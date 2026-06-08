@@ -156,7 +156,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { L } from '../../i18n'
 import {
   getSimulationProfilesRealtime,
@@ -468,6 +468,7 @@ async function loadAll() {
   }
 
   loading.value = false
+  scheduleAutoRefresh()
 }
 
 function switchPlatform(next) {
@@ -476,7 +477,19 @@ function switchPlatform(next) {
   loadAll()
 }
 
-// ===== Lifecycle =====
+// ===== Lifecycle / live auto-refresh =====
+// While the simulation is still running, re-poll every 10s so personas/feed/stats update
+// live without a manual refresh. Stops automatically once the run completes.
+let refreshTimer = null
+function scheduleAutoRefresh() {
+  if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null }
+  const rs = isPlainObject(runState.value) ? runState.value : {}
+  const st = String(rs.runner_status || '').toLowerCase()
+  if (props.simulationId && (st === 'running' || st === 'starting')) {
+    refreshTimer = setTimeout(loadAll, 10000)
+  }
+}
+
 onMounted(() => {
   loadAll()
 })
@@ -487,6 +500,10 @@ watch(
     loadAll()
   }
 )
+
+onUnmounted(() => {
+  if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null }
+})
 </script>
 
 <style scoped>
