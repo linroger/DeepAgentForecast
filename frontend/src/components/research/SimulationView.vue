@@ -1,0 +1,981 @@
+<template>
+  <div class="sim-view">
+    <!-- ===== Header ===== -->
+    <header class="sv-header">
+      <div class="sv-title">
+        <span class="diamond">◇</span>
+        <span class="sv-title-text">{{ L('群体模拟 · OASIS','Crowd Simulation · OASIS') }}</span>
+      </div>
+
+      <div class="sv-controls">
+        <!-- Platform segmented toggle -->
+        <div class="segmented" role="tablist" :aria-label="L('平台选择','Select platform')">
+          <button
+            type="button"
+            class="seg-btn"
+            :class="{ active: platform === 'twitter' }"
+            :aria-pressed="platform === 'twitter'"
+            @click="switchPlatform('twitter')"
+          >Twitter</button>
+          <button
+            type="button"
+            class="seg-btn"
+            :class="{ active: platform === 'reddit' }"
+            :aria-pressed="platform === 'reddit'"
+            @click="switchPlatform('reddit')"
+          >Reddit</button>
+        </div>
+
+        <!-- Refresh -->
+        <button
+          type="button"
+          class="refresh-btn"
+          :disabled="loading"
+          @click="loadAll"
+          :title="L('刷新数据','Refresh data')"
+        >
+          <span class="refresh-icon" :class="{ spinning: loading }">⟳</span>
+          <span class="refresh-label">{{ L('刷新','Refresh') }}</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ===== Error banner ===== -->
+    <div v-if="error" class="sv-error">
+      <span class="err-dot">●</span>
+      <span class="err-text">{{ error }}</span>
+    </div>
+
+    <!-- ===== Stats strip ===== -->
+    <section class="stats-strip" v-if="statTiles.length || hasRoundInfo">
+      <div class="stat-tile" v-if="hasRoundInfo">
+        <span class="stat-label">{{ L('回合','Round') }}</span>
+        <span class="stat-value mono">{{ roundLabel }}</span>
+      </div>
+      <div class="stat-tile" v-if="runnerStatus">
+        <span class="stat-label">{{ L('运行状态','Status') }}</span>
+        <span class="stat-value mono">{{ runnerStatus }}</span>
+      </div>
+      <div
+        class="stat-tile"
+        v-for="tile in statTiles"
+        :key="tile.key"
+      >
+        <span class="stat-label">{{ tile.label }}</span>
+        <span class="stat-value mono">{{ tile.value }}</span>
+      </div>
+    </section>
+
+    <!-- ===== Two columns ===== -->
+    <div class="sv-columns">
+      <!-- LEFT: Personas -->
+      <section class="col col-personas">
+        <div class="col-head">
+          <span class="diamond sm">◇</span>
+          <span class="col-label">{{ L('数字人设','Personas') }} ({{ profiles.length }})</span>
+        </div>
+
+        <div class="col-body scroll" v-if="profiles.length">
+          <article
+            class="persona-card"
+            v-for="(p, idx) in profiles"
+            :key="personaKey(p, idx)"
+          >
+            <div class="persona-top">
+              <div class="persona-avatar" :style="avatarStyle(personaName(p))">
+                {{ initialOf(personaName(p)) }}
+              </div>
+              <div class="persona-id">
+                <span class="persona-name">{{ personaName(p) }}</span>
+                <span class="persona-type" v-if="personaType(p)">{{ personaType(p) }}</span>
+              </div>
+            </div>
+            <p class="persona-snippet" v-if="personaSnippet(p)">{{ personaSnippet(p) }}</p>
+            <p class="persona-snippet empty" v-else>{{ L('暂无人设描述','No persona description') }}</p>
+          </article>
+        </div>
+
+        <div class="empty-state" v-else-if="!loading">
+          <span class="empty-icon">◇</span>
+          <span class="empty-text">{{ L('模拟尚未运行或暂无数据','Simulation not started or no data yet') }}</span>
+        </div>
+
+        <div class="empty-state" v-else>
+          <span class="empty-icon loading-dot">●</span>
+          <span class="empty-text">{{ L('加载中…','Loading…') }}</span>
+        </div>
+      </section>
+
+      <!-- RIGHT: Feed -->
+      <section class="col col-feed">
+        <div class="col-head">
+          <span class="diamond sm">◇</span>
+          <span class="col-label">{{ L('信息流','Feed') }} ({{ posts.length }})</span>
+        </div>
+
+        <div class="col-body scroll" v-if="posts.length">
+          <article
+            class="post-card"
+            v-for="(post, idx) in posts"
+            :key="postKey(post, idx)"
+          >
+            <div class="post-head">
+              <div class="post-avatar" :style="avatarStyle(authorName(post))">
+                {{ initialOf(authorName(post)) }}
+              </div>
+              <div class="post-meta">
+                <span class="post-author">{{ authorName(post) }}</span>
+                <span class="post-sub">
+                  <span class="plat-tag">{{ platformTag }}</span>
+                  <span class="post-time mono" v-if="relativeTime(post)">· {{ relativeTime(post) }}</span>
+                </span>
+              </div>
+            </div>
+
+            <p class="post-text" v-if="postText(post)">{{ postText(post) }}</p>
+            <p class="post-text empty" v-else>{{ L('（无内容）','(No content)') }}</p>
+
+            <div class="post-metrics" v-if="hasLikes(post)">
+              <span class="metric">♥ {{ likeCount(post) }}</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="empty-state" v-else-if="!loading">
+          <span class="empty-icon">◇</span>
+          <span class="empty-text">{{ L('模拟尚未运行或暂无数据','Simulation not started or no data yet') }}</span>
+        </div>
+
+        <div class="empty-state" v-else>
+          <span class="empty-icon loading-dot">●</span>
+          <span class="empty-text">{{ L('加载中…','Loading…') }}</span>
+        </div>
+      </section>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, watch } from 'vue'
+import { L } from '../../i18n'
+import {
+  getSimulationProfilesRealtime,
+  getSimulationPosts,
+  getAgentStats,
+  getRunStatus
+} from '../../api/simulation'
+
+const props = defineProps({
+  simulationId: { type: String, default: '' }
+})
+
+// ===== Local state =====
+const platform = ref('twitter') // 'twitter' | 'reddit'
+const profiles = ref([])
+const posts = ref([])
+const stats = ref({})
+const runState = ref({})
+const userMap = ref({})
+const loading = ref(false)
+const error = ref('')
+
+// ===== Defensive helpers =====
+function asArray(v) {
+  return Array.isArray(v) ? v : []
+}
+
+function isPlainObject(v) {
+  return v != null && typeof v === 'object' && !Array.isArray(v)
+}
+
+// Normalize profiles: res.data may be an array, or { profiles: [...] }
+function normalizeProfiles(data) {
+  if (Array.isArray(data)) return data
+  if (isPlainObject(data) && Array.isArray(data.profiles)) return data.profiles
+  return []
+}
+
+// Build userId -> name map from profiles
+function buildUserMap(list) {
+  const map = {}
+  asArray(list).forEach((p) => {
+    if (!isPlainObject(p)) return
+    const id = p.user_id ?? p.agent_id ?? p.id
+    if (id === undefined || id === null) return
+    const name = personaName(p)
+    if (name) map[String(id)] = name
+  })
+  return map
+}
+
+// ===== Persona accessors (all guarded) =====
+function personaName(p) {
+  if (!isPlainObject(p)) return ''
+  return (p.name || p.user_name || p.username || '').toString().trim()
+}
+
+function personaType(p) {
+  if (!isPlainObject(p)) return ''
+  return (p.type || p.category || '').toString().trim()
+}
+
+function personaSnippet(p) {
+  if (!isPlainObject(p)) return ''
+  const raw = p.persona || p.bio || p.description || p.self_description || ''
+  return raw == null ? '' : String(raw).trim()
+}
+
+function personaKey(p, idx) {
+  if (isPlainObject(p)) {
+    const id = p.user_id ?? p.agent_id ?? p.id
+    if (id !== undefined && id !== null) return 'p-' + id + '-' + idx
+  }
+  return 'p-' + idx
+}
+
+// ===== Post accessors (all guarded) =====
+function postText(post) {
+  if (!isPlainObject(post)) return ''
+  const raw = post.content ?? post.text ?? post.message ?? ''
+  return raw == null ? '' : String(raw).trim()
+}
+
+function authorName(post) {
+  if (!isPlainObject(post)) return 'Agent'
+  const id = post.user_id ?? post.agent_id ?? post.author_id ?? post.id
+  if (id !== undefined && id !== null) {
+    const mapped = userMap.value[String(id)]
+    if (mapped) return mapped
+    return 'Agent ' + id
+  }
+  return 'Agent'
+}
+
+function likeCount(post) {
+  if (!isPlainObject(post)) return 0
+  const v = post.num_likes ?? post.likes ?? post.like_count
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+function hasLikes(post) {
+  if (!isPlainObject(post)) return false
+  const v = post.num_likes ?? post.likes ?? post.like_count
+  return v !== undefined && v !== null && Number.isFinite(Number(v))
+}
+
+function postKey(post, idx) {
+  if (isPlainObject(post)) {
+    const id = post.post_id ?? post.id
+    if (id !== undefined && id !== null) return 'post-' + id + '-' + idx
+  }
+  return 'post-' + idx
+}
+
+// ===== Time formatting =====
+function relativeTime(post) {
+  if (!isPlainObject(post)) return ''
+  const rawTs = post.created_at ?? post.timestamp ?? post.time
+  if (rawTs === undefined || rawTs === null || rawTs === '') return ''
+  let ms
+  if (typeof rawTs === 'number') {
+    // seconds vs milliseconds heuristic
+    ms = rawTs < 1e12 ? rawTs * 1000 : rawTs
+  } else {
+    const parsed = Date.parse(String(rawTs))
+    if (Number.isNaN(parsed)) return ''
+    ms = parsed
+  }
+  const diff = Date.now() - ms
+  if (!Number.isFinite(diff)) return ''
+  if (diff < 0) return L('刚刚', 'just now')
+  const sec = Math.floor(diff / 1000)
+  if (sec < 60) return L('刚刚', 'just now')
+  const min = Math.floor(sec / 60)
+  if (min < 60) return min + L('分钟前', 'm ago')
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return hr + L('小时前', 'h ago')
+  const day = Math.floor(hr / 24)
+  if (day < 30) return day + L('天前', 'd ago')
+  const mon = Math.floor(day / 30)
+  if (mon < 12) return mon + L('个月前', 'mo ago')
+  return Math.floor(mon / 12) + L('年前', 'y ago')
+}
+
+// ===== Avatar helpers =====
+function initialOf(name) {
+  const n = (name || '').toString().trim()
+  if (!n) return '?'
+  return n.charAt(0).toUpperCase()
+}
+
+const AVATAR_COLORS = [
+  '#FF4500', '#0f766e', '#1d4ed8', '#7c3aed',
+  '#b91c1c', '#16a34a', '#c2410c', '#0891b2'
+]
+
+function avatarStyle(name) {
+  const n = (name || '').toString()
+  let hash = 0
+  for (let i = 0; i < n.length; i++) {
+    hash = (hash * 31 + n.charCodeAt(i)) >>> 0
+  }
+  const bg = AVATAR_COLORS[hash % AVATAR_COLORS.length]
+  return { background: bg }
+}
+
+// ===== Platform display =====
+const platformTag = computed(() => (platform.value === 'reddit' ? 'Reddit' : 'Twitter'))
+
+// ===== Run state / round info =====
+const hasRoundInfo = computed(() => {
+  const rs = runState.value
+  if (!isPlainObject(rs)) return false
+  const cur = rs.current_round
+  const total = rs.total_rounds
+  return (cur !== undefined && cur !== null) || (total !== undefined && total !== null)
+})
+
+const roundLabel = computed(() => {
+  const rs = isPlainObject(runState.value) ? runState.value : {}
+  const cur = rs.current_round
+  const total = rs.total_rounds
+  const curStr = cur === undefined || cur === null ? '—' : cur
+  const totalStr = total === undefined || total === null ? '—' : total
+  return curStr + ' / ' + totalStr
+})
+
+const runnerStatus = computed(() => {
+  const rs = isPlainObject(runState.value) ? runState.value : {}
+  const s = rs.runner_status
+  return s === undefined || s === null || s === '' ? '' : String(s)
+})
+
+// ===== Stat tiles from stats object (numeric entries only) =====
+const STAT_LABELS = {
+  total_actions: ['总动作', 'Total actions'],
+  total_posts: ['总帖子', 'Total posts'],
+  total_agents: ['总智能体', 'Total agents'],
+  total_comments: ['总评论', 'Total comments'],
+  total_likes: ['总点赞', 'Total likes'],
+  total_rounds: ['总回合', 'Total rounds'],
+  active_agents: ['活跃智能体', 'Active agents'],
+  posts: ['帖子', 'Posts'],
+  actions: ['动作', 'Actions'],
+  agents: ['智能体', 'Agents']
+}
+
+function humanizeKey(key) {
+  if (STAT_LABELS[key]) return L(STAT_LABELS[key][0], STAT_LABELS[key][1])
+  return String(key)
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim()
+}
+
+const statTiles = computed(() => {
+  const s = stats.value
+  if (!isPlainObject(s)) return []
+  const tiles = []
+  for (const key of Object.keys(s)) {
+    const val = s[key]
+    if (typeof val === 'number' && Number.isFinite(val)) {
+      tiles.push({ key, label: humanizeKey(key), value: formatNumber(val) })
+    }
+  }
+  return tiles
+})
+
+function formatNumber(n) {
+  if (!Number.isFinite(n)) return String(n)
+  if (Math.abs(n) >= 1000) return n.toLocaleString('en-US')
+  return String(n)
+}
+
+// ===== Data loading =====
+async function loadAll() {
+  if (!props.simulationId) {
+    profiles.value = []
+    posts.value = []
+    stats.value = {}
+    runState.value = {}
+    userMap.value = {}
+    error.value = ''
+    return
+  }
+
+  loading.value = true
+  error.value = ''
+  const simId = props.simulationId
+  const plat = platform.value
+
+  const results = await Promise.allSettled([
+    getSimulationProfilesRealtime(simId, plat),
+    getSimulationPosts(simId, plat, 60, 0),
+    getAgentStats(simId),
+    getRunStatus(simId)
+  ])
+
+  // Guard against a stale response landing after a platform/sim switch
+  if (props.simulationId !== simId || platform.value !== plat) {
+    loading.value = false
+    return
+  }
+
+  const [profilesRes, postsRes, statsRes, runRes] = results
+
+  // Profiles
+  if (profilesRes.status === 'fulfilled') {
+    const data = profilesRes.value && profilesRes.value.data
+    const list = normalizeProfiles(data)
+    profiles.value = asArray(list)
+    userMap.value = buildUserMap(profiles.value)
+  } else {
+    profiles.value = []
+    userMap.value = {}
+  }
+
+  // Posts
+  if (postsRes.status === 'fulfilled') {
+    const data = postsRes.value && postsRes.value.data
+    posts.value = asArray(isPlainObject(data) ? data.posts : null)
+  } else {
+    posts.value = []
+  }
+
+  // Stats
+  if (statsRes.status === 'fulfilled') {
+    const data = statsRes.value && statsRes.value.data
+    stats.value = isPlainObject(data) ? data : {}
+  } else {
+    stats.value = {}
+  }
+
+  // Run state
+  if (runRes.status === 'fulfilled') {
+    const data = runRes.value && runRes.value.data
+    runState.value = isPlainObject(data) ? data : {}
+  } else {
+    runState.value = {}
+  }
+
+  // Surface an error only when every request failed (transient/empty data stays graceful).
+  const allFailed = results.every((r) => r.status === 'rejected')
+  if (allFailed) {
+    const first = results.find((r) => r.status === 'rejected')
+    const reason = first && first.reason
+    error.value = (reason && reason.message) ? reason.message : L('加载模拟数据失败', 'Failed to load simulation data')
+  }
+
+  loading.value = false
+}
+
+function switchPlatform(next) {
+  if (platform.value === next) return
+  platform.value = next
+  loadAll()
+}
+
+// ===== Lifecycle =====
+onMounted(() => {
+  loadAll()
+})
+
+watch(
+  () => props.simulationId,
+  () => {
+    loadAll()
+  }
+)
+</script>
+
+<style scoped>
+.sim-view {
+  --orange: #FF4500;
+  --border: #E5E5E5;
+  --mono: 'JetBrains Mono', monospace;
+  --ink: #000;
+  --paper: #fff;
+  --muted: #666;
+  --faint: #999;
+  --ok: #16a34a;
+  --err: #b91c1c;
+  --soft: #FAFAFA;
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif;
+}
+
+.sim-view * {
+  box-sizing: border-box;
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+/* ===== Header ===== */
+.sv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sv-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diamond {
+  color: var(--orange);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.diamond.sm {
+  font-size: 11px;
+}
+
+.sv-title-text {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+}
+
+.sv-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Segmented toggle */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.seg-btn {
+  appearance: none;
+  border: none;
+  background: var(--paper);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.seg-btn + .seg-btn {
+  border-left: 1px solid var(--border);
+}
+
+.seg-btn:hover:not(.active) {
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.seg-btn.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Refresh button */
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--ink);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.refresh-icon {
+  display: inline-block;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.refresh-icon.spinning {
+  animation: sv-spin 0.9s linear infinite;
+}
+
+@keyframes sv-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ===== Error ===== */
+.sv-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--err);
+  background: var(--soft);
+  padding: 8px 12px;
+  border-radius: 2px;
+  font-size: 12px;
+}
+
+.err-dot {
+  color: var(--err);
+  font-size: 8px;
+}
+
+.err-text {
+  color: var(--err);
+  font-family: var(--mono);
+}
+
+/* ===== Stats strip ===== */
+.stats-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 96px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 10px 14px;
+  background: var(--paper);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.stat-tile:hover {
+  transform: translateY(-1px);
+  border-color: var(--ink);
+}
+
+.stat-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* ===== Columns ===== */
+.sv-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--paper);
+  min-height: 220px;
+  max-height: 640px;
+  overflow: hidden;
+}
+
+.col-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--soft);
+  flex: 0 0 auto;
+}
+
+.col-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+  color: var(--ink);
+}
+
+.col-body {
+  flex: 1 1 auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scroll {
+  overflow-y: auto;
+}
+
+.scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--faint);
+}
+
+/* ===== Persona card ===== */
+.persona-card {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 12px;
+  background: var(--paper);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.persona-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--ink);
+}
+
+.persona-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.persona-avatar,
+.post-avatar {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.persona-id {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.persona-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.persona-type {
+  align-self: flex-start;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+  color: var(--orange);
+  border: 1px solid var(--orange);
+  border-radius: 2px;
+  padding: 1px 6px;
+  line-height: 1.4;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.persona-snippet {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.persona-snippet.empty {
+  color: var(--faint);
+  font-style: italic;
+}
+
+/* ===== Post card ===== */
+.post-card {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 12px;
+  background: var(--paper);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.post-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--ink);
+}
+
+.post-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.post-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.post-author {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.plat-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 0 5px;
+  line-height: 1.5;
+}
+
+.post-time {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.post-text {
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.post-text.empty {
+  color: var(--faint);
+  font-style: italic;
+}
+
+.post-metrics {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.metric {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
+/* ===== Empty / loading state ===== */
+.empty-state {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 20px;
+  color: var(--border);
+}
+
+.empty-icon.loading-dot {
+  font-size: 12px;
+  color: var(--orange);
+  animation: sv-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes sv-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.empty-text {
+  font-size: 12px;
+  color: var(--faint);
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+}
+
+/* ===== Responsive: stack below 960px ===== */
+@media (max-width: 960px) {
+  .sv-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .col {
+    max-height: 480px;
+  }
+}
+</style>

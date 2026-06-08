@@ -1,0 +1,61 @@
+import service from './index'
+
+/**
+ * 启动统一研究→预测管线（Step 0）
+ *
+ * 注意：此请求 **非幂等** —— 每次 /run 都会新建一条 pipeline 并拉起一个 DeerFlow 子进程
+ * 与一整轮 OASIS 模拟。因此绝不能用 requestWithRetry 包裹：一次因超时/网络抖动而丢失响应的
+ * 重试会启动第二条不可见的管线，白白消耗 Claude 额度与算力。改用单次 service() 调用。
+ * @param {Object} data { prompt, mode, project_name, depth, max_rounds }
+ * @returns {Promise}
+ */
+export function runPipeline(data) {
+  return service({
+    url: '/api/research/run',
+    method: 'post',
+    data
+  })
+}
+
+/**
+ * 查询管线聚合进度
+ * @param {String} pipelineId
+ * @returns {Promise}
+ */
+export function getPipelineStatus(pipelineId) {
+  return service({
+    url: `/api/research/status/${pipelineId}`,
+    method: 'get'
+  })
+}
+
+/**
+ * 管线列表
+ */
+export function listPipelines() {
+  return service({ url: '/api/research/list', method: 'get' })
+}
+
+/**
+ * 研究产出（research_report.md + actors/sources）
+ * @param {String} pipelineId
+ */
+export function getDossier(pipelineId) {
+  return service({
+    url: `/api/research/${pipelineId}/dossier`,
+    method: 'get'
+  })
+}
+
+/**
+ * 研究子进程进度日志（tail）
+ * @param {String} pipelineId
+ * @param {Number} lines
+ */
+export function getProgressLog(pipelineId, lines = 200) {
+  return service({
+    url: `/api/research/${pipelineId}/progress`,
+    method: 'get',
+    params: { lines }
+  })
+}
