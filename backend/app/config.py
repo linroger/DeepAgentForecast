@@ -46,16 +46,37 @@ class Config:
     _MINIMAX_DEFAULT_MODEL = 'MiniMax-M3'
     _is_minimax = LLM_PROVIDER == 'minimax'
 
-    # LLM配置（provider=openai/kimi/minimax 时统一使用 OpenAI 格式）
+    # —— 新增 OpenAI 兼容提供方默认连接参数 ——
+    # DeepSeek V4（api.deepseek.com，1M 上下文）。报告/模拟为高频调用，默认用更经济稳定的
+    # deepseek-chat；深度研究阶段在 deer-flow/config.yaml 用旗舰 deepseek-v4-pro。
+    _DEEPSEEK_DEFAULT_BASE_URL = 'https://api.deepseek.com/v1'
+    _DEEPSEEK_DEFAULT_MODEL = 'deepseek-chat'
+    _is_deepseek = LLM_PROVIDER == 'deepseek'
+    # 通义千问 Qwen（DashScope OpenAI 兼容；国际站端点，CN 用户改 dashscope.aliyuncs.com）。
+    _QWEN_DEFAULT_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
+    _QWEN_DEFAULT_MODEL = 'qwen-plus'
+    _is_qwen = LLM_PROVIDER == 'qwen'
+    # 智谱 GLM（Z.ai/BigModel OpenAI 兼容；国际站端点，CN 用户改 open.bigmodel.cn）。
+    _GLM_DEFAULT_BASE_URL = 'https://api.z.ai/api/paas/v4'
+    _GLM_DEFAULT_MODEL = 'glm-4.6'
+    _is_glm = LLM_PROVIDER == 'glm'
+
+    # LLM配置（provider=openai/kimi/minimax/deepseek/qwen/glm 时统一使用 OpenAI 格式）
     LLM_API_KEY = os.environ.get('LLM_API_KEY')
     LLM_BASE_URL = os.environ.get('LLM_BASE_URL') or (
         _KIMI_DEFAULT_BASE_URL if _is_kimi
         else _MINIMAX_DEFAULT_BASE_URL if _is_minimax
+        else _DEEPSEEK_DEFAULT_BASE_URL if _is_deepseek
+        else _QWEN_DEFAULT_BASE_URL if _is_qwen
+        else _GLM_DEFAULT_BASE_URL if _is_glm
         else 'https://api.openai.com/v1'
     )
     LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME') or (
         _KIMI_DEFAULT_MODEL if _is_kimi
         else _MINIMAX_DEFAULT_MODEL if _is_minimax
+        else _DEEPSEEK_DEFAULT_MODEL if _is_deepseek
+        else _QWEN_DEFAULT_MODEL if _is_qwen
+        else _GLM_DEFAULT_MODEL if _is_glm
         else 'gpt-4o-mini'
     )
 
@@ -71,18 +92,34 @@ class Config:
     # 可设对应 *_DISABLE_THINKING=false 重新开启推理。
     LLM_KIMI_DISABLE_THINKING = os.environ.get('LLM_KIMI_DISABLE_THINKING', 'true').strip().lower() == 'true'
     LLM_MINIMAX_DISABLE_THINKING = os.environ.get('LLM_MINIMAX_DISABLE_THINKING', 'true').strip().lower() == 'true'
+    # 新增推理提供方(deepseek/qwen/glm)的统一关闭推理开关（默认关闭推理，保证报告/模拟输出稳定可解析）
+    LLM_DISABLE_THINKING = os.environ.get('LLM_DISABLE_THINKING', 'true').strip().lower() == 'true'
+
+    # 各推理提供方"关闭推理"对应的 extra_body。GLM/DeepSeek/Kimi/MiniMax 用 thinking.type；
+    # 通义千问 DashScope 用非标准的 enable_thinking 布尔。
+    _DISABLE_THINKING_EXTRA_BODY = {
+        'kimi': {"thinking": {"type": "disabled"}},
+        'minimax': {"thinking": {"type": "disabled"}},
+        'deepseek': {"thinking": {"type": "disabled"}},
+        'glm': {"thinking": {"type": "disabled"}},
+        'qwen': {"enable_thinking": False},
+    }
 
     @classmethod
     def reasoning_extra_body(cls):
-        """OpenAI 兼容推理提供方(kimi/minimax)关闭推理用的 extra_body；其它提供方返回 None。
+        """OpenAI 兼容推理提供方关闭推理用的 extra_body；非推理提供方或开关关闭时返回 None。
 
-        kimi 与 MiniMax-M3 都接受 ``extra_body={"thinking": {"type": "disabled"}}``。
+        kimi/minimax 沿用各自历史开关；deepseek/qwen/glm 统一受 LLM_DISABLE_THINKING 控制。
+        关闭推理可避免 reasoning 吃光 max_tokens 导致 content 为空、JSON 解析失败。
         """
-        if cls.LLM_PROVIDER == 'kimi' and cls.LLM_KIMI_DISABLE_THINKING:
-            return {"thinking": {"type": "disabled"}}
-        if cls.LLM_PROVIDER == 'minimax' and cls.LLM_MINIMAX_DISABLE_THINKING:
-            return {"thinking": {"type": "disabled"}}
-        return None
+        p = cls.LLM_PROVIDER
+        if p == 'kimi' and not cls.LLM_KIMI_DISABLE_THINKING:
+            return None
+        if p == 'minimax' and not cls.LLM_MINIMAX_DISABLE_THINKING:
+            return None
+        if p in ('deepseek', 'qwen', 'glm') and not cls.LLM_DISABLE_THINKING:
+            return None
+        return cls._DISABLE_THINKING_EXTRA_BODY.get(p)
 
     # 向后兼容别名（旧调用点）：等价于 reasoning_extra_body。
     @classmethod
@@ -92,15 +129,28 @@ class Config:
     # —— 运行时模型提供方切换（供 /api/settings 使用）——
     # 每个提供方的展示元数据：是否需要 API Key、对应的 DeerFlow 研究模型（deer-flow/config.yaml
     # 当前仅定义了 claude + minimax 两个研究模型，故其余提供方的深度研究回退到 claude/OAuth）。
+    # 每个提供方的展示与路由元数据：
+    #   label          前端显示名
+    #   needs_key      是否需要用户填写 API Key（CLI/订阅类为 False）
+    #   deerflow_model 深度研究阶段在 deer-flow/config.yaml 选用的模型 stanza 名
+    #   openai_compat  报告/模拟阶段是否走 OpenAI 兼容 HTTP 客户端（否则走本机 CLI）
+    #   default_base / default_model  OpenAI 兼容提供方的默认连接参数
+    #   key_env        把用户填的 Key 镜像到的提供方专属环境变量（供 deer-flow $VAR 解析）
     PROVIDER_META = {
-        'claude-cli': {'label': 'Claude Code（CLI 订阅）', 'needs_key': False, 'deerflow_model': 'claude'},
-        'codex-cli':  {'label': 'Codex（CLI 订阅）',       'needs_key': False, 'deerflow_model': 'claude'},
-        'openai':     {'label': 'OpenAI 兼容 API',          'needs_key': True,  'deerflow_model': 'claude',
+        'claude-cli': {'label': 'Claude Code（CLI 订阅）', 'needs_key': False, 'deerflow_model': 'claude', 'openai_compat': False},
+        'codex-cli':  {'label': 'Codex（ChatGPT 订阅）',   'needs_key': False, 'deerflow_model': 'codex',  'openai_compat': False},
+        'openai':     {'label': 'OpenAI 兼容 API',          'needs_key': True,  'deerflow_model': 'claude', 'openai_compat': True,
                        'default_base': 'https://api.openai.com/v1', 'default_model': 'gpt-4o-mini'},
-        'kimi':       {'label': 'Kimi-for-coding',          'needs_key': True,  'deerflow_model': 'claude',
+        'kimi':       {'label': 'Kimi-for-coding',          'needs_key': True,  'deerflow_model': 'claude', 'openai_compat': True,
                        'default_base': _KIMI_DEFAULT_BASE_URL, 'default_model': _KIMI_DEFAULT_MODEL},
-        'minimax':    {'label': 'MiniMax 代码计划（国内版）', 'needs_key': True,  'deerflow_model': 'minimax',
-                       'default_base': _MINIMAX_DEFAULT_BASE_URL, 'default_model': _MINIMAX_DEFAULT_MODEL},
+        'minimax':    {'label': 'MiniMax 代码计划（国内版）', 'needs_key': True,  'deerflow_model': 'minimax', 'openai_compat': True,
+                       'default_base': _MINIMAX_DEFAULT_BASE_URL, 'default_model': _MINIMAX_DEFAULT_MODEL, 'key_env': 'MINIMAX_API_KEY'},
+        'deepseek':   {'label': 'DeepSeek V4',              'needs_key': True,  'deerflow_model': 'deepseek', 'openai_compat': True,
+                       'default_base': _DEEPSEEK_DEFAULT_BASE_URL, 'default_model': _DEEPSEEK_DEFAULT_MODEL, 'key_env': 'DEEPSEEK_API_KEY'},
+        'qwen':       {'label': '通义千问 Qwen3.7 Max',      'needs_key': True,  'deerflow_model': 'qwen', 'openai_compat': True,
+                       'default_base': _QWEN_DEFAULT_BASE_URL, 'default_model': _QWEN_DEFAULT_MODEL, 'key_env': 'DASHSCOPE_API_KEY'},
+        'glm':        {'label': '智谱 GLM-4.6',             'needs_key': True,  'deerflow_model': 'glm', 'openai_compat': True,
+                       'default_base': _GLM_DEFAULT_BASE_URL, 'default_model': _GLM_DEFAULT_MODEL, 'key_env': 'ZHIPUAI_API_KEY'},
     }
 
     @classmethod
@@ -129,7 +179,7 @@ class Config:
         if provider not in cls.SUPPORTED_LLM_PROVIDERS:
             raise ValueError(f"不支持的提供方: {provider}（需为 {', '.join(cls.SUPPORTED_LLM_PROVIDERS)} 之一）")
         meta = cls.PROVIDER_META.get(provider, {})
-        is_openai_compat = provider in ('openai', 'kimi', 'minimax')
+        is_openai_compat = bool(meta.get('openai_compat'))
 
         keeps_existing_key = (provider == cls.LLM_PROVIDER and bool(cls.LLM_API_KEY))
         if meta.get('needs_key') and not ((api_key or '').strip() or keeps_existing_key):
@@ -138,6 +188,9 @@ class Config:
         cls.LLM_PROVIDER = provider
         cls._is_kimi = provider == 'kimi'
         cls._is_minimax = provider == 'minimax'
+        cls._is_deepseek = provider == 'deepseek'
+        cls._is_qwen = provider == 'qwen'
+        cls._is_glm = provider == 'glm'
         cls.DEERFLOW_MODEL = meta.get('deerflow_model', 'claude')
 
         env_updates = {'LLM_PROVIDER': provider, 'DEERFLOW_MODEL': cls.DEERFLOW_MODEL}
@@ -151,8 +204,12 @@ class Config:
             env_updates['LLM_MODEL_NAME'] = cls.LLM_MODEL_NAME
             if cls.LLM_API_KEY:
                 env_updates['LLM_API_KEY'] = cls.LLM_API_KEY
-                if provider == 'minimax':
-                    env_updates['MINIMAX_API_KEY'] = cls.LLM_API_KEY
+                # 把 Key 镜像到提供方专属环境变量，供 deer-flow/config.yaml 的 $VAR 解析
+                # （deepseek→$DEEPSEEK_API_KEY、qwen→$DASHSCOPE_API_KEY、glm→$ZHIPUAI_API_KEY、
+                #  minimax→$MINIMAX_API_KEY），这样深度研究子进程也能拿到正确的 Key。
+                key_env = meta.get('key_env')
+                if key_env:
+                    env_updates[key_env] = cls.LLM_API_KEY
 
         for k, v in env_updates.items():
             os.environ[k] = v
@@ -218,8 +275,8 @@ class Config:
     REPORT_AGENT_MAX_REFLECTION_ROUNDS = int(os.environ.get('REPORT_AGENT_MAX_REFLECTION_ROUNDS', '2'))
     REPORT_AGENT_TEMPERATURE = float(os.environ.get('REPORT_AGENT_TEMPERATURE', '0.5'))
     
-    # 支持的 LLM 提供方
-    SUPPORTED_LLM_PROVIDERS = ('claude-cli', 'codex-cli', 'openai', 'kimi', 'minimax')
+    # 支持的 LLM 提供方（直接从 PROVIDER_META 派生，新增提供方只需改一处）
+    SUPPORTED_LLM_PROVIDERS = tuple(PROVIDER_META.keys())
 
     # ============================================================
     # DeerFlow 深度研究集成（前置 Step 0：用一个 prompt 自动调研生成种子材料）
@@ -258,11 +315,22 @@ class Config:
                 f"当前为 '{cls.LLM_PROVIDER}'"
             )
 
-        # openai / kimi / minimax 提供方需要 API Key；CLI 提供方使用本机订阅
-        if cls.LLM_PROVIDER in ('openai', 'kimi', 'minimax') and not cls.LLM_API_KEY:
+        # 需要 Key 的提供方（needs_key=True）必须配置 LLM_API_KEY；CLI/订阅提供方使用本机订阅
+        if cls.PROVIDER_META.get(cls.LLM_PROVIDER, {}).get('needs_key') and not cls.LLM_API_KEY:
             errors.append(f"LLM_PROVIDER={cls.LLM_PROVIDER} 时必须配置 LLM_API_KEY")
 
         if not cls.ZEP_API_KEY:
             errors.append("ZEP_API_KEY 未配置")
         return errors
 
+
+# ------------------------------------------------------------------
+# DeerFlow 子进程兼容：deer-flow/config.yaml 在加载时会“贪婪地”解析所有模型 stanza 里的
+# $VAR（api_key），任意一个未设置的环境变量都会让整份 config 解析直接抛错——从而连带
+# 拖垮当前实际选用的研究模型（如 claude）。因此为所有提供方专属 Key 环境变量预置空默认值
+# （仅在未设置时），保证未配置的提供方 stanza 也能被安全解析；真正选用某提供方时，
+# apply_provider 会把真实 Key 写入对应变量。子进程通过 env=dict(os.environ) 继承这些值。
+for _meta in Config.PROVIDER_META.values():
+    _ke = _meta.get('key_env')
+    if _ke:
+        os.environ.setdefault(_ke, '')

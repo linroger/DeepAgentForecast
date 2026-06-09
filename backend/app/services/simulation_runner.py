@@ -313,7 +313,7 @@ class SimulationRunner:
         cls,
         simulation_id: str,
         platform: str = "parallel",  # twitter / reddit / parallel
-        max_rounds: int = None,  # 最大模拟轮数（可选，用于截断过长的模拟）
+        max_rounds: int = 40,  # 最大模拟轮数（默认 40，截断过长的模拟；传更大值或 None 可放开）
         enable_graph_memory_update: bool = False,  # 是否将活动更新到Zep图谱
         graph_id: str = None  # Zep图谱ID（启用图谱更新时必需）
     ) -> SimulationRunState:
@@ -348,7 +348,8 @@ class SimulationRunner:
         # 初始化运行状态
         time_config = config.get("time_config", {})
         total_hours = time_config.get("total_simulation_hours", 72)
-        minutes_per_round = time_config.get("minutes_per_round", 30)
+        # 与配置生成器默认值(60)保持一致：缺省字段时算出 72 轮而非 144 轮，消除潜在的 2x 差异。
+        minutes_per_round = time_config.get("minutes_per_round", 60)
         total_rounds = int(total_hours * 60 / minutes_per_round)
         
         # 如果指定了最大轮数，则截断

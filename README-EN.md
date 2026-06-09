@@ -118,7 +118,12 @@ cp .env.example .env
 # LLM Provider — defaults to claude-cli (no API key required)
 #   claude-cli: uses your local `claude` CLI / Claude Code subscription (default)
 #   codex-cli:  uses your local `codex` CLI / Codex subscription
-#   openai:     fall back to any OpenAI-compatible API (requires LLM_API_KEY below)
+#   openai:     any OpenAI-compatible API (requires LLM_API_KEY/BASE_URL/MODEL_NAME below)
+#   kimi:       Kimi-for-coding (coding-agent gateway, just set LLM_API_KEY)
+#   minimax:    MiniMax-M3 reasoning model (default BASE_URL/MODEL, just set LLM_API_KEY)
+#   deepseek:   DeepSeek (default deepseek-chat; research uses deepseek-v4-pro, just set LLM_API_KEY)
+#   qwen:       Qwen (default qwen-plus; research uses qwen3.7-max, just set LLM_API_KEY)
+#   glm:        GLM-4.6 (just set LLM_API_KEY)
 LLM_PROVIDER=claude-cli
 
 # Zep Cloud Configuration (always required)
@@ -158,6 +163,8 @@ npm run setup
 # Install Python dependencies (backend, auto-creates virtual environment)
 npm run setup:backend
 ```
+
+> **Deep-research engine.** `./setup.sh` automatically downloads the DeerFlow research engine — it clones the sibling `../deer-flow` repo, applies the MiroFish bridge overlay, and builds its isolated venv (so `git` is now a prerequisite). Re-running it is idempotent and safe.
 
 #### 3. Start Services
 

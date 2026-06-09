@@ -12,11 +12,14 @@
 #       - neither               -> default claude-cli + a warning
 #   * Scaffolds .env from .env.example (never overwrites an existing .env) and
 #     upserts the detected provider lines safely.
-#   * Installs root + frontend + backend dependencies, and the sibling
-#     deer-flow research engine venv if that repo is present.
+#   * Installs root + frontend + backend dependencies.
+#   * DOWNLOADS the DeerFlow research engine: clones the sibling ../deer-flow
+#     repo (pinned commit), applies the bridge overlay (research driver, patched
+#     model providers, and a ready-to-use config.yaml with claude / minimax /
+#     deepseek / qwen / glm / codex stanzas), then builds its isolated venv.
 #
 # Safe to run multiple times. Optional steps are guarded so a missing piece
-# (e.g. no deer-flow checkout) never aborts the whole script.
+# (e.g. no network for the deer-flow clone) never aborts the whole script.
 # ---------------------------------------------------------------------------
 
 # Fail fast on errors, unset variables, and broken pipes — but we deliberately
@@ -117,6 +120,15 @@ else
   MISSING_PREREQS=1
 fi
 
+# --- git (needed to auto-download the DeerFlow research engine) ---
+if have git; then
+  ok "git $(git --version 2>/dev/null | awk '{print $3}')"
+else
+  warn "git not found. It is needed to auto-clone the DeerFlow research engine."
+  warn "    Install: https://git-scm.com/downloads"
+  MISSING_PREREQS=1
+fi
+
 if [ "$MISSING_PREREQS" -ne 0 ]; then
   warn "Some prerequisites are missing/old. Setup will continue, but install the"
   warn "items above before running the app for the full pipeline to work."
@@ -128,7 +140,8 @@ fi
 step "Detecting model provider"
 
 # DEERFLOW_MODEL must be one of the models DeerFlow's research stage supports
-# (claude | minimax). For CLI providers we point DeerFlow at "claude".
+# (claude | minimax | deepseek | qwen | glm | codex). For CLI providers we point
+# DeerFlow at "claude" (the local CLI OAuth path needs no API key).
 LLM_PROVIDER=""
 DEERFLOW_MODEL="claude"
 
@@ -238,45 +251,130 @@ fi
 # ---------------------------------------------------------------------------
 
 # --- Root + frontend npm deps ---
+# Guarded so an npm failure WARNS but never aborts the run (set -euo pipefail is
+# active); the DeerFlow download below must still happen even if npm hiccups.
 step "Installing root + frontend dependencies (npm)"
 if have npm; then
-  # Prefer the project's convenience script; fall back to explicit installs.
-  if npm run | grep -qE '^\s*setup:all' 2>/dev/null; then
-    ( cd "$ROOT_DIR" && npm run setup:all )
+  npm_failed=0
+  # Prefer the project's convenience script (detected by inspecting package.json,
+  # which is more robust than parsing `npm run` output); fall back to explicit installs.
+  if [ -f "$ROOT_DIR/package.json" ] && grep -q '"setup:all"' "$ROOT_DIR/package.json" 2>/dev/null; then
+    ( cd "$ROOT_DIR" && npm run setup:all ) || npm_failed=1
   else
-    ( cd "$ROOT_DIR" && npm install )
+    ( cd "$ROOT_DIR" && npm install ) || npm_failed=1
     if [ -d "$ROOT_DIR/frontend" ]; then
-      ( cd "$ROOT_DIR/frontend" && npm install )
+      ( cd "$ROOT_DIR/frontend" && npm install ) || npm_failed=1
     fi
   fi
-  ok "Root + frontend npm dependencies installed"
+  if [ "$npm_failed" -eq 0 ]; then
+    ok "Root + frontend npm dependencies installed"
+  else
+    warn "npm install hit an error (see output above). Setup continues — re-run"
+    warn "    'npm run setup:all' (or 'npm install') in the project root later."
+  fi
 else
   warn "Skipping npm install — npm is not available."
 fi
 
 # --- Backend Python venv via uv ---
+# Guarded the same way: a failed uv sync warns and continues.
 step "Installing backend dependencies (uv sync)"
 if have uv && [ -d "$ROOT_DIR/backend" ]; then
-  ( cd "$ROOT_DIR/backend" && uv sync )
-  ok "Backend venv ready (backend/.venv)"
+  if ( cd "$ROOT_DIR/backend" && uv sync ); then
+    ok "Backend venv ready (backend/.venv)"
+  else
+    warn "Backend 'uv sync' failed (see output above). Setup continues — retry with:"
+    warn "    ( cd \"$ROOT_DIR/backend\" && uv sync )"
+  fi
 elif [ ! -d "$ROOT_DIR/backend" ]; then
   warn "backend/ directory not found — skipping backend install."
 else
   warn "Skipping backend 'uv sync' — uv is not available (see install hint above)."
 fi
 
-# --- DeerFlow research engine (sibling ../deer-flow) — OPTIONAL but required
-#     for the research stage (stage 1) of a full run ---
+# --- DeerFlow research engine (sibling ../deer-flow) — REQUIRED for the deep
+#     research stage (stage 1) of a full run. setup.sh DOWNLOADS it for you:
+#     clone (pinned) -> apply the bridge overlay -> build its isolated venv. ---
 step "Setting up DeerFlow research engine (sibling ../deer-flow)"
 
-# Allow an explicit override via DEERFLOW_DIR; otherwise default to the sibling.
+# Where to put deer-flow, where to clone from, and which commit to pin to.
+#   * DEERFLOW_DIR  — override the location (default: sibling of this project).
+#   * DEERFLOW_REPO — override the clone URL.
+#   * DEERFLOW_REF  — pin to a commit/branch. Defaults to the exact upstream
+#     commit the bridge patches were authored against, so the overlay always
+#     applies cleanly. Set DEERFLOW_REF=main to track upstream HEAD instead.
 DEERFLOW_DIR="${DEERFLOW_DIR:-$(cd "$ROOT_DIR/.." && pwd)/deer-flow}"
+DEERFLOW_REPO="${DEERFLOW_REPO:-https://github.com/bytedance/deer-flow.git}"
+DEERFLOW_REF="${DEERFLOW_REF:-799bef6d9dbc3a2cb37ce8177eeeabe2a33d8971}"
+BRIDGE_DIR="$ROOT_DIR/deerflow_bridge"
 
-if [ -d "$DEERFLOW_DIR" ]; then
-  if have uv && [ -d "$DEERFLOW_DIR/backend" ]; then
-    info "Found deer-flow at: $DEERFLOW_DIR"
-    # Build DeerFlow's isolated venv (Python >=3.12; 3.13 recommended). Guarded
-    # so a build failure here does not abort the whole setup.
+# 1) Clone if it isn't already there ("downloads everything"). A fresh clone is
+#    only attempted into a missing/empty directory; an existing checkout is kept.
+if [ ! -d "$DEERFLOW_DIR/.git" ] && [ ! -d "$DEERFLOW_DIR/backend" ]; then
+  if have git; then
+    info "Downloading DeerFlow research engine -> $DEERFLOW_DIR"
+    if git clone --quiet "$DEERFLOW_REPO" "$DEERFLOW_DIR"; then
+      ok "Cloned deer-flow from $DEERFLOW_REPO"
+      if [ "$DEERFLOW_REF" != "main" ]; then
+        if git -C "$DEERFLOW_DIR" checkout --quiet "$DEERFLOW_REF" 2>/dev/null; then
+          ok "Pinned deer-flow to commit ${DEERFLOW_REF:0:12}"
+        else
+          warn "Pinned commit ${DEERFLOW_REF:0:12} not found upstream; staying on the"
+          warn "default branch. The bridge overlay still applies, but if the research"
+          warn "stage misbehaves, set DEERFLOW_REF=main or report it so we refresh the pin."
+        fi
+      fi
+    else
+      warn "git clone of deer-flow failed (offline or blocked?)."
+      warn "Clone it manually, then re-run ./setup.sh:"
+      warn "    git clone $DEERFLOW_REPO \"$DEERFLOW_DIR\""
+    fi
+  else
+    warn "git not found — cannot auto-download deer-flow. Install git, or clone manually:"
+    warn "    git clone $DEERFLOW_REPO \"$DEERFLOW_DIR\""
+  fi
+else
+  ok "deer-flow already present at $DEERFLOW_DIR — not re-cloning."
+fi
+
+# 2) Apply the bridge overlay so the research stage matches what this project
+#    expects. The overlay is idempotent (plain file copies) and lives in
+#    deerflow_bridge/ so the integration is fully reproducible from this repo.
+if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
+  info "Applying DeerFlow bridge overlay from $BRIDGE_DIR"
+
+  # (a) The research driver / bridge entry point (backend invokes this).
+  if [ -f "$BRIDGE_DIR/deerflow_research.py" ]; then
+    cp "$BRIDGE_DIR/deerflow_research.py" "$DEERFLOW_DIR/deerflow_research.py"
+    ok "Installed deerflow_research.py (bridge entry point)"
+  fi
+
+  # (b) Patched model providers: macOS-Keychain OAuth + OAuth-preference (fixes
+  #     the 'claude' 401), and the MiniMax 'user name must be consistent' fix.
+  DF_MODELS="$DEERFLOW_DIR/backend/packages/harness/deerflow/models"
+  if [ -d "$BRIDGE_DIR/patches/models" ] && [ -d "$DF_MODELS" ]; then
+    cp "$BRIDGE_DIR/patches/models/"*.py "$DF_MODELS/"
+    ok "Applied provider patches (claude_provider, credential_loader, patched_minimax)"
+  fi
+
+  # (c) Ready-to-use config.yaml (claude/minimax/deepseek/qwen/glm/codex stanzas,
+  #     all keys as $VAR — no secrets). NEVER clobber an existing config.yaml:
+  #     it is gitignored upstream and may carry the user's own tuning.
+  if [ ! -f "$DEERFLOW_DIR/config.yaml" ]; then
+    if [ -f "$BRIDGE_DIR/config.yaml" ]; then
+      cp "$BRIDGE_DIR/config.yaml" "$DEERFLOW_DIR/config.yaml"
+      ok "Installed config.yaml (6 provider stanzas; keys read from .env via \$VAR)"
+    fi
+  else
+    info "deer-flow/config.yaml already exists — leaving it. Diff it against"
+    info "    deerflow_bridge/config.yaml to pick up new provider stanzas."
+  fi
+fi
+
+# 3) Build DeerFlow's isolated venv (Python >=3.12; 3.13 recommended). Guarded
+#    so a build failure here does not abort the rest of the setup.
+if [ -d "$DEERFLOW_DIR/backend" ]; then
+  if have uv; then
     if UV_PROJECT_ENVIRONMENT="$DEERFLOW_DIR/backend/.venv" \
          uv sync --project "$DEERFLOW_DIR/backend" --python 3.13; then
       ok "DeerFlow venv ready ($DEERFLOW_DIR/backend/.venv, Python 3.13)"
@@ -286,19 +384,13 @@ if [ -d "$DEERFLOW_DIR" ]; then
       warn "    UV_PROJECT_ENVIRONMENT=\"$DEERFLOW_DIR/backend/.venv\" \\"
       warn "      uv sync --project \"$DEERFLOW_DIR/backend\" --python 3.13"
     fi
-  elif [ ! -d "$DEERFLOW_DIR/backend" ]; then
-    warn "deer-flow found but '$DEERFLOW_DIR/backend' is missing — skipping its venv."
   else
-    warn "Skipping DeerFlow venv — uv is not available."
+    warn "Skipping DeerFlow venv — uv is not available (see install hint above)."
   fi
 else
-  # deer-flow absent: the deep-research stage (stage 1) can't run. Stage 1 is
-  # the first stage of a full pipeline, so this repo is REQUIRED for full runs.
-  warn "No deer-flow repo found at: $DEERFLOW_DIR"
-  warn "Deep research (pipeline stage 1) needs the 'deer-flow' repo as a SIBLING"
-  warn "directory of MiroFish-0.1.2. Without it, full 'research -> forecast' runs"
-  warn "cannot perform the research stage. Clone deer-flow next to this project,"
-  warn "then re-run ./setup.sh (or set DEERFLOW_DIR to its location)."
+  warn "deer-flow not available at: $DEERFLOW_DIR"
+  warn "Deep research (pipeline stage 1) needs it. Re-run ./setup.sh once you have"
+  warn "network access, or set DEERFLOW_DIR to an existing checkout."
 fi
 
 # ---------------------------------------------------------------------------
@@ -312,9 +404,13 @@ cat <<NEXT
 
   2) Model provider: currently LLM_PROVIDER=$LLM_PROVIDER (DEERFLOW_MODEL=$DEERFLOW_MODEL).
        • claude-cli / codex-cli use your local CLI — no API key needed.
-       • For an API provider, set LLM_PROVIDER=openai|kimi|minimax in .env and add
-         LLM_API_KEY / LLM_BASE_URL / LLM_MODEL_NAME. You can also switch the
-         provider at runtime from the UI Settings menu (applies to NEW runs).
+       • For an API provider, set LLM_PROVIDER in .env to one of:
+           openai | kimi | minimax | deepseek | qwen | glm
+         and add LLM_API_KEY / LLM_BASE_URL / LLM_MODEL_NAME (sensible defaults
+         exist for kimi/minimax/deepseek/qwen/glm — see .env.example). You can
+         also switch the provider at runtime from the UI Settings menu (NEW runs).
+       • To run deep research on a specific model, set DEERFLOW_MODEL to
+         claude | minimax | deepseek | qwen | glm | codex.
 
   3) Start everything (backend :5001 + frontend :3000):
        ${C_BOLD}npm run dev${C_RESET}

@@ -10,6 +10,7 @@ LLM客户端封装
 """
 
 import json
+import os
 import re
 import subprocess
 import time
@@ -20,9 +21,16 @@ from .logger import get_logger
 
 logger = get_logger('mirofish.llm_client')
 
+# 单次 CLI 调用超时（秒）。从 300 降到 180 以便在模拟中卡住的 agent 调用更快释放并发槽；
+# 仍足够长，可容纳报告章节这类长文生成。可用 LLM_CLI_TIMEOUT 覆盖（模拟密集场景可设 120）。
+CLI_TIMEOUT = int(os.environ.get('LLM_CLI_TIMEOUT', '180'))
+
 CLI_PROVIDERS = ('claude-cli', 'codex-cli')
-# OpenAI 兼容的 HTTP 提供方（openai 原生 + kimi-for-coding + minimax 代码计划）
-OPENAI_COMPATIBLE_PROVIDERS = ('openai', 'kimi', 'minimax')
+# OpenAI 兼容的 HTTP 提供方（直接从 PROVIDER_META 的 openai_compat 标记派生，
+# 新增提供方只需在 config.py 改一处：openai / kimi / minimax / deepseek / qwen / glm）
+OPENAI_COMPATIBLE_PROVIDERS = tuple(
+    pid for pid, meta in Config.PROVIDER_META.items() if meta.get('openai_compat')
+)
 
 # CLI 调用的瞬时失败重试配置
 MAX_RETRIES = 3
@@ -47,9 +55,9 @@ class LLMClient:
         self.model = model or Config.LLM_MODEL_NAME
 
         if self.provider not in CLI_PROVIDERS and self.provider not in OPENAI_COMPATIBLE_PROVIDERS:
+            _supported = " / ".join(repr(p) for p in (*CLI_PROVIDERS, *OPENAI_COMPATIBLE_PROVIDERS))
             raise ValueError(
-                f"不支持的 LLM 提供方: {self.provider!r}。"
-                f"可选: 'claude-cli' / 'codex-cli' / 'openai' / 'kimi' / 'minimax'。"
+                f"不支持的 LLM 提供方: {self.provider!r}。可选: {_supported}。"
             )
 
         # 仅在使用 OpenAI 兼容提供方（openai/kimi）时才创建 OpenAI 客户端（CLI 模式无需 API Key）
@@ -187,11 +195,11 @@ class LLMClient:
         if response_format:
             kwargs["response_format"] = response_format
 
-        # kimi / minimax 推理模型：默认关闭推理，避免 reasoning 吃光 max_tokens 导致 content 为空。
-        if self.provider in ("kimi", "minimax"):
-            extra_body = Config.reasoning_extra_body()
-            if extra_body:
-                kwargs["extra_body"] = extra_body
+        # 推理模型(kimi/minimax/deepseek/qwen/glm)：默认关闭推理，避免 reasoning 吃光
+        # max_tokens 导致 content 为空。reasoning_extra_body() 对非推理提供方返回 None。
+        extra_body = Config.reasoning_extra_body()
+        if extra_body:
+            kwargs["extra_body"] = extra_body
 
         response = self._openai_client.chat.completions.create(**kwargs)
         choice = response.choices[0]
@@ -222,7 +230,7 @@ class LLMClient:
         try:
             result = subprocess.run(
                 ["claude", "-p", "--output-format", "json", prompt],
-                capture_output=True, text=True, timeout=300,
+                capture_output=True, text=True, timeout=CLI_TIMEOUT,
                 cwd="/tmp"
             )
 
@@ -252,7 +260,7 @@ class LLMClient:
             return content
 
         except subprocess.TimeoutExpired:
-            raise RuntimeError("Claude CLI timed out after 300s")
+            raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s")
         except FileNotFoundError:
             raise RuntimeError(
                 "未找到 `claude` 可执行文件，请确认已安装 Claude Code CLI 并加入 PATH"
@@ -275,7 +283,7 @@ class LLMClient:
             result = subprocess.run(
                 ["codex", "exec", "--skip-git-repo-check"],
                 input=prompt,
-                capture_output=True, text=True, timeout=180,
+                capture_output=True, text=True, timeout=CLI_TIMEOUT,
                 cwd="/tmp"
             )
 
@@ -299,7 +307,7 @@ class LLMClient:
             return self._clean_content(content)
 
         except subprocess.TimeoutExpired:
-            raise RuntimeError("Codex CLI timed out after 180s")
+            raise RuntimeError(f"Codex CLI timed out after {CLI_TIMEOUT}s")
         except FileNotFoundError:
             raise RuntimeError(
                 "未找到 `codex` 可执行文件，请确认已安装 Codex CLI 并加入 PATH"

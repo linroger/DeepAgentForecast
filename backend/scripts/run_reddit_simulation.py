@@ -511,7 +511,7 @@ class RedditSimulationRunner:
         
         time_config = self.config.get("time_config", {})
         total_hours = time_config.get("total_simulation_hours", 72)
-        minutes_per_round = time_config.get("minutes_per_round", 30)
+        minutes_per_round = time_config.get("minutes_per_round", 60)
         total_rounds = (total_hours * 60) // minutes_per_round
         
         # 如果指定了最大轮数，则截断
@@ -615,9 +615,14 @@ class RedditSimulationRunner:
                 agent: LLMAction()
                 for _, agent in active_agents
             }
-            
-            await self.env.step(actions)
-            
+
+            # 健壮性：单轮内某个 agent LLM 调用失败不应中断整场模拟，记录并跳过本轮
+            try:
+                await self.env.step(actions)
+            except Exception as step_err:
+                print(f"  [Round {round_num + 1}] env.step 失败，跳过本轮（不中断整场模拟）: {step_err}")
+                continue
+
             if (round_num + 1) % 10 == 0 or round_num == 0:
                 elapsed = (datetime.now() - start_time).total_seconds()
                 progress = (round_num + 1) / total_rounds * 100
@@ -679,8 +684,8 @@ async def main():
     parser.add_argument(
         '--max-rounds',
         type=int,
-        default=None,
-        help='最大模拟轮数（可选，用于截断过长的模拟）'
+        default=40,
+        help='最大模拟轮数（默认 40，用于截断过长的模拟；传 0/负数视为不限制）'
     )
     parser.add_argument(
         '--no-wait',

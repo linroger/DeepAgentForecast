@@ -24,7 +24,9 @@ from .logger import get_logger
 
 logger = get_logger('mirofish.oasis_llm')
 
-DEFAULT_CLI_SEMAPHORE = 3
+# CLI 提供方(claude-cli/codex-cli)的并发上限。从 3 提到 8 以显著缩短每轮墙钟时间
+# （每个 CLI 调用会 spawn 子进程，8 是吞吐与系统负载的稳妥平衡）。可用 OASIS_CLI_SEMAPHORE 覆盖。
+DEFAULT_CLI_SEMAPHORE = 8
 DEFAULT_OPENAI_SEMAPHORE = 30
 
 
@@ -240,16 +242,16 @@ def create_oasis_model(config: Dict[str, Any], use_boost: bool = False):
     if provider == 'kimi':
         # 仅 Kimi-for-coding 网关按 UA 校验 coding-agent 身份；MiniMax 不需要。
         _inject_coding_agent_ua(model)
-    if provider in ('kimi', 'minimax'):
-        # 推理模型默认关闭推理，避免 reasoning 吃光 token 预算导致 content 为空。
-        # CAMEL 会把 model_config_dict 透传为 create() 关键字参数，故注入 extra_body。
-        extra_body = Config.reasoning_extra_body()
-        if extra_body is not None:
-            try:
-                model.model_config_dict["extra_body"] = extra_body
-                logger.info(f"OASIS {provider}: 已关闭推理(thinking:disabled) via model_config_dict.extra_body")
-            except Exception as e:
-                logger.warning(f"OASIS {provider}: 注入 extra_body 失败（继续，但可能触发空 content）: {e}")
+    # 推理模型(kimi/minimax/deepseek/qwen/glm)默认关闭推理，避免 reasoning 吃光 token 预算
+    # 导致 content 为空。reasoning_extra_body() 对非推理提供方返回 None，故可统一调用。
+    # CAMEL 会把 model_config_dict 透传为 create() 关键字参数，故注入 extra_body。
+    extra_body = Config.reasoning_extra_body()
+    if extra_body is not None:
+        try:
+            model.model_config_dict["extra_body"] = extra_body
+            logger.info(f"OASIS {provider}: 已关闭推理 via model_config_dict.extra_body={extra_body}")
+        except Exception as e:
+            logger.warning(f"OASIS {provider}: 注入 extra_body 失败（继续，但可能触发空 content）: {e}")
     return model
 
 

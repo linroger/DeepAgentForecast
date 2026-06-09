@@ -519,7 +519,7 @@ class TwitterSimulationRunner:
         # 加载时间配置
         time_config = self.config.get("time_config", {})
         total_hours = time_config.get("total_simulation_hours", 72)
-        minutes_per_round = time_config.get("minutes_per_round", 30)
+        minutes_per_round = time_config.get("minutes_per_round", 60)
         
         # 计算总轮数
         total_rounds = (total_hours * 60) // minutes_per_round
@@ -625,9 +625,13 @@ class TwitterSimulationRunner:
                 for _, agent in active_agents
             }
             
-            # 执行动作
-            await self.env.step(actions)
-            
+            # 执行动作（健壮性：单轮内某个 agent LLM 调用失败不应中断整场模拟，记录并跳过本轮）
+            try:
+                await self.env.step(actions)
+            except Exception as step_err:
+                print(f"  [Round {round_num + 1}] env.step 失败，跳过本轮（不中断整场模拟）: {step_err}")
+                continue
+
             # 打印进度
             if (round_num + 1) % 10 == 0 or round_num == 0:
                 elapsed = (datetime.now() - start_time).total_seconds()
@@ -690,8 +694,8 @@ async def main():
     parser.add_argument(
         '--max-rounds',
         type=int,
-        default=None,
-        help='最大模拟轮数（可选，用于截断过长的模拟）'
+        default=40,
+        help='最大模拟轮数（默认 40，用于截断过长的模拟；传 0/负数视为不限制）'
     )
     parser.add_argument(
         '--no-wait',

@@ -568,10 +568,10 @@ PLAN_SYSTEM_PROMPT = """\
 - ❌ 不是泛泛而谈的舆情综述
 
 【章节数量限制】
-- 最少2个章节，最多5个章节
-- 不需要子章节，每个章节直接撰写完整内容
-- 内容要精炼，聚焦于核心预测发现
-- 章节结构由你根据预测结果自主设计
+- 最少5个章节，最多8个章节
+- 不需要子章节，每个章节直接撰写完整内容（每章为一个深入的长篇分析）
+- 内容要丰富详实、层层递进，全面覆盖核心预测发现的不同维度
+- 章节结构由你根据预测结果自主设计（例如：未来全景 / 群体博弈 / 涌现信号 / 风险暗面 / 关键转折 / 应对建议 等）
 
 请输出JSON格式的报告大纲，格式如下：
 {
@@ -585,7 +585,7 @@ PLAN_SYSTEM_PROMPT = """\
     ]
 }
 
-注意：sections数组最少2个，最多5个元素！"""
+注意：sections数组最少5个，最多8个元素！每个章节都应是一篇深入详实的长篇分析。"""
 
 PLAN_USER_PROMPT_TEMPLATE = """\
 【预测场景设定】
@@ -607,7 +607,7 @@ PLAN_USER_PROMPT_TEMPLATE = """\
 
 根据预测结果，设计最合适的报告章节结构。
 
-【再次提醒】报告章节数量：最少2个，最多5个，内容要精炼聚焦于核心预测发现。"""
+【再次提醒】报告章节数量：最少5个，最多8个；每章都是一篇深入详实的长篇分析，全面覆盖核心预测发现的不同维度。"""
 
 # ── 章节生成 prompt ──
 
@@ -643,7 +643,7 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
    - 你正在以「上帝视角」观察未来的预演
    - 所有内容必须来自模拟世界中发生的事件和Agent言行
    - 禁止使用你自己的知识来编写报告内容
-   - 每个章节至少调用3次工具（最多5次）来观察模拟的世界，它代表了未来
+   - 每个章节至少调用4次工具（最多8次）来观察模拟的世界，它代表了未来
 
 2. 【必须引用Agent的原始言行】
    - Agent的发言和行为是对未来人群行为的预测
@@ -702,7 +702,7 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 ```
 
 ═══════════════════════════════════════════════════════════════
-【可用检索工具】（每章节调用3-5次）
+【可用检索工具】（每章节调用4-8次）
 ═══════════════════════════════════════════════════════════════
 
 {tools_description}
@@ -738,6 +738,13 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 【章节内容要求】
 ═══════════════════════════════════════════════════════════════
 
+0. 【篇幅要求 - 极其重要】本章节必须是一篇深入、详实、丰富的长篇分析：
+   - 正文长度不少于 1500 字，目标 1800–2800 字（不含引用块）
+   - 必须层层展开：先给出整体判断，再分多个角度深入论证，每个角度都要有
+     具体的模拟证据（数据、事件、Agent 原话）支撑
+   - 充分展开因果链条、二阶效应、不同人群的分化反应、潜在转折点
+   - ❌ 严禁写成几百字的提纲式摘要或泛泛而谈——那是不合格的章节
+   - ✅ 像撰写一篇严肃深度报告的章节那样，写得充实、有洞察、有层次
 1. 内容必须基于工具检索到的模拟数据
 2. 大量引用原文来展示模拟效果
 3. 使用Markdown格式（但禁止使用标题）：
@@ -787,8 +794,9 @@ SECTION_USER_PROMPT_TEMPLATE = """\
 
 请开始：
 1. 首先思考（Thought）这个章节需要什么信息
-2. 然后调用工具（Action）获取模拟数据
-3. 收集足够信息后输出 Final Answer（纯正文，无任何标题）"""
+2. 然后调用工具（Action）获取模拟数据（建议 4-8 次，覆盖多个角度）
+3. 收集足够信息后输出 Final Answer（纯正文，无任何标题）
+4. 【篇幅】Final Answer 必须充实详尽，不少于 1500 字、目标 1800–2800 字，层层深入、证据扎实，不要写成简短摘要"""
 
 # ── ReACT 循环内消息模板 ──
 
@@ -923,8 +931,8 @@ class ReportAgent:
     3. 反思阶段：检查内容完整性和准确性
     """
     
-    # 最大工具调用次数（每个章节）
-    MAX_TOOL_CALLS_PER_SECTION = 5
+    # 最大工具调用次数（每个章节）— 提高以支撑更深入、更长篇的章节
+    MAX_TOOL_CALLS_PER_SECTION = 8
     
     # 最大反思轮数
     MAX_REFLECTION_ROUNDS = 3
@@ -1317,8 +1325,8 @@ class ReportAgent:
         if previous_sections:
             previous_parts = []
             for sec in previous_sections:
-                # 每个章节最多4000字
-                truncated = sec[:4000] + "..." if len(sec) > 4000 else sec
+                # 每个已完成章节最多保留 8000 字作为上下文（避免重复、保持连贯）
+                truncated = sec[:8000] + "..." if len(sec) > 8000 else sec
                 previous_parts.append(truncated)
             previous_content = "\n\n---\n\n".join(previous_parts)
         else:
@@ -1336,8 +1344,8 @@ class ReportAgent:
         
         # ReACT循环
         tool_calls_count = 0
-        max_iterations = 5  # 最大迭代轮数
-        min_tool_calls = 3  # 最少工具调用次数
+        max_iterations = 10  # 最大迭代轮数（更高以支撑更深入的检索与更长的章节）
+        min_tool_calls = 4  # 最少工具调用次数
         conflict_retries = 0  # 工具调用与Final Answer同时出现的连续冲突次数
         contamination_retries = 0  # 输出被污染（系统提示泄漏/工具调用残留）的连续重试次数
         MAX_CONTAMINATION_RETRIES = 2  # 污染输出最多纠正重试次数
@@ -1355,11 +1363,12 @@ class ReportAgent:
                     f"深度检索与撰写中 ({tool_calls_count}/{self.MAX_TOOL_CALLS_PER_SECTION})"
                 )
             
-            # 调用LLM
+            # 调用LLM（提高 max_tokens 以容纳更长的章节正文；对 OpenAI 兼容提供方生效，
+            # CLI 提供方由 prompt 篇幅下限驱动）
             response = self.llm.chat(
                 messages=messages,
                 temperature=0.5,
-                max_tokens=4096
+                max_tokens=8192
             )
 
             # 检查 LLM 返回是否为 None（API 异常或内容为空）
@@ -1592,11 +1601,11 @@ class ReportAgent:
         # 达到最大迭代次数，强制生成内容
         logger.warning(f"章节 {section.title} 达到最大迭代次数，强制生成")
         messages.append({"role": "user", "content": REACT_FORCE_FINAL_MSG})
-        
+
         response = self.llm.chat(
             messages=messages,
             temperature=0.5,
-            max_tokens=4096
+            max_tokens=8192
         )
 
         # 检查强制收尾时 LLM 返回是否为 None
@@ -1914,9 +1923,9 @@ class ReportAgent:
         try:
             report = ReportManager.get_report_by_simulation(self.simulation_id)
             if report and report.markdown_content:
-                # 限制报告长度，避免上下文过长
-                report_content = report.markdown_content[:15000]
-                if len(report.markdown_content) > 15000:
+                # 限制报告长度，避免上下文过长（放宽到 40000 字以覆盖更长的报告）
+                report_content = report.markdown_content[:40000]
+                if len(report.markdown_content) > 40000:
                     report_content += "\n\n... [报告内容已截断] ..."
         except Exception as e:
             logger.warning(f"获取报告内容失败: {e}")

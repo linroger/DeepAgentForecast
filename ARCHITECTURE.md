@@ -319,7 +319,11 @@ progress.
 ## 6. LLM provider abstraction
 
 Two cooperating modules make every LLM call provider-agnostic. `Config.LLM_PROVIDER`
-selects one of `claude-cli` (default), `codex-cli`, `openai`, `kimi`.
+selects one of 8 providers (data-driven via `PROVIDER_META`): `claude-cli`
+(default), `codex-cli`, `openai`, `kimi`, `minimax`, `deepseek`, `qwen`, `glm`.
+The last six are OpenAI-compatible API providers needing `LLM_API_KEY`;
+`kimi`/`minimax`/`deepseek`/`qwen`/`glm` ship sensible default `BASE_URL`/`MODEL_NAME`
+so you only set `LLM_API_KEY`.
 
 - **`utils/llm_client.py` — `LLMClient`** is used by all *pipeline* generation
   (ontology, profiles, config, report). Uniform interface: `chat(...)` and
@@ -333,7 +337,7 @@ selects one of `claude-cli` (default), `codex-cli`, `openai`, `kimi`.
     `User-Agent` header (`claude-cli/1.0.0`) — the Kimi-for-coding gateway
     authorises by UA — and disables hidden "thinking" by default so reasoning
     tokens don't exhaust the budget and return empty content.
-- **`utils/oasis_llm.py`** bridges the same four providers into the CAMEL
+- **`utils/oasis_llm.py`** bridges the same 8 providers into the CAMEL
   `ChatCompletion` shape OASIS expects. CLI providers are wrapped in a
   **`CLIModel`** (a fake `OpenAIModel` that calls `LLMClient` and synthesises a
   `ChatCompletion` with estimated token usage; it ignores `tools=` because CLI

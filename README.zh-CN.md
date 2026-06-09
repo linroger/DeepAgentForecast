@@ -145,8 +145,9 @@ flowchart LR
 | **Node.js** | 18+ |
 | **Python** | ≥ 3.11（DeerFlow 研究引擎需要 Python ≥ 3.12，推荐 3.13） |
 | **uv** | Python 包管理器（最新版） |
+| **git** | 前置条件：`setup.sh` 用它自动克隆 DeerFlow 研究引擎仓库 |
 | **Zep Cloud API Key** | **始终必填**（免费额度即可）：<https://app.getzep.com/> |
-| **LLM** | 默认使用本机 `claude` 或 `codex` CLI（无需 API Key）；仅 `openai` / `kimi` / `minimax` 需要 API Key |
+| **LLM** | 默认使用本机 `claude` 或 `codex` CLI（无需 API Key）；`openai` / `kimi` / `minimax` / `deepseek` / `qwen` / `glm` 等 OpenAI 兼容提供方需要 API Key |
 
 ---
 
@@ -162,10 +163,16 @@ flowchart LR
 
 该脚本会：
 
-- 检查前置条件（`node>=18`、`npm`、`uv`、`python3`），缺失时只**告警、绝不硬失败**；
+- 检查前置条件（`git`、`node>=18`、`npm`、`uv`、`python3`），缺失时只**告警、绝不硬失败**（`git` 为克隆 DeerFlow 所必需）；
+- **自动下载 DeerFlow 研究引擎**：若同级目录 `../deer-flow` 不存在，则从 <https://github.com/bytedance/deer-flow> 克隆（固定到一个已知可用的提交），随后应用 `deerflow_bridge/` 中的「桥接覆盖层（bridge overlay）」：
+  - `deerflow_research.py` → `deer-flow/` 根目录（研究驱动 / 入口脚本）；
+  - `patches/models/*.py` → `deer-flow/backend/packages/harness/deerflow/models/`（`claude_provider.py` = 修复 401 的 OAuth 优先策略；`credential_loader.py` = 从 macOS 钥匙串读取凭据；`patched_minimax.py` = 剥除逐条消息的 `name`，修复 MiniMax「400 user name must be consistent」）；
+  - `config.yaml` → `deer-flow/config.yaml`（仅当其不存在时写入；**绝不覆盖已存在的配置**）；
+
+  之后用 `uv` 构建 DeerFlow 隔离 venv（Python 3.13）。可用环境变量覆盖：`DEERFLOW_DIR`（位置）、`DEERFLOW_REPO`（克隆地址）、`DEERFLOW_REF`（固定提交；设为 `main` 可跟踪 HEAD）；
 - **自动探测模型提供方**：检测到本机 `claude` CLI → `LLM_PROVIDER=claude-cli`、`DEERFLOW_MODEL=claude`；检测到 `codex` CLI → `LLM_PROVIDER=codex-cli`、`DEERFLOW_MODEL=claude`；两者皆无 → 回落到默认 `claude-cli` 并告警；
 - 从 `.env.example` 生成 `.env`（**永不覆盖已存在的 `.env`**），并安全地写入探测到的提供方配置；交互式终端下还会提示你粘贴 `ZEP_API_KEY`；
-- 安装根目录 + 前端 + 后端依赖（后端用 `uv sync`），并在检测到同级 `deer-flow` 仓库时一并构建其研究引擎 venv。
+- 安装根目录 + 前端 + 后端依赖（后端用 `uv sync`）。
 
 脚本是幂等的，可安全地重复运行。完成后按提示执行 `npm run dev` 并打开 `http://localhost:3000/research`。
 
@@ -185,12 +192,16 @@ cp .env.example .env
 npm run setup:all
 ```
 
-> DeerFlow 位于**同级目录** `deer-flow`，其 langchain/langgraph 依赖与后端隔离，运行在自己的 venv（`deer-flow/backend/.venv`，Python ≥ 3.12）中。如需手动构建该 venv：
+> **DeerFlow 研究引擎**：推荐直接运行 `./setup.sh`，它会自动克隆 `../deer-flow` 并应用桥接覆盖层。若需手动准备：
 >
-> ```bash
-> UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv \
->   uv sync --project deer-flow/backend --python 3.13
-> ```
+> 1. 将 DeerFlow 克隆为**同级目录** `deer-flow`（来自 <https://github.com/bytedance/deer-flow>）。
+> 2. 应用 `deerflow_bridge/` 桥接覆盖层：将研究驱动 `deerflow_research.py` 复制到 `deer-flow/` 根目录；将 `patches/models/*.py`（`claude_provider.py` / `credential_loader.py` / `patched_minimax.py`）复制到 `deer-flow/backend/packages/harness/deerflow/models/`；并将 `config.yaml` 复制到 `deer-flow/config.yaml`（仅在其不存在时）。
+> 3. 构建其隔离 venv（langchain/langgraph 依赖与后端隔离，`deer-flow/backend/.venv`，Python ≥ 3.12）：
+>
+>    ```bash
+>    UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv \
+>      uv sync --project deer-flow/backend --python 3.13
+>    ```
 
 #### 3. 启动前后端
 
@@ -205,17 +216,22 @@ npm run dev
 
 ## 模型提供方与切换方式
 
-支持的 LLM 提供方（均可在**运行时**切换，切换对**新发起的运行**生效）：
+报告 + 模拟阶段共支持 8 个 `LLM_PROVIDER` 取值（均可在**运行时**切换，切换对**新发起的运行**生效）：
 
 | 提供方 | 说明 | 是否需要 API Key |
 |--------|------|------------------|
 | **`claude-cli`** | **默认**。使用本机 `claude` CLI / Claude Code 订阅。 | 否 |
-| `codex-cli` | 使用本机 `codex` CLI / Codex 订阅。 | 否 |
+| `codex-cli` | 使用本机 `codex` CLI / Codex（ChatGPT）订阅。 | 否 |
 | `openai` | 任意 OpenAI 兼容 API（需 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL_NAME`）。 | 是 |
-| `kimi` | Kimi-for-coding（OpenAI 兼容 + coding-agent User-Agent 网关）。 | 是 |
-| `minimax` | MiniMax-M3 代码计划（`api.minimaxi.com`；约 1M token 上下文、最高 512K 输出；推理模型）。 | 是 |
+| `kimi` | Kimi-for-coding（`api.kimi.com/coding`；OpenAI 兼容 + coding-agent User-Agent 网关）。 | 是 |
+| `minimax` | MiniMax-M3（`https://api.minimaxi.com/v1`；推理模型）。 | 是 |
+| `deepseek` | DeepSeek（`https://api.deepseek.com/v1`，默认模型 `deepseek-chat`；**研究阶段**改用旗舰 `deepseek-v4-pro`，百万 token 上下文）。 | 是 |
+| `qwen` | Qwen（`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`，默认模型 `qwen-plus`；**研究阶段**改用旗舰 `qwen3.7-max`，百万 token 上下文）。 | 是 |
+| `glm` | GLM-4.6（`https://api.z.ai/api/paas/v4`，模型 `glm-4.6`）。 | 是 |
 
-> **关于深度研究阶段**：DeerFlow 的深度研究阶段目前仅支持 **`claude`** 与 **`minimax`** 两种研究模型。选择其他提供方时，**研究阶段会回落到 Claude**，而模拟 / 报告阶段仍使用你所选择的提供方。
+> `openai` / `kimi` / `minimax` / `deepseek` / `qwen` / `glm` 都属于「OpenAI 兼容 API」提供方，均需 `LLM_API_KEY`；其中 `kimi` / `minimax` / `deepseek` / `qwen` / `glm` 已内置合理的默认 `LLM_BASE_URL` / `LLM_MODEL_NAME`，因此通常只需填入 `LLM_API_KEY`。
+
+> **关于深度研究阶段**：DeerFlow 的深度研究阶段（`DEERFLOW_MODEL`）支持 6 个取值：**`claude`（默认）** | `minimax` | `deepseek` | `qwen` | `glm` | `codex`。其中 `claude` 使用 Claude Code OAuth（无需 API Key）；`openai` / `kimi` 会映射到 `claude` 配置。当所选提供方在研究阶段不受支持时，**研究阶段会回落到 Claude**，而模拟 / 报告阶段仍使用你所选择的提供方。若以 `minimax` / `deepseek` / `qwen` / `glm` 运行研究阶段，需分别提供 `MINIMAX_API_KEY` / `DEEPSEEK_API_KEY` / `DASHSCOPE_API_KEY` / `ZHIPUAI_API_KEY`。
 
 ### 三种切换方式
 
@@ -231,22 +247,27 @@ npm run dev
 
 ```env
 # ===== LLM 提供方 =====
-# claude-cli | codex-cli | openai | kimi | minimax
+# claude-cli | codex-cli | openai | kimi | minimax | deepseek | qwen | glm
 LLM_PROVIDER=claude-cli
 
 # ===== Zep 记忆图谱（始终必填）=====
 # 免费额度即可支撑简单使用：https://app.getzep.com/
 ZEP_API_KEY=...
 
-# ===== 仅 openai / kimi / minimax 提供方需要 =====
+# ===== OpenAI 兼容提供方需要（openai / kimi / minimax / deepseek / qwen / glm）=====
+# kimi / minimax / deepseek / qwen / glm 已内置默认 BASE_URL / MODEL_NAME，通常只需填 LLM_API_KEY
 # LLM_API_KEY=...
 # LLM_BASE_URL=...
 # LLM_MODEL_NAME=...
 
 # ===== DeerFlow 深度研究（可选，全部有默认值）=====
 # DEERFLOW_DIR=                 # 留空 = <项目根>/../deer-flow（同级目录）
+# DEERFLOW_REPO=                # 留空 = https://github.com/bytedance/deer-flow（克隆地址）
+# DEERFLOW_REF=                 # 留空 = 固定的已知可用提交；设为 main 可跟踪 HEAD
 # DEERFLOW_PYTHON=              # 留空 = 自动探测 deer-flow/backend/.venv，再退回 uv run
-# DEERFLOW_MODEL=claude         # 研究模型：claude | minimax
+# DEERFLOW_MODEL=claude         # 研究模型：claude | minimax | deepseek | qwen | glm | codex
+# 以 minimax / deepseek / qwen / glm 运行研究阶段时，分别需要：
+# MINIMAX_API_KEY / DEEPSEEK_API_KEY / DASHSCOPE_API_KEY / ZHIPUAI_API_KEY
 # DEERFLOW_RESEARCH_DEPTH=standard
 # DEERFLOW_RESEARCH_LANGUAGE=Chinese
 # DEERFLOW_RESEARCH_TIMEOUT=2400
@@ -356,10 +377,10 @@ MiroFish-0.1.2/
 | 问题 | 排查方向 |
 |------|----------|
 | 启动即报缺少 Zep 配置 | `ZEP_API_KEY` 始终必填。检查根目录 `.env` 是否已填入真实 Key（免费额度可在 <https://app.getzep.com/> 申请）。 |
-| 研究阶段（stage 1）无法运行 | DeerFlow 需作为 `MiroFish-0.1.2` 的**同级目录** `deer-flow` 存在，且已构建好自己的 venv（Python ≥ 3.12）。重新运行 `./setup.sh`，或设置 `DEERFLOW_DIR` 指向其位置。 |
-| 选了 `openai`/`kimi`/`minimax` 却报鉴权失败 | 这些提供方需要 `LLM_API_KEY`（以及按需的 `LLM_BASE_URL` / `LLM_MODEL_NAME`）。可在 `.env`、UI 设置菜单或 `POST /api/settings/llm` 中配置。 |
+| 研究阶段（stage 1）无法运行 | DeerFlow 需作为 `MiroFish-0.1.2` 的**同级目录** `deer-flow` 存在、已应用 `deerflow_bridge/` 桥接覆盖层、且已构建好自己的 venv（Python ≥ 3.12）。重新运行 `./setup.sh`（会自动克隆并应用覆盖层），或设置 `DEERFLOW_DIR` 指向其位置。 |
+| 选了需要 Key 的提供方（`openai`/`kimi`/`minimax`/`deepseek`/`qwen`/`glm`）却报鉴权失败 | 这些 OpenAI 兼容提供方需要 `LLM_API_KEY`（以及按需的 `LLM_BASE_URL` / `LLM_MODEL_NAME`）。可在 `.env`、UI 设置菜单或 `POST /api/settings/llm` 中配置。 |
 | 切换了模型提供方但当前运行没变化 | 提供方切换只对**新发起的运行**生效；已在运行中的管线沿用其启动时读取的配置。请重新发起一次运行。 |
-| 选了非 Claude/MiniMax 提供方，研究阶段仍走 Claude | 这是预期行为：DeerFlow 深度研究阶段目前仅支持 `claude` 与 `minimax`，其他提供方在研究阶段回落到 Claude，模拟/报告阶段仍用所选提供方。 |
+| 选了不受研究阶段支持的提供方，研究阶段仍走 Claude | 这是预期行为：DeerFlow 深度研究阶段（`DEERFLOW_MODEL`）支持 `claude` / `minimax` / `deepseek` / `qwen` / `glm` / `codex`；不受支持的提供方在研究阶段回落到 Claude，模拟/报告阶段仍用所选提供方。 |
 | 后端起来了但前端 `/api` 请求 404 | 确认后端在 `:5001` 运行，且前端开发服务器（`:3000`）已将 `/api` 代理至 `5001`；用 `npm run dev` 同时启动两端最为稳妥。 |
-| `uv` / `node` 缺失或版本过旧 | 满足环境要求：Node.js 18+、Python ≥ 3.11（DeerFlow 需 ≥ 3.12，推荐 3.13）、安装最新版 `uv`。`./setup.sh` 会就缺失项给出告警与安装提示。 |
+| `git` / `uv` / `node` 缺失或版本过旧 | 满足环境要求：`git`（克隆 DeerFlow 所必需）、Node.js 18+、Python ≥ 3.11（DeerFlow 需 ≥ 3.12，推荐 3.13）、安装最新版 `uv`。`./setup.sh` 会就缺失项给出告警与安装提示。 |
 ```

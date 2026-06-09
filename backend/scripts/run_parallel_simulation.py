@@ -1164,8 +1164,11 @@ async def run_twitter_simulation(
                 pass
         
         if initial_actions:
-            await result.env.step(initial_actions)
-            log_info(f"已发布 {len(initial_actions)} 条初始帖子")
+            try:
+                await result.env.step(initial_actions)
+                log_info(f"已发布 {len(initial_actions)} 条初始帖子")
+            except Exception as init_err:
+                log_info(f"初始帖子发布失败，跳过（继续进入主循环）: {init_err}")
     
     # 记录 round 0 结束
     if action_logger:
@@ -1174,7 +1177,7 @@ async def run_twitter_simulation(
     # 主模拟循环
     time_config = config.get("time_config", {})
     total_hours = time_config.get("total_simulation_hours", 72)
-    minutes_per_round = time_config.get("minutes_per_round", 30)
+    minutes_per_round = time_config.get("minutes_per_round", 60)
     total_rounds = (total_hours * 60) // minutes_per_round
     
     # 如果指定了最大轮数，则截断
@@ -1212,8 +1215,16 @@ async def run_twitter_simulation(
             continue
         
         actions = {agent: LLMAction() for _, agent in active_agents}
-        await result.env.step(actions)
-        
+        # 健壮性：单次 env.step 内的某个 agent LLM 调用失败（超时/降级/异常）不应中断整场模拟。
+        # 记录并跳过本轮，让模拟继续，保住此前所有轮次的进度。
+        try:
+            await result.env.step(actions)
+        except Exception as step_err:
+            log_info(f"第 {round_num + 1} 轮 env.step 失败，跳过本轮（不中断整场模拟）: {step_err}")
+            if action_logger:
+                action_logger.log_round_end(round_num + 1, 0)
+            continue
+
         # 从数据库获取实际执行的动作并记录
         actual_actions, last_rowid = fetch_new_actions_from_db(
             db_path, last_rowid, agent_names
@@ -1363,8 +1374,11 @@ async def run_reddit_simulation(
                 pass
         
         if initial_actions:
-            await result.env.step(initial_actions)
-            log_info(f"已发布 {len(initial_actions)} 条初始帖子")
+            try:
+                await result.env.step(initial_actions)
+                log_info(f"已发布 {len(initial_actions)} 条初始帖子")
+            except Exception as init_err:
+                log_info(f"初始帖子发布失败，跳过（继续进入主循环）: {init_err}")
     
     # 记录 round 0 结束
     if action_logger:
@@ -1373,7 +1387,7 @@ async def run_reddit_simulation(
     # 主模拟循环
     time_config = config.get("time_config", {})
     total_hours = time_config.get("total_simulation_hours", 72)
-    minutes_per_round = time_config.get("minutes_per_round", 30)
+    minutes_per_round = time_config.get("minutes_per_round", 60)
     total_rounds = (total_hours * 60) // minutes_per_round
     
     # 如果指定了最大轮数，则截断
@@ -1411,8 +1425,16 @@ async def run_reddit_simulation(
             continue
         
         actions = {agent: LLMAction() for _, agent in active_agents}
-        await result.env.step(actions)
-        
+        # 健壮性：单次 env.step 内的某个 agent LLM 调用失败（超时/降级/异常）不应中断整场模拟。
+        # 记录并跳过本轮，让模拟继续，保住此前所有轮次的进度。
+        try:
+            await result.env.step(actions)
+        except Exception as step_err:
+            log_info(f"第 {round_num + 1} 轮 env.step 失败，跳过本轮（不中断整场模拟）: {step_err}")
+            if action_logger:
+                action_logger.log_round_end(round_num + 1, 0)
+            continue
+
         # 从数据库获取实际执行的动作并记录
         actual_actions, last_rowid = fetch_new_actions_from_db(
             db_path, last_rowid, agent_names
@@ -1471,8 +1493,8 @@ async def main():
     parser.add_argument(
         '--max-rounds',
         type=int,
-        default=None,
-        help='最大模拟轮数（可选，用于截断过长的模拟）'
+        default=40,
+        help='最大模拟轮数（默认 40，用于截断过长的模拟；传 0/负数视为不限制）'
     )
     parser.add_argument(
         '--no-wait',
@@ -1512,7 +1534,7 @@ async def main():
     
     time_config = config.get("time_config", {})
     total_hours = time_config.get('total_simulation_hours', 72)
-    minutes_per_round = time_config.get('minutes_per_round', 30)
+    minutes_per_round = time_config.get('minutes_per_round', 60)
     config_total_rounds = (total_hours * 60) // minutes_per_round
     
     log_manager.info(f"模拟参数:")
@@ -1543,11 +1565,20 @@ async def main():
         reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds)
     else:
         # 并行运行（每个平台使用独立的日志记录器）
+        # return_exceptions=True：一个平台抛异常不会取消另一个平台、也不会让 main() 崩溃；
+        # 异常作为结果返回，下面单独降级为 None 并记录，保证平台之间相互隔离。
         results = await asyncio.gather(
             run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds),
             run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds),
+            return_exceptions=True,
         )
         twitter_result, reddit_result = results
+        if isinstance(twitter_result, BaseException):
+            log_manager.error(f"Twitter 平台模拟异常（已隔离，不影响 Reddit）: {twitter_result}")
+            twitter_result = None
+        if isinstance(reddit_result, BaseException):
+            log_manager.error(f"Reddit 平台模拟异常（已隔离，不影响 Twitter）: {reddit_result}")
+            reddit_result = None
     
     total_elapsed = (datetime.now() - start_time).total_seconds()
     log_manager.info("=" * 60)

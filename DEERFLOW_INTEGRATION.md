@@ -253,16 +253,39 @@ China, where `api.minimaxi.com` is reachable and the plan is a flat-rate "code p
   for stable JSON output; `_clean_content` also strips any inline `<think>`. No User-Agent
   gating (unlike Kimi). Both the `LLMClient` path (ontology/personas/report) and the OASIS
   CAMEL path are wired.
-- **DeerFlow** → the `minimax` model in `config.yaml` (`langchain_openai:ChatOpenAI`,
-  `MiniMax-M3`, key from `$MINIMAX_API_KEY`). Select it with `DEERFLOW_MODEL=minimax`
-  (or `deerflow_research.py --model minimax`). `deerflow_research.py` strips any residual
-  `<think>` from the report.
+- **DeerFlow** → the `minimax` model in `config.yaml` (`deerflow.models.patched_minimax:PatchedChatMiniMax`,
+  `MiniMax-M3`, key from `$MINIMAX_API_KEY`). `PatchedChatMiniMax` strips the
+  middleware-injected per-message `name` field that otherwise triggers MiniMax's
+  **"400 user name must be consistent"** error — tools and reasoning stay **ON**.
+  Select it with `DEERFLOW_MODEL=minimax` (or `deerflow_research.py --model minimax`).
+  `deerflow_research.py` strips any residual `<think>` from the report.
 
 To ride MiniMax on **both** engines: set `LLM_PROVIDER=minimax`, `LLM_API_KEY=<sk-cp-…>`,
 `MINIMAX_API_KEY=<sk-cp-…>`, `DEERFLOW_MODEL=minimax`. (Validated live: MiroFish `LLMClient`
 chat/chat_json, the OASIS `model.run()`, and a real ontology generation all succeed on
 MiniMax-M3. DeerFlow research over MiniMax uses **streaming**, which works on a normal host
 but is blocked inside hardened/no-egress sandboxes that break long-lived SSE sockets.)
+
+### 5.2 The full `DEERFLOW_MODEL` set (6 options)
+
+`DEERFLOW_MODEL` selects the deep-research stage model (the `deer-flow/config.yaml`
+model stanza). Six values are wired:
+
+| `DEERFLOW_MODEL` | Provider / model | Base URL | Key env (deer-flow) |
+|---|---|---|---|
+| `claude` *(default)* | Claude Code OAuth (`ClaudeChatModel`) | direct Anthropic API | none (`~/.claude/.credentials.json`) |
+| `minimax` | `PatchedChatMiniMax`, `MiniMax-M3` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` |
+| `deepseek` | DeepSeek V4, `deepseek-v4-pro` | `https://api.deepseek.com/v1` | `DEEPSEEK_API_KEY` |
+| `qwen` | Qwen3.7-Max, `qwen3.7-max` | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` |
+| `glm` | GLM-4.6, `glm-4.6` | `https://api.z.ai/api/paas/v4` | `ZHIPUAI_API_KEY` |
+| `codex` | Codex (ChatGPT) OAuth | direct OpenAI API | none (`~/.codex/auth.json`) |
+
+`claude` and `codex` ride a coding-plan subscription (no API key). The other four
+are OpenAI-compatible API stanzas and need only their per-provider `$KEY` env set
+(base URL / model name ship as sensible defaults in `config.yaml`). Select any of
+them with `DEERFLOW_MODEL=<value>` (or `deerflow_research.py --model <value>`).
+Mirror the matching MiroFish `LLM_PROVIDER` + key envs when you want **both** the
+research and report/simulation stages on the same provider.
 
 ---
 
@@ -315,10 +338,11 @@ entry. Power users can still skip research entirely.
 
 ## 7. Phased implementation plan
 
-**Phase 0 — Provisioning (½ day).** In `deer-flow/`: `make setup` (or copy
-`config.example.yaml` → `config.yaml`) with the single `ClaudeChatModel` entry from
-§5; enable a `web_search` provider (DDG works key-free; Tavily/Exa if a key is
-available); `uv sync` its own venv. Verify with
+**Phase 0 — Provisioning (½ day).** `./setup.sh` now does this automatically: it
+clones the pinned `../deer-flow`, applies the `deerflow_bridge/` overlay
+(`deerflow_research.py` + `patches/models/*.py` + `config.yaml` with the single
+`ClaudeChatModel` entry from §5), and builds its isolated `uv` venv. DDG `web_search`
+works key-free (Tavily/Exa if a key is available). Verify with
 `DeerFlowClient(model_name="claude").chat("hello")`. Confirm
 `~/.claude/.credentials.json` is fresh (`claude` logged in).
 
@@ -401,7 +425,16 @@ for concurrency; (optional, separate) route MiroFish LLM calls through
 
 ### What was built
 
-**DeerFlow side (`../deer-flow/`)**
+**DeerFlow side (`../deer-flow/`)** — *auto-provisioned by `./setup.sh`* (clones the
+sibling `../deer-flow` from `https://github.com/bytedance/deer-flow`, pinned to a
+known-good commit, then applies the **bridge overlay** from `deerflow_bridge/`:
+`deerflow_research.py` → repo root; `patches/models/*.py` → the harness `deerflow/models/`
+dir (`claude_provider.py` = OAuth-preference 401 fix, `credential_loader.py` = macOS
+Keychain source, `patched_minimax.py` = the name-strip fix); `config.yaml` → only if
+absent, never clobbering an existing one — then builds its isolated `uv` venv on Python
+3.13). `git` is a prerequisite; overridable via `DEERFLOW_DIR` / `DEERFLOW_REPO` /
+`DEERFLOW_REF` (set `DEERFLOW_REF=main` to track HEAD). Re-running `setup.sh` is
+idempotent. So the whole integration is reproducible from a single `./setup.sh`.
 - `config.yaml` — created from the template with one **active model `claude`**
   (`ClaudeChatModel`, Claude Code OAuth from `~/.claude/.credentials.json`,
   `supports_thinking`, native tool calling). DDG `web_search` + Jina `web_fetch`
@@ -417,7 +450,8 @@ for concurrency; (optional, separate) route MiroFish LLM calls through
 **MiroFish side (`MiroFish-0.1.2/backend/`)**
 - `app/config.py` — new `DEERFLOW_*` knobs with operational defaults:
   `DEERFLOW_DIR` (auto = sibling `../deer-flow`), `DEERFLOW_PYTHON` (auto-detect
-  `deer-flow/backend/.venv` → `uv run`), `DEERFLOW_MODEL` (`claude`),
+  `deer-flow/backend/.venv` → `uv run`), `DEERFLOW_MODEL` (`claude`; one of
+  `claude | minimax | deepseek | qwen | glm | codex`, see §5.2),
   `DEERFLOW_RESEARCH_DEPTH` (`standard`; quick/standard/deep),
   `DEERFLOW_RESEARCH_LANGUAGE` (`Chinese`), `DEERFLOW_RESEARCH_TIMEOUT` (`2400`s,
   ≈40-min research watchdog budget), `DEERFLOW_SUBAGENTS` (`false`) +
@@ -460,8 +494,10 @@ for concurrency; (optional, separate) route MiroFish LLM calls through
    Recreate it: `cd backend && uv venv --python 3.12 && uv sync` (matches the
    README's "Python ≥3.11,≤3.12"). This is unrelated to the integration — the base
    MiroFish app needs it too.
-2. **DeerFlow venv installed**: `cd ../deer-flow/backend && uv sync` (heavy
-   langchain/markitdown stack; use `UV_HTTP_TIMEOUT=300` on slow links).
+2. **DeerFlow repo + venv installed**: `./setup.sh` clones the pinned `../deer-flow`,
+   applies the `deerflow_bridge/` overlay, and builds the venv automatically (heavy
+   langchain/markitdown stack; use `UV_HTTP_TIMEOUT=300` on slow links). `git` is a
+   prerequisite. To do it by hand instead: `cd ../deer-flow/backend && uv sync`.
 3. **Claude Code logged in**: `~/.claude/.credentials.json` must hold a fresh
    `sk-ant-oat…` token (run `claude` once if expired). The bridge now pre-flights
    this and exits 3 with a clear message if the credential is missing/expired,

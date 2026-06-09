@@ -70,11 +70,27 @@ DEPTH_PRESETS: dict[str, dict[str, Any]] = {
 # ONE tool-free synthesis turn that writes the report from the already-gathered, thread-
 # checkpointed research context. Without this, a perfectly good research pass (dozens of
 # real sources fetched) is thrown away as "no report text produced".
-SYNTHESIS_TRIGGER_CHARS = 600
+# A too-SHORT primary report is as useless as a missing one for a downstream
+# simulation, so trigger the high-budget, tool-free synthesis whenever the primary
+# turn produced less than a full dossier's worth of text. The synthesis path runs
+# with thinking OFF and the model's full max_tokens, so it reliably writes long-form;
+# 4000 chars (~a couple of pages) is the floor below which we always re-synthesize.
+SYNTHESIS_TRIGGER_CHARS = 4000
 # Cap on how much gathered-research context to feed the tool-free synthesis net.
-# MiniMax-M3 has a ~1M-token context window, so we can pass a very large slice of
-# the gathered sources (~400k chars ≈ ~120k tokens) and still leave ample headroom.
-SYNTHESIS_MAX_CONTEXT_CHARS = 400000
+# Model-aware: MiniMax-M3 has a ~1M-token context window so it can ingest a very
+# large slice of the gathered sources for a richer, more detailed synthesis; Claude
+# (Sonnet 4.6, ~200K context) gets a smaller but still generous slice. Bigger context
+# in == richer dossier out.
+SYNTHESIS_MAX_CONTEXT_CHARS = 400000          # default / Claude-class (~100k tokens)
+SYNTHESIS_MAX_CONTEXT_CHARS_LARGE = 900000    # MiniMax-class 1M-context (~225k tokens)
+
+
+def _synthesis_context_cap(model_name: str) -> int:
+    """Pick the gathered-research context cap by model context-window class."""
+    name = (model_name or "").lower()
+    if "minimax" in name or "qwen" in name or "deepseek" in name:
+        return SYNTHESIS_MAX_CONTEXT_CHARS_LARGE
+    return SYNTHESIS_MAX_CONTEXT_CHARS
 
 REPORT_FILENAME = "research_report.md"
 REQUIREMENT_FILENAME = "prediction_requirement.txt"
@@ -158,6 +174,12 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
         "  4. The main points of contention, hot topics, and likely flashpoints.\n"
         "  5. Relevant facts, figures, and quotes, each attributable to a source.\n"
         "  6. A short list of the sources you used (titles + URLs).\n\n"
+        "LENGTH & DEPTH: This dossier is the sole ground-truth a downstream simulation "
+        "will reason over, so it must be LONG and richly detailed — aim for at least "
+        "2,500–4,000 words. Organize it with clear Markdown section headings (##), and "
+        "under each actor and topic go deep: specific numbers, dated events, direct "
+        "quotes, competing perspectives, second-order effects, and concrete scenarios. "
+        "Do NOT write a terse summary — exhaustive, well-structured coverage is the goal.\n\n"
         "IMPORTANT: Once you have gathered enough material across the angles above, you "
         "MUST stop calling tools and write the full report as your very next message. The "
         "written report is the deliverable — do not keep searching for marginal extra "
@@ -189,7 +211,11 @@ def build_synthesis_prompt(question: str, target_language: str | None) -> str:
         "  3. A timeline of key events with dates.\n"
         "  4. The main points of contention, hot topics, and likely flashpoints.\n"
         "  5. Relevant facts, figures, and quotes, each attributable to a source.\n"
-        "  6. A short list of the sources you used (titles + URLs).\n"
+        "  6. A short list of the sources you used (titles + URLs).\n\n"
+        "LENGTH & DEPTH: Write a LONG, comprehensive dossier — at least 2,500–4,000 "
+        "words — organized with clear Markdown section headings (##). Use ALL the "
+        "material you gathered above: every relevant figure, dated event, direct quote, "
+        "and opposing view. Go deep on each actor and topic; do not summarize tersely.\n"
         "Write the report directly — no preamble, no tool calls."
         f"{lang_line}"
     )
@@ -254,8 +280,9 @@ def synthesize_from_thread(client, thread_id: str, question: str, target_languag
     if not context:
         plog.write("warn", "synthesize: gathered research context is empty")
         return ""
-    if len(context) > SYNTHESIS_MAX_CONTEXT_CHARS:
-        context = context[:SYNTHESIS_MAX_CONTEXT_CHARS] + "\n\n[...research context truncated...]"
+    _cap = _synthesis_context_cap(model_name)
+    if len(context) > _cap:
+        context = context[:_cap] + "\n\n[...research context truncated...]"
 
     # 3) Bare, tool-free model call — it cannot keep researching, so it writes.
     plog.write("stage", f"synthesize: writing report (tool-free) from {len(context)} chars of gathered research")

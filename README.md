@@ -120,8 +120,9 @@ flowchart LR
 | **Python ≥ 3.11** | For the backend. |
 | **Python ≥ 3.12 (3.13 recommended)** | DeerFlow's deep-research engine needs Python ≥ 3.12. |
 | **uv** | The Python package manager used for both backend and DeerFlow. |
+| **git** | Required — `setup.sh` uses it to auto-download the DeerFlow research engine. |
 | **Zep Cloud API key** | **Always required** (the free tier works). Get one at <https://app.getzep.com/>. |
-| **An LLM** | By default the local `claude` or `codex` CLI (no API key). Only `openai`, `kimi`, and `minimax` need an API key. |
+| **An LLM** | By default the local `claude` or `codex` CLI (no API key). The OpenAI-compatible API providers (`openai`, `kimi`, `minimax`, `deepseek`, `qwen`, `glm`) need `LLM_API_KEY`. |
 
 ---
 
@@ -131,13 +132,15 @@ DeerFlow lives in a **sibling directory** named `deer-flow` so its LangChain/Lan
 
 ### Option A — `setup.sh` (recommended)
 
-A quick-start script automates the entire installation **and auto-detects the model provider**.
+A quick-start script automates the entire installation, **auto-downloads the DeerFlow research engine**, and **auto-detects the model provider**.
 
 ```bash
 ./setup.sh
 ```
 
-`setup.sh` installs the root, frontend, backend, and DeerFlow dependencies, detects which LLM provider is available, and gets you ready to run.
+`setup.sh` installs the root, frontend, backend, and DeerFlow dependencies, detects which LLM provider is available, and gets you ready to run. It also **downloads DeerFlow automatically** — no manual clone needed: it clones the sibling `../deer-flow` repo (from <https://github.com/bytedance/deer-flow>, pinned to a known-good commit) if absent, applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` patches, and `config.yaml`), then builds DeerFlow's isolated venv (uv, Python 3.13). Re-running it is idempotent and safe.
+
+Override the defaults via env vars if needed: `DEERFLOW_DIR` (location), `DEERFLOW_REPO` (clone URL), `DEERFLOW_REF` (pinned commit; set `=main` to track HEAD).
 
 ### Option B — manual setup
 
@@ -145,16 +148,25 @@ A quick-start script automates the entire installation **and auto-detects the mo
 # 1. Install all dependencies (root + frontend + backend)
 npm run setup:all          # backend deps are installed via `uv sync`
 
-# 2. Build DeerFlow's isolated research venv (Python ≥ 3.12; 3.13 recommended)
+# 2. Download the DeerFlow research engine (git required) and apply the bridge overlay.
+#    Clone the sibling repo, then copy the bridge overlay from deerflow_bridge/ into it:
+#      - deerflow_research.py  → deer-flow/ root (research driver / entry point)
+#      - patches/models/*.py   → deer-flow/backend/packages/harness/deerflow/models/
+#      - config.yaml           → deer-flow/config.yaml (only if absent)
+git clone https://github.com/bytedance/deer-flow ../deer-flow
+
+# 3. Build DeerFlow's isolated research venv (Python ≥ 3.12; 3.13 recommended)
 UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv \
   uv sync --project deer-flow/backend --python 3.13
 
-# 3. Configure your environment (see .env reference below)
+# 4. Configure your environment (see .env reference below)
 #    Set ZEP_API_KEY (always required) and LLM_PROVIDER.
 
-# 4. Run both servers (backend on 5001 + frontend on 3000)
+# 5. Run both servers (backend on 5001 + frontend on 3000)
 npm run dev
 ```
+
+> The bridge overlay is what `setup.sh` applies for you; doing it manually means copying `deerflow_bridge/deerflow_research.py`, `deerflow_bridge/patches/models/*.py`, and `deerflow_bridge/config.yaml` into the cloned `deer-flow` as shown above. `config.yaml` is only copied if one is not already present.
 
 Then open **<http://localhost:3000/research>**.
 
@@ -169,15 +181,33 @@ Then open **<http://localhost:3000/research>**.
 
 The LLM provider is **switchable at runtime** via the Settings menu (it can also be set in `.env`, or via the `/api/settings/llm` endpoint). A provider switch applies to **new runs**.
 
+The **report + simulation** stages are driven by `LLM_PROVIDER` (8 values):
+
 | Provider | Description | API key? |
 |---|---|---|
 | **`claude-cli`** *(default)* | Uses the local `claude` CLI / Claude Code subscription. | No key |
-| **`codex-cli`** | Uses the local `codex` CLI / Codex subscription. | No key |
+| **`codex-cli`** | Uses the local `codex` CLI / Codex (ChatGPT) subscription. | No key |
 | **`openai`** | Any OpenAI-compatible API. | Needs `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL_NAME` |
-| **`kimi`** | Kimi-for-coding (OpenAI-compatible + coding-agent User-Agent gateway). | Yes |
-| **`minimax`** | MiniMax-M3 code plan (`api.minimaxi.com`; ~1M-token context, up to 512K output; a reasoning model). | Yes |
+| **`kimi`** | Kimi-for-coding (`api.kimi.com/coding`; OpenAI-compatible + coding-agent User-Agent gateway). | Needs `LLM_API_KEY` |
+| **`minimax`** | MiniMax-M3 (`https://api.minimaxi.com/v1`; a reasoning model). | Needs `LLM_API_KEY` |
+| **`deepseek`** | DeepSeek (`https://api.deepseek.com/v1`, default model `deepseek-chat`; the **research** stage uses the flagship `deepseek-v4-pro`, million-token context). | Needs `LLM_API_KEY` |
+| **`qwen`** | Qwen (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`, default model `qwen-plus`; the **research** stage uses the flagship `qwen3.7-max`, million-token context). | Needs `LLM_API_KEY` |
+| **`glm`** | GLM-4.6 (`https://api.z.ai/api/paas/v4`, model `glm-4.6`). | Needs `LLM_API_KEY` |
 
-> **Note on the research stage:** DeerFlow's deep-research stage currently supports only **`claude`** and **`minimax`** research models. If another provider is selected, the **research** stage falls back to Claude, while the **simulation** and **report** stages use your selected provider.
+`openai`, `kimi`, `minimax`, `deepseek`, `qwen`, and `glm` are all OpenAI-compatible API providers needing `LLM_API_KEY`; `kimi`, `minimax`, `deepseek`, `qwen`, and `glm` ship sensible default `LLM_BASE_URL` / `LLM_MODEL_NAME`, so you only set `LLM_API_KEY`.
+
+The **deep-research** stage is driven separately by `DEERFLOW_MODEL` (6 options):
+
+| Research model | Notes |
+|---|---|
+| **`claude`** *(default)* | Uses Claude Code OAuth — no API key. `openai` / `kimi` map to this stanza. |
+| **`minimax`** | Needs `MINIMAX_API_KEY`. |
+| **`deepseek`** | Needs `DEEPSEEK_API_KEY`. |
+| **`qwen`** | Needs `DASHSCOPE_API_KEY`. |
+| **`glm`** | Needs `ZHIPUAI_API_KEY`. |
+| **`codex`** | Codex research model. |
+
+> **Note on the research stage:** the research stage is configured independently from `LLM_PROVIDER` via `DEERFLOW_MODEL`. Its per-provider key is mirrored for deer-flow (e.g. `MINIMAX_API_KEY`, `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`, `ZHIPUAI_API_KEY`) and is only needed when you actually run `DEERFLOW_MODEL` on that provider. The default `claude` uses Claude Code OAuth (no API key).
 
 ### How to switch
 
@@ -192,33 +222,47 @@ The LLM provider is **switchable at runtime** via the Settings menu (it can also
 Create a `.env` file at the project root.
 
 ```bash
-LLM_PROVIDER=claude-cli      # claude-cli | codex-cli | openai | kimi | minimax
+LLM_PROVIDER=claude-cli      # claude-cli | codex-cli | openai | kimi | minimax | deepseek | qwen | glm
 ZEP_API_KEY=...              # required (free tier works)
 
-# openai / kimi / minimax only:
+# openai / kimi / minimax / deepseek / qwen / glm only:
 LLM_API_KEY=...
-LLM_BASE_URL=...
-LLM_MODEL_NAME=...
+LLM_BASE_URL=...             # kimi/minimax/deepseek/qwen/glm ship a sensible default
+LLM_MODEL_NAME=...           # kimi/minimax/deepseek/qwen/glm ship a sensible default
 
 # DeerFlow deep research (optional — all have sensible defaults):
 DEERFLOW_DIR=...                 # path to the deer-flow sibling directory
+DEERFLOW_REPO=...                # clone URL (default https://github.com/bytedance/deer-flow)
+DEERFLOW_REF=...                 # pinned commit (set =main to track HEAD)
 DEERFLOW_PYTHON=...              # python interpreter for DeerFlow's venv
-DEERFLOW_MODEL=...               # claude | minimax
+DEERFLOW_MODEL=...               # claude | minimax | deepseek | qwen | glm | codex
 DEERFLOW_RESEARCH_DEPTH=...      # research depth
 DEERFLOW_RESEARCH_LANGUAGE=...   # research output language
 DEERFLOW_RESEARCH_TIMEOUT=...    # research stage timeout
+
+# DeerFlow per-provider keys (only when DEERFLOW_MODEL runs on that provider):
+MINIMAX_API_KEY=...              # DEERFLOW_MODEL=minimax
+DEEPSEEK_API_KEY=...             # DEERFLOW_MODEL=deepseek
+DASHSCOPE_API_KEY=...            # DEERFLOW_MODEL=qwen
+ZHIPUAI_API_KEY=...              # DEERFLOW_MODEL=glm
 ```
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `LLM_PROVIDER` | Yes | Selects the active provider. One of `claude-cli`, `codex-cli`, `openai`, `kimi`, `minimax`. |
+| `LLM_PROVIDER` | Yes | Selects the active provider. One of `claude-cli`, `codex-cli`, `openai`, `kimi`, `minimax`, `deepseek`, `qwen`, `glm`. |
 | `ZEP_API_KEY` | **Always** | Zep Cloud API key for the temporal knowledge graph. |
-| `LLM_API_KEY` | openai/kimi/minimax | API key for the hosted provider. |
-| `LLM_BASE_URL` | openai/kimi/minimax | Base URL for the OpenAI-compatible endpoint. |
-| `LLM_MODEL_NAME` | openai/kimi/minimax | Model name to request. |
+| `LLM_API_KEY` | openai/kimi/minimax/deepseek/qwen/glm | API key for the hosted provider. |
+| `LLM_BASE_URL` | openai/kimi/minimax/deepseek/qwen/glm | Base URL for the OpenAI-compatible endpoint (kimi/minimax/deepseek/qwen/glm default it). |
+| `LLM_MODEL_NAME` | openai/kimi/minimax/deepseek/qwen/glm | Model name to request (kimi/minimax/deepseek/qwen/glm default it). |
 | `DEERFLOW_DIR` | No | Location of the `deer-flow` sibling directory. |
+| `DEERFLOW_REPO` | No | Clone URL for the DeerFlow repo (default `https://github.com/bytedance/deer-flow`). |
+| `DEERFLOW_REF` | No | Pinned commit for the DeerFlow clone (set `=main` to track HEAD). |
 | `DEERFLOW_PYTHON` | No | Python interpreter for DeerFlow's isolated venv. |
-| `DEERFLOW_MODEL` | No | Research model: `claude` or `minimax`. |
+| `DEERFLOW_MODEL` | No | Research model: `claude`, `minimax`, `deepseek`, `qwen`, `glm`, or `codex`. |
+| `MINIMAX_API_KEY` | DEERFLOW_MODEL=minimax | DeerFlow research key when running MiniMax. |
+| `DEEPSEEK_API_KEY` | DEERFLOW_MODEL=deepseek | DeerFlow research key when running DeepSeek. |
+| `DASHSCOPE_API_KEY` | DEERFLOW_MODEL=qwen | DeerFlow research key when running Qwen. |
+| `ZHIPUAI_API_KEY` | DEERFLOW_MODEL=glm | DeerFlow research key when running GLM. |
 | `DEERFLOW_RESEARCH_DEPTH` | No | Depth of the research stage. |
 | `DEERFLOW_RESEARCH_LANGUAGE` | No | Language of the research output. |
 | `DEERFLOW_RESEARCH_TIMEOUT` | No | Timeout for the research stage. |
@@ -308,15 +352,21 @@ DeepResearchForecast/
 ├── backend/                 # Flask API (port 5001) — pipeline orchestration,
 │                            #   graph ingest, simulation, ReportAgent. uv-managed.
 ├── frontend/                # Vue 3 + Vite dashboard (port 3000), bilingual EN/中文.
+├── deerflow_bridge/         # Bridge overlay applied onto the cloned deer-flow:
+│   ├── deerflow_research.py #   research driver / entry point (→ deer-flow/ root).
+│   ├── patches/models/      #   provider patches (claude OAuth fix, Keychain loader,
+│   │                        #     patched_minimax → MiniMax "name" fix).
+│   └── config.yaml          #   deer-flow model config (copied only if absent).
 ├── deer-flow/               # SIBLING engine: LangGraph deep-research super agent.
-│   └── backend/
+│   └── backend/             #   (auto-downloaded by setup.sh; git required.)
 │       └── .venv/           # Isolated Python ≥ 3.12 venv (deps isolated from backend).
-├── setup.sh                 # Quick-start: installs everything, auto-detects provider.
+├── setup.sh                 # Quick-start: downloads deer-flow, installs everything,
+│                            #   applies the bridge overlay, auto-detects provider.
 ├── .env                     # LLM_PROVIDER, ZEP_API_KEY, provider + DeerFlow config.
 └── package.json             # `setup:all` and `dev` scripts (run backend + frontend).
 ```
 
-> DeerFlow is a **sibling directory** to keep its dependency tree isolated from the backend. Build its venv with:
+> DeerFlow is a **sibling directory** to keep its dependency tree isolated from the backend. `setup.sh` clones it (git required), applies the `deerflow_bridge/` overlay (driver + `patches/models` + `config.yaml`), and builds its venv with:
 > `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.13`
 
 ---
@@ -326,9 +376,9 @@ DeepResearchForecast/
 | Symptom | Likely cause / fix |
 |---|---|
 | **Missing / invalid `ZEP_API_KEY`** | The Zep Cloud key is **always required** (graph stage). Set `ZEP_API_KEY` in `.env`; the free tier works. Get one at <https://app.getzep.com/>. |
-| **Research stage runs on Claude even though I picked another provider** | Expected. DeerFlow's deep-research stage supports only `claude` and `minimax`; other providers fall back to Claude for research while simulation/report use your selection. |
-| **DeerFlow / research stage fails to start** | Ensure the `deer-flow` sibling venv is built with Python ≥ 3.12 (3.13 recommended): `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.13`. Optionally set `DEERFLOW_DIR` / `DEERFLOW_PYTHON`. |
-| **No API key but hosted provider selected** | `openai`, `kimi`, and `minimax` need `LLM_API_KEY` (and `LLM_BASE_URL`, `LLM_MODEL_NAME`). For no-key operation use `claude-cli` or `codex-cli`. |
+| **Research stage runs on Claude even though I picked another provider** | The research stage is configured separately via `DEERFLOW_MODEL` (`claude` *(default)*, `minimax`, `deepseek`, `qwen`, `glm`, `codex`), not by `LLM_PROVIDER`. `openai` / `kimi` map to the `claude` stanza. Set `DEERFLOW_MODEL` (and its key, e.g. `MINIMAX_API_KEY`) to run research on a different model. |
+| **DeerFlow / research stage fails to start** | `setup.sh` clones the `deer-flow` sibling (git required) and applies the `deerflow_bridge/` overlay. Ensure its venv is built with Python ≥ 3.12 (3.13 recommended): `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.13`. Re-running `setup.sh` is idempotent. Optionally set `DEERFLOW_DIR` / `DEERFLOW_PYTHON` / `DEERFLOW_REPO` / `DEERFLOW_REF`. |
+| **No API key but hosted provider selected** | `openai`, `kimi`, `minimax`, `deepseek`, `qwen`, and `glm` need `LLM_API_KEY` (with `LLM_BASE_URL` / `LLM_MODEL_NAME`; `kimi`/`minimax`/`deepseek`/`qwen`/`glm` default those). For no-key operation use `claude-cli` or `codex-cli`. |
 | **Provider switch didn't take effect** | The runtime switch applies to **new runs** only. Start a fresh pipeline after switching. |
 | **Frontend can't reach the API** | The frontend proxies `/api` → `5001`. Confirm the backend is running on port 5001 (`npm run dev` starts both). |
 | **Research stage times out** | Increase `DEERFLOW_RESEARCH_TIMEOUT`, or reduce research `depth` (`quick` / `standard` / `deep`). |

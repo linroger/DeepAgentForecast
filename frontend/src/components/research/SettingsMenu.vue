@@ -20,8 +20,8 @@
         <section class="block">
           <div class="block-label">{{ L('模型提供方', 'Model provider') }}</div>
           <p class="hint">
-            {{ L('切换对新发起的推演生效（运行中的不受影响）。深度研究仅支持 Claude 与 MiniMax，其余提供方的研究阶段回退至 Claude。',
-                 'Applies to new runs (in-flight runs are unaffected). Deep research supports only Claude and MiniMax; other providers fall back to Claude for the research stage.') }}
+            {{ L('切换对新发起的推演生效（运行中的不受影响）。Claude / Codex / MiniMax / DeepSeek / 通义千问 / GLM 都有各自的深度研究模型；OpenAI/Kimi 的研究阶段回退至 Claude。',
+                 'Applies to new runs (in-flight runs are unaffected). Claude, Codex, MiniMax, DeepSeek, Qwen and GLM each drive their own deep-research model; OpenAI/Kimi fall back to Claude for the research stage.') }}
           </p>
 
           <div v-if="loadingInfo" class="loading">{{ L('加载中…', 'Loading…') }}</div>
@@ -91,11 +91,17 @@ const saving = ref(false)
 const error = ref('')
 const okMsg = ref('')
 
-const DEERFLOW_MAP = { 'claude-cli': 'claude', 'codex-cli': 'claude', openai: 'claude', kimi: 'claude', minimax: 'minimax' }
+const DEERFLOW_MAP = {
+  'claude-cli': 'claude', 'codex-cli': 'codex', openai: 'claude', kimi: 'claude',
+  minimax: 'minimax', deepseek: 'deepseek', qwen: 'qwen', glm: 'glm'
+}
 const DEFAULTS = {
   openai: { base: 'https://api.openai.com/v1', model: 'gpt-4o-mini', ph: 'sk-…' },
   kimi: { base: 'https://api.kimi.com/coding/v1', model: 'kimi-for-coding', ph: 'sk-…' },
-  minimax: { base: 'https://api.minimaxi.com/v1', model: 'MiniMax-M3', ph: 'sk-cp-…' }
+  minimax: { base: 'https://api.minimaxi.com/v1', model: 'MiniMax-M3', ph: 'sk-cp-…' },
+  deepseek: { base: 'https://api.deepseek.com/v1', model: 'deepseek-chat', ph: 'sk-…' },
+  qwen: { base: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus', ph: 'sk-…' },
+  glm: { base: 'https://api.z.ai/api/paas/v4', model: 'glm-4.6', ph: '••••.••••' }
 }
 function deerflowModelFor(id) { return DEERFLOW_MAP[id] || 'claude' }
 
