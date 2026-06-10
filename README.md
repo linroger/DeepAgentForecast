@@ -178,7 +178,7 @@ Three steps: **install → configure → run**. DeerFlow lives in `deer-flow/` *
 ./setup.sh
 ```
 
-It checks prerequisites, scaffolds `.env` from `.env.example`, **auto-detects your model provider** (`claude` CLI → `claude-cli`, `codex` CLI → `codex-cli` + research on `codex`), prompts for your Zep key, installs the root + frontend npm deps, builds the backend venv (**pinned to Python 3.12**), then **downloads DeerFlow automatically**: it shallow-clones `deer-flow/` into the repo (from <https://github.com/bytedance/deer-flow>, pinned to a known-good commit, gitignored) if absent, **trims it to runtime essentials** (`backend/`, `skills/`, `config.yaml` — the upstream web frontend, docs, docker and CI are dead weight here), applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` patches, and `config.yaml`), and builds DeerFlow's isolated venv (Python 3.13). Re-running it is idempotent and safe.
+It checks prerequisites, scaffolds `.env` from `.env.example`, **auto-detects your model provider** (`claude` CLI → `claude-cli`, `codex` CLI → `codex-cli` + research on `codex`), prompts for your Zep key, installs the root + frontend npm deps, builds the backend venv (**pinned to Python 3.12**), then **downloads DeerFlow automatically**: it shallow-clones `deer-flow/` into the repo (from <https://github.com/bytedance/deer-flow>, pinned to a known-good commit, gitignored) if absent, **trims it to runtime essentials** (`backend/`, `skills/`, `config.yaml` — the upstream web frontend, docs, docker and CI are dead weight here), applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` + middleware patches, the overhauled source-tiering deep-research skill, and `config.yaml`), and builds DeerFlow's isolated venv (Python 3.13). Re-running it is idempotent and safe.
 
 Override the defaults via env vars if needed: `DEERFLOW_DIR` (location), `DEERFLOW_REPO` (clone URL), `DEERFLOW_REF` (pinned commit; set `=main` to track HEAD). These are read by `setup.sh` from the shell environment (they are not `.env` keys), e.g. `DEERFLOW_REF=main ./setup.sh`.
 
@@ -194,6 +194,8 @@ git clone https://github.com/bytedance/deer-flow deer-flow
 # 3. Apply the bridge overlay from deerflow_bridge/
 cp deerflow_bridge/deerflow_research.py deer-flow/deerflow_research.py
 cp deerflow_bridge/patches/models/*.py  deer-flow/backend/packages/harness/deerflow/models/
+cp deerflow_bridge/patches/middlewares/*.py deer-flow/backend/packages/harness/deerflow/agents/middlewares/
+cp deerflow_bridge/skills/deep-research/SKILL.md deer-flow/skills/public/deep-research/SKILL.md
 cp deerflow_bridge/config.yaml          deer-flow/config.yaml      # only if absent
 
 # 4. Build DeerFlow's isolated research venv (Python ≥ 3.12; 3.13 recommended)
@@ -437,7 +439,7 @@ DeepResearchForecast/
     └── backend/.venv/       #   gitignored; isolated LangGraph venv (Python ≥3.12).
 ```
 
-> DeerFlow lives **inside the repo** but is gitignored — your clone stays a single folder and `git status` stays clean. `setup.sh` shallow-downloads it (git required), trims it to the runtime essentials (`backend/`, `skills/`, `config.yaml`), applies the `deerflow_bridge/` overlay (driver + `patches/models` + `config.yaml`), and builds its venv with:
+> DeerFlow lives **inside the repo** but is gitignored — your clone stays a single folder and `git status` stays clean. `setup.sh` shallow-downloads it (git required), trims it to the runtime essentials (`backend/`, `skills/`, `config.yaml`), applies the `deerflow_bridge/` overlay (driver + patches + the overhauled deep-research skill + `config.yaml`), and builds its venv with:
 > `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.13`
 
 ---

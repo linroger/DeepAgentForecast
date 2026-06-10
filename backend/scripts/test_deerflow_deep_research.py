@@ -33,6 +33,25 @@ def assert_bridge_synced() -> None:
     assert BRIDGE_PATH.read_text(encoding="utf-8") == DEPLOYED_PATH.read_text(encoding="utf-8")
 
 
+def assert_skill_synced() -> None:
+    """The overhauled deep-research skill must be deployed byte-identical.
+
+    The skill enforces source-quality tiering (S1–S4), triangulation of
+    load-bearing claims, and tool-budget discipline; a drifted or upstream
+    copy silently degrades research quality.
+    """
+    overlay = ROOT / "deerflow_bridge" / "skills" / "deep-research" / "SKILL.md"
+    deployed = ROOT / "deer-flow" / "skills" / "public" / "deep-research" / "SKILL.md"
+    assert overlay.exists(), f"missing overlay skill: {overlay}"
+    text = overlay.read_text(encoding="utf-8")
+    for marker in ("S1 — Primary / authoritative", "S4 — Reject", "circular-sourcing", "Synthesis gate"):
+        assert marker in text, f"overlay skill lost its '{marker}' section"
+    if deployed.exists():
+        assert deployed.read_text(encoding="utf-8") == text, (
+            "deployed deep-research skill differs from overlay — re-run ./setup.sh"
+        )
+
+
 def assert_loop_detection_patch() -> None:
     """The multi-pass protocol depends on per-run loop-budget resets.
 
@@ -134,6 +153,7 @@ def assert_deep_runner_sequence(module) -> None:
 
 if __name__ == "__main__":
     assert_bridge_synced()
+    assert_skill_synced()
     assert_loop_detection_patch()
     bridge = load_bridge()
     assert_deep_prompt_contract(bridge)

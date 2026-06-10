@@ -216,9 +216,25 @@ upsert_env() {
   ' "$ENV_FILE" > "$tmp" && mv "$tmp" "$ENV_FILE"
 }
 
-upsert_env "LLM_PROVIDER"   "$LLM_PROVIDER"
-upsert_env "DEERFLOW_MODEL" "$DEERFLOW_MODEL"
-ok "Set LLM_PROVIDER=$LLM_PROVIDER and DEERFLOW_MODEL=$DEERFLOW_MODEL in .env"
+# Respect an existing .env: auto-detection must never clobber a provider the
+# user already configured (e.g. minimax/kimi). Only write the detected values
+# when the keys are missing or empty.
+CURRENT_PROVIDER="$(grep -E '^[[:space:]]*LLM_PROVIDER=' "$ENV_FILE" | head -n1 | cut -d= -f2- || true)"
+CURRENT_DF_MODEL="$(grep -E '^[[:space:]]*DEERFLOW_MODEL=' "$ENV_FILE" | head -n1 | cut -d= -f2- || true)"
+if [ -n "$CURRENT_PROVIDER" ]; then
+  LLM_PROVIDER="$CURRENT_PROVIDER"
+  ok "Keeping existing LLM_PROVIDER=$CURRENT_PROVIDER from .env (auto-detect skipped)"
+else
+  upsert_env "LLM_PROVIDER" "$LLM_PROVIDER"
+  ok "Set LLM_PROVIDER=$LLM_PROVIDER in .env"
+fi
+if [ -n "$CURRENT_DF_MODEL" ]; then
+  DEERFLOW_MODEL="$CURRENT_DF_MODEL"
+  ok "Keeping existing DEERFLOW_MODEL=$CURRENT_DF_MODEL from .env"
+else
+  upsert_env "DEERFLOW_MODEL" "$DEERFLOW_MODEL"
+  ok "Set DEERFLOW_MODEL=$DEERFLOW_MODEL in .env"
+fi
 
 # --- Zep API key prompt (required for every run; allow skipping) -------------
 # We only prompt if the key is still the placeholder/empty. We never echo the
@@ -382,7 +398,15 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
     ok "Applied provider patches (claude_provider, credential_loader, patched_minimax)"
   fi
 
-  # (b2) Patched middlewares: loop-detection counters reset per agent run.
+  # (b2) Overhauled deep-research skill: source-quality tiering (S1–S4),
+  #     triangulation, circular-sourcing detection, and tool-budget discipline.
+  DF_SKILL="$DEERFLOW_DIR/skills/public/deep-research"
+  if [ -f "$BRIDGE_DIR/skills/deep-research/SKILL.md" ] && [ -d "$DF_SKILL" ]; then
+    cp "$BRIDGE_DIR/skills/deep-research/SKILL.md" "$DF_SKILL/SKILL.md"
+    ok "Applied deep-research skill overhaul (source tiering + budget discipline)"
+  fi
+
+  # (b3) Patched middlewares: loop-detection counters reset per agent run.
   #     Upstream accumulates per-tool call counts across ALL turns of a thread,
   #     so multi-pass deep research permanently force-stops web_search from
   #     pass 2 onward once the cumulative count crosses the safety limit.

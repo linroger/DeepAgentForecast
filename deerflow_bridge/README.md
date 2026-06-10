@@ -16,6 +16,7 @@ everything here automatically — you normally never touch these files by hand.
 | `patches/models/claude_provider.py` | `ClaudeChatModel` with **OAuth‑preference** (prefers a Claude Code OAuth credential over an ambient non‑OAuth `ANTHROPIC_API_KEY`, fixing stray‑key 401s) and a 0.5 thinking‑budget ratio. | → `deer-flow/backend/packages/harness/deerflow/models/` |
 | `patches/models/credential_loader.py` | Adds a **macOS Keychain** credential source (`security find-generic-password -s "Claude Code-credentials"`) so the local `claude` OAuth token is found even when it isn't in `~/.claude/.credentials.json`. | → same `models/` dir |
 | `patches/models/patched_minimax.py` | `PatchedChatMiniMax` — strips the per‑message `name` field that DeerFlow middlewares inject, fixing MiniMax `400 user name must be consistent`; keeps tools + reasoning **on**. | → same `models/` dir |
+| `skills/deep-research/SKILL.md` | **Overhauled deep-research skill** (replaces the generic upstream one). Adds a source-quality framework — S1 primary/authoritative → S4 reject (SEO farms, aggregator slop, undated/anonymous pages) — 8 signal heuristics applied *before* fetching, circular-sourcing detection (ten echoes of one report = one source), mandatory triangulation of load-bearing claims, disconfirmation searches, a synthesis gate, and tool-budget discipline tuned to the per-run `web_search`/`web_fetch` limits. | → `deer-flow/skills/public/deep-research/SKILL.md` |
 | `patches/middlewares/loop_detection_middleware.py` | Loop detection with **per‑run counter resets**. Upstream accumulates per‑tool call counts across *all* turns of a thread, so multi‑pass deep research permanently force‑stops `web_search` from pass 2 onward (`[FORCED STOP] Tool web_search called N times…`) once the cumulative count crosses the limit. The patch resets the budget at the start of each agent run — full in‑run loop protection stays intact. | → `deer-flow/backend/packages/harness/deerflow/agents/middlewares/` |
 | `config.yaml` | A complete, ready‑to‑use DeerFlow config with active stanzas for **claude / minimax / deepseek / qwen / glm / codex / kimi**. All keys are `$VAR` references resolved from `.env` — **no secrets**. Bridge‑tuned: conversation **memory off** (no cross‑run fact contamination), **title generation off** (headless runs), summarization trigger raised to **120K tokens** (research keeps full source detail). | → `deer-flow/config.yaml` (only if absent; never clobbers an existing one — diff against this copy to pick up new stanzas/tuning). |
 | `config.minimax.snippet.yaml` | Just the `minimax` model stanza, for pasting into an existing `deer-flow/config.yaml` by hand. | (manual merge helper) |
@@ -29,8 +30,9 @@ From the project root:
 ```
 
 It downloads DeerFlow into the repo (`deer-flow/`, pinned to a known‑good commit, gitignored), drops the
-research driver in, applies the three provider patches, installs `config.yaml` if there isn't
-one, and builds DeerFlow's isolated venv. Re‑running is safe (idempotent). Overrides:
+research driver in, applies the three provider patches + the middleware patch, installs the
+overhauled deep-research skill, installs `config.yaml` if there isn't one, and builds DeerFlow's
+isolated venv. Re‑running is safe (idempotent). Overrides:
 
 - `DEERFLOW_DIR` — where to put / find the checkout (default: `./deer-flow` in the repo root).
 - `DEERFLOW_REPO` — clone URL (default: the upstream ByteDance repo).
@@ -46,11 +48,13 @@ git clone https://github.com/bytedance/deer-flow deer-flow
 # 2. Drop the bridge entry point in
 cp deerflow_bridge/deerflow_research.py deer-flow/deerflow_research.py
 
-# 3. Apply the provider + middleware patches
+# 3. Apply the provider + middleware patches and the overhauled skill
 cp deerflow_bridge/patches/models/*.py \
    deer-flow/backend/packages/harness/deerflow/models/
 cp deerflow_bridge/patches/middlewares/*.py \
    deer-flow/backend/packages/harness/deerflow/agents/middlewares/
+cp deerflow_bridge/skills/deep-research/SKILL.md \
+   deer-flow/skills/public/deep-research/SKILL.md
 
 # 4. Install the ready-to-use config (keys come from .env via $VAR)
 cp deerflow_bridge/config.yaml deer-flow/config.yaml

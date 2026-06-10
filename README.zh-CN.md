@@ -207,7 +207,7 @@ flowchart LR
 ./setup.sh
 ```
 
-它会检查前置条件、从 `.env.example` 生成 `.env`、**自动探测本机的模型提供方**（`claude` CLI → `claude-cli`；`codex` CLI → `codex-cli`，研究阶段同时切到 `codex`）、提示你填入 Zep Key、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**），然后**自动下载 DeerFlow**：若仓库内 `deer-flow/` 不存在，则从 <https://github.com/bytedance/deer-flow> 浅克隆（固定到一个已知可用的提交），并**裁剪到运行所需的最小集合**（`backend/`、`skills/`、`config.yaml`——上游的 Web 前端、文档、docker 与 CI 在本工作流中均用不到），再应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁、`config.yaml`），并构建 DeerFlow 的隔离 venv（Python 3.13）。脚本幂等，可安全地重复运行。
+它会检查前置条件、从 `.env.example` 生成 `.env`、**自动探测本机的模型提供方**（`claude` CLI → `claude-cli`；`codex` CLI → `codex-cli`，研究阶段同时切到 `codex`）、提示你填入 Zep Key、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**），然后**自动下载 DeerFlow**：若仓库内 `deer-flow/` 不存在，则从 <https://github.com/bytedance/deer-flow> 浅克隆（固定到一个已知可用的提交），并**裁剪到运行所需的最小集合**（`backend/`、`skills/`、`config.yaml`——上游的 Web 前端、文档、docker 与 CI 在本工作流中均用不到），再应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁与中间件补丁、经过强化的来源分级 deep-research 技能、`config.yaml`），并构建 DeerFlow 的隔离 venv（Python 3.13）。脚本幂等，可安全地重复运行。
 
 如需覆盖默认值，可通过环境变量：`DEERFLOW_DIR`（位置）、`DEERFLOW_REPO`（克隆地址）、`DEERFLOW_REF`（固定提交；设为 `=main` 可跟踪 HEAD）。它们由 `setup.sh` 从 **shell 环境**读取（不是 `.env` 配置项），例如 `DEERFLOW_REF=main ./setup.sh`。
 
@@ -223,6 +223,8 @@ git clone https://github.com/bytedance/deer-flow deer-flow
 # 3. 应用 deerflow_bridge/ 桥接覆盖层
 cp deerflow_bridge/deerflow_research.py deer-flow/deerflow_research.py
 cp deerflow_bridge/patches/models/*.py  deer-flow/backend/packages/harness/deerflow/models/
+cp deerflow_bridge/patches/middlewares/*.py deer-flow/backend/packages/harness/deerflow/agents/middlewares/
+cp deerflow_bridge/skills/deep-research/SKILL.md deer-flow/skills/public/deep-research/SKILL.md
 cp deerflow_bridge/config.yaml          deer-flow/config.yaml      # 仅当其不存在时
 
 # 4. 构建 DeerFlow 的隔离研究 venv（Python ≥ 3.12，推荐 3.13）
