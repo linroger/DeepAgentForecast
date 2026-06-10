@@ -1,17 +1,17 @@
-# DeepResearchForecast
+# DeepAgentForecast
 
 [English](README.md) | **简体中文**
 
 > **一句话提问，自动产出预测。**
 > 输入一个问题，它会自动联网研究、构建高保真的平行世界、运行多智能体群体模拟，并生成一份可交互的预测报告。
 
-**DeepResearchForecast** 是一个自主的「一句话 → 预测」引擎。你只需键入一个问题，系统便会自动联网调研、把调研成果沉淀为一个高保真的平行数字世界、在其中运行成百上千个 LLM 人格智能体的群体模拟，最后由一个报告 Agent 综合产出一份分章节、可深度交互的预测报告。
+**DeepAgentForecast** 是一个自主的「一句话 → 预测」引擎。你只需键入一个问题，系统便会自动联网调研、把调研成果沉淀为一个高保真的平行数字世界、在其中运行成百上千个 LLM 人格智能体的群体模拟，最后由一个报告 Agent 综合产出一份分章节、可深度交互的预测报告。
 
 ---
 
 ## 演示
 
-🔗 **[在线演示站](https://linroger.github.io/DeepResearchForecast/)**（中英双语）—— 走完真实端到端运行的**每一个阶段**：深度研究控制台日志、含行动者与来源的研究档案、生成的本体、可交互知识图谱、模拟的 Twitter/Reddit 论坛，以及最终预测报告（2030 美国 AI 竞赛、2035 全球电动汽车产业、俄乌战争终局、2030 全球半导体产业）。
+🔗 **[在线演示站](https://linroger.github.io/DeepAgentForecast/)**（中英双语）—— 走完真实端到端运行的**每一个阶段**：深度研究控制台日志、含行动者与来源的研究档案、生成的本体、可交互知识图谱、模拟的 Twitter/Reddit 论坛，以及最终预测报告（2030 美国 AI 竞赛、2035 全球电动汽车产业、俄乌战争终局、2030 全球半导体产业）。
 
 一句提示词 —— *“Who wins the US AI race by 2030?”*（谁会在 2030 年赢得美国 AI 竞赛？）—— 从提问到可交互预测的全过程（研究 → 知识图谱 → 40 轮群体模拟 → 报告）：
 
@@ -23,7 +23,7 @@
 
 最近一次展示运行：深度模式调研覆盖半导体全产业链（存储 / HBM / 逻辑 / 代工，17 家具名企业），构建 285 节点知识图谱，**115 个数字人格**进行 **40 轮双平台模拟**，最终产出分章节预测报告。
 
-▶ **[观看半导体运行全程视频（42 秒，4 倍速，MP4）](docs/media/demo-semiconductors.mp4)** · 🔗 **[在线浏览这次运行](https://linroger.github.io/DeepResearchForecast/demo.html?run=semiconductors-2030)**
+▶ **[观看半导体运行全程视频（42 秒，4 倍速，MP4）](docs/media/demo-semiconductors.mp4)** · 🔗 **[在线浏览这次运行](https://linroger.github.io/DeepAgentForecast/demo.html?run=semiconductors-2030)**
 
 | | |
 |---|---|
@@ -66,7 +66,7 @@
 
 ## 它能做什么
 
-把一个开放性问题（例如「2035 年电动车市场会怎样演化？」）交给 DeepResearchForecast，它会：
+把一个开放性问题（例如「2035 年电动车市场会怎样演化？」）交给 DeepAgentForecast，它会：
 
 - **自动联网研究**：用一个深度研究「超级智能体」搜索全网、抓取全文、从多角度展开调研，并写出一份结构化的研究档案（dossier）。
 - **构建高保真平行世界**：把研究档案抽象成实体/关系、灌入时序知识图谱（GraphRAG），并据此生成数字人格。
@@ -79,7 +79,7 @@
 
 ## 架构总览
 
-DeepResearchForecast 是一条统一管线，串联两大引擎，并由一张知识图谱与一个报告 Agent 黏合：
+DeepAgentForecast 是一条统一管线，串联两大引擎，并由一张知识图谱与一个报告 Agent 黏合：
 
 - **DeerFlow —— 深度研究引擎**
   基于 LangGraph 的深度研究「超级智能体」：联网搜索 + 全文抓取，多角度研究，写出一份结构化的研究档案。它运行在**独立的子进程与独立的 Python 虚拟环境**中，与后端的依赖隔离。
@@ -171,7 +171,7 @@ flowchart LR
 - **多智能体群体模拟**：数以百计的 LLM 人格在模拟的 Twitter + Reddit 上互动；涌现的群体动态为预测提供输入。
 - **工具增强的预测综合**：ReAct ReportAgent 在动笔之前同时检索知识图谱与模拟结果。
 - **统一仪表盘**：实时日志、研究档案、知识图谱、模拟信息流与预测报告，全部收纳在一个带吸顶六阶段时间线的视图里。
-- **运行时可切换 LLM 提供方**：在设置菜单中即可在本机 CLI 与托管 API 之间切换，对**新发起的运行**生效。
+- **运行时可切换 LLM 提供方**：在设置菜单中即可在本机 CLI 与托管 API 之间切换，对**新发起的运行**生效。内置**「测试连接」**按钮，一键验证 API Key（或本机 CLI）可用后再应用。
 - **可取消的运行**：运行中的管线可在任意阶段从 UI 中止 —— 研究子进程组被杀掉、OASIS 模拟被停止，被取消的运行会立即停止消耗配额。
 - **可恢复的运行**：失败或被取消的管线可以原地恢复（**继续**按钮，或 `POST /api/research/<id>/resume`）。已完成的阶段会被复用 —— 已写出的研究档案、本体、知识图谱或已完成的模拟不会被重复付费；管线从出错的阶段重新开始。
 - **秒级预检（fail-fast）**：`npm run doctor` 几秒内检查完整个环境；`POST /research/run` 会在产生任何花费之前校验 Key / 凭据 / DeerFlow 检出。
@@ -207,9 +207,9 @@ flowchart LR
 ./setup.sh
 ```
 
-它会检查前置条件、从 `.env.example` 生成 `.env`、**自动探测本机的模型提供方**（`claude` CLI → `claude-cli`；`codex` CLI → `codex-cli`，研究阶段同时切到 `codex`）、提示你填入 Zep Key、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**），然后**自动下载 DeerFlow**：若仓库内 `deer-flow/` 不存在，则从 <https://github.com/bytedance/deer-flow> 浅克隆（固定到一个已知可用的提交），并**裁剪到运行所需的最小集合**（`backend/`、`skills/`、`config.yaml`——上游的 Web 前端、文档、docker 与 CI 在本工作流中均用不到），再应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁与中间件补丁、经过强化的来源分级 deep-research 技能、`config.yaml`），并构建 DeerFlow 的隔离 venv（Python 3.13）。脚本幂等，可安全地重复运行。
+它会检查前置条件，然后进入**交互式提供方选择器**：在本机 `claude` / `codex` CLI（零配置、无需 API Key——检测到的 CLI 会被预选为默认项）与六个托管 API 提供方（OpenAI 兼容 / Kimi / MiniMax / DeepSeek / Qwen / GLM）之间选择。选择 API 提供方时会提示你输入 **API Key**（静默输入、绝不回显），并用一次 1-token 补全**实时验证该 Key**——写错的 Key 几秒内即被发现，而不是在研究跑了 40 分钟后才暴露。随后它会提示你填入 Zep Key、从 `.env.example` 生成 `.env`、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**），然后**自动下载 DeerFlow**：若仓库内 `deer-flow/` 不存在，则从 <https://github.com/bytedance/deer-flow> 浅克隆（固定到一个已知可用的提交），并**裁剪到运行所需的最小集合**（`backend/`、`skills/`、`config.yaml`——上游的 Web 前端、文档、docker 与 CI 在本工作流中均用不到），再应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁与中间件补丁、经过强化的来源分级 deep-research 技能、`config.yaml`），并构建 DeerFlow 的隔离 venv（Python 3.13）。脚本幂等，可安全地重复运行。
 
-如需覆盖默认值，可通过环境变量：`DEERFLOW_DIR`（位置）、`DEERFLOW_REPO`（克隆地址）、`DEERFLOW_REF`（固定提交；设为 `=main` 可跟踪 HEAD）。它们由 `setup.sh` 从 **shell 环境**读取（不是 `.env` 配置项），例如 `DEERFLOW_REF=main ./setup.sh`。
+如需覆盖默认值，可通过环境变量：`DEERFLOW_DIR`（位置）、`DEERFLOW_REPO`（克隆地址）、`DEERFLOW_REF`（固定提交；设为 `=main` 可跟踪 HEAD）、`SETUP_NONINTERACTIVE=1`（跳过选择器、走自动探测——CI / 管道运行会自动如此）。它们由 `setup.sh` 从 **shell 环境**读取（不是 `.env` 配置项），例如 `DEERFLOW_REF=main ./setup.sh`。重复运行是幂等的：选择器默认选中你当前 `.env` 里的提供方，直接回车绝不会覆盖既有配置。
 
 **路径 B —— 手动安装**（与上面等价的手动步骤）：
 
@@ -287,7 +287,7 @@ npm run dev        # 后端 :5001 + 前端 :3000
 
 ### 三种切换方式
 
-1. **UI 设置菜单**（推荐）：在 `/research` 页面右上角的「设置」菜单中选择模型提供方（以及 EN / 中文 界面语言）。需要 Key 的提供方可在此填写 Key（及可选的 base URL / model 高级项）。
+1. **UI 设置菜单**（推荐）：在 `/research` 页面右上角的「设置」菜单中选择模型提供方（以及 EN / 中文 界面语言）。需要 Key 的提供方可在此填写 Key（及可选的 base URL / model 高级项）。**「测试连接」**按钮可在应用前先验证配置：API 提供方会向其端点发起一次真实的 1-token 补全（精确报出失败原因——401 Key 无效、404 端点/模型名错误、429 配额耗尽），CLI 提供方则检查 PATH 与版本。测试不会持久化任何配置。
 2. **`.env` 文件**：设置 `LLM_PROVIDER`（及按需设置 `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_NAME`）。
 3. **`/api/settings` 接口**：`POST /api/settings/llm`，请求体为 `{provider, api_key?, base_url?, model?}`。这是运行时切换，更新进程内配置 + 环境变量（供 DeerFlow 子进程继承）并 upsert 进 `.env`；已在运行中的管线不受影响。
 
@@ -401,12 +401,13 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 |------|------|------|
 | `GET` | `/settings/llm` | 当前提供方 + 受支持提供方清单。 |
 | `POST` | `/settings/llm` | 运行时切换提供方 `{provider, api_key?, base_url?, model?}`（对新发起的运行生效）。 |
+| `POST` | `/settings/llm/test` | 测试一个提供方配置（同样的请求体），**不持久化任何配置**。API 提供方：真实的 1-token 补全（返回 ok/延迟/模型，或失败原因——401 Key 无效、404 端点/模型错误、429 配额）。CLI 提供方：PATH + 版本检查。 |
 
 ---
 
 ## 前端统一面板
 
-前端主视图为 `/research`：一个**组合式仪表盘**，把提示词输入 + 参数、一条吸顶的六阶段时间线，以及一组标签页整合在同一页面。此外还有一个运行历史抽屉与一个设置菜单（模型提供方 + EN/中文 语言切换）。界面为双语（English + 中文）。
+前端主视图为 `/research`：一个**组合式仪表盘**，把提示词输入 + 参数、一条吸顶的六阶段时间线，以及一组标签页整合在同一页面。此外还有一个运行历史抽屉与一个设置菜单（模型提供方 + 一键「测试连接」+ EN/中文 语言切换）。界面为双语（English + 中文）。
 
 **标签页：**
 
@@ -434,8 +435,8 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 ## 项目结构
 
 ```
-DeepResearchForecast/
-├── setup.sh                  # 一键安装 / 快速开始脚本（自动探测模型提供方）
+DeepAgentForecast/
+├── setup.sh                  # 一键安装 / 快速开始脚本（交互式提供方选择 + Key 验证）
 ├── package.json              # 根脚本：setup:all / dev / backend / frontend / build
 ├── .env.example              # 环境变量参考
 ├── backend/                  # Flask 后端（:5001）

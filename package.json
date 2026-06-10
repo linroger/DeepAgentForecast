@@ -1,7 +1,7 @@
 {
-  "name": "deepresearchforecast",
+  "name": "deepagentforecast",
   "version": "0.2.0",
-  "description": "DeepResearchForecast — one prompt: deep research → knowledge graph → multi-agent simulation → forecast",
+  "description": "DeepAgentForecast — one prompt: deep research → knowledge graph → multi-agent simulation → forecast",
   "scripts": {
     "setup": "npm install && cd frontend && npm install",
     "setup:backend": "cd backend && uv sync --python 3.12",

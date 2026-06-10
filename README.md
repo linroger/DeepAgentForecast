@@ -1,17 +1,17 @@
-# DeepResearchForecast
+# DeepAgentForecast
 
 **English** | [简体中文](README.zh-CN.md)
 
 > **Type a single question. Get an interactive forecast.**
-> DeepResearchForecast auto-researches the web, builds a high-fidelity parallel world, runs a multi-agent population simulation, and produces an interactive forecast report — all from one prompt.
+> DeepAgentForecast auto-researches the web, builds a high-fidelity parallel world, runs a multi-agent population simulation, and produces an interactive forecast report — all from one prompt.
 
-DeepResearchForecast is an autonomous **"one prompt → forecast"** engine. You give it a question about the future; it researches the open web, distills what it learns into a temporal knowledge graph, populates a simulated society of LLM-driven personas, runs that society forward in time, and then synthesizes everything into a sectioned, evidence-grounded forecast report you can read and explore in your browser. The whole journey — research, graph, simulation, report — happens behind a single combined dashboard with a live, stage-by-stage view of the work in progress.
+DeepAgentForecast is an autonomous **"one prompt → forecast"** engine. You give it a question about the future; it researches the open web, distills what it learns into a temporal knowledge graph, populates a simulated society of LLM-driven personas, runs that society forward in time, and then synthesizes everything into a sectioned, evidence-grounded forecast report you can read and explore in your browser. The whole journey — research, graph, simulation, report — happens behind a single combined dashboard with a live, stage-by-stage view of the work in progress.
 
 ---
 
 ## Demo
 
-🔗 **[Live demo site](https://linroger.github.io/DeepResearchForecast/)** (English + 中文) — walk through **every stage** of real end-to-end runs: the deep-research console log, the research dossier with actors & sources, the generated ontology, an interactive knowledge graph, the simulated Twitter/Reddit forum, and the final forecast (US AI race 2030, global EV industry 2035, Russia–Ukraine endgame, global semiconductors 2030).
+🔗 **[Live demo site](https://linroger.github.io/DeepAgentForecast/)** (English + 中文) — walk through **every stage** of real end-to-end runs: the deep-research console log, the research dossier with actors & sources, the generated ontology, an interactive knowledge graph, the simulated Twitter/Reddit forum, and the final forecast (US AI race 2030, global EV industry 2035, Russia–Ukraine endgame, global semiconductors 2030).
 
 One prompt — *"Who wins the US AI race by 2030?"* — taken from question to interactive forecast (research → knowledge graph → 40-round population simulation → report):
 
@@ -23,7 +23,7 @@ One prompt — *"Who wins the US AI race by 2030?"* — taken from question to i
 
 The most recent showcase run: a deep-mode research pass on the full semiconductor value chain (memory / HBM / logic / foundry across 17 named companies), a 285-node knowledge graph, **115 personas** over **40 dual-platform rounds**, and a sectioned forecast report.
 
-▶ **[Watch the semiconductor run walkthrough (42s at 4× speed, MP4)](docs/media/demo-semiconductors.mp4)** · 🔗 **[Explore it live](https://linroger.github.io/DeepResearchForecast/demo.html?run=semiconductors-2030)**
+▶ **[Watch the semiconductor run walkthrough (42s at 4× speed, MP4)](docs/media/demo-semiconductors.mp4)** · 🔗 **[Explore it live](https://linroger.github.io/DeepAgentForecast/demo.html?run=semiconductors-2030)**
 
 | | |
 |---|---|
@@ -45,7 +45,7 @@ The most recent showcase run: a deep-mode research pass on the full semiconducto
 
 ## What it does
 
-Given one natural-language prediction question (for example, *"Will product X reach mainstream adoption within 18 months?"*), DeepResearchForecast:
+Given one natural-language prediction question (for example, *"Will product X reach mainstream adoption within 18 months?"*), DeepAgentForecast:
 
 1. **Researches the web autonomously** — a deep-research super-agent performs multi-angle web search and full-text fetching, then writes a structured research dossier with the actors, sources, and the precise prediction requirement.
 2. **Builds a parallel world** — the dossier is converted into a temporal knowledge graph, and one digital persona is generated per key entity in that graph.
@@ -58,7 +58,7 @@ Everything is observable in real time: a live research console, the rendered dos
 
 ## Architecture overview
 
-DeepResearchForecast chains **two engines** through a **shared temporal knowledge graph** and a **report agent**, all surfaced by a single Vue frontend.
+DeepAgentForecast chains **two engines** through a **shared temporal knowledge graph** and a **report agent**, all surfaced by a single Vue frontend.
 
 | Component | Role |
 |---|---|
@@ -74,7 +74,7 @@ A **pipeline** is one prompt run. Each run flows through six stages:
 
 ```
             ┌────────────────────────────────────────────────────────────────────────┐
-  one       │                          DeepResearchForecast                            │
+  one       │                          DeepAgentForecast                            │
  prompt ───▶│                                                                          │
             │  ┌───────────┐ ┌──────────┐ ┌────────┐ ┌─────────┐ ┌─────┐ ┌────────┐   │
             │  │ 1 RESEARCH│▶│2 ONTOLOGY│▶│3 GRAPH │▶│4 PREPARE│▶│5 RUN│▶│6 REPORT│   │
@@ -142,7 +142,7 @@ flowchart LR
 - **Multi-agent population simulation.** Hundreds of LLM personas interact on a simulated Twitter + Reddit; emergent dynamics inform the forecast.
 - **Tool-augmented forecast synthesis.** A ReAct ReportAgent retrieves across both the graph and the simulation before writing.
 - **Single combined dashboard.** Live log, dossier, knowledge graph, simulation feed, and forecast — all in one view with a sticky 6-stage timeline.
-- **Runtime-switchable LLM providers.** Switch between local CLIs and hosted APIs from the Settings menu; the switch applies to new runs.
+- **Runtime-switchable LLM providers.** Switch between local CLIs and hosted APIs from the Settings menu; the switch applies to new runs. A built-in **Test connection** button verifies an API key (or a local CLI) in one click before you commit to it.
 - **Cancellable runs.** A running pipeline can be aborted from the UI at any stage — the research subprocess group is killed and the OASIS simulation is stopped, so a cancelled run stops burning quota immediately.
 - **Resumable runs.** A failed or cancelled pipeline can be resumed in place (**Resume** button, or `POST /api/research/<id>/resume`). Completed stages are reused — an already-written research dossier, ontology, knowledge graph, or finished simulation is never paid for twice; the pipeline restarts from the stage that broke.
 - **Fail-fast preflight.** `npm run doctor` checks the whole environment in seconds, and `POST /research/run` validates keys/credentials/checkout before any spend.
@@ -178,9 +178,9 @@ Three steps: **install → configure → run**. DeerFlow lives in `deer-flow/` *
 ./setup.sh
 ```
 
-It checks prerequisites, scaffolds `.env` from `.env.example`, **auto-detects your model provider** (`claude` CLI → `claude-cli`, `codex` CLI → `codex-cli` + research on `codex`), prompts for your Zep key, installs the root + frontend npm deps, builds the backend venv (**pinned to Python 3.12**), then **downloads DeerFlow automatically**: it shallow-clones `deer-flow/` into the repo (from <https://github.com/bytedance/deer-flow>, pinned to a known-good commit, gitignored) if absent, **trims it to runtime essentials** (`backend/`, `skills/`, `config.yaml` — the upstream web frontend, docs, docker and CI are dead weight here), applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` + middleware patches, the overhauled source-tiering deep-research skill, and `config.yaml`), and builds DeerFlow's isolated venv (Python 3.13). Re-running it is idempotent and safe.
+It checks prerequisites, then walks you through an **interactive provider picker**: choose between the local `claude` / `codex` CLIs (zero config, no API key — the detected CLI is pre-selected as the default) and six hosted API providers (OpenAI-compatible / Kimi / MiniMax / DeepSeek / Qwen / GLM). If you pick an API provider it prompts for your **API key** (silent input, never echoed) and **live-tests it** with a one-token completion so a typo'd key fails in seconds, not 40 minutes into a research run. It then prompts for your Zep key, scaffolds `.env` from `.env.example`, installs the root + frontend npm deps, builds the backend venv (**pinned to Python 3.12**), then **downloads DeerFlow automatically**: it shallow-clones `deer-flow/` into the repo (from <https://github.com/bytedance/deer-flow>, pinned to a known-good commit, gitignored) if absent, **trims it to runtime essentials** (`backend/`, `skills/`, `config.yaml` — the upstream web frontend, docs, docker and CI are dead weight here), applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` + middleware patches, the overhauled source-tiering deep-research skill, and `config.yaml`), and builds DeerFlow's isolated venv (Python 3.13). Re-running it is idempotent and safe.
 
-Override the defaults via env vars if needed: `DEERFLOW_DIR` (location), `DEERFLOW_REPO` (clone URL), `DEERFLOW_REF` (pinned commit; set `=main` to track HEAD). These are read by `setup.sh` from the shell environment (they are not `.env` keys), e.g. `DEERFLOW_REF=main ./setup.sh`.
+Override the defaults via env vars if needed: `DEERFLOW_DIR` (location), `DEERFLOW_REPO` (clone URL), `DEERFLOW_REF` (pinned commit; set `=main` to track HEAD), `SETUP_NONINTERACTIVE=1` (skip the picker and auto-detect — what CI / piped runs do automatically). These are read by `setup.sh` from the shell environment (they are not `.env` keys), e.g. `DEERFLOW_REF=main ./setup.sh`. Re-runs are idempotent: the picker defaults to your current `.env` provider, so pressing Enter never clobbers an existing configuration.
 
 **Option B — manual setup** (the equivalent steps by hand):
 
@@ -265,9 +265,10 @@ The **deep-research** stage is driven separately by `DEERFLOW_MODEL` (7 options)
 
 ### How to switch
 
-- **Settings menu** — open the Settings menu in the frontend and pick a provider (and, if needed, supply key / base URL / model). This is the easiest path.
+- **Settings menu** — open the Settings menu in the frontend and pick a provider (and, if needed, supply key / base URL / model). This is the easiest path. A **Test connection** button verifies the configuration *before* you apply it: API providers get a real one-token completion against their endpoint (catching invalid keys, wrong base URLs and bad model names with a precise reason — 401 invalid key, 404 wrong endpoint/model, 429 quota), CLI providers get a PATH + version check. Nothing is persisted by a test.
+- **`setup.sh`** — re-run it any time for the interactive picker (defaults to your current provider).
 - **`.env`** — set `LLM_PROVIDER` (and provider credentials) before starting. See the reference below.
-- **API** — `POST /api/settings/llm` with `{provider, api_key?, base_url?, model?}` to switch at runtime. Read the current setting with `GET /api/settings/llm`.
+- **API** — `POST /api/settings/llm` with `{provider, api_key?, base_url?, model?}` to switch at runtime. Read the current setting with `GET /api/settings/llm`; test a candidate configuration without persisting it with `POST /api/settings/llm/test` (same body).
 
 ---
 
@@ -379,6 +380,7 @@ The backend is a **Flask** app at `http://localhost:5001`. All endpoints are und
 |---|---|---|
 | `GET` | `/settings/llm` | Current LLM provider settings. |
 | `POST` | `/settings/llm` | Switch provider at runtime. Body: `{provider, api_key?, base_url?, model?}`. Applies to **new runs**. |
+| `POST` | `/settings/llm/test` | Test a provider configuration **without persisting it** (same body). API providers: a real one-token completion (returns ok/latency/model, or the failure reason — 401 invalid key, 404 wrong endpoint/model, 429 quota). CLI providers: PATH + version check. |
 
 ---
 
@@ -389,7 +391,7 @@ The frontend is **Vue 3 + Vite** at `http://localhost:3000` (it proxies `/api` t
 - A **prompt input** with run parameters.
 - A **sticky 6-stage timeline** tracking research → ontology → graph → prepare → run → report.
 - A **run-history drawer** for past runs.
-- A **Settings menu** (model provider + EN/中文 language toggle).
+- A **Settings menu** (model provider with one-click **Test connection**, + EN/中文 language toggle).
 
 The dashboard's tabs:
 
@@ -419,7 +421,7 @@ The entire UI is **bilingual** (English + 中文).
 ## Project layout
 
 ```
-DeepResearchForecast/
+DeepAgentForecast/
 ├── backend/                 # Flask API (port 5001) — pipeline orchestration,
 │   │                        #   graph ingest, simulation, ReportAgent. uv-managed,
 │   └── .python-version      #   pinned to Python 3.12 (camel-ai stack targets ≤3.12).
@@ -431,8 +433,8 @@ DeepResearchForecast/
 │   └── config.yaml          #   deer-flow model config (copied only if absent).
 ├── docs/                    # GitHub Pages demo site + media assets (docs/media/).
 ├── scripts/doctor.sh        # `npm run doctor` — environment health check.
-├── setup.sh                 # Quick-start: downloads deer-flow, installs everything,
-│                            #   applies the bridge overlay, auto-detects provider.
+├── setup.sh                 # Quick-start: interactive provider picker + key test,
+│                            #   downloads deer-flow, installs everything, applies overlay.
 ├── .env                     # LLM_PROVIDER, ZEP_API_KEY, provider + DeerFlow config.
 ├── package.json             # `setup:all`, `doctor` and `dev` scripts.
 └── deer-flow/               # DeerFlow research engine — auto-downloaded by setup.sh,

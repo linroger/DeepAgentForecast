@@ -1,6 +1,6 @@
 # DeerFlow bridge
 
-DeepResearchForecast's **deep-research stage** (stage 1 of the pipeline) is powered by
+DeepAgentForecast's **deep-research stage** (stage 1 of the pipeline) is powered by
 [DeerFlow](https://github.com/bytedance/deer-flow), a LangGraph-based research super‑agent.
 DeerFlow runs in **its own Python environment** (its `langchain`/`langgraph` dependency tree is
 isolated from this backend) and is invoked as a **subprocess** that writes a file‑based
@@ -19,7 +19,6 @@ everything here automatically — you normally never touch these files by hand.
 | `skills/deep-research/SKILL.md` | **Overhauled deep-research skill** (replaces the generic upstream one). Adds a source-quality framework — S1 primary/authoritative → S4 reject (SEO farms, aggregator slop, undated/anonymous pages) — 8 signal heuristics applied *before* fetching, circular-sourcing detection (ten echoes of one report = one source), mandatory triangulation of load-bearing claims, disconfirmation searches, a synthesis gate, and tool-budget discipline tuned to the per-run `web_search`/`web_fetch` limits. | → `deer-flow/skills/public/deep-research/SKILL.md` |
 | `patches/middlewares/loop_detection_middleware.py` | Loop detection with **per‑run counter resets**. Upstream accumulates per‑tool call counts across *all* turns of a thread, so multi‑pass deep research permanently force‑stops `web_search` from pass 2 onward (`[FORCED STOP] Tool web_search called N times…`) once the cumulative count crosses the limit. The patch resets the budget at the start of each agent run — full in‑run loop protection stays intact. | → `deer-flow/backend/packages/harness/deerflow/agents/middlewares/` |
 | `config.yaml` | A complete, ready‑to‑use DeerFlow config with active stanzas for **claude / minimax / deepseek / qwen / glm / codex / kimi**. All keys are `$VAR` references resolved from `.env` — **no secrets**. Bridge‑tuned: conversation **memory off** (no cross‑run fact contamination), **title generation off** (headless runs), summarization trigger raised to **120K tokens** (research keeps full source detail). | → `deer-flow/config.yaml` (only if absent; never clobbers an existing one — diff against this copy to pick up new stanzas/tuning). |
-| `config.minimax.snippet.yaml` | Just the `minimax` model stanza, for pasting into an existing `deer-flow/config.yaml` by hand. | (manual merge helper) |
 
 ## Automated install (recommended)
 

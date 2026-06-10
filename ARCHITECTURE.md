@@ -23,10 +23,9 @@ API, or Kimi-for-coding).
 ## 1. Top-level layout
 
 ```
-DeepResearchForecast/
+DeepAgentForecast/
 ├── package.json            # npm scripts: dev = concurrently(backend, frontend)
 ├── .env / .env.example     # LLM_PROVIDER, ZEP_API_KEY, …
-├── run_simulation.py       # standalone CLI driver (dev/testing, bypasses Flask)
 ├── frontend/               # Vue 3 + Vite SPA  (port 3000)
 │   └── src/{views,components,api,router,store}
 └── backend/                # Flask API + pipeline + OASIS scripts (port 5001)

@@ -1,5 +1,5 @@
 /**
- * Minimal, dependency-free i18n for DeepResearchForecast.
+ * Minimal, dependency-free i18n for DeepAgentForecast.
  *
  * Usage in any component:
  *   import { locale, L, setLocale } from '<relative>/i18n'

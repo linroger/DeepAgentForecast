@@ -1,4 +1,4 @@
-/* Tiny i18n for the DeepResearchForecast demo site.
+/* Tiny i18n for the DeepAgentForecast demo site.
  * Usage: elements carry data-i18n="key" (textContent) or data-i18n-html="key"
  * (innerHTML, for strings with markup). drfT(key) for JS strings.
  * Language persists in localStorage('drf_lang'); default follows the browser. */

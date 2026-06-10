@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# doctor.sh — DeepResearchForecast environment health check
+# doctor.sh — DeepAgentForecast environment health check
 # ---------------------------------------------------------------------------
 # Verifies, in seconds, everything a full "one prompt -> forecast" run needs:
 # tool versions, both Python venvs, the DeerFlow checkout + bridge overlay,

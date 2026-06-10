@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
 #
-# setup.sh — DeepResearchForecast quick-start / installer
+# setup.sh — DeepAgentForecast quick-start / installer
 # ---------------------------------------------------------------------------
 # Idempotent, re-runnable setup for the "one prompt -> forecast" engine.
 #
 #   * Checks prerequisites (node>=18, npm, uv, python3) and WARNS (never
 #     hard-fails) when something optional is missing.
-#   * Auto-detects the local model provider:
+#   * INTERACTIVE provider picker (TTY runs): choose between the local Claude /
+#     Codex CLIs (no API key) and six API-key providers (OpenAI-compatible /
+#     Kimi / MiniMax / DeepSeek / Qwen / GLM); API-key providers prompt for the
+#     key (silent input) and live-test it with a 1-token completion.
+#     Non-interactive runs (CI, piped) silently auto-detect:
 #       - `claude` CLI on PATH -> LLM_PROVIDER=claude-cli, DEERFLOW_MODEL=claude
 #       - `codex`  CLI on PATH -> LLM_PROVIDER=codex-cli,  DEERFLOW_MODEL=codex
 #       - neither               -> default claude-cli + a warning
 #   * Scaffolds .env from .env.example (never overwrites an existing .env) and
-#     upserts the detected provider lines safely.
+#     upserts the chosen provider lines safely (re-runs default to your current
+#     .env provider, so pressing Enter never clobbers an existing config).
 #   * Installs root + frontend + backend dependencies.
 #   * DOWNLOADS the DeerFlow research engine into ./deer-flow inside this repo
 #     (pinned commit, gitignored), applies the bridge overlay (research driver, patched
@@ -59,7 +64,7 @@ step()  { printf '\n%s== %s ==%s\n' "$C_BOLD" "$*" "$C_RESET"; }
 printf '%s' "$C_BOLD"
 cat <<'BANNER'
 ============================================================
-   DeepResearchForecast — setup
+   DeepAgentForecast — setup
    one prompt -> research -> simulate -> forecast
 ============================================================
 BANNER
@@ -137,35 +142,130 @@ if [ "$MISSING_PREREQS" -ne 0 ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 3) Auto-detect the model provider
+# 3) Choose the model provider (interactive picker; auto-detect fallback)
 # ---------------------------------------------------------------------------
-step "Detecting model provider"
+step "Choosing model provider"
 
-# DEERFLOW_MODEL must be one of the models DeerFlow's research stage supports
-# (claude | minimax | deepseek | qwen | glm | codex | kimi). Each CLI provider
-# maps to its own subscription's research model (claude -> claude OAuth,
-# codex -> codex OAuth) so a codex-only machine never needs Claude credentials.
-LLM_PROVIDER=""
-DEERFLOW_MODEL="claude"
+# Provider tables (bash-3.2-compatible: no associative arrays on stock macOS).
+# Fields per provider: label | needs API key | DeerFlow research model |
+# default base URL / model name | provider-specific key env mirrored for deer-flow.
+PROVIDER_IDS=(claude-cli codex-cli openai kimi minimax deepseek qwen glm)
+PROVIDER_LABELS=(
+  "Claude Code (local CLI subscription — no API key)"
+  "Codex (local CLI / ChatGPT subscription — no API key)"
+  "OpenAI-compatible API (needs API key)"
+  "Kimi-for-coding (needs API key)"
+  "MiniMax code plan (needs API key)"
+  "DeepSeek (needs API key)"
+  "Qwen / DashScope (needs API key)"
+  "GLM / Z.ai (needs API key)"
+)
+PROVIDER_NEEDS_KEY=(no no yes yes yes yes yes yes)
+PROVIDER_DF_MODEL=(claude codex claude kimi minimax deepseek qwen glm)
+PROVIDER_BASE=(
+  "" ""
+  "https://api.openai.com/v1"
+  "https://api.kimi.com/coding/v1"
+  "https://api.minimaxi.com/v1"
+  "https://api.deepseek.com/v1"
+  "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+  "https://api.z.ai/api/paas/v4"
+)
+PROVIDER_MODEL=(
+  "" ""
+  "gpt-4o-mini"
+  "kimi-for-coding"
+  "MiniMax-M3"
+  "deepseek-chat"
+  "qwen-plus"
+  "glm-4.6"
+)
+PROVIDER_KEY_ENV=("" "" "" "KIMI_API_KEY" "MINIMAX_API_KEY" "DEEPSEEK_API_KEY" "DASHSCOPE_API_KEY" "ZHIPUAI_API_KEY")
 
+# Auto-detect a sensible default: a local CLI means zero-config (subscription
+# OAuth, no API key). DEERFLOW_MODEL must be one of the models DeerFlow's
+# research stage supports (claude | minimax | deepseek | qwen | glm | codex | kimi).
+DETECTED_IDX=0   # default: claude-cli
+DEFAULT_BADGE="detected default"
 if have claude; then
-  LLM_PROVIDER="claude-cli"
-  DEERFLOW_MODEL="claude"
-  ok "Claude Code CLI detected -> LLM_PROVIDER=claude-cli (no API key needed)"
+  DETECTED_IDX=0
+  ok "Claude Code CLI detected (recommended default — no API key needed)"
 elif have codex; then
-  LLM_PROVIDER="codex-cli"
-  DEERFLOW_MODEL="codex"
-  ok "Codex CLI detected -> LLM_PROVIDER=codex-cli, DEERFLOW_MODEL=codex (no API key needed)"
+  DETECTED_IDX=1
+  ok "Codex CLI detected (recommended default — no API key needed)"
 else
-  # No local CLI: keep claude-cli as the documented default but make it loud
-  # that the user must either install a CLI or configure an API-key provider.
-  LLM_PROVIDER="claude-cli"
-  DEERFLOW_MODEL="claude"
-  warn "No 'claude' or 'codex' CLI found on PATH."
-  warn "Defaulting LLM_PROVIDER=claude-cli, but you must EITHER:"
-  warn "    • install a CLI:  Claude Code (https://claude.com/claude-code) or Codex, OR"
-  warn "    • set an API-key provider in .env (LLM_PROVIDER=openai|kimi|minimax"
-  warn "      with LLM_API_KEY / LLM_BASE_URL / LLM_MODEL_NAME)."
+  warn "No 'claude' or 'codex' CLI found on PATH — pick an API-key provider below,"
+  warn "or install Claude Code (https://claude.com/claude-code) and re-run."
+fi
+
+# Re-runs: a provider already configured in .env beats auto-detection as the
+# menu default, so pressing Enter never clobbers an existing configuration.
+PRE_ENV_PROVIDER=""
+if [ -f "$ROOT_DIR/.env" ]; then
+  PRE_ENV_PROVIDER="$(grep -E '^[[:space:]]*LLM_PROVIDER=' "$ROOT_DIR/.env" | head -n1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+  if [ -n "$PRE_ENV_PROVIDER" ]; then
+    i=0
+    for pid in "${PROVIDER_IDS[@]}"; do
+      if [ "$pid" = "$PRE_ENV_PROVIDER" ]; then
+        DETECTED_IDX="$i"
+        DEFAULT_BADGE="current .env setting"
+        ok "Existing .env provider found: $PRE_ENV_PROVIDER (menu default)"
+        break
+      fi
+      i=$((i + 1))
+    done
+  fi
+fi
+
+LLM_PROVIDER="${PROVIDER_IDS[$DETECTED_IDX]}"
+DEERFLOW_MODEL="${PROVIDER_DF_MODEL[$DETECTED_IDX]}"
+CHOSEN_IDX="$DETECTED_IDX"
+LLM_API_KEY_INPUT=""
+INTERACTIVE_PICKED=0
+
+# Interactive picker — only when stdin is a TTY (CI / piped runs keep the
+# auto-detected default silently). SETUP_NONINTERACTIVE=1 also skips it.
+if [ -t 0 ] && [ "${SETUP_NONINTERACTIVE:-0}" != "1" ]; then
+  INTERACTIVE_PICKED=1
+  printf '\n  Select your model provider (how the pipeline calls its LLM):\n\n'
+  i=0
+  for label in "${PROVIDER_LABELS[@]}"; do
+    n=$((i + 1))
+    if [ "$i" -eq "$DETECTED_IDX" ]; then
+      printf '    %s%d) %s  [%s]%s\n' "$C_GREEN" "$n" "$label" "$DEFAULT_BADGE" "$C_RESET"
+    else
+      printf '    %d) %s\n' "$n" "$label"
+    fi
+    i=$((n))
+  done
+  printf '\n  Choice [1-%d, Enter = %d]: ' "${#PROVIDER_IDS[@]}" "$((DETECTED_IDX + 1))"
+  read -r PICK || PICK=""
+  case "$PICK" in
+    (''|*[!0-9]*) CHOSEN_IDX="$DETECTED_IDX" ;;       # Enter / non-numeric -> default
+    (*) if [ "$PICK" -ge 1 ] && [ "$PICK" -le "${#PROVIDER_IDS[@]}" ]; then
+          CHOSEN_IDX=$((PICK - 1))
+        else
+          warn "Out-of-range choice '$PICK' — keeping the default."
+          CHOSEN_IDX="$DETECTED_IDX"
+        fi ;;
+  esac
+  LLM_PROVIDER="${PROVIDER_IDS[$CHOSEN_IDX]}"
+  DEERFLOW_MODEL="${PROVIDER_DF_MODEL[$CHOSEN_IDX]}"
+  ok "Provider: $LLM_PROVIDER (deep-research model: $DEERFLOW_MODEL)"
+
+  # API-key providers: prompt for the key now (silent input, never echoed).
+  if [ "${PROVIDER_NEEDS_KEY[$CHOSEN_IDX]}" = "yes" ]; then
+    printf '  Paste your %s API key (or press Enter to add it to .env later): ' "$LLM_PROVIDER"
+    read -rs LLM_API_KEY_INPUT || LLM_API_KEY_INPUT=""
+    printf '\n'
+    if [ -n "$LLM_API_KEY_INPUT" ]; then
+      ok "API key captured (will be written to .env, never echoed)"
+    else
+      warn "Skipped — set LLM_API_KEY in .env before running."
+    fi
+  fi
+else
+  ok "Non-interactive run -> LLM_PROVIDER=$LLM_PROVIDER (auto-detected default)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -216,24 +316,98 @@ upsert_env() {
   ' "$ENV_FILE" > "$tmp" && mv "$tmp" "$ENV_FILE"
 }
 
-# Respect an existing .env: auto-detection must never clobber a provider the
-# user already configured (e.g. minimax/kimi). Only write the detected values
-# when the keys are missing or empty.
-CURRENT_PROVIDER="$(grep -E '^[[:space:]]*LLM_PROVIDER=' "$ENV_FILE" | head -n1 | cut -d= -f2- || true)"
-CURRENT_DF_MODEL="$(grep -E '^[[:space:]]*DEERFLOW_MODEL=' "$ENV_FILE" | head -n1 | cut -d= -f2- || true)"
-if [ -n "$CURRENT_PROVIDER" ]; then
-  LLM_PROVIDER="$CURRENT_PROVIDER"
-  ok "Keeping existing LLM_PROVIDER=$CURRENT_PROVIDER from .env (auto-detect skipped)"
-else
+CURRENT_PROVIDER="$(grep -E '^[[:space:]]*LLM_PROVIDER=' "$ENV_FILE" | head -n1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+CURRENT_DF_MODEL="$(grep -E '^[[:space:]]*DEERFLOW_MODEL=' "$ENV_FILE" | head -n1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+
+if [ "$INTERACTIVE_PICKED" = "1" ]; then
+  # The user explicitly chose a provider in the picker — persist that choice.
+  # (Pressing Enter selects the current .env provider, so re-runs are no-ops.)
   upsert_env "LLM_PROVIDER" "$LLM_PROVIDER"
   ok "Set LLM_PROVIDER=$LLM_PROVIDER in .env"
-fi
-if [ -n "$CURRENT_DF_MODEL" ]; then
-  DEERFLOW_MODEL="$CURRENT_DF_MODEL"
-  ok "Keeping existing DEERFLOW_MODEL=$CURRENT_DF_MODEL from .env"
+  if [ "$LLM_PROVIDER" = "$CURRENT_PROVIDER" ] && [ -n "$CURRENT_DF_MODEL" ]; then
+    # Same provider as before: keep any custom DEERFLOW_MODEL the user tuned.
+    DEERFLOW_MODEL="$CURRENT_DF_MODEL"
+    ok "Keeping existing DEERFLOW_MODEL=$CURRENT_DF_MODEL from .env"
+  else
+    upsert_env "DEERFLOW_MODEL" "$DEERFLOW_MODEL"
+    ok "Set DEERFLOW_MODEL=$DEERFLOW_MODEL in .env"
+  fi
+
+  if [ "${PROVIDER_NEEDS_KEY[$CHOSEN_IDX]}" = "yes" ]; then
+    # Connection defaults: write base URL / model name when the provider just
+    # changed (stale values from another provider would break calls) or when
+    # they are missing; otherwise leave the user's tuning alone.
+    CURRENT_BASE="$(grep -E '^[[:space:]]*LLM_BASE_URL=' "$ENV_FILE" | head -n1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+    CURRENT_MODEL="$(grep -E '^[[:space:]]*LLM_MODEL_NAME=' "$ENV_FILE" | head -n1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+    if [ "$LLM_PROVIDER" != "$CURRENT_PROVIDER" ] || [ -z "$CURRENT_BASE" ]; then
+      upsert_env "LLM_BASE_URL" "${PROVIDER_BASE[$CHOSEN_IDX]}"
+      ok "Set LLM_BASE_URL=${PROVIDER_BASE[$CHOSEN_IDX]}"
+    fi
+    if [ "$LLM_PROVIDER" != "$CURRENT_PROVIDER" ] || [ -z "$CURRENT_MODEL" ]; then
+      upsert_env "LLM_MODEL_NAME" "${PROVIDER_MODEL[$CHOSEN_IDX]}"
+      ok "Set LLM_MODEL_NAME=${PROVIDER_MODEL[$CHOSEN_IDX]}"
+    fi
+    if [ -n "$LLM_API_KEY_INPUT" ]; then
+      upsert_env "LLM_API_KEY" "$LLM_API_KEY_INPUT"
+      # Mirror the key into the provider-specific env var that
+      # deer-flow/config.yaml resolves via $VAR for the deep-research stage.
+      KEY_ENV="${PROVIDER_KEY_ENV[$CHOSEN_IDX]}"
+      if [ -n "$KEY_ENV" ]; then
+        upsert_env "$KEY_ENV" "$LLM_API_KEY_INPUT"
+      fi
+      ok "LLM_API_KEY saved to .env${KEY_ENV:+ (mirrored to $KEY_ENV for deep research)}"
+    fi
+  fi
 else
-  upsert_env "DEERFLOW_MODEL" "$DEERFLOW_MODEL"
-  ok "Set DEERFLOW_MODEL=$DEERFLOW_MODEL in .env"
+  # Non-interactive: never clobber a provider the user already configured —
+  # only write the auto-detected values when the keys are missing or empty.
+  if [ -n "$CURRENT_PROVIDER" ]; then
+    LLM_PROVIDER="$CURRENT_PROVIDER"
+    ok "Keeping existing LLM_PROVIDER=$CURRENT_PROVIDER from .env (auto-detect skipped)"
+  else
+    upsert_env "LLM_PROVIDER" "$LLM_PROVIDER"
+    ok "Set LLM_PROVIDER=$LLM_PROVIDER in .env"
+  fi
+  if [ -n "$CURRENT_DF_MODEL" ]; then
+    DEERFLOW_MODEL="$CURRENT_DF_MODEL"
+    ok "Keeping existing DEERFLOW_MODEL=$CURRENT_DF_MODEL from .env"
+  else
+    upsert_env "DEERFLOW_MODEL" "$DEERFLOW_MODEL"
+    ok "Set DEERFLOW_MODEL=$DEERFLOW_MODEL in .env"
+  fi
+fi
+
+# --- Optional live key test (only when a fresh key was just entered) ---------
+# A single 1-token chat completion against the provider's endpoint: catches
+# typo'd keys in setup instead of 40 minutes into a research run. You can also
+# re-test any time from the UI Settings menu ("Test connection").
+if [ -n "$LLM_API_KEY_INPUT" ] && have curl; then
+  info "Testing the API key against ${PROVIDER_BASE[$CHOSEN_IDX]} …"
+  UA_HEADER=()
+  if [ "$LLM_PROVIDER" = "kimi" ]; then
+    # The Kimi-for-coding gateway validates a coding-agent User-Agent.
+    UA_HEADER=(-H "User-Agent: claude-cli/1.0.0")
+  fi
+  # ${arr[@]+...} guards the empty-array expansion (bash 3.2 + set -u safe).
+  HTTP_CODE="$(curl -sS -o /tmp/setup_llm_test.$$ -w '%{http_code}' --max-time 25 \
+    "${PROVIDER_BASE[$CHOSEN_IDX]}/chat/completions" \
+    -H "Authorization: Bearer $LLM_API_KEY_INPUT" \
+    -H "Content-Type: application/json" \
+    ${UA_HEADER[@]+"${UA_HEADER[@]}"} \
+    -d "{\"model\":\"${PROVIDER_MODEL[$CHOSEN_IDX]}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1}" \
+    2>/dev/null || printf '000')"
+  if [ "$HTTP_CODE" = "200" ]; then
+    ok "API key works (HTTP 200 from ${PROVIDER_MODEL[$CHOSEN_IDX]})"
+  elif [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
+    warn "API key REJECTED (HTTP $HTTP_CODE). Double-check the key in .env (LLM_API_KEY)."
+  elif [ "$HTTP_CODE" = "000" ]; then
+    warn "Could not reach the provider endpoint (offline?). Key saved; test later from"
+    warn "    the UI Settings menu ('Test connection')."
+  else
+    warn "Provider returned HTTP $HTTP_CODE — key saved; verify from the UI Settings menu."
+  fi
+  rm -f "/tmp/setup_llm_test.$$" 2>/dev/null || true
+  unset LLM_API_KEY_INPUT
 fi
 
 # --- Zep API key prompt (required for every run; allow skipping) -------------
@@ -463,11 +637,10 @@ cat <<NEXT
 
   2) Model provider: currently LLM_PROVIDER=$LLM_PROVIDER (DEERFLOW_MODEL=$DEERFLOW_MODEL).
        • claude-cli / codex-cli use your local CLI — no API key needed.
-       • For an API provider, set LLM_PROVIDER in .env to one of:
-           openai | kimi | minimax | deepseek | qwen | glm
-         and add LLM_API_KEY / LLM_BASE_URL / LLM_MODEL_NAME (sensible defaults
-         exist for kimi/minimax/deepseek/qwen/glm — see .env.example). You can
-         also switch the provider at runtime from the UI Settings menu (NEW runs).
+       • Change it any time: re-run ./setup.sh (interactive picker), edit .env
+         (LLM_PROVIDER=openai|kimi|minimax|deepseek|qwen|glm + LLM_API_KEY), or
+         switch at runtime from the UI Settings menu — which also has a
+         "Test connection" button to verify your API key in one click.
        • To run deep research on a specific model, set DEERFLOW_MODEL to
          claude | minimax | deepseek | qwen | glm | codex | kimi.
 

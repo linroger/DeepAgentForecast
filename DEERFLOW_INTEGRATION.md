@@ -25,7 +25,7 @@ This document is the design + implementation plan. Both pieces live in this
 single repo folder:
 
 ```
-DeepResearchForecast/
+DeepAgentForecast/
 ├── backend/ + frontend/ ← prediction engine (see ARCHITECTURE.md)
 ├── deerflow_bridge/     ← overlay applied onto deer-flow/ by setup.sh
 └── deer-flow/           ← DeerFlow 2.0 super-agent harness (auto-downloaded, gitignored)

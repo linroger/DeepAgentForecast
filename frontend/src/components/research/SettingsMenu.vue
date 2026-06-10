@@ -56,6 +56,19 @@
               <input v-model="model" type="text" class="text-input" :placeholder="defaultModel" />
             </details>
           </div>
+
+          <!-- 连通性测试：API 提供方验证 Key，CLI 提供方检查本机 CLI。不持久化任何配置。 -->
+          <div class="test-row">
+            <button class="test-btn" :disabled="testing || !canTest" @click="testConnection">
+              {{ testing ? L('测试中…', 'Testing…') : L('测试连接', 'Test connection') }}
+            </button>
+            <span v-if="testResult" class="test-result" :class="testResult.ok ? 'ok' : 'err'">
+              <template v-if="testResult.ok">
+                ✓ {{ L('连接成功', 'Connected') }}<template v-if="testResult.latency_ms"> · {{ testResult.latency_ms }}ms</template><template v-if="testResult.model"> · {{ testResult.model }}</template><template v-if="testResult.detail"> · {{ testResult.detail }}</template>
+              </template>
+              <template v-else>✗ {{ testResult.error }}</template>
+            </span>
+          </div>
         </section>
 
         <p v-if="error" class="err">{{ error }}</p>
@@ -73,8 +86,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { getLlmSettings, setLlmSettings } from '../../api/settings'
+import { ref, computed, watch, onMounted } from 'vue'
+import { getLlmSettings, setLlmSettings, testLlmSettings } from '../../api/settings'
 import { locale, setLocale, L } from '../../i18n'
 
 const emit = defineEmits(['close', 'changed'])
@@ -90,6 +103,8 @@ const model = ref('')
 const saving = ref(false)
 const error = ref('')
 const okMsg = ref('')
+const testing = ref(false)
+const testResult = ref(null)
 
 const DEERFLOW_MAP = {
   'claude-cli': 'claude', 'codex-cli': 'codex', openai: 'claude', kimi: 'claude',
@@ -115,6 +130,8 @@ const canSave = computed(() => {
   if (selectedNeedsKey.value && !(selected.value === current.value && hasApiKey.value) && !apiKey.value.trim()) return false
   return true
 })
+// 可测试 = 可保存的同一约束（CLI 提供方永远可测；API 提供方需要 Key 或已配置的沿用 Key）
+const canTest = computed(() => canSave.value)
 
 async function load() {
   loadingInfo.value = true
@@ -130,6 +147,26 @@ async function load() {
     error.value = (e && e.message) || 'Failed to load settings'
   } finally {
     loadingInfo.value = false
+  }
+}
+
+async function testConnection() {
+  if (!canTest.value || testing.value) return
+  testing.value = true
+  testResult.value = null
+  try {
+    const payload = { provider: selected.value }
+    if (selectedNeedsKey.value) {
+      if (apiKey.value.trim()) payload.api_key = apiKey.value.trim()
+      if (baseUrl.value.trim()) payload.base_url = baseUrl.value.trim()
+      if (model.value.trim()) payload.model = model.value.trim()
+    }
+    const res = await testLlmSettings(payload)
+    testResult.value = res.data || { ok: false, error: 'Empty response' }
+  } catch (e) {
+    testResult.value = { ok: false, error: (e && e.message) || 'Test failed' }
+  } finally {
+    testing.value = false
   }
 }
 
@@ -156,6 +193,9 @@ async function save() {
     saving.value = false
   }
 }
+
+// 切换提供方时清掉上一次的测试结果，避免误读为新选择的状态
+watch(selected, () => { testResult.value = null })
 
 onMounted(load)
 </script>
@@ -202,4 +242,11 @@ onMounted(load)
 .ghost-btn { background: #fff; border: 1px solid #DDD; padding: 10px 18px; font-family: var(--mono); cursor: pointer; }
 .err { color: var(--orange); font-family: var(--mono); font-size: .8rem; margin-top: 12px; }
 .ok { color: #16a34a; font-family: var(--mono); font-size: .8rem; margin-top: 12px; }
+.test-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.test-btn { background: #fff; border: 1px solid #000; padding: 8px 16px; font-family: var(--mono); font-size: .78rem; font-weight: 700; cursor: pointer; }
+.test-btn:hover:not(:disabled) { background: #000; color: #fff; }
+.test-btn:disabled { border-color: #DDD; color: #999; cursor: not-allowed; }
+.test-result { font-family: var(--mono); font-size: .76rem; line-height: 1.5; word-break: break-word; }
+.test-result.ok { color: #16a34a; margin-top: 0; }
+.test-result.err { color: var(--orange); margin-top: 0; }
 </style>
