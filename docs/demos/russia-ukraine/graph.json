@@ -1,0 +1,4157 @@
+{
+ "nodes": [
+  {
+   "id": "fe4883f4-de9f-4b14-bbdc-d1050592a109",
+   "name": "Zelensky's mandate",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Zelensky's mandate remains constitutionally clear, according to Western analysts."
+  },
+  {
+   "id": "fd1c368b-5792-4654-b9aa-7a12b844c049",
+   "name": "Myrnohrad",
+   "labels": [],
+   "summary": "The Ukrainian-held portion of the Donbas, including Pokrovsk and Myrnohrad, fell to Russian forces in early 2026 after a multi-year siege that became symbolic of the war's grinding character."
+  },
+  {
+   "id": "fc99eaab-e1a9-4d0f-9ef9-58eb80a10973",
+   "name": "Wikipedia",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Wikipedia is a reference for the Russo-Ukrainian war (2022–present), providing a 20% territorial control figure and overall casualty framework."
+  },
+  {
+   "id": "fafbcc8c-3c45-4397-8818-33f7ac24fd41",
+   "name": "Russia's \"shadow fleet\"",
+   "labels": [],
+   "summary": "A package of sanctions against Russia includes an additional 46 vessels in Russia's \"shadow fleet,\" bringing the total to 632 listed vessels subject to port access bans and service prohibitions."
+  },
+  {
+   "id": "fab86708-a282-4bd3-90e7-10826fb2989d",
+   "name": "Congress",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "Congress received the 2027 U.S. federal budget, which omits funding for the Ukraine Security Assistance Initiative. A 2026 tranche of $400 million remained in slow distribution as of early 2026."
+  },
+  {
+   "id": "f802574f-46ad-4c0a-8243-022a54c5fff4",
+   "name": "German Institute for International and Security Affairs",
+   "labels": [
+    "ThinkTank"
+   ],
+   "summary": "Western analysts at the German Institute for International and Security Affairs (SWP) have noted that the suspension of elections under martial law is a common democratic practice and that Zelensky's mandate remains constitutionally clear."
+  },
+  {
+   "id": "f7773d48-eb11-4726-9a7f-d091c638b6aa",
+   "name": "Ukraine Security Assistance Initiative",
+   "labels": [],
+   "summary": "The 2027 U.S. federal budget submitted to Congress omits funding for the Ukraine Security Assistance Initiative, the principal vehicle for U.S. military aid. A 2026 tranche of $400 million remained in slow distribution as of early 2026."
+  },
+  {
+   "id": "f61aeb27-d94f-4a18-8664-0c0cb5f29778",
+   "name": "White House",
+   "labels": [],
+   "summary": "The Trump administration's 28-point peace plan and public statements from the White House have included a Ukrainian election requirement. The Washington deadline reportedly calls for presidential elections in May."
+  },
+  {
+   "id": "f539c914-9755-4dfb-a070-18ffa982788f",
+   "name": "Russian attack",
+   "labels": [],
+   "summary": "A Russian attack on a Western logistics hub is a scenario that would involve escalation and fundamentally change the character of the war."
+  },
+  {
+   "id": "f3fc2149-8857-477a-a8a5-08df94621342",
+   "name": "sub-zero temperatures",
+   "labels": [],
+   "summary": "Millions of lives are at risk in sub-zero temperatures due to the destruction of heating infrastructure, a consequence of repeated Russian strikes on the energy grid that left hundreds of thousands of Ukrainians without electricity, heating, and water during the winter months."
+  },
+  {
+   "id": "f34b16be-560b-4dc3-ab6c-c7a8a16e6752",
+   "name": "Mediazona",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Mediazona has confirmed more than 163,000 Russian military deaths through public records, noting that the true figure is necessarily higher."
+  },
+  {
+   "id": "f3309251-0e43-493d-9cb7-bcf1ba379450",
+   "name": "Russian advance",
+   "labels": [],
+   "summary": "The pace of the Russian advance has collapsed, dramatically slowing in 2026."
+  },
+  {
+   "id": "f279051d-14a1-4815-b675-c90672b47e96",
+   "name": "independent state",
+   "labels": [],
+   "summary": "Ukraine's population of approximately 28 million is the lowest in its modern history as an independent state."
+  },
+  {
+   "id": "f0edd1d3-6e92-43a9-bdfd-daaff11d24ee",
+   "name": "fiscal stress",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "efc3a5a0-6857-4e91-9ce7-834eba30b412",
+   "name": "Western analysts",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Western analysts, including those at the German Institute for International and Security Affairs (SWP), have noted that suspending elections under martial law is a common democratic practice. They also acknowledge that Zelensky's mandate remains constitutionally clear."
+  },
+  {
+   "id": "ee05d8cb-03fd-4a5f-a29a-b22b0e77c771",
+   "name": "energy infrastructure sites",
+   "labels": [],
+   "summary": "Ukraine is building second-level protection on 120 energy infrastructure sites amid Russian attacks."
+  },
+  {
+   "id": "eddb836a-fc6a-4a4e-803b-e7c5d8c75ddf",
+   "name": "Donbas",
+   "labels": [],
+   "summary": "Arguments have been made that ceding Donbas would create a launchpad for future Russian aggression."
+  },
+  {
+   "id": "eda18cd8-3f59-494f-9aa4-89428cad5368",
+   "name": "Russian military deaths",
+   "labels": [],
+   "summary": "Independent Russian-language outlets, the BBC's Russian service and Mediazona, have confirmed more than 163,000 Russian military deaths through public records, while noting that the true figure is necessarily higher."
+  },
+  {
+   "id": "ed6768c9-71bb-4904-9f1e-65b2b9425a12",
+   "name": "CSIS study",
+   "labels": [
+    "ThinkTank"
+   ],
+   "summary": "A CSIS study published in January 2026 reported that the combined Russian and Ukrainian military casualty count, including killed, wounded, and missing, approached 2 million by late 2025 and was projected to reach that figure by spring 2026."
+  },
+  {
+   "id": "eb43bd7b-ec87-471b-8ab5-921e8e4eeb7c",
+   "name": "BOFIT weekly review",
+   "labels": [
+    "ThinkTank"
+   ],
+   "summary": "The BOFIT weekly review noted in June 2026 that Russian oil exports benefited from the temporary relaxation of sanctions on Russian oil by the US and the UK. The review also mentioned a broader effort to stabilize global energy markets."
+  },
+  {
+   "id": "ea9a3dd6-b3bd-4ac8-bf99-4f6d2a452e1a",
+   "name": "bullets and shells",
+   "labels": [],
+   "summary": "The war's outcome will be determined less by bullets and shells and more by politics, economics, and diplomacy. The question is who can outlast the other in blood, treasure, and political will."
+  },
+  {
+   "id": "ea650b2f-e68a-427f-ace3-90632ba3c514",
+   "name": "Radosław Sikorski",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Radosław Sikorski is Poland's foreign minister. He publicly criticized Elon Musk on X for allowing Russians to use Starlink to target Ukrainian cities."
+  },
+  {
+   "id": "e72cee0e-0313-47f7-9264-7548628c2b68",
+   "name": "Center for Strategic and International Studies",
+   "labels": [
+    "ThinkTank"
+   ],
+   "summary": "The Center for Strategic and International Studies provides authoritative data for an assessment that synthesizes recent information to map the war's status, causes, and future trajectory."
+  },
+  {
+   "id": "e6d7c1ca-6cbc-4ef0-b39e-46834fb14ac6",
+   "name": "Ukrainian military casualties",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "e3ca396b-c3a9-4447-98cb-d7141b5195fc",
+   "name": "Geneva talks",
+   "labels": [],
+   "summary": "The Geneva talks are a negotiation process from which the European Union is working to influence from the outside, with European negotiators pushing back on what they view as the most punitive elements of the U.S."
+  },
+  {
+   "id": "e23be03c-a36d-4f34-91e5-c750b482023a",
+   "name": "Trump administration",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The Trump administration developed a 28-point plan in close coordination with Russian envoy Kirill Dmitriev, incorporating feedback from Russian and Ukrainian officials."
+  },
+  {
+   "id": "e19c72e1-1f8c-4ba2-9c87-0ff8846c29e0",
+   "name": "UN Office of the High Commissioner for Human Rights",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "The UN Office of the High Commissioner for Human Rights monitors Ukrainian civilian casualties, verifying nearly 15,000 killed and more than 40,600 injured since February 2022, with actual totals believed to be considerably higher."
+  },
+  {
+   "id": "e0a09598-55c5-4db2-a77f-f78a8bbd451b",
+   "name": "Russian sovereign assets",
+   "labels": [],
+   "summary": "Approximately $100 billion of Russian sovereign assets would be used for Ukraine's reconstruction as part of a proposal that also includes formal U.S. and international security guarantees short of NATO membership, and a path toward eventual EU accession."
+  },
+  {
+   "id": "dfe6cf3d-48ff-4041-9b58-41908f9070f6",
+   "name": "UK",
+   "labels": [],
+   "summary": "In June 2026, the UK temporarily relaxed sanctions on Russian oil, which benefited Russian oil exports. This information was noted by the BOFIT weekly review."
+  },
+  {
+   "id": "df8f4775-9061-475e-8717-535b524c35d6",
+   "name": "Think Tank and Research Sources",
+   "labels": [],
+   "summary": "This refers to research institutions and analytical centers that produce war assessments and policy analysis. One such source is the Russian Offensive Campaign Assessment, June 1, 2026, from ISW, which is the primary source for Russian territorial gain/loss calculations and the \"halted offensive\" assessment."
+  },
+  {
+   "id": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "President Zelensky",
+   "labels": [
+    "Person"
+   ],
+   "summary": "President Zelensky's February 2025 figure of \"nearly 46,000\" Ukrainian dead is widely viewed as an underestimate."
+  },
+  {
+   "id": "dd13914b-d165-49a7-af14-4db1c70b1153",
+   "name": "reconstruction package",
+   "labels": [],
+   "summary": "A multi-year reconstruction package, partly funded by frozen Russian sovereign assets, is a potential component of a negotiated settlement."
+  },
+  {
+   "id": "dd035b98-17ea-4003-875f-4ef98133c9ca",
+   "name": "The Guardian",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "The Guardian published a study on the Ukraine war, citing a CSIS study that reported nearly 2 million military casualties by late 2025."
+  },
+  {
+   "id": "db448417-863a-4e3e-b226-a9c197e036fd",
+   "name": "emigration",
+   "labels": [],
+   "summary": "Emigration is a contributing factor to a tight labour market."
+  },
+  {
+   "id": "da78d30a-409c-46c0-80b1-14cb016d568a",
+   "name": "Ukrainian drone attacks",
+   "labels": [],
+   "summary": "Ukrainian drone attacks on refining infrastructure are constraining oil and gas revenues."
+  },
+  {
+   "id": "d7e032f9-7637-4ec2-ada6-941b7e2a0964",
+   "name": "Russian banks",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The EU's 20th sanctions package against Russia extended the transaction ban to an additional 20 Russian banks, bringing the total excluded from the EU internal market to 70. The ban also extended to four banks in third countries (Kyrgyzstan, Laos, Azerbaijan) considered to be enabling sanctions evasion."
+  },
+  {
+   "id": "d733a0a5-0a6b-4b93-b889-eda9cb488750",
+   "name": "Ukrainian economy",
+   "labels": [],
+   "summary": "The Ukrainian economy in 2026 remains entirely dependent on external support to maintain basic state functions."
+  },
+  {
+   "id": "d73299aa-989d-42ea-8b90-ae58303e9d7d",
+   "name": "mental health crisis",
+   "labels": [],
+   "summary": "The mental health crisis is an Entity."
+  },
+  {
+   "id": "d57133c2-8c0c-48b8-b914-f7580293cd8d",
+   "name": "Russian sanctions evasion",
+   "labels": [],
+   "summary": "The EU activated its \"anti-circumvention\" tool for the first time to crack down on third-country entities that materially support Russian sanctions evasion."
+  },
+  {
+   "id": "d45b2a1e-c695-4ae2-ba57-b692c5d082dc",
+   "name": "Ukrainian sovereignty",
+   "labels": [],
+   "summary": "Ukrainian sovereignty is a key aspect of a proposed free trade zone in the still-contested parts of eastern Ukraine, with its final political status to be deferred. Peace talks are scheduled to occur in Abu Dhabi between Ukraine, Russia, and the U.S."
+  },
+  {
+   "id": "d4583e33-ce88-4162-8756-d38795846a9f",
+   "name": "Russian controlled-territory",
+   "labels": [],
+   "summary": "In early 2025, Russia was gaining approximately 100 square kilometers of territory per month. Following a Ukrainian counter-offensive, the net change in Russian-controlled territory between December 2025 and May 2026 was a loss of about 281 square kilometers."
+  },
+  {
+   "id": "d37d4f59-4e59-4d03-a490-e5ebe3310fb9",
+   "name": "NATO",
+   "labels": [
+    "IntergovernmentalOrganization"
+   ],
+   "summary": "NATO is preparing for a range of contingencies. The presence of senior NATO military officials, including NATO's Supreme Allied Commander Europe, at the Abu Dhabi talks signals the alliance's preparation for these contingencies."
+  },
+  {
+   "id": "d2fe2a4f-0aea-4271-9219-cf63904a93e0",
+   "name": "2026",
+   "labels": [],
+   "summary": "In 2026, four broad trajectories can be identified for the remainder of the year and into 2027."
+  },
+  {
+   "id": "d2d8dc32-6d7f-41fb-81de-ea39038fd080",
+   "name": "Elon Musk",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Elon Musk was criticized by Poland's foreign minister Radosław Sikorski on X for permitting the use of Starlink satellite internet service by Russia to guide drone operations for targeting Ukrainian cities."
+  },
+  {
+   "id": "d1549a5a-c590-42fa-9773-e44780a051b3",
+   "name": "external support",
+   "labels": [],
+   "summary": "External support is provided to maintain basic state functions."
+  },
+  {
+   "id": "d114f5b3-0afb-4621-85cf-b626ab2f4af1",
+   "name": "peace talks",
+   "labels": [],
+   "summary": "Peace talks between Ukraine, Russia, and the U.S. are scheduled to occur in Abu Dhabi to discuss territorial concessions, including a Ukrainian counter-proposal for a free trade zone under Ukrainian sovereignty in eastern Ukraine, with the question of final political status deferred."
+  },
+  {
+   "id": "ce0c1cf7-0db2-408b-bfe2-845d0f3a9673",
+   "name": "five claimed oblasts",
+   "labels": [],
+   "summary": "The story of Russia's wartime economy in 2026 is one of slowdown approaching stagnation."
+  },
+  {
+   "id": "c966d73b-ec1a-47df-b860-a47ddfb2238d",
+   "name": "Russian Offensive Campaign Assessment, June 1, 2026",
+   "labels": [],
+   "summary": "This assessment, published on June 1, 2026, by ISW, is the primary source for calculations of Russian territorial gain/loss and for the assessment of a \"halted offensive\"."
+  },
+  {
+   "id": "c9456ed1-96dd-4aaf-94e0-333f607fb5fa",
+   "name": "negotiated settlement",
+   "labels": [],
+   "summary": "A negotiated settlement might involve a phased agreement with a ceasefire along current contact lines, partial international recognition of Russian control over Crimea and existing occupied territory, Ukrainian security guarantees short of NATO membership, a cap on Ukrainian force size, and a multi-year reconstruction package partly funded by frozen Russian sovereign assets. This path has a moderate probability and could extend into 2027."
+  },
+  {
+   "id": "c74b7546-d62a-4386-a941-3c37708b6afd",
+   "name": "Russian military casualties",
+   "labels": [],
+   "summary": "CSIS estimates that approximately 1.2 million Russian casualties have occurred since February 2022, with as many as 325,000 deaths."
+  },
+  {
+   "id": "c6f188cd-0eea-4cc9-b52f-c47fa45b55f5",
+   "name": "Russian casualties",
+   "labels": [],
+   "summary": "CSIS estimates that approximately 1.2 million Russian casualties have occurred since February 2022, with as many as 325,000 deaths."
+  },
+  {
+   "id": "c6e03158-5a9e-4b8f-81c2-b89f80799f86",
+   "name": "working-age population",
+   "labels": [],
+   "summary": "The working-age population is shrinking."
+  },
+  {
+   "id": "c4675119-d945-4fa0-b96b-04b2d87c34e7",
+   "name": "BBC",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "c1b18cf0-0f82-45bc-8c73-d7f068875ff4",
+   "name": "Trump team",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "c16a44b0-9ed3-4567-92f8-33c417fd3911",
+   "name": "Moscow Times",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "c0e702b8-b611-4973-89f8-816c2f24991d",
+   "name": "May",
+   "labels": [],
+   "summary": "The Trump administration's 28-point peace plan and public statements from the White House have included a Ukrainian election requirement. The Washington deadline reportedly calls for presidential elections in May."
+  },
+  {
+   "id": "be3d425b-3371-4867-84b5-6ac71718dc1c",
+   "name": "Ukraine military aid program",
+   "labels": [],
+   "summary": "The Kiel Institute's analysis identifies a \"widening gap between military and non-military aid\" within the Ukraine military aid program, indicating that European military contributions are increasingly bearing the primary responsibility for support. This analysis is based on data from the Ukraine Support Tracker."
+  },
+  {
+   "id": "bdad2b9a-e677-41a4-bc35-c4cf4b38f9f8",
+   "name": "ISW assessment",
+   "labels": [],
+   "summary": "The ISW assessment published on June 1, 2026, stated that Russian forces gained a presence in only 40.64 square kilometers between December 2025 and May 2026. This included both confirmed territorial gains and infiltrations by small groups operating behind Ukrainian lines."
+  },
+  {
+   "id": "bb7c1764-ef01-4800-9b97-cfc854b4a50a",
+   "name": "ABC News",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "ABC News is a media outlet that published an article on the potential fall of Pokrovsk to Russia after 18 months of fighting, providing pre-capture context of the battle."
+  },
+  {
+   "id": "bb3da054-82f1-430e-922c-54076539b65f",
+   "name": "2022",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "bafe9c2c-4d56-4287-87ed-4c26fddf81a9",
+   "name": "Zaporizhzhia",
+   "labels": [],
+   "summary": "As of May 2026, Russian forces occupy large parts of Zaporizhzhia, which Moscow claimed to have annexed in September 2022."
+  },
+  {
+   "id": "ba1e930e-3858-44d0-aebd-c367c5a35af6",
+   "name": "pre-war population",
+   "labels": [],
+   "summary": "Ukraine's pre-war population was approximately 41 million, but has shrunk to roughly 28 million due to war, displacement, and emigration."
+  },
+  {
+   "id": "ba0cdb62-378f-44ad-bd3c-52e834a6c9a0",
+   "name": "Kramatorsk–Kostiantynivka urban agglomeration",
+   "labels": [],
+   "summary": "The Kramatorsk–Kostiantynivka urban agglomeration is the last significant Ukrainian redoubt in Donetsk Oblast."
+  },
+  {
+   "id": "b8e8e5e3-2940-4c25-b758-6ef48df9dc75",
+   "name": "Kharkiv Oblast",
+   "labels": [],
+   "summary": "In the winter of 2025–2026, Russian strikes on urban energy and transport infrastructure produced acute mass-casualty events, including a January 2026 drone strike on a passenger train in Kharkiv Oblast that killed five people."
+  },
+  {
+   "id": "b89cbdfb-80dc-47b4-8728-50d4facdacdf",
+   "name": "Los Angeles Times",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "The Los Angeles Times reported on January 23, 2026, that Russia and the U.S. were holding peace talks in Abu Dhabi. The Russian delegation was headed by Admiral Igor Kostyukov, head of the GRU military intelligence service, indicating Moscow's emphasis on the military channel of negotiation."
+  },
+  {
+   "id": "b84cf126-11d6-494c-bc0f-cf979ead3427",
+   "name": "EU accession",
+   "labels": [],
+   "summary": "EU accession will not stop the demographic crisis in Ukraine, according to European Pravda."
+  },
+  {
+   "id": "b5c0d8c1-5db2-498b-a61b-911c8015d80f",
+   "name": "Ukrainian force size",
+   "labels": [],
+   "summary": "A cap on Ukrainian force size is a potential component of a negotiated settlement."
+  },
+  {
+   "id": "b4f56f08-ec59-4d97-86de-e921cb9502cf",
+   "name": "ISW",
+   "labels": [
+    "ThinkTank"
+   ],
+   "summary": "ISW reported on June 1, 2026, that the Russian army in spring 2026 advanced or infiltrated into only 7.87% of the territory it captured in spring 2025, seizing 515.84 square kilometers in the equivalent period a year earlier, a more than tenfold reduction in operational tempo."
+  },
+  {
+   "id": "b48cbbd9-3277-40a2-9ee6-3e07b5cc70cd",
+   "name": "Newsweek",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Newsweek reported on additional details concerning a $100 billion frozen assets provision within Trump's Ukraine Proposal, which includes land concessions and NATO limits."
+  },
+  {
+   "id": "b474861a-2e5d-4724-83de-9ca5773aabdb",
+   "name": "Steve Witkoff",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Steve Witkoff was involved in developing the Trump 28-point plan, in close coordination with Russian envoy Kirill Dmitriev. This plan incorporated feedback from both Russian and Ukrainian officials."
+  },
+  {
+   "id": "b46edf11-7d9e-45f1-b083-5bd80610c72f",
+   "name": "Russian crude oil",
+   "labels": [],
+   "summary": "Russian crude oil is subject to sanctions evasion efforts and a future maritime services ban by the G7 price cap coalition."
+  },
+  {
+   "id": "b4170cfc-70a0-4dc3-8c45-3b0141738e00",
+   "name": "energy sector",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "b4115fba-6917-40f8-b4cd-9263f93b3959",
+   "name": "forced displacement crises",
+   "labels": [],
+   "summary": "The war has produced one of the largest forced displacement crises in the world."
+  },
+  {
+   "id": "b3f33ea3-0421-4556-acad-b7865edb00a2",
+   "name": "spring 2026",
+   "labels": [],
+   "summary": "In spring 2026, the Russian army advanced or infiltrated into 7.87% of the territory captured in spring 2025, seizing 515.84 square kilometers in the equivalent period a year earlier. This represents a more than tenfold reduction in operational tempo."
+  },
+  {
+   "id": "b0dbbcfa-0300-420f-b69b-a36cf2317fff",
+   "name": "diplomatic sprint",
+   "labels": [],
+   "summary": "The conflict involves an intensifying diplomatic sprint, alongside a grinding attritional equilibrium on the battlefield, a brittle sanctions regime under fresh strain, and an emerging political crisis inside Ukraine."
+  },
+  {
+   "id": "aafb2f24-998a-4ee3-93d3-d208a312391f",
+   "name": "Russian strikes",
+   "labels": [],
+   "summary": "Repeated Russian strikes have targeted the energy grid, leaving hundreds of thousands of Ukrainians without electricity, heating, and water during winter months. The destruction of heating infrastructure puts millions of lives at risk in sub-zero temperatures."
+  },
+  {
+   "id": "aa1b1f33-5491-42de-89a3-a6827b36017d",
+   "name": "Energoatom",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Energoatom is a state nuclear operator. Andriy Yermak faces kickback allegations connected to this organization, leading to formal charges by NABU and SAPO in May 2026."
+  },
+  {
+   "id": "a822a0ba-1f85-4aff-a375-29067cc44af7",
+   "name": "European Pravda",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "European Pravda reported that the war is rapidly shrinking Ukraine's population and that even EU accession will not stop the demographic crisis."
+  },
+  {
+   "id": "a71b0409-4355-4d9a-9038-5bb15698b328",
+   "name": "Russian units",
+   "labels": [],
+   "summary": "Russian units were forced to clear Pokrovsk block by block over many months after it was described by Ukrainian and Western analysts as having been reduced to rubble during the assault."
+  },
+  {
+   "id": "a70e17c8-015c-453b-9a62-bb5cbeb4367a",
+   "name": "Geneva talks on Ukraine",
+   "labels": [],
+   "summary": "The European negotiating position for the Geneva talks on Ukraine is detailed."
+  },
+  {
+   "id": "a6f76ae6-b94f-4440-bc73-e19966641018",
+   "name": "European military contributions",
+   "labels": [],
+   "summary": "European military contributions are increasingly carrying the load in aid to Ukraine, identified by the Kiel Institute's analysis of the Ukraine military aid program. This indicates a \"widening gap between military and non-military aid.\""
+  },
+  {
+   "id": "a5649238-6cdf-4b05-9a1d-92c54287e4c8",
+   "name": "Ukrainians",
+   "labels": [
+    "Person"
+   ],
+   "summary": "As of early 2026, more than 5.6 million Ukrainians are recorded as refugees in Europe and Asia, and approximately 8 million are internally displaced."
+  },
+  {
+   "id": "a38911c3-caf9-4940-886e-1bf0a8ee293c",
+   "name": "opposition leader",
+   "labels": [
+    "Person"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "a38154f0-631d-457c-a6b2-da1193c5220b",
+   "name": "Trump 28-point plan",
+   "labels": [],
+   "summary": "The Trump 28-point plan was developed in close coordination with Russian envoy Kirill Dmitriev and incorporated feedback from Russian and Ukrainian officials."
+  },
+  {
+   "id": "a2e28537-dd9d-41da-9e3e-80df5fa1317e",
+   "name": "United Kingdom",
+   "labels": [],
+   "summary": "The United Kingdom is among the nations that have contributed to supporting Ukraine. This support represents a portion of the total aid provided."
+  },
+  {
+   "id": "a2c31569-1872-4047-bc38-190f70d6c7ca",
+   "name": "oil and gas revenues",
+   "labels": [],
+   "summary": "Oil and gas revenues, a traditional backbone of the budget, are constrained by sanctions and Ukrainian drone attacks on refining infrastructure."
+  },
+  {
+   "id": "a0eb6eac-e02e-4369-83ed-55a07a22ef88",
+   "name": "Defence spending",
+   "labels": [],
+   "summary": "Defence spending has crowded out civilian investment."
+  },
+  {
+   "id": "9fbee35c-0d8f-4661-bae2-157f5a0f307a",
+   "name": "heating infrastructure",
+   "labels": [],
+   "summary": "Heating infrastructure has been destroyed by repeated Russian strikes on the energy grid. This destruction puts millions of lives at risk in sub-zero temperatures, having left hundreds of thousands of Ukrainians without electricity, heating, and water during the winter months."
+  },
+  {
+   "id": "9f9b4c85-d4f4-4ff1-b6f1-2cc9e683eb01",
+   "name": "Supreme Allied Commander Europe",
+   "labels": [
+    "Person"
+   ],
+   "summary": "The Supreme Allied Commander Europe, a senior NATO military official, was present at the Abu Dhabi talks."
+  },
+  {
+   "id": "9f6d4ea9-384c-48e4-a3f9-4bfaeb887150",
+   "name": "Russian army",
+   "labels": [],
+   "summary": "In spring 2026, the Russian army advanced or infiltrated into 7.87% of the territory captured in spring 2025, seizing 515.84 square kilometers in the equivalent period a year earlier. This represents a more than tenfold reduction in operational tempo."
+  },
+  {
+   "id": "9f351786-22c2-47a9-b6c1-02cd8cc854c9",
+   "name": "24 February 2022",
+   "labels": [],
+   "summary": "Russian forces crossed the Ukrainian border on this date, marking the start of the Russia-Ukraine War."
+  },
+  {
+   "id": "9deb4297-91b2-4dd1-9937-aabedd792f59",
+   "name": "politics, economics, and diplomacy",
+   "labels": [],
+   "summary": "The war's outcome will be determined more by politics, economics, and diplomacy than by bullets and shells. The question is who can outlast the other in blood, treasure, and political will."
+  },
+  {
+   "id": "9d8829aa-8079-419d-b580-dd4fbbadd1c9",
+   "name": "protracted war",
+   "labels": [],
+   "summary": "A second scenario posits that the diplomatic track fails, leading to the continuation of the war into 2027 with its current attritional character. In this scenario, Russia's operational tempo remains low, Ukrainian counter-offensives are local and limited, and the front line stays essentially static, while the economic costs for both sides continue to mount. The conflict's current state appears higher than at any point since 2022."
+  },
+  {
+   "id": "9c97b97f-b8e9-4f67-a288-7e046807d51c",
+   "name": "martial law",
+   "labels": [],
+   "summary": "Martial law has been continuously in effect in Ukraine since February 2022 and was extended in February 2025 by a unanimous Verkhovna Rada resolution. Presidential elections are constitutionally prohibited during martial law under Ukrainian law."
+  },
+  {
+   "id": "9b135149-023a-43ea-beb8-d2274705b9e2",
+   "name": "Zelensky's Legitimacy",
+   "labels": [],
+   "summary": "Zelensky's legitimacy is undisputed according to ZOiS Berlin."
+  },
+  {
+   "id": "9a6e2891-7aab-48c5-9066-a407379512e1",
+   "name": "combat-related trauma",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "9a29283c-3388-47de-b6b5-7b79e4343486",
+   "name": "domestic critics",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Domestic critics argue that wartime mobilization and reconstruction have provided cover for large-scale graft."
+  },
+  {
+   "id": "99aa6360-9c5f-4d58-a369-d0f5f1ab1a72",
+   "name": "free trade zone",
+   "labels": [],
+   "summary": "A free trade zone under Ukrainian sovereignty has been proposed for the still-contested parts of eastern Ukraine, with the question of final political status deferred. Peace talks regarding this issue are scheduled to occur in Abu Dhabi between Ukraine, Russia, and the U.S."
+  },
+  {
+   "id": "96f53bb8-8faf-4d26-bcd6-4b050765c9ff",
+   "name": "first-person-view drones",
+   "labels": [],
+   "summary": "Ukraine pioneered the use of first-person-view drones for reconnaissance and strike missions in the 2026 conflict."
+  },
+  {
+   "id": "9639f42d-1407-447d-97c5-31ea2ca09d34",
+   "name": "Ukrainian law",
+   "labels": [],
+   "summary": "Ukrainian law constitutionally prohibits presidential elections during martial law. Martial law has been in effect since February 2022."
+  },
+  {
+   "id": "95dff41f-7025-4a9d-b67e-05cba5993d8d",
+   "name": "Pokrovsk offensive",
+   "labels": [],
+   "summary": "The Pokrovsk offensive refers to the multi-year siege that led to the fall of the Ukrainian-held Donbas, including Pokrovsk and Myrnohrad, to Russian forces in early 2026."
+  },
+  {
+   "id": "953cc2c4-6819-498a-a745-7716aaae4c4d",
+   "name": "Russian energy sector",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "951dc4dc-1de2-4dd3-92d4-0afa824980d0",
+   "name": "Army Secretary Dan Driscoll",
+   "labels": [
+    "Person"
+   ],
+   "summary": "In late January 2026, Army Secretary Dan Driscoll, as a Trump-administration envoy, met with delegations from Kyiv and Moscow in Abu Dhabi."
+  },
+  {
+   "id": "9472b28b-68ab-4921-b63d-44925ace0f0b",
+   "name": "criticalthreats.org",
+   "labels": [
+    "TechCompany"
+   ],
+   "summary": "criticalthreats.org provides analysis of the conflict through its Russian Offensive Campaign Assessments."
+  },
+  {
+   "id": "92ede2dd-f013-4560-b15a-cd39f56f15f8",
+   "name": "Indonesia",
+   "labels": [],
+   "summary": "Indonesia's Karimun Oil Terminal is involved in shadow-fleet-related activity."
+  },
+  {
+   "id": "923008ef-5f29-4ba1-a11c-3891c139b93f",
+   "name": "2027 U.S. federal budget",
+   "labels": [],
+   "summary": "The 2027 U.S. federal budget submitted to Congress omits funding for the Ukraine Security Assistance Initiative. A 2026 tranche of $400 million remained in slow distribution as of early 2026."
+  },
+  {
+   "id": "9214447b-2d6b-451b-a5b5-de12a2c695b0",
+   "name": "Russian sovereignty",
+   "labels": [],
+   "summary": "Moscow will not agree to a settlement that leaves any of the five claimed oblasts under Ukrainian control. This position remains the same as it has been for three years."
+  },
+  {
+   "id": "8fc574b8-e146-44eb-a3b7-e1cbfc8f3048",
+   "name": "Ukrainian civilians",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Nearly 15,000 Ukrainian civilians have been verified killed and more than 40,600 injured since February 2022, with actual totals believed to be considerably higher."
+  },
+  {
+   "id": "8fa3053e-c638-4e27-9436-6e0e2fd351c0",
+   "name": "Trump's Ukraine Proposal",
+   "labels": [],
+   "summary": "The 28-point plan includes provisions for land concessions and limits on NATO. Newsweek reported on additional details concerning a $100 billion frozen assets provision."
+  },
+  {
+   "id": "8f5097f4-c8a4-4532-b45c-a6f5425bfe72",
+   "name": "General Alexus Grynkewich",
+   "labels": [
+    "Person"
+   ],
+   "summary": "In late January 2026, NATO's Supreme Allied Commander Europe, General Alexus Grynkewich, met with delegations from Kyiv and Moscow in Abu Dhabi."
+  },
+  {
+   "id": "8e90a1d0-b319-4ab9-8941-332c178b46d3",
+   "name": "January 2026",
+   "labels": [],
+   "summary": "A CSIS study was published in January 2026."
+  },
+  {
+   "id": "8e441446-d19e-4e6c-8ce8-9772a077985c",
+   "name": "National Anti-Corruption Bureau of Ukraine",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "8dea05ae-5f1b-4543-9d95-270e1ab71f82",
+   "name": "Kiel Institute",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The Kiel Institute maintains the Ukraine Support Tracker, which monitors aid allocations. According to this tracker, as of April 2026, the United States has committed approximately $120 billion in total support to Ukraine since 2022."
+  },
+  {
+   "id": "8d369bf5-31fb-4d81-a2e2-2b9aea527270",
+   "name": "Russian oil exports",
+   "labels": [],
+   "summary": "Russian oil exports benefited in June 2026 from a temporary relaxation of sanctions by the US and the UK, as noted by the BOFIT weekly review which also mentioned a broader effort to stabilize global energy markets."
+  },
+  {
+   "id": "8c54f51b-5840-41c0-bc31-54e1c2856b7f",
+   "name": "St. Petersburg International Economic Forum",
+   "labels": [],
+   "summary": "The St. Petersburg International Economic Forum is associated with structural drivers of economic slowdown, including intensified defence spending that has crowded out civilian investment, a tight labour market due to mobilisation and emigration, and constrained oil and gas revenues impacting the budget due to sanctions and Ukrainian drone attacks on refining infrastructure."
+  },
+  {
+   "id": "8c3c45db-5a0b-4306-96d8-6f947280000b",
+   "name": "analysts",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Some analysts had predicted a \"forever war\", but the situation has instead settled into a grinding attritional equilibrium on the battlefield, an intensifying diplomatic sprint, a brittle sanctions regime under fresh strain, and an emerging political crisis inside Ukraine itself."
+  },
+  {
+   "id": "8bea4f0f-516e-4c1b-8110-375fcee79355",
+   "name": "Russian envoy",
+   "labels": [
+    "Person"
+   ],
+   "summary": "A Russian envoy, Kirill Dmitriev, coordinated the development of the Trump 28-point plan with Russian and Ukrainian officials, incorporating their feedback."
+  },
+  {
+   "id": "8b762cfc-e999-4faa-bbd2-c6919a3c8c0d",
+   "name": "Ukrainian officials",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Ukrainian officials provided feedback that was incorporated into the Trump 28-point plan, developed in coordination with Russian envoy Kirill Dmitriev."
+  },
+  {
+   "id": "89bfdd14-412f-4425-970a-bc28d51c4ba6",
+   "name": "ZOiS Berlin",
+   "labels": [
+    "ThinkTank"
+   ],
+   "summary": "ZOiS Berlin states that Zelensky's legitimacy is undisputed."
+  },
+  {
+   "id": "87b87eb2-e046-4b9e-abdf-3c9452d1a3da",
+   "name": "Shahed-type one-way attack drones",
+   "labels": [],
+   "summary": "Russia's domestic production of Shahed-type one-way attack drones is increasing and outpacing Ukraine's air defence capacity to intercept them."
+  },
+  {
+   "id": "85143978-e058-4ce7-9df0-10e81acac39f",
+   "name": "Alexander Novak",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Alexander Novak is the Deputy Prime Minister. In May 2026, Novak announced that the official 2026 GDP growth forecast had been cut from 1.3% to 0.4%."
+  },
+  {
+   "id": "8403a5c3-b3e6-40d8-b5a0-c0603c73d946",
+   "name": "GRU military intelligence service",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "The GRU military intelligence service, headed by Admiral Igor Kostyukov, was involved in peace talks with the U.S. in Abu Dhabi. The Los Angeles Times reported on January 23, 2026, that Kostyukov's leadership of the Russian delegation signalled Moscow's elevation of the military channel of negotiation."
+  },
+  {
+   "id": "83b53c5c-51e9-45e0-811f-ed8f5baf4327",
+   "name": "Poland",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "name": "Kyiv",
+   "labels": [],
+   "summary": "In January 2026, a wave of Russian attacks left 710,000 residents of Kyiv without electricity and central heating in sub-zero temperatures."
+  },
+  {
+   "id": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "name": "Moscow",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The capture of Pokrovsk came at a cost that few in Moscow have been willing to publicly acknowledge. Pokrovsk was described by Ukrainian and Western analysts as having been reduced to rubble during the assault, with Russian units forced to clear the city block by block over many months."
+  },
+  {
+   "id": "7f7c689c-4e85-42ae-92ed-1cd554c9efd6",
+   "name": "WHO",
+   "labels": [
+    "IntergovernmentalOrganization"
+   ],
+   "summary": "The WHO is an IntergovernmentalOrganization."
+  },
+  {
+   "id": "7f2a81f6-2e35-411a-93ae-41419a0b2fc1",
+   "name": "energy infrastructure attacks",
+   "labels": [],
+   "summary": "The Guardian reported on February 13, 2026, about the humanitarian impact of energy infrastructure attacks in Kyiv. The article, titled 'Everything is frozen', described a bitter winter dragging on for Kyiv residents as Russia targeted power infrastructure."
+  },
+  {
+   "id": "7ec8e62e-8011-45df-99ac-00364b30314f",
+   "name": "Zelensky allies",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Zelensky allies are engulfed in a major corruption scandal, as detailed in the Operation Midas investigation which has led to ministerial resignations."
+  },
+  {
+   "id": "7daee85c-94a9-47ea-8736-efd683a306b2",
+   "name": "Operation Midas",
+   "labels": [],
+   "summary": "Operation Midas is a major corruption scandal that has directly implicated figures close to President Zelensky. The investigation has implicated former Energy Minister and Deputy Prime Minister Herman Halushchenko and former Justice Minister Svitlana Grynchuk. Both resigned in November 2025 under pressure from the president."
+  },
+  {
+   "id": "7cc1bfc9-a77b-41dc-a80e-012d3d470aea",
+   "name": "Ukrainian military deaths",
+   "labels": [],
+   "summary": "CSIS estimates between 100,000 and 140,000 Ukrainian military deaths."
+  },
+  {
+   "id": "7c7830ef-b998-4024-8f6e-a9d23394e435",
+   "name": "late 2025",
+   "labels": [],
+   "summary": "By late 2025, the combined Russian and Ukrainian military casualty count approached 2 million."
+  },
+  {
+   "id": "7c4c8ff5-477d-47dd-862b-14ba1c51d7aa",
+   "name": "political crisis",
+   "labels": [],
+   "summary": "An emerging political crisis inside Ukraine itself may prove as consequential as anything happening on the front lines, alongside a grinding attritional equilibrium on the battlefield, an intensifying diplomatic sprint, and a brittle sanctions regime under fresh strain."
+  },
+  {
+   "id": "7b62efde-8d12-4e90-9af2-03a97b53cc28",
+   "name": "demographic crisis",
+   "labels": [],
+   "summary": "A demographic crisis exists in Ukraine, which EU accession will not stop, as reported by European Pravda."
+  },
+  {
+   "id": "7ab307a6-67be-43d0-80fd-b4bbb5fd3567",
+   "name": "Murmansk",
+   "labels": [],
+   "summary": "Murmansk has been listed as one of two Russian ports subject to sanctions."
+  },
+  {
+   "id": "7a4a7d64-54ad-4965-84a9-70771726c6c0",
+   "name": "third-country entities",
+   "labels": [],
+   "summary": "The EU activated its \"anti-circumvention\" tool for the first time to address Russian sanctions evasion by third-country entities that provide material support for such evasion."
+  },
+  {
+   "id": "7a201ca7-d68d-4c5c-8d17-9c0210e81d57",
+   "name": "Admiral Igor Kostyukov",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Admiral Igor Kostyukov, head of the GRU military intelligence service, headed the Russian delegation in peace talks with the U.S. in Abu Dhabi, as reported by the Los Angeles Times on January 23, 2026. This signalled Moscow's elevation of the military channel of negotiation."
+  },
+  {
+   "id": "786c3c29-123d-4df7-bc30-cdb65e1b3732",
+   "name": "small commercial drones",
+   "labels": [],
+   "summary": "Ukraine pioneered the use of small commercial drones for reconnaissance and strike missions in the 2026 conflict."
+  },
+  {
+   "id": "768fa926-99d3-4f89-9911-aaff71a16af9",
+   "name": "DeerFlow Research",
+   "labels": [
+    "ThinkTank"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "7480185d-051f-4391-83e8-ca71a4c44bcd",
+   "name": "Andriy Yermak",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Andriy Yermak, Zelensky's former chief of staff, faces kickback allegations involving Energoatom. NABU and SAPO formally charged him in May 2026."
+  },
+  {
+   "id": "72de4b47-402e-4c0a-be8c-85de7e19f806",
+   "name": "long-range strike drones",
+   "labels": [],
+   "summary": "Long-range strike drones capable of attacking Russian refining and military infrastructure deep inside Russia have been fielded, including a drone strike on St. P."
+  },
+  {
+   "id": "6f9c2052-6561-402b-ab99-85967eeae11b",
+   "name": "Ukrainian security guarantees",
+   "labels": [],
+   "summary": "Ukrainian security guarantees, short of NATO membership, are a potential component of a negotiated settlement."
+  },
+  {
+   "id": "6f02e190-38e0-4c33-b486-3a815ff61e5c",
+   "name": "Luhansk",
+   "labels": [],
+   "summary": "As of May 2026, Russian forces occupy large parts of Luhansk, which Moscow claimed to have annexed in September 2022."
+  },
+  {
+   "id": "6e1595b8-86c9-4833-b884-0073a9635b49",
+   "name": "corruption allegations",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "6c29eb76-322a-4989-80ae-36ad2ec9f89f",
+   "name": "Russian forces",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Russian forces captured the Ukrainian-held Donbas, including Pokrovsk and Myrnohrad, in early 2026 after a multi-year siege."
+  },
+  {
+   "id": "6aa11ccd-9455-42f6-802f-22dc37c34d00",
+   "name": "European Commission",
+   "labels": [
+    "IntergovernmentalOrganization"
+   ],
+   "summary": "The European Commission provides authoritative data for an assessment that synthesizes recent information to map the war's status, causes, and future trajectory."
+  },
+  {
+   "id": "69a45472-96f0-437a-8990-3c6038cf8fb6",
+   "name": "European negotiators",
+   "labels": [
+    "Person"
+   ],
+   "summary": "European negotiators have pushed back on what they view as the most punitive elements of the U.S. within the Geneva talks, which the European Union is working to influence from the outside."
+  },
+  {
+   "id": "694f1817-4728-47d2-961c-8b290b9b1de2",
+   "name": "Donetsk Oblast",
+   "labels": [],
+   "summary": "Donetsk Oblast contains the Kramatorsk–Kostiantynivka urban agglomeration, the last significant Ukrainian redoubt in the oblast."
+  },
+  {
+   "id": "6780f7e1-d5e3-4c69-bf23-0bb4e393a19c",
+   "name": "U.S. leadership",
+   "labels": [],
+   "summary": "Questions exist regarding Ukraine's situation without U.S. leadership. Concerns also involve the U.S.'s ability to hold Russia accountable for its commitments and whether Ukraine will accept a peace agreement that does not fully restore its territorial integrity."
+  },
+  {
+   "id": "66525772-17d8-432c-bfa5-54eddf9f0bf7",
+   "name": "Karimun Oil Terminal",
+   "labels": [],
+   "summary": "The Karimun Oil Terminal in Indonesia is associated with shadow-fleet-related activity."
+  },
+  {
+   "id": "65668232-175c-43f9-9935-5fb4d234d11c",
+   "name": "EU maritime services ban",
+   "labels": [],
+   "summary": "An EU maritime services ban is a potential factor that, along with sanctions, falling oil and gas revenues, and mobilisation-driven labour shortages, could push the Russian economy into a sharp recession. This scenario would intensify political pressure on Putin to seek a deal, shifting diplomatic terms substantially in Ukraine's favour."
+  },
+  {
+   "id": "64aba7a0-95bf-41f3-a793-3c2b86cc7077",
+   "name": "refugees abroad",
+   "labels": [
+    "Person"
+   ],
+   "summary": "As of early 2026, 5.6 million refugees abroad were recorded."
+  },
+  {
+   "id": "64812ae1-758d-42c2-9672-1826af3bd684",
+   "name": "UNICEF",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "UNICEF issued warnings about the winter humanitarian situation in Ukraine."
+  },
+  {
+   "id": "62bfba7d-7a83-49af-bc8e-49b08c71becd",
+   "name": "Ukrainian cities",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "61428010-1111-427c-a582-84fb218440c5",
+   "name": "Walaw",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Walaw published an article detailing estimates of Russian and Ukrainian military losses approaching 2 million, also referencing the January 2026 train strike and providing a breakdown of CSIS estimates."
+  },
+  {
+   "id": "60907ebe-47be-4ffe-8e05-07e4006fda83",
+   "name": "G7 price cap coalition",
+   "labels": [
+    "IntergovernmentalOrganization"
+   ],
+   "summary": "The G7 price cap coalition is working in tandem with the EU to prepare a future maritime services ban on Russian crude oil and petroleum products."
+  },
+  {
+   "id": "6051850c-b189-4509-be97-c5dccc28dc59",
+   "name": "sanctions regime",
+   "labels": [],
+   "summary": "The conflict includes a brittle sanctions regime that is under fresh strain, alongside a grinding attritional equilibrium on the battlefield, an intensifying diplomatic sprint, and an emerging political crisis inside Ukraine."
+  },
+  {
+   "id": "5d961b50-1724-4bce-a20a-1a04728b4bb7",
+   "name": "Millions of lives under threat in Ukraine this winter",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "5d1b16ac-0090-4f31-a972-269f054715d1",
+   "name": "UNHCR Ukraine Refugee Situation",
+   "labels": [
+    "IntergovernmentalOrganization"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "5c15be6a-732b-481e-911d-59c96ded3636",
+   "name": "true figure",
+   "labels": [],
+   "summary": "The true figure of Russian military deaths is necessarily higher than confirmed figures."
+  },
+  {
+   "id": "5c0d522d-ebc6-41e8-8352-d0b29eca8f6d",
+   "name": "World Health Organization",
+   "labels": [
+    "IntergovernmentalOrganization"
+   ],
+   "summary": "The World Health Organization has described the conflict as producing one of the largest populations of people suffering from combat-related trauma in modern history, with consequences that will outlast any ceasefire by decades."
+  },
+  {
+   "id": "5bcd0734-d1ee-4133-9501-e48a8e9d2883",
+   "name": "Trump-administration envoys",
+   "labels": [
+    "Person"
+   ],
+   "summary": "In late January 2026, Trump-administration envoys, including Steve Witkoff and Jared Kushner, met with delegations from Kyiv and Moscow in Abu Dhabi."
+  },
+  {
+   "id": "5b5e10a0-e484-451d-9669-a9f13e2b7974",
+   "name": "Tuapse",
+   "labels": [],
+   "summary": "Tuapse has been listed as one of two Russian ports subject to sanctions."
+  },
+  {
+   "id": "5a8f68f4-1a58-4509-86a6-101b74e9d74e",
+   "name": "Putin",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Political pressure on Putin to seek a deal could intensify if the Russian economy enters a sharp recession due to sanctions, falling oil and gas revenues, mobilisation-driven labour shortages, and a possible EU maritime services ban. This scenario would shift diplomatic terms substantially in Ukraine's favour."
+  },
+  {
+   "id": "595c7e92-4b2a-47fe-a919-991f6dde588f",
+   "name": "Ukrainian control",
+   "labels": [],
+   "summary": "Kyiv will not formally recognise Russian sovereignty over any of the five claimed oblasts. This position remains the same as it has been for three years."
+  },
+  {
+   "id": "5831c1a5-c4ef-486e-a8bb-44c7fbda26dc",
+   "name": "Marco Rubio",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Marco Rubio was involved in developing the Trump 28-point plan, in close coordination with Russian envoy Kirill Dmitriev. This plan incorporated feedback from both Russian and Ukrainian officials."
+  },
+  {
+   "id": "56d63780-2c52-405d-9849-71f732cad1cd",
+   "name": "national-security cost",
+   "labels": [],
+   "summary": "Ukraine faces a population crisis that constrains its ability to generate forces without hollowing out its economy and its future, treating it as a national-security cost."
+  },
+  {
+   "id": "55ab172a-6471-4b64-8db4-51971da8cc80",
+   "name": "recession",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "name": "U.S.",
+   "labels": [],
+   "summary": "The U.S. would provide formal security guarantees to Ukraine, short of NATO membership. This includes approximately $100 billion in frozen Russian sovereign assets for Ukraine's reconstruction and a path toward eventual EU accession."
+  },
+  {
+   "id": "5410e3f3-0462-4b27-8131-29d25f258a7a",
+   "name": "petroleum products",
+   "labels": [],
+   "summary": "Petroleum products are subject to sanctions evasion efforts and a future maritime services ban by the G7 price cap coalition."
+  },
+  {
+   "id": "53d5a969-30f4-42cf-8426-500f01157bd3",
+   "name": "displacement",
+   "labels": [],
+   "summary": "Displacement has contributed to Ukraine's population shrinkage from approximately 41 million pre-war to roughly 28 million."
+  },
+  {
+   "id": "536c7591-3edd-41a2-b58d-83172b07c299",
+   "name": "Trump",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Trump met with President Zelensky in Florida in late 2025, after which Trump stated that territorial issues remained unresolved."
+  },
+  {
+   "id": "532d5337-4fe9-4db2-8458-280cfc5ccd40",
+   "name": "Svitlana Grynchuk",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Svitlana Grynchuk is the former Justice Minister who resigned in November 2025 under pressure from President Zelensky due to her implication in the Operation Midas corruption scandal."
+  },
+  {
+   "id": "532b20ae-7b97-44e3-b826-64cb170fbc96",
+   "name": "Abu Dhabi",
+   "labels": [],
+   "summary": "Abu Dhabi is the location for upcoming peace talks between Ukraine, Russia, and the U.S. to discuss territorial concessions, including a Ukrainian counter-proposal for a free trade zone under Ukrainian sovereignty in eastern Ukraine, with the question of final political status deferred."
+  },
+  {
+   "id": "530ce6f6-438b-43cf-8486-593e7060f10e",
+   "name": "February 2025",
+   "labels": [],
+   "summary": "In February 2025, the Verkhovna Rada unanimously passed a resolution affirming Zelensky's mandate until the end of martial law."
+  },
+  {
+   "id": "51329dba-52af-4297-903e-3309b2a586a6",
+   "name": "presidential elections",
+   "labels": [],
+   "summary": "Presidential elections are constitutionally prohibited in Ukraine during martial law."
+  },
+  {
+   "id": "5069da59-e6ae-4581-a11e-ae69bf99be7a",
+   "name": "EUobserver",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "The EUobserver reported that the war is rapidly shrinking Ukraine's population and that even EU accession will not stop the demographic crisis."
+  },
+  {
+   "id": "4f0dd9d7-0b9d-434b-ad82-1851f2367a9a",
+   "name": "Herman Halushchenko",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Herman Halushchenko is the former Energy Minister and Deputy Prime Minister who resigned in November 2025 under pressure from President Zelensky due to his implication in the Operation Midas corruption scandal."
+  },
+  {
+   "id": "4e11a727-1e62-4ea5-8bd1-ebebe23d2532",
+   "name": "Ukrainian Armed Forces",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "A peace plan proposed by Donald Trump would cap the size of the Ukrainian Armed Forces and restrict their access to long-range strike weapons."
+  },
+  {
+   "id": "4d2acb7a-14f1-4617-a8c3-5bf48380d03e",
+   "name": "Washington",
+   "labels": [],
+   "summary": "Washington has not yet fully resolved the question of whether and when elections can be safely held with Kyiv."
+  },
+  {
+   "id": "4c924160-7943-4c9f-babe-62eeab86e52b",
+   "name": "Kirill Dmitriev",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Kirill Dmitriev coordinated the development of the Trump 28-point plan with Russian and Ukrainian officials, incorporating their feedback."
+  },
+  {
+   "id": "4c0e3f17-faa1-4baf-8492-3274af28b258",
+   "name": "Ukrainian election",
+   "labels": [],
+   "summary": "The Trump administration's 28-point peace plan and public statements from the White House have included a Ukrainian election requirement. The Washington deadline reportedly calls for presidential elections in May."
+  },
+  {
+   "id": "48aab258-a807-4029-a84f-8d5e85a3a0a5",
+   "name": "Starlink satellite internet service",
+   "labels": [
+    "TechCompany"
+   ],
+   "summary": "Russia has been forced to use the Starlink satellite internet service to guide its own drone operations. Poland's foreign minister Radosław Sikorski criticized Elon Musk, asking why he permits Russians to use Starlink to target Ukrainian cities."
+  },
+  {
+   "id": "453bae61-3396-4d04-911b-2abfd3a2e7ec",
+   "name": "UNHCR",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "According to UNHCR, more than 5.6 million Ukrainians are recorded as refugees in Europe and Asia as of early 2026, and approximately 8 million are internally displaced."
+  },
+  {
+   "id": "43b4ebdf-254a-421d-8ff8-209764db3c60",
+   "name": "military infrastructure",
+   "labels": [],
+   "summary": "Long-range strike drones are capable of attacking Russian military infrastructure deep inside Russia."
+  },
+  {
+   "id": "4381ecfe-74a8-4b75-8488-87ee7c839df1",
+   "name": "Kyiv residents",
+   "labels": [
+    "Person"
+   ],
+   "summary": "The January 2026 attack wave left 710,000 Kyiv residents without electricity and heating. In the following weeks, 45% of Kyiv's schools were closed."
+  },
+  {
+   "id": "4361867a-a116-458c-b100-edf206d2b8fa",
+   "name": "U.S. draft",
+   "labels": [],
+   "summary": "The U.S. draft is viewed as containing the most punitive elements, specifically regarding limits on Ukrainian force size and an implicit acceptance of Russian sovereignty over seized territory. The EU plans to join Geneva talks on Ukraine and will push the Trump team."
+  },
+  {
+   "id": "418423ad-9e2b-4390-a6a3-7b6f5d05d57f",
+   "name": "Ukrainian lines",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "3fa346b7-dda1-41c7-9196-2385b9a14fc5",
+   "name": "Donetsk",
+   "labels": [],
+   "summary": "As of May 2026, Russian forces occupy large parts of Donetsk, which Moscow claimed to have annexed in September 2022."
+  },
+  {
+   "id": "3d09ab01-28f5-4842-832a-b7665417e538",
+   "name": "Russia-Ukraine War",
+   "labels": [],
+   "summary": "The Russia-Ukraine War began when Russian forces crossed the Ukrainian border on 24 February 2022. As of 9 June 2026, the war has entered a new, ambiguous phase, no longer characterized by dramatic offensives and rapid territorial shifts, nor by a frozen conflict."
+  },
+  {
+   "id": "3cc815e0-e2ff-4d9f-8b9a-3d622863032e",
+   "name": "attritional equilibrium",
+   "labels": [],
+   "summary": "The conflict has settled into a grinding attritional equilibrium on the battlefield, accompanied by an intensifying diplomatic sprint, a brittle sanctions regime under fresh strain, and an emerging political crisis inside Ukraine."
+  },
+  {
+   "id": "3c3b769a-7b25-4b3d-9711-3a497ebd5777",
+   "name": "Russo-Ukrainian war",
+   "labels": [],
+   "summary": "The Russo-Ukrainian war (2022–present) has a reference providing a 20% territorial control figure and overall casualty framework. The UN OHCHR tracks civilian casualties, and in winter, UNICEF and WHO issued warnings about the humanitarian situation."
+  },
+  {
+   "id": "3c23116a-9dd5-4cbc-baac-1177f5212fd2",
+   "name": "elections",
+   "labels": [],
+   "summary": "The question of whether and when elections can be safely held has become a tangible element of diplomatic negotiation between Kyiv and Washington, which has not yet been fully resolved."
+  },
+  {
+   "id": "3be30007-a030-48b6-89eb-dac223b416a3",
+   "name": "The Military Balance",
+   "labels": [],
+   "summary": "The Military Balance assesses the war as one characterized by drones and dwindling stocks, with shifts in manpower comparisons."
+  },
+  {
+   "id": "3bc4dd41-8ff7-44e8-9100-4aff71340d33",
+   "name": "Institute for the Study of War",
+   "labels": [
+    "ThinkTank"
+   ],
+   "summary": "The Institute for the Study of War contributes authoritative data to an assessment that synthesizes recent information to map the war's status, causes, and future trajectory."
+  },
+  {
+   "id": "3bb36eaf-67d1-4d56-8bdc-c68d753fca63",
+   "name": "Ukrainian and Western analysts",
+   "labels": [],
+   "summary": "Ukrainian and Western analysts described Pokrovsk as having been reduced to rubble during the assault, with Russian units forced to clear the city block by block over many months."
+  },
+  {
+   "id": "3a597dd9-0f19-4068-b21c-209a0acca7c8",
+   "name": "energy grid",
+   "labels": [],
+   "summary": "The energy grid has been repeatedly targeted by Russian strikes, causing power, heating, and water outages for hundreds of thousands of Ukrainians during winter. Destruction of heating infrastructure further endangers lives in sub-zero temperatures."
+  },
+  {
+   "id": "392ff027-d4c1-4fcb-b70d-aec2c8845377",
+   "name": "Russian oil and gas",
+   "labels": [],
+   "summary": "The UK relaxed strict sanctions on Russian crude oil in May 2026, a decision that drew political criticism."
+  },
+  {
+   "id": "37a879c4-5192-445f-a8ef-6112a0a0e31a",
+   "name": "budget",
+   "labels": [],
+   "summary": "The budget's traditional backbone, oil and gas revenues, is constrained by sanctions and Ukrainian drone attacks on refining infrastructure."
+  },
+  {
+   "id": "37a0f402-4dad-497b-b913-b1b22044ca7a",
+   "name": "European production",
+   "labels": [],
+   "summary": "European production has scaled and partially alleviated Ukraine's dependence on Western 155mm artillery ammunition, though the issue is not eliminated."
+  },
+  {
+   "id": "35c2a0d1-6a5b-40d3-b1fc-57d84fa47cba",
+   "name": "Ukrainian dead",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Between 100,000 and 140,000 Ukrainian dead are reported, a figure which includes deaths from the conflict. President Zelensky's February 2025 figure of \"nearly 46,000\" Ukrainian dead is widely viewed as an underestimate."
+  },
+  {
+   "id": "3508a8fb-8b91-401c-a204-42cfddfd9ad1",
+   "name": "Ukraine Seizes the Initiative",
+   "labels": [],
+   "summary": "The March 2026 ISW assessment, titled \"Ukraine Seizes the Initiative,\" noted that Ukrainian forces reclaimed more territory in March 2026 than Russia had captured. This was the first time since the 2024 Kursk operation that Ukraine had achieved this territorial gain within a single month."
+  },
+  {
+   "id": "344cbf4b-7e61-4fa8-832e-7a569603ff69",
+   "name": "drones",
+   "labels": [],
+   "summary": "Drones are a characteristic of the war as assessed by The Military Balance."
+  },
+  {
+   "id": "33ad6c4d-777d-41f1-bde7-7f9f41215fbb",
+   "name": "BBC's Russian service",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "The BBC's Russian service has confirmed more than 163,000 Russian military deaths through public records, noting that the true figure is necessarily higher."
+  },
+  {
+   "id": "31fedb99-5a65-4b78-b8a6-7f0f2c19b198",
+   "name": "Ukrainian parliament",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The Ukrainian parliament extended President Zelenskyy's mandate until the end of martial law on February 25, 2025. This decision was affirmed by Al Jazeera."
+  },
+  {
+   "id": "315b9614-35db-49dd-a5a7-20beb7d68b6c",
+   "name": "Russian central bank officials",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Some Russian central bank officials have warned of a possible recession by year-end 2026."
+  },
+  {
+   "id": "3015a7fa-6a1d-4d8d-b579-620f071cf10f",
+   "name": "Asia",
+   "labels": [],
+   "summary": "As of early 2026, Asia hosts more than 5.6 million Ukrainian refugees."
+  },
+  {
+   "id": "2efe912e-7fcc-414c-a650-aaefbe804b12",
+   "name": "labour market",
+   "labels": [],
+   "summary": "The labour market is tight due to mobilisation and emigration."
+  },
+  {
+   "id": "2dcbb338-c758-49db-afa6-d09bf4b9d13f",
+   "name": "schools in Kyiv",
+   "labels": [],
+   "summary": "By January 2026, 45% of schools in Kyiv were closed due to a lack of central heating. This is a result of cumulative effects on Ukrainian energy infrastructure from varying numbers of cruise and ballistic missiles. The Ukrainian government is building a second level of physical protection at 120 critical energy infrastructure sites."
+  },
+  {
+   "id": "2b9d751a-951b-4e47-a32c-89d4c895b5f1",
+   "name": "Kremlin",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "At the St. Petersburg International Economic Forum in early June 2026, Kremlin official Maxim Oreshkin admitted that the wartime economy is the permanent economy, stating that things should not be expected to return to the way they were or for Western sanctions to be lifted."
+  },
+  {
+   "id": "29e59e61-2916-4b1c-8f7d-5cd2db115834",
+   "name": "Jared Kushner",
+   "labels": [
+    "Person"
+   ],
+   "summary": "In late January 2026, Jared Kushner, as a Trump-administration envoy, met with delegations from Kyiv and Moscow in Abu Dhabi."
+  },
+  {
+   "id": "29462cfa-b980-4afe-b25c-cf928617950e",
+   "name": "refining infrastructure",
+   "labels": [],
+   "summary": "Refining infrastructure is being targeted by Ukrainian drone attacks, which constrains oil and gas revenues."
+  },
+  {
+   "id": "28d5f3d4-3a30-430b-8f3f-4fd9ee7fc0d0",
+   "name": "Crimea",
+   "labels": [],
+   "summary": "Crimea was annexed by Moscow in 2014."
+  },
+  {
+   "id": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "name": "European Union",
+   "labels": [
+    "IntergovernmentalOrganization"
+   ],
+   "summary": "The European Union has been working to influence the negotiation process from the outside and joined the Geneva talks. European negotiators are pushing back on what they view as the most punitive elements of the U.S."
+  },
+  {
+   "id": "2824027a-9865-4c14-9deb-c3cde7b4593f",
+   "name": "third countries",
+   "labels": [],
+   "summary": "Four banks in Kyrgyzstan, Laos, and Azerbaijan were included in the EU's 20th sanctions package against Russia. These banks are considered to be enabling sanctions evasion."
+  },
+  {
+   "id": "27877a14-5667-4b29-beff-888c3bcec2d6",
+   "name": "Yermak affair",
+   "labels": [],
+   "summary": "The Yermak affair is part of Operation Midas, a section within 'Inside Ukraine: The Corruption Crisis and the Question of Legitimacy'."
+  },
+  {
+   "id": "26ec5ba2-ef9a-44b4-8eec-cac4c253bbf5",
+   "name": "Starlinks",
+   "labels": [],
+   "summary": "Starlinks were used to target Ukrainian cities. Making money on war crimes may damage your brand [citation:The Guardian, January 2026]."
+  },
+  {
+   "id": "25e4bbf9-1c51-4be5-bf5d-ec2ae6a29789",
+   "name": "Manpower",
+   "labels": [],
+   "summary": "Manpower comparisons between the sides in the war have shifted in interesting ways, according to The Military Balance."
+  },
+  {
+   "id": "22e9f15d-e6cd-4d00-9399-fe262ccab21e",
+   "name": "Kherson",
+   "labels": [],
+   "summary": "As of May 2026, Russian forces occupy large parts of Kherson, which Moscow claimed to have annexed in September 2022."
+  },
+  {
+   "id": "2203b102-dac5-4263-9a80-c5a5dc628c81",
+   "name": "Russian economy",
+   "labels": [],
+   "summary": "In 2026, the Russian economy is approaching stagnation, with GDP growth decelerating sharply after posting 4.1% in 2023 and 4.9% in 2024. This slowdown defied predictions of a sanctions-induced collapse from many Western analysts. The cracks in Russia's economy were highlighted at SPIEF, according to the Moscow Times."
+  },
+  {
+   "id": "20814253-3e27-4c0d-98df-a6476ede4d46",
+   "name": "Western logistics hub",
+   "labels": [],
+   "summary": "A Russian attack on a Western logistics hub is a scenario that would involve escalation and fundamentally change the character of the war."
+  },
+  {
+   "id": "1e2e5d06-b65e-4b71-895d-06a2317159bc",
+   "name": "civilian investment",
+   "labels": [],
+   "summary": "Civilian investment has been crowded out by defence spending."
+  },
+  {
+   "id": "1d29634f-4867-440c-b106-ad8a3af3fbdc",
+   "name": "UN agencies",
+   "labels": [
+    "IntergovernmentalOrganization"
+   ],
+   "summary": "UN agencies provide authoritative data for an assessment that synthesizes recent information to map the war's status, causes, and future trajectory."
+  },
+  {
+   "id": "1b6bd318-33b6-45a3-9167-b4505b31d7d6",
+   "name": "dwindling stocks",
+   "labels": [],
+   "summary": "Dwindling stocks are a characteristic of the war as assessed by The Military Balance."
+  },
+  {
+   "id": "19bd9e87-8d6f-4130-a8f9-66e4b063ed5a",
+   "name": "St. Petersburg",
+   "labels": [],
+   "summary": "St. Petersburg experienced a drone strike during the economic forum in early June 2026."
+  },
+  {
+   "id": "197f9f02-9e63-4573-8c9d-3a352c170b48",
+   "name": "eastern Ukraine",
+   "labels": [],
+   "summary": "The still-contested parts of eastern Ukraine are the subject of a proposed free trade zone under Ukrainian sovereignty, with the question of final political status to be deferred. Peace talks are scheduled to occur in Abu Dhabi between Ukraine, Russia, and the U.S."
+  },
+  {
+   "id": "17e02936-826d-4ce3-84ab-89e13427c4b3",
+   "name": "mobilisation",
+   "labels": [],
+   "summary": "Mobilisation is a contributing factor to a tight labour market."
+  },
+  {
+   "id": "149ce96e-de37-4059-a26a-e3843df0772e",
+   "name": "2026 GDP growth forecast",
+   "labels": [],
+   "summary": "The official 2026 GDP growth forecast was cut from 1.3% to 0.4% in May 2026, as announced by Deputy Prime Minister Alexander Novak."
+  },
+  {
+   "id": "13ff123b-b1d5-49bb-9e7c-1c4aaa6cc405",
+   "name": "Verkhovna Rada",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "The Verkhovna Rada unanimously passed a resolution in February 2025 affirming Zelensky's mandate until the end of martial law."
+  },
+  {
+   "id": "132e7198-be38-45a8-83ed-4a7b5f86ff88",
+   "name": "UK government",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The UK government quietly issued a license in May 2026 allowing imports of Russian oil refined in third countries, a relaxation criticized by opposition leader Kemi Badenoch as a back-door concession."
+  },
+  {
+   "id": "12e1909a-a4ab-4275-bac2-f14b1abe94e2",
+   "name": "Giorgia Meloni",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Italian Prime Minister Giorgia Meloni has publicly argued that extending NATO's Article 5 security guarantee to Ukraine would be a meaningful test of Russia's intentions."
+  },
+  {
+   "id": "12402125-3c43-468f-8917-29b3968878dd",
+   "name": "Ukrainian constitutional and legal provisions",
+   "labels": [],
+   "summary": "The relevant Ukrainian constitutional and legal provisions prohibit unilateral territorial concessions."
+  },
+  {
+   "id": "1236b8d5-1eb3-4f44-b709-018a62b5ec0f",
+   "name": "2027",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "11f0342c-63fa-4cef-bcb7-4e13232d6dd8",
+   "name": "Kemi Badenoch",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Kemi Badenoch, opposition leader, criticized the UK government's May 2026 decision to allow imports of Russian oil refined in third countries, calling it a back-door concession."
+  },
+  {
+   "id": "0ea44752-b022-4787-84e3-d99a3b961731",
+   "name": "large-scale graft",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "0ea02095-dd28-4b7c-ab8b-b37bb30269df",
+   "name": "Ukraine Support Tracker",
+   "labels": [],
+   "summary": "The Ukraine Support Tracker, maintained by the Kiel Institute, tracks aid allocations through April 2026. This tracker shows that the United States has committed roughly $120 billion in total support to Ukraine since 2022."
+  },
+  {
+   "id": "0c478c82-9cf3-449b-a2e5-2e6396bec495",
+   "name": "Russian oil",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "0c3f3a48-55ca-4c7e-86e0-f791d95fab24",
+   "name": "internally displaced persons",
+   "labels": [
+    "Person"
+   ],
+   "summary": "As of early 2026, approximately 8 million internally displaced persons were recorded."
+  },
+  {
+   "id": "0b5e6981-1920-4237-b934-142ada9106c9",
+   "name": "tax base",
+   "labels": [],
+   "summary": "The tax base is hollowed out."
+  },
+  {
+   "id": "0adb4a67-f6d3-4222-9b85-e77521f5e535",
+   "name": "ceasefire",
+   "labels": [],
+   "summary": "A ceasefire along current contact lines is a potential component of a negotiated settlement."
+  },
+  {
+   "id": "0a8995ca-c2ce-4c59-80d3-1cab6cf7f777",
+   "name": "St. P",
+   "labels": [],
+   "summary": "St. P was the target of a drone strike by long-range strike drones."
+  },
+  {
+   "id": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "Ukraine",
+   "labels": [
+    "IntergovernmentalOrganization"
+   ],
+   "summary": "An emerging political crisis inside Ukraine itself may prove as consequential as anything happening on the front lines."
+  },
+  {
+   "id": "07cf59c7-5119-4324-89a2-97dee066c87b",
+   "name": "European military",
+   "labels": [
+    "Person"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "07968e51-18e4-4ddf-a13c-e0227b6927fc",
+   "name": "economy",
+   "labels": [],
+   "summary": "Ukraine faces a population crisis that constrains its ability to generate forces without hollowing out its economy and its future."
+  },
+  {
+   "id": "07333ca9-c5e7-42b7-a4fb-9bacc84bc11e",
+   "name": "28-point peace plan",
+   "labels": [],
+   "summary": "The 28-point peace plan, unveiled in late 2025, was drafted by Trump administration's special envoy Steve Witkoff and Secretary of State Marco Rubio. It is considered a consequential diplomatic event of the war's fourth year."
+  },
+  {
+   "id": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "name": "Pokrovsk",
+   "labels": [],
+   "summary": "The Ukrainian-held portion of the Donbas, including Pokrovsk and Myrnohrad, fell to Russian forces in early 2026 after a multi-year siege that became symbolic of the war's grinding character."
+  },
+  {
+   "id": "04f5d114-e9e7-4b74-9456-59a602a8c220",
+   "name": "anti-circumvention tool",
+   "labels": [],
+   "summary": "The EU activated its \"anti-circumvention\" tool for the first time to address Russian sanctions evasion. This tool targets third-country entities that provide material support for such evasion."
+  },
+  {
+   "id": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "Russia",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Russian forces crossed the Ukrainian border on 24 February 2022."
+  },
+  {
+   "id": "03abc9d2-83ef-4af4-ae84-1249bb27ed42",
+   "name": "Maxim Oreshkin",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Kremlin official Maxim Oreshkin stated in early June 2026 at the St. Petersburg International Economic Forum that the wartime economy is the permanent economy and that things should not be expected to return to how they were or for sanctions to be lifted."
+  },
+  {
+   "id": "03256773-c25b-4048-8b2d-4dce9fa883fa",
+   "name": "basic state functions",
+   "labels": [],
+   "summary": "Basic state functions are maintained with external support."
+  },
+  {
+   "id": "02fe4ff6-7978-4de2-89cd-0d8def23df3d",
+   "name": "Russian officials",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Russian officials provided feedback that was incorporated into the Trump 28-point plan, developed in coordination with Russian envoy Kirill Dmitriev."
+  },
+  {
+   "id": "0285d50b-6b4f-43fb-933c-9d05d7bebd8e",
+   "name": "Specialized Anti-Corruption Prosecutor's Office",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "022f421b-0008-4752-a558-15ba24d059fc",
+   "name": "Europe",
+   "labels": [],
+   "summary": "As of early 2026, Europe hosts more than 5.6 million Ukrainian refugees."
+  }
+ ],
+ "links": [
+  {
+   "source": "9fbee35c-0d8f-4661-bae2-157f5a0f307a",
+   "target": "f3fc2149-8857-477a-a8a5-08df94621342",
+   "name": "IS_DESTROYED_DURING",
+   "fact": "Heating infrastructure is destroyed during sub-zero temperatures."
+  },
+  {
+   "source": "5a8f68f4-1a58-4509-86a6-101b74e9d74e",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "SEEKS_DEAL_WITH",
+   "fact": "Putin intensifies efforts to seek a deal with Ukraine."
+  },
+  {
+   "source": "5831c1a5-c4ef-486e-a8bb-44c7fbda26dc",
+   "target": "a38154f0-631d-457c-a6b2-da1193c5220b",
+   "name": "DRAFTED",
+   "fact": "Marco Rubio drafted the Trump 28-point plan."
+  },
+  {
+   "source": "04f5d114-e9e7-4b74-9456-59a602a8c220",
+   "target": "7a4a7d64-54ad-4965-84a9-70771726c6c0",
+   "name": "DESIGNED_TO_CRACK_DOWN_ON",
+   "fact": "The anti-circumvention tool is designed to crack down on third-country entities that materially support Russian sanctions evasion."
+  },
+  {
+   "source": "d2fe2a4f-0aea-4271-9219-cf63904a93e0",
+   "target": "1236b8d5-1eb3-4f44-b709-018a62b5ec0f",
+   "name": "PRECEDES",
+   "fact": "Four broad trajectories can be identified for the remainder of 2026 and into 2027."
+  },
+  {
+   "source": "315b9614-35db-49dd-a5a7-20beb7d68b6c",
+   "target": "55ab172a-6471-4b64-8db4-51971da8cc80",
+   "name": "WARNS_OF",
+   "fact": "Some Russian central bank officials have warned of a possible recession by year-end."
+  },
+  {
+   "source": "dfe6cf3d-48ff-4041-9b58-41908f9070f6",
+   "target": "392ff027-d4c1-4fcb-b70d-aec2c8845377",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The UK has delayed some sanctions on Russian oil and gas."
+  },
+  {
+   "source": "e19c72e1-1f8c-4ba2-9c87-0ff8846c29e0",
+   "target": "8fc574b8-e146-44eb-a3b7-e1cbfc8f3048",
+   "name": "REPORTS_ON",
+   "fact": "The UN Office of the High Commissioner for Human Rights reports that nearly 15,000 Ukrainian civilians have been verified killed and more than 40,600 injured since February 2022, with actual totals believed to be considerably higher."
+  },
+  {
+   "source": "31fedb99-5a65-4b78-b8a6-7f0f2c19b198",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "AFFILIATED_WITH",
+   "fact": "The Ukrainian parliament affirmed Zelenskyy's legitimacy and mandate until the end of martial law."
+  },
+  {
+   "source": "6e1595b8-86c9-4833-b884-0073a9635b49",
+   "target": "9a29283c-3388-47de-b6b5-7b79e4343486",
+   "name": "ENERGISES",
+   "fact": "The corruption allegations have energised domestic critics."
+  },
+  {
+   "source": "9f9b4c85-d4f4-4ff1-b6f1-2cc9e683eb01",
+   "target": "532b20ae-7b97-44e3-b826-64cb170fbc96",
+   "name": "PRESENT_AT",
+   "fact": "The Supreme Allied Commander Europe was present at the Abu Dhabi talks."
+  },
+  {
+   "source": "7daee85c-94a9-47ea-8736-efd683a306b2",
+   "target": "27877a14-5667-4b29-beff-888c3bcec2d6",
+   "name": "RELATED_TO",
+   "fact": "Operation Midas is related to the Yermak affair."
+  },
+  {
+   "source": "b474861a-2e5d-4724-83de-9ca5773aabdb",
+   "target": "07333ca9-c5e7-42b7-a4fb-9bacc84bc11e",
+   "name": "DRAFTED",
+   "fact": "Steve Witkoff, the Trump administration's special envoy, drafted the 28-point peace plan."
+  },
+  {
+   "source": "4381ecfe-74a8-4b75-8488-87ee7c839df1",
+   "target": "7f2a81f6-2e35-411a-93ae-41419a0b2fc1",
+   "name": "AFFECTED_BY",
+   "fact": "Kyiv residents are experiencing the humanitarian impact of energy infrastructure attacks."
+  },
+  {
+   "source": "5bcd0734-d1ee-4133-9501-e48a8e9d2883",
+   "target": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "name": "MET_WITH",
+   "fact": "Trump-administration envoys met with delegations from Kyiv."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "LAUNCHES_BARRAGES_AGAINST",
+   "fact": "Russia launches nightly drone and missile barrages against Ukraine."
+  },
+  {
+   "source": "6aa11ccd-9455-42f6-802f-22dc37c34d00",
+   "target": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "name": "AFFILIATED_WITH",
+   "fact": "The European Commission is part of the EU."
+  },
+  {
+   "source": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "target": "536c7591-3edd-41a2-b58d-83172b07c299",
+   "name": "MET_WITH",
+   "fact": "President Zelensky met with Trump in Florida in late 2025."
+  },
+  {
+   "source": "26ec5ba2-ef9a-44b4-8eec-cac4c253bbf5",
+   "target": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "name": "REPORTS_ON",
+   "fact": "Kinstellar provides legal analysis of the EU's 20th sanctions package against Russia."
+  },
+  {
+   "source": "a2e28537-dd9d-41da-9e3e-80df5fa1317e",
+   "target": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "name": "SUPPORTS",
+   "fact": "The United Kingdom and European Union institutions and member states have contributed to total support."
+  },
+  {
+   "source": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "target": "694f1817-4728-47d2-961c-8b290b9b1de2",
+   "name": "IS_LOCATED_IN",
+   "fact": "Pokrovsk is in Donetsk Oblast."
+  },
+  {
+   "source": "8dea05ae-5f1b-4543-9d95-270e1ab71f82",
+   "target": "be3d425b-3371-4867-84b5-6ac71718dc1c",
+   "name": "ANALYZES",
+   "fact": "The Kiel Institute's analysis identifies a widening gap between military and non-military aid for the Ukraine military aid program."
+  },
+  {
+   "source": "768fa926-99d3-4f89-9911-aaff71a16af9",
+   "target": "e72cee0e-0313-47f7-9264-7548628c2b68",
+   "name": "USES_DATA_FROM",
+   "fact": "DeerFlow Research synthesizes recent authoritative data from the Center for Strategic and International Studies."
+  },
+  {
+   "source": "d114f5b3-0afb-4621-85cf-b626ab2f4af1",
+   "target": "532b20ae-7b97-44e3-b826-64cb170fbc96",
+   "name": "OCCURRING_IN",
+   "fact": "The peace talks are being held in Abu Dhabi."
+  },
+  {
+   "source": "c966d73b-ec1a-47df-b860-a47ddfb2238d",
+   "target": "9472b28b-68ab-4921-b63d-44925ace0f0b",
+   "name": "HOSTED_ON",
+   "fact": "The Russian Offensive Campaign Assessment, June 1, 2026 is hosted on criticalthreats.org."
+  },
+  {
+   "source": "e0a09598-55c5-4db2-a77f-f78a8bbd451b",
+   "target": "07333ca9-c5e7-42b7-a4fb-9bacc84bc11e",
+   "name": "FROZEN_ASSETS_FUND_PLAN",
+   "fact": "Frozen Russian sovereign assets are used to fund the 28-point plan."
+  },
+  {
+   "source": "7ec8e62e-8011-45df-99ac-00364b30314f",
+   "target": "7daee85c-94a9-47ea-8736-efd683a306b2",
+   "name": "INVOLVED_IN",
+   "fact": "Zelensky allies are involved in the Operation Midas investigation."
+  },
+  {
+   "source": "aafb2f24-998a-4ee3-93d3-d208a312391f",
+   "target": "3a597dd9-0f19-4068-b21c-209a0acca7c8",
+   "name": "TARGETS",
+   "fact": "Russian strikes repeatedly target the energy grid."
+  },
+  {
+   "source": "e72cee0e-0313-47f7-9264-7548628c2b68",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "REPORTS_ON",
+   "fact": "CSIS reports on Russia's grinding war in Ukraine."
+  },
+  {
+   "source": "8c54f51b-5840-41c0-bc31-54e1c2856b7f",
+   "target": "03abc9d2-83ef-4af4-ae84-1249bb27ed42",
+   "name": "FEATURED_SPEAKER",
+   "fact": "At the St. Petersburg International Economic Forum, Kremlin official Maxim Oreshkin was a speaker."
+  },
+  {
+   "source": "aafb2f24-998a-4ee3-93d3-d208a312391f",
+   "target": "d37d4f59-4e59-4d03-a490-e5ebe3310fb9",
+   "name": "TARGETS",
+   "fact": "A major Russian strike on a NATO member could lead to escalation and direct NATO involvement."
+  },
+  {
+   "source": "c9456ed1-96dd-4aaf-94e0-333f607fb5fa",
+   "target": "e0a09598-55c5-4db2-a77f-f78a8bbd451b",
+   "name": "FUNDED_BY",
+   "fact": "A negotiated settlement would be funded partly by Russian sovereign assets."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "fafbcc8c-3c45-4397-8818-33f7ac24fd41",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The EU's 20th sanctions package lists an additional 46 vessels in Russia's \"shadow fleet\", bringing the total to 632 listed vessels subject to port access bans and service prohibitions."
+  },
+  {
+   "source": "7a4a7d64-54ad-4965-84a9-70771726c6c0",
+   "target": "d57133c2-8c0c-48b8-b914-f7580293cd8d",
+   "name": "MATERIALLY_SUPPORT",
+   "fact": "Third-country entities materially support Russian sanctions evasion."
+  },
+  {
+   "source": "03abc9d2-83ef-4af4-ae84-1249bb27ed42",
+   "target": "8c54f51b-5840-41c0-bc31-54e1c2856b7f",
+   "name": "ATTENDED",
+   "fact": "Maxim Oreshkin attended the St. Petersburg International Economic Forum in early June 2026."
+  },
+  {
+   "source": "2203b102-dac5-4263-9a80-c5a5dc628c81",
+   "target": "2efe912e-7fcc-414c-a650-aaefbe804b12",
+   "name": "IS_IMPACTED_BY",
+   "fact": "The Russian economy is impacted by mobilisation-driven labour shortages."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "b8e8e5e3-2940-4c25-b758-6ef48df9dc75",
+   "name": "STRUCK",
+   "fact": "A January 2026 drone strike on a passenger train in Kharkiv Oblast by Russia killed five people."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "OPPOSES",
+   "fact": "The peace plan requires Ukraine to cede Crimea, Luhansk, and Donetsk to Russia."
+  },
+  {
+   "source": "b84cf126-11d6-494c-bc0f-cf979ead3427",
+   "target": "7b62efde-8d12-4e90-9af2-03a97b53cc28",
+   "name": "DOES_NOT_STOP",
+   "fact": "EU accession will not stop the demographic crisis in Ukraine."
+  },
+  {
+   "source": "536c7591-3edd-41a2-b58d-83172b07c299",
+   "target": "07333ca9-c5e7-42b7-a4fb-9bacc84bc11e",
+   "name": "AUTHORED",
+   "fact": "Donald Trump authored a 28-point Ukraine peace plan that includes land Kyiv must hand to Russia and conditions for elections."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "149ce96e-de37-4059-a26a-e3843df0772e",
+   "name": "HAS_FORECAST",
+   "fact": "Russia's official 2026 GDP growth forecast was cut from 1.3% to 0.4%."
+  },
+  {
+   "source": "022f421b-0008-4752-a558-15ba24d059fc",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "HOSTS_PEACE_TALKS_FOR",
+   "fact": "The war is being decided in conference rooms in Davos."
+  },
+  {
+   "source": "923008ef-5f29-4ba1-a11c-3891c139b93f",
+   "target": "be3d425b-3371-4867-84b5-6ac71718dc1c",
+   "name": "OMITS_FUNDING_FOR",
+   "fact": "The U.S. 2027 budget omits funding for the Ukraine military aid program."
+  },
+  {
+   "source": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "target": "4d2acb7a-14f1-4617-a8c3-5bf48380d03e",
+   "name": "HAS_UNRESOLVED_ISSUE_WITH",
+   "fact": "Kyiv and Washington have not yet fully resolved the question of whether and when elections can be safely held."
+  },
+  {
+   "source": "25e4bbf9-1c51-4be5-bf5d-ec2ae6a29789",
+   "target": "3be30007-a030-48b6-89eb-dac223b416a3",
+   "name": "ASPECT_OF",
+   "fact": "Manpower is an aspect of The Military Balance."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "56d63780-2c52-405d-9849-71f732cad1cd",
+   "name": "CONSIDERS",
+   "fact": "Russia considers mobilization a national-security cost."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "197f9f02-9e63-4573-8c9d-3a352c170b48",
+   "name": "BUILDING_PROTECTION_AT",
+   "fact": "The Ukrainian government was building a second level of physical protection at 120 critical energy infrastructure sites."
+  },
+  {
+   "source": "4c924160-7943-4c9f-babe-62eeab86e52b",
+   "target": "a38154f0-631d-457c-a6b2-da1193c5220b",
+   "name": "COLLABORATED_ON",
+   "fact": "Kirill Dmitriev coordinated on the Trump 28-point plan."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "2824027a-9865-4c14-9deb-c3cde7b4593f",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The EU extended the transaction ban to four banks in third countries (Kyrgyzstan, Laos, Azerbaijan) considered to be enabling sanctions evasion."
+  },
+  {
+   "source": "2203b102-dac5-4263-9a80-c5a5dc628c81",
+   "target": "8c3c45db-5a0b-4306-96d8-6f947280000b",
+   "name": "OPPOSES",
+   "fact": "Western analysts had predicted a sanctions-induced collapse of the Russian economy, but it grew instead."
+  },
+  {
+   "source": "da78d30a-409c-46c0-80b1-14cb016d568a",
+   "target": "29462cfa-b980-4afe-b25c-cf928617950e",
+   "name": "TARGETS",
+   "fact": "Ukrainian drone attacks target refining infrastructure."
+  },
+  {
+   "source": "13ff123b-b1d5-49bb-9e7c-1c4aaa6cc405",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "AFFIRMS_LEGITIMACY",
+   "fact": "The Verkhovna Rada affirmed Zelenskyy's legitimacy through a unanimous parliamentary vote."
+  },
+  {
+   "source": "99aa6360-9c5f-4d58-a369-d0f5f1ab1a72",
+   "target": "197f9f02-9e63-4573-8c9d-3a352c170b48",
+   "name": "LOCATED_IN",
+   "fact": "The proposed free trade zone is in the still-contested parts of eastern Ukraine."
+  },
+  {
+   "source": "8dea05ae-5f1b-4543-9d95-270e1ab71f82",
+   "target": "0ea02095-dd28-4b7c-ab8b-b37bb30269df",
+   "name": "REPORTS_ON",
+   "fact": "The Kiel Institute reports on the Ukraine Support Tracker."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "19bd9e87-8d6f-4130-a8f9-66e4b063ed5a",
+   "name": "TARGETED_BY_DRONE_STRIKE_IN",
+   "fact": "Russia was targeted by a drone strike on St. Petersburg during the economic forum in early June 2026."
+  },
+  {
+   "source": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "target": "35c2a0d1-6a5b-40d3-b1fc-57d84fa47cba",
+   "name": "STATED_FIGURE_FOR",
+   "fact": "President Zelensky stated in February 2025 that there were nearly 46,000 Ukrainian dead."
+  },
+  {
+   "source": "bdad2b9a-e677-41a4-bc35-c4cf4b38f9f8",
+   "target": "6c29eb76-322a-4989-80ae-36ad2ec9f89f",
+   "name": "PUBLISHED_BY",
+   "fact": "The ISW assessment published on June 1, 2026 states Russian forces gained a presence in only 40.64 square kilometres between December 2025 and May 2026."
+  },
+  {
+   "source": "a2c31569-1872-4047-bc38-190f70d6c7ca",
+   "target": "6051850c-b189-4509-be97-c5dccc28dc59",
+   "name": "CONSTRAINED_BY",
+   "fact": "Oil and gas revenues are constrained by sanctions."
+  },
+  {
+   "source": "ee05d8cb-03fd-4a5f-a29a-b22b0e77c771",
+   "target": "f539c914-9755-4dfb-a070-18ffa982788f",
+   "name": "TARGETED_BY",
+   "fact": "The energy infrastructure sites are being hardened amidst Russian attacks."
+  },
+  {
+   "source": "a5649238-6cdf-4b05-9a1d-92c54287e4c8",
+   "target": "d45b2a1e-c695-4ae2-ba57-b692c5d082dc",
+   "name": "ACCEPTANCE_OF_PEACE_FALLING_SHORT",
+   "fact": "The Ukrainian people may need to accept a peace that falls short of the full restoration of their territorial integrity."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "22e9f15d-e6cd-4d00-9399-fe262ccab21e",
+   "name": "FREEZE_FRONT_LINE",
+   "fact": "The Trump 28-point plan requires Ukraine to freeze the front line in Kherson."
+  },
+  {
+   "source": "c9456ed1-96dd-4aaf-94e0-333f607fb5fa",
+   "target": "d4583e33-ce88-4162-8756-d38795846a9f",
+   "name": "INVOLVES_PARTIAL_AGREEMENT",
+   "fact": "A negotiated settlement may involve partial international recognition of Russian control over Crimea and existing occupied territory."
+  },
+  {
+   "source": "6aa11ccd-9455-42f6-802f-22dc37c34d00",
+   "target": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "name": "REPRESENTS",
+   "fact": "The European Commission adopted the 20th sanctions package against Russia on April 23, 2026."
+  },
+  {
+   "source": "3be30007-a030-48b6-89eb-dac223b416a3",
+   "target": "344cbf4b-7e61-4fa8-832e-7a569603ff69",
+   "name": "INVOLVES",
+   "fact": "The Military Balance notes a war of drones."
+  },
+  {
+   "source": "35c2a0d1-6a5b-40d3-b1fc-57d84fa47cba",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "IS_UNDERESTIMATE_OF",
+   "fact": "President Zelensky's figure of nearly 46,000 Ukrainian dead is widely viewed as an underestimate."
+  },
+  {
+   "source": "e19c72e1-1f8c-4ba2-9c87-0ff8846c29e0",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "REPORTS_ON",
+   "fact": "UN OHCHR provides civilian casualty figures for Ukraine."
+  },
+  {
+   "source": "9f6d4ea9-384c-48e4-a3f9-4bfaeb887150",
+   "target": "b3f33ea3-0421-4556-acad-b7865edb00a2",
+   "name": "OPERATES_IN",
+   "fact": "The Russian army is advancing or infiltrating into only 7.87% of the territory it captured in spring 2025 during spring 2026."
+  },
+  {
+   "source": "8f5097f4-c8a4-4532-b45c-a6f5425bfe72",
+   "target": "5bcd0734-d1ee-4133-9501-e48a8e9d2883",
+   "name": "AFFILIATED_WITH",
+   "fact": "General Alexus Grynkewich is one of the Trump-administration envoys."
+  },
+  {
+   "source": "b4f56f08-ec59-4d97-86de-e921cb9502cf",
+   "target": "9f6d4ea9-384c-48e4-a3f9-4bfaeb887150",
+   "name": "ASSESSES",
+   "fact": "The ISW assessment from June 1, 2026 indicates that the Russian army's operational tempo in spring 2026 is a more than tenfold reduction compared to spring 2025."
+  },
+  {
+   "source": "e23be03c-a36d-4f34-91e5-c750b482023a",
+   "target": "b474861a-2e5d-4724-83de-9ca5773aabdb",
+   "name": "EMPLOYED_BY",
+   "fact": "Steve Witkoff was a special envoy for the Trump administration."
+  },
+  {
+   "source": "3bc4dd41-8ff7-44e8-9100-4aff71340d33",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "CONFIRMS",
+   "fact": "The Institute for the Study of War confirmed that Russia uses Starlink for drone operations."
+  },
+  {
+   "source": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "target": "595c7e92-4b2a-47fe-a919-991f6dde588f",
+   "name": "OPPOSES",
+   "fact": "Moscow will not agree to a settlement that leaves any of the five claimed oblasts under Ukrainian control."
+  },
+  {
+   "source": "0c3f3a48-55ca-4c7e-86e0-f791d95fab24",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "IS_FROM",
+   "fact": "There are approximately 8 million internally displaced persons from Ukraine."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "3d09ab01-28f5-4842-832a-b7665417e538",
+   "name": "IS_FEATURE_OF",
+   "fact": "Russian nightly drone and missile barrages have become a defining feature of the war."
+  },
+  {
+   "source": "3fa346b7-dda1-41c7-9196-2385b9a14fc5",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "OCCUPIED_BY",
+   "fact": "Donetsk is occupied by Russian forces, which Moscow claimed to have annexed in September 2022."
+  },
+  {
+   "source": "a0eb6eac-e02e-4369-83ed-55a07a22ef88",
+   "target": "37a879c4-5192-445f-a8ef-6112a0a0e31a",
+   "name": "CONSUMES",
+   "fact": "The defence burden consumes a majority of the state budget."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "name": "POTENTIAL_CAPTURE_OF",
+   "fact": "Russia has the potential to capture Pokrovsk."
+  },
+  {
+   "source": "a38154f0-631d-457c-a6b2-da1193c5220b",
+   "target": "02fe4ff6-7978-4de2-89cd-0d8def23df3d",
+   "name": "INCORPORATES_FEEDBACK_FROM",
+   "fact": "The Trump 28-point plan incorporates feedback from Russian officials."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "5b5e10a0-e484-451d-9669-a9f13e2b7974",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The EU's 20th sanctions package lists the Russian port of Tuapse."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "ENGAGED_IN",
+   "fact": "Russia engaged in the Russia-Ukraine War."
+  },
+  {
+   "source": "b0dbbcfa-0300-420f-b69b-a36cf2317fff",
+   "target": "6051850c-b189-4509-be97-c5dccc28dc59",
+   "name": "CHARACTERIZED_BY",
+   "fact": "The war has settled into a grinding attritional equilibrium on the battlefield, an intensifying diplomatic sprint, a brittle sanctions regime under fresh strain, and an emerging political crisis inside Ukraine itself."
+  },
+  {
+   "source": "2203b102-dac5-4263-9a80-c5a5dc628c81",
+   "target": "6051850c-b189-4509-be97-c5dccc28dc59",
+   "name": "IS_IMPACTED_BY",
+   "fact": "The Russian economy is impacted by sanctions."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "96f53bb8-8faf-4d26-bcd6-4b050765c9ff",
+   "name": "PIONEERED_USE_OF",
+   "fact": "Ukraine pioneered the use of improvised first-person-view drones for reconnaissance and strike missions."
+  },
+  {
+   "source": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "target": "8403a5c3-b3e6-40d8-b5a0-c0603c73d946",
+   "name": "AFFILIATED_WITH",
+   "fact": "The GRU military intelligence service is associated with Moscow."
+  },
+  {
+   "source": "951dc4dc-1de2-4dd3-92d4-0afa824980d0",
+   "target": "5bcd0734-d1ee-4133-9501-e48a8e9d2883",
+   "name": "AFFILIATED_WITH",
+   "fact": "Army Secretary Dan Driscoll is one of the Trump-administration envoys."
+  },
+  {
+   "source": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "target": "532b20ae-7b97-44e3-b826-64cb170fbc96",
+   "name": "DISCUSSES_WITH",
+   "fact": "The U.S. is discussing the issue of territorial concessions in Abu Dhabi."
+  },
+  {
+   "source": "8fa3053e-c638-4e27-9436-6e0e2fd351c0",
+   "target": "b48cbbd9-3277-40a2-9ee6-3e07b5cc70cd",
+   "name": "REPORTED_IN",
+   "fact": "Trump's Ukraine Proposal is detailed in Newsweek."
+  },
+  {
+   "source": "fe4883f4-de9f-4b14-bbdc-d1050592a109",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "REPORTS_ON",
+   "fact": "Al Jazeera reported on Zelenskyy's legitimacy."
+  },
+  {
+   "source": "768fa926-99d3-4f89-9911-aaff71a16af9",
+   "target": "3bc4dd41-8ff7-44e8-9100-4aff71340d33",
+   "name": "USES_DATA_FROM",
+   "fact": "DeerFlow Research synthesizes recent authoritative data from the Institute for the Study of War."
+  },
+  {
+   "source": "33ad6c4d-777d-41f1-bde7-7f9f41215fbb",
+   "target": "eda18cd8-3f59-494f-9aa4-89428cad5368",
+   "name": "REPORTS_ON",
+   "fact": "The BBC's Russian service confirmed more than 163,000 Russian military deaths through public records."
+  },
+  {
+   "source": "8dea05ae-5f1b-4543-9d95-270e1ab71f82",
+   "target": "be3d425b-3371-4867-84b5-6ac71718dc1c",
+   "name": "REPORTS_ON",
+   "fact": "The Kiel Institute reports on aid allocation data through April 2026."
+  },
+  {
+   "source": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "target": "0c478c82-9cf3-449b-a2e5-2e6396bec495",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The United States has temporarily relaxed enforcement of certain sanctions on Russian oil as part of a broader effort to stabilize global energy markets."
+  },
+  {
+   "source": "a5649238-6cdf-4b05-9a1d-92c54287e4c8",
+   "target": "022f421b-0008-4752-a558-15ba24d059fc",
+   "name": "IS_REFUGEE_IN",
+   "fact": "Ukrainians are recorded as refugees in Europe as of early 2026."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "MAINTAINS_FORCE_LEVELS",
+   "fact": "Russia fields an active force in Ukraine estimated at over 700,000 personnel as of mid-2024."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "PROVIDES_AID_TO",
+   "fact": "The European Union has been working to influence the process from the outside and is pushing back on punitive elements of the U.S. draft regarding Ukrainian force size and Russian sovereignty over seized territory."
+  },
+  {
+   "source": "b474861a-2e5d-4724-83de-9ca5773aabdb",
+   "target": "e23be03c-a36d-4f34-91e5-c750b482023a",
+   "name": "AFFILIATED_WITH",
+   "fact": "Steve Witkoff is affiliated with the Trump administration."
+  },
+  {
+   "source": "a0eb6eac-e02e-4369-83ed-55a07a22ef88",
+   "target": "1e2e5d06-b65e-4b71-895d-06a2317159bc",
+   "name": "CROWDS_OUT",
+   "fact": "Defence spending has crowded out civilian investment."
+  },
+  {
+   "source": "536c7591-3edd-41a2-b58d-83172b07c299",
+   "target": "07333ca9-c5e7-42b7-a4fb-9bacc84bc11e",
+   "name": "APPROVES",
+   "fact": "Trump approves the 28-Point Russia-Ukraine Peace Plan."
+  },
+  {
+   "source": "c4675119-d945-4fa0-b96b-04b2d87c34e7",
+   "target": "7ec8e62e-8011-45df-99ac-00364b30314f",
+   "name": "REPORTS_ON",
+   "fact": "The BBC reported on a major corruption scandal engulfing top Zelensky allies in relation to Operation Midas and ministerial resignations."
+  },
+  {
+   "source": "a71b0409-4355-4d9a-9038-5bb15698b328",
+   "target": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "name": "CLEARED",
+   "fact": "Russian units were forced to clear Pokrovsk block by block over many months."
+  },
+  {
+   "source": "69a45472-96f0-437a-8990-3c6038cf8fb6",
+   "target": "e3ca396b-c3a9-4447-98cb-d7141b5195fc",
+   "name": "AFFILIATED_WITH",
+   "fact": "European negotiators are involved in the Geneva talks."
+  },
+  {
+   "source": "7480185d-051f-4391-83e8-ca71a4c44bcd",
+   "target": "aa1b1f33-5491-42de-89a3-a6827b36017d",
+   "name": "ACCUSED_IN_CONNECTION_WITH",
+   "fact": "Andriy Yermak was formally charged in May 2026 in connection with kickback allegations involving Energoatom."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "d4583e33-ce88-4162-8756-d38795846a9f",
+   "name": "CONTROLS",
+   "fact": "Russia controls territory, and in early 2025, it was gaining roughly 100 square kilometers per month."
+  },
+  {
+   "source": "9f9b4c85-d4f4-4ff1-b6f1-2cc9e683eb01",
+   "target": "d37d4f59-4e59-4d03-a490-e5ebe3310fb9",
+   "name": "AFFILIATED_WITH",
+   "fact": "The Supreme Allied Commander Europe is affiliated with NATO."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "5410e3f3-0462-4b27-8131-29d25f258a7a",
+   "name": "PREPARES_BAN_ON",
+   "fact": "The EU is preparing a future maritime services ban on petroleum products."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "HAS_CASUALTIES_IN",
+   "fact": "Russia has lost approximately 1.2 million total personnel in Ukraine."
+  },
+  {
+   "source": "3d09ab01-28f5-4842-832a-b7665417e538",
+   "target": "022f421b-0008-4752-a558-15ba24d059fc",
+   "name": "OCCURRED_IN",
+   "fact": "The Russia-Ukraine war has reached casualty toll levels not seen in Europe since 1945."
+  },
+  {
+   "source": "6c29eb76-322a-4989-80ae-36ad2ec9f89f",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "OCCUPIES",
+   "fact": "Russian forces occupy approximately 20% of Ukraine's internationally recognised territory as of May 2026."
+  },
+  {
+   "source": "f61aeb27-d94f-4a18-8664-0c0cb5f29778",
+   "target": "4c0e3f17-faa1-4baf-8492-3274af28b258",
+   "name": "REQUIRES",
+   "fact": "Public statements from the White House have included a Ukrainian election requirement."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "7ab307a6-67be-43d0-80fd-b4bbb5fd3567",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The EU's 20th sanctions package lists the Russian port of Murmansk."
+  },
+  {
+   "source": "923008ef-5f29-4ba1-a11c-3891c139b93f",
+   "target": "fab86708-a282-4bd3-90e7-10826fb2989d",
+   "name": "SUBMITTED_TO",
+   "fact": "The 2027 U.S. federal budget was submitted to Congress."
+  },
+  {
+   "source": "c74b7546-d62a-4386-a941-3c37708b6afd",
+   "target": "e6d7c1ca-6cbc-4ef0-b39e-46834fb14ac6",
+   "name": "APPROACHES",
+   "fact": "Russian military losses approach Ukrainian military losses, nearing 2 million in total, according to a study."
+  },
+  {
+   "source": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "target": "fe4883f4-de9f-4b14-bbdc-d1050592a109",
+   "name": "HAS_PRPERTY",
+   "fact": "Zelensky's mandate remains constitutionally clear."
+  },
+  {
+   "source": "768fa926-99d3-4f89-9911-aaff71a16af9",
+   "target": "6aa11ccd-9455-42f6-802f-22dc37c34d00",
+   "name": "USES_DATA_FROM",
+   "fact": "DeerFlow Research synthesizes recent authoritative data from the European Commission."
+  },
+  {
+   "source": "768fa926-99d3-4f89-9911-aaff71a16af9",
+   "target": "1d29634f-4867-440c-b106-ad8a3af3fbdc",
+   "name": "USES_DATA_FROM",
+   "fact": "DeerFlow Research synthesizes recent authoritative data from UN agencies."
+  },
+  {
+   "source": "fd1c368b-5792-4654-b9aa-7a12b844c049",
+   "target": "6c29eb76-322a-4989-80ae-36ad2ec9f89f",
+   "name": "OCCUPIED_BY",
+   "fact": "Myrnohrad fell to Russian forces in early 2026 after a multi-year siege."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "On April 23, 2026, the EU adopted its 20th sanctions package against Russia."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "a38154f0-631d-457c-a6b2-da1193c5220b",
+   "name": "PROVIDED_FEEDBACK_ON",
+   "fact": "Ukraine provided feedback on the Trump 28-point plan."
+  },
+  {
+   "source": "3cc815e0-e2ff-4d9f-8b9a-3d622863032e",
+   "target": "b0dbbcfa-0300-420f-b69b-a36cf2317fff",
+   "name": "CHARACTERIZED_BY",
+   "fact": "The war has settled into a grinding attritional equilibrium on the battlefield, an intensifying diplomatic sprint, a brittle sanctions regime under fresh strain, and an emerging political crisis inside Ukraine itself."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "6aa11ccd-9455-42f6-802f-22dc37c34d00",
+   "name": "HAS_PATH_TO_ACCESSION",
+   "fact": "Ukraine would have a path toward eventual EU accession."
+  },
+  {
+   "source": "9639f42d-1407-447d-97c5-31ea2ca09d34",
+   "target": "51329dba-52af-4297-903e-3309b2a586a6",
+   "name": "PROHIBITS",
+   "fact": "Under Ukrainian law, presidential elections are constitutionally prohibited during martial law."
+  },
+  {
+   "source": "bb7c1764-ef01-4800-9b97-cfc854b4a50a",
+   "target": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "name": "REPORTS_ON",
+   "fact": "ABC News provides context on the Pokrovsk battle."
+  },
+  {
+   "source": "66525772-17d8-432c-bfa5-54eddf9f0bf7",
+   "target": "92ede2dd-f013-4560-b15a-cd39f56f15f8",
+   "name": "LOCATED_IN",
+   "fact": "Karimun Oil Terminal is located in Indonesia."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "0a8995ca-c2ce-4c59-80d3-1cab6cf7f777",
+   "name": "CONDUCTED_DRONE_STRIKE_ON",
+   "fact": "Ukraine conducted a drone strike on St. P."
+  },
+  {
+   "source": "6e1595b8-86c9-4833-b884-0073a9635b49",
+   "target": "f0edd1d3-6e92-43a9-bdfd-daaff11d24ee",
+   "name": "OCCURRED_DURING",
+   "fact": "The corruption allegations surfaced at a moment of acute fiscal stress."
+  },
+  {
+   "source": "07cf59c7-5119-4324-89a2-97dee066c87b",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "PROVIDES_AID_TO",
+   "fact": "European military contributions are increasingly carrying the load for Ukraine."
+  },
+  {
+   "source": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "target": "3bb36eaf-67d1-4d56-8bdc-c68d753fca63",
+   "name": "DESCRIBED_AS",
+   "fact": "Ukrainian and Western analysts described Pokrovsk as having been reduced to rubble during the assault."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "HAS_STATE",
+   "fact": "The regime's hold on power appears secure for the foreseeable future."
+  },
+  {
+   "source": "8fc574b8-e146-44eb-a3b7-e1cbfc8f3048",
+   "target": "3d09ab01-28f5-4842-832a-b7665417e538",
+   "name": "CASUALTIES_IN",
+   "fact": "Ukrainian civilians have sustained nearly 15,000 verified deaths and over 40,600 injuries in the Russia-Ukraine War since February 2022, though actual totals are likely higher."
+  },
+  {
+   "source": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "target": "c4675119-d945-4fa0-b96b-04b2d87c34e7",
+   "name": "REPORTED_ON",
+   "fact": "The strategic significance of Pokrovsk is reported on by the BBC."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "OPPOSES",
+   "fact": "Russia is not losing the war, and the front line is essentially static with both sides trading small salients at unsustainable cost."
+  },
+  {
+   "source": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "target": "ba0cdb62-378f-44ad-bd3c-52e834a6c9a0",
+   "name": "SHIFT_TO",
+   "fact": "There is a strategic shift from Pokrovsk to Kramatorsk-Kostiantynivka."
+  },
+  {
+   "source": "dd035b98-17ea-4003-875f-4ef98133c9ca",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "REPORTS_ON",
+   "fact": "The Guardian reported on Ukraine war briefings, stating nearly 2 million military casualties to date."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "3fa346b7-dda1-41c7-9196-2385b9a14fc5",
+   "name": "CEDE",
+   "fact": "The Trump 28-point plan requires Ukraine to cede Donetsk to Russia."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "MANAGES_SANCTIONS_FOR",
+   "fact": "The war is being decided in sanctions committees in Brussels."
+  },
+  {
+   "source": "3d09ab01-28f5-4842-832a-b7665417e538",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "OCCURS_IN",
+   "fact": "The Russia-Ukraine War is occurring in Ukraine."
+  },
+  {
+   "source": "8c3c45db-5a0b-4306-96d8-6f947280000b",
+   "target": "3cc815e0-e2ff-4d9f-8b9a-3d622863032e",
+   "name": "PREDICTS",
+   "fact": "Some analysts had predicted a 'forever war', but it has settled into a grinding attritional equilibrium on the battlefield."
+  },
+  {
+   "source": "dd035b98-17ea-4003-875f-4ef98133c9ca",
+   "target": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "name": "REPORTS_ON",
+   "fact": "The Guardian reports that everything is frozen and the bitter winter drags on for Kyiv residents."
+  },
+  {
+   "source": "12e1909a-a4ab-4275-bac2-f14b1abe94e2",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "ARGUES_THAT",
+   "fact": "Giorgia Meloni has publicly argued that any extension of NATO's Article 5 security guarantee to Ukraine would be a meaningful test of Russia's intentions."
+  },
+  {
+   "source": "2203b102-dac5-4263-9a80-c5a5dc628c81",
+   "target": "65668232-175c-43f9-9935-5fb4d234d11c",
+   "name": "IS_IMPACTED_BY",
+   "fact": "The Russian economy is impacted by a possible EU maritime services ban."
+  },
+  {
+   "source": "5831c1a5-c4ef-486e-a8bb-44c7fbda26dc",
+   "target": "e23be03c-a36d-4f34-91e5-c750b482023a",
+   "name": "AFFILIATED_WITH",
+   "fact": "Marco Rubio is affiliated with the Trump administration as Secretary of State."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "c6e03158-5a9e-4b8f-81c2-b89f80799f86",
+   "name": "HAS_IMPLICATION",
+   "fact": "Ukraine has a shrinking working-age population due to economic implications."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "53d5a969-30f4-42cf-8426-500f01157bd3",
+   "name": "EXPERIENCES",
+   "fact": "Ukraine is experiencing displacement due to the war."
+  },
+  {
+   "source": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "target": "532b20ae-7b97-44e3-b826-64cb170fbc96",
+   "name": "HOSTED_TALKS_IN",
+   "fact": "The United States, Ukraine, and Russia convened three-way talks in Abu Dhabi in late January 2026."
+  },
+  {
+   "source": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "target": "d114f5b3-0afb-4621-85cf-b626ab2f4af1",
+   "name": "PARTICIPATES_IN",
+   "fact": "The U.S. is participating in peace talks."
+  },
+  {
+   "source": "3d09ab01-28f5-4842-832a-b7665417e538",
+   "target": "d73299aa-989d-42ea-8b90-ae58303e9d7d",
+   "name": "PRODUCES",
+   "fact": "The war has produced a profound mental health crisis."
+  },
+  {
+   "source": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "target": "9c97b97f-b8e9-4f67-a288-7e046807d51c",
+   "name": "SUBJECT_TO",
+   "fact": "Zelenskyy's mandate as president is extended until the end of martial law."
+  },
+  {
+   "source": "9c97b97f-b8e9-4f67-a288-7e046807d51c",
+   "target": "9f351786-22c2-47a9-b6c1-02cd8cc854c9",
+   "name": "STARTED_IN",
+   "fact": "Martial law has been continuously in effect since February 2022."
+  },
+  {
+   "source": "df8f4775-9061-475e-8717-535b524c35d6",
+   "target": "c966d73b-ec1a-47df-b860-a47ddfb2238d",
+   "name": "REFERENCES",
+   "fact": "Think Tank and Research Sources references the Russian Offensive Campaign Assessment, June 1, 2026."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "b46edf11-7d9e-45f1-b083-5bd80610c72f",
+   "name": "PREPARES_BAN_ON",
+   "fact": "The EU is preparing a future maritime services ban on Russian crude oil."
+  },
+  {
+   "source": "d2d8dc32-6d7f-41fb-81de-ea39038fd080",
+   "target": "26ec5ba2-ef9a-44b4-8eec-cac4c253bbf5",
+   "name": "PROVIDES_AID_TO",
+   "fact": "Elon Musk's Starlinks are being used to target Ukrainian cities."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "f279051d-14a1-4815-b675-c90672b47e96",
+   "name": "HAS_POPULATION",
+   "fact": "Ukraine's population of approximately 28 million is the lowest in its modern history as an independent state."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "6780f7e1-d5e3-4c69-bf23-0bb4e393a19c",
+   "name": "OPPOSES",
+   "fact": "Ukraine requires U.S. leadership to sustain military aid."
+  },
+  {
+   "source": "5069da59-e6ae-4581-a11e-ae69bf99be7a",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "REPORTS_ON",
+   "fact": "EUobserver reported that the war is rapidly shrinking Ukraine's population."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "48aab258-a807-4029-a84f-8d5e85a3a0a5",
+   "name": "USES",
+   "fact": "Russia uses the Starlink satellite internet service to guide its drone operations."
+  },
+  {
+   "source": "e72cee0e-0313-47f7-9264-7548628c2b68",
+   "target": "7cc1bfc9-a77b-41dc-a80e-012d3d470aea",
+   "name": "ESTIMATES",
+   "fact": "CSIS estimates between 100,000 and 140,000 Ukrainian military deaths."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "60907ebe-47be-4ffe-8e05-07e4006fda83",
+   "name": "WORKS_IN_TANDEM_WITH",
+   "fact": "The EU is working in tandem with the G7 price cap coalition."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "2203b102-dac5-4263-9a80-c5a5dc628c81",
+   "name": "BENEFITS_FROM_COLLAPSE_OF",
+   "fact": "Diplomatic terms shift substantially in Ukraine's favour due to the Russian economy's collapse."
+  },
+  {
+   "source": "e72cee0e-0313-47f7-9264-7548628c2b68",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "REPORTS_ON",
+   "fact": "CSIS reports on Russia's grinding war in Ukraine."
+  },
+  {
+   "source": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "target": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "name": "IS_INFLUENCED_BY",
+   "fact": "The economic cost of continued war is starting to bend Moscow's posture, but not yet enough to agree to a settlement that leaves claimed oblasts under Ukrainian control."
+  },
+  {
+   "source": "72de4b47-402e-4c0a-be8c-85de7e19f806",
+   "target": "43b4ebdf-254a-421d-8ff8-209764db3c60",
+   "name": "ATTACK",
+   "fact": "Ukraine's long-range strike drones are capable of attacking military infrastructure deep inside Russia."
+  },
+  {
+   "source": "d37d4f59-4e59-4d03-a490-e5ebe3310fb9",
+   "target": "532b20ae-7b97-44e3-b826-64cb170fbc96",
+   "name": "PRESENT_AT",
+   "fact": "Senior NATO military officials were present at the Abu Dhabi talks."
+  },
+  {
+   "source": "fc99eaab-e1a9-4d0f-9ef9-58eb80a10973",
+   "target": "3c3b769a-7b25-4b3d-9711-3a497ebd5777",
+   "name": "REPORTS_ON",
+   "fact": "Wikipedia provides reference for the Russo-Ukrainian war, including territorial control figures and casualty frameworks."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "e6d7c1ca-6cbc-4ef0-b39e-46834fb14ac6",
+   "name": "HAS_CASUALTIES",
+   "fact": "Ukraine has suffered between 500,000 and 600,000 military casualties."
+  },
+  {
+   "source": "12e1909a-a4ab-4275-bac2-f14b1abe94e2",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "ARGUES_THAT",
+   "fact": "Giorgia Meloni has publicly argued that any extension of NATO's Article 5 security guarantee to Ukraine would be a meaningful test of Russia's intentions."
+  },
+  {
+   "source": "e23be03c-a36d-4f34-91e5-c750b482023a",
+   "target": "a38154f0-631d-457c-a6b2-da1193c5220b",
+   "name": "DEVELOPED",
+   "fact": "The Trump administration developed the Trump 28-point plan."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "d7e032f9-7637-4ec2-ada6-941b7e2a0964",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The EU extended the transaction ban to an additional 20 Russian banks, bringing the total to 70 Russian banks excluded from the EU internal market."
+  },
+  {
+   "source": "eb43bd7b-ec87-471b-8ab5-921e8e4eeb7c",
+   "target": "2203b102-dac5-4263-9a80-c5a5dc628c81",
+   "name": "REPORTS_ON",
+   "fact": "BOFIT reports on the Russian economy stabilising after a weak start to the year."
+  },
+  {
+   "source": "d733a0a5-0a6b-4b93-b889-eda9cb488750",
+   "target": "03256773-c25b-4048-8b2d-4dce9fa883fa",
+   "name": "MAINTAINS",
+   "fact": "The Ukrainian economy relies on external support to maintain basic state functions."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "bafe9c2c-4d56-4287-87ed-4c26fddf81a9",
+   "name": "FREEZE_FRONT_LINE",
+   "fact": "The Trump 28-point plan requires Ukraine to freeze the front line in Zaporizhzhia."
+  },
+  {
+   "source": "a2c31569-1872-4047-bc38-190f70d6c7ca",
+   "target": "da78d30a-409c-46c0-80b1-14cb016d568a",
+   "name": "CONSTRAINED_BY",
+   "fact": "Oil and gas revenues are constrained by Ukrainian drone attacks."
+  },
+  {
+   "source": "eb43bd7b-ec87-471b-8ab5-921e8e4eeb7c",
+   "target": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "name": "REPORTS_ON",
+   "fact": "BOFIT reports on the temporary relaxation of sanctions by the US."
+  },
+  {
+   "source": "b4f56f08-ec59-4d97-86de-e921cb9502cf",
+   "target": "9472b28b-68ab-4921-b63d-44925ace0f0b",
+   "name": "HAS_WEBSITE",
+   "fact": "ISW has a website at criticalthreats.org."
+  },
+  {
+   "source": "132e7198-be38-45a8-83ed-4a7b5f86ff88",
+   "target": "0c478c82-9cf3-449b-a2e5-2e6396bec495",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The UK government issued a licence allowing imports of Russian oil refined in third countries."
+  },
+  {
+   "source": "4d2acb7a-14f1-4617-a8c3-5bf48380d03e",
+   "target": "3c23116a-9dd5-4cbc-baac-1177f5212fd2",
+   "name": "HAS_INTENTION_TO_HOLD",
+   "fact": "Washington has not yet fully resolved the question of whether and when elections can be safely held."
+  },
+  {
+   "source": "ea650b2f-e68a-427f-ace3-90632ba3c514",
+   "target": "62bfba7d-7a83-49af-bc8e-49b08c71becd",
+   "name": "TARGETED_BY",
+   "fact": "Radosław Sikorski stated that Russians are using Starlinks to target Ukrainian cities."
+  },
+  {
+   "source": "f3309251-0e43-493d-9cb7-bcf1ba379450",
+   "target": "f3309251-0e43-493d-9cb7-bcf1ba379450",
+   "name": "HAS_PROPERTY",
+   "fact": "The Russian advance has slowed dramatically."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "532b20ae-7b97-44e3-b826-64cb170fbc96",
+   "name": "PARTICIPATED_IN_TALKS_IN",
+   "fact": "Ukraine participated in three-way talks in Abu Dhabi in late January 2026."
+  },
+  {
+   "source": "03abc9d2-83ef-4af4-ae84-1249bb27ed42",
+   "target": "6051850c-b189-4509-be97-c5dccc28dc59",
+   "name": "OPPOSES",
+   "fact": "Kremlin official Maxim Oreshkin stated that we shouldn't expect Western sanctions to be lifted."
+  },
+  {
+   "source": "f34b16be-560b-4dc3-ab6c-c7a8a16e6752",
+   "target": "5c15be6a-732b-481e-911d-59c96ded3636",
+   "name": "REPORTS_ON",
+   "fact": "Mediazona noted that the true figure is necessarily higher than confirmed public records."
+  },
+  {
+   "source": "f34b16be-560b-4dc3-ab6c-c7a8a16e6752",
+   "target": "eda18cd8-3f59-494f-9aa4-89428cad5368",
+   "name": "REPORTS_ON",
+   "fact": "Mediazona confirmed more than 163,000 Russian military deaths through public records."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "name": "RECEIVES_SECURITY_GUARANTEES_FROM",
+   "fact": "Ukraine would receive formal U.S. and international security guarantees short of NATO membership."
+  },
+  {
+   "source": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "target": "2dcbb338-c758-49db-afa6-d09bf4b9d13f",
+   "name": "AFFECTED_BY",
+   "fact": "In the weeks following the January 2026 attack wave, 45% of Kyiv's schools were closed."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "37a0f402-4dad-497b-b913-b1b22044ca7a",
+   "name": "HAS_DEPENDENCE_ON",
+   "fact": "Ukraine's dependence on Western 155mm artillery ammunition has been partially alleviated by European production scaling."
+  },
+  {
+   "source": "e72cee0e-0313-47f7-9264-7548628c2b68",
+   "target": "e6d7c1ca-6cbc-4ef0-b39e-46834fb14ac6",
+   "name": "STUDIES",
+   "fact": "CSIS estimates that Ukrainian military casualties have approached 2 million by late 2025 and were projected to reach that figure by spring 2026."
+  },
+  {
+   "source": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "OPPOSES",
+   "fact": "Moscow will not agree to a settlement that leaves any of the claimed oblasts under Ukrainian control."
+  },
+  {
+   "source": "7daee85c-94a9-47ea-8736-efd683a306b2",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "INVESTIGATES",
+   "fact": "The Operation Midas investigation is related to allies of Zelensky in Ukraine."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "HAS_STATE",
+   "fact": "Ukraine is also fighting a war of national identity and historical memory that no peace deal, however favourable, can fully resolve."
+  },
+  {
+   "source": "22e9f15d-e6cd-4d00-9399-fe262ccab21e",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "OCCUPIED_BY",
+   "fact": "Kherson is occupied by Russian forces, which Moscow claimed to have annexed in September 2022."
+  },
+  {
+   "source": "a5649238-6cdf-4b05-9a1d-92c54287e4c8",
+   "target": "3015a7fa-6a1d-4d8d-b579-620f071cf10f",
+   "name": "IS_REFUGEE_IN",
+   "fact": "Ukrainians are recorded as refugees in Asia as of early 2026."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The EU adopted its 20th package of sanctions against Russia on 23 April 2026, including measures targeting the shadow fleet, banking, and energy."
+  },
+  {
+   "source": "6780f7e1-d5e3-4c69-bf23-0bb4e393a19c",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "CAN_HOLD_TO_COMMITMENTS",
+   "fact": "The U.S. leadership must be able to hold Russia to its commitments."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "532b20ae-7b97-44e3-b826-64cb170fbc96",
+   "name": "PARTICIPATED_IN_TALKS_IN",
+   "fact": "Russia participated in three-way talks in Abu Dhabi in late January 2026."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "7b62efde-8d12-4e90-9af2-03a97b53cc28",
+   "name": "FACES",
+   "fact": "Ukraine faces a population crisis."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "7cc1bfc9-a77b-41dc-a80e-012d3d470aea",
+   "name": "HAS_DEATHS",
+   "fact": "Ukraine has suffered between 100,000 and 140,000 military deaths."
+  },
+  {
+   "source": "5831c1a5-c4ef-486e-a8bb-44c7fbda26dc",
+   "target": "07333ca9-c5e7-42b7-a4fb-9bacc84bc11e",
+   "name": "DRAFTED",
+   "fact": "Marco Rubio, Secretary of State, drafted the 28-point peace plan."
+  },
+  {
+   "source": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "PROVIDES_AID_TO",
+   "fact": "The United States has shifted from rhetorical support for Ukraine to active mediation."
+  },
+  {
+   "source": "eb43bd7b-ec87-471b-8ab5-921e8e4eeb7c",
+   "target": "0c478c82-9cf3-449b-a2e5-2e6396bec495",
+   "name": "REPORTS_ON",
+   "fact": "BOFIT reports on Russian oil revenues."
+  },
+  {
+   "source": "9b135149-023a-43ea-beb8-d2274705b9e2",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "PROPERTY_OF",
+   "fact": "Zelensky's Legitimacy is discussed by ZOiS Berlin."
+  },
+  {
+   "source": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "target": "9c97b97f-b8e9-4f67-a288-7e046807d51c",
+   "name": "MANDATE_ENDS_WITH",
+   "fact": "Zelensky's mandate is until the end of martial law."
+  },
+  {
+   "source": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "DEMANDS_WITHDRAWAL_FROM",
+   "fact": "Moscow continues to insist on full Ukrainian withdrawal from the remainder of Donetsk."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "532b20ae-7b97-44e3-b826-64cb170fbc96",
+   "name": "DISCUSSES_WITH",
+   "fact": "Ukraine is discussing the issue of territorial concessions in Abu Dhabi."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "e3ca396b-c3a9-4447-98cb-d7141b5195fc",
+   "name": "AFFILIATED_WITH",
+   "fact": "The European Union joined the Geneva talks."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "ENGAGED_IN",
+   "fact": "Russia is engaged in a war with Ukraine in June 2026."
+  },
+  {
+   "source": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "target": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "name": "ACKNOWLEDGED_COST",
+   "fact": "Few in Moscow have been willing to publicly acknowledge the cost of Pokrovsk's capture."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "0b5e6981-1920-4237-b934-142ada9106c9",
+   "name": "HAS_IMPLICATION",
+   "fact": "Ukraine has a hollowed-out tax base due to economic implications."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "FACES_THREAT_FROM",
+   "fact": "Ukraine faces potential fall of Pokrovsk to Russia."
+  },
+  {
+   "source": "85143978-e058-4ce7-9df0-10e81acac39f",
+   "target": "149ce96e-de37-4059-a26a-e3843df0772e",
+   "name": "ANNOUNCED_CHANGE_TO",
+   "fact": "Deputy Prime Minister Alexander Novak announced in May 2026 that the official 2026 GDP growth forecast had been cut from 1.3% to 0.4%."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "e0a09598-55c5-4db2-a77f-f78a8bbd451b",
+   "name": "RECEIVES",
+   "fact": "Ukraine would receive approximately $100 billion in frozen Russian sovereign assets for reconstruction."
+  },
+  {
+   "source": "7a201ca7-d68d-4c5c-8d17-9c0210e81d57",
+   "target": "8403a5c3-b3e6-40d8-b5a0-c0603c73d946",
+   "name": "AFFILIATED_WITH",
+   "fact": "Admiral Igor Kostyukov is the head of the GRU military intelligence service."
+  },
+  {
+   "source": "61428010-1111-427c-a582-84fb218440c5",
+   "target": "c74b7546-d62a-4386-a941-3c37708b6afd",
+   "name": "REPORTS_ON",
+   "fact": "Walaw reports on Russian military losses and their approach to Ukrainian military losses, detailed by CSIS estimates."
+  },
+  {
+   "source": "d733a0a5-0a6b-4b93-b889-eda9cb488750",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "DEPENDS_ON",
+   "fact": "The Ukrainian economy in 2026 remains entirely dependent on external support to maintain basic state functions."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "72de4b47-402e-4c0a-be8c-85de7e19f806",
+   "name": "FIELDED",
+   "fact": "Ukraine has fielded long-range strike drones capable of attacking Russian refining and military infrastructure deep inside Russia."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "43b4ebdf-254a-421d-8ff8-209764db3c60",
+   "name": "ATTACKS",
+   "fact": "Russia attacks military infrastructure."
+  },
+  {
+   "source": "b89cbdfb-80dc-47b4-8728-50d4facdacdf",
+   "target": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "name": "REPORTS_ON",
+   "fact": "The Los Angeles Times reported on peace talks involving Moscow in January 2026."
+  },
+  {
+   "source": "7f7c689c-4e85-42ae-92ed-1cd554c9efd6",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "REPORTS_ON",
+   "fact": "WHO issues warnings on the winter humanitarian situation in Ukraine."
+  },
+  {
+   "source": "7daee85c-94a9-47ea-8736-efd683a306b2",
+   "target": "b4170cfc-70a0-4dc3-8c45-3b0141738e00",
+   "name": "TARGETS",
+   "fact": "Operation Midas is an anti-corruption investigation into major graft in the energy sector."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "4e11a727-1e62-4ea5-8bd1-ebebe23d2532",
+   "name": "HAS_LIMITATION_ON",
+   "fact": "The plan would cap the size of the Ukrainian Armed Forces."
+  },
+  {
+   "source": "95dff41f-7025-4a9d-b67e-05cba5993d8d",
+   "target": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "name": "PART_OF",
+   "fact": "The Pokrovsk offensive refers to the events surrounding Pokrovsk."
+  },
+  {
+   "source": "8e441446-d19e-4e6c-8ce8-9772a077985c",
+   "target": "7480185d-051f-4391-83e8-ca71a4c44bcd",
+   "name": "INVESTIGATES",
+   "fact": "NABU has charged Andriy Yermak in May 2026."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "d114f5b3-0afb-4621-85cf-b626ab2f4af1",
+   "name": "PARTICIPATES_IN",
+   "fact": "Ukraine is participating in peace talks."
+  },
+  {
+   "source": "95dff41f-7025-4a9d-b67e-05cba5993d8d",
+   "target": "95dff41f-7025-4a9d-b67e-05cba5993d8d",
+   "name": "RELATED_TO",
+   "fact": "The Pokrovsk offensive is detailed in an account of the Pokrovsk battle."
+  },
+  {
+   "source": "3d09ab01-28f5-4842-832a-b7665417e538",
+   "target": "4381ecfe-74a8-4b75-8488-87ee7c839df1",
+   "name": "AFFECTS",
+   "fact": "The war has had consequences for Kyiv residents."
+  },
+  {
+   "source": "a2c31569-1872-4047-bc38-190f70d6c7ca",
+   "target": "37a879c4-5192-445f-a8ef-6112a0a0e31a",
+   "name": "BACKBONE_OF",
+   "fact": "Oil and gas revenues are the traditional backbone of the budget."
+  },
+  {
+   "source": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "target": "ba0cdb62-378f-44ad-bd3c-52e834a6c9a0",
+   "name": "OPERATIONAL_FOCUS_SHIFTED_TO",
+   "fact": "The loss of Pokrovsk shifts the Russian operational focus toward the Kramatorsk–Kostiantynivka urban agglomeration."
+  },
+  {
+   "source": "a38154f0-631d-457c-a6b2-da1193c5220b",
+   "target": "8b762cfc-e999-4faa-bbd2-c6919a3c8c0d",
+   "name": "INCORPORATES_FEEDBACK_FROM",
+   "fact": "The Trump 28-point plan incorporates feedback from Ukrainian officials."
+  },
+  {
+   "source": "ea650b2f-e68a-427f-ace3-90632ba3c514",
+   "target": "48aab258-a807-4029-a84f-8d5e85a3a0a5",
+   "name": "CRITICIZES_USE_OF",
+   "fact": "Radosław Sikorski publicly criticized Elon Musk for allowing Russians to use Starlink services to target Ukrainian cities."
+  },
+  {
+   "source": "7daee85c-94a9-47ea-8736-efd683a306b2",
+   "target": "6e1595b8-86c9-4833-b884-0073a9635b49",
+   "name": "RELATED_TO",
+   "fact": "Operation Midas provides background on the anti-corruption investigation."
+  },
+  {
+   "source": "c16a44b0-9ed3-4567-92f8-33c417fd3911",
+   "target": "55ab172a-6471-4b64-8db4-51971da8cc80",
+   "name": "REPORTS_ON",
+   "fact": "The Moscow Times reported in June 2026 on warnings by Russian central bank officials of a possible recession by year-end."
+  },
+  {
+   "source": "64aba7a0-95bf-41f3-a793-3c2b86cc7077",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "IS_FROM",
+   "fact": "There are 5.6 million refugees abroad from Ukraine as of early 2026."
+  },
+  {
+   "source": "7c4c8ff5-477d-47dd-862b-14ba1c51d7aa",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "OCCURRING_IN",
+   "fact": "There is an emerging political crisis inside Ukraine itself that may prove as consequential as anything happening on the front lines."
+  },
+  {
+   "source": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "target": "9214447b-2d6b-451b-a5b5-de12a2c695b0",
+   "name": "OPPOSES",
+   "fact": "Kyiv will not formally recognise Russian sovereignty over any of the five claimed oblasts."
+  },
+  {
+   "source": "2efe912e-7fcc-414c-a650-aaefbe804b12",
+   "target": "17e02936-826d-4ce3-84ab-89e13427c4b3",
+   "name": "IS_TIGHT_DUE_TO",
+   "fact": "The labour market is tight due to mobilisation."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "HAS_LOST_MORE_PERSONNEL_THAN",
+   "fact": "Russia has borne the brunt of the losses in the war with Ukraine."
+  },
+  {
+   "source": "89bfdd14-412f-4425-970a-bc28d51c4ba6",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "PROVIDES_LEGAL_ANALYSIS_ON",
+   "fact": "ZOiS Berlin provided Western legal analysis on Zelenskyy's constitutional standing."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "3a597dd9-0f19-4068-b21c-209a0acca7c8",
+   "name": "AFFECTED_BY",
+   "fact": "Ukraine's energy grid has been severely affected by civilian infrastructure toll."
+  },
+  {
+   "source": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "target": "99aa6360-9c5f-4d58-a369-d0f5f1ab1a72",
+   "name": "PROPOSED",
+   "fact": "Kyiv proposed a free trade zone under Ukrainian sovereignty in the contested parts of eastern Ukraine."
+  },
+  {
+   "source": "c966d73b-ec1a-47df-b860-a47ddfb2238d",
+   "target": "b4f56f08-ec59-4d97-86de-e921cb9502cf",
+   "name": "PUBLISHED_BY",
+   "fact": "The Russian Offensive Campaign Assessment, June 1, 2026 was published by ISW."
+  },
+  {
+   "source": "2203b102-dac5-4263-9a80-c5a5dc628c81",
+   "target": "a2c31569-1872-4047-bc38-190f70d6c7ca",
+   "name": "IS_IMPACTED_BY",
+   "fact": "The Russian economy is impacted by falling oil and gas revenues."
+  },
+  {
+   "source": "dd035b98-17ea-4003-875f-4ef98133c9ca",
+   "target": "4381ecfe-74a8-4b75-8488-87ee7c839df1",
+   "name": "REPORTS_ON",
+   "fact": "The Guardian reports on the humanitarian impact of energy infrastructure attacks on Kyiv residents during a bitter winter."
+  },
+  {
+   "source": "022f421b-0008-4752-a558-15ba24d059fc",
+   "target": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "name": "AFFILIATED_WITH",
+   "fact": "Europe relies on U.S. leadership for military aid."
+  },
+  {
+   "source": "99aa6360-9c5f-4d58-a369-d0f5f1ab1a72",
+   "target": "d45b2a1e-c695-4ae2-ba57-b692c5d082dc",
+   "name": "UNDER",
+   "fact": "The proposed free trade zone would be under Ukrainian sovereignty."
+  },
+  {
+   "source": "5069da59-e6ae-4581-a11e-ae69bf99be7a",
+   "target": "7b62efde-8d12-4e90-9af2-03a97b53cc28",
+   "name": "REPORTS_ON",
+   "fact": "EUobserver reported on the demographic crisis in Ukraine."
+  },
+  {
+   "source": "0285d50b-6b4f-43fb-933c-9d05d7bebd8e",
+   "target": "7480185d-051f-4391-83e8-ca71a4c44bcd",
+   "name": "INVESTIGATES",
+   "fact": "SAPO has charged Andriy Yermak in May 2026."
+  },
+  {
+   "source": "ed6768c9-71bb-4904-9f1e-65b2b9425a12",
+   "target": "b3f33ea3-0421-4556-acad-b7865edb00a2",
+   "name": "PROJECTED_TO_REACH",
+   "fact": "The CSIS study projected the combined casualty count to reach 2 million by spring 2026."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "0c478c82-9cf3-449b-a2e5-2e6396bec495",
+   "name": "REGULATES_OR_SANCIONS",
+   "fact": "The EU is considering a future maritime services ban on Russian oil."
+  },
+  {
+   "source": "6aa11ccd-9455-42f6-802f-22dc37c34d00",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The European Commission characterized the EU's 20th sanctions package against Russia as having a strong anti-circumvention angle."
+  },
+  {
+   "source": "4c924160-7943-4c9f-babe-62eeab86e52b",
+   "target": "a38154f0-631d-457c-a6b2-da1193c5220b",
+   "name": "DEVELOPED",
+   "fact": "Kirill Dmitriev developed the Trump 28-point plan."
+  },
+  {
+   "source": "7480185d-051f-4391-83e8-ca71a4c44bcd",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "AFFILIATED_WITH",
+   "fact": "Andriy Yermak was President Zelensky's former chief of staff."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "453bae61-3396-4d04-911b-2abfd3a2e7ec",
+   "name": "HAS_SITUATION",
+   "fact": "Ukraine has a refugee situation recorded by UNHCR."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "953cc2c4-6819-498a-a745-7716aaae4c4d",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The EU's 20th sanctions package includes new listings in the Russian energy sector covering exploration, extraction, refining, and transportation."
+  },
+  {
+   "source": "eb43bd7b-ec87-471b-8ab5-921e8e4eeb7c",
+   "target": "dfe6cf3d-48ff-4041-9b58-41908f9070f6",
+   "name": "REPORTS_ON",
+   "fact": "BOFIT reports on the temporary relaxation of sanctions by the UK."
+  },
+  {
+   "source": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "target": "3fa346b7-dda1-41c7-9196-2385b9a14fc5",
+   "name": "CANNOT_ACCEPT_SETTLEMENT",
+   "fact": "Moscow cannot accept a settlement that does not cede Donetsk wholesale."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "HAS_OFFENSIVE_HALTED_BY",
+   "fact": "Russia's spring-summer 2026 offensive has been largely halted by Ukrainian forces."
+  },
+  {
+   "source": "ed6768c9-71bb-4904-9f1e-65b2b9425a12",
+   "target": "8e90a1d0-b319-4ab9-8941-332c178b46d3",
+   "name": "PUBLISHED_ON",
+   "fact": "A CSIS study was published in January 2026."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "04f5d114-e9e7-4b74-9456-59a602a8c220",
+   "name": "ACTIVATED",
+   "fact": "The EU activated its anti-circumvention tool."
+  },
+  {
+   "source": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "target": "ce0c1cf7-0db2-408b-bfe2-845d0f3a9673",
+   "name": "WILL_NOT_AGREE_TO_SETTLEMENT_LEAVING_UNDER_UKRAINIAN_CONTROL",
+   "fact": "Moscow will not agree to a settlement that leaves any of the five claimed oblasts under Ukrainian control."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "87b87eb2-e046-4b9e-abdf-3c9452d1a3da",
+   "name": "PRODUCES",
+   "fact": "Russia's domestic production of artillery shells, glide bombs, and Shahed-type one-way attack drones has outpaced Ukraine's air defence capacity."
+  },
+  {
+   "source": "5d1b16ac-0090-4f31-a972-269f054715d1",
+   "target": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "name": "PROVIDES_CITATION_FOR",
+   "fact": "The UNHCR Ukraine Refugee Situation provides a citation regarding the impact of attacks on Kyiv."
+  },
+  {
+   "source": "c9456ed1-96dd-4aaf-94e0-333f607fb5fa",
+   "target": "0adb4a67-f6d3-4222-9b85-e77521f5e535",
+   "name": "INVOLVES_PARTIAL_AGREEMENT",
+   "fact": "A negotiated settlement involves a phased agreement that includes a ceasefire along current contact lines."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The EU's 20th sanctions package provides the legal basis for a future prohibition on the transport of Russian crude oil and petroleum products."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "LOST_TERRITORY_TO",
+   "fact": "Between December 2025 and May 2026, Russia lost approximately 281 square kilometers of net controlled-territory to Ukraine after a Ukrainian counter-offensive."
+  },
+  {
+   "source": "c74b7546-d62a-4386-a941-3c37708b6afd",
+   "target": "ed6768c9-71bb-4904-9f1e-65b2b9425a12",
+   "name": "BASED_ON",
+   "fact": "Russian military losses are detailed by CSIS estimates."
+  },
+  {
+   "source": "7f7c689c-4e85-42ae-92ed-1cd554c9efd6",
+   "target": "d73299aa-989d-42ea-8b90-ae58303e9d7d",
+   "name": "DESCRIBES",
+   "fact": "The WHO described the conflict as producing one of the largest populations of people suffering from combat-related trauma in modern history, with consequences that will outlast any ceasefire by decades."
+  },
+  {
+   "source": "72de4b47-402e-4c0a-be8c-85de7e19f806",
+   "target": "29462cfa-b980-4afe-b25c-cf928617950e",
+   "name": "ATTACK",
+   "fact": "Ukraine's long-range strike drones are capable of attacking Russian refining infrastructure deep inside Russia."
+  },
+  {
+   "source": "b474861a-2e5d-4724-83de-9ca5773aabdb",
+   "target": "a38154f0-631d-457c-a6b2-da1193c5220b",
+   "name": "DRAFTED",
+   "fact": "Steve Witkoff drafted the Trump 28-point plan."
+  },
+  {
+   "source": "9a29283c-3388-47de-b6b5-7b79e4343486",
+   "target": "0ea44752-b022-4787-84e3-d99a3b961731",
+   "name": "ARGUE_IS_COVERED_BY",
+   "fact": "Domestic critics argue that wartime mobilisation and reconstruction have provided cover for large-scale graft."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "022f421b-0008-4752-a558-15ba24d059fc",
+   "name": "RECEIVES_AID_FROM",
+   "fact": "Ukraine may be fighting for its survival, and the war is being decided by whether Europe can sustain military aid to Ukraine without U.S. leadership."
+  },
+  {
+   "source": "c6f188cd-0eea-4cc9-b52f-c47fa45b55f5",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "OF",
+   "fact": "Of approximately 1.2 million Russian casualties since February 2022, as many as 325,000 have been deaths."
+  },
+  {
+   "source": "11f0342c-63fa-4cef-bcb7-4e13232d6dd8",
+   "target": "132e7198-be38-45a8-83ed-4a7b5f86ff88",
+   "name": "OPPOSES",
+   "fact": "Kemi Badenoch criticised the UK government's relaxation of sanctions on Russian oil as a back-door concession."
+  },
+  {
+   "source": "f3309251-0e43-493d-9cb7-bcf1ba379450",
+   "target": "f3309251-0e43-493d-9cb7-bcf1ba379450",
+   "name": "HAS_PROPERTY",
+   "fact": "The pace of the Russian advance has collapsed dramatically in 2026."
+  },
+  {
+   "source": "8d369bf5-31fb-4d81-a2e2-2b9aea527270",
+   "target": "dfe6cf3d-48ff-4041-9b58-41908f9070f6",
+   "name": "BENEFITED_FROM",
+   "fact": "Russian oil exports have benefited recently from the temporary relaxation of sanctions on Russian oil by the UK."
+  },
+  {
+   "source": "a6f76ae6-b94f-4440-bc73-e19966641018",
+   "target": "be3d425b-3371-4867-84b5-6ac71718dc1c",
+   "name": "PROVIDES_AID_TO",
+   "fact": "European military contributions are increasingly carrying the load for the Ukraine military aid program."
+  },
+  {
+   "source": "83b53c5c-51e9-45e0-811f-ed8f5baf4327",
+   "target": "ea650b2f-e68a-427f-ace3-90632ba3c514",
+   "name": "HAS_FOREIGN_MINISTER",
+   "fact": "Poland's foreign minister is Radosław Sikorski."
+  },
+  {
+   "source": "5a8f68f4-1a58-4509-86a6-101b74e9d74e",
+   "target": "2203b102-dac5-4263-9a80-c5a5dc628c81",
+   "name": "IS_PRESSURED_BY",
+   "fact": "Putin faces political pressure due to the Russian economy entering a sharp recession."
+  },
+  {
+   "source": "2efe912e-7fcc-414c-a650-aaefbe804b12",
+   "target": "db448417-863a-4e3e-b226-a9c197e036fd",
+   "name": "IS_TIGHT_DUE_TO",
+   "fact": "The labour market is tight due to emigration."
+  },
+  {
+   "source": "2dcbb338-c758-49db-afa6-d09bf4b9d13f",
+   "target": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "name": "LOCATED_IN",
+   "fact": "Schools in Kyiv are located in Kyiv."
+  },
+  {
+   "source": "b474861a-2e5d-4724-83de-9ca5773aabdb",
+   "target": "5bcd0734-d1ee-4133-9501-e48a8e9d2883",
+   "name": "AFFILIATED_WITH",
+   "fact": "Steve Witkoff is one of the Trump-administration envoys."
+  },
+  {
+   "source": "532d5337-4fe9-4db2-8458-280cfc5ccd40",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "RESIGNED_UNDER_PRESSURE_FROM",
+   "fact": "Svitlana Grynchuk resigned in November 2025 under pressure from President Zelensky."
+  },
+  {
+   "source": "6c29eb76-322a-4989-80ae-36ad2ec9f89f",
+   "target": "418423ad-9e2b-4390-a6a3-7b6f5d05d57f",
+   "name": "OPERATES_BEHIND",
+   "fact": "Russian forces included small groups operating behind Ukrainian lines."
+  },
+  {
+   "source": "d2d8dc32-6d7f-41fb-81de-ea39038fd080",
+   "target": "dd035b98-17ea-4003-875f-4ef98133c9ca",
+   "name": "REPORTS_ON",
+   "fact": "The Guardian reported that making money on war crimes may damage Elon Musk's brand."
+  },
+  {
+   "source": "efc3a5a0-6857-4e91-9ce7-834eba30b412",
+   "target": "f802574f-46ad-4c0a-8243-022a54c5fff4",
+   "name": "AFFILIATED_WITH",
+   "fact": "Western analysts are affiliated with the German Institute for International and Security Affairs (SWP)."
+  },
+  {
+   "source": "9c97b97f-b8e9-4f67-a288-7e046807d51c",
+   "target": "530ce6f6-438b-43cf-8486-593e7060f10e",
+   "name": "EXTENDED_IN",
+   "fact": "Martial law was extended in February 2025."
+  },
+  {
+   "source": "5c0d522d-ebc6-41e8-8352-d0b29eca8f6d",
+   "target": "9a6e2891-7aab-48c5-9066-a407379512e1",
+   "name": "DESCRIBED_AS_PRODUCING",
+   "fact": "The World Health Organization has described the conflict as producing one of the largest populations of people suffering from combat-related trauma in modern history."
+  },
+  {
+   "source": "768fa926-99d3-4f89-9911-aaff71a16af9",
+   "target": "3d09ab01-28f5-4842-832a-b7665417e538",
+   "name": "PUBLISHES_ASSESSMENT_OF",
+   "fact": "DeerFlow Research published a comprehensive strategic assessment of the Russia-Ukraine War."
+  },
+  {
+   "source": "7daee85c-94a9-47ea-8736-efd683a306b2",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "IMPLICATES",
+   "fact": "Operation Midas has directly implicated figures close to President Zelensky."
+  },
+  {
+   "source": "8d369bf5-31fb-4d81-a2e2-2b9aea527270",
+   "target": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "name": "BENEFITED_FROM",
+   "fact": "Russian oil exports have benefited recently from the temporary relaxation of sanctions on Russian oil by the US."
+  },
+  {
+   "source": "532d5337-4fe9-4db2-8458-280cfc5ccd40",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "CLOSE_TO",
+   "fact": "Svitlana Grynchuk is close to President Zelensky."
+  },
+  {
+   "source": "532b20ae-7b97-44e3-b826-64cb170fbc96",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "HOSTS_PEACE_TALKS_FOR",
+   "fact": "The war is being decided in conference rooms in Abu Dhabi."
+  },
+  {
+   "source": "7480185d-051f-4391-83e8-ca71a4c44bcd",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "FORMER_ASSOCIATE_OF",
+   "fact": "Andriy Yermak was formerly Zelensky's right-hand man."
+  },
+  {
+   "source": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "target": "bb3da054-82f1-430e-922c-54076539b65f",
+   "name": "HAS_WILL_FOR_DEAL_HIGHER_THAN",
+   "fact": "The political will on Moscow's side for some form of deal appears to be higher than at any point since 2022."
+  },
+  {
+   "source": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "target": "eddb836a-fc6a-4a4e-803b-e7c5d8c75ddf",
+   "name": "ARGUES_AGAINST_CESSION_OF",
+   "fact": "President Zelensky has publicly argued that ceding Donbas would create a launchpad for future Russian aggression."
+  },
+  {
+   "source": "61428010-1111-427c-a582-84fb218440c5",
+   "target": "e6d7c1ca-6cbc-4ef0-b39e-46834fb14ac6",
+   "name": "REPORTS_ON",
+   "fact": "Walaw reports on Ukrainian military losses and their approach to Russian military losses, detailed by CSIS estimates."
+  },
+  {
+   "source": "8c54f51b-5840-41c0-bc31-54e1c2856b7f",
+   "target": "a0eb6eac-e02e-4369-83ed-55a07a22ef88",
+   "name": "FEATURES_DISCUSSED_AT",
+   "fact": "Defence spending was a discussed topic at the St. Petersburg International Economic Forum."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "c1b18cf0-0f82-45bc-8c73-d7f068875ff4",
+   "name": "WILL_PUSH",
+   "fact": "The EU will push the Trump team during the Geneva talks on Ukraine."
+  },
+  {
+   "source": "e23be03c-a36d-4f34-91e5-c750b482023a",
+   "target": "07333ca9-c5e7-42b7-a4fb-9bacc84bc11e",
+   "name": "CREATED",
+   "fact": "The Trump administration drafted the 28-point peace plan in late 2025."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "INVADED",
+   "fact": "Russian forces crossed the Ukrainian border on 24 February 2022, initiating the Russia-Ukraine War."
+  },
+  {
+   "source": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "target": "12402125-3c43-468f-8917-29b3968878dd",
+   "name": "STATES_PROHIBIT",
+   "fact": "President Zelensky states that the relevant Ukrainian constitutional and legal provisions prohibit unilateral territorial concessions."
+  },
+  {
+   "source": "536c7591-3edd-41a2-b58d-83172b07c299",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "PROPOSED_PEACE_PLAN_FOR",
+   "fact": "Trump's proposed peace plan for Ukraine included territorial concessions."
+  },
+  {
+   "source": "28d5f3d4-3a30-430b-8f3f-4fd9ee7fc0d0",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "OCCUPIED_BY",
+   "fact": "Crimea is occupied by Russian forces, having been annexed in 2014."
+  },
+  {
+   "source": "b4f56f08-ec59-4d97-86de-e921cb9502cf",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "ASSESSED",
+   "fact": "ISW assessed that Russia's spring-summer 2026 offensive has been largely halted by Ukrainian forces."
+  },
+  {
+   "source": "5a8f68f4-1a58-4509-86a6-101b74e9d74e",
+   "target": "07333ca9-c5e7-42b7-a4fb-9bacc84bc11e",
+   "name": "PUBLISHED",
+   "fact": "Sky News published the verbatim text of Donald Trump's 28-point Ukraine peace plan."
+  },
+  {
+   "source": "6aa11ccd-9455-42f6-802f-22dc37c34d00",
+   "target": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "name": "AFFILIATED_WITH",
+   "fact": "The European Commission is an authoritative source on the EU's 20th sanctions package."
+  },
+  {
+   "source": "eb43bd7b-ec87-471b-8ab5-921e8e4eeb7c",
+   "target": "8d369bf5-31fb-4d81-a2e2-2b9aea527270",
+   "name": "NOTES_BENEFIT_OF",
+   "fact": "The BOFIT weekly review noted in June 2026 that Russian oil exports have benefited recently by the temporary relaxation of sanctions on Russian oil by both the US and the UK."
+  },
+  {
+   "source": "7a201ca7-d68d-4c5c-8d17-9c0210e81d57",
+   "target": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "name": "REPRESENTS",
+   "fact": "Admiral Igor Kostyukov headed the Russian delegation in the peace talks."
+  },
+  {
+   "source": "4f0dd9d7-0b9d-434b-ad82-1851f2367a9a",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "RESIGNED_UNDER_PRESSURE_FROM",
+   "fact": "Herman Halushchenko resigned under pressure from President Zelensky in November 2025."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "a38154f0-631d-457c-a6b2-da1193c5220b",
+   "name": "PROVIDED_FEEDBACK_ON",
+   "fact": "Russia provided feedback on the Trump 28-point plan."
+  },
+  {
+   "source": "5bcd0734-d1ee-4133-9501-e48a8e9d2883",
+   "target": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "name": "MET_WITH",
+   "fact": "Trump-administration envoys met with delegations from Moscow."
+  },
+  {
+   "source": "f7773d48-eb11-4726-9a7f-d091c638b6aa",
+   "target": "923008ef-5f29-4ba1-a11c-3891c139b93f",
+   "name": "OMITTED_FROM",
+   "fact": "The Ukraine Security Assistance Initiative is omitted from the 2027 U.S. federal budget."
+  },
+  {
+   "source": "b474861a-2e5d-4724-83de-9ca5773aabdb",
+   "target": "e23be03c-a36d-4f34-91e5-c750b482023a",
+   "name": "AFFILIATED_WITH",
+   "fact": "Steve Witkoff is affiliated with the Trump administration as a special envoy."
+  },
+  {
+   "source": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "AFFILIATED_WITH",
+   "fact": "The U.S. is assessing whether Russia can be held to its commitments."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "66525772-17d8-432c-bfa5-54eddf9f0bf7",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The EU's 20th sanctions package listed the Karimun Oil Terminal in Indonesia for shadow-fleet-related activity."
+  },
+  {
+   "source": "dd035b98-17ea-4003-875f-4ef98133c9ca",
+   "target": "e72cee0e-0313-47f7-9264-7548628c2b68",
+   "name": "REPORTS_ON",
+   "fact": "The Guardian reports on CSIS casualty figures and the January 2026 train strike."
+  },
+  {
+   "source": "33ad6c4d-777d-41f1-bde7-7f9f41215fbb",
+   "target": "5c15be6a-732b-481e-911d-59c96ded3636",
+   "name": "REPORTS_ON",
+   "fact": "The BBC's Russian service noted that the true figure is necessarily higher than confirmed public records."
+  },
+  {
+   "source": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "PROVIDES_AID_TO",
+   "fact": "The war is being decided by whether Europe can sustain military aid to Ukraine without U.S. leadership."
+  },
+  {
+   "source": "c9456ed1-96dd-4aaf-94e0-333f607fb5fa",
+   "target": "b5c0d8c1-5db2-498b-a61b-911c8015d80f",
+   "name": "INVOLVES_PARTIAL_AGREEMENT",
+   "fact": "A negotiated settlement may involve a cap on Ukrainian force size."
+  },
+  {
+   "source": "4c924160-7943-4c9f-babe-62eeab86e52b",
+   "target": "8bea4f0f-516e-4c1b-8110-375fcee79355",
+   "name": "IS_A",
+   "fact": "Kirill Dmitriev is a Russian envoy."
+  },
+  {
+   "source": "dd035b98-17ea-4003-875f-4ef98133c9ca",
+   "target": "a38154f0-631d-457c-a6b2-da1193c5220b",
+   "name": "REPORTS_ON",
+   "fact": "theguardian.com reports on the Trump 28-point plan."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "07968e51-18e4-4ddf-a13c-e0227b6927fc",
+   "name": "CONSTRAINS",
+   "fact": "Ukraine's population crisis constrains its economy."
+  },
+  {
+   "source": "11f0342c-63fa-4cef-bcb7-4e13232d6dd8",
+   "target": "a38911c3-caf9-4940-886e-1bf0a8ee293c",
+   "name": "AFFILIATED_WITH",
+   "fact": "Kemi Badenoch is an opposition leader."
+  },
+  {
+   "source": "ed6768c9-71bb-4904-9f1e-65b2b9425a12",
+   "target": "7c7830ef-b998-4024-8f6e-a9d23394e435",
+   "name": "REPORTS_ON",
+   "fact": "The CSIS study reported that combined Russian and Ukrainian military casualty count approached 2 million by late 2025."
+  },
+  {
+   "source": "b89cbdfb-80dc-47b4-8728-50d4facdacdf",
+   "target": "532b20ae-7b97-44e3-b826-64cb170fbc96",
+   "name": "REPORTS_ON",
+   "fact": "The Los Angeles Times reported on the Abu Dhabi three-way talks regarding territorial concessions between Ukraine, Russia, and the U.S."
+  },
+  {
+   "source": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "target": "a71b0409-4355-4d9a-9038-5bb15698b328",
+   "name": "OCCUPIED_BY",
+   "fact": "Pokrovsk was occupied by Russian units after being reduced to rubble."
+  },
+  {
+   "source": "3a597dd9-0f19-4068-b21c-209a0acca7c8",
+   "target": "a5649238-6cdf-4b05-9a1d-92c54287e4c8",
+   "name": "IMPACTS",
+   "fact": "Damage to the energy grid has left hundreds of thousands of Ukrainians without electricity, heating, and water during the winter months."
+  },
+  {
+   "source": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "target": "b4115fba-6917-40f8-b4cd-9263f93b3959",
+   "name": "HAS_PRODUCED",
+   "fact": "The war has produced one of the largest forced displacement crises in the world."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "8dea05ae-5f1b-4543-9d95-270e1ab71f82",
+   "name": "SUPPORTED_BY",
+   "fact": "The Kiel Institute tracks military and non-military aid for Ukraine."
+  },
+  {
+   "source": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "target": "3fa346b7-dda1-41c7-9196-2385b9a14fc5",
+   "name": "CONTINUES_TO_INSIST_ON_WITHDRAWAL_FROM",
+   "fact": "Moscow continues to insist on full Ukrainian withdrawal from the remainder of Donetsk as a non-negotiable condition."
+  },
+  {
+   "source": "29e59e61-2916-4b1c-8f7d-5cd2db115834",
+   "target": "5bcd0734-d1ee-4133-9501-e48a8e9d2883",
+   "name": "AFFILIATED_WITH",
+   "fact": "Jared Kushner is one of the Trump-administration envoys."
+  },
+  {
+   "source": "3bc4dd41-8ff7-44e8-9100-4aff71340d33",
+   "target": "3508a8fb-8b91-401c-a204-42cfddfd9ad1",
+   "name": "ASSESSES",
+   "fact": "The Institute for the Study of War assessment titled \"Ukraine Seizes the Initiative\" noted that Ukrainian forces had reclaimed more territory in a single month than Russia had captured."
+  },
+  {
+   "source": "e3ca396b-c3a9-4447-98cb-d7141b5195fc",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "HOSTS_PEACE_TALKS_FOR",
+   "fact": "The war is being decided in conference rooms in Geneva."
+  },
+  {
+   "source": "e72cee0e-0313-47f7-9264-7548628c2b68",
+   "target": "e6d7c1ca-6cbc-4ef0-b39e-46834fb14ac6",
+   "name": "ESTIMATES",
+   "fact": "CSIS estimates between 500,000 and 600,000 Ukrainian military casualties."
+  },
+  {
+   "source": "8dea05ae-5f1b-4543-9d95-270e1ab71f82",
+   "target": "0ea02095-dd28-4b7c-ab8b-b37bb30269df",
+   "name": "TRACKS",
+   "fact": "The Kiel Institute's Ukraine Support Tracker tracks aid allocations through April 2026."
+  },
+  {
+   "source": "89bfdd14-412f-4425-970a-bc28d51c4ba6",
+   "target": "9b135149-023a-43ea-beb8-d2274705b9e2",
+   "name": "REPORTS_ON",
+   "fact": "ZOiS Berlin discusses Zelensky's Legitimacy."
+  },
+  {
+   "source": "03abc9d2-83ef-4af4-ae84-1249bb27ed42",
+   "target": "2b9d751a-951b-4e47-a32c-89d4c895b5f1",
+   "name": "AFFILIATED_WITH",
+   "fact": "Maxim Oreshkin is a Kremlin official."
+  },
+  {
+   "source": "7daee85c-94a9-47ea-8736-efd683a306b2",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "OCCURRED_IN",
+   "fact": "Operation Midas occurred inside Ukraine."
+  },
+  {
+   "source": "e23be03c-a36d-4f34-91e5-c750b482023a",
+   "target": "f7773d48-eb11-4726-9a7f-d091c638b6aa",
+   "name": "OPPOSES",
+   "fact": "The Trump administration has signalled a willingness to continue some level of support, but the 2027 U.S. federal budget submitted to Congress omits funding for the Ukraine Security Assistance Initiative."
+  },
+  {
+   "source": "e72cee0e-0313-47f7-9264-7548628c2b68",
+   "target": "c74b7546-d62a-4386-a941-3c37708b6afd",
+   "name": "STUDIES",
+   "fact": "CSIS estimates that Russian military casualties have approached 2 million by late 2025 and were projected to reach that figure by spring 2026."
+  },
+  {
+   "source": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "target": "532d5337-4fe9-4db2-8458-280cfc5ccd40",
+   "name": "IS_ASSOCIATED_WITH",
+   "fact": "Figures close to President Zelensky, including Svitlana Grynchuk, have been implicated in Operation Midas."
+  },
+  {
+   "source": "13ff123b-b1d5-49bb-9e7c-1c4aaa6cc405",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "LEGAL_BODY_FOR",
+   "fact": "The war is being decided in the corridors of the Verkhovna Rada."
+  },
+  {
+   "source": "d733a0a5-0a6b-4b93-b889-eda9cb488750",
+   "target": "d1549a5a-c590-42fa-9773-e44780a051b3",
+   "name": "DEPENDS_ON",
+   "fact": "The Ukrainian economy in 2026 remains entirely dependent on external support to maintain basic state functions."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "6f02e190-38e0-4c33-b486-3a815ff61e5c",
+   "name": "CEDE",
+   "fact": "The Trump 28-point plan requires Ukraine to cede Luhansk to Russia."
+  },
+  {
+   "source": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "CLAIMS_UNRESOLVED_ISSUE",
+   "fact": "After meeting Trump, President Zelensky said the land issue remained unresolved."
+  },
+  {
+   "source": "9d8829aa-8079-419d-b580-dd4fbbadd1c9",
+   "target": "1236b8d5-1eb3-4f44-b709-018a62b5ec0f",
+   "name": "CONTINUES_INTO",
+   "fact": "A protracted war scenario implies the war continues into 2027."
+  },
+  {
+   "source": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "PROVIDES_AID_TO",
+   "fact": "The United States remains the single largest bilateral donor, having committed roughly $120 billion in total support to Ukraine since 2022, including military, humanitarian, and financial aid."
+  },
+  {
+   "source": "0285d50b-6b4f-43fb-933c-9d05d7bebd8e",
+   "target": "7daee85c-94a9-47ea-8736-efd683a306b2",
+   "name": "INVESTIGATES",
+   "fact": "The Specialized Anti-Corruption Prosecutor's Office is investigating Operation Midas."
+  },
+  {
+   "source": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "target": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "name": "SUPPORTS",
+   "fact": "The United States and European Union institutions and member states have contributed to total support."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "ADOPTS_MEASURES",
+   "fact": "Ukraine has been forced to adopt increasingly desperate measures to maintain force levels, with the average soldier's age rising and frontline units often under-strength."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "HAS_STATE",
+   "fact": "Ukraine is fighting for its survival."
+  },
+  {
+   "source": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "target": "bb3da054-82f1-430e-922c-54076539b65f",
+   "name": "HAS_WILL_FOR_DEAL_HIGHER_THAN",
+   "fact": "The political will on Kyiv's side for some form of deal appears to be higher than at any point since 2022."
+  },
+  {
+   "source": "efc3a5a0-6857-4e91-9ce7-834eba30b412",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "REPORTS_ON",
+   "fact": "Western analysts note that the suspension of elections under martial law is a common democratic practice and that Zelensky's mandate remains constitutionally clear."
+  },
+  {
+   "source": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "STATES_POSITION_ON",
+   "fact": "President Zelensky has stated that Ukraine cannot legally or politically accept the territorial terms of the peace plan."
+  },
+  {
+   "source": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "target": "3c23116a-9dd5-4cbc-baac-1177f5212fd2",
+   "name": "HAS_INTENTION_TO_HOLD",
+   "fact": "Kyiv has not yet fully resolved the question of whether and when elections can be safely held."
+  },
+  {
+   "source": "f34b16be-560b-4dc3-ab6c-c7a8a16e6752",
+   "target": "07333ca9-c5e7-42b7-a4fb-9bacc84bc11e",
+   "name": "REPORTS_ON",
+   "fact": "Mezha reports on the 28-Point Russia-Ukraine Peace Plan."
+  },
+  {
+   "source": "ea650b2f-e68a-427f-ace3-90632ba3c514",
+   "target": "d2d8dc32-6d7f-41fb-81de-ea39038fd080",
+   "name": "DIRECTS_CRITICISM_AT",
+   "fact": "Poland's foreign minister Radosław Sikorski addressed Elon Musk directly on X, questioning why Russians are not being stopped from using Starlinks."
+  },
+  {
+   "source": "13ff123b-b1d5-49bb-9e7c-1c4aaa6cc405",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "AFFIRMS",
+   "fact": "The Verkhovna Rada affirmed Zelensky's mandate until the end of martial law."
+  },
+  {
+   "source": "e23be03c-a36d-4f34-91e5-c750b482023a",
+   "target": "5831c1a5-c4ef-486e-a8bb-44c7fbda26dc",
+   "name": "EMPLOYED_BY",
+   "fact": "Marco Rubio, Secretary of State, was part of the Trump administration."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "RECLAIMED_TERRITORY_FROM",
+   "fact": "Ukrainian forces reclaimed more territory than Russia had captured in March 2026."
+  },
+  {
+   "source": "5d961b50-1724-4bce-a20a-1a04728b4bb7",
+   "target": "c4675119-d945-4fa0-b96b-04b2d87c34e7",
+   "name": "PROVIDES_CITATION_FOR",
+   "fact": "The BBC provides a citation for 'Millions of lives under threat in Ukraine this winter'."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "name": "FACING_POTENTIAL_FALL_TO",
+   "fact": "Ukraine faces the potential fall of Pokrovsk to Russia."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "b0dbbcfa-0300-420f-b69b-a36cf2317fff",
+   "name": "AFFILIATED_WITH",
+   "fact": "The war has entered a phase of high casualty generation and low territorial yield, defining the strategic environment for the diplomatic push of 2026."
+  },
+  {
+   "source": "4f0dd9d7-0b9d-434b-ad82-1851f2367a9a",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "CLOSE_TO",
+   "fact": "Herman Halushchenko is close to President Zelensky."
+  },
+  {
+   "source": "4e11a727-1e62-4ea5-8bd1-ebebe23d2532",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "REPORTS_ON",
+   "fact": "Ukrainian Air Force reports on Russia's drone and missile launches."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "28d5f3d4-3a30-430b-8f3f-4fd9ee7fc0d0",
+   "name": "CEDE",
+   "fact": "The Trump 28-point plan requires Ukraine to cede Crimea to Russia."
+  },
+  {
+   "source": "dd035b98-17ea-4003-875f-4ef98133c9ca",
+   "target": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "name": "PROVIDES_CITATION_FOR",
+   "fact": "The Guardian provides a citation concerning events in Kyiv in February 2026."
+  },
+  {
+   "source": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "target": "fd1c368b-5792-4654-b9aa-7a12b844c049",
+   "name": "TWIN_CITY_OF",
+   "fact": "Pokrovsk and Myrnohrad are twin cities."
+  },
+  {
+   "source": "6e1595b8-86c9-4833-b884-0073a9635b49",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "WEAKENS_POSITION_OF",
+   "fact": "The corruption allegations have weakened President Zelensky's negotiating position."
+  },
+  {
+   "source": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "target": "4f0dd9d7-0b9d-434b-ad82-1851f2367a9a",
+   "name": "IS_ASSOCIATED_WITH",
+   "fact": "Figures close to President Zelensky, including Herman Halushchenko, have been implicated in Operation Midas."
+  },
+  {
+   "source": "ea9a3dd6-b3bd-4ac8-bf99-4f6d2a452e1a",
+   "target": "9deb4297-91b2-4dd1-9937-aabedd792f59",
+   "name": "LESS_IMPORTANT_THAN",
+   "fact": "The war's outcome will be determined less by the trajectory of bullets and shells and more by the trajectory of politics, economics, and diplomacy."
+  },
+  {
+   "source": "ba0cdb62-378f-44ad-bd3c-52e834a6c9a0",
+   "target": "694f1817-4728-47d2-961c-8b290b9b1de2",
+   "name": "IS_LAST_REDOUBT_IN",
+   "fact": "The Kramatorsk–Kostiantynivka urban agglomeration is the last significant Ukrainian redoubt in Donetsk Oblast."
+  },
+  {
+   "source": "8f5097f4-c8a4-4532-b45c-a6f5425bfe72",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "IS_SUPREME_ALLIED_COMMANDER",
+   "fact": "General Alexus Grynkewich is NATO's Supreme Allied Commander Europe."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "4361867a-a116-458c-b100-edf206d2b8fa",
+   "name": "OPPOSES",
+   "fact": "The European Union is pushing back on punitive elements of the U.S. draft, particularly limits on Ukrainian force size and the implicit acceptance of Russian sovereignty over seized territory."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "2203b102-dac5-4263-9a80-c5a5dc628c81",
+   "name": "REGULATES_OR_SANCIONS",
+   "fact": "The EU's 20th sanctions package and the activation of the anti-circumvention tool are designed to make a Russian economic collapse more likely."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "HAS_CASUALTIES_IN",
+   "fact": "Ukraine has lost approximately 500,000–600,000 personnel in relation to Russia."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "c74b7546-d62a-4386-a941-3c37708b6afd",
+   "name": "HAS_CASUALTIES",
+   "fact": "Russia has borne the brunt of the losses, with CSIS estimating approximately 1.2 million Russian casualties since February 2022."
+  },
+  {
+   "source": "e23be03c-a36d-4f34-91e5-c750b482023a",
+   "target": "4c0e3f17-faa1-4baf-8492-3274af28b258",
+   "name": "REQUIRES",
+   "fact": "The Trump administration's peace plan includes a Ukrainian election requirement."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "3d09ab01-28f5-4842-832a-b7665417e538",
+   "name": "EXPERIENCES",
+   "fact": "Ukraine is experiencing a war."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "92ede2dd-f013-4560-b15a-cd39f56f15f8",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The EU's 20th sanctions package listed the Karimun Oil Terminal in Indonesia for shadow-fleet-related activity."
+  },
+  {
+   "source": "bafe9c2c-4d56-4287-87ed-4c26fddf81a9",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "OCCUPIED_BY",
+   "fact": "Zaporizhzhia is occupied by Russian forces, which Moscow claimed to have annexed in September 2022."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "ba1e930e-3858-44d0-aebd-c367c5a35af6",
+   "name": "HAS_POPULATION_REDUCED_TO",
+   "fact": "Ukraine's population has shrunk from approximately 41 million to roughly 28 million due to war, displacement, and emigration."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "REGULATES_OR_SANCTIONS",
+   "fact": "The EU adopted its 20th sanctions package against Russia, characterized by the European Commission as having a strong anti-circumvention angle."
+  },
+  {
+   "source": "2203b102-dac5-4263-9a80-c5a5dc628c81",
+   "target": "c16a44b0-9ed3-4567-92f8-33c417fd3911",
+   "name": "AFFILIATED_WITH",
+   "fact": "The Moscow Times reported on the Russian economy."
+  },
+  {
+   "source": "fe4883f4-de9f-4b14-bbdc-d1050592a109",
+   "target": "13ff123b-b1d5-49bb-9e7c-1c4aaa6cc405",
+   "name": "REPORTS_ON",
+   "fact": "Al Jazeera reported on the Verkhovna Rada's affirmation of Zelenskyy's legitimacy."
+  },
+  {
+   "source": "f802574f-46ad-4c0a-8243-022a54c5fff4",
+   "target": "dea8a0d1-f8d2-4742-884d-b68e1ce5eaf0",
+   "name": "REPORTS_ON",
+   "fact": "The German Institute for International and Security Affairs (SWP) notes that the suspension of elections under martial law is a common democratic practice and that Zelensky's mandate remains constitutionally clear."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "name": "STRUCK",
+   "fact": "Russian strikes on urban energy and transport infrastructure in the winter of 2025–2026 produced acute mass-casualty events, including a wave of attacks that left 710,000 residents of Kyiv without electricity and central heating in sub-zero temperatures."
+  },
+  {
+   "source": "c9456ed1-96dd-4aaf-94e0-333f607fb5fa",
+   "target": "dd13914b-d165-49a7-af14-4db1c70b1153",
+   "name": "INVOLVES_PARTIAL_AGREEMENT",
+   "fact": "A negotiated settlement may involve a multi-year reconstruction package funded partly by frozen Russian sovereign assets."
+  },
+  {
+   "source": "82c19d34-fb06-4adf-8659-1340b1705926",
+   "target": "3fa346b7-dda1-41c7-9196-2385b9a14fc5",
+   "name": "CANNOT_ACCEPT_CESSION",
+   "fact": "Kyiv cannot accept ceding Donetsk wholesale."
+  },
+  {
+   "source": "3be30007-a030-48b6-89eb-dac223b416a3",
+   "target": "1b6bd318-33b6-45a3-9167-b4505b31d7d6",
+   "name": "INVOLVES",
+   "fact": "The Military Balance notes dwindling stocks."
+  },
+  {
+   "source": "b4f56f08-ec59-4d97-86de-e921cb9502cf",
+   "target": "3508a8fb-8b91-401c-a204-42cfddfd9ad1",
+   "name": "REPORTS_ON",
+   "fact": "ISW reports on the \"Ukraine Seizes the Initiative\" assessment."
+  },
+  {
+   "source": "69a45472-96f0-437a-8990-3c6038cf8fb6",
+   "target": "55557e23-0d0b-4ebd-b914-fe2c617c0e34",
+   "name": "OPPOSES",
+   "fact": "European negotiators are pushing back on punitive elements of the U.S."
+  },
+  {
+   "source": "dd035b98-17ea-4003-875f-4ef98133c9ca",
+   "target": "ed6768c9-71bb-4904-9f1e-65b2b9425a12",
+   "name": "PUBLISHED",
+   "fact": "The Guardian published a study by CSIS."
+  },
+  {
+   "source": "a822a0ba-1f85-4aff-a375-29067cc44af7",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "REPORTS_ON",
+   "fact": "European Pravda reported on Ukraine's shrinking population."
+  },
+  {
+   "source": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "target": "ba0cdb62-378f-44ad-bd3c-52e834a6c9a0",
+   "name": "POTENTIAL_SHIFT_TO",
+   "fact": "There is a potential shift from Pokrovsk to Kramatorsk-Kostiantynivka."
+  },
+  {
+   "source": "6051850c-b189-4509-be97-c5dccc28dc59",
+   "target": "7c4c8ff5-477d-47dd-862b-14ba1c51d7aa",
+   "name": "CHARACTERIZED_BY",
+   "fact": "The war has settled into a grinding attritional equilibrium on the battlefield, an intensifying diplomatic sprint, a brittle sanctions regime under fresh strain, and an emerging political crisis inside Ukraine itself."
+  },
+  {
+   "source": "3d09ab01-28f5-4842-832a-b7665417e538",
+   "target": "9f351786-22c2-47a9-b6c1-02cd8cc854c9",
+   "name": "STARTED_ON",
+   "fact": "The Russia-Ukraine War started on 24 February 2022."
+  },
+  {
+   "source": "51329dba-52af-4297-903e-3309b2a586a6",
+   "target": "c0e702b8-b611-4973-89f8-816c2f24991d",
+   "name": "SCHEDULED_FOR",
+   "fact": "Presidential elections are reportedly scheduled for May."
+  },
+  {
+   "source": "f539c914-9755-4dfb-a070-18ffa982788f",
+   "target": "20814253-3e27-4c0d-98df-a6476ede4d46",
+   "name": "TARGETS",
+   "fact": "A Russian attack on a Western logistics hub is a scenario that could lead to escalation."
+  },
+  {
+   "source": "5831c1a5-c4ef-486e-a8bb-44c7fbda26dc",
+   "target": "e23be03c-a36d-4f34-91e5-c750b482023a",
+   "name": "AFFILIATED_WITH",
+   "fact": "Marco Rubio is affiliated with the Trump administration."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "db448417-863a-4e3e-b226-a9c197e036fd",
+   "name": "EXPERIENCES",
+   "fact": "Ukraine is experiencing emigration due to the war."
+  },
+  {
+   "source": "808084cf-4ce9-4983-a631-c2fead16c148",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "POLITICAL_TOLERANCE_FOR_LOSSES",
+   "fact": "Moscow has a higher political tolerance for absorbing losses than Kyiv."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "532b20ae-7b97-44e3-b826-64cb170fbc96",
+   "name": "DISCUSSES_WITH",
+   "fact": "Russia is discussing the issue of territorial concessions in Abu Dhabi."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "047a2559-6901-44c8-aa72-84282e883d20",
+   "name": "HAS_STATE",
+   "fact": "Russia's economy is in slow-motion decline."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "FIELDS_ACTIVE_FORCE_IN",
+   "fact": "Russia fields an active force in Ukraine estimated at over 700,000 personnel as of mid-2024, after conducting a partial mobilisation in September 2022 and sustained covert conscription drives since."
+  },
+  {
+   "source": "6f02e190-38e0-4c33-b486-3a815ff61e5c",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "OCCUPIED_BY",
+   "fact": "Luhansk is occupied by Russian forces, which Moscow claimed to have annexed in September 2022."
+  },
+  {
+   "source": "28c993b8-397e-4a4a-a7c1-08c71ccf5028",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "SUPPORTS",
+   "fact": "The EU's actions, including sanctions and a potential maritime services ban on Russian oil, are designed to shift diplomatic terms in Ukraine's favour."
+  },
+  {
+   "source": "05b98b15-20f3-48b2-9573-ef4fbe2bcc9c",
+   "target": "6c29eb76-322a-4989-80ae-36ad2ec9f89f",
+   "name": "CONQUERED",
+   "fact": "Pokrovsk was conquered by Russian forces in early 2026."
+  },
+  {
+   "source": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "target": "786c3c29-123d-4df7-bc30-cdb65e1b3732",
+   "name": "PIONEERED_USE_OF",
+   "fact": "Ukraine pioneered the use of small commercial drones for reconnaissance and strike missions."
+  },
+  {
+   "source": "8e441446-d19e-4e6c-8ce8-9772a077985c",
+   "target": "7daee85c-94a9-47ea-8736-efd683a306b2",
+   "name": "INVESTIGATES",
+   "fact": "The National Anti-Corruption Bureau of Ukraine is investigating Operation Midas."
+  },
+  {
+   "source": "e6d7c1ca-6cbc-4ef0-b39e-46834fb14ac6",
+   "target": "ed6768c9-71bb-4904-9f1e-65b2b9425a12",
+   "name": "BASED_ON",
+   "fact": "Ukrainian military losses are detailed by CSIS estimates."
+  },
+  {
+   "source": "64812ae1-758d-42c2-9672-1826af3bd684",
+   "target": "0914b60e-9314-486d-997a-09d6389ee7b7",
+   "name": "REPORTS_ON",
+   "fact": "UNICEF issues warnings on the winter humanitarian situation in Ukraine."
+  },
+  {
+   "source": "047a2559-6901-44c8-aa72-84282e883d20",
+   "target": "d114f5b3-0afb-4621-85cf-b626ab2f4af1",
+   "name": "PARTICIPATES_IN",
+   "fact": "Russia is participating in peace talks."
+  }
+ ],
+ "graph_id": "mirofish_fb4ad9d8141e4fd7"
+}

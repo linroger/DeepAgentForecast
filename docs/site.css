@@ -167,3 +167,88 @@ a { color: inherit; }
 .md-body pre code { display: block; padding: 14px 16px; overflow-x: auto; }
 .md-body img { max-width: 100%; }
 .md-loading { font-family: var(--mono); font-size: .8rem; color: #999; padding: 40px 0; }
+
+/* ——— language toggle ——— */
+.lang-toggle {
+  background: #fff; border: 1px solid var(--border); cursor: pointer;
+  font-family: var(--mono); font-size: .72rem; font-weight: 700;
+  padding: 6px 12px; color: #444;
+  transition: border-color .18s ease, color .18s ease;
+}
+.lang-toggle:hover { border-color: var(--orange); color: var(--orange); }
+
+/* ——— stage tabs (6 tabs, wrap on mobile) ——— */
+.stage-tabs { flex-wrap: wrap; width: 100%; }
+.stage-tabs button { flex: 1 1 auto; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.stage-intro { font-size: .86rem; color: #666; margin: 16px 0 4px; max-width: 760px; }
+.stage-body { padding-top: 8px; }
+
+/* ——— stage ①: research console log ——— */
+.console-log {
+  background: #0B0B0B; color: #C9EFC9; padding: 18px 20px;
+  font-family: var(--mono); font-size: .7rem; line-height: 1.65;
+  overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+  max-height: 70vh; overflow-y: auto;
+}
+
+/* ——— stage ②: actors + sources ——— */
+.block-h { font-size: 1.2rem; margin: 2em 0 .4em; letter-spacing: -.3px; }
+.block-h:first-child { margin-top: .6em; }
+.block-sub { font-size: .82rem; color: #777; margin: 0 0 14px; }
+
+.actor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; margin-bottom: 10px; }
+.actor-card { border: 1px solid var(--border); padding: 14px 16px; font-size: .8rem; }
+.actor-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.actor-type { font-family: var(--mono); font-size: .62rem; color: #999; text-transform: uppercase; }
+.actor-card p { margin: 4px 0; color: #444; line-height: 1.5; }
+.alabel { font-family: var(--mono); font-size: .62rem; font-weight: 700; color: var(--orange); text-transform: uppercase; margin-right: 4px; }
+.actor-infl { display: inline-block; margin-top: 6px; font-family: var(--mono); font-size: .62rem; font-weight: 700; padding: 2px 8px; border: 1px solid var(--border); text-transform: uppercase; }
+.infl-high { color: #b91c1c; border-color: #FCA5A5; }
+.infl-medium { color: #ca8a04; border-color: #FDE68A; }
+.infl-low { color: #16a34a; border-color: #B7E4C7; }
+
+.source-list { font-size: .82rem; line-height: 1.9; padding-left: 22px; word-break: break-word; }
+.source-list a { color: #2563eb; text-decoration: none; }
+.source-list a:hover { text-decoration: underline; }
+
+/* ——— stage ③: ontology cards ——— */
+.onto-summary { border-left: 3px solid var(--orange); margin: 0 0 1em; padding: 10px 18px; color: #555; background: #FAFAFA; font-size: .88rem; }
+.count-pill { font-family: var(--mono); font-size: .66rem; font-weight: 700; color: #fff; background: var(--orange); padding: 1px 8px; border-radius: 999px; vertical-align: middle; }
+.onto-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
+.onto-card { border: 1px solid var(--border); padding: 14px 16px; font-size: .8rem; }
+.onto-card p { margin: 6px 0; color: #555; line-height: 1.5; }
+.onto-name { font-family: var(--mono); font-size: .8rem; font-weight: 700; color: var(--orange); }
+.onto-attrs { font-size: .7rem; color: #888; line-height: 1.9; }
+.onto-attrs code { font-family: var(--mono); font-size: .66rem; background: #F4F4F4; padding: 1px 6px; }
+
+/* ——— stage ④: knowledge graph ——— */
+.graph-stats { font-family: var(--mono); font-size: .74rem; color: #555; padding: 6px 0 10px; }
+.graph-note { color: #999; }
+.graph-canvas { border: 1px solid var(--border); min-height: 480px; }
+.g-tip { max-width: 340px; font-family: 'Space Grotesk','Noto Sans SC',sans-serif; font-size: .74rem; line-height: 1.5; }
+.g-tip em { color: #FF8A60; font-style: normal; font-family: var(--mono); font-size: .64rem; }
+
+/* ——— stage ⑤: simulated forum ——— */
+.forum-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 4px 0 14px; }
+.forum-switch { display: inline-flex; border: 1px solid var(--border); }
+.forum-switch button {
+  background: #fff; border: none; border-right: 1px solid var(--border);
+  font-family: var(--mono); font-size: .72rem; font-weight: 600;
+  padding: 8px 16px; cursor: pointer; color: #555;
+}
+.forum-switch button:last-child { border-right: none; }
+.forum-switch button.active { background: #000; color: #fff; }
+.forum-stats { font-family: var(--mono); font-size: .7rem; color: #888; }
+
+.feed { display: flex; flex-direction: column; gap: 10px; }
+.feed-item { border: 1px solid var(--border); padding: 14px 16px; }
+.feed-comment { margin-left: 34px; background: #FAFAFA; }
+.feed-head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; font-size: .8rem; }
+.feed-avatar {
+  width: 24px; height: 24px; border-radius: 50%; color: #fff; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: .7rem; font-weight: 700;
+}
+.feed-kind { font-family: var(--mono); font-size: .64rem; color: #999; }
+.feed-round { margin-left: auto; font-family: var(--mono); font-size: .64rem; color: #aaa; white-space: nowrap; }
+.feed-content { margin: 0; font-size: .84rem; line-height: 1.6; color: #222; word-break: break-word; }

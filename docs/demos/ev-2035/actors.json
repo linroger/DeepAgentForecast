@@ -1,0 +1,210 @@
+{
+  "central_question": "在2025-2030年全球电动汽车市场转型关键期,谁将主导竞争格局——中国价格战与海外扩张战略能否重塑全球产业秩序,传统车企的电动化转型能否成功突围?",
+  "as_of_date": "2026-06-09",
+  "actors": [
+    {
+      "name": "比亚迪(BYD)",
+      "type": "Organization",
+      "role": "全球电动汽车市场领导者,2025年超越特斯拉,主导中国价格战并加速全球生产布局",
+      "stance": "通过激进的定价策略(海鸥69,800元起售)和大规模海外建厂(泰国、巴西、土耳其等)实现全球扩张",
+      "influence": "high",
+      "memory": "已建立覆盖泰国、巴西、乌兹别克斯坦、土耳其的全球生产网络,合计海外产能超30万辆/年,2025年海外销售目标100万辆"
+    },
+    {
+      "name": "特斯拉(Tesla)",
+      "type": "Organization",
+      "role": "曾经的全球EV市场领导者,2025年被比亚迪超越",
+      "stance": "面临中国价格战压力,利润率下滑,在中国市场与BYD、吉利、蔚来等竞争加剧",
+      "influence": "high",
+      "memory": "第一季度利润率跌至三年新低,不得不持续降价以维持销量"
+    },
+    {
+      "name": "现代汽车集团(Hyundai Motor Group)",
+      "type": "Organization",
+      "role": "韩国传统车企代表,押注技术差异化战略",
+      "stance": "通过2030愿景投资553亿美元,聚焦SDV平台、下一代电池技术和区域定制化产品",
+      "influence": "high",
+      "memory": "2030年全球销量目标555万辆,投资77.3万亿韩元,2025-2030年实施,IONIQ 3主攻欧洲市场"
+    },
+    {
+      "name": "起亚(Kia)",
+      "type": "Organization",
+      "role": "现代汽车集团子品牌,EV9旗舰电动SUV推动者",
+      "stance": "作为集团31款EV车型阵容的重要组成部分,推进电动化转型",
+      "influence": "medium",
+      "memory": "EV9作为首款三排座电动旗舰SUV已上市"
+    },
+    {
+      "name": "捷尼赛思(Genesis)",
+      "type": "Organization",
+      "role": "现代汽车集团豪华品牌,参与集团EV战略",
+      "stance": "作为集团31款EV车型阵容的豪华组成部分",
+      "influence": "medium",
+      "memory": "与现代、起亚共同组成集团电动化矩阵"
+    },
+    {
+      "name": "VinFast",
+      "type": "Organization",
+      "role": "越南本土EV品牌,东南亚市场挑战者",
+      "stance": "在与中国品牌的价格战中无法竞争,无限期推迟东南亚扩张,转向欧洲市场",
+      "influence": "medium",
+      "memory": "电动巴士在德国首发,与西门子合作电巴士技术,2018年起合作"
+    },
+    {
+      "name": "英国政府(UK Government)",
+      "type": "Government",
+      "role": "2030年ICE禁售政策的制定者",
+      "stance": "工党政府2024年7月恢复2030年ICE禁售期限(原推迟至2035),2025年1月议会书面声明确认",
+      "influence": "high",
+      "memory": "2030年禁售新汽油和柴油汽车,2024年11月再次重申,并承诺发布全面计划"
+    },
+    {
+      "name": "欧盟(European Union)",
+      "type": "Government",
+      "role": "通过2035年ICE禁售和对中国EV加征关税影响市场",
+      "stance": "即将对中国汽车制造商加征惩罚性关税,促使BYD将欧洲生产重心转向土耳其",
+      "influence": "high",
+      "memory": "2035年新车销售100%零排放目标,关税政策推动BYD等中国车企在土耳其建厂"
+    },
+    {
+      "name": "巴西政府(Brazilian Government)",
+      "type": "Government",
+      "role": "接受BYD投资,提供原福特工厂改造场地",
+      "stance": "支持BYD在巴西建设15万辆年产能工厂,作为BYD在拉丁美洲的桥头堡",
+      "influence": "medium",
+      "memory": "提供原福特工厂供BYD改造,实现本地化生产"
+    },
+    {
+      "name": "泰国政府(Thai Government)",
+      "type": "Government",
+      "role": "BYD东南亚生产基地的东道国",
+      "stance": "支持BYD在泰国建设首座全资海外工厂,2024年年中投产,年产能15万辆",
+      "influence": "medium",
+      "memory": "为BYD提供15万辆年产能的工厂用地,服务东南亚市场"
+    },
+    {
+      "name": "土耳其政府(Turkish Government)",
+      "type": "Organization",
+      "role": "吸引BYD投资10亿美元建厂,规避欧盟关税",
+      "stance": "通过支持BYD建厂吸引中国EV产业投资",
+      "influence": "medium",
+      "memory": "BYD在土耳其建设15万辆年产能工厂,2025年7月加速推进,原计划在匈牙利"
+    },
+    {
+      "name": "Mobileye",
+      "type": "Organization",
+      "role": "自动驾驶技术供应商,与大众汽车合作",
+      "stance": "为大众ID. Buzz提供L4级自动驾驶技术支持",
+      "influence": "medium",
+      "memory": "自2021年起开发ID. Buzz的自动驾驶技术,符合SAE L4级别定义"
+    },
+    {
+      "name": "大众汽车(Volkswagen)",
+      "type": "Organization",
+      "role": "通过ADMT与Mobileye合作推进自动驾驶",
+      "stance": "在ID. Buzz平台上开发L4级自动驾驶",
+      "influence": "medium",
+      "memory": "与Mobileye达成自动驾驶协议,目标在限定区域实现完全自动驾驶"
+    },
+    {
+      "name": "西门子(Siemens)",
+      "type": "Organization",
+      "role": "VinFast的电动巴士技术合作伙伴",
+      "stance": "为VinFast提供电动巴士技术和组件,服务东南亚市场",
+      "influence": "low",
+      "memory": "2018年8月与VinFast签订两份合同,供应电巴士生产技术"
+    },
+    {
+      "name": "TrendForce",
+      "type": "Media",
+      "role": "全球市场研究机构,提供EV销量数据",
+      "stance": "发布2025年全球EV销量达2053万辆的历史纪录数据",
+      "influence": "medium",
+      "memory": "统计数据显示2025年全球新能源汽车销量20.53百万辆"
+    },
+    {
+      "name": "英国工党(UK Labour Party)",
+      "type": "Government",
+      "role": "2024年执政后恢复2030年ICE禁售政策的执政党",
+      "stance": "2024年7月将2035年期限恢复为2030年,2025年4月再次确认",
+      "influence": "high",
+      "memory": "认为2030年期限为行业提供了明确的转型时间表,有助于实现Net Zero目标"
+    },
+    {
+      "name": "美国加州(California)",
+      "type": "Government",
+      "role": "美国2035年ICE禁售政策的标杆州",
+      "stance": "渐进式推进2035年新车销售100%零排放目标",
+      "influence": "medium",
+      "memory": "作为美国先进减排标准的领导者影响其他州政策"
+    }
+  ],
+  "key_events": [
+    {
+      "date": "2018-08",
+      "event": "VinFast与西门子签订两份合同,合作电动巴士技术"
+    },
+    {
+      "date": "2021",
+      "event": "大众与Mobileye开始ID. Buzz的自动驾驶技术开发"
+    },
+    {
+      "date": "2024-中",
+      "event": "BYD泰国首座全资海外工厂投产,年产能15万辆"
+    },
+    {
+      "date": "2024-07",
+      "event": "英国工党政府将2035年ICE禁售期限恢复为2030年"
+    },
+    {
+      "date": "2024",
+      "event": "中国BEV平均售价下降14%,中端OEM毛利率腰斩"
+    },
+    {
+      "date": "2024-11-24",
+      "event": "英国政府重申2030年ICE车辆禁售目标,承诺发布全面计划"
+    },
+    {
+      "date": "2025-01-06",
+      "event": "英国议会书面声明确认2030年禁售新汽油柴油汽车政策"
+    },
+    {
+      "date": "2025-03",
+      "event": "全球EV销量同比增长40%,欧洲增长22%,英国单月突破10万辆"
+    },
+    {
+      "date": "2025-04-15",
+      "event": "英国工党确认2030年ICE汽车禁售和ZEV转型政策"
+    },
+    {
+      "date": "2025-07-22",
+      "event": "BYD将欧洲生产重心从匈牙利转向土耳其,土耳其工厂加速推进"
+    },
+    {
+      "date": "2025-09-18",
+      "event": "现代汽车发布2030愿景,投资553亿美元,目标2030年555万辆销量"
+    },
+    {
+      "date": "2025-12-11",
+      "event": "BYD海外扩张报告:泰国、乌兹别克斯坦、巴西合计产能超30万辆/年"
+    },
+    {
+      "date": "2025",
+      "event": "BYD超越特斯拉成为全球EV市场领导者,全球EV销量达20.53百万辆"
+    }
+  ],
+  "hot_topics": [
+    "中国EV价格战与中端OEM财务风险(Evergrande式危机)",
+    "BYD主导的全球生产网络扩张与关税规避策略",
+    "海外建厂的本地化生产趋势(泰国、巴西、土耳其、匈牙利)",
+    "端到端自动驾驶(End-to-End)技术竞赛成为行业焦点",
+    "单车智能(SAD)与车路协同(i-VICS)技术路线分化",
+    "软件定义汽车(SDV)平台的开发与应用",
+    "全球ICE禁售时间表:英国2030、欧盟2035、加州2035",
+    "东南亚新兴市场:中国品牌主导与本土品牌(VinFast)承压",
+    "韩国现代汽车集团的区域定制化产品战略(IONIQ 3主攻欧洲)",
+    "下一代电池技术与云端电池管理系统(2026年起)",
+    "VinFast的战略性撤退:从东南亚转向欧洲电动巴士市场",
+    "BYD海鸥69,800元低价对市场定价结构的颠覆性影响"
+  ]
+}

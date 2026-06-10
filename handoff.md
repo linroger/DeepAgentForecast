@@ -42,6 +42,17 @@ Full pipeline: `cd MiroFish-0.1.2 && npm run dev` → http://localhost:3000 → 
 
 ---
 
+## SESSION 2026-06-10 (4th pass) — Full-workflow demo walkthroughs + bilingual site
+
+**Request:** the live demos must show every workflow stage (deep research log, research brief, ontology, knowledge graph, forum, final report), and the site must be bilingual (EN/中文).
+
+**Shipped:**
+1. **`backend/scripts/export_demo_site_data.py`** — reproducible exporter dumping per run: `research_log.txt`, `dossier.md`, `actors.json`/`sources.json` (when present), `ontology.json` (entity/edge types + analysis summary from project.json), `graph.json` (Zep nodes+links, trimmed), `forum.json` (parsed from twitter/reddit actions.jsonl), `report.md` (placeholder-failure sections stripped generically), `meta.json` (prompt/rounds/personas from run_state + sim config).
+2. **Zep graphs had to be REBUILT**: the original graphs 404 on the current Zep account (account/plan rotated — limit now 300/min, only 2 unrelated graphs existed). Exporter detects 404 → re-runs stage 3 on identical inputs (saved dossier + ontology, same chunking) → exports the result. us-ai-2030: 61 nodes/95 links; ev-2035: 74/100; russia-ukraine: 128 chunks (largest dossier).
+3. **demo.html rewritten** as a 6-tab stage walkthrough: ① research console log (terminal style) ② dossier with actor cards (role/stance/influence) + cited sources (graceful no-actors fallback for the older Russia run) ③ ontology cards ④ interactive force-graph (force-graph CDN, hover tooltips with extracted facts) ⑤ forum feed (Twitter/Reddit switch, post/comment/like stats, avatar feed) ⑥ final report. Per-tab lazy fetch + cache; language switch re-renders the active tab.
+4. **i18n**: `docs/i18n.js` (~70 keys, EN/中文), `data-i18n` attributes, `.lang-toggle` in both navs, localStorage persistence, browser-language default. index.html fully retrofitted.
+5. Verified in Chrome throughout: all six tabs on multiple runs, zh/EN toggle on both pages, graph force-layout, no console errors. The user's own live run (semiconductor) was cancelled by them mid-session via the new cancel button — observed working.
+
 ## SESSION 2026-06-10 (later still) — Run management + live demo site
 
 **Request:** Screenshots folder pointer (already covered — those raw originals were previously optimized into docs/media); add a cancel button (one already existed in the run header; added per-run controls to the history drawer); clean the failed runs; create a live demo site and link it from the GitHub repo description.

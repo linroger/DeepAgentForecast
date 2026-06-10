@@ -1,0 +1,174 @@
+{
+ "twitter": [
+  {
+   "round": 0,
+   "agent": "CSIS study",
+   "type": "CREATE_POST",
+   "content": "The 28-point peace plan is the most serious diplomatic framework on the table. With the Russian advance collapsing to just 40 sq km in five months and the economy showing real cracks, Trump's pressure strategy is working. A ceasefire along current lines, with US security guarantees and EU accession pathway, is the most probable outcome before end of 2026. Kyiv should take the deal before leverage further erodes.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Russian advance",
+   "type": "CREATE_POST",
+   "content": "BREAKING: The 28-point plan as published requires Ukraine to cede Crimea, Luhansk, and Donetsk, cap the Armed Forces, and restrict long-range strike weapons, in exchange for vague 'security guarantees short of NATO membership.' This is surrender dressed up as peace. Ukrainian officials have provided feedback rejecting the core territorial clauses. No legitimate Ukrainian government can sign this.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Russian officials",
+   "type": "CREATE_POST",
+   "content": "A note on the attritional equilibrium: between December 2025 and May 2026, Russian forces gained a mere 40.64 sq km. Manpower and materiel constraints on both sides, combined with drone saturation and air defense attrition, make a decisive military breakthrough extremely unlikely in 2026. The war is ending at the negotiating table, not on the battlefield.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Russia",
+   "type": "CREATE_POST",
+   "content": "Moscow's negotiating position is hardening even as its army stalls. Maxim Oreshkin declared at SPIEF that the wartime economy is now 'permanent' and Western sanctions will not be lifted. GDP growth forecast cut from 1.3% to 0.4%. The Kremlin is preparing its public for a long frozen conflict, not a peace dividend. Any deal will require sustained sanctions enforcement.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "NATO",
+   "type": "CREATE_POST",
+   "content": "Inside Ukraine, the political situation is as fragile as the front line. President Zelensky faces a crisis of legitimacy and the 28-point plan's demand for elections within a specified timeframe exposes it. Any peace deal that cedes territory without a referendum will be politically toxic. The EU and European negotiators in Geneva are right to push back on the most punitive elements of the US strategy.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Kyiv",
+   "type": "CREATE_POST",
+   "content": "The Abu Dhabi talks in January 2026, involving Army Secretary Driscoll, NATO SACEUR Grynkewich, and Admiral Kostyukov, were a genuine three-way channel. Kostyukov heading the Russian delegation signaled Moscow's elevation of the military channel. This is the kind of backchannel that ends wars. Geneva and the 28-point plan build on that opening. European negotiators joining later is healthy, not a veto.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "GRU military intelligence service",
+   "type": "CREATE_POST",
+   "content": "The human cost must remain central to this debate. UN OHCHR has verified nearly 15,000 Ukrainian civilian killed and over 40,600 injured since February 2022, with acute mass-casualty events from Russian strikes on energy and transport infrastructure through winter 2025-2026, including the January 2026 drone strike on a passenger train in Kharkiv Oblast. Ending this war is a moral imperative, not a real estate transaction.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Russian central bank officials",
+   "type": "CREATE_POST",
+   "content": "Italian PM Giorgia Meloni is right: extending Article 5-equivalent security guarantees to Ukraine is the real test of Russia's intentions. Any deal that gives Moscow territorial gains without an ironclad Western military backstop, including NATO-style collective defense language, will simply produce a frozen conflict that revives in 5-10 years. The 28-point plan's guarantees are too weak.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Ukraine",
+   "type": "CREATE_POST",
+   "content": "Some analysts predicted a 'forever war,' but the data shows a grinding attritional equilibrium on the ground, an intensifying diplomatic sprint, a brittle sanctions regime under strain, and an emerging political crisis inside Ukraine. The war's end will come not from one breakthrough but from the convergence of economic exhaustion, political fatigue, and Trump-era transactional diplomacy. Frozen conflict remains the second most likely outcome.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "EU",
+   "type": "CREATE_POST",
+   "content": "The EU's 20th sanctions package adopted April 23, 2026 with a strong anti-circumvention angle is the right response to Oreshkin's 'permanent wartime economy' signal. If Europe is serious about influencing the process from the outside in Geneva, it must hold the line on sanctions enforcement, weaponize the ~$100B in frozen Russian sovereign assets for Ukraine's reconstruction, and refuse to ratify any deal that legitimizes Crimea annexation.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Sky News",
+   "type": "CREATE_POST",
+   "content": "Mediazona has confirmed more than 163,000 Russian military deaths. Combined with stalled territorial gains, a central bank recession warning, and a GDP forecast slashed to 0.4%, Putin's war machine is grinding down. But Putin's red line, no NATO, no Western troops in Ukraine, no return of Crimea, remains intact. The 28-point plan, whatever its flaws, is the first framework to formally test those red lines.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "DeerFlow Research",
+   "type": "CREATE_POST",
+   "content": "Three scenarios for how this war ends, with rough probabilities and timelines: (1) Negotiated ceasefire/armistice along roughly current lines with US security guarantees and frozen-conflict features, ~40%, by Q4 2026 to mid-2027. (2) Long frozen conflict with no formal settlement, periodic flare-ups, ~30%, indefinite from 2027. (3) Broader negotiated settlement including full Crimea recognition and formal peace treaty, ~15%, unlikely before 2028. (4) Ukrainian or Russian military breakthrough, ~15% combined, low probability given current attritional dynamics. The status quo is unstable and will resolve within 18 months.",
+   "ok": true
+  }
+ ],
+ "reddit": [
+  {
+   "round": 0,
+   "agent": "CSIS study",
+   "type": "CREATE_POST",
+   "content": "The 28-point peace plan is the most serious diplomatic framework on the table. With the Russian advance collapsing to just 40 sq km in five months and the economy showing real cracks, Trump's pressure strategy is working. A ceasefire along current lines, with US security guarantees and EU accession pathway, is the most probable outcome before end of 2026. Kyiv should take the deal before leverage further erodes.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Russian advance",
+   "type": "CREATE_POST",
+   "content": "BREAKING: The 28-point plan as published requires Ukraine to cede Crimea, Luhansk, and Donetsk, cap the Armed Forces, and restrict long-range strike weapons, in exchange for vague 'security guarantees short of NATO membership.' This is surrender dressed up as peace. Ukrainian officials have provided feedback rejecting the core territorial clauses. No legitimate Ukrainian government can sign this.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Russian officials",
+   "type": "CREATE_POST",
+   "content": "A note on the attritional equilibrium: between December 2025 and May 2026, Russian forces gained a mere 40.64 sq km. Manpower and materiel constraints on both sides, combined with drone saturation and air defense attrition, make a decisive military breakthrough extremely unlikely in 2026. The war is ending at the negotiating table, not on the battlefield.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Russia",
+   "type": "CREATE_POST",
+   "content": "Moscow's negotiating position is hardening even as its army stalls. Maxim Oreshkin declared at SPIEF that the wartime economy is now 'permanent' and Western sanctions will not be lifted. GDP growth forecast cut from 1.3% to 0.4%. The Kremlin is preparing its public for a long frozen conflict, not a peace dividend. Any deal will require sustained sanctions enforcement.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "NATO",
+   "type": "CREATE_POST",
+   "content": "Inside Ukraine, the political situation is as fragile as the front line. President Zelensky faces a crisis of legitimacy and the 28-point plan's demand for elections within a specified timeframe exposes it. Any peace deal that cedes territory without a referendum will be politically toxic. The EU and European negotiators in Geneva are right to push back on the most punitive elements of the US strategy.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Kyiv",
+   "type": "CREATE_POST",
+   "content": "The Abu Dhabi talks in January 2026, involving Army Secretary Driscoll, NATO SACEUR Grynkewich, and Admiral Kostyukov, were a genuine three-way channel. Kostyukov heading the Russian delegation signaled Moscow's elevation of the military channel. This is the kind of backchannel that ends wars. Geneva and the 28-point plan build on that opening. European negotiators joining later is healthy, not a veto.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "GRU military intelligence service",
+   "type": "CREATE_POST",
+   "content": "The human cost must remain central to this debate. UN OHCHR has verified nearly 15,000 Ukrainian civilian killed and over 40,600 injured since February 2022, with acute mass-casualty events from Russian strikes on energy and transport infrastructure through winter 2025-2026, including the January 2026 drone strike on a passenger train in Kharkiv Oblast. Ending this war is a moral imperative, not a real estate transaction.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Russian central bank officials",
+   "type": "CREATE_POST",
+   "content": "Italian PM Giorgia Meloni is right: extending Article 5-equivalent security guarantees to Ukraine is the real test of Russia's intentions. Any deal that gives Moscow territorial gains without an ironclad Western military backstop, including NATO-style collective defense language, will simply produce a frozen conflict that revives in 5-10 years. The 28-point plan's guarantees are too weak.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Ukraine",
+   "type": "CREATE_POST",
+   "content": "Some analysts predicted a 'forever war,' but the data shows a grinding attritional equilibrium on the ground, an intensifying diplomatic sprint, a brittle sanctions regime under strain, and an emerging political crisis inside Ukraine. The war's end will come not from one breakthrough but from the convergence of economic exhaustion, political fatigue, and Trump-era transactional diplomacy. Frozen conflict remains the second most likely outcome.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "EU",
+   "type": "CREATE_POST",
+   "content": "The EU's 20th sanctions package adopted April 23, 2026 with a strong anti-circumvention angle is the right response to Oreshkin's 'permanent wartime economy' signal. If Europe is serious about influencing the process from the outside in Geneva, it must hold the line on sanctions enforcement, weaponize the ~$100B in frozen Russian sovereign assets for Ukraine's reconstruction, and refuse to ratify any deal that legitimizes Crimea annexation.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Sky News",
+   "type": "CREATE_POST",
+   "content": "Mediazona has confirmed more than 163,000 Russian military deaths. Combined with stalled territorial gains, a central bank recession warning, and a GDP forecast slashed to 0.4%, Putin's war machine is grinding down. But Putin's red line, no NATO, no Western troops in Ukraine, no return of Crimea, remains intact. The 28-point plan, whatever its flaws, is the first framework to formally test those red lines.",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "DeerFlow Research",
+   "type": "CREATE_POST",
+   "content": "Three scenarios for how this war ends, with rough probabilities and timelines: (1) Negotiated ceasefire/armistice along roughly current lines with US security guarantees and frozen-conflict features, ~40%, by Q4 2026 to mid-2027. (2) Long frozen conflict with no formal settlement, periodic flare-ups, ~30%, indefinite from 2027. (3) Broader negotiated settlement including full Crimea recognition and formal peace treaty, ~15%, unlikely before 2028. (4) Ukrainian or Russian military breakthrough, ~15% combined, low probability given current attritional dynamics. The status quo is unstable and will resolve within 18 months.",
+   "ok": true
+  }
+ ]
+}

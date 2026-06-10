@@ -1,0 +1,989 @@
+{
+ "nodes": [
+  {
+   "id": "fe53c0e9-830d-4d52-894e-5e1abdadb2f0",
+   "name": "AI subscriptions",
+   "labels": [],
+   "summary": "Alphabet's AI subscriptions are mentioned in the context of their Q1 2026 earnings call."
+  },
+  {
+   "id": "fca298d1-6d64-489b-8e37-361e5a315198",
+   "name": "Gemini integration",
+   "labels": [],
+   "summary": "A pivotal 2025 leadership meeting restructured Apple's AI division and pushed for deeper Gemini integration, causing product delays."
+  },
+  {
+   "id": "f63d16cb-fc86-4c1f-826c-e79c94f58c92",
+   "name": "Sam Altman",
+   "labels": [
+    "CEO"
+   ],
+   "summary": "Sam Altman has publicly predicted that AI will exceed human intelligence by 2030. He frames this decade as decisive for whether superintelligence becomes a tool of empowerment or displacement."
+  },
+  {
+   "id": "ec1eb1d8-b7e7-4550-911e-82635f188b2d",
+   "name": "Peter Welinder",
+   "labels": [
+    "TechExecutive"
+   ],
+   "summary": "Peter Welinder is overseeing the engineers and researchers from io who joined OpenAI as part of the company's nearly $6.5 billion all-stock acquisition of io."
+  },
+  {
+   "id": "eae26c9a-e72e-4b02-82f3-83b2a199e091",
+   "name": "artificial intelligence sector",
+   "labels": [],
+   "summary": "The artificial intelligence sector is the most capital-intensive, strategically contested, and commercially transformative industry as of June 9, 2026. It has matured from a research race in 2022 into a full-stack industrial competition covering chips, models, agents, devices, infrastructure, energy, and talent."
+  },
+  {
+   "id": "e92b9090-ef69-4944-ae5b-5a1cb21f8798",
+   "name": "Mark Zuckerberg",
+   "labels": [
+    "CEO"
+   ],
+   "summary": "Mark Zuckerberg stated that Meta's Q2 2025 results beat expectations, with AI-driven ad improvements more than offsetting massive infrastructure spend. This was reported by The Guardian in relation to superintelligence."
+  },
+  {
+   "id": "e8ce1c6a-53b5-4e68-a1d6-fcba587d8fe7",
+   "name": "Alphabet",
+   "labels": [
+    "AILab"
+   ],
+   "summary": "Alphabet's launch of Gemini 3 was accompanied by a more than 30% reduction in the cost of core AI responses, demonstrating scaling and efficiency gains. This was detailed in an Alphabet Investor Presentation in June 2026."
+  },
+  {
+   "id": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "name": "Anthropic",
+   "labels": [
+    "AILab"
+   ],
+   "summary": "Anthropic achieved a quarterly operating profit of $559 million. The company released Claude Opus 4.7 in April 2026, a model optimized for sustained reasoning, long-running autonomous tasks, and multi-agent coordination."
+  },
+  {
+   "id": "d5ef46b5-172b-44de-9fc2-402375be2031",
+   "name": "Meta",
+   "labels": [
+    "TechCompany"
+   ],
+   "summary": "Meta's Q2 2025 results beat expectations with $47.52 billion in revenue. AI-driven ad improvements more than offset massive infrastructure spend according to The Guardian, referencing Zuckerberg's comments on superintelligence."
+  },
+  {
+   "id": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "name": "OpenAI",
+   "labels": [
+    "AILab"
+   ],
+   "summary": "OpenAI pioneered the consumer AI era with ChatGPT and is expanding its Sora video generation and native GPT-4o image generation across its product surface. Sora is planned to be integrated into ChatGPT, and GPT-4o image generation received an upgrade."
+  },
+  {
+   "id": "c6296d71-ba4c-4534-ae22-6417128f356b",
+   "name": "five-player oligopoly",
+   "labels": [],
+   "summary": "The frontier-model market has crystallized into a five-player oligopoly, with notable revenue inversions."
+  },
+  {
+   "id": "c2c219dd-5a30-46ce-8bd9-daf64a5046f6",
+   "name": "devices",
+   "labels": [],
+   "summary": "Devices are part of the full-stack industrial competition within the artificial intelligence sector as of June 9, 2026."
+  },
+  {
+   "id": "bd1319da-b0e8-47a2-a093-b0b101678279",
+   "name": "Starlink",
+   "labels": [
+    "Organization"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "ba065299-ae1a-4e5a-b072-e53222554301",
+   "name": "foundation model",
+   "labels": [],
+   "summary": "The frontier-model market has crystallized into a five-player oligopoly, with notable revenue inversions."
+  },
+  {
+   "id": "b683bbca-00b6-430c-b2e1-c6f50c2a4b6c",
+   "name": "Gemini Spark",
+   "labels": [],
+   "summary": "Gemini Spark launched in May 2026, contributing to a 63% Google Cloud revenue surge and 2 billion AI Overview users during that quarter."
+  },
+  {
+   "id": "a78618b2-61fd-4ada-b0ad-88c8d1076b27",
+   "name": "Gemini 3",
+   "labels": [],
+   "summary": "Gemini 3's launch was accompanied by a more than 30% reduction in the cost of core AI responses, demonstrating that scaling and efficiency gains are advancing in tandem. This information was presented in an Alphabet Investor Presentation in June 2026."
+  },
+  {
+   "id": "9ab2b837-8016-4601-96c8-aff936ec1a5c",
+   "name": "Jensen Huang",
+   "labels": [
+    "CEO"
+   ],
+   "summary": "Jensen Huang reported that sales for some AI components were \"off the charts.\""
+  },
+  {
+   "id": "9a8d8957-c6d7-48b4-b399-15575af762fb",
+   "name": "AI",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "949e35af-44e4-400a-961a-8e68ac50681a",
+   "name": "energy",
+   "labels": [],
+   "summary": "Energy is part of the full-stack industrial competition within the artificial intelligence sector as of June 9, 2026."
+  },
+  {
+   "id": "93d978c6-6b35-430d-b9a2-423566439b26",
+   "name": "a16z",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "a16z is backing a funding round for Cursor, which is aiming for a $6 billion end-of-year run-rate and has achieved a $50 billion valuation. Nvidia is also backing this round."
+  },
+  {
+   "id": "8dad4d64-df03-476a-82d7-d73a203eb6ed",
+   "name": "personal superintelligence",
+   "labels": [],
+   "summary": "Meta has staked its identity on \"personal superintelligence.\" Mark Zuckerberg's mid-2025 memo declared that \"developing superintelligence is now in sight\" as Meta's AI systems began showing early signs of self-improvement."
+  },
+  {
+   "id": "8ab48cd6-efcc-4009-9508-031e91a66dd4",
+   "name": "LoveFrom",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "LoveFrom is assuming creative and design responsibilities across OpenAI following OpenAI's acquisition of io."
+  },
+  {
+   "id": "8998e10a-2eb1-46fd-b17a-b202520548f1",
+   "name": "TPU economics",
+   "labels": [],
+   "summary": "TPU economics are being leveraged by Google DeepMind to challenge Nvidia. AI-related Google Cloud workloads utilizing TPU economics are projected to exceed a $1 trillion valuation equivalent by 2026."
+  },
+  {
+   "id": "83c797b3-8a42-4af0-8bd6-85f06cc02309",
+   "name": "Gemini 3.5",
+   "labels": [],
+   "summary": "Gemini 3.5 launched in May 2026, contributing to a 63% Google Cloud revenue surge and 2 billion AI Overview users during that quarter."
+  },
+  {
+   "id": "8185b5d6-9a9d-4fc6-b7ab-e75c16d9c673",
+   "name": "chips",
+   "labels": [],
+   "summary": "Chips are part of the full-stack industrial competition within the artificial intelligence sector as of June 9, 2026."
+  },
+  {
+   "id": "7f55c323-0f5e-4d55-947b-a4b0ebde3d01",
+   "name": "Nvidia",
+   "labels": [
+    "ChipCompany"
+   ],
+   "summary": "Nvidia is the central toll collector of the AI build-out. The Blackwell Ultra (GB300) platform shipped through 2025. The next-generation \"Vera Rubin\" architecture is slated for 2026. Nvidia CEO Jensen Huang reported that sales for some AI components were \"off the charts.\""
+  },
+  {
+   "id": "7dbfef14-b1a0-4546-ab07-732aa9280424",
+   "name": "Google Cloud",
+   "labels": [
+    "TechCompany"
+   ],
+   "summary": "Google Cloud is part of Alphabet's AI momentum, with Alphabet outlining a $175 billion to $185 billion capital expenditure plan for 2026."
+  },
+  {
+   "id": "78bb328e-ef09-4549-97f3-18570475d974",
+   "name": "Blackwell Ultra",
+   "labels": [],
+   "summary": "The Blackwell Ultra (GB300) platform shipped through 2025."
+  },
+  {
+   "id": "759da347-279b-4f18-a2a1-2f25b0076750",
+   "name": "The Information",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "The Information, a paywalled media outlet, has argued that Apple's caution regarding AI spending could prove advantageous in 2026, particularly if a market correction impacts organizations with higher expenditures."
+  },
+  {
+   "id": "753ce4ca-4610-4297-a3b0-41b671d4df1a",
+   "name": "Apple Intelligence",
+   "labels": [],
+   "summary": "Apple Intelligence and Siri were put back on track by a crucial 2025 meeting, and the company's AI strategy is projected to yield results in 2026."
+  },
+  {
+   "id": "7291f70f-0445-438f-822b-6530e61ef131",
+   "name": "ChatGPT",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "ChatGPT was pioneered by OpenAI as the start of the consumer AI era. Sora is planned to be brought to ChatGPT."
+  },
+  {
+   "id": "71e27f44-58c0-4809-b1cd-87d3f61afe9c",
+   "name": "GPT-4o",
+   "labels": [],
+   "summary": "GPT-4o is a model developed by OpenAI. OpenAI is expanding native GPT-4o image generation across its product surface, and its image generation feature received an upgrade."
+  },
+  {
+   "id": "6fc5ee2b-14ed-4ae2-b690-c0aebe73bca6",
+   "name": "AI Industry Landscape",
+   "labels": [],
+   "summary": "The AI Industry Landscape briefing from June 9, 2026, synthesizes consequential developments in the artificial intelligence sector. The sector is described as the most capital-intensive, strategically contested, and commercially transformative industry, having evolved from a 2022 research race into a full-stack industrial competition across chips, models, agents, devices, infrastructure, energy, and talent."
+  },
+  {
+   "id": "67c12194-fc23-4af3-b47a-28c8810217b5",
+   "name": "GitHub Copilot",
+   "labels": [],
+   "summary": "GitHub Copilot was an AI coding tool used by engineers. By late 2025, it was surpassed by Anthropic's Claude Code in usage."
+  },
+  {
+   "id": "6494ac14-dedf-4cbd-aa30-e628c9e89d48",
+   "name": "Jony Ive",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Jony Ive is the founder of the device startup io. OpenAI acquired io for nearly $6.5 billion all-stock, bringing Ive's company's engineers and researchers to OpenAI, with LoveFrom assuming creative and design responsibilities across OpenAI."
+  },
+  {
+   "id": "55c614a5-44f6-40ae-9255-9d7c055fe3b6",
+   "name": "TechSearchers",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "TechSearchers reported that Google's May 2026 updates, including Gemini 3.5 and Gemini Spark, led to a 63% Google Cloud revenue surge and 2 billion AI Overview users, outpacing competitors."
+  },
+  {
+   "id": "554c309c-faad-43e7-b3b6-37cff791513d",
+   "name": "SpaceX",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "SpaceX entered into a $920 million per month agreement with Google for compute capacity from October 2026 through June 2029. This compute capacity deal is projected to exceed SpaceX's combined Starlink launch and AI revenue from 2025."
+  },
+  {
+   "id": "537dfbf6-b91a-4850-b606-e071a3d7de9d",
+   "name": "product delays",
+   "labels": [],
+   "summary": "A pivotal 2025 leadership meeting restructured Apple's AI division and pushed for deeper Gemini integration, at the cost of product delays."
+  },
+  {
+   "id": "53657360-e90e-4ce3-9aab-f6038e2c87f4",
+   "name": "Vera Rubin",
+   "labels": [],
+   "summary": "The \"Vera Rubin\" architecture is the next generation slated for 2026."
+  },
+  {
+   "id": "50952dda-543e-4e00-80b6-ecbfbabe0480",
+   "name": "infrastructure",
+   "labels": [],
+   "summary": "Infrastructure is part of the full-stack industrial competition within the artificial intelligence sector as of June 9, 2026."
+  },
+  {
+   "id": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "name": "Google",
+   "labels": [
+    "TechCompany"
+   ],
+   "summary": "Google signed a $920 million per month agreement with SpaceX for compute capacity running from October 2026 through June 2029. This deal is projected to exceed SpaceX's combined Starlink launch and AI revenue from 2025."
+  },
+  {
+   "id": "4c7be030-845e-4f41-9a5e-ce0b4cf10d48",
+   "name": "Claude Code",
+   "labels": [],
+   "summary": "Claude Code, an AI coding tool from Anthropic, became the most-used AI coding tool among engineers by late 2025, surpassing Cursor and GitHub Copilot."
+  },
+  {
+   "id": "4c3879b4-52f9-4866-a105-11e08a48dcb3",
+   "name": "Anysphere",
+   "labels": [
+    "Startup"
+   ],
+   "summary": "Anysphere is an AI coding startup with a valuation of -60 billion dollars."
+  },
+  {
+   "id": "47936480-f4b9-4bf2-84e8-e9247ebda076",
+   "name": "Siri",
+   "labels": [],
+   "summary": "Siri's role or status is not mentioned in the provided context."
+  },
+  {
+   "id": "4366fa14-2c93-42ac-9929-b012e0bfe8e3",
+   "name": "models",
+   "labels": [],
+   "summary": "Models are part of the full-stack industrial competition within the artificial intelligence sector as of June 9, 2026."
+  },
+  {
+   "id": "435d2b97-5bcc-4a11-b5c7-6edcde632586",
+   "name": "Google DeepMind",
+   "labels": [],
+   "summary": "Google DeepMind is leveraging custom TPU economics to challenge Nvidia. AI-related Google Cloud workloads are projected to exceed a $1 trillion valuation equivalent by 2026."
+  },
+  {
+   "id": "42420ad0-8792-4968-8f19-ea92c92b03a1",
+   "name": "Search",
+   "labels": [],
+   "summary": "Search is an area of AI momentum for Alphabet, as the company outlined a $175 billion to $185 billion capital expenditure plan for 2026."
+  },
+  {
+   "id": "3dd72f29-5d10-4792-9ad9-b3f989ff5f8b",
+   "name": "Sora",
+   "labels": [],
+   "summary": "Sora is a video generation model from OpenAI that is planned to be integrated into ChatGPT. OpenAI is expanding its Sora video generation across its product surface."
+  },
+  {
+   "id": "366830c6-d1ec-40f9-8151-e1a7d6a3f957",
+   "name": "AI Overview",
+   "labels": [],
+   "summary": "AI Overview reached 2 billion users in May 2026, coinciding with a 63% Google Cloud revenue surge and the launch of Gemini 3.5 and Gemini Spark."
+  },
+  {
+   "id": "33a3992a-132a-446f-ba01-475d5fc57a5e",
+   "name": "Gemini",
+   "labels": [],
+   "summary": "Gemini's AI strategy could pay off in 2026, according to reports."
+  },
+  {
+   "id": "31d317a7-0b08-4c85-8763-5c44b849abd5",
+   "name": "Cursor",
+   "labels": [
+    "Startup"
+   ],
+   "summary": "Cursor was an AI coding tool used by engineers. By late 2025, it was surpassed by Anthropic's Claude Code in usage."
+  },
+  {
+   "id": "2acb465f-685f-477a-b010-72c9cc8c93e3",
+   "name": "io",
+   "labels": [
+    "Startup"
+   ],
+   "summary": "io, a device startup founded by Jony Ive, was acquired by OpenAI for nearly $6.5 billion in an all-stock deal. This acquisition brought approximately 55 engineers and researchers to OpenAI."
+  },
+  {
+   "id": "243cabf5-882d-4f83-bd32-628f2768e292",
+   "name": "xAI",
+   "labels": [],
+   "summary": "xAI is developing massive Memphis-scale training clusters."
+  },
+  {
+   "id": "2134f092-bbb0-4f53-8e14-0fea2ab8dac6",
+   "name": "compute capacity",
+   "labels": [],
+   "summary": "Google has signed a monthly compute deal with SpaceX valued at $920 million. SpaceX's projected annual data center revenue in 2025 is expected to exceed its combined proceeds from Starlink, launch services, and AI."
+  },
+  {
+   "id": "19a94f71-4413-479c-81f0-5fb7a1345ab6",
+   "name": "AI-native consumer hardware",
+   "labels": [],
+   "summary": "This represents OpenAI's largest acquisition to date, signaling an explicit push to own the next generation of AI-native consumer hardware. It involves design responsibilities across the company."
+  },
+  {
+   "id": "18b29d1b-c0d2-4035-8bc1-f4530b314345",
+   "name": "Claude Opus 4.7",
+   "labels": [],
+   "summary": "Released in April 2026, Claude Opus 4.7 is optimized for sustained reasoning, long-running autonomous tasks, and multi-agent coordination."
+  },
+  {
+   "id": "0e8abbf6-a793-4fb3-9fe5-1f3c5d84da92",
+   "name": "talent",
+   "labels": [],
+   "summary": "Talent is part of the full-stack industrial competition within the artificial intelligence sector as of June 9, 2026."
+  },
+  {
+   "id": "0dfbb156-6bdc-42a5-988b-b57fdd09cabb",
+   "name": "superintelligence",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "0b1da77d-bd6a-4fd5-84ea-610456755a9d",
+   "name": "Apple",
+   "labels": [
+    "TechCompany"
+   ],
+   "summary": "Apple's AI strategy is not explicitly mentioned in the provided context."
+  },
+  {
+   "id": "0642e136-81e1-442c-ab97-8880d27eb62a",
+   "name": "agents",
+   "labels": [],
+   "summary": "Agents are part of the full-stack industrial competition within the artificial intelligence sector as of June 9, 2026."
+  },
+  {
+   "id": "05457736-ebe4-4b1b-bf6c-8fc51851bbb3",
+   "name": "AI components",
+   "labels": [],
+   "summary": "Sales for some AI components were reported by Jensen Huang as \"off the charts.\""
+  }
+ ],
+ "links": [
+  {
+   "source": "6fc5ee2b-14ed-4ae2-b690-c0aebe73bca6",
+   "target": "eae26c9a-e72e-4b02-82f3-83b2a199e091",
+   "name": "SYNTHESIZES",
+   "fact": "The AI Industry Landscape report synthesizes consequential developments shaping the artificial intelligence sector."
+  },
+  {
+   "source": "ba065299-ae1a-4e5a-b072-e53222554301",
+   "target": "c6296d71-ba4c-4534-ae22-6417128f356b",
+   "name": "IS_A",
+   "fact": "The foundation model market has crystallized into a five-player oligopoly."
+  },
+  {
+   "source": "554c309c-faad-43e7-b3b6-37cff791513d",
+   "target": "bd1319da-b0e8-47a2-a093-b0b101678279",
+   "name": "HAS_PRODUCT",
+   "fact": "SpaceX's projected annual data center revenue is expected to exceed its combined proceeds from Starlink launch services and AI in 2025."
+  },
+  {
+   "source": "eae26c9a-e72e-4b02-82f3-83b2a199e091",
+   "target": "0e8abbf6-a793-4fb3-9fe5-1f3c5d84da92",
+   "name": "COMPETES_IN",
+   "fact": "The artificial intelligence sector engages in full-stack industrial competition spanning talent."
+  },
+  {
+   "source": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "target": "19a94f71-4413-479c-81f0-5fb7a1345ab6",
+   "name": "PUSHES_TOWARDS",
+   "fact": "OpenAI is explicitly pushing to own the next generation of AI-native consumer hardware."
+  },
+  {
+   "source": "f63d16cb-fc86-4c1f-826c-e79c94f58c92",
+   "target": "0dfbb156-6bdc-42a5-988b-b57fdd09cabb",
+   "name": "FRAMES_DECADE_AS",
+   "fact": "Sam Altman is framing this decade as decisive for whether superintelligence becomes a tool of empowerment or displacement."
+  },
+  {
+   "source": "fe53c0e9-830d-4d52-894e-5e1abdadb2f0",
+   "target": "e8ce1c6a-53b5-4e68-a1d6-fcba587d8fe7",
+   "name": "DRIVES_REVENUE_FOR",
+   "fact": "AI subscriptions drive revenue for Alphabet, reaching $109.9 billion in Q1 2026."
+  },
+  {
+   "source": "a78618b2-61fd-4ada-b0ad-88c8d1076b27",
+   "target": "fe53c0e9-830d-4d52-894e-5e1abdadb2f0",
+   "name": "PART_OF",
+   "fact": "Gemini 3 is associated with AI subscriptions."
+  },
+  {
+   "source": "3dd72f29-5d10-4792-9ad9-b3f989ff5f8b",
+   "target": "7291f70f-0445-438f-822b-6530e61ef131",
+   "name": "AVAILABLE_IN",
+   "fact": "Sora video generation is available in ChatGPT."
+  },
+  {
+   "source": "eae26c9a-e72e-4b02-82f3-83b2a199e091",
+   "target": "949e35af-44e4-400a-961a-8e68ac50681a",
+   "name": "COMPETES_IN",
+   "fact": "The artificial intelligence sector engages in full-stack industrial competition spanning energy."
+  },
+  {
+   "source": "31d317a7-0b08-4c85-8763-5c44b849abd5",
+   "target": "7f55c323-0f5e-4d55-947b-a4b0ebde3d01",
+   "name": "BACKED_BY",
+   "fact": "Cursor is backed by Nvidia."
+  },
+  {
+   "source": "31d317a7-0b08-4c85-8763-5c44b849abd5",
+   "target": "4c3879b4-52f9-4866-a105-11e08a48dcb3",
+   "name": "WORKS_FOR",
+   "fact": "Cursor is a product of Anysphere."
+  },
+  {
+   "source": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "target": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "name": "COMPETES_WITH",
+   "fact": "OpenAI competes with Google."
+  },
+  {
+   "source": "4c7be030-845e-4f41-9a5e-ce0b4cf10d48",
+   "target": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "name": "WORKS_FOR",
+   "fact": "Claude Code is associated with Anthropic."
+  },
+  {
+   "source": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "target": "bd1319da-b0e8-47a2-a093-b0b101678279",
+   "name": "USES_COMPUTE_CAPACITY_FROM",
+   "fact": "Google's compute capacity agreement with SpaceX is projected to exceed SpaceX's combined Starlink launch and AI revenue from 2025."
+  },
+  {
+   "source": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "target": "7291f70f-0445-438f-822b-6530e61ef131",
+   "name": "PIONEERED",
+   "fact": "OpenAI pioneered the consumer AI era with ChatGPT."
+  },
+  {
+   "source": "eae26c9a-e72e-4b02-82f3-83b2a199e091",
+   "target": "4366fa14-2c93-42ac-9929-b012e0bfe8e3",
+   "name": "COMPETES_IN",
+   "fact": "The artificial intelligence sector engages in full-stack industrial competition spanning models."
+  },
+  {
+   "source": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "target": "366830c6-d1ec-40f9-8151-e1a7d6a3f957",
+   "name": "HAD_USERS",
+   "fact": "Google had 2 billion AI Overview users."
+  },
+  {
+   "source": "9ab2b837-8016-4601-96c8-aff936ec1a5c",
+   "target": "05457736-ebe4-4b1b-bf6c-8fc51851bbb3",
+   "name": "REPORTED_SALES",
+   "fact": "Jensen Huang reported that sales for some AI components were 'off the charts'."
+  },
+  {
+   "source": "7f55c323-0f5e-4d55-947b-a4b0ebde3d01",
+   "target": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "name": "SUPPLIES_CHIPS_TO",
+   "fact": "Nvidia's AI components sales were 'off the charts', easing concerns about an AI spending bubble."
+  },
+  {
+   "source": "435d2b97-5bcc-4a11-b5c7-6edcde632586",
+   "target": "8998e10a-2eb1-46fd-b17a-b202520548f1",
+   "name": "EXPLOITS",
+   "fact": "Google DeepMind is leveraging TPU economics to challenge Nvidia."
+  },
+  {
+   "source": "e8ce1c6a-53b5-4e68-a1d6-fcba587d8fe7",
+   "target": "e8ce1c6a-53b5-4e68-a1d6-fcba587d8fe7",
+   "name": "HAS_CAPITAL_EXPENDITURE_PLAN",
+   "fact": "Alphabet has outlined a $175–$185 billion capital expenditure plan for 2026."
+  },
+  {
+   "source": "8ab48cd6-efcc-4009-9508-031e91a66dd4",
+   "target": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "name": "ASSUMES_RESPONSIBILITY_FOR",
+   "fact": "LoveFrom assumes creative and design responsibilities across OpenAI."
+  },
+  {
+   "source": "759da347-279b-4f18-a2a1-2f25b0076750",
+   "target": "0b1da77d-bd6a-4fd5-84ea-610456755a9d",
+   "name": "REPORTS_ON",
+   "fact": "The Information has argued that Apple's caution could pay off in 2026 if a market correction punishes the higher-spending labs."
+  },
+  {
+   "source": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "target": "7dbfef14-b1a0-4546-ab07-732aa9280424",
+   "name": "EXPERIENCED_REVENUE_SURGE",
+   "fact": "Google experienced a 63% Google Cloud revenue surge."
+  },
+  {
+   "source": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "target": "18b29d1b-c0d2-4035-8bc1-f4530b314345",
+   "name": "HAS_ADOPTION_OF",
+   "fact": "Anthropic's enterprise adoption of the Claude 4.7 reasoning model is driving revenue."
+  },
+  {
+   "source": "e8ce1c6a-53b5-4e68-a1d6-fcba587d8fe7",
+   "target": "50952dda-543e-4e00-80b6-ecbfbabe0480",
+   "name": "COMMITS_CAPITAL_TO",
+   "fact": "Alphabet is committing up to $185 billion in 2026 towards AI infrastructure."
+  },
+  {
+   "source": "eae26c9a-e72e-4b02-82f3-83b2a199e091",
+   "target": "50952dda-543e-4e00-80b6-ecbfbabe0480",
+   "name": "COMPETES_IN",
+   "fact": "The artificial intelligence sector engages in full-stack industrial competition spanning infrastructure."
+  },
+  {
+   "source": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "target": "2acb465f-685f-477a-b010-72c9cc8c93e3",
+   "name": "ACQUIRED",
+   "fact": "OpenAI acquired io, Jony Ive's device startup, for nearly $6.5 billion all-stock."
+  },
+  {
+   "source": "435d2b97-5bcc-4a11-b5c7-6edcde632586",
+   "target": "7f55c323-0f5e-4d55-947b-a4b0ebde3d01",
+   "name": "CHALLENGES",
+   "fact": "Google DeepMind's use of TPU economics is challenging Nvidia."
+  },
+  {
+   "source": "18b29d1b-c0d2-4035-8bc1-f4530b314345",
+   "target": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "name": "OPTIMIZED_FOR",
+   "fact": "Claude Opus 4.7 is optimized for sustained reasoning, long-running autonomous tasks, and multi-agent coordination, surpassing OpenAI in revenue."
+  },
+  {
+   "source": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "target": "b683bbca-00b6-430c-b2e1-c6f50c2a4b6c",
+   "name": "LAUNCHED",
+   "fact": "Google launched Gemini Spark."
+  },
+  {
+   "source": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "target": "ec1eb1d8-b7e7-4550-911e-82635f188b2d",
+   "name": "WORKS_FOR",
+   "fact": "Peter Welinder is at OpenAI and oversees the engineers and researchers from the io acquisition."
+  },
+  {
+   "source": "0b1da77d-bd6a-4fd5-84ea-610456755a9d",
+   "target": "33a3992a-132a-446f-ba01-475d5fc57a5e",
+   "name": "DEPENDS_ON",
+   "fact": "Apple is restructuring its AI division and pushing for deeper Gemini integration, with Siri and Apple Intelligence features delayed until spring 2026."
+  },
+  {
+   "source": "ec1eb1d8-b7e7-4550-911e-82635f188b2d",
+   "target": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "name": "WORKS_FOR",
+   "fact": "Peter Welinder works for OpenAI and oversees the roughly 55 engineers and researchers from io."
+  },
+  {
+   "source": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "target": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "name": "PARTNERS_WITH",
+   "fact": "Anthropic's revenue surpasses OpenAI's revenue."
+  },
+  {
+   "source": "7291f70f-0445-438f-822b-6530e61ef131",
+   "target": "f63d16cb-fc86-4c1f-826c-e79c94f58c92",
+   "name": "REPORTS_ON",
+   "fact": "Capitaly reported on Sam Altman's $1T vision for OpenAI."
+  },
+  {
+   "source": "42420ad0-8792-4968-8f19-ea92c92b03a1",
+   "target": "e8ce1c6a-53b5-4e68-a1d6-fcba587d8fe7",
+   "name": "DRIVES_REVENUE_FOR",
+   "fact": "Search drives revenue for Alphabet, reaching $109.9 billion in Q1 2026."
+  },
+  {
+   "source": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "target": "3dd72f29-5d10-4792-9ad9-b3f989ff5f8b",
+   "name": "EXPANDS",
+   "fact": "OpenAI continues to expand Sora video generation across its product surface."
+  },
+  {
+   "source": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "target": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "name": "REVENUE_COMPARISON",
+   "fact": "Anthropic's annualized revenue of $45 billion by mid-2026 was 35% higher than OpenAI's $33 billion ARR."
+  },
+  {
+   "source": "eae26c9a-e72e-4b02-82f3-83b2a199e091",
+   "target": "0642e136-81e1-442c-ab97-8880d27eb62a",
+   "name": "COMPETES_IN",
+   "fact": "The artificial intelligence sector engages in full-stack industrial competition spanning agents."
+  },
+  {
+   "source": "554c309c-faad-43e7-b3b6-37cff791513d",
+   "target": "bd1319da-b0e8-47a2-a093-b0b101678279",
+   "name": "HAS_PRODUCT",
+   "fact": "SpaceX's revenue includes Starlink launch and AI."
+  },
+  {
+   "source": "71e27f44-58c0-4809-b1cd-87d3f61afe9c",
+   "target": "7291f70f-0445-438f-822b-6530e61ef131",
+   "name": "AVAILABLE_IN",
+   "fact": "GPT-4o image generation is available in ChatGPT."
+  },
+  {
+   "source": "0b1da77d-bd6a-4fd5-84ea-610456755a9d",
+   "target": "753ce4ca-4610-4297-a3b0-41b671d4df1a",
+   "name": "DELAYED_UNTIL",
+   "fact": "Apple is restructuring its AI division and pushing for deeper Gemini integration, with Siri and Apple Intelligence features delayed until spring 2026."
+  },
+  {
+   "source": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "target": "6494ac14-dedf-4cbd-aa30-e628c9e89d48",
+   "name": "WORKS_FOR",
+   "fact": "OpenAI made a $6.5B bet on Jony Ive."
+  },
+  {
+   "source": "4c3879b4-52f9-4866-a105-11e08a48dcb3",
+   "target": "4c3879b4-52f9-4866-a105-11e08a48dcb3",
+   "name": "HAS_ARR",
+   "fact": "Anysphere has ARR above $1 billion and a $6 billion end-of-year run-rate in sight."
+  },
+  {
+   "source": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "target": "18b29d1b-c0d2-4035-8bc1-f4530b314345",
+   "name": "DEVELOPS",
+   "fact": "Anthropic develops the Claude 4.7 reasoning model."
+  },
+  {
+   "source": "4c7be030-845e-4f41-9a5e-ce0b4cf10d48",
+   "target": "67c12194-fc23-4af3-b47a-28c8810217b5",
+   "name": "COMPETES_WITH",
+   "fact": "Claude Code competes with GitHub Copilot."
+  },
+  {
+   "source": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "target": "d5ef46b5-172b-44de-9fc2-402375be2031",
+   "name": "COMPETES_WITH",
+   "fact": "OpenAI competes with Meta."
+  },
+  {
+   "source": "eae26c9a-e72e-4b02-82f3-83b2a199e091",
+   "target": "c2c219dd-5a30-46ce-8bd9-daf64a5046f6",
+   "name": "COMPETES_IN",
+   "fact": "The artificial intelligence sector engages in full-stack industrial competition spanning devices."
+  },
+  {
+   "source": "f63d16cb-fc86-4c1f-826c-e79c94f58c92",
+   "target": "9a8d8957-c6d7-48b4-b399-15575af762fb",
+   "name": "PREDICTS_SUPERINTELLIGENCE_BY",
+   "fact": "Sam Altman has publicly predicted AI will exceed human intelligence by 2030."
+  },
+  {
+   "source": "0b1da77d-bd6a-4fd5-84ea-610456755a9d",
+   "target": "0b1da77d-bd6a-4fd5-84ea-610456755a9d",
+   "name": "RESTRUCTURED_AI_DIVISION",
+   "fact": "Apple restructured its AI division in a pivotal 2025 leadership meeting."
+  },
+  {
+   "source": "7dbfef14-b1a0-4546-ab07-732aa9280424",
+   "target": "e8ce1c6a-53b5-4e68-a1d6-fcba587d8fe7",
+   "name": "DRIVES_REVENUE_FOR",
+   "fact": "Google Cloud drives revenue for Alphabet, reaching $109.9 billion in Q1 2026."
+  },
+  {
+   "source": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "target": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "name": "COMPETES_WITH",
+   "fact": "Anthropic competes with OpenAI in the AI foundation model market."
+  },
+  {
+   "source": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "target": "d5ef46b5-172b-44de-9fc2-402375be2031",
+   "name": "COMPETES_WITH",
+   "fact": "Google competes with Meta."
+  },
+  {
+   "source": "6494ac14-dedf-4cbd-aa30-e628c9e89d48",
+   "target": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "name": "WORKS_FOR",
+   "fact": "Jony Ive leads OpenAI's design work."
+  },
+  {
+   "source": "e92b9090-ef69-4944-ae5b-5a1cb21f8798",
+   "target": "d5ef46b5-172b-44de-9fc2-402375be2031",
+   "name": "LEADS",
+   "fact": "Mark Zuckerberg leads Meta and believes developing superintelligence is in sight."
+  },
+  {
+   "source": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "target": "2134f092-bbb0-4f53-8e14-0fea2ab8dac6",
+   "name": "PURCHASES",
+   "fact": "Google is purchasing compute capacity from SpaceX."
+  },
+  {
+   "source": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "target": "4c7be030-845e-4f41-9a5e-ce0b4cf10d48",
+   "name": "DEVELOPS",
+   "fact": "Anthropic develops Claude Code."
+  },
+  {
+   "source": "d5ef46b5-172b-44de-9fc2-402375be2031",
+   "target": "0dfbb156-6bdc-42a5-988b-b57fdd09cabb",
+   "name": "SHOWED_EARLY_SIGNS_OF",
+   "fact": "Meta's AI systems began showing early signs of self-improvement towards superintelligence."
+  },
+  {
+   "source": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "target": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "name": "REPORTS_ON",
+   "fact": "TechCrunch reported on OpenAI and Jony Ive."
+  },
+  {
+   "source": "243cabf5-882d-4f83-bd32-628f2768e292",
+   "target": "243cabf5-882d-4f83-bd32-628f2768e292",
+   "name": "BUILDS",
+   "fact": "xAI is building the 'gigafactory of compute' with massive Memphis-scale training clusters."
+  },
+  {
+   "source": "31d317a7-0b08-4c85-8763-5c44b849abd5",
+   "target": "93d978c6-6b35-430d-b9a2-423566439b26",
+   "name": "BACKED_BY",
+   "fact": "Cursor is backed by a16z."
+  },
+  {
+   "source": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "target": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "name": "ACHIEVED_OPERATING_PROFIT",
+   "fact": "Anthropic achieved its first-ever quarterly operating profit of $559 million."
+  },
+  {
+   "source": "0b1da77d-bd6a-4fd5-84ea-610456755a9d",
+   "target": "33a3992a-132a-446f-ba01-475d5fc57a5e",
+   "name": "DEPENDS_ON",
+   "fact": "Apple exhibits a dependence on Gemini."
+  },
+  {
+   "source": "0b1da77d-bd6a-4fd5-84ea-610456755a9d",
+   "target": "537dfbf6-b91a-4850-b606-e071a3d7de9d",
+   "name": "CAUSED",
+   "fact": "The push for Gemini integration at Apple reportedly caused product delays."
+  },
+  {
+   "source": "eae26c9a-e72e-4b02-82f3-83b2a199e091",
+   "target": "8185b5d6-9a9d-4fc6-b7ab-e75c16d9c673",
+   "name": "COMPETES_IN",
+   "fact": "The artificial intelligence sector engages in full-stack industrial competition spanning chips."
+  },
+  {
+   "source": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "target": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "name": "COMPETES_WITH",
+   "fact": "Anthropic competes with Google."
+  },
+  {
+   "source": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "target": "83c797b3-8a42-4af0-8bd6-85f06cc02309",
+   "name": "LAUNCHED",
+   "fact": "Google launched Gemini 3.5."
+  },
+  {
+   "source": "31d317a7-0b08-4c85-8763-5c44b849abd5",
+   "target": "4c7be030-845e-4f41-9a5e-ce0b4cf10d48",
+   "name": "IS_VALUED_HIGHER_THAN",
+   "fact": "Cursor is valued at $50B+ and Claude Code surpasses all competitors in usage, making AI coding the first true \"killer app\" of the agentic era."
+  },
+  {
+   "source": "7f55c323-0f5e-4d55-947b-a4b0ebde3d01",
+   "target": "53657360-e90e-4ce3-9aab-f6038e2c87f4",
+   "name": "ANNOUNCED_ARCHITECTURE",
+   "fact": "Nvidia announced the next-generation Vera Rubin architecture slated for 2026."
+  },
+  {
+   "source": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "target": "7dbfef14-b1a0-4546-ab07-732aa9280424",
+   "name": "OWNS",
+   "fact": "Google owns Google Cloud."
+  },
+  {
+   "source": "4c3879b4-52f9-4866-a105-11e08a48dcb3",
+   "target": "31d317a7-0b08-4c85-8763-5c44b849abd5",
+   "name": "MAKES",
+   "fact": "Anysphere makes Cursor."
+  },
+  {
+   "source": "4c7be030-845e-4f41-9a5e-ce0b4cf10d48",
+   "target": "31d317a7-0b08-4c85-8763-5c44b849abd5",
+   "name": "COMPETES_WITH",
+   "fact": "Claude Code competes with Cursor."
+  },
+  {
+   "source": "6494ac14-dedf-4cbd-aa30-e628c9e89d48",
+   "target": "8ab48cd6-efcc-4009-9508-031e91a66dd4",
+   "name": "WORKS_FOR",
+   "fact": "Jony Ive is associated with LoveFrom, which is assuming creative and design responsibilities at OpenAI."
+  },
+  {
+   "source": "4c3879b4-52f9-4866-a105-11e08a48dcb3",
+   "target": "4c3879b4-52f9-4866-a105-11e08a48dcb3",
+   "name": "IN_TALKS_TO_RAISE",
+   "fact": "Anysphere is in talks to raise $2 billion at a $50+ billion valuation."
+  },
+  {
+   "source": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "target": "6494ac14-dedf-4cbd-aa30-e628c9e89d48",
+   "name": "ACQUIRED",
+   "fact": "OpenAI acquired Jony Ive's company."
+  },
+  {
+   "source": "6494ac14-dedf-4cbd-aa30-e628c9e89d48",
+   "target": "2acb465f-685f-477a-b010-72c9cc8c93e3",
+   "name": "FOUNDED",
+   "fact": "Jony Ive founded the device startup io."
+  },
+  {
+   "source": "f63d16cb-fc86-4c1f-826c-e79c94f58c92",
+   "target": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "name": "LEADS",
+   "fact": "Sam Altman leads OpenAI."
+  },
+  {
+   "source": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "target": "4c7be030-845e-4f41-9a5e-ce0b4cf10d48",
+   "name": "HAS_ADOPTION_OF",
+   "fact": "Anthropic's enterprise adoption of Claude Code is driving revenue."
+  },
+  {
+   "source": "d5ef46b5-172b-44de-9fc2-402375be2031",
+   "target": "8dad4d64-df03-476a-82d7-d73a203eb6ed",
+   "name": "IDENTITY_IS",
+   "fact": "Meta has staked its identity on personal superintelligence."
+  },
+  {
+   "source": "4c7be030-845e-4f41-9a5e-ce0b4cf10d48",
+   "target": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "name": "WORKS_FOR",
+   "fact": "Claude Code surpasses all competitors in usage."
+  },
+  {
+   "source": "a78618b2-61fd-4ada-b0ad-88c8d1076b27",
+   "target": "42420ad0-8792-4968-8f19-ea92c92b03a1",
+   "name": "PART_OF",
+   "fact": "Gemini 3 is associated with Search."
+  },
+  {
+   "source": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "target": "554c309c-faad-43e7-b3b6-37cff791513d",
+   "name": "PARTNERS_WITH",
+   "fact": "Google signed a $920 million per month agreement with SpaceX for compute capacity running from October 2026 through June 2029."
+  },
+  {
+   "source": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "target": "55c614a5-44f6-40ae-9255-9d7c055fe3b6",
+   "name": "REPORTED_ON",
+   "fact": "TechSearchers reported on Google's AI updates and performance in 2026."
+  },
+  {
+   "source": "0b1da77d-bd6a-4fd5-84ea-610456755a9d",
+   "target": "47936480-f4b9-4bf2-84e8-e9247ebda076",
+   "name": "HAS_FEATURE",
+   "fact": "Apple's personalized Siri was promised in 2024 but delayed until spring 2026 for iPhone users."
+  },
+  {
+   "source": "a78618b2-61fd-4ada-b0ad-88c8d1076b27",
+   "target": "7dbfef14-b1a0-4546-ab07-732aa9280424",
+   "name": "PART_OF",
+   "fact": "Gemini 3 is associated with Google Cloud."
+  },
+  {
+   "source": "e2180293-c55f-4208-9050-d1a890cb8259",
+   "target": "18b29d1b-c0d2-4035-8bc1-f4530b314345",
+   "name": "RELEASED_VERSION",
+   "fact": "Anthropic released Claude Opus 4.7 in April 2026."
+  },
+  {
+   "source": "e8ce1c6a-53b5-4e68-a1d6-fcba587d8fe7",
+   "target": "a78618b2-61fd-4ada-b0ad-88c8d1076b27",
+   "name": "LAUNCHED",
+   "fact": "Alphabet launched Gemini 3."
+  },
+  {
+   "source": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "target": "71e27f44-58c0-4809-b1cd-87d3f61afe9c",
+   "name": "EXPANDS",
+   "fact": "OpenAI continues to expand native GPT-4o image generation across its product surface."
+  },
+  {
+   "source": "e92b9090-ef69-4944-ae5b-5a1cb21f8798",
+   "target": "0dfbb156-6bdc-42a5-988b-b57fdd09cabb",
+   "name": "DECLARED_TARGET_IS",
+   "fact": "Mark Zuckerberg declared in mid-2025 that developing superintelligence is now in sight."
+  },
+  {
+   "source": "d5ef46b5-172b-44de-9fc2-402375be2031",
+   "target": "4f90cc46-ec1f-4b17-a427-3ca2eaf55143",
+   "name": "COMPETES_WITH",
+   "fact": "Meta competes with Google."
+  },
+  {
+   "source": "0b1da77d-bd6a-4fd5-84ea-610456755a9d",
+   "target": "fca298d1-6d64-489b-8e37-361e5a315198",
+   "name": "PUSHED_FOR",
+   "fact": "Apple pushed for deeper Gemini integration following a 2025 leadership meeting."
+  },
+  {
+   "source": "d1c61c9a-1c27-45f1-9776-e641ba4d5b01",
+   "target": "18b29d1b-c0d2-4035-8bc1-f4530b314345",
+   "name": "DEVELOPS",
+   "fact": "OpenAI is developing the Claude 4.7 reasoning model."
+  },
+  {
+   "source": "7f55c323-0f5e-4d55-947b-a4b0ebde3d01",
+   "target": "78bb328e-ef09-4549-97f3-18570475d974",
+   "name": "ANNOUNCED_PLATFORM",
+   "fact": "Nvidia announced the Blackwell Ultra platform, which shipped through 2025."
+  }
+ ],
+ "graph_id": "mirofish_6c43fe85d13644f2"
+}

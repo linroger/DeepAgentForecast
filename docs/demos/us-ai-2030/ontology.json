@@ -1,0 +1,477 @@
+{
+ "entity_types": [
+  {
+   "name": "AILab",
+   "description": "AI foundation model labs/companies developing frontier models (e.g., OpenAI, Anthropic, Google De...",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Official name of the AI lab"
+    },
+    {
+     "name": "arr_usd",
+     "type": "text",
+     "description": "Annualized revenue run-rate in USD"
+    },
+    {
+     "name": "key_model",
+     "type": "text",
+     "description": "Current flagship model name"
+    }
+   ],
+   "examples": [
+    "OpenAI",
+    "Anthropic",
+    "Google DeepMind",
+    "xAI"
+   ]
+  },
+  {
+   "name": "TechCompany",
+   "description": "Large tech corporations with AI strategies but not pure AI labs (e.g., Meta, Apple)",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Official company name"
+    },
+    {
+     "name": "ai_strategy",
+     "type": "text",
+     "description": "Stated AI strategy or vision"
+    },
+    {
+     "name": "quarterly_revenue",
+     "type": "text",
+     "description": "Most recent quarterly revenue"
+    }
+   ],
+   "examples": [
+    "Meta",
+    "Apple",
+    "Alphabet"
+   ]
+  },
+  {
+   "name": "ChipCompany",
+   "description": "Semiconductor companies providing AI compute hardware (e.g., Nvidia)",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Official company name"
+    },
+    {
+     "name": "current_architecture",
+     "type": "text",
+     "description": "Current chip architecture in production"
+    },
+    {
+     "name": "next_architecture",
+     "type": "text",
+     "description": "Next-generation chip architecture roadmap"
+    }
+   ],
+   "examples": [
+    "Nvidia",
+    "AMD"
+   ]
+  },
+  {
+   "name": "Startup",
+   "description": "Venture-backed AI startups in coding, devices, or other vertical applications",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Official startup name"
+    },
+    {
+     "name": "valuation_usd",
+     "type": "text",
+     "description": "Latest known valuation in USD"
+    },
+    {
+     "name": "focus_area",
+     "type": "text",
+     "description": "Primary product or focus area"
+    }
+   ],
+   "examples": [
+    "Anysphere (Cursor)",
+    "io (acquired by OpenAI)"
+   ]
+  },
+  {
+   "name": "CEO",
+   "description": "Chief executive officers and top leaders of major AI/tech companies who publicly shape narrative",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full name of the executive"
+    },
+    {
+     "name": "company",
+     "type": "text",
+     "description": "Company they lead"
+    },
+    {
+     "name": "public_stance",
+     "type": "text",
+     "description": "Publicly stated position on AI's future"
+    }
+   ],
+   "examples": [
+    "Sam Altman",
+    "Mark Zuckerberg",
+    "Jensen Huang",
+    "Dario Amodei"
+   ]
+  },
+  {
+   "name": "Designer",
+   "description": "Prominent product designers and creative leads shaping AI hardware/interface design",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full name of the designer"
+    },
+    {
+     "name": "affiliation",
+     "type": "text",
+     "description": "Current organization or studio"
+    },
+    {
+     "name": "design_focus",
+     "type": "text",
+     "description": "Current design focus area"
+    }
+   ],
+   "examples": [
+    "Jony Ive"
+   ]
+  },
+  {
+   "name": "TechExecutive",
+   "description": "Non-CEO senior executives at AI/tech companies (VPs, division heads, etc.)",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full name of the executive"
+    },
+    {
+     "name": "role",
+     "type": "text",
+     "description": "Job title or role"
+    },
+    {
+     "name": "company",
+     "type": "text",
+     "description": "Company they work for"
+    }
+   ],
+   "examples": [
+    "Peter Welinder"
+   ]
+  },
+  {
+   "name": "MediaOutlet",
+   "description": "News media organizations that report on the AI industry",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Official media outlet name"
+    },
+    {
+     "name": "media_type",
+     "type": "text",
+     "description": "Type of media (mainstream, tech-focused, paywalled, etc.)"
+    },
+    {
+     "name": "editorial_stance",
+     "type": "text",
+     "description": "Known editorial perspective on AI"
+    }
+   ],
+   "examples": [
+    "TechCrunch",
+    "The Guardian",
+    "The Information",
+    "CNBC",
+    "BBC"
+   ]
+  },
+  {
+   "name": "Person",
+   "description": "Catch-all type for any natural person not fitting other specific person types (e.g., general publ...",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Person's full name or handle"
+    },
+    {
+     "name": "role_description",
+     "type": "text",
+     "description": "Brief description of who they are"
+    }
+   ],
+   "examples": [
+    "Various industry analysts",
+    "Anonymous online commenters",
+    "General public figures"
+   ]
+  },
+  {
+   "name": "Organization",
+   "description": "Catch-all type for any organization/institution not fitting other specific org types (e.g., small...",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "Organization name"
+    },
+    {
+     "name": "sector",
+     "type": "text",
+     "description": "Industry sector or domain"
+    }
+   ],
+   "examples": [
+    "a16z (VC firm)",
+    "Thrive Capital",
+    "Various industry associations"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "LEADS",
+   "description": "Serves as CEO or top leader of a company",
+   "source_targets": [
+    {
+     "source": "CEO",
+     "target": "AILab"
+    },
+    {
+     "source": "CEO",
+     "target": "TechCompany"
+    },
+    {
+     "source": "CEO",
+     "target": "ChipCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "WORKS_FOR",
+   "description": "Employed by or affiliated with an organization",
+   "source_targets": [
+    {
+     "source": "TechExecutive",
+     "target": "AILab"
+    },
+    {
+     "source": "TechExecutive",
+     "target": "TechCompany"
+    },
+    {
+     "source": "Designer",
+     "target": "AILab"
+    },
+    {
+     "source": "Designer",
+     "target": "TechCompany"
+    },
+    {
+     "source": "Person",
+     "target": "Organization"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "ACQUIRED",
+   "description": "Acquired or merged with another company",
+   "source_targets": [
+    {
+     "source": "AILab",
+     "target": "Startup"
+    },
+    {
+     "source": "AILab",
+     "target": "TechCompany"
+    },
+    {
+     "source": "TechCompany",
+     "target": "Startup"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "SUPPLIES_CHIPS_TO",
+   "description": "Provides AI chips or compute infrastructure to another company",
+   "source_targets": [
+    {
+     "source": "ChipCompany",
+     "target": "AILab"
+    },
+    {
+     "source": "ChipCompany",
+     "target": "TechCompany"
+    },
+    {
+     "source": "TechCompany",
+     "target": "AILab"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "COMPETES_WITH",
+   "description": "Directly competes in the AI foundation model or AI product market",
+   "source_targets": [
+    {
+     "source": "AILab",
+     "target": "AILab"
+    },
+    {
+     "source": "AILab",
+     "target": "TechCompany"
+    },
+    {
+     "source": "AILab",
+     "target": "Startup"
+    },
+    {
+     "source": "TechCompany",
+     "target": "TechCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "INVESTS_IN",
+   "description": "Provides venture capital or strategic investment",
+   "source_targets": [
+    {
+     "source": "ChipCompany",
+     "target": "Startup"
+    },
+    {
+     "source": "Organization",
+     "target": "Startup"
+    },
+    {
+     "source": "Organization",
+     "target": "AILab"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "REPORTS_ON",
+   "description": "Publishes news or analysis about a company or executive",
+   "source_targets": [
+    {
+     "source": "MediaOutlet",
+     "target": "AILab"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "TechCompany"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "ChipCompany"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "CEO"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "CRITICIZES",
+   "description": "Publicly questions or criticizes another entity's strategy or claims",
+   "source_targets": [
+    {
+     "source": "CEO",
+     "target": "AILab"
+    },
+    {
+     "source": "CEO",
+     "target": "TechCompany"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "AILab"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "TechCompany"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "CEO"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "SUPPORTS",
+   "description": "Publicly endorses or expresses support for an entity's strategy or product",
+   "source_targets": [
+    {
+     "source": "CEO",
+     "target": "AILab"
+    },
+    {
+     "source": "CEO",
+     "target": "TechCompany"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "AILab"
+    },
+    {
+     "source": "TechCompany",
+     "target": "AILab"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "PARTNERS_WITH",
+   "description": "Has a formal commercial or technical partnership",
+   "source_targets": [
+    {
+     "source": "AILab",
+     "target": "TechCompany"
+    },
+    {
+     "source": "AILab",
+     "target": "ChipCompany"
+    },
+    {
+     "source": "TechCompany",
+     "target": "TechCompany"
+    },
+    {
+     "source": "AILab",
+     "target": "AILab"
+    }
+   ],
+   "attributes": []
+  }
+ ],
+ "analysis_summary": "本模拟需求聚焦于2030年美国AI领域主导者的预测，文本涵盖了OpenAI、Anthropic、Google DeepMind、Meta四大前沿AI实验室，以及Nvidia（芯片）、Apple（消费硬件）、Anysphere/Cursor（AI编程）、SpaceX（算力）等关键参与者。核心舆论议题包括：AGI/超级智能的2030年路线图之争、万亿美元级资本支出、英伟达vs自研芯片TPU的经济学、Anthropic反超OpenAI的营收逆转、OpenAI 65亿美元收购io押注后智能手机交互、苹果Apple Intelligence延期、Meta个人超级智能战略等。涉及的舆论发声主体高度集中：企业层面有AI实验室（OpenAI/Anthropic/DeepMind/xAI）、大型科技公司（Meta/Apple/Alphabet）、芯片公司（Nvidia）、AI编程初创（Anysphere）；个人层面有CEO（Altman/Zuckerberg/Huang/Amodei）、设计师（Ive）、高管（Welinder）；以及专业科技媒体（TechCrunch/卫报/The Information）。实体类型设计将'AI实验室'独立成类以突出其核心地位，同时设置CEO、Designer、TechExecutive区分不同影响力层级的个人，最后以Person和Organization兜底涵盖普通评论者、VC等次要角色。关系类型覆盖了竞争、收购、芯片供应、投资、媒体监督、CEO表态等社媒舆论中最常见的互动模式。"
+}

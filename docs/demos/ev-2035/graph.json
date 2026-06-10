@@ -1,0 +1,1065 @@
+{
+ "nodes": [
+  {
+   "id": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "name": "Hyundai",
+   "labels": [],
+   "summary": "Hyundai is part of Hyundai Motor Group's 31-model EV lineup."
+  },
+  {
+   "id": "fb6d23d1-8bbe-4200-a89e-5468f0ad7c0a",
+   "name": "2030",
+   "labels": [],
+   "summary": "This year is the reinstated deadline for the ban on the sale of new ICE vehicles in the United Kingdom, confirmed by the Labour government in July 2024 and a parliamentary statement in January 2025. The deadline was previously moved to 2035."
+  },
+  {
+   "id": "f7e8a535-4659-43ad-923a-b6b1aca5679e",
+   "name": "BBC",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "BBC reported that BYD surpassed Tesla to become the global EV market leader in 2025, with China making EVs mainstream."
+  },
+  {
+   "id": "f78628ca-8534-4e1e-923f-0150aeda72e8",
+   "name": "Malaysia",
+   "labels": [],
+   "summary": "Malaysia is a planned future production location for BYD."
+  },
+  {
+   "id": "efd69e08-d575-486f-9280-bff657d9e8be",
+   "name": "Hyundai Battery Strategy 2025",
+   "labels": [],
+   "summary": "Hyundai's 2025 Battery Strategy outlines its plan to become an energy powerhouse, focusing on battery technology."
+  },
+  {
+   "id": "ee7105e8-ce61-4d74-a7e6-e74b93d303e5",
+   "name": "英国",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "ec32c175-b661-448f-b246-e2a3e5d8d7de",
+   "name": "Volkswagen",
+   "labels": [],
+   "summary": "Volkswagen is mentioned in the context of autonomous driving technology development."
+  },
+  {
+   "id": "ec1c6adb-a5f1-4ee0-85d0-ce3e3252ff40",
+   "name": "local brands",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "ec09380b-ada5-48a0-ae5a-278e27c44bc5",
+   "name": "vertical integration depth",
+   "labels": [],
+   "summary": "Long-term success depends on vertical integration depth."
+  },
+  {
+   "id": "ea994af8-6fe3-4ee5-9178-c1b12d51a127",
+   "name": "Intelligent driving technology",
+   "labels": [],
+   "summary": "Resources are available on End-to-End Autonomous Driving, Multimodal Fusion Autonomous Driving, and the Future of Autonomous Driving, which compares single-vehicle intelligence with vehicle-road coordination. Volkswagen is associated with Mobileye in this field."
+  },
+  {
+   "id": "e836db88-b92f-4f57-8045-2f479c5e82e6",
+   "name": "European Union",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "BYD is investing in a plant in Turkey with an annual capacity of 150,000 vehicles specifically to avoid European Union tariffs."
+  },
+  {
+   "id": "e50da547-e44e-40f4-8b26-b35a408bc6bf",
+   "name": "IONIQ 3",
+   "labels": [],
+   "summary": "The IONIQ 3 is a regionally customized product from Hyundai Motor Group, targeting the European mass market."
+  },
+  {
+   "id": "d9640271-f4f6-4005-85f7-063891dc5f5b",
+   "name": "i-VICS",
+   "labels": [],
+   "summary": "i-VICS, or Vehicle-Road Collaborative Systems, is one of the two technical routes developing in parallel for autonomous driving, alongside SAD (Single-car Intelligence)."
+  },
+  {
+   "id": "d7cb90da-5c22-4d3c-961e-3dae22c28bcb",
+   "name": "China car online",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "d5792b9e-ab66-43c6-999d-bee70886c492",
+   "name": "Tesla",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "d2130e67-3233-4d62-9210-ce0661613304",
+   "name": "BYD Production Network",
+   "labels": [],
+   "summary": "The BYD Production Network article from automotive world discusses BYD's global production network."
+  },
+  {
+   "id": "d0ce283e-c2d6-443d-ae63-1b59d25f26f0",
+   "name": "Southeast Asia",
+   "labels": [],
+   "summary": "VinFast announced an indefinite postponement of its expansion into Southeast Asia due to an inability to compete with Chinese brands in price wars."
+  },
+  {
+   "id": "cebc1586-4e64-4093-9552-986c43b69f56",
+   "name": "United Kingdom",
+   "labels": [],
+   "summary": "The Labour government reinstated the 2030 deadline for banning the sale of new ICE vehicles in July 2024, confirming it in a written parliamentary statement on January 1, 2025. This date was previously delayed to 2035."
+  },
+  {
+   "id": "ce60fcb0-deb2-4892-8e30-086978b8e050",
+   "name": "Cambodia",
+   "labels": [],
+   "summary": "Cambodia is a planned future production location for BYD."
+  },
+  {
+   "id": "cad926e6-3eb5-4a5b-aa27-6d32e3c7d274",
+   "name": "Thailand",
+   "labels": [],
+   "summary": "Thailand is the location of BYD's first wholly-owned overseas factory, which is scheduled to begin production in mid-2024 with an annual capacity of 150,000 vehicles. Combined with Uzbekistan and Brazil, it contributes to a total annual capacity exceeding 300,000 vehicles for BYD."
+  },
+  {
+   "id": "c9a56528-decd-4f72-9f58-81244837cda0",
+   "name": "BYD Targets 1M Overseas Sales",
+   "labels": [],
+   "summary": "The article BYD Targets 1M Overseas Sales from electricarworld.com reports on BYD's goal of achieving 1 million overseas car sales."
+  },
+  {
+   "id": "c7b49976-8454-41b5-817a-7ebd38135609",
+   "name": "Genesis",
+   "labels": [],
+   "summary": "Genesis is part of Hyundai Motor Group's 31-model EV lineup."
+  },
+  {
+   "id": "c1449124-ec0b-4192-a9ee-e0a2dcc82535",
+   "name": "2025",
+   "labels": [],
+   "summary": "This year is the target for Norway to effectively complete its ban on the sale of new ICE vehicles. It is also the year a UK parliamentary statement confirmed the reinstated 2030 ICE vehicle ban."
+  },
+  {
+   "id": "c0b2af84-f75a-4fcd-8023-2b24c5820079",
+   "name": "ICE Bans Global",
+   "labels": [],
+   "summary": "ICE Bans Global is a map detailing worldwide ICE car bans, including their locations and effective dates. It references policy updates from the UK, such as their reaffirmation of the 2030 ICE vehicle ban despite industry concerns. The resource also notes the return of the UK's 'bring the ice phase out' track."
+  },
+  {
+   "id": "be67d289-a6da-41ba-98c5-3fd05ee5a727",
+   "name": "ID. Buzz",
+   "labels": [],
+   "summary": "Volkswagen and Mobileye continue their collaboration on L4-level autonomous driving for the ID. Buzz."
+  },
+  {
+   "id": "be11cb8b-78b5-4a51-af04-c0998c574bf1",
+   "name": "Italy",
+   "labels": [],
+   "summary": "BEV sales in Italy surged by 64% in March 2025."
+  },
+  {
+   "id": "bdc2f31f-9568-4d32-a64e-b3b1f84df430",
+   "name": "HMGMA factory",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "b2b5d9e7-ac0c-4662-91d2-366ebb6a7718",
+   "name": "Uzbekistan",
+   "labels": [],
+   "summary": "Uzbekistan is a location where BYD is already producing vehicles. Combined with Thailand and Brazil, it contributes to a total annual capacity exceeding 300,000 vehicles for BYD."
+  },
+  {
+   "id": "b147a21c-0015-439e-99c7-959d32ae59e1",
+   "name": "Hyundai Motor Group",
+   "labels": [],
+   "summary": "Hyundai Motor Group plans to increase production capacity by 200,000 units at its HMGMA factory's second phase, investing $2.7 billion and creating 3,000 jobs. Their EV lineup will include 31 models across Hyundai, Kia, and Genesis brands. Regionally customized products, such as the IONIQ 3 for the European mass market, are part of their strategy. They are also focusing on next-generation battery technology with cloud-based battery management systems starting in 2026, and a software-defined vehicle (SDV) platform, alongside localized production."
+  },
+  {
+   "id": "aea488d5-4e3e-4eac-9b19-46a608b225e8",
+   "name": "2030 policy",
+   "labels": [],
+   "summary": "The UK Government has a 2030 Statement regarding the transition to zero-emission vehicles. UK Labour has confirmed a 2030 ban on internal combustion engine (ICE) cars, bringing the phase-out back on track."
+  },
+  {
+   "id": "a9877f18-b209-4c5d-96b4-a920c98bdf67",
+   "name": "China",
+   "labels": [],
+   "summary": "In China, the average selling price for BEVs decreased by 14% in 2024, leading to a halving of gross profit margins for mid-range OEM manufacturers amid an intensifying price war."
+  },
+  {
+   "id": "a3093112-b292-4879-ab25-cdd9b22b8501",
+   "name": "mid-range OEM manufacturers",
+   "labels": [],
+   "summary": "Mid-range OEM manufacturers in China experienced their gross profit margins halved in 2024 due to a 14% decrease in the average selling price of BEVs and an intensifying price war."
+  },
+  {
+   "id": "a2da7af2-7ef0-4823-95f7-461bc10ba8cd",
+   "name": "Electrek",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Electrek published a March sales report."
+  },
+  {
+   "id": "9a78db69-48d3-430a-af72-36812b267d04",
+   "name": "下一代电池",
+   "labels": [],
+   "summary": "现代押注下一代电池技术。"
+  },
+  {
+   "id": "96ce25da-0bef-4f10-a15a-8abf6639706a",
+   "name": "UK Labour",
+   "labels": [
+    "PoliticalParty"
+   ],
+   "summary": "UK Labour has confirmed a 2030 ban on internal combustion engine (ICE) cars, bringing the phase-out back on track."
+  },
+  {
+   "id": "935d7f28-36b8-4e49-9856-bc0ea482808c",
+   "name": "Multimodal Fusion Autonomous Driving",
+   "labels": [],
+   "summary": "A resource is available on Multimodal Fusion Autonomous Driving."
+  },
+  {
+   "id": "91847d4c-cc6d-4a58-84c4-c1e95ccdbc75",
+   "name": "Evergrande",
+   "labels": [],
+   "summary": "Evergrande's financial risks are frequently mentioned in the context of the Chinese EV industry's \"involution\" and price wars, which have led to mid-tier manufacturers' gross profit margins being halved."
+  },
+  {
+   "id": "912c10c5-8737-492c-bd04-fe981a2289bc",
+   "name": "single neural network",
+   "labels": [],
+   "summary": "A single neural network is used in end-to-end autonomous driving models, contrasting with traditional modular architectures."
+  },
+  {
+   "id": "90f6ca7a-0e66-4b52-8bec-d1b1a06f8aaf",
+   "name": "Chinese brands",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "8b1c4fbe-0f41-4b3b-bc6d-c51e42c63c59",
+   "name": "Kia",
+   "labels": [],
+   "summary": "Kia is part of Hyundai Motor Group's 31-model EV lineup."
+  },
+  {
+   "id": "8aedb46d-fe92-4854-876c-baf26c3de81a",
+   "name": "End-to-End Autonomous Driving",
+   "labels": [],
+   "summary": "End-to-End Autonomous Driving became the focus of the 2025 technology competition, shifting from traditional modular architectures to single neural network end-to-end models. Two technical routes, Single-car Intelligence (SAD) and Vehicle-Road Collaborative Systems (i-VICS), are developing in parallel. China continues to make breakthroughs in multimodal fusion perception."
+  },
+  {
+   "id": "85c70a60-aeb7-4f88-a306-9e076bedb1e3",
+   "name": "Europe",
+   "labels": [],
+   "summary": "In March 2025, Europe experienced a 22% year-over-year increase in EV sales. Specifically, Germany saw a 37% increase in BEV sales, Italy surged by 64%, and the UK recorded over 100,000 EV sales in a single month."
+  },
+  {
+   "id": "83fd62f2-6c1d-40d0-bb3f-29edd4993163",
+   "name": "Hungary",
+   "labels": [],
+   "summary": "Hungary was originally planned for BYD production by the end of 2025, but this has been postponed. BYD is now shifting its focus to Turkey for accelerated expansion."
+  },
+  {
+   "id": "8354ca3a-d458-4ba7-8fb7-cfb95a75d4b4",
+   "name": "BYD Seagull",
+   "labels": [],
+   "summary": "The BYD Seagull has a starting price of 69,800 RMB (approximately 7,600 GBP), which forces smaller competitors to sell below cost."
+  },
+  {
+   "id": "82e45e80-1e52-43bd-ba84-f4933de268f3",
+   "name": "Future of Autonomous Driving",
+   "labels": [],
+   "summary": "A resource titled \"Future of Autonomous Driving\" discusses single-vehicle intelligence versus vehicle-road coordination."
+  },
+  {
+   "id": "7fe94962-cd9c-4663-904f-584368eff1f4",
+   "name": "software capabilities",
+   "labels": [],
+   "summary": "Long-term success depends on software capabilities."
+  },
+  {
+   "id": "7b45c9f2-6fa3-4dfa-bd90-30deeca26324",
+   "name": "TrendForce",
+   "labels": [
+    "ResearchInstitute"
+   ],
+   "summary": "TrendForce analysts reported that global new energy vehicle sales reached 20.53 million units in 2025, setting a new historical record."
+  },
+  {
+   "id": "7825f6ad-413b-49b5-b5f2-ddfb5a3c10d8",
+   "name": "Emerging Markets",
+   "labels": [],
+   "summary": "BYD is expanding its global presence with new plants in emerging markets. The company aims to achieve 1 million overseas car sales by 2025 and is shifting its European production focus from Hungary to Turkey."
+  },
+  {
+   "id": "70bdf404-6820-4875-8eeb-3339d572bfe9",
+   "name": "ICE vehicle ban",
+   "labels": [],
+   "summary": "The United Kingdom's ban on new ICE vehicle sales is set for 2030, a deadline reinstated by the Labour government in July 2024 and confirmed by a parliamentary statement on January 1, 2025, after a previous postponement to 2035. Norway aims to have this ban substantially completed by 2025."
+  },
+  {
+   "id": "6e7b7605-8bfc-4b14-9eb7-4916820cdf97",
+   "name": "automotive world",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "5ffa3855-d184-4c11-9aa6-09de12fc3846",
+   "name": "Mobileye",
+   "labels": [],
+   "summary": "Volkswagen and Mobileye have an agreement for autonomous driving technology."
+  },
+  {
+   "id": "5bc1d97b-1b34-4e15-81c8-e1cb5ee019a2",
+   "name": "end-to-end intelligent driving",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "5734a711-9e29-48f7-aae1-90ee0cad5cde",
+   "name": "SDV",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "54994604-07c8-4f34-b47c-0f0d6e824d72",
+   "name": "Norway",
+   "labels": [],
+   "summary": "Norway has effectively completed its ban on the sale of new ICE vehicles, with a target year of 2025."
+  },
+  {
+   "id": "5412cd26-e61d-4e57-ae81-cad2a948ee0e",
+   "name": "Brazil",
+   "labels": [],
+   "summary": "Brazil is a location for BYD's global production, with a former Ford factory being converted to have an annual capacity of 150,000 vehicles. Combined with Thailand and Uzbekistan, it contributes to a total annual capacity exceeding 300,000 vehicles for BYD."
+  },
+  {
+   "id": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
+   "name": "VinFast",
+   "labels": [],
+   "summary": "VinFast electric buses debuted in Germany. The company has cooperated with Siemens on electric bus technology since 2018."
+  },
+  {
+   "id": "41d55056-bbbb-4210-b19d-0ba096fe5fad",
+   "name": "Germany",
+   "labels": [],
+   "summary": "BEV sales in Germany increased by 37% in March 2025."
+  },
+  {
+   "id": "4014098d-36b4-4eab-b88a-3c5767742a60",
+   "name": "中国品牌",
+   "labels": [],
+   "summary": "中国品牌押注端到端智驾和价格。在东南亚等新兴市场，中国品牌占据主导地位，但本土品牌面临压力。VinFast 的撤退反映了新兴市场本土品牌面临的困境。"
+  },
+  {
+   "id": "3fd88a85-6761-46d2-a373-d608d7d74175",
+   "name": "price",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "3eb78813-0396-466e-85e9-0abef866d729",
+   "name": "BYD Global Expansion 2025",
+   "labels": [],
+   "summary": "China car online's article, BYD Global Expansion 2025, details BYD's overseas expansion plans."
+  },
+  {
+   "id": "3cd88686-62d0-47d7-b515-62f187686869",
+   "name": "next-generation batteries",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "3c1a724a-0a70-4386-a94f-a45768de5b00",
+   "name": "Siemens",
+   "labels": [],
+   "summary": "Siemens has cooperated with VinFast on electric bus technology since 2018."
+  },
+  {
+   "id": "36bff843-9f5b-46bf-8820-b1bb09feb0eb",
+   "name": "BEV",
+   "labels": [],
+   "summary": "The average selling price of BEVs in China fell by 14% in 2024. Globally, EV sales increased by 40% year-over-year in March 2025. In March 2025, Europe saw a 22% year-over-year increase in EV sales, with Germany experiencing a 37% rise, Italy a 64% surge, and the UK surpassing 100,000 vehicle sales in a single month."
+  },
+  {
+   "id": "3672c9ad-9c78-4016-aadc-5a3bd2ee461f",
+   "name": "英国政府",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "英国政府 on November 1, 2024 reaffirmed the 2030 ICE sales ban target."
+  },
+  {
+   "id": "297a9362-b644-4400-9e7d-6a41f6321715",
+   "name": "Electricarworld.com",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Electricarworld.com cited BYD's overseas sales target of 1 million vehicles by 2025."
+  },
+  {
+   "id": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "BYD",
+   "labels": [],
+   "summary": "BYD aims for 1 million overseas car sales by 2025. Their global production includes a wholly-owned factory in Thailand set to begin production in mid-2024 with an annual capacity of 150,000 vehicles, a converted former Ford plant in Brazil with an annual capacity of 150,000 vehicles, and production in Uzbekistan. A planned factory in Hungary for late 2025 has been postponed, with BYD shifting focus to Turkey where they are investing $1 billion for a 150,000 annual capacity plant to avoid European Union tariffs. Malaysia and Cambodia are also planned production locations. Thailand, Uzbekistan, "
+  },
+  {
+   "id": "283234e4-1523-4c7f-9fb9-3444db2c35ad",
+   "name": "Hyundai Kia Group",
+   "labels": [],
+   "summary": "Hyundai Kia Group has a 2030 strategic goal of 5.55 million global sales. Between 2025 and 2030, they plan to invest $55.3 billion (77.3 trillion KRW). The second phase expansion of the HMGMA factory in the US will add 200,000 vehicle production capacity."
+  },
+  {
+   "id": "23eaeb7c-747e-42be-8897-049e24dc565e",
+   "name": "SAD",
+   "labels": [],
+   "summary": "SAD, or Single-car Intelligence, is one of the two technical routes developing in parallel for autonomous driving, alongside i-VICS (Vehicle-Road Collaborative Systems)."
+  },
+  {
+   "id": "23cd5c2f-76f1-4791-ab17-e7ae20358e57",
+   "name": "Turkey",
+   "labels": [],
+   "summary": "Turkey is a focus for BYD's accelerated expansion, with an investment of $1 billion for a plant that will have an annual capacity of 150,000 vehicles. This move aims to avoid European Union tariffs."
+  },
+  {
+   "id": "165e6914-32f4-407c-b819-ac19994ca340",
+   "name": "Global EV market",
+   "labels": [],
+   "summary": "BYD became the global EV market leader in 2025, surpassing Tesla. BYD has set an overseas sales target of 1 million vehicles for 2025."
+  },
+  {
+   "id": "0e51b812-d3d2-41fb-b113-da5a2a681df8",
+   "name": "VinFast Europe",
+   "labels": [],
+   "summary": "VinFast Europe is progressing in the European market."
+  },
+  {
+   "id": "0c170e9e-dcac-406f-9d6f-4f0f64c04ccd",
+   "name": "HMGMA",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "09d4016c-48c7-4400-9550-8ca4898262a2",
+   "name": "ICE vehicles",
+   "labels": [],
+   "summary": "There is a sales ban schedule for ICE vehicles."
+  },
+  {
+   "id": "08fee1c3-3a5e-489e-ae30-b4e82ab8ddb4",
+   "name": "BYD Auto Wikipedia",
+   "labels": [],
+   "summary": "BYD Auto Wikipedia provides basic company information for BYD Auto."
+  }
+ ],
+ "links": [
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "83fd62f2-6c1d-40d0-bb3f-29edd4993163",
+   "name": "AFFILIATED_WITH",
+   "fact": "BYD is shifting its focus away from Hungary for European EV production."
+  },
+  {
+   "source": "8aedb46d-fe92-4854-876c-baf26c3de81a",
+   "target": "912c10c5-8737-492c-bd04-fe981a2289bc",
+   "name": "IS_A",
+   "fact": "End-to-End Autonomous Driving uses a single neural network end-to-end model."
+  },
+  {
+   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "target": "efd69e08-d575-486f-9280-bff657d9e8be",
+   "name": "HAS_STRATEGY",
+   "fact": "Hyundai has a strategy called Hyundai Battery Strategy 2025."
+  },
+  {
+   "source": "54994604-07c8-4f34-b47c-0f0d6e824d72",
+   "target": "70bdf404-6820-4875-8eeb-3339d572bfe9",
+   "name": "HAS_POLICY",
+   "fact": "Norway has an ICE vehicle ban."
+  },
+  {
+   "source": "23cd5c2f-76f1-4791-ab17-e7ae20358e57",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "IS_PRODUCTION_SITE_FOR",
+   "fact": "Turkey is a production site for BYD, with an investment of 1 billion USD and an annual capacity of 150,000 vehicles."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "23cd5c2f-76f1-4791-ab17-e7ae20358e57",
+   "name": "BUILDS_FACTORY_IN",
+   "fact": "BYD is building a factory in Turkey to circumvent EU tariffs."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "d5792b9e-ab66-43c6-999d-bee70886c492",
+   "name": "COMPETES_WITH",
+   "fact": "BYD has overtaken Tesla."
+  },
+  {
+   "source": "f7e8a535-4659-43ad-923a-b6b1aca5679e",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "REPORTS_ON",
+   "fact": "BBC reported that China's EVs, including BYD, are becoming mainstream."
+  },
+  {
+   "source": "3672c9ad-9c78-4016-aadc-5a3bd2ee461f",
+   "target": "70bdf404-6820-4875-8eeb-3339d572bfe9",
+   "name": "SETS_POLICY_FOR",
+   "fact": "The UK Government brings the ICE phase-out back on track."
+  },
+  {
+   "source": "90f6ca7a-0e66-4b52-8bec-d1b1a06f8aaf",
+   "target": "3fd88a85-6761-46d2-a373-d608d7d74175",
+   "name": "BETTING_ON",
+   "fact": "Chinese brands are betting on price for long-term success."
+  },
+  {
+   "source": "cebc1586-4e64-4093-9552-986c43b69f56",
+   "target": "36bff843-9f5b-46bf-8820-b1bb09feb0eb",
+   "name": "BREAKS_SALES_RECORD_IN",
+   "fact": "The United Kingdom surpassed 100,000 BEV sales in a single month in March 2025."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "OWNS_BRAND",
+   "fact": "BYD owns the brand BYD Auto."
+  },
+  {
+   "source": "85c70a60-aeb7-4f88-a306-9e076bedb1e3",
+   "target": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "name": "POLICY_DRIVEN_IN",
+   "fact": "Mature markets like Europe and the US are policy-driven."
+  },
+  {
+   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "target": "0c170e9e-dcac-406f-9d6f-4f0f64c04ccd",
+   "name": "EXPANDS_PRODUCTION_AT",
+   "fact": "Hyundai is expanding production at HMGMA for localization in the US."
+  },
+  {
+   "source": "3672c9ad-9c78-4016-aadc-5a3bd2ee461f",
+   "target": "aea488d5-4e3e-4eac-9b19-46a608b225e8",
+   "name": "SETS_POLICY_FOR",
+   "fact": "The UK Government has a 2030 policy statement regarding vehicle transitions."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "a3093112-b292-4879-ab25-cdd9b22b8501",
+   "name": "COMPETES_WITH",
+   "fact": "BYD is leading price reductions in the Chinese EV industry, impacting the gross profit margins of mid-range manufacturers."
+  },
+  {
+   "source": "d7cb90da-5c22-4d3c-961e-3dae22c28bcb",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "REPORTS_ON",
+   "fact": "China Car Online reports on BYD's global expansion and overseas growth in 2025."
+  },
+  {
+   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "target": "9a78db69-48d3-430a-af72-36812b267d04",
+   "name": "BETTING_ON",
+   "fact": "Hyundai is betting on SDV and next-generation batteries."
+  },
+  {
+   "source": "85c70a60-aeb7-4f88-a306-9e076bedb1e3",
+   "target": "36bff843-9f5b-46bf-8820-b1bb09feb0eb",
+   "name": "SEES_GROWTH_IN",
+   "fact": "Europe saw a 22% year-on-year growth in BEV sales in March 2025."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "f78628ca-8534-4e1e-923f-0150aeda72e8",
+   "name": "HAS_PRODUCTION_FACILITY_IN",
+   "fact": "BYD has a production facility planned in Malaysia."
+  },
+  {
+   "source": "f7e8a535-4659-43ad-923a-b6b1aca5679e",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "REPORTS_ON",
+   "fact": "BBC reported that China made EVs mainstream, with BYD overtaking Tesla."
+  },
+  {
+   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
+   "target": "3c1a724a-0a70-4386-a94f-a45768de5b00",
+   "name": "PARTNERS_WITH",
+   "fact": "VinFast partnered with Siemens for electric bus technology starting in 2018."
+  },
+  {
+   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "target": "c1449124-ec0b-4192-a9ee-e0a2dcc82535",
+   "name": "HAS_STRATEGY",
+   "fact": "Hyundai has a strategy named Hyundai Strategy 2025."
+  },
+  {
+   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
+   "target": "a9877f18-b209-4c5d-96b4-a920c98bdf67",
+   "name": "COMPETES_WITH",
+   "fact": "VinFast is unable to compete with established brands from China."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "d5792b9e-ab66-43c6-999d-bee70886c492",
+   "name": "COMPETES_WITH",
+   "fact": "BYD is competing with Tesla."
+  },
+  {
+   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
+   "target": "41d55056-bbbb-4210-b19d-0ba096fe5fad",
+   "name": "ELECTRIC_BUS_FIRST_APPEARED_IN",
+   "fact": "VinFast electric buses made their debut in Germany."
+  },
+  {
+   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "target": "83fd62f2-6c1d-40d0-bb3f-29edd4993163",
+   "name": "LOCALIZES_PRODUCTION_IN",
+   "fact": "Hyundai is expanding production at HMGMA for localization in the US."
+  },
+  {
+   "source": "90f6ca7a-0e66-4b52-8bec-d1b1a06f8aaf",
+   "target": "ec09380b-ada5-48a0-ae5a-278e27c44bc5",
+   "name": "COMPETES_ON",
+   "fact": "The long-term competition depends on software capabilities and vertical integration depth."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "d5792b9e-ab66-43c6-999d-bee70886c492",
+   "name": "COMPETES_WITH",
+   "fact": "BYD is predicted to surpass Tesla in global EV sales by 2025."
+  },
+  {
+   "source": "cad926e6-3eb5-4a5b-aa27-6d32e3c7d274",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "IS_PRODUCTION_SITE_FOR",
+   "fact": "Thailand is a production site for BYD with a planned annual capacity of 150,000 vehicles."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "ce60fcb0-deb2-4892-8e30-086978b8e050",
+   "name": "HAS_PRODUCTION_FACILITY_IN",
+   "fact": "BYD has a production facility planned in Cambodia."
+  },
+  {
+   "source": "ea994af8-6fe3-4ee5-9178-c1b12d51a127",
+   "target": "8aedb46d-fe92-4854-876c-baf26c3de81a",
+   "name": "HAS_SUBTOPIC",
+   "fact": "Intelligent driving technology includes an End-to-End Autonomous Driving Survey."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "cad926e6-3eb5-4a5b-aa27-6d32e3c7d274",
+   "name": "HAS_PRODUCTION_CAPACITY",
+   "fact": "BYD's total production capacity in Thailand, Uzbekistan, and Brazil exceeds 300,000 vehicles per year."
+  },
+  {
+   "source": "41d55056-bbbb-4210-b19d-0ba096fe5fad",
+   "target": "36bff843-9f5b-46bf-8820-b1bb09feb0eb",
+   "name": "SEES_GROWTH_IN",
+   "fact": "Germany experienced 37% growth in BEV sales in March 2025."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "a3093112-b292-4879-ab25-cdd9b22b8501",
+   "name": "COMPETES_WITH",
+   "fact": "BYD is leading price reductions and achieving record sales, but has halved the gross profit margin for mid-range manufacturers."
+  },
+  {
+   "source": "ec32c175-b661-448f-b246-e2a3e5d8d7de",
+   "target": "8aedb46d-fe92-4854-876c-baf26c3de81a",
+   "name": "PARTNERS_WITH",
+   "fact": "Volkswagen and Mobileye are advancing their L4-level autonomous driving cooperation on the ID. Buzz."
+  },
+  {
+   "source": "a2da7af2-7ef0-4823-95f7-461bc10ba8cd",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "REPORTS_ON",
+   "fact": "Electrek released a sales report for March 2025."
+  },
+  {
+   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
+   "target": "d0ce283e-c2d6-443d-ae63-1b59d25f26f0",
+   "name": "POSTPONED_EXPANSION_INTO",
+   "fact": "VinFast has indefinitely postponed its expansion into Southeast Asia."
+  },
+  {
+   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
+   "target": "ec1c6adb-a5f1-4ee0-85d0-ce3e3252ff40",
+   "name": "REPRESENTS_DIFFICULTY_FOR",
+   "fact": "VinFast's retreat is a representation of the difficulties faced by local brands in emerging markets."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "8354ca3a-d458-4ba7-8fb7-cfb95a75d4b4",
+   "name": "HAS_PRODUCT",
+   "fact": "BYD's Seagull has a starting price of 69,800 Chinese Yuan."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "165e6914-32f4-407c-b819-ac19994ca340",
+   "name": "LEADS",
+   "fact": "BYD became the leader in the global EV market in 2025."
+  },
+  {
+   "source": "6e7b7605-8bfc-4b14-9eb7-4916820cdf97",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "REPORTS_ON",
+   "fact": "Automotive World reports on BYD's steady progress on its global production network."
+  },
+  {
+   "source": "90f6ca7a-0e66-4b52-8bec-d1b1a06f8aaf",
+   "target": "7fe94962-cd9c-4663-904f-584368eff1f4",
+   "name": "FOCUSES_ON",
+   "fact": "Chinese brands are focusing on end-to-end intelligent driving and price."
+  },
+  {
+   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "COMPETES_WITH",
+   "fact": "VinFast is competing with BYD."
+  },
+  {
+   "source": "4014098d-36b4-4eab-b88a-3c5767742a60",
+   "target": "8aedb46d-fe92-4854-876c-baf26c3de81a",
+   "name": "BETTING_ON",
+   "fact": "Chinese brands are betting on end-to-end intelligent driving and price."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "23cd5c2f-76f1-4791-ab17-e7ae20358e57",
+   "name": "HAS_PRODUCTION_FACILITY_IN",
+   "fact": "BYD has a production facility in Turkey."
+  },
+  {
+   "source": "3eb78813-0396-466e-85e9-0abef866d729",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "PROVIDES_INFORMATION_ON",
+   "fact": "BYD Global Expansion 2025 provides details on BYD's overseas expansion."
+  },
+  {
+   "source": "54994604-07c8-4f34-b47c-0f0d6e824d72",
+   "target": "c1449124-ec0b-4192-a9ee-e0a2dcc82535",
+   "name": "HAS_BAN_YEAR",
+   "fact": "Norway has an ICE vehicle ban set for 2025."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "cad926e6-3eb5-4a5b-aa27-6d32e3c7d274",
+   "name": "BUILDS_FACTORY_IN",
+   "fact": "BYD is building factories in Thailand and Brazil for regional outreach."
+  },
+  {
+   "source": "ec32c175-b661-448f-b246-e2a3e5d8d7de",
+   "target": "8aedb46d-fe92-4854-876c-baf26c3de81a",
+   "name": "RESEARCHING",
+   "fact": "Volkswagen is researching End-to-End Autonomous Driving."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "d5792b9e-ab66-43c6-999d-bee70886c492",
+   "name": "COMPETES_WITH",
+   "fact": "BYD overtook Tesla in 2025 to become the global EV market leader."
+  },
+  {
+   "source": "a3093112-b292-4879-ab25-cdd9b22b8501",
+   "target": "a9877f18-b209-4c5d-96b4-a920c98bdf67",
+   "name": "EXPERIENCES_PRICE_WAR_IN",
+   "fact": "Mid-range OEM manufacturers in China are experiencing a white-hot price war with halved gross profit margins."
+  },
+  {
+   "source": "d2130e67-3233-4d62-9210-ce0661613304",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "PROVIDES_INFORMATION_ON",
+   "fact": "BYD Production Network provides details on BYD's global production network."
+  },
+  {
+   "source": "3672c9ad-9c78-4016-aadc-5a3bd2ee461f",
+   "target": "ee7105e8-ce61-4d74-a7e6-e74b93d303e5",
+   "name": "GOVERNS",
+   "fact": "英国政府 governs 英国."
+  },
+  {
+   "source": "cebc1586-4e64-4093-9552-986c43b69f56",
+   "target": "70bdf404-6820-4875-8eeb-3339d572bfe9",
+   "name": "HAS_POLICY",
+   "fact": "The United Kingdom has an ICE vehicle ban."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "7825f6ad-413b-49b5-b5f2-ddfb5a3c10d8",
+   "name": "AFFILIATED_WITH",
+   "fact": "BYD is expanding its global presence with new plants in emerging markets."
+  },
+  {
+   "source": "be11cb8b-78b5-4a51-af04-c0998c574bf1",
+   "target": "36bff843-9f5b-46bf-8820-b1bb09feb0eb",
+   "name": "SEES_GROWTH_IN",
+   "fact": "Italy saw a surge of 64% in BEV sales in March 2025."
+  },
+  {
+   "source": "09d4016c-48c7-4400-9550-8ca4898262a2",
+   "target": "41d55056-bbbb-4210-b19d-0ba096fe5fad",
+   "name": "BAN_EXPECTED_IN",
+   "fact": "Germany has a timeline for banning ICE vehicles."
+  },
+  {
+   "source": "ec32c175-b661-448f-b246-e2a3e5d8d7de",
+   "target": "be67d289-a6da-41ba-98c5-3fd05ee5a727",
+   "name": "WORKS_WITH",
+   "fact": "Volkswagen is working with Mobileye on the L4-level autonomous driving features for the ID. Buzz."
+  },
+  {
+   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "target": "8b1c4fbe-0f41-4b3b-bc6d-c51e42c63c59",
+   "name": "COMPETES_WITH",
+   "fact": "Hyundai competes with Kia."
+  },
+  {
+   "source": "e50da547-e44e-40f4-8b26-b35a408bc6bf",
+   "target": "85c70a60-aeb7-4f88-a306-9e076bedb1e3",
+   "name": "TARGETS_MARKET",
+   "fact": "IONIQ 3 targets the European mass market."
+  },
+  {
+   "source": "ea994af8-6fe3-4ee5-9178-c1b12d51a127",
+   "target": "82e45e80-1e52-43bd-ba84-f4933de268f3",
+   "name": "HAS_SUBTOPIC",
+   "fact": "Intelligent driving technology includes the Future of Autonomous Driving, discussing single-vehicle intelligence vs. vehicle-road coordination."
+  },
+  {
+   "source": "ea994af8-6fe3-4ee5-9178-c1b12d51a127",
+   "target": "935d7f28-36b8-4e49-9856-bc0ea482808c",
+   "name": "HAS_SUBTOPIC",
+   "fact": "Intelligent driving technology includes Multimodal Fusion Autonomous Driving."
+  },
+  {
+   "source": "91847d4c-cc6d-4a58-84c4-c1e95ccdbc75",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "HAS_FINANCIAL_RISK_MENTIONED_ALONGSIDE",
+   "fact": "Evergrande's financial risks are frequently mentioned alongside BYD's market dominance."
+  },
+  {
+   "source": "83fd62f2-6c1d-40d0-bb3f-29edd4993163",
+   "target": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "name": "POLICY_DRIVEN_IN",
+   "fact": "Mature markets like Europe and the US are policy-driven."
+  },
+  {
+   "source": "283234e4-1523-4c7f-9fb9-3444db2c35ad",
+   "target": "bdc2f31f-9568-4d32-a64e-b3b1f84df430",
+   "name": "HAS_FACILITY",
+   "fact": "The Hyundai Kia Group is expanding the HMGMA factory by 200,000 units for its second phase."
+  },
+  {
+   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
+   "target": "0e51b812-d3d2-41fb-b113-da5a2a681df8",
+   "name": "HAS_ORGANIZATION",
+   "fact": "VinFast has an organization called VinFast Europe focused on the European market."
+  },
+  {
+   "source": "7b45c9f2-6fa3-4dfa-bd90-30deeca26324",
+   "target": "165e6914-32f4-407c-b819-ac19994ca340",
+   "name": "REPORTS_ON",
+   "fact": "TrendForce analysts reported that global new energy vehicle sales reached a record high of 20.53 million units in 2025."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "5412cd26-e61d-4e57-ae81-cad2a948ee0e",
+   "name": "BUILDS_FACTORY_IN",
+   "fact": "BYD is building factories in Thailand and Brazil for regional outreach."
+  },
+  {
+   "source": "a3093112-b292-4879-ab25-cdd9b22b8501",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "IMPACTED_BY",
+   "fact": "Mid-range manufacturers' gross profit margins have been halved due to BYD's price war."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "83fd62f2-6c1d-40d0-bb3f-29edd4993163",
+   "name": "HAS_PRODUCTION_FACILITY_IN",
+   "fact": "BYD has a production facility in Hungary."
+  },
+  {
+   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "target": "3cd88686-62d0-47d7-b515-62f187686869",
+   "name": "BETTING_ON",
+   "fact": "Hyundai is betting on next-generation batteries for long-term success."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "d5792b9e-ab66-43c6-999d-bee70886c492",
+   "name": "COMPETES_WITH",
+   "fact": "BYD Auto is noted as surpassing Tesla."
+  },
+  {
+   "source": "a9877f18-b209-4c5d-96b4-a920c98bdf67",
+   "target": "36bff843-9f5b-46bf-8820-b1bb09feb0eb",
+   "name": "SEES_PRICE_DROP_IN",
+   "fact": "China saw a 14% average price decrease for BEVs in 2024."
+  },
+  {
+   "source": "cebc1586-4e64-4093-9552-986c43b69f56",
+   "target": "fb6d23d1-8bbe-4200-a89e-5468f0ad7c0a",
+   "name": "HAS_BAN_YEAR",
+   "fact": "The United Kingdom has an ICE vehicle ban set for 2030."
+  },
+  {
+   "source": "91847d4c-cc6d-4a58-84c4-c1e95ccdbc75",
+   "target": "a3093112-b292-4879-ab25-cdd9b22b8501",
+   "name": "FINANCIAL_RISK_MENTIONED_WITH",
+   "fact": "Financial risks associated with Evergrande are frequently mentioned in the context of mid-range manufacturers."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "cad926e6-3eb5-4a5b-aa27-6d32e3c7d274",
+   "name": "HAS_PRODUCTION_FACILITY_IN",
+   "fact": "BYD has a production facility in Thailand."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "91847d4c-cc6d-4a58-84c4-c1e95ccdbc75",
+   "name": "COMPARED_TO",
+   "fact": "BYD is frequently mentioned in the context of Evergrande-style financial risks."
+  },
+  {
+   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "target": "5734a711-9e29-48f7-aae1-90ee0cad5cde",
+   "name": "BETTING_ON",
+   "fact": "Hyundai is betting on SDV for long-term success."
+  },
+  {
+   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "target": "c7b49976-8454-41b5-817a-7ebd38135609",
+   "name": "COMPETES_WITH",
+   "fact": "Hyundai competes with Genesis."
+  },
+  {
+   "source": "90f6ca7a-0e66-4b52-8bec-d1b1a06f8aaf",
+   "target": "5bc1d97b-1b34-4e15-81c8-e1cb5ee019a2",
+   "name": "BETTING_ON",
+   "fact": "Chinese brands are betting on end-to-end intelligent driving for long-term success."
+  },
+  {
+   "source": "297a9362-b644-4400-9e7d-6a41f6321715",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "REPORTS_ON",
+   "fact": "Electricarworld.com reported that BYD is targeting 1 million overseas car sales by 2025."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "e836db88-b92f-4f57-8045-2f479c5e82e6",
+   "name": "SEEKS_TO_CIRCUMVENT_TARIFF_FOR",
+   "fact": "BYD is building a plant in Turkey to circumvent European Union tariffs."
+  },
+  {
+   "source": "5412cd26-e61d-4e57-ae81-cad2a948ee0e",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "IS_PRODUCTION_SITE_FOR",
+   "fact": "Brazil is a production site for BYD, with the former Ford plant having an annual capacity of 150,000 vehicles."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "b2b5d9e7-ac0c-4662-91d2-366ebb6a7718",
+   "name": "HAS_PRODUCTION_FACILITY_IN",
+   "fact": "BYD has a production facility in Uzbekistan."
+  },
+  {
+   "source": "ec32c175-b661-448f-b246-e2a3e5d8d7de",
+   "target": "5ffa3855-d184-4c11-9aa6-09de12fc3846",
+   "name": "PARTNERS_WITH",
+   "fact": "Volkswagen and Mobileye have an agreement for autonomous driving."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "23cd5c2f-76f1-4791-ab17-e7ae20358e57",
+   "name": "PARTNERS_WITH",
+   "fact": "BYD is shifting its European EV production focus to Turkey."
+  },
+  {
+   "source": "283234e4-1523-4c7f-9fb9-3444db2c35ad",
+   "target": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "name": "HAS_SUB_ORGANIZATION",
+   "fact": "Hyundai is part of the organization 现代起亚."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "cad926e6-3eb5-4a5b-aa27-6d32e3c7d274",
+   "name": "ESTABLISHES_PLANT_IN",
+   "fact": "BYD is establishing a plant in Thailand for regional reach."
+  },
+  {
+   "source": "c0b2af84-f75a-4fcd-8023-2b24c5820079",
+   "target": "ee7105e8-ce61-4d74-a7e6-e74b93d303e5",
+   "name": "INCLUDES_POLICY_FOR",
+   "fact": "ICE Bans Global provides a map of ICE car bans worldwide, including for the UK."
+  },
+  {
+   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "target": "5734a711-9e29-48f7-aae1-90ee0cad5cde",
+   "name": "BETTING_ON",
+   "fact": "Hyundai is betting on SDV and next-generation batteries."
+  },
+  {
+   "source": "08fee1c3-3a5e-489e-ae30-b4e82ab8ddb4",
+   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "name": "PROVIDES_INFORMATION_ON",
+   "fact": "BYD Auto Wikipedia provides basic company information on BYD."
+  },
+  {
+   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "target": "b147a21c-0015-439e-99c7-959d32ae59e1",
+   "name": "PART_OF",
+   "fact": "Hyundai is part of Hyundai Motor Group."
+  },
+  {
+   "source": "23eaeb7c-747e-42be-8897-049e24dc565e",
+   "target": "d9640271-f4f6-4005-85f7-063891dc5f5b",
+   "name": "PARALLEL_TO",
+   "fact": "SAD and i-VICS are two parallel technical routes."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "5412cd26-e61d-4e57-ae81-cad2a948ee0e",
+   "name": "HAS_PRODUCTION_FACILITY_IN",
+   "fact": "BYD has a production facility in Brazil."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "283234e4-1523-4c7f-9fb9-3444db2c35ad",
+   "name": "COMPETES_WITH",
+   "fact": "BYD is a major competitor to Hyundai Kia Group in the EV market."
+  },
+  {
+   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "target": "165e6914-32f4-407c-b819-ac19994ca340",
+   "name": "HAS_SALES_TARGET",
+   "fact": "BYD has an overseas sales target of 1 million vehicles by 2025."
+  },
+  {
+   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
+   "target": "0c170e9e-dcac-406f-9d6f-4f0f64c04ccd",
+   "name": "EXPANDS_PRODUCTION_AT",
+   "fact": "Hyundai is expanding production at HMGMA to achieve US localization."
+  },
+  {
+   "source": "4014098d-36b4-4eab-b88a-3c5767742a60",
+   "target": "d0ce283e-c2d6-443d-ae63-1b59d25f26f0",
+   "name": "DOMINATES_IN",
+   "fact": "Chinese brands dominate emerging markets like Southeast Asia, which are price-sensitive."
+  },
+  {
+   "source": "b147a21c-0015-439e-99c7-959d32ae59e1",
+   "target": "e50da547-e44e-40f4-8b26-b35a408bc6bf",
+   "name": "HAS_MODEL",
+   "fact": "Hyundai Motor Group has a model called IONIQ 3."
+  }
+ ],
+ "graph_id": "mirofish_76972211fdd840ac"
+}

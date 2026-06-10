@@ -1,0 +1,9 @@
+{
+ "pipeline_id": "pipe_8b47373016f1",
+ "prompt": "How and when will the Russia–Ukraine war end? Research the current state of the war as of mid-2026 — the front lines and territorial control, the military situation (manpower, materiel, drones, air defense, long-range strikes), Western military and financial aid (the United States under the second Trump administration, the EU, and NATO), sanctions and the state of the Russian and Ukrainian economies, domestic political stability in both Moscow and Kyiv, and the status of any ceasefire or peace negotiations (including any US-brokered or European-brokered talks). Identify the principal actors — Vladimir Putin, Volodymyr Zelensky, Donald Trump, key European leaders, and any mediators — with their objectives, constraints, leverage, and red lines. Then predict the most probable ways the war ends — for example a negotiated ceasefire or armistice along roughly current lines, a long frozen conflict, a Ukrainian or Russian military breakthrough, or a broader negotiated settlement — and for each scenario give a rough probability and an approximate timeline.",
+ "created_at": "2026-06-08T18:23:22.499025+00:00",
+ "mode": "full",
+ "rounds": 3,
+ "personas": 36,
+ "has_actors": false
+}

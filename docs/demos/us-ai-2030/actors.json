@@ -1,0 +1,220 @@
+{
+  "central_question": "到2030年,人工智能行业是否将由通用人工智能(AGI)或超级智能(ASI)的到来所重塑,以及OpenAI、Anthropic、Google DeepMind、Meta、xAI等头部实验室在资本支出、芯片、模型、代理与硬件上的全栈竞争,谁将在新一轮产业格局中占据主导地位?",
+  "as_of_date": "2026-06-09",
+  "actors": [
+    {
+      "name": "萨姆·奥特曼(Sam Altman)",
+      "type": "Person",
+      "role": "OpenAI首席执行官,公开AGI路线图的制定者",
+      "stance": "预测AI将在2030年前超越人类智能,主张从ChatGPT迈向AGI,并通过收购io打造万亿美元级全栈",
+      "influence": "high",
+      "memory": "相信其AI系统已出现自我改进迹象,认为本十年是决定性时期"
+    },
+    {
+      "name": "马克·扎克伯格(Mark Zuckerberg)",
+      "type": "Person",
+      "role": "Meta首席执行官,亲自推动超级智能战略",
+      "stance": "宣称'超级智能已在视野中',主张'个人超级智能'而非替代劳动力的生产力路径",
+      "influence": "high",
+      "memory": "认为Meta的AI系统已开始显现自我改进,即使缓慢但不可否认"
+    },
+    {
+      "name": "乔纳森·艾维(Jony Ive)",
+      "type": "Person",
+      "role": "前苹果首席设计师,OpenAI收购io后领导其硬件与设计",
+      "stance": "加入OpenAI主导后智能手机时代的AI原生硬件设计,LoveFrom承担OpenAI创意与设计责任",
+      "influence": "high",
+      "memory": "携约55名工程师与研究人员加入OpenAI,组建新硬件部门"
+    },
+    {
+      "name": "黄仁勋(Jensen Huang)",
+      "type": "Person",
+      "role": "英伟达首席执行官,AI芯片霸主",
+      "stance": "表示部分AI组件销售'超乎想象',弱化AI泡沫担忧,推进Blackwell Ultra与Vera Rubin路线图",
+      "influence": "high",
+      "memory": "相信数据中心需求结构性持续,2026年Vera Rubin将延续性能领先"
+    },
+    {
+      "name": "达里奥·阿莫代伊(Dario Amodei)",
+      "type": "Organization",
+      "role": "Anthropic联合创始人(以公司代表形式列出),Claude系列主导者",
+      "stance": "主打企业级推理与Claude Code,2026年中ARR达约450亿美元,首次实现季度运营利润5.59亿美元",
+      "influence": "high",
+      "memory": "认为长程推理与多智能体协调是模型差异化关键,Claude Code使用量已超越Cursor与Copilot"
+    },
+    {
+      "name": "Alphabet / Google DeepMind",
+      "type": "Organization",
+      "role": "Gemini 3/3.5/TPU与Google Cloud的运营主体",
+      "stance": "2026年资本支出指引1750–1850亿美元,Q1收入1099亿美元同比增长22%,TPU经济性挑战英伟达",
+      "influence": "high",
+      "memory": "Gemini 3上线后核心AI响应成本下降超30%,AI订阅是Google One最强增长引擎"
+    },
+    {
+      "name": "OpenAI",
+      "type": "Organization",
+      "role": "ChatGPT、Sora、GPT-4o原生图像生成、io收购的主导者",
+      "stance": "从模型走向模型+芯片+设备+智能体的全栈超级应用公司,目标万亿美元级体量",
+      "influence": "high",
+      "memory": "认为2025–2026是智能体进入劳动力市场的起点,AGI是确定方向"
+    },
+    {
+      "name": "Anthropic",
+      "type": "Organization",
+      "role": "Claude 4.7/4.8与Claude Code的研发与商业化主体",
+      "stance": "以企业级、可解释安全为差异点,2026年中ARR反超OpenAI约35%",
+      "influence": "high",
+      "memory": "把'持续推理、长时自主任务、多智能体协同'视为下一代模型核心战场"
+    },
+    {
+      "name": "Meta",
+      "type": "Organization",
+      "role": "Llama系列与'个人超级智能'愿景的承载方",
+      "stance": "2025年Q2营收475.2亿美元超预期,通过广告AI化反哺AI巨额投入",
+      "influence": "high",
+      "memory": "认为开源与个人赋能的路径能避免AI取代大量社会岗位的风险"
+    },
+    {
+      "name": "英伟达(Nvidia)",
+      "type": "Organization",
+      "role": "Blackwell Ultra (GB300)与Vera Rubin的芯片供应商",
+      "stance": "坚持'一年一架构'节奏,2026年GTC上Vera Rubin将接棒Blackwell Ultra",
+      "influence": "high",
+      "memory": "客户订单可见度延伸至2027,2025–2026数据中心需求结构性扩张"
+    },
+    {
+      "name": "Anysphere(Cursor)",
+      "type": "Organization",
+      "role": "AI编程助手Cursor的开发主体",
+      "stance": "正以500亿美元以上估值融资20亿美元,ARR突破10亿美元,年底有望达60亿美元运行率",
+      "influence": "high",
+      "memory": "面对Claude Code的快速侵蚀,仍凭借IDE集成与产品体验守住龙头位置"
+    },
+    {
+      "name": "苹果(Apple)",
+      "type": "Organization",
+      "role": "Apple Intelligence与Siri的产品责任方",
+      "stance": "2025年关键会议后重组AI团队并加深Gemini集成,但Siri个性化能力推迟至2026年春季",
+      "influence": "medium",
+      "memory": "承认AI节奏滞后,寄望于'AI泡沫破裂'与延迟兑现换取追赶窗口"
+    },
+    {
+      "name": "SpaceX",
+      "type": "Organization",
+      "role": "Starlink与AI算力服务的运营主体",
+      "stance": "与Google签署2026年10月至2029年6月、月度9.2亿美元的算力供应协议",
+      "influence": "medium",
+      "memory": "预计该算力合同年收入将超过2025年Starlink发射与AI收入总和"
+    },
+    {
+      "name": "彼得·韦林德(Peter Welinder)",
+      "type": "Person",
+      "role": "OpenAI新硬件部门负责人(io并入后)",
+      "stance": "负责将55名前io员工整合为OpenAI硬件部门,推进AI原生消费设备",
+      "influence": "medium",
+      "memory": "掌握OpenAI对'后手机时代'交互形态的产品判断"
+    },
+    {
+      "name": "《卫报》(The Guardian)",
+      "type": "Media",
+      "role": "西方主流媒体,深度报道Meta超级智能战略与Q2财报",
+      "stance": "质疑Meta巨额资本支出能否获得匹配回报,但承认其多季度超预期",
+      "influence": "medium",
+      "memory": "编辑层认同'本十年后半段决定性'的判断,关注AI就业冲击"
+    },
+    {
+      "name": "《信息》(The Information)",
+      "type": "Media",
+      "role": "聚焦硅谷深度报道的付费媒体",
+      "stance": "认为苹果谨慎的AI战略可能在2026年因AI泡沫破裂而获益",
+      "influence": "medium",
+      "memory": "掌握苹果内部Siri延期与领导层重组的细节"
+    },
+    {
+      "name": "TechCrunch",
+      "type": "Media",
+      "role": "科技创业领域核心媒体",
+      "stance": "详细披露OpenAI收购io的股权结构、估值与团队规模",
+      "influence": "medium",
+      "memory": "持续跟踪Sora、GPT-4o原生图像、Codex等多模态与编程工具发布"
+    },
+    {
+      "name": "Anthropic(产品方代表Claude)",
+      "type": "Platform",
+      "role": "Claude系列产品与API的发布平台",
+      "stance": "发布Claude Opus 4.7(2026年4月),定位长程推理与多智能体",
+      "influence": "high",
+      "memory": "认为模型原生代理能力是企业采购的决定性指标"
+    },
+    {
+      "name": "Nvidia GTC 2026",
+      "type": "Platform",
+      "role": "行业风向标式技术大会平台",
+      "stance": "传达'数据中心从英特尔时代跨入英伟达时代'的产业叙事",
+      "influence": "medium",
+      "memory": "编辑判断认为GTC 2026真正信号不是单一芯片,而是全栈范式"
+    }
+  ],
+  "key_events": [
+    {
+      "date": "2024-12-09",
+      "event": "OpenAI向ChatGPT Pro与Plus订阅用户开放Sora视频生成"
+    },
+    {
+      "date": "2025-02-28",
+      "event": "OpenAI宣布计划将Sora视频生成整合进ChatGPT"
+    },
+    {
+      "date": "2025-03-07",
+      "event": "苹果宣布Siri AI改进推迟至2026年,凸显下一代语音助手研发挑战"
+    },
+    {
+      "date": "2025-03-18",
+      "event": "英伟达在GTC 2025上发布Blackwell Ultra并预告Vera Rubin(2026)"
+    },
+    {
+      "date": "2025-03-25",
+      "event": "OpenAI在ChatGPT与Sora中上线GPT-4o原生图像生成"
+    },
+    {
+      "date": "2025-05-21",
+      "event": "OpenAI宣布以约65亿美元全股票收购Jony Ive创办的io,为其最大并购"
+    },
+    {
+      "date": "2025-07-30",
+      "event": "扎克伯格发布'超级智能已在视野'内部备忘录,Meta Q2营收475.2亿美元超预期"
+    },
+    {
+      "date": "2025-12-30",
+      "event": "The Information等媒体评估苹果谨慎AI战略或将在2026年获得回报"
+    },
+    {
+      "date": "2026-04-16",
+      "event": "Anthropic发布Claude Opus 4.7,主打长程推理与多智能体协同"
+    },
+    {
+      "date": "2026-04-21",
+      "event": "Anysphere(Cursor)洽谈以500亿美元以上估值融资20亿美元"
+    },
+    {
+      "date": "2026-05-26",
+      "event": "谷歌发布Gemini 3.5与Gemini Spark,Google Cloud同比增长63%,AI概览用户达20亿"
+    },
+    {
+      "date": "2026-06-03",
+      "event": "Alphabet投资者沟通会披露2026年资本支出1750–1850亿美元,Gemini 3后核心AI成本下降超30%"
+    }
+  ],
+  "hot_topics": [
+    "AGI/超级智能将在2030年前实现的路线图之争",
+    "万亿美元级AI资本支出与能源、芯片、电力瓶颈",
+    "英伟达Blackwell Ultra与Vera Rubin vs Google TPU的自研芯片经济学",
+    "Anthropic反超OpenAI:Claude Code成为最常用AI编程工具",
+    "OpenAI以65亿美元收购io、押注AI原生硬件与后智能手机交互",
+    "Meta'个人超级智能'与开源策略对抗生产力替代叙事",
+    "苹果Apple Intelligence与Siri延期,加深Gemini集成",
+    "AI编程赛道:Cursor以500亿美元估值融资与Claude Code的崛起",
+    "企业级长程推理、多智能体协同与代理进入劳动力市场",
+    "Sora、GPT-4o原生图像等多模态生成的产品化与商业化"
+  ]
+}

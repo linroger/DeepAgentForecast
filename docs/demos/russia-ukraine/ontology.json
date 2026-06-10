@@ -1,0 +1,573 @@
+{
+ "entity_types": [
+  {
+   "name": "HeadOfState",
+   "description": "National leaders with executive authority over war/peace decisions (e.g., presidents, prime minis...",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full legal name of the leader"
+    },
+    {
+     "name": "country",
+     "type": "text",
+     "description": "Country the leader represents"
+    },
+    {
+     "name": "public_position",
+     "type": "text",
+     "description": "Stated public position on the war (e.g., pro-ceasefire, pro-territorial-integrity)"
+    }
+   ],
+   "examples": [
+    "Vladimir Putin",
+    "Volodymyr Zelensky",
+    "Donald Trump",
+    "Giorgia Meloni"
+   ]
+  },
+  {
+   "name": "Diplomat",
+   "description": "Negotiators, envoys, and special representatives engaged in peace talks or mediation",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full name of the diplomat or envoy"
+    },
+    {
+     "name": "affiliated_country",
+     "type": "text",
+     "description": "Country or organization the diplomat represents"
+    },
+    {
+     "name": "role_title",
+     "type": "text",
+     "description": "Official title or role (e.g., Special Envoy, Secretary of State)"
+    }
+   ],
+   "examples": [
+    "Steve Witkoff",
+    "Marco Rubio",
+    "Jared Kushner",
+    "Kirill Dmitriev"
+   ]
+  },
+  {
+   "name": "MilitaryCommander",
+   "description": "Senior military officers, intelligence chiefs, and NATO/supranational military leaders",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full name of the military officer"
+    },
+    {
+     "name": "rank",
+     "type": "text",
+     "description": "Military rank held"
+    },
+    {
+     "name": "branch",
+     "type": "text",
+     "description": "Military branch or service (e.g., Army, GRU, NATO SACEUR)"
+    }
+   ],
+   "examples": [
+    "General Alexus Grynkewich",
+    "Admiral Igor Kostyukov",
+    "Dan Driscoll"
+   ]
+  },
+  {
+   "name": "GovernmentAgency",
+   "description": "Specific government bodies, regulators, or anti-corruption institutions",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full official name of the agency"
+    },
+    {
+     "name": "country",
+     "type": "text",
+     "description": "Country jurisdiction"
+    },
+    {
+     "name": "function",
+     "type": "text",
+     "description": "Primary function (e.g., sanctions enforcement, anti-corruption, aid distribution)"
+    }
+   ],
+   "examples": [
+    "National Anti-Corruption Bureau of Ukraine (NABU)",
+    "Specialized Anti-Corruption Prosecutor's Office (SAPO)",
+    "Verkhovna Rada",
+    "USAI"
+   ]
+  },
+  {
+   "name": "IntergovernmentalOrganization",
+   "description": "Multinational alliances, blocs, and supranational bodies (e.g., EU, NATO, UN)",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "Name of the intergovernmental organization"
+    },
+    {
+     "name": "headquarters",
+     "type": "text",
+     "description": "Primary location of headquarters"
+    },
+    {
+     "name": "stance_on_war",
+     "type": "text",
+     "description": "Official position on the Russia-Ukraine war"
+    }
+   ],
+   "examples": [
+    "European Union",
+    "NATO",
+    "United Nations",
+    "G7"
+   ]
+  },
+  {
+   "name": "ThinkTank",
+   "description": "Research institutions and analytical centers producing war assessments and policy analysis",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "Name of the think tank or research institute"
+    },
+    {
+     "name": "specialization",
+     "type": "text",
+     "description": "Area of analytical focus (e.g., conflict studies, economics, security)"
+    },
+    {
+     "name": "country",
+     "type": "text",
+     "description": "Country where the think tank is based"
+    }
+   ],
+   "examples": [
+    "Institute for the Study of War (ISW)",
+    "Center for Strategic and International Studies (CSIS)",
+    "Kiel Institute",
+    "SWP"
+   ]
+  },
+  {
+   "name": "MediaOutlet",
+   "description": "News organizations, broadcasters, and journalism outlets covering the war",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "Name of the media outlet"
+    },
+    {
+     "name": "country",
+     "type": "text",
+     "description": "Country where the outlet is headquartered"
+    },
+    {
+     "name": "media_type",
+     "type": "text",
+     "description": "Format (e.g., newspaper, TV, online, wire service)"
+    }
+   ],
+   "examples": [
+    "BBC",
+    "The Guardian",
+    "The Moscow Times",
+    "Sky News",
+    "Kyiv Independent"
+   ]
+  },
+  {
+   "name": "TechCompany",
+   "description": "Private technology companies whose products, services, or leadership directly affect the war or n...",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "Name of the company"
+    },
+    {
+     "name": "sector",
+     "type": "text",
+     "description": "Technology sector (e.g., satellite internet, drones, social media)"
+    },
+    {
+     "name": "war_relevance",
+     "type": "text",
+     "description": "How the company's products or statements are relevant to the conflict"
+    }
+   ],
+   "examples": [
+    "SpaceX (Starlink)",
+    "X (Twitter)"
+   ]
+  },
+  {
+   "name": "Person",
+   "description": "Fallback type for any natural person (citizens, analysts, refugees, ordinary citizens, public com...",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Name of the individual"
+    },
+    {
+     "name": "role_or_occupation",
+     "type": "text",
+     "description": "General occupation or social role"
+    },
+    {
+     "name": "nationality",
+     "type": "text",
+     "description": "Country of citizenship or residence"
+    }
+   ],
+   "examples": [
+    "Andriy Yermak",
+    "Herman Halushchenko",
+    "Svitlana Grynchuk",
+    "Kemi Badenoch",
+    "Radosław Sikorski",
+    "Elon Musk",
+    "Maxim Oreshkin",
+    "Alexander Novak"
+   ]
+  },
+  {
+   "name": "Organization",
+   "description": "Fallback type for any organization (political parties, private companies, NGOs, local groups) not...",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "Name of the organization"
+    },
+    {
+     "name": "country",
+     "type": "text",
+     "description": "Country where the organization is based"
+    },
+    {
+     "name": "org_type",
+     "type": "text",
+     "description": "Type of organization (e.g., political party, company, NGO, opposition group)"
+    }
+   ],
+   "examples": [
+    "Energoatom",
+    "European Commission",
+    "Kremlin",
+    "Conservative Party (UK)"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "REPRESENTS",
+   "description": "Officially represents or speaks on behalf of a country, organization, or bloc",
+   "source_targets": [
+    {
+     "source": "HeadOfState",
+     "target": "IntergovernmentalOrganization"
+    },
+    {
+     "source": "Diplomat",
+     "target": "GovernmentAgency"
+    },
+    {
+     "source": "Diplomat",
+     "target": "IntergovernmentalOrganization"
+    },
+    {
+     "source": "MilitaryCommander",
+     "target": "IntergovernmentalOrganization"
+    },
+    {
+     "source": "HeadOfState",
+     "target": "GovernmentAgency"
+    },
+    {
+     "source": "Person",
+     "target": "Organization"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "NEGOTIATES_WITH",
+   "description": "Engages in direct diplomatic talks, peace negotiations, or formal exchanges with another party",
+   "source_targets": [
+    {
+     "source": "Diplomat",
+     "target": "Diplomat"
+    },
+    {
+     "source": "HeadOfState",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "HeadOfState",
+     "target": "Diplomat"
+    },
+    {
+     "source": "IntergovernmentalOrganization",
+     "target": "IntergovernmentalOrganization"
+    },
+    {
+     "source": "GovernmentAgency",
+     "target": "GovernmentAgency"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "REPORTS_ON",
+   "description": "Publishes coverage, analysis, or commentary about the war or a specific actor",
+   "source_targets": [
+    {
+     "source": "MediaOutlet",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "Diplomat"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "IntergovernmentalOrganization"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "GovernmentAgency"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "Person"
+    },
+    {
+     "source": "ThinkTank",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "ThinkTank",
+     "target": "IntergovernmentalOrganization"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "ANALYZES",
+   "description": "Produces expert research, strategic assessments, or policy analysis about a subject",
+   "source_targets": [
+    {
+     "source": "ThinkTank",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "ThinkTank",
+     "target": "IntergovernmentalOrganization"
+    },
+    {
+     "source": "ThinkTank",
+     "target": "MilitaryCommander"
+    },
+    {
+     "source": "ThinkTank",
+     "target": "GovernmentAgency"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "REGULATES_OR_SANCTIONS",
+   "description": "Imposes, designs, or enforces sanctions, legal measures, or regulatory actions against a target",
+   "source_targets": [
+    {
+     "source": "IntergovernmentalOrganization",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "IntergovernmentalOrganization",
+     "target": "Organization"
+    },
+    {
+     "source": "GovernmentAgency",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "GovernmentAgency",
+     "target": "Organization"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "INVESTIGATES",
+   "description": "Conducts a formal investigation, inquiry, or prosecution of a person or organization",
+   "source_targets": [
+    {
+     "source": "GovernmentAgency",
+     "target": "Person"
+    },
+    {
+     "source": "GovernmentAgency",
+     "target": "Organization"
+    },
+    {
+     "source": "GovernmentAgency",
+     "target": "HeadOfState"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "PROVIDES_AID_TO",
+   "description": "Provides military, financial, humanitarian, or political aid or support to a recipient",
+   "source_targets": [
+    {
+     "source": "HeadOfState",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "IntergovernmentalOrganization",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "IntergovernmentalOrganization",
+     "target": "GovernmentAgency"
+    },
+    {
+     "source": "Organization",
+     "target": "GovernmentAgency"
+    },
+    {
+     "source": "TechCompany",
+     "target": "MilitaryCommander"
+    },
+    {
+     "source": "TechCompany",
+     "target": "GovernmentAgency"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "OPPOSES",
+   "description": "Publicly criticizes, rejects, or pushes back against the position, plan, or actions of another actor",
+   "source_targets": [
+    {
+     "source": "HeadOfState",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "HeadOfState",
+     "target": "Diplomat"
+    },
+    {
+     "source": "Diplomat",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "IntergovernmentalOrganization",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "Person",
+     "target": "Person"
+    },
+    {
+     "source": "Person",
+     "target": "Organization"
+    },
+    {
+     "source": "Person",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "Person",
+     "target": "TechCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "SUPPORTS",
+   "description": "Publicly endorses, backs, or aligns with the position, plan, or actions of another actor",
+   "source_targets": [
+    {
+     "source": "HeadOfState",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "IntergovernmentalOrganization",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "Diplomat",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "Diplomat",
+     "target": "Diplomat"
+    },
+    {
+     "source": "Person",
+     "target": "Person"
+    },
+    {
+     "source": "Person",
+     "target": "Organization"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "AFFILIATED_WITH",
+   "description": "Has a formal affiliation, membership, employment, or organizational connection with another entity",
+   "source_targets": [
+    {
+     "source": "Person",
+     "target": "Organization"
+    },
+    {
+     "source": "Person",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "Person",
+     "target": "GovernmentAgency"
+    },
+    {
+     "source": "Person",
+     "target": "IntergovernmentalOrganization"
+    },
+    {
+     "source": "Person",
+     "target": "TechCompany"
+    },
+    {
+     "source": "Organization",
+     "target": "IntergovernmentalOrganization"
+    },
+    {
+     "source": "Organization",
+     "target": "Organization"
+    }
+   ],
+   "attributes": []
+  }
+ ],
+ "analysis_summary": "本模拟围绕2026年6月俄乌战争的多方博弈展开，涉及的核心舆论主体包括：国家领导人（普京、泽连斯基、特朗普、欧洲领导人）作为最高决策与发声者；外交官与特使（Witkoff、Rubio、Dmitriev、Kushner）作为谈判桌前的主要传播节点；高级军事指挥官（北约Grynkewich将军、俄GRU Kostyukov上将）兼具军事与外交信号功能；政府机构（NABU/SAPO反腐败调查、Verkhovna Rada、美国USAI）作为政策执行与合法性争议的关键主体；国际组织（欧盟、北约、联合国、G7）作为多边发声与制裁制定者；智库（ISW、CSIS、Kiel Institute）作为舆论场上极具影响力的战争分析信源；媒体（BBC、卫报、莫斯科时报、基辅独立报）作为舆论放大器；以及科技公司（Starlink/X的马斯克）作为战争基础设施提供者与社媒舆论场上的争议人物。兜底类型Person和Organization用于容纳文本中提到的众多次要人物（如Yermak、Halushchenko、Sikorski、Musk、Novak、Oreshkin等）和次要组织（如Energoatom、Energoatom、UK保守党等）。关系设计上突出社媒舆论场的真实互动：NEGOTIATES_WITH（外交谈判）、OPPOSES/SUPPORTS（公开立场）、REPORTS_ON/ANALYZES（媒体与分析机构的舆论产出）、REGULATES_OR_SANCTIONS（欧盟制裁机制）、PROVIDES_AID_TO（西方援乌）、INVESTIGATES（NABU腐败调查）、AFFILIATED_WITH（人物与机构关系）。"
+}
