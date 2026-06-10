@@ -1,138 +1,201 @@
 ---
 name: deep-research
-description: Use this skill instead of WebSearch for ANY question requiring web research. Trigger on queries like "what is X", "explain X", "compare X and Y", "research X", "forecast X", or before content generation tasks. Provides a systematic multi-angle research methodology with strict source-quality tiering — prioritize high-signal primary and reputable sources, reject SEO farms and aggregator slop. Use this proactively when the user's question needs online information.
+description: Use this skill instead of WebSearch for ANY question requiring web research. Trigger on queries like "what is X", "explain X", "compare X and Y", "research X", "forecast X", or before content generation tasks. Provides a complete research-tradecraft methodology — question decomposition, advanced search craft, source-quality tiering (S1–S4), evidence grading, triangulation, competing-hypotheses analysis, and forecast-oriented synthesis. Prioritizes high-signal primary and reputable sources; rejects SEO farms and aggregator slop. Use proactively whenever the answer depends on online information.
 ---
 
 # Deep Research Skill
 
-## Mission
+## 1. Mission & Operating Principles
 
-Produce **evidence-grounded, source-tiered research** efficiently. Every claim you carry forward must be traceable to a vetted source. You have a finite tool budget per run — spend it on high-signal sources, never on low-value ones. One authoritative source outranks five aggregators repeating it.
+Produce **decision-grade research** — evidence-graded, triangulated, adversarially tested — at the lowest tool cost that achieves it. You are not a search engine summarizer; you are an analyst. The difference is tradecraft:
 
-**Never generate content from general knowledge alone.** But also: never confuse *volume* of searching with *quality* of evidence. The goal is the smallest set of tool calls that yields a defensible, triangulated picture.
+1. **Evidence over volume.** One regulator filing outranks fifty articles paraphrasing it. Budget is spent on *verification depth*, not search breadth.
+2. **Provenance over prose.** Every claim you carry forward has a knowable origin, date, and quality grade. If you cannot say where a fact comes from, you do not have a fact.
+3. **Disconfirmation over confirmation.** A conclusion you have not tried to break is a guess. Allocate real budget to the case *against* your emerging picture.
+4. **Calibration over confidence.** Say what is known, what is inferred, what is assumed, and what is unknown — separately, and with honest uncertainty language.
+5. **Never write from general knowledge alone** — and never let writing begin before the synthesis gate (§11) passes.
 
-## Source Quality Framework
+## 2. Phase 0 — Research Design (before any tool call)
 
-Judge every search result BEFORE fetching it, and every fetched page BEFORE citing it.
+Spend one explicit thinking step designing the investigation. Poor design is the #1 cause of wasted budget.
 
-### Source tiers
+**2.1 Decompose the question** into 3–7 Key Intelligence Questions (KIQs) — the specific sub-questions whose answers compose the final answer. For each KIQ note:
 
-| Tier | What | Examples | How to use |
-|---|---|---|---|
-| **S1 — Primary / authoritative** | Original data & documents from the actor or an official body | Government statistics (BLS, Eurostat, NBS, IMF, World Bank), regulator filings (SEC/EDGAR, FDA, central banks), peer-reviewed journals, court documents, earnings reports & call transcripts, official press releases, standards bodies, primary datasets | **Preferred for every load-bearing claim.** Quote numbers, dates and wording directly. |
-| **S2 — High-quality secondary** | Original reporting & analysis with editorial standards and named accountability | Reuters, AP, Bloomberg, FT, WSJ, The Economist, Nikkei, Caixin; top-tier domain trade press; major research houses (Gartner, McKinsey — note their commercial angle); established think tanks (CSIS, Brookings, Carnegie — note ideological lean); industry associations (SEMI, SIA, IEA) | Good for synthesis, context, expert quotes, and as a **pointer back to the S1 origin**. |
-| **S3 — Conditional** | Useful but biased, unvetted, or derivative — corroborate before relying on | Company blogs/marketing, vendor whitepapers, named-expert blogs/Substacks with credentials, conference talks, Wikipedia (use as a **map to its primary citations**, never as the citation itself), preprints (arXiv — not yet peer-reviewed) | Cite only when corroborated by S1/S2, or clearly labeled as the actor's own claim ("Company X claims…"). |
-| **S4 — Reject** | Low-signal noise that wastes budget and contaminates conclusions | SEO content farms ("Top 10 X in 2026"), affiliate listicles, AI-generated aggregator slop, wire-reprint sites adding no reporting, undated/anonymous pages, forum threads (Reddit/Quora) presented as fact, stock/crypto-pump sites, sites that only rewrite other articles | **Do not fetch. Do not cite.** Skip these in search results without spending a tool call. (Exception: forums may be cited *as sentiment evidence only*, explicitly labeled as such.) |
+- **Claim type** it needs: established fact · current statistic · causal mechanism · actor intention · estimate/projection · contested interpretation. Each type has a different evidence standard (§6).
+- **Likely best source class**: which S1/S2 sources (§4) probably hold the answer — name them before searching ("TSMC capex → their quarterly report"; "US tariff schedule → Federal Register / USTR").
+- **Priority**: which KIQs are load-bearing for the conclusion vs. nice-to-have color.
 
-### Signal heuristics — 8 quick checks
+**2.2 Draft the opening query set** (one per KIQ, plus one landscape query). Write queries that would surface *documents*, not commentary, wherever possible.
 
-Scan these from the search snippet/URL before spending a fetch:
+**2.3 State your priors and what would change them.** One sentence each: what you currently expect, and what evidence would most efficiently prove you wrong. You will deliberately search for the latter in §7.
 
-1. **Named author or institution** with relevant standing? Anonymous → suspect.
-2. **Publication date visible** and recent enough for the claim? Undated → suspect.
-3. **Original work** (reporting, data, analysis) or a rewrite of someone else's?
-4. **Specificity**: concrete numbers, names, dates — or vague superlatives ("huge growth", "experts say")?
-5. **Methodology / data sourcing disclosed** for any statistic?
-6. **Incentive check**: who benefits if you believe this? (Vendor selling the solution, fund talking its book, advocacy group.)
-7. **Domain reputation**: established outlet / .gov / .edu / known institution vs. keyword-stuffed domain (`best-ai-tools-2026.xyz`).
-8. **Headline–content match**: clickbait framing usually signals thin content.
+## 3. Search Craft
 
-≥2 red flags → treat as S4 and move on without fetching.
+### 3.1 Operator toolkit
 
-### The circular-sourcing trap
-
-When many outlets repeat the same striking number or quote, they are usually echoing **one** origin. Find that origin (the S1 document or the first S2 report), cite *it*, and count the claim as **one** source — not ten. A claim repeated 50 times from a single origin is exactly as strong as that origin. Also date-check statistics: a 2019 figure repackaged in a 2026 listicle is still a 2019 figure — say so.
-
-## Research Protocol
-
-### Phase 1 — Scope (no tools yet)
-
-Before the first search, spend one thinking step: restate the question, list the 3–6 dimensions that must be covered (actors, mechanisms, data, counterarguments, trajectory), and draft the initial query set. A planned query set prevents redundant searching later.
-
-### Phase 2 — Broad survey (cheap, wide)
-
-2–4 searches across the main dimensions to map the territory. From the results: identify the key subtopics, the recurring primary sources (which S1 documents does everyone cite?), and the named experts/institutions worth targeting. **Do not fetch anything yet** unless a clear S1 source already surfaced.
-
-### Phase 3 — Targeted deep dive (spend budget here)
-
-For each dimension, in priority order:
-
-1. **Search with precision**: entity names, specific metrics, document types — `"[company] 10-K 2025"`, `"[agency] [statistic] site:gov"`, `"[topic] peer-reviewed study"`, `"[expert name] [topic]"`.
-2. **Hunt the primary**: prefer queries that surface S1 documents over commentary about them.
-3. **Fetch selectively**: at most the **1–3 most load-bearing sources per dimension** — the ones your conclusions will actually rest on. Read those in full; for the rest, snippets suffice.
-4. **Mine fetched pages**: an S2 article's own citations are a free map to S1 sources — follow the best one instead of issuing a fresh blind search.
-
-### Phase 4 — Triangulate & stress-test
-
-- Every **load-bearing claim** (a number, date, quote, or causal assertion your output depends on) needs **two independent S1/S2 sources** — independent meaning different origins, not two echoes of one report.
-- Deliberately search for **disconfirmation**: `"[claim] criticism"`, `"[claim] debunked"`, `"[topic] risks"`, `"[forecast] skeptics"`. A picture with no contradictions found is a picture you haven't tested.
-- When sources **conflict**, do not average silently: report the range, identify why they differ (definition, time window, methodology, incentive), and state which you weight higher and why.
-
-### Phase 5 — Synthesis gate
-
-Proceed to writing only when you can answer YES to all:
-
-- [ ] Each major dimension is covered by at least one S1/S2 source?
-- [ ] Every load-bearing number/quote is triangulated or explicitly flagged as single-source?
-- [ ] I searched for the opposing case, not just confirmation?
-- [ ] I know the *origin* of each key statistic (no circular sourcing)?
-- [ ] Information is current, and anything dated is labeled with its true date?
-
-Any NO → one more targeted pass on that gap only. Do not restart broad searching.
-
-## Efficiency & Budget Discipline
-
-Tool calls are metered (per-run limits on `web_search` and `web_fetch`). Waste = worse research, because budget spent on noise is unavailable for verification.
-
-- **Plan, then search.** Never fire near-duplicate queries (`"AI chips market"` → `"market for AI chips"`). If a query returns weak results, change the *angle* (different entity, document type, or language), not the word order.
-- **Triage from snippets.** Apply the 8 signal checks to search results and discard S4 hits without fetching.
-- **Fetch with intent.** Each `web_fetch` should answer a specific question you can name. If you can't name it, don't fetch.
-- **Stop on diminishing returns.** When two consecutive searches add nothing new on a dimension, that dimension is done — move on.
-- **Checkpoint as you go.** After each dimension, mentally fix what's established, with which sources, and what's still open. Never re-research something already settled, including in later passes of a multi-pass run.
-- **Never loop.** If a tool errors or a page won't load, try ONE alternative (different URL or query), then route around it. Repeating a failing call burns budget for nothing.
-
-## Temporal Awareness
-
-**Always check `<current_date>` before forming ANY time-sensitive query.** Match precision to intent:
-
-| User intent | Precision | Example |
+| Technique | When | Example |
 |---|---|---|
-| "today / just released" | month + day + year | `"chip export rules February 28 2026"` |
-| "this week" | week range | `"semiconductor news week of Feb 24 2026"` |
-| "recently / latest" | month + year | `"AI regulation February 2026"` |
-| "this year / trends" | year | `"foundry capex 2026"` |
+| Exact phrase `"..."` | Names, titles, distinctive wording | `"advanced packaging capacity" TSMC` |
+| `site:` | Go straight to the authoritative domain | `site:sec.gov 10-K NVIDIA`, `site:stats.gov.cn 半导体` |
+| `filetype:pdf` | Reports, filings, academic papers | `semiconductor forecast 2030 filetype:pdf` |
+| Exclusion `-term` | Cut dominant noise | `Mirai -toyota` (botnet, not the car) |
+| `intitle:` | Documents *about* X, not mentioning X | `intitle:"export controls" semiconductors` |
+| Date qualifiers | Pin the time window (§9) | `"price cap" oil December 2025` |
+| Entity pivot | Person → org → publications → co-authors | search the *author* of a key report next |
+| Citation chase | Find the origin of a repeated claim | search the exact statistic in quotes + earliest date |
 
-- Never hardcode a past year from memory — use the actual current year from `<current_date>`.
-- Year-only queries will NOT surface today's news; day-level intent needs day-level queries.
-- Recency cuts both ways: for stable facts (history, established science), an authoritative older source beats a fresh low-tier rewrite.
+### 3.2 Document-type targeting
 
-## Robustness Playbook
+The fastest route to S1 evidence is naming the document, not the topic: annual/quarterly reports and earnings-call transcripts; SEC/regulator filings (10-K, S-1, 8-K, prospectus); legislative texts, Federal Register notices, comment dockets; court filings and dockets; patent filings; central-bank statements and minutes; statistical releases (with the agency's name); tender/procurement notices; clinical-trial registries; standards documents. Ask: *"what document would contain this answer?"* — then search for that document.
+
+### 3.3 Pivots when results are thin
+
+- **Language pivot**: regional topics → search the local language and local S1/S2 outlets (Chinese: 国家统计局, Caixin/财新; Japanese: Nikkei, METI; German: Destatis, Handelsblatt). Translate the key claim back and verify the translation didn't distort it.
+- **Time pivot**: for a changed/deleted page or an older claim, use the Wayback Machine (`web.archive.org/web/*/URL`).
+- **Vocabulary pivot**: insiders use different words than outsiders (say "fab utilization" not "chip factory busy"). Adopt the field's jargon from your first good source and re-query with it.
+- **Source pivot**: if commentary is all you find, search the names/documents the commentary cites.
+
+## 4. Source Quality Framework
+
+Judge every result BEFORE fetching, and every page BEFORE citing.
+
+### 4.1 Tiers
+
+| Tier | What | How to use |
+|---|---|---|
+| **S1 — Primary / authoritative** | Original data & documents from the actor or an official body: government statistics, regulator filings, peer-reviewed journals, court documents, earnings reports & transcripts, official texts, primary datasets, direct first-party statements | Preferred for every load-bearing claim. Quote numbers, dates, wording directly. Note: primary ≠ unbiased — a company's own filing is authoritative about its *reported* numbers and its *stated* intentions, not about the truth of its marketing claims. |
+| **S2 — High-quality secondary** | Original reporting/analysis with editorial standards and named accountability: Reuters, AP, Bloomberg, FT, WSJ, The Economist, Nikkei, Caixin; top domain trade press; serious research houses (Gartner, TrendForce, McKinsey — commercial angle noted); established think tanks (CSIS, Brookings, Carnegie — ideological lean noted); industry associations (SEMI, SIA, IEA) | Synthesis, context, expert quotes — and as a **pointer back to the S1 origin**. |
+| **S3 — Conditional** | Useful but biased, unvetted, or derivative: company blogs/marketing, vendor whitepapers, credentialed-expert blogs/Substacks, conference talks, Wikipedia (a **map to its citations**, never the citation), preprints (not yet peer-reviewed) | Cite only when corroborated by S1/S2, or explicitly attributed ("Company X claims…"). |
+| **S4 — Reject** | SEO content farms ("Top 10 X in 2026"), affiliate listicles, AI-generated aggregator slop, wire-reprint sites adding nothing, undated/anonymous pages, forum threads presented as fact, pump sites, citation-less "statistics" portals | **Do not fetch. Do not cite.** Skip from the snippet without spending a tool call. Exception: forums may serve *as labeled sentiment evidence only*. |
+
+### 4.2 Domain map — where S1 actually lives
+
+| Domain | Go first to |
+|---|---|
+| Macro/economy | National statistics agencies, central banks, IMF/World Bank/BIS/OECD |
+| Companies/finance | SEC EDGAR & local equivalents, earnings transcripts, exchange disclosures |
+| Tech/semiconductors | Company capex & roadmap disclosures, SEMI/SIA data, TechInsights/TrendForce, export-control texts (BIS rules) |
+| Policy/regulation | The bill/regulation text itself, Federal Register & comment dockets, committee testimony |
+| Science/medicine | Peer-reviewed journals, clinicaltrials.gov, regulator assessments (FDA/EMA), Cochrane reviews |
+| Geopolitics/conflict | Official statements from each side, UN/OSCE-type bodies, ACLED-style event data, named-analyst OSINT with shown evidence |
+| Public opinion | Named pollsters with methodology (Pew, Gallup) — never vibes from social media |
+
+### 4.3 Eight signal checks (from the snippet, pre-fetch)
+
+1. Named author/institution with relevant standing? 2. Visible, recent-enough date? 3. Original work or rewrite? 4. Specificity — numbers, names, dates vs. vague superlatives? 5. Methodology/data sourcing disclosed? 6. **Incentive check** — who profits if you believe this? 7. Domain reputation vs. keyword-stuffed domain? 8. Headline–content match?
+
+**≥2 red flags → treat as S4, skip without fetching.**
+
+### 4.4 Evaluating an "expert"
+
+Track record on *this* topic (not fame), methodology shown vs. asserted, conflicts disclosed, willingness to state uncertainty, and whether their past predictions are checkable. A credentialed person speaking outside their field is S3 at best.
+
+## 5. The Evidence Ledger
+
+Maintain a running mental ledger — and in long multi-pass runs, restate it at each checkpoint so it survives summarization:
+
+```
+[KIQ-2] TSMC 2026 capex guidance = $52–56B
+  src: Q4'25 earnings call transcript (S1, 2026-01-16) + Reuters report (S2, independent? NO — cites the call)
+  grade: B1 · status: single-origin, firm · open: split by geography?
+```
+
+For each entry track: **claim → sources (tier, date) → independence (different origins or echoes?) → grade → open questions.**
+
+**Grading (Admiralty-style shorthand):** letter = source reliability (A reliable S1 · B usually-reliable S2 · C fair/S3 · D suspect), digit = claim credibility (1 confirmed by independent sources · 2 probable/logical+partially corroborated · 3 possible · 4 doubtful). A load-bearing claim should reach **B2 or better**; anything C3/D-grade either gets upgraded by more research, explicitly flagged, or dropped.
+
+Claim typology matters: a **fact** can be confirmed; an **estimate** needs its methodology and range; a **projection** needs its assumptions; an **intention** ("X plans to…") needs the actor's own words and a feasibility check; a **rumor** stays a rumor however many outlets repeat it.
+
+## 6. Verification Tradecraft
+
+- **Lateral reading.** Don't evaluate a source by reading more *of* it; leave it and search what *others* say about that source/author/institute. Unknown site making big claims → check the site first, not the claim.
+- **Triangulation rule.** Load-bearing claims need **two independent origins** (different underlying documents/reporting, not two echoes). State independence explicitly when it matters.
+- **Circular-sourcing trap.** Many outlets repeating one striking number are echoing one origin — find it, cite *it*, count it as **one** source. Trace via exact-phrase search + earliest date.
+- **Number sanity checks.** Units and magnitude (million vs. billion); growth rates compound — sanity-check a "40% CAGR" against the implied end value; components should sum to totals; currency/real-vs-nominal; per-capita vs. absolute; **definition drift** (two "AI chip market" sizes may define the market differently — say which definition each uses).
+- **Dataset hygiene.** Note the data's *as-of* date vs. the article's publication date; check whether a "record high" uses a revised or original series; a 2019 figure in a 2026 listicle is still a 2019 figure.
+- **Quote verification.** Striking quotes get checked against the primary transcript/video when load-bearing; paraphrase drift and out-of-context clipping are routine.
+- **Manipulation defenses.** Watch for press-release laundering ("study shows" → vendor PR), coordinated narratives appearing simultaneously in low-tier outlets, fake/AI-generated experts, paper-mill journals, preprints touted as proven, hallucinated citations in AI-written content (verify cited sources actually exist before reusing them), and stealth-edited pages (archive-check when wording is disputed).
+
+## 7. Adversarial Analysis
+
+Run these cheaply but explicitly before synthesis:
+
+- **Competing hypotheses (ACH-lite).** For any contested or causal KIQ, list the 2–4 plausible explanations/outcomes and ask of each major piece of evidence: *which hypotheses is this consistent with?* Evidence consistent with everything discriminates nothing. Prefer the hypothesis with the least contradicting evidence, not the most confirming.
+- **Key assumptions check.** List the 3–5 assumptions your emerging conclusion rests on ("export controls stay in force", "no demand shock"). For each: what's the evidence, and what's the impact if wrong? Fragile load-bearing assumptions get flagged in the output.
+- **Targeted disconfirmation.** Spend dedicated searches on the strongest opposing case: `"[claim] criticism"`, `"[thesis] wrong/skeptics/debunked"`, the bear case to your bull case. Finding nothing *after genuinely looking* is informative; not looking is not.
+- **Premortem (for projections).** "It's two years on and this forecast failed — why?" The best answers become risks and indicators in your output.
+- **Consensus check.** When every source agrees, ask whether they share one origin or one incentive before treating consensus as evidence.
+
+## 8. Forecast-Oriented Research
+
+When the question is predictive (this pipeline's main case), research for *forecasting inputs*, not just description:
+
+- **Outside view first.** Find the **reference class and base rates**: how often do comparable projects ship on time, mergers clear review, conflicts de-escalate within a year? Search for historical analogues and their outcomes before tuning to case specifics.
+- **Actors & incentives.** For each key actor: stated position (their words, S1), revealed behavior (what they *did*), capabilities, constraints, and what they gain/lose under each outcome. Disagreement between stated and revealed is itself evidence.
+- **Drivers & indicators.** Identify the 3–6 variables that actually move the outcome, and for each a **watchable indicator** (a number, decision, or event with a date) that would signal which way things are breaking. These power downstream simulation and monitoring.
+- **Trend vs. break.** Establish the trend with data, then research what could structurally break it (policy, technology, capacity limits) — extrapolation and rupture need different evidence.
+- **Timeline discipline.** Build the dated sequence of events; causation claims that violate chronology die here.
+
+## 9. Temporal Awareness
+
+**Check `<current_date>` before forming ANY time-sensitive query.** Match precision to intent: "today/just released" → month+day+year (`"export rules February 28 2026"`); "this week" → week range; "recently" → month+year; "this year/trends" → year. Never hardcode a remembered year. Year-only queries will not surface today's news. Recency cuts both ways: for stable facts, an authoritative older source beats a fresh low-tier rewrite.
+
+## 10. Budget & Efficiency Discipline
+
+Tool calls are metered per run (`web_search`/`web_fetch` limits). Allocate deliberately: roughly **¼ scoping/landscape · ½ targeted deep-dive & verification · ¼ disconfirmation + gap-filling** — and protect the verification share; it is the first thing sloppy research cuts.
+
+- **Plan, then search.** No near-duplicate queries; a weak result means change the *angle* (entity, document type, language), not the word order.
+- **Triage from snippets** with the 8 checks; never fetch S4.
+- **Fetch with intent**: each fetch answers a specific named question; **1–3 fetches per KIQ**, on the sources your conclusions will actually rest on. Mine fetched pages' own citations before issuing fresh blind searches.
+- **Stopping rules**: a KIQ is done when its load-bearing claims reach B2-grade or you've exhausted plausible source classes (then flag it); two consecutive searches adding nothing new on a dimension → move on; budget low → cut breadth, never verification of what you'll actually assert.
+- **Checkpoint** the ledger after each phase/pass; never re-research settled items in later passes.
+- **Never loop.** One retry with a changed approach, then route around and note the gap.
+
+## 10.5 Obstacle Playbook
 
 | Obstacle | Move |
 |---|---|
-| **Paywall** on an S2 article | Don't fight it. Find the same story via wire coverage (Reuters/AP), the underlying S1 document, or the outlet's free summary. |
-| **Conflicting numbers** | Report the range + why (definitions, time windows, methodology); weight the more independent / more primary source. |
-| **Thin results** in English on a regional topic | Search in the relevant language (Chinese, Japanese, German…) and in local S1/S2 outlets (e.g. Caixin, Nikkei, national statistics offices). |
-| **Only S3/S4 sources exist** for a claim | Either drop the claim or carry it explicitly flagged: "single low-tier source — unverified". Never launder a weak source by citing it without its tier. |
-| **Breaking/rumor-stage story** | Label rumor vs. confirmation; cite who reported first and who confirmed independently. |
-| **Tool failure / empty page** | One retry with a changed approach, then route around. Note the gap rather than stalling. |
+| **Paywall** | Never fight it, never guess at the content behind it. In order: (1) find the **underlying S1 document** the article reports on (filing, release, transcript — usually free at the source); (2) wire coverage of the same story (Reuters/AP) or the outlet's free summary/newsletter version; (3) for papers: the **author's open copy** (arXiv, SSRN, university page, Google Scholar "all versions"); (4) an **archived version** (`web.archive.org`). If only the headline/lede is accessible and the claim is load-bearing, cite it flagged as "headline-only — full text unverified" and grade it down; never present a snippet as a read article. |
+| **Dead / changed / deleted page** | Wayback Machine; or exact-phrase search the key sentence to find a mirror or the original document. |
+| **Conflicting numbers** | Report the range + why (definition, window, methodology, incentive); weight the more independent, more primary source (§12.4). |
+| **Thin English results on a regional topic** | Language pivot (§3.3): local-language queries + local S1/S2 outlets; verify translations of key claims. |
+| **Only S3/S4 sources exist** | Drop the claim, or carry it explicitly flagged "single low-tier source — unverified". Never launder a weak source by citing it without its tier. |
+| **Breaking / rumor-stage story** | Label rumor vs. confirmation; record who reported first and who confirmed *independently*; expect early numbers to be revised. |
+| **Tool failure / empty page** | One retry with a changed approach, then route around and note the gap. Never loop. |
 
-## Output Requirements
+## 11. Synthesis Gate
 
-Carry your evidence forward so downstream consumers can audit it:
+Write only when every box ticks:
 
-1. **Inline attribution** for every load-bearing claim: source name + date (`Reuters, 2026-02-14`; `TSMC Q4'25 earnings call`).
-2. **Source list** with URL, date, and tier (S1/S2/S3) for each source actually used.
-3. **Flags preserved**: single-source claims, actor-self-claims, conflicts and their ranges, rumor-stage items.
-4. **No S4 citations, ever.** If something is only known via S4, it is not known.
+- [ ] Every KIQ answered, or its gap explicitly acknowledged?
+- [ ] Every load-bearing claim at B2-or-better — or flagged as single-origin/low-grade?
+- [ ] Origins traced (no circular sourcing) and key numbers sanity-checked?
+- [ ] Genuine disconfirmation attempted, key assumptions listed, competing hypotheses weighed?
+- [ ] Dates verified; anything old is labeled with its true date?
+- [ ] For forecasts: base rates, actor incentives, and watchable indicators gathered?
 
-## Failure Modes to Avoid
+Any NO → one targeted pass on that gap only. Do not restart broad searching.
 
+## 12. Output Contract
+
+1. **Layered claims**: distinguish *known* (graded evidence) / *inferred* (your reasoning, shown) / *assumed* (flagged) / *unknown* (stated). Never silently blend them.
+2. **Calibrated uncertainty language**, used consistently: "almost certain" ≈ >90% · "likely/probable" ≈ 65–85% · "roughly even" ≈ 45–55% · "unlikely" ≈ 15–35% · "remote" ≈ <10%. Attach the driver of the uncertainty, not just the hedge.
+3. **Inline attribution** for every load-bearing claim: source + date (`Reuters, 2026-02-14`; `TSMC Q4'25 call`). **Source list** with URL, date, tier for everything actually used.
+4. **Conflicts shown, not averaged**: the range, why sources differ (definition/window/method/incentive), and which you weight and why.
+5. **Flags preserved downstream**: single-origin claims, actor self-claims, rumor-stage items, fragile assumptions.
+6. **For forecasts**: drivers, scenarios with rough likelihoods, and the dated indicators that would confirm/deny each.
+7. **No S4 citations, ever.** If something is only known via S4, it is not known.
+
+## 13. Failure Modes
+
+- ❌ Searching commentary when a primary document exists (§3.2)
 - ❌ Fetching the first pretty result instead of triaging by tier
-- ❌ Counting ten echoes of one report as ten sources
-- ❌ Burning budget on duplicate queries or retry loops
-- ❌ Only searching the confirming side of a question
+- ❌ Counting echoes of one report as independent sources
+- ❌ Evidence consistent with every hypothesis presented as supporting yours
+- ❌ Only searching the confirming side; skipping the premortem
+- ❌ "Studies show" without naming the study; quotes without checking the transcript
+- ❌ A 40% CAGR cited without sanity-checking the implied end state
 - ❌ Citing Wikipedia/aggregators instead of the primaries they point to
-- ❌ Presenting a vendor's claim about itself as independent fact
-- ❌ Using an old statistic without dating it
+- ❌ Presenting a vendor's self-claim as independent fact
+- ❌ Burning budget on duplicate queries or retry loops, then skipping verification
 - ❌ Starting to write before the synthesis gate passes

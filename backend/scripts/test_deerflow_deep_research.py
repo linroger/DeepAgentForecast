@@ -44,7 +44,16 @@ def assert_skill_synced() -> None:
     deployed = ROOT / "deer-flow" / "skills" / "public" / "deep-research" / "SKILL.md"
     assert overlay.exists(), f"missing overlay skill: {overlay}"
     text = overlay.read_text(encoding="utf-8")
-    for marker in ("S1 — Primary / authoritative", "S4 — Reject", "circular-sourcing", "Synthesis gate"):
+    for marker in (
+        "S1 — Primary / authoritative",
+        "S4 — Reject",
+        "Evidence Ledger",
+        "Circular-sourcing",
+        "Competing hypotheses",
+        "Synthesis Gate",
+        "Paywall",
+        "base rates",
+    ):
         assert marker in text, f"overlay skill lost its '{marker}' section"
     if deployed.exists():
         assert deployed.read_text(encoding="utf-8") == text, (
