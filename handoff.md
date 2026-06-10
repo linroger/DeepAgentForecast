@@ -42,6 +42,18 @@ Full pipeline: `cd MiroFish-0.1.2 && npm run dev` → http://localhost:3000 → 
 
 ---
 
+## SESSION 2026-06-10 (later still) — Run management + live demo site
+
+**Request:** Screenshots folder pointer (already covered — those raw originals were previously optimized into docs/media); add a cancel button (one already existed in the run header; added per-run controls to the history drawer); clean the failed runs; create a live demo site and link it from the GitHub repo description.
+
+**Shipped (commit `87cc668`):**
+1. **Run management.** `DELETE /api/research/<id>` (terminal-only, path-traversal-safe, refuses live runs under the lifecycle lock) and `POST /api/research/clean` (bulk failed+cancelled, never touches running/completed). History drawer got per-run **Cancel** (running) / **Delete** (terminal) buttons + a **Clear failed (N)** bulk button; deleting the active run resets the view. Regression checks added (delete/clean/traversal/live-protection) — suite now 8 checks, all pass.
+2. **Cleaned this machine:** all 12 failed pipelines purged via the new clean path; the 4 completed runs kept.
+3. **Live demo site** (GitHub Pages, `main:/docs`): `docs/index.html` (hero, run cards with verified stats from run_state.json, demo video, screenshots, pipeline overview, quickstart) + `docs/demo.html?run=<key>` (marked.js viewer with Forecast/Dossier tabs) + `docs/demos/{us-ai-2030,ev-2035,russia-ukraine}/{report,dossier}.md` — unedited artifacts from the 3 good completed runs (the 4th, pipe_8bd4981639ac, had a placeholder-failure report from the pre-fix era and was excluded; one failed section was trimmed from the us-ai-2030 demo copy). Verified locally in Chrome (render + tabs + no console errors) and live post-deploy.
+4. **Repo metadata:** description + homepage now carry https://linroger.github.io/DeepResearchForecast/ ; READMEs link the live site and document the delete/clean endpoints (EN + zh-CN).
+
+**Gotcha (this machine):** stale `GH_TOKEN` *and* `GITHUB_TOKEN` env vars shadow the valid gh keyring login → `env -u GH_TOKEN -u GITHUB_TOKEN gh …` and `gh auth switch -u linroger` were needed for the Pages/description API calls. git push itself was unaffected (osxkeychain).
+
 ## SESSION 2026-06-10 (later) — Resume hardening + fresh-clone audit + commit
 
 **Request:** integrate the pieces, optimize, make setup/instructions accurate so a fresh clone runs seamlessly, and make the resume feature robust.
