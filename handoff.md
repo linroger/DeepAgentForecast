@@ -276,3 +276,18 @@ tail -f backend/uploads/pipelines/pipe_f8844f93a738/handoff/research_progress.lo
 
 **Remaining work:**
 - The user can now open/select `pipe_f8844f93a738` and press `继续`. That will reuse its already-written `research_report.md` and proceed into ontology/graph instead of rerunning the expensive DeerFlow research pass.
+
+## 2026-06-10 — session 4: semiconductor run published as 4th live demo
+
+**Request:** Upload the latest successful run, `pipe_f01ed9fe06de` (2030 全球半导体产业, deep mode, completed 2026-06-10 13:04 UTC), as a new live demo on the GitHub Pages site.
+
+**What was done:**
+1. Added `"semiconductors-2030": "pipe_f01ed9fe06de"` to `RUNS` in `backend/scripts/export_demo_site_data.py` and exported all 9 artifacts to `docs/demos/semiconductors-2030/` (research_log 335K, dossier 74K, actors, sources, ontology, graph 312K, forum 1.1M, report 136K, meta).
+2. The run's original Zep graph (`mirofish_7648a1e807bd4401`, built today on the current account) exported directly — no 404 rebuild needed. 285 nodes / 893 edges, the largest demo graph.
+3. Wired the run key into `docs/demo.html` (`RUN_KEYS`), `docs/index.html` (4th run card), and `docs/i18n.js` (`card.semi.title/meta`, `run.semi.title` in EN + 中文). Stats verified from run_state/config: 40 rounds, 115 personas.
+4. Notably this is the first demo produced AFTER the loop-detection fix: research_log.txt, dossier.md and report.md all contain **0** `[FORCED STOP]` markers and **0** placeholder-failure sections — scenario evidence that the per-run counter reset works in production.
+
+**Evidence captured:**
+- Exporter run: `ok semiconductors-2030` (graph 285/893); all JSON artifacts parse; forum feed 613 twitter + 1055 reddit actions.
+- `node --check docs/i18n.js` — pass.
+- Local smoke test (python http.server + Chrome): index shows the 4th card with Chinese i18n; all 6 stage tabs render (console log, dossier+actor cards, ontology, interactive force-graph "285 个实体 · 893 条关系", Twitter/Reddit feed, final report "硅基重构…"); EN toggle re-renders the page; zero console errors.

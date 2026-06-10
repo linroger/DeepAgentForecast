@@ -1,0 +1,477 @@
+{
+  "central_question": "在 2026-2028 年窗口内，全球半导体产业链（设计/代工/存储/HBM/先进封装/AI 加速器）在 AI CapEx 超 1 万亿美元/年的支撑下能否持续兑现 WSTS 1.511 万亿美元（+89.9%）的 2026 增速，以及谁会成为被电力供给、出口管制和估值泡沫夹击下的主要输家与赢家",
+  "as_of_date": "2026-06-10",
+  "actors": [
+    {
+      "name": "Jensen Huang",
+      "type": "Person",
+      "role": "NVIDIA 创办人暨执行长",
+      "stance": "Vera Rubin 进入全量产；Marvell 是'下一个万亿'；要求 SK Hynix 加产 HBM",
+      "influence": "high",
+      "memory": "知道 Q1 FY27 816 亿、Q2 指引 910 亿、零中国基线；锁定三供 HBM4；Spectrum-X 与 Marvell 协同打开市场"
+    },
+    {
+      "name": "C.C. Wei",
+      "type": "Person",
+      "role": "台积电执行长",
+      "stance": "N2 史上最强客户采用；CoWoS 已售罄到 2026 内；2nm/A16 三年复合 70%",
+      "influence": "high",
+      "memory": "知道 N2 量产 2025 H2 启动、2026 月产能 100k；亚利桑那 F2 装机；缺独立审计的良率数字"
+    },
+    {
+      "name": "Matt Murphy",
+      "type": "Person",
+      "role": "Marvell 总裁暨执行长",
+      "stance": "定制 ASIC 业务从 0 增至 15 亿（FY26），FY28 接近 150 亿营收",
+      "influence": "high",
+      "memory": "股价 YTD +240%；内部人在 5、6 月开始卖股；Teralynx T100 + AWS Trainium + Google TPU 是三大引擎"
+    },
+    {
+      "name": "Lip-Bu Tan",
+      "type": "Person",
+      "role": "Intel 执行长",
+      "stance": "18A 是内部和外部客户双用节点，14A 接续；18A-P 提升能效 18%",
+      "influence": "high",
+      "memory": "知道 Q1 2026 Foundry 51 亿、2024 Foundry 亏 188 亿、CHIPS 补贴 85 亿、14A risk 2028"
+    },
+    {
+      "name": "Elon Musk",
+      "type": "Person",
+      "role": "Tesla 执行长",
+      "stance": "AI6 选 Samsung Taylor 厂 165 亿美元长约",
+      "influence": "high",
+      "memory": "知道 Samsung 2nm 良率约 60%、从 7 万亿亏损到 Q3 2026 转盈路径"
+    },
+    {
+      "name": "Ming-Chi Kuo",
+      "type": "Person",
+      "role": "天风国际证券分析师",
+      "stance": "iPhone Fold 2026 秋发布、2026 8-10M、2027 20-25M；量产时点可能延至 2027",
+      "influence": "high",
+      "memory": "掌握 Apple 供应链订单与零组件 BOM 详细时点"
+    },
+    {
+      "name": "Mo Wenyu",
+      "type": "Person",
+      "role": "信达证券分析师",
+      "stance": "寒武纪进入'值得观察'名单；DeepSeek V3.1 加快 AI 芯片国产替代",
+      "influence": "medium",
+      "memory": "知道 Cambricon 2025 H1 营收 28.81 亿、净利 10.38 亿、PE 4,554x"
+    },
+    {
+      "name": "NVIDIA",
+      "type": "Organization",
+      "role": "AI 加速器龙头、数据中心 GPU 统治者",
+      "stance": "Vera Rubin NVL72 2026 H2 量产，3.5× 训练、5× 推理",
+      "influence": "high",
+      "memory": "Q1 FY27 营收 816 亿、Q2 指引 910 亿（零中国）、HBM4 三供锁定、订单积压已超万亿"
+    },
+    {
+      "name": "SK Hynix",
+      "type": "Organization",
+      "role": "HBM 与 DRAM 龙头",
+      "stance": "HBM3E 世代独占后维持 HBM4 60-70% 配额",
+      "influence": "high",
+      "memory": "Q1 2026 HBM 份额 50%→40%；HBM4 12 层良率 70%；HBM4E 已出样"
+    },
+    {
+      "name": "Samsung Electronics",
+      "type": "Organization",
+      "role": "存储、代工、逻辑综合体",
+      "stance": "2026 HBM 收入 +3× vs 2025；2nm GAA 60% 良率、订单目标 +130%",
+      "influence": "high",
+      "memory": "2025 Foundry 亏 7 万亿韩元；AI6 165 亿美元长约；D2 DRAM/HBM 2026 量产；Kwak Noh-jung 表态追赶快于预期"
+    },
+    {
+      "name": "TSMC",
+      "type": "Organization",
+      "role": "全球晶圆代工龙头",
+      "stance": "N2 进入量产、2nm/A16 三年 CAGR 70%、CoWoS 80%+",
+      "influence": "high",
+      "memory": "15+ 客户、20 tape-outs、70 排队；9 座 fab/封装厂 2026 破土或装机；亚利桑那 F2 H2 工具装机、日本 F2 升级 3nm"
+    },
+    {
+      "name": "Intel Corporation",
+      "type": "Organization",
+      "role": "IDM 与 Foundry 转型中",
+      "stance": "18A 是内部+外部节点、14A 是真正 Foundry 节点",
+      "influence": "medium",
+      "memory": "Q1 2026 Foundry 营收 51 亿、CHIPS 85 亿补贴已落袋、Tesla 是关键外部客户"
+    },
+    {
+      "name": "Broadcom",
+      "type": "Organization",
+      "role": "AI ASIC 与网络芯片龙头",
+      "stance": "FY26 Q1 AI 收入 84 亿（+106%）、Q2 指引 107 亿",
+      "influence": "high",
+      "memory": "客户涵盖 Google、Meta、字节跳动、Anthropic；毛利率受 XPU 议价压力"
+    },
+    {
+      "name": "Marvell Technology",
+      "type": "Organization",
+      "role": "定制 AI 硅第二供",
+      "stance": "FY26 81.95 亿（+42%）、FY27 127 亿、FY28 150 亿",
+      "influence": "high",
+      "memory": "股价 YTD +240%；Teralynx T100 + Trainium + Google TPU + Microsoft Maia 是四引擎；forward P/E 26-65 分歧大"
+    },
+    {
+      "name": "Apple",
+      "type": "Organization",
+      "role": "iPhone、Mac 自研芯片、AI 终端入口",
+      "stance": "M5 MacBook Air + MacBook Neo 双线；iPhone 18 Pro 用 2nm A20；iPhone Fold 2026 末发布",
+      "influence": "high",
+      "memory": "iPhone Fold 2026 8-10M 颗、2027 20-25M 颗、$2,000-2,500 定价；M5 性能比 M4 提升 10-20%"
+    },
+    {
+      "name": "AMD",
+      "type": "Organization",
+      "role": "AI GPU 第二供",
+      "stance": "MI400 2026 上市、MI450X 2026 H2、Helios OpenAI 2027 部署",
+      "influence": "high",
+      "memory": "MI450X 在 Helios 机架提供 2.9 exaflops FP4；HBM4 拿到 Samsung 主供"
+    },
+    {
+      "name": "Alibaba T-Head 平头哥",
+      "type": "Organization",
+      "role": "阿里云旗下 AI 芯片子公司",
+      "stance": "Zhenwu 累计 56 万颗、400+ 客户；V900/J900 2026-2027 路线图",
+      "influence": "medium",
+      "memory": "传出 2026 IPO 分拆；客户含中国电信、一汽、浦发；C2 modem 2026"
+    },
+    {
+      "name": "华为 HiSilicon",
+      "type": "Organization",
+      "role": "中国系统厂自有芯片",
+      "stance": "Ascend 910C 2025 中开始向中国客户大规模出货，对冲 H20 禁运",
+      "influence": "medium",
+      "memory": "与 SMIC 共生，依赖 7nm 翻倍、5nm 试产；与长鑫 CXMT 合作 HBM"
+    },
+    {
+      "name": "Cambricon 寒武纪",
+      "type": "Organization",
+      "role": "中国 AI 芯片设计上市公司",
+      "stance": "2025-08 取代茅台成 A 股最贵股；2026 计划出货 50 万颗（思元 590 ≤30 万 + 思元 690 起步）",
+      "influence": "medium",
+      "memory": "2025-08 PE 4,554x、2026-02 单日蒸发 480 亿、2026 仍处于估值争议中"
+    },
+    {
+      "name": "SMIC 中芯国际",
+      "type": "Organization",
+      "role": "中国大陆最大晶圆代工厂",
+      "stance": "2026 7nm 翻倍、5nm 试产；走 DUV 浸没式多重曝光路线",
+      "influence": "medium",
+      "memory": "5nm 试产良率传闻 60-70%（无外部客户采用）；EUV 仍被封锁"
+    },
+    {
+      "name": "CXMT 长鑫存储",
+      "type": "Organization",
+      "role": "中国 DRAM 新势力",
+      "stance": "2026 全面停产 DDR4、转向 DDR5 与 HBM3",
+      "influence": "medium",
+      "memory": "2026 月产能 30 万片、HBM3 占 6 万片（20%）；与华为共攻 HBM"
+    },
+    {
+      "name": "Micron",
+      "type": "Organization",
+      "role": "美国本土唯一 HBM/DRAM 玩家",
+      "stance": "Vera Rubin HBM4 第三供（5-10%）",
+      "influence": "medium",
+      "memory": "Q1 2026 DRAM 份额未进前三；HBM 3-5 名前后波动；本土制造是 NV 地缘保险"
+    },
+    {
+      "name": "SanDisk 闪迪",
+      "type": "Organization",
+      "role": "NAND 与企业 SSD 龙头之一",
+      "stance": "Q1 2026 数据中心业务 QoQ +200%+；NAND 转为'AI 必需'",
+      "influence": "medium",
+      "memory": "与 Kioxia 合资 Yokkaichi 延至 2034；2026-2029 付 11.6 亿美元代工费；股价 2026-01 RSI 81.6"
+    },
+    {
+      "name": "Qualcomm",
+      "type": "Organization",
+      "role": "手机基带与 Snapdragon X 笔记本芯片",
+      "stance": "Snapdragon X2 Elite Extreme 已能与 M4 Pro 对标",
+      "influence": "medium",
+      "memory": "苹果补缴版税 45-47 亿（一次性）；6 年期基带供应协议；CES 2026 评测显示 ARM Windows 已能对标 Apple Silicon"
+    },
+    {
+      "name": "Foxconn 鸿海",
+      "type": "Organization",
+      "role": "AI 服务器最大 ODM",
+      "stance": "2025 AI 服务器营收破 NT$1 万亿、与 NVIDIA 锁定 Wistron 工厂产能",
+      "influence": "high",
+      "memory": "2026 出口管制扩展到全中国的预案成本上升；与 Quanta/Wistron 共享 GB300 / Rubin 平台订单"
+    },
+    {
+      "name": "Quanta Computer",
+      "type": "Organization",
+      "role": "AI 服务器 ODM 第二巨头",
+      "stance": "2025 营收破 NT$1 万亿、2026 持续 AI 服务器驱动",
+      "influence": "high",
+      "memory": "客户为 AWS / Google / Meta / Microsoft；数据中心产品线对单一客户依赖度下降"
+    },
+    {
+      "name": "Wistron 纬创",
+      "type": "Organization",
+      "role": "AI 服务器 ODM 第三巨头",
+      "stance": "2025 营收破 NT$1 万亿、NVIDIA 包下 Zhubei A2 整厂",
+      "influence": "high",
+      "memory": "与 NVIDIA 锁定 GB300 平台；2026 全产能已被锁定至年底"
+    },
+    {
+      "name": "Kioxia 铠侠",
+      "type": "Organization",
+      "role": "日本 NAND 龙头",
+      "stance": "Kitakami 2 期 2025-09-30 量产、与 SanDisk JV 延至 2034",
+      "influence": "medium",
+      "memory": "Q1 2026 NAND 份额并列第四 13.9%；BI/CIS NAND 在 AI 数据中心需求爆量"
+    },
+    {
+      "name": "台积电亚利桑那 TSMC Arizona",
+      "type": "Organization",
+      "role": "美国本土先进制程枢纽",
+      "stance": "F1 量产、F2 工具装机 H2 2026、F3 建设中、F4 计划 2026 破土",
+      "influence": "medium",
+      "memory": "亚利桑那良率 4 个百分点高于台湾；CHIPS Act 配套核心"
+    },
+    {
+      "name": "Microsoft",
+      "type": "Organization",
+      "role": "Hyperscaler + Maia 自研芯片",
+      "stance": "Q1 FY26 AI 收入 370 亿（+123%）、AI capex 全行业第一",
+      "influence": "high",
+      "memory": "与 OpenAI 长期绑定；Maia + Marvell 是供应链多元化保障"
+    },
+    {
+      "name": "Amazon AWS",
+      "type": "Organization",
+      "role": "Hyperscaler + Trainium 自研芯片",
+      "stance": "AI 芯片 backlog 2,250 亿、Q1 2026 增速 15 季度最高",
+      "influence": "high",
+      "memory": "Trainium2/3 + Graviton + Inferentia 全部由 Marvell 共同设计；Project Rainier 锚定 Anthropic"
+    },
+    {
+      "name": "Google Cloud",
+      "type": "Organization",
+      "role": "Hyperscaler + TPU 自研",
+      "stance": "Q1 2026 营收 +63% YoY；与 Marvell 谈 Inference 优化 TPU + MPU",
+      "influence": "high",
+      "memory": "TPU HBM3E Samsung 主供 >60%；2026 Marvell 成为第三供合作伙伴"
+    },
+    {
+      "name": "Meta",
+      "type": "Organization",
+      "role": "Hyperscaler + AI 算力自建",
+      "stance": "capex 6 家中第四大、Llama + 算力扩张双线",
+      "influence": "medium",
+      "memory": "Microsoft 之外最大 GPU 客户；2026 capex 占比 ~17%"
+    },
+    {
+      "name": "Oracle",
+      "type": "Organization",
+      "role": "Hyperscaler + OCI GPU 云",
+      "stance": "Q1 2026 capex 进入前六",
+      "influence": "medium",
+      "memory": "OCI 与 NVIDIA 锁定 Vera Rubin 大单"
+    },
+    {
+      "name": "CoreWeave",
+      "type": "Organization",
+      "role": "AI 专用云新进入者",
+      "stance": "2026 进入前六 Hyperscaler、债市支撑 capex",
+      "influence": "medium",
+      "memory": "CoreWeave 与 NVIDIA 关系最深；2026 capex 杠杆高"
+    },
+    {
+      "name": "OpenAI",
+      "type": "Organization",
+      "role": "前沿 AI 模型公司",
+      "stance": "ARR 24-25 亿（4 月）；与 AMD 锁定 Helios + MI450X 集群 2027 部署",
+      "influence": "high",
+      "memory": "算力饥渴未解；NVIDIA、AMD、Oracle、CoreWeave 多源供算"
+    },
+    {
+      "name": "Anthropic",
+      "type": "Organization",
+      "role": "前沿 AI 模型公司",
+      "stance": "4 月 ARR 30 亿（年化）；与 AWS Project Rainier 12.5 亿/月合同",
+      "influence": "high",
+      "memory": "15 个月 30× 增长；Trainium 路线锁定 AWS"
+    },
+    {
+      "name": "台湾经济部 MOEA",
+      "type": "Government",
+      "role": "台湾半导体出口管制主管机关",
+      "stance": "6-9 表态继续强化战略高新技术出口管控；可能将 AI 芯片对华管控从华为/SMIC 扩到全中国",
+      "influence": "high",
+      "memory": "TPP 21,000 + 6,500 GB/s 阈值；与美国商务部保持节奏同步；Entity List 6-10 新增 265 个、删除 13 个"
+    },
+    {
+      "name": "美国商务部 BIS",
+      "type": "Government",
+      "role": "美国出口管制主管机关",
+      "stance": "2026-06 考虑阻断中国海外实体进口 AI 芯片的漏洞",
+      "influence": "high",
+      "memory": "TPP 阈值自 2026-01 起执行；200K+ 单位出口需投资承诺与官方保证"
+    },
+    {
+      "name": "Moody's 穆迪",
+      "type": "Organization",
+      "role": "信用评级机构",
+      "stance": "2026 capex 上修至 7,850 亿、2027 接近 1 万亿；同时警告 capex/OCF 接近 100% 可能触发信用重估",
+      "influence": "medium",
+      "memory": "2026 评级展望调升与警示并重；将 capex 与合同 backlog 联动"
+    },
+    {
+      "name": "Goldman Sachs",
+      "type": "Organization",
+      "role": "投资银行",
+      "stance": "2025-2027 累计 Hyperscaler capex 1.15 万亿",
+      "influence": "medium",
+      "memory": "将 AI 基础设施视为结构性增长而非泡沫"
+    },
+    {
+      "name": "McKinsey",
+      "type": "Organization",
+      "role": "咨询机构",
+      "stance": "全球 AI 基础设施 2030 累计投资 6.7 万亿",
+      "influence": "medium",
+      "memory": "将电力、土地、冷却纳入核心约束变量"
+    },
+    {
+      "name": "WSTS",
+      "type": "Organization",
+      "role": "半导体行业统计组织",
+      "stance": "2026 春季将行业增速上修至 +89.9%、2027 +26.6%",
+      "influence": "medium",
+      "memory": "数据涵盖存储 +249.5%、美洲 +112%；2026 已是历史最大增速"
+    },
+    {
+      "name": "TrendForce",
+      "type": "Media",
+      "role": "半导体行业研究机构",
+      "stance": "6-10 报道台湾可能扩展出口管制范围；3-9 报道平头哥累计 47 万颗",
+      "influence": "medium",
+      "memory": "掌握月度 NAND/DRAM/Foundry 报价与客户配额"
+    },
+    {
+      "name": "Counterpoint Research",
+      "type": "Media",
+      "role": "半导体市场研究机构",
+      "stance": "Q1 2026 DRAM 份额 Samsung 38% / Hynix 29% / CXMT 8%",
+      "influence": "medium",
+      "memory": "中国大陆分析师 Wei Sun 称出口管制'反而加速中国自立'"
+    },
+    {
+      "name": "Cambricon 股价",
+      "type": "Platform",
+      "role": "A 股 AI 芯片情绪指标",
+      "stance": "2025-08 PE 4,554x、2026-02 单日 480 亿回撤、2026 全年仍处估值争议",
+      "influence": "low",
+      "memory": "既是国产替代旗帜也是散户博弈标的"
+    },
+    {
+      "name": "OpenAI 算力合同",
+      "type": "Platform",
+      "role": "AI 实验室算力承诺",
+      "stance": "与 AMD Helios 2027、与 NVIDIA 多源、Stargate 持续扩张",
+      "influence": "medium",
+      "memory": "OpenAI ARR 落后于 capex 支出，回款节奏决定供应商现金流"
+    },
+    {
+      "name": "Anthropic 算力合同",
+      "type": "Platform",
+      "role": "AI 实验室算力承诺",
+      "stance": "4 月起 12.5 亿/月、Project Rainier Trainium 路线",
+      "influence": "medium",
+      "memory": "30× 增长 + 12.5 亿月算力合同是 2026 capex 上修的最大引擎"
+    }
+  ],
+  "key_events": [
+    {
+      "date": "2026-03-03",
+      "event": "Apple 推出 M5 MacBook Air，起价上调 100 美元；新增 MacBook Neo 入门机型（A18 Pro、8GB/256GB）"
+    },
+    {
+      "date": "2026-04-29",
+      "event": "Microsoft、Meta、Alphabet、Amazon Q1 2026 财报披露合计 AI capex 承诺 6,300 亿美元"
+    },
+    {
+      "date": "2026-05-19",
+      "event": "Samsung 宣布通过 NVIDIA 与 AMD 的 HBM4 最终资质，11.7 Gbps/pin，6 月大规模供货"
+    },
+    {
+      "date": "2026-05-20",
+      "event": "NVIDIA Q1 FY27 公布营收 816 亿美元（YoY +85%），Q2 指引 910 亿（零中国基线）"
+    },
+    {
+      "date": "2026-05-20",
+      "event": "阿里云栖大会公布平头哥 Zhenwu V900/J900 路线图；累计出货 56 万颗、客户 400+"
+    },
+    {
+      "date": "2026-06-01",
+      "event": "NVIDIA GTC Taipei 揭露 Vera Rubin NVL72，进入全量产；三星/Hynix/Micron 同步为 HBM4 三供"
+    },
+    {
+      "date": "2026-06-02",
+      "event": "Moody 上修 2026 Hyperscaler capex 至 7,850 亿、2027 接近 1 万亿（+850 亿修正）"
+    },
+    {
+      "date": "2026-06-02",
+      "event": "Jensen Huang 在 Computex 公开称 Marvell 是'下一个万亿'，Marvell 单日 +25%"
+    },
+    {
+      "date": "2026-06-05",
+      "event": "Jensen Huang 亲赴首尔确认三家 HBM4 供应商全部通过 Vera Rubin 资质"
+    },
+    {
+      "date": "2026-06-09",
+      "event": "台湾 MOEA 表态考虑将 AI 芯片对华出口管控从华为/SMIC 扩到全中国"
+    },
+    {
+      "date": "2026-06-09",
+      "event": "WSTS 春季更新上修 2026 行业至 1.511 万亿美元（+89.9%）、2027 1.914 万亿（+26.6%）"
+    },
+    {
+      "date": "2026-09-01",
+      "event": "Apple 预计发布 iPhone 18 Pro / Pro Max（A20 Pro 2nm、C2 modem）；iPhone Fold 同步发布（出货可能延至 2027 H1）"
+    },
+    {
+      "date": "2026-H2",
+      "event": "AMD MI450X Helios 平台大规模出货；Marvell FY27 营收目标 127 亿"
+    },
+    {
+      "date": "2026-H2",
+      "event": "TSMC 亚利桑那 F2 工具装机完成、日本 F2 升级 3nm 量产；CoWoS 持续 80% CAGR"
+    },
+    {
+      "date": "2027",
+      "event": "TSMC N2P 量产、A16 进入风险量产；Vera Rubin 出货进入第二个完整年度；OpenAI Helios 部署"
+    },
+    {
+      "date": "2028",
+      "event": "Intel 14A risk production；TSMC CoWoS 14-reticle（20 HBM）；Samsung Foundry 全面转盈"
+    },
+    {
+      "date": "2027-2028",
+      "event": "iPhone Fold 出货从 8-10M 颗升至 20-25M 颗；MacBook Neo 二代迭代"
+    }
+  ],
+  "hot_topics": [
+    "WSTS 2026 行业 +89.9% 是否能持续到 2027、2028",
+    "SK Hynix HBM 份额从 50%→40% 是衰退还是高位维持",
+    "HBM4 三方配额（Hynix 60-70% / Samsung 25-30% / Micron 5-10%）与 HBM4E 路线之争",
+    "TSMC 2nm/A16 70% CAGR vs Intel 18A/14A 抢单 vs Samsung 2nm GAA 60% 良率追赶",
+    "Hyperscaler 2026 capex 7,850 亿、2027 接近 1 万亿中 60% 流向电力 / 冷却 / 厂房——算力瓶颈切换到电力",
+    "NVIDIA Q2 FY27 910 亿（零中国）基线是否反映 H20 完全禁运或预留恢复空间",
+    "Apple iPhone Fold 2026 末发布、2027 大量出货的 ASP 拉抬效应（$2,000-2,500 定价）",
+    "Marvell 股价 YTD +240%、forward P/E 26-65 分歧、内部人卖出与定制 ASIC 业绩兑现的博弈",
+    "Cambricon 寒武纪 4,554x PE、2026 计划 50 万颗出货的国产替代兑现度与单日 480 亿回撤风险",
+    "台湾 6-9 表态出口管制扩展到全中国对 Foxconn/Quanta/Wistron AI 服务器营收（占总营收 60%+）的潜在冲击",
+    "SMIC 5nm 试产 60-70% 良率传闻 vs 实际 HVM 兑现、华为/阿里高端芯片的成本与良率代价",
+    "Hyperscaler capex/OCF 从 10 年均值 40% 跳到接近 100%、信用评级可能重估的金融约束",
+    "OpenAI ARR 24-25 亿 vs Anthropic 30 亿（年化）的算力合同与厂商绑定差异",
+    "Samsung HBM 2026 +3×、Foundry Q3 2026 转盈、AI6 165 亿长约驱动下的'存储+代工'双重反弹",
+    "CoWoS 14-reticle 2028、24 HBM 2029、64 HBM SoW 2029 路线图与 ABF 基板、IC 载板供应链联动"
+  ]
+}

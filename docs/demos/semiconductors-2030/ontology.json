@@ -1,0 +1,510 @@
+{
+ "entity_types": [
+  {
+   "name": "SemiconductorCompany",
+   "description": "Semiconductor design, manufacturing, or fabless company directly in the chip value chain",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Company official name"
+    },
+    {
+     "name": "headquarters",
+     "type": "text",
+     "description": "Country or region of headquarters"
+    },
+    {
+     "name": "market_segment",
+     "type": "text",
+     "description": "Primary segment: foundry, memory, AI accelerator, mobile chip, NAND, IDM, etc."
+    }
+   ],
+   "examples": [
+    "TSMC",
+    "Samsung Electronics",
+    "NVIDIA",
+    "SK Hynix",
+    "SMIC",
+    "Micron",
+    "Intel Corporation",
+    "Broadcom",
+    "Marvell Technology",
+    "AMD",
+    "Qualcomm",
+    "SanDisk",
+    "CXMT",
+    "Alibaba T-Head",
+    "HiSilicon",
+    "Cambricon"
+   ]
+  },
+  {
+   "name": "Hyperscaler",
+   "description": "Large cloud and AI platform company that consumes chips and drives capex",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Hyperscaler official name"
+    },
+    {
+     "name": "cloud_revenue_growth",
+     "type": "text",
+     "description": "Recent cloud business year-over-year growth rate"
+    }
+   ],
+   "examples": [
+    "Microsoft",
+    "Amazon AWS",
+    "Google Cloud",
+    "Meta",
+    "Oracle",
+    "CoreWeave",
+    "Alibaba Cloud"
+   ]
+  },
+  {
+   "name": "EndProductMaker",
+   "description": "Consumer device or server assembler brand that integrates chips into final products",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Brand or company name"
+    },
+    {
+     "name": "product_line",
+     "type": "text",
+     "description": "Main product category: smartphone, PC, server ODM, EV, etc."
+    }
+   ],
+   "examples": [
+    "Apple",
+    "Tesla",
+    "Foxconn",
+    "Quanta Computer",
+    "Wistron",
+    "Wiwynn",
+    "Inventec",
+    "Pegatron"
+   ]
+  },
+  {
+   "name": "GovernmentAgency",
+   "description": "Government body involved in export control, industrial policy, or regulation",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Agency official name"
+    },
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "Country or territory governed"
+    }
+   ],
+   "examples": [
+    "US Department of Commerce BIS",
+    "Taiwan MOEA",
+    "Taiwan ITA",
+    "The White House"
+   ]
+  },
+  {
+   "name": "IndustryAnalyst",
+   "description": "Sell-side or research analyst who publishes market forecasts and opinions",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Analyst full name"
+    },
+    {
+     "name": "employer",
+     "type": "text",
+     "description": "Research firm or bank"
+    },
+    {
+     "name": "coverage",
+     "type": "text",
+     "description": "Primary sector or company coverage"
+    }
+   ],
+   "examples": [
+    "Ming-Chi Kuo",
+    "Mo Wenyu",
+    "Jim Cramer"
+   ]
+  },
+  {
+   "name": "CorporateExecutive",
+   "description": "Top executive (CEO, founder, chair) who speaks publicly for a major company",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Executive full name"
+    },
+    {
+     "name": "title",
+     "type": "text",
+     "description": "Official position, e.g. CEO, Founder"
+    },
+    {
+     "name": "affiliated_org",
+     "type": "text",
+     "description": "Company the executive leads"
+    }
+   ],
+   "examples": [
+    "Jensen Huang",
+    "C.C. Wei",
+    "Matt Murphy",
+    "Lip-Bu Tan",
+    "Elon Musk"
+   ]
+  },
+  {
+   "name": "InvestmentInstitution",
+   "description": "Bank, rating agency, or research body that issues market forecasts and credit views",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Institution official name"
+    },
+    {
+     "name": "institution_type",
+     "type": "text",
+     "description": "Type: rating agency, investment bank, consultancy, industry body"
+    }
+   ],
+   "examples": [
+    "Moody's",
+    "Goldman Sachs",
+    "WSTS",
+    "Gartner",
+    "McKinsey",
+    "TrendForce",
+    "Counterpoint",
+    "Yole",
+    "Bank of America"
+   ]
+  },
+  {
+   "name": "AIChipStartup",
+   "description": "Emerging or high-growth AI chip design firm, often publicly traded with volatile valuation",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Startup official name"
+    },
+    {
+     "name": "ipo_status",
+     "type": "text",
+     "description": "IPO, pre-IPO, or planned listing status"
+    }
+   ],
+   "examples": [
+    "Cambricon",
+    "Alibaba T-Head",
+    "Cerebras",
+    "SambaNova",
+    "Groq"
+   ]
+  },
+  {
+   "name": "Person",
+   "description": "Generic natural person not matching more specific role types",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Person full name"
+    },
+    {
+     "name": "role",
+     "type": "text",
+     "description": "Free-text role or identity description"
+    }
+   ],
+   "examples": [
+    "anonymous netizen",
+    "industry commentator",
+    "consumer",
+    "investor"
+   ]
+  },
+  {
+   "name": "Organization",
+   "description": "Generic organization not matching more specific organization subtypes",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Organization official name"
+    },
+    {
+     "name": "sector",
+     "type": "text",
+     "description": "Sector or industry"
+    }
+   ],
+   "examples": [
+    "industry consortium",
+    "trade association",
+    "advocacy group",
+    "supplier not elsewhere classified"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "SUPPLIES_TO",
+   "description": "Sells chips, memory, or semiconductor IP to another entity",
+   "source_targets": [
+    {
+     "source": "SemiconductorCompany",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "EndProductMaker"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "AIChipStartup"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "COMPETES_WITH",
+   "description": "Direct rivalry in the same chip or product market",
+   "source_targets": [
+    {
+     "source": "SemiconductorCompany",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "Hyperscaler",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "EndProductMaker",
+     "target": "EndProductMaker"
+    },
+    {
+     "source": "AIChipStartup",
+     "target": "AIChipStartup"
+    },
+    {
+     "source": "AIChipStartup",
+     "target": "SemiconductorCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "PROJECTS_MARKET_FORECAST",
+   "description": "Issues a market size, growth, capex, or cycle forecast",
+   "source_targets": [
+    {
+     "source": "InvestmentInstitution",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "InvestmentInstitution",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "InvestmentInstitution",
+     "target": "EndProductMaker"
+    },
+    {
+     "source": "IndustryAnalyst",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "IndustryAnalyst",
+     "target": "EndProductMaker"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "REGULATES",
+   "description": "Imposes export controls, tariffs, or policy restrictions on another entity",
+   "source_targets": [
+    {
+     "source": "GovernmentAgency",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "GovernmentAgency",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "GovernmentAgency",
+     "target": "EndProductMaker"
+    },
+    {
+     "source": "GovernmentAgency",
+     "target": "AIChipStartup"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "REPORTS_ON",
+   "description": "Covers, comments, or critiques another entity in public analysis",
+   "source_targets": [
+    {
+     "source": "IndustryAnalyst",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "IndustryAnalyst",
+     "target": "EndProductMaker"
+    },
+    {
+     "source": "IndustryAnalyst",
+     "target": "AIChipStartup"
+    },
+    {
+     "source": "InvestmentInstitution",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "CorporateExecutive",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "CorporateExecutive",
+     "target": "AIChipStartup"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "PARTNERS_WITH",
+   "description": "Strategic alliance, joint venture, long-term contract, or co-design deal",
+   "source_targets": [
+    {
+     "source": "SemiconductorCompany",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "EndProductMaker"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "AIChipStartup"
+    },
+    {
+     "source": "Hyperscaler",
+     "target": "EndProductMaker"
+    },
+    {
+     "source": "EndProductMaker",
+     "target": "SemiconductorCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "INVESTS_IN",
+   "description": "Holds equity, provides capital, or funds another entity",
+   "source_targets": [
+    {
+     "source": "Hyperscaler",
+     "target": "AIChipStartup"
+    },
+    {
+     "source": "Hyperscaler",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "InvestmentInstitution",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "InvestmentInstitution",
+     "target": "AIChipStartup"
+    },
+    {
+     "source": "CorporateExecutive",
+     "target": "AIChipStartup"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "SUPPORTS_OPPOSES",
+   "description": "Publicly endorses, defends, or criticizes another entity's strategy",
+   "source_targets": [
+    {
+     "source": "CorporateExecutive",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "CorporateExecutive",
+     "target": "AIChipStartup"
+    },
+    {
+     "source": "IndustryAnalyst",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "IndustryAnalyst",
+     "target": "AIChipStartup"
+    },
+    {
+     "source": "GovernmentAgency",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "GovernmentAgency",
+     "target": "Hyperscaler"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "EMPLOYED_BY",
+   "description": "Executive is employed by, leads, or represents the organization",
+   "source_targets": [
+    {
+     "source": "CorporateExecutive",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "CorporateExecutive",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "CorporateExecutive",
+     "target": "EndProductMaker"
+    },
+    {
+     "source": "CorporateExecutive",
+     "target": "AIChipStartup"
+    },
+    {
+     "source": "IndustryAnalyst",
+     "target": "InvestmentInstitution"
+    }
+   ],
+   "attributes": []
+  }
+ ],
+ "analysis_summary": "本报告围绕2030年前全球半导体产业链展开，核心叙事由AI算力基建驱动，涉及17家以上芯片设计、代工、存储、终端厂商，6家超大规模云厂商，以及出口管制机构和投资/分析机构。文本中可发声的主体高度集中于：（1）芯片公司层（TSMC、Samsung、SK Hynix、NVIDIA、AMD、Intel、SMIC、CXMT、Broadcom、Marvell、Qualcomm、SanDisk、HiSilicon、T-Head、Cambricon等）；（2）需求侧超大规模云厂商（Microsoft、Amazon、Google、Meta、Oracle、CoreWeave、Alibaba Cloud）；（3）终端/组装（Apple、Tesla、Foxconn、Quanta、Wistron等）；（4）政策端（美国BIS、台湾MOEA/ITA、特朗普政府）；（5）观点端（多位CEO和分析师）。本本体设计为前8个具体类型（SemiconductorCompany、EndProductMaker、Hyperscaler、GovernmentAgency、CorporateExecutive、IndustryAnalyst、InvestmentInstitution、AIChipStartup）覆盖产业链各环节及观点生产方，以Person和Organization兜底。关系类型侧重供应链供需、竞争、监管、预测、观点交锋、资本连接、雇佣关系，能够完整模拟AI芯片、HBM、代工产能、出口管制、估值博弈等多条舆论线索的互动。"
+}
