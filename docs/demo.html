@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forecast demo — DeepResearchForecast</title>
+<meta name="description" content="Unedited forecast report and research dossier from a real DeepResearchForecast run.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<nav class="nav">
+  <span class="brand"><span class="diamond">◇</span> DeepResearchForecast</span>
+  <span class="nav-links">
+    <a href="index.html#demos">All demos</a>
+    <a class="gh-btn" href="https://github.com/linroger/DeepResearchForecast">GitHub →</a>
+  </span>
+</nav>
+
+<main class="viewer">
+  <div class="viewer-head">
+    <a class="back" href="index.html#demos">← back to demos</a>
+  </div>
+
+  <div class="viewer-prompt">
+    <span class="plabel">Prompt</span>
+    <span id="prompt-text">…</span>
+  </div>
+
+  <div class="viewer-tabs" role="tablist">
+    <button id="tab-report" class="active" type="button">Forecast report</button>
+    <button id="tab-dossier" type="button">Research dossier</button>
+  </div>
+
+  <article id="md" class="md-body"><p class="md-loading">Loading…</p></article>
+</main>
+
+<footer class="footer">
+  <p>Unedited output of a real end-to-end run · <a href="https://github.com/linroger/DeepResearchForecast">DeepResearchForecast</a> · AGPL-3.0</p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script>
+(function () {
+  // Per-run metadata. Markdown lives in demos/<run>/{report,dossier}.md (same origin).
+  var RUNS = {
+    'us-ai-2030': {
+      prompt: '预测到2030年，哪家美国人工智能实验室或企业将成为美国AI领域竞争的主导者，请综合考量资金获取能力、算力储备、人才储备、资金消耗速度、合作布局、上市规划、发展战略、月活跃用户、利润率、市场份额等因素。',
+      title: 'Who dominates US AI by 2030?'
+    },
+    'ev-2035': {
+      prompt: '预判2035年前全球电动汽车产业的发展趋势：技术路线演进、产业链竞争格局、各国政策走向与消费市场结构变化。',
+      title: 'Global EV industry through 2035'
+    },
+    'russia-ukraine': {
+      prompt: 'How and when will the Russia–Ukraine war end? Research the current state of the conflict and forecast the most likely endgame scenarios.',
+      title: 'How and when does the Russia–Ukraine war end?'
+    }
+  };
+
+  var params = new URLSearchParams(location.search);
+  var runKey = params.get('run');
+  var run = Object.prototype.hasOwnProperty.call(RUNS, runKey) ? RUNS[runKey] : null;
+  var md = document.getElementById('md');
+
+  if (!run) {
+    document.getElementById('prompt-text').textContent = '—';
+    md.innerHTML = '<p class="md-loading">Unknown demo run. <a href="index.html#demos">Back to the demo list →</a></p>';
+    return;
+  }
+
+  document.title = run.title + ' — DeepResearchForecast';
+  document.getElementById('prompt-text').textContent = run.prompt;
+
+  var cache = {};
+  function show(kind) {
+    document.getElementById('tab-report').classList.toggle('active', kind === 'report');
+    document.getElementById('tab-dossier').classList.toggle('active', kind === 'dossier');
+    if (cache[kind]) { md.innerHTML = cache[kind]; window.scrollTo(0, 0); return; }
+    md.innerHTML = '<p class="md-loading">Loading…</p>';
+    // runKey is whitelisted against RUNS above, so the fetch path is closed.
+    fetch('demos/' + runKey + '/' + kind + '.md')
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(function (text) {
+        cache[kind] = marked.parse(text);
+        md.innerHTML = cache[kind];
+        window.scrollTo(0, 0);
+      })
+      .catch(function (e) {
+        md.innerHTML = '<p class="md-loading">Failed to load: ' + String(e.message).replace(/[<>&]/g, '') + '</p>';
+      });
+  }
+
+  document.getElementById('tab-report').addEventListener('click', function () { show('report'); });
+  document.getElementById('tab-dossier').addEventListener('click', function () { show('dossier'); });
+  show('report');
+})();
+</script>
+
+</body>
+</html>

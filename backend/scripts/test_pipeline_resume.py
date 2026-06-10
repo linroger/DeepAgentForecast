@@ -172,6 +172,50 @@ def test_cancel_orphan_persists_cancelled() -> None:
     print("✓ cancel() on orphan persists status=cancelled (resumable)")
 
 
+def test_delete_and_clean(block_run) -> None:
+    # terminal pipeline -> deleted
+    _write_state("pipe_del1", status="failed")
+    res = PipelineOrchestrator.delete_pipeline("pipe_del1")
+    assert res == {"ok": True, "status": "deleted"}
+    assert PipelineManager.load("pipe_del1") is None
+    assert not os.path.isdir(os.path.join(Config.PIPELINE_DATA_DIR, "pipe_del1"))
+
+    # unknown pipeline -> not_found
+    assert PipelineOrchestrator.delete_pipeline("pipe_nope")["status"] == "not_found"
+
+    # path traversal is refused at the manager level
+    assert PipelineManager.delete("../pipelines") is False
+    assert PipelineManager.delete("a/b") is False
+
+    # live pipeline -> still_running (spawn a resume thread blocked on the event)
+    block_run.clear()
+    _write_state("pipe_del_live", status="cancelled", current_stage="research",
+                 stages={"research": {"name": "research", "status": "cancelled"}})
+    PipelineOrchestrator.resume("pipe_del_live")
+    try:
+        res = PipelineOrchestrator.delete_pipeline("pipe_del_live")
+        assert res == {"ok": False, "status": "still_running"}
+    finally:
+        block_run.set()
+        for t in list(PipelineOrchestrator._threads.values()):
+            t.join(timeout=5)
+        block_run.clear()
+
+    # clean_terminal removes failed+cancelled, keeps completed/running
+    _write_state("pipe_cl_f", status="failed")
+    _write_state("pipe_cl_c", status="cancelled")
+    _write_state("pipe_cl_ok", status="completed")
+    _write_state("pipe_cl_run", status="running")
+    result = PipelineOrchestrator.clean_terminal()
+    assert set(result["deleted"]) >= {"pipe_cl_f", "pipe_cl_c"}
+    assert "pipe_cl_ok" not in result["deleted"] and "pipe_cl_run" not in result["deleted"]
+    assert PipelineManager.load("pipe_cl_ok") is not None
+    assert PipelineManager.load("pipe_cl_run") is not None
+    assert PipelineManager.load("pipe_cl_f") is None
+    assert PipelineManager.load("pipe_cl_c") is None
+    print("✓ delete_pipeline / clean_terminal: terminal-only, traversal-safe, live-protected")
+
+
 def test_load_research_handoff(tmp: str) -> None:
     handoff = os.path.join(tmp, "handoff_a")
     os.makedirs(handoff, exist_ok=True)
@@ -243,6 +287,7 @@ def main() -> int:
         for t in list(PipelineOrchestrator._threads.values()):
             t.join(timeout=5)
         test_cancel_orphan_persists_cancelled()
+        test_delete_and_clean(block_run)
         test_load_research_handoff(tmp)
         test_rotate_stale_action_logs(tmp)
     finally:

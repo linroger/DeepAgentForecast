@@ -42,6 +42,31 @@ export function resumePipeline(pipelineId) {
 }
 
 /**
+ * 删除一条已结束的管线记录（在飞管线须先取消，否则后端返回 409）
+ * @param {String} pipelineId
+ * @returns {Promise}
+ */
+export function deletePipeline(pipelineId) {
+  return service({
+    url: `/api/research/${pipelineId}`,
+    method: 'delete'
+  })
+}
+
+/**
+ * 批量清理失败/已取消的管线记录
+ * @param {Array<String>} statuses 默认 ['failed','cancelled']
+ * @returns {Promise}
+ */
+export function cleanPipelines(statuses = ['failed', 'cancelled']) {
+  return service({
+    url: '/api/research/clean',
+    method: 'post',
+    data: { statuses }
+  })
+}
+
+/**
  * 查询管线聚合进度
  * @param {String} pipelineId
  * @returns {Promise}

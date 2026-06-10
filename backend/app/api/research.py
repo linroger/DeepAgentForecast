@@ -6,6 +6,8 @@
     POST   /run                      启动管线，立即返回 {pipeline_id, task_id}
     POST   /<pipeline_id>/cancel     取消在飞管线（杀研究子进程 / 停 OASIS 模拟）
     POST   /<pipeline_id>/resume     从失败/取消的管线继续（复用已完成产物）
+    DELETE /<pipeline_id>            删除已结束的管线记录（含 handoff 产物）
+    POST   /clean                    批量清理失败/已取消的管线记录
     GET    /status/<pipeline_id>     聚合的五阶段进度
     GET    /list                     最近管线列表
     GET    /<pipeline_id>/dossier    研究报告 markdown + actors/sources
@@ -137,6 +139,40 @@ def resume_pipeline(pipeline_id: str):
     except Exception as e:
         logger.error(f"恢复管线失败: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@research_bp.route('/<pipeline_id>', methods=['DELETE'])
+def delete_pipeline(pipeline_id: str):
+    """删除一条已结束的管线记录（含 handoff 产物）。在飞管线须先取消。"""
+    try:
+        result = PipelineOrchestrator.delete_pipeline(pipeline_id)
+        if result["status"] == "not_found":
+            return jsonify({"success": False, "error": "管线不存在"}), 404
+        if result["status"] == "still_running":
+            return jsonify({"success": False, "error": "管线正在运行，请先取消再删除"}), 409
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        logger.error(f"删除管线失败: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@research_bp.route('/clean', methods=['POST'])
+def clean_pipelines():
+    """批量清理失败/已取消的管线记录。请求体可选 {statuses: ["failed","cancelled"]}。"""
+    try:
+        data = request.get_json(silent=True) or {}
+        statuses = data.get('statuses') or ["failed", "cancelled"]
+        if not isinstance(statuses, list) or not statuses:
+            return jsonify({"success": False, "error": "statuses 必须是非空列表"}), 400
+        allowed = {"failed", "cancelled"}
+        bad = [s for s in statuses if s not in allowed]
+        if bad:
+            return jsonify({"success": False, "error": f"只允许清理终态 {sorted(allowed)}，收到 {bad}"}), 400
+        result = PipelineOrchestrator.clean_terminal(tuple(statuses))
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        logger.error(f"清理管线失败: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @research_bp.route('/status/<pipeline_id>', methods=['GET'])

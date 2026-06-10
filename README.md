@@ -11,6 +11,8 @@ DeepResearchForecast is an autonomous **"one prompt → forecast"** engine. You 
 
 ## Demo
 
+🔗 **[Live demo site](https://linroger.github.io/DeepResearchForecast/)** — unedited forecast reports and research dossiers from real end-to-end runs (US AI race 2030, global EV industry 2035, Russia–Ukraine endgame).
+
 One prompt — *"Who wins the US AI race by 2030?"* — taken from question to interactive forecast (research → knowledge graph → 40-round population simulation → report):
 
 ![Demo: one prompt to forecast](docs/media/demo-preview.gif)
@@ -329,6 +331,8 @@ The backend is a **Flask** app at `http://localhost:5001`. All endpoints are und
 | `POST` | `/research/run` | Start a pipeline. Body: `{prompt, mode(full\|research_only), depth(quick\|standard\|deep), max_rounds?, project_name?}` → `{pipeline_id}`. Pre-flights the whole configuration (Zep key, provider credentials, DeerFlow checkout) and returns an actionable `400` instead of failing mid-run. |
 | `POST` | `/research/<id>/cancel` | **Cancel a running pipeline** — kills the research subprocess group / stops the OASIS simulation; other stages exit at the next checkpoint. |
 | `POST` | `/research/<id>/resume` | **Resume a failed/cancelled pipeline** — reuses completed stages (research dossier, ontology, graph, finished simulation) and restarts from the stage that failed. Pre-flights the configuration first. |
+| `DELETE` | `/research/<id>` | **Delete a finished run record** (including its handoff artifacts). Running pipelines must be cancelled first (`409`). |
+| `POST` | `/research/clean` | **Bulk-delete failed/cancelled runs.** Body: `{statuses?: ["failed","cancelled"]}`; `running`/`completed` are never touched. |
 | `GET` | `/research/status/<id>` | Current status of a pipeline run (terminal states: `completed` / `failed` / `cancelled`). |
 | `GET` | `/research/list` | List pipeline runs. |
 | `GET` | `/research/<id>/dossier` | The rendered research dossier. |

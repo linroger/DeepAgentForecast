@@ -18,7 +18,7 @@
           <span>{{ L('历史推演','Run history') }}</span>
           <button class="drawer-close" @click="showHistory = false">✕</button>
         </div>
-        <PipelineHistory :active-id="pipelineId" @select="selectPipeline" />
+        <PipelineHistory :active-id="pipelineId" @select="selectPipeline" @deleted="onRunDeleted" />
       </div>
     </transition>
     <div v-if="showHistory" class="drawer-scrim" @click="showHistory = false"></div>
@@ -410,6 +410,11 @@ function reset() {
   resetState()
   pipelineId.value = ''
   try { localStorage.removeItem(ACTIVE_PIPELINE_KEY) } catch (e) { /* noop */ }
+}
+
+/** 历史抽屉里删掉的运行若正是当前查看的运行，回到输入页（避免对已删 id 继续轮询/展示）。 */
+function onRunDeleted(id) {
+  if (id && id === pipelineId.value) reset()
 }
 
 onMounted(() => {

@@ -11,6 +11,8 @@
 
 ## 演示
 
+🔗 **[在线演示站](https://linroger.github.io/DeepResearchForecast/)** —— 来自真实端到端运行、未经编辑的预测报告与研究档案（2030 美国 AI 竞赛、2035 全球电动汽车产业、俄乌战争终局）。
+
 一句提示词 —— *“Who wins the US AI race by 2030?”*（谁会在 2030 年赢得美国 AI 竞赛？）—— 从提问到可交互预测的全过程（研究 → 知识图谱 → 40 轮群体模拟 → 报告）：
 
 ![演示：一句话到预测](docs/media/demo-preview.gif)
@@ -351,6 +353,8 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 | `POST` | `/research/run` | 触发一次运行。请求体 `{prompt, mode(full\|research_only), depth(quick\|standard\|deep), max_rounds?, project_name?}` → 返回 `{pipeline_id}`。会先对整套配置做预检（Zep Key、提供方凭据、DeerFlow 检出），有问题时返回可操作的 `400`，而不是跑到一半才失败。 |
 | `POST` | `/research/<id>/cancel` | **取消一条运行中的管线** —— 杀掉研究子进程组 / 停止 OASIS 模拟；其余阶段在下一个检查点退出。 |
 | `POST` | `/research/<id>/resume` | **恢复失败/被取消的管线** —— 复用已完成的阶段（研究档案、本体、图谱、已完成的模拟），从失败的阶段重新开始。恢复前会先做配置预检。 |
+| `DELETE` | `/research/<id>` | **删除一条已结束的运行记录**（含 handoff 产物）。运行中的管线须先取消（返回 `409`）。 |
+| `POST` | `/research/clean` | **批量清理失败/已取消的运行**。请求体 `{statuses?: ["failed","cancelled"]}`；`running`/`completed` 永不触碰。 |
 | `GET` | `/research/status/<id>` | 查询管线状态（终态：`completed` / `failed` / `cancelled`）。 |
 | `GET` | `/research/list` | 列出历史管线。 |
 | `GET` | `/research/<id>/dossier` | 获取研究档案。 |

@@ -6,16 +6,28 @@
         <span class="diamond">◇</span> {{ L('历史推演','Research history') }}
         <span class="ph-count" v-if="items.length">{{ items.length }}</span>
       </span>
-      <button
-        class="ph-refresh"
-        type="button"
-        :disabled="loading"
-        @click="load"
-        :title="L('刷新历史列表','Refresh history list')"
-      >
-        <span class="ph-refresh-icon" :class="{ spinning: loading }">↻</span>
-        {{ L('刷新','Refresh') }}
-      </button>
+      <span class="ph-header-actions">
+        <button
+          v-if="failedCount > 0"
+          class="ph-refresh ph-clean"
+          type="button"
+          :disabled="cleaning"
+          @click="cleanFailed"
+          :title="L('删除所有失败/已取消的运行记录','Delete all failed/cancelled run records')"
+        >
+          {{ cleaning ? L('清理中…','Cleaning…') : L('清理失败','Clear failed') + ` (${failedCount})` }}
+        </button>
+        <button
+          class="ph-refresh"
+          type="button"
+          :disabled="loading"
+          @click="load"
+          :title="L('刷新历史列表','Refresh history list')"
+        >
+          <span class="ph-refresh-icon" :class="{ spinning: loading }">↻</span>
+          {{ L('刷新','Refresh') }}
+        </button>
+      </span>
     </header>
 
     <!-- 错误态 -->
@@ -35,15 +47,17 @@
         {{ L('暂无历史','No history yet') }}
       </div>
 
-      <!-- 行 -->
-      <button
+      <!-- 行（div 而非 button：行内还有取消/删除等嵌套按钮，按钮不能嵌按钮） -->
+      <div
         v-for="item in items"
         :key="rowKey(item)"
-        type="button"
         class="ph-row"
         :class="{ active: isActive(item) }"
         role="listitem"
+        tabindex="0"
         @click="select(item)"
+        @keydown.enter.self="select(item)"
+        @keydown.space.self.prevent="select(item)"
       >
         <!-- 顶行：状态徽标 + 相对时间 -->
         <div class="ph-row-top">
@@ -63,25 +77,108 @@
           </div>
           <span class="ph-progress-pct">{{ progressOf(item) }}%</span>
         </div>
-      </button>
+
+        <!-- 行内操作：运行中可取消；已结束可删除 -->
+        <div class="ph-row-actions">
+          <button
+            v-if="isRunning(item)"
+            type="button"
+            class="ph-action ph-action-cancel"
+            :disabled="busyId === item.pipeline_id"
+            @click.stop="cancelRun(item)"
+          >{{ busyId === item.pipeline_id ? L('取消中…','Cancelling…') : L('取消','Cancel') }}</button>
+          <button
+            v-else
+            type="button"
+            class="ph-action ph-action-delete"
+            :disabled="busyId === item.pipeline_id"
+            @click.stop="deleteRun(item)"
+          >{{ busyId === item.pipeline_id ? L('删除中…','Deleting…') : L('删除','Delete') }}</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { listPipelines } from '../../api/research'
+import { ref, computed, onMounted } from 'vue'
+import { listPipelines, cancelPipeline, deletePipeline, cleanPipelines } from '../../api/research'
 import { L } from '../../i18n'
 
 const props = defineProps({
   activeId: { type: String, default: '' }
 })
 
-const emit = defineEmits(['select'])
+const emit = defineEmits(['select', 'deleted', 'cancelled'])
 
 const items = ref([])
 const loading = ref(false)
 const error = ref('')
+const busyId = ref('')
+const cleaning = ref(false)
+
+const failedCount = computed(() =>
+  items.value.filter(it => {
+    const s = it && String(it.status || '').toLowerCase()
+    return s === 'failed' || s === 'cancelled' || s === 'canceled' || s === 'error'
+  }).length
+)
+
+function isRunning(item) {
+  const s = item && String(item.status || '').toLowerCase()
+  return s === 'running' || s === 'in_progress' || s === 'pending'
+}
+
+/** 取消一条运行中的管线，随后刷新列表。 */
+async function cancelRun(item) {
+  const id = item && item.pipeline_id
+  if (!id || busyId.value) return
+  if (!window.confirm(L('确定取消该推演？正在运行的研究/模拟将被终止。', 'Cancel this run? The in-flight research/simulation will be stopped.'))) return
+  busyId.value = id
+  try {
+    await cancelPipeline(id)
+    emit('cancelled', id)
+    await load()
+  } catch (e) {
+    error.value = (e && e.message) ? e.message : L('取消失败', 'Cancel failed')
+  } finally {
+    busyId.value = ''
+  }
+}
+
+/** 删除一条已结束的管线记录，随后刷新列表。 */
+async function deleteRun(item) {
+  const id = item && item.pipeline_id
+  if (!id || busyId.value) return
+  if (!window.confirm(L('确定删除该运行记录？研究档案等产物将一并删除，不可恢复。', 'Delete this run? Its research dossier and artifacts will be removed permanently.'))) return
+  busyId.value = id
+  try {
+    await deletePipeline(id)
+    emit('deleted', id)
+    await load()
+  } catch (e) {
+    error.value = (e && e.message) ? e.message : L('删除失败', 'Delete failed')
+  } finally {
+    busyId.value = ''
+  }
+}
+
+/** 批量清理失败/已取消的运行记录。 */
+async function cleanFailed() {
+  if (cleaning.value) return
+  if (!window.confirm(L(`确定清理全部 ${failedCount.value} 条失败/已取消的记录？不可恢复。`, `Delete all ${failedCount.value} failed/cancelled runs? This cannot be undone.`))) return
+  cleaning.value = true
+  try {
+    const res = await cleanPipelines()
+    const deleted = (res && res.data && res.data.deleted) || []
+    deleted.forEach(id => emit('deleted', id))
+    await load()
+  } catch (e) {
+    error.value = (e && e.message) ? e.message : L('清理失败', 'Clean failed')
+  } finally {
+    cleaning.value = false
+  }
+}
 
 /**
  * 拉取管线历史列表。永不抛出：任何异常都落到 error 文案，列表保持上一次的安全值。
@@ -460,4 +557,54 @@ defineExpose({ load })
   min-width: 34px;
   text-align: right;
 }
+
+/* ——— 头部操作区 ——— */
+.ph-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ph-clean {
+  color: #b91c1c;
+}
+
+.ph-clean:hover:not(:disabled) {
+  border-color: #b91c1c;
+}
+
+/* ——— 行内操作 ——— */
+.ph-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.ph-row:hover .ph-row-actions,
+.ph-row:focus-within .ph-row-actions,
+.ph-row.active .ph-row-actions {
+  opacity: 1;
+}
+
+.ph-action {
+  background: #fff;
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease;
+}
+
+.ph-action:disabled { color: #bbb; cursor: default; }
+
+.ph-action-cancel { color: var(--orange); }
+.ph-action-cancel:hover:not(:disabled) { border-color: var(--orange); }
+
+.ph-action-delete { color: #b91c1c; }
+.ph-action-delete:hover:not(:disabled) { border-color: #b91c1c; }
 </style>

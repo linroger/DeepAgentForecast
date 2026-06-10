@@ -240,6 +240,24 @@ class PipelineManager:
             return None
 
     @classmethod
+    def delete(cls, pipeline_id: str) -> bool:
+        """删除一条管线记录（整个 uploads/pipelines/<id>/ 目录，含 handoff 产物）。
+
+        只做文件系统删除；调用方（PipelineOrchestrator.delete_pipeline）负责
+        拒绝在飞管线。目录不存在返回 False。
+        """
+        import shutil
+
+        # 基本路径防御：pipeline_id 来自 URL，绝不允许路径分隔符逃出数据目录
+        if not pipeline_id or "/" in pipeline_id or "\\" in pipeline_id or ".." in pipeline_id:
+            return False
+        target = cls._dir(pipeline_id)
+        if not os.path.isdir(target):
+            return False
+        shutil.rmtree(target, ignore_errors=True)
+        return not os.path.isdir(target)
+
+    @classmethod
     def list_pipelines(cls) -> list[dict[str, Any]]:
         root = Config.PIPELINE_DATA_DIR
         if not os.path.isdir(root):
@@ -851,6 +869,53 @@ class PipelineOrchestrator:
                 except Exception:
                     pass
             return {"ok": True, "status": "cancelled"}
+
+    @classmethod
+    def delete_pipeline(cls, pipeline_id: str) -> dict[str, Any]:
+        """删除一条已结束的管线记录（含其 handoff 产物目录）。
+
+        在飞管线必须先取消再删除——删除运行中的状态文件会让 _run 线程在下次
+        落盘时凭空复活记录，且孤儿子进程无人回收。
+
+        Returns:
+            {"ok": bool, "status": str}  status ∈ deleted / not_found / still_running
+        """
+        with cls._lifecycle_lock:
+            live = cls._threads.get(pipeline_id)
+            if live is not None and live.is_alive():
+                return {"ok": False, "status": "still_running"}
+            data = PipelineManager.load(pipeline_id)
+            if data is None:
+                return {"ok": False, "status": "not_found"}
+            if data.get("status") == "running":
+                # 持久化为 running 但本进程无线程 → 孤儿；先按取消语义落盘再删，
+                # 这样即使删除中途失败，状态也不会停在 running 误导前端。
+                PipelineManager.mark_failed(pipeline_id, "已被用户删除", status="cancelled")
+                cls._kill_orphan_research(pipeline_id, data.get("research_pid"))
+            ok = PipelineManager.delete(pipeline_id)
+            if ok:
+                cls._cancel_events.pop(pipeline_id, None)
+                cls._threads.pop(pipeline_id, None)
+                logger.info(f"[{pipeline_id}] 管线记录已删除")
+            return {"ok": ok, "status": "deleted" if ok else "not_found"}
+
+    @classmethod
+    def clean_terminal(cls, statuses: tuple[str, ...] = ("failed", "cancelled")) -> dict[str, Any]:
+        """批量删除处于指定终态的管线记录（默认清理失败/已取消的运行）。
+
+        running 与 completed 永不触碰；本进程仍有在飞线程的管线一并跳过。
+        """
+        deleted: list[str] = []
+        skipped: list[str] = []
+        for p in PipelineManager.list_pipelines():
+            pid = p.get("pipeline_id")
+            if not pid or p.get("status") not in statuses:
+                continue
+            result = cls.delete_pipeline(pid)
+            (deleted if result["ok"] else skipped).append(pid)
+        if deleted:
+            logger.info(f"批量清理管线: 删除 {len(deleted)} 条（{', '.join(deleted[:5])}…）")
+        return {"deleted": deleted, "skipped": skipped}
 
     @classmethod
     def resume(cls, pipeline_id: str) -> PipelineState:

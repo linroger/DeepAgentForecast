@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepResearchForecast — one prompt · research to forecast</title>
+<meta name="description" content="Ask one question — a deep-research agent gathers evidence, builds a knowledge graph, runs a multi-agent population simulation, and writes a forecast. Live demos of real runs inside.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<nav class="nav">
+  <span class="brand"><span class="diamond">◇</span> DeepResearchForecast</span>
+  <span class="nav-links">
+    <a href="#demos">Live demos</a>
+    <a href="#video">Video</a>
+    <a href="#how">How it works</a>
+    <a class="gh-btn" href="https://github.com/linroger/DeepResearchForecast">GitHub →</a>
+  </span>
+</nav>
+
+<header class="hero">
+  <div class="tag-row">
+    <span class="orange-tag">one prompt · research to forecast</span>
+    <span class="version-text">/ DeerFlow × OASIS × Zep</span>
+  </div>
+  <h1>Ask one question.<br>
+    <span class="gradient-text">Auto-research, build a world, simulate the future.</span></h1>
+  <p class="lead">A deep-research agent (DeerFlow) searches the web and builds an evidence-grounded dossier;
+    the system constructs a temporal knowledge graph (Zep), generates digital personas for the real-world
+    actors it found, runs a multi-agent population simulation (OASIS, dual-platform), and a report agent
+    synthesizes the forecast. The pages below are <strong>unedited output from real runs</strong>.</p>
+  <div class="hero-actions">
+    <a class="primary-btn" href="#demos">View the demo forecasts ↓</a>
+    <a class="ghost-btn" href="https://github.com/linroger/DeepResearchForecast#getting-started">Run it yourself</a>
+  </div>
+</header>
+
+<section id="demos" class="section">
+  <h2><span class="diamond">◇</span> Live demos — real end-to-end runs</h2>
+  <p class="section-sub">Each card is one full pipeline run: prompt in → web research → knowledge graph →
+    population simulation → forecast report out. Click through for the full forecast and the research dossier it was grounded in.</p>
+  <div class="card-grid">
+    <a class="run-card" href="demo.html?run=us-ai-2030">
+      <div class="run-top"><span class="run-status">● completed · full pipeline</span><span class="run-lang">中文</span></div>
+      <h3>Who dominates US AI by 2030?</h3>
+      <p class="run-prompt">“预测到2030年，哪家美国人工智能实验室或企业将成为美国AI领域竞争的主导者……”</p>
+      <p class="run-meta">40-round dual-platform simulation · 42 personas · 6-section forecast</p>
+      <span class="run-cta">Read the forecast →</span>
+    </a>
+    <a class="run-card" href="demo.html?run=ev-2035">
+      <div class="run-top"><span class="run-status">● completed · full pipeline</span><span class="run-lang">中文</span></div>
+      <h3>Global EV industry through 2035</h3>
+      <p class="run-prompt">“预判2035年前全球电动汽车产业的发展趋势：技术路线演进、产业链竞争格局、各国政策走向……”</p>
+      <p class="run-meta">40-round dual-platform simulation · 16 personas · technology / supply-chain / policy scenarios</p>
+      <span class="run-cta">Read the forecast →</span>
+    </a>
+    <a class="run-card" href="demo.html?run=russia-ukraine">
+      <div class="run-top"><span class="run-status">● completed · full pipeline</span><span class="run-lang">EN/中文</span></div>
+      <h3>How and when does the Russia–Ukraine war end?</h3>
+      <p class="run-prompt">“How and when will the Russia–Ukraine war end? Research the current state of the conflict…”</p>
+      <p class="run-meta">36 personas · multi-scenario endgame analysis grounded in a 40K-char research dossier</p>
+      <span class="run-cta">Read the forecast →</span>
+    </a>
+  </div>
+</section>
+
+<section id="video" class="section">
+  <h2><span class="diamond">◇</span> 47-second demo</h2>
+  <p class="section-sub">One prompt → research console → knowledge graph → live simulation feed → forecast.</p>
+  <video controls preload="metadata" poster="media/demo-poster.jpg" class="demo-video">
+    <source src="media/demo.mp4" type="video/mp4">
+    Your browser does not support embedded video — <a href="media/demo.mp4">download the MP4</a>.
+  </video>
+</section>
+
+<section id="shots" class="section">
+  <h2><span class="diamond">◇</span> Screenshots</h2>
+  <div class="shot-grid">
+    <figure><img loading="lazy" src="media/01-pipeline-knowledge-graph.jpg" alt="Knowledge graph"><figcaption>Temporal knowledge graph built from the research dossier</figcaption></figure>
+    <figure><img loading="lazy" src="media/02-research-dossier-sources.jpg" alt="Research dossier"><figcaption>Research dossier — every claim grounded in cited sources</figcaption></figure>
+    <figure><img loading="lazy" src="media/03-agent-personas.jpg" alt="Agent personas"><figcaption>Digital personas generated for each real-world actor</figcaption></figure>
+    <figure><img loading="lazy" src="media/04-simulation-console.jpg" alt="Simulation console"><figcaption>Live simulation console streaming agent actions</figcaption></figure>
+    <figure><img loading="lazy" src="media/06-simulation-feed.jpg" alt="Simulated feed"><figcaption>The simulated Twitter/Reddit feed mid-run</figcaption></figure>
+    <figure><img loading="lazy" src="media/07-simulation-posts.jpg" alt="Simulated posts"><figcaption>Emergent discussion threads between personas</figcaption></figure>
+  </div>
+</section>
+
+<section id="how" class="section">
+  <h2><span class="diamond">◇</span> How it works</h2>
+  <ol class="stage-list">
+    <li><strong>research</strong> — DeerFlow deep-research agent searches the web, extracts key actors (role / stance / influence) and writes a cited dossier</li>
+    <li><strong>ontology</strong> — an LLM derives entity & relation types from the dossier and your question</li>
+    <li><strong>graph</strong> — the dossier is ingested into a Zep temporal knowledge graph (GraphRAG)</li>
+    <li><strong>prepare</strong> — researched actors become digital personas with evidence-based stances</li>
+    <li><strong>run</strong> — hundreds of LLM personas interact on a simulated Twitter + Reddit (OASIS)</li>
+    <li><strong>report</strong> — a tool-augmented ReAct agent queries graph + simulation and writes the forecast</li>
+  </ol>
+  <pre class="quickstart"><code># run it yourself — free-tier Zep key + a Claude/Codex CLI login is all you need
+git clone https://github.com/linroger/DeepResearchForecast.git
+cd DeepResearchForecast && ./setup.sh
+npm run dev   # → http://localhost:3000/research</code></pre>
+</section>
+
+<footer class="footer">
+  <p>Built on <a href="https://github.com/camel-ai/oasis">OASIS</a> (CAMEL-AI),
+    <a href="https://github.com/bytedance/deer-flow">DeerFlow</a> (ByteDance),
+    <a href="https://www.getzep.com/">Zep Cloud</a> and
+    <a href="https://github.com/666ghj/MiroFish">MiroFish</a> · AGPL-3.0 ·
+    <a href="https://github.com/linroger/DeepResearchForecast">github.com/linroger/DeepResearchForecast</a></p>
+</footer>
+
+</body>
+</html>
