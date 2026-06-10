@@ -207,7 +207,7 @@ flowchart LR
 ./setup.sh
 ```
 
-它会检查前置条件、从 `.env.example` 生成 `.env`、**自动探测本机的模型提供方**（`claude` CLI → `claude-cli`；`codex` CLI → `codex-cli`，研究阶段同时切到 `codex`）、提示你填入 Zep Key、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**），然后**自动下载 DeerFlow**：若仓库内 `deer-flow/` 不存在，则从 <https://github.com/bytedance/deer-flow> 克隆（固定到一个已知可用的提交），应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁、`config.yaml`），并构建 DeerFlow 的隔离 venv（Python 3.13）。脚本幂等，可安全地重复运行。
+它会检查前置条件、从 `.env.example` 生成 `.env`、**自动探测本机的模型提供方**（`claude` CLI → `claude-cli`；`codex` CLI → `codex-cli`，研究阶段同时切到 `codex`）、提示你填入 Zep Key、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**），然后**自动下载 DeerFlow**：若仓库内 `deer-flow/` 不存在，则从 <https://github.com/bytedance/deer-flow> 浅克隆（固定到一个已知可用的提交），并**裁剪到运行所需的最小集合**（`backend/`、`skills/`、`config.yaml`——上游的 Web 前端、文档、docker 与 CI 在本工作流中均用不到），再应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁、`config.yaml`），并构建 DeerFlow 的隔离 venv（Python 3.13）。脚本幂等，可安全地重复运行。
 
 如需覆盖默认值，可通过环境变量：`DEERFLOW_DIR`（位置）、`DEERFLOW_REPO`（克隆地址）、`DEERFLOW_REF`（固定提交；设为 `=main` 可跟踪 HEAD）。它们由 `setup.sh` 从 **shell 环境**读取（不是 `.env` 配置项），例如 `DEERFLOW_REF=main ./setup.sh`。
 
@@ -465,7 +465,7 @@ DeepResearchForecast/
 |------|----------|
 | 启动即报缺少 Zep 配置 | `ZEP_API_KEY` 始终必填。检查根目录 `.env` 是否已填入真实 Key（免费额度可在 <https://app.getzep.com/> 申请）。 |
 | 报告阶段报 `status_code: 429` / `Rate limit exceeded for FREE plan` | 这是 Zep 免费额度限流。后端现在会解析 `Retry-After`、等待后重试，并在报告生成中复用节点/边快照以减少重复读取。超大运行可降低深度/并发，或在 `.env` 中调高 Zep 重试参数。 |
-| 研究阶段（stage 1）无法运行 | DeerFlow 需存在于仓库内的 `deer-flow/` 目录、已应用 `deerflow_bridge/` 桥接覆盖层、且已构建好自己的 venv（Python ≥ 3.12）。重新运行 `./setup.sh`（会自动克隆并应用覆盖层），或设置 `DEERFLOW_DIR` 指向其位置。 |
+| 研究阶段（stage 1）无法运行 | DeerFlow 需存在于仓库内的 `deer-flow/` 目录、已应用 `deerflow_bridge/` 桥接覆盖层、且已构建好自己的 venv（Python ≥ 3.12）。重新运行 `./setup.sh`（会自动克隆并应用覆盖层）；如需更新引擎，删除 `deer-flow/` 后重跑 `./setup.sh`。也可设置 `DEERFLOW_DIR` 指向其位置。 |
 | 选了需要 Key 的提供方（`openai`/`kimi`/`minimax`/`deepseek`/`qwen`/`glm`）却报鉴权失败 | 这些 OpenAI 兼容提供方需要 `LLM_API_KEY`（以及按需的 `LLM_BASE_URL` / `LLM_MODEL_NAME`）。可在 `.env`、UI 设置菜单或 `POST /api/settings/llm` 中配置。 |
 | 切换了模型提供方但当前运行没变化 | 提供方切换只对**新发起的运行**生效；已在运行中的管线沿用其启动时读取的配置。请重新发起一次运行。 |
 | 选了不受研究阶段支持的提供方，研究阶段仍走 Claude | 这是预期行为：DeerFlow 深度研究阶段（`DEERFLOW_MODEL`）支持 `claude` / `minimax` / `deepseek` / `qwen` / `glm` / `codex` / `kimi`；不受支持的提供方在研究阶段回落到 Claude，模拟/报告阶段仍用所选提供方。 |

@@ -318,28 +318,45 @@ BRIDGE_DIR="$ROOT_DIR/deerflow_bridge"
 
 # 1) Clone if it isn't already there ("downloads everything"). A fresh clone is
 #    only attempted into a missing/empty directory; an existing checkout is kept.
+#    The clone is SHALLOW (--depth 1 + a depth-1 fetch of the pinned commit) and
+#    then TRIMMED to what the headless research bridge actually uses: backend/
+#    (engine + venv), skills/ (the deep-research skill), config.yaml, and
+#    README/LICENSE for attribution. The web frontend, docs, docker, CI and the
+#    .git dir are dead weight for this workflow. To update the engine later,
+#    delete deer-flow/ and re-run ./setup.sh.
 if [ ! -d "$DEERFLOW_DIR/.git" ] && [ ! -d "$DEERFLOW_DIR/backend" ]; then
   if have git; then
     info "Downloading DeerFlow research engine -> $DEERFLOW_DIR"
-    if git clone --quiet "$DEERFLOW_REPO" "$DEERFLOW_DIR"; then
-      ok "Cloned deer-flow from $DEERFLOW_REPO"
+    if git clone --quiet --depth 1 "$DEERFLOW_REPO" "$DEERFLOW_DIR"; then
+      ok "Cloned deer-flow (shallow) from $DEERFLOW_REPO"
       if [ "$DEERFLOW_REF" != "main" ]; then
-        if git -C "$DEERFLOW_DIR" checkout --quiet "$DEERFLOW_REF" 2>/dev/null; then
+        # GitHub allows fetching an arbitrary commit SHA at depth 1.
+        if git -C "$DEERFLOW_DIR" fetch --quiet --depth 1 origin "$DEERFLOW_REF" 2>/dev/null \
+           && git -C "$DEERFLOW_DIR" checkout --quiet FETCH_HEAD 2>/dev/null; then
           ok "Pinned deer-flow to commit ${DEERFLOW_REF:0:12}"
         else
-          warn "Pinned commit ${DEERFLOW_REF:0:12} not found upstream; staying on the"
+          warn "Pinned commit ${DEERFLOW_REF:0:12} could not be fetched; staying on the"
           warn "default branch. The bridge overlay still applies, but if the research"
           warn "stage misbehaves, set DEERFLOW_REF=main or report it so we refresh the pin."
         fi
       fi
+      (
+        cd "$DEERFLOW_DIR" && rm -rf .git frontend docs docker contracts scripts \
+          .github .agent pr-build logs Makefile Install.md CONTRIBUTING.md \
+          CODE_OF_CONDUCT.md SECURITY.md README_fr.md README_ja.md README_ru.md \
+          README_zh.md deer-flow.code-workspace config.example.yaml \
+          extensions_config.example.json .pre-commit-config.yaml .gitattributes \
+          .gitignore .dockerignore
+      ) 2>/dev/null || true
+      ok "Trimmed deer-flow to runtime essentials (backend/, skills/, config)"
     else
       warn "git clone of deer-flow failed (offline or blocked?)."
       warn "Clone it manually, then re-run ./setup.sh:"
-      warn "    git clone $DEERFLOW_REPO \"$DEERFLOW_DIR\""
+      warn "    git clone --depth 1 $DEERFLOW_REPO \"$DEERFLOW_DIR\""
     fi
   else
     warn "git not found — cannot auto-download deer-flow. Install git, or clone manually:"
-    warn "    git clone $DEERFLOW_REPO \"$DEERFLOW_DIR\""
+    warn "    git clone --depth 1 $DEERFLOW_REPO \"$DEERFLOW_DIR\""
   fi
 else
   ok "deer-flow already present at $DEERFLOW_DIR — not re-cloning."

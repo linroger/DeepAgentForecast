@@ -438,8 +438,9 @@ Gateway (Option B) for concurrency; route MiroFish LLM calls through
 
 ### What was built
 
-**DeerFlow side (`deer-flow/`)** — *auto-provisioned by `./setup.sh`* (clones
-`deer-flow/` into the repo from `https://github.com/bytedance/deer-flow`, pinned to a
+**DeerFlow side (`deer-flow/`)** — *auto-provisioned by `./setup.sh`* (shallow-clones
+`deer-flow/` into the repo from `https://github.com/bytedance/deer-flow`, trimmed to
+runtime essentials — backend/, skills/, config.yaml — and pinned to a
 known-good commit, then applies the **bridge overlay** from `deerflow_bridge/`:
 `deerflow_research.py` → repo root; `patches/models/*.py` → the harness `deerflow/models/`
 dir (`claude_provider.py` = OAuth-preference 401 fix, `credential_loader.py` = macOS
