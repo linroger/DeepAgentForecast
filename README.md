@@ -168,7 +168,7 @@ flowchart LR
 
 ## Getting started
 
-Three steps: **install → configure → run**. DeerFlow lives in a **sibling directory** named `deer-flow` so its LangChain/LangGraph dependencies stay isolated from the backend; it runs in its own venv at `../deer-flow/backend/.venv`.
+Three steps: **install → configure → run**. DeerFlow lives in `deer-flow/` **inside this repo** (auto-downloaded by `setup.sh`, gitignored) so its LangChain/LangGraph dependencies stay isolated from the backend; it runs in its own venv at `deer-flow/backend/.venv`.
 
 ### 1. Install
 
@@ -178,7 +178,7 @@ Three steps: **install → configure → run**. DeerFlow lives in a **sibling di
 ./setup.sh
 ```
 
-It checks prerequisites, scaffolds `.env` from `.env.example`, **auto-detects your model provider** (`claude` CLI → `claude-cli`, `codex` CLI → `codex-cli` + research on `codex`), prompts for your Zep key, installs the root + frontend npm deps, builds the backend venv (**pinned to Python 3.12**), then **downloads DeerFlow automatically**: it clones the sibling `../deer-flow` repo (from <https://github.com/bytedance/deer-flow>, pinned to a known-good commit) if absent, applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` patches, and `config.yaml`), and builds DeerFlow's isolated venv (Python 3.13). Re-running it is idempotent and safe.
+It checks prerequisites, scaffolds `.env` from `.env.example`, **auto-detects your model provider** (`claude` CLI → `claude-cli`, `codex` CLI → `codex-cli` + research on `codex`), prompts for your Zep key, installs the root + frontend npm deps, builds the backend venv (**pinned to Python 3.12**), then **downloads DeerFlow automatically**: it clones `deer-flow/` into the repo (from <https://github.com/bytedance/deer-flow>, pinned to a known-good commit, gitignored) if absent, applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` patches, and `config.yaml`), and builds DeerFlow's isolated venv (Python 3.13). Re-running it is idempotent and safe.
 
 Override the defaults via env vars if needed: `DEERFLOW_DIR` (location), `DEERFLOW_REPO` (clone URL), `DEERFLOW_REF` (pinned commit; set `=main` to track HEAD). These are read by `setup.sh` from the shell environment (they are not `.env` keys), e.g. `DEERFLOW_REF=main ./setup.sh`.
 
@@ -188,17 +188,17 @@ Override the defaults via env vars if needed: `DEERFLOW_DIR` (location), `DEERFL
 # 1. Install Node deps (root + frontend) and the backend venv (Python 3.12 pinned)
 npm run setup:all
 
-# 2. Download the DeerFlow research engine (git required) as a SIBLING directory
-git clone https://github.com/bytedance/deer-flow ../deer-flow
+# 2. Download the DeerFlow research engine (git required) into the repo root
+git clone https://github.com/bytedance/deer-flow deer-flow
 
 # 3. Apply the bridge overlay from deerflow_bridge/
-cp deerflow_bridge/deerflow_research.py ../deer-flow/deerflow_research.py
-cp deerflow_bridge/patches/models/*.py  ../deer-flow/backend/packages/harness/deerflow/models/
-cp deerflow_bridge/config.yaml          ../deer-flow/config.yaml   # only if absent
+cp deerflow_bridge/deerflow_research.py deer-flow/deerflow_research.py
+cp deerflow_bridge/patches/models/*.py  deer-flow/backend/packages/harness/deerflow/models/
+cp deerflow_bridge/config.yaml          deer-flow/config.yaml      # only if absent
 
 # 4. Build DeerFlow's isolated research venv (Python ≥ 3.12; 3.13 recommended)
-UV_PROJECT_ENVIRONMENT=../deer-flow/backend/.venv \
-  uv sync --project ../deer-flow/backend --python 3.13
+UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv \
+  uv sync --project deer-flow/backend --python 3.13
 ```
 
 ### 2. Configure
@@ -283,7 +283,7 @@ LLM_BASE_URL=...             # kimi/minimax/deepseek/qwen/glm ship a sensible de
 LLM_MODEL_NAME=...           # kimi/minimax/deepseek/qwen/glm ship a sensible default
 
 # DeerFlow deep research (optional — all have sensible defaults):
-DEERFLOW_DIR=...                 # path to the deer-flow sibling directory
+DEERFLOW_DIR=...                 # path to the deer-flow checkout (default: ./deer-flow)
 DEERFLOW_PYTHON=...              # python interpreter for DeerFlow's venv (auto-detected)
 DEERFLOW_MODEL=...               # claude | minimax | deepseek | qwen | glm | codex | kimi
 DEERFLOW_RESEARCH_DEPTH=...      # quick | standard | deep
@@ -315,8 +315,8 @@ FLASK_DEBUG=false                # dev only: exposes the Werkzeug debugger + rel
 | `LLM_API_KEY` | openai/kimi/minimax/deepseek/qwen/glm | API key for the hosted provider. |
 | `LLM_BASE_URL` | openai/kimi/minimax/deepseek/qwen/glm | Base URL for the OpenAI-compatible endpoint (kimi/minimax/deepseek/qwen/glm default it). |
 | `LLM_MODEL_NAME` | openai/kimi/minimax/deepseek/qwen/glm | Model name to request (kimi/minimax/deepseek/qwen/glm default it). |
-| `DEERFLOW_DIR` | No | Location of the `deer-flow` sibling directory. |
-| `DEERFLOW_PYTHON` | No | Python interpreter for DeerFlow's isolated venv (auto-detects `../deer-flow/backend/.venv`). |
+| `DEERFLOW_DIR` | No | Location of the `deer-flow` checkout (default: `./deer-flow` inside the repo). |
+| `DEERFLOW_PYTHON` | No | Python interpreter for DeerFlow's isolated venv (auto-detects `deer-flow/backend/.venv`). |
 | `DEERFLOW_MODEL` | No | Research model: `claude`, `minimax`, `deepseek`, `qwen`, `glm`, `codex`, or `kimi`. |
 | `KIMI_API_KEY` | DEERFLOW_MODEL=kimi | DeerFlow research key when running Kimi-for-coding. |
 | `MINIMAX_API_KEY` | DEERFLOW_MODEL=minimax | DeerFlow research key when running MiniMax. |
@@ -423,24 +423,22 @@ DeepResearchForecast/
 │   └── .python-version      #   pinned to Python 3.12 (camel-ai stack targets ≤3.12).
 ├── frontend/                # Vue 3 + Vite dashboard (port 3000), bilingual EN/中文.
 ├── deerflow_bridge/         # Bridge overlay applied onto the cloned deer-flow:
-│   ├── deerflow_research.py #   research driver / entry point (→ ../deer-flow/ root).
+│   ├── deerflow_research.py #   research driver / entry point (→ deer-flow/ root).
 │   ├── patches/models/      #   provider patches (claude OAuth fix, Keychain loader,
 │   │                        #     patched_minimax → MiniMax "name" fix).
 │   └── config.yaml          #   deer-flow model config (copied only if absent).
-├── Screenshots -> docs/media/ # README screenshots + demo video/GIF.
-├── docs/media/              # Canonical optimized media assets.
+├── docs/                    # GitHub Pages demo site + media assets (docs/media/).
 ├── scripts/doctor.sh        # `npm run doctor` — environment health check.
 ├── setup.sh                 # Quick-start: downloads deer-flow, installs everything,
 │                            #   applies the bridge overlay, auto-detects provider.
 ├── .env                     # LLM_PROVIDER, ZEP_API_KEY, provider + DeerFlow config.
-└── package.json             # `setup:all`, `doctor` and `dev` scripts.
-
-../deer-flow/                # SIBLING engine: LangGraph deep-research super agent
-└── backend/.venv/           #   (auto-downloaded by setup.sh; isolated Python ≥3.12 venv).
+├── package.json             # `setup:all`, `doctor` and `dev` scripts.
+└── deer-flow/               # DeerFlow research engine — auto-downloaded by setup.sh,
+    └── backend/.venv/       #   gitignored; isolated LangGraph venv (Python ≥3.12).
 ```
 
-> DeerFlow is a **sibling directory** to keep its dependency tree isolated from the backend. `setup.sh` clones it (git required), applies the `deerflow_bridge/` overlay (driver + `patches/models` + `config.yaml`), and builds its venv with:
-> `UV_PROJECT_ENVIRONMENT=../deer-flow/backend/.venv uv sync --project ../deer-flow/backend --python 3.13`
+> DeerFlow lives **inside the repo** but is gitignored — your clone stays a single folder and `git status` stays clean. `setup.sh` downloads it (git required), applies the `deerflow_bridge/` overlay (driver + `patches/models` + `config.yaml`), and builds its venv with:
+> `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.13`
 
 ---
 
@@ -455,7 +453,7 @@ DeepResearchForecast/
 | **Report stage fails with `status_code: 429` / `Rate limit exceeded for FREE plan`** | Zep free-tier throttling. The app now parses `Retry-After`, waits before retrying, and reuses report graph snapshots to reduce duplicate node/edge reads. For very large runs, lower concurrency/depth or raise the retry knobs in `.env`. |
 | **Backend install fails (camel-ai / tiktoken build errors)** | Your default Python is 3.13+. The backend venv must be on **3.11–3.12**: `( cd backend && uv sync --python 3.12 )` — `setup.sh` and `backend/.python-version` already pin this. |
 | **Research stage runs on Claude even though I picked another provider** | The research stage is configured separately via `DEERFLOW_MODEL` (`claude` *(default)*, `minimax`, `deepseek`, `qwen`, `glm`, `codex`, `kimi`), not by `LLM_PROVIDER`. Only `openai` maps to the `claude` stanza. Set `DEERFLOW_MODEL` (and its key, e.g. `MINIMAX_API_KEY`) to run research on a different model. |
-| **DeerFlow / research stage fails to start** | `setup.sh` clones the `deer-flow` sibling (git required) and applies the `deerflow_bridge/` overlay. Ensure its venv is built with Python ≥ 3.12 (3.13 recommended): `UV_PROJECT_ENVIRONMENT=../deer-flow/backend/.venv uv sync --project ../deer-flow/backend --python 3.13`. Re-running `setup.sh` is idempotent. Optionally set `DEERFLOW_DIR` / `DEERFLOW_PYTHON` (or `DEERFLOW_REPO` / `DEERFLOW_REF` for `setup.sh`). |
+| **DeerFlow / research stage fails to start** | `setup.sh` downloads `deer-flow/` into the repo (git required) and applies the `deerflow_bridge/` overlay. Ensure its venv is built with Python ≥ 3.12 (3.13 recommended): `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.13`. Re-running `setup.sh` is idempotent. Optionally set `DEERFLOW_DIR` / `DEERFLOW_PYTHON` (or `DEERFLOW_REPO` / `DEERFLOW_REF` for `setup.sh`). |
 | **No API key but hosted provider selected** | `openai`, `kimi`, `minimax`, `deepseek`, `qwen`, and `glm` need `LLM_API_KEY` (with `LLM_BASE_URL` / `LLM_MODEL_NAME`; `kimi`/`minimax`/`deepseek`/`qwen`/`glm` default those). For no-key operation use `claude-cli` or `codex-cli`. |
 | **`claude-cli` returns 401 / bills the API instead of my subscription** | A stray `ANTHROPIC_API_KEY` in your environment. It is stripped from the CLI subprocess automatically; run `claude` once to refresh the OAuth login. (Set `LLM_CLI_USE_API_KEY=true` if you *want* API-key billing.) |
 | **Provider switch didn't take effect** | The runtime switch applies to **new runs** only. Start a fresh pipeline after switching. |

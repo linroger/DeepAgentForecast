@@ -14,7 +14,7 @@
 设计要点
 --------
 * DeerFlow 运行在它自己的 venv（依赖树与 MiroFish 隔离），通过 subprocess 调用
-  sibling 仓库的 ``deerflow_research.py``，消费其写出的文件化 handoff 契约。
+  仓库内 deer-flow/ 的 ``deerflow_research.py``，消费其写出的文件化 handoff 契约。
   这一模式与 ``SimulationRunner`` 驱动 OASIS 进程完全一致。
 * 编排器在后台 daemon 线程中运行，进度同时写入：
     - 全局 ``TaskManager`` 任务（沿用 MiroFish 既有的轮询机制）；

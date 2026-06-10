@@ -13,8 +13,8 @@
 #   * Scaffolds .env from .env.example (never overwrites an existing .env) and
 #     upserts the detected provider lines safely.
 #   * Installs root + frontend + backend dependencies.
-#   * DOWNLOADS the DeerFlow research engine: clones the sibling ../deer-flow
-#     repo (pinned commit), applies the bridge overlay (research driver, patched
+#   * DOWNLOADS the DeerFlow research engine into ./deer-flow inside this repo
+#     (pinned commit, gitignored), applies the bridge overlay (research driver, patched
 #     model providers, and a ready-to-use config.yaml with claude / minimax /
 #     deepseek / qwen / glm / codex / kimi stanzas), then builds its isolated venv.
 #
@@ -299,18 +299,19 @@ else
   warn "Skipping backend 'uv sync' — uv is not available (see install hint above)."
 fi
 
-# --- DeerFlow research engine (sibling ../deer-flow) — REQUIRED for the deep
-#     research stage (stage 1) of a full run. setup.sh DOWNLOADS it for you:
-#     clone (pinned) -> apply the bridge overlay -> build its isolated venv. ---
-step "Setting up DeerFlow research engine (sibling ../deer-flow)"
+# --- DeerFlow research engine (./deer-flow inside this repo) — REQUIRED for
+#     the deep research stage (stage 1) of a full run. setup.sh DOWNLOADS it:
+#     clone (pinned) -> apply the bridge overlay -> build its isolated venv.
+#     The checkout is gitignored, so everything lives in this single folder. ---
+step "Setting up DeerFlow research engine (./deer-flow)"
 
 # Where to put deer-flow, where to clone from, and which commit to pin to.
-#   * DEERFLOW_DIR  — override the location (default: sibling of this project).
+#   * DEERFLOW_DIR  — override the location (default: ./deer-flow in this repo).
 #   * DEERFLOW_REPO — override the clone URL.
 #   * DEERFLOW_REF  — pin to a commit/branch. Defaults to the exact upstream
 #     commit the bridge patches were authored against, so the overlay always
 #     applies cleanly. Set DEERFLOW_REF=main to track upstream HEAD instead.
-DEERFLOW_DIR="${DEERFLOW_DIR:-$(cd "$ROOT_DIR/.." && pwd)/deer-flow}"
+DEERFLOW_DIR="${DEERFLOW_DIR:-$ROOT_DIR/deer-flow}"
 DEERFLOW_REPO="${DEERFLOW_REPO:-https://github.com/bytedance/deer-flow.git}"
 DEERFLOW_REF="${DEERFLOW_REF:-799bef6d9dbc3a2cb37ce8177eeeabe2a33d8971}"
 BRIDGE_DIR="$ROOT_DIR/deerflow_bridge"

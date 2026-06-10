@@ -197,7 +197,7 @@ flowchart LR
 
 ## 快速开始
 
-三步走：**安装 → 配置 → 运行**。DeerFlow 位于名为 `deer-flow` 的**同级目录**中，使其 LangChain/LangGraph 依赖与后端完全隔离；它运行在自己的 venv（`../deer-flow/backend/.venv`）里。
+三步走：**安装 → 配置 → 运行**。DeerFlow 位于仓库内的 `deer-flow/` 目录（由 `setup.sh` 自动下载、已被 gitignore），使其 LangChain/LangGraph 依赖与后端完全隔离；它运行在自己的 venv（`deer-flow/backend/.venv`）里。
 
 ### 1. 安装
 
@@ -207,7 +207,7 @@ flowchart LR
 ./setup.sh
 ```
 
-它会检查前置条件、从 `.env.example` 生成 `.env`、**自动探测本机的模型提供方**（`claude` CLI → `claude-cli`；`codex` CLI → `codex-cli`，研究阶段同时切到 `codex`）、提示你填入 Zep Key、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**），然后**自动下载 DeerFlow**：若同级仓库 `../deer-flow` 不存在，则从 <https://github.com/bytedance/deer-flow> 克隆（固定到一个已知可用的提交），应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁、`config.yaml`），并构建 DeerFlow 的隔离 venv（Python 3.13）。脚本幂等，可安全地重复运行。
+它会检查前置条件、从 `.env.example` 生成 `.env`、**自动探测本机的模型提供方**（`claude` CLI → `claude-cli`；`codex` CLI → `codex-cli`，研究阶段同时切到 `codex`）、提示你填入 Zep Key、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**），然后**自动下载 DeerFlow**：若仓库内 `deer-flow/` 不存在，则从 <https://github.com/bytedance/deer-flow> 克隆（固定到一个已知可用的提交），应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁、`config.yaml`），并构建 DeerFlow 的隔离 venv（Python 3.13）。脚本幂等，可安全地重复运行。
 
 如需覆盖默认值，可通过环境变量：`DEERFLOW_DIR`（位置）、`DEERFLOW_REPO`（克隆地址）、`DEERFLOW_REF`（固定提交；设为 `=main` 可跟踪 HEAD）。它们由 `setup.sh` 从 **shell 环境**读取（不是 `.env` 配置项），例如 `DEERFLOW_REF=main ./setup.sh`。
 
@@ -217,17 +217,17 @@ flowchart LR
 # 1. 安装 Node 依赖（根目录 + 前端）与后端 venv（固定 Python 3.12）
 npm run setup:all
 
-# 2. 下载 DeerFlow 研究引擎（需要 git），克隆为「同级目录」
-git clone https://github.com/bytedance/deer-flow ../deer-flow
+# 2. 下载 DeerFlow 研究引擎（需要 git），克隆到仓库内（已被 gitignore）
+git clone https://github.com/bytedance/deer-flow deer-flow
 
 # 3. 应用 deerflow_bridge/ 桥接覆盖层
-cp deerflow_bridge/deerflow_research.py ../deer-flow/deerflow_research.py
-cp deerflow_bridge/patches/models/*.py  ../deer-flow/backend/packages/harness/deerflow/models/
-cp deerflow_bridge/config.yaml          ../deer-flow/config.yaml   # 仅当其不存在时
+cp deerflow_bridge/deerflow_research.py deer-flow/deerflow_research.py
+cp deerflow_bridge/patches/models/*.py  deer-flow/backend/packages/harness/deerflow/models/
+cp deerflow_bridge/config.yaml          deer-flow/config.yaml      # 仅当其不存在时
 
 # 4. 构建 DeerFlow 的隔离研究 venv（Python ≥ 3.12，推荐 3.13）
-UV_PROJECT_ENVIRONMENT=../deer-flow/backend/.venv \
-  uv sync --project ../deer-flow/backend --python 3.13
+UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv \
+  uv sync --project deer-flow/backend --python 3.13
 ```
 
 ### 2. 配置
@@ -305,7 +305,7 @@ LLM_BASE_URL=...             # kimi/minimax/deepseek/qwen/glm 已内置合理默
 LLM_MODEL_NAME=...           # kimi/minimax/deepseek/qwen/glm 已内置合理默认值
 
 # DeerFlow 深度研究（可选 —— 全部有合理默认值）：
-DEERFLOW_DIR=...                 # deer-flow 同级目录的路径
+DEERFLOW_DIR=...                 # deer-flow 检出目录的路径（默认 ./deer-flow）
 DEERFLOW_PYTHON=...              # DeerFlow venv 的 python 解释器（自动探测）
 DEERFLOW_MODEL=...               # claude | minimax | deepseek | qwen | glm | codex | kimi
 DEERFLOW_RESEARCH_DEPTH=...      # quick | standard | deep
@@ -337,8 +337,8 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 | `LLM_API_KEY` | openai/kimi/minimax/deepseek/qwen/glm | 托管提供方的 API Key。 |
 | `LLM_BASE_URL` | openai/kimi/minimax/deepseek/qwen/glm | OpenAI 兼容端点的 Base URL（kimi/minimax/deepseek/qwen/glm 已内置默认值）。 |
 | `LLM_MODEL_NAME` | openai/kimi/minimax/deepseek/qwen/glm | 请求的模型名（kimi/minimax/deepseek/qwen/glm 已内置默认值）。 |
-| `DEERFLOW_DIR` | 否 | `deer-flow` 同级目录的位置。 |
-| `DEERFLOW_PYTHON` | 否 | DeerFlow 隔离 venv 的 Python 解释器（自动探测 `../deer-flow/backend/.venv`）。 |
+| `DEERFLOW_DIR` | 否 | `deer-flow` 检出目录的位置（默认仓库内 `./deer-flow`）。 |
+| `DEERFLOW_PYTHON` | 否 | DeerFlow 隔离 venv 的 Python 解释器（自动探测 `deer-flow/backend/.venv`）。 |
 | `DEERFLOW_MODEL` | 否 | 研究模型：`claude`、`minimax`、`deepseek`、`qwen`、`glm`、`codex` 或 `kimi`。 |
 | `KIMI_API_KEY` | DEERFLOW_MODEL=kimi | 研究阶段运行 Kimi-for-coding 时的 DeerFlow Key。 |
 | `MINIMAX_API_KEY` | DEERFLOW_MODEL=minimax | 研究阶段运行 MiniMax 时的 DeerFlow Key。 |
@@ -432,7 +432,7 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 ## 项目结构
 
 ```
-MiroFish-0.1.2/
+DeepResearchForecast/
 ├── setup.sh                  # 一键安装 / 快速开始脚本（自动探测模型提供方）
 ├── package.json              # 根脚本：setup:all / dev / backend / frontend / build
 ├── .env.example              # 环境变量参考
@@ -452,9 +452,9 @@ MiroFish-0.1.2/
 │       │                         # / SimulationView / ForecastReport / SettingsMenu …
 │       ├── router/
 │       └── i18n.js           # 双语（EN / 中文）
-├── Screenshots -> docs/media/ # README 截图 + 演示视频/GIF
-├── docs/media/               # 规范化保存的优化媒体资产
-└── （同级目录）deer-flow/    # DeerFlow 深度研究引擎（独立 venv，与后端依赖隔离）
+├── docs/                     # GitHub Pages 演示站点 + 媒体资产（docs/media/）
+└── deer-flow/                # DeerFlow 深度研究引擎（setup.sh 自动下载、已被 gitignore；
+                              #   独立 venv，与后端依赖隔离）
 ```
 
 ---
@@ -465,7 +465,7 @@ MiroFish-0.1.2/
 |------|----------|
 | 启动即报缺少 Zep 配置 | `ZEP_API_KEY` 始终必填。检查根目录 `.env` 是否已填入真实 Key（免费额度可在 <https://app.getzep.com/> 申请）。 |
 | 报告阶段报 `status_code: 429` / `Rate limit exceeded for FREE plan` | 这是 Zep 免费额度限流。后端现在会解析 `Retry-After`、等待后重试，并在报告生成中复用节点/边快照以减少重复读取。超大运行可降低深度/并发，或在 `.env` 中调高 Zep 重试参数。 |
-| 研究阶段（stage 1）无法运行 | DeerFlow 需作为 `MiroFish-0.1.2` 的**同级目录** `deer-flow` 存在、已应用 `deerflow_bridge/` 桥接覆盖层、且已构建好自己的 venv（Python ≥ 3.12）。重新运行 `./setup.sh`（会自动克隆并应用覆盖层），或设置 `DEERFLOW_DIR` 指向其位置。 |
+| 研究阶段（stage 1）无法运行 | DeerFlow 需存在于仓库内的 `deer-flow/` 目录、已应用 `deerflow_bridge/` 桥接覆盖层、且已构建好自己的 venv（Python ≥ 3.12）。重新运行 `./setup.sh`（会自动克隆并应用覆盖层），或设置 `DEERFLOW_DIR` 指向其位置。 |
 | 选了需要 Key 的提供方（`openai`/`kimi`/`minimax`/`deepseek`/`qwen`/`glm`）却报鉴权失败 | 这些 OpenAI 兼容提供方需要 `LLM_API_KEY`（以及按需的 `LLM_BASE_URL` / `LLM_MODEL_NAME`）。可在 `.env`、UI 设置菜单或 `POST /api/settings/llm` 中配置。 |
 | 切换了模型提供方但当前运行没变化 | 提供方切换只对**新发起的运行**生效；已在运行中的管线沿用其启动时读取的配置。请重新发起一次运行。 |
 | 选了不受研究阶段支持的提供方，研究阶段仍走 Claude | 这是预期行为：DeerFlow 深度研究阶段（`DEERFLOW_MODEL`）支持 `claude` / `minimax` / `deepseek` / `qwen` / `glm` / `codex` / `kimi`；不受支持的提供方在研究阶段回落到 Claude，模拟/报告阶段仍用所选提供方。 |

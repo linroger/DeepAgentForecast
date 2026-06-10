@@ -71,7 +71,7 @@ fi
 
 sect "DeerFlow research engine"
 DEERFLOW_DIR="${DEERFLOW_DIR:-$(envval DEERFLOW_DIR)}"
-DEERFLOW_DIR="${DEERFLOW_DIR:-$(cd "$ROOT_DIR/.." && pwd)/deer-flow}"
+DEERFLOW_DIR="${DEERFLOW_DIR:-$ROOT_DIR/deer-flow}"
 if [ -d "$DEERFLOW_DIR/backend" ]; then
   ok "deer-flow checkout: $DEERFLOW_DIR"
   [ -f "$DEERFLOW_DIR/deerflow_research.py" ] && ok "bridge entry point installed (deerflow_research.py)" \

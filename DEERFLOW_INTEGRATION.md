@@ -21,13 +21,14 @@ context; that context is handed to the **multi-agent prediction engine
 returns a prediction report — all driven by a **coding-plan subscription
 (Claude Code / Codex), no per-token API key.**
 
-This document is the design + implementation plan. It assumes the two repos sit
-side by side:
+This document is the design + implementation plan. Both pieces live in this
+single repo folder:
 
 ```
-<parent-dir>/
-├── MiroFish-0.1.2/      ← prediction engine (see ARCHITECTURE.md)
-└── deer-flow/           ← DeerFlow 2.0 super-agent harness (studied below)
+DeepResearchForecast/
+├── backend/ + frontend/ ← prediction engine (see ARCHITECTURE.md)
+├── deerflow_bridge/     ← overlay applied onto deer-flow/ by setup.sh
+└── deer-flow/           ← DeerFlow 2.0 super-agent harness (auto-downloaded, gitignored)
 ```
 
 ---
@@ -186,7 +187,7 @@ MiroFish already treats OASIS as an out-of-process engine.
 A small script `deerflow_research.py` living in DeerFlow's repo, run via its venv:
 
 ```bash
-cd ../deer-flow && uv run python deerflow_research.py \
+cd deer-flow && uv run python deerflow_research.py \
     --prompt-file <handoff>/prediction_requirement.txt \
     --out-dir <handoff>/
 ```
@@ -349,7 +350,7 @@ entry. Power users can still skip research entirely.
 ## 7. Phased implementation plan
 
 **Phase 0 — Provisioning (½ day).** `./setup.sh` now does this automatically: it
-clones the pinned `../deer-flow`, applies the `deerflow_bridge/` overlay
+downloads the pinned `deer-flow/` into the repo, applies the `deerflow_bridge/` overlay
 (`deerflow_research.py` + `patches/models/*.py` + `config.yaml` with the single
 `ClaudeChatModel` entry from §5), and builds its isolated `uv` venv. DDG `web_search`
 works key-free (Tavily/Exa if a key is available). Verify with
@@ -425,7 +426,7 @@ Gateway (Option B) for concurrency; route MiroFish LLM calls through
 - Skills: `skills/public/deep-research/SKILL.md` (+ `github-deep-research`, `systematic-literature-review`, …)
 - Gateway (Option B): `backend/app/gateway/routers/{runs,threads,uploads,artifacts}.py`
 
-**MiroFish (`MiroFish-0.1.2/`)** — see `ARCHITECTURE.md`
+**MiroFish (repo root)** — see `ARCHITECTURE.md`
 - Entry seam: `backend/app/api/graph.py::generate_ontology` (`/api/graph/ontology/generate`)
 - Process+monitor template for Option C: `backend/app/services/simulation_runner.py`
 - Pipeline services: `backend/app/services/*` (ontology, graph_builder, profile, sim config, report)
@@ -437,8 +438,8 @@ Gateway (Option B) for concurrency; route MiroFish LLM calls through
 
 ### What was built
 
-**DeerFlow side (`../deer-flow/`)** — *auto-provisioned by `./setup.sh`* (clones the
-sibling `../deer-flow` from `https://github.com/bytedance/deer-flow`, pinned to a
+**DeerFlow side (`deer-flow/`)** — *auto-provisioned by `./setup.sh`* (clones
+`deer-flow/` into the repo from `https://github.com/bytedance/deer-flow`, pinned to a
 known-good commit, then applies the **bridge overlay** from `deerflow_bridge/`:
 `deerflow_research.py` → repo root; `patches/models/*.py` → the harness `deerflow/models/`
 dir (`claude_provider.py` = OAuth-preference 401 fix, `credential_loader.py` = macOS
@@ -463,9 +464,9 @@ idempotent. So the whole integration is reproducible from a single `./setup.sh`.
   checkpointed research.
 - Its own venv (`backend/.venv`) via `uv sync` — dependency-isolated from MiroFish.
 
-**MiroFish side (`MiroFish-0.1.2/backend/`)**
+**MiroFish side (`backend/`)**
 - `app/config.py` — new `DEERFLOW_*` knobs with operational defaults:
-  `DEERFLOW_DIR` (auto = sibling `../deer-flow`), `DEERFLOW_PYTHON` (auto-detect
+  `DEERFLOW_DIR` (auto = `./deer-flow` in the repo), `DEERFLOW_PYTHON` (auto-detect
   `deer-flow/backend/.venv` → `uv run`), `DEERFLOW_MODEL` (`claude`; one of
   `claude | minimax | deepseek | qwen | glm | codex | kimi`, see §5.2),
   `DEERFLOW_RESEARCH_DEPTH` (`standard`; quick/standard/deep),
@@ -486,7 +487,7 @@ idempotent. So the whole integration is reproducible from a single `./setup.sh`.
   `GET /list`, `GET /<id>/dossier`, `GET /<id>/progress`. Registered in
   `app/api/__init__.py` and `app/__init__.py` under `/api/research`.
 
-**Frontend (`MiroFish-0.1.2/frontend/src/`)**
+**Frontend (`frontend/src/`)**
 - `api/research.js` — client for the 5 endpoints.
 - `views/ResearchView.vue` — Step 0 page: prompt + mode (full / research-only) +
   depth + optional max-rounds; live global progress bar, 6 stage chips, a research
@@ -506,38 +507,35 @@ idempotent. So the whole integration is reproducible from a single `./setup.sh`.
 - ⏳ Live end-to-end run pending two environment items below.
 
 ### Prerequisites to run (environment, not code)
-1. **MiroFish venv must be Python ≤3.12.** The current `MiroFish-0.1.2/backend/.venv`
+1. **MiroFish venv must be Python ≤3.12.** The current `backend/.venv`
    is **Python 3.13**, on which `camel-ai`/`tiktoken` fail to build (PyO3 ≤3.12).
    Recreate it: `cd backend && uv venv --python 3.12 && uv sync` (matches the
    README's "Python ≥3.11,≤3.12"). This is unrelated to the integration — the base
    MiroFish app needs it too.
-2. **DeerFlow repo + venv installed**: `./setup.sh` clones the pinned `../deer-flow`,
+2. **DeerFlow repo + venv installed**: `./setup.sh` downloads the pinned `deer-flow/`,
    applies the `deerflow_bridge/` overlay, and builds the venv automatically (heavy
    langchain/markitdown stack; use `UV_HTTP_TIMEOUT=300` on slow links). `git` is a
-   prerequisite. To do it by hand instead: `cd ../deer-flow/backend && uv sync`.
+   prerequisite. To do it by hand instead: `cd deer-flow/backend && uv sync`.
 3. **Claude Code logged in**: `~/.claude/.credentials.json` must hold a fresh
    `sk-ant-oat…` token (run `claude` once if expired). The bridge now pre-flights
    this and exits 3 with a clear message if the credential is missing/expired,
    instead of failing opaquely deep inside the research stream.
 
-> **Run from source, not single-image Docker.** This feature shells out to
-> `<DEERFLOW_DIR>/deerflow_research.py` in DeerFlow's **own** venv. The MiroFish
-> Docker image does not bundle the `deer-flow` repo or its langchain venv, so
-> `/api/research/*` is unavailable there — use the from-source `npm run dev` flow
-> with both venvs on the host. (The rest of MiroFish — upload → graph → sim →
-> report — runs fine in Docker.)
+> **Run from source.** This feature shells out to
+> `<DEERFLOW_DIR>/deerflow_research.py` in DeerFlow's **own** venv, so both venvs
+> must exist on the host — `./setup.sh` builds them; `npm run dev` starts everything.
 
 ### How to run
 ```bash
 # 0) one-time: ensure both venvs (see prerequisites) and DeerFlow config.yaml exist
 # 1) start MiroFish (backend :5001 + frontend :3000)
-cd MiroFish-0.1.2 && npm run dev
+npm run dev
 # 2) open http://localhost:3000 → click "✦ 用一句话深度研究 → 预测"
 #    enter a question → watch research console → prediction report at the end
 ```
 Or headless, just the research stage (fastest smoke test, only needs DeerFlow venv):
 ```bash
-cd ../deer-flow && backend/.venv/bin/python deerflow_research.py \
+cd deer-flow && backend/.venv/bin/python deerflow_research.py \
     --prompt "若某市全面放开网约车牌照，三个月内本地出租车司机群体舆情如何演变？" \
     --out-dir /tmp/handoff_test --depth quick
 ls /tmp/handoff_test     # research_report.md, actors.json, sources.json, research_progress.log

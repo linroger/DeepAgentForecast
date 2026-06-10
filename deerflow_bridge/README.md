@@ -28,11 +28,11 @@ From the project root:
 ./setup.sh
 ```
 
-It clones DeerFlow as a **sibling** (`../deer-flow`, pinned to a known‑good commit), drops the
+It downloads DeerFlow into the repo (`deer-flow/`, pinned to a known‑good commit, gitignored), drops the
 research driver in, applies the three provider patches, installs `config.yaml` if there isn't
 one, and builds DeerFlow's isolated venv. Re‑running is safe (idempotent). Overrides:
 
-- `DEERFLOW_DIR` — where to put / find the checkout (default: `../deer-flow`).
+- `DEERFLOW_DIR` — where to put / find the checkout (default: `./deer-flow` in the repo root).
 - `DEERFLOW_REPO` — clone URL (default: the upstream ByteDance repo).
 - `DEERFLOW_REF` — commit/branch to pin (default: the commit these patches target; set
   `DEERFLOW_REF=main` to track upstream HEAD instead).
@@ -40,26 +40,26 @@ one, and builds DeerFlow's isolated venv. Re‑running is safe (idempotent). Ove
 ## Manual install (equivalent steps)
 
 ```bash
-# 1. Clone DeerFlow as a SIBLING of this project (the backend auto-detects ../deer-flow)
-git clone https://github.com/bytedance/deer-flow ../deer-flow
+# 1. Clone DeerFlow into the repo root (the backend auto-detects ./deer-flow)
+git clone https://github.com/bytedance/deer-flow deer-flow
 
 # 2. Drop the bridge entry point in
-cp deerflow_bridge/deerflow_research.py ../deer-flow/deerflow_research.py
+cp deerflow_bridge/deerflow_research.py deer-flow/deerflow_research.py
 
 # 3. Apply the provider + middleware patches
 cp deerflow_bridge/patches/models/*.py \
-   ../deer-flow/backend/packages/harness/deerflow/models/
+   deer-flow/backend/packages/harness/deerflow/models/
 cp deerflow_bridge/patches/middlewares/*.py \
-   ../deer-flow/backend/packages/harness/deerflow/agents/middlewares/
+   deer-flow/backend/packages/harness/deerflow/agents/middlewares/
 
 # 4. Install the ready-to-use config (keys come from .env via $VAR)
-cp deerflow_bridge/config.yaml ../deer-flow/config.yaml
+cp deerflow_bridge/config.yaml deer-flow/config.yaml
 
 # 5. Build DeerFlow's isolated venv (Python >= 3.12; 3.13 recommended)
-UV_PROJECT_ENVIRONMENT=../deer-flow/backend/.venv uv sync --project ../deer-flow/backend --python 3.13
+UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.13
 ```
 
-The backend finds DeerFlow via `DEERFLOW_DIR` (defaults to the sibling `../deer-flow`) and the
+The backend finds DeerFlow via `DEERFLOW_DIR` (defaults to `./deer-flow` in the repo) and the
 research model via `DEERFLOW_MODEL` (`claude | minimax | deepseek | qwen | glm | codex | kimi`). See the
 main `README.md` and `DEERFLOW_INTEGRATION.md` for the full contract.
 

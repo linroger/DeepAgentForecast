@@ -23,9 +23,8 @@ API, or Kimi-for-coding).
 ## 1. Top-level layout
 
 ```
-MiroFish-0.1.2/
+DeepResearchForecast/
 ├── package.json            # npm scripts: dev = concurrently(backend, frontend)
-├── docker-compose.yml      # ports 3000 (frontend) / 5001 (backend)
 ├── .env / .env.example     # LLM_PROVIDER, ZEP_API_KEY, …
 ├── run_simulation.py       # standalone CLI driver (dev/testing, bypasses Flask)
 ├── frontend/               # Vue 3 + Vite SPA  (port 3000)

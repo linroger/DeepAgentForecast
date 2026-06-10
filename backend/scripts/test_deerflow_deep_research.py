@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BRIDGE_PATH = ROOT / "deerflow_bridge" / "deerflow_research.py"
-SIBLING_PATH = ROOT.parent / "deer-flow" / "deerflow_research.py"
+DEPLOYED_PATH = ROOT / "deer-flow" / "deerflow_research.py"
 
 
 def load_bridge():
@@ -29,8 +29,8 @@ class FakeProgressLog:
 
 
 def assert_bridge_synced() -> None:
-    assert SIBLING_PATH.exists(), f"missing installed DeerFlow bridge: {SIBLING_PATH}"
-    assert BRIDGE_PATH.read_text(encoding="utf-8") == SIBLING_PATH.read_text(encoding="utf-8")
+    assert DEPLOYED_PATH.exists(), f"missing installed DeerFlow bridge: {DEPLOYED_PATH}"
+    assert BRIDGE_PATH.read_text(encoding="utf-8") == DEPLOYED_PATH.read_text(encoding="utf-8")
 
 
 def assert_loop_detection_patch() -> None:
@@ -44,7 +44,7 @@ def assert_loop_detection_patch() -> None:
     deployed, and stays byte-identical to the overlay copy.
     """
     overlay = ROOT / "deerflow_bridge" / "patches" / "middlewares" / "loop_detection_middleware.py"
-    deployed = ROOT.parent / "deer-flow" / "backend" / "packages" / "harness" / "deerflow" / "agents" / "middlewares" / "loop_detection_middleware.py"
+    deployed = ROOT / "deer-flow" / "backend" / "packages" / "harness" / "deerflow" / "agents" / "middlewares" / "loop_detection_middleware.py"
     assert overlay.exists(), f"missing overlay middleware patch: {overlay}"
     text = overlay.read_text(encoding="utf-8")
     assert "_reset_run_scoped_loop_state" in text, "overlay middleware lost the per-run reset"

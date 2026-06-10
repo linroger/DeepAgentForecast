@@ -288,13 +288,13 @@ class Config:
     # ============================================================
     # DeerFlow 深度研究集成（前置 Step 0：用一个 prompt 自动调研生成种子材料）
     # DeerFlow runs in its OWN venv (separate dependency tree). MiroFish launches
-    # backend/scripts or the sibling deer-flow repo's deerflow_research.py via
-    # subprocess and consumes the file-based handoff contract.
+    # the in-repo deer-flow checkout's deerflow_research.py via subprocess and
+    # consumes the file-based handoff contract.
     # ============================================================
-    # 默认指向同级目录的 deer-flow 仓库： <MiroFish-0.1.2>/../deer-flow
+    # 默认指向仓库内的 deer-flow 目录（由 ./setup.sh 自动下载）：<repo>/deer-flow
     DEERFLOW_DIR = os.environ.get(
         'DEERFLOW_DIR',
-        os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..', 'deer-flow'))
+        os.path.abspath(os.path.join(os.path.dirname(__file__), '../..', 'deer-flow'))
     )
     # DeerFlow venv 的 python（留空则自动探测 .venv，再退回到 `uv run`）
     DEERFLOW_PYTHON = os.environ.get('DEERFLOW_PYTHON', '').strip() or None

@@ -64,3 +64,12 @@ backend/uploads/
 
 # Docker 数据
 data/
+
+# DeerFlow research engine — auto-downloaded into the repo by ./setup.sh
+# (pinned upstream clone + bridge overlay; never committed here)
+deer-flow/
+
+# Local agent/session artifacts (never commit)
+CLAUDE.md
+**/CLAUDE.md
+handoff.md
