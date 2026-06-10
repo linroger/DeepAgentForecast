@@ -18,6 +18,7 @@ from datetime import datetime
 from zep_cloud.client import Zep
 
 from ..config import Config
+from ..utils.actors import actor_briefing, match_actor
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .zep_entity_reader import EntityNode, ZepEntityReader
@@ -211,31 +212,34 @@ class OasisProfileGenerator:
                 logger.warning(f"Zep客户端初始化失败: {e}")
     
     def generate_profile_from_entity(
-        self, 
-        entity: EntityNode, 
+        self,
+        entity: EntityNode,
         user_id: int,
-        use_llm: bool = True
+        use_llm: bool = True,
+        actor: Optional[Dict[str, Any]] = None
     ) -> OasisAgentProfile:
         """
         从Zep实体生成OASIS Agent Profile
-        
+
         Args:
             entity: Zep实体节点
             user_id: 用户ID（用于OASIS）
             use_llm: 是否使用LLM生成详细人设
-            
+            actor: 深度研究 actors.json 中匹配到的结构化角色行（可选；
+                   含 role/stance/influence/memory，注入人设提示词作为实证依据）
+
         Returns:
             OasisAgentProfile
         """
         entity_type = entity.get_entity_type() or "Entity"
-        
+
         # 基础信息
         name = entity.name
         user_name = self._generate_username(name)
-        
+
         # 构建上下文信息
         context = self._build_entity_context(entity)
-        
+
         if use_llm:
             # 使用LLM生成详细人设
             profile_data = self._generate_profile_with_llm(
@@ -243,7 +247,8 @@ class OasisProfileGenerator:
                 entity_type=entity_type,
                 entity_summary=entity.summary,
                 entity_attributes=entity.attributes,
-                context=context
+                context=context,
+                actor=actor
             )
         else:
             # 使用规则生成基础人设
@@ -501,18 +506,23 @@ class OasisProfileGenerator:
         entity_type: str,
         entity_summary: str,
         entity_attributes: Dict[str, Any],
-        context: str
+        context: str,
+        actor: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         使用LLM生成非常详细的人设
-        
+
         根据实体类型区分：
         - 个人实体：生成具体的人物设定
         - 群体/机构实体：生成代表性账号设定
         """
-        
+
         is_individual = self._is_individual_entity(entity_type)
-        
+
+        # 深度研究实证档案：作为最高优先级上下文拼到提示词尾部，
+        # 让 persona 的立场/记忆以真实调研数据为准（而非凭报告行文再猜）。
+        actor_block = actor_briefing(actor)
+
         if is_individual:
             prompt = self._build_individual_persona_prompt(
                 entity_name, entity_type, entity_summary, entity_attributes, context
@@ -520,6 +530,13 @@ class OasisProfileGenerator:
         else:
             prompt = self._build_group_persona_prompt(
                 entity_name, entity_type, entity_summary, entity_attributes, context
+            )
+        if actor_block:
+            prompt += (
+                f"\n\n{actor_block}\n"
+                "上述实证档案与其它上下文冲突时，以实证档案为准："
+                "persona 的「立场观点」必须与档案立场一致，"
+                "「个人记忆/机构记忆」必须涵盖档案中的已知事实/记忆。"
             )
 
         # 尝试多次生成，直到成功或达到最大重试次数
@@ -847,11 +864,12 @@ class OasisProfileGenerator:
         graph_id: Optional[str] = None,
         parallel_count: int = 5,
         realtime_output_path: Optional[str] = None,
-        output_platform: str = "reddit"
+        output_platform: str = "reddit",
+        actors: Optional[Dict[str, Any]] = None
     ) -> List[OasisAgentProfile]:
         """
         批量从实体生成Agent Profile（支持并行生成）
-        
+
         Args:
             entities: 实体列表
             use_llm: 是否使用LLM生成详细人设
@@ -860,7 +878,9 @@ class OasisProfileGenerator:
             parallel_count: 并行生成数量，默认5
             realtime_output_path: 实时写入的文件路径（如果提供，每生成一个就写入一次）
             output_platform: 输出平台格式 ("reddit" 或 "twitter")
-            
+            actors: 深度研究 actors.json 顶层对象（可选）。按名字匹配到实体后，
+                    其 role/stance/influence/memory 会注入对应 persona 提示词
+
         Returns:
             Agent Profile列表
         """
@@ -910,12 +930,17 @@ class OasisProfileGenerator:
         def generate_single_profile(idx: int, entity: EntityNode) -> tuple:
             """生成单个profile的工作函数"""
             entity_type = entity.get_entity_type() or "Entity"
-            
+
             try:
+                # 深度研究档案匹配：命中则把实证立场/记忆注入 persona 提示词
+                actor = match_actor(entity.name, actors)
+                if actor is not None:
+                    logger.info(f"实体 {entity.name} 匹配到研究档案 actor: {actor.get('name')}")
                 profile = self.generate_profile_from_entity(
                     entity=entity,
                     user_id=idx,
-                    use_llm=use_llm
+                    use_llm=use_llm,
+                    actor=actor
                 )
                 
                 # 实时输出生成的人设到控制台和日志

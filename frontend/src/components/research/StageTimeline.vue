@@ -155,7 +155,7 @@ function stageMeta(key) {
   }
 }
 
-const VALID_STATUS = new Set(['pending', 'running', 'completed', 'failed'])
+const VALID_STATUS = new Set(['pending', 'running', 'completed', 'failed', 'cancelled'])
 
 function statusText(status) {
   switch (status) {
@@ -163,6 +163,7 @@ function statusText(status) {
     case 'running': return L('进行中', 'Running')
     case 'completed': return L('已完成', 'Completed')
     case 'failed': return L('失败', 'Failed')
+    case 'cancelled': return L('已取消', 'Cancelled')
     default: return ''
   }
 }

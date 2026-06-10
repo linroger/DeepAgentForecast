@@ -1,5 +1,7 @@
 # DeepResearchForecast
 
+[English](README.md) | **简体中文**
+
 > **一句话提问，自动产出预测。**
 > 输入一个问题，它会自动联网研究、构建高保真的平行世界、运行多智能体群体模拟，并生成一份可交互的预测报告。
 
@@ -7,8 +9,28 @@
 
 ---
 
+## 演示
+
+一句提示词 —— *“Who wins the US AI race by 2030?”*（谁会在 2030 年赢得美国 AI 竞赛？）—— 从提问到可交互预测的全过程（研究 → 知识图谱 → 40 轮群体模拟 → 报告）：
+
+![演示：一句话到预测](docs/media/demo-preview.gif)
+
+▶ **[观看完整演示视频（47 秒，MP4）](docs/media/demo.mp4)**
+
+### 截图
+
+| | |
+|---|---|
+| ![基于研究档案构建的知识图谱](docs/media/01-pipeline-knowledge-graph.jpg) <br/>*阶段 4 —— 基于研究档案构建的时序知识图谱* | ![带来源引用的研究档案](docs/media/02-research-dossier-sources.jpg) <br/>*研究档案标签页 —— 每条论断都有网络来源引用支撑* |
+| ![生成的智能体人格](docs/media/03-agent-personas.jpg) <br/>*为每位真实世界行动者生成的数字人格（立场与影响力均来自调研）* | ![实时模拟控制台](docs/media/04-simulation-console.jpg) <br/>*实时模拟控制台，流式呈现智能体的每个动作* |
+| ![图谱节点详情](docs/media/05-graph-node-details.jpg) <br/>*模拟进行中查看某个图谱实体的详情* | ![模拟社交信息流](docs/media/06-simulation-feed.jpg) <br/>*第 20/40 轮时的模拟 Twitter/Reddit 信息流* |
+| ![模拟帖子](docs/media/07-simulation-posts.jpg) <br/>*智能体人格之间自然涌现的讨论串* | ![智能体详情面板](docs/media/08-simulation-agent-detail.jpg) <br/>*第 33/40 轮的帖子与智能体详情面板（管线进度 88%）* |
+
+---
+
 ## 目录
 
+- [演示](#演示)
 - [它能做什么](#它能做什么)
 - [架构总览](#架构总览)
 - [六阶段管线](#六阶段管线)
@@ -22,6 +44,8 @@
 - [关键工程要点](#关键工程要点)
 - [项目结构](#项目结构)
 - [故障排查](#故障排查)
+- [致谢](#致谢)
+- [许可证](#许可证)
 
 ---
 
@@ -125,16 +149,20 @@ flowchart LR
 
 ## 功能特性
 
-- **一句话 → 预测的端到端管线**：单个提示词触发六个阶段，自动衔接，无需在阶段间手动搬运中间产物。
-- **两种运行模式**：`full`（完整：研究 → 图谱 → 模拟 → 报告）与 `research_only`（仅研究）。
-- **可调研究深度**：`quick` / `standard` / `deep`。
-- **可调模拟轮数**：轮数越多，群体动态越丰富。
-- **双平台社会模拟**：在模拟的 Twitter 与 Reddit 上并行运行多智能体群体。
-- **时序知识图谱（GraphRAG）**：以 Zep Cloud 为统一记忆底座，服务端抽取实体与关系。
-- **工具增强的报告 Agent**：ReAct 循环 + `insight_forge` 工具，在图谱与模拟之上检索后综合写作。
-- **运行时可切换模型提供方**：通过 UI 设置菜单 / `.env` / `/api/settings` 切换，对**新发起的运行**生效。
-- **统一仪表盘**：提示词输入、参数、六阶段时间线、多标签页、运行历史抽屉、设置菜单一站式呈现。
+- **一句话 → 完整预测**：单个问题端到端驱动「研究 → 模拟 → 报告」整条管线，无需在阶段间手动搬运中间产物。
+- **自主深度研究**：多角度联网搜索 + 全文抓取，沉淀为带行动者与来源的结构化研究档案。选择 `deep` 深度时，DeerFlow 会执行分阶段多轮协议：来源版图、原始证据、行动者/激励、矛盾/风险、预测输入，再进入最终长文综合。
+- **研究档案驱动的人设**：结构化行动者档案（`actors.json`：每位真实世界行动者的角色、立场、影响力、记忆）为本体生成、**智能体人格、每个智能体的立场/影响力配置以及模拟的初始帖子**提供种子 —— 智能体从调研得来的事实出发，而非 LLM 的凭空猜测。
+- **时序知识图谱（GraphRAG）**：研究成果灌入 Zep Cloud，服务端抽取实体与关系，可随时检索查询。
+- **多智能体群体模拟**：数以百计的 LLM 人格在模拟的 Twitter + Reddit 上互动；涌现的群体动态为预测提供输入。
+- **工具增强的预测综合**：ReAct ReportAgent 在动笔之前同时检索知识图谱与模拟结果。
+- **统一仪表盘**：实时日志、研究档案、知识图谱、模拟信息流与预测报告，全部收纳在一个带吸顶六阶段时间线的视图里。
+- **运行时可切换 LLM 提供方**：在设置菜单中即可在本机 CLI 与托管 API 之间切换，对**新发起的运行**生效。
+- **可取消的运行**：运行中的管线可在任意阶段从 UI 中止 —— 研究子进程组被杀掉、OASIS 模拟被停止，被取消的运行会立即停止消耗配额。
+- **可恢复的运行**：失败或被取消的管线可以原地恢复（**继续**按钮，或 `POST /api/research/<id>/resume`）。已完成的阶段会被复用 —— 已写出的研究档案、本体、知识图谱或已完成的模拟不会被重复付费；管线从出错的阶段重新开始。
+- **秒级预检（fail-fast）**：`npm run doctor` 几秒内检查完整个环境；`POST /research/run` 会在产生任何花费之前校验 Key / 凭据 / DeerFlow 检出。
 - **双语界面**：English + 中文，可在设置菜单一键切换。
+- **运行历史**：抽屉中列出历史管线运行，便于快速回看。
+- **为韧性而设计**：错误守卫、无工具的综合兜底网、随深度自适应且可抢救报告的研究看门狗、逐章优雅降级、原子化状态写入，以及跨重启的孤儿对账（包括滞留的研究进程）。
 
 ---
 
@@ -142,75 +170,70 @@ flowchart LR
 
 | 组件 | 要求 |
 |------|------|
-| **Node.js** | 18+ |
-| **Python** | ≥ 3.11（DeerFlow 研究引擎需要 Python ≥ 3.12，推荐 3.13） |
-| **uv** | Python 包管理器（最新版） |
-| **git** | 前置条件：`setup.sh` 用它自动克隆 DeerFlow 研究引擎仓库 |
-| **Zep Cloud API Key** | **始终必填**（免费额度即可）：<https://app.getzep.com/> |
-| **LLM** | 默认使用本机 `claude` 或 `codex` CLI（无需 API Key）；`openai` / `kimi` / `minimax` / `deepseek` / `qwen` / `glm` 等 OpenAI 兼容提供方需要 API Key |
+| **Node.js ≥ 20.19** | 前端（Vue 3 + Vite 7）需要。 |
+| **Python 3.11 – 3.12** | 后端需要 —— `camel-ai`/`camel-oasis` 模拟技术栈仅支持 ≤ 3.12，因此后端 venv **固定使用 3.12**（`backend/.python-version` + `uv sync --python 3.12`）。若系统默认解释器是 3.13/3.14，会直接导致安装失败。 |
+| **Python ≥ 3.12（推荐 3.13）** | DeerFlow 深度研究引擎运行在**自己独立的 venv** 中。 |
+| **uv** | 两套 venv 共用的 Python 包管理器。安装：`curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| **git** | 必需 —— `setup.sh` 用它自动下载 DeerFlow 研究引擎。 |
+| **Zep Cloud API Key** | **始终必填**（免费额度即可）。申请地址：<https://app.getzep.com/>。 |
+| **LLM** | 默认使用本机 `claude` 或 `codex` CLI（无需 API Key）；`openai` / `kimi` / `minimax` / `deepseek` / `qwen` / `glm` 等 OpenAI 兼容 API 提供方需要 `LLM_API_KEY`。 |
 
 ---
 
 ## 快速开始
 
-### 路径一：一键脚本（`setup.sh`，推荐）
+三步走：**安装 → 配置 → 运行**。DeerFlow 位于名为 `deer-flow` 的**同级目录**中，使其 LangChain/LangGraph 依赖与后端完全隔离；它运行在自己的 venv（`../deer-flow/backend/.venv`）里。
 
-项目根目录的 `setup.sh` 会自动完成全部准备工作，并**自动探测本机的模型提供方**：
+### 1. 安装
+
+**路径 A —— `setup.sh`（推荐）**。一个脚本自动完成全部安装：
 
 ```bash
 ./setup.sh
 ```
 
-该脚本会：
+它会检查前置条件、从 `.env.example` 生成 `.env`、**自动探测本机的模型提供方**（`claude` CLI → `claude-cli`；`codex` CLI → `codex-cli`，研究阶段同时切到 `codex`）、提示你填入 Zep Key、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**），然后**自动下载 DeerFlow**：若同级仓库 `../deer-flow` 不存在，则从 <https://github.com/bytedance/deer-flow> 克隆（固定到一个已知可用的提交），应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁、`config.yaml`），并构建 DeerFlow 的隔离 venv（Python 3.13）。脚本幂等，可安全地重复运行。
 
-- 检查前置条件（`git`、`node>=18`、`npm`、`uv`、`python3`），缺失时只**告警、绝不硬失败**（`git` 为克隆 DeerFlow 所必需）；
-- **自动下载 DeerFlow 研究引擎**：若同级目录 `../deer-flow` 不存在，则从 <https://github.com/bytedance/deer-flow> 克隆（固定到一个已知可用的提交），随后应用 `deerflow_bridge/` 中的「桥接覆盖层（bridge overlay）」：
-  - `deerflow_research.py` → `deer-flow/` 根目录（研究驱动 / 入口脚本）；
-  - `patches/models/*.py` → `deer-flow/backend/packages/harness/deerflow/models/`（`claude_provider.py` = 修复 401 的 OAuth 优先策略；`credential_loader.py` = 从 macOS 钥匙串读取凭据；`patched_minimax.py` = 剥除逐条消息的 `name`，修复 MiniMax「400 user name must be consistent」）；
-  - `config.yaml` → `deer-flow/config.yaml`（仅当其不存在时写入；**绝不覆盖已存在的配置**）；
+如需覆盖默认值，可通过环境变量：`DEERFLOW_DIR`（位置）、`DEERFLOW_REPO`（克隆地址）、`DEERFLOW_REF`（固定提交；设为 `=main` 可跟踪 HEAD）。它们由 `setup.sh` 从 **shell 环境**读取（不是 `.env` 配置项），例如 `DEERFLOW_REF=main ./setup.sh`。
 
-  之后用 `uv` 构建 DeerFlow 隔离 venv（Python 3.13）。可用环境变量覆盖：`DEERFLOW_DIR`（位置）、`DEERFLOW_REPO`（克隆地址）、`DEERFLOW_REF`（固定提交；设为 `main` 可跟踪 HEAD）；
-- **自动探测模型提供方**：检测到本机 `claude` CLI → `LLM_PROVIDER=claude-cli`、`DEERFLOW_MODEL=claude`；检测到 `codex` CLI → `LLM_PROVIDER=codex-cli`、`DEERFLOW_MODEL=claude`；两者皆无 → 回落到默认 `claude-cli` 并告警；
-- 从 `.env.example` 生成 `.env`（**永不覆盖已存在的 `.env`**），并安全地写入探测到的提供方配置；交互式终端下还会提示你粘贴 `ZEP_API_KEY`；
-- 安装根目录 + 前端 + 后端依赖（后端用 `uv sync`）。
-
-脚本是幂等的，可安全地重复运行。完成后按提示执行 `npm run dev` 并打开 `http://localhost:3000/research`。
-
-### 路径二：手动安装
-
-#### 1. 配置环境变量
+**路径 B —— 手动安装**（与上面等价的手动步骤）：
 
 ```bash
-cp .env.example .env
-# 编辑 .env，至少填入 ZEP_API_KEY；LLM 默认走本机 claude-cli，无需 API Key
-```
-
-#### 2. 安装依赖
-
-```bash
-# 一键安装根目录 + 前端 + 后端依赖（后端使用 uv sync）
+# 1. 安装 Node 依赖（根目录 + 前端）与后端 venv（固定 Python 3.12）
 npm run setup:all
+
+# 2. 下载 DeerFlow 研究引擎（需要 git），克隆为「同级目录」
+git clone https://github.com/bytedance/deer-flow ../deer-flow
+
+# 3. 应用 deerflow_bridge/ 桥接覆盖层
+cp deerflow_bridge/deerflow_research.py ../deer-flow/deerflow_research.py
+cp deerflow_bridge/patches/models/*.py  ../deer-flow/backend/packages/harness/deerflow/models/
+cp deerflow_bridge/config.yaml          ../deer-flow/config.yaml   # 仅当其不存在时
+
+# 4. 构建 DeerFlow 的隔离研究 venv（Python ≥ 3.12，推荐 3.13）
+UV_PROJECT_ENVIRONMENT=../deer-flow/backend/.venv \
+  uv sync --project ../deer-flow/backend --python 3.13
 ```
 
-> **DeerFlow 研究引擎**：推荐直接运行 `./setup.sh`，它会自动克隆 `../deer-flow` 并应用桥接覆盖层。若需手动准备：
->
-> 1. 将 DeerFlow 克隆为**同级目录** `deer-flow`（来自 <https://github.com/bytedance/deer-flow>）。
-> 2. 应用 `deerflow_bridge/` 桥接覆盖层：将研究驱动 `deerflow_research.py` 复制到 `deer-flow/` 根目录；将 `patches/models/*.py`（`claude_provider.py` / `credential_loader.py` / `patched_minimax.py`）复制到 `deer-flow/backend/packages/harness/deerflow/models/`；并将 `config.yaml` 复制到 `deer-flow/config.yaml`（仅在其不存在时）。
-> 3. 构建其隔离 venv（langchain/langgraph 依赖与后端隔离，`deer-flow/backend/.venv`，Python ≥ 3.12）：
->
->    ```bash
->    UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv \
->      uv sync --project deer-flow/backend --python 3.13
->    ```
+### 2. 配置
 
-#### 3. 启动前后端
+在 `.env` 中至少填入你的 **Zep Key**（若选择了托管提供方，还需相应的 API Key）—— 详见下文的 [`.env` 配置参考](#env-配置参考)。如果使用 `claude` CLI，确保已登录即可（运行一次 `claude`）。
+
+然后做一次体检，确认一切就绪 —— **doctor 几秒钟就能查完整个环境**（工具版本、两套 venv、DeerFlow 覆盖层、所选提供方的凭据）：
 
 ```bash
-# 同时启动后端（:5001）与前端（:3000）
-npm run dev
+npm run doctor
 ```
 
-打开浏览器访问：**<http://localhost:3000/research>**
+逐项修复它报告的 ✗ 项并重新运行，直到输出 `All checks passed`。
+
+### 3. 运行
+
+```bash
+npm run dev        # 后端 :5001 + 前端 :3000
+```
+
+打开 **<http://localhost:3000/research>**，输入你的问题，点击 **Run research + simulate + forecast**。后端会在发起运行时对配置做预检（preflight）—— 配置有误会在几秒内被报告，而不是等一场 40 分钟的研究跑完才发现。
 
 ---
 
@@ -231,7 +254,19 @@ npm run dev
 
 > `openai` / `kimi` / `minimax` / `deepseek` / `qwen` / `glm` 都属于「OpenAI 兼容 API」提供方，均需 `LLM_API_KEY`；其中 `kimi` / `minimax` / `deepseek` / `qwen` / `glm` 已内置合理的默认 `LLM_BASE_URL` / `LLM_MODEL_NAME`，因此通常只需填入 `LLM_API_KEY`。
 
-> **关于深度研究阶段**：DeerFlow 的深度研究阶段（`DEERFLOW_MODEL`）支持 6 个取值：**`claude`（默认）** | `minimax` | `deepseek` | `qwen` | `glm` | `codex`。其中 `claude` 使用 Claude Code OAuth（无需 API Key）；`openai` / `kimi` 会映射到 `claude` 配置。当所选提供方在研究阶段不受支持时，**研究阶段会回落到 Claude**，而模拟 / 报告阶段仍使用你所选择的提供方。若以 `minimax` / `deepseek` / `qwen` / `glm` 运行研究阶段，需分别提供 `MINIMAX_API_KEY` / `DEEPSEEK_API_KEY` / `DASHSCOPE_API_KEY` / `ZHIPUAI_API_KEY`。
+深度研究阶段由 `DEERFLOW_MODEL` **单独**驱动（7 个取值）：
+
+| 研究模型 | 说明 |
+|---|---|
+| **`claude`**（默认） | 使用 Claude Code OAuth —— 无需 API Key。`openai` 提供方映射到此配置。 |
+| **`codex`** | Codex（ChatGPT）OAuth —— 无需 API Key。本机只装了 `codex` CLI 时自动选用。 |
+| **`kimi`** | Kimi-for-coding。需要 `KIMI_API_KEY`。在设置中切换到 kimi 提供方时自动同步。 |
+| **`minimax`** | 需要 `MINIMAX_API_KEY`。 |
+| **`deepseek`** | 需要 `DEEPSEEK_API_KEY`。 |
+| **`qwen`** | 需要 `DASHSCOPE_API_KEY`。 |
+| **`glm`** | 需要 `ZHIPUAI_API_KEY`。 |
+
+> **关于深度研究阶段**：研究阶段通过 `DEERFLOW_MODEL` 独立于 `LLM_PROVIDER` 进行配置。它按提供方区分的 Key 会镜像给 deer-flow（如 `KIMI_API_KEY`、`MINIMAX_API_KEY`、`DEEPSEEK_API_KEY`、`DASHSCOPE_API_KEY`、`ZHIPUAI_API_KEY`），且仅当 `DEERFLOW_MODEL` 实际运行在该提供方上时才需要。默认的 `claude` 使用 Claude Code OAuth（无需 API Key）。`POST /api/research/run` 与 `deerflow_research.py` 都会对所选模型的凭据做预检，缺失时快速失败并给出可操作的报错。
 
 ### 三种切换方式
 
@@ -243,35 +278,65 @@ npm run dev
 
 ## `.env` 配置参考
 
-`.env` 位于项目根目录。完整可选项见 `.env.example`。
+在项目根目录创建 `.env` 文件（`setup.sh` 会从 `.env.example` 自动生成）。
 
-```env
-# ===== LLM 提供方 =====
-# claude-cli | codex-cli | openai | kimi | minimax | deepseek | qwen | glm
-LLM_PROVIDER=claude-cli
+```bash
+LLM_PROVIDER=claude-cli      # claude-cli | codex-cli | openai | kimi | minimax | deepseek | qwen | glm
+ZEP_API_KEY=...              # 始终必填（免费额度即可）
 
-# ===== Zep 记忆图谱（始终必填）=====
-# 免费额度即可支撑简单使用：https://app.getzep.com/
-ZEP_API_KEY=...
+# 仅 openai / kimi / minimax / deepseek / qwen / glm 需要：
+LLM_API_KEY=...
+LLM_BASE_URL=...             # kimi/minimax/deepseek/qwen/glm 已内置合理默认值
+LLM_MODEL_NAME=...           # kimi/minimax/deepseek/qwen/glm 已内置合理默认值
 
-# ===== OpenAI 兼容提供方需要（openai / kimi / minimax / deepseek / qwen / glm）=====
-# kimi / minimax / deepseek / qwen / glm 已内置默认 BASE_URL / MODEL_NAME，通常只需填 LLM_API_KEY
-# LLM_API_KEY=...
-# LLM_BASE_URL=...
-# LLM_MODEL_NAME=...
+# DeerFlow 深度研究（可选 —— 全部有合理默认值）：
+DEERFLOW_DIR=...                 # deer-flow 同级目录的路径
+DEERFLOW_PYTHON=...              # DeerFlow venv 的 python 解释器（自动探测）
+DEERFLOW_MODEL=...               # claude | minimax | deepseek | qwen | glm | codex | kimi
+DEERFLOW_RESEARCH_DEPTH=...      # quick | standard | deep
+DEERFLOW_RESEARCH_LANGUAGE=...   # 研究产出语言（默认中文）
+DEERFLOW_RESEARCH_TIMEOUT=...    # 研究看门狗超时覆盖；不设置 = 随深度自适应
+                                 #   （quick 900s / standard 2400s / deep 10800s）
 
-# ===== DeerFlow 深度研究（可选，全部有默认值）=====
-# DEERFLOW_DIR=                 # 留空 = <项目根>/../deer-flow（同级目录）
-# DEERFLOW_REPO=                # 留空 = https://github.com/bytedance/deer-flow（克隆地址）
-# DEERFLOW_REF=                 # 留空 = 固定的已知可用提交；设为 main 可跟踪 HEAD
-# DEERFLOW_PYTHON=              # 留空 = 自动探测 deer-flow/backend/.venv，再退回 uv run
-# DEERFLOW_MODEL=claude         # 研究模型：claude | minimax | deepseek | qwen | glm | codex
-# 以 minimax / deepseek / qwen / glm 运行研究阶段时，分别需要：
-# MINIMAX_API_KEY / DEEPSEEK_API_KEY / DASHSCOPE_API_KEY / ZHIPUAI_API_KEY
-# DEERFLOW_RESEARCH_DEPTH=standard
-# DEERFLOW_RESEARCH_LANGUAGE=Chinese
-# DEERFLOW_RESEARCH_TIMEOUT=2400
+# DeerFlow 按提供方区分的 Key（仅当 DEERFLOW_MODEL 运行在该提供方上时需要）：
+KIMI_API_KEY=...                 # DEERFLOW_MODEL=kimi
+MINIMAX_API_KEY=...              # DEERFLOW_MODEL=minimax
+DEEPSEEK_API_KEY=...             # DEERFLOW_MODEL=deepseek
+DASHSCOPE_API_KEY=...            # DEERFLOW_MODEL=qwen
+ZHIPUAI_API_KEY=...              # DEERFLOW_MODEL=glm
+
+# 调优（可选）：
+OASIS_SEMAPHORE=30               # 模拟期间 API 提供方的 LLM 并发调用上限
+OASIS_CLI_SEMAPHORE=3            # CLI 提供方的 LLM 并发调用上限
+ZEP_MAX_RETRIES=4                 # Zep 429 / 瞬态错误重试次数
+ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS=90
+FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + 自动重载
 ```
+
+> `DEERFLOW_REPO` / `DEERFLOW_REF` 是 `setup.sh` 在安装时从 **shell** 环境读取的变量（例如 `DEERFLOW_REF=main ./setup.sh`），不是 `.env` 配置项。
+
+| 变量 | 必填 | 用途 |
+|---|---|---|
+| `LLM_PROVIDER` | 是 | 选择当前生效的提供方。取值之一：`claude-cli`、`codex-cli`、`openai`、`kimi`、`minimax`、`deepseek`、`qwen`、`glm`。 |
+| `ZEP_API_KEY` | **始终必填** | 时序知识图谱所用的 Zep Cloud API Key。 |
+| `LLM_API_KEY` | openai/kimi/minimax/deepseek/qwen/glm | 托管提供方的 API Key。 |
+| `LLM_BASE_URL` | openai/kimi/minimax/deepseek/qwen/glm | OpenAI 兼容端点的 Base URL（kimi/minimax/deepseek/qwen/glm 已内置默认值）。 |
+| `LLM_MODEL_NAME` | openai/kimi/minimax/deepseek/qwen/glm | 请求的模型名（kimi/minimax/deepseek/qwen/glm 已内置默认值）。 |
+| `DEERFLOW_DIR` | 否 | `deer-flow` 同级目录的位置。 |
+| `DEERFLOW_PYTHON` | 否 | DeerFlow 隔离 venv 的 Python 解释器（自动探测 `../deer-flow/backend/.venv`）。 |
+| `DEERFLOW_MODEL` | 否 | 研究模型：`claude`、`minimax`、`deepseek`、`qwen`、`glm`、`codex` 或 `kimi`。 |
+| `KIMI_API_KEY` | DEERFLOW_MODEL=kimi | 研究阶段运行 Kimi-for-coding 时的 DeerFlow Key。 |
+| `MINIMAX_API_KEY` | DEERFLOW_MODEL=minimax | 研究阶段运行 MiniMax 时的 DeerFlow Key。 |
+| `DEEPSEEK_API_KEY` | DEERFLOW_MODEL=deepseek | 研究阶段运行 DeepSeek 时的 DeerFlow Key。 |
+| `DASHSCOPE_API_KEY` | DEERFLOW_MODEL=qwen | 研究阶段运行 Qwen 时的 DeerFlow Key。 |
+| `ZHIPUAI_API_KEY` | DEERFLOW_MODEL=glm | 研究阶段运行 GLM 时的 DeerFlow Key。 |
+| `DEERFLOW_RESEARCH_DEPTH` | 否 | 研究阶段的深度：`quick` / `standard` / `deep`。`deep` 会先运行多轮分主题调研，再做最终长文综合。 |
+| `DEERFLOW_RESEARCH_LANGUAGE` | 否 | 研究产出的语言。 |
+| `DEERFLOW_RESEARCH_TIMEOUT` | 否 | 研究看门狗超时覆盖（秒）。不设置 = 随深度自适应：quick 900 / standard 2400 / deep 10800。若看门狗触发时报告其实已经写完，该次运行会被抢救回来而不是丢弃。 |
+| `OASIS_SEMAPHORE` / `OASIS_CLI_SEMAPHORE` | 否 | 模拟期间的 LLM 并发调用上限（API 提供方 / CLI 提供方）。双平台并行运行时每个平台各分一半，因此该上限是真正的全局在途上限。 |
+| `ZEP_MAX_RETRIES` / `ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS` | 否 | Zep 免费额度返回 429 和 `Retry-After` 时的重试预算与最大等待秒数。默认分别为 `4` 和 `90`。 |
+| `LLM_CLI_USE_API_KEY` | 否 | `claude-cli` 默认会从子进程环境中剥除多余的 `ANTHROPIC_API_KEY`（否则会悄悄把计费从订阅切到 API）。设为 `true` 可保留。 |
+| `FLASK_DEBUG` | 否 | 仅限开发（默认 `false`）：开启 Werkzeug 调试器 + 自动重载（重载会杀掉运行中的管线）。 |
 
 ---
 
@@ -283,11 +348,13 @@ ZEP_API_KEY=...
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/research/run` | 触发一次运行。请求体 `{prompt, mode(full\|research_only), depth(quick\|standard\|deep), max_rounds?}` → 返回 `{pipeline_id}`。 |
-| `GET` | `/research/status/<id>` | 查询管线状态。 |
+| `POST` | `/research/run` | 触发一次运行。请求体 `{prompt, mode(full\|research_only), depth(quick\|standard\|deep), max_rounds?, project_name?}` → 返回 `{pipeline_id}`。会先对整套配置做预检（Zep Key、提供方凭据、DeerFlow 检出），有问题时返回可操作的 `400`，而不是跑到一半才失败。 |
+| `POST` | `/research/<id>/cancel` | **取消一条运行中的管线** —— 杀掉研究子进程组 / 停止 OASIS 模拟；其余阶段在下一个检查点退出。 |
+| `POST` | `/research/<id>/resume` | **恢复失败/被取消的管线** —— 复用已完成的阶段（研究档案、本体、图谱、已完成的模拟），从失败的阶段重新开始。恢复前会先做配置预检。 |
+| `GET` | `/research/status/<id>` | 查询管线状态（终态：`completed` / `failed` / `cancelled`）。 |
 | `GET` | `/research/list` | 列出历史管线。 |
 | `GET` | `/research/<id>/dossier` | 获取研究档案。 |
-| `GET` | `/research/<id>/progress` | 获取研究进度日志。 |
+| `GET` | `/research/<id>/progress` | 获取研究进度日志（DeerFlow 控制台）。 |
 
 ### 知识图谱（`/api/graph`）
 
@@ -337,6 +404,7 @@ ZEP_API_KEY=...
 ## 关键工程要点
 
 - **基于文件的交接契约**：DeerFlow 与后端之间通过运行在子进程之上的「基于文件的交接契约」通信，实现依赖隔离。
+- **结构化行动者信息端到端贯通**：DeerFlow 产出的 `actors.json`（每位被调研行动者的角色 / 立场 / 影响力 / 记忆）流经每一个下游阶段：为本体生成提供倾向、按名字匹配图谱实体为每个人格锚定立场与记忆、驱动模拟配置中每个智能体的 `stance` / `influence_weight`，并让初始帖子由*真实被调研的行动者本人*发出（`poster_name` 匹配），而非按类型匹配的替身。
 - **研究产物错误守卫**：一道错误守卫会防止「LLM 报错 / 降级提示」被误当作真实研究报告（快速失败，不污染下游）。
 - **无工具的「综合兜底网」**：若研究 Agent 在动笔前就把步数预算耗在工具调用上，或在最终写作时遭遇提供方的结构性错误，系统会直接基于已采集（已检查点保存）的研究材料，用一次干净的单轮调用综合产出报告。
 - **报告 Agent 逐章优雅降级**：单个章节的 LLM 错误只会变成该章节的占位内容，其余章节仍可产出，得到一份部分完成的报告。
@@ -367,6 +435,8 @@ MiroFish-0.1.2/
 │       │                         # / SimulationView / ForecastReport / SettingsMenu …
 │       ├── router/
 │       └── i18n.js           # 双语（EN / 中文）
+├── Screenshots -> docs/media/ # README 截图 + 演示视频/GIF
+├── docs/media/               # 规范化保存的优化媒体资产
 └── （同级目录）deer-flow/    # DeerFlow 深度研究引擎（独立 venv，与后端依赖隔离）
 ```
 
@@ -377,10 +447,26 @@ MiroFish-0.1.2/
 | 问题 | 排查方向 |
 |------|----------|
 | 启动即报缺少 Zep 配置 | `ZEP_API_KEY` 始终必填。检查根目录 `.env` 是否已填入真实 Key（免费额度可在 <https://app.getzep.com/> 申请）。 |
+| 报告阶段报 `status_code: 429` / `Rate limit exceeded for FREE plan` | 这是 Zep 免费额度限流。后端现在会解析 `Retry-After`、等待后重试，并在报告生成中复用节点/边快照以减少重复读取。超大运行可降低深度/并发，或在 `.env` 中调高 Zep 重试参数。 |
 | 研究阶段（stage 1）无法运行 | DeerFlow 需作为 `MiroFish-0.1.2` 的**同级目录** `deer-flow` 存在、已应用 `deerflow_bridge/` 桥接覆盖层、且已构建好自己的 venv（Python ≥ 3.12）。重新运行 `./setup.sh`（会自动克隆并应用覆盖层），或设置 `DEERFLOW_DIR` 指向其位置。 |
 | 选了需要 Key 的提供方（`openai`/`kimi`/`minimax`/`deepseek`/`qwen`/`glm`）却报鉴权失败 | 这些 OpenAI 兼容提供方需要 `LLM_API_KEY`（以及按需的 `LLM_BASE_URL` / `LLM_MODEL_NAME`）。可在 `.env`、UI 设置菜单或 `POST /api/settings/llm` 中配置。 |
 | 切换了模型提供方但当前运行没变化 | 提供方切换只对**新发起的运行**生效；已在运行中的管线沿用其启动时读取的配置。请重新发起一次运行。 |
-| 选了不受研究阶段支持的提供方，研究阶段仍走 Claude | 这是预期行为：DeerFlow 深度研究阶段（`DEERFLOW_MODEL`）支持 `claude` / `minimax` / `deepseek` / `qwen` / `glm` / `codex`；不受支持的提供方在研究阶段回落到 Claude，模拟/报告阶段仍用所选提供方。 |
+| 选了不受研究阶段支持的提供方，研究阶段仍走 Claude | 这是预期行为：DeerFlow 深度研究阶段（`DEERFLOW_MODEL`）支持 `claude` / `minimax` / `deepseek` / `qwen` / `glm` / `codex` / `kimi`；不受支持的提供方在研究阶段回落到 Claude，模拟/报告阶段仍用所选提供方。 |
 | 后端起来了但前端 `/api` 请求 404 | 确认后端在 `:5001` 运行，且前端开发服务器（`:3000`）已将 `/api` 代理至 `5001`；用 `npm run dev` 同时启动两端最为稳妥。 |
-| `git` / `uv` / `node` 缺失或版本过旧 | 满足环境要求：`git`（克隆 DeerFlow 所必需）、Node.js 18+、Python ≥ 3.11（DeerFlow 需 ≥ 3.12，推荐 3.13）、安装最新版 `uv`。`./setup.sh` 会就缺失项给出告警与安装提示。 |
-```
+| `git` / `uv` / `node` 缺失或版本过旧 | 满足环境要求：`git`（克隆 DeerFlow 所必需）、Node.js ≥ 20.19、Python 3.11–3.12（后端）、Python ≥ 3.12（DeerFlow，推荐 3.13）、安装最新版 `uv`。`./setup.sh` 会就缺失项给出告警与安装提示。 |
+| 想停止一次长时间运行 | 点击运行头部的**取消**按钮（或 `POST /api/research/<id>/cancel`）。研究/模拟子进程会被立即终止，停止消耗配额。 |
+| 运行中途失败（或被取消） | 点击运行头部的**继续**按钮（或 `POST /api/research/<id>/resume`）。已完成的阶段会被复用 —— 已写出的研究档案、图谱或已完成的模拟不会重跑 —— 管线从出错的阶段重新开始。后端重启导致中断的运行同样适用。 |
+| 研究阶段超时 | 看门狗按深度分级（quick 900s / standard 2400s / deep 10800s）。deep 模式刻意运行多轮研究因此更慢；可用 `DEERFLOW_RESEARCH_TIMEOUT` 覆盖或调低研究 `depth`。若看门狗触发时报告已写出，本次运行会打捞报告并继续。 |
+
+---
+
+## 致谢
+
+- **[OASIS](https://github.com/camel-ai/oasis)**（CAMEL-AI）驱动多智能体社会模拟引擎 —— 诚挚感谢 CAMEL-AI 团队的开源工作。
+- **[DeerFlow](https://github.com/bytedance/deer-flow)**（字节跳动）驱动深度研究阶段。
+- **[Zep Cloud](https://www.getzep.com/)** 提供时序知识图谱（GraphRAG）。
+- 基于 **[MiroFish](https://github.com/666ghj/MiroFish)** —— 原版群体模拟预测引擎 —— 构建。
+
+## 许可证
+
+[AGPL-3.0](LICENSE)

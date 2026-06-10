@@ -8,7 +8,7 @@
 #     hard-fails) when something optional is missing.
 #   * Auto-detects the local model provider:
 #       - `claude` CLI on PATH -> LLM_PROVIDER=claude-cli, DEERFLOW_MODEL=claude
-#       - `codex`  CLI on PATH -> LLM_PROVIDER=codex-cli,  DEERFLOW_MODEL=claude
+#       - `codex`  CLI on PATH -> LLM_PROVIDER=codex-cli,  DEERFLOW_MODEL=codex
 #       - neither               -> default claude-cli + a warning
 #   * Scaffolds .env from .env.example (never overwrites an existing .env) and
 #     upserts the detected provider lines safely.
@@ -16,7 +16,7 @@
 #   * DOWNLOADS the DeerFlow research engine: clones the sibling ../deer-flow
 #     repo (pinned commit), applies the bridge overlay (research driver, patched
 #     model providers, and a ready-to-use config.yaml with claude / minimax /
-#     deepseek / qwen / glm / codex stanzas), then builds its isolated venv.
+#     deepseek / qwen / glm / codex / kimi stanzas), then builds its isolated venv.
 #
 # Safe to run multiple times. Optional steps are guarded so a missing piece
 # (e.g. no network for the deer-flow clone) never aborts the whole script.
@@ -77,19 +77,21 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # Track whether anything important is missing so we can summarise at the end.
 MISSING_PREREQS=0
 
-# --- node (>= 18) ---
+# --- node (>= 20.19; vite 7 requires ^20.19 || >=22.12) ---
 if have node; then
-  # `node -v` prints e.g. "v20.11.0"; strip the leading 'v' and take the major.
+  # `node -v` prints e.g. "v20.11.0"; strip the leading 'v' and take major/minor.
   NODE_VER="$(node -v 2>/dev/null | sed 's/^v//')"
   NODE_MAJOR="${NODE_VER%%.*}"
-  if [ -n "$NODE_MAJOR" ] && [ "$NODE_MAJOR" -ge 18 ] 2>/dev/null; then
-    ok "node $NODE_VER (>=18)"
+  NODE_MINOR="$(printf '%s' "$NODE_VER" | cut -d. -f2)"
+  if [ -n "$NODE_MAJOR" ] 2>/dev/null && { [ "$NODE_MAJOR" -ge 22 ] || { [ "$NODE_MAJOR" -eq 20 ] && [ "${NODE_MINOR:-0}" -ge 19 ]; } || [ "$NODE_MAJOR" -eq 21 ]; }; then
+    ok "node $NODE_VER (>=20.19)"
   else
-    warn "node $NODE_VER found, but >=18 is required. Update Node.js: https://nodejs.org/"
+    warn "node $NODE_VER found, but the frontend (vite 7) needs >=20.19 (or >=22.12)."
+    warn "    Update Node.js: https://nodejs.org/"
     MISSING_PREREQS=1
   fi
 else
-  warn "node not found (>=18 required). Install Node.js: https://nodejs.org/"
+  warn "node not found (>=20.19 required). Install Node.js: https://nodejs.org/"
   MISSING_PREREQS=1
 fi
 
@@ -140,8 +142,9 @@ fi
 step "Detecting model provider"
 
 # DEERFLOW_MODEL must be one of the models DeerFlow's research stage supports
-# (claude | minimax | deepseek | qwen | glm | codex). For CLI providers we point
-# DeerFlow at "claude" (the local CLI OAuth path needs no API key).
+# (claude | minimax | deepseek | qwen | glm | codex | kimi). Each CLI provider
+# maps to its own subscription's research model (claude -> claude OAuth,
+# codex -> codex OAuth) so a codex-only machine never needs Claude credentials.
 LLM_PROVIDER=""
 DEERFLOW_MODEL="claude"
 
@@ -151,8 +154,8 @@ if have claude; then
   ok "Claude Code CLI detected -> LLM_PROVIDER=claude-cli (no API key needed)"
 elif have codex; then
   LLM_PROVIDER="codex-cli"
-  DEERFLOW_MODEL="claude"
-  ok "Codex CLI detected -> LLM_PROVIDER=codex-cli (no API key needed)"
+  DEERFLOW_MODEL="codex"
+  ok "Codex CLI detected -> LLM_PROVIDER=codex-cli, DEERFLOW_MODEL=codex (no API key needed)"
 else
   # No local CLI: keep claude-cli as the documented default but make it loud
   # that the user must either install a CLI or configure an API-key provider.
@@ -256,10 +259,11 @@ fi
 step "Installing root + frontend dependencies (npm)"
 if have npm; then
   npm_failed=0
-  # Prefer the project's convenience script (detected by inspecting package.json,
-  # which is more robust than parsing `npm run` output); fall back to explicit installs.
-  if [ -f "$ROOT_DIR/package.json" ] && grep -q '"setup:all"' "$ROOT_DIR/package.json" 2>/dev/null; then
-    ( cd "$ROOT_DIR" && npm run setup:all ) || npm_failed=1
+  # Node deps only here ("setup" = root + frontend). The backend venv is built
+  # in the next step with an explicit Python pin — using "setup:all" would run
+  # an extra, redundant `uv sync` first.
+  if [ -f "$ROOT_DIR/package.json" ] && grep -q '"setup"' "$ROOT_DIR/package.json" 2>/dev/null; then
+    ( cd "$ROOT_DIR" && npm run setup ) || npm_failed=1
   else
     ( cd "$ROOT_DIR" && npm install ) || npm_failed=1
     if [ -d "$ROOT_DIR/frontend" ]; then
@@ -270,7 +274,7 @@ if have npm; then
     ok "Root + frontend npm dependencies installed"
   else
     warn "npm install hit an error (see output above). Setup continues — re-run"
-    warn "    'npm run setup:all' (or 'npm install') in the project root later."
+    warn "    'npm run setup' (or 'npm install') in the project root later."
   fi
 else
   warn "Skipping npm install — npm is not available."
@@ -278,13 +282,16 @@ fi
 
 # --- Backend Python venv via uv ---
 # Guarded the same way: a failed uv sync warns and continues.
-step "Installing backend dependencies (uv sync)"
+# PINNED to Python 3.12: the camel-ai/camel-oasis simulation stack targets
+# <=3.12 (a 3.13/3.14 default interpreter breaks the build out of the box).
+# backend/.python-version carries the same pin for bare `uv sync` / `uv run`.
+step "Installing backend dependencies (uv sync, Python 3.12)"
 if have uv && [ -d "$ROOT_DIR/backend" ]; then
-  if ( cd "$ROOT_DIR/backend" && uv sync ); then
-    ok "Backend venv ready (backend/.venv)"
+  if ( cd "$ROOT_DIR/backend" && uv sync --python 3.12 ); then
+    ok "Backend venv ready (backend/.venv, Python 3.12)"
   else
     warn "Backend 'uv sync' failed (see output above). Setup continues — retry with:"
-    warn "    ( cd \"$ROOT_DIR/backend\" && uv sync )"
+    warn "    ( cd \"$ROOT_DIR/backend\" && uv sync --python 3.12 )"
   fi
 elif [ ! -d "$ROOT_DIR/backend" ]; then
   warn "backend/ directory not found — skipping backend install."
@@ -363,7 +370,7 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
   if [ ! -f "$DEERFLOW_DIR/config.yaml" ]; then
     if [ -f "$BRIDGE_DIR/config.yaml" ]; then
       cp "$BRIDGE_DIR/config.yaml" "$DEERFLOW_DIR/config.yaml"
-      ok "Installed config.yaml (6 provider stanzas; keys read from .env via \$VAR)"
+      ok "Installed config.yaml (7 provider stanzas; keys read from .env via \$VAR)"
     fi
   else
     info "deer-flow/config.yaml already exists — leaving it. Diff it against"
@@ -410,7 +417,7 @@ cat <<NEXT
          exist for kimi/minimax/deepseek/qwen/glm — see .env.example). You can
          also switch the provider at runtime from the UI Settings menu (NEW runs).
        • To run deep research on a specific model, set DEERFLOW_MODEL to
-         claude | minimax | deepseek | qwen | glm | codex.
+         claude | minimax | deepseek | qwen | glm | codex | kimi.
 
   3) Start everything (backend :5001 + frontend :3000):
        ${C_BOLD}npm run dev${C_RESET}

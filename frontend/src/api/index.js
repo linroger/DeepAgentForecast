@@ -35,17 +35,27 @@ service.interceptors.response.use(
   },
   error => {
     console.error('Response error:', error)
-    
+
     // 处理超时
     if (error.code === 'ECONNABORTED' && error.message.includes('timeout')) {
       console.error('Request timeout')
     }
-    
+
     // 处理网络错误
     if (error.message === 'Network Error') {
       console.error('Network error - please check your connection')
     }
-    
+
+    // 后端的 4xx/5xx 响应体里带有人类可读的 error 字段（如启动前体检清单）。
+    // 把它提取成 error.message，让 UI 显示真实原因而不是
+    // "Request failed with status code 400"。保留 error.response 以便调用方
+    // 仍能按 status（如 404）分支处理。
+    const backendMsg = error.response && error.response.data &&
+      (error.response.data.error || error.response.data.message)
+    if (backendMsg) {
+      error.message = backendMsg
+    }
+
     return Promise.reject(error)
   }
 )

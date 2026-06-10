@@ -14,6 +14,7 @@ from zep_cloud import InternalServerError
 from zep_cloud.client import Zep
 
 from .logger import get_logger
+from .zep_rate_limit import is_zep_rate_limit_error, zep_retry_delay_seconds
 
 logger = get_logger('mirofish.zep_paging')
 
@@ -21,6 +22,8 @@ _DEFAULT_PAGE_SIZE = 100
 _MAX_NODES = 2000
 _DEFAULT_MAX_RETRIES = 3
 _DEFAULT_RETRY_DELAY = 2.0  # seconds, doubles each retry
+_DEFAULT_RATE_LIMIT_BUFFER = 1.0
+_DEFAULT_RATE_LIMIT_MAX_SLEEP = 90.0
 
 
 def _fetch_page_with_retry(
@@ -28,6 +31,8 @@ def _fetch_page_with_retry(
     *args: Any,
     max_retries: int = _DEFAULT_MAX_RETRIES,
     retry_delay: float = _DEFAULT_RETRY_DELAY,
+    rate_limit_buffer: float = _DEFAULT_RATE_LIMIT_BUFFER,
+    rate_limit_max_sleep: float = _DEFAULT_RATE_LIMIT_MAX_SLEEP,
     page_description: str = "page",
     **kwargs: Any,
 ) -> list[Any]:
@@ -41,13 +46,29 @@ def _fetch_page_with_retry(
     for attempt in range(max_retries):
         try:
             return api_call(*args, **kwargs)
-        except (ConnectionError, TimeoutError, OSError, InternalServerError) as e:
+        except Exception as e:
+            if not (
+                isinstance(e, (ConnectionError, TimeoutError, OSError, InternalServerError))
+                or is_zep_rate_limit_error(e)
+            ):
+                raise
+
             last_exception = e
             if attempt < max_retries - 1:
-                logger.warning(
-                    f"Zep {page_description} attempt {attempt + 1} failed: {str(e)[:100]}, retrying in {delay:.1f}s..."
+                sleep_for = (
+                    zep_retry_delay_seconds(
+                        e,
+                        fallback=delay,
+                        buffer_seconds=rate_limit_buffer,
+                        max_sleep_seconds=rate_limit_max_sleep,
+                    )
+                    if is_zep_rate_limit_error(e)
+                    else delay
                 )
-                time.sleep(delay)
+                logger.warning(
+                    f"Zep {page_description} attempt {attempt + 1} failed: {str(e)[:100]}, retrying in {sleep_for:.1f}s..."
+                )
+                time.sleep(sleep_for)
                 delay *= 2
             else:
                 logger.error(f"Zep {page_description} failed after {max_retries} attempts: {str(e)}")
@@ -63,6 +84,8 @@ def fetch_all_nodes(
     max_items: int = _MAX_NODES,
     max_retries: int = _DEFAULT_MAX_RETRIES,
     retry_delay: float = _DEFAULT_RETRY_DELAY,
+    rate_limit_buffer: float = _DEFAULT_RATE_LIMIT_BUFFER,
+    rate_limit_max_sleep: float = _DEFAULT_RATE_LIMIT_MAX_SLEEP,
 ) -> list[Any]:
     """分页获取图谱节点，最多返回 max_items 条（默认 2000）。每页请求自带重试。"""
     all_nodes: list[Any] = []
@@ -80,6 +103,8 @@ def fetch_all_nodes(
             graph_id,
             max_retries=max_retries,
             retry_delay=retry_delay,
+            rate_limit_buffer=rate_limit_buffer,
+            rate_limit_max_sleep=rate_limit_max_sleep,
             page_description=f"fetch nodes page {page_num} (graph={graph_id})",
             **kwargs,
         )
@@ -108,6 +133,8 @@ def fetch_all_edges(
     page_size: int = _DEFAULT_PAGE_SIZE,
     max_retries: int = _DEFAULT_MAX_RETRIES,
     retry_delay: float = _DEFAULT_RETRY_DELAY,
+    rate_limit_buffer: float = _DEFAULT_RATE_LIMIT_BUFFER,
+    rate_limit_max_sleep: float = _DEFAULT_RATE_LIMIT_MAX_SLEEP,
 ) -> list[Any]:
     """分页获取图谱所有边，返回完整列表。每页请求自带重试。"""
     all_edges: list[Any] = []
@@ -125,6 +152,8 @@ def fetch_all_edges(
             graph_id,
             max_retries=max_retries,
             retry_delay=retry_delay,
+            rate_limit_buffer=rate_limit_buffer,
+            rate_limit_max_sleep=rate_limit_max_sleep,
             page_description=f"fetch edges page {page_num} (graph={graph_id})",
             **kwargs,
         )

@@ -16,7 +16,7 @@ everything here automatically — you normally never touch these files by hand.
 | `patches/models/claude_provider.py` | `ClaudeChatModel` with **OAuth‑preference** (prefers a Claude Code OAuth credential over an ambient non‑OAuth `ANTHROPIC_API_KEY`, fixing stray‑key 401s) and a 0.5 thinking‑budget ratio. | → `deer-flow/backend/packages/harness/deerflow/models/` |
 | `patches/models/credential_loader.py` | Adds a **macOS Keychain** credential source (`security find-generic-password -s "Claude Code-credentials"`) so the local `claude` OAuth token is found even when it isn't in `~/.claude/.credentials.json`. | → same `models/` dir |
 | `patches/models/patched_minimax.py` | `PatchedChatMiniMax` — strips the per‑message `name` field that DeerFlow middlewares inject, fixing MiniMax `400 user name must be consistent`; keeps tools + reasoning **on**. | → same `models/` dir |
-| `config.yaml` | A complete, ready‑to‑use DeerFlow config with active stanzas for **claude / minimax / deepseek / qwen / glm / codex**. All keys are `$VAR` references resolved from `.env` — **no secrets**. | → `deer-flow/config.yaml` (only if absent; never clobbers an existing one). |
+| `config.yaml` | A complete, ready‑to‑use DeerFlow config with active stanzas for **claude / minimax / deepseek / qwen / glm / codex / kimi**. All keys are `$VAR` references resolved from `.env` — **no secrets**. Bridge‑tuned: conversation **memory off** (no cross‑run fact contamination), **title generation off** (headless runs), summarization trigger raised to **120K tokens** (research keeps full source detail). | → `deer-flow/config.yaml` (only if absent; never clobbers an existing one — diff against this copy to pick up new stanzas/tuning). |
 | `config.minimax.snippet.yaml` | Just the `minimax` model stanza, for pasting into an existing `deer-flow/config.yaml` by hand. | (manual merge helper) |
 
 ## Automated install (recommended)
@@ -57,13 +57,15 @@ UV_PROJECT_ENVIRONMENT=../deer-flow/backend/.venv uv sync --project ../deer-flow
 ```
 
 The backend finds DeerFlow via `DEERFLOW_DIR` (defaults to the sibling `../deer-flow`) and the
-research model via `DEERFLOW_MODEL` (`claude | minimax | deepseek | qwen | glm | codex`). See the
+research model via `DEERFLOW_MODEL` (`claude | minimax | deepseek | qwen | glm | codex | kimi`). See the
 main `README.md` and `DEERFLOW_INTEGRATION.md` for the full contract.
 
 ## Notable bridge hardening (in `deerflow_research.py`)
 
-- **Pre-flight credential check** (fails fast with a clear message when a `claude` model has no valid OAuth/API key).
+- **Pre-flight credential check for every model** — runs BEFORE the DeerFlow client/config is constructed: `claude` (OAuth token present/fresh), `codex` (`~/.codex/auth.json`), and each API model (`kimi`/`minimax`/`deepseek`/`qwen`/`glm` → its `$KEY` env var). Fails fast (exit 3) with the exact variable to set instead of an opaque traceback mid-research.
+- **Provider-key env hygiene** — DeerFlow's config loader greedily resolves every `$VAR` in `config.yaml`, so one unset key used to crash even the default claude path on standalone runs; the bridge now presets empty defaults for all known provider key vars (MiroFish's backend does the same before spawning it).
 - **LLM-error guard** — a degraded provider message (rate limit, `422 new_sensitive`, `400 bad_request`, connection error) is never mistaken for a real research report; the run fails fast instead of contaminating the pipeline.
 - **Tool-free synthesis net** — if the research agent exhausts its step budget on tool calls before writing, *or* hits a provider **structural** error on the final write (e.g. MiniMax `400 user name must be consistent`), the report is synthesized directly from the gathered, thread-checkpointed research via a clean single-turn call. (Only a genuine content-moderation block is excluded, since re-sending the same content would just be blocked again.)
-- **Longer, richer reports** — a higher synthesis trigger and a model‑aware context cap (up to ~900K chars for million‑token models: minimax / qwen / deepseek) with explicit length mandates in the research/synthesis prompts.
+- **Multi-pass `deep` research** — `quick` and `standard` remain single-turn research runs, while `deep` now runs a staged protocol in one thread: opening source map → primary evidence sweep → actor/incentive analysis → contradiction/risk testing → forecast-input pass → tool-free long-form synthesis. This makes deep runs slower, but much more detailed and less likely to stop after a short generic dossier.
+- **Longer, richer reports** — a higher synthesis trigger and a model‑aware context cap (up to ~900K chars for million‑token models: minimax / qwen / deepseek) with explicit length mandates in the research/synthesis prompts. Deep synthesis targets an 8,000–12,000 word evidence-backed dossier when the model can support it.
 - **`<think>` stripping** for reasoning models (MiniMax‑M3 inlines its chain‑of‑thought).

@@ -96,6 +96,12 @@
             <h2 class="run-title">{{ statusTitle }}</h2>
           </div>
           <div class="run-actions">
+            <button v-if="status === 'running'" class="ghost-btn cancel-btn" :disabled="cancelling" @click="cancel">
+              {{ cancelling ? L('取消中…','Cancelling…') : L('取消','Cancel') }}
+            </button>
+            <button v-if="canResume" class="ghost-btn resume-btn" :disabled="resuming" @click="resume">
+              {{ resuming ? L('恢复中…','Resuming…') : L('继续','Resume') }}
+            </button>
             <button class="ghost-btn" @click="showHistory = true">{{ L('历史','History') }}</button>
             <button class="ghost-btn" @click="reset">＋ {{ L('新建','New') }}</button>
           </div>
@@ -144,7 +150,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { runPipeline, getPipelineStatus, getProgressLog, getDossier } from '../api/research'
+import { runPipeline, cancelPipeline, resumePipeline, getPipelineStatus, getProgressLog, getDossier } from '../api/research'
 import { getGraphData } from '../api/graph'
 import { locale, setLocale, L } from '../i18n'
 import StageTimeline from '../components/research/StageTimeline.vue'
@@ -202,6 +208,9 @@ const graphMax = ref(false)
 
 let pollTimer = null
 let dossierFetched = false
+let pollFailures = 0
+let connErrorShown = false
+const POLL_FAILURE_THRESHOLD = 4 // 连续 4 次（约 10s）轮询失败才提示，容忍偶发抖动
 
 function stageLabel(name) {
   return {
@@ -214,6 +223,7 @@ const canStart = computed(() => prompt.value.trim().length > 0)
 const statusTitle = computed(() => {
   if (status.value === 'completed') return mode.value === 'research_only' ? L('研究完成', 'Research complete') : L('推演完成 · 预测就绪', 'Done · forecast ready')
   if (status.value === 'failed') return L('运行失败', 'Run failed')
+  if (status.value === 'cancelled') return L('已取消', 'Cancelled')
   return currentStage.value ? `${L('运行中','Running')} · ${stageLabel(currentStage.value)}` : L('运行中…', 'Running…')
 })
 
@@ -271,16 +281,56 @@ function beginPipeline(id) {
   startPolling()
 }
 
+const cancelling = ref(false)
+const resuming = ref(false)
+const canResume = computed(() => !!pipelineId.value && (status.value === 'failed' || status.value === 'cancelled'))
+async function cancel() {
+  if (!pipelineId.value || cancelling.value) return
+  if (!window.confirm(L('确定取消本次推演？正在运行的研究/模拟将被终止。', 'Cancel this run? The in-flight research/simulation will be stopped.'))) return
+  cancelling.value = true
+  try {
+    await cancelPipeline(pipelineId.value)
+    // 状态翻转由轮询接管（cancelled 是终态）
+  } catch (e) {
+    error.value = e?.message || L('取消失败', 'Cancel failed')
+  } finally {
+    cancelling.value = false
+  }
+}
+
+async function resume() {
+  if (!pipelineId.value || resuming.value) return
+  resuming.value = true
+  error.value = ''
+  try {
+    const res = await resumePipeline(pipelineId.value)
+    const id = (res && res.data && res.data.pipeline_id) || pipelineId.value
+    pipelineId.value = id
+    status.value = 'running'
+    try { localStorage.setItem(ACTIVE_PIPELINE_KEY, id) } catch (e) { /* noop */ }
+    startPolling()
+  } catch (e) {
+    error.value = e?.message || L('恢复失败', 'Resume failed')
+  } finally {
+    resuming.value = false
+  }
+}
+
 function startPolling() { stopPolling(); pollTimer = setInterval(poll, 2500); poll() }
 function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } }
 
 async function poll() {
   if (!pipelineId.value) return
   try {
+    // 研究日志只在研究阶段增长：研究完成后（已拿到过一次完整 tail）就不再
+    // 每 2.5s 重新拉 400 行，省掉整个管线生命周期里的无效轮询。
+    const researchRunning = !(stages.value.research && stages.value.research.status === 'completed') || logLines.value.length === 0
     const [st, lg] = await Promise.all([
       getPipelineStatus(pipelineId.value),
-      getProgressLog(pipelineId.value, 400)
+      researchRunning ? getProgressLog(pipelineId.value, 400) : Promise.resolve(null)
     ])
+    pollFailures = 0
+    if (connErrorShown) { error.value = ''; connErrorShown = false }
     const d = st.data
     status.value = d.status
     globalProgress.value = d.global_progress || 0
@@ -290,7 +340,7 @@ async function poll() {
     if (d.graph_id) graphId.value = d.graph_id
     if (d.simulation_id) simulationId.value = d.simulation_id
     if (d.report_id) reportId.value = d.report_id
-    logLines.value = (lg.data && lg.data.lines) || []
+    if (lg) logLines.value = (lg.data && lg.data.lines) || []
 
     const researchDone = stages.value.research && stages.value.research.status === 'completed'
     if (researchDone && !dossierFetched) {
@@ -298,7 +348,7 @@ async function poll() {
       try { dossier.value = (await getDossier(pipelineId.value)).data } catch (e) { /* noop */ }
     }
 
-    if (status.value === 'completed' || status.value === 'failed') {
+    if (status.value === 'completed' || status.value === 'failed' || status.value === 'cancelled') {
       stopPolling()
       try { localStorage.removeItem(ACTIVE_PIPELINE_KEY) } catch (e) { /* noop */ }
       if (!dossier.value) { try { dossier.value = (await getDossier(pipelineId.value)).data } catch (e) { /* noop */ } }
@@ -313,6 +363,14 @@ async function poll() {
       try { localStorage.removeItem(ACTIVE_PIPELINE_KEY) } catch (_) { /* noop */ }
       status.value = 'failed'
       error.value = L('该管线不存在或已被清理', 'This pipeline no longer exists')
+      return
+    }
+    // 非 404 失败（后端崩溃/网络断开）不再静默吞掉：连续多次失败时提示用户，
+    // 但保持轮询——后端恢复后下一次成功轮询会自动清掉提示。
+    pollFailures += 1
+    if (pollFailures >= POLL_FAILURE_THRESHOLD) {
+      error.value = L('与后端失去连接（持续重试中）：', 'Lost connection to the backend (retrying): ') + (e?.message || '')
+      connErrorShown = true
     }
   }
 }
@@ -368,12 +426,12 @@ onUnmounted(stopPolling)
   font-family: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif;
   color: #000; --orange: #FF4500; --mono: 'JetBrains Mono', monospace; --border: #E5E5E5;
 }
-.navbar { height: 60px; background:#000; color:#fff; display:flex; justify-content:space-between; align-items:center; padding:0 40px; position:sticky; top:0; z-index:20; }
-.nav-brand { font-family: var(--mono); font-weight:800; letter-spacing:.5px; font-size:1.05rem; }
+.navbar { min-height: 60px; background:#000; color:#fff; display:flex; justify-content:space-between; align-items:center; gap:18px; padding:0 40px; position:sticky; top:0; z-index:20; }
+.nav-brand { font-family: var(--mono); font-weight:800; letter-spacing:0; font-size:1.05rem; flex:0 1 auto; min-width:0; white-space:nowrap; }
 .brand-accent { color: var(--orange); }
-.nav-links { display:flex; align-items:center; gap:14px; }
-.nav-tag { font-family: var(--mono); font-size:.74rem; color:#bbb; }
-.nav-icon-btn { background:transparent; border:1px solid #444; color:#ddd; font-family:var(--mono); font-size:.74rem; width:30px; height:30px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.nav-links { display:flex; align-items:center; justify-content:flex-end; gap:10px; min-width:0; flex:1 1 auto; }
+.nav-tag { font-family: var(--mono); font-size:.74rem; color:#bbb; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nav-icon-btn { background:transparent; border:1px solid #444; color:#ddd; font-family:var(--mono); font-size:.74rem; min-width:30px; width:30px; height:30px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
 .nav-icon-btn:hover { border-color:var(--orange); color:#fff; }
 .nav-hist-btn { background:transparent; border:1px solid #444; color:#ddd; font-family:var(--mono); font-size:.74rem; padding:6px 12px; cursor:pointer; }
 .nav-hist-btn:hover { border-color:var(--orange); color:#fff; }
@@ -390,7 +448,7 @@ onUnmounted(stopPolling)
 .tag-row { display:flex; gap:15px; align-items:center; margin-bottom:20px; font-family:var(--mono); font-size:.8rem; }
 .orange-tag { background:var(--orange); color:#fff; padding:4px 10px; font-weight:700; letter-spacing:1px; font-size:.75rem; }
 .version-text { color:#999; }
-.main-title { font-size:3rem; line-height:1.2; font-weight:500; letter-spacing:-1.5px; margin:0 0 22px; }
+.main-title { font-size:3rem; line-height:1.2; font-weight:500; letter-spacing:0; margin:0 0 22px; }
 .gradient-text { background:linear-gradient(90deg,#000,#FF4500); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
 .lead { color:#666; line-height:1.85; max-width:820px; margin-bottom:34px; }
 .console-box { border:1px solid #CCC; padding:8px; }
@@ -426,6 +484,11 @@ onUnmounted(stopPolling)
 .primary-btn { background:var(--orange); color:#fff; border:none; padding:12px 18px; font-family:var(--mono); font-weight:700; cursor:pointer; }
 .ghost-btn { background:#fff; color:#000; border:1px solid #DDD; padding:10px 16px; font-family:var(--mono); font-size:.82rem; cursor:pointer; }
 .ghost-btn:hover { border-color:var(--orange); }
+.cancel-btn { color:var(--orange); border-color:#F3C4B2; }
+.cancel-btn:disabled { color:#bbb; border-color:#E5E5E5; cursor:not-allowed; }
+.resume-btn { color:#166534; border-color:#B7E4C7; }
+.resume-btn:hover { border-color:#16a34a; }
+.resume-btn:disabled { color:#bbb; border-color:#E5E5E5; cursor:not-allowed; }
 
 .run-layout { display:grid; grid-template-columns:330px 1fr; gap:24px; align-items:start; }
 .rail { position:sticky; top:84px; }
@@ -444,5 +507,22 @@ onUnmounted(stopPolling)
   .run-layout { grid-template-columns:1fr; }
   .rail { position:static; }
   .main-title { font-size:2.2rem; }
+}
+
+@media (max-width: 640px) {
+  .navbar { padding:10px 16px; align-items:flex-start; }
+  .nav-brand { font-size:.95rem; line-height:30px; }
+  .nav-links { flex:0 0 auto; gap:8px; }
+  .nav-tag { display:none; }
+  .nav-hist-btn { width:30px; height:30px; padding:0; overflow:hidden; color:transparent; position:relative; }
+  .nav-hist-btn::after { content:'☰'; color:#ddd; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  .main-content { padding:28px 16px; }
+  .main-title { font-size:2rem; line-height:1.24; }
+  .lead { font-size:.95rem; line-height:1.75; }
+  .console-section { padding:16px; }
+  .params-row { gap:18px; }
+  .param, .num-input { width:100%; }
+  .seg { width:100%; }
+  .seg button { flex:1; min-width:0; padding:9px 10px; }
 }
 </style>

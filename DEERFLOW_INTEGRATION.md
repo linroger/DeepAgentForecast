@@ -1,14 +1,18 @@
 # MiroFish × DeerFlow — Integration Design
 
-> **STATUS: IMPLEMENTED (Option C, Phases 0–3 + part of Phase 4).** Code is written
-> and statically verified. The end-to-end pipeline (prompt → research → ontology →
-> graph → simulation → report) works, and `actors.json` **biases the ontology**
-> (the highest-leverage fidelity hook). **Not yet wired:** the rest of Phase 4 —
-> seeding per-agent `stance`/`influence` and `initial_posts` from `actors.json`
-> (today personas/posts are generated from the research report prose, not the
-> structured actor fields), surfacing `sources.json` provenance is now done in the
-> UI. See **§7 Phase 4** and **§10 Build Status & Runbook** for the exact split and
-> the one prerequisite (a Python ≤3.12 MiroFish venv).
+> **STATUS: IMPLEMENTED (Option C, Phases 0–4).** The end-to-end pipeline
+> (prompt → research → ontology → graph → simulation → report) works, and the
+> full Phase-4 fidelity loop is now wired: `actors.json` **biases the ontology**,
+> its structured `role`/`stance`/`influence`/`memory` fields are **name-matched to
+> graph entities and injected into persona generation** (`OasisProfileGenerator`),
+> drive **per-agent `stance`/`influence_weight`** in `SimulationConfigGenerator`,
+> and ground **`initial_posts`** (with `poster_name` targeting to the actual
+> researched actor). `sources.json` provenance is surfaced in the UI. Pipelines
+> are **cancellable** (`POST /api/research/<id>/cancel`), `POST /run` pre-flights
+> the whole configuration, and the backend venv is pinned to Python 3.12
+> (`backend/.python-version`). Shared helpers live in `backend/app/utils/actors.py`.
+> Still open (deliberate): stage-aware resume/continue of failed or research-only
+> pipelines, and the optional Gateway (Option B) migration.
 
 **Goal:** one prompt in, a prediction out. The user types a natural-language
 question; a **deep-research agent (DeerFlow 2.0)** gathers data and builds the
@@ -21,7 +25,7 @@ This document is the design + implementation plan. It assumes the two repos sit
 side by side:
 
 ```
-/Users/rogerlin/Downloads/mirofish/
+<parent-dir>/
 ├── MiroFish-0.1.2/      ← prediction engine (see ARCHITECTURE.md)
 └── deer-flow/           ← DeerFlow 2.0 super-agent harness (studied below)
 ```
@@ -130,15 +134,21 @@ If DeerFlow is asked (via a custom skill / a structured-output sub-agent) to emi
 with real data instead of LLM guesses, and (c) skip re-discovering the cast. This
 turns DeerFlow from "a fancier file upload" into a genuine fidelity upgrade.
 
-> **Implementation status (as of this writing):** (a) is **wired** —
+> **Implementation status:** (a), (b) and (c) are all **wired**. (a)
 > `PipelineOrchestrator` passes `_actors_to_context(actors)` as
 > `additional_context` into `OntologyGenerator.generate`, biasing the ontology
-> toward the researched actors. (b) is **not yet wired**: `prepare_simulation`
-> receives only the prompt + the research-report text, so personas and
-> `initial_posts` are generated from the report *prose* (which already describes
-> the actors), not from the structured `stance`/`influence` fields. The research
-> report still carries all the actor information, so this is a fidelity refinement
-> (future Phase 4), not a missing input. (c) holds implicitly via (a).
+> toward the researched actors. (b) `prepare_simulation(..., actors=...)` threads
+> the structured archive through both generators: `OasisProfileGenerator` matches
+> each graph entity to its actor row by normalized name (`app/utils/actors.py`)
+> and injects role/stance/influence/memory into the persona prompt as
+> authoritative researched evidence; `SimulationConfigGenerator` adds an
+> actors/key_events/hot_topics digest to its context, grounds per-agent
+> `stance`/`sentiment_bias`/`influence_weight` in the researched profile
+> (high≈2.5-3.0 / medium≈1.5-2.0 / low≈0.8-1.2, with a deterministic
+> influence override on the rule-based fallback path), and asks the event-config
+> LLM to author `initial_posts` as the actual researched actors (`poster_name`
+> is matched by name to the right agent before falling back to type aliases).
+> (c) holds via (a)+(b).
 
 > The minimum viable contract is just `research_report.md` +
 > `prediction_requirement.txt`. `actors.json` is a fast-follow that materially
@@ -266,7 +276,7 @@ chat/chat_json, the OASIS `model.run()`, and a real ontology generation all succ
 MiniMax-M3. DeerFlow research over MiniMax uses **streaming**, which works on a normal host
 but is blocked inside hardened/no-egress sandboxes that break long-lived SSE sockets.)
 
-### 5.2 The full `DEERFLOW_MODEL` set (6 options)
+### 5.2 The full `DEERFLOW_MODEL` set (7 options)
 
 `DEERFLOW_MODEL` selects the deep-research stage model (the `deer-flow/config.yaml`
 model stanza). Six values are wired:
@@ -363,13 +373,15 @@ end to end, a prediction report — no manual file upload.
 dossier review) and a unified progress bar. **Acceptance:** the whole thing runs
 from the browser with one prompt; user can stop-after-research, edit, and continue.
 
-**Phase 4 — Fidelity & polish (partly done).** **Done:** `actors.json` pre-seeds
-the **ontology** (via `additional_context`); the "research depth" knob (quick/
-standard/deep) is live; `sources.json` provenance is surfaced in the dossier panel.
-**Still open:** pre-seed `initial_posts` and per-agent `stance`/`influence` in
-`SimulationConfigGenerator` from `actors.json` (today they come from the research
-report prose, not the structured fields); (optional) migrate to Gateway (Option B)
-for concurrency; (optional, separate) route MiroFish LLM calls through
+**Phase 4 — Fidelity & polish (done).** `actors.json` pre-seeds the **ontology**
+(via `additional_context`); the structured `stance`/`influence`/`memory` fields
+seed **personas** (name-matched per entity) and **per-agent simulation config**;
+**`initial_posts`** are grounded in researched actor stances with `poster_name`
+targeting; the "research depth" knob (quick/standard/deep) is live, and `deep`
+uses a multi-pass research protocol with a depth-aware watchdog; `sources.json` provenance is surfaced in the dossier panel;
+pipelines are cancellable and pre-flighted. **Still open (optional):**
+stage-aware resume/continue of failed or research-only pipelines; migrate to
+Gateway (Option B) for concurrency; route MiroFish LLM calls through
 `ClaudeChatModel`.
 
 ---
@@ -445,16 +457,21 @@ idempotent. So the whole integration is reproducible from a single `./setup.sh`.
   tail-able `research_progress.log`, writes the **handoff contract**:
   `research_report.md` (required) + `prediction_requirement.txt` +
   `actors.json` + `sources.json` (best effort). Exit 0 = report produced.
+  `depth=deep` is intentionally multi-pass in one thread: opening source map,
+  primary-evidence sweep, actor/incentive analysis, contradiction/risk testing,
+  forecast-input pass, then tool-free long-form synthesis from the accumulated
+  checkpointed research.
 - Its own venv (`backend/.venv`) via `uv sync` — dependency-isolated from MiroFish.
 
 **MiroFish side (`MiroFish-0.1.2/backend/`)**
 - `app/config.py` — new `DEERFLOW_*` knobs with operational defaults:
   `DEERFLOW_DIR` (auto = sibling `../deer-flow`), `DEERFLOW_PYTHON` (auto-detect
   `deer-flow/backend/.venv` → `uv run`), `DEERFLOW_MODEL` (`claude`; one of
-  `claude | minimax | deepseek | qwen | glm | codex`, see §5.2),
+  `claude | minimax | deepseek | qwen | glm | codex | kimi`, see §5.2),
   `DEERFLOW_RESEARCH_DEPTH` (`standard`; quick/standard/deep),
-  `DEERFLOW_RESEARCH_LANGUAGE` (`Chinese`), `DEERFLOW_RESEARCH_TIMEOUT` (`2400`s,
-  ≈40-min research watchdog budget), `DEERFLOW_SUBAGENTS` (`false`) +
+  `DEERFLOW_RESEARCH_LANGUAGE` (`Chinese`), `DEERFLOW_RESEARCH_TIMEOUT` (unset by
+  default; depth-aware budgets are quick 900s / standard 2400s / deep 10800s),
+  `DEERFLOW_SUBAGENTS` (`false`) +
   `PIPELINE_DATA_DIR` (hardcoded `uploads/pipelines/`, not an env var). All have
   defaults — none are required to run. Mirrored in `.env.example`.
 - `app/services/pipeline_orchestrator.py` — `PipelineOrchestrator` (daemon-thread,

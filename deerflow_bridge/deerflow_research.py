@@ -60,9 +60,67 @@ DEPTH_PRESETS: dict[str, dict[str, Any]] = {
     # an eager model that keeps searching past this still gets caught by the tool-free
     # synthesis net, but a well-behaved run should conclude here on its own.
     "quick": {"recursion_limit": 100, "guidance": "Do a focused, efficient pass: about 4-8 searches across the key angles, then STOP searching and write the report."},
-    "standard": {"recursion_limit": 320, "guidance": "Research thoroughly from multiple angles (roughly 10-20 searches), fetch the most important sources in full, then STOP searching and write the report. Do not keep searching for marginal extra detail."},
-    "deep": {"recursion_limit": 1000, "guidance": "Research exhaustively across every major dimension (you may use up to ~500 tool calls — roughly 25-60 searches plus full-text fetches of key primary sources). Cross-check the important claims across multiple independent sources. You have a very large step budget and a 1M-token context window, so be genuinely thorough and read primary sources in full. Once you have strong, cross-checked coverage of all dimensions, STOP searching and write a comprehensive, well-structured dossier."},
+    "standard": {"recursion_limit": 360, "guidance": "Research thoroughly from multiple angles (roughly 14-28 searches), fetch the most important sources in full, cross-check the major claims, then STOP searching and write the report. Do not keep searching for marginal extra detail."},
+    "deep": {"recursion_limit": 1660, "guidance": "Run the multi-pass deep research protocol. Do not compress the work into one short search pass: map the source landscape, read primary sources in full, profile actors, test contradictions, and only then synthesize a long evidence-backed dossier."},
 }
+
+DEEP_RESEARCH_PHASES: list[dict[str, Any]] = [
+    {
+        "label": "scope",
+        "recursion_limit": 220,
+        "focus": (
+            "Map the full research space. Identify every major dimension, the exact "
+            "sub-questions that must be answered, the most relevant primary-source "
+            "classes, the likely data series, and the actors whose incentives matter. "
+            "Search broadly, but end this pass with a gap list and source plan. Do NOT "
+            "write the final report yet."
+        ),
+    },
+    {
+        "label": "primary-evidence",
+        "recursion_limit": 360,
+        "focus": (
+            "Collect and read primary/high-authority evidence in depth: official filings, "
+            "policy documents, standards bodies, earnings calls, regulator releases, "
+            "company statements, technical roadmaps, credible datasets, and full-text "
+            "industry analyses. Prefer original documents over summaries. Capture dates, "
+            "numbers, URLs, and exact attribution. Do NOT write the final report yet."
+        ),
+    },
+    {
+        "label": "actors-and-incentives",
+        "recursion_limit": 300,
+        "focus": (
+            "Build a detailed actor map. For each named company, government body, "
+            "executive, platform, customer group, supplier, or competitor: identify "
+            "role, stance, incentives, constraints, assets, vulnerabilities, and likely "
+            "moves. Search for actor-specific evidence and conflicts of interest. Do NOT "
+            "write the final report yet."
+        ),
+    },
+    {
+        "label": "contradictions-and-risks",
+        "recursion_limit": 300,
+        "focus": (
+            "Stress-test the evidence. Search specifically for contrary data, bearish "
+            "and bullish cases, regional disagreements, policy uncertainty, technological "
+            "bottlenecks, second-order effects, and source conflicts. For every major "
+            "claim, note whether it is confirmed, contested, or speculative. Do NOT "
+            "write the final report yet."
+        ),
+    },
+    {
+        "label": "forecast-implications",
+        "recursion_limit": 260,
+        "focus": (
+            "Translate the gathered evidence into forecast inputs for the downstream "
+            "simulation: timelines, catalysts, leading indicators, measurable variables, "
+            "base/upside/downside scenarios, likely winners and losers, and what each "
+            "actor would know or believe. Fill remaining evidence gaps. Do NOT write the "
+            "final report yet."
+        ),
+    },
+]
 
 # When the research turn ends with too little final text — an eager / over-researching
 # model (notably MiniMax-M3) can spend its entire recursion budget on tool calls and hit
@@ -155,6 +213,24 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
     lang_line = ""
     if target_language:
         lang_line = f"\n\nWrite the final report in {target_language}."
+    if depth == "deep":
+        return (
+            "You are a deep-research lead analyst starting a MULTI-PASS investigation. "
+            "This is pass 0: orient yourself, load the deep-research workflow, and begin "
+            "the source map. You will receive several follow-up research-pass prompts in "
+            "this same thread before final synthesis.\n\n"
+            f"RESEARCH BRIEF:\n{question}\n\n"
+            f"{preset['guidance']}\n\n"
+            "For this first pass, search broadly enough to understand the terrain and "
+            "produce working notes, not a final report. Identify the key dimensions, "
+            "actors, primary-source targets, likely quantitative datasets, and open "
+            "questions. Use tools aggressively where needed. End with a concise research "
+            "plan and gap list.\n\n"
+            "IMPORTANT: Do NOT write the final dossier yet. Do NOT stop after a short "
+            "summary. The downstream simulation needs dense, sourced facts, named actors, "
+            "timelines, incentives, and disputed claims gathered across multiple passes."
+            f"{lang_line}"
+        )
     return (
         "You are a deep-research analyst. Use the deep-research methodology: search "
         "the web from multiple angles, fetch and read important primary sources in "
@@ -176,7 +252,7 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
         "  6. A short list of the sources you used (titles + URLs).\n\n"
         "LENGTH & DEPTH: This dossier is the sole ground-truth a downstream simulation "
         "will reason over, so it must be LONG and richly detailed — aim for at least "
-        "2,500–4,000 words. Organize it with clear Markdown section headings (##), and "
+        "3,500–6,000 words for standard depth. Organize it with clear Markdown section headings (##), and "
         "under each actor and topic go deep: specific numbers, dated events, direct "
         "quotes, competing perspectives, second-order effects, and concrete scenarios. "
         "Do NOT write a terse summary — exhaustive, well-structured coverage is the goal.\n\n"
@@ -188,7 +264,31 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
     )
 
 
-def build_synthesis_prompt(question: str, target_language: str | None) -> str:
+def build_deep_phase_prompt(question: str, phase: dict[str, Any], index: int, total: int, target_language: str | None) -> str:
+    """Prompt one explicit deep-research pass within the same DeerFlow thread."""
+    lang_line = f"\n\nWrite your pass notes in {target_language}." if target_language else ""
+    return (
+        f"DEEP RESEARCH PASS {index}/{total}: {phase['label']}\n\n"
+        f"RESEARCH BRIEF:\n{question}\n\n"
+        f"PASS OBJECTIVE:\n{phase['focus']}\n\n"
+        "Use web search and full-text fetching as needed. Prefer primary sources and "
+        "high-authority sources. Capture concrete numbers, dates, organizations, named "
+        "people, URLs/titles, direct source attribution, and unresolved uncertainty. "
+        "Cross-check important claims against at least two independent sources where "
+        "possible.\n\n"
+        "End this pass with Markdown working notes under these headings:\n"
+        "## Evidence gathered\n"
+        "## Actor / incentive updates\n"
+        "## Quantitative facts and dates\n"
+        "## Contradictions or uncertainty\n"
+        "## Gaps to carry into the next pass\n\n"
+        "Do NOT write the final report yet. Do NOT say the research is complete. "
+        "This pass is one layer of a longer investigation."
+        f"{lang_line}"
+    )
+
+
+def build_synthesis_prompt(question: str, target_language: str | None, depth: str = "standard") -> str:
     """Prompt for a forced, tool-free 'write the report now' turn.
 
     Used when the research turn exhausted its step budget before writing the report.
@@ -197,6 +297,17 @@ def build_synthesis_prompt(question: str, target_language: str | None) -> str:
     final report.
     """
     lang_line = f"\n\nWrite the report in {target_language}." if target_language else ""
+    word_target = "8,000–12,000 words" if depth == "deep" else "3,500–6,000 words"
+    extra_deep = ""
+    if depth == "deep":
+        extra_deep = (
+            "Because this was a multi-pass deep investigation, the final report MUST "
+            "preserve the richness of the research instead of compressing it. Include "
+            "a detailed source-grounded actor table, a dated timeline, a quantitative "
+            "evidence table, explicit winners/losers by segment, base/upside/downside "
+            "scenarios, leading indicators to monitor, and a section on contested claims "
+            "or evidence quality.\n\n"
+        )
     return (
         "STOP researching. Do NOT call any tools, do NOT search, do NOT fetch — you "
         "have already gathered enough material in this conversation.\n\n"
@@ -212,8 +323,9 @@ def build_synthesis_prompt(question: str, target_language: str | None) -> str:
         "  4. The main points of contention, hot topics, and likely flashpoints.\n"
         "  5. Relevant facts, figures, and quotes, each attributable to a source.\n"
         "  6. A short list of the sources you used (titles + URLs).\n\n"
-        "LENGTH & DEPTH: Write a LONG, comprehensive dossier — at least 2,500–4,000 "
-        "words — organized with clear Markdown section headings (##). Use ALL the "
+        f"{extra_deep}"
+        f"LENGTH & DEPTH: Write a LONG, comprehensive dossier — {word_target} — "
+        "organized with clear Markdown section headings (##). Use ALL the "
         "material you gathered above: every relevant figure, dated event, direct quote, "
         "and opposing view. Go deep on each actor and topic; do not summarize tersely.\n"
         "Write the report directly — no preamble, no tool calls."
@@ -234,7 +346,7 @@ def _message_text(content: Any) -> str:
     return strip_think(str(content or "")).strip()
 
 
-def synthesize_from_thread(client, thread_id: str, question: str, target_language: str | None, model_name: str, plog: "ProgressLog") -> str:
+def synthesize_from_thread(client, thread_id: str, question: str, target_language: str | None, model_name: str, plog: "ProgressLog", depth: str = "standard") -> str:
     """Tool-free report synthesis from a thread's already-gathered research.
 
     When the research agent exhausts its step budget on tool calls without ever
@@ -292,7 +404,7 @@ def synthesize_from_thread(client, thread_id: str, question: str, target_languag
 
         model = create_chat_model(model_name, thinking_enabled=False)
         prompt = (
-            build_synthesis_prompt(question, target_language)
+            build_synthesis_prompt(question, target_language, depth)
             + "\n\n=== GATHERED RESEARCH (base the report ONLY on this; do not invent) ===\n"
             + context
         )
@@ -305,15 +417,22 @@ def synthesize_from_thread(client, thread_id: str, question: str, target_languag
         return ""
 
 
-def build_extraction_prompt(target_language: str | None) -> str:
+def build_extraction_prompt(target_language: str | None, depth: str = "standard") -> str:
     lang = target_language or "the same language as the research report"
+    actor_range = "10-35" if depth == "deep" else "5-20"
+    source_hint = (
+        "For deep runs, preserve a broad source set: include the most important "
+        "primary and high-authority sources across regions, actors, and opposing views."
+        if depth == "deep"
+        else "Include the most important sources."
+    )
     return (
         "Based ONLY on the research you just completed, output a single JSON object "
         "and NOTHING else (no prose, no code fences). It must match this schema:\n\n"
         "{\n"
         '  "central_question": string,            // the prediction question, refined\n'
         '  "as_of_date": string,                  // YYYY-MM-DD, the research cutoff\n'
-        '  "actors": [                             // 5-20 specific, named real-world actors\n'
+        f'  "actors": [                             // {actor_range} specific, named real-world actors\n'
         "    {\n"
         '      "name": string,\n'
         '      "type": "Person"|"Organization"|"Media"|"Government"|"Platform"|"Other",\n'
@@ -327,6 +446,7 @@ def build_extraction_prompt(target_language: str | None) -> str:
         '  "hot_topics": [ string ],\n'
         '  "sources": [ {"title": string, "url": string} ]\n'
         "}\n\n"
+        f"{source_hint}\n"
         f"Write all natural-language string values in {lang}. Output valid JSON only."
     )
 
@@ -484,6 +604,60 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
     return final_text
 
 
+def run_research_stage(client, question: str, depth: str, target_language: str | None, model_name: str, thread_id: str, plog: ProgressLog) -> str:
+    """Run the research stage.
+
+    Quick/standard remain one DeerFlow turn. Deep is intentionally multi-pass:
+    several scoped research turns share the same thread/checkpointer, then a
+    tool-free synthesis turn writes the final dossier from all accumulated notes
+    and fetched sources.
+    """
+    preset = DEPTH_PRESETS[depth]
+    if depth != "deep":
+        return run_streamed_turn(
+            client,
+            build_research_prompt(question, depth, target_language),
+            thread_id,
+            preset["recursion_limit"],
+            plog,
+            "research",
+        )
+
+    plog.write("stage", f"deep: starting multi-pass research protocol ({len(DEEP_RESEARCH_PHASES) + 1} research turns + final synthesis)")
+    reports: list[str] = []
+    opening_limit = int(os.environ.get("DEERFLOW_DEEP_OPENING_RECURSION_LIMIT", "220"))
+    opening = run_streamed_turn(
+        client,
+        build_research_prompt(question, depth, target_language),
+        thread_id,
+        opening_limit,
+        plog,
+        "research:deep-opening",
+    )
+    if opening.strip():
+        reports.append(opening)
+
+    for idx, phase in enumerate(DEEP_RESEARCH_PHASES, start=1):
+        limit = int(phase["recursion_limit"])
+        phase_text = run_streamed_turn(
+            client,
+            build_deep_phase_prompt(question, phase, idx, len(DEEP_RESEARCH_PHASES), target_language),
+            thread_id,
+            limit,
+            plog,
+            f"research:deep-{idx}-{phase['label']}",
+        )
+        if phase_text.strip():
+            reports.append(phase_text)
+
+    synth = synthesize_from_thread(client, thread_id, question, target_language, model_name, plog, depth=depth)
+    if synth.strip():
+        return synth
+
+    plog.write("warn", "deep: tool-free synthesis returned empty text; falling back to concatenated pass notes")
+    return "\n\n---\n\n".join(reports)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -531,6 +705,14 @@ def main() -> int:
         "started_at": started_at,
         "target_language": args.target_language,
     }
+    if args.depth == "deep":
+        meta["deep_research_phases"] = [
+            {"label": "deep-opening", "recursion_limit": int(os.environ.get("DEERFLOW_DEEP_OPENING_RECURSION_LIMIT", "220"))},
+            *[
+                {"label": str(phase["label"]), "recursion_limit": int(phase["recursion_limit"])}
+                for phase in DEEP_RESEARCH_PHASES
+            ],
+        ]
 
     def write_meta() -> None:
         (out_dir / META_FILENAME).write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -539,6 +721,68 @@ def main() -> int:
 
     # Quiet DeerFlow's verbose import-time logging on stderr; keep warnings.
     logging.basicConfig(level=logging.WARNING)
+
+    # --- Provider-key env hygiene (BEFORE the config is loaded) ---
+    # DeerFlow's config loader greedily resolves every $VAR in config.yaml; a single
+    # unset variable crashes the whole load even when that stanza isn't selected.
+    # MiroFish's backend presets empty defaults before spawning this script, but a
+    # STANDALONE run (the documented smoke test) doesn't inherit them — preset here
+    # too so the default claude path never dies on an unrelated provider's key.
+    _PROVIDER_KEY_ENVS = {
+        "minimax": "MINIMAX_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY",
+        "qwen": "DASHSCOPE_API_KEY",
+        "glm": "ZHIPUAI_API_KEY",
+        "kimi": "KIMI_API_KEY",
+    }
+    for _env_name in _PROVIDER_KEY_ENVS.values():
+        os.environ.setdefault(_env_name, "")
+
+    def _preflight_fail(msg: str, error: str) -> int:
+        meta.update(status="failed", error=error, finished_at=_utcnow())
+        write_meta()
+        plog.write("error", msg)
+        plog.close()
+        print(f"ERROR: {msg}", file=sys.stderr)
+        return 3
+
+    # --- Selected-model credential preflight (BEFORE client/config construction) ---
+    # Models are built lazily on the first stream() call, so a missing key or an
+    # absent/stale OAuth token would otherwise surface as an opaque 401/exit-2
+    # traceback deep inside Stage 1. Fail fast with an actionable message instead.
+    _need_env = _PROVIDER_KEY_ENVS.get(args.model)
+    if _need_env and not os.environ.get(_need_env, "").strip():
+        return _preflight_fail(
+            f"--model {args.model} 需要环境变量 {_need_env}（写入 MiroFish 的 .env 或 export 后重试）。",
+            f"missing {_need_env}",
+        )
+    if args.model == "claude":
+        have_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+        have_oauth = bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+        if not (have_key or have_oauth):
+            try:
+                from deerflow.models.credential_loader import load_claude_code_credential
+                have_oauth = load_claude_code_credential() is not None  # None if missing OR expired
+            except Exception:  # loader import/path problems must not crash the preflight
+                have_oauth = False
+        if not (have_key or have_oauth):
+            return _preflight_fail(
+                "未找到有效的 Claude 凭据：请设置 $ANTHROPIC_API_KEY，或运行 `claude` 登录以刷新 "
+                "~/.claude/.credentials.json（OAuth token 缺失或已过期）。",
+                "missing/expired Claude credential",
+            )
+    elif args.model == "codex":
+        try:
+            from deerflow.models.credential_loader import load_codex_cli_credential
+            have_codex = load_codex_cli_credential() is not None
+        except Exception:
+            have_codex = os.path.exists(os.path.expanduser(
+                os.environ.get("CODEX_AUTH_PATH", "~/.codex/auth.json")))
+        if not have_codex:
+            return _preflight_fail(
+                "未找到有效的 Codex 凭据：运行 `codex` 并用 ChatGPT 账号登录以生成 ~/.codex/auth.json。",
+                "missing Codex credential",
+            )
 
     try:
         plog.write("init", f"importing DeerFlow client (model={args.model})")
@@ -552,39 +796,15 @@ def main() -> int:
         )
         plog.write("init", "client ready; available skills will load on demand (deep-research)")
 
-        # --- Pre-flight: fail fast on a missing/expired Claude credential ---
-        # The model is built lazily on the first stream() call, so an absent or stale
-        # OAuth token would otherwise surface as an opaque 401/403 deep inside Stage 1
-        # and be reported only as a raw exception. Surface a clear, actionable error up
-        # front instead (matches DEERFLOW_INTEGRATION.md §8 risk row + §10 prerequisite).
-        if args.model == "claude":
-            have_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
-            have_oauth = bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
-            if not (have_key or have_oauth):
-                try:
-                    from deerflow.models.credential_loader import load_claude_code_credential
-                    have_oauth = load_claude_code_credential() is not None  # None if missing OR expired
-                except Exception:  # loader import/path problems must not crash the preflight
-                    have_oauth = False
-            if not (have_key or have_oauth):
-                msg = ("未找到有效的 Claude 凭据：请设置 $ANTHROPIC_API_KEY，或运行 `claude` 登录以刷新 "
-                       "~/.claude/.credentials.json（OAuth token 缺失或已过期）。")
-                meta.update(status="failed", error="missing/expired Claude credential", finished_at=_utcnow())
-                write_meta()
-                plog.write("error", msg)
-                plog.close()
-                print(f"ERROR: {msg}", file=sys.stderr)
-                return 3
-
         # --- Stage 1: research + report ---
-        recursion_limit = DEPTH_PRESETS[args.depth]["recursion_limit"]
-        report = run_streamed_turn(
+        report = run_research_stage(
             client,
-            build_research_prompt(question, args.depth, args.target_language),
+            question,
+            args.depth,
+            args.target_language,
+            args.model,
             thread_id,
-            recursion_limit,
             plog,
-            "research",
         )
 
         # SAFETY NET: the primary path is the real agentic research turn above (tools +
@@ -604,7 +824,7 @@ def main() -> int:
         _is_content_block = bool(_stripped) and any(s in report for s in ("new_sensitive", "unprocessable_entity"))
         if len(_stripped) < SYNTHESIS_TRIGGER_CHARS and not _is_content_block:
             plog.write("warn", f"research turn returned only {len(_stripped)} chars (budget exhausted or a provider error on the final write); synthesizing tool-free from gathered research")
-            synth = synthesize_from_thread(client, thread_id, question, args.target_language, args.model, plog)
+            synth = synthesize_from_thread(client, thread_id, question, args.target_language, args.model, plog, depth=args.depth)
             if len(synth.strip()) > len(_stripped):
                 report = synth
 
@@ -636,9 +856,9 @@ def main() -> int:
             try:
                 raw = run_streamed_turn(
                     client,
-                    build_extraction_prompt(args.target_language),
+                    build_extraction_prompt(args.target_language, args.depth),
                     thread_id,  # same thread → research context preserved via checkpointer
-                    40,
+                    80 if args.depth == "deep" else 40,
                     plog,
                     "extract",
                 )

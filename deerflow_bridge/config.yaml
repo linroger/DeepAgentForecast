@@ -192,6 +192,30 @@ models:
     supports_reasoning_effort: true
     supports_vision: false
 
+  # === Kimi-for-coding (api.kimi.com/coding, OpenAI-compatible) ===
+  # Selected by MiroFish's provider=kimi (DEERFLOW_MODEL=kimi). Key comes from .env
+  # as $KIMI_API_KEY. The coding-plan gateway only serves recognized coding-agent
+  # clients, hence the mandatory User-Agent header (same trick MiroFish's own kimi
+  # provider uses). kimi-for-coding is a reasoning model; thinking stays ON for
+  # research (deerflow_research.py strips residual <think> from the report).
+  - name: kimi
+    display_name: Kimi-for-coding (code plan)
+    use: langchain_openai:ChatOpenAI
+    model: kimi-for-coding
+    api_key: $KIMI_API_KEY
+    base_url: https://api.kimi.com/coding/v1
+    default_headers:
+      User-Agent: claude-cli/1.0.0
+    request_timeout: 900.0
+    max_retries: 2
+    max_tokens: 32768
+    supports_thinking: true
+    supports_vision: false
+    when_thinking_disabled:
+      extra_body:
+        thinking:
+          type: disabled
+
   # Example: Volcengine (Doubao) model
   # - name: doubao-seed-1.8
   #   display_name: Doubao-Seed-1.8
@@ -1051,8 +1075,10 @@ skills:
 # ============================================================================
 # Automatic conversation title generation settings
 
+# Bridge runs are headless one-shots — a generated conversation title is never
+# shown anywhere, so skip the extra LLM call per research run.
 title:
-  enabled: true
+  enabled: false
   max_words: 6
   max_chars: 60
   model_name: null # Use default model (first model in models list)
@@ -1074,9 +1100,13 @@ summarization:
   # Summarization runs when ANY threshold is met (OR logic)
   # You can specify a single trigger or a list of triggers
   trigger:
-    # Trigger when token count reaches 32000
+    # Deep research gathers dozens of full-text sources; compressing at 32K tokens
+    # repeatedly squeezed source detail out of the thread mid-run (and each pass is
+    # an extra LLM call). 120K leaves plenty of headroom below every wired model's
+    # context (Claude 200K / MiniMax-M3 ~1M / deepseek-v4-pro 1M / qwen3.7-max 1M)
+    # while still preventing unbounded growth on deep runs.
     - type: tokens
-      value: 32000
+      value: 120000
     # Uncomment to also trigger when message count reaches 50
     # - type: messages
     #   value: 50
@@ -1123,14 +1153,18 @@ summarization:
 # ============================================================================
 # Global memory mechanism
 # Stores user context and conversation history for personalized responses
+# DISABLED for the bridge: every research run is an independent question — facts
+# remembered from a previous run would be injected into the next run's system
+# prompt (cross-run contamination of fresh research), and each background
+# memory-update is a wasted LLM call. Re-enable only for interactive use.
 memory:
-  enabled: true
+  enabled: false
   storage_path: memory.json # Path relative to backend directory
   debounce_seconds: 30 # Wait time before processing queued updates
   model_name: null # Use default model
   max_facts: 100 # Maximum number of facts to store
   fact_confidence_threshold: 0.7 # Minimum confidence for storing facts
-  injection_enabled: true # Whether to inject memory into system prompt
+  injection_enabled: false # Whether to inject memory into system prompt
   max_injection_tokens: 2000 # Maximum tokens for memory injection
 
 # ============================================================================

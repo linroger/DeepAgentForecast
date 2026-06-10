@@ -399,11 +399,15 @@ class ReportSection:
     """报告章节"""
     title: str
     content: str = ""
+    # 规划阶段产出的章节内容描述：传给章节撰写 prompt，让写作贴合大纲意图
+    # （此前规划 LLM 生成了 description 却被解析丢弃，撰写时只见裸标题）。
+    description: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "title": self.title,
-            "content": self.content
+            "content": self.content,
+            "description": self.description
         }
 
     def to_markdown(self, level: int = 2) -> str:
@@ -1251,7 +1255,8 @@ class ReportAgent:
             for section_data in response.get("sections", []):
                 sections.append(ReportSection(
                     title=section_data.get("title", ""),
-                    content=""
+                    content="",
+                    description=section_data.get("description", "")
                 ))
             
             outline = ReportOutline(
@@ -1313,11 +1318,16 @@ class ReportAgent:
         if self.report_logger:
             self.report_logger.log_section_start(section.title, section_index)
         
+        # 规划阶段的章节描述拼进章节标题位，让撰写贴合大纲意图（模板无独立槽位，
+        # 避免对超长模板做侵入式修改）
+        _section_heading = section.title
+        if section.description:
+            _section_heading = f"{section.title}\n本章内容定位（大纲规划）: {section.description}"
         system_prompt = SECTION_SYSTEM_PROMPT_TEMPLATE.format(
             report_title=outline.title,
             report_summary=outline.summary,
             simulation_requirement=self.simulation_requirement,
-            section_title=section.title,
+            section_title=_section_heading,
             tools_description=self._get_tools_description(),
         )
 
@@ -2596,7 +2606,8 @@ class ReportManager:
             for s in outline_data.get('sections', []):
                 sections.append(ReportSection(
                     title=s['title'],
-                    content=s.get('content', '')
+                    content=s.get('content', ''),
+                    description=s.get('description', '')
                 ))
             outline = ReportOutline(
                 title=outline_data['title'],

@@ -238,18 +238,19 @@ class SimulationManager:
         defined_entity_types: Optional[List[str]] = None,
         use_llm_for_profiles: bool = True,
         progress_callback: Optional[callable] = None,
-        parallel_profile_count: int = 3
+        parallel_profile_count: int = 3,
+        actors: Optional[Dict[str, Any]] = None
     ) -> SimulationState:
         """
         准备模拟环境（全程自动化）
-        
+
         步骤：
         1. 从Zep图谱读取并过滤实体
         2. 为每个实体生成OASIS Agent Profile（可选LLM增强，支持并行）
         3. 使用LLM智能生成模拟配置参数（时间、活跃度、发言频率等）
         4. 保存配置文件和Profile文件
         5. 复制预设脚本到模拟目录
-        
+
         Args:
             simulation_id: 模拟ID
             simulation_requirement: 模拟需求描述（用于LLM生成配置）
@@ -258,7 +259,9 @@ class SimulationManager:
             use_llm_for_profiles: 是否使用LLM生成详细人设
             progress_callback: 进度回调函数 (stage, progress, message)
             parallel_profile_count: 并行生成人设的数量，默认3
-            
+            actors: 深度研究 actors.json 顶层对象（可选）。提供时 persona 与
+                    模拟配置都会以调研实证（立场/影响力/记忆/时间线）为准
+
         Returns:
             SimulationState
         """
@@ -346,7 +349,8 @@ class SimulationManager:
                 graph_id=state.graph_id,  # 传入graph_id用于Zep检索
                 parallel_count=parallel_profile_count,  # 并行生成数量
                 realtime_output_path=realtime_output_path,  # 实时保存路径
-                output_platform=realtime_platform  # 输出格式
+                output_platform=realtime_platform,  # 输出格式
+                actors=actors  # 深度研究档案（可选）：实证立场/记忆注入 persona
             )
             
             state.profiles_count = len(profiles)
@@ -411,7 +415,8 @@ class SimulationManager:
                 document_text=document_text,
                 entities=filtered.entities,
                 enable_twitter=state.enable_twitter,
-                enable_reddit=state.enable_reddit
+                enable_reddit=state.enable_reddit,
+                actors=actors  # 深度研究档案（可选）：实证立场/热点/时间线进配置
             )
             
             if progress_callback:

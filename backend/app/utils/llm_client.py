@@ -86,14 +86,15 @@ class LLMClient:
         """
         发送聊天请求，返回模型响应文本。
 
-        CLI 提供方在瞬时失败时自动指数退避重试（3 次）。
+        所有提供方在瞬时失败（RuntimeError，含 CLI 错误、超时、推理模型空 content）
+        时自动指数退避重试（3 次）。OpenAI SDK 自身的 APIError 子类不在此重试范围，
+        会按原样抛出（SDK 内部已有自己的重试与限流处理）。
         """
-        if self.provider in OPENAI_COMPATIBLE_PROVIDERS:
-            return self._chat_openai(messages, temperature, max_tokens, response_format)
-
         last_error: Optional[Exception] = None
         for attempt in range(MAX_RETRIES):
             try:
+                if self.provider in OPENAI_COMPATIBLE_PROVIDERS:
+                    return self._chat_openai(messages, temperature, max_tokens, response_format)
                 if self.provider == "codex-cli":
                     return self._chat_codex_cli(messages, temperature, max_tokens, response_format)
                 return self._chat_claude_cli(messages, temperature, max_tokens, response_format)
@@ -113,23 +114,90 @@ class LLMClient:
         temperature: float = 0.3,
         max_tokens: int = 4096
     ) -> Dict[str, Any]:
-        """发送聊天请求并返回解析后的 JSON。"""
-        response = self.chat(
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format={"type": "json_object"}
-        )
+        """发送聊天请求并返回解析后的 JSON。
+
+        解析失败时先做本地修复（提取 JSON 块、补全被 max_tokens 截断的括号），
+        仍失败则降温重发一次。单次格式抖动不再让上层（如报告大纲）直接退化。
+        """
+        last_response = ""
+        for attempt in range(2):
+            response = self.chat(
+                messages=messages,
+                temperature=max(0.0, temperature - attempt * 0.2),
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"}
+            )
+            last_response = response
+            parsed = self._parse_json_response(response)
+            if parsed is not None:
+                return parsed
+            if attempt == 0:
+                logger.warning("chat_json 解析失败，降温重发一次")
+        raise ValueError(f"LLM返回的JSON格式无效: {last_response[:500]}")
+
+    @staticmethod
+    def _parse_json_response(response: str) -> Optional[Dict[str, Any]]:
+        """尽力把模型输出解析成 JSON 对象；失败返回 None（不抛异常）。"""
+        cleaned = response.strip()
         # 清理 markdown 代码块标记
-        cleaned_response = response.strip()
-        cleaned_response = re.sub(r'^```(?:json)?\s*\n?', '', cleaned_response, flags=re.IGNORECASE)
-        cleaned_response = re.sub(r'\n?```\s*$', '', cleaned_response)
-        cleaned_response = cleaned_response.strip()
+        cleaned = re.sub(r'^```(?:json)?\s*\n?', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\n?```\s*$', '', cleaned)
+        cleaned = cleaned.strip()
 
         try:
-            return json.loads(cleaned_response)
+            return json.loads(cleaned)
         except json.JSONDecodeError:
-            raise ValueError(f"LLM返回的JSON格式无效: {cleaned_response[:500]}")
+            pass
+
+        # 提取首个 JSON 对象（应对模型在 JSON 前后加说明文字）
+        match = re.search(r'\{[\s\S]*\}', cleaned)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                cleaned = match.group()
+        else:
+            # 没有闭合的 '}'：截断式输出，从首个 '{' 起修复
+            brace = cleaned.find('{')
+            if brace < 0:
+                return None
+            cleaned = cleaned[brace:]
+
+        # 补全被 max_tokens 截断的字符串/括号：扫描跟踪字符串态与括号栈，
+        # 按嵌套逆序闭合（简单计数会按错误顺序拼接 ]} ）。
+        stack: List[str] = []
+        in_string = False
+        escaped = False
+        for ch in cleaned:
+            if escaped:
+                escaped = False
+                continue
+            if ch == '\\':
+                escaped = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch in '{[':
+                stack.append(ch)
+            elif ch == '}' and stack and stack[-1] == '{':
+                stack.pop()
+            elif ch == ']' and stack and stack[-1] == '[':
+                stack.pop()
+
+        repaired = cleaned
+        if in_string:
+            repaired += '"'
+        # 去掉悬空的尾逗号（如 '{"a": 1,' 截断）
+        repaired = re.sub(r',\s*$', '', repaired)
+        for opener in reversed(stack):
+            repaired += '}' if opener == '{' else ']'
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            return None
 
     # ------------------------------------------------------------------
     # 共享辅助
@@ -217,6 +285,19 @@ class LLMClient:
     # ------------------------------------------------------------------
     # claude-cli 提供方
     # ------------------------------------------------------------------
+    @staticmethod
+    def _claude_cli_env() -> Dict[str, str]:
+        """claude-cli 子进程环境：默认剥离 ANTHROPIC_API_KEY。
+
+        历史事故：环境里游离的 ANTHROPIC_API_KEY 会让 `claude` CLI 弃用订阅 OAuth
+        改走 API 计费，且 Key 失效时表现为难排查的 401。订阅是本提供方的设计前提，
+        故默认剥离；确需 API Key 计费时设 LLM_CLI_USE_API_KEY=true 保留。
+        """
+        env = dict(os.environ)
+        if os.environ.get('LLM_CLI_USE_API_KEY', '').strip().lower() != 'true':
+            env.pop('ANTHROPIC_API_KEY', None)
+        return env
+
     def _chat_claude_cli(
         self,
         messages: List[Dict[str, str]],
@@ -224,14 +305,19 @@ class LLMClient:
         max_tokens: int,
         response_format: Optional[Dict] = None
     ) -> str:
-        """通过 Claude Code CLI 调用。"""
+        """通过 Claude Code CLI 调用。
+
+        prompt 经 stdin 传入而非 argv：报告后期的长 prompt 会超 Linux 的 ARG_MAX
+        （E2BIG），且 argv 会把 prompt 暴露在进程列表里。
+        """
         prompt = self._flatten_prompt(messages, response_format)
 
         try:
             result = subprocess.run(
-                ["claude", "-p", "--output-format", "json", prompt],
+                ["claude", "-p", "--output-format", "json"],
+                input=prompt,
                 capture_output=True, text=True, timeout=CLI_TIMEOUT,
-                cwd="/tmp"
+                cwd="/tmp", env=self._claude_cli_env()
             )
 
             if result.returncode != 0:
@@ -265,6 +351,8 @@ class LLMClient:
             raise RuntimeError(
                 "未找到 `claude` 可执行文件，请确认已安装 Claude Code CLI 并加入 PATH"
             )
+        except OSError as exc:
+            raise RuntimeError(f"Claude CLI 进程启动失败: {exc}")
 
     # ------------------------------------------------------------------
     # codex-cli 提供方

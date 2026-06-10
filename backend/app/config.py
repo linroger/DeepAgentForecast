@@ -22,7 +22,10 @@ class Config:
     
     # Flask配置
     SECRET_KEY = os.environ.get('SECRET_KEY', 'mirofish-secret-key')
-    DEBUG = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+    # 默认关闭 debug：开发期显式设 FLASK_DEBUG=true。debug 模式有两个生产隐患——
+    # (1) Werkzeug 调试器暴露在 0.0.0.0（局域网可触发任意代码执行）；
+    # (2) 自动 reloader 会在代码变动时重启进程，杀死在飞的研究/模拟管线。
+    DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     
     # JSON配置 - 禁用ASCII转义，让中文直接显示（而不是 \uXXXX 格式）
     JSON_AS_ASCII = False
@@ -141,8 +144,8 @@ class Config:
         'codex-cli':  {'label': 'Codex（ChatGPT 订阅）',   'needs_key': False, 'deerflow_model': 'codex',  'openai_compat': False},
         'openai':     {'label': 'OpenAI 兼容 API',          'needs_key': True,  'deerflow_model': 'claude', 'openai_compat': True,
                        'default_base': 'https://api.openai.com/v1', 'default_model': 'gpt-4o-mini'},
-        'kimi':       {'label': 'Kimi-for-coding',          'needs_key': True,  'deerflow_model': 'claude', 'openai_compat': True,
-                       'default_base': _KIMI_DEFAULT_BASE_URL, 'default_model': _KIMI_DEFAULT_MODEL},
+        'kimi':       {'label': 'Kimi-for-coding',          'needs_key': True,  'deerflow_model': 'kimi', 'openai_compat': True,
+                       'default_base': _KIMI_DEFAULT_BASE_URL, 'default_model': _KIMI_DEFAULT_MODEL, 'key_env': 'KIMI_API_KEY'},
         'minimax':    {'label': 'MiniMax 代码计划（国内版）', 'needs_key': True,  'deerflow_model': 'minimax', 'openai_compat': True,
                        'default_base': _MINIMAX_DEFAULT_BASE_URL, 'default_model': _MINIMAX_DEFAULT_MODEL, 'key_env': 'MINIMAX_API_KEY'},
         'deepseek':   {'label': 'DeepSeek V4',              'needs_key': True,  'deerflow_model': 'deepseek', 'openai_compat': True,
@@ -246,6 +249,10 @@ class Config:
 
     # Zep配置
     ZEP_API_KEY = os.environ.get('ZEP_API_KEY')
+    ZEP_MAX_RETRIES = int(os.environ.get('ZEP_MAX_RETRIES', '4'))
+    ZEP_RETRY_DELAY_SECONDS = float(os.environ.get('ZEP_RETRY_DELAY_SECONDS', '2.0'))
+    ZEP_RATE_LIMIT_BUFFER_SECONDS = float(os.environ.get('ZEP_RATE_LIMIT_BUFFER_SECONDS', '1.0'))
+    ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS = float(os.environ.get('ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS', '90.0'))
     
     # 文件上传配置
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
@@ -291,18 +298,30 @@ class Config:
     )
     # DeerFlow venv 的 python（留空则自动探测 .venv，再退回到 `uv run`）
     DEERFLOW_PYTHON = os.environ.get('DEERFLOW_PYTHON', '').strip() or None
-    # DeerFlow config.yaml 中的模型名（默认 claude → Claude Code 订阅 OAuth）
+    # DeerFlow config.yaml 中的模型名（默认 claude → Claude Code 订阅 OAuth；
+    # 可选 claude | minimax | deepseek | qwen | glm | codex | kimi）
     DEERFLOW_MODEL = os.environ.get('DEERFLOW_MODEL', 'claude').strip()
     # 研究深度：quick / standard / deep
     DEERFLOW_RESEARCH_DEPTH = os.environ.get('DEERFLOW_RESEARCH_DEPTH', 'standard').strip().lower()
     # 研究报告/结构化输出语言（MiroFish 面向中文舆论，默认中文；留空交给模型自选）
     DEERFLOW_RESEARCH_LANGUAGE = os.environ.get('DEERFLOW_RESEARCH_LANGUAGE', 'Chinese').strip() or None
-    # 研究阶段最长等待秒数
-    DEERFLOW_RESEARCH_TIMEOUT = int(os.environ.get('DEERFLOW_RESEARCH_TIMEOUT', '2400'))
+    # 研究阶段最长等待秒数（仅作为兜底/显式覆盖；正常由研究深度自适应）
+    DEERFLOW_RESEARCH_TIMEOUT = int(os.environ.get('DEERFLOW_RESEARCH_TIMEOUT', '10800'))
     # 是否启用 DeerFlow 子代理（并行 scoped workers，更深但更慢）
     DEERFLOW_SUBAGENTS = os.environ.get('DEERFLOW_SUBAGENTS', 'false').strip().lower() == 'true'
     # 统一管线产物目录
     PIPELINE_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/pipelines')
+
+    # .env.example 里的占位符：保留占位符等同于未配置（否则首跑要等研究阶段
+    # 烧完几十分钟额度后才在建图阶段发现 Zep 401）。
+    _PLACEHOLDER_VALUES = {
+        'your_zep_api_key_here', 'your_zep_api_key', 'your_api_key',
+        'your_api_key_here', 'changeme', 'xxx', '...',
+    }
+
+    @classmethod
+    def _is_placeholder(cls, value) -> bool:
+        return bool(value) and str(value).strip().lower() in cls._PLACEHOLDER_VALUES
 
     @classmethod
     def validate(cls):
@@ -321,6 +340,8 @@ class Config:
 
         if not cls.ZEP_API_KEY:
             errors.append("ZEP_API_KEY 未配置")
+        elif cls._is_placeholder(cls.ZEP_API_KEY):
+            errors.append("ZEP_API_KEY 仍是 .env.example 的占位符——请在 https://app.getzep.com/ 获取真实 Key 并写入 .env")
         return errors
 
 

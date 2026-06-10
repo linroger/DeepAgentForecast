@@ -255,9 +255,17 @@ def create_oasis_model(config: Dict[str, Any], use_boost: bool = False):
     return model
 
 
-def get_oasis_semaphore(config: Dict[str, Any], use_boost: bool = False) -> int:
-    """根据提供方返回合适的 OASIS 并发上限。"""
+def get_oasis_semaphore(config: Dict[str, Any], use_boost: bool = False, platforms: int = 1) -> int:
+    """根据提供方返回合适的 OASIS 并发上限。
+
+    Args:
+        platforms: 同进程内并发运行的平台数。双平台并行时各平台拿到 cap/2，
+            使全局在飞 LLM 请求数符合 OASIS_*SEMAPHORE 的文档语义（此前
+            Twitter、Reddit 各拿一整份，实际并发是配置值的 2 倍）。
+    """
     provider = _resolve_provider(config)
     if provider in CLI_PROVIDERS:
-        return int(os.environ.get('OASIS_CLI_SEMAPHORE', str(DEFAULT_CLI_SEMAPHORE)))
-    return int(os.environ.get('OASIS_SEMAPHORE', str(DEFAULT_OPENAI_SEMAPHORE)))
+        cap = int(os.environ.get('OASIS_CLI_SEMAPHORE', str(DEFAULT_CLI_SEMAPHORE)))
+    else:
+        cap = int(os.environ.get('OASIS_SEMAPHORE', str(DEFAULT_OPENAI_SEMAPHORE)))
+    return max(1, cap // max(1, platforms))

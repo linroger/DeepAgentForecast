@@ -341,7 +341,9 @@ class SimulationRunner:
         
         if not os.path.exists(config_path):
             raise ValueError(f"模拟配置不存在，请先调用 /prepare 接口")
-        
+
+        cls._rotate_stale_action_logs(sim_dir)
+
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         
@@ -686,6 +688,24 @@ class SimulationRunner:
             logger.warning(f"读取动作日志失败: {log_path}, error={e}")
             return position
     
+    @classmethod
+    def _rotate_stale_action_logs(cls, sim_dir: str) -> None:
+        """重跑同一 simulation 前轮转上一轮的动作日志。
+
+        actions.jsonl 由模拟脚本以 append 模式写入（模拟 DB 会被脚本自删重建，
+        但动作日志不会）。管线 resume 失败的 run 阶段时若不清理，旧轮次动作会
+        混进新一轮的进度监控、帖子流和报告分析。轮转为 actions.prev.jsonl
+        保留现场便于排查（只保留最近一份）。
+        """
+        for plat in ("twitter", "reddit"):
+            stale = os.path.join(sim_dir, plat, "actions.jsonl")
+            if os.path.exists(stale):
+                try:
+                    os.replace(stale, os.path.join(sim_dir, plat, "actions.prev.jsonl"))
+                    logger.info(f"已轮转上一轮动作日志: {plat}/actions.jsonl -> actions.prev.jsonl")
+                except OSError as e:
+                    logger.warning(f"轮转旧动作日志失败（{stale}）: {e}")
+
     @classmethod
     def _check_all_platforms_completed(cls, state: SimulationRunState) -> bool:
         """

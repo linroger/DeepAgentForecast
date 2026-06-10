@@ -18,6 +18,30 @@ export function runPipeline(data) {
 }
 
 /**
+ * 取消在飞管线（杀掉研究子进程 / 停止 OASIS 模拟）
+ * @param {String} pipelineId
+ * @returns {Promise}
+ */
+export function cancelPipeline(pipelineId) {
+  return service({
+    url: `/api/research/${pipelineId}/cancel`,
+    method: 'post'
+  })
+}
+
+/**
+ * 恢复失败/取消的管线。后端会复用已完成产物并从第一个缺失/失败阶段继续。
+ * @param {String} pipelineId
+ * @returns {Promise}
+ */
+export function resumePipeline(pipelineId) {
+  return service({
+    url: `/api/research/${pipelineId}/resume`,
+    method: 'post'
+  })
+}
+
+/**
  * 查询管线聚合进度
  * @param {String} pipelineId
  * @returns {Promise}

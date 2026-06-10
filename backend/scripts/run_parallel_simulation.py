@@ -1060,11 +1060,12 @@ class PlatformSimulation:
 
 
 async def run_twitter_simulation(
-    config: Dict[str, Any], 
+    config: Dict[str, Any],
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
-    max_rounds: Optional[int] = None
+    max_rounds: Optional[int] = None,
+    semaphore_platforms: int = 1
 ) -> PlatformSimulation:
     """运行Twitter模拟
     
@@ -1117,7 +1118,7 @@ async def run_twitter_simulation(
         agent_graph=result.agent_graph,
         platform=oasis.DefaultPlatformType.TWITTER,
         database_path=db_path,
-        semaphore=get_oasis_semaphore(config, use_boost=False),  # 按提供方限制并发 LLM 请求数
+        semaphore=get_oasis_semaphore(config, use_boost=False, platforms=semaphore_platforms),  # 按提供方限制并发 LLM 请求数（双平台并行时各拿一半）
     )
     
     await result.env.reset()
@@ -1263,11 +1264,12 @@ async def run_twitter_simulation(
 
 
 async def run_reddit_simulation(
-    config: Dict[str, Any], 
+    config: Dict[str, Any],
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
-    max_rounds: Optional[int] = None
+    max_rounds: Optional[int] = None,
+    semaphore_platforms: int = 1
 ) -> PlatformSimulation:
     """运行Reddit模拟
     
@@ -1319,7 +1321,7 @@ async def run_reddit_simulation(
         agent_graph=result.agent_graph,
         platform=oasis.DefaultPlatformType.REDDIT,
         database_path=db_path,
-        semaphore=get_oasis_semaphore(config, use_boost=True),  # 按提供方限制并发 LLM 请求数
+        semaphore=get_oasis_semaphore(config, use_boost=True, platforms=semaphore_platforms),  # 按提供方限制并发 LLM 请求数（双平台并行时各拿一半）
     )
     
     await result.env.reset()
@@ -1568,8 +1570,10 @@ async def main():
         # return_exceptions=True：一个平台抛异常不会取消另一个平台、也不会让 main() 崩溃；
         # 异常作为结果返回，下面单独降级为 None 并记录，保证平台之间相互隔离。
         results = await asyncio.gather(
-            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds),
-            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds),
+            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds,
+                                   semaphore_platforms=2),
+            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds,
+                                  semaphore_platforms=2),
             return_exceptions=True,
         )
         twitter_result, reddit_result = results

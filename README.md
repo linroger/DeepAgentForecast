@@ -1,9 +1,30 @@
 # DeepResearchForecast
 
+**English** | [简体中文](README.zh-CN.md)
+
 > **Type a single question. Get an interactive forecast.**
 > DeepResearchForecast auto-researches the web, builds a high-fidelity parallel world, runs a multi-agent population simulation, and produces an interactive forecast report — all from one prompt.
 
 DeepResearchForecast is an autonomous **"one prompt → forecast"** engine. You give it a question about the future; it researches the open web, distills what it learns into a temporal knowledge graph, populates a simulated society of LLM-driven personas, runs that society forward in time, and then synthesizes everything into a sectioned, evidence-grounded forecast report you can read and explore in your browser. The whole journey — research, graph, simulation, report — happens behind a single combined dashboard with a live, stage-by-stage view of the work in progress.
+
+---
+
+## Demo
+
+One prompt — *"Who wins the US AI race by 2030?"* — taken from question to interactive forecast (research → knowledge graph → 40-round population simulation → report):
+
+![Demo: one prompt to forecast](docs/media/demo-preview.gif)
+
+▶ **[Watch the full demo video (47s, MP4)](docs/media/demo.mp4)**
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Knowledge graph built from the research dossier](docs/media/01-pipeline-knowledge-graph.jpg) <br/>*Stage 4 — the temporal knowledge graph built from the research dossier* | ![Research dossier with cited sources](docs/media/02-research-dossier-sources.jpg) <br/>*The research dossier tab — every claim grounded in cited web sources* |
+| ![Generated agent personas](docs/media/03-agent-personas.jpg) <br/>*Digital personas generated for each real-world actor (researched stance & influence)* | ![Live simulation console](docs/media/04-simulation-console.jpg) <br/>*The live simulation console streaming agent actions in real time* |
+| ![Graph node details](docs/media/05-graph-node-details.jpg) <br/>*Inspecting a graph entity mid-simulation* | ![Simulated social feed](docs/media/06-simulation-feed.jpg) <br/>*The simulated Twitter/Reddit feed at round 20/40* |
+| ![Simulated posts](docs/media/07-simulation-posts.jpg) <br/>*Emergent discussion threads between agent personas* | ![Agent detail panel](docs/media/08-simulation-agent-detail.jpg) <br/>*Post & agent detail panel at round 33/40 (88% through the pipeline)* |
 
 ---
 
@@ -100,15 +121,19 @@ flowchart LR
 ## Features
 
 - **One prompt → full forecast.** A single question drives the entire research → simulation → report pipeline end to end.
-- **Autonomous deep research.** Multi-angle web search and full-text fetch, distilled into a structured dossier with actors and sources.
+- **Autonomous deep research.** Multi-angle web search and full-text fetch, distilled into a structured dossier with actors and sources. At `deep` depth, DeerFlow runs a staged multi-pass protocol: source mapping, primary-evidence sweep, actor/incentive analysis, contradiction/risk testing, forecast-input synthesis, then final long-form synthesis.
+- **Research-grounded personas.** The structured actor dossier (`actors.json`: role, stance, influence, memory per real-world actor) seeds the ontology, **the agent personas, the per-agent stance/influence config, and the simulation's initial posts** — agents start from researched facts, not LLM guesses.
 - **Temporal knowledge graph (GraphRAG).** The research is ingested into Zep Cloud, where entities and relations are extracted and made queryable.
 - **Multi-agent population simulation.** Hundreds of LLM personas interact on a simulated Twitter + Reddit; emergent dynamics inform the forecast.
 - **Tool-augmented forecast synthesis.** A ReAct ReportAgent retrieves across both the graph and the simulation before writing.
 - **Single combined dashboard.** Live log, dossier, knowledge graph, simulation feed, and forecast — all in one view with a sticky 6-stage timeline.
 - **Runtime-switchable LLM providers.** Switch between local CLIs and hosted APIs from the Settings menu; the switch applies to new runs.
+- **Cancellable runs.** A running pipeline can be aborted from the UI at any stage — the research subprocess group is killed and the OASIS simulation is stopped, so a cancelled run stops burning quota immediately.
+- **Resumable runs.** A failed or cancelled pipeline can be resumed in place (**Resume** button, or `POST /api/research/<id>/resume`). Completed stages are reused — an already-written research dossier, ontology, knowledge graph, or finished simulation is never paid for twice; the pipeline restarts from the stage that broke.
+- **Fail-fast preflight.** `npm run doctor` checks the whole environment in seconds, and `POST /research/run` validates keys/credentials/checkout before any spend.
 - **Bilingual UI.** English + 中文, toggled from the Settings menu.
 - **Run history.** A drawer lists past pipeline runs for quick review.
-- **Resilient by design.** Error guards, a tool-free synthesis net, per-section graceful degradation, atomic state writes, and orphan reconciliation across restarts.
+- **Resilient by design.** Error guards, a tool-free synthesis net, depth-aware research watchdog with report salvage, per-section graceful degradation, atomic state writes, and orphan reconciliation (including stranded research processes) across restarts.
 
 ---
 
@@ -116,59 +141,70 @@ flowchart LR
 
 | Requirement | Notes |
 |---|---|
-| **Node.js 18+** | For the frontend (Vue 3 + Vite). |
-| **Python ≥ 3.11** | For the backend. |
-| **Python ≥ 3.12 (3.13 recommended)** | DeerFlow's deep-research engine needs Python ≥ 3.12. |
-| **uv** | The Python package manager used for both backend and DeerFlow. |
+| **Node.js ≥ 20.19** | For the frontend (Vue 3 + Vite 7). |
+| **Python 3.11 – 3.12** | For the backend — the `camel-ai`/`camel-oasis` simulation stack targets ≤ 3.12, so the venv is **pinned to 3.12** (`backend/.python-version` + `uv sync --python 3.12`). A 3.13/3.14 default interpreter would break the install. |
+| **Python ≥ 3.12 (3.13 recommended)** | DeerFlow's deep-research engine runs in its **own, separate venv**. |
+| **uv** | The Python package manager used for both venvs. Install: `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | **git** | Required — `setup.sh` uses it to auto-download the DeerFlow research engine. |
 | **Zep Cloud API key** | **Always required** (the free tier works). Get one at <https://app.getzep.com/>. |
 | **An LLM** | By default the local `claude` or `codex` CLI (no API key). The OpenAI-compatible API providers (`openai`, `kimi`, `minimax`, `deepseek`, `qwen`, `glm`) need `LLM_API_KEY`. |
 
 ---
 
-## Quick start
+## Getting started
 
-DeerFlow lives in a **sibling directory** named `deer-flow` so its LangChain/LangGraph dependencies stay isolated from the backend. It runs in its own venv at `deer-flow/backend/.venv` (Python ≥ 3.12).
+Three steps: **install → configure → run**. DeerFlow lives in a **sibling directory** named `deer-flow` so its LangChain/LangGraph dependencies stay isolated from the backend; it runs in its own venv at `../deer-flow/backend/.venv`.
 
-### Option A — `setup.sh` (recommended)
+### 1. Install
 
-A quick-start script automates the entire installation, **auto-downloads the DeerFlow research engine**, and **auto-detects the model provider**.
+**Option A — `setup.sh` (recommended).** One script automates the entire installation:
 
 ```bash
 ./setup.sh
 ```
 
-`setup.sh` installs the root, frontend, backend, and DeerFlow dependencies, detects which LLM provider is available, and gets you ready to run. It also **downloads DeerFlow automatically** — no manual clone needed: it clones the sibling `../deer-flow` repo (from <https://github.com/bytedance/deer-flow>, pinned to a known-good commit) if absent, applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` patches, and `config.yaml`), then builds DeerFlow's isolated venv (uv, Python 3.13). Re-running it is idempotent and safe.
+It checks prerequisites, scaffolds `.env` from `.env.example`, **auto-detects your model provider** (`claude` CLI → `claude-cli`, `codex` CLI → `codex-cli` + research on `codex`), prompts for your Zep key, installs the root + frontend npm deps, builds the backend venv (**pinned to Python 3.12**), then **downloads DeerFlow automatically**: it clones the sibling `../deer-flow` repo (from <https://github.com/bytedance/deer-flow>, pinned to a known-good commit) if absent, applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` patches, and `config.yaml`), and builds DeerFlow's isolated venv (Python 3.13). Re-running it is idempotent and safe.
 
-Override the defaults via env vars if needed: `DEERFLOW_DIR` (location), `DEERFLOW_REPO` (clone URL), `DEERFLOW_REF` (pinned commit; set `=main` to track HEAD).
+Override the defaults via env vars if needed: `DEERFLOW_DIR` (location), `DEERFLOW_REPO` (clone URL), `DEERFLOW_REF` (pinned commit; set `=main` to track HEAD). These are read by `setup.sh` from the shell environment (they are not `.env` keys), e.g. `DEERFLOW_REF=main ./setup.sh`.
 
-### Option B — manual setup
+**Option B — manual setup** (the equivalent steps by hand):
 
 ```bash
-# 1. Install all dependencies (root + frontend + backend)
-npm run setup:all          # backend deps are installed via `uv sync`
+# 1. Install Node deps (root + frontend) and the backend venv (Python 3.12 pinned)
+npm run setup:all
 
-# 2. Download the DeerFlow research engine (git required) and apply the bridge overlay.
-#    Clone the sibling repo, then copy the bridge overlay from deerflow_bridge/ into it:
-#      - deerflow_research.py  → deer-flow/ root (research driver / entry point)
-#      - patches/models/*.py   → deer-flow/backend/packages/harness/deerflow/models/
-#      - config.yaml           → deer-flow/config.yaml (only if absent)
+# 2. Download the DeerFlow research engine (git required) as a SIBLING directory
 git clone https://github.com/bytedance/deer-flow ../deer-flow
 
-# 3. Build DeerFlow's isolated research venv (Python ≥ 3.12; 3.13 recommended)
-UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv \
-  uv sync --project deer-flow/backend --python 3.13
+# 3. Apply the bridge overlay from deerflow_bridge/
+cp deerflow_bridge/deerflow_research.py ../deer-flow/deerflow_research.py
+cp deerflow_bridge/patches/models/*.py  ../deer-flow/backend/packages/harness/deerflow/models/
+cp deerflow_bridge/config.yaml          ../deer-flow/config.yaml   # only if absent
 
-# 4. Configure your environment (see .env reference below)
-#    Set ZEP_API_KEY (always required) and LLM_PROVIDER.
-
-# 5. Run both servers (backend on 5001 + frontend on 3000)
-npm run dev
+# 4. Build DeerFlow's isolated research venv (Python ≥ 3.12; 3.13 recommended)
+UV_PROJECT_ENVIRONMENT=../deer-flow/backend/.venv \
+  uv sync --project ../deer-flow/backend --python 3.13
 ```
 
-> The bridge overlay is what `setup.sh` applies for you; doing it manually means copying `deerflow_bridge/deerflow_research.py`, `deerflow_bridge/patches/models/*.py`, and `deerflow_bridge/config.yaml` into the cloned `deer-flow` as shown above. `config.yaml` is only copied if one is not already present.
+### 2. Configure
 
-Then open **<http://localhost:3000/research>**.
+Set at minimum your **Zep key** (and an API key if you picked a hosted provider) in `.env` — see the [Configuration](#configuration-env) reference below. If you use the `claude` CLI, just make sure you are logged in (run `claude` once).
+
+Then verify everything is wired up — **the doctor checks your whole environment in seconds** (tool versions, both venvs, the DeerFlow overlay, credentials for the providers you selected):
+
+```bash
+npm run doctor
+```
+
+Fix any ✗ items it reports and re-run until it prints `All checks passed`.
+
+### 3. Run
+
+```bash
+npm run dev        # backend on :5001 + frontend on :3000
+```
+
+Open **<http://localhost:3000/research>**, type your question, and click **Run research + simulate + forecast**. The backend pre-flights your configuration at launch time — misconfiguration is reported in seconds, not after a 40-minute research run.
 
 | Service | URL |
 |---|---|
@@ -196,18 +232,19 @@ The **report + simulation** stages are driven by `LLM_PROVIDER` (8 values):
 
 `openai`, `kimi`, `minimax`, `deepseek`, `qwen`, and `glm` are all OpenAI-compatible API providers needing `LLM_API_KEY`; `kimi`, `minimax`, `deepseek`, `qwen`, and `glm` ship sensible default `LLM_BASE_URL` / `LLM_MODEL_NAME`, so you only set `LLM_API_KEY`.
 
-The **deep-research** stage is driven separately by `DEERFLOW_MODEL` (6 options):
+The **deep-research** stage is driven separately by `DEERFLOW_MODEL` (7 options):
 
 | Research model | Notes |
 |---|---|
-| **`claude`** *(default)* | Uses Claude Code OAuth — no API key. `openai` / `kimi` map to this stanza. |
+| **`claude`** *(default)* | Uses Claude Code OAuth — no API key. `openai` maps to this stanza. |
+| **`codex`** | Codex (ChatGPT) OAuth — no API key. Auto-selected when only the `codex` CLI is installed. |
+| **`kimi`** | Kimi-for-coding. Needs `KIMI_API_KEY`. Auto-mirrored when you switch to the kimi provider in Settings. |
 | **`minimax`** | Needs `MINIMAX_API_KEY`. |
 | **`deepseek`** | Needs `DEEPSEEK_API_KEY`. |
 | **`qwen`** | Needs `DASHSCOPE_API_KEY`. |
 | **`glm`** | Needs `ZHIPUAI_API_KEY`. |
-| **`codex`** | Codex research model. |
 
-> **Note on the research stage:** the research stage is configured independently from `LLM_PROVIDER` via `DEERFLOW_MODEL`. Its per-provider key is mirrored for deer-flow (e.g. `MINIMAX_API_KEY`, `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`, `ZHIPUAI_API_KEY`) and is only needed when you actually run `DEERFLOW_MODEL` on that provider. The default `claude` uses Claude Code OAuth (no API key).
+> **Note on the research stage:** the research stage is configured independently from `LLM_PROVIDER` via `DEERFLOW_MODEL`. Its per-provider key is mirrored for deer-flow (e.g. `KIMI_API_KEY`, `MINIMAX_API_KEY`, `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`, `ZHIPUAI_API_KEY`) and is only needed when you actually run `DEERFLOW_MODEL` on that provider. The default `claude` uses Claude Code OAuth (no API key). Both `POST /api/research/run` and `deerflow_research.py` pre-flight the selected model's credentials and fail fast with an actionable message.
 
 ### How to switch
 
@@ -219,7 +256,7 @@ The **deep-research** stage is driven separately by `DEERFLOW_MODEL` (6 options)
 
 ## Configuration (`.env`)
 
-Create a `.env` file at the project root.
+Create a `.env` file at the project root (`setup.sh` scaffolds it from `.env.example`).
 
 ```bash
 LLM_PROVIDER=claude-cli      # claude-cli | codex-cli | openai | kimi | minimax | deepseek | qwen | glm
@@ -232,20 +269,29 @@ LLM_MODEL_NAME=...           # kimi/minimax/deepseek/qwen/glm ship a sensible de
 
 # DeerFlow deep research (optional — all have sensible defaults):
 DEERFLOW_DIR=...                 # path to the deer-flow sibling directory
-DEERFLOW_REPO=...                # clone URL (default https://github.com/bytedance/deer-flow)
-DEERFLOW_REF=...                 # pinned commit (set =main to track HEAD)
-DEERFLOW_PYTHON=...              # python interpreter for DeerFlow's venv
-DEERFLOW_MODEL=...               # claude | minimax | deepseek | qwen | glm | codex
-DEERFLOW_RESEARCH_DEPTH=...      # research depth
-DEERFLOW_RESEARCH_LANGUAGE=...   # research output language
-DEERFLOW_RESEARCH_TIMEOUT=...    # research stage timeout
+DEERFLOW_PYTHON=...              # python interpreter for DeerFlow's venv (auto-detected)
+DEERFLOW_MODEL=...               # claude | minimax | deepseek | qwen | glm | codex | kimi
+DEERFLOW_RESEARCH_DEPTH=...      # quick | standard | deep
+DEERFLOW_RESEARCH_LANGUAGE=...   # research output language (default Chinese)
+DEERFLOW_RESEARCH_TIMEOUT=...    # research watchdog override; unset = depth-aware
+                                 #   (quick 900s / standard 2400s / deep 10800s)
 
 # DeerFlow per-provider keys (only when DEERFLOW_MODEL runs on that provider):
+KIMI_API_KEY=...                 # DEERFLOW_MODEL=kimi
 MINIMAX_API_KEY=...              # DEERFLOW_MODEL=minimax
 DEEPSEEK_API_KEY=...             # DEERFLOW_MODEL=deepseek
 DASHSCOPE_API_KEY=...            # DEERFLOW_MODEL=qwen
 ZHIPUAI_API_KEY=...              # DEERFLOW_MODEL=glm
+
+# Tuning (optional):
+OASIS_SEMAPHORE=30               # concurrent LLM calls for API providers during simulation
+OASIS_CLI_SEMAPHORE=3            # concurrent LLM calls for CLI providers
+ZEP_MAX_RETRIES=4                 # Zep 429 / transient retry budget
+ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS=90
+FLASK_DEBUG=false                # dev only: exposes the Werkzeug debugger + reloader
 ```
+
+> `DEERFLOW_REPO` / `DEERFLOW_REF` are **shell** env vars read by `setup.sh` at install time (e.g. `DEERFLOW_REF=main ./setup.sh`), not `.env` keys.
 
 | Variable | Required | Purpose |
 |---|---|---|
@@ -255,17 +301,20 @@ ZHIPUAI_API_KEY=...              # DEERFLOW_MODEL=glm
 | `LLM_BASE_URL` | openai/kimi/minimax/deepseek/qwen/glm | Base URL for the OpenAI-compatible endpoint (kimi/minimax/deepseek/qwen/glm default it). |
 | `LLM_MODEL_NAME` | openai/kimi/minimax/deepseek/qwen/glm | Model name to request (kimi/minimax/deepseek/qwen/glm default it). |
 | `DEERFLOW_DIR` | No | Location of the `deer-flow` sibling directory. |
-| `DEERFLOW_REPO` | No | Clone URL for the DeerFlow repo (default `https://github.com/bytedance/deer-flow`). |
-| `DEERFLOW_REF` | No | Pinned commit for the DeerFlow clone (set `=main` to track HEAD). |
-| `DEERFLOW_PYTHON` | No | Python interpreter for DeerFlow's isolated venv. |
-| `DEERFLOW_MODEL` | No | Research model: `claude`, `minimax`, `deepseek`, `qwen`, `glm`, or `codex`. |
+| `DEERFLOW_PYTHON` | No | Python interpreter for DeerFlow's isolated venv (auto-detects `../deer-flow/backend/.venv`). |
+| `DEERFLOW_MODEL` | No | Research model: `claude`, `minimax`, `deepseek`, `qwen`, `glm`, `codex`, or `kimi`. |
+| `KIMI_API_KEY` | DEERFLOW_MODEL=kimi | DeerFlow research key when running Kimi-for-coding. |
 | `MINIMAX_API_KEY` | DEERFLOW_MODEL=minimax | DeerFlow research key when running MiniMax. |
 | `DEEPSEEK_API_KEY` | DEERFLOW_MODEL=deepseek | DeerFlow research key when running DeepSeek. |
 | `DASHSCOPE_API_KEY` | DEERFLOW_MODEL=qwen | DeerFlow research key when running Qwen. |
 | `ZHIPUAI_API_KEY` | DEERFLOW_MODEL=glm | DeerFlow research key when running GLM. |
-| `DEERFLOW_RESEARCH_DEPTH` | No | Depth of the research stage. |
+| `DEERFLOW_RESEARCH_DEPTH` | No | Depth of the research stage: `quick` / `standard` / `deep`. `deep` runs multiple scoped research passes before final synthesis. |
 | `DEERFLOW_RESEARCH_LANGUAGE` | No | Language of the research output. |
-| `DEERFLOW_RESEARCH_TIMEOUT` | No | Timeout for the research stage. |
+| `DEERFLOW_RESEARCH_TIMEOUT` | No | Research watchdog override (seconds). Unset = depth-aware: quick 900 / standard 2400 / deep 10800. If the report was already written when the watchdog fires, the run is salvaged instead of discarded. |
+| `OASIS_SEMAPHORE` / `OASIS_CLI_SEMAPHORE` | No | Concurrent LLM-call cap during simulation (API providers / CLI providers). In dual-platform parallel runs each platform gets half, so the cap is the true global in-flight limit. |
+| `ZEP_MAX_RETRIES` / `ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS` | No | Zep retry budget and maximum wait when the free tier returns 429 with `Retry-After`. Defaults are `4` and `90`. |
+| `LLM_CLI_USE_API_KEY` | No | `claude-cli` strips a stray `ANTHROPIC_API_KEY` from the subprocess env by default (it would silently switch billing from your subscription to the API). Set `true` to keep it. |
+| `FLASK_DEBUG` | No | Dev only (default `false`): enables the Werkzeug debugger + auto-reloader (the reloader kills in-flight pipelines). |
 
 ---
 
@@ -277,8 +326,10 @@ The backend is a **Flask** app at `http://localhost:5001`. All endpoints are und
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/research/run` | Start a pipeline. Body: `{prompt, mode(full\|research_only), depth(quick\|standard\|deep), max_rounds?}` → `{pipeline_id}`. |
-| `GET` | `/research/status/<id>` | Current status of a pipeline run. |
+| `POST` | `/research/run` | Start a pipeline. Body: `{prompt, mode(full\|research_only), depth(quick\|standard\|deep), max_rounds?, project_name?}` → `{pipeline_id}`. Pre-flights the whole configuration (Zep key, provider credentials, DeerFlow checkout) and returns an actionable `400` instead of failing mid-run. |
+| `POST` | `/research/<id>/cancel` | **Cancel a running pipeline** — kills the research subprocess group / stops the OASIS simulation; other stages exit at the next checkpoint. |
+| `POST` | `/research/<id>/resume` | **Resume a failed/cancelled pipeline** — reuses completed stages (research dossier, ontology, graph, finished simulation) and restarts from the stage that failed. Pre-flights the configuration first. |
+| `GET` | `/research/status/<id>` | Current status of a pipeline run (terminal states: `completed` / `failed` / `cancelled`). |
 | `GET` | `/research/list` | List pipeline runs. |
 | `GET` | `/research/<id>/dossier` | The rendered research dossier. |
 | `GET` | `/research/<id>/progress` | Live research progress (DeerFlow console). |
@@ -338,6 +389,7 @@ The entire UI is **bilingual** (English + 中文).
 ## Notable engineering
 
 - **File-based handoff contract over a subprocess.** The DeerFlow ↔ backend bridge is a file-based handoff contract executed in a subprocess, keeping DeerFlow's LangChain/LangGraph dependencies fully isolated from the backend.
+- **Structured actor seeding end-to-end.** DeerFlow's `actors.json` (role / stance / influence / memory per researched actor) flows through every downstream stage: it biases the ontology, is matched by name to graph entities to ground each persona's stance and memory, drives per-agent `stance` / `influence_weight` in the simulation config, and lets initial posts be authored *by the actual researched actor* (`poster_name` matching) instead of a type-matched stand-in.
 - **Research error guard.** An error guard prevents an LLM-error or degraded message from being mistaken for a real research report — it fails fast, so no contamination flows downstream.
 - **Tool-free "synthesis net".** If the research agent exhausts its step budget on tool calls before writing, or hits a provider **structural** error on the final write, the report is synthesized directly from the gathered (checkpointed) research via a clean single-turn call.
 - **Per-section graceful degradation.** In the ReportAgent, a single section's LLM error becomes a placeholder while the rest of the report still produces a partial result.
@@ -350,36 +402,61 @@ The entire UI is **bilingual** (English + 中文).
 ```
 DeepResearchForecast/
 ├── backend/                 # Flask API (port 5001) — pipeline orchestration,
-│                            #   graph ingest, simulation, ReportAgent. uv-managed.
+│   │                        #   graph ingest, simulation, ReportAgent. uv-managed,
+│   └── .python-version      #   pinned to Python 3.12 (camel-ai stack targets ≤3.12).
 ├── frontend/                # Vue 3 + Vite dashboard (port 3000), bilingual EN/中文.
 ├── deerflow_bridge/         # Bridge overlay applied onto the cloned deer-flow:
-│   ├── deerflow_research.py #   research driver / entry point (→ deer-flow/ root).
+│   ├── deerflow_research.py #   research driver / entry point (→ ../deer-flow/ root).
 │   ├── patches/models/      #   provider patches (claude OAuth fix, Keychain loader,
 │   │                        #     patched_minimax → MiniMax "name" fix).
 │   └── config.yaml          #   deer-flow model config (copied only if absent).
-├── deer-flow/               # SIBLING engine: LangGraph deep-research super agent.
-│   └── backend/             #   (auto-downloaded by setup.sh; git required.)
-│       └── .venv/           # Isolated Python ≥ 3.12 venv (deps isolated from backend).
+├── Screenshots -> docs/media/ # README screenshots + demo video/GIF.
+├── docs/media/              # Canonical optimized media assets.
+├── scripts/doctor.sh        # `npm run doctor` — environment health check.
 ├── setup.sh                 # Quick-start: downloads deer-flow, installs everything,
 │                            #   applies the bridge overlay, auto-detects provider.
 ├── .env                     # LLM_PROVIDER, ZEP_API_KEY, provider + DeerFlow config.
-└── package.json             # `setup:all` and `dev` scripts (run backend + frontend).
+└── package.json             # `setup:all`, `doctor` and `dev` scripts.
+
+../deer-flow/                # SIBLING engine: LangGraph deep-research super agent
+└── backend/.venv/           #   (auto-downloaded by setup.sh; isolated Python ≥3.12 venv).
 ```
 
 > DeerFlow is a **sibling directory** to keep its dependency tree isolated from the backend. `setup.sh` clones it (git required), applies the `deerflow_bridge/` overlay (driver + `patches/models` + `config.yaml`), and builds its venv with:
-> `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.13`
+> `UV_PROJECT_ENVIRONMENT=../deer-flow/backend/.venv uv sync --project ../deer-flow/backend --python 3.13`
 
 ---
 
 ## Troubleshooting
 
+**First move: run `npm run doctor`.** It diagnoses the most common problems (missing venvs, wrong Python, missing overlay, placeholder keys, missing CLI logins) with the exact fix command for each.
+
 | Symptom | Likely cause / fix |
 |---|---|
-| **Missing / invalid `ZEP_API_KEY`** | The Zep Cloud key is **always required** (graph stage). Set `ZEP_API_KEY` in `.env`; the free tier works. Get one at <https://app.getzep.com/>. |
-| **Research stage runs on Claude even though I picked another provider** | The research stage is configured separately via `DEERFLOW_MODEL` (`claude` *(default)*, `minimax`, `deepseek`, `qwen`, `glm`, `codex`), not by `LLM_PROVIDER`. `openai` / `kimi` map to the `claude` stanza. Set `DEERFLOW_MODEL` (and its key, e.g. `MINIMAX_API_KEY`) to run research on a different model. |
-| **DeerFlow / research stage fails to start** | `setup.sh` clones the `deer-flow` sibling (git required) and applies the `deerflow_bridge/` overlay. Ensure its venv is built with Python ≥ 3.12 (3.13 recommended): `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.13`. Re-running `setup.sh` is idempotent. Optionally set `DEERFLOW_DIR` / `DEERFLOW_PYTHON` / `DEERFLOW_REPO` / `DEERFLOW_REF`. |
+| **`POST /research/run` returns a preflight error list** | That's the fail-fast check working — each bullet names the missing piece (Zep key, provider key, CLI login, DeerFlow checkout) and how to fix it. Nothing was spent. |
+| **Missing / invalid / placeholder `ZEP_API_KEY`** | The Zep Cloud key is **always required** (graph stage), and the `.env.example` placeholder is rejected. Set a real `ZEP_API_KEY` in `.env`; the free tier works: <https://app.getzep.com/>. |
+| **Report stage fails with `status_code: 429` / `Rate limit exceeded for FREE plan`** | Zep free-tier throttling. The app now parses `Retry-After`, waits before retrying, and reuses report graph snapshots to reduce duplicate node/edge reads. For very large runs, lower concurrency/depth or raise the retry knobs in `.env`. |
+| **Backend install fails (camel-ai / tiktoken build errors)** | Your default Python is 3.13+. The backend venv must be on **3.11–3.12**: `( cd backend && uv sync --python 3.12 )` — `setup.sh` and `backend/.python-version` already pin this. |
+| **Research stage runs on Claude even though I picked another provider** | The research stage is configured separately via `DEERFLOW_MODEL` (`claude` *(default)*, `minimax`, `deepseek`, `qwen`, `glm`, `codex`, `kimi`), not by `LLM_PROVIDER`. Only `openai` maps to the `claude` stanza. Set `DEERFLOW_MODEL` (and its key, e.g. `MINIMAX_API_KEY`) to run research on a different model. |
+| **DeerFlow / research stage fails to start** | `setup.sh` clones the `deer-flow` sibling (git required) and applies the `deerflow_bridge/` overlay. Ensure its venv is built with Python ≥ 3.12 (3.13 recommended): `UV_PROJECT_ENVIRONMENT=../deer-flow/backend/.venv uv sync --project ../deer-flow/backend --python 3.13`. Re-running `setup.sh` is idempotent. Optionally set `DEERFLOW_DIR` / `DEERFLOW_PYTHON` (or `DEERFLOW_REPO` / `DEERFLOW_REF` for `setup.sh`). |
 | **No API key but hosted provider selected** | `openai`, `kimi`, `minimax`, `deepseek`, `qwen`, and `glm` need `LLM_API_KEY` (with `LLM_BASE_URL` / `LLM_MODEL_NAME`; `kimi`/`minimax`/`deepseek`/`qwen`/`glm` default those). For no-key operation use `claude-cli` or `codex-cli`. |
+| **`claude-cli` returns 401 / bills the API instead of my subscription** | A stray `ANTHROPIC_API_KEY` in your environment. It is stripped from the CLI subprocess automatically; run `claude` once to refresh the OAuth login. (Set `LLM_CLI_USE_API_KEY=true` if you *want* API-key billing.) |
 | **Provider switch didn't take effect** | The runtime switch applies to **new runs** only. Start a fresh pipeline after switching. |
-| **Frontend can't reach the API** | The frontend proxies `/api` → `5001`. Confirm the backend is running on port 5001 (`npm run dev` starts both). |
-| **Research stage times out** | Increase `DEERFLOW_RESEARCH_TIMEOUT`, or reduce research `depth` (`quick` / `standard` / `deep`). |
+| **Frontend can't reach the API** | The frontend proxies `/api` → `5001`. Confirm the backend is running on port 5001 (`npm run dev` starts both). The UI shows a "Lost connection" banner if the backend stops responding mid-run. |
+| **Research stage times out** | The watchdog is depth-aware (quick 900s / standard 2400s / deep 10800s). Deep mode intentionally runs multiple research passes, so it is slower; override with `DEERFLOW_RESEARCH_TIMEOUT` or reduce research `depth`. If the report was already written when the watchdog fired, the run salvages it and continues. |
+| **Need to stop a long run** | Click **Cancel** in the run header (or `POST /api/research/<id>/cancel`). Research/simulation subprocesses are terminated immediately. |
+| **A run failed (or was cancelled) midway** | Click **Resume** in the run header (or `POST /api/research/<id>/resume`). Completed stages are reused — a finished research dossier, graph, or simulation is never re-run — and the pipeline restarts from the stage that broke. This also covers runs interrupted by a backend restart. |
 | **A report section shows a placeholder** | Per-section graceful degradation: one section's LLM error becomes a placeholder while the rest of the report is still produced. Re-run if needed. |
+
+---
+
+## Acknowledgments
+
+- **[OASIS](https://github.com/camel-ai/oasis)** (CAMEL-AI) powers the multi-agent social simulation engine — sincere thanks to the CAMEL-AI team for their open-source work.
+- **[DeerFlow](https://github.com/bytedance/deer-flow)** (ByteDance) powers the deep-research stage.
+- **[Zep Cloud](https://www.getzep.com/)** provides the temporal knowledge graph (GraphRAG).
+- Built on **[MiroFish](https://github.com/666ghj/MiroFish)**, the original population-simulation prediction engine.
+
+## License
+
+[AGPL-3.0](LICENSE)

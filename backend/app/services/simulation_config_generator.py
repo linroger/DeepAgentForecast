@@ -17,6 +17,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 
 from ..config import Config
+from ..utils.actors import actors_digest, influence_weight, match_actor
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .zep_entity_reader import EntityNode, ZepEntityReader
@@ -253,10 +254,11 @@ class SimulationConfigGenerator:
         enable_twitter: bool = True,
         enable_reddit: bool = True,
         progress_callback: Optional[Callable[[int, int, str], None]] = None,
+        actors: Optional[Dict[str, Any]] = None,
     ) -> SimulationParameters:
         """
         智能生成完整的模拟配置（分步生成）
-        
+
         Args:
             simulation_id: 模拟ID
             project_id: 项目ID
@@ -267,7 +269,10 @@ class SimulationConfigGenerator:
             enable_twitter: 是否启用Twitter
             enable_reddit: 是否启用Reddit
             progress_callback: 进度回调函数(current_step, total_steps, message)
-            
+            actors: 深度研究 actors.json 顶层对象（可选）。提供时：上下文与事件
+                    配置注入调研实证（立场/影响力/时间线/热点），初始帖子可按
+                    actor 名字定向到对应 Agent，Agent 配置以实证立场为准
+
         Returns:
             SimulationParameters: 完整的模拟参数
         """
@@ -285,26 +290,27 @@ class SimulationConfigGenerator:
                 progress_callback(step, total_steps, message)
             logger.info(f"[{step}/{total_steps}] {message}")
         
-        # 1. 构建基础上下文信息
+        # 1. 构建基础上下文信息（含深度研究档案摘要，如有）
         context = self._build_context(
             simulation_requirement=simulation_requirement,
             document_text=document_text,
-            entities=entities
+            entities=entities,
+            actors=actors
         )
-        
+
         reasoning_parts = []
-        
+
         # ========== 步骤1: 生成时间配置 ==========
         report_progress(1, "生成时间配置...")
         num_entities = len(entities)
         time_config_result = self._generate_time_config(context, num_entities)
         time_config = self._parse_time_config(time_config_result, num_entities)
         reasoning_parts.append(f"时间配置: {time_config_result.get('reasoning', '成功')}")
-        
+
         # ========== 步骤2: 生成事件配置 ==========
         report_progress(2, "生成事件配置和热点话题...")
-        event_config_result = self._generate_event_config(context, simulation_requirement, entities)
-        event_config = self._parse_event_config(event_config_result)
+        event_config_result = self._generate_event_config(context, simulation_requirement, entities, actors=actors)
+        event_config = self._parse_event_config(event_config_result, actors=actors)
         reasoning_parts.append(f"事件配置: {event_config_result.get('reasoning', '成功')}")
         
         # ========== 步骤3-N: 分批生成Agent配置 ==========
@@ -323,7 +329,8 @@ class SimulationConfigGenerator:
                 context=context,
                 entities=batch_entities,
                 start_idx=start_idx,
-                simulation_requirement=simulation_requirement
+                simulation_requirement=simulation_requirement,
+                actors=actors
             )
             all_agent_configs.extend(batch_configs)
         
@@ -385,28 +392,35 @@ class SimulationConfigGenerator:
         self,
         simulation_requirement: str,
         document_text: str,
-        entities: List[EntityNode]
+        entities: List[EntityNode],
+        actors: Optional[Dict[str, Any]] = None
     ) -> str:
         """构建LLM上下文，截断到最大长度"""
-        
+
         # 实体摘要
         entity_summary = self._summarize_entities(entities)
-        
+
         # 构建上下文
         context_parts = [
             f"## 模拟需求\n{simulation_requirement}",
             f"\n## 实体信息 ({len(entities)}个)\n{entity_summary}",
         ]
-        
+
+        # 深度研究档案（actors.json）：立场/影响力/时间线/热点都是调研实证，
+        # 优先于原始文档进入上下文（文档随后按剩余空间截断）。
+        digest = actors_digest(actors)
+        if digest:
+            context_parts.append(f"\n## 深度研究档案（调研实证，生成配置时优先采信）\n{digest}")
+
         current_length = sum(len(p) for p in context_parts)
         remaining_length = self.MAX_CONTEXT_LENGTH - current_length - 500  # 留500字符余量
-        
+
         if remaining_length > 0 and document_text:
             doc_text = document_text[:remaining_length]
             if len(document_text) > remaining_length:
                 doc_text += "\n...(文档已截断)"
             context_parts.append(f"\n## 原始文档内容\n{doc_text}")
-        
+
         return "\n".join(context_parts)
     
     def _summarize_entities(self, entities: List[EntityNode]) -> str:
@@ -638,18 +652,14 @@ class SimulationConfigGenerator:
         )
     
     def _generate_event_config(
-        self, 
-        context: str, 
+        self,
+        context: str,
         simulation_requirement: str,
-        entities: List[EntityNode]
+        entities: List[EntityNode],
+        actors: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """生成事件配置"""
-        
-        # 获取可用的实体类型列表，供 LLM 参考
-        entity_types_available = list(set(
-            e.get_entity_type() or "Unknown" for e in entities
-        ))
-        
+
         # 为每种类型列出代表性实体名称
         type_examples = {}
         for e in entities:
@@ -658,21 +668,33 @@ class SimulationConfigGenerator:
                 type_examples[etype] = []
             if len(type_examples[etype]) < 3:
                 type_examples[etype].append(e.name)
-        
+
         type_info = "\n".join([
-            f"- {t}: {', '.join(examples)}" 
+            f"- {t}: {', '.join(examples)}"
             for t, examples in type_examples.items()
         ])
-        
+
         # 使用配置的上下文截断长度
         context_truncated = context[:self.EVENT_CONFIG_CONTEXT_LENGTH]
-        
+
+        # 深度研究档案：初始帖子要落在真实角色的真实立场上，而不是 LLM 再编一遍
+        digest = actors_digest(actors, max_chars=2500)
+        research_block = ""
+        poster_name_hint = ""
+        if digest:
+            research_block = f"\n## 深度研究档案（调研实证）\n{digest}\n"
+            poster_name_hint = (
+                "\n**强烈建议**: 初始帖子尽量出自研究档案中的真实角色——为这类帖子额外给出 "
+                "poster_name（角色名，从档案中选），内容必须与该角色的实证立场一致；"
+                "热点话题优先复用档案中的热点议题。"
+            )
+
         prompt = f"""基于以下模拟需求，生成事件配置。
 
 模拟需求: {simulation_requirement}
 
 {context_truncated}
-
+{research_block}
 ## 可用实体类型及示例
 {type_info}
 
@@ -683,21 +705,21 @@ class SimulationConfigGenerator:
 - 设计初始帖子内容，**每个帖子必须指定 poster_type（发布者类型）**
 
 **重要**: poster_type 必须从上面的"可用实体类型"中选择，这样初始帖子才能分配给合适的 Agent 发布。
-例如：官方声明应由 Official/University 类型发布，新闻由 MediaOutlet 发布，学生观点由 Student 发布。
+例如：官方声明应由 Official/University 类型发布，新闻由 MediaOutlet 发布，学生观点由 Student 发布。{poster_name_hint}
 
 返回JSON格式（不要markdown）：
 {{
     "hot_topics": ["关键词1", "关键词2", ...],
     "narrative_direction": "<舆论发展方向描述>",
     "initial_posts": [
-        {{"content": "帖子内容", "poster_type": "实体类型（必须从可用类型中选择）"}},
+        {{"content": "帖子内容", "poster_type": "实体类型（必须从可用类型中选择）", "poster_name": "发布者角色名（可选，来自研究档案）"}},
         ...
     ],
     "reasoning": "<简要说明>"
 }}"""
 
         system_prompt = "你是舆论分析专家。返回纯JSON格式。注意 poster_type 必须精确匹配可用实体类型。"
-        
+
         try:
             return self._call_llm_with_retry(prompt, system_prompt)
         except Exception as e:
@@ -708,13 +730,18 @@ class SimulationConfigGenerator:
                 "initial_posts": [],
                 "reasoning": "使用默认配置"
             }
-    
-    def _parse_event_config(self, result: Dict[str, Any]) -> EventConfig:
-        """解析事件配置结果"""
+
+    def _parse_event_config(self, result: Dict[str, Any], actors: Optional[Dict[str, Any]] = None) -> EventConfig:
+        """解析事件配置结果。LLM 漏掉热点时回填研究档案中的热点议题。"""
+        hot_topics = result.get("hot_topics", [])
+        if not hot_topics and isinstance(actors, dict):
+            researched = actors.get("hot_topics")
+            if isinstance(researched, list):
+                hot_topics = [str(t) for t in researched[:12]]
         return EventConfig(
             initial_posts=result.get("initial_posts", []),
             scheduled_events=[],
-            hot_topics=result.get("hot_topics", []),
+            hot_topics=hot_topics,
             narrative_direction=result.get("narrative_direction", "")
         )
     
@@ -753,23 +780,47 @@ class SimulationConfigGenerator:
         
         # 记录每种类型已使用的 agent 索引，避免重复使用同一个 agent
         used_indices: Dict[str, int] = {}
-        
+
+        # 名字索引：研究档案驱动的 poster_name 可以把帖子精确定向到真实角色
+        from ..utils.actors import normalize_name
+        agents_by_name = {
+            normalize_name(agent.entity_name): agent
+            for agent in agent_configs
+            if agent.entity_name
+        }
+
         updated_posts = []
         for post in event_config.initial_posts:
             poster_type = post.get("poster_type", "").lower()
             content = post.get("content", "")
-            
+
             # 尝试找到匹配的 agent
             matched_agent_id = None
-            
+
+            # 0. 按名字精确定向（poster_name 来自研究档案的真实角色名）
+            poster_name = str(post.get("poster_name", "") or "").strip()
+            if poster_name:
+                target = normalize_name(poster_name)
+                agent = agents_by_name.get(target)
+                if agent is None and target:
+                    # 双向包含（处理 "OpenAI" vs "OpenAI 公司" 这类差异）
+                    for cand_name, cand_agent in agents_by_name.items():
+                        if len(cand_name) >= 2 and (cand_name in target or target in cand_name):
+                            agent = cand_agent
+                            break
+                if agent is not None:
+                    matched_agent_id = agent.agent_id
+                    logger.info(f"初始帖子按角色名定向: '{poster_name}' -> agent_id={matched_agent_id}")
+
             # 1. 直接匹配
-            if poster_type in agents_by_type:
+            if matched_agent_id is None and poster_type in agents_by_type:
                 agents = agents_by_type[poster_type]
                 idx = used_indices.get(poster_type, 0) % len(agents)
                 matched_agent_id = agents[idx].agent_id
                 used_indices[poster_type] = idx + 1
-            else:
-                # 2. 使用别名匹配
+
+            # 2. 使用别名匹配
+            if matched_agent_id is None:
                 for alias_key, aliases in type_aliases.items():
                     if poster_type in aliases or alias_key == poster_type:
                         for alias in aliases:
@@ -781,7 +832,7 @@ class SimulationConfigGenerator:
                                 break
                     if matched_agent_id is not None:
                         break
-            
+
             # 3. 如果仍未找到，使用影响力最高的 agent
             if matched_agent_id is None:
                 logger.warning(f"未找到类型 '{poster_type}' 的匹配 Agent，使用影响力最高的 Agent")
@@ -791,12 +842,15 @@ class SimulationConfigGenerator:
                     matched_agent_id = sorted_agents[0].agent_id
                 else:
                     matched_agent_id = 0
-            
-            updated_posts.append({
+
+            updated_post = {
                 "content": content,
                 "poster_type": post.get("poster_type", "Unknown"),
                 "poster_agent_id": matched_agent_id
-            })
+            }
+            if poster_name:
+                updated_post["poster_name"] = poster_name
+            updated_posts.append(updated_post)
             
             logger.info(f"初始帖子分配: poster_type='{poster_type}' -> agent_id={matched_agent_id}")
         
@@ -808,21 +862,45 @@ class SimulationConfigGenerator:
         context: str,
         entities: List[EntityNode],
         start_idx: int,
-        simulation_requirement: str
+        simulation_requirement: str,
+        actors: Optional[Dict[str, Any]] = None
     ) -> List[AgentActivityConfig]:
         """分批生成Agent配置"""
-        
-        # 构建实体信息（使用配置的摘要长度）
+
+        # 构建实体信息（使用配置的摘要长度）；命中研究档案的实体带上实证字段
         entity_list = []
         summary_len = self.AGENT_SUMMARY_LENGTH
+        matched_actors: Dict[int, Dict[str, Any]] = {}
         for i, e in enumerate(entities):
-            entity_list.append({
-                "agent_id": start_idx + i,
+            agent_id = start_idx + i
+            row: Dict[str, Any] = {
+                "agent_id": agent_id,
                 "entity_name": e.name,
                 "entity_type": e.get_entity_type() or "Unknown",
                 "summary": e.summary[:summary_len] if e.summary else ""
-            })
-        
+            }
+            actor = match_actor(e.name, actors)
+            if actor is not None:
+                matched_actors[agent_id] = actor
+                researched = {
+                    "role": str(actor.get("role", "") or ""),
+                    "stance": str(actor.get("stance", "") or ""),
+                    "influence": str(actor.get("influence", "") or ""),
+                }
+                memory = str(actor.get("memory", "") or "")
+                if memory:
+                    researched["memory"] = memory[:300]
+                row["researched_profile"] = {k: v for k, v in researched.items() if v}
+            entity_list.append(row)
+
+        research_rule = ""
+        if matched_actors:
+            research_rule = (
+                "\n- **带 researched_profile 的实体是深度调研实证数据**：其 stance/sentiment_bias/"
+                "influence_weight 必须与 researched_profile 的立场和影响力一致（high≈2.5-3.0, "
+                "medium≈1.5-2.0, low≈0.8-1.2），不要凭空另行猜测"
+            )
+
         prompt = f"""基于以下信息，为每个实体生成社交媒体活动配置。
 
 模拟需求: {simulation_requirement}
@@ -838,7 +916,7 @@ class SimulationConfigGenerator:
 - **官方机构**（University/GovernmentAgency）：活跃度低(0.1-0.3)，工作时间(9-17)活动，响应慢(60-240分钟)，影响力高(2.5-3.0)
 - **媒体**（MediaOutlet）：活跃度中(0.4-0.6)，全天活动(8-23)，响应快(5-30分钟)，影响力高(2.0-2.5)
 - **个人**（Student/Person/Alumni）：活跃度高(0.6-0.9)，主要晚间活动(18-23)，响应快(1-15分钟)，影响力低(0.8-1.2)
-- **公众人物/专家**：活跃度中(0.4-0.6)，影响力中高(1.5-2.0)
+- **公众人物/专家**：活跃度中(0.4-0.6)，影响力中高(1.5-2.0){research_rule}
 
 返回JSON格式（不要markdown）：
 {{
@@ -873,11 +951,15 @@ class SimulationConfigGenerator:
         for i, entity in enumerate(entities):
             agent_id = start_idx + i
             cfg = llm_configs.get(agent_id, {})
-            
+
             # 如果LLM没有生成，使用规则生成
             if not cfg:
                 cfg = self._generate_agent_config_by_rule(entity)
-            
+                # 规则路径没有 LLM 参与：直接落研究档案的实证影响力
+                researched_weight = influence_weight(matched_actors.get(agent_id))
+                if researched_weight is not None:
+                    cfg["influence_weight"] = researched_weight
+
             config = AgentActivityConfig(
                 agent_id=agent_id,
                 entity_uuid=entity.uuid,
@@ -894,7 +976,7 @@ class SimulationConfigGenerator:
                 influence_weight=cfg.get("influence_weight", 1.0)
             )
             configs.append(config)
-        
+
         return configs
     
     def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
