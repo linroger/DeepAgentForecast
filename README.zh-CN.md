@@ -11,13 +11,26 @@
 
 ## 演示
 
-🔗 **[在线演示站](https://linroger.github.io/DeepResearchForecast/)**（中英双语）—— 走完真实端到端运行的**每一个阶段**：深度研究控制台日志、含行动者与来源的研究档案、生成的本体、可交互知识图谱、模拟的 Twitter/Reddit 论坛，以及最终预测报告（2030 美国 AI 竞赛、2035 全球电动汽车产业、俄乌战争终局）。
+🔗 **[在线演示站](https://linroger.github.io/DeepResearchForecast/)**（中英双语）—— 走完真实端到端运行的**每一个阶段**：深度研究控制台日志、含行动者与来源的研究档案、生成的本体、可交互知识图谱、模拟的 Twitter/Reddit 论坛，以及最终预测报告（2030 美国 AI 竞赛、2035 全球电动汽车产业、俄乌战争终局、2030 全球半导体产业）。
 
 一句提示词 —— *“Who wins the US AI race by 2030?”*（谁会在 2030 年赢得美国 AI 竞赛？）—— 从提问到可交互预测的全过程（研究 → 知识图谱 → 40 轮群体模拟 → 报告）：
 
 ![演示：一句话到预测](docs/media/demo-preview.gif)
 
 ▶ **[观看完整演示视频（47 秒，MP4）](docs/media/demo.mp4)**
+
+### 最新运行 —— 2030 年前全球半导体产业
+
+最近一次展示运行：深度模式调研覆盖半导体全产业链（存储 / HBM / 逻辑 / 代工，17 家具名企业），构建 285 节点知识图谱，**115 个数字人格**进行 **40 轮双平台模拟**，最终产出分章节预测报告。
+
+▶ **[观看半导体运行全程视频（42 秒，4 倍速，MP4）](docs/media/demo-semiconductors.mp4)** · 🔗 **[在线浏览这次运行](https://linroger.github.io/DeepResearchForecast/demo.html?run=semiconductors-2030)**
+
+| | |
+|---|---|
+| ![深度研究控制台](docs/media/09-semis-research-console.jpg) <br/>*阶段 1 —— 深度研究控制台：多轮研究协议中的每一次搜索、抓取与写作* | ![研究档案](docs/media/10-semis-research-dossier.jpg) <br/>*完成的研究档案 —— 对 2030 年半导体行业的循证深度研究* |
+| ![调研提取的核心行动者](docs/media/11-semis-key-actors.jpg) <br/>*调研提取的核心行动者 —— CEO、分析师与企业，立场与影响力均来自调研* | ![引用的网络来源](docs/media/12-semis-cited-sources.jpg) <br/>*支撑档案论断的网络来源引用* |
+| ![半导体知识图谱](docs/media/13-semis-knowledge-graph.jpg) <br/>*285 实体知识图谱与 10 个自动生成的实体类型* | ![40/40 轮的模拟信息流](docs/media/14-semis-simulation-feed.jpg) <br/>*模拟完成 —— 115 个人格、40/40 轮，完整 Twitter 信息流* |
+| ![最终预测报告](docs/media/15-semis-forecast-report.jpg) <br/>*带可导航目录的最终预测报告* | |
 
 ### 截图
 

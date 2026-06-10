@@ -11,13 +11,26 @@ DeepResearchForecast is an autonomous **"one prompt → forecast"** engine. You 
 
 ## Demo
 
-🔗 **[Live demo site](https://linroger.github.io/DeepResearchForecast/)** (English + 中文) — walk through **every stage** of real end-to-end runs: the deep-research console log, the research dossier with actors & sources, the generated ontology, an interactive knowledge graph, the simulated Twitter/Reddit forum, and the final forecast (US AI race 2030, global EV industry 2035, Russia–Ukraine endgame).
+🔗 **[Live demo site](https://linroger.github.io/DeepResearchForecast/)** (English + 中文) — walk through **every stage** of real end-to-end runs: the deep-research console log, the research dossier with actors & sources, the generated ontology, an interactive knowledge graph, the simulated Twitter/Reddit forum, and the final forecast (US AI race 2030, global EV industry 2035, Russia–Ukraine endgame, global semiconductors 2030).
 
 One prompt — *"Who wins the US AI race by 2030?"* — taken from question to interactive forecast (research → knowledge graph → 40-round population simulation → report):
 
 ![Demo: one prompt to forecast](docs/media/demo-preview.gif)
 
 ▶ **[Watch the full demo video (47s, MP4)](docs/media/demo.mp4)**
+
+### Latest run — global semiconductors through 2030
+
+The most recent showcase run: a deep-mode research pass on the full semiconductor value chain (memory / HBM / logic / foundry across 17 named companies), a 285-node knowledge graph, **115 personas** over **40 dual-platform rounds**, and a sectioned forecast report.
+
+▶ **[Watch the semiconductor run walkthrough (42s at 4× speed, MP4)](docs/media/demo-semiconductors.mp4)** · 🔗 **[Explore it live](https://linroger.github.io/DeepResearchForecast/demo.html?run=semiconductors-2030)**
+
+| | |
+|---|---|
+| ![Deep-research console](docs/media/09-semis-research-console.jpg) <br/>*Stage 1 — the deep-research console: every search, fetch and write of the multi-pass protocol* | ![Research dossier](docs/media/10-semis-research-dossier.jpg) <br/>*The finished research dossier — an evidence-grounded deep dive on the 2030 semiconductor industry* |
+| ![Key actors extracted by research](docs/media/11-semis-key-actors.jpg) <br/>*Key actors extracted from research — CEOs, analysts and companies with researched stances & influence* | ![Cited web sources](docs/media/12-semis-cited-sources.jpg) <br/>*The cited web sources backing the dossier's claims* |
+| ![Semiconductor knowledge graph](docs/media/13-semis-knowledge-graph.jpg) <br/>*The 285-entity knowledge graph with its 10 generated entity types* | ![Simulated feed at 40/40 rounds](docs/media/14-semis-simulation-feed.jpg) <br/>*Simulation complete — 115 personas, 40/40 rounds, the full Twitter feed* |
+| ![Final forecast report](docs/media/15-semis-forecast-report.jpg) <br/>*The final forecast with navigable table of contents* | |
 
 ### Screenshots
 

@@ -291,3 +291,14 @@ tail -f backend/uploads/pipelines/pipe_f8844f93a738/handoff/research_progress.lo
 - Exporter run: `ok semiconductors-2030` (graph 285/893); all JSON artifacts parse; forum feed 613 twitter + 1055 reddit actions.
 - `node --check docs/i18n.js` — pass.
 - Local smoke test (python http.server + Chrome): index shows the 4th card with Chinese i18n; all 6 stage tabs render (console log, dossier+actor cards, ontology, interactive force-graph "285 个实体 · 893 条关系", Twitter/Reddit feed, final report "硅基重构…"); EN toggle re-renders the page; zero console errors.
+
+## 2026-06-10 — session 4 (cont.): READMEs + new media for the semiconductor run
+
+**Request:** Update both READMEs and incorporate the new screenshots/video from `/Users/rogerlin/Downloads/mirofish/Screenshots`.
+
+**What was done:**
+1. Converted the 7 new Jun-10 Safari screenshots (3830×2578 PNG, ~4.7MB each) to 1600px JPGs (~320–380KB) in `docs/media/` as `09-semis-…` through `15-semis-…` (console, dossier, actors, sources, graph, feed at 40/40, forecast).
+2. Re-encoded the new 42s 4×-speed walkthrough video (42.5MB, 8.1Mbps) to `docs/media/demo-semiconductors.mp4` (21.8MB, x264 crf30, faststart, audio stripped). The Jun-09 video/PNGs in the folder were already incorporated as demo.mp4 / 01-08.
+3. Both READMEs: added "2030 全球半导体产业 / global semiconductors 2030" to the live-demo run list, plus a new "Latest run — global semiconductors through 2030 / 最新运行 —— 2030 年前全球半导体产业" gallery section with the video link, the live demo deep-link, and all 7 captioned screenshots. Existing 01-08 gallery untouched.
+
+**Evidence:** link checker over both READMEs — all `docs/media/` refs exist; ffprobe confirms the re-encode is 1728×1006/41.7s; zh TOC is top-level only so no TOC change needed.
