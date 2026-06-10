@@ -16,6 +16,7 @@ everything here automatically — you normally never touch these files by hand.
 | `patches/models/claude_provider.py` | `ClaudeChatModel` with **OAuth‑preference** (prefers a Claude Code OAuth credential over an ambient non‑OAuth `ANTHROPIC_API_KEY`, fixing stray‑key 401s) and a 0.5 thinking‑budget ratio. | → `deer-flow/backend/packages/harness/deerflow/models/` |
 | `patches/models/credential_loader.py` | Adds a **macOS Keychain** credential source (`security find-generic-password -s "Claude Code-credentials"`) so the local `claude` OAuth token is found even when it isn't in `~/.claude/.credentials.json`. | → same `models/` dir |
 | `patches/models/patched_minimax.py` | `PatchedChatMiniMax` — strips the per‑message `name` field that DeerFlow middlewares inject, fixing MiniMax `400 user name must be consistent`; keeps tools + reasoning **on**. | → same `models/` dir |
+| `patches/middlewares/loop_detection_middleware.py` | Loop detection with **per‑run counter resets**. Upstream accumulates per‑tool call counts across *all* turns of a thread, so multi‑pass deep research permanently force‑stops `web_search` from pass 2 onward (`[FORCED STOP] Tool web_search called N times…`) once the cumulative count crosses the limit. The patch resets the budget at the start of each agent run — full in‑run loop protection stays intact. | → `deer-flow/backend/packages/harness/deerflow/agents/middlewares/` |
 | `config.yaml` | A complete, ready‑to‑use DeerFlow config with active stanzas for **claude / minimax / deepseek / qwen / glm / codex / kimi**. All keys are `$VAR` references resolved from `.env` — **no secrets**. Bridge‑tuned: conversation **memory off** (no cross‑run fact contamination), **title generation off** (headless runs), summarization trigger raised to **120K tokens** (research keeps full source detail). | → `deer-flow/config.yaml` (only if absent; never clobbers an existing one — diff against this copy to pick up new stanzas/tuning). |
 | `config.minimax.snippet.yaml` | Just the `minimax` model stanza, for pasting into an existing `deer-flow/config.yaml` by hand. | (manual merge helper) |
 
@@ -45,9 +46,11 @@ git clone https://github.com/bytedance/deer-flow ../deer-flow
 # 2. Drop the bridge entry point in
 cp deerflow_bridge/deerflow_research.py ../deer-flow/deerflow_research.py
 
-# 3. Apply the provider patches
+# 3. Apply the provider + middleware patches
 cp deerflow_bridge/patches/models/*.py \
    ../deer-flow/backend/packages/harness/deerflow/models/
+cp deerflow_bridge/patches/middlewares/*.py \
+   ../deer-flow/backend/packages/harness/deerflow/agents/middlewares/
 
 # 4. Install the ready-to-use config (keys come from .env via $VAR)
 cp deerflow_bridge/config.yaml ../deer-flow/config.yaml

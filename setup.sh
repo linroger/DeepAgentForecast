@@ -364,6 +364,16 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
     ok "Applied provider patches (claude_provider, credential_loader, patched_minimax)"
   fi
 
+  # (b2) Patched middlewares: loop-detection counters reset per agent run.
+  #     Upstream accumulates per-tool call counts across ALL turns of a thread,
+  #     so multi-pass deep research permanently force-stops web_search from
+  #     pass 2 onward once the cumulative count crosses the safety limit.
+  DF_MIDDLEWARES="$DEERFLOW_DIR/backend/packages/harness/deerflow/agents/middlewares"
+  if [ -d "$BRIDGE_DIR/patches/middlewares" ] && [ -d "$DF_MIDDLEWARES" ]; then
+    cp "$BRIDGE_DIR/patches/middlewares/"*.py "$DF_MIDDLEWARES/"
+    ok "Applied middleware patches (loop_detection per-run reset)"
+  fi
+
   # (c) Ready-to-use config.yaml (claude/minimax/deepseek/qwen/glm/codex stanzas,
   #     all keys as $VAR — no secrets). NEVER clobber an existing config.yaml:
   #     it is gitignored upstream and may carry the user's own tuning.

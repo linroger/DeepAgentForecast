@@ -460,6 +460,7 @@ MiroFish-0.1.2/
 | `git` / `uv` / `node` 缺失或版本过旧 | 满足环境要求：`git`（克隆 DeerFlow 所必需）、Node.js ≥ 20.19、Python 3.11–3.12（后端）、Python ≥ 3.12（DeerFlow，推荐 3.13）、安装最新版 `uv`。`./setup.sh` 会就缺失项给出告警与安装提示。 |
 | 想停止一次长时间运行 | 点击运行头部的**取消**按钮（或 `POST /api/research/<id>/cancel`）。研究/模拟子进程会被立即终止，停止消耗配额。 |
 | 运行中途失败（或被取消） | 点击运行头部的**继续**按钮（或 `POST /api/research/<id>/resume`）。已完成的阶段会被复用 —— 已写出的研究档案、图谱或已完成的模拟不会重跑 —— 管线从出错的阶段重新开始。后端重启导致中断的运行同样适用。 |
+| 深度研究从第 2 轮起反复出现 `[FORCED STOP] Tool web_search called N times` | 上游 DeerFlow 的循环检测按线程累计同一工具的调用次数，会饿死后续研究轮次。重新运行 `./setup.sh` 应用桥接中间件补丁（计数按轮次重置），并获取 `deerflow_bridge/config.yaml` 中面向研究的 `web_search`/`web_fetch` 上限（若你维护自己的 `deer-flow/config.yaml`，请手动合并 `loop_detection.tool_freq_overrides` 段）。 |
 | 研究阶段超时 | 看门狗按深度分级（quick 900s / standard 2400s / deep 10800s）。deep 模式刻意运行多轮研究因此更慢；可用 `DEERFLOW_RESEARCH_TIMEOUT` 覆盖或调低研究 `depth`。若看门狗触发时报告已写出，本次运行会打捞报告并继续。 |
 
 ---

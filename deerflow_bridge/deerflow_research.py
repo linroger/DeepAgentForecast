@@ -534,6 +534,11 @@ def looks_like_llm_error(text: str) -> bool:
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 _DANGLING_THINK_RE = re.compile(r"<think>.*\Z", re.DOTALL | re.IGNORECASE)
+# DeerFlow's loop-detection middleware appends "[FORCED STOP] …" / "[LOOP
+# DETECTED] …" sentences to the assistant text when it intervenes. They are
+# harness control-flow notices, not research content — strip them so they
+# never pollute the dossier (and downstream graph/personas/report).
+_HARNESS_MARKER_RE = re.compile(r"^[ \t]*\[(?:FORCED STOP|LOOP DETECTED)\][^\n]*\n?", re.MULTILINE)
 
 
 def strip_think(text: str) -> str:
@@ -548,6 +553,7 @@ def strip_think(text: str) -> str:
         return text
     cleaned = _THINK_RE.sub("", text)
     cleaned = _DANGLING_THINK_RE.sub("", cleaned)
+    cleaned = _HARNESS_MARKER_RE.sub("", cleaned)
     return cleaned.strip()
 
 

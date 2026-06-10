@@ -33,6 +33,46 @@ def assert_bridge_synced() -> None:
     assert BRIDGE_PATH.read_text(encoding="utf-8") == SIBLING_PATH.read_text(encoding="utf-8")
 
 
+def assert_loop_detection_patch() -> None:
+    """The multi-pass protocol depends on per-run loop-budget resets.
+
+    Upstream DeerFlow accumulates per-tool call counts across ALL turns of a
+    thread, so deep research's pass 2+ would instantly hit
+    "[FORCED STOP] Tool web_search called N times" once pass 0/1 crossed the
+    cumulative limit. The overlay ships a patched middleware that resets the
+    counters at the start of each agent run; verify the patch exists, is
+    deployed, and stays byte-identical to the overlay copy.
+    """
+    overlay = ROOT / "deerflow_bridge" / "patches" / "middlewares" / "loop_detection_middleware.py"
+    deployed = ROOT.parent / "deer-flow" / "backend" / "packages" / "harness" / "deerflow" / "agents" / "middlewares" / "loop_detection_middleware.py"
+    assert overlay.exists(), f"missing overlay middleware patch: {overlay}"
+    text = overlay.read_text(encoding="utf-8")
+    assert "_reset_run_scoped_loop_state" in text, "overlay middleware lost the per-run reset"
+    for hook in ("def before_agent", "async def abefore_agent"):
+        idx = text.find(hook)
+        assert idx != -1 and "_reset_run_scoped_loop_state" in text[idx : idx + 400], (
+            f"{hook} no longer calls the per-run reset"
+        )
+    if deployed.exists():
+        assert deployed.read_text(encoding="utf-8") == text, (
+            "deployed deer-flow middleware differs from overlay — re-run ./setup.sh"
+        )
+
+
+def assert_harness_marker_stripping(module) -> None:
+    """Loop-detection notices must never leak into the research dossier."""
+    dirty = (
+        "## 主要证据\n\n实质内容第一段。\n"
+        "[FORCED STOP] Tool web_search called 52 times — exceeded the per-tool safety limit. Producing final answer with results collected so far.\n"
+        "实质内容第二段。\n"
+        "  [LOOP DETECTED] You have called web_search 30 times without producing a final answer. Stop calling tools and produce your final answer now.\n"
+        "结论。"
+    )
+    cleaned = module.strip_think(dirty)
+    assert "FORCED STOP" not in cleaned and "LOOP DETECTED" not in cleaned
+    assert "实质内容第一段。" in cleaned and "实质内容第二段。" in cleaned and "结论。" in cleaned
+
+
 def assert_deep_prompt_contract(module) -> None:
     prompt = module.build_research_prompt("semiconductor supply chain outlook", "deep", "Chinese")
     assert "MULTI-PASS" in prompt
@@ -94,7 +134,9 @@ def assert_deep_runner_sequence(module) -> None:
 
 if __name__ == "__main__":
     assert_bridge_synced()
+    assert_loop_detection_patch()
     bridge = load_bridge()
     assert_deep_prompt_contract(bridge)
     assert_deep_runner_sequence(bridge)
+    assert_harness_marker_stripping(bridge)
     print("DeerFlow deep-research protocol checks passed")

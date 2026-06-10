@@ -829,10 +829,18 @@ loop_detection:
   # higher or lower than the global defaults. Commonly used to raise thresholds
   # for high-frequency tools like bash in batch workflows (e.g. RNA-seq pipelines)
   # without weakening protection on every other tool.
-  # tool_freq_overrides:
-  #   bash:
-  #     warn: 150
-  #     hard_limit: 300
+  #
+  # web_search / web_fetch get research-grade budgets: a single deep-research
+  # pass legitimately performs dozens of searches and fetches. Counters reset
+  # at the start of each agent run (bridge middleware patch), so these are
+  # per-pass limits, not per-thread.
+  tool_freq_overrides:
+    web_search:
+      warn: 60
+      hard_limit: 100
+    web_fetch:
+      warn: 60
+      hard_limit: 100
 
 # ============================================================================
 # Provider Safety Termination Configuration
