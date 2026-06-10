@@ -42,6 +42,22 @@ Full pipeline: `cd MiroFish-0.1.2 && npm run dev` → http://localhost:3000 → 
 
 ---
 
+## SESSION 2026-06-10 (5th pass) — Deep-research FORCED STOP starvation fix
+
+**Symptom (user screenshot):** from pass 2 of deep research, every turn logged `[FORCED STOP] Tool web_search called 52/53/54 times — exceeded the per-tool safety limit`, degrading passes 2-7 to no-research summaries, with the notices leaking into the dossier.
+
+**Root cause:** DeerFlow's `LoopDetectionMiddleware` keeps per-tool frequency counters scoped to the *thread* and never resets them between agent runs. The multi-pass protocol runs 6-8 turns on one thread; passes 0-1 legitimately burn ~50 web searches, after which the cumulative counter permanently force-stops `web_search`. (Upstream bug for ANY long thread, not just our protocol — the warning text itself says "without producing a final answer", contradicting cross-run accumulation.)
+
+**Fix (commit `fccdde9`):**
+1. Overlay patch `deerflow_bridge/patches/middlewares/loop_detection_middleware.py` — `before_agent`/`abefore_agent` reset the per-thread hash window + tool-frequency counters, so each run gets a fresh budget while in-run protection is unchanged. setup.sh applies it (new b2 step). All 65 upstream middleware tests pass + functional two-run regression (run1 hard-stops at its limit; run2 starts fresh; run2 still self-protects).
+2. `deerflow_bridge/config.yaml`: `loop_detection.tool_freq_overrides` — web_search/web_fetch warn 60 / hard 100 (per-run). Synced to ../deer-flow (config verified to flow into middleware via from_config).
+3. `deerflow_research.py` `strip_think` also strips `[FORCED STOP]`/`[LOOP DETECTED]` lines so harness notices never enter the dossier.
+4. Regression checks in `test_deerflow_deep_research.py` (patch presence, deploy sync, marker stripping); troubleshooting rows in both READMEs.
+
+**No backend restart needed** — research runs in a fresh subprocess per pipeline, so the patched middleware + config apply to the next run.
+**NOTE for the cancelled semiconductor run:** its research stage completed UNDER the bug (passes 2+ starved), so Resume would reuse the degraded dossier. For full research quality, delete it and start a fresh run.
+**Mishap & recovery:** first commit attempt accidentally landed in the ../deer-flow clone (cd in a chained command); `git reset --mixed 799bef6d` restored it to the pinned commit with the overlay back as working-tree files; push to upstream had been refused (403) so nothing leaked.
+
 ## SESSION 2026-06-10 (4th pass) — Full-workflow demo walkthroughs + bilingual site
 
 **Request:** the live demos must show every workflow stage (deep research log, research brief, ontology, knowledge graph, forum, final report), and the site must be bilingual (EN/中文).
