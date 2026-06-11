@@ -35,6 +35,8 @@
     'card.ru.meta':     { en: '36 personas · multi-scenario endgame analysis grounded in a 40K-char research dossier', zh: '36 个人格 · 基于 4 万字研究档案的多情景终局推演' },
     'card.semi.title':  { en: 'Global semiconductors through 2030', zh: '2030 年前全球半导体产业' },
     'card.semi.meta':   { en: '40-round dual-platform simulation · 115 personas · full value chain: memory / HBM / logic / foundry across 17 named companies', zh: '40 轮双平台模拟 · 115 个人格 · 覆盖存储 / HBM / 逻辑 / 代工全产业链与 17 家企业' },
+    'card.ess.title':   { en: "China's energy storage & battery market in 2035", zh: '2035 年中国储能与电池市场' },
+    'card.ess.meta':    { en: '40-round dual-platform simulation · 94 personas · grid / C&I / home storage segments, full supply chain & winners-vs-losers analysis', zh: '40 轮双平台模拟 · 94 个人格 · 大储 / 工商业 / 户储细分赛道、全产业链与赢家输家研判' },
 
     /* ——— index video / screenshots / how ——— */
     'video.h2':         { en: '47-second demo', zh: '47 秒演示' },
@@ -98,7 +100,8 @@
     'run.ai.title':     { en: 'Who dominates US AI by 2030?', zh: '2030 年谁主导美国 AI？' },
     'run.ev.title':     { en: 'Global EV industry through 2035', zh: '2035 年前全球电动汽车产业' },
     'run.ru.title':     { en: 'How and when does the Russia–Ukraine war end?', zh: '俄乌战争如何终结、何时终结？' },
-    'run.semi.title':   { en: 'Global semiconductors through 2030', zh: '2030 年前全球半导体产业' }
+    'run.semi.title':   { en: 'Global semiconductors through 2030', zh: '2030 年前全球半导体产业' },
+    'run.ess.title':    { en: "China's energy storage & battery market in 2035", zh: '2035 年中国储能与电池市场' }
   };
 
   var lang = null;

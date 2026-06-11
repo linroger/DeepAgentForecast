@@ -1,0 +1,568 @@
+{
+ "entity_types": [
+  {
+   "name": "BatteryManufacturer",
+   "description": "储能/动力电池电芯制造企业，如宁德时代、比亚迪、亿纬锂能、海辰储能",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "core_technology",
+     "type": "text",
+     "description": "核心技术路线，如LFP/钠电/固态"
+    },
+    {
+     "name": "market_position",
+     "type": "text",
+     "description": "全球或国内市场地位排名"
+    }
+   ],
+   "examples": [
+    "宁德时代",
+    "比亚迪",
+    "亿纬锂能",
+    "海辰储能",
+    "瑞浦兰钧",
+    "国轩高科",
+    "蜂巢能源"
+   ]
+  },
+  {
+   "name": "SystemIntegrator",
+   "description": "储能系统集成商，将电芯+PCS+BMS+EMS整合为完整解决方案",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "integration_focus",
+     "type": "text",
+     "description": "集成方向，如大储/工商业/户储"
+    },
+    {
+     "name": "overseas_ratio",
+     "type": "text",
+     "description": "海外业务占比"
+    }
+   ],
+   "examples": [
+    "阳光电源",
+    "海博思创",
+    "中车株洲所",
+    "远景能源",
+    "华为数字能源",
+    "天合储能",
+    "阿特斯e-STORAGE"
+   ]
+  },
+  {
+   "name": "EnergyStorageOperator",
+   "description": "储能电站投资运营方，包括央企发电集团和独立运营商",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "运营方全称"
+    },
+    {
+     "name": "ownership_type",
+     "type": "text",
+     "description": "所有制类型，如央企/民营/外资"
+    },
+    {
+     "name": "business_model",
+     "type": "text",
+     "description": "商业模式，如独立储能/共享储能"
+    }
+   ],
+   "examples": [
+    "国家电投",
+    "华能集团",
+    "大唐集团",
+    "中国华电",
+    "国家能源集团"
+   ]
+  },
+  {
+   "name": "PowerElectronicsSupplier",
+   "description": "PCS/BMS/EMS等电力电子与软件系统供应商",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "product_line",
+     "type": "text",
+     "description": "产品线，如PCS/BMS/EMS/逆变器"
+    },
+    {
+     "name": "tech_advantage",
+     "type": "text",
+     "description": "技术优势描述"
+    }
+   ],
+   "examples": [
+    "上能电气",
+    "科华数能",
+    "特变电工",
+    "固德威",
+    "古瑞瓦特"
+   ]
+  },
+  {
+   "name": "RawMaterialSupplier",
+   "description": "上游锂、钴、镍、钒等关键矿产资源供应商",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "resource_type",
+     "type": "text",
+     "description": "资源类型，如锂矿/钒矿/镍矿"
+    },
+    {
+     "name": "supply_position",
+     "type": "text",
+     "description": "资源供应地位"
+    }
+   ],
+   "examples": [
+    "赣锋锂业",
+    "天齐锂业",
+    "华友钴业",
+    "洛阳钼业",
+    "攀钢钒钛"
+   ]
+  },
+  {
+   "name": "BatteryMaterialsSupplier",
+   "description": "正极、负极、隔膜、电解液等电池关键材料供应商",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "material_type",
+     "type": "text",
+     "description": "材料类型，如正极/负极/隔膜/电解液"
+    },
+    {
+     "name": "market_share_tier",
+     "type": "text",
+     "description": "市场份额层级"
+    }
+   ],
+   "examples": [
+    "湖南裕能",
+    "德方纳米",
+    "容百科技",
+    "贝特瑞",
+    "杉杉股份",
+    "恩捷股份",
+    "天赐材料",
+    "新宙邦"
+   ]
+  },
+  {
+   "name": "LongDurationStorageSpecialist",
+   "description": "长时储能技术专业企业，专注液流电池、压缩空气等非锂技术",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "tech_route",
+     "type": "text",
+     "description": "技术路线，如全钒液流/压缩空气/锌基"
+    },
+    {
+     "name": "lead_scenario",
+     "type": "text",
+     "description": "主导应用场景"
+    }
+   ],
+   "examples": [
+    "大连融科",
+    "上海电气",
+    "中储国能",
+    "纬景储能",
+    "北京普能"
+   ]
+  },
+  {
+   "name": "IndustryAssociation",
+   "description": "行业协会、研究机构、数据咨询等第三方权威组织",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "机构全称"
+    },
+    {
+     "name": "service_scope",
+     "type": "text",
+     "description": "服务范围，如行业数据/政策研究/标准制定"
+    },
+    {
+     "name": "credibility",
+     "type": "text",
+     "description": "权威性定位"
+    }
+   ],
+   "examples": [
+    "中关村储能产业技术联盟（CNESA）",
+    "高工产研锂电研究所（GGII）",
+    "InfoLink Consulting",
+    "SNE Research",
+    "BNEF",
+    "真锂研究"
+   ]
+  },
+  {
+   "name": "Person",
+   "description": "自然人个体的兜底类型，不属于更具体的角色类型时归入此类",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "个人全名"
+    },
+    {
+     "name": "current_role",
+     "type": "text",
+     "description": "当前职务"
+    },
+    {
+     "name": "core_influence",
+     "type": "text",
+     "description": "核心影响力领域"
+    }
+   ],
+   "examples": [
+    "曾毓群",
+    "曹仁贤",
+    "张剑辉",
+    "刘金成",
+    "张雷",
+    "侯金龙",
+    "王传福",
+    "顾亦磊",
+    "陈海生",
+    "王晓丽",
+    "李柯"
+   ]
+  },
+  {
+   "name": "Organization",
+   "description": "任何组织机构的兜底类型，不属于更具体的组织类型时归入此类",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "组织全称"
+    },
+    {
+     "name": "org_type",
+     "type": "text",
+     "description": "组织类型，如政府部门/监管机构/媒体/科研院所"
+    },
+    {
+     "name": "policy_role",
+     "type": "text",
+     "description": "政策或行业角色"
+    }
+   ],
+   "examples": [
+    "国家发改委",
+    "国家能源局",
+    "工信部",
+    "新华社",
+    "北极星储能网",
+    "华尔街见闻"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "WORKS_FOR",
+   "description": "个人工作于某组织，体现雇佣/任职关系",
+   "source_targets": [
+    {
+     "source": "Person",
+     "target": "Organization"
+    },
+    {
+     "source": "Person",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "Person",
+     "target": "SystemIntegrator"
+    },
+    {
+     "source": "Person",
+     "target": "PowerElectronicsSupplier"
+    },
+    {
+     "source": "Person",
+     "target": "LongDurationStorageSpecialist"
+    },
+    {
+     "source": "Person",
+     "target": "IndustryAssociation"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "SUPPLIES_TO",
+   "description": "上游供应商向下游客户供货，体现产业链供给关系",
+   "source_targets": [
+    {
+     "source": "RawMaterialSupplier",
+     "target": "BatteryMaterialsSupplier"
+    },
+    {
+     "source": "RawMaterialSupplier",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "BatteryMaterialsSupplier",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "BatteryManufacturer",
+     "target": "SystemIntegrator"
+    },
+    {
+     "source": "PowerElectronicsSupplier",
+     "target": "SystemIntegrator"
+    },
+    {
+     "source": "BatteryManufacturer",
+     "target": "EnergyStorageOperator"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "INTEGRATES_WITH",
+   "description": "系统集成商集成电芯、电力电子等组件形成完整系统",
+   "source_targets": [
+    {
+     "source": "SystemIntegrator",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "SystemIntegrator",
+     "target": "PowerElectronicsSupplier"
+    },
+    {
+     "source": "SystemIntegrator",
+     "target": "LongDurationStorageSpecialist"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "COMPETES_WITH",
+   "description": "同一赛道竞争对手关系，体现市场份额争夺",
+   "source_targets": [
+    {
+     "source": "BatteryManufacturer",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "SystemIntegrator",
+     "target": "SystemIntegrator"
+    },
+    {
+     "source": "PowerElectronicsSupplier",
+     "target": "PowerElectronicsSupplier"
+    },
+    {
+     "source": "LongDurationStorageSpecialist",
+     "target": "LongDurationStorageSpecialist"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "COOPERATES_WITH",
+   "description": "战略合作、合资建厂、技术授权等合作关系",
+   "source_targets": [
+    {
+     "source": "BatteryManufacturer",
+     "target": "SystemIntegrator"
+    },
+    {
+     "source": "BatteryManufacturer",
+     "target": "Organization"
+    },
+    {
+     "source": "SystemIntegrator",
+     "target": "EnergyStorageOperator"
+    },
+    {
+     "source": "SystemIntegrator",
+     "target": "Organization"
+    },
+    {
+     "source": "BatteryManufacturer",
+     "target": "Organization"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "REPORTS_ON",
+   "description": "行业机构或媒体对企业/行业进行数据披露与报道",
+   "source_targets": [
+    {
+     "source": "IndustryAssociation",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "IndustryAssociation",
+     "target": "SystemIntegrator"
+    },
+    {
+     "source": "Organization",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "Organization",
+     "target": "SystemIntegrator"
+    },
+    {
+     "source": "Organization",
+     "target": "EnergyStorageOperator"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "REGULATES",
+   "description": "政府机构对企业或行业进行政策监管",
+   "source_targets": [
+    {
+     "source": "Organization",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "Organization",
+     "target": "SystemIntegrator"
+    },
+    {
+     "source": "Organization",
+     "target": "EnergyStorageOperator"
+    },
+    {
+     "source": "Organization",
+     "target": "PowerElectronicsSupplier"
+    },
+    {
+     "source": "Organization",
+     "target": "RawMaterialSupplier"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "OPPOSES",
+   "description": "竞争性表态、反对意见或市场份额争夺中的对抗关系",
+   "source_targets": [
+    {
+     "source": "BatteryManufacturer",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "SystemIntegrator",
+     "target": "SystemIntegrator"
+    },
+    {
+     "source": "Person",
+     "target": "Organization"
+    },
+    {
+     "source": "Person",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "Organization",
+     "target": "Organization"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "SUPPORTS",
+   "description": "支持立场、技术背书、政策支持等正向关系",
+   "source_targets": [
+    {
+     "source": "Organization",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "Organization",
+     "target": "SystemIntegrator"
+    },
+    {
+     "source": "Organization",
+     "target": "LongDurationStorageSpecialist"
+    },
+    {
+     "source": "IndustryAssociation",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "Person",
+     "target": "BatteryManufacturer"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "ENDORSES",
+   "description": "权威人士或机构公开发声背书某企业/技术路线",
+   "source_targets": [
+    {
+     "source": "Person",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "Person",
+     "target": "SystemIntegrator"
+    },
+    {
+     "source": "Person",
+     "target": "LongDurationStorageSpecialist"
+    },
+    {
+     "source": "IndustryAssociation",
+     "target": "BatteryManufacturer"
+    },
+    {
+     "source": "IndustryAssociation",
+     "target": "SystemIntegrator"
+    }
+   ],
+   "attributes": []
+  }
+ ],
+ "analysis_summary": "本报告围绕2035年中国储能与电池市场预测展开，涉及10+核心实体类型。从文本中可识别出六类具体组织角色：（1）电池电芯制造商（宁德/比亚迪/亿纬/海辰等），（2）系统集成商（阳光/海博/中车/远景/华为等），（3）储能运营商（央企五大发电集团），（4）电力电子供应商（上能/科华/特变等），（5）上游矿产及材料供应商（赣锋/湖南裕能/恩捷/天赐等），（6）长时储能专业企业（大连融科/纬景/中储国能等）。同时涉及行业协会（CNESA/GGII/InfoLink等数据权威）、政府部门（发改委/能源局/工信部政策制定方）和媒体机构。关键个人涵盖：宁德曾毓群、阳光曹仁贤、比亚迪王传福、海博张剑辉、亿纬刘金成、远景张雷、华为侯金龙、阳光顾亦磊、大连融科王晓丽等10位行业核心人物。关系设计上突出产业链分层（上游-中游-下游的SUPPLIES_TO链）、竞争格局（COMPETES_WITH双寡头演进）、政策驱动（REGULATES与SUPPORTS）、个人影响力（WORKS_FOR与ENDORSES）等社媒舆论互动核心维度。兜底类型Person和Organization用于容纳文本中的非核心个人（如中小集成商负责人、网友、普通分析师）和机构（如中小媒体、地方平台公司、临时行业组织）。"
+}

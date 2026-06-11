@@ -43,6 +43,7 @@ RUNS = {
     "ev-2035": "pipe_66838c1c67de",
     "russia-ukraine": "pipe_8b47373016f1",
     "semiconductors-2030": "pipe_f01ed9fe06de",
+    "china-storage-2035": "pipe_764249df9c38",
 }
 
 PLACEHOLDER_MARKER = "本章节生成失败"
