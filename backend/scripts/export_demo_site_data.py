@@ -44,6 +44,7 @@ RUNS = {
     "russia-ukraine": "pipe_8b47373016f1",
     "semiconductors-2030": "pipe_f01ed9fe06de",
     "china-storage-2035": "pipe_764249df9c38",
+    "us-iran-2026": "pipe_a90b338fdfa0",
 }
 
 PLACEHOLDER_MARKER = "本章节生成失败"

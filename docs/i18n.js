@@ -37,6 +37,8 @@
     'card.semi.meta':   { en: '40-round dual-platform simulation · 115 personas · full value chain: memory / HBM / logic / foundry across 17 named companies', zh: '40 轮双平台模拟 · 115 个人格 · 覆盖存储 / HBM / 逻辑 / 代工全产业链与 17 家企业' },
     'card.ess.title':   { en: "China's energy storage & battery market in 2035", zh: '2035 年中国储能与电池市场' },
     'card.ess.meta':    { en: '40-round dual-platform simulation · 94 personas · grid / C&I / home storage segments, full supply chain & winners-vs-losers analysis', zh: '40 轮双平台模拟 · 94 个人格 · 大储 / 工商业 / 户储细分赛道、全产业链与赢家输家研判' },
+    'card.iran.title':  { en: 'How does the 2026 US–Iran war end?', zh: '2026 年美伊战争如何收场？' },
+    'card.iran.meta':   { en: '40-round dual-platform simulation · 135 personas · endgame scenarios, peace-deal terms & post-war Middle East order', zh: '40 轮双平台模拟 · 135 个人格 · 终局情景、终战协议条款与战后中东秩序重构' },
 
     /* ——— index video / screenshots / how ——— */
     'video.h2':         { en: '47-second demo', zh: '47 秒演示' },
@@ -101,7 +103,8 @@
     'run.ev.title':     { en: 'Global EV industry through 2035', zh: '2035 年前全球电动汽车产业' },
     'run.ru.title':     { en: 'How and when does the Russia–Ukraine war end?', zh: '俄乌战争如何终结、何时终结？' },
     'run.semi.title':   { en: 'Global semiconductors through 2030', zh: '2030 年前全球半导体产业' },
-    'run.ess.title':    { en: "China's energy storage & battery market in 2035", zh: '2035 年中国储能与电池市场' }
+    'run.ess.title':    { en: "China's energy storage & battery market in 2035", zh: '2035 年中国储能与电池市场' },
+    'run.iran.title':   { en: 'How does the 2026 US–Iran war end?', zh: '2026 年美伊战争如何收场？' }
   };
 
   var lang = null;
