@@ -557,6 +557,31 @@ def strip_think(text: str) -> str:
     return cleaned.strip()
 
 
+_DOC_FENCE_OPEN_RE = re.compile(r"^```[ \t]*(?:markdown|md)?[ \t]*\n", re.IGNORECASE)
+
+
+def unwrap_markdown_fence(text: str) -> str:
+    """Remove a code fence wrapping the ENTIRE report document.
+
+    Models occasionally emit the whole research report inside a single
+    ```markdown … ``` fence, which makes every markdown renderer downstream
+    show the dossier as one giant code block. Only the outermost wrapper is
+    removed, and only when the interior fence count stays balanced — interior
+    fenced blocks (e.g. ASCII diagrams) are preserved untouched.
+    """
+    t = (text or "").strip()
+    m = _DOC_FENCE_OPEN_RE.match(t)
+    if not m:
+        return text
+    lines = t.split("\n")
+    if lines[-1].strip() != "```":
+        return text
+    inner = lines[1:-1]
+    if sum(1 for ln in inner if ln.lstrip().startswith("```")) % 2 != 0:
+        return text
+    return "\n".join(inner).strip("\n") + "\n"
+
+
 # ---------------------------------------------------------------------------
 # Streaming run — consume DeerFlowClient.stream, log progress, return final text
 # ---------------------------------------------------------------------------
@@ -852,6 +877,7 @@ def main() -> int:
             plog.close()
             return 2
 
+        report = unwrap_markdown_fence(report)
         (out_dir / REPORT_FILENAME).write_text(report, encoding="utf-8")
         meta["report_chars"] = len(report)
         plog.write("ok", f"wrote {REPORT_FILENAME} ({len(report)} chars)")
