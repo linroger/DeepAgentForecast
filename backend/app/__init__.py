@@ -54,8 +54,10 @@ def create_app(config_class=Config):
     # 注册模拟进程清理函数（确保服务器关闭时终止所有模拟进程）
     from .services.simulation_runner import SimulationRunner
     SimulationRunner.register_cleanup()
+    # 回收上一进程遗留、仍在烧 LLM 额度的孤儿 OASIS 模拟进程（EXECPLAN2 F-12-0/F-6-5）。
+    SimulationRunner.reconcile_orphans()
     if should_log_startup:
-        logger.info("已注册模拟进程清理函数")
+        logger.info("已注册模拟进程清理函数并回收孤儿模拟")
 
     # 统一管线（DeerFlow 研究 → 预测）的生命周期挂钩：
     #  1) 启动时回收上一个进程遗留的孤儿管线（status=running 但无对应线程 → 标记 failed），

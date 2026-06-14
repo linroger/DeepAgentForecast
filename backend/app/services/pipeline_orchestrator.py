@@ -841,8 +841,12 @@ class PipelineOrchestrator:
                 capture_output=True, text=True, timeout=5,
             )
             cmdline = (check.stdout or "").strip()
-            if check.returncode != 0 or "deerflow_research.py" not in cmdline:
-                return  # 进程已退出，或 PID 已被复用 → 不动
+            # 同时要求命令行含本管线的 handoff 路径（--out-dir .../<pipeline_id>/handoff 中已带
+            # pipeline_id），避免 PID 复用时误杀同名脚本的另一条管线（EXECPLAN2 F-1-8）。
+            if (check.returncode != 0
+                    or "deerflow_research.py" not in cmdline
+                    or pipeline_id not in cmdline):
+                return  # 进程已退出，或 PID 已被复用/属于别的管线 → 不动
             os.killpg(os.getpgid(pid), signal.SIGTERM)
             logger.warning(f"[{pipeline_id}] 已终止孤儿研究子进程组 pid={pid}")
         except (ProcessLookupError, PermissionError, OSError, subprocess.SubprocessError):

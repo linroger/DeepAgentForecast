@@ -43,10 +43,34 @@ import logging
 import os
 import re
 import sys
+import tempfile
 import traceback
 import uuid
 from pathlib import Path
 from typing import Any
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Atomically write text: temp file in the same dir, fsync, then os.replace.
+
+    The orchestrator's watchdog SIGKILLs this process group at the depth budget;
+    a plain write_text mid-flush leaves a truncated/partial JSON and corrupts the
+    cross-stage contract (EXECPLAN2 F-0-4).
+    """
+    path = Path(path)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)  # atomic on the same filesystem
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 # ---------------------------------------------------------------------------
 # Constants / depth presets
@@ -802,7 +826,7 @@ def main() -> int:
         ]
 
     def write_meta() -> None:
-        (out_dir / META_FILENAME).write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        _atomic_write_text(out_dir / META_FILENAME, json.dumps(meta, ensure_ascii=False, indent=2))
 
     write_meta()
 
@@ -934,7 +958,7 @@ def main() -> int:
             return 2
 
         report = unwrap_markdown_fence(report)
-        (out_dir / REPORT_FILENAME).write_text(report, encoding="utf-8")
+        _atomic_write_text(out_dir / REPORT_FILENAME, report)
         meta["report_chars"] = len(report)
         plog.write("ok", f"wrote {REPORT_FILENAME} ({len(report)} chars)")
         write_meta()
@@ -965,7 +989,7 @@ def main() -> int:
                     sources = obj.pop("sources", None)
                     # actors.json keeps the full object (incl. situation_brief, relationships,
                     # key_events) so one dossier read carries the whole enriched contract.
-                    (out_dir / ACTORS_FILENAME).write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+                    _atomic_write_text(out_dir / ACTORS_FILENAME, json.dumps(obj, ensure_ascii=False, indent=2))
                     meta["actors_count"] = len(obj.get("actors", []) or [])
                     meta["relationships_count"] = len(obj.get("relationships", []) or [])
                     meta["has_situation_brief"] = bool(obj.get("situation_brief"))
@@ -974,11 +998,11 @@ def main() -> int:
                     # actors.json too for back-compat). Gives downstream a clean valid_at source.
                     key_events = obj.get("key_events")
                     if isinstance(key_events, list) and key_events:
-                        (out_dir / TIMELINE_FILENAME).write_text(json.dumps(key_events, ensure_ascii=False, indent=2), encoding="utf-8")
+                        _atomic_write_text(out_dir / TIMELINE_FILENAME, json.dumps(key_events, ensure_ascii=False, indent=2))
                         meta["timeline_count"] = len(key_events)
                         plog.write("ok", f"wrote {TIMELINE_FILENAME} ({len(key_events)} events)")
                     if isinstance(sources, list) and sources:
-                        (out_dir / SOURCES_FILENAME).write_text(json.dumps(sources, ensure_ascii=False, indent=2), encoding="utf-8")
+                        _atomic_write_text(out_dir / SOURCES_FILENAME, json.dumps(sources, ensure_ascii=False, indent=2))
                         meta["sources_count"] = len(sources)
                         plog.write("ok", f"wrote {SOURCES_FILENAME} ({len(sources)} sources)")
             except Exception as e:  # extraction must never fail the whole run

@@ -325,8 +325,12 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
                     state_data["status"] = "ready"
                     from datetime import datetime
                     state_data["updated_at"] = datetime.now().isoformat()
-                    with open(state_file, 'w', encoding='utf-8') as f:
-                        json.dump(state_data, f, ensure_ascii=False, indent=2)
+                    # 原子写入（tmp + os.replace），避免并发实时端点读到半截 JSON，
+                    # 与 SimulationManager / SimulationRunner 的写入保持一致（EXECPLAN2 F-6-13）。
+                    from ..utils.atomic import write_json_atomic
+                    from ..services.simulation_runner import SimulationRunner
+                    with SimulationRunner._run_state_lock:
+                        write_json_atomic(state_file, state_data)
                     logger.info(f"自动更新模拟状态: {simulation_id} preparing -> ready")
                     status = "ready"
                 except Exception as e:
@@ -1611,7 +1615,12 @@ def start_simulation():
         response_data = run_state.to_dict()
         if max_rounds:
             response_data['max_rounds_applied'] = max_rounds
-        response_data['graph_memory_update_enabled'] = enable_graph_memory_update
+        # 报告「实际」开启状态而非请求标志（EXECPLAN2 F-6-12）：创建更新器若失败，
+        # run_state.graph_memory_active 为 False，且带 graph_memory_error 说明原因。
+        response_data['graph_memory_update_enabled'] = run_state.graph_memory_active
+        response_data['graph_memory_requested'] = run_state.graph_memory_requested
+        if run_state.graph_memory_error:
+            response_data['graph_memory_error'] = run_state.graph_memory_error
         response_data['force_restarted'] = force_restarted
         if enable_graph_memory_update:
             response_data['graph_id'] = graph_id

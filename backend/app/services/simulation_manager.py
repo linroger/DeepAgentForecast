@@ -143,19 +143,18 @@ class SimulationManager:
     
     def _save_simulation_state(self, state: SimulationState):
         """保存模拟状态到文件"""
+        from ..utils.atomic import write_json_atomic
+        from .simulation_runner import SimulationRunner
         sim_dir = self._get_simulation_dir(state.simulation_id)
         state_file = os.path.join(sim_dir, "state.json")
-        
+
         state.updated_at = datetime.now().isoformat()
 
-        # 原子写入（tmp + os.replace）：关闭清理时 SimulationRunner 会重写同一个 state.json，
-        # 直接 'w' 截断可能让并发读者读到半截 JSON。
-        tmp_file = state_file + ".tmp"
-        with open(tmp_file, 'w', encoding='utf-8') as f:
-            json.dump(state.to_dict(), f, ensure_ascii=False, indent=2)
-        os.replace(tmp_file, state_file)
-
-        self._simulations[state.simulation_id] = state
+        # 原子写入 + 与 SimulationRunner 共享同一把锁（EXECPLAN2 F-6-9）：关闭清理 /
+        # 孤儿回收时 SimulationRunner 也会写同一个 state.json，串行化避免基于陈旧快照的覆盖。
+        with SimulationRunner._run_state_lock:
+            write_json_atomic(state_file, state.to_dict())
+            self._simulations[state.simulation_id] = state
     
     def _load_simulation_state(self, simulation_id: str) -> Optional[SimulationState]:
         """从文件加载模拟状态"""

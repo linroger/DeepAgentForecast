@@ -19,6 +19,7 @@ from datetime import datetime
 from enum import Enum
 
 from ..config import Config
+from ..utils.atomic import write_text_atomic
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .zep_tools import (
@@ -2532,9 +2533,10 @@ class ReportManager:
         """
         cls._ensure_report_folder(report_id)
         
-        with open(cls._get_outline_path(report_id), 'w', encoding='utf-8') as f:
-            json.dump(outline.to_dict(), f, ensure_ascii=False, indent=2)
-        
+        # 原子写入，避免轮询端点读到半截 JSON（EXECPLAN2 F-7-6）
+        write_text_atomic(cls._get_outline_path(report_id),
+                          json.dumps(outline.to_dict(), ensure_ascii=False, indent=2))
+
         logger.info(f"大纲已保存: {report_id}")
     
     @classmethod
@@ -2568,8 +2570,7 @@ class ReportManager:
         # 保存文件
         file_suffix = f"section_{section_index:02d}.md"
         file_path = os.path.join(cls._get_report_folder(report_id), file_suffix)
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(md_content)
+        write_text_atomic(file_path, md_content)  # 原子写入（F-7-6）
 
         logger.info(f"章节已保存: {report_id}/{file_suffix}")
         return file_path
@@ -2668,9 +2669,9 @@ class ReportManager:
             "updated_at": datetime.now().isoformat()
         }
         
-        with open(cls._get_progress_path(report_id), 'w', encoding='utf-8') as f:
-            json.dump(progress_data, f, ensure_ascii=False, indent=2)
-    
+        write_text_atomic(cls._get_progress_path(report_id),
+                          json.dumps(progress_data, ensure_ascii=False, indent=2))  # 原子写入（F-7-6）
+
     @classmethod
     def get_progress(cls, report_id: str) -> Optional[Dict[str, Any]]:
         """获取报告生成进度"""
@@ -2735,11 +2736,10 @@ class ReportManager:
         # 后处理：清理整个报告的标题问题
         md_content = cls._post_process_report(md_content, outline)
         
-        # 保存完整报告
+        # 保存完整报告（原子写入，F-7-6）
         full_path = cls._get_report_markdown_path(report_id)
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(md_content)
-        
+        write_text_atomic(full_path, md_content)
+
         logger.info(f"完整报告已组装: {report_id}")
         return md_content
     
@@ -2874,19 +2874,18 @@ class ReportManager:
         """保存报告元信息和完整报告"""
         cls._ensure_report_folder(report.report_id)
         
-        # 保存元信息JSON
-        with open(cls._get_report_path(report.report_id), 'w', encoding='utf-8') as f:
-            json.dump(report.to_dict(), f, ensure_ascii=False, indent=2)
-        
+        # 保存元信息JSON（原子写入，F-7-6）
+        write_text_atomic(cls._get_report_path(report.report_id),
+                          json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+
         # 保存大纲
         if report.outline:
             cls.save_outline(report.report_id, report.outline)
-        
-        # 保存完整Markdown报告
+
+        # 保存完整Markdown报告（原子写入）
         if report.markdown_content:
-            with open(cls._get_report_markdown_path(report.report_id), 'w', encoding='utf-8') as f:
-                f.write(report.markdown_content)
-        
+            write_text_atomic(cls._get_report_markdown_path(report.report_id), report.markdown_content)
+
         logger.info(f"报告已保存: {report.report_id}")
     
     @classmethod
