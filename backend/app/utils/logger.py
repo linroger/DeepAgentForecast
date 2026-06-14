@@ -6,8 +6,7 @@
 import os
 import sys
 import logging
-from datetime import datetime
-from logging.handlers import RotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 
 
 def _ensure_utf8_stdout():
@@ -63,14 +62,17 @@ def setup_logger(name: str = 'mirofish', level: int = logging.DEBUG) -> logging.
         datefmt='%H:%M:%S'
     )
     
-    # 1. 文件处理器 - 详细日志（按日期命名，带轮转）
-    log_filename = datetime.now().strftime('%Y-%m-%d') + '.log'
-    file_handler = RotatingFileHandler(
-        os.path.join(LOG_DIR, log_filename),
-        maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=5,
-        encoding='utf-8'
+    # 1. 文件处理器 - 详细日志（按天滚动）
+    # EXECPLAN2 F-8-6：用 TimedRotatingFileHandler 而非「导入时算一次的日期文件名 + 体积轮转」，
+    # 否则进程跨午夜仍写昨天的文件、日期永不滚动。活动文件固定为 mirofish.log，
+    # 历史按 mirofish.log.YYYY-MM-DD 命名，保留 30 天。
+    file_handler = TimedRotatingFileHandler(
+        os.path.join(LOG_DIR, 'mirofish.log'),
+        when='midnight',
+        backupCount=30,
+        encoding='utf-8',
     )
+    file_handler.suffix = '%Y-%m-%d'
     # 文件日志级别从 LOG_LEVEL 环境变量驱动（默认 INFO），不再硬编码 DEBUG。
     # 这是纵深防御：即便某处误把含密请求体写到 DEBUG，部署环境默认也不会落盘
     # （载荷脱敏在中间件层已做，见 app/__init__.py）。EXECPLAN2 F-13-1/F-8-0。

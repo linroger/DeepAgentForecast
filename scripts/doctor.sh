@@ -31,9 +31,12 @@ sect() { printf '\n%s== %s ==%s\n' "$C_BOLD" "$*" "$C_RESET"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # read KEY from .env (first active assignment; empty if absent)
+# EXECPLAN2 F-11-2: mirror python-dotenv — strip surrounding quotes, a space-prefixed
+# inline comment ( # ...), and surrounding whitespace; keep `sk-abc#notcomment` intact.
 envval() {
   [ -f "$ROOT_DIR/.env" ] || { echo ""; return; }
-  grep -E "^[[:space:]]*$1=" "$ROOT_DIR/.env" | head -n1 | cut -d= -f2- | tr -d '"' || true
+  grep -E "^[[:space:]]*$1=" "$ROOT_DIR/.env" | head -n1 | cut -d= -f2- | tr -d '"' \
+    | sed -E 's/[[:space:]]+#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' || true
 }
 
 sect "Tooling"
@@ -56,9 +59,10 @@ BE_PY="$ROOT_DIR/backend/.venv/bin/python"
 if [ -x "$BE_PY" ]; then
   BE_VER="$("$BE_PY" --version 2>/dev/null | awk '{print $2}')"
   case "$BE_VER" in
-    3.11.*|3.12.*) ok "backend/.venv on Python $BE_VER" ;;
+    3.12.*) ok "backend/.venv on Python $BE_VER" ;;
+    3.11.*) warn "backend/.venv on Python $BE_VER — the local graph backend (falkordblite/redis) needs 3.12+; rebuild: ( cd backend && uv sync --python 3.12 )" ;;
     "") bad "backend/.venv python is broken — rebuild: ( cd backend && uv sync --python 3.12 )" ;;
-    *) warn "backend/.venv on Python $BE_VER — the simulation stack targets 3.11–3.12; if imports below fail, rebuild: ( cd backend && uv sync --python 3.12 )" ;;
+    *) warn "backend/.venv on Python $BE_VER — the simulation stack targets 3.12; if imports below fail, rebuild: ( cd backend && uv sync --python 3.12 )" ;;
   esac
   if "$BE_PY" -c "import camel, oasis, graphiti_core, flask" >/dev/null 2>&1; then
     ok "backend imports OK (camel / oasis / graphiti_core / flask)"

@@ -1,8 +1,10 @@
 [project]
 name = "mirofish-backend"
 version = "0.1.0"
+# EXECPLAN2 F-11-1: 提高到 >=3.12 与现实一致 —— falkordblite/redis 仅在 3.12+ 可装，
+# 3.11 装上后本地图谱后端缺失，等于不可用。契约对齐后下方 markers 即可去冗余。
 description = "MiroFish - 简洁通用的群体智能引擎，预测万物"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "AGPL-3.0" }
 authors = [
     { name = "MiroFish Team" }
@@ -21,8 +23,8 @@ dependencies = [
     #   falkordblite = 嵌入式 FalkorDB（无需 Docker，Python>=3.12）。
     #   sentence-transformers = 本地多语言向量嵌入（中英文）。
     "graphiti-core==0.29.2",
-    "falkordblite>=0.5.0; python_version>='3.12'",
-    "redis<8; python_version>='3.12'",
+    "falkordblite>=0.5.0",
+    "redis<8",
     "sentence-transformers>=3.0.0",
 
     # OASIS 社交媒体模拟
