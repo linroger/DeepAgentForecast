@@ -45,7 +45,7 @@ DeepAgentForecast/
     │   ├── api/            # HTTP routes  (graph / simulation / report)
     │   ├── models/         # Task (in-memory) + Project (file-backed)
     │   ├── services/       # the actual pipeline (12 modules)
-    │   │   └── graphiti_client/   # Zep-compatible shim → Graphiti → embedded FalkorDB
+    │   │   └── graphiti_client/   # Graphiti shim → embedded FalkorDB (Zep-SDK-compatible)
     │   └── utils/          # LLM clients, file parsing, graph paging, retry, logging
     └── scripts/            # OASIS subprocess runners (run as separate processes)
         ├── run_parallel_simulation.py   # Twitter + Reddit in one process
@@ -151,9 +151,9 @@ backend restart even though the `Task` object doesn't.
 
 All comments/prompts are Chinese; the system targets Chinese-language public-
 opinion ("舆论") simulation. Everything routes LLM calls through one
-`LLMClient` and knowledge-graph calls through the **Zep-compatible shim**
-(`services/graphiti_client/`, which fronts a local Graphiti + FalkorDB engine)
-plus paged helpers. The five graph-touching services (`GraphBuilderService`,
+`LLMClient` and knowledge-graph calls through the **Graphiti shim**
+(`services/graphiti_client/`, which fronts a local Graphiti + FalkorDB engine
+behind a Zep-SDK-compatible surface) plus paged helpers. The five graph-touching services (`GraphBuilderService`,
 `ZepEntityReader`, `ZepGraphMemoryUpdater`, `OasisProfileGenerator`,
 `ZepToolsService`) and `utils/zep_paging.py` kept their Zep-era names and
 call shapes; only their import line changed
@@ -170,7 +170,7 @@ Sends the seed text + the prediction requirement to the LLM with a long system
 prompt that demands the ontology describe **real, social-media-capable actors**
 (people, companies, media, government, platforms) — explicitly *not* abstract
 topics or stances. Hard constraints (graph schema limits, inherited from the
-Zep-era contract): exactly **10 entity types**, the last two forced to be
+original Graphiti/Zep graph-schema contract): exactly **10 entity types**, the last two forced to be
 `Person`/`Organization` fallbacks; 6-10 edge types; attribute names must avoid
 reserved words and stay **primitive** (`Optional[str]`), because FalkorDB only
 stores scalar node/edge properties. Output is a validated dict of
@@ -478,8 +478,8 @@ curved multi-edges, collapsed self-loops, type-colour legend, and a live
 A user uploads a document and a question. MiroFish reads the document, decides
 what kinds of real-world actors matter, builds a temporal knowledge graph of
 them **locally** (Graphiti extracting entities/edges with your LLM provider and
-embedding them on-device, stored in an embedded FalkorDB behind a
-Zep-compatible shim), gives each actor an LLM persona and a memory of the event,
+embedding them on-device, stored in an embedded FalkorDB behind the
+Graphiti shim), gives each actor an LLM persona and a memory of the event,
 then sets thousands of them loose on two simulated social networks where they
 post, argue, like, and follow autonomously over 72 simulated hours. Their
 collective behaviour is logged action-by-action and continuously fed back into
