@@ -66,15 +66,62 @@ class LLMClient:
         # 仅在使用 OpenAI 兼容提供方（openai/kimi）时才创建 OpenAI 客户端（CLI 模式无需 API Key）
         self._openai_client = None
         if self.provider in OPENAI_COMPATIBLE_PROVIDERS:
-            from openai import OpenAI
-            if not self.api_key:
-                raise ValueError(f"LLM_PROVIDER={self.provider} 时必须配置 LLM_API_KEY")
-            client_kwargs: Dict[str, Any] = {"api_key": self.api_key, "base_url": self.base_url}
-            # Kimi-for-coding 网关按 User-Agent 校验 coding-agent 身份；
-            # 不带可识别的 UA 会被拒绝（access_terminated_error）。
-            if self.provider == "kimi":
-                client_kwargs["default_headers"] = {"User-Agent": Config.LLM_USER_AGENT}
-            self._openai_client = OpenAI(**client_kwargs)
+            self._openai_client = self._build_openai_client(self.provider, self.api_key, self.base_url)
+
+        # EXECPLAN2 I-6-2: 当 fast tier 指向一个完全不同的 OpenAI 兼容提供方时，按需懒构建
+        # 的第二个客户端（如本地廉价抽取 + 远端旗舰合成）。仅在 tiered routing 开启且配齐
+        # LLM_FAST_PROVIDER/BASE_URL/API_KEY 时才会真正实例化；否则保持 None（同提供方切模型）。
+        self._fast_openai_client = None
+
+    @staticmethod
+    def _build_openai_client(provider: str, api_key: Optional[str], base_url: Optional[str]):
+        """构造一个 OpenAI 兼容客户端（供主客户端与 fast-tier 第二客户端复用）。"""
+        from openai import OpenAI
+        if not api_key:
+            raise ValueError(f"LLM_PROVIDER={provider} 时必须配置 LLM_API_KEY")
+        client_kwargs: Dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+        # Kimi-for-coding 网关按 User-Agent 校验 coding-agent 身份；
+        # 不带可识别的 UA 会被拒绝（access_terminated_error）。
+        if provider == "kimi":
+            client_kwargs["default_headers"] = {"User-Agent": Config.LLM_USER_AGENT}
+        return OpenAI(**client_kwargs)
+
+    # ------------------------------------------------------------------
+    # EXECPLAN2 I-6-2: 双层模型路由（fast / strong）
+    # ------------------------------------------------------------------
+    def _model_for_tier(self, tier: Optional[str]) -> str:
+        """按 tier 解析实际使用的模型名。
+
+        - tiered routing 关闭（默认）→ 一律返回 self.model（行为与现状逐字节一致）。
+        - tier='fast'  → Config.fast_model()（未配置 LLM_FAST_MODEL 时回退到当前模型，不报错）。
+        - tier='strong'/None/未知 → Config.strong_model()（同样回退到当前模型）。
+        CLI 订阅提供方只有单一订阅模型，tier 在 _chat_* 中被忽略，此处返回值仅用于计量一致性。
+        """
+        if not getattr(Config, "LLM_TIERED_ROUTING", False):
+            return self.model
+        if tier == "fast":
+            return Config.fast_model() or self.model
+        return Config.strong_model() or self.model
+
+    def _fast_provider_client(self):
+        """若 fast tier 指向不同的 OpenAI 兼容提供方，返回（懒构建的）第二客户端，否则 None。
+
+        需要 LLM_FAST_PROVIDER + LLM_FAST_BASE_URL + LLM_FAST_API_KEY 三者齐备且该提供方
+        为 OpenAI 兼容；缺任一则回退为「同提供方切模型」（返回 None）。构建失败同样回退 None，
+        绝不让 fast tier 的误配置把整条调用打挂（graceful degradation）。
+        """
+        fp = getattr(Config, "LLM_FAST_PROVIDER", None)
+        fb = getattr(Config, "LLM_FAST_BASE_URL", None)
+        fk = getattr(Config, "LLM_FAST_API_KEY", None)
+        if not (fp and fb and fk) or fp not in OPENAI_COMPATIBLE_PROVIDERS:
+            return None
+        if self._fast_openai_client is None:
+            try:
+                self._fast_openai_client = self._build_openai_client(fp, fk, fb)
+            except Exception as exc:  # 误配置不应中断调用，记录后回退主客户端
+                logger.warning(f"fast-tier 第二客户端构建失败，回退主客户端: {exc}")
+                return None
+        return self._fast_openai_client
 
     # ------------------------------------------------------------------
     # 公共接口
@@ -84,7 +131,8 @@ class LLMClient:
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        response_format: Optional[Dict] = None
+        response_format: Optional[Dict] = None,
+        tier: str = "strong"
     ) -> str:
         """
         发送聊天请求，返回模型响应文本。
@@ -92,18 +140,25 @@ class LLMClient:
         所有提供方在瞬时失败（RuntimeError，含 CLI 错误、超时、推理模型空 content）
         时自动指数退避重试（3 次）。OpenAI SDK 自身的 APIError 子类不在此重试范围，
         会按原样抛出（SDK 内部已有自己的重试与限流处理）。
+
+        tier（EXECPLAN2 I-6-2）: 'strong'（默认，= 当前模型，行为不变）| 'fast'（廉价/快速档）。
+        仅当 Config.LLM_TIERED_ROUTING=true 且为 OpenAI 兼容提供方时，fast 才路由到更便宜的
+        模型/提供方；CLI 订阅提供方与关闭路由时一律 no-op（graceful degradation）。
         """
+        # EXECPLAN2 I-6-2: 解析本次调用实际使用的模型（fast/strong）。关闭路由时 = self.model。
+        model = self._model_for_tier(tier)
         # EXECPLAN2 I-6-0/I-5-0/I-5-3: 内容寻址缓存命中直接返回；否则正常调用后记录
         # token/延迟/成本计量并做预算检查。计量默认开（开销极小），缓存/预算默认关。
         from .telemetry import LLMMeter, LLMCache, get_run_context, check_budget, estimate_tokens
         run_id, stage = get_run_context()
         cache_key = None
         if Config.LLM_CACHE_ENABLED:
-            cache_key = LLMCache.key(self.provider, self.model, messages, temperature, max_tokens, response_format)
+            # 缓存键纳入解析后的 model，避免 fast/strong 两档结果互相串档。
+            cache_key = LLMCache.key(self.provider, model, messages, temperature, max_tokens, response_format)
             hit = LLMCache.get(cache_key)
             if hit is not None:
                 if Config.LLM_TELEMETRY_ENABLED:
-                    LLMMeter.record(self.provider, self.model, 0, 0, 0.0, cached=True, stage=stage, run_id=run_id)
+                    LLMMeter.record(self.provider, model, 0, 0, 0.0, cached=True, stage=stage, run_id=run_id)
                 return hit
 
         last_error: Optional[Exception] = None
@@ -113,8 +168,9 @@ class LLMClient:
         for attempt in range(MAX_RETRIES):
             try:
                 if self.provider in OPENAI_COMPATIBLE_PROVIDERS:
-                    result = self._chat_openai(messages, temperature, max_tokens, response_format)
+                    result = self._chat_openai(messages, temperature, max_tokens, response_format, tier=tier)
                 elif self.provider == "codex-cli":
+                    # CLI 订阅提供方只有单一订阅模型，tier 在此为 no-op。
                     result = self._chat_codex_cli(messages, temperature, max_tokens, response_format)
                 else:
                     result = self._chat_claude_cli(messages, temperature, max_tokens, response_format)
@@ -139,7 +195,8 @@ class LLMClient:
                 # 无精确 usage（CLI 提供方）→ 按文本长度粗估
                 pt = sum(estimate_tokens(str(m.get("content", ""))) for m in messages)
                 ct = estimate_tokens(result)
-            LLMMeter.record(self.provider, self.model, pt, ct, latency_ms, cached=False, stage=stage, run_id=run_id)
+            # 用解析后的 model 计量，使 by_model 维度区分 fast/strong 用量与成本。
+            LLMMeter.record(self.provider, model, pt, ct, latency_ms, cached=False, stage=stage, run_id=run_id)
         if Config.LLM_CACHE_ENABLED and cache_key is not None:
             LLMCache.put(cache_key, result)
         if Config.LLM_RUN_BUDGET_TOKENS or Config.LLM_RUN_BUDGET_USD:
@@ -150,12 +207,16 @@ class LLMClient:
         self,
         messages: List[Dict[str, str]],
         temperature: float = 0.3,
-        max_tokens: int = 4096
+        max_tokens: int = 4096,
+        tier: str = "strong"
     ) -> Dict[str, Any]:
         """发送聊天请求并返回解析后的 JSON。
 
         解析失败时先做本地修复（提取 JSON 块、补全被 max_tokens 截断的括号），
         仍失败则降温重发一次。单次格式抖动不再让上层（如报告大纲）直接退化。
+
+        tier（EXECPLAN2 I-6-2）透传给 chat()：结构化/机械型 JSON 调用（子查询分解、
+        受访者选择、图谱抽取）可传 tier='fast' 路由到廉价档；默认 'strong' 行为不变。
         """
         last_response = ""
         for attempt in range(2):
@@ -163,7 +224,8 @@ class LLMClient:
                 messages=messages,
                 temperature=max(0.0, temperature - attempt * 0.2),
                 max_tokens=max_tokens,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                tier=tier
             )
             last_response = response
             parsed = self._parse_json_response(response)
@@ -195,12 +257,14 @@ class LLMClient:
         tools_schema: List[Dict[str, Any]],
         temperature: float = 0.4,
         max_tokens: int = 4096,
+        tier: str = "strong",
     ) -> Dict[str, Any]:
         """原生 tool calling 单轮调用。
 
         Args:
             messages: OpenAI 格式消息（可含 role=tool 的工具结果回填）。
             tools_schema: OpenAI tools schema 列表（[{type:'function', function:{name,description,parameters}}]）。
+            tier: EXECPLAN2 I-6-2 模型档位；默认 'strong'（报告合成保持旗舰模型，行为不变）。
         Returns:
             {"content": str, "tool_calls": [{"id","name","arguments"(dict)}]}。无工具调用时 tool_calls=[]。
         Raises:
@@ -208,8 +272,15 @@ class LLMClient:
         """
         if self._openai_client is None:
             raise RuntimeError("chat_with_tools 仅支持 OpenAI 兼容提供方")
+        # EXECPLAN2 I-6-2: 解析模型/客户端（默认 strong = 当前模型/主客户端，工具调用行为不变）。
+        model = self._model_for_tier(tier)
+        client = self._openai_client
+        if getattr(Config, "LLM_TIERED_ROUTING", False) and tier == "fast":
+            fast_client = self._fast_provider_client()
+            if fast_client is not None:
+                client = fast_client
         kwargs: Dict[str, Any] = {
-            "model": self.model,
+            "model": model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -219,7 +290,7 @@ class LLMClient:
         extra_body = Config.reasoning_extra_body()
         if extra_body:
             kwargs["extra_body"] = extra_body
-        response = self._openai_client.chat.completions.create(**kwargs)
+        response = client.chat.completions.create(**kwargs)
         choice = response.choices[0]
         msg = choice.message
         tool_calls = []
@@ -351,10 +422,19 @@ class LLMClient:
         messages: List[Dict[str, str]],
         temperature: float,
         max_tokens: int,
-        response_format: Optional[Dict] = None
+        response_format: Optional[Dict] = None,
+        tier: str = "strong"
     ) -> str:
+        # EXECPLAN2 I-6-2: 解析本次实际模型与客户端。fast tier 指向不同提供方时用第二客户端，
+        # 否则同提供方仅切模型名；关闭路由时 model=self.model、client=self._openai_client。
+        model = self._model_for_tier(tier)
+        client = self._openai_client
+        if getattr(Config, "LLM_TIERED_ROUTING", False) and tier == "fast":
+            fast_client = self._fast_provider_client()
+            if fast_client is not None:
+                client = fast_client
         kwargs: Dict[str, Any] = {
-            "model": self.model,
+            "model": model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -368,7 +448,7 @@ class LLMClient:
         if extra_body:
             kwargs["extra_body"] = extra_body
 
-        response = self._openai_client.chat.completions.create(**kwargs)
+        response = client.chat.completions.create(**kwargs)
         # 捕获精确 token 用量供计量（I-5-0）；无 usage 字段时留空走粗估。
         try:
             _u = getattr(response, "usage", None)

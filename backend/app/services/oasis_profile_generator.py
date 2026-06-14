@@ -175,8 +175,16 @@ class OasisProfileGenerator:
     
     # 群体/机构类型实体（需要生成群体代表人设）
     GROUP_ENTITY_TYPES = [
-        "university", "governmentagency", "organization", "ngo", 
+        "university", "governmentagency", "organization", "ngo",
         "mediaoutlet", "company", "institution", "group", "community"
+    ]
+
+    # EXECPLAN2 I-1-5: 社会关系类边类型——用于 ego 网检索的 edge_types 过滤，
+    # 让 persona 的「实际位置」只聚焦立场/结盟/对抗等关系边（而非随机事实边）。
+    # 与 utils/actors.py 的关系类型表 / 本体 edge_types 命名保持一致。
+    RELATIONSHIP_EDGE_TYPES = [
+        "ALLY_OF", "OPPOSES", "COMPETES_WITH", "REGULATES",
+        "DEPENDS_ON", "PARTNERS_WITH", "INFLUENCES",
     ]
     
     def __init__(
@@ -422,9 +430,126 @@ class OasisProfileGenerator:
             logger.warning(f"Zep检索超时 ({entity_name})")
         except Exception as e:
             logger.warning(f"Zep检索失败 ({entity_name}): {e}")
-        
+
         return results
-    
+
+    def _resolve_entity_uuid(self, entity: EntityNode) -> Optional[str]:
+        """EXECPLAN2 I-1-5: 解析实体到图谱节点 uuid（ego 网检索的中心节点）。
+
+        优先用实体自带的 uuid（来自 ZepEntityReader 的筛选/枚举，已是规范节点）；
+        缺失时退化到按名字搜索 nodes，取与实体名最匹配的 top 结果。任一步失败/无果
+        返回 None —— 调用方据此降级回当前的名字关键词检索（无回归）。
+        """
+        # 实体通常已携带规范 uuid，直接复用，省一次网络往返。
+        if getattr(entity, "uuid", None):
+            return entity.uuid
+
+        if not self.zep_client or not self.graph_id:
+            return None
+
+        try:
+            node_result = self.zep_client.graph.search(
+                query=entity.name,
+                graph_id=self.graph_id,
+                limit=5,
+                scope="nodes",
+                reranker="rrf",
+            )
+        except Exception as e:
+            logger.debug(f"解析实体 uuid 失败（按名搜索 nodes）: {entity.name}: {str(e)[:80]}")
+            return None
+
+        nodes = getattr(node_result, "nodes", None) or []
+        if not nodes:
+            return None
+
+        # 先取精确同名节点；否则退化到 top-1（reranker 已按相关度排序）。
+        target = entity.name.strip().lower()
+        for node in nodes:
+            if (getattr(node, "name", "") or "").strip().lower() == target:
+                uuid = getattr(node, "uuid_", None) or getattr(node, "uuid", None)
+                if uuid:
+                    return uuid
+        top = nodes[0]
+        return getattr(top, "uuid_", None) or getattr(top, "uuid", None)
+
+    def _retrieve_ego_network(self, entity: EntityNode, center_uuid: str) -> List[str]:
+        """EXECPLAN2 I-1-5: 以 center_node_uuid 为中心检索 ego 网（图距离重排）。
+
+        相比 `_search_zep_for_entity` 的名字关键词检索，这里以解析出的节点 uuid 为中心
+        做 node-distance 重排的边检索，并用 RELATIONSHIP_EDGE_TYPES 过滤，得到「最近的
+        N 个邻居 + 连接它们的关系边」。同时会拾取模拟反馈写回的新关系边（静态 actors.json
+        关系块拿不到的涌现拓扑）。返回已格式化的若干行，供 persona 提示词使用。
+
+        注意：底层 search facade 当提案 1（center_node_uuid / search_filter 透传）落地后，
+        这两个参数才真正生效并做图距离重排；在此之前 facade 会忽略它们（不报错），此路径
+        默认关闭（PERSONA_EGO_RETRIEVAL=false），故不会引入回归。
+        """
+        if not self.zep_client or not self.graph_id or not center_uuid:
+            return []
+
+        # 复用 _search_zep_for_entity 的重试预算配置（保持一致的退避/超时行为）。
+        max_retries = max(1, int(getattr(Config, "PROFILE_ZEP_SEARCH_MAX_RETRIES", 3)))
+        base_delay = float(getattr(Config, "PROFILE_ZEP_SEARCH_RETRY_DELAY_SECONDS", 2.0))
+        # 邻居上限（控制每实体一次额外检索的延迟/噪声）。缺失则默认 10。
+        max_neighbors = max(1, int(getattr(Config, "PERSONA_EGO_MAX_NEIGHBORS", 10)))
+
+        search_filter = {"edge_types": self.RELATIONSHIP_EDGE_TYPES}
+        last_exception = None
+        delay = base_delay
+        edge_result = None
+
+        for attempt in range(max_retries):
+            try:
+                edge_result = self.zep_client.graph.search(
+                    query=entity.name,
+                    graph_id=self.graph_id,
+                    limit=max_neighbors,
+                    scope="edges",
+                    reranker="node_distance",          # 提案 1 落地后生效：按图距离重排
+                    center_node_uuid=center_uuid,       # 提案 1 落地后生效：ego 网中心
+                    search_filter=search_filter,        # 仅保留关系类边
+                )
+                break
+            except Exception as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    logger.debug(
+                        f"Zep ego 网检索第 {attempt + 1} 次失败: {str(e)[:80]}, 重试中..."
+                    )
+                    time.sleep(delay)
+                    delay *= 2
+                else:
+                    logger.debug(f"Zep ego 网检索在 {max_retries} 次尝试后仍失败: {e}")
+
+        if edge_result is None:
+            if last_exception is not None:
+                logger.debug(f"ego 网检索降级（{entity.name}）: {last_exception}")
+            return []
+
+        edges = getattr(edge_result, "edges", None) or []
+        center_name = entity.name.strip()
+        lines: List[str] = []
+        seen = set()
+        for edge in edges:
+            fact = (getattr(edge, "fact", "") or "").strip()
+            edge_name = (getattr(edge, "name", "") or "").strip()
+            line = fact if fact else (
+                f"{center_name} --[{edge_name}]--> (关系网邻居)" if edge_name else ""
+            )
+            if not line or line in seen:
+                continue
+            seen.add(line)
+            lines.append(line)
+            if len(lines) >= max_neighbors:
+                break
+
+        if lines:
+            logger.info(
+                f"ego 网检索完成: {center_name}, 获取 {len(lines)} 条关系网邻居边"
+            )
+        return lines
+
     def _build_entity_context(self, entity: EntityNode) -> str:
         """
         构建实体的完整上下文信息
@@ -517,7 +642,27 @@ class OasisProfileGenerator:
         
         if zep_results.get("node_summaries"):
             context_parts.append("### Zep检索到的相关节点\n" + "\n".join(f"- {s}" for s in zep_results["node_summaries"][:10]))
-        
+
+        # 5. EXECPLAN2 I-1-5: ego 网检索——以解析出的节点 uuid 为中心做图距离重排的关系边检索，
+        # 把「你在关系网中的实际位置」（最近邻居 + 关系边，含模拟反馈写回的涌现边）注入 persona，
+        # 与上面静态的研究关系块互补。默认关闭（PERSONA_EGO_RETRIEVAL=false）以满足可降级不变式：
+        # 关闭、解析不到 uuid、或检索无果时均回退到当前行为，无回归。
+        if bool(getattr(Config, "PERSONA_EGO_RETRIEVAL", False)):
+            try:
+                center_uuid = self._resolve_entity_uuid(entity)
+                if center_uuid:
+                    ego_lines = self._retrieve_ego_network(entity, center_uuid)
+                    if ego_lines:
+                        context_parts.append(
+                            "## 你在关系网中的实际位置\n"
+                            + "\n".join(f"- {line}" for line in ego_lines)
+                        )
+                else:
+                    logger.debug(f"ego 网检索跳过（未解析到节点 uuid）: {entity.name}")
+            except Exception as e:
+                # best-effort 富集，失败即降级，绝不影响主流程。
+                logger.debug(f"ego 网检索异常（{entity.name}）: {str(e)[:80]}")
+
         return "\n\n".join(context_parts)
     
     def _is_individual_entity(self, entity_type: str) -> bool:

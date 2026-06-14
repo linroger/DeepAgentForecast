@@ -127,6 +127,15 @@ def create_app(config_class=Config):
     app.register_blueprint(report_bp, url_prefix='/api/report')
     app.register_blueprint(research_bp, url_prefix='/api/research')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
+
+    # 稳定版程序化 API 表面 /api/v1（EXECPLAN2 I-9-5）。可选降级：默认 **不注册**，
+    # 仅当 Config.API_V1_ENABLED 为真时挂载，未开启则本机 SPA 与现有路由行为完全不变。
+    # 鉴权/CORS 复用上面的 /api/* 统一闸门（/api/v1/* 自动继承）。
+    if getattr(Config, 'API_V1_ENABLED', False):
+        from .api import sdk_bp
+        app.register_blueprint(sdk_bp, url_prefix='/api/v1')
+        if should_log_startup:
+            logger.info("已注册稳定版程序化 API：/api/v1（API_V1_ENABLED=true）")
     
     # 健康检查
     @app.route('/health')

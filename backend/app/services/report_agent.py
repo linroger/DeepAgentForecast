@@ -25,6 +25,8 @@ from ..config import Config
 from ..utils.atomic import write_text_atomic, write_json_atomic
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
+# EXECPLAN2 I-5-4: 报告阶段把 LLM 计量上下文设到 (report_id, 'report')，并按章节读取计量快照差值。
+from ..utils.telemetry import LLMMeter, set_run_context, get_run_context
 from .zep_tools import (
     ZepToolsService, 
     SearchResult, 
@@ -309,35 +311,61 @@ class ReportLogger:
         self,
         section_title: str,
         section_index: int,
-        full_content: str
+        full_content: str,
+        telemetry: Optional[Dict[str, Any]] = None
     ):
         """
         记录章节生成完成
 
         前端应监听此日志来判断一个章节是否真正完成，并获取完整内容
+
+        EXECPLAN2 I-5-4: telemetry（可选）携带本章节触发的 LLM 计量
+        {llm_calls, tool_calls, total_tokens, est_cost_usd, duration_s}。
+        缺省为 None 时本条日志与历史完全一致（额外键为可选、向后兼容）。
         """
+        details = {
+            "content": full_content,
+            "content_length": len(full_content),
+            "message": f"章节 {section_title} 生成完成"
+        }
+        # EXECPLAN2 I-5-4: 仅在有遥测时附加，旧 log reader 不受影响
+        if telemetry:
+            details["telemetry"] = telemetry
         self.log(
             action="section_complete",
             stage="generating",
             section_title=section_title,
             section_index=section_index,
-            details={
-                "content": full_content,
-                "content_length": len(full_content),
-                "message": f"章节 {section_title} 生成完成"
-            }
+            details=details
         )
-    
-    def log_report_complete(self, total_sections: int, total_time_seconds: float):
-        """记录报告生成完成"""
+
+    def log_report_complete(
+        self,
+        total_sections: int,
+        total_time_seconds: float,
+        section_rollup: Optional[List[Dict[str, Any]]] = None,
+        totals: Optional[Dict[str, Any]] = None
+    ):
+        """记录报告生成完成
+
+        EXECPLAN2 I-5-4: section_rollup / totals（皆可选）携带 per-section 与报告级的
+        {llm_calls, tool_calls, tokens, est_cost_usd, duration_s} 汇总。缺省时本条日志
+        与历史完全一致（额外键为可选、向后兼容）。
+        """
+        details = {
+            "total_sections": total_sections,
+            "total_time_seconds": round(total_time_seconds, 2),
+            "message": "报告生成完成"
+        }
+        # EXECPLAN2 I-5-4: 仅在有遥测时附加汇总，避免给历史 reader 引入空字段
+        if section_rollup is not None:
+            details["section_rollup"] = section_rollup
+        if totals is not None:
+            details["telemetry_totals"] = totals
         self.log(
             action="report_complete",
             stage="completed",
-            details={
-                "total_sections": total_sections,
-                "total_time_seconds": round(total_time_seconds, 2),
-                "message": "报告生成完成"
-            }
+            details=details
         )
     
     def log_error(self, error_message: str, stage: str, section_title: str = None):
@@ -508,9 +536,13 @@ class Report:
     created_at: str = ""
     completed_at: str = ""
     error: Optional[str] = None
-    
+    # EXECPLAN2 I-5-4: 报告级 LLM 成本/时延/工具调用紧凑汇总（per-section + totals）。
+    # 仅在 LLM_TELEMETRY_ENABLED 且 REPORT_TELEMETRY 同时开启时填充；否则为 None，
+    # to_dict 输出与历史完全一致（向后兼容，前端可据此显示「本报告耗费 ~$X / Y秒 / Z章」）。
+    telemetry: Optional[Dict[str, Any]] = None
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "report_id": self.report_id,
             "simulation_id": self.simulation_id,
             "graph_id": self.graph_id,
@@ -522,6 +554,10 @@ class Report:
             "completed_at": self.completed_at,
             "error": self.error
         }
+        # EXECPLAN2 I-5-4: 仅在有遥测数据时附加该键，避免给历史 reader 引入空字段
+        if self.telemetry is not None:
+            d["telemetry"] = self.telemetry
+        return d
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1043,6 +1079,9 @@ class ReportAgent:
         self.base_simulation_id = base_simulation_id or None
         self._background_block = self._build_background_block()
         self._sources_index = self._build_sources_index()
+        # EXECPLAN2 I-3-2: 模拟量化信号包（确定性接地下限），懒构建一次后缓存；
+        # 关闭 REPORT_SIGNAL_PACK 时始终为空串，_prepend_research_background 自动跳过（行为不变）。
+        self._signal_pack = ""
 
         self.llm = llm_client or LLMClient()
         self.zep_tools = zep_tools or ZepToolsService()
@@ -1058,6 +1097,9 @@ class ReportAgent:
         # simulation_id 在 agent 生命周期内固定，缓存安全；用哨兵区分「未解析」与「解析为 None」。
         self._cached_report_sentinel = object()
         self._cached_report = self._cached_report_sentinel
+        # EXECPLAN2 I-5-4: 当前章节的工具调用计数器（_execute_tool 单一汇聚点累加），
+        # 用于 per-section 遥测；未开遥测时该计数依旧无害地维护，开销可忽略。
+        self._section_tool_calls = 0
         
         logger.info(f"ReportAgent 初始化完成: graph_id={graph_id}, simulation_id={simulation_id}")
 
@@ -1107,11 +1149,254 @@ class ReportAgent:
         return "\n".join(lines) if len(lines) > 1 else ""
 
     def _prepend_research_background(self, prompt: str) -> str:
-        """T4.1: 把背景档案 + 来源索引钉到提示词最前；二者皆空时原样返回（回退冷图路径）。"""
-        prefix_parts = [p for p in (self._background_block, self._sources_index) if p]
+        """T4.1: 把背景档案 + 来源索引钉到提示词最前；二者皆空时原样返回（回退冷图路径）。
+
+        EXECPLAN2 I-3-2: 同时钉入模拟量化信号包（self._signal_pack），使每个章节都获得确定性的
+        量化接地下限。信号包为空（未开启或无结构化数据）时自动跳过，行为与历史一致。
+        """
+        prefix_parts = [p for p in (self._background_block, self._sources_index, self._signal_pack) if p]
         if not prefix_parts:
             return prompt
         return "\n\n".join(prefix_parts) + "\n\n" + prompt
+
+    def _build_signal_pack(self) -> str:
+        """EXECPLAN2 I-3-2: 组装一份紧凑、确定性的「模拟量化信号包」，钉进每个章节提示词。
+
+        内容来自既有的确定性结构化工具（simulation_outcomes / coalition_map / scenario_diff），
+        全部为可直接引用的硬数字（Top actor / 逐轮动作量 + 峰值 / 动作类型分布 / 派系数与规模
+        / 反事实差异）。任一子块缺失时其友好降级串会被截断逻辑过滤掉，整包自我抑制。
+
+        计算一次后缓存在 self._signal_pack；仅在 Config.REPORT_SIGNAL_PACK 为真时调用。
+        篇幅有界（单块各自截断），避免给每个章节提示词注入过量 token。
+        """
+        parts: List[str] = []
+        # 1) 量化结果（Top actor / 逐轮动作量 + 峰值 / 动作类型分布）——截断到 ~1800 字
+        try:
+            outcomes = self.zep_tools.simulation_outcomes(self.simulation_id, top_n=8)
+            if outcomes and not outcomes.strip().startswith("（"):
+                parts.append(outcomes[:1800])
+        except Exception as e:  # noqa: BLE001 — 信号包为可选增强，失败仅告警不影响主流程
+            logger.warning(f"信号包 simulation_outcomes 计算失败（忽略）: {e}")
+        # 2) 派系/联盟结构——截断到 ~800 字
+        try:
+            coalitions = self.zep_tools.coalition_map(self.graph_id, self.simulation_id)
+            if coalitions and not coalitions.strip().startswith("（"):
+                parts.append(coalitions[:800])
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"信号包 coalition_map 计算失败（忽略）: {e}")
+        # 3) 反事实差异（仅情景报告有基线时）——截断到 ~1200 字
+        if self.base_simulation_id:
+            try:
+                diff = self.zep_tools.scenario_diff(self.base_simulation_id, self.simulation_id)
+                if diff and not diff.strip().startswith("（"):
+                    parts.append(diff[:1200])
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"信号包 scenario_diff 计算失败（忽略）: {e}")
+
+        if not parts:
+            return ""
+        header = (
+            "【模拟量化信号（确定性·权威·可直接引用）】\n"
+            "以下数字直接来自本次模拟的结构化聚合，撰写本章时应至少引用其中相关的具体数值"
+            "（如最活跃 Agent、逐轮动作量、峰值轮次、派系规模、基线-情景差值），"
+            "避免出现「只有叙事、没有数字」的章节。需要更细粒度时再调用工具深挖。"
+        )
+        return header + "\n\n" + "\n\n".join(parts)
+
+    # ──────────────────────────────────────────────────────────────
+    # EXECPLAN2 I-3-4: 结构化「基线 vs 情景」对比表（确定性，无 LLM）
+    # 数据源与 zep_tools.scenario_diff 完全一致（SimulationRunner 的
+    # get_timeline / get_agent_stats），保证「按构造即正确」，让 LLM 围绕
+    # 权威表格叙述而非自行复算差值（避免反转 delta 符号或漏维度）。
+    # ──────────────────────────────────────────────────────────────
+    def _scenario_diff_structured(self) -> Optional[Dict[str, Any]]:
+        """把基线/情景两次模拟归一化为可比维度的字典。
+
+        返回 {dimensions:[{name, baseline, scenario, delta, verdict}], rounds_*}；
+        无基线或两侧均无数据时返回 None（调用方自动跳过，行为不变）。
+        """
+        if not self.base_simulation_id:
+            return None
+        try:
+            from .simulation_runner import SimulationRunner
+            base_tl = SimulationRunner.get_timeline(self.base_simulation_id) or []
+            scen_tl = SimulationRunner.get_timeline(self.simulation_id) or []
+            base_stats = SimulationRunner.get_agent_stats(self.base_simulation_id) or []
+            scen_stats = SimulationRunner.get_agent_stats(self.simulation_id) or []
+        except Exception as e:  # noqa: BLE001 — 对比表为可选增强，失败返回 None 即跳过
+            logger.warning(f"结构化对比表读取模拟数据失败（忽略）: {e}")
+            return None
+        if not (base_tl or scen_tl):
+            return None
+
+        def _total(tl):
+            return sum(int(r.get("total_actions", 0)) for r in tl)
+
+        def _peak(tl):
+            return max(tl, key=lambda r: r.get("total_actions", 0), default=None)
+
+        dims: List[Dict[str, Any]] = []
+
+        # 维度1：总动作量（数值高低判定）
+        bt, st = _total(base_tl), _total(scen_tl)
+        pct = ((st - bt) / bt * 100) if bt else 0.0
+        dims.append({
+            "name": "总动作量",
+            "baseline": bt,
+            "scenario": st,
+            "delta": f"{st - bt:+d}（{pct:+.1f}%）",
+            "verdict": "更高" if st > bt else ("更低" if st < bt else "持平"),
+        })
+
+        # 维度2：峰值轮次（时间早晚判定 —— 情景峰值更早=更快爆发）
+        bp, sp = _peak(base_tl), _peak(scen_tl)
+        if bp and sp:
+            br, sr = int(bp["round_num"]), int(sp["round_num"])
+            dims.append({
+                "name": "峰值轮次",
+                "baseline": f"round {br}（{bp['total_actions']}）",
+                "scenario": f"round {sr}（{sp['total_actions']}）",
+                "delta": f"{sr - br:+d} 轮",
+                "verdict": "更早" if sr < br else ("更晚" if sr > br else "同轮"),
+            })
+
+        # 维度3：执行轮数（升温/降温速度的代理）
+        bl, sl = len(base_tl), len(scen_tl)
+        dims.append({
+            "name": "执行轮数",
+            "baseline": bl,
+            "scenario": sl,
+            "delta": f"{sl - bl:+d}",
+            "verdict": "更长" if sl > bl else ("更短" if sl < bl else "持平"),
+        })
+
+        # 维度4：参与 Agent 数（动员广度）
+        b_agents = len(base_stats)
+        s_agents = len(scen_stats)
+        dims.append({
+            "name": "参与 Agent 数",
+            "baseline": b_agents,
+            "scenario": s_agents,
+            "delta": f"{s_agents - b_agents:+d}",
+            "verdict": "更多" if s_agents > b_agents else ("更少" if s_agents < b_agents else "持平"),
+        })
+
+        # 维度5：变化最大的 Top mover（活跃度 delta 绝对值最大者）
+        b_by = {s.get("agent_name"): int(s.get("total_actions", 0)) for s in base_stats}
+        s_by = {s.get("agent_name"): int(s.get("total_actions", 0)) for s in scen_stats}
+        names = [n for n in (set(b_by) | set(s_by)) if n]
+        if names:
+            top_name = max(names, key=lambda n: abs(s_by.get(n, 0) - b_by.get(n, 0)))
+            d = s_by.get(top_name, 0) - b_by.get(top_name, 0)
+            dims.append({
+                "name": "活跃度变化最大 Agent",
+                "baseline": f"{top_name}: {b_by.get(top_name, 0)}",
+                "scenario": f"{top_name}: {s_by.get(top_name, 0)}",
+                "delta": f"{d:+d}",
+                "verdict": "升" if d > 0 else ("降" if d < 0 else "不变"),
+            })
+
+        return {
+            "base_simulation_id": self.base_simulation_id,
+            "scenario_simulation_id": self.simulation_id,
+            "scenario_label": self.scenario_label,
+            "dimensions": dims,
+        }
+
+    @staticmethod
+    def _is_comparison_section(title: str) -> bool:
+        """EXECPLAN2 I-3-4: 判定某章节是否为「情景对比 / 反事实」章节。
+
+        plan_outline 在有基线时已强制大纲含标题含「情景对比」或「反事实」的章节，
+        这里据此识别需要前置对比表的章节。"""
+        t = (title or "")
+        return ("情景对比" in t) or ("反事实" in t)
+
+    @staticmethod
+    def _render_comparison_table(diff_dict: Dict[str, Any]) -> str:
+        """EXECPLAN2 I-3-4: 把结构化对比字典渲染为 GFM Markdown 表格（数据缺失的行自动跳过）。"""
+        dims = diff_dict.get("dimensions") or []
+        if not dims:
+            return ""
+
+        def _esc(v: Any) -> str:
+            # 表格单元转义竖线/换行，避免破坏 Markdown 表格结构
+            return str(v).replace("|", "\\|").replace("\n", " ").strip()
+
+        scen_label = (diff_dict.get("scenario_label") or "").strip()
+        scen_col = f"情景（{scen_label}）" if scen_label else "情景"
+        lines = [
+            "**基线 vs 情景 结构化对比（确定性聚合，权威）**",
+            "",
+            f"| 维度 | 基线 | {_esc(scen_col)} | Δ | 判定 |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        for d in dims:
+            lines.append(
+                f"| {_esc(d.get('name'))} | {_esc(d.get('baseline'))} | "
+                f"{_esc(d.get('scenario'))} | {_esc(d.get('delta'))} | {_esc(d.get('verdict'))} |"
+            )
+        lines.append("")
+        lines.append("> 上表为确定性聚合结果，正文请围绕这些权威差值展开解读，勿自行复算或反转方向。")
+        return "\n".join(lines)
+
+    # ──────────────────────────────────────────────────────────────
+    # EXECPLAN2 I-5-4: 报告级 LLM 成本/时延遥测（per-section + totals）
+    # 复用中央 LLMMeter（按 run_id=report_id 聚合）。每章节前后各取一次累计快照，
+    # 相减即为该章节触发的 LLM 经济学（tokens / cost / latency / calls）。
+    # 全程 degrade-safe：未开 LLM_TELEMETRY_ENABLED & REPORT_TELEMETRY 时不调用本逻辑。
+    # ──────────────────────────────────────────────────────────────
+    def _telemetry_enabled(self) -> bool:
+        """两个开关都为真才采集：底层计量已开（LLM_TELEMETRY_ENABLED），且报告级汇总已开。"""
+        return bool(
+            getattr(Config, "LLM_TELEMETRY_ENABLED", False)
+            and getattr(Config, "REPORT_TELEMETRY", False)
+        )
+
+    def _meter_total(self, run_id: str) -> Dict[str, Any]:
+        """读取本 run 的累计 LLM 计量 total（失败返回零值，绝不抛出）。
+
+        用于 per-section 区间差值：章节循环期间 stage 恒为 'report'，故 total 的增量即本章节
+        触发的 LLM 经济学（哪怕 run_id 与上游共享，区间差值仍只含本报告期间的调用）。
+        """
+        try:
+            return dict(LLMMeter.snapshot(run_id).get("total") or {})
+        except Exception:  # noqa: BLE001 — 遥测读取失败不得影响报告生成
+            return {}
+
+    def _meter_stage_total(self, run_id: str, stage: str = "report") -> Dict[str, Any]:
+        """读取本 run 中指定 stage 的累计 LLM 计量（失败返回零值，绝不抛出）。
+
+        用于报告级 totals：当 run_id 是上游编排器的共享 run（如 pipeline_id）时，total 会混入
+        其它阶段（research/ontology/...）的调用；按 stage='report' 切片可只统计报告阶段花销。
+        """
+        try:
+            by_stage = LLMMeter.snapshot(run_id).get("by_stage") or {}
+            return dict(by_stage.get(stage) or {})
+        except Exception:  # noqa: BLE001 — 遥测读取失败不得影响报告生成
+            return {}
+
+    @staticmethod
+    def _meter_delta(before: Dict[str, Any], after: Dict[str, Any], duration_s: float,
+                     tool_calls: int) -> Dict[str, Any]:
+        """两次 total 快照相减，得到一段区间内的紧凑遥测条目。"""
+        def _g(d: Dict[str, Any], k: str) -> float:
+            try:
+                return float(d.get(k, 0) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        llm_calls = int(_g(after, "calls") - _g(before, "calls"))
+        tokens = int(_g(after, "total_tokens") - _g(before, "total_tokens"))
+        cost = round(_g(after, "cost_usd") - _g(before, "cost_usd"), 6)
+        latency_ms = round(_g(after, "latency_ms") - _g(before, "latency_ms"), 1)
+        return {
+            "llm_calls": max(0, llm_calls),
+            "tool_calls": max(0, int(tool_calls)),
+            "tokens": max(0, tokens),
+            "est_cost_usd": max(0.0, cost),
+            "latency_ms": max(0.0, latency_ms),
+            "duration_s": round(max(0.0, duration_s), 2),
+        }
 
 
     def _define_tools(self) -> Dict[str, Dict[str, Any]]:
@@ -1615,6 +1900,7 @@ class ReportAgent:
                 })
                 for c in calls:
                     tool_calls_count += 1
+                    self._section_tool_calls += 1  # EXECPLAN2 I-5-4: per-section 工具调用计数
                     try:
                         result = self._execute_tool(c["name"], c["arguments"], report_context=section.title)
                     except Exception as te:  # noqa: BLE001
@@ -1916,6 +2202,7 @@ class ReportAgent:
 
                 tool_calls_count += 1
                 used_tools.add(call['name'])
+                self._section_tool_calls += 1  # EXECPLAN2 I-5-4: per-section 工具调用计数
 
                 # 构建未使用工具提示
                 unused_tools = all_tools - used_tools
@@ -2064,7 +2351,28 @@ class ReportAgent:
         
         # 已完成的章节标题列表（用于进度追踪）
         completed_section_titles = []
-        
+
+        # EXECPLAN2 I-5-4: 报告级遥测 —— 设定 LLM 计量上下文的 stage='report'。
+        # run_id 优先沿用编排器已设定的 run（如 pipeline_id，便于跨阶段汇总）；独立生成
+        # （无上游 run）时退回 report_id，使手动报告也被计量。保存旧上下文，finally 中还原，
+        # 避免污染复用线程/调用方。默认关闭时不动上下文。
+        _telemetry_on = self._telemetry_enabled()
+        _prev_run_ctx = None
+        _telemetry_run_id = report_id  # 实际用于 LLMMeter 快照的 run 键
+        _report_stage_before: Dict[str, Any] = {}  # 报告开始时 stage='report' 的基线快照
+        section_rollup: List[Dict[str, Any]] = []  # I-5-4: per-section 遥测条目
+        if _telemetry_on:
+            try:
+                _prev_run_ctx = get_run_context()
+                # 沿用上游 run_id（若已设），否则用 report_id；stage 统一标记为 'report'
+                _telemetry_run_id = (_prev_run_ctx[0] if _prev_run_ctx and _prev_run_ctx[0] else report_id)
+                set_run_context(_telemetry_run_id, "report")
+                # 基线：共享 run 上可能已有其它报告的 report 阶段花销，取差值才是本报告真实花销
+                _report_stage_before = self._meter_stage_total(_telemetry_run_id, "report")
+            except Exception:  # noqa: BLE001 — 遥测初始化失败不得影响报告生成
+                _telemetry_on = False
+                _telemetry_run_id = report_id
+
         try:
             # 初始化：创建报告文件夹并保存初始状态
             ReportManager._ensure_report_folder(report_id)
@@ -2120,7 +2428,18 @@ class ReportAgent:
             
             # 阶段2: 逐章节生成（分章节保存）
             report.status = ReportStatus.GENERATING
-            
+
+            # EXECPLAN2 I-3-2: 构建一次模拟量化信号包，钉进随后每个章节提示词（确定性接地下限）。
+            # 关闭 REPORT_SIGNAL_PACK 时不构建，self._signal_pack 保持空串，行为不变。
+            if getattr(Config, "REPORT_SIGNAL_PACK", False) and not self._signal_pack:
+                try:
+                    self._signal_pack = self._build_signal_pack()
+                    if self._signal_pack:
+                        logger.info(f"已注入模拟量化信号包（{len(self._signal_pack)} 字）到各章节提示词")
+                except Exception as _sp_err:  # noqa: BLE001 — 信号包为可选增强，失败不影响主流程
+                    logger.warning(f"构建模拟量化信号包失败（忽略）: {_sp_err}")
+                    self._signal_pack = ""
+
             total_sections = len(outline.sections)
             generated_sections = []  # 保存内容用于上下文
             failed_section_titles = []  # 记录生成失败（写入占位符）的章节，用于状态汇报
@@ -2144,6 +2463,12 @@ class ReportAgent:
                         f"正在生成章节: {section.title} ({section_num}/{total_sections})"
                     )
                 
+                # EXECPLAN2 I-5-4: per-section 遥测——记录本章节开始时刻与累计计量快照、
+                # 归零本章节工具计数；章节结束后相减得到该章节的 LLM 经济学。
+                _sec_started = time.monotonic()
+                _sec_meter_before = self._meter_total(_telemetry_run_id) if _telemetry_on else {}
+                self._section_tool_calls = 0
+
                 # 生成主章节内容。
                 # 纵深防御：单个章节的 LLM 调用可能抛异常（如 MiniMax 域内容审核 422
                 # new_sensitive、限流、网络错误）。绝不让单章节失败拖垮整份报告——捕获后
@@ -2171,6 +2496,31 @@ class ReportAgent:
                             pass
                     section_content = SECTION_FAILURE_PLACEHOLDER
 
+                # EXECPLAN2 I-3-4: 若为情景对比章节且开关开启，把确定性结构化对比表
+                # 前置到本章正文，使 LLM 围绕权威差值叙述（不复算/不反转方向）。
+                if (
+                    self.base_simulation_id
+                    and getattr(Config, "REPORT_COMPARISON_TABLE", False)
+                    and section_content != SECTION_FAILURE_PLACEHOLDER
+                    and self._is_comparison_section(section.title)
+                ):
+                    try:
+                        diff_dict = self._scenario_diff_structured()
+                        if diff_dict:
+                            table_md = self._render_comparison_table(diff_dict)
+                            if table_md:
+                                section_content = table_md + "\n\n" + section_content
+                                # 落盘结构化对比工件，供 UI / diff 工具消费
+                                cpath = os.path.join(
+                                    ReportManager._get_report_folder(report_id), "comparison.json"
+                                )
+                                write_text_atomic(
+                                    cpath, json.dumps(diff_dict, ensure_ascii=False, indent=2)
+                                )
+                                logger.info(f"已注入结构化对比表并写入 comparison.json: {report_id}")
+                    except Exception as _ct_err:  # noqa: BLE001 — 对比表为可选增强，失败不影响主流程
+                        logger.warning(f"注入结构化对比表失败（忽略）: {_ct_err}")
+
                 section.content = section_content
                 if section_content == SECTION_FAILURE_PLACEHOLDER:
                     failed_section_titles.append(section.title)
@@ -2184,11 +2534,28 @@ class ReportAgent:
                 # 记录章节完成日志
                 full_section_content = f"## {section.title}\n\n{section_content}"
 
+                # EXECPLAN2 I-5-4: 计算本章节遥测条目（LLM 调用/tokens/cost/latency + 工具调用）
+                _sec_telemetry = None
+                if _telemetry_on:
+                    try:
+                        _sec_after = self._meter_total(_telemetry_run_id)
+                        _sec_telemetry = self._meter_delta(
+                            _sec_meter_before, _sec_after,
+                            duration_s=time.monotonic() - _sec_started,
+                            tool_calls=self._section_tool_calls,
+                        )
+                        _sec_telemetry["section_title"] = section.title
+                        _sec_telemetry["section_index"] = section_num
+                        section_rollup.append(_sec_telemetry)
+                    except Exception:  # noqa: BLE001 — 遥测计算失败不得影响报告生成
+                        _sec_telemetry = None
+
                 if self.report_logger:
                     self.report_logger.log_section_full_complete(
                         section_title=section.title,
                         section_index=section_num,
-                        full_content=full_section_content.strip()
+                        full_content=full_section_content.strip(),
+                        telemetry=_sec_telemetry
                     )
 
                 logger.info(f"章节已保存: {report_id}/section_{section_num:02d}.md")
@@ -2252,14 +2619,63 @@ class ReportAgent:
             
             # 计算总耗时
             total_time_seconds = (datetime.now() - start_time).total_seconds()
-            
+
+            # EXECPLAN2 I-5-4: 汇总报告级遥测（per-section rollup + totals），写入完成日志、
+            # telemetry.json 工件，并挂到 Report.telemetry 以便经 /report/<id> 与 by-simulation 暴露。
+            telemetry_totals = None
+            if _telemetry_on:
+                try:
+                    # 报告级 totals 取 stage='report' 切片并相对基线求差：
+                    # 即便 run_id 与上游/其它报告共享，也只计入本报告这次的报告阶段花销。
+                    def _diff(after: Dict[str, Any], before: Dict[str, Any], key: str) -> float:
+                        try:
+                            return float(after.get(key, 0) or 0) - float(before.get(key, 0) or 0)
+                        except (TypeError, ValueError):
+                            return 0.0
+                    snap_after = self._meter_stage_total(_telemetry_run_id, "report")
+                    telemetry_totals = {
+                        "report_id": report_id,
+                        "run_id": _telemetry_run_id,
+                        "total_sections": total_sections,
+                        "failed_sections": len(failed_section_titles),
+                        "duration_s": round(total_time_seconds, 2),
+                        "llm_calls": max(0, int(_diff(snap_after, _report_stage_before, "calls"))),
+                        "tokens": max(0, int(_diff(snap_after, _report_stage_before, "total_tokens"))),
+                        "prompt_tokens": max(0, int(_diff(snap_after, _report_stage_before, "prompt_tokens"))),
+                        "completion_tokens": max(0, int(_diff(snap_after, _report_stage_before, "completion_tokens"))),
+                        "est_cost_usd": round(max(0.0, _diff(snap_after, _report_stage_before, "cost_usd")), 6),
+                        "latency_ms": round(max(0.0, _diff(snap_after, _report_stage_before, "latency_ms")), 1),
+                        "tool_calls": sum(int(s.get("tool_calls", 0) or 0) for s in section_rollup),
+                    }
+                    report.telemetry = {"totals": telemetry_totals, "sections": section_rollup}
+                    try:
+                        tpath = os.path.join(
+                            ReportManager._get_report_folder(report_id), "telemetry.json"
+                        )
+                        write_text_atomic(
+                            tpath, json.dumps(report.telemetry, ensure_ascii=False, indent=2)
+                        )
+                    except Exception as _twe:  # noqa: BLE001 — 工件落盘失败不影响主流程
+                        logger.warning(f"telemetry.json 写入失败（忽略）: {_twe}")
+                    logger.info(
+                        f"报告遥测: {report_id} 共 {telemetry_totals['llm_calls']} 次 LLM 调用, "
+                        f"{telemetry_totals['tokens']} tokens, "
+                        f"~${telemetry_totals['est_cost_usd']:.4f}, "
+                        f"{telemetry_totals['duration_s']}s, {total_sections} 章"
+                    )
+                except Exception as _te:  # noqa: BLE001 — 遥测汇总失败不得影响报告完成
+                    logger.warning(f"报告级遥测汇总失败（忽略）: {_te}")
+                    telemetry_totals = None
+
             # 记录报告完成日志
             if self.report_logger:
                 self.report_logger.log_report_complete(
                     total_sections=total_sections,
-                    total_time_seconds=total_time_seconds
+                    total_time_seconds=total_time_seconds,
+                    section_rollup=(section_rollup if _telemetry_on else None),
+                    totals=telemetry_totals,
                 )
-            
+
             # 保存最终报告
             ReportManager.save_report(report)
             ReportManager.update_progress(
@@ -2302,9 +2718,17 @@ class ReportAgent:
             if self.console_logger:
                 self.console_logger.close()
                 self.console_logger = None
-            
+
             return report
-    
+
+        finally:
+            # EXECPLAN2 I-5-4: 还原进入本方法前的 LLM 计量上下文，避免污染复用线程/调用方。
+            if _telemetry_on and _prev_run_ctx is not None:
+                try:
+                    set_run_context(_prev_run_ctx[0], _prev_run_ctx[1])
+                except Exception:  # noqa: BLE001 — 还原失败仅影响后续计量归属，不影响报告
+                    pass
+
     def _resolve_report_cached(self) -> Optional[Report]:
         """EXECPLAN2 F-7-3: 解析本 simulation 的最新报告并在实例级记忆，避免重复扫描。"""
         if self._cached_report is not self._cached_report_sentinel:
@@ -3145,7 +3569,8 @@ class ReportManager:
             markdown_content=markdown_content,
             created_at=data.get('created_at', ''),
             completed_at=data.get('completed_at', ''),
-            error=data.get('error')
+            error=data.get('error'),
+            telemetry=data.get('telemetry')  # EXECPLAN2 I-5-4: 从 meta.json 还原紧凑遥测，经 API 暴露
         )
     
     @classmethod

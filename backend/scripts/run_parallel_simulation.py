@@ -81,6 +81,25 @@ from typing import Dict, Any, List, Optional, Tuple
 _shutdown_event = None
 _cleanup_done = False
 
+
+# EXECPLAN2 I-7-2: 确定性随机数种子（默认 None = 维持当前非确定性行为）。
+# 设置环境变量 SIM_SEED=<int> 后，调度采样（加权水库 / 概率发帖）变为可复现，
+# 使 prepare/run 阶段的快照/黄金测试与 A/B 评估成为可能。未设置时 random.Random()
+# 从系统熵播种，与历史上的 random.random() 行为逐次一致（零行为变化）。
+def _build_sampling_rng() -> "random.Random":
+    """根据 SIM_SEED 构造本进程的采样 RNG（缺省即非确定性，与旧行为一致）。"""
+    raw = os.environ.get("SIM_SEED")
+    if raw is None or str(raw).strip() == "":
+        return random.Random()
+    try:
+        return random.Random(int(str(raw).strip()))
+    except (TypeError, ValueError):
+        # 容错：非整数种子退回非确定性，避免因配置错误中断模拟。
+        return random.Random()
+
+
+_RNG = _build_sampling_rng()
+
 # 添加 backend 目录到路径
 # 脚本固定位于 backend/scripts/ 目录
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1013,7 +1032,7 @@ def _weighted_sample_without_replacement(items: List, k: int) -> List:
     keyed = []
     for item_id, w in items:
         w = max(1e-6, float(w))
-        keyed.append((random.random() ** (1.0 / w), item_id))
+        keyed.append((_RNG.random() ** (1.0 / w), item_id))  # EXECPLAN2 I-7-2: 可复现采样
     keyed.sort(reverse=True)
     return [item_id for _, item_id in keyed[:k]]
 
@@ -1066,7 +1085,7 @@ def get_active_agents_for_round(
         p = activity_level * (0.5 + 0.5 * (infl / max_infl)) * multiplier
         if agent_id in last_active_ids:
             p *= 1.5  # 近因加成：上一轮活跃/被提及 → 形成级联
-        if random.random() < min(1.0, p):
+        if _RNG.random() < min(1.0, p):  # EXECPLAN2 I-7-2: 可复现激活概率
             candidates.append((agent_id, infl))
 
     # 目标人数：随 cast 规模放大，封顶 3×base_max
@@ -1246,6 +1265,515 @@ def build_oasis_platform(kind: str, db_path: str, config: Dict[str, Any], log_in
     except Exception as e:  # noqa: BLE001
         log_info(f"自定义平台构建失败，回退默认平台: {e}")
         return None
+
+
+# ============================================================
+# EXECPLAN2 I-2-0: 涌现结构 / 观点动力学度量层
+# ------------------------------------------------------------
+# 模拟结束后（只读地）在 {platform}_simulation.db + actions.jsonl 上计算：
+#   1) 观点/立场轨迹 —— 每轮按 stance 桶（supportive/opposing/neutral/observer）
+#      统计发声量（CREATE_POST/CREATE_COMMENT/QUOTE_POST），并对内容做轻量情感打分；
+#   2) 极化指数 —— 每 agent 净情感分布的方差/双峰性 + 跨立场 vs 同立场互动比；
+#   3) 关注图社区检测 —— 在真实 follow 表上跑 networkx（贪婪模块度/标签传播），
+#      给出每个社区的主导立场与桥接 agent；
+#   4) 级联/传播 —— top 帖的回复+转发+引用深度与广度。
+# 全部行为默认关闭（SIM_EMERGENT_METRICS!=true 时不计算），networkx 缺失时社区检测
+# 自动跳过，情感使用离线 CN/EN 极性词典（无 LLM 成本）。任何异常都不影响已完成的模拟，
+# 仅在调用方以 try/except 包裹，结果写入 {platform}_emergent_metrics.json 与 emergent_metrics.json。
+# ============================================================
+
+# 影响立场表达的发声动作（用于立场轨迹加权与跨立场互动判定）
+_SPEECH_ACTIONS = {"CREATE_POST", "CREATE_COMMENT", "QUOTE_POST", "REPOST"}
+# 直接产生“agent→agent”互动的动作（用于跨立场 vs 同立场互动比）
+_INTERACTION_ACTIONS = {
+    "REPOST", "QUOTE_POST", "CREATE_COMMENT", "LIKE_POST", "DISLIKE_POST",
+    "LIKE_COMMENT", "DISLIKE_COMMENT", "FOLLOW", "MUTE",
+}
+_STANCE_BUCKETS = ("supportive", "opposing", "neutral", "observer")
+
+# 离线情感词典（CN + EN 极性词），用于 LLM 成本过高时的回退打分。
+# 仅作粗粒度净情感方向估计；命中即 ±1，无命中记 0（中性）。
+_POS_LEXICON = {
+    # EN
+    "good", "great", "excellent", "positive", "support", "growth", "win", "gain",
+    "strong", "bullish", "optimistic", "agree", "love", "best", "advantage",
+    "lead", "leading", "dominate", "success", "breakthrough", "soar", "surge",
+    # CN
+    "好", "强", "优势", "增长", "领先", "成功", "突破", "看好", "利好", "支持",
+    "同意", "赞", "上涨", "飙升", "主导", "碾压", "双赢", "乐观",
+}
+_NEG_LEXICON = {
+    # EN
+    "bad", "poor", "negative", "oppose", "decline", "lose", "loss", "weak",
+    "bearish", "pessimistic", "disagree", "hate", "worst", "risk", "fail",
+    "failure", "crash", "plunge", "drop", "threat", "concern", "doubt",
+    # CN
+    "差", "弱", "下跌", "崩", "失败", "风险", "反对", "不同意", "看空", "利空",
+    "暴跌", "担忧", "质疑", "威胁", "落后", "亏损", "悲观", "泡沫",
+}
+
+
+def _load_stance_by_agent(config: Dict[str, Any]) -> Dict[int, str]:
+    """agent_id -> 归一化 stance 桶映射（缺省 neutral）。"""
+    stance_map: Dict[int, str] = {}
+    for cfg in config.get("agent_configs", []) or []:
+        aid = cfg.get("agent_id")
+        if aid is None:
+            continue
+        raw = str(cfg.get("stance", "neutral") or "neutral").strip().lower()
+        stance_map[int(aid)] = raw if raw in _STANCE_BUCKETS else "neutral"
+    return stance_map
+
+
+def _lexicon_sentiment(text: str) -> float:
+    """离线极性打分：返回 [-1, 1] 的净情感方向（无命中 → 0）。"""
+    if not text:
+        return 0.0
+    low = text.lower()
+    pos = sum(1 for w in _POS_LEXICON if w in low)
+    neg = sum(1 for w in _NEG_LEXICON if w in low)
+    if pos == 0 and neg == 0:
+        return 0.0
+    return (pos - neg) / float(pos + neg)
+
+
+def _iter_action_lines(actions_jsonl_path: str):
+    """逐行产出 actions.jsonl 中的“真实动作”记录（跳过 event_type 控制行）。"""
+    if not os.path.exists(actions_jsonl_path):
+        return
+    try:
+        with open(actions_jsonl_path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                # 控制行（simulation_start/round_start/round_end/simulation_end）无 action_type
+                if rec.get("event_type") or not rec.get("action_type"):
+                    continue
+                yield rec
+    except OSError:
+        return
+
+
+def _score_stance_trajectory(
+    actions_jsonl_path: str,
+    stance_by_agent: Dict[int, str],
+) -> Tuple[List[Dict[str, Any]], float, Dict[int, float]]:
+    """计算每轮立场轨迹 + 全局极化指数（按 agent 净情感分布方差）。
+
+    Returns:
+        (trajectory, polarization_index, net_sentiment_by_agent)
+        - trajectory: [{round, by_stance:{...发声量...}, net_sentiment}]
+        - polarization_index: agent 级净情感分布的方差（[0,1] 量级，越大越极化）
+        - net_sentiment_by_agent: agent_id -> 平均净情感（供互动比/社区主导立场使用）
+    """
+    from collections import defaultdict
+
+    per_round: Dict[int, Dict[str, Any]] = {}
+    sent_sum_by_agent: Dict[int, float] = defaultdict(float)
+    sent_cnt_by_agent: Dict[int, int] = defaultdict(int)
+
+    for rec in _iter_action_lines(actions_jsonl_path):
+        action_type = str(rec.get("action_type", ""))
+        if action_type not in _SPEECH_ACTIONS:
+            continue
+        agent_id = rec.get("agent_id")
+        round_num = rec.get("round")
+        if agent_id is None or round_num is None:
+            continue
+        agent_id = int(agent_id)
+        round_num = int(round_num)
+        stance = stance_by_agent.get(agent_id, "neutral")
+
+        bucket = per_round.setdefault(
+            round_num,
+            {"round": round_num, "by_stance": {s: 0 for s in _STANCE_BUCKETS}, "_sent": 0.0, "_n": 0},
+        )
+        bucket["by_stance"][stance] = bucket["by_stance"].get(stance, 0) + 1
+
+        # 情感仅对带内容的动作打分
+        content = ""
+        args = rec.get("action_args") or {}
+        if isinstance(args, dict):
+            content = str(args.get("content") or args.get("quote_content") or "")
+        if content:
+            s = _lexicon_sentiment(content)
+            bucket["_sent"] += s
+            bucket["_n"] += 1
+            sent_sum_by_agent[agent_id] += s
+            sent_cnt_by_agent[agent_id] += 1
+
+    trajectory: List[Dict[str, Any]] = []
+    for round_num in sorted(per_round.keys()):
+        b = per_round[round_num]
+        net = (b["_sent"] / b["_n"]) if b["_n"] else 0.0
+        trajectory.append({
+            "round": round_num,
+            "by_stance": b["by_stance"],
+            "net_sentiment": round(net, 4),
+        })
+
+    net_by_agent: Dict[int, float] = {}
+    for aid, total in sent_sum_by_agent.items():
+        cnt = sent_cnt_by_agent.get(aid, 0)
+        if cnt:
+            net_by_agent[aid] = total / cnt
+
+    # 极化指数：发声 agent 净情感分布的方差（0=完全一致，越大越极化）
+    polarization = 0.0
+    vals = list(net_by_agent.values())
+    if len(vals) >= 2:
+        mean = sum(vals) / len(vals)
+        polarization = sum((v - mean) ** 2 for v in vals) / len(vals)
+
+    return trajectory, round(polarization, 4), net_by_agent
+
+
+def _compute_interaction_ratio(
+    conn: "sqlite3.Connection",
+    stance_by_agent: Dict[int, str],
+) -> Dict[str, Any]:
+    """跨立场 vs 同立场互动比。
+
+    通过 follow（关注边）、post.original_post_id（转发/引用）、comment（回复）三类
+    “agent→agent”边，按双方 stance 是否相同计数。比值 = 跨立场 / (同立场 + 跨立场)。
+    """
+    cursor = conn.cursor()
+
+    # user_id -> agent_id -> stance
+    uid_to_stance: Dict[int, str] = {}
+    try:
+        cursor.execute("SELECT user_id, agent_id FROM user")
+        for user_id, agent_id in cursor.fetchall():
+            if agent_id is None:
+                continue
+            uid_to_stance[user_id] = stance_by_agent.get(int(agent_id), "neutral")
+    except sqlite3.Error:
+        return {"cross_stance_interaction_ratio": 0.0, "cross_stance": 0, "within_stance": 0}
+
+    cross = 0
+    within = 0
+
+    def _tally(src_uid, dst_uid):
+        nonlocal cross, within
+        if src_uid is None or dst_uid is None or src_uid == dst_uid:
+            return
+        s_src = uid_to_stance.get(src_uid)
+        s_dst = uid_to_stance.get(dst_uid)
+        if s_src is None or s_dst is None:
+            return
+        if s_src == s_dst:
+            within += 1
+        else:
+            cross += 1
+
+    # 关注边
+    try:
+        cursor.execute("SELECT follower_id, followee_id FROM follow")
+        for follower, followee in cursor.fetchall():
+            _tally(follower, followee)
+    except sqlite3.Error:
+        pass
+
+    # 转发/引用边：reposter -> 原帖作者
+    try:
+        cursor.execute(
+            "SELECT p.user_id, orig.user_id "
+            "FROM post p JOIN post orig ON p.original_post_id = orig.post_id "
+            "WHERE p.original_post_id IS NOT NULL"
+        )
+        for reposter, author in cursor.fetchall():
+            _tally(reposter, author)
+    except sqlite3.Error:
+        pass
+
+    # 评论边：评论者 -> 被评论帖作者
+    try:
+        cursor.execute(
+            "SELECT c.user_id, p.user_id "
+            "FROM comment c JOIN post p ON c.post_id = p.post_id"
+        )
+        for commenter, author in cursor.fetchall():
+            _tally(commenter, author)
+    except sqlite3.Error:
+        pass
+
+    total = cross + within
+    ratio = (cross / total) if total else 0.0
+    return {
+        "cross_stance_interaction_ratio": round(ratio, 4),
+        "cross_stance": cross,
+        "within_stance": within,
+    }
+
+
+def _detect_follow_communities(
+    conn: "sqlite3.Connection",
+    stance_by_agent: Dict[int, str],
+    log_info,
+) -> List[Dict[str, Any]]:
+    """在真实 follow 表上做社区检测（networkx 缺失 → 返回 [] 并跳过）。"""
+    try:
+        import networkx as nx  # 可选依赖，缺失即优雅跳过
+        from networkx.algorithms import community as nx_community
+    except Exception as e:  # noqa: BLE001
+        log_info(f"涌现度量：networkx 不可用，跳过社区检测: {e}")
+        return []
+
+    cursor = conn.cursor()
+    # user_id -> agent_id
+    uid_to_agent: Dict[int, Optional[int]] = {}
+    try:
+        cursor.execute("SELECT user_id, agent_id FROM user")
+        for user_id, agent_id in cursor.fetchall():
+            uid_to_agent[user_id] = int(agent_id) if agent_id is not None else None
+    except sqlite3.Error:
+        return []
+
+    g = nx.DiGraph()
+    try:
+        cursor.execute("SELECT follower_id, followee_id FROM follow")
+        for follower, followee in cursor.fetchall():
+            if follower is None or followee is None or follower == followee:
+                continue
+            g.add_edge(follower, followee)
+    except sqlite3.Error:
+        return []
+
+    if g.number_of_nodes() == 0:
+        return []
+
+    # 贪婪模块度在无向图上运行；用无向投影
+    ug = g.to_undirected()
+    try:
+        comms = list(nx_community.greedy_modularity_communities(ug))
+    except Exception:
+        try:
+            comms = list(nx_community.label_propagation_communities(ug))
+        except Exception as e:  # noqa: BLE001
+            log_info(f"涌现度量：社区检测失败，跳过: {e}")
+            return []
+
+    # 桥接节点：跨社区出/入度高者（按 betweenness 近似——用跨社区边计数）
+    node_to_comm: Dict[int, int] = {}
+    for idx, members in enumerate(comms):
+        for node in members:
+            node_to_comm[node] = idx
+
+    cross_links: Dict[int, int] = {}
+    for u, v in ug.edges():
+        if node_to_comm.get(u) != node_to_comm.get(v):
+            cross_links[u] = cross_links.get(u, 0) + 1
+            cross_links[v] = cross_links.get(v, 0) + 1
+
+    result: List[Dict[str, Any]] = []
+    for idx, members in enumerate(comms):
+        member_agents = [uid_to_agent.get(uid) for uid in members]
+        member_agents = [a for a in member_agents if a is not None]
+        # 主导立场
+        from collections import Counter
+        stance_counts = Counter(stance_by_agent.get(a, "neutral") for a in member_agents)
+        dominant = stance_counts.most_common(1)[0][0] if stance_counts else "neutral"
+        # 桥接 agent（跨社区连接数最高的前 3 个）
+        bridges = sorted(
+            (uid for uid in members if cross_links.get(uid, 0) > 0),
+            key=lambda uid: cross_links.get(uid, 0),
+            reverse=True,
+        )[:3]
+        bridge_agents = [uid_to_agent.get(uid) for uid in bridges]
+        bridge_agents = [a for a in bridge_agents if a is not None]
+        result.append({
+            "size": len(members),
+            "members": sorted(member_agents),
+            "dominant_stance": dominant,
+            "stance_breakdown": dict(stance_counts),
+            "bridge_agents": bridge_agents,
+        })
+    # 大社区在前
+    result.sort(key=lambda c: c["size"], reverse=True)
+    return result
+
+
+def _compute_cascades(
+    conn: "sqlite3.Connection",
+    top_n: int = 10,
+) -> List[Dict[str, Any]]:
+    """每个原帖的级联/传播统计：回复数(breadth) + 转发/引用数 + 综合互动深度。"""
+    cursor = conn.cursor()
+
+    # 转发/引用：original_post_id -> 计数
+    repost_counts: Dict[int, int] = {}
+    try:
+        cursor.execute(
+            "SELECT original_post_id, COUNT(*) FROM post "
+            "WHERE original_post_id IS NOT NULL GROUP BY original_post_id"
+        )
+        for orig_id, cnt in cursor.fetchall():
+            if orig_id is not None:
+                repost_counts[orig_id] = cnt
+    except sqlite3.Error:
+        repost_counts = {}
+
+    # 评论数
+    comment_counts: Dict[int, int] = {}
+    try:
+        cursor.execute("SELECT post_id, COUNT(*) FROM comment GROUP BY post_id")
+        for post_id, cnt in cursor.fetchall():
+            if post_id is not None:
+                comment_counts[post_id] = cnt
+    except sqlite3.Error:
+        comment_counts = {}
+
+    # 原帖（original_post_id 为空）的基础信息
+    cascades: List[Dict[str, Any]] = []
+    try:
+        cursor.execute(
+            "SELECT post_id, num_likes, num_shares FROM post "
+            "WHERE original_post_id IS NULL"
+        )
+        rows = cursor.fetchall()
+    except sqlite3.Error:
+        return []
+
+    for post_id, num_likes, num_shares in rows:
+        reposts = repost_counts.get(post_id, 0)
+        replies = comment_counts.get(post_id, 0)
+        likes = num_likes or 0
+        breadth = reposts + replies
+        # 综合级联“深度”：直接互动总量（回复 + 转发 + 点赞）
+        depth = breadth + likes
+        if breadth == 0 and likes == 0:
+            continue
+        cascades.append({
+            "post_id": post_id,
+            "replies": replies,
+            "reposts": reposts,
+            "likes": likes,
+            "breadth": breadth,
+            "depth": depth,
+        })
+
+    cascades.sort(key=lambda c: c["depth"], reverse=True)
+    return cascades[:top_n]
+
+
+def compute_emergent_metrics(
+    simulation_dir: str,
+    config: Dict[str, Any],
+    platform: str,
+    log_info,
+) -> Optional[Dict[str, Any]]:
+    """EXECPLAN2 I-2-0: 为单个平台计算涌现度量并返回字典（失败 → None）。
+
+    只读 {platform}_simulation.db + {platform}/actions.jsonl，绝不修改模拟产物。
+    """
+    db_path = os.path.join(simulation_dir, f"{platform}_simulation.db")
+    actions_path = os.path.join(simulation_dir, platform, "actions.jsonl")
+    if not os.path.exists(db_path):
+        log_info(f"涌现度量[{platform}]：数据库不存在，跳过")
+        return None
+
+    stance_by_agent = _load_stance_by_agent(config)
+
+    trajectory, polarization, net_by_agent = _score_stance_trajectory(actions_path, stance_by_agent)
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        interaction = _compute_interaction_ratio(conn, stance_by_agent)
+        communities = _detect_follow_communities(conn, stance_by_agent, log_info)
+        cascades = _compute_cascades(conn)
+    except Exception as e:  # noqa: BLE001
+        log_info(f"涌现度量[{platform}]：数据库读取失败，部分跳过: {e}")
+        interaction = {"cross_stance_interaction_ratio": 0.0, "cross_stance": 0, "within_stance": 0}
+        communities = []
+        cascades = []
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
+
+    # 末轮立场占比（供报告 agent 直接引用“支持率从 X% 跌至 Y%”）
+    final_stance_share: Dict[str, float] = {}
+    if trajectory:
+        last = trajectory[-1]["by_stance"]
+        total = sum(last.values()) or 1
+        final_stance_share = {s: round(v / total, 4) for s, v in last.items()}
+
+    metrics = {
+        "platform": platform,
+        "polarization_index": polarization,
+        "cross_stance_interaction_ratio": interaction.get("cross_stance_interaction_ratio", 0.0),
+        "interaction_counts": {
+            "cross_stance": interaction.get("cross_stance", 0),
+            "within_stance": interaction.get("within_stance", 0),
+        },
+        "final_stance_share": final_stance_share,
+        "stance_trajectory": trajectory,
+        "follow_communities": communities,
+        "cascades": cascades,
+        "num_speaking_agents": len(net_by_agent),
+        "sentiment_method": "lexicon",
+    }
+    return metrics
+
+
+def write_emergent_metrics(
+    simulation_dir: str,
+    config: Dict[str, Any],
+    platforms: List[str],
+    log_info,
+) -> None:
+    """EXECPLAN2 I-2-0: 计算并原子写出涌现度量产物（仅 SIM_EMERGENT_METRICS=true 时调用）。
+
+    产出：
+      - {platform}_emergent_metrics.json（每平台）
+      - emergent_metrics.json（聚合，供报告 agent 读取）
+    全程 try/except 隔离，任何失败都不影响已完成的模拟。
+    """
+    from app.utils.atomic import write_json_atomic  # 复用原子写助手
+
+    aggregate: Dict[str, Any] = {
+        "simulation_id": config.get("simulation_id"),
+        "generated_at": datetime.now().isoformat(),
+        "platforms": {},
+    }
+    for platform in platforms:
+        try:
+            metrics = compute_emergent_metrics(simulation_dir, config, platform, log_info)
+        except Exception as e:  # noqa: BLE001
+            log_info(f"涌现度量[{platform}]：计算异常，跳过该平台: {e}")
+            metrics = None
+        if metrics is None:
+            continue
+        aggregate["platforms"][platform] = metrics
+        try:
+            write_json_atomic(
+                os.path.join(simulation_dir, f"{platform}_emergent_metrics.json"),
+                metrics,
+            )
+            log_info(
+                f"涌现度量[{platform}]：极化={metrics['polarization_index']}, "
+                f"跨立场互动比={metrics['cross_stance_interaction_ratio']}, "
+                f"社区数={len(metrics['follow_communities'])}"
+            )
+        except Exception as e:  # noqa: BLE001
+            log_info(f"涌现度量[{platform}]：写出失败: {e}")
+
+    if aggregate["platforms"]:
+        try:
+            write_json_atomic(
+                os.path.join(simulation_dir, "emergent_metrics.json"),
+                aggregate,
+            )
+        except Exception as e:  # noqa: BLE001
+            log_info(f"涌现度量：聚合产物写出失败: {e}")
 
 
 class PlatformSimulation:
@@ -1822,7 +2350,25 @@ async def main():
     total_elapsed = (datetime.now() - start_time).total_seconds()
     log_manager.info("=" * 60)
     log_manager.info(f"模拟循环完成! 总耗时: {total_elapsed:.1f}秒")
-    
+
+    # EXECPLAN2 I-2-0: 模拟结束后（只读）计算涌现结构 / 观点动力学度量。
+    # 默认关闭（SIM_EMERGENT_METRICS!=true 时完全跳过，run 产物逐字节不变）；
+    # 全程 try/except 隔离，失败不影响已完成的模拟与后续 interview/关闭流程。
+    if os.environ.get("SIM_EMERGENT_METRICS", "false").strip().lower() == "true":
+        emergent_platforms: List[str] = []
+        if twitter_result is not None and twitter_result.env is not None:
+            emergent_platforms.append("twitter")
+        if reddit_result is not None and reddit_result.env is not None:
+            emergent_platforms.append("reddit")
+        if emergent_platforms:
+            try:
+                write_emergent_metrics(
+                    simulation_dir, config, emergent_platforms, log_manager.info
+                )
+                log_manager.info("已生成涌现度量: emergent_metrics.json")
+            except Exception as _em_err:  # noqa: BLE001
+                log_manager.error(f"涌现度量计算失败（已隔离，不影响模拟结果）: {_em_err}")
+
     # 是否进入等待命令模式
     if wait_for_commands:
         log_manager.info("")

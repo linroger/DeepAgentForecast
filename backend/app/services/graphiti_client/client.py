@@ -220,6 +220,21 @@ class _GraphNamespace:
         return self._rt.build_communities(graph_id)
 
     # --- retrieval -------------------------------------------------------
+    # EXECPLAN2 I-1-0: map the legacy ``reranker`` arg (which the facade used to
+    # silently drop) onto the new recipe selector so existing callers that pass
+    # reranker='mmr'/'cross_encoder'/'node_distance' now actually get that recipe.
+    _RERANKER_TO_RECIPE = {
+        "rrf": "rrf",
+        "mmr": "mmr",
+        "node_distance": "node_distance",
+        "nodedistance": "node_distance",
+        "node-distance": "node_distance",
+        "cross_encoder": "cross_encoder",
+        "cross-encoder": "cross_encoder",
+        "crossencoder": "cross_encoder",
+        "combined": "combined",
+    }
+
     def search(
         self,
         graph_id: str,
@@ -227,9 +242,29 @@ class _GraphNamespace:
         limit: int = 10,
         scope: str = "edges",
         reranker: Optional[str] = None,
+        recipe: Optional[str] = None,
+        center_node_uuid: Optional[str] = None,
+        bfs_origin_node_uuids: Optional[List[str]] = None,
+        search_filter: Optional[dict] = None,
         **_: Any,
     ) -> _SearchResult:
-        edges, nodes = self._rt.search(graph_id, query, limit, scope)
+        # EXECPLAN2 I-1-0: structured retrieval surface. All new params are optional;
+        # when omitted the runtime defaults to the configured recipe (default 'rrf'),
+        # so the historical 4-arg call path is unchanged. An explicit ``recipe`` wins;
+        # otherwise the legacy ``reranker`` arg is mapped to a recipe selector.
+        effective = recipe
+        if effective is None and reranker:
+            effective = self._RERANKER_TO_RECIPE.get(str(reranker).strip().lower())
+        edges, nodes = self._rt.search(
+            graph_id,
+            query,
+            limit,
+            scope,
+            recipe=effective,
+            center_node_uuid=center_node_uuid,
+            bfs_origin_node_uuids=bfs_origin_node_uuids,
+            search_filter=search_filter,
+        )
         return _SearchResult([_ZepEdge(e) for e in edges], [_ZepNode(n) for n in nodes])
 
 

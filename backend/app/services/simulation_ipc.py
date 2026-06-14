@@ -27,6 +27,57 @@ logger = get_logger('mirofish.simulation_ipc')
 _CANCEL_SUFFIX = ".cancel"
 _PROCESSING_SUFFIX = ".processing"
 
+# EXECPLAN2 I-5-5: 每条 IPC 命令往返的轻量遥测落地文件名（位于 simulation_dir 下）。
+# 采访（interview/batch_interview）的延迟分布与超时率直接解释报告丰富度——
+# 报告读起来单薄到底是「模型选择不采访」还是「采访一直超时」可由此区分。
+_IPC_TELEMETRY_FILENAME = "ipc_telemetry.jsonl"
+
+
+def _ipc_telemetry_enabled() -> bool:
+    """是否开启 IPC 往返遥测（默认关，保持现有行为）。EXECPLAN2 I-5-5
+
+    本文件不拥有 config.py，故通过 getattr 读取 Config.IPC_TELEMETRY_ENABLED，
+    未配置时回落为 False；导入失败也安全降级为关闭，绝不影响采访语义。
+    """
+    try:
+        from ..config import Config
+        return bool(getattr(Config, "IPC_TELEMETRY_ENABLED", False))
+    except Exception:
+        return False
+
+
+def _append_jsonl(path: str, record: Dict[str, Any]) -> None:
+    """尽力而为地向 JSONL 文件追加一行（失败静默）。EXECPLAN2 I-5-5
+
+    遥测是纯旁路测量：任何 I/O 失败都不得影响命令收发的成功/失败语义或时序，
+    因此整段包在 try/except 中，并仅以追加方式写入避免覆盖既有记录。
+    """
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
+        line = json.dumps(record, ensure_ascii=False, default=str)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+    except (OSError, TypeError, ValueError):
+        # 遥测失败绝不冒泡到调用方；丢一行测量数据可以接受。
+        pass
+
+
+def _percentile(sorted_values: List[float], pct: float) -> float:
+    """对已升序排序的列表取近似分位数（最近秩法）。EXECPLAN2 I-5-5
+
+    用于汇总 p50/p95 延迟。空列表返回 0.0；pct 取 [0,100]。
+    """
+    if not sorted_values:
+        return 0.0
+    if len(sorted_values) == 1:
+        return float(sorted_values[0])
+    pct = max(0.0, min(100.0, pct))
+    # 最近秩：rank = ceil(pct/100 * N)，转 0 基索引并夹取边界。
+    import math
+    rank = int(math.ceil((pct / 100.0) * len(sorted_values)))
+    idx = min(max(rank - 1, 0), len(sorted_values) - 1)
+    return float(sorted_values[idx])
+
 # EXECPLAN F-6-6 / F-12-7: 陈旧 IPC 文件的最小回收阈值（秒）。
 # 命令/响应文件名都是一次性 UUID，超过阈值的文件必然是无人认领的孤儿，
 # 直接清理不会误删任何还在等待的活跃消费者。
@@ -191,23 +242,31 @@ class SimulationIPCClient:
             args=args
         )
 
+        # EXECPLAN2 I-5-5: 轻量遥测——记录往返延迟、轮询次数、超时率，并归因到
+        # agent_id / platform。仅在 Config.IPC_TELEMETRY_ENABLED 开启时落盘；
+        # 整条测量路径 best-effort，绝不影响采访收发语义或时序。
+        telemetry_on = _ipc_telemetry_enabled()
+        agent_id = args.get("agent_id") if isinstance(args, dict) else None
+        platform = args.get("platform") if isinstance(args, dict) else None
+        poll_count = 0
+
         # 写入命令文件（原子写，避免服务端轮询读到半截 JSON）。EXECPLAN F-6-6
         command_file = os.path.join(self.commands_dir, f"{command_id}.json")
         write_json_atomic(command_file, command.to_dict())
-        
+
         logger.info(f"发送IPC命令: {command_type.value}, command_id={command_id}")
-        
+
         # 等待响应
         response_file = os.path.join(self.responses_dir, f"{command_id}.json")
         start_time = time.time()
-        
+
         while time.time() - start_time < timeout:
             if os.path.exists(response_file):
                 try:
                     with open(response_file, 'r', encoding='utf-8') as f:
                         response_data = json.load(f)
                     response = IPCResponse.from_dict(response_data)
-                    
+
                     # 清理命令和响应文件（含服务端认领标记与可能遗留的取消标记）。
                     # EXECPLAN F-12-7: 命令文件可能已被服务端 rename 成 .processing，
                     # 逐个尽力而为删除，互不影响。
@@ -221,16 +280,45 @@ class SimulationIPCClient:
                             os.remove(path)
                         except OSError:
                             pass
-                    
+
                     logger.info(f"收到IPC响应: command_id={command_id}, status={response.status.value}")
+                    # EXECPLAN2 I-5-5: 记录已完成往返（completed/failed 取决于服务端状态）。
+                    if telemetry_on:
+                        self._record_ipc_telemetry(
+                            command_id=command_id,
+                            command_type=command_type,
+                            agent_id=agent_id,
+                            platform=platform,
+                            latency_ms=(time.time() - start_time) * 1000.0,
+                            status=(
+                                "completed"
+                                if response.status == CommandStatus.COMPLETED
+                                else "failed"
+                            ),
+                            poll_count=poll_count,
+                            timeout=timeout,
+                        )
                     return response
                 except (json.JSONDecodeError, KeyError) as e:
                     logger.warning(f"解析响应失败: {e}")
-            
+
+            poll_count += 1  # EXECPLAN2 I-5-5: 统计轮询次数，反映等待深度。
             time.sleep(poll_interval)
-        
+
         # 超时
         logger.error(f"等待IPC响应超时: command_id={command_id}")
+        # EXECPLAN2 I-5-5: 记录超时往返——这是「报告单薄是因为采访一直超时」的关键信号。
+        if telemetry_on:
+            self._record_ipc_telemetry(
+                command_id=command_id,
+                command_type=command_type,
+                agent_id=agent_id,
+                platform=platform,
+                latency_ms=(time.time() - start_time) * 1000.0,
+                status="timeout",
+                poll_count=poll_count,
+                timeout=timeout,
+            )
 
         # EXECPLAN F-12-7: 写入 .cancel 取消标记，让服务端在执行前/写响应前
         # 感知到客户端已放弃，从而跳过 LLM 采访或避免写出无人消费的孤儿响应。
@@ -349,6 +437,111 @@ class SimulationIPCClient:
             return status.get("status") == "alive"
         except (json.JSONDecodeError, OSError):
             return False
+
+    def _record_ipc_telemetry(
+        self,
+        *,
+        command_id: str,
+        command_type: CommandType,
+        agent_id: Optional[int],
+        platform: Optional[str],
+        latency_ms: float,
+        status: str,
+        poll_count: int,
+        timeout: float,
+    ) -> None:
+        """向 simulation_dir/ipc_telemetry.jsonl 追加一条往返测量。EXECPLAN2 I-5-5
+
+        每行 {ts, command_id, command_type, agent_id, platform, latency_ms,
+        status, poll_count, timeout_s}。纯旁路、best-effort，绝不抛出。
+        采访超时会静默饿死报告里的 agent 视角；这条记录把该退化变得可诊断。
+        """
+        record = {
+            "ts": datetime.now().isoformat(),
+            "command_id": command_id,
+            "command_type": command_type.value,
+            "agent_id": agent_id,
+            "platform": platform,
+            "latency_ms": round(float(latency_ms), 1),
+            "status": status,
+            "poll_count": int(poll_count),
+            "timeout_s": float(timeout),
+        }
+        _append_jsonl(
+            os.path.join(self.simulation_dir, _IPC_TELEMETRY_FILENAME), record
+        )
+
+    @classmethod
+    def summarize(cls, simulation_dir: str) -> Dict[str, Any]:
+        """汇总 simulation_dir 下的 IPC 往返遥测。EXECPLAN2 I-5-5
+
+        读取 ipc_telemetry.jsonl，返回总体与按命令类型的健康度统计：
+        {count, completed, failed, timeout, timeout_rate, p50_ms, p95_ms,
+         by_command: {<command_type>: {count, timeout_rate, p50_ms, p95_ms}}}。
+
+        让报告阶段/运维可以一眼看出采访是否健康（延迟分布 + 超时率），
+        从而把「报告单薄」归因到模型选择还是基础设施退化，并据 p95 调超时。
+        遥测缺失/解析失败时返回零值骨架，绝不抛出。
+        """
+        empty = {
+            "count": 0,
+            "completed": 0,
+            "failed": 0,
+            "timeout": 0,
+            "timeout_rate": 0.0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "by_command": {},
+        }
+        path = os.path.join(simulation_dir, _IPC_TELEMETRY_FILENAME)
+        if not os.path.isfile(path):
+            return empty
+
+        records: List[Dict[str, Any]] = []
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        records.append(json.loads(line))
+                    except (json.JSONDecodeError, ValueError):
+                        # 容忍写一半的尾行/损坏行，跳过即可。
+                        continue
+        except OSError:
+            return empty
+
+        if not records:
+            return empty
+
+        def _bucket(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+            count = len(rows)
+            completed = sum(1 for r in rows if r.get("status") == "completed")
+            failed = sum(1 for r in rows if r.get("status") == "failed")
+            timeout = sum(1 for r in rows if r.get("status") == "timeout")
+            latencies = sorted(
+                float(r.get("latency_ms", 0.0) or 0.0) for r in rows
+            )
+            return {
+                "count": count,
+                "completed": completed,
+                "failed": failed,
+                "timeout": timeout,
+                "timeout_rate": round(timeout / count, 4) if count else 0.0,
+                "p50_ms": round(_percentile(latencies, 50.0), 1),
+                "p95_ms": round(_percentile(latencies, 95.0), 1),
+            }
+
+        summary = _bucket(records)
+        by_command: Dict[str, Any] = {}
+        for rec in records:
+            ct = str(rec.get("command_type", "unknown"))
+            by_command.setdefault(ct, []).append(rec)
+        summary["by_command"] = {
+            ct: _bucket(rows) for ct, rows in by_command.items()
+        }
+        return summary
 
 
 class SimulationIPCServer:
