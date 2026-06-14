@@ -55,6 +55,10 @@ class Config:
     # 每个 run 的 token / 成本上限（0=不限）。超限后下一次 LLM 调用抛 BudgetExceeded，止血式中止。
     LLM_RUN_BUDGET_TOKENS = int(os.environ.get('LLM_RUN_BUDGET_TOKENS', '0') or '0')
     LLM_RUN_BUDGET_USD = float(os.environ.get('LLM_RUN_BUDGET_USD', '0') or '0')
+
+    # 报告完成后追加一遍「结构化预测」抽取：机器可读的情景+概率+判定标准+引用审计
+    # （EXECPLAN2 I-3-0/I-9-1/I-3-1）。默认关，保持现有纯文本报告行为。落 forecast.json。
+    REPORT_STRUCTURED_FORECAST = os.environ.get('REPORT_STRUCTURED_FORECAST', 'False').strip().lower() == 'true'
     
     # LLM提供方（默认使用 Claude Code CLI 订阅）
     # claude-cli: 通过本机 `claude` CLI 调用（使用 Claude Code 订阅，无需 API Key）

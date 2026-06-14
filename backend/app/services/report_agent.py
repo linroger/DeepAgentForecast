@@ -2216,6 +2216,26 @@ class ReportAgent:
             report.status = ReportStatus.COMPLETED
             report.completed_at = datetime.now().isoformat()
 
+            # EXECPLAN2 I-3-0/I-9-1/I-3-1: 可选追加「结构化预测」抽取 + 引用接地审计。
+            # 默认关；失败仅告警不影响主报告（degrade-safe）。
+            if getattr(Config, "REPORT_STRUCTURED_FORECAST", False):
+                try:
+                    from .forecast_extractor import extract_structured_forecast, audit_citation_grounding
+                    forecast = extract_structured_forecast(
+                        report.markdown_content, self.llm,
+                        situation_brief=getattr(self, "situation_brief", None),
+                    )
+                    forecast["citation_audit"] = audit_citation_grounding(report.markdown_content)
+                    fpath = os.path.join(ReportManager._get_report_folder(report_id), "forecast.json")
+                    write_text_atomic(fpath, json.dumps(forecast, ensure_ascii=False, indent=2))
+                    logger.info(
+                        f"结构化预测已生成: {report_id} "
+                        f"({len(forecast.get('scenarios', []))} 情景, "
+                        f"引用覆盖 {forecast['citation_audit'].get('coverage')})"
+                    )
+                except Exception as _fe:
+                    logger.warning(f"结构化预测抽取失败（忽略，不影响主报告）: {_fe}")
+
             # 报告整体仍标记为 completed（确实跑完了），但若有章节写入了失败占位符，
             # 必须显著告警，避免"假完成"掩盖失败章节（历史上是静默写入污染内容）。
             if failed_section_titles:
