@@ -108,6 +108,52 @@ def extract_structured_forecast(report_markdown: str, llm,
     }
 
 
+_CRITIQUE_INSTRUCTIONS = """你是预测红队评审。下面是一个结构化预测对象（JSON）。请审查并修正它，重点检查：
+1) 过度自信：是否有情景概率过高而证据不足？向不确定性回归（base-rate）。
+2) 基率忽视：是否忽略了历史基率/惯性情景？
+3) 无支撑的跳跃：resolution_criteria 是否客观可验证？
+4) 互斥穷尽：情景是否互斥、是否需要补一个「其它/维持现状」兜底情景？
+输出修正后的**同样结构**的 JSON（headline/horizon/scenarios[name,probability,summary,key_drivers,resolution_criteria]/
+key_uncertainties/confidence/confidence_rationale），并在每个情景加一个 "critique_note" 字段说明你的调整。
+只输出 JSON。概率之和应≈1。"""
+
+
+def self_critique_forecast(forecast: Dict[str, Any], llm) -> Dict[str, Any]:
+    """Red-team + recalibrate a structured forecast (EXECPLAN2 I-3-5).
+
+    Runs one adversarial LLM pass that pushes back on overconfidence / base-rate
+    neglect / unsupported leaps and may add a status-quo fallback scenario, then
+    re-normalizes. Returns a new forecast dict tagged ``critiqued=True``; on any
+    failure returns the input unchanged (degrade-safe).
+    """
+    import json as _json
+    try:
+        raw = llm.chat_json(
+            messages=[{"role": "user",
+                       "content": _CRITIQUE_INSTRUCTIONS + "\n\n[预测对象]\n" + _json.dumps(forecast, ensure_ascii=False)}],
+            temperature=0.2,
+            max_tokens=2048,
+        )
+        if not isinstance(raw, dict) or not raw.get("scenarios"):
+            return forecast
+        out = dict(forecast)
+        out["scenarios"] = _normalize_scenarios(raw.get("scenarios"))
+        # preserve critique_note per scenario if the model supplied it
+        for new_s, raw_s in zip(out["scenarios"], raw.get("scenarios") or []):
+            if isinstance(raw_s, dict) and raw_s.get("critique_note"):
+                new_s["critique_note"] = str(raw_s["critique_note"])
+        if raw.get("confidence"):
+            c = str(raw["confidence"]).lower()
+            if c in ("low", "medium", "high"):
+                out["confidence"] = c
+        if raw.get("confidence_rationale"):
+            out["confidence_rationale"] = str(raw["confidence_rationale"])
+        out["critiqued"] = True
+        return out
+    except Exception:
+        return forecast
+
+
 # ---------------------------------------------------------------- citation audit
 # A "quantitative claim" = a sentence/line carrying a number or percentage. We
 # check whether each such line is near a citation marker ([S1], 【S3】, etc.).

@@ -2220,11 +2220,16 @@ class ReportAgent:
             # 默认关；失败仅告警不影响主报告（degrade-safe）。
             if getattr(Config, "REPORT_STRUCTURED_FORECAST", False):
                 try:
-                    from .forecast_extractor import extract_structured_forecast, audit_citation_grounding
+                    from .forecast_extractor import (
+                        extract_structured_forecast, audit_citation_grounding, self_critique_forecast,
+                    )
                     forecast = extract_structured_forecast(
                         report.markdown_content, self.llm,
                         situation_brief=getattr(self, "situation_brief", None),
                     )
+                    # 可选红队自校准（I-3-5）：纠正过度自信/基率忽视
+                    if getattr(Config, "REPORT_FORECAST_SELF_CRITIQUE", False):
+                        forecast = self_critique_forecast(forecast, self.llm)
                     forecast["citation_audit"] = audit_citation_grounding(report.markdown_content)
                     fpath = os.path.join(ReportManager._get_report_folder(report_id), "forecast.json")
                     write_text_atomic(fpath, json.dumps(forecast, ensure_ascii=False, indent=2))

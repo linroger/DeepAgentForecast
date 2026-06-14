@@ -59,6 +59,10 @@ class Config:
     # 报告完成后追加一遍「结构化预测」抽取：机器可读的情景+概率+判定标准+引用审计
     # （EXECPLAN2 I-3-0/I-9-1/I-3-1）。默认关，保持现有纯文本报告行为。落 forecast.json。
     REPORT_STRUCTURED_FORECAST = os.environ.get('REPORT_STRUCTURED_FORECAST', 'False').strip().lower() == 'true'
+    # 结构化预测后追加红队自校准（纠正过度自信/基率忽视，EXECPLAN2 I-3-5）。默认关（多一次 LLM 调用）。
+    REPORT_FORECAST_SELF_CRITIQUE = os.environ.get('REPORT_FORECAST_SELF_CRITIQUE', 'False').strip().lower() == 'true'
+    # OASIS 抽样/人设生成确定性种子（EXECPLAN2 I-7-2；0/空=随机，复现/集成跑设同一正整数）。
+    SIM_SEED = int(os.environ.get('SIM_SEED', '0') or '0')
     
     # LLM提供方（默认使用 Claude Code CLI 订阅）
     # claude-cli: 通过本机 `claude` CLI 调用（使用 Claude Code 订阅，无需 API Key）
