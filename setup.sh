@@ -657,10 +657,16 @@ cat <<NEXT
        • To run deep research on a specific model, set DEERFLOW_MODEL to
          claude | minimax | deepseek | qwen | glm | codex | kimi.
 
-  3) Start everything (backend :5001 + frontend :3000):
+  3) Verify the environment is ready (tool versions, both venvs, the DeerFlow
+     overlay, and credentials for the provider you picked) — takes seconds:
+       ${C_BOLD}npm run doctor${C_RESET}
+     Fix any ✗ it reports and re-run until it prints "All checks passed".
+
+  4) Start everything (backend :5001 + frontend :3000):
        ${C_BOLD}npm run dev${C_RESET}
 
-  4) Open the dashboard:
+  5) Open the dashboard, type a question, and click
+     "Run research + simulate + forecast":
        ${C_BOLD}http://localhost:3000/research${C_RESET}
 NEXT
 

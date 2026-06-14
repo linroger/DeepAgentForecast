@@ -25,11 +25,11 @@
 <header class="hero">
   <div class="tag-row">
     <span class="orange-tag" data-i18n="hero.tag">one prompt · research to forecast</span>
-    <span class="version-text">/ DeerFlow × OASIS × Zep</span>
+    <span class="version-text">/ DeerFlow × OASIS × Graphiti</span>
   </div>
   <h1><span data-i18n="hero.h1a">Ask one question.</span><br>
     <span class="gradient-text" data-i18n="hero.h1b">Auto-research, build a world, simulate the future.</span></h1>
-  <p class="lead" data-i18n="hero.lead">A deep-research agent (DeerFlow) searches the web and builds an evidence-grounded dossier; the system constructs a temporal knowledge graph (Zep), generates digital personas for the real-world actors it found, runs a multi-agent population simulation (OASIS, dual-platform), and a report agent synthesizes the forecast. The pages below show every stage of real runs, unedited.</p>
+  <p class="lead" data-i18n="hero.lead">A deep-research agent (DeerFlow) searches the web and builds an evidence-grounded dossier; the system constructs a local temporal knowledge graph (Graphiti), generates digital personas for the real-world actors it found, runs a multi-agent population simulation (OASIS, dual-platform), and a report agent synthesizes the forecast. The pages below show every stage of real runs, unedited.</p>
   <div class="hero-actions">
     <a class="primary-btn" href="#demos" data-i18n="hero.cta">View the demo forecasts ↓</a>
     <a class="ghost-btn" href="https://github.com/linroger/DeepAgentForecast#getting-started" data-i18n="hero.run">Run it yourself</a>
@@ -118,21 +118,22 @@
   <ol class="stage-list">
     <li data-i18n="how.s1">research — DeerFlow deep-research agent searches the web, extracts key actors (role / stance / influence) and writes a cited dossier</li>
     <li data-i18n="how.s2">ontology — an LLM derives entity &amp; relation types from the dossier and your question</li>
-    <li data-i18n="how.s3">graph — the dossier is ingested into a Zep temporal knowledge graph (GraphRAG)</li>
+    <li data-i18n="how.s3">graph — the dossier is ingested into a local temporal knowledge graph (Graphiti, GraphRAG)</li>
     <li data-i18n="how.s4">prepare — researched actors become digital personas with evidence-based stances</li>
     <li data-i18n="how.s5">run — hundreds of LLM personas interact on a simulated Twitter + Reddit (OASIS)</li>
     <li data-i18n="how.s6">report — a tool-augmented ReAct agent queries graph + simulation and writes the forecast</li>
   </ol>
-  <pre class="quickstart"><code># run it yourself — free-tier Zep key + a Claude/Codex CLI login is all you need
+  <pre class="quickstart"><code># run it yourself — no graph DB to host (embedded Graphiti/FalkorDB);
+# all you need is a Claude/Codex CLI login or any LLM API key
 git clone https://github.com/linroger/DeepAgentForecast.git
-cd DeepAgentForecast && ./setup.sh
+cd DeepAgentForecast && ./setup.sh   # interactive: picks your LLM provider
 npm run dev   # → http://localhost:3000/research</code></pre>
 </section>
 
 <footer class="footer">
   <p>Built on <a href="https://github.com/camel-ai/oasis">OASIS</a> (CAMEL-AI),
     <a href="https://github.com/bytedance/deer-flow">DeerFlow</a> (ByteDance),
-    <a href="https://www.getzep.com/">Zep Cloud</a> and
+    <a href="https://github.com/getzep/graphiti">Graphiti</a> (Zep) and
     <a href="https://github.com/666ghj/MiroFish">MiroFish</a> · AGPL-3.0 ·
     <a href="https://github.com/linroger/DeepAgentForecast">github.com/linroger/DeepAgentForecast</a></p>
 </footer>
