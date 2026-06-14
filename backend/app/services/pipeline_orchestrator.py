@@ -1333,6 +1333,12 @@ class PipelineOrchestrator:
 
     def _make_stage_updater(self, state: PipelineState, stage: str):
         task_manager = TaskManager()
+        # 把后续该阶段的 LLM 调用归属到此 stage（I-5-2 per-stage rollup）。
+        try:
+            from ..utils.telemetry import set_stage
+            set_stage(stage)
+        except Exception:
+            pass
 
         def update(local_pct: int, message: str):
             # 取消点：各阶段内部都会频繁回调进度，在这里抬升取消请求，
@@ -1422,6 +1428,9 @@ class PipelineOrchestrator:
     def _run(cls, state: PipelineState) -> None:
         self = cls()
         task_manager = TaskManager()
+        # EXECPLAN2 I-5-0/I-5-2: 把本次管线所有 LLM 调用归属到该 pipeline_id（contextvars）。
+        from ..utils.telemetry import set_run_context, LLMMeter
+        set_run_context(state.pipeline_id)
         try:
             # ---- Stage 0: RESEARCH ----
             upd = self._make_stage_updater(state, STAGE_RESEARCH)
@@ -1862,6 +1871,21 @@ class PipelineOrchestrator:
                 except Exception:
                     pass
         finally:
+            # EXECPLAN2 I-5-1: 落盘本次管线的 LLM 计量（token/成本/延迟，按阶段/模型），便于复盘。
+            try:
+                tpath = os.path.join(PipelineManager._dir(state.pipeline_id), "run_telemetry.json")
+                LLMMeter.write_run_telemetry(tpath, run_id=state.pipeline_id, extra={
+                    "pipeline_id": state.pipeline_id,
+                    "status": state.status,
+                    "report_id": state.report_id,
+                })
+                state.artifacts = getattr(state, "artifacts", None) or {}
+                if isinstance(state.artifacts, dict):
+                    state.artifacts["run_telemetry"] = tpath
+                    PipelineManager.save(state)
+                LLMMeter.reset(state.pipeline_id)
+            except Exception as _te:
+                logger.debug(f"[{state.pipeline_id}] 写入 run_telemetry 失败（忽略）: {_te}")
             # 线程结束即从注册表移除，避免 _threads 无界增长，并让 reconcile_orphans 的
             # "pid in _threads" 判定准确反映当前在飞的线程。
             cls._threads.pop(state.pipeline_id, None)

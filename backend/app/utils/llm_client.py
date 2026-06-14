@@ -49,6 +49,9 @@ class LLMClient:
     ):
         self.provider = (provider or Config.LLM_PROVIDER or "claude-cli").lower()
 
+        # 最近一次调用的精确 token 用量（OpenAI 兼容路径填充；CLI 路径为 None→按文本粗估）。
+        self._last_usage: Optional[Dict[str, int]] = None
+
         # openai 提供方所需的连接参数（CLI 模式下不使用）
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
@@ -90,14 +93,32 @@ class LLMClient:
         时自动指数退避重试（3 次）。OpenAI SDK 自身的 APIError 子类不在此重试范围，
         会按原样抛出（SDK 内部已有自己的重试与限流处理）。
         """
+        # EXECPLAN2 I-6-0/I-5-0/I-5-3: 内容寻址缓存命中直接返回；否则正常调用后记录
+        # token/延迟/成本计量并做预算检查。计量默认开（开销极小），缓存/预算默认关。
+        from .telemetry import LLMMeter, LLMCache, get_run_context, check_budget, estimate_tokens
+        run_id, stage = get_run_context()
+        cache_key = None
+        if Config.LLM_CACHE_ENABLED:
+            cache_key = LLMCache.key(self.provider, self.model, messages, temperature, max_tokens, response_format)
+            hit = LLMCache.get(cache_key)
+            if hit is not None:
+                if Config.LLM_TELEMETRY_ENABLED:
+                    LLMMeter.record(self.provider, self.model, 0, 0, 0.0, cached=True, stage=stage, run_id=run_id)
+                return hit
+
         last_error: Optional[Exception] = None
+        result: Optional[str] = None
+        started = time.monotonic()
+        self._last_usage = None
         for attempt in range(MAX_RETRIES):
             try:
                 if self.provider in OPENAI_COMPATIBLE_PROVIDERS:
-                    return self._chat_openai(messages, temperature, max_tokens, response_format)
-                if self.provider == "codex-cli":
-                    return self._chat_codex_cli(messages, temperature, max_tokens, response_format)
-                return self._chat_claude_cli(messages, temperature, max_tokens, response_format)
+                    result = self._chat_openai(messages, temperature, max_tokens, response_format)
+                elif self.provider == "codex-cli":
+                    result = self._chat_codex_cli(messages, temperature, max_tokens, response_format)
+                else:
+                    result = self._chat_claude_cli(messages, temperature, max_tokens, response_format)
+                break
             except RuntimeError as exc:
                 last_error = exc
                 if attempt < MAX_RETRIES - 1:
@@ -106,7 +127,24 @@ class LLMClient:
                         f"LLM 调用失败 (第 {attempt + 1}/{MAX_RETRIES} 次)，{delay}s 后重试: {exc}"
                     )
                     time.sleep(delay)
-        raise last_error if last_error is not None else RuntimeError("LLM 调用失败")
+        if result is None:
+            raise last_error if last_error is not None else RuntimeError("LLM 调用失败")
+
+        if Config.LLM_TELEMETRY_ENABLED:
+            latency_ms = (time.monotonic() - started) * 1000.0
+            usage = self._last_usage
+            if usage:
+                pt, ct = int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", 0))
+            else:
+                # 无精确 usage（CLI 提供方）→ 按文本长度粗估
+                pt = sum(estimate_tokens(str(m.get("content", ""))) for m in messages)
+                ct = estimate_tokens(result)
+            LLMMeter.record(self.provider, self.model, pt, ct, latency_ms, cached=False, stage=stage, run_id=run_id)
+        if Config.LLM_CACHE_ENABLED and cache_key is not None:
+            LLMCache.put(cache_key, result)
+        if Config.LLM_RUN_BUDGET_TOKENS or Config.LLM_RUN_BUDGET_USD:
+            check_budget(run_id)  # 超预算抛 BudgetExceeded
+        return result
 
     def chat_json(
         self,
@@ -331,6 +369,16 @@ class LLMClient:
             kwargs["extra_body"] = extra_body
 
         response = self._openai_client.chat.completions.create(**kwargs)
+        # 捕获精确 token 用量供计量（I-5-0）；无 usage 字段时留空走粗估。
+        try:
+            _u = getattr(response, "usage", None)
+            if _u is not None:
+                self._last_usage = {
+                    "prompt_tokens": int(getattr(_u, "prompt_tokens", 0) or 0),
+                    "completion_tokens": int(getattr(_u, "completion_tokens", 0) or 0),
+                }
+        except Exception:
+            self._last_usage = None
         choice = response.choices[0]
         content = choice.message.content
         # 推理模型在 content 被推理耗尽时会返回空串/None（finish_reason=length）。
