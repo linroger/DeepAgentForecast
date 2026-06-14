@@ -4,6 +4,7 @@
 """
 
 import os
+import threading
 from dotenv import load_dotenv
 
 # 加载项目根目录的 .env 文件
@@ -41,6 +42,10 @@ class Config:
     ).strip()
     # 连通性/研究子进程发起的出站请求是否禁止私网/环回地址（暴露到环回之外时建议开启）。
     APP_BLOCK_PRIVATE_URLS = os.environ.get('APP_BLOCK_PRIVATE_URLS', 'False').strip().lower() == 'true'
+
+    # 串行化 apply_provider 对共享 Config 类属性 + os.environ + .env 的读改写（EXECPLAN2 F-8-4），
+    # 避免并发切换提供方时与正在读取配置的管线发生竞态/撕裂。
+    _provider_lock = threading.Lock()
     
     # LLM提供方（默认使用 Claude Code CLI 订阅）
     # claude-cli: 通过本机 `claude` CLI 调用（使用 Claude Code 订阅，无需 API Key）
@@ -214,36 +219,38 @@ class Config:
             except ValueError as e:
                 raise ValueError(f"非法的 base_url：{e}")
 
-        cls.LLM_PROVIDER = provider
-        cls._is_kimi = provider == 'kimi'
-        cls._is_minimax = provider == 'minimax'
-        cls._is_deepseek = provider == 'deepseek'
-        cls._is_qwen = provider == 'qwen'
-        cls._is_glm = provider == 'glm'
-        cls.DEERFLOW_MODEL = meta.get('deerflow_model', 'claude')
+        # 在锁内完成「改类属性 + 改 os.environ + 写 .env」整段读改写（F-8-4）。
+        with cls._provider_lock:
+            cls.LLM_PROVIDER = provider
+            cls._is_kimi = provider == 'kimi'
+            cls._is_minimax = provider == 'minimax'
+            cls._is_deepseek = provider == 'deepseek'
+            cls._is_qwen = provider == 'qwen'
+            cls._is_glm = provider == 'glm'
+            cls.DEERFLOW_MODEL = meta.get('deerflow_model', 'claude')
 
-        env_updates = {'LLM_PROVIDER': provider, 'DEERFLOW_MODEL': cls.DEERFLOW_MODEL}
-        if is_openai_compat:
-            cls.LLM_BASE_URL = (base_url or '').strip() or meta.get('default_base') or 'https://api.openai.com/v1'
-            cls.LLM_MODEL_NAME = (model or '').strip() or meta.get('default_model') or 'gpt-4o-mini'
-            _key = (api_key or '').strip()
-            if _key:
-                cls.LLM_API_KEY = _key
-            env_updates['LLM_BASE_URL'] = cls.LLM_BASE_URL
-            env_updates['LLM_MODEL_NAME'] = cls.LLM_MODEL_NAME
-            if cls.LLM_API_KEY:
-                env_updates['LLM_API_KEY'] = cls.LLM_API_KEY
-                # 把 Key 镜像到提供方专属环境变量，供 deer-flow/config.yaml 的 $VAR 解析
-                # （deepseek→$DEEPSEEK_API_KEY、qwen→$DASHSCOPE_API_KEY、glm→$ZHIPUAI_API_KEY、
-                #  minimax→$MINIMAX_API_KEY），这样深度研究子进程也能拿到正确的 Key。
-                key_env = meta.get('key_env')
-                if key_env:
-                    env_updates[key_env] = cls.LLM_API_KEY
+            env_updates = {'LLM_PROVIDER': provider, 'DEERFLOW_MODEL': cls.DEERFLOW_MODEL}
+            if is_openai_compat:
+                cls.LLM_BASE_URL = (base_url or '').strip() or meta.get('default_base') or 'https://api.openai.com/v1'
+                cls.LLM_MODEL_NAME = (model or '').strip() or meta.get('default_model') or 'gpt-4o-mini'
+                _key = (api_key or '').strip()
+                if _key:
+                    cls.LLM_API_KEY = _key
+                env_updates['LLM_BASE_URL'] = cls.LLM_BASE_URL
+                env_updates['LLM_MODEL_NAME'] = cls.LLM_MODEL_NAME
+                if cls.LLM_API_KEY:
+                    env_updates['LLM_API_KEY'] = cls.LLM_API_KEY
+                    # 把 Key 镜像到提供方专属环境变量，供 deer-flow/config.yaml 的 $VAR 解析
+                    # （deepseek→$DEEPSEEK_API_KEY、qwen→$DASHSCOPE_API_KEY、glm→$ZHIPUAI_API_KEY、
+                    #  minimax→$MINIMAX_API_KEY），这样深度研究子进程也能拿到正确的 Key。
+                    key_env = meta.get('key_env')
+                    if key_env:
+                        env_updates[key_env] = cls.LLM_API_KEY
 
-        for k, v in env_updates.items():
-            os.environ[k] = v
-        cls._persist_env(env_updates)
-        return cls.provider_info()
+            for k, v in env_updates.items():
+                os.environ[k] = v
+            cls._persist_env(env_updates)
+            return cls.provider_info()
 
     @classmethod
     def _persist_env(cls, updates):

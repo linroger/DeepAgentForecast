@@ -14,6 +14,9 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 
 from .graphiti_client import Zep
+# F-4-6: 引入后端错误类型，使 search_graph 只对预期的后端/连接/服务端错误降级，
+# 而把编程/解析类缺陷暴露出来（ERROR + 重抛），不再被宽泛的 except 掩盖。
+from .graphiti_client import ApiError, InternalServerError
 
 from ..config import Config
 from ..utils.logger import get_logger
@@ -32,6 +35,9 @@ class SearchResult:
     nodes: List[Dict[str, Any]]
     query: str
     total_count: int
+    # F-4-6: 标记本次结果是否来自本地降级搜索（语义检索失败后的关键词兜底），
+    # 让调用方能识别持续性降级，而非把降级结果误当成高质量语义命中。
+    degraded: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -39,12 +45,15 @@ class SearchResult:
             "edges": self.edges,
             "nodes": self.nodes,
             "query": self.query,
-            "total_count": self.total_count
+            "total_count": self.total_count,
+            "degraded": self.degraded
         }
 
     def to_text(self) -> str:
         """转换为文本格式，供LLM理解"""
-        text_parts = [f"搜索查询: {self.query}", f"找到 {self.total_count} 条相关信息"]
+        # F-4-6: 降级搜索结果带上显式标记，便于人工/调用方察觉质量下降。
+        degraded_marker = "（降级搜索）" if self.degraded else ""
+        text_parts = [f"搜索查询: {self.query}{degraded_marker}", f"找到 {self.total_count} 条相关信息"]
 
         if self.facts:
             text_parts.append("\n### 相关事实:")
@@ -432,7 +441,42 @@ class ZepToolsService:
         self._llm_client = llm_client
         self._nodes_cache: Dict[str, List[NodeInfo]] = {}
         self._edges_cache: Dict[tuple[str, bool], List[EdgeInfo]] = {}
+        # I-6-1: 跨 section 复用的检索缓存（图谱在报告阶段不可变）。默认关闭以保持现有行为，
+        # 通过 Config.REPORT_RETRIEVAL_CACHE 开启；采访写图后通过 invalidate_search_cache 失效。
+        self._search_cache: Dict[tuple, SearchResult] = {}
+        self._forge_cache: Dict[tuple, InsightForgeResult] = {}
         logger.info("ZepToolsService 初始化完成")
+
+    # I-6-1: 集中读取性能开关，默认 False/串行，缺少 Config 字段时回退到当前行为。
+    @staticmethod
+    def _retrieval_cache_enabled() -> bool:
+        return bool(getattr(Config, "REPORT_RETRIEVAL_CACHE", False))
+
+    @staticmethod
+    def _retrieval_parallel_enabled() -> bool:
+        return bool(getattr(Config, "REPORT_RETRIEVAL_PARALLEL", False))
+
+    @staticmethod
+    def _retrieval_parallel_workers() -> int:
+        try:
+            workers = int(getattr(Config, "REPORT_RETRIEVAL_PARALLEL_WORKERS", 4))
+        except (TypeError, ValueError):
+            workers = 4
+        return max(1, workers)
+
+    def invalidate_search_cache(self, graph_id: Optional[str] = None) -> None:
+        """I-6-1: 失效检索/洞察缓存。采访等写图操作后调用，避免返回陈旧检索结果。
+
+        传入 graph_id 时仅清理该图谱相关缓存键；否则清空全部。"""
+        if graph_id is None:
+            self._search_cache.clear()
+            self._forge_cache.clear()
+            return
+        # 缓存键首元素均为 graph_id，按图谱定向清理。
+        for key in [k for k in self._search_cache if k and k[0] == graph_id]:
+            self._search_cache.pop(key, None)
+        for key in [k for k in self._forge_cache if k and k[0] == graph_id]:
+            self._forge_cache.pop(key, None)
 
     @property
     def llm(self) -> LLMClient:
@@ -498,6 +542,15 @@ class ZepToolsService:
         """
         logger.info(f"图谱搜索: graph_id={graph_id}, query={query[:50]}...")
 
+        # I-6-1: 命中跨 section 检索缓存则直接返回拷贝（避免调用方修改污染缓存）。
+        cache_enabled = self._retrieval_cache_enabled()
+        cache_key = (graph_id, (query or "").strip().lower(), limit, scope)
+        if cache_enabled:
+            cached = self._search_cache.get(cache_key)
+            if cached is not None:
+                logger.info("复用检索缓存命中（search_graph）")
+                return self._copy_search_result(cached)
+
         # 尝试使用Zep Cloud Search API
         try:
             search_results = self._call_with_retry(
@@ -543,18 +596,57 @@ class ZepToolsService:
 
             logger.info(f"搜索完成: 找到 {len(facts)} 条相关事实")
 
-            return SearchResult(
+            result = SearchResult(
                 facts=facts,
                 edges=edges,
                 nodes=nodes,
                 query=query,
                 total_count=len(facts)
             )
+            if cache_enabled:
+                self._search_cache[cache_key] = self._copy_search_result(result)
+            return result
 
+        except (ApiError, InternalServerError, ConnectionError, TimeoutError, OSError) as e:
+            # F-4-6: 仅对预期的后端/连接/服务端错误降级，保留对真实 API 故障的优雅退化。
+            logger.warning(f"Zep Search API失败（已知后端/连接错误），降级为本地搜索: {str(e)}")
+            return self._fallback_local_search(graph_id, query, limit, scope, cache_enabled, cache_key)
         except Exception as e:
-            logger.warning(f"Zep Search API失败，降级为本地搜索: {str(e)}")
-            # 降级：使用本地关键词匹配搜索
-            return self._local_search(graph_id, query, limit, scope)
+            # F-4-6: 限流错误依然降级（_call_with_retry 已耗尽重试）；其余未知异常很可能是
+            # 编程/解析类缺陷——记 ERROR + 堆栈并重抛，使真实回归可被诊断而非被静默掩盖。
+            if is_zep_rate_limit_error(e):
+                logger.warning(f"Zep Search API 限流，降级为本地搜索: {str(e)}")
+                return self._fallback_local_search(graph_id, query, limit, scope, cache_enabled, cache_key)
+            logger.error(f"Zep Search API 未预期异常（疑似程序/解析缺陷）: {str(e)}", exc_info=True)
+            raise
+
+    @staticmethod
+    def _copy_search_result(result: SearchResult) -> SearchResult:
+        """I-6-1: 返回 SearchResult 的浅拷贝（拷贝可变容器），避免缓存被调用方就地修改。"""
+        return SearchResult(
+            facts=list(result.facts),
+            edges=[dict(e) for e in result.edges],
+            nodes=[dict(n) for n in result.nodes],
+            query=result.query,
+            total_count=result.total_count,
+            degraded=result.degraded,
+        )
+
+    def _fallback_local_search(
+        self,
+        graph_id: str,
+        query: str,
+        limit: int,
+        scope: str,
+        cache_enabled: bool,
+        cache_key: tuple,
+    ) -> SearchResult:
+        """F-4-6/I-6-1: 统一的本地降级搜索出口，打上 degraded 标记并写入缓存。"""
+        result = self._local_search(graph_id, query, limit, scope)
+        result.degraded = True
+        if cache_enabled:
+            self._search_cache[cache_key] = self._copy_search_result(result)
+        return result
 
     def _local_search(
         self,
@@ -659,6 +751,24 @@ class ZepToolsService:
             query=query,
             total_count=len(facts)
         )
+
+    def search_from_cache(
+        self,
+        graph_id: str,
+        query: str,
+        limit: int = 10,
+        scope: str = "both",
+    ) -> SearchResult:
+        """I-6-5: 纯本地、基于已缓存全图节点/边的关键词匹配检索。
+
+        供画像富集等阶段在 PROFILE_ENRICH_FROM_CACHE 模式下复用：当同一不可变图谱被按实体
+        反复检索时（如 80 个 agent 各跑 2 次嵌入检索），可改为一次性 bulk 拉取（已缓存）+ 内存
+        匹配评分，把 O(agents) 次嵌入往返收敛为 O(1) 次拉取。返回结果标记 degraded=True 以示其
+        来自本地匹配而非嵌入语义检索。默认不被任何路径调用，仅由调用方显式选用，保持现有行为。
+        """
+        result = self._local_search(graph_id, query, limit, scope)
+        result.degraded = True
+        return result
 
     def get_all_nodes(self, graph_id: str) -> List[NodeInfo]:
         """
@@ -1015,6 +1125,17 @@ class ZepToolsService:
         """
         logger.info(f"InsightForge 深度洞察检索: {query[:50]}...")
 
+        # I-6-1: 命中跨 section 的 InsightForge 缓存则直接返回（图谱在报告阶段不可变）。
+        # 默认关闭，由 Config.REPORT_RETRIEVAL_CACHE 控制；采访写图后通过 invalidate_search_cache 失效。
+        forge_cache_enabled = self._retrieval_cache_enabled()
+        forge_key = (graph_id, (query or "").strip().lower(), (simulation_requirement or "").strip().lower(),
+                     hash((report_context or "").strip()), max_sub_queries)
+        if forge_cache_enabled:
+            cached_forge = self._forge_cache.get(forge_key)
+            if cached_forge is not None:
+                logger.info("复用 InsightForge 缓存命中")
+                return cached_forge
+
         result = InsightForgeResult(
             query=query,
             simulation_requirement=simulation_requirement,
@@ -1031,37 +1152,46 @@ class ZepToolsService:
         result.sub_queries = sub_queries
         logger.info(f"生成 {len(sub_queries)} 个子问题")
 
-        # Step 2: 对每个子问题进行语义搜索
+        # Step 2: 对每个子问题进行语义搜索（I-6-1: 可选并行扇出，默认串行保持原顺序）
         all_facts = []
         all_edges = []
         seen_facts = set()
 
-        for sub_query in sub_queries:
-            search_result = self.search_graph(
-                graph_id=graph_id,
-                query=sub_query,
-                limit=15,
-                scope="edges"
-            )
+        # (子问题, limit) 列表 + 原始问题，统一调度，便于并行。
+        search_specs = [(sq, 15) for sq in sub_queries]
+        search_specs.append((query, 20))  # 原始问题用更大的 limit
 
+        if self._retrieval_parallel_enabled() and len(search_specs) > 1:
+            # 检索路径是 I/O 密集且线程安全（与 oasis_profile_generator 的并行边/点检索同源），
+            # 用有界线程池并发扇出，墙钟时间趋近最慢的单次检索而非求和。
+            from concurrent.futures import ThreadPoolExecutor
+
+            ordered_results: List[Optional[SearchResult]] = [None] * len(search_specs)
+            workers = min(self._retrieval_parallel_workers(), len(search_specs))
+            with ThreadPoolExecutor(max_workers=workers) as ex:
+                future_to_idx = {
+                    ex.submit(self.search_graph, graph_id, spec_q, spec_limit, "edges"): idx
+                    for idx, (spec_q, spec_limit) in enumerate(search_specs)
+                }
+                for fut, idx in future_to_idx.items():
+                    try:
+                        ordered_results[idx] = fut.result()
+                    except Exception as e:  # noqa: BLE001  保持单次检索失败不影响整体扇出
+                        logger.warning(f"子问题并行检索失败（跳过该项）: {e}")
+            search_results_list = [r for r in ordered_results if r is not None]
+        else:
+            search_results_list = [
+                self.search_graph(graph_id=graph_id, query=spec_q, limit=spec_limit, scope="edges")
+                for spec_q, spec_limit in search_specs
+            ]
+
+        # 按确定性顺序合并去重，保持与原串行实现一致的事实先后次序。
+        for search_result in search_results_list:
             for fact in search_result.facts:
                 if fact not in seen_facts:
                     all_facts.append(fact)
                     seen_facts.add(fact)
-
             all_edges.extend(search_result.edges)
-
-        # 对原始问题也进行搜索
-        main_search = self.search_graph(
-            graph_id=graph_id,
-            query=query,
-            limit=20,
-            scope="edges"
-        )
-        for fact in main_search.facts:
-            if fact not in seen_facts:
-                all_facts.append(fact)
-                seen_facts.add(fact)
 
         result.semantic_facts = all_facts
         result.total_facts = len(all_facts)
@@ -1081,12 +1211,17 @@ class ZepToolsService:
         entity_insights = []
         node_map = {}  # 用于后续关系链构建
 
+        # F-4-3: 用一次（已缓存的）全图节点快照取代每个 UUID 一次的 get_node_detail 阻塞往返。
+        # get_all_nodes(graph_id) 会分页拉全图并缓存；本会话若已调用过则直接命中缓存。
+        # 仅当 UUID 不在快照中（跨图/陈旧）时才回退 get_node_detail，行为保持等价。
+        snapshot = {n.uuid: n for n in self.get_all_nodes(graph_id) if n.uuid}
+
         for uuid in list(entity_uuids):  # 处理所有实体，不截断
             if not uuid:
                 continue
             try:
-                # 单独获取每个相关节点的信息
-                node = self.get_node_detail(uuid)
+                # F-4-3: 优先用快照命中，缺失才回退单点查询（保留原跨图/陈旧 UUID 兜底语义）。
+                node = snapshot.get(uuid) or self.get_node_detail(uuid)
                 if node:
                     node_map[uuid] = node
                     entity_type = next((l for l in node.labels if l not in ["Entity", "Node"]), "实体")
@@ -1130,6 +1265,10 @@ class ZepToolsService:
         result.total_relationships = len(relationship_chains)
 
         logger.info(f"InsightForge完成: {result.total_facts}条事实, {result.total_entities}个实体, {result.total_relationships}条关系")
+
+        # I-6-1: 写入 InsightForge 缓存，供后续 section 复用（写图后会被 invalidate_search_cache 失效）。
+        if forge_cache_enabled:
+            self._forge_cache[forge_key] = result
         return result
 
     def _generate_sub_queries(
@@ -1517,6 +1656,9 @@ class ZepToolsService:
                         if _updater.write_interview_fact(itv.agent_name, itv.response):
                             _written += 1
                     logger.info(f"采访事实已写入图谱 {graph_id}: {_written}/{len(result.interviews)} 条")
+                    # I-6-1: 采访写入了新事实，使该图谱的检索/洞察缓存失效，避免后续返回陈旧检索结果。
+                    if _written:
+                        self.invalidate_search_cache(graph_id)
                 except Exception as _persist_err:
                     logger.warning(f"采访事实持久化跳过（不影响采访）: {_persist_err}")
 

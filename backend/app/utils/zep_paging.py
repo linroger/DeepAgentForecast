@@ -19,6 +19,9 @@ logger = get_logger('mirofish.zep_paging')
 
 _DEFAULT_PAGE_SIZE = 100
 _MAX_NODES = 2000
+# F-4-4: 边数量普遍多于节点，单独设置上限（高于 _MAX_NODES），
+# 避免长/大型仿真把全部边无界载入内存并缓存。
+_MAX_EDGES = 10000
 _DEFAULT_MAX_RETRIES = 3
 _DEFAULT_RETRY_DELAY = 2.0  # seconds, doubles each retry
 _DEFAULT_RATE_LIMIT_BUFFER = 1.0
@@ -130,12 +133,13 @@ def fetch_all_edges(
     client: Zep,
     graph_id: str,
     page_size: int = _DEFAULT_PAGE_SIZE,
+    max_items: int = _MAX_EDGES,
     max_retries: int = _DEFAULT_MAX_RETRIES,
     retry_delay: float = _DEFAULT_RETRY_DELAY,
     rate_limit_buffer: float = _DEFAULT_RATE_LIMIT_BUFFER,
     rate_limit_max_sleep: float = _DEFAULT_RATE_LIMIT_MAX_SLEEP,
 ) -> list[Any]:
-    """分页获取图谱所有边，返回完整列表。每页请求自带重试。"""
+    """分页获取图谱所有边，最多返回 max_items 条（默认 _MAX_EDGES）。每页请求自带重试。"""
     all_edges: list[Any] = []
     cursor: str | None = None
     page_num = 0
@@ -160,6 +164,13 @@ def fetch_all_edges(
             break
 
         all_edges.extend(batch)
+        # F-4-4: 与 fetch_all_nodes 一致地限制总量，防止无界载入/缓存。
+        # 一旦截断，下游 _local_search/panorama_search/get_node_edges/coalition
+        # 会在不完整的边集上静默运行，因此截断警告必须显眼可见于日志。
+        if len(all_edges) >= max_items:
+            all_edges = all_edges[:max_items]
+            logger.warning(f"Edge count reached limit ({max_items}), stopping pagination for graph {graph_id}")
+            break
         if len(batch) < page_size:
             break
 

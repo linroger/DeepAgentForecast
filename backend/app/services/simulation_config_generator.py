@@ -1169,7 +1169,8 @@ class SimulationConfigGenerator:
             "response_delay_max": <最大响应延迟分钟>,
             "sentiment_bias": <-1.0到1.0>,
             "stance": "<supportive/opposing/neutral/observer>",
-            "influence_weight": <影响力权重>
+            "influence_weight": <影响力权重>,
+            "interested_topics": [<关注议题，1-3个；用于同温层聚类>]
         }},
         ...
     ]
@@ -1177,18 +1178,40 @@ class SimulationConfigGenerator:
 
         system_prompt = "你是社交媒体行为分析专家。返回纯JSON，配置需符合中国人作息习惯。"
         
+        # EXECPLAN F-5-2: 防御式构建 agent_id -> 配置 映射，避免单条畸形配置（缺 agent_id / 类型不符）
+        # 让 dict 推导原子失败，从而把整批 15 个 Agent 静默退化为规则生成；同时把 key 统一 int 化，
+        # 修正 LLM 把 agent_id 输出成字符串（"5"）导致 int 查找全部 miss 的隐性退化。
+        raw_cfgs: List[Any] = []
+        llm_configs: Dict[int, Dict[str, Any]] = {}
         try:
             result = self._call_llm_with_retry(prompt, system_prompt)
-            llm_configs = {cfg["agent_id"]: cfg for cfg in result.get("agent_configs", [])}
+            raw_cfgs = result.get("agent_configs", []) or []
+            for cfg in raw_cfgs:
+                if not isinstance(cfg, dict):
+                    continue
+                aid = cfg.get("agent_id")
+                if aid is None:
+                    continue
+                try:
+                    llm_configs[int(aid)] = cfg  # 强制 int 化："5" / 5.0 -> 5
+                except (TypeError, ValueError):
+                    logger.warning(f"跳过无法解析 agent_id 的配置: {aid!r}")
         except Exception as e:
             logger.warning(f"Agent配置批次LLM生成失败: {e}, 使用规则生成")
+            raw_cfgs = []
             llm_configs = {}
-        
+
         # 构建AgentActivityConfig对象
         configs = []
         for i, entity in enumerate(entities):
             agent_id = start_idx + i
-            cfg = llm_configs.get(agent_id, {})
+            # EXECPLAN F-5-2: 优先按 id 命中；miss 时按位置回退（覆盖 LLM 漏写/写错 agent_id
+            # 但仍按输入顺序返回配置的情况），最后再退化到规则生成。
+            cfg = llm_configs.get(agent_id)
+            if not cfg and i < len(raw_cfgs) and isinstance(raw_cfgs[i], dict):
+                cfg = raw_cfgs[i]
+            if not cfg:
+                cfg = {}
 
             # 如果LLM没有生成，使用规则生成
             if not cfg:
@@ -1212,7 +1235,12 @@ class SimulationConfigGenerator:
                 sentiment_bias=cfg.get("sentiment_bias", 0.0),
                 stance=cfg.get("stance", "neutral"),
                 influence_weight=cfg.get("influence_weight", 1.0),
-                interested_topics=[str(t) for t in (cfg.get("interested_topics") or [])][:5],
+                # EXECPLAN F-5-3: cfg 未给 interested_topics 时按实体类型回退到确定性话题，
+                # 保证 T3.4 同温层聚类键 (stance, topic) 不退化为仅按 stance。
+                interested_topics=(
+                    [str(t) for t in (cfg.get("interested_topics") or [])][:5]
+                    or self._default_interested_topics(entity)
+                ),
             )
             # T3.6: 在两条路径（LLM 成功 / 规则兜底）上都强制落研究档案的实证影响力，
             # 避免 LLM-success 路径只被「提示」而给出任意权重，破坏 T3.5 的影响力加权激活。
@@ -1223,10 +1251,31 @@ class SimulationConfigGenerator:
 
         return configs
     
+    # EXECPLAN F-5-3: 按实体类型确定性映射关注议题，让 T3.4 同温层聚类键 (stance, topic)
+    # 稳定且有意义；LLM 未给 interested_topics 时作为兜底，杜绝聚类静默退化为仅按 stance。
+    _RULE_INTERESTED_TOPICS = {
+        "university": ["Public Affairs"],
+        "governmentagency": ["Public Affairs"],
+        "ngo": ["Public Affairs"],
+        "mediaoutlet": ["General News"],
+        "professor": ["Academic"],
+        "expert": ["Academic"],
+        "official": ["Public Affairs"],
+        "student": ["Education"],
+        "alumni": ["Education"],
+    }
+
+    def _default_interested_topics(self, entity: EntityNode) -> List[str]:
+        """EXECPLAN F-5-3: 由实体类型推导确定性关注议题（聚类键回退用）。"""
+        entity_type = (entity.get_entity_type() or "Unknown").lower()
+        return list(self._RULE_INTERESTED_TOPICS.get(entity_type, ["Public Opinion"]))
+
     def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
         """基于规则生成单个Agent配置（中国人作息）"""
         entity_type = (entity.get_entity_type() or "Unknown").lower()
-        
+        # EXECPLAN F-5-3: 规则路径同样产出 interested_topics，保证聚类键在确定性兜底路径下可用
+        interested_topics = self._default_interested_topics(entity)
+
         if entity_type in ["university", "governmentagency", "ngo"]:
             # 官方机构：工作时间活动，低频率，高影响力
             return {
@@ -1238,7 +1287,8 @@ class SimulationConfigGenerator:
                 "response_delay_max": 240,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 3.0
+                "influence_weight": 3.0,
+                "interested_topics": interested_topics
             }
         elif entity_type in ["mediaoutlet"]:
             # 媒体：全天活动，中等频率，高影响力
@@ -1251,7 +1301,8 @@ class SimulationConfigGenerator:
                 "response_delay_max": 30,
                 "sentiment_bias": 0.0,
                 "stance": "observer",
-                "influence_weight": 2.5
+                "influence_weight": 2.5,
+                "interested_topics": interested_topics
             }
         elif entity_type in ["professor", "expert", "official"]:
             # 专家/教授：工作+晚间活动，中等频率
@@ -1264,7 +1315,8 @@ class SimulationConfigGenerator:
                 "response_delay_max": 90,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 2.0
+                "influence_weight": 2.0,
+                "interested_topics": interested_topics
             }
         elif entity_type in ["student"]:
             # 学生：晚间为主，高频率
@@ -1277,7 +1329,8 @@ class SimulationConfigGenerator:
                 "response_delay_max": 15,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 0.8
+                "influence_weight": 0.8,
+                "interested_topics": interested_topics
             }
         elif entity_type in ["alumni"]:
             # 校友：晚间为主
@@ -1290,7 +1343,8 @@ class SimulationConfigGenerator:
                 "response_delay_max": 30,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 1.0
+                "influence_weight": 1.0,
+                "interested_topics": interested_topics
             }
         else:
             # 普通人：晚间高峰
@@ -1303,7 +1357,8 @@ class SimulationConfigGenerator:
                 "response_delay_max": 20,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 1.0
+                "influence_weight": 1.0,
+                "interested_topics": interested_topics
             }
     
 

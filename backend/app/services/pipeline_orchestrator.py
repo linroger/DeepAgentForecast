@@ -48,6 +48,7 @@ from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
 from ..services.text_processor import TextProcessor
+from ..services.zep_graph_memory_updater import ZepGraphMemoryManager
 from ..utils.actors import (
     REL_LABEL,
     extract_relationship_rows,
@@ -1538,7 +1539,12 @@ class PipelineOrchestrator:
                 chunks = TextProcessor.split_text(report_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP)
                 self._recompute_dynamic_bands(state, chunk_count=len(chunks))  # T6.7: 已知 chunk 数→重排区间
                 graph_id = builder.create_graph(name=project.name)
-                builder.set_ontology(graph_id, project.ontology)
+                # EXECPLAN2 F-3-1（跨文件兜底）：set_ontology 已对无名条目逐项跳过；这里再包一层
+                # try/except，确保即便整段本体异常也不至于中断 GRAPH 阶段（无本体则按纯文本抽取建图）。
+                try:
+                    builder.set_ontology(graph_id, project.ontology)
+                except Exception as _e:
+                    logger.warning(f"set_ontology 失败，回退为无本体建图: {_e}")
 
                 # T2.2/T2.3: 在文本抽取前，把研究确认的 actors + relationships 作为 typed 边
                 # 种入图谱；valid_at 锚定研究 as_of（不是建图时刻），后续文本抽取按名+embedding
@@ -1702,6 +1708,36 @@ class PipelineOrchestrator:
                         sim_manager._save_simulation_state(ss)
                 except Exception:
                     pass
+
+                # EXECPLAN2 F-12-1: 模拟结束后、读 actions.jsonl 写 run_summary 与跑报告之前，
+                # 加一道"汇流栅栏"。runner_status 会在 simulation_end 事件被解析的瞬间就置为
+                # COMPLETED（此时 OASIS 进程仍存活、监控线程仍在收尾，「模拟 → 图谱」反馈写入器
+                # 也可能还在排空队列向同一张 FalkorDB 图谱写 typed 边/episode）。若直接前进，报告
+                # 可能读到只摄入了一半反馈的图谱、run_summary 也可能基于仍在增长的 actions.jsonl，
+                # 导致同一模拟的报告 run-to-run 漂移、漏掉末轮反馈动态。故：
+                #   (1) join 监控线程 → 保证 OASIS 进程已退出且 _monitor_simulation 的 finally 跑完；
+                #   (2) 显式 stop_updater → 其 stop() 会 _flush_remaining 再 join worker（幂等，
+                #       即便监控线程已停过也安全）。
+                # 仅在本次运行启用了反馈回路时才需要（与 RUN 启动条件一致）；任何卡顿降级为告警，
+                # 不让栅栏本身拖垮管线。
+                if Config.SIM_GRAPH_FEEDBACK and graph_id:
+                    try:
+                        _mon = SimulationRunner._monitor_threads.get(sim_state.simulation_id)
+                        if _mon is not None and _mon.is_alive():
+                            _mon.join(timeout=30)
+                    except Exception as _join_err:  # noqa: BLE001
+                        logger.warning(
+                            "[%s] 等待模拟监控线程退出失败（降级继续）: %s",
+                            state.pipeline_id, _join_err,
+                        )
+                    try:
+                        ZepGraphMemoryManager.stop_updater(sim_state.simulation_id)
+                    except Exception as _flush_err:  # noqa: BLE001
+                        logger.warning(
+                            "[%s] 排空图谱反馈写入器失败（降级继续）: %s",
+                            state.pipeline_id, _flush_err,
+                        )
+
                 self._complete_stage(state, STAGE_RUN, "模拟完成")
 
             # T3.14: 模拟结束后聚合 run_summary.json（per-agent engagement + 每轮动作量 + top_posts +
@@ -1722,43 +1758,67 @@ class PipelineOrchestrator:
 
             # ---- Stage 5: REPORT ----
             upd = self._make_stage_updater(state, STAGE_REPORT)
-            upd(5, "生成预测报告…")
-            report_id = f"report_{uuid.uuid4().hex[:12]}"
-            # T4.6/T4.7: 情景报告 → 传情景标签 + base 模拟 id（反事实对比 scenario_diff）
-            _scenario_label = state.options.get("scenario_label")
-            _base_sim_id = None
-            _base_pid = state.options.get("base_pipeline_id")
-            if _base_pid:
+            # EXECPLAN2 F-1-0: REPORT 复用守卫——以"已落盘的报告本身"为复用信号，而非
+            # stage 状态。REPORT 总是末阶段：当报告已生成、却在收尾 DONE 记账处崩溃/失败时，
+            # _fail_stage / mark_failed 会把 REPORT（current_stage）状态翻成 failed，resume()
+            # 又把它重置为 pending——因此 state.stages[REPORT].status 在恢复时永远不是 completed，
+            # 无法像其它阶段那样用阶段状态做复用判定。改为：若 state.report_id 能解析到一份非
+            # FAILED 的已存报告，则直接复用（保留原 report_id，不再凭空铸新 id 孤立前端/书签链接），
+            # 避免重复跑最贵的多工具 LLM 报告生成。
+            existing_report = None
+            if state.report_id:
                 try:
-                    _bd = PipelineManager.load(_base_pid) or {}
-                    _base_sim_id = _bd.get("simulation_id")
+                    existing_report = ReportManager.get_report(state.report_id)
                 except Exception:
-                    _base_sim_id = None
-            agent = ReportAgent(
-                graph_id=graph_id,
-                simulation_id=sim_state.simulation_id,
-                simulation_requirement=state.prompt,
-                # T4.1: 钉入研究档案，报告不再从冷图盲搜重挖 cast/关系/时间线
-                situation_brief=situation_brief(actors),
-                actors=actors,
-                sources=research.get("sources"),
-                research_report=report_md,
-                scenario_label=_scenario_label,
-                base_simulation_id=_base_sim_id,
-            )
+                    existing_report = None
+            # 兜底：report_id 丢失但该模拟已有报告时，按 simulation_id 找回（同样保留原 id）。
+            if existing_report is None and sim_state is not None:
+                try:
+                    existing_report = ReportManager.get_report_by_simulation(sim_state.simulation_id)
+                except Exception:
+                    existing_report = None
+            if existing_report is not None and getattr(existing_report, "status", None) != ReportStatus.FAILED:
+                upd(100, "复用已有报告")
+                state.report_id = getattr(existing_report, "report_id", state.report_id)
+                self._complete_stage(state, STAGE_REPORT, "报告完成（复用）")
+            else:
+                upd(5, "生成预测报告…")
+                report_id = f"report_{uuid.uuid4().hex[:12]}"
+                # T4.6/T4.7: 情景报告 → 传情景标签 + base 模拟 id（反事实对比 scenario_diff）
+                _scenario_label = state.options.get("scenario_label")
+                _base_sim_id = None
+                _base_pid = state.options.get("base_pipeline_id")
+                if _base_pid:
+                    try:
+                        _bd = PipelineManager.load(_base_pid) or {}
+                        _base_sim_id = _bd.get("simulation_id")
+                    except Exception:
+                        _base_sim_id = None
+                agent = ReportAgent(
+                    graph_id=graph_id,
+                    simulation_id=sim_state.simulation_id,
+                    simulation_requirement=state.prompt,
+                    # T4.1: 钉入研究档案，报告不再从冷图盲搜重挖 cast/关系/时间线
+                    situation_brief=situation_brief(actors),
+                    actors=actors,
+                    sources=research.get("sources"),
+                    research_report=report_md,
+                    scenario_label=_scenario_label,
+                    base_simulation_id=_base_sim_id,
+                )
 
-            def report_cb(stage: str, progress: int, message: str):
-                upd(max(5, min(99, int(progress))), f"{stage}: {message}")
+                def report_cb(stage: str, progress: int, message: str):
+                    upd(max(5, min(99, int(progress))), f"{stage}: {message}")
 
-            report = agent.generate_report(progress_callback=report_cb, report_id=report_id)
-            try:
-                ReportManager.save_report(report)
-            except Exception:
-                pass
-            state.report_id = getattr(report, "report_id", report_id)
-            if getattr(report, "status", None) == ReportStatus.FAILED:
-                raise RuntimeError(getattr(report, "error", "报告生成失败"))
-            self._complete_stage(state, STAGE_REPORT, "报告完成")
+                report = agent.generate_report(progress_callback=report_cb, report_id=report_id)
+                try:
+                    ReportManager.save_report(report)
+                except Exception:
+                    pass
+                state.report_id = getattr(report, "report_id", report_id)
+                if getattr(report, "status", None) == ReportStatus.FAILED:
+                    raise RuntimeError(getattr(report, "error", "报告生成失败"))
+                self._complete_stage(state, STAGE_REPORT, "报告完成")
 
             # ---- DONE ----
             state.status = "completed"

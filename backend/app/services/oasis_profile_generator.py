@@ -19,6 +19,7 @@ from .graphiti_client import Zep
 
 from ..config import Config
 from ..utils.actors import actor_briefing, match_actor, relationship_briefing
+from ..utils.atomic import write_text_atomic, write_json_atomic  # EXECPLAN2 F-5-0/F-5-1 原子写
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .zep_entity_reader import EntityNode, ZepEntityReader
@@ -324,13 +325,18 @@ class OasisProfileGenerator:
             return results
         
         comprehensive_query = f"关于{entity_name}的所有信息、活动、事件、关系和背景"
-        
+
+        # EXECPLAN2 F-5-4: 重试预算与退避改由 Config 驱动（默认收紧到 2 次/0.5s 起步），
+        # 显著削减 Zep 抖动时的串行退避延迟；这是 best-effort 富集，失败即降级空上下文。
+        # 缺失 Config 字段时回退旧行为（3 次 / 2.0s），保持向后兼容。
+        max_retries = max(1, int(getattr(Config, "PROFILE_ZEP_SEARCH_MAX_RETRIES", 3)))
+        base_delay = float(getattr(Config, "PROFILE_ZEP_SEARCH_RETRY_DELAY_SECONDS", 2.0))
+
         def search_edges():
             """搜索边（事实/关系）- 带重试机制"""
-            max_retries = 3
             last_exception = None
-            delay = 2.0
-            
+            delay = base_delay
+
             for attempt in range(max_retries):
                 try:
                     return self.zep_client.graph.search(
@@ -349,13 +355,12 @@ class OasisProfileGenerator:
                     else:
                         logger.debug(f"Zep边搜索在 {max_retries} 次尝试后仍失败: {e}")
             return None
-        
+
         def search_nodes():
             """搜索节点（实体摘要）- 带重试机制"""
-            max_retries = 3
             last_exception = None
-            delay = 2.0
-            
+            delay = base_delay
+
             for attempt in range(max_retries):
                 try:
                     return self.zep_client.graph.search(
@@ -492,8 +497,18 @@ class OasisProfileGenerator:
                 context_parts.append("### 关联实体信息\n" + "\n".join(related_info))
         
         # 4. 使用Zep混合检索获取更丰富的信息
-        zep_results = self._search_zep_for_entity(entity)
-        
+        # EXECPLAN2 F-5-4: 实体已自带 related_edges/related_nodes 上下文时跳过这次冗余的 Zep 二次检索
+        # （省掉每实体一次网络往返 + 嵌套线程池 + 抖动时的串行退避）。默认开启（PROFILE_ZEP_SKIP_WHEN_CONTEXT=true）；
+        # 关闭或冷上下文（既无边也无邻居节点）时仍走原有检索路径，保持富集能力不降级。
+        skip_zep = bool(getattr(Config, "PROFILE_ZEP_SKIP_WHEN_CONTEXT", False)) and bool(
+            entity.related_edges or entity.related_nodes
+        )
+        if skip_zep:
+            zep_results = {"facts": [], "node_summaries": [], "context": ""}
+            logger.debug(f"跳过Zep二次检索（实体已自带上下文）: {entity.name}")
+        else:
+            zep_results = self._search_zep_for_entity(entity)
+
         if zep_results.get("facts"):
             # 去重：排除已存在的事实
             new_facts = [f for f in zep_results["facts"] if f not in existing_facts]
@@ -929,32 +944,37 @@ class OasisProfileGenerator:
         
         # 实时写入文件的辅助函数
         def save_profiles_realtime():
-            """实时保存已生成的 profiles 到文件"""
+            """实时保存已生成的 profiles 到文件（preview-only 预览产物）。
+
+            EXECPLAN2 F-5-0 / F-5-1:
+            - OASIS generate_reddit_agent_graph 按 JSON 数组下标分配 agent_id（忽略行内 user_id），
+              且对 mbti/gender/age/country 做无条件 key 访问。因此实时产物必须满足两点：
+              (1) 与最终写入器同一套 OASIS-loadable schema（带默认值），否则中断/早读会触发 KeyError；
+              (2) 数组下标 == 实体枚举下标，否则 poster_agent_id/initial_follows 会指向错误 persona。
+            - 修复：不再写「压实/重排」的产物，改为只写「连续已完成前缀」（遇到第一个 None 即停止），
+              使下标永远等于实体下标；并复用 _save_reddit_json / _save_twitter_csv 与最终写入器保持
+              逐字节 schema 一致（默认 age→30 / gender 归一化 / mbti→'ISTJ' / country→'中国'）。
+            """
             if not realtime_output_path:
                 return
-            
+
             with lock:
-                # 过滤出已生成的 profiles
-                existing_profiles = [p for p in profiles if p is not None]
-                if not existing_profiles:
+                # 只取连续已完成前缀：遇到第一个 None 即停止，保证 下标==实体下标 (F-5-1)
+                prefix_profiles = []
+                for p in profiles:
+                    if p is None:
+                        break
+                    prefix_profiles.append(p)
+                if not prefix_profiles:
                     return
-                
+
                 try:
+                    # 复用最终写入器，保证实时产物与最终产物 schema 完全一致 (F-5-0)；
+                    # 两个写入器内部均已改为原子写盘。
                     if output_platform == "reddit":
-                        # Reddit JSON 格式
-                        profiles_data = [p.to_reddit_format() for p in existing_profiles]
-                        with open(realtime_output_path, 'w', encoding='utf-8') as f:
-                            json.dump(profiles_data, f, ensure_ascii=False, indent=2)
+                        self._save_reddit_json(prefix_profiles, realtime_output_path)
                     else:
-                        # Twitter CSV 格式
-                        import csv
-                        profiles_data = [p.to_twitter_format() for p in existing_profiles]
-                        if profiles_data:
-                            fieldnames = list(profiles_data[0].keys())
-                            with open(realtime_output_path, 'w', encoding='utf-8', newline='') as f:
-                                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                                writer.writeheader()
-                                writer.writerows(profiles_data)
+                        self._save_twitter_csv(prefix_profiles, realtime_output_path)
                 except Exception as e:
                     logger.warning(f"实时保存 profiles 失败: {e}")
         
@@ -1127,39 +1147,43 @@ class OasisProfileGenerator:
         - description: 外部显示，其他用户可见的简介
         """
         import csv
-        
+        import io
+
         # 确保文件扩展名是.csv
         if not file_path.endswith('.csv'):
             file_path = file_path.replace('.json', '.csv')
-        
-        with open(file_path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            
-            # 写入OASIS要求的表头
-            headers = ['user_id', 'name', 'username', 'user_char', 'description']
-            writer.writerow(headers)
-            
-            # 写入数据行
-            for idx, profile in enumerate(profiles):
-                # user_char: 完整人设（bio + persona），用于LLM系统提示
-                user_char = profile.bio
-                if profile.persona and profile.persona != profile.bio:
-                    user_char = f"{profile.bio} {profile.persona}"
-                # 处理换行符（CSV中用空格替代）
-                user_char = user_char.replace('\n', ' ').replace('\r', ' ')
-                
-                # description: 简短简介，用于外部显示
-                description = profile.bio.replace('\n', ' ').replace('\r', ' ')
-                
-                row = [
-                    idx,                    # user_id: 从0开始的顺序ID
-                    profile.name,           # name: 真实姓名
-                    profile.user_name,      # username: 用户名
-                    user_char,              # user_char: 完整人设（内部LLM使用）
-                    description             # description: 简短简介（外部显示）
-                ]
-                writer.writerow(row)
-        
+
+        # EXECPLAN2 F-5-0: 先在内存缓冲构建完整 CSV，再原子写盘，避免读取者看到半写文件。
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+
+        # 写入OASIS要求的表头
+        headers = ['user_id', 'name', 'username', 'user_char', 'description']
+        writer.writerow(headers)
+
+        # 写入数据行
+        for idx, profile in enumerate(profiles):
+            # user_char: 完整人设（bio + persona），用于LLM系统提示
+            user_char = profile.bio
+            if profile.persona and profile.persona != profile.bio:
+                user_char = f"{profile.bio} {profile.persona}"
+            # 处理换行符（CSV中用空格替代）
+            user_char = user_char.replace('\n', ' ').replace('\r', ' ')
+
+            # description: 简短简介，用于外部显示
+            description = profile.bio.replace('\n', ' ').replace('\r', ' ')
+
+            row = [
+                idx,                    # user_id: 从0开始的顺序ID
+                profile.name,           # name: 真实姓名
+                profile.user_name,      # username: 用户名
+                user_char,              # user_char: 完整人设（内部LLM使用）
+                description             # description: 简短简介（外部显示）
+            ]
+            writer.writerow(row)
+
+        write_text_atomic(file_path, buf.getvalue())
+
         logger.info(f"已保存 {len(profiles)} 个Twitter Profile到 {file_path} (OASIS CSV格式)")
     
     def _normalize_gender(self, gender: Optional[str]) -> str:
@@ -1230,10 +1254,10 @@ class OasisProfileGenerator:
                 item["interested_topics"] = profile.interested_topics
             
             data.append(item)
-        
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        
+
+        # EXECPLAN2 F-5-0: 原子写，避免 watchdog SIGKILL 或轮询读取者看到半写文件。
+        write_json_atomic(file_path, data, ensure_ascii=False, indent=2)
+
         logger.info(f"已保存 {len(profiles)} 个Reddit Profile到 {file_path} (JSON格式，包含user_id字段)")
     
     # 保留旧方法名作为别名，保持向后兼容

@@ -159,20 +159,37 @@ class SimulationRunState:
     rounds_truncated_from: Optional[int] = None
     rounds_truncated_to: Optional[int] = None
 
+    # EXECPLAN2 F-6-1：守护本对象可变标量计数器的可重入锁。
+    # get_run_state() 返回缓存的同一个对象；监控线程持续 mutate（add_action / current_round /
+    # twitter_*/reddit_* / counts），而 Flask 请求线程并发调用 to_dict()/to_detail_dict() 序列化。
+    # 用可重入锁保证「所有标量计数器的快照内部自洽」，避免轮询面板读到半更新的不一致数字。
+    # 可重入（RLock）以允许 _read_action_log 持锁时再调用 add_action，以及 to_detail_dict 调用 to_dict。
+    # init=False/repr=False/compare=False：锁不参与构造、序列化与比较。
+    _lock: "threading.RLock" = field(
+        default_factory=threading.RLock, init=False, repr=False, compare=False
+    )
+
     def add_action(self, action: AgentAction):
         """添加动作到最近动作列表"""
-        self.recent_actions.insert(0, action)
-        if len(self.recent_actions) > self.max_recent_actions:
-            self.recent_actions = self.recent_actions[:self.max_recent_actions]
-        
-        if action.platform == "twitter":
-            self.twitter_actions_count += 1
-        else:
-            self.reddit_actions_count += 1
-        
-        self.updated_at = datetime.now().isoformat()
-    
+        # EXECPLAN2 F-6-1：持锁更新 recent_actions 与计数器，使其相对序列化原子。
+        with self._lock:
+            self.recent_actions.insert(0, action)
+            if len(self.recent_actions) > self.max_recent_actions:
+                self.recent_actions = self.recent_actions[:self.max_recent_actions]
+
+            if action.platform == "twitter":
+                self.twitter_actions_count += 1
+            else:
+                self.reddit_actions_count += 1
+
+            self.updated_at = datetime.now().isoformat()
+
     def to_dict(self) -> Dict[str, Any]:
+        # EXECPLAN2 F-6-1：持锁构造返回字典，确保所有标量计数器是一次性自洽快照。
+        with self._lock:
+            return self._to_dict_unlocked()
+
+    def _to_dict_unlocked(self) -> Dict[str, Any]:
         return {
             "simulation_id": self.simulation_id,
             "runner_status": self.runner_status.value,
@@ -210,10 +227,13 @@ class SimulationRunState:
 
     def to_detail_dict(self) -> Dict[str, Any]:
         """包含最近动作的详细信息"""
-        result = self.to_dict()
-        result["recent_actions"] = [a.to_dict() for a in self.recent_actions]
-        result["rounds_count"] = len(self.rounds)
-        return result
+        # EXECPLAN2 F-6-1：持锁构造，使标量快照与 recent_actions 的拷贝相对监控线程一致，
+        # 避免在请求线程序列化 recent_actions 的同时监控线程 insert/slice 造成不一致快照。
+        with self._lock:
+            result = self._to_dict_unlocked()
+            result["recent_actions"] = [a.to_dict() for a in self.recent_actions]
+            result["rounds_count"] = len(self.rounds)
+            return result
 
 
 class SimulationRunner:
@@ -677,50 +697,54 @@ class SimulationRunner:
                             # 处理事件类型的条目
                             if "event_type" in action_data:
                                 event_type = action_data.get("event_type")
-                                
+
                                 # 检测 simulation_end 事件，标记平台已完成
+                                # EXECPLAN2 F-6-1：持锁更新标量状态，使其相对请求线程的序列化自洽。
                                 if event_type == "simulation_end":
-                                    if platform == "twitter":
-                                        state.twitter_completed = True
-                                        state.twitter_running = False
-                                        logger.info(f"Twitter 模拟已完成: {state.simulation_id}, total_rounds={action_data.get('total_rounds')}, total_actions={action_data.get('total_actions')}")
-                                    elif platform == "reddit":
-                                        state.reddit_completed = True
-                                        state.reddit_running = False
-                                        logger.info(f"Reddit 模拟已完成: {state.simulation_id}, total_rounds={action_data.get('total_rounds')}, total_actions={action_data.get('total_actions')}")
-                                    
-                                    # 检查是否所有启用的平台都已完成
-                                    # 如果只运行了一个平台，只检查那个平台
-                                    # 如果运行了两个平台，需要两个都完成
-                                    all_completed = cls._check_all_platforms_completed(state)
-                                    if all_completed:
-                                        state.runner_status = RunnerStatus.COMPLETED
-                                        state.completed_at = datetime.now().isoformat()
-                                        logger.info(f"所有平台模拟已完成: {state.simulation_id}")
-                                
+                                    with state._lock:
+                                        if platform == "twitter":
+                                            state.twitter_completed = True
+                                            state.twitter_running = False
+                                            logger.info(f"Twitter 模拟已完成: {state.simulation_id}, total_rounds={action_data.get('total_rounds')}, total_actions={action_data.get('total_actions')}")
+                                        elif platform == "reddit":
+                                            state.reddit_completed = True
+                                            state.reddit_running = False
+                                            logger.info(f"Reddit 模拟已完成: {state.simulation_id}, total_rounds={action_data.get('total_rounds')}, total_actions={action_data.get('total_actions')}")
+
+                                        # 检查是否所有启用的平台都已完成
+                                        # 如果只运行了一个平台，只检查那个平台
+                                        # 如果运行了两个平台，需要两个都完成
+                                        all_completed = cls._check_all_platforms_completed(state)
+                                        if all_completed:
+                                            state.runner_status = RunnerStatus.COMPLETED
+                                            state.completed_at = datetime.now().isoformat()
+                                            logger.info(f"所有平台模拟已完成: {state.simulation_id}")
+
                                 # 更新轮次信息（从 round_end 事件）
                                 elif event_type == "round_end":
                                     round_num = action_data.get("round", 0)
                                     simulated_hours = action_data.get("simulated_hours", 0)
-                                    
-                                    # 更新各平台独立的轮次和时间
-                                    if platform == "twitter":
-                                        if round_num > state.twitter_current_round:
-                                            state.twitter_current_round = round_num
-                                        state.twitter_simulated_hours = simulated_hours
-                                    elif platform == "reddit":
-                                        if round_num > state.reddit_current_round:
-                                            state.reddit_current_round = round_num
-                                        state.reddit_simulated_hours = simulated_hours
-                                    
-                                    # 总体轮次取两个平台的最大值
-                                    if round_num > state.current_round:
-                                        state.current_round = round_num
-                                    # 总体时间取两个平台的最大值
-                                    state.simulated_hours = max(state.twitter_simulated_hours, state.reddit_simulated_hours)
-                                
+
+                                    # EXECPLAN2 F-6-1：轮次/模拟时间标量的更新同样持锁。
+                                    with state._lock:
+                                        # 更新各平台独立的轮次和时间
+                                        if platform == "twitter":
+                                            if round_num > state.twitter_current_round:
+                                                state.twitter_current_round = round_num
+                                            state.twitter_simulated_hours = simulated_hours
+                                        elif platform == "reddit":
+                                            if round_num > state.reddit_current_round:
+                                                state.reddit_current_round = round_num
+                                            state.reddit_simulated_hours = simulated_hours
+
+                                        # 总体轮次取两个平台的最大值
+                                        if round_num > state.current_round:
+                                            state.current_round = round_num
+                                        # 总体时间取两个平台的最大值
+                                        state.simulated_hours = max(state.twitter_simulated_hours, state.reddit_simulated_hours)
+
                                 continue
-                            
+
                             action = AgentAction(
                                 round_num=action_data.get("round", 0),
                                 timestamp=action_data.get("timestamp", datetime.now().isoformat()),
@@ -732,13 +756,16 @@ class SimulationRunner:
                                 result=action_data.get("result"),
                                 success=action_data.get("success", True),
                             )
-                            state.add_action(action)
-                            
-                            # 更新轮次
-                            if action.round_num and action.round_num > state.current_round:
-                                state.current_round = action.round_num
-                            
+                            # EXECPLAN2 F-6-1：add_action 已内部持锁；紧随其后的 current_round
+                            # 更新也持同一把可重入锁，保证计数器与轮次的快照一致。
+                            with state._lock:
+                                state.add_action(action)
+                                # 更新轮次
+                                if action.round_num and action.round_num > state.current_round:
+                                    state.current_round = action.round_num
+
                             # 如果启用了图谱记忆更新，将活动发送到Zep
+                            # （网络/IO 副作用，放在锁外以缩短临界区）
                             if graph_updater:
                                 graph_updater.add_activity_from_dict(action_data, platform)
                             
@@ -1252,8 +1279,10 @@ class SimulationRunner:
         Returns:
             每轮的汇总信息
         """
-        actions = cls.get_actions(simulation_id, limit=10000)
-        
+        # EXECPLAN2 F-6-3：聚合须读取完整动作历史，不能用 get_actions(limit=10000) 的分页切片
+        # （会按时间倒序丢弃最早的轮次），否则长时模拟的早期轮次会从时间线中消失。
+        actions = cls.get_all_actions(simulation_id)
+
         # 按轮次分组
         rounds: Dict[int, Dict[str, Any]] = {}
         
@@ -1313,8 +1342,10 @@ class SimulationRunner:
         Returns:
             Agent统计列表
         """
-        actions = cls.get_actions(simulation_id, limit=10000)
-        
+        # EXECPLAN2 F-6-3：per-agent 统计须基于完整历史，否则超过 1w 动作后早期轮次/Agent 会被截断、
+        # engagement 总量被低估。
+        actions = cls.get_all_actions(simulation_id)
+
         agent_stats: Dict[int, Dict[str, Any]] = {}
         
         for action in actions:
@@ -1363,7 +1394,9 @@ class SimulationRunner:
         try:
             agent_stats = cls.get_agent_stats(simulation_id)
             timeline = cls.get_timeline(simulation_id)
-            actions = cls.get_actions(simulation_id, limit=10000)
+            # EXECPLAN2 F-6-3：run_summary 喂给报告/预测阶段，必须基于完整动作历史，
+            # 否则 total_actions / top_posts / rounds_executed 会因 1w 截断而偏向 late-run 窗口。
+            actions = cls.get_all_actions(simulation_id)
         except Exception as e:  # noqa: BLE001
             logger.warning(f"[{simulation_id}] run_summary 聚合失败: {e}")
             return None
@@ -1647,8 +1680,20 @@ class SimulationRunner:
                     # 默认行为：正常退出
                     sys.exit(0)
             else:
-                # 如果原处理器不可调用（如 SIG_DFL），则使用默认行为
-                raise KeyboardInterrupt
+                # EXECPLAN2 F-12-3：原处理器为 SIG_DFL / SIG_IGN / 未知。
+                # 旧逻辑硬 `raise KeyboardInterrupt`：对 SIGTERM（Docker stop / systemd / supervisor
+                # 的默认终止信号）而言，KeyboardInterrupt 是普通 BaseException，会沿被中断帧（Flask/
+                # Werkzeug 服务循环）向上传播，可能被某层 try/except 吞掉而无法可靠终止进程。
+                # 改为与 PipelineOrchestrator 的同构处理：恢复默认 disposition 并重新投递信号，
+                # 让 OS 按默认行为（终止进程）处理；若原本被忽略（SIG_IGN）则保持忽略。
+                if signum is not None and signal.getsignal(signum) is signal.SIG_IGN:
+                    return
+                if signum is not None:
+                    signal.signal(signum, signal.SIG_DFL)
+                    os.kill(os.getpid(), signum)
+                else:
+                    # 无信号编号（如直接调用）：退化为正常退出。
+                    sys.exit(0)
         
         # 注册 atexit 处理器（作为备用）
         atexit.register(cls.cleanup_all_simulations)

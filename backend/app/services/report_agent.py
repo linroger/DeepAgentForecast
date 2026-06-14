@@ -13,13 +13,16 @@ import os
 import json
 import time
 import re
+import logging
+import threading
+import contextvars
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
 from ..config import Config
-from ..utils.atomic import write_text_atomic
+from ..utils.atomic import write_text_atomic, write_json_atomic
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .zep_tools import (
@@ -31,6 +34,53 @@ from .zep_tools import (
 )
 
 logger = get_logger('mirofish.report_agent')
+
+# EXECPLAN2 F-7-1: 并发报告生成时，每份报告的 console_log.txt 此前都挂在进程级共享 logger
+# （'mirofish.report_agent' / 'mirofish.zep_tools'）上，导致两份报告的日志互相串扰，且 handler
+# 增删在并发 close()/__del__ 时存在竞态。修复思路：
+#   1) 用 ContextVar 记录「当前正在生成的 report_id」——报告生成跑在各自的 daemon 线程里，
+#      ContextVar 天然按执行上下文隔离；
+#   2) 在两个父 logger 上各装一个「打戳」过滤器，把当前上下文的 report_id 写进每条 record；
+#   3) 每份报告的 FileHandler 再装一个「按 report_id 匹配」的过滤器，只写属于自己的 record，
+#      从根本上杜绝串扰（不必改动散落各处的 logger.xxx 发射点）；
+#   4) handler 的增删/关闭统一用一把进程级锁串行化，消除并发竞态。
+_REPORT_LOG_PARENT_LOGGERS = ('mirofish.report_agent', 'mirofish.zep_tools')
+
+# 当前执行上下文正在生成的 report_id（无则 None）
+_current_report_id: "contextvars.ContextVar[Optional[str]]" = contextvars.ContextVar(
+    'mirofish_current_report_id', default=None
+)
+
+# 串行化 FileHandler 的 addHandler/removeHandler/close（EXECPLAN2 F-7-1）
+_console_handler_lock = threading.Lock()
+
+
+class _ReportIdStampFilter(logging.Filter):
+    """EXECPLAN2 F-7-1: 把当前上下文的 report_id 打到每条 record 上（始终放行）。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        if not hasattr(record, 'report_id'):
+            record.report_id = _current_report_id.get()
+        return True
+
+
+class _ReportIdMatchFilter(logging.Filter):
+    """EXECPLAN2 F-7-1: 仅放行属于本报告（report_id 匹配）的 record，杜绝并发串扰。"""
+
+    def __init__(self, report_id: str):
+        super().__init__()
+        self.report_id = report_id
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        return getattr(record, 'report_id', None) == self.report_id
+
+
+def _ensure_stamp_filters_installed() -> None:
+    """EXECPLAN2 F-7-1: 在父 logger 上幂等安装打戳过滤器（仅安装一次）。"""
+    for name in _REPORT_LOG_PARENT_LOGGERS:
+        lg = logging.getLogger(name)
+        if not any(isinstance(f, _ReportIdStampFilter) for f in lg.filters):
+            lg.addFilter(_ReportIdStampFilter())
 
 
 class ReportLogger:
@@ -325,6 +375,9 @@ class ReportConsoleLogger:
         )
         self._ensure_log_file()
         self._file_handler = None
+        # EXECPLAN2 F-7-1: 绑定当前执行上下文到本 report_id，使该上下文（及其衍生线程）
+        # 发射的日志都被打戳为本报告，从而只写进本报告的 console_log.txt。
+        self._ctx_token = _current_report_id.set(report_id)
         self._setup_file_handler()
     
     def _ensure_log_file(self):
@@ -333,9 +386,7 @@ class ReportConsoleLogger:
         os.makedirs(log_dir, exist_ok=True)
     
     def _setup_file_handler(self):
-        """设置文件处理器，将日志同时写入文件"""
-        import logging
-        
+        """设置文件处理器，将日志同时写入文件（EXECPLAN2 F-7-1：仅写本报告自己的日志）"""
         # 创建文件处理器
         self._file_handler = logging.FileHandler(
             self.log_file_path,
@@ -343,44 +394,46 @@ class ReportConsoleLogger:
             encoding='utf-8'
         )
         self._file_handler.setLevel(logging.INFO)
-        
+
         # 使用与控制台相同的简洁格式
         formatter = logging.Formatter(
             '[%(asctime)s] %(levelname)s: %(message)s',
             datefmt='%H:%M:%S'
         )
         self._file_handler.setFormatter(formatter)
-        
-        # 添加到 report_agent 相关的 logger
-        loggers_to_attach = [
-            'mirofish.report_agent',
-            'mirofish.zep_tools',
-        ]
-        
-        for logger_name in loggers_to_attach:
-            target_logger = logging.getLogger(logger_name)
-            # 避免重复添加
-            if self._file_handler not in target_logger.handlers:
-                target_logger.addHandler(self._file_handler)
-    
-    def close(self):
-        """关闭文件处理器并从 logger 中移除"""
-        import logging
-        
-        if self._file_handler:
-            loggers_to_detach = [
-                'mirofish.report_agent',
-                'mirofish.zep_tools',
-            ]
-            
-            for logger_name in loggers_to_detach:
+        # EXECPLAN2 F-7-1: 只放行本报告（report_id 匹配）的 record，避免并发时多报告日志串扰
+        self._file_handler.addFilter(_ReportIdMatchFilter(self.report_id))
+
+        # EXECPLAN2 F-7-1: 确保父 logger 已装打戳过滤器；handler 增删用进程级锁串行化
+        with _console_handler_lock:
+            _ensure_stamp_filters_installed()
+            for logger_name in _REPORT_LOG_PARENT_LOGGERS:
                 target_logger = logging.getLogger(logger_name)
-                if self._file_handler in target_logger.handlers:
-                    target_logger.removeHandler(self._file_handler)
-            
-            self._file_handler.close()
-            self._file_handler = None
-    
+                # 避免重复添加
+                if self._file_handler not in target_logger.handlers:
+                    target_logger.addHandler(self._file_handler)
+
+    def close(self):
+        """关闭文件处理器并从 logger 中移除（EXECPLAN2 F-7-1：加锁串行化，消除并发竞态）"""
+        with _console_handler_lock:
+            if self._file_handler:
+                for logger_name in _REPORT_LOG_PARENT_LOGGERS:
+                    target_logger = logging.getLogger(logger_name)
+                    if self._file_handler in target_logger.handlers:
+                        target_logger.removeHandler(self._file_handler)
+
+                self._file_handler.close()
+                self._file_handler = None
+        # 还原本报告占用的 ContextVar 上下文（EXECPLAN2 F-7-1）
+        token = getattr(self, '_ctx_token', None)
+        if token is not None:
+            try:
+                _current_report_id.reset(token)
+            except (ValueError, LookupError):
+                # 跨线程/上下文 reset 可能失败，忽略即可（仅影响打戳，handler 已移除不再写）
+                pass
+            self._ctx_token = None
+
     def __del__(self):
         """析构时确保关闭文件处理器"""
         self.close()
@@ -1001,6 +1054,10 @@ class ReportAgent:
         self.report_logger: Optional[ReportLogger] = None
         # 控制台日志记录器（在 generate_report 中初始化）
         self.console_logger: Optional[ReportConsoleLogger] = None
+        # EXECPLAN2 F-7-3: chat() 解析到的报告做实例级记忆，避免同一 agent 多次对话重复扫描解析。
+        # simulation_id 在 agent 生命周期内固定，缓存安全；用哨兵区分「未解析」与「解析为 None」。
+        self._cached_report_sentinel = object()
+        self._cached_report = self._cached_report_sentinel
         
         logger.info(f"ReportAgent 初始化完成: graph_id={graph_id}, simulation_id={simulation_id}")
 
@@ -1576,6 +1633,18 @@ class ReportAgent:
 
             # 无更多工具调用（或已达上限）→ 收尾出正文
             if content.strip():
+                # EXECPLAN2 F-7-2 工具调用不足且仍可继续检索 → 拒绝过早出正文，强制补足实证（对齐 ReAct 路径）
+                if tool_calls_count < self.MIN_TOOL_CALLS_PER_SECTION and tool_calls_count < max_tool_calls:
+                    messages.append({"role": "assistant", "content": content})
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            f"你只调用了 {tool_calls_count} 次工具，少于本章要求的至少 "
+                            f"{self.MIN_TOOL_CALLS_PER_SECTION} 次。请勿现在输出正文，"
+                            "继续发起工具调用以补足实证后再撰写本章。"
+                        ),
+                    })
+                    continue
                 return content
             # 达到工具上限但模型还没出正文：显式要求收尾
             messages.append({"role": "user", "content": "请基于以上工具结果直接输出本章完整 Markdown 正文。"})
@@ -2211,8 +2280,16 @@ class ReportAgent:
             
             return report
     
+    def _resolve_report_cached(self) -> Optional[Report]:
+        """EXECPLAN2 F-7-3: 解析本 simulation 的最新报告并在实例级记忆，避免重复扫描。"""
+        if self._cached_report is not self._cached_report_sentinel:
+            return self._cached_report
+        report = ReportManager.get_report_by_simulation(self.simulation_id)
+        self._cached_report = report
+        return report
+
     def chat(
-        self, 
+        self,
         message: str,
         chat_history: List[Dict[str, str]] = None
     ) -> Dict[str, Any]:
@@ -2239,7 +2316,7 @@ class ReportAgent:
         # 获取已生成的报告内容
         report_content = ""
         try:
-            report = ReportManager.get_report_by_simulation(self.simulation_id)
+            report = self._resolve_report_cached()  # EXECPLAN2 F-7-3: 实例级记忆 + 索引快路径
             if report and report.markdown_content:
                 # 限制报告长度，避免上下文过长（放宽到 40000 字以覆盖更长的报告）
                 report_content = report.markdown_content[:40000]
@@ -2348,7 +2425,13 @@ class ReportManager:
     
     # 报告存储目录
     REPORTS_DIR = os.path.join(Config.UPLOAD_FOLDER, 'reports')
-    
+
+    # EXECPLAN2 F-7-3: simulation_id -> [report_id, ...] 轻量索引文件，
+    # 让 get_report_by_simulation 免去对全部报告文件夹的 O(N) 全量扫描 + 全文反序列化。
+    _SIM_INDEX_FILENAME = "_sim_index.json"
+    # 串行化索引文件的读改写（同进程内）
+    _sim_index_lock = threading.Lock()
+
     @classmethod
     def _ensure_reports_dir(cls):
         """确保报告根目录存在"""
@@ -2375,7 +2458,92 @@ class ReportManager:
     def _get_report_markdown_path(cls, report_id: str) -> str:
         """获取完整报告Markdown文件路径"""
         return os.path.join(cls._get_report_folder(report_id), "full_report.md")
-    
+
+    # ── EXECPLAN2 F-7-3: simulation_id 轻量索引 + 仅读 meta 头部 ──
+
+    @classmethod
+    def _get_sim_index_path(cls) -> str:
+        """获取 simulation_id 索引文件路径"""
+        return os.path.join(cls.REPORTS_DIR, cls._SIM_INDEX_FILENAME)
+
+    @classmethod
+    def _read_report_meta(cls, report_id: str) -> Optional[Dict[str, Any]]:
+        """仅读取并解析某报告的 meta.json（不重建 Report、不读取 full_report.md）。
+
+        meta.json 内嵌了完整 markdown，json.load 仍会读全文；该方法主要用于在已知
+        候选 report_id 时只解析一次，避免遍历全部文件夹。读取失败返回 None。
+        """
+        path = cls._get_report_path(report_id)
+        if not os.path.exists(path):
+            old_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.json")
+            if not os.path.exists(old_path):
+                return None
+            path = old_path
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    @classmethod
+    def _load_sim_index(cls) -> Dict[str, List[str]]:
+        """读取 simulation_id -> [report_id, ...] 索引；缺失/损坏时返回空字典。"""
+        path = cls._get_sim_index_path()
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                # 规范化为 {sim_id: [report_id,...]}
+                norm: Dict[str, List[str]] = {}
+                for k, v in data.items():
+                    if isinstance(v, list):
+                        norm[k] = [str(x) for x in v]
+                    elif v:
+                        norm[k] = [str(v)]
+                return norm
+        except (OSError, json.JSONDecodeError):
+            pass
+        return {}
+
+    @classmethod
+    def _index_add(cls, simulation_id: str, report_id: str) -> None:
+        """把 (simulation_id, report_id) 写入索引（原子写、加锁，幂等）。EXECPLAN2 F-7-3"""
+        if not simulation_id or not report_id:
+            return
+        cls._ensure_reports_dir()
+        with cls._sim_index_lock:
+            index = cls._load_sim_index()
+            ids = index.get(simulation_id, [])
+            if report_id not in ids:
+                ids.append(report_id)
+            index[simulation_id] = ids
+            try:
+                write_json_atomic(cls._get_sim_index_path(), index, indent=2)
+            except Exception as e:  # noqa: BLE001 — 索引仅为优化，失败不应阻断保存
+                logger.warning(f"更新 simulation 索引失败（忽略，回退全量扫描）: {e}")
+
+    @classmethod
+    def _index_remove(cls, report_id: str) -> None:
+        """从索引中移除某 report_id（删除报告时调用）。EXECPLAN2 F-7-3"""
+        if not report_id:
+            return
+        with cls._sim_index_lock:
+            index = cls._load_sim_index()
+            changed = False
+            for sim_id in list(index.keys()):
+                if report_id in index[sim_id]:
+                    index[sim_id] = [r for r in index[sim_id] if r != report_id]
+                    changed = True
+                    if not index[sim_id]:
+                        del index[sim_id]
+            if changed:
+                try:
+                    write_json_atomic(cls._get_sim_index_path(), index, indent=2)
+                except Exception as e:  # noqa: BLE001 — 索引仅为优化，失败不阻断删除
+                    logger.warning(f"清理 simulation 索引失败（忽略）: {e}")
+
     @classmethod
     def _get_outline_path(cls, report_id: str) -> str:
         """获取大纲文件路径"""
@@ -2886,13 +3054,20 @@ class ReportManager:
         if report.markdown_content:
             write_text_atomic(cls._get_report_markdown_path(report.report_id), report.markdown_content)
 
+        # EXECPLAN2 F-7-3: 维护 simulation_id -> report_id 轻量索引，加速 by-simulation 查询
+        cls._index_add(report.simulation_id, report.report_id)
+
         logger.info(f"报告已保存: {report.report_id}")
     
     @classmethod
     def get_report(cls, report_id: str) -> Optional[Report]:
         """获取报告"""
+        # EXECPLAN2 F-7-3: 保留文件名（索引）不是报告，直接忽略，避免误解析
+        if f"{report_id}.json" == cls._SIM_INDEX_FILENAME or report_id == cls._SIM_INDEX_FILENAME[:-5]:
+            return None
+
         path = cls._get_report_path(report_id)
-        
+
         if not os.path.exists(path):
             # 兼容旧格式：检查直接存储在reports目录下的文件
             old_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.json")
@@ -2900,10 +3075,16 @@ class ReportManager:
                 path = old_path
             else:
                 return None
-        
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+        # EXECPLAN2 F-7-3: 非报告结构（如索引/旧版无关 JSON）容错，返回 None 而非抛错
+        if not isinstance(data, dict) or 'report_id' not in data or 'simulation_id' not in data:
+            return None
+
         # 重建Report对象
         outline = None
         if data.get('outline'):
@@ -2944,25 +3125,72 @@ class ReportManager:
     
     @classmethod
     def get_report_by_simulation(cls, simulation_id: str) -> Optional[Report]:
-        """根据模拟ID获取报告"""
+        """根据模拟ID获取报告（EXECPLAN2 F-7-0 / F-7-3）。
+
+        旧实现遍历 os.listdir 返回首个匹配项——listdir 顺序由文件系统决定，
+        force_regenerate 留下多份同 simulation 报告时返回的往往是过期报告且不确定。
+        新实现：
+          1) 先查 simulation_id 轻量索引（F-7-3），仅解析候选 report_id 的 meta，
+             避免对全部报告文件夹做 O(N) 全量扫描；
+          2) 在候选中按 created_at 取最新（确定性，对齐 list_reports 的排序，F-7-0 A）；
+          3) 索引缺失/未命中时回退全量扫描，同样按 created_at 取最新而非首个 listdir 命中。
+        """
         cls._ensure_reports_dir()
-        
+
+        # ① 索引快路径：候选 report_id -> (created_at, report_id)，仅读 meta 头部
+        index = cls._load_sim_index()
+        candidates: List[tuple] = []  # (created_at, report_id)
+        for rid in index.get(simulation_id, []):
+            meta = cls._read_report_meta(rid)
+            if meta and meta.get('simulation_id') == simulation_id:
+                candidates.append((meta.get('created_at', ''), rid))
+        if candidates:
+            best_rid = max(candidates, key=lambda x: x[0])[1]
+            report = cls.get_report(best_rid)
+            if report and report.simulation_id == simulation_id:
+                return report
+
+        # ② 回退：全量扫描，确定性地按 created_at 取最新（F-7-0 A）
+        matches: List[Report] = []
         for item in os.listdir(cls.REPORTS_DIR):
+            if item == cls._SIM_INDEX_FILENAME:  # EXECPLAN2 F-7-3: 跳过索引文件，避免误当报告解析
+                continue
             item_path = os.path.join(cls.REPORTS_DIR, item)
             # 新格式：文件夹
             if os.path.isdir(item_path):
                 report = cls.get_report(item)
                 if report and report.simulation_id == simulation_id:
-                    return report
+                    matches.append(report)
             # 兼容旧格式：JSON文件
             elif item.endswith('.json'):
                 report_id = item[:-5]
                 report = cls.get_report(report_id)
                 if report and report.simulation_id == simulation_id:
-                    return report
-        
-        return None
-    
+                    matches.append(report)
+
+        if not matches:
+            return None
+        return max(matches, key=lambda r: r.created_at)
+
+    @classmethod
+    def delete_other_reports_for_simulation(cls, simulation_id: str, keep_report_id: str) -> int:
+        """EXECPLAN2 F-7-0 (B 的 in-file 部分): 删除某 simulation 除 keep_report_id 外的所有报告，
+        修复 force_regenerate 留下的孤儿文件夹泄漏与过期短路。
+
+        仅在新报告已成功落盘后调用，确保该 simulation 不会被清成零报告。
+        调用方（api/report.py 等，跨文件不在本次改动范围）应在新报告 COMPLETED 后调用本方法。
+        返回删除的报告数量。
+        """
+        deleted = 0
+        for report in cls.list_reports(simulation_id=simulation_id, limit=10_000):
+            if report.report_id != keep_report_id:
+                try:
+                    if cls.delete_report(report.report_id):
+                        deleted += 1
+                except Exception as e:  # noqa: BLE001 — 清理失败不应影响主流程
+                    logger.warning(f"清理同 simulation 旧报告失败（忽略）: {report.report_id}: {e}")
+        return deleted
+
     @classmethod
     def list_reports(cls, simulation_id: Optional[str] = None, limit: int = 50) -> List[Report]:
         """列出报告"""
@@ -2970,6 +3198,8 @@ class ReportManager:
         
         reports = []
         for item in os.listdir(cls.REPORTS_DIR):
+            if item == cls._SIM_INDEX_FILENAME:  # EXECPLAN2 F-7-3: 跳过索引文件，避免误当报告解析
+                continue
             item_path = os.path.join(cls.REPORTS_DIR, item)
             # 新格式：文件夹
             if os.path.isdir(item_path):
@@ -2994,25 +3224,29 @@ class ReportManager:
     def delete_report(cls, report_id: str) -> bool:
         """删除报告（整个文件夹）"""
         import shutil
-        
+
         folder_path = cls._get_report_folder(report_id)
-        
+
         # 新格式：删除整个文件夹
         if os.path.exists(folder_path) and os.path.isdir(folder_path):
             shutil.rmtree(folder_path)
+            cls._index_remove(report_id)  # EXECPLAN2 F-7-3: 同步清理索引
             logger.info(f"报告文件夹已删除: {report_id}")
             return True
-        
+
         # 兼容旧格式：删除单独的文件
         deleted = False
         old_json_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.json")
         old_md_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.md")
-        
+
         if os.path.exists(old_json_path):
             os.remove(old_json_path)
             deleted = True
         if os.path.exists(old_md_path):
             os.remove(old_md_path)
             deleted = True
-        
+
+        if deleted:
+            cls._index_remove(report_id)  # EXECPLAN2 F-7-3: 同步清理索引
+
         return deleted

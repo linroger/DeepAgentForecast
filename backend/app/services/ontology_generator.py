@@ -6,6 +6,11 @@
 import json
 from typing import Dict, Any, List, Optional
 from ..utils.llm_client import LLMClient
+from ..utils.logger import get_logger
+
+
+# F-3-4: 模块日志器，使本体截断/丢弃可审计（此前文件无任何日志）
+logger = get_logger('mirofish.ontology_generator')
 
 
 # 本体生成的系统提示词
@@ -256,15 +261,49 @@ class OntologyGenerator:
     
     def _validate_and_process(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """验证和后处理结果"""
-        
-        # 确保必要字段存在
-        if "entity_types" not in result:
+
+        # F-3-0: 顶层类型强制。chat_json 直接返回 json.loads 的结果，
+        # 合法 JSON 也可能是 list/str/None（顶层数组、字符串、null），此时
+        # 下面的 result["entity_types"] = ... 赋值会抛 TypeError，整个本体阶段崩溃。
+        if not isinstance(result, dict):
+            result = {}
+
+        # F-3-0: 集合字段强制为 list。仅做成员检查（"x" not in result）无法
+        # 处理 entity_types 被 LLM 返回为 dict/str/null 的情况，后续 for / 切片 /
+        # extend / len 全部假设是 list，必须在此统一强制类型。
+        if not isinstance(result.get("entity_types"), list):
             result["entity_types"] = []
-        if "edge_types" not in result:
+        if not isinstance(result.get("edge_types"), list):
             result["edge_types"] = []
-        if "analysis_summary" not in result:
+        if not isinstance(result.get("analysis_summary"), str):
             result["analysis_summary"] = ""
-        
+
+        # F-3-0: 丢弃非 dict 的条目，保证后续 entity["..."] / e["name"] 等访问安全
+        result["entity_types"] = [e for e in result["entity_types"] if isinstance(e, dict)]
+        result["edge_types"] = [e for e in result["edge_types"] if isinstance(e, dict)]
+
+        # F-3-4: 实体类型按 name 去重（保留首次出现），并丢弃 name 缺失/为空的条目，
+        # 避免重复或无名条目占用 10 个类型的预算、把唯一的尾部具体类型挤出去。
+        deduped_entities: List[Dict[str, Any]] = []
+        seen_entity_names: set = set()
+        dropped_for_name: List[str] = []
+        for entity in result["entity_types"]:
+            name = entity.get("name")
+            if not isinstance(name, str) or not name.strip():
+                dropped_for_name.append(repr(name))
+                continue
+            if name in seen_entity_names:
+                dropped_for_name.append(name)
+                continue
+            seen_entity_names.add(name)
+            deduped_entities.append(entity)
+        if dropped_for_name:
+            logger.warning(
+                "Ontology: dropped %d entity type(s) with empty/duplicate names: %s",
+                len(dropped_for_name), dropped_for_name
+            )
+        result["entity_types"] = deduped_entities
+
         # 验证实体类型
         for entity in result["entity_types"]:
             if "attributes" not in entity:
@@ -274,7 +313,7 @@ class OntologyGenerator:
             # 确保description不超过100字符
             if len(entity.get("description", "")) > 100:
                 entity["description"] = entity["description"][:97] + "..."
-        
+
         # 验证关系类型
         for edge in result["edge_types"]:
             if "source_targets" not in edge:
@@ -283,7 +322,7 @@ class OntologyGenerator:
                 edge["attributes"] = []
             if len(edge.get("description", "")) > 100:
                 edge["description"] = edge["description"][:97] + "..."
-        
+
         # Zep API 限制：最多 10 个自定义实体类型，最多 10 个自定义边类型
         MAX_ENTITY_TYPES = 10
         MAX_EDGE_TYPES = 10
@@ -310,38 +349,62 @@ class OntologyGenerator:
         }
         
         # 检查是否已有兜底类型
+        # F-3-0: 此处条目已保证为含非空 name 的 dict，e["name"] 访问安全
         entity_names = {e["name"] for e in result["entity_types"]}
         has_person = "Person" in entity_names
         has_organization = "Organization" in entity_names
-        
+
         # 需要添加的兜底类型
         fallbacks_to_add = []
         if not has_person:
             fallbacks_to_add.append(person_fallback)
         if not has_organization:
             fallbacks_to_add.append(organization_fallback)
-        
+
         if fallbacks_to_add:
             current_count = len(result["entity_types"])
             needed_slots = len(fallbacks_to_add)
-            
+
             # 如果添加后会超过 10 个，需要移除一些现有类型
             if current_count + needed_slots > MAX_ENTITY_TYPES:
-                # 计算需要移除多少个
-                to_remove = current_count + needed_slots - MAX_ENTITY_TYPES
-                # 从末尾移除（保留前面更重要的具体类型）
-                result["entity_types"] = result["entity_types"][:-to_remove]
-            
+                # F-3-4: 用 max(0, ...) 防御异常巨大的 current_count 产生坏切片
+                to_remove = max(0, current_count + needed_slots - MAX_ENTITY_TYPES)
+                if to_remove:
+                    # 从末尾移除（保留前面更重要的具体类型）。
+                    # F-3-4: 兜底插入恰恰发生在模型未遵守"兜底类型放最后"指令时，
+                    # 此时尾部条目未必是最不重要的，可能是研究中关键的具体类型，
+                    # 因此显式记录被丢弃的类型名，使丢弃可审计而非静默。
+                    removed = result["entity_types"][-to_remove:]
+                    result["entity_types"] = result["entity_types"][:-to_remove]
+                    logger.warning(
+                        "Ontology truncated: dropping entity types %s to fit "
+                        "MAX_ENTITY_TYPES=%d for fallbacks %s",
+                        [t.get("name") for t in removed],
+                        MAX_ENTITY_TYPES,
+                        [f.get("name") for f in fallbacks_to_add],
+                    )
+
             # 添加兜底类型
             result["entity_types"].extend(fallbacks_to_add)
-        
+
         # 最终确保不超过限制（防御性编程）
+        # F-3-4: 硬上限丢弃同样记录，避免静默丢失实体类型
         if len(result["entity_types"]) > MAX_ENTITY_TYPES:
+            removed = result["entity_types"][MAX_ENTITY_TYPES:]
             result["entity_types"] = result["entity_types"][:MAX_ENTITY_TYPES]
-        
+            logger.warning(
+                "Ontology hard cap: dropping %d entity type(s) over MAX_ENTITY_TYPES=%d: %s",
+                len(removed), MAX_ENTITY_TYPES, [t.get("name") for t in removed],
+            )
+
         if len(result["edge_types"]) > MAX_EDGE_TYPES:
+            removed_edges = result["edge_types"][MAX_EDGE_TYPES:]
             result["edge_types"] = result["edge_types"][:MAX_EDGE_TYPES]
-        
+            logger.warning(
+                "Ontology hard cap: dropping %d edge type(s) over MAX_EDGE_TYPES=%d: %s",
+                len(removed_edges), MAX_EDGE_TYPES, [t.get("name") for t in removed_edges],
+            )
+
         return result
     
     def generate_python_code(self, ontology: Dict[str, Any]) -> str:

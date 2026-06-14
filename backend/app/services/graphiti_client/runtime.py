@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import contextlib
 import logging
 import os
 import threading
@@ -63,6 +64,16 @@ class GraphitiRuntime:
         self._llm = None
         self._cross_encoder = None
         self._ensure_lock: asyncio.Lock | None = None
+        # EXECPLAN2 F-12-8 / F-2-5: per-graph_id write lock registry. The cached
+        # Graphiti instance is shared by all callers, and add_episode does a
+        # search→resolve→write dedup sequence across await points; two concurrent
+        # writers on the SAME graph_id (e.g. a scenario fork's feedback updater
+        # overlapping the base run, or add_episodes_concurrent's fan-out) can both
+        # miss the dedup lookup and create duplicate entity nodes. We serialize
+        # mutating access per graph_id (different graph_ids still proceed in
+        # parallel). The dict is only mutated on the single bg-loop thread, so its
+        # creation needs no extra lock.
+        self._graph_locks: dict = {}   # graph_id -> asyncio.Lock
         self._resolved_backend: str | None = None
         atexit.register(self._shutdown)
 
@@ -72,6 +83,39 @@ class GraphitiRuntime:
     def run(self, coro, timeout: float | None = None):
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         return future.result(timeout)
+
+    # EXECPLAN2 F-12-8 / F-2-5: lazily create/return the per-graph_id write lock.
+    # Must be awaited from the bg loop (the only thread that touches _graph_locks).
+    def _graph_lock(self, graph_id: str) -> asyncio.Lock:
+        lock = self._graph_locks.get(graph_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._graph_locks[graph_id] = lock
+        return lock
+
+    @staticmethod
+    def _serialize_reads() -> bool:
+        # EXECPLAN2 F-12-8: opt-in flag. When enabled, reads take the per-graph
+        # write lock too (serializing reads against in-flight writes on the same
+        # graph to avoid dirty/mid-transaction reads). Default off preserves
+        # current read latency/behavior (reads proceed without blocking on writes).
+        return (os.environ.get("GRAPH_SERIALIZE_READS", "0") or "0").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+
+    @contextlib.asynccontextmanager
+    async def _read_guard(self, graph_id: str):
+        # EXECPLAN2 F-12-8: when GRAPH_SERIALIZE_READS is enabled, take the per-graph
+        # write lock for the duration of a read so it cannot observe a write's
+        # mid-transaction state; otherwise this is a no-op (default behavior).
+        if self._serialize_reads():
+            async with self._graph_lock(graph_id):
+                yield
+        else:
+            yield
 
     # ------------------------------------------------------------------
     # backend resolution + driver construction
@@ -277,6 +321,26 @@ class GraphitiRuntime:
     async def _add_episode(
         self, graph_id, *, name, body, source_type, source_description, reference_time
     ) -> str:
+        # EXECPLAN2 F-12-8 / F-2-5: serialize writes per graph_id so the
+        # search→resolve→write dedup sequence is never interleaved with another
+        # writer on the same graph (which would create duplicate same-name nodes).
+        # asyncio.Lock is non-reentrant, so the actual write lives in the
+        # lock-free _add_episode_locked helper that the concurrent fan-out (which
+        # already holds the lock) calls directly.
+        async with self._graph_lock(graph_id):
+            return await self._add_episode_locked(
+                graph_id,
+                name=name,
+                body=body,
+                source_type=source_type,
+                source_description=source_description,
+                reference_time=reference_time,
+            )
+
+    async def _add_episode_locked(
+        self, graph_id, *, name, body, source_type, source_description, reference_time
+    ) -> str:
+        """Write one episode. Caller MUST hold ``self._graph_lock(graph_id)``."""
         g = await self._ensure_graph(graph_id)
         entity_types, edge_types, edge_type_map = self._ontologies.get(
             graph_id, (None, None, None)
@@ -364,16 +428,31 @@ class GraphitiRuntime:
             episodes=[],
             attributes={},
         )
-        await g.add_triplet(src, edge, tgt)
+        # EXECPLAN2 F-12-8: serialize per graph_id — add_triplet also resolves/dedups
+        # endpoint nodes by name+embedding, so a concurrent writer on the same graph
+        # could duplicate endpoints.
+        async with self._graph_lock(graph_id):
+            await g.add_triplet(src, edge, tgt)
         return edge.uuid
 
     def add_episodes_concurrent(self, graph_id: str, episodes: list, concurrency: int = 4) -> list:
         """T2.5: ingest many episodes concurrently under a semaphore on the bg loop.
 
         ``episodes`` is a list of dicts ``{name?, data, type?, source_description?,
-        reference_time?}``. Returns uuids in input order. Trades a small dedup-ordering
-        risk for a large speedup on big reports; the serial path (concurrency<=1) is
-        byte-identical to ``add_episode`` in a loop.
+        reference_time?}``. Returns uuids in input order. The serial path
+        (concurrency<=1, the default) is byte-identical to ``add_episode`` in a loop.
+
+        WARNING (EXECPLAN2 F-2-5): with ``concurrency>1`` this fans out
+        ``graphiti_core.add_episode`` calls that run concurrently against the SAME
+        graph. ``graphiti_core`` has NO DB-side name-uniqueness constraint, and its
+        entity resolution reads existing nodes BEFORE the in-flight nodes are
+        committed; two episodes that mention the same new entity can therefore both
+        miss the dedup lookup and each create a duplicate same-name node. This is
+        an extraction-parallel / dedup-best-effort fast path, NOT a write-safe one.
+        Keep ``GRAPH_BUILD_CONCURRENCY=1`` unless duplicate same-name entities are
+        acceptable for the workload. The whole fan-out is still held under the
+        per-graph write lock (F-12-8) so it never overlaps an EXTERNAL writer/reader
+        on the same graph_id.
         """
         return self.run(self._add_episodes_concurrent(graph_id, episodes, concurrency))
 
@@ -383,7 +462,11 @@ class GraphitiRuntime:
 
         async def one(i, ep):
             async with sem:
-                return await self._add_episode(
+                # Caller (below) already holds the per-graph write lock for the whole
+                # batch, so call the lock-free core to avoid deadlocking on the
+                # non-reentrant asyncio.Lock. The intra-batch dedup race documented
+                # above is the accepted tradeoff of this opt-in fast path.
+                return await self._add_episode_locked(
                     graph_id,
                     name=ep.get("name") or f"chunk-{i}",
                     body=ep.get("data", "") or "",
@@ -392,7 +475,10 @@ class GraphitiRuntime:
                     reference_time=ep.get("reference_time"),
                 )
 
-        return list(await asyncio.gather(*[one(i, ep) for i, ep in enumerate(episodes)]))
+        # EXECPLAN2 F-12-8: hold the per-graph write lock across the entire fan-out so
+        # the batch never overlaps an external writer/reader on the same graph_id.
+        async with self._graph_lock(graph_id):
+            return list(await asyncio.gather(*[one(i, ep) for i, ep in enumerate(episodes)]))
 
     def build_communities(self, graph_id: str) -> list:
         """T2.4: Leiden 社区发现 + LLM 摘要，返回 [{uuid,name,summary}]。
@@ -403,7 +489,10 @@ class GraphitiRuntime:
 
     async def _build_communities(self, graph_id):
         g = await self._ensure_graph(graph_id)
-        nodes, _edges = await g.build_communities(group_ids=[graph_id])
+        # EXECPLAN2 F-12-8: community building clears+rewrites community nodes for the
+        # graph; serialize it per graph_id so it never overlaps a writer/reader.
+        async with self._graph_lock(graph_id):
+            nodes, _edges = await g.build_communities(group_ids=[graph_id])
         return [
             {"uuid": n.uuid, "name": n.name, "summary": getattr(n, "summary", "") or ""}
             for n in nodes
@@ -422,7 +511,9 @@ class GraphitiRuntime:
         recipe = NODE_HYBRID_SEARCH_RRF if scope == "nodes" else EDGE_HYBRID_SEARCH_RRF
         config = recipe.model_copy(deep=True)
         config.limit = limit
-        results = await g.search_(query, config=config, group_ids=[graph_id])
+        # EXECPLAN2 F-12-8: optionally serialize read-vs-write on this graph_id.
+        async with self._read_guard(graph_id):
+            results = await g.search_(query, config=config, group_ids=[graph_id])
         return list(results.edges), list(results.nodes)
 
     def list_nodes(self, graph_id: str, limit: int, uuid_cursor):
@@ -432,9 +523,11 @@ class GraphitiRuntime:
         g = await self._ensure_graph(graph_id)
         from graphiti_core.nodes import EntityNode
 
-        return await EntityNode.get_by_group_ids(
-            g.driver, [graph_id], limit=limit, uuid_cursor=uuid_cursor
-        )
+        # EXECPLAN2 F-12-8: optionally serialize read-vs-write on this graph_id.
+        async with self._read_guard(graph_id):
+            return await EntityNode.get_by_group_ids(
+                g.driver, [graph_id], limit=limit, uuid_cursor=uuid_cursor
+            )
 
     def list_edges(self, graph_id: str, limit: int, uuid_cursor):
         return self.run(self._list_edges(graph_id, limit, uuid_cursor))
@@ -444,10 +537,12 @@ class GraphitiRuntime:
         from graphiti_core.edges import EntityEdge
         from graphiti_core.errors import GroupsEdgesNotFoundError
 
+        # EXECPLAN2 F-12-8: optionally serialize read-vs-write on this graph_id.
         try:
-            return await EntityEdge.get_by_group_ids(
-                g.driver, [graph_id], limit=limit, uuid_cursor=uuid_cursor
-            )
+            async with self._read_guard(graph_id):
+                return await EntityEdge.get_by_group_ids(
+                    g.driver, [graph_id], limit=limit, uuid_cursor=uuid_cursor
+                )
         except GroupsEdgesNotFoundError:
             return []
 
@@ -461,7 +556,9 @@ class GraphitiRuntime:
         for gid in await self._candidate_graph_ids(graph_id):
             try:
                 g = await self._ensure_graph(gid)
-                return await EntityNode.get_by_uuid(g.driver, uuid)
+                # EXECPLAN2 F-12-8: optionally serialize read-vs-write on this graph_id.
+                async with self._read_guard(gid):
+                    return await EntityNode.get_by_uuid(g.driver, uuid)
             except NodeNotFoundError:
                 continue
             except Exception:  # pragma: no cover - defensive
@@ -477,7 +574,9 @@ class GraphitiRuntime:
         for gid in await self._candidate_graph_ids(graph_id):
             try:
                 g = await self._ensure_graph(gid)
-                edges = await EntityEdge.get_by_node_uuid(g.driver, node_uuid)
+                # EXECPLAN2 F-12-8: optionally serialize read-vs-write on this graph_id.
+                async with self._read_guard(gid):
+                    edges = await EntityEdge.get_by_node_uuid(g.driver, node_uuid)
                 if edges:
                     return edges
             except Exception:  # pragma: no cover - defensive
@@ -488,19 +587,59 @@ class GraphitiRuntime:
         self.run(self._delete_graph(graph_id))
 
     async def _delete_graph(self, graph_id):
-        g = self._graphs.pop(graph_id, None)
-        self._ontologies.pop(graph_id, None)
-        if g is not None:
-            try:
-                await g.close()
-            except Exception:
-                pass
-        try:
-            if self._falkor_client is not None and hasattr(self._falkor_client, "select_graph"):
-                graph = self._falkor_client.select_graph(graph_id)
-                await graph.delete()
-        except Exception:
-            pass
+        # EXECPLAN2 F-12-8: serialize the delete against any in-flight writer/reader
+        # on this graph_id so we never tear data out from under a live operation.
+        async with self._graph_lock(graph_id):
+            g = self._graphs.pop(graph_id, None)
+            self._ontologies.pop(graph_id, None)
+
+            # EXECPLAN2 F-2-1: drop the server-side FalkorDB graph data BEFORE closing
+            # the driver. The previous code gated this on ``self._falkor_client``, which
+            # is populated ONLY on the embedded (falkordblite) path — so on the
+            # ``falkordb`` server backend (each driver builds its own client) the data
+            # deletion was skipped entirely and the graph leaked on the server forever,
+            # while the surrounding ``except: pass`` falsely reported success.
+            #
+            # Resolve the FalkorDB connection from the LIVE driver, which works for both
+            # backends (driver.client is the AsyncFalkorDB/FalkorDB for embedded AND
+            # server). Fall back to the shared embedded client when the graph was never
+            # cached in this process.
+            falkor_client = None
+            if g is not None:
+                falkor_client = getattr(getattr(g, "driver", None), "client", None)
+            if falkor_client is None:
+                falkor_client = self._falkor_client
+
+            if falkor_client is not None and hasattr(falkor_client, "select_graph"):
+                try:
+                    graph = falkor_client.select_graph(graph_id)
+                    await graph.delete()
+                except Exception as exc:  # EXECPLAN2 F-2-1: surface the leak, don't swallow it
+                    logger.warning("Failed to delete FalkorDB graph %s: %s", graph_id, exc)
+
+            # EXECPLAN2 F-2-1: only close the driver when it does NOT wrap the shared
+            # embedded client. On falkordblite every cached graph reuses the single
+            # ``self._falkor_client``; closing one driver would aclose() that shared
+            # connection and break every other graph. On the server backend each driver
+            # owns its own client, so closing it frees the connection (no leak).
+            if g is not None:
+                driver_client = getattr(getattr(g, "driver", None), "client", None)
+                shares_embedded_client = (
+                    self._falkor_client is not None
+                    and driver_client is self._falkor_client
+                )
+                if not shares_embedded_client:
+                    try:
+                        await g.close()
+                    except Exception as exc:
+                        logger.debug("Error closing graph %s after delete: %s", graph_id, exc)
+
+        # NOTE (EXECPLAN2 F-12-8): intentionally retain the per-graph lock in the
+        # registry. Popping it here could hand a freshly-created lock to a new caller
+        # while another coroutine is still blocked on the old one for the same
+        # graph_id, defeating the mutual exclusion. The registry is bounded by the
+        # number of distinct graph_ids (same lifetime concern as self._graphs), so
+        # the leak is negligible; correctness wins.
 
     # ------------------------------------------------------------------
     def _shutdown(self):  # pragma: no cover - process teardown

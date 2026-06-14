@@ -12,9 +12,18 @@ graph_id is used verbatim as the Graphiti group_id / FalkorDB tenant.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, List, Optional
 
 from .runtime import get_runtime
+
+
+def _iso(v: Any) -> Any:
+    """EXECPLAN F-2-2: normalize graphiti ``datetime`` temporal fields to ISO-8601
+    strings at the facade boundary, restoring the documented Zep contract that
+    downstream consumers (EdgeInfo/NodeInfo Optional[str], to_dict()/json.dumps)
+    assume. Non-datetime values pass through unchanged."""
+    return v.isoformat() if isinstance(v, datetime) else v
 
 
 # ----------------------------------------------------------------------
@@ -31,7 +40,7 @@ class _ZepNode:
         self.labels = list(getattr(n, "labels", None) or [])
         self.summary = getattr(n, "summary", "") or ""
         self.attributes = dict(getattr(n, "attributes", None) or {})
-        self.created_at = getattr(n, "created_at", None)
+        self.created_at = _iso(getattr(n, "created_at", None))  # EXECPLAN F-2-2
 
 
 class _ZepEdge:
@@ -47,10 +56,12 @@ class _ZepEdge:
         self.source_node_uuid = getattr(e, "source_node_uuid", "") or ""
         self.target_node_uuid = getattr(e, "target_node_uuid", "") or ""
         self.attributes = dict(getattr(e, "attributes", None) or {})
-        self.created_at = getattr(e, "created_at", None)
-        self.valid_at = getattr(e, "valid_at", None)
-        self.invalid_at = getattr(e, "invalid_at", None)
-        self.expired_at = getattr(e, "expired_at", None)
+        # EXECPLAN F-2-2: graphiti returns datetimes here; Zep returned ISO strings.
+        # Normalize so json.dumps consumers (EdgeInfo.to_dict) don't crash.
+        self.created_at = _iso(getattr(e, "created_at", None))
+        self.valid_at = _iso(getattr(e, "valid_at", None))
+        self.invalid_at = _iso(getattr(e, "invalid_at", None))
+        self.expired_at = _iso(getattr(e, "expired_at", None))
         episodes = list(getattr(e, "episodes", None) or [])
         self.episodes = episodes
         self.episode_ids = episodes
