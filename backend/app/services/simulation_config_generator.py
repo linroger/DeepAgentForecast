@@ -12,6 +12,8 @@
 
 import json
 import math
+import os
+import random
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -21,6 +23,7 @@ from ..utils.actors import (
     actors_digest,
     build_initial_follow_graph,
     events_to_schedule,
+    extract_actor_rows,
     influence_weight,
     match_actor,
     normalize_name,
@@ -368,6 +371,25 @@ class SimulationConfigGenerator:
         event_config = self._assign_initial_post_agents(event_config, all_agent_configs)
         assigned_count = len([p for p in event_config.initial_posts if p.get("poster_agent_id") is not None])
         reasoning_parts.append(f"初始帖子分配: {assigned_count} 个帖子已分配发布者")
+
+        # ========== 追加「沉默的大多数」受众群体（I-2-2）==========
+        # 在具名调研角色（all_agent_configs）之后，按 SIM_AUDIENCE_SIZE 追加 M 个程序化生成的
+        # 低影响力受众 Agent（不做逐个 LLM 调研）：立场按调研立场分布抽样、议题复用热点话题、
+        # 高潜水偏好（低活跃度 + 低影响力）。它们的 agent_id 与具名角色连续，使 OASIS 的
+        # agent_graph 下标保持一致；并在 _build_echo_chamber_follows 之前追加，从而自然加入同温层
+        # 聚类。SIM_AUDIENCE_SIZE 默认 0 → 完全保持当前行为（不生成受众）。
+        try:
+            audience_configs = self._generate_audience_agent_configs(
+                start_idx=len(all_agent_configs),
+                event_config=event_config,
+                actors=actors,
+            )
+            if audience_configs:
+                all_agent_configs.extend(audience_configs)
+                reasoning_parts.append(f"受众群体: 追加 {len(audience_configs)} 个沉默大多数 Agent")
+                logger.info(f"受众群体（沉默大多数）: 追加 {len(audience_configs)} 个 Agent")
+        except Exception as e:
+            logger.warning(f"受众群体生成失败（降级跳过，不影响模拟）: {e}")
 
         # ========== 构建初始关注图（T3.2）==========
         # 研究 relationships[] → 有向关注边（方向遵循 actors.build_initial_follow_graph 的语义），
@@ -1360,5 +1382,171 @@ class SimulationConfigGenerator:
                 "influence_weight": 1.0,
                 "interested_topics": interested_topics
             }
-    
+
+    # ====================================================================
+    # I-2-2: 「沉默的大多数」受众群体生成（程序化、零 LLM/Zep 调用）
+    # ====================================================================
+
+    # 受众 Agent 在配置里的实体类型标记，便于运行脚本/指标按群体区分。
+    AUDIENCE_ENTITY_TYPE = "Audience"
+
+    # 受众立场 → AgentActivityConfig.stance 的取值（与具名 Agent 同一桶集合，
+    # 以便 T3.4 同温层聚类键 (stance, topic) 自然把受众并入对应阵营）。
+    _AUDIENCE_STANCE_BUCKETS = ["supportive", "opposing", "neutral", "observer"]
+
+    # 研究档案里 actor.stance 自由文本 → 标准化立场桶的关键词映射（中英文）。
+    _STANCE_KEYWORDS = {
+        "supportive": ["support", "favor", "pro-", "拥护", "支持", "赞成", "看多", "利好"],
+        "opposing": ["oppos", "against", "critic", "反对", "批评", "抵制", "看空", "质疑"],
+        "observer": ["observ", "report", "neutral coverage", "中立报道", "观察", "旁观", "报道"],
+    }
+
+    def _build_audience_rng(self) -> "random.Random":
+        """I-2-2: 受众抽样 RNG。SIM_SEED>0 时确定性可复现，否则系统熵播种。
+
+        复用 run_parallel_simulation 的 SIM_SEED 语义；优先读环境变量（与运行脚本一致），
+        缺省回退到 Config.SIM_SEED。0/空/非整数一律退化为非确定性，与历史行为一致。
+        """
+        raw = os.environ.get("SIM_SEED")
+        if raw is None or str(raw).strip() == "":
+            raw = getattr(Config, "SIM_SEED", 0)
+        try:
+            seed = int(str(raw).strip())
+        except (TypeError, ValueError):
+            return random.Random()
+        if seed == 0:
+            return random.Random()
+        # 受众用独立子种子（与调度采样错开），避免两处采样耦合。
+        return random.Random(seed ^ 0x4155_4449)  # "AUDI"
+
+    def _audience_stance_distribution(
+        self, actors: Optional[Dict[str, Any]]
+    ) -> Dict[str, float]:
+        """I-2-2: 由调研 actor 立场推导受众立场抽样分布。
+
+        统计每个 actor 的 stance 落入哪个标准化立场桶（supportive/opposing/observer/neutral），
+        归一化为概率分布。无 actor 或全部无法解析 → 返回均匀分布（不偏向任何阵营）。
+        受众默认偏向「沉默」，因此把无法明确归类者计入 neutral，使大多数保持中立潜水。
+        """
+        counts: Dict[str, float] = {b: 0.0 for b in self._AUDIENCE_STANCE_BUCKETS}
+        for row in extract_actor_rows(actors):
+            bucket = self._classify_stance(str(row.get("stance", "") or ""))
+            counts[bucket] += 1.0
+        total = sum(counts.values())
+        if total <= 0:
+            # 无实证立场：均匀分布
+            n = len(self._AUDIENCE_STANCE_BUCKETS)
+            return {b: 1.0 / n for b in self._AUDIENCE_STANCE_BUCKETS}
+        return {b: c / total for b, c in counts.items()}
+
+    def _classify_stance(self, raw_stance: str) -> str:
+        """I-2-2: actor.stance 自由文本 → 标准化立场桶；无法识别归为 neutral。"""
+        s = raw_stance.strip().lower()
+        if not s:
+            return "neutral"
+        for bucket, keywords in self._STANCE_KEYWORDS.items():
+            for kw in keywords:
+                if kw in s:
+                    return bucket
+        return "neutral"
+
+    def _sample_audience_stance(
+        self, rng: "random.Random", distribution: Dict[str, float]
+    ) -> str:
+        """I-2-2: 按立场分布抽一个受众立场。分布退化（全 0）时回退均匀抽样。"""
+        buckets = list(distribution.keys()) or list(self._AUDIENCE_STANCE_BUCKETS)
+        weights = [max(0.0, distribution.get(b, 0.0)) for b in buckets]
+        if sum(weights) <= 0:
+            return rng.choice(self._AUDIENCE_STANCE_BUCKETS)
+        return rng.choices(buckets, weights=weights, k=1)[0]
+
+    def _generate_audience_agent_configs(
+        self,
+        start_idx: int,
+        event_config: EventConfig,
+        actors: Optional[Dict[str, Any]],
+    ) -> List[AgentActivityConfig]:
+        """I-2-2: 程序化生成 M 个低影响力「沉默大多数」受众 Agent 配置。
+
+        - 数量由 SIM_AUDIENCE_SIZE 控制（默认 0 → 返回 []，完全保持当前行为）。
+        - 立场按调研立场分布抽样（无调研 → 均匀），议题复用热点话题（无则留空，
+          聚类退化为仅按 stance）。
+        - 高潜水偏好：低 activity_level、低 posts_per_hour、低 influence_weight，
+          response_delay 较长——绝大多数只 LIKE/REPOST/潜水，偶尔冒泡。
+        - agent_id 从 start_idx 连续编号，与具名角色衔接，保证 OASIS agent_graph 下标一致。
+        - 不做逐 Agent 的 LLM/Zep 调用，生成成本可忽略，可廉价压到 300-1000 规模。
+        """
+        try:
+            size = int(getattr(Config, "SIM_AUDIENCE_SIZE", 0) or 0)
+        except (TypeError, ValueError):
+            size = 0
+        if size <= 0:
+            return []
+        # 防御性上限：避免极端配置一次性撑出超大配置文件（仍远超具名上限）。
+        size = min(size, 5000)
+
+        rng = self._build_audience_rng()
+        distribution = self._audience_stance_distribution(actors)
+
+        # 受众默认每轮激活上限（仅记录到 reasoning / 供运行脚本采样限流参考）——
+        # 真正的「每轮只激活一小撮受众」由运行脚本的加权激活采样配合低 activity_level 实现。
+        try:
+            active_cap = int(getattr(Config, "SIM_AUDIENCE_ACTIVE_CAP", 0) or 0)
+        except (TypeError, ValueError):
+            active_cap = 0
+        if active_cap > 0:
+            logger.info(f"受众每轮激活上限（SIM_AUDIENCE_ACTIVE_CAP）: {active_cap}")
+
+        # 受众关注议题：复用研究/事件得到的热点话题（最多 3 个），让受众落入真实议题的同温层。
+        hot_topics = [str(t) for t in (event_config.hot_topics or []) if str(t).strip()]
+
+        configs: List[AgentActivityConfig] = []
+        for k in range(size):
+            agent_id = start_idx + k
+            stance = self._sample_audience_stance(rng, distribution)
+
+            # 高潜水：低活跃度、低发帖、几乎只评论/点赞，影响力低。
+            activity_level = round(rng.uniform(0.2, 0.6), 3)
+            influence = round(rng.uniform(0.3, 0.8), 3)
+            posts_per_hour = round(rng.uniform(0.02, 0.15), 3)
+            comments_per_hour = round(rng.uniform(0.1, 0.5), 3)
+
+            # 立场决定轻微的情感偏置（与具名角色同向，但幅度更小、噪声更多）。
+            if stance == "supportive":
+                sentiment_bias = round(rng.uniform(0.1, 0.6), 3)
+            elif stance == "opposing":
+                sentiment_bias = round(rng.uniform(-0.6, -0.1), 3)
+            else:
+                sentiment_bias = round(rng.uniform(-0.2, 0.2), 3)
+
+            # 活跃时段：普通公众的白天 + 晚间高峰作息（与规则「普通人」一致，略加抖动）。
+            base_hours = [9, 10, 11, 12, 13, 18, 19, 20, 21, 22, 23]
+            active_hours = sorted(rng.sample(base_hours, k=rng.randint(5, len(base_hours))))
+
+            # 关注议题：从热点话题里随机取 1-2 个（无热点 → 空，聚类退化为仅按 stance）。
+            if hot_topics:
+                pick = min(len(hot_topics), rng.randint(1, 2))
+                interested_topics = rng.sample(hot_topics, k=pick)
+            else:
+                interested_topics = []
+
+            configs.append(AgentActivityConfig(
+                agent_id=agent_id,
+                entity_uuid=f"audience:{agent_id}",  # 合成 uuid，不指向任何图谱节点
+                entity_name=f"公众_{k}",
+                entity_type=self.AUDIENCE_ENTITY_TYPE,
+                activity_level=activity_level,
+                posts_per_hour=posts_per_hour,
+                comments_per_hour=comments_per_hour,
+                active_hours=active_hours,
+                response_delay_min=rng.randint(5, 30),
+                response_delay_max=rng.randint(60, 240),
+                sentiment_bias=sentiment_bias,
+                stance=stance,
+                influence_weight=influence,
+                interested_topics=interested_topics,
+            ))
+
+        return configs
+
 

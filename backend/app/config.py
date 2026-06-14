@@ -425,6 +425,16 @@ class Config:
     # 设为正整数则作为全局轮数上限（每次运行可被 options.max_rounds 覆盖；冒烟测试用小值）。
     OASIS_DEFAULT_MAX_ROUNDS = int(os.environ.get('OASIS_DEFAULT_MAX_ROUNDS', '0'))
     OASIS_SIMULATION_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/simulations')
+
+    # —— OASIS 并发上限（每轮在飞 LLM 请求数）单一真源（EXECPLAN2 I-8-4）——
+    # 此前这两个旋钮只在 utils/oasis_llm.py::get_oasis_semaphore 里经 os.environ 直读，
+    # 绕过了集中式 Config 配置面——对 doctor/validate/run 清单不可见、无法记录复现。
+    # 提升为一等 Config 属性，默认值与 oasis_llm.py 的 DEFAULT_*_SEMAPHORE 逐字节一致
+    # （CLI 提供方 8、OpenAI 兼容提供方 30），故 env 未设时行为字节稳定不变。
+    # CLI 提供方(claude-cli/codex-cli)：每个调用 spawn 子进程，8 是吞吐与负载的稳妥平衡。
+    OASIS_CLI_SEMAPHORE = int(os.environ.get('OASIS_CLI_SEMAPHORE', '8') or '8')
+    # OpenAI 兼容提供方：纯 HTTP 并发，30 给足吞吐。
+    OASIS_SEMAPHORE = int(os.environ.get('OASIS_SEMAPHORE', '30') or '30')
     
     # OASIS平台可用动作配置
     OASIS_TWITTER_ACTIONS = [
@@ -565,6 +575,13 @@ class Config:
                 logging.getLogger('mirofish.config').warning(
                     "DEERFLOW_MODEL=%s 需要环境变量 %s，当前未设置（研究阶段将失败）。", _df_model, _key_env
                 )
+
+        # EXECPLAN2 I-8-4: OASIS 并发上限纳入集中式校验。<1 会让 get_oasis_semaphore
+        # 返回 0/负值（信号量直接死锁），故启动期硬性拦截，而非运行时悬挂。
+        for _sem_name in ('OASIS_CLI_SEMAPHORE', 'OASIS_SEMAPHORE'):
+            _sem_val = getattr(cls, _sem_name, None)
+            if not isinstance(_sem_val, int) or _sem_val < 1:
+                errors.append(f"{_sem_name} 必须是 >=1 的整数，当前为 '{_sem_val}'")
         return errors
 
 

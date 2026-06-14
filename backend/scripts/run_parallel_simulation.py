@@ -228,6 +228,329 @@ REDDIT_ACTIONS = [
 ]
 
 
+# ============================================================
+# EXECPLAN2 I-2-3: 按角色定制的「动作可供性」（per-role action affordances）
+# ------------------------------------------------------------
+# 现状：同一平台的所有 Agent 共用一份全局动作清单（TWITTER_ACTIONS / REDDIT_ACTIONS），
+# 政府账号、官媒、学生、匿名水军拥有完全相同的可选动作（都能 REPOST/QUOTE/FOLLOW/MUTE…）。
+# 现实中可供性与行为习惯是角色相关的：官方账号很少给个人点赞/转发/拉黑，媒体大量引用/造势，
+# 活动家激进转发/关注，潜水受众多为点赞/沉默。人设文本会暗示这点，但没有任何东西约束动作空间，
+# 于是 LLM 频繁选出「跳戏」的动作，稀释保真度。
+#
+# 方案：以 entity_type（角色）为键，为每个 Agent 量身裁剪 available_actions。camel-oasis 在
+# 构图时已把动作转成 ChatAgent 的工具（SocialAgent.__init__ 把 available_actions 过滤成
+# action_tools 并注入 ChatAgent.tools）；ChatAgent 暴露了公开的 remove_tools(name) API，
+# 工具名恰为 ActionType.value。因此「构图后按角色裁剪」是库原生支持的——在 generate_*_agent_graph
+# 之后、env.reset() 之前，逐个 Agent 移除不属于其角色策略的社交动作工具即可（仅移除社交动作，
+# 不动 INTERVIEW 等其它工具）。同时把一句简短的「行为习惯」约束注入 system prompt，让 LLM 自我设限。
+#
+# 可降级不变式：默认 SIM_ROLE_ACTION_PROFILES!=true → 完全跳过，沿用单一全局清单（逐字节旧行为）。
+# 任意环节失败（缺 entity_type、库 API 变动、工具名不匹配）一律 best-effort 跳过该 Agent，绝不中断模拟。
+#
+# 策略表的「白名单」会与平台 union 清单求交，确保永远不会授予平台不存在/未启用的动作；
+# 任何角色都至少保留 CREATE_POST / CREATE_COMMENT / DO_NOTHING，避免把某类角色变成完全惰性。
+# ============================================================
+
+# 每个角色策略只在 union 动作集合内做「白名单」过滤；未列出的 entity_type 走 _ROLE_ACTION_DEFAULT。
+# 注：键为 entity_type.lower()，与 oasis_profile_generator 的 INDIVIDUAL/GROUP_ENTITY_TYPES 命名一致。
+ROLE_ACTION_POLICY = {
+    # —— 机构 / 群体 ——
+    # 政府机构：几乎只发布官方声明、检索舆情；不给个人点赞/转发/拉黑。
+    "governmentagency": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "official": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    # 媒体：大量发帖/引用/转发/造势/评论，构成信息放大主力。
+    "mediaoutlet": [
+        ActionType.CREATE_POST,
+        ActionType.QUOTE_POST,
+        ActionType.REPOST,
+        ActionType.CREATE_COMMENT,
+        ActionType.TREND,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "journalist": [
+        ActionType.CREATE_POST,
+        ActionType.QUOTE_POST,
+        ActionType.REPOST,
+        ActionType.CREATE_COMMENT,
+        ActionType.SEARCH_POSTS,
+        ActionType.SEARCH_USER,
+        ActionType.DO_NOTHING,
+    ],
+    # 高校 / NGO / 公司 / 机构：偏官方口径，少量互动。
+    "university": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "ngo": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.QUOTE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "company": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "organization": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "institution": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "group": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.LIKE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "community": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.LIKE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    # —— 个人 ——
+    # 专家 / 教授：发表观点、评论、引用佐证，少量转发。
+    "professor": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.QUOTE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.LIKE_POST,
+        ActionType.DO_NOTHING,
+    ],
+    "expert": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.QUOTE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.LIKE_POST,
+        ActionType.DO_NOTHING,
+    ],
+    "faculty": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.QUOTE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.LIKE_POST,
+        ActionType.DO_NOTHING,
+    ],
+    "publicfigure": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.QUOTE_POST,
+        ActionType.REPOST,
+        ActionType.LIKE_POST,
+        ActionType.FOLLOW,
+        ActionType.DO_NOTHING,
+    ],
+    # 活动家：激进——大量转发/关注/评论/造势以扩散立场。
+    "activist": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.QUOTE_POST,
+        ActionType.LIKE_POST,
+        ActionType.FOLLOW,
+        ActionType.TREND,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    # 学生 / 普通个人：完整社交动作集（最自由）——见 _ROLE_FULL_ACCESS，直接放行平台全部 union。
+    # —— 程序化「沉默的大多数」受众（simulation_config_generator.AUDIENCE_ENTITY_TYPE="Audience"）——
+    # 以点赞 / 偶尔评论 / 转发 / 大量沉默为主，几乎不发起原创帖、不关注、不拉黑。
+    "audience": [
+        ActionType.LIKE_POST,
+        ActionType.DISLIKE_POST,
+        ActionType.LIKE_COMMENT,
+        ActionType.REPOST,
+        ActionType.CREATE_COMMENT,
+        ActionType.DO_NOTHING,
+        ActionType.REFRESH,
+    ],
+}
+
+# 完整动作集角色：最自由的个人账号，直接放行平台全部 union（不做任何裁剪）。
+# 等价于设计草图里 'student': TWITTER_ACTIONS 的「完整社交动作集」语义，但与平台无关——
+# Reddit 上同样拿到 REDDIT_ACTIONS 全集，而非被 Twitter 清单截断。
+_ROLE_FULL_ACCESS = {"student", "alumni", "person"}
+
+# 未匹配到具体角色时的兜底策略：保守地保留发帖/评论/检索/沉默/点赞，避免越权放大类动作。
+_ROLE_ACTION_DEFAULT = [
+    ActionType.CREATE_POST,
+    ActionType.CREATE_COMMENT,
+    ActionType.LIKE_POST,
+    ActionType.SEARCH_POSTS,
+    ActionType.DO_NOTHING,
+]
+
+# 不变式：任何角色都至少保留这几样基本动作，防止过度限制把某类 Agent 变成完全惰性。
+_ROLE_ACTION_FLOOR = {
+    ActionType.CREATE_POST,
+    ActionType.CREATE_COMMENT,
+    ActionType.DO_NOTHING,
+}
+
+# 角色 → 注入 system prompt 的「行为习惯」一句话约束（让 LLM 在工具裁剪之外再自我设限）。
+# 仅覆盖最容易跳戏的机构/媒体/活动家/受众；未列出的角色不注入额外约束（保持原 persona）。
+_ROLE_BEHAVIOR_HINT = {
+    "governmentagency": "【行为习惯】你是官方机构账号：通常只发布正式声明或检索舆情，几乎从不给个人点赞、转发或拉黑。",
+    "official": "【行为习惯】你是官方机构账号：通常只发布正式声明或检索舆情，几乎从不给个人点赞、转发或拉黑。",
+    "mediaoutlet": "【行为习惯】你是媒体账号：以发布报道、引用与转发关键信息、推动话题热度为主，很少给普通用户点赞。",
+    "journalist": "【行为习惯】你是记者：以发布报道、引用与求证、关注信源为主，较少随手点赞。",
+    "activist": "【行为习惯】你是活动家：积极转发、关注同立场账号、评论与造势以扩散你的主张。",
+    "audience": "【行为习惯】你是普通围观受众（沉默的大多数）：多数时候只是点赞或沉默，偶尔评论或转发，几乎不发起原创长帖。",
+}
+
+
+def _build_role_type_map(config: Dict[str, Any]) -> Dict[int, str]:
+    """EXECPLAN2 I-2-3: 从 simulation_config 构建 agent_id -> entity_type（小写）映射。
+
+    与 get_agent_names_from_config 同源（config["agent_configs"]，每项含 agent_id/entity_type），
+    缺字段则跳过该项。供按角色裁剪动作可供性使用。
+    """
+    role_map: Dict[int, str] = {}
+    for agent_config in config.get("agent_configs", []) or []:
+        agent_id = agent_config.get("agent_id")
+        entity_type = agent_config.get("entity_type")
+        if agent_id is not None and entity_type:
+            role_map[agent_id] = str(entity_type).strip().lower()
+    return role_map
+
+
+def _allowed_actions_for_role(entity_type: str, platform_union: List["ActionType"]) -> List["ActionType"]:
+    """EXECPLAN2 I-2-3: 计算某角色在给定平台上的「允许动作」白名单。
+
+    策略表白名单 ∩ 平台 union（绝不授予平台不存在/未启用的动作），再并入基本动作下限
+    （_ROLE_ACTION_FLOOR，同样需在 union 内）。返回顺序去重、稳定。
+    完整动作集角色（_ROLE_FULL_ACCESS）直接返回平台 union 全集，不做裁剪。
+    """
+    role = (entity_type or "").lower()
+    if role in _ROLE_FULL_ACCESS:
+        return list(platform_union)
+    policy = ROLE_ACTION_POLICY.get(role, _ROLE_ACTION_DEFAULT)
+    union_set = set(platform_union)
+    allowed_set = (set(policy) & union_set) | (_ROLE_ACTION_FLOOR & union_set)
+    # 以平台 union 的顺序产出，便于阅读 / 日志稳定。
+    return [a for a in platform_union if a in allowed_set]
+
+
+def _apply_role_action_profiles(
+    agent_graph,
+    config: Dict[str, Any],
+    platform_union: List["ActionType"],
+    log_info,
+) -> None:
+    """EXECPLAN2 I-2-3: 在构图后、env.reset() 前，按角色裁剪每个 Agent 的社交动作工具。
+
+    机制：camel ChatAgent 把每个动作注册为名为 ActionType.value 的工具。对每个 Agent，
+    移除「属于平台 union 但不在该角色白名单」的社交动作工具（仅社交动作，绝不动 INTERVIEW 等
+    其它工具）。同时把一句「行为习惯」约束追加进 system prompt，让 LLM 自我设限。
+
+    可降级：任意 Agent 处理失败仅跳过该 Agent（best-effort），不抛出、不中断模拟。
+    仅当 SIM_ROLE_ACTION_PROFILES=true 时由调用方触发；默认完全不进入本函数。
+    """
+    if agent_graph is None:
+        return
+    role_map = _build_role_type_map(config)
+    # 平台所有社交动作的工具名集合——只在这个集合内做增删，避免误删非社交工具。
+    union_tool_names = {a.value for a in platform_union}
+
+    restricted = 0
+    hinted = 0
+    try:
+        agents = agent_graph.get_agents()
+    except Exception as e:  # noqa: BLE001
+        log_info(f"角色动作裁剪跳过（无法枚举 Agent）: {e}")
+        return
+
+    for agent_id, agent in agents:
+        try:
+            entity_type = role_map.get(agent_id, "")
+            allowed = _allowed_actions_for_role(entity_type, platform_union)
+            allowed_names = {a.value for a in allowed}
+            # 待移除 = 平台社交动作 - 允许动作；只在 agent 实际拥有的工具里删。
+            to_remove = [
+                name for name in union_tool_names
+                if name not in allowed_names and name in getattr(agent, "_internal_tools", {})
+            ]
+            if to_remove:
+                agent.remove_tools(to_remove)
+                restricted += 1
+
+            # 软约束：把「行为习惯」一句话注入 system prompt（best-effort，失败不影响硬裁剪）。
+            hint = _ROLE_BEHAVIOR_HINT.get((entity_type or "").lower())
+            if hint and _inject_behavior_hint(agent, hint):
+                hinted += 1
+        except Exception as e:  # noqa: BLE001
+            log_info(f"角色动作裁剪跳过 Agent {agent_id}（已隔离）: {e}")
+            continue
+
+    log_info(f"角色动作可供性已应用: 裁剪 {restricted} 个 Agent，注入行为约束 {hinted} 个")
+
+
+def _inject_behavior_hint(agent, hint: str) -> bool:
+    """EXECPLAN2 I-2-3: 把一句行为约束追加进 Agent 的 system prompt（best-effort）。
+
+    走 camel ChatAgent 受支持的路径：基于 _original_system_message 重建系统消息并
+    init_messages() 把它重新写入记忆。任何版本差异/缺属性即返回 False（降级，不影响硬裁剪）。
+    在 env.reset() 之前调用——reset()→generate_custom_agents 不会重置记忆，注入得以保留。
+    """
+    try:
+        original = getattr(agent, "_original_system_message", None)
+        if original is None or not hasattr(original, "content"):
+            return False
+        if hint in (original.content or ""):
+            return True  # 已注入过，幂等
+        new_msg = original.create_new_instance((original.content or "") + "\n\n" + hint)
+        agent._original_system_message = new_msg
+        # 触发系统消息按输出语言重算并重新写入记忆（与 camel 内部行为一致）。
+        agent._system_message = agent._generate_system_message_for_output_language()
+        agent.init_messages()
+        return True
+    except Exception:
+        return False
+
+
+def _role_action_profiles_enabled() -> bool:
+    """EXECPLAN2 I-2-3: 特性开关（与 SIM_WIRE_RECSYS / SIM_EMERGENT_METRICS 同风格的环境变量）。
+
+    默认关闭 → 维持单一全局动作清单的旧行为（可降级不变式）。
+    """
+    return os.environ.get("SIM_ROLE_ACTION_PROFILES", "false").strip().lower() == "true"
+
+
 # IPC相关常量
 IPC_COMMANDS_DIR = "ipc_commands"
 IPC_RESPONSES_DIR = "ipc_responses"
@@ -1827,14 +2150,22 @@ async def run_twitter_simulation(
         model=model,
         available_actions=TWITTER_ACTIONS,
     )
-    
+
+    # EXECPLAN2 I-2-3: 按角色裁剪每个 Agent 的动作可供性（默认关闭；开关 SIM_ROLE_ACTION_PROFILES）。
+    # 必须在 oasis.make()/env.reset() 之前，对 generate_*_agent_graph 产出的同一批 Agent 直接生效。
+    if _role_action_profiles_enabled():
+        try:
+            _apply_role_action_profiles(result.agent_graph, config, TWITTER_ACTIONS, log_info)
+        except Exception as _rap_err:  # noqa: BLE001
+            log_info(f"角色动作可供性应用失败（已隔离，回退全局动作清单）: {_rap_err}")
+
     # 从配置文件获取 Agent 真实名称映射（使用 entity_name 而非默认的 Agent_X）
     agent_names = get_agent_names_from_config(config)
     # 如果配置中没有某个 agent，则使用 OASIS 的默认名称
     for agent_id, agent in result.agent_graph.get_agents():
         if agent_id not in agent_names:
             agent_names[agent_id] = getattr(agent, 'name', f'Agent_{agent_id}')
-    
+
     db_path = os.path.join(simulation_dir, "twitter_simulation.db")
     if os.path.exists(db_path):
         os.remove(db_path)
@@ -2049,14 +2380,22 @@ async def run_reddit_simulation(
         model=model,
         available_actions=REDDIT_ACTIONS,
     )
-    
+
+    # EXECPLAN2 I-2-3: 按角色裁剪每个 Agent 的动作可供性（默认关闭；开关 SIM_ROLE_ACTION_PROFILES）。
+    # Reddit 平台以 REDDIT_ACTIONS 为 union，白名单与之求交，绝不授予平台不存在的动作。
+    if _role_action_profiles_enabled():
+        try:
+            _apply_role_action_profiles(result.agent_graph, config, REDDIT_ACTIONS, log_info)
+        except Exception as _rap_err:  # noqa: BLE001
+            log_info(f"角色动作可供性应用失败（已隔离，回退全局动作清单）: {_rap_err}")
+
     # 从配置文件获取 Agent 真实名称映射（使用 entity_name 而非默认的 Agent_X）
     agent_names = get_agent_names_from_config(config)
     # 如果配置中没有某个 agent，则使用 OASIS 的默认名称
     for agent_id, agent in result.agent_graph.get_agents():
         if agent_id not in agent_names:
             agent_names[agent_id] = getattr(agent, 'name', f'Agent_{agent_id}')
-    
+
     db_path = os.path.join(simulation_dir, "reddit_simulation.db")
     if os.path.exists(db_path):
         os.remove(db_path)

@@ -287,10 +287,34 @@ def list_pipelines():
 
 @research_bp.route('/preflight', methods=['GET'])
 def preflight():
-    """T5.6: 启动前就绪检查（不发起管线）。复用 POST /run 的同一套检查，避免漂移。"""
+    """T5.6: 启动前就绪检查（不发起管线）。复用 POST /run 的同一套检查，避免漂移。
+
+    EXECPLAN2 I-8-0: 默认行为不变（返回 {ready, errors, mode}）。可选 ?format=full
+    走单一真源的 environment_report()（与 doctor.sh / preflight CLI 共用），返回带
+    provider/deerflow_model/graph_backend + 结构化 checks[{id,severity,ok,message,fix}]
+    的就绪文档，供前端设置页渲染实时就绪面板；?deep=true 追加 live 凭据/嵌入缓存/磁盘探针。
+    """
     mode = request.args.get('mode', 'full')
     if mode not in ('full', 'research_only'):
         mode = 'full'
+
+    if (request.args.get('format') or '').strip().lower() == 'full':
+        # 复用 backend/scripts/preflight.py 的 environment_report()（同一引擎，零漂移）。
+        # 容错降级：脚本不可导入时回退到旧版精简响应，绝不让设置页因此 500。
+        try:
+            import sys
+            _scripts_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'scripts')
+            _scripts_dir = os.path.abspath(_scripts_dir)
+            if _scripts_dir not in sys.path:
+                sys.path.insert(0, _scripts_dir)
+            from preflight import environment_report  # type: ignore
+            deep = (request.args.get('deep') or '').strip().lower() in ('1', 'true', 'yes')
+            model = (request.args.get('model') or '').strip() or None
+            report = environment_report(mode=mode, model=model, deep=deep)
+            return jsonify({"success": True, "data": report})
+        except Exception as e:
+            logger.warning(f"preflight format=full 降级到精简响应: {e}")
+
     errors = preflight_pipeline(mode=mode)
     return jsonify({"success": True, "data": {"ready": not errors, "errors": errors, "mode": mode}})
 
