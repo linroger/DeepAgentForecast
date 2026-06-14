@@ -1,0 +1,50 @@
+# EXECPLAN2 I-7-1: tiered CI. All jobs are offline (no LLM/network) and fast, so
+# they can gate every PR. Heavy e2e (real research/sim) is intentionally excluded.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-drift:
+    name: Lint + env-drift gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Ruff lint (F/E9/B/C4)
+        run: uvx ruff check backend/app backend/scripts deerflow_bridge
+      - name: .env.example <-> Config drift
+        run: python3 backend/scripts/check_env_drift.py --strict
+
+  unit:
+    name: Offline unit/golden tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      # Install only the light deps the offline tests need (pytest + python-dotenv);
+      # the full sim/graph stack is not required for the pure-function golden tests.
+      - name: Run telemetry/security/atomic/dates golden tests
+        run: |
+          uv venv --python 3.12
+          uv pip install pytest python-dotenv
+          cd backend && uv run pytest -q
+
+  byte-compile:
+    name: Byte-compile (syntax) all backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: compileall
+        run: python -m compileall -q backend/app backend/scripts deerflow_bridge

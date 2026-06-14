@@ -69,6 +69,14 @@ if [ -x "$BE_PY" ]; then
   else
     bad "backend deps missing — run: ( cd backend && uv sync --python 3.12 )"
   fi
+  # EXECPLAN2 I-8-5: .env.example <-> Config drift (undocumented knobs hurt discoverability)
+  if [ -f "$ROOT_DIR/backend/scripts/check_env_drift.py" ]; then
+    if "$BE_PY" "$ROOT_DIR/backend/scripts/check_env_drift.py" --strict >/dev/null 2>&1; then
+      ok ".env.example documents every Config env var (no drift)"
+    else
+      warn ".env.example drift — run: ( cd backend && uv run python scripts/check_env_drift.py )"
+    fi
+  fi
 else
   bad "backend venv missing — run: ( cd backend && uv sync --python 3.12 )  (or ./setup.sh)"
 fi

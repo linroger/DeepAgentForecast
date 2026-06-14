@@ -68,3 +68,21 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+# EXECPLAN2 I-7-0: offline-first test harness. `uv run pytest` (or `npm run test`)
+# runs the golden/unit tests under backend/tests/ without touching any LLM/network.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+# EXECPLAN2 I-7-6: lint gate. Scoped to the cheap, high-signal rules so it can be a
+# CI gate without churn: pyflakes (F) + a few error-prone bugbear/comprehension checks.
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["**/__pycache__"]
+
+[tool.ruff.lint]
+select = ["F", "E9", "B", "C4"]
+ignore = ["F401", "F841", "B008"]
