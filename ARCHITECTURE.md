@@ -14,9 +14,18 @@ predictive report you can interrogate. It is, in effect, a digital wind-tunnel
 for "what if" questions.
 
 The simulation core is **OASIS** (Open Agent Social Interaction Simulations,
-by CAMEL-AI); the long-term memory / knowledge graph is **Zep Cloud**; the LLM
-brain is pluggable (local Claude/Codex CLI by default, or any OpenAI-compatible
-API, or Kimi-for-coding).
+by CAMEL-AI); the long-term memory / knowledge graph runs **locally** on the
+open-source **Graphiti** engine (`graphiti-core`) backed by an embedded
+**FalkorDB** (`falkordblite` — no Docker, no server, no account, no API key);
+the LLM brain is pluggable (local Claude/Codex CLI by default, or any
+OpenAI-compatible API, or Kimi-for-coding).
+
+> *Migration note.* The knowledge-graph layer was originally **Zep Cloud** (a
+> paid SaaS). It now runs entirely on-device via **Graphiti** — the same
+> open-source engine Zep Cloud was built on — behind a drop-in
+> **Zep-compatible shim** (`backend/app/services/graphiti_client/`). The shim
+> preserves the old Zep SDK surface so the pipeline code barely changed; see
+> §4.3 for how the local graph actually works.
 
 ---
 
@@ -25,7 +34,7 @@ API, or Kimi-for-coding).
 ```
 DeepAgentForecast/
 ├── package.json            # npm scripts: dev = concurrently(backend, frontend)
-├── .env / .env.example     # LLM_PROVIDER, ZEP_API_KEY, …
+├── .env / .env.example     # LLM_PROVIDER, GRAPH_BACKEND, GRAPHITI_* …  (no API key)
 ├── frontend/               # Vue 3 + Vite SPA  (port 3000)
 │   └── src/{views,components,api,router,store}
 └── backend/                # Flask API + pipeline + OASIS scripts (port 5001)
@@ -36,7 +45,8 @@ DeepAgentForecast/
     │   ├── api/            # HTTP routes  (graph / simulation / report)
     │   ├── models/         # Task (in-memory) + Project (file-backed)
     │   ├── services/       # the actual pipeline (12 modules)
-    │   └── utils/          # LLM clients, file parsing, Zep paging, retry, logging
+    │   │   └── graphiti_client/   # Zep-compatible shim → Graphiti → embedded FalkorDB
+    │   └── utils/          # LLM clients, file parsing, graph paging, retry, logging
     └── scripts/            # OASIS subprocess runners (run as separate processes)
         ├── run_parallel_simulation.py   # Twitter + Reddit in one process
         ├── run_twitter_simulation.py
@@ -62,11 +72,11 @@ backend service; arrows are the artifacts handed forward.
      │
      ├─OntologyGenerator (LLM)──▶ ontology {10 entity types, 6-10 edge types}
      │
- text+ontology ─GraphBuilderService (Zep)──▶ Standalone Graph  (graph_id)
+ text+ontology ─GraphBuilderService (shim→Graphiti)──▶ Local Graph  (graph_id≡group_id)
      │
  graph_id ─ZepEntityReader──▶ typed entities (the actors that become agents)
      │
-     ├─OasisProfileGenerator (LLM + Zep search)──▶ personas
+     ├─OasisProfileGenerator (LLM + graph search)──▶ personas
      │     reddit_profiles.json  /  twitter_profiles.csv
      │
      └─SimulationConfigGenerator (LLM)──▶ simulation_config.json
@@ -82,7 +92,7 @@ backend service; arrows are the artifacts handed forward.
      │                                       │
      ├── monitor thread tails actions.jsonl ─┘──▶ run_state.json (progress)
      │            │
-     │            └─(optional) ZepGraphMemoryUpdater ──▶ Zep graph   ← feedback loop
+     │            └─(optional) ZepGraphMemoryUpdater ──▶ local graph   ← feedback loop
      │
  ReportAgent (ReAct + ZepToolsService) ──▶ markdown report (sections)
      │
@@ -105,11 +115,16 @@ Step 2 Env Setup → Step 3 Simulation → Step 4 Report → Step 5 Interaction.
   `SimulationRunner.register_cleanup()` so all child simulation processes are
   killed on shutdown.
 - **`config.py`** is the single configuration surface, driven entirely by `.env`.
-  Key knobs: `LLM_PROVIDER` (default `claude-cli`), `ZEP_API_KEY` (required),
-  upload limits (50 MB; `pdf/md/txt/markdown`), chunking defaults (500/50),
-  OASIS round defaults, the Twitter/Reddit action whitelists, and report-agent
-  limits. `Config.validate()` enforces a known provider and the presence of
-  required keys before the server starts.
+  Key knobs: `LLM_PROVIDER` (default `claude-cli`); the local graph stack —
+  `GRAPH_BACKEND` (`auto`|`falkordblite`|`kuzu`|`falkordb`), `GRAPHITI_DATA_DIR`,
+  `GRAPHITI_EMBED_MODEL`/`GRAPHITI_EMBED_DIM`, `GRAPHITI_RERANKER`, and
+  `FALKORDB_HOST`/`FALKORDB_PORT` (only used when pointing at an external
+  FalkorDB); upload limits (50 MB; `pdf/md/txt/markdown`), chunking defaults
+  (500/50), OASIS round defaults, the Twitter/Reddit action whitelists, and
+  report-agent limits. **No `ZEP_API_KEY` is required** — the graph is local.
+  The legacy `ZEP_*` retry/backoff knobs are retained but now tune transient
+  *local* graph reads (no rate limits / 429s to absorb). `Config.validate()`
+  enforces a known provider before the server starts.
 
 ### Async job pattern
 
@@ -136,7 +151,13 @@ backend restart even though the `Task` object doesn't.
 
 All comments/prompts are Chinese; the system targets Chinese-language public-
 opinion ("舆论") simulation. Everything routes LLM calls through one
-`LLMClient` and Zep calls through paged helpers.
+`LLMClient` and knowledge-graph calls through the **Zep-compatible shim**
+(`services/graphiti_client/`, which fronts a local Graphiti + FalkorDB engine)
+plus paged helpers. The five graph-touching services (`GraphBuilderService`,
+`ZepEntityReader`, `ZepGraphMemoryUpdater`, `OasisProfileGenerator`,
+`ZepToolsService`) and `utils/zep_paging.py` kept their Zep-era names and
+call shapes; only their import line changed
+(`from zep_cloud…` → `from .graphiti_client…`).
 
 ### 4.1 TextProcessor + FileParser — ingestion
 `FileParser` extracts text from PDFs (PyMuPDF/`fitz`) and md/txt (with
@@ -148,22 +169,54 @@ on sentence boundaries (default 500 chars, 50 overlap).
 Sends the seed text + the prediction requirement to the LLM with a long system
 prompt that demands the ontology describe **real, social-media-capable actors**
 (people, companies, media, government, platforms) — explicitly *not* abstract
-topics or stances. Hard constraints (Zep API limits): exactly **10 entity
-types**, the last two forced to be `Person`/`Organization` fallbacks; 6-10 edge
-types; attribute names must avoid Zep reserved words. Output is a validated
-dict of `entity_types` + `edge_types`.
+topics or stances. Hard constraints (graph schema limits, inherited from the
+Zep-era contract): exactly **10 entity types**, the last two forced to be
+`Person`/`Organization` fallbacks; 6-10 edge types; attribute names must avoid
+reserved words and stay **primitive** (`Optional[str]`), because FalkorDB only
+stores scalar node/edge properties. Output is a validated dict of
+`entity_types` + `edge_types`.
 
 ### 4.3 GraphBuilderService — *build the knowledge graph (GraphRAG)*
-This is where the Zep graph is created. Runs async (background thread, progress
-via `TaskManager`):
-1. `graph.create` → a Zep **Standalone Graph** `mirofish_<hex>`.
+This is where the local knowledge graph is created. Runs async (background
+thread, progress via `TaskManager`). The service still calls the **Zep API
+shape** (`graph.create` / `set_ontology` / `add_batch` / `search` …); the
+`graphiti_client` shim translates each call onto Graphiti, which writes into the
+embedded FalkorDB. Steps:
+1. `graph.create` → a local graph keyed by `mirofish_<hex>`. The shim maps this
+   `graph_id` **directly onto Graphiti's `group_id`** (also reused as the
+   FalkorDB tenant/database name) and caches **one `Graphiti` instance per
+   `graph_id`**.
 2. `graph.set_ontology` — **dynamically synthesises Pydantic entity/edge classes**
    from the ontology dict (`type(name, (EntityModel,), …)`), remapping reserved
-   attribute names.
-3. Chunk text → `graph.add_batch` episodes (batches of 3).
-4. `_wait_for_episodes` — polls each episode's `.processed` flag (≤ 600 s) while
-   Zep asynchronously extracts entities & relations.
-5. `get_graph_data` pages all nodes/edges (with temporal fields) for the UI.
+   attribute names. The shim caches this ontology and passes `entity_types` /
+   `edge_types` **per `add_episode`** (Graphiti takes the schema at ingest time)
+   rather than registering it server-side as Zep did.
+3. Chunk text → `graph.add_batch` episodes (batches of 3). The shim routes each
+   to Graphiti's `add_episode`, where the app's configured **`LLM_PROVIDER`**
+   (via an `AppGraphitiLLMClient` adapter over the app's `LLMClient` — works even
+   with the no-key CLI providers) performs entity/edge extraction and a local
+   **sentence-transformers** model (`paraphrase-multilingual-MiniLM-L12-v2`,
+   384-dim, via `LocalSentenceTransformerEmbedder`) computes embeddings.
+4. **No episode polling.** `add_episode` is *synchronous on return* — extraction
+   has already completed when the call returns — so the old "submit then poll
+   `episode.processed` (≤ 600 s)" wait collapses to a fast no-op.
+5. `get_graph_data` pages all nodes/edges (with temporal fields) for the UI; the
+   shim wraps Graphiti nodes/edges back into the Zep object shape (`uuid_`+`uuid`,
+   `fact`, `fact_type`, `valid_at`/`invalid_at`/`expired_at`/`created_at`,
+   `labels`, `summary`, `attributes`, `episodes`). Bi-temporal facts are still
+   produced — now computed by Graphiti locally rather than by a remote service.
+
+> **How the shim runs Graphiti.** Graphiti's API is `async`; the app is sync.
+> The shim runs every Graphiti coroutine on a **dedicated background asyncio
+> event loop** (a sync→async bridge), so callers keep their blocking interface.
+> Listing maps to `EntityNode.get_by_group_ids` / `EntityEdge.get_by_group_ids`
+> (cursor pagination preserved; an empty edge set raises
+> `GroupsEdgesNotFoundError`, which the shim catches → `[]`). `graph.search`
+> maps to `graphiti.search_()` with the `EDGE_HYBRID_SEARCH_RRF` /
+> `NODE_HYBRID_SEARCH_RRF` recipes. Reranking is **RRF by default** (a
+> `NoOpCrossEncoder` satisfies construction; the RRF recipes do the ranking with
+> no extra cross-encoder LLM call); a local **BGE** cross-encoder is optional via
+> `GRAPHITI_RERANKER=bge`.
 
 ### 4.4 ZepEntityReader — *which nodes become agents?*
 `filter_defined_entities(graph_id)` keeps only nodes whose labels include a
@@ -173,7 +226,7 @@ neighbour summaries. This filtered set is the cast of the simulation.
 
 ### 4.5 OasisProfileGenerator — *give each actor a persona* (Step 2a)
 For every entity it builds a context blob (attributes + related facts + a
-**parallel secondary Zep search** over edges & nodes for extra recall) and asks
+**parallel secondary graph search** over edges & nodes for extra recall) and asks
 the LLM to write an `OasisAgentProfile`: bio (~200 chars), a ~2000-char persona
 (background, MBTI, posting behaviour, stance, and the actor's personal/
 institutional *memory* of the event), plus demographics. Individuals vs.
@@ -222,7 +275,7 @@ registries. `start_simulation`:
   action records become `AgentAction`s. When the process exits it sets
   COMPLETED/FAILED (capturing the log tail on failure).
 - If graph-memory updating is enabled, each parsed action is forwarded to the
-  `ZepGraphMemoryUpdater` — **the feedback loop that grows the Zep graph during
+  `ZepGraphMemoryUpdater` — **the feedback loop that grows the local graph during
   the run.**
 
 It also exposes process control (cross-platform kill via `taskkill`/`killpg`),
@@ -242,14 +295,17 @@ side) polls for commands, executes them, writes responses, and maintains
 ### 4.10 ZepGraphMemoryUpdater — simulation → graph feedback
 Converts each agent action into a natural-language Chinese sentence
 (`<agent>: created a post about … / liked …`), buffers per platform (batch 5),
-and `graph.add`s them back into Zep so the knowledge graph keeps evolving as the
-simulation unfolds (this is what powers the "GraphRAG memory updating live"
-overlay in the UI). Runs on its own worker thread with a registry manager.
+and `graph.add`s them back into the local graph (shim → Graphiti `add_episode`)
+so the knowledge graph keeps evolving as the simulation unfolds (this is what
+powers the "GraphRAG memory updating live" overlay in the UI). Runs on its own
+worker thread with a registry manager.
 
 ### 4.11 ZepToolsService — the report agent's toolbox
-The retrieval/interview toolkit. Foundation is `search_graph` (Zep hybrid search
-with a cross-encoder reranker; degrades to local keyword search on failure). On
-top sit the 4 high-level tools the report agent calls:
+The retrieval/interview toolkit. Foundation is `search_graph` — the shim's
+`graph.search`, i.e. Graphiti hybrid search over the local FalkorDB using the
+`*_HYBRID_SEARCH_RRF` recipes (RRF reranking by default, optional local BGE
+cross-encoder); degrades to local keyword search on failure. On top sit the 4
+high-level tools the report agent calls:
 - **`insight_forge`** — multi-hop deep retrieval: LLM decomposes the question
   into sub-queries, searches each, pulls entity details, builds relationship
   chains.
@@ -342,8 +398,12 @@ so you only set `LLM_API_KEY`.
   mode has no native tool calling). `get_oasis_semaphore` caps concurrency low
   (3) for CLI providers. There's an optional OpenAI "boost" dual-LLM path.
 
-**Net effect:** by default MiroFish needs *no API key for the LLM* — it drives
-your local Claude Code / Codex subscription. Only Zep always requires a key.
+**Net effect:** by default MiroFish needs *no API key at all*. The LLM drives
+your local Claude Code / Codex subscription, and the knowledge graph runs
+locally on Graphiti + embedded FalkorDB — there is **no Zep account, no
+`ZEP_API_KEY`, and no remote graph service**. Entity/edge extraction and
+embeddings happen on-device (your `LLM_PROVIDER` for extraction, a local
+sentence-transformers model for embeddings).
 
 ---
 
@@ -388,9 +448,12 @@ curved multi-edges, collapsed self-loops, type-colour legend, and a live
 ## 8. Cross-cutting concerns & notable design points
 
 - **Concurrency model:** Flask is threaded; slow jobs run in daemon threads;
-  profile generation and Zep enrichment use thread pools; OASIS runs as detached
-  OS subprocesses with their own asyncio loops. Three independent retry layers
-  (LLMClient CLI backoff, OpenAI SDK retries, Zep paging backoff).
+  profile generation and graph enrichment use thread pools; the graph shim runs
+  Graphiti's async API on a dedicated background asyncio event loop (sync→async
+  bridge); OASIS runs as detached OS subprocesses with their own asyncio loops.
+  Three independent retry layers (LLMClient CLI backoff, OpenAI SDK retries, and
+  the `ZEP_*`-tuned graph-paging backoff — now smoothing transient *local* graph
+  reads rather than remote rate limits).
 - **Resilience to LLM flakiness:** aggressive JSON repair (`_fix_truncated_json`,
   control-char scrubbing, regex extraction) across ontology/profile/config
   generation; empty completions raise to trigger retry rather than poisoning
@@ -414,12 +477,15 @@ curved multi-edges, collapsed self-loops, type-colour legend, and a live
 
 A user uploads a document and a question. MiroFish reads the document, decides
 what kinds of real-world actors matter, builds a temporal knowledge graph of
-them in Zep, gives each actor an LLM persona and a memory of the event, then
-sets thousands of them loose on two simulated social networks where they post,
-argue, like, and follow autonomously over 72 simulated hours. Their collective
-behaviour is logged action-by-action and continuously fed back into the
-knowledge graph. A ReAct report agent then mines that post-simulation graph —
-running deep multi-hop retrievals and even interviewing the agents directly — to
-write a predictive report, which the user can finally interrogate by chatting
-with the report agent or talking to any individual simulated character. The
-entire LLM workload can run on a local Claude/Codex subscription with no API key.
+them **locally** (Graphiti extracting entities/edges with your LLM provider and
+embedding them on-device, stored in an embedded FalkorDB behind a
+Zep-compatible shim), gives each actor an LLM persona and a memory of the event,
+then sets thousands of them loose on two simulated social networks where they
+post, argue, like, and follow autonomously over 72 simulated hours. Their
+collective behaviour is logged action-by-action and continuously fed back into
+the knowledge graph. A ReAct report agent then mines that post-simulation
+graph — running deep multi-hop retrievals and even interviewing the agents
+directly — to write a predictive report, which the user can finally interrogate
+by chatting with the report agent or talking to any individual simulated
+character. The entire workload — LLM **and** knowledge graph — can run on a
+local Claude/Codex subscription with **no API key and no paid services.**

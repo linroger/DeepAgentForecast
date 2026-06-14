@@ -10,8 +10,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from zep_cloud import InternalServerError
-from zep_cloud.client import Zep
+from ..services.graphiti_client import InternalServerError, Zep
 
 from .logger import get_logger
 from .zep_rate_limit import is_zep_rate_limit_error, zep_retry_delay_seconds

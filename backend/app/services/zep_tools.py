@@ -13,7 +13,7 @@ import json
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 
-from zep_cloud.client import Zep
+from .graphiti_client import Zep
 
 from ..config import Config
 from ..utils.logger import get_logger
@@ -1318,7 +1318,8 @@ class ZepToolsService:
         interview_requirement: str,
         simulation_requirement: str = "",
         max_agents: int = 5,
-        custom_questions: List[str] = None
+        custom_questions: List[str] = None,
+        graph_id: Optional[str] = None,
     ) -> InterviewResult:
         """
         【InterviewAgents - 深度采访】
@@ -1504,6 +1505,20 @@ class ZepToolsService:
                 result.interviews.append(interview)
 
             result.interviewed_count = len(result.interviews)
+
+            # T3.14: 把采访回答持久化为 typed 图谱事实（<agent> STATED_AT_END_OF_SIM …），
+            # 让最丰富的收尾反思可被后续检索；key-free 走本地 shim。best-effort，失败不影响采访结果。
+            if graph_id and result.interviews:
+                try:
+                    from .zep_graph_memory_updater import ZepGraphMemoryUpdater
+                    _updater = ZepGraphMemoryUpdater(graph_id)
+                    _written = 0
+                    for itv in result.interviews:
+                        if _updater.write_interview_fact(itv.agent_name, itv.response):
+                            _written += 1
+                    logger.info(f"采访事实已写入图谱 {graph_id}: {_written}/{len(result.interviews)} 条")
+                except Exception as _persist_err:
+                    logger.warning(f"采访事实持久化跳过（不影响采访）: {_persist_err}")
 
         except ValueError as e:
             # 模拟环境未运行
@@ -1779,3 +1794,185 @@ class ZepToolsService:
             logger.warning(f"生成采访摘要失败: {e}")
             # 降级：简单拼接
             return f"共采访了{len(interviews)}位受访者，包括：" + "、".join([i.agent_name for i in interviews])
+
+    # ==================================================================
+    # 结构化模拟结果工具（EXECPLAN T4.2）—— 让报告的量化结论有据可查，
+    # 不再只靠图谱模糊检索猜「谁最活跃 / 谁与谁抱团 / 立场怎么变」。
+    # 三者都是确定性聚合（无 LLM），直接读 SimulationRunner 的结构化数据。
+    # ==================================================================
+    def simulation_outcomes(self, simulation_id: str, top_n: int = 15) -> str:
+        """量化模拟结果：最活跃 agent Top-N、逐轮动作量、动作类型分布。"""
+        from .simulation_runner import SimulationRunner
+        try:
+            stats = SimulationRunner.get_agent_stats(simulation_id) or []
+            timeline = SimulationRunner.get_timeline(simulation_id) or []
+        except Exception as e:
+            return f"（无法读取模拟结构化数据：{e}）"
+        if not stats and not timeline:
+            return "（该模拟暂无可用的结构化结果数据）"
+
+        stats_sorted = sorted(stats, key=lambda s: s.get("total_actions", 0), reverse=True)
+        lines = ["## 模拟量化结果（结构化，可直接引用）", "", f"### 最活跃 Agent（Top {top_n}，按总动作数）"]
+        for s in stats_sorted[:top_n]:
+            at = s.get("action_types") or {}
+            at_str = "、".join(f"{k}×{v}" for k, v in sorted(at.items(), key=lambda x: -x[1])[:5])
+            lines.append(f"- {s.get('agent_name','?')}(id={s.get('agent_id')}): 共 {s.get('total_actions',0)} 次动作 [{at_str}]")
+
+        breakdown: Dict[str, int] = {}
+        for s in stats:
+            for atype, c in (s.get("action_types") or {}).items():
+                breakdown[atype] = breakdown.get(atype, 0) + int(c)
+        if breakdown:
+            lines.append("")
+            lines.append("### 全局动作类型分布")
+            lines.append("、".join(f"{k}: {v}" for k, v in sorted(breakdown.items(), key=lambda x: -x[1])))
+
+        if timeline:
+            lines.append("")
+            lines.append("### 逐轮动作量 (round: total/active_agents)")
+            vol = "  ".join(f"{r['round_num']}:{r['total_actions']}/{r['active_agents_count']}" for r in timeline)
+            lines.append(vol)
+            peak = max(timeline, key=lambda r: r["total_actions"])
+            lines.append(f"峰值轮次: round {peak['round_num']}（{peak['total_actions']} 次动作）")
+        return "\n".join(lines)
+
+    def coalition_map(self, graph_id: str, simulation_id: str) -> str:
+        """派系图：把对相同对象互动（点赞/转发/评论/关注）的 agent 聚成连通分量（确定性，无 LLM）。"""
+        from .simulation_runner import SimulationRunner
+        try:
+            actions = SimulationRunner.get_actions(simulation_id, limit=100000) or []
+        except Exception as e:
+            return f"（无法读取模拟动作数据：{e}）"
+        # agent → 其互动过的目标名集合
+        target_keys = ("post_author_name", "original_author_name", "comment_author_name",
+                       "quoted_author_name", "followee_name", "target_name")
+        agent_targets: Dict[int, set] = {}
+        agent_name: Dict[int, str] = {}
+        for a in actions:
+            agent_name[a.agent_id] = a.agent_name
+            args = a.action_args or {}
+            for k in target_keys:
+                v = str(args.get(k, "") or "").strip()
+                if v:
+                    agent_targets.setdefault(a.agent_id, set()).add(v)
+        if not agent_targets:
+            return "（本次模拟没有可用于聚类的定向互动，无法形成派系图）"
+
+        # 并查集：共享任一目标的 agent 归为同一派系
+        parent: Dict[int, int] = {aid: aid for aid in agent_targets}
+
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def union(x, y):
+            parent[find(x)] = find(y)
+
+        target_to_agent: Dict[str, int] = {}
+        for aid, tgts in agent_targets.items():
+            for t in tgts:
+                if t in target_to_agent:
+                    union(aid, target_to_agent[t])
+                else:
+                    target_to_agent[t] = aid
+        clusters: Dict[int, List[int]] = {}
+        for aid in agent_targets:
+            clusters.setdefault(find(aid), []).append(aid)
+        clusters_sorted = sorted(clusters.values(), key=len, reverse=True)
+
+        lines = ["## 派系/联盟图（按共享互动对象聚类，确定性）"]
+        idx = 0
+        for members in clusters_sorted:
+            if len(members) < 2:
+                continue
+            idx += 1
+            names = "、".join(agent_name.get(m, f"agent{m}") for m in members[:15])
+            lines.append(f"- 派系 {idx}（{len(members)} 人）: {names}")
+        if idx == 0:
+            lines.append("- （未发现 ≥2 人的互动派系）")
+        return "\n".join(lines)
+
+    def opinion_shift(self, simulation_id: str, actor_name: str) -> str:
+        """单个 actor 的逐轮行为轨迹（动作量/类型随轮次变化），用于观察立场/参与度演变。"""
+        from .simulation_runner import SimulationRunner
+        try:
+            actions = SimulationRunner.get_actions(simulation_id, limit=100000) or []
+        except Exception as e:
+            return f"（无法读取模拟动作数据：{e}）"
+        from ..utils.actors import normalize_name
+        target = normalize_name(actor_name)
+        mine = [a for a in actions if normalize_name(a.agent_name) == target or normalize_name(a.agent_name).find(target) >= 0]
+        if not mine:
+            return f"（未找到名为「{actor_name}」的 agent 的动作记录）"
+        by_round: Dict[int, Dict[str, int]] = {}
+        for a in mine:
+            r = by_round.setdefault(a.round_num, {})
+            r[a.action_type] = r.get(a.action_type, 0) + 1
+        lines = [f"## 「{actor_name}」逐轮行为轨迹（参与度/立场演变线索）"]
+        for rn in sorted(by_round):
+            at = by_round[rn]
+            lines.append(f"- round {rn}: " + "、".join(f"{k}×{v}" for k, v in sorted(at.items(), key=lambda x: -x[1])))
+        lines.append(f"合计 {len(mine)} 次动作，跨 {len(by_round)} 轮。")
+        return "\n".join(lines)
+
+    def scenario_diff(self, base_sim_id: str, scenario_sim_id: str) -> str:
+        """T4.7: 反事实对比 base vs 情景两次模拟的结构化差异（确定性，无 LLM）。
+
+        计算：总动作量差、峰值轮次差、逐轮动作量 delta、Top-actor 活跃度 delta。所有数字都可
+        回溯到各自的 get_timeline / get_agent_stats。任一模拟缺失 → 友好降级提示。
+        """
+        from .simulation_runner import SimulationRunner
+        try:
+            base_tl = SimulationRunner.get_timeline(base_sim_id) or []
+            scen_tl = SimulationRunner.get_timeline(scenario_sim_id) or []
+            base_stats = SimulationRunner.get_agent_stats(base_sim_id) or []
+            scen_stats = SimulationRunner.get_agent_stats(scenario_sim_id) or []
+        except Exception as e:
+            return f"（无法读取对比所需的结构化数据：{e}）"
+        if not (base_tl or scen_tl):
+            return "（基线或情景模拟暂无可用结构化数据，无法对比）"
+
+        def _total(tl):
+            return sum(r.get("total_actions", 0) for r in tl)
+
+        def _peak(tl):
+            return max(tl, key=lambda r: r.get("total_actions", 0), default=None)
+
+        bt, st = _total(base_tl), _total(scen_tl)
+        lines = ["## 情景对比 / 反事实差异（基线 vs 情景，结构化）", ""]
+        lines.append(f"- 总动作量: 基线 {bt} → 情景 {st}（Δ {st - bt:+d}, {((st-bt)/bt*100) if bt else 0:+.1f}%）")
+        bp, sp = _peak(base_tl), _peak(scen_tl)
+        if bp and sp:
+            lines.append(
+                f"- 峰值轮次: 基线 round {bp['round_num']}（{bp['total_actions']}）"
+                f" → 情景 round {sp['round_num']}（{sp['total_actions']}）"
+            )
+        lines.append(f"- 执行轮数: 基线 {len(base_tl)} → 情景 {len(scen_tl)}")
+
+        # 逐轮 delta（取两者并集的前若干轮）
+        bvol = {r["round_num"]: r.get("total_actions", 0) for r in base_tl}
+        svol = {r["round_num"]: r.get("total_actions", 0) for r in scen_tl}
+        rounds = sorted(set(bvol) | set(svol))
+        if rounds:
+            lines.append("")
+            lines.append("### 逐轮动作量 delta (round: base→scenario)")
+            lines.append("  ".join(
+                f"{rn}:{bvol.get(rn,0)}→{svol.get(rn,0)}" for rn in rounds[:48]
+            ))
+
+        # Top-actor 活跃度 delta
+        b_by = {s.get("agent_name"): s.get("total_actions", 0) for s in base_stats}
+        s_by = {s.get("agent_name"): s.get("total_actions", 0) for s in scen_stats}
+        names = set(b_by) | set(s_by)
+        deltas = sorted(
+            ((n, s_by.get(n, 0) - b_by.get(n, 0)) for n in names if n),
+            key=lambda x: abs(x[1]), reverse=True,
+        )[:10]
+        if deltas:
+            lines.append("")
+            lines.append("### Top-actor 活跃度 delta（按变化幅度）")
+            for n, d in deltas:
+                lines.append(f"- {n}: {b_by.get(n,0)} → {s_by.get(n,0)}（Δ {d:+d}）")
+        return "\n".join(lines)

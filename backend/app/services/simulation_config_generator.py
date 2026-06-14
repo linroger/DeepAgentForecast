@@ -17,7 +17,15 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 
 from ..config import Config
-from ..utils.actors import actors_digest, influence_weight, match_actor
+from ..utils.actors import (
+    actors_digest,
+    build_initial_follow_graph,
+    events_to_schedule,
+    influence_weight,
+    match_actor,
+    normalize_name,
+    situation_brief_block,
+)
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .zep_entity_reader import EntityNode, ZepEntityReader
@@ -78,8 +86,11 @@ class AgentActivityConfig:
     # 影响力权重（决定其发言被其他Agent看到的概率）
     influence_weight: float = 1.0
 
+    # 关注议题（用于 T3.4 同温层聚类；LLM 未给出时为空，聚类退化为仅按 stance）
+    interested_topics: List[str] = field(default_factory=list)
 
-@dataclass  
+
+@dataclass
 class TimeSimulationConfig:
     """时间模拟配置（基于中国人作息习惯）"""
     # 模拟总时长（模拟小时数）
@@ -114,15 +125,19 @@ class EventConfig:
     """事件配置"""
     # 初始事件（模拟开始时的触发事件）
     initial_posts: List[Dict[str, Any]] = field(default_factory=list)
-    
+
     # 定时事件（在特定时间触发的事件）
     scheduled_events: List[Dict[str, Any]] = field(default_factory=list)
-    
+
     # 热点话题关键词
     hot_topics: List[str] = field(default_factory=list)
-    
+
     # 舆论引导方向
     narrative_direction: str = ""
+
+    # 初始关注边 [[follower_agent_id, followee_agent_id], ...]（T3.2）
+    # 来自研究 relationships[] + 图谱邻边，模拟开始前注入，让 OASIS 不再从空社交图起步。
+    initial_follows: List[List[int]] = field(default_factory=list)
 
 
 @dataclass
@@ -137,9 +152,17 @@ class PlatformConfig:
     
     # 病毒传播阈值（达到多少互动后触发扩散）
     viral_threshold: int = 10
-    
+
     # 回声室效应强度（相似观点聚集程度）
     echo_chamber_strength: float = 0.5
+
+    # —— OASIS 推荐器真正消费的旋钮（T3.12；仅当 SIM_WIRE_RECSYS=true 时生效）——
+    # 上面的 recency/popularity/relevance/viral_threshold 是展示性权重，OASIS 推荐器并不读取；
+    # 下列字段会被映射到 oasis Platform(recsys_type, refresh_rec_post_count, max_rec_post_len,
+    # following_post_count)，是真正改变曝光的旋钮。twitter 默认 twhin-bert，reddit 默认 reddit。
+    recsys_type: str = ""               # 留空 → 平台默认（twitter:twhin-bert / reddit:reddit）
+    refresh_rec_post_count: int = 0     # 0 → 平台默认（twitter:2 / reddit:5）
+    max_rec_post_len: int = 0           # 0 → 平台默认（twitter:2 / reddit:100）
 
 
 @dataclass
@@ -169,10 +192,13 @@ class SimulationParameters:
     llm_model: str = ""
     llm_base_url: str = ""
     
+    # 研究截止日（T3.9：锚定模拟时钟 round→date 映射；来自 actors.as_of_date，可空）
+    as_of_date: Optional[str] = None
+
     # 生成元数据
     generated_at: str = field(default_factory=lambda: datetime.now().isoformat())
     generation_reasoning: str = ""  # LLM的推理说明
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         time_dict = asdict(self.time_config)
@@ -181,6 +207,7 @@ class SimulationParameters:
             "project_id": self.project_id,
             "graph_id": self.graph_id,
             "simulation_requirement": self.simulation_requirement,
+            "as_of_date": self.as_of_date,
             "time_config": time_dict,
             "agent_configs": [asdict(a) for a in self.agent_configs],
             "event_config": asdict(self.event_config),
@@ -341,7 +368,45 @@ class SimulationConfigGenerator:
         event_config = self._assign_initial_post_agents(event_config, all_agent_configs)
         assigned_count = len([p for p in event_config.initial_posts if p.get("poster_agent_id") is not None])
         reasoning_parts.append(f"初始帖子分配: {assigned_count} 个帖子已分配发布者")
-        
+
+        # ========== 构建初始关注图（T3.2）==========
+        # 研究 relationships[] → 有向关注边（方向遵循 actors.build_initial_follow_graph 的语义），
+        # 再用图谱邻边补充（relationships[] 稀疏时也能成形）。模拟开始前注入，杜绝空社交图。
+        try:
+            event_config.initial_follows = self._build_initial_follows(all_agent_configs, entities, actors)
+            reasoning_parts.append(f"初始关注图: {len(event_config.initial_follows)} 条关注边")
+            logger.info(f"初始关注图: {len(event_config.initial_follows)} 条关注边")
+        except Exception as e:
+            logger.warning(f"初始关注图构建失败（降级为空，不影响模拟）: {e}")
+            event_config.initial_follows = []
+
+        # ========== 回放研究时间线为定时事件（T3.8）==========
+        # key_events → 映射到 [0, total_rounds) 的 scheduled_events，附上最相关的高影响力发布者；
+        # 运行脚本在对应轮次以 CREATE_POST 触发。无 key_events / 无法解析 → 空，不影响模拟。
+        try:
+            event_config.scheduled_events = self._build_scheduled_events(
+                actors, time_config, all_agent_configs
+            )
+            if event_config.scheduled_events:
+                reasoning_parts.append(f"定时事件: {len(event_config.scheduled_events)} 个")
+                logger.info(f"定时事件（时间线回放）: {len(event_config.scheduled_events)} 个")
+        except Exception as e:
+            logger.warning(f"定时事件构建失败（降级为空，不影响模拟）: {e}")
+            event_config.scheduled_events = []
+
+        # ========== 把 echo-chamber 同温层关注补进初始关注图（T3.4）==========
+        try:
+            extra = self._build_echo_chamber_follows(all_agent_configs, twitter_config_strength=None)
+            if extra:
+                merged = {(a, b) for (a, b) in (tuple(p) for p in event_config.initial_follows)}
+                before = len(merged)
+                merged |= {(a, b) for (a, b) in extra}
+                event_config.initial_follows = [[a, b] for (a, b) in sorted(merged)]
+                logger.info(f"同温层关注边: 新增 {len(merged) - before} 条（echo-chamber）")
+                reasoning_parts.append(f"同温层关注: +{len(merged) - before} 条")
+        except Exception as e:
+            logger.warning(f"同温层关注构建失败（降级跳过，不影响模拟）: {e}")
+
         # ========== 最后一步: 生成平台配置 ==========
         report_progress(total_steps, "生成平台配置...")
         twitter_config = None
@@ -378,6 +443,7 @@ class SimulationConfigGenerator:
             event_config=event_config,
             twitter_config=twitter_config,
             reddit_config=reddit_config,
+            as_of_date=(str((actors or {}).get("as_of_date")) if isinstance(actors, dict) and actors.get("as_of_date") else None),
             llm_provider=self.provider,
             llm_model=self.model_name,
             llm_base_url=self.base_url,
@@ -385,9 +451,159 @@ class SimulationConfigGenerator:
         )
         
         logger.info(f"模拟配置生成完成: {len(params.agent_configs)} 个Agent配置")
-        
+
         return params
-    
+
+    # 每个 agent 从图谱邻边最多派生的关注数（防止稠密图把关注表撑爆）
+    MAX_GRAPH_FOLLOWS_PER_AGENT = 8
+
+    def _build_initial_follows(
+        self,
+        agent_configs: List[AgentActivityConfig],
+        entities: List[EntityNode],
+        actors: Optional[Dict[str, Any]],
+    ) -> List[List[int]]:
+        """T3.2: relationships[] + 图谱邻边 → 去重的初始关注边 [[follower, followee]]。
+
+        研究 relationships[] 走 ``build_initial_follow_graph`` 的方向语义（盟友低→高、
+        依赖方→被依赖方、受众→影响者……）；图谱邻边作为补充，让 relationships[] 稀疏时
+        也能形成初始社交结构。自环/越界 id 一律剔除。
+        """
+        agent_id_by_name = {
+            normalize_name(c.entity_name): c.agent_id
+            for c in agent_configs if c.entity_name
+        }
+        pairs: set = set()
+        # 1. 研究关系（带方向语义）
+        for f in build_initial_follow_graph(actors, agent_id_by_name):
+            if len(f) == 2:
+                pairs.add((f[0], f[1]))
+        # 2. 图谱邻边补充
+        name_by_uuid = {e.uuid: e.name for e in entities}
+        for e in entities:
+            src = agent_id_by_name.get(normalize_name(e.name))
+            if src is None:
+                continue
+            added = 0
+            for edge in (e.related_edges or []):
+                if added >= self.MAX_GRAPH_FOLLOWS_PER_AGENT:
+                    break
+                other_uuid = edge.get("target_node_uuid") or edge.get("source_node_uuid")
+                if not other_uuid:
+                    continue
+                other_name = name_by_uuid.get(other_uuid)
+                if not other_name:
+                    continue
+                dst = agent_id_by_name.get(normalize_name(other_name))
+                if dst is None or dst == src:
+                    continue
+                # 出边：src 关注邻居；入边：邻居关注 src（监控/受影响方向）
+                if edge.get("direction") == "outgoing":
+                    pairs.add((src, dst))
+                else:
+                    pairs.add((dst, src))
+                added += 1
+        valid = {c.agent_id for c in agent_configs}
+        return [[a, b] for (a, b) in sorted(pairs) if a in valid and b in valid]
+
+    def _build_scheduled_events(
+        self,
+        actors: Optional[Dict[str, Any]],
+        time_config: "TimeSimulationConfig",
+        agent_configs: List[AgentActivityConfig],
+    ) -> List[Dict[str, Any]]:
+        """T3.8: 研究 key_events → 映射到 [0,total_rounds) 的定时事件，附最相关高影响力发布者。
+
+        每个事件优先定向到事件文本里提到的真实角色 Agent；否则回退到全局影响力最高的 Agent。
+        无 key_events / 无法解析日期 → []（模拟不变）。返回项形如
+        ``{"round","content","date","poster_agent_id","poster_name"}``。
+        """
+        if not isinstance(actors, dict) or not agent_configs:
+            return []
+        total_rounds = max(
+            1,
+            int(time_config.total_simulation_hours * 60 / max(1, time_config.minutes_per_round)),
+        )
+        as_of = actors.get("as_of_date")
+        schedule = events_to_schedule(actors, total_rounds, as_of)
+        if not schedule:
+            return []
+        # 名字 → agent 索引（用于把事件定向到被提及的真实角色）
+        agents_by_name = {
+            normalize_name(c.entity_name): c for c in agent_configs if c.entity_name
+        }
+        fallback = max(agent_configs, key=lambda a: a.influence_weight)
+        out: List[Dict[str, Any]] = []
+        for ev in schedule:
+            text = str(ev.get("event") or "").strip()
+            if not text:
+                continue
+            poster = None
+            for nm, cand in agents_by_name.items():
+                if len(nm) >= 2 and nm in normalize_name(text):
+                    poster = cand
+                    break
+            poster = poster or fallback
+            out.append({
+                "round": int(ev.get("round", 0)),
+                "content": text,
+                "date": ev.get("date"),
+                "poster_agent_id": poster.agent_id,
+                "poster_name": poster.entity_name,
+            })
+        return out
+
+    def _build_echo_chamber_follows(
+        self,
+        agent_configs: List[AgentActivityConfig],
+        twitter_config_strength: Optional[float] = None,
+    ) -> "set":
+        """T3.4: 按 (stance 桶, 主导议题) 聚类，在簇内加同温层关注边，高影响力 Agent 留跨簇桥。
+
+        强度由 echo_chamber_strength 控制（默认 0.5）：簇内每个 Agent 关注最多 ``round(3×强度)``
+        个同簇高影响力 Agent；少数高影响力 Agent 额外关注几个其他簇的高影响力 Agent（让叙事仍能
+        外溢）。确定性实现（不依赖随机数），避免运行间漂移。返回 ``{(follower, followee), ...}``。
+        """
+        from collections import defaultdict
+
+        strength = 0.5 if twitter_config_strength is None else float(twitter_config_strength)
+        if strength <= 0 or len(agent_configs) < 3:
+            return set()
+        clusters: Dict[Any, List[AgentActivityConfig]] = defaultdict(list)
+        for c in agent_configs:
+            topic = ""
+            if c.interested_topics:
+                topic = normalize_name(str(c.interested_topics[0]))
+            clusters[(str(c.stance or "neutral").lower(), topic)].append(c)
+        pairs: set = set()
+        k = max(1, round(3 * strength))  # strength 0.5 -> ~2
+        for members in clusters.values():
+            if len(members) < 2:
+                continue
+            ranked = sorted(members, key=lambda a: a.influence_weight, reverse=True)
+            for c in members:
+                followed = 0
+                for peer in ranked:
+                    if peer.agent_id == c.agent_id:
+                        continue
+                    pairs.add((c.agent_id, peer.agent_id))
+                    followed += 1
+                    if followed >= k:
+                        break
+        # 跨簇桥：让 top 影响力 Agent 互相关注，narratives 可外溢
+        n_bridge = max(2, len(agent_configs) // 10)
+        high = sorted(agent_configs, key=lambda a: a.influence_weight, reverse=True)[:n_bridge]
+        for c in high:
+            bridges = 0
+            for peer in high:
+                if peer.agent_id == c.agent_id:
+                    continue
+                pairs.add((c.agent_id, peer.agent_id))
+                bridges += 1
+                if bridges >= 2:
+                    break
+        return pairs
+
     def _build_context(
         self,
         simulation_requirement: str,
@@ -405,6 +621,12 @@ class SimulationConfigGenerator:
             f"## 模拟需求\n{simulation_requirement}",
             f"\n## 实体信息 ({len(entities)}个)\n{entity_summary}",
         ]
+
+        # T3.9: 局势简报（调研实证）置顶，作为所有 Agent 的共同事实基线——它先于被截断的
+        # 原始文档进入上下文，确保时间/事件配置 LLM 推理的是简报而非半句切断的长文档。
+        brief_block = situation_brief_block(actors)
+        if brief_block:
+            context_parts.insert(1, f"\n{brief_block}")
 
         # 深度研究档案（actors.json）：立场/影响力/时间线/热点都是调研实证，
         # 优先于原始文档进入上下文（文档随后按剩余空间截断）。
@@ -687,6 +909,22 @@ class SimulationConfigGenerator:
                 "\n**强烈建议**: 初始帖子尽量出自研究档案中的真实角色——为这类帖子额外给出 "
                 "poster_name（角色名，从档案中选），内容必须与该角色的实证立场一致；"
                 "热点话题优先复用档案中的热点议题。"
+            )
+
+        # T3.9(2): 让初始帖子覆盖局势简报里的每条「争议断层」(fault_lines)，由最相关的真实角色发声
+        fault_lines = []
+        if isinstance(actors, dict):
+            sb = actors.get("situation_brief")
+            if isinstance(sb, dict) and isinstance(sb.get("fault_lines"), list):
+                fault_lines = [str(x) for x in sb["fault_lines"] if str(x).strip()][:6]
+        if fault_lines:
+            fl_lines = "\n".join(f"  - {x}" for x in fault_lines)
+            research_block += (
+                "\n## 争议断层（来自局势简报，必须覆盖）\n" + fl_lines + "\n"
+            )
+            poster_name_hint += (
+                "\n**要求**: 为上述每一条「争议断层」至少生成一条初始帖子，由对该议题最相关的研究角色"
+                "（poster_name）发声，立场与其实证立场一致，让模拟开局即围绕真实争议点展开。"
             )
 
         prompt = f"""基于以下模拟需求，生成事件配置。
@@ -973,8 +1211,14 @@ class SimulationConfigGenerator:
                 response_delay_max=cfg.get("response_delay_max", 60),
                 sentiment_bias=cfg.get("sentiment_bias", 0.0),
                 stance=cfg.get("stance", "neutral"),
-                influence_weight=cfg.get("influence_weight", 1.0)
+                influence_weight=cfg.get("influence_weight", 1.0),
+                interested_topics=[str(t) for t in (cfg.get("interested_topics") or [])][:5],
             )
+            # T3.6: 在两条路径（LLM 成功 / 规则兜底）上都强制落研究档案的实证影响力，
+            # 避免 LLM-success 路径只被「提示」而给出任意权重，破坏 T3.5 的影响力加权激活。
+            researched_weight = influence_weight(matched_actors.get(agent_id))
+            if researched_weight is not None:
+                config.influence_weight = researched_weight
             configs.append(config)
 
         return configs

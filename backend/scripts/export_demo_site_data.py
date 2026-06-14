@@ -190,7 +190,7 @@ def export_run(key: str, pipeline_id: str, skip_graph: bool) -> None:
     # original graph no longer exists on the account, rebuild it from the
     # saved dossier + ontology (identical stage-3 inputs) and export that.
     if not skip_graph:
-        from zep_cloud.core.api_error import ApiError
+        from app.services.graphiti_client import ApiError
 
         graph_id = state["graph_id"]
         try:

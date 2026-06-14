@@ -935,37 +935,61 @@ class ReportAgent:
     3. 反思阶段：检查内容完整性和准确性
     """
     
-    # 最大工具调用次数（每个章节）— 提高以支撑更深入、更长篇的章节
-    MAX_TOOL_CALLS_PER_SECTION = 8
-    
+    # T4.4: 工具调用上下限从 Config 读取（默认 8/4/2 = 原硬编码值，行为不变；运维可调成本/深度）
+    MAX_TOOL_CALLS_PER_SECTION = Config.REPORT_AGENT_MAX_TOOL_CALLS
+    MIN_TOOL_CALLS_PER_SECTION = Config.REPORT_AGENT_MIN_TOOL_CALLS
+
     # 最大反思轮数
     MAX_REFLECTION_ROUNDS = 3
-    
+
     # 对话中的最大工具调用次数
-    MAX_TOOL_CALLS_PER_CHAT = 2
+    MAX_TOOL_CALLS_PER_CHAT = Config.REPORT_AGENT_MAX_TOOL_CALLS_CHAT
     
     def __init__(
-        self, 
+        self,
         graph_id: str,
         simulation_id: str,
         simulation_requirement: str,
         llm_client: Optional[LLMClient] = None,
-        zep_tools: Optional[ZepToolsService] = None
+        zep_tools: Optional[ZepToolsService] = None,
+        situation_brief: Optional[str] = None,
+        actors: Optional[Dict[str, Any]] = None,
+        sources: Optional[List[Dict[str, Any]]] = None,
+        research_report: Optional[str] = None,
+        scenario_label: Optional[str] = None,
+        base_simulation_id: Optional[str] = None,
     ):
         """
         初始化Report Agent
-        
+
         Args:
             graph_id: 图谱ID
             simulation_id: 模拟ID
             simulation_requirement: 模拟需求描述
             llm_client: LLM客户端（可选）
             zep_tools: Zep工具服务（可选）
+            situation_brief: 研究档案渲染的「背景档案」文本（可选；T4.1）。提供时钉进
+                规划/章节提示词，避免报告阶段对全套 cast/关系/时间线盲搜重挖。
+            actors: 研究 actors.json 顶层对象（可选）。
+            sources: 研究来源列表 [{title,url}]（可选）；渲染为 [S1]/[S2] 引用索引。
+            research_report: 原始研究报告 markdown（可选）。
+            三者全部缺省时，行为与旧 3 参构造完全一致（冷图盲搜路径）。
         """
         self.graph_id = graph_id
         self.simulation_id = simulation_id
         self.simulation_requirement = simulation_requirement
-        
+
+        # T4.1: 钉入研究档案。背景块 + 来源索引在构造时一次性渲染，规划与每个章节复用。
+        self.situation_brief = situation_brief or ""
+        self.actors = actors
+        self.sources = sources or []
+        self.research_report = research_report or ""
+        # T4.6/T4.7: 情景标签（what-if 框架）+ base 模拟 id（反事实对比）
+        self.scenario_label = (scenario_label or "").strip()
+        self.base_simulation_id = base_simulation_id or None
+        self._background_block = self._build_background_block()
+        self._sources_index = self._build_sources_index()
+
         self.llm = llm_client or LLMClient()
         self.zep_tools = zep_tools or ZepToolsService()
         
@@ -978,10 +1002,63 @@ class ReportAgent:
         self.console_logger: Optional[ReportConsoleLogger] = None
         
         logger.info(f"ReportAgent 初始化完成: graph_id={graph_id}, simulation_id={simulation_id}")
-    
+
+    def _build_background_block(self) -> str:
+        """T4.1: 把研究背景档案包装成钉入提示词的权威背景块；缺省返回空串（回退冷图路径）。
+
+        T4.6: 若为情景（what-if）报告，前置情景框架，要求正文显式以该情景命名与展开。
+        """
+        scenario_head = ""
+        if self.scenario_label:
+            scenario_head = (
+                f"【情景预测（What-If）：{self.scenario_label}】\n"
+                f"本报告是在「{self.scenario_label}」假设下的反事实预测。撰写时必须显式点明这是"
+                f"该情景下的推演，结论需与基线区分。\n\n"
+            )
+        sb = (self.situation_brief or "").strip()
+        if not sb:
+            return scenario_head
+        aod = ""
+        if isinstance(self.actors, dict):
+            aod = str(self.actors.get("as_of_date", "") or "").strip()
+        header = (
+            f"【背景档案（深度研究·权威，as-of {aod}）】" if aod
+            else "【背景档案（深度研究·权威）】"
+        )
+        return (
+            f"{header}\n"
+            "以下为本次预测所依据的深度研究实证档案（角色/关系/时间线/热点均为调研确认）。"
+            "撰写时以此为权威背景：优先复用其中真实人名/机构/关系，再用工具补充模拟动态与量化结果。\n\n"
+            f"{sb}"
+        )
+
+    def _build_sources_index(self) -> str:
+        """T4.1: 把研究来源渲染成 [S1]/[S2] 引用索引；缺省返回空串。"""
+        if not self.sources:
+            return ""
+        lines = ["【可引用来源（正文用 [S1]/[S2] 形式标注）】"]
+        for i, s in enumerate(self.sources[:40], 1):
+            if not isinstance(s, dict):
+                continue
+            title = str(s.get("title", "") or "").strip()
+            url = str(s.get("url", "") or "").strip()
+            seg = f"[S{i}] {title}".rstrip()
+            if url:
+                seg += f" — {url}"
+            lines.append(seg)
+        return "\n".join(lines) if len(lines) > 1 else ""
+
+    def _prepend_research_background(self, prompt: str) -> str:
+        """T4.1: 把背景档案 + 来源索引钉到提示词最前；二者皆空时原样返回（回退冷图路径）。"""
+        prefix_parts = [p for p in (self._background_block, self._sources_index) if p]
+        if not prefix_parts:
+            return prompt
+        return "\n\n".join(prefix_parts) + "\n\n" + prompt
+
+
     def _define_tools(self) -> Dict[str, Dict[str, Any]]:
         """定义可用工具"""
-        return {
+        tools = {
             "insight_forge": {
                 "name": "insight_forge",
                 "description": TOOL_DESC_INSIGHT_FORGE,
@@ -1013,9 +1090,33 @@ class ReportAgent:
                     "interview_topic": "采访主题或需求描述（如：'了解学生对宿舍甲醛事件的看法'）",
                     "max_agents": "最多采访的Agent数量（可选，默认5，最大6）"
                 }
+            },
+            # T4.2: 结构化模拟结果工具（量化论断必须有据可查）
+            "simulation_outcomes": {
+                "name": "simulation_outcomes",
+                "description": "获取模拟的量化结果：最活跃 Agent 排名、逐轮动作量、动作类型分布、峰值轮次。任何涉及『谁最活跃/参与度/动作量/级联峰值』的量化论断都应先调用它，引用具体数字。",
+                "parameters": {"top_n": "返回最活跃 Agent 的数量（可选，默认15）"}
+            },
+            "coalition_map": {
+                "name": "coalition_map",
+                "description": "派系/联盟图：把对相同对象互动（点赞/转发/评论/关注）的 Agent 聚成派系（确定性，无需猜测）。分析阵营/联盟/抱团结构时使用。",
+                "parameters": {}
+            },
+            "opinion_shift": {
+                "name": "opinion_shift",
+                "description": "单个 Agent/角色的逐轮行为轨迹（动作量/类型随轮次变化），用于观察其立场或参与度的演变。",
+                "parameters": {"actor_name": "要追踪的 Agent/角色名"}
             }
         }
-    
+        # T4.7: 仅情景报告（有基线模拟）暴露反事实对比工具
+        if self.base_simulation_id:
+            tools["scenario_diff"] = {
+                "name": "scenario_diff",
+                "description": "反事实对比：基线模拟 vs 当前情景模拟的结构化差异（总动作量/峰值轮次/逐轮 delta/Top-actor 活跃度 delta）。撰写『情景对比』章节时必须调用，引用具体差值。",
+                "parameters": {}
+            }
+        return tools
+
     def _execute_tool(self, tool_name: str, parameters: Dict[str, Any], report_context: str = "") -> str:
         """
         执行工具调用
@@ -1081,12 +1182,32 @@ class ReportAgent:
                     simulation_id=self.simulation_id,
                     interview_requirement=interview_topic,
                     simulation_requirement=self.simulation_requirement,
-                    max_agents=max_agents
+                    max_agents=max_agents,
+                    graph_id=self.graph_id,  # T3.14: 把采访回答持久化为 typed 图谱事实
                 )
                 return result.to_text()
             
+            elif tool_name == "simulation_outcomes":
+                top_n = parameters.get("top_n", 15)
+                if isinstance(top_n, str):
+                    top_n = int(top_n) if top_n.isdigit() else 15
+                return self.zep_tools.simulation_outcomes(self.simulation_id, top_n=top_n)
+
+            elif tool_name == "coalition_map":
+                return self.zep_tools.coalition_map(self.graph_id, self.simulation_id)
+
+            elif tool_name == "opinion_shift":
+                actor_name = parameters.get("actor_name", parameters.get("query", ""))
+                return self.zep_tools.opinion_shift(self.simulation_id, actor_name)
+
+            elif tool_name == "scenario_diff":
+                # T4.7: 反事实对比 base vs 当前情景模拟
+                if not self.base_simulation_id:
+                    return "（本报告非情景对比报告，无基线模拟可对比）"
+                return self.zep_tools.scenario_diff(self.base_simulation_id, self.simulation_id)
+
             # ========== 向后兼容的旧工具（内部重定向到新工具） ==========
-            
+
             elif tool_name == "search_graph":
                 # 重定向到 quick_search
                 logger.info("search_graph 已重定向到 quick_search")
@@ -1127,7 +1248,8 @@ class ReportAgent:
             return f"工具执行失败: {str(e)}"
     
     # 合法的工具名称集合，用于裸 JSON 兜底解析时校验
-    VALID_TOOL_NAMES = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
+    VALID_TOOL_NAMES = {"insight_forge", "panorama_search", "quick_search", "interview_agents",
+                        "simulation_outcomes", "coalition_map", "opinion_shift", "scenario_diff"}
 
     def _parse_tool_calls(self, response: str) -> List[Dict[str, Any]]:
         """
@@ -1235,8 +1357,48 @@ class ReportAgent:
             total_edges=context.get('graph_statistics', {}).get('total_edges', 0),
             entity_types=list(context.get('graph_statistics', {}).get('entity_types', {}).keys()),
             total_entities=context.get('total_entities', 0),
-            related_facts_json=json.dumps(context.get('related_facts', [])[:10], ensure_ascii=False, indent=2),
+            # T4.3: 事实切片 10→25，给规划更充足的实证依据。
+            related_facts_json=json.dumps(context.get('related_facts', [])[:25], ensure_ascii=False, indent=2),
         )
+        # T4.1: 钉入研究背景档案 + 来源索引，让大纲规划基于真实 cast/关系，而非纯凭模拟统计盲设。
+        user_prompt = self._prepend_research_background(user_prompt)
+
+        # T4.3: 规划前先做两次扫描——一次图谱深挖（central_question）+ 一次结构化模拟结果，
+        # 让大纲随真实研究发现与模拟动态而变（如高级联的运行会催生「级联」章节），而非盲设。
+        sweeps = []
+        try:
+            forge = self.zep_tools.insight_forge(
+                graph_id=self.graph_id,
+                query=self.simulation_requirement,
+                simulation_requirement=self.simulation_requirement,
+                report_context="报告大纲规划阶段的全局扫描",
+            )
+            forge_text = forge.to_text() if hasattr(forge, "to_text") else str(forge)
+            if forge_text:
+                sweeps.append("【图谱深挖摘要】\n" + forge_text[:3000])
+        except Exception as e:
+            logger.warning(f"plan_outline insight_forge 扫描失败（忽略）: {e}")
+        try:
+            outcomes = self.zep_tools.simulation_outcomes(self.simulation_id, top_n=10)
+            if outcomes:
+                sweeps.append("【模拟量化结果摘要】\n" + outcomes[:2500])
+        except Exception as e:
+            logger.warning(f"plan_outline simulation_outcomes 扫描失败（忽略）: {e}")
+        if sweeps:
+            user_prompt = user_prompt + "\n\n" + "\n\n".join(sweeps)
+
+        # T4.7: 情景对比报告 —— 强制大纲包含「情景对比 / 反事实」章节，并预取 scenario_diff 摘要
+        if self.base_simulation_id:
+            try:
+                diff_text = self.zep_tools.scenario_diff(self.base_simulation_id, self.simulation_id)
+                if diff_text:
+                    user_prompt += "\n\n【基线 vs 情景 结构化对比（必须据此撰写对比章节）】\n" + diff_text[:2500]
+            except Exception as e:
+                logger.warning(f"plan_outline scenario_diff 扫描失败（忽略）: {e}")
+            user_prompt += (
+                "\n\n**强制要求**：本报告为情景（What-If）预测，大纲必须包含一节标题含"
+                "「情景对比」或「反事实」的章节，对比基线与本情景的关键差异（引用上面对比数据中的具体差值）。"
+            )
 
         try:
             response = self.llm.chat_json(
@@ -1284,8 +1446,148 @@ class ReportAgent:
                 ]
             )
     
+    def _generate_section(
+        self,
+        section: ReportSection,
+        outline: ReportOutline,
+        previous_sections: List[str],
+        progress_callback: Optional[Callable] = None,
+        section_index: int = 0,
+    ) -> str:
+        """T4.5: 章节生成调度——原生 tool calling 可用时走结构化路径，否则回退手搓 ReAct。"""
+        if self.llm.supports_native_tools():
+            try:
+                return self._generate_section_native(
+                    section, outline, previous_sections, progress_callback, section_index
+                )
+            except Exception as e:  # noqa: BLE001 — 原生路径异常时优雅回退 ReAct，绝不让章节失败
+                logger.warning(f"原生 tool calling 章节生成失败，回退 ReAct: {e}")
+        return self._generate_section_react(
+            section, outline, previous_sections, progress_callback, section_index
+        )
+
+    def _to_openai_tool_schemas(self) -> List[Dict[str, Any]]:
+        """T4.5: 把内部 tools 定义转成 OpenAI function tool schema。"""
+        schemas = []
+        for tname in sorted(self.VALID_TOOL_NAMES):
+            spec = self.tools.get(tname)
+            if not spec:
+                continue
+            props = {}
+            for pname, pdesc in (spec.get("parameters") or {}).items():
+                props[pname] = {"type": "string", "description": str(pdesc)}
+            schemas.append({
+                "type": "function",
+                "function": {
+                    "name": tname,
+                    "description": spec.get("description", tname),
+                    "parameters": {"type": "object", "properties": props},
+                },
+            })
+        return schemas
+
+    def _generate_section_native(
+        self,
+        section: ReportSection,
+        outline: ReportOutline,
+        previous_sections: List[str],
+        progress_callback: Optional[Callable] = None,
+        section_index: int = 0,
+    ) -> str:
+        """T4.5: 用原生 tool calling 生成章节（无正则解析/无 conflict_retries/无污染检测）。"""
+        logger.info(f"原生 tool calling 生成章节: {section.title}")
+        if self.report_logger:
+            self.report_logger.log_section_start(section.title, section_index)
+
+        _section_heading = section.title
+        if section.description:
+            _section_heading = f"{section.title}\n本章内容定位（大纲规划）: {section.description}"
+        system_prompt = SECTION_SYSTEM_PROMPT_TEMPLATE.format(
+            report_title=outline.title,
+            report_summary=outline.summary,
+            simulation_requirement=self.simulation_requirement,
+            section_title=_section_heading,
+            tools_description=self._get_tools_description(),
+        )
+        system_prompt = self._prepend_research_background(system_prompt)
+        # 原生路径：覆盖 ReAct 的格式要求，改为「自然调用工具，最后直接输出 Markdown 正文」
+        system_prompt += (
+            "\n\n【输出模式】你已具备原生工具调用能力：需要数据时直接发起工具调用（可多次），"
+            "信息充分后直接输出本章 Markdown 正文（不要输出 Thought/Action/Final Answer 等标记，"
+            "不要输出 JSON 工具包裹）。撰写正文前至少调用 "
+            f"{self.MIN_TOOL_CALLS_PER_SECTION} 次工具以获取实证。"
+        )
+
+        if previous_sections:
+            previous_content = "\n\n---\n\n".join(
+                (sec[:8000] + "..." if len(sec) > 8000 else sec) for sec in previous_sections
+            )
+        else:
+            previous_content = "（这是第一个章节）"
+        user_prompt = SECTION_USER_PROMPT_TEMPLATE.format(
+            previous_content=previous_content, section_title=section.title
+        )
+
+        messages: List[Dict[str, Any]] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        schemas = self._to_openai_tool_schemas()
+        max_iterations = 10
+        max_tool_calls = self.MAX_TOOL_CALLS_PER_SECTION
+        tool_calls_count = 0
+
+        for _ in range(max_iterations):
+            resp = self.llm.chat_with_tools(
+                messages, schemas, temperature=Config.REPORT_AGENT_TEMPERATURE
+            )
+            calls = resp.get("tool_calls") or []
+            content = resp.get("content") or ""
+
+            if calls and tool_calls_count < max_tool_calls:
+                # 回填 assistant 工具调用消息
+                messages.append({
+                    "role": "assistant",
+                    "content": content or None,
+                    "tool_calls": [
+                        {"id": c["id"], "type": "function",
+                         "function": {"name": c["name"], "arguments": json.dumps(c["arguments"], ensure_ascii=False)}}
+                        for c in calls
+                    ],
+                })
+                for c in calls:
+                    tool_calls_count += 1
+                    try:
+                        result = self._execute_tool(c["name"], c["arguments"], report_context=section.title)
+                    except Exception as te:  # noqa: BLE001
+                        result = f"（工具 {c['name']} 执行失败：{te}）"
+                    if self.report_logger:
+                        try:
+                            self.report_logger.log_tool_call(
+                                section.title, section_index, c["name"], c["arguments"], tool_calls_count
+                            )
+                        except Exception:
+                            pass
+                    messages.append({"role": "tool", "tool_call_id": c["id"], "content": str(result)[:8000]})
+                if progress_callback:
+                    progress_callback("generating", min(90, tool_calls_count * 12), f"{section.title}: 工具检索 {tool_calls_count}")
+                continue
+
+            # 无更多工具调用（或已达上限）→ 收尾出正文
+            if content.strip():
+                return content
+            # 达到工具上限但模型还没出正文：显式要求收尾
+            messages.append({"role": "user", "content": "请基于以上工具结果直接输出本章完整 Markdown 正文。"})
+
+        # 兜底：迭代用尽仍无正文 → 末次无工具强制出文
+        final = self.llm.chat(messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt + "\n\n请直接输出本章 Markdown 正文。"},
+        ], temperature=Config.REPORT_AGENT_TEMPERATURE, max_tokens=4096)
+        return final
+
     def _generate_section_react(
-        self, 
+        self,
         section: ReportSection,
         outline: ReportOutline,
         previous_sections: List[str],
@@ -1330,6 +1632,8 @@ class ReportAgent:
             section_title=_section_heading,
             tools_description=self._get_tools_description(),
         )
+        # T4.1: 钉入研究背景档案 + 来源索引，让每章撰写复用真实角色/关系/时间线并按 [S#] 引用。
+        system_prompt = self._prepend_research_background(system_prompt)
 
         # 构建用户prompt - 每个已完成章节各传入最大4000字
         if previous_sections:
@@ -1355,12 +1659,15 @@ class ReportAgent:
         # ReACT循环
         tool_calls_count = 0
         max_iterations = 10  # 最大迭代轮数（更高以支撑更深入的检索与更长的章节）
-        min_tool_calls = 4  # 最少工具调用次数
+        min_tool_calls = self.MIN_TOOL_CALLS_PER_SECTION  # T4.4: 从 Config 读取（默认 4）
         conflict_retries = 0  # 工具调用与Final Answer同时出现的连续冲突次数
         contamination_retries = 0  # 输出被污染（系统提示泄漏/工具调用残留）的连续重试次数
         MAX_CONTAMINATION_RETRIES = 2  # 污染输出最多纠正重试次数
         used_tools = set()  # 记录已调用过的工具名
-        all_tools = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
+        all_tools = {"insight_forge", "panorama_search", "quick_search", "interview_agents",
+                     "simulation_outcomes", "coalition_map", "opinion_shift"}
+        if self.base_simulation_id:
+            all_tools.add("scenario_diff")  # T4.7
 
         # 报告上下文，用于InsightForge的子问题生成
         report_context = f"章节标题: {section.title}\n模拟需求: {self.simulation_requirement}"
@@ -1773,7 +2080,7 @@ class ReportAgent:
                 # 写入失败占位符，沿用既有的 failed_section_titles 机制，其余章节照常生成，
                 # 最终产出一份"部分完成"的报告而非整体失败。
                 try:
-                    section_content = self._generate_section_react(
+                    section_content = self._generate_section(
                         section=section,
                         outline=outline,
                         previous_sections=generated_sections,

@@ -62,9 +62,9 @@ DeepAgentForecast chains **two engines** through a **shared temporal knowledge g
 
 | Component | Role |
 |---|---|
-| **DeerFlow** | A LangGraph-based deep-research "super agent": web search + full-text fetch, multi-angle research, writes a structured research dossier. Runs in its **own subprocess and isolated Python venv**. |
+| **DeerFlow** | **DeerFlow 2.0**, a LangGraph-based super agent harness: web search + full-text fetch, multi-angle research, writes a structured dossier. Runs in its **own subprocess and isolated venv**. |
 | **MiroFish / OASIS** | A multi-agent social-simulation engine (built on CAMEL-AI's OASIS). Spins up hundreds of LLM personas interacting on a simulated **Twitter + Reddit**. |
-| **Zep Cloud** | A **temporal knowledge graph (GraphRAG)** that glues the two engines together. The dossier is ingested here; entities and relations are extracted server-side. |
+| **Local Graphiti KG** | A **temporal knowledge graph (GraphRAG)** that glues the two engines together — the open-source [Graphiti](https://github.com/getzep/graphiti) engine (`graphiti-core==0.29.2`, the same engine Zep Cloud was built on) running **locally on an embedded FalkorDB** (the `falkordblite` package — no Docker, no server process, no account, **no API key**). The dossier is ingested here; entities and relations are extracted locally via your configured `LLM_PROVIDER` (so it works even with the no-key CLI providers), and vector embeddings are computed locally by a sentence-transformers multilingual model. |
 | **ReportAgent** | A **ReAct loop** with an `insight_forge` tool that performs tool-augmented retrieval over the graph **and** the simulation, then writes the final forecast report. |
 | **Frontend** | A Vue 3 + Vite single combined dashboard with a sticky 6-stage timeline and tabs for each phase. Bilingual (English + 中文). |
 
@@ -79,11 +79,11 @@ A **pipeline** is one prompt run. Each run flows through six stages:
             │  ┌───────────┐ ┌──────────┐ ┌────────┐ ┌─────────┐ ┌─────┐ ┌────────┐   │
             │  │ 1 RESEARCH│▶│2 ONTOLOGY│▶│3 GRAPH │▶│4 PREPARE│▶│5 RUN│▶│6 REPORT│   │
             │  └─────┬─────┘ └────┬─────┘ └───┬────┘ └────┬────┘ └──┬──┘ └───┬────┘   │
-            │   DeerFlow      LLM derives   Zep KG     personas   OASIS    ReportAgent │
+            │   DeerFlow      LLM derives   local KG   personas   OASIS    ReportAgent │
             │   (subprocess)  entity/edge   ingest +   + sim cfg  dual-    (ReAct +    │
             │   → dossier     types         extract    (env agent)platform insight_forge)│
             │        │            │            │           │         │          │       │
-            │        └─ Zep Cloud temporal knowledge graph (GraphRAG) shared throughout ┘ │
+            │        └─ local Graphiti temporal KG (GraphRAG, embedded FalkorDB) throughout ┘ │
             └────────────────────────────────────────────────────────────────────────┘
                                                                                   │
                                                                                   ▼
@@ -99,7 +99,7 @@ flowchart LR
     end
 
     R --> O["2. ontology<br/>LLM derives entity<br/>+ edge types"]
-    O --> G["3. graph<br/>chunk + ingest into<br/>Zep temporal KG"]
+    O --> G["3. graph<br/>chunk + ingest into<br/>local Graphiti temporal KG"]
     G --> PR["4. prepare<br/>digital personas +<br/>simulation config"]
 
     subgraph OASIS["MiroFish / OASIS"]
@@ -110,10 +110,10 @@ flowchart LR
     RUN --> REP["6. report<br/>ReportAgent (ReAct +<br/>insight_forge) over<br/>graph + simulation"]
     REP --> F([Interactive forecast report])
 
-    Zep[("Zep Cloud<br/>temporal KG (GraphRAG)")]
-    G -.-> Zep
-    PR -.-> Zep
-    REP -.-> Zep
+    KG[("local Graphiti temporal KG<br/>(GraphRAG, embedded FalkorDB)")]
+    G -.-> KG
+    PR -.-> KG
+    REP -.-> KG
 ```
 
 **Stage by stage:**
@@ -126,7 +126,7 @@ flowchart LR
    - `meta.json` — run metadata
    - `research_progress.log` — the live research console log
 2. **ontology** — an LLM derives **entity types + edge types** from the dossier and the prediction question.
-3. **graph** — the dossier is **chunked and ingested** into a Zep temporal knowledge graph (GraphRAG); entities and relations are extracted server-side.
+3. **graph** — the dossier is **chunked and ingested** into a local Graphiti temporal knowledge graph (GraphRAG) on an embedded FalkorDB; entities and relations are extracted locally via your configured `LLM_PROVIDER`, and vector embeddings are computed locally by a sentence-transformers model — no cloud service or API key involved.
 4. **prepare** — **digital personas** (one per key graph entity) and the **simulation config** are generated; an "environment agent" sets the rounds and timing.
 5. **run** — OASIS runs a **dual-platform (Twitter + Reddit)** multi-agent simulation for *N* rounds; personas post, comment, and like, and social dynamics emerge.
 6. **report** — the **ReportAgent** (a ReAct loop with the `insight_forge` tool) retrieves from the graph + simulation and writes a **sectioned forecast report**.
@@ -138,7 +138,7 @@ flowchart LR
 - **One prompt → full forecast.** A single question drives the entire research → simulation → report pipeline end to end.
 - **Autonomous deep research.** Multi-angle web search and full-text fetch, distilled into a structured dossier with actors and sources. At `deep` depth, DeerFlow runs a staged multi-pass protocol: source mapping, primary-evidence sweep, actor/incentive analysis, contradiction/risk testing, forecast-input synthesis, then final long-form synthesis.
 - **Research-grounded personas.** The structured actor dossier (`actors.json`: role, stance, influence, memory per real-world actor) seeds the ontology, **the agent personas, the per-agent stance/influence config, and the simulation's initial posts** — agents start from researched facts, not LLM guesses.
-- **Temporal knowledge graph (GraphRAG).** The research is ingested into Zep Cloud, where entities and relations are extracted and made queryable.
+- **Temporal knowledge graph (GraphRAG).** The research is ingested into a **local** Graphiti knowledge graph (embedded FalkorDB, no API key), where entities and relations are extracted locally — via your configured `LLM_PROVIDER` plus local sentence-transformers embeddings — and made queryable.
 - **Multi-agent population simulation.** Hundreds of LLM personas interact on a simulated Twitter + Reddit; emergent dynamics inform the forecast.
 - **Tool-augmented forecast synthesis.** A ReAct ReportAgent retrieves across both the graph and the simulation before writing.
 - **Single combined dashboard.** Live log, dossier, knowledge graph, simulation feed, and forecast — all in one view with a sticky 6-stage timeline.
@@ -158,17 +158,17 @@ flowchart LR
 |---|---|
 | **Node.js ≥ 20.19** | For the frontend (Vue 3 + Vite 7). |
 | **Python 3.11 – 3.12** | For the backend — the `camel-ai`/`camel-oasis` simulation stack targets ≤ 3.12, so the venv is **pinned to 3.12** (`backend/.python-version` + `uv sync --python 3.12`). A 3.13/3.14 default interpreter would break the install. |
-| **Python ≥ 3.12 (3.13 recommended)** | DeerFlow's deep-research engine runs in its **own, separate venv**. |
+| **Python 3.12** | DeerFlow's deep-research engine runs in its **own, separate venv**. |
 | **uv** | The Python package manager used for both venvs. Install: `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| **git** | Required — `setup.sh` uses it to auto-download the DeerFlow research engine. |
-| **Zep Cloud API key** | **Always required** (the free tier works). Get one at <https://app.getzep.com/>. |
-| **An LLM** | By default the local `claude` or `codex` CLI (no API key). The OpenAI-compatible API providers (`openai`, `kimi`, `minimax`, `deepseek`, `qwen`, `glm`) need `LLM_API_KEY`. |
+| **git** | Needed only for the optional upstream-clone fallback; by default `setup.sh` seeds the DeerFlow research engine from the vendored `deer-flow-2.0-m1-rc3/` build. |
+| **Knowledge graph** | Runs **locally** via the open-source Graphiti engine on an embedded FalkorDB — **no account, no API key, no Docker**. The local graph DB and a multilingual sentence-transformers embedding model (~470MB, downloaded once on first graph build) are installed by `setup.sh` / `uv sync`. |
+| **An LLM** | By default the local `claude` or `codex` CLI (no API key). The OpenAI-compatible API providers (`openai`, `kimi`, `minimax`, `deepseek`, `qwen`, `glm`) need `LLM_API_KEY`. The same provider also performs local graph entity/relation extraction. |
 
 ---
 
 ## Getting started
 
-Three steps: **install → configure → run**. DeerFlow lives in `deer-flow/` **inside this repo** (auto-downloaded by `setup.sh`, gitignored) so its LangChain/LangGraph dependencies stay isolated from the backend; it runs in its own venv at `deer-flow/backend/.venv`.
+Three steps: **install → configure → run**. DeerFlow lives in `deer-flow/` **inside this repo** (assembled by `setup.sh` from the vendored 2.0 build or a pinned clone, gitignored) so its LangChain/LangGraph dependencies stay isolated from the backend; it runs in its own venv at `deer-flow/backend/.venv`.
 
 ### 1. Install
 
@@ -178,7 +178,7 @@ Three steps: **install → configure → run**. DeerFlow lives in `deer-flow/` *
 ./setup.sh
 ```
 
-It checks prerequisites, then walks you through an **interactive provider picker**: choose between the local `claude` / `codex` CLIs (zero config, no API key — the detected CLI is pre-selected as the default) and six hosted API providers (OpenAI-compatible / Kimi / MiniMax / DeepSeek / Qwen / GLM). If you pick an API provider it prompts for your **API key** (silent input, never echoed) and **live-tests it** with a one-token completion so a typo'd key fails in seconds, not 40 minutes into a research run. It then prompts for your Zep key, scaffolds `.env` from `.env.example`, installs the root + frontend npm deps, builds the backend venv (**pinned to Python 3.12**), then **downloads DeerFlow automatically**: it shallow-clones `deer-flow/` into the repo (from <https://github.com/bytedance/deer-flow>, pinned to a known-good commit, gitignored) if absent, **trims it to runtime essentials** (`backend/`, `skills/`, `config.yaml` — the upstream web frontend, docs, docker and CI are dead weight here), applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` + middleware patches, the overhauled source-tiering deep-research skill, and `config.yaml`), and builds DeerFlow's isolated venv (Python 3.13). Re-running it is idempotent and safe.
+It checks prerequisites, then walks you through an **interactive provider picker**: choose between the local `claude` / `codex` CLIs (zero config, no API key — the detected CLI is pre-selected as the default) and six hosted API providers (OpenAI-compatible / Kimi / MiniMax / DeepSeek / Qwen / GLM). If you pick an API provider it prompts for your **API key** (silent input, never echoed) and **live-tests it** with a one-token completion so a typo'd key fails in seconds, not 40 minutes into a research run. It then scaffolds `.env` from `.env.example`, installs the root + frontend npm deps, builds the backend venv (**pinned to Python 3.12**, including the local Graphiti graph stack), then **assembles DeerFlow automatically**: it seeds `deer-flow/` from the vendored 2.0 build `deer-flow-2.0-m1-rc3/` (falling back to a pinned shallow clone from <https://github.com/bytedance/deer-flow> if that vendor dir is absent, gitignored), **trims it to runtime essentials** (`backend/`, `skills/`, `config.yaml` — the upstream web frontend, docs, docker and CI are dead weight here), applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` + middleware patches, the overhauled source-tiering deep-research skill, and `config.yaml`), and builds DeerFlow's isolated venv on Python 3.12. Re-running it is idempotent and safe.
 
 Override the defaults via env vars if needed: `DEERFLOW_DIR` (location), `DEERFLOW_REPO` (clone URL), `DEERFLOW_REF` (pinned commit; set `=main` to track HEAD), `SETUP_NONINTERACTIVE=1` (skip the picker and auto-detect — what CI / piped runs do automatically). These are read by `setup.sh` from the shell environment (they are not `.env` keys), e.g. `DEERFLOW_REF=main ./setup.sh`. Re-runs are idempotent: the picker defaults to your current `.env` provider, so pressing Enter never clobbers an existing configuration.
 
@@ -188,8 +188,10 @@ Override the defaults via env vars if needed: `DEERFLOW_DIR` (location), `DEERFL
 # 1. Install Node deps (root + frontend) and the backend venv (Python 3.12 pinned)
 npm run setup:all
 
-# 2. Download the DeerFlow research engine (git required) into the repo root
-git clone https://github.com/bytedance/deer-flow deer-flow
+# 2. Seed the DeerFlow research engine into the repo root from the vendored 2.0 build
+cp -R deer-flow-2.0-m1-rc3 deer-flow
+# Fallback if the vendor dir is absent (git required):
+#   git clone --depth 1 https://github.com/bytedance/deer-flow deer-flow
 
 # 3. Apply the bridge overlay from deerflow_bridge/
 cp deerflow_bridge/deerflow_research.py deer-flow/deerflow_research.py
@@ -198,14 +200,14 @@ cp deerflow_bridge/patches/middlewares/*.py deer-flow/backend/packages/harness/d
 cp deerflow_bridge/skills/deep-research/SKILL.md deer-flow/skills/public/deep-research/SKILL.md
 cp deerflow_bridge/config.yaml          deer-flow/config.yaml      # only if absent
 
-# 4. Build DeerFlow's isolated research venv (Python ≥ 3.12; 3.13 recommended)
+# 4. Build DeerFlow's isolated research venv (DeerFlow 2.0 pins Python 3.12)
 UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv \
-  uv sync --project deer-flow/backend --python 3.13
+  uv sync --project deer-flow/backend --python 3.12
 ```
 
 ### 2. Configure
 
-Set at minimum your **Zep key** (and an API key if you picked a hosted provider) in `.env` — see the [Configuration](#configuration-env) reference below. If you use the `claude` CLI, just make sure you are logged in (run `claude` once).
+If you picked a hosted provider, set its **API key** in `.env` — see the [Configuration](#configuration-env) reference below. (The knowledge graph runs locally with no key, and the `claude` / `codex` CLIs need no key either — just make sure you are logged in, e.g. run `claude` once.)
 
 Then verify everything is wired up — **the doctor checks your whole environment in seconds** (tool versions, both venvs, the DeerFlow overlay, credentials for the providers you selected):
 
@@ -278,7 +280,7 @@ Create a `.env` file at the project root (`setup.sh` scaffolds it from `.env.exa
 
 ```bash
 LLM_PROVIDER=claude-cli      # claude-cli | codex-cli | openai | kimi | minimax | deepseek | qwen | glm
-ZEP_API_KEY=...              # required (free tier works)
+# No knowledge-graph API key is needed — the graph runs locally (see GRAPH_* below).
 
 # openai / kimi / minimax / deepseek / qwen / glm only:
 LLM_API_KEY=...
@@ -301,11 +303,20 @@ DEEPSEEK_API_KEY=...             # DEERFLOW_MODEL=deepseek
 DASHSCOPE_API_KEY=...            # DEERFLOW_MODEL=qwen
 ZHIPUAI_API_KEY=...              # DEERFLOW_MODEL=glm
 
+# Local knowledge graph (optional — all have sensible defaults):
+GRAPH_BACKEND=auto               # auto (→ embedded FalkorDB via falkordblite) | falkordblite | kuzu | falkordb
+GRAPHITI_DATA_DIR=...            # where the local graph DB persists (default: backend/uploads/graphiti_db)
+GRAPHITI_EMBED_MODEL=paraphrase-multilingual-MiniLM-L12-v2  # local sentence-transformers model (EN + 中文)
+GRAPHITI_EMBED_DIM=384           # embedding dimension; must match GRAPHITI_EMBED_MODEL
+GRAPHITI_RERANKER=rrf            # rrf (default) | bge (local cross-encoder)
+FALKORDB_HOST=...                # point at an external FalkorDB server instead of embedded
+FALKORDB_PORT=...                #   (only when GRAPH_BACKEND=falkordb)
+
 # Tuning (optional):
 OASIS_SEMAPHORE=30               # concurrent LLM calls for API providers during simulation
 OASIS_CLI_SEMAPHORE=3            # concurrent LLM calls for CLI providers
-ZEP_MAX_RETRIES=4                 # Zep 429 / transient retry budget
-ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS=90
+ZEP_MAX_RETRIES=4                 # retry budget for transient local-graph read errors
+ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS=90  # max backoff between those retries
 FLASK_DEBUG=false                # dev only: exposes the Werkzeug debugger + reloader
 ```
 
@@ -313,11 +324,16 @@ FLASK_DEBUG=false                # dev only: exposes the Werkzeug debugger + rel
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `LLM_PROVIDER` | Yes | Selects the active provider. One of `claude-cli`, `codex-cli`, `openai`, `kimi`, `minimax`, `deepseek`, `qwen`, `glm`. |
-| `ZEP_API_KEY` | **Always** | Zep Cloud API key for the temporal knowledge graph. |
+| `LLM_PROVIDER` | Yes | Selects the active provider. One of `claude-cli`, `codex-cli`, `openai`, `kimi`, `minimax`, `deepseek`, `qwen`, `glm`. Also drives local graph entity/relation extraction. |
 | `LLM_API_KEY` | openai/kimi/minimax/deepseek/qwen/glm | API key for the hosted provider. |
 | `LLM_BASE_URL` | openai/kimi/minimax/deepseek/qwen/glm | Base URL for the OpenAI-compatible endpoint (kimi/minimax/deepseek/qwen/glm default it). |
 | `LLM_MODEL_NAME` | openai/kimi/minimax/deepseek/qwen/glm | Model name to request (kimi/minimax/deepseek/qwen/glm default it). |
+| `GRAPH_BACKEND` | No | Local graph DB backend (default `auto` → embedded FalkorDB via `falkordblite`). Other values: `falkordblite`, `kuzu`, `falkordb`. |
+| `GRAPHITI_DATA_DIR` | No | Directory where the local graph DB persists (default: `backend/uploads/graphiti_db`). |
+| `GRAPHITI_EMBED_MODEL` | No | Local sentence-transformers embedding model (default `paraphrase-multilingual-MiniLM-L12-v2`, handles EN + 中文; ~470MB, downloaded once on first graph build, then cached). |
+| `GRAPHITI_EMBED_DIM` | No | Embedding dimension (default `384`). Must match `GRAPHITI_EMBED_MODEL`. |
+| `GRAPHITI_RERANKER` | No | Search reranker: `rrf` (default) or `bge` (a local cross-encoder). |
+| `FALKORDB_HOST` / `FALKORDB_PORT` | No | Point at an **external** FalkorDB server instead of the embedded one (used with `GRAPH_BACKEND=falkordb`). |
 | `DEERFLOW_DIR` | No | Location of the `deer-flow` checkout (default: `./deer-flow` inside the repo). |
 | `DEERFLOW_PYTHON` | No | Python interpreter for DeerFlow's isolated venv (auto-detects `deer-flow/backend/.venv`). |
 | `DEERFLOW_MODEL` | No | Research model: `claude`, `minimax`, `deepseek`, `qwen`, `glm`, `codex`, or `kimi`. |
@@ -330,7 +346,7 @@ FLASK_DEBUG=false                # dev only: exposes the Werkzeug debugger + rel
 | `DEERFLOW_RESEARCH_LANGUAGE` | No | Language of the research output. |
 | `DEERFLOW_RESEARCH_TIMEOUT` | No | Research watchdog override (seconds). Unset = depth-aware: quick 900 / standard 2400 / deep 10800. If the report was already written when the watchdog fires, the run is salvaged instead of discarded. |
 | `OASIS_SEMAPHORE` / `OASIS_CLI_SEMAPHORE` | No | Concurrent LLM-call cap during simulation (API providers / CLI providers). In dual-platform parallel runs each platform gets half, so the cap is the true global in-flight limit. |
-| `ZEP_MAX_RETRIES` / `ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS` | No | Zep retry budget and maximum wait when the free tier returns 429 with `Retry-After`. Defaults are `4` and `90`. |
+| `ZEP_MAX_RETRIES` / `ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS` | No | Retry budget and maximum backoff for **transient local-graph read errors**. The graph runs locally now, so there are no rate limits or 429s — these knobs only smooth over occasional transient read failures. Defaults are `4` and `90`. |
 | `LLM_CLI_USE_API_KEY` | No | `claude-cli` strips a stray `ANTHROPIC_API_KEY` from the subprocess env by default (it would silently switch billing from your subscription to the API). Set `true` to keep it. |
 | `FLASK_DEBUG` | No | Dev only (default `false`): enables the Werkzeug debugger + auto-reloader (the reloader kills in-flight pipelines). |
 
@@ -344,7 +360,7 @@ The backend is a **Flask** app at `http://localhost:5001`. All endpoints are und
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/research/run` | Start a pipeline. Body: `{prompt, mode(full\|research_only), depth(quick\|standard\|deep), max_rounds?, project_name?}` → `{pipeline_id}`. Pre-flights the whole configuration (Zep key, provider credentials, DeerFlow checkout) and returns an actionable `400` instead of failing mid-run. |
+| `POST` | `/research/run` | Start a pipeline. Body: `{prompt, mode(full\|research_only), depth(quick\|standard\|deep), max_rounds?, project_name?}` → `{pipeline_id}`. Pre-flights the whole configuration (local graph backend importable, provider credentials, DeerFlow checkout) and returns an actionable `400` instead of failing mid-run. |
 | `POST` | `/research/<id>/cancel` | **Cancel a running pipeline** — kills the research subprocess group / stops the OASIS simulation; other stages exit at the next checkpoint. |
 | `POST` | `/research/<id>/resume` | **Resume a failed/cancelled pipeline** — reuses completed stages (research dossier, ontology, graph, finished simulation) and restarts from the stage that failed. Pre-flights the configuration first. |
 | `DELETE` | `/research/<id>` | **Delete a finished run record** (including its handoff artifacts). Running pipelines must be cancelled first (`409`). |
@@ -434,15 +450,15 @@ DeepAgentForecast/
 ├── docs/                    # GitHub Pages demo site + media assets (docs/media/).
 ├── scripts/doctor.sh        # `npm run doctor` — environment health check.
 ├── setup.sh                 # Quick-start: interactive provider picker + key test,
-│                            #   downloads deer-flow, installs everything, applies overlay.
-├── .env                     # LLM_PROVIDER, ZEP_API_KEY, provider + DeerFlow config.
+│                            #   assembles deer-flow, installs everything, applies overlay.
+├── .env                     # LLM_PROVIDER, local graph (GRAPH_*) + provider + DeerFlow config.
 ├── package.json             # `setup:all`, `doctor` and `dev` scripts.
-└── deer-flow/               # DeerFlow research engine — auto-downloaded by setup.sh,
-    └── backend/.venv/       #   gitignored; isolated LangGraph venv (Python ≥3.12).
+└── deer-flow/               # DeerFlow research engine — assembled by setup.sh,
+    └── backend/.venv/       #   gitignored; isolated LangGraph venv (Python 3.12).
 ```
 
-> DeerFlow lives **inside the repo** but is gitignored — your clone stays a single folder and `git status` stays clean. `setup.sh` shallow-downloads it (git required), trims it to the runtime essentials (`backend/`, `skills/`, `config.yaml`), applies the `deerflow_bridge/` overlay (driver + patches + the overhauled deep-research skill + `config.yaml`), and builds its venv with:
-> `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.13`
+> DeerFlow lives **inside the repo** but is gitignored — your clone stays a single folder and `git status` stays clean. `setup.sh` seeds it from the vendored 2.0 build `deer-flow-2.0-m1-rc3/` (falling back to a pinned shallow clone if that vendor dir is absent — git required only then), trims it to the runtime essentials (`backend/`, `skills/`, `config.yaml`), applies the `deerflow_bridge/` overlay (driver + patches + the overhauled deep-research skill + `config.yaml`), and builds its venv with:
+> `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.12`
 
 ---
 
@@ -452,12 +468,12 @@ DeepAgentForecast/
 
 | Symptom | Likely cause / fix |
 |---|---|
-| **`POST /research/run` returns a preflight error list** | That's the fail-fast check working — each bullet names the missing piece (Zep key, provider key, CLI login, DeerFlow checkout) and how to fix it. Nothing was spent. |
-| **Missing / invalid / placeholder `ZEP_API_KEY`** | The Zep Cloud key is **always required** (graph stage), and the `.env.example` placeholder is rejected. Set a real `ZEP_API_KEY` in `.env`; the free tier works: <https://app.getzep.com/>. |
-| **Report stage fails with `status_code: 429` / `Rate limit exceeded for FREE plan`** | Zep free-tier throttling. The app now parses `Retry-After`, waits before retrying, and reuses report graph snapshots to reduce duplicate node/edge reads. For very large runs, lower concurrency/depth or raise the retry knobs in `.env`. |
+| **`POST /research/run` returns a preflight error list** | That's the fail-fast check working — each bullet names the missing piece (local graph backend, provider key, CLI login, DeerFlow checkout) and how to fix it. Nothing was spent. |
+| **Graph stage fails: local graph backend not installed / not importable** | The knowledge graph runs locally via Graphiti on an embedded FalkorDB, installed by the backend venv. Run `./setup.sh` (or `( cd backend && uv sync --python 3.12 )`) to install it. The first graph build also downloads the multilingual sentence-transformers embedding model (~470MB, cached afterwards), so the very first run is slower; subsequent runs reuse the cache. |
+| **First graph build is slow / appears to hang downloading a model** | On the first graph build the local embedding model (`GRAPHITI_EMBED_MODEL`, default `paraphrase-multilingual-MiniLM-L12-v2`, ~470MB) is downloaded once and cached. Let it finish; later runs skip the download. Behind a firewall, pre-cache the model or point `GRAPHITI_EMBED_MODEL` at a locally available one (and set `GRAPHITI_EMBED_DIM` to match). |
 | **Backend install fails (camel-ai / tiktoken build errors)** | Your default Python is 3.13+. The backend venv must be on **3.11–3.12**: `( cd backend && uv sync --python 3.12 )` — `setup.sh` and `backend/.python-version` already pin this. |
 | **Research stage runs on Claude even though I picked another provider** | The research stage is configured separately via `DEERFLOW_MODEL` (`claude` *(default)*, `minimax`, `deepseek`, `qwen`, `glm`, `codex`, `kimi`), not by `LLM_PROVIDER`. Only `openai` maps to the `claude` stanza. Set `DEERFLOW_MODEL` (and its key, e.g. `MINIMAX_API_KEY`) to run research on a different model. |
-| **DeerFlow / research stage fails to start** | `setup.sh` downloads `deer-flow/` into the repo (git required) and applies the `deerflow_bridge/` overlay. Ensure its venv is built with Python ≥ 3.12 (3.13 recommended): `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.13`. Re-running `setup.sh` is idempotent; to update the engine, delete `deer-flow/` and re-run `./setup.sh`. Optionally set `DEERFLOW_DIR` / `DEERFLOW_PYTHON` (or `DEERFLOW_REPO` / `DEERFLOW_REF` for `setup.sh`). |
+| **DeerFlow / research stage fails to start** | `setup.sh` assembles `deer-flow/` into the repo (seeded from the vendored `deer-flow-2.0-m1-rc3/` build, or a pinned shallow clone if that vendor dir is absent — git required only then) and applies the `deerflow_bridge/` overlay. Ensure its venv is built with Python 3.12: `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.12`. Re-running `setup.sh` is idempotent; to update the engine, delete `deer-flow/` and re-run `./setup.sh`. Optionally set `DEERFLOW_DIR` / `DEERFLOW_PYTHON` (or `DEERFLOW_REPO` / `DEERFLOW_REF` for `setup.sh`). |
 | **No API key but hosted provider selected** | `openai`, `kimi`, `minimax`, `deepseek`, `qwen`, and `glm` need `LLM_API_KEY` (with `LLM_BASE_URL` / `LLM_MODEL_NAME`; `kimi`/`minimax`/`deepseek`/`qwen`/`glm` default those). For no-key operation use `claude-cli` or `codex-cli`. |
 | **`claude-cli` returns 401 / bills the API instead of my subscription** | A stray `ANTHROPIC_API_KEY` in your environment. It is stripped from the CLI subprocess automatically; run `claude` once to refresh the OAuth login. (Set `LLM_CLI_USE_API_KEY=true` if you *want* API-key billing.) |
 | **Provider switch didn't take effect** | The runtime switch applies to **new runs** only. Start a fresh pipeline after switching. |
@@ -474,7 +490,7 @@ DeepAgentForecast/
 
 - **[OASIS](https://github.com/camel-ai/oasis)** (CAMEL-AI) powers the multi-agent social simulation engine — sincere thanks to the CAMEL-AI team for their open-source work.
 - **[DeerFlow](https://github.com/bytedance/deer-flow)** (ByteDance) powers the deep-research stage.
-- **[Zep Cloud](https://www.getzep.com/)** provides the temporal knowledge graph (GraphRAG).
+- **[Graphiti](https://github.com/getzep/graphiti)** (the open-source temporal knowledge-graph engine) powers the local GraphRAG knowledge graph, running embedded with no cloud service or API key.
 - Built on **[MiroFish](https://github.com/666ghj/MiroFish)**, the original population-simulation prediction engine.
 
 ## License

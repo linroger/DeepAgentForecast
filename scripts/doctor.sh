@@ -60,8 +60,8 @@ if [ -x "$BE_PY" ]; then
     "") bad "backend/.venv python is broken — rebuild: ( cd backend && uv sync --python 3.12 )" ;;
     *) warn "backend/.venv on Python $BE_VER — the simulation stack targets 3.11–3.12; if imports below fail, rebuild: ( cd backend && uv sync --python 3.12 )" ;;
   esac
-  if "$BE_PY" -c "import camel, oasis, zep_cloud, flask" >/dev/null 2>&1; then
-    ok "backend imports OK (camel / oasis / zep_cloud / flask)"
+  if "$BE_PY" -c "import camel, oasis, graphiti_core, flask" >/dev/null 2>&1; then
+    ok "backend imports OK (camel / oasis / graphiti_core / flask)"
   else
     bad "backend deps missing — run: ( cd backend && uv sync --python 3.12 )"
   fi
@@ -85,7 +85,7 @@ if [ -d "$DEERFLOW_DIR/backend" ]; then
     if "$DF_PY" -c "import deerflow, langgraph" >/dev/null 2>&1; then
       ok "deer-flow venv OK (Python $DF_VER, deerflow importable)"
     else
-      bad "deer-flow venv incomplete — UV_PROJECT_ENVIRONMENT=\"$DEERFLOW_DIR/backend/.venv\" uv sync --project \"$DEERFLOW_DIR/backend\" --python 3.13"
+      bad "deer-flow venv incomplete — UV_PROJECT_ENVIRONMENT=\"$DEERFLOW_DIR/backend/.venv\" uv sync --project \"$DEERFLOW_DIR/backend\" --python 3.12"
     fi
   else
     bad "deer-flow venv missing ($DF_PY) — re-run ./setup.sh"
@@ -101,11 +101,16 @@ else
   bad ".env missing — cp .env.example .env (or run ./setup.sh)"
 fi
 
-ZEP="$(envval ZEP_API_KEY)"
-case "$ZEP" in
-  ""|your_zep_api_key_here|your_zep_api_key) bad "ZEP_API_KEY not set (or still the placeholder) — free key at https://app.getzep.com/" ;;
-  *) ok "ZEP_API_KEY configured" ;;
-esac
+# Knowledge graph runs locally (Graphiti). No API key needed; just verify a local
+# backend is importable (embedded FalkorDB via falkordblite, or kuzu).
+GRAPH_BACKEND="$(envval GRAPH_BACKEND)"; GRAPH_BACKEND="${GRAPH_BACKEND:-auto}"
+if [ -n "${BE_PY:-}" ] && [ -x "$BE_PY" ]; then
+  if "$BE_PY" -c "import importlib.util,sys; sys.exit(0 if (importlib.util.find_spec('redislite.async_falkordb_client') or importlib.util.find_spec('kuzu')) else 1)" >/dev/null 2>&1; then
+    ok "local knowledge graph backend available (GRAPH_BACKEND=$GRAPH_BACKEND, no API key needed)"
+  else
+    bad "no local graph backend installed — run: ( cd backend && uv sync --python 3.12 )  (installs falkordblite)"
+  fi
+fi
 
 PROVIDER="$(envval LLM_PROVIDER)"; PROVIDER="${PROVIDER:-claude-cli}"
 case "$PROVIDER" in

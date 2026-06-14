@@ -15,10 +15,10 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from zep_cloud.client import Zep
+from .graphiti_client import Zep
 
 from ..config import Config
-from ..utils.actors import actor_briefing, match_actor
+from ..utils.actors import actor_briefing, match_actor, relationship_briefing
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .zep_entity_reader import EntityNode, ZepEntityReader
@@ -216,7 +216,8 @@ class OasisProfileGenerator:
         entity: EntityNode,
         user_id: int,
         use_llm: bool = True,
-        actor: Optional[Dict[str, Any]] = None
+        actor: Optional[Dict[str, Any]] = None,
+        actors: Optional[Dict[str, Any]] = None,
     ) -> OasisAgentProfile:
         """
         从Zep实体生成OASIS Agent Profile
@@ -227,6 +228,7 @@ class OasisProfileGenerator:
             use_llm: 是否使用LLM生成详细人设
             actor: 深度研究 actors.json 中匹配到的结构化角色行（可选；
                    含 role/stance/influence/memory，注入人设提示词作为实证依据）
+            actors: 完整研究档案对象（含 relationships[]），用于注入该 actor 的社会关系网（T3.1）
 
         Returns:
             OasisAgentProfile
@@ -248,7 +250,8 @@ class OasisProfileGenerator:
                 entity_summary=entity.summary,
                 entity_attributes=entity.attributes,
                 context=context,
-                actor=actor
+                actor=actor,
+                actors=actors,
             )
         else:
             # 使用规则生成基础人设
@@ -440,21 +443,31 @@ class OasisProfileGenerator:
         # 2. 添加相关边信息（事实/关系）
         existing_facts = set()
         if entity.related_edges:
+            # T3.1: 用 related_nodes 把边端点 uuid 解析回真实邻居名 —— 修复原先在缺少自由文本
+            # fact 时输出字面 "(相关实体)" 的名称黑洞（让 persona 看到的是 "X 监管 某大学" 而非
+            # "X 监管 (相关实体)"）。related_nodes 已随实体携带 uuid/name/labels。
+            nb = {n.get("uuid"): n for n in (entity.related_nodes or [])}
             relationships = []
             for edge in entity.related_edges:  # 不限制数量
                 fact = edge.get("fact", "")
                 edge_name = edge.get("edge_name", "")
                 direction = edge.get("direction", "")
-                
+
                 if fact:
                     relationships.append(f"- {fact}")
                     existing_facts.add(fact)
                 elif edge_name:
+                    nbr = nb.get(edge.get("target_node_uuid")) or nb.get(edge.get("source_node_uuid")) or {}
+                    nbr_name = nbr.get("name") or "(未知实体)"
+                    nbr_label = next(
+                        (l for l in (nbr.get("labels") or []) if l not in ("Entity", "Node")), ""
+                    )
+                    nbr_disp = f"{nbr_name}（{nbr_label}）" if nbr_label else nbr_name
                     if direction == "outgoing":
-                        relationships.append(f"- {entity.name} --[{edge_name}]--> (相关实体)")
+                        relationships.append(f"- {entity.name} --[{edge_name}]--> {nbr_disp}")
                     else:
-                        relationships.append(f"- (相关实体) --[{edge_name}]--> {entity.name}")
-            
+                        relationships.append(f"- {nbr_disp} --[{edge_name}]--> {entity.name}")
+
             if relationships:
                 context_parts.append("### 相关事实和关系\n" + "\n".join(relationships))
         
@@ -507,7 +520,8 @@ class OasisProfileGenerator:
         entity_summary: str,
         entity_attributes: Dict[str, Any],
         context: str,
-        actor: Optional[Dict[str, Any]] = None
+        actor: Optional[Dict[str, Any]] = None,
+        actors: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         使用LLM生成非常详细的人设
@@ -522,6 +536,9 @@ class OasisProfileGenerator:
         # 深度研究实证档案：作为最高优先级上下文拼到提示词尾部，
         # 让 persona 的立场/记忆以真实调研数据为准（而非凭报告行文再猜）。
         actor_block = actor_briefing(actor)
+        # T3.1: 该 actor 的社会关系网（命名真实盟友/对手），让 persona 在互动时
+        # 知道该 @ 谁、与谁结盟/对立——联盟形成不再是随机涌现。
+        rel_block = relationship_briefing(entity_name, actors)
 
         if is_individual:
             prompt = self._build_individual_persona_prompt(
@@ -531,6 +548,20 @@ class OasisProfileGenerator:
             prompt = self._build_group_persona_prompt(
                 entity_name, entity_type, entity_summary, entity_attributes, context
             )
+        # T3.9(5): 共享局势基线——把局势简报的「当前态势 + 张力」压缩成一行前置到所有 persona，
+        # 让全体 Agent 共享同一份事实背景（而非各自从摘要里臆测情境）。缺失则跳过。
+        if isinstance(actors, dict):
+            sb = actors.get("situation_brief")
+            if isinstance(sb, dict):
+                cs = str(sb.get("current_situation") or "").strip()
+                dy = str(sb.get("dynamics") or "").strip()
+                seg = " ".join(s for s in (cs, dy) if s)[:600]
+                if seg:
+                    prompt = f"【共同背景·局势简报（调研实证）】{seg}\n\n" + prompt
+
+        # 关系网与实证档案都拼在提示词尾部（不进入 context[:3000] 截断区），hub actor 的关系块永不被截。
+        if rel_block:
+            prompt += f"\n\n{rel_block}"
         if actor_block:
             prompt += (
                 f"\n\n{actor_block}\n"
@@ -940,7 +971,8 @@ class OasisProfileGenerator:
                     entity=entity,
                     user_id=idx,
                     use_llm=use_llm,
-                    actor=actor
+                    actor=actor,
+                    actors=actors,  # 完整研究档案 → 注入社会关系网（T3.1）
                 )
                 
                 # 实时输出生成的人设到控制台和日志

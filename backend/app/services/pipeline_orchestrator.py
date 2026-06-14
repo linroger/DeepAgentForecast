@@ -46,6 +46,13 @@ from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
 from ..services.text_processor import TextProcessor
+from ..utils.actors import (
+    REL_LABEL,
+    extract_relationship_rows,
+    situation_brief,
+    situation_brief_block,
+)
+from ..utils.dates import parse_as_of
 from ..utils.logger import get_logger
 
 logger = get_logger('mirofish.pipeline')
@@ -136,6 +143,9 @@ class PipelineState:
     updated_at: str = field(default_factory=_utcnow)
     options: dict[str, Any] = field(default_factory=dict)
     stages: dict[str, StageState] = field(default_factory=dict)
+    # T6.3: 各阶段产物的可深链指针（stage 名 → handoff 相对文件名），随阶段完成填充。
+    # 供 GET /api/research/<id>/artifact/<name> + StageTimeline 的「view →」入口。
+    artifacts: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -166,6 +176,7 @@ class PipelineState:
             updated_at=data.get("updated_at") or _utcnow(),
             options=data.get("options") or {},
             stages=stages,
+            artifacts=data.get("artifacts") or {},  # T6.3: 老状态文件缺失则默认空 dict
         )
 
 
@@ -377,6 +388,9 @@ class DeerFlowResearchRunner:
 
         env = dict(os.environ)
         env.setdefault("PYTHONUNBUFFERED", "1")
+        # T6.6: deep 开场 pass 的递归上限从 Config 单一真源下发给子进程（旧版在 bridge 内直接读
+        # os.environ）。Config 属性本身读 env（默认 220），故此处覆盖即「Config 即真源」。
+        env["DEERFLOW_DEEP_OPENING_RECURSION_LIMIT"] = str(Config.DEERFLOW_DEEP_OPENING_RECURSION_LIMIT)
 
         logger.info(f"启动 DeerFlow 研究子进程: {' '.join(cmd[:1])} … (cwd={deerflow_dir})")
         on_progress(2, "启动深度研究子进程…")
@@ -400,16 +414,15 @@ class DeerFlowResearchRunner:
 
         # 看门狗预算按研究深度缩放：deep 是多轮研究协议（source map →
         # primary evidence → actors → contradictions → forecast implications →
-        # synthesis），在固定 2400s 下经常被无差别 SIGKILL。显式 timeout 参数 > 用户在 .env 里
-        # 显式设置的 DEERFLOW_RESEARCH_TIMEOUT > 深度档位默认值。
-        _DEPTH_BUDGETS = {"quick": 900, "standard": 2400, "deep": 10800}
+        # synthesis），在固定 2400s 下经常被无差别 SIGKILL。优先级（T6.6）：显式 timeout 参数 >
+        # 用户在 .env 里显式设置的 DEERFLOW_RESEARCH_TIMEOUT > Config.DEERFLOW_DEPTH_BUDGETS 档位默认值。
         effective_depth = (depth or Config.DEERFLOW_RESEARCH_DEPTH or "standard").lower()
         if timeout:
             budget = timeout
         elif os.environ.get("DEERFLOW_RESEARCH_TIMEOUT", "").strip():
             budget = Config.DEERFLOW_RESEARCH_TIMEOUT
         else:
-            budget = _DEPTH_BUDGETS.get(effective_depth, Config.DEERFLOW_RESEARCH_TIMEOUT)
+            budget = Config.DEERFLOW_DEPTH_BUDGETS.get(effective_depth, Config.DEERFLOW_RESEARCH_TIMEOUT)
         deadline = time.time() + budget
         # 看门狗：即使子进程长时间无输出（模型思考），也能在超时后被杀掉。
         timed_out = {"hit": False}
@@ -517,12 +530,14 @@ class DeerFlowResearchRunner:
 
         actors = _read_json(os.path.join(handoff_dir, "actors.json"))
         sources = _read_json(os.path.join(handoff_dir, "sources.json"))
+        timeline = _read_json(os.path.join(handoff_dir, "timeline.json"))
         on_progress(100, f"研究完成（报告 {len(report)} 字）")
         return {
             "report": report,
             "report_path": report_path,
             "actors": actors,
             "sources": sources,
+            "timeline": timeline,
             "exit_code": returncode,
         }
 
@@ -572,12 +587,45 @@ def _load_research_handoff(handoff_dir: str) -> dict[str, Any]:
         "report_path": report_path,
         "actors": _read_json(os.path.join(handoff_dir, "actors.json")),
         "sources": _read_json(os.path.join(handoff_dir, "sources.json")),
+        "timeline": _read_json(os.path.join(handoff_dir, "timeline.json")),
         "exit_code": None,
         "resumed": True,
     }
 
 
-def preflight_pipeline(mode: str = "full") -> list[str]:
+def load_research_dossier_for_simulation(simulation_id: Optional[str]) -> dict[str, Any]:
+    """T4.1: best-effort 找到含该 simulation_id 的管线 handoff，加载研究档案。
+
+    供手动报告路径（api/report.py）复用：让手动生成/对话也能钉入背景档案。找不到对应
+    管线 / handoff 时全部返回 None，ReportAgent 回退到冷图盲搜路径（与旧行为一致）。
+    """
+    out: dict[str, Any] = {
+        "situation_brief": None, "actors": None, "sources": None, "research_report": None,
+    }
+    if not simulation_id:
+        return out
+    try:
+        for entry in PipelineManager.list_pipelines():
+            pid = entry.get("pipeline_id")
+            if not pid:
+                continue
+            data = PipelineManager.load(pid)
+            if not data or data.get("simulation_id") != simulation_id:
+                continue
+            hd = data.get("handoff_dir") or PipelineManager.handoff_dir(pid)
+            actors = _read_json(os.path.join(hd, "actors.json"))
+            report = _read_text(os.path.join(hd, "research_report.md"))
+            out["actors"] = actors
+            out["sources"] = _read_json(os.path.join(hd, "sources.json"))
+            out["research_report"] = report or None
+            out["situation_brief"] = situation_brief(actors) if actors else None
+            break
+    except Exception:  # best-effort enrichment must never break manual report generation
+        pass
+    return out
+
+
+def preflight_pipeline(mode: str = "full", model: Optional[str] = None) -> list[str]:
     """启动管线前的快速体检：把会在几十分钟后才暴露的配置错误提前到 POST /run 时。
 
     只做廉价的本地检查（文件存在性 / PATH / 环境变量），不发任何网络请求。
@@ -592,9 +640,26 @@ def preflight_pipeline(mode: str = "full") -> list[str]:
     errors: list[str] = []
     full_mode = mode != "research_only"
 
-    # 1) Zep：建图阶段硬依赖（仅 full 模式）。占位符等同于未配置。
-    if full_mode and (not Config.ZEP_API_KEY or Config._is_placeholder(Config.ZEP_API_KEY)):
-        errors.append("ZEP_API_KEY 未配置（或仍是占位符）。到 https://app.getzep.com/ 免费获取并写入 .env")
+    # 1) 本地知识图谱后端（建图阶段硬依赖，仅 full 模式）。
+    #    本地 Graphiti 无需任何 API Key；仅检查嵌入式后端是否可导入。
+    if full_mode:
+        import importlib.util
+
+        backend = Config.GRAPH_BACKEND
+        if backend in ('auto', 'falkordblite') and importlib.util.find_spec(
+            'redislite.async_falkordb_client'
+        ) is None:
+            if backend == 'auto' and importlib.util.find_spec('kuzu') is not None:
+                pass  # auto 会回退到 kuzu
+            elif backend == 'auto' and Config.FALKORDB_HOST:
+                pass  # auto 会使用外部 FalkorDB 服务
+            else:
+                errors.append(
+                    "本地知识图谱后端未安装。运行 ./setup.sh，或手动安装 "
+                    "'falkordblite'（嵌入式，推荐，Python>=3.12）或 'kuzu'。"
+                )
+        elif backend == 'kuzu' and importlib.util.find_spec('kuzu') is None:
+            errors.append("GRAPH_BACKEND=kuzu 但未安装 kuzu。运行 ./setup.sh 或 pip install kuzu。")
 
     # 2) 报告/模拟阶段的 LLM 提供方（仅 full 模式）
     if full_mode:
@@ -614,11 +679,10 @@ def preflight_pipeline(mode: str = "full") -> list[str]:
             "在项目根目录运行 ./setup.sh 自动下载并配置（或设置 DEERFLOW_DIR 指向现有 checkout）"
         )
 
-    # 4) 研究模型的凭据
-    df_model = (Config.DEERFLOW_MODEL or 'claude').lower()
-    _df_key_env = {'minimax': 'MINIMAX_API_KEY', 'deepseek': 'DEEPSEEK_API_KEY',
-                   'qwen': 'DASHSCOPE_API_KEY', 'glm': 'ZHIPUAI_API_KEY',
-                   'kimi': 'KIMI_API_KEY'}
+    # 4) 研究模型的凭据（T5.5：per-run model 覆盖时校验覆盖模型的 Key，而非 Config 默认）
+    df_model = (model or Config.DEERFLOW_MODEL or 'claude').lower()
+    # T6.4: 单一真源 Config.DEERFLOW_KEY_ENV（与 validate()/doctor.sh 共用，避免三处漂移）
+    _df_key_env = Config.DEERFLOW_KEY_ENV
     if df_model in _df_key_env and not os.environ.get(_df_key_env[df_model], '').strip():
         errors.append(f"DEERFLOW_MODEL={df_model} 需要环境变量 {_df_key_env[df_model]}（写入 .env）")
     elif df_model == 'claude':
@@ -657,6 +721,24 @@ def _actors_to_context(actors: Optional[dict]) -> Optional[str]:
     topics = actors.get("hot_topics") or []
     if topics:
         lines.append("热点议题：" + "、".join(str(t) for t in topics[:10]))
+
+    # T2.8: 把局势简报 + 调研确认的角色关系喂给本体生成，让 edge_types 覆盖真实关系类型，
+    # source_targets 连接这些角色所属的实体类型（而非凭报告行文凭空发明边类型）。
+    sb = situation_brief_block(actors)
+    if sb:
+        lines.append("")
+        lines.append(sb)
+    rels = extract_relationship_rows(actors)
+    if rels:
+        lines.append("")
+        lines.append(
+            "以下角色间关系均为深度研究实证——你的 edge_types 应覆盖这些关系类型，"
+            "source_targets 应连接这些角色所属的实体类型："
+        )
+        for r in rels[:30]:
+            typ = str(r.get("type", "")).upper()
+            label = REL_LABEL.get(typ, typ or "关联")
+            lines.append(f"- {r.get('source')} --[{label}/{typ}]--> {r.get('target')}")
     return "\n".join(lines)
 
 
@@ -792,6 +874,8 @@ class PipelineOrchestrator:
         project_name: Optional[str] = None,
         depth: Optional[str] = None,
         max_rounds: Optional[int] = None,
+        language: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> PipelineState:
         """创建管线记录并在后台线程启动。立即返回（含 pipeline_id / task_id）。"""
         pipeline_id = f"pipe_{uuid.uuid4().hex[:12]}"
@@ -819,6 +903,10 @@ class PipelineOrchestrator:
             "project_name": project_name or f"研究预测 {pipeline_id}",
             "depth": depth or Config.DEERFLOW_RESEARCH_DEPTH,
             "max_rounds": max_rounds,
+            # T5.5: 每次运行的研究语言/模型覆盖。language 区分三态：None=用 Config 默认；
+            # ""=auto（不传 --target-language，模型自选）；具体值=覆盖。model: None=用 Config 默认。
+            "research_language": language,
+            "research_model": model or None,
         })
         PipelineManager.save(state)
 
@@ -977,14 +1065,233 @@ class PipelineOrchestrator:
             t.start()
             return state
 
+    @classmethod
+    def continue_to_full(cls, pipeline_id: str) -> PipelineState:
+        """T6.2: 把一条已完成的 research_only 管线继续跑成完整管线（复用研究产物）。
+
+        要求 mode==research_only && status==completed && 存在 research_report.md。翻转
+        mode='full'，把完整 STAGE_BANDS 的非研究阶段标记为 pending（研究保持 completed），
+        复用 resume() 的启动尾。``_run`` 会经 research_report.md 复用守卫跳过研究、且不再走
+        research_only 早退。对 full / running 管线 → RuntimeError（由 API 层转 409）。
+        """
+        with cls._lifecycle_lock:
+            live = cls._threads.get(pipeline_id)
+            if live is not None and live.is_alive():
+                raise RuntimeError("管线仍在运行，无法继续")
+
+            data = PipelineManager.load(pipeline_id)
+            if data is None:
+                raise FileNotFoundError("管线不存在")
+            if data.get("mode") != "research_only":
+                raise RuntimeError("仅 research_only 管线可继续为完整管线")
+            if data.get("status") != "completed":
+                raise RuntimeError("research_only 管线尚未完成，无法继续")
+
+            handoff_dir = PipelineManager.handoff_dir(pipeline_id)
+            report_path = os.path.join(handoff_dir, "research_report.md")
+            if not (os.path.exists(report_path) and os.path.getsize(report_path) > 0):
+                raise RuntimeError("缺少 research_report.md，无法继续（请重跑研究）")
+
+            state = PipelineState.from_dict(data)
+            # 翻转为完整模式；研究阶段保持 completed，其余阶段重置为 pending
+            state.mode = "full"
+            for name in STAGE_BANDS.keys():
+                st = state.stages.setdefault(name, StageState(name=name))
+                if name == STAGE_RESEARCH:
+                    st.status = "completed"
+                    if st.progress != 100:
+                        st.progress = 100
+                else:
+                    st.status = "pending"
+                    st.error = None
+                    st.finished_at = None
+                    st.progress = 0
+
+            task_manager = TaskManager()
+            task_id = task_manager.create_task(
+                task_type="pipeline:full:continue",
+                metadata={"pipeline_id": pipeline_id, "continued_from_task_id": state.task_id},
+            )
+            state.task_id = task_id
+            state.status = "running"
+            state.error = None
+            state.current_stage = STAGE_ONTOLOGY
+            state.options["continued_to_full_at"] = _utcnow()
+            PipelineManager.save(state)
+
+            cls._cancel_events[pipeline_id] = threading.Event()
+            t = threading.Thread(
+                target=cls._run,
+                args=(state,),
+                name=f"pipeline-continue-{pipeline_id}",
+                daemon=True,
+            )
+            cls._threads[pipeline_id] = t
+            t.start()
+            logger.info(f"[{pipeline_id}] research_only → full 继续，复用研究产物")
+            return state
+
+    @classmethod
+    def fork(cls, base_pipeline_id: str, overlay: dict[str, Any]) -> PipelineState:
+        """T4.6: 在 PREPARE 处分叉一个 what-if 情景管线（复用 base 的研究/本体/图谱）。
+
+        overlay = {label, max_rounds?, influence_overrides{name:weight}, stance_overrides{name:stance},
+                   injected_events[{round,poster_name,content}], as_of_shift?}。新管线复用 base 的
+        project_id/graph_id/handoff（研究+本体+图谱直接命中复用守卫），仅重跑 prepare/run/report。
+        要求 base 已完成图谱阶段。返回新建管线状态。
+        """
+        base = PipelineManager.load(base_pipeline_id)
+        if base is None:
+            raise FileNotFoundError("基础管线不存在")
+        base_state = PipelineState.from_dict(base)
+        if not base_state.graph_id:
+            raise RuntimeError("基础管线尚未建图，无法分叉情景")
+
+        label = str((overlay or {}).get("label") or "情景").strip()
+        new_id = f"pipe_{uuid.uuid4().hex[:12]}"
+        new_state = PipelineState(
+            pipeline_id=new_id,
+            prompt=base_state.prompt,
+            mode="full",
+            project_id=base_state.project_id,
+            graph_id=base_state.graph_id,
+            handoff_dir=base_state.handoff_dir or PipelineManager.handoff_dir(base_pipeline_id),
+        )
+        # 研究/本体/图谱标记完成 → 命中复用守卫；prepare/run/report 全新
+        for name in STAGE_BANDS.keys():
+            st = StageState(name=name)
+            if name in (STAGE_RESEARCH, STAGE_ONTOLOGY, STAGE_GRAPH):
+                st.status = "completed"
+                st.progress = 100
+            new_state.stages[name] = st
+        new_state.options = {
+            "scenario_overlay": overlay or {},
+            "scenario_label": label,
+            "base_pipeline_id": base_pipeline_id,
+            "project_name": base_state.options.get("project_name"),
+        }
+        if (overlay or {}).get("max_rounds"):
+            try:
+                new_state.options["max_rounds"] = int(overlay["max_rounds"])
+            except (TypeError, ValueError):
+                pass
+
+        PipelineManager.ensure_dirs(new_id)
+        task_manager = TaskManager()
+        task_id = task_manager.create_task(
+            task_type="pipeline:full:scenario",
+            metadata={"pipeline_id": new_id, "base_pipeline_id": base_pipeline_id, "label": label},
+        )
+        new_state.task_id = task_id
+        new_state.status = "running"
+        new_state.current_stage = STAGE_PREPARE
+        PipelineManager.save(new_state)
+
+        with cls._lifecycle_lock:
+            cls._cancel_events[new_id] = threading.Event()
+            t = threading.Thread(target=cls._run, args=(new_state,), name=f"pipeline-scenario-{new_id}", daemon=True)
+            cls._threads[new_id] = t
+            t.start()
+        logger.info(f"[{new_id}] 情景分叉自 {base_pipeline_id}（label={label}），复用图谱 {base_state.graph_id}")
+        return new_state
+
+    @staticmethod
+    def apply_scenario_overlay_to_config(config: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+        """T4.6: 把情景 overlay 确定性地落到已生成的 simulation_config 上（就地修改并返回）。
+
+        influence_overrides{name:weight} / stance_overrides{name:stance} 按 agent 名匹配覆盖
+        （两路都覆盖，闭合 T3.6 旁路）；injected_events 追加为 scheduled_events（解析 poster_name
+        → agent_id）；不破坏缺省字段。
+        """
+        from ..utils.actors import normalize_name
+        agents = config.get("agent_configs") or []
+        by_name = {normalize_name(a.get("entity_name", "")): a for a in agents if a.get("entity_name")}
+
+        inf = (overlay or {}).get("influence_overrides") or {}
+        for name, weight in inf.items():
+            a = by_name.get(normalize_name(str(name)))
+            if a is not None:
+                try:
+                    a["influence_weight"] = float(weight)
+                except (TypeError, ValueError):
+                    pass
+        stc = (overlay or {}).get("stance_overrides") or {}
+        for name, stance in stc.items():
+            a = by_name.get(normalize_name(str(name)))
+            if a is not None:
+                a["stance"] = str(stance)
+
+        injected = (overlay or {}).get("injected_events") or []
+        if injected:
+            ec = config.setdefault("event_config", {})
+            sched = ec.setdefault("scheduled_events", [])
+            # 影响力最高 agent 作兜底发布者
+            fallback = max(agents, key=lambda x: x.get("influence_weight", 1.0), default=None)
+            fb_id = fallback.get("agent_id") if fallback else 0
+            fb_name = fallback.get("entity_name") if fallback else ""
+            for ev in injected:
+                poster_name = str(ev.get("poster_name", "") or "").strip()
+                a = by_name.get(normalize_name(poster_name)) if poster_name else None
+                sched.append({
+                    "round": int(ev.get("round", 0) or 0),
+                    "content": str(ev.get("content", "") or ""),
+                    "date": ev.get("date"),
+                    "poster_agent_id": a.get("agent_id") if a else fb_id,
+                    "poster_name": a.get("entity_name") if a else fb_name,
+                    "is_scenario_injection": True,
+                })
+        return config
+
     # -- 内部：进度辅助 ----------------------------------------------------
 
     @staticmethod
-    def _global_from_stage(mode: str, stage: str, local_pct: int) -> int:
-        bands = RESEARCH_ONLY_BANDS if mode == "research_only" else STAGE_BANDS
-        lo, hi = bands.get(stage, (0, 100))
+    def _global_from_stage(mode: str, stage: str, local_pct: int, dynamic_bands: Optional[dict] = None) -> int:
+        base = RESEARCH_ONLY_BANDS if mode == "research_only" else STAGE_BANDS
+        # T6.7: 已知真实成本信号时用动态权重（仅 full 模式）；否则回退静态档位。
+        bands = dynamic_bands if (dynamic_bands and mode != "research_only") else base
+        band = bands.get(stage) or base.get(stage, (0, 100))
+        lo, hi = band[0], band[1]
         local_pct = max(0, min(100, local_pct))
         return int(lo + (hi - lo) * local_pct / 100)
+
+    @staticmethod
+    def _recompute_dynamic_bands(
+        state: "PipelineState",
+        chunk_count: Optional[int] = None,
+        total_rounds: Optional[int] = None,
+        section_count: Optional[int] = None,
+    ) -> None:
+        """T6.7: 用已知成本信号（chunk 数 / 轮数 / 章节数）按比例重排 graph/run/report 的全局区间。
+
+        research/ontology/prepare 区间保持静态；把这三段之后到 100 的剩余区间按成本权重重新切分，
+        让深跑（多 chunk/多轮）时图谱/模拟阶段占更大份额，进度条与 ETA 更诚实。结果写入
+        state.options['dynamic_bands']，被 _global_from_stage 读取。信号不全则按当前已知部分估计。"""
+        # research/ontology 静态；动态区间覆盖 graph(40)→report(100)
+        dyn_start = STAGE_BANDS[STAGE_GRAPH][0]      # 40
+        dyn_total = 100 - dyn_start                  # 60
+        # 成本权重（带兜底，避免 0）
+        prev = state.options.get("cost_signals", {}) if isinstance(state.options.get("cost_signals"), dict) else {}
+        cc = chunk_count if chunk_count is not None else prev.get("chunk_count")
+        tr = total_rounds if total_rounds is not None else prev.get("total_rounds")
+        sc = section_count if section_count is not None else prev.get("section_count")
+        state.options["cost_signals"] = {"chunk_count": cc, "total_rounds": tr, "section_count": sc}
+        w_graph = float(cc or 20)        # 每 chunk ~1 次 LLM 抽取
+        w_prepare = 8.0                  # prepare 较轻且较稳定
+        w_run = float((tr or 24) * 1.5)  # 每轮多次 agent LLM 调用
+        w_report = float((sc or 6) * 6)  # 每章多次工具调用
+        weights = [("graph", w_graph), ("prepare", w_prepare), ("run", w_run), ("report", w_report)]
+        tot = sum(w for _, w in weights) or 1.0
+        bands: dict[str, list] = {
+            STAGE_RESEARCH: list(STAGE_BANDS[STAGE_RESEARCH]),
+            STAGE_ONTOLOGY: list(STAGE_BANDS[STAGE_ONTOLOGY]),
+        }
+        cursor = float(dyn_start)
+        for name, w in weights:
+            seg = dyn_total * (w / tot)
+            bands[name] = [int(round(cursor)), int(round(cursor + seg))]
+            cursor += seg
+        bands["report"][1] = 100  # 收尾对齐 100，避免取整漂移
+        state.options["dynamic_bands"] = bands
 
     def _make_stage_updater(self, state: PipelineState, stage: str):
         task_manager = TaskManager()
@@ -1005,7 +1312,9 @@ class PipelineOrchestrator:
             if st.started_at is None:
                 st.started_at = _utcnow()
             state.current_stage = stage
-            state.global_progress = self._global_from_stage(state.mode, stage, local_pct)
+            state.global_progress = self._global_from_stage(
+                state.mode, stage, local_pct, state.options.get("dynamic_bands")
+            )
             PipelineManager.save(state)
             if state.task_id:
                 task_manager.update_task(
@@ -1022,8 +1331,45 @@ class PipelineOrchestrator:
         st.progress = 100
         st.message = message
         st.finished_at = _utcnow()
-        state.global_progress = self._global_from_stage(state.mode, stage, 100)
+        state.global_progress = self._global_from_stage(
+            state.mode, stage, 100, state.options.get("dynamic_bands")
+        )
+        try:
+            self._record_stage_artifacts(state, stage)  # T6.3
+        except Exception:
+            pass
         PipelineManager.save(state)
+
+    def _record_stage_artifacts(self, state: PipelineState, stage: str) -> None:
+        """T6.3: 阶段完成时登记其产物的可深链路径（存在且非空才登记）。"""
+        hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+
+        def add_if(name: str, path: Optional[str]) -> None:
+            if path and os.path.exists(path) and os.path.getsize(path) > 0:
+                state.artifacts[name] = path
+
+        if stage == STAGE_RESEARCH:
+            add_if("dossier", os.path.join(hd, "actors.json"))
+            add_if("timeline", os.path.join(hd, "timeline.json"))
+            add_if("sources", os.path.join(hd, "sources.json"))
+        elif stage == STAGE_ONTOLOGY:
+            add_if("ontology", os.path.join(hd, "ontology.json"))
+        elif stage == STAGE_GRAPH:
+            add_if("communities", os.path.join(hd, "communities.json"))
+        elif stage == STAGE_PREPARE:
+            sim_id = state.simulation_id
+            if sim_id:
+                sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, sim_id)
+                add_if("initial_posts", os.path.join(sim_dir, "simulation_config.json"))
+                for fname in ("twitter_profiles.csv", "reddit_profiles.json"):
+                    p = os.path.join(sim_dir, fname)
+                    if os.path.exists(p) and os.path.getsize(p) > 0:
+                        state.artifacts["personas"] = p
+                        break
+        elif stage == STAGE_RUN:
+            sim_id = state.simulation_id
+            if sim_id:
+                add_if("run_summary", os.path.join(SimulationRunner.RUN_STATE_DIR, sim_id, "run_summary.json"))
 
     def _fail_stage(self, state: PipelineState, stage: str, error: str):
         st = state.stages.setdefault(stage, StageState(name=stage))
@@ -1059,6 +1405,8 @@ class PipelineOrchestrator:
                     handoff_dir,
                     on_progress=upd,
                     depth=state.options.get("depth"),
+                    language=state.options.get("research_language"),  # T5.5
+                    model=state.options.get("research_model"),        # T5.5
                     cancel_event=cls._cancel_events.get(state.pipeline_id),
                     on_spawn=_persist_research_pid,
                 )
@@ -1114,13 +1462,36 @@ class PipelineOrchestrator:
                 project.analysis_summary = ontology.get("analysis_summary", "")
                 project.status = ProjectStatus.ONTOLOGY_GENERATED
                 ProjectManager.save_project(project)
+                # T6.3: 把本体落到 handoff/ontology.json，供 artifact 深链
+                try:
+                    _hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+                    with open(os.path.join(_hd, "ontology.json"), "w", encoding="utf-8") as _of:
+                        json.dump(project.ontology, _of, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
                 self._complete_stage(state, STAGE_ONTOLOGY, "本体生成完成")
 
             # ---- Stage 2: GRAPH ----
             upd = self._make_stage_updater(state, STAGE_GRAPH)
             graph_stage_done = state.stages.get(STAGE_GRAPH) and state.stages[STAGE_GRAPH].status == "completed"
             graph_id = state.graph_id or getattr(project, "graph_id", None)
-            if graph_stage_done and graph_id:
+            _reuse_graph = bool(graph_stage_done and graph_id)
+            if _reuse_graph:
+                # T6.1/T2.7: 复用前做廉价健康检查——0 实体的图谱被复用会在 PREPARE 阶段崩溃，
+                # 故实体数为 0（或查询失败）时回落到重建，并留痕。
+                try:
+                    from .zep_entity_reader import ZepEntityReader
+                    _cnt = len(ZepEntityReader().filter_defined_entities(graph_id, enrich_with_edges=False).entities)
+                    state.options["graph_entity_count"] = _cnt
+                    if _cnt == 0:
+                        _reuse_graph = False
+                        state.options["resumed_stage_validation"] = "graph_rebuilt_0_entities"
+                        logger.info("[%s] 复用图谱实体数为 0，回落到重建", state.pipeline_id)
+                except Exception as e:
+                    _reuse_graph = False
+                    state.options["resumed_stage_validation"] = "graph_rebuilt_healthcheck_error"
+                    logger.warning("[%s] 图谱健康检查失败，回落到重建: %s", state.pipeline_id, e)
+            if _reuse_graph:
                 upd(100, "复用已有知识图谱…")
                 state.graph_id = graph_id
                 self._complete_stage(state, STAGE_GRAPH, "图谱已恢复")
@@ -1128,20 +1499,53 @@ class PipelineOrchestrator:
                 upd(5, "构建知识图谱…")
                 builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
                 chunks = TextProcessor.split_text(report_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP)
+                self._recompute_dynamic_bands(state, chunk_count=len(chunks))  # T6.7: 已知 chunk 数→重排区间
                 graph_id = builder.create_graph(name=project.name)
                 builder.set_ontology(graph_id, project.ontology)
+
+                # T2.2/T2.3: 在文本抽取前，把研究确认的 actors + relationships 作为 typed 边
+                # 种入图谱；valid_at 锚定研究 as_of（不是建图时刻），后续文本抽取按名+embedding
+                # dedup「富化」这些种子节点而非重复创建。as_of 同时作为所有研究 chunk 的
+                # reference_time，给 panorama_search 的 active/historical 切分一个真实双时态轴。
+                as_of = parse_as_of((actors or {}).get("as_of_date")) if isinstance(actors, dict) else None
+                if Config.GRAPH_SEED_FROM_ACTORS and actors:
+                    try:
+                        seeded = builder.seed_actors(graph_id, actors, valid_at=as_of)
+                        upd(8, f"已注入 {seeded} 条调研关系/角色种子…")
+                        state.options["graph_seeded_edges"] = seeded
+                    except Exception as e:
+                        logger.warning("[%s] actor seeding skipped: %s", state.pipeline_id, e)
 
                 def add_cb(msg: str, ratio: float):
                     upd(int(10 + ratio * 55), msg)
 
                 # batch_size 10：Zep graph.add 按 episode 异步处理，批量提交吞吐近似线性；
                 # 3 是早期保守值，研究报告动辄上百 chunk 时建图要多等数分钟。
-                uuids = builder.add_text_batches(graph_id, chunks, batch_size=10, progress_callback=add_cb)
+                uuids = builder.add_text_batches(
+                    graph_id, chunks, batch_size=10, progress_callback=add_cb, reference_time=as_of
+                )
 
                 def wait_cb(msg: str, ratio: float):
                     upd(int(65 + ratio * 33), msg)
 
                 builder._wait_for_episodes(uuids, wait_cb)
+
+                # T2.4: best-effort 社区发现（派系/联盟），失败不影响建图。持久化到 handoff/communities.json
+                # 供 sim-config 回声室种子（T3.4）与报告派系图（T4.2）复用。
+                if Config.GRAPH_BUILD_COMMUNITIES:
+                    try:
+                        upd(99, "检测派系/社区结构…")
+                        communities = builder.build_communities(graph_id)
+                        if communities:
+                            handoff_dir = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+                            os.makedirs(handoff_dir, exist_ok=True)
+                            with open(os.path.join(handoff_dir, "communities.json"), "w", encoding="utf-8") as cf:
+                                json.dump(communities, cf, ensure_ascii=False, indent=2)
+                        state.options["graph_communities"] = len(communities)
+                        logger.info("[%s] 社区发现: %d 个", state.pipeline_id, len(communities))
+                    except Exception as e:
+                        logger.warning("[%s] community detection skipped: %s", state.pipeline_id, e)
+
                 project.graph_id = graph_id
                 project.status = ProjectStatus.GRAPH_COMPLETED
                 ProjectManager.save_project(project)
@@ -1184,6 +1588,26 @@ class PipelineOrchestrator:
                 )
                 self._complete_stage(state, STAGE_PREPARE, "环境就绪")
 
+            # T4.6: 情景 overlay — 把影响力/立场覆盖 + 注入事件确定性落到 simulation_config.json
+            _overlay = state.options.get("scenario_overlay")
+            _run_already_done = bool(state.stages.get(STAGE_RUN) and state.stages[STAGE_RUN].status == "completed")
+            if _overlay and not _run_already_done:
+                try:
+                    _cfg_path = os.path.join(
+                        Config.OASIS_SIMULATION_DATA_DIR, sim_state.simulation_id, "simulation_config.json"
+                    )
+                    if os.path.exists(_cfg_path):
+                        with open(_cfg_path, "r", encoding="utf-8") as _cf:
+                            _cfg = json.load(_cf)
+                        self.apply_scenario_overlay_to_config(_cfg, _overlay)
+                        _tmp = _cfg_path + ".tmp"
+                        with open(_tmp, "w", encoding="utf-8") as _cf:
+                            json.dump(_cfg, _cf, ensure_ascii=False, indent=2)
+                        os.replace(_tmp, _cfg_path)
+                        logger.info("[%s] 情景 overlay 已应用到 simulation_config", state.pipeline_id)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("[%s] 情景 overlay 应用跳过: %s", state.pipeline_id, e)
+
             # ---- Stage 4: RUN ----
             upd = self._make_stage_updater(state, STAGE_RUN)
             run_stage_done = state.stages.get(STAGE_RUN) and state.stages[STAGE_RUN].status == "completed"
@@ -1193,9 +1617,14 @@ class PipelineOrchestrator:
             else:
                 upd(2, "启动 OASIS 模拟…")
                 run_kwargs: dict[str, Any] = {"platform": "parallel"}
-                _mr = state.options.get("max_rounds")
+                # T3.7: 每次运行的 max_rounds 优先，否则用 Config.OASIS_DEFAULT_MAX_ROUNDS（0→None=跑满）。
+                _mr = state.options.get("max_rounds") or (Config.OASIS_DEFAULT_MAX_ROUNDS or None)
                 if _mr:
                     run_kwargs["max_rounds"] = int(_mr)
+                # T3.10: 打开「模拟 → 图谱」反馈回路（本地默认开），让报告阶段挖到的是模拟后的图谱。
+                if Config.SIM_GRAPH_FEEDBACK and graph_id:
+                    run_kwargs["enable_graph_memory_update"] = True
+                    run_kwargs["graph_id"] = graph_id
                 SimulationRunner.start_simulation(simulation_id=sim_state.simulation_id, **run_kwargs)
                 # 轮询直到完成
                 cancel_ev = cls._cancel_events.get(state.pipeline_id)
@@ -1216,6 +1645,8 @@ class PipelineOrchestrator:
                     # 仅在轮次推进时落盘进度，省掉每 5s 一次的无效 JSON 重写 + 任务更新
                     # （取消请求由循环顶部的检查兜底，最多延迟一个 5s 周期）
                     if (cur, total) != _last_round_seen:
+                        if total > 0 and (_last_round_seen[1] or 0) <= 0:
+                            self._recompute_dynamic_bands(state, total_rounds=total)  # T6.7
                         _last_round_seen = (cur, total)
                         if total > 0:
                             upd(min(98, int(cur / total * 100)), f"模拟轮次 {cur}/{total}")
@@ -1236,14 +1667,47 @@ class PipelineOrchestrator:
                     pass
                 self._complete_stage(state, STAGE_RUN, "模拟完成")
 
+            # T3.14: 模拟结束后聚合 run_summary.json（per-agent engagement + 每轮动作量 + top_posts +
+            # 可选派系）。报告阶段的 simulation_outcomes 工具与前端均可直接读，免再 fuzzy 检索。
+            try:
+                _comm = None
+                _comm_path = os.path.join(handoff_dir, "communities.json")
+                if os.path.exists(_comm_path):
+                    with open(_comm_path, "r", encoding="utf-8") as cf:
+                        _comm = json.load(cf)
+                SimulationRunner.write_run_summary(sim_state.simulation_id, communities=_comm)
+                _rs = os.path.join(SimulationRunner.RUN_STATE_DIR, sim_state.simulation_id, "run_summary.json")
+                if os.path.exists(_rs) and os.path.getsize(_rs) > 0:
+                    state.artifacts["run_summary"] = _rs  # T6.3
+                    PipelineManager.save(state)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[%s] run_summary 写出跳过: %s", state.pipeline_id, e)
+
             # ---- Stage 5: REPORT ----
             upd = self._make_stage_updater(state, STAGE_REPORT)
             upd(5, "生成预测报告…")
             report_id = f"report_{uuid.uuid4().hex[:12]}"
+            # T4.6/T4.7: 情景报告 → 传情景标签 + base 模拟 id（反事实对比 scenario_diff）
+            _scenario_label = state.options.get("scenario_label")
+            _base_sim_id = None
+            _base_pid = state.options.get("base_pipeline_id")
+            if _base_pid:
+                try:
+                    _bd = PipelineManager.load(_base_pid) or {}
+                    _base_sim_id = _bd.get("simulation_id")
+                except Exception:
+                    _base_sim_id = None
             agent = ReportAgent(
                 graph_id=graph_id,
                 simulation_id=sim_state.simulation_id,
                 simulation_requirement=state.prompt,
+                # T4.1: 钉入研究档案，报告不再从冷图盲搜重挖 cast/关系/时间线
+                situation_brief=situation_brief(actors),
+                actors=actors,
+                sources=research.get("sources"),
+                research_report=report_md,
+                scenario_label=_scenario_label,
+                base_simulation_id=_base_sim_id,
             )
 
             def report_cb(stage: str, progress: int, message: str):

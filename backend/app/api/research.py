@@ -28,6 +28,8 @@ logger = get_logger('mirofish.api.research')
 
 _VALID_DEPTH = {"quick", "standard", "deep"}
 _VALID_MODE = {"full", "research_only"}
+# T5.5: 每次运行可选的研究语言（与 DeerFlow --target-language 对齐；auto=交给模型自选）
+_VALID_LANGUAGES = {"Chinese", "English", "auto"}
 
 
 @research_bp.route('/run', methods=['POST'])
@@ -62,8 +64,24 @@ def run_pipeline():
             except (TypeError, ValueError):
                 return jsonify({"success": False, "error": "max_rounds 必须是整数"}), 400
 
+        # T5.5: 每次运行可覆盖研究语言/模型（缺省回退 Config）。在任何子进程启动前校验，杜绝
+        # 一个拼错的模型名烧完研究额度后才暴露。
+        language = (data.get('language') or '').strip() or None
+        if language is not None and language not in _VALID_LANGUAGES:
+            return jsonify({"success": False, "error": f"language 必须是 {sorted(_VALID_LANGUAGES)} 之一"}), 400
+        if language == 'auto':
+            language = ''  # 空串 → 研究子进程不传 --target-language，交给模型自选
+        model = (data.get('model') or '').strip() or None
+        if model is not None and model.lower() not in Config.SUPPORTED_DEERFLOW_MODELS:
+            return jsonify({
+                "success": False,
+                "error": f"model 必须是 {', '.join(Config.SUPPORTED_DEERFLOW_MODELS)} 之一",
+            }), 400
+        if model:
+            model = model.lower()
+
         # 起飞前体检：把"研究跑完 40 分钟后才发现 Zep Key 是占位符"这类失败提前到现在
-        preflight_errors = preflight_pipeline(mode=mode)
+        preflight_errors = preflight_pipeline(mode=mode, model=model)
         if preflight_errors:
             return jsonify({
                 "success": False,
@@ -77,6 +95,8 @@ def run_pipeline():
             project_name=data.get('project_name'),
             depth=depth,
             max_rounds=max_rounds,
+            language=language,
+            model=model,
         )
         return jsonify({
             "success": True,
@@ -141,6 +161,82 @@ def resume_pipeline(pipeline_id: str):
         return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
 
 
+@research_bp.route('/<pipeline_id>/continue', methods=['POST'])
+def continue_pipeline(pipeline_id: str):
+    """T6.2: 把一条已完成的 research_only 管线继续跑成完整管线（复用研究产物，不重跑研究）。"""
+    try:
+        existing = PipelineManager.load(pipeline_id)
+        if existing is None:
+            return jsonify({"success": False, "error": "管线不存在"}), 404
+        # 继续会跑完整管线（建图/模拟/报告），按 full 模式预检配置
+        preflight_errors = preflight_pipeline(mode="full")
+        if preflight_errors:
+            return jsonify({
+                "success": False,
+                "error": "继续前检查未通过：\n" + "\n".join(f"• {e}" for e in preflight_errors),
+                "preflight_errors": preflight_errors,
+            }), 400
+        state = PipelineOrchestrator.continue_to_full(pipeline_id)
+        return jsonify({
+            "success": True,
+            "data": {
+                "pipeline_id": state.pipeline_id,
+                "task_id": state.task_id,
+                "mode": state.mode,
+                "status": state.status,
+                "continued": True,
+            },
+        })
+    except FileNotFoundError:
+        return jsonify({"success": False, "error": "管线不存在"}), 404
+    except RuntimeError as e:
+        return jsonify({"success": False, "error": str(e)}), 409
+    except Exception as e:
+        logger.error(f"继续管线失败: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@research_bp.route('/<pipeline_id>/scenario', methods=['POST'])
+def fork_scenario(pipeline_id: str):
+    """T4.6: 在 PREPARE 处分叉一个 what-if 情景管线（复用 base 研究/本体/图谱，仅重跑 prepare/run/report）。
+
+    body: {label, max_rounds?, influence_overrides{name:weight}, stance_overrides{name:stance},
+           injected_events[{round,poster_name,content}], as_of_shift?}
+    """
+    try:
+        existing = PipelineManager.load(pipeline_id)
+        if existing is None:
+            return jsonify({"success": False, "error": "基础管线不存在"}), 404
+        overlay = request.get_json(silent=True) or {}
+        if not (overlay.get("label") or "").strip():
+            return jsonify({"success": False, "error": "缺少情景标签 label"}), 400
+        preflight_errors = preflight_pipeline(mode="full")
+        if preflight_errors:
+            return jsonify({
+                "success": False,
+                "error": "情景分叉前检查未通过：\n" + "\n".join(f"• {e}" for e in preflight_errors),
+                "preflight_errors": preflight_errors,
+            }), 400
+        state = PipelineOrchestrator.fork(pipeline_id, overlay)
+        return jsonify({
+            "success": True,
+            "data": {
+                "pipeline_id": state.pipeline_id,
+                "base_pipeline_id": pipeline_id,
+                "task_id": state.task_id,
+                "label": overlay.get("label"),
+                "status": state.status,
+            },
+        })
+    except FileNotFoundError:
+        return jsonify({"success": False, "error": "基础管线不存在"}), 404
+    except RuntimeError as e:
+        return jsonify({"success": False, "error": str(e)}), 409
+    except Exception as e:
+        logger.error(f"情景分叉失败: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
 @research_bp.route('/<pipeline_id>', methods=['DELETE'])
 def delete_pipeline(pipeline_id: str):
     """删除一条已结束的管线记录（含 handoff 产物）。在飞管线须先取消。"""
@@ -189,6 +285,16 @@ def list_pipelines():
     return jsonify({"success": True, "data": {"pipelines": PipelineManager.list_pipelines()}})
 
 
+@research_bp.route('/preflight', methods=['GET'])
+def preflight():
+    """T5.6: 启动前就绪检查（不发起管线）。复用 POST /run 的同一套检查，避免漂移。"""
+    mode = request.args.get('mode', 'full')
+    if mode not in ('full', 'research_only'):
+        mode = 'full'
+    errors = preflight_pipeline(mode=mode)
+    return jsonify({"success": True, "data": {"ready": not errors, "errors": errors, "mode": mode}})
+
+
 @research_bp.route('/<pipeline_id>/dossier', methods=['GET'])
 def get_dossier(pipeline_id: str):
     """返回深度研究产出的研究报告 + 结构化 actors/sources。"""
@@ -210,15 +316,89 @@ def get_dossier(pipeline_id: str):
     report = _read('research_report.md')
     actors_raw = _read('actors.json')
     sources_raw = _read('sources.json')
+    timeline_raw = _read('timeline.json')  # T5.2: 一等公民时间线
     return jsonify({
         "success": True,
         "data": {
             "report": report,
             "actors": _json.loads(actors_raw) if actors_raw else None,
             "sources": _json.loads(sources_raw) if sources_raw else None,
+            "timeline": _json.loads(timeline_raw) if timeline_raw else None,
             "has_report": report is not None,
         },
     })
+
+
+@research_bp.route('/<pipeline_id>/dossier', methods=['PUT'])
+def edit_dossier(pipeline_id: str):
+    """T5.4: 编辑研究档案（research_report.md / actors.json），人类介入后再继续。
+
+    仅当 status==completed && mode==research_only（或失败于建图之前）时允许，避免改动已下游消费的档案。
+    原子写（tmp + os.replace）。body: {report?: str, actors?: object}。
+    """
+    import json as _json
+    data = PipelineManager.load(pipeline_id)
+    if data is None:
+        return jsonify({"success": False, "error": "管线不存在"}), 404
+    status = data.get("status")
+    mode = data.get("mode")
+    graph_done = bool((data.get("stages") or {}).get("graph", {}).get("status") == "completed")
+    # 允许：已完成的 research_only；或失败/取消且尚未建图（编辑后可继续）
+    allowed = (status == "completed" and mode == "research_only") or (
+        status in ("failed", "cancelled") and not graph_done
+    )
+    if not allowed:
+        return jsonify({"success": False, "error": "当前状态不允许编辑档案（仅完成的 research_only 或建图前的失败管线可编辑）"}), 409
+
+    body = request.get_json(silent=True) or {}
+    handoff = PipelineManager.handoff_dir(pipeline_id)
+    if not os.path.isdir(handoff):
+        return jsonify({"success": False, "error": "管线产物目录不存在"}), 404
+
+    def _atomic_write(name, text):
+        path = os.path.join(handoff, name)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+
+    wrote = []
+    try:
+        if isinstance(body.get("report"), str):
+            _atomic_write("research_report.md", body["report"])
+            wrote.append("research_report.md")
+        if body.get("actors") is not None:
+            _atomic_write("actors.json", _json.dumps(body["actors"], ensure_ascii=False, indent=2))
+            wrote.append("actors.json")
+    except Exception as e:
+        logger.error(f"编辑档案写入失败: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+    if not wrote:
+        return jsonify({"success": False, "error": "未提供 report 或 actors"}), 400
+    return jsonify({"success": True, "data": {"updated": wrote}})
+
+
+# T6.3: 各阶段产物深链。artifacts 映射在 pipeline_state.json 里维护（_record_stage_artifacts）：
+# dossier/timeline/sources/ontology/communities/initial_posts/personas/run_summary。
+@research_bp.route('/<pipeline_id>/artifact/<name>', methods=['GET'])
+def get_artifact(pipeline_id: str, name: str):
+    """T6.3: 返回某阶段产物（JSON 解析后内容；csv/未知按纯文本）。"""
+    data = PipelineManager.load(pipeline_id)
+    if data is None:
+        return jsonify({"success": False, "error": "管线不存在"}), 404
+    artifacts = (data.get("artifacts") or {})
+    path = artifacts.get(name)
+    if not path or not os.path.exists(path):
+        return jsonify({"success": False, "error": f"产物 '{name}' 不存在"}), 404
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            raw = f.read()
+        import json as _json
+        if path.endswith('.json'):
+            return jsonify({"success": True, "data": {"name": name, "content": _json.loads(raw)}})
+        return jsonify({"success": True, "data": {"name": name, "content": raw}})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @research_bp.route('/<pipeline_id>/progress', methods=['GET'])

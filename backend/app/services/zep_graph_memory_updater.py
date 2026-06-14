@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from queue import Queue, Empty
 
-from zep_cloud.client import Zep
+from .graphiti_client import Zep
 
 from ..config import Config
 from ..utils.logger import get_logger
@@ -416,6 +416,9 @@ class ZepGraphMemoryUpdater:
                 display_name = self._get_platform_display_name(platform)
                 logger.info(f"成功批量发送 {len(activities)} 条{display_name}活动到图谱 {self.graph_id}")
                 logger.debug(f"批量内容预览: {combined_text[:200]}...")
+                # T3.10: 除自由文本 episode 外，再为带「作者+目标」的动作写带名 typed 边，
+                # 让身份与轮级双时态在反馈回路中存活（gate: SIM_TYPED_FEEDBACK_EDGES）。
+                self._write_typed_edges(activities)
                 return
                 
             except Exception as e:
@@ -426,6 +429,79 @@ class ZepGraphMemoryUpdater:
                     logger.error(f"批量发送到Zep失败，已重试{self.MAX_RETRIES}次: {e}")
                     self._failed_count += 1
     
+    # T3.10: 动作 → (typed 边名, 目标名候选 action_args 键)。用于把交互写成带名实体边。
+    _TYPED_EDGE_MAP = {
+        "LIKE_POST": ("LIKED", ("post_author_name",)),
+        "DISLIKE_POST": ("DISLIKED", ("post_author_name",)),
+        "REPOST": ("REPOSTED", ("original_author_name",)),
+        "QUOTE_POST": ("QUOTED", ("original_author_name", "quoted_author_name")),
+        "CREATE_COMMENT": ("REPLIED_TO", ("post_author_name",)),
+        "LIKE_COMMENT": ("LIKED", ("comment_author_name", "post_author_name")),
+        "DISLIKE_COMMENT": ("DISLIKED", ("comment_author_name", "post_author_name")),
+        "FOLLOW": ("FOLLOWED", ("followee_name", "target_name", "followee")),
+        "MUTE": ("MUTED", ("target_name", "mutee_name")),
+    }
+
+    def _write_typed_edges(self, activities: List[AgentActivity]):
+        """为带「作者+目标」的动作写带名 typed 边（best-effort；gate: SIM_TYPED_FEEDBACK_EDGES）。"""
+        if not getattr(Config, "SIM_TYPED_FEEDBACK_EDGES", False):
+            return
+        for act in activities:
+            spec = self._TYPED_EDGE_MAP.get(act.action_type)
+            if not spec:
+                continue
+            edge_name, keys = spec
+            target = ""
+            for k in keys:
+                v = str((act.action_args or {}).get(k, "") or "").strip()
+                if v:
+                    target = v
+                    break
+            author = (act.agent_name or "").strip()
+            if not author or not target or author == target:
+                continue
+            valid_at = None
+            try:
+                from datetime import datetime
+                if act.timestamp:
+                    valid_at = datetime.fromisoformat(act.timestamp)
+            except Exception:
+                valid_at = None
+            try:
+                self.client.graph.add_triplet(
+                    self.graph_id, author, edge_name, target,
+                    f"{author} {edge_name} {target} (round {act.round_num})",
+                    valid_at=valid_at,
+                )
+            except Exception as e:  # typed edges are an enhancement; never break the loop
+                logger.debug(f"typed feedback edge skipped ({author}-{edge_name}-{target}): {e}")
+
+    def write_interview_fact(self, agent_name: str, statement: str, valid_at=None) -> bool:
+        """T3.14: 把一条采访回答写为 typed 图谱事实
+
+        ``<agent> STATED_AT_END_OF_SIM 模拟终局陈述`` (fact=回答全文)，让最丰富的收尾反思变成
+        可检索的持久事实，而非被摘要后丢失。key-free（走本地 shim）。best-effort，失败返回 False。
+        """
+        agent_name = (agent_name or "").strip()
+        statement = (statement or "").strip()
+        if not agent_name or not statement:
+            return False
+        try:
+            self.client.graph.add_triplet(
+                self.graph_id,
+                agent_name,
+                "STATED_AT_END_OF_SIM",
+                "模拟终局陈述",
+                f"{agent_name}: {statement[:1500]}",
+                valid_at=valid_at,
+                source_label="Entity",
+                target_label="Entity",
+            )
+            return True
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"采访事实写入跳过 ({agent_name}): {e}")
+            return False
+
     def _flush_remaining(self):
         """发送队列和缓冲区中剩余的活动"""
         # 首先处理队列中剩余的活动，添加到缓冲区

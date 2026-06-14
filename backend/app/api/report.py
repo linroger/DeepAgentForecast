@@ -11,6 +11,7 @@ from flask import request, jsonify, send_file
 from . import report_bp
 from ..config import Config
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.pipeline_orchestrator import load_research_dossier_for_simulation
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
@@ -130,11 +131,16 @@ def generate_report():
                     message="初始化Report Agent..."
                 )
                 
-                # 创建Report Agent
+                # 创建Report Agent（T4.1: best-effort 钉入研究档案，找不到则回退冷图路径）
+                _dossier = load_research_dossier_for_simulation(simulation_id)
                 agent = ReportAgent(
                     graph_id=graph_id,
                     simulation_id=simulation_id,
-                    simulation_requirement=simulation_requirement
+                    simulation_requirement=simulation_requirement,
+                    situation_brief=_dossier.get("situation_brief"),
+                    actors=_dossier.get("actors"),
+                    sources=_dossier.get("sources"),
+                    research_report=_dossier.get("research_report"),
                 )
                 
                 # 进度回调
@@ -536,13 +542,18 @@ def chat_with_report_agent():
         
         simulation_requirement = project.simulation_requirement or ""
         
-        # 创建Agent并进行对话
+        # 创建Agent并进行对话（T4.1: best-effort 钉入研究档案）
+        _dossier = load_research_dossier_for_simulation(simulation_id)
         agent = ReportAgent(
             graph_id=graph_id,
             simulation_id=simulation_id,
-            simulation_requirement=simulation_requirement
+            simulation_requirement=simulation_requirement,
+            situation_brief=_dossier.get("situation_brief"),
+            actors=_dossier.get("actors"),
+            sources=_dossier.get("sources"),
+            research_report=_dossier.get("research_report"),
         )
-        
+
         result = agent.chat(message=message, chat_history=chat_history)
         
         return jsonify({

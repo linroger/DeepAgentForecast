@@ -247,8 +247,34 @@ class Config:
         except Exception:
             pass
 
-    # Zep配置
-    ZEP_API_KEY = os.environ.get('ZEP_API_KEY')
+    # ============================================================
+    # 知识图谱后端：本地 Graphiti（替代 Zep Cloud）
+    # 不再需要 ZEP_API_KEY / 任何外部 SaaS。图谱在本机运行：
+    #   - 默认嵌入式 FalkorDB（falkordblite，Python>=3.12，无需 Docker）
+    #   - 实体/关系抽取复用 Config.LLM_PROVIDER（含 claude-cli 等免 Key 提供方）
+    #   - 向量嵌入用本地 sentence-transformers 多语言模型（无需 Key）
+    # ============================================================
+    # 图数据库后端：auto | falkordblite | falkordb | kuzu
+    GRAPH_BACKEND = os.environ.get('GRAPH_BACKEND', 'auto').strip().lower()
+    # 图数据持久化目录（嵌入式 FalkorDB / Kuzu 文件落盘位置）
+    GRAPHITI_DATA_DIR = os.environ.get(
+        'GRAPHITI_DATA_DIR',
+        os.path.join(os.path.dirname(__file__), '../uploads/graphiti_db')
+    )
+    # 本地嵌入模型（多语言，覆盖中英文舆情内容）及其维度
+    GRAPHITI_EMBED_MODEL = os.environ.get('GRAPHITI_EMBED_MODEL', 'paraphrase-multilingual-MiniLM-L12-v2')
+    GRAPHITI_EMBED_DIM = int(os.environ.get('GRAPHITI_EMBED_DIM', '384'))
+    # 重排序：rrf（默认，纯本地、零下载）| bge（本地 sentence-transformers 交叉编码器，更准但需下载模型）
+    GRAPHITI_RERANKER = os.environ.get('GRAPHITI_RERANKER', 'rrf').strip().lower()
+    # 可选：连接外部 FalkorDB 服务（设置后 auto 优先使用）
+    FALKORDB_HOST = os.environ.get('FALKORDB_HOST') or None
+    FALKORDB_PORT = int(os.environ.get('FALKORDB_PORT', '6379'))
+
+    # 兼容保留：旧版 Zep 配置（已不再必需）。本地 Graphiti 不需要任何 Key，但代码中仍有若干
+    # `if not Config.ZEP_API_KEY` / `if not self.api_key` 真值守卫与服务构造检查。给一个非空哨兵值
+    # 让这些守卫一律通过（shim 会忽略该值），从而无需改动 5 个服务构造器与 API 守卫。
+    # 四个重试/退避旋钮仍被分页工具复用于本地图谱的瞬态错误重试。
+    ZEP_API_KEY = os.environ.get('ZEP_API_KEY') or 'local-graphiti'
     ZEP_MAX_RETRIES = int(os.environ.get('ZEP_MAX_RETRIES', '4'))
     ZEP_RETRY_DELAY_SECONDS = float(os.environ.get('ZEP_RETRY_DELAY_SECONDS', '2.0'))
     ZEP_RATE_LIMIT_BUFFER_SECONDS = float(os.environ.get('ZEP_RATE_LIMIT_BUFFER_SECONDS', '1.0'))
@@ -264,7 +290,9 @@ class Config:
     DEFAULT_CHUNK_OVERLAP = 50  # 默认重叠大小
     
     # OASIS模拟配置
-    OASIS_DEFAULT_MAX_ROUNDS = int(os.environ.get('OASIS_DEFAULT_MAX_ROUNDS', '10'))
+    # T3.7: 0 = 不截断（跑满按 total_hours/minutes_per_round 算出的完整轮数，如 72h/60min=72 轮）。
+    # 设为正整数则作为全局轮数上限（每次运行可被 options.max_rounds 覆盖；冒烟测试用小值）。
+    OASIS_DEFAULT_MAX_ROUNDS = int(os.environ.get('OASIS_DEFAULT_MAX_ROUNDS', '0'))
     OASIS_SIMULATION_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/simulations')
     
     # OASIS平台可用动作配置
@@ -278,7 +306,8 @@ class Config:
     ]
     
     # Report Agent配置
-    REPORT_AGENT_MAX_TOOL_CALLS = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS', '5'))
+    # T4.4: 默认 8 = 与原硬编码 MAX_TOOL_CALLS_PER_SECTION 一致（接入 Config 后行为不变）。
+    REPORT_AGENT_MAX_TOOL_CALLS = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS', '8'))
     REPORT_AGENT_MAX_REFLECTION_ROUNDS = int(os.environ.get('REPORT_AGENT_MAX_REFLECTION_ROUNDS', '2'))
     REPORT_AGENT_TEMPERATURE = float(os.environ.get('REPORT_AGENT_TEMPERATURE', '0.5'))
     
@@ -309,6 +338,51 @@ class Config:
     DEERFLOW_RESEARCH_TIMEOUT = int(os.environ.get('DEERFLOW_RESEARCH_TIMEOUT', '10800'))
     # 是否启用 DeerFlow 子代理（并行 scoped workers，更深但更慢）
     DEERFLOW_SUBAGENTS = os.environ.get('DEERFLOW_SUBAGENTS', 'false').strip().lower() == 'true'
+
+    # ============================================================
+    # EXECPLAN —— 打通「研究 → 图谱 → 模拟 → 报告」结构化契约的旋钮
+    # 默认值保持「当前行为」；所有新字段可选降级（缺失即回退旧路径）。
+    # ============================================================
+    # --- 图谱（Phase 2）---
+    # 文本抽取前，把研究确认的 actors + relationships 作为 typed 边种入图谱（T2.2）
+    GRAPH_SEED_FROM_ACTORS = os.environ.get('GRAPH_SEED_FROM_ACTORS', 'true').strip().lower() == 'true'
+    # episode 并发抽取数（>1 提速，但有轻微 dedup 排序风险；1 = 与旧行为逐字节一致）(T2.5)
+    GRAPH_BUILD_CONCURRENCY = int(os.environ.get('GRAPH_BUILD_CONCURRENCY', '1'))
+    # 建图末尾跑 Leiden 社区发现（派系/联盟，best-effort，失败不影响建图）(T2.4)
+    GRAPH_BUILD_COMMUNITIES = os.environ.get('GRAPH_BUILD_COMMUNITIES', 'false').strip().lower() == 'true'
+    # 远程 Graphiti/Zep 才需要分批限流停顿；本地 FalkorDB 关闭死延迟（T2.6）
+    GRAPHITI_REMOTE = os.environ.get('GRAPHITI_REMOTE', 'false').strip().lower() == 'true'
+
+    # --- 模拟（Phase 3）---
+    # 智能体数量上限；超过则按 (是否匹配 actor, 影响力, 邻边数) 排序保留，始终保留研究 actor（T3.13）
+    OASIS_MAX_AGENTS = int(os.environ.get('OASIS_MAX_AGENTS', '80'))
+    # 模拟 → 图谱反馈回路（本地默认开；写回模拟期间涌现的关系，报告阶段可见）(T3.10)
+    SIM_GRAPH_FEEDBACK = os.environ.get('SIM_GRAPH_FEEDBACK', 'true').strip().lower() == 'true'
+    # 反馈除自由文本 episode 外，再写带名实体的 typed 边（A LIKED/REPLIED_TO/FOLLOWED B）(T3.10)
+    SIM_TYPED_FEEDBACK_EDGES = os.environ.get('SIM_TYPED_FEEDBACK_EDGES', 'true').strip().lower() == 'true'
+    # 把 *_config 的 recsys 旋钮（recsys_type/refresh_rec_post_count/max_rec_post_len + echo→
+    # following_post_count）映射到 oasis Platform；默认关 = 用 DefaultPlatformType（与旧行为一致）(T3.12)
+    SIM_WIRE_RECSYS = os.environ.get('SIM_WIRE_RECSYS', 'false').strip().lower() == 'true'
+
+    # --- 报告（Phase 4）---
+    # 每节最少/对话模式最多工具调用（与 REPORT_AGENT_MAX_TOOL_CALLS 配套；T4.4 接入硬编码值）
+    REPORT_AGENT_MIN_TOOL_CALLS = int(os.environ.get('REPORT_AGENT_MIN_TOOL_CALLS', '4'))
+    REPORT_AGENT_MAX_TOOL_CALLS_CHAT = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS_CHAT', '2'))
+    # 用 DeerFlow ClaudeChatModel 的原生 tool calling 取代手搓 ReAct（仅 claude；默认关，最后启用）(T4.5)
+    REPORT_NATIVE_TOOLS = os.environ.get('REPORT_NATIVE_TOOLS', 'false').strip().lower() == 'true'
+
+    # --- DeerFlow 模型 / Key / 预算 单一真源（T6.4 / T6.6）---
+    SUPPORTED_DEERFLOW_MODELS = ('claude', 'codex', 'minimax', 'deepseek', 'qwen', 'glm', 'kimi')
+    # 模型 → 所需 Key 环境变量（claude/codex 用本机订阅，无需 Key）
+    DEERFLOW_KEY_ENV = {
+        'minimax': 'MINIMAX_API_KEY', 'deepseek': 'DEEPSEEK_API_KEY',
+        'qwen': 'DASHSCOPE_API_KEY', 'glm': 'ZHIPUAI_API_KEY', 'kimi': 'KIMI_API_KEY',
+    }
+    # 研究深度 → 超时预算（秒）；DEERFLOW_RESEARCH_TIMEOUT 为显式覆盖（优先级最高）(T6.6)
+    DEERFLOW_DEPTH_BUDGETS = {'quick': 900, 'standard': 2400, 'deep': 10800}
+    # deep 开场 pass 的递归上限（旧版在 bridge 内直接读 os.environ；提升为 Config 属性）(T6.6)
+    DEERFLOW_DEEP_OPENING_RECURSION_LIMIT = int(os.environ.get('DEERFLOW_DEEP_OPENING_RECURSION_LIMIT', '220'))
+
     # 统一管线产物目录
     PIPELINE_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/pipelines')
 
@@ -338,10 +412,28 @@ class Config:
         if cls.PROVIDER_META.get(cls.LLM_PROVIDER, {}).get('needs_key') and not cls.LLM_API_KEY:
             errors.append(f"LLM_PROVIDER={cls.LLM_PROVIDER} 时必须配置 LLM_API_KEY")
 
-        if not cls.ZEP_API_KEY:
-            errors.append("ZEP_API_KEY 未配置")
-        elif cls._is_placeholder(cls.ZEP_API_KEY):
-            errors.append("ZEP_API_KEY 仍是 .env.example 的占位符——请在 https://app.getzep.com/ 获取真实 Key 并写入 .env")
+        # 知识图谱已迁移到本地 Graphiti——不再需要 ZEP_API_KEY。
+        # 仅校验 GRAPH_BACKEND 取值合法；嵌入式后端无需任何外部服务或 Key。
+        _valid_backends = ('auto', 'falkordblite', 'falkordb', 'kuzu')
+        if cls.GRAPH_BACKEND not in _valid_backends:
+            errors.append(
+                f"GRAPH_BACKEND 必须是 {', '.join(_valid_backends)} 之一，当前为 '{cls.GRAPH_BACKEND}'"
+            )
+
+        # T6.4: 校验 DEERFLOW_MODEL —— 未知模型直接报错（启动期暴露拼写错误，而非 40 分钟后）；
+        # 缺失对应 Key 仅告警（claude/codex 用本机订阅无需 Key；缺 Key 会在 POST /run 的 preflight 拦截）。
+        _df_model = (cls.DEERFLOW_MODEL or 'claude').strip().lower()
+        if _df_model not in cls.SUPPORTED_DEERFLOW_MODELS:
+            errors.append(
+                f"DEERFLOW_MODEL 必须是 {', '.join(cls.SUPPORTED_DEERFLOW_MODELS)} 之一，当前为 '{cls.DEERFLOW_MODEL}'"
+            )
+        else:
+            _key_env = cls.DEERFLOW_KEY_ENV.get(_df_model)
+            if _key_env and not os.environ.get(_key_env, '').strip():
+                import logging
+                logging.getLogger('mirofish.config').warning(
+                    "DEERFLOW_MODEL=%s 需要环境变量 %s，当前未设置（研究阶段将失败）。", _df_model, _key_env
+                )
         return errors
 
 

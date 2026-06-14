@@ -6,17 +6,31 @@
 import os
 import uuid
 import time
+import logging
 import threading
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass
 
-from zep_cloud.client import Zep
-from zep_cloud import EpisodeData, EntityEdgeSourceTarget
+from .graphiti_client import Zep
+from .graphiti_client import EpisodeData, EntityEdgeSourceTarget
 
 from ..config import Config
 from ..models.task import TaskManager, TaskStatus
 from ..utils.zep_paging import fetch_all_nodes, fetch_all_edges
+from ..utils.actors import extract_actor_rows, extract_relationship_rows, REL_EDGE_NAME
 from .text_processor import TextProcessor
+
+logger = logging.getLogger("mirofish.graph_builder")
+
+# 研究 actor.type → 图谱节点标签（自定义实体类型；未知归到通用 Entity）。
+# Media/Government/Platform 都落到 Organization（与本体生成器的类型口径一致）。
+ACTOR_TYPE_TO_LABEL = {
+    "Person": "Person",
+    "Organization": "Organization",
+    "Media": "Organization",
+    "Government": "Organization",
+    "Platform": "Organization",
+}
 
 
 @dataclass
@@ -201,7 +215,7 @@ class GraphBuilderService:
         import warnings
         from typing import Optional
         from pydantic import Field
-        from zep_cloud.external_clients.ontology import EntityModel, EntityText, EdgeModel
+        from .graphiti_client.ontology import EntityModel, EntityText, EdgeModel
         
         # 抑制 Pydantic v2 关于 Field(default=None) 的警告
         # 这是 Zep SDK 要求的用法，警告来自动态类创建，可以安全忽略
@@ -285,14 +299,71 @@ class GraphBuilderService:
                 edges=edge_definitions if edge_definitions else None,
             )
     
+    def seed_actors(
+        self,
+        graph_id: str,
+        actors: Optional[Dict[str, Any]],
+        valid_at: Any = None,
+    ) -> int:
+        """T2.2: 在文本抽取前，把研究确认的 actors + relationships 直接种入图谱。
+
+        每条 ``relationships[]`` 写成一条 typed 边（``type`` 即边名）；落单的高信号 actor
+        写成 ``IS_A``→类型 的节点（让没有关系边的关键 actor 也进图谱）。``add_triplet`` 按
+        名字+embedding dedup，所以后续文本抽取会「富化」这些种子节点而非重复创建。
+        返回写入的边数。幂等：重复种同一三元组不会产生重复（T2.7 依赖此性质）。
+        """
+        rows = extract_actor_rows(actors)
+        rels = extract_relationship_rows(actors)
+        if not rows and not rels:
+            return 0
+        label = {a["name"]: ACTOR_TYPE_TO_LABEL.get(str(a.get("type") or ""), "Entity") for a in rows}
+        n = 0
+        seeded_names: set = set()
+        for r in rels:
+            etype = REL_EDGE_NAME.get(str(r.get("type", "")).upper())
+            if not etype:
+                continue
+            src, tgt = r.get("source"), r.get("target")
+            try:
+                self.client.graph.add_triplet(
+                    graph_id, src, etype, tgt,
+                    str(r.get("basis") or f"{src} {etype} {tgt}"),
+                    valid_at=valid_at,
+                    source_label=label.get(src, "Entity"),
+                    target_label=label.get(tgt, "Entity"),
+                )
+                n += 1
+                seeded_names |= {src, tgt}
+            except Exception as e:  # one bad edge must never abort seeding
+                logger.warning("[%s] seed edge skipped (%s-%s-%s): %s", graph_id, src, etype, tgt, e)
+        for a in rows:  # isolated high-signal actors (no relationship edge)
+            name = a["name"]
+            if name in seeded_names:
+                continue
+            try:
+                self.client.graph.add_triplet(
+                    graph_id, name, "IS_A", a.get("type", "Entity"),
+                    a.get("role") or name,
+                    valid_at=valid_at,
+                    source_label=label.get(name, "Entity"),
+                )
+                n += 1
+            except Exception as e:
+                logger.warning("[%s] seed node skipped (%s): %s", graph_id, name, e)
+        return n
+
     def add_text_batches(
         self,
         graph_id: str,
         chunks: List[str],
         batch_size: int = 3,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        reference_time: Any = None,
     ) -> List[str]:
-        """分批添加文本到图谱，返回所有 episode 的 uuid 列表"""
+        """分批添加文本到图谱，返回所有 episode 的 uuid 列表。
+
+        ``reference_time``（T2.3）会写入每个 chunk 的双时态 valid 锚点（缺省 = 落库时刻）。
+        """
         episode_uuids = []
         total_chunks = len(chunks)
         
@@ -308,9 +379,9 @@ class GraphBuilderService:
                     progress
                 )
             
-            # 构建episode数据
+            # 构建episode数据（T2.3: 统一锚定 reference_time）
             episodes = [
-                EpisodeData(data=chunk, type="text")
+                EpisodeData(data=chunk, type="text", reference_time=reference_time)
                 for chunk in batch_chunks
             ]
             
@@ -328,9 +399,10 @@ class GraphBuilderService:
                         if ep_uuid:
                             episode_uuids.append(ep_uuid)
                 
-                # 避免请求过快
-                time.sleep(1)
-                
+                # T2.6: 本地 FalkorDB 同步落库，无需限流停顿（纯死延迟）。仅远程后端保留。
+                if Config.GRAPHITI_REMOTE:
+                    time.sleep(1)
+
             except Exception as e:
                 if progress_callback:
                     progress_callback(f"批次 {batch_num} 发送失败: {str(e)}", 0)
@@ -344,56 +416,29 @@ class GraphBuilderService:
         progress_callback: Optional[Callable] = None,
         timeout: int = 600
     ):
-        """等待所有 episode 处理完成（通过查询每个 episode 的 processed 状态）"""
-        if not episode_uuids:
-            if progress_callback:
-                progress_callback("无需等待（没有 episode）", 1.0)
-            return
-        
-        start_time = time.time()
-        pending_episodes = set(episode_uuids)
-        completed_count = 0
-        total_episodes = len(episode_uuids)
-        
+        """T2.6: 本地 Graphiti 同步落库——``add_batch`` 返回时 episode 已抽取完毕，
+        shim 的 ``episode.get`` 恒返回 ``processed=True``，原轮询循环是空转（且占用
+        65→98% 进度带）。这里直接收尾，保留签名以兼容调用点；远程后端如需异步处理
+        状态轮询可在此恢复（gate on ``Config.GRAPHITI_REMOTE``）。
+        """
         if progress_callback:
-            progress_callback(f"开始等待 {total_episodes} 个文本块处理...", 0)
-        
-        while pending_episodes:
-            if time.time() - start_time > timeout:
-                if progress_callback:
-                    progress_callback(
-                        f"部分文本块超时，已完成 {completed_count}/{total_episodes}",
-                        completed_count / total_episodes
-                    )
-                break
-            
-            # 检查每个 episode 的处理状态
-            for ep_uuid in list(pending_episodes):
-                try:
-                    episode = self.client.graph.episode.get(uuid_=ep_uuid)
-                    is_processed = getattr(episode, 'processed', False)
-                    
-                    if is_processed:
-                        pending_episodes.remove(ep_uuid)
-                        completed_count += 1
-                        
-                except Exception as e:
-                    # 忽略单个查询错误，继续
-                    pass
-            
-            elapsed = int(time.time() - start_time)
-            if progress_callback:
-                progress_callback(
-                    f"Zep处理中... {completed_count}/{total_episodes} 完成, {len(pending_episodes)} 待处理 ({elapsed}秒)",
-                    completed_count / total_episodes if total_episodes > 0 else 0
-                )
-            
-            if pending_episodes:
-                time.sleep(3)  # 每3秒检查一次
-        
-        if progress_callback:
-            progress_callback(f"处理完成: {completed_count}/{total_episodes}", 1.0)
+            n = len(episode_uuids)
+            progress_callback(
+                f"文本块已处理完成（{n} 个）" if n else "无需等待（没有 episode）",
+                1.0,
+            )
     
+    def build_communities(self, graph_id: str) -> List[Dict[str, Any]]:
+        """T2.4: best-effort 社区发现（派系/联盟），返回 [{uuid,name,summary}]；失败返回 []。
+
+        永不让社区发现的失败影响建图（catch+log）。重跑会清空旧社区（graphiti 语义）。
+        """
+        try:
+            return self.client.graph.build_communities(graph_id) or []
+        except Exception as e:
+            logger.warning("[%s] build_communities skipped: %s", graph_id, e)
+            return []
+
     def _get_graph_info(self, graph_id: str) -> GraphInfo:
         """获取图谱信息"""
         # 获取节点（分页）

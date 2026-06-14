@@ -221,6 +221,11 @@
           <span class="legend-dot" :style="{ background: type.color }"></span>
           <span class="legend-label">{{ type.name }}</span>
         </div>
+        <!-- T5.3: 研究种子图例（仅在有种子 actor 时显示） -->
+        <div class="legend-item" v-if="seedActorSet.size">
+          <span class="legend-dot seed-legend-dot"></span>
+          <span class="legend-label">{{ L('研究确认', 'Researched') }}</span>
+        </div>
       </div>
     </div>
     
@@ -238,13 +243,40 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import * as d3 from 'd3'
+import { L } from '../i18n'
 
 const props = defineProps({
   graphData: Object,
   loading: Boolean,
   currentPhase: Number,
-  isSimulating: Boolean
+  isSimulating: Boolean,
+  // T5.3: 研究确认的 actor 名列表；匹配到的节点加「研究种子」环 + 图例
+  seedActors: { type: Array, default: () => [] }
 })
+
+// T5.3: 归一化（NFKC + lowercase + trim）的种子名集合，用于节点匹配
+const seedActorSet = computed(() => {
+  const s = new Set()
+  for (const n of (props.seedActors || [])) {
+    if (n == null) continue
+    try {
+      s.add(String(n).normalize('NFKC').toLowerCase().trim())
+    } catch (e) {
+      s.add(String(n).toLowerCase().trim())
+    }
+  }
+  return s
+})
+
+function isSeedNode(node) {
+  if (!node || !seedActorSet.value.size) return false
+  const nm = node.name || node.id || ''
+  try {
+    return seedActorSet.value.has(String(nm).normalize('NFKC').toLowerCase().trim())
+  } catch (e) {
+    return seedActorSet.value.has(String(nm).toLowerCase().trim())
+  }
+}
 
 const emit = defineEmits(['refresh', 'toggle-maximize'])
 
@@ -650,10 +682,23 @@ const renderGraph = () => {
   // Nodes group
   const nodeGroup = g.append('g').attr('class', 'nodes')
   
+  // T5.3: 研究种子节点的高亮外环（橙色），在节点 circle 之前绘制，置于其下方
+  const seedRings = nodeGroup.selectAll('circle.seed-ring')
+    .data(nodes.filter(d => isSeedNode(d)))
+    .enter().append('circle')
+    .attr('class', 'seed-ring')
+    .attr('r', 14)
+    .attr('fill', 'none')
+    .attr('stroke', '#FF4500')
+    .attr('stroke-width', 2)
+    .attr('stroke-dasharray', '3,2')
+    .style('pointer-events', 'none')
+
   // Node circles
-  const node = nodeGroup.selectAll('circle')
+  const node = nodeGroup.selectAll('circle.node-dot')
     .data(nodes)
     .enter().append('circle')
+    .attr('class', 'node-dot')
     .attr('r', 10)
     .attr('fill', d => getColor(d.type))
     .attr('stroke', '#fff')
@@ -765,6 +810,10 @@ const renderGraph = () => {
     })
 
     node
+      .attr('cx', d => d.x)
+      .attr('cy', d => d.y)
+
+    seedRings
       .attr('cx', d => d.x)
       .attr('cy', d => d.y)
 
@@ -958,6 +1007,14 @@ onUnmounted(() => {
 
 .legend-label {
   white-space: nowrap;
+}
+
+/* T5.3: 研究种子图例点（空心橙色虚环，呼应图谱里的 seed-ring） */
+.seed-legend-dot {
+  background: transparent;
+  border: 2px dashed #FF4500;
+  width: 12px;
+  height: 12px;
 }
 
 /* Edge Labels Toggle - Top Right */

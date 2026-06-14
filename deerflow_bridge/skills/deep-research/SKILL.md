@@ -132,6 +132,7 @@ When the question is predictive (this pipeline's main case), research for *forec
 
 - **Outside view first.** Find the **reference class and base rates**: how often do comparable projects ship on time, mergers clear review, conflicts de-escalate within a year? Search for historical analogues and their outcomes before tuning to case specifics.
 - **Actors & incentives.** For each key actor: stated position (their words, S1), revealed behavior (what they *did*), capabilities, constraints, and what they gain/lose under each outcome. Disagreement between stated and revealed is itself evidence.
+- **Actor relationship graph.** Map the *directed, typed* relationships between the named actors — who **allies with / opposes / competes with / regulates / depends on / partners with / influences** whom — each with a one-line researched basis. This relationship graph (not just the per-actor profiles) is a first-class output: it seeds the downstream knowledge graph, the personas' social networks, and the simulation's initial follow structure.
 - **Drivers & indicators.** Identify the 3–6 variables that actually move the outcome, and for each a **watchable indicator** (a number, decision, or event with a date) that would signal which way things are breaking. These power downstream simulation and monitoring.
 - **Trend vs. break.** Establish the trend with data, then research what could structurally break it (policy, technology, capacity limits) — extrapolation and rupture need different evidence.
 - **Timeline discipline.** Build the dated sequence of events; causation claims that violate chronology die here.
@@ -185,6 +186,7 @@ Any NO → one targeted pass on that gap only. Do not restart broad searching.
 5. **Flags preserved downstream**: single-origin claims, actor self-claims, rumor-stage items, fragile assumptions.
 6. **For forecasts**: drivers, scenarios with rough likelihoods, and the dated indicators that would confirm/deny each.
 7. **No S4 citations, ever.** If something is only known via S4, it is not known.
+8. **Structured handoff (first-class, not just prose)**: make the report explicitly carry (a) the **actor relationship graph** — directed, typed edges between named actors with a one-line basis each (§8); and (b) a **situation brief** — current situation, how it got here (context), the forces in tension (dynamics), the 3–6 fault lines actors will argue over, and the catalysts that would shift things. A downstream structured-extraction pass converts these into the simulation contract, so they must be unambiguous and grounded in the evidence above.
 
 ## 13. Failure Modes
 

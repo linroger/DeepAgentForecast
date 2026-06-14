@@ -15,10 +15,16 @@ dependencies = [
     
     # LLM 相关
     "openai>=1.0.0",
-    
-    # Zep Cloud
-    "zep-cloud==3.13.0",
-    
+
+    # 本地知识图谱（替代 Zep Cloud，无需 API Key）：
+    #   graphiti-core = 本地时序知识图谱内核（Zep Cloud 的开源底座）。
+    #   falkordblite = 嵌入式 FalkorDB（无需 Docker，Python>=3.12）。
+    #   sentence-transformers = 本地多语言向量嵌入（中英文）。
+    "graphiti-core==0.29.2",
+    "falkordblite>=0.5.0; python_version>='3.12'",
+    "redis<8; python_version>='3.12'",
+    "sentence-transformers>=3.0.0",
+
     # OASIS 社交媒体模拟
     "camel-oasis==0.2.5",
     "camel-ai==0.2.78",
@@ -40,6 +46,13 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pipreqs>=0.5.0",
 ]
+
+[tool.uv]
+# camel-oasis==0.2.5 hard-pins neo4j==5.23.0 while graphiti-core declares neo4j>=5.26.0.
+# We never use the Neo4j backend (the local knowledge graph runs on embedded FalkorDB), so
+# the Neo4j client version is irrelevant at runtime. Override to satisfy both and unblock
+# resolution. Verified: graphiti-core 0.29.2 builds + searches fine with neo4j 5.23.0.
+override-dependencies = ["neo4j==5.23.0"]
 
 [build-system]
 requires = ["hatchling"]

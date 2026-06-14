@@ -135,6 +135,67 @@ class LLMClient:
                 logger.warning("chat_json 解析失败，降温重发一次")
         raise ValueError(f"LLM返回的JSON格式无效: {last_response[:500]}")
 
+    # ------------------------------------------------------------------
+    # 原生 tool calling（T4.5）—— 取代手搓 ReAct 的正则解析
+    # ------------------------------------------------------------------
+    def supports_native_tools(self) -> bool:
+        """是否支持原生 function/tool calling。
+
+        OpenAI 兼容提供方（openai/kimi/minimax/deepseek/qwen/glm）通过 OpenAI SDK 的 ``tools=``
+        原生支持；CLI 提供方（claude-cli/codex-cli）无原生工具，返回 False → 报告退回 ReAct 兜底。
+        仅当 Config.REPORT_NATIVE_TOOLS=true 时启用（默认关，保持现有行为）。
+        """
+        return bool(
+            getattr(Config, "REPORT_NATIVE_TOOLS", False)
+            and self.provider in OPENAI_COMPATIBLE_PROVIDERS
+            and self._openai_client is not None
+        )
+
+    def chat_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools_schema: List[Dict[str, Any]],
+        temperature: float = 0.4,
+        max_tokens: int = 4096,
+    ) -> Dict[str, Any]:
+        """原生 tool calling 单轮调用。
+
+        Args:
+            messages: OpenAI 格式消息（可含 role=tool 的工具结果回填）。
+            tools_schema: OpenAI tools schema 列表（[{type:'function', function:{name,description,parameters}}]）。
+        Returns:
+            {"content": str, "tool_calls": [{"id","name","arguments"(dict)}]}。无工具调用时 tool_calls=[]。
+        Raises:
+            RuntimeError: 非原生提供方调用 / SDK 失败。
+        """
+        if self._openai_client is None:
+            raise RuntimeError("chat_with_tools 仅支持 OpenAI 兼容提供方")
+        kwargs: Dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "tools": tools_schema,
+            "tool_choice": "auto",
+        }
+        extra_body = Config.reasoning_extra_body()
+        if extra_body:
+            kwargs["extra_body"] = extra_body
+        response = self._openai_client.chat.completions.create(**kwargs)
+        choice = response.choices[0]
+        msg = choice.message
+        tool_calls = []
+        for tc in (getattr(msg, "tool_calls", None) or []):
+            try:
+                args = json.loads(tc.function.arguments) if tc.function.arguments else {}
+            except (json.JSONDecodeError, TypeError):
+                args = {}
+            tool_calls.append({"id": tc.id, "name": tc.function.name, "arguments": args})
+        return {
+            "content": self._clean_content(msg.content or ""),
+            "tool_calls": tool_calls,
+        }
+
     @staticmethod
     def _parse_json_response(response: str) -> Optional[Dict[str, Any]]:
         """尽力把模型输出解析成 JSON 对象；失败返回 None（不抛异常）。"""
@@ -298,6 +359,18 @@ class LLMClient:
             env.pop('ANTHROPIC_API_KEY', None)
         return env
 
+    @staticmethod
+    def _codex_cli_env() -> Dict[str, str]:
+        """codex-cli 子进程环境：默认剥离 OPENAI_API_KEY（与 _claude_cli_env 对称，T6.5）。
+
+        游离的 OPENAI_API_KEY 会让 `codex` CLI 弃用 ChatGPT 订阅 OAuth 改走 API 计费。
+        订阅是本提供方的设计前提，故默认剥离；确需 API Key 计费时设 LLM_CLI_USE_API_KEY=true 保留。
+        """
+        env = dict(os.environ)
+        if os.environ.get('LLM_CLI_USE_API_KEY', '').strip().lower() != 'true':
+            env.pop('OPENAI_API_KEY', None)
+        return env
+
     def _chat_claude_cli(
         self,
         messages: List[Dict[str, str]],
@@ -372,7 +445,7 @@ class LLMClient:
                 ["codex", "exec", "--skip-git-repo-check"],
                 input=prompt,
                 capture_output=True, text=True, timeout=CLI_TIMEOUT,
-                cwd="/tmp"
+                cwd="/tmp", env=self._codex_cli_env()
             )
 
             if result.returncode != 0:

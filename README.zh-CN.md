@@ -81,14 +81,14 @@
 
 DeepAgentForecast 是一条统一管线，串联两大引擎，并由一张知识图谱与一个报告 Agent 黏合：
 
-- **DeerFlow —— 深度研究引擎**
-  基于 LangGraph 的深度研究「超级智能体」：联网搜索 + 全文抓取，多角度研究，写出一份结构化的研究档案。它运行在**独立的子进程与独立的 Python 虚拟环境**中，与后端的依赖隔离。
+- **DeerFlow 2.0 —— 深度研究引擎**
+  一个基于 LangGraph 的超级智能体框架：联网搜索 + 全文抓取，多角度研究，产出结构化的研究档案。它运行在**自己的子进程与独立的 Python 虚拟环境**中，与后端的依赖隔离。
 
 - **MiroFish / OASIS —— 群体模拟引擎**
   基于 CAMEL-AI 的 **OASIS** 多智能体社会模拟引擎：拉起成百上千个 LLM 人格，在模拟的 Twitter + Reddit 上互动。
 
-- **Zep Cloud 时序知识图谱（GraphRAG）—— 黏合层**
-  把研究档案分块灌入 Zep 的时序知识图谱，服务端抽取实体与关系，作为后续人格生成与报告检索的统一记忆底座。
+- **Graphiti 时序知识图谱（GraphRAG）—— 黏合层**
+  用开源 **Graphiti**（Zep Cloud 的开源底座）在**嵌入式 FalkorDB** 上本地运行：把研究档案分块灌入时序知识图谱，由你配置的 `LLM_PROVIDER` 在本地抽取实体与关系、由本地 sentence-transformers 多语言模型计算向量嵌入，作为后续人格生成与报告检索的统一记忆底座。无需 Docker、无需服务进程、无需账号、无需 API Key。
 
 - **ReportAgent —— 报告 Agent**
   一个带 `insight_forge` 工具的 ReAct 循环，对「知识图谱 + 模拟结果」做工具增强的检索，综合写出最终的分章节预测报告。
@@ -108,9 +108,9 @@ DeepAgentForecast 是一条统一管线，串联两大引擎，并由一张知�
                           └───┬───────────────┬──────────────┬───────────┘
                               │               │              │
               ┌───────────────▼──┐   ┌────────▼────────┐  ┌──▼──────────────┐
-              │  DeerFlow         │   │  Zep Cloud      │  │  OASIS           │
+              │  DeerFlow         │   │  Graphiti       │  │  OASIS           │
               │  深度研究引擎      │   │  时序知识图谱    │  │  群体模拟引擎     │
-              │ (独立子进程/venv) │   │  (GraphRAG)     │  │ (Twitter+Reddit) │
+              │ (独立子进程/venv) │   │ (本地/GraphRAG) │  │ (Twitter+Reddit) │
               └───────────────────┘   └────────┬────────┘  └──┬──────────────┘
                                                │              │
                                           ┌────▼──────────────▼────┐
@@ -155,7 +155,7 @@ flowchart LR
 |------|------|------|
 | 1 | **research（深度研究）** | DeerFlow 在自己的子进程（独立 Python venv，见下文）中运行，联网研究，并写出一份基于文件的「交接契约」：`research_report.md`、`actors.json`、`sources.json`、`prediction_requirement.txt`、`meta.json`、`research_progress.log`。 |
 | 2 | **ontology（本体生成）** | 由 LLM 依据研究档案与预测问题，推导出实体类型（entity types）与关系类型（edge types）。 |
-| 3 | **graph（图谱构建）** | 将研究档案分块，灌入 Zep 时序知识图谱（GraphRAG）；实体/关系在服务端被抽取。 |
+| 3 | **graph（图谱构建）** | 将研究档案分块，灌入本地运行的 Graphiti 时序知识图谱（GraphRAG，嵌入式 FalkorDB）；实体/关系由你配置的本地 LLM 抽取，向量嵌入由本地 sentence-transformers 多语言模型计算。 |
 | 4 | **prepare（环境搭建）** | 为每个关键图谱实体生成一位数字人格，并由一个「环境 Agent」生成模拟配置（设定轮数/时序等参数）。 |
 | 5 | **run（群体模拟）** | OASIS 运行 N 轮双平台（Twitter + Reddit）多智能体模拟；人格们发帖/评论/点赞，群体动态自然涌现。 |
 | 6 | **report（预测报告）** | ReportAgent（一个带 `insight_forge` 工具的 ReAct 循环）从图谱 + 模拟结果中检索，写出一份分章节的预测报告。 |
@@ -167,7 +167,7 @@ flowchart LR
 - **一句话 → 完整预测**：单个问题端到端驱动「研究 → 模拟 → 报告」整条管线，无需在阶段间手动搬运中间产物。
 - **自主深度研究**：多角度联网搜索 + 全文抓取，沉淀为带行动者与来源的结构化研究档案。选择 `deep` 深度时，DeerFlow 会执行分阶段多轮协议：来源版图、原始证据、行动者/激励、矛盾/风险、预测输入，再进入最终长文综合。
 - **研究档案驱动的人设**：结构化行动者档案（`actors.json`：每位真实世界行动者的角色、立场、影响力、记忆）为本体生成、**智能体人格、每个智能体的立场/影响力配置以及模拟的初始帖子**提供种子 —— 智能体从调研得来的事实出发，而非 LLM 的凭空猜测。
-- **时序知识图谱（GraphRAG）**：研究成果灌入 Zep Cloud，服务端抽取实体与关系，可随时检索查询。
+- **时序知识图谱（GraphRAG）**：研究成果灌入本地运行的 Graphiti（嵌入式 FalkorDB），由本地 LLM 抽取实体与关系、本地嵌入模型建索引，可随时检索查询 —— 全程本地、无需云端账号或 API Key。
 - **多智能体群体模拟**：数以百计的 LLM 人格在模拟的 Twitter + Reddit 上互动；涌现的群体动态为预测提供输入。
 - **工具增强的预测综合**：ReAct ReportAgent 在动笔之前同时检索知识图谱与模拟结果。
 - **统一仪表盘**：实时日志、研究档案、知识图谱、模拟信息流与预测报告，全部收纳在一个带吸顶六阶段时间线的视图里。
@@ -187,17 +187,17 @@ flowchart LR
 |------|------|
 | **Node.js ≥ 20.19** | 前端（Vue 3 + Vite 7）需要。 |
 | **Python 3.11 – 3.12** | 后端需要 —— `camel-ai`/`camel-oasis` 模拟技术栈仅支持 ≤ 3.12，因此后端 venv **固定使用 3.12**（`backend/.python-version` + `uv sync --python 3.12`）。若系统默认解释器是 3.13/3.14，会直接导致安装失败。 |
-| **Python ≥ 3.12（推荐 3.13）** | DeerFlow 深度研究引擎运行在**自己独立的 venv** 中。 |
+| **Python 3.12** | DeerFlow 深度研究引擎运行在**自己独立的 venv** 中（DeerFlow 2.0 固定使用 Python 3.12）。 |
 | **uv** | 两套 venv 共用的 Python 包管理器。安装：`curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| **git** | 必需 —— `setup.sh` 用它自动下载 DeerFlow 研究引擎。 |
-| **Zep Cloud API Key** | **始终必填**（免费额度即可）。申请地址：<https://app.getzep.com/>。 |
-| **LLM** | 默认使用本机 `claude` 或 `codex` CLI（无需 API Key）；`openai` / `kimi` / `minimax` / `deepseek` / `qwen` / `glm` 等 OpenAI 兼容 API 提供方需要 `LLM_API_KEY`。 |
+| **git** | 仅在可选的上游克隆回退路径下需要 —— `setup.sh` 默认从仓库内随附的 `deer-flow-2.0-m1-rc3/` 源码播种引擎；仅当该目录不存在时才回退到用 git 浅克隆上游。 |
+| **知识图谱** | 无需任何账号或 API Key。时序知识图谱由开源 **Graphiti** 在**嵌入式 FalkorDB**（`falkordblite`）上本地运行 —— 无需 Docker、无需服务进程。首次建图会自动下载一次本地嵌入模型（约 470MB）并缓存。 |
+| **LLM** | 默认使用本机 `claude` 或 `codex` CLI（无需 API Key）；`openai` / `kimi` / `minimax` / `deepseek` / `qwen` / `glm` 等 OpenAI 兼容 API 提供方需要 `LLM_API_KEY`。建图阶段复用同一个 `LLM_PROVIDER`，连免 Key 的 CLI 提供方也能用。 |
 
 ---
 
 ## 快速开始
 
-三步走：**安装 → 配置 → 运行**。DeerFlow 位于仓库内的 `deer-flow/` 目录（由 `setup.sh` 自动下载、已被 gitignore），使其 LangChain/LangGraph 依赖与后端完全隔离；它运行在自己的 venv（`deer-flow/backend/.venv`）里。
+三步走：**安装 → 配置 → 运行**。DeerFlow 位于仓库内的 `deer-flow/` 目录（由 `setup.sh` 从随附的 2.0 源码播种或固定克隆装配而成、已被 gitignore），使其 LangChain/LangGraph 依赖与后端完全隔离；它运行在自己的 venv（`deer-flow/backend/.venv`）里。
 
 ### 1. 安装
 
@@ -207,7 +207,7 @@ flowchart LR
 ./setup.sh
 ```
 
-它会检查前置条件，然后进入**交互式提供方选择器**：在本机 `claude` / `codex` CLI（零配置、无需 API Key——检测到的 CLI 会被预选为默认项）与六个托管 API 提供方（OpenAI 兼容 / Kimi / MiniMax / DeepSeek / Qwen / GLM）之间选择。选择 API 提供方时会提示你输入 **API Key**（静默输入、绝不回显），并用一次 1-token 补全**实时验证该 Key**——写错的 Key 几秒内即被发现，而不是在研究跑了 40 分钟后才暴露。随后它会提示你填入 Zep Key、从 `.env.example` 生成 `.env`、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**），然后**自动下载 DeerFlow**：若仓库内 `deer-flow/` 不存在，则从 <https://github.com/bytedance/deer-flow> 浅克隆（固定到一个已知可用的提交），并**裁剪到运行所需的最小集合**（`backend/`、`skills/`、`config.yaml`——上游的 Web 前端、文档、docker 与 CI 在本工作流中均用不到），再应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁与中间件补丁、经过强化的来源分级 deep-research 技能、`config.yaml`），并构建 DeerFlow 的隔离 venv（Python 3.13）。脚本幂等，可安全地重复运行。
+它会检查前置条件，然后进入**交互式提供方选择器**：在本机 `claude` / `codex` CLI（零配置、无需 API Key——检测到的 CLI 会被预选为默认项）与六个托管 API 提供方（OpenAI 兼容 / Kimi / MiniMax / DeepSeek / Qwen / GLM）之间选择。选择 API 提供方时会提示你输入 **API Key**（静默输入、绝不回显），并用一次 1-token 补全**实时验证该 Key**——写错的 Key 几秒内即被发现，而不是在研究跑了 40 分钟后才暴露。随后它会从 `.env.example` 生成 `.env`、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**，其中包含本地知识图谱依赖 `graphiti-core` / `falkordblite` / sentence-transformers），然后**装配 DeerFlow**：**优先从随附的 2.0 源码 `deer-flow-2.0-m1-rc3/` 播种 `deer-flow/`**（若该目录不存在则回退到从 <https://github.com/bytedance/deer-flow> 固定到一个已知可用提交的浅克隆），并**裁剪到运行所需的最小集合**（`backend/`、`skills/`、`config.yaml`——上游的 Web 前端、文档、docker 与 CI 在本工作流中均用不到），再应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁与中间件补丁、经过强化的来源分级 deep-research 技能、`config.yaml`），并在 **Python 3.12** 上构建 DeerFlow 的隔离 venv。脚本幂等，可安全地重复运行。
 
 如需覆盖默认值，可通过环境变量：`DEERFLOW_DIR`（位置）、`DEERFLOW_REPO`（克隆地址）、`DEERFLOW_REF`（固定提交；设为 `=main` 可跟踪 HEAD）、`SETUP_NONINTERACTIVE=1`（跳过选择器、走自动探测——CI / 管道运行会自动如此）。它们由 `setup.sh` 从 **shell 环境**读取（不是 `.env` 配置项），例如 `DEERFLOW_REF=main ./setup.sh`。重复运行是幂等的：选择器默认选中你当前 `.env` 里的提供方，直接回车绝不会覆盖既有配置。
 
@@ -217,8 +217,10 @@ flowchart LR
 # 1. 安装 Node 依赖（根目录 + 前端）与后端 venv（固定 Python 3.12）
 npm run setup:all
 
-# 2. 下载 DeerFlow 研究引擎（需要 git），克隆到仓库内（已被 gitignore）
-git clone https://github.com/bytedance/deer-flow deer-flow
+# 2. 从随附的 DeerFlow 2.0 源码播种研究引擎到仓库内（已被 gitignore）
+cp -R deer-flow-2.0-m1-rc3 deer-flow
+# 回退方式（仅当随附目录不存在时，需要 git）：
+#   git clone --depth 1 https://github.com/bytedance/deer-flow deer-flow
 
 # 3. 应用 deerflow_bridge/ 桥接覆盖层
 cp deerflow_bridge/deerflow_research.py deer-flow/deerflow_research.py
@@ -227,14 +229,14 @@ cp deerflow_bridge/patches/middlewares/*.py deer-flow/backend/packages/harness/d
 cp deerflow_bridge/skills/deep-research/SKILL.md deer-flow/skills/public/deep-research/SKILL.md
 cp deerflow_bridge/config.yaml          deer-flow/config.yaml      # 仅当其不存在时
 
-# 4. 构建 DeerFlow 的隔离研究 venv（Python ≥ 3.12，推荐 3.13）
+# 4. 构建 DeerFlow 的隔离研究 venv（DeerFlow 2.0 固定 Python 3.12）
 UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv \
-  uv sync --project deer-flow/backend --python 3.13
+  uv sync --project deer-flow/backend --python 3.12
 ```
 
 ### 2. 配置
 
-在 `.env` 中至少填入你的 **Zep Key**（若选择了托管提供方，还需相应的 API Key）—— 详见下文的 [`.env` 配置参考](#env-配置参考)。如果使用 `claude` CLI，确保已登录即可（运行一次 `claude`）。
+默认配置开箱即用 —— 知识图谱在本地运行，无需任何 Key。仅当选择了托管提供方时，才需在 `.env` 中填入相应的 API Key —— 详见下文的 [`.env` 配置参考](#env-配置参考)。如果使用 `claude` CLI，确保已登录即可（运行一次 `claude`）。
 
 然后做一次体检，确认一切就绪 —— **doctor 几秒钟就能查完整个环境**（工具版本、两套 venv、DeerFlow 覆盖层、所选提供方的凭据）：
 
@@ -299,12 +301,20 @@ npm run dev        # 后端 :5001 + 前端 :3000
 
 ```bash
 LLM_PROVIDER=claude-cli      # claude-cli | codex-cli | openai | kimi | minimax | deepseek | qwen | glm
-ZEP_API_KEY=...              # 始终必填（免费额度即可）
 
 # 仅 openai / kimi / minimax / deepseek / qwen / glm 需要：
 LLM_API_KEY=...
 LLM_BASE_URL=...             # kimi/minimax/deepseek/qwen/glm 已内置合理默认值
 LLM_MODEL_NAME=...           # kimi/minimax/deepseek/qwen/glm 已内置合理默认值
+
+# 本地知识图谱 / Graphiti（可选 —— 全部有合理默认值，开箱即用、无需任何 Key）：
+GRAPH_BACKEND=auto               # auto（→ 嵌入式 FalkorDB）| falkordblite | kuzu | falkordb
+GRAPHITI_DATA_DIR=...            # 本地图数据持久化目录（默认 backend/uploads/graphiti_db）
+GRAPHITI_EMBED_MODEL=...         # 本地嵌入模型（默认 paraphrase-multilingual-MiniLM-L12-v2，384 维，中英文）
+GRAPHITI_EMBED_DIM=...           # 嵌入维度（需与模型匹配；默认 384）
+GRAPHITI_RERANKER=rrf            # 检索重排：rrf（默认）| bge（本地交叉编码器）
+FALKORDB_HOST=...                # 指向外部 FalkorDB 服务时使用（不设则用嵌入式）
+FALKORDB_PORT=...                # 同上
 
 # DeerFlow 深度研究（可选 —— 全部有合理默认值）：
 DEERFLOW_DIR=...                 # deer-flow 检出目录的路径（默认 ./deer-flow）
@@ -325,8 +335,8 @@ ZHIPUAI_API_KEY=...              # DEERFLOW_MODEL=glm
 # 调优（可选）：
 OASIS_SEMAPHORE=30               # 模拟期间 API 提供方的 LLM 并发调用上限
 OASIS_CLI_SEMAPHORE=3            # CLI 提供方的 LLM 并发调用上限
-ZEP_MAX_RETRIES=4                 # Zep 429 / 瞬态错误重试次数
-ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS=90
+ZEP_MAX_RETRIES=4                 # 本地图谱读取瞬态错误的重试次数（保留旧变量名）
+ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS=90  # 重试之间的最大等待秒数（本地运行不再有限流）
 FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + 自动重载
 ```
 
@@ -334,11 +344,16 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 
 | 变量 | 必填 | 用途 |
 |---|---|---|
-| `LLM_PROVIDER` | 是 | 选择当前生效的提供方。取值之一：`claude-cli`、`codex-cli`、`openai`、`kimi`、`minimax`、`deepseek`、`qwen`、`glm`。 |
-| `ZEP_API_KEY` | **始终必填** | 时序知识图谱所用的 Zep Cloud API Key。 |
+| `LLM_PROVIDER` | 是 | 选择当前生效的提供方。取值之一：`claude-cli`、`codex-cli`、`openai`、`kimi`、`minimax`、`deepseek`、`qwen`、`glm`。建图阶段复用此提供方在本地抽取实体/关系，与具体提供方无关。 |
 | `LLM_API_KEY` | openai/kimi/minimax/deepseek/qwen/glm | 托管提供方的 API Key。 |
 | `LLM_BASE_URL` | openai/kimi/minimax/deepseek/qwen/glm | OpenAI 兼容端点的 Base URL（kimi/minimax/deepseek/qwen/glm 已内置默认值）。 |
 | `LLM_MODEL_NAME` | openai/kimi/minimax/deepseek/qwen/glm | 请求的模型名（kimi/minimax/deepseek/qwen/glm 已内置默认值）。 |
+| `GRAPH_BACKEND` | 否 | 本地知识图谱后端。默认 `auto`（→ 嵌入式 FalkorDB，无需 Docker / 服务进程）；其它取值 `falkordblite` / `kuzu` / `falkordb`。 |
+| `GRAPHITI_DATA_DIR` | 否 | 本地图数据的持久化目录（默认 `backend/uploads/graphiti_db`）。 |
+| `GRAPHITI_EMBED_MODEL` | 否 | 本地 sentence-transformers 嵌入模型（默认 `paraphrase-multilingual-MiniLM-L12-v2`，覆盖中英文；首次建图自动下载约 470MB 并缓存）。 |
+| `GRAPHITI_EMBED_DIM` | 否 | 嵌入向量维度（需与 `GRAPHITI_EMBED_MODEL` 匹配；默认 `384`）。 |
+| `GRAPHITI_RERANKER` | 否 | 检索结果重排方式：`rrf`（默认，倒数排名融合）或 `bge`（本地交叉编码器）。 |
+| `FALKORDB_HOST` / `FALKORDB_PORT` | 否 | 指向外部 FalkorDB 服务（而非嵌入式）时设置；不设置则使用嵌入式 `falkordblite`。 |
 | `DEERFLOW_DIR` | 否 | `deer-flow` 检出目录的位置（默认仓库内 `./deer-flow`）。 |
 | `DEERFLOW_PYTHON` | 否 | DeerFlow 隔离 venv 的 Python 解释器（自动探测 `deer-flow/backend/.venv`）。 |
 | `DEERFLOW_MODEL` | 否 | 研究模型：`claude`、`minimax`、`deepseek`、`qwen`、`glm`、`codex` 或 `kimi`。 |
@@ -351,7 +366,7 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 | `DEERFLOW_RESEARCH_LANGUAGE` | 否 | 研究产出的语言。 |
 | `DEERFLOW_RESEARCH_TIMEOUT` | 否 | 研究看门狗超时覆盖（秒）。不设置 = 随深度自适应：quick 900 / standard 2400 / deep 10800。若看门狗触发时报告其实已经写完，该次运行会被抢救回来而不是丢弃。 |
 | `OASIS_SEMAPHORE` / `OASIS_CLI_SEMAPHORE` | 否 | 模拟期间的 LLM 并发调用上限（API 提供方 / CLI 提供方）。双平台并行运行时每个平台各分一半，因此该上限是真正的全局在途上限。 |
-| `ZEP_MAX_RETRIES` / `ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS` | 否 | Zep 免费额度返回 429 和 `Retry-After` 时的重试预算与最大等待秒数。默认分别为 `4` 和 `90`。 |
+| `ZEP_MAX_RETRIES` / `ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS` | 否 | 本地图谱读取遇到瞬态错误时的重试预算与最大等待秒数（保留旧变量名；本地运行不再有 429 / 限流）。默认分别为 `4` 和 `90`。 |
 | `LLM_CLI_USE_API_KEY` | 否 | `claude-cli` 默认会从子进程环境中剥除多余的 `ANTHROPIC_API_KEY`（否则会悄悄把计费从订阅切到 API）。设为 `true` 可保留。 |
 | `FLASK_DEBUG` | 否 | 仅限开发（默认 `false`）：开启 Werkzeug 调试器 + 自动重载（重载会杀掉运行中的管线）。 |
 
@@ -365,7 +380,7 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/research/run` | 触发一次运行。请求体 `{prompt, mode(full\|research_only), depth(quick\|standard\|deep), max_rounds?, project_name?}` → 返回 `{pipeline_id}`。会先对整套配置做预检（Zep Key、提供方凭据、DeerFlow 检出），有问题时返回可操作的 `400`，而不是跑到一半才失败。 |
+| `POST` | `/research/run` | 触发一次运行。请求体 `{prompt, mode(full\|research_only), depth(quick\|standard\|deep), max_rounds?, project_name?}` → 返回 `{pipeline_id}`。会先对整套配置做预检（本地图谱后端可用性、提供方凭据、DeerFlow 检出），有问题时返回可操作的 `400`，而不是跑到一半才失败。 |
 | `POST` | `/research/<id>/cancel` | **取消一条运行中的管线** —— 杀掉研究子进程组 / 停止 OASIS 模拟；其余阶段在下一个检查点退出。 |
 | `POST` | `/research/<id>/resume` | **恢复失败/被取消的管线** —— 复用已完成的阶段（研究档案、本体、图谱、已完成的模拟），从失败的阶段重新开始。恢复前会先做配置预检。 |
 | `DELETE` | `/research/<id>` | **删除一条已结束的运行记录**（含 handoff 产物）。运行中的管线须先取消（返回 `409`）。 |
@@ -456,8 +471,8 @@ DeepAgentForecast/
 │       ├── router/
 │       └── i18n.js           # 双语（EN / 中文）
 ├── docs/                     # GitHub Pages 演示站点 + 媒体资产（docs/media/）
-└── deer-flow/                # DeerFlow 深度研究引擎（setup.sh 自动下载、已被 gitignore；
-                              #   独立 venv，与后端依赖隔离）
+└── deer-flow/                # DeerFlow 深度研究引擎（setup.sh 从随附的 2.0 源码播种或固定克隆装配、
+                              #   已被 gitignore；独立 venv，与后端依赖隔离）
 ```
 
 ---
@@ -466,14 +481,14 @@ DeepAgentForecast/
 
 | 问题 | 排查方向 |
 |------|----------|
-| 启动即报缺少 Zep 配置 | `ZEP_API_KEY` 始终必填。检查根目录 `.env` 是否已填入真实 Key（免费额度可在 <https://app.getzep.com/> 申请）。 |
-| 报告阶段报 `status_code: 429` / `Rate limit exceeded for FREE plan` | 这是 Zep 免费额度限流。后端现在会解析 `Retry-After`、等待后重试，并在报告生成中复用节点/边快照以减少重复读取。超大运行可降低深度/并发，或在 `.env` 中调高 Zep 重试参数。 |
-| 研究阶段（stage 1）无法运行 | DeerFlow 需存在于仓库内的 `deer-flow/` 目录、已应用 `deerflow_bridge/` 桥接覆盖层、且已构建好自己的 venv（Python ≥ 3.12）。重新运行 `./setup.sh`（会自动克隆并应用覆盖层）；如需更新引擎，删除 `deer-flow/` 后重跑 `./setup.sh`。也可设置 `DEERFLOW_DIR` 指向其位置。 |
+| 图谱构建（stage 3）报本地图谱后端不可用 / 找不到 `graphiti` / `falkordblite` | 知识图谱依赖（`graphiti-core`、`falkordblite`、sentence-transformers）随后端 venv 一起安装。重新运行 `./setup.sh`（或在 `backend/` 下 `uv sync`）即可补齐。注意首次建图会自动下载一次本地嵌入模型（约 470MB），请保证网络与磁盘空间充足并耐心等待。 |
+| 图谱构建很慢或卡在下载 | 这通常是首次建图在下载本地嵌入模型（默认 `paraphrase-multilingual-MiniLM-L12-v2`，约 470MB），下载完成后会缓存，后续运行无需再次下载。如需换用更小或更大的模型，设置 `GRAPHITI_EMBED_MODEL` 并相应调整 `GRAPHITI_EMBED_DIM`。 |
+| 研究阶段（stage 1）无法运行 | DeerFlow 需存在于仓库内的 `deer-flow/` 目录、已应用 `deerflow_bridge/` 桥接覆盖层、且已构建好自己的 venv（DeerFlow 2.0 固定 Python 3.12）。重新运行 `./setup.sh`（会从随附的 2.0 源码播种或固定克隆装配并应用覆盖层）；如需更新引擎，删除 `deer-flow/` 后重跑 `./setup.sh`。也可设置 `DEERFLOW_DIR` 指向其位置。 |
 | 选了需要 Key 的提供方（`openai`/`kimi`/`minimax`/`deepseek`/`qwen`/`glm`）却报鉴权失败 | 这些 OpenAI 兼容提供方需要 `LLM_API_KEY`（以及按需的 `LLM_BASE_URL` / `LLM_MODEL_NAME`）。可在 `.env`、UI 设置菜单或 `POST /api/settings/llm` 中配置。 |
 | 切换了模型提供方但当前运行没变化 | 提供方切换只对**新发起的运行**生效；已在运行中的管线沿用其启动时读取的配置。请重新发起一次运行。 |
 | 选了不受研究阶段支持的提供方，研究阶段仍走 Claude | 这是预期行为：DeerFlow 深度研究阶段（`DEERFLOW_MODEL`）支持 `claude` / `minimax` / `deepseek` / `qwen` / `glm` / `codex` / `kimi`；不受支持的提供方在研究阶段回落到 Claude，模拟/报告阶段仍用所选提供方。 |
 | 后端起来了但前端 `/api` 请求 404 | 确认后端在 `:5001` 运行，且前端开发服务器（`:3000`）已将 `/api` 代理至 `5001`；用 `npm run dev` 同时启动两端最为稳妥。 |
-| `git` / `uv` / `node` 缺失或版本过旧 | 满足环境要求：`git`（克隆 DeerFlow 所必需）、Node.js ≥ 20.19、Python 3.11–3.12（后端）、Python ≥ 3.12（DeerFlow，推荐 3.13）、安装最新版 `uv`。`./setup.sh` 会就缺失项给出告警与安装提示。 |
+| `git` / `uv` / `node` 缺失或版本过旧 | 满足环境要求：`git`（仅在可选的上游克隆回退路径下需要）、Node.js ≥ 20.19、Python 3.11–3.12（后端）、Python 3.12（DeerFlow 2.0 固定）、安装最新版 `uv`。`./setup.sh` 会就缺失项给出告警与安装提示。 |
 | 想停止一次长时间运行 | 点击运行头部的**取消**按钮（或 `POST /api/research/<id>/cancel`）。研究/模拟子进程会被立即终止，停止消耗配额。 |
 | 运行中途失败（或被取消） | 点击运行头部的**继续**按钮（或 `POST /api/research/<id>/resume`）。已完成的阶段会被复用 —— 已写出的研究档案、图谱或已完成的模拟不会重跑 —— 管线从出错的阶段重新开始。后端重启导致中断的运行同样适用。 |
 | 深度研究从第 2 轮起反复出现 `[FORCED STOP] Tool web_search called N times` | 上游 DeerFlow 的循环检测按线程累计同一工具的调用次数，会饿死后续研究轮次。重新运行 `./setup.sh` 应用桥接中间件补丁（计数按轮次重置），并获取 `deerflow_bridge/config.yaml` 中面向研究的 `web_search`/`web_fetch` 上限（若你维护自己的 `deer-flow/config.yaml`，请手动合并 `loop_detection.tool_freq_overrides` 段）。 |
@@ -485,7 +500,7 @@ DeepAgentForecast/
 
 - **[OASIS](https://github.com/camel-ai/oasis)**（CAMEL-AI）驱动多智能体社会模拟引擎 —— 诚挚感谢 CAMEL-AI 团队的开源工作。
 - **[DeerFlow](https://github.com/bytedance/deer-flow)**（字节跳动）驱动深度研究阶段。
-- **[Zep Cloud](https://www.getzep.com/)** 提供时序知识图谱（GraphRAG）。
+- **[Graphiti](https://github.com/getzep/graphiti)**（getzep 开源）驱动本地运行的时序知识图谱（GraphRAG）—— 诚挚感谢 Graphiti 团队的开源工作。
 - 基于 **[MiroFish](https://github.com/666ghj/MiroFish)** —— 原版群体模拟预测引擎 —— 构建。
 
 ## 许可证

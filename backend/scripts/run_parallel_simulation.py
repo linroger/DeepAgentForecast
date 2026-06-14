@@ -176,6 +176,9 @@ except ImportError as e:
 
 
 # Twitter可用动作（不包含INTERVIEW，INTERVIEW只能通过ManualAction手动触发）
+# T3.11: 加入 CREATE_COMMENT（最大结构性收益——让推文形成回复线程，而非只有转发/引用），
+# 以及 SEARCH_POSTS / TREND。三者在 camel-oasis 0.2.5 platform.py 均有平台无关的处理器
+# （create_comment@1079 / search_posts@773 / trend@1030），对 Twitter 同样可用。
 TWITTER_ACTIONS = [
     ActionType.CREATE_POST,
     ActionType.LIKE_POST,
@@ -183,6 +186,9 @@ TWITTER_ACTIONS = [
     ActionType.FOLLOW,
     ActionType.DO_NOTHING,
     ActionType.QUOTE_POST,
+    ActionType.CREATE_COMMENT,
+    ActionType.SEARCH_POSTS,
+    ActionType.TREND,
 ]
 
 # Reddit可用动作（不包含INTERVIEW，INTERVIEW只能通过ManualAction手动触发）
@@ -998,48 +1004,77 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     return create_oasis_model(config=config, use_boost=use_boost)
 
 
+def _weighted_sample_without_replacement(items: List, k: int) -> List:
+    """按权重不放回采样 k 个（Efraimidis-Spirakis A-Res）。items: [(id, weight), ...]。"""
+    if not items or k <= 0:
+        return []
+    if k >= len(items):
+        return [i for i, _ in items]
+    keyed = []
+    for item_id, w in items:
+        w = max(1e-6, float(w))
+        keyed.append((random.random() ** (1.0 / w), item_id))
+    keyed.sort(reverse=True)
+    return [item_id for _, item_id in keyed[:k]]
+
+
 def get_active_agents_for_round(
     env,
     config: Dict[str, Any],
     current_hour: int,
-    round_num: int
+    round_num: int,
+    last_active_ids: Optional[set] = None,
 ) -> List:
-    """根据时间和配置决定本轮激活哪些Agent"""
+    """根据时间、影响力与上一轮活跃情况决定本轮激活哪些 Agent（T3.5）。
+
+    - 激活概率 p = activity_level × (0.5 + 0.5 × 归一化影响力) × 时段乘子；
+    - 上一轮活跃/被提及的 agent 获 ×1.5 近因加成（形成级联）；
+    - 目标人数随 cast 规模放大（max(base_max, ceil(0.2N))，封顶 3×base_max），避免大规模 cast 被饿死；
+    - 候选按影响力加权不放回采样。缺 influence_weight 时退化为 1.0（与旧行为接近）。
+    """
     time_config = config.get("time_config", {})
     agent_configs = config.get("agent_configs", [])
-    
-    base_min = time_config.get("agents_per_hour_min", 5)
+    num_agents = len(agent_configs)
+    last_active_ids = last_active_ids or set()
+
     base_max = time_config.get("agents_per_hour_max", 20)
-    
+
     peak_hours = time_config.get("peak_hours", [9, 10, 11, 14, 15, 20, 21, 22])
     off_peak_hours = time_config.get("off_peak_hours", [0, 1, 2, 3, 4, 5])
-    
+
     if current_hour in peak_hours:
         multiplier = time_config.get("peak_activity_multiplier", 1.5)
     elif current_hour in off_peak_hours:
         multiplier = time_config.get("off_peak_activity_multiplier", 0.3)
     else:
         multiplier = 1.0
-    
-    target_count = int(random.uniform(base_min, base_max) * multiplier)
-    
-    candidates = []
+
+    # 影响力归一化（用于激活概率与采样权重）
+    influences = [float(c.get("influence_weight", 1.0) or 1.0) for c in agent_configs]
+    max_infl = max(influences) if influences else 1.0
+    if max_infl <= 0:
+        max_infl = 1.0
+
+    candidates = []  # (agent_id, influence_weight)
     for cfg in agent_configs:
         agent_id = cfg.get("agent_id", 0)
         active_hours = cfg.get("active_hours", list(range(8, 23)))
-        activity_level = cfg.get("activity_level", 0.5)
-        
         if current_hour not in active_hours:
             continue
-        
-        if random.random() < activity_level:
-            candidates.append(agent_id)
-    
-    selected_ids = random.sample(
-        candidates, 
-        min(target_count, len(candidates))
-    ) if candidates else []
-    
+        activity_level = float(cfg.get("activity_level", 0.5) or 0.5)
+        infl = float(cfg.get("influence_weight", 1.0) or 1.0)
+        p = activity_level * (0.5 + 0.5 * (infl / max_infl)) * multiplier
+        if agent_id in last_active_ids:
+            p *= 1.5  # 近因加成：上一轮活跃/被提及 → 形成级联
+        if random.random() < min(1.0, p):
+            candidates.append((agent_id, infl))
+
+    # 目标人数：随 cast 规模放大，封顶 3×base_max
+    base_target = max(base_max, (num_agents + 4) // 5)  # ceil(0.2 * num_agents)
+    target_count = max(1, int(min(base_max * 3, base_target) * multiplier))
+
+    selected_ids = _weighted_sample_without_replacement(candidates, target_count)
+
     active_agents = []
     for agent_id in selected_ids:
         try:
@@ -1047,8 +1082,170 @@ def get_active_agents_for_round(
             active_agents.append((agent_id, agent))
         except Exception:
             pass
-    
+
     return active_agents
+
+
+async def inject_initial_follows(env, event_config, log_info, agent_names=None, action_logger=None):
+    """T3.3: 把 event_config.initial_follows 作为 round-0 关注边注入。
+
+    对每条 [follower, followee]：
+      1. ``agent_graph.add_edge`` 直接建图——立刻改变推荐器看到的社交结构；
+      2. 下一个 ``FOLLOW`` ManualAction——写入 ``follow`` 表（platform.follow 自带去重）。
+    两者互不冲突（add_edge 改内存图，follow 写 DB 表）。一个 agent 每个 step 只能一个动作，
+    故按 follower 分组多趟 step 清空。空/缺失 → 直接返回 0（与旧行为一致）。
+    """
+    follows = event_config.get("initial_follows", []) or []
+    if not follows:
+        return 0
+
+    from collections import defaultdict
+    by_follower = defaultdict(list)
+    for pair in follows:
+        try:
+            follower, followee = int(pair[0]), int(pair[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if follower == followee:
+            continue
+        # 1. 直接建图（best-effort）
+        try:
+            env.agent_graph.add_edge(follower, followee)
+        except Exception:
+            pass
+        by_follower[follower].append(followee)
+
+    # 2. FOLLOW 动作多趟注入（每趟每个 follower 处理一个 followee）
+    applied = 0
+    max_passes = max((len(v) for v in by_follower.values()), default=0)
+    for p in range(max_passes):
+        actions = {}
+        for follower, followees in by_follower.items():
+            if p >= len(followees):
+                continue
+            try:
+                agent = env.agent_graph.get_agent(follower)
+                actions[agent] = ManualAction(
+                    action_type=ActionType.FOLLOW,
+                    action_args={"followee_id": followees[p]},
+                )
+            except Exception:
+                continue
+        if not actions:
+            continue
+        try:
+            await env.step(actions)
+            applied += len(actions)
+        except Exception as e:
+            log_info(f"初始关注注入第 {p + 1} 趟部分失败（继续）: {e}")
+    log_info(f"已建立 {applied} 条初始关注边")
+    return applied
+
+
+async def fire_scheduled_events(env, event_config, loop_round, agent_names, action_logger, log_info):
+    """T3.8: 在 loop_round（0 基）触发 scheduled_events 中 round==loop_round 的事件为 CREATE_POST。
+
+    复用 initial_posts 的注入路径（matched poster → ManualAction(CREATE_POST)）。无匹配事件 → 0。
+    返回成功触发的事件数。
+    """
+    events = event_config.get("scheduled_events", []) or []
+    due = [e for e in events if int(e.get("round", -1)) == loop_round]
+    if not due:
+        return 0
+    actions = {}
+    fired = 0
+    for ev in due:
+        agent_id = ev.get("poster_agent_id")
+        content = str(ev.get("content", "") or "")
+        if agent_id is None or not content:
+            continue
+        try:
+            agent = env.agent_graph.get_agent(agent_id)
+            actions[agent] = ManualAction(
+                action_type=ActionType.CREATE_POST,
+                action_args={"content": content},
+            )
+            if action_logger:
+                action_logger.log_action(
+                    round_num=loop_round + 1,
+                    agent_id=agent_id,
+                    agent_name=(agent_names or {}).get(agent_id, f"Agent_{agent_id}"),
+                    action_type="CREATE_POST",
+                    action_args={"content": content, "is_scheduled_event": True},
+                )
+            fired += 1
+        except Exception:
+            continue
+    if actions:
+        try:
+            await env.step(actions)
+            log_info(f"第 {loop_round + 1} 轮触发 {fired} 个定时事件（时间线回放）")
+        except Exception as e:
+            log_info(f"定时事件触发失败，跳过（不中断模拟）: {e}")
+            return 0
+    return fired
+
+
+def build_oasis_platform(kind: str, db_path: str, config: Dict[str, Any], log_info):
+    """T3.12: 用 config 的 *_config recsys 旋钮构建自定义 oasis Platform（含 T3.9 时钟锚定）。
+
+    OASIS 的 make() 只接受 agent_graph/platform/db/semaphore；recsys_type / refresh_rec_post_count /
+    max_rec_post_len / following_post_count / start_time 等仅在 Platform 上。仅当 SIM_WIRE_RECSYS=true
+    时启用；否则返回 None，调用方退回 DefaultPlatformType（与旧行为逐字节一致）。构建失败同样回退。
+
+    映射：recsys_type / refresh_rec_post_count / max_rec_post_len 直传；echo_chamber_strength →
+    following_post_count（越强→关注流曝光越多→同温层更强）。recency/popularity/relevance/
+    viral_threshold 是展示性权重，OASIS 不消费，此处不再谎称生效。
+    """
+    if os.environ.get("SIM_WIRE_RECSYS", "false").strip().lower() != "true":
+        return None
+    try:
+        from oasis.social_platform.platform import Platform
+        from oasis.social_platform.channel import Channel
+    except Exception as e:  # noqa: BLE001
+        log_info(f"recsys 旋钮接入不可用，回退默认平台: {e}")
+        return None
+
+    pcfg = (config.get("twitter_config") if kind == "twitter" else config.get("reddit_config")) or {}
+    echo = float(pcfg.get("echo_chamber_strength", 0.5) or 0.5)
+    start_time = None
+    as_of = config.get("as_of_date")
+    if as_of:
+        try:
+            start_time = datetime.fromisoformat(str(as_of)[:10])
+        except Exception:
+            start_time = None
+    try:
+        channel = Channel()
+        if kind == "twitter":
+            platform = Platform(
+                db_path=db_path,
+                channel=channel,
+                recsys_type=(pcfg.get("recsys_type") or "twhin-bert"),
+                refresh_rec_post_count=int(pcfg.get("refresh_rec_post_count") or 2),
+                max_rec_post_len=int(pcfg.get("max_rec_post_len") or 2),
+                following_post_count=int(round(2 + echo * 4)),
+                start_time=start_time,
+            )
+        else:
+            platform = Platform(
+                db_path=db_path,
+                channel=channel,
+                recsys_type=(pcfg.get("recsys_type") or "reddit"),
+                allow_self_rating=True,
+                show_score=True,
+                refresh_rec_post_count=int(pcfg.get("refresh_rec_post_count") or 5),
+                max_rec_post_len=int(pcfg.get("max_rec_post_len") or 100),
+                start_time=start_time,
+            )
+        log_info(
+            f"已接入 recsys 旋钮[{kind}]: type={getattr(platform, 'recsys_type', '?')}, "
+            f"echo={echo}, start_time={start_time.date() if start_time else '默认'}"
+        )
+        return platform
+    except Exception as e:  # noqa: BLE001
+        log_info(f"自定义平台构建失败，回退默认平台: {e}")
+        return None
 
 
 class PlatformSimulation:
@@ -1114,9 +1311,11 @@ async def run_twitter_simulation(
     if os.path.exists(db_path):
         os.remove(db_path)
     
+    # T3.12: 优先用 config 的 recsys 旋钮构建自定义平台；未启用/失败则回退默认平台类型
+    _custom_platform = build_oasis_platform("twitter", db_path, config, log_info)
     result.env = oasis.make(
         agent_graph=result.agent_graph,
-        platform=oasis.DefaultPlatformType.TWITTER,
+        platform=_custom_platform if _custom_platform is not None else oasis.DefaultPlatformType.TWITTER,
         database_path=db_path,
         semaphore=get_oasis_semaphore(config, use_boost=False, platforms=semaphore_platforms),  # 按提供方限制并发 LLM 请求数（双平台并行时各拿一半）
     )
@@ -1171,6 +1370,12 @@ async def run_twitter_simulation(
             except Exception as init_err:
                 log_info(f"初始帖子发布失败，跳过（继续进入主循环）: {init_err}")
     
+    # T3.3: 注入研究/图谱驱动的初始关注边（建图 add_edge + FOLLOW 动作），让社交图不再从空起步
+    try:
+        await inject_initial_follows(result.env, event_config, log_info, agent_names, action_logger)
+    except Exception as follow_err:
+        log_info(f"初始关注注入失败，跳过（继续进入主循环）: {follow_err}")
+
     # 记录 round 0 结束
     if action_logger:
         action_logger.log_round_end(0, initial_action_count)
@@ -1190,6 +1395,7 @@ async def run_twitter_simulation(
     
     start_time = datetime.now()
     
+    last_active_ids: set = set()  # T3.5: 近因加成——上一轮活跃的 agent 下一轮更易被激活
     for round_num in range(total_rounds):
         # 检查是否收到退出信号
         if _shutdown_event and _shutdown_event.is_set():
@@ -1200,10 +1406,20 @@ async def run_twitter_simulation(
         simulated_minutes = round_num * minutes_per_round
         simulated_hour = (simulated_minutes // 60) % 24
         simulated_day = simulated_minutes // (60 * 24) + 1
-        
+
+        # T3.8: 在活跃 agent 选择前回放本轮到期的研究时间线事件（CREATE_POST），使其对本轮可见
+        try:
+            fired = await fire_scheduled_events(
+                result.env, event_config, round_num, agent_names, action_logger, log_info
+            )
+            total_actions += fired
+        except Exception as _ev_err:
+            log_info(f"定时事件触发异常，跳过（不中断模拟）: {_ev_err}")
+
         active_agents = get_active_agents_for_round(
-            result.env, config, simulated_hour, round_num
+            result.env, config, simulated_hour, round_num, last_active_ids
         )
+        last_active_ids = {aid for aid, _ in active_agents}  # T3.5: 供下一轮近因加成
         
         # 无论是否有活跃agent，都记录round开始
         if action_logger:
@@ -1317,9 +1533,11 @@ async def run_reddit_simulation(
     if os.path.exists(db_path):
         os.remove(db_path)
     
+    # T3.12: 优先用 config 的 recsys 旋钮构建自定义平台；未启用/失败则回退默认平台类型
+    _custom_platform = build_oasis_platform("reddit", db_path, config, log_info)
     result.env = oasis.make(
         agent_graph=result.agent_graph,
-        platform=oasis.DefaultPlatformType.REDDIT,
+        platform=_custom_platform if _custom_platform is not None else oasis.DefaultPlatformType.REDDIT,
         database_path=db_path,
         semaphore=get_oasis_semaphore(config, use_boost=True, platforms=semaphore_platforms),  # 按提供方限制并发 LLM 请求数（双平台并行时各拿一半）
     )
@@ -1382,6 +1600,12 @@ async def run_reddit_simulation(
             except Exception as init_err:
                 log_info(f"初始帖子发布失败，跳过（继续进入主循环）: {init_err}")
     
+    # T3.3: 注入研究/图谱驱动的初始关注边（建图 add_edge + FOLLOW 动作），让社交图不再从空起步
+    try:
+        await inject_initial_follows(result.env, event_config, log_info, agent_names, action_logger)
+    except Exception as follow_err:
+        log_info(f"初始关注注入失败，跳过（继续进入主循环）: {follow_err}")
+
     # 记录 round 0 结束
     if action_logger:
         action_logger.log_round_end(0, initial_action_count)
@@ -1401,6 +1625,7 @@ async def run_reddit_simulation(
     
     start_time = datetime.now()
     
+    last_active_ids: set = set()  # T3.5: 近因加成——上一轮活跃的 agent 下一轮更易被激活
     for round_num in range(total_rounds):
         # 检查是否收到退出信号
         if _shutdown_event and _shutdown_event.is_set():
@@ -1411,10 +1636,20 @@ async def run_reddit_simulation(
         simulated_minutes = round_num * minutes_per_round
         simulated_hour = (simulated_minutes // 60) % 24
         simulated_day = simulated_minutes // (60 * 24) + 1
-        
+
+        # T3.8: 在活跃 agent 选择前回放本轮到期的研究时间线事件（CREATE_POST），使其对本轮可见
+        try:
+            fired = await fire_scheduled_events(
+                result.env, event_config, round_num, agent_names, action_logger, log_info
+            )
+            total_actions += fired
+        except Exception as _ev_err:
+            log_info(f"定时事件触发异常，跳过（不中断模拟）: {_ev_err}")
+
         active_agents = get_active_agents_for_round(
-            result.env, config, simulated_hour, round_num
+            result.env, config, simulated_hour, round_num, last_active_ids
         )
+        last_active_ids = {aid for aid, _ in active_agents}  # T3.5: 供下一轮近因加成
         
         # 无论是否有活跃agent，都记录round开始
         if action_logger:

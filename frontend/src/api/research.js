@@ -42,6 +42,58 @@ export function resumePipeline(pipelineId) {
 }
 
 /**
+ * 把已完成的 research_only 管线继续跑成完整管线（复用研究产物，不重跑研究）。T6.2
+ * @param {String} pipelineId
+ * @returns {Promise}
+ */
+export function continuePipeline(pipelineId) {
+  return service({
+    url: `/api/research/${pipelineId}/continue`,
+    method: 'post'
+  })
+}
+
+/**
+ * 在 PREPARE 处分叉一个 what-if 情景管线（复用 base 研究/本体/图谱）。T4.6
+ * @param {String} pipelineId 基础管线
+ * @param {Object} overlay { label, max_rounds?, influence_overrides?, stance_overrides?, injected_events?, as_of_shift? }
+ * @returns {Promise}
+ */
+export function forkScenario(pipelineId, overlay) {
+  return service({
+    url: `/api/research/${pipelineId}/scenario`,
+    method: 'post',
+    data: overlay
+  })
+}
+
+/**
+ * 读取某阶段产物（dossier/timeline/sources/ontology/communities/initial_posts/personas/run_summary）。T6.3
+ * @param {String} pipelineId
+ * @param {String} name
+ * @returns {Promise}
+ */
+export function getArtifact(pipelineId, name) {
+  return service({
+    url: `/api/research/${pipelineId}/artifact/${name}`,
+    method: 'get'
+  })
+}
+
+/**
+ * 启动前就绪检查（不发起管线）。T5.6
+ * @param {String} mode full | research_only
+ * @returns {Promise}
+ */
+export function getPreflight(mode = 'full') {
+  return service({
+    url: '/api/research/preflight',
+    method: 'get',
+    params: { mode }
+  })
+}
+
+/**
  * 删除一条已结束的管线记录（在飞管线须先取消，否则后端返回 409）
  * @param {String} pipelineId
  * @returns {Promise}
@@ -93,6 +145,19 @@ export function getDossier(pipelineId) {
   return service({
     url: `/api/research/${pipelineId}/dossier`,
     method: 'get'
+  })
+}
+
+/**
+ * 编辑研究档案（research_report.md / actors.json）。仅完成的 research_only 或建图前失败管线可编辑。T5.4
+ * @param {String} pipelineId
+ * @param {Object} payload { report?: string, actors?: object }
+ */
+export function editDossier(pipelineId, payload) {
+  return service({
+    url: `/api/research/${pipelineId}/dossier`,
+    method: 'put',
+    data: payload
   })
 }
 

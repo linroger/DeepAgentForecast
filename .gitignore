@@ -61,13 +61,25 @@ logs/
 
 # 上传文件（运行时数据：研究档案/模拟/报告）
 backend/uploads/
+# 本地知识图谱数据（嵌入式 FalkorDB / Kuzu 落盘）+ 旧路径残留
+backend/app/uploads/
+graphiti_db/
+# Graphiti 上游源码的本地参考 checkout（运行时用 pip 安装的 graphiti_core，不入库）
+graphiti-0.29.2/
 
 # Docker 数据
 data/
 
-# DeerFlow research engine — auto-downloaded into the repo by ./setup.sh
-# (pinned upstream clone + bridge overlay; never committed here)
+# DeerFlow 2.0 research/agent engine — assembled into ./deer-flow by ./setup.sh
+# (seeded from the vendored RC below, or a pinned upstream clone, + bridge
+# overlay; the built runtime carries a ~900MB venv and is never committed).
 deer-flow/
+# Vendored DeerFlow 2.0 source drop (the exact build the bridge targets). It is
+# the preferred seed for ./setup.sh but is a large third-party tree, so it is
+# kept local-only rather than committed. Drop a newer deer-flow-2.0-* here to
+# pin a different build.
+deer-flow-2.0-m1-rc3/
+deer-flow-2.0-*/
 
 # Local agent/session artifacts (never commit)
 CLAUDE.md

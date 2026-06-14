@@ -77,6 +77,38 @@
             </div>
           </div>
 
+          <!-- T5.5: 高级（研究语言 + 研究模型，每次运行覆盖） -->
+          <div class="adv-toggle" @click="showAdvanced = !showAdvanced">
+            <span class="adv-caret">{{ showAdvanced ? '▾' : '▸' }}</span>
+            {{ L('高级','Advanced') }}
+          </div>
+          <div v-show="showAdvanced" class="console-section params-row adv-row">
+            <div class="param">
+              <label>{{ L('研究语言','Research language') }}</label>
+              <select v-model="researchLanguage" class="adv-select" :disabled="starting">
+                <option v-for="o in LANGUAGE_OPTIONS" :key="o.v" :value="o.v">{{ locale==='en' ? o.en : o.zh }}</option>
+              </select>
+            </div>
+            <div class="param">
+              <label>{{ L('研究模型','Research model') }}</label>
+              <select v-model="researchModel" class="adv-select" :disabled="starting">
+                <option value="">{{ L('默认','Default') }}</option>
+                <option v-for="m in DEERFLOW_MODELS" :key="m" :value="m">{{ m }}</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- T5.6: 就绪检查横幅 -->
+          <div v-if="preflightChecked && !preflightReady" class="preflight-banner err-banner">
+            <div class="pf-title">⚠ {{ L('启动前检查未通过','Not ready to launch') }}</div>
+            <ul class="pf-list">
+              <li v-for="(e, i) in preflightErrors" :key="i">{{ e }}</li>
+            </ul>
+          </div>
+          <div v-else-if="preflightChecked && preflightReady" class="preflight-banner ok-banner">
+            ✓ {{ L('配置就绪，可以启动','Configuration ready') }}
+          </div>
+
           <div class="console-section btn-section">
             <button class="start-engine-btn" @click="start" :disabled="!canStart || starting">
               <span v-if="!starting">{{ mode==='full' ? L('启动 研究 + 模拟 + 预测','Run research + simulate + forecast') : L('启动深度研究','Run deep research') }}</span>
@@ -102,6 +134,9 @@
             <button v-if="canResume" class="ghost-btn resume-btn" :disabled="resuming" @click="resume">
               {{ resuming ? L('恢复中…','Resuming…') : L('继续','Resume') }}
             </button>
+            <button v-if="canContinue" class="ghost-btn resume-btn" :disabled="continuing" @click="continueToFull">
+              {{ continuing ? L('继续中…','Continuing…') : L('继续完整管线 →','Continue to full pipeline →') }}
+            </button>
             <button class="ghost-btn" @click="showHistory = true">{{ L('历史','History') }}</button>
             <button class="ghost-btn" @click="reset">＋ {{ L('新建','New') }}</button>
           </div>
@@ -123,9 +158,11 @@
 
             <div class="tab-body">
               <ResearchConsole v-show="activeTab==='log'" :log-lines="logLines" />
-              <DossierViewer v-show="activeTab==='dossier'" :dossier="dossier" />
+              <DossierViewer v-show="activeTab==='dossier'" :dossier="dossier"
+                :pipeline-id="pipelineId" :editable="canContinue" @saved-continue="continueToFull" />
               <div v-show="activeTab==='graph'" class="graph-wrap" :class="{ max: graphMax }">
                 <GraphPanel v-if="graphData" :graph-data="graphData" :loading="graphLoading"
+                  :seed-actors="seedActorNames"
                   @refresh="fetchGraph(true)" @toggle-maximize="graphMax = !graphMax" />
                 <div v-else class="lazy-empty">
                   <span v-if="graphLoading">{{ L('加载知识图谱…','Loading knowledge graph…') }}</span>
@@ -150,7 +187,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { runPipeline, cancelPipeline, resumePipeline, getPipelineStatus, getProgressLog, getDossier } from '../api/research'
+import { runPipeline, cancelPipeline, resumePipeline, getPipelineStatus, getProgressLog, getDossier, continuePipeline, getPreflight } from '../api/research'
 import { getGraphData } from '../api/graph'
 import { locale, setLocale, L } from '../i18n'
 import StageTimeline from '../components/research/StageTimeline.vue'
@@ -177,6 +214,60 @@ const maxRounds = ref(null)
 const starting = ref(false)
 const error = ref('')
 const showSettings = ref(false)
+
+// —— T5.5: 高级（每次运行覆盖研究语言/模型）——
+const showAdvanced = ref(false)
+const researchLanguage = ref('')   // ''=默认；'auto'/'Chinese'/'English'
+const researchModel = ref('')      // ''=默认；7 个 DeerFlow 模型之一
+const DEERFLOW_MODELS = ['claude', 'codex', 'minimax', 'deepseek', 'qwen', 'glm', 'kimi']
+const LANGUAGE_OPTIONS = [
+  { v: '', zh: '默认', en: 'Default' },
+  { v: 'Chinese', zh: '中文', en: 'Chinese' },
+  { v: 'English', zh: '英文', en: 'English' },
+  { v: 'auto', zh: '自动', en: 'Auto' }
+]
+
+// —— T5.6: 启动前就绪检查 ——
+const preflightReady = ref(true)
+const preflightErrors = ref([])
+const preflightChecked = ref(false)
+async function checkPreflight() {
+  try {
+    const res = await getPreflight(mode.value)
+    preflightReady.value = !!(res && res.data && res.data.ready)
+    preflightErrors.value = (res && res.data && res.data.errors) || []
+  } catch (e) {
+    // 检查接口本身失败：不阻塞用户，按就绪处理（真正的错误会在 /run 时拦截）
+    preflightReady.value = true
+    preflightErrors.value = []
+  } finally {
+    preflightChecked.value = true
+  }
+}
+
+// —— T6.2: research_only → 继续完整管线 ——
+const continuing = ref(false)
+const canContinue = computed(
+  () => !!pipelineId.value && status.value === 'completed' && mode.value === 'research_only'
+)
+async function continueToFull() {
+  if (!pipelineId.value || continuing.value) return
+  continuing.value = true
+  error.value = ''
+  try {
+    const res = await continuePipeline(pipelineId.value)
+    const id = (res && res.data && res.data.pipeline_id) || pipelineId.value
+    pipelineId.value = id
+    mode.value = 'full'
+    status.value = 'running'
+    try { localStorage.setItem(ACTIVE_PIPELINE_KEY, id) } catch (e) { /* noop */ }
+    startPolling()
+  } catch (e) {
+    error.value = e?.message || L('继续失败', 'Continue failed')
+  } finally {
+    continuing.value = false
+  }
+}
 
 const EXAMPLES = [
   ['预判2035年前全球电动汽车市场的发展趋势', 'Forecast global EV market trends through 2035'],
@@ -206,6 +297,13 @@ const graphData = ref(null)
 const graphLoading = ref(false)
 const graphMax = ref(false)
 
+// T5.3: 研究种子 actor 名（用于在图谱中高亮「研究确认 vs 模拟涌现」节点）
+const seedActorNames = computed(() => {
+  const a = dossier.value && dossier.value.actors
+  const list = a && Array.isArray(a.actors) ? a.actors : []
+  return list.map(x => x && x.name).filter(Boolean)
+})
+
 let pollTimer = null
 let dossierFetched = false
 let pollFailures = 0
@@ -219,7 +317,10 @@ function stageLabel(name) {
   }[name] || name
 }
 
-const canStart = computed(() => prompt.value.trim().length > 0)
+// T5.6: 就绪检查未通过时禁用启动（preflightChecked 前不阻塞，避免初次加载抖动）
+const canStart = computed(() =>
+  prompt.value.trim().length > 0 && (!preflightChecked.value || preflightReady.value)
+)
 const statusTitle = computed(() => {
   if (status.value === 'completed') return mode.value === 'research_only' ? L('研究完成', 'Research complete') : L('推演完成 · 预测就绪', 'Done · forecast ready')
   if (status.value === 'failed') return L('运行失败', 'Run failed')
@@ -265,7 +366,9 @@ async function start() {
       prompt: prompt.value.trim(),
       mode: mode.value,
       depth: depth.value,
-      max_rounds: maxRounds.value || undefined
+      max_rounds: maxRounds.value || undefined,
+      language: researchLanguage.value || undefined,  // T5.5
+      model: researchModel.value || undefined          // T5.5
     })
     beginPipeline(res.data.pipeline_id)
   } catch (e) {
@@ -421,7 +524,10 @@ onMounted(() => {
   let saved = null
   try { saved = localStorage.getItem(ACTIVE_PIPELINE_KEY) } catch (e) { saved = null }
   if (saved) beginPipeline(saved)
+  else checkPreflight()  // T5.6: 落地即检查就绪状态
 })
+// T5.6: 切换模式时重新检查（research_only 跳过图谱/报告 LLM 检查）
+watch(mode, () => { if (!pipelineId.value) checkPreflight() })
 onUnmounted(stopPolling)
 </script>
 
@@ -476,6 +582,19 @@ onUnmounted(stopPolling)
 .seg button:last-child { border-right:none; }
 .seg button.active { background:#000; color:#fff; }
 .num-input { border:1px solid #DDD; padding:8px 10px; font-family:var(--mono); font-size:.85rem; width:200px; outline:none; }
+/* T5.5 高级 */
+.adv-toggle { font-family:var(--mono); font-size:.78rem; color:#666; cursor:pointer; padding:10px 0 4px; user-select:none; }
+.adv-toggle:hover { color:var(--orange); }
+.adv-caret { color:var(--orange); margin-right:6px; }
+.adv-row { margin-top:6px; }
+.adv-select { border:1px solid #DDD; padding:8px 10px; font-family:var(--mono); font-size:.85rem; width:200px; outline:none; background:#fff; cursor:pointer; }
+/* T5.6 就绪横幅 */
+.preflight-banner { margin-top:14px; padding:10px 14px; font-family:var(--mono); font-size:.8rem; border-radius:2px; }
+.preflight-banner.ok-banner { color:#0a7d28; background:#f0fff4; border:1px solid #b7ebc6; }
+.preflight-banner.err-banner { color:#a40000; background:#fff5f5; border:1px solid #f0bcbc; }
+.pf-title { font-weight:700; margin-bottom:6px; }
+.pf-list { margin:0; padding-left:18px; }
+.pf-list li { margin:3px 0; line-height:1.5; }
 .start-engine-btn { width:100%; background:#000; color:#fff; border:none; padding:18px; font-family:var(--mono); font-weight:700; font-size:1.05rem; display:flex; justify-content:space-between; align-items:center; cursor:pointer; transition:all .25s; letter-spacing:1px; }
 .start-engine-btn:hover:not(:disabled) { background:var(--orange); transform:translateY(-2px); }
 .start-engine-btn:disabled { background:#E5E5E5; color:#999; cursor:not-allowed; }

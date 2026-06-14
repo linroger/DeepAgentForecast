@@ -106,25 +106,6 @@ class PatchedChatMiniMax(ChatOpenAI):
         **kwargs: Any,
     ) -> dict:
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
-
-        # MiniMax's OpenAI-compatible API enforces that the per-message ``name`` field
-        # (OpenAI's optional sender label) be *consistent within a role*: if some
-        # role="user" messages carry a ``name`` and others do not — which is exactly
-        # what happens once DeerFlow middlewares inject named HumanMessages such as
-        # ``name="summary"`` (summarization), ``name="loop_warning"`` (loop detection),
-        # and ``name="todo_reminder"`` (todo) into a multi-turn tool-calling
-        # conversation — MiniMax rejects the whole request with
-        #   400 invalid params, user name must be consistent (err 2013).
-        # ``name`` is only a routing/labeling hint that LangChain round-trips, not
-        # semantic content the model needs (OpenAI's own Responses serializer drops it
-        # too), so the correct adaptation to MiniMax's contract is to strip it from the
-        # serialized payload. This leaves tools, ``tool_calls``, ``tool_call_id``
-        # linkage, reasoning (``reasoning_split`` below), and streaming fully intact —
-        # it is NOT a "disable tools/reasoning" workaround.
-        for msg in payload.get("messages", []):
-            if isinstance(msg, dict):
-                msg.pop("name", None)
-
         extra_body = payload.get("extra_body")
         if isinstance(extra_body, dict):
             payload["extra_body"] = {
@@ -133,7 +114,26 @@ class PatchedChatMiniMax(ChatOpenAI):
             }
         else:
             payload["extra_body"] = {"reasoning_split": True}
+        self._strip_user_message_names(payload)
         return payload
+
+    @staticmethod
+    def _strip_user_message_names(payload: dict) -> None:
+        """Drop the per-message ``name`` field from user-role messages.
+
+        DeerFlow middlewares tag user messages with internal provenance names
+        (``user-input``, ``summary``, ``loop_warning``, ...). ``langchain_openai``
+        serializes those into the OpenAI-compatible request, but MiniMax requires
+        every user-role ``name`` to be identical and otherwise rejects the request
+        with ``invalid params, user name must be consistent (2013)``. MiniMax does
+        not use the per-message author name, so strip it.
+        """
+        messages = payload.get("messages")
+        if not isinstance(messages, list):
+            return
+        for message in messages:
+            if isinstance(message, dict) and message.get("role") == "user":
+                message.pop("name", None)
 
     def _convert_chunk_to_generation_chunk(
         self,

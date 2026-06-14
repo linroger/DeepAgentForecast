@@ -142,7 +142,12 @@ class SimulationRunState:
     
     # 进程ID（用于停止）
     process_pid: Optional[int] = None
-    
+
+    # 轮数截断记录（T3.7）：当显式 max_rounds 小于按时长算出的完整轮数时，
+    # 把「本应跑多少轮 / 实际跑多少轮」记为一等字段，让 UI/报告能看见这次预测被裁短了。
+    rounds_truncated_from: Optional[int] = None
+    rounds_truncated_to: Optional[int] = None
+
     def add_action(self, action: AgentAction):
         """添加动作到最近动作列表"""
         self.recent_actions.insert(0, action)
@@ -182,8 +187,10 @@ class SimulationRunState:
             "completed_at": self.completed_at,
             "error": self.error,
             "process_pid": self.process_pid,
+            "rounds_truncated_from": self.rounds_truncated_from,
+            "rounds_truncated_to": self.rounds_truncated_to,
         }
-    
+
     def to_detail_dict(self) -> Dict[str, Any]:
         """包含最近动作的详细信息"""
         result = self.to_dict()
@@ -313,9 +320,9 @@ class SimulationRunner:
         cls,
         simulation_id: str,
         platform: str = "parallel",  # twitter / reddit / parallel
-        max_rounds: int = 40,  # 最大模拟轮数（默认 40，截断过长的模拟；传更大值或 None 可放开）
+        max_rounds: Optional[int] = None,  # 最大模拟轮数（T3.7: 默认 None=不截断，跑满按时长算出的完整轮数）
         enable_graph_memory_update: bool = False,  # 是否将活动更新到Zep图谱
-        graph_id: str = None  # Zep图谱ID（启用图谱更新时必需）
+        graph_id: Optional[str] = None  # Zep图谱ID（启用图谱更新时必需）
     ) -> SimulationRunState:
         """
         启动模拟
@@ -354,19 +361,24 @@ class SimulationRunner:
         minutes_per_round = time_config.get("minutes_per_round", 60)
         total_rounds = int(total_hours * 60 / minutes_per_round)
         
-        # 如果指定了最大轮数，则截断
+        # T3.7: 仅当显式给定 max_rounds 时才截断（默认 None=跑满）。截断时把「本应/实际」记为一等字段。
+        truncated_from = None
+        truncated_to = None
         if max_rounds is not None and max_rounds > 0:
             original_rounds = total_rounds
             total_rounds = min(total_rounds, max_rounds)
             if total_rounds < original_rounds:
+                truncated_from, truncated_to = original_rounds, total_rounds
                 logger.info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-        
+
         state = SimulationRunState(
             simulation_id=simulation_id,
             runner_status=RunnerStatus.STARTING,
             total_rounds=total_rounds,
             total_simulation_hours=total_hours,
             started_at=datetime.now().isoformat(),
+            rounds_truncated_from=truncated_from,
+            rounds_truncated_to=truncated_to,
         )
         
         cls._save_run_state(state)
@@ -1112,9 +1124,86 @@ class SimulationRunner:
         
         # 按总动作数排序
         result = sorted(agent_stats.values(), key=lambda x: x["total_actions"], reverse=True)
-        
+
         return result
-    
+
+    @classmethod
+    def write_run_summary(
+        cls,
+        simulation_id: str,
+        communities: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """T3.14: 聚合 actions.jsonl + 时间线，落 run_summary.json（报告阶段直接读，免再 fuzzy 检索）。
+
+        产出：per-agent engagement（沿用 get_agent_stats）、action_volume_by_round（来自 get_timeline）、
+        top_posts（按互动量近似的高传播帖）、可选 communities（派系，来自 T2.4）。
+        best-effort：任何子步骤失败都不抛，返回已聚合的部分（或 None）。
+        """
+        try:
+            agent_stats = cls.get_agent_stats(simulation_id)
+            timeline = cls.get_timeline(simulation_id)
+            actions = cls.get_actions(simulation_id, limit=10000)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[{simulation_id}] run_summary 聚合失败: {e}")
+            return None
+
+        # 每轮动作量
+        action_volume_by_round = [
+            {
+                "round_num": r["round_num"],
+                "total_actions": r["total_actions"],
+                "active_agents_count": r["active_agents_count"],
+                "action_types": r["action_types"],
+            }
+            for r in timeline
+        ]
+
+        # top_posts：CREATE_POST/QUOTE_POST 近似按内容长度+发帖者影响排序（无 DB 互动列时的稳健近似）
+        top_posts = []
+        for a in actions:
+            if a.action_type in ("CREATE_POST", "QUOTE_POST"):
+                content = ""
+                try:
+                    content = str((a.action_args or {}).get("content", ""))
+                except Exception:
+                    content = ""
+                top_posts.append({
+                    "round_num": a.round_num,
+                    "agent_id": a.agent_id,
+                    "agent_name": a.agent_name,
+                    "platform": a.platform,
+                    "content": content[:280],
+                })
+        top_posts = top_posts[:25]
+
+        peak = max(action_volume_by_round, key=lambda x: x["total_actions"], default=None)
+        summary = {
+            "simulation_id": simulation_id,
+            "agent_count": len(agent_stats),
+            "total_actions": sum(s["total_actions"] for s in agent_stats),
+            "rounds_executed": len(action_volume_by_round),
+            "peak_round": peak,
+            "top_agents": agent_stats[:15],
+            "action_volume_by_round": action_volume_by_round,
+            "top_posts": top_posts,
+        }
+        if communities:
+            summary["communities"] = communities
+
+        try:
+            sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
+            os.makedirs(sim_dir, exist_ok=True)
+            out = os.path.join(sim_dir, "run_summary.json")
+            tmp = out + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(summary, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, out)
+            logger.info(f"[{simulation_id}] run_summary.json 已写出（{len(agent_stats)} agents, "
+                        f"{len(action_volume_by_round)} rounds）")
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[{simulation_id}] run_summary.json 写出失败（不影响主流程）: {e}")
+        return summary
+
     @classmethod
     def cleanup_simulation_logs(cls, simulation_id: str) -> Dict[str, Any]:
         """

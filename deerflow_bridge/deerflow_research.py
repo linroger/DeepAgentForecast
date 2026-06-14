@@ -154,6 +154,7 @@ REPORT_FILENAME = "research_report.md"
 REQUIREMENT_FILENAME = "prediction_requirement.txt"
 ACTORS_FILENAME = "actors.json"
 SOURCES_FILENAME = "sources.json"
+TIMELINE_FILENAME = "timeline.json"
 PROGRESS_FILENAME = "research_progress.log"
 META_FILENAME = "meta.json"
 
@@ -223,9 +224,10 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
             f"{preset['guidance']}\n\n"
             "For this first pass, search broadly enough to understand the terrain and "
             "produce working notes, not a final report. Identify the key dimensions, "
-            "actors, primary-source targets, likely quantitative datasets, and open "
-            "questions. Use tools aggressively where needed. End with a concise research "
-            "plan and gap list.\n\n"
+            "actors, the relationships between actors (who allies/opposes/regulates/"
+            "depends-on/influences whom), primary-source targets, likely quantitative "
+            "datasets, and open questions. Use tools aggressively where needed. End with "
+            "a concise research plan and gap list.\n\n"
             "IMPORTANT: Do NOT write the final dossier yet. Do NOT stop after a short "
             "summary. The downstream simulation needs dense, sourced facts, named actors, "
             "timelines, incentives, and disputed claims gathered across multiple passes."
@@ -245,7 +247,9 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
         "  2. The KEY REAL-WORLD ACTORS involved — specific named people, companies, "
         "media outlets, government bodies, and online platforms — with each actor's "
         "role, public stance, influence, and what they know/believe about the event. "
-        "(Concrete named entities, NOT abstract themes.)\n"
+        "(Concrete named entities, NOT abstract themes.) Make the RELATIONSHIPS between "
+        "these actors EXPLICIT: who allies with, opposes, competes with, regulates, "
+        "depends on, partners with, or influences whom, with a one-line basis each.\n"
         "  3. A timeline of key events with dates.\n"
         "  4. The main points of contention, hot topics, and likely flashpoints.\n"
         "  5. Relevant facts, figures, and quotes, each attributable to a source.\n"
@@ -279,6 +283,7 @@ def build_deep_phase_prompt(question: str, phase: dict[str, Any], index: int, to
         "End this pass with Markdown working notes under these headings:\n"
         "## Evidence gathered\n"
         "## Actor / incentive updates\n"
+        "## Actor relationships (who allies/opposes/regulates/depends-on/influences whom, with basis)\n"
         "## Quantitative facts and dates\n"
         "## Contradictions or uncertainty\n"
         "## Gaps to carry into the next pass\n\n"
@@ -318,7 +323,8 @@ def build_synthesis_prompt(question: str, target_language: str | None, depth: st
         "  1. An executive summary of the situation.\n"
         "  2. The KEY REAL-WORLD ACTORS — specific named people, organizations, media "
         "outlets, and government bodies — each with role, public stance, influence, and "
-        "what they know/believe.\n"
+        "what they know/believe; plus the explicit RELATIONSHIPS between them (who allies "
+        "with, opposes, competes with, regulates, depends on, or influences whom).\n"
         "  3. A timeline of key events with dates.\n"
         "  4. The main points of contention, hot topics, and likely flashpoints.\n"
         "  5. Relevant facts, figures, and quotes, each attributable to a source.\n"
@@ -417,6 +423,35 @@ def synthesize_from_thread(client, thread_id: str, question: str, target_languag
         return ""
 
 
+def extract_structured_tool_free(report: str, target_language: str | None, model_name: str, depth: str, plog: "ProgressLog") -> str:
+    """Tool-free structured extraction from the finished report.
+
+    The agent turn (with tools bound) is unreliable for the JSON extraction: eager
+    reasoning models like MiniMax-M3 keep calling ``web_search`` instead of emitting
+    the JSON object, so the turn ends with prose/tool-calls that don't parse. Mirroring
+    ``synthesize_from_thread``, we call the BARE model (no tools) with the extraction
+    prompt + the already-written report, so the model has no choice but to emit JSON.
+    Returns the raw model text ('' on failure) for ``extract_json_object`` to parse.
+    """
+    try:
+        from deerflow.models import create_chat_model
+        from langchain_core.messages import HumanMessage
+
+        model = create_chat_model(model_name, thinking_enabled=False)
+        prompt = (
+            build_extraction_prompt(target_language, depth)
+            + "\n\n=== RESEARCH REPORT (extract the JSON strictly from this; do not search, do not invent) ===\n"
+            + report
+        )
+        resp = model.invoke([HumanMessage(content=prompt)])
+        text = _message_text(getattr(resp, "content", resp))
+        plog.write("stage", f"extract (tool-free): produced {len(text)} chars")
+        return text
+    except Exception as e:  # noqa: BLE001
+        plog.write("warn", f"extract (tool-free) model call failed ({type(e).__name__}: {e})")
+        return ""
+
+
 def build_extraction_prompt(target_language: str | None, depth: str = "standard") -> str:
     lang = target_language or "the same language as the research report"
     actor_range = "10-35" if depth == "deep" else "5-20"
@@ -432,6 +467,13 @@ def build_extraction_prompt(target_language: str | None, depth: str = "standard"
         "{\n"
         '  "central_question": string,            // the prediction question, refined\n'
         '  "as_of_date": string,                  // YYYY-MM-DD, the research cutoff\n'
+        '  "situation_brief": {                    // simulation-ready brief of the situation\n'
+        '    "current_situation": string,         // 2-4 factual sentences: state of play as of as_of_date\n'
+        '    "context": string,                   // how it got here (causal / historical)\n'
+        '    "dynamics": string,                  // forces in tension; what is escalating / de-escalating\n'
+        '    "fault_lines": [ string ],           // 3-6 issues the actors will argue over\n'
+        '    "catalysts": [ string ]              // events/decisions that would shift the situation\n'
+        "  },\n"
         f'  "actors": [                             // {actor_range} specific, named real-world actors\n'
         "    {\n"
         '      "name": string,\n'
@@ -442,11 +484,25 @@ def build_extraction_prompt(target_language: str | None, depth: str = "standard"
         '      "memory": string                    // what this actor knows/believes\n'
         "    }\n"
         "  ],\n"
+        '  "relationships": [                      // directed, typed edges between NAMED actors\n'
+        "    {\n"
+        '      "source": string,                   // MUST equal an actors[].name\n'
+        '      "target": string,                   // MUST equal an actors[].name\n'
+        '      "type": "ALLY_OF"|"OPPOSES"|"COMPETES_WITH"|"REGULATES"|"DEPENDS_ON"|"PARTNERS_WITH"|"INFLUENCES",\n'
+        '      "sign": "ally"|"rival"|"neutral",\n'
+        '      "strength": "high"|"medium"|"low",\n'
+        '      "basis": string                     // 1-line researched evidence for the edge\n'
+        "    }\n"
+        "  ],\n"
         '  "key_events": [ {"date": string, "event": string} ],\n'
         '  "hot_topics": [ string ],\n'
         '  "sources": [ {"title": string, "url": string} ]\n'
         "}\n\n"
         f"{source_hint}\n"
+        "RELATIONSHIPS: emit edges ONLY between actors named in actors[]; every edge MUST cite a "
+        "researched basis. Omit speculative edges. For a single-actor situation use an empty "
+        'relationships array ("relationships": []). SITUATION_BRIEF: populate it from your '
+        "actors-and-incentives analysis — current_situation and fault_lines are required.\n"
         f"Write all natural-language string values in {lang}. Output valid JSON only."
     )
 
@@ -860,22 +916,41 @@ def main() -> int:
         # --- Stage 2: structured extraction (best effort) ---
         if not args.no_actors:
             try:
-                raw = run_streamed_turn(
-                    client,
-                    build_extraction_prompt(args.target_language, args.depth),
-                    thread_id,  # same thread → research context preserved via checkpointer
-                    80 if args.depth == "deep" else 40,
-                    plog,
-                    "extract",
-                )
+                # PRIMARY: tool-free extraction from the finished report — reliable JSON
+                # (eager models like MiniMax-M3 otherwise keep calling web_search during the
+                # agent turn and never emit parseable JSON, dropping the whole enriched contract).
+                raw = extract_structured_tool_free(report, args.target_language, args.model, args.depth, plog)
                 obj = extract_json_object(raw)
+                if obj is None:
+                    # FALLBACK: the in-thread agent turn (older path) in case the bare call failed.
+                    plog.write("warn", "tool-free extraction unparseable; falling back to in-thread agent extraction")
+                    raw = run_streamed_turn(
+                        client,
+                        build_extraction_prompt(args.target_language, args.depth),
+                        thread_id,  # same thread → research context preserved via checkpointer
+                        80 if args.depth == "deep" else 40,
+                        plog,
+                        "extract",
+                    )
+                    obj = extract_json_object(raw)
                 if obj is None:
                     plog.write("warn", "could not parse structured JSON; actors.json/sources.json skipped")
                 else:
                     sources = obj.pop("sources", None)
+                    # actors.json keeps the full object (incl. situation_brief, relationships,
+                    # key_events) so one dossier read carries the whole enriched contract.
                     (out_dir / ACTORS_FILENAME).write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
                     meta["actors_count"] = len(obj.get("actors", []) or [])
-                    plog.write("ok", f"wrote {ACTORS_FILENAME} ({meta['actors_count']} actors)")
+                    meta["relationships_count"] = len(obj.get("relationships", []) or [])
+                    meta["has_situation_brief"] = bool(obj.get("situation_brief"))
+                    plog.write("ok", f"wrote {ACTORS_FILENAME} ({meta['actors_count']} actors, {meta['relationships_count']} relationships, brief={meta['has_situation_brief']})")
+                    # T1.2: promote key_events to a first-class timeline.json (kept inside
+                    # actors.json too for back-compat). Gives downstream a clean valid_at source.
+                    key_events = obj.get("key_events")
+                    if isinstance(key_events, list) and key_events:
+                        (out_dir / TIMELINE_FILENAME).write_text(json.dumps(key_events, ensure_ascii=False, indent=2), encoding="utf-8")
+                        meta["timeline_count"] = len(key_events)
+                        plog.write("ok", f"wrote {TIMELINE_FILENAME} ({len(key_events)} events)")
                     if isinstance(sources, list) and sources:
                         (out_dir / SOURCES_FILENAME).write_text(json.dumps(sources, ensure_ascii=False, indent=2), encoding="utf-8")
                         meta["sources_count"] = len(sources)

@@ -15,8 +15,8 @@
     'hero.tag':         { en: 'one prompt · research to forecast', zh: '一句话 · 从调研到预测' },
     'hero.h1a':         { en: 'Ask one question.', zh: '输入一个问题。' },
     'hero.h1b':         { en: 'Auto-research, build a world, simulate the future.', zh: '自动调研、构建世界、推演未来。' },
-    'hero.lead':        { en: 'A deep-research agent (DeerFlow) searches the web and builds an evidence-grounded dossier; the system constructs a temporal knowledge graph (Zep), generates digital personas for the real-world actors it found, runs a multi-agent population simulation (OASIS, dual-platform), and a report agent synthesizes the forecast. The pages below show every stage of real runs, unedited.',
-                          zh: '深度研究 Agent（DeerFlow）联网搜集证据并写出研究档案；系统据此构建时序知识图谱（Zep）、为调研发现的真实行动者生成数字人格、运行多智能体群体模拟（OASIS 双平台），最终由报告 Agent 综合产出预测。下面的页面展示了真实运行的每一个阶段，未经编辑。' },
+    'hero.lead':        { en: 'A deep-research agent (DeerFlow) searches the web and builds an evidence-grounded dossier; the system constructs a local temporal knowledge graph (Graphiti), generates digital personas for the real-world actors it found, runs a multi-agent population simulation (OASIS, dual-platform), and a report agent synthesizes the forecast. The pages below show every stage of real runs, unedited.',
+                          zh: '深度研究 Agent（DeerFlow）联网搜集证据并写出研究档案；系统据此构建本地时序知识图谱（Graphiti）、为调研发现的真实行动者生成数字人格、运行多智能体群体模拟（OASIS 双平台），最终由报告 Agent 综合产出预测。下面的页面展示了真实运行的每一个阶段，未经编辑。' },
     'hero.cta':         { en: 'View the demo forecasts ↓', zh: '查看演示预测 ↓' },
     'hero.run':         { en: 'Run it yourself', zh: '自己跑一个' },
 
@@ -43,7 +43,7 @@
     'how.h2':           { en: 'How it works', zh: '工作原理' },
     'how.s1':           { en: 'research — DeerFlow deep-research agent searches the web, extracts key actors (role / stance / influence) and writes a cited dossier', zh: 'research（深度研究）—— DeerFlow 联网搜索，提取关键行动者（角色/立场/影响力），写出带引用的研究档案' },
     'how.s2':           { en: 'ontology — an LLM derives entity & relation types from the dossier and your question', zh: 'ontology（本体生成）—— LLM 依据研究档案与你的问题推导实体与关系类型' },
-    'how.s3':           { en: 'graph — the dossier is ingested into a Zep temporal knowledge graph (GraphRAG)', zh: 'graph（图谱构建）—— 研究档案灌入 Zep 时序知识图谱（GraphRAG）' },
+    'how.s3':           { en: 'graph — the dossier is ingested into a local temporal knowledge graph (Graphiti, GraphRAG)', zh: 'graph（图谱构建）—— 研究档案灌入本地时序知识图谱（Graphiti，GraphRAG）' },
     'how.s4':           { en: 'prepare — researched actors become digital personas with evidence-based stances', zh: 'prepare（环境搭建）—— 调研得到的行动者成为带实证立场的数字人格' },
     'how.s5':           { en: 'run — hundreds of LLM personas interact on a simulated Twitter + Reddit (OASIS)', zh: 'run（群体模拟）—— 大量 LLM 人格在模拟的 Twitter + Reddit 上互动（OASIS）' },
     'how.s6':           { en: 'report — a tool-augmented ReAct agent queries graph + simulation and writes the forecast', zh: 'report（预测报告）—— 工具增强的 ReAct Agent 检索图谱与模拟结果并写出预测' },
@@ -80,10 +80,10 @@
     'onto.attrs':       { en: 'attributes', zh: '属性' },
     'onto.examples':    { en: 'e.g.', zh: '例如' },
 
-    'graph.intro':      { en: 'Stage 3: the dossier is chunked into a Zep temporal knowledge graph. Drag to pan, scroll to zoom, hover a node or edge for its extracted summary/fact.', zh: '阶段 3：研究档案分块灌入 Zep 时序知识图谱。拖拽平移、滚轮缩放，悬停节点或边可查看抽取出的摘要/事实。' },
+    'graph.intro':      { en: 'Stage 3: the dossier is chunked into a local temporal knowledge graph (Graphiti). Drag to pan, scroll to zoom, hover a node or edge for its extracted summary/fact.', zh: '阶段 3：研究档案分块灌入本地时序知识图谱（Graphiti）。拖拽平移、滚轮缩放，悬停节点或边可查看抽取出的摘要/事实。' },
     'graph.nodes':      { en: 'entities', zh: '个实体' },
     'graph.edges':      { en: 'relations', zh: '条关系' },
-    'graph.rebuilt':    { en: 'Rebuilt from the run’s saved dossier + ontology (the original cloud graph expired).', zh: '由该次运行保存的研究档案 + 本体重建（原云端图谱已过期）。' },
+    'graph.rebuilt':    { en: 'Rebuilt from the run’s saved dossier + ontology.', zh: '由该次运行保存的研究档案 + 本体重建。' },
 
     'forum.intro':      { en: 'Stage 5: digital personas post, reply and vote on a simulated Twitter + Reddit. This is the raw action feed of the run.', zh: '阶段 5：数字人格在模拟的 Twitter + Reddit 上发帖、回复、点赞。下面是这次运行的原始动作流。' },
     'forum.posts':      { en: 'posts', zh: '帖子' },

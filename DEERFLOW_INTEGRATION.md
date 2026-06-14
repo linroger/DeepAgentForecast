@@ -11,8 +11,24 @@
 > are **cancellable** (`POST /api/research/<id>/cancel`), `POST /run` pre-flights
 > the whole configuration, and the backend venv is pinned to Python 3.12
 > (`backend/.python-version`). Shared helpers live in `backend/app/utils/actors.py`.
-> Still open (deliberate): stage-aware resume/continue of failed or research-only
-> pipelines, and the optional Gateway (Option B) migration.
+> **Stage-aware resume is IMPLEMENTED** — `resume()`
+> (`pipeline_orchestrator.py:937-995`) + `POST /api/research/<id>/resume` re-enter
+> `_run` and reuse completed-stage artifacts via per-stage health-checked reuse
+> guards (see *Resume semantics* below). Still open (re-scoped to `EXECPLAN.md`):
+> validate-on-resume hardening (T6.1), `research_only`→full continue (T6.2),
+> edit-and-continue the dossier (T5.4), per-stage artifact deep-links (T6.3), and
+> the optional Gateway (Option B) migration.
+>
+> **Resume semantics.** A resume keeps the same `pipeline_id`, mints a fresh
+> `task_id`, resets only the failed/pending stage to running, and reuses every
+> already-completed stage's artifacts through five `_run` reuse guards:
+> (1) **research** reuses `handoff/research_report.md` when present;
+> (2) **ontology** reuses the persisted ontology dict;
+> (3) **graph** reuses `graph_id` **only when its entity count > 0** (a 0-entity
+> graph falls through to rebuild — T6.1/T2.7);
+> (4) **prepare** reuses the sim dir when a profiles file exists;
+> (5) **report** reuses a non-empty, non-FAILED `full_report.md`.
+> Each guard fails open toward regeneration and never raises.
 
 **Goal:** one prompt in, a prediction out. The user types a natural-language
 question; a **deep-research agent (DeerFlow 2.0)** gathers data and builds the
@@ -36,8 +52,9 @@ DeepAgentForecast/
 ## 1. The two systems in one paragraph each
 
 **MiroFish** (see `ARCHITECTURE.md`) is a linear pipeline with a feedback loop:
-seed text + a natural-language *prediction requirement* → LLM ontology → Zep
-knowledge graph → typed entities become agents → personas + simulation config →
+seed text + a natural-language *prediction requirement* → LLM ontology → local
+Graphiti knowledge graph (embedded FalkorDB) → typed entities become agents →
+personas + simulation config →
 **OASIS** dual-platform (Twitter+Reddit) agent simulation → a ReAct **ReportAgent**
 writes a prediction report → deep interaction (chat / interview live agents). Its
 true inputs are just **(a) seed material describing the real-world situation and
@@ -87,7 +104,7 @@ So the pipeline composes cleanly with no architectural surgery:
             │                       │                                               │
             │                       ▼                                               │
             │  MiroFish: seed = research_report.md ; requirement = user prompt      │
-            │    ontology ▸ Zep graph ▸ personas ▸ OASIS sim ▸ ReportAgent          │
+            │    ontology ▸ Graphiti graph ▸ personas ▸ OASIS sim ▸ ReportAgent     │
             └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -160,7 +177,8 @@ turns DeerFlow from "a fancier file upload" into a genuine fidelity upgrade.
 ## 4. Integration topology — three options, one recommendation
 
 The hard constraint driving this choice: **dependency isolation.** MiroFish pins
-`camel-oasis==0.2.5`, `camel-ai==0.2.78`, `zep-cloud==3.13.0` (Python ≥3.11,≤3.12).
+`camel-oasis==0.2.5`, `camel-ai==0.2.78`, and the local `graphiti-core` /
+`falkordblite` knowledge-graph stack (Python ≥3.11,≤3.12).
 DeerFlow needs Python ≥3.12 with the full `langchain`/`langgraph`/`anthropic`/
 `fastapi` stack. `camel-ai` drags heavy transitive pins (pydantic, openai,
 tokenizers, …) that fight the langchain stack. **They must not share one venv.**
@@ -380,10 +398,13 @@ seed **personas** (name-matched per entity) and **per-agent simulation config**;
 **`initial_posts`** are grounded in researched actor stances with `poster_name`
 targeting; the "research depth" knob (quick/standard/deep) is live, and `deep`
 uses a multi-pass research protocol with a depth-aware watchdog; `sources.json` provenance is surfaced in the dossier panel;
-pipelines are cancellable and pre-flighted. **Still open (optional):**
-stage-aware resume/continue of failed or research-only pipelines; migrate to
-Gateway (Option B) for concurrency; route MiroFish LLM calls through
-`ClaudeChatModel`.
+pipelines are cancellable and pre-flighted. **Stage-aware resume is IMPLEMENTED**
+(`pipeline_orchestrator.py:937-995` + `POST /api/research/<id>/resume`; see the
+*Resume semantics* note at the top). **Still open (re-scoped to `EXECPLAN.md`):**
+`research_only`→full continue (T6.2); edit-and-continue the dossier (T5.4);
+per-stage artifact deep-links (T6.3); routing MiroFish report LLM calls through
+DeerFlow's `ClaudeChatModel` for native tool calling (T4.5); the optional Gateway
+(Option B) migration.
 
 ---
 
@@ -438,17 +459,23 @@ Gateway (Option B) for concurrency; route MiroFish LLM calls through
 
 ### What was built
 
-**DeerFlow side (`deer-flow/`)** — *auto-provisioned by `./setup.sh`* (shallow-clones
-`deer-flow/` into the repo from `https://github.com/bytedance/deer-flow`, trimmed to
-runtime essentials — backend/, skills/, config.yaml — and pinned to a
-known-good commit, then applies the **bridge overlay** from `deerflow_bridge/`:
+**DeerFlow side (`deer-flow/`)** — *auto-provisioned by `./setup.sh`* (assembles `deer-flow/`
+in the repo by **seeding from the vendored DeerFlow 2.0 build** at `deer-flow-2.0-m1-rc3/` —
+falling back to a shallow upstream clone of `https://github.com/bytedance/deer-flow` pinned to a
+known-good commit when no vendor dir is present — trimmed to runtime essentials (backend/,
+skills/, config.yaml), then applies the **bridge overlay** from `deerflow_bridge/`:
 `deerflow_research.py` → repo root; `patches/models/*.py` → the harness `deerflow/models/`
-dir (`claude_provider.py` = OAuth-preference 401 fix, `credential_loader.py` = macOS
-Keychain source, `patched_minimax.py` = the name-strip fix); `config.yaml` → only if
-absent, never clobbering an existing one — then builds its isolated `uv` venv on Python
-3.13). `git` is a prerequisite; overridable via `DEERFLOW_DIR` / `DEERFLOW_REPO` /
-`DEERFLOW_REF` (set `DEERFLOW_REF=main` to track HEAD). Re-running `setup.sh` is
-idempotent. So the whole integration is reproducible from a single `./setup.sh`.
+dir (`claude_provider.py` = OAuth-preference 401 fix + 0.5 thinking-budget ratio,
+`credential_loader.py` = macOS Keychain source, `patched_minimax.py` = DeerFlow 2.0's **own
+upstreamed** name-strip fix carried verbatim — a no-op on the vendored engine, a back-port on an
+older fallback base); `patches/middlewares/*.py` → `deerflow/agents/middlewares/`
+(`loop_detection_middleware.py` = per-run budget reset); the overhauled deep-research
+`SKILL.md` → `skills/public/deep-research/`; `config.yaml` → only if absent, never clobbering an
+existing one — then builds its isolated `uv` venv on **Python 3.12** (DeerFlow 2.0's pin). The
+vendor seed needs no network; the clone fallback needs `git`. Overridable via `DEERFLOW_DIR` /
+`DEERFLOW_VENDOR_DIR` / `DEERFLOW_REPO` / `DEERFLOW_REF` (set `DEERFLOW_REF=main` to track HEAD).
+Re-running `setup.sh` is idempotent. So the whole integration is reproducible from a single
+`./setup.sh`.
 - `config.yaml` — created from the template with one **active model `claude`**
   (`ClaudeChatModel`, Claude Code OAuth from `~/.claude/.credentials.json`,
   `supports_thinking`, native tool calling). DDG `web_search` + Jina `web_fetch`

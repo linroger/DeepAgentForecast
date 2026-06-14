@@ -289,7 +289,36 @@ class SimulationManager:
                 defined_entity_types=defined_entity_types,
                 enrich_with_edges=True
             )
-            
+
+            # T3.13: 上限智能体数，按 (是否匹配研究 actor, 影响力, 邻边数) 排序保留 top N，
+            # 但始终保留每个 actors.json 匹配到的 actor（避免深度档案被海量通用节点稀释，
+            # 也省去每个 persona 1 次 LLM + 2 次检索的成本）。
+            from ..utils.actors import match_actor as _match_actor, influence_weight as _influence_weight
+            _max_agents = Config.OASIS_MAX_AGENTS
+            if _max_agents and len(filtered.entities) > _max_agents:
+                _matched = {id(e): (_match_actor(e.name, actors) if actors else None) for e in filtered.entities}
+                _matched_count = sum(1 for v in _matched.values() if v)
+
+                def _rank(e):
+                    a = _matched.get(id(e))
+                    iw = (_influence_weight(a) or 0.0) if a else 0.0
+                    return (1 if a else 0, iw, len(e.related_edges or []))
+
+                kept = [e for e in filtered.entities if _matched.get(id(e))]  # 所有匹配 actor 必留
+                kept_ids = {id(e) for e in kept}
+                for e in sorted(filtered.entities, key=_rank, reverse=True):
+                    if len(kept) >= _max_agents:
+                        break
+                    if id(e) not in kept_ids:
+                        kept.append(e)
+                        kept_ids.add(id(e))
+                logger.info(
+                    f"[T3.13] 智能体上限 {_max_agents}: {len(filtered.entities)} → 保留 {len(kept)} "
+                    f"(匹配研究 actor {_matched_count} 个全部保留)，丢弃 {len(filtered.entities) - len(kept)}"
+                )
+                filtered.entities = kept
+                filtered.filtered_count = len(kept)
+
             state.entities_count = filtered.filtered_count
             state.entity_types = list(filtered.entity_types)
             

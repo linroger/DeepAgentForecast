@@ -1,0 +1,134 @@
+"""Provider-agnostic Graphiti LLM client backed by the app's own ``LLMClient``.
+
+Graphiti needs an LLM to extract entities/edges from episodes and return schema-conforming
+JSON. Rather than bind Graphiti to one provider, we delegate to the app's existing
+``app.utils.llm_client.LLMClient``, which already supports every configured provider
+(claude-cli / codex-cli / openai / kimi / minimax / deepseek / qwen / glm), with
+disable-thinking handling, Kimi User-Agent injection, retries, and JSON repair.
+
+This means local graph building works with whatever provider the user configured —
+including the no-API-key CLI providers — and needs NO embeddings endpoint (embeddings are
+handled separately by the local sentence-transformers embedder).
+
+The Graphiti base ``LLMClient.generate_response`` already injects the response model's JSON
+schema and a multilingual instruction into the messages before calling ``_generate_response``,
+so here we only translate messages and invoke the app client's ``chat_json``.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import typing
+
+from pydantic import BaseModel
+
+from graphiti_core.llm_client.client import LLMClient as GraphitiLLMClient
+from graphiti_core.llm_client.config import LLMConfig, ModelSize
+from graphiti_core.llm_client.errors import EmptyResponseError, RateLimitError
+
+from ...utils.llm_client import LLMClient as AppLLMClient
+from ...config import Config
+
+# Transient OpenAI-SDK errors that should be retried rather than aborting a whole graph
+# build. Graphiti's tenacity retry fires on RateLimitError, so we normalize to it.
+try:  # pragma: no cover - import guard for environments without openai
+    from openai import (
+        APIConnectionError as _OpenAIConnError,
+        APITimeoutError as _OpenAITimeout,
+        InternalServerError as _OpenAIServerError,
+        RateLimitError as _OpenAIRateLimit,
+    )
+
+    _TRANSIENT_LLM_ERRORS: tuple[type[Exception], ...] = (
+        _OpenAITimeout,
+        _OpenAIConnError,
+        _OpenAIServerError,
+        _OpenAIRateLimit,
+    )
+except Exception:  # pragma: no cover
+    _TRANSIENT_LLM_ERRORS = ()
+
+
+class AppGraphitiLLMClient(GraphitiLLMClient):
+    """Adapts the app's synchronous ``LLMClient`` to Graphiti's async LLM interface."""
+
+    def __init__(self, app_llm: AppLLMClient | None = None, max_tokens: int = 8192):
+        config = LLMConfig(
+            api_key=Config.LLM_API_KEY or "local",
+            model=Config.LLM_MODEL_NAME,
+            base_url=Config.LLM_BASE_URL,
+            max_tokens=max_tokens,
+        )
+        super().__init__(config, cache=False)
+        self._app_llm = app_llm or AppLLMClient()
+        self._max_tokens = max_tokens
+
+    async def _generate_response(
+        self,
+        messages: list,
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = 0,
+        model_size: ModelSize = ModelSize.medium,
+    ) -> dict[str, typing.Any]:
+        # Graphiti Message objects expose .role / .content; the schema (if any) and the
+        # multilingual instruction are already baked into message content by the base class.
+        msg_dicts = [{"role": m.role, "content": m.content} for m in messages]
+        if msg_dicts:
+            # Non-premium models sometimes echo the injected JSON *schema* back instead of
+            # producing a conforming instance. Add an explicit guard to the final message.
+            msg_dicts[-1] = {
+                "role": msg_dicts[-1]["role"],
+                "content": msg_dicts[-1]["content"]
+                + (
+                    "\n\nIMPORTANT: Output ONLY a single JSON object that is a concrete "
+                    "INSTANCE conforming to the schema above — with real extracted values. "
+                    "Do NOT output the schema itself; never include keys like \"$defs\", "
+                    "\"properties\", \"$ref\", or \"type\": \"object\"."
+                ),
+            }
+        tokens = max_tokens or self._max_tokens
+
+        loop = asyncio.get_event_loop()
+        # Internal rising-temperature retry for the schema-echo failure mode: eager models
+        # (e.g. MiniMax-M3) sometimes echo the injected JSON *schema* instead of a conforming
+        # instance, and at temperature 0.0 they do so DETERMINISTICALLY — so graphiti's own
+        # tenacity retry (same args) re-hits the identical schema every time and hard-fails the
+        # whole graph build. Retrying here with rising temperature + a stronger nudge breaks the
+        # determinism so a real instance is produced.
+        temps = (0.0, 0.4, 0.7)
+        for attempt, temp in enumerate(temps):
+            try:
+                result = await loop.run_in_executor(
+                    None,
+                    lambda t=temp: self._app_llm.chat_json(msg_dicts, temperature=t, max_tokens=tokens),
+                )
+            except ValueError as exc:
+                # Unparseable / empty JSON — retryable by graphiti's tenacity (4 attempts).
+                raise EmptyResponseError(str(exc)) from exc
+            except _TRANSIENT_LLM_ERRORS as exc:
+                # Transient provider hiccups (timeouts, connection drops, 5xx, rate limits)
+                # → graphiti's RateLimitError (exponential backoff) handles them.
+                raise RateLimitError(str(exc)) from exc
+
+            if not isinstance(result, dict):
+                raise EmptyResponseError(f"Expected JSON object, got {type(result).__name__}")
+            if not self._looks_like_schema(result):
+                return result
+            # Schema echo — strengthen the instruction and retry at a higher temperature.
+            if attempt < len(temps) - 1:
+                msg_dicts[-1] = {
+                    "role": msg_dicts[-1]["role"],
+                    "content": msg_dicts[-1]["content"]
+                    + "\n\n(Your previous reply was the SCHEMA, not data. Output the concrete "
+                    "JSON INSTANCE with the real extracted values NOW — no schema keywords.)",
+                }
+        # Still a schema after all temperatures — surface as retryable for graphiti's outer retry.
+        raise EmptyResponseError("LLM returned a JSON schema instead of an instance (after temperature retries)")
+
+    @staticmethod
+    def _looks_like_schema(obj: dict) -> bool:
+        if "$defs" in obj or "$schema" in obj:
+            return True
+        if obj.get("type") == "object" and "properties" in obj:
+            return True
+        return False

@@ -18,13 +18,17 @@
 #     upserts the chosen provider lines safely (re-runs default to your current
 #     .env provider, so pressing Enter never clobbers an existing config).
 #   * Installs root + frontend + backend dependencies.
-#   * DOWNLOADS the DeerFlow research engine into ./deer-flow inside this repo
-#     (pinned commit, gitignored), applies the bridge overlay (research driver, patched
-#     model providers, and a ready-to-use config.yaml with claude / minimax /
-#     deepseek / qwen / glm / codex / kimi stanzas), then builds its isolated venv.
+#   * ASSEMBLES the DeerFlow 2.0 engine into ./deer-flow inside this repo
+#     (gitignored): seeds from the vendored ./deer-flow-2.0-m1-rc3 build when
+#     present, else falls back to a pinned upstream clone; then applies the bridge
+#     overlay (research driver, patched model providers, loop-detection middleware,
+#     deep-research skill, and a ready-to-use config.yaml with claude / minimax /
+#     deepseek / qwen / glm / codex / kimi stanzas) and builds its isolated
+#     Python 3.12 venv.
 #
 # Safe to run multiple times. Optional steps are guarded so a missing piece
-# (e.g. no network for the deer-flow clone) never aborts the whole script.
+# (e.g. no vendored build AND no network for the clone fallback) never aborts the
+# whole script.
 # ---------------------------------------------------------------------------
 
 # Fail fast on errors, unset variables, and broken pipes — but we deliberately
@@ -286,7 +290,8 @@ else
   warn ".env.example not found; creating a minimal .env stub."
   cat > "$ENV_FILE" <<'STUB'
 LLM_PROVIDER=claude-cli
-ZEP_API_KEY=your_zep_api_key_here
+# Local knowledge graph (no API key needed). auto -> embedded FalkorDB (falkordblite).
+GRAPH_BACKEND=auto
 STUB
 fi
 
@@ -410,34 +415,12 @@ if [ -n "$LLM_API_KEY_INPUT" ] && have curl; then
   unset LLM_API_KEY_INPUT
 fi
 
-# --- Zep API key prompt (required for every run; allow skipping) -------------
-# We only prompt if the key is still the placeholder/empty. We never echo the
-# secret back and we read silently. If stdin is not a TTY (e.g. CI), we skip.
-ZEP_PLACEHOLDER="your_zep_api_key_here"
-CURRENT_ZEP="$(grep -E '^[[:space:]]*ZEP_API_KEY=' "$ENV_FILE" | head -n1 | cut -d= -f2- || true)"
-
-if [ -z "$CURRENT_ZEP" ] || [ "$CURRENT_ZEP" = "$ZEP_PLACEHOLDER" ]; then
-  if [ -t 0 ]; then
-    info "A Zep Cloud API key is required for every run (free tier works):"
-    info "    https://app.getzep.com/"
-    printf '  Paste your ZEP_API_KEY (or press Enter to skip and edit .env later): '
-    # -s: silent (don't echo the secret); -r: raw (keep backslashes).
-    read -rs ZEP_INPUT || ZEP_INPUT=""
-    printf '\n'
-    if [ -n "$ZEP_INPUT" ]; then
-      upsert_env "ZEP_API_KEY" "$ZEP_INPUT"
-      ok "ZEP_API_KEY saved to .env"
-      unset ZEP_INPUT
-    else
-      warn "Skipped — set ZEP_API_KEY in .env before running (still a placeholder)."
-    fi
-  else
-    warn "ZEP_API_KEY is still a placeholder and stdin is non-interactive."
-    warn "Edit .env and set ZEP_API_KEY before running."
-  fi
-else
-  ok "ZEP_API_KEY already configured in .env"
-fi
+# --- Knowledge graph: local Graphiti (no API key) ---------------------------
+# The knowledge graph now runs locally via Graphiti on an embedded FalkorDB
+# (falkordblite) — no Zep account, no API key, no external service. The backend
+# 'uv sync' step below installs everything; entity/relation extraction reuses your
+# configured LLM_PROVIDER and embeddings run locally (sentence-transformers).
+info "Knowledge graph: local Graphiti + embedded FalkorDB (no API key required)."
 
 # ---------------------------------------------------------------------------
 # 5) Install dependencies
@@ -495,28 +478,49 @@ fi
 #     The checkout is gitignored, so everything lives in this single folder. ---
 step "Setting up DeerFlow research engine (./deer-flow)"
 
-# Where to put deer-flow, where to clone from, and which commit to pin to.
-#   * DEERFLOW_DIR  — override the location (default: ./deer-flow in this repo).
-#   * DEERFLOW_REPO — override the clone URL.
-#   * DEERFLOW_REF  — pin to a commit/branch. Defaults to the exact upstream
-#     commit the bridge patches were authored against, so the overlay always
-#     applies cleanly. Set DEERFLOW_REF=main to track upstream HEAD instead.
+# Where to put deer-flow, and where to get the engine from.
+#   * DEERFLOW_DIR        — runtime location (default: ./deer-flow in this repo).
+#   * DEERFLOW_VENDOR_DIR — PREFERRED source: a DeerFlow 2.0 build dropped into
+#     the repo (default: ./deer-flow-2.0-m1-rc3). This is the EXACT engine the
+#     bridge overlay targets, so the integration is deterministic and offline.
+#   * DEERFLOW_REPO / DEERFLOW_REF — FALLBACK only (when the vendor dir is
+#     absent): a shallow upstream clone pinned to the commit the bridge overlay's
+#     base matches (claude_provider / credential_loader / loop_detection are
+#     byte-identical between this pin and the vendored RC outside the patched
+#     regions, so the overlay applies cleanly either way). Set DEERFLOW_REF=main
+#     to track upstream HEAD instead.
 DEERFLOW_DIR="${DEERFLOW_DIR:-$ROOT_DIR/deer-flow}"
+DEERFLOW_VENDOR_DIR="${DEERFLOW_VENDOR_DIR:-$ROOT_DIR/deer-flow-2.0-m1-rc3}"
 DEERFLOW_REPO="${DEERFLOW_REPO:-https://github.com/bytedance/deer-flow.git}"
 DEERFLOW_REF="${DEERFLOW_REF:-799bef6d9dbc3a2cb37ce8177eeeabe2a33d8971}"
 BRIDGE_DIR="$ROOT_DIR/deerflow_bridge"
 
-# 1) Clone if it isn't already there ("downloads everything"). A fresh clone is
-#    only attempted into a missing/empty directory; an existing checkout is kept.
-#    The clone is SHALLOW (--depth 1 + a depth-1 fetch of the pinned commit) and
-#    then TRIMMED to what the headless research bridge actually uses: backend/
-#    (engine + venv), skills/ (the deep-research skill), config.yaml, and
-#    README/LICENSE for attribution. The web frontend, docs, docker, CI and the
-#    .git dir are dead weight for this workflow. To update the engine later,
-#    delete deer-flow/ and re-run ./setup.sh.
+# 1) Obtain the engine if it isn't already there. A fresh acquisition is only
+#    attempted into a missing/empty directory; an existing checkout is kept (the
+#    overlay in step 2 is re-applied either way). Two sources, in priority order:
+#      (a) PREFERRED — copy the pinned DeerFlow 2.0 build vendored in this repo
+#          ($DEERFLOW_VENDOR_DIR). Deterministic, offline, and exactly what the
+#          bridge overlay targets.
+#      (b) FALLBACK — a SHALLOW upstream clone (--depth 1 + depth-1 fetch of the
+#          pinned commit) when no vendor dir is present.
+#    Either way the checkout is then TRIMMED to what the headless research bridge
+#    actually uses: backend/ (engine + venv), skills/, config.yaml, README/LICENSE
+#    for attribution. The web frontend, docs, docker, CI and the .git dir are dead
+#    weight here. To update the engine later, delete deer-flow/ (or drop a newer
+#    deer-flow-2.0-* vendor dir) and re-run ./setup.sh.
+DF_ACQUIRED=0
 if [ ! -d "$DEERFLOW_DIR/.git" ] && [ ! -d "$DEERFLOW_DIR/backend" ]; then
-  if have git; then
-    info "Downloading DeerFlow research engine -> $DEERFLOW_DIR"
+  if [ -d "$DEERFLOW_VENDOR_DIR/backend" ]; then
+    info "Seeding DeerFlow 2.0 engine from vendored build -> $DEERFLOW_DIR"
+    info "    source: $DEERFLOW_VENDOR_DIR"
+    if cp -R "$DEERFLOW_VENDOR_DIR" "$DEERFLOW_DIR" 2>/dev/null; then
+      ok "Seeded deer-flow from $(basename "$DEERFLOW_VENDOR_DIR")"
+      DF_ACQUIRED=1
+    else
+      warn "Could not copy the vendored DeerFlow build from $DEERFLOW_VENDOR_DIR."
+    fi
+  elif have git; then
+    info "No vendored DeerFlow build at $DEERFLOW_VENDOR_DIR; cloning upstream -> $DEERFLOW_DIR"
     if git clone --quiet --depth 1 "$DEERFLOW_REPO" "$DEERFLOW_DIR"; then
       ok "Cloned deer-flow (shallow) from $DEERFLOW_REPO"
       if [ "$DEERFLOW_REF" != "main" ]; then
@@ -530,26 +534,30 @@ if [ ! -d "$DEERFLOW_DIR/.git" ] && [ ! -d "$DEERFLOW_DIR/backend" ]; then
           warn "stage misbehaves, set DEERFLOW_REF=main or report it so we refresh the pin."
         fi
       fi
-      (
-        cd "$DEERFLOW_DIR" && rm -rf .git frontend docs docker contracts scripts \
-          .github .agent pr-build logs Makefile Install.md CONTRIBUTING.md \
-          CODE_OF_CONDUCT.md SECURITY.md README_fr.md README_ja.md README_ru.md \
-          README_zh.md deer-flow.code-workspace config.example.yaml \
-          extensions_config.example.json .pre-commit-config.yaml .gitattributes \
-          .gitignore .dockerignore
-      ) 2>/dev/null || true
-      ok "Trimmed deer-flow to runtime essentials (backend/, skills/, config)"
+      DF_ACQUIRED=1
     else
       warn "git clone of deer-flow failed (offline or blocked?)."
-      warn "Clone it manually, then re-run ./setup.sh:"
+      warn "Drop a DeerFlow 2.0 build at $DEERFLOW_VENDOR_DIR, or clone manually:"
       warn "    git clone --depth 1 $DEERFLOW_REPO \"$DEERFLOW_DIR\""
     fi
   else
-    warn "git not found — cannot auto-download deer-flow. Install git, or clone manually:"
+    warn "No vendored build and git not found — cannot obtain deer-flow."
+    warn "Drop a DeerFlow 2.0 build at $DEERFLOW_VENDOR_DIR, or install git and clone:"
     warn "    git clone --depth 1 $DEERFLOW_REPO \"$DEERFLOW_DIR\""
   fi
+  if [ "$DF_ACQUIRED" = "1" ] && [ -d "$DEERFLOW_DIR" ]; then
+    (
+      cd "$DEERFLOW_DIR" && rm -rf .git frontend docs docker contracts scripts \
+        .github .agent pr-build logs Makefile Install.md CONTRIBUTING.md \
+        CODE_OF_CONDUCT.md SECURITY.md README_fr.md README_ja.md README_ru.md \
+        README_zh.md deer-flow.code-workspace config.example.yaml \
+        extensions_config.example.json .pre-commit-config.yaml .gitattributes \
+        .gitignore .dockerignore .DS_Store
+    ) 2>/dev/null || true
+    ok "Trimmed deer-flow to runtime essentials (backend/, skills/, config)"
+  fi
 else
-  ok "deer-flow already present at $DEERFLOW_DIR — not re-cloning."
+  ok "deer-flow already present at $DEERFLOW_DIR — not re-acquiring."
 fi
 
 # 2) Apply the bridge overlay so the research stage matches what this project
@@ -564,8 +572,12 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
     ok "Installed deerflow_research.py (bridge entry point)"
   fi
 
-  # (b) Patched model providers: macOS-Keychain OAuth + OAuth-preference (fixes
-  #     the 'claude' 401), and the MiniMax 'user name must be consistent' fix.
+  # (b) Patched model providers: macOS-Keychain OAuth + OAuth-preference for
+  #     claude_provider (fixes the 'claude' 401) and credential_loader. The
+  #     patched_minimax.py shipped here is DeerFlow 2.0's own upstreamed
+  #     'user name must be consistent' fix carried verbatim, so applying it is a
+  #     no-op on the vendored RC engine and back-ports the fix on an older
+  #     clone-fallback base — it never downgrades the upstream implementation.
   DF_MODELS="$DEERFLOW_DIR/backend/packages/harness/deerflow/models"
   if [ -d "$BRIDGE_DIR/patches/models" ] && [ -d "$DF_MODELS" ]; then
     cp "$BRIDGE_DIR/patches/models/"*.py "$DF_MODELS/"
@@ -604,18 +616,19 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
   fi
 fi
 
-# 3) Build DeerFlow's isolated venv (Python >=3.12; 3.13 recommended). Guarded
-#    so a build failure here does not abort the rest of the setup.
+# 3) Build DeerFlow's isolated venv. DeerFlow 2.0 pins Python 3.12
+#    (deer-flow/backend/.python-version), so build against 3.12 to match its
+#    uv.lock exactly. Guarded so a build failure here does not abort the setup.
 if [ -d "$DEERFLOW_DIR/backend" ]; then
   if have uv; then
     if UV_PROJECT_ENVIRONMENT="$DEERFLOW_DIR/backend/.venv" \
-         uv sync --project "$DEERFLOW_DIR/backend" --python 3.13; then
-      ok "DeerFlow venv ready ($DEERFLOW_DIR/backend/.venv, Python 3.13)"
+         uv sync --project "$DEERFLOW_DIR/backend" --python 3.12; then
+      ok "DeerFlow venv ready ($DEERFLOW_DIR/backend/.venv, Python 3.12)"
     else
       warn "DeerFlow 'uv sync' failed. The rest of the setup is unaffected;"
       warn "you can retry with:"
       warn "    UV_PROJECT_ENVIRONMENT=\"$DEERFLOW_DIR/backend/.venv\" \\"
-      warn "      uv sync --project \"$DEERFLOW_DIR/backend\" --python 3.13"
+      warn "      uv sync --project \"$DEERFLOW_DIR/backend\" --python 3.12"
     fi
   else
     warn "Skipping DeerFlow venv — uv is not available (see install hint above)."
@@ -631,9 +644,9 @@ fi
 # ---------------------------------------------------------------------------
 step "Next steps"
 cat <<NEXT
-  1) Zep API key (required for every run, free tier works):
-       • Get one at https://app.getzep.com/
-       • Set ZEP_API_KEY=... in: $ENV_FILE
+  1) Knowledge graph: runs locally (Graphiti + embedded FalkorDB). No API key,
+     no external service. Configurable via GRAPH_BACKEND=auto in: $ENV_FILE
+     (auto -> embedded FalkorDB; or 'kuzu', or point FALKORDB_HOST at a server).
 
   2) Model provider: currently LLM_PROVIDER=$LLM_PROVIDER (DEERFLOW_MODEL=$DEERFLOW_MODEL).
        • claude-cli / codex-cli use your local CLI — no API key needed.

@@ -19,9 +19,26 @@
 
     <!-- 研究报告 -->
     <section v-show="activeTab === 'report'" class="panel" role="tabpanel">
-      <div class="panel-head"><span class="diamond">◇</span>{{ L('研究报告', 'Research Report') }}</div>
+      <div class="panel-head">
+        <span class="diamond">◇</span>{{ L('研究报告', 'Research Report') }}
+        <!-- T5.4: 编辑入口（仅可编辑时显示） -->
+        <span v-if="editable && hasReport" class="edit-actions">
+          <button v-if="!editing" type="button" class="edit-btn" @click="startEdit">✎ {{ L('编辑', 'Edit') }}</button>
+          <template v-else>
+            <button type="button" class="edit-btn ghost" @click="cancelEdit" :disabled="saving">{{ L('取消', 'Cancel') }}</button>
+            <button type="button" class="edit-btn primary" @click="saveAndContinue" :disabled="saving">
+              {{ saving ? L('保存中…', 'Saving…') : L('保存并继续 →', 'Save & Continue →') }}
+            </button>
+          </template>
+        </span>
+      </div>
       <div class="panel-body">
-        <div v-if="hasReport" class="md-body" v-html="renderedReport"></div>
+        <div v-if="editing" class="edit-wrap">
+          <p class="edit-hint">{{ L('编辑研究报告后「保存并继续」将以新内容重建图谱并运行完整管线。', 'After editing, “Save & Continue” rebuilds the graph from the new content and runs the full pipeline.') }}</p>
+          <textarea v-model="editReport" class="edit-textarea" rows="24"></textarea>
+          <p v-if="saveError" class="edit-error">{{ saveError }}</p>
+        </div>
+        <div v-else-if="hasReport" class="md-body" v-html="renderedReport"></div>
         <div v-else class="empty">
           <div class="empty-icon">◇</div>
           <div class="empty-title">{{ L('暂无研究报告', 'No research report yet') }}</div>
@@ -87,6 +104,52 @@
       </div>
     </section>
 
+    <!-- 局势简报 (T5.1) -->
+    <section v-show="activeTab === 'brief'" class="panel" role="tabpanel">
+      <div class="panel-head"><span class="diamond">◇</span>{{ L('局势简报', 'Situation Brief') }}</div>
+      <div class="panel-body">
+        <div v-if="briefFields.length" class="brief-blocks">
+          <div v-for="(f, i) in briefFields" :key="'bf' + i" class="brief-block">
+            <div class="sub-label">{{ f.label }}</div>
+            <p v-if="f.text" class="brief-text">{{ f.text }}</p>
+            <ul v-else-if="f.list" class="brief-list">
+              <li v-for="(item, j) in f.list" :key="'bl' + i + '-' + j">{{ item }}</li>
+            </ul>
+          </div>
+        </div>
+        <div v-else class="empty">
+          <div class="empty-icon">◇</div>
+          <div class="empty-title">{{ L('暂无局势简报', 'No situation brief yet') }}</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 关系网 (T5.1) -->
+    <section v-show="activeTab === 'relationships'" class="panel" role="tabpanel">
+      <div class="panel-head"><span class="diamond">◇</span>{{ L('关系网', 'Relationships') }}</div>
+      <div class="panel-body">
+        <template v-if="relationships.length">
+          <div class="sources-count">{{ L('共', 'Total') }} {{ relationships.length }} {{ L('条关系', 'relationships') }}</div>
+          <ul class="rel-list">
+            <li v-for="(rel, i) in relationships" :key="'rel' + i" class="rel-item">
+              <span class="rel-node">{{ rel.source }}</span>
+              <span class="rel-edge" :class="relSignClass(rel)">
+                {{ relTypeLabel(rel.type) }}
+                <span v-if="rel.strength" class="rel-strength">· {{ rel.strength }}</span>
+              </span>
+              <span class="rel-arrow">→</span>
+              <span class="rel-node">{{ rel.target }}</span>
+              <span v-if="rel.basis" class="rel-basis" :title="rel.basis">{{ rel.basis }}</span>
+            </li>
+          </ul>
+        </template>
+        <div v-else class="empty">
+          <div class="empty-icon">◇</div>
+          <div class="empty-title">{{ L('暂无关系数据', 'No relationship data') }}</div>
+        </div>
+      </div>
+    </section>
+
     <!-- 信息来源 -->
     <section v-show="activeTab === 'sources'" class="panel" role="tabpanel">
       <div class="panel-head"><span class="diamond">◇</span>{{ L('信息来源', 'Sources') }}</div>
@@ -119,15 +182,51 @@
 import { ref, computed } from 'vue'
 import { renderMarkdown } from '../../utils/markdown'
 import { L } from '../../i18n'
+import { editDossier } from '../../api/research'
 
 const props = defineProps({
   dossier: {
     type: Object,
     default: null
-  }
+  },
+  // T5.4: 可编辑（仅完成的 research_only）时传入 pipelineId + editable
+  pipelineId: { type: String, default: '' },
+  editable: { type: Boolean, default: false }
 })
 
+const emit = defineEmits(['saved-continue'])
+
 const activeTab = ref('report')
+
+// ---- T5.4: edit-and-continue ----
+const editing = ref(false)
+const editReport = ref('')
+const saving = ref(false)
+const saveError = ref('')
+
+function startEdit() {
+  editReport.value = (props.dossier && props.dossier.report) || ''
+  saveError.value = ''
+  editing.value = true
+}
+function cancelEdit() {
+  editing.value = false
+  saveError.value = ''
+}
+async function saveAndContinue() {
+  if (saving.value || !props.pipelineId) return
+  saving.value = true
+  saveError.value = ''
+  try {
+    await editDossier(props.pipelineId, { report: editReport.value })
+    editing.value = false
+    emit('saved-continue')
+  } catch (e) {
+    saveError.value = (e && e.message) || L('保存失败', 'Save failed')
+  } finally {
+    saving.value = false
+  }
+}
 
 // ---- Safe accessors ------------------------------------------------------
 
@@ -142,10 +241,46 @@ const actorList = computed(() => {
   return c && Array.isArray(c.actors) ? c.actors.filter(Boolean) : []
 })
 
+// T5.2: 优先用一等公民 dossier.timeline（timeline.json），否则回退 actors.key_events
 const keyEvents = computed(() => {
+  const tl = props.dossier && props.dossier.timeline
+  if (Array.isArray(tl) && tl.length) {
+    return tl.filter(ev => ev && (ev.event || ev.date))
+  }
   const c = actorsContainer.value
   if (!c || !Array.isArray(c.key_events)) return []
   return c.key_events.filter(ev => ev && (ev.event || ev.date))
+})
+
+// T5.1: 局势简报（仅在存在时渲染）
+const situationBrief = computed(() => {
+  const c = actorsContainer.value
+  const sb = c && c.situation_brief
+  return sb && typeof sb === 'object' ? sb : null
+})
+
+const briefFields = computed(() => {
+  const sb = situationBrief.value
+  if (!sb) return []
+  const out = []
+  const push = (label, key) => {
+    const v = sb[key]
+    if (typeof v === 'string' && v.trim()) out.push({ label, text: v.trim(), list: null })
+    else if (Array.isArray(v) && v.length) out.push({ label, text: null, list: v.filter(x => x != null && String(x).trim() !== '') })
+  }
+  push(L('当前态势', 'Current Situation'), 'current_situation')
+  push(L('来龙去脉', 'Context'), 'context')
+  push(L('张力 / 动态', 'Dynamics'), 'dynamics')
+  push(L('争议断层', 'Fault Lines'), 'fault_lines')
+  push(L('潜在触发', 'Catalysts'), 'catalysts')
+  return out
+})
+
+// T5.1: 关系图（source --[type]--> target，仅端点都在 actors 内时已由后端筛过；此处只渲染）
+const relationships = computed(() => {
+  const c = actorsContainer.value
+  if (!c || !Array.isArray(c.relationships)) return []
+  return c.relationships.filter(r => r && r.source && r.target && r.type)
 })
 
 const hotTopics = computed(() => {
@@ -189,11 +324,45 @@ const renderedReport = computed(() => {
 
 // ---- Tabs ----------------------------------------------------------------
 
-const tabs = computed(() => [
-  { key: 'report', label: L('研究报告', 'Research Report'), count: null },
-  { key: 'actors', label: L('关键参与者', 'Key Actors'), count: actorList.value.length },
-  { key: 'sources', label: L('信息来源', 'Sources'), count: sourceList.value.length }
-])
+const tabs = computed(() => {
+  const t = [
+    { key: 'report', label: L('研究报告', 'Research Report'), count: null },
+    { key: 'actors', label: L('关键参与者', 'Key Actors'), count: actorList.value.length }
+  ]
+  // T5.1: 仅在存在时插入 Brief / Relationships 标签
+  if (briefFields.value.length) {
+    t.push({ key: 'brief', label: L('局势简报', 'Situation Brief'), count: null })
+  }
+  if (relationships.value.length) {
+    t.push({ key: 'relationships', label: L('关系网', 'Relationships'), count: relationships.value.length })
+  }
+  t.push({ key: 'sources', label: L('信息来源', 'Sources'), count: sourceList.value.length })
+  return t
+})
+
+// 关系类型 → 中英文标签 + 情感色（与 actors.py REL_LABEL 对齐）
+const REL_META = {
+  ALLY_OF: { zh: '盟友', en: 'Ally', sign: 'ally' },
+  PARTNERS_WITH: { zh: '伙伴', en: 'Partner', sign: 'ally' },
+  INFLUENCES: { zh: '影响', en: 'Influences', sign: 'neutral' },
+  DEPENDS_ON: { zh: '依赖', en: 'Depends on', sign: 'neutral' },
+  REGULATES: { zh: '监管', en: 'Regulates', sign: 'neutral' },
+  OPPOSES: { zh: '对立', en: 'Opposes', sign: 'rival' },
+  COMPETES_WITH: { zh: '竞争', en: 'Competes', sign: 'rival' }
+}
+
+function relTypeLabel(type) {
+  const m = REL_META[String(type || '').toUpperCase()]
+  return m ? L(m.zh, m.en) : String(type || '')
+}
+
+function relSignClass(rel) {
+  const m = REL_META[String(rel.type || '').toUpperCase()]
+  const sign = rel.sign || (m ? m.sign : 'neutral')
+  if (sign === 'ally') return 'rel-ally'
+  if (sign === 'rival') return 'rel-rival'
+  return 'rel-neutral'
+}
 
 // ---- Field helpers (defensive) ------------------------------------------
 
@@ -589,6 +758,168 @@ function sourceHref(src) {
   color: var(--orange);
   background: #fff;
   white-space: nowrap;
+}
+
+/* ---- Edit & continue (T5.4) ---- */
+.edit-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.edit-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #000;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.edit-btn.primary {
+  background: #000;
+  color: #fff;
+  border-color: #000;
+}
+
+.edit-btn.primary:hover:not(:disabled) {
+  background: var(--orange);
+  border-color: var(--orange);
+}
+
+.edit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.edit-hint {
+  font-size: 12px;
+  color: #666;
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+
+.edit-textarea {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.edit-textarea:focus {
+  border-color: var(--orange);
+}
+
+.edit-error {
+  color: #a40000;
+  font-size: 12px;
+  font-family: var(--mono);
+  margin: 8px 0 0;
+}
+
+/* ---- Situation Brief (T5.1) ---- */
+.brief-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.brief-text {
+  font-size: 14px;
+  line-height: 1.75;
+  color: #000;
+  margin: 0;
+}
+
+.brief-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.brief-list li {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #000;
+  margin: 3px 0;
+}
+
+/* ---- Relationships (T5.1) ---- */
+.rel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rel-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.rel-item:last-child {
+  border-bottom: none;
+}
+
+.rel-node {
+  font-weight: 600;
+  font-size: 14px;
+  color: #000;
+}
+
+.rel-arrow {
+  color: #999;
+  font-family: var(--mono);
+}
+
+.rel-edge {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  padding: 2px 9px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.rel-strength {
+  opacity: 0.7;
+}
+
+.rel-ally {
+  background: #fff;
+  color: #000;
+  border: 1px solid #000;
+}
+
+.rel-rival {
+  background: var(--orange);
+  color: #fff;
+}
+
+.rel-neutral {
+  background: #F0F0F0;
+  color: #666;
+}
+
+.rel-basis {
+  flex: 1 1 100%;
+  font-size: 11px;
+  color: #999;
+  line-height: 1.5;
+  padding-left: 2px;
 }
 
 /* ---- Sources ---- */
