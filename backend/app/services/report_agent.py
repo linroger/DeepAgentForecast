@@ -1125,17 +1125,46 @@ class ReportAgent:
             f"【背景档案（深度研究·权威，as-of {aod}）】" if aod
             else "【背景档案（深度研究·权威）】"
         )
-        return (
+        parts = [
             f"{header}\n"
             "以下为本次预测所依据的深度研究实证档案（角色/关系/时间线/热点均为调研确认）。"
             "撰写时以此为权威背景：优先复用其中真实人名/机构/关系，再用工具补充模拟动态与量化结果。\n\n"
             f"{sb}"
-        )
+        ]
+        # EXECPLAN2 I-0-5/I-0-1/I-0-2: 钉入研究契约富化块（定量事实表/争议证据/预测输入）。
+        # 渲染器在 actors.py，皆 degrade-safe（无对应字段返回空串）；受 RESEARCH_FORECAST_INPUTS /
+        # RESEARCH_EVIDENCE_GRADING 旗标约束（默认开），关闭即回退到仅 situation_brief 的旧行为。
+        try:
+            from ..utils import actors as _actors
+            if getattr(Config, "RESEARCH_FORECAST_INPUTS", True):
+                for blk in (_actors.quantitative_facts_block(self.actors),
+                            _actors.forecast_inputs_block(self.actors)):
+                    if blk:
+                        parts.append(blk)
+            if getattr(Config, "RESEARCH_EVIDENCE_GRADING", True):
+                cb = _actors.contested_claims_block(self.actors)
+                if cb:
+                    parts.append(cb)
+        except Exception as _e:
+            logger.debug(f"研究契约富化块渲染跳过: {_e}")
+        return "\n\n".join(parts)
 
     def _build_sources_index(self) -> str:
-        """T4.1: 把研究来源渲染成 [S1]/[S2] 引用索引；缺省返回空串。"""
+        """T4.1: 把研究来源渲染成 [S1]/[S2] 引用索引；缺省返回空串。
+
+        EXECPLAN2 I-0-0: 当 RESEARCH_EVIDENCE_GRADING 开启且来源带 tier/date 时，改用
+        按可信度分层（S1-S4）的索引渲染（actors.sources_index_tiered），否则回退到原始位置索引。
+        """
         if not self.sources:
             return ""
+        if getattr(Config, "RESEARCH_EVIDENCE_GRADING", True):
+            try:
+                from ..utils import actors as _actors
+                tiered = _actors.sources_index_tiered(self.sources)
+                if tiered:
+                    return tiered
+            except Exception as _e:
+                logger.debug(f"分层来源索引渲染跳过，回退位置索引: {_e}")
         lines = ["【可引用来源（正文用 [S1]/[S2] 形式标注）】"]
         for i, s in enumerate(self.sources[:40], 1):
             if not isinstance(s, dict):
