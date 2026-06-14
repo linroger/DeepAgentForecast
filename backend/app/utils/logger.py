@@ -71,7 +71,11 @@ def setup_logger(name: str = 'mirofish', level: int = logging.DEBUG) -> logging.
         backupCount=5,
         encoding='utf-8'
     )
-    file_handler.setLevel(logging.DEBUG)
+    # 文件日志级别从 LOG_LEVEL 环境变量驱动（默认 INFO），不再硬编码 DEBUG。
+    # 这是纵深防御：即便某处误把含密请求体写到 DEBUG，部署环境默认也不会落盘
+    # （载荷脱敏在中间件层已做，见 app/__init__.py）。EXECPLAN2 F-13-1/F-8-0。
+    _file_level = getattr(logging, os.environ.get('LOG_LEVEL', 'INFO').upper(), logging.INFO)
+    file_handler.setLevel(_file_level)
     file_handler.setFormatter(detailed_formatter)
     
     # 2. 控制台处理器 - 简洁日志（INFO及以上）

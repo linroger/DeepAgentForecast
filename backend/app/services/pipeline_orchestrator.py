@@ -28,8 +28,10 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import re
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -188,8 +190,20 @@ class PipelineState:
 class PipelineManager:
     """读写 uploads/pipelines/<id>/pipeline_state.json。"""
 
+    # 管线 id 形如 pipe_<hex>（见 create()/fork()），亦含少量历史/手工 id（如 pipe_e2egold02）。
+    # 允许字母数字/下划线/连字符；不含 '.' '/' '\\' 故天然无法 ..  逃逸（EXECPLAN2 F-13-4）。
+    _PIPELINE_ID_RE = re.compile(r"^pipe_[A-Za-z0-9_-]+$")
+
+    @classmethod
+    def _validate_id(cls, pipeline_id: str) -> str:
+        if (not pipeline_id or "/" in pipeline_id or "\\" in pipeline_id
+                or ".." in pipeline_id or not cls._PIPELINE_ID_RE.match(pipeline_id)):
+            raise ValueError(f"invalid pipeline_id: {pipeline_id!r}")
+        return pipeline_id
+
     @classmethod
     def _dir(cls, pipeline_id: str) -> str:
+        cls._validate_id(pipeline_id)
         return os.path.join(Config.PIPELINE_DATA_DIR, pipeline_id)
 
     @classmethod
@@ -241,7 +255,10 @@ class PipelineManager:
 
     @classmethod
     def load(cls, pipeline_id: str) -> Optional[dict[str, Any]]:
-        path = cls.state_path(pipeline_id)
+        try:
+            path = cls.state_path(pipeline_id)
+        except ValueError:
+            return None  # malformed id → treat as not-found, keep callers robust
         if not os.path.exists(path):
             return None
         try:
@@ -259,10 +276,11 @@ class PipelineManager:
         """
         import shutil
 
-        # 基本路径防御：pipeline_id 来自 URL，绝不允许路径分隔符逃出数据目录
-        if not pipeline_id or "/" in pipeline_id or "\\" in pipeline_id or ".." in pipeline_id:
+        # 路径防御集中在 _dir/_validate_id（pipeline_id 来自 URL，绝不允许逃出数据目录）。
+        try:
+            target = cls._dir(pipeline_id)
+        except ValueError:
             return False
-        target = cls._dir(pipeline_id)
         if not os.path.isdir(target):
             return False
         shutil.rmtree(target, ignore_errors=True)
@@ -373,9 +391,19 @@ class DeerFlowResearchRunner:
             raise RuntimeError(f"未找到 deerflow_research.py: {script}")
 
         os.makedirs(handoff_dir, exist_ok=True)
+        # 把（可能敏感的）研究问题写入文件，经 --prompt-file 传给子进程，避免出现在
+        # ps / /proc/<pid>/cmdline 里（EXECPLAN2 F-0-7/F-13-3，与 llm_client 既有约定一致）。
+        # run() 会阻塞到子进程退出，子进程启动时即读取该文件，故可在 finally 安全删除。
+        fd, prompt_file = tempfile.mkstemp(prefix=".prompt-", suffix=".txt", dir=handoff_dir)
+        with os.fdopen(fd, "w", encoding="utf-8") as _pf:
+            _pf.write(prompt)
+        try:
+            os.chmod(prompt_file, 0o600)
+        except OSError:
+            pass
         cmd = _detect_deerflow_python(deerflow_dir) + [
             script,
-            "--prompt", prompt,
+            "--prompt-file", prompt_file,
             "--out-dir", handoff_dir,
             "--model", model or Config.DEERFLOW_MODEL,
             "--depth", depth or Config.DEERFLOW_RESEARCH_DEPTH,
@@ -485,6 +513,11 @@ class DeerFlowResearchRunner:
             if proc.poll() is None:
                 _kill_process_group(proc)
             DeerFlowResearchRunner._live_procs.discard(proc)
+            # 子进程已退出（或被杀），prompt 文件不再需要，删除以减小磁盘驻留面。
+            try:
+                os.unlink(prompt_file)
+            except OSError:
+                pass
 
         if cancelled["hit"]:
             raise PipelineCancelled("深度研究已取消")

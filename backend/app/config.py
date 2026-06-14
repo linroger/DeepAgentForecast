@@ -29,6 +29,18 @@ class Config:
     
     # JSON配置 - 禁用ASCII转义，让中文直接显示（而不是 \uXXXX 格式）
     JSON_AS_ASCII = False
+
+    # —— API 暴露面收敛（EXECPLAN2 F-13-0 / F-13-2）——
+    # 默认仅环回可达：未配置令牌时，非环回来源一律拒绝（fail-closed）。
+    # 配置 APP_API_TOKEN 后，所有 /api/* 变更请求需带 X-API-Token 头（常量时间比较）。
+    APP_API_TOKEN = os.environ.get('APP_API_TOKEN', '').strip()
+    # 允许的 CORS 来源（逗号分隔）。默认仅本机前端开发端口；设为 '*' 可恢复旧的全开行为。
+    APP_CORS_ORIGINS = os.environ.get(
+        'APP_CORS_ORIGINS',
+        'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5001,http://127.0.0.1:5001',
+    ).strip()
+    # 连通性/研究子进程发起的出站请求是否禁止私网/环回地址（暴露到环回之外时建议开启）。
+    APP_BLOCK_PRIVATE_URLS = os.environ.get('APP_BLOCK_PRIVATE_URLS', 'False').strip().lower() == 'true'
     
     # LLM提供方（默认使用 Claude Code CLI 订阅）
     # claude-cli: 通过本机 `claude` CLI 调用（使用 Claude Code 订阅，无需 API Key）
@@ -188,6 +200,20 @@ class Config:
         if meta.get('needs_key') and not ((api_key or '').strip() or keeps_existing_key):
             raise ValueError(f"提供方 {provider} 需要 API Key")
 
+        # 校验/清洗用户输入，避免 .env 注入与 SSRF（EXECPLAN2 F-8-1 / F-13-2）。
+        from .utils.security import sanitize_env_value, validate_safe_url
+        try:
+            api_key = sanitize_env_value(api_key) if api_key else api_key
+            model = sanitize_env_value(model) if model else model
+            base_url = sanitize_env_value(base_url) if base_url else base_url
+        except ValueError as e:
+            raise ValueError(f"非法字段（含换行/控制字符）：{e}")
+        if is_openai_compat and base_url:
+            try:
+                validate_safe_url(base_url, block_private=cls.APP_BLOCK_PRIVATE_URLS)
+            except ValueError as e:
+                raise ValueError(f"非法的 base_url：{e}")
+
         cls.LLM_PROVIDER = provider
         cls._is_kimi = provider == 'kimi'
         cls._is_minimax = provider == 'minimax'
@@ -221,14 +247,22 @@ class Config:
 
     @classmethod
     def _persist_env(cls, updates):
-        """把 key=value 安全 upsert 进项目根 .env（best-effort，失败不抛）。"""
+        """把 key=value 安全 upsert 进项目根 .env（best-effort，失败不抛）。
+
+        每个值都经 sanitize（拒绝换行/控制字符，防止注入额外 KEY=VALUE 行）+ dotenv
+        安全引号，再原子落盘（EXECPLAN2 F-8-1）。
+        """
         try:
+            from .utils.security import sanitize_env_value, quote_env_value
+            from .utils.atomic import write_text_atomic
             env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../.env'))
             lines = []
             if os.path.exists(env_path):
                 with open(env_path, 'r', encoding='utf-8') as f:
                     lines = f.read().splitlines()
-            remaining = dict(updates)
+            # 预先清洗所有值；任一非法直接放弃整次写入（不破坏现有 .env）。
+            safe = {k: quote_env_value(sanitize_env_value(v)) for k, v in updates.items()}
+            remaining = dict(safe)
             out = []
             for line in lines:
                 stripped = line.strip()
@@ -240,10 +274,7 @@ class Config:
                 out.append(line)
             for key, val in remaining.items():
                 out.append(f"{key}={val}")
-            tmp = env_path + '.tmp'
-            with open(tmp, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(out) + '\n')
-            os.replace(tmp, env_path)
+            write_text_atomic(env_path, '\n'.join(out) + '\n')
         except Exception:
             pass
 
