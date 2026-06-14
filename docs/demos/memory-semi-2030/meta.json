@@ -1,0 +1,9 @@
+{
+ "pipeline_id": "pipe_e2egold02",
+ "prompt": "预测到2030年全球存储半导体（DRAM、NAND闪存、HBM高带宽内存）市场的竞争格局：主要厂商（三星、SK海力士、美光、长江存储等）的份额演变、技术路线、AI驱动的HBM需求、地缘政治与出口管制的影响。",
+ "created_at": "2026-06-13T20:36:05.149934+00:00",
+ "mode": "full",
+ "rounds": 4,
+ "personas": 80,
+ "has_actors": true
+}

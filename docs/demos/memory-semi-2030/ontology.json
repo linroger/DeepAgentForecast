@@ -1,0 +1,361 @@
+{
+ "entity_types": [
+  {
+   "name": "SemiconductorCompany",
+   "description": "存储或逻辑半导体IDM/设计公司，如SK海力士、三星、美光、NVIDIA",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "ticker",
+     "type": "text",
+     "description": "股票代码"
+    },
+    {
+     "name": "hq_location",
+     "type": "text",
+     "description": "总部所在地"
+    }
+   ],
+   "examples": [
+    "SK海力士",
+    "三星电子",
+    "美光科技",
+    "NVIDIA",
+    "长江存储",
+    "长鑫存储"
+   ]
+  },
+  {
+   "name": "ChipBuyer",
+   "description": "大规模采购存储芯片的下游厂商，如苹果、AWS、AMD",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "industry",
+     "type": "text",
+     "description": "下游行业（消费电子/云计算/汽车等）"
+    }
+   ],
+   "examples": [
+    "苹果公司",
+    "AMD",
+    "谷歌"
+   ]
+  },
+  {
+   "name": "EquipmentMaker",
+   "description": "半导体制造设备供应商，如ASML、东京电子、应用材料",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "core_product",
+     "type": "text",
+     "description": "核心设备类别（EUV/DUV/沉积/刻蚀等）"
+    }
+   ],
+   "examples": [
+    "ASML Holding",
+    "东京电子",
+    "应用材料"
+   ]
+  },
+  {
+   "name": "InvestmentFund",
+   "description": "政府主导或战略性的半导体产业投资基金，如中国大基金",
+   "attributes": [
+    {
+     "name": "fund_name",
+     "type": "text",
+     "description": "基金名称"
+    },
+    {
+     "name": "registered_capital",
+     "type": "text",
+     "description": "注册资本"
+    }
+   ],
+   "examples": [
+    "国家集成电路产业投资基金（大基金三期）"
+   ]
+  },
+  {
+   "name": "GovernmentAgency",
+   "description": "制定产业政策或执行出口管制的政府机构",
+   "attributes": [
+    {
+     "name": "agency_name",
+     "type": "text",
+     "description": "机构名称"
+    },
+    {
+     "name": "country",
+     "type": "text",
+     "description": "所属国家"
+    }
+   ],
+   "examples": [
+    "美国商务部工业与安全局（BIS）",
+    "韩国产业通商资源部（METI）"
+   ]
+  },
+  {
+   "name": "CorporateExecutive",
+   "description": "上市公司或大型企业的CEO、董事长、副会长等高管",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "姓名"
+    },
+    {
+     "name": "title",
+     "type": "text",
+     "description": "职位"
+    },
+    {
+     "name": "company",
+     "type": "text",
+     "description": "所属公司"
+    }
+   ],
+   "examples": [
+    "Jensen Huang",
+    "李在镕",
+    "崔泰源",
+    "Sanjay Mehrotra",
+    "Tim Cook",
+    "Christophe Fouquet"
+   ]
+  },
+  {
+   "name": "GovernmentOfficial",
+   "description": "政府部门的部长、局长等政策制定者",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "姓名"
+    },
+    {
+     "name": "title",
+     "type": "text",
+     "description": "职位"
+    },
+    {
+     "name": "agency",
+     "type": "text",
+     "description": "所属机构"
+    }
+   ],
+   "examples": [
+    "Howard Lutnick"
+   ]
+  },
+  {
+   "name": "StartupFounder",
+   "description": "新兴存储或半导体公司的创始人/CEO，通常在成长期阶段",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "姓名"
+    },
+    {
+     "name": "title",
+     "type": "text",
+     "description": "职位"
+    },
+    {
+     "name": "company",
+     "type": "text",
+     "description": "所属公司"
+    }
+   ],
+   "examples": [
+    "朱一明",
+    "陈南翔"
+   ]
+  },
+  {
+   "name": "Person",
+   "description": "兜底类型：任何自然人个体，不属于上述具体人物类型时使用",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "姓名"
+    },
+    {
+     "name": "role",
+     "type": "text",
+     "description": "社会角色"
+    }
+   ],
+   "examples": [
+    "行业分析师",
+    "普通网民",
+    "学术评论员"
+   ]
+  },
+  {
+   "name": "Organization",
+   "description": "兜底类型：任何组织机构，不属于上述具体组织类型时使用",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "组织名称"
+    },
+    {
+     "name": "sector",
+     "type": "text",
+     "description": "所在领域"
+    }
+   ],
+   "examples": [
+    "行业研究机构",
+    "行业协会",
+    "小型咨询公司"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "PARTNERS_WITH",
+   "description": "战略合作伙伴关系，如供应协议、合资、客户绑定",
+   "source_targets": [
+    {
+     "source": "SemiconductorCompany",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "ChipBuyer"
+    },
+    {
+     "source": "GovernmentAgency",
+     "target": "GovernmentAgency"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "COMPETES_WITH",
+   "description": "在同一产品市场争夺份额的竞争关系",
+   "source_targets": [
+    {
+     "source": "SemiconductorCompany",
+     "target": "SemiconductorCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "DEPENDS_ON",
+   "description": "供应链或资金上的关键依赖关系",
+   "source_targets": [
+    {
+     "source": "SemiconductorCompany",
+     "target": "EquipmentMaker"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "InvestmentFund"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "REGULATES",
+   "description": "政府机构对企业的出口管制、补贴等监管行为",
+   "source_targets": [
+    {
+     "source": "GovernmentAgency",
+     "target": "SemiconductorCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "INFLUENCES",
+   "description": "通过游说、行业地位等对政策或决策施加影响",
+   "source_targets": [
+    {
+     "source": "SemiconductorCompany",
+     "target": "GovernmentAgency"
+    },
+    {
+     "source": "CorporateExecutive",
+     "target": "GovernmentAgency"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "LEADS",
+   "description": "个人担任某组织的高管领导职位",
+   "source_targets": [
+    {
+     "source": "CorporateExecutive",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "CorporateExecutive",
+     "target": "ChipBuyer"
+    },
+    {
+     "source": "CorporateExecutive",
+     "target": "EquipmentMaker"
+    },
+    {
+     "source": "StartupFounder",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "GovernmentOfficial",
+     "target": "GovernmentAgency"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "SUPPLIES_TO",
+   "description": "向上游设备厂或下游客户供应产品/技术",
+   "source_targets": [
+    {
+     "source": "SemiconductorCompany",
+     "target": "ChipBuyer"
+    },
+    {
+     "source": "EquipmentMaker",
+     "target": "SemiconductorCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "FUNDS",
+   "description": "投资基金对企业进行股权投资或注资",
+   "source_targets": [
+    {
+     "source": "InvestmentFund",
+     "target": "SemiconductorCompany"
+    }
+   ],
+   "attributes": []
+  }
+ ],
+ "analysis_summary": "本报告分析全球存储半导体市场（DRAM/NAND/HBM）至2030年的竞争格局，涉及的核心实体类型涵盖三类：一是半导体公司（SK海力士、三星、美光、NVIDIA、CXMT、YMTC），二是芯片采购方（苹果、AMD等下游大客户），三是设备供应商（ASML等上游命脉企业）。此外还包括政府机构（BIS、METI）、投资基金（大基金三期）等政策与资本主体。人物层面需区分大型上市公司高管（Jensen Huang、李在镕、崔泰源等）、政府官员（Howard Lutnick）以及成长期企业创始人（朱一明、陈南翔）。关系网络的核心张力在于：供应链上下游的依赖关系（依赖ASML）、政府与企业的监管关系（BIS出口管制）、企业间的竞争关系（三大存储巨头HBM份额争夺）以及战略合作（NVIDIA与存储厂的深度绑定）。这一本体设计可有效模拟AI驱动下存储产业链的舆论博弈与地缘政治动态。"
+}

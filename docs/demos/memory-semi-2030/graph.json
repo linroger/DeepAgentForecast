@@ -1,0 +1,3727 @@
+{
+ "nodes": [
+  {
+   "id": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "美光",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "Counterpoint Research reported that in Q4 2025, Micron held 27% of the global DRAM market share, ranking third among DRAM competitors.\nIn Q2 2025, SK hynix led the HBM market with a 62% share versus Micron's 21% share, reflecting direct competition between the two memory suppliers.\nIn Q2 2025, Micron held a 21% share of the HBM market, ahead of Samsung's 17%, reflecting competition between the two HBM suppliers for NVIDIA business.\n美光凭借CHIPS法案补贴与本土制造，目标2030年在NVIDIA HBM供应链中份额突破30%。\nSK海力士与美光在NVIDIA HBM订单及HBM4/4E认证上存在直接竞争，2030年HBM份额博弈激烈。\n美光依赖美国CHIPS法案补贴支撑其本土制造与产能扩张，这是其2030年HBM份额突破30%的关键政策红利。\nTren"
+  },
+  {
+   "id": "fe9012cc-b7ff-4bf8-acbb-605b71b2cf2c",
+   "name": "欧盟EU Chips Act",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "欧盟EU Chips Act（430亿欧元）与美CHIPS法案、日本Rapidus补贴共同推动本土内存制造回流。"
+  },
+  {
+   "id": "fa37da48-31ad-4a05-814d-62e23522bee4",
+   "name": "3D NAND",
+   "labels": [],
+   "summary": "2023年10月17日，美国BIS更新出口管制规则，将限制范围扩大至14nm以下逻辑与18nm DRAM相关设备。\n2025年7月23日，长江存储宣布首条全国产化3D NAND产线于2025年下半年导入试产。\nTechInsights publishes the 3D NAND Technology Roadmap tracking layer-count progression across the industry.\nYangtze Memory Technologies is a key Chinese competitor in 3D NAND and is featured in ChipPub's 'NAND's New Hybrid War' coverage."
+  },
+  {
+   "id": "f9de864f-f763-4aee-b973-6de27197629f",
+   "name": "三星",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "三星押注Pyeongtaek P5约80万亿韩元投资，希望2026—2027年通过NVIDIA Vera Rubin Ultra HBM4E认证，从SK海力士手中重夺HBM份额。\nMeta MTIA需要HBM供应商提供定制化HBM4/4E规格，三星的HBM4E差异化方案有望满足Meta差异化需求。\nChristophe Fouquet表示三星的1c/1-gamma DRAM与HBM base die依赖ASML的EUV光刻机维持工艺竞争力。\n三星与SK海力士在2025年Q4全球DRAM市场直接竞争，三星占38%、SK海力士占29%。\n三星与美光在2025年Q4全球DRAM市场直接竞争，三星占38%、美光占27%。\nSK海力士与三星在2025年Q2全球HBM市场直接竞争，SK海力士占62%、三星占17%。\n美光与三星在2025年Q2全球HBM市场直接竞争，美光占21%、三星占17%。\n长鑫存储与三星在2025年Q4全球DRAM市场存在竞争，长鑫存储占5%、三星占38%。\n长江存储在NAND领域与三星等竞争，2025年Q4长江存储已占全球NAND供应约8%；TechInsights指出三星290层V9已量产，长江存储232层QLC领先但受限于DUV多重曝光。\n三星在Pyeongtaek P5投资约80万亿韩元专攻HBM4，希望2026—2027年通过Vera Rubin Ultra H"
+  },
+  {
+   "id": "f6ccac89-aa48-44e0-84ed-85dfc5a60180",
+   "name": "B200",
+   "labels": [],
+   "summary": "NVIDIA B200 AI GPU. January 2025: Micron's HBM3E 12-Hi passed NVIDIA H200/B200 certification, making Micron an approved HBM supplier for the B200 platform alongside SK Hynix."
+  },
+  {
+   "id": "f6037482-e7e0-4795-b745-32687265fe6c",
+   "name": "Howard Lutnick",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Howard Lutnick自2025年起担任美国商务部部长，主管工业与安全局（BIS）的出口管制执法。\nHoward Lutnick is the Secretary of Commerce who leads the U.S. Department of Commerce's Bureau of Industry and Security (BIS), taking office in 2025.\nHoward Lutnick是美国商务部负责人（建议优先关注人物之一）。\nHoward Lutnick公开表态美国在内存领域将对中华人民共和国保持2—3代的领先优势，并推动BIS继续升级对华存储设备出口管制。"
+  },
+  {
+   "id": "f569cd57-23c8-478e-a6cf-2bc7b5b35541",
+   "name": "Vera Rubin平台",
+   "labels": [],
+   "summary": "NVIDIA的Vera Rubin平台需要HBM4 12-Hi+规格的HBM供应。\n2026年2月，NVIDIA GTC 2026发布Vera Rubin平台，明确HBM4为标配；SK海力士获约三分之二份额，美光约25%，三星约10%。\n三星电子 aims to pass NVIDIA Vera Rubin platform certification for HBM4 in 2026, with NVIDIA working closely with 三星 toward that goal."
+  },
+  {
+   "id": "f428dd9f-cf9e-4dc6-b110-2846230ac564",
+   "name": "谷歌",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "三星电子与谷歌TPU团队建立合作供应关系。\n三星与谷歌保持多客户合作关系"
+  },
+  {
+   "id": "f2f9491d-59c3-4f72-a875-2aaf161f5a96",
+   "name": "Tom Kang",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Tom Kang是Counterpoint Research的分析师"
+  },
+  {
+   "id": "f25de327-d584-491d-ae21-8ecc02892ae6",
+   "name": "三星V-NAND路线",
+   "labels": [],
+   "summary": "三星V-NAND路线：V9（290层）已量产；V10（约430层）2025年；2030年目标1000层。规划1000层V-NAND为2030年目标。\nSamsung is prepping 400-layer V-NAND for future 16TB SSD to maintain NAND leadership, according to TechSpot."
+  },
+  {
+   "id": "f1aaf3d8-973d-40f5-b978-0f7854ee8882",
+   "name": "朝鲜日报",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "朝鲜日报（ChosunBiz）为韩国主流媒体，是三星、SK海力士等存储产业首发新闻平台之一。"
+  },
+  {
+   "id": "f0312946-f486-47d5-8c47-c93be930bacb",
+   "name": "Meta MTIA",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "Meta MTIA等加速器对HBM的差异化需求，可能改变HBM4/4E的规格博弈，影响SK海力士等HBM供应商。\nMeta MTIA自研AI加速器对HBM4/4E提出定制化需求，可能改变NVIDIA Vera Rubin平台主导的HBM4规格博弈，影响2026—2027年SK海力士、三星、美光的份额分配。\nMeta MTIA需要HBM供应商提供定制化HBM4/4E规格，SK海力士有望成为差异化HBM4供应的候选厂商之一。\nMeta MTIA需要HBM供应商提供定制化HBM4/4E规格，三星的HBM4E差异化方案有望满足Meta差异化需求。\nMeta MTIA需要HBM供应商提供定制化HBM4/4E规格，美光凭借本土制造有望承接Meta的HBM定制订单。\nMeta MTIA自研AI加速器需要HBM供应商提供定制化的HBM4/4E规格，可能改变HBM4规格博弈\nMeta MTIA的差异化HBM4需求可能改变SK海力士、三星、美光在2026—2027年的份额分配\nMeta MTIA的差异化HBM4需求可能改变三星在2026—2027年的份额分配\nMeta MTIA的差异化HBM4需求可能改变美光在2026—2027年的份额分配"
+  },
+  {
+   "id": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "name": "美国商务部工业与安全局（BIS）",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "美国出口管制执法主体，隶属于美国商务部。2022年10月7日首次发布对华先进存储芯片（HBM、128层以上3D NAND）及相关设备全面出口管制规则；2022年12月将长江存储列入实体清单；2023年10月17日更新规则将限制扩大至14nm以下逻辑与18nm DRAM相关设备；2024年12月将140家中国实体列入清单含多家CXMT/YMTC关联公司；2024年12月与2025年继续收紧。\n\n商务部长Howard Lutnick（2025年上任）公开表示\"美国将在内存领域保持对中国的2—3代领先优势\"。其规则直接决定CXMT、YMTC能否获得ASML、东京电子、应用材料关键设备。\n\n韩国协调：对SK海力士、三星在华现有工厂给予VEU豁免至2027年；与韩国产业通商资源部（METI）协调确保韩国厂商对华出口合规。\n\nNVIDIA CEO Jensen Huang深度游说BIS放松对韩国HBM出口管制并推动三星重返NVIDIA认证名单。\n\n美光受BIS直接保护与制约：不能向中国出口HBM，但可向中国销售消费类DRAM/NAND。\n\n2027年BIS VEU豁免到期前后，SK海力士、三星在华工厂是否被迫停产或转移将是美中科技脱钩关键决裂点；美方可能进一步限制DUV出口威胁中国内存厂商产能扩张与良率提升。\n美国商务部工业与安全局(BIS)通过对华出口管制限制长江存储的先进设备采购，影响其产"
+  },
+  {
+   "id": "ebe4cfc5-044f-4029-b608-65965bedb6cc",
+   "name": "合肥市政府",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "长鑫存储与合肥市政府深度绑定合作"
+  },
+  {
+   "id": "eb647c87-262d-426c-9207-b41989f8d277",
+   "name": "232层QLC产品",
+   "labels": [],
+   "summary": "YMTC's 232-layer QLC NAND product, released September 2023, achieves industry-record density of 19.8 Gbit/mm². It serves as a key milestone in YMTC's domestic substitution strategy amid US Entity List restrictions.\n长江存储生产232层QLC 3D NAND，密度达19.8 Gbit/mm²的行业纪录。"
+  },
+  {
+   "id": "e831ed63-f1f8-494c-ae2c-275815924131",
+   "name": "东京电子",
+   "labels": [
+    "EquipmentMaker"
+   ],
+   "summary": "SK海力士高度依赖东京电子的沉积设备。\n美光与东京电子在沉积设备上保持深度合作\n长鑫存储高度依赖东京电子沉积设备\n美国商务部BIS influences the export of Tokyo Electron's critical equipment to Chinese memory makers like CXMT and YMTC through export control rules."
+  },
+  {
+   "id": "e77a4404-14dc-44a4-964a-c48db8bb0f2c",
+   "name": "海盗船 (Corsair)",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "2026年5月海盗船首次在其Vengeance DDR5模组中采用长鑫存储颗粒，标志着CXMT进入消费级国际供应链\nCorsair首次在其Vengeance DDR5模组中采用CXMT颗粒，标志着CXMT进入消费级国际供应链\nCorsair在其Vengeance DDR5模组中采用CXMT颗粒\nCorsair integrates CXMT-sourced DRAM chips into its Vengeance DDR5 memory modules, with the first CXMT-equipped Vengeance DDR5 modules shipping in May 2026.\n海盗船Corsair在Vengeance DDR5模组中采用长鑫存储的DRAM颗粒。\n海盗船Corsair供应采用长鑫存储颗粒的Vengeance DDR5模组。"
+  },
+  {
+   "id": "e611a3d2-6165-4ba5-b7e0-7c2e9125bbaa",
+   "name": "Tyler Texas新厂",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "三星电子在美国德州的工厂，2026年导入设备，目标2027—2028年量产，是三星\"逆境中重夺王座\"路径中的关键产能布局之一。"
+  },
+  {
+   "id": "e29abe95-e4f7-49f9-ad2b-621c8e01343e",
+   "name": "中华人民共和国",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "美国商务部BIS自2022年10月以来已三次升级对华存储设备出口管制，2024年12月又将140家中国实体列入清单。2024年12月清单包括多家CXMT/YMTC关联公司。规则持续收紧，关键设备与技术不会落入中国手中。商务部长Howard Lutnick公开表态：美国在内存领域将对中华人民共和国保持2—3代领先优势，此为国家安全层面的承诺，不可商业谈判。长江存储2022年12月被列入实体清单后仍坚持扩张；长鑫存储DDR5进入海盗船国际供应链；苹果评估iPhone 18、MacBook导入CXMT DRAM与YMTC NAND。中国通过国家大基金三期（注册资本3440亿元人民币）持续注资存储产业，国产替代为核心战略。\nHoward Lutnick公开表态美国在内存领域将对中华人民共和国保持2—3代的领先优势，并推动BIS继续升级对华存储设备出口管制。"
+  },
+  {
+   "id": "e1ee3a18-9365-422a-a074-f4d27650a52a",
+   "name": "NVIDIA Feynman",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "NVIDIA Feynman（1nm）架构绑定HBM4E规格"
+  },
+  {
+   "id": "e0c4e82e-7f09-4a31-9d57-5ce02bda0265",
+   "name": "拓荆科技",
+   "labels": [
+    "EquipmentMaker"
+   ],
+   "summary": "长江存储（YMTC）依赖拓荆科技等国产设备来推进其NAND产线建设。\n长江存储在全国产化3D NAND产线上依赖拓荆科技提供的国产设备。"
+  },
+  {
+   "id": "de903061-c77e-4e91-8f2c-252ed0a127a9",
+   "name": "Astute Group",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Astute Group is a data source reporting HBM market share statistics. It reported that in 2025 Q2, SK hynix held 62% of the HBM market and Micron overtook Samsung. It also quoted Counterpoint Research analyst Tom Kang stating that Samsung's HBM3E certification failure cost it billions in AI memory revenue."
+  },
+  {
+   "id": "da740eee-e0b8-42da-8575-9d91c91346c5",
+   "name": "Wccftech",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "科技媒体，在报告来源列表中以《Samsung's HBM3E Supply To NVIDIA Looks \"Impossible\" This Year》为题报道三星HBM3E对NVIDIA本年度供应\"不可能\"。"
+  },
+  {
+   "id": "d8ef59b7-d911-4bd2-949f-c79fd7b1b9db",
+   "name": "Han Jung-bae",
+   "labels": [
+    "CorporateExecutive"
+   ],
+   "summary": "Han Jung-bae为三星电子半导体业务（DS部门）暂代负责人，接替已故的Han Jong-hee。现任联席CEO为Han Jong-hui。"
+  },
+  {
+   "id": "d8d4b5d1-6afc-4b9a-b1ba-e7b76a6569dd",
+   "name": "广岛K2 NAND厂",
+   "labels": [],
+   "summary": "美光与东芝在广岛合资设立K2 NAND厂"
+  },
+  {
+   "id": "d423b122-2678-4943-ae51-848087e509c2",
+   "name": "MacBook",
+   "labels": [],
+   "summary": "苹果正在评估在MacBook产品中导入长鑫存储的DRAM与长江存储的NAND产品。"
+  },
+  {
+   "id": "d2cae45a-58af-4ee4-a17b-867e525540c4",
+   "name": "DS部门",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "三星电子半导体业务部门（Device Solutions），业务涵盖DRAM、NAND、HBM全产品线。负责人Han Jong-hee（已故）→ 继任者Han Jung-bae（暂代）/ 现任联席CEO Han Jong-hui。2025年Q3股东会上副会长李在镕公开致歉失去技术领先地位。"
+  },
+  {
+   "id": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "name": "苹果公司（Apple Inc.）",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "苹果正在评估在iPhone 18系列中导入长江存储（YMTC）的NAND产品。\n苹果正在评估在iPhone 18系列中导入长鑫存储（CXMT）的DRAM产品。\nTim Cook is the CEO of Apple Inc.\nApple is evaluating cooperation with YMTC to supply memory/storage chips for iPhone 18, MacBook, and other products, as reported in August 2025.\nApple traditionally cooperates with Samsung for NAND supply.\nApple traditionally cooperates with Kioxia for NAND supply.\n苹果正在考虑与CXMT合作，为iPhone 18、MacBook等提供DRAM芯片以分散地缘政治风险\n苹果正在考虑与YMTC合作，为iPhone 18系列提供NAND芯片以分散地缘政治风险\n三星与苹果保持多客户合作关系\n三星电子是苹果iPhone的主要NAND Flash供应商之一(传统合作关系)。\nSK海力士传统上为苹果iPhone提供HBM供应。\nApple is evaluating a partnership with Yang"
+  },
+  {
+   "id": "cb50b789-d23b-498e-a2e7-6f49f3064dad",
+   "name": "HBM3E 12-Hi",
+   "labels": [],
+   "summary": "HBM3E 12-Hi是当前主流HBM产品。三星HBM3E 12-Hi因未通过NVIDIA能效与散热测试，丧失H100/H200周期大部分份额。美光HBM3E 12-Hi于2025年下半年通过NVIDIA认证，2026年成为HBM4的二供。SK海力士与AMD合作，MI300/MI325采用HBM3E 12-Hi。\n美光的HBM3E 12-Hi产品于2025年下半年通过NVIDIA认证，是2026年HBM4的二供\n2025年1月，美光HBM3E 12-Hi通过NVIDIA H200/B200认证，正式成为HBM第二供应商。\n2025年9月23日，美光Q4财报创纪录营收与EPS，HBM3E 12-Hi业务首次贡献利润。\n美光's HBM3E 12-Hi business contributed to profit for the first time on the Q4 FY2025 earnings reported September 23, 2025, a record quarter for 美光."
+  },
+  {
+   "id": "ca76a74f-55c0-48df-92ed-6bf9ab05f43b",
+   "name": "Kioxia/WD BiCS",
+   "labels": [],
+   "summary": "Kioxia/WD BiCS：目标2027年完成1000层V-NAND研发，属激进时间表。Kioxia自身目标2027年完成1000层V-NAND。"
+  },
+  {
+   "id": "c970c961-8102-4a9b-acf5-268540970d44",
+   "name": "CHIPS法案",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "美国CHIPS法案向美光科技提供约62亿美元补贴（直接拨款+贷款）。\n美光凭借美国本土制造（爱达荷州Boise、纽约Clay、维吉尼亚Manassas）享受CHIPS法案补贴约62亿美元（直接拨款+贷款）\n美CHIPS法案补贴推动美/欧/日/韩本土内存制造回流，惠及美光等美国厂商。\n美光凭借美国本土制造与CHIPS法案补贴，2030年HBM份额有望突破30%，成为不可忽视的AI内存专家。\n美光科技凭借美国本土制造(爱达荷州、纽约、维吉尼亚)享受CHIPS法案补贴约62亿美元(直接拨款+贷款)。\n美光 receives approximately 6.2 billion USD in subsidies (grants and loans) from the US CHIPS Act to support its fab buildouts in Idaho Boise, New York Clay, and Singapore.\n美光依赖美国CHIPS法案补贴支撑其本土制造与产能扩张，这是其2030年HBM份额突破30%的关键政策红利。\n美光凭借CHIPS法案补贴与本土制造，2030年HBM份额有望突破30%"
+  },
+  {
+   "id": "c762a3e1-fe42-4e36-8e0c-061693e49197",
+   "name": "Dr Robert Castellano",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Dr Robert Castellano是行业分析师，其substack文章（drrobertcastellano.substack.com）发布关于CXMT扩张与产能的深度分析，是CXMT月产能数据的重要来源之一，分析认为CXMT 80万片晶圆/月是其长期\"自给自足\"目标。\nDr Robert Castellano公开质疑长鑫存储声称的DDR5良率达80%—90%的数据，指出独立拆解报告显示实际良率仅20%—50%，警示投资者关注CXMT晶圆良率与有效产出的差距。"
+  },
+  {
+   "id": "c731d3ff-dc52-4c70-9f76-de70437d38d0",
+   "name": "Person",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "NVIDIA",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "NVIDIA Corporation (NASDAQ: NVDA), CEO Jensen Huang, is the largest HBM buyer, accounting for 55%–65% of global HBM demand. HBM supply determines how many AI systems NVIDIA can deliver. Jensen Huang publicly requested SK hynix to pull HBM4 mass production forward by 6 months in 2025; in 2026 GTC keynote, he stated HBM supply is the real bottleneck for AI systems. HBM supplier mix: SK hynix ~65%, Micron ~25%, Samsung ~10%. NVIDIA signs multi-year HBM4 exclusive MOU with SK hynix. Vera Rubin platform requires HBM4 12-Hi+; Rubin Ultra requires HBM4E (14–16 Gb/s pin, 3.6 TB/s stack bandwidth). NVI"
+  },
+  {
+   "id": "bdf176f4-f6bc-455c-ab5e-c0b79b4631c9",
+   "name": "Pyeongtaek P5",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "三星电子在Pyeongtaek P5投资约80万亿韩元专攻HBM4。\n2025年3月，三星宣布Pyeongtaek P5重启计划。\nSamsung restarts the Pyeongtaek P5 fab to secure HBM4 capacity, with a $108 billion investment.\n三星电子 is investing approximately 80 trillion KRW (around 550 billion USD) in the Pyeongtaek P5 fab dedicated to HBM4 as part of its 5-year 450 trillion KRW investment plan.\n三星在Pyeongtaek P5投资约80万亿韩元专攻HBM4，希望2026—2027年通过Vera Rubin Ultra HBM4E认证重夺份额"
+  },
+  {
+   "id": "b93156f5-ea7c-4440-bf9c-30a149238c37",
+   "name": "Rubin Ultra",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "Rubin Ultra is NVIDIA's next-generation AI platform requiring HBM4E memory. NVIDIA's Vera Rubin platform requires HBM4 12-Hi+, while Rubin Ultra escalates the memory specification to HBM4E.\nNVIDIA Vera Rubin Ultra需要HBM4E\n三星若能在HBM4E节点（2026—2027年）成功通过NVIDIA Vera Rubin Ultra认证，将重夺部分HBM份额。\n三星目标2026—2027年通过Vera Rubin Ultra HBM4E认证以重夺AI内存份额"
+  },
+  {
+   "id": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "name": "Kioxia",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "SK海力士与东芝/Kioxia在NAND领域建立合资关系（Solidigm）。\nApple traditionally cooperates with Kioxia for NAND supply.\n三星与Kioxia在NAND市场争夺1000层V-NAND技术领先地位\n长江存储在hybrid bonding技术上领先国际大厂近一代，但产能受设备限制，与Kioxia竞争NAND市场\nKioxia与三星在1000层V-NAND上竞争，Kioxia激进目标2027年完成\nKioxia与SK海力士在1000层V-NAND上竞争，Kioxia激进目标2027年完成\nKioxia与WD在BiCS 3D NAND技术上合作，目标2027年完成1000层研发\nWestern Digital and Kioxia merger talks were nearing completion as of July 2023."
+  },
+  {
+   "id": "b8609707-c146-4ed3-aa1b-70bec68f48be",
+   "name": "HBM3E",
+   "labels": [],
+   "summary": "高带宽内存第三代增强版。SK海力士率先量产，2024年Q1—Q2量产，2024年Q4宣布2025年产能基本售罄；三星HBM3E 8-Hi于2024年Q3通过NVIDIA初步认证但功耗超标，12-Hi因未通过能效与散热测试丧失H100/H200周期大部分份额，产量被削减一半；美光HBM3E 12-Hi于2025年1月通过NVIDIA H200/B200认证，2025年下半年成为HBM第二供应商，2025年9月美光HBM3E业务首次贡献利润。三星与SK海力士原计划同步于2026年2月启动HBM4量产（比原计划提前约6个月）。"
+  },
+  {
+   "id": "b6c1a2fc-2c1a-48de-9c54-6a4834ab6442",
+   "name": "WD",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "Kioxia与WD在BiCS 3D NAND技术上合作，目标2027年完成1000层研发\nWestern Digital and Kioxia merger talks were nearing completion as of July 2023."
+  },
+  {
+   "id": "b4ad8e66-0e70-460b-b064-f2761bdcbb20",
+   "name": "新加坡HBM先进封装厂",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "美光在新加坡拥有HBM先进封装厂，2027年贡献有意义供应"
+  },
+  {
+   "id": "b2aa0839-b413-4d6c-ad53-3fd1f9a60828",
+   "name": "日本Rapidus",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "日本Rapidus补贴与美CHIPS法案、欧盟EU Chips Act共同推动本土内存制造回流。"
+  },
+  {
+   "id": "b289b0cf-d4c7-4a91-bbbb-25a43ba37dce",
+   "name": "Kwak Noh-Jung",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Kwak Noh-Jung担任SK海力士CEO，在2025年Q3财报电话会议强调HBM是AI基础设施的真正瓶颈。\nKwak Noh-Jung stated SK海力士 is advancing HBM4 mass production ahead of schedule per customer requests and aims to maintain a two-generation HBM technology lead before 2030.\nKwak Noh-Jung在2025年Q3财报电话会议上作为SK海力士CEO发表声明，强调HBM是AI基础设施的真正瓶颈，并表示SK海力士2026年HBM产能已全部售罄，Q3营业利润率高达71.8%。\nKwak Noh-Jung表示SK海力士正按NVIDIA等客户要求将HBM4量产提前，目标2030年前保持HBM技术领先两代以上。"
+  },
+  {
+   "id": "afb5ccc6-b266-4512-95cc-c80dcd6ec58b",
+   "name": "HBM3E 6-Hi",
+   "labels": [],
+   "summary": "2024年Q1-Q2，SK海力士宣布HBM3E量产，并通过NVIDIA H200（搭配HBM3E 6-Hi）正式发售。"
+  },
+  {
+   "id": "aed761d7-af29-4267-8558-42dbaf5aa519",
+   "name": "MI300",
+   "labels": [],
+   "summary": "MI300为AMD AI加速器产品，采用SK海力士HBM3E 12-Hi供应。属于三星关系网中的合作产品。"
+  },
+  {
+   "id": "a9d3713a-dfbe-4dcc-bc20-dd3926697ec2",
+   "name": "MI325",
+   "labels": [],
+   "summary": "MI325为AMD AI加速器产品，采用SK海力士HBM3E 12-Hi供应。属于三星关系网中的合作产品。"
+  },
+  {
+   "id": "a831348d-183e-4e41-843d-42d5895ef1bb",
+   "name": "D1X大连",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "美国BIS对韩国厂商在华工厂（如D1X大连）的运营保持开放"
+  },
+  {
+   "id": "a6f4732e-518e-4803-814f-ac4bf6cc8163",
+   "name": "Digitimes",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Digitimes为存储产业专业媒体。"
+  },
+  {
+   "id": "a2dd32b5-561a-4d0f-a3ec-31ebc73cafbd",
+   "name": "Vengeance DDR5模组",
+   "labels": [],
+   "summary": "海盗船（Corsair）2026年5月首次在其Vengeance DDR5模组中采用CXMT颗粒，标志着CXMT进入消费级国际供应链。该模组使用CXMT DDR5芯片，速率达8000Mbps，单die 16Gb/24Gb。\nCorsair在其Vengeance DDR5模组中采用CXMT颗粒\nCorsair integrates CXMT-sourced DRAM chips into its Vengeance DDR5 memory modules, with the first CXMT-equipped Vengeance DDR5 modules shipping in May 2026.\n海盗船Corsair供应采用长鑫存储颗粒的Vengeance DDR5模组。"
+  },
+  {
+   "id": "a035001c-fd9d-498b-a27d-90ddb033478f",
+   "name": "中微公司",
+   "labels": [
+    "EquipmentMaker"
+   ],
+   "summary": "长江存储（YMTC）依赖中微公司等国产设备来推进其NAND产线建设。\n长江存储在全国产化3D NAND产线上依赖中微公司提供的国产设备。"
+  },
+  {
+   "id": "9fefc8d7-ea79-480d-b48c-63fd901b6ec1",
+   "name": "SK海力士V-NAND",
+   "labels": [],
+   "summary": "SK海力士V-NAND：V8 238L已量产；V10 300层（采用hybrid bonding）计划2027年量产。HBM相关基础设施投资为此前4倍以上（2026年）。\nSK Hynix is preparing 300+ Layer NAND Flash as part of its NAND technology roadmap."
+  },
+  {
+   "id": "9e83abc9-37ae-419f-aefc-1df7e9a19acc",
+   "name": "中芯国际",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "长江存储（YMTC）与中芯国际形成国产存储+国产先进封装的垂直整合合作。"
+  },
+  {
+   "id": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "美光科技（Micron Technology）",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "美光科技是唯一总部位于美国的DRAM+HBM IDM，2025年全球DRAM第三、HBM第三（市占率约21%），2025年Q4 DRAM市占率约27%。HBM3E 12-Hi于2025年1月通过NVIDIA H200/B200认证，正式成为HBM第二供应商；2025年9月23日Q4财报创纪录营收与EPS，HBM3E业务首次贡献利润；2026年2月NVIDIA GTC 2026获Vera Rubin平台HBM4约25%份额。产能布局：爱达荷州Boise（DRAM+HBM，1-gamma制程）、纽约Clay（2026年初破土，目标2030年量产）、新加坡HBM先进封装厂（2027年贡献供应）、广岛东芝合资K2 NAND厂。FY2026资本支出从180亿美元上调至200亿美元；Idaho第一厂提前至2027年年中量产，Idaho第二厂建设计划启动。享受美国CHIPS法案补贴约62亿美元（直接拨款+贷款）。关键人物：CEO Sanjay Mehrotra（即将卸任）/ 候任Sanjay Rai。客户：NVIDIA HBM二供（约25%份额）、AMD HBM3E供应。合作：与东京电子沉积设备深度合作、与台积电逻辑die中介层合作。2030年情景：基准（50%概率）HBM份额25%—30%，市值突破5000亿美元；乐观HBM4E抢先份额超30%跻身DRAM第二。\nMicron rides HB"
+  },
+  {
+   "id": "9d61cd3a-c8cb-445c-b321-53cc71d43d16",
+   "name": "华海清科",
+   "labels": [
+    "EquipmentMaker"
+   ],
+   "summary": "长江存储（YMTC）依赖华海清科等国产设备来推进其NAND产线建设。\n长江存储在全国产化3D NAND产线上依赖华海清科提供的国产设备。"
+  },
+  {
+   "id": "9cd29e62-ce91-4c22-ad7f-d1e610de4cff",
+   "name": "长鑫存储 (CXMT)",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "Dr Robert Castellano公开质疑长鑫存储声称的DDR5良率达80%—90%的数据，指出独立拆解报告显示实际良率仅20%—50%，警示投资者关注CXMT晶圆良率与有效产出的差距。\n美国商务部BIS自2022年10月以来已三次升级对华存储设备出口管制，限制长鑫存储等中国存储企业获取关键设备与技术。\n朱一明是长鑫存储的领导人，主导长鑫存储的A股IPO与产能扩张计划。\n长鑫存储生产DDR5单die 16Gb/24Gb、速率8000Mbps产品。\n海盗船Corsair在Vengeance DDR5模组中采用长鑫存储的DRAM颗粒。\n苹果正在评估在iPhone 18系列以及MacBook产品中导入长鑫存储的DRAM产品。\n长鑫存储的DDR5实际良率被Dr Robert Castellano认为与官方声称存在显著差距，声称值80%—90% vs. 独立拆解报告的20%—50%"
+  },
+  {
+   "id": "9c67128f-83c7-46e7-9ea4-950f95581731",
+   "name": "龙仁集群",
+   "labels": [],
+   "summary": "龙仁集群为SK海力士未来在韩国本土的工厂集群，是韩国本土最大单一工厂集群，预计2027年起量产。\n崔泰源 announced SK海力士 is investing billions of dollars to expand capacity at the Korean 龙仁集群 and in the US state of Indiana."
+  },
+  {
+   "id": "9bf12b37-f69c-43ee-a317-56e0fa0f6489",
+   "name": "新浪财经",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "中国财经新闻媒体。2025年12月13日发布'国家大基金三期战略投资全景'，报道中国国家大基金三期（注册资本3440亿元人民币）的战略投资布局。"
+  },
+  {
+   "id": "9900ded2-a162-41d0-bff2-dec567d6321a",
+   "name": "X-Stacking 3.0/4.0",
+   "labels": [],
+   "summary": "X-Stacking 3.0/4.0 is YMTC's 3D NAND architecture enabling mass production of 232+ layer NAND. It underpins YMTC's hybrid bonding lead of nearly one generation over international competitors.\n2023年9月，长江存储发布基于Xtacking 3.0架构的232层QLC 3D NAND，密度达19.8 Gbit/mm²，创下行业纪录。"
+  },
+  {
+   "id": "98e53e5d-b6c8-4fa8-a465-d08b7519a659",
+   "name": "利川M16",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "利川M16为SK海力士在韩国利川的HBM专用工厂。属于SK海力士产能布局的一部分。\n2026年1-2月，SK海力士利川M16/清州M15X同步进入HBM4风险量产。"
+  },
+  {
+   "id": "98a27b78-3bbe-4c45-8564-b76a2bb05210",
+   "name": "HBM3E 8-Hi",
+   "labels": [],
+   "summary": "2024年Q3，三星HBM3E 8-Hi通过NVIDIA初步认证但功耗超标。"
+  },
+  {
+   "id": "97c5d1f5-83a4-4600-a9be-3c55335b3e5b",
+   "name": "朱一明",
+   "labels": [
+    "Person"
+   ],
+   "summary": "朱一明是长鑫存储CXMT的负责人（建议优先关注人物之一）。\n朱一明 is the StartupFounder and senior executive leading ChangXin Memory Technologies (CXMT), publicly stating CXMT's IPO launch on July 7, 2025 with a target valuation of approximately 100 billion RMB.\n朱一明是长鑫存储的领导人，主导长鑫存储的A股IPO与产能扩张计划。"
+  },
+  {
+   "id": "970bb2d5-5c2f-46bd-82ec-a45809d35fad",
+   "name": "华为",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "长江存储（YMTC）与华为形成国产存储+国产先进封装的垂直整合合作。\n长江存储与华为形成国产存储+国产先进封装的垂直整合合作，部分抵消了美国出口管制对YMTC的影响。"
+  },
+  {
+   "id": "9697f1f7-325b-4eea-a6b2-04e607cbb40e",
+   "name": "应用材料",
+   "labels": [
+    "EquipmentMaker"
+   ],
+   "summary": "长鑫存储依赖Applied Materials检测设备（部分已被列入实体清单）\n长江存储（YMTC）部分关键刻蚀工序仍依赖美国应用材料（Applied Materials），面临断供风险。\n美国商务部BIS influences the export of Applied Materials' critical equipment to Chinese memory makers like CXMT and YMTC through export control rules."
+  },
+  {
+   "id": "965815a5-37da-4a84-959c-aa9a37a0f1d5",
+   "name": "TPU",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "TPU为谷歌AI芯片，三星与其团队存在合作关系。\nAI芯片设计公司谷歌TPU越来越依赖存储厂SK海力士的产能规划。"
+  },
+  {
+   "id": "8fea55d0-86b1-497a-b1a6-1b042d1a9350",
+   "name": "Sourceability",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "半导体市场分析平台，在报告来源列表中以《1H2025 Semiconductor Market Outlook》为题发布2025年上半年半导体市场展望。"
+  },
+  {
+   "id": "8fe410dc-1ba1-406c-967f-27209b12ef66",
+   "name": "Azure",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "超大规模云计算厂商之一，与AWS、Google Cloud、Meta、Oracle Cloud一同面临HBM供应短缺。AI云厂商面临\"GPU到位但HBM缺位\"窘境，可能被迫推迟AI集群部署6—12个月。"
+  },
+  {
+   "id": "8de03b5f-be53-406d-82d7-28f2a44b5e98",
+   "name": "陈南翔",
+   "labels": [
+    "Person"
+   ],
+   "summary": "陈南翔是长江存储YMTC的负责人（建议优先关注人物之一）。\n陈南翔是长江存储的领导人，宣布全国产化3D NAND产线扩张计划。"
+  },
+  {
+   "id": "8a481b8b-4392-4b0a-aa65-bc8e8fce42c7",
+   "name": "21经济网",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "中国财经媒体。报道'3440亿大基金三期来了'，介绍中国国家集成电路产业投资基金三期（注册资本3440亿元人民币）的设立与战略意义。"
+  },
+  {
+   "id": "84bcb2c1-6d64-48d4-96b4-ab4242847d24",
+   "name": "Tim Cook",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Tim Cook is the CEO of Apple Inc."
+  },
+  {
+   "id": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "name": "国家集成电路产业投资基金（大基金三期）",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "国家大基金一期/二期/三期对长鑫存储进行注资\nYMTC依赖中国大基金三期（注册资本3440亿元人民币）持续注资\n中国大基金三期投资动向是影响CXMT等中国存储厂商的关键政策事件（建议追踪）。\n中国大基金三期投资动向是影响YMTC等中国存储厂商的关键政策事件（建议追踪）。\n长鑫科技 received backing from the National IC Big Fund (国家大基金) and launched its A-share IPO, according to 新浪科技 on 2025-07-07.\n国家大基金三期 (registered capital 3440亿元人民币) made strategic investments including in 长鑫科技, per 新浪财经 and 21经济网 coverage.\nThe China Big Fund Phase III, with 344 billion yuan in registered capital, was established to fund domestic semiconductor efforts, influencing the competitive landscape against incumbents like Samsung.\nChina's National IC Indus"
+  },
+  {
+   "id": "8370b065-1283-433c-b7e1-05a2b16e88be",
+   "name": "iPhone 18系列",
+   "labels": [],
+   "summary": "Apple's iPhone 18 series is under evaluation to adopt CXMT/YMTC NAND and DRAM components, signaling potential entry of Chinese national-team memory suppliers into Apple's consumer supply chain.\n苹果正在评估在iPhone 18系列中导入长鑫存储的DRAM与长江存储的NAND产品。"
+  },
+  {
+   "id": "8273fad3-ec94-43b2-b6bf-79862a93c90f",
+   "name": "ChosunBiz",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "ChosunBiz为韩国《朝鲜日报》英文版，是三星、SK海力士等存储产业首发新闻平台之一。"
+  },
+  {
+   "id": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "长鑫存储（CXMT）",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "中国DRAM龙头，总部合肥，全球第五大DRAM厂，2025年市占率约4%—5%。月产能从2023年初9万片扩张至2025年Q4约26万—29万片，2026年5月达29万片，2026年底目标30万片，长期目标80万片（占全球10%以上）。\n\n2025年7月7日启动A股IPO，目标估值约1000亿元人民币；声称DDR5良率已达80%，目标2025年底90%（独立行业分析认为实际20%—50%）。DDR5单die 16Gb/24Gb，速率8000Mbps。2024年Q3启动DDR5试产；2025年7月21日Omdia报告显示Q3产能同比扩张70%。\n\n2026年5月26日，海盗船Corsair首次在Vengeance DDR5模组中采用CXMT颗粒，进入消费级国际供应链。苹果正在评估iPhone 18、MacBook导入CXMT DRAM以分散地缘政治风险。\n\n依赖关系：高度依赖ASML DUV（EUV禁运）、东京电子沉积设备、Applied Materials检测设备（部分已列入实体清单）。DUV多重曝光工艺成本高出30%—50%。与合肥市政府、国家大基金一期/二期/三期（注册资本3440亿元人民币）深度绑定；与中科院微电子所合作研发。在低端DDR4/DDR5模组上对美光、SK海力士形成价格压力。HBM领域仍为空白，至少落后4年。\n\n基准情景（60%概率）下占全球DRAM 8%—10%"
+  },
+  {
+   "id": "7fbe1221-6ea1-496f-a23c-5addfe25f52e",
+   "name": "AMD MI400",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "AMD MI400等加速器对HBM的差异化需求，可能改变HBM4/4E的规格博弈，影响SK海力士等HBM供应商。"
+  },
+  {
+   "id": "7d384570-196b-429b-9885-626f4089b45b",
+   "name": "北京君正",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "Beijing Junzheng (北京君正) is mentioned as a potential new DRAM entrant that has already stopped DRAM operations, listed among uncertainties regarding whether Chinese/Taiwanese players will break through in the memory market."
+  },
+  {
+   "id": "78b259b0-4ecb-4908-aa96-ded29906372f",
+   "name": "AWS Trainium 3",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "AWS Trainium 3等加速器对HBM的差异化需求，可能改变HBM4/4E的规格博弈，影响SK海力士等HBM供应商。"
+  },
+  {
+   "id": "77890850-52d2-43f4-af13-ca9bac072fc6",
+   "name": "Datacenter Dynamics",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Datacenter Dynamics（DCD）为存储产业专业媒体，聚焦数据中心与存储技术报道。"
+  },
+  {
+   "id": "762b3b2e-3af2-44e2-8851-fe101ab07bb1",
+   "name": "Han Jong-hee",
+   "labels": [
+    "CorporateExecutive"
+   ],
+   "summary": "Han Jong-hee曾任三星电子半导体业务（DS部门）负责人，已故。继任者为Han Jung-bae（暂代）及现任联席CEO Han Jong-hui。"
+  },
+  {
+   "id": "74149b70-d716-49f2-a7c6-f7c5a87e79c3",
+   "name": "ABHS",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "ABHS is referenced as a source covering Samsung labor disputes, specifically an article about an 18-day strike starting May 21 and its $20 billion HBM risk impact on the 2026 AI supply chain."
+  },
+  {
+   "id": "7241a5be-b023-496b-817f-8e67ffb5a7ec",
+   "name": "北方华创",
+   "labels": [
+    "EquipmentMaker"
+   ],
+   "summary": "长江存储（YMTC）依赖北方华创等国产设备来推进其NAND产线建设。\nYangtze Memory Technologies (YMTC) depends on NAURA (北方华创) for domestic semiconductor manufacturing equipment in its fully localized 3D NAND production line, using it as a key substitute for U.S. tools.\n长江存储在全国产化3D NAND产线上依赖北方华创提供的国产设备。"
+  },
+  {
+   "id": "6f8bc6f3-45a5-49a0-976d-d664bf02a70b",
+   "name": "DDR5",
+   "labels": [],
+   "summary": "CXMT声称DDR5良率已达80%，目标2025年底90%，但独立行业分析认为实际良率约20%—50%。CXMT DDR5芯片速率达8000Mbps，单die 16Gb/24Gb，在低端DDR5模组上对美光、SK海力士形成价格压力。2026年5月海盗船CORSair首次在其Vengeance DDR5模组中采用CXMT颗粒，标志着CXMT进入消费级国际供应链。\n2024年Q3，CXMT启动DDR5试产。\n长鑫存储 (CXMT) is reported to target a 90% DDR5 yield rate, as documented in CSDN blog post titled '长鑫存储 DDR5 良率 90%'.\n长鑫存储生产DDR5单die 16Gb/24Gb、速率8000Mbps产品。\n长鑫存储的DDR5实际良率被Dr Robert Castellano认为与官方声称存在显著差距，声称值80%—90% vs. 独立拆解报告的20%—50%"
+  },
+  {
+   "id": "6d1fa878-9067-4465-b4b1-ad53aee5e9c2",
+   "name": "崔泰源（Chey Tae-won）",
+   "labels": [
+    "Person"
+   ],
+   "summary": "崔泰源（Chey Tae-won）担任SK海力士董事长，公开宣称存储短缺将持续到2028年甚至2030年。\n崔泰源是SK海力士的负责人（建议优先关注人物之一）。\n崔泰源 announced SK海力士 is investing billions of dollars to expand capacity at the Korean 龙仁集群 and in the US state of Indiana.\n崔泰源（Chey Tae-won）作为SK海力士董事长，在多个公开场合宣称存储芯片短缺将持续到2028年甚至2030年，并表示SK海力士已在韩国龙仁和美国印第安纳州投资数十亿美元扩建产能。"
+  },
+  {
+   "id": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "name": "长江存储 (YMTC)",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "长江存储受美国实体清单限制，但仍通过白手套渠道向华硕等品牌SSD厂商出货NAND产品。\n长江存储受美国实体清单限制，但仍通过白手套渠道向HP等品牌SSD厂商出货NAND产品。\n长江存储与华为形成国产存储+国产先进封装的垂直整合合作，部分抵消了美国出口管制对YMTC的影响。\n美国商务部BIS自2022年10月以来已三次升级对华存储设备出口管制，限制长江存储等中国存储企业获取关键设备与技术；2024年12月又将140家中国实体列入清单。\n陈南翔是长江存储的领导人，宣布全国产化3D NAND产线扩张计划。\n长江存储生产232层QLC 3D NAND，密度达19.8 Gbit/mm²的行业纪录。\n长江存储在全国产化3D NAND产线上依赖北方华创提供的国产设备。\n长江存储在全国产化3D NAND产线上依赖中微公司提供的国产设备。\n长江存储在全国产化3D NAND产线上依赖拓荆科技提供的国产设备。\n长江存储在全国产化3D NAND产线上依赖华海清科提供的国产设备。\n苹果正在评估在iPhone 18系列以及MacBook产品中导入长江存储的NAND产品。\n国家集成电路产业投资基金（大基金三期）注册资本3440亿元人民币，将持续向长江存储注资。\n长江存储在NAND领域与三星等竞争，2025年Q4长江存储已占全球NAND供应约8%；TechInsights指出三星290层V9已量产，长江存储232"
+  },
+  {
+   "id": "6c4e504e-6543-4cbd-bfd4-269ebc770f38",
+   "name": "Pyeongtaek P4",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "2025年11月16日，三星公布5年450万亿韩元国内投资计划。\n2026年1-2月，三星Pyeongtaek P4进入HBM4风险量产。"
+  },
+  {
+   "id": "6c071cf8-377e-40eb-9688-b83e04062276",
+   "name": "东芝",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "SK海力士与东芝/Kioxia在NAND领域建立合资关系（Solidigm）。\n美光与东芝在广岛合资运营K2 NAND厂"
+  },
+  {
+   "id": "6b73a44c-89df-4197-9373-3acc58c3fee5",
+   "name": "H200",
+   "labels": [],
+   "summary": "NVIDIA H200 AI GPU officially launched 2024 Q1-Q2, paired with SK Hynix HBM3E 6-Hi memory. January 2025: Micron's HBM3E 12-Hi passed NVIDIA H200/B200 certification, establishing Micron as the second HBM supplier for these platforms."
+  },
+  {
+   "id": "6b4a8481-4f66-4d30-9abd-4f397254ae3c",
+   "name": "16TB SSD",
+   "labels": [],
+   "summary": "Samsung's 400-layer V-NAND effort aims at future 16TB SSD products."
+  },
+  {
+   "id": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "三星电子（Samsung Electronics）",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "三星电子传统DRAM全球第一（2025年Q4市占率约38%—42%），但HBM大幅落后，2025年Q2 HBM全球份额仅17%。HBM3E 12-Hi因未通过NVIDIA能效与散热测试丧失H100/H200周期大部分份额，HBM3E 8-Hi于2024年Q3通过初步认证但功耗超标。副会长李在镕（Lee Jae-yong）2025年Q3股东会对失去技术领先地位公开致歉。联席CEO Han Jong-hui（前任Han Jong-hee已故，Han Jung-bae曾暂代）领导DS部门。仍是全球NAND Flash龙头（290层V9量产，V10约430层2025年，2030年规划1000层V-NAND），是CXMT/YMTC之外唯一DRAM+NAND+HBM全产品线IDM。\n\n产能布局：Pyeongtaek P1—P4已量产，P5（2025年3月重启，2025年10月动工，投资约80万亿韩元专攻HBM4）、平泽P5、泰勒德州厂（2026年导入设备，目标2027—2028量产）。2025年11月16日公布5年450万亿韩元（约3220亿美元）国内投资计划。\n\n技术路线：HBM4E差异化方案采用1c纳米DRAM+4纳米逻辑die+硅穿孔混合键合，14 Gb/s pin；HBM4E目标16 Gb/s pin、3.6 TB/s堆栈带宽。客户包括AMD MI300/MI325、谷歌TPU、苹果。"
+  },
+  {
+   "id": "6b22f38d-4a63-4f76-ac26-c5d3329f8425",
+   "name": "The Next Platform",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "存储产业专业媒体。2025年12月19日发布报道'HBM Supply Curve Gets Steeper, But Still Can't Meet Demand'，分析HBM供应曲线趋陡但仍无法满足需求的行业现状。"
+  },
+  {
+   "id": "6b188e84-a57f-4e22-b247-87dd194d198e",
+   "name": "台积电",
+   "labels": [
+    "EquipmentMaker"
+   ],
+   "summary": "SK海力士与台积电合作，台积电为其HBM提供先进封装中介层供应。\n三星强化与台积电的合作（逻辑die中介层），形成内存+逻辑垂直整合。\n美光强化与台积电的合作（逻辑die中介层），形成内存+逻辑垂直整合。"
+  },
+  {
+   "id": "6886e899-0331-4575-87c3-a0eefd4f8d64",
+   "name": "TrendForce",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "2025年5月，TrendForce将2025年DRAM合约价上调预期至同比上涨50%以上。\n2025年11月26日，TrendForce预测2025年Q4 DRAM合约价环比上涨45%—50%。\nTrendForce于2025年11月26日预测2025年Q4 DRAM合约价环比上涨45%—50%\nTrendForce预测2025年Q4 DRAM合约价环比上涨45%—50%、全年同比上涨50%以上，AI驱动的供需缺口利好包括美光在内的存储厂商。\nTrendForce 2025年11月26日预测2025年Q4 DRAM合约价环比上涨45%—50%，全年同比上涨50%以上"
+  },
+  {
+   "id": "679762e7-fc47-45c6-8b8c-9b1e28bc1062",
+   "name": "Sanjay Mehrotra",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Sanjay Mehrotra为美光科技即将卸任的CEO。他公开主张内存产业进入'产能为王'阶段，AI将驱动持续短缺。2025年9月23日主持美光Q4财报，发布创纪录营收与EPS指引，强调HBM占比将持续提升。\nSanjay Mehrotra是美光科技的负责人（建议优先关注人物之一）。\nSanjay Mehrotra is the CEO of 美光 and declared that the memory industry has entered a 'capacity is king' phase where HBM and DRAM capacity will determine AI-era winners.\nSanjay Mehrotra作为美光CEO，表示内存产业已正式进入'产能为王'阶段，美光在爱达荷州Boise、纽约Clay、新加坡的产能布局加上CHIPS法案约62亿美元补贴将支撑美光2030年HBM份额突破30%。"
+  },
+  {
+   "id": "6749bd6c-92be-4b31-b95a-a18e82bc9f24",
+   "name": "Solidigm",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "Solidigm is SK海力士与东芝/Kioxia在NAND领域的合资公司，属于SK海力士关系网中的合作方（与NVIDIA、台积电并列）。具体股权结构、总部及上市状态在现有材料中未披露。\nSK海力士与东芝/Kioxia在NAND领域通过Solidigm进行合资合作\nSK海力士通过Solidigm在NAND市场维持14%—16%份额"
+  },
+  {
+   "id": "66b3453e-7dc0-4fd4-9cc7-8714d9e94ebf",
+   "name": "Sanjay Rai",
+   "labels": [
+    "CorporateExecutive"
+   ],
+   "summary": "Sanjay Rai为Micron Technology候任CEO，将接替即将卸任的Sanjay Mehrotra。"
+  },
+  {
+   "id": "658d5cc1-5496-4560-a7b2-8cb355ccbf2b",
+   "name": "Boise",
+   "labels": [],
+   "summary": "美光科技在美国爱达荷州Boise拥有本土制造基地。\n美光在爱达荷州Boise拥有DRAM+HBM工厂，采用1-gamma制程"
+  },
+  {
+   "id": "6543af5c-c01e-4467-abad-45938019a7c0",
+   "name": "韩国国家科技咨询会议",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "韩国国家科技咨询会议（NASTC）制定韩国半导体战略，推动\"韩版CHIPS法案\"。2025年与韩国产业通商资源部共同公布\"K-半导体战略2.0\"，计划未来5年提供约26万亿韩元税收优惠。与美国BIS紧密协调，避免韩国厂商在中国被\"二选一\"；与三星、SK海力士、韩国半导体产业协会（KSIA）形成\"政府—企业—协会\"三位一体。"
+  },
+  {
+   "id": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "ASML Holding",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "SK海力士高度依赖ASML的EUV光刻机。\nChristophe Fouquet担任ASML Holding的CEO。\n受美国BIS出口管制规则影响，ASML Holding对华EUV完全禁运，使长鑫存储（CXMT）只能依赖DUV多重曝光。\n受美国BIS出口管制规则影响，ASML Holding对华EUV完全禁运，使长江存储（YMTC）只能依赖DUV多重曝光实现层数追赶。\nSK海力士高度依赖ASML Holding的EUV光刻机以维持其在1c/1-gamma DRAM与HBM base die上的工艺节点竞争力。\n三星高度依赖ASML Holding的EUV光刻机以维持其在1c/1-gamma DRAM与HBM base die上的工艺节点竞争力。\n美光高度依赖ASML Holding的EUV光刻机以维持其在1c/1-gamma DRAM与HBM base die上的工艺节点竞争力。\n美国商务部BIS influences the export of ASML's critical equipment to Chinese memory makers like CXMT and YMTC through export control rules.\nCXMT高度依赖ASML DUV（EUV禁运），若美方进一步限制DUV出口，CXMT可能面临良率天花板\nYMTC依赖ASML DUV设备"
+  },
+  {
+   "id": "5e096b6d-8f7d-46d3-8460-982a69a63240",
+   "name": "清州M15X",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "清州M15X为SK海力士在韩国清州的工厂，生产DRAM与HBM。属于SK海力士产能布局的一部分。\n2026年1-2月，SK海力士利川M16/清州M15X同步进入HBM4风险量产。"
+  },
+  {
+   "id": "5da4fe74-49d5-40ab-b1fa-923c4796a92c",
+   "name": "AWS",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "超大规模云计算厂商之一，与Azure、Google Cloud、Meta、Oracle Cloud一同面临HBM供应短缺。AI云厂商面临\"GPU到位但HBM缺位\"窘境，可能被迫推迟AI集群部署6—12个月。"
+  },
+  {
+   "id": "5b04fe3d-06c0-4908-a479-c7f72c065bb0",
+   "name": "Oracle Cloud",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "超大规模云计算厂商之一，与AWS、Azure、Google Cloud、Meta一同面临HBM供应短缺。AI云厂商面临\"GPU到位但HBM缺位\"窘境，可能被迫推迟AI集群部署6—12个月。"
+  },
+  {
+   "id": "57297d9d-daa1-4ebb-8f68-856ea6abdaf1",
+   "name": "HBM",
+   "labels": [],
+   "summary": "HBM（高带宽内存）是AI基础设施的核心瓶颈。SK海力士将其视为数据中心'新石油'，2025年Q2占全球HBM出货量62%。HBM市场预计从2025年95亿美元增长至2030年300亿美元以上，CAGR约26%—30%。美光凭借HBM3E 12-Hi进入NVIDIA供应链，2025年市占率从约18%升至21%。三星HBM3E 12-Hi因未通过NVIDIA能效与散热测试，失去H100/H200周期大部分份额。HBM4是三星夺回AI内存王座的最后机会。\nMicron rides HBM surge to record quarter (Q1 FY2026), with HBM3E business contributing to record revenue and EPS as cited by Blocks & Files article from 2025-12-18."
+  },
+  {
+   "id": "5e096b6d-8f7d-46d3-8460-982a69a63240",
+   "name": "清州M15X",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "清州M15X为SK海力士在韩国清州的工厂，生产DRAM与HBM。属于SK海力士产能布局的一部分。\n2026年1-2月，SK海力士利川M16/清州M15X同步进入HBM4风险量产。"
+  },
+  {
+   "id": "5da4fe74-49d5-40ab-b1fa-923c4796a92c",
+   "name": "AWS",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "超大规模云计算厂商之一，与Azure、Google Cloud、Meta、Oracle Cloud一同面临HBM供应短缺。AI云厂商面临\"GPU到位但HBM缺位\"窘境，可能被迫推迟AI集群部署6—12个月。"
+  },
+  {
+   "id": "5b04fe3d-06c0-4908-a479-c7f72c065bb0",
+   "name": "Oracle Cloud",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "超大规模云计算厂商之一，与AWS、Azure、Google Cloud、Meta一同面临HBM供应短缺。AI云厂商面临\"GPU到位但HBM缺位\"窘境，可能被迫推迟AI集群部署6—12个月。"
+  },
+  {
+   "id": "57297d9d-daa1-4ebb-8f68-856ea6abdaf1",
+   "name": "HBM",
+   "labels": [],
+   "summary": "HBM（高带宽内存）是AI基础设施的核心瓶颈。SK海力士将其视为数据中心'新石油'，2025年Q2占全球HBM出货量62%。HBM市场预计从2025年95亿美元增长至2030年300亿美元以上，CAGR约26%—30%。美光凭借HBM3E 12-Hi进入NVIDIA供应链，2025年市占率从约18%升至21%。三星HBM3E 12-Hi因未通过NVIDIA能效与散热测试，失去H100/H200周期大部分份额。HBM4是三星夺回AI内存王座的最后机会。\nMicron rides HBM surge to record quarter (Q1 FY2026), with HBM3E business contributing to record revenue and EPS as cited by Blocks & Files article from 2025-12-18."
+  },
+  {
+   "id": "56d7fc15-0e91-485a-bc29-4559dcd4d4b0",
+   "name": "Jensen Huang",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Jensen Huang担任NVIDIA的CEO。\nJensen Huang深度游说美国商务部工业与安全局（BIS）放松对韩国HBM出口管制，并推动三星重返NVIDIA认证名单。\n2025年4月，Jensen Huang公开要求SK海力士将HBM4量产提前6个月。\nJensen Huang担任NVIDIA CEO，推动HBM供应链多元化并要求SK海力士将HBM4量产提前6个月\nJensen Huang担任NVIDIA的CEO\nJensen Huang stated NVIDIA requested SK海力士 to pull HBM4 mass production forward by 6 months in 2025, and SK海力士 supplies about 65% of NVIDIA's HBM.\nJensen Huang has communicated with the US Department of Commerce arguing that Korean HBM is a key link in the global AI supply chain and should not be overly restricted by export controls.\nJensen Huang作为NVIDIA CEO，强调HBM供应决定NVIDIA能交付多少AI系统"
+  },
+  {
+   "id": "55db20ce-98c7-4de3-9617-3787824edc42",
+   "name": "新浪科技",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "新浪旗下科技新闻媒体平台。2025年7月7日发布'存储芯片龙头启动IPO：长鑫科技曾获大基金加持'，报道长鑫存储启动A股IPO及国家大基金投资背景。"
+  },
+  {
+   "id": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "name": "韩国产业通商资源部（METI）",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "美国商务部BIS coordinates with 韩国产业通商资源部 (METI) to ensure SK hynix and Samsung's exports to China comply with regulations.\n韩国产业通商资源部 leads and published the K-Semiconductor Strategy 2.0 in 2025, planning approximately 26 trillion KRW in tax incentives over the next 5 years.\n韩国产业通商资源部 forms a government-enterprise-association trinity with Samsung, SK hynix, and the Korea Semiconductor Industry Association (KSIA).\n韩国产业通商资源部 forms a government-enterprise-association trinity with Samsung, SK hynix, and the Korea Semiconductor Industry Association (KSIA).\n韩国产业通商资源部 forms a government-enterprise-associat"
+  },
+  {
+   "id": "51083879-e2b0-4088-8596-49c3a664c808",
+   "name": "TechInsights",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "TechInsights发布3D NAND技术路线图与芯片逆向工程报告，是存储产业技术分析平台之一。\nTechInsights publishes the 3D NAND Technology Roadmap tracking layer-count progression across the industry.\nTechInsights' latest 3D NAND technology roadmap reports that Samsung's 290-layer V9 is in mass production, V10 at approximately 430 layers is scheduled for 2025, and a 1000-layer V-NAND is targeted for 2030.\nTechInsights' 3D NAND roadmap reports that YMTC's 232-layer QLC leads in density but is constrained by reliance on DUV multi-patterning exposure.\nTechInsights' 3D NAND roadmap reports that SK hynix is relatively conservative in its N"
+  },
+  {
+   "id": "4d82da15-2c6a-42dd-ade2-a20c8b8239b8",
+   "name": "The Outpost",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The Outpost (theoutpost.ai) is an AI and semiconductor industry news platform. It reported that NVIDIA urged SK hynix to accelerate HBM4 chip production amid soaring AI demand. It also cited Micron's prediction that combined memory vendor revenue in 2026 will reach $551 billion."
+  },
+  {
+   "id": "48779d8b-2eaa-4ed7-876a-82f1b87bf9e9",
+   "name": "韩国先驱报",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "韩国先驱报（Korea Herald）为韩国主流媒体，发布三星、SK海力士等存储产业新闻。"
+  },
+  {
+   "id": "486ebace-6f97-46fe-afc4-d14dc11f3b6d",
+   "name": "TechPowerUp",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "科技媒体。发布报道'SK Hynix Slows Down HBM4 Ramp, Prepares 300+ Layer NAND Flash'，报道SK海力士放缓HBM4量产爬坡并准备300+层NAND闪存产品。"
+  },
+  {
+   "id": "47fb3cde-d6f1-4fef-9b6c-502b831e65cb",
+   "name": "谷歌TPU v7",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "谷歌TPU v7等加速器对HBM的差异化需求，可能改变HBM4/4E的规格博弈，影响SK海力士等HBM供应商。"
+  },
+  {
+   "id": "3dd51c5a-2203-46b6-916a-1f0aee300550",
+   "name": "Wikipedia",
+   "labels": [
+    "Organization"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "3b63b7be-707a-4234-b99e-cd4b9053c3cb",
+   "name": "Han Jong-hui",
+   "labels": [
+    "CorporateExecutive"
+   ],
+   "summary": "Han Jong-hui为三星电子现任联席CEO。半导体业务（DS部门）此前由Han Jong-hee（已故）负责，后由Han Jung-bae暂代。"
+  },
+  {
+   "id": "3a3c90ac-357f-44c6-bac2-84aad3abe7a9",
+   "name": "美国商务部",
+   "labels": [
+    "GovernmentAgency"
+   ],
+   "summary": "Howard Lutnick是美国商务部负责人（建议优先关注人物之一）。\nJensen Huang has communicated with the US Department of Commerce arguing that Korean HBM is a key link in the global AI supply chain and should not be overly restricted by export controls.\nChristophe Fouquet leads ASML Holding, the sole supplier of EUV lithography systems on which Micron depends for its 1c/1-gamma DRAM and HBM base die process competitiveness.\n美光的产能扩张依赖美国商务部CHIPS法案约62亿美元补贴。"
+  },
+  {
+   "id": "39a58179-0ed7-4b01-a3ae-b52896fd1f63",
+   "name": "S&P Global",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "S&P Global published research titled 'SK Hynix set to overtake Samsung as DRAM leader amid AI-driven memory boom' in May 2025, documenting SK hynix's rise in DRAM market share driven by AI memory demand."
+  },
+  {
+   "id": "36b306d1-8589-4e09-97dc-4c2ea37bb3c1",
+   "name": "美光Idaho第一厂",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "美光宣布Idaho第二厂建设计划，第一厂原计划2027年下半年量产，提前至2027年年中"
+  },
+  {
+   "id": "35bf436f-206c-45ad-96fa-081efc76df4a",
+   "name": "ChipPub",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "聚焦NAND技术与存储产业分析的媒体平台。发表'NAND's New \"Hybrid\" War'，分析混合键合技术在NAND市场的竞争格局与发展趋势。"
+  },
+  {
+   "id": "334148ff-2818-44de-bc53-462bd1297d73",
+   "name": "AMD",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "三星电子向AMD的MI300/MI325供应HBM3E 12-Hi。\n美光向AMD供应HBM3E\n三星与AMD保持多客户合作关系\nAI芯片设计公司AMD越来越依赖存储厂SK海力士的产能规划。"
+  },
+  {
+   "id": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "name": "SK海力士",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "SK海力士凭借HBM3E先发优势已锁定NVIDIA 2026年约三分之二需求，并与NVIDIA签署多年期HBM4独家供应MOU。\nSK海力士与美光在NVIDIA HBM订单及HBM4/4E认证上存在直接竞争，2030年HBM份额博弈激烈。\nMeta MTIA需要HBM供应商提供定制化HBM4/4E规格，SK海力士有望成为差异化HBM4供应的候选厂商之一。\nKwak Noh-Jung在2025年Q3财报电话会议上作为SK海力士CEO发表声明，强调HBM是AI基础设施的真正瓶颈，并表示SK海力士2026年HBM产能已全部售罄，Q3营业利润率高达71.8%。\n崔泰源（Chey Tae-won）作为SK海力士董事长，在多个公开场合宣称存储芯片短缺将持续到2028年甚至2030年，并表示SK海力士已在韩国龙仁和美国印第安纳州投资数十亿美元扩建产能。\n崔泰源表示SK海力士作为全球HBM领导者，承担起供应AI时代核心元件的使命，主要客户包括NVIDIA等AI基础设施厂商。\n三星电子与SK海力士在HBM4/HBM4E领域竞争AI内存市场份额，三星通过Pyeongtaek P5投资约80万亿韩元专攻HBM4。\nJensen Huang表示NVIDIA的HBM供应中SK海力士约占65%，是最大供应商，2025年已要求SK海力士将HBM4量产提前6个月。\nChristophe Fouquet表示SK海力"
+  },
+  {
+   "id": "2f672c04-4a15-4c49-b60d-72f1a260811b",
+   "name": "Christophe Fouquet",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Christophe Fouquet担任ASML Holding的CEO。\nChristophe Fouquet担任ASML的CEO\nChristophe Fouquet leads ASML Holding, the sole supplier of EUV lithography systems on which SK hynix depends for its 1c/1-gamma DRAM and HBM base die process competitiveness.\nChristophe Fouquet leads ASML Holding, the sole supplier of EUV lithography systems on which Samsung depends for its 1c/1-gamma DRAM and HBM base die process competitiveness.\nChristophe Fouquet leads ASML Holding, the sole supplier of EUV lithography systems on which Micron depends for its 1c/1-gamma DRAM and HBM base die process competitiveness.\nChristop"
+  },
+  {
+   "id": "2d3d92cb-58fe-415a-809f-947a6fe7af11",
+   "name": "K-半导体战略2.0",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "韩国产业通商资源部 leads and published the K-Semiconductor Strategy 2.0 in 2025, planning approximately 26 trillion KRW in tax incentives over the next 5 years.\n韩国K-半导体战略2.0提供26万亿韩元税收优惠，推动本土内存制造回流，惠及SK海力士等韩国厂商。\n韩国K-半导体战略2.0提供26万亿韩元税收优惠，推动本土内存制造回流，惠及三星等韩国厂商。"
+  },
+  {
+   "id": "2d1c264a-dd59-4def-86de-07b840a97800",
+   "name": "台湾华邦电子",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "Winbond Electronics (台湾华邦电子), headquartered in Taiwan, is listed among potential new entrants to the memory market alongside CXMT, Nanya, and Beijing Junzheng, with no confirmed breakthroughs identified."
+  },
+  {
+   "id": "2c01d829-fad3-466d-9384-c639af954dac",
+   "name": "KOSPI",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "2026年4月，三星Q1合并营收创历史新高，市值突破1万亿美元；KOSPI突破7000点。"
+  },
+  {
+   "id": "2c01c94e-f96e-4aa8-ada7-6ba2592f093f",
+   "name": "中科院微电子所",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "长鑫存储与中科院微电子所合作研发"
+  },
+  {
+   "id": "2a2e78dc-f784-4427-90b3-93f7f24593a8",
+   "name": "美光纽约Clay厂",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "美光纽约Clay厂2026年初破土，目标2030年起贡献供应"
+  },
+  {
+   "id": "28f10942-4136-42bb-a378-415c79b94737",
+   "name": "Omdia",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Omdia发布长鑫存储（CXMT）、长江存储（YMTC）产能与良率深度报告；是中国大基金主要数据来源。\n2025年7月21日，Omdia报告显示CXMT DRAM产能Q3同比扩张70%。"
+  },
+  {
+   "id": "2891d92c-27f2-4b61-b605-9e1a3db28d5a",
+   "name": "Financial Times",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Financial Times为国际新闻媒体机构，报道存储半导体领域的地缘政治与并购事件。"
+  },
+  {
+   "id": "2877d912-cb5d-46d3-bc13-2303b9ae7d48",
+   "name": "Meta",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "超大规模云计算厂商之一，与AWS、Azure、Google Cloud、Oracle Cloud一同面临HBM供应短缺。AI云厂商面临\"GPU到位但HBM缺位\"窘境，可能被迫推迟AI集群部署6—12个月。"
+  },
+  {
+   "id": "26d28513-0c00-4f43-8e85-62eace23ce0d",
+   "name": "Gartner",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Gartner Q1 2025预测全球半导体市场规模2030年将突破1万亿美元。"
+  },
+  {
+   "id": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "长江存储（YMTC）",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "中国3D NAND龙头，总部武汉。2025年Q4月产能约13万片（约占全球8%），目标2026年底15万片、占全球供应量15%。2023年9月发布基于Xtacking 3.0架构的232层QLC 3D NAND，密度19.8 Gbit/mm²创行业纪录。在hybrid bonding技术上领先国际大厂近一代。2025年7月23日宣布首条全国产化3D NAND产线于2025年下半年导入试产。被列入美国实体清单后仍坚持扩张，依赖北方华创、中微公司、拓荆科技、华海清科等国产设备推进产线建设，部分关键刻蚀仍依赖美国应用材料，面临断供风险。\n\n受美国BIS设备禁运约束，2024年12月140家中国实体被列入清单包括多家YMTC关联公司。通过白手套渠道向华硕、HP等品牌SSD厂商出货NAND产品。苹果正在评估iPhone 18系列NAND供应中导入YMTC产品。与华为、中芯国际形成国产存储+国产先进封装垂直整合合作。\n\n依赖中国大基金三期（注册资本3440亿元人民币）持续注资。NAND市场因AI SSD需求复苏与1000层堆叠竞赛重塑；YMTC hybrid bonding有先发优势但产能受限。美国进一步设备制裁威胁其2026年底15%全球份额目标实现。负责人为陈南翔。\nChina's National IC Industry Investment Fund Phase III, with r"
+  },
+  {
+   "id": "24c3bcb9-d26b-4079-b183-9fe80ee67824",
+   "name": "Inspire2Rise",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "媒体/在线出版物，在报告来源列表中以《Samsung Slashes HBM3E 12Hi Production by Half》为题报道三星将HBM3E 12-Hi产量削减一半。"
+  },
+  {
+   "id": "23e85664-cb82-4316-a06f-11570f66d351",
+   "name": "华硕",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "长江存储（YMTC）受美国实体清单限制，但仍通过白手套渠道向华硕等品牌SSD厂商出货NAND产品。\n长江存储受美国实体清单限制，但仍通过白手套渠道向华硕等品牌SSD厂商出货NAND产品。"
+  },
+  {
+   "id": "227d553a-16ab-4e29-b76b-e088c343e574",
+   "name": "Bloomberg",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Bloomberg为国际新闻媒体机构，报道存储半导体领域的地缘政治与并购事件。"
+  },
+  {
+   "id": "223cc6b6-d6a4-4acb-ab41-55653f9eba72",
+   "name": "Google Cloud",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "Google Cloud is among the hyperscale data center operators (alongside AWS, Azure, Meta, Oracle Cloud) facing a 'GPU in place but HBM missing' squeeze due to HBM supply shortages, potentially forcing 6–12 month delays in AI cluster deployments."
+  },
+  {
+   "id": "1fce9046-628f-4481-8a0d-efce14ed7119",
+   "name": "HBM4E",
+   "labels": [],
+   "summary": "美光将HBM4E（14 Gb/s pin speed）视为拉开与SK海力士差距的关键技术节点，预计成为公司未来5年最大盈利引擎之一。三星视HBM4为夺回AI内存王座的最后机会，计划通过1c纳米DRAM + 4-nm逻辑die + 硅穿孔混合键合工艺弥补认证延误。\nNVIDIA的Rubin Ultra平台需要HBM4E规格的HBM供应。\nNVIDIA Vera Rubin Ultra需要HBM4E\nNVIDIA Feynman（1nm）架构绑定HBM4E规格\nNVIDIA Vera Rubin Ultra / Feynman架构绑定HBM4E规格\n三星电子's stated goal is to retake the AI memory crown at the HBM4E node in 2027."
+  },
+  {
+   "id": "1d1edb1f-889e-402a-b487-945ab4ad197d",
+   "name": "Reuters",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Reuters为国际新闻媒体机构，主要负责存储半导体领域的地缘政治与并购报道。"
+  },
+  {
+   "id": "1bb4c66d-6e90-4feb-b8cb-95d7d7cdeb78",
+   "name": "NAND",
+   "labels": [],
+   "summary": "闪存。三星全球龙头，V9 290层量产、V10约430层2025年，2030年目标1000层V-NAND；SK海力士V8 238L量产、V10 300层（hybrid bonding）2027年量产；Kioxia/WD目标2027年完成1000层BiCS研发。长江存储（YMTC）2025年Q4月产能约13万片（约占全球8%），目标2026年底15万片、占全球供应量15%；2023年9月发布232层QLC 3D NAND（Xtacking 3.0/4.0架构，密度19.8 Gbit/mm²行业纪录），hybrid bonding技术领先国际大厂近一代；2025年7月宣布首条\"全国产化\"NAND产线导入试产。长江存储被列入美国实体清单（2022年12月），仍通过\"白手套\"渠道向华硕、HP等品牌SSD厂商出货。美国BIS 2022年10月规则限制128层以上3D NAND设备对华出口。"
+  },
+  {
+   "id": "184904c3-913e-4801-8143-98054fd8eae9",
+   "name": "中国半导体行业协会",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "中国半导体行业协会与CXMT高层共同强调\"自主可控是首要目标，盈利第二\"的信念，主张美国设备禁运是\"慢刀子割肉但不会立刻死亡\"。该协会是中国半导体行业相关企业、机构组成的全国性行业组织。"
+  },
+  {
+   "id": "17a9403d-9aea-4526-93df-defec684f53f",
+   "name": "HP",
+   "labels": [
+    "ChipBuyer"
+   ],
+   "summary": "长江存储（YMTC）受美国实体清单限制，但仍通过白手套渠道向HP等品牌SSD厂商出货NAND产品。\n长江存储受美国实体清单限制，但仍通过白手套渠道向HP等品牌SSD厂商出货NAND产品。\n长江存储通过白手套渠道向HP等品牌SSD厂商出货NAND产品"
+  },
+  {
+   "id": "1697dabf-909b-421d-90fe-04c66ce1c24f",
+   "name": "韩国半导体产业协会",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "韩国产业通商资源部 forms a government-enterprise-association trinity with Samsung, SK hynix, and the Korea Semiconductor Industry Association (KSIA)."
+  },
+  {
+   "id": "1598b11c-3bec-4928-a469-95a4e7132d54",
+   "name": "DRAM",
+   "labels": [],
+   "summary": "动态随机存取存储器。2025年Q1市场份额：三星38%、SK海力士29%、美光约27%、CXMT约5%（Counterpoint Research）。2025年Q4 Counterpoint数据：三星38%、SK海力士29%、美光27%、CXMT 5%。2025年Q2 SK海力士首次反超三星成为全球DRAM+HBM综合市占率第一。2025年Q3合约价同比上涨171.8%（三星数据），TrendForce预测2025年Q4环比上涨45%—50%。CXMT DDR5单die 16Gb/24Gb，速率8000Mbps，功耗较DDR4下降20%。CXMT月产能从2023年初9万片扩至2025年底约26万—29万片，2026年5月达29万片，长期目标80万片（占全球10%以上）；声称DDR5良率已达80%、目标年底90%，独立分析认为实际20%—50%。美国BIS 2023年10月规则限制18nm DRAM相关设备对华出口。\nTrendForce 2025年11月26日预测2025年Q4 DRAM合约价环比上涨45%—50%，全年同比上涨50%以上"
+  },
+  {
+   "id": "10c4824f-e56c-4a47-8a94-e3f48b11512a",
+   "name": "CSDN博客",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "技术博客平台。发布'长鑫存储 DDR5 良率 90%'相关内容，探讨CXMT DDR5良率达90%的技术话题。"
+  },
+  {
+   "id": "0fff03fd-4b6a-48cf-a968-0e77043e3a5e",
+   "name": "南亚科技",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "Nanya Technology (南亚科技) is listed as a potential new entrant to the global memory semiconductor market, alongside CXMT, Beijing Junzheng, and Winbond Electronics, with no confirmed breakthrough in DRAM/HBM identified."
+  },
+  {
+   "id": "0fe2e4f1-4d7d-459c-9d74-5dab59ff1b8b",
+   "name": "cnBeta",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "cnBeta (cnbeta.com.tw) is a Chinese-language technology media outlet cited as a reference source. It published reporting on CXMT (长鑫存储) and YMTC (长江存储) strengthening R&D despite significant obstacles."
+  },
+  {
+   "id": "0e17a741-8281-4145-b47d-cdf8e5a580e5",
+   "name": "TechSpot",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "科技媒体平台。发布关于三星筹备400层V-NAND以支撑未来16TB SSD的报道（'Samsung is prepping 400-layer V-NAND for future 16TB SSD'）。"
+  },
+  {
+   "id": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "HBM4",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "HBM4是下一代HBM产品。SK海力士2026年HBM产能已售罄，2026年Q3营业利润率高达71.8%，预计2026年仍占据NVIDIA需求约三分之二，并与NVIDIA签署多年期独家供应MOU。三星押注HBM4夺回AI内存王座，Pyeongtaek P5投资约80万亿韩元专攻HBM4，采用1c纳米DRAM + 4-nm逻辑die + 硅穿孔混合键合工艺。美光是2026年HBM4的二供。三星与美光在HBM4认证环节竞争NVIDIA份额。\nNVIDIA的Vera Rubin平台需要HBM4供应，HBM供应决定了其能交付多少AI系统。\n2025年12月25日，韩国媒体披露三星与SK海力士将于2026年2月同步启动HBM4量产。\n2025年12月25日，韩国媒体披露SK海力士与三星将于2026年2月同步启动HBM4量产。\n2026年2月，NVIDIA GTC 2026发布Vera Rubin平台，明确HBM4为标配；SK海力士获约三分之二份额，美光约25%，三星约10%。\n2026年2月，NVIDIA GTC 2026上SK海力士获Vera Rubin平台HBM4约三分之二份额。\n2026年2月，NVIDIA GTC 2026上美光获Vera Rubin平台HBM4约25%份额。\n2026年2月，NVIDIA GTC 2026上三星获Vera Rubin平台HBM4约10%份额。\n美光宣"
+  },
+  {
+   "id": "0cb62295-cb73-4298-ab09-607895123f8a",
+   "name": "V9 NAND",
+   "labels": [],
+   "summary": "三星电子 has the 290-layer V9 NAND in mass production and is pursuing a 1000-layer V-NAND roadmap."
+  },
+  {
+   "id": "0a6ceba9-d44f-4814-a79a-bcb93fe5eda3",
+   "name": "Counterpoint Research",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Counterpoint Research发布HBM与DRAM市占率季度报告。2025年Q4数据：三星DRAM份额38%、SK海力士29%、美光27%、CXMT 5%。2025年Q2数据显示SK海力士占全球HBM出货量62%。\n2025年9月，Counterpoint报告显示Q2 SK海力士HBM份额62%、美光21%、三星17%。\nCounterpoint Research发布2025年Q2 HBM市场份额数据，SK海力士占62%\nCounterpoint Research发布2025年Q2 HBM市场份额数据，美光占21%\nCounterpoint Research发布2025年Q2 HBM市场份额数据，三星占17%\nTom Kang是Counterpoint Research的分析师\nCounterpoint估计DRAM占手机BOM成本约8%—15%，影响SK海力士等存储厂商在AI PC与智能手机市场的定价。\nCounterpoint Research reported that in Q4 2025, Samsung held 38% of the global DRAM market share, making it the leader among competing DRAM suppliers.\nCounterpoint Research reported that"
+  },
+  {
+   "id": "096f3e13-97d3-437d-a58c-db08c6225fa7",
+   "name": "李在镕（Lee Jae-yong）",
+   "labels": [
+    "Person"
+   ],
+   "summary": "李在镕是三星电子的副会长（公司领导人），于2025年Q3股东会上对失去技术领先地位公开致歉并宣布投资计划。\n李在镕是三星电子的负责人（建议优先关注人物之一）。\n李在镕（Lee Jae-yong）作为三星电子副会长，在2025年Q3股东大会上对三星失去HBM技术领先地位公开致歉，并宣布启动5年450万亿韩元投资计划，其中Pyeongtaek P5投资约80万亿韩元专攻HBM4。"
+  },
+  {
+   "id": "077d3411-cdb3-46b9-a25e-707c9481a672",
+   "name": "D1X无锡",
+   "labels": [
+    "SemiconductorCompany"
+   ],
+   "summary": "美国BIS对韩国厂商在华工厂（如D1X无锡）的运营保持开放"
+  },
+  {
+   "id": "06296f70-a82d-4f2c-8aa1-5ed86bd6e685",
+   "name": "Clay",
+   "labels": [],
+   "summary": "美光科技在美国纽约Clay拥有本土制造基地。\n美光在纽约Clay的工厂于2026年初破土，目标2030年量产"
+  },
+  {
+   "id": "05a56cbd-dcda-4002-9837-001bc139d587",
+   "name": "Manassas",
+   "labels": [],
+   "summary": "美光科技在美国维吉尼亚Manassas拥有本土制造基地。"
+  },
+  {
+   "id": "039652c7-0cf1-4d63-bc81-6b800da5d852",
+   "name": "DDR4",
+   "labels": [],
+   "summary": "CXMT在低端DDR4/DDR5模组上对美光、SK海力士形成价格压力，但目前尚无HBM产品。"
+  },
+  {
+   "id": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "SK海力士（SK hynix）",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "SK hynix is the global HBM leader with 62% Q2 2025 HBM share and an estimated two-thirds of NVIDIA HBM4 demand in 2026. Chairman Chey Tae-won stated memory shortages may persist until 2028–2030; CEO Kwak Noh-Jung called HBM the true bottleneck for AI infrastructure. In Q3 2025 earnings call, Kwak Noh-Jung stated 2026 HBM capacity is fully sold out, Q3 operating margin reached 71.8%, and HBM4 mass production is being pulled forward per customer request. Yongin cluster target: maintain two-generation HBM lead by 2030. SK hynix is NVIDIA's largest HBM supplier (~65% of procurement), signing a mul"
+  },
+  {
+   "id": "0220cb60-e5ef-4c07-88de-3abd444af387",
+   "name": "Blocks & Files",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Blocks & Files为存储产业专业媒体，覆盖存储芯片与系统领域报道。"
+  }
+ ],
+ "links": [
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "三星电子与SK海力士在所有存储细分市场正面冲突。"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "NVIDIA推动三星重返HBM认证名单，引发美光、三星对SK海力士的市场份额争夺战"
+  },
+  {
+   "source": "0a6ceba9-d44f-4814-a79a-bcb93fe5eda3",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "INFLUENCES",
+   "fact": "Counterpoint Research发布2025年Q2 HBM市场份额数据，SK海力士占62%"
+  },
+  {
+   "source": "0a6ceba9-d44f-4814-a79a-bcb93fe5eda3",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "INFLUENCES",
+   "fact": "Counterpoint Research发布2025年Q2 HBM市场份额数据，美光占21%"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "fa37da48-31ad-4a05-814d-62e23522bee4",
+   "name": "REGULATES",
+   "fact": "2023年10月17日，美国BIS更新出口管制规则，将限制范围扩大至14nm以下逻辑与18nm DRAM相关设备。"
+  },
+  {
+   "source": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "崔泰源表示SK海力士作为全球HBM领导者，承担起供应AI时代核心元件的使命，主要客户包括NVIDIA等AI基础设施厂商。"
+  },
+  {
+   "source": "f0312946-f486-47d5-8c47-c93be930bacb",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "SUPPLIES_TO",
+   "fact": "Meta MTIA等加速器对HBM的差异化需求，可能改变HBM4/4E的规格博弈，影响SK海力士等HBM供应商。"
+  },
+  {
+   "source": "6d1fa878-9067-4465-b4b1-ad53aee5e9c2",
+   "target": "9c67128f-83c7-46e7-9ea4-950f95581731",
+   "name": "INFLUENCES",
+   "fact": "崔泰源 announced SK海力士 is investing billions of dollars to expand capacity at the Korean 龙仁集群 and in the US state of Indiana."
+  },
+  {
+   "source": "2d3d92cb-58fe-415a-809f-947a6fe7af11",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "FUNDS",
+   "fact": "韩国K-半导体战略2.0提供26万亿韩元税收优惠，推动本土内存制造回流，惠及三星等韩国厂商。"
+  },
+  {
+   "source": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "Sanjay Mehrotra表示美光HBM3E 12-Hi业务首次贡献利润，美光是NVIDIA HBM供应链的重要供应商。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "f428dd9f-cf9e-4dc6-b110-2846230ac564",
+   "name": "PARTNERS_WITH",
+   "fact": "三星与谷歌保持多客户合作关系"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "PARTNERS_WITH",
+   "fact": "传统上苹果iPhone HBM由SK海力士供应；保持稳定采购关系"
+  },
+  {
+   "source": "679762e7-fc47-45c6-8b8c-9b1e28bc1062",
+   "target": "c731d3ff-dc52-4c70-9f76-de70437d38d0",
+   "name": "IS_A",
+   "fact": "美光科技即将卸任CEO"
+  },
+  {
+   "source": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "PARTNERS_WITH",
+   "fact": "SK海力士凭借HBM3E先发优势已锁定NVIDIA 2026年约三分之二需求，并与NVIDIA签署多年期HBM4独家供应MOU。"
+  },
+  {
+   "source": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "target": "9d61cd3a-c8cb-445c-b321-53cc71d43d16",
+   "name": "DEPENDS_ON",
+   "fact": "长江存储在全国产化3D NAND产线上依赖华海清科提供的国产设备。"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "name": "PARTNERS_WITH",
+   "fact": "苹果正在评估在iPhone 18系列以及MacBook产品中导入长江存储的NAND产品。"
+  },
+  {
+   "source": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "target": "970bb2d5-5c2f-46bd-82ec-a45809d35fad",
+   "name": "PARTNERS_WITH",
+   "fact": "长江存储与华为形成国产存储+国产先进封装的垂直整合合作，部分抵消了美国出口管制对YMTC的影响。"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "DEPENDS_ON",
+   "fact": "NVIDIA的Vera Rubin平台需要HBM4供应，HBM供应决定了其能交付多少AI系统。"
+  },
+  {
+   "source": "0a6ceba9-d44f-4814-a79a-bcb93fe5eda3",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "COMPETES_WITH",
+   "fact": "Counterpoint Research reported that in Q4 2025, CXMT held 5% of the global DRAM market share, while competing Korean and U.S. suppliers dominated with shares above 27%."
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "SK海力士是NVIDIA的HBM最大供应商，2025年Q2占全球HBM出货量62%"
+  },
+  {
+   "source": "2f672c04-4a15-4c49-b60d-72f1a260811b",
+   "target": "f9de864f-f763-4aee-b973-6de27197629f",
+   "name": "SUPPLIES_TO",
+   "fact": "Christophe Fouquet表示三星的1c/1-gamma DRAM与HBM base die依赖ASML的EUV光刻机维持工艺竞争力。"
+  },
+  {
+   "source": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "REGULATES",
+   "fact": "若ASML High-NA EUV在2027—2028年加速普及，将进一步拉大中国CXMT与韩美厂商的工艺差距。"
+  },
+  {
+   "source": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "target": "b6c1a2fc-2c1a-48de-9c54-6a4834ab6442",
+   "name": "PARTNERS_WITH",
+   "fact": "Kioxia与WD在BiCS 3D NAND技术上合作，目标2027年完成1000层研发"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "美光在HBM市场与SK海力士竞争，目标缩小差距"
+  },
+  {
+   "source": "56d7fc15-0e91-485a-bc29-4559dcd4d4b0",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "LEADS",
+   "fact": "Jensen Huang担任NVIDIA的CEO"
+  },
+  {
+   "source": "c762a3e1-fe42-4e36-8e0c-061693e49197",
+   "target": "9cd29e62-ce91-4c22-ad7f-d1e610de4cff",
+   "name": "INFLUENCES",
+   "fact": "Dr Robert Castellano公开质疑长鑫存储声称的DDR5良率达80%—90%的数据，指出独立拆解报告显示实际良率仅20%—50%，警示投资者关注CXMT晶圆良率与有效产出的差距。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "COMPETES_WITH",
+   "fact": "CXMT在低端DDR4/DDR5模组上对美光形成价格压力，在中国市场蚕食美光份额（'CXMT正在吃美光午餐'）"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "6b188e84-a57f-4e22-b247-87dd194d198e",
+   "name": "PARTNERS_WITH",
+   "fact": "美光强化与台积电的合作（逻辑die中介层），形成内存+逻辑垂直整合。"
+  },
+  {
+   "source": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "PARTNERS_WITH",
+   "fact": "韩国产业通商资源部 forms a government-enterprise-association trinity with Samsung, SK hynix, and the Korea Semiconductor Industry Association (KSIA)."
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "2a2e78dc-f784-4427-90b3-93f7f24593a8",
+   "name": "DEPENDS_ON",
+   "fact": "美光纽约Clay厂2026年初破土，目标2030年起贡献供应"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "fa37da48-31ad-4a05-814d-62e23522bee4",
+   "name": "COMPETES_WITH",
+   "fact": "Yangtze Memory Technologies is a key Chinese competitor in 3D NAND and is featured in ChipPub's 'NAND's New Hybrid War' coverage."
+  },
+  {
+   "source": "f9de864f-f763-4aee-b973-6de27197629f",
+   "target": "bdf176f4-f6bc-455c-ab5e-c0b79b4631c9",
+   "name": "INVESTS_IN",
+   "fact": "三星在Pyeongtaek P5投资约80万亿韩元专攻HBM4，希望2026—2027年通过Vera Rubin Ultra HBM4E认证重夺份额"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "三星和SK海力士在NAND技术路线上规划1000层V-NAND（2030年目标），存在技术路线竞争"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "9fefc8d7-ea79-480d-b48c-63fd901b6ec1",
+   "name": "DEVELOPS",
+   "fact": "SK Hynix is preparing 300+ Layer NAND Flash as part of its NAND technology roadmap."
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "name": "FUNDS",
+   "fact": "YMTC依赖中国大基金三期（注册资本3440亿元人民币）持续注资"
+  },
+  {
+   "source": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "FUNDS",
+   "fact": "中国大基金三期投资动向是影响YMTC等中国存储厂商的关键政策事件（建议追踪）。"
+  },
+  {
+   "source": "51083879-e2b0-4088-8596-49c3a664c808",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "INFLUENCES",
+   "fact": "TechInsights' 3D NAND roadmap reports that YMTC's 232-layer QLC leads in density but is constrained by reliance on DUV multi-patterning exposure."
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "长江存储在hybrid bonding技术上领先三星等国际大厂近一代"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "美光是NVIDIA HBM4的二供（second supplier）"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "b4ad8e66-0e70-460b-b064-f2761bdcbb20",
+   "name": "OWNS_FACTORY",
+   "fact": "美光在新加坡拥有HBM先进封装厂，2027年贡献有意义供应"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "6b188e84-a57f-4e22-b247-87dd194d198e",
+   "name": "PARTNERS_WITH",
+   "fact": "SK海力士与台积电合作，台积电为其HBM提供先进封装中介层供应。"
+  },
+  {
+   "source": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "FUNDS",
+   "fact": "国家大基金三期 (registered capital 3440亿元人民币) made strategic investments including in 长鑫科技, per 新浪财经 and 21经济网 coverage."
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "REGULATES",
+   "fact": "美国商务部BIS controls whether YMTC can obtain critical equipment from ASML, Tokyo Electron, and Applied Materials, and in December 2024 added 140 Chinese entities to the Entity List, including multiple YMTC-affiliated companies."
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "REGULATES",
+   "fact": "美国BIS通过设备禁运维持对YMTC的2—3代领先差距，可能进一步限制DUV出口"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "PARTNERS_WITH",
+   "fact": "Apple is evaluating a partnership with Yangtze Memory Technologies (YMTC) to source NAND flash products for the iPhone 18 series and MacBook as part of supply chain diversification, with a final decision expected in 2026."
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "23e85664-cb82-4316-a06f-11570f66d351",
+   "name": "SUPPLIES_TO",
+   "fact": "长江存储（YMTC）受美国实体清单限制，但仍通过白手套渠道向华硕等品牌SSD厂商出货NAND产品。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "name": "REGULATES",
+   "fact": "美光受美国商务部出口管制的直接保护与制约"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "INFLUENCES",
+   "fact": "美国商务部BIS influences the export of ASML's critical equipment to Chinese memory makers like CXMT and YMTC through export control rules."
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "f428dd9f-cf9e-4dc6-b110-2846230ac564",
+   "name": "SUPPLIES_TO",
+   "fact": "三星电子与谷歌TPU团队建立合作供应关系。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "SUPPLIES_TO",
+   "fact": "2026年2月，NVIDIA GTC 2026上美光获Vera Rubin平台HBM4约25%份额。"
+  },
+  {
+   "source": "f9de864f-f763-4aee-b973-6de27197629f",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "COMPETES_WITH",
+   "fact": "三星押注Pyeongtaek P5约80万亿韩元投资，希望2026—2027年通过NVIDIA Vera Rubin Ultra HBM4E认证，从SK海力士手中重夺HBM份额。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "REGULATES",
+   "fact": "美国BIS进一步设备制裁威胁可能阻碍长江存储2026年底达全球NAND供应15%份额的目标"
+  },
+  {
+   "source": "47fb3cde-d6f1-4fef-9b6c-502b831e65cb",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "SUPPLIES_TO",
+   "fact": "谷歌TPU v7等加速器对HBM的差异化需求，可能改变HBM4/4E的规格博弈，影响SK海力士等HBM供应商。"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "name": "SUPPLIES_TO",
+   "fact": "Jensen Huang表示NVIDIA的HBM供应中SK海力士约占65%，是最大供应商，2025年已要求SK海力士将HBM4量产提前6个月。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "Samsung's HBM3E 12-Hi supply to NVIDIA is considered impossible this year, and Samsung has slashed HBM3E 12-Hi production by half."
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "SUPPLIES_TO",
+   "fact": "Samsung is pursuing Nvidia HBM4E supply and LP40 foundry work following a Seoul bilateral engagement in June 2026."
+  },
+  {
+   "source": "97c5d1f5-83a4-4600-a9be-3c55335b3e5b",
+   "target": "9cd29e62-ce91-4c22-ad7f-d1e610de4cff",
+   "name": "LEADS",
+   "fact": "朱一明是长鑫存储的领导人，主导长鑫存储的A股IPO与产能扩张计划。"
+  },
+  {
+   "source": "97c5d1f5-83a4-4600-a9be-3c55335b3e5b",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "LEADS",
+   "fact": "朱一明 is the StartupFounder and senior executive leading ChangXin Memory Technologies (CXMT), publicly stating CXMT's IPO launch on July 7, 2025 with a target valuation of approximately 100 billion RMB."
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "bdf176f4-f6bc-455c-ab5e-c0b79b4631c9",
+   "name": "INFLUENCES",
+   "fact": "三星电子在Pyeongtaek P5投资约80万亿韩元专攻HBM4。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "REGULATES",
+   "fact": "美国商务部BIS grants Samsung VEU exemptions for its existing fabs in China through 2027."
+  },
+  {
+   "source": "e77a4404-14dc-44a4-964a-c48db8bb0f2c",
+   "target": "a2dd32b5-561a-4d0f-a3ec-31ebc73cafbd",
+   "name": "SUPPLIES_TO",
+   "fact": "海盗船Corsair供应采用长鑫存储颗粒的Vengeance DDR5模组。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "Micron与SK Hynix在HBM技术路线图上展开竞争，双方均有针对2026年的HBM技术路线规划。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "REGULATES",
+   "fact": "2022年12月长江存储被列入实体清单；128层以上3D NAND设备纳入管控，限制YMTC先进制程扩张"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "三星若能在HBM4E节点（2026—2027年）成功通过NVIDIA Vera Rubin Ultra认证，将重夺部分份额；否则面临系统性失血。"
+  },
+  {
+   "source": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "COMPETES_IN",
+   "fact": "美光凭借CHIPS法案补贴与本土制造争夺HBM4市场份额，2030年目标突破30%"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "f569cd57-23c8-478e-a6cf-2bc7b5b35541",
+   "name": "DEPENDS_ON",
+   "fact": "NVIDIA的Vera Rubin平台需要HBM4 12-Hi+规格的HBM供应。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "长江存储（YMTC）在被列入美国实体清单后仍推进232层QLC NAND量产，目标2026年底拿下全球NAND供应量的15%，与三星电子争夺NAND市场份额。"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "SUPPLIES_TO",
+   "fact": "SK海力士是NVIDIA最大的HBM供应商，约占其采购量的65%。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "e831ed63-f1f8-494c-ae2c-275815924131",
+   "name": "DEPENDS_ON",
+   "fact": "SK海力士高度依赖东京电子的沉积设备。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "REGULATES",
+   "fact": "美国商务部工业与安全局(BIS)通过对华出口管制限制长江存储的先进设备采购，影响其产能扩张。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "REGULATES",
+   "fact": "美国商务部工业与安全局（BIS）通过出口管制规则限制长鑫存储（CXMT）获得关键半导体设备。"
+  },
+  {
+   "source": "f0312946-f486-47d5-8c47-c93be930bacb",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "REQUIRES_CUSTOM",
+   "fact": "Meta MTIA自研AI加速器需要HBM供应商提供定制化的HBM4/4E规格，可能改变HBM4规格博弈"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "REGULATES",
+   "fact": "美国商务部BIS controls whether CXMT can obtain critical equipment from ASML, Tokyo Electron, and Applied Materials, and in December 2024 added 140 Chinese entities to the Entity List, including multiple CXMT-affiliated companies."
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "三星和SK海力士在HBM市场存在竞争关系，在HBM4量产时间上同步竞争"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "PRODUCES",
+   "fact": "SK海力士's 2026 HBM4 capacity is fully sold out, and the company is pulling mass production forward per customer requests (including NVIDIA's 6-month pull-in request in 2025)."
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "COMPETES_WITH",
+   "fact": "三星电子与美光在HBM4认证环节竞争NVIDIA份额。"
+  },
+  {
+   "source": "b2aa0839-b413-4d6c-ad53-3fd1f9a60828",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "FUNDS",
+   "fact": "日本Rapidus补贴与美CHIPS法案、欧盟EU Chips Act共同推动本土内存制造回流。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "98e53e5d-b6c8-4fa8-a465-d08b7519a659",
+   "name": "OPERATES",
+   "fact": "2026年1-2月，SK海力士利川M16/清州M15X同步进入HBM4风险量产。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "PARTNERS_WITH",
+   "fact": "李在镕表示三星的目标是2026年通过NVIDIA Vera Rubin认证，2027年HBM4E节点重新夺回AI内存王座。"
+  },
+  {
+   "source": "2f672c04-4a15-4c49-b60d-72f1a260811b",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "LEADS",
+   "fact": "Christophe Fouquet leads ASML Holding, the sole supplier of EUV lithography systems on which SK hynix depends for its 1c/1-gamma DRAM and HBM base die process competitiveness."
+  },
+  {
+   "source": "97c5d1f5-83a4-4600-a9be-3c55335b3e5b",
+   "target": "c731d3ff-dc52-4c70-9f76-de70437d38d0",
+   "name": "IS_A",
+   "fact": "长鑫存储（CXMT）CEO"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "6b188e84-a57f-4e22-b247-87dd194d198e",
+   "name": "PARTNERS_WITH",
+   "fact": "三星强化与台积电的合作（逻辑die中介层），形成内存+逻辑垂直整合。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "7241a5be-b023-496b-817f-8e67ffb5a7ec",
+   "name": "DEPENDS_ON",
+   "fact": "Yangtze Memory Technologies (YMTC) depends on NAURA (北方华创) for domestic semiconductor manufacturing equipment in its fully localized 3D NAND production line, using it as a key substitute for U.S. tools."
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "REGULATES",
+   "fact": "The U.S. Department of Commerce's BIS regulates Yangtze Memory Technologies (YMTC) by maintaining it on the Entity List and tightening export controls on equipment and technology, restricting YMTC's access to U.S.-origin semiconductor manufacturing tools."
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "PRODUCES",
+   "fact": "三星电子 aims to pass NVIDIA Vera Rubin certification in 2026 for HBM4, with the goal of regaining the AI memory crown at the HBM4E node in 2027."
+  },
+  {
+   "source": "56d7fc15-0e91-485a-bc29-4559dcd4d4b0",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "LEADS",
+   "fact": "Jensen Huang担任NVIDIA CEO，推动HBM供应链多元化并要求SK海力士将HBM4量产提前6个月"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "57297d9d-daa1-4ebb-8f68-856ea6abdaf1",
+   "name": "SUPPLIES_TO",
+   "fact": "Micron rides HBM surge to record quarter (Q1 FY2026), with HBM3E business contributing to record revenue and EPS as cited by Blocks & Files article from 2025-12-18."
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "CXMT基准情景下占全球DRAM 8%—10%，主要服务中国本土市场"
+  },
+  {
+   "source": "f2f9491d-59c3-4f72-a875-2aaf161f5a96",
+   "target": "0a6ceba9-d44f-4814-a79a-bcb93fe5eda3",
+   "name": "LEADS",
+   "fact": "Tom Kang是Counterpoint Research的分析师"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "name": "PARTNERS_WITH",
+   "fact": "苹果正在考虑与CXMT合作，为iPhone 18、MacBook等提供DRAM芯片以分散地缘政治风险"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "美光2025年Q2以21%份额超越三星17%，夺走HBM第二位置；HBM4E节点继续竞争"
+  },
+  {
+   "source": "56d7fc15-0e91-485a-bc29-4559dcd4d4b0",
+   "target": "3a3c90ac-357f-44c6-bac2-84aad3abe7a9",
+   "name": "INFLUENCES",
+   "fact": "Jensen Huang has communicated with the US Department of Commerce arguing that Korean HBM is a key link in the global AI supply chain and should not be overly restricted by export controls."
+  },
+  {
+   "source": "b289b0cf-d4c7-4a91-bbbb-25a43ba37dce",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "Kwak Noh-Jung表示SK海力士正按NVIDIA等客户要求将HBM4量产提前，目标2030年前保持HBM技术领先两代以上。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "bdf176f4-f6bc-455c-ab5e-c0b79b4631c9",
+   "name": "OPERATES",
+   "fact": "2025年3月，三星宣布Pyeongtaek P5重启计划。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "COMPETES_WITH",
+   "fact": "Samsung is competing with NVIDIA's other HBM suppliers in the HBM3E 12-Hi segment, but has been unable to qualify for NVIDIA's supply chain at scale."
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "1fce9046-628f-4481-8a0d-efce14ed7119",
+   "name": "DEPENDS_ON",
+   "fact": "NVIDIA Vera Rubin Ultra / Feynman架构绑定HBM4E规格"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "长鑫存储在低端DDR4/DDR5模组上对SK海力士形成价格压力"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "name": "DEPENDS_ON",
+   "fact": "CXMT与国家大基金一期/二期/三期深度绑定，大基金三期注册资本3440亿元人民币持续注资"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "name": "REGULATES",
+   "fact": "美国商务部BIS自2022年10月以来已三次升级对华存储设备出口管制，限制长江存储等中国存储企业获取关键设备与技术；2024年12月又将140家中国实体列入清单。"
+  },
+  {
+   "source": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "Kioxia与三星在1000层V-NAND上竞争，Kioxia激进目标2027年完成"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "name": "REGULATES",
+   "fact": "美国商务部BIS自2022年10月以来已三次升级对华存储设备出口管制，限制长江存储等中国存储企业获取关键设备与技术；2024年12月又将140家中国实体列入清单。"
+  },
+  {
+   "source": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "Kioxia与三星在1000层V-NAND上竞争，Kioxia激进目标2027年完成"
+  },
+  {
+   "source": "56d7fc15-0e91-485a-bc29-4559dcd4d4b0",
+   "target": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "name": "INFLUENCES",
+   "fact": "Jensen Huang深度游说美国商务部工业与安全局（BIS）放松对韩国HBM出口管制，并推动三星重返NVIDIA认证名单。"
+  },
+  {
+   "source": "096f3e13-97d3-437d-a58c-db08c6225fa7",
+   "target": "c731d3ff-dc52-4c70-9f76-de70437d38d0",
+   "name": "IS_A",
+   "fact": "三星电子副会长，集团实际控制人"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "REGULATES",
+   "fact": "The U.S. Bureau of Industry and Security (BIS) has imposed export controls on CXMT through multiple rounds of updated rules, including restrictions on equipment related to sub-18nm DRAM and the addition of 140 Chinese entities to the Entity List, many of which are affiliated with CXMT."
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "name": "REGULATES",
+   "fact": "长江存储被美国商务部列入实体清单，但仍坚持扩张"
+  },
+  {
+   "source": "b93156f5-ea7c-4440-bf9c-30a149238c37",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "SUPPLIES_TO",
+   "fact": "三星若能在HBM4E节点（2026—2027年）成功通过NVIDIA Vera Rubin Ultra认证，将重夺部分HBM份额。"
+  },
+  {
+   "source": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "target": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "name": "PARTNERS_WITH",
+   "fact": "韩国产业通商资源部与美国商务部BIS保持密切协调，确保韩国企业对中国出口符合国际管制规则。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "bdf176f4-f6bc-455c-ab5e-c0b79b4631c9",
+   "name": "INVESTS_IN",
+   "fact": "三星电子 is investing approximately 80 trillion KRW (around 550 billion USD) in the Pyeongtaek P5 fab dedicated to HBM4 as part of its 5-year 450 trillion KRW investment plan."
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "c970c961-8102-4a9b-acf5-268540970d44",
+   "name": "DEPENDS_ON",
+   "fact": "美光凭借美国本土制造与CHIPS法案补贴，2030年HBM份额有望突破30%，成为不可忽视的AI内存专家。"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "PARTNERS_WITH",
+   "fact": "苹果正在评估在iPhone 18系列中导入长江存储（YMTC）的NAND产品。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "REGULATES",
+   "fact": "美国商务部对美光实施出口管制：不能向中国出口HBM，但可以向中国销售消费类DRAM/NAND"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "美光科技与三星电子在NVIDIA HBM4市场份额上展开竞争，美光以约25%份额领先三星的约10%。"
+  },
+  {
+   "source": "f0312946-f486-47d5-8c47-c93be930bacb",
+   "target": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "INFLUENCES_SHARE_OF",
+   "fact": "Meta MTIA的差异化HBM4需求可能改变美光在2026—2027年的份额分配"
+  },
+  {
+   "source": "096f3e13-97d3-437d-a58c-db08c6225fa7",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "LEADS",
+   "fact": "李在镕是三星电子的负责人（建议优先关注人物之一）。"
+  },
+  {
+   "source": "0a6ceba9-d44f-4814-a79a-bcb93fe5eda3",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "Counterpoint Research reported that in Q4 2025, Samsung held 38% of the global DRAM market share, making it the leader among competing DRAM suppliers."
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "PARTNERS_WITH",
+   "fact": "中国CXMT+YMTC在成熟DRAM/NAND领域形成自主可控双线，2030年合计市占率有望达15%—20%。"
+  },
+  {
+   "source": "2f672c04-4a15-4c49-b60d-72f1a260811b",
+   "target": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "name": "SUPPLIES_TO",
+   "fact": "Christophe Fouquet表示SK海力士的1c/1-gamma DRAM与HBM base die依赖ASML的EUV光刻机维持工艺竞争力。"
+  },
+  {
+   "source": "679762e7-fc47-45c6-8b8c-9b1e28bc1062",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "LEADS",
+   "fact": "Sanjay Mehrotra is the CEO of 美光 and declared that the memory industry has entered a 'capacity is king' phase where HBM and DRAM capacity will determine AI-era winners."
+  },
+  {
+   "source": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "FUNDS",
+   "fact": "国家大基金一期/二期/三期对长鑫存储进行注资"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "STANDARDIZES",
+   "fact": "2026年Q2—Q3 HBM4 12-Hi良率优化；HBM4E规格开始定义（14 Gb/s pin、3.6 TB/s堆栈带宽）"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "6749bd6c-92be-4b31-b95a-a18e82bc9f24",
+   "name": "PARTNERS_WITH",
+   "fact": "SK海力士与东芝/Kioxia在NAND领域通过Solidigm进行合资合作"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "9cd29e62-ce91-4c22-ad7f-d1e610de4cff",
+   "name": "REGULATES",
+   "fact": "美国商务部BIS自2022年10月以来已三次升级对华存储设备出口管制，限制长鑫存储等中国存储企业获取关键设备与技术。"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "56d7fc15-0e91-485a-bc29-4559dcd4d4b0",
+   "name": "LEADS",
+   "fact": "Jensen Huang担任NVIDIA的CEO。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "DEPENDS_ON",
+   "fact": "SK海力士EUV光刻机关键客户，依赖ASML EUV支持1c纳米DRAM与HBM base die的工艺节点"
+  },
+  {
+   "source": "f6037482-e7e0-4795-b745-32687265fe6c",
+   "target": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "name": "LEADS",
+   "fact": "Howard Lutnick is the Secretary of Commerce who leads the U.S. Department of Commerce's Bureau of Industry and Security (BIS), taking office in 2025."
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "COMPETES_WITH",
+   "fact": "SK海力士与美光争夺NVIDIA的HBM订单。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "2c01c94e-f96e-4aa8-ada7-6ba2592f093f",
+   "name": "PARTNERS_WITH",
+   "fact": "长鑫存储与中科院微电子所合作研发"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "cb50b789-d23b-498e-a2e7-6f49f3064dad",
+   "name": "SUPPLIES_TO",
+   "fact": "美光的HBM3E 12-Hi产品于2025年下半年通过NVIDIA认证，是2026年HBM4的二供"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "6c071cf8-377e-40eb-9688-b83e04062276",
+   "name": "PARTNERS_WITH",
+   "fact": "美光与东芝在广岛合资运营K2 NAND厂"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "REGULATES",
+   "fact": "美国BIS通过设备禁运维持对CXMT的2—3代领先差距"
+  },
+  {
+   "source": "0a6ceba9-d44f-4814-a79a-bcb93fe5eda3",
+   "target": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "COMPETES_WITH",
+   "fact": "Counterpoint Research reported that in Q4 2025, Micron held 27% of the global DRAM market share, ranking third among DRAM competitors."
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "DEPENDS_ON",
+   "fact": "SK海力士高度依赖ASML的EUV光刻机。"
+  },
+  {
+   "source": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "LEADS_IN",
+   "fact": "SK海力士凭借HBM3E先发优势锁定NVIDIA 2026年约三分之二HBM4需求，并签署多年期独家供应MOU"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "name": "COMPETES_WITH",
+   "fact": "长鑫存储与SK海力士在2025年Q4全球DRAM市场存在竞争，长鑫存储占5%、SK海力士占29%。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "美光凭借HBM3E 12-Hi成功进入NVIDIA供应链，2025年在HBM市场份额从约18%攀升至21%。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "334148ff-2818-44de-bc53-462bd1297d73",
+   "name": "PARTNERS_WITH",
+   "fact": "三星与AMD保持多客户合作关系"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "DEPENDS_ON",
+   "fact": "CXMT高度依赖ASML DUV光刻机（EUV已被禁运），工艺成本因此高出30%—50%"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "6749bd6c-92be-4b31-b95a-a18e82bc9f24",
+   "name": "PARTNERS_WITH",
+   "fact": "SK海力士通过Solidigm在NAND市场维持14%—16%份额"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "7241a5be-b023-496b-817f-8e67ffb5a7ec",
+   "name": "DEPENDS_ON",
+   "fact": "长江存储（YMTC）依赖北方华创等国产设备来推进其NAND产线建设。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "COMPETES_WITH",
+   "fact": "NAND市场将因AI SSD需求复苏与1000层堆叠竞赛重塑；长江存储在hybrid bonding技术上有先发优势但产能受限。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "name": "REGULATES",
+   "fact": "地缘政治两难将在2027年BIS VEU豁免到期前后迎来关键节点，韩国厂商的选边将深刻影响全球产能格局。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "a831348d-183e-4e41-843d-42d5895ef1bb",
+   "name": "REGULATES",
+   "fact": "美国BIS对韩国厂商在华工厂（如D1X大连）的运营保持开放"
+  },
+  {
+   "source": "f9de864f-f763-4aee-b973-6de27197629f",
+   "target": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "name": "COMPETES_WITH",
+   "fact": "三星与SK海力士在2025年Q4全球DRAM市场直接竞争，三星占38%、SK海力士占29%。"
+  },
+  {
+   "source": "c970c961-8102-4a9b-acf5-268540970d44",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "REGULATES",
+   "fact": "美国CHIPS法案向美光科技提供约62亿美元补贴（直接拨款+贷款）。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "f569cd57-23c8-478e-a6cf-2bc7b5b35541",
+   "name": "PARTNERS_WITH",
+   "fact": "三星电子 aims to pass NVIDIA Vera Rubin platform certification for HBM4 in 2026, with NVIDIA working closely with 三星 toward that goal."
+  },
+  {
+   "source": "f0312946-f486-47d5-8c47-c93be930bacb",
+   "target": "f9de864f-f763-4aee-b973-6de27197629f",
+   "name": "INFLUENCES_SHARE_OF",
+   "fact": "Meta MTIA的差异化HBM4需求可能改变三星在2026—2027年的份额分配"
+  },
+  {
+   "source": "f0312946-f486-47d5-8c47-c93be930bacb",
+   "target": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "name": "PARTNERS_WITH",
+   "fact": "Meta MTIA需要HBM供应商提供定制化HBM4/4E规格，SK海力士有望成为差异化HBM4供应的候选厂商之一。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "REGULATES",
+   "fact": "2027年BIS VEU豁免到期前后，三星在华工厂是否被迫停产或转移，是美中科技脱钩的决裂点之一。"
+  },
+  {
+   "source": "e77a4404-14dc-44a4-964a-c48db8bb0f2c",
+   "target": "a2dd32b5-561a-4d0f-a3ec-31ebc73cafbd",
+   "name": "USES_PRODUCT",
+   "fact": "Corsair在其Vengeance DDR5模组中采用CXMT颗粒"
+  },
+  {
+   "source": "f6037482-e7e0-4795-b745-32687265fe6c",
+   "target": "3a3c90ac-357f-44c6-bac2-84aad3abe7a9",
+   "name": "LEADS",
+   "fact": "Howard Lutnick是美国商务部负责人（建议优先关注人物之一）。"
+  },
+  {
+   "source": "f0312946-f486-47d5-8c47-c93be930bacb",
+   "target": "f9de864f-f763-4aee-b973-6de27197629f",
+   "name": "PARTNERS_WITH",
+   "fact": "Meta MTIA需要HBM供应商提供定制化HBM4/4E规格，三星的HBM4E差异化方案有望满足Meta差异化需求。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "05a56cbd-dcda-4002-9837-001bc139d587",
+   "name": "INFLUENCES",
+   "fact": "美光科技在美国维吉尼亚Manassas拥有本土制造基地。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "COMPETES_WITH",
+   "fact": "中国合肥长鑫与长鑫存储（CXMT）作为新进入者，其是否突破存在不确定性。"
+  },
+  {
+   "source": "b93156f5-ea7c-4440-bf9c-30a149238c37",
+   "target": "1fce9046-628f-4481-8a0d-efce14ed7119",
+   "name": "DEPENDS_ON",
+   "fact": "NVIDIA Vera Rubin Ultra需要HBM4E"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "REGULATES",
+   "fact": "与韩国METI协调确保三星对华出口符合规则；VEU豁免至2027年；2027年到期后须'选边'"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "6c4e504e-6543-4cbd-bfd4-269ebc770f38",
+   "name": "INVESTS_IN",
+   "fact": "2025年11月16日，三星公布5年450万亿韩元国内投资计划。"
+  },
+  {
+   "source": "56d7fc15-0e91-485a-bc29-4559dcd4d4b0",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "LEADS",
+   "fact": "Jensen Huang作为NVIDIA CEO，强调HBM供应决定NVIDIA能交付多少AI系统，2025年已要求SK海力士将HBM4量产提前6个月。"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "PARTNERS_WITH",
+   "fact": "NVIDIA与SK海力士签署多年期HBM4独家供应MOU"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "name": "COMPETES_WITH",
+   "fact": "三星电子与SK海力士在HBM4/HBM4E领域竞争AI内存市场份额，三星通过Pyeongtaek P5投资约80万亿韩元专攻HBM4。"
+  },
+  {
+   "source": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "target": "e0c4e82e-7f09-4a31-9d57-5ce02bda0265",
+   "name": "DEPENDS_ON",
+   "fact": "长江存储在全国产化3D NAND产线上依赖拓荆科技提供的国产设备。"
+  },
+  {
+   "source": "6d1fa878-9067-4465-b4b1-ad53aee5e9c2",
+   "target": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "name": "LEADS",
+   "fact": "崔泰源（Chey Tae-won）作为SK海力士董事长，在多个公开场合宣称存储芯片短缺将持续到2028年甚至2030年，并表示SK海力士已在韩国龙仁和美国印第安纳州投资数十亿美元扩建产能。"
+  },
+  {
+   "source": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "SUPPLIES_TO",
+   "fact": "SK海力士高度依赖ASML Holding的EUV光刻机以维持其在1c/1-gamma DRAM与HBM base die上的工艺节点竞争力。"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "PARTNERS_WITH",
+   "fact": "2025年8月媒体报道苹果正在考虑为iPhone 18、MacBook等导入CXMT/YMTC芯片以分散地缘政治风险"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "e77a4404-14dc-44a4-964a-c48db8bb0f2c",
+   "name": "SUPPLIES_TO",
+   "fact": "Corsair首次在其Vengeance DDR5模组中采用CXMT颗粒，标志着CXMT进入消费级国际供应链"
+  },
+  {
+   "source": "c970c961-8102-4a9b-acf5-268540970d44",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "FUNDS",
+   "fact": "美光 receives approximately 6.2 billion USD in subsidies (grants and loans) from the US CHIPS Act to support its fab buildouts in Idaho Boise, New York Clay, and Singapore."
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "9697f1f7-325b-4eea-a6b2-04e607cbb40e",
+   "name": "DEPENDS_ON",
+   "fact": "长江存储（YMTC）部分关键刻蚀工序仍依赖美国应用材料（Applied Materials），面临断供风险。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "COMPETES_WITH",
+   "fact": "In Q2 2025, SK hynix led the HBM market with a 62% share versus Micron's 21% share, reflecting direct competition between the two memory suppliers."
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "DEVELOPS",
+   "fact": "2025年12月25日，韩国媒体披露三星与SK海力士将于2026年2月同步启动HBM4量产。"
+  },
+  {
+   "source": "679762e7-fc47-45c6-8b8c-9b1e28bc1062",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "LEADS",
+   "fact": "Sanjay Mehrotra是美光科技的负责人（建议优先关注人物之一）。"
+  },
+  {
+   "source": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "target": "2d3d92cb-58fe-415a-809f-947a6fe7af11",
+   "name": "LEADS",
+   "fact": "韩国产业通商资源部 leads and published the K-Semiconductor Strategy 2.0 in 2025, planning approximately 26 trillion KRW in tax incentives over the next 5 years."
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "SUPPLIES_TO",
+   "fact": "SK Hynix slows down HBM4 ramp while preparing 300+ Layer NAND Flash, according to TechPowerUp."
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "98a27b78-3bbe-4c45-8564-b76a2bb05210",
+   "name": "DEVELOPS",
+   "fact": "2024年Q3，三星HBM3E 8-Hi通过NVIDIA初步认证但功耗超标。"
+  },
+  {
+   "source": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "target": "f9de864f-f763-4aee-b973-6de27197629f",
+   "name": "COMPETES_WITH",
+   "fact": "SK海力士与三星在2025年Q2全球HBM市场直接竞争，SK海力士占62%、三星占17%。"
+  },
+  {
+   "source": "b289b0cf-d4c7-4a91-bbbb-25a43ba37dce",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "INFLUENCES",
+   "fact": "Kwak Noh-Jung stated SK海力士 is advancing HBM4 mass production ahead of schedule per customer requests and aims to maintain a two-generation HBM technology lead before 2030."
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "SK海力士在HBM4/HBM4E市场面临三星的强烈反扑。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "美光与三星争夺HBM4市场份额"
+  },
+  {
+   "source": "f0312946-f486-47d5-8c47-c93be930bacb",
+   "target": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "name": "INFLUENCES_SHARE_OF",
+   "fact": "Meta MTIA的差异化HBM4需求可能改变SK海力士、三星、美光在2026—2027年的份额分配"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "PARTNERS_WITH",
+   "fact": "美光为NVIDIA供应HBM，基准情景下HBM份额将达25%—30%"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "PARTNERS_WITH",
+   "fact": "SK海力士 is the largest HBM supplier to NVIDIA, holding about 65% of NVIDIA's HBM purchases and a multi-year HBM4 exclusive supply MOU."
+  },
+  {
+   "source": "51083879-e2b0-4088-8596-49c3a664c808",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "INFLUENCES",
+   "fact": "TechInsights' latest 3D NAND technology roadmap reports that Samsung's 290-layer V9 is in mass production, V10 at approximately 430 layers is scheduled for 2025, and a 1000-layer V-NAND is targeted for 2030."
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "PARTNERS_WITH",
+   "fact": "SK海力士是NVIDIA HBM第一供应商，2025年Q2占62%份额，2026年HBM4预计占NVIDIA需求约三分之二，签署多年期独家供应MOU"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "name": "SUPPLIES_TO",
+   "fact": "三星电子是苹果iPhone的主要NAND Flash供应商之一(传统合作关系)。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "INVESTS_IN",
+   "fact": "美光宣布FY2026资本支出从180亿美元上调至200亿美元，用于HBM4及HBM4E产能建设"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "970bb2d5-5c2f-46bd-82ec-a45809d35fad",
+   "name": "PARTNERS_WITH",
+   "fact": "长江存储（YMTC）与华为形成国产存储+国产先进封装的垂直整合合作。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "三星在HBM4E上对SK海力士发起反扑，乐观情景下份额突破30%，重夺DRAM第一"
+  },
+  {
+   "source": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "target": "c970c961-8102-4a9b-acf5-268540970d44",
+   "name": "BENEFITS_FROM",
+   "fact": "美光凭借CHIPS法案补贴与本土制造，2030年HBM份额有望突破30%"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "bdf176f4-f6bc-455c-ab5e-c0b79b4631c9",
+   "name": "INVESTS_IN",
+   "fact": "Samsung restarts the Pyeongtaek P5 fab to secure HBM4 capacity, with a $108 billion investment."
+  },
+  {
+   "source": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "target": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "name": "FUNDS",
+   "fact": "国家集成电路产业投资基金（大基金三期）注册资本3440亿元人民币，将持续向长江存储注资。"
+  },
+  {
+   "source": "f9de864f-f763-4aee-b973-6de27197629f",
+   "target": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "COMPETES_WITH",
+   "fact": "三星与美光在2025年Q4全球DRAM市场直接竞争，三星占38%、美光占27%。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "DEPENDS_ON",
+   "fact": "三星EUV光刻机最大客户之一，依赖ASML支持1c纳米DRAM与HBM先进制程"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "name": "DEPENDS_ON",
+   "fact": "YMTC作为中国3D NAND龙头获国家大基金持续注资，是'自主可控'国家战略核心载体"
+  },
+  {
+   "source": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "SUPPLIES_TO",
+   "fact": "三星高度依赖ASML Holding的EUV光刻机以维持其在1c/1-gamma DRAM与HBM base die上的工艺节点竞争力。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "cb50b789-d23b-498e-a2e7-6f49f3064dad",
+   "name": "DEVELOPS",
+   "fact": "2025年1月，美光HBM3E 12-Hi通过NVIDIA H200/B200认证，正式成为HBM第二供应商。"
+  },
+  {
+   "source": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "target": "eb647c87-262d-426c-9207-b41989f8d277",
+   "name": "SUPPLIES_TO",
+   "fact": "长江存储生产232层QLC 3D NAND，密度达19.8 Gbit/mm²的行业纪录。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "36b306d1-8589-4e09-97dc-4c2ea37bb3c1",
+   "name": "DEPENDS_ON",
+   "fact": "美光宣布Idaho第二厂建设计划，第一厂原计划2027年下半年量产，提前至2027年年中"
+  },
+  {
+   "source": "679762e7-fc47-45c6-8b8c-9b1e28bc1062",
+   "target": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "LEADS",
+   "fact": "Sanjay Mehrotra作为美光CEO，表示内存产业已正式进入'产能为王'阶段，美光在爱达荷州Boise、纽约Clay、新加坡的产能布局加上CHIPS法案约62亿美元补贴将支撑美光2030年HBM份额突破30%。"
+  },
+  {
+   "source": "e77a4404-14dc-44a4-964a-c48db8bb0f2c",
+   "target": "a2dd32b5-561a-4d0f-a3ec-31ebc73cafbd",
+   "name": "SUPPLIES_TO",
+   "fact": "Corsair integrates CXMT-sourced DRAM chips into its Vengeance DDR5 memory modules, with the first CXMT-equipped Vengeance DDR5 modules shipping in May 2026."
+  },
+  {
+   "source": "9cd29e62-ce91-4c22-ad7f-d1e610de4cff",
+   "target": "6f8bc6f3-45a5-49a0-976d-d664bf02a70b",
+   "name": "PRODUCES",
+   "fact": "长鑫存储的DDR5实际良率被Dr Robert Castellano认为与官方声称存在显著差距，声称值80%—90% vs. 独立拆解报告的20%—50%"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "name": "PARTNERS_WITH",
+   "fact": "三星与苹果保持多客户合作关系"
+  },
+  {
+   "source": "9cd29e62-ce91-4c22-ad7f-d1e610de4cff",
+   "target": "6f8bc6f3-45a5-49a0-976d-d664bf02a70b",
+   "name": "PRODUCES",
+   "fact": "长鑫存储的DDR5实际良率被Dr Robert Castellano认为与官方声称存在显著差距，声称值80%—90% vs. 独立拆解报告的20%—50%"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "name": "PARTNERS_WITH",
+   "fact": "三星与苹果保持多客户合作关系"
+  },
+  {
+   "source": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "target": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "COMPETES_WITH",
+   "fact": "SK海力士与美光在2025年Q2全球HBM市场直接竞争，SK海力士占62%、美光占21%。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "e0c4e82e-7f09-4a31-9d57-5ce02bda0265",
+   "name": "DEPENDS_ON",
+   "fact": "长江存储（YMTC）依赖拓荆科技等国产设备来推进其NAND产线建设。"
+  },
+  {
+   "source": "fe9012cc-b7ff-4bf8-acbb-605b71b2cf2c",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "FUNDS",
+   "fact": "欧盟EU Chips Act（430亿欧元）与美CHIPS法案、日本Rapidus补贴共同推动本土内存制造回流。"
+  },
+  {
+   "source": "e77a4404-14dc-44a4-964a-c48db8bb0f2c",
+   "target": "9cd29e62-ce91-4c22-ad7f-d1e610de4cff",
+   "name": "DEPENDS_ON",
+   "fact": "海盗船Corsair在Vengeance DDR5模组中采用长鑫存储的DRAM颗粒。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "COMPETES_WITH",
+   "fact": "2027—2028年新建产能集中释放，可能引发美光对SK海力士HBM的价格战反扑"
+  },
+  {
+   "source": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "target": "7241a5be-b023-496b-817f-8e67ffb5a7ec",
+   "name": "DEPENDS_ON",
+   "fact": "长江存储在全国产化3D NAND产线上依赖北方华创提供的国产设备。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "美光与SK海力士在HBM市场展开竞争，争夺NVIDIA HBM4订单份额"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "DEPENDS_ON",
+   "fact": "长江存储在DUV多重曝光技术上依赖ASML DUV光刻机(EUV被完全禁运)，以实现3D NAND层数追赶。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "PRODUCES",
+   "fact": "Samsung计划在2026年2月启动HBM4大规模量产，以满足AI驱动的存储需求。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "9d61cd3a-c8cb-445c-b321-53cc71d43d16",
+   "name": "DEPENDS_ON",
+   "fact": "长江存储（YMTC）依赖华海清科等国产设备来推进其NAND产线建设。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "9e83abc9-37ae-419f-aefc-1df7e9a19acc",
+   "name": "PARTNERS_WITH",
+   "fact": "长江存储（YMTC）与中芯国际形成国产存储+国产先进封装的垂直整合合作。"
+  },
+  {
+   "source": "6d1fa878-9067-4465-b4b1-ad53aee5e9c2",
+   "target": "c731d3ff-dc52-4c70-9f76-de70437d38d0",
+   "name": "IS_A",
+   "fact": "SK海力士董事长，集团战略决策者"
+  },
+  {
+   "source": "2d3d92cb-58fe-415a-809f-947a6fe7af11",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "FUNDS",
+   "fact": "韩国K-半导体战略2.0提供26万亿韩元税收优惠，推动本土内存制造回流，惠及SK海力士等韩国厂商。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "6f8bc6f3-45a5-49a0-976d-d664bf02a70b",
+   "name": "PRODUCES",
+   "fact": "长鑫存储 (CXMT) is reported to target a 90% DDR5 yield rate, as documented in CSDN blog post titled '长鑫存储 DDR5 良率 90%'."
+  },
+  {
+   "source": "b289b0cf-d4c7-4a91-bbbb-25a43ba37dce",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "LEADS",
+   "fact": "Kwak Noh-Jung担任SK海力士CEO，在2025年Q3财报电话会议强调HBM是AI基础设施的真正瓶颈。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "在HBM4/HBM4E市场争夺NVIDIA第一供应商地位；美光HBM4E 16 Gb/s pin目标强调差异化"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "28f10942-4136-42bb-a378-415c79b94737",
+   "name": "REFERENCED_BY",
+   "fact": "2025年7月21日，Omdia报告显示CXMT DRAM产能Q3同比扩张70%。"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "SUPPLIES_TO",
+   "fact": "Jensen Huang表示NVIDIA的HBM供应链中三星约占10%，NVIDIA正与三星深度合作，希望其HBM4能尽快通过Vera Rubin平台认证。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "Samsung与SK Hynix将HBM4量产时间加速至2026年初，两家同步推进量产以争夺AI内存市场份额。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "e831ed63-f1f8-494c-ae2c-275815924131",
+   "name": "INFLUENCES",
+   "fact": "美国商务部BIS influences the export of Tokyo Electron's critical equipment to Chinese memory makers like CXMT and YMTC through export control rules."
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "5e096b6d-8f7d-46d3-8460-982a69a63240",
+   "name": "OPERATES",
+   "fact": "2026年1-2月，SK海力士利川M16/清州M15X同步进入HBM4风险量产。"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "cb50b789-d23b-498e-a2e7-6f49f3064dad",
+   "name": "PRODUCES",
+   "fact": "美光's HBM3E 12-Hi business contributed to profit for the first time on the Q4 FY2025 earnings reported September 23, 2025, a record quarter for 美光."
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "美光科技与SK海力士争夺NVIDIA HBM订单，2025年Q2美光HBM份额达21%超过三星位列第二。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "SUPPLIES_TO",
+   "fact": "2026年2月，NVIDIA GTC 2026上三星获Vera Rubin平台HBM4约10%份额。"
+  },
+  {
+   "source": "78b259b0-4ecb-4908-aa96-ded29906372f",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "SUPPLIES_TO",
+   "fact": "AWS Trainium 3等加速器对HBM的差异化需求，可能改变HBM4/4E的规格博弈，影响SK海力士等HBM供应商。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "334148ff-2818-44de-bc53-462bd1297d73",
+   "name": "SUPPLIES_TO",
+   "fact": "三星电子向AMD的MI300/MI325供应HBM3E 12-Hi。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "afb5ccc6-b266-4512-95cc-c80dcd6ec58b",
+   "name": "SUPPLIES_TO",
+   "fact": "2024年Q1-Q2，SK海力士宣布HBM3E量产，并通过NVIDIA H200（搭配HBM3E 6-Hi）正式发售。"
+  },
+  {
+   "source": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "target": "23e85664-cb82-4316-a06f-11570f66d351",
+   "name": "SUPPLIES_TO",
+   "fact": "长江存储受美国实体清单限制，但仍通过白手套渠道向华硕等品牌SSD厂商出货NAND产品。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "d8d4b5d1-6afc-4b9a-b1ba-e7b76a6569dd",
+   "name": "PARTNERS_WITH",
+   "fact": "美光与东芝在广岛合资设立K2 NAND厂"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "长江存储在hybrid bonding技术上领先SK海力士等国际大厂近一代"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "6f8bc6f3-45a5-49a0-976d-d664bf02a70b",
+   "name": "DEVELOPS",
+   "fact": "2024年Q3，CXMT启动DDR5试产。"
+  },
+  {
+   "source": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "target": "a035001c-fd9d-498b-a27d-90ddb033478f",
+   "name": "DEPENDS_ON",
+   "fact": "长江存储在全国产化3D NAND产线上依赖中微公司提供的国产设备。"
+  },
+  {
+   "source": "56d7fc15-0e91-485a-bc29-4559dcd4d4b0",
+   "target": "c731d3ff-dc52-4c70-9f76-de70437d38d0",
+   "name": "IS_A",
+   "fact": "NVIDIA CEO，HBM最大买方的决策者"
+  },
+  {
+   "source": "8de03b5f-be53-406d-82d7-28f2a44b5e98",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "LEADS",
+   "fact": "陈南翔是长江存储YMTC的负责人（建议优先关注人物之一）。"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "d423b122-2678-4943-ae51-848087e509c2",
+   "name": "PARTNERS_WITH",
+   "fact": "苹果正在评估在MacBook产品中导入长鑫存储的DRAM与长江存储的NAND产品。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "06296f70-a82d-4f2c-8aa1-5ed86bd6e685",
+   "name": "INFLUENCES",
+   "fact": "美光科技在美国纽约Clay拥有本土制造基地。"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "9cd29e62-ce91-4c22-ad7f-d1e610de4cff",
+   "name": "PARTNERS_WITH",
+   "fact": "苹果正在评估在iPhone 18系列以及MacBook产品中导入长鑫存储的DRAM产品。"
+  },
+  {
+   "source": "2f672c04-4a15-4c49-b60d-72f1a260811b",
+   "target": "3a3c90ac-357f-44c6-bac2-84aad3abe7a9",
+   "name": "LEADS",
+   "fact": "Christophe Fouquet leads ASML Holding, the sole supplier of EUV lithography systems on which Micron depends for its 1c/1-gamma DRAM and HBM base die process competitiveness."
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "REGULATES",
+   "fact": "2027年BIS VEU豁免到期前后，SK海力士在华工厂是否被迫停产或转移，是美中科技脱钩的决裂点之一。"
+  },
+  {
+   "source": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "target": "f9de864f-f763-4aee-b973-6de27197629f",
+   "name": "COMPETES_WITH",
+   "fact": "美光与三星在2025年Q2全球HBM市场直接竞争，美光占21%、三星占17%。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "DEPENDS_ON",
+   "fact": "CXMT高度依赖ASML DUV（EUV禁运），若美方进一步限制DUV出口，CXMT可能面临良率天花板"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "美光凭借美国本土制造与NVIDIA紧密关系稳步攀升，预计2030年达到25%—30%的HBM市场份额，与SK海力士争夺HBM市场。"
+  },
+  {
+   "source": "84bcb2c1-6d64-48d4-96b4-ab4242847d24",
+   "target": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "name": "LEADS",
+   "fact": "Tim Cook is the CEO of Apple Inc."
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "06296f70-a82d-4f2c-8aa1-5ed86bd6e685",
+   "name": "OWNS_FACTORY",
+   "fact": "美光在纽约Clay的工厂于2026年初破土，目标2030年量产"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "PARTNERS_WITH",
+   "fact": "Apple traditionally cooperates with Samsung for NAND supply."
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "PARTNERS_WITH",
+   "fact": "Samsung与SK Hynix在2026年同步扩大内存产能，共同应对AI需求驱动的供应紧张。"
+  },
+  {
+   "source": "b289b0cf-d4c7-4a91-bbbb-25a43ba37dce",
+   "target": "c731d3ff-dc52-4c70-9f76-de70437d38d0",
+   "name": "IS_A",
+   "fact": "SK海力士CEO"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "0cb62295-cb73-4298-ab09-607895123f8a",
+   "name": "PRODUCES",
+   "fact": "三星电子 has the 290-layer V9 NAND in mass production and is pursuing a 1000-layer V-NAND roadmap."
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "9900ded2-a162-41d0-bff2-dec567d6321a",
+   "name": "USES_TECHNOLOGY",
+   "fact": "2023年9月，长江存储发布基于Xtacking 3.0架构的232层QLC 3D NAND，密度达19.8 Gbit/mm²，创下行业纪录。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "1fce9046-628f-4481-8a0d-efce14ed7119",
+   "name": "PRODUCES",
+   "fact": "三星电子's stated goal is to retake the AI memory crown at the HBM4E node in 2027."
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "REGULATES",
+   "fact": "美国希望SK海力士限制对华HBM出口，但维持对中国晶圆厂运营"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "name": "REGULATES",
+   "fact": "地缘政治两难将在2027年BIS VEU豁免到期前后迎来关键节点，韩国厂商的选边将深刻影响全球产能格局。"
+  },
+  {
+   "source": "f9de864f-f763-4aee-b973-6de27197629f",
+   "target": "b93156f5-ea7c-4440-bf9c-30a149238c37",
+   "name": "TARGETS",
+   "fact": "三星目标2026—2027年通过Vera Rubin Ultra HBM4E认证以重夺AI内存份额"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "三星为NVIDIA提供HBM，2025年Q2占全球HBM出货量约17%"
+  },
+  {
+   "source": "c970c961-8102-4a9b-acf5-268540970d44",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "FUNDS",
+   "fact": "美CHIPS法案补贴推动美/欧/日/韩本土内存制造回流，惠及美光等美国厂商。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "6c071cf8-377e-40eb-9688-b83e04062276",
+   "name": "PARTNERS_WITH",
+   "fact": "SK海力士与东芝/Kioxia在NAND领域建立合资关系（Solidigm）。"
+  },
+  {
+   "source": "ebe4cfc5-044f-4029-b608-65965bedb6cc",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "PARTNERS_WITH",
+   "fact": "长鑫存储与合肥市政府深度绑定合作"
+  },
+  {
+   "source": "6d1fa878-9067-4465-b4b1-ad53aee5e9c2",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "LEADS",
+   "fact": "崔泰源是SK海力士的负责人（建议优先关注人物之一）。"
+  },
+  {
+   "source": "096f3e13-97d3-437d-a58c-db08c6225fa7",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "LEADS",
+   "fact": "李在镕是三星电子的副会长（公司领导人），于2025年Q3股东会上对失去技术领先地位公开致歉并宣布投资计划。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "658d5cc1-5496-4560-a7b2-8cb355ccbf2b",
+   "name": "INFLUENCES",
+   "fact": "美光科技在美国爱达荷州Boise拥有本土制造基地。"
+  },
+  {
+   "source": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "In Q2 2025, Micron held a 21% share of the HBM market, ahead of Samsung's 17%, reflecting competition between the two HBM suppliers for NVIDIA business."
+  },
+  {
+   "source": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "REGULATES",
+   "fact": "受美国BIS出口管制规则影响，ASML Holding对华EUV完全禁运，使长江存储（YMTC）只能依赖DUV多重曝光实现层数追赶。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "REGULATES",
+   "fact": "对SK海力士、三星在中国现有工厂给予'经验证终端用户'（VEU）豁免至2027年；要求限制对华先进HBM出口"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "美光 supplies approximately 25% of NVIDIA's HBM as part of NVIDIA's diversified HBM supply chain."
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "PARTNERS_WITH",
+   "fact": "三星电子在NVIDIA HBM4供应链中获得约10%份额，但其HBM3E 12-Hi曾因未通过NVIDIA能效与散热测试而丧失H100/H200周期大部分份额。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "658d5cc1-5496-4560-a7b2-8cb355ccbf2b",
+   "name": "OWNS_FACTORY",
+   "fact": "美光在爱达荷州Boise拥有DRAM+HBM工厂，采用1-gamma制程"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "PARTNERS_WITH",
+   "fact": "CXMT与YMTC作为中国存储国家队，共同推进国产替代"
+  },
+  {
+   "source": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "target": "c970c961-8102-4a9b-acf5-268540970d44",
+   "name": "DEPENDS_ON",
+   "fact": "美光依赖美国CHIPS法案补贴支撑其本土制造与产能扩张，这是其2030年HBM份额突破30%的关键政策红利。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "PARTNERS_WITH",
+   "fact": "长江存储与长鑫存储共同被列为中国存储国家队代表，协同推动国产化产能扩张与全球份额追赶。"
+  },
+  {
+   "source": "51083879-e2b0-4088-8596-49c3a664c808",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "INFLUENCES",
+   "fact": "TechInsights' 3D NAND roadmap reports that SK hynix is relatively conservative in its NAND layer-count progression compared with Samsung and YMTC."
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "077d3411-cdb3-46b9-a25e-707c9481a672",
+   "name": "REGULATES",
+   "fact": "美国BIS对韩国厂商在华工厂（如D1X无锡）的运营保持开放"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "DEPENDS_ON",
+   "fact": "AI芯片设计公司NVIDIA越来越依赖存储厂SK海力士的产能规划。"
+  },
+  {
+   "source": "c970c961-8102-4a9b-acf5-268540970d44",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "REGULATES",
+   "fact": "美光科技凭借美国本土制造(爱达荷州、纽约、维吉尼亚)享受CHIPS法案补贴约62亿美元(直接拨款+贷款)。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "334148ff-2818-44de-bc53-462bd1297d73",
+   "name": "SUPPLIES_TO",
+   "fact": "美光向AMD供应HBM3E"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "name": "INFLUENCES",
+   "fact": "美光是唯一美国DRAM+HBM IDM，深度游说BIS收紧对华出口管制以维持本土优势；获CHIPS法案约62亿美元补贴"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "SUPPLIES_TO",
+   "fact": "三星是NVIDIA的HBM供应商，约占其采购量的10%。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "name": "COMPETES_WITH",
+   "fact": "长江存储在hybrid bonding技术上领先国际大厂近一代，但产能受设备限制，与Kioxia竞争NAND市场"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "2c01d829-fad3-466d-9384-c639af954dac",
+   "name": "INFLUENCES",
+   "fact": "2026年4月，三星Q1合并营收创历史新高，市值突破1万亿美元；KOSPI突破7000点。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "e831ed63-f1f8-494c-ae2c-275815924131",
+   "name": "DEPENDS_ON",
+   "fact": "长鑫存储高度依赖东京电子沉积设备"
+  },
+  {
+   "source": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "REGULATES",
+   "fact": "South Korea's Ministry of Trade, Industry and Energy (METI) announced the K-Semiconductor Strategy 2.0 in 2025, which provides approximately 26 trillion KRW in tax incentives over 5 years and directly benefits SK hynix's Yongin cluster."
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "DEPENDS_ON",
+   "fact": "美光在1-gamma制程DRAM+HBM生产中依赖ASML等设备"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "Micron achieves record revenue on the AI memory boom, competing with Samsung in HBM."
+  },
+  {
+   "source": "b6c1a2fc-2c1a-48de-9c54-6a4834ab6442",
+   "target": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "name": "PARTNERS_WITH",
+   "fact": "Western Digital and Kioxia merger talks were nearing completion as of July 2023."
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "REGULATES",
+   "fact": "2022年10月对华存储设备全面禁运；2024年12月将140家中国实体列入清单含CXMT关联公司；EUV完全禁运使CXMT只能依赖DUV多重曝光"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "COMPETES_WITH",
+   "fact": "SK海力士在HBM4/HBM4E市场面临美光的强烈反扑。"
+  },
+  {
+   "source": "e1ee3a18-9365-422a-a074-f4d27650a52a",
+   "target": "1fce9046-628f-4481-8a0d-efce14ed7119",
+   "name": "DEPENDS_ON",
+   "fact": "NVIDIA Feynman（1nm）架构绑定HBM4E规格"
+  },
+  {
+   "source": "56d7fc15-0e91-485a-bc29-4559dcd4d4b0",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "INFLUENCES",
+   "fact": "Jensen Huang stated NVIDIA requested SK海力士 to pull HBM4 mass production forward by 6 months in 2025, and SK海力士 supplies about 65% of NVIDIA's HBM."
+  },
+  {
+   "source": "f6037482-e7e0-4795-b745-32687265fe6c",
+   "target": "e29abe95-e4f7-49f9-ad2b-621c8e01343e",
+   "name": "INFLUENCES",
+   "fact": "Howard Lutnick公开表态美国在内存领域将对中华人民共和国保持2—3代的领先优势，并推动BIS继续升级对华存储设备出口管制。"
+  },
+  {
+   "source": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "target": "f9de864f-f763-4aee-b973-6de27197629f",
+   "name": "COMPETES_WITH",
+   "fact": "长江存储在NAND领域与三星等竞争，2025年Q4长江存储已占全球NAND供应约8%；TechInsights指出三星290层V9已量产，长江存储232层QLC领先但受限于DUV多重曝光。"
+  },
+  {
+   "source": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "target": "17a9403d-9aea-4526-93df-defec684f53f",
+   "name": "SUPPLIES_TO",
+   "fact": "长江存储通过白手套渠道向HP等品牌SSD厂商出货NAND产品"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "name": "COMPETES_WITH",
+   "fact": "三星与Kioxia在NAND市场争夺1000层V-NAND技术领先地位"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "PARTNERS_WITH",
+   "fact": "CXMT and YMTC jointly boost DRAM and NAND production, as reported by Chosun Biz on 2025-07-21."
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "PARTNERS_WITH",
+   "fact": "Apple is evaluating cooperation with YMTC to supply memory/storage chips for iPhone 18, MacBook, and other products, as reported in August 2025."
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "f25de327-d584-491d-ae21-8ecc02892ae6",
+   "name": "DEVELOPS",
+   "fact": "Samsung is prepping 400-layer V-NAND for future 16TB SSD to maintain NAND leadership, according to TechSpot."
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "name": "SUPPLIES_TO",
+   "fact": "SK海力士传统上为苹果iPhone提供HBM供应。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "In Q2 2025, SK hynix led the HBM market with a 62% share while Samsung trailed with only 17%, illustrating intense competition between the two Korean memory giants."
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "name": "PARTNERS_WITH",
+   "fact": "美国商务部BIS coordinates with 韩国产业通商资源部 (METI) to ensure SK hynix and Samsung's exports to China comply with regulations."
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "c970c961-8102-4a9b-acf5-268540970d44",
+   "name": "REGULATES",
+   "fact": "美光凭借美国本土制造（爱达荷州Boise、纽约Clay、维吉尼亚Manassas）享受CHIPS法案补贴约62亿美元（直接拨款+贷款）"
+  },
+  {
+   "source": "b6c1a2fc-2c1a-48de-9c54-6a4834ab6442",
+   "target": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "name": "PARTNERS_WITH",
+   "fact": "Western Digital and Kioxia merger talks were nearing completion as of July 2023."
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "REGULATES",
+   "fact": "2022年10月对华存储设备全面禁运；2024年12月将140家中国实体列入清单含CXMT关联公司；EUV完全禁运使CXMT只能依赖DUV多重曝光"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "COMPETES_WITH",
+   "fact": "SK海力士在HBM4/HBM4E市场面临美光的强烈反扑。"
+  },
+  {
+   "source": "e1ee3a18-9365-422a-a074-f4d27650a52a",
+   "target": "1fce9046-628f-4481-8a0d-efce14ed7119",
+   "name": "DEPENDS_ON",
+   "fact": "NVIDIA Feynman（1nm）架构绑定HBM4E规格"
+  },
+  {
+   "source": "56d7fc15-0e91-485a-bc29-4559dcd4d4b0",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "INFLUENCES",
+   "fact": "Jensen Huang stated NVIDIA requested SK海力士 to pull HBM4 mass production forward by 6 months in 2025, and SK海力士 supplies about 65% of NVIDIA's HBM."
+  },
+  {
+   "source": "f6037482-e7e0-4795-b745-32687265fe6c",
+   "target": "e29abe95-e4f7-49f9-ad2b-621c8e01343e",
+   "name": "INFLUENCES",
+   "fact": "Howard Lutnick公开表态美国在内存领域将对中华人民共和国保持2—3代的领先优势，并推动BIS继续升级对华存储设备出口管制。"
+  },
+  {
+   "source": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "target": "f9de864f-f763-4aee-b973-6de27197629f",
+   "name": "COMPETES_WITH",
+   "fact": "长江存储在NAND领域与三星等竞争，2025年Q4长江存储已占全球NAND供应约8%；TechInsights指出三星290层V9已量产，长江存储232层QLC领先但受限于DUV多重曝光。"
+  },
+  {
+   "source": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "target": "17a9403d-9aea-4526-93df-defec684f53f",
+   "name": "SUPPLIES_TO",
+   "fact": "长江存储通过白手套渠道向HP等品牌SSD厂商出货NAND产品"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "name": "COMPETES_WITH",
+   "fact": "三星与Kioxia在NAND市场争夺1000层V-NAND技术领先地位"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "PARTNERS_WITH",
+   "fact": "CXMT and YMTC jointly boost DRAM and NAND production, as reported by Chosun Biz on 2025-07-21."
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "PARTNERS_WITH",
+   "fact": "Apple is evaluating cooperation with YMTC to supply memory/storage chips for iPhone 18, MacBook, and other products, as reported in August 2025."
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "f25de327-d584-491d-ae21-8ecc02892ae6",
+   "name": "DEVELOPS",
+   "fact": "Samsung is prepping 400-layer V-NAND for future 16TB SSD to maintain NAND leadership, according to TechSpot."
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "name": "SUPPLIES_TO",
+   "fact": "SK海力士传统上为苹果iPhone提供HBM供应。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "In Q2 2025, SK hynix led the HBM market with a 62% share while Samsung trailed with only 17%, illustrating intense competition between the two Korean memory giants."
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "name": "PARTNERS_WITH",
+   "fact": "美国商务部BIS coordinates with 韩国产业通商资源部 (METI) to ensure SK hynix and Samsung's exports to China comply with regulations."
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "c970c961-8102-4a9b-acf5-268540970d44",
+   "name": "REGULATES",
+   "fact": "美光凭借美国本土制造（爱达荷州Boise、纽约Clay、维吉尼亚Manassas）享受CHIPS法案补贴约62亿美元（直接拨款+贷款）"
+  },
+  {
+   "source": "0a6ceba9-d44f-4814-a79a-bcb93fe5eda3",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "INFLUENCES",
+   "fact": "Counterpoint估计DRAM占手机BOM成本约8%—15%，影响SK海力士等存储厂商在AI PC与智能手机市场的定价。"
+  },
+  {
+   "source": "965815a5-37da-4a84-959c-aa9a37a0f1d5",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "DEPENDS_ON",
+   "fact": "AI芯片设计公司谷歌TPU越来越依赖存储厂SK海力士的产能规划。"
+  },
+  {
+   "source": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "FUNDS",
+   "fact": "China's National IC Industry Investment Fund Phase III, with registered capital of 344 billion RMB, will continue to inject capital into CXMT as part of China's national semiconductor strategy."
+  },
+  {
+   "source": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "REGULATES",
+   "fact": "The China Big Fund Phase III, with 344 billion yuan in registered capital, was established to fund domestic semiconductor efforts, influencing the competitive landscape against incumbents like Samsung."
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "f6037482-e7e0-4795-b745-32687265fe6c",
+   "name": "LEADS",
+   "fact": "Howard Lutnick自2025年起担任美国商务部部长，主管工业与安全局（BIS）的出口管制执法。"
+  },
+  {
+   "source": "2f672c04-4a15-4c49-b60d-72f1a260811b",
+   "target": "c731d3ff-dc52-4c70-9f76-de70437d38d0",
+   "name": "IS_A",
+   "fact": "ASML CEO，EUV光刻机唯一供应商掌门人"
+  },
+  {
+   "source": "f569cd57-23c8-478e-a6cf-2bc7b5b35541",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "USES_TECHNOLOGY",
+   "fact": "2026年2月，NVIDIA GTC 2026发布Vera Rubin平台，明确HBM4为标配；SK海力士获约三分之二份额，美光约25%，三星约10%。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "f9de864f-f763-4aee-b973-6de27197629f",
+   "name": "COMPETES_WITH",
+   "fact": "长鑫存储与三星在2025年Q4全球DRAM市场存在竞争，长鑫存储占5%、三星占38%。"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "PARTNERS_WITH",
+   "fact": "三星HBM3E 8-Hi通过初步认证但功耗超标，2026年HBM4预计仅获约10%份额；NVIDIA推动三星重返认证名单"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "DEVELOPS",
+   "fact": "2025年12月25日，韩国媒体披露SK海力士与三星将于2026年2月同步启动HBM4量产。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "美光科技的HBM3E 12-Hi在2025年下半年通过NVIDIA认证，是2026年HBM4的二供。"
+  },
+  {
+   "source": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "target": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "name": "PARTNERS_WITH",
+   "fact": "South Korea's METI maintains close coordination with the U.S. BIS to ensure that Korean companies' exports to China comply with international export control rules."
+  },
+  {
+   "source": "f0312946-f486-47d5-8c47-c93be930bacb",
+   "target": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "PARTNERS_WITH",
+   "fact": "Meta MTIA需要HBM供应商提供定制化HBM4/4E规格，美光凭借本土制造有望承接Meta的HBM定制订单。"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "PARTNERS_WITH",
+   "fact": "苹果正在评估在iPhone 18系列中导入长鑫存储（CXMT）的DRAM产品。"
+  },
+  {
+   "source": "6886e899-0331-4575-87c3-a0eefd4f8d64",
+   "target": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "INFLUENCES",
+   "fact": "TrendForce预测2025年Q4 DRAM合约价环比上涨45%—50%、全年同比上涨50%以上，AI驱动的供需缺口利好包括美光在内的存储厂商。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "COMPETES_WITH",
+   "fact": "长鑫存储与美光在2025年Q4全球DRAM市场存在竞争，长鑫存储占5%、美光占27%。"
+  },
+  {
+   "source": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "PARTNERS_WITH",
+   "fact": "韩国产业通商资源部 forms a government-enterprise-association trinity with Samsung, SK hynix, and the Korea Semiconductor Industry Association (KSIA)."
+  },
+  {
+   "source": "97c5d1f5-83a4-4600-a9be-3c55335b3e5b",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "LEADS",
+   "fact": "朱一明是长鑫存储CXMT的负责人（建议优先关注人物之一）。"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "PARTNERS_WITH",
+   "fact": "美光HBM3E 12-Hi 2025年1月通过NVIDIA H200/B200认证成为HBM第二供应商，2026年HBM4预计获约25%份额"
+  },
+  {
+   "source": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "target": "3a3c90ac-357f-44c6-bac2-84aad3abe7a9",
+   "name": "DEPENDS_ON",
+   "fact": "美光的产能扩张依赖美国商务部CHIPS法案约62亿美元补贴。"
+  },
+  {
+   "source": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "SUPPLIES_TO",
+   "fact": "美光高度依赖ASML Holding的EUV光刻机以维持其在1c/1-gamma DRAM与HBM base die上的工艺节点竞争力。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "9697f1f7-325b-4eea-a6b2-04e607cbb40e",
+   "name": "INFLUENCES",
+   "fact": "美国商务部BIS influences the export of Applied Materials' critical equipment to Chinese memory makers like CXMT and YMTC through export control rules."
+  },
+  {
+   "source": "8de03b5f-be53-406d-82d7-28f2a44b5e98",
+   "target": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "name": "LEADS",
+   "fact": "陈南翔是长江存储的领导人，宣布全国产化3D NAND产线扩张计划。"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "cb50b789-d23b-498e-a2e7-6f49f3064dad",
+   "name": "SUPPLIES_TO",
+   "fact": "2025年9月23日，美光Q4财报创纪录营收与EPS，HBM3E 12-Hi业务首次贡献利润。"
+  },
+  {
+   "source": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "FUNDS",
+   "fact": "中国大基金三期投资动向是影响CXMT等中国存储厂商的关键政策事件（建议追踪）。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "6886e899-0331-4575-87c3-a0eefd4f8d64",
+   "name": "REFERENCED_BY",
+   "fact": "2025年11月26日，TrendForce预测2025年Q4 DRAM合约价环比上涨45%—50%。"
+  },
+  {
+   "source": "84bcb2c1-6d64-48d4-96b4-ab4242847d24",
+   "target": "c731d3ff-dc52-4c70-9f76-de70437d38d0",
+   "name": "IS_A",
+   "fact": "苹果公司CEO"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "PARTNERS_WITH",
+   "fact": "苹果正在评估导入YMTC NAND/DRAM以缓解成本压力，但担忧良率与知识产权问题"
+  },
+  {
+   "source": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "target": "2f672c04-4a15-4c49-b60d-72f1a260811b",
+   "name": "LEADS",
+   "fact": "Christophe Fouquet担任ASML Holding的CEO。"
+  },
+  {
+   "source": "2f672c04-4a15-4c49-b60d-72f1a260811b",
+   "target": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "LEADS",
+   "fact": "Christophe Fouquet担任ASML的CEO"
+  },
+  {
+   "source": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "REGULATES",
+   "fact": "受美国BIS出口管制规则影响，ASML Holding对华EUV完全禁运，使长鑫存储（CXMT）只能依赖DUV多重曝光。"
+  },
+  {
+   "source": "8de03b5f-be53-406d-82d7-28f2a44b5e98",
+   "target": "c731d3ff-dc52-4c70-9f76-de70437d38d0",
+   "name": "IS_A",
+   "fact": "长江存储（YMTC）董事长"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "a035001c-fd9d-498b-a27d-90ddb033478f",
+   "name": "DEPENDS_ON",
+   "fact": "长江存储（YMTC）依赖中微公司等国产设备来推进其NAND产线建设。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "REGULATES",
+   "fact": "The U.S. Department of Commerce's BIS regulates ChangXin Memory Technologies (CXMT) through export controls on key semiconductor manufacturing equipment, preventing CXMT from obtaining advanced EUV lithography and certain deposition/inspection tools."
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "name": "PARTNERS_WITH",
+   "fact": "苹果正在考虑与YMTC合作，为iPhone 18系列提供NAND芯片以分散地缘政治风险"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "6c4e504e-6543-4cbd-bfd4-269ebc770f38",
+   "name": "OPERATES",
+   "fact": "2026年1-2月，三星Pyeongtaek P4进入HBM4风险量产。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "COMPETES_WITH",
+   "fact": "长江存储（YMTC）目标2026年底拿下全球NAND供应量的15%，与三星电子、美光共同竞争NAND市场份额。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "三星电子的HBM3E 12-Hi因未通过NVIDIA的能效与散热测试，丧失了H100/H200周期的大部分份额。"
+  },
+  {
+   "source": "f6037482-e7e0-4795-b745-32687265fe6c",
+   "target": "c731d3ff-dc52-4c70-9f76-de70437d38d0",
+   "name": "IS_A",
+   "fact": "美国商务部长（2025年上任）"
+  },
+  {
+   "source": "b289b0cf-d4c7-4a91-bbbb-25a43ba37dce",
+   "target": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "name": "LEADS",
+   "fact": "Kwak Noh-Jung在2025年Q3财报电话会议上作为SK海力士CEO发表声明，强调HBM是AI基础设施的真正瓶颈，并表示SK海力士2026年HBM产能已全部售罄，Q3营业利润率高达71.8%。"
+  },
+  {
+   "source": "e77a4404-14dc-44a4-964a-c48db8bb0f2c",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "SUPPLIES_TO",
+   "fact": "2026年5月海盗船首次在其Vengeance DDR5模组中采用长鑫存储颗粒，标志着CXMT进入消费级国际供应链"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "name": "PARTNERS_WITH",
+   "fact": "SK海力士与东芝/Kioxia在NAND领域建立合资关系（Solidigm）。"
+  },
+  {
+   "source": "322fb461-b635-489c-a97c-bde60bb567e1",
+   "target": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "COMPETES_WITH",
+   "fact": "SK海力士与美光在NVIDIA HBM订单及HBM4/4E认证上存在直接竞争，2030年HBM份额博弈激烈。"
+  },
+  {
+   "source": "0a6ceba9-d44f-4814-a79a-bcb93fe5eda3",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "Counterpoint Research reported that in Q4 2025, SK hynix held 29% of the global DRAM market share, placing it behind Samsung in the competitive DRAM ranking."
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "PARTNERS_WITH",
+   "fact": "三星目标在HBM4/HBM4E重返NVIDIA供应链，份额回升至25%—30%（基准情景）"
+  },
+  {
+   "source": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "美光凭借CHIPS法案补贴与本土制造，目标2030年在NVIDIA HBM供应链中份额突破30%。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "SK海力士2025年Q2占全球HBM出货量62%，三星电子在HBM4/HBM4E上试图夺回部分份额但传统DRAM第一地位已失。"
+  },
+  {
+   "source": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "REGULATES",
+   "fact": "美国希望三星限制对华HBM出口，但维持对中国晶圆厂运营"
+  },
+  {
+   "source": "7fbe1221-6ea1-496f-a23c-5addfe25f52e",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "SUPPLIES_TO",
+   "fact": "AMD MI400等加速器对HBM的差异化需求，可能改变HBM4/4E的规格博弈，影响SK海力士等HBM供应商。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "9697f1f7-325b-4eea-a6b2-04e607cbb40e",
+   "name": "DEPENDS_ON",
+   "fact": "长鑫存储依赖Applied Materials检测设备（部分已被列入实体清单）"
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "e831ed63-f1f8-494c-ae2c-275815924131",
+   "name": "PARTNERS_WITH",
+   "fact": "美光与东京电子在沉积设备上保持深度合作"
+  },
+  {
+   "source": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "target": "1697dabf-909b-421d-90fe-04c66ce1c24f",
+   "name": "PARTNERS_WITH",
+   "fact": "韩国产业通商资源部 forms a government-enterprise-association trinity with Samsung, SK hynix, and the Korea Semiconductor Industry Association (KSIA)."
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "fa37da48-31ad-4a05-814d-62e23522bee4",
+   "name": "DEVELOPS",
+   "fact": "2025年7月23日，长江存储宣布首条全国产化3D NAND产线于2025年下半年导入试产。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "name": "FUNDS",
+   "fact": "长鑫科技 received backing from the National IC Big Fund (国家大基金) and launched its A-share IPO, according to 新浪科技 on 2025-07-07."
+  },
+  {
+   "source": "6d16de0e-5b16-4dc3-855b-e71cfb1f1aca",
+   "target": "17a9403d-9aea-4526-93df-defec684f53f",
+   "name": "SUPPLIES_TO",
+   "fact": "长江存储受美国实体清单限制，但仍通过白手套渠道向HP等品牌SSD厂商出货NAND产品。"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "SUPPLIES_TO",
+   "fact": "SK海力士 supplies about 65% of NVIDIA's HBM, with 美光 supplying roughly 25% and 三星 about 10%, in NVIDIA's diversified HBM supply chain."
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "COMPETES_WITH",
+   "fact": "在HBM与传统DRAM市场全方位对峙；2025年8月SK海力士首次反超三星成为全球DRAM+HBM综合市占率第一"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "三星若再次延迟通过HBM4E认证，将丧失NVIDIA Vera Rubin Ultra周期订单"
+  },
+  {
+   "source": "6886e899-0331-4575-87c3-a0eefd4f8d64",
+   "target": "1598b11c-3bec-4928-a469-95a4e7132d54",
+   "name": "PRICE_FORECAST_FOR",
+   "fact": "TrendForce 2025年11月26日预测2025年Q4 DRAM合约价环比上涨45%—50%，全年同比上涨50%以上"
+  },
+  {
+   "source": "51083879-e2b0-4088-8596-49c3a664c808",
+   "target": "fa37da48-31ad-4a05-814d-62e23522bee4",
+   "name": "PUBLISHES_ROADMAP_FOR",
+   "fact": "TechInsights publishes the 3D NAND Technology Roadmap tracking layer-count progression across the industry."
+  },
+  {
+   "source": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "SUPPLIES_TO",
+   "fact": "美光为NVIDIA的HBM4供应做出贡献，约占25%份额（基于2025年Q2 HBM市场份额数据）"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "DEPENDS_ON",
+   "fact": "Jensen Huang 2025年4月公开要求SK海力士将HBM4量产提前6个月，反映NVIDIA对SK海力士产能的高度依赖"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "name": "PARTNERS_WITH",
+   "fact": "长江存储与长鑫存储在中国存储芯片国产替代路径上协同加强研发，应对外部设备禁运限制。"
+  },
+  {
+   "source": "9cd29e62-ce91-4c22-ad7f-d1e610de4cff",
+   "target": "6f8bc6f3-45a5-49a0-976d-d664bf02a70b",
+   "name": "SUPPLIES_TO",
+   "fact": "长鑫存储生产DDR5单die 16Gb/24Gb、速率8000Mbps产品。"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "SUPPLIES_TO",
+   "fact": "Jensen Huang表示NVIDIA的HBM供应链中美光约占25%。"
+  },
+  {
+   "source": "0a6ceba9-d44f-4814-a79a-bcb93fe5eda3",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "INFLUENCES",
+   "fact": "Counterpoint Research发布2025年Q2 HBM市场份额数据，三星占17%"
+  },
+  {
+   "source": "56d7fc15-0e91-485a-bc29-4559dcd4d4b0",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "INFLUENCES",
+   "fact": "2025年4月，Jensen Huang公开要求SK海力士将HBM4量产提前6个月。"
+  },
+  {
+   "source": "2f672c04-4a15-4c49-b60d-72f1a260811b",
+   "target": "ff642a9d-69c6-4a9f-9b6a-b61b73d9ddcf",
+   "name": "SUPPLIES_TO",
+   "fact": "Christophe Fouquet表示美光的1c/1-gamma DRAM与HBM base die依赖ASML的EUV光刻机维持工艺竞争力。"
+  },
+  {
+   "source": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "target": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "name": "PARTNERS_WITH",
+   "fact": "韩国METI与美国BIS紧密协调，避免韩国厂商在中国被'二选一'，推动2027年VEU豁免延期谈判"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "PARTNERS_WITH",
+   "fact": "长鑫存储与长江存储在重重障碍中加强研发，共同推进中国存储芯片自主化进程。"
+  },
+  {
+   "source": "6d1fa878-9067-4465-b4b1-ad53aee5e9c2",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "LEADS",
+   "fact": "崔泰源（Chey Tae-won）担任SK海力士董事长，公开宣称存储短缺将持续到2028年甚至2030年。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "17a9403d-9aea-4526-93df-defec684f53f",
+   "name": "SUPPLIES_TO",
+   "fact": "长江存储（YMTC）受美国实体清单限制，但仍通过白手套渠道向HP等品牌SSD厂商出货NAND产品。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "0a6ceba9-d44f-4814-a79a-bcb93fe5eda3",
+   "name": "REFERENCED_BY",
+   "fact": "2025年9月，Counterpoint报告显示Q2 SK海力士HBM份额62%、美光21%、三星17%。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "DEPENDS_ON",
+   "fact": "长江存储在hybrid bonding技术上对国产与DUV设备存在依赖"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "1fce9046-628f-4481-8a0d-efce14ed7119",
+   "name": "DEPENDS_ON",
+   "fact": "NVIDIA的Rubin Ultra平台需要HBM4E规格的HBM供应。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "6b4a8481-4f66-4d30-9abd-4f397254ae3c",
+   "name": "TARGETS",
+   "fact": "Samsung's 400-layer V-NAND effort aims at future 16TB SSD products."
+  },
+  {
+   "source": "f0312946-f486-47d5-8c47-c93be930bacb",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "COMPETES_WITH",
+   "fact": "Meta MTIA自研AI加速器对HBM4/4E提出定制化需求，可能改变NVIDIA Vera Rubin平台主导的HBM4规格博弈，影响2026—2027年SK海力士、三星、美光的份额分配。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "长鑫存储（CXMT）月产能从2023年初的9万片晶圆扩张至2025年底约26万—29万片，目标在HBM领域至少落后4年，不构成对SK海力士的实质性威胁，但在传统DRAM市场形成产能竞争。"
+  },
+  {
+   "source": "334148ff-2818-44de-bc53-462bd1297d73",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "DEPENDS_ON",
+   "fact": "AI芯片设计公司AMD越来越依赖存储厂SK海力士的产能规划。"
+  },
+  {
+   "source": "6886e899-0331-4575-87c3-a0eefd4f8d64",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "INFLUENCES",
+   "fact": "TrendForce于2025年11月26日预测2025年Q4 DRAM合约价环比上涨45%—50%"
+  },
+  {
+   "source": "096f3e13-97d3-437d-a58c-db08c6225fa7",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "LEADS",
+   "fact": "李在镕（Lee Jae-yong）作为三星电子副会长，在2025年Q3股东大会上对三星失去HBM技术领先地位公开致歉，并宣布启动5年450万亿韩元投资计划，其中Pyeongtaek P5投资约80万亿韩元专攻HBM4。"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "name": "PARTNERS_WITH",
+   "fact": "Apple traditionally cooperates with Kioxia for NAND supply."
+  },
+  {
+   "source": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "FUNDS",
+   "fact": "China's National IC Industry Investment Fund Phase III, with registered capital of 344 billion RMB, will continue to inject capital into YMTC as part of China's national semiconductor strategy."
+  },
+  {
+   "source": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "REGULATES",
+   "fact": "South Korea's Ministry of Trade, Industry and Energy (METI) announced the K-Semiconductor Strategy 2.0 in 2025, providing about 26 trillion KRW in tax incentives over 5 years that directly benefit Samsung's Pyeongtaek P5 facility."
+  },
+  {
+   "source": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "target": "ec5f63f2-eb43-4330-b11a-14ea55530462",
+   "name": "PARTNERS_WITH",
+   "fact": "韩国METI与美国BIS紧密协调，避免韩国厂商在中国被'二选一'，推动2027年VEU豁免延期谈判"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "PARTNERS_WITH",
+   "fact": "长鑫存储与长江存储在重重障碍中加强研发，共同推进中国存储芯片自主化进程。"
+  },
+  {
+   "source": "6d1fa878-9067-4465-b4b1-ad53aee5e9c2",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "LEADS",
+   "fact": "崔泰源（Chey Tae-won）担任SK海力士董事长，公开宣称存储短缺将持续到2028年甚至2030年。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "17a9403d-9aea-4526-93df-defec684f53f",
+   "name": "SUPPLIES_TO",
+   "fact": "长江存储（YMTC）受美国实体清单限制，但仍通过白手套渠道向HP等品牌SSD厂商出货NAND产品。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "0a6ceba9-d44f-4814-a79a-bcb93fe5eda3",
+   "name": "REFERENCED_BY",
+   "fact": "2025年9月，Counterpoint报告显示Q2 SK海力士HBM份额62%、美光21%、三星17%。"
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "DEPENDS_ON",
+   "fact": "长江存储在hybrid bonding技术上对国产与DUV设备存在依赖"
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "1fce9046-628f-4481-8a0d-efce14ed7119",
+   "name": "DEPENDS_ON",
+   "fact": "NVIDIA的Rubin Ultra平台需要HBM4E规格的HBM供应。"
+  },
+  {
+   "source": "6b33b62c-e960-4668-8704-b16283c98575",
+   "target": "6b4a8481-4f66-4d30-9abd-4f397254ae3c",
+   "name": "TARGETS",
+   "fact": "Samsung's 400-layer V-NAND effort aims at future 16TB SSD products."
+  },
+  {
+   "source": "f0312946-f486-47d5-8c47-c93be930bacb",
+   "target": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "name": "COMPETES_WITH",
+   "fact": "Meta MTIA自研AI加速器对HBM4/4E提出定制化需求，可能改变NVIDIA Vera Rubin平台主导的HBM4规格博弈，影响2026—2027年SK海力士、三星、美光的份额分配。"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "长鑫存储（CXMT）月产能从2023年初的9万片晶圆扩张至2025年底约26万—29万片，目标在HBM领域至少落后4年，不构成对SK海力士的实质性威胁，但在传统DRAM市场形成产能竞争。"
+  },
+  {
+   "source": "334148ff-2818-44de-bc53-462bd1297d73",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "DEPENDS_ON",
+   "fact": "AI芯片设计公司AMD越来越依赖存储厂SK海力士的产能规划。"
+  },
+  {
+   "source": "6886e899-0331-4575-87c3-a0eefd4f8d64",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "INFLUENCES",
+   "fact": "TrendForce于2025年11月26日预测2025年Q4 DRAM合约价环比上涨45%—50%"
+  },
+  {
+   "source": "096f3e13-97d3-437d-a58c-db08c6225fa7",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "LEADS",
+   "fact": "李在镕（Lee Jae-yong）作为三星电子副会长，在2025年Q3股东大会上对三星失去HBM技术领先地位公开致歉，并宣布启动5年450万亿韩元投资计划，其中Pyeongtaek P5投资约80万亿韩元专攻HBM4。"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "name": "PARTNERS_WITH",
+   "fact": "Apple traditionally cooperates with Kioxia for NAND supply."
+  },
+  {
+   "source": "8408cd78-c161-4a14-be7a-6a43c8e923c9",
+   "target": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "name": "FUNDS",
+   "fact": "China's National IC Industry Investment Fund Phase III, with registered capital of 344 billion RMB, will continue to inject capital into YMTC as part of China's national semiconductor strategy."
+  },
+  {
+   "source": "558c4c95-ce1d-4b4c-b5b8-268faf9f81bb",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "REGULATES",
+   "fact": "South Korea's Ministry of Trade, Industry and Energy (METI) announced the K-Semiconductor Strategy 2.0 in 2025, providing about 26 trillion KRW in tax incentives over 5 years that directly benefit Samsung's Pyeongtaek P5 facility."
+  },
+  {
+   "source": "c4fafc02-cec6-42cd-ab89-4f627cf270d8",
+   "target": "9dae2f12-dd90-4a23-816d-7fe107e5802c",
+   "name": "SUPPLIES_TO",
+   "fact": "美光是NVIDIA的HBM供应商，约占其采购量的25%。"
+  },
+  {
+   "source": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "target": "0d7aa2fe-162b-475e-b640-82fe5924e83a",
+   "name": "SUPPLIES_TO",
+   "fact": "2026年2月，NVIDIA GTC 2026上SK海力士获Vera Rubin平台HBM4约三分之二份额。"
+  },
+  {
+   "source": "d257c253-52f7-4457-b1ee-65b44ec91ee9",
+   "target": "8370b065-1283-433c-b7e1-05a2b16e88be",
+   "name": "PARTNERS_WITH",
+   "fact": "苹果正在评估在iPhone 18系列中导入长鑫存储的DRAM与长江存储的NAND产品。"
+  },
+  {
+   "source": "b8df81c6-a332-4b65-adfa-2793d0816f7d",
+   "target": "032f899e-30fb-495b-b8fa-5157eaaff79c",
+   "name": "COMPETES_WITH",
+   "fact": "Kioxia与SK海力士在1000层V-NAND上竞争，Kioxia激进目标2027年完成"
+  },
+  {
+   "source": "80ff12e3-838f-45c6-b44b-fe36cdb64226",
+   "target": "6886e899-0331-4575-87c3-a0eefd4f8d64",
+   "name": "REFERENCED_BY",
+   "fact": "2025年5月，TrendForce将2025年DRAM合约价上调预期至同比上涨50%以上。"
+  },
+  {
+   "source": "2f672c04-4a15-4c49-b60d-72f1a260811b",
+   "target": "6b33b62c-e960-4668-8704-b16283c98575",
+   "name": "LEADS",
+   "fact": "Christophe Fouquet leads ASML Holding, the sole supplier of EUV lithography systems on which Samsung depends for its 1c/1-gamma DRAM and HBM base die process competitiveness."
+  },
+  {
+   "source": "24f3eb9a-d024-4f8d-b1f4-46d2d08528ed",
+   "target": "603f6d7a-d81a-46c9-8e56-295e5c75683a",
+   "name": "DEPENDS_ON",
+   "fact": "YMTC依赖ASML DUV设备，若美方进一步限制DUV出口，YMTC全国产化产线15%份额目标受到威胁"
+  }
+ ],
+ "graph_id": "mirofish_0a1219d6764848c1"
+}

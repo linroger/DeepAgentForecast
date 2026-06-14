@@ -1,0 +1,463 @@
+{
+  "central_question": "2026—2030年全球存储半导体市场（DRAM、NAND、HBM）的竞争格局与地缘政治结构将如何演变？",
+  "as_of_date": "2026-05-31",
+  "situation_brief": {
+    "current_situation": "全球存储市场正经历AI驱动的结构性短缺周期。SK海力士2025年Q2 HBM市占率达62%，2026年HBM4产能约三分之二锁定NVIDIA；三星HBM3E 12-Hi因能效与散热问题失去NVIDIA H100/H200周期主要份额；美光HBM3E 12-Hi于2025年通过认证，HBM份额升至约21%。中国方面，CXMT月产能扩张至26—29万片并启动A股IPO；长江存储推进232层QLC量产并启动'全国产化'产线，目标2026年底拿下全球NAND供应量15%。",
+    "context": "2022年10月美国BIS首次发布对华先进存储设备出口管制，2023年10月与2024年12月连续升级；同期NVIDIA H200/B200带动HBM3E需求爆发。SK海力士凭借2023年首家量产HBM3的先发优势、与NVIDIA深度绑定及成熟hybrid bonding工艺建立壁垒；三星因HBM3E认证延误错失关键周期，2025年8月被SK海力士反超失去DRAM第一地位；美光凭美国本土制造获CHIPS法案约62亿美元补贴成为唯一美国IDM。",
+    "dynamics": "三大力量相互交织：一是AI算力对HBM的爆炸式需求与传统DRAM/NAND产能被HBM'虹吸'形成的供需失衡；二是美中科技脱钩推动美韩主导高端、中国主导中低端的双轨产业链；三是2027年BIS VEU豁免到期将使韩国厂商面临'选边'抉择。HBM利润率（SK海力士Q3营业利润率71.8%）吸引资本大规模涌入，2027—2028年新建产能集中释放或将引发供过于求风险。",
+    "fault_lines": [
+      "HBM是否持续短缺至2028—2030年还是2027年下半年起出现供过于求",
+      "三星能否在HBM4E节点（2026—2027年）通过NVIDIA Vera Rubin Ultra认证以重夺份额",
+      "中国CXMT/YMTC能否用DUV多重曝光+国产设备实现'工艺替代'，还是被High-NA EUV差距锁死",
+      "2027年BIS VEU豁免到期时韩国厂商对华工厂'选边'的代价",
+      "苹果等大客户是否会导入中国存储以分散地缘政治风险",
+      "NAND市场因AI SSD需求复苏与1000层堆叠竞赛重塑，长江存储hybrid bonding技术能否转化为市占率"
+    ],
+    "catalysts": [
+      "NVIDIA GTC 2026 HBM4规格与供应商份额正式公布",
+      "三星HBM4/HBM4E通过或未通过NVIDIA认证",
+      "美国BIS 2026年下半年对华存储设备管制进一步升级或放松",
+      "ASML High-NA EUV在2027—2028年加速普及影响中国工艺差距",
+      "CXMT 2026年A股IPO募资规模与估值",
+      "三星Pyeongtaek P5量产时间表",
+      "美光Idaho/纽约/新加坡三厂资本支出落地",
+      "苹果iPhone 18对CXMT/YMTC的导入决策"
+    ]
+  },
+  "actors": [
+    {
+      "name": "崔泰源（Chey Tae-won）",
+      "type": "Person",
+      "role": "SK海力士董事长，集团战略决策者",
+      "stance": "公开宣称存储短缺将持续到2028年甚至2030年；推动HBM先发战略与龙仁集群建设",
+      "influence": "high",
+      "memory": "HBM是数据中心的'新石油'；先发优势+客户绑定比技术参数更重要；中国内存厂商在HBM领域至少落后4年"
+    },
+    {
+      "name": "Kwak Noh-Jung",
+      "type": "Person",
+      "role": "SK海力士CEO",
+      "stance": "在2025年Q3财报电话会议强调HBM是AI基础设施真正瓶颈",
+      "influence": "high",
+      "memory": "HBM不再是GPU晶圆之后的次要约束，而是AI基础设施的真正瓶颈"
+    },
+    {
+      "name": "SK海力士（SK hynix）",
+      "type": "Organization",
+      "role": "全球HBM绝对领导者，2025年Q2 HBM市占率62%",
+      "stance": "维持HBM先发优势与NVIDIA深度绑定；2026年HBM4预计占NVIDIA需求约三分之二",
+      "influence": "high",
+      "memory": "掌握最成熟hybrid bonding工艺；与NVIDIA签署HBM4多年期独家供应MOU；2025年市值一度突破800万亿韩元"
+    },
+    {
+      "name": "李在镕（Lee Jae-yong）",
+      "type": "Person",
+      "role": "三星电子副会长，集团实际控制人",
+      "stance": "2025年Q3股东会上对失去技术领先地位公开致歉；推动5年450万亿韩元投资计划",
+      "influence": "high",
+      "memory": "HBM4是夺回AI内存王座的最后机会；工艺多样化能弥补认证延误"
+    },
+    {
+      "name": "三星电子（Samsung Electronics）",
+      "type": "Organization",
+      "role": "传统DRAM全球第一，HBM大幅落后；唯一具备DRAM+NAND+HBM全产品线IDM",
+      "stance": "Pyeongtaek P5投资80万亿韩元专攻HBM4；推进290层V9 NAND与1000层V-NAND路线",
+      "influence": "high",
+      "memory": "在HBM3E认证失败导致AI内存收入损失数十亿美元；2025年8月被SK海力士反超失去DRAM第一地位"
+    },
+    {
+      "name": "Sanjay Mehrotra",
+      "type": "Person",
+      "role": "美光科技即将卸任CEO",
+      "stance": "主张'内存产业进入产能为王阶段，AI将驱动持续短缺'",
+      "influence": "high",
+      "memory": "HBM将成为公司未来5年最大盈利引擎；本土制造是地缘政治护城河"
+    },
+    {
+      "name": "美光科技（Micron Technology）",
+      "type": "Organization",
+      "role": "全球DRAM第三、HBM第三（市占率约21%）；唯一美国IDM",
+      "stance": "HBM3E 12-Hi 2025年通过NVIDIA认证成为HBM第二供应商；获CHIPS法案约62亿美元补贴",
+      "influence": "high",
+      "memory": "FY2026资本支出从180亿上调至200亿美元；纽约Clay厂2026年初破土目标2030年量产"
+    },
+    {
+      "name": "朱一明",
+      "type": "Person",
+      "role": "长鑫存储（CXMT）CEO",
+      "stance": "推动A股IPO（2025年7月启动，估值约1000亿元）；DDR5良率目标2025年底90%",
+      "influence": "high",
+      "memory": "中国半导体行业协会与CXMT高层强调'自主可控是首要目标，盈利第二'；美国设备禁运是慢刀子割肉但不会立刻死亡"
+    },
+    {
+      "name": "长鑫存储（CXMT）",
+      "type": "Organization",
+      "role": "中国DRAM龙头，全球第五大DRAM厂（2025年市占率约4%—5%）",
+      "stance": "月产能从2023年9万片扩张至2025年Q4约26—29万片，2026年底目标30万片，长期目标80万片",
+      "influence": "high",
+      "memory": "2026年5月海盗船首次在Vengeance DDR5模组中采用CXMT颗粒；技术上落后1.5—2代"
+    },
+    {
+      "name": "陈南翔",
+      "type": "Person",
+      "role": "长江存储（YMTC）董事长",
+      "stance": "在被列入实体清单后仍坚持扩张；2025年7月宣布首条'全国产化'NAND产线导入试产",
+      "influence": "high",
+      "memory": "在不能买美国设备的情况下，先用国产替代关键工序，再用DUV多重曝光实现层数追赶"
+    },
+    {
+      "name": "长江存储（YMTC）",
+      "type": "Organization",
+      "role": "中国3D NAND龙头，2025年Q4月产能约13万片",
+      "stance": "目标2026年底15万片、占全球NAND供应量15%；推进232层QLC NAND量产",
+      "influence": "high",
+      "memory": "Xtacking 3.0/4.0架构实现232层以上3D NAND量产；2023年9月发布232层QLC产品（密度19.8 Gbit/mm²，行业纪录）"
+    },
+    {
+      "name": "Jensen Huang",
+      "type": "Person",
+      "role": "NVIDIA CEO，HBM最大买方的决策者",
+      "stance": "2025年要求SK海力士将HBM4量产提前6个月；'HBM供应决定我们能交付多少AI系统'",
+      "influence": "high",
+      "memory": "通过HBM认证标准（功耗、热密度、带宽）实际制定行业技术路线图；Vera Rubin需要HBM4 12-Hi+、Rubin Ultra需要HBM4E"
+    },
+    {
+      "name": "NVIDIA",
+      "type": "Organization",
+      "role": "HBM最大买方，占全球HBM需求约55%—65%",
+      "stance": "推动HBM4供应商多元化（SK海力士约65%、美光约25%、三星约10%）；深度游说美国商务部",
+      "influence": "high",
+      "memory": "2026年GTC明确HBM4为Vera Rubin平台标配；制定HBM4E规格博弈"
+    },
+    {
+      "name": "Christophe Fouquet",
+      "type": "Person",
+      "role": "ASML CEO，EUV光刻机唯一供应商掌门人",
+      "stance": "'我们遵守所有法规，但全球化对半导体产业有利'",
+      "influence": "high",
+      "memory": "决定三星、SK海力士、美光在1c/1-gamma DRAM与HBM base die上的工艺节点竞争力；对华EUV完全禁运使中国厂商只能依赖DUV多重曝光"
+    },
+    {
+      "name": "ASML Holding",
+      "type": "Organization",
+      "role": "唯一EUV光刻机厂商，是HBM/DDR5/3D NAND尖端制程命脉",
+      "stance": "对华EUV完全禁运；DUV部分受限",
+      "influence": "high",
+      "memory": "High-NA EUV在2027—2028年加速普及将进一步拉大中国与韩美厂商的工艺差距"
+    },
+    {
+      "name": "Howard Lutnick",
+      "type": "Person",
+      "role": "美国商务部长（2025年上任）",
+      "stance": "'美国将在内存领域保持对中国的2—3代领先优势'",
+      "influence": "high",
+      "memory": "2024年12月将140家中国实体列入清单；推动韩国厂商对华出口管制升级"
+    },
+    {
+      "name": "美国商务部工业与安全局（BIS）",
+      "type": "Government",
+      "role": "出口管制执法主体",
+      "stance": "2022年10月首次发布对华存储设备禁运，2023年10月、2024年12月连续升级",
+      "influence": "high",
+      "memory": "2027年BIS VEU豁免到期是关键节点；已对SK海力士、三星在中国现有工厂给予VEU豁免至2027年"
+    },
+    {
+      "name": "韩国产业通商资源部（METI）",
+      "type": "Government",
+      "role": "制定韩国半导体战略，推动'K-半导体战略2.0'",
+      "stance": "未来5年提供约26万亿韩元税收优惠；与美国BIS紧密协调",
+      "influence": "high",
+      "memory": "试图维持'模糊平衡'——尖端HBM不卖中国，传统DRAM/NAND继续卖"
+    },
+    {
+      "name": "Tim Cook",
+      "type": "Person",
+      "role": "苹果公司CEO",
+      "stance": "2025年8月媒体报道苹果正在考虑与CXMT、YMTC合作为iPhone 18等提供内存/存储",
+      "influence": "high",
+      "memory": "传统上与SK海力士、三星、Kioxia合作；正在评估'中国备份供应链'以缓解成本压力"
+    },
+    {
+      "name": "苹果公司（Apple Inc.）",
+      "type": "Organization",
+      "role": "消费电子最大存储采购方之一（NAND与LPDDR）",
+      "stance": "评估导入中国存储以分散地缘政治风险",
+      "influence": "high",
+      "memory": "担忧中国存储的良率与知识产权问题；iPhone 18系列正在评估导入CXMT/YMTC"
+    },
+    {
+      "name": "国家集成电路产业投资基金（大基金三期）",
+      "type": "Organization",
+      "role": "中国半导体国家队主要投资平台",
+      "stance": "大基金三期注册资本3440亿元人民币，持续注资CXMT/YMTC",
+      "influence": "high",
+      "memory": "大基金一期/二期/三期与CXMT、YMTC深度绑定；'自主可控'国家战略核心载体"
+    }
+  ],
+  "relationships": [
+    {
+      "source": "SK海力士（SK hynix）",
+      "target": "NVIDIA",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "SK海力士是NVIDIA HBM第一供应商，2025年Q2占62%份额，2026年HBM4预计占NVIDIA需求约三分之二，签署多年期独家供应MOU"
+    },
+    {
+      "source": "NVIDIA",
+      "target": "SK海力士（SK hynix）",
+      "type": "DEPENDS_ON",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Jensen Huang 2025年4月公开要求SK海力士将HBM4量产提前6个月，反映NVIDIA对SK海力士产能的高度依赖"
+    },
+    {
+      "source": "NVIDIA",
+      "target": "美光科技（Micron Technology）",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "美光HBM3E 12-Hi 2025年1月通过NVIDIA H200/B200认证成为HBM第二供应商，2026年HBM4预计获约25%份额"
+    },
+    {
+      "source": "NVIDIA",
+      "target": "三星电子（Samsung Electronics）",
+      "type": "PARTNERS_WITH",
+      "sign": "neutral",
+      "strength": "low",
+      "basis": "三星HBM3E 8-Hi通过初步认证但功耗超标，2026年HBM4预计仅获约10%份额；NVIDIA推动三星重返认证名单"
+    },
+    {
+      "source": "SK海力士（SK hynix）",
+      "target": "三星电子（Samsung Electronics）",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "在HBM与传统DRAM市场全方位对峙；2025年8月SK海力士首次反超三星成为全球DRAM+HBM综合市占率第一"
+    },
+    {
+      "source": "美光科技（Micron Technology）",
+      "target": "SK海力士（SK hynix）",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "在HBM4/HBM4E市场争夺NVIDIA第一供应商地位；美光HBM4E 16 Gb/s pin目标强调差异化"
+    },
+    {
+      "source": "美光科技（Micron Technology）",
+      "target": "三星电子（Samsung Electronics）",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "美光2025年Q2以21%份额超越三星17%，夺走HBM第二位置；HBM4E节点继续竞争"
+    },
+    {
+      "source": "美国商务部工业与安全局（BIS）",
+      "target": "长鑫存储（CXMT）",
+      "type": "REGULATES",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "2022年10月对华存储设备全面禁运；2024年12月将140家中国实体列入清单含CXMT关联公司；EUV完全禁运使CXMT只能依赖DUV多重曝光"
+    },
+    {
+      "source": "美国商务部工业与安全局（BIS）",
+      "target": "长江存储（YMTC）",
+      "type": "REGULATES",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "2022年12月长江存储被列入实体清单；128层以上3D NAND设备纳入管控，限制YMTC先进制程扩张"
+    },
+    {
+      "source": "美国商务部工业与安全局（BIS）",
+      "target": "SK海力士（SK hynix）",
+      "type": "REGULATES",
+      "sign": "neutral",
+      "strength": "medium",
+      "basis": "对SK海力士、三星在中国现有工厂给予'经验证终端用户'（VEU）豁免至2027年；要求限制对华先进HBM出口"
+    },
+    {
+      "source": "美国商务部工业与安全局（BIS）",
+      "target": "三星电子（Samsung Electronics）",
+      "type": "REGULATES",
+      "sign": "neutral",
+      "strength": "medium",
+      "basis": "与韩国METI协调确保三星对华出口符合规则；VEU豁免至2027年；2027年到期后须'选边'"
+    },
+    {
+      "source": "长鑫存储（CXMT）",
+      "target": "国家集成电路产业投资基金（大基金三期）",
+      "type": "DEPENDS_ON",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "CXMT与国家大基金一期/二期/三期深度绑定，大基金三期注册资本3440亿元人民币持续注资"
+    },
+    {
+      "source": "长江存储（YMTC）",
+      "target": "国家集成电路产业投资基金（大基金三期）",
+      "type": "DEPENDS_ON",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "YMTC作为中国3D NAND龙头获国家大基金持续注资，是'自主可控'国家战略核心载体"
+    },
+    {
+      "source": "长鑫存储（CXMT）",
+      "target": "ASML Holding",
+      "type": "DEPENDS_ON",
+      "sign": "neutral",
+      "strength": "medium",
+      "basis": "CXMT高度依赖ASML DUV光刻机（EUV已被禁运），工艺成本因此高出30%—50%"
+    },
+    {
+      "source": "SK海力士（SK hynix）",
+      "target": "ASML Holding",
+      "type": "DEPENDS_ON",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "SK海力士EUV光刻机关键客户，依赖ASML EUV支持1c纳米DRAM与HBM base die的工艺节点"
+    },
+    {
+      "source": "三星电子（Samsung Electronics）",
+      "target": "ASML Holding",
+      "type": "DEPENDS_ON",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "三星EUV光刻机最大客户之一，依赖ASML支持1c纳米DRAM与HBM先进制程"
+    },
+    {
+      "source": "美光科技（Micron Technology）",
+      "target": "美国商务部工业与安全局（BIS）",
+      "type": "INFLUENCES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "美光是唯一美国DRAM+HBM IDM，深度游说BIS收紧对华出口管制以维持本土优势；获CHIPS法案约62亿美元补贴"
+    },
+    {
+      "source": "苹果公司（Apple Inc.）",
+      "target": "SK海力士（SK hynix）",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "传统上苹果iPhone HBM由SK海力士供应；保持稳定采购关系"
+    },
+    {
+      "source": "苹果公司（Apple Inc.）",
+      "target": "长鑫存储（CXMT）",
+      "type": "PARTNERS_WITH",
+      "sign": "neutral",
+      "strength": "low",
+      "basis": "2025年8月媒体报道苹果正在考虑为iPhone 18、MacBook等导入CXMT/YMTC芯片以分散地缘政治风险"
+    },
+    {
+      "source": "苹果公司（Apple Inc.）",
+      "target": "长江存储（YMTC）",
+      "type": "PARTNERS_WITH",
+      "sign": "neutral",
+      "strength": "low",
+      "basis": "苹果正在评估导入YMTC NAND/DRAM以缓解成本压力，但担忧良率与知识产权问题"
+    },
+    {
+      "source": "韩国产业通商资源部（METI）",
+      "target": "美国商务部工业与安全局（BIS）",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "韩国METI与美国BIS紧密协调，避免韩国厂商在中国被'二选一'，推动2027年VEU豁免延期谈判"
+    },
+    {
+      "source": "长鑫存储（CXMT）",
+      "target": "美光科技（Micron Technology）",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "CXMT在低端DDR4/DDR5模组上对美光形成价格压力，在中国市场蚕食美光份额（'CXMT正在吃美光午餐'）"
+    }
+  ],
+  "key_events": [
+    {
+      "date": "2022-10-07",
+      "event": "美国商务部BIS发布对中国先进存储芯片及设备的全面出口管制规则，128层以上3D NAND设备纳入管控"
+    },
+    {
+      "date": "2022-12",
+      "event": "长江存储被列入美国实体清单"
+    },
+    {
+      "date": "2023-09",
+      "event": "长江存储发布232层QLC 3D NAND（Xtacking 3.0架构），密度19.8 Gbit/mm²创行业纪录"
+    },
+    {
+      "date": "2023-10-17",
+      "event": "美国BIS更新规则，限制范围扩大至14nm以下逻辑与18nm DRAM相关设备"
+    },
+    {
+      "date": "2024-12",
+      "event": "美国BIS将140家中国实体列入清单，含多家CXMT/YMTC关联公司"
+    },
+    {
+      "date": "2025-01",
+      "event": "美光HBM3E 12-Hi通过NVIDIA H200/B200认证，正式成为HBM第二供应商"
+    },
+    {
+      "date": "2025-04",
+      "event": "Jensen Huang公开要求SK海力士将HBM4量产提前6个月"
+    },
+    {
+      "date": "2025-07-07",
+      "event": "CXMT正式启动A股IPO，目标估值约1000亿元人民币"
+    },
+    {
+      "date": "2025-07-23",
+      "event": "长江存储宣布首条'全国产化'3D NAND产线于2025年下半年导入试产"
+    },
+    {
+      "date": "2025-08-01",
+      "event": "SK海力士首次反超三星成为全球DRAM+HBM综合市占率第一"
+    },
+    {
+      "date": "2025-09",
+      "event": "Counterpoint报告：Q2 SK海力士HBM份额62%、美光21%、三星17%"
+    },
+    {
+      "date": "2025-11-16",
+      "event": "三星公布5年450万亿韩元国内投资计划，Pyeongtaek P5约80万亿韩元专攻HBM4"
+    },
+    {
+      "date": "2025-11-26",
+      "event": "TrendForce预测2025年Q4 DRAM合约价环比上涨45%—50%"
+    },
+    {
+      "date": "2025-12-25",
+      "event": "韩媒披露三星与SK海力士将于2026年2月同步启动HBM4量产（比原计划提前约6个月）"
+    },
+    {
+      "date": "2026-01",
+      "event": "三星Pyeongtaek P4、SK海力士利川M16同步进入HBM4风险量产"
+    },
+    {
+      "date": "2026-02",
+      "event": "NVIDIA GTC 2026发布Vera Rubin平台，HBM4为标配；SK海力士获约三分之二份额，美光约25%，三星约10%"
+    },
+    {
+      "date": "2026-03",
+      "event": "美光宣布FY2026资本支出从180亿美元上调至200亿美元"
+    },
+    {
+      "date": "2026-05-22",
+      "event": "CXMT月产能达29万片，分析师认为80万片是其长期'自给自足'目标"
+    },
+    {
+      "date": "2026-05-26",
+      "event": "海盗船Corsair首次在其Vengeance DDR5模组中采用CXMT颗粒，进入消费级国际供应链"
+    }
+  ],
+  "hot_topics": [
+    "HBM4/HBM4E技术路线之争与NVIDIA认证博弈",
+    "2027年BIS VEU豁免到期与韩国厂商'选边'风险",
+    "中国存储自主可控与DUV多重曝光+国产设备工艺替代路径",
+    "AI驱动下HBM短缺持续性与2027—2028年新建产能集中释放的供过于求风险",
+    "1000层NAND堆叠竞赛与长江存储hybrid bonding技术领先",
+    "苹果等大客户对中国存储导入决策与地缘政治对冲",
+    "SK海力士龙仁集群与三星Pyeongtaek P5/泰勒厂的产能竞赛",
+    "美光Idaho/纽约/新加坡三厂资本支出与HBM4E差异化策略"
+  ]
+}
