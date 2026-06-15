@@ -546,6 +546,12 @@ class Config:
     REPORT_AGENT_MAX_TOOL_CALLS_CHAT = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS_CHAT', '2'))
     # 用 DeerFlow ClaudeChatModel 的原生 tool calling 取代手搓 ReAct（仅 claude；默认关，最后启用）(T4.5)
     REPORT_NATIVE_TOOLS = os.environ.get('REPORT_NATIVE_TOOLS', 'false').strip().lower() == 'true'
+    # 并发生成报告章节（EXECPLAN2 I-6-3）：>1 时正文章节走线程池并行，摘要/结论章节最后串行
+    # （依赖正文全文）。默认 1 = 严格串行（与现状逐字节一致）。章节级 LLM 并发受 OASIS 信号量同源约束。
+    REPORT_SECTION_CONCURRENCY = int(os.environ.get('REPORT_SECTION_CONCURRENCY', '1') or '1')
+    # 章节上下文模式（I-6-3）：full = 每章注入此前所有章节全文（现状）；brief = 注入大纲+各章
+    # 1-2 句摘要（去除 O(N²) 上下文膨胀）。并发模式下正文章节强制用 brief（并行时拿不到彼此全文）。
+    REPORT_SECTION_CONTEXT_MODE = os.environ.get('REPORT_SECTION_CONTEXT_MODE', 'full').strip().lower()
 
     # --- DeerFlow 模型 / Key / 预算 单一真源（T6.4 / T6.6）---
     SUPPORTED_DEERFLOW_MODELS = ('claude', 'codex', 'minimax', 'deepseek', 'qwen', 'glm', 'kimi')

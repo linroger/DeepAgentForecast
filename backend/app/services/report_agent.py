@@ -105,6 +105,9 @@ class ReportLogger:
             Config.UPLOAD_FOLDER, 'reports', report_id, 'agent_log.jsonl'
         )
         self.start_time = datetime.now()
+        # EXECPLAN2 I-6-3: serialize log appends so concurrent section-generation
+        # threads (REPORT_SECTION_CONCURRENCY>1) never interleave JSONL lines.
+        self._lock = threading.Lock()
         self._ensure_log_file()
     
     def _ensure_log_file(self):
@@ -145,9 +148,10 @@ class ReportLogger:
             "details": details
         }
         
-        # 追加写入 JSONL 文件
-        with open(self.log_file_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+        # 追加写入 JSONL 文件（持锁，避免并发章节线程交错写入半行 JSON）
+        with self._lock:
+            with open(self.log_file_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
     
     def log_start(self, simulation_id: str, graph_id: str, simulation_requirement: str):
         """记录报告生成开始"""
@@ -1830,6 +1834,77 @@ class ReportAgent:
                 ]
             )
     
+    # ---- EXECPLAN2 I-6-3: concurrent section generation helpers ----
+    _TAIL_SECTION_RE = re.compile(
+        r"(总结|结论|结语|执行摘要|概要|summary|conclusion|executive)", re.I
+    )
+
+    @classmethod
+    def _is_tail_section(cls, title: str) -> bool:
+        """True for summary/conclusion-style sections that depend on the body and
+        must be generated LAST (sequentially, with full body text). Pure."""
+        return bool(cls._TAIL_SECTION_RE.search(title or ""))
+
+    @staticmethod
+    def _build_synthesis_brief(sections: List[ReportSection]) -> str:
+        """Compact 'synthesis brief' (outline + per-section 1-liner) used as shared
+        cross-section context when sections are generated concurrently or in brief
+        context mode — replaces the O(N²) 'full text of every prior section'. Pure."""
+        lines = ["【报告大纲与各章节意图（用于保持全局一致性）】"]
+        for i, s in enumerate(sections, 1):
+            desc = (getattr(s, "description", "") or "").strip()
+            lines.append(f"{i}. {s.title}" + (f"：{desc}" if desc else ""))
+        return "\n".join(lines)
+
+    def _generate_sections_concurrent(self, outline: "ReportOutline", concurrency: int) -> Dict[int, str]:
+        """Pre-generate all section contents with bounded concurrency, returning
+        {section_index: content}. Body sections (independent) run in a thread pool
+        with the shared synthesis brief as context; summary/conclusion sections run
+        last, sequentially, with the full body text for coherence. Per-section
+        failures degrade to the placeholder (never abort the report). Caller's serial
+        bookkeeping loop then consumes the returned contents in order.
+        """
+        import concurrent.futures as _cf
+
+        sections = outline.sections
+        body = [(i, s) for i, s in enumerate(sections) if not self._is_tail_section(s.title)]
+        tail = [(i, s) for i, s in enumerate(sections) if self._is_tail_section(s.title)]
+        if not body:  # everything looked like a summary → treat all as body (keep parallelism)
+            body, tail = tail, []
+        brief = self._build_synthesis_brief(sections)
+        contents: Dict[int, str] = {}
+
+        def _noop(*_a, **_k):
+            return None
+
+        def _gen_body(idx: int, section: ReportSection):
+            try:
+                return idx, self._generate_section(
+                    section=section, outline=outline, previous_sections=[brief],
+                    progress_callback=_noop, section_index=idx + 1)
+            except Exception as e:  # noqa: BLE001 — per-section isolation
+                logger.error(f"并发章节生成异常（降级占位符）: {section.title} -> {e}")
+                return idx, SECTION_FAILURE_PLACEHOLDER
+
+        if body:
+            with _cf.ThreadPoolExecutor(max_workers=min(concurrency, len(body))) as ex:
+                for fut in _cf.as_completed([ex.submit(_gen_body, i, s) for i, s in body]):
+                    idx, content = fut.result()
+                    contents[idx] = content
+
+        # tail sections: sequential, full body text as context for narrative closure
+        body_text = [f"## {sections[i].title}\n\n{contents.get(i, '')}" for i, _ in body]
+        for idx, section in tail:
+            try:
+                contents[idx] = self._generate_section(
+                    section=section, outline=outline, previous_sections=body_text,
+                    progress_callback=_noop, section_index=idx + 1)
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"尾部章节生成异常（降级占位符）: {section.title} -> {e}")
+                contents[idx] = SECTION_FAILURE_PLACEHOLDER
+            body_text.append(f"## {section.title}\n\n{contents[idx]}")
+        return contents
+
     def _generate_section(
         self,
         section: ReportSection,
@@ -2485,6 +2560,24 @@ class ReportAgent:
             generated_sections = []  # 保存内容用于上下文
             failed_section_titles = []  # 记录生成失败（写入占位符）的章节，用于状态汇报
 
+            # EXECPLAN2 I-6-3: optionally pre-generate sections concurrently. Default
+            # REPORT_SECTION_CONCURRENCY=1 → _precomputed stays None → the serial loop
+            # below calls _generate_section inline exactly as before (byte-identical).
+            # REPORT_SECTION_CONTEXT_MODE=brief (serial path) swaps the O(N²) full
+            # prior-section context for the compact synthesis brief.
+            _precomputed = None
+            _context_mode = (getattr(Config, "REPORT_SECTION_CONTEXT_MODE", "full") or "full").strip().lower()
+            _section_brief = ""
+            try:
+                _concurrency = max(1, int(getattr(Config, "REPORT_SECTION_CONCURRENCY", 1) or 1))
+            except (TypeError, ValueError):
+                _concurrency = 1
+            if _concurrency > 1 and total_sections > 1:
+                logger.info(f"I-6-3: 并发生成 {total_sections} 个章节（concurrency={_concurrency}）")
+                _precomputed = self._generate_sections_concurrent(outline, _concurrency)
+            elif _context_mode == "brief":
+                _section_brief = self._build_synthesis_brief(outline.sections)
+
             for i, section in enumerate(outline.sections):
                 section_num = i + 1
                 base_progress = 20 + int((i / total_sections) * 70)
@@ -2516,18 +2609,24 @@ class ReportAgent:
                 # 写入失败占位符，沿用既有的 failed_section_titles 机制，其余章节照常生成，
                 # 最终产出一份"部分完成"的报告而非整体失败。
                 try:
-                    section_content = self._generate_section(
-                        section=section,
-                        outline=outline,
-                        previous_sections=generated_sections,
-                        progress_callback=lambda stage, prog, msg:
-                            progress_callback(
-                                stage,
-                                base_progress + int(prog * 0.7 / total_sections),
-                                msg
-                            ) if progress_callback else None,
-                        section_index=section_num
-                    )
+                    if _precomputed is not None:
+                        # I-6-3: content already produced concurrently; bookkeeping stays serial/in-order.
+                        section_content = _precomputed.get(i, SECTION_FAILURE_PLACEHOLDER)
+                    else:
+                        # I-6-3: brief context mode swaps full prior-section text for the compact brief.
+                        _prev_ctx = [_section_brief] if (_context_mode == "brief" and _section_brief) else generated_sections
+                        section_content = self._generate_section(
+                            section=section,
+                            outline=outline,
+                            previous_sections=_prev_ctx,
+                            progress_callback=lambda stage, prog, msg:
+                                progress_callback(
+                                    stage,
+                                    base_progress + int(prog * 0.7 / total_sections),
+                                    msg
+                                ) if progress_callback else None,
+                            section_index=section_num
+                        )
                 except Exception as sec_err:  # noqa: BLE001 — 章节级容错，绝不整体失败
                     logger.error(f"章节 LLM 调用异常（已降级为占位符）: {section.title} -> {sec_err}")
                     if self.report_logger:

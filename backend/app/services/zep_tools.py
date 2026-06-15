@@ -10,6 +10,7 @@ Zep检索工具服务
 
 import time
 import json
+import threading
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass, field
@@ -449,6 +450,10 @@ class ZepToolsService:
         # 通过 Config.REPORT_RETRIEVAL_CACHE 开启；采访写图后通过 invalidate_search_cache 失效。
         self._search_cache: Dict[tuple, SearchResult] = {}
         self._forge_cache: Dict[tuple, InsightForgeResult] = {}
+        # EXECPLAN2 I-6-3: guard the retrieval caches so concurrent section threads
+        # (REPORT_SECTION_CONCURRENCY>1) can't crash on invalidate-during-iterate or
+        # produce torn reads. Re-entrant (a cached path may re-enter via copy helpers).
+        self._cache_lock = threading.RLock()
         # EXECPLAN2 I-1-6: 检索覆盖度追踪器（纯观测，try/except 包裹，绝不影响报告输出）。
         # 按 graph_id 累计本次报告运行中所有工具调用「触达」过的实体 uuid / 社区 id / 边类型，
         # 报告收尾时可 flush 成 handoff/retrieval_coverage.json，并对高影响 actor 覆盖不足告警。
@@ -503,15 +508,16 @@ class ZepToolsService:
         """I-6-1: 失效检索/洞察缓存。采访等写图操作后调用，避免返回陈旧检索结果。
 
         传入 graph_id 时仅清理该图谱相关缓存键；否则清空全部。"""
-        if graph_id is None:
-            self._search_cache.clear()
-            self._forge_cache.clear()
-            return
-        # 缓存键首元素均为 graph_id，按图谱定向清理。
-        for key in [k for k in self._search_cache if k and k[0] == graph_id]:
-            self._search_cache.pop(key, None)
-        for key in [k for k in self._forge_cache if k and k[0] == graph_id]:
-            self._forge_cache.pop(key, None)
+        with self._cache_lock:  # I-6-3: consistent vs concurrent get/set in other section threads
+            if graph_id is None:
+                self._search_cache.clear()
+                self._forge_cache.clear()
+                return
+            # 缓存键首元素均为 graph_id，按图谱定向清理。
+            for key in [k for k in self._search_cache if k and k[0] == graph_id]:
+                self._search_cache.pop(key, None)
+            for key in [k for k in self._forge_cache if k and k[0] == graph_id]:
+                self._forge_cache.pop(key, None)
 
     @property
     def llm(self) -> LLMClient:
@@ -591,7 +597,8 @@ class ZepToolsService:
         cache_key = (graph_id, (query or "").strip().lower(), limit, scope,
                      (recipe or "").strip().lower(), filter_key)
         if cache_enabled:
-            cached = self._search_cache.get(cache_key)
+            with self._cache_lock:  # I-6-3
+                cached = self._search_cache.get(cache_key)
             if cached is not None:
                 logger.info("复用检索缓存命中（search_graph）")
                 return self._copy_search_result(cached)
@@ -656,7 +663,8 @@ class ZepToolsService:
                 total_count=len(facts)
             )
             if cache_enabled:
-                self._search_cache[cache_key] = self._copy_search_result(result)
+                with self._cache_lock:  # I-6-3
+                    self._search_cache[cache_key] = self._copy_search_result(result)
             return result
 
         except (ApiError, InternalServerError, ConnectionError, TimeoutError, OSError) as e:
@@ -697,7 +705,8 @@ class ZepToolsService:
         result = self._local_search(graph_id, query, limit, scope)
         result.degraded = True
         if cache_enabled:
-            self._search_cache[cache_key] = self._copy_search_result(result)
+            with self._cache_lock:  # I-6-3
+                self._search_cache[cache_key] = self._copy_search_result(result)
         return result
 
     def _local_search(
@@ -1431,7 +1440,8 @@ class ZepToolsService:
                      hash((report_context or "").strip()), max_sub_queries,
                      as_of_dt.isoformat() if as_of_dt else "", recipe or "")
         if forge_cache_enabled:
-            cached_forge = self._forge_cache.get(forge_key)
+            with self._cache_lock:  # I-6-3
+                cached_forge = self._forge_cache.get(forge_key)
             if cached_forge is not None:
                 logger.info("复用 InsightForge 缓存命中")
                 return cached_forge
@@ -1587,7 +1597,8 @@ class ZepToolsService:
 
         # I-6-1: 写入 InsightForge 缓存，供后续 section 复用（写图后会被 invalidate_search_cache 失效）。
         if forge_cache_enabled:
-            self._forge_cache[forge_key] = result
+            with self._cache_lock:  # I-6-3
+                self._forge_cache[forge_key] = result
         return result
 
     def _generate_sub_queries(
