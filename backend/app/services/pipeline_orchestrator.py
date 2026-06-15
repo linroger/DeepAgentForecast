@@ -2633,6 +2633,27 @@ class PipelineOrchestrator:
                     except Exception as e:
                         logger.warning("[%s] community detection skipped: %s", state.pipeline_id, e)
 
+                # I-1-4: best-effort LLM-assisted entity resolution / canonical-alias merge.
+                # Runs AFTER communities so merges land before retrieval reads the graph;
+                # default-off (GRAPH_RESOLVE_ENTITIES). Never blocks the build; audited to
+                # handoff/entity_merges.json.
+                if Config.GRAPH_RESOLVE_ENTITIES:
+                    try:
+                        upd(99, "实体消解/规范别名合并…")
+                        from .zep_entity_resolver import resolve_entities
+                        audit = resolve_entities(graph_id, actors)
+                        if audit.get("merges"):
+                            handoff_dir = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+                            os.makedirs(handoff_dir, exist_ok=True)
+                            with open(os.path.join(handoff_dir, "entity_merges.json"), "w", encoding="utf-8") as mf:
+                                json.dump(audit, mf, ensure_ascii=False, indent=2)
+                        state.options["entity_merges"] = audit.get("merged_nodes", 0)
+                        logger.info("[%s] 实体消解: 扫描 %d 合并 %d 节点",
+                                    state.pipeline_id, audit.get("nodes_scanned", 0),
+                                    audit.get("merged_nodes", 0))
+                    except Exception as e:
+                        logger.warning("[%s] entity resolution skipped: %s", state.pipeline_id, e)
+
                 project.graph_id = graph_id
                 project.status = ProjectStatus.GRAPH_COMPLETED
                 ProjectManager.save_project(project)
