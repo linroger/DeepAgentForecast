@@ -3599,6 +3599,28 @@ Ordered by remediation priority (P0 + high-confidence + broad blast-radius first
 
 67 concrete proposals across 10 areas. Each is optional/degrade-safe. `id` prefix `I-`.
 
+> **Implementation status (2026-06-15).** ~58 improvements shipped in the first wave
+> (branch `execplan2-implementation`, merged to `main` `e587a18`). The remaining
+> L-effort items were then implemented on branch `execplan2-remaining`, all
+> default-off / degrade-safe / offline-unit-tested:
+> - **I-7-7** forecast-quality LLM-judge harness — done (`fa7556a`, opt-in `EVAL_ENABLED`)
+> - **I-1-4** entity resolution / canonical-alias merge — done (`59c420d`, `GRAPH_RESOLVE_ENTITIES`)
+> - **I-1-2** faction-aware GraphRAG — done (`e5899b8`, `GRAPH_COMMUNITY_RETRIEVAL`)
+> - **I-2-1** dynamic per-agent affective state — done (`e2a13b6`, `SIM_AGENT_DYNAMICS`)
+> - **I-0-4** per-KIQ/per-actor research fan-out — done (`6412119`, `RESEARCH_DEEP_FANOUT`)
+> - **I-4-2** mid-run OASIS resume — **DEFERRED (upstream-blocked).** Vendored
+>   camel-oasis `create_db` runs bare `CREATE TABLE` (no `IF NOT EXISTS`) and
+>   `env.reset()` re-signs-up every agent (PK conflict on an existing DB); the runner
+>   `os.remove`s the DB before every start *because a fresh DB is mandatory*. True
+>   resume needs forking camel-oasis (idempotent `create_db` + conditional signup +
+>   rec-table restore) OR a deterministic ManualAction replay engine — neither fits
+>   the degrade-safe/default-off/small-feature bar. Flag `SIM_RESUME_FROM_ROUND` is
+>   reserved; no dead always-degrading plumbing was shipped.
+>
+> A parallel adversarial review verified all five shipped features; its three
+> confirmed findings (fan-out log thread-safety, affective-state memory preservation,
+> faction_brief type coercion) were fixed in `f559747`.
+
 ### 7.1 Deep-research quality & coverage
 
 #### [I-0-5] Structured quantitative_facts table with units, as-of dates, and sanity flags
