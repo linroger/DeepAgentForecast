@@ -44,6 +44,7 @@ import os
 import re
 import sys
 import tempfile
+import threading
 import traceback
 import uuid
 from pathlib import Path
@@ -220,13 +221,18 @@ class ProgressLog:
     def __init__(self, path: Path):
         self._path = path
         self._fh = path.open("w", encoding="utf-8")
+        # EXECPLAN2 I-0-4: the deep fan-out runs scoped workers in a ThreadPoolExecutor
+        # that all call write() concurrently. Serialize the write→flush→print sequence
+        # so log lines never interleave/corrupt. Single-threaded callers are unaffected.
+        self._lock = threading.Lock()
 
     def write(self, kind: str, message: str) -> None:
         line = f"{_utcnow()} [{kind}] {message}".rstrip()
-        self._fh.write(line + "\n")
-        self._fh.flush()
-        # Also echo to stdout so a Popen reader without the file still sees it.
-        print(line, flush=True)
+        with self._lock:
+            self._fh.write(line + "\n")
+            self._fh.flush()
+            # Also echo to stdout so a Popen reader without the file still sees it.
+            print(line, flush=True)
 
     def close(self) -> None:
         try:
@@ -875,6 +881,154 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
     return final_text
 
 
+# ---------------------------------------------------------------------------
+# EXECPLAN2 I-0-4: per-KIQ / per-actor subagent fan-out for the deep protocol.
+# After the opening scope pass, dispatch N parallel scoped sub-investigations (one
+# per top actor / key question), each on its OWN thread_id (isolated checkpointer
+# state), then absorb their merged notes into the MAIN thread so the existing
+# contradiction + synthesis passes account for the added breadth. Gated by
+# RESEARCH_DEEP_FANOUT (default off) with a RESEARCH_FANOUT_WIDTH cap; when off the
+# linear deep protocol runs byte-identically. Best-effort: a dead worker just
+# contributes nothing (mirrors run_streamed_turn's salvage-partial pattern).
+# ---------------------------------------------------------------------------
+_FANOUT_PRIORITY_RE = re.compile(
+    r"(actor|stakeholder|player|protagonist|角色|利益相关|参与者|阵营|"
+    r"kiq|key question|key intelligence|关键问题|关键信息|核心问题|研究问题)",
+    re.I,
+)
+_FANOUT_BULLET_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)")
+_FANOUT_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+
+
+def _clean_seed(text: str) -> str:
+    """Reduce a bullet/bold line to its name/topic head (pure)."""
+    s = re.sub(r"^\**\s*", "", (text or "").strip())
+    s = _FANOUT_BOLD_RE.sub(r"\1", s)
+    for sep in ("：", ":", " — ", " - ", "—", "–", "（", "("):
+        if sep in s:
+            s = s.split(sep, 1)[0].strip()
+            break
+    return s.strip(" *#`\"'。.")
+
+
+def extract_kiqs_from_opening(opening_text: str, width: int = 4) -> list[str]:
+    """Heuristically parse up to ``width`` salient actor names / key questions from
+    the opening pass markdown (pure, deterministic — no LLM). Prefers items under
+    actor/stakeholder/KIQ-style sections; falls back to top-level bullets. Returns
+    [] when nothing parseable, so the caller skips fan-out cleanly."""
+    if not opening_text or width < 1:
+        return []
+    priority: list[str] = []
+    other: list[str] = []
+    in_priority = False
+    for raw in opening_text.splitlines():
+        line = raw.rstrip()
+        heading = re.match(r"^\s*#{1,6}\s+(.*\S)", line)
+        if heading:
+            in_priority = bool(_FANOUT_PRIORITY_RE.search(heading.group(1)))
+            continue
+        cand = None
+        m = _FANOUT_BULLET_RE.match(line)
+        if m:
+            cand = _clean_seed(m.group(1))
+        else:
+            b = _FANOUT_BOLD_RE.search(line)
+            if b and in_priority:
+                cand = _clean_seed(b.group(1))
+        if not cand or not (2 <= len(cand) <= 80):
+            continue
+        (priority if in_priority else other).append(cand)
+    seen: set[str] = set()
+    out: list[str] = []
+    for c in priority + other:
+        k = c.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(c)
+        if len(out) >= width:
+            break
+    return out
+
+
+def build_scoped_worker_prompt(question: str, kiq: str, target_language: str | None) -> str:
+    lang = f" Write your notes in {target_language}." if target_language else ""
+    return (
+        "You are a scoped sub-investigator within a larger forecasting research effort.\n"
+        f"OVERALL QUESTION: {question}\n\n"
+        f"YOUR NARROW FOCUS — investigate ONLY this, in depth: {kiq}\n\n"
+        "Budget per deep-research tradecraft: ~1/4 scoping the best sources, ~1/2 reading "
+        "primary sources in depth on this focus, ~1/4 actively disconfirming. Use your "
+        "search/read tools. Return concise, evidence-backed working notes (with source "
+        "URLs/titles) on this focus ONLY — do not write the full report; another agent "
+        f"synthesizes.{lang}"
+    )
+
+
+def build_fanout_absorption_prompt(question: str, fanout_notes: str, target_language: str | None) -> str:
+    cap = 24000
+    notes = fanout_notes if len(fanout_notes) <= cap else fanout_notes[:cap] + "\n…(truncated)…"
+    lang = f" Respond in {target_language}." if target_language else ""
+    return (
+        "Several parallel scoped sub-investigations were run on key actors / key questions "
+        "for this research. Read and INTERNALIZE their findings below so the upcoming "
+        "contradiction-testing and final synthesis account for this breadth. Briefly note "
+        "(a few lines) the most important cross-cutting findings and any contradictions they "
+        f"surface; do not re-run searches now.{lang}\n\n"
+        f"OVERALL QUESTION: {question}\n\n=== PARALLEL SUB-INVESTIGATION NOTES ===\n{notes}"
+    )
+
+
+def run_scoped_worker(client, kiq: str, question: str, parent_thread_id: str, depth: str,
+                      target_language: str | None, model_name: str, plog: "ProgressLog", index: int) -> str:
+    """Run one scoped sub-investigation on its own isolated thread_id."""
+    worker_thread = f"{parent_thread_id}-fanout-{index}-{uuid.uuid4().hex[:6]}"
+    return run_streamed_turn(
+        client,
+        build_scoped_worker_prompt(question, kiq, target_language),
+        worker_thread,
+        220,
+        plog,
+        f"research:fanout:{kiq[:24]}",
+    )
+
+
+def run_deep_fanout(client, opening_text: str, question: str, depth: str,
+                    target_language: str | None, model_name: str, thread_id: str,
+                    plog: "ProgressLog", width: int) -> str:
+    """Fan out scoped workers over the opening pass's seed list; merge their notes.
+
+    Returns a single merged markdown block (or '' if no seeds / no notes). Workers
+    run concurrently (bounded by ``width``) on isolated thread_ids; a failed worker
+    contributes nothing.
+    """
+    import concurrent.futures as _cf
+
+    seeds = extract_kiqs_from_opening(opening_text, width)
+    if not seeds:
+        plog.write("warn", "deep fan-out: no KIQ/actor seeds parsed from opening; skipping")
+        return ""
+    plog.write("stage", f"deep fan-out: {len(seeds)} scoped workers — {', '.join(seeds)}")
+    notes: list[str] = []
+    with _cf.ThreadPoolExecutor(max_workers=min(width, len(seeds))) as ex:
+        futs = {
+            ex.submit(run_scoped_worker, client, s, question, thread_id, depth,
+                      target_language, model_name, plog, i): s
+            for i, s in enumerate(seeds)
+        }
+        for fut in _cf.as_completed(futs):
+            s = futs[fut]
+            try:
+                txt = fut.result()
+                if txt and txt.strip():
+                    notes.append(f"## 子调查：{s}\n\n{txt.strip()}")
+            except Exception as exc:  # noqa: BLE001 — best-effort per worker
+                plog.write("warn", f"deep fan-out worker '{s}' failed: {exc}")
+    if not notes:
+        return ""
+    return "# 并行子调查汇总（per-KIQ/per-actor fan-out）\n\n" + "\n\n---\n\n".join(notes)
+
+
 def run_research_stage(client, question: str, depth: str, target_language: str | None, model_name: str, thread_id: str, plog: ProgressLog) -> str:
     """Run the research stage.
 
@@ -907,6 +1061,28 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
     )
     if opening.strip():
         reports.append(opening)
+
+    # I-0-4: optional per-KIQ/per-actor fan-out (default off). Runs scoped parallel
+    # sub-investigations off the opening's seed list, then absorbs the merged notes
+    # into THIS thread so the contradiction + synthesis passes below see the breadth.
+    if _env_flag("RESEARCH_DEEP_FANOUT", False) and opening.strip():
+        try:
+            width = max(1, int(os.environ.get("RESEARCH_FANOUT_WIDTH", "4") or "4"))
+            fanout_notes = run_deep_fanout(
+                client, opening, question, depth, target_language, model_name, thread_id, plog, width
+            )
+            if fanout_notes.strip():
+                reports.append(fanout_notes)
+                run_streamed_turn(
+                    client,
+                    build_fanout_absorption_prompt(question, fanout_notes, target_language),
+                    thread_id,
+                    120,
+                    plog,
+                    "research:deep-fanout-merge",
+                )
+        except Exception as exc:  # noqa: BLE001 — fan-out is additive; never break the run
+            plog.write("warn", f"deep fan-out skipped: {exc}")
 
     for idx, phase in enumerate(DEEP_RESEARCH_PHASES, start=1):
         limit = int(phase["recursion_limit"])

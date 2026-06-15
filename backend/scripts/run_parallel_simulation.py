@@ -1428,6 +1428,68 @@ def get_active_agents_for_round(
     return active_agents
 
 
+# ============================================================================
+# EXECPLAN2 I-2-1: per-agent affective-state dynamics (mood/energy/opinion/fatigue)
+# threaded into each round's prompt. All gated behind Config.SIM_AGENT_DYNAMICS;
+# when off these helpers are never called → static-persona behavior is byte-identical.
+# The pure update math lives in app.services.agent_dynamics (offline-tested); here
+# we (a) extract received-interaction signals from the round's actions, (b) inject
+# the rendered state line into each active agent's system message before env.step.
+# ============================================================================
+def _build_dynamics_tracker(config, log_info):
+    """Build an AgentDynamicsTracker if SIM_AGENT_DYNAMICS is on; else None (no-op)."""
+    try:
+        from app.config import Config
+        if not getattr(Config, "SIM_AGENT_DYNAMICS", False):
+            return None
+        from app.services.agent_dynamics import AgentDynamicsTracker
+        tracker = AgentDynamicsTracker.from_config(config.get("agent_configs", []), config_obj=Config)
+        log_info("已启用逐智能体动态情感状态 (SIM_AGENT_DYNAMICS)")
+        return tracker
+    except Exception as e:  # never let an init bug break the run
+        log_info(f"动态情感状态初始化失败，按静态人设运行: {e}")
+        return None
+
+
+def _inject_agent_dynamics(active_agents, tracker, log_info):
+    """Append each active agent's current-state line as a fresh SYSTEM memory record
+    for this round. astep() reads memory.get_context(), so the note becomes the
+    most-recent system message before the action prompt (maximal salience) WITHOUT
+    clearing the agent's accumulated conversation memory. Best-effort per agent.
+
+    (EXECPLAN2 I-2-1. Memory-preserving via update_memory rather than the earlier
+    init_messages() re-seed, which the adversarial review flagged as silently wiping
+    cross-round agent memory once an agent developed non-baseline state.)"""
+    if tracker is None:
+        return
+    try:
+        from camel.messages import BaseMessage
+        from camel.types import OpenAIBackendRole
+    except Exception:
+        return
+    for aid, agent in active_agents:
+        try:
+            line = tracker.state_line(aid)
+            if not line:
+                continue
+            note = BaseMessage.make_user_message(role_name="StateUpdater", content=line)
+            agent.update_memory(note, OpenAIBackendRole.SYSTEM)
+        except Exception as e:
+            log_info(f"动态状态注入失败 (agent {aid}): {e}")
+
+
+def _observe_agent_dynamics(tracker, actual_actions, name_to_id):
+    """Feed this round's signals into the tracker (best-effort, never raises)."""
+    if tracker is None:
+        return
+    try:
+        from app.services.agent_dynamics import extract_round_signals
+        received, activity = extract_round_signals(actual_actions, name_to_id)
+        tracker.observe_round(received, activity)
+    except Exception:
+        pass
+
+
 async def inject_initial_follows(env, event_config, log_info, agent_names=None, action_logger=None):
     """T3.3: 把 event_config.initial_follows 作为 round-0 关注边注入。
 
@@ -2255,6 +2317,9 @@ async def run_twitter_simulation(
     start_time = datetime.now()
     
     last_active_ids: set = set()  # T3.5: 近因加成——上一轮活跃的 agent 下一轮更易被激活
+    # I-2-1: 逐智能体动态情感状态（默认关；SIM_AGENT_DYNAMICS=true 时生效）
+    dynamics_tracker = _build_dynamics_tracker(config, log_info)
+    dyn_name_to_id = {name: aid for aid, name in agent_names.items()}
     for round_num in range(total_rounds):
         # 检查是否收到退出信号
         if _shutdown_event and _shutdown_event.is_set():
@@ -2290,6 +2355,8 @@ async def run_twitter_simulation(
                 action_logger.log_round_end(round_num + 1, 0)
             continue
         
+        # I-2-1: 注入本轮动态情感状态到各活跃 agent 的系统提示（默认关 → no-op）
+        _inject_agent_dynamics(active_agents, dynamics_tracker, log_info)
         actions = {agent: LLMAction() for _, agent in active_agents}
         # 健壮性：单次 env.step 内的某个 agent LLM 调用失败（超时/降级/异常）不应中断整场模拟。
         # 记录并跳过本轮，让模拟继续，保住此前所有轮次的进度。
@@ -2319,6 +2386,9 @@ async def run_twitter_simulation(
                 total_actions += 1
                 round_action_count += 1
         
+        # I-2-1: 用本轮实际动作更新动态情感状态（默认关 → no-op）
+        _observe_agent_dynamics(dynamics_tracker, actual_actions, dyn_name_to_id)
+
         if action_logger:
             action_logger.log_round_end(round_num + 1, round_action_count)
         
@@ -2493,6 +2563,9 @@ async def run_reddit_simulation(
     start_time = datetime.now()
     
     last_active_ids: set = set()  # T3.5: 近因加成——上一轮活跃的 agent 下一轮更易被激活
+    # I-2-1: 逐智能体动态情感状态（默认关；SIM_AGENT_DYNAMICS=true 时生效）
+    dynamics_tracker = _build_dynamics_tracker(config, log_info)
+    dyn_name_to_id = {name: aid for aid, name in agent_names.items()}
     for round_num in range(total_rounds):
         # 检查是否收到退出信号
         if _shutdown_event and _shutdown_event.is_set():
@@ -2528,6 +2601,8 @@ async def run_reddit_simulation(
                 action_logger.log_round_end(round_num + 1, 0)
             continue
         
+        # I-2-1: 注入本轮动态情感状态到各活跃 agent 的系统提示（默认关 → no-op）
+        _inject_agent_dynamics(active_agents, dynamics_tracker, log_info)
         actions = {agent: LLMAction() for _, agent in active_agents}
         # 健壮性：单次 env.step 内的某个 agent LLM 调用失败（超时/降级/异常）不应中断整场模拟。
         # 记录并跳过本轮，让模拟继续，保住此前所有轮次的进度。
@@ -2557,6 +2632,9 @@ async def run_reddit_simulation(
                 total_actions += 1
                 round_action_count += 1
         
+        # I-2-1: 用本轮实际动作更新动态情感状态（默认关 → no-op）
+        _observe_agent_dynamics(dynamics_tracker, actual_actions, dyn_name_to_id)
+
         if action_logger:
             action_logger.log_round_end(round_num + 1, round_action_count)
         

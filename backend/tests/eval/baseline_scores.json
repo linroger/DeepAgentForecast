@@ -1,0 +1,27 @@
+{
+  "_comment": "Conservative per-dimension regression FLOORS (0-5), not measured scores. A dimension fails when its k-pass mean drops below (floor - tolerance). citation_density floors are low because the committed demo reports express probabilities in prose without [S#] markers. Run `eval_forecast_quality.py run --judge-provider <p> --update-baseline` once to replace these with measured baselines for your judge model.",
+  "us-iran-2026": {
+    "groundedness": 3.0,
+    "coverage": 3.5,
+    "calibration": 3.0,
+    "contradiction": 3.0,
+    "citation_density": 1.0,
+    "tolerance": 0.5
+  },
+  "memory-semi-2030": {
+    "groundedness": 3.0,
+    "coverage": 3.0,
+    "calibration": 2.5,
+    "contradiction": 3.0,
+    "citation_density": 1.0,
+    "tolerance": 0.5
+  },
+  "china-storage-2035": {
+    "groundedness": 3.0,
+    "coverage": 3.0,
+    "calibration": 2.5,
+    "contradiction": 3.0,
+    "citation_density": 1.0,
+    "tolerance": 0.5
+  }
+}

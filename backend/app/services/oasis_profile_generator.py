@@ -423,7 +423,19 @@ class OasisProfileGenerator:
             if results["node_summaries"]:
                 context_parts.append("相关实体:\n" + "\n".join(f"- {s}" for s in results["node_summaries"][:10]))
             results["context"] = "\n\n".join(context_parts)
-            
+
+            # EXECPLAN2 I-1-2: 给人设附上「群体身份」(in/out-group)，让 agent 能基于派系归属
+            # 推理（图谱社区检测的产物）。默认关（GRAPH_COMMUNITY_RETRIEVAL）→ 不附加，逐字节一致。
+            if getattr(Config, "GRAPH_COMMUNITY_RETRIEVAL", False):
+                try:
+                    grp = self._community_for_entity(entity_name)
+                    if grp:
+                        block = f"群体身份: 属于派系「{grp.get('name', '')}」。{(grp.get('summary') or '')[:300]}".strip()
+                        results["context"] = (results["context"] + "\n\n" + block).strip()
+                        results["community"] = grp.get("name")
+                except Exception as e:
+                    logger.debug(f"社区身份附加失败 ({entity_name}): {e}")
+
             logger.info(f"Zep混合检索完成: {entity_name}, 获取 {len(results['facts'])} 条事实, {len(results['node_summaries'])} 个相关节点")
             
         except concurrent.futures.TimeoutError:
@@ -432,6 +444,34 @@ class OasisProfileGenerator:
             logger.warning(f"Zep检索失败 ({entity_name}): {e}")
 
         return results
+
+    def _community_for_entity(self, entity_name: str) -> Optional[Dict[str, Any]]:
+        """EXECPLAN2 I-1-2: 找出实体所属社区（带实例缓存，避免每个实体都重新拉取全部社区）。
+
+        匹配复用 actors.normalize_name 的规范化 + 双向包含（≥2 字符），与实体消解/actor 匹配
+        口径一致。任一步失败/无果返回 None（调用方据此跳过群体身份块，无回归）。
+        """
+        if not entity_name or not self.graph_id:
+            return None
+        if getattr(self, "_communities_cache", None) is None:
+            try:
+                from .graphiti_client.runtime import get_runtime
+                self._communities_cache = get_runtime().list_communities(self.graph_id) or []
+            except Exception as e:
+                logger.debug(f"社区列表获取失败: {e}")
+                self._communities_cache = []
+        from ..utils.actors import normalize_name
+        target = normalize_name(entity_name)
+        if not target:
+            return None
+        for c in self._communities_cache:
+            for m in (c.get("members") or []):
+                mn = normalize_name(m)
+                if not mn:
+                    continue
+                if mn == target or (len(target) >= 2 and (target in mn or mn in target)):
+                    return c
+        return None
 
     def _resolve_entity_uuid(self, entity: EntityNode) -> Optional[str]:
         """EXECPLAN2 I-1-5: 解析实体到图谱节点 uuid（ego 网检索的中心节点）。

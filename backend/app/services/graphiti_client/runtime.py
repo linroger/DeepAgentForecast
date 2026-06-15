@@ -498,6 +498,45 @@ class GraphitiRuntime:
             for n in nodes
         ]
 
+    # EXECPLAN2 I-1-2: list detected communities (Leiden) + their member entity
+    # names, so the report's faction_brief tool and persona generation can read the
+    # graph's OWN faction structure (with LLM-written summaries) instead of only the
+    # action-log heuristic. Best-effort: any failure returns [] (caller degrades).
+    def list_communities(self, graph_id: str) -> list:
+        return self.run(self._list_communities(graph_id))
+
+    async def _list_communities(self, graph_id):
+        g = await self._ensure_graph(graph_id)
+        from graphiti_core.nodes import CommunityNode
+
+        async with self._read_guard(graph_id):
+            try:
+                comms = await CommunityNode.get_by_group_ids(g.driver, [graph_id], limit=200)
+            except Exception as exc:
+                logger.debug("list_communities: get_by_group_ids failed for %s: %s", graph_id, exc)
+                return []
+            members_by_uuid: dict = {}
+            try:
+                records, _, _ = await g.driver.execute_query(
+                    "MATCH (c:Community)-[:HAS_MEMBER]->(e:Entity) "
+                    "RETURN c.uuid AS cuuid, collect(e.name) AS members"
+                )
+                for rec in (records or []):
+                    cu = rec.get("cuuid")
+                    if cu:
+                        members_by_uuid[cu] = [m for m in (rec.get("members") or []) if m]
+            except Exception as exc:
+                logger.debug("list_communities: membership query failed for %s: %s", graph_id, exc)
+        return [
+            {
+                "uuid": c.uuid,
+                "name": c.name,
+                "summary": getattr(c, "summary", "") or "",
+                "members": members_by_uuid.get(c.uuid, []),
+            }
+            for c in comms
+        ]
+
     # EXECPLAN2 I-1-0: map a recipe selector ('rrf'|'mmr'|'node_distance'|
     # 'cross_encoder'|'combined') + scope ('edges'|'nodes') to a graphiti_core
     # SearchConfig recipe. Unknown selectors fall back to 'rrf', so a stray value
@@ -801,6 +840,132 @@ class GraphitiRuntime:
             except Exception:  # pragma: no cover - defensive
                 continue
         return []
+
+    # ------------------------------------------------------------------
+    # EXECPLAN2 I-1-4: entity-resolution primitives (list all nodes, embed
+    # names, merge a duplicate node into a survivor). Used by zep_entity_resolver.
+    # ------------------------------------------------------------------
+    def all_entity_nodes(self, graph_id: str) -> list:
+        """Return ALL entity nodes for a graph (paginated), as lightweight dicts."""
+        return self.run(self._all_entity_nodes(graph_id))
+
+    async def _all_entity_nodes(self, graph_id, page: int = 500):
+        g = await self._ensure_graph(graph_id)
+        from graphiti_core.nodes import EntityNode
+
+        out: list = []
+        cursor = None
+        async with self._read_guard(graph_id):
+            while True:
+                batch = await EntityNode.get_by_group_ids(
+                    g.driver, [graph_id], limit=page, uuid_cursor=cursor
+                )
+                if not batch:
+                    break
+                for n in batch:
+                    out.append({
+                        "uuid": n.uuid,
+                        "name": n.name,
+                        "labels": list(getattr(n, "labels", []) or []),
+                        "summary": getattr(n, "summary", "") or "",
+                    })
+                if len(batch) < page:
+                    break
+                cursor = batch[-1].uuid
+        return out
+
+    def embed_texts(self, texts: list) -> list:
+        """Embed a list of strings into unit vectors (local sentence-transformer)."""
+        return self.run(self._embed_texts(texts))
+
+    async def _embed_texts(self, texts):
+        embedder, _, _ = self._get_clients()
+        if not texts:
+            return []
+        return await embedder.create_batch(list(texts))
+
+    def merge_nodes(self, graph_id: str, survivor_uuid: str, victim_uuid: str) -> dict:
+        """Merge ``victim`` entity node into ``survivor`` (EXECPLAN2 I-1-4).
+
+        Rewires the victim's RELATES_TO edges onto the survivor (via graphiti_core's
+        own EntityEdge.save — so the backend dialect, incl. reified RelatesToNode_
+        backends, is handled by the library, not hand-written Cypher), unions
+        attributes/labels onto the survivor, then DETACH-DELETEs the victim. A fresh
+        edge uuid is assigned on rewire so the re-save can never collide with the
+        victim's original edge uuid. Per-edge and overall best-effort: a failed step
+        is logged and skipped (never half-corrupts beyond the offending edge). The
+        whole pass is serialized on the per-graph write lock. Episodic MENTIONS edges
+        to the victim are not rewired (provenance only) and drop with the victim.
+        """
+        return self.run(self._merge_nodes(graph_id, survivor_uuid, victim_uuid))
+
+    async def _merge_nodes(self, graph_id, survivor_uuid, victim_uuid):
+        import uuid as _uuidlib
+
+        from graphiti_core.edges import EntityEdge
+        from graphiti_core.nodes import EntityNode
+
+        if survivor_uuid == victim_uuid:
+            return {"rewired": 0, "deleted": False, "skipped": "same uuid"}
+        g = await self._ensure_graph(graph_id)
+        async with self._graph_lock(graph_id):
+            try:
+                survivor = await EntityNode.get_by_uuid(g.driver, survivor_uuid)
+                victim = await EntityNode.get_by_uuid(g.driver, victim_uuid)
+            except Exception as exc:
+                logger.warning("merge_nodes: could not load nodes (%s): %s", graph_id, exc)
+                return {"rewired": 0, "deleted": False, "skipped": "node load failed"}
+            if survivor is None or victim is None:
+                return {"rewired": 0, "deleted": False, "skipped": "node missing"}
+
+            try:
+                edges = await EntityEdge.get_by_node_uuid(g.driver, victim_uuid)
+            except Exception as exc:
+                logger.warning("merge_nodes: could not list victim edges (%s): %s", graph_id, exc)
+                edges = []
+
+            rewired = 0
+            for e in edges:
+                try:
+                    touched = False
+                    if e.source_node_uuid == victim_uuid:
+                        e.source_node_uuid = survivor_uuid
+                        touched = True
+                    if e.target_node_uuid == victim_uuid:
+                        e.target_node_uuid = survivor_uuid
+                        touched = True
+                    if not touched:
+                        continue
+                    if e.source_node_uuid == e.target_node_uuid:
+                        continue  # self-loop after merge — drop (removed with victim)
+                    e.uuid = str(_uuidlib.uuid4())  # fresh uuid: re-save can't collide
+                    await e.save(g.driver)
+                    rewired += 1
+                except Exception as exc:
+                    logger.warning("merge_nodes: edge rewire failed (%s): %s", graph_id, exc)
+
+            # union victim attributes/labels onto survivor (never overwrite survivor's)
+            try:
+                v_attrs = dict(getattr(victim, "attributes", None) or {})
+                s_attrs = dict(getattr(survivor, "attributes", None) or {})
+                for k, val in v_attrs.items():
+                    s_attrs.setdefault(k, val)
+                if hasattr(survivor, "attributes"):
+                    survivor.attributes = s_attrs
+                survivor.labels = list(dict.fromkeys(
+                    list(survivor.labels or []) + list(victim.labels or [])
+                ))
+                await survivor.save(g.driver)
+            except Exception as exc:
+                logger.warning("merge_nodes: survivor union failed (%s): %s", graph_id, exc)
+
+            deleted = False
+            try:
+                await victim.delete(g.driver)
+                deleted = True
+            except Exception as exc:
+                logger.warning("merge_nodes: victim delete failed (%s): %s", graph_id, exc)
+        return {"rewired": rewired, "deleted": deleted}
 
     def delete_graph(self, graph_id: str) -> None:
         self.run(self._delete_graph(graph_id))
