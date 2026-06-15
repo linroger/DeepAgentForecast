@@ -1,0 +1,451 @@
+{
+ "entity_types": [
+  {
+   "name": "HeadOfState",
+   "description": "国家元首或政府首脑级别的最高决策者",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "完整姓名"
+    },
+    {
+     "name": "country",
+     "type": "text",
+     "description": "所属国家"
+    }
+   ],
+   "examples": [
+    "唐纳德·特朗普",
+    "内塔尼亚胡",
+    "穆杰塔巴·哈梅内伊",
+    "习近平",
+    "普京",
+    "埃尔多安"
+   ]
+  },
+  {
+   "name": "GovernmentOfficial",
+   "description": "政府高级官员、部长、谈判特使等非元首决策者",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "完整姓名"
+    },
+    {
+     "name": "position",
+     "type": "text",
+     "description": "职位名称"
+    }
+   ],
+   "examples": [
+    "JD·万斯",
+    "史蒂夫·维特科夫",
+    "贾里德·库什纳",
+    "皮特·赫格塞斯",
+    "夏巴兹·谢里夫",
+    "穆罕默德·本·扎耶德"
+   ]
+  },
+  {
+   "name": "MilitaryCommander",
+   "description": "军方高级指挥官，拥有独立发声和执行能力",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "完整姓名"
+    },
+    {
+     "name": "affiliation",
+     "type": "text",
+     "description": "所属军事组织"
+    }
+   ],
+   "examples": [
+    "阿西姆·穆尼尔",
+    "CENTCOM指挥官",
+    "侯赛因·萨拉米",
+    "穆罕默德·巴盖里"
+   ]
+  },
+  {
+   "name": "ReligiousLeader",
+   "description": "宗教领袖或具有宗教权威的精神领袖",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "完整姓名"
+    },
+    {
+     "name": "religious_role",
+     "type": "text",
+     "description": "宗教角色或头衔"
+    }
+   ],
+   "examples": [
+    "阿亚图拉·阿里·哈梅内伊",
+    "纳伊姆·卡西姆",
+    "阿亚图拉·阿拉菲"
+   ]
+  },
+  {
+   "name": "IntelligenceAgency",
+   "description": "情报机构作为独立发声主体",
+   "attributes": [
+    {
+     "name": "agency_name",
+     "type": "text",
+     "description": "机构名称"
+    },
+    {
+     "name": "country",
+     "type": "text",
+     "description": "所属国家"
+    }
+   ],
+   "examples": [
+    "DIA美国国防情报局",
+    "IAEA国际原子能机构",
+    "Mossad",
+    "Mossad以色列情报机构"
+   ]
+  },
+  {
+   "name": "MilitaryOrganization",
+   "description": "具有独立指挥体系的军事或准军事组织",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "组织名称"
+    },
+    {
+     "name": "sponsor_state",
+     "type": "text",
+     "description": "主要支持国"
+    }
+   ],
+   "examples": [
+    "伊斯兰革命卫队IRGC",
+    "IDF以色列国防军",
+    "真主党",
+    "哈马斯",
+    "也门胡塞武装",
+    "伊拉克什叶派民兵PMF"
+   ]
+  },
+  {
+   "name": "GovernmentAgency",
+   "description": "政府机构、监管机构等公共部门组织",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "机构名称"
+    },
+    {
+     "name": "country",
+     "type": "text",
+     "description": "所属国家"
+    }
+   ],
+   "examples": [
+    "美国中央司令部CENTCOM",
+    "联合国安理会",
+    "美国国会众议院",
+    "OPEC欧佩克"
+   ]
+  },
+  {
+   "name": "MediaOutlet",
+   "description": "媒体机构、智库等具有公开舆论影响力的信息发布主体",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "机构名称"
+    },
+    {
+     "name": "outlet_type",
+     "type": "text",
+     "description": "媒体或智库类型"
+    }
+   ],
+   "examples": [
+    "CNN",
+    "纽约时报",
+    "路透社",
+    "CSIS战略与国际研究中心",
+    "FDD国防民主基金会",
+    "IISS国际战略研究所",
+    "Al Jazeera半岛电视台",
+    "Iran International"
+   ]
+  },
+  {
+   "name": "Person",
+   "description": "任何自然人个体的兜底类型，当个人不属于其他更具体的人物类型时使用",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "完整姓名"
+    },
+    {
+     "name": "description",
+     "type": "text",
+     "description": "个人描述"
+    }
+   ],
+   "examples": [
+    "马苏德·佩泽什基安",
+    "阿里·阿克巴尔·瓦希迪",
+    "拉斐尔·格罗西",
+    "法提赫·比罗尔",
+    "普通网友",
+    "匿名评论者"
+   ]
+  },
+  {
+   "name": "Organization",
+   "description": "任何组织机构的兜底类型，当组织不属于其他更具体的组织类型时使用",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "组织名称"
+    },
+    {
+     "name": "description",
+     "type": "text",
+     "description": "组织描述"
+    }
+   ],
+   "examples": [
+    "金砖国家组织BRICS",
+    "海湾合作委员会GCC",
+    "欧盟EU",
+    "中国跨境支付系统CIPS",
+    "区域中小型组织",
+    "临时联盟"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "LEADS",
+   "description": "领导或指挥关系，指向被领导者",
+   "source_targets": [
+    {
+     "source": "HeadOfState",
+     "target": "GovernmentAgency"
+    },
+    {
+     "source": "HeadOfState",
+     "target": "MilitaryOrganization"
+    },
+    {
+     "source": "HeadOfState",
+     "target": "GovernmentOfficial"
+    },
+    {
+     "source": "MilitaryCommander",
+     "target": "MilitaryOrganization"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "NEGOTIATES_WITH",
+   "description": "外交谈判或对话关系",
+   "source_targets": [
+    {
+     "source": "GovernmentOfficial",
+     "target": "GovernmentOfficial"
+    },
+    {
+     "source": "HeadOfState",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "GovernmentOfficial",
+     "target": "HeadOfState"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "REPORTS_ON",
+   "description": "媒体报道或信息发布关系",
+   "source_targets": [
+    {
+     "source": "MediaOutlet",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "GovernmentOfficial"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "MilitaryOrganization"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "IntelligenceAgency"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "Person"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "OPPOSES",
+   "description": "反对或对抗关系，包括军事和外交对抗",
+   "source_targets": [
+    {
+     "source": "HeadOfState",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "HeadOfState",
+     "target": "MilitaryOrganization"
+    },
+    {
+     "source": "MilitaryOrganization",
+     "target": "MilitaryOrganization"
+    },
+    {
+     "source": "HeadOfState",
+     "target": "GovernmentAgency"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "SUPPORTS",
+   "description": "支持或声援关系",
+   "source_targets": [
+    {
+     "source": "HeadOfState",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "HeadOfState",
+     "target": "MilitaryOrganization"
+    },
+    {
+     "source": "MilitaryOrganization",
+     "target": "MilitaryOrganization"
+    },
+    {
+     "source": "GovernmentOfficial",
+     "target": "HeadOfState"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "CONTROLS",
+   "description": "实际控制或指挥关系，区别于名义领导",
+   "source_targets": [
+    {
+     "source": "MilitaryOrganization",
+     "target": "MilitaryOrganization"
+    },
+    {
+     "source": "HeadOfState",
+     "target": "IntelligenceAgency"
+    },
+    {
+     "source": "HeadOfState",
+     "target": "GovernmentAgency"
+    },
+    {
+     "source": "MilitaryCommander",
+     "target": "MilitaryOrganization"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "ASSESSES",
+   "description": "评估或分析关系，通常由情报机构或智库发起",
+   "source_targets": [
+    {
+     "source": "IntelligenceAgency",
+     "target": "MilitaryOrganization"
+    },
+    {
+     "source": "IntelligenceAgency",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "GovernmentAgency"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "AFFILIATED_WITH",
+   "description": "隶属或联盟关系",
+   "source_targets": [
+    {
+     "source": "Person",
+     "target": "MilitaryOrganization"
+    },
+    {
+     "source": "Person",
+     "target": "GovernmentAgency"
+    },
+    {
+     "source": "Organization",
+     "target": "Organization"
+    },
+    {
+     "source": "MilitaryOrganization",
+     "target": "Organization"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "COMMENTS_ON",
+   "description": "公开评论或表态关系，涵盖社媒发言和官方声明",
+   "source_targets": [
+    {
+     "source": "Person",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "Person",
+     "target": "MilitaryOrganization"
+    },
+    {
+     "source": "MediaOutlet",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "GovernmentOfficial",
+     "target": "HeadOfState"
+    },
+    {
+     "source": "ReligiousLeader",
+     "target": "HeadOfState"
+    }
+   ],
+   "attributes": []
+  }
+ ],
+ "analysis_summary": "本报告涉及2026年美伊战争及其在中东引发的多层级地缘博弈，核心行为体涵盖美国（特朗普、万斯、库什纳等决策者）、以色列（内塔尼亚胡、IDF）、伊朗（穆杰塔巴·哈梅内伊、IRGC、真主党等代理网络）、海湾国家（沙特MBS、阿联酋MBZ、巴基斯坦）、域外大国（中俄欧盟）以及IAEA、CSIS、IISS等国际组织和智库。实体类型设计聚焦于'能在社媒上发声、互动、传播信息的主体'：包括国家元首、政府官员、军方指挥官、宗教领袖等具体人物类型，以及情报机构、军事组织、政府部门、媒体智库等组织类型。关系类型覆盖社媒互动的核心场景——领导指挥、外交谈判、媒体报道、公开评论、评估分析、阵营对抗与支持、实际控制等，能够模拟战争推演过程中各方的信息发布、立场表态、阵营博弈和舆论传播路径。"
+}

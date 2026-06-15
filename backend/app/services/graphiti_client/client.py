@@ -12,9 +12,18 @@ graph_id is used verbatim as the Graphiti group_id / FalkorDB tenant.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, List, Optional
 
 from .runtime import get_runtime
+
+
+def _iso(v: Any) -> Any:
+    """EXECPLAN F-2-2: normalize graphiti ``datetime`` temporal fields to ISO-8601
+    strings at the facade boundary, restoring the documented Zep contract that
+    downstream consumers (EdgeInfo/NodeInfo Optional[str], to_dict()/json.dumps)
+    assume. Non-datetime values pass through unchanged."""
+    return v.isoformat() if isinstance(v, datetime) else v
 
 
 # ----------------------------------------------------------------------
@@ -31,7 +40,7 @@ class _ZepNode:
         self.labels = list(getattr(n, "labels", None) or [])
         self.summary = getattr(n, "summary", "") or ""
         self.attributes = dict(getattr(n, "attributes", None) or {})
-        self.created_at = getattr(n, "created_at", None)
+        self.created_at = _iso(getattr(n, "created_at", None))  # EXECPLAN F-2-2
 
 
 class _ZepEdge:
@@ -47,10 +56,12 @@ class _ZepEdge:
         self.source_node_uuid = getattr(e, "source_node_uuid", "") or ""
         self.target_node_uuid = getattr(e, "target_node_uuid", "") or ""
         self.attributes = dict(getattr(e, "attributes", None) or {})
-        self.created_at = getattr(e, "created_at", None)
-        self.valid_at = getattr(e, "valid_at", None)
-        self.invalid_at = getattr(e, "invalid_at", None)
-        self.expired_at = getattr(e, "expired_at", None)
+        # EXECPLAN F-2-2: graphiti returns datetimes here; Zep returned ISO strings.
+        # Normalize so json.dumps consumers (EdgeInfo.to_dict) don't crash.
+        self.created_at = _iso(getattr(e, "created_at", None))
+        self.valid_at = _iso(getattr(e, "valid_at", None))
+        self.invalid_at = _iso(getattr(e, "invalid_at", None))
+        self.expired_at = _iso(getattr(e, "expired_at", None))
         episodes = list(getattr(e, "episodes", None) or [])
         self.episodes = episodes
         self.episode_ids = episodes
@@ -209,6 +220,21 @@ class _GraphNamespace:
         return self._rt.build_communities(graph_id)
 
     # --- retrieval -------------------------------------------------------
+    # EXECPLAN2 I-1-0: map the legacy ``reranker`` arg (which the facade used to
+    # silently drop) onto the new recipe selector so existing callers that pass
+    # reranker='mmr'/'cross_encoder'/'node_distance' now actually get that recipe.
+    _RERANKER_TO_RECIPE = {
+        "rrf": "rrf",
+        "mmr": "mmr",
+        "node_distance": "node_distance",
+        "nodedistance": "node_distance",
+        "node-distance": "node_distance",
+        "cross_encoder": "cross_encoder",
+        "cross-encoder": "cross_encoder",
+        "crossencoder": "cross_encoder",
+        "combined": "combined",
+    }
+
     def search(
         self,
         graph_id: str,
@@ -216,9 +242,29 @@ class _GraphNamespace:
         limit: int = 10,
         scope: str = "edges",
         reranker: Optional[str] = None,
+        recipe: Optional[str] = None,
+        center_node_uuid: Optional[str] = None,
+        bfs_origin_node_uuids: Optional[List[str]] = None,
+        search_filter: Optional[dict] = None,
         **_: Any,
     ) -> _SearchResult:
-        edges, nodes = self._rt.search(graph_id, query, limit, scope)
+        # EXECPLAN2 I-1-0: structured retrieval surface. All new params are optional;
+        # when omitted the runtime defaults to the configured recipe (default 'rrf'),
+        # so the historical 4-arg call path is unchanged. An explicit ``recipe`` wins;
+        # otherwise the legacy ``reranker`` arg is mapped to a recipe selector.
+        effective = recipe
+        if effective is None and reranker:
+            effective = self._RERANKER_TO_RECIPE.get(str(reranker).strip().lower())
+        edges, nodes = self._rt.search(
+            graph_id,
+            query,
+            limit,
+            scope,
+            recipe=effective,
+            center_node_uuid=center_node_uuid,
+            bfs_origin_node_uuids=bfs_origin_node_uuids,
+            search_filter=search_filter,
+        )
         return _SearchResult([_ZepEdge(e) for e in edges], [_ZepNode(n) for n in nodes])
 
 

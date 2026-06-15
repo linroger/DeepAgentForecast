@@ -9,9 +9,27 @@ DeepAgentForecast is an autonomous **"one prompt → forecast"** engine. You giv
 
 ---
 
+## Quickstart
+
+```bash
+git clone https://github.com/linroger/DeepAgentForecast.git
+cd DeepAgentForecast
+./setup.sh        # interactive: picks your LLM provider + installs everything
+npm run doctor    # verify the environment is ready (seconds)
+npm run dev       # backend :5001 + frontend :3000
+```
+
+Then open **<http://localhost:3000/research>**, type a question, and click **Run research + simulate + forecast**.
+
+**There is no graph database to host.** The temporal knowledge graph runs **locally** on an embedded Graphiti + FalkorDB (no account, no Docker, no API key). The only credential you need is **one LLM**: either a local `claude` / `codex` CLI login (zero keys), or an API key for one of the hosted providers (`openai`, `kimi`, `minimax`, `deepseek`, `qwen`, `glm`). `setup.sh` walks you through picking one and live-tests the key.
+
+See [Requirements](#requirements) and [Getting started](#getting-started) for the full walkthrough, and [Configuration (`.env`)](#configuration-env) for every knob.
+
+---
+
 ## Demo
 
-🔗 **[Live demo site](https://linroger.github.io/DeepAgentForecast/)** (English + 中文) — walk through **every stage** of real end-to-end runs: the deep-research console log, the research dossier with actors & sources, the generated ontology, an interactive knowledge graph, the simulated Twitter/Reddit forum, and the final forecast (US AI race 2030, global EV industry 2035, Russia–Ukraine endgame, global semiconductors 2030).
+🔗 **[Live demo site](https://linroger.github.io/DeepAgentForecast/)** (English + 中文) — walk through **every stage** of real end-to-end runs: the deep-research console log, the research dossier with actors & sources, the generated ontology, an interactive knowledge graph, the simulated Twitter/Reddit forum, and the final forecast (US AI race 2030, global EV industry 2035, Russia–Ukraine endgame, global semiconductors 2030, global memory chips 2030, China energy storage 2035, US–Iran war endgame 2026).
 
 One prompt — *"Who wins the US AI race by 2030?"* — taken from question to interactive forecast (research → knowledge graph → 40-round population simulation → report):
 

@@ -43,10 +43,34 @@ import logging
 import os
 import re
 import sys
+import tempfile
 import traceback
 import uuid
 from pathlib import Path
 from typing import Any
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Atomically write text: temp file in the same dir, fsync, then os.replace.
+
+    The orchestrator's watchdog SIGKILLs this process group at the depth budget;
+    a plain write_text mid-flush leaves a truncated/partial JSON and corrupts the
+    cross-stage contract (EXECPLAN2 F-0-4).
+    """
+    path = Path(path)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)  # atomic on the same filesystem
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 # ---------------------------------------------------------------------------
 # Constants / depth presets
@@ -155,8 +179,30 @@ REQUIREMENT_FILENAME = "prediction_requirement.txt"
 ACTORS_FILENAME = "actors.json"
 SOURCES_FILENAME = "sources.json"
 TIMELINE_FILENAME = "timeline.json"
+QUANTITATIVE_FILENAME = "quantitative.json"   # EXECPLAN2 I-0-5
+CONTESTED_FILENAME = "contested.json"         # EXECPLAN2 I-0-1
 PROGRESS_FILENAME = "research_progress.log"
 META_FILENAME = "meta.json"
+
+# Recognized source-quality tiers (SKILL.md §4). Used for the meta tier histogram
+# and to validate model-emitted tiers; anything else is dropped to "unknown".
+_VALID_TIERS = ("S1", "S2", "S3", "S4")  # EXECPLAN2 I-0-0
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    """Read a boolean feature flag from the environment (truthy 1/true/yes/on).
+
+    This bridge runs inside DeerFlow's own venv and imports ``deerflow`` only —
+    it can NOT import MiroFish's ``backend.app.config.Config``. The OPTIONAL-DEGRADE
+    flags (RESEARCH_EVIDENCE_GRADING / RESEARCH_FORECAST_INPUTS) are therefore read
+    from the env, which the orchestrator already forwards verbatim (``env = dict(
+    os.environ)``) when it spawns this process. Unset → ``default``.
+    EXECPLAN2 I-0-0 / I-0-5.
+    """
+    raw = os.environ.get(name)
+    if raw is None or not str(raw).strip():
+        return default
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
 
 
 def _utcnow() -> str:
@@ -284,8 +330,12 @@ def build_deep_phase_prompt(question: str, phase: dict[str, Any], index: int, to
         "## Evidence gathered\n"
         "## Actor / incentive updates\n"
         "## Actor relationships (who allies/opposes/regulates/depends-on/influences whom, with basis)\n"
-        "## Quantitative facts and dates\n"
-        "## Contradictions or uncertainty\n"
+        # EXECPLAN2 I-0-5: ask each quantitative fact to carry unit + as-of date +
+        # definition so the downstream extraction can build a clean quantitative.json.
+        "## Quantitative facts and dates (each number WITH its unit, as-of date, definition, and source tier)\n"
+        # EXECPLAN2 I-0-1: ask the contradictions pass to record WHERE the evidence
+        # conflicts (positions + sources + why they differ), not just that uncertainty exists.
+        "## Contradictions or uncertainty (for each: the disputed claim, the differing positions with their sources, and WHY they differ)\n"
         "## Gaps to carry into the next pass\n\n"
         "Do NOT write the final report yet. Do NOT say the research is complete. "
         "This pass is one layer of a longer investigation."
@@ -452,7 +502,23 @@ def extract_structured_tool_free(report: str, target_language: str | None, model
         return ""
 
 
-def build_extraction_prompt(target_language: str | None, depth: str = "standard") -> str:
+def build_extraction_prompt(
+    target_language: str | None,
+    depth: str = "standard",
+    *,
+    evidence_grading: bool | None = None,
+    forecast_inputs: bool | None = None,
+) -> str:
+    # EXECPLAN2 I-0-0 / I-0-1 / I-0-5: the SKILL prescribes source tiering (S1-S4),
+    # Admiralty-style grading, quantitative number hygiene, and triangulation/conflict
+    # tracking — but none of it survived the JSON boundary. We surface it here as
+    # OPTIONAL schema fields gated behind env flags (default ON: prompt-only, no tool
+    # cost). A model that omits any field degrades to exactly the old contract.
+    if evidence_grading is None:
+        evidence_grading = _env_flag("RESEARCH_EVIDENCE_GRADING", True)
+    if forecast_inputs is None:
+        forecast_inputs = _env_flag("RESEARCH_FORECAST_INPUTS", True)
+
     lang = target_language or "the same language as the research report"
     actor_range = "10-35" if depth == "deep" else "5-20"
     source_hint = (
@@ -461,6 +527,90 @@ def build_extraction_prompt(target_language: str | None, depth: str = "standard"
         if depth == "deep"
         else "Include the most important sources."
     )
+
+    # EXECPLAN2 I-0-0: per-actor / per-relationship optional Admiralty grade line.
+    actor_grade = (
+        '      "grade": string,                    // OPTIONAL Admiralty grade e.g. "B2" (letter=source reliability A-D, digit=claim credibility 1-4); omit if unsure\n'
+        if evidence_grading else ""
+    )
+    rel_grade = (
+        '      "grade": string,                    // OPTIONAL Admiralty grade e.g. "B2"; omit if the basis is single-origin/weak\n'
+        if evidence_grading else ""
+    )
+
+    # EXECPLAN2 I-0-0: enriched sources schema (tier/date/supports/independent).
+    if evidence_grading:
+        sources_schema = (
+            '  "sources": [\n'
+            "    {\n"
+            '      "title": string,\n'
+            '      "url": string,\n'
+            '      "tier": "S1"|"S2"|"S3"|"S4",       // OPTIONAL SKILL §4 source-quality tier (S1=primary/authoritative … S4=reject); omit if unsure\n'
+            '      "date": string,                    // OPTIONAL YYYY-MM-DD publication/as-of date of the source\n'
+            '      "supports": [ string ],            // OPTIONAL short refs to the claims this source backs\n'
+            '      "independent": boolean             // OPTIONAL true if an independent origin, false if it echoes another source\n'
+            "    }\n"
+            "  ]"
+        )
+    else:
+        sources_schema = '  "sources": [ {"title": string, "url": string} ]'
+
+    # EXECPLAN2 I-0-5: structured quantitative facts (metric + unit + as-of date + definition).
+    quant_schema = ""
+    if forecast_inputs:
+        quant_schema = (
+            '  "quantitative_facts": [               // OPTIONAL dated, unit-bearing numbers (SKILL §6 number hygiene)\n'
+            "    {\n"
+            '      "metric": string,                  // what is measured, e.g. "TSMC 2026 capex guidance"\n'
+            '      "value": string,                   // the number as stated, e.g. "52-56"\n'
+            '      "unit": string,                    // REQUIRED unit/currency, e.g. "USD billion", "%", "units/yr"\n'
+            '      "as_of_date": string,              // REQUIRED YYYY-MM-DD the figure is as-of (NOT the article date if they differ)\n'
+            '      "definition": string,              // how the metric is defined (guards against definition drift)\n'
+            '      "source": string,                  // short source ref/title for the figure\n'
+            '      "tier": "S1"|"S2"|"S3"|"S4"        // OPTIONAL source tier of the figure\n'
+            "    }\n"
+            "  ],\n"
+        )
+
+    # EXECPLAN2 I-0-1: structured contested claims / evidence conflicts.
+    contested_schema = ""
+    if evidence_grading:
+        contested_schema = (
+            '  "contested_claims": [                 // OPTIONAL where the EVIDENCE itself conflicts (SKILL §6-§7)\n'
+            "    {\n"
+            '      "claim": string,                   // the disputed claim/number/thesis\n'
+            '      "positions": [                     // the differing stances on it\n'
+            "        {\n"
+            '          "stance": string,              // what this side holds\n'
+            '          "sources": [ string ],         // source refs/titles backing this stance\n'
+            '          "tier": "S1"|"S2"|"S3"|"S4"    // OPTIONAL strongest tier behind this stance\n'
+            "        }\n"
+            "      ],\n"
+            '      "status": "confirmed"|"contested"|"speculative"|"single-origin",\n'
+            '      "why_they_differ": string          // definition / window / method / incentive driving the disagreement\n'
+            "    }\n"
+            "  ],\n"
+        )
+
+    grading_note = ""
+    if evidence_grading:
+        grading_note = (
+            "EVIDENCE GRADING: where you can, tag sources with their SKILL §4 tier (S1=primary/authoritative, "
+            "S2=high-quality secondary, S3=conditional, S4=reject — never cite S4) and load-bearing claims with an "
+            "Admiralty grade (letter A-D for source reliability, digit 1-4 for claim credibility, e.g. B2). Base tiers "
+            "and grades on the EVIDENCE you actually saw — do NOT invent them; OMIT any tier/grade/date you are unsure of. "
+            "CONTESTED_CLAIMS: list only genuine evidence conflicts (two sources disagree on a number, a thesis has a live "
+            "bear case, a striking claim is single-origin); each entry must cite >=2 sources across its positions OR carry "
+            'status "single-origin". Omit trivial disagreements; an empty array ("contested_claims": []) is fine.\n'
+        )
+    quant_note = ""
+    if forecast_inputs:
+        quant_note = (
+            "QUANTITATIVE_FACTS: extract the load-bearing numbers from the report, each with its unit and as-of date "
+            "(the date the figure refers to, which may differ from the article's publication date) and a one-line definition. "
+            'Omit any number you cannot give a unit and as-of date for. An empty array ("quantitative_facts": []) is fine.\n'
+        )
+
     return (
         "Based ONLY on the research you just completed, output a single JSON object "
         "and NOTHING else (no prose, no code fences). It must match this schema:\n\n"
@@ -481,6 +631,7 @@ def build_extraction_prompt(target_language: str | None, depth: str = "standard"
         '      "role": string,                     // their role in the situation\n'
         '      "stance": string,                   // their public position\n'
         '      "influence": "high"|"medium"|"low",\n'
+        f"{actor_grade}"
         '      "memory": string                    // what this actor knows/believes\n'
         "    }\n"
         "  ],\n"
@@ -491,18 +642,23 @@ def build_extraction_prompt(target_language: str | None, depth: str = "standard"
         '      "type": "ALLY_OF"|"OPPOSES"|"COMPETES_WITH"|"REGULATES"|"DEPENDS_ON"|"PARTNERS_WITH"|"INFLUENCES",\n'
         '      "sign": "ally"|"rival"|"neutral",\n'
         '      "strength": "high"|"medium"|"low",\n'
+        f"{rel_grade}"
         '      "basis": string                     // 1-line researched evidence for the edge\n'
         "    }\n"
         "  ],\n"
         '  "key_events": [ {"date": string, "event": string} ],\n'
         '  "hot_topics": [ string ],\n'
-        '  "sources": [ {"title": string, "url": string} ]\n'
+        f"{quant_schema}"
+        f"{contested_schema}"
+        f"{sources_schema}\n"
         "}\n\n"
         f"{source_hint}\n"
         "RELATIONSHIPS: emit edges ONLY between actors named in actors[]; every edge MUST cite a "
         "researched basis. Omit speculative edges. For a single-actor situation use an empty "
         'relationships array ("relationships": []). SITUATION_BRIEF: populate it from your '
         "actors-and-incentives analysis — current_situation and fault_lines are required.\n"
+        f"{grading_note}"
+        f"{quant_note}"
         f"Write all natural-language string values in {lang}. Output valid JSON only."
     )
 
@@ -554,6 +710,34 @@ def extract_json_object(text: str) -> dict | None:
         except json.JSONDecodeError:
             continue
     return None
+
+
+def source_tier_histogram(sources: Any) -> dict[str, int]:
+    """Count S1-S4 source tiers for the meta observability block (EXECPLAN2 I-0-0).
+
+    Tolerant of legacy flat sources (no ``tier`` key) and dirty rows: anything that
+    is not a recognized tier counts toward ``s_unknown``. Returns
+    {s1_count, s2_count, s3_count, s4_count, s_unknown}.
+    """
+    hist = {"s1_count": 0, "s2_count": 0, "s3_count": 0, "s4_count": 0, "s_unknown": 0}
+    if not isinstance(sources, list):
+        return hist
+    for s in sources:
+        tier = ""
+        if isinstance(s, dict):
+            tier = str(s.get("tier", "") or "").strip().upper()
+        if tier in _VALID_TIERS:
+            hist[f"{tier.lower()}_count"] += 1
+        else:
+            hist["s_unknown"] += 1
+    return hist
+
+
+def _clean_optional_rows(value: Any) -> list:
+    """Return ``value`` as a list of dict rows, dropping non-dict junk; else []."""
+    if not isinstance(value, list):
+        return []
+    return [r for r in value if isinstance(r, dict)]
 
 
 # ---------------------------------------------------------------------------
@@ -611,6 +795,31 @@ def strip_think(text: str) -> str:
     cleaned = _DANGLING_THINK_RE.sub("", cleaned)
     cleaned = _HARNESS_MARKER_RE.sub("", cleaned)
     return cleaned.strip()
+
+
+_DOC_FENCE_OPEN_RE = re.compile(r"^```[ \t]*(?:markdown|md)?[ \t]*\n", re.IGNORECASE)
+
+
+def unwrap_markdown_fence(text: str) -> str:
+    """Remove a code fence wrapping the ENTIRE report document.
+
+    Models occasionally emit the whole research report inside a single
+    ```markdown … ``` fence, which makes every markdown renderer downstream
+    show the dossier as one giant code block. Only the outermost wrapper is
+    removed, and only when the interior fence count stays balanced — interior
+    fenced blocks (e.g. ASCII diagrams) are preserved untouched.
+    """
+    t = (text or "").strip()
+    m = _DOC_FENCE_OPEN_RE.match(t)
+    if not m:
+        return text
+    lines = t.split("\n")
+    if lines[-1].strip() != "```":
+        return text
+    inner = lines[1:-1]
+    if sum(1 for ln in inner if ln.lstrip().startswith("```")) % 2 != 0:
+        return text
+    return "\n".join(inner).strip("\n") + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -777,7 +986,7 @@ def main() -> int:
         ]
 
     def write_meta() -> None:
-        (out_dir / META_FILENAME).write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        _atomic_write_text(out_dir / META_FILENAME, json.dumps(meta, ensure_ascii=False, indent=2))
 
     write_meta()
 
@@ -908,7 +1117,8 @@ def main() -> int:
             plog.close()
             return 2
 
-        (out_dir / REPORT_FILENAME).write_text(report, encoding="utf-8")
+        report = unwrap_markdown_fence(report)
+        _atomic_write_text(out_dir / REPORT_FILENAME, report)
         meta["report_chars"] = len(report)
         plog.write("ok", f"wrote {REPORT_FILENAME} ({len(report)} chars)")
         write_meta()
@@ -938,8 +1148,9 @@ def main() -> int:
                 else:
                     sources = obj.pop("sources", None)
                     # actors.json keeps the full object (incl. situation_brief, relationships,
-                    # key_events) so one dossier read carries the whole enriched contract.
-                    (out_dir / ACTORS_FILENAME).write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+                    # key_events, quantitative_facts, contested_claims) so one dossier read
+                    # carries the whole enriched contract.
+                    _atomic_write_text(out_dir / ACTORS_FILENAME, json.dumps(obj, ensure_ascii=False, indent=2))
                     meta["actors_count"] = len(obj.get("actors", []) or [])
                     meta["relationships_count"] = len(obj.get("relationships", []) or [])
                     meta["has_situation_brief"] = bool(obj.get("situation_brief"))
@@ -948,13 +1159,34 @@ def main() -> int:
                     # actors.json too for back-compat). Gives downstream a clean valid_at source.
                     key_events = obj.get("key_events")
                     if isinstance(key_events, list) and key_events:
-                        (out_dir / TIMELINE_FILENAME).write_text(json.dumps(key_events, ensure_ascii=False, indent=2), encoding="utf-8")
+                        _atomic_write_text(out_dir / TIMELINE_FILENAME, json.dumps(key_events, ensure_ascii=False, indent=2))
                         meta["timeline_count"] = len(key_events)
                         plog.write("ok", f"wrote {TIMELINE_FILENAME} ({len(key_events)} events)")
+                    # EXECPLAN2 I-0-5: promote quantitative_facts to a first-class
+                    # quantitative.json (mirrors the timeline.json pattern; kept inside
+                    # actors.json too for back-compat). Degrades silently when absent.
+                    quant = _clean_optional_rows(obj.get("quantitative_facts"))
+                    if quant:
+                        _atomic_write_text(out_dir / QUANTITATIVE_FILENAME, json.dumps(quant, ensure_ascii=False, indent=2))
+                        meta["quantitative_count"] = len(quant)
+                        plog.write("ok", f"wrote {QUANTITATIVE_FILENAME} ({len(quant)} facts)")
+                    # EXECPLAN2 I-0-1: promote contested_claims to a first-class
+                    # contested.json so the adversarial work survives the JSON boundary.
+                    contested = _clean_optional_rows(obj.get("contested_claims"))
+                    if contested:
+                        _atomic_write_text(out_dir / CONTESTED_FILENAME, json.dumps(contested, ensure_ascii=False, indent=2))
+                        meta["contested_count"] = len(contested)
+                        plog.write("ok", f"wrote {CONTESTED_FILENAME} ({len(contested)} contested claims)")
                     if isinstance(sources, list) and sources:
-                        (out_dir / SOURCES_FILENAME).write_text(json.dumps(sources, ensure_ascii=False, indent=2), encoding="utf-8")
+                        _atomic_write_text(out_dir / SOURCES_FILENAME, json.dumps(sources, ensure_ascii=False, indent=2))
                         meta["sources_count"] = len(sources)
-                        plog.write("ok", f"wrote {SOURCES_FILENAME} ({len(sources)} sources)")
+                        # EXECPLAN2 I-0-0: tier histogram for observability (and so a
+                        # downstream coverage gate can reject S4-heavy dossiers).
+                        meta["source_tiers"] = source_tier_histogram(sources)
+                        plog.write(
+                            "ok",
+                            f"wrote {SOURCES_FILENAME} ({len(sources)} sources; tiers={meta['source_tiers']})",
+                        )
             except Exception as e:  # extraction must never fail the whole run
                 plog.write("warn", f"structured extraction failed (non-fatal): {e}")
 

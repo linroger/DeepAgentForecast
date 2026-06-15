@@ -13,14 +13,20 @@ import os
 import json
 import time
 import re
+import logging
+import threading
+import contextvars
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
 from ..config import Config
+from ..utils.atomic import write_text_atomic, write_json_atomic
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
+# EXECPLAN2 I-5-4: 报告阶段把 LLM 计量上下文设到 (report_id, 'report')，并按章节读取计量快照差值。
+from ..utils.telemetry import LLMMeter, set_run_context, get_run_context
 from .zep_tools import (
     ZepToolsService, 
     SearchResult, 
@@ -30,6 +36,53 @@ from .zep_tools import (
 )
 
 logger = get_logger('mirofish.report_agent')
+
+# EXECPLAN2 F-7-1: 并发报告生成时，每份报告的 console_log.txt 此前都挂在进程级共享 logger
+# （'mirofish.report_agent' / 'mirofish.zep_tools'）上，导致两份报告的日志互相串扰，且 handler
+# 增删在并发 close()/__del__ 时存在竞态。修复思路：
+#   1) 用 ContextVar 记录「当前正在生成的 report_id」——报告生成跑在各自的 daemon 线程里，
+#      ContextVar 天然按执行上下文隔离；
+#   2) 在两个父 logger 上各装一个「打戳」过滤器，把当前上下文的 report_id 写进每条 record；
+#   3) 每份报告的 FileHandler 再装一个「按 report_id 匹配」的过滤器，只写属于自己的 record，
+#      从根本上杜绝串扰（不必改动散落各处的 logger.xxx 发射点）；
+#   4) handler 的增删/关闭统一用一把进程级锁串行化，消除并发竞态。
+_REPORT_LOG_PARENT_LOGGERS = ('mirofish.report_agent', 'mirofish.zep_tools')
+
+# 当前执行上下文正在生成的 report_id（无则 None）
+_current_report_id: "contextvars.ContextVar[Optional[str]]" = contextvars.ContextVar(
+    'mirofish_current_report_id', default=None
+)
+
+# 串行化 FileHandler 的 addHandler/removeHandler/close（EXECPLAN2 F-7-1）
+_console_handler_lock = threading.Lock()
+
+
+class _ReportIdStampFilter(logging.Filter):
+    """EXECPLAN2 F-7-1: 把当前上下文的 report_id 打到每条 record 上（始终放行）。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        if not hasattr(record, 'report_id'):
+            record.report_id = _current_report_id.get()
+        return True
+
+
+class _ReportIdMatchFilter(logging.Filter):
+    """EXECPLAN2 F-7-1: 仅放行属于本报告（report_id 匹配）的 record，杜绝并发串扰。"""
+
+    def __init__(self, report_id: str):
+        super().__init__()
+        self.report_id = report_id
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        return getattr(record, 'report_id', None) == self.report_id
+
+
+def _ensure_stamp_filters_installed() -> None:
+    """EXECPLAN2 F-7-1: 在父 logger 上幂等安装打戳过滤器（仅安装一次）。"""
+    for name in _REPORT_LOG_PARENT_LOGGERS:
+        lg = logging.getLogger(name)
+        if not any(isinstance(f, _ReportIdStampFilter) for f in lg.filters):
+            lg.addFilter(_ReportIdStampFilter())
 
 
 class ReportLogger:
@@ -258,35 +311,61 @@ class ReportLogger:
         self,
         section_title: str,
         section_index: int,
-        full_content: str
+        full_content: str,
+        telemetry: Optional[Dict[str, Any]] = None
     ):
         """
         记录章节生成完成
 
         前端应监听此日志来判断一个章节是否真正完成，并获取完整内容
+
+        EXECPLAN2 I-5-4: telemetry（可选）携带本章节触发的 LLM 计量
+        {llm_calls, tool_calls, total_tokens, est_cost_usd, duration_s}。
+        缺省为 None 时本条日志与历史完全一致（额外键为可选、向后兼容）。
         """
+        details = {
+            "content": full_content,
+            "content_length": len(full_content),
+            "message": f"章节 {section_title} 生成完成"
+        }
+        # EXECPLAN2 I-5-4: 仅在有遥测时附加，旧 log reader 不受影响
+        if telemetry:
+            details["telemetry"] = telemetry
         self.log(
             action="section_complete",
             stage="generating",
             section_title=section_title,
             section_index=section_index,
-            details={
-                "content": full_content,
-                "content_length": len(full_content),
-                "message": f"章节 {section_title} 生成完成"
-            }
+            details=details
         )
-    
-    def log_report_complete(self, total_sections: int, total_time_seconds: float):
-        """记录报告生成完成"""
+
+    def log_report_complete(
+        self,
+        total_sections: int,
+        total_time_seconds: float,
+        section_rollup: Optional[List[Dict[str, Any]]] = None,
+        totals: Optional[Dict[str, Any]] = None
+    ):
+        """记录报告生成完成
+
+        EXECPLAN2 I-5-4: section_rollup / totals（皆可选）携带 per-section 与报告级的
+        {llm_calls, tool_calls, tokens, est_cost_usd, duration_s} 汇总。缺省时本条日志
+        与历史完全一致（额外键为可选、向后兼容）。
+        """
+        details = {
+            "total_sections": total_sections,
+            "total_time_seconds": round(total_time_seconds, 2),
+            "message": "报告生成完成"
+        }
+        # EXECPLAN2 I-5-4: 仅在有遥测时附加汇总，避免给历史 reader 引入空字段
+        if section_rollup is not None:
+            details["section_rollup"] = section_rollup
+        if totals is not None:
+            details["telemetry_totals"] = totals
         self.log(
             action="report_complete",
             stage="completed",
-            details={
-                "total_sections": total_sections,
-                "total_time_seconds": round(total_time_seconds, 2),
-                "message": "报告生成完成"
-            }
+            details=details
         )
     
     def log_error(self, error_message: str, stage: str, section_title: str = None):
@@ -324,6 +403,9 @@ class ReportConsoleLogger:
         )
         self._ensure_log_file()
         self._file_handler = None
+        # EXECPLAN2 F-7-1: 绑定当前执行上下文到本 report_id，使该上下文（及其衍生线程）
+        # 发射的日志都被打戳为本报告，从而只写进本报告的 console_log.txt。
+        self._ctx_token = _current_report_id.set(report_id)
         self._setup_file_handler()
     
     def _ensure_log_file(self):
@@ -332,9 +414,7 @@ class ReportConsoleLogger:
         os.makedirs(log_dir, exist_ok=True)
     
     def _setup_file_handler(self):
-        """设置文件处理器，将日志同时写入文件"""
-        import logging
-        
+        """设置文件处理器，将日志同时写入文件（EXECPLAN2 F-7-1：仅写本报告自己的日志）"""
         # 创建文件处理器
         self._file_handler = logging.FileHandler(
             self.log_file_path,
@@ -342,44 +422,46 @@ class ReportConsoleLogger:
             encoding='utf-8'
         )
         self._file_handler.setLevel(logging.INFO)
-        
+
         # 使用与控制台相同的简洁格式
         formatter = logging.Formatter(
             '[%(asctime)s] %(levelname)s: %(message)s',
             datefmt='%H:%M:%S'
         )
         self._file_handler.setFormatter(formatter)
-        
-        # 添加到 report_agent 相关的 logger
-        loggers_to_attach = [
-            'mirofish.report_agent',
-            'mirofish.zep_tools',
-        ]
-        
-        for logger_name in loggers_to_attach:
-            target_logger = logging.getLogger(logger_name)
-            # 避免重复添加
-            if self._file_handler not in target_logger.handlers:
-                target_logger.addHandler(self._file_handler)
-    
-    def close(self):
-        """关闭文件处理器并从 logger 中移除"""
-        import logging
-        
-        if self._file_handler:
-            loggers_to_detach = [
-                'mirofish.report_agent',
-                'mirofish.zep_tools',
-            ]
-            
-            for logger_name in loggers_to_detach:
+        # EXECPLAN2 F-7-1: 只放行本报告（report_id 匹配）的 record，避免并发时多报告日志串扰
+        self._file_handler.addFilter(_ReportIdMatchFilter(self.report_id))
+
+        # EXECPLAN2 F-7-1: 确保父 logger 已装打戳过滤器；handler 增删用进程级锁串行化
+        with _console_handler_lock:
+            _ensure_stamp_filters_installed()
+            for logger_name in _REPORT_LOG_PARENT_LOGGERS:
                 target_logger = logging.getLogger(logger_name)
-                if self._file_handler in target_logger.handlers:
-                    target_logger.removeHandler(self._file_handler)
-            
-            self._file_handler.close()
-            self._file_handler = None
-    
+                # 避免重复添加
+                if self._file_handler not in target_logger.handlers:
+                    target_logger.addHandler(self._file_handler)
+
+    def close(self):
+        """关闭文件处理器并从 logger 中移除（EXECPLAN2 F-7-1：加锁串行化，消除并发竞态）"""
+        with _console_handler_lock:
+            if self._file_handler:
+                for logger_name in _REPORT_LOG_PARENT_LOGGERS:
+                    target_logger = logging.getLogger(logger_name)
+                    if self._file_handler in target_logger.handlers:
+                        target_logger.removeHandler(self._file_handler)
+
+                self._file_handler.close()
+                self._file_handler = None
+        # 还原本报告占用的 ContextVar 上下文（EXECPLAN2 F-7-1）
+        token = getattr(self, '_ctx_token', None)
+        if token is not None:
+            try:
+                _current_report_id.reset(token)
+            except (ValueError, LookupError):
+                # 跨线程/上下文 reset 可能失败，忽略即可（仅影响打戳，handler 已移除不再写）
+                pass
+            self._ctx_token = None
+
     def __del__(self):
         """析构时确保关闭文件处理器"""
         self.close()
@@ -454,9 +536,13 @@ class Report:
     created_at: str = ""
     completed_at: str = ""
     error: Optional[str] = None
-    
+    # EXECPLAN2 I-5-4: 报告级 LLM 成本/时延/工具调用紧凑汇总（per-section + totals）。
+    # 仅在 LLM_TELEMETRY_ENABLED 且 REPORT_TELEMETRY 同时开启时填充；否则为 None，
+    # to_dict 输出与历史完全一致（向后兼容，前端可据此显示「本报告耗费 ~$X / Y秒 / Z章」）。
+    telemetry: Optional[Dict[str, Any]] = None
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "report_id": self.report_id,
             "simulation_id": self.simulation_id,
             "graph_id": self.graph_id,
@@ -468,6 +554,10 @@ class Report:
             "completed_at": self.completed_at,
             "error": self.error
         }
+        # EXECPLAN2 I-5-4: 仅在有遥测数据时附加该键，避免给历史 reader 引入空字段
+        if self.telemetry is not None:
+            d["telemetry"] = self.telemetry
+        return d
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -989,6 +1079,9 @@ class ReportAgent:
         self.base_simulation_id = base_simulation_id or None
         self._background_block = self._build_background_block()
         self._sources_index = self._build_sources_index()
+        # EXECPLAN2 I-3-2: 模拟量化信号包（确定性接地下限），懒构建一次后缓存；
+        # 关闭 REPORT_SIGNAL_PACK 时始终为空串，_prepend_research_background 自动跳过（行为不变）。
+        self._signal_pack = ""
 
         self.llm = llm_client or LLMClient()
         self.zep_tools = zep_tools or ZepToolsService()
@@ -1000,6 +1093,13 @@ class ReportAgent:
         self.report_logger: Optional[ReportLogger] = None
         # 控制台日志记录器（在 generate_report 中初始化）
         self.console_logger: Optional[ReportConsoleLogger] = None
+        # EXECPLAN2 F-7-3: chat() 解析到的报告做实例级记忆，避免同一 agent 多次对话重复扫描解析。
+        # simulation_id 在 agent 生命周期内固定，缓存安全；用哨兵区分「未解析」与「解析为 None」。
+        self._cached_report_sentinel = object()
+        self._cached_report = self._cached_report_sentinel
+        # EXECPLAN2 I-5-4: 当前章节的工具调用计数器（_execute_tool 单一汇聚点累加），
+        # 用于 per-section 遥测；未开遥测时该计数依旧无害地维护，开销可忽略。
+        self._section_tool_calls = 0
         
         logger.info(f"ReportAgent 初始化完成: graph_id={graph_id}, simulation_id={simulation_id}")
 
@@ -1025,17 +1125,46 @@ class ReportAgent:
             f"【背景档案（深度研究·权威，as-of {aod}）】" if aod
             else "【背景档案（深度研究·权威）】"
         )
-        return (
+        parts = [
             f"{header}\n"
             "以下为本次预测所依据的深度研究实证档案（角色/关系/时间线/热点均为调研确认）。"
             "撰写时以此为权威背景：优先复用其中真实人名/机构/关系，再用工具补充模拟动态与量化结果。\n\n"
             f"{sb}"
-        )
+        ]
+        # EXECPLAN2 I-0-5/I-0-1/I-0-2: 钉入研究契约富化块（定量事实表/争议证据/预测输入）。
+        # 渲染器在 actors.py，皆 degrade-safe（无对应字段返回空串）；受 RESEARCH_FORECAST_INPUTS /
+        # RESEARCH_EVIDENCE_GRADING 旗标约束（默认开），关闭即回退到仅 situation_brief 的旧行为。
+        try:
+            from ..utils import actors as _actors
+            if getattr(Config, "RESEARCH_FORECAST_INPUTS", True):
+                for blk in (_actors.quantitative_facts_block(self.actors),
+                            _actors.forecast_inputs_block(self.actors)):
+                    if blk:
+                        parts.append(blk)
+            if getattr(Config, "RESEARCH_EVIDENCE_GRADING", True):
+                cb = _actors.contested_claims_block(self.actors)
+                if cb:
+                    parts.append(cb)
+        except Exception as _e:
+            logger.debug(f"研究契约富化块渲染跳过: {_e}")
+        return "\n\n".join(parts)
 
     def _build_sources_index(self) -> str:
-        """T4.1: 把研究来源渲染成 [S1]/[S2] 引用索引；缺省返回空串。"""
+        """T4.1: 把研究来源渲染成 [S1]/[S2] 引用索引；缺省返回空串。
+
+        EXECPLAN2 I-0-0: 当 RESEARCH_EVIDENCE_GRADING 开启且来源带 tier/date 时，改用
+        按可信度分层（S1-S4）的索引渲染（actors.sources_index_tiered），否则回退到原始位置索引。
+        """
         if not self.sources:
             return ""
+        if getattr(Config, "RESEARCH_EVIDENCE_GRADING", True):
+            try:
+                from ..utils import actors as _actors
+                tiered = _actors.sources_index_tiered(self.sources)
+                if tiered:
+                    return tiered
+            except Exception as _e:
+                logger.debug(f"分层来源索引渲染跳过，回退位置索引: {_e}")
         lines = ["【可引用来源（正文用 [S1]/[S2] 形式标注）】"]
         for i, s in enumerate(self.sources[:40], 1):
             if not isinstance(s, dict):
@@ -1049,11 +1178,254 @@ class ReportAgent:
         return "\n".join(lines) if len(lines) > 1 else ""
 
     def _prepend_research_background(self, prompt: str) -> str:
-        """T4.1: 把背景档案 + 来源索引钉到提示词最前；二者皆空时原样返回（回退冷图路径）。"""
-        prefix_parts = [p for p in (self._background_block, self._sources_index) if p]
+        """T4.1: 把背景档案 + 来源索引钉到提示词最前；二者皆空时原样返回（回退冷图路径）。
+
+        EXECPLAN2 I-3-2: 同时钉入模拟量化信号包（self._signal_pack），使每个章节都获得确定性的
+        量化接地下限。信号包为空（未开启或无结构化数据）时自动跳过，行为与历史一致。
+        """
+        prefix_parts = [p for p in (self._background_block, self._sources_index, self._signal_pack) if p]
         if not prefix_parts:
             return prompt
         return "\n\n".join(prefix_parts) + "\n\n" + prompt
+
+    def _build_signal_pack(self) -> str:
+        """EXECPLAN2 I-3-2: 组装一份紧凑、确定性的「模拟量化信号包」，钉进每个章节提示词。
+
+        内容来自既有的确定性结构化工具（simulation_outcomes / coalition_map / scenario_diff），
+        全部为可直接引用的硬数字（Top actor / 逐轮动作量 + 峰值 / 动作类型分布 / 派系数与规模
+        / 反事实差异）。任一子块缺失时其友好降级串会被截断逻辑过滤掉，整包自我抑制。
+
+        计算一次后缓存在 self._signal_pack；仅在 Config.REPORT_SIGNAL_PACK 为真时调用。
+        篇幅有界（单块各自截断），避免给每个章节提示词注入过量 token。
+        """
+        parts: List[str] = []
+        # 1) 量化结果（Top actor / 逐轮动作量 + 峰值 / 动作类型分布）——截断到 ~1800 字
+        try:
+            outcomes = self.zep_tools.simulation_outcomes(self.simulation_id, top_n=8)
+            if outcomes and not outcomes.strip().startswith("（"):
+                parts.append(outcomes[:1800])
+        except Exception as e:  # noqa: BLE001 — 信号包为可选增强，失败仅告警不影响主流程
+            logger.warning(f"信号包 simulation_outcomes 计算失败（忽略）: {e}")
+        # 2) 派系/联盟结构——截断到 ~800 字
+        try:
+            coalitions = self.zep_tools.coalition_map(self.graph_id, self.simulation_id)
+            if coalitions and not coalitions.strip().startswith("（"):
+                parts.append(coalitions[:800])
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"信号包 coalition_map 计算失败（忽略）: {e}")
+        # 3) 反事实差异（仅情景报告有基线时）——截断到 ~1200 字
+        if self.base_simulation_id:
+            try:
+                diff = self.zep_tools.scenario_diff(self.base_simulation_id, self.simulation_id)
+                if diff and not diff.strip().startswith("（"):
+                    parts.append(diff[:1200])
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"信号包 scenario_diff 计算失败（忽略）: {e}")
+
+        if not parts:
+            return ""
+        header = (
+            "【模拟量化信号（确定性·权威·可直接引用）】\n"
+            "以下数字直接来自本次模拟的结构化聚合，撰写本章时应至少引用其中相关的具体数值"
+            "（如最活跃 Agent、逐轮动作量、峰值轮次、派系规模、基线-情景差值），"
+            "避免出现「只有叙事、没有数字」的章节。需要更细粒度时再调用工具深挖。"
+        )
+        return header + "\n\n" + "\n\n".join(parts)
+
+    # ──────────────────────────────────────────────────────────────
+    # EXECPLAN2 I-3-4: 结构化「基线 vs 情景」对比表（确定性，无 LLM）
+    # 数据源与 zep_tools.scenario_diff 完全一致（SimulationRunner 的
+    # get_timeline / get_agent_stats），保证「按构造即正确」，让 LLM 围绕
+    # 权威表格叙述而非自行复算差值（避免反转 delta 符号或漏维度）。
+    # ──────────────────────────────────────────────────────────────
+    def _scenario_diff_structured(self) -> Optional[Dict[str, Any]]:
+        """把基线/情景两次模拟归一化为可比维度的字典。
+
+        返回 {dimensions:[{name, baseline, scenario, delta, verdict}], rounds_*}；
+        无基线或两侧均无数据时返回 None（调用方自动跳过，行为不变）。
+        """
+        if not self.base_simulation_id:
+            return None
+        try:
+            from .simulation_runner import SimulationRunner
+            base_tl = SimulationRunner.get_timeline(self.base_simulation_id) or []
+            scen_tl = SimulationRunner.get_timeline(self.simulation_id) or []
+            base_stats = SimulationRunner.get_agent_stats(self.base_simulation_id) or []
+            scen_stats = SimulationRunner.get_agent_stats(self.simulation_id) or []
+        except Exception as e:  # noqa: BLE001 — 对比表为可选增强，失败返回 None 即跳过
+            logger.warning(f"结构化对比表读取模拟数据失败（忽略）: {e}")
+            return None
+        if not (base_tl or scen_tl):
+            return None
+
+        def _total(tl):
+            return sum(int(r.get("total_actions", 0)) for r in tl)
+
+        def _peak(tl):
+            return max(tl, key=lambda r: r.get("total_actions", 0), default=None)
+
+        dims: List[Dict[str, Any]] = []
+
+        # 维度1：总动作量（数值高低判定）
+        bt, st = _total(base_tl), _total(scen_tl)
+        pct = ((st - bt) / bt * 100) if bt else 0.0
+        dims.append({
+            "name": "总动作量",
+            "baseline": bt,
+            "scenario": st,
+            "delta": f"{st - bt:+d}（{pct:+.1f}%）",
+            "verdict": "更高" if st > bt else ("更低" if st < bt else "持平"),
+        })
+
+        # 维度2：峰值轮次（时间早晚判定 —— 情景峰值更早=更快爆发）
+        bp, sp = _peak(base_tl), _peak(scen_tl)
+        if bp and sp:
+            br, sr = int(bp["round_num"]), int(sp["round_num"])
+            dims.append({
+                "name": "峰值轮次",
+                "baseline": f"round {br}（{bp['total_actions']}）",
+                "scenario": f"round {sr}（{sp['total_actions']}）",
+                "delta": f"{sr - br:+d} 轮",
+                "verdict": "更早" if sr < br else ("更晚" if sr > br else "同轮"),
+            })
+
+        # 维度3：执行轮数（升温/降温速度的代理）
+        bl, sl = len(base_tl), len(scen_tl)
+        dims.append({
+            "name": "执行轮数",
+            "baseline": bl,
+            "scenario": sl,
+            "delta": f"{sl - bl:+d}",
+            "verdict": "更长" if sl > bl else ("更短" if sl < bl else "持平"),
+        })
+
+        # 维度4：参与 Agent 数（动员广度）
+        b_agents = len(base_stats)
+        s_agents = len(scen_stats)
+        dims.append({
+            "name": "参与 Agent 数",
+            "baseline": b_agents,
+            "scenario": s_agents,
+            "delta": f"{s_agents - b_agents:+d}",
+            "verdict": "更多" if s_agents > b_agents else ("更少" if s_agents < b_agents else "持平"),
+        })
+
+        # 维度5：变化最大的 Top mover（活跃度 delta 绝对值最大者）
+        b_by = {s.get("agent_name"): int(s.get("total_actions", 0)) for s in base_stats}
+        s_by = {s.get("agent_name"): int(s.get("total_actions", 0)) for s in scen_stats}
+        names = [n for n in (set(b_by) | set(s_by)) if n]
+        if names:
+            top_name = max(names, key=lambda n: abs(s_by.get(n, 0) - b_by.get(n, 0)))
+            d = s_by.get(top_name, 0) - b_by.get(top_name, 0)
+            dims.append({
+                "name": "活跃度变化最大 Agent",
+                "baseline": f"{top_name}: {b_by.get(top_name, 0)}",
+                "scenario": f"{top_name}: {s_by.get(top_name, 0)}",
+                "delta": f"{d:+d}",
+                "verdict": "升" if d > 0 else ("降" if d < 0 else "不变"),
+            })
+
+        return {
+            "base_simulation_id": self.base_simulation_id,
+            "scenario_simulation_id": self.simulation_id,
+            "scenario_label": self.scenario_label,
+            "dimensions": dims,
+        }
+
+    @staticmethod
+    def _is_comparison_section(title: str) -> bool:
+        """EXECPLAN2 I-3-4: 判定某章节是否为「情景对比 / 反事实」章节。
+
+        plan_outline 在有基线时已强制大纲含标题含「情景对比」或「反事实」的章节，
+        这里据此识别需要前置对比表的章节。"""
+        t = (title or "")
+        return ("情景对比" in t) or ("反事实" in t)
+
+    @staticmethod
+    def _render_comparison_table(diff_dict: Dict[str, Any]) -> str:
+        """EXECPLAN2 I-3-4: 把结构化对比字典渲染为 GFM Markdown 表格（数据缺失的行自动跳过）。"""
+        dims = diff_dict.get("dimensions") or []
+        if not dims:
+            return ""
+
+        def _esc(v: Any) -> str:
+            # 表格单元转义竖线/换行，避免破坏 Markdown 表格结构
+            return str(v).replace("|", "\\|").replace("\n", " ").strip()
+
+        scen_label = (diff_dict.get("scenario_label") or "").strip()
+        scen_col = f"情景（{scen_label}）" if scen_label else "情景"
+        lines = [
+            "**基线 vs 情景 结构化对比（确定性聚合，权威）**",
+            "",
+            f"| 维度 | 基线 | {_esc(scen_col)} | Δ | 判定 |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        for d in dims:
+            lines.append(
+                f"| {_esc(d.get('name'))} | {_esc(d.get('baseline'))} | "
+                f"{_esc(d.get('scenario'))} | {_esc(d.get('delta'))} | {_esc(d.get('verdict'))} |"
+            )
+        lines.append("")
+        lines.append("> 上表为确定性聚合结果，正文请围绕这些权威差值展开解读，勿自行复算或反转方向。")
+        return "\n".join(lines)
+
+    # ──────────────────────────────────────────────────────────────
+    # EXECPLAN2 I-5-4: 报告级 LLM 成本/时延遥测（per-section + totals）
+    # 复用中央 LLMMeter（按 run_id=report_id 聚合）。每章节前后各取一次累计快照，
+    # 相减即为该章节触发的 LLM 经济学（tokens / cost / latency / calls）。
+    # 全程 degrade-safe：未开 LLM_TELEMETRY_ENABLED & REPORT_TELEMETRY 时不调用本逻辑。
+    # ──────────────────────────────────────────────────────────────
+    def _telemetry_enabled(self) -> bool:
+        """两个开关都为真才采集：底层计量已开（LLM_TELEMETRY_ENABLED），且报告级汇总已开。"""
+        return bool(
+            getattr(Config, "LLM_TELEMETRY_ENABLED", False)
+            and getattr(Config, "REPORT_TELEMETRY", False)
+        )
+
+    def _meter_total(self, run_id: str) -> Dict[str, Any]:
+        """读取本 run 的累计 LLM 计量 total（失败返回零值，绝不抛出）。
+
+        用于 per-section 区间差值：章节循环期间 stage 恒为 'report'，故 total 的增量即本章节
+        触发的 LLM 经济学（哪怕 run_id 与上游共享，区间差值仍只含本报告期间的调用）。
+        """
+        try:
+            return dict(LLMMeter.snapshot(run_id).get("total") or {})
+        except Exception:  # noqa: BLE001 — 遥测读取失败不得影响报告生成
+            return {}
+
+    def _meter_stage_total(self, run_id: str, stage: str = "report") -> Dict[str, Any]:
+        """读取本 run 中指定 stage 的累计 LLM 计量（失败返回零值，绝不抛出）。
+
+        用于报告级 totals：当 run_id 是上游编排器的共享 run（如 pipeline_id）时，total 会混入
+        其它阶段（research/ontology/...）的调用；按 stage='report' 切片可只统计报告阶段花销。
+        """
+        try:
+            by_stage = LLMMeter.snapshot(run_id).get("by_stage") or {}
+            return dict(by_stage.get(stage) or {})
+        except Exception:  # noqa: BLE001 — 遥测读取失败不得影响报告生成
+            return {}
+
+    @staticmethod
+    def _meter_delta(before: Dict[str, Any], after: Dict[str, Any], duration_s: float,
+                     tool_calls: int) -> Dict[str, Any]:
+        """两次 total 快照相减，得到一段区间内的紧凑遥测条目。"""
+        def _g(d: Dict[str, Any], k: str) -> float:
+            try:
+                return float(d.get(k, 0) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        llm_calls = int(_g(after, "calls") - _g(before, "calls"))
+        tokens = int(_g(after, "total_tokens") - _g(before, "total_tokens"))
+        cost = round(_g(after, "cost_usd") - _g(before, "cost_usd"), 6)
+        latency_ms = round(_g(after, "latency_ms") - _g(before, "latency_ms"), 1)
+        return {
+            "llm_calls": max(0, llm_calls),
+            "tool_calls": max(0, int(tool_calls)),
+            "tokens": max(0, tokens),
+            "est_cost_usd": max(0.0, cost),
+            "latency_ms": max(0.0, latency_ms),
+            "duration_s": round(max(0.0, duration_s), 2),
+        }
 
 
     def _define_tools(self) -> Dict[str, Dict[str, Any]]:
@@ -1557,6 +1929,7 @@ class ReportAgent:
                 })
                 for c in calls:
                     tool_calls_count += 1
+                    self._section_tool_calls += 1  # EXECPLAN2 I-5-4: per-section 工具调用计数
                     try:
                         result = self._execute_tool(c["name"], c["arguments"], report_context=section.title)
                     except Exception as te:  # noqa: BLE001
@@ -1575,6 +1948,18 @@ class ReportAgent:
 
             # 无更多工具调用（或已达上限）→ 收尾出正文
             if content.strip():
+                # EXECPLAN2 F-7-2 工具调用不足且仍可继续检索 → 拒绝过早出正文，强制补足实证（对齐 ReAct 路径）
+                if tool_calls_count < self.MIN_TOOL_CALLS_PER_SECTION and tool_calls_count < max_tool_calls:
+                    messages.append({"role": "assistant", "content": content})
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            f"你只调用了 {tool_calls_count} 次工具，少于本章要求的至少 "
+                            f"{self.MIN_TOOL_CALLS_PER_SECTION} 次。请勿现在输出正文，"
+                            "继续发起工具调用以补足实证后再撰写本章。"
+                        ),
+                    })
+                    continue
                 return content
             # 达到工具上限但模型还没出正文：显式要求收尾
             messages.append({"role": "user", "content": "请基于以上工具结果直接输出本章完整 Markdown 正文。"})
@@ -1846,6 +2231,7 @@ class ReportAgent:
 
                 tool_calls_count += 1
                 used_tools.add(call['name'])
+                self._section_tool_calls += 1  # EXECPLAN2 I-5-4: per-section 工具调用计数
 
                 # 构建未使用工具提示
                 unused_tools = all_tools - used_tools
@@ -1994,7 +2380,28 @@ class ReportAgent:
         
         # 已完成的章节标题列表（用于进度追踪）
         completed_section_titles = []
-        
+
+        # EXECPLAN2 I-5-4: 报告级遥测 —— 设定 LLM 计量上下文的 stage='report'。
+        # run_id 优先沿用编排器已设定的 run（如 pipeline_id，便于跨阶段汇总）；独立生成
+        # （无上游 run）时退回 report_id，使手动报告也被计量。保存旧上下文，finally 中还原，
+        # 避免污染复用线程/调用方。默认关闭时不动上下文。
+        _telemetry_on = self._telemetry_enabled()
+        _prev_run_ctx = None
+        _telemetry_run_id = report_id  # 实际用于 LLMMeter 快照的 run 键
+        _report_stage_before: Dict[str, Any] = {}  # 报告开始时 stage='report' 的基线快照
+        section_rollup: List[Dict[str, Any]] = []  # I-5-4: per-section 遥测条目
+        if _telemetry_on:
+            try:
+                _prev_run_ctx = get_run_context()
+                # 沿用上游 run_id（若已设），否则用 report_id；stage 统一标记为 'report'
+                _telemetry_run_id = (_prev_run_ctx[0] if _prev_run_ctx and _prev_run_ctx[0] else report_id)
+                set_run_context(_telemetry_run_id, "report")
+                # 基线：共享 run 上可能已有其它报告的 report 阶段花销，取差值才是本报告真实花销
+                _report_stage_before = self._meter_stage_total(_telemetry_run_id, "report")
+            except Exception:  # noqa: BLE001 — 遥测初始化失败不得影响报告生成
+                _telemetry_on = False
+                _telemetry_run_id = report_id
+
         try:
             # 初始化：创建报告文件夹并保存初始状态
             ReportManager._ensure_report_folder(report_id)
@@ -2050,7 +2457,18 @@ class ReportAgent:
             
             # 阶段2: 逐章节生成（分章节保存）
             report.status = ReportStatus.GENERATING
-            
+
+            # EXECPLAN2 I-3-2: 构建一次模拟量化信号包，钉进随后每个章节提示词（确定性接地下限）。
+            # 关闭 REPORT_SIGNAL_PACK 时不构建，self._signal_pack 保持空串，行为不变。
+            if getattr(Config, "REPORT_SIGNAL_PACK", False) and not self._signal_pack:
+                try:
+                    self._signal_pack = self._build_signal_pack()
+                    if self._signal_pack:
+                        logger.info(f"已注入模拟量化信号包（{len(self._signal_pack)} 字）到各章节提示词")
+                except Exception as _sp_err:  # noqa: BLE001 — 信号包为可选增强，失败不影响主流程
+                    logger.warning(f"构建模拟量化信号包失败（忽略）: {_sp_err}")
+                    self._signal_pack = ""
+
             total_sections = len(outline.sections)
             generated_sections = []  # 保存内容用于上下文
             failed_section_titles = []  # 记录生成失败（写入占位符）的章节，用于状态汇报
@@ -2074,6 +2492,12 @@ class ReportAgent:
                         f"正在生成章节: {section.title} ({section_num}/{total_sections})"
                     )
                 
+                # EXECPLAN2 I-5-4: per-section 遥测——记录本章节开始时刻与累计计量快照、
+                # 归零本章节工具计数；章节结束后相减得到该章节的 LLM 经济学。
+                _sec_started = time.monotonic()
+                _sec_meter_before = self._meter_total(_telemetry_run_id) if _telemetry_on else {}
+                self._section_tool_calls = 0
+
                 # 生成主章节内容。
                 # 纵深防御：单个章节的 LLM 调用可能抛异常（如 MiniMax 域内容审核 422
                 # new_sensitive、限流、网络错误）。绝不让单章节失败拖垮整份报告——捕获后
@@ -2101,6 +2525,31 @@ class ReportAgent:
                             pass
                     section_content = SECTION_FAILURE_PLACEHOLDER
 
+                # EXECPLAN2 I-3-4: 若为情景对比章节且开关开启，把确定性结构化对比表
+                # 前置到本章正文，使 LLM 围绕权威差值叙述（不复算/不反转方向）。
+                if (
+                    self.base_simulation_id
+                    and getattr(Config, "REPORT_COMPARISON_TABLE", False)
+                    and section_content != SECTION_FAILURE_PLACEHOLDER
+                    and self._is_comparison_section(section.title)
+                ):
+                    try:
+                        diff_dict = self._scenario_diff_structured()
+                        if diff_dict:
+                            table_md = self._render_comparison_table(diff_dict)
+                            if table_md:
+                                section_content = table_md + "\n\n" + section_content
+                                # 落盘结构化对比工件，供 UI / diff 工具消费
+                                cpath = os.path.join(
+                                    ReportManager._get_report_folder(report_id), "comparison.json"
+                                )
+                                write_text_atomic(
+                                    cpath, json.dumps(diff_dict, ensure_ascii=False, indent=2)
+                                )
+                                logger.info(f"已注入结构化对比表并写入 comparison.json: {report_id}")
+                    except Exception as _ct_err:  # noqa: BLE001 — 对比表为可选增强，失败不影响主流程
+                        logger.warning(f"注入结构化对比表失败（忽略）: {_ct_err}")
+
                 section.content = section_content
                 if section_content == SECTION_FAILURE_PLACEHOLDER:
                     failed_section_titles.append(section.title)
@@ -2114,11 +2563,28 @@ class ReportAgent:
                 # 记录章节完成日志
                 full_section_content = f"## {section.title}\n\n{section_content}"
 
+                # EXECPLAN2 I-5-4: 计算本章节遥测条目（LLM 调用/tokens/cost/latency + 工具调用）
+                _sec_telemetry = None
+                if _telemetry_on:
+                    try:
+                        _sec_after = self._meter_total(_telemetry_run_id)
+                        _sec_telemetry = self._meter_delta(
+                            _sec_meter_before, _sec_after,
+                            duration_s=time.monotonic() - _sec_started,
+                            tool_calls=self._section_tool_calls,
+                        )
+                        _sec_telemetry["section_title"] = section.title
+                        _sec_telemetry["section_index"] = section_num
+                        section_rollup.append(_sec_telemetry)
+                    except Exception:  # noqa: BLE001 — 遥测计算失败不得影响报告生成
+                        _sec_telemetry = None
+
                 if self.report_logger:
                     self.report_logger.log_section_full_complete(
                         section_title=section.title,
                         section_index=section_num,
-                        full_content=full_section_content.strip()
+                        full_content=full_section_content.strip(),
+                        telemetry=_sec_telemetry
                     )
 
                 logger.info(f"章节已保存: {report_id}/section_{section_num:02d}.md")
@@ -2146,6 +2612,31 @@ class ReportAgent:
             report.status = ReportStatus.COMPLETED
             report.completed_at = datetime.now().isoformat()
 
+            # EXECPLAN2 I-3-0/I-9-1/I-3-1: 可选追加「结构化预测」抽取 + 引用接地审计。
+            # 默认关；失败仅告警不影响主报告（degrade-safe）。
+            if getattr(Config, "REPORT_STRUCTURED_FORECAST", False):
+                try:
+                    from .forecast_extractor import (
+                        extract_structured_forecast, audit_citation_grounding, self_critique_forecast,
+                    )
+                    forecast = extract_structured_forecast(
+                        report.markdown_content, self.llm,
+                        situation_brief=getattr(self, "situation_brief", None),
+                    )
+                    # 可选红队自校准（I-3-5）：纠正过度自信/基率忽视
+                    if getattr(Config, "REPORT_FORECAST_SELF_CRITIQUE", False):
+                        forecast = self_critique_forecast(forecast, self.llm)
+                    forecast["citation_audit"] = audit_citation_grounding(report.markdown_content)
+                    fpath = os.path.join(ReportManager._get_report_folder(report_id), "forecast.json")
+                    write_text_atomic(fpath, json.dumps(forecast, ensure_ascii=False, indent=2))
+                    logger.info(
+                        f"结构化预测已生成: {report_id} "
+                        f"({len(forecast.get('scenarios', []))} 情景, "
+                        f"引用覆盖 {forecast['citation_audit'].get('coverage')})"
+                    )
+                except Exception as _fe:
+                    logger.warning(f"结构化预测抽取失败（忽略，不影响主报告）: {_fe}")
+
             # 报告整体仍标记为 completed（确实跑完了），但若有章节写入了失败占位符，
             # 必须显著告警，避免"假完成"掩盖失败章节（历史上是静默写入污染内容）。
             if failed_section_titles:
@@ -2157,14 +2648,63 @@ class ReportAgent:
             
             # 计算总耗时
             total_time_seconds = (datetime.now() - start_time).total_seconds()
-            
+
+            # EXECPLAN2 I-5-4: 汇总报告级遥测（per-section rollup + totals），写入完成日志、
+            # telemetry.json 工件，并挂到 Report.telemetry 以便经 /report/<id> 与 by-simulation 暴露。
+            telemetry_totals = None
+            if _telemetry_on:
+                try:
+                    # 报告级 totals 取 stage='report' 切片并相对基线求差：
+                    # 即便 run_id 与上游/其它报告共享，也只计入本报告这次的报告阶段花销。
+                    def _diff(after: Dict[str, Any], before: Dict[str, Any], key: str) -> float:
+                        try:
+                            return float(after.get(key, 0) or 0) - float(before.get(key, 0) or 0)
+                        except (TypeError, ValueError):
+                            return 0.0
+                    snap_after = self._meter_stage_total(_telemetry_run_id, "report")
+                    telemetry_totals = {
+                        "report_id": report_id,
+                        "run_id": _telemetry_run_id,
+                        "total_sections": total_sections,
+                        "failed_sections": len(failed_section_titles),
+                        "duration_s": round(total_time_seconds, 2),
+                        "llm_calls": max(0, int(_diff(snap_after, _report_stage_before, "calls"))),
+                        "tokens": max(0, int(_diff(snap_after, _report_stage_before, "total_tokens"))),
+                        "prompt_tokens": max(0, int(_diff(snap_after, _report_stage_before, "prompt_tokens"))),
+                        "completion_tokens": max(0, int(_diff(snap_after, _report_stage_before, "completion_tokens"))),
+                        "est_cost_usd": round(max(0.0, _diff(snap_after, _report_stage_before, "cost_usd")), 6),
+                        "latency_ms": round(max(0.0, _diff(snap_after, _report_stage_before, "latency_ms")), 1),
+                        "tool_calls": sum(int(s.get("tool_calls", 0) or 0) for s in section_rollup),
+                    }
+                    report.telemetry = {"totals": telemetry_totals, "sections": section_rollup}
+                    try:
+                        tpath = os.path.join(
+                            ReportManager._get_report_folder(report_id), "telemetry.json"
+                        )
+                        write_text_atomic(
+                            tpath, json.dumps(report.telemetry, ensure_ascii=False, indent=2)
+                        )
+                    except Exception as _twe:  # noqa: BLE001 — 工件落盘失败不影响主流程
+                        logger.warning(f"telemetry.json 写入失败（忽略）: {_twe}")
+                    logger.info(
+                        f"报告遥测: {report_id} 共 {telemetry_totals['llm_calls']} 次 LLM 调用, "
+                        f"{telemetry_totals['tokens']} tokens, "
+                        f"~${telemetry_totals['est_cost_usd']:.4f}, "
+                        f"{telemetry_totals['duration_s']}s, {total_sections} 章"
+                    )
+                except Exception as _te:  # noqa: BLE001 — 遥测汇总失败不得影响报告完成
+                    logger.warning(f"报告级遥测汇总失败（忽略）: {_te}")
+                    telemetry_totals = None
+
             # 记录报告完成日志
             if self.report_logger:
                 self.report_logger.log_report_complete(
                     total_sections=total_sections,
-                    total_time_seconds=total_time_seconds
+                    total_time_seconds=total_time_seconds,
+                    section_rollup=(section_rollup if _telemetry_on else None),
+                    totals=telemetry_totals,
                 )
-            
+
             # 保存最终报告
             ReportManager.save_report(report)
             ReportManager.update_progress(
@@ -2207,11 +2747,27 @@ class ReportAgent:
             if self.console_logger:
                 self.console_logger.close()
                 self.console_logger = None
-            
+
             return report
-    
+
+        finally:
+            # EXECPLAN2 I-5-4: 还原进入本方法前的 LLM 计量上下文，避免污染复用线程/调用方。
+            if _telemetry_on and _prev_run_ctx is not None:
+                try:
+                    set_run_context(_prev_run_ctx[0], _prev_run_ctx[1])
+                except Exception:  # noqa: BLE001 — 还原失败仅影响后续计量归属，不影响报告
+                    pass
+
+    def _resolve_report_cached(self) -> Optional[Report]:
+        """EXECPLAN2 F-7-3: 解析本 simulation 的最新报告并在实例级记忆，避免重复扫描。"""
+        if self._cached_report is not self._cached_report_sentinel:
+            return self._cached_report
+        report = ReportManager.get_report_by_simulation(self.simulation_id)
+        self._cached_report = report
+        return report
+
     def chat(
-        self, 
+        self,
         message: str,
         chat_history: List[Dict[str, str]] = None
     ) -> Dict[str, Any]:
@@ -2238,7 +2794,7 @@ class ReportAgent:
         # 获取已生成的报告内容
         report_content = ""
         try:
-            report = ReportManager.get_report_by_simulation(self.simulation_id)
+            report = self._resolve_report_cached()  # EXECPLAN2 F-7-3: 实例级记忆 + 索引快路径
             if report and report.markdown_content:
                 # 限制报告长度，避免上下文过长（放宽到 40000 字以覆盖更长的报告）
                 report_content = report.markdown_content[:40000]
@@ -2347,7 +2903,13 @@ class ReportManager:
     
     # 报告存储目录
     REPORTS_DIR = os.path.join(Config.UPLOAD_FOLDER, 'reports')
-    
+
+    # EXECPLAN2 F-7-3: simulation_id -> [report_id, ...] 轻量索引文件，
+    # 让 get_report_by_simulation 免去对全部报告文件夹的 O(N) 全量扫描 + 全文反序列化。
+    _SIM_INDEX_FILENAME = "_sim_index.json"
+    # 串行化索引文件的读改写（同进程内）
+    _sim_index_lock = threading.Lock()
+
     @classmethod
     def _ensure_reports_dir(cls):
         """确保报告根目录存在"""
@@ -2374,7 +2936,92 @@ class ReportManager:
     def _get_report_markdown_path(cls, report_id: str) -> str:
         """获取完整报告Markdown文件路径"""
         return os.path.join(cls._get_report_folder(report_id), "full_report.md")
-    
+
+    # ── EXECPLAN2 F-7-3: simulation_id 轻量索引 + 仅读 meta 头部 ──
+
+    @classmethod
+    def _get_sim_index_path(cls) -> str:
+        """获取 simulation_id 索引文件路径"""
+        return os.path.join(cls.REPORTS_DIR, cls._SIM_INDEX_FILENAME)
+
+    @classmethod
+    def _read_report_meta(cls, report_id: str) -> Optional[Dict[str, Any]]:
+        """仅读取并解析某报告的 meta.json（不重建 Report、不读取 full_report.md）。
+
+        meta.json 内嵌了完整 markdown，json.load 仍会读全文；该方法主要用于在已知
+        候选 report_id 时只解析一次，避免遍历全部文件夹。读取失败返回 None。
+        """
+        path = cls._get_report_path(report_id)
+        if not os.path.exists(path):
+            old_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.json")
+            if not os.path.exists(old_path):
+                return None
+            path = old_path
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    @classmethod
+    def _load_sim_index(cls) -> Dict[str, List[str]]:
+        """读取 simulation_id -> [report_id, ...] 索引；缺失/损坏时返回空字典。"""
+        path = cls._get_sim_index_path()
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                # 规范化为 {sim_id: [report_id,...]}
+                norm: Dict[str, List[str]] = {}
+                for k, v in data.items():
+                    if isinstance(v, list):
+                        norm[k] = [str(x) for x in v]
+                    elif v:
+                        norm[k] = [str(v)]
+                return norm
+        except (OSError, json.JSONDecodeError):
+            pass
+        return {}
+
+    @classmethod
+    def _index_add(cls, simulation_id: str, report_id: str) -> None:
+        """把 (simulation_id, report_id) 写入索引（原子写、加锁，幂等）。EXECPLAN2 F-7-3"""
+        if not simulation_id or not report_id:
+            return
+        cls._ensure_reports_dir()
+        with cls._sim_index_lock:
+            index = cls._load_sim_index()
+            ids = index.get(simulation_id, [])
+            if report_id not in ids:
+                ids.append(report_id)
+            index[simulation_id] = ids
+            try:
+                write_json_atomic(cls._get_sim_index_path(), index, indent=2)
+            except Exception as e:  # noqa: BLE001 — 索引仅为优化，失败不应阻断保存
+                logger.warning(f"更新 simulation 索引失败（忽略，回退全量扫描）: {e}")
+
+    @classmethod
+    def _index_remove(cls, report_id: str) -> None:
+        """从索引中移除某 report_id（删除报告时调用）。EXECPLAN2 F-7-3"""
+        if not report_id:
+            return
+        with cls._sim_index_lock:
+            index = cls._load_sim_index()
+            changed = False
+            for sim_id in list(index.keys()):
+                if report_id in index[sim_id]:
+                    index[sim_id] = [r for r in index[sim_id] if r != report_id]
+                    changed = True
+                    if not index[sim_id]:
+                        del index[sim_id]
+            if changed:
+                try:
+                    write_json_atomic(cls._get_sim_index_path(), index, indent=2)
+                except Exception as e:  # noqa: BLE001 — 索引仅为优化，失败不阻断删除
+                    logger.warning(f"清理 simulation 索引失败（忽略）: {e}")
+
     @classmethod
     def _get_outline_path(cls, report_id: str) -> str:
         """获取大纲文件路径"""
@@ -2532,9 +3179,10 @@ class ReportManager:
         """
         cls._ensure_report_folder(report_id)
         
-        with open(cls._get_outline_path(report_id), 'w', encoding='utf-8') as f:
-            json.dump(outline.to_dict(), f, ensure_ascii=False, indent=2)
-        
+        # 原子写入，避免轮询端点读到半截 JSON（EXECPLAN2 F-7-6）
+        write_text_atomic(cls._get_outline_path(report_id),
+                          json.dumps(outline.to_dict(), ensure_ascii=False, indent=2))
+
         logger.info(f"大纲已保存: {report_id}")
     
     @classmethod
@@ -2568,8 +3216,7 @@ class ReportManager:
         # 保存文件
         file_suffix = f"section_{section_index:02d}.md"
         file_path = os.path.join(cls._get_report_folder(report_id), file_suffix)
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(md_content)
+        write_text_atomic(file_path, md_content)  # 原子写入（F-7-6）
 
         logger.info(f"章节已保存: {report_id}/{file_suffix}")
         return file_path
@@ -2668,9 +3315,9 @@ class ReportManager:
             "updated_at": datetime.now().isoformat()
         }
         
-        with open(cls._get_progress_path(report_id), 'w', encoding='utf-8') as f:
-            json.dump(progress_data, f, ensure_ascii=False, indent=2)
-    
+        write_text_atomic(cls._get_progress_path(report_id),
+                          json.dumps(progress_data, ensure_ascii=False, indent=2))  # 原子写入（F-7-6）
+
     @classmethod
     def get_progress(cls, report_id: str) -> Optional[Dict[str, Any]]:
         """获取报告生成进度"""
@@ -2735,11 +3382,10 @@ class ReportManager:
         # 后处理：清理整个报告的标题问题
         md_content = cls._post_process_report(md_content, outline)
         
-        # 保存完整报告
+        # 保存完整报告（原子写入，F-7-6）
         full_path = cls._get_report_markdown_path(report_id)
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(md_content)
-        
+        write_text_atomic(full_path, md_content)
+
         logger.info(f"完整报告已组装: {report_id}")
         return md_content
     
@@ -2874,26 +3520,32 @@ class ReportManager:
         """保存报告元信息和完整报告"""
         cls._ensure_report_folder(report.report_id)
         
-        # 保存元信息JSON
-        with open(cls._get_report_path(report.report_id), 'w', encoding='utf-8') as f:
-            json.dump(report.to_dict(), f, ensure_ascii=False, indent=2)
-        
+        # 保存元信息JSON（原子写入，F-7-6）
+        write_text_atomic(cls._get_report_path(report.report_id),
+                          json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+
         # 保存大纲
         if report.outline:
             cls.save_outline(report.report_id, report.outline)
-        
-        # 保存完整Markdown报告
+
+        # 保存完整Markdown报告（原子写入）
         if report.markdown_content:
-            with open(cls._get_report_markdown_path(report.report_id), 'w', encoding='utf-8') as f:
-                f.write(report.markdown_content)
-        
+            write_text_atomic(cls._get_report_markdown_path(report.report_id), report.markdown_content)
+
+        # EXECPLAN2 F-7-3: 维护 simulation_id -> report_id 轻量索引，加速 by-simulation 查询
+        cls._index_add(report.simulation_id, report.report_id)
+
         logger.info(f"报告已保存: {report.report_id}")
     
     @classmethod
     def get_report(cls, report_id: str) -> Optional[Report]:
         """获取报告"""
+        # EXECPLAN2 F-7-3: 保留文件名（索引）不是报告，直接忽略，避免误解析
+        if f"{report_id}.json" == cls._SIM_INDEX_FILENAME or report_id == cls._SIM_INDEX_FILENAME[:-5]:
+            return None
+
         path = cls._get_report_path(report_id)
-        
+
         if not os.path.exists(path):
             # 兼容旧格式：检查直接存储在reports目录下的文件
             old_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.json")
@@ -2901,10 +3553,16 @@ class ReportManager:
                 path = old_path
             else:
                 return None
-        
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+        # EXECPLAN2 F-7-3: 非报告结构（如索引/旧版无关 JSON）容错，返回 None 而非抛错
+        if not isinstance(data, dict) or 'report_id' not in data or 'simulation_id' not in data:
+            return None
+
         # 重建Report对象
         outline = None
         if data.get('outline'):
@@ -2940,30 +3598,78 @@ class ReportManager:
             markdown_content=markdown_content,
             created_at=data.get('created_at', ''),
             completed_at=data.get('completed_at', ''),
-            error=data.get('error')
+            error=data.get('error'),
+            telemetry=data.get('telemetry')  # EXECPLAN2 I-5-4: 从 meta.json 还原紧凑遥测，经 API 暴露
         )
     
     @classmethod
     def get_report_by_simulation(cls, simulation_id: str) -> Optional[Report]:
-        """根据模拟ID获取报告"""
+        """根据模拟ID获取报告（EXECPLAN2 F-7-0 / F-7-3）。
+
+        旧实现遍历 os.listdir 返回首个匹配项——listdir 顺序由文件系统决定，
+        force_regenerate 留下多份同 simulation 报告时返回的往往是过期报告且不确定。
+        新实现：
+          1) 先查 simulation_id 轻量索引（F-7-3），仅解析候选 report_id 的 meta，
+             避免对全部报告文件夹做 O(N) 全量扫描；
+          2) 在候选中按 created_at 取最新（确定性，对齐 list_reports 的排序，F-7-0 A）；
+          3) 索引缺失/未命中时回退全量扫描，同样按 created_at 取最新而非首个 listdir 命中。
+        """
         cls._ensure_reports_dir()
-        
+
+        # ① 索引快路径：候选 report_id -> (created_at, report_id)，仅读 meta 头部
+        index = cls._load_sim_index()
+        candidates: List[tuple] = []  # (created_at, report_id)
+        for rid in index.get(simulation_id, []):
+            meta = cls._read_report_meta(rid)
+            if meta and meta.get('simulation_id') == simulation_id:
+                candidates.append((meta.get('created_at', ''), rid))
+        if candidates:
+            best_rid = max(candidates, key=lambda x: x[0])[1]
+            report = cls.get_report(best_rid)
+            if report and report.simulation_id == simulation_id:
+                return report
+
+        # ② 回退：全量扫描，确定性地按 created_at 取最新（F-7-0 A）
+        matches: List[Report] = []
         for item in os.listdir(cls.REPORTS_DIR):
+            if item == cls._SIM_INDEX_FILENAME:  # EXECPLAN2 F-7-3: 跳过索引文件，避免误当报告解析
+                continue
             item_path = os.path.join(cls.REPORTS_DIR, item)
             # 新格式：文件夹
             if os.path.isdir(item_path):
                 report = cls.get_report(item)
                 if report and report.simulation_id == simulation_id:
-                    return report
+                    matches.append(report)
             # 兼容旧格式：JSON文件
             elif item.endswith('.json'):
                 report_id = item[:-5]
                 report = cls.get_report(report_id)
                 if report and report.simulation_id == simulation_id:
-                    return report
-        
-        return None
-    
+                    matches.append(report)
+
+        if not matches:
+            return None
+        return max(matches, key=lambda r: r.created_at)
+
+    @classmethod
+    def delete_other_reports_for_simulation(cls, simulation_id: str, keep_report_id: str) -> int:
+        """EXECPLAN2 F-7-0 (B 的 in-file 部分): 删除某 simulation 除 keep_report_id 外的所有报告，
+        修复 force_regenerate 留下的孤儿文件夹泄漏与过期短路。
+
+        仅在新报告已成功落盘后调用，确保该 simulation 不会被清成零报告。
+        调用方（api/report.py 等，跨文件不在本次改动范围）应在新报告 COMPLETED 后调用本方法。
+        返回删除的报告数量。
+        """
+        deleted = 0
+        for report in cls.list_reports(simulation_id=simulation_id, limit=10_000):
+            if report.report_id != keep_report_id:
+                try:
+                    if cls.delete_report(report.report_id):
+                        deleted += 1
+                except Exception as e:  # noqa: BLE001 — 清理失败不应影响主流程
+                    logger.warning(f"清理同 simulation 旧报告失败（忽略）: {report.report_id}: {e}")
+        return deleted
+
     @classmethod
     def list_reports(cls, simulation_id: Optional[str] = None, limit: int = 50) -> List[Report]:
         """列出报告"""
@@ -2971,6 +3677,8 @@ class ReportManager:
         
         reports = []
         for item in os.listdir(cls.REPORTS_DIR):
+            if item == cls._SIM_INDEX_FILENAME:  # EXECPLAN2 F-7-3: 跳过索引文件，避免误当报告解析
+                continue
             item_path = os.path.join(cls.REPORTS_DIR, item)
             # 新格式：文件夹
             if os.path.isdir(item_path):
@@ -2995,25 +3703,29 @@ class ReportManager:
     def delete_report(cls, report_id: str) -> bool:
         """删除报告（整个文件夹）"""
         import shutil
-        
+
         folder_path = cls._get_report_folder(report_id)
-        
+
         # 新格式：删除整个文件夹
         if os.path.exists(folder_path) and os.path.isdir(folder_path):
             shutil.rmtree(folder_path)
+            cls._index_remove(report_id)  # EXECPLAN2 F-7-3: 同步清理索引
             logger.info(f"报告文件夹已删除: {report_id}")
             return True
-        
+
         # 兼容旧格式：删除单独的文件
         deleted = False
         old_json_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.json")
         old_md_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.md")
-        
+
         if os.path.exists(old_json_path):
             os.remove(old_json_path)
             deleted = True
         if os.path.exists(old_md_path):
             os.remove(old_md_path)
             deleted = True
-        
+
+        if deleted:
+            cls._index_remove(report_id)  # EXECPLAN2 F-7-3: 同步清理索引
+
         return deleted

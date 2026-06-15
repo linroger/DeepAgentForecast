@@ -1,0 +1,300 @@
+{
+ "twitter": [
+  {
+   "round": 0,
+   "agent": "Kwak Noh-Jung",
+   "type": "CREATE_POST",
+   "content": "在2025年Q3财报电话会议上我已明确表态：HBM是AI基础设施的真正瓶颈，不是GPU算力本身，而是把算力连接起来的内存。SK海力士2026年HBM产能已全部售罄，Q3营业利润率高达71.8%，这印证了我们HBM先发战略的正确性。我们正按客户要求将HBM4量产提前，并继续推进龙仁集群建设，目标2030年前保持HBM技术领先两代以上。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "崔泰源（Chey Tae-won）",
+   "type": "CREATE_POST",
+   "content": "我在多个公开场合说过，存储芯片短缺将不是短期现象，而是会持续到2028年甚至2030年。AI基础设施建设的规模远超此前预期，HBM、DRAM、NAND全线供应紧张。SK海力士作为全球HBM领导者，责无旁贷要承担起供应AI时代核心元件的使命。我们已在韩国龙仁和美国印第安纳州投资数十亿美元扩建产能。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "李在镕（Lee Jae-yong）",
+   "type": "CREATE_POST",
+   "content": "在2025年Q3股东大会上，我对股东就三星在HBM领域失去技术领先地位公开致歉。三星电子将启动5年450万亿韩元投资计划，其中Pyeongtaek P5投资约80万亿韩元专攻HBM4。我们的目标明确：2026年通过NVIDIA Vera Rubin认证，2027年HBM4E节点重新夺回AI内存王座。290层V9 NAND已量产，1000层V-NAND路线图也在推进。三星依然是全球唯一具备DRAM+NAND+HBM全产品线的IDM。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Sanjay Mehrotra",
+   "type": "CREATE_POST",
+   "content": "内存产业已经正式进入'产能为王'阶段。过去我们靠工艺节点领先赚取溢价，未来五年谁能把HBM与DRAM产能变成可交付的晶圆，谁就赢得AI时代。2025年9月23日Q4财报创下美光历史纪录，HBM3E 12-Hi业务首次贡献利润。我们在爱达荷州Boise、纽约Clay、新加坡的产能布局，加上美国CHIPS法案约62亿美元补贴，将支撑美光2030年HBM份额突破30%。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Jensen Huang",
+   "type": "CREATE_POST",
+   "content": "HBM供应决定我们能交付多少AI系统，这不是夸张。2025年我们已要求SK海力士将HBM4量产提前6个月。供应链必须多元化——SK海力士约占65%、美光约25%、三星约10%。我们正在与三星深度合作，希望其HBM4能尽快通过Vera Rubin平台认证。我也与美国商务部沟通过，韩国HBM是全球AI供应链的关键环节，不应被出口管制过度限制。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Howard Lutnick",
+   "type": "CREATE_POST",
+   "content": "美国在内存领域将对中华人民共和国保持2—3代的领先优势，这是国家安全层面的承诺，不是商业可谈判议题。美国商务部BIS自2022年10月以来已三次升级对华存储设备出口管制，2024年12月又将140家中国实体列入清单。规则还会继续收紧，关键设备与技术不会落入对手手中。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "朱一明",
+   "type": "CREATE_POST",
+   "content": "2025年7月7日长鑫存储正式启动A股IPO，目标估值约1000亿元人民币。我们目前DDR5单die 16Gb/24Gb、速率8000Mbps，良率目标2025年底达到90%。月产能从2023年初9万片已扩张至2025年Q4约26万—29万片，2026年5月将达29万片，长期目标80万片/月。2026年5月海盗船Corsair已在Vengeance DDR5模组中采用我们的颗粒，这是国际供应链对我们的认可。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "陈南翔",
+   "type": "CREATE_POST",
+   "content": "长江存储在被列入美国实体清单后并未停止扩张。2025年7月23日我们宣布首条'全国产化'3D NAND产线于下半年导入试产，依托北方华创、中微公司、拓荆科技、华海清科等国产设备。我们的232层QLC 3D NAND密度19.8 Gbit/mm²仍是行业纪录，hybrid bonding技术领先国际大厂近一代。目标2026年底月产能15万片，占全球NAND供应量15%。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Christophe Fouquet",
+   "type": "CREATE_POST",
+   "content": "我们遵守所有适用的出口管制法规，但同样要明确：全球化对半导体产业有利，对华EUV完全禁运已持续多年。SK海力士、三星、美光的1c/1-gamma DRAM与HBM base die都依赖我们的EUV光刻机维持工艺竞争力。产业脱钩的代价，最终由全球芯片价格承担。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Tim Cook",
+   "type": "CREATE_POST",
+   "content": "苹果正在评估在iPhone 18系列以及MacBook产品中导入长江存储（YMTC）的NAND产品与长鑫存储（CXMT）的DRAM产品。供应链多元化与地缘风险分散是必须严肃考虑的议题，我们不会把所有鸡蛋放在同一个篮子里。最终决策将在2026年作出。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Counterpoint Research",
+   "type": "CREATE_POST",
+   "content": "Counterpoint Research 2025年Q4数据显示全球DRAM格局：三星38%、SK海力士29%、美光27%、长鑫存储5%。HBM方面，2025年Q2 SK海力士占62%、美光21%、三星17%。中国厂商在传统DRAM份额仍低于5%，但在NAND领域长江存储已占约8%。这些数字背后的技术差距与产能差距，才是真正的竞争维度。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "美国商务部工业与安全局（BIS）",
+   "type": "CREATE_POST",
+   "content": "美国商务部BIS自2022年10月7日首次发布对华先进存储芯片及设备全面出口管制规则以来，2023年10月17日、2024年12月、2025年继续三次升级。最新规则将限制扩大至14nm以下逻辑与18nm DRAM相关设备，140家中国实体被列入清单含多家CXMT/YMTC关联公司。我们的执法只会更严，不会放松。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "韩国产业通商资源部（METI）",
+   "type": "CREATE_POST",
+   "content": "韩国产业通商资源部于2025年发布K-半导体战略2.0，规划未来5年约26万亿韩元税收优惠，推动本土内存制造回流。该战略直接惠及SK海力士龙仁集群与三星Pyeongtaek P5。我们同时与美国商务部BIS保持密切协调，确保韩国企业对中国出口符合国际管制规则。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "国家集成电路产业投资基金（大基金三期）",
+   "type": "CREATE_POST",
+   "content": "国家集成电路产业投资基金（大基金三期）注册资本3440亿元人民币，将持续向长鑫存储、长江存储等中国存储龙头注资。大基金三期是中国半导体国家队意志的体现，不会因短期设备禁运而停止对国产存储的支持。这是国家战略，不是商业投资。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "TechInsights",
+   "type": "CREATE_POST",
+   "content": "TechInsights发布最新3D NAND技术路线图：三星290层V9已量产、V10约430层2025年导入、2030年规划1000层V-NAND；长江存储232层QLC领先但受限于DUV多重曝光；SK海力士在NAND领域相对保守。hybrid bonding技术差距是另一个关键变量——长江存储在该领域领先国际大厂近一代。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Dr Robert Castellano",
+   "type": "CREATE_POST",
+   "content": "长鑫存储的实际DDR5良率数据需要独立验证。根据行业分析，CXMT声称的'良率达80%、目标90%'与独立拆解报告得出的'实际20%—50%'之间存在显著差距。月产能从9万片扩张到29万片是事实，但晶圆良率与有效产出是两回事。投资者需要看清真实情况。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "HBM4",
+   "type": "CREATE_POST",
+   "content": "HBM4是下一代HBM的胜负手。SK海力士凭借HBM3E先发优势已锁定NVIDIA 2026年约三分之二需求，并与NVIDIA签署多年期独家供应MOU。三星押注Pyeongtaek P5约80万亿韩元投资，希望2026—2027年通过Vera Rubin Ultra HBM4E认证重夺份额。美光凭借CHIPS法案补贴与本土制造，2030年HBM份额有望突破30%。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "TrendForce",
+   "type": "CREATE_POST",
+   "content": "2025年11月26日 TrendForce预测：2025年Q4 DRAM合约价环比上涨45%—50%，2025全年DRAM合约价同比上涨50%以上。AI驱动的需求与有限的产能扩张形成历史性供需缺口，存储芯片已从'周期商品'转为'战略物资'。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "华硕",
+   "type": "CREATE_POST",
+   "content": "长江存储受美国实体清单限制，但仍通过白手套渠道向华硕、HP等品牌SSD厂商出货NAND产品。YMTC与华为形成国产存储+国产先进封装的垂直整合合作，部分抵消了直接出口受阻的影响。这是中国存储产业在设备禁运下'曲线突围'的典型路径。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Meta MTIA",
+   "type": "CREATE_POST",
+   "content": "Meta MTIA自研AI加速器对HBM容量与带宽提出差异化需求。我们需要HBM供应商提供定制化的HBM4/4E规格，而非完全跟随NVIDIA Vera Rubin平台的节奏。这可能改变HBM4规格博弈，让SK海力士、三星、美光在2026—2027年的份额分配上出现新变数。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "AMD",
+   "type": "CREATE_POST",
+   "content": "AMD MI400加速器对HBM的差异化需求可能重塑HBM4/4E规格博弈。三星电子已向我们供应HBM3E 12-Hi用于MI300/MI325，美光也在HBM供应名单中。我们将持续推动供应商多元化，避免被单一供应商锁定产能。",
+   "ok": true
+  }
+ ],
+ "reddit": [
+  {
+   "round": 0,
+   "agent": "Kwak Noh-Jung",
+   "type": "CREATE_POST",
+   "content": "在2025年Q3财报电话会议上我已明确表态：HBM是AI基础设施的真正瓶颈，不是GPU算力本身，而是把算力连接起来的内存。SK海力士2026年HBM产能已全部售罄，Q3营业利润率高达71.8%，这印证了我们HBM先发战略的正确性。我们正按客户要求将HBM4量产提前，并继续推进龙仁集群建设，目标2030年前保持HBM技术领先两代以上。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "崔泰源（Chey Tae-won）",
+   "type": "CREATE_POST",
+   "content": "我在多个公开场合说过，存储芯片短缺将不是短期现象，而是会持续到2028年甚至2030年。AI基础设施建设的规模远超此前预期，HBM、DRAM、NAND全线供应紧张。SK海力士作为全球HBM领导者，责无旁贷要承担起供应AI时代核心元件的使命。我们已在韩国龙仁和美国印第安纳州投资数十亿美元扩建产能。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "李在镕（Lee Jae-yong）",
+   "type": "CREATE_POST",
+   "content": "在2025年Q3股东大会上，我对股东就三星在HBM领域失去技术领先地位公开致歉。三星电子将启动5年450万亿韩元投资计划，其中Pyeongtaek P5投资约80万亿韩元专攻HBM4。我们的目标明确：2026年通过NVIDIA Vera Rubin认证，2027年HBM4E节点重新夺回AI内存王座。290层V9 NAND已量产，1000层V-NAND路线图也在推进。三星依然是全球唯一具备DRAM+NAND+HBM全产品线的IDM。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Sanjay Mehrotra",
+   "type": "CREATE_POST",
+   "content": "内存产业已经正式进入'产能为王'阶段。过去我们靠工艺节点领先赚取溢价，未来五年谁能把HBM与DRAM产能变成可交付的晶圆，谁就赢得AI时代。2025年9月23日Q4财报创下美光历史纪录，HBM3E 12-Hi业务首次贡献利润。我们在爱达荷州Boise、纽约Clay、新加坡的产能布局，加上美国CHIPS法案约62亿美元补贴，将支撑美光2030年HBM份额突破30%。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Jensen Huang",
+   "type": "CREATE_POST",
+   "content": "HBM供应决定我们能交付多少AI系统，这不是夸张。2025年我们已要求SK海力士将HBM4量产提前6个月。供应链必须多元化——SK海力士约占65%、美光约25%、三星约10%。我们正在与三星深度合作，希望其HBM4能尽快通过Vera Rubin平台认证。我也与美国商务部沟通过，韩国HBM是全球AI供应链的关键环节，不应被出口管制过度限制。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Howard Lutnick",
+   "type": "CREATE_POST",
+   "content": "美国在内存领域将对中华人民共和国保持2—3代的领先优势，这是国家安全层面的承诺，不是商业可谈判议题。美国商务部BIS自2022年10月以来已三次升级对华存储设备出口管制，2024年12月又将140家中国实体列入清单。规则还会继续收紧，关键设备与技术不会落入对手手中。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "朱一明",
+   "type": "CREATE_POST",
+   "content": "2025年7月7日长鑫存储正式启动A股IPO，目标估值约1000亿元人民币。我们目前DDR5单die 16Gb/24Gb、速率8000Mbps，良率目标2025年底达到90%。月产能从2023年初9万片已扩张至2025年Q4约26万—29万片，2026年5月将达29万片，长期目标80万片/月。2026年5月海盗船Corsair已在Vengeance DDR5模组中采用我们的颗粒，这是国际供应链对我们的认可。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "陈南翔",
+   "type": "CREATE_POST",
+   "content": "长江存储在被列入美国实体清单后并未停止扩张。2025年7月23日我们宣布首条'全国产化'3D NAND产线于下半年导入试产，依托北方华创、中微公司、拓荆科技、华海清科等国产设备。我们的232层QLC 3D NAND密度19.8 Gbit/mm²仍是行业纪录，hybrid bonding技术领先国际大厂近一代。目标2026年底月产能15万片，占全球NAND供应量15%。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Christophe Fouquet",
+   "type": "CREATE_POST",
+   "content": "我们遵守所有适用的出口管制法规，但同样要明确：全球化对半导体产业有利，对华EUV完全禁运已持续多年。SK海力士、三星、美光的1c/1-gamma DRAM与HBM base die都依赖我们的EUV光刻机维持工艺竞争力。产业脱钩的代价，最终由全球芯片价格承担。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Tim Cook",
+   "type": "CREATE_POST",
+   "content": "苹果正在评估在iPhone 18系列以及MacBook产品中导入长江存储（YMTC）的NAND产品与长鑫存储（CXMT）的DRAM产品。供应链多元化与地缘风险分散是必须严肃考虑的议题，我们不会把所有鸡蛋放在同一个篮子里。最终决策将在2026年作出。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Counterpoint Research",
+   "type": "CREATE_POST",
+   "content": "Counterpoint Research 2025年Q4数据显示全球DRAM格局：三星38%、SK海力士29%、美光27%、长鑫存储5%。HBM方面，2025年Q2 SK海力士占62%、美光21%、三星17%。中国厂商在传统DRAM份额仍低于5%，但在NAND领域长江存储已占约8%。这些数字背后的技术差距与产能差距，才是真正的竞争维度。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "美国商务部工业与安全局（BIS）",
+   "type": "CREATE_POST",
+   "content": "美国商务部BIS自2022年10月7日首次发布对华先进存储芯片及设备全面出口管制规则以来，2023年10月17日、2024年12月、2025年继续三次升级。最新规则将限制扩大至14nm以下逻辑与18nm DRAM相关设备，140家中国实体被列入清单含多家CXMT/YMTC关联公司。我们的执法只会更严，不会放松。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "韩国产业通商资源部（METI）",
+   "type": "CREATE_POST",
+   "content": "韩国产业通商资源部于2025年发布K-半导体战略2.0，规划未来5年约26万亿韩元税收优惠，推动本土内存制造回流。该战略直接惠及SK海力士龙仁集群与三星Pyeongtaek P5。我们同时与美国商务部BIS保持密切协调，确保韩国企业对中国出口符合国际管制规则。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "国家集成电路产业投资基金（大基金三期）",
+   "type": "CREATE_POST",
+   "content": "国家集成电路产业投资基金（大基金三期）注册资本3440亿元人民币，将持续向长鑫存储、长江存储等中国存储龙头注资。大基金三期是中国半导体国家队意志的体现，不会因短期设备禁运而停止对国产存储的支持。这是国家战略，不是商业投资。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "TechInsights",
+   "type": "CREATE_POST",
+   "content": "TechInsights发布最新3D NAND技术路线图：三星290层V9已量产、V10约430层2025年导入、2030年规划1000层V-NAND；长江存储232层QLC领先但受限于DUV多重曝光；SK海力士在NAND领域相对保守。hybrid bonding技术差距是另一个关键变量——长江存储在该领域领先国际大厂近一代。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Dr Robert Castellano",
+   "type": "CREATE_POST",
+   "content": "长鑫存储的实际DDR5良率数据需要独立验证。根据行业分析，CXMT声称的'良率达80%、目标90%'与独立拆解报告得出的'实际20%—50%'之间存在显著差距。月产能从9万片扩张到29万片是事实，但晶圆良率与有效产出是两回事。投资者需要看清真实情况。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "HBM4",
+   "type": "CREATE_POST",
+   "content": "HBM4是下一代HBM的胜负手。SK海力士凭借HBM3E先发优势已锁定NVIDIA 2026年约三分之二需求，并与NVIDIA签署多年期独家供应MOU。三星押注Pyeongtaek P5约80万亿韩元投资，希望2026—2027年通过Vera Rubin Ultra HBM4E认证重夺份额。美光凭借CHIPS法案补贴与本土制造，2030年HBM份额有望突破30%。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "TrendForce",
+   "type": "CREATE_POST",
+   "content": "2025年11月26日 TrendForce预测：2025年Q4 DRAM合约价环比上涨45%—50%，2025全年DRAM合约价同比上涨50%以上。AI驱动的需求与有限的产能扩张形成历史性供需缺口，存储芯片已从'周期商品'转为'战略物资'。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "华硕",
+   "type": "CREATE_POST",
+   "content": "长江存储受美国实体清单限制，但仍通过白手套渠道向华硕、HP等品牌SSD厂商出货NAND产品。YMTC与华为形成国产存储+国产先进封装的垂直整合合作，部分抵消了直接出口受阻的影响。这是中国存储产业在设备禁运下'曲线突围'的典型路径。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Meta MTIA",
+   "type": "CREATE_POST",
+   "content": "Meta MTIA自研AI加速器对HBM容量与带宽提出差异化需求。我们需要HBM供应商提供定制化的HBM4/4E规格，而非完全跟随NVIDIA Vera Rubin平台的节奏。这可能改变HBM4规格博弈，让SK海力士、三星、美光在2026—2027年的份额分配上出现新变数。",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "AMD",
+   "type": "CREATE_POST",
+   "content": "AMD MI400加速器对HBM的差异化需求可能重塑HBM4/4E规格博弈。三星电子已向我们供应HBM3E 12-Hi用于MI300/MI325，美光也在HBM供应名单中。我们将持续推动供应商多元化，避免被单一供应商锁定产能。",
+   "ok": true
+  }
+ ]
+}

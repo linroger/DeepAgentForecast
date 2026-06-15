@@ -231,65 +231,88 @@ class GraphBuilderService:
             return attr_name
         
         # 动态创建实体类型
+        # F-3-1: 本体来自 LLM（不可信边界），且 resume/复用路径会直接喂入持久化本体而不再
+        # 校验。任一 entity/attr/edge 缺 "name" 不能让整个 GRAPH 阶段崩溃——用 .get() 取名、
+        # 跳过无名条目，并 per-item try/except 隔离单个坏类型（与 seed_actors 的逐项保护一致）。
         entity_types = {}
         for entity_def in ontology.get("entity_types", []):
-            name = entity_def["name"]
-            description = entity_def.get("description", f"A {name} entity.")
-            
-            # 创建属性字典和类型注解（Pydantic v2 需要）
-            attrs = {"__doc__": description}
-            annotations = {}
-            
-            for attr_def in entity_def.get("attributes", []):
-                attr_name = safe_attr_name(attr_def["name"])  # 使用安全名称
-                attr_desc = attr_def.get("description", attr_name)
-                # Zep API 需要 Field 的 description，这是必需的
-                attrs[attr_name] = Field(description=attr_desc, default=None)
-                annotations[attr_name] = Optional[EntityText]  # 类型注解
-            
-            attrs["__annotations__"] = annotations
-            
-            # 动态创建类
-            entity_class = type(name, (EntityModel,), attrs)
-            entity_class.__doc__ = description
-            entity_types[name] = entity_class
-        
+            name = entity_def.get("name")
+            if not name:
+                logger.warning("skipping entity_def without name: %r", entity_def)  # F-3-1
+                continue
+            try:
+                description = entity_def.get("description", f"A {name} entity.")
+
+                # 创建属性字典和类型注解（Pydantic v2 需要）
+                attrs = {"__doc__": description}
+                annotations = {}
+
+                for attr_def in entity_def.get("attributes", []):
+                    raw_attr_name = attr_def.get("name")
+                    if not raw_attr_name:  # F-3-1: 跳过无名属性而非 KeyError
+                        continue
+                    attr_name = safe_attr_name(raw_attr_name)  # 使用安全名称
+                    attr_desc = attr_def.get("description", attr_name)
+                    # Zep API 需要 Field 的 description，这是必需的
+                    attrs[attr_name] = Field(description=attr_desc, default=None)
+                    annotations[attr_name] = Optional[EntityText]  # 类型注解
+
+                attrs["__annotations__"] = annotations
+
+                # 动态创建类
+                entity_class = type(name, (EntityModel,), attrs)
+                entity_class.__doc__ = description
+                entity_types[name] = entity_class
+            except Exception as e:  # F-3-1: 单个坏类型不得中断整批
+                logger.warning("skipping malformed entity type %s: %s", name, e)
+                continue
+
         # 动态创建边类型
         edge_definitions = {}
         for edge_def in ontology.get("edge_types", []):
-            name = edge_def["name"]
-            description = edge_def.get("description", f"A {name} relationship.")
-            
-            # 创建属性字典和类型注解
-            attrs = {"__doc__": description}
-            annotations = {}
-            
-            for attr_def in edge_def.get("attributes", []):
-                attr_name = safe_attr_name(attr_def["name"])  # 使用安全名称
-                attr_desc = attr_def.get("description", attr_name)
-                # Zep API 需要 Field 的 description，这是必需的
-                attrs[attr_name] = Field(description=attr_desc, default=None)
-                annotations[attr_name] = Optional[str]  # 边属性用str类型
-            
-            attrs["__annotations__"] = annotations
-            
-            # 动态创建类
-            class_name = ''.join(word.capitalize() for word in name.split('_'))
-            edge_class = type(class_name, (EdgeModel,), attrs)
-            edge_class.__doc__ = description
-            
-            # 构建source_targets
-            source_targets = []
-            for st in edge_def.get("source_targets", []):
-                source_targets.append(
-                    EntityEdgeSourceTarget(
-                        source=st.get("source", "Entity"),
-                        target=st.get("target", "Entity")
+            name = edge_def.get("name")
+            if not name:
+                logger.warning("skipping edge_def without name: %r", edge_def)  # F-3-1
+                continue
+            try:
+                description = edge_def.get("description", f"A {name} relationship.")
+
+                # 创建属性字典和类型注解
+                attrs = {"__doc__": description}
+                annotations = {}
+
+                for attr_def in edge_def.get("attributes", []):
+                    raw_attr_name = attr_def.get("name")
+                    if not raw_attr_name:  # F-3-1: 跳过无名属性而非 KeyError
+                        continue
+                    attr_name = safe_attr_name(raw_attr_name)  # 使用安全名称
+                    attr_desc = attr_def.get("description", attr_name)
+                    # Zep API 需要 Field 的 description，这是必需的
+                    attrs[attr_name] = Field(description=attr_desc, default=None)
+                    annotations[attr_name] = Optional[str]  # 边属性用str类型
+
+                attrs["__annotations__"] = annotations
+
+                # 动态创建类
+                class_name = ''.join(word.capitalize() for word in name.split('_'))
+                edge_class = type(class_name, (EdgeModel,), attrs)
+                edge_class.__doc__ = description
+
+                # 构建source_targets
+                source_targets = []
+                for st in edge_def.get("source_targets", []):
+                    source_targets.append(
+                        EntityEdgeSourceTarget(
+                            source=st.get("source", "Entity"),
+                            target=st.get("target", "Entity")
+                        )
                     )
-                )
-            
-            if source_targets:
-                edge_definitions[name] = (edge_class, source_targets)
+
+                if source_targets:
+                    edge_definitions[name] = (edge_class, source_targets)
+            except Exception as e:  # F-3-1: 单个坏边类型不得中断整批
+                logger.warning("skipping malformed edge type %s: %s", name, e)
+                continue
         
         # 调用Zep API设置本体
         if entity_types or edge_definitions:
@@ -341,11 +364,18 @@ class GraphBuilderService:
             if name in seeded_names:
                 continue
             try:
+                # F-3-3: add_triplet 会把 target 物化为一个节点；过去 target_label 缺省为
+                # "Entity"，使类型字符串（"Person"/"Organization"…）成了仅带 "Entity" 标签的
+                # 孤儿污染节点。这里显式给 target_label 打上正确的实体类型标签，让该合成端至少
+                # 是一个合法分型的概念节点（彻底去除 IS_A 端节点需 runtime.add_node 节点级 upsert，
+                # 跨文件改动，见 skipped）。
+                actor_type = a.get("type") or "Entity"
                 self.client.graph.add_triplet(
-                    graph_id, name, "IS_A", a.get("type", "Entity"),
+                    graph_id, name, "IS_A", actor_type,
                     a.get("role") or name,
                     valid_at=valid_at,
                     source_label=label.get(name, "Entity"),
+                    target_label=ACTOR_TYPE_TO_LABEL.get(str(a.get("type") or ""), "Entity"),
                 )
                 n += 1
             except Exception as e:

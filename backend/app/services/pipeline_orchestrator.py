@@ -28,8 +28,10 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import re
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -46,6 +48,7 @@ from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
 from ..services.text_processor import TextProcessor
+from ..services.zep_graph_memory_updater import ZepGraphMemoryManager
 from ..utils.actors import (
     REL_LABEL,
     extract_relationship_rows,
@@ -82,6 +85,11 @@ STAGE_BANDS: dict[str, tuple[int, int]] = {
 # research_only 模式下，研究阶段独占 0-100
 RESEARCH_ONLY_BANDS: dict[str, tuple[int, int]] = {STAGE_RESEARCH: (0, 100)}
 
+# I-4-4: pipeline_state.json 的 schema 版本。每次形状演进 +1，并在 _MIGRATIONS 注册
+# 一个把「上一版 → 本版」就地补齐的纯函数。v1 = 历史无 schema_version 字段的状态文件。
+# v2 = 引入显式 schema_version + run.json manifest 指针（artifacts['run_manifest']）。
+PIPELINE_SCHEMA_VERSION = 2
+
 
 class PipelineCancelled(BaseException):
     """用户主动取消管线（与失败区分开：不是错误，是决定）。
@@ -93,8 +101,80 @@ class PipelineCancelled(BaseException):
     """
 
 
+class IncompatiblePipelineSchema(RuntimeError):
+    """I-4-4: 试图操作一个由更新版代码写出的 pipeline_state.json。
+
+    严格模式（Config.PIPELINE_STRICT_SCHEMA，默认 True）下，对 resume/continue/fork
+    等会重写状态文件的操作抛出，避免旧二进制按旧语义解析丢字段、再落盘降级覆写。
+    API 层应把它映射成 409 Conflict（而非 500），并提示「升级后端或开启
+    PIPELINE_STRICT_SCHEMA=false 应急旁路」。
+    """
+
+    def __init__(self, pipeline_id: str, file_version: int):
+        self.pipeline_id = pipeline_id
+        self.file_version = file_version
+        super().__init__(
+            f"管线 {pipeline_id} 的状态文件 schema 版本为 {file_version}，"
+            f"高于当前后端支持的 {PIPELINE_SCHEMA_VERSION}。"
+            "请升级后端，或在 .env 设 PIPELINE_STRICT_SCHEMA=false 应急旁路（可能丢失新字段）。"
+        )
+
+
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# I-4-1: 进程级 boot id（每次后端进程启动唯一）。配合持久化的 owner_pid，让
+# reconcile_orphans 能区分「本进程拥有的在飞管线」与「上一进程/别的 worker 遗留的孤儿」，
+# 而不再仅凭 in-process _threads 判定（多 worker / 重启后 _threads 会丢失真相）。
+_BOOT_ID = uuid.uuid4().hex
+
+
+def _parse_iso(ts: Optional[str]) -> Optional[datetime]:
+    """I-4-1/I-5-6: 解析 _utcnow() 写出的 ISO 时间戳；解析失败返回 None（best-effort）。"""
+    if not ts or not isinstance(ts, str):
+        return None
+    try:
+        dt = datetime.fromisoformat(ts)
+    except (ValueError, TypeError):
+        return None
+    # 旧文件可能写的是 naive 时间戳；统一补成 UTC，使与 _utcnow() 的 aware 比较安全。
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _age_seconds(ts: Optional[str]) -> Optional[float]:
+    """I-4-1/I-5-6: 自 ts 起经过的秒数（now-ts）；ts 不可解析返回 None。"""
+    dt = _parse_iso(ts)
+    if dt is None:
+        return None
+    return max(0.0, (datetime.now(timezone.utc) - dt).total_seconds())
+
+
+def _pid_alive(pid: Optional[int]) -> bool:
+    """I-4-1: 进程是否存活（os.kill(pid, 0) 探活，不依赖第三方 psutil）。
+
+    pid 无效 / 已退出 → False；权限不足（EPERM）说明进程确实存在但非本用户 → 视为存活，
+    保守地避免把别人的存活进程误判为死。
+    """
+    if not pid:
+        return False
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
 
 
 @dataclass
@@ -124,6 +204,8 @@ class StageState:
 class PipelineState:
     pipeline_id: str
     prompt: str
+    # I-4-4: 状态文件 schema 版本（每次落盘写当前版本；load 时按需向前迁移）。
+    schema_version: int = PIPELINE_SCHEMA_VERSION
     mode: str = "full"               # full / research_only
     status: str = "pending"          # pending / running / completed / failed
     global_progress: int = 0
@@ -138,6 +220,15 @@ class PipelineState:
     # 在飞研究子进程的 PID（进程组长）。持久化后，后端崩溃重启时
     # reconcile_orphans 能找到并杀掉仍在烧额度的孤儿研究进程。
     research_pid: Optional[int] = None
+    # I-4-1: 拥有该在飞管线的后端进程指纹（owner_pid + owner_boot_id）与按固定壁钟节律刷新的
+    # 心跳时间戳。reconcile_orphans 据此把「死管线」与「慢但活的管线」区分开（owner 进程不在/
+    # boot_id 不符 且 心跳过期 才回收）。老状态文件缺失 → None，回退到旧的 _threads 判定。
+    owner_pid: Optional[int] = None
+    owner_boot_id: Optional[str] = None
+    heartbeat_at: Optional[str] = None
+    # I-5-6: 最近一次进度回调的壁钟时间戳。供状态 API 计算 stale（now-last_progress_at>阈值
+    # 即「还在思考」而非「卡死」）。每次 _make_stage_updater.update() 刷新。
+    last_progress_at: Optional[str] = None
     error: Optional[str] = None
     created_at: str = field(default_factory=_utcnow)
     updated_at: str = field(default_factory=_utcnow)
@@ -160,6 +251,8 @@ class PipelineState:
         return cls(
             pipeline_id=data["pipeline_id"],
             prompt=data.get("prompt", ""),
+            # I-4-4: 缺失则视为 v1（历史文件）。load() 已在更上游做过迁移，这里只是兜底。
+            schema_version=int(data.get("schema_version") or 1),
             mode=data.get("mode", "full"),
             status=data.get("status", "pending"),
             global_progress=int(data.get("global_progress") or 0),
@@ -171,6 +264,11 @@ class PipelineState:
             report_id=data.get("report_id"),
             handoff_dir=data.get("handoff_dir"),
             research_pid=data.get("research_pid"),
+            # I-4-1 / I-5-6: 老状态文件无这些字段 → None（回退旧 _threads 判定 / 无 stale 信息）。
+            owner_pid=data.get("owner_pid"),
+            owner_boot_id=data.get("owner_boot_id"),
+            heartbeat_at=data.get("heartbeat_at"),
+            last_progress_at=data.get("last_progress_at"),
             error=data.get("error"),
             created_at=data.get("created_at") or _utcnow(),
             updated_at=data.get("updated_at") or _utcnow(),
@@ -188,8 +286,20 @@ class PipelineState:
 class PipelineManager:
     """读写 uploads/pipelines/<id>/pipeline_state.json。"""
 
+    # 管线 id 形如 pipe_<hex>（见 create()/fork()），亦含少量历史/手工 id（如 pipe_e2egold02）。
+    # 允许字母数字/下划线/连字符；不含 '.' '/' '\\' 故天然无法 ..  逃逸（EXECPLAN2 F-13-4）。
+    _PIPELINE_ID_RE = re.compile(r"^pipe_[A-Za-z0-9_-]+$")
+
+    @classmethod
+    def _validate_id(cls, pipeline_id: str) -> str:
+        if (not pipeline_id or "/" in pipeline_id or "\\" in pipeline_id
+                or ".." in pipeline_id or not cls._PIPELINE_ID_RE.match(pipeline_id)):
+            raise ValueError(f"invalid pipeline_id: {pipeline_id!r}")
+        return pipeline_id
+
     @classmethod
     def _dir(cls, pipeline_id: str) -> str:
+        cls._validate_id(pipeline_id)
         return os.path.join(Config.PIPELINE_DATA_DIR, pipeline_id)
 
     @classmethod
@@ -201,17 +311,63 @@ class PipelineManager:
         return os.path.join(cls._dir(pipeline_id), "handoff")
 
     @classmethod
+    def manifest_path(cls, pipeline_id: str) -> str:
+        """I-8-1: uploads/pipelines/<id>/run.json 的路径（可复现性清单）。"""
+        return os.path.join(cls._dir(pipeline_id), "run.json")
+
+    @classmethod
     def ensure_dirs(cls, pipeline_id: str) -> None:
         os.makedirs(cls.handoff_dir(pipeline_id), exist_ok=True)
+
+    # I-4-4: 当 load() 读到一个 schema_version 比当前运行代码更新的状态文件时返回的哨兵。
+    # 旧二进制不知道新版的语义，贸然按旧 from_dict 解析可能丢字段并在下次落盘时把新文件
+    # 「降级覆写」损坏。哨兵让上层（API）把它映射成 409 Conflict 而不是 500。
+    INCOMPATIBLE_KEY = "__incompatible_schema__"
 
     @classmethod
     def save(cls, state: PipelineState) -> None:
         cls.ensure_dirs(state.pipeline_id)
         state.updated_at = _utcnow()
+        # I-4-4: 每次落盘都写当前 schema 版本（即便 dataclass 实例由旧文件迁移而来）。
+        state.schema_version = PIPELINE_SCHEMA_VERSION
         tmp = cls.state_path(state.pipeline_id) + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(state.to_dict(), f, ensure_ascii=False, indent=2)
         os.replace(tmp, cls.state_path(state.pipeline_id))
+
+    # I-4-4: 有序迁移函数，键 = 「源版本」，把 vN 的 dict 就地补齐到 v(N+1)。
+    # 必须纯且幂等（在 load 时反复运行也安全）。新增一版时：PIPELINE_SCHEMA_VERSION += 1，
+    # 并在此注册 {上一版: _migrate_to_next}。
+    @staticmethod
+    def _migrate_v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
+        """v1（无 schema_version 的历史文件）→ v2。
+
+        历史文件不会有 artifacts['run_manifest'] / run.json，缺失即按无 manifest 降级；
+        这里只确保 artifacts 是 dict（极老的文件可能整体缺该键），其余字段由 from_dict 兜底。
+        """
+        if not isinstance(data.get("artifacts"), dict):
+            data["artifacts"] = {}
+        return data
+
+    @classmethod
+    def _migrations(cls) -> "dict[int, Callable[[dict[str, Any]], dict[str, Any]]]":
+        """源版本 → 迁移函数。集中一处，新增版本只改这里 + PIPELINE_SCHEMA_VERSION。"""
+        return {1: cls._migrate_v1_to_v2}
+
+    @classmethod
+    def _migrate(cls, data: dict[str, Any], from_version: int) -> dict[str, Any]:
+        """把 data 从 from_version 依次迁移到 PIPELINE_SCHEMA_VERSION（就地 + 返回）。"""
+        migrations = cls._migrations()
+        ver = from_version
+        while ver < PIPELINE_SCHEMA_VERSION:
+            fn = migrations.get(ver)
+            if fn is None:
+                # 没有登记的迁移函数：保守跳过（不修改），仅推进版本号，避免死循环。
+                break
+            data = fn(data)
+            ver += 1
+        data["schema_version"] = PIPELINE_SCHEMA_VERSION
+        return data
 
     @classmethod
     def mark_failed(cls, pipeline_id: str, error: str, status: str = "failed") -> bool:
@@ -240,15 +396,111 @@ class PipelineManager:
         return True
 
     @classmethod
+    def touch_heartbeat(cls, pipeline_id: str, pid: Optional[int] = None) -> bool:
+        """I-4-1: 仅刷新 heartbeat_at（+ 可选 owner_pid/owner_boot_id），不重建 dataclass。
+
+        独立于阶段进度的「我还活着」壁钟信号，由 _run 的看护线程按固定节律调用。沿用
+        mark_failed 的轻量直写模式（load → 改两三个键 → 原子替换），避免每次心跳走 full save
+        / 触发 schema 迁移副作用。状态非 running 时静默 no-op（终态管线无需心跳）。
+        """
+        data = cls.load(pipeline_id)
+        if not data or cls.INCOMPATIBLE_KEY in data:
+            return False
+        if data.get("status") != "running":
+            return False
+        data["heartbeat_at"] = _utcnow()
+        if pid is not None:
+            data["owner_pid"] = int(pid)
+            data["owner_boot_id"] = _BOOT_ID
+        cls.ensure_dirs(pipeline_id)
+        tmp = cls.state_path(pipeline_id) + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, cls.state_path(pipeline_id))
+        return True
+
+    # ----------------------------------------------------------------------
+    # I-4-3: 产物清单 manifest.json（每条产物的 sha256/字节数/产出阶段/schema_ok）。
+    # 与 run.json（run manifest，可复现性快照）不同：此清单服务于「复用前完整性校验」，
+    # 防止半写/截断的产物冒充 completed 被复用、把垃圾喂给下游静默降级整份预测。
+    # ----------------------------------------------------------------------
+
+    @classmethod
+    def artifact_manifest_path(cls, pipeline_id: str) -> str:
+        """I-4-3: uploads/pipelines/<id>/handoff/manifest.json 的路径。"""
+        return os.path.join(cls.handoff_dir(pipeline_id), "manifest.json")
+
+    @classmethod
+    def load_artifact_manifest(cls, pipeline_id: str) -> dict[str, Any]:
+        """I-4-3: 读产物清单（缺失/损坏 → 空 dict，按「无清单」降级到旧的存在性复用）。"""
+        try:
+            path = cls.artifact_manifest_path(pipeline_id)
+        except ValueError:
+            return {}
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    @classmethod
+    def write_artifact_manifest(cls, pipeline_id: str, manifest: dict[str, Any]) -> None:
+        """I-4-3: 原子写产物清单（复用 utils.atomic，与其它产物写法一致）。"""
+        from ..utils.atomic import write_json_atomic
+        cls.ensure_dirs(pipeline_id)
+        write_json_atomic(cls.artifact_manifest_path(pipeline_id), manifest)
+
+    @classmethod
     def load(cls, pipeline_id: str) -> Optional[dict[str, Any]]:
-        path = cls.state_path(pipeline_id)
+        try:
+            path = cls.state_path(pipeline_id)
+        except ValueError:
+            return None  # malformed id → treat as not-found, keep callers robust
         if not os.path.exists(path):
             return None
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
         except Exception:
             return None
+        if not isinstance(data, dict):
+            return None
+        # I-4-4: 版本检查 + 迁移，在所有 load() 消费者之前统一进行。
+        v = int(data.get("schema_version") or 1)
+        if v > PIPELINE_SCHEMA_VERSION:
+            # 文件比当前代码更新。严格模式（默认）下拒绝，避免按旧语义解析丢字段、
+            # 并在下次落盘时把新文件降级覆写。返回带 pipeline_id 的最小哨兵 dict，
+            # 让 status/list 仍能读到 id 而不至于崩，由 API 层映射为 409。
+            strict = bool(getattr(Config, "PIPELINE_STRICT_SCHEMA", True))
+            if strict:
+                return {
+                    "pipeline_id": data.get("pipeline_id", pipeline_id),
+                    "status": data.get("status"),
+                    "schema_version": v,
+                    cls.INCOMPATIBLE_KEY: v,
+                }
+            # 非严格（应急旁路）：尽力按旧语义读取，不迁移、不改版本号。
+            return data
+        if v < PIPELINE_SCHEMA_VERSION:
+            try:
+                data = cls._migrate(data, v)
+            except Exception:
+                # 迁移意外失败：返回原始数据（from_dict 的逐字段默认仍可兜底），不丢记录。
+                return data
+        return data
+
+    @classmethod
+    def is_incompatible(cls, data: Optional[dict[str, Any]]) -> Optional[int]:
+        """若 load() 返回的是「更新版本」哨兵，返回该文件的版本号，否则 None。"""
+        if isinstance(data, dict) and cls.INCOMPATIBLE_KEY in data:
+            try:
+                return int(data[cls.INCOMPATIBLE_KEY])
+            except (TypeError, ValueError):
+                return PIPELINE_SCHEMA_VERSION + 1
+        return None
 
     @classmethod
     def delete(cls, pipeline_id: str) -> bool:
@@ -259,10 +511,11 @@ class PipelineManager:
         """
         import shutil
 
-        # 基本路径防御：pipeline_id 来自 URL，绝不允许路径分隔符逃出数据目录
-        if not pipeline_id or "/" in pipeline_id or "\\" in pipeline_id or ".." in pipeline_id:
+        # 路径防御集中在 _dir/_validate_id（pipeline_id 来自 URL，绝不允许逃出数据目录）。
+        try:
+            target = cls._dir(pipeline_id)
+        except ValueError:
             return False
-        target = cls._dir(pipeline_id)
         if not os.path.isdir(target):
             return False
         shutil.rmtree(target, ignore_errors=True)
@@ -373,9 +626,19 @@ class DeerFlowResearchRunner:
             raise RuntimeError(f"未找到 deerflow_research.py: {script}")
 
         os.makedirs(handoff_dir, exist_ok=True)
+        # 把（可能敏感的）研究问题写入文件，经 --prompt-file 传给子进程，避免出现在
+        # ps / /proc/<pid>/cmdline 里（EXECPLAN2 F-0-7/F-13-3，与 llm_client 既有约定一致）。
+        # run() 会阻塞到子进程退出，子进程启动时即读取该文件，故可在 finally 安全删除。
+        fd, prompt_file = tempfile.mkstemp(prefix=".prompt-", suffix=".txt", dir=handoff_dir)
+        with os.fdopen(fd, "w", encoding="utf-8") as _pf:
+            _pf.write(prompt)
+        try:
+            os.chmod(prompt_file, 0o600)
+        except OSError:
+            pass
         cmd = _detect_deerflow_python(deerflow_dir) + [
             script,
-            "--prompt", prompt,
+            "--prompt-file", prompt_file,
             "--out-dir", handoff_dir,
             "--model", model or Config.DEERFLOW_MODEL,
             "--depth", depth or Config.DEERFLOW_RESEARCH_DEPTH,
@@ -454,6 +717,11 @@ class DeerFlowResearchRunner:
         local = 2
         tool_events = 0
         last_line = ""
+        # I-5-7: 结构化研究阶段遥测（token/工具量/壁钟）。bridge 已在 stdout 发出 [usage] 行，
+        # 此前只用于推进进度启发，token 数字被丢弃；这里顺带累加，使最贵的研究阶段也进入统一计量。
+        _tok_in = _tok_out = _tok_total = 0
+        _result_events = 0
+        _t_start = time.time()
         try:
             assert proc.stdout is not None
             for raw in proc.stdout:
@@ -461,15 +729,24 @@ class DeerFlowResearchRunner:
                 if not line:
                     continue
                 last_line = line
-                # 解析进度日志的事件类型 [tool]/[result]/[stage]/[ok]/[done]/[error]
+                # 解析进度日志的事件类型 [tool]/[result]/[stage]/[ok]/[done]/[error]/[usage]
                 if "[tool]" in line:
                     tool_events += 1
                     local = min(90, 10 + tool_events * 4)
                     on_progress(local, _tail(line))
                 elif "[result]" in line:
+                    _result_events += 1
                     on_progress(local, _tail(line))
                 elif "[stage]" in line:
                     on_progress(min(local, 92), _tail(line))
+                elif "[usage]" in line:
+                    # I-5-7: 仅累加 token，不动进度（usage 行非进度信号）。
+                    parsed = _parse_usage_line(line)
+                    if parsed is not None:
+                        _i, _o, _t = parsed
+                        _tok_in += _i
+                        _tok_out += _o
+                        _tok_total += (_t if _t else _i + _o)
                 elif "[ok]" in line or "[done]" in line:
                     local = max(local, 95)
                     on_progress(local, _tail(line))
@@ -485,6 +762,11 @@ class DeerFlowResearchRunner:
             if proc.poll() is None:
                 _kill_process_group(proc)
             DeerFlowResearchRunner._live_procs.discard(proc)
+            # 子进程已退出（或被杀），prompt 文件不再需要，删除以减小磁盘驻留面。
+            try:
+                os.unlink(prompt_file)
+            except OSError:
+                pass
 
         if cancelled["hit"]:
             raise PipelineCancelled("深度研究已取消")
@@ -531,6 +813,17 @@ class DeerFlowResearchRunner:
         actors = _read_json(os.path.join(handoff_dir, "actors.json"))
         sources = _read_json(os.path.join(handoff_dir, "sources.json"))
         timeline = _read_json(os.path.join(handoff_dir, "timeline.json"))
+        # I-5-7: 汇总研究阶段遥测。token 行可能整轮缺失（某些研究模型不报 usage）→ 全 0/None。
+        research_telemetry = {
+            "model": (model or Config.DEERFLOW_MODEL),
+            "depth": effective_depth,
+            "tokens_in": _tok_in,
+            "tokens_out": _tok_out,
+            "tokens_total": _tok_total or (_tok_in + _tok_out),
+            "tool_calls": tool_events,
+            "results": _result_events,
+            "wall_s": round(time.time() - _t_start, 1),
+        }
         on_progress(100, f"研究完成（报告 {len(report)} 字）")
         return {
             "report": report,
@@ -539,7 +832,28 @@ class DeerFlowResearchRunner:
             "sources": sources,
             "timeline": timeline,
             "exit_code": returncode,
+            "research_telemetry": research_telemetry,  # I-5-7
         }
+
+
+# I-5-7: 解析 DeerFlow bridge 已发出的「[usage] tokens in=.. out=.. total=..」行
+# （deerflow_research.py:ProgressLog.write('usage', ...)）。容错：out/total 可能为 None
+# 时 bridge 会打印字面 "None"，故各组匹配数字或 None；no-match → 该行不计入。
+_USAGE_RE = re.compile(
+    r"tokens in=(?P<in>\d+|None)\s+out=(?P<out>\d+|None)\s+total=(?P<total>\d+|None)"
+)
+
+
+def _parse_usage_line(line: str) -> Optional[tuple[int, int, int]]:
+    """从一行 [usage] 日志解析 (in, out, total) token；解析不出返回 None。"""
+    m = _USAGE_RE.search(line)
+    if not m:
+        return None
+
+    def _num(s: str) -> int:
+        return int(s) if s and s.isdigit() else 0
+
+    return _num(m.group("in")), _num(m.group("out")), _num(m.group("total"))
 
 
 def _tail(s: str, limit: int = 160) -> str:
@@ -743,6 +1057,224 @@ def _actors_to_context(actors: Optional[dict]) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
+# I-8-1: 每次运行的可复现性清单 run.json
+# ---------------------------------------------------------------------------
+# 因为 LLM 提供方可在运行时经 Config.apply_provider 热切换，事后查看 .env 无法可靠还原
+# 某份报告到底是「哪个模型、几个 agent、什么研究深度」生成的。run.json 把完整解析后的
+# 运行配置 + 环境指纹（已脱敏）快照下来，使每份预测可审计、可复现、可 A/B 对比。
+# 默认开（成本字段几乎零开销）；包版本冻结（uv pip freeze，较慢）默认关。
+
+
+def _repo_git_sha() -> Optional[str]:
+    """当前仓库的 git SHA（best-effort，非 git checkout / 无 git 时返回 None）。"""
+    try:
+        # config.py 在 backend/app/，仓库根 = 上溯三级
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+        r = subprocess.run(
+            ["git", "-C", repo_root, "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        sha = (r.stdout or "").strip()
+        return sha if r.returncode == 0 and sha else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _deerflow_ref() -> Optional[str]:
+    """deer-flow checkout 的 commit（用于复现研究阶段）；vendored / 无 git 时降级。"""
+    try:
+        deerflow_dir = getattr(Config, "DEERFLOW_DIR", "") or ""
+        if not deerflow_dir or not os.path.isdir(deerflow_dir):
+            return None
+        if not os.path.isdir(os.path.join(deerflow_dir, ".git")):
+            return "vendored"  # 子目录而非独立 git checkout（如 shallow vendoring）
+        r = subprocess.run(
+            ["git", "-C", deerflow_dir, "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        sha = (r.stdout or "").strip()
+        return sha if r.returncode == 0 and sha else "vendored"
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _capture_key_packages() -> Optional[dict[str, Any]]:
+    """可选包版本冻结（MANIFEST_CAPTURE_VERSIONS=true 时）。
+
+    优先用 importlib.metadata 取几个关键包的版本（廉价、无子进程）；不引入新依赖，
+    失败静默降级到 None。
+    """
+    try:
+        from importlib import metadata as _md
+    except Exception:
+        return None
+    out: dict[str, Any] = {}
+    for pkg in ("graphiti-core", "sentence-transformers", "openai", "flask",
+                "redislite", "kuzu", "falkordb"):
+        try:
+            out[pkg] = _md.version(pkg)
+        except Exception:
+            continue
+    return out or None
+
+
+def _build_run_manifest(state: "PipelineState") -> dict[str, Any]:
+    """构造 run.json 的内容快照（secrets 已脱敏）。
+
+    resolved 段在管线各阶段进入时由 PipelineOrchestrator._update_manifest 增量填充；
+    本函数生成首版骨架 + 不随阶段变化的环境/图谱指纹。
+    """
+    opts = state.options or {}
+    depth = (opts.get("depth") or getattr(Config, "DEERFLOW_RESEARCH_DEPTH", "standard"))
+    research_model = opts.get("research_model") or getattr(Config, "DEERFLOW_MODEL", "claude")
+    depth_budgets = getattr(Config, "DEERFLOW_DEPTH_BUDGETS", {}) or {}
+    research_timeout = depth_budgets.get(
+        str(depth).lower(), getattr(Config, "DEERFLOW_RESEARCH_TIMEOUT", 0)
+    )
+    max_rounds = opts.get("max_rounds") or (getattr(Config, "OASIS_DEFAULT_MAX_ROUNDS", 0) or None)
+
+    manifest: dict[str, Any] = {
+        "schema_version": PIPELINE_SCHEMA_VERSION,
+        "pipeline_id": state.pipeline_id,
+        "mode": state.mode,
+        "created_at": state.created_at,
+        "updated_at": _utcnow(),
+        "repo_git_sha": _repo_git_sha(),
+        "deerflow_ref": _deerflow_ref(),
+        "resolved": {
+            "research": {
+                "model": research_model,
+                "depth": str(depth).lower() if depth else None,
+                "timeout_s": research_timeout,
+                "language": opts.get("research_language"),
+            },
+            # provider 在每阶段边界由 _update_manifest 钉入实际值（可热切换）
+            "ontology": {"provider": None, "model_name": None},
+            "graph": {"provider": None, "model_name": None},
+            "report": {"provider": None, "model_name": None},
+            "simulation": {
+                "max_agents": getattr(Config, "OASIS_MAX_AGENTS", None),
+                "max_rounds": int(max_rounds) if max_rounds else None,
+                "total_rounds": None,  # 真实总轮数运行时填
+                "recsys_wired": bool(getattr(Config, "SIM_WIRE_RECSYS", False)),
+                "sim_graph_feedback": bool(getattr(Config, "SIM_GRAPH_FEEDBACK", True)),
+            },
+        },
+        "graph": {
+            "backend": getattr(Config, "GRAPH_BACKEND", None),
+            "embed_model": getattr(Config, "GRAPHITI_EMBED_MODEL", None),
+            "embed_dim": getattr(Config, "GRAPHITI_EMBED_DIM", None),
+            "reranker": getattr(Config, "GRAPHITI_RERANKER", None),
+        },
+        "env_fingerprint": {
+            "python": _python_version_string(),
+        },
+        # 字段名刻意避开 redact_secrets 的 secret-key 正则（含 "key"/"secret"/"token" 的键名
+        # 会被整值替换为 ***REDACTED***）：用 redacted_flag / package_versions 而非
+        # secrets_redacted / key_packages，避免观测字段被误脱敏。
+        "redacted_flag": True,
+    }
+    if bool(getattr(Config, "MANIFEST_CAPTURE_VERSIONS", False)):
+        pkgs = _capture_key_packages()
+        if pkgs:
+            manifest["env_fingerprint"]["package_versions"] = pkgs
+    return manifest
+
+
+def _python_version_string() -> str:
+    import sys
+    v = sys.version_info
+    return f"{v.major}.{v.minor}.{v.micro}"
+
+
+def _current_provider_pair() -> dict[str, Optional[str]]:
+    """当前 Config 解析出的报告/模拟阶段提供方 + 模型名（随热切换变化）。"""
+    return {
+        "provider": getattr(Config, "LLM_PROVIDER", None),
+        "model_name": getattr(Config, "LLM_MODEL_NAME", None),
+    }
+
+
+# ---------------------------------------------------------------------------
+# I-4-3: 产物完整性（流式 sha256 + 轻量 schema 探针）
+# ---------------------------------------------------------------------------
+
+
+def _sha256_file(path: str, chunk_size: int = 1 << 20) -> Optional[str]:
+    """流式计算文件 sha256（1MiB 分块，避免把大研究报告/图谱 dump 整入内存）。
+
+    文件不存在 / 读失败 → None（视为「无法核验」，由调用方决定保守重建还是放行）。
+    """
+    import hashlib
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            while True:
+                buf = f.read(chunk_size)
+                if not buf:
+                    break
+                h.update(buf)
+        return h.hexdigest()
+    except (OSError, ValueError):
+        return None
+
+
+def _probe_artifact_schema(name: str, path: str) -> bool:
+    """I-4-3: 对已知产物做廉价的「结构是否像样」探针（best-effort，绝不抛出）。
+
+    目的不是严格校验，而是抓住「半写/截断/被错误文本覆盖」这类粗暴损坏：
+      - actors.json  → dict 且含 list 形 'actors'
+      - ontology.json→ dict 且含非空 'entity_types'
+      - communities.json → list
+      - *.md / *.csv / 其它 → 仅看非空（交由各自阶段的语义守卫，如 research 的 400 字门）
+    未知产物 / 读失败 → True（不因探针缺位误杀一份本可复用的产物）。
+    """
+    try:
+        if not os.path.exists(path) or os.path.getsize(path) <= 0:
+            return False
+        base = os.path.basename(path)
+        if base.endswith(".json"):
+            data = _read_json(path)
+            if data is None:
+                return False
+            if base == "actors.json":
+                return isinstance(data, dict) and isinstance(data.get("actors"), list)
+            if base == "ontology.json":
+                return isinstance(data, dict) and bool(data.get("entity_types"))
+            if base == "communities.json":
+                return isinstance(data, list)
+            # 其它 JSON：能解析即视为通过（dict/list 皆可）。
+            return isinstance(data, (dict, list))
+        # 非 JSON（md/csv）：非空即可（语义门交给阶段自身）。
+        return os.path.getsize(path) > 0
+    except Exception:  # noqa: BLE001 — 探针永不拦截一次合法的新跑
+        return True
+
+
+def _manifest_entry_for(name: str, path: str, stage: str) -> Optional[dict[str, Any]]:
+    """I-4-3: 为单个产物构造清单条目（路径/sha256/字节/产出阶段/产出时间/schema_ok）。
+
+    文件缺失返回 None（不登记不存在的产物）。
+    """
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return None
+    if size <= 0:
+        return None
+    return {
+        "path": path,
+        "sha256": _sha256_file(path),
+        "bytes": size,
+        "produced_by_stage": stage,
+        "produced_at": _utcnow(),
+        "schema_ok": _probe_artifact_schema(name, path),
+    }
+
+
+# ---------------------------------------------------------------------------
 # 编排器
 # ---------------------------------------------------------------------------
 
@@ -758,6 +1290,10 @@ class PipelineOrchestrator:
     # 线程（双倍烧额度 + 状态互相覆盖）。
     _lifecycle_lock: threading.Lock = threading.Lock()
 
+    def __init__(self) -> None:
+        # I-4-6: 运行中临时产物扫描的「上次扫描壁钟」按阶段节流戳（仅本实例/本次运行有效）。
+        self._partial_scan_at: dict[str, float] = {}
+
     # -- 生命周期：启动回收 + 关闭清理 ------------------------------------
 
     @classmethod
@@ -767,15 +1303,30 @@ class PipelineOrchestrator:
         硬杀 / 崩溃 / 重启会跳过 ``_run`` 的 except 块，使 pipeline_state.json 永远停在
         ``running``；前端 ``poll()`` 只在 completed/failed 时停止，于是无限空转。进程刚启动时
         ``_threads`` 必为空，故任何持久化为 running 的管线都是上一进程遗留的孤儿 → 标记 failed。
+
+        I-4-1: 旧逻辑「不在本进程 _threads 即孤儿」只在「单进程、_threads 即真相」下成立。多
+        worker / gunicorn / 重启竞态下，它会误杀另一进程里真正在飞的管线，或让两个 worker 都
+        以为自己拥有同一条。开启 PIPELINE_HEARTBEAT_ENABLED（默认）时改为基于证据的存活判定：
+        仅当 (owner 进程已不在 / boot_id 不是本进程 / owner 未知) 且 心跳过期 才回收；owner 进程
+        仍活且心跳新鲜的「慢但活」管线一律保留。关闭该开关时回退到旧的 _threads 判定。
         """
         try:
             from ..models.task import TaskManager
             task_manager = TaskManager()
+            hb_enabled = bool(getattr(Config, "PIPELINE_HEARTBEAT_ENABLED", True))
+            stale_s = float(getattr(Config, "PIPELINE_HEARTBEAT_STALE_S", 120) or 120)
             for p in PipelineManager.list_pipelines():
                 if p.get("status") != "running":
                     continue
                 pipeline_id = p.get("pipeline_id")
                 if not pipeline_id or pipeline_id in cls._threads:
+                    continue
+                # I-4-1: 心跳模式下，先判定该 running 管线是否仍可能在别处存活。
+                if hb_enabled and not cls._orphan_is_dead(pipeline_id, stale_s):
+                    logger.info(
+                        "[%s] 持久化为 running 但有存活证据（owner 进程活/心跳新鲜），暂不回收",
+                        pipeline_id,
+                    )
                     continue
                 msg = "后端在运行中被中断（进程重启），该管线已标记为失败。"
                 if PipelineManager.mark_failed(pipeline_id, msg):
@@ -791,6 +1342,35 @@ class PipelineOrchestrator:
                             pass
         except Exception as e:  # noqa: BLE001 — 回收失败不应阻断启动
             logger.error(f"回收孤儿管线失败: {e}", exc_info=True)
+
+    @classmethod
+    def _orphan_is_dead(cls, pipeline_id: str, stale_s: float) -> bool:
+        """I-4-1: 基于证据判定一个「持久化为 running 但不在本进程 _threads」的管线是否真的死了。
+
+        判定（保守，宁可漏杀不可误杀活的）：
+          - owner_boot_id == 本进程 _BOOT_ID 但又不在 _threads → 本进程自己的残留 → 视为死。
+          - owner_pid 存在且进程仍存活（且非本进程的 boot）→ 可能是别的 worker 在跑 → 视为活
+            （除非心跳已过期到 stale_s，说明那进程虽在但 hung / pid 复用 → 回收）。
+          - owner_pid 不存在 / 已退出 / 字段缺失（老状态文件无 owner 信息）→ 心跳过期或缺失即视为死。
+        """
+        data = PipelineManager.load(pipeline_id)
+        if not data or PipelineManager.INCOMPATIBLE_KEY in data:
+            # 读不出 / schema 不兼容：无证据可依，沿用旧行为（视为死，交给 mark_failed）。
+            return True
+        owner_boot = data.get("owner_boot_id")
+        owner_pid = data.get("owner_pid")
+        hb_age = _age_seconds(data.get("heartbeat_at"))
+        fresh = hb_age is not None and hb_age <= stale_s
+
+        # 本进程自己写过 owner 但已不在 _threads → 线程确已结束的残留，回收。
+        if owner_boot == _BOOT_ID:
+            return True
+        # owner 进程仍存活（属于别的后端进程/worker）：
+        if _pid_alive(owner_pid):
+            # 心跳仍新鲜 → 真在跑，保留；心跳过期 → 那进程 hung 或 pid 被复用 → 回收。
+            return not fresh
+        # owner 进程不存在 / 字段缺失：心跳新鲜（极少见，刚崩溃）也给一个宽限，否则回收。
+        return not fresh
 
     @staticmethod
     def _kill_orphan_research(pipeline_id: str, pid) -> None:
@@ -808,8 +1388,12 @@ class PipelineOrchestrator:
                 capture_output=True, text=True, timeout=5,
             )
             cmdline = (check.stdout or "").strip()
-            if check.returncode != 0 or "deerflow_research.py" not in cmdline:
-                return  # 进程已退出，或 PID 已被复用 → 不动
+            # 同时要求命令行含本管线的 handoff 路径（--out-dir .../<pipeline_id>/handoff 中已带
+            # pipeline_id），避免 PID 复用时误杀同名脚本的另一条管线（EXECPLAN2 F-1-8）。
+            if (check.returncode != 0
+                    or "deerflow_research.py" not in cmdline
+                    or pipeline_id not in cmdline):
+                return  # 进程已退出，或 PID 已被复用/属于别的管线 → 不动
             os.killpg(os.getpgid(pid), signal.SIGTERM)
             logger.warning(f"[{pipeline_id}] 已终止孤儿研究子进程组 pid={pid}")
         except (ProcessLookupError, PermissionError, OSError, subprocess.SubprocessError):
@@ -1022,6 +1606,9 @@ class PipelineOrchestrator:
             data = PipelineManager.load(pipeline_id)
             if data is None:
                 raise FileNotFoundError("管线不存在")
+            _bad = PipelineManager.is_incompatible(data)  # I-4-4
+            if _bad is not None:
+                raise IncompatiblePipelineSchema(pipeline_id, _bad)
             if data.get("status") == "running":
                 raise RuntimeError("管线仍在运行，无法恢复")
             if data.get("status") == "completed":
@@ -1082,6 +1669,9 @@ class PipelineOrchestrator:
             data = PipelineManager.load(pipeline_id)
             if data is None:
                 raise FileNotFoundError("管线不存在")
+            _bad = PipelineManager.is_incompatible(data)  # I-4-4
+            if _bad is not None:
+                raise IncompatiblePipelineSchema(pipeline_id, _bad)
             if data.get("mode") != "research_only":
                 raise RuntimeError("仅 research_only 管线可继续为完整管线")
             if data.get("status") != "completed":
@@ -1143,6 +1733,9 @@ class PipelineOrchestrator:
         base = PipelineManager.load(base_pipeline_id)
         if base is None:
             raise FileNotFoundError("基础管线不存在")
+        _bad = PipelineManager.is_incompatible(base)  # I-4-4
+        if _bad is not None:
+            raise IncompatiblePipelineSchema(base_pipeline_id, _bad)
         base_state = PipelineState.from_dict(base)
         if not base_state.graph_id:
             raise RuntimeError("基础管线尚未建图，无法分叉情景")
@@ -1295,6 +1888,12 @@ class PipelineOrchestrator:
 
     def _make_stage_updater(self, state: PipelineState, stage: str):
         task_manager = TaskManager()
+        # 把后续该阶段的 LLM 调用归属到此 stage（I-5-2 per-stage rollup）。
+        try:
+            from ..utils.telemetry import set_stage
+            set_stage(stage)
+        except Exception:
+            pass
 
         def update(local_pct: int, message: str):
             # 取消点：各阶段内部都会频繁回调进度，在这里抬升取消请求，
@@ -1312,9 +1911,20 @@ class PipelineOrchestrator:
             if st.started_at is None:
                 st.started_at = _utcnow()
             state.current_stage = stage
+            # I-5-6: 记录最近一次进度信号的壁钟时间戳，供状态 API 计算 elapsed/stale，
+            # 让 UI 把「长时间无进度」诚实地呈现为「仍在思考」而非「卡死的进度条」。
+            # I-4-1: 进度回调本身即确凿的存活信号，顺手把 heartbeat_at 也刷新，避免随后的
+            # save(state) 用陈旧的内存值覆盖看护线程刚原子写入的新心跳（两者就此保持一致）。
+            _hb_now = _utcnow()
+            state.last_progress_at = _hb_now
+            if state.owner_boot_id is not None:
+                state.heartbeat_at = _hb_now
             state.global_progress = self._global_from_stage(
                 state.mode, stage, local_pct, state.options.get("dynamic_bands")
             )
+            # I-4-6: 在长阶段运行中机会性地登记已落盘的「临时产物」深链（best-effort，
+            # 不覆盖完成时登记的正式产物），让用户在阶段完成前就能查看增量证据。
+            self._register_partial_artifacts(state, stage)
             PipelineManager.save(state)
             if state.task_id:
                 task_manager.update_task(
@@ -1340,36 +1950,81 @@ class PipelineOrchestrator:
             pass
         PipelineManager.save(state)
 
-    def _record_stage_artifacts(self, state: PipelineState, stage: str) -> None:
-        """T6.3: 阶段完成时登记其产物的可深链路径（存在且非空才登记）。"""
+    @staticmethod
+    def _stage_artifact_specs(state: PipelineState, stage: str) -> list[tuple[str, str]]:
+        """T6.3/I-4-3/I-4-6: 单一真源——某阶段「可深链产物」的 (name, 绝对路径) 候选列表。
+
+        完成时登记（_record_stage_artifacts）、复用前完整性校验（_validate_reuse）、
+        运行中临时产物发现（_discover_partial_artifacts）三处共用，避免三套各写一份文件名清单
+        造成漂移。仅返回候选路径，不检查存在性（调用方按需过滤）。
+        """
         hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
-
-        def add_if(name: str, path: Optional[str]) -> None:
-            if path and os.path.exists(path) and os.path.getsize(path) > 0:
-                state.artifacts[name] = path
-
+        specs: list[tuple[str, str]] = []
         if stage == STAGE_RESEARCH:
-            add_if("dossier", os.path.join(hd, "actors.json"))
-            add_if("timeline", os.path.join(hd, "timeline.json"))
-            add_if("sources", os.path.join(hd, "sources.json"))
+            specs.append(("report", os.path.join(hd, "research_report.md")))
+            specs.append(("dossier", os.path.join(hd, "actors.json")))
+            specs.append(("timeline", os.path.join(hd, "timeline.json")))
+            specs.append(("sources", os.path.join(hd, "sources.json")))
         elif stage == STAGE_ONTOLOGY:
-            add_if("ontology", os.path.join(hd, "ontology.json"))
+            specs.append(("ontology", os.path.join(hd, "ontology.json")))
         elif stage == STAGE_GRAPH:
-            add_if("communities", os.path.join(hd, "communities.json"))
+            specs.append(("communities", os.path.join(hd, "communities.json")))
         elif stage == STAGE_PREPARE:
             sim_id = state.simulation_id
             if sim_id:
                 sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, sim_id)
-                add_if("initial_posts", os.path.join(sim_dir, "simulation_config.json"))
+                specs.append(("initial_posts", os.path.join(sim_dir, "simulation_config.json")))
                 for fname in ("twitter_profiles.csv", "reddit_profiles.json"):
-                    p = os.path.join(sim_dir, fname)
-                    if os.path.exists(p) and os.path.getsize(p) > 0:
-                        state.artifacts["personas"] = p
-                        break
+                    specs.append(("personas", os.path.join(sim_dir, fname)))
         elif stage == STAGE_RUN:
             sim_id = state.simulation_id
             if sim_id:
-                add_if("run_summary", os.path.join(SimulationRunner.RUN_STATE_DIR, sim_id, "run_summary.json"))
+                specs.append(("run_summary",
+                              os.path.join(SimulationRunner.RUN_STATE_DIR, sim_id, "run_summary.json")))
+        elif stage == STAGE_REPORT:
+            # 报告章节逐节落盘（section_NN.md）；运行中可作临时产物深链（见 _discover_partial_artifacts）。
+            pass
+        return specs
+
+    def _record_stage_artifacts(self, state: PipelineState, stage: str) -> None:
+        """T6.3: 阶段完成时登记其产物的可深链路径（存在且非空才登记）。
+
+        I-4-3: 同时把每条登记的产物写入 handoff/manifest.json（sha256/字节/产出阶段/schema_ok），
+        供后续 resume 复用前做完整性校验（_validate_reuse）。清单写失败仅退化为「无清单」，
+        不影响 T6.3 的深链登记。
+        """
+        recorded: list[tuple[str, str]] = []
+
+        def add_if(name: str, path: Optional[str]) -> bool:
+            if path and os.path.exists(path) and os.path.getsize(path) > 0:
+                state.artifacts[name] = path
+                recorded.append((name, path))
+                return True
+            return False
+
+        if stage == STAGE_PREPARE:
+            # personas 取首个存在者（twitter_profiles.csv | reddit_profiles.json）。
+            for name, path in self._stage_artifact_specs(state, stage):
+                if name == "personas":
+                    if add_if("personas", path):
+                        break
+                else:
+                    add_if(name, path)
+        else:
+            for name, path in self._stage_artifact_specs(state, stage):
+                add_if(name, path)
+
+        # I-4-3: 把本阶段实际登记到的产物写入完整性清单。
+        if recorded and bool(getattr(Config, "PIPELINE_VALIDATE_ARTIFACTS", True)):
+            try:
+                manifest = PipelineManager.load_artifact_manifest(state.pipeline_id)
+                for name, path in recorded:
+                    entry = _manifest_entry_for(name, path, stage)
+                    if entry is not None:
+                        manifest[name] = entry
+                PipelineManager.write_artifact_manifest(state.pipeline_id, manifest)
+            except Exception as e:  # noqa: BLE001 — 清单是复用保障，写失败仅退化为无校验
+                logger.debug("[%s] 产物清单写出跳过: %s", state.pipeline_id, e)
 
     def _fail_stage(self, state: PipelineState, stage: str, error: str):
         st = state.stages.setdefault(stage, StageState(name=stage))
@@ -1378,12 +2033,427 @@ class PipelineOrchestrator:
         st.finished_at = _utcnow()
         PipelineManager.save(state)
 
+    # -- 内部：产物完整性校验（复用前守卫） (I-4-3) ------------------------
+
+    def _validate_reuse(self, state: PipelineState, stage: str) -> bool:
+        """I-4-3: 复用一个标记 completed 的阶段前，按产物清单核验其产物未被半写/截断/篡改。
+
+        对该阶段在清单里登记过的每条产物：重算 sha256 + 字节数与清单比对，并跑轻量 schema 探针。
+        任一不符 → 返回 False（调用方应回落到重建并留痕），全部通过 → True。
+
+        语义边界（保守、绝不误杀一次本可复用的产物）：
+          - 清单整体缺失（老管线 / 关闭过校验）→ True（按旧的「存在性复用」行为放行）；
+          - 某产物在清单里没有条目（阶段产出可选，如无 communities.json）→ 不校验该产物；
+          - 清单里有条目但磁盘文件已不存在 → False（产物丢了，必须重建）；
+          - sha256 当时未能计算（None）→ 仅比字节数 + schema（无哈希可比时不因此误判）。
+        仅在 Config.PIPELINE_VALIDATE_ARTIFACTS 开启时被调用（见各复用分支）。
+        """
+        manifest = PipelineManager.load_artifact_manifest(state.pipeline_id)
+        if not manifest:
+            return True  # 无清单 → 退化到旧的存在性复用，保持向后兼容
+        ok = True
+        for name, path in self._stage_artifact_specs(state, stage):
+            entry = manifest.get(name)
+            if not isinstance(entry, dict):
+                continue  # 该产物未登记（可选 / 老清单）→ 不校验
+            man_path = entry.get("path") or path
+            if not os.path.exists(man_path):
+                logger.warning("[%s] 复用校验：产物 %s 缺失（%s）", state.pipeline_id, name, man_path)
+                ok = False
+                break
+            try:
+                size = os.path.getsize(man_path)
+            except OSError:
+                ok = False
+                break
+            exp_bytes = entry.get("bytes")
+            if isinstance(exp_bytes, int) and exp_bytes != size:
+                logger.warning("[%s] 复用校验：产物 %s 字节数变更 %s→%s",
+                               state.pipeline_id, name, exp_bytes, size)
+                ok = False
+                break
+            exp_sha = entry.get("sha256")
+            if isinstance(exp_sha, str) and exp_sha:
+                cur_sha = _sha256_file(man_path)
+                if cur_sha is not None and cur_sha != exp_sha:
+                    logger.warning("[%s] 复用校验：产物 %s 哈希不符（内容变更/损坏）",
+                                   state.pipeline_id, name)
+                    ok = False
+                    break
+            if not _probe_artifact_schema(name, man_path):
+                logger.warning("[%s] 复用校验：产物 %s 结构探针未通过", state.pipeline_id, name)
+                ok = False
+                break
+        return ok
+
+    def _reuse_ok(self, state: PipelineState, stage: str) -> bool:
+        """I-4-3: 复用守卫的薄封装——校验关闭时恒 True，开启时调 _validate_reuse。
+
+        各阶段（GRAPH/PREPARE/RUN）的复用分支统一经此判定，校验失败时由调用方
+        把对应阶段降级重建，并写 resumed_stage_validation 面包屑（与既有图谱重建路径同构）。
+        """
+        if not bool(getattr(Config, "PIPELINE_VALIDATE_ARTIFACTS", True)):
+            return True
+        try:
+            return self._validate_reuse(state, stage)
+        except Exception as e:  # noqa: BLE001 — 校验自身异常绝不阻断一次合法复用
+            logger.debug("[%s] 复用校验异常（放行）: %s", state.pipeline_id, e)
+            return True
+
+    # -- 内部：运行中临时产物深链 (I-4-6) ----------------------------------
+
+    @staticmethod
+    def _discover_partial_artifacts(state: PipelineState, stage: str) -> list[dict[str, Any]]:
+        """I-4-6: best-effort 发现某阶段「此刻已落盘」的临时产物（含字节/mtime，标记 provisional）。
+
+        长且大多无声的阶段（深度研究、多轮模拟、多章节报告）正是用户最需要增量证据来
+        判断是否取消的地方。本方法只读目录元信息（cheap），不解析内容；返回的每条都带
+        provisional 标记，供 UI/API 永不把临时产物当成最终产物。
+        REPORT 额外扫描 section_NN.md（逐节落盘），RUN 额外扫描尚未聚合的 actions/run-state。
+        """
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+
+        def _stat(name: str, path: str) -> None:
+            if not path or path in seen or not os.path.exists(path):
+                return
+            try:
+                size = os.path.getsize(path)
+                mtime = os.path.getmtime(path)
+            except OSError:
+                return
+            if size <= 0:
+                return
+            seen.add(path)
+            out.append({
+                "name": name,
+                "path": path,
+                "bytes": size,
+                "mtime": datetime.fromtimestamp(mtime, timezone.utc).isoformat(),
+                "provisional": True,
+            })
+
+        # 1) 阶段已知产物（与完成时登记同源，但此处不要求阶段已完成）。
+        for name, path in PipelineOrchestrator._stage_artifact_specs(state, stage):
+            _stat(name, path)
+
+        # 2) 阶段特有的「过程中产物」（完成时清单未涵盖的逐步落盘文件）。
+        try:
+            if stage == STAGE_RESEARCH:
+                hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+                _stat("research_report", os.path.join(hd, "research_report.md"))
+                _stat("research_progress", os.path.join(hd, "research_progress.log"))
+            elif stage == STAGE_RUN:
+                sim_id = state.simulation_id
+                if sim_id:
+                    rsd = os.path.join(SimulationRunner.RUN_STATE_DIR, sim_id)
+                    _stat("run_state", os.path.join(rsd, "run_state.json"))
+                    # actions.jsonl 按平台分目录（twitter/ reddit/）逐行 append，运行中即可观测。
+                    for _plat in ("twitter", "reddit"):
+                        _stat(f"actions_{_plat}", os.path.join(rsd, _plat, "actions.jsonl"))
+            elif stage == STAGE_REPORT:
+                # 报告章节逐节写入 ReportManager 的报告目录；扫描 section_*.md 排序后透出。
+                rid = state.report_id
+                if rid:
+                    try:
+                        rep_dir = ReportManager._get_report_folder(rid)
+                    except Exception:  # noqa: BLE001
+                        rep_dir = None
+                    if rep_dir and os.path.isdir(rep_dir):
+                        for fn in sorted(os.listdir(rep_dir)):
+                            if fn.startswith("section_") and fn.endswith(".md"):
+                                _stat(fn[:-3], os.path.join(rep_dir, fn))
+        except Exception:  # noqa: BLE001 — 发现是观测增益，永不抛出
+            pass
+        return out
+
+    def _register_partial_artifacts(self, state: PipelineState, stage: str) -> None:
+        """I-4-6: 运行中把新出现的临时产物以 provisional 键登记进 state.artifacts（节流、不覆盖正式产物）。
+
+        节流：同一阶段每隔 PIPELINE_PARTIAL_SCAN_EVERY_S 秒最多扫一次磁盘（默认 10s），
+        避免在每次进度回调（可能秒级多次）都做目录 stat。登记键形如 'report_partial'，与完成时
+        登记的正式键（'run_summary' 等）分离，确保完成产物永不被临时产物覆盖。
+        关闭 PIPELINE_LIVE_ARTIFACTS 时整段 no-op（行为回到只在完成时登记）。
+        """
+        if not bool(getattr(Config, "PIPELINE_LIVE_ARTIFACTS", True)):
+            return
+        now = time.time()
+        every = float(getattr(Config, "PIPELINE_PARTIAL_SCAN_EVERY_S", 10) or 10)
+        # 节流戳存在 orchestrator 实例（每次 _run 新建一个实例，更新器闭包持有它），
+        # 仅在本次运行内跨调用有效——刻意不落到 state.options，避免污染持久化状态文件。
+        throttle = self._partial_scan_at
+        last = throttle.get(stage)
+        if isinstance(last, (int, float)) and (now - last) < every:
+            return
+        throttle[stage] = now
+        try:
+            partials = self._discover_partial_artifacts(state, stage)
+        except Exception:  # noqa: BLE001
+            return
+        for p in partials:
+            name = p.get("name")
+            path = p.get("path")
+            if not name or not path:
+                continue
+            key = f"{name}_partial"
+            # 正式产物（同名非 _partial 键）已登记则不再重复打临时键，避免冗余。
+            if name in state.artifacts:
+                continue
+            state.artifacts[key] = path
+
+    # -- 内部：ETA / spend 心跳估计 (I-5-6) --------------------------------
+
+    def estimate_eta(self, state: PipelineState) -> dict[str, Any]:
+        """I-5-6: 从已有数据廉价推导 elapsed / 近似 ETA / staleness（不发任何请求）。
+
+        ETA 用「当前 global_progress 占比 vs 自 created_at 起的已耗时」线性外推剩余时间——刻意标注
+        approximate（管线各阶段速率差异大，仅作量级参考）。stale 判定：自 last_progress_at（无则
+        updated_at）起超过 PIPELINE_STALE_S 秒未更新 → True（UI 显示「仍在思考」而非「卡死」）。
+        终态（completed/failed/cancelled）下 eta=0、不再 stale。供状态 API 增量拼进响应（纯附加字段）。
+        """
+        out: dict[str, Any] = {
+            "elapsed_s": None,
+            "eta_s": None,
+            "eta_approximate": True,
+            "stale": False,
+            "last_progress_age_s": None,
+        }
+        elapsed = _age_seconds(state.created_at)
+        if elapsed is not None:
+            out["elapsed_s"] = int(elapsed)
+        status = state.status
+        terminal = status in ("completed", "failed", "cancelled")
+        # staleness：仅对在飞管线有意义。
+        ref = state.last_progress_at or state.updated_at
+        age = _age_seconds(ref)
+        if age is not None:
+            out["last_progress_age_s"] = int(age)
+        if not terminal and age is not None:
+            stale_s = float(getattr(Config, "PIPELINE_STALE_S", 300) or 300)
+            out["stale"] = age > stale_s
+        # ETA：线性外推（progress→剩余时间）。需要正进度与正耗时。
+        if terminal:
+            out["eta_s"] = 0
+        else:
+            prog = max(0, min(100, int(state.global_progress or 0)))
+            if elapsed is not None and elapsed > 0 and 0 < prog < 100:
+                remaining = elapsed * (100 - prog) / prog
+                # 夹取到合理上限，避免极早期（prog=1）外推出离谱数字误导用户。
+                cap = float(getattr(Config, "PIPELINE_ETA_CAP_S", 7200) or 7200)
+                out["eta_s"] = int(min(remaining, cap))
+        return out
+
+    def heartbeat_status(self, state: PipelineState) -> dict[str, Any]:
+        """I-4-1/I-5-6: 汇总 ETA/staleness 心跳 + （计量开启时）当前累计花费，供状态 API 透出。
+
+        spend_so_far 来自 LLMMeter.snapshot（进程内累计，仅对本进程在飞的管线有数据；
+        重启后或别的 worker 的管线读不到 → 省略该字段，不臆造）。整体 best-effort。
+        """
+        info = self.estimate_eta(state)
+        # owner/心跳液体性（reconcile 也用同一判据，这里只读不改）。
+        info["owner_pid"] = state.owner_pid
+        info["owner_alive"] = _pid_alive(state.owner_pid) if state.owner_pid else None
+        hb_age = _age_seconds(state.heartbeat_at)
+        info["heartbeat_age_s"] = int(hb_age) if hb_age is not None else None
+        if bool(getattr(Config, "LLM_TELEMETRY_ENABLED", True)):
+            try:
+                from ..utils.telemetry import LLMMeter
+                snap = LLMMeter.snapshot(state.pipeline_id)
+                tot = snap.get("total") or {}
+                # 仅在确有计量数据时透出（全 0 视为「本进程无数据」省略）。
+                if tot.get("total_tokens") or tot.get("cost_usd"):
+                    info["spend_so_far"] = {
+                        "tokens": tot.get("total_tokens"),
+                        "cost_usd": tot.get("cost_usd"),
+                    }
+            except Exception:  # noqa: BLE001
+                pass
+        return info
+
+    # -- 内部：心跳看护线程 (I-4-1) ----------------------------------------
+
+    def _start_heartbeat(self, state: PipelineState) -> Optional[threading.Event]:
+        """I-4-1: 钉入 owner 指纹并启动壁钟心跳看护线程。返回用于在 finally 停止它的 Event。
+
+        看护线程独立于阶段进度，每 PIPELINE_HEARTBEAT_INTERVAL_S 秒原子刷新一次 heartbeat_at
+        （走 touch_heartbeat 轻量直写，不触发 full save）。即便研究子进程/persona 生成长时间无
+        进度回调，心跳仍在跳，让别的进程的 reconcile_orphans 看到「这条管线还活着」。
+        关闭 PIPELINE_HEARTBEAT_ENABLED 时不启动线程、不写 owner（回退旧的 _threads 判定），返回 None。
+        """
+        if not bool(getattr(Config, "PIPELINE_HEARTBEAT_ENABLED", True)):
+            return None
+        # 钉入 owner 指纹 + 首拍心跳（即便随后看护线程才起，状态文件也已带 owner/心跳）。
+        try:
+            state.owner_pid = os.getpid()
+            state.owner_boot_id = _BOOT_ID
+            state.heartbeat_at = _utcnow()
+        except Exception:  # noqa: BLE001
+            pass
+        interval = float(getattr(Config, "PIPELINE_HEARTBEAT_INTERVAL_S", 30) or 30)
+        stop = threading.Event()
+        pid = os.getpid()
+
+        def _beat() -> None:
+            # 立即落一拍，再按节律续跳，直到 _run 在 finally 置位 stop。
+            while not stop.wait(interval):
+                try:
+                    if not PipelineManager.touch_heartbeat(state.pipeline_id, pid=pid):
+                        # 状态已非 running（终态）→ 无需再跳，提前退出看护线程。
+                        return
+                except Exception as e:  # noqa: BLE001 — 心跳失败不得拖垮管线
+                    logger.debug("[%s] 心跳刷新跳过: %s", state.pipeline_id, e)
+
+        t = threading.Thread(target=_beat, name=f"pipeline-hb-{state.pipeline_id}", daemon=True)
+        t.start()
+        return stop
+
+    # -- 内部：可复现性清单 run.json (I-8-1) -------------------------------
+
+    def _write_run_manifest(self, state: PipelineState) -> None:
+        """I-8-1: 在管线启动时写出首版 run.json（best-effort，绝不阻断运行）。
+
+        与 _persist_env 一样整体包 try/except：清单写失败只是少了审计产物，
+        不能让它拖垮一次真正的预测运行。RECORD_RUN_MANIFEST=false 时整段跳过。
+        """
+        if not bool(getattr(Config, "RECORD_RUN_MANIFEST", True)):
+            return
+        try:
+            from ..utils.security import redact_secrets
+            from ..utils.atomic import write_json_atomic
+            manifest = redact_secrets(_build_run_manifest(state))
+            write_json_atomic(PipelineManager.manifest_path(state.pipeline_id), manifest)
+            # 登记可深链指针，供 StageTimeline / GET /manifest 复用。
+            if isinstance(state.artifacts, dict):
+                state.artifacts["run_manifest"] = PipelineManager.manifest_path(state.pipeline_id)
+        except Exception as e:  # noqa: BLE001 — 清单是观测产物，写失败必须静默降级
+            logger.debug("[%s] run.json 写出跳过: %s", state.pipeline_id, e)
+
+    def _update_manifest(self, state: PipelineState, stage: str,
+                         total_rounds: Optional[int] = None) -> None:
+        """I-8-1: 阶段进入时把当前解析出的 provider/model（可热切换）钉入 run.json。
+
+        读出现有清单，更新对应 stage 的 resolved.provider/model_name（ontology/graph/report）
+        与 simulation.total_rounds，原子写回。任何异常静默吞掉。
+        """
+        if not bool(getattr(Config, "RECORD_RUN_MANIFEST", True)):
+            return
+        try:
+            from ..utils.security import redact_secrets
+            from ..utils.atomic import write_json_atomic
+            path = PipelineManager.manifest_path(state.pipeline_id)
+            manifest = _read_json(path)
+            if not isinstance(manifest, dict):
+                # 清单缺失（如老管线 resume）：重建首版骨架。
+                manifest = redact_secrets(_build_run_manifest(state))
+            resolved = manifest.setdefault("resolved", {})
+            if stage in (STAGE_ONTOLOGY, STAGE_GRAPH, STAGE_REPORT):
+                resolved[stage] = _current_provider_pair()
+            if total_rounds is not None:
+                sim = resolved.setdefault("simulation", {})
+                sim["total_rounds"] = int(total_rounds)
+            manifest["updated_at"] = _utcnow()
+            write_json_atomic(path, redact_secrets(manifest))
+        except Exception as e:  # noqa: BLE001
+            logger.debug("[%s] run.json 更新跳过: %s", state.pipeline_id, e)
+
+    # -- 内部：研究阶段遥测 (I-5-7) ----------------------------------------
+
+    def _record_research_telemetry(self, state: PipelineState,
+                                   telemetry: Optional[dict[str, Any]]) -> None:
+        """I-5-7: 把 DeerFlowResearchRunner 返回的研究遥测纳入统一计量。
+
+        (1) 始终 stash 到 state.options['research_telemetry']（即使计量关闭，也是免费观测）；
+        (2) 计量开启且确有 token 时，向 LLMMeter 写一条 stage='research' 的合成记录，
+            让 run_telemetry.json 的整轮 token/成本 rollup 把最贵的研究阶段也算进去。
+        resume 路径无遥测（telemetry=None）→ 直接跳过，保持旧行为。
+        """
+        if not isinstance(telemetry, dict):
+            return
+        try:
+            state.options["research_telemetry"] = telemetry
+            PipelineManager.save(state)
+        except Exception:  # noqa: BLE001 — stash 失败不影响主流程
+            pass
+        if not bool(getattr(Config, "LLM_TELEMETRY_ENABLED", True)):
+            return
+        t_in = int(telemetry.get("tokens_in") or 0)
+        t_out = int(telemetry.get("tokens_out") or 0)
+        if t_in <= 0 and t_out <= 0:
+            return  # 该研究模型未报 usage → 无可计量 token，跳过合成记录
+        try:
+            from ..utils.telemetry import LLMMeter
+            model = str(telemetry.get("model") or getattr(Config, "DEERFLOW_MODEL", "claude"))
+            # 研究模型名映射到一个计价 provider 键：CLI 订阅类（claude/codex）边际成本为 0，
+            # 其余复用同名 provider 的定价表（缺失则成本 0，仍记 token/延迟）。
+            provider = "claude-cli" if model in ("claude", "codex") else model
+            wall_ms = float(telemetry.get("wall_s") or 0.0) * 1000.0
+            LLMMeter.record(
+                provider=provider,
+                model=model,
+                prompt_tokens=t_in,
+                completion_tokens=t_out,
+                latency_ms=wall_ms,
+                stage=STAGE_RESEARCH,
+                run_id=state.pipeline_id,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.debug("[%s] 研究阶段合成计量跳过: %s", state.pipeline_id, e)
+
+    # -- 内部：研究覆盖度/质量记分牌 (I-0-3) -------------------------------
+
+    def _surface_research_quality(self, state: PipelineState, handoff_dir: str) -> None:
+        """I-0-3: 把研究阶段写出的 research_quality 记分牌（来自 handoff/meta.json）
+        透传到 state.options，供 StageTimeline / API 展示。
+
+        记分牌由 DeerFlow bridge 的 compute_research_quality() 写入 meta.json（跨文件部分）。
+        本方法只负责「读出并上抛」：若 bridge 尚未写该字段（旧 bridge / 未启用），静默 no-op，
+        保持现有行为不变（纯观测、零成本、永不硬失败）。
+
+        若 RESEARCH_QUALITY_GATE 开启且记分牌的 score 低于 RESEARCH_QUALITY_FLOOR，
+        在 options 里打一个软告警标记（real gap-pass 由 bridge 在研究阶段内自校正）。
+        """
+        try:
+            meta = _read_json(os.path.join(handoff_dir, "meta.json"))
+        except Exception:  # noqa: BLE001
+            meta = None
+        if not isinstance(meta, dict):
+            return
+        rq = meta.get("research_quality")
+        if not isinstance(rq, dict):
+            return
+        try:
+            state.options["research_quality"] = rq
+            # 软告警：记分牌偏低时留痕（不阻断管线——GIGO 是软信号，宁可继续也不误杀小盘口事件）。
+            gate_on = bool(getattr(Config, "RESEARCH_QUALITY_GATE", False))
+            floor = float(getattr(Config, "RESEARCH_QUALITY_FLOOR", 0.0) or 0.0)
+            score = rq.get("score")
+            if gate_on and isinstance(score, (int, float)) and floor > 0 and score < floor:
+                state.options["research_quality_warning"] = (
+                    f"research quality score {round(float(score), 3)} < floor {floor}"
+                )
+                logger.warning(
+                    "[%s] 研究质量记分牌偏低: score=%.3f < floor=%.3f（继续，不硬失败）",
+                    state.pipeline_id, float(score), floor,
+                )
+            PipelineManager.save(state)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("[%s] research_quality 透传跳过: %s", state.pipeline_id, e)
+
     # -- 内部：主流程 ------------------------------------------------------
 
     @classmethod
     def _run(cls, state: PipelineState) -> None:
         self = cls()
         task_manager = TaskManager()
+        # EXECPLAN2 I-5-0/I-5-2: 把本次管线所有 LLM 调用归属到该 pipeline_id（contextvars）。
+        from ..utils.telemetry import set_run_context, LLMMeter
+        set_run_context(state.pipeline_id)
+        # I-8-1: 管线起飞即写首版 run.json（解析后的研究深度/模型/图谱/环境指纹），
+        # 后续每阶段进入时把热切换出的报告/模拟 provider 钉入。
+        self._write_run_manifest(state)
+        # I-4-1: 钉入本进程的 owner 指纹 + 启动一个独立于阶段进度的壁钟心跳看护线程。
+        # 心跳让 reconcile_orphans 把「死管线」与「慢但活（深研究/persona 静默数分钟）」区分开。
+        hb_stop = self._start_heartbeat(state)
         try:
             # ---- Stage 0: RESEARCH ----
             upd = self._make_stage_updater(state, STAGE_RESEARCH)
@@ -1414,6 +2484,10 @@ class PipelineOrchestrator:
                 self._complete_stage(state, STAGE_RESEARCH, "研究完成")
             report_md: str = research["report"]
             actors = research.get("actors")
+            # I-5-7: 把研究阶段遥测并入统一计量（stash 到 options + 喂给 meter）。
+            self._record_research_telemetry(state, research.get("research_telemetry"))
+            # I-0-3: 透传研究覆盖度/质量记分牌（meta.json → options，纯观测，永不硬失败）。
+            self._surface_research_quality(state, handoff_dir)
 
             if state.mode == "research_only":
                 state.status = "completed"
@@ -1430,6 +2504,7 @@ class PipelineOrchestrator:
 
             # ---- Stage 1: ONTOLOGY (用研究报告做种子) ----
             upd = self._make_stage_updater(state, STAGE_ONTOLOGY)
+            self._update_manifest(state, STAGE_ONTOLOGY)  # I-8-1: 钉入本阶段实际 provider
             project_name = state.options.get("project_name") or f"研究预测 {state.pipeline_id}"
             project = ProjectManager.get_project(state.project_id) if state.project_id else None
             if project is not None and project.ontology:
@@ -1473,9 +2548,16 @@ class PipelineOrchestrator:
 
             # ---- Stage 2: GRAPH ----
             upd = self._make_stage_updater(state, STAGE_GRAPH)
+            self._update_manifest(state, STAGE_GRAPH)  # I-8-1
             graph_stage_done = state.stages.get(STAGE_GRAPH) and state.stages[STAGE_GRAPH].status == "completed"
             graph_id = state.graph_id or getattr(project, "graph_id", None)
             _reuse_graph = bool(graph_stage_done and graph_id)
+            # I-4-3: 复用前先按产物清单校验 GRAPH 阶段的文件产物（communities.json 等）未被半写/篡改；
+            # 不符则回落重建并留痕（与下方既有的实体数健康检查并列，两道防线各管一半）。
+            if _reuse_graph and not self._reuse_ok(state, STAGE_GRAPH):
+                _reuse_graph = False
+                state.options["resumed_stage_validation"] = "graph_rebuilt_manifest_mismatch"
+                logger.info("[%s] 图谱产物清单校验未通过，回落到重建", state.pipeline_id)
             if _reuse_graph:
                 # T6.1/T2.7: 复用前做廉价健康检查——0 实体的图谱被复用会在 PREPARE 阶段崩溃，
                 # 故实体数为 0（或查询失败）时回落到重建，并留痕。
@@ -1501,7 +2583,12 @@ class PipelineOrchestrator:
                 chunks = TextProcessor.split_text(report_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP)
                 self._recompute_dynamic_bands(state, chunk_count=len(chunks))  # T6.7: 已知 chunk 数→重排区间
                 graph_id = builder.create_graph(name=project.name)
-                builder.set_ontology(graph_id, project.ontology)
+                # EXECPLAN2 F-3-1（跨文件兜底）：set_ontology 已对无名条目逐项跳过；这里再包一层
+                # try/except，确保即便整段本体异常也不至于中断 GRAPH 阶段（无本体则按纯文本抽取建图）。
+                try:
+                    builder.set_ontology(graph_id, project.ontology)
+                except Exception as _e:
+                    logger.warning(f"set_ontology 失败，回退为无本体建图: {_e}")
 
                 # T2.2/T2.3: 在文本抽取前，把研究确认的 actors + relationships 作为 typed 边
                 # 种入图谱；valid_at 锚定研究 as_of（不是建图时刻），后续文本抽取按名+embedding
@@ -1557,7 +2644,14 @@ class PipelineOrchestrator:
             sim_manager = SimulationManager()
             prepare_stage_done = state.stages.get(STAGE_PREPARE) and state.stages[STAGE_PREPARE].status == "completed"
             sim_state = sim_manager.get_simulation(state.simulation_id) if state.simulation_id else None
-            if prepare_stage_done and sim_state is not None:
+            # I-4-3: 复用前校验 PREPARE 产物（simulation_config.json / personas）未被半写/篡改；
+            # 不符则当作未完成、走重建分支并留痕（半写的 sim_config 会让模拟/报告静默降级）。
+            _prepare_reuse = bool(prepare_stage_done and sim_state is not None)
+            if _prepare_reuse and not self._reuse_ok(state, STAGE_PREPARE):
+                _prepare_reuse = False
+                state.options["resumed_stage_validation"] = "prepare_rebuilt_manifest_mismatch"
+                logger.info("[%s] 模拟环境产物清单校验未通过，回落到重建", state.pipeline_id)
+            if _prepare_reuse:
                 upd(100, "复用已有模拟环境…")
                 self._complete_stage(state, STAGE_PREPARE, "环境已恢复")
             else:
@@ -1611,6 +2705,11 @@ class PipelineOrchestrator:
             # ---- Stage 4: RUN ----
             upd = self._make_stage_updater(state, STAGE_RUN)
             run_stage_done = state.stages.get(STAGE_RUN) and state.stages[STAGE_RUN].status == "completed"
+            # I-4-3: 复用前校验 RUN 产物（run_summary.json）未被半写/篡改；不符则重跑模拟并留痕。
+            if run_stage_done and not self._reuse_ok(state, STAGE_RUN):
+                run_stage_done = False
+                state.options["resumed_stage_validation"] = "run_rebuilt_manifest_mismatch"
+                logger.info("[%s] 模拟结果产物清单校验未通过，回落到重跑", state.pipeline_id)
             if run_stage_done:
                 upd(100, "复用已有模拟结果…")
                 self._complete_stage(state, STAGE_RUN, "模拟已恢复")
@@ -1647,6 +2746,7 @@ class PipelineOrchestrator:
                     if (cur, total) != _last_round_seen:
                         if total > 0 and (_last_round_seen[1] or 0) <= 0:
                             self._recompute_dynamic_bands(state, total_rounds=total)  # T6.7
+                            self._update_manifest(state, STAGE_RUN, total_rounds=total)  # I-8-1
                         _last_round_seen = (cur, total)
                         if total > 0:
                             upd(min(98, int(cur / total * 100)), f"模拟轮次 {cur}/{total}")
@@ -1665,6 +2765,36 @@ class PipelineOrchestrator:
                         sim_manager._save_simulation_state(ss)
                 except Exception:
                     pass
+
+                # EXECPLAN2 F-12-1: 模拟结束后、读 actions.jsonl 写 run_summary 与跑报告之前，
+                # 加一道"汇流栅栏"。runner_status 会在 simulation_end 事件被解析的瞬间就置为
+                # COMPLETED（此时 OASIS 进程仍存活、监控线程仍在收尾，「模拟 → 图谱」反馈写入器
+                # 也可能还在排空队列向同一张 FalkorDB 图谱写 typed 边/episode）。若直接前进，报告
+                # 可能读到只摄入了一半反馈的图谱、run_summary 也可能基于仍在增长的 actions.jsonl，
+                # 导致同一模拟的报告 run-to-run 漂移、漏掉末轮反馈动态。故：
+                #   (1) join 监控线程 → 保证 OASIS 进程已退出且 _monitor_simulation 的 finally 跑完；
+                #   (2) 显式 stop_updater → 其 stop() 会 _flush_remaining 再 join worker（幂等，
+                #       即便监控线程已停过也安全）。
+                # 仅在本次运行启用了反馈回路时才需要（与 RUN 启动条件一致）；任何卡顿降级为告警，
+                # 不让栅栏本身拖垮管线。
+                if Config.SIM_GRAPH_FEEDBACK and graph_id:
+                    try:
+                        _mon = SimulationRunner._monitor_threads.get(sim_state.simulation_id)
+                        if _mon is not None and _mon.is_alive():
+                            _mon.join(timeout=30)
+                    except Exception as _join_err:  # noqa: BLE001
+                        logger.warning(
+                            "[%s] 等待模拟监控线程退出失败（降级继续）: %s",
+                            state.pipeline_id, _join_err,
+                        )
+                    try:
+                        ZepGraphMemoryManager.stop_updater(sim_state.simulation_id)
+                    except Exception as _flush_err:  # noqa: BLE001
+                        logger.warning(
+                            "[%s] 排空图谱反馈写入器失败（降级继续）: %s",
+                            state.pipeline_id, _flush_err,
+                        )
+
                 self._complete_stage(state, STAGE_RUN, "模拟完成")
 
             # T3.14: 模拟结束后聚合 run_summary.json（per-agent engagement + 每轮动作量 + top_posts +
@@ -1680,48 +2810,84 @@ class PipelineOrchestrator:
                 if os.path.exists(_rs) and os.path.getsize(_rs) > 0:
                     state.artifacts["run_summary"] = _rs  # T6.3
                     PipelineManager.save(state)
+                    # I-4-3: run_summary 在 _complete_stage(RUN) 之后才落盘，故补登清单条目，
+                    # 让后续 resume 能对它做完整性校验（否则清单缺该条 → 校验放行无保障）。
+                    if bool(getattr(Config, "PIPELINE_VALIDATE_ARTIFACTS", True)):
+                        try:
+                            _man = PipelineManager.load_artifact_manifest(state.pipeline_id)
+                            _entry = _manifest_entry_for("run_summary", _rs, STAGE_RUN)
+                            if _entry is not None:
+                                _man["run_summary"] = _entry
+                                PipelineManager.write_artifact_manifest(state.pipeline_id, _man)
+                        except Exception:  # noqa: BLE001
+                            pass
             except Exception as e:  # noqa: BLE001
                 logger.warning("[%s] run_summary 写出跳过: %s", state.pipeline_id, e)
 
             # ---- Stage 5: REPORT ----
             upd = self._make_stage_updater(state, STAGE_REPORT)
-            upd(5, "生成预测报告…")
-            report_id = f"report_{uuid.uuid4().hex[:12]}"
-            # T4.6/T4.7: 情景报告 → 传情景标签 + base 模拟 id（反事实对比 scenario_diff）
-            _scenario_label = state.options.get("scenario_label")
-            _base_sim_id = None
-            _base_pid = state.options.get("base_pipeline_id")
-            if _base_pid:
+            self._update_manifest(state, STAGE_REPORT)  # I-8-1
+            # EXECPLAN2 F-1-0: REPORT 复用守卫——以"已落盘的报告本身"为复用信号，而非
+            # stage 状态。REPORT 总是末阶段：当报告已生成、却在收尾 DONE 记账处崩溃/失败时，
+            # _fail_stage / mark_failed 会把 REPORT（current_stage）状态翻成 failed，resume()
+            # 又把它重置为 pending——因此 state.stages[REPORT].status 在恢复时永远不是 completed，
+            # 无法像其它阶段那样用阶段状态做复用判定。改为：若 state.report_id 能解析到一份非
+            # FAILED 的已存报告，则直接复用（保留原 report_id，不再凭空铸新 id 孤立前端/书签链接），
+            # 避免重复跑最贵的多工具 LLM 报告生成。
+            existing_report = None
+            if state.report_id:
                 try:
-                    _bd = PipelineManager.load(_base_pid) or {}
-                    _base_sim_id = _bd.get("simulation_id")
+                    existing_report = ReportManager.get_report(state.report_id)
                 except Exception:
-                    _base_sim_id = None
-            agent = ReportAgent(
-                graph_id=graph_id,
-                simulation_id=sim_state.simulation_id,
-                simulation_requirement=state.prompt,
-                # T4.1: 钉入研究档案，报告不再从冷图盲搜重挖 cast/关系/时间线
-                situation_brief=situation_brief(actors),
-                actors=actors,
-                sources=research.get("sources"),
-                research_report=report_md,
-                scenario_label=_scenario_label,
-                base_simulation_id=_base_sim_id,
-            )
+                    existing_report = None
+            # 兜底：report_id 丢失但该模拟已有报告时，按 simulation_id 找回（同样保留原 id）。
+            if existing_report is None and sim_state is not None:
+                try:
+                    existing_report = ReportManager.get_report_by_simulation(sim_state.simulation_id)
+                except Exception:
+                    existing_report = None
+            if existing_report is not None and getattr(existing_report, "status", None) != ReportStatus.FAILED:
+                upd(100, "复用已有报告")
+                state.report_id = getattr(existing_report, "report_id", state.report_id)
+                self._complete_stage(state, STAGE_REPORT, "报告完成（复用）")
+            else:
+                upd(5, "生成预测报告…")
+                report_id = f"report_{uuid.uuid4().hex[:12]}"
+                # T4.6/T4.7: 情景报告 → 传情景标签 + base 模拟 id（反事实对比 scenario_diff）
+                _scenario_label = state.options.get("scenario_label")
+                _base_sim_id = None
+                _base_pid = state.options.get("base_pipeline_id")
+                if _base_pid:
+                    try:
+                        _bd = PipelineManager.load(_base_pid) or {}
+                        _base_sim_id = _bd.get("simulation_id")
+                    except Exception:
+                        _base_sim_id = None
+                agent = ReportAgent(
+                    graph_id=graph_id,
+                    simulation_id=sim_state.simulation_id,
+                    simulation_requirement=state.prompt,
+                    # T4.1: 钉入研究档案，报告不再从冷图盲搜重挖 cast/关系/时间线
+                    situation_brief=situation_brief(actors),
+                    actors=actors,
+                    sources=research.get("sources"),
+                    research_report=report_md,
+                    scenario_label=_scenario_label,
+                    base_simulation_id=_base_sim_id,
+                )
 
-            def report_cb(stage: str, progress: int, message: str):
-                upd(max(5, min(99, int(progress))), f"{stage}: {message}")
+                def report_cb(stage: str, progress: int, message: str):
+                    upd(max(5, min(99, int(progress))), f"{stage}: {message}")
 
-            report = agent.generate_report(progress_callback=report_cb, report_id=report_id)
-            try:
-                ReportManager.save_report(report)
-            except Exception:
-                pass
-            state.report_id = getattr(report, "report_id", report_id)
-            if getattr(report, "status", None) == ReportStatus.FAILED:
-                raise RuntimeError(getattr(report, "error", "报告生成失败"))
-            self._complete_stage(state, STAGE_REPORT, "报告完成")
+                report = agent.generate_report(progress_callback=report_cb, report_id=report_id)
+                try:
+                    ReportManager.save_report(report)
+                except Exception:
+                    pass
+                state.report_id = getattr(report, "report_id", report_id)
+                if getattr(report, "status", None) == ReportStatus.FAILED:
+                    raise RuntimeError(getattr(report, "error", "报告生成失败"))
+                self._complete_stage(state, STAGE_REPORT, "报告完成")
 
             # ---- DONE ----
             state.status = "completed"
@@ -1765,6 +2931,24 @@ class PipelineOrchestrator:
                 except Exception:
                     pass
         finally:
+            # I-4-1: 停掉心跳看护线程（管线已到终态，不应再刷新 heartbeat_at）。
+            if hb_stop is not None:
+                hb_stop.set()
+            # EXECPLAN2 I-5-1: 落盘本次管线的 LLM 计量（token/成本/延迟，按阶段/模型），便于复盘。
+            try:
+                tpath = os.path.join(PipelineManager._dir(state.pipeline_id), "run_telemetry.json")
+                LLMMeter.write_run_telemetry(tpath, run_id=state.pipeline_id, extra={
+                    "pipeline_id": state.pipeline_id,
+                    "status": state.status,
+                    "report_id": state.report_id,
+                })
+                state.artifacts = getattr(state, "artifacts", None) or {}
+                if isinstance(state.artifacts, dict):
+                    state.artifacts["run_telemetry"] = tpath
+                    PipelineManager.save(state)
+                LLMMeter.reset(state.pipeline_id)
+            except Exception as _te:
+                logger.debug(f"[{state.pipeline_id}] 写入 run_telemetry 失败（忽略）: {_te}")
             # 线程结束即从注册表移除，避免 _threads 无界增长，并让 reconcile_orphans 的
             # "pid in _threads" 判定准确反映当前在飞的线程。
             cls._threads.pop(state.pipeline_id, None)

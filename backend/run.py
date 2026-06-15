@@ -37,9 +37,16 @@ def main():
     app = create_app()
     
     # 获取运行配置
-    host = os.environ.get('FLASK_HOST', '0.0.0.0')
+    # 默认仅绑定环回（EXECPLAN2 F-13-0）：服务无鉴权时不应暴露在所有网卡上。
+    # 需要局域网访问时显式设 FLASK_HOST=0.0.0.0，并务必同时配置 APP_API_TOKEN。
+    host = os.environ.get('FLASK_HOST', '127.0.0.1')
     port = int(os.environ.get('FLASK_PORT', 5001))
     debug = Config.DEBUG
+    if host not in ('127.0.0.1', 'localhost', '::1') and not Config.APP_API_TOKEN:
+        print(
+            f"⚠️  绑定到 {host} 但未设置 APP_API_TOKEN —— 所有变更类接口将对网络开放且无鉴权。\n"
+            f"   建议：设置 APP_API_TOKEN 后再以非环回地址启动。"
+        )
     
     # 启动服务
     app.run(host=host, port=port, debug=debug, threaded=True)

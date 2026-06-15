@@ -1,0 +1,61 @@
+"""Shared pytest fixtures (EXECPLAN2 I-7-0 / I-7-4).
+
+Offline-first: no test here may hit a real LLM or network. The FakeLLMClient
+fixture lets generator/report code be exercised deterministically without
+burning API calls (I-7-4: record/replay-style stub).
+"""
+
+import os
+import sys
+
+import pytest
+
+# Make `import app...` work when running pytest from the backend/ dir.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+class FakeLLMClient:
+    """Drop-in stand-in for app.utils.llm_client.LLMClient.
+
+    Returns scripted responses in order (or a default), and records every call
+    so tests can assert what was sent. Mirrors the real surface: chat(),
+    chat_json(), supports_native_tools().
+    """
+
+    def __init__(self, responses=None, json_responses=None, provider="fake", model="fake-1"):
+        self.provider = provider
+        self.model = model
+        self._responses = list(responses or [])
+        self._json_responses = list(json_responses or [])
+        self.calls = []
+
+    def chat(self, messages, temperature=0.7, max_tokens=4096, response_format=None):
+        self.calls.append({"kind": "chat", "messages": messages, "temperature": temperature})
+        if self._responses:
+            return self._responses.pop(0)
+        return "FAKE_RESPONSE"
+
+    def chat_json(self, messages, temperature=0.3, max_tokens=4096):
+        self.calls.append({"kind": "chat_json", "messages": messages, "temperature": temperature})
+        if self._json_responses:
+            return self._json_responses.pop(0)
+        return {}
+
+    def supports_native_tools(self):
+        return False
+
+
+@pytest.fixture
+def fake_llm():
+    """Factory: fake_llm(responses=[...], json_responses=[...]) -> FakeLLMClient."""
+    def _make(**kwargs):
+        return FakeLLMClient(**kwargs)
+    return _make
+
+
+@pytest.fixture
+def tmp_run_dir(tmp_path):
+    """A throwaway run directory for artifact-write tests."""
+    d = tmp_path / "run"
+    d.mkdir()
+    return str(d)

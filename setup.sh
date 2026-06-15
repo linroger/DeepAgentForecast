@@ -394,13 +394,21 @@ if [ -n "$LLM_API_KEY_INPUT" ] && have curl; then
     UA_HEADER=(-H "User-Agent: claude-cli/1.0.0")
   fi
   # ${arr[@]+...} guards the empty-array expansion (bash 3.2 + set -u safe).
-  HTTP_CODE="$(curl -sS -o /tmp/setup_llm_test.$$ -w '%{http_code}' --max-time 25 \
+  # Secret hygiene (EXECPLAN2 F-11-0): feed the bearer token via a curl config on
+  # stdin (--config -) so it never lands in argv (ps / /proc/<pid>/cmdline); write
+  # the response to a mktemp 0600 file instead of a predictable /tmp name.
+  SETUP_LLM_TEST_TMP="$(mktemp "${TMPDIR:-/tmp}/setup_llm_test.XXXXXX")"
+  chmod 600 "$SETUP_LLM_TEST_TMP" 2>/dev/null || true
+  HTTP_CODE="$(curl -sS -o "$SETUP_LLM_TEST_TMP" -w '%{http_code}' --max-time 25 \
     "${PROVIDER_BASE[$CHOSEN_IDX]}/chat/completions" \
-    -H "Authorization: Bearer $LLM_API_KEY_INPUT" \
     -H "Content-Type: application/json" \
     ${UA_HEADER[@]+"${UA_HEADER[@]}"} \
+    --config - \
     -d "{\"model\":\"${PROVIDER_MODEL[$CHOSEN_IDX]}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1}" \
-    2>/dev/null || printf '000')"
+    2>/dev/null <<EOF || printf '000'
+header = "Authorization: Bearer ${LLM_API_KEY_INPUT}"
+EOF
+)"
   if [ "$HTTP_CODE" = "200" ]; then
     ok "API key works (HTTP 200 from ${PROVIDER_MODEL[$CHOSEN_IDX]})"
   elif [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
@@ -411,8 +419,8 @@ if [ -n "$LLM_API_KEY_INPUT" ] && have curl; then
   else
     warn "Provider returned HTTP $HTTP_CODE — key saved; verify from the UI Settings menu."
   fi
-  rm -f "/tmp/setup_llm_test.$$" 2>/dev/null || true
-  unset LLM_API_KEY_INPUT
+  rm -f "$SETUP_LLM_TEST_TMP" 2>/dev/null || true
+  unset SETUP_LLM_TEST_TMP LLM_API_KEY_INPUT
 fi
 
 # --- Knowledge graph: local Graphiti (no API key) ---------------------------
@@ -657,10 +665,16 @@ cat <<NEXT
        • To run deep research on a specific model, set DEERFLOW_MODEL to
          claude | minimax | deepseek | qwen | glm | codex | kimi.
 
-  3) Start everything (backend :5001 + frontend :3000):
+  3) Verify the environment is ready (tool versions, both venvs, the DeerFlow
+     overlay, and credentials for the provider you picked) — takes seconds:
+       ${C_BOLD}npm run doctor${C_RESET}
+     Fix any ✗ it reports and re-run until it prints "All checks passed".
+
+  4) Start everything (backend :5001 + frontend :3000):
        ${C_BOLD}npm run dev${C_RESET}
 
-  4) Open the dashboard:
+  5) Open the dashboard, type a question, and click
+     "Run research + simulate + forecast":
        ${C_BOLD}http://localhost:3000/research${C_RESET}
 NEXT
 

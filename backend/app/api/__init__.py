@@ -16,3 +16,7 @@ from . import report  # noqa: E402, F401
 from . import research  # noqa: E402, F401
 from . import settings  # noqa: E402, F401
 
+# 稳定版程序化 API 表面 /api/v1（EXECPLAN2 I-9-5）。导入仅定义蓝图（无副作用，
+# 不会把路由挂到 app 上）；实际注册由 create_app 在 Config.API_V1_ENABLED 时才执行。
+from .sdk import sdk_bp  # noqa: E402, F401
+

@@ -356,6 +356,10 @@ const closeDetailPanel = () => {
 let currentSimulation = null
 let linkLabelsRef = null
 let linkLabelBgRef = null
+// EXECPLAN2 F-10-1: 跨刷新保留布局与视口，避免每次 refresh 全量重建 D3 仿真而丢失
+// 缩放/平移与既有节点位置。
+let zoomBehavior = null
+let savedTransform = null
 
 const renderGraph = () => {
   if (!graphSvg.value || !props.graphData) return
@@ -373,24 +377,45 @@ const renderGraph = () => {
     .attr('width', width)
     .attr('height', height)
     .attr('viewBox', `0 0 ${width} ${height}`)
-    
+
+  // F-10-1: 拆除前先记录既有节点坐标与当前缩放变换，刷新后据此复原。
+  const prevPositions = new Map()
+  if (currentSimulation) {
+    for (const n of currentSimulation.nodes()) {
+      if (n && n.id != null && n.x != null && n.y != null) {
+        prevPositions.set(n.id, { x: n.x, y: n.y })
+      }
+    }
+  }
+  try {
+    const t = d3.zoomTransform(svg.node())
+    if (t && (t.k !== 1 || t.x !== 0 || t.y !== 0)) savedTransform = t
+  } catch (_e) { /* 首次渲染无变换 */ }
+
   svg.selectAll('*').remove()
-  
+
   const nodesData = props.graphData.nodes || []
   const edgesData = props.graphData.edges || []
-  
+
   if (nodesData.length === 0) return
 
   // Prep data
   const nodeMap = {}
   nodesData.forEach(n => nodeMap[n.uuid] = n)
-  
-  const nodes = nodesData.map(n => ({
-    id: n.uuid,
-    name: n.name || 'Unnamed',
-    type: n.labels?.find(l => l !== 'Entity') || 'Entity',
-    rawData: n
-  }))
+
+  // 为已存在的节点种入上一次的坐标，仅新节点重新布局（F-10-1）。
+  let survived = 0
+  const nodes = nodesData.map(n => {
+    const prev = prevPositions.get(n.uuid)
+    if (prev) survived++
+    return {
+      id: n.uuid,
+      name: n.name || 'Unnamed',
+      type: n.labels?.find(l => l !== 'Entity') || 'Entity',
+      rawData: n,
+      ...(prev ? { x: prev.x, y: prev.y } : {})
+    }
+  })
   
   const nodeIds = new Set(nodes.map(n => n.id))
   
@@ -517,13 +542,21 @@ const renderGraph = () => {
     .force('y', d3.forceY(height / 2).strength(0.04))
   
   currentSimulation = simulation
+  // F-10-1: 多数节点存活时降低初始 alpha，让布局微调而非整体重排（保留位置感）。
+  if (nodes.length > 0 && survived / nodes.length > 0.5) {
+    simulation.alpha(0.3)
+  }
 
   const g = svg.append('g')
-  
-  // Zoom
-  svg.call(d3.zoom().extent([[0, 0], [width, height]]).scaleExtent([0.1, 4]).on('zoom', (event) => {
+
+  // Zoom —— 复用具名 behavior，便于刷新后用 svg.call(zoomBehavior.transform, savedTransform) 复原视口。
+  zoomBehavior = d3.zoom().extent([[0, 0], [width, height]]).scaleExtent([0.1, 4]).on('zoom', (event) => {
     g.attr('transform', event.transform)
-  }))
+  })
+  svg.call(zoomBehavior)
+  if (savedTransform) {
+    svg.call(zoomBehavior.transform, savedTransform)  // 复原上次的平移/缩放
+  }
 
   // Links - 使用 path 支持曲线
   const linkGroup = g.append('g').attr('class', 'links')

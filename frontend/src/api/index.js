@@ -2,7 +2,9 @@ import axios from 'axios'
 
 // 创建axios实例
 const service = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001',
+  // EXECPLAN2 F-10-7: 默认走同源相对路径 —— 开发期经 Vite 代理 (/api → 后端)，
+  // 生产/被托管时命中托管 SPA 的同源后端。仅当后端真的跨源时才设 VITE_API_BASE_URL。
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/',
   timeout: 300000, // 5分钟超时（本体生成可能需要较长时间）
   headers: {
     'Content-Type': 'application/json'

@@ -6,7 +6,7 @@ Report API路由
 import os
 import traceback
 import threading
-from flask import request, jsonify, send_file
+from flask import request, jsonify, send_file, Response
 
 from . import report_bp
 from ..config import Config
@@ -159,7 +159,19 @@ def generate_report():
                 
                 # 保存报告
                 ReportManager.save_report(report)
-                
+
+                # EXECPLAN2 F-7-0: force_regenerate 成功后清理同 simulation 的旧报告文件夹，
+                # 避免遗留多份导致 get_report_by_simulation 返回过期/不确定的报告。
+                if force_regenerate and report.status == ReportStatus.COMPLETED:
+                    try:
+                        removed = ReportManager.delete_other_reports_for_simulation(
+                            simulation_id, keep_report_id=report.report_id
+                        )
+                        if removed:
+                            logger.info(f"已清理 {removed} 份同 simulation 旧报告: {simulation_id}")
+                    except Exception as _e:
+                        logger.warning(f"清理旧报告失败（忽略）: {_e}")
+
                 if report.status == ReportStatus.COMPLETED:
                     task_manager.complete_task(
                         task_id,
@@ -415,16 +427,13 @@ def download_report(report_id: str):
         md_path = ReportManager._get_report_markdown_path(report_id)
         
         if not os.path.exists(md_path):
-            # 如果MD文件不存在，生成一个临时文件
-            import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-                f.write(report.markdown_content)
-                temp_path = f.name
-            
-            return send_file(
-                temp_path,
-                as_attachment=True,
-                download_name=f"{report_id}.md"
+            # EXECPLAN2 F-7-4: MD文件不存在时直接以内存流返回，避免遗留临时文件导致磁盘/inode泄漏
+            return Response(
+                report.markdown_content or "",
+                mimetype="text/markdown",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{report_id}.md"'
+                },
             )
         
         return send_file(

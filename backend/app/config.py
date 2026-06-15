@@ -4,6 +4,7 @@
 """
 
 import os
+import threading
 from dotenv import load_dotenv
 
 # 加载项目根目录的 .env 文件
@@ -29,7 +30,116 @@ class Config:
     
     # JSON配置 - 禁用ASCII转义，让中文直接显示（而不是 \uXXXX 格式）
     JSON_AS_ASCII = False
-    
+
+    # —— API 暴露面收敛（EXECPLAN2 F-13-0 / F-13-2）——
+    # 默认仅环回可达：未配置令牌时，非环回来源一律拒绝（fail-closed）。
+    # 配置 APP_API_TOKEN 后，所有 /api/* 变更请求需带 X-API-Token 头（常量时间比较）。
+    APP_API_TOKEN = os.environ.get('APP_API_TOKEN', '').strip()
+    # 允许的 CORS 来源（逗号分隔）。默认仅本机前端开发端口；设为 '*' 可恢复旧的全开行为。
+    APP_CORS_ORIGINS = os.environ.get(
+        'APP_CORS_ORIGINS',
+        'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5001,http://127.0.0.1:5001',
+    ).strip()
+    # 连通性/研究子进程发起的出站请求是否禁止私网/环回地址（暴露到环回之外时建议开启）。
+    APP_BLOCK_PRIVATE_URLS = os.environ.get('APP_BLOCK_PRIVATE_URLS', 'False').strip().lower() == 'true'
+
+    # 串行化 apply_provider 对共享 Config 类属性 + os.environ + .env 的读改写（EXECPLAN2 F-8-4），
+    # 避免并发切换提供方时与正在读取配置的管线发生竞态/撕裂。
+    _provider_lock = threading.Lock()
+
+    # —— LLM 可观测性 / 缓存 / 预算（EXECPLAN2 I-5-0/I-5-2/I-6-0/I-5-3）——
+    # 计量默认开（开销极小，仅累加计数）；缓存与预算默认关，保持现有行为。
+    LLM_TELEMETRY_ENABLED = os.environ.get('LLM_TELEMETRY_ENABLED', 'True').strip().lower() == 'true'
+    # 内容寻址缓存：对完全相同的 chat()/chat_json() 调用复用结果（同一管线内的抽取/分解去重）。
+    LLM_CACHE_ENABLED = os.environ.get('LLM_CACHE_ENABLED', 'False').strip().lower() == 'true'
+    # 每个 run 的 token / 成本上限（0=不限）。超限后下一次 LLM 调用抛 BudgetExceeded，止血式中止。
+    LLM_RUN_BUDGET_TOKENS = int(os.environ.get('LLM_RUN_BUDGET_TOKENS', '0') or '0')
+    LLM_RUN_BUDGET_USD = float(os.environ.get('LLM_RUN_BUDGET_USD', '0') or '0')
+
+    # —— 双层模型路由（EXECPLAN2 I-6-2）——
+    # 把机械型结构化调用（子查询分解 / 受访者选择 / 访谈问题生成 / JSON 修复重试 /
+    # 图谱实体边抽取）路由到更便宜更快的 "fast" 模型，把质量敏感的合成型调用
+    # （人设生成 / 报告规划 / 章节合成）留在旗舰 "strong" 模型。默认关：未开启时
+    #  tier 参数为 no-op，所有调用一律走当前 LLM_MODEL_NAME（行为与现状逐字节一致）。
+    # 配置错误（未设 fast/strong 模型）一律回退到 strong/当前模型，绝不报错。
+    LLM_TIERED_ROUTING = os.environ.get('LLM_TIERED_ROUTING', 'False').strip().lower() == 'true'
+    # fast / strong 模型别名（留空 → 回退到当前 LLM_MODEL_NAME，见 fast_model()/strong_model()）。
+    # 仅在 LLM_TIERED_ROUTING=true 且为 OpenAI 兼容提供方时生效；CLI 订阅提供方（claude-cli/
+    # codex-cli）只有单一订阅模型，tier 自动降级为 no-op（graceful degradation）。
+    LLM_FAST_MODEL = (os.environ.get('LLM_FAST_MODEL') or '').strip() or None
+    LLM_STRONG_MODEL = (os.environ.get('LLM_STRONG_MODEL') or '').strip() or None
+    # 可选：让 fast tier 走一个完全不同的 OpenAI 兼容提供方（如本地廉价抽取 + 远端旗舰合成）。
+    # 留空 → fast tier 复用当前提供方/连接参数，仅切换模型名。设置后需配合 LLM_FAST_BASE_URL /
+    # LLM_FAST_API_KEY（缺任一则忽略此项、回退为「同提供方切模型」）。
+    LLM_FAST_PROVIDER = (os.environ.get('LLM_FAST_PROVIDER') or '').strip().lower() or None
+    LLM_FAST_BASE_URL = (os.environ.get('LLM_FAST_BASE_URL') or '').strip() or None
+    LLM_FAST_API_KEY = (os.environ.get('LLM_FAST_API_KEY') or '').strip() or None
+
+    # —— 自适应上下文预算（EXECPLAN2 I-6-4）——
+    # 把散落在各处的硬编码字符切片（persona context[:3000] / 前文章节[:8000] /
+    #  related_facts[:25] 等）换成「按提供方上下文窗口动态计算」的预算化截断：
+    #  大窗口模型（MiniMax 512K / DeepSeek 1M）塞入更多事实与更长前文以提升 grounding，
+    #  小窗口模型收紧以规避静默截断导致的 JSON 断裂。默认关：未开启时各调用点回退到
+    #  原有硬编码切片（逐字节一致）。估算器为近似值（≈4 字符/token），故保留充裕的
+    #  RESERVED_COMPLETION_TOKENS 安全余量。
+    ADAPTIVE_CONTEXT = os.environ.get('ADAPTIVE_CONTEXT', 'False').strip().lower() == 'true'
+    # 预留给「补全输出」的 token 余量（从可用窗口中扣除，避免 prompt 顶满窗口后无处生成）。
+    RESERVED_COMPLETION_TOKENS = int(os.environ.get('RESERVED_COMPLETION_TOKENS', '8192') or '8192')
+    # 单条上下文条目（单个事实/单段前文）允许占用的硬上限 token 数，防止某一超长条目吃光整个预算。
+    CONTEXT_ITEM_MAX_TOKENS = int(os.environ.get('CONTEXT_ITEM_MAX_TOKENS', '4096') or '4096')
+    # 各提供方上下文窗口（token）。未列出的提供方回退到保守默认 32K（见 context_window_for）。
+    # 注意：这里按提供方粒度而非具体模型；fast/strong 同提供方时共用此窗口。
+    PROVIDER_CONTEXT_WINDOWS = {
+        'openai': 128000,
+        'kimi': 256000,
+        'minimax': 512000,
+        'deepseek': 1000000,
+        'qwen': 131072,
+        'glm': 200000,
+        # CLI 订阅提供方：claude/codex 当前主力模型均为 200K 窗口量级，给保守值。
+        'claude-cli': 200000,
+        'codex-cli': 200000,
+    }
+    DEFAULT_CONTEXT_WINDOW = int(os.environ.get('DEFAULT_CONTEXT_WINDOW', '32000') or '32000')
+
+    @classmethod
+    def fast_model(cls):  # EXECPLAN2 I-6-2
+        """fast tier 模型名：LLM_FAST_MODEL 优先，未设则回退到当前 LLM_MODEL_NAME（不报错）。"""
+        return cls.LLM_FAST_MODEL or cls.LLM_MODEL_NAME
+
+    @classmethod
+    def strong_model(cls):  # EXECPLAN2 I-6-2
+        """strong tier 模型名：LLM_STRONG_MODEL 优先，未设则回退到当前 LLM_MODEL_NAME（不报错）。"""
+        return cls.LLM_STRONG_MODEL or cls.LLM_MODEL_NAME
+
+    @classmethod
+    def context_window_for(cls, provider):  # EXECPLAN2 I-6-4
+        """返回某提供方的上下文窗口（token）；未知提供方回退到 DEFAULT_CONTEXT_WINDOW。"""
+        return int(cls.PROVIDER_CONTEXT_WINDOWS.get((provider or '').lower(), cls.DEFAULT_CONTEXT_WINDOW))
+
+    # 报告完成后追加一遍「结构化预测」抽取：机器可读的情景+概率+判定标准+引用审计
+    # （EXECPLAN2 I-3-0/I-9-1/I-3-1）。默认关，保持现有纯文本报告行为。落 forecast.json。
+    REPORT_STRUCTURED_FORECAST = os.environ.get('REPORT_STRUCTURED_FORECAST', 'False').strip().lower() == 'true'
+    # 结构化预测后追加红队自校准（纠正过度自信/基率忽视，EXECPLAN2 I-3-5）。默认关（多一次 LLM 调用）。
+    REPORT_FORECAST_SELF_CRITIQUE = os.environ.get('REPORT_FORECAST_SELF_CRITIQUE', 'False').strip().lower() == 'true'
+    # OASIS 抽样/人设生成确定性种子（EXECPLAN2 I-7-2；0/空=随机，复现/集成跑设同一正整数）。
+    SIM_SEED = int(os.environ.get('SIM_SEED', '0') or '0')
+
+    # —— EXECPLAN2 第二波改进旋钮（单一真源；各消费方此前经 getattr 读取，这里收口 + 文档化）——
+    GRAPH_SEARCH_RECIPE = os.environ.get('GRAPH_SEARCH_RECIPE', 'rrf').strip().lower()          # I-1-0/I-1-6 检索 recipe
+    RESEARCH_QUALITY_GATE = os.environ.get('RESEARCH_QUALITY_GATE', 'False').strip().lower() == 'true'  # I-0-3 研究后质量门
+    PIPELINE_STRICT_SCHEMA = os.environ.get('PIPELINE_STRICT_SCHEMA', 'True').strip().lower() == 'true'  # I-4-4 状态模式版本校验
+    SIM_EMERGENT_METRICS = os.environ.get('SIM_EMERGENT_METRICS', 'False').strip().lower() == 'true'     # I-2-0 涌现结构指标
+    IPC_TELEMETRY_ENABLED = os.environ.get('IPC_TELEMETRY_ENABLED', 'False').strip().lower() == 'true'   # I-5-5 IPC 延迟计量
+    ONTOLOGY_TEMPLATE = os.environ.get('ONTOLOGY_TEMPLATE', 'social_opinion').strip().lower()  # I-1-3 领域自适应本体模板
+    PERSONA_EGO_RETRIEVAL = os.environ.get('PERSONA_EGO_RETRIEVAL', 'False').strip().lower() == 'true'   # I-1-5 自我中心人设上下文
+    API_V1_ENABLED = os.environ.get('API_V1_ENABLED', 'False').strip().lower() == 'true'       # I-9-5 稳定版程序化 API /api/v1
+    MODEL_COMPARISON_ENABLED = os.environ.get('MODEL_COMPARISON_ENABLED', 'False').strip().lower() == 'true'  # I-9-4 模型对比
+    REPORT_TELEMETRY = os.environ.get('REPORT_TELEMETRY', 'True').strip().lower() == 'true'     # I-5-4 报告级 LLM 计量汇总
+    REPORT_SIGNAL_PACK = os.environ.get('REPORT_SIGNAL_PACK', 'False').strip().lower() == 'true'  # I-3-2 每章注入定量信号包
+    REPORT_COMPARISON_TABLE = os.environ.get('REPORT_COMPARISON_TABLE', 'False').strip().lower() == 'true'  # I-3-4 基线-情景对比表
+    RECORD_RUN_MANIFEST = os.environ.get('RECORD_RUN_MANIFEST', 'True').strip().lower() == 'true'  # I-8-1 复现清单 run.json
+
     # LLM提供方（默认使用 Claude Code CLI 订阅）
     # claude-cli: 通过本机 `claude` CLI 调用（使用 Claude Code 订阅，无需 API Key）
     # codex-cli:  通过本机 `codex` CLI 调用（使用 Codex 订阅，无需 API Key）
@@ -188,47 +298,71 @@ class Config:
         if meta.get('needs_key') and not ((api_key or '').strip() or keeps_existing_key):
             raise ValueError(f"提供方 {provider} 需要 API Key")
 
-        cls.LLM_PROVIDER = provider
-        cls._is_kimi = provider == 'kimi'
-        cls._is_minimax = provider == 'minimax'
-        cls._is_deepseek = provider == 'deepseek'
-        cls._is_qwen = provider == 'qwen'
-        cls._is_glm = provider == 'glm'
-        cls.DEERFLOW_MODEL = meta.get('deerflow_model', 'claude')
+        # 校验/清洗用户输入，避免 .env 注入与 SSRF（EXECPLAN2 F-8-1 / F-13-2）。
+        from .utils.security import sanitize_env_value, validate_safe_url
+        try:
+            api_key = sanitize_env_value(api_key) if api_key else api_key
+            model = sanitize_env_value(model) if model else model
+            base_url = sanitize_env_value(base_url) if base_url else base_url
+        except ValueError as e:
+            raise ValueError(f"非法字段（含换行/控制字符）：{e}")
+        if is_openai_compat and base_url:
+            try:
+                validate_safe_url(base_url, block_private=cls.APP_BLOCK_PRIVATE_URLS)
+            except ValueError as e:
+                raise ValueError(f"非法的 base_url：{e}")
 
-        env_updates = {'LLM_PROVIDER': provider, 'DEERFLOW_MODEL': cls.DEERFLOW_MODEL}
-        if is_openai_compat:
-            cls.LLM_BASE_URL = (base_url or '').strip() or meta.get('default_base') or 'https://api.openai.com/v1'
-            cls.LLM_MODEL_NAME = (model or '').strip() or meta.get('default_model') or 'gpt-4o-mini'
-            _key = (api_key or '').strip()
-            if _key:
-                cls.LLM_API_KEY = _key
-            env_updates['LLM_BASE_URL'] = cls.LLM_BASE_URL
-            env_updates['LLM_MODEL_NAME'] = cls.LLM_MODEL_NAME
-            if cls.LLM_API_KEY:
-                env_updates['LLM_API_KEY'] = cls.LLM_API_KEY
-                # 把 Key 镜像到提供方专属环境变量，供 deer-flow/config.yaml 的 $VAR 解析
-                # （deepseek→$DEEPSEEK_API_KEY、qwen→$DASHSCOPE_API_KEY、glm→$ZHIPUAI_API_KEY、
-                #  minimax→$MINIMAX_API_KEY），这样深度研究子进程也能拿到正确的 Key。
-                key_env = meta.get('key_env')
-                if key_env:
-                    env_updates[key_env] = cls.LLM_API_KEY
+        # 在锁内完成「改类属性 + 改 os.environ + 写 .env」整段读改写（F-8-4）。
+        with cls._provider_lock:
+            cls.LLM_PROVIDER = provider
+            cls._is_kimi = provider == 'kimi'
+            cls._is_minimax = provider == 'minimax'
+            cls._is_deepseek = provider == 'deepseek'
+            cls._is_qwen = provider == 'qwen'
+            cls._is_glm = provider == 'glm'
+            cls.DEERFLOW_MODEL = meta.get('deerflow_model', 'claude')
 
-        for k, v in env_updates.items():
-            os.environ[k] = v
-        cls._persist_env(env_updates)
-        return cls.provider_info()
+            env_updates = {'LLM_PROVIDER': provider, 'DEERFLOW_MODEL': cls.DEERFLOW_MODEL}
+            if is_openai_compat:
+                cls.LLM_BASE_URL = (base_url or '').strip() or meta.get('default_base') or 'https://api.openai.com/v1'
+                cls.LLM_MODEL_NAME = (model or '').strip() or meta.get('default_model') or 'gpt-4o-mini'
+                _key = (api_key or '').strip()
+                if _key:
+                    cls.LLM_API_KEY = _key
+                env_updates['LLM_BASE_URL'] = cls.LLM_BASE_URL
+                env_updates['LLM_MODEL_NAME'] = cls.LLM_MODEL_NAME
+                if cls.LLM_API_KEY:
+                    env_updates['LLM_API_KEY'] = cls.LLM_API_KEY
+                    # 把 Key 镜像到提供方专属环境变量，供 deer-flow/config.yaml 的 $VAR 解析
+                    # （deepseek→$DEEPSEEK_API_KEY、qwen→$DASHSCOPE_API_KEY、glm→$ZHIPUAI_API_KEY、
+                    #  minimax→$MINIMAX_API_KEY），这样深度研究子进程也能拿到正确的 Key。
+                    key_env = meta.get('key_env')
+                    if key_env:
+                        env_updates[key_env] = cls.LLM_API_KEY
+
+            for k, v in env_updates.items():
+                os.environ[k] = v
+            cls._persist_env(env_updates)
+            return cls.provider_info()
 
     @classmethod
     def _persist_env(cls, updates):
-        """把 key=value 安全 upsert 进项目根 .env（best-effort，失败不抛）。"""
+        """把 key=value 安全 upsert 进项目根 .env（best-effort，失败不抛）。
+
+        每个值都经 sanitize（拒绝换行/控制字符，防止注入额外 KEY=VALUE 行）+ dotenv
+        安全引号，再原子落盘（EXECPLAN2 F-8-1）。
+        """
         try:
+            from .utils.security import sanitize_env_value, quote_env_value
+            from .utils.atomic import write_text_atomic
             env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../.env'))
             lines = []
             if os.path.exists(env_path):
                 with open(env_path, 'r', encoding='utf-8') as f:
                     lines = f.read().splitlines()
-            remaining = dict(updates)
+            # 预先清洗所有值；任一非法直接放弃整次写入（不破坏现有 .env）。
+            safe = {k: quote_env_value(sanitize_env_value(v)) for k, v in updates.items()}
+            remaining = dict(safe)
             out = []
             for line in lines:
                 stripped = line.strip()
@@ -240,10 +374,7 @@ class Config:
                 out.append(line)
             for key, val in remaining.items():
                 out.append(f"{key}={val}")
-            tmp = env_path + '.tmp'
-            with open(tmp, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(out) + '\n')
-            os.replace(tmp, env_path)
+            write_text_atomic(env_path, '\n'.join(out) + '\n')
         except Exception:
             pass
 
@@ -294,6 +425,16 @@ class Config:
     # 设为正整数则作为全局轮数上限（每次运行可被 options.max_rounds 覆盖；冒烟测试用小值）。
     OASIS_DEFAULT_MAX_ROUNDS = int(os.environ.get('OASIS_DEFAULT_MAX_ROUNDS', '0'))
     OASIS_SIMULATION_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/simulations')
+
+    # —— OASIS 并发上限（每轮在飞 LLM 请求数）单一真源（EXECPLAN2 I-8-4）——
+    # 此前这两个旋钮只在 utils/oasis_llm.py::get_oasis_semaphore 里经 os.environ 直读，
+    # 绕过了集中式 Config 配置面——对 doctor/validate/run 清单不可见、无法记录复现。
+    # 提升为一等 Config 属性，默认值与 oasis_llm.py 的 DEFAULT_*_SEMAPHORE 逐字节一致
+    # （CLI 提供方 8、OpenAI 兼容提供方 30），故 env 未设时行为字节稳定不变。
+    # CLI 提供方(claude-cli/codex-cli)：每个调用 spawn 子进程，8 是吞吐与负载的稳妥平衡。
+    OASIS_CLI_SEMAPHORE = int(os.environ.get('OASIS_CLI_SEMAPHORE', '8') or '8')
+    # OpenAI 兼容提供方：纯 HTTP 并发，30 给足吞吐。
+    OASIS_SEMAPHORE = int(os.environ.get('OASIS_SEMAPHORE', '30') or '30')
     
     # OASIS平台可用动作配置
     OASIS_TWITTER_ACTIONS = [
@@ -434,6 +575,13 @@ class Config:
                 logging.getLogger('mirofish.config').warning(
                     "DEERFLOW_MODEL=%s 需要环境变量 %s，当前未设置（研究阶段将失败）。", _df_model, _key_env
                 )
+
+        # EXECPLAN2 I-8-4: OASIS 并发上限纳入集中式校验。<1 会让 get_oasis_semaphore
+        # 返回 0/负值（信号量直接死锁），故启动期硬性拦截，而非运行时悬挂。
+        for _sem_name in ('OASIS_CLI_SEMAPHORE', 'OASIS_SEMAPHORE'):
+            _sem_val = getattr(cls, _sem_name, None)
+            if not isinstance(_sem_val, int) or _sem_val < 1:
+                errors.append(f"{_sem_name} 必须是 >=1 的整数，当前为 '{_sem_val}'")
         return errors
 
 

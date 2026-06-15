@@ -1,4 +1,6 @@
-import service, { requestWithRetry } from './index'
+import service from './index'
+
+// EXECPLAN2 F-10-12: 本体生成 / 建图为非幂等 POST（触发 LLM 抽取与建图副作用），不自动重试。
 
 /**
  * 生成本体（上传文档和模拟需求）
@@ -6,16 +8,14 @@ import service, { requestWithRetry } from './index'
  * @returns {Promise}
  */
 export function generateOntology(formData) {
-  return requestWithRetry(() => 
-    service({
-      url: '/api/graph/ontology/generate',
-      method: 'post',
-      data: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
-  )
+  return service({   // non-idempotent: do not retry
+    url: '/api/graph/ontology/generate',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
 }
 
 /**
@@ -24,13 +24,11 @@ export function generateOntology(formData) {
  * @returns {Promise}
  */
 export function buildGraph(data) {
-  return requestWithRetry(() =>
-    service({
-      url: '/api/graph/build',
-      method: 'post',
-      data
-    })
-  )
+  return service({   // non-idempotent: do not retry
+    url: '/api/graph/build',
+    method: 'post',
+    data
+  })
 }
 
 /**

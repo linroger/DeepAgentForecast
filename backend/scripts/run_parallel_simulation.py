@@ -81,6 +81,25 @@ from typing import Dict, Any, List, Optional, Tuple
 _shutdown_event = None
 _cleanup_done = False
 
+
+# EXECPLAN2 I-7-2: 确定性随机数种子（默认 None = 维持当前非确定性行为）。
+# 设置环境变量 SIM_SEED=<int> 后，调度采样（加权水库 / 概率发帖）变为可复现，
+# 使 prepare/run 阶段的快照/黄金测试与 A/B 评估成为可能。未设置时 random.Random()
+# 从系统熵播种，与历史上的 random.random() 行为逐次一致（零行为变化）。
+def _build_sampling_rng() -> "random.Random":
+    """根据 SIM_SEED 构造本进程的采样 RNG（缺省即非确定性，与旧行为一致）。"""
+    raw = os.environ.get("SIM_SEED")
+    if raw is None or str(raw).strip() == "":
+        return random.Random()
+    try:
+        return random.Random(int(str(raw).strip()))
+    except (TypeError, ValueError):
+        # 容错：非整数种子退回非确定性，避免因配置错误中断模拟。
+        return random.Random()
+
+
+_RNG = _build_sampling_rng()
+
 # 添加 backend 目录到路径
 # 脚本固定位于 backend/scripts/ 目录
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))
@@ -207,6 +226,329 @@ REDDIT_ACTIONS = [
     ActionType.FOLLOW,
     ActionType.MUTE,
 ]
+
+
+# ============================================================
+# EXECPLAN2 I-2-3: 按角色定制的「动作可供性」（per-role action affordances）
+# ------------------------------------------------------------
+# 现状：同一平台的所有 Agent 共用一份全局动作清单（TWITTER_ACTIONS / REDDIT_ACTIONS），
+# 政府账号、官媒、学生、匿名水军拥有完全相同的可选动作（都能 REPOST/QUOTE/FOLLOW/MUTE…）。
+# 现实中可供性与行为习惯是角色相关的：官方账号很少给个人点赞/转发/拉黑，媒体大量引用/造势，
+# 活动家激进转发/关注，潜水受众多为点赞/沉默。人设文本会暗示这点，但没有任何东西约束动作空间，
+# 于是 LLM 频繁选出「跳戏」的动作，稀释保真度。
+#
+# 方案：以 entity_type（角色）为键，为每个 Agent 量身裁剪 available_actions。camel-oasis 在
+# 构图时已把动作转成 ChatAgent 的工具（SocialAgent.__init__ 把 available_actions 过滤成
+# action_tools 并注入 ChatAgent.tools）；ChatAgent 暴露了公开的 remove_tools(name) API，
+# 工具名恰为 ActionType.value。因此「构图后按角色裁剪」是库原生支持的——在 generate_*_agent_graph
+# 之后、env.reset() 之前，逐个 Agent 移除不属于其角色策略的社交动作工具即可（仅移除社交动作，
+# 不动 INTERVIEW 等其它工具）。同时把一句简短的「行为习惯」约束注入 system prompt，让 LLM 自我设限。
+#
+# 可降级不变式：默认 SIM_ROLE_ACTION_PROFILES!=true → 完全跳过，沿用单一全局清单（逐字节旧行为）。
+# 任意环节失败（缺 entity_type、库 API 变动、工具名不匹配）一律 best-effort 跳过该 Agent，绝不中断模拟。
+#
+# 策略表的「白名单」会与平台 union 清单求交，确保永远不会授予平台不存在/未启用的动作；
+# 任何角色都至少保留 CREATE_POST / CREATE_COMMENT / DO_NOTHING，避免把某类角色变成完全惰性。
+# ============================================================
+
+# 每个角色策略只在 union 动作集合内做「白名单」过滤；未列出的 entity_type 走 _ROLE_ACTION_DEFAULT。
+# 注：键为 entity_type.lower()，与 oasis_profile_generator 的 INDIVIDUAL/GROUP_ENTITY_TYPES 命名一致。
+ROLE_ACTION_POLICY = {
+    # —— 机构 / 群体 ——
+    # 政府机构：几乎只发布官方声明、检索舆情；不给个人点赞/转发/拉黑。
+    "governmentagency": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "official": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    # 媒体：大量发帖/引用/转发/造势/评论，构成信息放大主力。
+    "mediaoutlet": [
+        ActionType.CREATE_POST,
+        ActionType.QUOTE_POST,
+        ActionType.REPOST,
+        ActionType.CREATE_COMMENT,
+        ActionType.TREND,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "journalist": [
+        ActionType.CREATE_POST,
+        ActionType.QUOTE_POST,
+        ActionType.REPOST,
+        ActionType.CREATE_COMMENT,
+        ActionType.SEARCH_POSTS,
+        ActionType.SEARCH_USER,
+        ActionType.DO_NOTHING,
+    ],
+    # 高校 / NGO / 公司 / 机构：偏官方口径，少量互动。
+    "university": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "ngo": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.QUOTE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "company": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "organization": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "institution": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "group": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.LIKE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "community": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.LIKE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    # —— 个人 ——
+    # 专家 / 教授：发表观点、评论、引用佐证，少量转发。
+    "professor": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.QUOTE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.LIKE_POST,
+        ActionType.DO_NOTHING,
+    ],
+    "expert": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.QUOTE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.LIKE_POST,
+        ActionType.DO_NOTHING,
+    ],
+    "faculty": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.QUOTE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.LIKE_POST,
+        ActionType.DO_NOTHING,
+    ],
+    "publicfigure": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.QUOTE_POST,
+        ActionType.REPOST,
+        ActionType.LIKE_POST,
+        ActionType.FOLLOW,
+        ActionType.DO_NOTHING,
+    ],
+    # 活动家：激进——大量转发/关注/评论/造势以扩散立场。
+    "activist": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.QUOTE_POST,
+        ActionType.LIKE_POST,
+        ActionType.FOLLOW,
+        ActionType.TREND,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    # 学生 / 普通个人：完整社交动作集（最自由）——见 _ROLE_FULL_ACCESS，直接放行平台全部 union。
+    # —— 程序化「沉默的大多数」受众（simulation_config_generator.AUDIENCE_ENTITY_TYPE="Audience"）——
+    # 以点赞 / 偶尔评论 / 转发 / 大量沉默为主，几乎不发起原创帖、不关注、不拉黑。
+    "audience": [
+        ActionType.LIKE_POST,
+        ActionType.DISLIKE_POST,
+        ActionType.LIKE_COMMENT,
+        ActionType.REPOST,
+        ActionType.CREATE_COMMENT,
+        ActionType.DO_NOTHING,
+        ActionType.REFRESH,
+    ],
+}
+
+# 完整动作集角色：最自由的个人账号，直接放行平台全部 union（不做任何裁剪）。
+# 等价于设计草图里 'student': TWITTER_ACTIONS 的「完整社交动作集」语义，但与平台无关——
+# Reddit 上同样拿到 REDDIT_ACTIONS 全集，而非被 Twitter 清单截断。
+_ROLE_FULL_ACCESS = {"student", "alumni", "person"}
+
+# 未匹配到具体角色时的兜底策略：保守地保留发帖/评论/检索/沉默/点赞，避免越权放大类动作。
+_ROLE_ACTION_DEFAULT = [
+    ActionType.CREATE_POST,
+    ActionType.CREATE_COMMENT,
+    ActionType.LIKE_POST,
+    ActionType.SEARCH_POSTS,
+    ActionType.DO_NOTHING,
+]
+
+# 不变式：任何角色都至少保留这几样基本动作，防止过度限制把某类 Agent 变成完全惰性。
+_ROLE_ACTION_FLOOR = {
+    ActionType.CREATE_POST,
+    ActionType.CREATE_COMMENT,
+    ActionType.DO_NOTHING,
+}
+
+# 角色 → 注入 system prompt 的「行为习惯」一句话约束（让 LLM 在工具裁剪之外再自我设限）。
+# 仅覆盖最容易跳戏的机构/媒体/活动家/受众；未列出的角色不注入额外约束（保持原 persona）。
+_ROLE_BEHAVIOR_HINT = {
+    "governmentagency": "【行为习惯】你是官方机构账号：通常只发布正式声明或检索舆情，几乎从不给个人点赞、转发或拉黑。",
+    "official": "【行为习惯】你是官方机构账号：通常只发布正式声明或检索舆情，几乎从不给个人点赞、转发或拉黑。",
+    "mediaoutlet": "【行为习惯】你是媒体账号：以发布报道、引用与转发关键信息、推动话题热度为主，很少给普通用户点赞。",
+    "journalist": "【行为习惯】你是记者：以发布报道、引用与求证、关注信源为主，较少随手点赞。",
+    "activist": "【行为习惯】你是活动家：积极转发、关注同立场账号、评论与造势以扩散你的主张。",
+    "audience": "【行为习惯】你是普通围观受众（沉默的大多数）：多数时候只是点赞或沉默，偶尔评论或转发，几乎不发起原创长帖。",
+}
+
+
+def _build_role_type_map(config: Dict[str, Any]) -> Dict[int, str]:
+    """EXECPLAN2 I-2-3: 从 simulation_config 构建 agent_id -> entity_type（小写）映射。
+
+    与 get_agent_names_from_config 同源（config["agent_configs"]，每项含 agent_id/entity_type），
+    缺字段则跳过该项。供按角色裁剪动作可供性使用。
+    """
+    role_map: Dict[int, str] = {}
+    for agent_config in config.get("agent_configs", []) or []:
+        agent_id = agent_config.get("agent_id")
+        entity_type = agent_config.get("entity_type")
+        if agent_id is not None and entity_type:
+            role_map[agent_id] = str(entity_type).strip().lower()
+    return role_map
+
+
+def _allowed_actions_for_role(entity_type: str, platform_union: List["ActionType"]) -> List["ActionType"]:
+    """EXECPLAN2 I-2-3: 计算某角色在给定平台上的「允许动作」白名单。
+
+    策略表白名单 ∩ 平台 union（绝不授予平台不存在/未启用的动作），再并入基本动作下限
+    （_ROLE_ACTION_FLOOR，同样需在 union 内）。返回顺序去重、稳定。
+    完整动作集角色（_ROLE_FULL_ACCESS）直接返回平台 union 全集，不做裁剪。
+    """
+    role = (entity_type or "").lower()
+    if role in _ROLE_FULL_ACCESS:
+        return list(platform_union)
+    policy = ROLE_ACTION_POLICY.get(role, _ROLE_ACTION_DEFAULT)
+    union_set = set(platform_union)
+    allowed_set = (set(policy) & union_set) | (_ROLE_ACTION_FLOOR & union_set)
+    # 以平台 union 的顺序产出，便于阅读 / 日志稳定。
+    return [a for a in platform_union if a in allowed_set]
+
+
+def _apply_role_action_profiles(
+    agent_graph,
+    config: Dict[str, Any],
+    platform_union: List["ActionType"],
+    log_info,
+) -> None:
+    """EXECPLAN2 I-2-3: 在构图后、env.reset() 前，按角色裁剪每个 Agent 的社交动作工具。
+
+    机制：camel ChatAgent 把每个动作注册为名为 ActionType.value 的工具。对每个 Agent，
+    移除「属于平台 union 但不在该角色白名单」的社交动作工具（仅社交动作，绝不动 INTERVIEW 等
+    其它工具）。同时把一句「行为习惯」约束追加进 system prompt，让 LLM 自我设限。
+
+    可降级：任意 Agent 处理失败仅跳过该 Agent（best-effort），不抛出、不中断模拟。
+    仅当 SIM_ROLE_ACTION_PROFILES=true 时由调用方触发；默认完全不进入本函数。
+    """
+    if agent_graph is None:
+        return
+    role_map = _build_role_type_map(config)
+    # 平台所有社交动作的工具名集合——只在这个集合内做增删，避免误删非社交工具。
+    union_tool_names = {a.value for a in platform_union}
+
+    restricted = 0
+    hinted = 0
+    try:
+        agents = agent_graph.get_agents()
+    except Exception as e:  # noqa: BLE001
+        log_info(f"角色动作裁剪跳过（无法枚举 Agent）: {e}")
+        return
+
+    for agent_id, agent in agents:
+        try:
+            entity_type = role_map.get(agent_id, "")
+            allowed = _allowed_actions_for_role(entity_type, platform_union)
+            allowed_names = {a.value for a in allowed}
+            # 待移除 = 平台社交动作 - 允许动作；只在 agent 实际拥有的工具里删。
+            to_remove = [
+                name for name in union_tool_names
+                if name not in allowed_names and name in getattr(agent, "_internal_tools", {})
+            ]
+            if to_remove:
+                agent.remove_tools(to_remove)
+                restricted += 1
+
+            # 软约束：把「行为习惯」一句话注入 system prompt（best-effort，失败不影响硬裁剪）。
+            hint = _ROLE_BEHAVIOR_HINT.get((entity_type or "").lower())
+            if hint and _inject_behavior_hint(agent, hint):
+                hinted += 1
+        except Exception as e:  # noqa: BLE001
+            log_info(f"角色动作裁剪跳过 Agent {agent_id}（已隔离）: {e}")
+            continue
+
+    log_info(f"角色动作可供性已应用: 裁剪 {restricted} 个 Agent，注入行为约束 {hinted} 个")
+
+
+def _inject_behavior_hint(agent, hint: str) -> bool:
+    """EXECPLAN2 I-2-3: 把一句行为约束追加进 Agent 的 system prompt（best-effort）。
+
+    走 camel ChatAgent 受支持的路径：基于 _original_system_message 重建系统消息并
+    init_messages() 把它重新写入记忆。任何版本差异/缺属性即返回 False（降级，不影响硬裁剪）。
+    在 env.reset() 之前调用——reset()→generate_custom_agents 不会重置记忆，注入得以保留。
+    """
+    try:
+        original = getattr(agent, "_original_system_message", None)
+        if original is None or not hasattr(original, "content"):
+            return False
+        if hint in (original.content or ""):
+            return True  # 已注入过，幂等
+        new_msg = original.create_new_instance((original.content or "") + "\n\n" + hint)
+        agent._original_system_message = new_msg
+        # 触发系统消息按输出语言重算并重新写入记忆（与 camel 内部行为一致）。
+        agent._system_message = agent._generate_system_message_for_output_language()
+        agent.init_messages()
+        return True
+    except Exception:
+        return False
+
+
+def _role_action_profiles_enabled() -> bool:
+    """EXECPLAN2 I-2-3: 特性开关（与 SIM_WIRE_RECSYS / SIM_EMERGENT_METRICS 同风格的环境变量）。
+
+    默认关闭 → 维持单一全局动作清单的旧行为（可降级不变式）。
+    """
+    return os.environ.get("SIM_ROLE_ACTION_PROFILES", "false").strip().lower() == "true"
 
 
 # IPC相关常量
@@ -1013,7 +1355,7 @@ def _weighted_sample_without_replacement(items: List, k: int) -> List:
     keyed = []
     for item_id, w in items:
         w = max(1e-6, float(w))
-        keyed.append((random.random() ** (1.0 / w), item_id))
+        keyed.append((_RNG.random() ** (1.0 / w), item_id))  # EXECPLAN2 I-7-2: 可复现采样
     keyed.sort(reverse=True)
     return [item_id for _, item_id in keyed[:k]]
 
@@ -1066,7 +1408,7 @@ def get_active_agents_for_round(
         p = activity_level * (0.5 + 0.5 * (infl / max_infl)) * multiplier
         if agent_id in last_active_ids:
             p *= 1.5  # 近因加成：上一轮活跃/被提及 → 形成级联
-        if random.random() < min(1.0, p):
+        if _RNG.random() < min(1.0, p):  # EXECPLAN2 I-7-2: 可复现激活概率
             candidates.append((agent_id, infl))
 
     # 目标人数：随 cast 规模放大，封顶 3×base_max
@@ -1248,6 +1590,515 @@ def build_oasis_platform(kind: str, db_path: str, config: Dict[str, Any], log_in
         return None
 
 
+# ============================================================
+# EXECPLAN2 I-2-0: 涌现结构 / 观点动力学度量层
+# ------------------------------------------------------------
+# 模拟结束后（只读地）在 {platform}_simulation.db + actions.jsonl 上计算：
+#   1) 观点/立场轨迹 —— 每轮按 stance 桶（supportive/opposing/neutral/observer）
+#      统计发声量（CREATE_POST/CREATE_COMMENT/QUOTE_POST），并对内容做轻量情感打分；
+#   2) 极化指数 —— 每 agent 净情感分布的方差/双峰性 + 跨立场 vs 同立场互动比；
+#   3) 关注图社区检测 —— 在真实 follow 表上跑 networkx（贪婪模块度/标签传播），
+#      给出每个社区的主导立场与桥接 agent；
+#   4) 级联/传播 —— top 帖的回复+转发+引用深度与广度。
+# 全部行为默认关闭（SIM_EMERGENT_METRICS!=true 时不计算），networkx 缺失时社区检测
+# 自动跳过，情感使用离线 CN/EN 极性词典（无 LLM 成本）。任何异常都不影响已完成的模拟，
+# 仅在调用方以 try/except 包裹，结果写入 {platform}_emergent_metrics.json 与 emergent_metrics.json。
+# ============================================================
+
+# 影响立场表达的发声动作（用于立场轨迹加权与跨立场互动判定）
+_SPEECH_ACTIONS = {"CREATE_POST", "CREATE_COMMENT", "QUOTE_POST", "REPOST"}
+# 直接产生“agent→agent”互动的动作（用于跨立场 vs 同立场互动比）
+_INTERACTION_ACTIONS = {
+    "REPOST", "QUOTE_POST", "CREATE_COMMENT", "LIKE_POST", "DISLIKE_POST",
+    "LIKE_COMMENT", "DISLIKE_COMMENT", "FOLLOW", "MUTE",
+}
+_STANCE_BUCKETS = ("supportive", "opposing", "neutral", "observer")
+
+# 离线情感词典（CN + EN 极性词），用于 LLM 成本过高时的回退打分。
+# 仅作粗粒度净情感方向估计；命中即 ±1，无命中记 0（中性）。
+_POS_LEXICON = {
+    # EN
+    "good", "great", "excellent", "positive", "support", "growth", "win", "gain",
+    "strong", "bullish", "optimistic", "agree", "love", "best", "advantage",
+    "lead", "leading", "dominate", "success", "breakthrough", "soar", "surge",
+    # CN
+    "好", "强", "优势", "增长", "领先", "成功", "突破", "看好", "利好", "支持",
+    "同意", "赞", "上涨", "飙升", "主导", "碾压", "双赢", "乐观",
+}
+_NEG_LEXICON = {
+    # EN
+    "bad", "poor", "negative", "oppose", "decline", "lose", "loss", "weak",
+    "bearish", "pessimistic", "disagree", "hate", "worst", "risk", "fail",
+    "failure", "crash", "plunge", "drop", "threat", "concern", "doubt",
+    # CN
+    "差", "弱", "下跌", "崩", "失败", "风险", "反对", "不同意", "看空", "利空",
+    "暴跌", "担忧", "质疑", "威胁", "落后", "亏损", "悲观", "泡沫",
+}
+
+
+def _load_stance_by_agent(config: Dict[str, Any]) -> Dict[int, str]:
+    """agent_id -> 归一化 stance 桶映射（缺省 neutral）。"""
+    stance_map: Dict[int, str] = {}
+    for cfg in config.get("agent_configs", []) or []:
+        aid = cfg.get("agent_id")
+        if aid is None:
+            continue
+        raw = str(cfg.get("stance", "neutral") or "neutral").strip().lower()
+        stance_map[int(aid)] = raw if raw in _STANCE_BUCKETS else "neutral"
+    return stance_map
+
+
+def _lexicon_sentiment(text: str) -> float:
+    """离线极性打分：返回 [-1, 1] 的净情感方向（无命中 → 0）。"""
+    if not text:
+        return 0.0
+    low = text.lower()
+    pos = sum(1 for w in _POS_LEXICON if w in low)
+    neg = sum(1 for w in _NEG_LEXICON if w in low)
+    if pos == 0 and neg == 0:
+        return 0.0
+    return (pos - neg) / float(pos + neg)
+
+
+def _iter_action_lines(actions_jsonl_path: str):
+    """逐行产出 actions.jsonl 中的“真实动作”记录（跳过 event_type 控制行）。"""
+    if not os.path.exists(actions_jsonl_path):
+        return
+    try:
+        with open(actions_jsonl_path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                # 控制行（simulation_start/round_start/round_end/simulation_end）无 action_type
+                if rec.get("event_type") or not rec.get("action_type"):
+                    continue
+                yield rec
+    except OSError:
+        return
+
+
+def _score_stance_trajectory(
+    actions_jsonl_path: str,
+    stance_by_agent: Dict[int, str],
+) -> Tuple[List[Dict[str, Any]], float, Dict[int, float]]:
+    """计算每轮立场轨迹 + 全局极化指数（按 agent 净情感分布方差）。
+
+    Returns:
+        (trajectory, polarization_index, net_sentiment_by_agent)
+        - trajectory: [{round, by_stance:{...发声量...}, net_sentiment}]
+        - polarization_index: agent 级净情感分布的方差（[0,1] 量级，越大越极化）
+        - net_sentiment_by_agent: agent_id -> 平均净情感（供互动比/社区主导立场使用）
+    """
+    from collections import defaultdict
+
+    per_round: Dict[int, Dict[str, Any]] = {}
+    sent_sum_by_agent: Dict[int, float] = defaultdict(float)
+    sent_cnt_by_agent: Dict[int, int] = defaultdict(int)
+
+    for rec in _iter_action_lines(actions_jsonl_path):
+        action_type = str(rec.get("action_type", ""))
+        if action_type not in _SPEECH_ACTIONS:
+            continue
+        agent_id = rec.get("agent_id")
+        round_num = rec.get("round")
+        if agent_id is None or round_num is None:
+            continue
+        agent_id = int(agent_id)
+        round_num = int(round_num)
+        stance = stance_by_agent.get(agent_id, "neutral")
+
+        bucket = per_round.setdefault(
+            round_num,
+            {"round": round_num, "by_stance": {s: 0 for s in _STANCE_BUCKETS}, "_sent": 0.0, "_n": 0},
+        )
+        bucket["by_stance"][stance] = bucket["by_stance"].get(stance, 0) + 1
+
+        # 情感仅对带内容的动作打分
+        content = ""
+        args = rec.get("action_args") or {}
+        if isinstance(args, dict):
+            content = str(args.get("content") or args.get("quote_content") or "")
+        if content:
+            s = _lexicon_sentiment(content)
+            bucket["_sent"] += s
+            bucket["_n"] += 1
+            sent_sum_by_agent[agent_id] += s
+            sent_cnt_by_agent[agent_id] += 1
+
+    trajectory: List[Dict[str, Any]] = []
+    for round_num in sorted(per_round.keys()):
+        b = per_round[round_num]
+        net = (b["_sent"] / b["_n"]) if b["_n"] else 0.0
+        trajectory.append({
+            "round": round_num,
+            "by_stance": b["by_stance"],
+            "net_sentiment": round(net, 4),
+        })
+
+    net_by_agent: Dict[int, float] = {}
+    for aid, total in sent_sum_by_agent.items():
+        cnt = sent_cnt_by_agent.get(aid, 0)
+        if cnt:
+            net_by_agent[aid] = total / cnt
+
+    # 极化指数：发声 agent 净情感分布的方差（0=完全一致，越大越极化）
+    polarization = 0.0
+    vals = list(net_by_agent.values())
+    if len(vals) >= 2:
+        mean = sum(vals) / len(vals)
+        polarization = sum((v - mean) ** 2 for v in vals) / len(vals)
+
+    return trajectory, round(polarization, 4), net_by_agent
+
+
+def _compute_interaction_ratio(
+    conn: "sqlite3.Connection",
+    stance_by_agent: Dict[int, str],
+) -> Dict[str, Any]:
+    """跨立场 vs 同立场互动比。
+
+    通过 follow（关注边）、post.original_post_id（转发/引用）、comment（回复）三类
+    “agent→agent”边，按双方 stance 是否相同计数。比值 = 跨立场 / (同立场 + 跨立场)。
+    """
+    cursor = conn.cursor()
+
+    # user_id -> agent_id -> stance
+    uid_to_stance: Dict[int, str] = {}
+    try:
+        cursor.execute("SELECT user_id, agent_id FROM user")
+        for user_id, agent_id in cursor.fetchall():
+            if agent_id is None:
+                continue
+            uid_to_stance[user_id] = stance_by_agent.get(int(agent_id), "neutral")
+    except sqlite3.Error:
+        return {"cross_stance_interaction_ratio": 0.0, "cross_stance": 0, "within_stance": 0}
+
+    cross = 0
+    within = 0
+
+    def _tally(src_uid, dst_uid):
+        nonlocal cross, within
+        if src_uid is None or dst_uid is None or src_uid == dst_uid:
+            return
+        s_src = uid_to_stance.get(src_uid)
+        s_dst = uid_to_stance.get(dst_uid)
+        if s_src is None or s_dst is None:
+            return
+        if s_src == s_dst:
+            within += 1
+        else:
+            cross += 1
+
+    # 关注边
+    try:
+        cursor.execute("SELECT follower_id, followee_id FROM follow")
+        for follower, followee in cursor.fetchall():
+            _tally(follower, followee)
+    except sqlite3.Error:
+        pass
+
+    # 转发/引用边：reposter -> 原帖作者
+    try:
+        cursor.execute(
+            "SELECT p.user_id, orig.user_id "
+            "FROM post p JOIN post orig ON p.original_post_id = orig.post_id "
+            "WHERE p.original_post_id IS NOT NULL"
+        )
+        for reposter, author in cursor.fetchall():
+            _tally(reposter, author)
+    except sqlite3.Error:
+        pass
+
+    # 评论边：评论者 -> 被评论帖作者
+    try:
+        cursor.execute(
+            "SELECT c.user_id, p.user_id "
+            "FROM comment c JOIN post p ON c.post_id = p.post_id"
+        )
+        for commenter, author in cursor.fetchall():
+            _tally(commenter, author)
+    except sqlite3.Error:
+        pass
+
+    total = cross + within
+    ratio = (cross / total) if total else 0.0
+    return {
+        "cross_stance_interaction_ratio": round(ratio, 4),
+        "cross_stance": cross,
+        "within_stance": within,
+    }
+
+
+def _detect_follow_communities(
+    conn: "sqlite3.Connection",
+    stance_by_agent: Dict[int, str],
+    log_info,
+) -> List[Dict[str, Any]]:
+    """在真实 follow 表上做社区检测（networkx 缺失 → 返回 [] 并跳过）。"""
+    try:
+        import networkx as nx  # 可选依赖，缺失即优雅跳过
+        from networkx.algorithms import community as nx_community
+    except Exception as e:  # noqa: BLE001
+        log_info(f"涌现度量：networkx 不可用，跳过社区检测: {e}")
+        return []
+
+    cursor = conn.cursor()
+    # user_id -> agent_id
+    uid_to_agent: Dict[int, Optional[int]] = {}
+    try:
+        cursor.execute("SELECT user_id, agent_id FROM user")
+        for user_id, agent_id in cursor.fetchall():
+            uid_to_agent[user_id] = int(agent_id) if agent_id is not None else None
+    except sqlite3.Error:
+        return []
+
+    g = nx.DiGraph()
+    try:
+        cursor.execute("SELECT follower_id, followee_id FROM follow")
+        for follower, followee in cursor.fetchall():
+            if follower is None or followee is None or follower == followee:
+                continue
+            g.add_edge(follower, followee)
+    except sqlite3.Error:
+        return []
+
+    if g.number_of_nodes() == 0:
+        return []
+
+    # 贪婪模块度在无向图上运行；用无向投影
+    ug = g.to_undirected()
+    try:
+        comms = list(nx_community.greedy_modularity_communities(ug))
+    except Exception:
+        try:
+            comms = list(nx_community.label_propagation_communities(ug))
+        except Exception as e:  # noqa: BLE001
+            log_info(f"涌现度量：社区检测失败，跳过: {e}")
+            return []
+
+    # 桥接节点：跨社区出/入度高者（按 betweenness 近似——用跨社区边计数）
+    node_to_comm: Dict[int, int] = {}
+    for idx, members in enumerate(comms):
+        for node in members:
+            node_to_comm[node] = idx
+
+    cross_links: Dict[int, int] = {}
+    for u, v in ug.edges():
+        if node_to_comm.get(u) != node_to_comm.get(v):
+            cross_links[u] = cross_links.get(u, 0) + 1
+            cross_links[v] = cross_links.get(v, 0) + 1
+
+    result: List[Dict[str, Any]] = []
+    for idx, members in enumerate(comms):
+        member_agents = [uid_to_agent.get(uid) for uid in members]
+        member_agents = [a for a in member_agents if a is not None]
+        # 主导立场
+        from collections import Counter
+        stance_counts = Counter(stance_by_agent.get(a, "neutral") for a in member_agents)
+        dominant = stance_counts.most_common(1)[0][0] if stance_counts else "neutral"
+        # 桥接 agent（跨社区连接数最高的前 3 个）
+        bridges = sorted(
+            (uid for uid in members if cross_links.get(uid, 0) > 0),
+            key=lambda uid: cross_links.get(uid, 0),
+            reverse=True,
+        )[:3]
+        bridge_agents = [uid_to_agent.get(uid) for uid in bridges]
+        bridge_agents = [a for a in bridge_agents if a is not None]
+        result.append({
+            "size": len(members),
+            "members": sorted(member_agents),
+            "dominant_stance": dominant,
+            "stance_breakdown": dict(stance_counts),
+            "bridge_agents": bridge_agents,
+        })
+    # 大社区在前
+    result.sort(key=lambda c: c["size"], reverse=True)
+    return result
+
+
+def _compute_cascades(
+    conn: "sqlite3.Connection",
+    top_n: int = 10,
+) -> List[Dict[str, Any]]:
+    """每个原帖的级联/传播统计：回复数(breadth) + 转发/引用数 + 综合互动深度。"""
+    cursor = conn.cursor()
+
+    # 转发/引用：original_post_id -> 计数
+    repost_counts: Dict[int, int] = {}
+    try:
+        cursor.execute(
+            "SELECT original_post_id, COUNT(*) FROM post "
+            "WHERE original_post_id IS NOT NULL GROUP BY original_post_id"
+        )
+        for orig_id, cnt in cursor.fetchall():
+            if orig_id is not None:
+                repost_counts[orig_id] = cnt
+    except sqlite3.Error:
+        repost_counts = {}
+
+    # 评论数
+    comment_counts: Dict[int, int] = {}
+    try:
+        cursor.execute("SELECT post_id, COUNT(*) FROM comment GROUP BY post_id")
+        for post_id, cnt in cursor.fetchall():
+            if post_id is not None:
+                comment_counts[post_id] = cnt
+    except sqlite3.Error:
+        comment_counts = {}
+
+    # 原帖（original_post_id 为空）的基础信息
+    cascades: List[Dict[str, Any]] = []
+    try:
+        cursor.execute(
+            "SELECT post_id, num_likes, num_shares FROM post "
+            "WHERE original_post_id IS NULL"
+        )
+        rows = cursor.fetchall()
+    except sqlite3.Error:
+        return []
+
+    for post_id, num_likes, num_shares in rows:
+        reposts = repost_counts.get(post_id, 0)
+        replies = comment_counts.get(post_id, 0)
+        likes = num_likes or 0
+        breadth = reposts + replies
+        # 综合级联“深度”：直接互动总量（回复 + 转发 + 点赞）
+        depth = breadth + likes
+        if breadth == 0 and likes == 0:
+            continue
+        cascades.append({
+            "post_id": post_id,
+            "replies": replies,
+            "reposts": reposts,
+            "likes": likes,
+            "breadth": breadth,
+            "depth": depth,
+        })
+
+    cascades.sort(key=lambda c: c["depth"], reverse=True)
+    return cascades[:top_n]
+
+
+def compute_emergent_metrics(
+    simulation_dir: str,
+    config: Dict[str, Any],
+    platform: str,
+    log_info,
+) -> Optional[Dict[str, Any]]:
+    """EXECPLAN2 I-2-0: 为单个平台计算涌现度量并返回字典（失败 → None）。
+
+    只读 {platform}_simulation.db + {platform}/actions.jsonl，绝不修改模拟产物。
+    """
+    db_path = os.path.join(simulation_dir, f"{platform}_simulation.db")
+    actions_path = os.path.join(simulation_dir, platform, "actions.jsonl")
+    if not os.path.exists(db_path):
+        log_info(f"涌现度量[{platform}]：数据库不存在，跳过")
+        return None
+
+    stance_by_agent = _load_stance_by_agent(config)
+
+    trajectory, polarization, net_by_agent = _score_stance_trajectory(actions_path, stance_by_agent)
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        interaction = _compute_interaction_ratio(conn, stance_by_agent)
+        communities = _detect_follow_communities(conn, stance_by_agent, log_info)
+        cascades = _compute_cascades(conn)
+    except Exception as e:  # noqa: BLE001
+        log_info(f"涌现度量[{platform}]：数据库读取失败，部分跳过: {e}")
+        interaction = {"cross_stance_interaction_ratio": 0.0, "cross_stance": 0, "within_stance": 0}
+        communities = []
+        cascades = []
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
+
+    # 末轮立场占比（供报告 agent 直接引用“支持率从 X% 跌至 Y%”）
+    final_stance_share: Dict[str, float] = {}
+    if trajectory:
+        last = trajectory[-1]["by_stance"]
+        total = sum(last.values()) or 1
+        final_stance_share = {s: round(v / total, 4) for s, v in last.items()}
+
+    metrics = {
+        "platform": platform,
+        "polarization_index": polarization,
+        "cross_stance_interaction_ratio": interaction.get("cross_stance_interaction_ratio", 0.0),
+        "interaction_counts": {
+            "cross_stance": interaction.get("cross_stance", 0),
+            "within_stance": interaction.get("within_stance", 0),
+        },
+        "final_stance_share": final_stance_share,
+        "stance_trajectory": trajectory,
+        "follow_communities": communities,
+        "cascades": cascades,
+        "num_speaking_agents": len(net_by_agent),
+        "sentiment_method": "lexicon",
+    }
+    return metrics
+
+
+def write_emergent_metrics(
+    simulation_dir: str,
+    config: Dict[str, Any],
+    platforms: List[str],
+    log_info,
+) -> None:
+    """EXECPLAN2 I-2-0: 计算并原子写出涌现度量产物（仅 SIM_EMERGENT_METRICS=true 时调用）。
+
+    产出：
+      - {platform}_emergent_metrics.json（每平台）
+      - emergent_metrics.json（聚合，供报告 agent 读取）
+    全程 try/except 隔离，任何失败都不影响已完成的模拟。
+    """
+    from app.utils.atomic import write_json_atomic  # 复用原子写助手
+
+    aggregate: Dict[str, Any] = {
+        "simulation_id": config.get("simulation_id"),
+        "generated_at": datetime.now().isoformat(),
+        "platforms": {},
+    }
+    for platform in platforms:
+        try:
+            metrics = compute_emergent_metrics(simulation_dir, config, platform, log_info)
+        except Exception as e:  # noqa: BLE001
+            log_info(f"涌现度量[{platform}]：计算异常，跳过该平台: {e}")
+            metrics = None
+        if metrics is None:
+            continue
+        aggregate["platforms"][platform] = metrics
+        try:
+            write_json_atomic(
+                os.path.join(simulation_dir, f"{platform}_emergent_metrics.json"),
+                metrics,
+            )
+            log_info(
+                f"涌现度量[{platform}]：极化={metrics['polarization_index']}, "
+                f"跨立场互动比={metrics['cross_stance_interaction_ratio']}, "
+                f"社区数={len(metrics['follow_communities'])}"
+            )
+        except Exception as e:  # noqa: BLE001
+            log_info(f"涌现度量[{platform}]：写出失败: {e}")
+
+    if aggregate["platforms"]:
+        try:
+            write_json_atomic(
+                os.path.join(simulation_dir, "emergent_metrics.json"),
+                aggregate,
+            )
+        except Exception as e:  # noqa: BLE001
+            log_info(f"涌现度量：聚合产物写出失败: {e}")
+
+
 class PlatformSimulation:
     """平台模拟结果容器"""
     def __init__(self):
@@ -1299,14 +2150,22 @@ async def run_twitter_simulation(
         model=model,
         available_actions=TWITTER_ACTIONS,
     )
-    
+
+    # EXECPLAN2 I-2-3: 按角色裁剪每个 Agent 的动作可供性（默认关闭；开关 SIM_ROLE_ACTION_PROFILES）。
+    # 必须在 oasis.make()/env.reset() 之前，对 generate_*_agent_graph 产出的同一批 Agent 直接生效。
+    if _role_action_profiles_enabled():
+        try:
+            _apply_role_action_profiles(result.agent_graph, config, TWITTER_ACTIONS, log_info)
+        except Exception as _rap_err:  # noqa: BLE001
+            log_info(f"角色动作可供性应用失败（已隔离，回退全局动作清单）: {_rap_err}")
+
     # 从配置文件获取 Agent 真实名称映射（使用 entity_name 而非默认的 Agent_X）
     agent_names = get_agent_names_from_config(config)
     # 如果配置中没有某个 agent，则使用 OASIS 的默认名称
     for agent_id, agent in result.agent_graph.get_agents():
         if agent_id not in agent_names:
             agent_names[agent_id] = getattr(agent, 'name', f'Agent_{agent_id}')
-    
+
     db_path = os.path.join(simulation_dir, "twitter_simulation.db")
     if os.path.exists(db_path):
         os.remove(db_path)
@@ -1521,14 +2380,22 @@ async def run_reddit_simulation(
         model=model,
         available_actions=REDDIT_ACTIONS,
     )
-    
+
+    # EXECPLAN2 I-2-3: 按角色裁剪每个 Agent 的动作可供性（默认关闭；开关 SIM_ROLE_ACTION_PROFILES）。
+    # Reddit 平台以 REDDIT_ACTIONS 为 union，白名单与之求交，绝不授予平台不存在的动作。
+    if _role_action_profiles_enabled():
+        try:
+            _apply_role_action_profiles(result.agent_graph, config, REDDIT_ACTIONS, log_info)
+        except Exception as _rap_err:  # noqa: BLE001
+            log_info(f"角色动作可供性应用失败（已隔离，回退全局动作清单）: {_rap_err}")
+
     # 从配置文件获取 Agent 真实名称映射（使用 entity_name 而非默认的 Agent_X）
     agent_names = get_agent_names_from_config(config)
     # 如果配置中没有某个 agent，则使用 OASIS 的默认名称
     for agent_id, agent in result.agent_graph.get_agents():
         if agent_id not in agent_names:
             agent_names[agent_id] = getattr(agent, 'name', f'Agent_{agent_id}')
-    
+
     db_path = os.path.join(simulation_dir, "reddit_simulation.db")
     if os.path.exists(db_path):
         os.remove(db_path)
@@ -1822,7 +2689,25 @@ async def main():
     total_elapsed = (datetime.now() - start_time).total_seconds()
     log_manager.info("=" * 60)
     log_manager.info(f"模拟循环完成! 总耗时: {total_elapsed:.1f}秒")
-    
+
+    # EXECPLAN2 I-2-0: 模拟结束后（只读）计算涌现结构 / 观点动力学度量。
+    # 默认关闭（SIM_EMERGENT_METRICS!=true 时完全跳过，run 产物逐字节不变）；
+    # 全程 try/except 隔离，失败不影响已完成的模拟与后续 interview/关闭流程。
+    if os.environ.get("SIM_EMERGENT_METRICS", "false").strip().lower() == "true":
+        emergent_platforms: List[str] = []
+        if twitter_result is not None and twitter_result.env is not None:
+            emergent_platforms.append("twitter")
+        if reddit_result is not None and reddit_result.env is not None:
+            emergent_platforms.append("reddit")
+        if emergent_platforms:
+            try:
+                write_emergent_metrics(
+                    simulation_dir, config, emergent_platforms, log_manager.info
+                )
+                log_manager.info("已生成涌现度量: emergent_metrics.json")
+            except Exception as _em_err:  # noqa: BLE001
+                log_manager.error(f"涌现度量计算失败（已隔离，不影响模拟结果）: {_em_err}")
+
     # 是否进入等待命令模式
     if wait_for_commands:
         log_manager.info("")

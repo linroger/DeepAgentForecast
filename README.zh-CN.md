@@ -9,9 +9,27 @@
 
 ---
 
+## 快速上手
+
+```bash
+git clone https://github.com/linroger/DeepAgentForecast.git
+cd DeepAgentForecast
+./setup.sh        # 交互式：选择你的 LLM 提供方并一键安装全部依赖
+npm run doctor    # 数秒内体检环境是否就绪
+npm run dev       # 后端 :5001 + 前端 :3000
+```
+
+随后打开 **<http://localhost:3000/research>**，输入问题，点击 **运行研究 + 模拟 + 预测**。
+
+**无需自建图数据库。** 时序知识图谱在**本地**运行（内嵌 Graphiti + FalkorDB —— 无需账号、无需 Docker、无需 API Key）。你唯一需要的凭据是**一个 LLM**：要么使用本地 `claude` / `codex` CLI 登录（零 Key），要么为某个在线提供方（`openai`、`kimi`、`minimax`、`deepseek`、`qwen`、`glm`）填入 API Key。`setup.sh` 会引导你选择并对 Key 做实时校验。
+
+完整步骤见 [环境要求](#环境要求) 与 [快速开始](#快速开始)，每个配置项见 [`.env` 配置参考](#env-配置参考)。
+
+---
+
 ## 演示
 
-🔗 **[在线演示站](https://linroger.github.io/DeepAgentForecast/)**（中英双语）—— 走完真实端到端运行的**每一个阶段**：深度研究控制台日志、含行动者与来源的研究档案、生成的本体、可交互知识图谱、模拟的 Twitter/Reddit 论坛，以及最终预测报告（2030 美国 AI 竞赛、2035 全球电动汽车产业、俄乌战争终局、2030 全球半导体产业）。
+🔗 **[在线演示站](https://linroger.github.io/DeepAgentForecast/)**（中英双语）—— 走完真实端到端运行的**每一个阶段**：深度研究控制台日志、含行动者与来源的研究档案、生成的本体、可交互知识图谱、模拟的 Twitter/Reddit 论坛，以及最终预测报告（2030 美国 AI 竞赛、2035 全球电动汽车产业、俄乌战争终局、2030 全球半导体产业、2030 全球存储芯片、2035 中国储能与电池市场、2026 美伊战争终局）。
 
 一句提示词 —— *“Who wins the US AI race by 2030?”*（谁会在 2030 年赢得美国 AI 竞赛？）—— 从提问到可交互预测的全过程（研究 → 知识图谱 → 40 轮群体模拟 → 报告）：
 
@@ -45,6 +63,7 @@
 
 ## 目录
 
+- [快速上手](#快速上手)
 - [演示](#演示)
 - [它能做什么](#它能做什么)
 - [架构总览](#架构总览)

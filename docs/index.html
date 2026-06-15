@@ -25,11 +25,11 @@
 <header class="hero">
   <div class="tag-row">
     <span class="orange-tag" data-i18n="hero.tag">one prompt · research to forecast</span>
-    <span class="version-text">/ DeerFlow × OASIS × Zep</span>
+    <span class="version-text">/ DeerFlow × OASIS × Graphiti</span>
   </div>
   <h1><span data-i18n="hero.h1a">Ask one question.</span><br>
     <span class="gradient-text" data-i18n="hero.h1b">Auto-research, build a world, simulate the future.</span></h1>
-  <p class="lead" data-i18n="hero.lead">A deep-research agent (DeerFlow) searches the web and builds an evidence-grounded dossier; the system constructs a temporal knowledge graph (Zep), generates digital personas for the real-world actors it found, runs a multi-agent population simulation (OASIS, dual-platform), and a report agent synthesizes the forecast. The pages below show every stage of real runs, unedited.</p>
+  <p class="lead" data-i18n="hero.lead">A deep-research agent (DeerFlow) searches the web and builds an evidence-grounded dossier; the system constructs a local temporal knowledge graph (Graphiti), generates digital personas for the real-world actors it found, runs a multi-agent population simulation (OASIS, dual-platform), and a report agent synthesizes the forecast. The pages below show every stage of real runs, unedited.</p>
   <div class="hero-actions">
     <a class="primary-btn" href="#demos" data-i18n="hero.cta">View the demo forecasts ↓</a>
     <a class="ghost-btn" href="https://github.com/linroger/DeepAgentForecast#getting-started" data-i18n="hero.run">Run it yourself</a>
@@ -68,6 +68,27 @@
       <p class="run-meta" data-i18n="card.semi.meta">40-round dual-platform simulation · 115 personas · full value chain: memory / HBM / logic / foundry across 17 named companies</p>
       <span class="run-cta" data-i18n="demos.cta">Walk through the run →</span>
     </a>
+    <a class="run-card" href="demo.html?run=memory-semi-2030">
+      <div class="run-top"><span class="run-status" data-i18n="demos.completed">● completed · full pipeline</span><span class="run-lang">中文</span></div>
+      <h3 data-i18n="card.mem.title">Global memory-chip market through 2030</h3>
+      <p class="run-prompt">“预测到 2030 年全球存储半导体（DRAM、NAND 闪存、HBM 高带宽内存）市场的竞争格局：主要厂商的份额演变、技术路线、AI 驱动的 HBM 需求、地缘政治与出口管制的影响……”</p>
+      <p class="run-meta" data-i18n="card.mem.meta">4-round dual-platform simulation · 80 personas · DRAM / NAND / HBM competitive landscape — Samsung, SK Hynix, Micron &amp; YMTC, AI-driven HBM demand and export controls</p>
+      <span class="run-cta" data-i18n="demos.cta">Walk through the run →</span>
+    </a>
+    <a class="run-card" href="demo.html?run=china-storage-2035">
+      <div class="run-top"><span class="run-status" data-i18n="demos.completed">● completed · full pipeline</span><span class="run-lang">中文</span></div>
+      <h3 data-i18n="card.ess.title">China's energy storage &amp; battery market in 2035</h3>
+      <p class="run-prompt">“请基于以下要点，对 2035 年中国储能与电池市场做出深度、结构化预测与竞争格局研判……”</p>
+      <p class="run-meta" data-i18n="card.ess.meta">40-round dual-platform simulation · 94 personas · grid / C&amp;I / home storage segments, full supply chain &amp; winners-vs-losers analysis</p>
+      <span class="run-cta" data-i18n="demos.cta">Walk through the run →</span>
+    </a>
+    <a class="run-card" href="demo.html?run=us-iran-2026">
+      <div class="run-top"><span class="run-status" data-i18n="demos.completed">● completed · full pipeline</span><span class="run-lang">中文</span></div>
+      <h3 data-i18n="card.iran.title">How does the 2026 US–Iran war end?</h3>
+      <p class="run-prompt">“请基于当前地缘政治现状、美伊双方核心战略诉求、军事实力对比、地区盟友体系、大国博弈背景……开展系统性、多层级、场景化深度预测分析……”</p>
+      <p class="run-meta" data-i18n="card.iran.meta">40-round dual-platform simulation · 135 personas · endgame scenarios, peace-deal terms &amp; post-war Middle East order</p>
+      <span class="run-cta" data-i18n="demos.cta">Walk through the run →</span>
+    </a>
   </div>
 </section>
 
@@ -97,21 +118,22 @@
   <ol class="stage-list">
     <li data-i18n="how.s1">research — DeerFlow deep-research agent searches the web, extracts key actors (role / stance / influence) and writes a cited dossier</li>
     <li data-i18n="how.s2">ontology — an LLM derives entity &amp; relation types from the dossier and your question</li>
-    <li data-i18n="how.s3">graph — the dossier is ingested into a Zep temporal knowledge graph (GraphRAG)</li>
+    <li data-i18n="how.s3">graph — the dossier is ingested into a local temporal knowledge graph (Graphiti, GraphRAG)</li>
     <li data-i18n="how.s4">prepare — researched actors become digital personas with evidence-based stances</li>
     <li data-i18n="how.s5">run — hundreds of LLM personas interact on a simulated Twitter + Reddit (OASIS)</li>
     <li data-i18n="how.s6">report — a tool-augmented ReAct agent queries graph + simulation and writes the forecast</li>
   </ol>
-  <pre class="quickstart"><code># run it yourself — free-tier Zep key + a Claude/Codex CLI login is all you need
+  <pre class="quickstart"><code># run it yourself — no graph DB to host (embedded Graphiti/FalkorDB);
+# all you need is a Claude/Codex CLI login or any LLM API key
 git clone https://github.com/linroger/DeepAgentForecast.git
-cd DeepAgentForecast && ./setup.sh
+cd DeepAgentForecast && ./setup.sh   # interactive: picks your LLM provider
 npm run dev   # → http://localhost:3000/research</code></pre>
 </section>
 
 <footer class="footer">
   <p>Built on <a href="https://github.com/camel-ai/oasis">OASIS</a> (CAMEL-AI),
     <a href="https://github.com/bytedance/deer-flow">DeerFlow</a> (ByteDance),
-    <a href="https://www.getzep.com/">Zep Cloud</a> and
+    <a href="https://github.com/getzep/graphiti">Graphiti</a> (Zep) and
     <a href="https://github.com/666ghj/MiroFish">MiroFish</a> · AGPL-3.0 ·
     <a href="https://github.com/linroger/DeepAgentForecast">github.com/linroger/DeepAgentForecast</a></p>
 </footer>

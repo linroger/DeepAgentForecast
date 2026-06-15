@@ -227,7 +227,10 @@ class ZepGraphMemoryUpdater:
     # 重试配置
     MAX_RETRIES = 3
     RETRY_DELAY = 2  # 秒
-    
+
+    # EXECPLAN2 F-4-5: 批次最终失败后，重新缓冲等待下一次发送时的硬上限（防止内存无界增长）。
+    MAX_BUFFERED_RETRY = 500
+
     def __init__(self, graph_id: str, api_key: Optional[str] = None):
         """
         初始化更新器
@@ -263,8 +266,18 @@ class ZepGraphMemoryUpdater:
         self._total_sent = 0        # 成功发送到Zep的批次数
         self._total_items_sent = 0  # 成功发送到Zep的活动条数
         self._failed_count = 0      # 发送失败的批次数
+        self._failed_items = 0      # EXECPLAN2 F-4-5: 发送失败的活动条数（量化丢失，而非仅批次数）
+        self._dead_lettered = 0     # EXECPLAN2 F-4-5: 关停时写入死信文件的活动条数
         self._skipped_count = 0     # 被过滤跳过的活动数（DO_NOTHING）
-        
+
+        # EXECPLAN2 F-4-5: 关停时若批次仍发送失败，缓冲区会被 _flush_remaining 清空，
+        # 无法靠重新缓冲恢复；改为追加到 sim-scoped 死信 JSONL，便于事后回放。
+        self._dead_letter_path = os.path.join(
+            Config.OASIS_SIMULATION_DATA_DIR,
+            "_zep_dead_letter",
+            f"{graph_id}.jsonl",
+        )
+
         logger.info(f"ZepGraphMemoryUpdater 初始化完成: graph_id={graph_id}, batch_size={self.BATCH_SIZE}")
     
     def _get_platform_display_name(self, platform: str) -> str:
@@ -299,7 +312,9 @@ class ZepGraphMemoryUpdater:
                    f"total_activities={self._total_activities}, "
                    f"batches_sent={self._total_sent}, "
                    f"items_sent={self._total_items_sent}, "
-                   f"failed={self._failed_count}, "
+                   f"failed_batches={self._failed_count}, "
+                   f"failed_items={self._failed_items}, "  # EXECPLAN2 F-4-5: 量化丢失的活动条数
+                   f"dead_lettered={self._dead_lettered}, "  # EXECPLAN2 F-4-5: 写入死信文件的条数
                    f"skipped={self._skipped_count}")
     
     def add_activity(self, activity: AgentActivity):
@@ -428,7 +443,75 @@ class ZepGraphMemoryUpdater:
                 else:
                     logger.error(f"批量发送到Zep失败，已重试{self.MAX_RETRIES}次: {e}")
                     self._failed_count += 1
+                    # EXECPLAN2 F-4-5: 不再静默丢弃整批活动——尽力恢复并量化丢失。
+                    self._failed_items += len(activities)
+                    self._recover_failed_batch(activities, platform)
     
+    def _recover_failed_batch(self, activities: List[AgentActivity], platform: str):
+        """EXECPLAN2 F-4-5: 批次最终失败后的恢复路径（best-effort，绝不抛出）。
+
+        调用约定：本方法的两处上游调用（_worker_loop 与 _flush_remaining）在调用
+        _send_batch_activities 时都已持有 self._buffer_lock，而 threading.Lock 不可重入，
+        因此这里 **不得** 再次获取 self._buffer_lock——直接在持锁上下文中操作缓冲区。
+
+        - 运行期（self._running=True）：把失败活动重新缓冲，受 MAX_BUFFERED_RETRY 硬上限约束，
+          等待下一次 BATCH_SIZE 触发或最终 flush 重发，可从短暂的 FalkorDB/InternalServerError
+          窗口中恢复。
+        - 关停期（self._running=False，即 _flush_remaining 调用栈）：缓冲区随后会被 _flush_remaining
+          清空，重新缓冲无意义，改为追加写入 sim-scoped 死信 JSONL 以便事后回放。
+        """
+        try:
+            if self._running:
+                # 上游已持锁；直接修改缓冲区，切勿再次获取 _buffer_lock（不可重入会死锁）。
+                buf = self._platform_buffers.setdefault(platform, [])
+                room = self.MAX_BUFFERED_RETRY - len(buf)
+                if room > 0:
+                    recovered = activities[:room]
+                    buf.extend(recovered)
+                    dropped = len(activities) - len(recovered)
+                else:
+                    dropped = len(activities)
+                if dropped > 0:
+                    # 超过缓冲上限的部分仍会丢失，写入死信文件以免静默。
+                    self._write_dead_letter(activities[len(activities) - dropped:], platform)
+            else:
+                # 关停路径：直接写死信文件。
+                self._write_dead_letter(activities, platform)
+        except Exception as e:  # noqa: BLE001  恢复本身是增强项，绝不破坏主流程
+            logger.error(f"失败批次恢复异常（{len(activities)} 条活动可能丢失）: {e}")
+
+    def _write_dead_letter(self, activities: List[AgentActivity], platform: str):
+        """EXECPLAN2 F-4-5: 将无法恢复的活动追加到死信 JSONL，便于回放（best-effort）。"""
+        if not activities:
+            return
+        try:
+            os.makedirs(os.path.dirname(self._dead_letter_path), exist_ok=True)
+            now = datetime.now().isoformat()
+            lines = []
+            for act in activities:
+                record = {
+                    "graph_id": self.graph_id,
+                    "platform": platform,
+                    "dead_lettered_at": now,
+                    "combined_text": act.to_episode_text(),
+                    "agent_name": act.agent_name,
+                    "action_type": act.action_type,
+                    "round": act.round_num,
+                    "timestamp": act.timestamp,
+                }
+                lines.append(json.dumps(record, ensure_ascii=False))
+            # 死信是追加语义（非整文件重写），直接以 append 模式落盘。
+            with open(self._dead_letter_path, "a", encoding="utf-8") as fh:
+                fh.write("\n".join(lines) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            self._dead_lettered += len(activities)
+            logger.warning(
+                f"已将 {len(activities)} 条无法发送的活动写入死信文件: {self._dead_letter_path}"
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"写入死信文件失败（{len(activities)} 条活动丢失）: {e}")
+
     # T3.10: 动作 → (typed 边名, 目标名候选 action_args 键)。用于把交互写成带名实体边。
     _TYPED_EDGE_MAP = {
         "LIKE_POST": ("LIKED", ("post_author_name",)),
@@ -438,8 +521,12 @@ class ZepGraphMemoryUpdater:
         "CREATE_COMMENT": ("REPLIED_TO", ("post_author_name",)),
         "LIKE_COMMENT": ("LIKED", ("comment_author_name", "post_author_name")),
         "DISLIKE_COMMENT": ("DISLIKED", ("comment_author_name", "post_author_name")),
-        "FOLLOW": ("FOLLOWED", ("followee_name", "target_name", "followee")),
-        "MUTE": ("MUTED", ("target_name", "mutee_name")),
+        # EXECPLAN2 F-4-0: 模拟器在 _enrich_action_context 中只把 FOLLOW/MUTE 的目标写入
+        # action_args['target_user_name']（canonical key，与 _describe_follow/_describe_mute 一致）。
+        # 因此必须把 target_user_name 放在候选键首位，否则 FOLLOWED/MUTED typed 边永不写入。
+        # 其余键作为无害回退保留。
+        "FOLLOW": ("FOLLOWED", ("target_user_name", "followee_name", "target_name", "followee")),
+        "MUTE": ("MUTED", ("target_user_name", "target_name", "mutee_name")),
     }
 
     def _write_typed_edges(self, activities: List[AgentActivity]):
@@ -539,6 +626,8 @@ class ZepGraphMemoryUpdater:
             "batches_sent": self._total_sent,            # 成功发送的批次数
             "items_sent": self._total_items_sent,        # 成功发送的活动条数
             "failed_count": self._failed_count,          # 发送失败的批次数
+            "failed_items": self._failed_items,          # EXECPLAN2 F-4-5: 发送失败的活动条数
+            "dead_lettered": self._dead_lettered,        # EXECPLAN2 F-4-5: 写入死信文件的活动条数
             "skipped_count": self._skipped_count,        # 被过滤跳过的活动数（DO_NOTHING）
             "queue_size": self._activity_queue.qsize(),
             "buffer_sizes": buffer_sizes,                # 各平台缓冲区大小

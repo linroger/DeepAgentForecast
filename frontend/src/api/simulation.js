@@ -1,11 +1,14 @@
-import service, { requestWithRetry } from './index'
+import service from './index'
+
+// EXECPLAN2 F-10-12: 创建/准备/启动/采访均为非幂等 POST，绝不自动重试 —— 否则首请求其实
+// 成功、客户端误判超时重试，会造成重复创建/重复启动等副作用。仅 GET/状态轮询可重试。
 
 /**
  * 创建模拟
  * @param {Object} data - { project_id, graph_id?, enable_twitter?, enable_reddit? }
  */
 export const createSimulation = (data) => {
-  return requestWithRetry(() => service.post('/api/simulation/create', data), 3, 1000)
+  return service.post('/api/simulation/create', data)  // non-idempotent: do not retry
 }
 
 /**
@@ -13,7 +16,7 @@ export const createSimulation = (data) => {
  * @param {Object} data - { simulation_id, entity_types?, use_llm_for_profiles?, parallel_profile_count?, force_regenerate? }
  */
 export const prepareSimulation = (data) => {
-  return requestWithRetry(() => service.post('/api/simulation/prepare', data), 3, 1000)
+  return service.post('/api/simulation/prepare', data)  // non-idempotent: do not retry
 }
 
 /**
@@ -81,7 +84,7 @@ export const listSimulations = (projectId) => {
  * @param {Object} data - { simulation_id, platform?, max_rounds?, enable_graph_memory_update? }
  */
 export const startSimulation = (data) => {
-  return requestWithRetry(() => service.post('/api/simulation/start', data), 3, 1000)
+  return service.post('/api/simulation/start', data)  // non-idempotent: do not retry
 }
 
 /**
@@ -173,7 +176,7 @@ export const getEnvStatus = (data) => {
  * @param {Object} data - { simulation_id, interviews: [{ agent_id, prompt }] }
  */
 export const interviewAgents = (data) => {
-  return requestWithRetry(() => service.post('/api/simulation/interview/batch', data), 3, 1000)
+  return service.post('/api/simulation/interview/batch', data)  // non-idempotent: do not retry
 }
 
 /**
