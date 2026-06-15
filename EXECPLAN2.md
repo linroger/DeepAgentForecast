@@ -3608,6 +3608,10 @@ Ordered by remediation priority (P0 + high-confidence + broad blast-radius first
 > - **I-1-2** faction-aware GraphRAG — done (`e5899b8`, `GRAPH_COMMUNITY_RETRIEVAL`)
 > - **I-2-1** dynamic per-agent affective state — done (`e2a13b6`, `SIM_AGENT_DYNAMICS`)
 > - **I-0-4** per-KIQ/per-actor research fan-out — done (`6412119`, `RESEARCH_DEEP_FANOUT`)
+> - **I-6-3** concurrent report section generation — done (`90b1e91`, `REPORT_SECTION_CONCURRENCY`).
+>   A full re-audit of all 67 IDs found this was the only wave-1 item not actually
+>   shipped (its sole "marker" was stale `.pyc` bytecode); now implemented with
+>   thread-safe ReportLogger + ZepTools retrieval caches.
 > - **I-4-2** mid-run OASIS resume — **DEFERRED (upstream-blocked).** Vendored
 >   camel-oasis `create_db` runs bare `CREATE TABLE` (no `IF NOT EXISTS`) and
 >   `env.reset()` re-signs-up every agent (PK conflict on an existing DB); the runner

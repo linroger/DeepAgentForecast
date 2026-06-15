@@ -2599,8 +2599,11 @@ class ReportAgent:
                 
                 # EXECPLAN2 I-5-4: per-section 遥测——记录本章节开始时刻与累计计量快照、
                 # 归零本章节工具计数；章节结束后相减得到该章节的 LLM 经济学。
+                # I-6-3: 并发模式下章节生成已发生在线程池中，逐章 meter 差值与 _section_tool_calls
+                # 计数器（被多线程共享递增）都不再可归因到单个章节，故跳过逐章遥测（run 级汇总仍准确）。
+                _sec_telemetry_on = _telemetry_on and _precomputed is None
                 _sec_started = time.monotonic()
-                _sec_meter_before = self._meter_total(_telemetry_run_id) if _telemetry_on else {}
+                _sec_meter_before = self._meter_total(_telemetry_run_id) if _sec_telemetry_on else {}
                 self._section_tool_calls = 0
 
                 # 生成主章节内容。
@@ -2675,8 +2678,9 @@ class ReportAgent:
                 full_section_content = f"## {section.title}\n\n{section_content}"
 
                 # EXECPLAN2 I-5-4: 计算本章节遥测条目（LLM 调用/tokens/cost/latency + 工具调用）
+                # I-6-3: 并发模式跳过（_sec_telemetry_on 已含 _precomputed is None 判断）。
                 _sec_telemetry = None
-                if _telemetry_on:
+                if _sec_telemetry_on:
                     try:
                         _sec_after = self._meter_total(_telemetry_run_id)
                         _sec_telemetry = self._meter_delta(
