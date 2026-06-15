@@ -140,6 +140,11 @@ class Config:
     REPORT_COMPARISON_TABLE = os.environ.get('REPORT_COMPARISON_TABLE', 'False').strip().lower() == 'true'  # I-3-4 基线-情景对比表
     RECORD_RUN_MANIFEST = os.environ.get('RECORD_RUN_MANIFEST', 'True').strip().lower() == 'true'  # I-8-1 复现清单 run.json
 
+    # —— EXECPLAN2 第三波改进旋钮（剩余 L-effort 新能力；全部默认关，留空即保持当前行为）——
+    # 预测质量回归评测开关（EXECPLAN2 I-7-7）：opt-in，绝不进默认 CI。开启后 eval_forecast_quality.py
+    # 用 LLM-judge 按 rubric 给固定情景集打分并与 baseline 对比。默认关。
+    EVAL_ENABLED = os.environ.get('EVAL_ENABLED', 'False').strip().lower() == 'true'  # I-7-7 预测质量评测
+
     # LLM提供方（默认使用 Claude Code CLI 订阅）
     # claude-cli: 通过本机 `claude` CLI 调用（使用 Claude Code 订阅，无需 API Key）
     # codex-cli:  通过本机 `codex` CLI 调用（使用 Codex 订阅，无需 API Key）
@@ -479,6 +484,12 @@ class Config:
     DEERFLOW_RESEARCH_TIMEOUT = int(os.environ.get('DEERFLOW_RESEARCH_TIMEOUT', '10800'))
     # 是否启用 DeerFlow 子代理（并行 scoped workers，更深但更慢）
     DEERFLOW_SUBAGENTS = os.environ.get('DEERFLOW_SUBAGENTS', 'false').strip().lower() == 'true'
+    # 深度研究 per-KIQ / per-actor 子代理扇出（EXECPLAN2 I-0-4）：开场 scope pass 产出种子清单后，
+    # 并行派发若干 scoped 子调查，合并工作笔记再做矛盾核验+综合。默认关 = 线性协议不变。
+    # 经 env 下发给 deerflow 子进程（独立 venv）读取。
+    RESEARCH_DEEP_FANOUT = os.environ.get('RESEARCH_DEEP_FANOUT', 'false').strip().lower() == 'true'
+    # 扇出宽度上限（并行子调查数）；防止子代理把工具/LLM 预算放大失控。
+    RESEARCH_FANOUT_WIDTH = int(os.environ.get('RESEARCH_FANOUT_WIDTH', '4') or '4')
 
     # ============================================================
     # EXECPLAN —— 打通「研究 → 图谱 → 模拟 → 报告」结构化契约的旋钮
@@ -491,6 +502,19 @@ class Config:
     GRAPH_BUILD_CONCURRENCY = int(os.environ.get('GRAPH_BUILD_CONCURRENCY', '1'))
     # 建图末尾跑 Leiden 社区发现（派系/联盟，best-effort，失败不影响建图）(T2.4)
     GRAPH_BUILD_COMMUNITIES = os.environ.get('GRAPH_BUILD_COMMUNITIES', 'false').strip().lower() == 'true'
+    # 把已发现的社区(派系)做成一等可检索结构：报告侧 faction_brief 工具 + 人设侧群体身份
+    # （EXECPLAN2 I-1-2）。默认跟随 GRAPH_BUILD_COMMUNITIES（无社区节点时 faction_brief 自动
+    # 降级到 coalition_map 的行为日志聚类）。显式设 true/false 可覆盖。
+    GRAPH_COMMUNITY_RETRIEVAL = (
+        os.environ.get('GRAPH_COMMUNITY_RETRIEVAL', '').strip().lower() == 'true'
+        if os.environ.get('GRAPH_COMMUNITY_RETRIEVAL', '').strip() != ''
+        else GRAPH_BUILD_COMMUNITIES
+    )
+    # 建图末尾跑一遍 LLM 实体消解 / 规范别名合并（EXECPLAN2 I-1-4）：把 'OpenAI'/'OpenAI 公司'/
+    # '@OpenAI' 等同实体的分裂节点合并到 actors.json 的规范名上。默认关（过度合并风险高）。
+    GRAPH_RESOLVE_ENTITIES = os.environ.get('GRAPH_RESOLVE_ENTITIES', 'false').strip().lower() == 'true'
+    # 合并所需的最小 embedding 余弦相似度（规范名匹配 + 此阈值 双重门，降低误合并）。
+    GRAPH_RESOLVE_SIM_THRESHOLD = float(os.environ.get('GRAPH_RESOLVE_SIM_THRESHOLD', '0.88') or '0.88')
     # 远程 Graphiti/Zep 才需要分批限流停顿；本地 FalkorDB 关闭死延迟（T2.6）
     GRAPHITI_REMOTE = os.environ.get('GRAPHITI_REMOTE', 'false').strip().lower() == 'true'
 
@@ -504,6 +528,17 @@ class Config:
     # 把 *_config 的 recsys 旋钮（recsys_type/refresh_rec_post_count/max_rec_post_len + echo→
     # following_post_count）映射到 oasis Platform；默认关 = 用 DefaultPlatformType（与旧行为一致）(T3.12)
     SIM_WIRE_RECSYS = os.environ.get('SIM_WIRE_RECSYS', 'false').strip().lower() == 'true'
+    # 逐智能体动态情感状态（情绪/精力/立场强度/疲劳）按轮更新并注入该轮提示（EXECPLAN2 I-2-1）。
+    # 默认关 = 每轮静态人设（与现状逐字节一致）。
+    SIM_AGENT_DYNAMICS = os.environ.get('SIM_AGENT_DYNAMICS', 'false').strip().lower() == 'true'
+    # 情感状态更新的学习率/速率常数（有界 clamp，保守取值；仅 SIM_AGENT_DYNAMICS=true 时生效）。
+    SIM_DYNAMICS_MOOD_LR = float(os.environ.get('SIM_DYNAMICS_MOOD_LR', '0.25') or '0.25')
+    SIM_DYNAMICS_OPINION_LR = float(os.environ.get('SIM_DYNAMICS_OPINION_LR', '0.15') or '0.15')
+    SIM_DYNAMICS_FATIGUE_RATE = float(os.environ.get('SIM_DYNAMICS_FATIGUE_RATE', '0.20') or '0.20')
+    SIM_DYNAMICS_FATIGUE_DECAY = float(os.environ.get('SIM_DYNAMICS_FATIGUE_DECAY', '0.10') or '0.10')
+    # 模拟中断后从上次完成的轮次继续（而非从第 0 轮重启），依赖 OASIS DB 持久性（EXECPLAN2 I-4-2）。
+    # 默认关 = 全量重启（与现状一致）。
+    SIM_RESUME_FROM_ROUND = os.environ.get('SIM_RESUME_FROM_ROUND', 'false').strip().lower() == 'true'
 
     # --- 报告（Phase 4）---
     # 每节最少/对话模式最多工具调用（与 REPORT_AGENT_MAX_TOOL_CALLS 配套；T4.4 接入硬编码值）
