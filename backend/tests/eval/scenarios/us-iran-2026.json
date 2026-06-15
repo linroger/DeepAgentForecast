@@ -1,0 +1,16 @@
+{
+  "name": "us-iran-2026",
+  "question": "2025-2026 US-Iran war endgame: scenario-ranked probabilistic forecast of war termination, drivers, and regional/global power shifts.",
+  "report_path": "docs/demos/us-iran-2026/report.md",
+  "expected_outcome": {
+    "scenario": "staged low-intensity stalemate / phased temporary ceasefire (base case)",
+    "key_signals": [
+      "base case ~55-60% within 6-12 months",
+      "extreme escalation ~20-25%, optimistic full ceasefire ~15-20%",
+      "oil export collapse, oil-price spike, CIPS settlement growth",
+      "three mutually-exclusive scenarios with explicit probabilities and drivers"
+    ],
+    "rationale": "A good forecast here covers >=3 mutually-exclusive scenarios with calibrated probabilities summing to ~1, names concrete drivers, and grounds quantitative claims."
+  },
+  "created_date": "2026-06-15"
+}
