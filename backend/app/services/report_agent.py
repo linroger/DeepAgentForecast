@@ -1480,6 +1480,14 @@ class ReportAgent:
                 "parameters": {"actor_name": "要追踪的 Agent/角色名"}
             }
         }
+        # I-1-2: faction_brief 仅在启用图谱社区检索时暴露（默认关 → 工具集与现状逐字节一致）。
+        # 图谱原生派系证据（社区检测 + LLM 摘要），无社区节点时内部降级到 coalition_map。
+        if Config.GRAPH_COMMUNITY_RETRIEVAL:
+            tools["faction_brief"] = {
+                "name": "faction_brief",
+                "description": "派系简报：基于图谱社区检测(Leiden)+LLM 摘要，列出各派系的成员实体与定位。分析阵营/联盟/对立结构时优先于 coalition_map（图谱原生证据，互补于行为日志聚类）。",
+                "parameters": {"query": "（可选）聚焦的主题/实体关键词"}
+            }
         # T4.7: 仅情景报告（有基线模拟）暴露反事实对比工具
         if self.base_simulation_id:
             tools["scenario_diff"] = {
@@ -1567,6 +1575,10 @@ class ReportAgent:
 
             elif tool_name == "coalition_map":
                 return self.zep_tools.coalition_map(self.graph_id, self.simulation_id)
+
+            elif tool_name == "faction_brief":  # EXECPLAN2 I-1-2
+                return self.zep_tools.faction_brief(
+                    self.graph_id, parameters.get("query", ""), self.simulation_id)
 
             elif tool_name == "opinion_shift":
                 actor_name = parameters.get("actor_name", parameters.get("query", ""))

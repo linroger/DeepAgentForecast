@@ -498,6 +498,45 @@ class GraphitiRuntime:
             for n in nodes
         ]
 
+    # EXECPLAN2 I-1-2: list detected communities (Leiden) + their member entity
+    # names, so the report's faction_brief tool and persona generation can read the
+    # graph's OWN faction structure (with LLM-written summaries) instead of only the
+    # action-log heuristic. Best-effort: any failure returns [] (caller degrades).
+    def list_communities(self, graph_id: str) -> list:
+        return self.run(self._list_communities(graph_id))
+
+    async def _list_communities(self, graph_id):
+        g = await self._ensure_graph(graph_id)
+        from graphiti_core.nodes import CommunityNode
+
+        async with self._read_guard(graph_id):
+            try:
+                comms = await CommunityNode.get_by_group_ids(g.driver, [graph_id], limit=200)
+            except Exception as exc:
+                logger.debug("list_communities: get_by_group_ids failed for %s: %s", graph_id, exc)
+                return []
+            members_by_uuid: dict = {}
+            try:
+                records, _, _ = await g.driver.execute_query(
+                    "MATCH (c:Community)-[:HAS_MEMBER]->(e:Entity) "
+                    "RETURN c.uuid AS cuuid, collect(e.name) AS members"
+                )
+                for rec in (records or []):
+                    cu = rec.get("cuuid")
+                    if cu:
+                        members_by_uuid[cu] = [m for m in (rec.get("members") or []) if m]
+            except Exception as exc:
+                logger.debug("list_communities: membership query failed for %s: %s", graph_id, exc)
+        return [
+            {
+                "uuid": c.uuid,
+                "name": c.name,
+                "summary": getattr(c, "summary", "") or "",
+                "members": members_by_uuid.get(c.uuid, []),
+            }
+            for c in comms
+        ]
+
     # EXECPLAN2 I-1-0: map a recipe selector ('rrf'|'mmr'|'node_distance'|
     # 'cross_encoder'|'combined') + scope ('edges'|'nodes') to a graphiti_core
     # SearchConfig recipe. Unknown selectors fall back to 'rrf', so a stray value

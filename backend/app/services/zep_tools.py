@@ -2391,6 +2391,45 @@ class ZepToolsService:
             lines.append("- （未发现 ≥2 人的互动派系）")
         return "\n".join(lines)
 
+    def faction_brief(self, graph_id: str, query: str = "", simulation_id: str = "") -> str:
+        """派系简报（EXECPLAN2 I-1-2）：基于图谱已检测的社区(Community)节点 + LLM 摘要，
+        列出各派系的成员实体与定位，给报告「图谱原生」的阵营证据（互补于 coalition_map 的
+        行为日志聚类）。无社区节点（或未启用 GRAPH_COMMUNITY_RETRIEVAL）时降级到 coalition_map。"""
+        if not getattr(Config, "GRAPH_COMMUNITY_RETRIEVAL", False):
+            return (self.coalition_map(graph_id, simulation_id) if simulation_id
+                    else "（GRAPH_COMMUNITY_RETRIEVAL 未启用；无 simulation_id 可回退到行为聚类）")
+        try:
+            from .graphiti_client.runtime import get_runtime
+            communities = get_runtime().list_communities(graph_id) or []
+        except Exception as e:
+            logger.warning(f"faction_brief: 读取社区失败，降级到 coalition_map: {e}")
+            communities = []
+        if not communities:
+            # 图谱无社区节点 → 降级到行为日志派系聚类
+            return (self.coalition_map(graph_id, simulation_id) if simulation_id
+                    else "（图谱无社区节点，且无 simulation_id 可回退到行为聚类）")
+        q = (query or "").strip().lower()
+
+        def _relevance(c):
+            if not q:
+                return 0
+            hay = (c.get("name", "") + " " + c.get("summary", "") + " "
+                   + " ".join(c.get("members") or [])).lower()
+            return hay.count(q)
+
+        # 有查询时优先相关社区，其次按成员数；无查询时纯按成员数（派系规模）排序。
+        communities.sort(key=lambda c: (_relevance(c), len(c.get("members") or [])), reverse=True)
+        lines = ["## 派系/社区简报（基于图谱社区检测 + LLM 摘要）"]
+        for i, c in enumerate(communities[:8], 1):
+            members = c.get("members") or []
+            lines.append(f"### 派系 {i}: {c.get('name') or f'社区{i}'}（{len(members)} 个实体）")
+            if c.get("summary"):
+                lines.append(c["summary"].strip())
+            if members:
+                shown = "、".join(members[:20])
+                lines.append(f"成员: {shown}" + ("…" if len(members) > 20 else ""))
+        return "\n".join(lines)
+
     def opinion_shift(self, simulation_id: str, actor_name: str) -> str:
         """单个 actor 的逐轮行为轨迹（动作量/类型随轮次变化），用于观察立场/参与度演变。"""
         from .simulation_runner import SimulationRunner
