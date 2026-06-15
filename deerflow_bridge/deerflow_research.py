@@ -44,6 +44,7 @@ import os
 import re
 import sys
 import tempfile
+import threading
 import traceback
 import uuid
 from pathlib import Path
@@ -220,13 +221,18 @@ class ProgressLog:
     def __init__(self, path: Path):
         self._path = path
         self._fh = path.open("w", encoding="utf-8")
+        # EXECPLAN2 I-0-4: the deep fan-out runs scoped workers in a ThreadPoolExecutor
+        # that all call write() concurrently. Serialize the write→flush→print sequence
+        # so log lines never interleave/corrupt. Single-threaded callers are unaffected.
+        self._lock = threading.Lock()
 
     def write(self, kind: str, message: str) -> None:
         line = f"{_utcnow()} [{kind}] {message}".rstrip()
-        self._fh.write(line + "\n")
-        self._fh.flush()
-        # Also echo to stdout so a Popen reader without the file still sees it.
-        print(line, flush=True)
+        with self._lock:
+            self._fh.write(line + "\n")
+            self._fh.flush()
+            # Also echo to stdout so a Popen reader without the file still sees it.
+            print(line, flush=True)
 
     def close(self) -> None:
         try:

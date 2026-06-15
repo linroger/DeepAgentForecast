@@ -1452,13 +1452,19 @@ def _build_dynamics_tracker(config, log_info):
 
 
 def _inject_agent_dynamics(active_agents, tracker, log_info):
-    """Prepend each active agent's current-state line to its system message for this
-    round. Re-seeds memory via init_messages() so astep() (which reads
-    memory.get_context) sees the updated system prompt. Best-effort per agent."""
+    """Append each active agent's current-state line as a fresh SYSTEM memory record
+    for this round. astep() reads memory.get_context(), so the note becomes the
+    most-recent system message before the action prompt (maximal salience) WITHOUT
+    clearing the agent's accumulated conversation memory. Best-effort per agent.
+
+    (EXECPLAN2 I-2-1. Memory-preserving via update_memory rather than the earlier
+    init_messages() re-seed, which the adversarial review flagged as silently wiping
+    cross-round agent memory once an agent developed non-baseline state.)"""
     if tracker is None:
         return
     try:
         from camel.messages import BaseMessage
+        from camel.types import OpenAIBackendRole
     except Exception:
         return
     for aid, agent in active_agents:
@@ -1466,14 +1472,8 @@ def _inject_agent_dynamics(active_agents, tracker, log_info):
             line = tracker.state_line(aid)
             if not line:
                 continue
-            base = getattr(agent, "_dyn_base_sysmsg", None)
-            if base is None:
-                base = agent.system_message.content if getattr(agent, "system_message", None) else ""
-                agent._dyn_base_sysmsg = base
-            role_name = agent.system_message.role_name if getattr(agent, "system_message", None) else "system"
-            agent._system_message = BaseMessage.make_assistant_message(
-                role_name=role_name, content=(base + "\n\n" + line))
-            agent.init_messages()
+            note = BaseMessage.make_user_message(role_name="StateUpdater", content=line)
+            agent.update_memory(note, OpenAIBackendRole.SYSTEM)
         except Exception as e:
             log_info(f"动态状态注入失败 (agent {aid}): {e}")
 

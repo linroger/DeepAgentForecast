@@ -81,6 +81,17 @@ def test_faction_brief_query_prioritizes_relevant(monkeypatch):
     assert out.index("small-semiconductor") < out.index("big")
 
 
+def test_faction_brief_tolerates_non_string_members(monkeypatch):
+    # adversarial-review regression: graph could return non-string member names;
+    # join() must not TypeError (defensive str() coercion).
+    monkeypatch.setattr(Config, "GRAPH_COMMUNITY_RETRIEVAL", True)
+    comms = [{"name": 42, "summary": None, "members": ["A", 7, None, {"x": 1}]}]
+    monkeypatch.setattr(rt_mod, "get_runtime", lambda: _FakeRT(comms))
+    svc = _bare_service()
+    out = svc.faction_brief("g1", "a")  # query path also exercises the hay join
+    assert "派系" in out  # rendered without crashing
+
+
 def test_faction_brief_runtime_error_degrades(monkeypatch):
     monkeypatch.setattr(Config, "GRAPH_COMMUNITY_RETRIEVAL", True)
 

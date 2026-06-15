@@ -2413,8 +2413,8 @@ class ZepToolsService:
         def _relevance(c):
             if not q:
                 return 0
-            hay = (c.get("name", "") + " " + c.get("summary", "") + " "
-                   + " ".join(c.get("members") or [])).lower()
+            hay = (str(c.get("name", "")) + " " + str(c.get("summary", "")) + " "
+                   + " ".join(str(m) for m in (c.get("members") or []))).lower()
             return hay.count(q)
 
         # 有查询时优先相关社区，其次按成员数；无查询时纯按成员数（派系规模）排序。
@@ -2426,7 +2426,7 @@ class ZepToolsService:
             if c.get("summary"):
                 lines.append(c["summary"].strip())
             if members:
-                shown = "、".join(members[:20])
+                shown = "、".join(str(m) for m in members[:20])
                 lines.append(f"成员: {shown}" + ("…" if len(members) > 20 else ""))
         return "\n".join(lines)
 
