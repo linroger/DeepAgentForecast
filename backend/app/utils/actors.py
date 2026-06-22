@@ -12,6 +12,8 @@ handoff 契约中的 actors.json 形如（NEW 字段均为可选，缺失即降�
       "actors": [
         {"name": "...", "type": "Person|Organization|Media|Government|Platform|Other",
          "role": "...", "stance": "...", "influence": "high|medium|low",
+         // NEW 身份消歧 / 别名解析（KG cookbook：描述用于消歧，别名解析零字符重叠的同义名）：
+         "description": "一句话锚定 who/what（消歧用）", "aliases": ["同义名/缩写/外文名"],
          // NEW 角色内在动机（actors-and-incentives 结构化，均可选；缺失即降级）：
          "goals": ["..."], "constraints": ["..."], "assets": ["..."],
          "vulnerabilities": ["..."], "stated_vs_revealed": "言行差异",
@@ -115,6 +117,27 @@ def normalize_name(name: str) -> str:
     return s
 
 
+def _actor_norm_aliases(row: Dict[str, Any]) -> List[str]:
+    """actor 行的可选 ``aliases`` 列表 → 标准化别名列表（容错：非 list/非 str 返回 []）。
+
+    KG 经验（Anthropic KG cookbook 核心洞见）：很多同一实体的别名零字符重叠
+    （"Edwin Aldrin"=="Buzz Aldrin"、"MSFT"=="Microsoft"、"马斯克"=="Musk"），
+    纯字符串相似度无法合并，需要显式别名表来解析。
+    """
+    if not isinstance(row, dict):
+        return []
+    raw = row.get("aliases")
+    if not isinstance(raw, list):
+        return []
+    out: List[str] = []
+    for a in raw:
+        if isinstance(a, str):
+            na = normalize_name(a)
+            if na:
+                out.append(na)
+    return out
+
+
 def extract_actor_rows(actors: Optional[Any]) -> List[Dict[str, Any]]:
     """从 actors.json 顶层对象安全取出 actor 行列表（容错任意脏数据）。"""
     if not isinstance(actors, dict):
@@ -129,7 +152,7 @@ def match_actor(entity_name: str, actors: Optional[Any]) -> Optional[Dict[str, A
     """把一个 Zep 实体名匹配回研究档案的 actor 行。
 
     匹配顺序：标准化精确匹配 → 双向包含（取较长名者优先，避免 "AI" 这类
-    短名误配）。无匹配返回 None。
+    短名误配）→ 别名匹配（覆盖零字符重叠的同义名/缩写/外文名）。无匹配返回 None。
     """
     rows = extract_actor_rows(actors)
     if not rows or not entity_name:
@@ -142,14 +165,19 @@ def match_actor(entity_name: str, actors: Optional[Any]) -> Optional[Dict[str, A
     best_len = 0
     for row in rows:
         cand = normalize_name(str(row.get("name", "")))
-        if not cand:
-            continue
-        if cand == target:
-            return row
-        # 双向包含；要求重叠名至少 2 个字符，否则噪声太大
-        if len(cand) >= 2 and (cand in target or target in cand):
-            if len(cand) > best_len:
-                best, best_len = row, len(cand)
+        if cand:
+            if cand == target:
+                return row
+            # 双向包含；要求重叠名至少 2 个字符，否则噪声太大
+            if len(cand) >= 2 and (cand in target or target in cand):
+                if len(cand) > best_len:
+                    best, best_len = row, len(cand)
+        # 别名表（可选）：零字符重叠的别名只能靠显式表解析。精确别名直接命中。
+        for al in _actor_norm_aliases(row):
+            if al == target:
+                return row
+            if len(al) >= 2 and (al in target or target in al) and len(al) > best_len:
+                best, best_len = row, len(al)
     return best
 
 
@@ -301,6 +329,9 @@ def extract_relationship_rows(actors: Optional[Any]) -> List[Dict[str, Any]]:
         return []
     rows = extract_actor_rows(actors)
     names = {normalize_name(r["name"]) for r in rows}
+    # 端点名集合也并入别名（可选）：让用别名书写的关系端点也能匹配到 actor。
+    for r in rows:
+        names.update(_actor_norm_aliases(r))
     out: List[Dict[str, Any]] = []
     for r in rels:
         if not isinstance(r, dict):

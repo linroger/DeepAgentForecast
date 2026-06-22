@@ -518,6 +518,8 @@ class Config:
     GRAPH_RESOLVE_ENTITIES = os.environ.get('GRAPH_RESOLVE_ENTITIES', 'false').strip().lower() == 'true'
     # 合并所需的最小 embedding 余弦相似度（规范名匹配 + 此阈值 双重门，降低误合并）。
     GRAPH_RESOLVE_SIM_THRESHOLD = float(os.environ.get('GRAPH_RESOLVE_SIM_THRESHOLD', '0.88') or '0.88')
+    # 弱连通分量数超过 ratio×节点数时告警（图谱多为孤立单点 = 实体欠合并的特征，KG cookbook 第4步）。
+    GRAPH_COMPONENT_WARN_RATIO = float(os.environ.get('GRAPH_COMPONENT_WARN_RATIO', '0.5') or '0.5')
     # 远程 Graphiti/Zep 才需要分批限流停顿；本地 FalkorDB 关闭死延迟（T2.6）
     GRAPHITI_REMOTE = os.environ.get('GRAPHITI_REMOTE', 'false').strip().lower() == 'true'
 

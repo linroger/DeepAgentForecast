@@ -551,6 +551,8 @@ def build_extraction_prompt(
     # Gated behind forecast_inputs (default ON, prompt-only); a model that omits them
     # degrades to exactly the old actors.json shape.
     actor_motive = (
+        '      "description": string,               // OPTIONAL ONE sentence pinning who/what this is (disambiguating IDENTITY, e.g. "TSMC, the Taiwanese contract chip foundry"), grounded in the research; powers KG entity resolution\n'
+        '      "aliases": [ string ],               // OPTIONAL other names this entity is known by (synonyms, abbreviations, foreign-language forms) — for zero-overlap alias resolution\n'
         '      "goals": [ string ],                 // OPTIONAL ranked objectives/incentives driving this actor\n'
         '      "constraints": [ string ],           // OPTIONAL hard limits (capital, power, regulatory, capacity)\n'
         '      "assets": [ string ],                // OPTIONAL capabilities/resources they can deploy\n'
@@ -692,7 +694,10 @@ def build_extraction_prompt(
         "type fits; multiple edges between the same pair are allowed when they hold simultaneously "
         "(e.g. REGULATES and DEPENDS_ON). For a single-actor situation use an empty "
         'relationships array ("relationships": []). '
-        "ACTORS: when the evidence supports it, populate goals/constraints/assets/vulnerabilities/"
+        "ACTORS: include ONLY actors CENTRAL to the central_question — those whose decisions, "
+        "incentives, or capabilities materially move the outcome; exclude entities mentioned only in "
+        "passing. Give each a one-sentence description (disambiguating identity) and known aliases. "
+        "When the evidence supports it, populate goals/constraints/assets/vulnerabilities/"
         "stated_vs_revealed from your actors-and-incentives analysis; omit any you did not research, "
         "and do NOT fold them into memory. SITUATION_BRIEF: populate it from your "
         "actors-and-incentives analysis — current_situation and fault_lines are required.\n"

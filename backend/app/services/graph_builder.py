@@ -22,6 +22,7 @@ from ..utils.actors import (
     extract_actor_rows,
     extract_relationship_rows,
     actor_briefing,
+    normalize_name,
     REL_EDGE_NAME,
 )
 from .text_processor import TextProcessor
@@ -46,13 +47,20 @@ class GraphInfo:
     node_count: int
     edge_count: int
     entity_types: List[str]
-    
+    # KG cookbook 结构完整性信号（均可选，ADD-only，旧消费者不受影响）：
+    # components = 弱连通分量数（≈1 表示实体已良好合并；远多于预期 = 实体欠合并）；
+    # top_hubs = 度数最高的若干节点名（枢纽合理性 sanity check）。
+    components: int = 0
+    top_hubs: Optional[List[str]] = None
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "graph_id": self.graph_id,
             "node_count": self.node_count,
             "edge_count": self.edge_count,
             "entity_types": self.entity_types,
+            "components": self.components,
+            "top_hubs": self.top_hubs or [],
         }
 
 
@@ -346,17 +354,22 @@ class GraphBuilderService:
         if not rows and not rels:
             return 0
         label = {a["name"]: ACTOR_TYPE_TO_LABEL.get(str(a.get("type") or ""), "Entity") for a in rows}
+        # 每个 actor 的一句话消歧 summary（KG cookbook：描述是实体解析的关键信号）。
+        # 优先用研究给的 description，回退到 role；喂给 add_triplet 的端点 summary，
+        # graphiti 的 LLM 去重器读 node.summary 来区分同名异体。
+        summ = {a["name"]: (str(a.get("description") or a.get("role") or "").strip()[:200]) for a in rows}
         n = 0
         seeded_names: set = set()
         for r in rels:
             typ = str(r.get("type", "")).upper()
             etype = REL_EDGE_NAME.get(typ)
-            if not etype:
-                # OTHER / 未知类型：用研究给的 relation_label 清洗成合法边名兜底，绝不丢边
-                # （旧逻辑这里 continue，会静默丢弃所有非 7 类边）。
+            if typ == "OTHER" or not etype:
+                # OTHER / 未知类型：优先用研究给的 relation_label 清洗成具体边名（如
+                # SUPPLIES/CO_INVESTS_IN_CAPACITY），保留语义；没有 label 才落到 RELATES_TO。
+                # 绝不丢边（旧逻辑这里 continue，会静默丢弃所有非 7 类边）。
                 rl = str(r.get("relation_label", "") or "").strip()
                 sanitized = re.sub(r"[^0-9A-Za-z_]+", "_", rl).strip("_").upper() if rl else ""
-                etype = sanitized or "RELATES_TO"
+                etype = sanitized or etype or "RELATES_TO"
             src, tgt = r.get("source"), r.get("target")
             # 把 sign/strength/grade 折进事实文本：边自带可检索的极性/强度/定级，无需改 Graphiti schema。
             fact = str(r.get("basis") or f"{src} {etype} {tgt}")
@@ -375,6 +388,8 @@ class GraphBuilderService:
                     valid_at=valid_at,
                     source_label=label.get(src, "Entity"),
                     target_label=label.get(tgt, "Entity"),
+                    source_summary=summ.get(src, ""),
+                    target_summary=summ.get(tgt, ""),
                 )
                 n += 1
                 seeded_names |= {src, tgt}
@@ -405,10 +420,36 @@ class GraphBuilderService:
                     valid_at=valid_at,
                     source_label=label.get(name, "Entity"),
                     target_label=ACTOR_TYPE_TO_LABEL.get(str(a.get("type") or ""), "Entity"),
+                    source_summary=summ.get(name, ""),
                 )
                 n += 1
             except Exception as e:
                 logger.warning("[%s] seed node skipped (%s): %s", graph_id, name, e)
+        # 别名桥（KG cookbook 别名解析）：为带 aliases 的 actor 显式播一条 ALSO_KNOWN_AS 边，
+        # 让后续 prose 抽取里以别名出现的提及能去重到同一规范节点，而非另起孤儿节点。
+        for a in rows:
+            name = a["name"]
+            aliases = a.get("aliases")
+            if not isinstance(aliases, list):
+                continue
+            for al in aliases:
+                if not (isinstance(al, str) and al.strip()):
+                    continue
+                if normalize_name(al) == normalize_name(name):
+                    continue
+                try:
+                    self.client.graph.add_triplet(
+                        graph_id, name, "ALSO_KNOWN_AS", al,
+                        f"{name} 亦称 {al}",
+                        valid_at=valid_at,
+                        source_label=label.get(name, "Entity"),
+                        target_label=label.get(name, "Entity"),
+                        source_summary=summ.get(name, ""),
+                        target_summary=summ.get(name, ""),
+                    )
+                    n += 1
+                except Exception as e:
+                    logger.warning("[%s] seed alias skipped (%s~%s): %s", graph_id, name, al, e)
         return n
 
     def add_text_batches(
@@ -514,11 +555,50 @@ class GraphBuilderService:
                     if label not in ["Entity", "Node"]:
                         entity_types.add(label)
 
+        # KG cookbook 第4步：结构完整性检查。弱连通分量数（stdlib 并查集，无第三方依赖）
+        # 是实体解析质量信号——分量数≈1 表示实体已良好合并；远多于预期 = 实体欠合并（重复孤点）。
+        # 另统计度数最高的枢纽节点做 sanity check。纯内存计算，复用已取的 nodes/edges，无额外 IO。
+        node_ids = {getattr(n, "uuid_", None) for n in nodes}
+        node_ids.discard(None)
+        parent: Dict[Any, Any] = {nid: nid for nid in node_ids}
+
+        def _find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def _union(a, b):
+            ra, rb = _find(a), _find(b)
+            if ra != rb:
+                parent[ra] = rb
+
+        degree: Dict[Any, int] = {nid: 0 for nid in node_ids}
+        for e in edges:
+            s = getattr(e, "source_node_uuid", None)
+            t = getattr(e, "target_node_uuid", None)
+            if s in parent and t in parent and s != t:
+                _union(s, t)
+                degree[s] += 1
+                degree[t] += 1
+        num_components = len({_find(nid) for nid in node_ids}) if node_ids else 0
+        name_by_id = {getattr(n, "uuid_", None): (getattr(n, "name", "") or "") for n in nodes}
+        top_hubs = [name_by_id.get(nid, "") for nid, _ in
+                    sorted(degree.items(), key=lambda kv: -kv[1])[:5] if name_by_id.get(nid)]
+        logger.info("[%s] graph integrity: nodes=%d edges=%d components=%d top_hubs=%s",
+                    graph_id, len(nodes), len(edges), num_components, top_hubs)
+        warn_ratio = getattr(Config, "GRAPH_COMPONENT_WARN_RATIO", 0.5)
+        if node_ids and num_components > max(1, int(len(node_ids) * warn_ratio)):
+            logger.warning("[%s] possibly UNDER-MERGED entities: %d components over %d nodes",
+                           graph_id, num_components, len(node_ids))
+
         return GraphInfo(
             graph_id=graph_id,
             node_count=len(nodes),
             edge_count=len(edges),
-            entity_types=list(entity_types)
+            entity_types=list(entity_types),
+            components=num_components,
+            top_hubs=top_hubs,
         )
     
     def get_graph_data(self, graph_id: str) -> Dict[str, Any]:

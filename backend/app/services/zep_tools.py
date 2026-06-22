@@ -292,6 +292,17 @@ class PanoramaResult:
                 entity_type = next((l for l in node.labels if l not in ["Entity", "Node"]), "实体")
                 text_parts.append(f"- **{node.name}** ({entity_type})")
 
+        # 类型化关系链（KG cookbook：把有向带类型边显式序列化为三元组行，并带边引用 [E<uuid8>]，
+        # 让报告可在论断旁标注支撑边）。past to_text 只渲染自由文本 fact，丢掉了 typed 边结构。
+        if self.all_edges:
+            text_parts.append(f"\n### 【关系链】(有向带类型边，可作支撑引用)")
+            for edge in self.all_edges[:40]:
+                src = edge.source_node_name or (edge.source_node_uuid or "")[:8]
+                tgt = edge.target_node_name or (edge.target_node_uuid or "")[:8]
+                eref = (edge.uuid or "")[:8]
+                prefix = f"[E{eref}] " if eref else ""
+                text_parts.append(f"- {prefix}{src} --[{edge.name}]--> {tgt}")
+
         return "\n".join(text_parts)
 
 
@@ -1575,7 +1586,12 @@ class ZepToolsService:
                 source_name = node_map.get(source_uuid, NodeInfo('', '', [], '', {})).name or source_uuid[:8]
                 target_name = node_map.get(target_uuid, NodeInfo('', '', [], '', {})).name or target_uuid[:8]
 
+                # 边引用句柄（KG cookbook 可追溯检索）：给关系链加 [E<uuid8>] 前缀，
+                # 让报告能在论断旁标注具体支撑边。保持 "src --[rel]--> tgt" 为子串不变。
+                eref = str(edge_data.get('uuid') or edge_data.get('uuid_') or '')[:8]
                 chain = f"{source_name} --[{relation_name}]--> {target_name}"
+                if eref:
+                    chain = f"[E{eref}] {chain}"
                 if chain not in relationship_chains:
                     relationship_chains.append(chain)
 

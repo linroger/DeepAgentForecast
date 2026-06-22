@@ -202,17 +202,23 @@ class _GraphNamespace:
         valid_at: Any = None,
         source_label: str = "Entity",
         target_label: str = "Entity",
+        source_summary: str = "",
+        target_summary: str = "",
         **_: Any,
     ) -> str:
         """Write a known typed (source, edge_type, target) relationship (EXECPLAN T2.1).
 
         Endpoints are resolved/deduped by name+embedding, so seeding researched
         relationships before text ingest lets the prose extraction enrich the same
-        nodes rather than duplicate them. Returns the edge uuid.
+        nodes rather than duplicate them. ``source_summary``/``target_summary`` (optional)
+        seed the endpoint nodes' summaries so graphiti's LLM resolver can disambiguate
+        same-name entities (KG cookbook: descriptions are the resolution signal). Returns
+        the edge uuid.
         """
         return self._rt.add_triplet(
             graph_id, source_name, edge_type, target_name, fact,
             valid_at, source_label, target_label,
+            source_summary, target_summary,
         )
 
     def build_communities(self, graph_id: str, **_: Any) -> List[dict]:

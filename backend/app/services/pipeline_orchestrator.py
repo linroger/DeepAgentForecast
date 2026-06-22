@@ -2661,6 +2661,16 @@ class PipelineOrchestrator:
                     except Exception as e:
                         logger.warning("[%s] entity resolution skipped: %s", state.pipeline_id, e)
 
+                # KG cookbook 第4步：建图后跑结构完整性检查（节点/边/弱连通分量/枢纽），
+                # 把分量数等指标记入 state.options 并 emit 日志/欠合并告警（实现在 _get_graph_info）。
+                try:
+                    gi = builder._get_graph_info(graph_id)
+                    state.options["graph_node_count"] = gi.node_count
+                    state.options["graph_edge_count"] = gi.edge_count
+                    state.options["graph_components"] = gi.components
+                except Exception as e:
+                    logger.warning("[%s] graph integrity check skipped: %s", state.pipeline_id, e)
+
                 project.graph_id = graph_id
                 project.status = ProjectStatus.GRAPH_COMPLETED
                 ProjectManager.save_project(project)

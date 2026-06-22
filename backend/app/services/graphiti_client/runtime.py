@@ -379,6 +379,8 @@ class GraphitiRuntime:
         valid_at: datetime | None = None,
         source_label: str = "Entity",
         target_label: str = "Entity",
+        source_summary: str = "",
+        target_summary: str = "",
     ) -> str:
         """Write a KNOWN (subject, predicate, object) edge directly (EXECPLAN T2.1).
 
@@ -388,17 +390,24 @@ class GraphitiRuntime:
         name+embedding, so a triplet whose endpoints already exist (text-extracted
         or previously seeded) attaches to them rather than duplicating. ``valid_at``
         stamps the edge's bi-temporal validity (T2.3).
+
+        ``source_summary``/``target_summary`` (optional) seed each endpoint node's
+        ``summary`` — graphiti's LLM dedup resolver reads node.summary to disambiguate
+        same-name entities (Anthropic KG cookbook: descriptions are the resolution
+        signal). Default "" keeps behavior identical to the pre-summary path.
         """
         return self.run(
             self._add_triplet(
                 graph_id, source_name, edge_name, target_name, fact,
                 valid_at, source_label, target_label,
+                source_summary, target_summary,
             )
         )
 
     async def _add_triplet(
         self, graph_id, source_name, edge_name, target_name, fact,
         valid_at, source_label, target_label,
+        source_summary="", target_summary="",
     ) -> str:
         from graphiti_core.edges import EntityEdge
         from graphiti_core.nodes import EntityNode
@@ -411,11 +420,11 @@ class GraphitiRuntime:
 
         src = EntityNode(
             name=source_name, group_id=graph_id, labels=_labels(source_label),
-            summary="", attributes={},
+            summary=source_summary or "", attributes={},
         )
         tgt = EntityNode(
             name=target_name, group_id=graph_id, labels=_labels(target_label),
-            summary="", attributes={},
+            summary=target_summary or "", attributes={},
         )
         edge = EntityEdge(
             name=edge_name,
