@@ -199,9 +199,9 @@ models:
   # provider uses). kimi-for-coding is a reasoning model; thinking stays ON for
   # research (deerflow_research.py strips residual <think> from the report).
   - name: kimi
-    display_name: Kimi-for-coding (code plan)
+    display_name: Kimi K2.7 (code plan)
     use: langchain_openai:ChatOpenAI
-    model: kimi-for-coding
+    model: kimi-k2.7
     api_key: $KIMI_API_KEY
     base_url: https://api.kimi.com/coding/v1
     default_headers:
@@ -211,7 +211,17 @@ models:
     max_tokens: 32768
     supports_thinking: true
     supports_vision: false
+    # K2.7 Code gateway HARD-VALIDATES temperature: ONLY `1` with thinking on and
+    # ONLY `0.6` with thinking off — any other value is 400 invalid_request_error.
+    # Set inside each thinking block so research (thinking-on) and tool-free
+    # synthesis/extraction (thinking-off) each send the single allowed value.
+    when_thinking_enabled:
+      temperature: 1.0
+      extra_body:
+        thinking:
+          type: enabled
     when_thinking_disabled:
+      temperature: 0.6
       extra_body:
         thinking:
           type: disabled

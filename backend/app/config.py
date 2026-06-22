@@ -155,7 +155,10 @@ class Config:
 
     # Kimi-for-coding 默认连接参数（provider=kimi 且未显式覆盖时启用）
     _KIMI_DEFAULT_BASE_URL = 'https://api.kimi.com/coding/v1'
-    _KIMI_DEFAULT_MODEL = 'kimi-for-coding'
+    # K2.7 Code：网关同时接受 'kimi-k2.7' 与历史别名 'kimi-for-coding'（/models 仅列后者，
+    # 但补全请求 echo 回 'kimi-k2.7'）。注意该模型对 temperature 有硬约束（开推理=1/关=0.6），
+    # 由 LLMClient._coerce_temperature 统一兜底。
+    _KIMI_DEFAULT_MODEL = 'kimi-k2.7'
     _is_kimi = LLM_PROVIDER == 'kimi'
 
     # MiniMax 代码计划默认连接参数（provider=minimax 且未显式覆盖时启用）

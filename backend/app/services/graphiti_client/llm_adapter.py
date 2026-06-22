@@ -113,6 +113,35 @@ class AppGraphitiLLMClient(GraphitiLLMClient):
             if not isinstance(result, dict):
                 raise EmptyResponseError(f"Expected JSON object, got {type(result).__name__}")
             if not self._looks_like_schema(result):
+                # JSON parsed and is not a schema echo. If a response_model is provided,
+                # confirm it actually CONFORMS before returning — graphiti validates the
+                # dict with ``response_model(**llm_response)`` *outside* its retry loop
+                # (utils/maintenance/combined_extraction.py), so a schema-valid-but-
+                # wrong-shaped reply hard-fails the whole graph build with no recovery.
+                # MiniMax-M3 hits this: it returns ExtractedEdges missing the required
+                # ``target_entity_name`` (and bleeds node-only keys like ``labels`` into
+                # edges). Pre-validate here and retry with the concrete pydantic errors as
+                # a corrective nudge (same rising-temperature trick as the schema-echo case).
+                if response_model is not None:
+                    try:
+                        response_model(**result)
+                    except Exception as ve:  # noqa: BLE001 — pydantic ValidationError / TypeError
+                        if attempt < len(temps) - 1:
+                            msg_dicts[-1] = {
+                                "role": msg_dicts[-1]["role"],
+                                "content": msg_dicts[-1]["content"]
+                                + "\n\n(Your previous JSON did NOT conform to the required "
+                                "schema. Validation errors:\n" + str(ve)[:900]
+                                + "\nReturn a corrected JSON instance with EVERY required "
+                                "field populated for EVERY item NOW. In particular each edge "
+                                "MUST include source_entity_name, target_entity_name and "
+                                "relation_type; do not put node-only fields on edges.)",
+                            }
+                            continue
+                        raise EmptyResponseError(
+                            f"LLM output failed {response_model.__name__} validation after "
+                            f"temperature retries: {str(ve)[:300]}"
+                        ) from ve
                 return result
             # Schema echo — strengthen the instruction and retry at a higher temperature.
             if attempt < len(temps) - 1:

@@ -243,6 +243,11 @@ def _live_openai_compat(label: str, provider: str, api_key, base_url, model):
     extra = getattr(Config, "_DISABLE_THINKING_EXTRA_BODY", {}).get(provider)
     if extra:
         kwargs["extra_body"] = extra
+    # Kimi K2.7 Code 网关硬校验温度（开推理只接受 1、关推理只接受 0.6），temperature=0 会 400。
+    # 与 LLMClient._coerce_temperature 同源，否则 kimi 实测会被误报为不可用。
+    if provider == "kimi":
+        thinking_disabled = bool(extra and (extra.get("thinking") or {}).get("type") == "disabled")
+        kwargs["temperature"] = 0.6 if thinking_disabled else 1.0
 
     started = time.monotonic()
     try:

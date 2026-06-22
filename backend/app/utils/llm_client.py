@@ -35,6 +35,37 @@ OPENAI_COMPATIBLE_PROVIDERS = tuple(
 # CLI 调用的瞬时失败重试配置
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2.0  # 秒
+RETRY_AFTER_CAP = 30.0  # 秒：尊重 429 的 Retry-After，但封顶避免硬额度耗尽时长时间挂起
+
+# OpenAI 兼容提供方（kimi/minimax/…）的瞬时 API 错误：429 限流、超时、连接抖动、5xx。
+# 这些异常默认不是 RuntimeError，历史上会绕过 chat() 的退避重试直达上层（报告章节因此
+# 一遇 429 即降级为占位符 —— 见 2026-06-21 失败）。在此显式纳入退避重试。
+# 注意：不含 BadRequestError(400)/AuthenticationError(401)/NotFoundError(404) —— 这些是
+# 确定性错误，重试无益，应快速失败。openai 在极简环境可能缺失，故 import 容错。
+try:
+    import openai as _openai  # noqa: F401
+    _RETRYABLE_API_ERRORS = (
+        _openai.RateLimitError,
+        _openai.APITimeoutError,
+        _openai.APIConnectionError,
+        _openai.InternalServerError,
+    )
+except Exception:  # noqa: BLE001 — openai 不可导入时退化为仅重试 RuntimeError
+    _RETRYABLE_API_ERRORS = ()
+
+
+def _retry_delay(exc: Exception, attempt: int) -> float:
+    """退避时长：默认指数退避；若 429 错误带 Retry-After 头则尊重之（封顶 RETRY_AFTER_CAP）。"""
+    base = RETRY_BASE_DELAY * (2 ** attempt)
+    headers = getattr(getattr(exc, "response", None), "headers", None)
+    if headers:
+        retry_after = headers.get("retry-after") or headers.get("Retry-After")
+        if retry_after:
+            try:
+                return min(max(base, float(retry_after)), RETRY_AFTER_CAP)
+            except (TypeError, ValueError):
+                pass
+    return base
 
 
 class LLMClient:
@@ -175,10 +206,10 @@ class LLMClient:
                 else:
                     result = self._chat_claude_cli(messages, temperature, max_tokens, response_format)
                 break
-            except RuntimeError as exc:
+            except (RuntimeError, *_RETRYABLE_API_ERRORS) as exc:
                 last_error = exc
                 if attempt < MAX_RETRIES - 1:
-                    delay = RETRY_BASE_DELAY * (2 ** attempt)
+                    delay = _retry_delay(exc, attempt)
                     logger.warning(
                         f"LLM 调用失败 (第 {attempt + 1}/{MAX_RETRIES} 次)，{delay}s 后重试: {exc}"
                     )
@@ -290,6 +321,8 @@ class LLMClient:
         extra_body = Config.reasoning_extra_body()
         if extra_body:
             kwargs["extra_body"] = extra_body
+        # Kimi K2.7 Code 网关按推理开关硬校验温度（开=1/关=0.6），覆盖调用方温度。
+        kwargs["temperature"] = self._coerce_temperature(temperature, extra_body)
         response = client.chat.completions.create(**kwargs)
         choice = response.choices[0]
         msg = choice.message
@@ -414,6 +447,21 @@ class LLMClient:
         """移除推理模型的 <think> 标签。"""
         return re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
 
+    def _coerce_temperature(self, temperature: float, extra_body: Optional[Dict]) -> float:
+        """按提供方约束修正采样温度。
+
+        Kimi K2.7 Code 网关（api.kimi.com/coding，model=kimi-k2.7 / kimi-for-coding）对
+        temperature 做硬校验，只接受单一允许值：开启推理时必须 ``1``，关闭推理
+        (thinking.type=disabled) 时必须 ``0.6``，传入其它值一律 400 invalid_request_error。
+        本仓库各调用点（report/oasis/graphiti/zep）会传 0.0~0.7 等任意温度并对失败重试
+        （graphiti 还做升温重试），全部会被网关拒绝。故在此对 kimi 提供方按本次实际发送的
+        ``extra_body``（是否关推理）强制为网关允许值；其它提供方原样返回，行为不变。
+        """
+        if self.provider != 'kimi':
+            return temperature
+        thinking_disabled = bool(extra_body and (extra_body.get("thinking") or {}).get("type") == "disabled")
+        return 0.6 if thinking_disabled else 1.0
+
     # ------------------------------------------------------------------
     # openai 提供方
     # ------------------------------------------------------------------
@@ -447,6 +495,9 @@ class LLMClient:
         extra_body = Config.reasoning_extra_body()
         if extra_body:
             kwargs["extra_body"] = extra_body
+
+        # Kimi K2.7 Code 网关按推理开关硬校验温度（开=1/关=0.6），覆盖调用方温度。
+        kwargs["temperature"] = self._coerce_temperature(temperature, extra_body)
 
         response = client.chat.completions.create(**kwargs)
         # 捕获精确 token 用量供计量（I-5-0）；无 usage 字段时留空走粗估。
