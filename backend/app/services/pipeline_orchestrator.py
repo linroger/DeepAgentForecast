@@ -2525,10 +2525,17 @@ class PipelineOrchestrator:
 
                 upd(40, "生成本体（LLM）…")
                 generator = OntologyGenerator()
+                # I-1-3 领域自适应本体：把研究的 central_question + actors 直方图喂给生成器，
+                # 让实体/关系类型贴合预测领域，而不是永远走通用 social_opinion 模板。
+                # 模板由 Config.ONTOLOGY_TEMPLATE 控制（general_forecast 有内置兜底回退到
+                # social_opinion，故传入即安全）；缺字段时静默降级到旧行为。
                 ontology = generator.generate(
                     document_texts=[report_md],
                     simulation_requirement=state.prompt,
                     additional_context=_actors_to_context(actors),
+                    template=Config.ONTOLOGY_TEMPLATE,
+                    central_question=(actors.get("central_question") if isinstance(actors, dict) else None),
+                    actors=actors,
                 )
                 project.ontology = {
                     "entity_types": ontology.get("entity_types", []),

@@ -12,12 +12,18 @@ handoff 契约中的 actors.json 形如（NEW 字段均为可选，缺失即降�
       "actors": [
         {"name": "...", "type": "Person|Organization|Media|Government|Platform|Other",
          "role": "...", "stance": "...", "influence": "high|medium|low",
+         // NEW 角色内在动机（actors-and-incentives 结构化，均可选；缺失即降级）：
+         "goals": ["..."], "constraints": ["..."], "assets": ["..."],
+         "vulnerabilities": ["..."], "stated_vs_revealed": "言行差异",
          "memory": "该角色对事件的已知信息/立场记忆"}
       ],
       "relationships": [                         // NEW — 命名 actor 之间的有向、带类型边
         {"source": "...", "target": "...",       // source/target 必须 = 某个 actors[].name
-         "type": "ALLY_OF|OPPOSES|COMPETES_WITH|REGULATES|DEPENDS_ON|PARTNERS_WITH|INFLUENCES",
-         "sign": "ally|rival|neutral", "strength": "high|medium|low", "basis": "调研实证一行"}
+         "type": "ALLY_OF|OPPOSES|COMPETES_WITH|REGULATES|DEPENDS_ON|PARTNERS_WITH|INFLUENCES|OTHER",
+         "relation_label": "type==OTHER 时的自由文本标签，如 SUPPLIES/FUNDS/OWNS",  // NEW 可选
+         "sign": "ally|rival|neutral", "strength": "high|medium|low",
+         "since": "YYYY-MM-DD", "until": "YYYY-MM-DD",  // NEW 可选起止日
+         "basis": "调研实证一行"}
       ],
       "key_events": [{"date": "...", "event": "..."}],
       "hot_topics": ["..."],
@@ -173,6 +179,16 @@ def actor_briefing(actor: Optional[Dict[str, Any]], max_memory_chars: int = 600)
         val = str(actor.get(key, "") or "").strip()
         if val:
             parts.append(f"- {label}: {val}")
+    # 角色「内在动机」结构化字段（来自深度研究的 actors-and-incentives 分析）。
+    # 让 persona 从「立场标签」升级为「动机画像」；字段缺失时自动跳过，旧档案输出不变。
+    for label, key in (("目标/动机", "goals"), ("约束", "constraints"),
+                       ("资源/能力", "assets"), ("软肋/红线", "vulnerabilities")):
+        val = actor.get(key)
+        if isinstance(val, list) and val:
+            parts.append(f"- {label}: " + "；".join(str(x) for x in val[:6] if str(x).strip()))
+    svr = str(actor.get("stated_vs_revealed", "") or "").strip()
+    if svr:
+        parts.append(f"- 言行差异: {svr}")
     memory = str(actor.get("memory", "") or "").strip()
     if memory:
         if len(memory) > max_memory_chars:
@@ -215,6 +231,9 @@ def actors_digest(
                 seg += f" | 立场: {stance}"
             if influence:
                 seg += f" | 影响力: {influence}"
+            goals = row.get("goals")
+            if isinstance(goals, list) and goals and str(goals[0]).strip():
+                seg += f" | 核心目标: {str(goals[0]).strip()}"
             lines.append(seg)
 
     events = actors.get("key_events")
@@ -251,6 +270,9 @@ REL_EDGE_NAME = {
     "DEPENDS_ON": "DEPENDS_ON",
     "PARTNERS_WITH": "PARTNERS_WITH",
     "INFLUENCES": "INFLUENCES",
+    # OTHER 是「逃生舱」类型：研究用 relation_label 给出自由文本边名（SUPPLIES/FUNDS/…）。
+    # 这里给个兜底边名，graph_builder 会优先用 relation_label，否则落到 RELATES_TO。
+    "OTHER": "RELATES_TO",
 }
 
 # 边类型 → 中文标签（persona 提示块用）
@@ -262,6 +284,7 @@ REL_LABEL = {
     "DEPENDS_ON": "依赖",
     "PARTNERS_WITH": "伙伴",
     "INFLUENCES": "影响",
+    "OTHER": "关联",
 }
 
 
@@ -316,12 +339,18 @@ def relationship_briefing(actor_name: str, actors: Optional[Any], max_edges: int
     out: List[str] = []
     for r in rows:
         typ = str(r.get("type", "")).upper()
+        # OTHER 边优先显示研究给出的自由文本标签（如 SUPPLIES / FUNDS），否则用通用「关联」。
+        label = REL_LABEL.get(typ, "关联")
+        if typ == "OTHER":
+            rl = str(r.get("relation_label", "") or "").strip()
+            if rl:
+                label = rl
         s, t = normalize_name(str(r.get("source", ""))), normalize_name(str(r.get("target", "")))
         strength = str(r.get("strength", "") or "")
         if me == s:
-            out.append(f"{REL_LABEL.get(typ, '关联')}（{strength}）: {r.get('target')}")
+            out.append(f"{label}（{strength}）: {r.get('target')}")
         elif me == t:
-            out.append(f"被{REL_LABEL.get(typ, '关联')}: {r.get('source')}")
+            out.append(f"被{label}: {r.get('source')}")
         if len(out) >= max_edges:
             break
     if not out:

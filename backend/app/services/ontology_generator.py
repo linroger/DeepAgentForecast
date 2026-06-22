@@ -123,12 +123,15 @@ B. **具体类型（8个，根据文本内容设计）**：
 - 数量：6-10个
 - 关系应该反映社媒互动中的真实联系
 - 确保关系的 source_targets 涵盖你定义的实体类型
+- **优先采用调研关系taxonomy**：当语义吻合时，优先用 `ALLY_OF`、`OPPOSES`、`COMPETES_WITH`、`REGULATES`、`DEPENDS_ON`、`PARTNERS_WITH`、`INFLUENCES` 这套类型名，使本体边类型与已注入图谱的角色关系图对齐（便于 typed 检索）。
+- 关系可带属性：推荐 `sentiment`（极性）、`strength`（强度）、`since_date`（起始日）、`basis`（依据），让边可被 typed 过滤检索。
 
 ### 3. 属性设计
 
 - 每个实体类型1-3个关键属性
 - **注意**：属性名不能使用 `name`、`uuid`、`group_id`、`created_at`、`summary`（这些是系统保留字）
 - 推荐使用：`full_name`, `title`, `role`, `position`, `location`, `description` 等
+- 对「会决策/发声」的主体，推荐补充能驱动智能体行为的属性：`role`、`stance`（立场）、`influence_tier`（影响力档位）、`motivation`/`goals`（动机/目标）、`interests`（关注议题）。
 
 ## 实体类型参考
 
@@ -255,6 +258,7 @@ ONTOLOGY_GENERAL_FORECAST_PROMPT = """你是一个专业的知识图谱本体设
 ### 2. 关系类型设计 - 覆盖领域动态并带预测可用属性
 
 - 数量：6-10 个，覆盖该领域真实的相互作用（如 `REGULATES`/`COMPETES_WITH`/`DEPENDS_ON`/`SUPPLIES`/`INFLUENCES`/`HOLDS_STAKE_IN`）。
+- **优先复用调研关系taxonomy**：语义吻合时优先采用 `ALLY_OF`、`OPPOSES`、`COMPETES_WITH`、`REGULATES`、`DEPENDS_ON`、`PARTNERS_WITH`、`INFLUENCES`，使本体边类型与已注入图谱的角色关系图对齐（typed 检索更准）；无合适类型时再自定义领域专属边名。
 - 确保 source_targets 连接你定义的实体类型。
 - **为关系附带对预测有判别力的属性**（强烈推荐），例如：
   - `sentiment`: 关系的方向性态度（positive/negative/neutral）

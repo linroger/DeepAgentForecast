@@ -18,7 +18,7 @@ from datetime import datetime
 from .graphiti_client import Zep
 
 from ..config import Config
-from ..utils.actors import actor_briefing, match_actor, relationship_briefing
+from ..utils.actors import actor_briefing, match_actor, relationship_briefing, influence_weight
 from ..utils.atomic import write_text_atomic, write_json_atomic  # EXECPLAN2 F-5-0/F-5-1 原子写
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
@@ -263,12 +263,14 @@ class OasisProfileGenerator:
                 actors=actors,
             )
         else:
-            # 使用规则生成基础人设
+            # 使用规则生成基础人设（带研究 actor 覆盖）
             profile_data = self._generate_profile_rule_based(
                 entity_name=name,
                 entity_type=entity_type,
                 entity_summary=entity.summary,
-                entity_attributes=entity.attributes
+                entity_attributes=entity.attributes,
+                actor=actor,
+                actors=actors,
             )
         
         return OasisAgentProfile(
@@ -816,7 +818,8 @@ class OasisProfileGenerator:
         
         logger.warning(f"LLM生成人设失败（{max_attempts}次尝试）: {last_error}, 使用规则生成")
         return self._generate_profile_rule_based(
-            entity_name, entity_type, entity_summary, entity_attributes
+            entity_name, entity_type, entity_summary, entity_attributes,
+            actor=actor, actors=actors,
         )
     
     def _fix_truncated_json(self, content: str) -> str:
@@ -1015,10 +1018,51 @@ class OasisProfileGenerator:
         entity_name: str,
         entity_type: str,
         entity_summary: str,
+        entity_attributes: Dict[str, Any],
+        actor: Optional[Dict[str, Any]] = None,
+        actors: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """规则人设；当匹配到深度研究 actor 时，用调研实证（角色/立场/动机/社会关系网/
+        影响力）覆盖通用模板，让非 LLM 路径也产出有据可依的角色，而非泛泛的「业内专家」。
+
+        actor 缺失时行为与旧实现完全一致（返回纯类型模板）。
+        """
+        base = self._rule_based_base(entity_name, entity_type, entity_summary, entity_attributes)
+        if not isinstance(actor, dict) or not actor:
+            return base
+
+        overlay: Dict[str, Any] = {}
+        role = str(actor.get("role", "") or "").strip()
+        stance = str(actor.get("stance", "") or "").strip()
+        if role or stance:
+            overlay["bio"] = (f"{role}；立场：{stance}" if (role and stance) else (role or stance))[:200]
+
+        # persona 叠加：调研档案（角色/立场/动机/软肋）+ 社会关系网（命名真实对手方）。
+        brief = actor_briefing(actor)
+        rels = relationship_briefing(entity_name, actors) if actors else ""
+        grounded = "\n\n".join(p for p in (brief, rels) if p)
+        if grounded:
+            base_persona = str(base.get("persona", "") or "").strip()
+            overlay["persona"] = (base_persona + "\n\n" + grounded).strip() if base_persona else grounded
+
+        # 影响力 → follower/karma 确定性缩放（取代纯随机），让研究的高影响力角色在网络中更突出。
+        iw = influence_weight(actor)
+        if iw:
+            overlay["follower_count"] = int(300 * iw)
+            overlay["friend_count"] = int(120 * iw)
+            overlay["karma"] = int(1500 * iw)
+
+        return {**base, **overlay}
+
+    def _rule_based_base(
+        self,
+        entity_name: str,
+        entity_type: str,
+        entity_summary: str,
         entity_attributes: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """使用规则生成基础人设"""
-        
+        """使用规则生成基础人设（纯类型模板，不含研究覆盖）"""
+
         # 根据实体类型生成不同的人设
         entity_type_lower = entity_type.lower()
         

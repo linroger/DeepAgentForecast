@@ -4,6 +4,7 @@
 """
 
 import os
+import re
 import uuid
 import time
 import logging
@@ -17,7 +18,12 @@ from .graphiti_client import EpisodeData, EntityEdgeSourceTarget
 from ..config import Config
 from ..models.task import TaskManager, TaskStatus
 from ..utils.zep_paging import fetch_all_nodes, fetch_all_edges
-from ..utils.actors import extract_actor_rows, extract_relationship_rows, REL_EDGE_NAME
+from ..utils.actors import (
+    extract_actor_rows,
+    extract_relationship_rows,
+    actor_briefing,
+    REL_EDGE_NAME,
+)
 from .text_processor import TextProcessor
 
 logger = logging.getLogger("mirofish.graph_builder")
@@ -343,14 +349,29 @@ class GraphBuilderService:
         n = 0
         seeded_names: set = set()
         for r in rels:
-            etype = REL_EDGE_NAME.get(str(r.get("type", "")).upper())
+            typ = str(r.get("type", "")).upper()
+            etype = REL_EDGE_NAME.get(typ)
             if not etype:
-                continue
+                # OTHER / 未知类型：用研究给的 relation_label 清洗成合法边名兜底，绝不丢边
+                # （旧逻辑这里 continue，会静默丢弃所有非 7 类边）。
+                rl = str(r.get("relation_label", "") or "").strip()
+                sanitized = re.sub(r"[^0-9A-Za-z_]+", "_", rl).strip("_").upper() if rl else ""
+                etype = sanitized or "RELATES_TO"
             src, tgt = r.get("source"), r.get("target")
+            # 把 sign/strength/grade 折进事实文本：边自带可检索的极性/强度/定级，无需改 Graphiti schema。
+            fact = str(r.get("basis") or f"{src} {etype} {tgt}")
+            sign, strength, grade = r.get("sign"), r.get("strength"), r.get("grade")
+            extra = [p for p in (
+                (f"sign={sign}" if sign else None),
+                (f"strength={strength}" if strength else None),
+                (f"grade={grade}" if grade else None),
+            ) if p]
+            if extra:
+                fact = f"{fact}（{'，'.join(extra)}）"
             try:
                 self.client.graph.add_triplet(
                     graph_id, src, etype, tgt,
-                    str(r.get("basis") or f"{src} {etype} {tgt}"),
+                    fact,
                     valid_at=valid_at,
                     source_label=label.get(src, "Entity"),
                     target_label=label.get(tgt, "Entity"),
@@ -370,9 +391,17 @@ class GraphBuilderService:
                 # 是一个合法分型的概念节点（彻底去除 IS_A 端节点需 runtime.add_node 节点级 upsert，
                 # 跨文件改动，见 skipped）。
                 actor_type = a.get("type") or "Entity"
+                # 把 role/stance/influence/动机/记忆摘录折进种子节点事实，让规范 actor 节点
+                # 自带调研属性，而不是只挂一个空壳 role 字符串。
+                fact = str(a.get("role") or name)
+                brief = actor_briefing(a, max_memory_chars=300)
+                if brief:
+                    body = brief.split("\n", 1)[-1].replace("\n", "；").strip()
+                    if body:
+                        fact = f"{fact}；{body}" if fact else body
                 self.client.graph.add_triplet(
                     graph_id, name, "IS_A", actor_type,
-                    a.get("role") or name,
+                    fact,
                     valid_at=valid_at,
                     source_label=label.get(name, "Entity"),
                     target_label=ACTOR_TYPE_TO_LABEL.get(str(a.get("type") or ""), "Entity"),

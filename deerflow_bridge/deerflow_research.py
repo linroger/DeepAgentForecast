@@ -544,6 +544,31 @@ def build_extraction_prompt(
         if evidence_grading else ""
     )
 
+    # Actor interior (SKILL §8 actors-and-incentives): the research already analyses
+    # goals/constraints/assets/vulnerabilities/stated-vs-revealed, but none of it crossed
+    # the JSON boundary — it collapsed into one "memory" blob. Surface it as OPTIONAL
+    # structured fields so personas become motivational profiles, not stance-label caricatures.
+    # Gated behind forecast_inputs (default ON, prompt-only); a model that omits them
+    # degrades to exactly the old actors.json shape.
+    actor_motive = (
+        '      "goals": [ string ],                 // OPTIONAL ranked objectives/incentives driving this actor\n'
+        '      "constraints": [ string ],           // OPTIONAL hard limits (capital, power, regulatory, capacity)\n'
+        '      "assets": [ string ],                // OPTIONAL capabilities/resources they can deploy\n'
+        '      "vulnerabilities": [ string ],       // OPTIONAL exposures / red-lines / weak points\n'
+        '      "stated_vs_revealed": string,        // OPTIONAL where the public position diverges from revealed behavior (SKILL §8: the gap is itself evidence)\n'
+        if forecast_inputs else ""
+    )
+
+    # Richer relationship typing: an OTHER escape-hatch + free-text label (so the research
+    # can capture SUPPLIES/FUNDS/OWNS/EMPLOYS/FAMILY_OF etc. beyond the 7-type enum) plus
+    # OPTIONAL since/until dates. The OTHER edges are seeded downstream (graph_builder
+    # falls back to relation_label → RELATES_TO rather than dropping them).
+    rel_since_until = (
+        '      "since": string,                     // OPTIONAL YYYY-MM-DD the relationship began / became salient\n'
+        '      "until": string,                     // OPTIONAL YYYY-MM-DD it ended (omit if ongoing)\n'
+        if forecast_inputs else ""
+    )
+
     # EXECPLAN2 I-0-0: enriched sources schema (tier/date/supports/independent).
     if evidence_grading:
         sources_schema = (
@@ -638,6 +663,7 @@ def build_extraction_prompt(
         '      "stance": string,                   // their public position\n'
         '      "influence": "high"|"medium"|"low",\n'
         f"{actor_grade}"
+        f"{actor_motive}"
         '      "memory": string                    // what this actor knows/believes\n'
         "    }\n"
         "  ],\n"
@@ -645,10 +671,12 @@ def build_extraction_prompt(
         "    {\n"
         '      "source": string,                   // MUST equal an actors[].name\n'
         '      "target": string,                   // MUST equal an actors[].name\n'
-        '      "type": "ALLY_OF"|"OPPOSES"|"COMPETES_WITH"|"REGULATES"|"DEPENDS_ON"|"PARTNERS_WITH"|"INFLUENCES",\n'
+        '      "type": "ALLY_OF"|"OPPOSES"|"COMPETES_WITH"|"REGULATES"|"DEPENDS_ON"|"PARTNERS_WITH"|"INFLUENCES"|"OTHER",\n'
+        '      "relation_label": string,            // OPTIONAL free-text label when type=="OTHER" (e.g. SUPPLIES, FUNDS, OWNS, EMPLOYS, FAMILY_OF)\n'
         '      "sign": "ally"|"rival"|"neutral",\n'
         '      "strength": "high"|"medium"|"low",\n'
         f"{rel_grade}"
+        f"{rel_since_until}"
         '      "basis": string                     // 1-line researched evidence for the edge\n'
         "    }\n"
         "  ],\n"
@@ -660,8 +688,13 @@ def build_extraction_prompt(
         "}\n\n"
         f"{source_hint}\n"
         "RELATIONSHIPS: emit edges ONLY between actors named in actors[]; every edge MUST cite a "
-        "researched basis. Omit speculative edges. For a single-actor situation use an empty "
-        'relationships array ("relationships": []). SITUATION_BRIEF: populate it from your '
+        "researched basis. Omit speculative edges. Use OTHER + relation_label only when no listed "
+        "type fits; multiple edges between the same pair are allowed when they hold simultaneously "
+        "(e.g. REGULATES and DEPENDS_ON). For a single-actor situation use an empty "
+        'relationships array ("relationships": []). '
+        "ACTORS: when the evidence supports it, populate goals/constraints/assets/vulnerabilities/"
+        "stated_vs_revealed from your actors-and-incentives analysis; omit any you did not research, "
+        "and do NOT fold them into memory. SITUATION_BRIEF: populate it from your "
         "actors-and-incentives analysis — current_situation and fault_lines are required.\n"
         f"{grading_note}"
         f"{quant_note}"
