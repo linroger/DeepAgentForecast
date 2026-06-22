@@ -1,0 +1,401 @@
+{
+ "entity_types": [
+  {
+   "name": "SemiconductorCompany",
+   "description": "存储半导体核心制造企业，如 DRAM/NAND/HBM 厂商",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "product_focus",
+     "type": "text",
+     "description": "核心产品线（DRAM/NAND/HBM/代工）"
+    },
+    {
+     "name": "headquarters",
+     "type": "text",
+     "description": "总部所在地"
+    }
+   ],
+   "examples": [
+    "SK hynix",
+    "Samsung Electronics",
+    "Micron Technology",
+    "Kioxia",
+    "SanDisk"
+   ]
+  },
+  {
+   "name": "ChineseChipmaker",
+   "description": "中国存储芯片厂商，受美国出口管制影响，在制裁下推进国产替代",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "product_focus",
+     "type": "text",
+     "description": "核心产品（DRAM/NAND）"
+    },
+    {
+     "name": "ipo_status",
+     "type": "text",
+     "description": "科创板 IPO 进度状态"
+    }
+   ],
+   "examples": [
+    "YMTC",
+    "CXMT"
+   ]
+  },
+  {
+   "name": "ChipDesigner",
+   "description": "AI GPU/芯片设计公司，是 HBM 等存储产品的核心需求方",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "core_platform",
+     "type": "text",
+     "description": "核心产品平台名称"
+    }
+   ],
+   "examples": [
+    "NVIDIA",
+    "AMD",
+    "Intel"
+   ]
+  },
+  {
+   "name": "Foundry",
+   "description": "晶圆代工厂与先进封装供应商",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "process_node",
+     "type": "text",
+     "description": "核心工艺节点与封装技术"
+    }
+   ],
+   "examples": [
+    "TSMC"
+   ]
+  },
+  {
+   "name": "DeviceBuyer",
+   "description": "消费电子 OEM 厂商，存储芯片涨价传导的终端承受方",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "product_line",
+     "type": "text",
+     "description": "主要产品线（PC/智能手机等）"
+    }
+   ],
+   "examples": [
+    "Apple",
+    "Lenovo",
+    "Dell",
+    "HP",
+    "ASUS"
+   ]
+  },
+  {
+   "name": "CloudProvider",
+   "description": "超大规模云厂商，AI 资本开支主力，存储长协合同主要签订方",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "公司全称"
+    },
+    {
+     "name": "ai_capex_focus",
+     "type": "text",
+     "description": "AI 资本开支方向"
+    }
+   ],
+   "examples": [
+    "AWS",
+    "Microsoft Azure",
+    "Google Cloud",
+    "Meta"
+   ]
+  },
+  {
+   "name": "ResearchInstitute",
+   "description": "半导体行业研究与市场调研机构，提供市场预测与数据",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "机构全称"
+    },
+    {
+     "name": "research_focus",
+     "type": "text",
+     "description": "研究覆盖领域"
+    }
+   ],
+   "examples": [
+    "TrendForce",
+    "Counterpoint",
+    "IDC",
+    "Gartner",
+    "Omdia"
+   ]
+  },
+  {
+   "name": "GovernmentAgency",
+   "description": "政府监管与政策执行机构，主导出口管制与产业补贴政策",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "机构全称"
+    },
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "管辖范围"
+    }
+   ],
+   "examples": [
+    "U.S. Department of Commerce BIS",
+    "U.S. NIST",
+    "China NDRC"
+   ]
+  },
+  {
+   "name": "Person",
+   "description": "任何自然人个体的兜底类型，包括企业高管、分析师、行业评论人士等不属于其他具体人物类型时归入此类",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "个人姓名"
+    },
+    {
+     "name": "title",
+     "type": "text",
+     "description": "职位或头衔"
+    },
+    {
+     "name": "affiliation",
+     "type": "text",
+     "description": "所属机构"
+    }
+   ],
+   "examples": [
+    "SK Group Chairman",
+    "Industry Analyst",
+    "Robert Dennard"
+   ]
+  },
+  {
+   "name": "Organization",
+   "description": "任何组织机构的兜底类型，包括标准制定联盟、行业协会、母公司、临时团体等不属于其他更具体组织类型时归入此类",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "组织名称"
+    },
+    {
+     "name": "role",
+     "type": "text",
+     "description": "组织在行业中的角色定位"
+    }
+   ],
+   "examples": [
+    "JEDEC",
+    "CXL Consortium",
+    "SK Group",
+    "OCP"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "PARTNERS_WITH",
+   "description": "战略合作伙伴关系，涵盖联合研发、标准定义、长协合同等",
+   "source_targets": [
+    {
+     "source": "SemiconductorCompany",
+     "target": "ChipDesigner"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "Foundry"
+    },
+    {
+     "source": "Foundry",
+     "target": "CloudProvider"
+    },
+    {
+     "source": "Organization",
+     "target": "SemiconductorCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "COMPETES_WITH",
+   "description": "市场竞争关系，争夺同一细分市场份额",
+   "source_targets": [
+    {
+     "source": "SemiconductorCompany",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "Foundry"
+    },
+    {
+     "source": "ChineseChipmaker",
+     "target": "SemiconductorCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "REGULATES",
+   "description": "政府监管或制裁关系，包括出口管制、实体清单、产业补贴政策",
+   "source_targets": [
+    {
+     "source": "GovernmentAgency",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "GovernmentAgency",
+     "target": "ChineseChipmaker"
+    },
+    {
+     "source": "Organization",
+     "target": "SemiconductorCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "DEPENDS_ON",
+   "description": "供应链依赖关系，下游采购或产能绑定",
+   "source_targets": [
+    {
+     "source": "ChipDesigner",
+     "target": "Foundry"
+    },
+    {
+     "source": "ChipDesigner",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "DeviceBuyer",
+     "target": "SemiconductorCompany"
+    },
+    {
+     "source": "CloudProvider",
+     "target": "SemiconductorCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "INFLUENCES",
+   "description": "市场影响力关系，包括采购决策、预测发布对市场预期的影响",
+   "source_targets": [
+    {
+     "source": "DeviceBuyer",
+     "target": "ChineseChipmaker"
+    },
+    {
+     "source": "ResearchInstitute",
+     "target": "CloudProvider"
+    },
+    {
+     "source": "Person",
+     "target": "SemiconductorCompany"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "SUPPLIES_TO",
+   "description": "产品供货关系，存储芯片或封装产品向下游客户的交付",
+   "source_targets": [
+    {
+     "source": "SemiconductorCompany",
+     "target": "ChipDesigner"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "DeviceBuyer"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "CloudProvider"
+    },
+    {
+     "source": "ChineseChipmaker",
+     "target": "DeviceBuyer"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "OPPOSES",
+   "description": "利益对立或冲突关系，如 OEM 与 CSP 在涨价传导上的张力",
+   "source_targets": [
+    {
+     "source": "DeviceBuyer",
+     "target": "CloudProvider"
+    },
+    {
+     "source": "SemiconductorCompany",
+     "target": "ChineseChipmaker"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "AFFILIATED_WITH",
+   "description": "股权或集团隶属关系，如母公司与子公司",
+   "source_targets": [
+    {
+     "source": "SemiconductorCompany",
+     "target": "Organization"
+    },
+    {
+     "source": "ChineseChipmaker",
+     "target": "ChineseChipmaker"
+    },
+    {
+     "source": "Organization",
+     "target": "SemiconductorCompany"
+    }
+   ],
+   "attributes": []
+  }
+ ],
+ "analysis_summary": "本报告围绕 2027—2028 年存储半导体市场前景，覆盖核心竞争厂商（HBM 三巨头 + 中国追赶者）、新一代存储技术（HBM4/HBM4E/HBF/DDR6/CXL）、市场供需与价格趋势、行业历史周期规律四大模块。文本涉及的关键实体角色可归类为：8 类具体组织/个人类型 + 2 类兜底类型。具体类型方面，SemiconductorCompany 覆盖三星/SK 海力士/美光/铠侠/闪迪等存储核心制造企业；ChineseChipmaker 单独成类以体现 CXMT/YMTC 受美国制裁、推进国产替代与科创板 IPO 的独特处境；ChipDesigner 涵盖 NVIDIA 等 AI GPU 龙头作为 HBM 最大需求方；Foundry 单独标识 TSMC 作为 CoWoS 先进封装唯一大规模供应商；DeviceBuyer 涵盖苹果、联想、戴尔等承受涨价传导的消费电子 OEM；CloudProvider 标识 AWS/Azure/GCP/Meta 等 AI 资本开支主力；ResearchInstitute 涵盖 TrendForce/Counterpoint/IDC 等市场预测方；GovernmentAgency 标识美国商务部 BIS 等出口管制执法机构。兜底类型方面，Person 用于覆盖 SK 集团董事长、行业分析师等具体个人；Organization 用于覆盖 JEDEC、CXL 联盟、SK 集团等行业组织与标准制定方。关系类型覆盖战略合作、市场竞争、政府监管、供应链依赖、市场影响、产品供货、利益对立、集团隶属八类核心互动模式，能够完整模拟存储半导体行业舆论事件中各方的发声、转发与互动路径。"
+}

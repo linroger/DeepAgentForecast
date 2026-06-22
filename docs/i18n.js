@@ -41,6 +41,10 @@
     'card.ess.meta':    { en: '40-round dual-platform simulation · 94 personas · grid / C&I / home storage segments, full supply chain & winners-vs-losers analysis', zh: '40 轮双平台模拟 · 94 个人格 · 大储 / 工商业 / 户储细分赛道、全产业链与赢家输家研判' },
     'card.iran.title':  { en: 'How does the 2026 US–Iran war end?', zh: '2026 年美伊战争如何收场？' },
     'card.iran.meta':   { en: '40-round dual-platform simulation · 135 personas · endgame scenarios, peace-deal terms & post-war Middle East order', zh: '40 轮双平台模拟 · 135 个人格 · 终局情景、终战协议条款与战后中东秩序重构' },
+    'card.storage.title': { en: 'Storage semiconductors — the 2027–2028 outlook', zh: '2027—2028 年存储半导体前景预判' },
+    'card.storage.meta':  { en: '40-round dual-platform simulation · 80 personas · 213-node knowledge graph · competitive landscape, next-gen tech (HBM4E / DDR6 / CXL 4.0), supply-demand & pricing, 40-year cycle history', zh: '40 轮双平台模拟 · 80 个人格 · 213 节点知识图谱 · 厂商格局、新一代技术（HBM4E / DDR6 / CXL 4.0）、供需与价格、四十年周期史' },
+    'card.cloud.title':   { en: 'Global cloud computing — the 2030 endgame', zh: '2030 年全球云计算竞争格局推演' },
+    'card.cloud.meta':    { en: 'Dual-platform population simulation · 80 personas · 130-node knowledge graph · the Big Three vs. Oracle OCI, sovereign cloud & AI-capex dynamics — winners & losers to 2030', zh: '双平台群体模拟 · 80 个人格 · 130 节点知识图谱 · 三巨头与 Oracle OCI、主权云与 AI 资本开支博弈——2030 年赢家与输家' },
 
     /* ——— index video / screenshots / how ——— */
     'video.h2':         { en: '47-second demo', zh: '47 秒演示' },
@@ -107,7 +111,9 @@
     'run.semi.title':   { en: 'Global semiconductors through 2030', zh: '2030 年前全球半导体产业' },
     'run.mem.title':    { en: 'Global memory-chip market through 2030', zh: '2030 年前全球存储半导体市场' },
     'run.ess.title':    { en: "China's energy storage & battery market in 2035", zh: '2035 年中国储能与电池市场' },
-    'run.iran.title':   { en: 'How does the 2026 US–Iran war end?', zh: '2026 年美伊战争如何收场？' }
+    'run.iran.title':   { en: 'How does the 2026 US–Iran war end?', zh: '2026 年美伊战争如何收场？' },
+    'run.storage.title': { en: 'Storage semiconductors — the 2027–2028 outlook', zh: '2027—2028 年存储半导体前景预判' },
+    'run.cloud.title':   { en: 'Global cloud computing — the 2030 endgame', zh: '2030 年全球云计算竞争格局推演' }
   };
 
   var lang = null;

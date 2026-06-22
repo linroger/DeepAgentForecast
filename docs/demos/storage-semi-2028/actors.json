@@ -1,0 +1,495 @@
+{
+  "central_question": "2027—2028 年全球存储半导体市场能否维持 AI 超级周期的主升浪，还是将在产能集中投放窗口期出现价格回调与周期性反转？",
+  "as_of_date": "2026-06-15",
+  "situation_brief": {
+    "current_situation": "截至 2026 年中，AI 驱动下存储行业进入\"四十年一遇\"的超级周期主升浪：TrendForce 将 2026 年全球存储市场规模上调至 8,893 亿美元（DRAM +303%、NAND +281% YoY），2027 年预计达 1.28 万亿美元（+44%）。HBM 短缺持续，DRAM 供应仅能满足约 60% 市场需求，Q1 2026 PC DRAM 合约价环比飙升 105—110%，创历史纪录；SK 海力士 Q1 2026 营业利润率高达 72%，美光市值首次触及 1 万亿美元。",
+    "context": "行业自 2022—2023 年谷底（DRAM ASP 跌约 60%）后，由 HBM 需求爆发、Agentic AI 推理工作流和超大规模厂商资本开支激增共同推动，进入第六阶段（AI 驱动新超级周期）。历史上 DRAM 行业呈现\"三年扩张、两年消化\"的循环规律——2017—2018 周期合约价涨 90%、2024—2028 周期被 Semianalysis 称为 1995 年以来最强复苏。",
+    "dynamics": "上行力量：HBM 短缺持续到 2030 年（SK 集团口径）、九大 CSP 2026 年 capex 增长 79%、资本密集度升至 34%、DDR6 2027 年大规模商用、HBF 新架构填补层级空白。下行力量：三星 P4L、SK 海力士龙仁、美光 ID1 与纽约厂、新加坡/广岛厂将在 2027 H2—2028 H1 集中投放产能；消费电子承压（PC -11.3%、智能手机 -12.9%）；CXMT/YMTC 国产化率超 50% 并推进科创板 IPO，可能提前 2 个季度翻转全球供给曲线。",
+    "fault_lines": [
+      "AI capex 是否在 2027 H1 减速——决定 HBM 价格能否守住",
+      "HBM4E 出货排序——SK 海力士、三星、美光谁先通过 NVIDIA Rubin Ultra 认证",
+      "HBF 能否成为 AI 推理主流中间层——闪迪+SK 海力士标准与三星/美光态度",
+      "中国 CXMT/YMTC IPO 与产能爬坡——是否触发全球供给曲线提前翻转",
+      "消费端涨价传导——500 美元以下笔记本消失、智能手机涨价 15—20% 是否引发需求坍塌",
+      "DDR6 大规模采用元年是否兑现——服务器平台支持节奏"
+    ],
+    "catalysts": [
+      "NVIDIA Rubin Ultra 1TB HBM4E 2027 年量产时间表更新",
+      "TSMC CoWoS 2027 年 9.5-reticle 12-HBM5 堆叠封装进度",
+      "CXMT/YMTC 科创板 IPO 审核结果与定价",
+      "美国 BIS 对中国存储厂商新一轮实体清单动作",
+      "苹果是否真正采购 CXMT/YMTC 内存（2026-02 TrendForce 评估中）",
+      "超大规模厂商季度 capex 同比增速跌破 +30%"
+    ]
+  },
+  "actors": [
+    {
+      "name": "三星电子",
+      "type": "Organization",
+      "role": "DRAM+NAND 双线龙头，HBM4 追赶者",
+      "stance": "维持 DRAM 第一地位，加码 HBM 与 Pyeongtaek P4L 满产，目标半导体部门 50% 营业利润率",
+      "influence": "high",
+      "memory": "2025 年首次被 SK 海力士在 DRAM 营收（含 HBM）上超越；HBM3E 良率落后、HBM4 认证多次推迟"
+    },
+    {
+      "name": "SK 海力士",
+      "type": "Organization",
+      "role": "HBM 全球龙头，AI 存储最大受益者",
+      "stance": "深化与 NVIDIA 绑定，主导 HBF 标准，2027 年 HBM4E 量产",
+      "influence": "high",
+      "memory": "Q1 2026 营业利润率 72%（行业纪录）；与闪迪联合定义 HBF，2014 年首家量产 HBM"
+    },
+    {
+      "name": "美光科技",
+      "type": "Organization",
+      "role": "美国唯一 HBM 第一梯队厂商，CHIPS 法案最大受益者",
+      "stance": "借供应链主权叙事与 2,000 亿美元投资计划抢占份额",
+      "influence": "high",
+      "memory": "2025-06-12 获特朗普政府 2,000 亿美元投资承诺（含 CHIPS 追加 2.75 亿美元）；2026-05-26 市值首破 1 万亿"
+    },
+    {
+      "name": "NVIDIA",
+      "type": "Organization",
+      "role": "AI GPU 龙头，HBM 最大客户",
+      "stance": "锁定 HBM4/HBM4E 长期供应，主导 Rubin Ultra 1TB HBM4E 路线",
+      "influence": "high",
+      "memory": "Vera Rubin 平台 2026 推出，Rubin Ultra 2027 年整合 1TB HBM4E（16 堆叠），FP4 100 PFLOPS"
+    },
+    {
+      "name": "TSMC",
+      "type": "Organization",
+      "role": "CoWoS 先进封装唯一大规模供应商",
+      "stance": "按路线图扩大中介层尺寸，支撑 HBM4/HBM4E/HBM5 堆叠",
+      "influence": "high",
+      "memory": "2027 年 9.5-reticle 中介层支持 12 HBM5 堆叠；2026 年底 CoWoS 月产能 11.5—14 万片"
+    },
+    {
+      "name": "铠侠（Kioxia）",
+      "type": "Organization",
+      "role": "NAND 第二梯队，BiCS 联合开发方",
+      "stance": "将 BiCS10 332 层量产从 2027 H2 提前至 2026 年抢占 AI 数据中心需求",
+      "influence": "medium",
+      "memory": "与闪迪 BiCS 合作延期至 2034 年；BiCS10 4.8 GB/s 速度较 BiCS8 提升 33%"
+    },
+    {
+      "name": "闪迪（SanDisk）",
+      "type": "Organization",
+      "role": "NAND 大厂，HBF 概念提出方",
+      "stance": "与 SK 海力士联合推动 HBF，目标 2027 年初首批 AI 推理设备样品",
+      "influence": "medium",
+      "memory": "2025-08 首次公开 HBF；2026-02-25 与 SK 海力士联合发布；OCP 工作流已启动"
+    },
+    {
+      "name": "长江存储（YMTC）",
+      "type": "Organization",
+      "role": "中国 NAND 龙头，受制裁仍高速扩张",
+      "stance": "武汉 Phase 3 量产 + 科创板 IPO，目标 2027 年全球 NAND 20% 份额",
+      "influence": "medium",
+      "memory": "Xtacking 4.0 270—294 层；2025 NAND 市占 11.8%；50%+ 设备国产化"
+    },
+    {
+      "name": "长鑫存储（CXMT）",
+      "type": "Organization",
+      "role": "中国 DRAM 龙头",
+      "stance": "1c DRAM 工艺量产 HBM4，2026-02 发布 138 美元 32GB DDR4 模块冲击市场",
+      "influence": "medium",
+      "memory": "2025 年底启动科创板 IPO，拟募资 295 亿元；与 YMTC 协同上市"
+    },
+    {
+      "name": "苹果",
+      "type": "Organization",
+      "role": "全球最大消费电子采购方",
+      "stance": "2026-02 起评估 CXMT/YMTC 内存作为对三星/SK 海力士谈判筹码",
+      "influence": "high",
+      "memory": "传统主供应商为三星、SK 海力士、美光；正寻求供应链多元化与议价杠杆"
+    },
+    {
+      "name": "TrendForce",
+      "type": "Media",
+      "role": "全球存储行业权威研究机构",
+      "stance": "持续上调 2026—2027 年市场规模预测，看好 AI 结构性需求",
+      "influence": "high",
+      "memory": "2026-05-29 将 2026 DRAM 预测从 5,516 亿→6,187 亿；2027 从 8,427 亿→9,033 亿"
+    },
+    {
+      "name": "JEDEC",
+      "type": "Organization",
+      "role": "内存标准制定组织",
+      "stance": "主导 DDR6 规范，2025-05 与三大厂商确认 2027 年大规模商用路线图",
+      "influence": "medium",
+      "memory": "DDR6 速度 8,800—17,600 MT/s、单通道位宽 +50%；CXL 4.0 2025-11-18 发布（128 GT/s）"
+    },
+    {
+      "name": "美国商务部 BIS",
+      "type": "Government",
+      "role": "出口管制执法机构",
+      "stance": "维持对中国存储厂商的实体清单与设备限制",
+      "influence": "high",
+      "memory": "2022 年起对 YMTC 实施制裁；2024 年新增 21 家中企 AI 威胁清单"
+    },
+    {
+      "name": "超大规模云厂商（CSP）",
+      "type": "Other",
+      "role": "AWS/Azure/GCP/Meta——AI 资本开支主力",
+      "stance": "2026 年集体提升 AI 资本开支，与存储厂商签订长协合同至 2027 年",
+      "influence": "high",
+      "memory": "九大 CSP 2026 capex +79%、资本密集度 34%；长协合同覆盖至 2027"
+    },
+    {
+      "name": "联想/戴尔/惠普",
+      "type": "Organization",
+      "role": "PC OEM，存储涨价传导终端",
+      "stance": "已公开警告零售价上调 15—20%，500 美元以下笔记本可能消失",
+      "influence": "medium",
+      "memory": "AI PC 最低 16GB、32GB 成标准，专业工作站 128GB；2026 PC 出货预计下滑 11.3%"
+    },
+    {
+      "name": "SK 集团",
+      "type": "Organization",
+      "role": "SK 海力士母公司",
+      "stance": "董事长 2026-04 公开警告 HBM 短缺将持续到 2030 年",
+      "influence": "medium",
+      "memory": "SK 海力士 Q1 2026 净利润 40.3 万亿韩元（约 272 亿美元）创纪录"
+    },
+    {
+      "name": "NVIDIA Vera Rubin / Rubin Ultra",
+      "type": "Platform",
+      "role": "驱动 HBM 需求的核心 AI 平台",
+      "stance": "2026 Vera Rubin 推出；2027 Rubin Ultra 整合 1TB HBM4E",
+      "influence": "high",
+      "memory": "Rubin Ultra 单 GPU 16 堆叠 HBM4E 位点；FP4 性能 100 PFLOPS"
+    },
+    {
+      "name": "CXL 联盟",
+      "type": "Organization",
+      "role": "CXL 内存互连标准制定方",
+      "stance": "推动 CXL 4.0（128 GT/s）成为 AI 数据中心内存池化标准",
+      "influence": "medium",
+      "memory": "CXL 3.1 2025 年底批准支持内存池化；CXL 4.0 2025-11-18 发布"
+    }
+  ],
+  "relationships": [
+    {
+      "source": "SK 海力士",
+      "target": "NVIDIA",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "HBM3/HBM3E 主力供应商，HBM4/HBM4E 长期供应合同，2026-04 SK 海力士量产 192GB SOCAMM2 用于 NVIDIA Vera 平台"
+    },
+    {
+      "source": "三星电子",
+      "target": "NVIDIA",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Pyeongtaek P4L 工厂为 NVIDIA Vera Rubin 平台供货；2026 年初 TrendForce 报道与客户进入 2027 年 HBM4 供应协议谈判"
+    },
+    {
+      "source": "美光科技",
+      "target": "NVIDIA",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "美光 HBM4 2026 CQ2 开始出货，HBM3E 2026 年产能已售罄，2026 投资者会议确认"
+    },
+    {
+      "source": "三星电子",
+      "target": "SK 海力士",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "2025 年三星首次被 SK 海力士在 DRAM 营收（含 HBM）上超越，2026 年 DRAM 市占率分别为 36% 与 32%（Counterpoint）"
+    },
+    {
+      "source": "三星电子",
+      "target": "美光科技",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "HBM 市场份额争夺——Counterpoint 预测 2026 年 HBM4 份额 SK 54%、三星 28%、美光 18%"
+    },
+    {
+      "source": "SK 海力士",
+      "target": "闪迪（SanDisk）",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "2026-02-25 联合发布 HBF 标准，OCP 工作流启动，闪迪 CBA 技术 + SK 海力士 HBM 堆叠工艺互补"
+    },
+    {
+      "source": "铠侠（Kioxia）",
+      "target": "闪迪（SanDisk）",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "BiCS 联合开发长期合作，2024 年起延期至 2034 年；BiCS10 332 层量产提前到 2026 年"
+    },
+    {
+      "source": "美光科技",
+      "target": "美国商务部 BIS",
+      "type": "REGULATES",
+      "sign": "neutral",
+      "strength": "high",
+      "basis": "美光获 CHIPS 法案 61.65 亿美元直接资金（2024-12-10）+ 2025-06-12 特朗普政府 2,000 亿美元扩大投资承诺（含 2.75 亿美元 CHIPS 追加）"
+    },
+    {
+      "source": "美国商务部 BIS",
+      "target": "长江存储（YMTC）",
+      "type": "REGULATES",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "2022 年制裁，2024 年将 YMTC 与 21 家中企列入 AI 威胁清单；设备出口限制持续"
+    },
+    {
+      "source": "美国商务部 BIS",
+      "target": "长鑫存储（CXMT）",
+      "type": "REGULATES",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "CXMT 在美国实体清单与设备出口限制范围内，限制其获取 EUV 等先进设备"
+    },
+    {
+      "source": "苹果",
+      "target": "三星电子",
+      "type": "DEPENDS_ON",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "苹果传统主供应商之一；2026-02 TrendForce 报道苹果以 CXMT/YMTC 作为谈判筹码压价"
+    },
+    {
+      "source": "苹果",
+      "target": "SK 海力士",
+      "type": "DEPENDS_ON",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "苹果传统主供应商之一；面临价格上涨压力，寻求供应链多元化"
+    },
+    {
+      "source": "苹果",
+      "target": "长江存储（YMTC）",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "low",
+      "basis": "TrendForce 2026-02-26 报道苹果正在评估 CXMT/YMTC 内存作为对三星/SK 海力士的谈判筹码，尚未确认采购"
+    },
+    {
+      "source": "苹果",
+      "target": "长鑫存储（CXMT）",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "low",
+      "basis": "TrendForce 2026-02-26 报道苹果正在评估 CXMT/YMTC 内存作为对三星/SK 海力士的谈判筹码"
+    },
+    {
+      "source": "长江存储（YMTC）",
+      "target": "长鑫存储（CXMT）",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "中国存储国家队协同推进 2025 年底科创板 IPO；中国发改委政策支持下的国产替代协同"
+    },
+    {
+      "source": "SK 海力士",
+      "target": "TSMC",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "HBM 通过 TSMC CoWoS 封装集成到 NVIDIA/AMD/Intel AI GPU；2026-04-20 SK 海力士量产 SOCAMM2 用于 NVIDIA Vera 平台"
+    },
+    {
+      "source": "NVIDIA",
+      "target": "TSMC",
+      "type": "DEPENDS_ON",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "所有 AI GPU 由 TSMC 代工，依赖 CoWoS 先进封装整合 HBM 堆叠"
+    },
+    {
+      "source": "三星电子",
+      "target": "TSMC",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "三星在先进制程与代工领域追赶 TSMC，但存储+逻辑代工全栈布局仍是其差异化优势"
+    },
+    {
+      "source": "美光科技",
+      "target": "三星电子",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "DRAM 市占率竞争（美光 23% vs 三星 36%），且美光受益美国 CHIPS 政策形成差异化竞争优势"
+    },
+    {
+      "source": "美光科技",
+      "target": "SK 海力士",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "HBM 市场份额争夺——2025 Q3 SK 海力士 53%，美光约 18%（Counterpoint）"
+    },
+    {
+      "source": "TSMC",
+      "target": "超大规模云厂商（CSP）",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "九大 CSP 2026 capex +79%、资本密集度 34%，与存储厂商签长协合同覆盖至 2027 年，TSMC 是核心受益方"
+    },
+    {
+      "source": "联想/戴尔/惠普",
+      "target": "超大规模云厂商（CSP）",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "low",
+      "basis": "消费端 PC OEM 与 CSP 在存储资源争夺中处于对立——OEM 已警告零售价上调 15—20%，500 美元以下笔记本可能消失"
+    },
+    {
+      "source": "TrendForce",
+      "target": "超大规模云厂商（CSP）",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "medium",
+      "basis": "TrendForce 持续上调 AI 需求预测，反向影响 CSP 资本开支节奏与长协合同定价"
+    },
+    {
+      "source": "JEDEC",
+      "target": "SK 海力士",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "JEDEC 与三大厂商确认 DDR6 路线图（2025-05），SK 海力士已提交 DDR6 设计图纸"
+    },
+    {
+      "source": "JEDEC",
+      "target": "三星电子",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "三星已向基板厂商提交 DDR6 设计图纸，加速开发"
+    },
+    {
+      "source": "CXL 联盟",
+      "target": "TSMC",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "CXL 4.0（2025-11-18）构建在 PCIe 7.0 上，与 TSMC CoWoS 共同构成 AI 数据中心可组合架构基础"
+    }
+  ],
+  "key_events": [
+    {
+      "date": "2024-04-25",
+      "event": "美国商务部与 Micron 签署 CHIPS 法案初步协议 61 亿美元（拜登政府）"
+    },
+    {
+      "date": "2024-12-10",
+      "event": "美国商务部正式授予 Micron 61.65 亿美元 CHIPS 直接资金"
+    },
+    {
+      "date": "2025-06-12",
+      "event": "特朗普政府宣布 Micron 扩大投资 2,000 亿美元（含 CHIPS 追加 2.75 亿美元）"
+    },
+    {
+      "date": "2025-08-06",
+      "event": "闪迪首次公开 HBF 概念；闪迪与 SK 海力士签署 HBF 谅解备忘录"
+    },
+    {
+      "date": "2025-11-18",
+      "event": "CXL 4.0 规范发布（128 GT/s、Bundled Ports）"
+    },
+    {
+      "date": "2025-12-12",
+      "event": "TrendForce 报道铠侠 BiCS10 332 层 NAND 量产从 2027 H2 提前至 2026 年"
+    },
+    {
+      "date": "2026-01-24",
+      "event": "Micron FY26 Q1 营收 125 亿美元创纪录，HBM 2026 产能售罄"
+    },
+    {
+      "date": "2026-02-20",
+      "event": "SK 海力士与闪迪联合发布 HBF，OCP 工作流启动"
+    },
+    {
+      "date": "2026-02-25",
+      "event": "TrendForce 报道 HBM 短缺持续到 2030 年（SK 集团董事长口径）"
+    },
+    {
+      "date": "2026-02-26",
+      "event": "TrendForce 报道苹果评估 CXMT/YMTC 内存作为谈判筹码"
+    },
+    {
+      "date": "2026-02-28",
+      "event": "CXMT 发布 32GB DDR4-3200 服务器模块（138 美元），停产 DDR4 升级 DDR5 产线"
+    },
+    {
+      "date": "2026-03-18",
+      "event": "NVIDIA GTC 2026 公布 Rubin Ultra 1TB HBM4E 计划（2027 年推出）"
+    },
+    {
+      "date": "2026-04-18",
+      "event": "Nikkei Asia 报道 DRAM 供应仅满足 60% 市场需求"
+    },
+    {
+      "date": "2026-04-20",
+      "event": "SK 海力士开始量产 192GB SOCAMM2（1c DRAM，用于 NVIDIA Vera）"
+    },
+    {
+      "date": "2026-04-27",
+      "event": "TSMC 公布 CoWoS 路线图（2027 年 9.5-reticle、12 个 HBM5 堆叠）"
+    },
+    {
+      "date": "2026-05-26",
+      "event": "Micron 市值首次触及 1 万亿美元"
+    },
+    {
+      "date": "2026-05-29",
+      "event": "TrendForce 大幅上调 2026 全球存储市场至 8,893 亿、2027 至 1.28 万亿"
+    },
+    {
+      "date": "2026-06-15",
+      "event": "TrendForce 报道 SK 海力士 HBM4E 样品出货提前到 6—7 月"
+    },
+    {
+      "date": "2027-02-15",
+      "event": "（预测）SK 海力士龙仁 Cluster 一期启用"
+    },
+    {
+      "date": "2027-06-30",
+      "event": "（预测）HBF 首批 AI 推理设备样品问世"
+    },
+    {
+      "date": "2027-12-31",
+      "event": "（预测）三星 Pyeongtaek P4L 满产；美光 ID1 出片；HBM4E 规模量产；可能出现价格回调压力"
+    },
+    {
+      "date": "2027-12-31",
+      "event": "（预测）CXMT/YMTC 科创板 IPO 大概率完成"
+    },
+    {
+      "date": "2028-06-30",
+      "event": "（推断）三星第五座 HBM 厂投产；美光纽约晶圆产能贡献；广岛厂量产"
+    },
+    {
+      "date": "2028-12-31",
+      "event": "（推断）可能进入产能消化期，DRAM/NAND 价格面临回调，BiCS 下一代（约 400 层）小规模试产"
+    }
+  ],
+  "hot_topics": [
+    "AI 驱动存储超级周期",
+    "HBM 短缺与 2030 年缺口预测",
+    "HBM4/HBM4E 出货时间表与 NVIDIA 认证争夺",
+    "HBF 作为 AI 推理新存储层级",
+    "DDR6 2027 年大规模商用元年",
+    "CXL 4.0 与内存池化架构",
+    "3D NAND 300+ 层竞赛（BiCS10 332 层、V10 400+ 层）",
+    "中国存储厂商 CXMT/YMTC IPO 与产能爬坡",
+    "AI capex 持续性 vs 周期性回调风险",
+    "消费电子涨价传导与 500 美元以下笔记本消失",
+    "TSMC CoWoS 先进封装产能",
+    "三星 P4L、SK 龙仁、美光 ID1/纽约厂产能投放窗口期",
+    "Agentic AI 推理工作流与 KV 缓存需求",
+    "存储周期历史规律与 2017—2018 周期对比"
+  ]
+}
