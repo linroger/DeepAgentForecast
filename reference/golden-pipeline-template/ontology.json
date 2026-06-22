@@ -1,0 +1,693 @@
+{
+ "entity_types": [
+  {
+   "name": "ChipVendor",
+   "description": "Merchant data-center AI accelerator (GPU) vendor selling silicon on the open market; the supply-side price-setter whose revenue share is the central question.",
+   "attributes": [
+    {
+     "name": "role",
+     "type": "text",
+     "description": "Market role (e.g. dominant incumbent vs. merchant challenger vs. trailing vendor)"
+    },
+    {
+     "name": "stance",
+     "type": "text",
+     "description": "Strategic posture toward defending or attacking accelerator share"
+    },
+    {
+     "name": "market_share",
+     "type": "text",
+     "description": "Estimated merchant data-center accelerator revenue share (%)"
+    },
+    {
+     "name": "product_roadmap",
+     "type": "text",
+     "description": "Core GPU roadmap (e.g. Blackwell->Rubin, MI300->MI400/Helios, Gaudi)"
+    }
+   ],
+   "examples": [
+    "NVIDIA",
+    "AMD"
+   ]
+  },
+  {
+   "name": "Foundry",
+   "description": "Leading-edge contract chip manufacturer and advanced-packaging (CoWoS) supplier that gatekeeps who can physically ship AI silicon.",
+   "attributes": [
+    {
+     "name": "role",
+     "type": "text",
+     "description": "Foundry positioning (dominant leader vs. second-source aspirant vs. IDM/foundry challenger)"
+    },
+    {
+     "name": "process_node",
+     "type": "text",
+     "description": "Leading-edge node capability (e.g. N3/N2/A16, SF3/SF2 GAA, 18A/14A)"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "Bottleneck/allocation power over the accelerator supply chain (high|medium|low)"
+    }
+   ],
+   "examples": [
+    "TSMC",
+    "Samsung Foundry"
+   ]
+  },
+  {
+   "name": "MemoryMaker",
+   "description": "HBM (high-bandwidth memory) supplier whose constrained, oligopoly-priced capacity is a binding input to every AI accelerator.",
+   "attributes": [
+    {
+     "name": "role",
+     "type": "text",
+     "description": "HBM positioning (leader vs. qualified second/third source)"
+    },
+    {
+     "name": "market_share",
+     "type": "text",
+     "description": "Estimated HBM market share / supply rank"
+    },
+    {
+     "name": "motivation",
+     "type": "text",
+     "description": "Core driver (e.g. lock multiyear NVIDIA allocation, close HBM4 gap)"
+    }
+   ],
+   "examples": [
+    "SK Hynix",
+    "Micron"
+   ]
+  },
+  {
+   "name": "EquipmentMaker",
+   "description": "Semiconductor capital-equipment supplier (notably EUV lithography) on the critical path of leading-edge AI-chip manufacturing.",
+   "attributes": [
+    {
+     "name": "role",
+     "type": "text",
+     "description": "Equipment role (e.g. monopoly EUV/High-NA lithography supplier)"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "Criticality to the AI supply chain (high|medium|low)"
+    },
+    {
+     "name": "motivation",
+     "type": "text",
+     "description": "Core driver (e.g. ramp High-NA EUV, manage China export exposure)"
+    }
+   ],
+   "examples": [
+    "ASML"
+   ]
+  },
+  {
+   "name": "Hyperscaler",
+   "description": "Cloud/platform giant that both buys merchant GPUs at scale and builds captive custom AI ASICs to cut cost-per-token and supply risk.",
+   "attributes": [
+    {
+     "name": "role",
+     "type": "text",
+     "description": "Dual role as largest GPU buyer and custom-ASIC builder"
+    },
+    {
+     "name": "stance",
+     "type": "text",
+     "description": "Posture toward shifting workloads from merchant GPUs to in-house silicon"
+    },
+    {
+     "name": "custom_silicon",
+     "type": "text",
+     "description": "In-house accelerator program (TPU/Trainium/Maia/MTIA)"
+    }
+   ],
+   "examples": [
+    "Google",
+    "Amazon Web Services"
+   ]
+  },
+  {
+   "name": "CustomSiliconPartner",
+   "description": "Merchant ASIC and AI-networking supplier that co-designs hyperscaler custom accelerators (XPUs), monetizing the GPU-to-ASIC shift as the arms dealer.",
+   "attributes": [
+    {
+     "name": "role",
+     "type": "text",
+     "description": "Custom-silicon role (lead XPU co-designer vs. secondary challenger)"
+    },
+    {
+     "name": "stance",
+     "type": "text",
+     "description": "Posture as the primary beneficiary of the captive-ASIC shift"
+    },
+    {
+     "name": "motivation",
+     "type": "text",
+     "description": "Core driver (e.g. grow XPU customers, win sockets vs. rival)"
+    }
+   ],
+   "examples": [
+    "Broadcom",
+    "Marvell"
+   ]
+  },
+  {
+   "name": "AILab",
+   "description": "Frontier AI model lab whose enormous training/inference compute appetite drives accelerator demand and supplier diversification.",
+   "attributes": [
+    {
+     "name": "role",
+     "type": "text",
+     "description": "Demand-side role (largest compute driver, custom-silicon aspirant, multi-silicon adopter)"
+    },
+    {
+     "name": "stance",
+     "type": "text",
+     "description": "Silicon strategy (single-supplier vs. multi-silicon vs. own-chip ambitions)"
+    },
+    {
+     "name": "motivation",
+     "type": "text",
+     "description": "Core driver (secure maximal compute, cut cost-per-token, escape GPU scarcity)"
+    }
+   ],
+   "examples": [
+    "OpenAI",
+    "Anthropic"
+   ]
+  },
+  {
+   "name": "Neocloud",
+   "description": "Specialized GPU cloud or capacity reseller that buys and leases large NVIDIA accelerator fleets to AI labs and hyperscalers.",
+   "attributes": [
+    {
+     "name": "role",
+     "type": "text",
+     "description": "Capacity-reseller role (pure-play neocloud vs. OCI-style hyperscaler reseller)"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "Weight in accelerator demand and allocation (high|medium|low)"
+    },
+    {
+     "name": "vulnerability",
+     "type": "text",
+     "description": "Key fragility (leverage/GPU-collateral, single-vendor/customer concentration)"
+    }
+   ],
+   "examples": [
+    "CoreWeave",
+    "Oracle"
+   ]
+  },
+  {
+   "name": "SiliconChallenger",
+   "description": "Domestic-substitution or niche AI-silicon vendor offering an alternative architecture to merchant GPUs (China substitute or wafer-scale/LPU startup).",
+   "attributes": [
+    {
+     "name": "role",
+     "type": "text",
+     "description": "Challenger role (China NVIDIA substitute vs. niche startup architecture)"
+    },
+    {
+     "name": "stance",
+     "type": "text",
+     "description": "Posture toward displacing NVIDIA in a market or workload niche"
+    },
+    {
+     "name": "market_share",
+     "type": "text",
+     "description": "Estimated share / scale relative to incumbents (typically low/niche)"
+    }
+   ],
+   "examples": [
+    "Huawei",
+    "Cerebras"
+   ]
+  },
+  {
+   "name": "Regulator",
+   "description": "Government agency shaping accelerator demand geography via export controls or industrial policy steering domestic substitution.",
+   "attributes": [
+    {
+     "name": "role",
+     "type": "text",
+     "description": "Regulatory role (export-control gatekeeper vs. self-sufficiency driver)"
+    },
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "Managed jurisdiction (US/CN)"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "Power to reshape the accelerator market (high|medium|low)"
+    }
+   ],
+   "examples": [
+    "Bureau of Industry and Security",
+    "China MIIT"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "COMPETES_WITH",
+   "description": "Direct market rivalry for accelerator revenue share, design sockets, or supply allocation.",
+   "source_targets": [
+    {
+     "source": "ChipVendor",
+     "target": "ChipVendor"
+    },
+    {
+     "source": "ChipVendor",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "ChipVendor",
+     "target": "SiliconChallenger"
+    },
+    {
+     "source": "CustomSiliconPartner",
+     "target": "CustomSiliconPartner"
+    },
+    {
+     "source": "Foundry",
+     "target": "Foundry"
+    },
+    {
+     "source": "MemoryMaker",
+     "target": "MemoryMaker"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Relationship sign (ally|rival|neutral); here typically rival"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Intensity of competition (high|medium|low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Approximate onset of the competitive dynamic (YYYY-MM-DD)"
+    },
+    {
+     "name": "basis",
+     "type": "text",
+     "description": "One researched line of evidence for the rivalry"
+    }
+   ]
+  },
+  {
+   "name": "DEPENDS_ON",
+   "description": "Hard supply or capacity dependency where the target is a binding constraint on the source's ability to ship or scale.",
+   "source_targets": [
+    {
+     "source": "ChipVendor",
+     "target": "Foundry"
+    },
+    {
+     "source": "ChipVendor",
+     "target": "MemoryMaker"
+    },
+    {
+     "source": "Foundry",
+     "target": "EquipmentMaker"
+    },
+    {
+     "source": "Hyperscaler",
+     "target": "ChipVendor"
+    },
+    {
+     "source": "Hyperscaler",
+     "target": "Foundry"
+    },
+    {
+     "source": "Neocloud",
+     "target": "ChipVendor"
+    },
+    {
+     "source": "AILab",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "SiliconChallenger",
+     "target": "Foundry"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Relationship sign (ally|rival|neutral); dependencies are usually neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Severity of the dependency / bottleneck (high|medium|low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Approximate onset of the dependency (YYYY-MM-DD)"
+    },
+    {
+     "name": "basis",
+     "type": "text",
+     "description": "One researched line of evidence for the dependency"
+    }
+   ]
+  },
+  {
+   "name": "PARTNERS_WITH",
+   "description": "Strategic alliance, investment, or compute-supply partnership aligning two actors' interests.",
+   "source_targets": [
+    {
+     "source": "Hyperscaler",
+     "target": "AILab"
+    },
+    {
+     "source": "CustomSiliconPartner",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "CustomSiliconPartner",
+     "target": "AILab"
+    },
+    {
+     "source": "ChipVendor",
+     "target": "Neocloud"
+    },
+    {
+     "source": "Neocloud",
+     "target": "AILab"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Relationship sign (ally|rival|neutral); here typically ally"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Closeness of the partnership (high|medium|low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Approximate start of the partnership (YYYY-MM-DD)"
+    },
+    {
+     "name": "basis",
+     "type": "text",
+     "description": "One researched line of evidence for the partnership"
+    }
+   ]
+  },
+  {
+   "name": "REGULATES",
+   "description": "Export-control or licensing authority gating an actor's market access or technology exports.",
+   "source_targets": [
+    {
+     "source": "Regulator",
+     "target": "ChipVendor"
+    },
+    {
+     "source": "Regulator",
+     "target": "EquipmentMaker"
+    },
+    {
+     "source": "Regulator",
+     "target": "CustomSiliconPartner"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Relationship sign (ally|rival|neutral); regulation is usually neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Severity of the regulatory constraint (high|medium|low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Date the control/rule took effect (YYYY-MM-DD)"
+    },
+    {
+     "name": "basis",
+     "type": "text",
+     "description": "One researched line of evidence for the regulatory action"
+    }
+   ]
+  },
+  {
+   "name": "OPPOSES",
+   "description": "Adversarial relationship in which a regulator or rival actively works to curb the target's access or progress.",
+   "source_targets": [
+    {
+     "source": "Regulator",
+     "target": "SiliconChallenger"
+    },
+    {
+     "source": "Regulator",
+     "target": "Foundry"
+    },
+    {
+     "source": "Regulator",
+     "target": "ChipVendor"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Relationship sign (ally|rival|neutral); here rival"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Intensity of the opposition (high|medium|low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Approximate onset of the opposition (YYYY-MM-DD)"
+    },
+    {
+     "name": "basis",
+     "type": "text",
+     "description": "One researched line of evidence for the adversarial stance"
+    }
+   ]
+  },
+  {
+   "name": "ALLY_OF",
+   "description": "Policy or industrial-policy alignment where one actor steers demand and support toward another.",
+   "source_targets": [
+    {
+     "source": "Regulator",
+     "target": "SiliconChallenger"
+    },
+    {
+     "source": "Regulator",
+     "target": "Foundry"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Relationship sign (ally|rival|neutral); here ally"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Closeness of the alignment (high|medium|low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Approximate onset of the alignment (YYYY-MM-DD)"
+    },
+    {
+     "name": "basis",
+     "type": "text",
+     "description": "One researched line of evidence for the alliance"
+    }
+   ]
+  },
+  {
+   "name": "SUPPLIES",
+   "description": "Component or material supply relationship feeding a binding input (HBM, EUV tools) into an accelerator producer.",
+   "source_targets": [
+    {
+     "source": "MemoryMaker",
+     "target": "ChipVendor"
+    },
+    {
+     "source": "EquipmentMaker",
+     "target": "Foundry"
+    },
+    {
+     "source": "Foundry",
+     "target": "ChipVendor"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Relationship sign (ally|rival|neutral); supply ties are usually ally"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Volume/criticality of the supply relationship (high|medium|low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Approximate start of supply (YYYY-MM-DD)"
+    },
+    {
+     "name": "basis",
+     "type": "text",
+     "description": "One researched line of evidence for the supply relationship"
+    }
+   ]
+  },
+  {
+   "name": "CO_DESIGNS",
+   "description": "Joint custom-silicon or CPU-IP design relationship where partners engineer an accelerator or processor together.",
+   "source_targets": [
+    {
+     "source": "Hyperscaler",
+     "target": "CustomSiliconPartner"
+    },
+    {
+     "source": "AILab",
+     "target": "CustomSiliconPartner"
+    },
+    {
+     "source": "MemoryMaker",
+     "target": "Foundry"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Relationship sign (ally|rival|neutral); here ally"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Depth of the co-design engagement (high|medium|low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Approximate start of co-design (YYYY-MM-DD)"
+    },
+    {
+     "name": "basis",
+     "type": "text",
+     "description": "One researched line of evidence for the co-design relationship"
+    }
+   ]
+  },
+  {
+   "name": "FABRICATES_FOR",
+   "description": "Foundry-to-customer manufacturing relationship in which the foundry tapes out and packages the customer's AI silicon.",
+   "source_targets": [
+    {
+     "source": "Foundry",
+     "target": "ChipVendor"
+    },
+    {
+     "source": "Foundry",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "Foundry",
+     "target": "SiliconChallenger"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Relationship sign (ally|rival|neutral); here ally"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Importance of the manufacturing relationship (high|medium|low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Approximate start of fabrication (YYYY-MM-DD)"
+    },
+    {
+     "name": "basis",
+     "type": "text",
+     "description": "One researched line of evidence for the fabrication relationship"
+    }
+   ]
+  },
+  {
+   "name": "INFLUENCES",
+   "description": "Analyst, research, or media influence shaping market perception of accelerator share, supply, and pricing.",
+   "source_targets": [
+    {
+     "source": "Organization",
+     "target": "ChipVendor"
+    },
+    {
+     "source": "Organization",
+     "target": "MemoryMaker"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Relationship sign (ally|rival|neutral); influence is usually neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Reach/weight of the influence (high|medium|low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Approximate onset of influence (YYYY-MM-DD)"
+    },
+    {
+     "name": "basis",
+     "type": "text",
+     "description": "One researched line of evidence for the influence relationship"
+    }
+   ]
+  }
+ ],
+ "analysis_summary": "This ontology models the data-center AI accelerator market through end-2027, centered on whether NVIDIA retains >=75% merchant accelerator revenue share against hyperscaler custom ASICs and AMD Instinct. Ten entity types capture the full value chain by behavioral role: ChipVendor (NVIDIA, AMD, Intel) is the supply-side share contender; Foundry (TSMC, Samsung Foundry, Intel Foundry) gatekeeps via leading-edge nodes and CoWoS allocation; MemoryMaker (SK Hynix, Samsung, Micron) supplies bottlenecked HBM; EquipmentMaker (ASML) holds the EUV monopoly upstream; Hyperscaler (Google, AWS, Microsoft, Meta) simultaneously buys GPUs and builds captive ASICs (TPU/Trainium/Maia/MTIA); CustomSiliconPartner (Broadcom, Marvell) co-designs those XPUs as the arms dealer of the ASIC shift; AILab (OpenAI, Anthropic) drives frontier compute demand and supplier diversification; Neocloud (CoreWeave, Oracle, xAI) resells NVIDIA capacity at leveraged scale; SiliconChallenger (Huawei, Cerebras, Groq, SambaNova) offers China-substitution or niche architectures; and Regulator (BIS, China MIIT) reshapes demand geography via export controls and self-sufficiency policy. Person (Jensen Huang, Lisa Su) and Organization (SemiAnalysis, TrendForce, Morgan Stanley, Arm) serve as fallback types. Ten edge types encode the researched taxonomy (COMPETES_WITH, DEPENDS_ON, PARTNERS_WITH, REGULATES, OPPOSES, ALLY_OF, INFLUENCES) plus domain-specific supply-chain edges (SUPPLIES, CO_DESIGNS, FABRICATES_FOR), each carrying sentiment, strength, since_date, and a grounded basis. Together these support simulating the decisive share dynamics: the denominator definition (merchant vs. captive ASICs at transfer value), training-vs-inference segmentation, CUDA lock-in vs. open stacks, CoWoS/HBM4 allocation races, and US-China decoupling driving Huawei/SMIC substitution."
+}

@@ -1,0 +1,50 @@
+GOLDEN-REFERENCE RESEARCH LOG  (illustrative deep-research trace — shows the *shape* of an ideal
+deep-research phase per the deep-research SKILL; not a live tool trace)
+Topic: Data-center AI accelerator market through end-2027
+as_of_date: 2026-06-15
+
+== PHASE 0 — RESEARCH DESIGN ==
+Central question refined: NVIDIA >=75% merchant accelerator revenue share by 31 Dec 2027, or eroded
+below 75% by hyperscaler custom ASICs + AMD?
+Decomposed into Key Intelligence Questions (KIQs):
+  KIQ-1 [current statistic] NVIDIA's data-center accelerator revenue share today and trend.
+        best source class: NVIDIA 10-K/10-Q (S1), TrendForce/SemiAnalysis market models (S2/S3).
+  KIQ-2 [projection]       Custom-ASIC volume trajectory (TPU v6/v7, Trainium2/3, Maia, MTIA).
+        best source class: hyperscaler earnings calls (S1), Broadcom/Marvell guidance (S1/S2).
+  KIQ-3 [causal mechanism] CUDA software lock-in vs ROCm/Triton/XLA maturity.
+        best source class: developer surveys (S2), framework release notes (S1), AMD ROCm docs (S1).
+  KIQ-4 [estimate]         Binding supply constraints — CoWoS advanced packaging + HBM3E/HBM4.
+        best source class: TSMC capex guidance (S1), SK Hynix/Micron HBM disclosures (S1), SemiAnalysis (S2).
+  KIQ-5 [actor intention]  Hyperscaler stated vs revealed intent to displace merchant GPUs.
+        best source class: AWS/Google/Microsoft/Meta earnings transcripts (S1), reporting (S2).
+  KIQ-6 [contested]        Denominator definition (merchant-only vs all-accelerators incl. captive ASICs).
+        best source class: competing analyst methodologies (S2/S3) — surface the definition each uses.
+Priors: NVIDIA likely retains >75% on a MERCHANT-silicon denominator; the all-accelerator denominator
+is where the bear case lives. Disconfirming evidence to hunt: captive ASIC unit counts at transfer value.
+
+== PHASE 1 — LANDSCAPE + TARGETED DEEP-DIVE ==
+[S1] NVIDIA FY2026 10-K + Q-calls -> data-center revenue, Blackwell ramp, customer concentration. grade A1.
+[S1] TSMC Q-calls -> CoWoS capacity expansion cadence through 2027; N3/N2 ramp. grade A1.
+[S1] SK Hynix / Micron / Samsung -> HBM3E shipping, HBM4 qualification timing. grade A2 (triangulated).
+[S1] AWS/Google/Microsoft/Meta earnings -> Trainium2/3, TPU v6/v7, Maia, MTIA deployment language. grade B1.
+[S1] BIS/Commerce rule texts (Federal Register) -> export-control SKU caps (H20-class). grade A1.
+[S2] Reuters / Bloomberg / Nikkei / FT -> corroboration + expert quotes; traced back to the S1 origins.
+[S2/S3] SemiAnalysis / TrendForce / Morgan Stanley -> market-size models; COMMERCIAL ANGLE NOTED;
+        used as pointers to S1 and as the explicit home of the contested denominator definitions.
+Circular-sourcing check: the "$350B AI-compute TAM" number echoed across outlets traced to 2 distinct
+model origins -> counted as TWO, range reported, not averaged.
+
+== PHASE 2 — ADVERSARIAL / DISCONFIRMATION ==
+ACH-lite on KIQ-6: (H1) NVIDIA holds >=75% merchant; (H2) custom ASICs push all-accelerator share <75%;
+(H3) AMD is the swing factor. Evidence consistent with H1 AND H2 simultaneously once the denominator is
+fixed -> the disagreement is DEFINITIONAL, recorded as the top contested claim.
+Premortem (forecast fails by 2027): HBM4/CoWoS shortage caps NVIDIA units while TPU/Trainium scale on
+allocation hyperscalers control -> share compresses faster than the merchant view implies.
+Key assumptions logged: export controls persist; no demand shock; CUDA moat intact through 2027.
+
+== PHASE 3 — SYNTHESIS GATE (all boxes ticked) ==
+Every KIQ answered or flagged; load-bearing claims at B2+; origins traced; numbers unit/as-of-date stamped;
+disconfirmation attempted; base rates + actor incentives + watch indicators gathered.
+HANDOFF EMITTED -> actors.json (34 actors incl. description+aliases+goals/constraints/assets/vulnerabilities),
+relationships (77 typed edges incl. OTHER+relation_label), sources.json (35, tiered S1-S4),
+quantitative.json (26, unit+as_of+definition), contested.json (9). See those files.

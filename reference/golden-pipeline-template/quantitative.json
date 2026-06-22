@@ -1,0 +1,236 @@
+[
+  {
+    "metric": "NVIDIA data-center revenue (FY2026, ended Jan 2026)",
+    "value": 171,
+    "unit": "USD billion",
+    "as_of_date": "2026-02-25",
+    "definition": "Full fiscal-year data-center segment revenue as reported in 10-K",
+    "source": "NVIDIA Corporation Form 10-K Fiscal Year 2026",
+    "tier": "S1"
+  },
+  {
+    "metric": "NVIDIA data-center revenue (Q1 FY2027, qtr ended Apr 2026)",
+    "value": 48,
+    "unit": "USD billion",
+    "as_of_date": "2026-05-27",
+    "definition": "Quarterly data-center segment revenue",
+    "source": "NVIDIA Q1 FY2027 Earnings Call Transcript and Press Release",
+    "tier": "S1"
+  },
+  {
+    "metric": "NVIDIA merchant data-center AI accelerator revenue share (mid-2026)",
+    "value": 85,
+    "unit": "percent",
+    "as_of_date": "2026-05-20",
+    "definition": "NVIDIA share of merchant (externally-sold) data-center AI accelerator revenue; midpoint of 80-90% range",
+    "source": "SemiAnalysis: Accelerator Market Share and the ASIC Inflection",
+    "tier": "S2"
+  },
+  {
+    "metric": "AMD Instinct (data-center GPU) annualized revenue run-rate (2026)",
+    "value": 9.5,
+    "unit": "USD billion",
+    "as_of_date": "2026-05-05",
+    "definition": "Estimated annualized Instinct MI-series revenue based on Q1 2026 run-rate and guidance",
+    "source": "AMD Q1 2026 Form 10-Q and Earnings Release",
+    "tier": "S1"
+  },
+  {
+    "metric": "Broadcom AI semiconductor revenue (FY2026 guided)",
+    "value": 34,
+    "unit": "USD billion",
+    "as_of_date": "2026-06-05",
+    "definition": "Combined custom XPU plus AI networking revenue for fiscal year 2026",
+    "source": "Broadcom Inc. Q2 FY2026 Earnings Call Transcript",
+    "tier": "S1"
+  },
+  {
+    "metric": "Marvell AI/data-center custom-silicon revenue (annualized 2026)",
+    "value": 5.5,
+    "unit": "USD billion",
+    "as_of_date": "2026-05-28",
+    "definition": "Annualized data-center revenue attributable to custom AI compute and optical interconnect",
+    "source": "Marvell Technology Q1 FY2027 Earnings Release",
+    "tier": "S1"
+  },
+  {
+    "metric": "Total data-center AI accelerator TAM (2027 forecast, all silicon)",
+    "value": 420,
+    "unit": "USD billion",
+    "as_of_date": "2026-05-12",
+    "definition": "Total addressable market for training+inference accelerators including captive ASICs valued at estimated merchant-equivalent",
+    "source": "Morgan Stanley Research: AI Accelerator TAM and NVIDIA Share Trajectory",
+    "tier": "S3"
+  },
+  {
+    "metric": "Hyperscaler ASIC share of total accelerator units (2027 forecast)",
+    "value": 25,
+    "unit": "percent",
+    "as_of_date": "2026-05-20",
+    "definition": "Custom ASIC (TPU+Trainium+Maia+MTIA) share of total accelerator deployment by unit, all-silicon denominator",
+    "source": "SemiAnalysis: Accelerator Market Share and the ASIC Inflection",
+    "tier": "S2"
+  },
+  {
+    "metric": "HBM industry bit-demand growth (2026 vs 2025)",
+    "value": 55,
+    "unit": "percent YoY",
+    "as_of_date": "2026-03-12",
+    "definition": "Year-over-year growth in HBM bit shipments driven by AI accelerator attach",
+    "source": "TrendForce: HBM Bit Demand and Supplier Share Forecast 2026",
+    "tier": "S3"
+  },
+  {
+    "metric": "SK Hynix HBM market share (2026)",
+    "value": 52,
+    "unit": "percent",
+    "as_of_date": "2026-04-24",
+    "definition": "SK Hynix share of total HBM revenue across HBM3E/HBM4",
+    "source": "SK Hynix Q1 2026 Earnings Release (DART filing)",
+    "tier": "S1"
+  },
+  {
+    "metric": "Micron HBM market share (2026)",
+    "value": 23,
+    "unit": "percent",
+    "as_of_date": "2026-06-18",
+    "definition": "Micron share of total HBM revenue, up from prior single-digit base",
+    "source": "Micron Technology FQ3 2026 Earnings Call",
+    "tier": "S1"
+  },
+  {
+    "metric": "HBM3E 12-Hi stack average selling price (2026)",
+    "value": 13,
+    "unit": "USD per GB",
+    "as_of_date": "2026-03-12",
+    "definition": "Blended ASP per gigabyte for HBM3E 12-high stacks sold to accelerator vendors",
+    "source": "TrendForce: HBM Bit Demand and Supplier Share Forecast 2026",
+    "tier": "S3"
+  },
+  {
+    "metric": "TSMC AI accelerator revenue (2026 forecast)",
+    "value": 95,
+    "unit": "USD billion",
+    "as_of_date": "2026-04-16",
+    "definition": "TSMC revenue from AI-accelerator-class chips (HPC/AI segment, leading-edge)",
+    "source": "TSMC Q1 2026 Earnings Conference Call and Investor Presentation",
+    "tier": "S1"
+  },
+  {
+    "metric": "TSMC CoWoS monthly capacity (end-2026 target)",
+    "value": 130000,
+    "unit": "wafers per month",
+    "as_of_date": "2026-04-08",
+    "definition": "Combined CoWoS-S/CoWoS-L advanced packaging monthly wafer capacity exiting 2026",
+    "source": "SemiAnalysis: CoWoS and HBM Supply Model 2026-2027",
+    "tier": "S2"
+  },
+  {
+    "metric": "Google TPU annual unit deployment (2026 estimate)",
+    "value": 2500000,
+    "unit": "chips per year",
+    "as_of_date": "2026-06-02",
+    "definition": "Estimated TPU v6/v7 chips deployed internally and externally per year",
+    "source": "SemiAnalysis: ClusterMax — Trainium and TPU Deployment Census",
+    "tier": "S2"
+  },
+  {
+    "metric": "AWS Trainium annual unit deployment (2026 estimate)",
+    "value": 1400000,
+    "unit": "chips per year",
+    "as_of_date": "2026-06-02",
+    "definition": "Estimated Trainium2/3 chips deployed for internal and Anthropic-scale workloads per year",
+    "source": "SemiAnalysis: ClusterMax — Trainium and TPU Deployment Census",
+    "tier": "S2"
+  },
+  {
+    "metric": "Aggregate Big Four hyperscaler capex (2026)",
+    "value": 600,
+    "unit": "USD billion",
+    "as_of_date": "2026-05-02",
+    "definition": "Combined Alphabet, Amazon, Microsoft, Meta capital expenditure for 2026, majority AI infrastructure",
+    "source": "Financial Times: Hyperscalers pour record capex into AI silicon and data centers",
+    "tier": "S2"
+  },
+  {
+    "metric": "Alphabet capex (2026 guidance)",
+    "value": 92,
+    "unit": "USD billion",
+    "as_of_date": "2026-04-28",
+    "definition": "Full-year 2026 capital expenditure guidance, primarily AI compute and TPU",
+    "source": "Alphabet Inc. Q1 2026 Form 10-Q and Earnings Call",
+    "tier": "S1"
+  },
+  {
+    "metric": "Microsoft capex (FY2026 run-rate)",
+    "value": 105,
+    "unit": "USD billion",
+    "as_of_date": "2026-04-29",
+    "definition": "Annualized capital expenditure including finance leases, AI datacenter and GPU buildout",
+    "source": "Microsoft Corporation FY2026 Q3 Earnings Call",
+    "tier": "S1"
+  },
+  {
+    "metric": "Oracle remaining performance obligations (RPO, FQ4 2026)",
+    "value": 215,
+    "unit": "USD billion",
+    "as_of_date": "2026-06-11",
+    "definition": "Contracted backlog driven by AI/OCI GPU capacity deals including Stargate",
+    "source": "Oracle Corporation FQ4 2026 Earnings and RPO Disclosure",
+    "tier": "S1"
+  },
+  {
+    "metric": "ASML order backlog (Q1 2026)",
+    "value": 38,
+    "unit": "EUR billion",
+    "as_of_date": "2026-04-15",
+    "definition": "Total system order backlog tied to AI/leading-edge buildout",
+    "source": "ASML Holding Q1 2026 Results and Statement",
+    "tier": "S1"
+  },
+  {
+    "metric": "NVIDIA China data-center revenue impact from H20 licensing",
+    "value": 12,
+    "unit": "USD billion (annualized foregone)",
+    "as_of_date": "2025-04-15",
+    "definition": "Estimated annualized China accelerator revenue curtailed by H20 license requirement",
+    "source": "BIS Interim Final Rule: Additional Export Controls on Advanced Computing Items",
+    "tier": "S1"
+  },
+  {
+    "metric": "Huawei Ascend 910C annual production (2026 estimate)",
+    "value": 700000,
+    "unit": "chips per year",
+    "as_of_date": "2026-01-28",
+    "definition": "Estimated Ascend 910C output constrained by SMIC 7nm yield and HBM availability",
+    "source": "Nikkei Asia: Huawei scales Ascend 910C on SMIC amid HBM scarcity",
+    "tier": "S2"
+  },
+  {
+    "metric": "AMD merchant accelerator revenue share (2027 forecast)",
+    "value": 11,
+    "unit": "percent",
+    "as_of_date": "2026-04-18",
+    "definition": "Projected AMD Instinct share of merchant data-center accelerator revenue by 2027",
+    "source": "Morgan Stanley Research: Custom Silicon vs Merchant GPU Economics",
+    "tier": "S3"
+  },
+  {
+    "metric": "Custom ASIC inference cost-per-token advantage vs merchant GPU",
+    "value": 40,
+    "unit": "percent lower",
+    "as_of_date": "2026-04-18",
+    "definition": "Estimated total-cost-of-ownership advantage of mature hyperscaler ASIC over rented merchant GPU for steady-state inference",
+    "source": "Morgan Stanley Research: Custom Silicon vs Merchant GPU Economics",
+    "tier": "S3"
+  },
+  {
+    "metric": "NVIDIA share of all accelerators incl. captive ASICs (2027 forecast)",
+    "value": 68,
+    "unit": "percent",
+    "as_of_date": "2026-05-12",
+    "definition": "NVIDIA share when captive ASICs are counted in denominator at merchant-equivalent value",
+    "source": "Morgan Stanley Research: AI Accelerator TAM and NVIDIA Share Trajectory",
+    "tier": "S3"
+  }
+]

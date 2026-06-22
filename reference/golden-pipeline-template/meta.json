@@ -1,0 +1,37 @@
+{
+  "kind": "golden-reference-template",
+  "note": "HAND-BUILT reference artifact set (authored by Claude, NOT produced by a live MiniMax pipeline run). It demonstrates the IDEAL, fully-populated output of every workflow stage so the live AI workflow can consult it as a quality bar. Numbers/relationships are realistic but illustrative, not freshly researched facts.",
+  "topic": "Data-center AI accelerator market through end-2027",
+  "central_question": "By 31 Dec 2027, will NVIDIA retain >=75% revenue share of the data-center AI accelerator (training+inference silicon) market, or will hyperscaler custom ASICs (Google TPU, AWS Trainium, Microsoft Maia, Meta MTIA) plus AMD Instinct erode NVIDIA below 75%?",
+  "as_of_date": "2026-06-15",
+  "pipeline_id": "pipe_goldenref_aiacc2027",
+  "graph_id": "mirofish_goldenref_aiacc2027",
+  "mode": "full",
+  "rounds": 40,
+  "personas": 80,
+  "has_actors": true,
+  "counts": {
+    "actors": 34,
+    "relationships": 77,
+    "key_events": 16,
+    "hot_topics": 12,
+    "ontology_entity_types": 10,
+    "ontology_edge_types": 10,
+    "graph_nodes": 103,
+    "graph_links": 206,
+    "personas_in_template": 24,
+    "personas_live_target": 80,
+    "sources": 35,
+    "quantitative_facts": 26,
+    "contested_claims": 9
+  },
+  "stage_files": {
+    "research": ["dossier.md", "research_log.txt"],
+    "structured_extraction": ["actors.json", "sources.json", "quantitative.json", "contested.json"],
+    "ontology": ["ontology.json"],
+    "knowledge_graph": ["graph.json"],
+    "prepare_personas": ["personas.json"],
+    "simulation": ["forum.json"],
+    "report": ["report.md"]
+  }
+}
