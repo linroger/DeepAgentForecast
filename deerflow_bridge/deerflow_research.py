@@ -561,6 +561,48 @@ def build_extraction_prompt(
         if forecast_inputs else ""
     )
 
+    # ONTOLOGY: entity classification + behavioral DNA (GEMINI_PRO_ONTOLOGY §2 tiering /
+    # §3 behavioral DNA, CLAUDE_ONTOLOGY §2-§3). Lets the synthesis pass distinguish a
+    # decision-making actor from a SOURCE it merely cites or an abstract concept, and
+    # equip the real movers with values/beliefs/incentives/resources so personas become
+    # motivational profiles rather than stance-label caricatures. All OPTIONAL and gated
+    # behind forecast_inputs (default ON, prompt-only) so a model that omits them degrades
+    # to exactly the old actors.json shape.
+    actor_archetype = (
+        '      "archetype": string,                 // OPTIONAL one of actor|collective|institution_rule|asset_object|event|signal|claim_narrative|constraint_resource|place_jurisdiction|source|scenario; omit to default "actor"\n'
+        '      "simulation_tier": 1|2|3|4,          // OPTIONAL 1=core decision-maker, 2=stakeholder/faction, 3=passive info/source (e.g. a reporter/outlet that itself moves the outcome), 4=abstract concept/resource; omit to let it be inferred\n'
+        '      "role_class": "principal"|"arbiter"|"stakeholder"|"amplifier"|"intermediary",  // OPTIONAL functional role in the contest\n'
+        if forecast_inputs else ""
+    )
+    actor_dna = (
+        '      "worldview": {                       // OPTIONAL behavioral DNA — values/beliefs/identity that drive this actor (profile tier 1-2 actors here)\n'
+        '        "values": [ string ],              //   what they hold sacred / optimize for\n'
+        '        "beliefs": [ string ],             //   how they read the world (e.g. "AI regulation stifles innovation")\n'
+        '        "identity": string,                //   how they see themselves\n'
+        '        "frame": string                    //   the lens through which they interpret events\n'
+        "      },\n"
+        '      "incentives": [                      // OPTIONAL ranked drivers with their win/lose conditions\n'
+        "        {\n"
+        '          "driver": string,                //   what they are maximizing/minimizing (e.g. "shareholder value", "re-election")\n'
+        '          "gains_if": string,              //   the outcome that rewards them\n'
+        '          "loses_if": string,              //   the outcome that costs them\n'
+        '          "intensity": "high"|"medium"|"low"\n'
+        "        }\n"
+        "      ],\n"
+        '      "resources": [ string ],             // OPTIONAL levers/capabilities they can deploy (superset of assets)\n'
+        '      "risk_tolerance": "low"|"medium"|"high",  // OPTIONAL appetite for risky moves\n'
+        if forecast_inputs else ""
+    )
+
+    # ONTOLOGY: valenced/directional relations (CLAUDE_ONTOLOGY §4, contract relations[]).
+    # OPTIONAL valence/polarity let downstream tell rivals from partners from buyers; both
+    # are gated behind forecast_inputs and degrade-safe (absent => derived from type).
+    rel_valence = (
+        '      "valence": "allied"|"adversarial"|"neutral"|"transactional"|"directional",  // OPTIONAL relationship colour; omit to derive from type\n'
+        '      "polarity": number,                  // OPTIONAL signed strength in [-1,1] (+ cooperative, - antagonistic); omit to derive from valence/type\n'
+        if forecast_inputs else ""
+    )
+
     # Richer relationship typing: an OTHER escape-hatch + free-text label (so the research
     # can capture SUPPLIES/FUNDS/OWNS/EMPLOYS/FAMILY_OF etc. beyond the 7-type enum) plus
     # OPTIONAL since/until dates. The OTHER edges are seeded downstream (graph_builder
@@ -644,6 +686,25 @@ def build_extraction_prompt(
             'Omit any number you cannot give a unit and as-of date for. An empty array ("quantitative_facts": []) is fine.\n'
         )
 
+    # ONTOLOGY inclusion/tiering rule (CLAUDE_ONTOLOGY §2 / GEMINI_PRO_ONTOLOGY §6.1):
+    # keep journalists/outlets/pollsters/analysts you merely CITE out of actors[] (they
+    # are SOURCES) unless they themselves move the outcome; classify concepts as tier 4.
+    tiering_note = ""
+    if forecast_inputs:
+        tiering_note = (
+            "ENTITY TIERING: a news outlet, reporter, pollster, or analyst that you only CITE is a SOURCE — put it in "
+            "sources[], NOT actors[]. Include such an entity as an actor ONLY if it itself moves the outcome, and then "
+            'set simulation_tier=3. Set simulation_tier=4 for abstract concepts/resources; 2 for stakeholders/factions; '
+            "1 for core decision-makers. Profile tier 1-2 actors deeply — populate worldview (values/beliefs), incentives "
+            "(driver/gains_if/loses_if), resources, and risk_tolerance from your actors-and-incentives analysis; leave them "
+            "thin for tier 3-4. RELATIONSHIP VALENCE: when you can, tag each edge with its valence (allied/adversarial/"
+            "neutral/transactional/directional) and a polarity in [-1,1] so rivals are not confused with partners or "
+            "buyers; omit either if unsure (it is derived from type). Prefer a specific relationship type (SUPPLIES, "
+            "CUSTOMER_OF, FUNDS, INVESTS_IN, BACKS, OWNS, SUPPORTS, SANCTIONS, REPORTS_ON, CONSUMES, ENDORSES, CRITICIZES, "
+            "LITIGATES_AGAINST) over OTHER when one fits. Omit any of these fields you did not research; a model that omits "
+            "all of them still produces a valid actors.json.\n"
+        )
+
     return (
         "Based ONLY on the research you just completed, output a single JSON object "
         "and NOTHING else (no prose, no code fences). It must match this schema:\n\n"
@@ -665,7 +726,9 @@ def build_extraction_prompt(
         '      "stance": string,                   // their public position\n'
         '      "influence": "high"|"medium"|"low",\n'
         f"{actor_grade}"
+        f"{actor_archetype}"
         f"{actor_motive}"
+        f"{actor_dna}"
         '      "memory": string                    // what this actor knows/believes\n'
         "    }\n"
         "  ],\n"
@@ -673,11 +736,12 @@ def build_extraction_prompt(
         "    {\n"
         '      "source": string,                   // MUST equal an actors[].name\n'
         '      "target": string,                   // MUST equal an actors[].name\n'
-        '      "type": "ALLY_OF"|"OPPOSES"|"COMPETES_WITH"|"REGULATES"|"DEPENDS_ON"|"PARTNERS_WITH"|"INFLUENCES"|"OTHER",\n'
-        '      "relation_label": string,            // OPTIONAL free-text label when type=="OTHER" (e.g. SUPPLIES, FUNDS, OWNS, EMPLOYS, FAMILY_OF)\n'
+        '      "type": "ALLY_OF"|"OPPOSES"|"COMPETES_WITH"|"REGULATES"|"DEPENDS_ON"|"PARTNERS_WITH"|"INFLUENCES"|"SUPPLIES"|"CUSTOMER_OF"|"FUNDS"|"INVESTS_IN"|"BACKS"|"OWNS"|"SUPPORTS"|"SANCTIONS"|"REPORTS_ON"|"CONSUMES"|"ENDORSES"|"CRITICIZES"|"LITIGATES_AGAINST"|"OTHER",\n'
+        '      "relation_label": string,            // OPTIONAL free-text label when type=="OTHER" (e.g. EMPLOYS, FAMILY_OF) — prefer a listed type when one fits\n'
         '      "sign": "ally"|"rival"|"neutral",\n'
         '      "strength": "high"|"medium"|"low",\n'
         f"{rel_grade}"
+        f"{rel_valence}"
         f"{rel_since_until}"
         '      "basis": string                     // 1-line researched evidence for the edge\n'
         "    }\n"
@@ -703,6 +767,7 @@ def build_extraction_prompt(
         "actors-and-incentives analysis — current_situation and fault_lines are required.\n"
         f"{grading_note}"
         f"{quant_note}"
+        f"{tiering_note}"
         f"Write all natural-language string values in {lang}. Output valid JSON only."
     )
 

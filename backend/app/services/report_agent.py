@@ -1169,9 +1169,131 @@ class ReportAgent:
                 cb = _actors.contested_claims_block(self.actors)
                 if cb:
                     parts.append(cb)
+            # CLAUDE §9.4/§10：把关键 actor 的关系名册（盟友/对手/竞争者/客户/供应商/出资方/
+            # 监管方）+ 核心激励钉进背景，让叙事按真实阵营展开。受 REPORT_RELATIONAL_ROSTER
+            # 约束（默认开）；仅当 actor 携带 relationships/worldview/incentives 时生效——
+            # 字段全缺时 _build_relational_roster_block 返回空串，背景块与历史逐字节一致（NO-OP）。
+            if getattr(Config, "REPORT_RELATIONAL_ROSTER", True):
+                rb = self._build_relational_roster_block(_actors)
+                if rb:
+                    parts.append(rb)
         except Exception as _e:
             logger.debug(f"研究契约富化块渲染跳过: {_e}")
         return "\n\n".join(parts)
+
+    def _build_relational_roster_block(
+        self,
+        _actors,
+        max_actors: int = 8,
+        max_per_bucket: int = 4,
+        max_chars: int = 3000,
+    ) -> str:
+        """CLAUDE §9.4/§10：把关键 actor 的关系名册 + 核心激励渲染成紧凑的背景块。
+
+        站在每个核心方视角，列出其盟友/伙伴/支持者/出资方/客户/供应商/竞争者/对手/监管方
+        （来自 actors.relational_roster 的 10 个命名桶），并附其核心激励（driver/gains_if/
+        loses_if，来自 incentives），让报告叙事能按真实阵营与得失结构展开，而非泛泛而谈。
+
+        NO-OP 保证：当没有任何 actor 携带 relationships / worldview / incentives 等新字段时，
+        本方法返回空串，背景块与历史逐字节一致（旧档案 / 现有离线测试夹具行为不变）。
+        actor 池按 salience_score 降序、并经 is_agent_eligible 过滤（报道者/概念/资源不入选），
+        逐项截断到 max_per_bucket，整体截断到 max_chars，与既有富化块同样有界。
+        """
+        rows = _actors.extract_actor_rows(self.actors)
+        if not rows:
+            return ""
+        # 仅当确有关系名册或激励数据时才渲染（否则与历史逐字节一致）。先判断是否存在任一关系行，
+        # 没有关系边时所有桶必为空，直接早退，避免无谓遍历。
+        if not _actors.extract_relationship_rows(self.actors):
+            has_incentive = any(
+                isinstance(r.get("incentives"), list) and r.get("incentives") for r in rows
+            )
+            if not has_incentive:
+                return ""
+
+        # 能动 actor（tier 1/2）按显著度降序；稳定排序保留同分时的原始出现序。
+        eligible = [r for r in rows if _actors.is_agent_eligible(r)]
+        eligible.sort(key=lambda r: _actors.salience_score(r), reverse=True)
+
+        # 名册桶 → 中文小标题（与 actors.roster_block 的口吻一致，按谈判语义排序）。
+        bucket_labels = (
+            ("allies", "盟友"),
+            ("partners", "伙伴"),
+            ("supporters", "支持者"),
+            ("backers_investors", "出资方/投资人"),
+            ("customers", "客户/下游"),
+            ("suppliers", "供应商/上游"),
+            ("competitors", "竞争对手"),
+            ("opponents", "对手/对立方"),
+            ("regulators", "监管方"),
+        )
+
+        lines: List[str] = []
+        rendered = 0
+        for row in eligible:
+            if rendered >= max_actors:  # 精确限制渲染的核心 actor 数（有界，与既有富化块一致）
+                break
+            name = str(row.get("name", "") or "").strip()
+            if not name:
+                continue
+            roster = _actors.relational_roster(name, self.actors)
+
+            roster_segs: List[str] = []
+            for bucket, label in bucket_labels:
+                items = roster.get(bucket) or []
+                if not items:
+                    continue
+                names: List[str] = []
+                for it in items[:max_per_bucket]:
+                    nm = str(it.get("name", "") or "").strip()
+                    if nm:
+                        names.append(nm)
+                if names:
+                    roster_segs.append(f"{label}：" + "、".join(names))
+
+            # 核心激励（driver/gains_if/loses_if）压成一两条短句，避免与 persona DNA 块重复冗长。
+            inc_segs: List[str] = []
+            incentives = row.get("incentives")
+            if isinstance(incentives, list):
+                for inc in incentives[:2]:
+                    if isinstance(inc, dict):
+                        driver = str(inc.get("driver", "") or "").strip()
+                        gains = str(inc.get("gains_if", "") or "").strip()
+                        loses = str(inc.get("loses_if", "") or "").strip()
+                        if not (driver or gains or loses):
+                            continue
+                        seg = driver or "动机"
+                        tail: List[str] = []
+                        if gains:
+                            tail.append(f"得益于「{gains}」")
+                        if loses:
+                            tail.append(f"受损于「{loses}」")
+                        if tail:
+                            seg += "（" + "，".join(tail) + "）"
+                        inc_segs.append(seg)
+                    else:
+                        s = str(inc or "").strip()
+                        if s:
+                            inc_segs.append(s)
+
+            if not (roster_segs or inc_segs):
+                continue
+            lines.append(f"- **{name}**")
+            if roster_segs:
+                lines.append("  - 关系网：" + "；".join(roster_segs))
+            if inc_segs:
+                lines.append("  - 核心激励：" + "；".join(inc_segs))
+            rendered += 1
+
+        if not lines:
+            return ""
+        block = (
+            "## 关键角色的关系网与激励（深度研究实证；撰写时据此按真实阵营与得失结构展开）\n"
+            + "\n".join(lines)
+        )
+        if len(block) > max_chars:
+            block = block[:max_chars] + "\n…(关系网名册已截断)"
+        return block
 
     def _build_sources_index(self) -> str:
         """T4.1: 把研究来源渲染成 [S1]/[S2] 引用索引；缺省返回空串。

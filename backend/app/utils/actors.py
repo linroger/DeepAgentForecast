@@ -17,12 +17,27 @@ handoff 契约中的 actors.json 形如（NEW 字段均为可选，缺失即降�
          // NEW 角色内在动机（actors-and-incentives 结构化，均可选；缺失即降级）：
          "goals": ["..."], "constraints": ["..."], "assets": ["..."],
          "vulnerabilities": ["..."], "stated_vs_revealed": "言行差异",
-         "memory": "该角色对事件的已知信息/立场记忆"}
+         "memory": "该角色对事件的已知信息/立场记忆",
+         // NEW 本体分类（ONTOLOGY：区分「能动 agent」与「报道者/概念/资源」，均可选）：
+         "archetype": "actor|collective|institution_rule|asset_object|event|signal|claim_narrative|constraint_resource|place_jurisdiction|source|scenario",
+         "simulation_tier": 1,                    // 1=核心决策者 2=利益相关方 3=被动信息源 4=抽象概念/资源
+         "role_class": "principal|arbiter|stakeholder|amplifier|intermediary",
+         "salience": {"score": 0.85, "tier": "high|medium|low", "basis": "..."},
+         // NEW 行为 DNA（持久人格底座；缺失即降级到旧的 stance/influence 标签）：
+         "worldview": {"values": ["..."], "beliefs": ["..."], "identity": "...", "frame": "..."},
+         "incentives": [{"driver": "...", "gains_if": "...", "loses_if": "...", "intensity": "high|medium|low"}],
+         "resources": ["..."],                    // assets 的超集/别名
+         "risk_tolerance": "low|medium|high"}
       ],
       "relationships": [                         // NEW — 命名 actor 之间的有向、带类型边
         {"source": "...", "target": "...",       // source/target 必须 = 某个 actors[].name
-         "type": "ALLY_OF|OPPOSES|COMPETES_WITH|REGULATES|DEPENDS_ON|PARTNERS_WITH|INFLUENCES|OTHER",
+         // 8 个旧类型保留；NEW 经济/治理/媒体类型扩展（见 REL_EDGE_NAME）：
+         "type": "ALLY_OF|OPPOSES|COMPETES_WITH|REGULATES|DEPENDS_ON|PARTNERS_WITH|INFLUENCES|OTHER"
+                 "|SUPPLIES|CUSTOMER_OF|FUNDS|INVESTS_IN|BACKS|OWNS|SUPPORTS|SANCTIONS"
+                 "|REPORTS_ON|CONSUMES|ENDORSES|CRITICIZES|LITIGATES_AGAINST",
          "relation_label": "type==OTHER 时的自由文本标签，如 SUPPLIES/FUNDS/OWNS",  // NEW 可选
+         "valence": "allied|adversarial|neutral|transactional|directional",  // NEW 可选；缺失从 type 推
+         "polarity": 0.4,                         // NEW 可选 -1..1；缺失从 valence/type 推
          "sign": "ally|rival|neutral", "strength": "high|medium|low",
          "since": "YYYY-MM-DD", "until": "YYYY-MM-DD",  // NEW 可选起止日
          "basis": "调研实证一行"}
@@ -79,6 +94,11 @@ handoff 契约中的 actors.json 形如（NEW 字段均为可选，缺失即降�
 * ``quantitative_facts_block`` / ``extract_quantitative_rows`` — I-0-5：定量事实表渲染 / 安全抽取。
 * ``contested_claims_block`` / ``extract_contested_rows``      — I-0-1：争议证据块渲染 / 安全抽取。
 * ``forecast_inputs_block`` / ``extract_forecast_inputs``      — I-0-2：预测输入块渲染 / 安全抽取。
+* ``entity_archetype`` / ``entity_simulation_tier`` / ``is_agent_eligible`` — ONTOLOGY：实体分类与「能动 agent」准入门。
+* ``salience_score``         — ONTOLOGY：actor 的显著度评分（salience.score → influence 回退）。
+* ``relation_valence`` / ``relation_polarity`` — ONTOLOGY：关系边的价（allied/adversarial/…）与极性（-1..1）。
+* ``relational_roster`` / ``roster_block`` — ONTOLOGY：把 relationships[] 投影为 10 个命名关系桶 / 渲染关系网角色块。
+* ``behavioral_dna_block``   — ONTOLOGY：把 worldview/incentives/resources/risk_tolerance 渲染为人格底座块。
 
 设计原则：actors.json 永远是「可选增强」。任何字段缺失 / 类型不符都静默降级为
 None / 空串 / 空列表，绝不让结构化数据的缺陷阻断原有的纯 LLM 生成路径。
@@ -298,6 +318,21 @@ REL_EDGE_NAME = {
     "DEPENDS_ON": "DEPENDS_ON",
     "PARTNERS_WITH": "PARTNERS_WITH",
     "INFLUENCES": "INFLUENCES",
+    # ONTOLOGY 扩展类型：经济/治理/媒体边。KG 边名 = 类型本身（恒等），让带价的供需/
+    # 出资/持股/制裁/报道等关系不再被压平成无类型的 RELATES_TO，从而保留语义与方向。
+    "SUPPLIES": "SUPPLIES",
+    "CUSTOMER_OF": "CUSTOMER_OF",
+    "FUNDS": "FUNDS",
+    "INVESTS_IN": "INVESTS_IN",
+    "BACKS": "BACKS",
+    "OWNS": "OWNS",
+    "SUPPORTS": "SUPPORTS",
+    "SANCTIONS": "SANCTIONS",
+    "REPORTS_ON": "REPORTS_ON",
+    "CONSUMES": "CONSUMES",
+    "ENDORSES": "ENDORSES",
+    "CRITICIZES": "CRITICIZES",
+    "LITIGATES_AGAINST": "LITIGATES_AGAINST",
     # OTHER 是「逃生舱」类型：研究用 relation_label 给出自由文本边名（SUPPLIES/FUNDS/…）。
     # 这里给个兜底边名，graph_builder 会优先用 relation_label，否则落到 RELATES_TO。
     "OTHER": "RELATES_TO",
@@ -312,6 +347,20 @@ REL_LABEL = {
     "DEPENDS_ON": "依赖",
     "PARTNERS_WITH": "伙伴",
     "INFLUENCES": "影响",
+    # ONTOLOGY 扩展类型的双语标签（persona/报告提示块用；保持与旧 8 类同样的简洁口吻）。
+    "SUPPLIES": "供应",
+    "CUSTOMER_OF": "客户",
+    "FUNDS": "出资",
+    "INVESTS_IN": "投资",
+    "BACKS": "扶持",
+    "OWNS": "持有",
+    "SUPPORTS": "支持",
+    "SANCTIONS": "制裁",
+    "REPORTS_ON": "报道",
+    "CONSUMES": "消费",
+    "ENDORSES": "背书",
+    "CRITICIZES": "批评",
+    "LITIGATES_AGAINST": "诉讼",
     "OTHER": "关联",
 }
 
@@ -389,6 +438,384 @@ def relationship_briefing(actor_name: str, actors: Optional[Any], max_edges: int
     return "## 你的社会关系网（调研实证，互动时据此 @ 相关方）\n" + "\n".join("- " + x for x in out)
 
 
+# ---------------------------------------------------------------------------
+# 本体分类 / 行为 DNA / 关系网角色（ONTOLOGY 层 — 让「报道者/概念/资源」不被当作能动 agent，
+# 给真正的 actor 注入价值观/动机/资源的人格底座，并把关系投影成命名关系桶）
+# ---------------------------------------------------------------------------
+
+# 合法 archetype 枚举（其余值原样保留但按「非 actor」处理）。
+ENTITY_ARCHETYPES = (
+    "actor", "collective", "institution_rule", "asset_object", "event",
+    "signal", "claim_narrative", "constraint_resource", "place_jurisdiction",
+    "source", "scenario",
+)
+# 能动（可作为模拟 agent）的 archetype：只有真实决策主体 / 群体派系才进 agent 池。
+_AGENT_ARCHETYPES = frozenset({"actor", "collective"})
+
+# 关系价 → 极性基准值（relation_polarity 在无显式 polarity 时据此推算，并按 strength 缩放）。
+_VALENCE_POLARITY = {
+    "allied": 0.4,
+    "adversarial": -0.4,
+    "transactional": 0.15,
+    "directional": 0.0,
+    "neutral": 0.0,
+}
+# 关系类型 → 价（无显式 valence 时据此推）。四类语义簇：结盟/对抗/经济/治理-依赖-影响-报道。
+_REL_TYPE_VALENCE = {
+    # 结盟（正向）
+    "ALLY_OF": "allied", "SUPPORTS": "allied", "PARTNERS_WITH": "allied", "ENDORSES": "allied",
+    # 对抗（负向）
+    "OPPOSES": "adversarial", "COMPETES_WITH": "adversarial", "SANCTIONS": "adversarial",
+    "CRITICIZES": "adversarial", "LITIGATES_AGAINST": "adversarial",
+    # 经济（交易性）
+    "SUPPLIES": "transactional", "CUSTOMER_OF": "transactional", "FUNDS": "transactional",
+    "INVESTS_IN": "transactional", "BACKS": "transactional", "OWNS": "transactional",
+    "CONSUMES": "transactional",
+    # 治理 / 依赖 / 影响 / 报道（有向、非褒贬）
+    "REGULATES": "directional", "DEPENDS_ON": "directional", "INFLUENCES": "directional",
+    "REPORTS_ON": "directional",
+}
+
+
+def entity_archetype(actor: Optional[Dict[str, Any]]) -> str:
+    """读取 actor 的 ``archetype``；缺失/非法返回默认 "actor"（保持旧行为：一切皆能动）。"""
+    if not isinstance(actor, dict):
+        return "actor"
+    raw = str(actor.get("archetype", "") or "").strip().lower()
+    return raw if raw in ENTITY_ARCHETYPES else "actor"
+
+
+def entity_simulation_tier(actor: Optional[Dict[str, Any]]) -> int:
+    """读取 actor 的 ``simulation_tier`` ∈ {1,2,3,4}；缺失时按 archetype/type/influence 推断。
+
+    推断规则（与契约一致）：
+    * source archetype 或「仅被引用的媒体」→ 3（被动信息源）。
+    * 其余非 actor/collective 的 archetype（事件/概念/资源/地点等）→ 4（抽象）。
+    * actor/collective：influence=high → 1（核心决策者），否则 → 2（利益相关方）。
+    * 完全无信号 → 1（默认能动，保持旧行为）。
+    """
+    if not isinstance(actor, dict):
+        return 1
+    raw = actor.get("simulation_tier")
+    if isinstance(raw, bool):  # bool 是 int 子类，需先排除
+        raw = None
+    if isinstance(raw, int) and raw in (1, 2, 3, 4):
+        return raw
+    if isinstance(raw, str):
+        m = re.search(r"[1-4]", raw)
+        if m:
+            return int(m.group(0))
+    arch = entity_archetype(actor)
+    if arch == "source":
+        return 3
+    if arch not in _AGENT_ARCHETYPES:
+        return 4
+    # actor / collective：按影响力分核心 / 利益相关方
+    w = influence_weight(actor)
+    if w is not None and w >= INFLUENCE_WEIGHTS["high"]:
+        return 1
+    return 1 if w is None else 2
+
+
+def is_agent_eligible(actor: Optional[Dict[str, Any]]) -> bool:
+    """能动 agent 准入门：tier ∈ {1,2}（即 archetype 实质为 actor/collective）。
+
+    报道者/媒体出口/抽象概念/资源（tier 3/4）被挡在模拟 agent 池外，避免它们被
+    错误地实例化为有行动力的角色。字段全缺时 tier 推断为 1，故旧档案全部放行。
+    """
+    return entity_simulation_tier(actor) in (1, 2)
+
+
+def salience_score(actor: Optional[Dict[str, Any]]) -> float:
+    """actor 的显著度评分 ∈ [0,1]：优先读 ``salience.score``，否则从 influence 回退。
+
+    回退标度与契约一致：influence high/medium/low → 0.85/0.55/0.3；无信号 → 0.3。
+    用于 agent 上限按「显著度」而非「原始度数」排序，让核心方优先入池。
+    """
+    if not isinstance(actor, dict):
+        return 0.3
+    sal = actor.get("salience")
+    if isinstance(sal, dict):
+        score = sal.get("score")
+        if isinstance(score, bool):
+            score = None
+        if isinstance(score, (int, float)):
+            return max(0.0, min(1.0, float(score)))
+        # 无数值 score 时，退而读 salience.tier 文本
+        tier = str(sal.get("tier", "") or "").strip().lower()
+        if tier in ("high", "高"):
+            return 0.85
+        if tier in ("medium", "med", "中"):
+            return 0.55
+        if tier in ("low", "低"):
+            return 0.3
+    w = influence_weight(actor)
+    if w is None:
+        return 0.3
+    if w >= INFLUENCE_WEIGHTS["high"]:
+        return 0.85
+    if w >= INFLUENCE_WEIGHTS["medium"]:
+        return 0.55
+    return 0.3
+
+
+def relation_valence(rel: Optional[Dict[str, Any]]) -> str:
+    """关系边的价 ∈ {allied, adversarial, transactional, directional, neutral}。
+
+    优先读显式 ``valence``；否则按 type 推（_REL_TYPE_VALENCE）；OTHER/未知 → "neutral"。
+    让「盟友 != 对手」「供应商 != 制裁方」在跟随图/情感计算里被正确区分。
+    """
+    if not isinstance(rel, dict):
+        return "neutral"
+    raw = str(rel.get("valence", "") or "").strip().lower()
+    if raw in _VALENCE_POLARITY:
+        return raw
+    typ = str(rel.get("type", "") or "").strip().upper()
+    return _REL_TYPE_VALENCE.get(typ, "neutral")
+
+
+def relation_polarity(rel: Optional[Dict[str, Any]]) -> float:
+    """关系边的极性 ∈ [-1,1]：优先读显式 ``polarity``，否则从价推（按 strength 缩放）。
+
+    缺省映射：allied→+0.4 / adversarial→-0.4 / transactional→+0.15 / 其余→0.0。
+    strength=high/medium/low → ×1.0/0.7/0.45（让强盟友比弱盟友极性更高）。
+    """
+    if not isinstance(rel, dict):
+        return 0.0
+    raw = rel.get("polarity")
+    if isinstance(raw, bool):
+        raw = None
+    if isinstance(raw, (int, float)):
+        return max(-1.0, min(1.0, float(raw)))
+    base = _VALENCE_POLARITY.get(relation_valence(rel), 0.0)
+    if base == 0.0:
+        return 0.0
+    strength = str(rel.get("strength", "") or "").strip().lower()
+    scale = 1.0
+    if strength in ("high", "高"):
+        scale = 1.0
+    elif strength in ("medium", "med", "中"):
+        scale = 0.7
+    elif strength in ("low", "低"):
+        scale = 0.45
+    return max(-1.0, min(1.0, base * scale))
+
+
+# relational_roster 的 10 个命名桶 → (关系类型集合, 方向)。方向语义：
+#   "out"  = 我是 source 时该 target 入桶；
+#   "in"   = 我是 target 时该 source 入桶；
+#   "both" = 任一端皆入桶（对称关系：竞争/对立等）。
+# 同一类型可同时供应多个桶（如 SUPPLIES：我作为 supplier 的 target 是 customer；
+# 我作为 customer 的 source 是 supplier）。
+_ROSTER_RULES: Dict[str, List[tuple]] = {
+    "allies": [("ALLY_OF", "both"), ("PARTNERS_WITH", "both"), ("SUPPORTS", "in"), ("ENDORSES", "in")],
+    "opponents": [("OPPOSES", "both"), ("SANCTIONS", "in"), ("CRITICIZES", "in"),
+                  ("LITIGATES_AGAINST", "both")],
+    "competitors": [("COMPETES_WITH", "both")],
+    # 我的客户：我是 SUPPLIES 的 source，或我是 CUSTOMER_OF 的 target，或 CONSUMES 的 target。
+    "customers": [("SUPPLIES", "out"), ("CUSTOMER_OF", "in"), ("CONSUMES", "in")],
+    # 我的供应商：我是 SUPPLIES 的 target，或我是 CUSTOMER_OF 的 source，或 CONSUMES 的 source。
+    "suppliers": [("SUPPLIES", "in"), ("CUSTOMER_OF", "out"), ("CONSUMES", "out"), ("DEPENDS_ON", "out")],
+    # 我的出资方/投资人：我是 FUNDS/INVESTS_IN/BACKS 的 target。
+    "backers_investors": [("FUNDS", "in"), ("INVESTS_IN", "in"), ("BACKS", "in")],
+    # 我的支持者：SUPPORTS/ENDORSES 的 source。
+    "supporters": [("SUPPORTS", "out"), ("ENDORSES", "out")],
+    # 监管我的方：REGULATES 的 source（我被监管）。
+    "regulators": [("REGULATES", "in")],
+    # 依赖我的方：DEPENDS_ON 的 source（依赖方），或我 SUPPLIES 的 target（下游对我有依赖）。
+    "dependents": [("DEPENDS_ON", "in"), ("SUPPLIES", "out")],
+    "partners": [("PARTNERS_WITH", "both")],
+}
+
+
+def _rel_strength_text(rel: Dict[str, Any]) -> str:
+    """关系行的强度文本（兼容 strength；缺省空串）。"""
+    return str(rel.get("strength", "") or "").strip()
+
+
+def relational_roster(actor_name: str, actors: Optional[Any]) -> Dict[str, List[Dict[str, Any]]]:
+    """把 relationships[] 投影为以 ``actor_name`` 为中心的 10 个命名关系桶。
+
+    每桶为 [{name, basis, strength}]，按 relationships[] 的出现序去重（同名只取首条）。
+    端点用 normalize_name 与 actor 表对齐（兼容别名）。无关系/无匹配返回 10 个空桶。
+
+    桶含义（站在 actor_name 视角）：allies/opponents/competitors/customers/suppliers/
+    backers_investors/supporters/regulators/dependents/partners。
+    """
+    buckets: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _ROSTER_RULES}
+    if not actor_name:
+        return buckets
+    rows = extract_relationship_rows(actors)
+    if not rows:
+        return buckets
+    me = normalize_name(actor_name)
+    if not me:
+        return buckets
+    # 每桶已收名集合（去重）。
+    seen: Dict[str, set] = {k: set() for k in _ROSTER_RULES}
+
+    def add(bucket: str, other_raw: Any, rel: Dict[str, Any]) -> None:
+        name = str(other_raw or "").strip()
+        if not name:
+            return
+        key = normalize_name(name)
+        if not key or key == me or key in seen[bucket]:
+            return
+        seen[bucket].add(key)
+        buckets[bucket].append({
+            "name": name,
+            "basis": str(rel.get("basis", "") or "").strip(),
+            "strength": _rel_strength_text(rel),
+        })
+
+    for r in rows:
+        typ = str(r.get("type", "") or "").strip().upper()
+        s_raw, t_raw = r.get("source"), r.get("target")
+        s, t = normalize_name(str(s_raw or "")), normalize_name(str(t_raw or ""))
+        i_am_source = (s == me)
+        i_am_target = (t == me)
+        if not (i_am_source or i_am_target):
+            continue
+        for bucket, rules in _ROSTER_RULES.items():
+            for rtype, direction in rules:
+                if rtype != typ:
+                    continue
+                if direction == "out" and i_am_source:
+                    add(bucket, t_raw, r)
+                elif direction == "in" and i_am_target:
+                    add(bucket, s_raw, r)
+                elif direction == "both":
+                    if i_am_source:
+                        add(bucket, t_raw, r)
+                    if i_am_target:
+                        add(bucket, s_raw, r)
+    return buckets
+
+
+# roster_block 的桶 → 中文小标题（按谈判/竞争语义排序，最实用的在前）。
+_ROSTER_BUCKET_LABEL = (
+    ("allies", "盟友"),
+    ("partners", "伙伴"),
+    ("supporters", "支持者"),
+    ("backers_investors", "出资方/投资人"),
+    ("customers", "客户/下游"),
+    ("suppliers", "供应商/上游"),
+    ("dependents", "依赖你的方"),
+    ("competitors", "竞争对手"),
+    ("opponents", "对手/对立方"),
+    ("regulators", "监管你的方"),
+)
+
+
+def roster_block(actor_name: str, actors: Optional[Any], max_per_bucket: int = 5) -> str:
+    """把 relational_roster 渲染为「## 关系网角色」提示块；无任何关系返回空串。
+
+    比 relationship_briefing 更结构化：按盟友/对手/客户/供应商等分组列出真实命名对手方，
+    让 persona 在互动时能精确 @ 到正确阵营。每桶截断到 max_per_bucket。
+    """
+    roster = relational_roster(actor_name, actors)
+    lines: List[str] = []
+    for bucket, label in _ROSTER_BUCKET_LABEL:
+        items = roster.get(bucket) or []
+        if not items:
+            continue
+        names: List[str] = []
+        for it in items[:max_per_bucket]:
+            nm = str(it.get("name", "") or "").strip()
+            if not nm:
+                continue
+            strength = str(it.get("strength", "") or "").strip()
+            names.append(f"{nm}（{strength}）" if strength else nm)
+        if names:
+            lines.append(f"- {label}：" + "、".join(names))
+    if not lines:
+        return ""
+    return "## 关系网角色（调研实证：互动时据此 @ 正确阵营）\n" + "\n".join(lines)
+
+
+def _dna_str_list(value: Any, limit: int) -> List[str]:
+    """取出非空字符串列表（容错：非 list 返回 []，逐项 strip 去空）。"""
+    if not isinstance(value, list):
+        return []
+    out: List[str] = []
+    for x in value:
+        s = str(x or "").strip()
+        if s:
+            out.append(s)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def behavioral_dna_block(actor: Optional[Dict[str, Any]]) -> str:
+    """把 worldview/incentives/resources/risk_tolerance 渲染为「人格底座」提示块。
+
+    缺全部字段时返回空串（旧档案输出不变）。让 persona 从「立场标签」升级为有价值观、
+    信念、得失结构（incentives 的 driver/gains_if/loses_if）与风险偏好的稳定人格。
+    """
+    if not isinstance(actor, dict):
+        return ""
+    parts: List[str] = []
+
+    wv = actor.get("worldview")
+    if isinstance(wv, dict):
+        identity = str(wv.get("identity", "") or "").strip()
+        frame = str(wv.get("frame", "") or "").strip()
+        values = _dna_str_list(wv.get("values"), 6)
+        beliefs = _dna_str_list(wv.get("beliefs"), 6)
+        if identity:
+            parts.append(f"- 身份认同: {identity}")
+        if frame:
+            parts.append(f"- 看待问题的框架: {frame}")
+        if values:
+            parts.append("- 核心价值观: " + "；".join(values))
+        if beliefs:
+            parts.append("- 核心信念: " + "；".join(beliefs))
+
+    incentives = actor.get("incentives")
+    if isinstance(incentives, list) and incentives:
+        inc_lines: List[str] = []
+        for inc in incentives[:6]:
+            if isinstance(inc, dict):
+                driver = str(inc.get("driver", "") or "").strip()
+                gains = str(inc.get("gains_if", "") or "").strip()
+                loses = str(inc.get("loses_if", "") or "").strip()
+                intensity = str(inc.get("intensity", "") or "").strip()
+                if not (driver or gains or loses):
+                    continue
+                seg = f"  - {driver}" if driver else "  - 动机"
+                tail: List[str] = []
+                if gains:
+                    tail.append(f"得益于「{gains}」")
+                if loses:
+                    tail.append(f"受损于「{loses}」")
+                if tail:
+                    seg += "：" + "，".join(tail)
+                if intensity:
+                    seg += f"（强度 {intensity}）"
+                inc_lines.append(seg)
+            else:
+                s = str(inc or "").strip()  # 容忍纯字符串写法
+                if s:
+                    inc_lines.append(f"  - {s}")
+        if inc_lines:
+            parts.append("- 激励结构（得失驱动）:")
+            parts.extend(inc_lines)
+
+    # resources 是 assets 的超集/别名：优先 resources，回退 assets。
+    resources = _dna_str_list(actor.get("resources"), 8) or _dna_str_list(actor.get("assets"), 8)
+    if resources:
+        parts.append("- 可调动资源: " + "；".join(resources))
+
+    risk = str(actor.get("risk_tolerance", "") or "").strip()
+    if risk:
+        parts.append(f"- 风险偏好: {risk}")
+
+    if not parts:
+        return ""
+    return "## 行为 DNA（持久人格底座，决策时据此保持一致的价值观与得失计算）\n" + "\n".join(parts)
+
+
 def build_initial_follow_graph(
     actors: Optional[Any],
     agent_id_by_name: Dict[str, int],
@@ -423,6 +850,22 @@ def build_initial_follow_graph(
             pairs.add((d, s))           # 受众关注影响者
         elif typ == "REGULATES":
             pairs.add((s, d))           # 监管方关注被监管方（监控）
+        # ---- ONTOLOGY 扩展类型（旧 8 类无新字段时上面已 continue / 命中，下面纯属增量）----
+        elif typ in ("SUPPLIES", "CUSTOMER_OF"):
+            # 依赖侧关注供给侧：SUPPLIES(source=供应商) → 客户(d) 关注供应商(s)；
+            # CUSTOMER_OF(source=客户) → 客户(s) 关注供应商(d)。
+            pairs.add((d, s) if typ == "SUPPLIES" else (s, d))
+        elif typ in ("FUNDS", "INVESTS_IN", "BACKS"):
+            pairs.add((d, s))           # 受资助/被投/被扶持方关注其出资方/投资人/后台
+        elif typ == "OWNS":
+            pairs.add((d, s))           # 被持有方关注其所有者
+        elif typ in ("SUPPORTS", "ENDORSES"):
+            pairs.add((d, s))           # 被支持/被背书方关注支持者/背书者
+        elif typ in ("SANCTIONS", "LITIGATES_AGAINST", "CRITICIZES"):
+            # 制裁/诉讼/批评：双向监视（被针对方紧盯发起方，发起方也持续盯目标）
+            pairs.add((s, d))
+            pairs.add((d, s))
+        # REPORTS_ON / CONSUMES：报道者/消费者不应被建成能动 agent 的关注边（无 follow）。
     return [list(p) for p in pairs]
 
 

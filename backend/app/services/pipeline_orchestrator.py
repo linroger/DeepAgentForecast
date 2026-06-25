@@ -2537,10 +2537,20 @@ class PipelineOrchestrator:
                     central_question=(actors.get("central_question") if isinstance(actors, dict) else None),
                     actors=actors,
                 )
-                project.ontology = {
-                    "entity_types": ontology.get("entity_types", []),
-                    "edge_types": ontology.get("edge_types", []),
-                }
+                # CLAUDE §12.1 / CODEX Step 1：保留完整本体对象。set_ontology 与现有读者只读
+                # entity_types/edge_types（见 graph_builder.set_ontology），故除这两键外，生成器
+                # 还可能返回的 archetype 分类的类型、边族/valence、analysis_summary、schema_version、
+                # domain 等键在被消费前都是惰性的——保留它们零风险，且为下游 valenced/archetype
+                # 消费打底。旗标关闭、或生成器只返回两键时，行为与旧逻辑逐字节一致。
+                if getattr(Config, "ONTOLOGY_RICH_SCHEMA", True) and isinstance(ontology, dict):
+                    project.ontology = dict(ontology)
+                    project.ontology["entity_types"] = ontology.get("entity_types", [])
+                    project.ontology["edge_types"] = ontology.get("edge_types", [])
+                else:
+                    project.ontology = {
+                        "entity_types": ontology.get("entity_types", []),
+                        "edge_types": ontology.get("edge_types", []),
+                    }
                 project.analysis_summary = ontology.get("analysis_summary", "")
                 project.status = ProjectStatus.ONTOLOGY_GENERATED
                 ProjectManager.save_project(project)

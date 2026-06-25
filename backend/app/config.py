@@ -135,12 +135,22 @@ class Config:
     # 开启后本体层按 prompt 自动在 general_forecast / social_opinion 之间择一（I-1-3）；
     # 默认关 = 始终用上面的 ONTOLOGY_TEMPLATE（与现状逐字节一致）。
     ONTOLOGY_AUTO_SELECT = os.environ.get('ONTOLOGY_AUTO_SELECT', 'false').strip().lower() == 'true'
+    # 更丰富的本体抽取 prompt（实体分类 archetype/simulation_tier、actor 行为 DNA、valenced 关系）+
+    # 保留完整 ontology 对象（CLAUDE/CODEX/GEMINI 三方收敛本体契约）。默认开：新字段缺失时为 no-op，
+    # 抽取结果与现状逐字节一致（旧数据/旧测试夹具不受影响）。
+    ONTOLOGY_RICH_SCHEMA = os.environ.get('ONTOLOGY_RICH_SCHEMA', 'True').strip().lower() == 'true'
     PERSONA_EGO_RETRIEVAL = os.environ.get('PERSONA_EGO_RETRIEVAL', 'False').strip().lower() == 'true'   # I-1-5 自我中心人设上下文
+    # 人设提示注入 actor 行为 DNA（价值观/信念/激励/资源/风险偏好）+ 关系名册（盟友/对手/竞争者…）。
+    # 默认开；仅当 actor 携带 worldview/incentives/resources 等新字段时生效，缺失时为 no-op（与现状一致）。
+    PERSONA_BEHAVIORAL_DNA = os.environ.get('PERSONA_BEHAVIORAL_DNA', 'True').strip().lower() == 'true'
     API_V1_ENABLED = os.environ.get('API_V1_ENABLED', 'False').strip().lower() == 'true'       # I-9-5 稳定版程序化 API /api/v1
     MODEL_COMPARISON_ENABLED = os.environ.get('MODEL_COMPARISON_ENABLED', 'False').strip().lower() == 'true'  # I-9-4 模型对比
     REPORT_TELEMETRY = os.environ.get('REPORT_TELEMETRY', 'True').strip().lower() == 'true'     # I-5-4 报告级 LLM 计量汇总
     REPORT_SIGNAL_PACK = os.environ.get('REPORT_SIGNAL_PACK', 'False').strip().lower() == 'true'  # I-3-2 每章注入定量信号包
     REPORT_COMPARISON_TABLE = os.environ.get('REPORT_COMPARISON_TABLE', 'False').strip().lower() == 'true'  # I-3-4 基线-情景对比表
+    # 报告背景注入 actor 关系名册 + 激励结构（盟友/对手/竞争者/客户/供应商/出资方…），让叙事更贴角色。
+    # 默认开；仅当 actor 携带 relational_roster/incentives 时生效，缺失时为 no-op（与现状一致）。
+    REPORT_RELATIONAL_ROSTER = os.environ.get('REPORT_RELATIONAL_ROSTER', 'True').strip().lower() == 'true'
     RECORD_RUN_MANIFEST = os.environ.get('RECORD_RUN_MANIFEST', 'True').strip().lower() == 'true'  # I-8-1 复现清单 run.json
 
     # —— EXECPLAN2 第三波改进旋钮（剩余 L-effort 新能力；全部默认关，留空即保持当前行为）——
@@ -551,6 +561,18 @@ class Config:
     # 模拟中断后从上次完成的轮次继续（而非从第 0 轮重启），依赖 OASIS DB 持久性（EXECPLAN2 I-4-2）。
     # 默认关 = 全量重启（与现状一致）。
     SIM_RESUME_FROM_ROUND = os.environ.get('SIM_RESUME_FROM_ROUND', 'false').strip().lower() == 'true'
+
+    # —— 本体契约：实体分类 / 显著度排序 / valenced 关系（CLAUDE/CODEX/GEMINI 三方收敛）——
+    # 智能体池按 is_agent_eligible() 收敛：仅 archetype actor/collective（simulation_tier 1/2）入池，
+    # 记者/媒体/抽象概念（tier 3/4）不再被当作仿真智能体。默认开；当没有实体携带 archetype/
+    # simulation_tier 时自动 no-op（保留全部，与现状一致）。
+    SIM_TIER_ELIGIBILITY = os.environ.get('SIM_TIER_ELIGIBILITY', 'True').strip().lower() == 'true'
+    # 智能体上限裁剪改按 salience_score() 排序（而非纯邻边度数）。默认开；salience 缺失时回退到
+    # 现状的 (是否匹配 actor, 影响力, 邻边数) 排序元组（与现状一致）。
+    SIM_SALIENCE_RANKING = os.environ.get('SIM_SALIENCE_RANKING', 'True').strip().lower() == 'true'
+    # 关注图 + 情感用关系 valence/polarity（盟友≠对手≠交易方）。默认开；仅对新增关系类型生效，
+    # 既有 8 类 legacy 关系行为与现状逐字节一致。
+    SIM_VALENCED_RELATIONS = os.environ.get('SIM_VALENCED_RELATIONS', 'True').strip().lower() == 'true'
 
     # --- 报告（Phase 4）---
     # 每节最少/对话模式最多工具调用（与 REPORT_AGENT_MAX_TOOL_CALLS 配套；T4.4 接入硬编码值）

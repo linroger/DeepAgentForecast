@@ -18,7 +18,14 @@ from datetime import datetime
 from .graphiti_client import Zep
 
 from ..config import Config
-from ..utils.actors import actor_briefing, match_actor, relationship_briefing, influence_weight
+from ..utils.actors import (
+    actor_briefing,
+    behavioral_dna_block,
+    influence_weight,
+    match_actor,
+    relationship_briefing,
+    roster_block,
+)
 from ..utils.atomic import write_text_atomic, write_json_atomic  # EXECPLAN2 F-5-0/F-5-1 原子写
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
@@ -741,6 +748,16 @@ class OasisProfileGenerator:
         # T3.1: 该 actor 的社会关系网（命名真实盟友/对手），让 persona 在互动时
         # 知道该 @ 谁、与谁结盟/对立——联盟形成不再是随机涌现。
         rel_block = relationship_briefing(entity_name, actors)
+        # C6: 行为 DNA（价值观/信念/激励得失/资源/风险偏好）+ 结构化关系网角色（按盟友/
+        # 对手/客户/供应商/出资方等分桶命名真实对手方），让 persona 提示词从「立场标签」升级为
+        # GEMINI 式的「你是 X；你的激励是…；你相信…；你对立 Y 并依赖 Z」。受 PERSONA_BEHAVIORAL_DNA
+        # 控制（默认开）。CRITICAL: 当 actor 不带任何新字段时（今天的数据），两个 helper 均返回空串，
+        # 拼接为 no-op，提示词与今日逐字节一致。
+        dna_block = ""
+        roster_struct_block = ""
+        if getattr(Config, "PERSONA_BEHAVIORAL_DNA", True):
+            dna_block = behavioral_dna_block(actor)
+            roster_struct_block = roster_block(entity_name, actors)
 
         if is_individual:
             prompt = self._build_individual_persona_prompt(
@@ -762,6 +779,12 @@ class OasisProfileGenerator:
                     prompt = f"【共同背景·局势简报（调研实证）】{seg}\n\n" + prompt
 
         # 关系网与实证档案都拼在提示词尾部（不进入 context[:3000] 截断区），hub actor 的关系块永不被截。
+        # C6: 行为 DNA（人格底座）先于关系块注入——让 persona 先确立稳定的价值观/激励/风险偏好，
+        # 再叠加「你与谁结盟/对立/供货」的关系网角色；二者均在 actor 不带新字段时为空串（no-op）。
+        if dna_block:
+            prompt += f"\n\n{dna_block}"
+        if roster_struct_block:
+            prompt += f"\n\n{roster_struct_block}"
         if rel_block:
             prompt += f"\n\n{rel_block}"
         if actor_block:
@@ -957,6 +980,11 @@ class OasisProfileGenerator:
 7. profession: 职业
 8. interested_topics: 感兴趣话题数组
 
+可选字段（若上下文足以推断则补充，否则省略，不要编造）:
+- values: 核心价值观数组（驱动其判断的底层价值，如"言论自由""国家安全"）
+- beliefs: 核心信念数组（其对该议题的基本预设/世界观）
+- incentives: 激励结构数组，每项为对象 {{"driver": 动机, "gains_if": 何事得益, "loses_if": 何事受损}}
+
 重要:
 - 所有字段值必须是字符串或数字，不要使用换行符
 - persona必须是一段连贯的文字描述
@@ -1005,6 +1033,11 @@ class OasisProfileGenerator:
 6. country: 国家（使用中文，如"中国"）
 7. profession: 机构职能描述
 8. interested_topics: 关注领域数组
+
+可选字段（若上下文足以推断则补充，否则省略，不要编造）:
+- values: 机构核心价值观数组（如"行业自律""公共利益"）
+- beliefs: 机构对该议题的官方信念/立场预设数组
+- incentives: 激励结构数组，每项为对象 {{"driver": 动机, "gains_if": 何事得益, "loses_if": 何事受损}}
 
 重要:
 - 所有字段值必须是字符串或数字，不允许null值

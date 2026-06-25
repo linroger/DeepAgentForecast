@@ -24,6 +24,11 @@ from ..utils.actors import (
     actor_briefing,
     normalize_name,
     REL_EDGE_NAME,
+    entity_archetype,
+    entity_simulation_tier,
+    salience_score,
+    relation_valence,
+    relation_polarity,
 )
 from .text_processor import TextProcessor
 
@@ -38,6 +43,21 @@ ACTOR_TYPE_TO_LABEL = {
     "Government": "Organization",
     "Platform": "Organization",
 }
+
+# Zep 保留属性名，不能作为节点属性名（与 set_ontology 内的同名集合一致）。
+RESERVED_ATTR_NAMES = {'uuid', 'name', 'group_id', 'name_embedding', 'summary', 'created_at'}
+
+
+def safe_attr_name(attr_name: str) -> str:
+    """把保留名称转换为安全的节点属性名（与 set_ontology 内的局部实现口径一致）。
+
+    C8（ONTOLOGY 富 schema）：种子节点的 archetype/simulation_tier/salience 等本体属性
+    需要一个稳定的、避开 Zep 保留字的属性名空间。set_ontology 用同样的规则给实体类型
+    的属性改名，这里抽到模块级供 seed_actors 复用，避免规则漂移。
+    """
+    if attr_name and attr_name.lower() in RESERVED_ATTR_NAMES:
+        return f"entity_{attr_name}"
+    return attr_name
 
 
 @dataclass
@@ -353,6 +373,10 @@ class GraphBuilderService:
         rels = extract_relationship_rows(actors)
         if not rows and not rels:
             return 0
+        # C8（ONTOLOGY 富 schema 开关）：控制是否把 archetype/simulation_tier/salience 与
+        # 关系 valence/polarity 折进种子节点/边。默认开启；但所有新写入都另有「字段存在」
+        # 守卫，故无新字段的旧档案即便开关为真也逐字节不变（degrade-safe）。
+        rich_schema = getattr(Config, "ONTOLOGY_RICH_SCHEMA", True)
         label = {a["name"]: ACTOR_TYPE_TO_LABEL.get(str(a.get("type") or ""), "Entity") for a in rows}
         # 每个 actor 的一句话消歧 summary（KG cookbook：描述是实体解析的关键信号）。
         # 优先用研究给的 description，回退到 role；喂给 add_triplet 的端点 summary，
@@ -379,6 +403,14 @@ class GraphBuilderService:
                 (f"strength={strength}" if strength else None),
                 (f"grade={grade}" if grade else None),
             ) if p]
+            # C8（ONTOLOGY 富 schema）：把关系的价(valence)/极性(polarity)也折进事实文本，
+            # 让种子边自带「盟友 != 对手 != 供应商」的可检索语义。仅在关系行**显式携带**
+            # valence/polarity 时才追加——绝不据 type 反推，以保证旧档案（无新字段）的种子
+            # 事实文本与今天逐字节一致（gated by ONTOLOGY_RICH_SCHEMA）。
+            if rich_schema and isinstance(r, dict) and \
+                    (r.get("valence") is not None or r.get("polarity") is not None):
+                extra.append(f"valence={relation_valence(r)}")
+                extra.append(f"polarity={relation_polarity(r):.2f}")
             if extra:
                 fact = f"{fact}（{'，'.join(extra)}）"
             try:
@@ -414,6 +446,23 @@ class GraphBuilderService:
                     body = brief.split("\n", 1)[-1].replace("\n", "；").strip()
                     if body:
                         fact = f"{fact}；{body}" if fact else body
+                # C8（ONTOLOGY 富 schema）：把本体分类属性 archetype/simulation_tier/salience
+                # 作为「节点属性」折进种子节点事实文本（add_triplet 不暴露节点 attributes，
+                # 故沿用本文件既有「把调研属性折进 fact」的范式）。属性键经 safe_attr_name 规范，
+                # 避开 Zep 保留字。仅在 actor **显式携带**这些字段时追加，否则逐字节不变。
+                node_attrs: List[str] = []
+                if rich_schema and isinstance(a, dict):
+                    if str(a.get("archetype", "") or "").strip():
+                        node_attrs.append(f"{safe_attr_name('archetype')}={entity_archetype(a)}")
+                    if a.get("simulation_tier") is not None:
+                        node_attrs.append(
+                            f"{safe_attr_name('simulation_tier')}={entity_simulation_tier(a)}")
+                    if a.get("salience") is not None:
+                        node_attrs.append(
+                            f"{safe_attr_name('salience')}={salience_score(a):.2f}")
+                if node_attrs:
+                    fact = f"{fact}（{'，'.join(node_attrs)}）" if fact else \
+                        "（" + "，".join(node_attrs) + "）"
                 self.client.graph.add_triplet(
                     graph_id, name, "IS_A", actor_type,
                     fact,

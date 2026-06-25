@@ -12,11 +12,73 @@ from .graphiti_client import Zep
 from ..config import Config
 from ..utils.logger import get_logger
 from ..utils.zep_paging import fetch_all_nodes, fetch_all_edges
+from ..utils.actors import (
+    entity_archetype,
+    entity_simulation_tier,
+    is_agent_eligible,
+    match_actor,
+)
 
 logger = get_logger('mirofish.zep_entity_reader')
 
 # 用于泛型返回类型
 T = TypeVar('T')
+
+# 节点属性里可能承载本体分类的键名（含 graph_builder.safe_attr_name 给保留字加的
+# ``entity_`` 前缀变体）。只有节点**显式**带这些键时才视作分类信号；缺失即无信号。
+_NODE_ARCHETYPE_KEYS = ("archetype", "entity_archetype")
+_NODE_TIER_KEYS = ("simulation_tier", "entity_simulation_tier")
+
+
+def _explicit_classification(
+    node: Dict[str, Any],
+    actors: Optional[Any],
+) -> Optional[Dict[str, Any]]:
+    """为一个图谱节点找出**显式**的本体分类信号，合成一个 actor-like dict 供 actors.py
+    的 ``is_agent_eligible`` 判定；没有任何显式信号时返回 None（→ 调用方据此保留该节点）。
+
+    信号来源（优先级从高到低）：
+    1. 节点自身 attributes 里显式写入的 archetype / simulation_tier（兼容
+       graph_builder.safe_attr_name 加的 ``entity_`` 前缀变体）。
+    2. 该节点匹配到的 actors.json 行，且该行**显式**携带 archetype / simulation_tier。
+
+    关键 NO-OP 保证：只有在能读到「显式」的 archetype/simulation_tier 时才返回非 None。
+    旧图谱 / 今日数据 / 离线测试夹具里没有任何节点携带这些字段，于是这里永远返回 None，
+    准入门退化为完全放行（与现状逐字节一致）。
+    """
+    # 1) 节点 attributes 上的显式分类（某些写入路径会把本体属性直接挂到节点上）。
+    attrs = node.get("attributes") or {}
+    if isinstance(attrs, dict):
+        signal: Dict[str, Any] = {}
+        for k in _NODE_ARCHETYPE_KEYS:
+            v = attrs.get(k)
+            if isinstance(v, str) and v.strip():
+                signal["archetype"] = v
+                break
+        for k in _NODE_TIER_KEYS:
+            v = attrs.get(k)
+            # bool 是 int 子类，需排除；字符串形态交给 entity_simulation_tier 解析
+            if isinstance(v, bool):
+                continue
+            if isinstance(v, int) and v in (1, 2, 3, 4):
+                signal["simulation_tier"] = v
+                break
+            if isinstance(v, str) and v.strip():
+                signal["simulation_tier"] = v
+                break
+        if signal:
+            return signal
+
+    # 2) 匹配回 actors.json 的行，且该行**显式**带 archetype/simulation_tier 才算信号。
+    if actors is not None:
+        row = match_actor(node.get("name", ""), actors)
+        if isinstance(row, dict) and (
+            str(row.get("archetype", "") or "").strip()
+            or row.get("simulation_tier") is not None
+        ):
+            return row
+
+    return None
 
 
 @dataclass
@@ -213,28 +275,43 @@ class ZepEntityReader:
             return []
     
     def filter_defined_entities(
-        self, 
+        self,
         graph_id: str,
         defined_entity_types: Optional[List[str]] = None,
-        enrich_with_edges: bool = True
+        enrich_with_edges: bool = True,
+        actors: Optional[Any] = None,
     ) -> FilteredEntities:
         """
         筛选出符合预定义实体类型的节点
-        
+
         筛选逻辑：
         - 如果节点的Labels只有一个"Entity"，说明这个实体不符合我们预定义的类型，跳过
         - 如果节点的Labels包含除"Entity"和"Node"之外的标签，说明符合预定义类型，保留
-        
+        - 本体准入门（CLAUDE §9 / GEMINI §6.3「只有 tier 1-2 才生成 persona」）：当
+          ``Config.SIM_TIER_ELIGIBILITY`` 为真、且某节点带有**显式**的 archetype/simulation_tier
+          信号时，剔除非能动节点（archetype 非 actor/collective，或 simulation_tier∈{3,4}），
+          让记者/媒体出口/抽象概念/资源不再被实例化为有行动力的仿真 agent。
+
+        关键 NO-OP：当**没有任何**候选节点携带 archetype/simulation_tier 信号（旧图谱、今日
+        数据、离线测试夹具），准入门保留全部节点，与现状逐字节一致。准入门只作为「额外」
+        过滤器存在，仅剔除带**显式非能动信号**的节点。
+
         Args:
             graph_id: 图谱ID
             defined_entity_types: 预定义的实体类型列表（可选，如果提供则只保留这些类型）
             enrich_with_edges: 是否获取每个实体的相关边信息
-            
+            actors: 深度研究 actors.json 顶层对象（可选）。提供时准入门可把图谱节点匹配回
+                    actor 行读取其 archetype/simulation_tier 分类（缺省时仅靠节点自身属性信号）。
+
         Returns:
             FilteredEntities: 过滤后的实体集合
         """
         logger.info(f"开始筛选图谱 {graph_id} 的实体...")
-        
+
+        # 本体准入门是否启用（默认开；无显式分类信号时自动退化为完全放行 → NO-OP）。
+        tier_gate_on = getattr(Config, 'SIM_TIER_ELIGIBILITY', True)
+        gate_dropped = 0
+
         # 获取所有节点
         all_nodes = self.get_all_nodes(graph_id)
         total_count = len(all_nodes)
@@ -267,7 +344,23 @@ class ZepEntityReader:
                 entity_type = matching_labels[0]
             else:
                 entity_type = custom_labels[0]
-            
+
+            # 本体准入门（额外过滤器，仅剔除带「显式非能动信号」的节点）：
+            # 只有当节点显式带 archetype/simulation_tier（或匹配到的 actor 行显式带），
+            # 且按 actors.py 判定为「非能动」（tier 3/4，即记者/媒体/概念/资源）时才剔除。
+            # 无任何显式信号时 _explicit_classification 返回 None → 节点照常保留（NO-OP）。
+            if tier_gate_on:
+                classification = _explicit_classification(node, actors)
+                if classification is not None and not is_agent_eligible(classification):
+                    gate_dropped += 1
+                    logger.debug(
+                        "[准入门] 剔除非能动节点 %r（archetype=%s tier=%s）",
+                        node.get("name", ""),
+                        entity_archetype(classification),
+                        entity_simulation_tier(classification),
+                    )
+                    continue
+
             entity_types_found.add(entity_type)
             
             # 创建实体节点对象
@@ -320,6 +413,11 @@ class ZepEntityReader:
             
             filtered_entities.append(entity)
         
+        if gate_dropped:
+            logger.info(
+                f"[准入门] 本体分类剔除 {gate_dropped} 个非能动节点"
+                f"（记者/媒体/概念/资源，tier 3/4 不进 agent 池）"
+            )
         logger.info(f"筛选完成: 总节点 {total_count}, 符合条件 {len(filtered_entities)}, "
                    f"实体类型: {entity_types_found}")
         
@@ -411,26 +509,30 @@ class ZepEntityReader:
             return None
     
     def get_entities_by_type(
-        self, 
-        graph_id: str, 
+        self,
+        graph_id: str,
         entity_type: str,
-        enrich_with_edges: bool = True
+        enrich_with_edges: bool = True,
+        actors: Optional[Any] = None,
     ) -> List[EntityNode]:
         """
         获取指定类型的所有实体
-        
+
         Args:
             graph_id: 图谱ID
             entity_type: 实体类型（如 "Student", "PublicFigure" 等）
             enrich_with_edges: 是否获取相关边信息
-            
+            actors: 深度研究 actors.json 顶层对象（可选）。透传给准入门做本体分类判定；
+                    缺省时准入门只读节点自身属性信号（无信号即完全放行，NO-OP）。
+
         Returns:
             实体列表
         """
         result = self.filter_defined_entities(
             graph_id=graph_id,
             defined_entity_types=[entity_type],
-            enrich_with_edges=enrich_with_edges
+            enrich_with_edges=enrich_with_edges,
+            actors=actors,
         )
         return result.entities
 

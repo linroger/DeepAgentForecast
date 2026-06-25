@@ -24,9 +24,12 @@ from ..utils.actors import (
     build_initial_follow_graph,
     events_to_schedule,
     extract_actor_rows,
+    extract_relationship_rows,
     influence_weight,
     match_actor,
     normalize_name,
+    relation_polarity,
+    relation_valence,
     situation_brief_block,
 )
 from ..utils.llm_client import LLMClient
@@ -34,6 +37,15 @@ from ..utils.logger import get_logger
 from .zep_entity_reader import EntityNode, ZepEntityReader
 
 logger = get_logger('mirofish.simulation_config')
+
+# C5: 旧 8 类关系（valence 价感知前就存在的类型）。仅当 relationships[] 出现「新信号」
+# ——任一关系带显式 valence/polarity 字段，或带一个超出这 8 类的新关系类型——才认为
+# 研究档案携带了价感知数据，从而启用价感知的同温层关注与情感种子。否则（今日数据：
+# 只有这 8 类、且无 valence/polarity 字段）价感知逻辑整体跳过，跟随图与情感逐字节不变。
+_LEGACY_REL_TYPES = frozenset({
+    "ALLY_OF", "OPPOSES", "COMPETES_WITH", "REGULATES",
+    "DEPENDS_ON", "PARTNERS_WITH", "INFLUENCES", "OTHER",
+})
 
 # 中国作息时间配置（北京时间）
 CHINA_TIMEZONE_CONFIG = {
@@ -511,7 +523,9 @@ class SimulationConfigGenerator:
 
         # ========== 把 echo-chamber 同温层关注补进初始关注图（T3.4）==========
         try:
-            extra = self._build_echo_chamber_follows(all_agent_configs, twitter_config_strength=None)
+            extra = self._build_echo_chamber_follows(
+                all_agent_configs, twitter_config_strength=None, actors=actors
+            )
             if extra:
                 merged = {(a, b) for (a, b) in (tuple(p) for p in event_config.initial_follows)}
                 before = len(merged)
@@ -668,16 +682,89 @@ class SimulationConfigGenerator:
             })
         return out
 
+    def _valence_signal_active(self, actors: Optional[Dict[str, Any]]) -> bool:
+        """C5 准入门：研究档案是否携带「价感知」信号。
+
+        仅当 SIM_VALENCED_RELATIONS 为真，且 relationships[] 中至少有一条边携带显式
+        valence/polarity 字段、或一个超出旧 8 类的新关系类型时返回 True。否则（今日数据）
+        返回 False，从而让价感知的同温层关注与情感种子整体跳过，行为逐字节不变。
+
+        端点能否匹配到 actor 不在判定范围内——只要研究方写出了新字段/新类型，就视为意图
+        启用价感知；不携带新信号的旧 8 类档案永远走 False 分支。
+        """
+        if not getattr(Config, "SIM_VALENCED_RELATIONS", True):
+            return False
+        if not isinstance(actors, dict):
+            return False
+        rels = actors.get("relationships")
+        if not isinstance(rels, list):
+            return False
+        for r in rels:
+            if not isinstance(r, dict):
+                continue
+            # 显式 valence/polarity 字段 → 新信号
+            if str(r.get("valence", "") or "").strip():
+                return True
+            pol = r.get("polarity")
+            if isinstance(pol, (int, float)) and not isinstance(pol, bool):
+                return True
+            # 超出旧 8 类的关系类型 → 新信号
+            typ = str(r.get("type", "") or "").strip().upper()
+            if typ and typ not in _LEGACY_REL_TYPES:
+                return True
+        return False
+
+    def _relation_sentiment_nudge(
+        self,
+        actor_name: str,
+        actors: Optional[Dict[str, Any]],
+    ) -> float:
+        """C5: 由一个具名角色的关系边聚合出对其整体情感偏置的「加性微调」∈ [-0.5, 0.5]。
+
+        对该角色参与的每条关系取 relation_polarity（盟友为正、对手为负、交易性微正），
+        以涉及自身的边的平均极性作为方向，再缩到一个温和幅度（×0.5），叠加到既有
+        sentiment_bias 上。匿名受众（名字不在 relationships[] 中）→ 0.0，故受众情感不变。
+
+        仅在 _valence_signal_active 为真时被调用；今日数据下整体跳过，返回值不会被使用。
+        """
+        if not actor_name:
+            return 0.0
+        rows = extract_relationship_rows(actors)
+        if not rows:
+            return 0.0
+        me = normalize_name(actor_name)
+        if not me:
+            return 0.0
+        polarities: List[float] = []
+        for r in rows:
+            s = normalize_name(str(r.get("source", "") or ""))
+            t = normalize_name(str(r.get("target", "") or ""))
+            if me != s and me != t:
+                continue
+            polarities.append(relation_polarity(r))
+        if not polarities:
+            return 0.0
+        avg = sum(polarities) / len(polarities)
+        # 温和幅度：均值极性 ×0.5，再夹到 [-0.5, 0.5]，避免覆盖 LLM/规则给出的主立场。
+        return max(-0.5, min(0.5, avg * 0.5))
+
     def _build_echo_chamber_follows(
         self,
         agent_configs: List[AgentActivityConfig],
         twitter_config_strength: Optional[float] = None,
+        actors: Optional[Dict[str, Any]] = None,
     ) -> "set":
         """T3.4: 按 (stance 桶, 主导议题) 聚类，在簇内加同温层关注边，高影响力 Agent 留跨簇桥。
 
         强度由 echo_chamber_strength 控制（默认 0.5）：簇内每个 Agent 关注最多 ``round(3×强度)``
         个同簇高影响力 Agent；少数高影响力 Agent 额外关注几个其他簇的高影响力 Agent（让叙事仍能
         外溢）。确定性实现（不依赖随机数），避免运行间漂移。返回 ``{(follower, followee), ...}``。
+
+        C5（价感知，gated by SIM_VALENCED_RELATIONS）：在上述 (stance, topic, influence) 聚类
+        基线之上，额外按关系价补边——盟友/伙伴/支持等「allied」边互相关注（把同盟拉得更紧），
+        对抗/制裁/批评等「adversarial」边让双方互相关注（跨阵营的「桥接式对立」，使对立叙事彼此
+        可见而非各自回声）。仅当 _valence_signal_active 为真（研究档案带显式 valence/polarity 或
+        新关系类型）才追加；今日数据（只有旧 8 类、无新字段）下该段整体跳过，返回逐字节不变。
         """
         from collections import defaultdict
 
@@ -717,6 +804,29 @@ class SimulationConfigGenerator:
                 bridges += 1
                 if bridges >= 2:
                     break
+
+        # ---- C5 价感知补边（仅当研究档案携带 valence/polarity/新关系类型时）----
+        # 旧 8 类、无新字段的今日数据走 _valence_signal_active==False，整段跳过 → pairs 不变。
+        if self._valence_signal_active(actors):
+            agent_by_name: Dict[str, AgentActivityConfig] = {}
+            for c in agent_configs:
+                if c.entity_name:
+                    # 同名只保留首个（与初始关注图按出现序的口径一致）
+                    agent_by_name.setdefault(normalize_name(c.entity_name), c)
+            for r in extract_relationship_rows(actors):
+                src = agent_by_name.get(normalize_name(str(r.get("source", "") or "")))
+                dst = agent_by_name.get(normalize_name(str(r.get("target", "") or "")))
+                if src is None or dst is None or src.agent_id == dst.agent_id:
+                    continue
+                valence = relation_valence(r)
+                if valence == "allied":
+                    # 盟友互相关注，把同盟拉得更紧
+                    pairs.add((src.agent_id, dst.agent_id))
+                    pairs.add((dst.agent_id, src.agent_id))
+                elif valence == "adversarial":
+                    # 桥接式对立：对立双方互相关注（盯住对方阵营），narratives 跨阵营可见
+                    pairs.add((src.agent_id, dst.agent_id))
+                    pairs.add((dst.agent_id, src.agent_id))
         return pairs
 
     def _build_context(
@@ -1325,6 +1435,8 @@ class SimulationConfigGenerator:
 
         # 构建AgentActivityConfig对象
         configs = []
+        # C5：是否启用价感知情感种子（旧 8 类/无新字段的今日数据 → False，逐批跳过 → 情感不变）
+        valence_on = self._valence_signal_active(actors)
         for i, entity in enumerate(entities):
             agent_id = start_idx + i
             # EXECPLAN F-5-2: 优先按 id 命中；miss 时按位置回退（覆盖 LLM 漏写/写错 agent_id
@@ -1369,6 +1481,13 @@ class SimulationConfigGenerator:
             researched_weight = influence_weight(matched_actors.get(agent_id))
             if researched_weight is not None:
                 config.influence_weight = researched_weight
+            # C5: 价感知情感种子——把该角色关系网的聚合极性（盟友为正、对手为负）加性叠到
+            # sentiment_bias 上，让对立双方开局即带方向性情绪，而非清一色由 stance 推。
+            # 仅 valence_on（研究档案带新信号）时生效；今日数据走 valence_on==False，情感不变。
+            if valence_on:
+                nudge = self._relation_sentiment_nudge(entity.name, actors)
+                if nudge:
+                    config.sentiment_bias = max(-1.0, min(1.0, config.sentiment_bias + nudge))
             configs.append(config)
 
         return configs
@@ -1600,6 +1719,10 @@ class SimulationConfigGenerator:
         # 受众关注议题：复用研究/事件得到的热点话题（最多 3 个），让受众落入真实议题的同温层。
         hot_topics = [str(t) for t in (event_config.hot_topics or []) if str(t).strip()]
 
+        # C5：是否启用价感知情感种子。受众为匿名「公众_k」，名字不在 relationships[] 中，
+        # _relation_sentiment_nudge 恒返回 0.0 → 受众情感逐字节不变；此处保持与具名路径一致的写法。
+        valence_on = self._valence_signal_active(actors)
+
         configs: List[AgentActivityConfig] = []
         for k in range(size):
             agent_id = start_idx + k
@@ -1618,6 +1741,13 @@ class SimulationConfigGenerator:
                 sentiment_bias = round(rng.uniform(-0.6, -0.1), 3)
             else:
                 sentiment_bias = round(rng.uniform(-0.2, 0.2), 3)
+
+            # C5: 价感知情感种子，加性叠加（不消耗 RNG，故不扰乱受众抽样的确定性）。匿名受众名
+            # 不在 relationships[] 中 → nudge 恒为 0.0 → 受众情感保持原值，今日数据逐字节不变。
+            if valence_on:
+                nudge = self._relation_sentiment_nudge(f"公众_{k}", actors)
+                if nudge:
+                    sentiment_bias = round(max(-1.0, min(1.0, sentiment_bias + nudge)), 3)
 
             # 活跃时段：普通公众的白天 + 晚间高峰作息（与规则「普通人」一致，略加抖动）。
             base_hours = [9, 10, 11, 12, 13, 18, 19, 20, 21, 22, 23]

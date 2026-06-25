@@ -293,16 +293,77 @@ class SimulationManager:
             # T3.13: 上限智能体数，按 (是否匹配研究 actor, 影响力, 邻边数) 排序保留 top N，
             # 但始终保留每个 actors.json 匹配到的 actor（避免深度档案被海量通用节点稀释，
             # 也省去每个 persona 1 次 LLM + 2 次检索的成本）。
-            from ..utils.actors import match_actor as _match_actor, influence_weight as _influence_weight
+            #
+            # 本体契约（CLAUDE §5/§9，C4:salience-rank）：当 SIM_SALIENCE_RANKING 开启且候选里
+            # 确有 actor 携带显式 salience 字段时，改用 salience_score() 作为主排序键（并叠加
+            # tier/决策权重，让放大器/利益相关方 tier≥2 不会盖过核心决策者 tier=1），其余仍按
+            # 现状 (是否匹配 actor, 影响力, 邻边数) 元组。当今天的数据无任何显式 salience 字段时，
+            # 排序键逐字节退化为现状元组（degrade-safe）。SIM_TIER_ELIGIBILITY 开启时优先填入
+            # 可作能动 agent（tier 1/2）的实体。
+            from ..utils.actors import (
+                match_actor as _match_actor,
+                influence_weight as _influence_weight,
+                salience_score as _salience_score,
+                is_agent_eligible as _is_agent_eligible,
+                entity_simulation_tier as _entity_simulation_tier,
+            )
             _max_agents = Config.OASIS_MAX_AGENTS
             if _max_agents and len(filtered.entities) > _max_agents:
                 _matched = {id(e): (_match_actor(e.name, actors) if actors else None) for e in filtered.entities}
                 _matched_count = sum(1 for v in _matched.values() if v)
 
-                def _rank(e):
+                _salience_rank_on = getattr(Config, 'SIM_SALIENCE_RANKING', True)
+                _tier_eligibility_on = getattr(Config, 'SIM_TIER_ELIGIBILITY', True)
+
+                # 显式 salience 字段是否真实存在：只有任一匹配 actor 携带 dict 形态的 salience 时，
+                # 才启用 salience 主排序；否则强制退回现状元组，保证旧数据逐字节一致。
+                def _has_explicit_salience(a) -> bool:
+                    return isinstance(a, dict) and isinstance(a.get("salience"), dict)
+
+                _use_salience = _salience_rank_on and any(
+                    _has_explicit_salience(_matched.get(id(e))) for e in filtered.entities
+                )
+
+                # tier 偏好：仅当开启 tier 准入门、且确有实体携带本体分类信号（archetype/
+                # simulation_tier）时才生效；否则今天的数据 tier 恒为 1，该项对所有实体相同，
+                # 排序结果与现状一致（degrade-safe）。
+                def _has_tier_signal(a) -> bool:
+                    return isinstance(a, dict) and (
+                        a.get("archetype") is not None or a.get("simulation_tier") is not None
+                    )
+
+                _use_tier = _tier_eligibility_on and any(
+                    _has_tier_signal(_matched.get(id(e))) for e in filtered.entities
+                )
+
+                def _legacy_rank(e):
+                    """现状排序键：(是否匹配 actor, 影响力权重, 邻边度数)。"""
                     a = _matched.get(id(e))
                     iw = (_influence_weight(a) or 0.0) if a else 0.0
                     return (1 if a else 0, iw, len(e.related_edges or []))
+
+                def _rank(e):
+                    if not _use_salience and not _use_tier:
+                        # 无任何本体信号：逐字节退化为现状元组。
+                        return _legacy_rank(e)
+                    a = _matched.get(id(e))
+                    matched_flag = 1 if a else 0
+                    # tier 偏好：能动 agent（tier 1/2）优先于被动信息源/抽象概念（tier 3/4）。
+                    eligible_flag = 1
+                    if _use_tier:
+                        eligible_flag = 1 if (a is None or _is_agent_eligible(a)) else 0
+                    # salience 主键：核心决策者(tier=1)的决策权重高于利益相关方(tier=2)，
+                    # 让同 salience 下 principal 不被 amplifier/stakeholder 盖过。
+                    if _use_salience:
+                        sal = _salience_score(a) if a else _salience_score(None)
+                        tier = _entity_simulation_tier(a) if a else 1
+                        # tier 1 → 1.0；tier 2 → 0.85；tier 3 → 0.5；tier 4 → 0.3（核心方更重）
+                        _tier_weight = {1: 1.0, 2: 0.85, 3: 0.5, 4: 0.3}.get(tier, 1.0)
+                        sal_key = sal * _tier_weight
+                    else:
+                        sal_key = 0.0
+                    iw = (_influence_weight(a) or 0.0) if a else 0.0
+                    return (matched_flag, eligible_flag, sal_key, iw, len(e.related_edges or []))
 
                 kept = [e for e in filtered.entities if _matched.get(id(e))]  # 所有匹配 actor 必留
                 kept_ids = {id(e) for e in kept}
@@ -312,9 +373,11 @@ class SimulationManager:
                     if id(e) not in kept_ids:
                         kept.append(e)
                         kept_ids.add(id(e))
+                _rank_mode = "salience" if _use_salience else ("tier" if _use_tier else "legacy")
                 logger.info(
                     f"[T3.13] 智能体上限 {_max_agents}: {len(filtered.entities)} → 保留 {len(kept)} "
-                    f"(匹配研究 actor {_matched_count} 个全部保留)，丢弃 {len(filtered.entities) - len(kept)}"
+                    f"(匹配研究 actor {_matched_count} 个全部保留，排序={_rank_mode})，"
+                    f"丢弃 {len(filtered.entities) - len(kept)}"
                 )
                 filtered.entities = kept
                 filtered.filtered_count = len(kept)

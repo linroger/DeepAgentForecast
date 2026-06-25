@@ -284,6 +284,44 @@ ONTOLOGY_TEMPLATES: Dict[str, str] = {
 
 DEFAULT_ONTOLOGY_TEMPLATE = "social_opinion"
 
+
+# ============================================================================
+# ONTOLOGY（CLAUDE §12.2 / CODEX Step 2-3 / GEMINI §5）：富本体 schema 附录。
+# ----------------------------------------------------------------------------
+# 设计要点：让 LLM 在生成实体/边类型时**额外**标注分类元数据，使下游能区分
+# 「能动 agent」与「报道者/概念/资源」、并让边带家族/价/方向语义——而不破坏
+# set_ontology 依赖的核心键（entity: name/description/attributes/examples；
+# edge: name/description/source_targets/attributes）。
+#
+# 关键：这两段附录只在 getattr(Config,'ONTOLOGY_RICH_SCHEMA',True) 为真时被
+# 拼接到对应基础提示词之后；旗标关闭时，发往 LLM 的 system_prompt 与产出 schema
+# 逐字节等于今日，新增字段纯属附加（additive）元数据。
+#
+# archetype 取值集与 actors.py 的 ENTITY_ARCHETYPES 契约一致：
+#   actor / collective / institution_rule / asset_object / event / signal /
+#   claim_narrative / constraint_resource / place_jurisdiction / source / scenario
+# ============================================================================
+ONTOLOGY_RICH_SCHEMA_ADDENDUM = """
+
+## 富本体分类元数据（附加要求，务必输出）
+
+除上述核心字段外，请为**每个 entity_type** 额外标注以下分类元数据（作为附加键写入同一对象，不要改动核心键 name/description/attributes/examples 的结构）：
+
+- `archetype`: 该类型的本体原型，必须取自——`actor`（能决策/发声的真实主体）、`collective`（派系/群体/联盟）、`institution_rule`（制度/规则/法律）、`asset_object`（资产/产品/标的客体）、`event`（事件）、`signal`（指标/信号）、`claim_narrative`（叙事/主张）、`constraint_resource`（约束/资源）、`place_jurisdiction`（地点/管辖区）、`source`（信息来源/被引用的媒体或报告）、`scenario`（情景）。
+- `simulation_tier`: 默认模拟层级（整数）：1=核心决策者，2=利益相关方/派系，3=被动信息源（如被引用的媒体/报告/分析），4=抽象概念/资源/标的。
+- `role_class`: 默认角色类（可选）：`principal`（主事方）、`arbiter`（裁决方）、`stakeholder`（利益相关方）、`amplifier`（放大/传播方）、`intermediary`（中介方）。
+- `selection_rule`: 一句话判定规则，说明何种实体应归入此类型（用于抽取阶段消歧）。
+- `anti_examples`: 反例数组，列出**不应**被实例化为此类型的对象。**特别强调**：被引用的媒体/报刊/榜单/数据库是 `source`（archetype=source, tier=3），不是能动 actor——除非它本身就是推动结局的当事方，否则不要把它设成一个独立的能动实体类型。
+
+为**每个 edge_type** 额外标注：
+- `family`: 边的语义家族，取自——`alignment`（结盟/支持，正向）、`antagonism`（对抗/制裁/批评，负向）、`economic`（供应/出资/持股/消费，交易性）、`governance`（监管/裁决）、`dependency`（依赖）、`influence`（影响）、`information`（报道/披露）。
+- `valence`: 边的价，取自——`allied`、`adversarial`、`transactional`、`directional`、`neutral`。
+- `direction_semantics`: 一句话说明该边方向的含义（source 与 target 谁对谁，如「source 供应 target」「source 监管 target」），避免方向被读反。
+
+这些元数据是**附加**的：核心键结构保持不变，下游消费照旧；新增键让被引用来源不被误当能动 actor、并让边携带价/家族/方向以供检索与推演。
+"""
+
+
 # F1: 自动选模板用的双语关键词集。命中"公众反应/舆情/民意/社交媒体/情绪/观点"语义即判定为
 # social_opinion，否则归入领域自适应的 general_forecast。仅在 Config.ONTOLOGY_AUTO_SELECT 打开
 # 且调用方未显式指定模板时才生效；默认（旗标关闭）路径逐字节不变。
@@ -296,6 +334,83 @@ SOCIAL_OPINION_KEYWORDS = (
     "舆情", "民意", "社交媒体", "公众反应", "公众舆论", "舆论", "情绪",
     "观点", "争议", "热搜", "网友", "口碑", "声誉", "民众", "网络舆论",
 )
+
+
+# ============================================================================
+# ONTOLOGY 归一化（CODEX Step 3）：当 LLM 漏标 archetype / edge family / valence 时，
+# 据类型名 / 边名确定性补全。映射保守、纯字符串子串匹配，无副作用；仅在
+# ONTOLOGY_RICH_SCHEMA 为真时被 _normalize_rich_schema 调用，旗标关闭时整段不触达。
+# ----------------------------------------------------------------------------
+
+# entity_type.name（小写）子串 → 推断的 archetype。命中第一个即止；都不中 → "actor"
+# （与 actors.entity_archetype 的缺省一致：信号不足时按能动主体处理，不误降级）。
+# 顺序重要：先判更专的（source/media/event/...），再落到 person/org 这类宽泛能动主体。
+_ARCHETYPE_NAME_HINTS = (
+    # 信息源 / 被引用媒体 / 报告 → source（tier 3，被动信息源，绝不当能动 actor）
+    (("source", "outlet", "press", "newspaper", "newswire", "publication",
+      "report", "dataset", "database", "index", "ranking", "wire",
+      "媒体", "报刊", "通讯社", "来源", "信源", "榜单", "数据库"), "source"),
+    # 制度 / 规则 / 法律 / 政策 → institution_rule
+    (("rule", "law", "regulation", "policy", "statute", "treaty", "framework",
+      "mandate", "制度", "规则", "法律", "法规", "政策", "条约"), "institution_rule"),
+    # 事件 → event
+    (("event", "incident", "summit", "election", "meeting", "hearing",
+      "事件", "峰会", "选举", "听证", "会议"), "event"),
+    # 指标 / 信号 → signal
+    (("signal", "indicator", "metric", "price", "rate", "index_value",
+      "指标", "信号", "价格", "利率"), "signal"),
+    # 叙事 / 主张 → claim_narrative
+    (("narrative", "claim", "rumor", "rumour", "story", "thesis",
+      "叙事", "主张", "传闻", "说法"), "claim_narrative"),
+    # 约束 / 资源 → constraint_resource
+    (("resource", "constraint", "supply", "capacity", "reserve", "budget",
+      "资源", "约束", "产能", "储备", "预算"), "constraint_resource"),
+    # 地点 / 管辖区 / 国家经济体 → place_jurisdiction
+    (("place", "jurisdiction", "region", "country", "nation", "state",
+      "city", "market_place", "地点", "管辖", "地区", "国家", "城市"),
+     "place_jurisdiction"),
+    # 情景 → scenario
+    (("scenario", "case", "情景", "情境"), "scenario"),
+    # 资产 / 产品 / 标的客体 → asset_object
+    (("asset", "product", "commodity", "currency", "security", "token",
+      "instrument", "device", "资产", "产品", "商品", "货币", "标的"),
+     "asset_object"),
+    # 群体 / 派系 / 联盟 / 阵营 → collective（仍是能动，tier 2）
+    (("collective", "coalition", "alliance", "faction", "bloc", "group",
+      "union", "community", "fans", "联盟", "派系", "阵营", "群体", "工会",
+      "团体", "粉丝"), "collective"),
+)
+
+# edge_type.name（大写）= REL_TYPE → (family, valence)。复用 actors._REL_TYPE_VALENCE
+# 的四簇划分，并细分出 governance/dependency/influence/information 家族，使 family 比
+# valence 更细。LLM 漏标 family/valence 时据此补全；未知边名 → ("other", "neutral")。
+_EDGE_FAMILY_VALENCE = {
+    # 结盟（正向）
+    "ALLY_OF": ("alignment", "allied"),
+    "SUPPORTS": ("alignment", "allied"),
+    "PARTNERS_WITH": ("alignment", "allied"),
+    "ENDORSES": ("alignment", "allied"),
+    # 对抗（负向）
+    "OPPOSES": ("antagonism", "adversarial"),
+    "COMPETES_WITH": ("antagonism", "adversarial"),
+    "SANCTIONS": ("antagonism", "adversarial"),
+    "CRITICIZES": ("antagonism", "adversarial"),
+    "LITIGATES_AGAINST": ("antagonism", "adversarial"),
+    # 经济（交易性）
+    "SUPPLIES": ("economic", "transactional"),
+    "CUSTOMER_OF": ("economic", "transactional"),
+    "FUNDS": ("economic", "transactional"),
+    "INVESTS_IN": ("economic", "transactional"),
+    "BACKS": ("economic", "transactional"),
+    "OWNS": ("economic", "transactional"),
+    "CONSUMES": ("economic", "transactional"),
+    # 治理 / 依赖 / 影响 / 报道（有向、非褒贬）
+    "REGULATES": ("governance", "directional"),
+    "DEPENDS_ON": ("dependency", "directional"),
+    "INFLUENCES": ("influence", "directional"),
+    "REPORTS_ON": ("information", "directional"),
+    "OTHER": ("other", "neutral"),
+}
 
 
 class OntologyGenerator:
@@ -324,6 +439,29 @@ class OntologyGenerator:
             )
             name = DEFAULT_ONTOLOGY_TEMPLATE
         return name
+
+    @staticmethod
+    def _rich_schema_enabled() -> bool:
+        """读取 ONTOLOGY_RICH_SCHEMA 旗标（缺失默认 True）。
+
+        本文件不拥有 config.py，仅经 getattr 读取，配置缺失即退回契约默认值，
+        保证富本体逻辑可被一处开关，且关闭时整条新增路径不触达。
+        """
+        return bool(getattr(_Config, "ONTOLOGY_RICH_SCHEMA", True))
+
+    @classmethod
+    def _effective_system_prompt(cls, template_name: str) -> str:
+        """组装发往 LLM 的 system 提示词。
+
+        ONTOLOGY_RICH_SCHEMA 为真时，把 ONTOLOGY_RICH_SCHEMA_ADDENDUM 追加到所选
+        基础模板之后，要求 LLM 额外标注 archetype/simulation_tier/role_class/
+        selection_rule/anti_examples（实体）与 family/valence/direction_semantics（边）；
+        旗标关闭时返回基础模板**原文**，发往 LLM 的提示词逐字节等于今日。
+        """
+        base = ONTOLOGY_TEMPLATES[template_name]
+        if cls._rich_schema_enabled():
+            return base + ONTOLOGY_RICH_SCHEMA_ADDENDUM
+        return base
 
     @staticmethod
     def _auto_select_template(prompt: str, default_template: str) -> str:
@@ -380,8 +518,9 @@ class OntologyGenerator:
             )
 
         # EXECPLAN2 I-1-3: 解析模板（默认 social_opinion=现有行为）。
+        # ONTOLOGY: 富本体旗标开启时在所选模板后追加分类元数据要求；关闭时逐字节等于今日。
         template_name = self._resolve_template(effective_template)
-        system_prompt = ONTOLOGY_TEMPLATES[template_name]
+        system_prompt = self._effective_system_prompt(template_name)
 
         # 构建用户消息
         user_message = self._build_user_message(
@@ -426,7 +565,7 @@ class OntologyGenerator:
             )
             fallback_result = self.llm_client.chat_json(
                 messages=[
-                    {"role": "system", "content": ONTOLOGY_TEMPLATES[DEFAULT_ONTOLOGY_TEMPLATE]},
+                    {"role": "system", "content": self._effective_system_prompt(DEFAULT_ONTOLOGY_TEMPLATE)},
                     {"role": "user", "content": fallback_message},
                 ],
                 temperature=0.3,
@@ -600,6 +739,59 @@ class OntologyGenerator:
                 if isinstance(a_name, str) and a_name.lower() in RESERVED_ATTR_NAMES:
                     attr["name"] = f"entity_{a_name}"
 
+    @staticmethod
+    def _infer_archetype_from_name(type_name: str) -> str:
+        """据 entity_type 名（子串匹配 _ARCHETYPE_NAME_HINTS）推断 archetype。
+
+        命中第一个提示组即返回对应 archetype；都不中 → "actor"（与 actors.entity_archetype
+        的缺省一致：信号不足时按能动主体处理）。纯字符串、确定性、无副作用。
+        """
+        low = str(type_name or "").strip().lower()
+        if not low:
+            return "actor"
+        for hints, archetype in _ARCHETYPE_NAME_HINTS:
+            if any(h in low for h in hints):
+                return archetype
+        return "actor"
+
+    @classmethod
+    def _normalize_rich_schema(cls, result: Dict[str, Any]) -> None:
+        """ONTOLOGY 归一化（CODEX Step 3）：就地补全缺失的富本体分类元数据。
+
+        仅在 ONTOLOGY_RICH_SCHEMA 为真时由 _validate_and_process 调用。职责：
+        * 实体类型缺 ``archetype`` → 据类型名推断（_infer_archetype_from_name）。
+        * 边类型缺 ``family`` / ``valence`` → 据边名（大写）查 _EDGE_FAMILY_VALENCE 推断。
+
+        所有补全均为**附加**键：core 键（name/description/attributes/examples 及
+        edge 的 source_targets）一律不动，故 set_ontology 兼容性不受影响。LLM 已显式
+        给出（非空）的值一律保留，绝不覆盖。``relation_types`` 别名折叠在调用本方法前
+        已完成（见 _validate_and_process 开头），故此处只处理规范化后的 edge_types。
+        """
+        for entity in result.get("entity_types", []):
+            if not isinstance(entity, dict):
+                continue
+            arch = entity.get("archetype")
+            if not (isinstance(arch, str) and arch.strip()):
+                entity["archetype"] = cls._infer_archetype_from_name(entity.get("name", ""))
+
+        for edge in result.get("edge_types", []):
+            if not isinstance(edge, dict):
+                continue
+            fam = edge.get("family")
+            val = edge.get("valence")
+            need_family = not (isinstance(fam, str) and fam.strip())
+            need_valence = not (isinstance(val, str) and val.strip())
+            if not (need_family or need_valence):
+                continue
+            edge_key = str(edge.get("name", "") or "").strip().upper()
+            inferred_family, inferred_valence = _EDGE_FAMILY_VALENCE.get(
+                edge_key, ("other", "neutral")
+            )
+            if need_family:
+                edge["family"] = inferred_family
+            if need_valence:
+                edge["valence"] = inferred_valence
+
     def _validate_and_process(
         self,
         result: Dict[str, Any],
@@ -613,6 +805,19 @@ class OntologyGenerator:
         # 下面的 result["entity_types"] = ... 赋值会抛 TypeError，整个本体阶段崩溃。
         if not isinstance(result, dict):
             result = {}
+
+        # ONTOLOGY 归一化（CODEX Step 3）：容忍 ``relation_types`` 作为 ``edge_types`` 的别名。
+        # 富 schema 提示词偶尔会让 LLM 用 relation_types 命名关系数组；这里在任何 edge_types
+        # 处理之前把它折叠进 edge_types（仅当 edge_types 缺失/为空且 relation_types 是非空 list）。
+        # 仅在 ONTOLOGY_RICH_SCHEMA 为真时生效，旗标关闭时此分支不触达、行为逐字节不变。
+        if self._rich_schema_enabled():
+            alias = result.get("relation_types")
+            if isinstance(alias, list) and alias and not result.get("edge_types"):
+                result["edge_types"] = alias
+                logger.info(
+                    "Ontology: folded %d 'relation_types' entr(ies) into 'edge_types' (alias).",
+                    len(alias),
+                )
 
         # F-3-0: 集合字段强制为 list。仅做成员检查（"x" not in result）无法
         # 处理 entity_types 被 LLM 返回为 dict/str/null 的情况，后续 for / 切片 /
@@ -675,6 +880,13 @@ class OntologyGenerator:
         # 这里提前按 graph_builder 的同一保留字集改写，使本体自洽（社媒模板亦受益，行为兼容）。
         self._sanitize_reserved_attrs(result["entity_types"])
         self._sanitize_reserved_attrs(result["edge_types"])
+
+        # ONTOLOGY 归一化（CODEX Step 3）：富 schema 开启时补全 LLM 漏标的 archetype（实体）
+        # 与 family/valence（边）。纯附加键，不动核心键，故 set_ontology 兼容性不变；旗标关闭
+        # 时此分支不触达。注意：放在保留字清洗之后、兜底类型注入之前——兜底 Person/Organization
+        # 不显式带 archetype（缺失即被 actors.entity_archetype 缺省为 "actor"，对二者均正确）。
+        if self._rich_schema_enabled():
+            self._normalize_rich_schema(result)
 
         # Zep API 限制：最多 10 个自定义实体类型，最多 10 个自定义边类型
         MAX_ENTITY_TYPES = 10
