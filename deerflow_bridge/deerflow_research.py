@@ -177,6 +177,10 @@ def _synthesis_context_cap(model_name: str) -> int:
 
 REPORT_FILENAME = "research_report.md"
 REQUIREMENT_FILENAME = "prediction_requirement.txt"
+# 双轨：Track B（actor-ontology-research）产出的 actor 卷宗。卷宗作为「主」actor
+# 来源喂本体生成/抽取，Track A 的 research_report.md 作为「附加上下文」。关闭双轨或
+# Track B 失败/空时不落此文件，行为与现状逐字节一致。
+ACTOR_DOSSIER_FILENAME = "actor_dossier.md"
 ACTORS_FILENAME = "actors.json"
 SOURCES_FILENAME = "sources.json"
 TIMELINE_FILENAME = "timeline.json"
@@ -1209,6 +1213,181 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
 
 
 # ---------------------------------------------------------------------------
+# 双轨 Track B —— actor-ontology 卷宗（与 Track A 的 deep-research 报告并行）
+# ---------------------------------------------------------------------------
+
+
+def build_actor_ontology_prompt(question: str, depth: str, target_language: str | None) -> str:
+    """构造 Track B 的提示词：产出「本体就绪的 actor 卷宗」（actor_dossier.md）。
+
+    与 :func:`build_research_prompt` 同风格/同签名。Track A 产出广覆盖证据报告；
+    Track B 把同样的搜证功夫专门拧向 ACTOR 维度，遵循 ``actor-ontology-research``
+    技能的输出契约：预测框架 + 情势简报、按显著度排序的真实关键 actor 阵容、每个
+    actor 的深度画像、有向/有类型/带极性的关系网络，以及 actor 与关系随时间的演化。
+    报告（Track A）解决「发生了什么」；卷宗（Track B）解决「谁在决定、谁受影响、
+    他们如何相连」，作为下游本体生成与 actor 抽取的主来源。
+    """
+    lang_line = ""
+    if target_language:
+        lang_line = f"\n\nWrite the dossier in {target_language}."
+    return (
+        "You are an actor-ontology research lead producing the SEED material for a "
+        "forecasting pipeline (knowledge graph + ontology + actor-based simulation). "
+        "FOLLOW THE 'actor-ontology-research' skill: build on the deep-research skill's "
+        "search craft, source tiering (S1–S4), evidence grading, triangulation, and "
+        "verification, but specialize the mission toward an ACTOR-CENTRIC, "
+        "ONTOLOGY-READY dossier rather than a generic topic report.\n\n"
+        f"FORECAST QUESTION:\n{question}\n\n"
+        "Search the web from multiple angles, fetch and read the most important primary "
+        "sources in full, then produce a SINGLE ontology-ready Markdown ACTOR DOSSIER "
+        "(your final message) per the skill's OUTPUT CONTRACT. The dossier MUST contain, "
+        "with these explicit labeled sections:\n\n"
+        "1. FORECAST FRAME & SITUATION BRIEF — the forecast object, horizon, and as-of "
+        "date; the current situation, how it got here, the forces in tension, the 3–6 "
+        "fault lines the actors argue over, and the catalysts that would shift things.\n\n"
+        "2. THE CAST (key actors), in SALIENCE ORDER — the real key actors only. Apply "
+        "the role/salience triage rigorously: EXPLICITLY DEMOTE cited reporters, news "
+        "outlets, wire services, and pollsters to SOURCES, not actors (simulation_tier 3); "
+        "abstract concepts, products, metrics, rules, and other context objects are tier 4 "
+        "— NOT cast members; the core decision-makers whose choices move the outcome are "
+        "tier 1 (principals); materially-affected stakeholders are tier 2. An outlet is an "
+        "actor ONLY if it itself moves the outcome. Aim for roughly 8–20 deeply-profiled "
+        "cast members (up to ~35 for sprawling multi-party situations), chosen by causal "
+        "role, not by how often a name appeared.\n"
+        "   For EACH key actor, go deep (a thin label is a failure): canonical name + "
+        "aliases and a one-line disambiguator; archetype (actor vs collective); "
+        "simulation_tier (1 principal / 2 stakeholder / 3 source / 4 context-object) and "
+        "role-class (principal / arbiter / stakeholder / amplifier / intermediary) with a "
+        "salience tier and basis; jurisdiction/sector; WHY it matters to the outcome; its "
+        "VALUES; BELIEFS / worldview; INCENTIVES (what it GAINS and what it LOSES under "
+        "each plausible outcome); ranked GOALS with horizon; CONSTRAINTS; RESOURCES / "
+        "capabilities; VULNERABILITIES; decision rights; and STATED position vs REVEALED "
+        "behavior (surface the gap explicitly); plus its history/evolution (how it got "
+        "here, how its strategy changed, its track record on commitments).\n\n"
+        "3. THE RELATIONSHIP NETWORK — an explicit, enumerated list of DIRECTED, TYPED, "
+        "VALENCED edges between cast members, one per line as "
+        "`Source —[TYPE, valence, strength]→ Target — basis`. Cover the load-bearing "
+        "relationships: allies, opponents, competitors, customers, suppliers, "
+        "backers/investors, and regulators. State DIRECTION explicitly (who → whom); pick a "
+        "precise TYPE (ALLY_OF / SUPPORTS / PARTNERS_WITH / OPPOSES / COMPETES_WITH / "
+        "REGULATES / SANCTIONS / SUPPLIES / CUSTOMER_OF / FUNDS / INVESTS_IN / BACKS / "
+        "DEPENDS_ON / INFLUENCES, or a precise free-text label); carry a VALENCE (allied / "
+        "adversarial / neutral / transactional — a partner and a rival MUST be "
+        "distinguishable, never flatten opposition into 'connected to'); a strength "
+        "(high / medium / low); and a one-line researched basis. Every endpoint must be a "
+        "canonical name from the cast.\n\n"
+        "4. PER-ACTOR RELATIONAL ROSTER — within or beside each profile, name the actor's "
+        "allies / opponents / competitors / customers / suppliers / backers-investors / "
+        "supporters / regulators / dependents.\n\n"
+        "5. EVOLUTION & TIMELINE — the dated sequence of how the cast and its "
+        "alliances/rivalries FORMED and CHANGED: inflection points, realignments, "
+        "entries/exits — not a present-day snapshot.\n\n"
+        "6. DRIVERS, INDICATORS & SCENARIOS, then CONTESTED CLAIMS & a tiered SOURCE LIST "
+        "(each source with its S1–S4 tier and date).\n\n"
+        "CONSISTENCY: use the SAME canonical name for an actor everywhere (cast, network, "
+        "roster, timeline) so downstream extraction resolves entities cleanly.\n\n"
+        "IMPORTANT: Once you have gathered enough material, you MUST stop calling tools and "
+        "write the full dossier as your very next message. The written dossier is the "
+        "deliverable — do not keep searching for marginal extra detail. A run that never "
+        "writes the dossier has failed."
+        f"{lang_line}"
+    )
+
+
+def run_actor_ontology_stage(client, question: str, depth: str, target_language: str | None,
+                             model_name: str, thread_id: str, plog: "ProgressLog") -> str:
+    """运行 Track B：产出 actor-ontology 卷宗（actor_dossier.md 的内容）。
+
+    一次有工具的研究回合（用 actor-ontology 提示词搜证、画像、建关系网），随后做一次
+    无工具的合成回合，从同一线程的检查点上下文把材料写成卷宗——这样即便是「过度搜索」
+    的模型（如 MiniMax-M3）也能可靠落出卷宗。刻意保持有界：不在 Track B 内跑完整 deep
+    fan-out（那是 Track A 的职责），只跑「研究回合 + 合成」这一对，避免把研究阶段成本再翻一倍。
+
+    返回卷宗 Markdown；任何失败由调用方（main）兜底为单轨。
+    """
+    # 给 Track B 的研究回合一个合理的递归预算：deep 复用 deep-opening 的预算，
+    # 否则用该 depth preset 的 recursion_limit。
+    preset = DEPTH_PRESETS.get(depth, DEPTH_PRESETS["standard"])
+    if depth == "deep":
+        research_limit = int(os.environ.get("DEERFLOW_DEEP_OPENING_RECURSION_LIMIT", "220"))
+    else:
+        research_limit = int(preset["recursion_limit"])
+
+    plog.write("stage", "actor-ontology (Track B): starting actor/ontology research turn")
+    research_text = run_streamed_turn(
+        client,
+        build_actor_ontology_prompt(question, depth, target_language),
+        thread_id,
+        research_limit,
+        plog,
+        "actor-ontology",
+    )
+
+    # 无工具合成：从本线程已收集的研究上下文把卷宗写出来。优先用专用的 actor-ontology
+    # 提示词做一次裸模型合成（与 synthesize_from_thread 同机制，但提示词换成卷宗契约），
+    # 这样卷宗结构正确且不会退化成普通研究报告。
+    try:
+        thread = client.get_thread(thread_id)
+    except Exception as e:  # noqa: BLE001 — 线程读不到则退回研究回合文本
+        plog.write("warn", f"actor-ontology synthesize: could not load thread ({type(e).__name__}: {e})")
+        return research_text
+    messages: list = []
+    for cp in reversed(thread.get("checkpoints") or []):
+        vals = cp.get("values") or {}
+        if vals.get("messages"):
+            messages = vals["messages"]
+            break
+    if not messages:
+        plog.write("warn", "actor-ontology synthesize: no messages in thread; using research-turn text")
+        return research_text
+
+    parts: list[str] = []
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        mtype = m.get("type")
+        text = _message_text(m.get("content"))
+        if not text:
+            continue
+        if mtype == "tool":
+            name = m.get("name") or "source"
+            parts.append(f"[{name}] {text}")
+        elif mtype == "ai":
+            parts.append(text)
+    context = "\n\n".join(parts).strip()
+    if not context:
+        plog.write("warn", "actor-ontology synthesize: gathered context empty; using research-turn text")
+        return research_text
+    _cap = _synthesis_context_cap(model_name)
+    if len(context) > _cap:
+        context = context[:_cap] + "\n\n[...research context truncated...]"
+
+    plog.write("stage", f"actor-ontology synthesize: writing dossier (tool-free) from {len(context)} chars")
+    try:
+        from deerflow.models import create_chat_model
+        from langchain_core.messages import HumanMessage
+
+        model = create_chat_model(model_name, thinking_enabled=False)
+        prompt = (
+            build_actor_ontology_prompt(question, depth, target_language)
+            + "\n\nSTOP researching. Do NOT call any tools — base the dossier ONLY on the "
+            "research already gathered below; do not invent.\n\n"
+            "=== GATHERED RESEARCH ===\n"
+            + context
+        )
+        resp = model.invoke([HumanMessage(content=prompt)])
+        dossier = _message_text(getattr(resp, "content", resp))
+        plog.write("stage", f"actor-ontology synthesize: produced {len(dossier)} chars")
+        # 合成回合理应更完整；若它意外更短/为空，回退到研究回合文本。
+        if len(dossier.strip()) >= len(research_text.strip()):
+            return dossier
+        return research_text
+    except Exception as e:  # noqa: BLE001 — 合成失败退回研究回合文本
+        plog.write("warn", f"actor-ontology synthesize: tool-free call failed ({type(e).__name__}: {e})")
+        return research_text
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1347,15 +1526,56 @@ def main() -> int:
         plog.write("init", "client ready; available skills will load on demand (deep-research)")
 
         # --- Stage 1: research + report ---
-        report = run_research_stage(
-            client,
-            question,
-            args.depth,
-            args.target_language,
-            args.model,
-            thread_id,
-            plog,
-        )
+        # 双轨：开启 DEERFLOW_DUAL_TRACK（默认开）时，Track A（广覆盖证据报告）与
+        # Track B（actor-ontology 卷宗）在 SAME client 上用 ISOLATED thread_id 并发跑
+        # （沿用 run_deep_fanout 已验证安全的并发回合模式）。Track A 结果仍是 report，
+        # 下游逻辑逐字节不变；Track B 结果记为 dossier。Track B 任何异常/空 → dossier=""
+        # 并告警，整轮退回单轨继续。关闭双轨时走原始单轨调用，行为逐字节一致。
+        dossier = ""
+        if _env_flag("DEERFLOW_DUAL_TRACK", True):
+            import concurrent.futures as _cf
+
+            actor_thread_id = thread_id + "-actor"
+            plog.write("stage", "dual-track: running Track A (report) + Track B (actor dossier) concurrently")
+            with _cf.ThreadPoolExecutor(max_workers=2) as _ex:
+                _fut_a = _ex.submit(
+                    run_research_stage,
+                    client,
+                    question,
+                    args.depth,
+                    args.target_language,
+                    args.model,
+                    thread_id,
+                    plog,
+                )
+                _fut_b = _ex.submit(
+                    run_actor_ontology_stage,
+                    client,
+                    question,
+                    args.depth,
+                    args.target_language,
+                    args.model,
+                    actor_thread_id,
+                    plog,
+                )
+                report = _fut_a.result()
+                try:
+                    dossier = _fut_b.result() or ""
+                except Exception as _exc:  # noqa: BLE001 — Track B 失败退回单轨
+                    dossier = ""
+                    plog.write("warn", f"dual-track: Track B (actor dossier) failed; continuing single-track ({type(_exc).__name__}: {_exc})")
+            if not dossier.strip():
+                plog.write("warn", "dual-track: Track B produced no dossier; continuing single-track")
+        else:
+            report = run_research_stage(
+                client,
+                question,
+                args.depth,
+                args.target_language,
+                args.model,
+                thread_id,
+                plog,
+            )
 
         # SAFETY NET: the primary path is the real agentic research turn above (tools +
         # thinking) writing its own report. But if the agent turn comes back with too
@@ -1402,13 +1622,33 @@ def main() -> int:
         plog.write("ok", f"wrote {REPORT_FILENAME} ({len(report)} chars)")
         write_meta()
 
+        # 双轨：Track B 的 actor 卷宗（若有内容）。report 通过安全网/校验并落盘后再写卷宗，
+        # 与 report 一样去掉外层 markdown 围栏。空卷宗（关闭双轨或 Track B 失败）不落此文件，
+        # 行为与现状逐字节一致。
+        if dossier.strip():
+            dossier = unwrap_markdown_fence(dossier)
+            _atomic_write_text(out_dir / ACTOR_DOSSIER_FILENAME, dossier)
+            meta["actor_dossier_chars"] = len(dossier)
+            plog.write("ok", f"wrote {ACTOR_DOSSIER_FILENAME} ({len(dossier)} chars)")
+            write_meta()
+
         # --- Stage 2: structured extraction (best effort) ---
         if not args.no_actors:
             try:
                 # PRIMARY: tool-free extraction from the finished report — reliable JSON
                 # (eager models like MiniMax-M3 otherwise keep calling web_search during the
                 # agent turn and never emit parseable JSON, dropping the whole enriched contract).
-                raw = extract_structured_tool_free(report, args.target_language, args.model, args.depth, plog)
+                # 双轨：有卷宗时，卷宗是 actor 抽取的「主」输入，报告作为「附加上下文」augmentation；
+                # 无卷宗时退回原行为（仅喂报告）。
+                if dossier.strip():
+                    extraction_input = (
+                        dossier
+                        + "\n\n---\n\n## 补充：广度深度研究报告（附加上下文）\n\n"
+                        + report
+                    )
+                else:
+                    extraction_input = report
+                raw = extract_structured_tool_free(extraction_input, args.target_language, args.model, args.depth, plog)
                 obj = extract_json_object(raw)
                 if obj is None:
                     # FALLBACK: the in-thread agent turn (older path) in case the bare call failed.

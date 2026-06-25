@@ -654,6 +654,10 @@ class DeerFlowResearchRunner:
         # T6.6: deep 开场 pass 的递归上限从 Config 单一真源下发给子进程（旧版在 bridge 内直接读
         # os.environ）。Config 属性本身读 env（默认 220），故此处覆盖即「Config 即真源」。
         env["DEERFLOW_DEEP_OPENING_RECURSION_LIMIT"] = str(Config.DEERFLOW_DEEP_OPENING_RECURSION_LIMIT)
+        # 双轨研究开关：Config 即单一真源（默认 True）下发给子进程，决定 deerflow 是否在跑
+        # Track A（深度研究→research_report.md）的同时并行跑 Track B（角色本体研究→actor_dossier.md）。
+        # 关闭时子进程行为与今日逐字节一致（只跑 Track A，不产出 actor_dossier.md）。
+        env["DEERFLOW_DUAL_TRACK"] = "true" if getattr(Config, "DEERFLOW_DUAL_TRACK", True) else "false"
 
         logger.info(f"启动 DeerFlow 研究子进程: {' '.join(cmd[:1])} … (cwd={deerflow_dir})")
         on_progress(2, "启动深度研究子进程…")
@@ -810,6 +814,9 @@ class DeerFlowResearchRunner:
                 "请稍后重试、降低研究深度，或更换模型"
             )
 
+        # 双轨 Track B 产物：角色本体档案。旗标关闭或 Track B 未产出时文件缺失，
+        # _read_text 返回 ""，下游按「空即退化」处理（document_texts/chunks 与单轨逐字节一致）。
+        actor_dossier = _read_text(os.path.join(handoff_dir, "actor_dossier.md"))
         actors = _read_json(os.path.join(handoff_dir, "actors.json"))
         sources = _read_json(os.path.join(handoff_dir, "sources.json"))
         timeline = _read_json(os.path.join(handoff_dir, "timeline.json"))
@@ -828,6 +835,7 @@ class DeerFlowResearchRunner:
         return {
             "report": report,
             "report_path": report_path,
+            "actor_dossier": actor_dossier,  # 双轨 Track B：角色本体档案（缺失为 ""）
             "actors": actors,
             "sources": sources,
             "timeline": timeline,
@@ -899,6 +907,9 @@ def _load_research_handoff(handoff_dir: str) -> dict[str, Any]:
     return {
         "report": report,
         "report_path": report_path,
+        # 双轨 Track B 产物：角色本体档案（actor_dossier.md）。缺失时 _read_text 返回 ""，
+        # 下游按「空即退化」处理，与单轨/旗标关闭时逐字节一致。
+        "actor_dossier": _read_text(os.path.join(handoff_dir, "actor_dossier.md")),
         "actors": _read_json(os.path.join(handoff_dir, "actors.json")),
         "sources": _read_json(os.path.join(handoff_dir, "sources.json")),
         "timeline": _read_json(os.path.join(handoff_dir, "timeline.json")),
@@ -915,6 +926,7 @@ def load_research_dossier_for_simulation(simulation_id: Optional[str]) -> dict[s
     """
     out: dict[str, Any] = {
         "situation_brief": None, "actors": None, "sources": None, "research_report": None,
+        "actor_dossier": None,  # 双轨 Track B：角色本体档案，供手动报告路径作背景上下文（缺失为 None）
     }
     if not simulation_id:
         return out
@@ -929,9 +941,11 @@ def load_research_dossier_for_simulation(simulation_id: Optional[str]) -> dict[s
             hd = data.get("handoff_dir") or PipelineManager.handoff_dir(pid)
             actors = _read_json(os.path.join(hd, "actors.json"))
             report = _read_text(os.path.join(hd, "research_report.md"))
+            dossier = _read_text(os.path.join(hd, "actor_dossier.md"))
             out["actors"] = actors
             out["sources"] = _read_json(os.path.join(hd, "sources.json"))
             out["research_report"] = report or None
+            out["actor_dossier"] = dossier or None
             out["situation_brief"] = situation_brief(actors) if actors else None
             break
     except Exception:  # best-effort enrichment must never break manual report generation
@@ -2483,6 +2497,10 @@ class PipelineOrchestrator:
                 state.research_pid = None  # 子进程已结束，清掉以免 reconcile 误杀复用 PID
                 self._complete_stage(state, STAGE_RESEARCH, "研究完成")
             report_md: str = research["report"]
+            # 双轨 Track B：角色本体档案（actor_dossier.md）。它是本体/角色抽取的主种子，
+            # 研究报告（Track A）作为补充上下文。旗标关闭或 Track B 缺失时为 None/""，
+            # 下游 document_texts/chunks 退化为单轨，与今日逐字节一致。
+            dossier_md = research.get("actor_dossier")
             actors = research.get("actors")
             # I-5-7: 把研究阶段遥测并入统一计量（stash 到 options + 喂给 meter）。
             self._record_research_telemetry(state, research.get("research_telemetry"))
@@ -2530,7 +2548,9 @@ class PipelineOrchestrator:
                 # 模板由 Config.ONTOLOGY_TEMPLATE 控制（general_forecast 有内置兜底回退到
                 # social_opinion，故传入即安全）；缺字段时静默降级到旧行为。
                 ontology = generator.generate(
-                    document_texts=[report_md],
+                    # 双轨喂料：角色档案在前作为本体/角色种子，研究报告在后作补充。
+                    # dossier_md 为空（旗标关闭/Track B 失败）时退化为 [report_md]，与今日逐字节一致。
+                    document_texts=([dossier_md] if dossier_md and dossier_md.strip() else []) + [report_md],
                     simulation_requirement=state.prompt,
                     additional_context=_actors_to_context(actors),
                     template=Config.ONTOLOGY_TEMPLATE,
@@ -2598,6 +2618,11 @@ class PipelineOrchestrator:
                 upd(5, "构建知识图谱…")
                 builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
                 chunks = TextProcessor.split_text(report_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP)
+                # 双轨：角色本体档案非空时也切块并前置注入（角色中心内容先种入图谱，
+                # 再由广覆盖研究报告补充）。dynamic-band 用 len(chunks) 重算仍成立。旗标关闭/
+                # Track B 缺失时 dossier_md 为 None/""，chunks 与今日逐字节一致。
+                if dossier_md and dossier_md.strip():
+                    chunks = TextProcessor.split_text(dossier_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP) + chunks
                 self._recompute_dynamic_bands(state, chunk_count=len(chunks))  # T6.7: 已知 chunk 数→重排区间
                 graph_id = builder.create_graph(name=project.name)
                 # EXECPLAN2 F-3-1（跨文件兜底）：set_ontology 已对无名条目逐项跳过；这里再包一层

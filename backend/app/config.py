@@ -506,6 +506,15 @@ class Config:
     RESEARCH_DEEP_FANOUT = os.environ.get('RESEARCH_DEEP_FANOUT', 'false').strip().lower() == 'true'
     # 扇出宽度上限（并行子调查数）；防止子代理把工具/LLM 预算放大失控。
     RESEARCH_FANOUT_WIDTH = int(os.environ.get('RESEARCH_FANOUT_WIDTH', '4') or '4')
+    # 双轨研究：在研究阶段「同时」跑两套调研工作流——Track A = 既有 deep-research 工作流
+    # （deep-research skill）产出 research_report.md（广覆盖证据报告，角色不变）；Track B =
+    # 新增 actor-ontology 研究工作流（actor-ontology-research skill）产出 actor_dossier.md
+    # （以 actor 为中心、面向本体的卷宗：archetype/simulation_tier/role/价值观/信念/激励/资源、
+    #  有向且带 valence 的关系、历史演变、情势简报）。随后 Track B 卷宗作为「主」actor 来源喂给
+    # 本体生成 + actor 抽取；Track A 报告作为「附加上下文」增强知识图谱/本体/人设上下文/情势上下文。
+    # 默认开；关闭（或 Track B 失败/空）时行为与现状逐字节一致（单跑 Track A，不落 actor_dossier.md）。
+    # 注意：开启后研究阶段 LLM 成本约翻倍（两套工作流并行），如需省额度可设为 false 关闭。
+    DEERFLOW_DUAL_TRACK = os.environ.get('DEERFLOW_DUAL_TRACK', 'True').strip().lower() == 'true'
 
     # ============================================================
     # EXECPLAN —— 打通「研究 → 图谱 → 模拟 → 报告」结构化契约的旋钮
