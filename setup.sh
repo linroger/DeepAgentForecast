@@ -600,6 +600,19 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
     ok "Applied deep-research skill overhaul (source tiering + budget discipline)"
   fi
 
+  # (b2b) Actor/ontology research skill: an actor-centric, ontology-ready
+  #     specialization of deep-research (rank the real key actors over
+  #     reporters/outlets, profile each in depth, map directed/typed/valenced
+  #     relations + their evolution) with a multipass + AI-judge quality loop.
+  #     Feeds the ontology generator and actors.json. It is a NEW skill dir, so
+  #     create it under the runtime's public skills.
+  DF_AOR="$DEERFLOW_DIR/skills/public/actor-ontology-research"
+  if [ -f "$BRIDGE_DIR/skills/actor-ontology-research/SKILL.md" ] && [ -d "$DEERFLOW_DIR/skills/public" ]; then
+    mkdir -p "$DF_AOR"
+    cp "$BRIDGE_DIR/skills/actor-ontology-research/SKILL.md" "$DF_AOR/SKILL.md"
+    ok "Installed actor-ontology-research skill (actor-centric, ontology-ready research)"
+  fi
+
   # (b3) Patched middlewares: loop-detection counters reset per agent run.
   #     Upstream accumulates per-tool call counts across ALL turns of a thread,
   #     so multi-pass deep research permanently force-stops web_search from
