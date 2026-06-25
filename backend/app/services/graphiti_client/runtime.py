@@ -566,6 +566,86 @@ class GraphitiRuntime:
             for c in comms
         ]
 
+    # ── NEXTSTEPS P3-6: 多跳路径 / N-hop 子图遍历（FalkorDB 变长 Cypher）──
+    # 预测是沿**传导机制**推理：「追踪级联，哪个节点一动就翻盘」。此前 runtime 只有 1-hop
+    # get_node_edges + 向量重排，无可达/路径原语。这两个方法补上（按边 name 可过滤为因果族）。
+    def causal_paths(self, graph_id: str, source: str, target: str,
+                     edge_types: list | None = None, max_hops: int = 4, limit: int = 20) -> list:
+        """source→target 的有向多跳路径（每跳 RELATES_TO，可选按边 name 过滤为因果族）。
+        返回 [{nodes:[name...], edges:[name...], hops:int}]；失败/无路径 → []（degrade-safe）。"""
+        return self.run(self._causal_paths(graph_id, source, target, edge_types, max_hops, limit))
+
+    async def _causal_paths(self, graph_id, source, target, edge_types, max_hops, limit):
+        try:
+            g = await self._ensure_graph(graph_id)
+        except Exception:  # noqa: BLE001
+            return []
+        hops = max(1, min(int(max_hops or 4), 6))      # 变长上界须为字面量；夹取后内插，安全
+        lim = max(1, min(int(limit or 20), 100))
+        params: dict = {"src": str(source), "tgt": str(target)}
+        type_filter = ""
+        if edge_types:
+            type_filter = "AND all(x IN r WHERE x.name IN $types) "
+            params["types"] = [str(t) for t in edge_types]
+        cypher = (
+            f"MATCH p=(a:Entity)-[r:RELATES_TO*1..{hops}]->(b:Entity) "
+            f"WHERE a.name = $src AND b.name = $tgt {type_filter}"
+            "RETURN [n IN nodes(p) | n.name] AS nodes, "
+            "[e IN relationships(p) | e.name] AS edges "
+            f"LIMIT {lim}"
+        )
+        try:
+            async with self._read_guard(graph_id):
+                records, _, _ = await g.driver.execute_query(cypher, **params)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("causal_paths failed %s (%s→%s): %s", graph_id, source, target, exc)
+            return []
+        out = []
+        for rec in (records or []):
+            nodes = [n for n in (rec.get("nodes") or []) if n]
+            edges = [e for e in (rec.get("edges") or []) if e]
+            if len(nodes) >= 2:
+                out.append({"nodes": nodes, "edges": edges, "hops": len(edges)})
+        return out
+
+    def n_hop_subgraph(self, graph_id: str, center: str, max_hops: int = 2,
+                       edge_types: list | None = None, limit: int = 60) -> list:
+        """以 center 为中心的 N 跳邻域边集（无向扩展，可选按边 name 过滤）。
+        返回 [{source, edge, target}]（去重）；失败 → []（degrade-safe）。"""
+        return self.run(self._n_hop_subgraph(graph_id, center, max_hops, edge_types, limit))
+
+    async def _n_hop_subgraph(self, graph_id, center, max_hops, edge_types, limit):
+        try:
+            g = await self._ensure_graph(graph_id)
+        except Exception:  # noqa: BLE001
+            return []
+        hops = max(1, min(int(max_hops or 2), 4))
+        lim = max(1, min(int(limit or 60), 300))
+        params: dict = {"center": str(center)}
+        type_filter = ""
+        if edge_types:
+            type_filter = "AND all(x IN r WHERE x.name IN $types) "
+            params["types"] = [str(t) for t in edge_types]
+        cypher = (
+            f"MATCH p=(a:Entity)-[r:RELATES_TO*1..{hops}]-(b:Entity) "
+            f"WHERE a.name = $center {type_filter}"
+            "UNWIND relationships(p) AS rel "
+            "RETURN DISTINCT startNode(rel).name AS source, rel.name AS edge, "
+            "endNode(rel).name AS target "
+            f"LIMIT {lim}"
+        )
+        try:
+            async with self._read_guard(graph_id):
+                records, _, _ = await g.driver.execute_query(cypher, **params)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("n_hop_subgraph failed %s (%s): %s", graph_id, center, exc)
+            return []
+        return [
+            {"source": rec.get("source"), "edge": rec.get("edge"), "target": rec.get("target")}
+            for rec in (records or [])
+            if rec.get("source") and rec.get("target")
+        ]
+
     # EXECPLAN2 I-1-0: map a recipe selector ('rrf'|'mmr'|'node_distance'|
     # 'cross_encoder'|'combined') + scope ('edges'|'nodes') to a graphiti_core
     # SearchConfig recipe. Unknown selectors fall back to 'rrf', so a stray value

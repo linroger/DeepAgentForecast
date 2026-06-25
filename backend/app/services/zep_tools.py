@@ -2475,6 +2475,54 @@ class ZepToolsService:
                 lines.append(f"成员: {shown}" + ("…" if len(members) > 20 else ""))
         return "\n".join(lines)
 
+    # NEXTSTEPS P3-6: 多跳传导/级联追踪（图谱原生结构推理，互补于 1-hop 检索）。
+    _CAUSAL_EDGE_NAMES = ["CAUSES", "ENABLES", "CONSTRAINS", "TRIGGERS", "ACCELERATES"]
+
+    def trace_cascade(self, graph_id: str, source: str = "", target: str = "",
+                      center: str = "", causal_only: bool = True) -> str:
+        """沿图谱多跳追踪传导/级联。给 source+target → 列出二者间的有向路径（优先因果族边）；
+        只给 center → 列出其多跳因果邻域。用于"追踪级联、哪个节点一动就翻盘"的结构推理。
+        无路径/遍历失败 → 友好降级串（不抛出）。"""
+        try:
+            from .graphiti_client.runtime import get_runtime
+            rt = get_runtime()
+        except Exception:  # noqa: BLE001
+            return "（图谱遍历不可用）"
+        edge_types = self._CAUSAL_EDGE_NAMES if causal_only else None
+        try:
+            if source and target:
+                paths = rt.causal_paths(graph_id, source, target, edge_types=edge_types) or []
+                note = ""
+                if not paths and causal_only:
+                    paths = rt.causal_paths(graph_id, source, target, edge_types=None) or []
+                    note = "（无纯因果路径，下列为一般关系路径）"
+                if not paths:
+                    return f"（{source} → {target} 间未找到 ≤6 跳路径）"
+                lines = [f"【传导路径：{source} → {target}】{note}"]
+                for p in paths[:12]:
+                    nodes, edges = p.get("nodes", []), p.get("edges", [])
+                    chain = ""
+                    for i, n in enumerate(nodes):
+                        chain += str(n)
+                        if i < len(edges):
+                            chain += f" --[{edges[i]}]--> "
+                    lines.append(f"· ({p.get('hops')}跳) {chain}")
+                return "\n".join(lines)
+            if center:
+                edges = rt.n_hop_subgraph(graph_id, center, edge_types=edge_types) or []
+                if not edges and causal_only:
+                    edges = rt.n_hop_subgraph(graph_id, center, edge_types=None) or []
+                if not edges:
+                    return f"（{center} 的多跳邻域为空）"
+                lines = [f"【{center} 的多跳传导邻域（{len(edges)} 条边）】"]
+                for e in edges[:40]:
+                    lines.append(f"· {e.get('source')} --[{e.get('edge')}]--> {e.get('target')}")
+                return "\n".join(lines)
+            return "（trace_cascade 需要 source+target 或 center）"
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"trace_cascade 失败（降级）: {exc}")
+            return "（图谱遍历失败）"
+
     def opinion_shift(self, simulation_id: str, actor_name: str) -> str:
         """单个 actor 的逐轮行为轨迹（动作量/类型随轮次变化），用于观察立场/参与度演变。"""
         from .simulation_runner import SimulationRunner

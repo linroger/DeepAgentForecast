@@ -1875,6 +1875,16 @@ class ReportAgent:
                 "name": "opinion_shift",
                 "description": "单个 Agent/角色的逐轮行为轨迹（动作量/类型随轮次变化），用于观察其立场或参与度的演变。",
                 "parameters": {"actor_name": "要追踪的 Agent/角色名"}
+            },
+            # NEXTSTEPS P3-6: 图谱多跳传导/级联追踪（结构推理，互补于 1-hop 检索）
+            "trace_cascade": {
+                "name": "trace_cascade",
+                "description": "多跳传导/级联追踪：给 source+target 列出图谱中二者间的有向路径（优先因果边 "
+                               "CAUSES/ENABLES/CONSTRAINS/TRIGGERS/ACCELERATES）；只给 center 列出其多跳因果邻域。"
+                               "用于『追踪级联、哪个节点一动就翻盘』的结构推理（而非 1-hop 检索）。",
+                "parameters": {"source": "起点实体名（与 target 配对追路径）",
+                               "target": "终点实体名",
+                               "center": "（可选）中心实体名：只看其多跳传导邻域时用"}
             }
         }
         # I-1-2: faction_brief 仅在启用图谱社区检索时暴露（默认关 → 工具集与现状逐字节一致）。
@@ -1984,6 +1994,14 @@ class ReportAgent:
             elif tool_name == "opinion_shift":
                 actor_name = parameters.get("actor_name", parameters.get("query", ""))
                 return self.zep_tools.opinion_shift(self.simulation_id, actor_name)
+
+            elif tool_name == "trace_cascade":  # NEXTSTEPS P3-6: 多跳传导/级联追踪
+                return self.zep_tools.trace_cascade(
+                    graph_id=self.graph_id,
+                    source=parameters.get("source", ""),
+                    target=parameters.get("target", ""),
+                    center=parameters.get("center", ""),
+                )
 
             elif tool_name == "scenario_diff":
                 # T4.7: 反事实对比 base vs 当前情景模拟
