@@ -1570,6 +1570,52 @@ def world_state_seed_from_actors(actors: Optional[Any]) -> Dict[str, Any]:
     return {"scenarios": names, "base_rates": rates}
 
 
+# 关系价 → 到预测时点的保守轨迹先验。结构性纽带（联盟/对抗）有惯性、更"黏"；交易性纽带随利益
+# 变化、最易翻转。这是**模型推断而非证据**，渲染时必须显式标注。
+_VALENCE_TRAJECTORY = {
+    "allied": ("likely_persists", "联盟有惯性，倾向延续"),
+    "adversarial": ("persists_or_escalates", "对抗关系倾向延续或升级"),
+    "transactional": ("contingent", "交易关系随利益变化，最易翻转"),
+    "neutral": ("uncertain", "价中性，轨迹不定"),
+}
+
+
+def project_relationships(actors: Optional[Any]) -> List[Dict[str, Any]]:
+    """NEXTSTEPS P3-8: 给每条已实现关系投一个「到预测时点的轨迹」标签。
+
+    预测要问的是"到 horizon 时，**哪些**纽带还在/会翻转"，而 KG 只编码当下。本函数基于关系价
+    （relation_valence）给一个保守先验轨迹（allied→likely_persists / adversarial→
+    persists_or_escalates / transactional→contingent）。**模型推断而非证据**，调用方须标注。
+    无关系 → []（degrade-safe）。
+    """
+    rows = extract_relationship_rows(actors)
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        val = relation_valence(r)
+        traj, why = _VALENCE_TRAJECTORY.get(val, ("uncertain", "轨迹不定"))
+        out.append({
+            "source": r.get("source"), "target": r.get("target"),
+            "type": r.get("type"), "valence": val,
+            "projected": traj, "rationale": why,
+        })
+    return out
+
+
+def projected_edges_block(actors: Optional[Any], max_rows: int = 14) -> str:
+    """把 project_relationships 渲染为报告用的「关系演化投影」块（显式标注=模型推断非证据）。
+    空 → ""（degrade-safe）。优先展示最易翻转的（contingent）纽带——它们是情景分叉的支点。"""
+    proj = project_relationships(actors)
+    if not proj:
+        return ""
+    order = {"contingent": 0, "persists_or_escalates": 1, "likely_persists": 2, "uncertain": 3}
+    proj.sort(key=lambda p: order.get(p.get("projected", "uncertain"), 9))
+    lines = ["【关系演化投影到预测时点（⚠模型推断·非证据；标注 contingent 者最易翻转、是情景支点）】"]
+    for p in proj[:max_rows]:
+        src, tgt = p.get("source") or "?", p.get("target") or "?"
+        lines.append(f"· {src} —[{p.get('type') or 'REL'}]→ {tgt}：{p.get('projected')}（{p.get('rationale')}）")
+    return "\n".join(lines)
+
+
 def forecast_inputs_block(actors: Optional[Any], max_per_section: int = 6) -> str:
     """把 forecast_inputs 渲染为预测脚手架块；全空返回空串。
 

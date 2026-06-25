@@ -1363,6 +1363,16 @@ class ReportAgent:
                 parts.append(ws_blk)
         except Exception as e:  # noqa: BLE001
             logger.warning(f"信号包 world_state 读取失败（忽略）: {e}")
+        # 0b) NEXTSTEPS P3-8: 关系演化投影到预测时点（保守模型先验，显式标注=非证据）。
+        # 默认关（REPORT_PROJECTED_EDGES）；标注 contingent 的纽带是情景分叉支点。
+        if getattr(Config, "REPORT_PROJECTED_EDGES", False):
+            try:
+                from ..utils.actors import projected_edges_block as _pe_blk
+                pe_blk = _pe_blk(self.actors)
+                if pe_blk:
+                    parts.append(pe_blk)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"信号包 projected_edges 失败（忽略）: {e}")
         # 1) 量化结果（Top actor / 逐轮动作量 + 峰值 / 动作类型分布）——截断到 ~1800 字
         try:
             outcomes = self.zep_tools.simulation_outcomes(self.simulation_id, top_n=8)

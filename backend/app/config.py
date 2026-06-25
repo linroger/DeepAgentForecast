@@ -142,6 +142,10 @@ class Config:
     # 自评。默认开（仅 jsonl 追加/读取，无 LLM）；初期无已解析样本时对信心无影响（degrade-safe）。
     REPORT_FORECAST_LEDGER = os.environ.get('REPORT_FORECAST_LEDGER', 'True').strip().lower() == 'true'
     FORECAST_LEDGER_DIR = os.environ.get('FORECAST_LEDGER_DIR', '').strip()  # 空=PIPELINE_DATA_DIR/_forecast_ledger
+    # NEXTSTEPS P3-8：把已实现关系按价投影一个「到预测时点的轨迹」（allied→likely_persists /
+    # adversarial→persists_or_escalates / transactional→contingent），喂进报告信号包帮助情景分叉
+    # 分析（contingent 纽带=支点）。**模型先验非证据**，块内显式标注。默认关（保守，避免被当成证据）。
+    REPORT_PROJECTED_EDGES = os.environ.get('REPORT_PROJECTED_EDGES', 'False').strip().lower() == 'true'
     # OASIS 抽样/人设生成确定性种子（EXECPLAN2 I-7-2；0/空=随机，复现/集成跑设同一正整数）。
     SIM_SEED = int(os.environ.get('SIM_SEED', '0') or '0')
     # NEXTSTEPS P0-3：同问多种子集成。LLM 驱动的模拟是随机生成器，单次=单抽样；对同一图谱用
