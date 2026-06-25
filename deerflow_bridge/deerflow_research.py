@@ -1294,8 +1294,103 @@ def build_actor_ontology_prompt(question: str, depth: str, target_language: str 
     )
 
 
+# ===================== NEXTSTEPS P3-1: actor-dossier AI-judge → refine loop =====================
+# 整条流水线的准确度被 actor 卷宗封顶；actor-ontology SKILL §6–§8 完整规定了「多pass + 8维
+# AI-judge 门（PASS 标准 + ≤3 轮定向 refine）」，但此前 Track B 只跑「一次研究 + 一次合成」就发首稿
+# ——正是 SKILL 明令禁止的「ship the first draft」。这里补上 judge→refine 环（默认开，预算有界）。
+
+_JUDGE_DIMS = (
+    "cast_correctness", "salience_ranking", "per_actor_depth", "relationship_completeness",
+    "history_evolution", "evidence_grounding", "contradiction_handling", "ontology_readiness",
+)
+# §8 的四个不可妥协维度（cast 正确性 / 单 actor 深度 / 关系完整性 / 本体就绪度）。
+_JUDGE_CRITICAL = ("cast_correctness", "per_actor_depth", "relationship_completeness", "ontology_readiness")
+
+
+def build_judge_prompt(question: str, target_language: str | None) -> str:
+    """构造对 actor 卷宗的 8 维 AI-judge 提示词（默认怀疑：未证明优秀即不合格）。只输出 JSON。"""
+    lang = f"（用{target_language}书写 gaps）" if target_language else ""
+    dims = "、".join(_JUDGE_DIMS)
+    return (
+        "你是一名严苛的研究评审（actor-ontology-research SKILL §7–§8）。默认怀疑：一份卷宗未被证明"
+        "优秀即视为不合格。针对下方【预测问题】评审【卷宗】，对以下 8 个维度各打 0–5 分并给定 verdict。\n"
+        f"维度：{dims}。\n"
+        "PASS 标准（§8，不可妥协）：无任何维度 <3；且 cast_correctness / per_actor_depth / "
+        "relationship_completeness / ontology_readiness 四项各 ≥4；且总体均分 ≥4。否则 FAIL。\n"
+        "若 FAIL，给出**定向**的 gaps 清单（具体、可执行，如：'缺少关键主体 X'、'X↔Y 边无 valence'、"
+        f"'媒体 W 被误列为 actor，应降级为 source'）{lang}。只输出 JSON，不要解释：\n"
+        '{"scores": {' + ", ".join(f'"{d}": 0-5' for d in _JUDGE_DIMS) + '}, '
+        '"verdict": "PASS|FAIL", "gaps": ["..."]}\n\n'
+        f"=== 预测问题 ===\n{question}\n"
+    )
+
+
+def dossier_passes(scorecard) -> bool:
+    """按 SKILL §8 判定卷宗是否通过。无有效记分牌时**不阻断**（degrade：回退为今日"发首稿"行为）。"""
+    if not isinstance(scorecard, dict):
+        return True
+    scores = scorecard.get("scores")
+    if not isinstance(scores, dict) or not scores:
+        return str(scorecard.get("verdict", "")).upper() != "FAIL"
+    vals = []
+    for v in scores.values():
+        try:
+            vals.append(float(v))
+        except (TypeError, ValueError):
+            pass
+    if not vals:
+        return str(scorecard.get("verdict", "")).upper() != "FAIL"
+    if min(vals) < 3:
+        return False
+    for k in _JUDGE_CRITICAL:
+        try:
+            if float(scores.get(k, 0)) < 4:
+                return False
+        except (TypeError, ValueError):
+            return False
+    return (sum(vals) / len(vals)) >= 4.0
+
+
+def build_actor_refinement_prompt(question: str, gaps: list, depth: str,
+                                  target_language: str | None) -> str:
+    """构造一次**定向** refine 研究回合提示词：只补 judge 指出的 gaps，不重写整份卷宗。"""
+    gap_lines = "\n".join(f"- {str(g)}" for g in (gaps or [])[:12])
+    lang = f"\n用{target_language}书写。" if target_language else ""
+    return (
+        "对【预测问题】的 actor 卷宗，一名评审指出了以下**具体缺口**。只针对这些缺口做定向研究"
+        "（必要时搜索/取证），补齐相应主体画像、关系 valence、来源分级或纠正误判，**不要**重写"
+        "整份卷宗、不要偏离这些缺口。完成后把新发现以工作笔记形式给出，供随后合成采纳。\n\n"
+        f"=== 缺口清单 ===\n{gap_lines}\n\n=== 预测问题 ===\n{question}{lang}\n"
+    )
+
+
+def judge_dossier(dossier: str, question: str, target_language: str | None,
+                  model_name: str, plog: "ProgressLog") -> dict | None:
+    """对卷宗做一次无工具的 AI-judge 评审，返回记分牌 dict（解析失败/异常→None）。"""
+    try:
+        from deerflow.models import create_chat_model
+        from langchain_core.messages import HumanMessage
+
+        model = create_chat_model(model_name, thinking_enabled=False)
+        prompt = (
+            build_judge_prompt(question, target_language)
+            + "\n=== 卷宗 ===\n" + (dossier or "")[:60000]
+        )
+        resp = model.invoke([HumanMessage(content=prompt)])
+        text = _message_text(getattr(resp, "content", resp))
+        sc = extract_json_object(text)
+        if isinstance(sc, dict):
+            return sc
+        plog.write("warn", "actor-ontology judge: could not parse scorecard JSON")
+        return None
+    except Exception as e:  # noqa: BLE001 — judge 失败不阻断，回退发当前稿
+        plog.write("warn", f"actor-ontology judge failed ({type(e).__name__}: {e})")
+        return None
+
+
 def run_actor_ontology_stage(client, question: str, depth: str, target_language: str | None,
-                             model_name: str, thread_id: str, plog: "ProgressLog") -> str:
+                             model_name: str, thread_id: str, plog: "ProgressLog",
+                             out_dir=None) -> str:
     """运行 Track B：产出 actor-ontology 卷宗（actor_dossier.md 的内容）。
 
     一次有工具的研究回合（用 actor-ontology 提示词搜证、画像、建关系网），随后做一次
@@ -1323,68 +1418,111 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
         "actor-ontology",
     )
 
-    # 无工具合成：从本线程已收集的研究上下文把卷宗写出来。优先用专用的 actor-ontology
-    # 提示词做一次裸模型合成（与 synthesize_from_thread 同机制，但提示词换成卷宗契约），
-    # 这样卷宗结构正确且不会退化成普通研究报告。
+    # 无工具合成（可被 refine 后重复调用）：从本线程**当前**已收集的研究上下文把卷宗写出来。
+    # 优先用 actor-ontology 提示词做裸模型合成，保证卷宗结构正确不退化为普通研究报告。
+    def _synthesize() -> str:
+        try:
+            thread = client.get_thread(thread_id)
+        except Exception as e:  # noqa: BLE001 — 线程读不到则退回研究回合文本
+            plog.write("warn", f"actor-ontology synthesize: could not load thread ({type(e).__name__}: {e})")
+            return research_text
+        messages: list = []
+        for cp in reversed(thread.get("checkpoints") or []):
+            vals = cp.get("values") or {}
+            if vals.get("messages"):
+                messages = vals["messages"]
+                break
+        if not messages:
+            plog.write("warn", "actor-ontology synthesize: no messages in thread; using research-turn text")
+            return research_text
+        parts: list[str] = []
+        for m in messages:
+            if not isinstance(m, dict):
+                continue
+            mtype = m.get("type")
+            text = _message_text(m.get("content"))
+            if not text:
+                continue
+            if mtype == "tool":
+                name = m.get("name") or "source"
+                parts.append(f"[{name}] {text}")
+            elif mtype == "ai":
+                parts.append(text)
+        context = "\n\n".join(parts).strip()
+        if not context:
+            plog.write("warn", "actor-ontology synthesize: gathered context empty; using research-turn text")
+            return research_text
+        _cap = _synthesis_context_cap(model_name)
+        if len(context) > _cap:
+            context = context[:_cap] + "\n\n[...research context truncated...]"
+        plog.write("stage", f"actor-ontology synthesize: writing dossier (tool-free) from {len(context)} chars")
+        try:
+            from deerflow.models import create_chat_model
+            from langchain_core.messages import HumanMessage
+
+            model = create_chat_model(model_name, thinking_enabled=False)
+            prompt = (
+                build_actor_ontology_prompt(question, depth, target_language)
+                + "\n\nSTOP researching. Do NOT call any tools — base the dossier ONLY on the "
+                "research already gathered below; do not invent.\n\n"
+                "=== GATHERED RESEARCH ===\n"
+                + context
+            )
+            resp = model.invoke([HumanMessage(content=prompt)])
+            dossier = _message_text(getattr(resp, "content", resp))
+            plog.write("stage", f"actor-ontology synthesize: produced {len(dossier)} chars")
+            if len(dossier.strip()) >= len(research_text.strip()):
+                return dossier
+            return research_text
+        except Exception as e:  # noqa: BLE001 — 合成失败退回研究回合文本
+            plog.write("warn", f"actor-ontology synthesize: tool-free call failed ({type(e).__name__}: {e})")
+            return research_text
+
+    dossier = _synthesize()
+
+    # NEXTSTEPS P3-1: AI-judge → 定向 refine 环（默认开，预算有界）。判不合格则按 gap 清单做一次
+    # 定向研究回合再重合成，最多 ACTOR_DOSSIER_JUDGE_MAX_ROUNDS 轮。任何失败都回退当前稿（degrade）。
+    if not _env_flag("ACTOR_DOSSIER_JUDGE", True):
+        return dossier
     try:
-        thread = client.get_thread(thread_id)
-    except Exception as e:  # noqa: BLE001 — 线程读不到则退回研究回合文本
-        plog.write("warn", f"actor-ontology synthesize: could not load thread ({type(e).__name__}: {e})")
-        return research_text
-    messages: list = []
-    for cp in reversed(thread.get("checkpoints") or []):
-        vals = cp.get("values") or {}
-        if vals.get("messages"):
-            messages = vals["messages"]
+        max_rounds = max(0, int(os.environ.get("ACTOR_DOSSIER_JUDGE_MAX_ROUNDS", "1") or "1"))
+    except ValueError:
+        max_rounds = 1
+    scorecard = None
+    for r in range(max_rounds):
+        scorecard = judge_dossier(dossier, question, target_language, model_name, plog)
+        if scorecard is None:
             break
-    if not messages:
-        plog.write("warn", "actor-ontology synthesize: no messages in thread; using research-turn text")
-        return research_text
-
-    parts: list[str] = []
-    for m in messages:
-        if not isinstance(m, dict):
-            continue
-        mtype = m.get("type")
-        text = _message_text(m.get("content"))
-        if not text:
-            continue
-        if mtype == "tool":
-            name = m.get("name") or "source"
-            parts.append(f"[{name}] {text}")
-        elif mtype == "ai":
-            parts.append(text)
-    context = "\n\n".join(parts).strip()
-    if not context:
-        plog.write("warn", "actor-ontology synthesize: gathered context empty; using research-turn text")
-        return research_text
-    _cap = _synthesis_context_cap(model_name)
-    if len(context) > _cap:
-        context = context[:_cap] + "\n\n[...research context truncated...]"
-
-    plog.write("stage", f"actor-ontology synthesize: writing dossier (tool-free) from {len(context)} chars")
-    try:
-        from deerflow.models import create_chat_model
-        from langchain_core.messages import HumanMessage
-
-        model = create_chat_model(model_name, thinking_enabled=False)
-        prompt = (
-            build_actor_ontology_prompt(question, depth, target_language)
-            + "\n\nSTOP researching. Do NOT call any tools — base the dossier ONLY on the "
-            "research already gathered below; do not invent.\n\n"
-            "=== GATHERED RESEARCH ===\n"
-            + context
-        )
-        resp = model.invoke([HumanMessage(content=prompt)])
-        dossier = _message_text(getattr(resp, "content", resp))
-        plog.write("stage", f"actor-ontology synthesize: produced {len(dossier)} chars")
-        # 合成回合理应更完整；若它意外更短/为空，回退到研究回合文本。
-        if len(dossier.strip()) >= len(research_text.strip()):
-            return dossier
-        return research_text
-    except Exception as e:  # noqa: BLE001 — 合成失败退回研究回合文本
-        plog.write("warn", f"actor-ontology synthesize: tool-free call failed ({type(e).__name__}: {e})")
-        return research_text
+        plog.write("stage",
+                   f"actor-ontology judge round {r + 1}: verdict={scorecard.get('verdict')} "
+                   f"scores={scorecard.get('scores')}")
+        if dossier_passes(scorecard):
+            plog.write("ok", f"actor-ontology judge: PASS at round {r + 1}")
+            break
+        gaps = scorecard.get("gaps") or []
+        if not gaps:
+            break
+        plog.write("stage", f"actor-ontology refine round {r + 1}: addressing {len(gaps)} gaps")
+        try:
+            run_streamed_turn(
+                client,
+                build_actor_refinement_prompt(question, gaps, depth, target_language),
+                thread_id, research_limit, plog, "actor-ontology-refine",
+            )
+            dossier = _synthesize()
+        except Exception as e:  # noqa: BLE001 — refine 失败发当前稿
+            plog.write("warn", f"actor-ontology refine failed ({type(e).__name__}: {e}); shipping current dossier")
+            break
+    # 落记分牌到 out_dir（供运维/质量面板查看；best-effort）。
+    if out_dir is not None and scorecard is not None:
+        try:
+            _atomic_write_text(
+                out_dir / "actor_dossier_judge.json",
+                json.dumps(scorecard, ensure_ascii=False, indent=2),
+            )
+        except Exception:  # noqa: BLE001
+            pass
+    return dossier
 
 
 # ---------------------------------------------------------------------------
@@ -1557,6 +1695,7 @@ def main() -> int:
                     args.model,
                     actor_thread_id,
                     plog,
+                    out_dir,  # NEXTSTEPS P3-1: 让 Track B 把 AI-judge 记分牌落到 out_dir
                 )
                 report = _fut_a.result()
                 try:

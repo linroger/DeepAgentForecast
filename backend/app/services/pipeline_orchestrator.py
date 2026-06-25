@@ -1557,14 +1557,41 @@ class PipelineOrchestrator:
             return {"ok": True, "status": "cancelled"}
 
     @classmethod
-    def delete_pipeline(cls, pipeline_id: str) -> dict[str, Any]:
+    def _dependent_forks(cls, pipeline_id: str) -> list[str]:
+        """返回把 pipeline_id 当作 base 的 fork 管线 id 列表。
+
+        fork（what-if 情景）与其 base **共享同一个 handoff 目录**（research/ontology/graph
+        产物），删除 base 会 rmtree 掉该目录，让所有 fork 的恢复/报告复用断裂。删除前据此
+        守卫。尽力而为；读不到 options 时退化为加载完整状态。
+        """
+        deps: list[str] = []
+        try:
+            for p in PipelineManager.list_pipelines():
+                pid = p.get("pipeline_id")
+                if not pid or pid == pipeline_id:
+                    continue
+                opts = p.get("options")
+                if not isinstance(opts, dict):
+                    full = PipelineManager.load(pid)
+                    opts = (full or {}).get("options") if isinstance(full, dict) else None
+                if isinstance(opts, dict) and opts.get("base_pipeline_id") == pipeline_id:
+                    deps.append(pid)
+        except Exception:  # noqa: BLE001 — 守卫为尽力而为，扫描失败不阻断删除决策
+            pass
+        return deps
+
+    @classmethod
+    def delete_pipeline(cls, pipeline_id: str, force: bool = False) -> dict[str, Any]:
         """删除一条已结束的管线记录（含其 handoff 产物目录）。
 
         在飞管线必须先取消再删除——删除运行中的状态文件会让 _run 线程在下次
         落盘时凭空复活记录，且孤儿子进程无人回收。
 
+        若该管线被其它 fork 当作 base（共享 handoff 目录），默认拒绝删除（返回
+        has_dependents + 依赖列表），避免静默破坏 fork；force=True 可强制删除。
+
         Returns:
-            {"ok": bool, "status": str}  status ∈ deleted / not_found / still_running
+            {"ok": bool, "status": str}  status ∈ deleted / not_found / still_running / has_dependents
         """
         with cls._lifecycle_lock:
             live = cls._threads.get(pipeline_id)
@@ -1573,6 +1600,15 @@ class PipelineOrchestrator:
             data = PipelineManager.load(pipeline_id)
             if data is None:
                 return {"ok": False, "status": "not_found"}
+            if not force:
+                deps = cls._dependent_forks(pipeline_id)
+                if deps:
+                    logger.warning(
+                        "[%s] 拒绝删除：仍有 %d 个 fork 依赖其 handoff 目录（%s…）。"
+                        "请先删除这些 fork 或 force 删除。",
+                        pipeline_id, len(deps), ", ".join(deps[:5]),
+                    )
+                    return {"ok": False, "status": "has_dependents", "dependents": deps}
             if data.get("status") == "running":
                 # 持久化为 running 但本进程无线程 → 孤儿；先按取消语义落盘再删，
                 # 这样即使删除中途失败，状态也不会停在 running 误导前端。
@@ -1848,6 +1884,201 @@ class PipelineOrchestrator:
                     "is_scenario_injection": True,
                 })
         return config
+
+    # -- NEXTSTEPS P0-3: 同问多种子集成 -----------------------------------
+    @staticmethod
+    def _agreement_to_confidence(agreement: Any) -> str:
+        """把 inter-seed 一致度 ∈[0,1] 映射为报告信心（高一致=high）。无效值→medium。"""
+        try:
+            a = float(agreement)
+        except (TypeError, ValueError):
+            return "medium"
+        if a >= 0.75:
+            return "high"
+        if a >= 0.45:
+            return "medium"
+        return "low"
+
+    @staticmethod
+    def _read_report_forecast(report_id: Optional[str]) -> Optional[dict]:
+        """读取某报告目录下的 forecast.json（不存在/损坏→None）。"""
+        if not report_id:
+            return None
+        try:
+            from .report_agent import ReportManager
+            fpath = os.path.join(ReportManager._get_report_folder(report_id), "forecast.json")
+            if os.path.exists(fpath):
+                with open(fpath, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception:  # noqa: BLE001 — 读不到就当无集成样本
+            return None
+        return None
+
+    def _maybe_run_seed_ensemble(self, state: "PipelineState", project: Any, graph_id: Optional[str],
+                                 actors: Any, research: dict, report_md: str) -> None:
+        """NEXTSTEPS P0-3: 同问多种子集成。
+
+        对**同一张图谱**用不同 SIM_SEED 多跑 (prepare→run→report)，收集每次的 forecast.json
+        （含主跑），聚合为 ensemble_forecast.json，并把 inter-seed 一致度映射成报告信心回写主
+        forecast.json。门控：N_FORECAST_SEEDS>1、full 模式、结构化预测已开、尚未集成。串行、
+        有界、带停滞看门狗；任一额外种子失败仅告警跳过；有效样本<2 则不落集成文件（degrade-safe）。
+        默认 N=1 → 该方法直接返回（与现状逐字节一致）。
+        """
+        try:
+            n_seeds = max(1, int(getattr(Config, "N_FORECAST_SEEDS", 1) or 1))
+        except (TypeError, ValueError):
+            n_seeds = 1
+        if (n_seeds <= 1 or state.mode != "full"
+                or not getattr(Config, "REPORT_STRUCTURED_FORECAST", True)
+                or state.options.get("ensemble_done")):
+            return
+        if not (project and graph_id and state.report_id):
+            return
+        from ..utils.atomic import write_json_atomic
+        primary_fc = self._read_report_forecast(state.report_id)
+        if not primary_fc or not primary_fc.get("scenarios"):
+            logger.info("[%s] 主报告无结构化预测，跳过多种子集成", state.pipeline_id)
+            return
+        forecasts: list = [primary_fc]
+        extra_runs: list = []
+        base_seed = int(getattr(Config, "SIM_SEED", 0) or 0)
+        _mr = state.options.get("max_rounds") or (Config.OASIS_DEFAULT_MAX_ROUNDS or None)
+        max_rounds = int(_mr) if _mr else None
+        handoff_dir = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+        for k in range(2, n_seeds + 1):
+            cancel_ev = type(self)._cancel_events.get(state.pipeline_id)
+            if cancel_ev is not None and cancel_ev.is_set():
+                raise PipelineCancelled("多种子集成期间被取消")
+            seed = (base_seed or 0) + k * 7919  # 派生互异种子（base=0 时也确定性互异）
+            st = state.stages.setdefault(STAGE_REPORT, StageState(name=STAGE_REPORT))
+            st.message = f"多种子集成 {k}/{n_seeds}（种子 {seed}）…"
+            PipelineManager.save(state)
+            try:
+                sim_id, rid, fc = self._run_one_seed(
+                    state, project, graph_id, actors, research, report_md,
+                    seed=seed, max_rounds=max_rounds,
+                )
+                extra_runs.append({"seed": seed, "simulation_id": sim_id, "report_id": rid})
+                if fc and fc.get("scenarios"):
+                    forecasts.append(fc)
+            except PipelineCancelled:
+                raise
+            except Exception as _se:  # noqa: BLE001 — 单个种子失败不拖垮集成
+                logger.warning("[%s] 集成种子 %s 失败（跳过）: %s", state.pipeline_id, k, _se)
+        if len(forecasts) < 2:
+            logger.info("[%s] 有效集成样本<2，不写 ensemble_forecast.json", state.pipeline_id)
+            state.options["ensemble_done"] = True
+            PipelineManager.save(state)
+            return
+        from .ensemble import aggregate_forecasts
+        agg = aggregate_forecasts(forecasts)
+        agg["n_seeds_requested"] = n_seeds
+        agg["extra_runs"] = extra_runs
+        agreement = agg.get("agreement")
+        agg["confidence"] = self._agreement_to_confidence(agreement)
+        # 落 ensemble_forecast.json（handoff + 主报告目录），并把一致度/信心回写主 forecast.json
+        try:
+            write_json_atomic(os.path.join(handoff_dir, "ensemble_forecast.json"), agg)
+            state.artifacts["ensemble_forecast"] = os.path.join(handoff_dir, "ensemble_forecast.json")
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from .report_agent import ReportManager
+            rfolder = ReportManager._get_report_folder(state.report_id)
+            write_json_atomic(os.path.join(rfolder, "ensemble_forecast.json"), agg)
+            primary_fc["confidence"] = agg["confidence"]
+            primary_fc["ensemble"] = {
+                "n_runs": agg.get("n_runs"), "agreement": agreement,
+                "scenarios": agg.get("scenarios"),
+            }
+            write_json_atomic(os.path.join(rfolder, "forecast.json"), primary_fc)
+        except Exception as _we:  # noqa: BLE001
+            logger.warning("[%s] 写集成结果失败: %s", state.pipeline_id, _we)
+        state.options["ensemble_done"] = True
+        state.options["ensemble"] = {
+            "n_runs": agg.get("n_runs"), "agreement": agreement, "confidence": agg["confidence"],
+        }
+        PipelineManager.save(state)
+        logger.info("[%s] 多种子集成完成: n=%s, 一致度=%s, 信心=%s",
+                    state.pipeline_id, agg.get("n_runs"), agreement, agg["confidence"])
+
+    def _run_one_seed(self, state: "PipelineState", project: Any, graph_id: str,
+                      actors: Any, research: dict, report_md: str, *,
+                      seed: int, max_rounds: Optional[int]) -> tuple:
+        """对同一图谱跑一次额外 (prepare→run→report)，返回 (sim_id, report_id, forecast|None)。
+
+        自包含、串行、运行在管线线程内；不触碰主 sim/report 的 id 与状态。带停滞看门狗。
+        """
+        sim_manager = SimulationManager()
+        _is_http = bool(Config.PROVIDER_META.get(Config.LLM_PROVIDER, {}).get('openai_compat'))
+        sim_state = sim_manager.create_simulation(
+            project.project_id, graph_id, enable_twitter=True, enable_reddit=True)
+        sim_id = sim_state.simulation_id
+        sim_manager.prepare_simulation(
+            simulation_id=sim_id,
+            simulation_requirement=state.prompt,
+            document_text=report_md,
+            parallel_profile_count=8 if _is_http else 3,
+            actors=actors,
+        )
+        run_kwargs: dict[str, Any] = {"platform": "parallel", "sim_seed": int(seed)}
+        if max_rounds:
+            run_kwargs["max_rounds"] = int(max_rounds)
+        if Config.SIM_GRAPH_FEEDBACK and graph_id:
+            run_kwargs["enable_graph_memory_update"] = True
+            run_kwargs["graph_id"] = graph_id
+        SimulationRunner.start_simulation(simulation_id=sim_id, **run_kwargs)
+        cancel_ev = type(self)._cancel_events.get(state.pipeline_id)
+        last_progress_at = time.monotonic()
+        last_round = -1
+        try:
+            stall_s = float(getattr(Config, "PIPELINE_RUN_STALL_S", 1800) or 1800)
+        except (TypeError, ValueError):
+            stall_s = 1800.0
+        while True:
+            if cancel_ev is not None and cancel_ev.is_set():
+                try:
+                    SimulationRunner.stop_simulation(sim_id)
+                except Exception:  # noqa: BLE001
+                    pass
+                raise PipelineCancelled("多种子集成期间被取消")
+            rs = SimulationRunner.get_run_state(sim_id)
+            if rs is None:
+                raise RuntimeError("集成种子模拟运行状态丢失")
+            cur = getattr(rs, "current_round", 0) or 0
+            if cur != last_round:
+                last_round = cur
+                last_progress_at = time.monotonic()
+            if rs.runner_status == RunnerStatus.COMPLETED:
+                break
+            if rs.runner_status in (RunnerStatus.FAILED, RunnerStatus.STOPPED):
+                raise RuntimeError(f"集成种子模拟未正常结束: {rs.runner_status}")
+            if stall_s > 0 and (time.monotonic() - last_progress_at) > stall_s:
+                try:
+                    SimulationRunner.stop_simulation(sim_id)
+                except Exception:  # noqa: BLE001
+                    pass
+                raise RuntimeError(f"集成种子模拟约 {int(stall_s)}s 无进展，看门狗终止")
+            time.sleep(5)
+        # 反馈写入器排空（与主跑一致），保证报告读到完整图谱
+        if Config.SIM_GRAPH_FEEDBACK and graph_id:
+            SimulationRunner.join_monitor_thread(sim_id, timeout=30)
+            try:
+                ZepGraphMemoryManager.stop_updater(sim_id)
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            SimulationRunner.write_run_summary(sim_id)
+        except Exception:  # noqa: BLE001
+            pass
+        rid = f"report_{uuid.uuid4().hex[:12]}"
+        agent = ReportAgent(
+            graph_id=graph_id, simulation_id=sim_id, simulation_requirement=state.prompt,
+            situation_brief=situation_brief(actors), actors=actors,
+            sources=research.get("sources"), research_report=report_md,
+        )
+        agent.generate_report(report_id=rid)
+        return sim_id, rid, self._read_report_forecast(rid)
 
     # -- 内部：进度辅助 ----------------------------------------------------
 
@@ -2502,10 +2733,56 @@ class PipelineOrchestrator:
             # 下游 document_texts/chunks 退化为单轨，与今日逐字节一致。
             dossier_md = research.get("actor_dossier")
             actors = research.get("actors")
+            # NEXTSTEPS P3-2: 抽取后跨轨去重，把同一实体的重复行合并为规范行（默认开；只会收紧
+            # cast，无重复时 no-op）。在下游 ontology/graph/prepare/report 用 actors 之前完成。
+            if getattr(Config, "CAST_RECONCILE", True) and actors:
+                try:
+                    from ..utils.actors import reconcile_cast as _reconcile
+                    _recon, _audit = _reconcile(actors)
+                    if _audit.get("merged"):
+                        actors = _recon
+                        research["actors"] = _recon  # 让下游 sources/report 也用规范 cast
+                        _hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+                        try:
+                            from ..utils.atomic import write_json_atomic
+                            write_json_atomic(os.path.join(_hd, "actors.json"), _recon)
+                            write_json_atomic(os.path.join(_hd, "cast_reconciliation.json"), _audit)
+                            state.artifacts["cast_reconciliation"] = os.path.join(_hd, "cast_reconciliation.json")
+                        except Exception:  # noqa: BLE001
+                            pass
+                        state.options["cast_reconciliation"] = {
+                            "n_before": _audit.get("n_before"), "n_after": _audit.get("n_after"),
+                            "merges": len(_audit.get("merged") or []),
+                        }
+                        logger.info("[%s] cast 去重：%s→%s（合并 %s 组）", state.pipeline_id,
+                                    _audit.get("n_before"), _audit.get("n_after"),
+                                    len(_audit.get("merged") or []))
+                except Exception as _rc_err:  # noqa: BLE001 — 去重为增强，失败回退原 cast
+                    logger.warning("[%s] cast 去重跳过: %s", state.pipeline_id, _rc_err)
             # I-5-7: 把研究阶段遥测并入统一计量（stash 到 options + 喂给 meter）。
             self._record_research_telemetry(state, research.get("research_telemetry"))
             # I-0-3: 透传研究覆盖度/质量记分牌（meta.json → options，纯观测，永不硬失败）。
             self._surface_research_quality(state, handoff_dir)
+
+            # NEXTSTEPS P3-4: 计算并透传 dossier 载荷字段覆盖率（纯观测；让"空壳种子"可见）。
+            try:
+                from ..utils.actors import dossier_coverage as _dcov
+                cov = _dcov(actors)
+                state.options["dossier_coverage"] = cov
+                _weak = []
+                if cov.get("n_actors", 0) and cov.get("pct_actors_with_incentives", 0) < 0.34:
+                    _weak.append("多数 actor 缺激励结构")
+                if cov.get("n_tier12", 0) and cov.get("pct_tier12_with_worldview", 0) < 0.34:
+                    _weak.append("核心 actor 多缺世界观")
+                if cov.get("n_relationships", 0) and cov.get("pct_edges_valenced", 0) < 0.2:
+                    _weak.append("关系网几乎无显式 valence")
+                if cov.get("n_relationships", 0) == 0:
+                    _weak.append("无关系边")
+                if _weak:
+                    state.options["dossier_coverage_warning"] = "；".join(_weak)
+                    logger.warning("[%s] dossier 覆盖偏低：%s", state.pipeline_id, "；".join(_weak))
+            except Exception as _cov_err:  # noqa: BLE001 — 覆盖度纯观测，失败不影响主流程
+                logger.debug("[%s] dossier_coverage 计算跳过: %s", state.pipeline_id, _cov_err)
 
             if state.mode == "research_only":
                 state.status = "completed"
@@ -2835,6 +3112,12 @@ class PipelineOrchestrator:
                 # 轮询直到完成
                 cancel_ev = cls._cancel_events.get(state.pipeline_id)
                 _last_round_seen = (-1, -1)
+                # B12: 停滞看门狗——记录上次「轮次推进」的时刻；长时间毫无进展视为卡死。
+                _last_progress_at = time.monotonic()
+                try:
+                    _stall_s = float(getattr(Config, "PIPELINE_RUN_STALL_S", 1800) or 1800)
+                except (TypeError, ValueError):
+                    _stall_s = 1800.0
                 while True:
                     if cancel_ev is not None and cancel_ev.is_set():
                         # 先停掉 OASIS 子进程再退出，避免取消后模拟继续烧额度
@@ -2855,6 +3138,7 @@ class PipelineOrchestrator:
                             self._recompute_dynamic_bands(state, total_rounds=total)  # T6.7
                             self._update_manifest(state, STAGE_RUN, total_rounds=total)  # I-8-1
                         _last_round_seen = (cur, total)
+                        _last_progress_at = time.monotonic()  # B12: 有进展即续命看门狗
                         if total > 0:
                             upd(min(98, int(cur / total * 100)), f"模拟轮次 {cur}/{total}")
                         else:
@@ -2863,6 +3147,14 @@ class PipelineOrchestrator:
                         break
                     if rs.runner_status in (RunnerStatus.FAILED, RunnerStatus.STOPPED):
                         raise RuntimeError(f"模拟未正常结束: {rs.runner_status} {getattr(rs, 'error', '') or ''}")
+                    # B12: 停滞看门狗——长时间无轮次推进（区别于「慢但在推进」）判定为卡死，
+                    # 停模拟并失败，避免管线线程永久空转。取消仍由循环顶部兜底；默认 30min。
+                    if _stall_s > 0 and (time.monotonic() - _last_progress_at) > _stall_s:
+                        try:
+                            SimulationRunner.stop_simulation(sim_state.simulation_id)
+                        except Exception as _wd_err:  # noqa: BLE001
+                            logger.warning(f"[{state.pipeline_id}] 看门狗停止模拟失败: {_wd_err}")
+                        raise RuntimeError(f"模拟约 {int(_stall_s)}s 无进展（疑似卡死），看门狗已终止")
                     time.sleep(5)
                 # 同步 SimulationManager 状态
                 try:
@@ -2885,14 +3177,10 @@ class PipelineOrchestrator:
                 # 仅在本次运行启用了反馈回路时才需要（与 RUN 启动条件一致）；任何卡顿降级为告警，
                 # 不让栅栏本身拖垮管线。
                 if Config.SIM_GRAPH_FEEDBACK and graph_id:
-                    try:
-                        _mon = SimulationRunner._monitor_threads.get(sim_state.simulation_id)
-                        if _mon is not None and _mon.is_alive():
-                            _mon.join(timeout=30)
-                    except Exception as _join_err:  # noqa: BLE001
+                    # F-12-1 汇流栅栏：经公共访问点等待监控线程退出（不再直接读私有注册表）。
+                    if not SimulationRunner.join_monitor_thread(sim_state.simulation_id, timeout=30):
                         logger.warning(
-                            "[%s] 等待模拟监控线程退出失败（降级继续）: %s",
-                            state.pipeline_id, _join_err,
+                            "[%s] 等待模拟监控线程退出超时（降级继续）", state.pipeline_id,
                         )
                     try:
                         ZepGraphMemoryManager.stop_updater(sim_state.simulation_id)

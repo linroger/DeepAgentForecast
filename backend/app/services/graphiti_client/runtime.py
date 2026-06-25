@@ -47,6 +47,20 @@ def _data_dir() -> str:
     return d
 
 
+def _default_op_timeout() -> float | None:
+    """每个 Graphiti 操作（一次 add_episode / search / list…）的默认挂钟上限（秒）。
+
+    读 Config.GRAPHITI_OP_TIMEOUT_S，默认 1800（30 分钟）；0/负 = 不设上限（旧行为，
+    无限等待）。给 sync→async 桥一个兜底，避免某次 LLM/DB 调用卡死时永久阻塞调用线程。
+    """
+    try:
+        from ...config import Config
+        v = float(getattr(Config, "GRAPHITI_OP_TIMEOUT_S", 1800) or 0)
+        return v if v > 0 else None
+    except Exception:  # noqa: BLE001 — 读不到配置就用保守的 30 分钟兜底
+        return 1800.0
+
+
 class GraphitiRuntime:
     """Singleton bridge to Graphiti. Access via ``get_runtime()``."""
 
@@ -82,7 +96,13 @@ class GraphitiRuntime:
     # ------------------------------------------------------------------
     def run(self, coro, timeout: float | None = None):
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result(timeout)
+        # 默认给每个操作一个挂钟上限（Config.GRAPHITI_OP_TIMEOUT_S，默认 1800s；0=旧的无限等待），
+        # 避免某次 LLM/DB 调用卡死时永久阻塞调用它的 Flask 线程。超时抛 TimeoutError，调用方一般已
+        # try/except 降级（检索→本地回退、构图→失败可见）。显式传 timeout 时以显式值为准。
+        if timeout is None:
+            timeout = _default_op_timeout()
+        eff = timeout if (timeout and timeout > 0) else None
+        return future.result(eff)
 
     # EXECPLAN2 F-12-8 / F-2-5: lazily create/return the per-graph_id write lock.
     # Must be awaited from the bg loop (the only thread that touches _graph_locks).
@@ -695,6 +715,13 @@ class GraphitiRuntime:
                 kwargs["invalid_at"] = invalid_or
 
             if not kwargs:
+                # B-fix: 非空 spec 却没解析出任何已知过滤键（如把 valid_at_before 误写成
+                # valid_before）→ 此前静默返回 None=全时段无过滤，对预测系统是 as-of 正确性
+                # 隐患（"按时点检索却拿到时间压平结果"）。显式告警，让该退化可见。
+                logger.warning(
+                    "search_filter %r 未解析出任何已知过滤键，退化为全时段检索（请检查键名拼写）",
+                    spec,
+                )
                 return None
             return SearchFilters(**kwargs)
         except Exception as exc:  # EXECPLAN2 I-1-0: bad filter -> degrade, never raise

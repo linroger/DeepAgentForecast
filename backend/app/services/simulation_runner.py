@@ -286,7 +286,26 @@ class SimulationRunner:
         if state:
             cls._run_states[simulation_id] = state
         return state
-    
+
+    @classmethod
+    def join_monitor_thread(cls, simulation_id: str, timeout: float = 30.0) -> bool:
+        """等待某模拟的监控线程退出（汇流栅栏用）。
+
+        公共访问点：替代调用方直接读私有 ``_monitor_threads`` 注册表（EXECPLAN2 F-12-1
+        的汇流栅栏 + NEXTSTEPS P0-3 的多种子集成都需要它）。监控线程的 finally 会停掉
+        「模拟→图谱」反馈写入器并收尾 actions.jsonl，故 join 后再读图谱/run_summary 才稳。
+        返回 True=线程已退出（或本就不存在）；False=超时仍存活。绝不抛出。
+        """
+        try:
+            mon = cls._monitor_threads.get(simulation_id)
+            if mon is None:
+                return True
+            if mon.is_alive():
+                mon.join(timeout=timeout)
+            return not mon.is_alive()
+        except Exception:  # noqa: BLE001 — 栅栏为尽力而为，失败降级为告警由调用方处理
+            return False
+
     @classmethod
     def _load_run_state(cls, simulation_id: str) -> Optional[SimulationRunState]:
         """从文件加载运行状态"""
@@ -370,7 +389,8 @@ class SimulationRunner:
         platform: str = "parallel",  # twitter / reddit / parallel
         max_rounds: Optional[int] = None,  # 最大模拟轮数（T3.7: 默认 None=不截断，跑满按时长算出的完整轮数）
         enable_graph_memory_update: bool = False,  # 是否将活动更新到Zep图谱
-        graph_id: Optional[str] = None  # Zep图谱ID（启用图谱更新时必需）
+        graph_id: Optional[str] = None,  # Zep图谱ID（启用图谱更新时必需）
+        sim_seed: Optional[int] = None,  # NEXTSTEPS P0-3: 本次运行的确定性采样种子（仅注入子进程环境，不改全局）
     ) -> SimulationRunState:
         """
         启动模拟
@@ -510,7 +530,11 @@ class SimulationRunner:
             env = os.environ.copy()
             env['PYTHONUTF8'] = '1'  # Python 3.7+ 支持，让所有 open() 默认使用 UTF-8
             env['PYTHONIOENCODING'] = 'utf-8'  # 确保 stdout/stderr 使用 UTF-8
-            
+            # NEXTSTEPS P0-3: 把本次运行的采样种子**仅注入子进程环境**（run_parallel_simulation
+            # 优先读 env['SIM_SEED']），不触碰本进程全局 os.environ，避免并发管线相互污染。
+            if sim_seed is not None:
+                env['SIM_SEED'] = str(int(sim_seed))
+
             # 设置工作目录为模拟目录（数据库等文件会生成在此）
             # 使用 start_new_session=True 创建新的进程组，确保可以通过 os.killpg 终止所有子进程
             process = subprocess.Popen(

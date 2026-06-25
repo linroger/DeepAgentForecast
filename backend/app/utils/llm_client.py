@@ -644,7 +644,12 @@ class LLMClient:
                 content = "\n".join(clean_lines).strip()
             else:
                 content = raw
-            return self._clean_content(content)
+            cleaned = self._clean_content(content)
+            # 与 claude 路径对称：空结果抛 RuntimeError 触发上层退避重试，避免把空串喂给下游 JSON 解析。
+            if not cleaned or not cleaned.strip():
+                logger.error(f"Codex CLI 返回空结果（stdout 前200: {raw[:200]}）")
+                raise RuntimeError("Codex CLI 返回空结果")
+            return cleaned
 
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"Codex CLI timed out after {CLI_TIMEOUT}s")
@@ -652,3 +657,8 @@ class LLMClient:
             raise RuntimeError(
                 "未找到 `codex` 可执行文件，请确认已安装 Codex CLI 并加入 PATH"
             )
+        except OSError as exc:
+            # 与 claude 路径对称（此前缺失）：非 ENOENT 的进程启动失败（EACCES/ENOMEM…）原本会以
+            # 裸 OSError 冒泡，不在 chat() 的重试集合 (RuntimeError, *_RETRYABLE_API_ERRORS) 内
+            # → 不重试且直接抛给调用方。包成 RuntimeError 让退避重试生效。
+            raise RuntimeError(f"Codex CLI 进程启动失败: {exc}") from exc

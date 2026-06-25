@@ -117,18 +117,40 @@ class Config:
         """返回某提供方的上下文窗口（token）；未知提供方回退到 DEFAULT_CONTEXT_WINDOW。"""
         return int(cls.PROVIDER_CONTEXT_WINDOWS.get((provider or '').lower(), cls.DEFAULT_CONTEXT_WINDOW))
 
-    # 报告完成后追加一遍「结构化预测」抽取：机器可读的情景+概率+判定标准+引用审计
-    # （EXECPLAN2 I-3-0/I-9-1/I-3-1）。默认关，保持现有纯文本报告行为。落 forecast.json。
-    REPORT_STRUCTURED_FORECAST = os.environ.get('REPORT_STRUCTURED_FORECAST', 'False').strip().lower() == 'true'
-    # 结构化预测后追加红队自校准（纠正过度自信/基率忽视，EXECPLAN2 I-3-5）。默认关（多一次 LLM 调用）。
-    REPORT_FORECAST_SELF_CRITIQUE = os.environ.get('REPORT_FORECAST_SELF_CRITIQUE', 'False').strip().lower() == 'true'
+    # 结构化预测（机器可读的情景+概率+判定标准+引用审计，EXECPLAN2 I-3-0/I-9-1/I-3-1；
+    # NEXTSTEPS P0-1）。默认开：预测是本产品的交付物，结构化骨架应是一等公民而非旁支。
+    # 关闭则回到旧的纯文本报告行为（degrade-safe）。落 forecast.json。
+    REPORT_STRUCTURED_FORECAST = os.environ.get('REPORT_STRUCTURED_FORECAST', 'True').strip().lower() == 'true'
+    # NEXTSTEPS P0-1：在撰写任何章节叙事**之前**先从信号包+forecast_inputs 推导「预测骨架」
+    # （情景+概率+判定标准），强制 MECE 纪律并把骨架注入每章提示词，让叙事对齐可证伪目标。
+    # 默认开；关闭则回退为旧的「报告写完后再从成稿抽取」行为（degrade-safe）。
+    REPORT_FORECAST_SPINE_FIRST = os.environ.get('REPORT_FORECAST_SPINE_FIRST', 'True').strip().lower() == 'true'
+    # 结构化预测后追加红队自校准（纠正过度自信/基率忽视，EXECPLAN2 I-3-5；NEXTSTEPS P2-1）。
+    # 默认开：与基率锚定+inter-seed 一致度配合做 anchor-and-adjust，纠正内视过度自信（多一次 LLM 调用）。
+    REPORT_FORECAST_SELF_CRITIQUE = os.environ.get('REPORT_FORECAST_SELF_CRITIQUE', 'True').strip().lower() == 'true'
+    # NEXTSTEPS P2-3：发布门。结构化预测推导后，对「喂给情景的定量声明」要求引用覆盖率≥阈值，
+    # 否则把整体 confidence 降级为 low；并强制存在一个「维持现状/兜底」情景、拒绝无依据的退化熵。
+    # 把品控写进 forecast.json.quality。默认开；关闭=不设门（degrade-safe）。
+    REPORT_PUBLISH_GATE = os.environ.get('REPORT_PUBLISH_GATE', 'True').strip().lower() == 'true'
+    REPORT_PUBLISH_GATE_MIN_COVERAGE = float(os.environ.get('REPORT_PUBLISH_GATE_MIN_COVERAGE', '0.5') or '0.5')
+    # NEXTSTEPS P2-2：在报告末尾追加一个**确定性**的「如何验证本预测」章节——逐情景列可证伪判定
+    # 标准 + 来自 forecast_inputs 的带日期/触发观察指标，并把指标-情景映射写进 forecast.json 供
+    # 解析调度器使用。默认开；无结构化预测/无情景时自动跳过（degrade-safe）。
+    REPORT_RESOLUTION_SECTION = os.environ.get('REPORT_RESOLUTION_SECTION', 'True').strip().lower() == 'true'
     # OASIS 抽样/人设生成确定性种子（EXECPLAN2 I-7-2；0/空=随机，复现/集成跑设同一正整数）。
     SIM_SEED = int(os.environ.get('SIM_SEED', '0') or '0')
+    # NEXTSTEPS P0-3：同问多种子集成。LLM 驱动的模拟是随机生成器，单次=单抽样；对同一图谱用
+    # 不同 SIM_SEED 跑 N 次 sim+report，聚合各自 forecast.json→ensemble_forecast.json，把点估计
+    # 变成带区间的分布，inter-seed 一致度→报告信心。默认 1 = 仅一次（与现状逐字节一致）。
+    N_FORECAST_SEEDS = max(1, int(os.environ.get('N_FORECAST_SEEDS', '1') or '1'))
 
     # —— EXECPLAN2 第二波改进旋钮（单一真源；各消费方此前经 getattr 读取，这里收口 + 文档化）——
     GRAPH_SEARCH_RECIPE = os.environ.get('GRAPH_SEARCH_RECIPE', 'rrf').strip().lower()          # I-1-0/I-1-6 检索 recipe
     RESEARCH_QUALITY_GATE = os.environ.get('RESEARCH_QUALITY_GATE', 'False').strip().lower() == 'true'  # I-0-3 研究后质量门
     PIPELINE_STRICT_SCHEMA = os.environ.get('PIPELINE_STRICT_SCHEMA', 'True').strip().lower() == 'true'  # I-4-4 状态模式版本校验
+    # 编排器 RUN 阶段「停滞看门狗」：模拟长时间无轮次推进（区别于慢但在推进）视为卡死，
+    # 停模拟并失败，避免管线线程永久空转。秒；<=0 关闭。默认 1800（30 分钟无进展）。
+    PIPELINE_RUN_STALL_S = float(os.environ.get('PIPELINE_RUN_STALL_S', '1800') or '1800')
     SIM_EMERGENT_METRICS = os.environ.get('SIM_EMERGENT_METRICS', 'False').strip().lower() == 'true'     # I-2-0 涌现结构指标
     IPC_TELEMETRY_ENABLED = os.environ.get('IPC_TELEMETRY_ENABLED', 'False').strip().lower() == 'true'   # I-5-5 IPC 延迟计量
     ONTOLOGY_TEMPLATE = os.environ.get('ONTOLOGY_TEMPLATE', 'social_opinion').strip().lower()  # I-1-3 领域自适应本体模板
@@ -139,6 +161,10 @@ class Config:
     # 保留完整 ontology 对象（CLAUDE/CODEX/GEMINI 三方收敛本体契约）。默认开：新字段缺失时为 no-op，
     # 抽取结果与现状逐字节一致（旧数据/旧测试夹具不受影响）。
     ONTOLOGY_RICH_SCHEMA = os.environ.get('ONTOLOGY_RICH_SCHEMA', 'True').strip().lower() == 'true'
+    # NEXTSTEPS P3-2：抽取后对 actors[] 跨轨去重（normalize_name + 双向包含/别名聚类，合并重复
+    # 行为规范行并改写关系端点）。默认开：只会收紧 cast（防中心度分裂/重复 persona/salience 污染）；
+    # 无重复时为 no-op（与现状一致）。
+    CAST_RECONCILE = os.environ.get('CAST_RECONCILE', 'True').strip().lower() == 'true'
     PERSONA_EGO_RETRIEVAL = os.environ.get('PERSONA_EGO_RETRIEVAL', 'False').strip().lower() == 'true'   # I-1-5 自我中心人设上下文
     # 人设提示注入 actor 行为 DNA（价值观/信念/激励/资源/风险偏好）+ 关系名册（盟友/对手/竞争者…）。
     # 默认开；仅当 actor 携带 worldview/incentives/resources 等新字段时生效，缺失时为 no-op（与现状一致）。
@@ -157,6 +183,19 @@ class Config:
     # 预测质量回归评测开关（EXECPLAN2 I-7-7）：opt-in，绝不进默认 CI。开启后 eval_forecast_quality.py
     # 用 LLM-judge 按 rubric 给固定情景集打分并与 baseline 对比。默认关。
     EVAL_ENABLED = os.environ.get('EVAL_ENABLED', 'False').strip().lower() == 'true'  # I-7-7 预测质量评测
+
+    # —— 运维脚本旋钮（此前各脚本用 getattr(Config, ...) 读但 config.py 从未定义 → "幽灵旋钮"：
+    #    在 .env 里设了也无效。这里收口为真实可读项 + .env.example 文档化，消除该反模式）——
+    # 定时重跑（scripts/scheduled_rerun.py，NEXTSTEPS P2-4 / I-9-6）。默认关：daemon/tick 才生效。
+    SCHEDULER_ENABLED = os.environ.get('SCHEDULER_ENABLED', 'False').strip().lower() == 'true'
+    SCHEDULER_TICK_SECONDS = int(os.environ.get('SCHEDULER_TICK_SECONDS', '300') or '300')
+    SCHEDULER_MAX_CONCURRENT = int(os.environ.get('SCHEDULER_MAX_CONCURRENT', '1') or '1')
+    # 漂移检测阈值（情景概率 |Δ| ≥ 此值即判材料性漂移）+ 漂移 webhook（SSRF 校验后回调）。
+    DRIFT_PROB_THRESHOLD = float(os.environ.get('DRIFT_PROB_THRESHOLD', '0.15') or '0.15')
+    DRIFT_WEBHOOK_URL = os.environ.get('DRIFT_WEBHOOK_URL', '').strip()
+    # 多问题批跑（scripts/batch_runs.py，I-9-3）：单锚点图谱上的最大分叉问题数（成本护栏）。
+    BATCH_MAX_FANOUT = int(os.environ.get('BATCH_MAX_FANOUT', '8') or '8')
+    BATCH_SHARED_SIMULATION = os.environ.get('BATCH_SHARED_SIMULATION', 'False').strip().lower() == 'true'
 
     # LLM提供方（默认使用 Claude Code CLI 订阅）
     # claude-cli: 通过本机 `claude` CLI 调用（使用 Claude Code 订阅，无需 API Key）
@@ -525,8 +564,10 @@ class Config:
     GRAPH_SEED_FROM_ACTORS = os.environ.get('GRAPH_SEED_FROM_ACTORS', 'true').strip().lower() == 'true'
     # episode 并发抽取数（>1 提速，但有轻微 dedup 排序风险；1 = 与旧行为逐字节一致）(T2.5)
     GRAPH_BUILD_CONCURRENCY = int(os.environ.get('GRAPH_BUILD_CONCURRENCY', '1'))
-    # 建图末尾跑 Leiden 社区发现（派系/联盟，best-effort，失败不影响建图）(T2.4)
-    GRAPH_BUILD_COMMUNITIES = os.environ.get('GRAPH_BUILD_COMMUNITIES', 'false').strip().lower() == 'true'
+    # 建图末尾跑 Leiden 社区发现（派系/联盟，best-effort，失败不影响建图）(T2.4)。
+    # NEXTSTEPS P3-9：默认开——联盟结构（及其随时间的迁移）是强预测信号；GRAPH_COMMUNITY_RETRIEVAL
+    # 默认跟随本旗标，使 faction_brief 走图谱原生证据而非行为日志启发式。建图会多一趟 Leiden+LLM 摘要。
+    GRAPH_BUILD_COMMUNITIES = os.environ.get('GRAPH_BUILD_COMMUNITIES', 'true').strip().lower() == 'true'
     # 把已发现的社区(派系)做成一等可检索结构：报告侧 faction_brief 工具 + 人设侧群体身份
     # （EXECPLAN2 I-1-2）。默认跟随 GRAPH_BUILD_COMMUNITIES（无社区节点时 faction_brief 自动
     # 降级到 coalition_map 的行为日志聚类）。显式设 true/false 可覆盖。
@@ -544,6 +585,9 @@ class Config:
     GRAPH_COMPONENT_WARN_RATIO = float(os.environ.get('GRAPH_COMPONENT_WARN_RATIO', '0.5') or '0.5')
     # 远程 Graphiti/Zep 才需要分批限流停顿；本地 FalkorDB 关闭死延迟（T2.6）
     GRAPHITI_REMOTE = os.environ.get('GRAPHITI_REMOTE', 'false').strip().lower() == 'true'
+    # 每个 Graphiti 操作（add_episode/search/list…）的挂钟上限（秒）。sync→async 桥兜底，
+    # 避免某次 LLM/DB 调用卡死时永久阻塞调用它的 Flask 线程。默认 1800（30 分钟）；0=不设上限（旧行为）。
+    GRAPHITI_OP_TIMEOUT_S = float(os.environ.get('GRAPHITI_OP_TIMEOUT_S', '1800') or '1800')
 
     # --- 模拟（Phase 3）---
     # 智能体数量上限；超过则按 (是否匹配 actor, 影响力, 邻边数) 排序保留，始终保留研究 actor（T3.13）

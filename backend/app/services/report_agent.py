@@ -1106,6 +1106,10 @@ class ReportAgent:
         # EXECPLAN2 I-3-2: 模拟量化信号包（确定性接地下限），懒构建一次后缓存；
         # 关闭 REPORT_SIGNAL_PACK 时始终为空串，_prepend_research_background 自动跳过（行为不变）。
         self._signal_pack = ""
+        # NEXTSTEPS P0-1: 预测骨架（情景+概率+判定标准），在章节生成前从信号包+forecast_inputs
+        # 推导一次，注入每章提示词让叙事对齐可证伪目标；缺省/未开时为空，_prepend 自动跳过。
+        self._forecast_spine: Optional[Dict[str, Any]] = None
+        self._forecast_spine_block = ""
 
         self.llm = llm_client or LLMClient()
         self.zep_tools = zep_tools or ZepToolsService()
@@ -1328,8 +1332,14 @@ class ReportAgent:
 
         EXECPLAN2 I-3-2: 同时钉入模拟量化信号包（self._signal_pack），使每个章节都获得确定性的
         量化接地下限。信号包为空（未开启或无结构化数据）时自动跳过，行为与历史一致。
+
+        NEXTSTEPS P0-1: 还钉入预测骨架块（self._forecast_spine_block），让每章叙事对齐并捍卫
+        先于叙事确定的情景概率与判定标准。骨架未推导/为空时自动跳过（行为与历史一致）。
         """
-        prefix_parts = [p for p in (self._background_block, self._sources_index, self._signal_pack) if p]
+        prefix_parts = [p for p in (
+            self._background_block, self._sources_index,
+            self._forecast_spine_block, self._signal_pack,
+        ) if p]
         if not prefix_parts:
             return prompt
         return "\n\n".join(prefix_parts) + "\n\n" + prompt
@@ -1377,6 +1387,185 @@ class ReportAgent:
             "避免出现「只有叙事、没有数字」的章节。需要更细粒度时再调用工具深挖。"
         )
         return header + "\n\n" + "\n\n".join(parts)
+
+    # ──────────────────────────────────────────────────────────────
+    # NEXTSTEPS P0-1 / P2-1 / P2-3: forecast spine + finalization + publish gate
+    # ──────────────────────────────────────────────────────────────
+    def _derive_and_pin_forecast_spine(self, report_id: str) -> None:
+        """NEXTSTEPS P0-1: derive the structured forecast spine BEFORE section prose,
+        persist forecast.json early, and pin a compact spine block into every section
+        prompt so each section defends its assigned probabilities/resolution criteria.
+
+        Degrade-safe: any failure leaves ``self._forecast_spine=None`` and the block
+        empty, so sections behave exactly as the pre-spine path.
+        """
+        from . import forecast_extractor as _fe
+        try:
+            from ..utils import actors as _actors
+            try:
+                forecast_inputs = _actors.forecast_inputs_block(self.actors) or ""
+            except Exception:  # noqa: BLE001 — forecast_inputs 为可选增强
+                forecast_inputs = ""
+            # 信号包：优先复用已构建的（REPORT_SIGNAL_PACK 开时），否则为骨架单独构建一次
+            # （不写回 self._signal_pack，避免在该旗标关闭时改变各章注入行为）。
+            signal_pack = self._signal_pack
+            if not signal_pack:
+                try:
+                    signal_pack = self._build_signal_pack()
+                except Exception:  # noqa: BLE001
+                    signal_pack = ""
+            horizon = ""
+            if isinstance(self.actors, dict):
+                horizon = str(self.actors.get("as_of_date", "") or "")
+            spine = _fe.derive_forecast_spine(
+                self.llm,
+                central_question=self.simulation_requirement or "",
+                horizon=horizon,
+                situation_brief=self.situation_brief or None,
+                forecast_inputs=forecast_inputs,
+                signal_pack=signal_pack,
+            )
+            if not spine or not spine.get("scenarios"):
+                logger.info("预测骨架推导未产出情景，跳过（回退为成稿后抽取）")
+                return
+            self._forecast_spine = spine
+            self._forecast_spine_block = _fe.render_forecast_spine_block(spine)
+            # 早落 forecast.json（骨架版）；成稿后由 _finalize_structured_forecast 补
+            # citation_audit / 自校准 / 发布门后覆盖。
+            try:
+                fpath = os.path.join(ReportManager._get_report_folder(report_id), "forecast.json")
+                write_text_atomic(fpath, json.dumps(spine, ensure_ascii=False, indent=2))
+            except Exception as _pe:  # noqa: BLE001 — 早落失败不影响主流程
+                logger.warning(f"预测骨架早落 forecast.json 失败（忽略）: {_pe}")
+            logger.info(
+                f"已先于叙事推导预测骨架: {report_id} "
+                f"（{len(spine.get('scenarios', []))} 情景, 信心 {spine.get('confidence')}）"
+            )
+        except Exception as _se:  # noqa: BLE001 — 骨架为可选增强，失败回退旧路径
+            logger.warning(f"预测骨架推导失败（忽略，回退成稿后抽取）: {_se}")
+            self._forecast_spine = None
+            self._forecast_spine_block = ""
+
+    def _finalize_structured_forecast(self, report_id: str, report_markdown: str) -> None:
+        """Persist the final forecast.json.
+
+        Prefers the pre-derived spine (P0-1, already MECE & signal-seeded); else
+        extracts post-hoc from prose (legacy path). Then optional red-team self-critique
+        (P2-1), citation-grounding audit, and the publish gate (P2-3). Caller wraps in
+        try/except → degrade-safe.
+        """
+        from .forecast_extractor import (
+            extract_structured_forecast, audit_citation_grounding, self_critique_forecast,
+        )
+        if self._forecast_spine and self._forecast_spine.get("scenarios"):
+            forecast = dict(self._forecast_spine)        # 骨架已由信号驱动且 MECE
+        else:
+            forecast = extract_structured_forecast(
+                report_markdown, self.llm,
+                situation_brief=getattr(self, "situation_brief", None),
+            )
+        if getattr(Config, "REPORT_FORECAST_SELF_CRITIQUE", False):
+            forecast = self_critique_forecast(forecast, self.llm)
+        forecast["citation_audit"] = audit_citation_grounding(report_markdown)
+        if getattr(Config, "REPORT_PUBLISH_GATE", False):
+            forecast = self._apply_publish_gate(forecast)
+        # P2-2: 把观察指标随 forecast.json 落盘（供解析调度器对照判别情景）。
+        try:
+            from ..utils import actors as _actors
+            _inds = _actors.extract_forecast_inputs(self.actors).get("indicators") or []
+            if _inds:
+                forecast["indicators"] = _inds
+        except Exception:  # noqa: BLE001
+            pass
+        fpath = os.path.join(ReportManager._get_report_folder(report_id), "forecast.json")
+        write_text_atomic(fpath, json.dumps(forecast, ensure_ascii=False, indent=2))
+        self._forecast_spine = forecast  # 最终版（集成阶段读 forecast.json 文件，这里仅保留内存副本）
+        logger.info(
+            f"结构化预测已生成: {report_id} "
+            f"({len(forecast.get('scenarios', []))} 情景, "
+            f"引用覆盖 {forecast['citation_audit'].get('coverage')}, "
+            f"信心 {forecast.get('confidence')})"
+        )
+
+    def _append_resolution_section(self, report_id: str, report: "Report") -> None:
+        """NEXTSTEPS P2-2: 把确定性的「如何验证本预测」章节（判定标准 + 观察指标）追加到成稿末尾
+        并重写 full_report.md。指标-情景映射已随 forecast.json 落盘。仅在已有预测骨架时调用。
+        """
+        from .forecast_extractor import render_resolution_block
+        from ..utils import actors as _actors
+        try:
+            indicators = _actors.extract_forecast_inputs(self.actors).get("indicators") or []
+        except Exception:  # noqa: BLE001
+            indicators = []
+        block = render_resolution_block(self._forecast_spine, indicators)
+        if not block:
+            return
+        new_md = (report.markdown_content or "").rstrip() + "\n\n" + block + "\n"
+        report.markdown_content = new_md
+        try:
+            folder = ReportManager._get_report_folder(report_id)
+            write_text_atomic(os.path.join(folder, "full_report.md"), new_md)
+        except Exception as _we:  # noqa: BLE001
+            logger.warning(f"重写 full_report.md（追加判定标准章节）失败（忽略）: {_we}")
+        logger.info(f"已追加判定标准与观察指标章节: {report_id}")
+
+    @staticmethod
+    def _apply_publish_gate(forecast: Dict[str, Any]) -> Dict[str, Any]:
+        """NEXTSTEPS P2-3: coherence + grounding publish gate.
+
+        A calibrated forecaster must refuse to silently publish incoherent or
+        ungrounded probability sets. Checks citation coverage of quantitative claims,
+        probability-sum coherence, presence of a residual/status-quo scenario, and
+        degenerate entropy; records ``forecast['quality']`` and demotes ``confidence``
+        (at most one level) when any issue is found. Pure / best-effort; never raises.
+        """
+        try:
+            scenarios = forecast.get("scenarios") or []
+            audit = forecast.get("citation_audit") or {}
+            coverage = float(audit.get("coverage", 1.0) or 0.0)
+            min_cov = float(getattr(Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.5) or 0.0)
+            probs: List[float] = []
+            for s in scenarios:
+                try:
+                    probs.append(float(s.get("probability") or 0.0))
+                except (TypeError, ValueError):
+                    pass
+            prob_sum = round(sum(probs), 3)
+            _residual_keys = ("维持现状", "其它", "其他", "兜底", "status", "other", "baseline")
+            has_residual = any(
+                any(k in str(s.get("name", "")).lower() for k in _residual_keys)
+                for s in scenarios
+            )
+            top = max(probs) if probs else 0.0
+            issues: List[str] = []
+            if scenarios and coverage < min_cov:
+                issues.append(f"定量声明引用覆盖率 {coverage:.2f} < 阈值 {min_cov:.2f}")
+            if scenarios and abs(prob_sum - 1.0) > 0.05:
+                issues.append(f"情景概率之和 {prob_sum} 偏离 1")
+            if scenarios and not has_residual:
+                issues.append("缺少『维持现状/兜底』情景")
+            if top >= 0.9 and len(probs) <= 1:
+                issues.append("概率分布退化（单情景≥0.9 且无对照情景）")
+            forecast["quality"] = {
+                "citation_coverage": round(coverage, 3),
+                "probability_sum": prob_sum,
+                "has_residual_scenario": has_residual,
+                "max_probability": round(top, 3),
+                "issues": issues,
+                "passed": not issues,
+            }
+            if issues:
+                levels = ["low", "medium", "high"]
+                order = {"low": 0, "medium": 1, "high": 2}
+                cur = order.get(str(forecast.get("confidence", "medium")).lower(), 1)
+                forecast["confidence"] = levels[max(0, cur - 1)]
+                rationale = (forecast.get("confidence_rationale", "") or "").strip()
+                forecast["confidence_rationale"] = (
+                    (rationale + " ｜发布门：" + "；".join(issues)).strip(" ｜")
+                )
+        except Exception as _qe:  # noqa: BLE001 — 发布门为旁路品控，失败不影响产物
+            logger.warning(f"发布门计算失败（忽略）: {_qe}")
+        return forecast
 
     # ──────────────────────────────────────────────────────────────
     # EXECPLAN2 I-3-4: 结构化「基线 vs 情景」对比表（确定性，无 LLM）
@@ -1582,7 +1771,10 @@ class ReportAgent:
                 "description": TOOL_DESC_INSIGHT_FORGE,
                 "parameters": {
                     "query": "你想深入分析的问题或话题",
-                    "report_context": "当前报告章节的上下文（可选，有助于生成更精准的子问题）"
+                    "report_context": "当前报告章节的上下文（可选，有助于生成更精准的子问题）",
+                    "as_of": "（可选）时点视图：只检索在该日期成立的事实（YYYY-MM-DD 或年份）。"
+                             "用于论证立场/关系随时间的漂移——对比种子时点 vs 模拟终局，"
+                             "而非只看时间压平后的快照。"
                 }
             },
             "panorama_search": {
@@ -1661,11 +1853,15 @@ class ReportAgent:
             if tool_name == "insight_forge":
                 query = parameters.get("query", "")
                 ctx = parameters.get("report_context", "") or report_context
+                # NEXTSTEPS P0-2: 时点视图（可选）。底层 insight_forge 早已支持 as_of，但此前
+                # 工具 schema/分发从不暴露它 → 预测者只能看到时间压平的快照。这里把它接通。
+                as_of = parameters.get("as_of") or None
                 result = self.zep_tools.insight_forge(
                     graph_id=self.graph_id,
                     query=query,
                     simulation_requirement=self.simulation_requirement,
-                    report_context=ctx
+                    report_context=ctx,
+                    as_of=as_of,
                 )
                 return result.to_text()
             
@@ -2737,6 +2933,12 @@ class ReportAgent:
                     logger.warning(f"构建模拟量化信号包失败（忽略）: {_sp_err}")
                     self._signal_pack = ""
 
+            # NEXTSTEPS P0-1: 先于章节叙事推导「预测骨架」（情景+概率+判定标准），把骨架块注入
+            # 每章提示词，让叙事对齐并捍卫所分配概率。默认开；关闭或推导失败时为 no-op（回退成稿后抽取）。
+            if (getattr(Config, "REPORT_STRUCTURED_FORECAST", True)
+                    and getattr(Config, "REPORT_FORECAST_SPINE_FIRST", True)):
+                self._derive_and_pin_forecast_spine(report_id)
+
             total_sections = len(outline.sections)
             generated_sections = []  # 保存内容用于上下文
             failed_section_titles = []  # 记录生成失败（写入占位符）的章节，用于状态汇报
@@ -2912,30 +3114,21 @@ class ReportAgent:
             # 由 partial 标记区分「完整」与「部分完成」。无失败章节时为空列表 → 与历史一致。
             report.failed_sections = list(failed_section_titles)
 
-            # EXECPLAN2 I-3-0/I-9-1/I-3-1: 可选追加「结构化预测」抽取 + 引用接地审计。
-            # 默认关；失败仅告警不影响主报告（degrade-safe）。
-            if getattr(Config, "REPORT_STRUCTURED_FORECAST", False):
+            # EXECPLAN2 I-3-0/I-9-1/I-3-1 + NEXTSTEPS P0-1/P2-1/P2-3: 最终化结构化预测。
+            # 优先采用先于叙事推导的骨架（P0-1），否则从成稿抽取；随后红队自校准（P2-1）+
+            # 引用接地审计 + 发布门（P2-3）→ forecast.json。默认开；失败仅告警（degrade-safe）。
+            if getattr(Config, "REPORT_STRUCTURED_FORECAST", True):
                 try:
-                    from .forecast_extractor import (
-                        extract_structured_forecast, audit_citation_grounding, self_critique_forecast,
-                    )
-                    forecast = extract_structured_forecast(
-                        report.markdown_content, self.llm,
-                        situation_brief=getattr(self, "situation_brief", None),
-                    )
-                    # 可选红队自校准（I-3-5）：纠正过度自信/基率忽视
-                    if getattr(Config, "REPORT_FORECAST_SELF_CRITIQUE", False):
-                        forecast = self_critique_forecast(forecast, self.llm)
-                    forecast["citation_audit"] = audit_citation_grounding(report.markdown_content)
-                    fpath = os.path.join(ReportManager._get_report_folder(report_id), "forecast.json")
-                    write_text_atomic(fpath, json.dumps(forecast, ensure_ascii=False, indent=2))
-                    logger.info(
-                        f"结构化预测已生成: {report_id} "
-                        f"({len(forecast.get('scenarios', []))} 情景, "
-                        f"引用覆盖 {forecast['citation_audit'].get('coverage')})"
-                    )
-                except Exception as _fe:
-                    logger.warning(f"结构化预测抽取失败（忽略，不影响主报告）: {_fe}")
+                    self._finalize_structured_forecast(report_id, report.markdown_content)
+                except Exception as _fe:  # noqa: BLE001
+                    logger.warning(f"结构化预测最终化失败（忽略，不影响主报告）: {_fe}")
+                # NEXTSTEPS P2-2: 追加确定性「如何验证本预测」章节（判定标准 + 观察指标）。
+                if (getattr(Config, "REPORT_RESOLUTION_SECTION", True)
+                        and self._forecast_spine and self._forecast_spine.get("scenarios")):
+                    try:
+                        self._append_resolution_section(report_id, report)
+                    except Exception as _rs_err:  # noqa: BLE001
+                        logger.warning(f"追加判定标准章节失败（忽略）: {_rs_err}")
 
             # 报告整体仍标记为 completed（确实跑完了），但若有章节写入了失败占位符，
             # 必须显著告警，避免"假完成"掩盖失败章节（历史上是静默写入污染内容）。

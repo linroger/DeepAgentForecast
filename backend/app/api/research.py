@@ -242,13 +242,25 @@ def fork_scenario(pipeline_id: str):
 
 @research_bp.route('/<pipeline_id>', methods=['DELETE'])
 def delete_pipeline(pipeline_id: str):
-    """删除一条已结束的管线记录（含 handoff 产物）。在飞管线须先取消。"""
+    """删除一条已结束的管线记录（含 handoff 产物）。在飞管线须先取消。
+
+    若有 fork（what-if 情景）依赖其共享 handoff 目录，默认拒绝（409 has_dependents）；
+    传 ?force=true 可强制删除（会同时破坏这些 fork 的恢复/产物复用）。
+    """
     try:
-        result = PipelineOrchestrator.delete_pipeline(pipeline_id)
+        force = str(request.args.get('force', '')).strip().lower() in ('1', 'true', 'yes')
+        result = PipelineOrchestrator.delete_pipeline(pipeline_id, force=force)
         if result["status"] == "not_found":
             return jsonify({"success": False, "error": "管线不存在"}), 404
         if result["status"] == "still_running":
             return jsonify({"success": False, "error": "管线正在运行，请先取消再删除"}), 409
+        if result["status"] == "has_dependents":
+            deps = result.get("dependents", [])
+            return jsonify({
+                "success": False,
+                "error": f"仍有 {len(deps)} 个 fork 依赖其 handoff 目录，请先删除这些 fork 或加 ?force=true 强制删除",
+                "data": result,
+            }), 409
         return jsonify({"success": True, "data": result})
     except Exception as e:
         logger.error(f"删除管线失败: {e}", exc_info=True)

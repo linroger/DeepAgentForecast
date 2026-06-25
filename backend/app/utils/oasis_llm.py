@@ -180,19 +180,20 @@ def _create_openai_model(config: Dict[str, Any], use_boost: bool = False):
     if not llm_model:
         llm_model = config.get("llm_model", "gpt-4o-mini")
 
-    if llm_api_key:
-        os.environ["OPENAI_API_KEY"] = llm_api_key
-
-    if not os.environ.get("OPENAI_API_KEY"):
+    # 修复（B9）：把 api_key/url 直接传给 ModelFactory.create，不再写进程全局 os.environ。
+    # 此前对 OPENAI_API_KEY/OPENAI_API_BASE_URL 的全局写在 twitter+reddit 并发建模（boost 与
+    # 通用 key 交替）时会相互覆盖。仍把既有 OPENAI_* 环境变量作为回退读取，仅不再写它。
+    eff_api_key = llm_api_key or os.environ.get("OPENAI_API_KEY", "")
+    eff_base_url = llm_base_url or os.environ.get("OPENAI_API_BASE_URL", "")
+    if not eff_api_key:
         raise ValueError("缺少 API Key 配置，请在项目根目录 .env 文件中设置 LLM_API_KEY")
-
-    if llm_base_url:
-        os.environ["OPENAI_API_BASE_URL"] = llm_base_url
 
     logger.info(f"OASIS model: {config_label} model={llm_model}, mode=openai")
     return ModelFactory.create(
         model_platform=ModelPlatformType.OPENAI,
         model_type=llm_model,
+        api_key=eff_api_key,
+        url=eff_base_url or None,
     )
 
 

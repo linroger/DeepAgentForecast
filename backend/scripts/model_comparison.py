@@ -343,9 +343,19 @@ def build_comparison(base_pipeline_id: str, results: List[Dict[str, Any]]) -> Di
             r["provider"]: (r["forecast"].get("citation_audit") or {}).get("coverage") for r in ok
         },
         "report_paths": {r["provider"]: r.get("report_path") for r in ok},
+        # 修复（B16）：此前 per-provider 的延迟/tokens/成本被 LLMMeter 采集了却从未在对比输出里
+        # 暴露——"便宜、可计量"的卖点缺了成本维。这里把每家的计量总计切片 surfacing 出来。
+        "telemetry_by_provider": {r["provider"]: _telemetry_summary(r.get("telemetry")) for r in ok},
         "failed": failed,
         "schema_version": 1,
     }
+
+
+def _telemetry_summary(snap):
+    """从 LLMMeter 快照取出"总计"切片（surfacing per-provider 成本/延迟/tokens）。无效→None。"""
+    if not isinstance(snap, dict):
+        return None
+    return snap.get("total") or snap
 
 
 # ----------------------------------------------------------------------------- public API

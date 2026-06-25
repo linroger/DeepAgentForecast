@@ -25,6 +25,7 @@ from ..utils.actors import (
     events_to_schedule,
     extract_actor_rows,
     extract_relationship_rows,
+    forecast_inputs_block,
     influence_weight,
     match_actor,
     normalize_name,
@@ -858,6 +859,14 @@ class SimulationConfigGenerator:
         digest = actors_digest(actors)
         if digest:
             context_parts.append(f"\n## 深度研究档案（调研实证，生成配置时优先采信）\n{digest}")
+
+        # NEXTSTEPS P0-4: 注入 forecast_inputs（参考类基率/驱动因素/观察指标/候选情景）。
+        # 此前这些研究painstakingly抽取的分析锚点只渲染进最终报告，模拟侧零使用——智能体只能
+        # 自由联想而非对照分析锚点推理。把它喂进配置生成上下文（事件/议题/逐智能体配置），让模拟
+        # 围绕真实的基率与驱动因素展开。actors 无 forecast_inputs 时返回空串（degrade-safe）。
+        fi_block = forecast_inputs_block(actors)
+        if fi_block:
+            context_parts.append(f"\n## 预测输入（分析锚点：基率/驱动/指标/情景，模拟应据此推理）\n{fi_block}")
 
         current_length = sum(len(p) for p in context_parts)
         remaining_length = self.MAX_CONTEXT_LENGTH - current_length - 500  # 留500字符余量

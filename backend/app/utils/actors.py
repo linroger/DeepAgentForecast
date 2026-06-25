@@ -1281,6 +1281,197 @@ def extract_forecast_inputs(actors: Optional[Any]) -> Dict[str, List[Dict[str, A
     return out
 
 
+def dossier_coverage(actors: Optional[Any]) -> Dict[str, Any]:
+    """NEXTSTEPS P3-4：计算 actors.json 契约中**载荷字段**的覆盖率，让"空壳种子"可被发现。
+
+    actors.py 让每个契约字段都可选并静默降级——这对鲁棒性正确，但一份每个 actor 都缺激励、
+    或关系网无边的"空壳" dossier 会与一份丰富的 dossier 无差别地流过，把预测建在空地基上而毫无
+    信号。本函数把它量化为可读指标（写进 meta.json / 经研究质量面板暴露 / 可触发 refine 或加宽
+    不确定度）。纯函数；actors 为空/畸形时返回零骨架。
+
+    返回：{n_actors, n_relationships, n_tier12, pct_actors_with_incentives,
+    pct_tier12_with_worldview, pct_edges_valenced, edges_per_actor, salience_basis_present}。
+    """
+    zero = {
+        "n_actors": 0, "n_relationships": 0, "n_tier12": 0,
+        "pct_actors_with_incentives": 0.0, "pct_tier12_with_worldview": 0.0,
+        "pct_edges_valenced": 0.0, "edges_per_actor": 0.0, "salience_basis_present": 0.0,
+    }
+    rows = extract_actor_rows(actors)
+    n = len(rows)
+    if n == 0:
+        return zero
+
+    def _truthy_field(a: Dict[str, Any], key: str) -> bool:
+        v = a.get(key)
+        return bool(v) if isinstance(v, (list, dict)) else bool(v)
+
+    n_incent = sum(1 for a in rows if _truthy_field(a, "incentives"))
+    tier12 = [a for a in rows if entity_simulation_tier(a) in (1, 2)]
+    n_wv = sum(1 for a in tier12 if isinstance(a.get("worldview"), dict) and a.get("worldview"))
+    n_sal = sum(1 for a in rows if _truthy_field(a, "salience"))
+
+    rels = extract_relationship_rows(actors)
+    n_rels = len(rels)
+    # 显式 valence 覆盖：只数携带 explicit valence/polarity 字段的边（区别于按类型推断的默认值），
+    # 这正是"扁平无 valence 网络"该被检测出的信号。
+    n_valenced = sum(
+        1 for r in rels
+        if isinstance(r, dict) and (r.get("valence") or r.get("polarity") is not None)
+    )
+    return {
+        "n_actors": n,
+        "n_relationships": n_rels,
+        "n_tier12": len(tier12),
+        "pct_actors_with_incentives": round(n_incent / n, 3),
+        "pct_tier12_with_worldview": round(n_wv / len(tier12), 3) if tier12 else 0.0,
+        "pct_edges_valenced": round(n_valenced / n_rels, 3) if n_rels else 0.0,
+        "edges_per_actor": round(n_rels / n, 2),
+        "salience_basis_present": round(n_sal / n, 3),
+    }
+
+
+def _row_norm_tokens(row: Dict[str, Any]) -> set:
+    """一个 actor 行的标准化"名字 token 集"（主名 + 别名），用于跨轨去重。"""
+    toks = set()
+    nm = normalize_name(str(row.get("name", "")))
+    if nm:
+        toks.add(nm)
+    for al in _actor_norm_aliases(row):
+        if al:
+            toks.add(al)
+    return toks
+
+
+def _rows_same_entity(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
+    """两 actor 行是否指向同一实体（保守判定，合并是破坏性的）。
+
+    命中任一：① 标准化名/别名 token 有交集；② 主名双向包含且较短名 ≥4 字符
+    （避免 "AI"/"EU" 这类短名误并）。
+    """
+    ta, tb = _row_norm_tokens(a), _row_norm_tokens(b)
+    if ta & tb:
+        return True
+    pa = normalize_name(str(a.get("name", "")))
+    pb = normalize_name(str(b.get("name", "")))
+    if pa and pb and min(len(pa), len(pb)) >= 4 and (pa in pb or pb in pa):
+        return True
+    return False
+
+
+def reconcile_cast(actors: Optional[Any]) -> tuple:
+    """NEXTSTEPS P3-2：抽取后对 actors[] 做跨轨去重，合并指向同一实体的重复行。
+
+    双轨研究刻意产出两份 cast，今天只是被拼接交给一个抽取 LLM 静默仲裁；同一实体的
+    重复行（如 "Nvidia" vs "NVIDIA Corp"，可能 role-class 还不同）会**分裂中心度、衍生
+    重复 persona、污染 agent-cap 依赖的 salience 排序**。本 pass 用 normalize_name +
+    双向包含/别名把重复行聚类，合并为一条规范行（更丰富者胜、并别名、缺字段回填、记冲突），
+    并把 relationships 端点改写到规范名。纯函数；返回 (reconciled_actors, audit)。
+    actors 非 dict / actor 行<2 → 原样返回 + 空 audit。
+    """
+    empty_audit = {"merged": [], "n_before": 0, "n_after": 0}
+    if not isinstance(actors, dict):
+        return actors, empty_audit
+    rows = extract_actor_rows(actors)
+    n_before = len(rows)
+    if n_before < 2:
+        return actors, {"merged": [], "n_before": n_before, "n_after": n_before}
+
+    # union-find 聚类
+    parent = list(range(n_before))
+
+    def _find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i in range(n_before):
+        for j in range(i + 1, n_before):
+            if _rows_same_entity(rows[i], rows[j]):
+                ri, rj = _find(i), _find(j)
+                if ri != rj:
+                    parent[rj] = ri
+
+    clusters: Dict[int, List[int]] = {}
+    for i in range(n_before):
+        clusters.setdefault(_find(i), []).append(i)
+
+    # 无任何重复 → 真正的 no-op：原样返回输入对象（与现状逐字节一致）。
+    if all(len(idxs) == 1 for idxs in clusters.values()):
+        return actors, {"merged": [], "n_before": n_before, "n_after": n_before}
+
+    _RICH_KEYS = ("role", "stance", "influence", "memory", "incentives", "worldview",
+                  "resources", "aliases", "goals", "constraints", "type", "salience")
+    _SCALAR_CONFLICT_KEYS = ("role", "stance", "type", "influence")
+
+    def _richness(row: Dict[str, Any]) -> int:
+        return sum(1 for k in _RICH_KEYS if row.get(k))
+
+    merged_audit: List[Dict[str, Any]] = []
+    new_rows: List[Dict[str, Any]] = []
+    rename: Dict[str, str] = {}   # 标准化的 victim 名 → survivor 规范名
+    for idxs in clusters.values():
+        members = [rows[i] for i in idxs]
+        if len(members) == 1:
+            new_rows.append(members[0])
+            continue
+        survivor = max(
+            members,
+            key=lambda r: (_richness(r), len(r.get("aliases") or []), len(str(r.get("name", "")))),
+        )
+        merged = dict(survivor)
+        aliases = {str(a) for a in (merged.get("aliases") or [])}
+        conflicts: List[Dict[str, Any]] = []
+        victim_names: List[str] = []
+        for m in members:
+            if m is survivor:
+                continue
+            vn = str(m.get("name") or "")
+            if vn:
+                victim_names.append(vn)
+                aliases.add(vn)
+            for a in (m.get("aliases") or []):
+                aliases.add(str(a))
+            for k, v in m.items():
+                if k in ("name", "aliases"):
+                    continue
+                if not merged.get(k) and v:
+                    merged[k] = v
+                elif (k in _SCALAR_CONFLICT_KEYS and isinstance(v, str)
+                      and isinstance(merged.get(k), str) and merged[k] and v and merged[k] != v):
+                    conflicts.append({"field": k, "kept": merged[k], "dropped": v, "from": vn})
+        aliases.discard(str(merged.get("name") or ""))
+        if aliases:
+            merged["aliases"] = sorted(aliases)
+        new_rows.append(merged)
+        canon = str(merged.get("name") or "")
+        for vn in victim_names:
+            nv = normalize_name(vn)
+            if nv:
+                rename[nv] = canon
+        merged_audit.append({"canonical": canon, "merged": victim_names, "conflicts": conflicts})
+
+    out = dict(actors)
+    out["actors"] = new_rows
+    rels = actors.get("relationships")
+    if isinstance(rels, list) and rename:
+        new_rels = []
+        for r in rels:
+            if not isinstance(r, dict):
+                new_rels.append(r)
+                continue
+            r2 = dict(r)
+            for ep in ("source", "target"):
+                nv = normalize_name(str(r2.get(ep, "")))
+                if nv in rename:
+                    r2[ep] = rename[nv]
+            new_rels.append(r2)
+        out["relationships"] = new_rels
+
+    return out, {"merged": merged_audit, "n_before": n_before, "n_after": len(new_rows)}
+
+
 def forecast_inputs_block(actors: Optional[Any], max_per_section: int = 6) -> str:
     """把 forecast_inputs 渲染为预测脚手架块；全空返回空串。
 

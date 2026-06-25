@@ -2266,11 +2266,21 @@ async def run_twitter_simulation(
             content = post.get("content", "")
             try:
                 agent = result.env.agent_graph.get_agent(agent_id)
-                initial_actions[agent] = ManualAction(
-                    action_type=ActionType.CREATE_POST,
-                    action_args={"content": content}
-                )
-                
+                # 修复：同一 agent 的多条初始帖此前会相互覆盖（dict 单键单值），第一条被静默丢弃。
+                # 与 Reddit 路径一致地把同 agent 的多条合并成 list（env.step 接受 list 值）。
+                if agent in initial_actions:
+                    if not isinstance(initial_actions[agent], list):
+                        initial_actions[agent] = [initial_actions[agent]]
+                    initial_actions[agent].append(ManualAction(
+                        action_type=ActionType.CREATE_POST,
+                        action_args={"content": content}
+                    ))
+                else:
+                    initial_actions[agent] = ManualAction(
+                        action_type=ActionType.CREATE_POST,
+                        action_args={"content": content}
+                    )
+
                 if action_logger:
                     action_logger.log_action(
                         round_num=0,
@@ -2283,7 +2293,7 @@ async def run_twitter_simulation(
                     initial_action_count += 1
             except Exception:
                 pass
-        
+
         if initial_actions:
             try:
                 await result.env.step(initial_actions)
@@ -2728,7 +2738,22 @@ async def main():
         if args.max_rounds < config_total_rounds:
             log_manager.info(f"  - 实际执行轮数: {args.max_rounds} (已截断)")
     log_manager.info(f"  - Agent数量: {len(config.get('agent_configs', []))}")
-    
+
+    # 加固：OASIS 按 profile 数组下标分配 agent_id，全链路（poster_agent_id / initial_follows /
+    # agent_configs 查找）都假设 agent_configs[i].agent_id == i。此前无任何运行时校验——生成器
+    # 一旦错位会表现为"语义错误但不崩溃"的模拟。这里在启动时做一次软校验，错位则显著告警（不中断）。
+    _acfgs = config.get("agent_configs", []) or []
+    _misaligned = [
+        i for i, _c in enumerate(_acfgs)
+        if isinstance(_c, dict) and str(_c.get("agent_id", i)) != str(i)
+    ]
+    if _misaligned:
+        log_manager.warning(
+            f"  - ⚠ agent_configs 下标与 agent_id 错位 {len(_misaligned)} 处"
+            f"（首例 index={_misaligned[0]} agent_id={_acfgs[_misaligned[0]].get('agent_id')}）；"
+            f"poster/follows/查找可能指向错误 persona——疑似生成器 bug，请检查。"
+        )
+
     log_manager.info("日志结构:")
     log_manager.info(f"  - 主日志: simulation.log")
     log_manager.info(f"  - Twitter动作: twitter/actions.jsonl")

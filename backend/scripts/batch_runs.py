@@ -89,6 +89,9 @@ _BATCH_ID_RE_PREFIX = "batch_"
 
 # 锚点管线等待图谱完成的轮询节奏与上限（研究+建图可达数十分钟，给足余量）。
 _POLL_INTERVAL_S = 5.0
+# 阻塞轮询的挂钟上限（秒）：锚点建图 / 分叉模拟若永不进入终态，避免 start_batch 永久空转。
+# 默认 4 小时（足够最重的建图+模拟）；可经 BATCH_WAIT_TIMEOUT_S 覆盖。
+_WAIT_TIMEOUT_S = float(os.environ.get("BATCH_WAIT_TIMEOUT_S", "14400") or "14400")
 # 终态：不会再前进的状态，等待图谱时遇到即视为失败提前退出。
 _TERMINAL_STATUSES = {"failed", "cancelled", "completed"}
 
@@ -197,9 +200,12 @@ def _wait_for_graph(pipeline_id: str, cancel: Optional[threading.Event] = None) 
     Raises:
         RuntimeError: 锚点在拿到图谱前进入终态（failed/cancelled）或记录丢失。
     """
+    _deadline = time.monotonic() + _WAIT_TIMEOUT_S if _WAIT_TIMEOUT_S > 0 else None
     while True:
         if cancel is not None and cancel.is_set():
             raise RuntimeError("批次已被取消（等待锚点图谱阶段时）")
+        if _deadline is not None and time.monotonic() > _deadline:
+            raise RuntimeError(f"等待锚点图谱阶段超时（>{int(_WAIT_TIMEOUT_S)}s，疑似卡死）")
         data = PipelineManager.load(pipeline_id)
         if data is None:
             raise RuntimeError(f"锚点管线 {pipeline_id} 记录丢失")
@@ -532,9 +538,12 @@ def _wait_for_simulation(pipeline_id: str, cancel: Optional[threading.Event] = N
     Raises:
         RuntimeError: 锚点在模拟完成前进入终态或记录丢失。
     """
+    _deadline = time.monotonic() + _WAIT_TIMEOUT_S if _WAIT_TIMEOUT_S > 0 else None
     while True:
         if cancel is not None and cancel.is_set():
             raise RuntimeError("批次已被取消（等待锚点模拟阶段时）")
+        if _deadline is not None and time.monotonic() > _deadline:
+            raise RuntimeError(f"等待锚点模拟阶段超时（>{int(_WAIT_TIMEOUT_S)}s，疑似卡死）")
         data = PipelineManager.load(pipeline_id)
         if data is None:
             raise RuntimeError(f"锚点管线 {pipeline_id} 记录丢失")

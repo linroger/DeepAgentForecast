@@ -921,19 +921,24 @@ class ZepToolsService:
         embedder = self._get_embedder()
         if embedder is None:
             return {}
-        todo = [f for f in facts if f and f not in self._fact_embed_cache]
+        # B8: 所有对 _fact_embed_cache 的 dict 读写加锁（与 insight_forge 并发 fan-out 一致），
+        # 但**不**在持锁期间做慢速嵌入调用，避免串行化并发检索。
+        with self._cache_lock:
+            todo = [f for f in facts if f and f not in self._fact_embed_cache]
         if todo:
             try:
                 # 嵌入器在后台事件循环线程上运行；通过 runtime 桥接同步取回 create_batch。
                 from .graphiti_client.runtime import get_runtime
                 vecs = get_runtime().run(embedder.create_batch(todo))
-                for f, v in zip(todo, vecs):
-                    self._fact_embed_cache[f] = v
+                with self._cache_lock:
+                    for f, v in zip(todo, vecs):
+                        self._fact_embed_cache[f] = v
             except Exception as e:
                 logger.warning(f"MMR 事实嵌入失败，回退精确去重: {e}")
                 self._embedder_unavailable = True
                 return {}
-        return {f: self._fact_embed_cache[f] for f in facts if f in self._fact_embed_cache}
+        with self._cache_lock:
+            return {f: self._fact_embed_cache[f] for f in facts if f in self._fact_embed_cache}
 
     @staticmethod
     def _cosine(a: List[float], b: List[float]) -> float:
@@ -1089,9 +1094,11 @@ class ZepToolsService:
         Returns:
             节点列表
         """
-        if graph_id in self._nodes_cache:
-            logger.info(f"复用图谱 {graph_id} 的节点缓存: {len(self._nodes_cache[graph_id])} 个节点")
-            return list(self._nodes_cache[graph_id])
+        # B8: 读缓存加锁（与并发章节线程的写保持一致，RLock 可重入）。
+        with self._cache_lock:
+            if graph_id in self._nodes_cache:
+                logger.info(f"复用图谱 {graph_id} 的节点缓存: {len(self._nodes_cache[graph_id])} 个节点")
+                return list(self._nodes_cache[graph_id])
 
         logger.info(f"获取图谱 {graph_id} 的所有节点...")
 
@@ -1116,8 +1123,11 @@ class ZepToolsService:
             ))
 
         logger.info(f"获取到 {len(result)} 个节点")
-        self._nodes_cache[graph_id] = result
-        return list(result)
+        # B8: 写缓存双检加锁，避免并发章节线程交错写 dict 撕裂；先到者写入，都返回一致结果。
+        with self._cache_lock:
+            if graph_id not in self._nodes_cache:
+                self._nodes_cache[graph_id] = result
+            return list(self._nodes_cache[graph_id])
 
     def get_all_edges(self, graph_id: str, include_temporal: bool = True) -> List[EdgeInfo]:
         """
@@ -1131,9 +1141,11 @@ class ZepToolsService:
             边列表（包含created_at, valid_at, invalid_at, expired_at）
         """
         cache_key = (graph_id, include_temporal)
-        if cache_key in self._edges_cache:
-            logger.info(f"复用图谱 {graph_id} 的边缓存: {len(self._edges_cache[cache_key])} 条边")
-            return list(self._edges_cache[cache_key])
+        # B8: 读缓存加锁（与并发章节线程的写一致）。
+        with self._cache_lock:
+            if cache_key in self._edges_cache:
+                logger.info(f"复用图谱 {graph_id} 的边缓存: {len(self._edges_cache[cache_key])} 条边")
+                return list(self._edges_cache[cache_key])
 
         logger.info(f"获取图谱 {graph_id} 的所有边...")
 
@@ -1167,8 +1179,11 @@ class ZepToolsService:
             result.append(edge_info)
 
         logger.info(f"获取到 {len(result)} 条边")
-        self._edges_cache[cache_key] = result
-        return list(result)
+        # B8: 写缓存双检加锁，避免并发章节线程交错写 dict 撕裂。
+        with self._cache_lock:
+            if cache_key not in self._edges_cache:
+                self._edges_cache[cache_key] = result
+            return list(self._edges_cache[cache_key])
 
     def get_node_detail(self, node_uuid: str) -> Optional[NodeInfo]:
         """
@@ -2368,8 +2383,11 @@ class ZepToolsService:
         except Exception as e:
             return f"（无法读取模拟动作数据：{e}）"
         # agent → 其互动过的目标名集合
+        # 修复：FOLLOW/MUTE 等动作的目标名由模拟侧写在 "target_user_name"（_enrich_action_context
+        # 的规范键），此前只读 followee_name/target_name → 关注/拉黑关系被静默漏掉，派系聚类失真。
+        # 把 target_user_name 纳入候选键。
         target_keys = ("post_author_name", "original_author_name", "comment_author_name",
-                       "quoted_author_name", "followee_name", "target_name")
+                       "quoted_author_name", "target_user_name", "followee_name", "target_name")
         agent_targets: Dict[int, set] = {}
         agent_name: Dict[int, str] = {}
         for a in actions:
