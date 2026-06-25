@@ -65,8 +65,8 @@ The most recent showcase run: a deep-mode research pass on the full semiconducto
 
 Given one natural-language prediction question (for example, *"Will product X reach mainstream adoption within 18 months?"*), DeepAgentForecast:
 
-1. **Researches the web autonomously** — a deep-research super-agent performs multi-angle web search and full-text fetching, then writes a structured research dossier with the actors, sources, and the precise prediction requirement.
-2. **Builds a parallel world** — the dossier is converted into a temporal knowledge graph, and one digital persona is generated per key entity in that graph.
+1. **Researches the web autonomously (dual-track)** — two research workflows run **concurrently**: a broad *deep-research* pass that writes an evidence-graded dossier, and an *actor-ontology* pass that profiles the real key actors in depth — their roles, values, beliefs, incentives, resources, and their directed, typed, **valenced** relationships — while demoting mere reporters/outlets/sources to context rather than actors.
+2. **Builds a parallel world** — the research is distilled into a temporal knowledge graph with a **tiered, behaviorally-rich ontology**, and a digital persona is generated for each **key actor** (decision-makers and stakeholders), ranked by salience rather than raw connectivity.
 3. **Simulates a population** — hundreds of LLM personas interact across a simulated Twitter and Reddit for a configurable number of rounds, producing emergent social dynamics around the question.
 4. **Forecasts and reports** — a report agent retrieves from both the knowledge graph and the simulation and writes an interactive, sectioned forecast report.
 
@@ -80,7 +80,7 @@ DeepAgentForecast chains **two engines** through a **shared temporal knowledge g
 
 | Component | Role |
 |---|---|
-| **DeerFlow** | **DeerFlow 2.0**, a LangGraph-based super agent harness: web search + full-text fetch, multi-angle research, writes a structured dossier. Runs in its **own subprocess and isolated venv**. |
+| **DeerFlow** | **DeerFlow 2.0**, a LangGraph-based super-agent harness: web search + full-text fetch, multi-angle research. Runs in its **own subprocess and isolated venv**, executing two research skills **concurrently** — `deep-research` (a broad evidence dossier) and `actor-ontology-research` (an actor-centric, ontology-ready dossier of the key cast and their relationships). |
 | **MiroFish / OASIS** | A multi-agent social-simulation engine (built on CAMEL-AI's OASIS). Spins up hundreds of LLM personas interacting on a simulated **Twitter + Reddit**. |
 | **Local Graphiti KG** | A **temporal knowledge graph (GraphRAG)** that glues the two engines together — the open-source [Graphiti](https://github.com/getzep/graphiti) engine (`graphiti-core==0.29.2`, the same engine Zep Cloud was built on) running **locally on an embedded FalkorDB** (the `falkordblite` package — no Docker, no server process, no account, **no API key**). The dossier is ingested here; entities and relations are extracted locally via your configured `LLM_PROVIDER` (so it works even with the no-key CLI providers), and vector embeddings are computed locally by a sentence-transformers multilingual model. |
 | **ReportAgent** | A **ReAct loop** with an `insight_forge` tool that performs tool-augmented retrieval over the graph **and** the simulation, then writes the final forecast report. |
@@ -113,7 +113,7 @@ flowchart LR
     P([One prompt]) --> R
 
     subgraph DeerFlow["DeerFlow (subprocess + isolated venv)"]
-        R["1. research<br/>web search + fetch<br/>writes handoff contract"]
+        R["1. research (dual-track)<br/>deep-research + actor-ontology<br/>writes handoff contract"]
     end
 
     R --> O["2. ontology<br/>LLM derives entity<br/>+ edge types"]
@@ -136,16 +136,14 @@ flowchart LR
 
 **Stage by stage:**
 
-1. **research** — DeerFlow runs in its own subprocess (its own Python venv), researches the web, and writes a **file-based handoff contract**:
-   - `research_report.md` — the structured research dossier
-   - `actors.json` — the key actors
-   - `sources.json` — the cited sources
-   - `prediction_requirement.txt` — the precise prediction question
-   - `meta.json` — run metadata
-   - `research_progress.log` — the live research console log
-2. **ontology** — an LLM derives **entity types + edge types** from the dossier and the prediction question.
-3. **graph** — the dossier is **chunked and ingested** into a local Graphiti temporal knowledge graph (GraphRAG) on an embedded FalkorDB; entities and relations are extracted locally via your configured `LLM_PROVIDER`, and vector embeddings are computed locally by a sentence-transformers model — no cloud service or API key involved.
-4. **prepare** — **digital personas** (one per key graph entity) and the **simulation config** are generated; an "environment agent" sets the rounds and timing.
+1. **research (dual-track)** — DeerFlow runs in its own subprocess (its own Python venv) and runs **two research workflows at once**, writing a **file-based handoff contract**:
+   - `research_report.md` — the broad *deep-research* dossier (Track A; augments the graph, ontology, and situation context)
+   - `actor_dossier.md` — the *actor-ontology* dossier (Track B): the ranked cast with roles, values, beliefs, incentives, resources, and their directed/typed/valenced relationships
+   - `actors.json` — the structured cast + relationships extracted from both (the actor dossier is the **primary** source; the report augments it)
+   - `sources.json` · `prediction_requirement.txt` · `timeline.json` · `meta.json` · `research_progress.log`
+2. **ontology** — an LLM derives **entity types + edge types** from the dossiers and the prediction question, tagging each entity with an **archetype + simulation tier** (so reporters, outlets, and abstract concepts become graph *context* rather than actors) and each edge with a **family + valence** (so allies, rivals, suppliers, and backers are distinguished, not collapsed together).
+3. **graph** — both dossiers are **chunked and ingested** into a local Graphiti temporal knowledge graph (GraphRAG) on an embedded FalkorDB; entities and relations are extracted locally via your configured `LLM_PROVIDER`, and vector embeddings are computed locally by a sentence-transformers model — no cloud service or API key involved.
+4. **prepare** — **digital personas** are generated for the **key actors only** (tier-1 decision-makers and tier-2 stakeholders — minor entities stay as graph context), ranked by **salience** rather than raw graph degree, each carrying its **behavioral DNA** (values, beliefs, incentives, resources) and its researched ally/rival/supplier/backer network; an "environment agent" sets the rounds and timing.
 5. **run** — OASIS runs a **dual-platform (Twitter + Reddit)** multi-agent simulation for *N* rounds; personas post, comment, and like, and social dynamics emerge.
 6. **report** — the **ReportAgent** (a ReAct loop with the `insight_forge` tool) retrieves from the graph + simulation and writes a **sectioned forecast report**.
 

@@ -87,8 +87,8 @@ npm run dev       # 后端 :5001 + 前端 :3000
 
 把一个开放性问题（例如「2035 年电动车市场会怎样演化？」）交给 DeepAgentForecast，它会：
 
-- **自动联网研究**：用一个深度研究「超级智能体」搜索全网、抓取全文、从多角度展开调研，并写出一份结构化的研究档案（dossier）。
-- **构建高保真平行世界**：把研究档案抽象成实体/关系、灌入时序知识图谱（GraphRAG），并据此生成数字人格。
+- **自动联网研究（双轨并行）**：两个研究工作流**同时运行** —— 一路「深度研究」写出循证研究档案，一路「角色本体研究」深挖真正的关键行动者：其角色、价值观、信念、动机、资源，以及彼此之间有向、带类型、**带极性（盟友≠对手≠交易方）**的关系；同时把仅被引用的记者/媒体/来源降级为上下文，而非行动者。
+- **构建高保真平行世界**：把研究成果蒸馏进一张带**分层、行为画像丰富的本体**的时序知识图谱（GraphRAG），并为每位**关键行动者**（决策者与利益相关方）生成一位数字人格 —— 按显著度（salience）而非单纯连接度排序。
 - **运行群体模拟**：在模拟的 Twitter + Reddit 双平台上，让数以百计、各具人格的 LLM 智能体发帖、评论、点赞，让群体动态自然涌现。
 - **产出可交互预测报告**：由报告 Agent 在图谱与模拟之上做工具增强的检索，综合写出一份分章节的预测报告。
 
@@ -100,8 +100,8 @@ npm run dev       # 后端 :5001 + 前端 :3000
 
 DeepAgentForecast 是一条统一管线，串联两大引擎，并由一张知识图谱与一个报告 Agent 黏合：
 
-- **DeerFlow 2.0 —— 深度研究引擎**
-  一个基于 LangGraph 的超级智能体框架：联网搜索 + 全文抓取，多角度研究，产出结构化的研究档案。它运行在**自己的子进程与独立的 Python 虚拟环境**中，与后端的依赖隔离。
+- **DeerFlow 2.0 —— 深度研究引擎（双轨）**
+  一个基于 LangGraph 的超级智能体框架：联网搜索 + 全文抓取，多角度研究。它运行在**自己的子进程与独立的 Python 虚拟环境**中，与后端依赖隔离，并**同时执行两个研究技能** —— `deep-research`（广覆盖的循证档案）与 `actor-ontology-research`（以行动者为中心、可直接喂给本体生成的角色与关系档案）。
 
 - **MiroFish / OASIS —— 群体模拟引擎**
   基于 CAMEL-AI 的 **OASIS** 多智能体社会模拟引擎：拉起成百上千个 LLM 人格，在模拟的 Twitter + Reddit 上互动。
@@ -154,7 +154,7 @@ DeepAgentForecast 是一条统一管线，串联两大引擎，并由一张知�
 
 ```mermaid
 flowchart LR
-    A["1 · research<br/>深度研究"] --> B["2 · ontology<br/>本体生成"]
+    A["1 · research<br/>深度研究（双轨）"] --> B["2 · ontology<br/>本体生成"]
     B --> C["3 · graph<br/>图谱构建"]
     C --> D["4 · prepare<br/>环境搭建"]
     D --> E["5 · run<br/>群体模拟"]
@@ -172,10 +172,10 @@ flowchart LR
 
 | 阶段 | 名称 | 说明 |
 |------|------|------|
-| 1 | **research（深度研究）** | DeerFlow 在自己的子进程（独立 Python venv，见下文）中运行，联网研究，并写出一份基于文件的「交接契约」：`research_report.md`、`actors.json`、`sources.json`、`prediction_requirement.txt`、`meta.json`、`research_progress.log`。 |
-| 2 | **ontology（本体生成）** | 由 LLM 依据研究档案与预测问题，推导出实体类型（entity types）与关系类型（edge types）。 |
-| 3 | **graph（图谱构建）** | 将研究档案分块，灌入本地运行的 Graphiti 时序知识图谱（GraphRAG，嵌入式 FalkorDB）；实体/关系由你配置的本地 LLM 抽取，向量嵌入由本地 sentence-transformers 多语言模型计算。 |
-| 4 | **prepare（环境搭建）** | 为每个关键图谱实体生成一位数字人格，并由一个「环境 Agent」生成模拟配置（设定轮数/时序等参数）。 |
+| 1 | **research（深度研究 · 双轨）** | DeerFlow 在自己的子进程（独立 Python venv）中**同时运行两个研究工作流**，写出基于文件的「交接契约」：`research_report.md`（Track A 广覆盖深度研究档案，用于增强图谱/本体/局势上下文）、`actor_dossier.md`（Track B 角色本体档案：分层排序的行动者阵容 + 价值观/信念/动机/资源 + 有向带极性的关系网）、`actors.json`（从两者抽取的结构化阵容与关系，**以角色档案为主、研究报告为辅**）、`sources.json`、`prediction_requirement.txt`、`timeline.json`、`meta.json`、`research_progress.log`。 |
+| 2 | **ontology（本体生成）** | 由 LLM 依据两份档案与预测问题，推导实体类型与关系类型，并为每个实体打上**原型（archetype）+ 模拟层级（tier）**标签（让记者/媒体/抽象概念成为图谱*上下文*而非行动者），为每条关系打上**族（family）+ 极性（valence）**（盟友、对手、供应商、投资方互不混淆）。 |
+| 3 | **graph（图谱构建）** | 将**两份档案**分块灌入本地运行的 Graphiti 时序知识图谱（GraphRAG，嵌入式 FalkorDB）；实体/关系由你配置的本地 LLM 抽取，向量嵌入由本地 sentence-transformers 多语言模型计算。 |
+| 4 | **prepare（环境搭建）** | **仅为关键行动者**（第 1 层决策者 + 第 2 层利益相关方，次要实体留作图谱上下文）生成数字人格，按**显著度（salience）**而非单纯邻边数排序；每位人格携带其**行为画像（行为 DNA：价值观/信念/动机/资源）**与调研得来的盟友/对手/供应商/投资方关系网。再由一个「环境 Agent」生成模拟配置（轮数/时序）。 |
 | 5 | **run（群体模拟）** | OASIS 运行 N 轮双平台（Twitter + Reddit）多智能体模拟；人格们发帖/评论/点赞，群体动态自然涌现。 |
 | 6 | **report（预测报告）** | ReportAgent（一个带 `insight_forge` 工具的 ReAct 循环）从图谱 + 模拟结果中检索，写出一份分章节的预测报告。 |
 
