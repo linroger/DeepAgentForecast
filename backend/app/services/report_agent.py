@@ -1355,6 +1355,14 @@ class ReportAgent:
         篇幅有界（单块各自截断），避免给每个章节提示词注入过量 token。
         """
         parts: List[str] = []
+        # 0) NEXTSTEPS P1-1: 决策通道演化出的「结果世界态」——建模出的 P(outcome)（按情景份额），
+        # 比声量份额更接近真实结果。仅开启 SIM_DECISION_CHANNEL 时存在；置于最前（最权威）。
+        try:
+            ws_blk = self._world_state_block()
+            if ws_blk:
+                parts.append(ws_blk)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"信号包 world_state 读取失败（忽略）: {e}")
         # 1) 量化结果（Top actor / 逐轮动作量 + 峰值 / 动作类型分布）——截断到 ~1800 字
         try:
             outcomes = self.zep_tools.simulation_outcomes(self.simulation_id, top_n=8)
@@ -1387,6 +1395,33 @@ class ReportAgent:
             "避免出现「只有叙事、没有数字」的章节。需要更细粒度时再调用工具深挖。"
         )
         return header + "\n\n" + "\n\n".join(parts)
+
+    def _world_state_block(self) -> str:
+        """NEXTSTEPS P1-1: 读取模拟的 world_state_trajectory.json（决策通道产物），渲染**建模出的
+        结果分布 P(outcome)**。未开 SIM_DECISION_CHANNEL / 无产物 → ""（degrade-safe）。
+        """
+        try:
+            path = os.path.join(getattr(Config, "OASIS_SIMULATION_DATA_DIR", "") or "",
+                                self.simulation_id, "world_state_trajectory.json")
+            if not os.path.exists(path):
+                return ""
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:  # noqa: BLE001
+            return ""
+        shares = ((data or {}).get("outcome") or {}).get("shares") or {}
+        if not isinstance(shares, dict) or not shares:
+            return ""
+        lines = ["【模拟建模结果·结果世界态 P(outcome)（权威·建模而非声量；情景概率应据此为主锚）】"]
+        for name, sh in sorted(shares.items(), key=lambda kv: -float(kv[1] or 0)):
+            try:
+                lines.append(f"· {name}: {float(sh) * 100:.0f}%")
+            except (TypeError, ValueError):
+                continue
+        ca = (data or {}).get("converged_at")
+        lines.append(f"收敛于第 {ca} 轮（稳定 → 高信心）" if ca else "未收敛（→ 降低信心）")
+        lines.append("注：以上为按资源加权的智能体决策（非发帖声量）演化出的结果分布，更接近真实结果。")
+        return "\n".join(lines)
 
     # ──────────────────────────────────────────────────────────────
     # NEXTSTEPS P0-1 / P2-1 / P2-3: forecast spine + finalization + publish gate
@@ -1477,9 +1512,33 @@ class ReportAgent:
                 forecast["indicators"] = _inds
         except Exception:  # noqa: BLE001
             pass
+        # NEXTSTEPS P2-4: 把历史校准（已解析预测的 Brier/ECE）surfacing 进 confidence_rationale，
+        # 让信心由 track record 赚得而非自评；无已解析样本时不改（degrade-safe）。
+        if getattr(Config, "REPORT_FORECAST_LEDGER", True):
+            try:
+                from .forecast_ledger import calibration_summary as _cal
+                _cs = _cal()
+                if _cs.get("n_resolved"):
+                    forecast["historical_calibration"] = _cs
+                    _note = (f"历史校准：已解析 {_cs['n_resolved']} 个预测，平均 Brier "
+                             f"{_cs.get('mean_brier')}，校准误差 {_cs.get('calibration_error')}")
+                    forecast["confidence_rationale"] = (
+                        (str(forecast.get("confidence_rationale") or "").strip()
+                         + " ｜" + _note).strip(" ｜"))
+            except Exception:  # noqa: BLE001
+                pass
         fpath = os.path.join(ReportManager._get_report_folder(report_id), "forecast.json")
         write_text_atomic(fpath, json.dumps(forecast, ensure_ascii=False, indent=2))
         self._forecast_spine = forecast  # 最终版（集成阶段读 forecast.json 文件，这里仅保留内存副本）
+        # P2-4: 追加进校准账本（loop-closer；resolution 经 /api/v1/resolve 或 forecast_tools backtest）。
+        if getattr(Config, "REPORT_FORECAST_LEDGER", True):
+            try:
+                from .forecast_ledger import append_forecast as _append
+                _append(forecast, report_id=report_id,
+                        horizon=str(forecast.get("horizon") or "") or None,
+                        created_at=datetime.now().isoformat())
+            except Exception:  # noqa: BLE001
+                pass
         logger.info(
             f"结构化预测已生成: {report_id} "
             f"({len(forecast.get('scenarios', []))} 情景, "

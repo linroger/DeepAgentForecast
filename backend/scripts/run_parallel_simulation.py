@@ -2169,6 +2169,65 @@ class PlatformSimulation:
         self.total_actions = 0
 
 
+# ============== NEXTSTEPS P1-1/P1-2/P1-4: post-sim decision channel helpers ==============
+def _read_actions_for_decision_channel(simulation_dir: str) -> List[Dict[str, Any]]:
+    """读取两平台 actions.jsonl 的动作记录（跳过 round_start/end/sim_end 事件），
+    汇成 [{round, agent_id, agent_name}] 供决策通道按轮回放。失败/缺失 → []。"""
+    out: List[Dict[str, Any]] = []
+    for plat in ("twitter", "reddit"):
+        path = os.path.join(simulation_dir, plat, "actions.jsonl")
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except (ValueError, TypeError):
+                        continue
+                    if rec.get("event_type") or rec.get("agent_id") is None:
+                        continue
+                    out.append({"round": rec.get("round", 0),
+                                "agent_id": rec.get("agent_id"),
+                                "agent_name": rec.get("agent_name", "")})
+        except OSError:
+            continue
+    return out
+
+
+def _build_round_to_date(seed: Dict[str, Any], config: Dict[str, Any]):
+    """NEXTSTEPS P1-2: round(1-based) → ISO 日期，as_of_date→horizon_date 线性映射。
+    无法确定（缺日期/非法/horizon≤as_of）→ None（不做日期映射）。"""
+    from datetime import datetime as _dt, timedelta as _td
+    as_of, horizon = seed.get("as_of_date"), seed.get("horizon_date")
+    if not as_of or not horizon:
+        return None
+    try:
+        d0 = _dt.fromisoformat(str(as_of)[:10])
+        d1 = _dt.fromisoformat(str(horizon)[:10])
+    except (ValueError, TypeError):
+        return None
+    if d1 <= d0:
+        return None
+    tc = config.get("time_config", {}) if isinstance(config, dict) else {}
+    try:
+        total_hours = float(tc.get("total_simulation_hours", 72) or 72)
+        mpr = float(tc.get("minutes_per_round", 60) or 60)
+    except (TypeError, ValueError):
+        total_hours, mpr = 72.0, 60.0
+    total_rounds = max(1, int(total_hours * 60 / mpr))
+    span_days = (d1 - d0).days
+
+    def _r2d(rnd: int) -> str:
+        frac = min(1.0, max(0.0, float(rnd) / total_rounds))
+        return (d0 + _td(days=int(span_days * frac))).date().isoformat()
+
+    return _r2d
+
+
 async def run_twitter_simulation(
     config: Dict[str, Any],
     simulation_dir: str,
@@ -2810,6 +2869,45 @@ async def main():
                 log_manager.info("已生成涌现度量: emergent_metrics.json")
             except Exception as _em_err:  # noqa: BLE001
                 log_manager.error(f"涌现度量计算失败（已隔离，不影响模拟结果）: {_em_err}")
+
+    # NEXTSTEPS P1-1/P1-2/P1-4: 模拟结束后演化"结果世界态"——按轮 elicit 各活跃 agent 的承诺
+    # （朝哪个 forecast 情景），资源加权步进 WorldState，落 world_state_trajectory.json +
+    # decisions.jsonl + 终局 outcome（report/集成读它而非声量份额 final_stance_share）。
+    # 默认关（SIM_DECISION_CHANNEL!=true 完全跳过，与现状一致）；全程 try/except 隔离。
+    _ws_seed = config.get("world_state_seed") if isinstance(config, dict) else None
+    if (os.environ.get("SIM_DECISION_CHANNEL", "false").strip().lower() == "true"
+            and isinstance(_ws_seed, dict) and _ws_seed.get("scenarios")):
+        try:
+            from app.services.decision_channel import run_decision_channel
+            from app.utils.llm_client import LLMClient
+            from app.utils.atomic import write_json_atomic
+            _acts = _read_actions_for_decision_channel(simulation_dir)
+            try:
+                _inertia = float(os.environ.get("SIM_DECISION_INERTIA", "0.7") or "0.7")
+            except ValueError:
+                _inertia = 0.7
+            try:
+                _eps = float(os.environ.get("SIM_CONVERGENCE_EPS", "0.02") or "0.02")
+            except ValueError:
+                _eps = 0.02
+            _res = run_decision_channel(
+                _acts, config.get("agent_configs"), _ws_seed, LLMClient(),
+                inertia=_inertia, conv_eps=_eps,
+                round_to_date=_build_round_to_date(_ws_seed, config),
+            )
+            if _res:
+                write_json_atomic(
+                    os.path.join(simulation_dir, "world_state_trajectory.json"), _res)
+                with open(os.path.join(simulation_dir, "decisions.jsonl"), "w",
+                          encoding="utf-8") as _df:
+                    for _d in _res.get("decisions", []):
+                        _df.write(json.dumps(_d, ensure_ascii=False) + "\n")
+                _oc = _res.get("outcome", {})
+                log_manager.info(
+                    f"决策通道·结果世界态: leader={_oc.get('leader')} "
+                    f"share={_oc.get('leader_share')} converged_at={_res.get('converged_at')}")
+        except Exception as _dc_err:  # noqa: BLE001
+            log_manager.error(f"决策通道演化失败（已隔离，不影响模拟结果）: {_dc_err}")
 
     # 是否进入等待命令模式
     if wait_for_commands:

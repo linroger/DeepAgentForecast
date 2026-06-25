@@ -1887,6 +1887,21 @@ class PipelineOrchestrator:
 
     # -- NEXTSTEPS P0-3: 同问多种子集成 -----------------------------------
     @staticmethod
+    def _infer_horizon_date(prompt: Any, actors: Any) -> Optional[str]:
+        """NEXTSTEPS P1-2：从问题/central_question 解析一个预测时间范围年份 → 'YYYY-12-31'。
+
+        供子进程把每轮映射到日历日期（as_of→horizon 线性）。无可解析年份 → None（不做日期映射）。
+        """
+        text = str(prompt or "")
+        if isinstance(actors, dict):
+            text += " " + str(actors.get("central_question") or "")
+        # 数字边界（非 \b：\b 在中日韩字符旁不触发，"2027年" 取不到年份）。
+        years = [int(y) for y in re.findall(r"(?<!\d)(20\d{2})(?!\d)", text)]
+        if not years:
+            return None
+        return f"{max(years)}-12-31"
+
+    @staticmethod
     def _agreement_to_confidence(agreement: Any) -> str:
         """把 inter-seed 一致度 ∈[0,1] 映射为报告信心（高一致=high）。无效值→medium。"""
         try:
@@ -3121,6 +3136,29 @@ class PipelineOrchestrator:
                         logger.info("[%s] 情景 overlay 已应用到 simulation_config", state.pipeline_id)
                 except Exception as e:  # noqa: BLE001
                     logger.warning("[%s] 情景 overlay 应用跳过: %s", state.pipeline_id, e)
+
+            # NEXTSTEPS P1-1/P1-2: 决策通道开启时，把 WorldState 种子（情景+基率）+ 时点跨度
+            # （as_of→horizon，供子进程逐轮日期映射）注入 simulation_config.json，供 post-sim
+            # 演化"结果世界态"。默认关 → 不注入，行为与今日逐字节一致。
+            if getattr(Config, "SIM_DECISION_CHANNEL", False) and not _run_already_done:
+                try:
+                    from ..utils.actors import world_state_seed_from_actors as _ws_seed
+                    _seed = _ws_seed(actors)
+                    if _seed.get("scenarios"):
+                        _seed["as_of_date"] = (actors.get("as_of_date") if isinstance(actors, dict) else None)
+                        _seed["horizon_date"] = self._infer_horizon_date(state.prompt, actors)
+                        _wcfg_path = os.path.join(
+                            Config.OASIS_SIMULATION_DATA_DIR, sim_state.simulation_id, "simulation_config.json")
+                        if os.path.exists(_wcfg_path):
+                            from ..utils.atomic import write_json_atomic
+                            with open(_wcfg_path, "r", encoding="utf-8") as _wf:
+                                _wcfg = json.load(_wf)
+                            _wcfg["world_state_seed"] = _seed
+                            write_json_atomic(_wcfg_path, _wcfg)
+                            logger.info("[%s] WorldState 种子已注入 simulation_config（%d 情景, horizon=%s）",
+                                        state.pipeline_id, len(_seed["scenarios"]), _seed.get("horizon_date"))
+                except Exception as _ws_err:  # noqa: BLE001
+                    logger.warning("[%s] WorldState 种子注入跳过: %s", state.pipeline_id, _ws_err)
 
             # ---- Stage 4: RUN ----
             upd = self._make_stage_updater(state, STAGE_RUN)
