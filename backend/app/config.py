@@ -611,13 +611,25 @@ class Config:
     # following_post_count）映射到 oasis Platform；默认关 = 用 DefaultPlatformType（与旧行为一致）(T3.12)
     SIM_WIRE_RECSYS = os.environ.get('SIM_WIRE_RECSYS', 'false').strip().lower() == 'true'
     # 逐智能体动态情感状态（情绪/精力/立场强度/疲劳）按轮更新并注入该轮提示（EXECPLAN2 I-2-1）。
-    # 默认关 = 每轮静态人设（与现状逐字节一致）。
-    SIM_AGENT_DYNAMICS = os.environ.get('SIM_AGENT_DYNAMICS', 'false').strip().lower() == 'true'
+    # NEXTSTEPS P0-4：默认开——无 intra-agent 状态时多轮模拟只是"N 次独立单轮投票重复 T 次"，
+    # 缺少升级/从众/疲劳这些让 discourse 真正移动结果的级联动态。关闭则回到每轮静态人设。
+    SIM_AGENT_DYNAMICS = os.environ.get('SIM_AGENT_DYNAMICS', 'true').strip().lower() == 'true'
     # 情感状态更新的学习率/速率常数（有界 clamp，保守取值；仅 SIM_AGENT_DYNAMICS=true 时生效）。
     SIM_DYNAMICS_MOOD_LR = float(os.environ.get('SIM_DYNAMICS_MOOD_LR', '0.25') or '0.25')
     SIM_DYNAMICS_OPINION_LR = float(os.environ.get('SIM_DYNAMICS_OPINION_LR', '0.15') or '0.15')
     SIM_DYNAMICS_FATIGUE_RATE = float(os.environ.get('SIM_DYNAMICS_FATIGUE_RATE', '0.20') or '0.20')
     SIM_DYNAMICS_FATIGUE_DECAY = float(os.environ.get('SIM_DYNAMICS_FATIGUE_DECAY', '0.10') or '0.10')
+    # NEXTSTEPS P1-1（决策/承诺通道 + 演化 WorldState）：让 agent 不只发帖，而是每轮就 forecast
+    # 情景做一次结构化"承诺"，按资源/影响力加权演化一个由 base_rates 初始化的**结果世界态**，把
+    # 模拟从"度量声量"变为"度量结果"。默认关（每个活跃 agent 每轮多一次结构化 LLM 调用，成本可观；
+    # 关闭则与现状逐字节一致：只有声量份额 final_stance_share）。落 decisions.jsonl + world_state_trajectory.json。
+    SIM_DECISION_CHANNEL = os.environ.get('SIM_DECISION_CHANNEL', 'false').strip().lower() == 'true'
+    SIM_DECISION_INERTIA = float(os.environ.get('SIM_DECISION_INERTIA', '0.7') or '0.7')  # 先验每轮持久度
+    # NEXTSTEPS P1-4：收敛/均衡检测——按 WorldState 的逐轮变化 EWMA 早停（区别于按声量），
+    # 把"收敛于 R 轮（稳定）" vs "未收敛（低信心）"本身作为校准信号。默认关（需 P1-1 的世界态）。
+    SIM_CONVERGENCE_STOP = os.environ.get('SIM_CONVERGENCE_STOP', 'false').strip().lower() == 'true'
+    SIM_CONVERGENCE_EPS = float(os.environ.get('SIM_CONVERGENCE_EPS', '0.02') or '0.02')
+    SIM_CONVERGENCE_WINDOW = int(os.environ.get('SIM_CONVERGENCE_WINDOW', '3') or '3')
     # 模拟中断后从上次完成的轮次继续（而非从第 0 轮重启），依赖 OASIS DB 持久性（EXECPLAN2 I-4-2）。
     # 默认关 = 全量重启（与现状一致）。
     SIM_RESUME_FROM_ROUND = os.environ.get('SIM_RESUME_FROM_ROUND', 'false').strip().lower() == 'true'

@@ -1539,6 +1539,37 @@ def ontology_seed_block(actors: Optional[Any]) -> str:
     return "\n".join(parts)
 
 
+def world_state_seed_from_actors(actors: Optional[Any]) -> Dict[str, Any]:
+    """NEXTSTEPS P1-1: 从 forecast_inputs.scenarios 抽出 WorldState 种子。
+
+    返回 {scenarios:[name], base_rates:{name: prob}}——给"结果世界态"一个由外部视角基率初始化
+    的起点（services.worldstate.WorldState 据此 seed）。无候选情景 → {}（调用方退化为不建世界态）。
+    """
+    fi = extract_forecast_inputs(actors)
+    scs = fi.get("scenarios") or []
+    names: List[str] = []
+    rates: Dict[str, float] = {}
+    for s in scs:
+        if not isinstance(s, dict):
+            continue
+        nm = str(s.get("name") or s.get("scenario") or "").strip()
+        if not nm or nm in names:
+            continue
+        names.append(nm)
+        for key in ("probability", "likelihood", "base_rate", "prob"):
+            v = s.get(key)
+            if v is None:
+                continue
+            try:
+                rates[nm] = float(v)
+                break
+            except (TypeError, ValueError):
+                pass
+    if not names:
+        return {}
+    return {"scenarios": names, "base_rates": rates}
+
+
 def forecast_inputs_block(actors: Optional[Any], max_per_section: int = 6) -> str:
     """把 forecast_inputs 渲染为预测脚手架块；全空返回空串。
 
