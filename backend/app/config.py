@@ -132,6 +132,9 @@ class Config:
     SIM_EMERGENT_METRICS = os.environ.get('SIM_EMERGENT_METRICS', 'False').strip().lower() == 'true'     # I-2-0 涌现结构指标
     IPC_TELEMETRY_ENABLED = os.environ.get('IPC_TELEMETRY_ENABLED', 'False').strip().lower() == 'true'   # I-5-5 IPC 延迟计量
     ONTOLOGY_TEMPLATE = os.environ.get('ONTOLOGY_TEMPLATE', 'social_opinion').strip().lower()  # I-1-3 领域自适应本体模板
+    # 开启后本体层按 prompt 自动在 general_forecast / social_opinion 之间择一（I-1-3）；
+    # 默认关 = 始终用上面的 ONTOLOGY_TEMPLATE（与现状逐字节一致）。
+    ONTOLOGY_AUTO_SELECT = os.environ.get('ONTOLOGY_AUTO_SELECT', 'false').strip().lower() == 'true'
     PERSONA_EGO_RETRIEVAL = os.environ.get('PERSONA_EGO_RETRIEVAL', 'False').strip().lower() == 'true'   # I-1-5 自我中心人设上下文
     API_V1_ENABLED = os.environ.get('API_V1_ENABLED', 'False').strip().lower() == 'true'       # I-9-5 稳定版程序化 API /api/v1
     MODEL_COMPARISON_ENABLED = os.environ.get('MODEL_COMPARISON_ENABLED', 'False').strip().lower() == 'true'  # I-9-4 模型对比
@@ -526,6 +529,10 @@ class Config:
     # --- 模拟（Phase 3）---
     # 智能体数量上限；超过则按 (是否匹配 actor, 影响力, 邻边数) 排序保留，始终保留研究 actor（T3.13）
     OASIS_MAX_AGENTS = int(os.environ.get('OASIS_MAX_AGENTS', '80'))
+    # 人设活动节律/时区预设：选择 simulation_config_generator 用哪套作息-时区模板。
+    # 默认 'china_social' 完整保留当前的北京作息行为（与现状逐字节一致）；
+    # 'us_business' / 'global_market' 是另两套预设，由 simulation_config_generator 消费。
+    SIM_ACTIVITY_PROFILE = os.environ.get('SIM_ACTIVITY_PROFILE', 'china_social').strip().lower()
     # 模拟 → 图谱反馈回路（本地默认开；写回模拟期间涌现的关系，报告阶段可见）(T3.10)
     SIM_GRAPH_FEEDBACK = os.environ.get('SIM_GRAPH_FEEDBACK', 'true').strip().lower() == 'true'
     # 反馈除自由文本 episode 外，再写带名实体的 typed 边（A LIKED/REPLIED_TO/FOLLOWED B）(T3.10)

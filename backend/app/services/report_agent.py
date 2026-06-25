@@ -540,6 +540,9 @@ class Report:
     created_at: str = ""
     completed_at: str = ""
     error: Optional[str] = None
+    # 部分完成（partial）信息：生成失败（写入占位符）的章节标题。报告整体仍标记 completed，
+    # 但前端据此把卡片标注为「部分完成」。默认空列表 → to_dict 输出 partial=False，与历史一致。
+    failed_sections: List[str] = field(default_factory=list)
     # EXECPLAN2 I-5-4: 报告级 LLM 成本/时延/工具调用紧凑汇总（per-section + totals）。
     # 仅在 LLM_TELEMETRY_ENABLED 且 REPORT_TELEMETRY 同时开启时填充；否则为 None，
     # to_dict 输出与历史完全一致（向后兼容，前端可据此显示「本报告耗费 ~$X / Y秒 / Z章」）。
@@ -556,7 +559,11 @@ class Report:
             "markdown_content": self.markdown_content,
             "created_at": self.created_at,
             "completed_at": self.completed_at,
-            "error": self.error
+            "error": self.error,
+            # 部分完成标记：failed_sections 为生成失败的章节标题列表，partial 为是否存在失败章节。
+            # 默认空列表 → failed_sections=[] / partial=False，前端据此区分「完整」与「部分完成」。
+            "failed_sections": list(self.failed_sections),
+            "partial": len(self.failed_sections) > 0
         }
         # EXECPLAN2 I-5-4: 仅在有遥测数据时附加该键，避免给历史 reader 引入空字段
         if self.telemetry is not None:
@@ -1039,7 +1046,19 @@ class ReportAgent:
 
     # 对话中的最大工具调用次数
     MAX_TOOL_CALLS_PER_CHAT = Config.REPORT_AGENT_MAX_TOOL_CALLS_CHAT
-    
+
+    # 大纲章节数契约：规划 prompt 要求 5-8 节（PLAN_SYSTEM_PROMPT），此处为成功路径的钳制
+    # 边界与 except 兜底所用的默认章节标题，确保任何路径产出的大纲都落在 [5, 8] 区间内。
+    OUTLINE_MIN_SECTIONS = 5
+    OUTLINE_MAX_SECTIONS = 8
+    _FALLBACK_SECTION_TITLES = [
+        "预测场景与核心发现",
+        "关键行为者与系统动力",
+        "模拟证据与行为轨迹",
+        "趋势展望与情景推演",
+        "风险信号与决策启示",
+    ]
+
     def __init__(
         self,
         graph_id: str,
@@ -1636,9 +1655,24 @@ class ReportAgent:
             logger.error(f"工具执行失败: {tool_name}, 错误: {str(e)}")
             return f"工具执行失败: {str(e)}"
     
-    # 合法的工具名称集合，用于裸 JSON 兜底解析时校验
-    VALID_TOOL_NAMES = {"insight_forge", "panorama_search", "quick_search", "interview_agents",
-                        "simulation_outcomes", "coalition_map", "opinion_shift", "scenario_diff"}
+    # 向后兼容的旧工具别名（_execute_tool 内部重定向到新工具，不在 self.tools 中暴露）。
+    # 单独维护，避免与动态工具集（_define_tools 按 Config 条件构建）漂移。
+    _LEGACY_TOOL_ALIASES = {"search_graph", "get_graph_statistics", "get_entity_summary",
+                            "get_simulation_context", "get_entities_by_type"}
+
+    # 合法的工具名称集合（遗留符号）：保留为旧工具别名集合，避免外部引用 NameError。
+    # 实际校验改用 self._valid_tool_names()，从 live 工具集动态派生，杜绝与 self.tools 漂移。
+    VALID_TOOL_NAMES = _LEGACY_TOOL_ALIASES
+
+    def _valid_tool_names(self) -> set:
+        """从当前实例的 live 工具集动态派生合法工具名，叠加向后兼容的旧工具别名。
+
+        self.tools 由 _define_tools 按 Config 条件构建（如 faction_brief 仅在
+        GRAPH_COMMUNITY_RETRIEVAL 时存在，scenario_diff 仅在情景报告时存在），
+        因此校验必须以 live 工具集为准，而非静态名单——否则条件工具会在裸 JSON 兜底
+        解析时被误丢。默认（条件工具关）时该集合与历史静态名单逐字节等价。
+        """
+        return set(self.tools.keys()) | self._LEGACY_TOOL_ALIASES
 
     def _parse_tool_calls(self, response: str) -> List[Dict[str, Any]]:
         """
@@ -1691,7 +1725,7 @@ class ReportAgent:
         """校验解析出的 JSON 是否是合法的工具调用"""
         # 支持 {"name": ..., "parameters": ...} 和 {"tool": ..., "params": ...} 两种键名
         tool_name = data.get("name") or data.get("tool")
-        if tool_name and tool_name in self.VALID_TOOL_NAMES:
+        if tool_name and tool_name in self._valid_tool_names():
             # 统一键名为 name / parameters
             if "tool" in data:
                 data["name"] = data.pop("tool")
@@ -1809,7 +1843,27 @@ class ReportAgent:
                     content="",
                     description=section_data.get("description", "")
                 ))
-            
+
+            # 钳制到 5-8 节契约（PLAN_SYSTEM_PROMPT 的硬约束）：不足补齐，超出截断。
+            # LLM 偶尔会无视数量要求，这里兜底以保证下游章节生成数量稳定。
+            if len(sections) < self.OUTLINE_MIN_SECTIONS:
+                _existing = {s.title for s in sections}
+                for _title in self._FALLBACK_SECTION_TITLES:
+                    if len(sections) >= self.OUTLINE_MIN_SECTIONS:
+                        break
+                    if _title in _existing:
+                        continue
+                    sections.append(ReportSection(title=_title))
+                    _existing.add(_title)
+                logger.warning(
+                    f"大纲章节数不足 {self.OUTLINE_MIN_SECTIONS}，已补齐至 {len(sections)} 节"
+                )
+            elif len(sections) > self.OUTLINE_MAX_SECTIONS:
+                logger.warning(
+                    f"大纲章节数 {len(sections)} 超过上限 {self.OUTLINE_MAX_SECTIONS}，已截断"
+                )
+                sections = sections[:self.OUTLINE_MAX_SECTIONS]
+
             outline = ReportOutline(
                 title=response.get("title", "模拟分析报告"),
                 summary=response.get("summary", ""),
@@ -1824,14 +1878,12 @@ class ReportAgent:
             
         except Exception as e:
             logger.error(f"大纲规划失败: {str(e)}")
-            # 返回默认大纲（3个章节，作为fallback）
+            # 返回默认大纲（5个章节，满足 5-8 节契约的下限，作为 fallback）
             return ReportOutline(
                 title="未来预测报告",
                 summary="基于模拟预测的未来趋势与风险分析",
                 sections=[
-                    ReportSection(title="预测场景与核心发现"),
-                    ReportSection(title="人群行为预测分析"),
-                    ReportSection(title="趋势展望与风险提示")
+                    ReportSection(title=_title) for _title in self._FALLBACK_SECTION_TITLES
                 ]
             )
     
@@ -1927,9 +1979,15 @@ class ReportAgent:
         )
 
     def _to_openai_tool_schemas(self) -> List[Dict[str, Any]]:
-        """T4.5: 把内部 tools 定义转成 OpenAI function tool schema。"""
+        """T4.5: 把内部 tools 定义转成 OpenAI function tool schema。
+
+        直接遍历 live 工具集 self.tools（_define_tools 按 Config 条件构建），使
+        faction_brief / scenario_diff 等条件工具在被定义时即原生暴露，杜绝「prompt 中
+        宣告但 tools= schema 缺失」的漂移。旧工具别名是 _execute_tool 的内部重定向，
+        本就不应原生暴露，故不纳入。默认（条件工具关）时输出与历史静态名单逐字节一致。
+        """
         schemas = []
-        for tname in sorted(self.VALID_TOOL_NAMES):
+        for tname in sorted(self.tools.keys()):
             spec = self.tools.get(tname)
             if not spec:
                 continue
@@ -2727,6 +2785,10 @@ class ReportAgent:
             report.markdown_content = ReportManager.assemble_full_report(report_id, outline)
             report.status = ReportStatus.COMPLETED
             report.completed_at = datetime.now().isoformat()
+            # 部分完成（partial）：把失败（写入占位符）的章节标题挂到 report，经 to_dict 暴露
+            # failed_sections / partial。状态仍为 completed（前端以 status==='completed' 判定终态），
+            # 由 partial 标记区分「完整」与「部分完成」。无失败章节时为空列表 → 与历史一致。
+            report.failed_sections = list(failed_section_titles)
 
             # EXECPLAN2 I-3-0/I-9-1/I-3-1: 可选追加「结构化预测」抽取 + 引用接地审计。
             # 默认关；失败仅告警不影响主报告（degrade-safe）。
@@ -3715,6 +3777,8 @@ class ReportManager:
             created_at=data.get('created_at', ''),
             completed_at=data.get('completed_at', ''),
             error=data.get('error'),
+            # 部分完成信息：从 meta.json 还原失败章节标题列表（旧报告无此键 → 空列表，partial=False）
+            failed_sections=data.get('failed_sections') or [],
             telemetry=data.get('telemetry')  # EXECPLAN2 I-5-4: 从 meta.json 还原紧凑遥测，经 API 暴露
         )
     

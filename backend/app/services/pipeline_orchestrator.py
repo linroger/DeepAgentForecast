@@ -2661,6 +2661,40 @@ class PipelineOrchestrator:
                     except Exception as e:
                         logger.warning("[%s] entity resolution skipped: %s", state.pipeline_id, e)
 
+                # J1: 并发抽取（GRAPH_BUILD_CONCURRENCY>1）的重名实体守卫。
+                # add_episodes_concurrent 的 read-before-commit dedup 在并发下可能让两个 episode
+                # 都漏掉对方在飞的同名新节点，各自建出重名重复节点（runtime 文档 F-2-5；DB 无名唯一约束）。
+                # 实体消解（GRAPH_RESOLVE_ENTITIES，默认关）是缓解手段，但与并发解耦。这里在并发>1 时
+                # 做一遍重名 DETECTION：按 NFKC 规范名分组、统计含 >1 节点的组数，记入 graph_integrity 指标，
+                # 并在未开消解却检出重复时打 WARNING。全程 best-effort，失败不影响建图；并发==1 时不触发，
+                # 默认路径逐字节不变。
+                _effective_concurrency = int(getattr(Config, "GRAPH_BUILD_CONCURRENCY", 1) or 1)
+                if _effective_concurrency > 1:
+                    try:
+                        from ..utils.actors import normalize_name as _normalize_name
+                        from .graphiti_client.runtime import get_runtime
+                        _nodes = get_runtime().all_entity_nodes(graph_id) or []
+                        _groups: dict[str, int] = {}
+                        for _nd in _nodes:
+                            _norm = _normalize_name(_nd.get("name", ""))
+                            if not _norm:
+                                continue
+                            _groups[_norm] = _groups.get(_norm, 0) + 1
+                        _dup_groups = sum(1 for _c in _groups.values() if _c > 1)
+                        state.options["graph_duplicate_name_groups"] = _dup_groups
+                        if _dup_groups and not Config.GRAPH_RESOLVE_ENTITIES:
+                            logger.warning(
+                                "[%s] 并发建图(GRAPH_BUILD_CONCURRENCY=%d)检出 %d 组重名实体节点，"
+                                "而实体消解(GRAPH_RESOLVE_ENTITIES)未开启——重复节点会分裂检索召回/低估中心性。"
+                                "建议设 GRAPH_RESOLVE_ENTITIES=true 合并，或回退 GRAPH_BUILD_CONCURRENCY=1",
+                                state.pipeline_id, _effective_concurrency, _dup_groups,
+                            )
+                        elif _dup_groups:
+                            logger.info("[%s] 并发建图检出 %d 组重名实体（已开启实体消解）",
+                                        state.pipeline_id, _dup_groups)
+                    except Exception as e:
+                        logger.warning("[%s] duplicate-name detection skipped: %s", state.pipeline_id, e)
+
                 # KG cookbook 第4步：建图后跑结构完整性检查（节点/边/弱连通分量/枢纽），
                 # 把分量数等指标记入 state.options 并 emit 日志/欠合并告警（实现在 _get_graph_info）。
                 try:

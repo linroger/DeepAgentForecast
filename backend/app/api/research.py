@@ -30,6 +30,9 @@ _VALID_DEPTH = {"quick", "standard", "deep"}
 _VALID_MODE = {"full", "research_only"}
 # T5.5: 每次运行可选的研究语言（与 DeerFlow --target-language 对齐；auto=交给模型自选）
 _VALID_LANGUAGES = {"Chinese", "English", "auto"}
+# B2: 人工编辑档案时报告的最小字符门。与编排器 research_report>=400 复用守卫语义一致：
+# <400 字符（含 LLM 降级/错误短串）一律拒绝，避免空/垃圾报告悄悄退化下游本体/图谱/模拟。
+MIN_DOSSIER_CHARS = 400
 
 
 @research_bp.route('/run', methods=['POST'])
@@ -378,6 +381,18 @@ def edit_dossier(pipeline_id: str):
     handoff = PipelineManager.handoff_dir(pipeline_id)
     if not os.path.isdir(handoff):
         return jsonify({"success": False, "error": "管线产物目录不存在"}), 404
+
+    # B2: 写入前质量门。若提交了 report，去空白后须 >= MIN_DOSSIER_CHARS，否则硬拒绝（400），
+    # 杜绝空/过短报告被原子写入后悄悄退化下游本体/图谱/模拟。actors/sources 为可选，缺失不拦。
+    if isinstance(body.get("report"), str):
+        if len(body["report"].strip()) < MIN_DOSSIER_CHARS:
+            return jsonify({
+                "success": False,
+                "error": (
+                    f"研究报告过短（去空白后须 >= {MIN_DOSSIER_CHARS} 字符），拒绝写入以免退化下游。"
+                    f" Research report too short (must be >= {MIN_DOSSIER_CHARS} chars after trimming)."
+                ),
+            }), 400
 
     def _atomic_write(name, text):
         path = os.path.join(handoff, name)

@@ -58,6 +58,99 @@ CHINA_TIMEZONE_CONFIG = {
 }
 
 
+# ====================================================================
+# 活动作息画像（activity profile）抽象
+# ----------------------------------------------------------------
+# 历史上时间/Agent 配置的作息节奏（北京时间）、提示词措辞、默认回退值都硬编码为
+# 中国社交媒体语境。这里把这一整套口径抽象成可切换的「画像」，由
+# getattr(Config, 'SIM_ACTIVITY_PROFILE', 'china_social') 选择：
+#   - 'china_social'：完全等价于历史行为，常量/提示词/默认值逐字节不变（默认）
+#   - 'us_business' ：美国商务作息口径（英文倾向的引导语）
+#   - 'global_market'：跨时区市场口径（24 小时更平坦，无明显深夜真空）
+# 缺省（未配置 SIM_ACTIVITY_PROFILE）= 'china_social'，产出与今日完全一致。
+# 注意：china_social 各字段的字符串/数值即今日代码内联使用的原文，切勿改动，
+# 否则默认输出会发生字节级漂移。
+# ====================================================================
+ACTIVITY_PROFILES = {
+    "china_social": {
+        # _generate_time_config 提示词内「基本原则」段（与原内联逐字一致）
+        "time_prompt_principles": (
+            "- 用户群体为中国人，需符合北京时间作息习惯\n"
+            "- 凌晨0-5点几乎无人活动（活跃度系数0.05）\n"
+            "- 早上6-8点逐渐活跃（活跃度系数0.4）\n"
+            "- 工作时间9-18点中等活跃（活跃度系数0.7）\n"
+            "- 晚间19-22点是高峰期（活跃度系数1.5）\n"
+            "- 23点后活跃度下降（活跃度系数0.5）\n"
+            "- 一般规律：凌晨低活跃、早间渐增、工作时段中等、晚间高峰"
+        ),
+        # _generate_time_config 的 system_prompt（与原内联逐字一致）
+        "time_system_prompt": "你是社交媒体模拟专家。返回纯JSON格式，时间配置需符合中国人作息习惯。",
+        # _get_default_time_config 的 reasoning 文案（与原内联逐字一致）
+        "default_time_reasoning": "使用默认中国人作息配置（每轮1小时）",
+        # _generate_agent_config 提示词首条作息要点（与原内联逐字一致）
+        "agent_prompt_rhythm": "- **时间符合中国人作息**：凌晨0-5点几乎不活动，晚间19-22点最活跃",
+        # active_hours 占位说明（与原内联逐字一致）
+        "agent_active_hours_hint": "活跃小时列表，考虑中国人作息",
+        # _generate_agent_config 的 system_prompt（与原内联逐字一致）
+        "agent_system_prompt": "你是社交媒体行为分析专家。返回纯JSON，配置需符合中国人作息习惯。",
+        # 时间配置数值口径（与原内联默认逐字一致）
+        "peak_hours": [19, 20, 21, 22],
+        "off_peak_hours": [0, 1, 2, 3, 4, 5],
+        "morning_hours": [6, 7, 8],
+        "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    },
+    "us_business": {
+        "time_prompt_principles": (
+            "- 用户群体为美国受众，需符合美东/美西商务作息习惯\n"
+            "- 凌晨0-5点几乎无人活动（活跃度系数0.05）\n"
+            "- 早上6-8点逐渐活跃（活跃度系数0.4）\n"
+            "- 工作时间9-17点最活跃（活跃度系数1.5）\n"
+            "- 午休及午后12-14点保持中等活跃（活跃度系数0.7）\n"
+            "- 18点后逐渐回落，晚间19-22点中等活跃（活跃度系数0.7）\n"
+            "- 一般规律：凌晨低活跃、早间渐增、工作时段高峰、晚间中等"
+        ),
+        "time_system_prompt": "你是社交媒体模拟专家。返回纯JSON格式，时间配置需符合美国商务作息习惯。",
+        "default_time_reasoning": "使用默认美国商务作息配置（每轮1小时）",
+        "agent_prompt_rhythm": "- **时间符合美国商务作息**：凌晨0-5点几乎不活动，工作时间9-17点最活跃",
+        "agent_active_hours_hint": "活跃小时列表，考虑美国商务作息",
+        "agent_system_prompt": "你是社交媒体行为分析专家。返回纯JSON，配置需符合美国商务作息习惯。",
+        "peak_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17],
+        "off_peak_hours": [0, 1, 2, 3, 4, 5],
+        "morning_hours": [6, 7, 8],
+        "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17],
+    },
+    "global_market": {
+        "time_prompt_principles": (
+            "- 用户群体为跨时区全球市场受众，作息相对平坦、无明显深夜真空\n"
+            "- 凌晨0-5点活跃度偏低但非归零（活跃度系数0.3）\n"
+            "- 各主要交易时段轮替接力，全天保持中高活跃（活跃度系数0.7-1.0）\n"
+            "- 欧美时段重叠的13-21点为相对高峰（活跃度系数1.2）\n"
+            "- 一般规律：24小时连续活跃、随交易时段切换而起伏，而非单一作息曲线"
+        ),
+        "time_system_prompt": "你是社交媒体模拟专家。返回纯JSON格式，时间配置需符合跨时区全球市场作息习惯。",
+        "default_time_reasoning": "使用默认跨时区全球市场作息配置（每轮1小时）",
+        "agent_prompt_rhythm": "- **时间符合全球市场作息**：全天24小时连续活跃，欧美重叠的13-21点相对最活跃",
+        "agent_active_hours_hint": "活跃小时列表，考虑跨时区全球市场作息",
+        "agent_system_prompt": "你是社交媒体行为分析专家。返回纯JSON，配置需符合跨时区全球市场作息习惯。",
+        "peak_hours": [13, 14, 15, 16, 17, 18, 19, 20, 21],
+        "off_peak_hours": [0, 1, 2, 3, 4, 5],
+        "morning_hours": [6, 7, 8],
+        "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    },
+}
+
+
+def get_activity_profile() -> Dict[str, Any]:
+    """读取当前活动作息画像。
+
+    通过 getattr(Config, 'SIM_ACTIVITY_PROFILE', 'china_social') 选择画像；
+    非法/未识别取值一律回退到 'china_social'，确保默认与未配置时行为完全一致。
+    """
+    raw = getattr(Config, "SIM_ACTIVITY_PROFILE", "china_social")
+    name = str(raw or "china_social").strip().lower()
+    return ACTIVITY_PROFILES.get(name, ACTIVITY_PROFILES["china_social"])
+
+
 @dataclass
 class AgentActivityConfig:
     """单个Agent的活动配置"""
@@ -789,10 +882,14 @@ class SimulationConfigGenerator:
         """生成时间配置"""
         # 使用配置的上下文截断长度
         context_truncated = context[:self.TIME_CONFIG_CONTEXT_LENGTH]
-        
+
         # 计算最大允许值（80%的agent数）
         max_agents_allowed = max(1, int(num_entities * 0.9))
-        
+
+        # 作息口径由活动画像决定；china_social 分支与历史措辞逐字节一致
+        profile = get_activity_profile()
+        time_prompt_principles = profile["time_prompt_principles"]
+
         prompt = f"""基于以下模拟需求，生成时间模拟配置。
 
 {context_truncated}
@@ -801,13 +898,7 @@ class SimulationConfigGenerator:
 请生成时间配置JSON。
 
 ### 基本原则（仅供参考，需根据具体事件和参与群体灵活调整）：
-- 用户群体为中国人，需符合北京时间作息习惯
-- 凌晨0-5点几乎无人活动（活跃度系数0.05）
-- 早上6-8点逐渐活跃（活跃度系数0.4）
-- 工作时间9-18点中等活跃（活跃度系数0.7）
-- 晚间19-22点是高峰期（活跃度系数1.5）
-- 23点后活跃度下降（活跃度系数0.5）
-- 一般规律：凌晨低活跃、早间渐增、工作时段中等、晚间高峰
+{time_prompt_principles}
 - **重要**：以下示例值仅供参考，你需要根据事件性质、参与群体特点来调整具体时段
   - 例如：学生群体高峰可能是21-23点；媒体全天活跃；官方机构只在工作时间
   - 例如：突发热点可能导致深夜也有讨论，off_peak_hours 可适当缩短
@@ -820,10 +911,10 @@ class SimulationConfigGenerator:
     "minutes_per_round": 60,
     "agents_per_hour_min": 5,
     "agents_per_hour_max": 50,
-    "peak_hours": [19, 20, 21, 22],
-    "off_peak_hours": [0, 1, 2, 3, 4, 5],
-    "morning_hours": [6, 7, 8],
-    "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    "peak_hours": {json.dumps(profile["peak_hours"])},
+    "off_peak_hours": {json.dumps(profile["off_peak_hours"])},
+    "morning_hours": {json.dumps(profile["morning_hours"])},
+    "work_hours": {json.dumps(profile["work_hours"])},
     "reasoning": "针对该事件的时间配置说明"
 }}
 
@@ -838,8 +929,8 @@ class SimulationConfigGenerator:
 - work_hours (int数组): 工作时段
 - reasoning (string): 简要说明为什么这样配置"""
 
-        system_prompt = "你是社交媒体模拟专家。返回纯JSON格式，时间配置需符合中国人作息习惯。"
-        
+        system_prompt = profile["time_system_prompt"]
+
         try:
             return self._call_llm_with_retry(prompt, system_prompt)
         except Exception as e:
@@ -848,20 +939,24 @@ class SimulationConfigGenerator:
     
     def _get_default_time_config(self, num_entities: int) -> Dict[str, Any]:
         """获取默认时间配置（中国人作息）"""
+        # 默认时段口径随活动画像切换；china_social 各数值/文案与历史逐字节一致
+        profile = get_activity_profile()
         return {
             "total_simulation_hours": 72,
             "minutes_per_round": 60,  # 每轮1小时，加快时间流速
             "agents_per_hour_min": max(1, num_entities // 15),
             "agents_per_hour_max": max(5, num_entities // 5),
-            "peak_hours": [19, 20, 21, 22],
-            "off_peak_hours": [0, 1, 2, 3, 4, 5],
-            "morning_hours": [6, 7, 8],
-            "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
-            "reasoning": "使用默认中国人作息配置（每轮1小时）"
+            "peak_hours": list(profile["peak_hours"]),
+            "off_peak_hours": list(profile["off_peak_hours"]),
+            "morning_hours": list(profile["morning_hours"]),
+            "work_hours": list(profile["work_hours"]),
+            "reasoning": profile["default_time_reasoning"]
         }
     
     def _parse_time_config(self, result: Dict[str, Any], num_entities: int) -> TimeSimulationConfig:
         """解析时间配置结果，并验证agents_per_hour值不超过总agent数"""
+        # 时段缺省值随活动画像切换；china_social 与历史默认逐字节一致
+        profile = get_activity_profile()
         # 获取原始值
         agents_per_hour_min = result.get("agents_per_hour_min", max(1, num_entities // 15))
         agents_per_hour_max = result.get("agents_per_hour_max", max(5, num_entities // 5))
@@ -885,12 +980,12 @@ class SimulationConfigGenerator:
             minutes_per_round=result.get("minutes_per_round", 60),  # 默认每轮1小时
             agents_per_hour_min=agents_per_hour_min,
             agents_per_hour_max=agents_per_hour_max,
-            peak_hours=result.get("peak_hours", [19, 20, 21, 22]),
-            off_peak_hours=result.get("off_peak_hours", [0, 1, 2, 3, 4, 5]),
+            peak_hours=result.get("peak_hours", list(profile["peak_hours"])),
+            off_peak_hours=result.get("off_peak_hours", list(profile["off_peak_hours"])),
             off_peak_activity_multiplier=0.05,  # 凌晨几乎无人
-            morning_hours=result.get("morning_hours", [6, 7, 8]),
+            morning_hours=result.get("morning_hours", list(profile["morning_hours"])),
             morning_activity_multiplier=0.4,
-            work_hours=result.get("work_hours", list(range(9, 19))),
+            work_hours=result.get("work_hours", list(profile["work_hours"])),
             work_activity_multiplier=0.7,
             peak_activity_multiplier=1.5
         )
@@ -1161,6 +1256,11 @@ class SimulationConfigGenerator:
                 "medium≈1.5-2.0, low≈0.8-1.2），不要凭空另行猜测"
             )
 
+        # 作息口径由活动画像决定；china_social 分支与历史措辞逐字节一致
+        profile = get_activity_profile()
+        agent_prompt_rhythm = profile["agent_prompt_rhythm"]
+        agent_active_hours_hint = profile["agent_active_hours_hint"]
+
         prompt = f"""基于以下信息，为每个实体生成社交媒体活动配置。
 
 模拟需求: {simulation_requirement}
@@ -1172,7 +1272,7 @@ class SimulationConfigGenerator:
 
 ## 任务
 为每个实体生成活动配置，注意：
-- **时间符合中国人作息**：凌晨0-5点几乎不活动，晚间19-22点最活跃
+{agent_prompt_rhythm}
 - **官方机构**（University/GovernmentAgency）：活跃度低(0.1-0.3)，工作时间(9-17)活动，响应慢(60-240分钟)，影响力高(2.5-3.0)
 - **媒体**（MediaOutlet）：活跃度中(0.4-0.6)，全天活动(8-23)，响应快(5-30分钟)，影响力高(2.0-2.5)
 - **个人**（Student/Person/Alumni）：活跃度高(0.6-0.9)，主要晚间活动(18-23)，响应快(1-15分钟)，影响力低(0.8-1.2)
@@ -1186,7 +1286,7 @@ class SimulationConfigGenerator:
             "activity_level": <0.0-1.0>,
             "posts_per_hour": <发帖频率>,
             "comments_per_hour": <评论频率>,
-            "active_hours": [<活跃小时列表，考虑中国人作息>],
+            "active_hours": [<{agent_active_hours_hint}>],
             "response_delay_min": <最小响应延迟分钟>,
             "response_delay_max": <最大响应延迟分钟>,
             "sentiment_bias": <-1.0到1.0>,
@@ -1198,7 +1298,7 @@ class SimulationConfigGenerator:
     ]
 }}"""
 
-        system_prompt = "你是社交媒体行为分析专家。返回纯JSON，配置需符合中国人作息习惯。"
+        system_prompt = profile["agent_system_prompt"]
         
         # EXECPLAN F-5-2: 防御式构建 agent_id -> 配置 映射，避免单条畸形配置（缺 agent_id / 类型不符）
         # 让 dict 推导原子失败，从而把整批 15 个 Agent 静默退化为规则生成；同时把 key 统一 int 化，

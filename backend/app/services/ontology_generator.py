@@ -284,6 +284,19 @@ ONTOLOGY_TEMPLATES: Dict[str, str] = {
 
 DEFAULT_ONTOLOGY_TEMPLATE = "social_opinion"
 
+# F1: 自动选模板用的双语关键词集。命中"公众反应/舆情/民意/社交媒体/情绪/观点"语义即判定为
+# social_opinion，否则归入领域自适应的 general_forecast。仅在 Config.ONTOLOGY_AUTO_SELECT 打开
+# 且调用方未显式指定模板时才生效；默认（旗标关闭）路径逐字节不变。
+SOCIAL_OPINION_KEYWORDS = (
+    # 英文
+    "public reaction", "public opinion", "sentiment", "social media",
+    "opinion", "backlash", "outrage", "controversy", "viral", "netizen",
+    "reputation", "public perception", "trending", "hashtag",
+    # 中文
+    "舆情", "民意", "社交媒体", "公众反应", "公众舆论", "舆论", "情绪",
+    "观点", "争议", "热搜", "网友", "口碑", "声誉", "民众", "网络舆论",
+)
+
 
 class OntologyGenerator:
     """
@@ -312,6 +325,22 @@ class OntologyGenerator:
             name = DEFAULT_ONTOLOGY_TEMPLATE
         return name
 
+    @staticmethod
+    def _auto_select_template(prompt: str, default_template: str) -> str:
+        """F1：根据预测问题文本确定性地挑选本体模板。
+
+        命中双语「公众反应 / 舆情 / 民意 / 社交媒体 / 情绪 / 观点」关键词集 → 'social_opinion'；
+        否则归入领域自适应的 'general_forecast'。空/非字符串提示返回 default_template，保证无信号
+        时不改变行为。该方法纯函数、无副作用，仅在 Config.ONTOLOGY_AUTO_SELECT 打开且调用方未显式
+        指定模板时被 generate() 调用。
+        """
+        text = str(prompt or "").strip().lower()
+        if not text:
+            return default_template
+        if any(kw in text for kw in SOCIAL_OPINION_KEYWORDS):
+            return "social_opinion"
+        return "general_forecast"
+
     def generate(
         self,
         document_texts: List[str],
@@ -338,8 +367,20 @@ class OntologyGenerator:
         Returns:
             本体定义（entity_types, edge_types等）
         """
+        # F1: 模板自动选择（默认关闭）。仅当 Config.ONTOLOGY_AUTO_SELECT 打开且调用方未显式传入
+        # template 时，才根据预测问题文本挑选模板；否则尊重显式覆盖 / 已配置的 ONTOLOGY_TEMPLATE。
+        # 旗标关闭（默认）时此分支不进入，template 原样进 _resolve_template，行为逐字节不变。
+        effective_template = template
+        if effective_template is None and getattr(_Config, "ONTOLOGY_AUTO_SELECT", False):
+            classifier_prompt = central_question or simulation_requirement or ""
+            effective_template = self._auto_select_template(classifier_prompt, DEFAULT_ONTOLOGY_TEMPLATE)
+            logger.info(
+                "Ontology: ONTOLOGY_AUTO_SELECT on, auto-selected template %r from central question.",
+                effective_template,
+            )
+
         # EXECPLAN2 I-1-3: 解析模板（默认 social_opinion=现有行为）。
-        template_name = self._resolve_template(template)
+        template_name = self._resolve_template(effective_template)
         system_prompt = ONTOLOGY_TEMPLATES[template_name]
 
         # 构建用户消息

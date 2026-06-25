@@ -5,6 +5,7 @@ OASIS模拟管理器
 """
 
 import os
+import csv
 import json
 import shutil
 from typing import Dict, Any, List, Optional
@@ -521,11 +522,29 @@ class SimulationManager:
             raise ValueError(f"模拟不存在: {simulation_id}")
         
         sim_dir = self._get_simulation_dir(simulation_id)
+
+        # Twitter 人设保存为 CSV（OASIS 要求），Reddit 保存为 JSON。
+        # 与 /profiles/realtime 的 CSV 解析保持一致：直接 csv.DictReader -> list（不做数值/JSON 转换），
+        # 字段名沿用 twitter_profiles.csv 的表头，避免前端拿到形状不一致的数据。
+        if platform == "twitter":
+            profile_path = os.path.join(sim_dir, "twitter_profiles.csv")
+
+            if not os.path.exists(profile_path):
+                return []
+
+            try:
+                with open(profile_path, 'r', encoding='utf-8') as f:
+                    return list(csv.DictReader(f))
+            except Exception as e:
+                # 文件可能正在写入中或行损坏：保持防御性，返回空列表而非抛错
+                logger.warning(f"读取 twitter_profiles.csv 失败: {e}")
+                return []
+
         profile_path = os.path.join(sim_dir, f"{platform}_profiles.json")
-        
+
         if not os.path.exists(profile_path):
             return []
-        
+
         with open(profile_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     
@@ -556,10 +575,12 @@ class SimulationManager:
                 "parallel": f"python {scripts_dir}/run_parallel_simulation.py --config {config_path}",
             },
             "instructions": (
-                f"1. 激活conda环境: conda activate MiroFish\n"
+                f"1. 进入后端目录并使用 uv 隔离环境（项目已从 conda 迁移到 uv）:\n"
+                f"   - 前端开发服务器: npm run dev\n"
+                f"   - 后端脚本统一通过 uv 运行: uv run python <脚本> （在 backend/ 目录下执行）\n"
                 f"2. 运行模拟 (脚本位于 {scripts_dir}):\n"
-                f"   - 单独运行Twitter: python {scripts_dir}/run_twitter_simulation.py --config {config_path}\n"
-                f"   - 单独运行Reddit: python {scripts_dir}/run_reddit_simulation.py --config {config_path}\n"
-                f"   - 并行运行双平台: python {scripts_dir}/run_parallel_simulation.py --config {config_path}"
+                f"   - 单独运行Twitter: uv run python {scripts_dir}/run_twitter_simulation.py --config {config_path}\n"
+                f"   - 单独运行Reddit: uv run python {scripts_dir}/run_reddit_simulation.py --config {config_path}\n"
+                f"   - 并行运行双平台: uv run python {scripts_dir}/run_parallel_simulation.py --config {config_path}"
             )
         }

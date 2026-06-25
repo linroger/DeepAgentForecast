@@ -3,6 +3,17 @@
 > *A Simple and Universal Swarm Intelligence Engine, Predicting Anything*
 > 简洁通用的群体智能引擎，预测万物
 
+> **⚠️ Scope of this document.** This page documents the **simulation-engine
+> internals** (MiroFish/OASIS) — the graph → personas → simulation → report core
+> that runs *after* research. It predates the one-prompt workflow and frames the
+> system around the older simulation-first model (the legacy 5-step wizard). For
+> the **current product** — the one-prompt **DeepAgentForecast** flow
+> (research → ontology → graph → prepare → run → report) and its `/api/research`
+> orchestration — see **[README.md](README.md)** and
+> **[DEERFLOW_INTEGRATION.md](DEERFLOW_INTEGRATION.md)**. The pipeline-service
+> descriptions below (§4) are still accurate; the entry seam and UI sections
+> reflect the standalone simulation engine, not the unified dashboard.
+
 MiroFish is an LLM-driven **multi-agent social simulation engine**. You feed it
 seed material (a news report, a policy draft, financial signals, or even a
 novel) plus a natural-language *prediction requirement*, and it (1) extracts a
@@ -44,7 +55,7 @@ DeepAgentForecast/
     │   ├── config.py       # all configuration (env-driven)
     │   ├── api/            # HTTP routes  (graph / simulation / report)
     │   ├── models/         # Task (in-memory) + Project (file-backed)
-    │   ├── services/       # the actual pipeline (12 modules)
+    │   ├── services/       # the actual pipeline (18 modules)
     │   │   └── graphiti_client/   # Graphiti shim → embedded FalkorDB (Zep-SDK-compatible)
     │   └── utils/          # LLM clients, file parsing, graph paging, retry, logging
     └── scripts/            # OASIS subprocess runners (run as separate processes)
@@ -110,8 +121,10 @@ Step 2 Env Setup → Step 3 Simulation → Step 4 Report → Step 5 Interaction.
   factory, and runs threaded on `0.0.0.0:5001`.
 - **`app/__init__.py`** (`create_app`): enables permissive CORS on `/api/*`,
   disables ASCII-escaping of JSON (so Chinese renders directly), registers a
-  request/response logging middleware, registers the three blueprints under
-  `/api/graph`, `/api/simulation`, `/api/report`, exposes `/health`, and calls
+  request/response logging middleware, registers the blueprints under
+  `/api/graph`, `/api/simulation`, `/api/report`, `/api/research`, and
+  `/api/settings` (plus an optional `/api/v1` SDK surface when
+  `Config.API_V1_ENABLED` is set), exposes `/health`, and calls
   `SimulationRunner.register_cleanup()` so all child simulation processes are
   killed on shutdown.
 - **`config.py`** is the single configuration surface, driven entirely by `.env`.
