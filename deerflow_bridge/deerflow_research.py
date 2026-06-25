@@ -705,7 +705,10 @@ def build_extraction_prompt(
             "neutral/transactional/directional) and a polarity in [-1,1] so rivals are not confused with partners or "
             "buyers; omit either if unsure (it is derived from type). Prefer a specific relationship type (SUPPLIES, "
             "CUSTOMER_OF, FUNDS, INVESTS_IN, BACKS, OWNS, SUPPORTS, SANCTIONS, REPORTS_ON, CONSUMES, ENDORSES, CRITICIZES, "
-            "LITIGATES_AGAINST) over OTHER when one fits. Omit any of these fields you did not research; a model that omits "
+            "LITIGATES_AGAINST) over OTHER when one fits. CAUSAL/MECHANISM EDGES (high value for forecasting): when the "
+            "research establishes a transmission mechanism, emit it as CAUSES / ENABLES / CONSTRAINS / TRIGGERS / "
+            "ACCELERATES (with sign/strength/basis in the edge's fields) — these are how a shock propagates to the outcome, "
+            "not just who-knows-whom. Omit any of these fields you did not research; a model that omits "
             "all of them still produces a valid actors.json.\n"
         )
 
@@ -740,7 +743,7 @@ def build_extraction_prompt(
         "    {\n"
         '      "source": string,                   // MUST equal an actors[].name\n'
         '      "target": string,                   // MUST equal an actors[].name\n'
-        '      "type": "ALLY_OF"|"OPPOSES"|"COMPETES_WITH"|"REGULATES"|"DEPENDS_ON"|"PARTNERS_WITH"|"INFLUENCES"|"SUPPLIES"|"CUSTOMER_OF"|"FUNDS"|"INVESTS_IN"|"BACKS"|"OWNS"|"SUPPORTS"|"SANCTIONS"|"REPORTS_ON"|"CONSUMES"|"ENDORSES"|"CRITICIZES"|"LITIGATES_AGAINST"|"OTHER",\n'
+        '      "type": "ALLY_OF"|"OPPOSES"|"COMPETES_WITH"|"REGULATES"|"DEPENDS_ON"|"PARTNERS_WITH"|"INFLUENCES"|"SUPPLIES"|"CUSTOMER_OF"|"FUNDS"|"INVESTS_IN"|"BACKS"|"OWNS"|"SUPPORTS"|"SANCTIONS"|"REPORTS_ON"|"CONSUMES"|"ENDORSES"|"CRITICIZES"|"LITIGATES_AGAINST"|"CAUSES"|"ENABLES"|"CONSTRAINS"|"TRIGGERS"|"ACCELERATES"|"OTHER",\n'
         '      "relation_label": string,            // OPTIONAL free-text label when type=="OTHER" (e.g. EMPLOYS, FAMILY_OF) — prefer a listed type when one fits\n'
         '      "sign": "ally"|"rival"|"neutral",\n'
         '      "strength": "high"|"medium"|"low",\n'

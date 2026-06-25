@@ -72,6 +72,9 @@ class GraphInfo:
     # top_hubs = 度数最高的若干节点名（枢纽合理性 sanity check）。
     components: int = 0
     top_hubs: Optional[List[str]] = None
+    # NEXTSTEPS P3-7：归一度数中心度先验 node_name→[0,1]（复用上面已算出的 degree，此前丢弃）。
+    # 高中心度比原始提及数更能反映"谁是关键节点"——一个便宜且接地的影响力先验，供 salience 融合。
+    centrality: Optional[Dict[str, float]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -81,6 +84,7 @@ class GraphInfo:
             "entity_types": self.entity_types,
             "components": self.components,
             "top_hubs": self.top_hubs or [],
+            "centrality": self.centrality or {},
         }
 
 
@@ -641,6 +645,15 @@ class GraphBuilderService:
             logger.warning("[%s] possibly UNDER-MERGED entities: %d components over %d nodes",
                            graph_id, num_components, len(node_ids))
 
+        # P3-7: 把已算出的度数转成 [0,1] 归一中心度先验（node_name→centrality），此前被丢弃。
+        max_deg = max(degree.values()) if degree else 0
+        centrality: Dict[str, float] = {}
+        if max_deg > 0:
+            for nid, d in degree.items():
+                nm = name_by_id.get(nid, "")
+                if nm and d > 0:
+                    centrality[nm] = max(centrality.get(nm, 0.0), round(d / max_deg, 4))
+
         return GraphInfo(
             graph_id=graph_id,
             node_count=len(nodes),
@@ -648,6 +661,7 @@ class GraphBuilderService:
             entity_types=list(entity_types),
             components=num_components,
             top_hubs=top_hubs,
+            centrality=centrality,
         )
     
     def get_graph_data(self, graph_id: str) -> Dict[str, Any]:

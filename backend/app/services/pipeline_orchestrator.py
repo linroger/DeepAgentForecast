@@ -2824,12 +2824,24 @@ class PipelineOrchestrator:
                 # 让实体/关系类型贴合预测领域，而不是永远走通用 social_opinion 模板。
                 # 模板由 Config.ONTOLOGY_TEMPLATE 控制（general_forecast 有内置兜底回退到
                 # social_opinion，故传入即安全）；缺字段时静默降级到旧行为。
+                # NEXTSTEPS P3-3: ONTOLOGY_FROM_DOSSIER 开启时，把已实现 actor 阵容投影成本体种子
+                # 约束拼到 additional_context 末尾（单一真源，避免从散文重新派生导致 schema/instance
+                # 漂移）。默认关 → 行为与今日一致。
+                _addl_ctx = _actors_to_context(actors)
+                if getattr(Config, "ONTOLOGY_FROM_DOSSIER", False):
+                    try:
+                        from ..utils.actors import ontology_seed_block as _onto_seed
+                        _seed_blk = _onto_seed(actors)
+                        if _seed_blk:
+                            _addl_ctx = ((_addl_ctx + "\n\n") if _addl_ctx else "") + _seed_blk
+                    except Exception:  # noqa: BLE001 — 本体种子为可选增强，失败回退
+                        pass
                 ontology = generator.generate(
                     # 双轨喂料：角色档案在前作为本体/角色种子，研究报告在后作补充。
                     # dossier_md 为空（旗标关闭/Track B 失败）时退化为 [report_md]，与今日逐字节一致。
                     document_texts=([dossier_md] if dossier_md and dossier_md.strip() else []) + [report_md],
                     simulation_requirement=state.prompt,
-                    additional_context=_actors_to_context(actors),
+                    additional_context=_addl_ctx,
                     template=Config.ONTOLOGY_TEMPLATE,
                     central_question=(actors.get("central_question") if isinstance(actors, dict) else None),
                     actors=actors,
@@ -3014,6 +3026,17 @@ class PipelineOrchestrator:
                     state.options["graph_node_count"] = gi.node_count
                     state.options["graph_edge_count"] = gi.edge_count
                     state.options["graph_components"] = gi.components
+                    # NEXTSTEPS P3-7: 持久化中心度先验（node_name→[0,1]）供 PREPARE 的 salience
+                    # 排序融合 + 报告/UI 引用；此前 _get_graph_info 算完即丢弃。
+                    if getattr(gi, "centrality", None):
+                        try:
+                            from ..utils.atomic import write_json_atomic
+                            _hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+                            write_json_atomic(os.path.join(_hd, "graph_priors.json"), gi.centrality)
+                            state.artifacts["graph_priors"] = os.path.join(_hd, "graph_priors.json")
+                            state.options["graph_centrality_nodes"] = len(gi.centrality)
+                        except Exception:  # noqa: BLE001
+                            pass
                 except Exception as e:
                     logger.warning("[%s] graph integrity check skipped: %s", state.pipeline_id, e)
 
@@ -3056,6 +3079,18 @@ class PipelineOrchestrator:
                 # persona 生成并发：CLI 提供方受本机 CLI 吞吐限制保持 3；
                 # OpenAI 兼容 HTTP 提供方可以放心放大（每个 persona 1 次 LLM + 2 次 Zep 检索）。
                 _is_http_provider = bool(Config.PROVIDER_META.get(Config.LLM_PROVIDER, {}).get('openai_compat'))
+                # P3-7: 读取 GRAPH 阶段持久化的中心度先验，融入 agent-cap 的 salience 排序
+                # （从 handoff 读，resume 也能拿到）。缺失则为 None → 排序行为不变。
+                _graph_priors = None
+                try:
+                    _gp_path = os.path.join(
+                        state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id),
+                        "graph_priors.json")
+                    if os.path.exists(_gp_path):
+                        with open(_gp_path, "r", encoding="utf-8") as _gf:
+                            _graph_priors = json.load(_gf)
+                except Exception:  # noqa: BLE001
+                    _graph_priors = None
                 sim_manager.prepare_simulation(
                     simulation_id=sim_state.simulation_id,
                     simulation_requirement=state.prompt,
@@ -3063,6 +3098,7 @@ class PipelineOrchestrator:
                     progress_callback=prepare_cb,
                     parallel_profile_count=8 if _is_http_provider else 3,
                     actors=actors,  # 研究档案直通模拟准备：persona/配置以实证立场为准
+                    graph_priors=_graph_priors,  # P3-7: 中心度先验（融入 salience 排序）
                 )
                 self._complete_stage(state, STAGE_PREPARE, "环境就绪")
 

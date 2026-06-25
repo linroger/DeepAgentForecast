@@ -333,6 +333,14 @@ REL_EDGE_NAME = {
     "ENDORSES": "ENDORSES",
     "CRITICIZES": "CRITICIZES",
     "LITIGATES_AGAINST": "LITIGATES_AGAINST",
+    # NEXTSTEPS P3-5：因果/机制边族。预测 outcome 本质是沿**传导机制**推理而非"谁认识谁"——
+    # 这些边把 KG 从一张扁平索引变成可追溯的传导模型（报告可沿因果链解释、未来可沿其播撒冲击/
+    # 前投未来边）。带 {sign, lag, strength, basis} 时由 graph_builder 折进 fact 文本。
+    "CAUSES": "CAUSES",
+    "ENABLES": "ENABLES",
+    "CONSTRAINS": "CONSTRAINS",
+    "TRIGGERS": "TRIGGERS",
+    "ACCELERATES": "ACCELERATES",
     # OTHER 是「逃生舱」类型：研究用 relation_label 给出自由文本边名（SUPPLIES/FUNDS/…）。
     # 这里给个兜底边名，graph_builder 会优先用 relation_label，否则落到 RELATES_TO。
     "OTHER": "RELATES_TO",
@@ -361,6 +369,12 @@ REL_LABEL = {
     "ENDORSES": "背书",
     "CRITICIZES": "批评",
     "LITIGATES_AGAINST": "诉讼",
+    # P3-5 因果/机制边族的中文标签
+    "CAUSES": "导致",
+    "ENABLES": "促成",
+    "CONSTRAINS": "制约",
+    "TRIGGERS": "触发",
+    "ACCELERATES": "加速",
     "OTHER": "关联",
 }
 
@@ -474,6 +488,9 @@ _REL_TYPE_VALENCE = {
     # 治理 / 依赖 / 影响 / 报道（有向、非褒贬）
     "REGULATES": "directional", "DEPENDS_ON": "directional", "INFLUENCES": "directional",
     "REPORTS_ON": "directional",
+    # P3-5 因果/机制（有向传导，非褒贬）
+    "CAUSES": "directional", "ENABLES": "directional", "CONSTRAINS": "directional",
+    "TRIGGERS": "directional", "ACCELERATES": "directional",
 }
 
 
@@ -1470,6 +1487,56 @@ def reconcile_cast(actors: Optional[Any]) -> tuple:
         out["relationships"] = new_rels
 
     return out, {"merged": merged_audit, "n_before": n_before, "n_after": len(new_rows)}
+
+
+def ontology_from_actors(actors: Optional[Any]) -> Dict[str, Any]:
+    """NEXTSTEPS P3-3: 把**已实现的 actor 阵容**投影成本体种子。
+
+    dossier+抽取已给每个 actor 标了 type/archetype、给每条 relationship 标了 typed/valenced
+    类型；而 OntologyGenerator 又从散文**重新派生** entity/edge 类型——一次冗余分类，可能与
+    actor 上标注的不一致，悄悄劣化 typed 图谱检索与 typed follow 图。本函数把"已实现的现实"
+    投影成种子（actor.type→entity_types，relationships[].type→edge_types，复用 REL_EDGE_NAME +
+    _REL_TYPE_VALENCE），作为单一真源喂给本体生成。actors 空/无类型 → {}（调用方退化为纯散文派生）。
+    """
+    rows = extract_actor_rows(actors)
+    rels = extract_relationship_rows(actors)
+    ent_seen: List[str] = []
+    for a in rows:
+        t = str(a.get("type") or "").strip()
+        if t and t not in ent_seen:
+            ent_seen.append(t)
+    edge_seen: Dict[str, Dict[str, Any]] = {}
+    for r in rels:
+        typ = str(r.get("type") or "OTHER").strip().upper()
+        name = REL_EDGE_NAME.get(typ, "RELATES_TO")
+        if typ == "OTHER":
+            lbl = str(r.get("relation_label") or "").strip()
+            if lbl:
+                name = re.sub(r"[^A-Za-z0-9]+", "_", lbl).strip("_").upper() or "RELATES_TO"
+        if name and name not in edge_seen:
+            edge_seen[name] = {"name": name, "valence": _REL_TYPE_VALENCE.get(typ, "neutral")}
+    if not ent_seen and not edge_seen:
+        return {}
+    return {
+        "entity_types": [{"name": n} for n in ent_seen],
+        "edge_types": list(edge_seen.values()),
+    }
+
+
+def ontology_seed_block(actors: Optional[Any]) -> str:
+    """把 ontology_from_actors 渲染成喂给本体生成 LLM 的约束块；空种子 → ""（degrade-safe）。"""
+    seed = ontology_from_actors(actors)
+    if not seed:
+        return ""
+    ents = "、".join(e["name"] for e in seed.get("entity_types", []))
+    edges = "、".join(e["name"] for e in seed.get("edge_types", []))
+    parts = ["【本体种子（来自已实现的 actor 阵容，单一真源；请**保留**这些实体/关系类型，"
+             "至多再新增 2 个领域专属类型；不要把已标注的类型重新命名）】"]
+    if ents:
+        parts.append(f"实体类型（来自 actor.type）：{ents}")
+    if edges:
+        parts.append(f"关系类型（来自 relationships[].type，含因果/经济/治理族）：{edges}")
+    return "\n".join(parts)
 
 
 def forecast_inputs_block(actors: Optional[Any], max_per_section: int = 6) -> str:

@@ -259,6 +259,7 @@ ONTOLOGY_GENERAL_FORECAST_PROMPT = """你是一个专业的知识图谱本体设
 
 - 数量：6-10 个，覆盖该领域真实的相互作用（如 `REGULATES`/`COMPETES_WITH`/`DEPENDS_ON`/`SUPPLIES`/`INFLUENCES`/`HOLDS_STAKE_IN`）。
 - **优先复用调研关系taxonomy**：语义吻合时优先采用 `ALLY_OF`、`OPPOSES`、`COMPETES_WITH`、`REGULATES`、`DEPENDS_ON`、`PARTNERS_WITH`、`INFLUENCES`，使本体边类型与已注入图谱的角色关系图对齐（typed 检索更准）；无合适类型时再自定义领域专属边名。
+- **因果/机制边（对预测高价值，强烈推荐）**：当领域存在传导机制时，加入 `CAUSES`/`ENABLES`/`CONSTRAINS`/`TRIGGERS`/`ACCELERATES` 这类因果边类型（family=causal），并尽量带 `sign`/`lag`/`strength` 属性——它们刻画"冲击如何传导到结果"，是把图谱从索引升级为传导模型的关键，比"谁认识谁"更能驱动预测。
 - 确保 source_targets 连接你定义的实体类型。
 - **为关系附带对预测有判别力的属性**（强烈推荐），例如：
   - `sentiment`: 关系的方向性态度（positive/negative/neutral）
@@ -409,6 +410,12 @@ _EDGE_FAMILY_VALENCE = {
     "DEPENDS_ON": ("dependency", "directional"),
     "INFLUENCES": ("influence", "directional"),
     "REPORTS_ON": ("information", "directional"),
+    # NEXTSTEPS P3-5：因果/机制家族（有向传导，非褒贬）。把 KG 从索引升级为传导模型。
+    "CAUSES": ("causal", "directional"),
+    "ENABLES": ("causal", "directional"),
+    "CONSTRAINS": ("causal", "directional"),
+    "TRIGGERS": ("causal", "directional"),
+    "ACCELERATES": ("causal", "directional"),
     "OTHER": ("other", "neutral"),
 }
 

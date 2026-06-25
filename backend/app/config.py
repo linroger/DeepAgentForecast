@@ -165,6 +165,10 @@ class Config:
     # 行为规范行并改写关系端点）。默认开：只会收紧 cast（防中心度分裂/重复 persona/salience 污染）；
     # 无重复时为 no-op（与现状一致）。
     CAST_RECONCILE = os.environ.get('CAST_RECONCILE', 'True').strip().lower() == 'true'
+    # NEXTSTEPS P3-3：把已实现的 actor 阵容（archetype/relationships[].type）投影成本体种子约束
+    # 喂给本体生成（单一真源，避免从散文重新派生导致 schema/instance 漂移）。默认关（改变本体派生，
+    # 较保守）；开启后本体生成会被偏置去保留 actor 上已标注的类型。
+    ONTOLOGY_FROM_DOSSIER = os.environ.get('ONTOLOGY_FROM_DOSSIER', 'False').strip().lower() == 'true'
     PERSONA_EGO_RETRIEVAL = os.environ.get('PERSONA_EGO_RETRIEVAL', 'False').strip().lower() == 'true'   # I-1-5 自我中心人设上下文
     # 人设提示注入 actor 行为 DNA（价值观/信念/激励/资源/风险偏好）+ 关系名册（盟友/对手/竞争者…）。
     # 默认开；仅当 actor 携带 worldview/incentives/resources 等新字段时生效，缺失时为 no-op（与现状一致）。
@@ -568,6 +572,9 @@ class Config:
     # NEXTSTEPS P3-9：默认开——联盟结构（及其随时间的迁移）是强预测信号；GRAPH_COMMUNITY_RETRIEVAL
     # 默认跟随本旗标，使 faction_brief 走图谱原生证据而非行为日志启发式。建图会多一趟 Leiden+LLM 摘要。
     GRAPH_BUILD_COMMUNITIES = os.environ.get('GRAPH_BUILD_COMMUNITIES', 'true').strip().lower() == 'true'
+    # NEXTSTEPS P3-7：把建图时算出的度数中心度（此前丢弃）作为影响力先验融入 agent-cap 的
+    # salience 排序——高中心度=更枢纽，比原始提及数更接地。默认开；无 graph_priors 时 +0.0（no-op）。
+    GRAPH_CENTRALITY_PRIORS = os.environ.get('GRAPH_CENTRALITY_PRIORS', 'true').strip().lower() == 'true'
     # 把已发现的社区(派系)做成一等可检索结构：报告侧 faction_brief 工具 + 人设侧群体身份
     # （EXECPLAN2 I-1-2）。默认跟随 GRAPH_BUILD_COMMUNITIES（无社区节点时 faction_brief 自动
     # 降级到 coalition_map 的行为日志聚类）。显式设 true/false 可覆盖。

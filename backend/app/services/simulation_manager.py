@@ -239,7 +239,8 @@ class SimulationManager:
         use_llm_for_profiles: bool = True,
         progress_callback: Optional[callable] = None,
         parallel_profile_count: int = 3,
-        actors: Optional[Dict[str, Any]] = None
+        actors: Optional[Dict[str, Any]] = None,
+        graph_priors: Optional[Dict[str, float]] = None
     ) -> SimulationState:
         """
         准备模拟环境（全程自动化）
@@ -306,7 +307,22 @@ class SimulationManager:
                 salience_score as _salience_score,
                 is_agent_eligible as _is_agent_eligible,
                 entity_simulation_tier as _entity_simulation_tier,
+                normalize_name as _normalize_name,
             )
+            # NEXTSTEPS P3-7: 中心度先验查找（GRAPH 阶段算出，按 NFKC 归一名匹配实体→[0,1]）。
+            # 缺失/旗标关 → _centrality 恒返回 0.0，排序逐字节退化为现状（degrade-safe）。
+            _cent_on = (bool(getattr(Config, 'GRAPH_CENTRALITY_PRIORS', True))
+                        and isinstance(graph_priors, dict) and bool(graph_priors))
+            _cent_lookup = {
+                _normalize_name(str(k)): float(v)
+                for k, v in (graph_priors or {}).items()
+                if _cent_on and isinstance(v, (int, float))
+            }
+
+            def _centrality(e) -> float:
+                if not _cent_lookup:
+                    return 0.0
+                return _cent_lookup.get(_normalize_name(getattr(e, "name", "") or ""), 0.0)
             _max_agents = Config.OASIS_MAX_AGENTS
             if _max_agents and len(filtered.entities) > _max_agents:
                 _matched = {id(e): (_match_actor(e.name, actors) if actors else None) for e in filtered.entities}
@@ -337,10 +353,11 @@ class SimulationManager:
                 )
 
                 def _legacy_rank(e):
-                    """现状排序键：(是否匹配 actor, 影响力权重, 邻边度数)。"""
+                    """现状排序键：(是否匹配 actor, 影响力权重+中心度先验, 邻边度数)。"""
                     a = _matched.get(id(e))
                     iw = (_influence_weight(a) or 0.0) if a else 0.0
-                    return (1 if a else 0, iw, len(e.related_edges or []))
+                    # P3-7: 把中心度先验叠加到影响力轴（缺失时 +0.0 → 与现状逐字节一致）。
+                    return (1 if a else 0, iw + 0.5 * _centrality(e), len(e.related_edges or []))
 
                 def _rank(e):
                     if not _use_salience and not _use_tier:
@@ -363,6 +380,8 @@ class SimulationManager:
                     else:
                         sal_key = 0.0
                     iw = (_influence_weight(a) or 0.0) if a else 0.0
+                    # P3-7: 中心度先验叠加到 salience 键（高中心度=更枢纽，比原始度数更强的影响力先验）。
+                    sal_key = sal_key + 0.5 * _centrality(e)
                     return (matched_flag, eligible_flag, sal_key, iw, len(e.related_edges or []))
 
                 kept = [e for e in filtered.entities if _matched.get(id(e))]  # 所有匹配 actor 必留

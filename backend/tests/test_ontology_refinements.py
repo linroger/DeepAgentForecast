@@ -27,6 +27,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.utils.actors import (  # noqa: E402
+    REL_EDGE_NAME,
+    REL_LABEL,
     behavioral_dna_block,
     build_initial_follow_graph,
     entity_archetype,
@@ -405,3 +407,47 @@ def test_behavioral_dna_block_contains_values_and_incentives():
     # resources + risk tolerance surfaced
     assert "算力" in block
     assert "high" in block
+
+
+# ----------------------------------------- NEXTSTEPS P3-5: causal/mechanism edges
+def test_causal_edge_family_wired():
+    """CAUSES/ENABLES/CONSTRAINS/TRIGGERS/ACCELERATES are first-class typed edges
+    (identity edge name, not collapsed to RELATES_TO) with directional valence."""
+    for t in ("CAUSES", "ENABLES", "CONSTRAINS", "TRIGGERS", "ACCELERATES"):
+        assert REL_EDGE_NAME[t] == t            # not collapsed to RELATES_TO
+        assert t in REL_LABEL                   # has a zh label for persona/report blocks
+        assert relation_valence({"type": t}) == "directional"
+
+
+def test_causal_edges_do_not_create_follows():
+    """Causal/mechanism edges are not social relations → no initial follow edges
+    (like REPORTS_ON/CONSUMES). They inform retrieval/propagation, not the social graph."""
+    actors = [{"name": "A", "type": "Organization"}, {"name": "B", "type": "Organization"}]
+    rels = [{"source": "A", "target": "B", "type": "CAUSES"}]
+    assert _follow_set(actors, rels) == set()
+
+
+# ----------------------------------------- NEXTSTEPS P3-3: ontology from dossier
+def test_ontology_from_actors_projects_types():
+    from app.utils.actors import ontology_from_actors
+    actors = {
+        "actors": [{"name": "A", "type": "Organization"}, {"name": "B", "type": "Media"}],
+        "relationships": [
+            {"source": "A", "target": "B", "type": "OPPOSES"},
+            {"source": "A", "target": "B", "type": "CAUSES"},
+        ],
+    }
+    onto = ontology_from_actors(actors)
+    ent_names = {e["name"] for e in onto["entity_types"]}
+    edge_names = {e["name"] for e in onto["edge_types"]}
+    assert ent_names == {"Organization", "Media"}
+    assert "OPPOSES" in edge_names and "CAUSES" in edge_names      # realized + causal projected
+    causal = [e for e in onto["edge_types"] if e["name"] == "CAUSES"][0]
+    assert causal["valence"] == "directional"                     # valence carried through
+
+
+def test_ontology_from_actors_empty_when_no_types():
+    from app.utils.actors import ontology_from_actors, ontology_seed_block
+    assert ontology_from_actors(None) == {}
+    assert ontology_from_actors({"actors": [{"name": "A"}]}) == {}  # no type, no rels
+    assert ontology_seed_block(None) == ""                          # renderer degrades to ""
