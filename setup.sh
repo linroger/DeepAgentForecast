@@ -394,8 +394,8 @@ if [ -n "$LLM_API_KEY_INPUT" ] && have curl; then
     UA_HEADER=(-H "User-Agent: claude-cli/1.0.0")
   fi
   # ${arr[@]+...} guards the empty-array expansion (bash 3.2 + set -u safe).
-  # Secret hygiene (EXECPLAN2 F-11-0): feed the bearer token via a curl config on
-  # stdin (--config -) so it never lands in argv (ps / /proc/<pid>/cmdline); write
+  # Secret hygiene: feed the bearer token via a curl config on stdin
+  # (--config -) so it never lands in argv (ps / /proc/<pid>/cmdline); write
   # the response to a mktemp 0600 file instead of a predictable /tmp name.
   SETUP_LLM_TEST_TMP="$(mktemp "${TMPDIR:-/tmp}/setup_llm_test.XXXXXX")"
   chmod 600 "$SETUP_LLM_TEST_TMP" 2>/dev/null || true
@@ -658,6 +658,84 @@ else
   warn "deer-flow not available at: $DEERFLOW_DIR"
   warn "Deep research (pipeline stage 1) needs it. Re-run ./setup.sh once you have"
   warn "network access, or set DEERFLOW_DIR to an existing checkout."
+fi
+
+# ---------------------------------------------------------------------------
+# 5b) OPTIONAL — DRF-2 preview (next-generation architecture)
+# ---------------------------------------------------------------------------
+# DRF-2 (drf2/ + REDESIGN.md) rebuilds the pipeline around the DeerFlow 2.0
+# super-agent harness: methodology as skills, the knowledge graph and OASIS
+# simulation exposed as MCP servers, and a deterministic Pipeline Driver for
+# gates/resume/ensemble. It is a PREVIEW — the legacy pipeline installed above
+# remains the working system. This step is OFF by default; opt in with:
+#     SETUP_DRF2=1 ./setup.sh
+# It only installs the engines' extra dependency (the python 'mcp' package,
+# pinned per drf2/engines/kg/requirements.txt) into backend/.venv and prints
+# the registration / run commands. Idempotent and guarded like everything else.
+if [ "${SETUP_DRF2:-0}" = "1" ]; then
+  step "Setting up DRF-2 preview (optional, SETUP_DRF2=1)"
+
+  DRF2_KG_REQS="$ROOT_DIR/drf2/engines/kg/requirements.txt"
+  DRF2_SIM_REQS="$ROOT_DIR/drf2/engines/simulation/requirements.txt"
+  BACKEND_PY="$ROOT_DIR/backend/.venv/bin/python"
+
+  if [ ! -d "$ROOT_DIR/drf2" ]; then
+    warn "drf2/ directory not found — skipping DRF-2 setup."
+  elif [ ! -x "$BACKEND_PY" ]; then
+    warn "backend/.venv is not built yet (the engines run from it). Re-run"
+    warn "    ./setup.sh so the backend 'uv sync' step succeeds, then retry with"
+    warn "    SETUP_DRF2=1 ./setup.sh"
+  else
+    # Install the MCP transport dependency into backend/.venv. Both engine
+    # requirement files pin only 'mcp' (kg: mcp>=1.24.0, sim: mcp>=1.2);
+    # everything else is reused from the legacy backend venv by import.
+    DRF2_MCP_OK=0
+    if have uv; then
+      if uv pip install --python "$BACKEND_PY" \
+           -r "$DRF2_KG_REQS" -r "$DRF2_SIM_REQS"; then
+        DRF2_MCP_OK=1
+      fi
+    elif [ -x "$ROOT_DIR/backend/.venv/bin/pip" ]; then
+      if "$ROOT_DIR/backend/.venv/bin/pip" install \
+           -r "$DRF2_KG_REQS" -r "$DRF2_SIM_REQS"; then
+        DRF2_MCP_OK=1
+      fi
+    fi
+    if [ "$DRF2_MCP_OK" = "1" ]; then
+      ok "DRF-2 engine dependency installed ('mcp' in backend/.venv)"
+    else
+      warn "Could not install the 'mcp' package into backend/.venv. Retry with:"
+      warn "    uv pip install --python \"$BACKEND_PY\" 'mcp>=1.24.0'"
+    fi
+
+    # How to register the two MCP engines + run the harness/driver. The two
+    # engines are stdio MCP servers the harness SPAWNS per extensions_config
+    # (you do not start them by hand); FalkorDB must be reachable for the KG
+    # engine. Full details: drf2/README.md and drf2/engines/*/README.md.
+    cat <<DRF2NEXT
+  DRF-2 next steps (preview — the legacy pipeline stays authoritative):
+
+  1) Register the two MCP engines with the harness. drf2/config/extensions_config.json
+     already carries both stdio server entries; re-point its absolute paths
+     (venv python, PYTHONPATH) at this checkout if needed:
+       drf2-kg:         backend/.venv/bin/python -m drf2.engines.kg.server --graph-id <id>
+       drf2-simulation: backend/.venv/bin/python drf2/engines/simulation/server.py
+
+  2) Start the DeerFlow 2.0 harness with the DRF-2 config:
+       cd "$ROOT_DIR/deer-flow-2.0.0"
+       export DEER_FLOW_CONFIG_PATH="$ROOT_DIR/drf2/config/config.yaml"
+       export DEER_FLOW_EXTENSIONS_CONFIG_PATH="$ROOT_DIR/drf2/config/extensions_config.json"
+       export PYTHONPATH="$ROOT_DIR:\${PYTHONPATH:-}"
+       make dev        # gateway :8001, UI :3000, nginx :2026
+
+  3) Drive a deterministic pipeline run (health gates, resume, ensemble):
+       cd "$ROOT_DIR"
+       PYTHONPATH="$ROOT_DIR" backend/.venv/bin/python -m drf2.driver.cli \\
+         run --question "..." --config drf2/config/config.yaml
+     (add --dry-run to smoke-test the whole state machine offline; see
+      drf2/README.md §3 and drf2/engines/*/README.md for details)
+DRF2NEXT
+  fi
 fi
 
 # ---------------------------------------------------------------------------
