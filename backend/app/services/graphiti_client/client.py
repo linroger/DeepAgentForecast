@@ -12,10 +12,13 @@ graph_id is used verbatim as the Graphiti group_id / FalkorDB tenant.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any, List, Optional
 
 from .runtime import get_runtime
+
+logger = logging.getLogger("mirofish.graphiti_client")
 
 
 def _iso(v: Any) -> Any:
@@ -170,16 +173,28 @@ class _GraphNamespace:
             uuids = self._rt.add_episodes_concurrent(graph_id, eps, concurrency)
             return [_ZepEpisode(u) for u in uuids]
         out: List[_ZepEpisode] = []
+        n_failed = 0
         for ep in eps:
-            uuid = self._rt.add_episode(
-                graph_id,
-                name=ep["name"],
-                body=ep["data"],
-                source_type=ep["type"],
-                source_description=ep["source_description"],
-                reference_time=ep["reference_time"],
-            )
-            out.append(_ZepEpisode(uuid))
+            # RESILIENCE: isolate per-episode failures (weak-model schema echo / transient
+            # extraction errors) so one bad chunk never aborts the batch → the graph stage.
+            try:
+                uuid = self._rt.add_episode(
+                    graph_id,
+                    name=ep["name"],
+                    body=ep["data"],
+                    source_type=ep["type"],
+                    source_description=ep["source_description"],
+                    reference_time=ep["reference_time"],
+                )
+                if uuid:
+                    out.append(_ZepEpisode(uuid))
+            except Exception as exc:  # noqa: BLE001 — skip the bad episode, keep the rest
+                n_failed += 1
+                logger.warning("[%s] episode %s ingest failed (skipped): %s",
+                               graph_id, ep.get("name"), str(exc)[:160])
+        if n_failed:
+            logger.warning("[%s] add_batch(serial): %d/%d episodes skipped due to errors",
+                           graph_id, n_failed, len(eps))
         return out
 
     def add(self, graph_id: str, type: str = "text", data: str = "", **_: Any) -> _ZepEpisode:

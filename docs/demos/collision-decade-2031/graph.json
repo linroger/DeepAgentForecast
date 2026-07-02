@@ -1,0 +1,1421 @@
+{
+ "nodes": [
+  {
+   "id": "actor-0",
+   "name": "US Federal Executive (Trump Administration)",
+   "labels": [
+    "Government"
+   ],
+   "summary": "Architect of the mercantilist tariff regime and controller of the AI-chip export valve (BIS/Commerce)\nStance: Tariffs are leverage paid by foreigners; AI supremacy is a national-security imperative; deals over rules\nThe US executive branch under President Donald Trump's second term, driving tariff and AI-chip policy by executive authority (IEEPA, Section 122/232/301, BIS/Commerce)."
+  },
+  {
+   "id": "actor-1",
+   "name": "People's Republic of China",
+   "labels": [
+    "Government"
+   ],
+   "summary": "Rival mercantilist state controlling the rare-earth/magnet chokepoint and building a parallel AI/chip stack\nStance: Commitment to win-win trade and opposition to weaponizing supply chains while pursuing self-reliance\nThe Chinese party-state (State Council, MOFCOM) directing trade retaliation, rare-earth policy, and indigenous AI/chip development."
+  },
+  {
+   "id": "actor-2",
+   "name": "Nvidia",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Dominant AI-accelerator designer whose chips are the contested asset at the center of the collision\nStance: Supports American AI leadership but lobbies to keep every market including China open; controls should be narrow\nNvidia, the dominant US designer of AI accelerator GPUs (H100/H200/H20/Blackwell) and the CUDA software ecosystem."
+  },
+  {
+   "id": "actor-3",
+   "name": "TSMC",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Sole-scale leading-edge foundry gating every advanced AI chip; flagship of Western reshoring policy\nStance: Customer neutrality and commitment to Taiwan as tech heart, while hedging via a US footprint\nTSMC, the Taiwanese contract foundry making the overwhelming majority of the world's leading-edge chips, with a $165B US (Arizona) commitment."
+  },
+  {
+   "id": "actor-4",
+   "name": "US Hyperscalers",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Capital source and demand engine of the ~$700B/yr AI capex supercycle\nStance: AI demand is insatiable and spending is disciplined; owning the full stack is strategic\nThe four US cloud/AI platform giants (Amazon/AWS, Microsoft, Alphabet/Google, Meta) funding the ~$700B/yr AI infrastructure buildout, modeled as a bloc."
+  },
+  {
+   "id": "actor-5",
+   "name": "OpenAI/Stargate",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Leading US frontier-model lab anchoring the largest single AI-infrastructure program ($500B Stargate)\nStance: Safe AGI for humanity while racing to lock up compute and sovereign geographic deals\nOpenAI, the leading US frontier-model lab, and its flagship $500B Stargate data-center consortium with SoftBank and Oracle."
+  },
+  {
+   "id": "actor-6",
+   "name": "US Federal Reserve",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Monetary anchor whose rate path gates AI financing and determines the macro landing\nStance: Data-dependent and apolitical; treats tariff price effects as arguably transitory\nThe US Federal Reserve (FOMC), the central bank setting policy rates amid tariff-driven inflation and an AI-capex boom."
+  },
+  {
+   "id": "actor-7",
+   "name": "European Union",
+   "labels": [
+    "Government"
+   ],
+   "summary": "Rule-maker and would-be third pole, caught between US tariffs and Chinese mineral coercion\nStance: Strategic autonomy and open trade, negotiating to avoid US tariffs while under-building compute\nThe European Union (Commission plus member states) as a trade bloc and rule-maker pursuing digital/strategic sovereignty via InvestAI."
+  },
+  {
+   "id": "actor-8",
+   "name": "US Congress & Supreme Court",
+   "labels": [
+    "Government"
+   ],
+   "summary": "Legal and legislative gate validating, voiding, or codifying the tariff and chip regime\nStance: Constitutional limits and separation of powers; SCOTUS ruled IEEPA does not authorize tariffs\nThe US legislative (Congress) and judicial (Supreme Court) branches that can validate, void, or codify the tariff/chip regime."
+  },
+  {
+   "id": "actor-9",
+   "name": "DeepSeek/Huawei/SMIC",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "China's efficient open-weight lab and domestic silicon backers challenging the export-control thesis\nStance: Open research and self-reliance; algorithmic efficiency beats brute-force compute hoarding\nDeepSeek, the Chinese frontier-efficient open-weight AI lab, together with its domestic silicon backers Huawei (Ascend) and SMIC."
+  },
+  {
+   "id": "actor-10",
+   "name": "Taiwan (Government)",
+   "labels": [
+    "Government"
+   ],
+   "summary": "Steward of the silicon shield and home constraint on TSMC's overseas expansion\nStance: Preserve deterrence and keep leading-edge nodes at home while deepening US ties\nTaiwan's government (ROC / MOEA), steward of the silicon shield and TSMC's home constraint."
+  },
+  {
+   "id": "actor-11",
+   "name": "South Korea chip complex",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Dominant HBM and memory suppliers forming a hard chokepoint on every AI accelerator\nStance: Defend the memory franchise; allied-with-friction with US export policy\nSamsung Electronics and SK Hynix, the dominant suppliers of high-bandwidth memory (HBM) essential to AI accelerators."
+  },
+  {
+   "id": "actor-12",
+   "name": "ASML",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Sole supplier of EUV lithography, the ultimate upstream gate on leading-edge chips\nStance: Serves global demand within Dutch/EU and US export-control coordination\nASML Holding, the Dutch sole supplier of EUV lithography tools required for leading-edge chip manufacturing."
+  },
+  {
+   "id": "actor-13",
+   "name": "Global South/Connectors",
+   "labels": [
+    "Government"
+   ],
+   "summary": "Trade-diversion beneficiaries and sovereign-AI buyers hedging between the two blocs\nStance: Position as China+1 friend-shoring hubs and sovereign-compute buyers while avoiding picking sides\nMiddle-power connector economies (India, Vietnam, Mexico, Gulf states/UAE, Saudi Arabia/HUMAIN) capturing rerouted trade and sovereign-AI investment."
+  },
+  {
+   "id": "topic-0",
+   "name": "Durability of the tariff regime after the SCOTUS IEEPA ruling",
+   "labels": [
+    "Topic"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "topic-1",
+   "name": "AI capex supercycle versus bubble / bond-market financing strain",
+   "labels": [
+    "Topic"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "topic-2",
+   "name": "US-China chip export controls and the 25% revenue-share model",
+   "labels": [
+    "Topic"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "topic-3",
+   "name": "Rare-earth/magnet chokepoint and the Nov 27 2026 truce expiry",
+   "labels": [
+    "Topic"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "topic-4",
+   "name": "Semiconductor reshoring and Taiwan concentration risk",
+   "labels": [
+    "Topic"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "topic-5",
+   "name": "Wide-but-shallow AI adoption and small near-term productivity gains",
+   "labels": [
+    "Topic"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "topic-6",
+   "name": "Sovereign AI and state equity in strategic chip firms",
+   "labels": [
+    "Topic"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "topic-7",
+   "name": "Data-center energy demand as the binding compute input",
+   "labels": [
+    "Topic"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "topic-8",
+   "name": "Connector economies and statistical vs. real decoupling",
+   "labels": [
+    "Topic"
+   ],
+   "summary": ""
+  },
+  {
+   "id": "event-0",
+   "name": "2023-08-01: China imposes gallium/germanium export licensing - the first mercantil…",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "China imposes gallium/germanium export licensing - the first mercantilist counter-chokepoint."
+  },
+  {
+   "id": "event-1",
+   "name": "2024-12-01: China escalates to a full gallium/germanium embargo on US shipments; g…",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "China escalates to a full gallium/germanium embargo on US shipments; gallium later hits $687/kg (+150%) by May 2025."
+  },
+  {
+   "id": "event-2",
+   "name": "2025-01-01: Stargate ($500B US AI infrastructure JV) announced; Biden AI Diffusion…",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "Stargate ($500B US AI infrastructure JV) announced; Biden AI Diffusion Rule tiers global chip access."
+  },
+  {
+   "id": "event-3",
+   "name": "2025-01-01: DeepSeek ships a frontier-class efficient open model, disconfirming th…",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "DeepSeek ships a frontier-class efficient open model, disconfirming the compute-hoarding thesis."
+  },
+  {
+   "id": "event-4",
+   "name": "2025-03-01: TSMC announces +$100B additional US investment (to $165B total).",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "TSMC announces +$100B additional US investment (to $165B total)."
+  },
+  {
+   "id": "event-5",
+   "name": "2025-04-09: 'Liberation Day' reciprocal tariffs; US effective tariff rate spikes t…",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "'Liberation Day' reciprocal tariffs; US effective tariff rate spikes to ~28%; Commerce declares H20 non-compliant."
+  },
+  {
+   "id": "event-6",
+   "name": "2025-05-13: HUMAIN-NVIDIA strategic partnership announced (Saudi PIF sovereign AI)…",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "HUMAIN-NVIDIA strategic partnership announced (Saudi PIF sovereign AI)."
+  },
+  {
+   "id": "event-7",
+   "name": "2025-07-01: BIS approves H20 (Nvidia) and MI308 (AMD) for China on a case-by-case …",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "BIS approves H20 (Nvidia) and MI308 (AMD) for China on a case-by-case basis."
+  },
+  {
+   "id": "event-8",
+   "name": "2025-08-18: MIT NANDA publishes 'The GenAI Divide' finding 95% of enterprise GenAI…",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "MIT NANDA publishes 'The GenAI Divide' finding 95% of enterprise GenAI pilots deliver zero measurable ROI."
+  },
+  {
+   "id": "event-9",
+   "name": "2025-10-09: China tightens rare-earth/magnet export controls.",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "China tightens rare-earth/magnet export controls."
+  },
+  {
+   "id": "event-10",
+   "name": "2025-11-01: Trump-Xi one-year truce: China suspends new rare-earth controls (to No…",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "Trump-Xi one-year truce: China suspends new rare-earth controls (to Nov 27 2026), pledges soybeans; US eases tech controls."
+  },
+  {
+   "id": "event-11",
+   "name": "2025-11-17: Agri exemptions and Switzerland deal cut the US effective tariff rate …",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "Agri exemptions and Switzerland deal cut the US effective tariff rate to 16.8%; SCOTUS IEEPA case pending."
+  },
+  {
+   "id": "event-12",
+   "name": "2025-12-08: Trump announces Commerce will allow Nvidia high-end chip sales to Chin…",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "Trump announces Commerce will allow Nvidia high-end chip sales to China for a 25% US revenue stake."
+  },
+  {
+   "id": "event-13",
+   "name": "2026-01-16: TSMC accelerates Arizona expansion post US-Taiwan trade deal.",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "TSMC accelerates Arizona expansion post US-Taiwan trade deal."
+  },
+  {
+   "id": "event-14",
+   "name": "2026-02-06: Big-4 hyperscalers guide to ~$700B combined 2026 AI capex.",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "Big-4 hyperscalers guide to ~$700B combined 2026 AI capex."
+  },
+  {
+   "id": "event-15",
+   "name": "2026-02-20: US Supreme Court strikes down IEEPA tariffs 6-3.",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "US Supreme Court strikes down IEEPA tariffs 6-3."
+  },
+  {
+   "id": "event-16",
+   "name": "2026-02-24: Administration pivots to Section 122/232/301 tariff authorities.",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "Administration pivots to Section 122/232/301 tariff authorities."
+  },
+  {
+   "id": "event-17",
+   "name": "2026-03-24: Anthropic Economic Index (March 2026) reports ~49% of jobs have >=25% …",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "Anthropic Economic Index (March 2026) reports ~49% of jobs have >=25% of tasks touched by Claude, adoption wide but uneven."
+  },
+  {
+   "id": "event-18",
+   "name": "2026-04-01: US effective tariff rate settles just above 11%, with Section 122 acco…",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "US effective tariff rate settles just above 11%, with Section 122 accounting for ~26%."
+  },
+  {
+   "id": "event-19",
+   "name": "2026-06-06: Japan shifts Rapidus to direct state equity (Y150B) plus a golden-shar…",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "Japan shifts Rapidus to direct state equity (Y150B) plus a golden-share veto."
+  },
+  {
+   "id": "event-20",
+   "name": "2026-11-27: Scheduled rare-earth truce expiry - a forecast flashpoint.",
+   "labels": [
+    "GeopoliticalEvent"
+   ],
+   "summary": "Scheduled rare-earth truce expiry - a forecast flashpoint."
+  },
+  {
+   "id": "metric-0",
+   "name": "US average effective tariff rate",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "16.8 % (as of 2025-11-17) — Trade-weighted average effective tariff rate on US goods imports (pre-substitution) [Yale Budget Lab, State of US Tariffs Nov 17 2025, tier S1]"
+  },
+  {
+   "id": "metric-1",
+   "name": "US average effective tariff rate post-SCOTUS",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "just above 11 % (as of 2026-04-01) — Effective US tariff rate after IEEPA strike-down and Section 122/232/301 substitution [Fortune/Tax Foundation reporting on post-ruling tariff regime, tier S2]"
+  },
+  {
+   "id": "metric-2",
+   "name": "US effective tariff rate peak (Liberation Day)",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "28 % (as of 2025-04-13) — Effective tariff rate after the April 9/13 2025 reciprocal tariff announcements [Yale Budget Lab, tier S1]"
+  },
+  {
+   "id": "metric-3",
+   "name": "Big-4 hyperscaler AI capex guidance 2026",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "700-725 USD billion (as of 2026-02-06) — Combined 2026 AI infrastructure capex for Amazon, Microsoft, Alphabet, Meta [CNBC Feb 2026, tier S3]"
+  },
+  {
+   "id": "metric-4",
+   "name": "Big-4 hyperscaler AI capex 2025",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "410 USD billion (as of 2025-12-31) — Combined 2025 AI infrastructure capex for the four US hyperscalers [valueaddvc / CNBC, tier S3]"
+  },
+  {
+   "id": "metric-5",
+   "name": "TSMC US (Arizona) investment commitment",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "165 USD billion (as of 2025-03-01) — Total announced TSMC greenfield investment commitment in Arizona [TSMC Arizona official / CNBC Jan 2026, tier S1]"
+  },
+  {
+   "id": "metric-6",
+   "name": "Stargate consortium size",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "500 USD billion (as of 2025-01-01) — Announced total investment for the OpenAI/SoftBank/Oracle US AI infrastructure JV [AI Wiki Stargate, tier S3]"
+  },
+  {
+   "id": "metric-7",
+   "name": "IEEPA tariffs collected illegally",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "160 USD billion (as of 2026-02-20) — Tax Foundation estimate of IEEPA tariff revenue collected before the SCOTUS strike-down [Tax Foundation, tier S2]"
+  },
+  {
+   "id": "metric-8",
+   "name": "US federal net interest",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "~1000 USD billion (as of 2026-09-30) — Net interest on the federal debt in FY2026 [CBO/Treasury via AInvest, tier S2]"
+  },
+  {
+   "id": "metric-9",
+   "name": "AI-linked corporate bond issuance",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "220 USD billion (as of 2025-12-31) — Record AI-linked bond issuance in 2025 [Reuters/FT via dossier, tier S2]"
+  },
+  {
+   "id": "metric-10",
+   "name": "Data-centre electricity demand 2024",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "415 TWh (as of 2024-12-31) — Global data-centre electricity consumption (~1.5% of global electricity) [IEA Energy and AI, tier S1]"
+  },
+  {
+   "id": "metric-11",
+   "name": "Data-centre electricity demand 2030 (projected)",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "945 TWh (as of 2030-12-31) — IEA projection of global data-centre electricity consumption (~3% of global) [IEA Energy and AI, tier S1]"
+  },
+  {
+   "id": "metric-12",
+   "name": "Enterprise GenAI pilots with zero measurable ROI",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "95 % (as of 2025-08-18) — Share of enterprise generative-AI pilots delivering no measurable ROI [MIT NANDA, The GenAI Divide, tier S2]"
+  },
+  {
+   "id": "metric-13",
+   "name": "US-India goods trade deficit growth",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "+27 to 58.2 USD billion (as of 2025-12-31) — US goods trade deficit with India in 2025 (up 27% year-over-year) [USTR India, tier S1]"
+  },
+  {
+   "id": "metric-14",
+   "name": "HUMAIN GPU commitment",
+   "labels": [
+    "MarketSignal"
+   ],
+   "summary": "600000 GPUs (as of 2025-05-13) — NVIDIA GPUs committed to Saudi HUMAIN sovereign-AI buildout [NVIDIA/HUMAIN partnership announcement, tier S1]"
+  },
+  {
+   "id": "prior-0",
+   "name": "reciprocal tariffs",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-1",
+   "name": "AMD",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-2",
+   "name": "United States",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-3",
+   "name": "United Arab Emirates",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-4",
+   "name": "HUMAIN",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-5",
+   "name": "Huawei",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-6",
+   "name": "Samsung Electronics",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-7",
+   "name": "Xi Jinping leadership",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-8",
+   "name": "CHIPS Act",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-9",
+   "name": "DeepSeek",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-10",
+   "name": "Abilene, Texas",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-11",
+   "name": "SK Hynix",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-12",
+   "name": "Ascend",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-13",
+   "name": "Trainium",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-14",
+   "name": "Maia",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-15",
+   "name": "rare-earth magnets",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-16",
+   "name": "soybeans",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-17",
+   "name": "Arizona",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-18",
+   "name": "European Commission",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-19",
+   "name": "Amazon",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-20",
+   "name": "Bureau of Industry and Security",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-21",
+   "name": "India",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-22",
+   "name": "Commerce Department",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-23",
+   "name": "Roberts Court",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-24",
+   "name": "MOEA",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-25",
+   "name": "Saudi Arabia PIF",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-26",
+   "name": "Meta",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-27",
+   "name": "export controls",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-28",
+   "name": "Beijing",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-29",
+   "name": "the courts",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-30",
+   "name": "gallium",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-31",
+   "name": "Bridgewater Associates",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-32",
+   "name": "SMIC",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-33",
+   "name": "TSMC-Arizona",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-34",
+   "name": "Google",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-35",
+   "name": "Vietnam",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-36",
+   "name": "rare earths",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-37",
+   "name": "Anthropic",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-38",
+   "name": "AI Diffusion Rule",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-39",
+   "name": "Congress",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-40",
+   "name": "GAIN AI Act",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-41",
+   "name": "Gulf sovereign-AI buyers",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-42",
+   "name": "Yale Budget Lab",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-43",
+   "name": "Mexico",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-44",
+   "name": "Nvidia revenue-share model",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-45",
+   "name": "Microsoft",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-46",
+   "name": "Korean memory makers",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-47",
+   "name": "Effective Tariff Rate",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-48",
+   "name": "HBM",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-49",
+   "name": "USTR",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-50",
+   "name": "EU AI Act",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-51",
+   "name": "Stargate",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-52",
+   "name": "AI compute",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-53",
+   "name": "InvestAI",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-54",
+   "name": "IEEPA",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-55",
+   "name": "China+1 economies",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-56",
+   "name": "TSM",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-57",
+   "name": "Draghi",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-58",
+   "name": "Biden",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-59",
+   "name": "friend-shoring hubs",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-60",
+   "name": "Oracle",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-61",
+   "name": "SoftBank",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-62",
+   "name": "Big-4",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-63",
+   "name": "Mistral",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-64",
+   "name": "Google DeepMind",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-65",
+   "name": "State Council",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-66",
+   "name": "Carbon Border Adjustment Mechanism",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-67",
+   "name": "Taipei",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-68",
+   "name": "sectoral tariffs",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-69",
+   "name": "Big Tech cloud",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-70",
+   "name": "IEEPA-based tariffs",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-71",
+   "name": "MOFCOM",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-72",
+   "name": "TPU",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-73",
+   "name": "germanium",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-74",
+   "name": "Trump",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-75",
+   "name": "Digital Markets Act",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-76",
+   "name": "the Chinese open-source AI stack",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "prior-77",
+   "name": "major-questions doctrine",
+   "labels": [],
+   "summary": ""
+  }
+ ],
+ "links": [
+  {
+   "source": "actor-0",
+   "target": "actor-1",
+   "name": "SANCTIONS",
+   "fact": "Reciprocal tariffs (peak ~28%, settled >11% by Apr 2026) plus chip export controls on China (Yale Budget Lab; Brookings)."
+  },
+  {
+   "source": "actor-1",
+   "target": "actor-0",
+   "name": "CONSTRAINS",
+   "fact": "Rare-earth/gallium/germanium/magnet export controls used as retaliation and coercive leverage (Skillings; LinkedIn/rare-earth reporting)."
+  },
+  {
+   "source": "actor-0",
+   "target": "actor-1",
+   "name": "PARTNERS_WITH",
+   "fact": "Oct-Nov 2025 one-year truce: China suspends rare-earth controls and pledges soybeans; US eases tech controls (AInvest; SCMP)."
+  },
+  {
+   "source": "actor-0",
+   "target": "actor-2",
+   "name": "REGULATES",
+   "fact": "BIS licensing of H20/Blackwell to China; Dec 2025 25%-revenue-share deal on high-end chip sales (FDD; CRS R48642)."
+  },
+  {
+   "source": "actor-2",
+   "target": "actor-0",
+   "name": "INFLUENCES",
+   "fact": "Nvidia lobbied to preserve China market access and accepted the revenue-share to regain it (Brookings)."
+  },
+  {
+   "source": "actor-2",
+   "target": "actor-3",
+   "name": "CUSTOMER_OF",
+   "fact": "Sole-scale advanced-node fabrication at TSMC gates all Nvidia shipments (TSMC Arizona)."
+  },
+  {
+   "source": "actor-2",
+   "target": "actor-11",
+   "name": "CUSTOMER_OF",
+   "fact": "HBM from SK Hynix/Samsung is required for every accelerator."
+  },
+  {
+   "source": "actor-4",
+   "target": "actor-2",
+   "name": "CUSTOMER_OF",
+   "fact": "GPU supply gates the ~$700B/yr buildout (CNBC Feb 2026)."
+  },
+  {
+   "source": "actor-4",
+   "target": "actor-2",
+   "name": "COMPETES_WITH",
+   "fact": "In-house ASICs (TPU/Trainium/MTIA/Maia) built to reduce Nvidia dependence."
+  },
+  {
+   "source": "actor-4",
+   "target": "actor-5",
+   "name": "FUNDS",
+   "fact": "Microsoft (with SoftBank and Oracle) anchors the $500B Stargate consortium (AI Wiki Stargate)."
+  },
+  {
+   "source": "actor-5",
+   "target": "actor-9",
+   "name": "COMPETES_WITH",
+   "fact": "Closed-frontier versus open-efficient models competing for global adoption (Brookings)."
+  },
+  {
+   "source": "actor-1",
+   "target": "actor-9",
+   "name": "BACKS",
+   "fact": "State support of the indigenous AI/chip stack as a tech-sovereignty instrument."
+  },
+  {
+   "source": "actor-0",
+   "target": "actor-9",
+   "name": "SANCTIONS",
+   "fact": "Export controls and entity-list additions aimed at capping Chinese compute (CRS R48642)."
+  },
+  {
+   "source": "actor-3",
+   "target": "actor-0",
+   "name": "INVESTS_IN",
+   "fact": "$165B Arizona commitment made under US industrial-policy pressure and incentives (CNBC Jan 2026; TSMC PR)."
+  },
+  {
+   "source": "actor-10",
+   "target": "actor-3",
+   "name": "CONSTRAINS",
+   "fact": "Home patron controlling leading-edge node retention (the silicon shield)."
+  },
+  {
+   "source": "actor-10",
+   "target": "actor-0",
+   "name": "ALLY_OF",
+   "fact": "Security alignment plus the 2026 US-Taiwan trade deal."
+  },
+  {
+   "source": "actor-1",
+   "target": "actor-10",
+   "name": "OPPOSES",
+   "fact": "Coercion risk over the chip chokepoint; the dominant tail risk to the AI supply chain."
+  },
+  {
+   "source": "actor-12",
+   "target": "actor-3",
+   "name": "SUPPLIES",
+   "fact": "EUV lithography tools required for leading-edge fabrication."
+  },
+  {
+   "source": "actor-12",
+   "target": "actor-9",
+   "name": "CONSTRAINS",
+   "fact": "EUV denial to SMIC caps China's ability to close the advanced-node gap (via Dutch/US controls)."
+  },
+  {
+   "source": "actor-0",
+   "target": "actor-6",
+   "name": "INFLUENCES",
+   "fact": "Executive pressure on the Fed to ease amid tariff inflation."
+  },
+  {
+   "source": "actor-6",
+   "target": "actor-4",
+   "name": "CONSTRAINS",
+   "fact": "Rate path sets the financing cost of the ~$700B capex boom (Reuters/Klement)."
+  },
+  {
+   "source": "actor-8",
+   "target": "actor-0",
+   "name": "REGULATES",
+   "fact": "SCOTUS 6-3 ruling struck down IEEPA tariffs Feb 20 2026, forcing statutory substitution (SCOTUS opinion; Tax Foundation)."
+  },
+  {
+   "source": "actor-7",
+   "target": "actor-4",
+   "name": "REGULATES",
+   "fact": "AI Act, DMA, and competition enforcement over US platform giants."
+  },
+  {
+   "source": "actor-0",
+   "target": "actor-7",
+   "name": "SANCTIONS",
+   "fact": "US tariff pressure plus bilateral deals with the EU."
+  },
+  {
+   "source": "actor-7",
+   "target": "actor-1",
+   "name": "DEPENDS_ON",
+   "fact": "Acute rare-earth/magnet dependence on China exposes the EU to coercion."
+  },
+  {
+   "source": "actor-5",
+   "target": "actor-13",
+   "name": "SUPPLIES",
+   "fact": "Sovereign-AI data centers built for Gulf buyers (UAE Stargate; HUMAIN-NVIDIA)."
+  },
+  {
+   "source": "actor-5",
+   "target": "actor-2",
+   "name": "CUSTOMER_OF",
+   "fact": "OpenAI/Stargate procures GPUs from Nvidia in interlocking vendor-financing arrangements."
+  },
+  {
+   "source": "actor-3",
+   "target": "actor-12",
+   "name": "DEPENDS_ON",
+   "fact": "TSMC's leading-edge processes depend on ASML EUV tools."
+  },
+  {
+   "source": "actor-0",
+   "target": "topic-0",
+   "name": "DISCUSSES",
+   "fact": "On Durability of the tariff regime after the SCOTUS IEEPA ruling — our position: Tariffs are leverage paid by foreigners; AI supremacy is a national-security imperative; deals over rules"
+  },
+  {
+   "source": "actor-1",
+   "target": "topic-1",
+   "name": "DISCUSSES",
+   "fact": "On AI capex supercycle versus bubble / bond-market financing strain — our position: Commitment to win-win trade and opposition to weaponizing supply chains while pursuing self-reliance"
+  },
+  {
+   "source": "actor-2",
+   "target": "topic-2",
+   "name": "DISCUSSES",
+   "fact": "On US-China chip export controls and the 25% revenue-share model — our position: Supports American AI leadership but lobbies to keep every market including China open; controls should be narrow"
+  },
+  {
+   "source": "actor-3",
+   "target": "topic-3",
+   "name": "DISCUSSES",
+   "fact": "On Rare-earth/magnet chokepoint and the Nov 27 2026 truce expiry — our position: Customer neutrality and commitment to Taiwan as tech heart, while hedging via a US footprint"
+  },
+  {
+   "source": "actor-4",
+   "target": "topic-4",
+   "name": "DISCUSSES",
+   "fact": "On Semiconductor reshoring and Taiwan concentration risk — our position: AI demand is insatiable and spending is disciplined; owning the full stack is strategic"
+  },
+  {
+   "source": "actor-5",
+   "target": "topic-5",
+   "name": "DISCUSSES",
+   "fact": "On Wide-but-shallow AI adoption and small near-term productivity gains — our position: Safe AGI for humanity while racing to lock up compute and sovereign geographic deals"
+  },
+  {
+   "source": "actor-6",
+   "target": "topic-6",
+   "name": "DISCUSSES",
+   "fact": "On Sovereign AI and state equity in strategic chip firms — our position: Data-dependent and apolitical; treats tariff price effects as arguably transitory"
+  },
+  {
+   "source": "actor-8",
+   "target": "topic-7",
+   "name": "DISCUSSES",
+   "fact": "On Data-center energy demand as the binding compute input — our position: Constitutional limits and separation of powers; SCOTUS ruled IEEPA does not authorize tariffs"
+  },
+  {
+   "source": "actor-9",
+   "target": "topic-8",
+   "name": "DISCUSSES",
+   "fact": "On Connector economies and statistical vs. real decoupling — our position: Open research and self-reliance; algorithmic efficiency beats brute-force compute hoarding"
+  },
+  {
+   "source": "actor-7",
+   "target": "topic-0",
+   "name": "DISCUSSES",
+   "fact": "On Durability of the tariff regime after the SCOTUS IEEPA ruling — our position: Strategic autonomy and open trade, negotiating to avoid US tariffs while under-building compute"
+  },
+  {
+   "source": "event-0",
+   "target": "actor-1",
+   "name": "MENTIONS",
+   "fact": "China imposes gallium/germanium export licensing - the first mercantilist counter-chokepoint."
+  },
+  {
+   "source": "event-1",
+   "target": "actor-1",
+   "name": "MENTIONS",
+   "fact": "China escalates to a full gallium/germanium embargo on US shipments; gallium later hits $687/kg (+150%) by May 2025."
+  },
+  {
+   "source": "event-2",
+   "target": "actor-5",
+   "name": "MENTIONS",
+   "fact": "Stargate ($500B US AI infrastructure JV) announced; Biden AI Diffusion Rule tiers global chip access."
+  },
+  {
+   "source": "event-3",
+   "target": "actor-9",
+   "name": "MENTIONS",
+   "fact": "DeepSeek ships a frontier-class efficient open model, disconfirming the compute-hoarding thesis."
+  },
+  {
+   "source": "event-4",
+   "target": "actor-3",
+   "name": "MENTIONS",
+   "fact": "TSMC announces +$100B additional US investment (to $165B total)."
+  },
+  {
+   "source": "event-7",
+   "target": "actor-1",
+   "name": "MENTIONS",
+   "fact": "BIS approves H20 (Nvidia) and MI308 (AMD) for China on a case-by-case basis."
+  },
+  {
+   "source": "event-7",
+   "target": "actor-2",
+   "name": "MENTIONS",
+   "fact": "BIS approves H20 (Nvidia) and MI308 (AMD) for China on a case-by-case basis."
+  },
+  {
+   "source": "event-9",
+   "target": "actor-1",
+   "name": "MENTIONS",
+   "fact": "China tightens rare-earth/magnet export controls."
+  },
+  {
+   "source": "event-10",
+   "target": "actor-1",
+   "name": "MENTIONS",
+   "fact": "Trump-Xi one-year truce: China suspends new rare-earth controls (to Nov 27 2026), pledges soybeans; US eases tech controls."
+  },
+  {
+   "source": "event-12",
+   "target": "actor-1",
+   "name": "MENTIONS",
+   "fact": "Trump announces Commerce will allow Nvidia high-end chip sales to China for a 25% US revenue stake."
+  },
+  {
+   "source": "event-12",
+   "target": "actor-2",
+   "name": "MENTIONS",
+   "fact": "Trump announces Commerce will allow Nvidia high-end chip sales to China for a 25% US revenue stake."
+  },
+  {
+   "source": "event-13",
+   "target": "actor-3",
+   "name": "MENTIONS",
+   "fact": "TSMC accelerates Arizona expansion post US-Taiwan trade deal."
+  },
+  {
+   "source": "event-13",
+   "target": "actor-10",
+   "name": "MENTIONS",
+   "fact": "TSMC accelerates Arizona expansion post US-Taiwan trade deal."
+  },
+  {
+   "source": "actor-13",
+   "target": "prior-4",
+   "name": "MENTIONS",
+   "fact": "Trade-diversion beneficiaries and sovereign-AI buyers hedging between the two blocs Position as China+1 friend-shoring hubs and sovereign-compute buyers while avoiding picking sides Middle-power connector economies (India, Vietnam, Mexico, Gulf states/UAE, Saudi Arabia/HUMAIN) capturing rerouted trade and sovereign-AI investment."
+  },
+  {
+   "source": "actor-9",
+   "target": "prior-5",
+   "name": "MENTIONS",
+   "fact": "algorithmic efficiency beats brute-force compute hoarding DeepSeek, the Chinese frontier-efficient open-weight AI lab, together with its domestic silicon backers Huawei (Ascend) and SMIC."
+  },
+  {
+   "source": "actor-11",
+   "target": "prior-6",
+   "name": "MENTIONS",
+   "fact": "allied-with-friction with US export policy Samsung Electronics and SK Hynix, the dominant suppliers of high-bandwidth memory (HBM) essential to AI accelerators."
+  },
+  {
+   "source": "actor-9",
+   "target": "prior-9",
+   "name": "MENTIONS",
+   "fact": "algorithmic efficiency beats brute-force compute hoarding DeepSeek, the Chinese frontier-efficient open-weight AI lab, together with its domestic silicon backers Huawei (Ascend) and SMIC."
+  },
+  {
+   "source": "actor-11",
+   "target": "prior-11",
+   "name": "MENTIONS",
+   "fact": "allied-with-friction with US export policy Samsung Electronics and SK Hynix, the dominant suppliers of high-bandwidth memory (HBM) essential to AI accelerators."
+  },
+  {
+   "source": "actor-9",
+   "target": "prior-12",
+   "name": "MENTIONS",
+   "fact": "algorithmic efficiency beats brute-force compute hoarding DeepSeek, the Chinese frontier-efficient open-weight AI lab, together with its domestic silicon backers Huawei (Ascend) and SMIC."
+  },
+  {
+   "source": "actor-3",
+   "target": "prior-17",
+   "name": "MENTIONS",
+   "fact": "flagship of Western reshoring policy Customer neutrality and commitment to Taiwan as tech heart, while hedging via a US footprint TSMC, the Taiwanese contract foundry making the overwhelming majority of the world's leading-edge chips, with a $165B US (Arizona) commitment."
+  },
+  {
+   "source": "actor-4",
+   "target": "prior-19",
+   "name": "MENTIONS",
+   "fact": "owning the full stack is strategic The four US cloud/AI platform giants (Amazon/AWS, Microsoft, Alphabet/Google, Meta) funding the ~$700B/yr AI infrastructure buildout, modeled as a bloc."
+  },
+  {
+   "source": "actor-13",
+   "target": "prior-21",
+   "name": "MENTIONS",
+   "fact": "Trade-diversion beneficiaries and sovereign-AI buyers hedging between the two blocs Position as China+1 friend-shoring hubs and sovereign-compute buyers while avoiding picking sides Middle-power connector economies (India, Vietnam, Mexico, Gulf states/UAE, Saudi Arabia/HUMAIN) capturing rerouted trade and sovereign-AI investment."
+  },
+  {
+   "source": "actor-10",
+   "target": "prior-24",
+   "name": "MENTIONS",
+   "fact": "Steward of the silicon shield and home constraint on TSMC's overseas expansion Preserve deterrence and keep leading-edge nodes at home while deepening US ties Taiwan's government (ROC / MOEA), steward of the silicon shield and TSMC's home constraint."
+  },
+  {
+   "source": "actor-4",
+   "target": "prior-26",
+   "name": "MENTIONS",
+   "fact": "owning the full stack is strategic The four US cloud/AI platform giants (Amazon/AWS, Microsoft, Alphabet/Google, Meta) funding the ~$700B/yr AI infrastructure buildout, modeled as a bloc."
+  },
+  {
+   "source": "actor-9",
+   "target": "prior-32",
+   "name": "MENTIONS",
+   "fact": "algorithmic efficiency beats brute-force compute hoarding DeepSeek, the Chinese frontier-efficient open-weight AI lab, together with its domestic silicon backers Huawei (Ascend) and SMIC."
+  },
+  {
+   "source": "actor-4",
+   "target": "prior-34",
+   "name": "MENTIONS",
+   "fact": "owning the full stack is strategic The four US cloud/AI platform giants (Amazon/AWS, Microsoft, Alphabet/Google, Meta) funding the ~$700B/yr AI infrastructure buildout, modeled as a bloc."
+  },
+  {
+   "source": "actor-13",
+   "target": "prior-35",
+   "name": "MENTIONS",
+   "fact": "Trade-diversion beneficiaries and sovereign-AI buyers hedging between the two blocs Position as China+1 friend-shoring hubs and sovereign-compute buyers while avoiding picking sides Middle-power connector economies (India, Vietnam, Mexico, Gulf states/UAE, Saudi Arabia/HUMAIN) capturing rerouted trade and sovereign-AI investment."
+  },
+  {
+   "source": "actor-8",
+   "target": "prior-39",
+   "name": "MENTIONS",
+   "fact": "SCOTUS ruled IEEPA does not authorize tariffs The US legislative (Congress) and judicial (Supreme Court) branches that can validate, void, or codify the tariff/chip regime."
+  },
+  {
+   "source": "actor-13",
+   "target": "prior-43",
+   "name": "MENTIONS",
+   "fact": "Trade-diversion beneficiaries and sovereign-AI buyers hedging between the two blocs Position as China+1 friend-shoring hubs and sovereign-compute buyers while avoiding picking sides Middle-power connector economies (India, Vietnam, Mexico, Gulf states/UAE, Saudi Arabia/HUMAIN) capturing rerouted trade and sovereign-AI investment."
+  },
+  {
+   "source": "actor-4",
+   "target": "prior-45",
+   "name": "MENTIONS",
+   "fact": "owning the full stack is strategic The four US cloud/AI platform giants (Amazon/AWS, Microsoft, Alphabet/Google, Meta) funding the ~$700B/yr AI infrastructure buildout, modeled as a bloc."
+  },
+  {
+   "source": "actor-11",
+   "target": "prior-48",
+   "name": "MENTIONS",
+   "fact": "Dominant HBM and memory suppliers forming a hard chokepoint on every AI accelerator Defend the memory franchise;"
+  },
+  {
+   "source": "actor-5",
+   "target": "prior-51",
+   "name": "MENTIONS",
+   "fact": "Leading US frontier-model lab anchoring the largest single AI-infrastructure program ($500B Stargate) Safe AGI for humanity while racing to lock up compute and sovereign geographic deals OpenAI, the leading US frontier-model lab, and its flagship $500B Stargate data-center consortium with SoftBank and Oracle."
+  },
+  {
+   "source": "actor-7",
+   "target": "prior-53",
+   "name": "MENTIONS",
+   "fact": "Rule-maker and would-be third pole, caught between US tariffs and Chinese mineral coercion Strategic autonomy and open trade, negotiating to avoid US tariffs while under-building compute The European Union (Commission plus member states) as a trade bloc and rule-maker pursuing digital/strategic sovereignty via InvestAI."
+  },
+  {
+   "source": "actor-0",
+   "target": "prior-54",
+   "name": "MENTIONS",
+   "fact": "deals over rules The US executive branch under President Donald Trump's second term, driving tariff and AI-chip policy by executive authority (IEEPA, Section 122/232/301, BIS/Commerce)."
+  },
+  {
+   "source": "actor-3",
+   "target": "prior-56",
+   "name": "MENTIONS",
+   "fact": "flagship of Western reshoring policy Customer neutrality and commitment to Taiwan as tech heart, while hedging via a US footprint TSMC, the Taiwanese contract foundry making the overwhelming majority of the world's leading-edge chips, with a $165B US (Arizona) commitment."
+  },
+  {
+   "source": "actor-13",
+   "target": "prior-59",
+   "name": "MENTIONS",
+   "fact": "Trade-diversion beneficiaries and sovereign-AI buyers hedging between the two blocs Position as China+1 friend-shoring hubs and sovereign-compute buyers while avoiding picking sides Middle-power connector economies (India, Vietnam, Mexico, Gulf states/UAE, Saudi Arabia/HUMAIN) capturing rerouted trade and sovereign-AI investment."
+  },
+  {
+   "source": "actor-2",
+   "target": "prior-60",
+   "name": "MENTIONS",
+   "fact": "sits at the center of interlocking vendor financing with OpenAI/Oracle/CoreWeave."
+  },
+  {
+   "source": "actor-5",
+   "target": "prior-61",
+   "name": "MENTIONS",
+   "fact": "Leading US frontier-model lab anchoring the largest single AI-infrastructure program ($500B Stargate) Safe AGI for humanity while racing to lock up compute and sovereign geographic deals OpenAI, the leading US frontier-model lab, and its flagship $500B Stargate data-center consortium with SoftBank and Oracle."
+  },
+  {
+   "source": "actor-1",
+   "target": "prior-65",
+   "name": "MENTIONS",
+   "fact": "Rival mercantilist state controlling the rare-earth/magnet chokepoint and building a parallel AI/chip stack Commitment to win-win trade and opposition to weaponizing supply chains while pursuing self-reliance The Chinese party-state (State Council, MOFCOM) directing trade retaliation, rare-earth policy, and indigenous AI/chip development."
+  },
+  {
+   "source": "actor-1",
+   "target": "prior-71",
+   "name": "MENTIONS",
+   "fact": "Rival mercantilist state controlling the rare-earth/magnet chokepoint and building a parallel AI/chip stack Commitment to win-win trade and opposition to weaponizing supply chains while pursuing self-reliance The Chinese party-state (State Council, MOFCOM) directing trade retaliation, rare-earth policy, and indigenous AI/chip development."
+  },
+  {
+   "source": "actor-0",
+   "target": "prior-74",
+   "name": "MENTIONS",
+   "fact": "deals over rules The US executive branch under President Donald Trump's second term, driving tariff and AI-chip policy by executive authority (IEEPA, Section 122/232/301, BIS/Commerce)."
+  }
+ ],
+ "graph_id": "demo_collision-decade-2031"
+}

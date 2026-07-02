@@ -37,7 +37,13 @@ def commitments_from_decisions(
     """Turn raw per-agent decisions into resource-weighted commitments for ``step``.
 
     Each decision: ``{agent_id, scenario, magnitude, confidence}``. The commitment
-    weight = (agent resource/influence weight, default 1.0) × confidence. Pure.
+    weight = (outcome power on the result, default 1.0) × confidence. Pure.
+
+    R2-SIM-2: the weight that moves the modeled OUTCOME is the agent's *outcome power*
+    (structural/resource leverage over the result), NOT its voice/activation influence.
+    Resolution order per decision: explicit ``outcome_power`` on the decision →
+    ``weight_by_agent[agent_id]`` (a power map the caller may still pass) → 1.0. An empty
+    / abstaining ``scenario`` contributes nothing (R2-CAL-13/SIM-9 abstention).
     """
     out: List[Dict[str, Any]] = []
     wmap = weight_by_agent or {}
@@ -53,9 +59,12 @@ def commitments_from_decisions(
         except (TypeError, ValueError):
             continue
         conf = max(0.0, min(1.0, conf))
-        base_w = wmap.get(d.get("agent_id"), 1.0)
+        # R2-SIM-2: prefer per-decision outcome_power; fall back to the supplied map.
+        power = d.get("outcome_power")
+        if power is None:
+            power = wmap.get(d.get("agent_id"), 1.0)
         try:
-            base_w = max(0.0, float(base_w))
+            base_w = max(0.0, float(power))
         except (TypeError, ValueError):
             base_w = 1.0
         out.append({"scenario": sc, "magnitude": mag, "weight": base_w * conf})
@@ -80,19 +89,31 @@ class WorldState:
                 seed[s] = float((base_rates or {}).get(s, 0.0) or 0.0)
             except (TypeError, ValueError):
                 seed[s] = 0.0
-        if sum(seed.values()) <= 0:  # no usable base rates → uniform prior
+        # R2-CAL-13/SIM-9: distinguish a genuinely seeded prior from a fabricated
+        # uniform one so a forecaster can flag "uniform_prior" instead of silently
+        # treating 50/50 as evidence.
+        self.uniform_prior = sum(seed.values()) <= 0
+        if self.uniform_prior:  # no usable base rates → uniform prior
             seed = dict.fromkeys(self.scenarios, 1.0)
         self.shares = _norm_shares(seed)
         self.history: List[Dict[str, float]] = [dict(self.shares)]
         self._last_delta = 1.0
         self._ewma_delta = 1.0
+        # P1-4: round at which the trajectory settled (set by the orchestration loop).
+        self.converged_at: Optional[int] = None
 
-    def step(self, commitments: List[Dict[str, Any]]) -> Dict[str, float]:
+    def step(self, commitments: List[Dict[str, Any]],
+             inertia: Optional[float] = None) -> Dict[str, float]:
         """Evolve one round: aggregate resource-weighted commitments into a target
         distribution, blend with the prior by ``inertia``. No commitments → unchanged.
+
+        R2-SIM-12: ``inertia`` may be overridden per round (e.g. scaled by the calendar
+        gap between rounds) — ``None`` keeps the instance default so existing callers
+        and the no-date path are byte-identical.
         """
         if not self.scenarios:
             return {}
+        eff_inertia = self.inertia if inertia is None else max(0.0, min(1.0, float(inertia)))
         votes: Dict[str, float] = dict.fromkeys(self.scenarios, 0.0)
         for c in commitments or []:
             if not isinstance(c, dict):
@@ -107,7 +128,7 @@ class WorldState:
                 continue
         if sum(votes.values()) > 0:
             target = _norm_shares(votes)
-            blended = {s: self.inertia * self.shares[s] + (1.0 - self.inertia) * target[s]
+            blended = {s: eff_inertia * self.shares[s] + (1.0 - eff_inertia) * target[s]
                        for s in self.scenarios}
             new = _norm_shares(blended)
         else:
@@ -135,4 +156,6 @@ class WorldState:
             "rounds": max(0, len(self.history) - 1),
             "ewma_delta": self._ewma_delta,
             "converged": self.converged(),
+            "converged_at": self.converged_at,   # P1-4 (set by the loop; None until settled)
+            "uniform_prior": self.uniform_prior,  # R2-CAL-13/SIM-9
         }

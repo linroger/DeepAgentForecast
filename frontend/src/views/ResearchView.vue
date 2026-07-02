@@ -310,6 +310,23 @@ let pollFailures = 0
 let connErrorShown = false
 const POLL_FAILURE_THRESHOLD = 4 // 连续 4 次（约 10s）轮询失败才提示，容忍偶发抖动
 
+// FE-1: 自适应轮询 —— 状态未变化时把间隔从 2.5s 逐步拉到 12s，标签页隐藏时暂停，
+// 重新可见时立即拉一次。降低长管线（数小时）空转时的后端/网络负载。
+const POLL_MIN_MS = 2500
+const POLL_MAX_MS = 12000
+let pollActive = false          // 轮询是否处于活动状态（避免隐藏/终态后被定时器重新唤醒）
+let pollDelay = POLL_MIN_MS     // 当前自适应间隔
+let lastFingerprint = ''        // 上一次轮询观测到的状态指纹，用于判定"有无变化"
+let visibilityHandler = null    // visibilitychange 监听器引用，便于卸载时移除
+
+// 计算一份轻量状态指纹：状态/进度/当前阶段/各阶段状态/日志行数。任一变化即视为"有进展"。
+function pollFingerprint() {
+  const stageSig = Object.keys(stages.value || {})
+    .map(k => `${k}:${stages.value[k] && stages.value[k].status}`)
+    .join('|')
+  return `${status.value}#${globalProgress.value}#${currentStage.value}#${stageSig}#${logLines.value.length}`
+}
+
 function stageLabel(name) {
   return {
     research: L('深度研究', 'Research'), ontology: L('本体生成', 'Ontology'), graph: L('知识图谱', 'Graph'),
@@ -419,8 +436,54 @@ async function resume() {
   }
 }
 
-function startPolling() { stopPolling(); pollTimer = setInterval(poll, 2500); poll() }
-function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } }
+// FE-1: 用自重排的 setTimeout 取代固定 setInterval，使间隔可随"有无进展"自适应。
+function startPolling() {
+  stopPolling()
+  pollActive = true
+  pollDelay = POLL_MIN_MS
+  lastFingerprint = ''
+  if (!visibilityHandler) {
+    visibilityHandler = () => {
+      if (!pollActive) return
+      if (!document.hidden) {
+        // 重新可见：复位为快节奏并立即拉一次，避免回到页面看到陈旧状态。
+        pollDelay = POLL_MIN_MS
+        scheduleNext(0)
+      }
+    }
+    document.addEventListener('visibilitychange', visibilityHandler)
+  }
+  scheduleNext(0)
+}
+
+function stopPolling() {
+  pollActive = false
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
+  if (visibilityHandler) {
+    document.removeEventListener('visibilitychange', visibilityHandler)
+    visibilityHandler = null
+  }
+}
+
+// 安排下一次轮询；隐藏标签页时不发起网络请求（暂停），仅保留一个慢心跳兜底，
+// 防止极少数情况下 visibilitychange 事件丢失导致永不恢复。
+function scheduleNext(delay) {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
+  if (!pollActive) return
+  pollTimer = setTimeout(runPoll, delay)
+}
+
+async function runPoll() {
+  if (!pollActive) return
+  if (typeof document !== 'undefined' && document.hidden) {
+    // 暂停：标签页不可见时跳过实际请求，留一个 POLL_MAX_MS 的兜底心跳。
+    scheduleNext(POLL_MAX_MS)
+    return
+  }
+  await poll()
+  if (!pollActive) return  // poll() 命中终态/404 时会调用 stopPolling()
+  scheduleNext(pollDelay)
+}
 
 async function poll() {
   if (!pipelineId.value) return
@@ -444,6 +507,15 @@ async function poll() {
     if (d.simulation_id) simulationId.value = d.simulation_id
     if (d.report_id) reportId.value = d.report_id
     if (lg) logLines.value = (lg.data && lg.data.lines) || []
+
+    // FE-1: 有进展则复位为快节奏，连续无变化则把间隔向 POLL_MAX_MS 拉升（~1.5x 阶梯）。
+    const fp = pollFingerprint()
+    if (fp !== lastFingerprint) {
+      pollDelay = POLL_MIN_MS
+    } else {
+      pollDelay = Math.min(POLL_MAX_MS, Math.round(pollDelay * 1.5))
+    }
+    lastFingerprint = fp
 
     const researchDone = stages.value.research && stages.value.research.status === 'completed'
     if (researchDone && !dossierFetched) {

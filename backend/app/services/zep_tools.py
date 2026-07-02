@@ -8,6 +8,7 @@ Zep检索工具服务
 3. QuickSearch（简单搜索）- 快速检索
 """
 
+import re
 import time
 import json
 import threading
@@ -30,6 +31,45 @@ from ..utils.zep_rate_limit import is_zep_rate_limit_error, zep_retry_delay_seco
 from ..utils.dates import parse_as_of
 
 logger = get_logger('mirofish.zep_tools')
+
+
+def compact_graph_query(text: str, max_chars: int = 350) -> str:
+    """RPT-8/XRUN-5: 把整段需求书压成可用于图谱检索的紧凑查询（确定性，无 LLM）。
+
+    整段 3388 字的预测需求书被当作 query 时，clamp 只保留开头的修辞性引言，检索
+    从此锚定在「Two seismic forces …」而非真正的核心问题。这里按句界取前缀（避免
+    截在半句中间），供调用方在把长文档当查询前先行压缩。文本不超限时原样返回。
+    """
+    t = " ".join(str(text or "").split())
+    if len(t) <= max_chars:
+        return t
+    head = t[:max_chars]
+    for sep in ("。", ". ", "! ", "? ", "！", "？", "；", "; "):
+        idx = head.rfind(sep)
+        if idx >= 40:  # 句界太靠前则弃用（避免只剩一个短标题）
+            return head[:idx + len(sep)].strip()
+    return (head.rsplit(" ", 1)[0] or head).strip()
+
+
+def _semantic_clamp_query(query: str, max_chars: int) -> str:
+    """KG-2: 语义保全式钳制——保留前缀 + 从被截尾部提取专名/数字 token 补进预算内，
+    使尾部实体名与阈值数字在嵌入与 BM25 两条腿上都存活，而非被盲切丢弃。纯函数。"""
+    head_budget = max(80, int(max_chars * 0.7))
+    head = query[:head_budget].rsplit(" ", 1)[0] or query[:head_budget]
+    tail = query[len(head):]
+    # 专名（大写开头的词）与数字/年份 token；CJK 文本无大小写，数字仍可提取
+    toks = re.findall(r"[A-Z][A-Za-z0-9\-\.]{2,}|\d[\d.,/%]*", tail)
+    seen: set = set()
+    out = head
+    for t in toks:
+        tl = t.lower()
+        if tl in seen:
+            continue
+        seen.add(tl)
+        if len(out) + 1 + len(t) > max_chars:
+            break
+        out += " " + t
+    return out
 
 
 @dataclass
@@ -598,6 +638,21 @@ class ZepToolsService:
         Returns:
             SearchResult: 搜索结果
         """
+        # QUALITY-OPT (a90b) + KG-2: 查询长度钳制。380 的紧限是 Zep Cloud 的 ~400 字符 400
+        # 残留——本地 Graphiti/FalkorDB 没有该限制，盲用 380 会把 3388 字的需求书砍到只剩
+        # 开头修辞句（嵌入与 BM25 都只见第一句）。默认改为：远端 Zep 380 / 本地 1200，可经
+        # GRAPH_QUERY_MAX_CHARS 覆盖（0=自动）。仍超限时做语义保全钳制（前缀+尾部专名/数字
+        # token），GRAPH_QUERY_CLAMP_SEMANTIC=False 回退旧的纯前缀切法。
+        _default_max = 380 if getattr(Config, "GRAPHITI_REMOTE", False) else 1200
+        _max_q = int(getattr(Config, "GRAPH_QUERY_MAX_CHARS", 0) or 0) or _default_max
+        if isinstance(query, str) and len(query) > _max_q:
+            _orig_len = len(query)
+            if getattr(Config, "GRAPH_QUERY_CLAMP_SEMANTIC", True):
+                query = _semantic_clamp_query(query, _max_q)
+                logger.info(f"图谱搜索 query 过长（{_orig_len}>{_max_q}），已压缩至 {len(query)} 字符（保留前缀+尾部实体词）")
+            else:
+                query = query[:_max_q].rsplit(" ", 1)[0] or query[:_max_q]
+                logger.info(f"图谱搜索 query 过长（{_orig_len}>{_max_q}），截断至 {len(query)} 字符")
         logger.info(f"图谱搜索: graph_id={graph_id}, query={query[:50]}...")
 
         # I-6-1: 命中跨 section 检索缓存则直接返回拷贝（避免调用方修改污染缓存）。
@@ -1369,7 +1424,8 @@ class ZepToolsService:
         self,
         graph_id: str,
         simulation_requirement: str,
-        limit: int = 30
+        limit: int = 30,
+        search_query: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         获取模拟相关的上下文信息
@@ -1380,16 +1436,20 @@ class ZepToolsService:
             graph_id: 图谱ID
             simulation_requirement: 模拟需求描述
             limit: 每类信息的数量限制
+            search_query: RPT-8/XRUN-5 可选的紧凑检索查询。整段需求书作 query 会被长度
+                钳制砍到只剩开头修辞句；调用方可传入预蒸馏的紧凑查询用于图谱检索，
+                simulation_requirement 仍原样回显在返回值中。缺省 None → 行为与历史一致。
 
         Returns:
             模拟上下文信息
         """
-        logger.info(f"获取模拟上下文: {simulation_requirement[:50]}...")
+        _q = (search_query or "").strip() or simulation_requirement
+        logger.info(f"获取模拟上下文: {_q[:50]}...")
 
         # 搜索与模拟需求相关的信息
         search_result = self.search_graph(
             graph_id=graph_id,
-            query=simulation_requirement,
+            query=_q,
             limit=limit
         )
 
@@ -1590,6 +1650,55 @@ class ZepToolsService:
         result.entity_insights = entity_insights
         result.total_entities = len(entity_insights)
 
+        # R2-KG-9: 追加一次 node-scope 混合检索，把节点摘要直接折叠进 entity_insights。
+        # 边检索（scope="edges"）只能触达「有出/入边」的实体；摘要丰富但少边的关键节点
+        # （如刚被提及的机构、概念性 actor）会被漏掉。node-scope 检索按原始 query 召回这些
+        # 节点，去重后补进洞察集；节点摘要经 MMR 冗余抑制（_mmr_enabled 时语义去冗，否则精确
+        # 去重）避免与已有实体重复。全程 try/except，失败跳过，保持现有行为不变。
+        node_scope_names: List[str] = []
+        try:
+            node_search = self.search_graph(
+                graph_id=graph_id, query=query, limit=10, scope="nodes",
+                recipe=recipe, search_filter=as_of_filter,
+            )
+            existing_uuids = {ei.get("uuid") for ei in entity_insights if ei.get("uuid")}
+            existing_names = {(ei.get("name") or "").strip().lower()
+                              for ei in entity_insights if ei.get("name")}
+            candidates: List[tuple] = []  # (node_dict, summary_blob)
+            for nd in node_search.nodes:
+                nm = str(nd.get("name", "") or "").strip()
+                summ = str(nd.get("summary", "") or "").strip()
+                uid = nd.get("uuid") or ""
+                if not nm or not summ:
+                    continue
+                if (uid and uid in existing_uuids) or nm.lower() in existing_names:
+                    continue
+                candidates.append((nd, f"[{nm}]: {summ}"))
+            # MMR/精确去重补充节点摘要，去掉与彼此语义近重复的条目。
+            kept_blobs = set(self._dedupe_facts_mmr([blob for _, blob in candidates]))
+            for nd, blob in candidates:
+                if blob not in kept_blobs:
+                    continue
+                nm = str(nd.get("name", "")).strip()
+                if nm.lower() in existing_names:  # 防止本批内重名重复
+                    continue
+                labels = nd.get("labels") or []
+                entity_type = next((l for l in labels if l not in ["Entity", "Node"]), "实体")
+                entity_insights.append({
+                    "uuid": nd.get("uuid") or "",
+                    "name": nm,
+                    "type": entity_type,
+                    "summary": str(nd.get("summary", "") or ""),
+                    "related_facts": [f for f in all_facts if nm.lower() in f.lower()],
+                })
+                existing_names.add(nm.lower())
+                node_scope_names.append(nm)
+            if node_scope_names:
+                result.total_entities = len(entity_insights)
+                logger.info(f"InsightForge: node-scope 检索折叠 {len(node_scope_names)} 个补充实体")
+        except Exception as exc:  # noqa: BLE001  node-scope 是增强项，失败不影响主流程
+            logger.debug(f"InsightForge node-scope 检索跳过（不影响报告）: {exc}")
+
         # Step 4: 构建所有关系链（不限制数量）
         relationship_chains = []
         for edge_data in all_edges:  # 处理所有边，不截断
@@ -1620,7 +1729,8 @@ class ZepToolsService:
         self.record_coverage(
             graph_id,
             entity_uuids=list(node_map.keys()),
-            entity_names=[n.name for n in node_map.values() if n.name],
+            # R2-KG-9: node-scope 补充实体也计入覆盖度，避免低估触达面。
+            entity_names=[n.name for n in node_map.values() if n.name] + node_scope_names,
             edge_types=[
                 e.get("name", "") for e in all_edges if isinstance(e, dict) and e.get("name")
             ],
@@ -1680,12 +1790,14 @@ class ZepToolsService:
 
         except Exception as e:
             logger.warning(f"生成子问题失败: {str(e)}，使用默认子问题")
-            # 降级：返回基于原问题的变体
+            # 降级：返回基于原问题的变体。RPT-8：超长原问题（如整段需求书）的四个变体
+            # 会在检索钳制时被切成同一段前缀，先压缩再派生变体，变体才有区分度。
+            base = compact_graph_query(query, 300)
             return [
-                query,
-                f"{query} 的主要参与者",
-                f"{query} 的原因和影响",
-                f"{query} 的发展过程"
+                base,
+                f"{base} 的主要参与者",
+                f"{base} 的原因和影响",
+                f"{base} 的发展过程"
             ][:max_queries]
 
     def panorama_search(
@@ -2473,10 +2585,133 @@ class ZepToolsService:
             if members:
                 shown = "、".join(str(m) for m in members[:20])
                 lines.append(f"成员: {shown}" + ("…" if len(members) > 20 else ""))
+        # R2-KG-11: 追加确定性的社区间张力矩阵（跨界边按极性加权）。失败 → 不追加（degrade-safe）。
+        tension_lines = self._inter_community_tension(graph_id, communities)
+        if tension_lines:
+            lines.extend(tension_lines)
         return "\n".join(lines)
+
+    def _inter_community_tension(self, graph_id: str,
+                                 communities: List[Dict[str, Any]]) -> List[str]:
+        """R2-KG-11: 确定性的「社区间张力矩阵」——把跨社区边按关系极性
+        （actors.relation_polarity，allied→正 / adversarial→负）加权汇总，给报告
+        「派系 A 与派系 B 整体对抗还是结盟」的图谱级证据（互补于派系内部的成员清单）。
+        纯聚合无 LLM；读图失败或无跨界边 → 返回 []（faction_brief 照常输出，degrade-safe）。"""
+        try:
+            from ..utils.actors import normalize_name, relation_polarity
+            # 只取有成员的前若干社区，避免社区极多时 O(K^2) 渲染爆炸。
+            comms = [c for c in (communities or []) if (c.get("members") or [])][:12]
+            if len(comms) < 2:
+                return []
+            # 标准化成员名 → 社区下标（重名归最先出现的社区，保持确定性）。
+            member_to_comm: Dict[str, int] = {}
+            for idx, c in enumerate(comms):
+                for m in (c.get("members") or []):
+                    nm = normalize_name(str(m))
+                    if nm and nm not in member_to_comm:
+                        member_to_comm[nm] = idx
+            if not member_to_comm:
+                return []
+            nodes = self.get_all_nodes(graph_id)
+            uuid_to_norm = {n.uuid: normalize_name(n.name)
+                            for n in nodes if n.uuid and n.name}
+            edges = self.get_all_edges(graph_id)
+            # (min社区,max社区) → [净极性累计, 跨界边数, 负向边数]
+            pair_stats: Dict[tuple, List[float]] = {}
+            for e in edges:
+                sn = uuid_to_norm.get(e.source_node_uuid)
+                tn = uuid_to_norm.get(e.target_node_uuid)
+                if not sn or not tn:
+                    continue
+                ci = member_to_comm.get(sn)
+                cj = member_to_comm.get(tn)
+                if ci is None or cj is None or ci == cj:
+                    continue
+                pol = relation_polarity({"type": e.name})
+                key = (min(ci, cj), max(ci, cj))
+                st = pair_stats.setdefault(key, [0.0, 0, 0])
+                st[0] += pol
+                st[1] += 1
+                if pol < 0:
+                    st[2] += 1
+            if not pair_stats:
+                return []
+
+            def _cname(i: int) -> str:
+                return comms[i].get("name") or f"社区{i + 1}"
+
+            # 净极性越负越靠前（最对抗的派系对置顶），再以边数稳定排序。
+            ordered = sorted(pair_stats.items(), key=lambda kv: (kv[1][0], -kv[1][1]))
+            lines = ["", "### 社区间张力矩阵（跨界边按关系极性加权，确定性）"]
+            for (i, j), (net, cnt, neg) in ordered[:12]:
+                if net < -0.05:
+                    tag = "对抗"
+                elif net > 0.05:
+                    tag = "结盟"
+                else:
+                    tag = "中性/混合"
+                lines.append(
+                    f"- {_cname(i)} ↔ {_cname(j)}: {cnt} 条跨界边，净极性 {net:+.2f}"
+                    f"（{neg} 条负向）→ {tag}"
+                )
+            return lines
+        except Exception as exc:  # noqa: BLE001  张力矩阵是增强项，失败不影响 faction_brief
+            logger.debug(f"inter-community tension 跳过（不影响 faction_brief）: {exc}")
+            return []
 
     # NEXTSTEPS P3-6: 多跳传导/级联追踪（图谱原生结构推理，互补于 1-hop 检索）。
     _CAUSAL_EDGE_NAMES = ["CAUSES", "ENABLES", "CONSTRAINS", "TRIGGERS", "ACCELERATES"]
+
+    def _resolve_entity_name(self, graph_id: str, name: str) -> str:
+        """R2-KG-2: 把工具/LLM 传入的实体名解析为图谱里实际存在的规范节点名，供
+        trace_cascade 的精确 `a.name = $src` Cypher 匹配使用（否则大小写/空格/公司后缀
+        的细微差异会让多跳查询无谓地返回空）。解析顺序对齐 actors.match_actor 语义：
+        标准化精确匹配 → 双向包含（取较长名，避免「AI」类短名误配）。无命中或读取失败 →
+        原样返回（degrade-safe，绝不因解析失败而阻断遍历）。"""
+        raw = (name or "").strip()
+        if not raw:
+            return raw
+        try:
+            from ..utils.actors import normalize_name
+            nodes = self.get_all_nodes(graph_id)
+        except Exception as exc:  # noqa: BLE001  解析是增强项，失败按原名走
+            logger.debug(f"_resolve_entity_name 读取节点失败，按原名匹配: {exc}")
+            return raw
+        target = normalize_name(raw)
+        if not target:
+            return raw
+        exact: Optional[str] = None
+        best: Optional[str] = None
+        best_len = 0
+        for node in nodes:
+            cand = normalize_name(node.name)
+            if not cand:
+                continue
+            if cand == target:
+                exact = node.name
+                break
+            if len(cand) >= 2 and (cand in target or target in cand) and len(cand) > best_len:
+                best, best_len = node.name, len(cand)
+        resolved = exact or best
+        if resolved and resolved != raw:
+            logger.info(f"trace_cascade 名称解析: {raw!r} → 规范节点 {resolved!r}")
+            return resolved
+        return raw
+
+    @staticmethod
+    def _fmt_edge_label(edge: Any) -> str:
+        """渲染一跳的边标签。runtime 当前返回边 name 字符串；若图谱侧升级为带
+        {name/sign/strength/lag/polarity} 的富投影（见因果遍历投影契约），这里把它渲染成
+        `REL, sign=-, strength=high, lag=...` 而不是把整个 dict 直接 str 出来。两种形态都
+        安全处理（forward-compat，degrade-safe）。"""
+        if isinstance(edge, dict):
+            parts = [str(edge.get("name") or edge.get("edge") or edge.get("rel") or "REL")]
+            for key in ("sign", "strength", "lag", "polarity", "family"):
+                val = edge.get(key)
+                if val not in (None, ""):
+                    parts.append(f"{key}={val}")
+            return ", ".join(parts)
+        return str(edge)
 
     def trace_cascade(self, graph_id: str, source: str = "", target: str = "",
                       center: str = "", causal_only: bool = True) -> str:
@@ -2491,32 +2726,38 @@ class ZepToolsService:
         edge_types = self._CAUSAL_EDGE_NAMES if causal_only else None
         try:
             if source and target:
-                paths = rt.causal_paths(graph_id, source, target, edge_types=edge_types) or []
+                # R2-KG-2: 先把 source/target 解析为规范节点名再下推 Cypher（并记录解析）。
+                rsource = self._resolve_entity_name(graph_id, source)
+                rtarget = self._resolve_entity_name(graph_id, target)
+                paths = rt.causal_paths(graph_id, rsource, rtarget, edge_types=edge_types) or []
                 note = ""
                 if not paths and causal_only:
-                    paths = rt.causal_paths(graph_id, source, target, edge_types=None) or []
+                    paths = rt.causal_paths(graph_id, rsource, rtarget, edge_types=None) or []
                     note = "（无纯因果路径，下列为一般关系路径）"
                 if not paths:
-                    return f"（{source} → {target} 间未找到 ≤6 跳路径）"
-                lines = [f"【传导路径：{source} → {target}】{note}"]
+                    return f"（{rsource} → {rtarget} 间未找到 ≤6 跳路径）"
+                lines = [f"【传导路径：{rsource} → {rtarget}】{note}"]
                 for p in paths[:12]:
                     nodes, edges = p.get("nodes", []), p.get("edges", [])
                     chain = ""
                     for i, n in enumerate(nodes):
                         chain += str(n)
                         if i < len(edges):
-                            chain += f" --[{edges[i]}]--> "
+                            chain += f" --[{self._fmt_edge_label(edges[i])}]--> "
                     lines.append(f"· ({p.get('hops')}跳) {chain}")
                 return "\n".join(lines)
             if center:
-                edges = rt.n_hop_subgraph(graph_id, center, edge_types=edge_types) or []
+                rcenter = self._resolve_entity_name(graph_id, center)
+                edges = rt.n_hop_subgraph(graph_id, rcenter, edge_types=edge_types) or []
                 if not edges and causal_only:
-                    edges = rt.n_hop_subgraph(graph_id, center, edge_types=None) or []
+                    edges = rt.n_hop_subgraph(graph_id, rcenter, edge_types=None) or []
                 if not edges:
-                    return f"（{center} 的多跳邻域为空）"
-                lines = [f"【{center} 的多跳传导邻域（{len(edges)} 条边）】"]
+                    return f"（{rcenter} 的多跳邻域为空）"
+                lines = [f"【{rcenter} 的多跳传导邻域（{len(edges)} 条边）】"]
                 for e in edges[:40]:
-                    lines.append(f"· {e.get('source')} --[{e.get('edge')}]--> {e.get('target')}")
+                    lines.append(
+                        f"· {e.get('source')} --[{self._fmt_edge_label(e.get('edge'))}]--> {e.get('target')}"
+                    )
                 return "\n".join(lines)
             return "（trace_cascade 需要 source+target 或 center）"
         except Exception as exc:  # noqa: BLE001
@@ -2532,6 +2773,9 @@ class ZepToolsService:
             return f"（无法读取模拟动作数据：{e}）"
         from ..utils.actors import normalize_name
         target = normalize_name(actor_name)
+        # RPT-13：空 target 时 str.find('') 恒为 0，会把全体动作日志误标成单一 actor 的轨迹。
+        if not target:
+            return "（opinion_shift 需要 actor_name 参数：请提供要追踪的 Agent/角色名）"
         mine = [a for a in actions if normalize_name(a.agent_name) == target or normalize_name(a.agent_name).find(target) >= 0]
         if not mine:
             return f"（未找到名为「{actor_name}」的 agent 的动作记录）"

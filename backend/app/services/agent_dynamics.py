@@ -28,8 +28,12 @@ from typing import Any, Dict, Iterable, List, Optional
 POS_ACTIONS = {"LIKE_POST", "LIKE_COMMENT", "REPOST", "FOLLOW", "QUOTE_POST"}
 NEG_ACTIONS = {"DISLIKE_POST", "DISLIKE_COMMENT", "MUTE"}
 ENGAGE_ACTIONS = {"CREATE_COMMENT", "REPLY"}
+# RUN-8: 'target_user_name' 是 _enrich_action_context 为 FOLLOW/MUTE 实际写入的键
+# （它从不写 followee_name/quoted_author_name）——缺了它，FOLLOW（正向）与 MUTE（负向）
+# 的被动信号永远解析不到目标 agent，动态情感更新静默丢失一整类信号。
 TARGET_NAME_KEYS = ("post_author_name", "original_author_name", "comment_author_name",
-                    "quoted_author_name", "followee_name", "target_name")
+                    "quoted_author_name", "followee_name", "target_name",
+                    "target_user_name")
 
 
 def extract_round_signals(actual_actions, name_to_id):
@@ -109,6 +113,11 @@ class AgentDynamicsTracker:
                 opinion = 0.3
             self._state[aid] = {"mood": mood, "energy": 1.0,
                                 "opinion_strength": opinion, "fatigue": 0.0}
+        # QUALITY-OPT C6: track whether the dynamics engine actually fired. If no round ever
+        # delivers a received-interaction signal (e.g. a hollow sim), the report must NOT claim
+        # emotional/opinion EVOLUTION that never happened — dynamics_summary() exposes this.
+        self._rounds_observed = 0
+        self._rounds_with_received = 0
 
     @classmethod
     def from_config(cls, agent_configs: List[Dict[str, Any]], *, config_obj: Any = None) -> "AgentDynamicsTracker":
@@ -148,6 +157,10 @@ class AgentDynamicsTracker:
         """
         received = received or {}
         activity = activity or {}
+        self._rounds_observed += 1
+        if any((isinstance(r, dict) and (r.get("pos") or r.get("neg") or r.get("engage")))
+               for r in received.values()):
+            self._rounds_with_received += 1
         for aid, st in self._state.items():
             r = received.get(aid) or {}
             pos = int(r.get("pos", 0) or 0)
@@ -163,6 +176,16 @@ class AgentDynamicsTracker:
             st["fatigue"] = _clamp(
                 st["fatigue"] * (1.0 - self.fatigue_decay) + self.fatigue_rate * acted, 0.0, 1.0)
             st["energy"] = _clamp(1.0 - st["fatigue"], 0.0, 1.0)
+
+    def dynamics_summary(self) -> Dict[str, Any]:
+        """QUALITY-OPT C6: did the dynamics engine actually fire? ``active`` is False when no
+        round delivered a received-interaction signal — the report must then NOT narrate
+        emotional/opinion evolution. Consumed alongside simulation_health."""
+        return {
+            "rounds_observed": self._rounds_observed,
+            "rounds_with_received_signal": self._rounds_with_received,
+            "active": self._rounds_with_received > 0,
+        }
 
     def get_state(self, aid: int) -> Dict[str, float]:
         return dict(self._state.get(aid, {}))

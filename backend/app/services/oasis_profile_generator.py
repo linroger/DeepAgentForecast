@@ -9,6 +9,7 @@ OASIS Agent Profile生成器
 """
 
 import json
+import os
 import random
 import time
 from typing import Dict, Any, List, Optional
@@ -65,7 +66,16 @@ class OasisAgentProfile:
     source_entity_type: Optional[str] = None
     
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
-    
+
+    # PREP-8: 人设生成路径（"llm" / "rule" / "rule_fallback" / "error_stub"），
+    # 用于统计静默降级的比例——不进入任何平台产物（reddit/twitter 写入器不读它）。
+    generation_path: str = "llm"
+
+    # NEXTSTEPS SIM_PERSONA_DESIGN: 结构化人格设计（逐角色情境工程的产物）。
+    # 仅对匹配到调研档案的真实角色生成；字段见 OasisProfileGenerator.PERSONA_DESIGN_KEYS。
+    # 无档案/开关关闭 → None（to_dict/reddit 产物省略，schema 与旧版逐字节一致）。
+    persona_design: Optional[Dict[str, Any]] = None
+
     def to_reddit_format(self) -> Dict[str, Any]:
         """转换为Reddit平台格式"""
         profile = {
@@ -126,7 +136,7 @@ class OasisAgentProfile:
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为完整字典格式"""
-        return {
+        data = {
             "user_id": self.user_id,
             "user_name": self.user_name,
             "name": self.name,
@@ -146,6 +156,11 @@ class OasisAgentProfile:
             "source_entity_type": self.source_entity_type,
             "created_at": self.created_at,
         }
+        # NEXTSTEPS SIM_PERSONA_DESIGN: 结构化人格设计随档持久化到 other_info，
+        # 供下游（决策通道/遥测）核查阵容的认知多样性；缺失即省略（旧 schema 不变）。
+        if self.persona_design:
+            data["other_info"] = {"persona_design": self.persona_design}
+        return data
 
 
 class OasisProfileGenerator:
@@ -193,16 +208,40 @@ class OasisProfileGenerator:
         "ALLY_OF", "OPPOSES", "COMPETES_WITH", "REGULATES",
         "DEPENDS_ON", "PARTNERS_WITH", "INFLUENCES",
     ]
-    
+
+    # NEXTSTEPS SIM_PERSONA_DESIGN: 结构化人格设计的字段契约。每个字段都必须是对该真实
+    # 角色调研实证（档案立场/记忆、行为 DNA、关系网、局势简报）的提炼——禁止发明档案外的
+    # 立场或事实。认知多样性来自真实角色本身的差异，而非人为指派的分析流派。
+    PERSONA_DESIGN_KEYS = (
+        "identity",               # 它是谁、在体系中的角色定位
+        "views_beliefs",          # 世界观与对当前局势的解读（它认为什么是真的）
+        "incentives",             # 不同结果下的得失、正在优化的目标函数
+        "objectives",             # 目标与策略路径
+        "relations",              # 盟友/对手/依赖对象及原因（据调研关系数据）
+        "constraints_red_lines",  # 约束与红线
+        "decision_style",         # 决策风格（如何权衡、行动节奏）
+        "rhetoric",               # 典型公开话术特征
+    )
+
     def __init__(
-        self, 
+        self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model_name: Optional[str] = None,
         zep_api_key: Optional[str] = None,
         graph_id: Optional[str] = None,
-        provider: Optional[str] = None
+        provider: Optional[str] = None,
+        persona_language: Optional[str] = None
     ):
+        # PREP-4(2): persona 语言口径。显式传入优先（'en'/'English' → 英文人设）；未传时，
+        # 若显式设置了非中文活动画像（SIM_ACTIVITY_PROFILE=us_business/global_market），
+        # personas 跟随英文。默认（不传 + 未设 env）→ None，提示词与产物逐字节不变。
+        if persona_language is None:
+            _env_profile = str(os.environ.get("SIM_ACTIVITY_PROFILE", "") or "").strip().lower()
+            if _env_profile in ("us_business", "global_market"):
+                persona_language = "en"
+        self.persona_language = persona_language
+
         self.provider = (provider or Config.LLM_PROVIDER or "claude-cli").lower()
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
@@ -269,6 +308,9 @@ class OasisProfileGenerator:
                 actor=actor,
                 actors=actors,
             )
+            # PREP-8: LLM 3 次尝试全败时 _generate_profile_with_llm 会静默退回规则模板，
+            # 此前对任何健康门不可见——这里读出并剥离路径标记，落到 profile 上供聚合统计。
+            generation_path = str(profile_data.pop("_generation_path", "llm") or "llm")
         else:
             # 使用规则生成基础人设（带研究 actor 覆盖）
             profile_data = self._generate_profile_rule_based(
@@ -279,7 +321,25 @@ class OasisProfileGenerator:
                 actor=actor,
                 actors=actors,
             )
-        
+            generation_path = "rule"
+
+        # QUALITY-OPT C5: person-only demographics (age/gender/MBTI) are nonsensical on
+        # organization/government/asset nodes (the corpus had Samsung profiled as "MBTI ISTJ,
+        # age 30, country 中国"). For non-individual entities, drop them so the agent reads as the
+        # institutional actor it is, not a fabricated person. Individuals keep them.
+        # XRUN-10(c): country is intentionally KEPT for non-individuals — the prompt now derives
+        # it from the entity's actual nationality/HQ (TSMC→台湾), which matters in geopolitics sims.
+        is_individual = self._is_individual_entity(entity_type)
+        age = profile_data.get("age") if is_individual else None
+        gender = profile_data.get("gender") if is_individual else None
+        mbti = profile_data.get("mbti") if is_individual else None
+
+        # NEXTSTEPS SIM_PERSONA_DESIGN: 结构化人格设计从 profile_data 剥离到独立字段
+        # （不留在自由 kv 里），非法形状（非 dict/空）→ None（产物 schema 不变）。
+        persona_design = profile_data.pop("persona_design", None)
+        if not isinstance(persona_design, dict) or not persona_design:
+            persona_design = None
+
         return OasisAgentProfile(
             user_id=user_id,
             user_name=user_name,
@@ -290,16 +350,18 @@ class OasisProfileGenerator:
             friend_count=profile_data.get("friend_count", random.randint(50, 500)),
             follower_count=profile_data.get("follower_count", random.randint(100, 1000)),
             statuses_count=profile_data.get("statuses_count", random.randint(100, 2000)),
-            age=profile_data.get("age"),
-            gender=profile_data.get("gender"),
-            mbti=profile_data.get("mbti"),
+            age=age,
+            gender=gender,
+            mbti=mbti,
             country=profile_data.get("country"),
             profession=profile_data.get("profession"),
             interested_topics=profile_data.get("interested_topics", []),
             source_entity_uuid=entity.uuid,
             source_entity_type=entity_type,
+            generation_path=generation_path,
+            persona_design=persona_design,
         )
-    
+
     def _generate_username(self, name: str) -> str:
         """生成用户名"""
         # 移除特殊字符，转换为小写
@@ -714,6 +776,14 @@ class OasisProfileGenerator:
 
         return "\n\n".join(context_parts)
     
+    def _english_persona(self) -> bool:
+        """PREP-4(2): 本次 persona 是否用英文口径（提示词语言 + country 缺省）。
+
+        __new__ 构造的实例（测试）无 persona_language 属性 → getattr 缺省 → False，行为不变。
+        """
+        lang = str(getattr(self, "persona_language", "") or "").strip().lower()
+        return lang.startswith("en")
+
     def _is_individual_entity(self, entity_type: str) -> bool:
         """判断是否是个人类型实体"""
         return entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES
@@ -721,7 +791,149 @@ class OasisProfileGenerator:
     def _is_group_entity(self, entity_type: str) -> bool:
         """判断是否是群体/机构类型实体"""
         return entity_type.lower() in self.GROUP_ENTITY_TYPES
-    
+
+    def _persona_design_enabled(self) -> bool:
+        """NEXTSTEPS SIM_PERSONA_DESIGN: 逐角色情境工程开关（默认开）。
+
+        config.py 归另一分桶所有——用 getattr 读取（字段不存在 → 默认 True）；
+        置 false 时提示词与产物与旧版逐字节一致（可降级不变式）。
+        """
+        raw = getattr(Config, "SIM_PERSONA_DESIGN", True)
+        return str(raw).strip().lower() not in ("false", "0", "no", "off")
+
+    def _build_persona_design_block(self) -> str:
+        """NEXTSTEPS SIM_PERSONA_DESIGN: 人格设计指令块（拼在提示词尾部，与实证档案同区）。
+
+        该实体是真实世界的行动者（如国家/公司/政府/机构/个人）——要求同一次 LLM 调用把
+        调研档案里关于它的一切提炼为结构化 persona_design，并让 persona 正文体现这份设计。
+        """
+        return (
+            "## 人格设计（逐角色情境工程，全部字段必须落在上方调研实证之内）\n"
+            "该实体是现实世界中的真实行动者。除上述字段外，额外输出一个 persona_design 对象，"
+            "把调研档案中关于它的一切提炼为结构化人格设计，字段（每项为 1-3 句纯文本字符串）：\n"
+            "- identity: 它是谁、在这个体系中的角色定位\n"
+            "- views_beliefs: 它的世界观与对当前局势的解读（它认为什么是真的）\n"
+            "- incentives: 它在不同结果下的得与失、正在优化的目标函数\n"
+            "- objectives: 它的目标与策略路径\n"
+            "- relations: 盟友/对手/依赖对象及其原因（严格依据上方关系网实证）\n"
+            "- constraints_red_lines: 它受到的约束与不可逾越的红线\n"
+            "- decision_style: 决策风格（如何权衡取舍、行动节奏）\n"
+            "- rhetoric: 典型公开话术特征\n"
+            "铁律：只允许提炼上方调研实证（实证档案/行为DNA/关系网/局势简报），"
+            "绝不发明档案之外的立场或事实；立场以实证档案为准。persona 正文必须体现（embody）"
+            "这份设计——以该角色自己的视角写出它的身份、信念、得失、目标、关系、红线、"
+            "决策风格与话术。"
+        )
+
+    def _normalize_persona_design(
+        self,
+        raw: Any,
+        actor: Optional[Dict[str, Any]],
+        entity_name: str,
+        actors: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, str]]:
+        """把 LLM 产出的 persona_design 规整为字段契约。
+
+        规则：只保留 PERSONA_DESIGN_KEYS 白名单键；list → '；' 连接；空值/未知键丢弃。
+        LLM 未产出或产出为空 → 退回 _design_from_actor 的规则提炼（保证有档案的
+        真实角色必有设计，degrade-safe）。
+        """
+        out: Dict[str, str] = {}
+        if isinstance(raw, dict):
+            for key in self.PERSONA_DESIGN_KEYS:
+                val = raw.get(key)
+                if isinstance(val, list):
+                    val = "；".join(str(x).strip() for x in val if str(x).strip())
+                text = str(val or "").strip()
+                if text:
+                    out[key] = text
+        if out:
+            return out
+        return self._design_from_actor(actor, entity_name, actors=actors)
+
+    def _design_from_actor(
+        self,
+        actor: Optional[Dict[str, Any]],
+        entity_name: str,
+        actors: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, str]]:
+        """从调研档案确定性提炼 persona_design（无 LLM 调用，规则回退路径也可用）。
+
+        逐字段映射档案实证：role/worldview.identity → identity；stance/beliefs/frame →
+        views_beliefs；incentives 的 driver/gains_if/loses_if → incentives；goals →
+        objectives；roster_block（去掉标题行）→ relations；constraints/vulnerabilities →
+        constraints_red_lines；risk_tolerance → decision_style；stated_vs_revealed →
+        rhetoric。档案为空或全字段缺失 → None。
+        """
+        if not isinstance(actor, dict) or not actor:
+            return None
+
+        def _joined(value: Any, limit: int = 4) -> str:
+            if isinstance(value, list):
+                return "；".join(str(x).strip() for x in value[:limit] if str(x).strip())
+            return str(value or "").strip()
+
+        worldview = actor.get("worldview") if isinstance(actor.get("worldview"), dict) else {}
+
+        identity = "；".join(s for s in (
+            str(actor.get("role", "") or "").strip(),
+            str(worldview.get("identity", "") or "").strip(),
+        ) if s)
+
+        views = "；".join(s for s in (
+            str(actor.get("stance", "") or "").strip(),
+            _joined(worldview.get("beliefs")),
+            str(worldview.get("frame", "") or "").strip(),
+        ) if s)
+
+        incentive_parts: List[str] = []
+        raw_incentives = actor.get("incentives")
+        for inc in (raw_incentives if isinstance(raw_incentives, list) else [])[:4]:
+            if isinstance(inc, dict):
+                driver = str(inc.get("driver", "") or "").strip()
+                gains = str(inc.get("gains_if", "") or "").strip()
+                loses = str(inc.get("loses_if", "") or "").strip()
+                bits = [b for b in (
+                    driver,
+                    f"得益于「{gains}」" if gains else "",
+                    f"受损于「{loses}」" if loses else "",
+                ) if b]
+                if bits:
+                    incentive_parts.append("，".join(bits))
+            else:
+                text = str(inc or "").strip()
+                if text:
+                    incentive_parts.append(text)
+
+        relations = ""
+        if actors is not None:
+            try:
+                roster = roster_block(entity_name, actors)
+                if roster and "\n" in roster:
+                    # 去掉「## 关系网角色…」标题行，压成一行紧凑关系描述。
+                    relations = roster.split("\n", 1)[1].replace("- ", "").replace("\n", "；")
+            except Exception:  # noqa: BLE001 — 关系提炼失败不影响其余字段
+                relations = ""
+
+        constraints = "；".join(s for s in (
+            _joined(actor.get("constraints"), 3),
+            _joined(actor.get("vulnerabilities"), 3),
+        ) if s)
+
+        risk = str(actor.get("risk_tolerance", "") or "").strip()
+        design = {
+            "identity": identity,
+            "views_beliefs": views,
+            "incentives": "；".join(incentive_parts),
+            "objectives": _joined(actor.get("goals")),
+            "relations": relations,
+            "constraints_red_lines": constraints,
+            "decision_style": f"风险偏好：{risk}" if risk else "",
+            "rhetoric": str(actor.get("stated_vs_revealed", "") or "").strip(),
+        }
+        design = {k: v for k, v in design.items() if v}
+        return design or None
+
     def _generate_profile_with_llm(
         self,
         entity_name: str,
@@ -795,6 +1007,16 @@ class OasisProfileGenerator:
                 "「个人记忆/机构记忆」必须涵盖档案中的已知事实/记忆。"
             )
 
+        # NEXTSTEPS SIM_PERSONA_DESIGN: 对匹配到调研档案的真实角色做逐角色情境工程——同一次
+        # LLM 调用里额外产出结构化 persona_design，并要求 persona 正文体现这份设计。认知多样性
+        # 来自真实角色本身的差异（各自的调研档案），而非人为指派的分析流派。无档案/开关关闭 →
+        # 不拼指令块，提示词与产物与旧版逐字一致（可降级不变式）。
+        design_requested = (
+            self._persona_design_enabled() and isinstance(actor, dict) and bool(actor)
+        )
+        if design_requested:
+            prompt += f"\n\n{self._build_persona_design_block()}"
+
         # 尝试多次生成，直到成功或达到最大重试次数
         max_attempts = 3
         last_error = None
@@ -819,16 +1041,32 @@ class OasisProfileGenerator:
                         result["bio"] = entity_summary[:200] if entity_summary else f"{entity_type}: {entity_name}"
                     if "persona" not in result or not result["persona"]:
                         result["persona"] = entity_summary or f"{entity_name}是一个{entity_type}。"
-                    
+
+                    # NEXTSTEPS SIM_PERSONA_DESIGN: 规整结构化设计（白名单键/list 拼接/空值剔除）；
+                    # LLM 漏产 → 从档案确定性提炼兜底。未请求设计时剔除幻觉键，保持旧 schema。
+                    if design_requested:
+                        result["persona_design"] = self._normalize_persona_design(
+                            result.get("persona_design"), actor, entity_name, actors=actors
+                        )
+                    else:
+                        result.pop("persona_design", None)
+
                     return result
-                    
+
                 except json.JSONDecodeError as je:
                     logger.warning(f"JSON解析失败 (attempt {attempt+1}): {str(je)[:80]}")
-                    
+
                     # 尝试修复JSON
                     result = self._try_fix_json(content, entity_name, entity_type, entity_summary)
                     if result.get("_fixed"):
                         del result["_fixed"]
+                        # NEXTSTEPS SIM_PERSONA_DESIGN: 修复路径同样规整/兜底结构化设计。
+                        if design_requested:
+                            result["persona_design"] = self._normalize_persona_design(
+                                result.get("persona_design"), actor, entity_name, actors=actors
+                            )
+                        else:
+                            result.pop("persona_design", None)
                         return result
                     
                     last_error = je
@@ -840,10 +1078,13 @@ class OasisProfileGenerator:
                 time.sleep(1 * (attempt + 1))  # 指数退避
         
         logger.warning(f"LLM生成人设失败（{max_attempts}次尝试）: {last_error}, 使用规则生成")
-        return self._generate_profile_rule_based(
+        # PREP-8: 标记静默降级路径，由 generate_profile_from_entity 剥离并聚合到运行级统计。
+        fallback_data = self._generate_profile_rule_based(
             entity_name, entity_type, entity_summary, entity_attributes,
             actor=actor, actors=actors,
         )
+        fallback_data["_generation_path"] = "rule_fallback"
+        return fallback_data
     
     def _fix_truncated_json(self, content: str) -> str:
         """修复被截断的JSON（输出被max_tokens限制截断）"""
@@ -936,6 +1177,14 @@ class OasisProfileGenerator:
     
     def _get_system_prompt(self, is_individual: bool) -> str:
         """获取系统提示词"""
+        # PREP-4(2): 英文口径下人设语言与调研语言一致，避免中文 persona 驱动英文帖子的错位；
+        # 默认（非英文口径）与历史措辞逐字节一致。
+        if self._english_persona():
+            return (
+                "你是社交媒体用户画像生成专家。生成详细、真实的人设用于舆论模拟,最大程度还原已有现实情况。"
+                "必须返回有效的JSON格式，所有字符串值不能包含未转义的换行符。"
+                "人设文本与调研语言一致：本次使用英文（English）撰写 bio/persona。"
+            )
         base_prompt = "你是社交媒体用户画像生成专家。生成详细、真实的人设用于舆论模拟,最大程度还原已有现实情况。必须返回有效的JSON格式，所有字符串值不能包含未转义的换行符。使用中文。"
         return base_prompt
     
@@ -948,10 +1197,37 @@ class OasisProfileGenerator:
         context: str
     ) -> str:
         """构建个人实体的详细人设提示词"""
-        
+
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "无"
         context_str = context[:3000] if context else "无额外上下文"
-        
+
+        # XRUN-10(a/b): 结构化字段从档案/上下文抽取而非套默认值（Lutnick 档案写明 ENTJ 却落
+        # ISTJ；US Congress 落 country 中国）。示例国家去掉「中国」锚定；无法推断的字段省略、
+        # 不编造。PERSONA_FIELD_EXTRACTION=false → 回到旧措辞。
+        if getattr(Config, "PERSONA_FIELD_EXTRACTION", True):
+            demo_fields = (
+                '3. age: 年龄数字（整数；优先从档案/上下文推断，无法推断则省略，不要编造）\n'
+                '4. gender: 性别，必须是英文: "male" 或 "female"（无法判断则省略）\n'
+                '5. mbti: MBTI类型（仅当档案/上下文可推断该人物性格时填写，如档案写明"MBTI偏向ENTJ"则填ENTJ；无法推断则省略，不要编造）\n'
+                '6. country: 国家/地区（填该人物的实际国籍或常驻地，从档案/上下文推断；无法判断则省略，不要编造）'
+            )
+            demo_rule = '- 给出的age必须是有效整数，gender必须是"male"或"female"；无依据的字段宁可省略，不要编造'
+        else:
+            demo_fields = (
+                '3. age: 年龄数字（必须是整数）\n'
+                '4. gender: 性别，必须是英文: "male" 或 "female"\n'
+                '5. mbti: MBTI类型（如INTJ、ENFP等）\n'
+                '6. country: 国家（使用中文，如"中国"）'
+            )
+            demo_rule = '- age必须是有效的整数，gender必须是"male"或"female"'
+
+        # PREP-4(2): 英文口径下 bio/persona 与调研语言一致；默认与历史措辞逐字一致。
+        lang_rule = (
+            "- bio/persona 使用英文撰写（与调研语言一致；gender字段用英文male/female）"
+            if self._english_persona()
+            else "- 使用中文（除了gender字段必须用英文male/female）"
+        )
+
         return f"""为实体生成详细的社交媒体用户人设,最大程度还原已有现实情况。
 
 实体名称: {entity_name}
@@ -973,10 +1249,7 @@ class OasisProfileGenerator:
    - 立场观点（对话题的态度、可能被激怒/感动的内容）
    - 独特特征（口头禅、特殊经历、个人爱好）
    - 个人记忆（人设的重要部分，要介绍这个个体与事件的关联，以及这个个体在事件中的已有动作与反应）
-3. age: 年龄数字（必须是整数）
-4. gender: 性别，必须是英文: "male" 或 "female"
-5. mbti: MBTI类型（如INTJ、ENFP等）
-6. country: 国家（使用中文，如"中国"）
+{demo_fields}
 7. profession: 职业
 8. interested_topics: 感兴趣话题数组
 
@@ -988,9 +1261,9 @@ class OasisProfileGenerator:
 重要:
 - 所有字段值必须是字符串或数字，不要使用换行符
 - persona必须是一段连贯的文字描述
-- 使用中文（除了gender字段必须用英文male/female）
+{lang_rule}
 - 内容要与实体信息保持一致
-- age必须是有效的整数，gender必须是"male"或"female"
+{demo_rule}
 """
 
     def _build_group_persona_prompt(
@@ -1002,10 +1275,24 @@ class OasisProfileGenerator:
         context: str
     ) -> str:
         """构建群体/机构实体的详细人设提示词"""
-        
+
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "无"
         context_str = context[:3000] if context else "无额外上下文"
-        
+
+        # XRUN-10(b/c): 机构 country 按总部/主要管辖地推断（TSMC→台湾），不再以「中国」示例
+        # 锚定。PERSONA_FIELD_EXTRACTION=false → 回到旧措辞。
+        country_field = (
+            '6. country: 机构总部或主要管辖所在国家/地区（按实际情况从档案/上下文推断；无法判断则省略，不要编造）'
+            if getattr(Config, "PERSONA_FIELD_EXTRACTION", True)
+            else '6. country: 国家（使用中文，如"中国"）'
+        )
+        # PREP-4(2): 英文口径下 bio/persona 与调研语言一致；默认与历史措辞逐字一致。
+        lang_rule = (
+            '- bio/persona 使用英文撰写（与调研语言一致；gender字段固定英文"other"）'
+            if self._english_persona()
+            else '- 使用中文（除了gender字段必须用英文"other"）'
+        )
+
         return f"""为机构/群体实体生成详细的社交媒体账号设定,最大程度还原已有现实情况。
 
 实体名称: {entity_name}
@@ -1030,7 +1317,7 @@ class OasisProfileGenerator:
 3. age: 固定填30（机构账号的虚拟年龄）
 4. gender: 固定填"other"（机构账号使用other表示非个人）
 5. mbti: MBTI类型，用于描述账号风格，如ISTJ代表严谨保守
-6. country: 国家（使用中文，如"中国"）
+{country_field}
 7. profession: 机构职能描述
 8. interested_topics: 关注领域数组
 
@@ -1042,7 +1329,7 @@ class OasisProfileGenerator:
 重要:
 - 所有字段值必须是字符串或数字，不允许null值
 - persona必须是一段连贯的文字描述，不要使用换行符
-- 使用中文（除了gender字段必须用英文"other"）
+{lang_rule}
 - age必须是整数30，gender必须是字符串"other"
 - 机构账号发言要符合其身份定位"""
     
@@ -1084,6 +1371,23 @@ class OasisProfileGenerator:
             overlay["follower_count"] = int(300 * iw)
             overlay["friend_count"] = int(120 * iw)
             overlay["karma"] = int(1500 * iw)
+
+        # NEXTSTEPS SIM_PERSONA_DESIGN: 规则路径（含 LLM 3 连败回退）不丢人格设计——从档案
+        # 确定性提炼结构化设计，并在 persona 末尾追加 1-2 句设计摘要（身份 + 得失/信念线），
+        # 让该真实角色的分析身份在降级路径下依然进入 system prompt。
+        if self._persona_design_enabled():
+            design = self._design_from_actor(actor, entity_name, actors=actors)
+            if design:
+                overlay["persona_design"] = design
+                summary = "。".join(s for s in (
+                    design.get("identity", ""),
+                    design.get("incentives", "") or design.get("views_beliefs", ""),
+                ) if s)
+                if summary:
+                    persona_text = str(overlay.get("persona") or base.get("persona") or "").strip()
+                    overlay["persona"] = (
+                        f"{persona_text}\n\n【人格设计·实证提炼】{summary}。"
+                    ).strip()
 
         return {**base, **overlay}
 
@@ -1215,7 +1519,8 @@ class OasisProfileGenerator:
               (2) 数组下标 == 实体枚举下标，否则 poster_agent_id/initial_follows 会指向错误 persona。
             - 修复：不再写「压实/重排」的产物，改为只写「连续已完成前缀」（遇到第一个 None 即停止），
               使下标永远等于实体下标；并复用 _save_reddit_json / _save_twitter_csv 与最终写入器保持
-              逐字节 schema 一致（默认 age→30 / gender 归一化 / mbti→'ISTJ' / country→'中国'）。
+              逐字节 schema 一致（默认 age→30 / gender 归一化 / mbti→'ISTJ' / country→'中国'，
+              英文口径下 country 缺省为空串）。
             """
             if not realtime_output_path:
                 return
@@ -1273,6 +1578,7 @@ class OasisProfileGenerator:
                     persona=entity.summary or f"A participant in social discussions.",
                     source_entity_uuid=entity.uuid,
                     source_entity_type=entity_type,
+                    generation_path="error_stub",  # PREP-8: 异常桩，计入降级统计
                 )
                 return idx, fallback_profile, str(e)
         
@@ -1329,14 +1635,40 @@ class OasisProfileGenerator:
                         persona=entity.summary or "A participant in social discussions.",
                         source_entity_uuid=entity.uuid,
                         source_entity_type=entity_type,
+                        generation_path="error_stub",  # PREP-8: 异常桩，计入降级统计
                     )
                     # 实时写入文件（即使是备用人设）
                     save_profiles_realtime()
         
+        # PREP-8: 聚合静默降级统计——LLM 3 连败的规则回退（rule_fallback）与异常桩
+        # （error_stub）此前只有逐条 log warning，任何健康门都看不见「5 ok / 75 fallback」
+        # 这种大面积降级。这里汇总成一行运行级指标：log + 进度回调 + 实例属性
+        # （last_generation_stats，供 simulation_manager 落到 config_reasoning）。
+        done = [p for p in profiles if p is not None]
+        n_fallback = sum(1 for p in done if getattr(p, "generation_path", "llm") == "rule_fallback")
+        n_stub = sum(1 for p in done if getattr(p, "generation_path", "llm") == "error_stub")
+        n_ok = len(done) - n_fallback - n_stub
+        summary = f"personas: {n_ok} ok / {n_fallback} rule-fallback / {n_stub} error-stub"
+        self.last_generation_stats = {
+            "total": total, "ok": n_ok,
+            "rule_fallback": n_fallback, "error_stub": n_stub,
+        }
+        logger.info(f"人设生成统计: {summary}")
+        if use_llm and total and (n_fallback + n_stub) / total > 0.25:
+            logger.warning(
+                f"人设降级比例过高（>25%）: {summary} —— LLM persona 大面积失败，"
+                "产出将是模板化人设（关键角色可能退化为泛泛简介）"
+            )
+        if progress_callback:
+            try:
+                progress_callback(total, total, summary)
+            except Exception:  # noqa: BLE001 回调异常不阻断主流程
+                pass
+
         print(f"\n{'='*60}")
-        print(f"人设生成完成！共生成 {len([p for p in profiles if p])} 个Agent")
+        print(f"人设生成完成！共生成 {len(done)} 个Agent（{summary}）")
         print(f"{'='*60}\n")
-        
+
         return profiles
     
     def _print_generated_profile(self, entity_name: str, entity_type: str, profile: OasisAgentProfile):
@@ -1491,14 +1823,21 @@ class OasisProfileGenerator:
         - mbti: MBTI类型
         - country: 国家
         """
+        # PREP-4(2): 英文口径下 country 缺省不再回填「中国」（56/80 个英文地缘政治角色曾被
+        # 打成中国籍，含 US Congress）；默认（中文口径）与历史逐字节一致。
+        default_country = "" if self._english_persona() else "中国"
+        # XRUN-10(d): 统计走了默认值回填的字段数，让「结构化字段未从档案抽取」的回归可见。
+        n_age_default = n_mbti_default = n_country_default = 0
         data = []
         for idx, profile in enumerate(profiles):
             # 使用与 to_reddit_format() 一致的格式
+            # PREP-8: bio 截断从 150 提到 300——提示词要求 200 字简介，旧上限把成功生成的
+            # bio 也在句中拦腰截断（Twitter CSV 一直是全量 bio，两产物口径不一致）。
             item = {
                 "user_id": profile.user_id if profile.user_id is not None else idx,  # 关键：必须包含 user_id
                 "username": profile.user_name,
                 "name": profile.name,
-                "bio": profile.bio[:150] if profile.bio else f"{profile.name}",
+                "bio": profile.bio[:300] if profile.bio else f"{profile.name}",
                 "persona": profile.persona or f"{profile.name} is a participant in social discussions.",
                 "karma": profile.karma if profile.karma else 1000,
                 "created_at": profile.created_at,
@@ -1506,16 +1845,31 @@ class OasisProfileGenerator:
                 "age": profile.age if profile.age else 30,
                 "gender": self._normalize_gender(profile.gender),
                 "mbti": profile.mbti if profile.mbti else "ISTJ",
-                "country": profile.country if profile.country else "中国",
+                "country": profile.country if profile.country else default_country,
             }
-            
+            n_age_default += 0 if profile.age else 1
+            n_mbti_default += 0 if profile.mbti else 1
+            n_country_default += 0 if profile.country else 1
+
             # 可选字段
             if profile.profession:
                 item["profession"] = profile.profession
             if profile.interested_topics:
                 item["interested_topics"] = profile.interested_topics
-            
+
+            # NEXTSTEPS SIM_PERSONA_DESIGN: 结构化人格设计随档持久化到 other_info。
+            # OASIS 加载器只读白名单字段（persona/mbti/gender/age/country…），多余 key
+            # 被忽略——不影响加载；下游遥测/校验可据此核查阵容的认知多样性。
+            if profile.persona_design:
+                item["other_info"] = {"persona_design": profile.persona_design}
+
             data.append(item)
+
+        if n_age_default or n_mbti_default or n_country_default:
+            logger.info(
+                f"Reddit Profile 默认值回填: age={n_age_default}, mbti={n_mbti_default}, "
+                f"country={n_country_default} / 共 {len(profiles)} 个"
+            )
 
         # EXECPLAN2 F-5-0: 原子写，避免 watchdog SIGKILL 或轮询读取者看到半写文件。
         write_json_atomic(file_path, data, ensure_ascii=False, indent=2)

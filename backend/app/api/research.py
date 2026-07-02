@@ -144,7 +144,10 @@ def resume_pipeline(pipeline_id: str):
                 "error": "恢复前检查未通过：\n" + "\n".join(f"• {e}" for e in preflight_errors),
                 "preflight_errors": preflight_errors,
             }), 400
-        state = PipelineOrchestrator.resume(pipeline_id)
+        # ORCH-3: force=true 允许恢复一条 completed 但 pipeline_health 降级/失败的管线
+        # （仅重置 REPORT 阶段重生成报告）；默认请求形状不变。
+        _force = bool((request.get_json(silent=True) or {}).get("force"))
+        state = PipelineOrchestrator.resume(pipeline_id, force=_force)
         return jsonify({
             "success": True,
             "data": {

@@ -93,3 +93,27 @@ def test_world_state_seed_empty_without_scenarios():
     from app.utils.actors import world_state_seed_from_actors
     assert world_state_seed_from_actors(None) == {}
     assert world_state_seed_from_actors({"actors": []}) == {}
+
+
+# ------------------------------------------------------- R2-SIM-12 / R2-CAL-13 / R2-SIM-2
+def test_step_inertia_override_is_per_round():
+    ws = WorldState(["A", "B"], base_rates={"A": 0.5, "B": 0.5}, inertia=0.9)
+    ws.step([{"scenario": "A", "magnitude": 1.0, "weight": 1.0}], inertia=0.0)
+    assert ws.shares["A"] == 1.0          # override beats the instance default for this round
+    before = dict(ws.shares)
+    ws.step([{"scenario": "B", "magnitude": 1.0, "weight": 1.0}])  # default (0.9) → sticky
+    assert ws.shares["A"] > 0.5 and ws.shares != before
+
+
+def test_outcome_exposes_uniform_prior_and_converged_at():
+    seeded = WorldState(["A", "B"], base_rates={"A": 0.7, "B": 0.3}).outcome()
+    assert seeded["uniform_prior"] is False and seeded["converged_at"] is None
+    bare = WorldState(["A", "B"]).outcome()
+    assert bare["uniform_prior"] is True   # R2-CAL-13/SIM-9: fabricated uniform flagged
+
+
+def test_commitments_prefer_per_decision_outcome_power():
+    cs = commitments_from_decisions(
+        [{"agent_id": 1, "scenario": "A", "magnitude": 1.0, "confidence": 0.5,
+          "outcome_power": 8.0}], {1: 1.0})   # per-decision power beats the map
+    assert cs[0]["weight"] == 8.0 * 0.5

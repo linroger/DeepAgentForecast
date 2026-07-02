@@ -17,8 +17,21 @@ import tempfile
 from typing import Any
 
 
-def write_text_atomic(path: str, text: str, *, encoding: str = "utf-8") -> None:
-    """Atomically write *text* to *path* (create parent dir if needed)."""
+def write_text_atomic(
+    path: str, text: str, *, encoding: str = "utf-8", fsync: bool = True
+) -> None:
+    """Atomically write *text* to *path* (create parent dir if needed).
+
+    The temp-file + ``os.replace`` rename is always atomic, so a reader never
+    observes a half-written file regardless of *fsync*. ``fsync`` only controls
+    whether the bytes are forced to the platter before the rename:
+
+    - ``fsync=True`` (default) survives a hard power loss / kernel panic — keep
+      it for durable artifacts (forecast.json, dossiers, terminal state).
+    - ``fsync=False`` skips the (slow) flush for high-frequency status/progress
+      writes that are overwritten seconds later anyway; the rename is still
+      atomic, so concurrent pollers stay safe. (ATOMIC-1)
+    """
     directory = os.path.dirname(os.path.abspath(path)) or "."
     os.makedirs(directory, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=directory)
@@ -26,7 +39,8 @@ def write_text_atomic(path: str, text: str, *, encoding: str = "utf-8") -> None:
         with os.fdopen(fd, "w", encoding=encoding) as fh:
             fh.write(text)
             fh.flush()
-            os.fsync(fh.fileno())
+            if fsync:
+                os.fsync(fh.fileno())
         os.replace(tmp, path)
     except BaseException:
         try:
@@ -42,9 +56,15 @@ def write_json_atomic(
     *,
     ensure_ascii: bool = False,
     indent: int | None = 2,
+    fsync: bool = True,
 ) -> None:
-    """Atomically serialize *obj* to JSON at *path*."""
+    """Atomically serialize *obj* to JSON at *path*.
+
+    *fsync* is forwarded to :func:`write_text_atomic`; pass ``fsync=False`` at
+    high-frequency status/progress sites only. (ATOMIC-1)
+    """
     write_text_atomic(
         path,
         json.dumps(obj, ensure_ascii=ensure_ascii, indent=indent, default=str),
+        fsync=fsync,
     )

@@ -21,15 +21,90 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import concurrent.futures
 import contextlib
 import logging
 import os
 import threading
 from datetime import datetime, timezone
+from typing import Any
 
 logger = logging.getLogger("mirofish.graphiti_runtime")
 
 _VALID_BACKENDS = ("auto", "falkordblite", "falkordb", "kuzu")
+
+# R2-KG-1 / R2-KG-3: causal attributes (sign / strength / lag / polarity / valence)
+# are folded into an edge's ``fact`` text by graph_builder.seed_actors (e.g.
+# "…（sign=-，strength=high，lag=2w，polarity=-0.80）"). The traversal primitives
+# project the fact and parse those attributes back out so a multi-hop path carries
+# per-hop sign/strength/lag and a computed NET polarity + cumulative lag — the
+# difference between "A reaches B" and "A reaches B with this transmission sign/lag".
+import re as _re
+
+_FACT_ATTR_RE = {
+    "sign": _re.compile(r"\bsign=([^\s，,）)、]+)", _re.IGNORECASE),
+    "strength": _re.compile(r"\bstrength=([^\s，,）)、]+)", _re.IGNORECASE),
+    "lag": _re.compile(r"\blag=([^\s，,）)、]+)", _re.IGNORECASE),
+    "polarity": _re.compile(r"\bpolarity=([^\s，,）)、]+)", _re.IGNORECASE),
+    "valence": _re.compile(r"\bvalence=([^\s，,）)、]+)", _re.IGNORECASE),
+}
+
+
+def _parse_edge_attrs(fact: str | None) -> dict:
+    """Extract folded causal attrs from an edge fact. Missing keys → None (degrade-safe)."""
+    out: dict = {"sign": None, "strength": None, "lag": None, "polarity": None, "valence": None}
+    if not fact:
+        return out
+    for key, rx in _FACT_ATTR_RE.items():
+        m = rx.search(fact)
+        if m:
+            out[key] = m.group(1).strip()
+    return out
+
+
+def _edge_polarity_sign(attrs: dict) -> int | None:
+    """Map an edge's parsed attrs to a polarity sign in {+1,-1,None} for net-polarity math.
+
+    Prefers a numeric ``polarity``; falls back to the ``sign`` token (+/-/positive/
+    negative or a signed number). ``None`` when genuinely unknown (so net polarity can
+    flag incomplete chains rather than silently assuming positive)."""
+    pol = attrs.get("polarity")
+    if pol is not None:
+        try:
+            v = float(pol)
+            if v > 0:
+                return 1
+            if v < 0:
+                return -1
+        except (TypeError, ValueError):
+            pass
+    sign = (attrs.get("sign") or "").strip().lower()
+    if sign in ("+", "positive", "pos", "up", "+1"):
+        return 1
+    if sign in ("-", "negative", "neg", "down", "-1"):
+        return -1
+    try:
+        v = float(sign)
+        if v > 0:
+            return 1
+        if v < 0:
+            return -1
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def _lag_numeric(lag: str | None) -> float | None:
+    """Best-effort numeric magnitude of a lag token (unit-agnostic leading number)."""
+    if not lag:
+        return None
+    m = _re.search(r"-?\d+(?:\.\d+)?", str(lag))
+    if not m:
+        return None
+    try:
+        return float(m.group(0))
+    except ValueError:
+        return None
 
 
 def _data_dir() -> str:
@@ -50,8 +125,9 @@ def _data_dir() -> str:
 def _default_op_timeout() -> float | None:
     """每个 Graphiti 操作（一次 add_episode / search / list…）的默认挂钟上限（秒）。
 
-    读 Config.GRAPHITI_OP_TIMEOUT_S，默认 1800（30 分钟）；0/负 = 不设上限（旧行为，
-    无限等待）。给 sync→async 桥一个兜底，避免某次 LLM/DB 调用卡死时永久阻塞调用线程。
+    读 Config.GRAPHITI_OP_TIMEOUT_S（config 默认 900 = 15 分钟，GRAPH-9 调低；本函数的
+    getattr 兜底 1800 仅在 Config 缺该属性时生效）；0/负 = 不设上限（旧行为，无限等待）。
+    给 sync→async 桥一个兜底，避免某次 LLM/DB 调用卡死时永久阻塞调用线程。
     """
     try:
         from ...config import Config
@@ -96,13 +172,26 @@ class GraphitiRuntime:
     # ------------------------------------------------------------------
     def run(self, coro, timeout: float | None = None):
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        # 默认给每个操作一个挂钟上限（Config.GRAPHITI_OP_TIMEOUT_S，默认 1800s；0=旧的无限等待），
+        # 默认给每个操作一个挂钟上限（Config.GRAPHITI_OP_TIMEOUT_S，config 默认 900s；0=旧的无限等待），
         # 避免某次 LLM/DB 调用卡死时永久阻塞调用它的 Flask 线程。超时抛 TimeoutError，调用方一般已
         # try/except 降级（检索→本地回退、构图→失败可见）。显式传 timeout 时以显式值为准。
         if timeout is None:
             timeout = _default_op_timeout()
         eff = timeout if (timeout and timeout > 0) else None
-        return future.result(eff)
+        try:
+            return future.result(eff)
+        except concurrent.futures.TimeoutError:
+            # CRITICAL: future.result() timing out does NOT stop the coroutine — it keeps
+            # running on the single bg loop, and if it holds the per-graph write lock
+            # (add_episode / merge_nodes / build_communities) that lock is NEVER released,
+            # so every subsequent op + read on that graph_id deadlocks and times out in a
+            # cascade (observed: graph builds fine, then all post-build reads time out for
+            # 15min×retries while the DB itself answers the same query in 0.01s). Cancel
+            # the asyncio task threadsafely so its `async with lock` unwinds via __aexit__.
+            future.cancel()
+            logger.warning("graphiti op exceeded %.0fs wall-clock; cancelled to release the "
+                           "per-graph lock (avoids deadlocking later reads)", eff or 0)
+            raise TimeoutError(f"graphiti operation exceeded {eff:.0f}s") from None
 
     # EXECPLAN2 F-12-8 / F-2-5: lazily create/return the per-graph_id write lock.
     # Must be awaited from the bg loop (the only thread that touches _graph_locks).
@@ -248,11 +337,14 @@ class GraphitiRuntime:
 
             # Cap concurrent LLM extraction calls. Graph building drives the configured
             # LLM provider; unbounded concurrency to a hosted endpoint causes timeouts/
-            # throttling. Default 8 (override via GRAPHITI_MAX_COROUTINES).
+            # throttling. GRAPH-3: the previous effective default of 8 throttled
+            # intra-episode per-node/edge fan-out to ~3-4 waves; graphiti's own default
+            # is 20. Promote to a documented default of 16 (sized jointly with
+            # GRAPH_BUILD_CONCURRENCY and the dedicated LLM I/O pool); override via env.
             try:
-                max_coros = int(os.environ.get("GRAPHITI_MAX_COROUTINES", "8"))
+                max_coros = int(os.environ.get("GRAPHITI_MAX_COROUTINES", "16"))
             except ValueError:
-                max_coros = 8
+                max_coros = 16
             g = Graphiti(
                 graph_driver=driver,
                 llm_client=llm,
@@ -506,8 +598,29 @@ class GraphitiRuntime:
 
         # EXECPLAN2 F-12-8: hold the per-graph write lock across the entire fan-out so
         # the batch never overlaps an external writer/reader on the same graph_id.
+        # RESILIENCE: return_exceptions=True so a SINGLE bad episode (e.g. a weak model
+        # echoing the JSON schema instead of an instance, a transient extraction error)
+        # is skipped+logged rather than aborting the whole batch → the whole graph stage.
+        # Successful uuids are returned in input order; failures are dropped (the caller
+        # counts the gap and hard-fails only if EVERYTHING failed).
         async with self._graph_lock(graph_id):
-            return list(await asyncio.gather(*[one(i, ep) for i, ep in enumerate(episodes)]))
+            results = await asyncio.gather(
+                *[one(i, ep) for i, ep in enumerate(episodes)], return_exceptions=True
+            )
+        out = []
+        n_failed = 0
+        for idx, r in enumerate(results):
+            if isinstance(r, BaseException):
+                n_failed += 1
+                logger.warning("[%s] episode %d ingest failed (skipped): %s",
+                               graph_id, idx, str(r)[:160])
+                continue
+            if r:
+                out.append(r)
+        if n_failed:
+            logger.warning("[%s] add_episodes_concurrent: %d/%d episodes skipped due to errors",
+                           graph_id, n_failed, len(episodes))
+        return out
 
     def build_communities(self, graph_id: str) -> list:
         """T2.4: Leiden 社区发现 + LLM 摘要，返回 [{uuid,name,summary}]。
@@ -569,13 +682,44 @@ class GraphitiRuntime:
     # ── NEXTSTEPS P3-6: 多跳路径 / N-hop 子图遍历（FalkorDB 变长 Cypher）──
     # 预测是沿**传导机制**推理：「追踪级联，哪个节点一动就翻盘」。此前 runtime 只有 1-hop
     # get_node_edges + 向量重排，无可达/路径原语。这两个方法补上（按边 name 可过滤为因果族）。
-    def causal_paths(self, graph_id: str, source: str, target: str,
-                     edge_types: list | None = None, max_hops: int = 4, limit: int = 20) -> list:
-        """source→target 的有向多跳路径（每跳 RELATES_TO，可选按边 name 过滤为因果族）。
-        返回 [{nodes:[name...], edges:[name...], hops:int}]；失败/无路径 → []（degrade-safe）。"""
-        return self.run(self._causal_paths(graph_id, source, target, edge_types, max_hops, limit))
+    @staticmethod
+    def _asof_predicate(as_of: Any):
+        """R2-KG-4: build a Cypher point-in-time predicate over a var-length rel ``r``.
 
-    async def _causal_paths(self, graph_id, source, target, edge_types, max_hops, limit):
+        Returns ``(clause, iso_param)``. ``as_of=None`` → ``("", None)`` so the query is
+        unchanged (default OFF). Accepts a datetime or ISO string; an unparseable value
+        degrades to no predicate (never raises)."""
+        if as_of is None:
+            return "", None
+        try:
+            if isinstance(as_of, datetime):
+                iso = as_of.isoformat()
+            else:
+                s = str(as_of).strip()
+                if not s:
+                    return "", None
+                iso = s
+        except Exception:  # noqa: BLE001
+            return "", None
+        clause = (
+            "AND all(x IN r WHERE (x.valid_at IS NULL OR x.valid_at <= $as_of) "
+            "AND (x.invalid_at IS NULL OR x.invalid_at > $as_of)) "
+        )
+        return clause, iso
+
+    def causal_paths(self, graph_id: str, source: str, target: str,
+                     edge_types: list | None = None, max_hops: int = 4, limit: int = 20,
+                     as_of: Any = None) -> list:
+        """source→target 的有向多跳路径（每跳 RELATES_TO，可选按边 name 过滤为因果族）。
+
+        返回 [{nodes:[name...], edges:[name...], hops:int, edge_details:[{name,sign,
+        strength,polarity,lag,fact}...], net_polarity:'+'/'-'/'?'/None, lag_total:float|None}]；
+        ``edges`` 保留为名字列表（向后兼容旧渲染），新键 ``edge_details`` 携带 R2-KG-1/R2-KG-3
+        的逐跳因果属性。``as_of``（R2-KG-4，默认 None=关闭）可加双时态点过滤。
+        失败/无路径 → []（degrade-safe）。"""
+        return self.run(self._causal_paths(graph_id, source, target, edge_types, max_hops, limit, as_of))
+
+    async def _causal_paths(self, graph_id, source, target, edge_types, max_hops, limit, as_of=None):
         try:
             g = await self._ensure_graph(graph_id)
         except Exception:  # noqa: BLE001
@@ -585,13 +729,22 @@ class GraphitiRuntime:
         params: dict = {"src": str(source), "tgt": str(target)}
         type_filter = ""
         if edge_types:
-            type_filter = "AND all(x IN r WHERE x.name IN $types) "
+            # FalkorDB types the variable-length binding `r` as an Edge (not a List) for
+            # length-1 matches, so `all(x IN r ...)` raises "expected List or Null but was
+            # Edge". Iterate `relationships(p)` (always a List of edges) instead — portable.
+            type_filter = "AND all(x IN relationships(p) WHERE x.name IN $types) "
             params["types"] = [str(t) for t in edge_types]
+        # R2-KG-4: optional point-in-time predicate (each hop valid at as_of). Inert
+        # when as_of is None (default) → query byte-identical to before.
+        asof_filter, asof_param = self._asof_predicate(as_of)
+        if asof_param is not None:
+            params["as_of"] = asof_param
         cypher = (
             f"MATCH p=(a:Entity)-[r:RELATES_TO*1..{hops}]->(b:Entity) "
-            f"WHERE a.name = $src AND b.name = $tgt {type_filter}"
+            f"WHERE a.name = $src AND b.name = $tgt {type_filter}{asof_filter}"
             "RETURN [n IN nodes(p) | n.name] AS nodes, "
-            "[e IN relationships(p) | e.name] AS edges "
+            "[e IN relationships(p) | e.name] AS edges, "
+            "[e IN relationships(p) | e.fact] AS facts "
             f"LIMIT {lim}"
         )
         try:
@@ -604,17 +757,55 @@ class GraphitiRuntime:
         for rec in (records or []):
             nodes = [n for n in (rec.get("nodes") or []) if n]
             edges = [e for e in (rec.get("edges") or []) if e]
-            if len(nodes) >= 2:
-                out.append({"nodes": nodes, "edges": edges, "hops": len(edges)})
+            facts = list(rec.get("facts") or [])
+            if len(nodes) < 2:
+                continue
+            # R2-KG-1/R2-KG-3: per-hop causal attrs + computed net polarity & cumulative lag.
+            details: list = []
+            net = 1
+            net_known = False
+            lag_total = 0.0
+            lag_seen = False
+            for i, ename in enumerate(edges):
+                fact = facts[i] if i < len(facts) else None
+                attrs = _parse_edge_attrs(fact)
+                ps = _edge_polarity_sign(attrs)
+                if ps is not None:
+                    net *= ps
+                    net_known = True
+                ln = _lag_numeric(attrs.get("lag"))
+                if ln is not None:
+                    lag_total += ln
+                    lag_seen = True
+                details.append({
+                    "name": ename,
+                    "sign": attrs.get("sign"),
+                    "strength": attrs.get("strength"),
+                    "polarity": attrs.get("polarity"),
+                    "lag": attrs.get("lag"),
+                    "fact": fact,
+                })
+            net_polarity = ("+" if net > 0 else "-") if net_known else None
+            out.append({
+                "nodes": nodes,
+                "edges": edges,
+                "hops": len(edges),
+                "edge_details": details,
+                "net_polarity": net_polarity,
+                "lag_total": (lag_total if lag_seen else None),
+            })
         return out
 
     def n_hop_subgraph(self, graph_id: str, center: str, max_hops: int = 2,
-                       edge_types: list | None = None, limit: int = 60) -> list:
+                       edge_types: list | None = None, limit: int = 60,
+                       as_of: Any = None) -> list:
         """以 center 为中心的 N 跳邻域边集（无向扩展，可选按边 name 过滤）。
-        返回 [{source, edge, target}]（去重）；失败 → []（degrade-safe）。"""
-        return self.run(self._n_hop_subgraph(graph_id, center, max_hops, edge_types, limit))
+        返回 [{source, edge, target, sign, strength, polarity, lag, fact}]（去重）；
+        ``source/edge/target`` 与旧版一致（向后兼容），新键为 R2-KG-1/R2-KG-3 逐边因果属性。
+        ``as_of``（R2-KG-4，默认 None=关闭）可加双时态点过滤。失败 → []（degrade-safe）。"""
+        return self.run(self._n_hop_subgraph(graph_id, center, max_hops, edge_types, limit, as_of))
 
-    async def _n_hop_subgraph(self, graph_id, center, max_hops, edge_types, limit):
+    async def _n_hop_subgraph(self, graph_id, center, max_hops, edge_types, limit, as_of=None):
         try:
             g = await self._ensure_graph(graph_id)
         except Exception:  # noqa: BLE001
@@ -624,14 +815,20 @@ class GraphitiRuntime:
         params: dict = {"center": str(center)}
         type_filter = ""
         if edge_types:
-            type_filter = "AND all(x IN r WHERE x.name IN $types) "
+            # FalkorDB types the variable-length binding `r` as an Edge (not a List) for
+            # length-1 matches, so `all(x IN r ...)` raises "expected List or Null but was
+            # Edge". Iterate `relationships(p)` (always a List of edges) instead — portable.
+            type_filter = "AND all(x IN relationships(p) WHERE x.name IN $types) "
             params["types"] = [str(t) for t in edge_types]
+        asof_filter, asof_param = self._asof_predicate(as_of)
+        if asof_param is not None:
+            params["as_of"] = asof_param
         cypher = (
             f"MATCH p=(a:Entity)-[r:RELATES_TO*1..{hops}]-(b:Entity) "
-            f"WHERE a.name = $center {type_filter}"
+            f"WHERE a.name = $center {type_filter}{asof_filter}"
             "UNWIND relationships(p) AS rel "
             "RETURN DISTINCT startNode(rel).name AS source, rel.name AS edge, "
-            "endNode(rel).name AS target "
+            "endNode(rel).name AS target, rel.fact AS fact "
             f"LIMIT {lim}"
         )
         try:
@@ -640,11 +837,23 @@ class GraphitiRuntime:
         except Exception as exc:  # noqa: BLE001
             logger.debug("n_hop_subgraph failed %s (%s): %s", graph_id, center, exc)
             return []
-        return [
-            {"source": rec.get("source"), "edge": rec.get("edge"), "target": rec.get("target")}
-            for rec in (records or [])
-            if rec.get("source") and rec.get("target")
-        ]
+        out = []
+        for rec in (records or []):
+            if not (rec.get("source") and rec.get("target")):
+                continue
+            fact = rec.get("fact")
+            attrs = _parse_edge_attrs(fact)
+            out.append({
+                "source": rec.get("source"),
+                "edge": rec.get("edge"),
+                "target": rec.get("target"),
+                "sign": attrs.get("sign"),
+                "strength": attrs.get("strength"),
+                "polarity": attrs.get("polarity"),
+                "lag": attrs.get("lag"),
+                "fact": fact,
+            })
+        return out
 
     # EXECPLAN2 I-1-0: map a recipe selector ('rrf'|'mmr'|'node_distance'|
     # 'cross_encoder'|'combined') + scope ('edges'|'nodes') to a graphiti_core
@@ -870,6 +1079,26 @@ class GraphitiRuntime:
         selector = (recipe or self._default_recipe() or "rrf").strip().lower()
         if selector == "node_distance" and not center_node_uuid:
             selector = "rrf"
+        # KG-1: cross-encoder recipes with a NO-OP reranker are strictly worse than RRF —
+        # graphiti truncates candidates to the first `limit` in dict-insertion order BEFORE
+        # reranking, so a no-op rank means: no RRF fusion AND no semantic rerank. Degrade to
+        # the RRF twin unless a real reranker (GRAPHITI_RERANKER=bge) is active.
+        if selector in ("cross_encoder", "combined_cross_encoder"):
+            try:
+                from .cross_encoder import NoOpCrossEncoder
+
+                if isinstance(self._get_clients()[2], NoOpCrossEncoder):
+                    degraded = "combined" if selector == "combined_cross_encoder" else "rrf"
+                    if not getattr(self, "_noop_ce_degrade_logged", False):
+                        self._noop_ce_degrade_logged = True
+                        logger.info(
+                            "cross_encoder recipe requested but the active reranker is a "
+                            "no-op (GRAPHITI_RERANKER!=bge); degrading '%s' -> '%s' to keep "
+                            "real RRF fusion", selector, degraded,
+                        )
+                    selector = degraded
+            except Exception:  # pragma: no cover - defensive; never break search on the guard
+                pass
         config = self._resolve_recipe(selector, scope).model_copy(deep=True)
         config.limit = limit
 

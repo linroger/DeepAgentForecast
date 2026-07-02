@@ -16,7 +16,10 @@ from graphiti_core.cross_encoder.client import CrossEncoderClient
 
 class NoOpCrossEncoder(CrossEncoderClient):
     """Passthrough reranker: returns passages with descending placeholder scores in their
-    original order. Used only to satisfy construction; RRF recipes never call ``rank``."""
+    original order. Used only to satisfy ``Graphiti(...)`` construction. NOTE (KG-1): since
+    I-1-0 mapped reranker→recipe, cross-encoder recipes CAN reach ``rank``; the runtime
+    search facade therefore degrades cross_encoder recipes to their RRF twins whenever this
+    no-op is the active reranker (a no-op rank skips both RRF fusion and semantic rerank)."""
 
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
         n = len(passages)

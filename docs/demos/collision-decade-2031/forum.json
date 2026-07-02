@@ -1,0 +1,4612 @@
+{
+ "twitter": [
+  {
+   "round": 0,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "CREATE_POST",
+   "content": "On Durability of the tariff regime after the SCOTUS IEEPA ruling — our position: Tariffs are leverage paid by foreigners; AI supremacy is a national-security imperative; deals over rules",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "People's Republic of China",
+   "type": "CREATE_POST",
+   "content": "On AI capex supercycle versus bubble / bond-market financing strain — our position: Commitment to win-win trade and opposition to weaponizing supply chains while pursuing self-reliance",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Nvidia",
+   "type": "CREATE_POST",
+   "content": "On US-China chip export controls and the 25% revenue-share model — our position: Supports American AI leadership but lobbies to keep every market including China open; controls should be narrow",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "TSMC",
+   "type": "CREATE_POST",
+   "content": "On Rare-earth/magnet chokepoint and the Nov 27 2026 truce expiry — our position: Customer neutrality and commitment to Taiwan as tech heart, while hedging via a US footprint",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "US Hyperscalers",
+   "type": "CREATE_POST",
+   "content": "On Semiconductor reshoring and Taiwan concentration risk — our position: AI demand is insatiable and spending is disciplined; owning the full stack is strategic",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "OpenAI/Stargate",
+   "type": "CREATE_POST",
+   "content": "On Wide-but-shallow AI adoption and small near-term productivity gains — our position: Safe AGI for humanity while racing to lock up compute and sovereign geographic deals",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "US Federal Reserve",
+   "type": "CREATE_POST",
+   "content": "On Sovereign AI and state equity in strategic chip firms — our position: Data-dependent and apolitical; treats tariff price effects as arguably transitory",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "US Congress & Supreme Court",
+   "type": "CREATE_POST",
+   "content": "On Data-center energy demand as the binding compute input — our position: Constitutional limits and separation of powers; SCOTUS ruled IEEPA does not authorize tariffs",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "CREATE_POST",
+   "content": "On Connector economies and statistical vs. real decoupling — our position: Open research and self-reliance; algorithmic efficiency beats brute-force compute hoarding",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "European Union",
+   "type": "CREATE_POST",
+   "content": "On Durability of the tariff regime after the SCOTUS IEEPA ruling — our position: Strategic autonomy and open trade, negotiating to avoid US tariffs while under-building compute",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "CREATE_POST",
+   "content": "On Durability of the tariff regime after the SCOTUS IEEPA ruling — our position: Tariffs are leverage paid by foreigners; AI supremacy is a national-security imperative; deals over rules",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "CREATE_POST",
+   "content": "On AI capex supercycle versus bubble / bond-market financing strain — our position: Commitment to win-win trade and opposition to weaponizing supply chains while pursuing self-reliance",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "CREATE_POST",
+   "content": "On US-China chip export controls and the 25% revenue-share model — our position: Supports American AI leadership but lobbies to keep every market including China open; controls should be narrow",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "CREATE_POST",
+   "content": "On Rare-earth/magnet chokepoint and the Nov 27 2026 truce expiry — our position: Customer neutrality and commitment to Taiwan as tech heart, while hedging via a US footprint",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "CREATE_POST",
+   "content": "On Semiconductor reshoring and Taiwan concentration risk — our position: AI demand is insatiable and spending is disciplined; owning the full stack is strategic",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "CREATE_POST",
+   "content": "On Wide-but-shallow AI adoption and small near-term productivity gains — our position: Safe AGI for humanity while racing to lock up compute and sovereign geographic deals",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Reserve",
+   "type": "CREATE_POST",
+   "content": "On Sovereign AI and state equity in strategic chip firms — our position: Data-dependent and apolitical; treats tariff price effects as arguably transitory",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "CREATE_POST",
+   "content": "On Data-center energy demand as the binding compute input — our position: Constitutional limits and separation of powers; SCOTUS ruled IEEPA does not authorize tariffs",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "CREATE_POST",
+   "content": "On Connector economies and statistical vs. real decoupling — our position: Open research and self-reliance; algorithmic efficiency beats brute-force compute hoarding",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "CREATE_POST",
+   "content": "On Durability of the tariff regime after the SCOTUS IEEPA ruling — our position: Strategic autonomy and open trade, negotiating to avoid US tariffs while under-building compute",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Korean memory makers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Congress",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Gulf sovereign-AI buyers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Beijing",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Commerce Department",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "USTR",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "South Korea chip complex",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSM",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "MOEA",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Xi Jinping leadership",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SK Hynix",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Commission",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "State Council",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Big-4",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "the courts",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "EU AI Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Huawei",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "India",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Reserve",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia H20",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Saudi Arabia PIF",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bureau of Industry and Security",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Big Tech cloud",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Mexico",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "China+1 economies",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taiwan (Government)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Samsung Electronics",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC-Arizona",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "InvestAI",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Samsung Electronics",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC-Arizona",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "InvestAI",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "MOFCOM",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "HUMAIN",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "ASML",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia revenue-share model",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Vietnam",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taipei",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "friend-shoring hubs",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Congressional Research Service",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Ascend",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "the Chinese open-source AI stack",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "United States",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Oracle",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "AI compute",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Microsoft",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "IEEPA",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Anthropic",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "IEEPA-based tariffs",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "export controls",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "GAIN AI Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "rare-earth magnets",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "CHIPS Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "rare earths",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Effective Tariff Rate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Mistral",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "soybeans",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TPU",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Digital Markets Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google DeepMind",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bridgewater Associates",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Korean memory makers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Congress",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Gulf sovereign-AI buyers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Beijing",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Commerce Department",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "USTR",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "South Korea chip complex",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSM",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "MOEA",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Xi Jinping leadership",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SK Hynix",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Commission",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "State Council",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Big-4",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "the courts",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "EU AI Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Huawei",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "India",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Reserve",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia H20",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Saudi Arabia PIF",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bureau of Industry and Security",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Big Tech cloud",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Mexico",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "China+1 economies",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taiwan (Government)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Samsung Electronics",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC-Arizona",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "InvestAI",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Samsung Electronics",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC-Arizona",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "InvestAI",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "MOFCOM",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "HUMAIN",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "ASML",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia revenue-share model",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Vietnam",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taipei",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "friend-shoring hubs",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Congressional Research Service",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Ascend",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "the Chinese open-source AI stack",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "United States",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Oracle",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "AI compute",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Microsoft",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "IEEPA",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Anthropic",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "IEEPA-based tariffs",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "export controls",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "GAIN AI Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "rare-earth magnets",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "CHIPS Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "rare earths",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Effective Tariff Rate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Mistral",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "soybeans",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TPU",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Digital Markets Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google DeepMind",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bridgewater Associates",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Congress",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Beijing",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Commerce Department",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "South Korea chip complex",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Xi Jinping leadership",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Reserve",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bureau of Industry and Security",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taiwan (Government)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC-Arizona",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "MOFCOM",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "ASML",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "United States",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Oracle",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Microsoft",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Anthropic",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "IEEPA-based tariffs",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "export controls",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "GAIN AI Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "CHIPS Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bridgewater Associates",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Congress",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Beijing",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Commerce Department",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "South Korea chip complex",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Reserve",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bureau of Industry and Security",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taiwan (Government)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "ASML",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "United States",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Oracle",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Microsoft",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Anthropic",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "export controls",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "South Korea chip complex",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taiwan (Government)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "ASML",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Microsoft",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taiwan (Government)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  }
+ ],
+ "reddit": [
+  {
+   "round": 0,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "CREATE_POST",
+   "content": "On Durability of the tariff regime after the SCOTUS IEEPA ruling — our position: Tariffs are leverage paid by foreigners; AI supremacy is a national-security imperative; deals over rules",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "People's Republic of China",
+   "type": "CREATE_POST",
+   "content": "On AI capex supercycle versus bubble / bond-market financing strain — our position: Commitment to win-win trade and opposition to weaponizing supply chains while pursuing self-reliance",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "Nvidia",
+   "type": "CREATE_POST",
+   "content": "On US-China chip export controls and the 25% revenue-share model — our position: Supports American AI leadership but lobbies to keep every market including China open; controls should be narrow",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "TSMC",
+   "type": "CREATE_POST",
+   "content": "On Rare-earth/magnet chokepoint and the Nov 27 2026 truce expiry — our position: Customer neutrality and commitment to Taiwan as tech heart, while hedging via a US footprint",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "US Hyperscalers",
+   "type": "CREATE_POST",
+   "content": "On Semiconductor reshoring and Taiwan concentration risk — our position: AI demand is insatiable and spending is disciplined; owning the full stack is strategic",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "OpenAI/Stargate",
+   "type": "CREATE_POST",
+   "content": "On Wide-but-shallow AI adoption and small near-term productivity gains — our position: Safe AGI for humanity while racing to lock up compute and sovereign geographic deals",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "US Federal Reserve",
+   "type": "CREATE_POST",
+   "content": "On Sovereign AI and state equity in strategic chip firms — our position: Data-dependent and apolitical; treats tariff price effects as arguably transitory",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "US Congress & Supreme Court",
+   "type": "CREATE_POST",
+   "content": "On Data-center energy demand as the binding compute input — our position: Constitutional limits and separation of powers; SCOTUS ruled IEEPA does not authorize tariffs",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "CREATE_POST",
+   "content": "On Connector economies and statistical vs. real decoupling — our position: Open research and self-reliance; algorithmic efficiency beats brute-force compute hoarding",
+   "ok": true
+  },
+  {
+   "round": 0,
+   "agent": "European Union",
+   "type": "CREATE_POST",
+   "content": "On Durability of the tariff regime after the SCOTUS IEEPA ruling — our position: Strategic autonomy and open trade, negotiating to avoid US tariffs while under-building compute",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "CREATE_POST",
+   "content": "On Durability of the tariff regime after the SCOTUS IEEPA ruling — our position: Tariffs are leverage paid by foreigners; AI supremacy is a national-security imperative; deals over rules",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "CREATE_POST",
+   "content": "On AI capex supercycle versus bubble / bond-market financing strain — our position: Commitment to win-win trade and opposition to weaponizing supply chains while pursuing self-reliance",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "CREATE_POST",
+   "content": "On US-China chip export controls and the 25% revenue-share model — our position: Supports American AI leadership but lobbies to keep every market including China open; controls should be narrow",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "CREATE_POST",
+   "content": "On Rare-earth/magnet chokepoint and the Nov 27 2026 truce expiry — our position: Customer neutrality and commitment to Taiwan as tech heart, while hedging via a US footprint",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "CREATE_POST",
+   "content": "On Semiconductor reshoring and Taiwan concentration risk — our position: AI demand is insatiable and spending is disciplined; owning the full stack is strategic",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "CREATE_POST",
+   "content": "On Wide-but-shallow AI adoption and small near-term productivity gains — our position: Safe AGI for humanity while racing to lock up compute and sovereign geographic deals",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Reserve",
+   "type": "CREATE_POST",
+   "content": "On Sovereign AI and state equity in strategic chip firms — our position: Data-dependent and apolitical; treats tariff price effects as arguably transitory",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "CREATE_POST",
+   "content": "On Data-center energy demand as the binding compute input — our position: Constitutional limits and separation of powers; SCOTUS ruled IEEPA does not authorize tariffs",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "CREATE_POST",
+   "content": "On Connector economies and statistical vs. real decoupling — our position: Open research and self-reliance; algorithmic efficiency beats brute-force compute hoarding",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "CREATE_POST",
+   "content": "On Durability of the tariff regime after the SCOTUS IEEPA ruling — our position: Strategic autonomy and open trade, negotiating to avoid US tariffs while under-building compute",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Korean memory makers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Congress",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Gulf sovereign-AI buyers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Beijing",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Commerce Department",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "USTR",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "South Korea chip complex",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSM",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "MOEA",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Xi Jinping leadership",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SK Hynix",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Commission",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "State Council",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Big-4",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "the courts",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "EU AI Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Huawei",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "India",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Reserve",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia H20",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Saudi Arabia PIF",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bureau of Industry and Security",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Big Tech cloud",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Mexico",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "China+1 economies",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taiwan (Government)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Samsung Electronics",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC-Arizona",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "InvestAI",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Samsung Electronics",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC-Arizona",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "InvestAI",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "MOFCOM",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "HUMAIN",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "ASML",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia revenue-share model",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Vietnam",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taipei",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "friend-shoring hubs",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Congressional Research Service",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Ascend",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "the Chinese open-source AI stack",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "United States",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Oracle",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "AI compute",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Microsoft",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "IEEPA",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Anthropic",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "IEEPA-based tariffs",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "export controls",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "GAIN AI Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "rare-earth magnets",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "CHIPS Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "rare earths",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Effective Tariff Rate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Mistral",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "soybeans",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TPU",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Digital Markets Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google DeepMind",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bridgewater Associates",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Korean memory makers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Congress",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Gulf sovereign-AI buyers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Beijing",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Commerce Department",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "USTR",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "South Korea chip complex",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSM",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "MOEA",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Xi Jinping leadership",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SK Hynix",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Commission",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "State Council",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Big-4",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "the courts",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "EU AI Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Huawei",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "India",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Reserve",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia H20",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Saudi Arabia PIF",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bureau of Industry and Security",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Big Tech cloud",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Mexico",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "China+1 economies",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taiwan (Government)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Samsung Electronics",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC-Arizona",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "InvestAI",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Samsung Electronics",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC-Arizona",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "InvestAI",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "MOFCOM",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "HUMAIN",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "ASML",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia revenue-share model",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Vietnam",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taipei",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "friend-shoring hubs",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Congressional Research Service",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Ascend",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "the Chinese open-source AI stack",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "United States",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Oracle",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "AI compute",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Microsoft",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "IEEPA",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Anthropic",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "IEEPA-based tariffs",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "export controls",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "GAIN AI Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "rare-earth magnets",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "CHIPS Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "rare earths",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Effective Tariff Rate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Mistral",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "soybeans",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TPU",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Digital Markets Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google DeepMind",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bridgewater Associates",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Congress",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Beijing",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Commerce Department",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "South Korea chip complex",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Xi Jinping leadership",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Reserve",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bureau of Industry and Security",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taiwan (Government)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC-Arizona",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "MOFCOM",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "ASML",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "United States",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Oracle",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Microsoft",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Anthropic",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "IEEPA-based tariffs",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "export controls",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "GAIN AI Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "CHIPS Act",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bridgewater Associates",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Congress",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Beijing",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Commerce Department",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "South Korea chip complex",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Reserve",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Bureau of Industry and Security",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taiwan (Government)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "ASML",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "United States",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Oracle",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Microsoft",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Anthropic",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "export controls",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "South Korea chip complex",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taiwan (Government)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "ASML",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "SoftBank",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Microsoft",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Taiwan (Government)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Hyperscalers",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Google",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Congress & Supreme Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Roberts Court",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "TSMC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Amazon",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Nvidia",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "US Federal Executive (Trump Administration)",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "Global South/Connectors",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "DeepSeek/Huawei/SMIC",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "OpenAI/Stargate",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "European Union",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  },
+  {
+   "round": 10,
+   "agent": "People's Republic of China",
+   "type": "FOLLOW",
+   "content": "",
+   "ok": true
+  }
+ ]
+}

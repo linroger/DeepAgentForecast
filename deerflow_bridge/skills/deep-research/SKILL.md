@@ -14,6 +14,8 @@ Produce **decision-grade research** — evidence-graded, triangulated, adversari
 3. **Disconfirmation over confirmation.** A conclusion you have not tried to break is a guess. Allocate real budget to the case *against* your emerging picture.
 4. **Calibration over confidence.** Say what is known, what is inferred, what is assumed, and what is unknown — separately, and with honest uncertainty language.
 5. **Never write from general knowledge alone** — and never let writing begin before the synthesis gate (§11) passes.
+6. **No thrashing, no white whales.** An elusive fact/quote/document is worth **at most two attempts** — then record it as a gap and move on. **Never reissue a near-duplicate query**: re-running the same intent with new quotes, a different `site:`/`filetype:`, reshuffled `OR` terms, or a synonym is a *duplicate* — it burns budget and surfaces nothing new. When a result is thin, change the *angle* (a different actor, driver, mechanism, document type, language, or time window), never the wording. Broad coverage of **every** actor and driver in the brief beats fifteen reworded attempts at one quotation.
+7. **Sources are real or they are nothing.** Cite only documents you **actually fetched and read**, with their **true URL** and the **date shown on the page**. Never fabricate a source, URL, title, or date from memory; never list a future-dated or hypothetical document as if it were published fact. A "source" with no real fetched URL is dropped. Aim for **wide high-tier coverage** — many distinct S1/S2 origins across regions, actors, and opposing views, not a handful re-cited.
 
 ## 2. Phase 0 — Research Design (before any tool call)
 
@@ -136,6 +138,7 @@ When the question is predictive (this pipeline's main case), research for *forec
 - **Drivers & indicators.** Identify the 3–6 variables that actually move the outcome, and for each a **watchable indicator** (a number, decision, or event with a date) that would signal which way things are breaking. These power downstream simulation and monitoring.
 - **Trend vs. break.** Establish the trend with data, then research what could structurally break it (policy, technology, capacity limits) — extrapolation and rupture need different evidence.
 - **Timeline discipline.** Build the dated sequence of events; causation claims that violate chronology die here.
+- **Prediction-market signals (automatic).** After your report is written, the harness machine-fetches related active prediction markets (Kalshi + Polymarket via Oddpool) and appends a "Prediction Market Signals" section with each market's implied P(yes). You do not need to search prediction-market sites yourself. Treat market-implied probabilities as **calibration anchors, not ground truth**: they are the crowd's priced belief at fetch time, they move continuously, and thin markets are noisy. Where your forecast overlaps a listed market, downstream stages will compare the two and expect an explicit rationale for divergences larger than ~10 percentage points.
 
 ## 9. Temporal Awareness
 
@@ -200,4 +203,8 @@ Any NO → one targeted pass on that gap only. Do not restart broad searching.
 - ❌ Citing Wikipedia/aggregators instead of the primaries they point to
 - ❌ Presenting a vendor's self-claim as independent fact
 - ❌ Burning budget on duplicate queries or retry loops, then skipping verification
+- ❌ **Chasing a "white whale"** — 5+ reworded queries hunting one elusive quote/document/number while most of the cast and drivers go uncovered (find it in ≤2 tries or log it as a gap and move on)
+- ❌ **Reissuing a near-duplicate query** — same intent, only re-quoted / new `site:` / reshuffled `OR` terms (change the angle, not the wording)
+- ❌ **Listing a source with no real fetched URL**, or inventing/guessing/future-dating a source, URL, or date from memory instead of from a page you actually read
+- ❌ Narrow coverage — a few sources re-cited across the whole report instead of wide, distinct S1/S2 origins per actor/driver
 - ❌ Starting to write before the synthesis gate passes

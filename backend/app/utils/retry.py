@@ -1,6 +1,13 @@
 """
 API调用重试机制
 用于处理LLM等外部API调用的重试逻辑
+
+⚠️ INFRA-1 弃用声明：本模块目前**零调用点**——真实的 LLM 重试逻辑统一在
+``app/utils/llm_client.py`` 的 chat() 退避循环（含 422/429 熔断、Retry-After 尊重、
+提供方回退），分页重试在 ``app/utils/zep_paging.py``。本模块默认值与二者不一致
+（带 jitter、max_delay=30、对裸 Exception 重试——包括不该重试的确定性 4xx），
+新代码请勿引入以免出现两套发散的重试语义；如需统一重试策略，扩展 llm_client 的
+循环而非此处。保留文件仅为脚本级一次性用途。
 """
 
 import time

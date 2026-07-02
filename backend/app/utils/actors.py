@@ -995,6 +995,19 @@ def events_to_schedule(
             spans.append(span)
     hz = horizon_days or (max(spans) if spans else 1) or 1
 
+    # PREP-5: 反应缓冲。hz 缺省取"最远未来事件的跨度"时，最远事件必然映到
+    # round(span/hz*total_rounds)=total_rounds → 被夹到最后一轮——高潮事件永远落在收官轮，
+    # agent 零轮可反应，事件形同虚设。把映射压进 [0, total_rounds-REACT_BUFFER] 窗口，
+    # 给最远事件留出 max(2, total_rounds//5) 轮的反应期。旗标关闭时回到旧映射。
+    effective_rounds = total_rounds
+    try:
+        from ..config import Config as _Cfg  # 延迟导入，避免 utils→config 顶层环依赖
+        _buffered = bool(getattr(_Cfg, "SIM_EVENT_REACT_BUFFER", True))
+    except Exception:
+        _buffered = True
+    if _buffered:
+        effective_rounds = max(1, total_rounds - max(2, total_rounds // 5))
+
     out: List[Dict[str, Any]] = []
     for e in evs:
         if not isinstance(e, dict):
@@ -1006,7 +1019,7 @@ def events_to_schedule(
         if span < 0:
             continue
         out.append({
-            "round": min(total_rounds - 1, round(span / hz * total_rounds)),
+            "round": min(total_rounds - 1, round(span / hz * effective_rounds)),
             "event": e.get("event"),
             "date": e.get("date"),
         })
@@ -1528,10 +1541,24 @@ def ontology_seed_block(actors: Optional[Any]) -> str:
     seed = ontology_from_actors(actors)
     if not seed:
         return ""
-    ents = "、".join(e["name"] for e in seed.get("entity_types", []))
+    ent_list = seed.get("entity_types", [])
+    ents = "、".join(e["name"] for e in ent_list)
     edges = "、".join(e["name"] for e in seed.get("edge_types", []))
+    # ONT-1: 新增预算自适应。dossier 的 actor.type 过粗（如仅 Government/Organization）时，
+    # 硬编码"至多再新增 2 个"会把实体类型预算压到 seed+2≈4，与 general_forecast 模板
+    # "6-10 个实体类型"的规则冲突，且 LLM 会偏向更紧的种子上限——这是 4 类型回归的根因。
+    # 自适应：允许补足到 8 类（下限保持 2），硬上限 10 由 _validate_and_process 的
+    # MAX_ENTITY_TYPES 兜底。旗标关闭时回到旧的固定 2。
+    allow_new = 2
+    try:
+        from ..config import Config as _Cfg  # 延迟导入，避免 utils→config 顶层环依赖
+        if bool(getattr(_Cfg, "ONTOLOGY_SEED_ADAPTIVE_BUDGET", True)):
+            allow_new = max(2, 8 - len(ent_list))
+    except Exception:
+        allow_new = max(2, 8 - len(ent_list))
     parts = ["【本体种子（来自已实现的 actor 阵容，单一真源；请**保留**这些实体/关系类型，"
-             "至多再新增 2 个领域专属类型；不要把已标注的类型重新命名）】"]
+             f"至多再新增 {allow_new} 个领域专属类型（实体类型总数不超过 10）；"
+             "不要把已标注的类型重新命名）】"]
     if ents:
         parts.append(f"实体类型（来自 actor.type）：{ents}")
     if edges:
@@ -1539,11 +1566,79 @@ def ontology_seed_block(actors: Optional[Any]) -> str:
     return "\n".join(parts)
 
 
-def world_state_seed_from_actors(actors: Optional[Any]) -> Dict[str, Any]:
-    """NEXTSTEPS P1-1: 从 forecast_inputs.scenarios 抽出 WorldState 种子。
+def _parse_probability_value(value: Any) -> Optional[float]:
+    """R2-CAL-13: 把自由文本概率（probability_band / outcome_frequency）解析为 [0,1] 中点。
 
-    返回 {scenarios:[name], base_rates:{name: prob}}——给"结果世界态"一个由外部视角基率初始化
-    的起点（services.worldstate.WorldState 据此 seed）。无候选情景 → {}（调用方退化为不建世界态）。
+    这是 R2-SIM-9 的 schema-mismatch 根因修复：forecast_inputs.scenarios 几乎从不带裸
+    ``probability`` 数值键，真实信号藏在 ``probability_band``（如 "30-40%"、"around 60%"、
+    "0.3-0.5"）里；base_rates 的外部视角则藏在 ``outcome_frequency``（如 "25%"、"0.2"）里。
+    旧逻辑只读裸数值键，于是几乎总是落空 → WorldState 被迫退化成静默 50/50 均匀先验。
+
+    解析策略（纯字符串、确定性、容错）：
+    * 抽取所有十进制数字；无数字 → None。
+    * 若文本含 ``%`` 或任一数字 > 1 → 视为百分数，逐个除以 100。
+    * 取所有数字的均值作为中点（区间 "30-40%" → 0.35；点估计 "60%" → 0.60）。
+    * 夹到 (0,1]；解析为 0 或越界 → None（视作无可用信号，交由 uniform_prior 标注）。
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):  # bool 是 int 子类，须先排除
+        return None
+    if isinstance(value, (int, float)):
+        f = float(value)
+        return f if 0.0 < f <= 1.0 else None
+    text = str(value).strip()
+    if not text:
+        return None
+    nums = re.findall(r"\d+(?:\.\d+)?", text)
+    if not nums:
+        return None
+    try:
+        vals = [float(x) for x in nums]
+    except ValueError:
+        return None
+    is_percent = ("%" in text) or any(v > 1.0 for v in vals)
+    if is_percent:
+        vals = [v / 100.0 for v in vals]
+    mid = sum(vals) / len(vals)
+    if mid <= 0.0 or mid > 1.0:
+        return None
+    return round(mid, 6)
+
+
+def _match_reference_class_to_scenario(reference_class: str, names: List[str]) -> Optional[str]:
+    """R2-CAL-13: 把一条 base_rate 的 reference_class 映射回某个情景名（标准化子串匹配）。
+
+    base_rates[].reference_class（如 "historical base rate of incumbent holding share"）
+    与情景名（如 "base" / "NVIDIA holds"）经常只在标准化后有子串包含关系。命中较长的情景名
+    优先，避免短名误配；无匹配返回 None（该 base_rate 不并入任何情景）。
+    """
+    rc = normalize_name(reference_class)
+    if not rc:
+        return None
+    best: Optional[str] = None
+    best_len = 0
+    for nm in names:
+        key = normalize_name(nm)
+        if len(key) >= 3 and (key in rc or rc in key) and len(key) > best_len:
+            best, best_len = nm, len(key)
+    return best
+
+
+def world_state_seed_from_actors(actors: Optional[Any]) -> Dict[str, Any]:
+    """NEXTSTEPS P1-1 / R2-CAL-13: 从 forecast_inputs 抽出 WorldState 种子。
+
+    返回 {scenarios:[name], base_rates:{name: prob}, uniform_prior: bool}——给"结果世界态"
+    一个由外部视角基率初始化的起点（services.worldstate.WorldState 据此 seed）。无候选情景 →
+    {}（调用方退化为不建世界态）。
+
+    R2-CAL-13（critical）：基率来源按优先级为
+      1. 情景上的裸数值键 probability/likelihood/base_rate/prob（旧行为，逐字节保留）；
+      2. 情景上的 ``probability_band`` 文本中点（"30-40%"→0.35）——这才是 forecast_inputs
+         的真实 schema，旧逻辑遗漏它正是 WorldState 总落到 50/50 的根因（R2-SIM-9）；
+      3. forecast_inputs.base_rates[].outcome_frequency，按 reference_class→情景名映射补全。
+    当三条来源都未给出任何可用基率时，``uniform_prior`` 置 True（显式标注"基率确实缺失、
+    将用均匀先验"），而不是让下游静默 50/50 而无人知晓。
     """
     fi = extract_forecast_inputs(actors)
     scs = fi.get("scenarios") or []
@@ -1556,18 +1651,46 @@ def world_state_seed_from_actors(actors: Optional[Any]) -> Dict[str, Any]:
         if not nm or nm in names:
             continue
         names.append(nm)
+        # 1) 裸数值键（旧行为，byte-stable）。
+        got = False
         for key in ("probability", "likelihood", "base_rate", "prob"):
             v = s.get(key)
             if v is None:
                 continue
             try:
                 rates[nm] = float(v)
+                got = True
                 break
             except (TypeError, ValueError):
                 pass
+        # 2) R2-CAL-13: probability_band 中点回退（真实 schema 所在）。
+        if not got:
+            band = _parse_probability_value(s.get("probability_band"))
+            if band is not None:
+                rates[nm] = band
     if not names:
         return {}
-    return {"scenarios": names, "base_rates": rates}
+
+    # 3) R2-CAL-13: forecast_inputs.base_rates[].outcome_frequency 按 reference_class 映射补全，
+    #    只填尚无基率的情景（情景自带的概率优先级更高）。
+    for br in fi.get("base_rates") or []:
+        if not isinstance(br, dict):
+            continue
+        rc = str(br.get("reference_class") or "").strip()
+        if not rc:
+            continue
+        freq = _parse_probability_value(br.get("outcome_frequency"))
+        if freq is None:
+            continue
+        target = _match_reference_class_to_scenario(rc, names)
+        if target and target not in rates:
+            rates[target] = freq
+
+    # uniform_prior：三条来源都没给出任何正基率 → 显式标注将退化为均匀先验（替代静默 50/50）。
+    uniform_prior = not any(
+        isinstance(v, (int, float)) and v > 0 for v in rates.values()
+    )
+    return {"scenarios": names, "base_rates": rates, "uniform_prior": uniform_prior}
 
 
 # 关系价 → 到预测时点的保守轨迹先验。结构性纽带（联盟/对抗）有惯性、更"黏"；交易性纽带随利益

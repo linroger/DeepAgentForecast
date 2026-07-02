@@ -324,16 +324,35 @@ class PipelineManager:
     # 「降级覆写」损坏。哨兵让上层（API）把它映射成 409 Conflict 而不是 500。
     INCOMPATIBLE_KEY = "__incompatible_schema__"
 
+    # ORCH-5: 每管线一把进程内写锁。唯一 tmp 名只消除了 FileNotFoundError 竞态；
+    # touch_heartbeat/mark_failed 的「load→改→整 dict 写回」与主线程 save() 交错时仍有
+    # lost-update：心跳线程读到旧 state 后原子覆写，静默回滚主线程刚落盘的阶段进度/产物，
+    # 最坏把 terminal 状态翻回 running（下次重启即被孤儿回收误杀）。全部写方都在本进程
+    # （管线线程/心跳线程/API 线程），进程内锁足以串行化读改写窗口，文件格式不变。
+    _state_locks: "dict[str, threading.Lock]" = {}
+    _state_locks_guard = threading.Lock()
+
+    @classmethod
+    def _state_lock(cls, pipeline_id: str) -> threading.Lock:
+        with cls._state_locks_guard:
+            lk = cls._state_locks.get(pipeline_id)
+            if lk is None:
+                lk = cls._state_locks[pipeline_id] = threading.Lock()
+            return lk
+
     @classmethod
     def save(cls, state: PipelineState) -> None:
         cls.ensure_dirs(state.pipeline_id)
         state.updated_at = _utcnow()
         # I-4-4: 每次落盘都写当前 schema 版本（即便 dataclass 实例由旧文件迁移而来）。
         state.schema_version = PIPELINE_SCHEMA_VERSION
-        tmp = cls.state_path(state.pipeline_id) + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(state.to_dict(), f, ensure_ascii=False, indent=2)
-        os.replace(tmp, cls.state_path(state.pipeline_id))
+        # 走 write_json_atomic（tempfile.mkstemp 生成「每次唯一」的 tmp 名）。此前三处 state 写入
+        # 共用同一个硬编码 `pipeline_state.json.tmp`，心跳线程(touch_heartbeat)与主线程 save() 并发时
+        # 会竞态：一方 os.replace 把共享 tmp 改走后，另一方 os.replace 找不到 tmp → FileNotFoundError，
+        # 研究阶段（双轨+心跳长跑）必现。唯一 tmp 名彻底消除该竞态。
+        from ..utils.atomic import write_json_atomic
+        with cls._state_lock(state.pipeline_id):  # ORCH-5: 与心跳/终态直写串行化
+            write_json_atomic(cls.state_path(state.pipeline_id), state.to_dict())
 
     # I-4-4: 有序迁移函数，键 = 「源版本」，把 vN 的 dict 就地补齐到 v(N+1)。
     # 必须纯且幂等（在 load 时反复运行也安全）。新增一版时：PIPELINE_SCHEMA_VERSION += 1，
@@ -377,23 +396,28 @@ class PipelineManager:
         running，前端轮询据此空转。原子写入（tmp + os.replace），同时把当前阶段标为
         同一终态。``status`` 允许 "cancelled"（用户对孤儿管线点取消时语义更准确）。
         """
-        data = cls.load(pipeline_id)
-        if not data:
-            return False
-        data["status"] = status
-        data["error"] = error
-        data["updated_at"] = _utcnow()
-        cur = data.get("current_stage")
-        stages = data.get("stages") or {}
-        if cur and isinstance(stages.get(cur), dict):
-            stages[cur]["status"] = status
-            stages[cur]["error"] = error
-        cls.ensure_dirs(pipeline_id)
-        tmp = cls.state_path(pipeline_id) + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, cls.state_path(pipeline_id))
-        return True
+        with cls._state_lock(pipeline_id):  # ORCH-5: 读改写全程持锁
+            data = cls.load(pipeline_id)
+            if not data:
+                return False
+            data["status"] = status
+            data["error"] = error
+            data["updated_at"] = _utcnow()
+            cur = data.get("current_stage")
+            stages = data.get("stages") or {}
+            if cur and isinstance(stages.get(cur), dict):
+                _st = stages[cur]
+                # XRUN-15: 已跑到 100% 的阶段是「完成的工作」，不因管线级取消/失败被改写成
+                # cancelled（曾出现 status='cancelled' + progress=100 + '本体生成完成' 的自相矛盾）。
+                if int(_st.get("progress") or 0) >= 100 and not _st.get("error"):
+                    _st["status"] = "completed"
+                else:
+                    _st["status"] = status
+                    _st["error"] = error
+            cls.ensure_dirs(pipeline_id)
+            from ..utils.atomic import write_json_atomic  # 唯一 tmp 名，消除与心跳/主存档的竞态
+            write_json_atomic(cls.state_path(pipeline_id), data)
+            return True
 
     @classmethod
     def touch_heartbeat(cls, pipeline_id: str, pid: Optional[int] = None) -> bool:
@@ -403,21 +427,21 @@ class PipelineManager:
         mark_failed 的轻量直写模式（load → 改两三个键 → 原子替换），避免每次心跳走 full save
         / 触发 schema 迁移副作用。状态非 running 时静默 no-op（终态管线无需心跳）。
         """
-        data = cls.load(pipeline_id)
-        if not data or cls.INCOMPATIBLE_KEY in data:
-            return False
-        if data.get("status") != "running":
-            return False
-        data["heartbeat_at"] = _utcnow()
-        if pid is not None:
-            data["owner_pid"] = int(pid)
-            data["owner_boot_id"] = _BOOT_ID
-        cls.ensure_dirs(pipeline_id)
-        tmp = cls.state_path(pipeline_id) + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, cls.state_path(pipeline_id))
-        return True
+        with cls._state_lock(pipeline_id):  # ORCH-5: 读改写全程持锁，防覆写主线程刚落盘的进度
+            data = cls.load(pipeline_id)
+            if not data or cls.INCOMPATIBLE_KEY in data:
+                return False
+            if data.get("status") != "running":
+                return False
+            data["heartbeat_at"] = _utcnow()
+            if pid is not None:
+                data["owner_pid"] = int(pid)
+                data["owner_boot_id"] = _BOOT_ID
+            cls.ensure_dirs(pipeline_id)
+            # 高频心跳：唯一 tmp 名消除与主存档竞态；fsync=False（数秒即被覆写，无需落盘耐久）。
+            from ..utils.atomic import write_json_atomic
+            write_json_atomic(cls.state_path(pipeline_id), data, fsync=False)
+            return True
 
     # ----------------------------------------------------------------------
     # I-4-3: 产物清单 manifest.json（每条产物的 sha256/字节数/产出阶段/schema_ok）。
@@ -800,14 +824,12 @@ class DeerFlowResearchRunner:
         # 纵深防御：即便上游漏写了降级/错误消息当报告，也别让管线拿一段错误串去
         # 建图/模拟/写报告（那会把垃圾当成功）。覆盖 DeerFlow 降级文案、原始 provider
         # 报错、以及 MiniMax 域内容审核(422 new_sensitive)等多种短错误串。
-        _err_markers = (
-            "The configured LLM provider",  # DeerFlow LLMErrorHandlingMiddleware 降级
-            "LLM request failed",            # 原始 provider 报错被当成正文
-            "unprocessable_entity",          # 例如 MiniMax 422 内容审核
-            "new_sensitive",                 # MiniMax 域内容过滤命中(code 1026)
-            "Error code: 4", "Error code: 5",  # 4xx/5xx 错误串
-        )
-        if len(report.strip()) < 400 and any(m in report for m in _err_markers):
+        # RES-1/RES-8 镜像：除「短 + 错误串」外再加一道裸长度下限（RESEARCH_MIN_REPORT_CHARS，
+        # 默认 400，0 关闭）——旧版 bridge 部署仍在时，编排器侧兜住 <400 字符的报告残段。
+        _min_chars = int(getattr(Config, "RESEARCH_MIN_REPORT_CHARS", 400) or 0)
+        _rlen = len(report.strip())
+        if (_min_chars and _rlen < _min_chars) or (
+                _rlen < 400 and any(m in report for m in _LLM_ERROR_MARKERS)):
             raise RuntimeError(
                 "DeerFlow 返回的是 LLM 降级/错误消息而非研究报告"
                 "（提供方临时不可用/限流/额度、网络错误，或内容审核拦截），"
@@ -816,7 +838,11 @@ class DeerFlowResearchRunner:
 
         # 双轨 Track B 产物：角色本体档案。旗标关闭或 Track B 未产出时文件缺失，
         # _read_text 返回 ""，下游按「空即退化」处理（document_texts/chunks 与单轨逐字节一致）。
+        # RES-8 镜像：错误串/过短的卷宗按缺失处理（bridge 的 _is_degraded_artifact 同语义）。
         actor_dossier = _read_text(os.path.join(handoff_dir, "actor_dossier.md"))
+        if actor_dossier and _is_degraded_dossier(actor_dossier):
+            logger.warning("actor_dossier.md 疑似降级产物（错误串/过短），按缺失处理")
+            actor_dossier = ""
         actors = _read_json(os.path.join(handoff_dir, "actors.json"))
         sources = _read_json(os.path.join(handoff_dir, "sources.json"))
         timeline = _read_json(os.path.join(handoff_dir, "timeline.json"))
@@ -872,6 +898,28 @@ def _tail(s: str, limit: int = 160) -> str:
     return s if len(s) <= limit else s[:limit] + "…"
 
 
+# RES-1/RES-8: LLM 降级/错误串标记（live 报告守卫 + 卷宗降级门共用；单一真源）。
+_LLM_ERROR_MARKERS = (
+    "The configured LLM provider",  # DeerFlow LLMErrorHandlingMiddleware 降级
+    "LLM request failed",            # 原始 provider 报错被当成正文
+    "unprocessable_entity",          # 例如 MiniMax 422 内容审核
+    "new_sensitive",                 # MiniMax 域内容过滤命中(code 1026)
+    "Error code: 4", "Error code: 5",  # 4xx/5xx 错误串
+)
+
+
+def _is_degraded_dossier(text: str) -> bool:
+    """RES-8 编排器侧镜像：actor_dossier.md 含错误串或短于 RESEARCH_MIN_REPORT_CHARS
+    （默认 400，0 关闭长度门）即视为降级产物——调用方应按缺失处理，绝不喂给本体/建图。"""
+    t = (text or "").strip()
+    if not t:
+        return False  # 空 = 缺失，由调用方原有语义处理
+    _min = int(getattr(Config, "RESEARCH_MIN_REPORT_CHARS", 400) or 0)
+    if _min and len(t) < _min:
+        return True
+    return any(m in t for m in _LLM_ERROR_MARKERS)
+
+
 def _read_text(path: str) -> str:
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -904,12 +952,17 @@ def _load_research_handoff(handoff_dir: str) -> dict[str, Any]:
     # <400 字符一律拒绝（涵盖错误串），≥400 视为真实研究报告。
     if len(report.strip()) < 400:
         raise RuntimeError("已有研究报告缺失或过短，无法从研究阶段恢复")
+    # RES-8 镜像（resume 路径）：错误串/过短的卷宗按缺失处理，与 live 路径一致。
+    _dossier = _read_text(os.path.join(handoff_dir, "actor_dossier.md"))
+    if _dossier and _is_degraded_dossier(_dossier):
+        logger.warning("resume：actor_dossier.md 疑似降级产物（错误串/过短），按缺失处理")
+        _dossier = ""
     return {
         "report": report,
         "report_path": report_path,
         # 双轨 Track B 产物：角色本体档案（actor_dossier.md）。缺失时 _read_text 返回 ""，
         # 下游按「空即退化」处理，与单轨/旗标关闭时逐字节一致。
-        "actor_dossier": _read_text(os.path.join(handoff_dir, "actor_dossier.md")),
+        "actor_dossier": _dossier,
         "actors": _read_json(os.path.join(handoff_dir, "actors.json")),
         "sources": _read_json(os.path.join(handoff_dir, "sources.json")),
         "timeline": _read_json(os.path.join(handoff_dir, "timeline.json")),
@@ -1326,6 +1379,23 @@ class PipelineOrchestrator:
         """
         try:
             from ..models.task import TaskManager
+            # ORCH-2: reconcile 在 create_app() 里、**绑定端口之前**运行。第二个后端在第一个仍
+            # 服务 :5001 时启动，会先破坏性地把活管线回收成 failed（并杀掉其研究子进程），然后才
+            # 死于 'Address already in use'——一个注定失败的重复进程踩死了活进程拥有的状态。
+            # 端口已被占用 = 极可能另一后端在跑 → 整体跳过孤儿回收（由那个活进程自己管理）。
+            if bool(getattr(Config, "PIPELINE_RECLAIM_PORT_PROBE", True)):
+                import socket
+                try:
+                    _port = int(os.environ.get("FLASK_PORT", "5001") or "5001")
+                except ValueError:
+                    _port = 5001
+                try:
+                    with socket.create_connection(("127.0.0.1", _port), timeout=0.2):
+                        logger.warning(
+                            "端口 %d 已被占用，疑似另一后端在跑——跳过孤儿管线回收", _port)
+                        return
+                except OSError:
+                    pass  # 端口空闲 → 本进程将是唯一后端，正常回收
             task_manager = TaskManager()
             hb_enabled = bool(getattr(Config, "PIPELINE_HEARTBEAT_ENABLED", True))
             stale_s = float(getattr(Config, "PIPELINE_HEARTBEAT_STALE_S", 120) or 120)
@@ -1384,6 +1454,11 @@ class PipelineOrchestrator:
             # 心跳仍新鲜 → 真在跑，保留；心跳过期 → 那进程 hung 或 pid 被复用 → 回收。
             return not fresh
         # owner 进程不存在 / 字段缺失：心跳新鲜（极少见，刚崩溃）也给一个宽限，否则回收。
+        # ORCH-2: owner/heartbeat 双缺失（老状态文件、或手工修复过的状态）此前零宽限、立即判死。
+        # 改为退回 updated_at 给同一个心跳窗口的宽限，避免刚手工编辑/刚崩溃的状态被秒杀。
+        if hb_age is None:
+            up_age = _age_seconds(data.get("updated_at"))
+            return not (up_age is not None and up_age <= stale_s)
         return not fresh
 
     @staticmethod
@@ -1640,12 +1715,18 @@ class PipelineOrchestrator:
         return {"deleted": deleted, "skipped": skipped}
 
     @classmethod
-    def resume(cls, pipeline_id: str) -> PipelineState:
+    def resume(cls, pipeline_id: str, force: bool = False) -> PipelineState:
         """Resume a failed/cancelled pipeline in place, reusing existing artifacts.
 
         The pipeline keeps the same id so browser history, artifact paths, and
         local bookmarks remain valid. A fresh task id is assigned for progress
         polling, and the background runner skips completed/recoverable stages.
+
+        ORCH-3 恢复态机收口（此前一天内被迫手工编辑 4 次 pipeline_state.json）：
+          * status=running 但 owner 进程确证已死（_orphan_is_dead）→ 就地按取消语义回收后继续
+            恢复，不再要求先重启后端触发 reconcile；
+          * ``force=True`` 允许恢复一条 completed 但 pipeline_health 为 degraded/failed 的管线：
+            仅把 REPORT 阶段重置为 pending（配合 ORCH-1 的损坏报告不复用守卫重生成报告）。
         """
         with cls._lifecycle_lock:
             # 持久化状态可能滞后（崩溃时写失败），线程注册表才是本进程在飞的真相。
@@ -1660,15 +1741,42 @@ class PipelineOrchestrator:
             if _bad is not None:
                 raise IncompatiblePipelineSchema(pipeline_id, _bad)
             if data.get("status") == "running":
-                raise RuntimeError("管线仍在运行，无法恢复")
+                # ORCH-3(a): 无在飞线程 + owner 证据判死 → 就地回收（复用 reconcile 的判据），
+                # 让「僵死的 running 孤儿」无需重启后端即可恢复。判活则维持 409。
+                _stale_s = float(getattr(Config, "PIPELINE_HEARTBEAT_STALE_S", 120) or 120)
+                if cls._orphan_is_dead(pipeline_id, _stale_s):
+                    PipelineManager.mark_failed(
+                        pipeline_id, "resume 时回收死管线（owner 进程已不存活）", status="cancelled")
+                    data = PipelineManager.load(pipeline_id) or data
+                    logger.warning("[%s] resume：running 孤儿 owner 已死，就地回收后继续恢复", pipeline_id)
+                else:
+                    raise RuntimeError("管线仍在运行，无法恢复")
             if data.get("status") == "completed":
-                raise RuntimeError("管线已完成，无需恢复")
+                # ORCH-3(b): completed 但交付物健康降级/失败时，允许 force 重驱报告阶段。
+                _ph = ((data.get("options") or {}).get("pipeline_health") or {})
+                if not (force and _ph.get("status") in ("degraded", "failed")):
+                    raise RuntimeError(
+                        "管线已完成，无需恢复"
+                        + ("（如需重生成降级报告，请带 force=true 重试）"
+                           if _ph.get("status") in ("degraded", "failed") else "")
+                    )
 
             state = PipelineState.from_dict(data)
             PipelineManager.ensure_dirs(pipeline_id)
             bands = RESEARCH_ONLY_BANDS if state.mode == "research_only" else STAGE_BANDS
             for name in bands.keys():
                 state.stages.setdefault(name, StageState(name=name))
+
+            if force and data.get("status") == "completed":
+                # 仅重置 REPORT：研究/图谱/模拟产物保持复用。ORCH-1 的复用守卫会因交付物损坏
+                # 拒绝复用旧报告并铸新 report_id。
+                _rst = state.stages.setdefault(STAGE_REPORT, StageState(name=STAGE_REPORT))
+                _rst.status = "pending"
+                _rst.progress = 0
+                _rst.error = None
+                _rst.finished_at = None
+                state.current_stage = STAGE_REPORT
+                state.options["force_report_regen"] = _utcnow()
 
             failed_stage = state.current_stage
             if failed_stage and failed_stage in state.stages:
@@ -2029,12 +2137,18 @@ class PipelineOrchestrator:
         sim_state = sim_manager.create_simulation(
             project.project_id, graph_id, enable_twitter=True, enable_reddit=True)
         sim_id = sim_state.simulation_id
+        # SIM-11 (pairs with SIM-7): HTTP/openai-compat providers tolerate higher
+        # persona fan-out; raise the default 8→16 (configurable via PARALLEL_PROFILE_COUNT).
+        # CLI providers stay capped at 3 (local CLI throughput bound).
+        _pp = int(getattr(Config, "PARALLEL_PROFILE_COUNT", 16) or 16)
         sim_manager.prepare_simulation(
             simulation_id=sim_id,
             simulation_requirement=state.prompt,
             document_text=report_md,
-            parallel_profile_count=8 if _is_http else 3,
+            parallel_profile_count=_pp if _is_http else 3,
             actors=actors,
+            max_rounds=max_rounds,  # PREP-1: 集成种子跑同样按真实执行窗排期
+            research_language=state.options.get("research_language"),  # PREP-4
         )
         run_kwargs: dict[str, Any] = {"platform": "parallel", "sim_seed": int(seed)}
         if max_rounds:
@@ -2209,6 +2323,277 @@ class PipelineOrchestrator:
         except Exception:
             pass
         PipelineManager.save(state)
+
+    # ---------------------------------------------------------------- S1 health gate
+    # The corpus review found 8/13 runs reported status=completed/100%/error=null while
+    # the deliverable was actually broken (all-placeholder reports, no forecast.json, hollow
+    # sims). The pipeline marked success on stage *return* without validating artifacts, so
+    # every other defect was invisible. These methods assess the real deliverable and either
+    # HARD-FAIL the run (so it shows as failed, not falsely completed) or record a degraded
+    # health block consumed by the status API + the report's simulation-caveat logic.
+    @staticmethod
+    def _sim_dir(sim_id: str) -> str:
+        return os.path.normpath(os.path.join(
+            os.path.dirname(__file__), "..", "..", "uploads", "simulations", sim_id))
+
+    def _spawn_run_stall_watchdog(self, pipeline_id: str, sim_id: str, stall_s: float) -> dict:
+        """QUALITY-OPT C1/C2 (live-surfaced): an INDEPENDENT daemon watchdog for the RUN stage.
+
+        The inline poll-loop watchdog cannot fire when the poll itself blocks on a wedged sim's
+        IPC (observed: both LLM providers exhausted → sim deadlocked at a round for 4.5h while the
+        pipeline still showed 'running'). This thread reads run_state.json FROM DISK (never blocks
+        on the sim), and if the round hasn't advanced within stall_s it force-stops the sim
+        subprocess — which makes the poll loop's next get_run_state return STOPPED and fail the run
+        honestly instead of hanging forever. Returns a control dict; caller sets ctl['stop']=True.
+        """
+        import threading
+        ctl = {"stop": False}
+        if stall_s <= 0:
+            return ctl
+        rsp = os.path.join(self._sim_dir(sim_id), "run_state.json")
+
+        def _wd() -> None:
+            last_round = None
+            last_prog = time.monotonic()
+            while not ctl["stop"]:
+                time.sleep(30)
+                if ctl["stop"]:
+                    return
+                try:
+                    cur = None
+                    if os.path.exists(rsp):
+                        with open(rsp, encoding="utf-8") as f:
+                            rs = json.load(f)
+                        cur = rs.get("current_round")
+                        if rs.get("completed") or rs.get("error"):
+                            return  # sim reached a terminal state; poll loop handles it
+                    if cur != last_round:
+                        last_round = cur
+                        last_prog = time.monotonic()
+                    elif (time.monotonic() - last_prog) > stall_s:
+                        logger.error("[%s] 独立看门狗：模拟 %ds 无轮次推进（卡在 round %s，疑似双 provider 耗尽），"
+                                     "强制停止子进程", pipeline_id, int(stall_s), cur)
+                        try:
+                            SimulationRunner.stop_simulation(sim_id)
+                        except Exception as _e:  # noqa: BLE001
+                            logger.warning("[%s] 看门狗停止模拟失败: %s", pipeline_id, _e)
+                        return
+                except Exception:  # noqa: BLE001 — watchdog must never crash
+                    pass
+
+        threading.Thread(target=_wd, name=f"run-stall-wd-{sim_id[:8]}", daemon=True).start()
+        return ctl
+
+    def _assess_report_health(self, report_id: Optional[str]) -> "tuple[str, list[str], dict]":
+        """Hard-fail if the report is fundamentally empty (all placeholders / no forecast /
+        trivially short); degraded if some sections are placeholders."""
+        import glob
+        issues: list[str] = []
+        if not report_id:
+            return "failed", ["no report_id was produced"], {}
+        try:
+            folder = ReportManager._get_report_folder(report_id)
+        except Exception:  # noqa: BLE001
+            return "failed", ["report folder unresolved"], {}
+        secs = sorted(glob.glob(os.path.join(folder, "section_*.md")))
+        total = len(secs)
+        placeholder = 0
+        for s in secs:
+            try:
+                body = open(s, encoding="utf-8", errors="ignore").read()
+            except OSError:
+                continue
+            if ("生成失败" in body) or ("本章节" in body and "失败" in body) or len(body.strip()) < 200:
+                placeholder += 1
+        fc_ok = False
+        fcp = os.path.join(folder, "forecast.json")
+        q_issues: list[str] = []
+        if os.path.exists(fcp):
+            try:
+                fc = json.load(open(fcp, encoding="utf-8"))
+                fc_ok = bool(fc.get("scenarios") or fc.get("binary_forecasts"))
+                # surface the report-side audit findings (S2/S11/S12) as degraded signals
+                q = fc.get("quality") or {}
+                if (q.get("quote_provenance") or {}).get("ungrounded"):
+                    q_issues.append(f"{q['quote_provenance']['ungrounded']} ungrounded/laundered quote(s) (S2)")
+                if (q.get("numeric_consistency") or {}).get("mismatch_count"):
+                    q_issues.append(f"{q['numeric_consistency']['mismatch_count']} prose-vs-forecast probability mismatch(es) (S11)")
+                if (q.get("implausible_stats") or {}).get("count"):
+                    q_issues.append(f"{q['implausible_stats']['count']} implausible headline stat(s) (S12)")
+                bq = fc.get("binary_quality") or {}
+                if bq and not bq.get("passed", True):
+                    q_issues.append("binary-forecast conviction/objectivity gate failed (A3/A4): " + "；".join(bq.get("issues", [])[:2]))
+                # XRUN-1(c): 二元预测对模拟不敏感（与另一份报告输出同一概率向量）→ 降级信号。
+                if (q.get("sim_insensitivity") or {}).get("issue"):
+                    q_issues.append(
+                        "binary forecasts insensitive to simulation (identical vector to "
+                        f"{(q.get('sim_insensitivity') or {}).get('other_report_id')})")
+                # XRUN-16(1): 钉定骨架与最终 forecast 之间情景数漂移。
+                _scd = q.get("scenario_count_drift") or {}
+                if _scd:
+                    q_issues.append(
+                        f"scenario count drifted {_scd.get('pinned')}→{_scd.get('final')} "
+                        "between pinned spine and final forecast")
+                # XRUN-16(2): 发布门的引用覆盖率失败已在报告侧写进 quality.issues，折入健康块。
+                for _qi in (q.get("issues") or []):
+                    if isinstance(_qi, str) and _qi.startswith("定量声明引用覆盖率"):
+                        q_issues.append(_qi)
+            except (OSError, ValueError):
+                fc_ok = False
+        fr = os.path.join(folder, "full_report.md")
+        fr_len = os.path.getsize(fr) if os.path.exists(fr) else 0
+        meta = {"sections": total, "placeholder_sections": placeholder,
+                "forecast_ok": fc_ok, "full_report_bytes": fr_len}
+        hard = False
+        if total and placeholder >= total:
+            hard = True
+            issues.append(f"all {total} report sections are failure placeholders")
+        elif placeholder:
+            issues.append(f"{placeholder}/{total} report sections are failure placeholders")
+        if not fc_ok and getattr(Config, "REPORT_STRUCTURED_FORECAST", True):
+            hard = True
+            issues.append("forecast.json missing or empty (no scenarios/binary_forecasts)")
+        if fr_len and fr_len < 2000:
+            hard = True
+            issues.append(f"full_report.md is only {fr_len} bytes (effectively empty)")
+        issues.extend(q_issues)  # S2/S11/S12/binary-gate audit findings → degraded signals
+        meta["quality_issues"] = q_issues
+        health = "failed" if hard else ("degraded" if issues else "ok")
+        return health, issues, meta
+
+    def _assess_run_health(self, sim_id: Optional[str],
+                           graph_id: Optional[str] = None) -> "tuple[str, list[str], dict]":
+        """Degraded (not hard-fail) if the simulation is hollow (0 organic posts/comments),
+        errored, or truncated — the report must then NOT narrativize it as evidence."""
+        import sqlite3
+        issues: list[str] = []
+        if not sim_id:
+            return "ok", issues, {}
+        base = self._sim_dir(sim_id)
+        db_rows = 0
+        db_found = False
+        for dbn in ("reddit_simulation.db", "twitter_simulation.db"):
+            p = os.path.join(base, dbn)
+            if not os.path.exists(p):
+                continue
+            db_found = True
+            try:
+                c = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+                cur = c.cursor()
+                for t in ("post", "comment"):
+                    try:
+                        db_rows += cur.execute(f"select count(*) from {t}").fetchone()[0]
+                    except sqlite3.Error:
+                        pass
+                c.close()
+            except sqlite3.Error:
+                pass
+        # XRUN-11: run_summary.json 已做诚实的种子/有机拆分（CREATE_POST/COMMENT − seeds），
+        # 与 sqlite 裸行数（含种子+转发行）是两套口径、曾对同一 sim 给出 20 vs 40 的双重真相。
+        # 存在时以 run_summary 为准；sqlite 计数保留为回退并改名 db_post_comment_rows。
+        organic = db_rows
+        organic_source = "db_rows"
+        summary_health = None
+        try:
+            _sum_path = os.path.join(SimulationRunner.RUN_STATE_DIR, sim_id, "run_summary.json")
+            if os.path.exists(_sum_path):
+                with open(_sum_path, encoding="utf-8") as _sf:
+                    _summary = json.load(_sf)
+                if isinstance(_summary, dict):
+                    _oc = _summary.get("organic_action_count")
+                    if isinstance(_oc, int):
+                        organic = _oc
+                        organic_source = "run_summary"
+                    _sh = _summary.get("simulation_health")
+                    if isinstance(_sh, str) and _sh:
+                        summary_health = _sh
+        except Exception:  # noqa: BLE001 — 老 run 无 summary → 沿用 db 口径
+            pass
+        err = None
+        truncated = False
+        rsp = os.path.join(base, "run_state.json")
+        if os.path.exists(rsp):
+            try:
+                rs = json.load(open(rsp, encoding="utf-8"))
+                err = rs.get("error")
+                cr = rs.get("current_round")
+                tr = rs.get("total_rounds") or rs.get("total_simulation_rounds")
+                if isinstance(cr, int) and isinstance(tr, int) and tr > 0 and cr < tr:
+                    truncated = True
+            except (OSError, ValueError):
+                pass
+        # XRUN-6: 图谱反馈死信队列非空 = 报告将读到一张 episode 饥饿的图谱。计数暴露 + 降级，
+        # 运维用 backend/scripts/replay_zep_dead_letters.py <graph_id> 重放（成功后归档、计数归零）。
+        dead_letters = 0
+        if graph_id:
+            try:
+                _dl_path = os.path.join(
+                    Config.OASIS_SIMULATION_DATA_DIR, "_zep_dead_letter", f"{graph_id}.jsonl")
+                if os.path.exists(_dl_path):
+                    with open(_dl_path, encoding="utf-8") as _df:
+                        dead_letters = sum(1 for _ln in _df if _ln.strip())
+            except Exception:  # noqa: BLE001
+                dead_letters = 0
+        meta = {"organic_actions": organic, "organic_source": organic_source,
+                "db_post_comment_rows": db_rows,
+                "error": (str(err)[:160] if err else None),
+                "truncated": truncated, "dead_letter_count": dead_letters}
+        if summary_health:
+            meta["simulation_health"] = summary_health
+            if summary_health in ("hollow", "errored", "llm_degraded", "truncated"):
+                issues.append(f"run_summary simulation_health={summary_health}")
+        if err:
+            issues.append(f"simulation error: {str(err)[:120]}")
+        if truncated:
+            issues.append("simulation was truncated before completion")
+        if db_found and organic == 0:
+            issues.append("simulation produced 0 organic posts/comments (hollow) — report must not cite it as evidence")
+        if dead_letters:
+            issues.append(
+                f"{dead_letters} graph-feedback episode(s) in the dead-letter queue — "
+                "report may read an episode-starved graph (replay via replay_zep_dead_letters.py)")
+        health = "degraded" if issues else "ok"
+        return health, issues, meta
+
+    def _enforce_pipeline_health(self, state: PipelineState) -> None:
+        """Aggregate stage health into state.options['pipeline_health']; HARD-FAIL (raise →
+        status=failed) when the report deliverable is empty. Flag-gated + degrade-safe."""
+        if not getattr(Config, "PIPELINE_HEALTH_GATE", True):
+            return
+        health: dict[str, Any] = {"status": "ok", "stages": {}}
+        hard_issues: list[str] = []
+        try:
+            rh, ri, rm = self._assess_report_health(state.report_id)
+            health["stages"]["report"] = {"health": rh, "issues": ri, **rm}
+            if rh == "failed":
+                hard_issues = ri
+            if state.simulation_id:
+                sh, si, sm = self._assess_run_health(state.simulation_id, graph_id=state.graph_id)
+                health["stages"]["run"] = {"health": sh, "issues": si, **sm}
+                if sh != "ok" and "run" in state.stages and not state.stages["run"].error:
+                    state.stages["run"].error = "；".join(si) or None
+            # KG-5: 建图跳块比例超阈值（graph 阶段留痕于 options）→ graph 阶段降级。
+            _gskip = state.options.get("graph_ingest_degraded_ratio")
+            if _gskip is not None:
+                health["stages"]["graph"] = {
+                    "health": "degraded",
+                    "issues": [f"graph build skipped {float(_gskip) * 100:.0f}% of chunks "
+                               f"({state.options.get('graph_skipped_chunks')}/"
+                               f"{state.options.get('graph_total_chunks')})"],
+                    "skipped_ratio": _gskip,
+                }
+            degraded = any(s.get("health") in ("degraded", "failed")
+                           for s in health["stages"].values())
+            health["status"] = "failed" if hard_issues else ("degraded" if degraded else "ok")
+            state.options["pipeline_health"] = health
+        except Exception as _he:  # noqa: BLE001 — assessment must never itself crash the run
+            logger.warning("[%s] 健康评估异常（忽略）: %s", state.pipeline_id, _he)
+            return
+        if hard_issues:
+            raise RuntimeError("交付物健康检查失败（deliverable is broken）: " + "；".join(hard_issues))
+        if health["status"] == "degraded":
+            logger.warning("[%s] 管线健康降级: %s", state.pipeline_id,
+                           json.dumps(health["stages"], ensure_ascii=False)[:400])
 
     @staticmethod
     def _stage_artifact_specs(state: PipelineState, stage: str) -> list[tuple[str, str]]:
@@ -2478,7 +2863,12 @@ class PipelineOrchestrator:
             "stale": False,
             "last_progress_age_s": None,
         }
-        elapsed = _age_seconds(state.created_at)
+        # ORCH-7: 恢复过的管线以 resumed_at 为耗时锚——created_at 可能是数天前，用它线性外推
+        # 会立刻顶到 PIPELINE_ETA_CAP_S（resume_count=5 的管线每个会话 ETA 全是噪声）。
+        _anchor = state.options.get("resumed_at") if isinstance(state.options, dict) else None
+        elapsed = _age_seconds(_anchor) if _anchor else None
+        if elapsed is None:
+            elapsed = _age_seconds(state.created_at)
         if elapsed is not None:
             out["elapsed_s"] = int(elapsed)
         status = state.status
@@ -2699,6 +3089,192 @@ class PipelineOrchestrator:
         except Exception as e:  # noqa: BLE001
             logger.debug("[%s] research_quality 透传跳过: %s", state.pipeline_id, e)
 
+    # -- 内部：预测信心罚分 (R2-RES-3) -------------------------------------
+
+    @staticmethod
+    def _compute_forecast_confidence_penalty(
+        meta: Optional[dict], dossier_coverage: Optional[dict]
+    ) -> tuple[float, dict]:
+        """R2-RES-3 (pure): derive an advisory forecast-confidence penalty in [0, 0.3]
+        from research evidence quality.
+
+        Three additive sources, each capped so the total is a soft demotion signal and
+        never large enough to be load-bearing on its own:
+          * research_quality.score below RESEARCH_QUALITY_FLOOR (proportional, ≤0.15);
+          * source-tier mix skewed to low-tier sources (≤~0.08);
+          * weak dossier-coverage signals (0.05 each, ≤0.10).
+        Returns ``(penalty, components)``; never raises (caller wraps too)."""
+        meta = meta if isinstance(meta, dict) else {}
+        components: dict[str, float] = {}
+        penalty = 0.0
+
+        rq = meta.get("research_quality")
+        if isinstance(rq, dict):
+            score = rq.get("score")
+            try:
+                floor = float(getattr(Config, "RESEARCH_QUALITY_FLOOR", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                floor = 0.0
+            if isinstance(score, (int, float)) and floor > 0 and score < floor:
+                c = round(min(0.15, float(floor) - float(score)), 3)
+                if c > 0:
+                    components["research_quality"] = c
+                    penalty += c
+
+        tiers = meta.get("source_tiers")
+        if isinstance(tiers, dict) and tiers:
+            _w = {"s1": 1.0, "s2": 0.7, "s3": 0.4}
+            tot = 0
+            wsum = 0.0
+            for t, n in tiers.items():
+                try:
+                    cnt = int(n)
+                except (TypeError, ValueError):
+                    continue
+                if cnt <= 0:
+                    continue
+                wsum += _w.get(str(t).strip().lower(), 0.2) * cnt
+                tot += cnt
+            if tot > 0:
+                c = round(max(0.0, 1.0 - (wsum / tot)) * 0.1, 3)
+                if c > 0:
+                    components["source_tier_mix"] = c
+                    penalty += c
+
+        if isinstance(dossier_coverage, dict):
+            weak = 0
+            if dossier_coverage.get("n_actors", 0) and dossier_coverage.get("pct_actors_with_incentives", 0) < 0.34:
+                weak += 1
+            if dossier_coverage.get("n_relationships", 0) == 0:
+                weak += 1
+            elif dossier_coverage.get("n_relationships", 0) and dossier_coverage.get("pct_edges_valenced", 0) < 0.2:
+                weak += 1
+            if weak:
+                c = round(min(0.10, 0.05 * weak), 3)
+                components["dossier_coverage"] = c
+                penalty += c
+
+        return round(min(0.3, penalty), 3), components
+
+    def _surface_forecast_confidence_penalty(self, state: PipelineState, handoff_dir: str) -> None:
+        """R2-RES-3: stash an advisory ``forecast_confidence_penalty`` (+ component
+        breakdown) into ``state.options`` for the publish gate to consume later.
+
+        Pure observation: only *writes* the number — the publish gate that reads it
+        (gate refine) is deliberately deferred to a later change, so nothing here can
+        block or wedge a run. Best-effort; never raises."""
+        try:
+            meta = _read_json(os.path.join(handoff_dir, "meta.json"))
+            penalty, components = self._compute_forecast_confidence_penalty(
+                meta if isinstance(meta, dict) else None,
+                state.options.get("dossier_coverage"),
+            )
+            state.options["forecast_confidence_penalty"] = penalty
+            state.options["forecast_confidence_penalty_components"] = components
+            if penalty > 0:
+                logger.info("[%s] forecast_confidence_penalty=%.3f（来源: %s）",
+                            state.pipeline_id, penalty, components)
+            PipelineManager.save(state)
+        except Exception as e:  # noqa: BLE001 — 罚分纯观测，失败不影响主流程
+            logger.debug("[%s] forecast_confidence_penalty 计算跳过: %s", state.pipeline_id, e)
+
+    # -- 内部：研究 as_of 锚校验 (R2-RES-7) -------------------------------
+
+    @staticmethod
+    def _validate_as_of_date(actors: Any, sources: Any) -> tuple[Optional[datetime], Optional[str]]:
+        """R2-RES-7: validate ``actors.as_of_date`` — the bi-temporal anchor used as the
+        seed ``valid_at`` and as every research chunk's ``reference_time``.
+
+        A trustworthy anchor must (a) parse, (b) be no later than the run date (no
+        future anchor), and (c) be no earlier than the newest source publication date
+        (the anchor cannot predate the evidence it summarizes). On any violation we fall
+        back to max(source dates) clamped to the run date, else the run date, and return
+        a human-readable note for telemetry.
+
+        Returns ``(as_of_dt | None, note | None)``. When ``as_of_date`` is simply absent
+        AND there are no source dates, returns ``(None, None)`` to preserve today's
+        "no anchor" behavior byte-for-byte. Never raises."""
+        run_dt = datetime.now(timezone.utc)
+        max_src: Optional[datetime] = None
+        if isinstance(sources, list):
+            for s in sources:
+                if not isinstance(s, dict):
+                    continue
+                d = parse_as_of(s.get("date"))
+                if d is not None and (max_src is None or d > max_src):
+                    max_src = d
+        raw = actors.get("as_of_date") if isinstance(actors, dict) else None
+        parsed = parse_as_of(raw)
+        note: Optional[str] = None
+        if parsed is not None:
+            if parsed > run_dt:
+                note = f"as_of_date {parsed.date()} 晚于运行日 {run_dt.date()}，回退"
+                parsed = None
+            elif max_src is not None and parsed < max_src:
+                note = f"as_of_date {parsed.date()} 早于最新来源日 {max_src.date()}，回退"
+                parsed = None
+        elif raw not in (None, ""):
+            note = f"as_of_date 无法解析（{raw!r}），回退"
+        if parsed is not None:
+            return parsed, None
+        if max_src is not None:
+            return (max_src if max_src <= run_dt else run_dt), note
+        if raw in (None, ""):
+            # 既无 as_of_date 也无来源日 → 维持今日「无锚」行为（degrade-safe）。
+            return None, None
+        # as_of_date 存在但无效且无来源日可回退 → 运行日兜底（优于带脏日期入图）。
+        return run_dt, note
+
+    # -- 内部：嵌入预热 (R2-EXEC-7) ---------------------------------------
+
+    def _maybe_warm_embedder(self, state: PipelineState, actors: Any) -> None:
+        """R2-EXEC-7: best-effort warm the local embedder during research/ontology.
+
+        Loads the SentenceTransformer model and pre-embeds actor names/aliases on a
+        daemon thread so the graph stage meets a warm model + a populated disk cache
+        (EMBED_DISK_CACHE_PATH) instead of paying first-encode latency mid-build.
+        Default-OFF (EMBED_WARM_AT_RESEARCH); fully best-effort — failures are swallowed
+        and the daemon thread can never block or wedge the pipeline."""
+        if not getattr(Config, "EMBED_WARM_AT_RESEARCH", False):
+            return
+        try:
+            from ..utils.actors import extract_actor_rows
+            rows = extract_actor_rows(actors)
+        except Exception:  # noqa: BLE001
+            rows = []
+        if not rows:
+            return
+        texts: list[str] = []
+        seen: set[str] = set()
+        for r in rows:
+            aliases = r.get("aliases") if isinstance(r.get("aliases"), list) else []
+            for cand in [r.get("name"), *aliases]:
+                s = str(cand or "").strip()
+                if s and s not in seen:
+                    seen.add(s)
+                    texts.append(s)
+            if len(texts) >= 600:
+                break
+        if not texts:
+            return
+        pid = state.pipeline_id
+
+        def _warm() -> None:
+            try:
+                from .graphiti_client.embedder import LocalSentenceTransformerEmbedder
+                emb = LocalSentenceTransformerEmbedder()
+                # 分批编码，写穿到共享磁盘缓存（按 model+text 寻址，graph 阶段命中即近零成本）。
+                for i in range(0, len(texts), 128):
+                    emb._encode(texts[i:i + 128])
+                logger.info("[%s] 嵌入预热完成：%d 个 actor 名/别名", pid, len(texts))
+            except Exception as _we:  # noqa: BLE001 — 预热纯增益，失败无声
+                logger.debug("[%s] 嵌入预热跳过: %s", pid, _we)
+
+        try:
+            threading.Thread(target=_warm, name=f"embed-warm-{pid[:8]}", daemon=True).start()
+        except Exception:  # noqa: BLE001
+            pass
+
     # -- 内部：主流程 ------------------------------------------------------
 
     @classmethod
@@ -2776,6 +3352,9 @@ class PipelineOrchestrator:
                     logger.warning("[%s] cast 去重跳过: %s", state.pipeline_id, _rc_err)
             # I-5-7: 把研究阶段遥测并入统一计量（stash 到 options + 喂给 meter）。
             self._record_research_telemetry(state, research.get("research_telemetry"))
+            # R2-EXEC-7: 趁本体/建图阶段尚未到来，后台预热嵌入器并预嵌 actor 名/别名
+            # （默认关，EMBED_WARM_AT_RESEARCH；纯增益、daemon 线程、失败无声）。
+            self._maybe_warm_embedder(state, actors)
             # I-0-3: 透传研究覆盖度/质量记分牌（meta.json → options，纯观测，永不硬失败）。
             self._surface_research_quality(state, handoff_dir)
 
@@ -2798,6 +3377,11 @@ class PipelineOrchestrator:
                     logger.warning("[%s] dossier 覆盖偏低：%s", state.pipeline_id, "；".join(_weak))
             except Exception as _cov_err:  # noqa: BLE001 — 覆盖度纯观测，失败不影响主流程
                 logger.debug("[%s] dossier_coverage 计算跳过: %s", state.pipeline_id, _cov_err)
+
+            # R2-RES-3: 由 dossier 覆盖度 + 来源层级 + 研究质量记分牌派生一个咨询性
+            # forecast_confidence_penalty 写入 options，供发布门后续消费（gate refine 推迟；
+            # 此处纯写值，不读不阻断，永不 wedge）。
+            self._surface_forecast_confidence_penalty(state, handoff_dir)
 
             if state.mode == "research_only":
                 state.status = "completed"
@@ -2857,7 +3441,12 @@ class PipelineOrchestrator:
                     document_texts=([dossier_md] if dossier_md and dossier_md.strip() else []) + [report_md],
                     simulation_requirement=state.prompt,
                     additional_context=_addl_ctx,
-                    template=Config.ONTOLOGY_TEMPLATE,
+                    # ONT-2: 传 None 才让 ONTOLOGY_AUTO_SELECT（默认开）真正生效——此前恒传
+                    # Config.ONTOLOGY_TEMPLATE（非 None），自动选模板在主管线路径是死代码，
+                    # 未手工改 ONTOLOGY_TEMPLATE 的部署会把市场/地缘预测硬塞进社媒 schema。
+                    # 关闭 AUTO_SELECT 时 _resolve_template(None) 仍回落 Config.ONTOLOGY_TEMPLATE，
+                    # 显式配置照旧生效。（关键词误路由已由 ONT-11 的双词组合收紧。）
+                    template=None,
                     central_question=(actors.get("central_question") if isinstance(actors, dict) else None),
                     actors=actors,
                 )
@@ -2878,13 +3467,15 @@ class PipelineOrchestrator:
                 project.analysis_summary = ontology.get("analysis_summary", "")
                 project.status = ProjectStatus.ONTOLOGY_GENERATED
                 ProjectManager.save_project(project)
-                # T6.3: 把本体落到 handoff/ontology.json，供 artifact 深链
+                # T6.3: 把本体落到 handoff/ontology.json，供 artifact 深链。
+                # ONT-10: 原子写（对齐 actors.json 的 write_json_atomic 约定）——半写的
+                # ontology.json 会让 resume 校验静默强制重建；失败留 warning 而非无声吞掉。
                 try:
+                    from ..utils.atomic import write_json_atomic
                     _hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
-                    with open(os.path.join(_hd, "ontology.json"), "w", encoding="utf-8") as _of:
-                        json.dump(project.ontology, _of, ensure_ascii=False, indent=2)
-                except Exception:
-                    pass
+                    write_json_atomic(os.path.join(_hd, "ontology.json"), project.ontology)
+                except Exception as _oe:  # noqa: BLE001 — 落盘失败非致命，但必须可见
+                    logger.warning("[%s] ontology.json 落盘失败: %s", state.pipeline_id, _oe)
                 self._complete_stage(state, STAGE_ONTOLOGY, "本体生成完成")
 
             # ---- Stage 2: GRAPH ----
@@ -2917,6 +3508,14 @@ class PipelineOrchestrator:
             if _reuse_graph:
                 upd(100, "复用已有知识图谱…")
                 state.graph_id = graph_id
+                # KG-6: 本体注册是进程内存字典——后端重启后的复用路径若不重注册，每次
+                # SIM_GRAPH_FEEDBACK 写回都以 entity_types=None 抽取、落成裸 'Entity' 标签，
+                # 随后被 typed-entity 过滤器整体丢弃。幂等、纯内存写，绝不失败该阶段。
+                try:
+                    if project is not None and project.ontology:
+                        GraphBuilderService(api_key=Config.ZEP_API_KEY).set_ontology(graph_id, project.ontology)
+                except Exception as _ro_err:  # noqa: BLE001
+                    logger.warning("reuse-path set_ontology skipped: %s", _ro_err)
                 self._complete_stage(state, STAGE_GRAPH, "图谱已恢复")
             else:
                 upd(5, "构建知识图谱…")
@@ -2925,8 +3524,24 @@ class PipelineOrchestrator:
                 # 双轨：角色本体档案非空时也切块并前置注入（角色中心内容先种入图谱，
                 # 再由广覆盖研究报告补充）。dynamic-band 用 len(chunks) 重算仍成立。旗标关闭/
                 # Track B 缺失时 dossier_md 为 None/""，chunks 与今日逐字节一致。
-                if dossier_md and dossier_md.strip():
+                #
+                # RESEARCH-2 / ONTO-7: 建图输入源可配置，默认 'both' 与今日逐字节一致。
+                #   'dossier_only' (RESEARCH-2): dossier 非空时只用 dossier 建图；研究报告仅
+                #       继续喂本体 + 报告上下文，不再切块入图。
+                #   'report_only'  (ONTO-7): 跳过 dossier 重切块——GRAPH_SEED_FROM_ACTORS 已把
+                #       cast 作为 typed 边种入，dossier 散文在此冗余。
+                # 未知值或 dossier 缺失/为空一律回退 'both'/当前行为（degrade-safe）。
+                _chunk_src = str(getattr(Config, "GRAPH_CHUNK_SOURCE", "both") or "both").strip().lower()
+                _have_dossier = bool(dossier_md and dossier_md.strip())
+                if _have_dossier and _chunk_src == "dossier_only":
+                    chunks = TextProcessor.split_text(dossier_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP)
+                    state.options["graph_chunk_source"] = "dossier_only"
+                elif _chunk_src == "report_only":
+                    # 报告 chunk 已在 `chunks` 中；dossier 有意不再切块。
+                    state.options["graph_chunk_source"] = "report_only"
+                elif _have_dossier:
                     chunks = TextProcessor.split_text(dossier_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP) + chunks
+                    state.options["graph_chunk_source"] = "both"
                 self._recompute_dynamic_bands(state, chunk_count=len(chunks))  # T6.7: 已知 chunk 数→重排区间
                 graph_id = builder.create_graph(name=project.name)
                 # EXECPLAN2 F-3-1（跨文件兜底）：set_ontology 已对无名条目逐项跳过；这里再包一层
@@ -2940,7 +3555,22 @@ class PipelineOrchestrator:
                 # 种入图谱；valid_at 锚定研究 as_of（不是建图时刻），后续文本抽取按名+embedding
                 # dedup「富化」这些种子节点而非重复创建。as_of 同时作为所有研究 chunk 的
                 # reference_time，给 panorama_search 的 active/historical 切分一个真实双时态轴。
-                as_of = parse_as_of((actors or {}).get("as_of_date")) if isinstance(actors, dict) else None
+                # R2-RES-7: validate the research as_of_date before using it as the
+                # bi-temporal anchor; fall back to newest source date / run date on a
+                # future, pre-evidence, or unparseable value. Gated default-on; any
+                # error or a disabled flag reverts to the plain parse (today's behavior).
+                if getattr(Config, "VALIDATE_AS_OF_DATE", True):
+                    try:
+                        as_of, _as_of_note = self._validate_as_of_date(actors, research.get("sources"))
+                        if _as_of_note:
+                            state.options["as_of_date_correction"] = _as_of_note
+                            logger.warning("[%s] %s → %s", state.pipeline_id, _as_of_note,
+                                           as_of.date() if as_of else None)
+                    except Exception as _ae:  # noqa: BLE001 — 校验失败回退原始解析
+                        logger.debug("[%s] as_of 校验跳过: %s", state.pipeline_id, _ae)
+                        as_of = parse_as_of((actors or {}).get("as_of_date")) if isinstance(actors, dict) else None
+                else:
+                    as_of = parse_as_of((actors or {}).get("as_of_date")) if isinstance(actors, dict) else None
                 if Config.GRAPH_SEED_FROM_ACTORS and actors:
                     try:
                         seeded = builder.seed_actors(graph_id, actors, valid_at=as_of)
@@ -2957,6 +3587,27 @@ class PipelineOrchestrator:
                 uuids = builder.add_text_batches(
                     graph_id, chunks, batch_size=10, progress_callback=add_cb, reference_time=as_of
                 )
+
+                # KG-5: 量化 ingest 丢失。builder 对失败 chunk 是跳过续跑（正确的韧性），但跳块
+                # 比例超过 GRAPH_MAX_SKIPPED_RATIO 时图谱是「安静残缺」的——留痕到 options，
+                # 由 _enforce_pipeline_health 折入 pipeline_health 的 graph 阶段降级。
+                try:
+                    _ing = getattr(builder, "last_ingest_stats", None)
+                    if isinstance(_ing, dict) and int(_ing.get("total") or 0) > 0:
+                        _ing_total = int(_ing.get("total") or 0)
+                        _ing_failed = int(_ing.get("failed") or 0)
+                        state.options["graph_skipped_chunks"] = _ing_failed
+                        state.options["graph_total_chunks"] = _ing_total
+                        _skip_ratio = _ing_failed / float(_ing_total)
+                        _max_skip = float(getattr(Config, "GRAPH_MAX_SKIPPED_RATIO", 0.3) or 0.3)
+                        if _skip_ratio > _max_skip:
+                            state.options["graph_ingest_degraded_ratio"] = round(_skip_ratio, 3)
+                            logger.warning(
+                                "[%s] 建图跳块比例 %.0f%%（%d/%d）超过阈值 %.0f%% —— 图谱残缺，"
+                                "GRAPH 阶段将标记 degraded", state.pipeline_id,
+                                _skip_ratio * 100, _ing_failed, _ing_total, _max_skip * 100)
+                except Exception:  # noqa: BLE001 — ingest 统计纯观测
+                    pass
 
                 def wait_cb(msg: str, ratio: float):
                     upd(int(65 + ratio * 33), msg)
@@ -2979,10 +3630,10 @@ class PipelineOrchestrator:
                     except Exception as e:
                         logger.warning("[%s] community detection skipped: %s", state.pipeline_id, e)
 
-                # I-1-4: best-effort LLM-assisted entity resolution / canonical-alias merge.
+                # I-1-4: best-effort entity resolution / canonical-alias merge (no LLM).
                 # Runs AFTER communities so merges land before retrieval reads the graph;
-                # default-off (GRAPH_RESOLVE_ENTITIES). Never blocks the build; audited to
-                # handoff/entity_merges.json.
+                # KG-10b: default-ON (GRAPH_RESOLVE_ENTITIES, config.py 默认 true——并行建图
+                # 的 dedup 安全网)。Never blocks the build; audited to handoff/entity_merges.json.
                 if Config.GRAPH_RESOLVE_ENTITIES:
                     try:
                         upd(99, "实体消解/规范别名合并…")
@@ -3043,13 +3694,32 @@ class PipelineOrchestrator:
                     state.options["graph_components"] = gi.components
                     # NEXTSTEPS P3-7: 持久化中心度先验（node_name→[0,1]）供 PREPARE 的 salience
                     # 排序融合 + 报告/UI 引用；此前 _get_graph_info 算完即丢弃。
+                    # KG-7: 按 actors.json 策展别名组折叠（组内 MAX、ADD-only、旗标内部门控）——
+                    # 同一现实 actor 的表面形不再把影响力信号打碎成小分片；无 actors/关旗标时原样返回。
                     if getattr(gi, "centrality", None):
                         try:
                             from ..utils.atomic import write_json_atomic
+                            from .graph_builder import fold_priors_with_aliases
                             _hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
-                            write_json_atomic(os.path.join(_hd, "graph_priors.json"), gi.centrality)
+                            _folded = fold_priors_with_aliases(gi.centrality, actors)
+                            write_json_atomic(os.path.join(_hd, "graph_priors.json"), _folded)
                             state.artifacts["graph_priors"] = os.path.join(_hd, "graph_priors.json")
-                            state.options["graph_centrality_nodes"] = len(gi.centrality)
+                            state.options["graph_centrality_nodes"] = len(_folded)
+                        except Exception:  # noqa: BLE001
+                            pass
+                    # KG-3: 结构咽喉先验（介数中心度 + 关节点，GRAPH_CHOKEPOINT_PRIORS 开启且
+                    # 非空时才有值）。落独立文件，扁平的 graph_priors.json（name→centrality）
+                    # 保持不变以兼容旧读者。
+                    if getattr(gi, "betweenness", None) or getattr(gi, "chokepoints", None):
+                        try:
+                            from ..utils.atomic import write_json_atomic
+                            _hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+                            _sp = os.path.join(_hd, "graph_priors_structural.json")
+                            write_json_atomic(_sp, {
+                                "betweenness": gi.betweenness or {},
+                                "chokepoints": gi.chokepoints or [],
+                            })
+                            state.artifacts["graph_priors_structural"] = _sp
                         except Exception:  # noqa: BLE001
                             pass
                 except Exception as e:
@@ -3086,6 +3756,10 @@ class PipelineOrchestrator:
                 upd(5, "创建模拟…")
                 sim_state = sim_manager.create_simulation(project.project_id, graph_id, enable_twitter=True, enable_reddit=True)
                 state.simulation_id = sim_state.simulation_id
+                # XRUN-15: 新模拟 attempt 取代旧 attempt，清掉指向旧 sim/report 目录的
+                # *_partial 临时产物指针（扫描器会为新 attempt 重新登记）。
+                for _pk in [k for k in list(state.artifacts) if k.endswith("_partial")]:
+                    state.artifacts.pop(_pk, None)
                 PipelineManager.save(state)
 
                 def prepare_cb(stage: str, progress: int, message: str, **_kwargs):
@@ -3106,14 +3780,22 @@ class PipelineOrchestrator:
                             _graph_priors = json.load(_gf)
                 except Exception:  # noqa: BLE001
                     _graph_priors = None
+                # SIM-11 (pairs with SIM-7): raise HTTP persona fan-out default 8→16
+                # (configurable via PARALLEL_PROFILE_COUNT); CLI providers stay at 3.
+                _pp = int(getattr(Config, "PARALLEL_PROFILE_COUNT", 16) or 16)
+                # PREP-1: 把本次运行的真实轮数预算透传到事件排期（否则生成器只能按
+                # OASIS_DEFAULT_MAX_ROUNDS 钳制，options.max_rounds < 默认时欠覆盖）。
+                _prep_mr = state.options.get("max_rounds") or (Config.OASIS_DEFAULT_MAX_ROUNDS or None)
                 sim_manager.prepare_simulation(
                     simulation_id=sim_state.simulation_id,
                     simulation_requirement=state.prompt,
                     document_text=report_md,
                     progress_callback=prepare_cb,
-                    parallel_profile_count=8 if _is_http_provider else 3,
+                    parallel_profile_count=_pp if _is_http_provider else 3,
                     actors=actors,  # 研究档案直通模拟准备：persona/配置以实证立场为准
                     graph_priors=_graph_priors,  # P3-7: 中心度先验（融入 salience 排序）
+                    max_rounds=int(_prep_mr) if _prep_mr else None,
+                    research_language=state.options.get("research_language"),  # PREP-4
                 )
                 self._complete_stage(state, STAGE_PREPARE, "环境就绪")
 
@@ -3192,44 +3874,53 @@ class PipelineOrchestrator:
                     _stall_s = float(getattr(Config, "PIPELINE_RUN_STALL_S", 1800) or 1800)
                 except (TypeError, ValueError):
                     _stall_s = 1800.0
-                while True:
-                    if cancel_ev is not None and cancel_ev.is_set():
-                        # 先停掉 OASIS 子进程再退出，避免取消后模拟继续烧额度
-                        try:
-                            SimulationRunner.stop_simulation(sim_state.simulation_id)
-                        except Exception as stop_err:  # noqa: BLE001
-                            logger.warning(f"[{state.pipeline_id}] 取消时停止模拟失败: {stop_err}")
-                        raise PipelineCancelled("模拟已被用户取消")
-                    rs = SimulationRunner.get_run_state(sim_state.simulation_id)
-                    if rs is None:
-                        raise RuntimeError("模拟运行状态丢失")
-                    total = getattr(rs, "total_rounds", 0) or 0
-                    cur = getattr(rs, "current_round", 0) or 0
-                    # 仅在轮次推进时落盘进度，省掉每 5s 一次的无效 JSON 重写 + 任务更新
-                    # （取消请求由循环顶部的检查兜底，最多延迟一个 5s 周期）
-                    if (cur, total) != _last_round_seen:
-                        if total > 0 and (_last_round_seen[1] or 0) <= 0:
-                            self._recompute_dynamic_bands(state, total_rounds=total)  # T6.7
-                            self._update_manifest(state, STAGE_RUN, total_rounds=total)  # I-8-1
-                        _last_round_seen = (cur, total)
-                        _last_progress_at = time.monotonic()  # B12: 有进展即续命看门狗
-                        if total > 0:
-                            upd(min(98, int(cur / total * 100)), f"模拟轮次 {cur}/{total}")
-                        else:
-                            upd(5, "模拟进行中…")
-                    if rs.runner_status == RunnerStatus.COMPLETED:
-                        break
-                    if rs.runner_status in (RunnerStatus.FAILED, RunnerStatus.STOPPED):
-                        raise RuntimeError(f"模拟未正常结束: {rs.runner_status} {getattr(rs, 'error', '') or ''}")
-                    # B12: 停滞看门狗——长时间无轮次推进（区别于「慢但在推进」）判定为卡死，
-                    # 停模拟并失败，避免管线线程永久空转。取消仍由循环顶部兜底；默认 30min。
-                    if _stall_s > 0 and (time.monotonic() - _last_progress_at) > _stall_s:
-                        try:
-                            SimulationRunner.stop_simulation(sim_state.simulation_id)
-                        except Exception as _wd_err:  # noqa: BLE001
-                            logger.warning(f"[{state.pipeline_id}] 看门狗停止模拟失败: {_wd_err}")
-                        raise RuntimeError(f"模拟约 {int(_stall_s)}s 无进展（疑似卡死），看门狗已终止")
-                    time.sleep(5)
+                # C1/C2: independent disk-based watchdog that force-stops a wedged sim even if
+                # this poll loop blocks on the sim's IPC (the inline check below can't fire then).
+                _wd_ctl = self._spawn_run_stall_watchdog(state.pipeline_id, sim_state.simulation_id, _stall_s)
+                # ORCH-6: 看门狗退休放 finally——此前只在 COMPLETED 快乐路径置位 stop，取消/
+                # FAILED/STOPPED/轮询异常路径会让 daemon 线程继续每 30s 轮询 run_state.json，
+                # 并在 stall_s 后对已结束的模拟再次 stop_simulation、伴随整个报告阶段游荡。
+                try:
+                    while True:
+                        if cancel_ev is not None and cancel_ev.is_set():
+                            # 先停掉 OASIS 子进程再退出，避免取消后模拟继续烧额度
+                            try:
+                                SimulationRunner.stop_simulation(sim_state.simulation_id)
+                            except Exception as stop_err:  # noqa: BLE001
+                                logger.warning(f"[{state.pipeline_id}] 取消时停止模拟失败: {stop_err}")
+                            raise PipelineCancelled("模拟已被用户取消")
+                        rs = SimulationRunner.get_run_state(sim_state.simulation_id)
+                        if rs is None:
+                            raise RuntimeError("模拟运行状态丢失")
+                        total = getattr(rs, "total_rounds", 0) or 0
+                        cur = getattr(rs, "current_round", 0) or 0
+                        # 仅在轮次推进时落盘进度，省掉每 5s 一次的无效 JSON 重写 + 任务更新
+                        # （取消请求由循环顶部的检查兜底，最多延迟一个 5s 周期）
+                        if (cur, total) != _last_round_seen:
+                            if total > 0 and (_last_round_seen[1] or 0) <= 0:
+                                self._recompute_dynamic_bands(state, total_rounds=total)  # T6.7
+                                self._update_manifest(state, STAGE_RUN, total_rounds=total)  # I-8-1
+                            _last_round_seen = (cur, total)
+                            _last_progress_at = time.monotonic()  # B12: 有进展即续命看门狗
+                            if total > 0:
+                                upd(min(98, int(cur / total * 100)), f"模拟轮次 {cur}/{total}")
+                            else:
+                                upd(5, "模拟进行中…")
+                        if rs.runner_status == RunnerStatus.COMPLETED:
+                            break
+                        if rs.runner_status in (RunnerStatus.FAILED, RunnerStatus.STOPPED):
+                            raise RuntimeError(f"模拟未正常结束: {rs.runner_status} {getattr(rs, 'error', '') or ''}")
+                        # B12: 停滞看门狗——长时间无轮次推进（区别于「慢但在推进」）判定为卡死，
+                        # 停模拟并失败，避免管线线程永久空转。取消仍由循环顶部兜底；默认 30min。
+                        if _stall_s > 0 and (time.monotonic() - _last_progress_at) > _stall_s:
+                            try:
+                                SimulationRunner.stop_simulation(sim_state.simulation_id)
+                            except Exception as _wd_err:  # noqa: BLE001
+                                logger.warning(f"[{state.pipeline_id}] 看门狗停止模拟失败: {_wd_err}")
+                            raise RuntimeError(f"模拟约 {int(_stall_s)}s 无进展（疑似卡死），看门狗已终止")
+                        time.sleep(5)
+                finally:
+                    _wd_ctl["stop"] = True  # C1/C2/ORCH-6: 任何退出路径都退休独立看门狗
                 # 同步 SimulationManager 状态
                 try:
                     ss = sim_manager.get_simulation(sim_state.simulation_id)
@@ -3315,11 +4006,52 @@ class PipelineOrchestrator:
                     existing_report = ReportManager.get_report_by_simulation(sim_state.simulation_id)
                 except Exception:
                     existing_report = None
+            # ORCH-1: 复用前评估交付物本身。meta 说 COMPLETED 但全章占位/无 forecast.json 的
+            # 报告若被复用，S1 健康门必再抛错 → resume 陷入「复用坏报告→健康门失败」死循环
+            # （report_id=None 手工修复也不够：get_report_by_simulation 兜底会把它找回来）。
+            # 交付物判 failed → 弃用复用、落到重建分支铸新 report_id。PIPELINE_HEALTH_GATE 关闭时不改行为。
+            if (existing_report is not None
+                    and getattr(Config, "PIPELINE_HEALTH_GATE", True)):
+                _cand_rid = getattr(existing_report, "report_id", None) or state.report_id
+                try:
+                    _erh, _eri, _ = self._assess_report_health(_cand_rid)
+                except Exception:  # noqa: BLE001 — 评估异常不拦一次合法复用
+                    _erh, _eri = "ok", []
+                if _erh == "failed":
+                    logger.warning("[%s] 现有报告 %s 交付物损坏（%s），弃用复用、重建报告",
+                                   state.pipeline_id, _cand_rid, "；".join(_eri)[:200])
+                    state.options["report_rebuilt_broken_deliverable"] = _cand_rid
+                    existing_report = None
+            # ORCH-3(b): force resume 显式要求重生成报告 → 跳过复用（一次性标记，用后即清）。
+            if existing_report is not None and state.options.pop("force_report_regen", None):
+                logger.info("[%s] force resume：跳过报告复用，重生成", state.pipeline_id)
+                existing_report = None
             if existing_report is not None and getattr(existing_report, "status", None) != ReportStatus.FAILED:
                 upd(100, "复用已有报告")
                 state.report_id = getattr(existing_report, "report_id", state.report_id)
                 self._complete_stage(state, STAGE_REPORT, "报告完成（复用）")
             else:
+                # ORCH-8: 报告是最贵的 LLM 阶段，而健康门在全部章节成本烧完后才触发。双 provider
+                # 同时不可用（MiniMax 审查/配额 + claude-cli 耗尽）时，先花 ~10 token 探测一次
+                # （chat() 自带重试+回退链）；失败即在 <60s 内以可恢复的 REPORT 阶段失败收场，
+                # 而不是磨完 N 个占位章节。带 uuid 防命中 LLM_CACHE 的陈旧 'ping' 结果。
+                if bool(getattr(Config, "REPORT_LLM_PREFLIGHT", True)):
+                    try:
+                        from ..utils.llm_client import LLMClient as _PreflightLLM
+                        _PreflightLLM().chat(
+                            [{"role": "user", "content": f"ping {uuid.uuid4().hex[:8]} — reply: pong"}],
+                            temperature=0.0, max_tokens=8,
+                        )
+                    except Exception as _pf_err:  # noqa: BLE001
+                        raise RuntimeError(
+                            "报告前置探测失败：主/回退 LLM 提供方均不可用 —— 中止报告阶段以免"
+                            f"烧掉全部章节成本（稍后 resume 可从 REPORT 续跑）: {str(_pf_err)[:200]}"
+                        )
+                # XRUN-15: 铸新报告 = 新 attempt，清掉上一 attempt 的 *_partial 临时产物指针
+                # （它们指向被取代的旧 report/sim 目录，读者会拼出 Franken-run）。扫描器会为新
+                # attempt 重新登记。
+                for _pk in [k for k in list(state.artifacts) if k.endswith("_partial")]:
+                    state.artifacts.pop(_pk, None)
                 upd(5, "生成预测报告…")
                 report_id = f"report_{uuid.uuid4().hex[:12]}"
                 # T4.6/T4.7: 情景报告 → 传情景标签 + base 模拟 id（反事实对比 scenario_diff）
@@ -3358,7 +4090,22 @@ class PipelineOrchestrator:
                     raise RuntimeError(getattr(report, "error", "报告生成失败"))
                 self._complete_stage(state, STAGE_REPORT, "报告完成")
 
-            # ---- DONE ----
+            # ORCH-4: NEXTSTEPS P0-3 多种子集成——此前实现完整却从未被调用（N_FORECAST_SEEDS>1
+            # 静默 no-op）。在主报告完成后、健康门之前接线，使集成的信心改写落进被健康门校验的
+            # forecast.json。方法自身在 N_FORECAST_SEEDS<=1（默认）时直接返回，默认行为逐字节不变。
+            if state.mode == "full":
+                try:
+                    self._maybe_run_seed_ensemble(state, project, graph_id, actors, research, report_md)
+                except PipelineCancelled:
+                    raise
+                except Exception as _ens_err:  # noqa: BLE001 — 集成失败不拖垮已成功的主跑
+                    logger.warning("[%s] 多种子集成失败（主报告不受影响）: %s",
+                                   state.pipeline_id, _ens_err)
+
+            # ---- DONE ---- S1: validate the real deliverable before declaring success.
+            # Hard-fails (raises → status=failed) on an empty/placeholder report or missing
+            # forecast.json; records a degraded health block otherwise. Makes broken runs visible.
+            self._enforce_pipeline_health(state)
             state.status = "completed"
             state.global_progress = 100
             PipelineManager.save(state)
@@ -3378,9 +4125,12 @@ class PipelineOrchestrator:
             state.error = str(e)
             if state.current_stage:
                 st = state.stages.setdefault(state.current_stage, StageState(name=state.current_stage))
-                st.status = "cancelled"
-                st.error = str(e)
-                st.finished_at = _utcnow()
+                # XRUN-15: 已完成（progress=100）的阶段是完成的工作，取消只作用于未完成阶段，
+                # 避免出现 status='cancelled' + progress=100 + '…完成' 的自相矛盾标签。
+                if not (st.status == "completed" or (st.progress or 0) >= 100):
+                    st.status = "cancelled"
+                    st.error = str(e)
+                st.finished_at = st.finished_at or _utcnow()
             PipelineManager.save(state)
             if state.task_id:
                 try:
@@ -3406,11 +4156,32 @@ class PipelineOrchestrator:
             # EXECPLAN2 I-5-1: 落盘本次管线的 LLM 计量（token/成本/延迟，按阶段/模型），便于复盘。
             try:
                 tpath = os.path.join(PipelineManager._dir(state.pipeline_id), "run_telemetry.json")
-                LLMMeter.write_run_telemetry(tpath, run_id=state.pipeline_id, extra={
+                _tel_extra: dict[str, Any] = {
                     "pipeline_id": state.pipeline_id,
                     "status": state.status,
                     "report_id": state.report_id,
-                })
+                }
+                # XRUN-8: 折入报告自身的 telemetry.json rollup——复用报告时 by_stage.report 只有
+                # 1 次 cached/0 token 的缓存命中，报告的真实成本在它自己的目录里。
+                try:
+                    if state.report_id:
+                        _rt = _read_json(os.path.join(
+                            ReportManager._get_report_folder(state.report_id), "telemetry.json"))
+                        if isinstance(_rt, dict):
+                            _tel_extra["report_telemetry"] = _rt
+                except Exception:  # noqa: BLE001
+                    pass
+                # XRUN-8(2): RUN 阶段的 LLM 调用发生在 sim 子进程（contextvars 不跨进程），
+                # 折入其自报的 llm_health.json 平台级计数，避免 run 阶段在 rollup 里显示为 0。
+                try:
+                    if state.simulation_id:
+                        _lh = _read_json(os.path.join(
+                            Config.OASIS_SIMULATION_DATA_DIR, state.simulation_id, "llm_health.json"))
+                        if isinstance(_lh, dict):
+                            _tel_extra["sim_llm_health"] = _lh
+                except Exception:  # noqa: BLE001
+                    pass
+                LLMMeter.write_run_telemetry(tpath, run_id=state.pipeline_id, extra=_tel_extra)
                 state.artifacts = getattr(state, "artifacts", None) or {}
                 if isinstance(state.artifacts, dict):
                     state.artifacts["run_telemetry"] = tpath

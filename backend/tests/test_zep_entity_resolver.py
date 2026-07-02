@@ -113,6 +113,55 @@ def test_plan_merges_splits_component_with_two_canonicals():
             assert v["uuid"] != "u1" and v["uuid"] != "u3"  # canonicals never become victims
 
 
+# ------------------------------------------------ R2-KG-8 alias / cross-label
+def _node_alias(uuid, name, aliases, label="Company"):
+    return {"uuid": uuid, "name": name, "labels": [label], "summary": "",
+            "attributes": {"aliases": aliases}}
+
+
+def test_plan_merges_alias_zero_overlap_merges():
+    # 'MSFT' and 'Microsoft' share no characters; the explicit alias table bridges
+    # them where name-containment never could.
+    nodes = [_node_alias("u1", "Microsoft", ["MSFT"]), _node("u2", "MSFT")]
+    emb = [[1.0, 0.0], [0.97, 0.1]]
+    plan = er.plan_merges(nodes, emb, {"microsoft"}, threshold=0.9)
+    assert len(plan) == 1
+    assert plan[0]["survivor_uuid"] == "u1"            # canonical wins
+    assert [v["uuid"] for v in plan[0]["victims"]] == ["u2"]
+
+
+def test_plan_merges_alias_requires_cosine_gate():
+    # alias match alone is not enough; orthogonal embeddings (cosine 0) block it.
+    nodes = [_node_alias("u1", "Microsoft", ["MSFT"]), _node("u2", "MSFT")]
+    emb = [[1.0, 0.0], [0.0, 1.0]]
+    plan = er.plan_merges(nodes, emb, {"microsoft"}, threshold=0.88)
+    assert plan == []
+
+
+def test_plan_merges_cross_label_entity_generic():
+    # an untyped 'Entity' duplicate of a typed node merges INTO the typed node and
+    # the survivor keeps its type.
+    nodes = [_node("u1", "OpenAI", "Company"), _node("u2", "OpenAI", "Entity")]
+    emb = [[1.0, 0.0], [1.0, 0.0]]
+    plan = er.plan_merges(nodes, emb, set(), threshold=0.9)
+    assert len(plan) == 1
+    assert plan[0]["survivor_uuid"] == "u1"
+    assert plan[0]["primary_label"] == "Company"
+    assert plan[0]["cross_label"] is True
+
+
+def test_plan_merges_entity_bridge_cannot_merge_two_typed_labels():
+    # 'Apple'(Company) and 'Apple'(Person) must NEVER co-merge, even bridged by a
+    # generic 'Apple'(Entity) node — the over-merge guard splits them.
+    nodes = [_node("u1", "Apple", "Company"), _node("u2", "Apple", "Entity"),
+             _node("u3", "Apple", "Person")]
+    emb = [[1.0, 0.0], [1.0, 0.0], [1.0, 0.0]]
+    plan = er.plan_merges(nodes, emb, set(), threshold=0.9)
+    for c in plan:
+        labels_in_cluster = {c["primary_label"]} | {v["label"] for v in c["victims"]}
+        assert not ({"Company", "Person"} <= labels_in_cluster)
+
+
 # --------------------------------------------------------------- orchestration
 class _FakeRuntime:
     def __init__(self, nodes, embeddings=None, fail_embed=False):
@@ -160,3 +209,41 @@ def test_resolve_entities_degrades_when_embedder_fails():
     audit = er.resolve_entities("g1", {"actors": [{"name": "OpenAI"}]}, threshold=0.9, runtime=rt)
     assert audit["merged_nodes"] == 1
     assert rt.merge_calls == [("u1", "u2")]  # only exact-norm match merged
+
+
+# ----------------------------------------------- O(N) fast path + node-count cap
+def test_plan_merges_fast_exact_merges_containment_skipped():
+    # The O(N) fast path merges EXACT-norm duplicates but skips containment refinement.
+    nodes = [_node("u1", "OpenAI"), _node("u2", "OpenAI"), _node("u3", "OpenAI 公司")]
+    emb = [[1.0, 0.0], [1.0, 0.0], [0.99, 0.05]]
+    plan = er.plan_merges_fast(nodes, emb, {"openai"}, threshold=0.9)
+    victims = {v["uuid"] for c in plan for v in c["victims"]}
+    survivors = {c["survivor_uuid"] for c in plan}
+    assert victims == {"u2"}          # exact-norm duplicate merged
+    assert survivors == {"u1"}        # canonical survives
+    assert "u3" not in victims        # containment-only NOT merged by fast path
+
+
+def test_resolve_entities_cap_forces_fast_path(monkeypatch):
+    # nodes > cap → fast path: only exact-norm dup merges, containment 'OpenAI 公司' does not,
+    # and it must return quickly without the O(N^2) scan.
+    from app.config import Config
+    monkeypatch.setattr(Config, "GRAPH_RESOLVE_MAX_NODES", 2, raising=False)
+    nodes = [_node("u1", "OpenAI"), _node("u2", "OpenAI"), _node("u3", "OpenAI 公司")]
+    emb = [[1.0, 0.0], [1.0, 0.0], [0.99, 0.05]]
+    rt = _FakeRuntime(nodes, emb)
+    audit = er.resolve_entities("g1", {"actors": [{"name": "OpenAI"}]}, threshold=0.9, runtime=rt)
+    assert audit["merged_nodes"] == 1
+    assert rt.merge_calls == [("u1", "u2")]
+
+
+def test_resolve_entities_under_cap_keeps_full_containment(monkeypatch):
+    # under cap → full plan_merges → containment 'OpenAI 公司' DOES merge (byte-identical to before)
+    from app.config import Config
+    monkeypatch.setattr(Config, "GRAPH_RESOLVE_MAX_NODES", 1000, raising=False)
+    nodes = [_node("u1", "OpenAI"), _node("u2", "OpenAI 公司")]
+    emb = [[1.0, 0.0], [0.98, 0.1]]
+    rt = _FakeRuntime(nodes, emb)
+    audit = er.resolve_entities("g1", {"actors": [{"name": "OpenAI"}]}, threshold=0.9, runtime=rt)
+    assert audit["merged_nodes"] == 1
+    assert rt.merge_calls == [("u1", "u2")]

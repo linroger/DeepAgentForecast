@@ -315,7 +315,7 @@ ONTOLOGY_RICH_SCHEMA_ADDENDUM = """
 - `anti_examples`: 反例数组，列出**不应**被实例化为此类型的对象。**特别强调**：被引用的媒体/报刊/榜单/数据库是 `source`（archetype=source, tier=3），不是能动 actor——除非它本身就是推动结局的当事方，否则不要把它设成一个独立的能动实体类型。
 
 为**每个 edge_type** 额外标注：
-- `family`: 边的语义家族，取自——`alignment`（结盟/支持，正向）、`antagonism`（对抗/制裁/批评，负向）、`economic`（供应/出资/持股/消费，交易性）、`governance`（监管/裁决）、`dependency`（依赖）、`influence`（影响）、`information`（报道/披露）。
+- `family`: 边的语义家族，取自——`alignment`（结盟/支持，正向）、`antagonism`（对抗/制裁/批评，负向）、`economic`（供应/出资/持股/消费，交易性）、`governance`（监管/裁决）、`dependency`（依赖）、`influence`（影响）、`information`（报道/披露）、`causal`（因果/机制传导，如 CAUSES/ENABLES/CONSTRAINS/TRIGGERS/ACCELERATES，有向）。
 - `valence`: 边的价，取自——`allied`、`adversarial`、`transactional`、`directional`、`neutral`。
 - `direction_semantics`: 一句话说明该边方向的含义（source 与 target 谁对谁，如「source 供应 target」「source 监管 target」），避免方向被读反。
 
@@ -323,17 +323,20 @@ ONTOLOGY_RICH_SCHEMA_ADDENDUM = """
 """
 
 
-# F1: 自动选模板用的双语关键词集。命中"公众反应/舆情/民意/社交媒体/情绪/观点"语义即判定为
+# F1: 自动选模板用的双语关键词集。命中"公众反应/舆情/民意/社交媒体"语义即判定为
 # social_opinion，否则归入领域自适应的 general_forecast。仅在 Config.ONTOLOGY_AUTO_SELECT 打开
 # 且调用方未显式指定模板时才生效；默认（旗标关闭）路径逐字节不变。
+# ONT-11: 单词级触发词（bare 'sentiment'/'opinion'/'情绪'/'观点'）在市场/地缘问题里极常见
+# （"investor sentiment"、"expert opinion"），任一命中就会把 10 类社媒模板强套到非社媒预测
+# ——恰是 ONTO-4 要防的反向误路由。故只保留"公众/舆论"限定的双词组合，弃用裸单词。
 SOCIAL_OPINION_KEYWORDS = (
     # 英文
-    "public reaction", "public opinion", "sentiment", "social media",
-    "opinion", "backlash", "outrage", "controversy", "viral", "netizen",
+    "public reaction", "public opinion", "public sentiment", "social media",
+    "backlash", "outrage", "controversy", "viral", "netizen",
     "reputation", "public perception", "trending", "hashtag",
     # 中文
-    "舆情", "民意", "社交媒体", "公众反应", "公众舆论", "舆论", "情绪",
-    "观点", "争议", "热搜", "网友", "口碑", "声誉", "民众", "网络舆论",
+    "舆情", "民意", "社交媒体", "公众反应", "公众舆论", "舆论", "公众情绪",
+    "争议", "热搜", "网友", "口碑", "声誉", "民众", "网络舆论",
 )
 
 
@@ -545,10 +548,13 @@ class OntologyGenerator:
         ]
 
         # 调用LLM
+        # ONTO-5: max_tokens 4096→8192。富本体 schema 要求每个 entity/edge 额外标注
+        # archetype/simulation_tier/family/valence 等元数据，10 类实体 + 10 类边的 JSON 体积
+        # 已逼近 4096 token 上限，截断会产出非法 JSON 触发空本体回退。提到 8192 给足裕量。
         result = self.llm_client.chat_json(
             messages=messages,
             temperature=0.3,
-            max_tokens=4096
+            max_tokens=8192
         )
 
         # 验证和后处理
@@ -576,7 +582,7 @@ class OntologyGenerator:
                     {"role": "user", "content": fallback_message},
                 ],
                 temperature=0.3,
-                max_tokens=4096,
+                max_tokens=8192,  # ONTO-5: 与主调用一致，避免回退路径再次因截断产出空本体
             )
             result = self._validate_and_process(
                 fallback_result, template=DEFAULT_ONTOLOGY_TEMPLATE, actors=actors
@@ -584,8 +590,36 @@ class OntologyGenerator:
 
         return result
     
-    # 传给 LLM 的文本最大长度（5万字）
-    MAX_TEXT_LENGTH_FOR_LLM = 50000
+    # ONTO-3: 传给 LLM 的文本最大长度 5万→12万字。本体分析需要"看全角色阵容"——50000 字常把
+    # 后半部分出现的关键 actor/关系整段截掉，导致类型覆盖不全。12万字配合下方 head+middle+tail
+    # 采样，让超长文档的首/中/尾都进入分析视野，而非只读前 N 字。仅影响传给 LLM 的内容，不影响图谱构建。
+    MAX_TEXT_LENGTH_FOR_LLM = 120000
+
+    @staticmethod
+    def _sample_head_middle_tail(text: str, cap: int) -> str:
+        """ONTO-3: 超长文本按 head(50%)+middle(25%)+tail(25%) 采样，替代纯首部截断。
+
+        纯 ``text[:cap]`` 会丢弃文档后半全部信号；本体分析尤其需要尾部出现的角色/关系。
+        这里在 head 与 tail 之间各保留一段，使首/中/尾都被采样到。``cap`` 极小（<=3）时
+        退化为简单首部切片，保证永不抛异常。纯函数、确定性。
+        """
+        if cap <= 0:
+            return ""
+        if len(text) <= cap:
+            return text
+        # 预留分隔标记的开销后再分配三段预算。
+        head_n = cap // 2
+        mid_n = cap // 4
+        tail_n = cap - head_n - mid_n
+        if mid_n <= 0 or tail_n <= 0:
+            return text[:cap]
+        head = text[:head_n]
+        mid_start = (len(text) - mid_n) // 2
+        middle = text[mid_start:mid_start + mid_n]
+        tail = text[-tail_n:]
+        return (
+            f"{head}\n\n…(中段节选)…\n\n{middle}\n\n…(尾段节选)…\n\n{tail}"
+        )
     
     @staticmethod
     def _actor_type_histogram(actors: Optional[Dict[str, Any]]) -> "Counter":
@@ -623,10 +657,13 @@ class OntologyGenerator:
         combined_text = "\n\n---\n\n".join(document_texts)
         original_length = len(combined_text)
 
-        # 如果文本超过5万字，截断（仅影响传给LLM的内容，不影响图谱构建）
+        # ONTO-3: 文本超长时按 head+middle+tail 采样（仅影响传给LLM的内容，不影响图谱构建）
         if len(combined_text) > self.MAX_TEXT_LENGTH_FOR_LLM:
-            combined_text = combined_text[:self.MAX_TEXT_LENGTH_FOR_LLM]
-            combined_text += f"\n\n...(原文共{original_length}字，已截取前{self.MAX_TEXT_LENGTH_FOR_LLM}字用于本体分析)..."
+            combined_text = self._sample_head_middle_tail(combined_text, self.MAX_TEXT_LENGTH_FOR_LLM)
+            combined_text += (
+                f"\n\n...(原文共{original_length}字，已采样首/中/尾约"
+                f"{self.MAX_TEXT_LENGTH_FOR_LLM}字用于本体分析)..."
+            )
 
         message = f"""## 模拟需求
 
@@ -711,11 +748,17 @@ class OntologyGenerator:
         """根据 actor 类型直方图判断是否需要 Person / Organization 兜底（EXECPLAN2 I-1-3）。
 
         actor 的 type 文本命中"自然人"语义 → 需要 Person 兜底；命中"组织机构"语义 → 需要
-        Organization 兜底。无法判断（空直方图/全是具体客体类型）→ 两者都不强制，留给领域类型。
+        Organization 兜底。ONT-5：必须区分「数据缺失」与「实证无人/无组织」——actors.json
+        丢失/畸形/空阵容（恰是研究交接降级的失败模式）不是"阵容里没有自然人"的证据，此时
+        退回旧的安全行为（两个兜底都注入），否则图谱抽取会把报告里的人/组织降级为无类型
+        泛实体，雪上加霜。仅当**非空阵容确实存在**却全是具体客体类型时，才允许 (False, False)。
         """
+        rows = actors.get("actors") if isinstance(actors, dict) else None
+        if not isinstance(rows, list) or not rows:
+            return (True, True)  # 数据缺失 → legacy-safe 兜底
         hist = self._actor_type_histogram(actors)
         if not hist:
-            return (False, False)
+            return (True, True)  # 阵容存在但 type 字段全不可用 → 同样按降级处理
         need_person = False
         need_org = False
         for typ in hist:
@@ -771,8 +814,10 @@ class OntologyGenerator:
 
         所有补全均为**附加**键：core 键（name/description/attributes/examples 及
         edge 的 source_targets）一律不动，故 set_ontology 兼容性不受影响。LLM 已显式
-        给出（非空）的值一律保留，绝不覆盖。``relation_types`` 别名折叠在调用本方法前
-        已完成（见 _validate_and_process 开头），故此处只处理规范化后的 edge_types。
+        给出（非空）的值一律保留，绝不覆盖——唯一例外是 ONT-6：五个 P3-5 因果边名的
+        family/valence 按边名确定性锁定为 ('causal','directional')。``relation_types``
+        别名折叠在调用本方法前已完成（见 _validate_and_process 开头），故此处只处理
+        规范化后的 edge_types。
         """
         for entity in result.get("entity_types", []):
             if not isinstance(entity, dict):
@@ -784,13 +829,31 @@ class OntologyGenerator:
         for edge in result.get("edge_types", []):
             if not isinstance(edge, dict):
                 continue
+            edge_key = str(edge.get("name", "") or "").strip().upper()
+            mapped = _EDGE_FAMILY_VALENCE.get(edge_key)
+            # ONT-6: P3-5 因果边名（CAUSES/ENABLES/CONSTRAINS/TRIGGERS/ACCELERATES）的
+            # family/valence 由边名确定性锁定。附录枚举曾缺 'causal'，遵循枚举的 LLM 会填成
+            # dependency/adversarial 等，而"显式值不覆盖"规则会让因果族在出生时即永久丢失
+            # （KG 作为传导模型的信号被毁）。名字键控校正只针对这五个因果边名，其余边的
+            # LLM 显式值一律保留不覆盖。
+            if mapped is not None and mapped[0] == "causal":
+                fam = edge.get("family")
+                val = edge.get("valence")
+                if (isinstance(fam, str) and fam.strip() and fam.strip().lower() != "causal") or \
+                   (isinstance(val, str) and val.strip() and val.strip().lower() != "directional"):
+                    logger.info(
+                        "Ontology ONT-6: causal edge %r family/valence %r/%r overridden to "
+                        "'causal'/'directional' (name-keyed).",
+                        edge.get("name"), fam, val,
+                    )
+                edge["family"], edge["valence"] = mapped
+                continue
             fam = edge.get("family")
             val = edge.get("valence")
             need_family = not (isinstance(fam, str) and fam.strip())
             need_valence = not (isinstance(val, str) and val.strip())
             if not (need_family or need_valence):
                 continue
-            edge_key = str(edge.get("name", "") or "").strip().upper()
             inferred_family, inferred_valence = _EDGE_FAMILY_VALENCE.get(
                 edge_key, ("other", "neutral")
             )
@@ -868,8 +931,12 @@ class OntologyGenerator:
                 entity["attributes"] = []
             if "examples" not in entity:
                 entity["examples"] = []
+            # ONT-3: description 可能被 LLM 显式给成 null/非字符串（MiniMax/JSON 修复路径），
+            # .get(...,"") 只兜键缺失，len(None) 会 TypeError 崩掉整个本体阶段——先强制为 str。
+            if not isinstance(entity.get("description"), str):
+                entity["description"] = ""
             # 确保description不超过100字符
-            if len(entity.get("description", "")) > 100:
+            if len(entity["description"]) > 100:
                 entity["description"] = entity["description"][:97] + "..."
 
         # 验证关系类型
@@ -878,7 +945,10 @@ class OntologyGenerator:
                 edge["source_targets"] = []
             if "attributes" not in edge:
                 edge["attributes"] = []
-            if len(edge.get("description", "")) > 100:
+            # ONT-3: 同实体类型——null/非字符串 description 先强制为 str，再做长度裁剪。
+            if not isinstance(edge.get("description"), str):
+                edge["description"] = ""
+            if len(edge["description"]) > 100:
                 edge["description"] = edge["description"][:97] + "..."
 
         # EXECPLAN2 I-1-3: 属性名保留字清洗。general_forecast 模板鼓励产出 sentiment/strength/
@@ -985,112 +1055,75 @@ class OntologyGenerator:
                 len(removed_edges), MAX_EDGE_TYPES, [t.get("name") for t in removed_edges],
             )
 
-        return result
-    
-    def generate_python_code(self, ontology: Dict[str, Any]) -> str:
-        """
-        将本体定义转换为Python代码（类似ontology.py）
-        
-        Args:
-            ontology: 本体定义
-            
-        Returns:
-            Python代码字符串
-        """
-        code_lines = [
-            '"""',
-            '自定义实体类型定义',
-            '由MiroFish自动生成，用于社会舆论模拟',
-            '"""',
-            '',
-            'from pydantic import Field',
-            'from app.services.graphiti_client.ontology import EntityModel, EntityText, EdgeModel',
-            '',
-            '',
-            '# ============== 实体类型定义 ==============',
-            '',
-        ]
-        
-        # 生成实体类型
-        for entity in ontology.get("entity_types", []):
-            name = entity["name"]
-            desc = entity.get("description", f"A {name} entity.")
-            
-            code_lines.append(f'class {name}(EntityModel):')
-            code_lines.append(f'    """{desc}"""')
-            
-            attrs = entity.get("attributes", [])
-            if attrs:
-                for attr in attrs:
-                    attr_name = attr["name"]
-                    attr_desc = attr.get("description", attr_name)
-                    code_lines.append(f'    {attr_name}: EntityText = Field(')
-                    code_lines.append(f'        description="{attr_desc}",')
-                    code_lines.append(f'        default=None')
-                    code_lines.append(f'    )')
-            else:
-                code_lines.append('    pass')
-            
-            code_lines.append('')
-            code_lines.append('')
-        
-        code_lines.append('# ============== 关系类型定义 ==============')
-        code_lines.append('')
-        
-        # 生成关系类型
-        for edge in ontology.get("edge_types", []):
-            name = edge["name"]
-            # 转换为PascalCase类名
-            class_name = ''.join(word.capitalize() for word in name.split('_'))
-            desc = edge.get("description", f"A {name} relationship.")
-            
-            code_lines.append(f'class {class_name}(EdgeModel):')
-            code_lines.append(f'    """{desc}"""')
-            
-            attrs = edge.get("attributes", [])
-            if attrs:
-                for attr in attrs:
-                    attr_name = attr["name"]
-                    attr_desc = attr.get("description", attr_name)
-                    code_lines.append(f'    {attr_name}: EntityText = Field(')
-                    code_lines.append(f'        description="{attr_desc}",')
-                    code_lines.append(f'        default=None')
-                    code_lines.append(f'    )')
-            else:
-                code_lines.append('    pass')
-            
-            code_lines.append('')
-            code_lines.append('')
-        
-        # 生成类型字典
-        code_lines.append('# ============== 类型配置 ==============')
-        code_lines.append('')
-        code_lines.append('ENTITY_TYPES = {')
-        for entity in ontology.get("entity_types", []):
-            name = entity["name"]
-            code_lines.append(f'    "{name}": {name},')
-        code_lines.append('}')
-        code_lines.append('')
-        code_lines.append('EDGE_TYPES = {')
-        for edge in ontology.get("edge_types", []):
-            name = edge["name"]
-            class_name = ''.join(word.capitalize() for word in name.split('_'))
-            code_lines.append(f'    "{name}": {class_name},')
-        code_lines.append('}')
-        code_lines.append('')
-        
-        # 生成边的source_targets映射
-        code_lines.append('EDGE_SOURCE_TARGETS = {')
-        for edge in ontology.get("edge_types", []):
-            name = edge["name"]
-            source_targets = edge.get("source_targets", [])
-            if source_targets:
-                st_list = ', '.join([
-                    f'{{"source": "{st.get("source", "Entity")}", "target": "{st.get("target", "Entity")}"}}'
-                    for st in source_targets
-                ])
-                code_lines.append(f'    "{name}": [{st_list}],')
-        code_lines.append('}')
-        
-        return '\n'.join(code_lines)
+        # ONTO-6: 实体类型已最终确定（去重/兜底/硬上限都跑完）后，校正每条边的 source_targets：
+        # 端点引用了不存在的实体类型时——大小写漂移可规范化的就 remap 回标准名，确实未定义的就丢弃。
+        # 必须放在所有 entity_types 变更之后，否则会拿"被截断前"的旧集合误判。
+        self._reconcile_edge_endpoints(result)
 
+        return result
+
+    @staticmethod
+    def _reconcile_edge_endpoints(result: Dict[str, Any]) -> None:
+        """ONTO-6：就地把每条 edge 的 source_targets 端点校正到已定义的实体类型集合。
+
+        graphiti 的 set_ontology 用 edge 的 source/target 把边绑定到实体类型；若某端点引用了
+        本体里**不存在**的实体类型（LLM 漏定义、或该类型在去重/兜底/硬上限阶段被丢弃），下游会
+        悄悄忽略整条边、甚至报错。处理规则（确定性、可审计）：
+        * 端点精确命中已定义类型 → 保留。
+        * 端点仅大小写/空白不同（如 "person" vs "Person"）→ remap 回规范名并记日志（remap）。
+        * 端点确实未定义 → 丢弃该 {source,target} 对并记日志（drop）。
+        丢弃后边可能只剩空 source_targets（下游已容忍空列表），整条边本身不删除。
+        """
+        entity_names = {
+            e["name"] for e in result.get("entity_types", [])
+            if isinstance(e, dict) and isinstance(e.get("name"), str)
+        }
+        if not entity_names:
+            return
+        lower_map = {n.lower(): n for n in entity_names}
+
+        def _resolve(endpoint: Any):
+            """→ (canonical_name | None, action) ；action ∈ {'ok','remap','drop'}。"""
+            name = str(endpoint or "").strip()
+            if not name:
+                return None, "drop"
+            if name in entity_names:
+                return name, "ok"
+            canon = lower_map.get(name.lower())
+            if canon is not None:
+                return canon, "remap"
+            return None, "drop"
+
+        for edge in result.get("edge_types", []):
+            if not isinstance(edge, dict):
+                continue
+            sts = edge.get("source_targets")
+            if not isinstance(sts, list):
+                continue
+            kept: List[Dict[str, Any]] = []
+            for st in sts:
+                if not isinstance(st, dict):
+                    logger.warning(
+                        "Ontology ONTO-6: dropping malformed source_target %r on edge %r",
+                        st, edge.get("name"),
+                    )
+                    continue
+                src, src_act = _resolve(st.get("source"))
+                tgt, tgt_act = _resolve(st.get("target"))
+                if src_act == "drop" or tgt_act == "drop":
+                    logger.warning(
+                        "Ontology ONTO-6: dropping edge %r source_target %s→%s "
+                        "(undefined endpoint not in entity types)",
+                        edge.get("name"), st.get("source"), st.get("target"),
+                    )
+                    continue
+                if src_act == "remap" or tgt_act == "remap":
+                    logger.info(
+                        "Ontology ONTO-6: remapped edge %r endpoints %s→%s to canonical %s→%s",
+                        edge.get("name"), st.get("source"), st.get("target"), src, tgt,
+                    )
+                new_st = dict(st)
+                new_st["source"] = src
+                new_st["target"] = tgt
+                kept.append(new_st)
+            edge["source_targets"] = kept

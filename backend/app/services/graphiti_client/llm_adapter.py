@@ -18,7 +18,10 @@ so here we only translate messages and invoke the app client's ``chat_json``.
 from __future__ import annotations
 
 import asyncio
+import logging
+import threading
 import typing
+from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel
 
@@ -28,6 +31,50 @@ from graphiti_core.llm_client.errors import EmptyResponseError, RateLimitError
 
 from ...utils.llm_client import LLMClient as AppLLMClient
 from ...config import Config
+
+logger = logging.getLogger("mirofish.graphiti_llm")
+
+
+# ---------------------------------------------------------------------------
+# R2-EXEC-1: dedicated I/O thread pool for the blocking graphiti LLM HTTP calls.
+#
+# Graphiti drives episode extraction by awaiting ``_generate_response`` from the
+# runtime's single bg event loop. Each call offloads a *blocking* ``chat_json``
+# POST onto a thread via ``loop.run_in_executor``. Previously this passed
+# ``None`` → the asyncio DEFAULT ThreadPoolExecutor, whose size is
+# ``min(32, os.cpu_count()+4)`` (~12-20 on typical hosts) and which is SHARED with
+# every other ``run_in_executor`` user (incl. the embedder's CPU encode). That
+# shared, ~20-slot pool is the hard ceiling that silently caps GRAPH_BUILD_CONCURRENCY
+# × GRAPHITI_MAX_COROUTINES no matter how high those knobs are set — the wedge root.
+#
+# A dedicated, larger pool (GRAPH_LLM_EXECUTOR_WORKERS, default 64) lets the
+# concurrency knobs actually reach the proxy. Lazily built, process-global, and
+# exposed via an accessor so every AppGraphitiLLMClient instance shares ONE pool.
+# ---------------------------------------------------------------------------
+_io_pool: ThreadPoolExecutor | None = None
+_io_pool_lock = threading.Lock()
+
+
+def get_graph_llm_io_pool() -> ThreadPoolExecutor:
+    """Return the process-global dedicated executor for blocking graphiti LLM POSTs.
+
+    Size is read once from ``Config.GRAPH_LLM_EXECUTOR_WORKERS`` (default 64); a
+    bad/missing value degrades to 64. Safe to call from any thread.
+    """
+    global _io_pool
+    if _io_pool is None:
+        with _io_pool_lock:
+            if _io_pool is None:
+                try:
+                    workers = int(getattr(Config, "GRAPH_LLM_EXECUTOR_WORKERS", 64) or 64)
+                except (TypeError, ValueError):
+                    workers = 64
+                workers = max(1, workers)
+                _io_pool = ThreadPoolExecutor(
+                    max_workers=workers, thread_name_prefix="graphiti-llm"
+                )
+                logger.info("graphiti LLM I/O pool: %d workers", workers)
+    return _io_pool
 
 # Transient OpenAI-SDK errors that should be retried rather than aborting a whole graph
 # build. Graphiti's tenacity retry fires on RateLimitError, so we normalize to it.
@@ -88,19 +135,37 @@ class AppGraphitiLLMClient(GraphitiLLMClient):
             }
         tokens = max_tokens or self._max_tokens
 
+        # GAP-1 / model_size->tier mapping: mechanical extraction (graphiti's
+        # entity/edge extraction & dedup prompts run at small/medium) routes to the
+        # FAST tier; only genuinely large/quality calls stay 'strong'. This is a
+        # no-op unless LLM_TIERED_ROUTING is on AND a fast model is configured
+        # (llm_client._model_for_tier falls back to the main model otherwise), so
+        # the default path is byte-identical.
+        tier = "strong"
+        if model_size in (ModelSize.small, ModelSize.medium):
+            tier = "fast"
+
         loop = asyncio.get_event_loop()
+        io_pool = get_graph_llm_io_pool()  # R2-EXEC-1: dedicated pool, not the shared default
         # Internal rising-temperature retry for the schema-echo failure mode: eager models
         # (e.g. MiniMax-M3) sometimes echo the injected JSON *schema* instead of a conforming
         # instance, and at temperature 0.0 they do so DETERMINISTICALLY — so graphiti's own
         # tenacity retry (same args) re-hits the identical schema every time and hard-fails the
         # whole graph build. Retrying here with rising temperature + a stronger nudge breaks the
         # determinism so a real instance is produced.
-        temps = (0.0, 0.4, 0.7)
+        #
+        # GRAPH-11: cap the combined inner-retry budget at 2 attempts (was 3). With
+        # graphiti's own tenacity retry on top (4 outer), 3 inner attempts multiplied
+        # failure latency on a wedged op; one corrective retry at a higher temperature
+        # still breaks the schema-echo determinism while bounding worst-case latency.
+        temps = (0.0, 0.4)
         for attempt, temp in enumerate(temps):
             try:
                 result = await loop.run_in_executor(
-                    None,
-                    lambda t=temp: self._app_llm.chat_json(msg_dicts, temperature=t, max_tokens=tokens),
+                    io_pool,
+                    lambda t=temp: self._app_llm.chat_json(
+                        msg_dicts, temperature=t, max_tokens=tokens, tier=tier
+                    ),
                 )
             except ValueError as exc:
                 # Unparseable / empty JSON — retryable by graphiti's tenacity (4 attempts).
@@ -142,6 +207,11 @@ class AppGraphitiLLMClient(GraphitiLLMClient):
                             f"LLM output failed {response_model.__name__} validation after "
                             f"temperature retries: {str(ve)[:300]}"
                         ) from ve
+                if attempt:  # GRAPH-11: surface inner-retry counts to telemetry
+                    logger.info(
+                        "graphiti extraction succeeded after %d inner retr%s (tier=%s)",
+                        attempt, "y" if attempt == 1 else "ies", tier,
+                    )
                 return result
             # Schema echo — strengthen the instruction and retry at a higher temperature.
             if attempt < len(temps) - 1:

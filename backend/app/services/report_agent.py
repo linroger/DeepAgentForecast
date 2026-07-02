@@ -750,11 +750,14 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
    - 禁止使用你自己的知识来编写报告内容
    - 每个章节至少调用4次工具（最多8次）来观察模拟的世界，它代表了未来
 
-2. 【必须引用Agent的原始言行】
-   - Agent的发言和行为是对未来人群行为的预测
-   - 在报告中使用引用格式展示这些预测，例如：
-     > "某类人群会表示：原文内容..."
-   - 这些引用是模拟预测的核心证据
+2. 【引用Agent言行——必须标注为「模拟推演」，严禁伪装成真实信源】
+   - 模拟中 Agent 的发言/行为是对未来人群行为的**推演**，不是真实世界已发生的事实
+   - 引用时必须显式标注来源为模拟代理人，例如：
+     > 模拟代理人「<角色名>」推演：原文内容...
+   - ❌ 严禁把模拟 Agent 的发言伪装成真实人物/真实采访/分析师/媒体的话
+     （禁止「某分析师在采访中表示」「据<真实媒体>报道」之类把模拟内容嫁接到真实信源）
+   - ❌ 严禁把知识图谱里的关系描述、或系统自己推导的概率，当作某人/某机构的「原话」引用
+   - 真实世界的事实/数据/观点只能来自研究材料（用 [S] 引用索引标注），不得与模拟推演混为一谈
 
 3. 【语言一致性 - 引用内容必须翻译为报告语言】
    - 工具返回的内容可能包含英文或中英文混杂的表述
@@ -763,10 +766,20 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
    - 翻译时保持原意不变，确保表述自然通顺
    - 这一规则同时适用于正文和引用块（> 格式）中的内容
 
-4. 【忠实呈现预测结果】
-   - 报告内容必须反映模拟世界中的代表未来的模拟结果
-   - 不要添加模拟中不存在的信息
-   - 如果某方面信息不足，如实说明
+4. 【忠实呈现 —— 反捏造纪律（最高优先级）】
+   - 报告内容必须反映模拟推演结果与研究材料，且二者来源分明
+   - ❌ 严禁编造研究材料/模拟中不存在的数字、引文、来源、URL、日期或事件
+   - 每个**承重数字**：要么能在研究材料中找到并标 [S]，要么明确标注为「模拟推演所得」
+   - 若模拟为空洞/未产生有机互动（系统会在 simulation_health 标注），**不得**虚构 Agent 言行或「共识」，
+     转而基于研究证据做因果推理，并显式说明「本轮模拟信号有限」
+   - 信息不足时如实说明，绝不用流畅叙事填补证据空白
+
+5. 【写作质量 —— 拒绝「通用 LLM 腔」(评审一眼判死的就是这个)】
+   - 不要重复前文章节已说过的告诫/结论；读 previous_content，本章必须推进一个**新论点**
+   - 每个承重段落给出**机制**（A 导致 B、B 又迫使 C），而非笼统断言或形容词堆砌
+   - 至少呈现一处**真实分歧**：steelman 一个相反观点再回应它；禁止「众口一词」式叙述
+   - 控制破折号/「不仅…而且」「值得注意的是」等填充套话；用具体数字与实例代替修辞
+   - 允许自然的散文流，不必每段都套**粗体小标题**；像一个有观点的人类分析师那样写
 
 ═══════════════════════════════════════════════════════════════
 【⚠️ 格式规范 - 极其重要！】
@@ -813,10 +826,7 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 {tools_description}
 
 【工具使用建议 - 请混合使用不同工具，不要只用一种】
-- insight_forge: 深度洞察分析，自动分解问题并多维度检索事实和关系
-- panorama_search: 广角全景搜索，了解事件全貌、时间线和演变过程
-- quick_search: 快速验证某个具体信息点
-- interview_agents: 采访模拟Agent，获取不同角色的第一人称观点和真实反应
+{tool_usage_hints}
 
 ═══════════════════════════════════════════════════════════════
 【工作流程】
@@ -1098,6 +1108,20 @@ class ReportAgent:
         self.actors = actors
         self.sources = sources or []
         self.research_report = research_report or ""
+        # QUALITY-OPT F0/B0: decide the report's output language from the brief + research
+        # report (an English brief → English submission; a wrong-language report is an automatic
+        # round-one fail). Overridable via REPORT_OUTPUT_LANGUAGE. Consumed by _lang_override()
+        # (section/plan prompts) and the binary/Part-1 renderers.
+        _forced_lang = (os.environ.get("REPORT_OUTPUT_LANGUAGE", "") or "").strip()
+        if _forced_lang:
+            self.output_language = _forced_lang
+        else:
+            try:
+                from .requirement_spec import detect_output_language
+                self.output_language = detect_output_language(
+                    self.simulation_requirement, self.research_report, self.situation_brief)
+            except Exception:  # noqa: BLE001 — never block construction on language sniff
+                self.output_language = "English"
         # T4.6/T4.7: 情景标签（what-if 框架）+ base 模拟 id（反事实对比）
         self.scenario_label = (scenario_label or "").strip()
         self.base_simulation_id = base_simulation_id or None
@@ -1106,17 +1130,37 @@ class ReportAgent:
         # EXECPLAN2 I-3-2: 模拟量化信号包（确定性接地下限），懒构建一次后缓存；
         # 关闭 REPORT_SIGNAL_PACK 时始终为空串，_prepend_research_background 自动跳过（行为不变）。
         self._signal_pack = ""
+        # 预测市场信号包（Oddpool 聚合 Kalshi/Polymarket）：市场隐含概率作为**校准锚点**
+        # 注入章节/骨架/二元预测提示词。优先读研究 handoff 的 prediction_markets.json，
+        # 缺失时经 OddpoolClient 现抓。懒构建一次后缓存；无 key/无数据/关闭
+        # PREDICTION_MARKETS_ENABLED 时为空串，注入自动跳过（degrade-safe，行为不变）。
+        self._market_pack = ""
+        self._prediction_markets: List[Dict[str, Any]] = []
         # NEXTSTEPS P0-1: 预测骨架（情景+概率+判定标准），在章节生成前从信号包+forecast_inputs
         # 推导一次，注入每章提示词让叙事对齐可证伪目标；缺省/未开时为空，_prepend 自动跳过。
         self._forecast_spine: Optional[Dict[str, Any]] = None
         self._forecast_spine_block = ""
+        # XRUN-5/RPT-8: 报告级紧凑检索查询（懒派生一次后缓存）；None=未派生。
+        self._retrieval_query: Optional[str] = None
+        # RPT-2(a): 大纲规划的 LLM 调用是否失败降级为默认大纲（系统性 LLM 故障的前哨信号）。
+        self._outline_degraded = False
+        # RPT-5: 大纲摘要（generate_report 规划完成后回填），供引用溯源审计豁免系统注入的
+        # 摘要 blockquote（assemble_full_report 固定输出 "> {outline.summary}"）。
+        self._outline_summary = ""
 
         self.llm = llm_client or LLMClient()
         self.zep_tools = zep_tools or ZepToolsService()
         
         # 工具定义
         self.tools = self._define_tools()
-        
+        # interview_agents 需要 OASIS 模拟环境在线（IPC）。报告阶段几乎总在模拟结束、环境关闭之后运行，
+        # 此时每次采访都会失败并浪费一轮昂贵的 LLM 工具调用（实测每章被反复 nudge 去采访→失败→回退）。
+        # 在 agent 初始化时探活一次：环境不在线就直接从工具集中移除 interview_agents，模型再也看不到它。
+        # 环境在线（极少数边跑场景）则保留。探活失败一律按「不可用」处理（degrade-safe）。
+        if "interview_agents" in self.tools and not self._interview_env_alive():
+            self.tools.pop("interview_agents", None)
+            logger.info("报告: OASIS 环境未在线，已从工具集移除 interview_agents（避免每章无效采访重试）")
+
         # 日志记录器（在 generate_report 中初始化）
         self.report_logger: Optional[ReportLogger] = None
         # 控制台日志记录器（在 generate_report 中初始化）
@@ -1130,6 +1174,25 @@ class ReportAgent:
         self._section_tool_calls = 0
         
         logger.info(f"ReportAgent 初始化完成: graph_id={graph_id}, simulation_id={simulation_id}")
+
+    def _interview_env_alive(self) -> bool:
+        """探活 OASIS 模拟 IPC 环境是否在线（interview_agents 的前置依赖）。
+
+        报告阶段通常在模拟结束、环境关闭后运行，此时采访必失败。一次性探活，离线即返回 False，
+        调用方据此从工具集移除 interview_agents。任何异常/缺失一律视为「不在线」（degrade-safe）。
+        """
+        try:
+            if not self.simulation_id:
+                return False
+            import os as _os
+            from .simulation_runner import SimulationRunner
+            from .simulation_ipc import SimulationIPCClient
+            sim_dir = _os.path.join(SimulationRunner.RUN_STATE_DIR, self.simulation_id)
+            if not _os.path.isdir(sim_dir):
+                return False
+            return bool(SimulationIPCClient(sim_dir).check_env_alive())
+        except Exception:  # noqa: BLE001 — 探活失败按不可用处理
+            return False
 
     def _build_background_block(self) -> str:
         """T4.1: 把研究背景档案包装成钉入提示词的权威背景块；缺省返回空串（回退冷图路径）。
@@ -1299,6 +1362,47 @@ class ReportAgent:
             block = block[:max_chars] + "\n…(关系网名册已截断)"
         return block
 
+    def _compact_retrieval_query(self) -> str:
+        """XRUN-5/RPT-8: 派生一次报告级紧凑检索查询并缓存。
+
+        整段需求书（3388 字）被直接当 query 时会被长度钳制砍到只剩开头修辞句，
+        报告阶段杠杆最高的几次检索（大纲上下文 / InsightForge 全局扫描）从此全部
+        锚定在引言上。这里按句界取核心问题前缀 + 追加高显著度 actor 名（让实体词
+        进入 BM25/嵌入）。REPORT_COMPACT_RETRIEVAL_QUERY=False 时原样返回需求书
+        （行为与历史一致）；任何失败也退回原文（degrade-safe）。
+        """
+        if getattr(self, "_retrieval_query", None) is not None:
+            return self._retrieval_query
+        req = self.simulation_requirement or ""
+        if not getattr(Config, "REPORT_COMPACT_RETRIEVAL_QUERY", True):
+            self._retrieval_query = req
+            return req
+        try:
+            from .zep_tools import compact_graph_query
+            q = compact_graph_query(req, 280)
+            if len(q) < len(" ".join(req.split())):
+                try:
+                    from ..utils import actors as _actors
+                    rows = _actors.extract_actor_rows(self.actors)
+                    eligible = [r for r in rows if _actors.is_agent_eligible(r)]
+                    eligible.sort(key=lambda r: _actors.salience_score(r), reverse=True)
+                    names: List[str] = []
+                    for r in eligible:
+                        nm = str((r or {}).get("name", "") or "").strip()
+                        if nm and nm not in names:
+                            names.append(nm)
+                        if len(names) >= 6:
+                            break
+                    if names:
+                        q = (q + " " + " ".join(names))[:360]
+                except Exception:  # noqa: BLE001 — actor 名为可选增强
+                    pass
+                logger.info(f"已派生紧凑检索查询（{len(req)}→{len(q)} 字符）: {q[:80]}...")
+            self._retrieval_query = q or req
+        except Exception:  # noqa: BLE001 — 派生失败退回原需求书
+            self._retrieval_query = req
+        return self._retrieval_query
+
     def _build_sources_index(self) -> str:
         """T4.1: 把研究来源渲染成 [S1]/[S2] 引用索引；缺省返回空串。
 
@@ -1335,10 +1439,16 @@ class ReportAgent:
 
         NEXTSTEPS P0-1: 还钉入预测骨架块（self._forecast_spine_block），让每章叙事对齐并捍卫
         先于叙事确定的情景概率与判定标准。骨架未推导/为空时自动跳过（行为与历史一致）。
+
+        预测市场：还钉入市场信号包（self._market_pack，Oddpool 聚合 Kalshi/Polymarket 的
+        隐含概率表）——涉及概率的论断须与市场锚点对照。为空时自动跳过（行为与历史一致）。
         """
+        # 市场包经 getattr 读取：部分离线测试用 __new__ 绕过 __init__ 构造 agent，
+        # 缺属性时按空串处理（与注入跳过语义一致）。
         prefix_parts = [p for p in (
             self._background_block, self._sources_index,
             self._forecast_spine_block, self._signal_pack,
+            getattr(self, "_market_pack", ""),
         ) if p]
         if not prefix_parts:
             return prompt
@@ -1387,6 +1497,16 @@ class ReportAgent:
                 parts.append(coalitions[:800])
         except Exception as e:  # noqa: BLE001
             logger.warning(f"信号包 coalition_map 计算失败（忽略）: {e}")
+        # 2b) R2-KG-7: 因果骨架——chokepoint 多跳因果邻域 + 最强 source→outcome 路径（含
+        # 方向/符号/强度/时滞）。默认关（REPORT_CAUSAL_SPINE），且 graph 层多跳遍历有界、
+        # 任意失败降级为空串，不影响信号包其余部分。
+        if getattr(Config, "REPORT_CAUSAL_SPINE", False):
+            try:
+                cs_blk = self._build_causal_spine_block()
+                if cs_blk:
+                    parts.append(cs_blk)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"信号包 causal_spine 计算失败（忽略）: {e}")
         # 3) 反事实差异（仅情景报告有基线时）——截断到 ~1200 字
         if self.base_simulation_id:
             try:
@@ -1434,6 +1554,167 @@ class ReportAgent:
         return "\n".join(lines)
 
     # ──────────────────────────────────────────────────────────────
+    # 预测市场信号包（Oddpool 聚合 Kalshi/Polymarket；市场隐含概率 = 校准锚点）
+    # ──────────────────────────────────────────────────────────────
+    def _load_prediction_markets(self) -> List[Dict[str, Any]]:
+        """加载本次运行的预测市场快照（规整化 schema，见 utils.prediction_markets）。
+
+        优先级：① 研究阶段落盘的 handoff/prediction_markets.json（经 PipelineManager 按
+        simulation_id 定位，与 load_research_dossier_for_simulation 同模式）；② 文件缺失
+        且 OddpoolClient 可用时现抓一次（检索词由需求书 + hot_topics + 头部 actor 名确定性
+        派生）。任何失败返回 []（degrade-safe，绝不阻断报告生成）。
+        """
+        try:
+            max_n = int(getattr(Config, "ODDPOOL_MAX_MARKETS", 20) or 20)
+        except (TypeError, ValueError):
+            max_n = 20
+        # ① 研究 handoff 产物（延迟导入避免与 pipeline_orchestrator 的模块级循环依赖）。
+        try:
+            from .pipeline_orchestrator import PipelineManager
+            for entry in PipelineManager.list_pipelines():
+                pid = entry.get("pipeline_id")
+                if not pid:
+                    continue
+                data = PipelineManager.load(pid)
+                if not data or data.get("simulation_id") != getattr(self, "simulation_id", None):
+                    continue
+                hd = data.get("handoff_dir") or PipelineManager.handoff_dir(pid)
+                path = os.path.join(hd, "prediction_markets.json")
+                if os.path.exists(path):
+                    with open(path, "r", encoding="utf-8") as f:
+                        payload = json.load(f)
+                    markets = payload.get("markets") if isinstance(payload, dict) else payload
+                    rows = [m for m in (markets or []) if isinstance(m, dict)]
+                    if rows:
+                        return rows[:max_n]
+                break  # 找到对应管线即停（无论有无市场文件），转现抓兜底
+        except Exception as e:  # noqa: BLE001 — handoff 读取失败转现抓兜底
+            logger.debug(f"读取 handoff prediction_markets.json 失败（转现抓兜底）: {e}")
+        # ② 现抓兜底（仅当 client 可用；一次快照，15s 超时 + 单次重试在 client 内部）。
+        try:
+            from ..utils.prediction_markets import OddpoolClient, derive_market_queries
+            client = OddpoolClient()
+            if not client.enabled:
+                return []
+            hot_topics: List[str] = []
+            actor_names: List[str] = []
+            _act = getattr(self, "actors", None)
+            if isinstance(_act, dict):
+                hot_topics = [str(t) for t in (_act.get("hot_topics") or []) if t]
+                try:
+                    from ..utils import actors as _actors
+                    rows = [r for r in _actors.extract_actor_rows(_act)
+                            if _actors.is_agent_eligible(r)]
+                    rows.sort(key=lambda r: _actors.salience_score(r), reverse=True)
+                    actor_names = [str((r or {}).get("name", "") or "").strip()
+                                   for r in rows]
+                    actor_names = [n for n in actor_names if n]
+                except Exception:  # noqa: BLE001 — actor 名为查询词的可选增强
+                    pass
+            queries = derive_market_queries(getattr(self, "simulation_requirement", "") or "",
+                                            hot_topics=hot_topics,
+                                            actor_names=actor_names)
+            if not queries:
+                return []
+            markets = client.snapshot_for_queries(queries, max_total=max_n)
+            if markets:
+                logger.info(f"预测市场现抓兜底：{len(markets)} 个活跃市场（queries={queries}）")
+            return markets
+        except Exception as e:  # noqa: BLE001 — 市场信号为可选增强
+            logger.warning(f"预测市场信号抓取失败（忽略）: {e}")
+            return []
+
+    def _build_market_pack(self) -> str:
+        """组装「预测市场信号包」：市场隐含概率表 + 对照指令，钉进章节/骨架/二元预测提示词。
+
+        计算一次后缓存市场快照于 self._prediction_markets（二元预测的 market_anchor 回填
+        复用同一份快照）。无数据/关闭旗标时返回 ""（注入自动跳过，行为与历史一致）。
+        """
+        if not getattr(Config, "PREDICTION_MARKETS_ENABLED", True):
+            return ""
+        markets = self._load_prediction_markets()
+        if not markets:
+            return ""
+        self._prediction_markets = markets
+        from ..utils.prediction_markets import render_markets_block
+        lang = ("en" if str(getattr(self, "output_language", "") or "English")
+                .lower().startswith("en") else "zh")
+        table = render_markets_block(markets[:12], lang=lang)
+        if not table:
+            return ""
+        header = (
+            "【预测市场信号（Kalshi/Polymarket 实盘隐含概率·校准锚点，非真值）】\n"
+            "以下为与本预测问题相关的真实预测市场当前定价（机器抓取）。撰写涉及概率的论断时"
+            "须与之对照：与所列市场重叠的预测应引用其隐含概率，偏离超过 10 个百分点时须显式"
+            "解释分歧依据（市场遗漏/错价了什么）。市场价格是聚合信念，不是事实真值。"
+        )
+        return header + "\n\n" + table
+
+    def _build_causal_spine_block(self, max_chokepoints: int = 2, max_chars: int = 1600) -> str:
+        """R2-KG-7: 确定性「因果骨架」块——以图谱中显著度最高的若干 chokepoint 为中心，渲染其
+        多跳因果邻域，并追踪最强 source→outcome（前两位支点之间）传导路径，钉进信号包。
+
+        支点取自研究 actors 的能动角色按显著度降序（与关系名册同源、确定性）。每个支点经
+        zep_tools.trace_cascade(center=...) 取其因果邻域；再以前两位支点为 source/target 取
+        二者间的有向因果路径——边的方向/符号/强度/时滞由 graph 层 runtime 投影 schema 渲染。
+
+        Degrade-safe：无 actors / 无能动角色 / 遍历失败 / 无路径 → 返回 ""，信号包其余部分不受影响。
+        仅在 REPORT_CAUSAL_SPINE 开启时由 _build_signal_pack 调用；多跳遍历在 graph 层有界。
+        """
+        try:
+            from ..utils import actors as _actors
+            rows = _actors.extract_actor_rows(self.actors)
+        except Exception:  # noqa: BLE001
+            return ""
+        if not rows:
+            return ""
+        try:
+            eligible = [r for r in rows if _actors.is_agent_eligible(r)]
+            eligible.sort(key=lambda r: _actors.salience_score(r), reverse=True)
+        except Exception:  # noqa: BLE001 — 排序/过滤失败时退回原始顺序
+            eligible = rows
+        centers: List[str] = []
+        for r in eligible:
+            nm = str((r or {}).get("name", "") or "").strip()
+            if nm and nm not in centers:
+                centers.append(nm)
+            if len(centers) >= max_chokepoints:
+                break
+        if not centers:
+            return ""
+        segs: List[str] = []
+        # 1) 各 chokepoint 的多跳因果邻域（"哪个节点一动就翻盘"的结构）
+        for nm in centers:
+            try:
+                neigh = self.zep_tools.trace_cascade(self.graph_id, center=nm, causal_only=True)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"因果骨架 trace_cascade(center={nm}) 失败（忽略）: {e}")
+                continue
+            if neigh and not neigh.strip().startswith("（"):
+                segs.append(neigh.strip())
+        # 2) 最强 source→outcome 传导路径（前两位支点之间的有向因果链）
+        if len(centers) >= 2:
+            try:
+                path = self.zep_tools.trace_cascade(
+                    self.graph_id, source=centers[0], target=centers[1], causal_only=True
+                )
+                if path and not path.strip().startswith("（"):
+                    segs.append(path.strip())
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"因果骨架 trace_cascade(source→target) 失败（忽略）: {e}")
+        if not segs:
+            return ""
+        body = "\n\n".join(segs)
+        if len(body) > max_chars:
+            body = body[:max_chars].rstrip() + " …"
+        header = (
+            "【因果骨架（确定性·图谱多跳，chokepoint 为情景分叉支点）】\n"
+            "以下为图谱中显著度最高节点的因果邻域与最强传导路径（边尽量标注方向/符号/强度/时滞），"
+            "撰写时据此解释「哪个节点一动就翻盘」的级联机制，而非仅罗列声量数字。"
+        )
+        return header + "\n" + body
+
+    # ──────────────────────────────────────────────────────────────
     # NEXTSTEPS P0-1 / P2-1 / P2-3: forecast spine + finalization + publish gate
     # ──────────────────────────────────────────────────────────────
     def _derive_and_pin_forecast_spine(self, report_id: str) -> None:
@@ -1459,6 +1740,14 @@ class ReportAgent:
                     signal_pack = self._build_signal_pack()
                 except Exception:  # noqa: BLE001
                     signal_pack = ""
+            # 预测市场信号包：优先复用已构建的（generate_report 已先构建），否则为骨架
+            # 单独构建一次（现抓/读 handoff 皆 degrade-safe，失败为空串 → 提示词不变）。
+            market_pack = getattr(self, "_market_pack", "")
+            if not market_pack and getattr(Config, "PREDICTION_MARKETS_ENABLED", True):
+                try:
+                    market_pack = self._build_market_pack()
+                except Exception:  # noqa: BLE001
+                    market_pack = ""
             horizon = ""
             if isinstance(self.actors, dict):
                 horizon = str(self.actors.get("as_of_date", "") or "")
@@ -1469,10 +1758,29 @@ class ReportAgent:
                 situation_brief=self.situation_brief or None,
                 forecast_inputs=forecast_inputs,
                 signal_pack=signal_pack,
+                market_block=market_pack,
             )
             if not spine or not spine.get("scenarios"):
                 logger.info("预测骨架推导未产出情景，跳过（回退为成稿后抽取）")
                 return
+            # RPT-3（REPORT_CRITIQUE_BEFORE_PROSE，默认开）：红队自校准 + 事前验尸挪到
+            # 叙事之前——此前批判发生在全部正文写完之后，正文（连章节标题里的百分比）
+            # 捍卫的是 4 情景 39/23/19/19，而 forecast.json 交付的是批判后的 5 情景
+            # 34/22/16/14/14，按构造必然矛盾（S11 只能事后打标）。前置后，钉进各章
+            # 提示词的骨架与最终 forecast.json 按构造一致。critiqued 标记数据驱动，
+            # _finalize 据此跳过二次批判（premortem 内部自带 REPORT_PREMORTEM 门）。
+            if (getattr(Config, "REPORT_CRITIQUE_BEFORE_PROSE", True)
+                    and getattr(Config, "REPORT_FORECAST_SELF_CRITIQUE", False)):
+                try:
+                    _critiqued = _fe.self_critique_forecast(spine, self.llm)
+                    _critiqued = _fe.premortem_forecast(_critiqued, self.llm)
+                    if _critiqued.get("scenarios"):
+                        spine = _critiqued
+                        logger.info(
+                            f"预测骨架已先于叙事完成红队自校准（{len(spine['scenarios'])} 情景）"
+                        )
+                except Exception as _ce:  # noqa: BLE001 — 批判失败沿用未批判骨架
+                    logger.warning(f"骨架前置自校准失败（忽略）: {_ce}")
             self._forecast_spine = spine
             self._forecast_spine_block = _fe.render_forecast_spine_block(spine)
             # 早落 forecast.json（骨架版）；成稿后由 _finalize_structured_forecast 补
@@ -1509,9 +1817,127 @@ class ReportAgent:
                 report_markdown, self.llm,
                 situation_brief=getattr(self, "situation_brief", None),
             )
-        if getattr(Config, "REPORT_FORECAST_SELF_CRITIQUE", False):
+        # RPT-3: 骨架已在叙事前完成批判（critiqued=True，数据驱动判断）时不再二次批判——
+        # 成稿后再动概率会让正文与 forecast.json 按构造矛盾。非骨架路径（成稿后抽取，
+        # 如骨架推导失败的 91f5 型运行）保留原有的成稿后批判。
+        if (getattr(Config, "REPORT_FORECAST_SELF_CRITIQUE", False)
+                and not forecast.get("critiqued")):
             forecast = self_critique_forecast(forecast, self.llm)
+        # XRUN-16(1): 骨架情景数与最终情景数漂移检测（正文按骨架 N 情景撰写、交付却是
+        # M 情景 ⇒ 必然矛盾）；随 forecast.json quality 落盘供健康门消费。
+        try:
+            _pin_n = len((self._forecast_spine or {}).get("scenarios") or [])
+            _fin_n = len(forecast.get("scenarios") or [])
+            if _pin_n and _fin_n and _pin_n != _fin_n:
+                forecast.setdefault("quality", {})["scenario_count_drift"] = {
+                    "pinned": _pin_n, "final": _fin_n}
+                logger.warning(f"情景数漂移：骨架 {_pin_n} 情景 → 最终 {_fin_n} 情景（正文与交付可能矛盾）")
+        except Exception:  # noqa: BLE001
+            pass
         forecast["citation_audit"] = audit_citation_grounding(report_markdown)
+        # QUALITY-OPT S2: flag quotes presented as real but neither labeled simulation nor found
+        # in the research material (laundered sim/graph text or fabrication). Observability →
+        # forecast.quality.quote_provenance; loud warning when any are found.
+        try:
+            _qp = self._audit_quote_provenance(report_markdown)
+            if _qp:
+                forecast.setdefault("quality", {})["quote_provenance"] = _qp
+                if _qp.get("ungrounded"):
+                    logger.warning(
+                        f"引用接地审计：{_qp['ungrounded']}/{_qp['total_quotes']} 条引用未标注为模拟"
+                        f"且未在研究材料中匹配（疑似嫁接/捏造）: {_qp.get('examples', [])[:2]}")
+                # RPT-5: 带 [S#] 来源但非逐字的引文单独告警（缺陷但非捏造，不入发布门）。
+                if _qp.get("cited_unverbatim"):
+                    logger.warning(
+                        f"引用接地审计：{_qp['cited_unverbatim']}/{_qp['total_quotes']} 条引用带 [S#] "
+                        f"来源但疑似非逐字引用: {_qp.get('unverbatim_examples', [])[:2]}")
+        except Exception:  # noqa: BLE001
+            pass
+        # QUALITY-OPT S11: flag prose scenario-probabilities that disagree with forecast.json.
+        try:
+            _nc = self._audit_numeric_consistency(report_markdown, forecast)
+            if _nc.get("mismatch_count"):
+                forecast.setdefault("quality", {})["numeric_consistency"] = _nc
+                logger.warning(f"概率一致性审计：{_nc['mismatch_count']} 处正文概率与 forecast.json 不符: "
+                               f"{_nc.get('scenario_prob_mismatches', [])[:3]}")
+        except Exception:  # noqa: BLE001
+            pass
+        # QUALITY-OPT S12: flag implausible headline growth stats (>100% YoY) that anchor reports.
+        try:
+            _sp = self._audit_stat_plausibility(report_markdown)
+            if _sp.get("count"):
+                forecast.setdefault("quality", {})["implausible_stats"] = _sp
+                logger.warning(f"统计合理性审计：{_sp['count']} 处疑似不合理的极端增长率: "
+                               f"{_sp.get('implausible_stats', [])[:3]}")
+        except Exception:  # noqa: BLE001
+            pass
+        # QUALITY-OPT A1: emit >=N INDEPENDENT binary (yes/no) forecasts — the brief's headline
+        # deliverable — ALONGSIDE the scenario spine. The research dossier usually already holds a
+        # compliant F1..Fn table; we extract it (preserving its probabilities) and top up to the
+        # minimum, with a conviction+objectivity scorecard. Language follows the report so the two
+        # views stay consistent. Additive + degrade-safe: failure leaves the scenario forecast intact.
+        if getattr(Config, "FORECAST_EMIT_BINARY", True):
+            try:
+                from .forecast_extractor import extract_binary_forecasts as _ebf
+                _lang = (getattr(self, "output_language", None)
+                         or getattr(Config, "DEERFLOW_RESEARCH_LANGUAGE", None) or "English")
+                _bsrc = self.research_report or report_markdown or ""
+                # RPT-6: 主题从配置/需求书派生，不再由抽取器硬编码 Bridgewater 三元组。
+                _themes = getattr(Config, "FORECAST_BINARY_THEMES", None)
+                if isinstance(_themes, str):
+                    _themes = [t.strip().lower() for t in _themes.split(",") if t.strip()]
+                if not _themes:
+                    try:
+                        from .requirement_spec import parse_requirement_spec
+                        _themes = parse_requirement_spec(
+                            self.simulation_requirement, self.research_report
+                        ).get("themes") or None
+                    except Exception:  # noqa: BLE001 — 主题派生失败退回主题无关措辞
+                        _themes = None
+                # XRUN-1(b): 注入模拟量化信号包（缺失时为骨架单独构建一次），让 Part-1 概率
+                # 对模拟敏感——两次不同模拟产出逐字节相同的概率向量即证明此前模拟被完全忽略。
+                _sig = self._signal_pack
+                if not _sig and getattr(Config, "FORECAST_SIM_SENSITIVITY", True):
+                    try:
+                        _sig = self._build_signal_pack()
+                    except Exception:  # noqa: BLE001
+                        _sig = ""
+                # 预测市场：市场表注入抽取提示词（重叠预测须引用隐含概率并解释 >10pt 分歧），
+                # 规整化快照回填 market_anchor 的隐含概率。缺失时构建一次；失败为空（degrade-safe）。
+                _mkt = getattr(self, "_market_pack", "")
+                if not _mkt and getattr(Config, "PREDICTION_MARKETS_ENABLED", True):
+                    try:
+                        _mkt = self._build_market_pack()
+                    except Exception:  # noqa: BLE001
+                        _mkt = ""
+                # B2: 需求书解析出的 binary_min_count 参与生效——取 spec 与 Config 的较大者
+                # （需求书写明「15+ binary forecasts」时不被 Config 默认静默压低）。
+                _bres = _ebf(
+                    _bsrc, self.llm,
+                    min_count=self._binary_min_count(),
+                    language=_lang,
+                    situation_brief=getattr(self, "situation_brief", None),
+                    themes=_themes,
+                    signal_pack=_sig or None,
+                    market_pack=_mkt or None,
+                    markets=getattr(self, "_prediction_markets", None) or None,
+                )
+                if _bres.get("binary_forecasts"):
+                    forecast["binary_forecasts"] = _bres["binary_forecasts"]
+                    forecast["binary_quality"] = _bres.get("binary_quality") or {}
+                    # XRUN-1(c): 与同图谱、不同模拟的上一份报告比对概率向量——
+                    # 若逐项 |Δ|≤0.01 完全一致，则预测对模拟不敏感，记入 quality。
+                    try:
+                        _dup = self._check_binary_sim_sensitivity(report_id, forecast)
+                        if _dup:
+                            forecast.setdefault("quality", {})["sim_insensitivity"] = _dup
+                            logger.warning(
+                                f"二元预测对模拟不敏感：概率向量与报告 {_dup.get('other_report_id')} "
+                                f"完全一致（不同 simulation_id）")
+                    except Exception:  # noqa: BLE001 — 观测性检查，绝不影响产物
+                        pass
+            except Exception as _be:  # noqa: BLE001 — additive; never break finalization
+                logger.warning(f"二元预测抽取失败（忽略，不影响情景预测）: {_be}")
         if getattr(Config, "REPORT_PUBLISH_GATE", False):
             forecast = self._apply_publish_gate(forecast)
         # P2-2: 把观察指标随 forecast.json 落盘（供解析调度器对照判别情景）。
@@ -1556,6 +1982,59 @@ class ReportAgent:
             f"信心 {forecast.get('confidence')})"
         )
 
+    def _check_binary_sim_sensitivity(self, report_id: str,
+                                      forecast: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """XRUN-1(c): 廉价的跨报告同一性门。同一图谱、不同 simulation_id 的上一份报告若
+        产出了逐项 |Δ|≤0.01 的相同二元概率向量，说明 Part-1 概率是研究先验的确定性复读、
+        模拟阶段贡献为零（74dc vs aa77 逐字节相同即为实锤）。命中返回 quality 记录字典，
+        否则 None。只读比对、任何失败返回 None（观测性，绝不影响主流程）。
+        注：在 XRUN-1(b) 的信号注入生效前，本门可能对既有报告合法命中。"""
+        probs = [b.get("probability") for b in (forecast.get("binary_forecasts") or [])
+                 if isinstance(b, dict)]
+        if len(probs) < 5:  # 向量太短时同一性没有区分力
+            return None
+        try:
+            reports_dir = os.path.join(Config.UPLOAD_FOLDER, "reports")
+            if not os.path.isdir(reports_dir):
+                return None
+            candidates = []
+            for name in os.listdir(reports_dir):
+                if name == report_id or not name.startswith("report_"):
+                    continue
+                meta_path = os.path.join(reports_dir, name, "meta.json")
+                fc_path = os.path.join(reports_dir, name, "forecast.json")
+                if os.path.exists(meta_path) and os.path.exists(fc_path):
+                    candidates.append((os.path.getmtime(fc_path), name, meta_path, fc_path))
+            # 只比对最近的少量报告（有界）
+            for _, other_id, meta_path, fc_path in sorted(candidates, reverse=True)[:8]:
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                    if str(meta.get("graph_id") or "") != str(self.graph_id or ""):
+                        continue
+                    if str(meta.get("simulation_id") or "") == str(self.simulation_id or ""):
+                        continue  # 同一模拟的重跑本就应相近，不算不敏感
+                    with open(fc_path, "r", encoding="utf-8") as f:
+                        other_fc = json.load(f)
+                    other_probs = [b.get("probability")
+                                   for b in (other_fc.get("binary_forecasts") or [])
+                                   if isinstance(b, dict)]
+                    if len(other_probs) != len(probs):
+                        continue
+                    if all(abs(float(a) - float(b)) <= 0.01
+                           for a, b in zip(probs, other_probs)):
+                        return {
+                            "issue": "binary probabilities identical to a different-simulation "
+                                     "report — forecasts insensitive to simulation",
+                            "other_report_id": other_id,
+                            "other_simulation_id": str(meta.get("simulation_id") or ""),
+                        }
+                except (OSError, ValueError, TypeError):
+                    continue
+        except Exception:  # noqa: BLE001
+            return None
+        return None
+
     def _append_resolution_section(self, report_id: str, report: "Report") -> None:
         """NEXTSTEPS P2-2: 把确定性的「如何验证本预测」章节（判定标准 + 观察指标）追加到成稿末尾
         并重写 full_report.md。指标-情景映射已随 forecast.json 落盘。仅在已有预测骨架时调用。
@@ -1577,6 +2056,349 @@ class ReportAgent:
         except Exception as _we:  # noqa: BLE001
             logger.warning(f"重写 full_report.md（追加判定标准章节）失败（忽略）: {_we}")
         logger.info(f"已追加判定标准与观察指标章节: {report_id}")
+
+    # RPT-5: 系统确定性注入的对比表注释 blockquote（_render_comparison_table 固定输出），
+    # 永远不可能命中研究材料，必须豁免。
+    _TABLE_NOTE_TEXT = "上表为确定性聚合结果，正文请围绕这些权威差值展开解读，勿自行复算或反转方向。"
+    _S_CITATION_RE = re.compile(r"[\[【]\s*S\d+\s*[\]】]", re.I)
+
+    @staticmethod
+    def _norm_quote_text(text: str) -> str:
+        """RPT-5: 归一化引文/底料——去 markdown 强调与引号字符（弯直混用）、压空白、小写，
+        让逐字比对不被排版差异（**加粗**、弯引号、折行）制造假阳性。纯函数。"""
+        import re as _re
+        t = _re.sub(r"[*_`]+", "", str(text or ""))
+        t = _re.sub(r"[\"'“”‘’„‟「」『』]", "", t)
+        return _re.sub(r"\s+", " ", t).strip().lower()
+
+    def _audit_quote_provenance(self, report_markdown: str) -> Dict[str, Any]:
+        """QUALITY-OPT S2 + RPT-5: detect laundered quotes. A blockquote presented as a
+        REAL/factual quote (not labeled as simulation) must substring-match the research
+        material; otherwise it is likely sim-roleplay or a graph-edge string dressed up as
+        a real source, or an outright fabrication. Returns a count + examples;
+        observability only (never mutates).
+
+        RPT-5（REPORT_QUOTE_AUDIT_V2，默认开）修掉系统性假阳性：(1) 豁免系统注入的
+        大纲摘要/对比表注释 blockquote；(2) 归一化 + 头/中/尾三段探针（此前单一 40 字
+        头探针对强调符/弯引号极脆）；(3) 带 [S#] 引用但非逐字的引文单列为
+        cited_unverbatim（仍是缺陷，但非捏造，发布门仅对 ungrounded 降级）。"""
+        import re as _re
+        lines = [ln.strip()[1:].strip() for ln in (report_markdown or "").splitlines()
+                 if ln.strip().startswith(">")]
+        quotes = [q for q in lines if len(q) >= 12]
+        if not quotes:
+            return {}
+        v2 = bool(getattr(Config, "REPORT_QUOTE_AUDIT_V2", True))
+        ground_raw = ((self.research_report or "") + "\n" + (self._background_block or "")
+                      + "\n" + (getattr(self, "situation_brief", "") or ""))
+        ground = self._norm_quote_text(ground_raw) if v2 else ground_raw.lower()
+        sim_labels = ("模拟", "simulation", "代理人", "推演", "sim-agent", "simulated agent")
+        _summary_n = self._norm_quote_text(getattr(self, "_outline_summary", "") or "")
+        _table_note_n = self._norm_quote_text(self._TABLE_NOTE_TEXT)
+        ungrounded: List[str] = []
+        unverbatim: List[str] = []
+        for q in quotes:
+            ql = q.lower()
+            if any(t in ql for t in sim_labels):       # honestly labeled as simulation → fine
+                continue
+            if not v2:
+                probe = _re.sub(r'^["“”「『\'\s]+', '', q)[:40].lower().strip()
+                if probe and probe in ground:           # matches real research material → fine
+                    continue
+                ungrounded.append(q[:90])
+                continue
+            qn = self._norm_quote_text(q)
+            if not qn:
+                continue
+            if (_summary_n and qn == _summary_n) or qn == _table_note_n:
+                continue                                # 系统注入的 blockquote → 豁免
+            probes = [qn[:40]]
+            if len(qn) > 80:
+                mid = len(qn) // 2
+                probes.append(qn[mid:mid + 40])
+            if len(qn) > 40:
+                probes.append(qn[-40:])
+            if any(p and p in ground for p in probes):  # verbatim match → fine
+                continue
+            if self._S_CITATION_RE.search(q):           # 有 [S#] 来源但非逐字 → 单列
+                unverbatim.append(q[:90])
+                continue
+            ungrounded.append(q[:90])
+        out = {"total_quotes": len(quotes), "ungrounded": len(ungrounded),
+               "examples": ungrounded[:5]}
+        if v2:
+            out["cited_unverbatim"] = len(unverbatim)
+            if unverbatim:
+                out["unverbatim_examples"] = unverbatim[:5]
+        return out
+
+    def _audit_stat_plausibility(self, report_markdown: str) -> Dict[str, Any]:
+        """QUALITY-OPT S12: flag implausible headline statistics that anchor whole reports —
+        extreme year-over-year growth (>100%) like 'DRAM +303%' / '增长249.5%'. Best-effort
+        prose scan; observability → forecast.quality. (Sub-market>parent & future-dated earnings
+        need structured facts → handled in the research quant sanity gate.)"""
+        import re as _re
+        md = report_markdown or ""
+        flags: List[str] = []
+        pat = _re.compile(
+            r'(?:\+|增长|增幅|同比|环比|growth|increase|surg\w*|yoy|year[\- ]over[\- ]year)'
+            r'[^0-9%]{0,10}([0-9]{3,4}(?:\.[0-9]+)?)\s*%', _re.I)
+        for m in pat.finditer(md):
+            try:
+                v = float(m.group(1))
+            except ValueError:
+                continue
+            if v > 100:
+                ctx = md[max(0, m.start() - 24):m.start() + 14].replace("\n", " ").strip()
+                flags.append(f"{v:.0f}% growth near '…{ctx}…'")
+        # dedup
+        seen = set(); uniq = []
+        for f in flags:
+            if f not in seen:
+                seen.add(f); uniq.append(f)
+        return {"implausible_stats": uniq[:8], "count": len(uniq)}
+
+    def _audit_numeric_consistency(self, report_markdown: str, forecast: Dict[str, Any]) -> Dict[str, Any]:
+        """QUALITY-OPT S11: flag prose scenario-probabilities that disagree with forecast.json
+        by >1pt (the 42/21/15/11/11-vs-38/17/13/12/20 failure). forecast.json is the single
+        source of truth; prose must match it. Observability → forecast.quality. Best-effort."""
+        import re as _re
+        if not isinstance(forecast, dict):
+            return {}
+        md = report_markdown or ""
+        issues: List[str] = []
+        for s in (forecast.get("scenarios") or []):
+            if not isinstance(s, dict):
+                continue
+            name = str(s.get("name") or "").strip()
+            try:
+                p = round(float(s.get("probability") or 0.0) * 100)
+            except (TypeError, ValueError):
+                continue
+            if len(name) < 4:
+                continue
+            idx = md.find(name)
+            if idx < 0:
+                continue
+            window = md[max(0, idx - 18):idx + len(name) + 55]
+            pcts = []
+            for m in _re.finditer(r'(\d{1,3})\s*%', window):
+                try:
+                    pv = int(m.group(1))
+                except ValueError:
+                    continue
+                if 0 <= pv <= 100:
+                    pcts.append(pv)
+            if not pcts:
+                continue
+            if any(abs(pv - p) <= 1 for pv in pcts):
+                continue  # a nearby percentage matches forecast.json → consistent
+            near = [pv for pv in pcts if abs(pv - p) <= 60]
+            if near:
+                pv = min(near, key=lambda x: abs(x - p))
+                issues.append(f"scenario '{name[:28]}': prose {pv}% vs forecast.json {p}%")
+        return {"scenario_prob_mismatches": issues[:8], "mismatch_count": len(issues)}
+
+    def _lang_override(self) -> str:
+        """QUALITY-OPT B0: a hard output-language directive prepended to every plan/section
+        system prompt. It explicitly OVERRIDES the template's legacy 'mirror the source
+        language / write in Chinese' rule, so an English brief yields an English submission."""
+        lang = getattr(self, "output_language", None) or "English"
+        return (
+            "═══ ABSOLUTE OUTPUT-LANGUAGE RULE (overrides every other language instruction below) ═══\n"
+            f"Write the ENTIRE report — every heading, sentence, table cell, and quotation — in {lang}. "
+            f"Translate any tool / interview / source output into {lang} before using it. Never switch "
+            "languages mid-report. This rule takes precedence over any instruction to mirror the source "
+            "language.\n\n"
+        )
+
+    def _prepend_binary_forecasts_section(self, report_id: str, report: "Report") -> None:
+        """QUALITY-OPT B1: insert the deterministic Part-1 binary-forecast table right after
+        the report's H1 title, so the brief's headline deliverable leads the document and its
+        numbers are guaranteed to match forecast.json. No-op if no binaries. Rewrites full_report.md.
+        """
+        from .forecast_extractor import render_binary_forecasts_block
+        fc = self._forecast_spine or {}
+        if not (fc.get("binary_forecasts")):
+            return
+        _lang = (getattr(self, "output_language", None)
+                 or getattr(Config, "DEERFLOW_RESEARCH_LANGUAGE", None) or "English")
+        block = render_binary_forecasts_block(fc, language=_lang)
+        if not block:
+            return
+        md = report.markdown_content or ""
+        if "Part 1 — Binary Forecasts" in md or "第一部分 · 二元预测" in md:
+            return  # idempotent — never double-insert on re-finalize
+        lines = md.split("\n", 1)
+        if lines and lines[0].lstrip().startswith("# "):
+            # after the H1 title (+ any immediate blockquote summary stays below Part 1)
+            new_md = lines[0] + "\n\n" + block + "\n\n" + (lines[1] if len(lines) > 1 else "")
+        else:
+            new_md = block + "\n\n" + md
+        report.markdown_content = new_md
+        try:
+            folder = ReportManager._get_report_folder(report_id)
+            write_text_atomic(os.path.join(folder, "full_report.md"), new_md)
+        except Exception as _we:  # noqa: BLE001
+            logger.warning(f"重写 full_report.md（前置二元预测章节）失败（忽略）: {_we}")
+        logger.info(f"已前置 Part-1 二元预测章节: {report_id} "
+                    f"({len(fc.get('binary_forecasts') or [])} 条)")
+
+    # ──────────────────────────────────────────────────────────────
+    # B2: 三部结构骨架 — Part 1（二元预测）→ Part 2（框架综合）→ Part 3（附录详析）
+    # ──────────────────────────────────────────────────────────────
+    # 幂等判定 + 定位用标记（与 _prepend_binary_forecasts_section / 渲染器的标题一致）。
+    _PART1_MARKERS = ("Part 1 — Binary Forecasts", "第一部分 · 二元预测")
+    _PART2_MARKERS = ("Part 2 — Framework & Synthesis", "第二部分 · 框架与综合")
+
+    def _binary_min_count(self) -> int:
+        """B2: 二元预测最小数量 = max(需求书解析出的 binary_min_count, Config 默认)。
+
+        需求书写明「15+ binary forecasts」时不能被 Config 的 10 静默压低；spec 未解析出
+        数量/解析失败时沿用 Config（degrade-safe，与历史行为一致）。"""
+        try:
+            n = int(getattr(Config, "BINARY_FORECASTS_MIN_COUNT", 10) or 10)
+        except (TypeError, ValueError):
+            n = 10
+        try:
+            from .requirement_spec import parse_requirement_spec
+            spec_n = parse_requirement_spec(
+                getattr(self, "simulation_requirement", "") or "",
+                getattr(self, "research_report", "") or "",
+            ).get("binary_min_count")
+            if spec_n:
+                n = max(n, int(spec_n))
+        except Exception:  # noqa: BLE001 — spec 解析失败沿用 Config
+            pass
+        return n
+
+    def _section_key_points(self, report_markdown: str, max_sections: int = 8,
+                            per_section_chars: int = 350, max_chars: int = 4000) -> str:
+        """B2: 确定性截取各详细章节的「要点」（标题 + 开头片段）供 Part 2 综合，
+        有界回灌避免整稿吃进提示词。跳过 Part 1 表格块；无章节返回 ""。"""
+        lines = (report_markdown or "").split("\n")
+        sections: List[tuple] = []  # (title, body_lines)
+        cur_title = None
+        cur_body: List[str] = []
+        for ln in lines:
+            s = ln.strip()
+            if s.startswith("## "):
+                if cur_title is not None:
+                    sections.append((cur_title, cur_body))
+                title = s[3:].strip()
+                cur_title = None if any(m in title for m in self._PART1_MARKERS) else title
+                cur_body = []
+            elif cur_title is not None:
+                cur_body.append(ln)
+        if cur_title is not None:
+            sections.append((cur_title, cur_body))
+        segs: List[str] = []
+        for title, body in sections[:max_sections]:
+            text = " ".join(x.strip() for x in body if x.strip())[:per_section_chars]
+            segs.append(f"- {title}: {text}")
+        out = "\n".join(segs)
+        return out[:max_chars]
+
+    def _build_part2_synthesis(self, report_markdown: str) -> str:
+        """B2: 一次 LLM 调用生成 Part 2「框架与综合」正文——从预测骨架 + 各章要点 +
+        预测市场信号包做紧凑综合（默认 ≤~1800 词；需求书解析出 page_budget 时按
+        ~150 词/页折算收紧，下限 600 词）。失败/过短返回 ""（调用方跳过，绝不写占位符）。"""
+        lang = getattr(self, "output_language", None) or "English"
+        cap_words = 1800
+        try:
+            from .requirement_spec import parse_requirement_spec
+            _pb = parse_requirement_spec(
+                getattr(self, "simulation_requirement", "") or "",
+                getattr(self, "research_report", "") or "",
+            ).get("page_budget")
+            if _pb:
+                cap_words = max(600, min(1800, int(_pb) * 150))
+        except Exception:  # noqa: BLE001 — spec 解析失败用默认词数
+            pass
+        from .forecast_extractor import render_forecast_spine_block
+        try:
+            spine_block = (render_forecast_spine_block(self._forecast_spine)
+                           if getattr(self, "_forecast_spine", None) else "")
+        except Exception:  # noqa: BLE001
+            spine_block = ""
+        parts: List[str] = []
+        if spine_block:
+            parts.append("[Forecast spine]\n" + spine_block[:3000])
+        mp = getattr(self, "_market_pack", "")
+        if mp:
+            parts.append("[Prediction market signals]\n" + str(mp)[:2500])
+        key_points = self._section_key_points(report_markdown)
+        if key_points:
+            parts.append("[Section key points]\n" + key_points)
+        if not parts:
+            return ""  # 没有任何可综合的输入 → 跳过（绝不让模型凭空写）
+        prompt = (
+            "You are the lead forecaster assembling 'Part 2 — Framework & Synthesis' of a "
+            "three-part forecast submission (Part 1 = the binary-forecast table, Part 3 = the "
+            "detailed appendix).\n"
+            f"Write a TIGHT synthesis of AT MOST {cap_words} words in {lang}: the analytical "
+            "framework, the causal logic connecting the key drivers to the Part-1 probabilities, "
+            "the decisive evidence, and how the prediction-market anchors (when present) were "
+            "weighed. DEFEND the spine's probabilities — do not introduce numbers that contradict "
+            "them. Use short paragraphs and at most '###' sub-headings; do NOT emit a '## Part 2' "
+            "top-level heading (the system adds it); no placeholders or meta commentary.\n\n"
+            + "\n\n".join(parts)
+        )
+        text = self.llm.chat(
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3, max_tokens=4096,
+        )
+        text = str(text or "").strip()
+        # 剥掉模型可能自带的 Part 2 大标题（系统会加），避免双标题。
+        text = re.sub(r"^#{1,2}\s*(?:Part\s*2|第二部分)[^\n]*\n+", "", text, count=1).strip()
+        return text if len(text) >= 200 else ""
+
+    def _apply_three_part_skeleton(self, report_id: str, report: "Report") -> None:
+        """B2: 把成稿重排为三部结构——在已前置的 Part 1 二元预测表之后插入
+        「Part 2 — Framework & Synthesis」（一次 LLM 紧凑综合），随后以
+        「Part 3 — Appendix: Detailed Analysis」标题包住既有详细章节（纯结构性重标签，
+        不动章节内容）。仅在 Part 1 已插入时生效；幂等（已有 Part 2 标记即跳过）；
+        综合失败/过短 → 一行告警并整体跳过（绝不写占位符，成稿保持原结构）。
+        """
+        md = report.markdown_content or ""
+        if not md or not any(m in md for m in self._PART1_MARKERS):
+            return  # 无 Part 1（无二元预测）→ 不套三部结构
+        if any(m in md for m in self._PART2_MARKERS):
+            return  # 幂等 — 重复最终化时绝不二次插入
+        synthesis = self._build_part2_synthesis(md)
+        if not synthesis:
+            logger.warning("Part 2 综合生成失败/为空，跳过三部结构骨架（保留原结构，不写占位符）")
+            return
+        zh = not str(getattr(self, "output_language", "") or "English").lower().startswith("en")
+        if zh:
+            part2_head = "## 第二部分 · 框架与综合（Part 2 — Framework & Synthesis）"
+            part3_head = "## 第三部分 · 附录：详细分析（Part 3 — Appendix: Detailed Analysis）"
+            part3_note = "_以下为支撑第一、二部分的逐章详细分析。_"
+        else:
+            part2_head = "## Part 2 — Framework & Synthesis"
+            part3_head = "## Part 3 — Appendix: Detailed Analysis"
+            part3_note = "_The detailed, section-by-section analysis supporting Parts 1–2 follows._"
+        lines = md.split("\n")
+        # 定位第一个非 Part-1 的 "## " 标题 = 详细章节起点；Part 2 + Part 3 标题插在其前。
+        insert_at = None
+        for i, ln in enumerate(lines):
+            s = ln.strip()
+            if s.startswith("## ") and not any(m in s for m in self._PART1_MARKERS):
+                insert_at = i
+                break
+        block = [part2_head, "", synthesis, "", part3_head, "", part3_note, ""]
+        if insert_at is None:
+            new_lines = lines + [""] + block  # 无详细章节（边界）：附在末尾，Part 3 空壳仍标出
+        else:
+            new_lines = lines[:insert_at] + block + lines[insert_at:]
+        new_md = "\n".join(new_lines)
+        report.markdown_content = new_md
+        try:
+            folder = ReportManager._get_report_folder(report_id)
+            write_text_atomic(os.path.join(folder, "full_report.md"), new_md)
+        except Exception as _we:  # noqa: BLE001
+            logger.warning(f"重写 full_report.md（三部结构骨架）失败（忽略）: {_we}")
+        logger.info(f"已套用三部结构骨架（Part 2 综合 {len(synthesis)} 字）: {report_id}")
 
     @staticmethod
     def _apply_publish_gate(forecast: Dict[str, Any]) -> Dict[str, Any]:
@@ -1615,14 +2437,30 @@ class ReportAgent:
                 issues.append("缺少『维持现状/兜底』情景")
             if top >= 0.9 and len(probs) <= 1:
                 issues.append("概率分布退化（单情景≥0.9 且无对照情景）")
-            forecast["quality"] = {
+            # QUALITY-OPT: fold the binary-forecast conviction/objectivity gate (A3/A4) +
+            # the S2/S11/S12 audits into the publish gate so they actually demote confidence.
+            bq = forecast.get("binary_quality") or {}
+            if bq and not bq.get("passed", True):
+                issues.append("二元预测信心/客观性门未过：" + "；".join((bq.get("issues") or [])[:2]))
+            _q0 = forecast.get("quality")
+            _existing_q = _q0 if isinstance(_q0, dict) else {}
+            if (_existing_q.get("quote_provenance") or {}).get("ungrounded"):
+                issues.append(f"{_existing_q['quote_provenance']['ungrounded']} 条疑似嫁接/捏造引用 (S2)")
+            if (_existing_q.get("numeric_consistency") or {}).get("mismatch_count"):
+                issues.append(f"{_existing_q['numeric_consistency']['mismatch_count']} 处正文概率与 forecast.json 不符 (S11)")
+            if (_existing_q.get("implausible_stats") or {}).get("count"):
+                issues.append(f"{_existing_q['implausible_stats']['count']} 处疑似不合理极端增长率 (S12)")
+            # MERGE into quality (do NOT overwrite the audit findings stored earlier).
+            quality = dict(_existing_q)
+            quality.update({
                 "citation_coverage": round(coverage, 3),
                 "probability_sum": prob_sum,
                 "has_residual_scenario": has_residual,
                 "max_probability": round(top, 3),
                 "issues": issues,
                 "passed": not issues,
-            }
+            })
+            forecast["quality"] = quality
             if issues:
                 levels = ["low", "medium", "high"]
                 order = {"low": 0, "medium": 1, "high": 2}
@@ -1971,6 +2809,10 @@ class ReportAgent:
                 return result.to_text()
             
             elif tool_name == "interview_agents":
+                # RPT-7: 工具已因 OASIS 环境离线被移除时短路，避免未经校验的调用方
+                # （原生路径等）白烧一次注定超时的 IPC 采访。
+                if "interview_agents" not in self.tools:
+                    return "（interview_agents 不可用：OASIS 模拟环境未在线，请改用其它检索工具）"
                 # 深度采访 - 调用真实的OASIS采访API获取模拟Agent的回答（双平台）
                 interview_topic = parameters.get("interview_topic", parameters.get("query", ""))
                 max_agents = parameters.get("max_agents", 5)
@@ -2041,7 +2883,8 @@ class ReportAgent:
             elif tool_name == "get_simulation_context":
                 # 重定向到 insight_forge，因为它更强大
                 logger.info("get_simulation_context 已重定向到 insight_forge")
-                query = parameters.get("query", self.simulation_requirement)
+                # XRUN-5: 模型未给 query 时回退紧凑查询而非整段需求书（会被钳制到只剩引言）。
+                query = parameters.get("query") or self._compact_retrieval_query()
                 return self._execute_tool("insight_forge", {"query": query}, report_context)
             
             elif tool_name == "get_entities_by_type":
@@ -2054,7 +2897,9 @@ class ReportAgent:
                 return json.dumps(result, ensure_ascii=False, indent=2)
             
             else:
-                return f"未知工具: {tool_name}。请使用以下工具之一: insight_forge, panorama_search, quick_search"
+                # RPT-7: 提示可用工具时列出 live 工具集（此前硬编码 3 个，遗漏了
+                # simulation_outcomes/coalition_map/opinion_shift/trace_cascade 等）。
+                return f"未知工具: {tool_name}。请使用以下工具之一: {', '.join(sorted(self.tools.keys()))}"
                 
         except Exception as e:
             logger.error(f"工具执行失败: {tool_name}, 错误: {str(e)}")
@@ -2094,6 +2939,16 @@ class ReportAgent:
         for match in re.finditer(xml_pattern, response, re.DOTALL):
             try:
                 call_data = json.loads(match.group(1))
+                if not isinstance(call_data, dict):
+                    continue
+                # RPT-7: 统一键名（tool→name / params→parameters），但不在解析层丢弃未知
+                # 工具名——由 ReACT 循环给出纠正性 Observation（且不计入工具调用预算）。
+                if "tool" in call_data and "name" not in call_data:
+                    call_data["name"] = call_data.pop("tool")
+                if "params" in call_data and "parameters" not in call_data:
+                    call_data["parameters"] = call_data.pop("params")
+                if not call_data.get("name"):
+                    continue
                 tool_calls.append(call_data)
             except json.JSONDecodeError:
                 pass
@@ -2148,19 +3003,47 @@ class ReportAgent:
             if params_desc:
                 desc_parts.append(f"  参数: {params_desc}")
         return "\n".join(desc_parts)
+
+    # RPT-7: 工具使用建议改为按 live 工具集动态渲染——interview_agents 被移除（OASIS 离线）
+    # 后不得继续在每章提示词中宣传它（否则模型被 nudge 去调不存在的工具，白烧一轮预算）。
+    # 前四条文案与历史静态块逐字一致；条件工具（faction_brief/scenario_diff 等）仅在存在时列出。
+    _TOOL_HINT_SUMMARIES = {
+        "insight_forge": "深度洞察分析，自动分解问题并多维度检索事实和关系",
+        "panorama_search": "广角全景搜索，了解事件全貌、时间线和演变过程",
+        "quick_search": "快速验证某个具体信息点",
+        "interview_agents": "采访模拟Agent，获取不同角色的第一人称观点和真实反应",
+        "simulation_outcomes": "模拟量化结果：最活跃 Agent、逐轮动作量、动作类型分布",
+        "coalition_map": "派系/联盟结构（对相同对象互动的 Agent 聚类，确定性）",
+        "opinion_shift": "单个 Agent 的逐轮行为轨迹（立场/参与度演变）",
+        "trace_cascade": "图谱多跳传导/级联追踪（哪个节点一动就翻盘）",
+        "faction_brief": "图谱社区检测派系简报（阵营/对立结构）",
+        "scenario_diff": "基线 vs 情景反事实结构化对比",
+    }
+
+    def _tool_usage_hints(self) -> str:
+        """RPT-7: 从 live self.tools 渲染工具使用建议 bullets（工具被移除即不再出现）。"""
+        lines = [f"- {name}: {self._TOOL_HINT_SUMMARIES[name]}"
+                 for name in self.tools if name in self._TOOL_HINT_SUMMARIES]
+        return "\n".join(lines) if lines else "（按上方工具描述使用）"
     
     def plan_outline(
-        self, 
-        progress_callback: Optional[Callable] = None
+        self,
+        progress_callback: Optional[Callable] = None,
+        forecast_spine_block: str = "",
+        require_forecast_structure: bool = False,
     ) -> ReportOutline:
         """
         规划报告大纲
-        
+
         使用LLM分析模拟需求，规划报告的目录结构
-        
+
         Args:
             progress_callback: 进度回调函数
-            
+            forecast_spine_block: R2-DETAIL-2 预测骨架块（先于大纲推导）。非空时钉入大纲提示词，
+                让章节围绕可证伪的预测组织而非反向从叙事抽取。缺省空串 → 行为与历史一致。
+            require_forecast_structure: R2-DETAIL-2 为真时强制大纲覆盖「预测框架/逐情景预测/校准与
+                信心」三类章节。缺省 False → 不追加该指令，提示词与历史逐字节一致。
+
         Returns:
             ReportOutline: 报告大纲
         """
@@ -2169,16 +3052,21 @@ class ReportAgent:
         if progress_callback:
             progress_callback("planning", 0, "正在分析模拟需求...")
         
-        # 首先获取模拟上下文
-        context = self.zep_tools.get_simulation_context(
-            graph_id=self.graph_id,
-            simulation_requirement=self.simulation_requirement
-        )
+        # 首先获取模拟上下文（XRUN-5: 检索用紧凑查询，需求书仍原样传给上下文回显；
+        # 紧凑查询与需求书相同时不传该参数，调用形态与历史逐字节一致）
+        _ctx_kwargs: Dict[str, Any] = {
+            "graph_id": self.graph_id,
+            "simulation_requirement": self.simulation_requirement,
+        }
+        _sq = self._compact_retrieval_query()
+        if _sq and _sq != self.simulation_requirement:
+            _ctx_kwargs["search_query"] = _sq
+        context = self.zep_tools.get_simulation_context(**_ctx_kwargs)
         
         if progress_callback:
             progress_callback("planning", 30, "正在生成报告大纲...")
         
-        system_prompt = PLAN_SYSTEM_PROMPT
+        system_prompt = self._lang_override() + PLAN_SYSTEM_PROMPT
         user_prompt = PLAN_USER_PROMPT_TEMPLATE.format(
             simulation_requirement=self.simulation_requirement,
             total_nodes=context.get('graph_statistics', {}).get('total_nodes', 0),
@@ -2195,9 +3083,10 @@ class ReportAgent:
         # 让大纲随真实研究发现与模拟动态而变（如高级联的运行会催生「级联」章节），而非盲设。
         sweeps = []
         try:
+            # XRUN-5: 全局扫描的 query 用紧凑查询（整段需求书会被钳制到只剩引言句）。
             forge = self.zep_tools.insight_forge(
                 graph_id=self.graph_id,
-                query=self.simulation_requirement,
+                query=self._compact_retrieval_query(),
                 simulation_requirement=self.simulation_requirement,
                 report_context="报告大纲规划阶段的全局扫描",
             )
@@ -2226,6 +3115,20 @@ class ReportAgent:
             user_prompt += (
                 "\n\n**强制要求**：本报告为情景（What-If）预测，大纲必须包含一节标题含"
                 "「情景对比」或「反事实」的章节，对比基线与本情景的关键差异（引用上面对比数据中的具体差值）。"
+            )
+
+        # R2-DETAIL-2: 把先于大纲推导出的预测骨架钉入提示词，并（在有骨架时）强制大纲围绕预测组织。
+        # forecast_spine_block 为空 / require_forecast_structure 为 False 时本段为 no-op（提示词与历史一致）。
+        if forecast_spine_block:
+            user_prompt += "\n\n" + forecast_spine_block
+        if require_forecast_structure:
+            user_prompt += (
+                "\n\n**结构强制要求（预测优先）**：本报告以上述预测骨架为核心，章节须围绕预测组织。"
+                "大纲必须显式覆盖以下三类章节："
+                "(1) 一节阐述「预测框架与方法」——研究证据基础、情景如何划分与定价（概率来源）；"
+                "(2) 围绕各核心情景的「逐情景预测」章节，逐一论证其概率、关键驱动与判定/证伪标准；"
+                "(3) 一节「校准与信心」——讨论不确定性、置信区间，以及模型与模拟之间的分歧。"
+                "其余章节可据预测发现自由设计，但上述三类必须被覆盖（标题可自拟，语义需对应）。"
             )
 
         try:
@@ -2283,6 +3186,10 @@ class ReportAgent:
             
         except Exception as e:
             logger.error(f"大纲规划失败: {str(e)}")
+            # RPT-2(a): 记录「大纲 LLM 调用失败、已降级为默认大纲」——这是系统性 LLM 故障的
+            # 前哨信号；generate_report 据此在前两章接连失败时快速中止，而非对着死掉的
+            # 提供方烧完全部章节再假装 completed。
+            self._outline_degraded = True
             # 返回默认大纲（5个章节，满足 5-8 节契约的下限，作为 fallback）
             return ReportOutline(
                 title="未来预测报告",
@@ -2337,7 +3244,7 @@ class ReportAgent:
 
         def _gen_body(idx: int, section: ReportSection):
             try:
-                return idx, self._generate_section(
+                return idx, self._generate_section_with_retry(
                     section=section, outline=outline, previous_sections=[brief],
                     progress_callback=_noop, section_index=idx + 1)
             except Exception as e:  # noqa: BLE001 — per-section isolation
@@ -2345,8 +3252,13 @@ class ReportAgent:
                 return idx, SECTION_FAILURE_PLACEHOLDER
 
         if body:
+            # RPT-9: ThreadPoolExecutor worker 线程不继承 ContextVar，_current_report_id
+            # 在 worker 中为 None → _ReportIdMatchFilter 丢弃全部章节内日志（console_log.txt
+            # 与 UI 日志流在并发模式下整段空白）。为每个任务复制当前上下文再运行。
+            _parent_ctx = contextvars.copy_context()
             with _cf.ThreadPoolExecutor(max_workers=min(concurrency, len(body))) as ex:
-                for fut in _cf.as_completed([ex.submit(_gen_body, i, s) for i, s in body]):
+                futures = [ex.submit(_parent_ctx.copy().run, _gen_body, i, s) for i, s in body]
+                for fut in _cf.as_completed(futures):
                     idx, content = fut.result()
                     contents[idx] = content
 
@@ -2354,7 +3266,7 @@ class ReportAgent:
         body_text = [f"## {sections[i].title}\n\n{contents.get(i, '')}" for i, _ in body]
         for idx, section in tail:
             try:
-                contents[idx] = self._generate_section(
+                contents[idx] = self._generate_section_with_retry(
                     section=section, outline=outline, previous_sections=body_text,
                     progress_callback=_noop, section_index=idx + 1)
             except Exception as e:  # noqa: BLE001
@@ -2382,6 +3294,41 @@ class ReportAgent:
         return self._generate_section_react(
             section, outline, previous_sections, progress_callback, section_index
         )
+
+    def _generate_section_with_retry(
+        self,
+        section: ReportSection,
+        outline: ReportOutline,
+        previous_sections: List[str],
+        progress_callback: Optional[Callable] = None,
+        section_index: int = 0,
+    ) -> str:
+        """RPT-2: 章节异常先退避重试，再落占位符。瞬时故障（限流/超时/单次 5xx）不应
+        直接把章节钉死成占位符。REPORT_SECTION_RETRY_MAX=0 时与直接调用逐字节等价。"""
+        try:
+            retries = int(getattr(Config, "REPORT_SECTION_RETRY_MAX", 1) or 0)
+        except (TypeError, ValueError):
+            retries = 1
+        try:
+            backoff = float(getattr(Config, "REPORT_SECTION_RETRY_BACKOFF_S", 8.0) or 0.0)
+        except (TypeError, ValueError):
+            backoff = 8.0
+        attempt = 0
+        while True:
+            try:
+                return self._generate_section(
+                    section, outline, previous_sections, progress_callback, section_index
+                )
+            except Exception as e:  # noqa: BLE001 — 重试耗尽后重抛，由调用方落占位符
+                if attempt >= retries:
+                    raise
+                attempt += 1
+                wait_s = min(backoff * attempt, 60.0)
+                logger.warning(
+                    f"章节 {section.title} 生成异常，{wait_s:.0f}s 后重试 "
+                    f"{attempt}/{retries}: {e}"
+                )
+                time.sleep(wait_s)
 
     def _to_openai_tool_schemas(self) -> List[Dict[str, Any]]:
         """T4.5: 把内部 tools 定义转成 OpenAI function tool schema。
@@ -2425,12 +3372,13 @@ class ReportAgent:
         _section_heading = section.title
         if section.description:
             _section_heading = f"{section.title}\n本章内容定位（大纲规划）: {section.description}"
-        system_prompt = SECTION_SYSTEM_PROMPT_TEMPLATE.format(
+        system_prompt = self._lang_override() + SECTION_SYSTEM_PROMPT_TEMPLATE.format(
             report_title=outline.title,
             report_summary=outline.summary,
             simulation_requirement=self.simulation_requirement,
             section_title=_section_heading,
             tools_description=self._get_tools_description(),
+            tool_usage_hints=self._tool_usage_hints(),  # RPT-7: live 工具集
         )
         system_prompt = self._prepend_research_background(system_prompt)
         # 原生路径：覆盖 ReAct 的格式要求，改为「自然调用工具，最后直接输出 Markdown 正文」
@@ -2461,13 +3409,31 @@ class ReportAgent:
         tool_calls_count = 0
 
         for _ in range(max_iterations):
+            # REPORT-9: 工具调用未达下限时，本回合的正文会被拒绝（强制继续检索）→ 必为「工具决策回合」，
+            # 用较小的 REPORT_AGENT_TOOL_TURN_MAX_TOKENS 抑制长链推理；达到下限后本回合可能直接产出正文，
+            # 回到完整 SECTION_MAX_TOKENS 预算以免截断。（原生路径此前用 chat_with_tools 的 4096 默认值。）
+            _turn_max_tokens = (
+                Config.REPORT_AGENT_SECTION_MAX_TOKENS
+                if tool_calls_count >= self.MIN_TOOL_CALLS_PER_SECTION
+                else getattr(Config, "REPORT_AGENT_TOOL_TURN_MAX_TOKENS", 8192)
+            )
             resp = self.llm.chat_with_tools(
-                messages, schemas, temperature=Config.REPORT_AGENT_TEMPERATURE
+                messages, schemas, temperature=Config.REPORT_AGENT_TEMPERATURE,
+                max_tokens=_turn_max_tokens
             )
             calls = resp.get("tool_calls") or []
             content = resp.get("content") or ""
 
             if calls and tool_calls_count < max_tool_calls:
+                # RPT-11: 整批放行会超预算（count=7、上限 8 时 4 连发会执行到 11）。先把批次
+                # 裁到剩余预算再构建 assistant 消息——assistant.tool_calls 与 role=tool 回包
+                # 必须一一对应，否则下一次 create() 会因缺失 tool_call_id 回包而 400。
+                _dropped = calls[max_tool_calls - tool_calls_count:]
+                calls = calls[:max_tool_calls - tool_calls_count]
+                if _dropped:
+                    logger.info(
+                        f"章节 {section.title}: 工具批次超出剩余预算，裁掉 {len(_dropped)} 个调用"
+                    )
                 # 回填 assistant 工具调用消息
                 messages.append({
                     "role": "assistant",
@@ -2493,6 +3459,15 @@ class ReportAgent:
                         except Exception:
                             pass
                     messages.append({"role": "tool", "tool_call_id": c["id"], "content": str(result)[:8000]})
+                    # RPT-11: 原生路径此前从不写 log_tool_result，agent_log.jsonl 丢失整条证据链。
+                    if self.report_logger:
+                        try:
+                            self.report_logger.log_tool_result(
+                                section.title, section_index, c["name"],
+                                str(result)[:8000], tool_calls_count
+                            )
+                        except Exception:
+                            pass
                 if progress_callback:
                     progress_callback("generating", min(90, tool_calls_count * 12), f"{section.title}: 工具检索 {tool_calls_count}")
                 continue
@@ -2519,7 +3494,7 @@ class ReportAgent:
         final = self.llm.chat(messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt + "\n\n请直接输出本章 Markdown 正文。"},
-        ], temperature=Config.REPORT_AGENT_TEMPERATURE, max_tokens=4096)
+        ], temperature=Config.REPORT_AGENT_TEMPERATURE, max_tokens=Config.REPORT_AGENT_SECTION_MAX_TOKENS)
         return final
 
     def _generate_section_react(
@@ -2561,12 +3536,13 @@ class ReportAgent:
         _section_heading = section.title
         if section.description:
             _section_heading = f"{section.title}\n本章内容定位（大纲规划）: {section.description}"
-        system_prompt = SECTION_SYSTEM_PROMPT_TEMPLATE.format(
+        system_prompt = self._lang_override() + SECTION_SYSTEM_PROMPT_TEMPLATE.format(
             report_title=outline.title,
             report_summary=outline.summary,
             simulation_requirement=self.simulation_requirement,
             section_title=_section_heading,
             tools_description=self._get_tools_description(),
+            tool_usage_hints=self._tool_usage_hints(),  # RPT-7: live 工具集
         )
         # T4.1: 钉入研究背景档案 + 来源索引，让每章撰写复用真实角色/关系/时间线并按 [S#] 引用。
         system_prompt = self._prepend_research_background(system_prompt)
@@ -2600,7 +3576,9 @@ class ReportAgent:
         contamination_retries = 0  # 输出被污染（系统提示泄漏/工具调用残留）的连续重试次数
         MAX_CONTAMINATION_RETRIES = 2  # 污染输出最多纠正重试次数
         used_tools = set()  # 记录已调用过的工具名
-        all_tools = {"insight_forge", "panorama_search", "quick_search", "interview_agents",
+        # REPORT-8: interview_agents 仍可用（保留在 self.tools / 提示词中），但不再进入
+        # 「未使用工具」推荐集——采访依赖 OASIS 在线、延迟高且易超时，不应被反复 nudge 去尝试。
+        all_tools = {"insight_forge", "panorama_search", "quick_search",
                      "simulation_outcomes", "coalition_map", "opinion_shift"}
         if self.base_simulation_id:
             all_tools.add("scenario_diff")  # T4.7
@@ -2618,10 +3596,19 @@ class ReportAgent:
             
             # 调用LLM（提高 max_tokens 以容纳更长的章节正文；对 OpenAI 兼容提供方生效，
             # CLI 提供方由 prompt 篇幅下限驱动）
+            # REPORT-9: 工具调用未达下限的回合必为「工具决策回合」（此时 Final Answer 会被拒绝、
+            # 强制继续检索），用较小的 REPORT_AGENT_TOOL_TURN_MAX_TOKENS 抑制长链推理浪费；一旦达
+            # 到下限，本回合可能直接产出最终正文，回到完整 SECTION_MAX_TOKENS 预算以免截断正文。
+            # REPORT-10: 温度统一读 Config.REPORT_AGENT_TEMPERATURE（默认 0.5，行为不变、可运维调）。
+            _turn_max_tokens = (
+                Config.REPORT_AGENT_SECTION_MAX_TOKENS
+                if tool_calls_count >= min_tool_calls
+                else getattr(Config, "REPORT_AGENT_TOOL_TURN_MAX_TOKENS", 8192)
+            )
             response = self.llm.chat(
                 messages=messages,
-                temperature=0.5,
-                max_tokens=8192
+                temperature=Config.REPORT_AGENT_TEMPERATURE,
+                max_tokens=_turn_max_tokens
             )
 
             # 检查 LLM 返回是否为 None（API 异常或内容为空）
@@ -2756,6 +3743,21 @@ class ReportAgent:
                 if len(tool_calls) > 1:
                     logger.info(f"LLM 尝试调用 {len(tool_calls)} 个工具，只执行第一个: {call['name']}")
 
+                # RPT-7: XML 解析出的工具名在此校验——未知名（如已被移除的 interview_agents）
+                # 给纠正性 Observation，且**不**计入工具调用预算（此前垃圾调用照样 +1）。
+                # self.tools 为空（仅测试替身场景）时跳过校验，保持旧直通行为。
+                if self.tools and call["name"] not in self._valid_tool_names():
+                    logger.warning(f"章节 {section.title}: 模型调用了未知工具 '{call['name']}'，已纠正（不计预算）")
+                    messages.append({"role": "assistant", "content": response})
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            f"【工具错误】'{call['name']}' 不是可用工具。请从以下工具中选择重新调用："
+                            f"{', '.join(sorted(self.tools.keys()))}"
+                        ),
+                    })
+                    continue
+
                 if self.report_logger:
                     self.report_logger.log_tool_call(
                         section_title=section.title,
@@ -2856,10 +3858,12 @@ class ReportAgent:
         logger.warning(f"章节 {section.title} 达到最大迭代次数，强制生成")
         messages.append({"role": "user", "content": REACT_FORCE_FINAL_MSG})
 
+        # REPORT-9: 这是强制收尾的「最终答案回合」，保留完整 SECTION_MAX_TOKENS 预算以免截断正文。
+        # REPORT-10: 温度读 Config.REPORT_AGENT_TEMPERATURE（默认 0.5，行为不变）。
         response = self.llm.chat(
             messages=messages,
-            temperature=0.5,
-            max_tokens=8192
+            temperature=Config.REPORT_AGENT_TEMPERATURE,
+            max_tokens=Config.REPORT_AGENT_SECTION_MAX_TOKENS
         )
 
         # 检查强制收尾时 LLM 返回是否为 None
@@ -2986,13 +3990,51 @@ class ReportAgent:
             
             if progress_callback:
                 progress_callback("planning", 0, "开始规划报告大纲...")
-            
+
+            # R2-DETAIL-2 / NEXTSTEPS P0-1: 先于大纲推导「预测骨架」，使章节围绕可证伪的预测组织，
+            # 而非反向从成稿叙事抽取。顺序：构建确定性信号包（若开）→ 推导骨架（含早落 forecast.json）
+            # → 把骨架块 + 强制结构（框架/逐情景/校准）传入 plan_outline。报告文件夹已于上文创建，
+            # 骨架早落安全。任一旗标关闭或推导失败时 self._forecast_spine_block 为空串，plan_outline
+            # 退回历史行为（提示词逐字节一致），章节阶段亦不受影响（degrade-safe）。
+            if getattr(Config, "REPORT_SIGNAL_PACK", False) and not self._signal_pack:
+                try:
+                    self._signal_pack = self._build_signal_pack()
+                    if self._signal_pack:
+                        logger.info(f"已注入模拟量化信号包（{len(self._signal_pack)} 字）到各章节提示词")
+                except Exception as _sp_err:  # noqa: BLE001 — 信号包为可选增强，失败不影响主流程
+                    logger.warning(f"构建模拟量化信号包失败（忽略）: {_sp_err}")
+                    self._signal_pack = ""
+
+            # 预测市场信号包（Oddpool 聚合 Kalshi/Polymarket）：与模拟信号包并列注入每章
+            # 提示词与预测骨架（下方 _derive_and_pin_forecast_spine 复用）。无 key/无数据/
+            # 关闭旗标时为空串 → 注入自动跳过（degrade-safe，提示词与历史逐字节一致）。
+            if (getattr(Config, "PREDICTION_MARKETS_ENABLED", True)
+                    and not getattr(self, "_market_pack", "")):
+                try:
+                    self._market_pack = self._build_market_pack()
+                    if self._market_pack:
+                        logger.info(
+                            f"已注入预测市场信号包（{len(getattr(self, '_prediction_markets', []))} 个市场）"
+                            "到各章节提示词")
+                except Exception as _mp_err:  # noqa: BLE001 — 市场信号为可选增强
+                    logger.warning(f"构建预测市场信号包失败（忽略）: {_mp_err}")
+                    self._market_pack = ""
+
+            if (getattr(Config, "REPORT_STRUCTURED_FORECAST", True)
+                    and getattr(Config, "REPORT_FORECAST_SPINE_FIRST", True)):
+                self._derive_and_pin_forecast_spine(report_id)
+
+            _spine_ready = bool(self._forecast_spine and self._forecast_spine.get("scenarios"))
             outline = self.plan_outline(
-                progress_callback=lambda stage, prog, msg: 
-                    progress_callback(stage, prog // 5, msg) if progress_callback else None
+                progress_callback=lambda stage, prog, msg:
+                    progress_callback(stage, prog // 5, msg) if progress_callback else None,
+                forecast_spine_block=self._forecast_spine_block,
+                require_forecast_structure=_spine_ready,
             )
             report.outline = outline
-            
+            # RPT-5: 供引用溯源审计豁免系统注入的摘要 blockquote（"> {outline.summary}"）。
+            self._outline_summary = outline.summary or ""
+
             # 记录规划完成日志
             self.report_logger.log_planning_complete(outline.to_dict())
             
@@ -3009,26 +4051,18 @@ class ReportAgent:
             # 阶段2: 逐章节生成（分章节保存）
             report.status = ReportStatus.GENERATING
 
-            # EXECPLAN2 I-3-2: 构建一次模拟量化信号包，钉进随后每个章节提示词（确定性接地下限）。
-            # 关闭 REPORT_SIGNAL_PACK 时不构建，self._signal_pack 保持空串，行为不变。
-            if getattr(Config, "REPORT_SIGNAL_PACK", False) and not self._signal_pack:
-                try:
-                    self._signal_pack = self._build_signal_pack()
-                    if self._signal_pack:
-                        logger.info(f"已注入模拟量化信号包（{len(self._signal_pack)} 字）到各章节提示词")
-                except Exception as _sp_err:  # noqa: BLE001 — 信号包为可选增强，失败不影响主流程
-                    logger.warning(f"构建模拟量化信号包失败（忽略）: {_sp_err}")
-                    self._signal_pack = ""
-
-            # NEXTSTEPS P0-1: 先于章节叙事推导「预测骨架」（情景+概率+判定标准），把骨架块注入
-            # 每章提示词，让叙事对齐并捍卫所分配概率。默认开；关闭或推导失败时为 no-op（回退成稿后抽取）。
-            if (getattr(Config, "REPORT_STRUCTURED_FORECAST", True)
-                    and getattr(Config, "REPORT_FORECAST_SPINE_FIRST", True)):
-                self._derive_and_pin_forecast_spine(report_id)
+            # R2-DETAIL-2: 信号包与预测骨架已在大纲规划前构建/推导（见上），此处不再重复；
+            # self._signal_pack / self._forecast_spine_block 已就绪并将注入每章提示词。
 
             total_sections = len(outline.sections)
             generated_sections = []  # 保存内容用于上下文
             failed_section_titles = []  # 记录生成失败（写入占位符）的章节，用于状态汇报
+            # RPT-2(b): 连续失败计数。大纲已降级（LLM 故障前哨）+ 前两章接连落占位符 ⇒
+            # 判定为系统性 LLM 中断，快速中止（走既有失败路径标记 FAILED，可重试），
+            # 而非对着死掉的提供方烧完余下章节。并发路径的 _gen_body 内部吞异常返回
+            # 占位符，故计数以「占位符结果」为准（两条路径统一覆盖）。
+            _consecutive_failures = 0
+            _abort_on_outage = bool(getattr(Config, "REPORT_ABORT_ON_LLM_OUTAGE", True))
 
             # EXECPLAN2 I-6-3: optionally pre-generate sections concurrently. Default
             # REPORT_SECTION_CONCURRENCY=1 → _precomputed stays None → the serial loop
@@ -3087,8 +4121,9 @@ class ReportAgent:
                         section_content = _precomputed.get(i, SECTION_FAILURE_PLACEHOLDER)
                     else:
                         # I-6-3: brief context mode swaps full prior-section text for the compact brief.
+                        # RPT-2: 经退避重试包装，瞬时故障不再直接落占位符。
                         _prev_ctx = [_section_brief] if (_context_mode == "brief" and _section_brief) else generated_sections
-                        section_content = self._generate_section(
+                        section_content = self._generate_section_with_retry(
                             section=section,
                             outline=outline,
                             previous_sections=_prev_ctx,
@@ -3137,7 +4172,19 @@ class ReportAgent:
                 section.content = section_content
                 if section_content == SECTION_FAILURE_PLACEHOLDER:
                     failed_section_titles.append(section.title)
+                    _consecutive_failures += 1
                     logger.error(f"章节生成失败（已写入占位符）: {section.title}")
+                    # RPT-2(b): 大纲降级 + 前两章接连失败 ⇒ 系统性 LLM 中断，快速中止。
+                    # 抛出 → 既有失败路径统一落盘 FAILED + update_progress('failed')（可重试），
+                    # 上游 S1 健康门不必再事后猜测「假完成」。
+                    if (_abort_on_outage and self._outline_degraded
+                            and section_num <= 2 and _consecutive_failures >= 2):
+                        raise RuntimeError(
+                            "疑似 LLM 服务中断：大纲规划已降级且前两个章节接连生成失败，"
+                            "提前中止本报告（修复提供方后可重试）"
+                        )
+                else:
+                    _consecutive_failures = 0
                 generated_sections.append(f"## {section.title}\n\n{section_content}")
 
                 # 保存章节
@@ -3183,6 +4230,17 @@ class ReportAgent:
                     completed_sections=completed_section_titles
                 )
             
+            # RPT-2(c): 全部章节均为失败占位符 ⇒ 报告没有任何可用内容，绝不能标记 completed
+            # （历史上 91f5 就是 5/5 占位符仍 status=completed，靠编排器健康门事后击杀）。
+            # 抛出 → 既有失败路径统一持久化 FAILED + update_progress('failed')，且先于
+            # _finalize_structured_forecast（不给空报告生成 forecast.json 的机会）。
+            if (_abort_on_outage and total_sections > 0
+                    and len(failed_section_titles) >= total_sections):
+                raise RuntimeError(
+                    f"全部 {total_sections} 个章节生成失败（疑似 LLM 服务中断），"
+                    "报告标记为失败（可重试），不写入全占位符的『完成』报告"
+                )
+
             # 阶段3: 组装完整报告
             if progress_callback:
                 progress_callback("generating", 95, "正在组装完整报告...")
@@ -3209,6 +4267,21 @@ class ReportAgent:
                     self._finalize_structured_forecast(report_id, report.markdown_content)
                 except Exception as _fe:  # noqa: BLE001
                     logger.warning(f"结构化预测最终化失败（忽略，不影响主报告）: {_fe}")
+                # QUALITY-OPT B1: prepend the deterministic Part-1 binary-forecast table so the
+                # brief's headline deliverable always appears and always matches forecast.json.
+                if getattr(Config, "FORECAST_EMIT_BINARY", True):
+                    try:
+                        self._prepend_binary_forecasts_section(report_id, report)
+                    except Exception as _bs_err:  # noqa: BLE001
+                        logger.warning(f"前置二元预测章节失败（忽略）: {_bs_err}")
+                # B2: 三部结构骨架——Part 1（二元预测表）之后插入 Part 2「框架与综合」
+                # （一次 LLM 紧凑综合），再以 Part 3「附录：详细分析」标题包住既有章节。
+                # 仅当 Part 1 已插入时生效；综合失败一行告警并跳过（绝不写占位符）。
+                if getattr(Config, "REPORT_THREE_PART_SKELETON", True):
+                    try:
+                        self._apply_three_part_skeleton(report_id, report)
+                    except Exception as _tp_err:  # noqa: BLE001
+                        logger.warning(f"三部结构骨架套用失败（忽略，保留原结构）: {_tp_err}")
                 # NEXTSTEPS P2-2: 追加确定性「如何验证本预测」章节（判定标准 + 观察指标）。
                 if (getattr(Config, "REPORT_RESOLUTION_SECTION", True)
                         and self._forecast_spine and self._forecast_spine.get("scenarios")):
@@ -3286,10 +4359,17 @@ class ReportAgent:
                 )
 
             # 保存最终报告
+            # XRUN-7: 终态 progress.json 如实记账——占位符章节单列 failed_sections（并从
+            # completed_sections 剔除），附 forecast.json 是否产出；status 语义保持不变。
+            _forecast_ok = os.path.exists(
+                os.path.join(ReportManager._get_report_folder(report_id), "forecast.json")
+            )
             ReportManager.save_report(report)
             ReportManager.update_progress(
                 report_id, "completed", 100, "报告生成完成",
-                completed_sections=completed_section_titles
+                completed_sections=completed_section_titles,
+                failed_sections=failed_section_titles,
+                forecast_ok=_forecast_ok
             )
             
             if progress_callback:
@@ -3871,21 +4951,29 @@ class ReportManager:
     
     @classmethod
     def update_progress(
-        cls, 
-        report_id: str, 
-        status: str, 
-        progress: int, 
+        cls,
+        report_id: str,
+        status: str,
+        progress: int,
         message: str,
         current_section: str = None,
-        completed_sections: List[str] = None
+        completed_sections: List[str] = None,
+        failed_sections: List[str] = None,
+        forecast_ok: bool = None
     ) -> None:
         """
         更新报告生成进度
-        
+
         前端可以通过读取progress.json获取实时进度
+
+        XRUN-7: failed_sections/forecast_ok 为可选增量字段——占位符章节从
+        completed_sections 中剔除并单列，附 placeholder_count 与 health 标记，
+        让 progress.json 不再对着 5/5 占位符宣称全部章节完成。二者缺省时
+        输出 schema 与历史逐字节一致（degrade-safe）。status 保持原语义不变
+        （消费方以 status 判定终态，健康降级经 health 字段表达）。
         """
         cls._ensure_report_folder(report_id)
-        
+
         progress_data = {
             "status": status,
             "progress": progress,
@@ -3894,7 +4982,18 @@ class ReportManager:
             "completed_sections": completed_sections or [],
             "updated_at": datetime.now().isoformat()
         }
-        
+        if failed_sections is not None:
+            _failed = list(failed_sections)
+            progress_data["completed_sections"] = [
+                t for t in (completed_sections or []) if t not in _failed
+            ]
+            progress_data["failed_sections"] = _failed
+            progress_data["placeholder_count"] = len(_failed)
+            if _failed:
+                progress_data["health"] = "degraded"
+        if forecast_ok is not None:
+            progress_data["forecast_ok"] = bool(forecast_ok)
+
         write_text_atomic(cls._get_progress_path(report_id),
                           json.dumps(progress_data, ensure_ascii=False, indent=2))  # 原子写入（F-7-6）
 

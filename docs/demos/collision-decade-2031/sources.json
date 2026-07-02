@@ -1,0 +1,654 @@
+[
+  {
+    "url": "https://budgetlab.yale.edu/research/state-us-tariffs-april-8-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "budgetlab.yale.edu",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.congress.gov/crs_external_products/LSB/PDF/LSB11398/LSB11398.1.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "CRS Legal Sidebar LSB11398 - IEEPA ruling",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "IEEPA ruling legal analysis"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.trendforce.com/news/2026/02/25/news-china-reportedly-aims-to-boost-7nm-5nm-output-fivefold-in-two-years-driven-by-smic-and-hua-hong",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.trendforce.com"
+  },
+  {
+    "url": "https://commission.europa.eu/topics/trade/eu-us-trade-deal_en",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "commission.europa.eu",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.eia.gov/todayinenergy/detail.php?id=65064",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.eia.gov",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.goldmansachs.com/insights/articles/generative-ai-could-raise-global-gdp-by-7-percent",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.goldmansachs.com"
+  },
+  {
+    "url": "https://fortune.com/2025/09/22/ray-dalio-warns-very-dark-times-economy-america-china-great-power-conflict-inequality",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "fortune.com"
+  },
+  {
+    "url": "https://energyanalysis.lbl.gov/news/berkeley-lab-report-evaluates-increase-electricity-demand-data-centers",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "energyanalysis.lbl.gov",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.imf.org/en/publications/wp/issues/2023/12/23/the-return-of-industrial-policy-in-data-542828",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.imf.org",
+    "tier": "S1"
+  },
+  {
+    "url": "https://gwern.net/doc/economics/automation/1990-david.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Paul David - The Dynamo and the Computer (1990)",
+    "tier": "S1",
+    "date": "1990-01-01",
+    "independent": true,
+    "supports": [
+      "electrification productivity-lag base rate"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 13330,
+    "is_stale": true
+  },
+  {
+    "url": "https://www.ainvest.com/news/debt-crisis-isn-default-story-ai-capex-story-2606",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "AInvest - The US debt crisis is an AI capex story",
+    "tier": "S3",
+    "independent": true,
+    "supports": [
+      "net interest trajectory",
+      "AI capex financing"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en"
+  },
+  {
+    "url": "https://taxfoundation.org/blog/supreme-court-trump-tariffs-ruling",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Tax Foundation - Supreme Court Trump tariffs ruling",
+    "tier": "S2",
+    "date": "2026-02-20",
+    "independent": true,
+    "supports": [
+      "$160B illegal",
+      "$1.4T projection"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 131,
+    "is_stale": false
+  },
+  {
+    "url": "https://www.anthropic.com/research/economic-index-march-2026-report",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Anthropic Economic Index (March 2026)",
+    "tier": "S1",
+    "date": "2026-03-24",
+    "independent": true,
+    "supports": [
+      "wide-shallow AI adoption"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 99,
+    "is_stale": false
+  },
+  {
+    "title": "State of U.S. Tariffs November 17, 2025",
+    "url": "https://budgetlab.yale.edu/research/state-us-tariffs-november-17-2025",
+    "tier": "S1",
+    "date": "2025-11-17",
+    "supports": [
+      "US effective tariff rate",
+      "tariff incidence",
+      "macro impact"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 226,
+    "is_stale": false
+  },
+  {
+    "title": "CRS R48642 - US Export Controls and China: Advanced Semiconductors",
+    "url": "https://www.congress.gov/crs-product/R48642",
+    "tier": "S1",
+    "date": "2025-01-01",
+    "supports": [
+      "H20/MI308 licensing",
+      "Entity List additions"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 546,
+    "is_stale": true
+  },
+  {
+    "title": "TSMC Arizona (official)",
+    "url": "https://www.tsmc.com/static/abouttsmcaz/index.htm",
+    "tier": "S1",
+    "supports": [
+      "TSMC $165B US commitment"
+    ],
+    "independent": true,
+    "jurisdiction": "Taiwan",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "TSMC PR - $100B US expansion",
+    "url": "https://pr.tsmc.com/english/news/3210",
+    "tier": "S1",
+    "date": "2025-03-04",
+    "supports": [
+      "TSMC US investment"
+    ],
+    "independent": true,
+    "jurisdiction": "Taiwan",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 484,
+    "is_stale": true
+  },
+  {
+    "title": "Brookings - Ball game's over: the US is out of the AI chip market in China",
+    "url": "https://www.brookings.edu/articles/ball-games-over-the-us-is-out-of-the-ai-chip-market-in-china",
+    "tier": "S2",
+    "supports": [
+      "export-control efficacy",
+      "DeepSeek parity"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "FDD - Rolling Back Export Controls: US Offers China Powerful AI Chips",
+    "url": "https://www.fdd.org/analysis/2025/12/10/rolling-back-export-controls-u-s-offers-china-powerful-ai-chips",
+    "tier": "S2",
+    "date": "2025-12-10",
+    "supports": [
+      "25% chip revenue-share model"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 203,
+    "is_stale": false
+  },
+  {
+    "title": "Mayer Brown - Administration policies on advanced AI chips codified",
+    "url": "https://www.mayerbrown.com/en/insights/publications/2026/01/administration-policies-on-advanced-ai-chips-codified",
+    "tier": "S2",
+    "date": "2026-01-22",
+    "supports": [
+      "GAIN AI Act direction"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 160,
+    "is_stale": false
+  },
+  {
+    "title": "TrendForce - US >20% advanced capacity by 2030",
+    "url": "https://www.trendforce.com/presscenter/news/20250305-12504.html",
+    "tier": "S2",
+    "date": "2025-03-05",
+    "supports": [
+      "reshoring share"
+    ],
+    "independent": true,
+    "jurisdiction": "Taiwan",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 483,
+    "is_stale": true
+  },
+  {
+    "title": "Bridgewater CIO interview summary (Coinmeta)",
+    "url": "https://www.coinmeta.com/en/news/1075131",
+    "tier": "S3",
+    "supports": [
+      "compute-rationing thesis"
+    ],
+    "independent": false,
+    "jurisdiction": "Global",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Bridgewater Associates CIO interview (Futunn)",
+    "url": "https://news.futunn.com/en/post/73305052/bridgewater-associates-cio-interview-ai-and-modern-mercantilism-spark-global",
+    "tier": "S3",
+    "supports": [
+      "modern mercantilism x AI framing"
+    ],
+    "independent": false,
+    "jurisdiction": "Global",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "CNBC - Tech AI spending approaches $700B in 2026",
+    "url": "https://www.cnbc.com/2026/02/06/google-microsoft-meta-amazon-ai-cash.html",
+    "tier": "S3",
+    "date": "2026-02-06",
+    "supports": [
+      "hyperscaler capex 2026"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 145,
+    "is_stale": false
+  },
+  {
+    "title": "CNBC - TSMC Arizona expansion isn't done",
+    "url": "https://www.cnbc.com/2026/01/16/tsmcs-arizona-chip-expansion-isnt-done-after-us-investment-cfo.html",
+    "tier": "S3",
+    "date": "2026-01-16",
+    "supports": [
+      "TSMC Arizona acceleration"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 166,
+    "is_stale": false
+  },
+  {
+    "title": "AInvest - China rare-earth truce: a year of calm, lingering rivalry",
+    "url": "https://www.ainvest.com/news/china-rare-earth-truce-year-calm-lingering-rivalry-2511",
+    "tier": "S3",
+    "date": "2025-11-01",
+    "supports": [
+      "US-China truce"
+    ],
+    "independent": true,
+    "jurisdiction": "Global",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 242,
+    "is_stale": false
+  },
+  {
+    "title": "SCMP - US-China fragile truce: divergent accounts",
+    "url": "https://www.scmp.com/news/china/article/3333764/us-china-fragile-truce-divergent-accounts-and-thanksgiving-test",
+    "tier": "S3",
+    "date": "2025-11-01",
+    "supports": [
+      "truce durability contested"
+    ],
+    "independent": true,
+    "jurisdiction": "China",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 242,
+    "is_stale": false
+  },
+  {
+    "title": "Skillings - Gallium/Germanium 12 months after export controls",
+    "url": "https://skillings.net/gallium-germanium-12-months-after-export-controls-where-is-the-supply",
+    "tier": "S3",
+    "supports": [
+      "China mineral controls",
+      "gallium price"
+    ],
+    "independent": true,
+    "jurisdiction": "Global",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Tom's Hardware - China gallium/germanium export controls",
+    "url": "https://www.tomshardware.com/news/china-retaliates-set-to-restrict-gallium-germanium-exports",
+    "tier": "S3",
+    "date": "2023-07-01",
+    "supports": [
+      "2023 mineral licensing"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 1096,
+    "is_stale": true
+  },
+  {
+    "title": "CGTN/Yale - US tariffs highest since 1934",
+    "url": "https://news.cgtn.com/news/2025-08-02/U-S-consumers-hit-with-highest-tariffs-since-1934-Yale-study-finds-1FvYaUf4KJi/p.html",
+    "tier": "S3",
+    "date": "2025-08-02",
+    "supports": [
+      "18.3% ETR"
+    ],
+    "independent": false,
+    "jurisdiction": "China",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 333,
+    "is_stale": false
+  },
+  {
+    "title": "AI Wiki - Stargate / Stargate UAE",
+    "url": "https://aiwiki.ai/wiki/stargate_uae",
+    "tier": "S3",
+    "supports": [
+      "Stargate consortium",
+      "Gulf sovereign AI"
+    ],
+    "independent": true,
+    "jurisdiction": "Global",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "valueaddvc - Hyperscaler capex compared",
+    "url": "https://valueaddvc.com/blog/ai-hyperscaler-capex-compared-why-microsoft-google-meta-and-amazon-are-all-spending-at-once",
+    "tier": "S3",
+    "supports": [
+      "hyperscaler capex 2025-2026"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Introl - AI export controls timeline",
+    "url": "https://introl.com/blog/ai-export-controls-navigating-chip-restrictions-globally-2025",
+    "tier": "S3",
+    "date": "2026-01-01",
+    "supports": [
+      "AI Diffusion Rule",
+      "export-control timeline"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 181,
+    "is_stale": false
+  },
+  {
+    "title": "AsianFin - Trump rare-earth deal",
+    "url": "https://www.asianfin.com/articles/210535",
+    "tier": "S3",
+    "supports": [
+      "truce optimism"
+    ],
+    "independent": true,
+    "jurisdiction": "China",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "MIT NANDA - The GenAI Divide (Fortune)",
+    "url": "https://fortune.com/2025/08/18/mit-report-95-percent-generative-ai-pilots-at-companies-failing-cfo",
+    "tier": "S2",
+    "date": "2025-08-18",
+    "supports": [
+      "95% GenAI pilots zero ROI"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 317,
+    "is_stale": false
+  },
+  {
+    "title": "ThinkChina - China's 10 trillion RMB debt clean-up falls short",
+    "url": "https://www.thinkchina.sg/economy/big-read-chinas-10-trillion-rmb-debt-clean-falls-short",
+    "tier": "S3",
+    "supports": [
+      "China fiscal constraint"
+    ],
+    "independent": true,
+    "jurisdiction": "Singapore",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "PIB - IndiaAI Mission",
+    "url": "https://pib.gov.in/PressReleasePage.aspx?PRID=2012375",
+    "tier": "S1",
+    "date": "2024-03-07",
+    "supports": [
+      "India sovereign AI"
+    ],
+    "independent": true,
+    "jurisdiction": "India",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 846,
+    "is_stale": true
+  },
+  {
+    "title": "Burry sounds alarm on Nvidia AI bubble",
+    "url": "https://faithinpolicy.com/burry-sounds-alarm-on-nvidias-ai-bubble",
+    "tier": "S3",
+    "supports": [
+      "Burry ~$1.1B puts"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "UNCTAD Global Trade Update (April 2026)",
+    "url": "https://unctad.org/system/files/official-document/ditcinf2026d4_en.pdf",
+    "tier": "S1",
+    "date": "2026-04-01",
+    "supports": [
+      "statistical vs real decoupling"
+    ],
+    "independent": true,
+    "jurisdiction": "Global",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 91,
+    "is_stale": false
+  },
+  {
+    "title": "History of tariffs in the United States (Smoot-Hawley base rate)",
+    "url": "https://en.wikipedia.org/wiki/History_of_tariffs_in_the_United_States",
+    "tier": "S3",
+    "supports": [
+      "tariff-durability base rate"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Reuters/Klement - High Treasury yields could slow AI boom",
+    "url": "https://www.reuters.com/markets/europe/high-treasury-yields-could-slow-ai-boom-klement-2025-09-26",
+    "tier": "S2",
+    "date": "2025-09-26",
+    "supports": [
+      "rates gate AI financing"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 278,
+    "is_stale": false
+  },
+  {
+    "title": "HUMAIN-NVIDIA strategic partnership",
+    "url": "https://nvidianews.nvidia.com/news/humain-and-nvidia-announce-strategic-partnership-to-build-ai-factories-of-the-future-in-saudi-arabia",
+    "tier": "S1",
+    "date": "2025-05-13",
+    "supports": [
+      "HUMAIN 600k GPUs sovereign AI"
+    ],
+    "independent": true,
+    "jurisdiction": "Saudi Arabia",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 414,
+    "is_stale": true
+  },
+  {
+    "title": "SCOTUS opinion - Learning Resources v. Trump",
+    "url": "https://www.supremecourt.gov/opinions/25pdf/24-1287_4gcj.pdf",
+    "tier": "S1",
+    "date": "2026-02-20",
+    "supports": [
+      "IEEPA tariffs struck down"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 131,
+    "is_stale": false
+  },
+  {
+    "title": "SCOTUSblog - Supreme Court strikes down tariffs",
+    "url": "https://www.scotusblog.com/2026/02/supreme-court-strikes-down-tariffs",
+    "tier": "S2",
+    "date": "2026-02-20",
+    "supports": [
+      "SCOTUS IEEPA ruling"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 131,
+    "is_stale": false
+  },
+  {
+    "title": "Fortune - Tariff plan in tatters, administration pivots",
+    "url": "https://fortune.com/2026/02/24/tariff-trump-absolutely-terrible-things-to-foreign-countries-powerful-obnoxious",
+    "tier": "S3",
+    "date": "2026-02-24",
+    "supports": [
+      "Section 122/232/301 substitution"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 127,
+    "is_stale": false
+  },
+  {
+    "title": "IEA - Energy demand from AI",
+    "url": "https://www.iea.org/reports/energy-and-ai/energy-demand-from-ai",
+    "tier": "S1",
+    "supports": [
+      "data-centre electricity projections"
+    ],
+    "independent": true,
+    "jurisdiction": "Global",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "The Economist - Japan storms back into the chip wars",
+    "url": "https://www.economist.com/asia/2025/08/21/japan-storms-back-into-the-chip-wars",
+    "tier": "S2",
+    "date": "2025-08-21",
+    "supports": [
+      "Japan chip revival"
+    ],
+    "independent": true,
+    "jurisdiction": "UK",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 314,
+    "is_stale": false
+  },
+  {
+    "title": "TechTimes - Rapidus gets Y150B state ownership",
+    "url": "https://www.techtimes.com/articles/317857/20260606/rapidus-gets-150b-japan-shifts-chip-subsidies-direct-ownership.htm",
+    "tier": "S3",
+    "date": "2026-06-06",
+    "supports": [
+      "sovereign equity in chip firms"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 25,
+    "is_stale": false
+  },
+  {
+    "title": "USTR - India",
+    "url": "https://ustr.gov/countries-regions/south-central-asia/india",
+    "tier": "S1",
+    "supports": [
+      "US-India trade deficit"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Gigazine - TSMC 3rd Arizona fab groundbreaking",
+    "url": "https://gigazine.net/gsc_news/en/20250501-tsmc-arizona-third-fab",
+    "tier": "S3",
+    "date": "2025-05-01",
+    "supports": [
+      "TSMC 2nm/1.6nm ~2030"
+    ],
+    "independent": true,
+    "jurisdiction": "Japan",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 426,
+    "is_stale": true
+  }
+]

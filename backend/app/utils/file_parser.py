@@ -145,18 +145,21 @@ class FileParser:
 
 
 def split_text_into_chunks(
-    text: str, 
-    chunk_size: int = 500, 
-    overlap: int = 50
+    text: str,
+    chunk_size: int = 2500,
+    overlap: int = 250
 ) -> List[str]:
     """
     将文本分割成小块
-    
+
     Args:
         text: 原始文本
-        chunk_size: 每块的字符数
-        overlap: 重叠字符数
-        
+        chunk_size: 每块的字符数（默认 2500，与 Config.DEFAULT_CHUNK_SIZE 对齐：
+                    更大的窗口让相关三元组留在同一 episode 内，graph 阶段 episode
+                    数量约降 5 倍。CHUNK-1）
+        overlap: 重叠字符数（默认 250，约为 chunk_size 的 10%，与
+                 Config.DEFAULT_CHUNK_OVERLAP 对齐，避免实体被边界切断。CHUNK-1）
+
     Returns:
         文本块列表
     """

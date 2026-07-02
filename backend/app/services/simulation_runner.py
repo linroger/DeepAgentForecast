@@ -159,6 +159,10 @@ class SimulationRunState:
     rounds_truncated_from: Optional[int] = None
     rounds_truncated_to: Optional[int] = None
 
+    # RUN-7: 断点续跑的诚实记账——本次运行从第几轮之后续起（None=全新运行）。
+    # 报告/健康门可据此区分「一气呵成」与「崩溃后续跑」的样本。
+    resumed_from_round: Optional[int] = None
+
     # EXECPLAN2 F-6-1：守护本对象可变标量计数器的可重入锁。
     # get_run_state() 返回缓存的同一个对象；监控线程持续 mutate（add_action / current_round /
     # twitter_*/reddit_* / counts），而 Flask 请求线程并发调用 to_dict()/to_detail_dict() 序列化。
@@ -223,6 +227,7 @@ class SimulationRunState:
             "graph_memory_error": self.graph_memory_error,
             "rounds_truncated_from": self.rounds_truncated_from,
             "rounds_truncated_to": self.rounds_truncated_to,
+            "resumed_from_round": self.resumed_from_round,
         }
 
     def to_detail_dict(self) -> Dict[str, Any]:
@@ -244,7 +249,8 @@ class SimulationRunner:
     1. 在后台进程中运行OASIS模拟
     2. 解析运行日志，记录每个Agent的动作
     3. 提供实时状态查询接口
-    4. 支持暂停/停止/恢复操作
+    4. 支持停止操作与断点续跑（SIM_RESUME）；暂停/恢复未实现——
+       RunnerStatus.PAUSED 仅为历史遗留状态值，代码从不主动进入（RUN-16）
     """
     
     # 运行状态存储目录
@@ -261,6 +267,9 @@ class SimulationRunner:
     
     # 内存中的运行状态
     _run_states: Dict[str, SimulationRunState] = {}
+    # SIM-13: 每个模拟上次「落盘」run_state.json 的单调时刻，用于按
+    # SIM_RUNSTATE_SAVE_INTERVAL 节流磁盘写入（内存态仍每次刷新）。
+    _run_state_last_save: Dict[str, float] = {}
     _processes: Dict[str, subprocess.Popen] = {}
     _action_queues: Dict[str, Queue] = {}
     _monitor_threads: Dict[str, threading.Thread] = {}
@@ -348,6 +357,7 @@ class SimulationRunner:
                 graph_memory_error=data.get("graph_memory_error"),
                 rounds_truncated_from=data.get("rounds_truncated_from"),
                 rounds_truncated_to=data.get("rounds_truncated_to"),
+                resumed_from_round=data.get("resumed_from_round"),
             )
             
             # 加载最近动作
@@ -371,16 +381,33 @@ class SimulationRunner:
             return None
     
     @classmethod
-    def _save_run_state(cls, state: SimulationRunState):
-        """保存运行状态到文件（原子写入，避免实时端点读到半截 JSON，EXECPLAN2 F-7-6 主题）"""
+    def _save_run_state(cls, state: SimulationRunState, force: bool = False):
+        """保存运行状态到文件（原子写入，避免实时端点读到半截 JSON，EXECPLAN2 F-7-6 主题）。
+
+        SIM-13: 内存态（_run_states）始终立即刷新——get_run_state 返回的就是这同一个对象，
+        故 API/编排轮询永远读到最新值；磁盘写入则按 SIM_RUNSTATE_SAVE_INTERVAL 秒节流，省掉
+        监控线程每 2s 一次的无效 JSON 重写。终态（completed/failed/stopped）与 force=True 始终
+        立即落盘，绝不丢终态。默认 interval=0 → 每次都写，与现状逐字节一致（degrade-safe）。
+        """
         from ..utils.atomic import write_json_atomic
         sim_dir = os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
         os.makedirs(sim_dir, exist_ok=True)
         state_file = os.path.join(sim_dir, "run_state.json")
 
+        try:
+            interval = float(getattr(Config, "SIM_RUNSTATE_SAVE_INTERVAL", 0) or 0)
+        except (TypeError, ValueError):
+            interval = 0.0
+        terminal = state.runner_status in (
+            RunnerStatus.COMPLETED, RunnerStatus.FAILED, RunnerStatus.STOPPED)
+
         with cls._run_state_lock:
-            write_json_atomic(state_file, state.to_detail_dict())
-            cls._run_states[state.simulation_id] = state
+            cls._run_states[state.simulation_id] = state  # 内存态始终最新
+            now = time.monotonic()
+            last = cls._run_state_last_save.get(state.simulation_id, 0.0)
+            if force or terminal or interval <= 0 or (now - last) >= interval:
+                write_json_atomic(state_file, state.to_detail_dict())
+                cls._run_state_last_save[state.simulation_id] = now
     
     @classmethod
     def start_simulation(
@@ -391,6 +418,7 @@ class SimulationRunner:
         enable_graph_memory_update: bool = False,  # 是否将活动更新到Zep图谱
         graph_id: Optional[str] = None,  # Zep图谱ID（启用图谱更新时必需）
         sim_seed: Optional[int] = None,  # NEXTSTEPS P0-3: 本次运行的确定性采样种子（仅注入子进程环境，不改全局）
+        resume: Optional[bool] = None,  # RUN-7: True=显式续跑；None=由 SIM_RESUME 自动判定；False=强制全新
     ) -> SimulationRunState:
         """
         启动模拟
@@ -423,7 +451,32 @@ class SimulationRunner:
         if not os.path.exists(config_path):
             raise ValueError(f"模拟配置不存在，请先调用 /prepare 接口")
 
-        cls._rotate_stale_action_logs(sim_dir)
+        # RUN-7: 断点续跑（默认关，SIM_RESUME=true 开启）。resume=None 时自动判定：
+        # 仅当上次运行未 COMPLETED 且存在轮级检查点才续跑（COMPLETED 后的重跑视为要全新结果）。
+        # 续跑时保留 actions.jsonl / 模拟 DB / 检查点，让子进程从上次完成的轮次继续。
+        sim_resume_flag = bool(getattr(Config, "SIM_RESUME", False))
+        if resume is None:
+            resume_requested = (
+                sim_resume_flag
+                and existing is not None
+                and existing.runner_status != RunnerStatus.COMPLETED
+            )
+        else:
+            resume_requested = bool(resume)
+        # 仅 parallel 脚本支持 --resume/检查点；单平台脚本（run_twitter/reddit_simulation.py）
+        # 的 argparse 不认识该参数，传入会直接 exit(2)。
+        if resume_requested and platform != "parallel":
+            logger.info(f"[{simulation_id}] 单平台运行不支持续跑（{platform}）→ 全新运行")
+            resume_requested = False
+        resume_from_round = cls._resume_checkpoint_round(sim_dir) if resume_requested else None
+        resume_active = resume_from_round is not None
+        if resume_requested and not resume_active:
+            logger.info(f"[{simulation_id}] 请求续跑但无可用检查点 → 全新运行")
+
+        if not resume_active:
+            cls._rotate_stale_action_logs(sim_dir)
+        else:
+            logger.info(f"[{simulation_id}] 断点续跑：保留动作日志与模拟 DB，从第 {resume_from_round} 轮之后继续")
 
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
@@ -453,6 +506,7 @@ class SimulationRunner:
             started_at=datetime.now().isoformat(),
             rounds_truncated_from=truncated_from,
             rounds_truncated_to=truncated_to,
+            resumed_from_round=resume_from_round if resume_active else None,
         )
         
         cls._save_run_state(state)
@@ -520,6 +574,10 @@ class SimulationRunner:
             # 如果指定了最大轮数，添加到命令行参数
             if max_rounds is not None and max_rounds > 0:
                 cmd.extend(["--max-rounds", str(max_rounds)])
+
+            # RUN-7: 续跑标志——子进程据此保留 DB、跳过种子注入并从检查点轮次继续。
+            if resume_active:
+                cmd.append("--resume")
             
             # 创建主日志文件，避免 stdout/stderr 管道缓冲区满导致进程阻塞
             main_log_path = os.path.join(sim_dir, "simulation.log")
@@ -534,6 +592,10 @@ class SimulationRunner:
             # 优先读 env['SIM_SEED']），不触碰本进程全局 os.environ，避免并发管线相互污染。
             if sim_seed is not None:
                 env['SIM_SEED'] = str(int(sim_seed))
+            # RUN-7: 开启 SIM_RESUME（或显式续跑）时向子进程注入开关——子进程据此每轮
+            # 原子落盘 checkpoint.json，使后续崩溃/重启可以续跑而非从第 0 轮重烧额度。
+            if sim_resume_flag or resume_active:
+                env['SIM_RESUME'] = 'true'
 
             # 设置工作目录为模拟目录（数据库等文件会生成在此）
             # 使用 start_new_session=True 创建新的进程组，确保可以通过 os.killpg 终止所有子进程
@@ -630,6 +692,12 @@ class SimulationRunner:
             if exit_code == 0:
                 state.runner_status = RunnerStatus.COMPLETED
                 state.completed_at = datetime.now().isoformat()
+                # RUN-17: 平台在进入主循环前中止（如 profile 缺失）时子进程仍会 0 退出——
+                # 交叉核验各启用平台是否都发出了 simulation_end，未齐则把退化记入 error，
+                # 让管线健康门/UI 看见「COMPLETED 但部分平台未产出」的自相矛盾终态。
+                if not cls._check_all_platforms_completed(state):
+                    state.error = "部分平台未产出 simulation_end（可能启动失败或中途异常被隔离）"
+                    logger.warning(f"模拟完成但存在未完成平台: {simulation_id}")
                 logger.info(f"模拟完成: {simulation_id}")
             else:
                 state.runner_status = RunnerStatus.FAILED
@@ -648,7 +716,11 @@ class SimulationRunner:
             state.twitter_running = False
             state.reddit_running = False
             cls._save_run_state(state)
-            
+            # RUN-11: 子进程已整体退出（含崩溃/被杀），IPC 必然不可用——把 env_status.json
+            # 落为 stopped，防止 interview 端点对着死进程阻塞整个超时窗。优雅退出时子进程
+            # 自己已写 stopped，重复写幂等无害。
+            cls._mark_env_stopped(simulation_id)
+
         except Exception as e:
             logger.error(f"监控线程异常: {simulation_id}, error={str(e)}")
             state.runner_status = RunnerStatus.FAILED
@@ -800,23 +872,74 @@ class SimulationRunner:
             logger.warning(f"读取动作日志失败: {log_path}, error={e}")
             return position
     
+    # RUN-15: 重跑前须一并轮转的派生产物——若上一轮的 run_summary / 世界态轨迹 / 决策流 /
+    # 涌现度量存活到新一轮且新一轮在再生它们之前失败，报告阶段会把「上一次运行」的
+    # 产物当作本次运行的结果静默消费。
+    _STALE_DERIVED_ARTIFACTS = (
+        "run_summary.json",
+        "world_state_trajectory.json",
+        "decisions.jsonl",
+        "emergent_metrics.json",
+        "twitter_emergent_metrics.json",
+        "reddit_emergent_metrics.json",
+        "twitter_dynamics_summary.json",
+        "reddit_dynamics_summary.json",
+        "ipc_telemetry.jsonl",
+        "llm_health.json",
+        "llm_fallback.jsonl",
+    )
+
     @classmethod
     def _rotate_stale_action_logs(cls, sim_dir: str) -> None:
-        """重跑同一 simulation 前轮转上一轮的动作日志。
+        """重跑同一 simulation 前轮转上一轮的动作日志与派生产物。
 
         actions.jsonl 由模拟脚本以 append 模式写入（模拟 DB 会被脚本自删重建，
         但动作日志不会）。管线 resume 失败的 run 阶段时若不清理，旧轮次动作会
-        混进新一轮的进度监控、帖子流和报告分析。轮转为 actions.prev.jsonl
-        保留现场便于排查（只保留最近一份）。
+        混进新一轮的进度监控、帖子流和报告分析。轮转为 *.prev 保留现场便于排查
+        （只保留最近一份）。RUN-15: 派生产物（run_summary 等）同样轮转，防止
+        新一轮失败时报告阶段消费到上一轮的摘要/轨迹。
         """
+        # 轮转目标名保持既有约定：actions.jsonl -> actions.prev.jsonl（下游排查工具已依赖）。
         for plat in ("twitter", "reddit"):
-            stale = os.path.join(sim_dir, plat, "actions.jsonl")
+            for name, prev_name in (("actions.jsonl", "actions.prev.jsonl"),
+                                    ("checkpoint.json", "checkpoint.prev.json")):
+                stale = os.path.join(sim_dir, plat, name)
+                if os.path.exists(stale):
+                    try:
+                        os.replace(stale, os.path.join(sim_dir, plat, prev_name))
+                        logger.info(f"已轮转上一轮文件: {plat}/{name} -> {prev_name}")
+                    except OSError as e:
+                        logger.warning(f"轮转旧文件失败（{stale}）: {e}")
+        for name in cls._STALE_DERIVED_ARTIFACTS:
+            stale = os.path.join(sim_dir, name)
             if os.path.exists(stale):
                 try:
-                    os.replace(stale, os.path.join(sim_dir, plat, "actions.prev.jsonl"))
-                    logger.info(f"已轮转上一轮动作日志: {plat}/actions.jsonl -> actions.prev.jsonl")
+                    os.replace(stale, os.path.join(sim_dir, f"{name}.prev"))
+                    logger.info(f"已轮转上一轮派生产物: {name} -> {name}.prev")
                 except OSError as e:
-                    logger.warning(f"轮转旧动作日志失败（{stale}）: {e}")
+                    logger.warning(f"轮转旧派生产物失败（{stale}）: {e}")
+
+    @classmethod
+    def _resume_checkpoint_round(cls, sim_dir: str) -> Optional[int]:
+        """RUN-7: 读取平台轮级检查点，返回可续跑的已完成轮次（无有效检查点 → None）。
+
+        取各平台 completed_round 的最大值（进度以最快的平台记账；慢平台的检查点由
+        子进程各自读取）。检查点损坏/字段非法一律视为不可续跑，绝不抛出。
+        """
+        best: Optional[int] = None
+        for plat in ("twitter", "reddit"):
+            ckpt_path = os.path.join(sim_dir, plat, "checkpoint.json")
+            if not os.path.exists(ckpt_path):
+                continue
+            try:
+                with open(ckpt_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                completed = int(data.get("completed_round", 0))
+                if completed >= 1 and (best is None or completed > best):
+                    best = completed
+            except (OSError, ValueError, TypeError):
+                continue
+        return best
 
     @classmethod
     def _check_all_platforms_completed(cls, state: SimulationRunState) -> bool:
@@ -977,11 +1100,35 @@ class SimulationRunner:
                     state.error = "后端在运行中被中断（进程重启），该模拟已回收为失败。"
                     cls._save_run_state(state)
                     cls._sync_state_json_status(sim_id, "failed")
+                    cls._mark_env_stopped(sim_id)  # RUN-11: 孤儿已回收，IPC 环境必然失效
                     logger.warning(f"[{sim_id}] 启动时回收孤儿模拟 → failed")
                 except Exception as e:  # noqa: BLE001 — 单条回收失败不应影响其它
                     logger.error(f"回收孤儿模拟失败 ({sim_id}): {e}")
         except Exception as e:  # noqa: BLE001 — 回收失败不应阻断启动
             logger.error(f"回收孤儿模拟总流程失败: {e}", exc_info=True)
+
+    @classmethod
+    def _mark_env_stopped(cls, simulation_id: str) -> None:
+        """RUN-11: 把 env_status.json 原子落为 stopped（best-effort，绝不抛出）。
+
+        env_status.json 原本只由模拟子进程在优雅退出时写 stopped；进程崩溃/被 SIGKILL/
+        被 stop·reconcile·cleanup 回收后它永远停留在 alive，check_env_alive() 恒真——
+        interview 端点会向不存在的进程发 IPC 并阻塞完整的 60-180s 超时窗。凡在后端侧
+        确认进程终止，就同步落 stopped。目录不存在（模拟从未运行/已清理）时不产生新文件。
+        """
+        from ..utils.atomic import write_json_atomic
+        try:
+            sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
+            if not os.path.isdir(sim_dir):
+                return
+            write_json_atomic(os.path.join(sim_dir, "env_status.json"), {
+                "status": "stopped",
+                "twitter_available": False,
+                "reddit_available": False,
+                "timestamp": datetime.now().isoformat(),
+            })
+        except Exception as e:  # noqa: BLE001 — 状态标记失败不应影响终止流程本身
+            logger.warning(f"标记 env_status=stopped 失败: {simulation_id}, error={e}")
 
     @classmethod
     def _sync_state_json_status(cls, simulation_id: str, status: str) -> None:
@@ -1063,7 +1210,9 @@ class SimulationRunner:
         if not state:
             raise ValueError(f"模拟不存在: {simulation_id}")
         
-        if state.runner_status not in [RunnerStatus.RUNNING, RunnerStatus.PAUSED]:
+        # RUN-16: 允许停止 STARTING——启动阶段卡死（如 agent 建图挂在 LLM 上）的模拟
+        # 此前必须等它自己转为 RUNNING 才能通过 API 停止；终止路径本就能处理短命/缺失进程。
+        if state.runner_status not in [RunnerStatus.RUNNING, RunnerStatus.PAUSED, RunnerStatus.STARTING]:
             raise ValueError(f"模拟未在运行: {simulation_id}, status={state.runner_status}")
         
         state.runner_status = RunnerStatus.STOPPING
@@ -1102,6 +1251,7 @@ class SimulationRunner:
             state.twitter_running = False
             state.reddit_running = False
             state.completed_at = datetime.now().isoformat()
+            cls._mark_env_stopped(simulation_id)  # RUN-11: 进程已确认终止，环境状态同步落 stopped
         else:
             # 没能确认终止 —— 不要谎报 STOPPED
             state.runner_status = RunnerStatus.FAILED
@@ -1338,7 +1488,13 @@ class SimulationRunner:
             
             r["active_agents"].add(action.agent_id)
             r["action_types"][action.action_type] = r["action_types"].get(action.action_type, 0) + 1
-            r["last_action_time"] = action.timestamp
+            # XRUN-9: 合并后的 twitter+reddit 动作流并非时间有序，必须比较时间戳取 min/max，
+            # 否则 first/last 反转（ISO-8601 字符串可安全按字典序比较；空串不得覆盖有效值）。
+            if action.timestamp:
+                if not r["first_action_time"] or action.timestamp < r["first_action_time"]:
+                    r["first_action_time"] = action.timestamp
+                if not r["last_action_time"] or action.timestamp > r["last_action_time"]:
+                    r["last_action_time"] = action.timestamp
         
         # 转换为列表
         result = []
@@ -1396,7 +1552,12 @@ class SimulationRunner:
                 stats["reddit_actions"] += 1
             
             stats["action_types"][action.action_type] = stats["action_types"].get(action.action_type, 0) + 1
-            stats["last_action_time"] = action.timestamp
+            # XRUN-9: 同 get_timeline——比较时间戳而非按遍历顺序覆盖，修复 first>last 反转。
+            if action.timestamp:
+                if not stats["first_action_time"] or action.timestamp < stats["first_action_time"]:
+                    stats["first_action_time"] = action.timestamp
+                if not stats["last_action_time"] or action.timestamp > stats["last_action_time"]:
+                    stats["last_action_time"] = action.timestamp
         
         # 按总动作数排序
         result = sorted(agent_stats.values(), key=lambda x: x["total_actions"], reverse=True)
@@ -1436,35 +1597,129 @@ class SimulationRunner:
             for r in timeline
         ]
 
-        # top_posts：CREATE_POST/QUOTE_POST 近似按内容长度+发帖者影响排序（无 DB 互动列时的稳健近似）
-        top_posts = []
+        # top_posts（RUN-13）：actions.jsonl 没有互动列（在 DB 里），无法真正按传播量排序。
+        # 旧实现取时间倒序前 25 条（= 最新帖，且混入 round-0 种子帖）却自称按互动排序。
+        # 诚实的最小版本：剔除 round-0 种子帖与定时回放事件，按 (轮次, 时间) 升序取
+        # agent 自发帖样本——报告端拿到的是「有机帖子的时间序样本」而非倒序尾巴。
+        organic_posts = []
         for a in actions:
-            if a.action_type in ("CREATE_POST", "QUOTE_POST"):
+            if a.action_type not in ("CREATE_POST", "QUOTE_POST"):
+                continue
+            args = a.action_args or {}
+            if (a.round_num or 0) <= 0 or args.get("is_scheduled_event"):
+                continue  # 种子注入/时间线回放不是 agent 的自发行为
+            try:
+                content = str(args.get("content", ""))
+            except Exception:
                 content = ""
-                try:
-                    content = str((a.action_args or {}).get("content", ""))
-                except Exception:
-                    content = ""
-                top_posts.append({
-                    "round_num": a.round_num,
-                    "agent_id": a.agent_id,
-                    "agent_name": a.agent_name,
-                    "platform": a.platform,
-                    "content": content[:280],
-                })
-        top_posts = top_posts[:25]
+            organic_posts.append({
+                "round_num": a.round_num,
+                "agent_id": a.agent_id,
+                "agent_name": a.agent_name,
+                "platform": a.platform,
+                "content": content[:280],
+                "timestamp": a.timestamp,
+            })
+        organic_posts.sort(key=lambda p: (p["round_num"], p["timestamp"] or ""))
+        top_posts = [{k: v for k, v in p.items() if k != "timestamp"} for p in organic_posts[:25]]
 
         peak = max(action_volume_by_round, key=lambda x: x["total_actions"], default=None)
+
+        # QUALITY-OPT S4/C3: honest run accounting. Distinguish ORGANIC engagement (posts/
+        # comments/likes the agents chose to make) from SEED graph actions (sign-up/follow), so a
+        # simulation whose 554 "actions" were all seed sign-ups is not mistaken for a lively run.
+        # rounds_executed comes from run_state.current_round (real rounds ran), not from the count
+        # of distinct round_nums that happened to carry an action (which collapses to 1 for a
+        # seed-only run). simulation_health is consumed by the pipeline health gate + report caveat.
+        _ORGANIC_TYPES = {"CREATE_POST", "QUOTE_POST", "REPOST", "CREATE_COMMENT",
+                          "LIKE_POST", "LIKE_COMMENT", "DISLIKE_POST", "DISLIKE_COMMENT"}
+        # XRUN-2(2): round-0 的种子帖与带 is_scheduled_event 标记的时间线回放是注入而非
+        # agent 决策——不得计入有机量，否则纯种子运行会被误判为 lively（hollow 检测失灵）。
+        organic = [
+            a for a in actions
+            if str(getattr(a, "action_type", "") or "").upper() in _ORGANIC_TYPES
+            and (a.round_num or 0) > 0
+            and not (a.action_args or {}).get("is_scheduled_event")
+        ]
+        organic_count = len(organic)
+        seed_count = max(0, len(actions) - organic_count)
+        rounds_with_organic = len({a.round_num for a in organic})
+        # real round count + error/truncation from run_state.json
+        current_round = total_rounds = None
+        run_error = None
+        try:
+            _rsp = os.path.join(cls.RUN_STATE_DIR, simulation_id, "run_state.json")
+            if os.path.exists(_rsp):
+                with open(_rsp, encoding="utf-8") as _f:
+                    _rs = json.load(_f)
+                current_round = _rs.get("current_round")
+                total_rounds = _rs.get("total_rounds") or _rs.get("total_simulation_rounds")
+                run_error = _rs.get("error")
+        except (OSError, ValueError):
+            pass
+        rounds_executed = current_round if isinstance(current_round, int) else len(action_volume_by_round)
+        truncated = bool(isinstance(current_round, int) and isinstance(total_rounds, int)
+                         and total_rounds > 0 and current_round < total_rounds)
+        if run_error:
+            sim_health = "errored"
+        elif organic_count == 0:
+            sim_health = "hollow"        # agents produced NO organic content — do not narrativize
+        elif truncated:
+            sim_health = "truncated"
+        else:
+            sim_health = "ok"
+
+        # RUN-2: 运行环落盘的平台级 LLM 健康（llm_health.json）。任一平台 degraded=true 时把
+        # ok 降为 llm_degraded（errored/hollow/truncated 语义更强者不被覆盖）。老运行无此文件 → 行为不变。
+        llm_health = None
+        try:
+            _lhp = os.path.join(cls.RUN_STATE_DIR, simulation_id, "llm_health.json")
+            if os.path.exists(_lhp):
+                with open(_lhp, encoding="utf-8") as _lf:
+                    llm_health = json.load(_lf)
+                _plats = (llm_health or {}).get("platforms") or {}
+                if sim_health == "ok" and any(
+                        isinstance(_p, dict) and _p.get("degraded") for _p in _plats.values()):
+                    sim_health = "llm_degraded"
+        except (OSError, ValueError):
+            llm_health = None
+
+        # RUN-9: 情感动态观测摘要（{platform}_dynamics_summary.json）。active=false 时报告阶段
+        # 据此抑制「情绪演化」叙事（动态信号从未送达 agent 提示词）。缺失 → 不写该键。
+        agent_dynamics = {}
+        for _plat in ("twitter", "reddit"):
+            try:
+                _dsp = os.path.join(cls.RUN_STATE_DIR, simulation_id, f"{_plat}_dynamics_summary.json")
+                if os.path.exists(_dsp):
+                    with open(_dsp, encoding="utf-8") as _df:
+                        _ds = json.load(_df)
+                    if isinstance(_ds, dict):
+                        agent_dynamics[_plat] = _ds
+            except (OSError, ValueError):
+                continue
+
         summary = {
             "simulation_id": simulation_id,
             "agent_count": len(agent_stats),
             "total_actions": sum(s["total_actions"] for s in agent_stats),
-            "rounds_executed": len(action_volume_by_round),
+            "organic_action_count": organic_count,
+            "seed_action_count": seed_count,
+            "rounds_executed": rounds_executed,
+            "rounds_with_organic_actions": rounds_with_organic,
+            "total_rounds": total_rounds,
+            "truncated": truncated,
+            "simulation_health": sim_health,
             "peak_round": peak,
             "top_agents": agent_stats[:15],
             "action_volume_by_round": action_volume_by_round,
             "top_posts": top_posts,
         }
+        if run_error:
+            summary["error"] = str(run_error)[:300]
+        if llm_health is not None:
+            summary["llm_health"] = llm_health  # RUN-2: 平台级 llm_calls/llm_errors/error_rate
+        if agent_dynamics:
+            summary["agent_dynamics"] = agent_dynamics  # RUN-9: 报告端可据 active=false 抑制情绪叙事
         if communities:
             summary["communities"] = communities
 
@@ -1516,6 +1771,8 @@ class SimulationRunner:
         errors = []
         
         # 要删除的文件列表（包括数据库文件）
+        # RUN-15: 派生产物（run_summary/世界态轨迹/决策流/涌现度量及其 .prev 快照）也在
+        # 强制重开时一并删除，防止新一轮失败后报告阶段消费到上一轮的摘要。
         files_to_delete = [
             "run_state.json",
             "simulation.log",
@@ -1525,10 +1782,12 @@ class SimulationRunner:
             "reddit_simulation.db",   # Reddit 平台数据库
             "env_status.json",        # 环境状态文件
         ]
-        
+        files_to_delete += list(cls._STALE_DERIVED_ARTIFACTS)
+        files_to_delete += [f"{name}.prev" for name in cls._STALE_DERIVED_ARTIFACTS]
+
         # 要删除的目录列表（包含动作日志）
         dirs_to_clean = ["twitter", "reddit"]
-        
+
         # 删除文件
         for filename in files_to_delete:
             file_path = os.path.join(sim_dir, filename)
@@ -1538,18 +1797,20 @@ class SimulationRunner:
                     cleaned_files.append(filename)
                 except Exception as e:
                     errors.append(f"删除 {filename} 失败: {str(e)}")
-        
-        # 清理平台目录中的动作日志
+
+        # 清理平台目录中的动作日志（含轮转快照与断点续跑检查点，RUN-15/RUN-7）
         for dir_name in dirs_to_clean:
             dir_path = os.path.join(sim_dir, dir_name)
             if os.path.exists(dir_path):
-                actions_file = os.path.join(dir_path, "actions.jsonl")
-                if os.path.exists(actions_file):
-                    try:
-                        os.remove(actions_file)
-                        cleaned_files.append(f"{dir_name}/actions.jsonl")
-                    except Exception as e:
-                        errors.append(f"删除 {dir_name}/actions.jsonl 失败: {str(e)}")
+                for fname in ("actions.jsonl", "actions.prev.jsonl",
+                              "checkpoint.json", "checkpoint.prev.json"):
+                    plat_file = os.path.join(dir_path, fname)
+                    if os.path.exists(plat_file):
+                        try:
+                            os.remove(plat_file)
+                            cleaned_files.append(f"{dir_name}/{fname}")
+                        except Exception as e:
+                            errors.append(f"删除 {dir_name}/{fname} 失败: {str(e)}")
         
         # 清理内存中的运行状态
         if simulation_id in cls._run_states:
@@ -1625,7 +1886,8 @@ class SimulationRunner:
                     
                     # 同时更新 state.json，将状态设为 stopped（原子 + 共享锁，F-6-9）
                     cls._sync_state_json_status(simulation_id, 'stopped')
-                        
+                    cls._mark_env_stopped(simulation_id)  # RUN-11: 服务器关闭已杀进程，环境同步落 stopped
+
             except Exception as e:
                 logger.error(f"清理进程失败: {simulation_id}, error={e}")
         
@@ -1869,6 +2131,33 @@ class SimulationRunner:
             }
     
     @classmethod
+    def _scale_interview_timeout(cls, timeout: float, n_interviews: int) -> float:
+        """RUN-12: 让批量采访超时随批量规模与有效并发扩展（只增不减）。
+
+        固定 120/180s 对 80 个 agent × 每平台 4 并发 × 每次 CLI 调用 10-60s 的现实
+        必然超时——客户端放弃后模拟端仍在烧额度回答无人消费的问题。公式：
+        timeout = max(传入值, 60 + per_agent × ceil(n / 有效并发))。
+        INTERVIEW_TIMEOUT_PER_AGENT<=0 时禁用缩放（回到今日行为）。
+        """
+        try:
+            per_agent = float(getattr(Config, "INTERVIEW_TIMEOUT_PER_AGENT", 30.0) or 0.0)
+        except (TypeError, ValueError):
+            per_agent = 30.0
+        if per_agent <= 0 or n_interviews <= 0:
+            return timeout
+        provider = (os.environ.get('LLM_PROVIDER') or getattr(Config, 'LLM_PROVIDER', '') or 'claude-cli').lower()
+        try:
+            if provider in ('claude-cli', 'codex-cli'):
+                cap = int(os.environ.get('OASIS_CLI_SEMAPHORE', '8') or '8')
+            else:
+                cap = int(os.environ.get('OASIS_SEMAPHORE', '30') or '30')
+        except ValueError:
+            cap = 8
+        concurrency = max(1, cap // 2)  # 双平台并行时各平台拿一半信号量
+        scaled = 60.0 + per_agent * ((n_interviews + concurrency - 1) // concurrency)
+        return max(float(timeout), scaled)
+
+    @classmethod
     def interview_agents_batch(
         cls,
         simulation_id: str,
@@ -1903,6 +2192,12 @@ class SimulationRunner:
 
         if not ipc_client.check_env_alive():
             raise ValueError(f"模拟环境未运行或已关闭，无法执行Interview: {simulation_id}")
+
+        # RUN-12: 超时随批量规模缩放（只增不减），避免整批采访必然超时后仍在烧额度。
+        scaled_timeout = cls._scale_interview_timeout(timeout, len(interviews))
+        if scaled_timeout > timeout:
+            logger.info(f"批量Interview超时按规模放大: {timeout}s -> {scaled_timeout}s (n={len(interviews)})")
+            timeout = scaled_timeout
 
         logger.info(f"发送批量Interview命令: simulation_id={simulation_id}, count={len(interviews)}, platform={platform}")
 

@@ -1,5 +1,9 @@
 """共享 token 估算 / 上下文预算工具（EXECPLAN2 I-6-4）。
 
+⚠️ CFG-2 诚实声明：本模块目前**尚无生产调用点**——ADAPTIVE_CONTEXT 打开也不改变任何
+行为（config.py 的对应旋钮块已同样标注）。保留作为未来接线的契约；首选消费点为
+report_agent 的前文[:8000] 切片与 persona context[:3000]。接线时按下述设计消费。
+
 把原本散落在各调用点的硬编码字符切片（persona context[:3000]、前文章节[:8000]、
 related_facts[:25] 等）统一为「按提供方上下文窗口动态计算」的预算化截断：
   - estimate_tokens(text)           —— 与 oasis_llm.CLIModel._estimate_tokens 一致的近似估算（ceil(len/4)）。

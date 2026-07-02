@@ -36,11 +36,17 @@ def _ledger_file(d: Optional[str] = None) -> str:
 
 def append_forecast(forecast: Optional[Dict[str, Any]], *, report_id: str,
                     horizon: Optional[str] = None, resolution_date: Optional[str] = None,
-                    created_at: Optional[str] = None, d: Optional[str] = None) -> Optional[Dict[str, Any]]:
+                    created_at: Optional[str] = None, d: Optional[str] = None,
+                    objective_signals: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     """Append one forecast entry to the ledger (jsonl). Best-effort → None on failure.
 
     Stores only what scoring needs (scenario names + probabilities) + keys for the
     resolution scheduler. ``resolution_date`` defaults to the horizon (year-end).
+
+    EVAL-1 / GAP-4: an optional ``objective_signals`` dict (free, deterministic report
+    quality metrics — citation coverage, sharp-criteria ratio, etc.) is persisted
+    alongside the entry when supplied, so the ledger doubles as an evaluation log even
+    before outcomes resolve. Default None → entry shape unchanged (degrade-safe).
     """
     if not isinstance(forecast, dict):
         return None
@@ -63,6 +69,8 @@ def append_forecast(forecast: Optional[Dict[str, Any]], *, report_id: str,
         "outcome": None,
         "schema_version": 1,
     }
+    if isinstance(objective_signals, dict) and objective_signals:
+        entry["objective_signals"] = objective_signals
     try:
         target = _ledger_file(d)
         os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
@@ -139,3 +147,36 @@ def due_for_resolution(as_of: str, d: Optional[str] = None) -> List[Dict[str, An
         if rd and str(rd) <= str(as_of):
             out.append(e)
     return out
+
+
+def recalibration_param(d: Optional[str] = None,
+                        entries: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """R2-CAL-5: fit the 1-param logit-scale recalibrator over RESOLVED ledger entries.
+
+    Returns ``{slope, n, fitted, enabled}``. ``enabled`` mirrors the
+    ``REPORT_RECALIBRATE_FROM_LEDGER`` flag (default OFF) so a caller can fit the
+    parameter for inspection yet only APPLY it once explicitly enabled AND enough
+    labels exist (``fitted``). Identity slope (1.0) when data is thin → applying it is
+    a no-op (degrade-safe; deferred until labels accrue).
+    """
+    led = entries if entries is not None else read_ledger(d)
+    resolved = [
+        {"forecast": {"scenarios": e.get("scenarios")}, "outcome": e.get("outcome")}
+        for e in led
+        if e.get("resolved") and e.get("outcome") and e.get("scenarios")
+    ]
+    enabled = False
+    try:
+        from ..config import Config
+        enabled = bool(getattr(Config, "REPORT_RECALIBRATE_FROM_LEDGER", False))
+    except Exception:  # noqa: BLE001
+        enabled = False
+    if not resolved:
+        return {"slope": 1.0, "n": 0, "fitted": False, "enabled": enabled}
+    try:
+        from .backtest import fit_recalibrator
+        fit = fit_recalibrator(resolved)
+        fit["enabled"] = enabled
+        return fit
+    except Exception:  # noqa: BLE001
+        return {"slope": 1.0, "n": len(resolved), "fitted": False, "enabled": enabled}

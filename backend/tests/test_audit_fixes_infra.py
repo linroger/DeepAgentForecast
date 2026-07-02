@@ -1,0 +1,440 @@
+"""ORCHESTRATOR + LLM INFRA 审计修复的针对性测试（R2 wave-2 infra group）。
+
+覆盖：LLM-1/2/3/5/6、RPT-10/14、XRUN-3（llm_client）；TEL-1/XRUN-8（telemetry）；
+ORCH-2/3/5/7、RES-1/RES-8 镜像、ORCH-4 接线、XRUN-15（pipeline_orchestrator）；
+CFG-1 + wave-1 旗标合并（config）。全部为进程内单元测试，不发任何网络请求。
+"""
+
+import json
+import logging
+import os
+import subprocess
+import time
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+
+import pytest
+
+from app.config import Config
+from app.utils import llm_client as lc
+from app.utils import telemetry as tel
+
+
+# ---------------------------------------------------------------- config flags
+NEW_FLAGS_AND_DEFAULTS = {
+    # CFG-1 幽灵旋钮收编
+    "PIPELINE_HEARTBEAT_ENABLED": True,
+    "PIPELINE_HEARTBEAT_INTERVAL_S": 30.0,
+    "PIPELINE_HEARTBEAT_STALE_S": 120.0,
+    "PIPELINE_STALE_S": 300.0,
+    "PIPELINE_ETA_CAP_S": 7200.0,
+    "PIPELINE_LIVE_ARTIFACTS": True,
+    "PIPELINE_PARTIAL_SCAN_EVERY_S": 10.0,
+    "PIPELINE_VALIDATE_ARTIFACTS": True,
+    "MANIFEST_CAPTURE_VERSIONS": False,
+    "PARALLEL_PROFILE_COUNT": 16,
+    "EMBED_WARM_AT_RESEARCH": False,
+    "VALIDATE_AS_OF_DATE": True,
+    "GRAPH_CHUNK_SOURCE": "both",
+    # 本组新增
+    "PIPELINE_RECLAIM_PORT_PROBE": True,
+    "REPORT_LLM_PREFLIGHT": True,
+    "LLM_CLI_ISOLATE_HOOKS": True,
+    # 研究组
+    "ACTOR_SYNTH_MIN_CONTEXT_CHARS": 3000,
+    "RESEARCH_MIN_REPORT_CHARS": 400,
+    "RESEARCH_FETCH_ACCOUNTING_V2": True,
+    "RESEARCH_ASOF_MAX_LAG_DAYS": 45,
+    "RESEARCH_QUALITY_GROUNDING": True,
+    "ACTOR_DOSSIER_JUDGE_STRICT": False,
+    "RESEARCH_COVERAGE_GATE_STANDARD": False,
+    # 本体/准备组
+    "ONTOLOGY_SEED_ADAPTIVE_BUDGET": True,
+    "SIM_EVENT_REACT_BUFFER": True,
+    "SIM_SCHEDULE_CLAMP_ROUNDS": True,
+    "SIM_RULE_FALLBACK_STANCE": True,
+    "SIM_SEED_POST_VARIANTS": True,
+    "PERSONA_FIELD_EXTRACTION": True,
+    # 图谱组
+    "GRAPH_CHOKEPOINT_PRIORS": False,
+    "GRAPH_CHOKEPOINT_MAX_NODES": 1500,
+    "GRAPH_PRIORS_ALIAS_FOLD": True,
+    "GRAPH_MAX_SKIPPED_RATIO": 0.3,
+    "SIM_TIER_FROM_ONTOLOGY": False,
+    "GRAPH_QUERY_MAX_CHARS": 0,
+    "GRAPH_QUERY_CLAMP_SEMANTIC": True,
+    # 运行环组
+    "SIM_START_HOUR": 0,
+    "SIM_RECENCY_CARRY": False,
+    "SIM_TWITTER_MODEL_FREE_FEED": True,
+    "SIM_TOOL_ARG_NORMALIZE": True,
+    "SIM_IDLE_CLOSE_MIN": 60.0,
+    "SIM_LLM_ERROR_RATE_THRESHOLD": 0.5,
+    "SIM_RESUME": False,
+    "INTERVIEW_TIMEOUT_PER_AGENT": 30.0,
+    "SIM_CLI_TOOL_EMULATION": True,
+    "SIM_LLM_FALLBACK": True,
+    "SIM_MIN_FREE_DISK_GB": 2.0,
+    "SIM_STEP_FAILURE_LIMIT": 3,
+    # 报告组
+    "REPORT_ABORT_ON_LLM_OUTAGE": True,
+    "REPORT_SECTION_RETRY_MAX": 1,
+    "REPORT_SECTION_RETRY_BACKOFF_S": 8.0,
+    "REPORT_CRITIQUE_BEFORE_PROSE": True,
+    "FORECAST_BINARY_CONTRARIAN": True,
+    "FORECAST_SIM_SENSITIVITY": True,
+    "FORECAST_BINARY_THEMES": "",
+    "REPORT_QUOTE_AUDIT_V2": True,
+    "REPORT_COMPACT_RETRIEVAL_QUERY": True,
+}
+
+
+def test_cfg1_all_flags_defined_with_expected_defaults():
+    """CFG-1 + wave-1 合并：全部旋钮成为真实 Config 属性（.env 未覆盖时按既定默认）。"""
+    missing = [n for n in NEW_FLAGS_AND_DEFAULTS if not hasattr(Config, n)]
+    assert not missing, f"config.py 缺定义: {missing}"
+    for name, default in NEW_FLAGS_AND_DEFAULTS.items():
+        if os.environ.get(name):  # 本机 .env 显式覆盖的跳过取值断言
+            continue
+        val = getattr(Config, name)
+        assert val == default, f"{name}: {val!r} != {default!r}"
+        assert isinstance(val, type(default)), f"{name} 类型漂移: {type(val)}"
+
+
+def test_kg8_component_warn_ratio_lowered():
+    if not os.environ.get("GRAPH_COMPONENT_WARN_RATIO"):
+        assert Config.GRAPH_COMPONENT_WARN_RATIO == pytest.approx(0.2)
+
+
+def test_llm6_minimax_native_tools_capability_bit():
+    assert Config.PROVIDER_META["minimax"].get("native_tools") is False
+    # 其余 openai-compat 提供方缺省 True
+    assert Config.PROVIDER_META["openai"].get("native_tools", True) is True
+
+
+# ---------------------------------------------------------------- llm_client
+@pytest.fixture(autouse=True)
+def _clean_cb_state():
+    lc._CB_STATE.clear()
+    yield
+    lc._CB_STATE.clear()
+
+
+def test_llm3_quota_classifier():
+    assert lc._is_quota(RuntimeError("Error code: 429 - rate_limit_exceeded"))
+    assert lc._is_quota(RuntimeError("insufficient quota"))
+    assert lc._is_quota(RuntimeError("Claude AI usage limit reached"))
+    assert not lc._is_quota(RuntimeError("connection reset by peer"))
+
+
+def test_llm3_429_breaker_trips_after_threshold():
+    for _ in range(lc._CB_429_THRESHOLD):
+        lc._cb_record_429("minimax")
+    assert lc._cb_tripped("minimax")
+    # 成功后清零两条 streak
+    lc._CB_STATE["minimax"]["tripped_until"] = 0.0
+    lc._cb_reset("minimax")
+    assert lc._CB_STATE["minimax"]["consec429"] == 0.0
+    assert not lc._cb_tripped("minimax")
+
+
+def _minimax_client(monkeypatch):
+    monkeypatch.setattr(Config, "REPORT_NATIVE_TOOLS", True, raising=False)
+    return lc.LLMClient(provider="minimax", api_key="sk-test",
+                        base_url="http://127.0.0.1:1/v1", model="MiniMax-M3")
+
+
+def test_llm6_rpt10_supports_native_tools_gates(monkeypatch):
+    client = _minimax_client(monkeypatch)
+    # 能力位 False（PROVIDER_META）→ 拒绝原生工具
+    assert client.supports_native_tools() is False
+    # 白名单覆盖能力位
+    monkeypatch.setenv("LLM_NATIVE_TOOLS_PROVIDERS", "minimax")
+    assert client.supports_native_tools() is True
+    # RPT-10: 熔断冷却期间即便白名单也拒绝
+    lc._CB_STATE["minimax"] = {"consec": 0.0, "tripped_until": time.monotonic() + 60}
+    assert client.supports_native_tools() is False
+
+
+def test_llm1_chat_with_tools_retries_then_raises(monkeypatch):
+    client = _minimax_client(monkeypatch)
+    calls = {"n": 0}
+
+    class _Boom:
+        def create(self, **kwargs):
+            calls["n"] += 1
+            raise RuntimeError("transient")
+
+    client._openai_client = SimpleNamespace(chat=SimpleNamespace(completions=_Boom()))
+    monkeypatch.setattr(lc, "_retry_delay", lambda exc, attempt: 0.0)
+    with pytest.raises(RuntimeError, match="transient"):
+        client.chat_with_tools([{"role": "user", "content": "hi"}], tools_schema=[])
+    assert calls["n"] == lc.MAX_RETRIES  # 重试打满而非单次裸调用
+
+
+def test_llm1_chat_with_tools_records_422_and_breaker_precheck(monkeypatch):
+    client = _minimax_client(monkeypatch)
+
+    class _Filter:
+        def create(self, **kwargs):
+            raise ValueError("Error code: 422 - new_sensitive")
+
+    client._openai_client = SimpleNamespace(chat=SimpleNamespace(completions=_Filter()))
+    with pytest.raises(ValueError):
+        client.chat_with_tools([{"role": "user", "content": "hi"}], tools_schema=[])
+    assert lc._CB_STATE["minimax"]["consec"] == 1.0
+    # 冷却中 → 预检直接抛（不再发注定失败的调用）
+    lc._CB_STATE["minimax"]["tripped_until"] = time.monotonic() + 60
+    with pytest.raises(RuntimeError, match="熔断冷却"):
+        client.chat_with_tools([{"role": "user", "content": "hi"}], tools_schema=[])
+
+
+def test_llm1_chat_with_tools_meters_usage(monkeypatch):
+    client = _minimax_client(monkeypatch)
+    usage = SimpleNamespace(prompt_tokens=11, completion_tokens=7)
+    msg = SimpleNamespace(content="ok", tool_calls=[])
+    resp = SimpleNamespace(choices=[SimpleNamespace(message=msg)], usage=usage)
+    client._openai_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **k: resp)))
+    recorded = []
+    monkeypatch.setattr(tel.LLMMeter, "record",
+                        classmethod(lambda cls, *a, **k: recorded.append((a, k))))
+    monkeypatch.setattr(Config, "LLM_TELEMETRY_ENABLED", True, raising=False)
+    out = client.chat_with_tools([{"role": "user", "content": "hi"}], tools_schema=[])
+    assert out["content"] == "ok" and out["tool_calls"] == []
+    assert len(recorded) == 1
+    args = recorded[0][0]
+    assert args[0] == "minimax" and args[2] == 11 and args[3] == 7
+
+
+def test_llm2_fallback_served_call_not_double_metered(monkeypatch):
+    """主提供方失败、回退接管 → 外层不得再按主提供方计量一次。"""
+    client = lc.LLMClient(provider="claude-cli")
+    monkeypatch.setattr(lc, "_retry_delay", lambda exc, attempt: 0.0)
+    monkeypatch.setattr(
+        lc.LLMClient, "_chat_claude_cli",
+        lambda self, *a, **k: (_ for _ in ()).throw(RuntimeError("primary down")))
+    monkeypatch.setattr(lc.LLMClient, "_try_fallback", lambda self, *a, **k: "fb-answer")
+    recorded = []
+    monkeypatch.setattr(tel.LLMMeter, "record",
+                        classmethod(lambda cls, *a, **k: recorded.append(a)))
+    monkeypatch.setattr(Config, "LLM_TELEMETRY_ENABLED", True, raising=False)
+    monkeypatch.setattr(Config, "LLM_CACHE_ENABLED", False, raising=False)
+    out = client.chat([{"role": "user", "content": "q"}])
+    assert out == "fb-answer"
+    assert recorded == []  # 回退客户端（此处被 mock 掉）才是唯一计量方
+
+
+def test_xrun3_claude_cli_isolates_hooks_and_reports_rc(monkeypatch):
+    client = lc.LLMClient(provider="claude-cli")
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        return SimpleNamespace(returncode=1, stdout="", stderr="")
+
+    monkeypatch.setattr(lc.subprocess, "run", fake_run)
+    monkeypatch.setattr(Config, "LLM_CLI_ISOLATE_HOOKS", True, raising=False)
+    with pytest.raises(RuntimeError) as ei:
+        client._chat_claude_cli([{"role": "user", "content": "hi"}], 0.3, 64)
+    # XRUN-3: hooks 隔离进了命令行；LLM-5/RPT-14: 空输出时错误串带 rc + 占位说明
+    assert "--settings" in seen["cmd"]
+    idx = seen["cmd"].index("--settings")
+    assert json.loads(seen["cmd"][idx + 1]) == {"disableAllHooks": True}
+    assert "rc=1" in str(ei.value) and "no output" in str(ei.value)
+
+
+def test_llm5_error_envelope_includes_result_payload(monkeypatch):
+    client = lc.LLMClient(provider="claude-cli")
+    envelope = json.dumps({"is_error": True, "subtype": "error",
+                           "result": "Claude AI usage limit reached"})
+    monkeypatch.setattr(
+        lc.subprocess, "run",
+        lambda *a, **k: SimpleNamespace(returncode=0, stdout=envelope, stderr=""))
+    with pytest.raises(RuntimeError, match="usage limit reached"):
+        client._chat_claude_cli([{"role": "user", "content": "hi"}], 0.3, 64)
+
+
+def test_llm3_fallback_openai_client_pool_cached(monkeypatch):
+    """回退提供方的 OpenAI 连接池跨调用复用（LLMClient 实例仍新建）。"""
+    lc._FB_OPENAI_CLIENTS.clear()
+    monkeypatch.setenv("LLM_FALLBACK_PROVIDER", "minimax")
+    monkeypatch.setenv("LLM_FALLBACK_API_KEY", "sk-test")
+    monkeypatch.setenv("LLM_FALLBACK_BASE_URL", "http://127.0.0.1:1/v1")
+    monkeypatch.setenv("LLM_FALLBACK_MODEL", "MiniMax-M3")
+    captured = []
+    orig_chat = lc.LLMClient.chat
+
+    def fake_chat(self, *a, **k):
+        captured.append(self._openai_client)
+        return "fb"
+
+    monkeypatch.setattr(lc.LLMClient, "chat", fake_chat)
+    primary = lc.LLMClient(provider="claude-cli")
+    try:
+        assert primary._try_fallback([{"role": "user", "content": "q"}], 0.3, 64, None,
+                                     RuntimeError("x")) == "fb"
+        assert primary._try_fallback([{"role": "user", "content": "q"}], 0.3, 64, None,
+                                     RuntimeError("y")) == "fb"
+    finally:
+        monkeypatch.setattr(lc.LLMClient, "chat", orig_chat)
+    assert len(captured) == 2 and captured[0] is captured[1]
+    lc._FB_OPENAI_CLIENTS.clear()
+
+
+# ---------------------------------------------------------------- telemetry
+def test_xrun8_cost_basis_subscription_vs_mixed():
+    rid = "test_cost_basis_run"
+    tel.LLMMeter.reset(rid)
+    tel.LLMMeter.record("claude-cli", "opus", 100, 50, 10.0, run_id=rid, stage="report")
+    assert tel.LLMMeter.snapshot(rid)["cost_basis"] == "subscription"
+    tel.LLMMeter.record("minimax", "MiniMax-M3", 100, 50, 10.0, run_id=rid, stage="report")
+    assert tel.LLMMeter.snapshot(rid)["cost_basis"] == "mixed"
+    tel.LLMMeter.reset(rid)
+
+
+def test_xrun8_write_run_telemetry_merges_previous_attempt(tmp_path):
+    rid = "test_merge_run"
+    path = str(tmp_path / "run_telemetry.json")
+    tel.LLMMeter.reset(rid)
+    tel.LLMMeter.record("minimax", "M3", 10, 5, 1.0, run_id=rid, stage="graph")
+    tel.LLMMeter.write_run_telemetry(path, run_id=rid, extra={"report_id": "report_a", "status": "failed"})
+    tel.LLMMeter.reset(rid)
+    tel.LLMMeter.record("minimax", "M3", 20, 10, 1.0, run_id=rid, stage="report")
+    tel.LLMMeter.write_run_telemetry(path, run_id=rid, extra={"report_id": "report_b", "status": "completed"})
+    data = json.loads(open(path, encoding="utf-8").read())
+    assert data["report_id"] == "report_b"
+    assert data["previous_attempt"]["report_id"] == "report_a"
+    assert data["cumulative_total"]["total_tokens"] == 45  # 15 + 30
+    tel.LLMMeter.reset(rid)
+
+
+def test_tel1_global_bucket_leak_warning():
+    # mirofish.* logger 不向 root 传播（app 日志配置），直接挂临时 handler 捕获。
+    records = []
+
+    class _Cap(logging.Handler):
+        def emit(self, record):
+            records.append(record.getMessage())
+
+    lg = logging.getLogger("mirofish.telemetry")
+    h = _Cap(level=logging.WARNING)
+    lg.addHandler(h)
+    try:
+        tel.LLMMeter._runs.pop("_global", None)
+        for _ in range(20):
+            tel.LLMMeter.record("minimax", "M3", 1, 1, 0.1, run_id=None, stage=None)
+    finally:
+        lg.removeHandler(h)
+        tel.LLMMeter._runs.pop("_global", None)
+    assert any("_global" in m for m in records)
+
+
+# ---------------------------------------------------------------- orchestrator
+from app.services import pipeline_orchestrator as po  # noqa: E402
+
+
+def test_res8_degraded_dossier_gate():
+    assert po._is_degraded_dossier("short") is True                       # <400 chars
+    assert po._is_degraded_dossier("x" * 500 + " new_sensitive ") is True  # 错误串
+    assert po._is_degraded_dossier("正常卷宗内容。" * 100) is False
+    assert po._is_degraded_dossier("") is False  # 空=缺失，交由原有语义
+
+
+def test_orch2_orphan_grace_when_owner_and_heartbeat_missing(monkeypatch):
+    now = datetime.now(timezone.utc)
+    fresh = {"pipeline_id": "pipe_x", "status": "running",
+             "updated_at": now.isoformat()}
+    stale = {"pipeline_id": "pipe_x", "status": "running",
+             "updated_at": (now - timedelta(seconds=999)).isoformat()}
+    monkeypatch.setattr(po.PipelineManager, "load", classmethod(lambda cls, pid: dict(fresh)))
+    assert po.PipelineOrchestrator._orphan_is_dead("pipe_x", 120.0) is False  # 有宽限
+    monkeypatch.setattr(po.PipelineManager, "load", classmethod(lambda cls, pid: dict(stale)))
+    assert po.PipelineOrchestrator._orphan_is_dead("pipe_x", 120.0) is True
+
+
+def test_xrun15_mark_failed_preserves_completed_stage(tmp_path, monkeypatch):
+    monkeypatch.setattr(Config, "PIPELINE_DATA_DIR", str(tmp_path), raising=False)
+    pid = "pipe_deadbeef0001"
+    os.makedirs(tmp_path / pid / "handoff", exist_ok=True)
+    state = {
+        "pipeline_id": pid, "status": "running", "current_stage": "ontology",
+        "schema_version": po.PIPELINE_SCHEMA_VERSION, "artifacts": {},
+        "stages": {"ontology": {"name": "ontology", "status": "running",
+                                "progress": 100, "message": "本体生成完成"}},
+    }
+    (tmp_path / pid / "pipeline_state.json").write_text(
+        json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    assert po.PipelineManager.mark_failed(pid, "已被用户取消", status="cancelled")
+    saved = json.loads((tmp_path / pid / "pipeline_state.json").read_text(encoding="utf-8"))
+    assert saved["status"] == "cancelled"
+    # 100% 的阶段不再被改写成 cancelled（曾出现 cancelled+progress=100+'完成' 的矛盾标签）
+    assert saved["stages"]["ontology"]["status"] == "completed"
+
+
+def test_orch7_eta_anchor_prefers_resumed_at():
+    state = po.PipelineState(
+        pipeline_id="pipe_eta", prompt="q", mode="full", status="running",
+        global_progress=50,
+    )
+    state.created_at = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+    state.options["resumed_at"] = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+    out = po.PipelineOrchestrator().estimate_eta(state)
+    assert out["elapsed_s"] is not None and out["elapsed_s"] < 3600  # 不再按 3 天外推
+
+
+def test_orch3_resume_completed_requires_force(monkeypatch):
+    data = {"pipeline_id": "pipe_done", "status": "completed",
+            "schema_version": po.PIPELINE_SCHEMA_VERSION,
+            "options": {"pipeline_health": {"status": "degraded"}}}
+    monkeypatch.setattr(po.PipelineManager, "load", classmethod(lambda cls, pid: dict(data)))
+    monkeypatch.setattr(po.PipelineOrchestrator, "_threads", {})
+    with pytest.raises(RuntimeError, match="force"):
+        po.PipelineOrchestrator.resume("pipe_done", force=False)
+    # 健康 ok 的 completed 即便 force 也拒绝
+    data_ok = dict(data, options={"pipeline_health": {"status": "ok"}})
+    monkeypatch.setattr(po.PipelineManager, "load", classmethod(lambda cls, pid: dict(data_ok)))
+    with pytest.raises(RuntimeError, match="管线已完成"):
+        po.PipelineOrchestrator.resume("pipe_done", force=True)
+
+
+def test_orch4_ensemble_wired_into_run():
+    """ORCH-4: _maybe_run_seed_ensemble 除定义外必须有 _run 内的真实调用点。"""
+    src = open(po.__file__, encoding="utf-8").read()
+    assert src.count("_maybe_run_seed_ensemble(") >= 2  # def + call site
+
+
+def test_ont2_template_none_passed_to_generator():
+    src = open(po.__file__, encoding="utf-8").read()
+    assert "template=Config.ONTOLOGY_TEMPLATE" not in src
+    assert "template=None" in src
+
+
+def test_kg5_graph_degraded_folded_into_pipeline_health(monkeypatch):
+    orch = po.PipelineOrchestrator()
+    state = po.PipelineState(pipeline_id="pipe_h", prompt="q", mode="full", status="running")
+    state.options["graph_ingest_degraded_ratio"] = 0.5
+    state.options["graph_skipped_chunks"] = 5
+    state.options["graph_total_chunks"] = 10
+    monkeypatch.setattr(po.PipelineOrchestrator, "_assess_report_health",
+                        lambda self, rid: ("ok", [], {}))
+    monkeypatch.setattr(Config, "PIPELINE_HEALTH_GATE", True, raising=False)
+    orch._enforce_pipeline_health(state)
+    ph = state.options["pipeline_health"]
+    assert ph["stages"]["graph"]["health"] == "degraded"
+    assert ph["status"] == "degraded"
+
+
+def test_xrun11_run_health_prefers_run_summary(tmp_path, monkeypatch):
+    sim_id = "sim_test_health"
+    # sqlite/run_state 目录（_sim_dir）与 run_summary 目录（RUN_STATE_DIR）分别打桩
+    monkeypatch.setattr(po.PipelineOrchestrator, "_sim_dir",
+                        staticmethod(lambda s: str(tmp_path / "simdir")))
+    monkeypatch.setattr(po.SimulationRunner, "RUN_STATE_DIR", str(tmp_path / "runstate"), raising=False)
+    os.makedirs(tmp_path / "runstate" / sim_id, exist_ok=True)
+    (tmp_path / "runstate" / sim_id / "run_summary.json").write_text(json.dumps({
+        "organic_action_count": 40, "simulation_health": "llm_degraded"}), encoding="utf-8")
+    health, issues, meta = po.PipelineOrchestrator()._assess_run_health(sim_id)
+    assert meta["organic_actions"] == 40 and meta["organic_source"] == "run_summary"
+    assert any("llm_degraded" in i for i in issues)
+    assert health == "degraded"

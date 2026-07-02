@@ -1051,8 +1051,9 @@ async def main():
     parser.add_argument(
         '--max-rounds',
         type=int,
-        default=40,
-        help='最大模拟轮数（默认 40，用于截断过长的模拟；传 0/负数视为不限制）'
+        default=None,
+        # RUN-3: 默认 None=不截断（T3.7 契约），run() 的截断块已按 None/<=0=不限制处理。
+        help='最大模拟轮数（默认不限制=跑满配置时长；传 0/负数亦视为不限制）'
     )
     parser.add_argument(
         '--no-wait',

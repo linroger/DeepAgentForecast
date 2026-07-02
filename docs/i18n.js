@@ -41,6 +41,8 @@
     'card.ess.meta':    { en: '40-round dual-platform simulation · 94 personas · grid / C&I / home storage segments, full supply chain & winners-vs-losers analysis', zh: '40 轮双平台模拟 · 94 个人格 · 大储 / 工商业 / 户储细分赛道、全产业链与赢家输家研判' },
     'card.iran.title':  { en: 'How does the 2026 US–Iran war end?', zh: '2026 年美伊战争如何收场？' },
     'card.iran.meta':   { en: '40-round dual-platform simulation · 135 personas · endgame scenarios, peace-deal terms & post-war Middle East order', zh: '40 轮双平台模拟 · 135 个人格 · 终局情景、终战协议条款与战后中东秩序重构' },
+    'card.collision.title': { en: 'The Collision Decade — Modern Mercantilism × AI, 2026–2031', zh: '碰撞的十年 —— 现代重商主义 × AI（2026–2031）' },
+    'card.collision.meta':  { en: '24-round dual-platform simulation · 80 personas · 13 binary forecasts & 4 scenarios · Bridgewater-style 3-part brief — tariffs, chip export controls & the AI-capex supercycle to 2031', zh: '24 轮双平台模拟 · 80 个人格 · 13 条二元预测与 4 个情景 · 桥水式三部分简报——关税、芯片出口管制与 AI 资本开支超级周期推演至 2031' },
     'card.storage.title': { en: 'Storage semiconductors — the 2027–2028 outlook', zh: '2027—2028 年存储半导体前景预判' },
     'card.storage.meta':  { en: '40-round dual-platform simulation · 80 personas · 213-node knowledge graph · competitive landscape, next-gen tech (HBM4E / DDR6 / CXL 4.0), supply-demand & pricing, 40-year cycle history', zh: '40 轮双平台模拟 · 80 个人格 · 213 节点知识图谱 · 厂商格局、新一代技术（HBM4E / DDR6 / CXL 4.0）、供需与价格、四十年周期史' },
     'card.cloud.title':   { en: 'Global cloud computing — the 2030 endgame', zh: '2030 年全球云计算竞争格局推演' },
@@ -113,7 +115,8 @@
     'run.ess.title':    { en: "China's energy storage & battery market in 2035", zh: '2035 年中国储能与电池市场' },
     'run.iran.title':   { en: 'How does the 2026 US–Iran war end?', zh: '2026 年美伊战争如何收场？' },
     'run.storage.title': { en: 'Storage semiconductors — the 2027–2028 outlook', zh: '2027—2028 年存储半导体前景预判' },
-    'run.cloud.title':   { en: 'Global cloud computing — the 2030 endgame', zh: '2030 年全球云计算竞争格局推演' }
+    'run.cloud.title':   { en: 'Global cloud computing — the 2030 endgame', zh: '2030 年全球云计算竞争格局推演' },
+    'run.collision.title': { en: 'The Collision Decade — Modern Mercantilism × AI, 2026–2031', zh: '碰撞的十年 —— 现代重商主义 × AI（2026–2031）' }
   };
 
   var lang = null;

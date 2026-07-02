@@ -48,6 +48,96 @@ ACTOR_TYPE_TO_LABEL = {
 RESERVED_ATTR_NAMES = {'uuid', 'name', 'group_id', 'name_embedding', 'summary', 'created_at'}
 
 
+# R2-KG-5: betweenness/articulation are O(V*E); skip the prior computation above this
+# node count so a pathologically large graph can never stall the (gated) post-build pass.
+# KG-3: 仅作 Config.GRAPH_CHOKEPOINT_MAX_NODES 缺失/非法时的兜底值（真正的旋钮在 Config）。
+_CHOKEPOINT_MAX_NODES = 1500
+
+
+def _brandes_betweenness(adj: Dict[Any, set]) -> Dict[Any, float]:
+    """R2-KG-5: unweighted betweenness centrality (Brandes' algorithm) on an
+    undirected adjacency map. O(V*E); caller caps V before invoking. Returns raw
+    (un-normalized) scores; the undirected pair double-count is halved here."""
+    import collections
+
+    CB: Dict[Any, float] = dict.fromkeys(adj, 0.0)
+    for s in adj:
+        S: List[Any] = []
+        P: Dict[Any, list] = {w: [] for w in adj}
+        sigma = dict.fromkeys(adj, 0.0)
+        sigma[s] = 1.0
+        dist = dict.fromkeys(adj, -1)
+        dist[s] = 0
+        Q = collections.deque([s])
+        while Q:
+            v = Q.popleft()
+            S.append(v)
+            for w in adj[v]:
+                if dist[w] < 0:
+                    Q.append(w)
+                    dist[w] = dist[v] + 1
+                if dist[w] == dist[v] + 1:
+                    sigma[w] += sigma[v]
+                    P[w].append(v)
+        delta = dict.fromkeys(adj, 0.0)
+        while S:
+            w = S.pop()
+            for v in P[w]:
+                if sigma[w]:
+                    delta[v] += (sigma[v] / sigma[w]) * (1.0 + delta[w])
+            if w != s:
+                CB[w] += delta[w]
+    for v in CB:
+        CB[v] /= 2.0  # undirected: each shortest path counted from both endpoints
+    return CB
+
+
+def _articulation_points(adj: Dict[Any, set]) -> set:
+    """R2-KG-5: articulation points (cut vertices) via iterative Tarjan DFS — nodes
+    whose removal disconnects the graph (structural chokepoints). Iterative to avoid
+    Python recursion limits on large graphs."""
+    visited: set = set()
+    disc: Dict[Any, int] = {}
+    low: Dict[Any, int] = {}
+    ap: set = set()
+    timer = 0
+    for start in adj:
+        if start in visited:
+            continue
+        root_children = 0
+        stack = [(start, None, iter(adj[start]))]  # frames: (node, parent, neighbor_iter)
+        visited.add(start)
+        disc[start] = low[start] = timer
+        timer += 1
+        while stack:
+            node, parent, it = stack[-1]
+            pushed = False
+            for nb in it:
+                if nb == parent:
+                    continue
+                if nb not in visited:
+                    visited.add(nb)
+                    disc[nb] = low[nb] = timer
+                    timer += 1
+                    if node == start:
+                        root_children += 1
+                    stack.append((nb, node, iter(adj[nb])))
+                    pushed = True
+                    break
+                else:
+                    low[node] = min(low[node], disc[nb])
+            if not pushed:
+                stack.pop()
+                if stack:
+                    par = stack[-1][0]
+                    low[par] = min(low[par], low[node])
+                    if par != start and low[node] >= disc[par]:
+                        ap.add(par)  # non-root articulation condition
+        if root_children > 1:
+            ap.add(start)
+    return ap
+
+
 def safe_attr_name(attr_name: str) -> str:
     """把保留名称转换为安全的节点属性名（与 set_ontology 内的局部实现口径一致）。
 
@@ -58,6 +148,71 @@ def safe_attr_name(attr_name: str) -> str:
     if attr_name and attr_name.lower() in RESERVED_ATTR_NAMES:
         return f"entity_{attr_name}"
     return attr_name
+
+
+def fold_priors_with_aliases(
+    priors: Optional[Dict[str, float]],
+    actors: Optional[Any],
+) -> Dict[str, float]:
+    """KG-7: 按 actors.json 的「策展别名组」折叠中心度先验，防止同一现实 actor 的
+    表面形（"TSM"/"TSMC"、"Trump"/别名）把影响力信号打碎成任意小的分片。
+
+    规则（GRAPH_PRIORS_ALIAS_FOLD，默认开）：
+    * 只认策展别名组 = actor 行的 name + aliases[]（归一名**精确**相等才算组员）。
+      刻意不做包含/启发式配对——"IEEEPA" vs "IEEPA-based tariffs"、"Trump"(人) vs
+      "Trump Administration"(机构) 在本体上是不同实体，MAX 折叠会错误抬高它们。
+    * 组内取 MAX，写回每个组员名下。ADD-only：已有键只升不降，别名缺键则补键，
+      旧消费者（simulation_manager 按归一名查 [0,1] 值）不受影响。
+    * 开关关闭 / 无 actors / 无先验时原样返回拷贝（degrade-safe）。
+    """
+    out: Dict[str, float] = dict(priors or {})
+    if not out or not getattr(Config, "GRAPH_PRIORS_ALIAS_FOLD", True):
+        return out
+    rows = extract_actor_rows(actors)
+    if not rows:
+        return out
+    # 归一名 → 原始 prior 键列表（同一归一名可能对应多个原始键，全部一起抬升）。
+    norm_index: Dict[str, List[str]] = {}
+    for k in out:
+        if isinstance(k, str):
+            nk = normalize_name(k)
+            if nk:
+                norm_index.setdefault(nk, []).append(k)
+    for row in rows:
+        members: List[str] = [str(row.get("name") or "")]
+        raw_aliases = row.get("aliases")
+        if isinstance(raw_aliases, list):
+            members.extend(a for a in raw_aliases if isinstance(a, str))
+        norm_members = {normalize_name(m) for m in members}
+        norm_members.discard("")
+        if len(norm_members) < 2:
+            continue  # 无别名 → 无可折叠
+        group_max = 0.0
+        for nm in norm_members:
+            for k in norm_index.get(nm, ()):
+                v = out.get(k)
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    group_max = max(group_max, float(v))
+        if group_max <= 0.0:
+            continue  # 组内无人带先验，无需补键
+        seen_norms: set = set()
+        for m in members:
+            nm = normalize_name(m)
+            if not nm or nm in seen_norms:
+                continue
+            seen_norms.add(nm)
+            keys = norm_index.get(nm)
+            if keys:
+                for k in keys:
+                    v = out.get(k)
+                    cur = float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else 0.0
+                    out[k] = max(cur, group_max)
+            else:
+                # 缺键的组员补键（消费者按 actor 名/别名查表时不再落空）。
+                mk = m.strip() or m
+                out[mk] = group_max
+                norm_index.setdefault(nm, []).append(mk)
+    return out
 
 
 @dataclass
@@ -75,6 +230,11 @@ class GraphInfo:
     # NEXTSTEPS P3-7：归一度数中心度先验 node_name→[0,1]（复用上面已算出的 degree，此前丢弃）。
     # 高中心度比原始提及数更能反映"谁是关键节点"——一个便宜且接地的影响力先验，供 salience 融合。
     centrality: Optional[Dict[str, float]] = None
+    # R2-KG-5（GRAPH_CHOKEPOINT_PRIORS，默认关）：度数中心度只看"邻居多不多"，看不出
+    # "谁卡在传导路径的咽喉"。betweenness = 归一化介数中心度 node_name→[0,1]；chokepoints =
+    # 介数高位 ∪ 关节点（移除即断图的桥接节点）。两者均为可选 ADD-only，关闭时为空。
+    betweenness: Optional[Dict[str, float]] = None
+    chokepoints: Optional[List[str]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -85,6 +245,8 @@ class GraphInfo:
             "components": self.components,
             "top_hubs": self.top_hubs or [],
             "centrality": self.centrality or {},
+            "betweenness": self.betweenness or {},
+            "chokepoints": self.chokepoints or [],
         }
 
 
@@ -101,6 +263,9 @@ class GraphBuilderService:
         
         self.client = Zep(api_key=self.api_key)
         self.task_manager = TaskManager()
+        # KG-5: 最近一次 add_text_batches 的落库记账（total/failed/succeeded），供编排器
+        # 把「部分文本块被跳过」写进 pipeline_state/health。None = 尚未跑过建图。
+        self.last_ingest_stats: Optional[Dict[str, int]] = None
     
     def build_graph_async(
         self,
@@ -402,10 +567,17 @@ class GraphBuilderService:
             # 把 sign/strength/grade 折进事实文本：边自带可检索的极性/强度/定级，无需改 Graphiti schema。
             fact = str(r.get("basis") or f"{src} {etype} {tgt}")
             sign, strength, grade = r.get("sign"), r.get("strength"), r.get("grade")
+            # R2-KG-3: fold the relationship's transmission LAG into the fact text so
+            # the seeded edge carries a retrievable lag the multi-hop traversal can
+            # surface+sum (a causal spine needs "how long until it propagates", not
+            # just "does it"). Only appended when the research row carries it, so
+            # rows without lag stay byte-identical.
+            lag = r.get("lag")
             extra = [p for p in (
                 (f"sign={sign}" if sign else None),
                 (f"strength={strength}" if strength else None),
                 (f"grade={grade}" if grade else None),
+                (f"lag={lag}" if lag not in (None, "") else None),
             ) if p]
             # C8（ONTOLOGY 富 schema）：把关系的价(valence)/极性(polarity)也折进事实文本，
             # 让种子边自带「盟友 != 对手 != 供应商」的可检索语义。仅在关系行**显式携带**
@@ -519,14 +691,15 @@ class GraphBuilderService:
         """
         episode_uuids = []
         total_chunks = len(chunks)
-        
+        failed_chunks = 0
+
         for i in range(0, total_chunks, batch_size):
             batch_chunks = chunks[i:i + batch_size]
             batch_num = i // batch_size + 1
             total_batches = (total_chunks + batch_size - 1) // batch_size
-            
+            progress = (i + len(batch_chunks)) / total_chunks
+
             if progress_callback:
-                progress = (i + len(batch_chunks)) / total_chunks
                 progress_callback(
                     f"发送第 {batch_num}/{total_batches} 批数据 ({len(batch_chunks)} 块)...",
                     progress
@@ -544,23 +717,53 @@ class GraphBuilderService:
                     graph_id=graph_id,
                     episodes=episodes
                 )
-                
-                # 收集返回的 episode uuid
+
+                # 收集返回的 episode uuid（add_batch 现已逐 episode 隔离失败：返回的条数
+                # 可能少于发送条数，差额即被跳过的坏 chunk）。
+                added = 0
                 if batch_result and isinstance(batch_result, list):
                     for ep in batch_result:
                         ep_uuid = getattr(ep, 'uuid_', None) or getattr(ep, 'uuid', None)
                         if ep_uuid:
                             episode_uuids.append(ep_uuid)
-                
+                            added += 1
+                failed_chunks += max(0, len(batch_chunks) - added)
+
                 # T2.6: 本地 FalkorDB 同步落库，无需限流停顿（纯死延迟）。仅远程后端保留。
                 if Config.GRAPHITI_REMOTE:
                     time.sleep(1)
 
             except Exception as e:
+                # RESILIENCE: 一整批失败（罕见——单 episode 失败已在 add_batch 内隔离）也不再
+                # 中断整个建图阶段：跳过该批、记账、继续。仅当「全部 chunk 都失败」时才在循环后
+                # 显式硬失败（见下），避免静默产出空图谱。
+                failed_chunks += len(batch_chunks)
+                logger.warning("[%s] 批次 %d/%d 抽取失败，已跳过: %s",
+                               graph_id, batch_num, total_batches, str(e)[:160])
                 if progress_callback:
-                    progress_callback(f"批次 {batch_num} 发送失败: {str(e)}", 0)
-                raise
-        
+                    progress_callback(f"批次 {batch_num} 跳过(失败): {str(e)[:80]}", progress)
+                continue
+
+        # KG-5: 记账落到实例（不改签名/返回值）：只丢一条 WARNING 时，30% 语料丢失的图谱
+        # 在 pipeline_state 里显示为全绿。编排器读 last_ingest_stats 即可量化 ingest 丢失
+        # （MiniMax 内容过滤 422 + claude-cli 兜底耗尽是当前主要失败形态）。
+        self.last_ingest_stats = {
+            "total": total_chunks,
+            "failed": failed_chunks,
+            "succeeded": len(episode_uuids),
+        }
+
+        # 硬护栏：所有文本块都抽取失败 → 不能静默产出空图谱（下游 prepare/模拟/报告会退化）。
+        # 明确失败，给出可诊断信息（最常见诱因：模型 JSON 输出异常/回显 schema）。
+        if total_chunks > 0 and not episode_uuids:
+            raise ValueError(
+                f"图谱构建失败：{total_chunks} 个文本块全部抽取失败（疑似模型 JSON 输出异常，"
+                f"如回显 schema）。请检查 LLM 提供方/模型是否能稳定产出结构化 JSON。"
+            )
+        if failed_chunks:
+            logger.warning("[%s] 建图完成但跳过了 %d/%d 个文本块（抽取失败）",
+                           graph_id, failed_chunks, total_chunks)
+
         return episode_uuids
     
     def _wait_for_episodes(
@@ -640,10 +843,28 @@ class GraphBuilderService:
                     sorted(degree.items(), key=lambda kv: -kv[1])[:5] if name_by_id.get(nid)]
         logger.info("[%s] graph integrity: nodes=%d edges=%d components=%d top_hubs=%s",
                     graph_id, len(nodes), len(edges), num_components, top_hubs)
-        warn_ratio = getattr(Config, "GRAPH_COMPONENT_WARN_RATIO", 0.5)
-        if node_ids and num_components > max(1, int(len(node_ids) * warn_ratio)):
-            logger.warning("[%s] possibly UNDER-MERGED entities: %d components over %d nodes",
-                           graph_id, num_components, len(node_ids))
+        try:
+            warn_ratio = float(getattr(Config, "GRAPH_COMPONENT_WARN_RATIO", 0.5))
+        except (TypeError, ValueError):
+            warn_ratio = 0.5
+        # KG-8: 旧的整数截断比较（> max(1, int(n*ratio))）在真实图上几乎永不触发（30 分量
+        # /132 节点已明显碎裂却只发 INFO）。改浮点比较，保留 >1 下限（单分量=完全连通不告警）。
+        # 阈值语义：分量数超过节点数×ratio 即告警；默认 ratio 仍偏松，建议经
+        # GRAPH_COMPONENT_WARN_RATIO 调低（0.2 可让上述 30/132 触发）。
+        if node_ids and num_components > 1 and num_components > len(node_ids) * warn_ratio:
+            # 附带最大的 3 个分量的枢纽名（分量内度数最高节点），让操作者看见「什么被断开了」。
+            comp_members: Dict[Any, List[Any]] = {}
+            for nid in node_ids:
+                comp_members.setdefault(_find(nid), []).append(nid)
+            top_comps = sorted(comp_members.values(), key=len, reverse=True)[:3]
+            comp_hubs = [
+                f"{name_by_id.get(max(m, key=lambda x: degree.get(x, 0)), '?')}(n={len(m)})"
+                for m in top_comps
+            ]
+            logger.warning(
+                "[%s] possibly UNDER-MERGED entities: %d components over %d nodes; "
+                "largest components' hubs: %s",
+                graph_id, num_components, len(node_ids), comp_hubs)
 
         # P3-7: 把已算出的度数转成 [0,1] 归一中心度先验（node_name→centrality），此前被丢弃。
         max_deg = max(degree.values()) if degree else 0
@@ -654,6 +875,55 @@ class GraphBuilderService:
                 if nm and d > 0:
                     centrality[nm] = max(centrality.get(nm, 0.0), round(d / max_deg, 4))
 
+        # R2-KG-5（GRAPH_CHOKEPOINT_PRIORS，默认关）：在已取的 nodes/edges 上算介数中心度 +
+        # 关节点，得到"谁卡在传导咽喉"的结构先验。纯内存、复用上面构造的连通信息；O(V*E) 故对
+        # 大图设节点上限（GRAPH_CHOKEPOINT_MAX_NODES，默认 1500）保护，超限则跳过（degrade-safe）。
+        betweenness: Dict[str, float] = {}
+        chokepoints: List[str] = []
+        if getattr(Config, "GRAPH_CHOKEPOINT_PRIORS", False) and node_ids and edges:
+            try:
+                # KG-3: O(V*E) 上限从 Config 读（GRAPH_CHOKEPOINT_MAX_NODES，默认 1500）——
+                # 此前注释声称可调但实际是模块常量；非法/缺失/非正值兜底到常量。
+                try:
+                    cap = int(getattr(Config, "GRAPH_CHOKEPOINT_MAX_NODES",
+                                      _CHOKEPOINT_MAX_NODES) or _CHOKEPOINT_MAX_NODES)
+                except (TypeError, ValueError):
+                    cap = _CHOKEPOINT_MAX_NODES
+                if cap <= 0:
+                    cap = _CHOKEPOINT_MAX_NODES
+                if len(node_ids) <= cap:
+                    adj: Dict[Any, set] = {nid: set() for nid in node_ids}
+                    for e in edges:
+                        s = getattr(e, "source_node_uuid", None)
+                        t = getattr(e, "target_node_uuid", None)
+                        if s in adj and t in adj and s != t:
+                            adj[s].add(t)
+                            adj[t].add(s)
+                    raw = _brandes_betweenness(adj)
+                    max_bc = max(raw.values()) if raw else 0.0
+                    if max_bc > 0:
+                        for nid, bc in raw.items():
+                            nm = name_by_id.get(nid, "")
+                            if nm and bc > 0:
+                                betweenness[nm] = max(betweenness.get(nm, 0.0), round(bc / max_bc, 4))
+                    aps = _articulation_points(adj)
+                    # chokepoints = 介数高位 ∪ 关节点（节点名，去重，按介数降序）
+                    choke_ids = set(aps) | {nid for nid, _ in
+                                            sorted(raw.items(), key=lambda kv: -kv[1])[:10]}
+                    seen: set = set()
+                    for nid in sorted(choke_ids, key=lambda x: -raw.get(x, 0.0)):
+                        nm = name_by_id.get(nid, "")
+                        if nm and nm not in seen:
+                            seen.add(nm)
+                            chokepoints.append(nm)
+                    logger.info("[%s] chokepoint priors: betweenness_nodes=%d articulation=%d",
+                                graph_id, len(betweenness), len(aps))
+                else:
+                    logger.info("[%s] chokepoint priors skipped: %d nodes over cap %d",
+                                graph_id, len(node_ids), cap)
+            except Exception as exc:  # noqa: BLE001 — priors are best-effort, never fail the build
+                logger.warning("[%s] chokepoint prior computation skipped: %s", graph_id, exc)
+
         return GraphInfo(
             graph_id=graph_id,
             node_count=len(nodes),
@@ -662,6 +932,8 @@ class GraphBuilderService:
             components=num_components,
             top_hubs=top_hubs,
             centrality=centrality,
+            betweenness=betweenness or None,
+            chokepoints=chokepoints or None,
         )
     
     def get_graph_data(self, graph_id: str) -> Dict[str, Any]:

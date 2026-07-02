@@ -77,15 +77,19 @@ class PlatformActionLogger:
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
-    def log_round_end(self, round_num: int, actions_count: int):
-        """记录轮次结束"""
+    def log_round_end(self, round_num: int, actions_count: int,
+                      simulated_hours: Optional[float] = None):
+        """记录轮次结束。simulated_hours=累计已模拟小时数——runner 的 round_end 对账
+        （simulation_runner state.simulated_hours）以此为唯一数据源，缺省则对账值恒为 0。"""
         entry = {
             "round": round_num,
             "timestamp": datetime.now().isoformat(),
             "event_type": "round_end",
             "actions_count": actions_count,
         }
-        
+        if simulated_hours is not None:
+            entry["simulated_hours"] = simulated_hours
+
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
@@ -251,7 +255,8 @@ class ActionLogger:
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
-    def log_round_end(self, round_num: int, actions_count: int, platform: str):
+    def log_round_end(self, round_num: int, actions_count: int, platform: str,
+                      simulated_hours: Optional[float] = None):
         entry = {
             "round": round_num,
             "timestamp": datetime.now().isoformat(),
@@ -259,7 +264,9 @@ class ActionLogger:
             "event_type": "round_end",
             "actions_count": actions_count,
         }
-        
+        if simulated_hours is not None:
+            entry["simulated_hours"] = simulated_hours
+
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     

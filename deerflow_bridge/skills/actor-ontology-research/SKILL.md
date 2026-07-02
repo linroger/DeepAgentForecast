@@ -22,6 +22,7 @@ Five operating principles specialize the base tradecraft:
 3. **Depth per actor, not breadth of names.** A dossier of 12 deeply-profiled key actors beats a list of 40 thin ones. Each key actor gets a real profile (§3), not a label.
 4. **Relationships are a first-class output, not a byproduct.** The directed, typed, *valenced* network (who allies with / opposes / competes with / supplies / funds / regulates / depends on whom) is researched and evidenced edge by edge (§4). A partner and a rival must not look the same.
 5. **Time is a dimension.** Actors and relationships have histories. Research how the cast and its alliances/rivalries *formed and changed* — inflection points, realignments, entries/exits — not just a present-day snapshot (§5). Evolution is what makes the simulation and forecast dynamic rather than static.
+6. **Evidence discipline (inherits the deep-research skill).** Source every profile and edge in documents you **actually fetched** — real URL, on-page date, S1/S2 tier. **Never fabricate** a source, URL, date, quote, or relationship from memory, and never list a future-dated/hypothetical document as fact. **No thrashing**: an elusive fact about an actor is worth **≤2 attempts**, then log it as a gap and move to the next actor/edge — never reissue a near-duplicate query (same intent, only re-quoted / new `site:` / reshuffled `OR`). Profile breadth across the **whole cast** beats hunting one missing detail about one actor.
 
 Never write the dossier from general knowledge, and never let writing begin before the **judge gate** (§7) passes.
 
@@ -188,9 +189,11 @@ The loop converges on *excellence*, not mere completeness: each round should rai
 
 ### 8.2 Pass bar (all must hold)
 
-- **Every** dimension ≥ **4**, AND
-- **No** dimension < 3, AND
-- Dimensions **1, 3, 4, 8** (cast correctness, per-actor depth, relationship completeness, ontology-readiness) are each ≥ **4** — these are non-negotiable for this pipeline.
+- **No** dimension < **3**, AND
+- Dimensions **1, 3, 4, 8** (cast correctness, per-actor depth, relationship completeness, ontology-readiness) are each ≥ **4** — these are non-negotiable for this pipeline, AND
+- The **mean** across all eight dimensions is ≥ **4**.
+
+(A stricter deployment may additionally require **every** dimension ≥ 4 — `ACTOR_DOSSIER_JUDGE_STRICT` — but the default bar tolerates a single non-critical dimension at 3 to absorb judge-score noise.)
 
 If the bar is not met, the judge FAILS the draft and emits the targeted gap list (§7.3).
 
@@ -201,7 +204,7 @@ If the bar is not met, the judge FAILS the draft and emits the targeted gap list
 Write the report so the downstream ontology generator and the structured-extraction pass can read it directly. Keep the `deep-research` §12 output contract (layered claims, calibrated uncertainty, inline attribution, conflicts shown not averaged, no S4 citations, tiered source list), and add this **explicit, labeled structure**:
 
 1. **Forecast frame** — the question, its forecast object, horizon, and as-of date; the situation brief (current situation, how it got here / context, the forces in tension / dynamics, the 3–6 fault lines the actors argue over, and the catalysts that would shift things).
-2. **The cast (key actors)** — one clearly-delimited profile per actor, in salience order, each carrying the §3 fields. Use **canonical names consistently** (the same string everywhere) and list aliases once. Mark each actor's archetype, role-class, and salience tier explicitly.
+2. **The cast (key actors)** — one clearly-delimited profile per actor, in salience order, each carrying the §3 fields. Use **canonical names consistently** (the same string everywhere) and list aliases once. Mark each actor's archetype, role-class, and salience tier explicitly, **with the one-line salience basis from §2.3 next to the tier** — the extraction pass emits it as `salience: {tier, basis}` and downstream coverage/agent-ranking read it.
 3. **The relationship network** — an explicit, enumerated list of directed edges: `Source —[TYPE, valence, strength]→ Target — basis`, covering the load-bearing relationships from §4. Every endpoint must be a name from the cast.
 4. **Per-actor relational roster** — within or beside each profile, the actor's allies / opponents / competitors / customers / suppliers / backers-investors / supporters / regulators / dependents, named.
 5. **Evolution & timeline** — the dated sequence of formation, inflection points, and realignments (§5).

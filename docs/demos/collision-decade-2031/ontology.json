@@ -1,0 +1,606 @@
+{
+ "entity_types": [
+  {
+   "name": "Government",
+   "description": "A sovereign state, executive, legislative/judicial branch, or supranational bloc directing trade,...",
+   "attributes": [
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "Primary territory or governance scope (e.g. US federal, PRC, EU, Taiwan)"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "Outcome-moving power: high/medium/low"
+    },
+    {
+     "name": "policy_stance",
+     "type": "text",
+     "description": "Mercantilist posture: aggressive/managed/defensive/hedging"
+    },
+    {
+     "name": "bloc_alignment",
+     "type": "text",
+     "description": "US-aligned / China-aligned / non-aligned-hedging"
+    }
+   ],
+   "examples": [
+    "US Federal Executive (Trump Administration)",
+    "People's Republic of China",
+    "European Union",
+    "US Congress & Supreme Court",
+    "Taiwan (Government)",
+    "Global South/Connectors"
+   ],
+   "archetype": "actor",
+   "simulation_tier": 1,
+   "role_class": "principal",
+   "selection_rule": "Instantiate for any state, government branch, court, or supranational bloc that can set tariffs, export controls, subsidies, or law affecting the collision; use for arbiter branches (SCOTUS/Congress) too.",
+   "anti_examples": [
+    "Yale Budget Lab",
+    "CSIS",
+    "CRS reports",
+    "the concept of sovereignty",
+    "tariff revenue"
+   ]
+  },
+  {
+   "name": "Organization",
+   "description": "A company, financial institution, AI lab, or corporate bloc that builds, supplies, finances, or i...",
+   "attributes": [
+    {
+     "name": "sector",
+     "type": "text",
+     "description": "e.g. AI-accelerators, foundry, hyperscale-cloud, memory/HBM, lithography, frontier-lab, central-bank"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "Outcome-moving power: high/medium/low"
+    },
+    {
+     "name": "home_jurisdiction",
+     "type": "text",
+     "description": "Country/region of domicile (e.g. US, Taiwan, China, Netherlands, South Korea)"
+    },
+    {
+     "name": "chokepoint_role",
+     "type": "text",
+     "description": "Whether it controls a supply chokepoint: foundry/lithography/HBM/none"
+    }
+   ],
+   "examples": [
+    "Nvidia",
+    "TSMC",
+    "US Hyperscalers",
+    "OpenAI/Stargate",
+    "US Federal Reserve",
+    "DeepSeek/Huawei/SMIC",
+    "South Korea chip complex",
+    "ASML"
+   ],
+   "archetype": "actor",
+   "simulation_tier": 1,
+   "role_class": "principal",
+   "selection_rule": "Instantiate for any firm, lab, bank, or corporate bloc that materially decides capex, chip supply, financing, or competes/supplies in the AI stack; central banks modeled here as arbiter organizations.",
+   "anti_examples": [
+    "CNBC",
+    "TrendForce",
+    "Bridgewater as cited source",
+    "the AI industry as an abstraction",
+    "compute scarcity"
+   ]
+  },
+  {
+   "name": "StrategicAsset",
+   "description": "A trackable physical or compute resource that is both a mercantilist prize and a chokepoint in th...",
+   "attributes": [
+    {
+     "name": "asset_class",
+     "type": "text",
+     "description": "e.g. AI-accelerator-chips, leading-edge-fab-capacity, HBM, EUV-tools, rare-earth-magnets, compute, electricity"
+    },
+    {
+     "name": "supply_concentration",
+     "type": "text",
+     "description": "How concentrated control is: monopoly/oligopoly/diffuse"
+    },
+    {
+     "name": "controlling_jurisdiction",
+     "type": "text",
+     "description": "Where the dominant supply/control sits"
+    }
+   ],
+   "examples": [
+    "Advanced AI GPUs (H20/Blackwell)",
+    "Leading-edge foundry capacity",
+    "High-bandwidth memory (HBM)",
+    "EUV lithography tools",
+    "Rare-earth/gallium/germanium & magnets"
+   ],
+   "archetype": "asset_object",
+   "simulation_tier": 4,
+   "role_class": "stakeholder",
+   "selection_rule": "Instantiate only for a concrete contested resource that actors fight to secure, deny, or reshore and that the material tracks as a chokepoint; not for abstract 'technology' or 'AI'.",
+   "anti_examples": [
+    "innovation",
+    "productivity",
+    "the AI boom",
+    "national power"
+   ]
+  },
+  {
+   "name": "PolicyInstrument",
+   "description": "A specific rule, tariff, control, or ownership mechanism through which states exert mercantilist ...",
+   "attributes": [
+    {
+     "name": "instrument_type",
+     "type": "text",
+     "description": "e.g. reciprocal-tariff, sectoral-tariff, export-control, revenue-share, golden-share, subsidy"
+    },
+    {
+     "name": "legal_authority",
+     "type": "text",
+     "description": "Statutory basis (e.g. IEEPA, Section-232, Section-301, Section-122, BIS)"
+    },
+    {
+     "name": "status",
+     "type": "text",
+     "description": "in-force/suspended/struck-down/pending/threatened"
+    }
+   ],
+   "examples": [
+    "IEEPA reciprocal tariffs",
+    "Section 232/301 tariffs",
+    "Advanced-chip export controls",
+    "Nvidia 25% China revenue-share",
+    "Rapidus golden-share equity"
+   ],
+   "archetype": "institution_rule",
+   "simulation_tier": 4,
+   "role_class": "arbiter",
+   "selection_rule": "Instantiate for a named, resolvable policy mechanism whose status change moves the forecast; not for the general idea of 'protectionism'.",
+   "anti_examples": [
+    "free trade",
+    "protectionism as ideology",
+    "regulation in general"
+   ]
+  },
+  {
+   "name": "MarketSignal",
+   "description": "A quantitative indicator that resolves forecasts and signals regime state (tariff, capex, financi...",
+   "attributes": [
+    {
+     "name": "metric_type",
+     "type": "text",
+     "description": "e.g. effective-tariff-rate, hyperscaler-capex, treasury-yield, credit-spread, data-center-power-share, productivity-growth"
+    },
+    {
+     "name": "current_reading",
+     "type": "text",
+     "description": "Latest as-of value or level"
+    },
+    {
+     "name": "trend",
+     "type": "text",
+     "description": "rising/falling/stable"
+    }
+   ],
+   "examples": [
+    "US effective tariff rate",
+    "Big-4 hyperscaler capex",
+    "10Y Treasury yield",
+    "AI-linked credit spreads",
+    "Data-center electricity demand"
+   ],
+   "archetype": "signal",
+   "simulation_tier": 4,
+   "role_class": "stakeholder",
+   "selection_rule": "Instantiate for a watchable, quantifiable indicator tied to a resolution criterion; not for the underlying actor or asset it measures.",
+   "anti_examples": [
+    "the economy",
+    "market sentiment",
+    "risk",
+    "bubble"
+   ]
+  },
+  {
+   "name": "GeopoliticalEvent",
+   "description": "A dated catalyst or flashpoint whose occurrence shifts the mercantilism-AI trajectory.",
+   "attributes": [
+    {
+     "name": "event_type",
+     "type": "text",
+     "description": "e.g. court-ruling, tariff-announcement, trade-truce, truce-expiry, military-contingency, capex-stress"
+    },
+    {
+     "name": "event_date",
+     "type": "text",
+     "description": "Occurrence or scheduled date (absolute)"
+    },
+    {
+     "name": "impact_direction",
+     "type": "text",
+     "description": "escalatory/de-escalatory/uncertain"
+    }
+   ],
+   "examples": [
+    "SCOTUS IEEPA ruling (Feb 20 2026)",
+    "Liberation Day tariffs (Apr 2025)",
+    "Trump-Xi truce (Oct-Nov 2025)",
+    "Nov 27 2026 truce expiry",
+    "Taiwan Strait contingency"
+   ],
+   "archetype": "event",
+   "simulation_tier": 4,
+   "role_class": "stakeholder",
+   "selection_rule": "Instantiate for a discrete, datable occurrence or scheduled flashpoint that catalyzes actor behavior; not for an ongoing condition or trend.",
+   "anti_examples": [
+    "the trade war",
+    "the AI race",
+    "decoupling",
+    "ongoing tension"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "SANCTIONS",
+   "description": "Source imposes tariffs, export controls, or entity-listing coercion on target.",
+   "source_targets": [
+    {
+     "source": "Government",
+     "target": "Government"
+    },
+    {
+     "source": "Government",
+     "target": "Organization"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/negative/neutral (typically negative)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low coercive intensity"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "When the sanction/control began"
+    },
+    {
+     "name": "instrument",
+     "type": "text",
+     "description": "Tariff / export-control / entity-list"
+    }
+   ],
+   "family": "antagonism",
+   "valence": "adversarial",
+   "direction_semantics": "source imposes the coercive restriction ON target (source is the sanctioning power)"
+  },
+  {
+   "name": "CONSTRAINS",
+   "description": "Source limits target's freedom of action via chokepoint leverage, denial, or binding conditions (...",
+   "source_targets": [
+    {
+     "source": "Government",
+     "target": "Government"
+    },
+    {
+     "source": "Government",
+     "target": "Organization"
+    },
+    {
+     "source": "Organization",
+     "target": "Organization"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/negative/neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low binding force"
+    },
+    {
+     "name": "sign",
+     "type": "text",
+     "description": "Direction of effect: negative (restricts) / positive (enables)"
+    },
+    {
+     "name": "lag",
+     "type": "text",
+     "description": "Time before the constraint bites: immediate/quarters/years"
+    }
+   ],
+   "family": "dependency",
+   "valence": "adversarial",
+   "direction_semantics": "source constrains/caps the options of target (source holds the leverage)"
+  },
+  {
+   "name": "PARTNERS_WITH",
+   "description": "Source and target enter a transactional truce, deal, or cooperative arrangement.",
+   "source_targets": [
+    {
+     "source": "Government",
+     "target": "Government"
+    },
+    {
+     "source": "Organization",
+     "target": "Government"
+    },
+    {
+     "source": "Organization",
+     "target": "Organization"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/negative/neutral (typically positive)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low durability"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Deal/truce start date"
+    },
+    {
+     "name": "durability",
+     "type": "text",
+     "description": "fragile/managed/durable"
+    }
+   ],
+   "family": "alignment",
+   "valence": "transactional",
+   "direction_semantics": "source and target are mutual counterparties; direction indicates the initiating party"
+  },
+  {
+   "name": "REGULATES",
+   "description": "Source exercises governance, licensing, or judicial authority over target.",
+   "source_targets": [
+    {
+     "source": "Government",
+     "target": "Organization"
+    },
+    {
+     "source": "Government",
+     "target": "Government"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/negative/neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low regulatory grip"
+    },
+    {
+     "name": "domain",
+     "type": "text",
+     "description": "export-licensing / antitrust / tariff-validity / statute"
+    }
+   ],
+   "family": "governance",
+   "valence": "directional",
+   "direction_semantics": "source holds regulatory/judicial authority OVER target (source rules on target)"
+  },
+  {
+   "name": "INFLUENCES",
+   "description": "Source shapes target's decisions through lobbying, pressure, or transmission without formal autho...",
+   "source_targets": [
+    {
+     "source": "Organization",
+     "target": "Government"
+    },
+    {
+     "source": "Government",
+     "target": "Government"
+    },
+    {
+     "source": "Organization",
+     "target": "Organization"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/negative/neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low sway"
+    },
+    {
+     "name": "channel",
+     "type": "text",
+     "description": "lobbying / political-pressure / financing-cost transmission"
+    }
+   ],
+   "family": "influence",
+   "valence": "directional",
+   "direction_semantics": "source exerts informal influence ON target's choices (source is the influencer)"
+  },
+  {
+   "name": "CUSTOMER_OF",
+   "description": "Source buys critical inputs/compute from target, creating demand-side dependence.",
+   "source_targets": [
+    {
+     "source": "Organization",
+     "target": "Organization"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/negative/neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low purchase dependence"
+    },
+    {
+     "name": "input_class",
+     "type": "text",
+     "description": "GPUs / foundry-capacity / HBM"
+    }
+   ],
+   "family": "economic",
+   "valence": "transactional",
+   "direction_semantics": "source is the buyer/customer of target (source purchases from target)"
+  },
+  {
+   "name": "COMPETES_WITH",
+   "description": "Source rivals target for market, capability, or supply position.",
+   "source_targets": [
+    {
+     "source": "Organization",
+     "target": "Organization"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/negative/neutral (typically negative)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low rivalry intensity"
+    },
+    {
+     "name": "arena",
+     "type": "text",
+     "description": "silicon / frontier-models / memory / foundry"
+    }
+   ],
+   "family": "antagonism",
+   "valence": "adversarial",
+   "direction_semantics": "symmetric rivalry between source and target; direction is nominal"
+  },
+  {
+   "name": "FUNDS",
+   "description": "Source provides capital/financing to target (capex, investment rounds).",
+   "source_targets": [
+    {
+     "source": "Organization",
+     "target": "Organization"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/negative/neutral (typically positive)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low capital commitment"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "When funding began"
+    }
+   ],
+   "family": "economic",
+   "valence": "transactional",
+   "direction_semantics": "source supplies capital TO target (source is the funder)"
+  },
+  {
+   "name": "BACKS",
+   "description": "Source (state) provides political/strategic support and protection to target champion.",
+   "source_targets": [
+    {
+     "source": "Government",
+     "target": "Organization"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/negative/neutral (typically positive)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low state support"
+    },
+    {
+     "name": "support_type",
+     "type": "text",
+     "description": "subsidy / strategic-protection / procurement"
+    }
+   ],
+   "family": "alignment",
+   "valence": "allied",
+   "direction_semantics": "source (patron state) backs target (national champion)"
+  },
+  {
+   "name": "INVESTS_IN",
+   "description": "Source commits capital/facilities into target's jurisdiction (e.g. reshoring FDI).",
+   "source_targets": [
+    {
+     "source": "Organization",
+     "target": "Government"
+    },
+    {
+     "source": "Organization",
+     "target": "Organization"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/negative/neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low commitment scale"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Commitment date"
+    },
+    {
+     "name": "amount_scale",
+     "type": "text",
+     "description": "Order of magnitude of the investment"
+    }
+   ],
+   "family": "economic",
+   "valence": "transactional",
+   "direction_semantics": "source directs investment INTO target's economy/jurisdiction (source is the investor)"
+  }
+ ],
+ "analysis_summary": "预测核心是2026–2031年'现代重商主义'与'AI资本/算力扩张'的碰撞及其赢家输家。角色阵容实证为 Organization×8、Government×6，故本体以种子类型 Government、Organization 为主干（覆盖全部14个能动主体：美行政、中国、欧盟、国会/最高法院、台湾、连接国等政府方，以及英伟达、台积电、超大规模云、OpenAI/Stargate、美联储、DeepSeek/华为/中芯、韩国存储、ASML等组织方），并按富本体指引新增4个非能动领域类型——StrategicAsset（芯片/算力/稀土/HBM/EUV等被争夺的咽喉资源）、PolicyInstrument（关税/出口管制/25%营收分成/黄金股等制度工具）、MarketSignal（有效关税率/资本开支/10年期收益率/信用利差/数据中心电力等可解算指标）、GeopoliticalEvent（IEEPA裁决/解放日关税/停火及11月27日到期/台海突发等催化事件），使被引用媒体与报告仍归为source而非能动actor。关系类型完整保留种子注入图谱的14条边（SANCTIONS/CONSTRAINS/PARTNERS_WITH/REGULATES/INFLUENCES/CUSTOMER_OF/COMPETES_WITH/FUNDS/BACKS/INVESTS_IN/ALLY_OF/OPPOSES/SUPPLIES/DEPENDS_ON），覆盖对抗、结盟、经济交易、治理、依赖与影响六大语义家族，并为CONSTRAINS等边补充sign/lag等因果属性、为关键边附sentiment/strength/since_date以支持下游typed检索与传导推演。"
+}

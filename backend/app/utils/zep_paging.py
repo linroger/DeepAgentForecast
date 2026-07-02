@@ -18,10 +18,28 @@ from .zep_rate_limit import is_zep_rate_limit_error, zep_retry_delay_seconds
 logger = get_logger('mirofish.zep_paging')
 
 _DEFAULT_PAGE_SIZE = 100
-_MAX_NODES = 2000
+# GRAPH-6: a ~400-episode corpus produces well over 2000 entity nodes; the old
+# hardcoded 2000 cap silently truncated the node read-back that feeds centrality,
+# component analysis, dedup and agent selection. The cap now reads
+# Config.GRAPH_MAX_NODES (default 8000) and the truncation is logged loudly.
+_MAX_NODES = 8000
 # F-4-4: 边数量普遍多于节点，单独设置上限（高于 _MAX_NODES），
 # 避免长/大型仿真把全部边无界载入内存并缓存。
 _MAX_EDGES = 10000
+
+
+def _resolve_max_nodes() -> int:
+    """GRAPH-6: resolve the node read-back cap from Config (default 8000).
+
+    Degrade-safe: a missing/bad Config value falls back to the module default.
+    """
+    try:
+        from ..config import Config
+
+        val = int(getattr(Config, "GRAPH_MAX_NODES", _MAX_NODES) or _MAX_NODES)
+        return max(1, val)
+    except Exception:  # noqa: BLE001 — config unavailable → conservative default
+        return _MAX_NODES
 _DEFAULT_MAX_RETRIES = 3
 _DEFAULT_RETRY_DELAY = 2.0  # seconds, doubles each retry
 _DEFAULT_RATE_LIMIT_BUFFER = 1.0
@@ -83,13 +101,20 @@ def fetch_all_nodes(
     client: Zep,
     graph_id: str,
     page_size: int = _DEFAULT_PAGE_SIZE,
-    max_items: int = _MAX_NODES,
+    max_items: int | None = None,
     max_retries: int = _DEFAULT_MAX_RETRIES,
     retry_delay: float = _DEFAULT_RETRY_DELAY,
     rate_limit_buffer: float = _DEFAULT_RATE_LIMIT_BUFFER,
     rate_limit_max_sleep: float = _DEFAULT_RATE_LIMIT_MAX_SLEEP,
 ) -> list[Any]:
-    """分页获取图谱节点，最多返回 max_items 条（默认 2000）。每页请求自带重试。"""
+    """分页获取图谱节点，最多返回 max_items 条。每页请求自带重试。
+
+    GRAPH-6: ``max_items=None`` (the default) resolves Config.GRAPH_MAX_NODES
+    (default 8000) at call time so the cap tracks config without a code change;
+    an explicit value still wins.
+    """
+    if max_items is None:
+        max_items = _resolve_max_nodes()
     all_nodes: list[Any] = []
     cursor: str | None = None
     page_num = 0

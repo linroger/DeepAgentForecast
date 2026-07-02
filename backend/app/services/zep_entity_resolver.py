@@ -70,6 +70,63 @@ def _primary_label(node: Dict[str, Any]) -> str:
     return labels[0] if labels else "Entity"
 
 
+def _node_aliases(node: Dict[str, Any]) -> set:
+    """R2-KG-8: normalized alias set for a graph node (best-effort, defensive).
+
+    Aliases let us merge surface forms with ZERO character overlap ('MSFT' vs
+    'Microsoft', '马斯克' vs 'Musk') that name-containment can never catch. We look
+    for an explicit ``aliases`` list on the node and on ``attributes`` (graphiti
+    stores extracted entity attributes there). Absent/garbage data → empty set, so
+    this branch is fully inert (no behavior change) on graphs without alias data.
+    """
+    out: set = set()
+    if not isinstance(node, dict):
+        return out
+    candidates: List[Any] = []
+    raw = node.get("aliases")
+    if isinstance(raw, list):
+        candidates.extend(raw)
+    attrs = node.get("attributes")
+    if isinstance(attrs, dict):
+        a2 = attrs.get("aliases")
+        if isinstance(a2, list):
+            candidates.extend(a2)
+        a3 = attrs.get("alias")
+        if isinstance(a3, str):
+            candidates.append(a3)
+    for a in candidates:
+        if isinstance(a, str):
+            na = normalize_name(a)
+            if na:
+                out.add(na)
+    return out
+
+
+def _alias_match(norm_a: str, norm_b: str, aliases_a: set, aliases_b: set) -> bool:
+    """R2-KG-8: explicit-alias equality between two nodes (all exact, no containment).
+
+    True iff one node's normalized name equals a curated alias of the other, or the
+    two nodes share a curated alias. Exactness keeps this high-precision so it can
+    serve as the 'exact signal' fallback when embeddings are unavailable.
+    """
+    if norm_a and aliases_b and norm_a in aliases_b:
+        return True
+    if norm_b and aliases_a and norm_b in aliases_a:
+        return True
+    if aliases_a and aliases_b and (aliases_a & aliases_b):
+        return True
+    return False
+
+
+def _labels_mergeable(label_a: str, label_b: str) -> bool:
+    """R2-KG-8: same primary label, OR one side is the generic 'Entity' (an untyped
+    duplicate of a typed node). Two DISTINCT typed labels are never directly
+    mergeable (over-merge guard); transitive bridging is blocked separately."""
+    if label_a == label_b:
+        return True
+    return "Entity" in (label_a, label_b)
+
+
 class _UnionFind:
     def __init__(self, n: int):
         self.parent = list(range(n))
@@ -90,11 +147,15 @@ def plan_merges(nodes: List[Dict[str, Any]], embeddings: Optional[List[List[floa
                 canonical_norms: set, threshold: float) -> List[Dict[str, Any]]:
     """Pure: cluster near-duplicate nodes and choose survivors. No graph access.
 
-    Returns [{survivor_uuid, survivor_name, primary_label, victims:[{uuid,name,similarity}]}].
-    A pair is mergeable iff: same primary label AND name-match (exact/containment)
-    AND (embedding cosine ≥ threshold when both embeddings exist, else exact-norm
-    match as a safe fallback) AND not both canonical. Components with ≥2 canonicals
-    are split so each canonical anchors its own cluster (never merge two canonicals).
+    Returns [{survivor_uuid, survivor_name, primary_label, cross_label,
+    victims:[{uuid,name,similarity,label}]}].
+    A pair is mergeable iff: labels mergeable (same primary label OR one is the
+    generic 'Entity') AND (name-match exact/containment OR explicit-alias match)
+    AND (embedding cosine ≥ threshold when both embeddings exist, else exact-norm /
+    exact-alias match as a safe fallback) AND not both DISTINCT canonical.
+    R2-KG-8: a generic-'Entity' bridge can never transitively merge two DISTINCT
+    typed labels (per-root typed-label set guard). Components with ≥2 canonicals are
+    split so each canonical anchors its own cluster (never merge two canonicals).
     """
     n = len(nodes)
     if n < 2:
@@ -102,32 +163,63 @@ def plan_merges(nodes: List[Dict[str, Any]], embeddings: Optional[List[List[floa
     emb = embeddings if (embeddings and len(embeddings) == n) else [None] * n
     norms = [normalize_name(nd.get("name", "")) for nd in nodes]
     labels = [_primary_label(nd) for nd in nodes]
+    aliases = [_node_aliases(nd) for nd in nodes]  # R2-KG-8: alias-aware matching
     is_canon = [norms[i] in canonical_norms and bool(norms[i]) for i in range(n)]
 
     uf = _UnionFind(n)
     sim_cache: Dict[tuple, float] = {}
+    # R2-KG-8: distinct typed (non-'Entity') labels per UF root. A union is refused
+    # if it would put two DISTINCT typed labels in one component, so an untyped
+    # 'Entity' duplicate can bridge to AT MOST one typed cluster (no over-merge).
+    typed_by_root: Dict[int, set] = {
+        i: ({labels[i]} if labels[i] != "Entity" else set()) for i in range(n)
+    }
+
+    def _try_union(a: int, b: int, cos: float) -> None:
+        key = (min(a, b), max(a, b))
+        ra, rb = uf.find(a), uf.find(b)
+        if ra == rb:
+            sim_cache[key] = round(cos, 4)
+            return
+        merged_typed = typed_by_root.get(ra, set()) | typed_by_root.get(rb, set())
+        if len(merged_typed) > 1:
+            return  # would bridge two DISTINCT typed labels → refuse (over-merge guard)
+        uf.union(a, b)
+        typed_by_root[uf.find(a)] = merged_typed
+        sim_cache[key] = round(cos, 4)
+
     for i in range(n):
         if not norms[i]:
             continue
         for j in range(i + 1, n):
-            if not norms[j] or labels[i] != labels[j]:
+            if not norms[j] or not _labels_mergeable(labels[i], labels[j]):
                 continue
             if is_canon[i] and is_canon[j] and norms[i] != norms[j]:
                 continue  # never merge two DISTINCT canonicals (same-canonical dups are fine)
-            if not _name_match(norms[i], norms[j]):
+            name_ok = _name_match(norms[i], norms[j])
+            alias_ok = _alias_match(norms[i], norms[j], aliases[i], aliases[j])
+            if not (name_ok or alias_ok):
                 continue
             cos = _cosine(emb[i], emb[j])
             if cos is None:
-                # no embeddings → safe fallback: require EXACT normalized match
-                if norms[i] != norms[j]:
+                # no embeddings → safe fallback: require an EXACT signal
+                # (exact normalized name OR explicit-alias match).
+                if norms[i] != norms[j] and not alias_ok:
                     continue
                 cos = 1.0
             elif cos < threshold:
                 continue
-            uf.union(i, j)
-            sim_cache[(i, j)] = round(cos, 4)
+            _try_union(i, j, cos)
 
-    # group component members
+    return _finalize_clusters(nodes, uf, n, is_canon, norms, labels, sim_cache)
+
+
+def _finalize_clusters(nodes, uf, n: int, is_canon: List[bool], norms: List[str],
+                       labels: List[str], sim_cache: Dict[tuple, float]) -> List[Dict[str, Any]]:
+    """Shared tail for both plan_merges (full) and plan_merges_fast: group union-find
+    components into clusters, split components that contain DISTINCT canonicals, pick a
+    survivor per cluster. Pure; no graph access. Identical to the original plan_merges
+    tail (extracted so the O(N) fast path can reuse it without duplicating the logic)."""
     comps: Dict[int, List[int]] = {}
     for i in range(n):
         comps.setdefault(uf.find(i), []).append(i)
@@ -155,34 +247,109 @@ def plan_merges(nodes: List[Dict[str, Any]], embeddings: Optional[List[List[floa
                 groups[norms[best_c]].append(m)
             for grp in groups.values():
                 if len(grp) >= 2:
-                    survivor = _pick_survivor(grp, is_canon, norms)
+                    survivor = _pick_survivor(grp, is_canon, norms, labels)
                     out.append(_make_cluster(nodes, survivor,
                                              [m for m in grp if m != survivor], _sim))
         else:
-            survivor = _pick_survivor(members, is_canon, norms)
+            survivor = _pick_survivor(members, is_canon, norms, labels)
             out.append(_make_cluster(nodes, survivor,
                                      [m for m in members if m != survivor], _sim))
     return out
 
 
-def _pick_survivor(members: List[int], is_canon: List[bool], norms: List[str]) -> int:
-    """Prefer a canonical member (longest among them); else the longest normalized
-    name. Tie-break by the name string so planning is deterministic."""
+def plan_merges_fast(nodes: List[Dict[str, Any]], embeddings: Optional[List[List[float]]],
+                     canonical_norms: set, threshold: float) -> List[Dict[str, Any]]:
+    """O(N) duplicate clustering for LARGE graphs — bucket by EXACT normalized name and
+    by shared explicit alias, union within buckets (still embedding-gated + canonical-
+    protected + label-mergeable), then finalize. Skips the O(N²) containment+cosine scan
+    that wedges plan_merges on big node sets. Catches the highest-value duplicates (the
+    same surface form appearing many times) without the all-pairs blow-up. Pure."""
+    from collections import defaultdict
+    n = len(nodes)
+    if n < 2:
+        return []
+    emb = embeddings if (embeddings and len(embeddings) == n) else [None] * n
+    norms = [normalize_name(nd.get("name", "")) for nd in nodes]
+    labels = [_primary_label(nd) for nd in nodes]
+    aliases = [_node_aliases(nd) for nd in nodes]
+    is_canon = [norms[i] in canonical_norms and bool(norms[i]) for i in range(n)]
+
+    uf = _UnionFind(n)
+    sim_cache: Dict[tuple, float] = {}
+    typed_by_root: Dict[int, set] = {
+        i: ({labels[i]} if labels[i] != "Entity" else set()) for i in range(n)
+    }
+
+    def _try_union(a: int, b: int, cos: float) -> None:
+        key = (min(a, b), max(a, b))
+        ra, rb = uf.find(a), uf.find(b)
+        if ra == rb:
+            sim_cache[key] = round(cos, 4)
+            return
+        merged_typed = typed_by_root.get(ra, set()) | typed_by_root.get(rb, set())
+        if len(merged_typed) > 1:
+            return
+        uf.union(a, b)
+        typed_by_root[uf.find(a)] = merged_typed
+        sim_cache[key] = round(cos, 4)
+
+    # Build candidate buckets: exact normalized name, plus each explicit alias key.
+    buckets: Dict[str, List[int]] = defaultdict(list)
+    for i in range(n):
+        if norms[i]:
+            buckets[norms[i]].append(i)
+        for al in aliases[i]:
+            buckets[al].append(i)
+
+    for idxs in buckets.values():
+        if len(idxs) < 2:
+            continue
+        base = idxs[0]
+        for k in idxs[1:]:
+            a, b = base, k
+            if not _labels_mergeable(labels[a], labels[b]):
+                continue
+            if is_canon[a] and is_canon[b] and norms[a] != norms[b]:
+                continue  # never merge two DISTINCT canonicals
+            cos = _cosine(emb[a], emb[b])
+            if cos is None:
+                cos = 1.0  # no embeddings → exact bucket match is itself the exact signal
+            elif cos < threshold:
+                continue
+            _try_union(a, b, cos)
+
+    return _finalize_clusters(nodes, uf, n, is_canon, norms, labels, sim_cache)
+
+
+def _pick_survivor(members: List[int], is_canon: List[bool], norms: List[str],
+                   labels: List[str]) -> int:
+    """Prefer a canonical member; among equals prefer a TYPED label over the generic
+    'Entity' (R2-KG-8: a cross-label merge keeps the entity's type on the survivor);
+    then the longest normalized name. Tie-break by name string for determinism."""
     canon = [m for m in members if is_canon[m]]
     pool = canon if canon else members
-    return min(pool, key=lambda m: (-len(norms[m]), norms[m]))
+    return min(pool, key=lambda m: (0 if labels[m] != "Entity" else 1,
+                                    -len(norms[m]), norms[m]))
 
 
 def _make_cluster(nodes, survivor: int, victims: List[int], sim_fn) -> Dict[str, Any]:
+    surv_label = _primary_label(nodes[survivor])
+    victim_rows = []
+    cross_label = False
+    for v in victims:
+        vlabel = _primary_label(nodes[v])
+        if vlabel != surv_label:
+            cross_label = True  # R2-KG-8: audit cross-label merges in entity_merges.json
+        victim_rows.append({
+            "uuid": nodes[v]["uuid"], "name": nodes[v]["name"],
+            "similarity": sim_fn(survivor, v), "label": vlabel,
+        })
     return {
         "survivor_uuid": nodes[survivor]["uuid"],
         "survivor_name": nodes[survivor]["name"],
-        "primary_label": _primary_label(nodes[survivor]),
-        "victims": [
-            {"uuid": nodes[v]["uuid"], "name": nodes[v]["name"],
-             "similarity": sim_fn(survivor, v)}
-            for v in victims
-        ],
+        "primary_label": surv_label,
+        "cross_label": cross_label,
+        "victims": victim_rows,
     }
 
 
@@ -214,7 +381,19 @@ def resolve_entities(graph_id: str, actors: Any, threshold: Optional[float] = No
         logger.warning("resolve_entities: embedding failed, exact-norm only: %s", exc)
         embeddings = None
 
-    plan = plan_merges(nodes, embeddings, canonical_norm_set(actors), threshold)
+    # Bound the O(N²) all-pairs containment+cosine scan: it is a pure-Python CPU wall on
+    # large node sets (observed: 100% CPU / multi-GB wedge in this step on a big graph).
+    # Above GRAPH_RESOLVE_MAX_NODES, fall back to the O(N) exact-norm/alias fast path —
+    # still merges the highest-value exact duplicates, never wedges. Small graphs keep the
+    # full containment refinement (byte-identical to before).
+    cap = int(getattr(Config, "GRAPH_RESOLVE_MAX_NODES", 1200) or 1200)
+    canon = canonical_norm_set(actors)
+    if cap > 0 and len(nodes) > cap:
+        logger.info("resolve_entities[%s]: %d nodes > cap %d → O(N) exact-name/alias fast path "
+                    "(skipping O(N²) containment refinement)", graph_id, len(nodes), cap)
+        plan = plan_merges_fast(nodes, embeddings, canon, threshold)
+    else:
+        plan = plan_merges(nodes, embeddings, canon, threshold)
 
     merged = 0
     for cluster in plan:

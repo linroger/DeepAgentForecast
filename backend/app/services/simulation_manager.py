@@ -240,7 +240,11 @@ class SimulationManager:
         progress_callback: Optional[callable] = None,
         parallel_profile_count: int = 3,
         actors: Optional[Dict[str, Any]] = None,
-        graph_priors: Optional[Dict[str, float]] = None
+        graph_priors: Optional[Dict[str, float]] = None,
+        # PREP-1/PREP-4: 编排器把 options.max_rounds 与 research_language 透传到配置生成——
+        # 定时事件按真实执行窗排期、英文调研自动切 global_market 画像/英文人设。None=旧行为。
+        max_rounds: Optional[int] = None,
+        research_language: Optional[str] = None,
     ) -> SimulationState:
         """
         准备模拟环境（全程自动化）
@@ -430,7 +434,12 @@ class SimulationManager:
                 )
             
             # 传入graph_id以启用Zep检索功能，获取更丰富的上下文
-            generator = OasisProfileGenerator(graph_id=state.graph_id)
+            # PREP-4(2): 英文调研 → 人设生成默认英文（persona_language='en'）；否则 None=
+            # 生成器自己的探测逻辑，行为不变。
+            generator = OasisProfileGenerator(
+                graph_id=state.graph_id,
+                persona_language=("en" if str(research_language or "").strip().lower().startswith("en") else None),
+            )
             
             def profile_progress(current, total, msg):
                 if progress_callback:
@@ -527,7 +536,9 @@ class SimulationManager:
                 entities=filtered.entities,
                 enable_twitter=state.enable_twitter,
                 enable_reddit=state.enable_reddit,
-                actors=actors  # 深度研究档案（可选）：实证立场/热点/时间线进配置
+                actors=actors,  # 深度研究档案（可选）：实证立场/热点/时间线进配置
+                max_rounds=max_rounds,  # PREP-1: 定时事件按真实执行轮数窗排期
+                research_language=research_language,  # PREP-4: 英文调研→global_market 画像
             )
             
             if progress_callback:
