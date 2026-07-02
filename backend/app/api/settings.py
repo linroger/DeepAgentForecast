@@ -12,7 +12,6 @@
 import shutil
 import subprocess
 import time
-import traceback
 
 from flask import jsonify, request
 
@@ -47,7 +46,7 @@ def set_llm_settings():
         return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         logger.error(f"切换提供方失败: {e}", exc_info=True)
-        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+        return jsonify({"success": False, "error": "internal server error"}), 500
 
 
 # 测试用最小请求：固定一条只要求回 "pong" 的消息，max_tokens 很小、显式关闭推理，
@@ -80,6 +79,13 @@ def _test_openai_compat_provider(provider, api_key, base_url, model):
     if not api_key:
         return {"ok": False, "error": "API key required — enter a key to test."}
 
+    # SSRF 防护（EXECPLAN2 F-13-2）：拒绝指向云元数据/链路本地等地址的 base_url。
+    from ..utils.security import validate_safe_url
+    try:
+        validate_safe_url(base_url, block_private=Config.APP_BLOCK_PRIVATE_URLS)
+    except ValueError as e:
+        return {"ok": False, "error": f"refused base_url: {e}"}
+
     from openai import OpenAI
 
     client_kwargs = {
@@ -102,6 +108,11 @@ def _test_openai_compat_provider(provider, api_key, base_url, model):
     extra_body = Config._DISABLE_THINKING_EXTRA_BODY.get(provider)
     if extra_body:
         kwargs["extra_body"] = extra_body
+    # Kimi K2.7 Code 网关硬校验温度（开推理只接受 1、关推理只接受 0.6），temperature=0 会 400。
+    # 与 LLMClient._coerce_temperature 同源，否则前端「测试连接」会把 kimi 误报为失败。
+    if provider == 'kimi':
+        thinking_disabled = bool(extra_body and (extra_body.get("thinking") or {}).get("type") == "disabled")
+        kwargs["temperature"] = 0.6 if thinking_disabled else 1.0
 
     started = time.monotonic()
     try:
@@ -115,13 +126,13 @@ def _test_openai_compat_provider(provider, api_key, base_url, model):
             429: "rate limited — key works, but quota is exhausted",
         }
         hint = hints.get(status) if isinstance(status, int) else None
-        msg = str(e)
-        if len(msg) > 300:
-            msg = msg[:300] + '…'
+        # 不把上游 SDK 异常原文回显给客户端（可能含内部 URL/路径，EXECPLAN2 F-8-5）。
+        # 仅返回映射后的提示；原始异常记到服务端日志。
+        logger.warning(f"连通性测试失败 provider={provider} status={status}: {e}")
         return {
             "ok": False,
             "status_code": status,
-            "error": (f"{hint} — " if hint else "") + msg,
+            "error": hint or "connection test failed — check API key / Base URL / model name",
         }
     latency_ms = int((time.monotonic() - started) * 1000)
     content = ''
@@ -173,4 +184,4 @@ def test_llm_settings():
         return jsonify({"success": True, "data": result})
     except Exception as e:
         logger.error(f"LLM 连通性测试失败: {e}", exc_info=True)
-        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+        return jsonify({"success": False, "error": "internal server error"}), 500

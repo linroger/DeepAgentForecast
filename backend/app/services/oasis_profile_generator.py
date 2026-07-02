@@ -9,6 +9,7 @@ OASIS Agent Profile生成器
 """
 
 import json
+import os
 import random
 import time
 from typing import Dict, Any, List, Optional
@@ -18,7 +19,15 @@ from datetime import datetime
 from .graphiti_client import Zep
 
 from ..config import Config
-from ..utils.actors import actor_briefing, match_actor, relationship_briefing
+from ..utils.actors import (
+    actor_briefing,
+    behavioral_dna_block,
+    influence_weight,
+    match_actor,
+    relationship_briefing,
+    roster_block,
+)
+from ..utils.atomic import write_text_atomic, write_json_atomic  # EXECPLAN2 F-5-0/F-5-1 原子写
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .zep_entity_reader import EntityNode, ZepEntityReader
@@ -57,7 +66,16 @@ class OasisAgentProfile:
     source_entity_type: Optional[str] = None
     
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
-    
+
+    # PREP-8: 人设生成路径（"llm" / "rule" / "rule_fallback" / "error_stub"），
+    # 用于统计静默降级的比例——不进入任何平台产物（reddit/twitter 写入器不读它）。
+    generation_path: str = "llm"
+
+    # NEXTSTEPS SIM_PERSONA_DESIGN: 结构化人格设计（逐角色情境工程的产物）。
+    # 仅对匹配到调研档案的真实角色生成；字段见 OasisProfileGenerator.PERSONA_DESIGN_KEYS。
+    # 无档案/开关关闭 → None（to_dict/reddit 产物省略，schema 与旧版逐字节一致）。
+    persona_design: Optional[Dict[str, Any]] = None
+
     def to_reddit_format(self) -> Dict[str, Any]:
         """转换为Reddit平台格式"""
         profile = {
@@ -118,7 +136,7 @@ class OasisAgentProfile:
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为完整字典格式"""
-        return {
+        data = {
             "user_id": self.user_id,
             "user_name": self.user_name,
             "name": self.name,
@@ -138,6 +156,11 @@ class OasisAgentProfile:
             "source_entity_type": self.source_entity_type,
             "created_at": self.created_at,
         }
+        # NEXTSTEPS SIM_PERSONA_DESIGN: 结构化人格设计随档持久化到 other_info，
+        # 供下游（决策通道/遥测）核查阵容的认知多样性；缺失即省略（旧 schema 不变）。
+        if self.persona_design:
+            data["other_info"] = {"persona_design": self.persona_design}
+        return data
 
 
 class OasisProfileGenerator:
@@ -174,19 +197,51 @@ class OasisProfileGenerator:
     
     # 群体/机构类型实体（需要生成群体代表人设）
     GROUP_ENTITY_TYPES = [
-        "university", "governmentagency", "organization", "ngo", 
+        "university", "governmentagency", "organization", "ngo",
         "mediaoutlet", "company", "institution", "group", "community"
     ]
-    
+
+    # EXECPLAN2 I-1-5: 社会关系类边类型——用于 ego 网检索的 edge_types 过滤，
+    # 让 persona 的「实际位置」只聚焦立场/结盟/对抗等关系边（而非随机事实边）。
+    # 与 utils/actors.py 的关系类型表 / 本体 edge_types 命名保持一致。
+    RELATIONSHIP_EDGE_TYPES = [
+        "ALLY_OF", "OPPOSES", "COMPETES_WITH", "REGULATES",
+        "DEPENDS_ON", "PARTNERS_WITH", "INFLUENCES",
+    ]
+
+    # NEXTSTEPS SIM_PERSONA_DESIGN: 结构化人格设计的字段契约。每个字段都必须是对该真实
+    # 角色调研实证（档案立场/记忆、行为 DNA、关系网、局势简报）的提炼——禁止发明档案外的
+    # 立场或事实。认知多样性来自真实角色本身的差异，而非人为指派的分析流派。
+    PERSONA_DESIGN_KEYS = (
+        "identity",               # 它是谁、在体系中的角色定位
+        "views_beliefs",          # 世界观与对当前局势的解读（它认为什么是真的）
+        "incentives",             # 不同结果下的得失、正在优化的目标函数
+        "objectives",             # 目标与策略路径
+        "relations",              # 盟友/对手/依赖对象及原因（据调研关系数据）
+        "constraints_red_lines",  # 约束与红线
+        "decision_style",         # 决策风格（如何权衡、行动节奏）
+        "rhetoric",               # 典型公开话术特征
+    )
+
     def __init__(
-        self, 
+        self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model_name: Optional[str] = None,
         zep_api_key: Optional[str] = None,
         graph_id: Optional[str] = None,
-        provider: Optional[str] = None
+        provider: Optional[str] = None,
+        persona_language: Optional[str] = None
     ):
+        # PREP-4(2): persona 语言口径。显式传入优先（'en'/'English' → 英文人设）；未传时，
+        # 若显式设置了非中文活动画像（SIM_ACTIVITY_PROFILE=us_business/global_market），
+        # personas 跟随英文。默认（不传 + 未设 env）→ None，提示词与产物逐字节不变。
+        if persona_language is None:
+            _env_profile = str(os.environ.get("SIM_ACTIVITY_PROFILE", "") or "").strip().lower()
+            if _env_profile in ("us_business", "global_market"):
+                persona_language = "en"
+        self.persona_language = persona_language
+
         self.provider = (provider or Config.LLM_PROVIDER or "claude-cli").lower()
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
@@ -253,15 +308,38 @@ class OasisProfileGenerator:
                 actor=actor,
                 actors=actors,
             )
+            # PREP-8: LLM 3 次尝试全败时 _generate_profile_with_llm 会静默退回规则模板，
+            # 此前对任何健康门不可见——这里读出并剥离路径标记，落到 profile 上供聚合统计。
+            generation_path = str(profile_data.pop("_generation_path", "llm") or "llm")
         else:
-            # 使用规则生成基础人设
+            # 使用规则生成基础人设（带研究 actor 覆盖）
             profile_data = self._generate_profile_rule_based(
                 entity_name=name,
                 entity_type=entity_type,
                 entity_summary=entity.summary,
-                entity_attributes=entity.attributes
+                entity_attributes=entity.attributes,
+                actor=actor,
+                actors=actors,
             )
-        
+            generation_path = "rule"
+
+        # QUALITY-OPT C5: person-only demographics (age/gender/MBTI) are nonsensical on
+        # organization/government/asset nodes (the corpus had Samsung profiled as "MBTI ISTJ,
+        # age 30, country 中国"). For non-individual entities, drop them so the agent reads as the
+        # institutional actor it is, not a fabricated person. Individuals keep them.
+        # XRUN-10(c): country is intentionally KEPT for non-individuals — the prompt now derives
+        # it from the entity's actual nationality/HQ (TSMC→台湾), which matters in geopolitics sims.
+        is_individual = self._is_individual_entity(entity_type)
+        age = profile_data.get("age") if is_individual else None
+        gender = profile_data.get("gender") if is_individual else None
+        mbti = profile_data.get("mbti") if is_individual else None
+
+        # NEXTSTEPS SIM_PERSONA_DESIGN: 结构化人格设计从 profile_data 剥离到独立字段
+        # （不留在自由 kv 里），非法形状（非 dict/空）→ None（产物 schema 不变）。
+        persona_design = profile_data.pop("persona_design", None)
+        if not isinstance(persona_design, dict) or not persona_design:
+            persona_design = None
+
         return OasisAgentProfile(
             user_id=user_id,
             user_name=user_name,
@@ -272,16 +350,18 @@ class OasisProfileGenerator:
             friend_count=profile_data.get("friend_count", random.randint(50, 500)),
             follower_count=profile_data.get("follower_count", random.randint(100, 1000)),
             statuses_count=profile_data.get("statuses_count", random.randint(100, 2000)),
-            age=profile_data.get("age"),
-            gender=profile_data.get("gender"),
-            mbti=profile_data.get("mbti"),
+            age=age,
+            gender=gender,
+            mbti=mbti,
             country=profile_data.get("country"),
             profession=profile_data.get("profession"),
             interested_topics=profile_data.get("interested_topics", []),
             source_entity_uuid=entity.uuid,
             source_entity_type=entity_type,
+            generation_path=generation_path,
+            persona_design=persona_design,
         )
-    
+
     def _generate_username(self, name: str) -> str:
         """生成用户名"""
         # 移除特殊字符，转换为小写
@@ -324,13 +404,18 @@ class OasisProfileGenerator:
             return results
         
         comprehensive_query = f"关于{entity_name}的所有信息、活动、事件、关系和背景"
-        
+
+        # EXECPLAN2 F-5-4: 重试预算与退避改由 Config 驱动（默认收紧到 2 次/0.5s 起步），
+        # 显著削减 Zep 抖动时的串行退避延迟；这是 best-effort 富集，失败即降级空上下文。
+        # 缺失 Config 字段时回退旧行为（3 次 / 2.0s），保持向后兼容。
+        max_retries = max(1, int(getattr(Config, "PROFILE_ZEP_SEARCH_MAX_RETRIES", 3)))
+        base_delay = float(getattr(Config, "PROFILE_ZEP_SEARCH_RETRY_DELAY_SECONDS", 2.0))
+
         def search_edges():
             """搜索边（事实/关系）- 带重试机制"""
-            max_retries = 3
             last_exception = None
-            delay = 2.0
-            
+            delay = base_delay
+
             for attempt in range(max_retries):
                 try:
                     return self.zep_client.graph.search(
@@ -349,13 +434,12 @@ class OasisProfileGenerator:
                     else:
                         logger.debug(f"Zep边搜索在 {max_retries} 次尝试后仍失败: {e}")
             return None
-        
+
         def search_nodes():
             """搜索节点（实体摘要）- 带重试机制"""
-            max_retries = 3
             last_exception = None
-            delay = 2.0
-            
+            delay = base_delay
+
             for attempt in range(max_retries):
                 try:
                     return self.zep_client.graph.search(
@@ -410,16 +494,173 @@ class OasisProfileGenerator:
             if results["node_summaries"]:
                 context_parts.append("相关实体:\n" + "\n".join(f"- {s}" for s in results["node_summaries"][:10]))
             results["context"] = "\n\n".join(context_parts)
-            
+
+            # EXECPLAN2 I-1-2: 给人设附上「群体身份」(in/out-group)，让 agent 能基于派系归属
+            # 推理（图谱社区检测的产物）。默认关（GRAPH_COMMUNITY_RETRIEVAL）→ 不附加，逐字节一致。
+            if getattr(Config, "GRAPH_COMMUNITY_RETRIEVAL", False):
+                try:
+                    grp = self._community_for_entity(entity_name)
+                    if grp:
+                        block = f"群体身份: 属于派系「{grp.get('name', '')}」。{(grp.get('summary') or '')[:300]}".strip()
+                        results["context"] = (results["context"] + "\n\n" + block).strip()
+                        results["community"] = grp.get("name")
+                except Exception as e:
+                    logger.debug(f"社区身份附加失败 ({entity_name}): {e}")
+
             logger.info(f"Zep混合检索完成: {entity_name}, 获取 {len(results['facts'])} 条事实, {len(results['node_summaries'])} 个相关节点")
             
         except concurrent.futures.TimeoutError:
             logger.warning(f"Zep检索超时 ({entity_name})")
         except Exception as e:
             logger.warning(f"Zep检索失败 ({entity_name}): {e}")
-        
+
         return results
-    
+
+    def _community_for_entity(self, entity_name: str) -> Optional[Dict[str, Any]]:
+        """EXECPLAN2 I-1-2: 找出实体所属社区（带实例缓存，避免每个实体都重新拉取全部社区）。
+
+        匹配复用 actors.normalize_name 的规范化 + 双向包含（≥2 字符），与实体消解/actor 匹配
+        口径一致。任一步失败/无果返回 None（调用方据此跳过群体身份块，无回归）。
+        """
+        if not entity_name or not self.graph_id:
+            return None
+        if getattr(self, "_communities_cache", None) is None:
+            try:
+                from .graphiti_client.runtime import get_runtime
+                self._communities_cache = get_runtime().list_communities(self.graph_id) or []
+            except Exception as e:
+                logger.debug(f"社区列表获取失败: {e}")
+                self._communities_cache = []
+        from ..utils.actors import normalize_name
+        target = normalize_name(entity_name)
+        if not target:
+            return None
+        for c in self._communities_cache:
+            for m in (c.get("members") or []):
+                mn = normalize_name(m)
+                if not mn:
+                    continue
+                if mn == target or (len(target) >= 2 and (target in mn or mn in target)):
+                    return c
+        return None
+
+    def _resolve_entity_uuid(self, entity: EntityNode) -> Optional[str]:
+        """EXECPLAN2 I-1-5: 解析实体到图谱节点 uuid（ego 网检索的中心节点）。
+
+        优先用实体自带的 uuid（来自 ZepEntityReader 的筛选/枚举，已是规范节点）；
+        缺失时退化到按名字搜索 nodes，取与实体名最匹配的 top 结果。任一步失败/无果
+        返回 None —— 调用方据此降级回当前的名字关键词检索（无回归）。
+        """
+        # 实体通常已携带规范 uuid，直接复用，省一次网络往返。
+        if getattr(entity, "uuid", None):
+            return entity.uuid
+
+        if not self.zep_client or not self.graph_id:
+            return None
+
+        try:
+            node_result = self.zep_client.graph.search(
+                query=entity.name,
+                graph_id=self.graph_id,
+                limit=5,
+                scope="nodes",
+                reranker="rrf",
+            )
+        except Exception as e:
+            logger.debug(f"解析实体 uuid 失败（按名搜索 nodes）: {entity.name}: {str(e)[:80]}")
+            return None
+
+        nodes = getattr(node_result, "nodes", None) or []
+        if not nodes:
+            return None
+
+        # 先取精确同名节点；否则退化到 top-1（reranker 已按相关度排序）。
+        target = entity.name.strip().lower()
+        for node in nodes:
+            if (getattr(node, "name", "") or "").strip().lower() == target:
+                uuid = getattr(node, "uuid_", None) or getattr(node, "uuid", None)
+                if uuid:
+                    return uuid
+        top = nodes[0]
+        return getattr(top, "uuid_", None) or getattr(top, "uuid", None)
+
+    def _retrieve_ego_network(self, entity: EntityNode, center_uuid: str) -> List[str]:
+        """EXECPLAN2 I-1-5: 以 center_node_uuid 为中心检索 ego 网（图距离重排）。
+
+        相比 `_search_zep_for_entity` 的名字关键词检索，这里以解析出的节点 uuid 为中心
+        做 node-distance 重排的边检索，并用 RELATIONSHIP_EDGE_TYPES 过滤，得到「最近的
+        N 个邻居 + 连接它们的关系边」。同时会拾取模拟反馈写回的新关系边（静态 actors.json
+        关系块拿不到的涌现拓扑）。返回已格式化的若干行，供 persona 提示词使用。
+
+        注意：底层 search facade 当提案 1（center_node_uuid / search_filter 透传）落地后，
+        这两个参数才真正生效并做图距离重排；在此之前 facade 会忽略它们（不报错），此路径
+        默认关闭（PERSONA_EGO_RETRIEVAL=false），故不会引入回归。
+        """
+        if not self.zep_client or not self.graph_id or not center_uuid:
+            return []
+
+        # 复用 _search_zep_for_entity 的重试预算配置（保持一致的退避/超时行为）。
+        max_retries = max(1, int(getattr(Config, "PROFILE_ZEP_SEARCH_MAX_RETRIES", 3)))
+        base_delay = float(getattr(Config, "PROFILE_ZEP_SEARCH_RETRY_DELAY_SECONDS", 2.0))
+        # 邻居上限（控制每实体一次额外检索的延迟/噪声）。缺失则默认 10。
+        max_neighbors = max(1, int(getattr(Config, "PERSONA_EGO_MAX_NEIGHBORS", 10)))
+
+        search_filter = {"edge_types": self.RELATIONSHIP_EDGE_TYPES}
+        last_exception = None
+        delay = base_delay
+        edge_result = None
+
+        for attempt in range(max_retries):
+            try:
+                edge_result = self.zep_client.graph.search(
+                    query=entity.name,
+                    graph_id=self.graph_id,
+                    limit=max_neighbors,
+                    scope="edges",
+                    reranker="node_distance",          # 提案 1 落地后生效：按图距离重排
+                    center_node_uuid=center_uuid,       # 提案 1 落地后生效：ego 网中心
+                    search_filter=search_filter,        # 仅保留关系类边
+                )
+                break
+            except Exception as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    logger.debug(
+                        f"Zep ego 网检索第 {attempt + 1} 次失败: {str(e)[:80]}, 重试中..."
+                    )
+                    time.sleep(delay)
+                    delay *= 2
+                else:
+                    logger.debug(f"Zep ego 网检索在 {max_retries} 次尝试后仍失败: {e}")
+
+        if edge_result is None:
+            if last_exception is not None:
+                logger.debug(f"ego 网检索降级（{entity.name}）: {last_exception}")
+            return []
+
+        edges = getattr(edge_result, "edges", None) or []
+        center_name = entity.name.strip()
+        lines: List[str] = []
+        seen = set()
+        for edge in edges:
+            fact = (getattr(edge, "fact", "") or "").strip()
+            edge_name = (getattr(edge, "name", "") or "").strip()
+            line = fact if fact else (
+                f"{center_name} --[{edge_name}]--> (关系网邻居)" if edge_name else ""
+            )
+            if not line or line in seen:
+                continue
+            seen.add(line)
+            lines.append(line)
+            if len(lines) >= max_neighbors:
+                break
+
+        if lines:
+            logger.info(
+                f"ego 网检索完成: {center_name}, 获取 {len(lines)} 条关系网邻居边"
+            )
+        return lines
+
     def _build_entity_context(self, entity: EntityNode) -> str:
         """
         构建实体的完整上下文信息
@@ -492,8 +733,18 @@ class OasisProfileGenerator:
                 context_parts.append("### 关联实体信息\n" + "\n".join(related_info))
         
         # 4. 使用Zep混合检索获取更丰富的信息
-        zep_results = self._search_zep_for_entity(entity)
-        
+        # EXECPLAN2 F-5-4: 实体已自带 related_edges/related_nodes 上下文时跳过这次冗余的 Zep 二次检索
+        # （省掉每实体一次网络往返 + 嵌套线程池 + 抖动时的串行退避）。默认开启（PROFILE_ZEP_SKIP_WHEN_CONTEXT=true）；
+        # 关闭或冷上下文（既无边也无邻居节点）时仍走原有检索路径，保持富集能力不降级。
+        skip_zep = bool(getattr(Config, "PROFILE_ZEP_SKIP_WHEN_CONTEXT", False)) and bool(
+            entity.related_edges or entity.related_nodes
+        )
+        if skip_zep:
+            zep_results = {"facts": [], "node_summaries": [], "context": ""}
+            logger.debug(f"跳过Zep二次检索（实体已自带上下文）: {entity.name}")
+        else:
+            zep_results = self._search_zep_for_entity(entity)
+
         if zep_results.get("facts"):
             # 去重：排除已存在的事实
             new_facts = [f for f in zep_results["facts"] if f not in existing_facts]
@@ -502,9 +753,37 @@ class OasisProfileGenerator:
         
         if zep_results.get("node_summaries"):
             context_parts.append("### Zep检索到的相关节点\n" + "\n".join(f"- {s}" for s in zep_results["node_summaries"][:10]))
-        
+
+        # 5. EXECPLAN2 I-1-5: ego 网检索——以解析出的节点 uuid 为中心做图距离重排的关系边检索，
+        # 把「你在关系网中的实际位置」（最近邻居 + 关系边，含模拟反馈写回的涌现边）注入 persona，
+        # 与上面静态的研究关系块互补。默认关闭（PERSONA_EGO_RETRIEVAL=false）以满足可降级不变式：
+        # 关闭、解析不到 uuid、或检索无果时均回退到当前行为，无回归。
+        if bool(getattr(Config, "PERSONA_EGO_RETRIEVAL", False)):
+            try:
+                center_uuid = self._resolve_entity_uuid(entity)
+                if center_uuid:
+                    ego_lines = self._retrieve_ego_network(entity, center_uuid)
+                    if ego_lines:
+                        context_parts.append(
+                            "## 你在关系网中的实际位置\n"
+                            + "\n".join(f"- {line}" for line in ego_lines)
+                        )
+                else:
+                    logger.debug(f"ego 网检索跳过（未解析到节点 uuid）: {entity.name}")
+            except Exception as e:
+                # best-effort 富集，失败即降级，绝不影响主流程。
+                logger.debug(f"ego 网检索异常（{entity.name}）: {str(e)[:80]}")
+
         return "\n\n".join(context_parts)
     
+    def _english_persona(self) -> bool:
+        """PREP-4(2): 本次 persona 是否用英文口径（提示词语言 + country 缺省）。
+
+        __new__ 构造的实例（测试）无 persona_language 属性 → getattr 缺省 → False，行为不变。
+        """
+        lang = str(getattr(self, "persona_language", "") or "").strip().lower()
+        return lang.startswith("en")
+
     def _is_individual_entity(self, entity_type: str) -> bool:
         """判断是否是个人类型实体"""
         return entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES
@@ -512,7 +791,149 @@ class OasisProfileGenerator:
     def _is_group_entity(self, entity_type: str) -> bool:
         """判断是否是群体/机构类型实体"""
         return entity_type.lower() in self.GROUP_ENTITY_TYPES
-    
+
+    def _persona_design_enabled(self) -> bool:
+        """NEXTSTEPS SIM_PERSONA_DESIGN: 逐角色情境工程开关（默认开）。
+
+        config.py 归另一分桶所有——用 getattr 读取（字段不存在 → 默认 True）；
+        置 false 时提示词与产物与旧版逐字节一致（可降级不变式）。
+        """
+        raw = getattr(Config, "SIM_PERSONA_DESIGN", True)
+        return str(raw).strip().lower() not in ("false", "0", "no", "off")
+
+    def _build_persona_design_block(self) -> str:
+        """NEXTSTEPS SIM_PERSONA_DESIGN: 人格设计指令块（拼在提示词尾部，与实证档案同区）。
+
+        该实体是真实世界的行动者（如国家/公司/政府/机构/个人）——要求同一次 LLM 调用把
+        调研档案里关于它的一切提炼为结构化 persona_design，并让 persona 正文体现这份设计。
+        """
+        return (
+            "## 人格设计（逐角色情境工程，全部字段必须落在上方调研实证之内）\n"
+            "该实体是现实世界中的真实行动者。除上述字段外，额外输出一个 persona_design 对象，"
+            "把调研档案中关于它的一切提炼为结构化人格设计，字段（每项为 1-3 句纯文本字符串）：\n"
+            "- identity: 它是谁、在这个体系中的角色定位\n"
+            "- views_beliefs: 它的世界观与对当前局势的解读（它认为什么是真的）\n"
+            "- incentives: 它在不同结果下的得与失、正在优化的目标函数\n"
+            "- objectives: 它的目标与策略路径\n"
+            "- relations: 盟友/对手/依赖对象及其原因（严格依据上方关系网实证）\n"
+            "- constraints_red_lines: 它受到的约束与不可逾越的红线\n"
+            "- decision_style: 决策风格（如何权衡取舍、行动节奏）\n"
+            "- rhetoric: 典型公开话术特征\n"
+            "铁律：只允许提炼上方调研实证（实证档案/行为DNA/关系网/局势简报），"
+            "绝不发明档案之外的立场或事实；立场以实证档案为准。persona 正文必须体现（embody）"
+            "这份设计——以该角色自己的视角写出它的身份、信念、得失、目标、关系、红线、"
+            "决策风格与话术。"
+        )
+
+    def _normalize_persona_design(
+        self,
+        raw: Any,
+        actor: Optional[Dict[str, Any]],
+        entity_name: str,
+        actors: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, str]]:
+        """把 LLM 产出的 persona_design 规整为字段契约。
+
+        规则：只保留 PERSONA_DESIGN_KEYS 白名单键；list → '；' 连接；空值/未知键丢弃。
+        LLM 未产出或产出为空 → 退回 _design_from_actor 的规则提炼（保证有档案的
+        真实角色必有设计，degrade-safe）。
+        """
+        out: Dict[str, str] = {}
+        if isinstance(raw, dict):
+            for key in self.PERSONA_DESIGN_KEYS:
+                val = raw.get(key)
+                if isinstance(val, list):
+                    val = "；".join(str(x).strip() for x in val if str(x).strip())
+                text = str(val or "").strip()
+                if text:
+                    out[key] = text
+        if out:
+            return out
+        return self._design_from_actor(actor, entity_name, actors=actors)
+
+    def _design_from_actor(
+        self,
+        actor: Optional[Dict[str, Any]],
+        entity_name: str,
+        actors: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, str]]:
+        """从调研档案确定性提炼 persona_design（无 LLM 调用，规则回退路径也可用）。
+
+        逐字段映射档案实证：role/worldview.identity → identity；stance/beliefs/frame →
+        views_beliefs；incentives 的 driver/gains_if/loses_if → incentives；goals →
+        objectives；roster_block（去掉标题行）→ relations；constraints/vulnerabilities →
+        constraints_red_lines；risk_tolerance → decision_style；stated_vs_revealed →
+        rhetoric。档案为空或全字段缺失 → None。
+        """
+        if not isinstance(actor, dict) or not actor:
+            return None
+
+        def _joined(value: Any, limit: int = 4) -> str:
+            if isinstance(value, list):
+                return "；".join(str(x).strip() for x in value[:limit] if str(x).strip())
+            return str(value or "").strip()
+
+        worldview = actor.get("worldview") if isinstance(actor.get("worldview"), dict) else {}
+
+        identity = "；".join(s for s in (
+            str(actor.get("role", "") or "").strip(),
+            str(worldview.get("identity", "") or "").strip(),
+        ) if s)
+
+        views = "；".join(s for s in (
+            str(actor.get("stance", "") or "").strip(),
+            _joined(worldview.get("beliefs")),
+            str(worldview.get("frame", "") or "").strip(),
+        ) if s)
+
+        incentive_parts: List[str] = []
+        raw_incentives = actor.get("incentives")
+        for inc in (raw_incentives if isinstance(raw_incentives, list) else [])[:4]:
+            if isinstance(inc, dict):
+                driver = str(inc.get("driver", "") or "").strip()
+                gains = str(inc.get("gains_if", "") or "").strip()
+                loses = str(inc.get("loses_if", "") or "").strip()
+                bits = [b for b in (
+                    driver,
+                    f"得益于「{gains}」" if gains else "",
+                    f"受损于「{loses}」" if loses else "",
+                ) if b]
+                if bits:
+                    incentive_parts.append("，".join(bits))
+            else:
+                text = str(inc or "").strip()
+                if text:
+                    incentive_parts.append(text)
+
+        relations = ""
+        if actors is not None:
+            try:
+                roster = roster_block(entity_name, actors)
+                if roster and "\n" in roster:
+                    # 去掉「## 关系网角色…」标题行，压成一行紧凑关系描述。
+                    relations = roster.split("\n", 1)[1].replace("- ", "").replace("\n", "；")
+            except Exception:  # noqa: BLE001 — 关系提炼失败不影响其余字段
+                relations = ""
+
+        constraints = "；".join(s for s in (
+            _joined(actor.get("constraints"), 3),
+            _joined(actor.get("vulnerabilities"), 3),
+        ) if s)
+
+        risk = str(actor.get("risk_tolerance", "") or "").strip()
+        design = {
+            "identity": identity,
+            "views_beliefs": views,
+            "incentives": "；".join(incentive_parts),
+            "objectives": _joined(actor.get("goals")),
+            "relations": relations,
+            "constraints_red_lines": constraints,
+            "decision_style": f"风险偏好：{risk}" if risk else "",
+            "rhetoric": str(actor.get("stated_vs_revealed", "") or "").strip(),
+        }
+        design = {k: v for k, v in design.items() if v}
+        return design or None
+
     def _generate_profile_with_llm(
         self,
         entity_name: str,
@@ -539,6 +960,16 @@ class OasisProfileGenerator:
         # T3.1: 该 actor 的社会关系网（命名真实盟友/对手），让 persona 在互动时
         # 知道该 @ 谁、与谁结盟/对立——联盟形成不再是随机涌现。
         rel_block = relationship_briefing(entity_name, actors)
+        # C6: 行为 DNA（价值观/信念/激励得失/资源/风险偏好）+ 结构化关系网角色（按盟友/
+        # 对手/客户/供应商/出资方等分桶命名真实对手方），让 persona 提示词从「立场标签」升级为
+        # GEMINI 式的「你是 X；你的激励是…；你相信…；你对立 Y 并依赖 Z」。受 PERSONA_BEHAVIORAL_DNA
+        # 控制（默认开）。CRITICAL: 当 actor 不带任何新字段时（今天的数据），两个 helper 均返回空串，
+        # 拼接为 no-op，提示词与今日逐字节一致。
+        dna_block = ""
+        roster_struct_block = ""
+        if getattr(Config, "PERSONA_BEHAVIORAL_DNA", True):
+            dna_block = behavioral_dna_block(actor)
+            roster_struct_block = roster_block(entity_name, actors)
 
         if is_individual:
             prompt = self._build_individual_persona_prompt(
@@ -560,6 +991,12 @@ class OasisProfileGenerator:
                     prompt = f"【共同背景·局势简报（调研实证）】{seg}\n\n" + prompt
 
         # 关系网与实证档案都拼在提示词尾部（不进入 context[:3000] 截断区），hub actor 的关系块永不被截。
+        # C6: 行为 DNA（人格底座）先于关系块注入——让 persona 先确立稳定的价值观/激励/风险偏好，
+        # 再叠加「你与谁结盟/对立/供货」的关系网角色；二者均在 actor 不带新字段时为空串（no-op）。
+        if dna_block:
+            prompt += f"\n\n{dna_block}"
+        if roster_struct_block:
+            prompt += f"\n\n{roster_struct_block}"
         if rel_block:
             prompt += f"\n\n{rel_block}"
         if actor_block:
@@ -569,6 +1006,16 @@ class OasisProfileGenerator:
                 "persona 的「立场观点」必须与档案立场一致，"
                 "「个人记忆/机构记忆」必须涵盖档案中的已知事实/记忆。"
             )
+
+        # NEXTSTEPS SIM_PERSONA_DESIGN: 对匹配到调研档案的真实角色做逐角色情境工程——同一次
+        # LLM 调用里额外产出结构化 persona_design，并要求 persona 正文体现这份设计。认知多样性
+        # 来自真实角色本身的差异（各自的调研档案），而非人为指派的分析流派。无档案/开关关闭 →
+        # 不拼指令块，提示词与产物与旧版逐字一致（可降级不变式）。
+        design_requested = (
+            self._persona_design_enabled() and isinstance(actor, dict) and bool(actor)
+        )
+        if design_requested:
+            prompt += f"\n\n{self._build_persona_design_block()}"
 
         # 尝试多次生成，直到成功或达到最大重试次数
         max_attempts = 3
@@ -594,16 +1041,32 @@ class OasisProfileGenerator:
                         result["bio"] = entity_summary[:200] if entity_summary else f"{entity_type}: {entity_name}"
                     if "persona" not in result or not result["persona"]:
                         result["persona"] = entity_summary or f"{entity_name}是一个{entity_type}。"
-                    
+
+                    # NEXTSTEPS SIM_PERSONA_DESIGN: 规整结构化设计（白名单键/list 拼接/空值剔除）；
+                    # LLM 漏产 → 从档案确定性提炼兜底。未请求设计时剔除幻觉键，保持旧 schema。
+                    if design_requested:
+                        result["persona_design"] = self._normalize_persona_design(
+                            result.get("persona_design"), actor, entity_name, actors=actors
+                        )
+                    else:
+                        result.pop("persona_design", None)
+
                     return result
-                    
+
                 except json.JSONDecodeError as je:
                     logger.warning(f"JSON解析失败 (attempt {attempt+1}): {str(je)[:80]}")
-                    
+
                     # 尝试修复JSON
                     result = self._try_fix_json(content, entity_name, entity_type, entity_summary)
                     if result.get("_fixed"):
                         del result["_fixed"]
+                        # NEXTSTEPS SIM_PERSONA_DESIGN: 修复路径同样规整/兜底结构化设计。
+                        if design_requested:
+                            result["persona_design"] = self._normalize_persona_design(
+                                result.get("persona_design"), actor, entity_name, actors=actors
+                            )
+                        else:
+                            result.pop("persona_design", None)
                         return result
                     
                     last_error = je
@@ -615,9 +1078,13 @@ class OasisProfileGenerator:
                 time.sleep(1 * (attempt + 1))  # 指数退避
         
         logger.warning(f"LLM生成人设失败（{max_attempts}次尝试）: {last_error}, 使用规则生成")
-        return self._generate_profile_rule_based(
-            entity_name, entity_type, entity_summary, entity_attributes
+        # PREP-8: 标记静默降级路径，由 generate_profile_from_entity 剥离并聚合到运行级统计。
+        fallback_data = self._generate_profile_rule_based(
+            entity_name, entity_type, entity_summary, entity_attributes,
+            actor=actor, actors=actors,
         )
+        fallback_data["_generation_path"] = "rule_fallback"
+        return fallback_data
     
     def _fix_truncated_json(self, content: str) -> str:
         """修复被截断的JSON（输出被max_tokens限制截断）"""
@@ -710,6 +1177,14 @@ class OasisProfileGenerator:
     
     def _get_system_prompt(self, is_individual: bool) -> str:
         """获取系统提示词"""
+        # PREP-4(2): 英文口径下人设语言与调研语言一致，避免中文 persona 驱动英文帖子的错位；
+        # 默认（非英文口径）与历史措辞逐字节一致。
+        if self._english_persona():
+            return (
+                "你是社交媒体用户画像生成专家。生成详细、真实的人设用于舆论模拟,最大程度还原已有现实情况。"
+                "必须返回有效的JSON格式，所有字符串值不能包含未转义的换行符。"
+                "人设文本与调研语言一致：本次使用英文（English）撰写 bio/persona。"
+            )
         base_prompt = "你是社交媒体用户画像生成专家。生成详细、真实的人设用于舆论模拟,最大程度还原已有现实情况。必须返回有效的JSON格式，所有字符串值不能包含未转义的换行符。使用中文。"
         return base_prompt
     
@@ -722,10 +1197,37 @@ class OasisProfileGenerator:
         context: str
     ) -> str:
         """构建个人实体的详细人设提示词"""
-        
+
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "无"
         context_str = context[:3000] if context else "无额外上下文"
-        
+
+        # XRUN-10(a/b): 结构化字段从档案/上下文抽取而非套默认值（Lutnick 档案写明 ENTJ 却落
+        # ISTJ；US Congress 落 country 中国）。示例国家去掉「中国」锚定；无法推断的字段省略、
+        # 不编造。PERSONA_FIELD_EXTRACTION=false → 回到旧措辞。
+        if getattr(Config, "PERSONA_FIELD_EXTRACTION", True):
+            demo_fields = (
+                '3. age: 年龄数字（整数；优先从档案/上下文推断，无法推断则省略，不要编造）\n'
+                '4. gender: 性别，必须是英文: "male" 或 "female"（无法判断则省略）\n'
+                '5. mbti: MBTI类型（仅当档案/上下文可推断该人物性格时填写，如档案写明"MBTI偏向ENTJ"则填ENTJ；无法推断则省略，不要编造）\n'
+                '6. country: 国家/地区（填该人物的实际国籍或常驻地，从档案/上下文推断；无法判断则省略，不要编造）'
+            )
+            demo_rule = '- 给出的age必须是有效整数，gender必须是"male"或"female"；无依据的字段宁可省略，不要编造'
+        else:
+            demo_fields = (
+                '3. age: 年龄数字（必须是整数）\n'
+                '4. gender: 性别，必须是英文: "male" 或 "female"\n'
+                '5. mbti: MBTI类型（如INTJ、ENFP等）\n'
+                '6. country: 国家（使用中文，如"中国"）'
+            )
+            demo_rule = '- age必须是有效的整数，gender必须是"male"或"female"'
+
+        # PREP-4(2): 英文口径下 bio/persona 与调研语言一致；默认与历史措辞逐字一致。
+        lang_rule = (
+            "- bio/persona 使用英文撰写（与调研语言一致；gender字段用英文male/female）"
+            if self._english_persona()
+            else "- 使用中文（除了gender字段必须用英文male/female）"
+        )
+
         return f"""为实体生成详细的社交媒体用户人设,最大程度还原已有现实情况。
 
 实体名称: {entity_name}
@@ -747,19 +1249,21 @@ class OasisProfileGenerator:
    - 立场观点（对话题的态度、可能被激怒/感动的内容）
    - 独特特征（口头禅、特殊经历、个人爱好）
    - 个人记忆（人设的重要部分，要介绍这个个体与事件的关联，以及这个个体在事件中的已有动作与反应）
-3. age: 年龄数字（必须是整数）
-4. gender: 性别，必须是英文: "male" 或 "female"
-5. mbti: MBTI类型（如INTJ、ENFP等）
-6. country: 国家（使用中文，如"中国"）
+{demo_fields}
 7. profession: 职业
 8. interested_topics: 感兴趣话题数组
+
+可选字段（若上下文足以推断则补充，否则省略，不要编造）:
+- values: 核心价值观数组（驱动其判断的底层价值，如"言论自由""国家安全"）
+- beliefs: 核心信念数组（其对该议题的基本预设/世界观）
+- incentives: 激励结构数组，每项为对象 {{"driver": 动机, "gains_if": 何事得益, "loses_if": 何事受损}}
 
 重要:
 - 所有字段值必须是字符串或数字，不要使用换行符
 - persona必须是一段连贯的文字描述
-- 使用中文（除了gender字段必须用英文male/female）
+{lang_rule}
 - 内容要与实体信息保持一致
-- age必须是有效的整数，gender必须是"male"或"female"
+{demo_rule}
 """
 
     def _build_group_persona_prompt(
@@ -771,10 +1275,24 @@ class OasisProfileGenerator:
         context: str
     ) -> str:
         """构建群体/机构实体的详细人设提示词"""
-        
+
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "无"
         context_str = context[:3000] if context else "无额外上下文"
-        
+
+        # XRUN-10(b/c): 机构 country 按总部/主要管辖地推断（TSMC→台湾），不再以「中国」示例
+        # 锚定。PERSONA_FIELD_EXTRACTION=false → 回到旧措辞。
+        country_field = (
+            '6. country: 机构总部或主要管辖所在国家/地区（按实际情况从档案/上下文推断；无法判断则省略，不要编造）'
+            if getattr(Config, "PERSONA_FIELD_EXTRACTION", True)
+            else '6. country: 国家（使用中文，如"中国"）'
+        )
+        # PREP-4(2): 英文口径下 bio/persona 与调研语言一致；默认与历史措辞逐字一致。
+        lang_rule = (
+            '- bio/persona 使用英文撰写（与调研语言一致；gender字段固定英文"other"）'
+            if self._english_persona()
+            else '- 使用中文（除了gender字段必须用英文"other"）'
+        )
+
         return f"""为机构/群体实体生成详细的社交媒体账号设定,最大程度还原已有现实情况。
 
 实体名称: {entity_name}
@@ -799,14 +1317,19 @@ class OasisProfileGenerator:
 3. age: 固定填30（机构账号的虚拟年龄）
 4. gender: 固定填"other"（机构账号使用other表示非个人）
 5. mbti: MBTI类型，用于描述账号风格，如ISTJ代表严谨保守
-6. country: 国家（使用中文，如"中国"）
+{country_field}
 7. profession: 机构职能描述
 8. interested_topics: 关注领域数组
+
+可选字段（若上下文足以推断则补充，否则省略，不要编造）:
+- values: 机构核心价值观数组（如"行业自律""公共利益"）
+- beliefs: 机构对该议题的官方信念/立场预设数组
+- incentives: 激励结构数组，每项为对象 {{"driver": 动机, "gains_if": 何事得益, "loses_if": 何事受损}}
 
 重要:
 - 所有字段值必须是字符串或数字，不允许null值
 - persona必须是一段连贯的文字描述，不要使用换行符
-- 使用中文（除了gender字段必须用英文"other"）
+{lang_rule}
 - age必须是整数30，gender必须是字符串"other"
 - 机构账号发言要符合其身份定位"""
     
@@ -815,10 +1338,68 @@ class OasisProfileGenerator:
         entity_name: str,
         entity_type: str,
         entity_summary: str,
+        entity_attributes: Dict[str, Any],
+        actor: Optional[Dict[str, Any]] = None,
+        actors: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """规则人设；当匹配到深度研究 actor 时，用调研实证（角色/立场/动机/社会关系网/
+        影响力）覆盖通用模板，让非 LLM 路径也产出有据可依的角色，而非泛泛的「业内专家」。
+
+        actor 缺失时行为与旧实现完全一致（返回纯类型模板）。
+        """
+        base = self._rule_based_base(entity_name, entity_type, entity_summary, entity_attributes)
+        if not isinstance(actor, dict) or not actor:
+            return base
+
+        overlay: Dict[str, Any] = {}
+        role = str(actor.get("role", "") or "").strip()
+        stance = str(actor.get("stance", "") or "").strip()
+        if role or stance:
+            overlay["bio"] = (f"{role}；立场：{stance}" if (role and stance) else (role or stance))[:200]
+
+        # persona 叠加：调研档案（角色/立场/动机/软肋）+ 社会关系网（命名真实对手方）。
+        brief = actor_briefing(actor)
+        rels = relationship_briefing(entity_name, actors) if actors else ""
+        grounded = "\n\n".join(p for p in (brief, rels) if p)
+        if grounded:
+            base_persona = str(base.get("persona", "") or "").strip()
+            overlay["persona"] = (base_persona + "\n\n" + grounded).strip() if base_persona else grounded
+
+        # 影响力 → follower/karma 确定性缩放（取代纯随机），让研究的高影响力角色在网络中更突出。
+        iw = influence_weight(actor)
+        if iw:
+            overlay["follower_count"] = int(300 * iw)
+            overlay["friend_count"] = int(120 * iw)
+            overlay["karma"] = int(1500 * iw)
+
+        # NEXTSTEPS SIM_PERSONA_DESIGN: 规则路径（含 LLM 3 连败回退）不丢人格设计——从档案
+        # 确定性提炼结构化设计，并在 persona 末尾追加 1-2 句设计摘要（身份 + 得失/信念线），
+        # 让该真实角色的分析身份在降级路径下依然进入 system prompt。
+        if self._persona_design_enabled():
+            design = self._design_from_actor(actor, entity_name, actors=actors)
+            if design:
+                overlay["persona_design"] = design
+                summary = "。".join(s for s in (
+                    design.get("identity", ""),
+                    design.get("incentives", "") or design.get("views_beliefs", ""),
+                ) if s)
+                if summary:
+                    persona_text = str(overlay.get("persona") or base.get("persona") or "").strip()
+                    overlay["persona"] = (
+                        f"{persona_text}\n\n【人格设计·实证提炼】{summary}。"
+                    ).strip()
+
+        return {**base, **overlay}
+
+    def _rule_based_base(
+        self,
+        entity_name: str,
+        entity_type: str,
+        entity_summary: str,
         entity_attributes: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """使用规则生成基础人设"""
-        
+        """使用规则生成基础人设（纯类型模板，不含研究覆盖）"""
+
         # 根据实体类型生成不同的人设
         entity_type_lower = entity_type.lower()
         
@@ -929,32 +1510,38 @@ class OasisProfileGenerator:
         
         # 实时写入文件的辅助函数
         def save_profiles_realtime():
-            """实时保存已生成的 profiles 到文件"""
+            """实时保存已生成的 profiles 到文件（preview-only 预览产物）。
+
+            EXECPLAN2 F-5-0 / F-5-1:
+            - OASIS generate_reddit_agent_graph 按 JSON 数组下标分配 agent_id（忽略行内 user_id），
+              且对 mbti/gender/age/country 做无条件 key 访问。因此实时产物必须满足两点：
+              (1) 与最终写入器同一套 OASIS-loadable schema（带默认值），否则中断/早读会触发 KeyError；
+              (2) 数组下标 == 实体枚举下标，否则 poster_agent_id/initial_follows 会指向错误 persona。
+            - 修复：不再写「压实/重排」的产物，改为只写「连续已完成前缀」（遇到第一个 None 即停止），
+              使下标永远等于实体下标；并复用 _save_reddit_json / _save_twitter_csv 与最终写入器保持
+              逐字节 schema 一致（默认 age→30 / gender 归一化 / mbti→'ISTJ' / country→'中国'，
+              英文口径下 country 缺省为空串）。
+            """
             if not realtime_output_path:
                 return
-            
+
             with lock:
-                # 过滤出已生成的 profiles
-                existing_profiles = [p for p in profiles if p is not None]
-                if not existing_profiles:
+                # 只取连续已完成前缀：遇到第一个 None 即停止，保证 下标==实体下标 (F-5-1)
+                prefix_profiles = []
+                for p in profiles:
+                    if p is None:
+                        break
+                    prefix_profiles.append(p)
+                if not prefix_profiles:
                     return
-                
+
                 try:
+                    # 复用最终写入器，保证实时产物与最终产物 schema 完全一致 (F-5-0)；
+                    # 两个写入器内部均已改为原子写盘。
                     if output_platform == "reddit":
-                        # Reddit JSON 格式
-                        profiles_data = [p.to_reddit_format() for p in existing_profiles]
-                        with open(realtime_output_path, 'w', encoding='utf-8') as f:
-                            json.dump(profiles_data, f, ensure_ascii=False, indent=2)
+                        self._save_reddit_json(prefix_profiles, realtime_output_path)
                     else:
-                        # Twitter CSV 格式
-                        import csv
-                        profiles_data = [p.to_twitter_format() for p in existing_profiles]
-                        if profiles_data:
-                            fieldnames = list(profiles_data[0].keys())
-                            with open(realtime_output_path, 'w', encoding='utf-8', newline='') as f:
-                                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                                writer.writeheader()
-                                writer.writerows(profiles_data)
+                        self._save_twitter_csv(prefix_profiles, realtime_output_path)
                 except Exception as e:
                     logger.warning(f"实时保存 profiles 失败: {e}")
         
@@ -991,6 +1578,7 @@ class OasisProfileGenerator:
                     persona=entity.summary or f"A participant in social discussions.",
                     source_entity_uuid=entity.uuid,
                     source_entity_type=entity_type,
+                    generation_path="error_stub",  # PREP-8: 异常桩，计入降级统计
                 )
                 return idx, fallback_profile, str(e)
         
@@ -1047,14 +1635,40 @@ class OasisProfileGenerator:
                         persona=entity.summary or "A participant in social discussions.",
                         source_entity_uuid=entity.uuid,
                         source_entity_type=entity_type,
+                        generation_path="error_stub",  # PREP-8: 异常桩，计入降级统计
                     )
                     # 实时写入文件（即使是备用人设）
                     save_profiles_realtime()
         
+        # PREP-8: 聚合静默降级统计——LLM 3 连败的规则回退（rule_fallback）与异常桩
+        # （error_stub）此前只有逐条 log warning，任何健康门都看不见「5 ok / 75 fallback」
+        # 这种大面积降级。这里汇总成一行运行级指标：log + 进度回调 + 实例属性
+        # （last_generation_stats，供 simulation_manager 落到 config_reasoning）。
+        done = [p for p in profiles if p is not None]
+        n_fallback = sum(1 for p in done if getattr(p, "generation_path", "llm") == "rule_fallback")
+        n_stub = sum(1 for p in done if getattr(p, "generation_path", "llm") == "error_stub")
+        n_ok = len(done) - n_fallback - n_stub
+        summary = f"personas: {n_ok} ok / {n_fallback} rule-fallback / {n_stub} error-stub"
+        self.last_generation_stats = {
+            "total": total, "ok": n_ok,
+            "rule_fallback": n_fallback, "error_stub": n_stub,
+        }
+        logger.info(f"人设生成统计: {summary}")
+        if use_llm and total and (n_fallback + n_stub) / total > 0.25:
+            logger.warning(
+                f"人设降级比例过高（>25%）: {summary} —— LLM persona 大面积失败，"
+                "产出将是模板化人设（关键角色可能退化为泛泛简介）"
+            )
+        if progress_callback:
+            try:
+                progress_callback(total, total, summary)
+            except Exception:  # noqa: BLE001 回调异常不阻断主流程
+                pass
+
         print(f"\n{'='*60}")
-        print(f"人设生成完成！共生成 {len([p for p in profiles if p])} 个Agent")
+        print(f"人设生成完成！共生成 {len(done)} 个Agent（{summary}）")
         print(f"{'='*60}\n")
-        
+
         return profiles
     
     def _print_generated_profile(self, entity_name: str, entity_type: str, profile: OasisAgentProfile):
@@ -1088,6 +1702,74 @@ class OasisProfileGenerator:
         # 只输出到控制台（避免重复，logger不再输出完整内容）
         print(output)
     
+    def generate_audience_profiles(
+        self,
+        audience_configs: List[Any],
+        start_user_id: int,
+    ) -> List[OasisAgentProfile]:
+        """ACTOR-CAST discipline：为 SIM_AUDIENCE_AGENTS 的受众 agent 生成填充 persona。
+
+        纯规则生成、零 LLM/Zep 成本 —— 受众是主阵容（≤ ACTOR_CAST_MAX 个 main actors）
+        之外的「沉默大多数」，不需要逐个调研。profile 顺序紧接具名角色之后追加
+        （OASIS 按数组下标建 agent_id，F-5-1 不变式），name/立场/议题与
+        simulation_config_generator 生成的受众 agent 配置一一对应。
+
+        Args:
+            audience_configs: 受众 AgentActivityConfig 列表（或等价对象/dict，duck-typed），
+                              按 agent_id 升序。
+            start_user_id: 首个受众 profile 的 user_id（= 具名 profile 数量）。
+
+        Returns:
+            与 audience_configs 等长的 OasisAgentProfile 列表。
+        """
+        def _get(cfg: Any, key: str, default: Any = None) -> Any:
+            if isinstance(cfg, dict):
+                return cfg.get(key, default)
+            return getattr(cfg, key, default)
+
+        _english = str(self.persona_language or "").strip().lower().startswith("en")
+        _stance_line = {
+            "supportive": "leans supportive of the mainstream position on this issue",
+            "opposing": "is skeptical and leans against the mainstream position on this issue",
+            "neutral": "has no strong prior stance and mostly watches the debate unfold",
+            "observer": "has no strong prior stance and mostly watches the debate unfold",
+        }
+        profiles: List[OasisAgentProfile] = []
+        for i, cfg in enumerate(audience_configs):
+            name = str(_get(cfg, "entity_name") or f"公众_{i}")
+            stance = str(_get(cfg, "stance") or "neutral").strip().lower()
+            topics = [str(t) for t in (_get(cfg, "interested_topics") or []) if str(t).strip()]
+            topics_str = ", ".join(topics) if topics else "current events"
+            stance_txt = _stance_line.get(stance, _stance_line["neutral"])
+            bio = f"Ordinary member of the public following {topics_str}."
+            persona = (
+                f"{name} is an ordinary member of the general public — part of the silent "
+                f"majority following the discussion around {topics_str}. They mostly read, "
+                f"like, or occasionally repost and comment; they rarely write original posts. "
+                f"{name} {stance_txt}."
+            )
+            profiles.append(OasisAgentProfile(
+                user_id=start_user_id + i,
+                user_name=self._generate_username(name),
+                name=name,
+                bio=bio,
+                persona=persona,
+                karma=random.randint(50, 800),
+                friend_count=random.randint(20, 200),
+                follower_count=random.randint(5, 120),
+                statuses_count=random.randint(10, 400),
+                age=random.randint(18, 65),
+                gender=random.choice(["male", "female"]),
+                mbti=random.choice(self.MBTI_TYPES),
+                country=("" if _english else "中国"),
+                profession="General public",
+                interested_topics=topics,
+                source_entity_uuid=str(_get(cfg, "entity_uuid") or f"audience:{start_user_id + i}"),
+                source_entity_type=str(_get(cfg, "entity_type") or "Audience"),
+                generation_path="rule",
+            ))
+        return profiles
+
     def save_profiles(
         self,
         profiles: List[OasisAgentProfile],
@@ -1127,39 +1809,43 @@ class OasisProfileGenerator:
         - description: 外部显示，其他用户可见的简介
         """
         import csv
-        
+        import io
+
         # 确保文件扩展名是.csv
         if not file_path.endswith('.csv'):
             file_path = file_path.replace('.json', '.csv')
-        
-        with open(file_path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            
-            # 写入OASIS要求的表头
-            headers = ['user_id', 'name', 'username', 'user_char', 'description']
-            writer.writerow(headers)
-            
-            # 写入数据行
-            for idx, profile in enumerate(profiles):
-                # user_char: 完整人设（bio + persona），用于LLM系统提示
-                user_char = profile.bio
-                if profile.persona and profile.persona != profile.bio:
-                    user_char = f"{profile.bio} {profile.persona}"
-                # 处理换行符（CSV中用空格替代）
-                user_char = user_char.replace('\n', ' ').replace('\r', ' ')
-                
-                # description: 简短简介，用于外部显示
-                description = profile.bio.replace('\n', ' ').replace('\r', ' ')
-                
-                row = [
-                    idx,                    # user_id: 从0开始的顺序ID
-                    profile.name,           # name: 真实姓名
-                    profile.user_name,      # username: 用户名
-                    user_char,              # user_char: 完整人设（内部LLM使用）
-                    description             # description: 简短简介（外部显示）
-                ]
-                writer.writerow(row)
-        
+
+        # EXECPLAN2 F-5-0: 先在内存缓冲构建完整 CSV，再原子写盘，避免读取者看到半写文件。
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+
+        # 写入OASIS要求的表头
+        headers = ['user_id', 'name', 'username', 'user_char', 'description']
+        writer.writerow(headers)
+
+        # 写入数据行
+        for idx, profile in enumerate(profiles):
+            # user_char: 完整人设（bio + persona），用于LLM系统提示
+            user_char = profile.bio
+            if profile.persona and profile.persona != profile.bio:
+                user_char = f"{profile.bio} {profile.persona}"
+            # 处理换行符（CSV中用空格替代）
+            user_char = user_char.replace('\n', ' ').replace('\r', ' ')
+
+            # description: 简短简介，用于外部显示
+            description = profile.bio.replace('\n', ' ').replace('\r', ' ')
+
+            row = [
+                idx,                    # user_id: 从0开始的顺序ID
+                profile.name,           # name: 真实姓名
+                profile.user_name,      # username: 用户名
+                user_char,              # user_char: 完整人设（内部LLM使用）
+                description             # description: 简短简介（外部显示）
+            ]
+            writer.writerow(row)
+
+        write_text_atomic(file_path, buf.getvalue())
+
         logger.info(f"已保存 {len(profiles)} 个Twitter Profile到 {file_path} (OASIS CSV格式)")
     
     def _normalize_gender(self, gender: Optional[str]) -> str:
@@ -1205,14 +1891,21 @@ class OasisProfileGenerator:
         - mbti: MBTI类型
         - country: 国家
         """
+        # PREP-4(2): 英文口径下 country 缺省不再回填「中国」（56/80 个英文地缘政治角色曾被
+        # 打成中国籍，含 US Congress）；默认（中文口径）与历史逐字节一致。
+        default_country = "" if self._english_persona() else "中国"
+        # XRUN-10(d): 统计走了默认值回填的字段数，让「结构化字段未从档案抽取」的回归可见。
+        n_age_default = n_mbti_default = n_country_default = 0
         data = []
         for idx, profile in enumerate(profiles):
             # 使用与 to_reddit_format() 一致的格式
+            # PREP-8: bio 截断从 150 提到 300——提示词要求 200 字简介，旧上限把成功生成的
+            # bio 也在句中拦腰截断（Twitter CSV 一直是全量 bio，两产物口径不一致）。
             item = {
                 "user_id": profile.user_id if profile.user_id is not None else idx,  # 关键：必须包含 user_id
                 "username": profile.user_name,
                 "name": profile.name,
-                "bio": profile.bio[:150] if profile.bio else f"{profile.name}",
+                "bio": profile.bio[:300] if profile.bio else f"{profile.name}",
                 "persona": profile.persona or f"{profile.name} is a participant in social discussions.",
                 "karma": profile.karma if profile.karma else 1000,
                 "created_at": profile.created_at,
@@ -1220,20 +1913,35 @@ class OasisProfileGenerator:
                 "age": profile.age if profile.age else 30,
                 "gender": self._normalize_gender(profile.gender),
                 "mbti": profile.mbti if profile.mbti else "ISTJ",
-                "country": profile.country if profile.country else "中国",
+                "country": profile.country if profile.country else default_country,
             }
-            
+            n_age_default += 0 if profile.age else 1
+            n_mbti_default += 0 if profile.mbti else 1
+            n_country_default += 0 if profile.country else 1
+
             # 可选字段
             if profile.profession:
                 item["profession"] = profile.profession
             if profile.interested_topics:
                 item["interested_topics"] = profile.interested_topics
-            
+
+            # NEXTSTEPS SIM_PERSONA_DESIGN: 结构化人格设计随档持久化到 other_info。
+            # OASIS 加载器只读白名单字段（persona/mbti/gender/age/country…），多余 key
+            # 被忽略——不影响加载；下游遥测/校验可据此核查阵容的认知多样性。
+            if profile.persona_design:
+                item["other_info"] = {"persona_design": profile.persona_design}
+
             data.append(item)
-        
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        
+
+        if n_age_default or n_mbti_default or n_country_default:
+            logger.info(
+                f"Reddit Profile 默认值回填: age={n_age_default}, mbti={n_mbti_default}, "
+                f"country={n_country_default} / 共 {len(profiles)} 个"
+            )
+
+        # EXECPLAN2 F-5-0: 原子写，避免 watchdog SIGKILL 或轮询读取者看到半写文件。
+        write_json_atomic(file_path, data, ensure_ascii=False, indent=2)
+
         logger.info(f"已保存 {len(profiles)} 个Reddit Profile到 {file_path} (JSON格式，包含user_id字段)")
     
     # 保留旧方法名作为别名，保持向后兼容

@@ -46,6 +46,9 @@ RUNS = {
     "memory-semi-2030": "pipe_e2egold02",
     "china-storage-2035": "pipe_764249df9c38",
     "us-iran-2026": "pipe_a90b338fdfa0",
+    # MiniMax (minimax-m3) demo runs — added 2026-06-21
+    "storage-semi-2028": "pipe_41522d5d9790",
+    "cloud-2030": "pipe_85d91bafe6fd",
 }
 
 PLACEHOLDER_MARKER = "本章节生成失败"

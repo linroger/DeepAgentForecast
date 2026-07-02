@@ -12,7 +12,7 @@
 > the whole configuration, and the backend venv is pinned to Python 3.12
 > (`backend/.python-version`). Shared helpers live in `backend/app/utils/actors.py`.
 > **Stage-aware resume is IMPLEMENTED** — `resume()`
-> (`pipeline_orchestrator.py:937-995`) + `POST /api/research/<id>/resume` re-enter
+> (`pipeline_orchestrator.py:1593-1655`) + `POST /api/research/<id>/resume` re-enter
 > `_run` and reuse completed-stage artifacts via per-stage health-checked reuse
 > guards (see *Resume semantics* below). Still open (re-scoped to `EXECPLAN.md`):
 > validate-on-resume hardening (T6.1), `research_only`→full continue (T6.2),
@@ -399,7 +399,7 @@ seed **personas** (name-matched per entity) and **per-agent simulation config**;
 targeting; the "research depth" knob (quick/standard/deep) is live, and `deep`
 uses a multi-pass research protocol with a depth-aware watchdog; `sources.json` provenance is surfaced in the dossier panel;
 pipelines are cancellable and pre-flighted. **Stage-aware resume is IMPLEMENTED**
-(`pipeline_orchestrator.py:937-995` + `POST /api/research/<id>/resume`; see the
+(`pipeline_orchestrator.py:1593-1655` + `POST /api/research/<id>/resume`; see the
 *Resume semantics* note at the top). **Still open (re-scoped to `EXECPLAN.md`):**
 `research_only`→full continue (T6.2); edit-and-continue the dossier (T5.4);
 per-stage artifact deep-links (T6.3); routing MiroFish report LLM calls through

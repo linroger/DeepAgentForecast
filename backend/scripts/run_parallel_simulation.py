@@ -64,14 +64,21 @@ if sys.platform == 'win32':
     
     builtins.open = _utf8_open
 
+# XRUN-14: transformers tokenizers 在 fork 后会逐条刷 "The current process just got forked"
+# 警告（曾把 simulation.log 的整个可见尾部淹没，掩盖真实错误）。必须在任何 huggingface
+# 相关 import 之前显式禁用 tokenizers 并行才能静音。
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 import argparse
 import asyncio
 import json
 import logging
 import multiprocessing
 import random
+import shutil
 import signal
 import sqlite3
+import time
 import warnings
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
@@ -80,6 +87,25 @@ from typing import Dict, Any, List, Optional, Tuple
 # 全局变量：用于信号处理
 _shutdown_event = None
 _cleanup_done = False
+
+
+# EXECPLAN2 I-7-2: 确定性随机数种子（默认 None = 维持当前非确定性行为）。
+# 设置环境变量 SIM_SEED=<int> 后，调度采样（加权水库 / 概率发帖）变为可复现，
+# 使 prepare/run 阶段的快照/黄金测试与 A/B 评估成为可能。未设置时 random.Random()
+# 从系统熵播种，与历史上的 random.random() 行为逐次一致（零行为变化）。
+def _build_sampling_rng() -> "random.Random":
+    """根据 SIM_SEED 构造本进程的采样 RNG（缺省即非确定性，与旧行为一致）。"""
+    raw = os.environ.get("SIM_SEED")
+    if raw is None or str(raw).strip() == "":
+        return random.Random()
+    try:
+        return random.Random(int(str(raw).strip()))
+    except (TypeError, ValueError):
+        # 容错：非整数种子退回非确定性，避免因配置错误中断模拟。
+        return random.Random()
+
+
+_RNG = _build_sampling_rng()
 
 # 添加 backend 目录到路径
 # 脚本固定位于 backend/scripts/ 目录
@@ -209,10 +235,403 @@ REDDIT_ACTIONS = [
 ]
 
 
+# ============================================================
+# EXECPLAN2 I-2-3: 按角色定制的「动作可供性」（per-role action affordances）
+# ------------------------------------------------------------
+# 现状：同一平台的所有 Agent 共用一份全局动作清单（TWITTER_ACTIONS / REDDIT_ACTIONS），
+# 政府账号、官媒、学生、匿名水军拥有完全相同的可选动作（都能 REPOST/QUOTE/FOLLOW/MUTE…）。
+# 现实中可供性与行为习惯是角色相关的：官方账号很少给个人点赞/转发/拉黑，媒体大量引用/造势，
+# 活动家激进转发/关注，潜水受众多为点赞/沉默。人设文本会暗示这点，但没有任何东西约束动作空间，
+# 于是 LLM 频繁选出「跳戏」的动作，稀释保真度。
+#
+# 方案：以 entity_type（角色）为键，为每个 Agent 量身裁剪 available_actions。camel-oasis 在
+# 构图时已把动作转成 ChatAgent 的工具（SocialAgent.__init__ 把 available_actions 过滤成
+# action_tools 并注入 ChatAgent.tools）；ChatAgent 暴露了公开的 remove_tools(name) API，
+# 工具名恰为 ActionType.value。因此「构图后按角色裁剪」是库原生支持的——在 generate_*_agent_graph
+# 之后、env.reset() 之前，逐个 Agent 移除不属于其角色策略的社交动作工具即可（仅移除社交动作，
+# 不动 INTERVIEW 等其它工具）。同时把一句简短的「行为习惯」约束注入 system prompt，让 LLM 自我设限。
+#
+# 可降级不变式：默认 SIM_ROLE_ACTION_PROFILES!=true → 完全跳过，沿用单一全局清单（逐字节旧行为）。
+# 任意环节失败（缺 entity_type、库 API 变动、工具名不匹配）一律 best-effort 跳过该 Agent，绝不中断模拟。
+#
+# 策略表的「白名单」会与平台 union 清单求交，确保永远不会授予平台不存在/未启用的动作；
+# 任何角色都至少保留 CREATE_POST / CREATE_COMMENT / DO_NOTHING，避免把某类角色变成完全惰性。
+# ============================================================
+
+# 每个角色策略只在 union 动作集合内做「白名单」过滤；未列出的 entity_type 走 _ROLE_ACTION_DEFAULT。
+# 注：键为 entity_type.lower()，与 oasis_profile_generator 的 INDIVIDUAL/GROUP_ENTITY_TYPES 命名一致。
+ROLE_ACTION_POLICY = {
+    # —— 机构 / 群体 ——
+    # 政府机构：几乎只发布官方声明、检索舆情；不给个人点赞/转发/拉黑。
+    "governmentagency": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "official": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    # 媒体：大量发帖/引用/转发/造势/评论，构成信息放大主力。
+    "mediaoutlet": [
+        ActionType.CREATE_POST,
+        ActionType.QUOTE_POST,
+        ActionType.REPOST,
+        ActionType.CREATE_COMMENT,
+        ActionType.TREND,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "journalist": [
+        ActionType.CREATE_POST,
+        ActionType.QUOTE_POST,
+        ActionType.REPOST,
+        ActionType.CREATE_COMMENT,
+        ActionType.SEARCH_POSTS,
+        ActionType.SEARCH_USER,
+        ActionType.DO_NOTHING,
+    ],
+    # 高校 / NGO / 公司 / 机构：偏官方口径，少量互动。
+    "university": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "ngo": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.QUOTE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "company": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "organization": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "institution": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "group": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.LIKE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    "community": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.LIKE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    # —— 个人 ——
+    # 专家 / 教授：发表观点、评论、引用佐证，少量转发。
+    "professor": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.QUOTE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.LIKE_POST,
+        ActionType.DO_NOTHING,
+    ],
+    "expert": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.QUOTE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.LIKE_POST,
+        ActionType.DO_NOTHING,
+    ],
+    "faculty": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.QUOTE_POST,
+        ActionType.SEARCH_POSTS,
+        ActionType.LIKE_POST,
+        ActionType.DO_NOTHING,
+    ],
+    "publicfigure": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.QUOTE_POST,
+        ActionType.REPOST,
+        ActionType.LIKE_POST,
+        ActionType.FOLLOW,
+        ActionType.DO_NOTHING,
+    ],
+    # 活动家：激进——大量转发/关注/评论/造势以扩散立场。
+    "activist": [
+        ActionType.CREATE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.REPOST,
+        ActionType.QUOTE_POST,
+        ActionType.LIKE_POST,
+        ActionType.FOLLOW,
+        ActionType.TREND,
+        ActionType.SEARCH_POSTS,
+        ActionType.DO_NOTHING,
+    ],
+    # 学生 / 普通个人：完整社交动作集（最自由）——见 _ROLE_FULL_ACCESS，直接放行平台全部 union。
+    # —— 程序化「沉默的大多数」受众（simulation_config_generator.AUDIENCE_ENTITY_TYPE="Audience"）——
+    # 以点赞 / 偶尔评论 / 转发 / 大量沉默为主，几乎不发起原创帖、不关注、不拉黑。
+    "audience": [
+        ActionType.LIKE_POST,
+        ActionType.DISLIKE_POST,
+        ActionType.LIKE_COMMENT,
+        ActionType.REPOST,
+        ActionType.CREATE_COMMENT,
+        ActionType.DO_NOTHING,
+        ActionType.REFRESH,
+    ],
+}
+
+# 完整动作集角色：最自由的个人账号，直接放行平台全部 union（不做任何裁剪）。
+# 等价于设计草图里 'student': TWITTER_ACTIONS 的「完整社交动作集」语义，但与平台无关——
+# Reddit 上同样拿到 REDDIT_ACTIONS 全集，而非被 Twitter 清单截断。
+_ROLE_FULL_ACCESS = {"student", "alumni", "person"}
+
+# 未匹配到具体角色时的兜底策略：保守地保留发帖/评论/检索/沉默/点赞，避免越权放大类动作。
+_ROLE_ACTION_DEFAULT = [
+    ActionType.CREATE_POST,
+    ActionType.CREATE_COMMENT,
+    ActionType.LIKE_POST,
+    ActionType.SEARCH_POSTS,
+    ActionType.DO_NOTHING,
+]
+
+# 不变式：任何角色都至少保留这几样基本动作，防止过度限制把某类 Agent 变成完全惰性。
+_ROLE_ACTION_FLOOR = {
+    ActionType.CREATE_POST,
+    ActionType.CREATE_COMMENT,
+    ActionType.DO_NOTHING,
+}
+
+# 角色 → 注入 system prompt 的「行为习惯」一句话约束（让 LLM 在工具裁剪之外再自我设限）。
+# 仅覆盖最容易跳戏的机构/媒体/活动家/受众；未列出的角色不注入额外约束（保持原 persona）。
+_ROLE_BEHAVIOR_HINT = {
+    "governmentagency": "【行为习惯】你是官方机构账号：通常只发布正式声明或检索舆情，几乎从不给个人点赞、转发或拉黑。",
+    "official": "【行为习惯】你是官方机构账号：通常只发布正式声明或检索舆情，几乎从不给个人点赞、转发或拉黑。",
+    "mediaoutlet": "【行为习惯】你是媒体账号：以发布报道、引用与转发关键信息、推动话题热度为主，很少给普通用户点赞。",
+    "journalist": "【行为习惯】你是记者：以发布报道、引用与求证、关注信源为主，较少随手点赞。",
+    "activist": "【行为习惯】你是活动家：积极转发、关注同立场账号、评论与造势以扩散你的主张。",
+    "audience": "【行为习惯】你是普通围观受众（沉默的大多数）：多数时候只是点赞或沉默，偶尔评论或转发，几乎不发起原创长帖。",
+}
+
+
+def _build_role_type_map(config: Dict[str, Any]) -> Dict[int, str]:
+    """EXECPLAN2 I-2-3: 从 simulation_config 构建 agent_id -> entity_type（小写）映射。
+
+    与 get_agent_names_from_config 同源（config["agent_configs"]，每项含 agent_id/entity_type），
+    缺字段则跳过该项。供按角色裁剪动作可供性使用。
+    """
+    role_map: Dict[int, str] = {}
+    for agent_config in config.get("agent_configs", []) or []:
+        agent_id = agent_config.get("agent_id")
+        entity_type = agent_config.get("entity_type")
+        if agent_id is not None and entity_type:
+            role_map[agent_id] = str(entity_type).strip().lower()
+    return role_map
+
+
+def _allowed_actions_for_role(entity_type: str, platform_union: List["ActionType"]) -> List["ActionType"]:
+    """EXECPLAN2 I-2-3: 计算某角色在给定平台上的「允许动作」白名单。
+
+    策略表白名单 ∩ 平台 union（绝不授予平台不存在/未启用的动作），再并入基本动作下限
+    （_ROLE_ACTION_FLOOR，同样需在 union 内）。返回顺序去重、稳定。
+    完整动作集角色（_ROLE_FULL_ACCESS）直接返回平台 union 全集，不做裁剪。
+    """
+    role = (entity_type or "").lower()
+    if role in _ROLE_FULL_ACCESS:
+        return list(platform_union)
+    policy = ROLE_ACTION_POLICY.get(role, _ROLE_ACTION_DEFAULT)
+    union_set = set(platform_union)
+    allowed_set = (set(policy) & union_set) | (_ROLE_ACTION_FLOOR & union_set)
+    # 以平台 union 的顺序产出，便于阅读 / 日志稳定。
+    return [a for a in platform_union if a in allowed_set]
+
+
+def _apply_role_action_profiles(
+    agent_graph,
+    config: Dict[str, Any],
+    platform_union: List["ActionType"],
+    log_info,
+) -> None:
+    """EXECPLAN2 I-2-3: 在构图后、env.reset() 前，按角色裁剪每个 Agent 的社交动作工具。
+
+    机制：camel ChatAgent 把每个动作注册为名为 ActionType.value 的工具。对每个 Agent，
+    移除「属于平台 union 但不在该角色白名单」的社交动作工具（仅社交动作，绝不动 INTERVIEW 等
+    其它工具）。同时把一句「行为习惯」约束追加进 system prompt，让 LLM 自我设限。
+
+    可降级：任意 Agent 处理失败仅跳过该 Agent（best-effort），不抛出、不中断模拟。
+    仅当 SIM_ROLE_ACTION_PROFILES=true 时由调用方触发；默认完全不进入本函数。
+    """
+    if agent_graph is None:
+        return
+    role_map = _build_role_type_map(config)
+    # 平台所有社交动作的工具名集合——只在这个集合内做增删，避免误删非社交工具。
+    union_tool_names = {a.value for a in platform_union}
+
+    restricted = 0
+    hinted = 0
+    try:
+        agents = agent_graph.get_agents()
+    except Exception as e:  # noqa: BLE001
+        log_info(f"角色动作裁剪跳过（无法枚举 Agent）: {e}")
+        return
+
+    for agent_id, agent in agents:
+        try:
+            entity_type = role_map.get(agent_id, "")
+            allowed = _allowed_actions_for_role(entity_type, platform_union)
+            allowed_names = {a.value for a in allowed}
+            # 待移除 = 平台社交动作 - 允许动作；只在 agent 实际拥有的工具里删。
+            to_remove = [
+                name for name in union_tool_names
+                if name not in allowed_names and name in getattr(agent, "_internal_tools", {})
+            ]
+            if to_remove:
+                agent.remove_tools(to_remove)
+                restricted += 1
+
+            # 软约束：把「行为习惯」一句话注入 system prompt（best-effort，失败不影响硬裁剪）。
+            hint = _ROLE_BEHAVIOR_HINT.get((entity_type or "").lower())
+            if hint and _inject_behavior_hint(agent, hint):
+                hinted += 1
+        except Exception as e:  # noqa: BLE001
+            log_info(f"角色动作裁剪跳过 Agent {agent_id}（已隔离）: {e}")
+            continue
+
+    log_info(f"角色动作可供性已应用: 裁剪 {restricted} 个 Agent，注入行为约束 {hinted} 个")
+
+
+def _inject_behavior_hint(agent, hint: str) -> bool:
+    """EXECPLAN2 I-2-3: 把一句行为约束追加进 Agent 的 system prompt（best-effort）。
+
+    走 camel ChatAgent 受支持的路径：基于 _original_system_message 重建系统消息并
+    init_messages() 把它重新写入记忆。任何版本差异/缺属性即返回 False（降级，不影响硬裁剪）。
+    在 env.reset() 之前调用——reset()→generate_custom_agents 不会重置记忆，注入得以保留。
+    """
+    try:
+        original = getattr(agent, "_original_system_message", None)
+        if original is None or not hasattr(original, "content"):
+            return False
+        if hint in (original.content or ""):
+            return True  # 已注入过，幂等
+        new_msg = original.create_new_instance((original.content or "") + "\n\n" + hint)
+        agent._original_system_message = new_msg
+        # 触发系统消息按输出语言重算并重新写入记忆（与 camel 内部行为一致）。
+        agent._system_message = agent._generate_system_message_for_output_language()
+        agent.init_messages()
+        return True
+    except Exception:
+        return False
+
+
+def _inject_world_brief(agent_graph, world_brief, log_info) -> None:
+    """NEXTSTEPS SIM_WORLD_BRIEF: 把 config.world_brief（核心预测问题 + 局势简报 + 热点话题）
+    作为共同世界背景追加进每个 Agent 的 system prompt。
+
+    机制与 _inject_behavior_hint 完全一致（基于 _original_system_message 重建系统消息并
+    init_messages() 重新写入记忆，幂等），必须在 oasis.make()/env.reset() 之前调用。
+    可降级：world_brief 为空 / agent_graph 不可枚举 / 单个 Agent 失败均静默跳过，绝不中断模拟。
+    """
+    brief = str(world_brief or "").strip()
+    if agent_graph is None or not brief:
+        return
+    block = "# WORLD BRIEF（共同世界背景）\n" + brief
+    try:
+        agents = agent_graph.get_agents()
+    except Exception as e:  # noqa: BLE001
+        log_info(f"世界简报注入跳过（无法枚举 Agent）: {e}")
+        return
+    injected = 0
+    total = 0
+    for _agent_id, agent in agents:
+        total += 1
+        try:
+            if _inject_behavior_hint(agent, block):
+                injected += 1
+        except Exception:  # noqa: BLE001 — 单个 Agent 失败不影响其余（best-effort）
+            continue
+    log_info(f"世界简报已注入 {injected}/{total} 个 Agent（简报 {len(brief)} 字）")
+
+
+def _world_brief_enabled() -> bool:
+    """NEXTSTEPS SIM_WORLD_BRIEF: 世界简报注入开关（默认开）。
+
+    与其它 SIM_* 开关同风格：env 优先（子进程独立可控），其次 app.config.Config，
+    最后默认 true。置 false → 完全跳过注入（system prompt 与旧行为逐字节一致）。
+    """
+    return _flag_true("SIM_WORLD_BRIEF", "true")
+
+
+def _role_action_profiles_enabled() -> bool:
+    """EXECPLAN2 I-2-3: 特性开关（与 SIM_WIRE_RECSYS / SIM_EMERGENT_METRICS 同风格的环境变量）。
+
+    默认关闭 → 维持单一全局动作清单的旧行为（可降级不变式）。
+    """
+    return os.environ.get("SIM_ROLE_ACTION_PROFILES", "false").strip().lower() == "true"
+
+
+def _cfg_flag(name: str, default: str) -> str:
+    """读取运行开关：环境变量优先（子进程独立可控），其次 app.config.Config（由 infra
+    统一定义），最后落安全默认。Config 不可导入时绝不阻断模拟。"""
+    raw = os.environ.get(name)
+    if raw is not None and str(raw).strip() != "":
+        return str(raw).strip()
+    try:
+        from app.config import Config
+        val = getattr(Config, name, default)
+        return default if val is None else str(val)
+    except Exception:
+        return default
+
+
+def _flag_true(name: str, default: str) -> bool:
+    return _cfg_flag(name, default).strip().lower() in ("true", "1", "yes", "on")
+
+
 # IPC相关常量
 IPC_COMMANDS_DIR = "ipc_commands"
 IPC_RESPONSES_DIR = "ipc_responses"
 ENV_STATUS_FILE = "env_status.json"
+# RUN-10: 与 simulation_ipc.SimulationIPCClient 的 F-12-7 取消协议对齐——客户端超时后
+# 会写 <command_id>.cancel；服务端必须在执行前/写响应前感知，否则被放弃的采访照跑不误。
+IPC_CANCEL_SUFFIX = ".cancel"
+
+
+def _ipc_write_json(path: str, payload: Dict[str, Any]) -> None:
+    """RUN-10: 状态/响应文件被客户端与 runner 轮询读取，必须原子写避免读到半截 JSON。
+    原子写助手不可用时降级为旧的直接写（保持旧行为而非崩溃）。"""
+    try:
+        from app.utils.atomic import write_json_atomic
+        write_json_atomic(path, payload)
+    except Exception:
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
 
 class CommandType:
     """命令类型常量"""
@@ -249,42 +668,79 @@ class ParallelIPCHandler:
         # 确保目录存在
         os.makedirs(self.commands_dir, exist_ok=True)
         os.makedirs(self.responses_dir, exist_ok=True)
-    
+
+        # XRUN-14: 空闲计时基准——每处理一条命令即刷新，供 main 的等待循环做空闲自动关闭。
+        self.last_command_at = time.monotonic()
+
     def update_status(self, status: str):
-        """更新环境状态"""
-        with open(self.status_file, 'w', encoding='utf-8') as f:
-            json.dump({
-                "status": status,
-                "twitter_available": self.twitter_env is not None,
-                "reddit_available": self.reddit_env is not None,
-                "timestamp": datetime.now().isoformat()
-            }, f, ensure_ascii=False, indent=2)
-    
+        """更新环境状态（RUN-10: 原子写，runner 会轮询此文件）"""
+        _ipc_write_json(self.status_file, {
+            "status": status,
+            "twitter_available": self.twitter_env is not None,
+            "reddit_available": self.reddit_env is not None,
+            "timestamp": datetime.now().isoformat()
+        })
+
     def poll_command(self) -> Optional[Dict[str, Any]]:
-        """轮询获取待处理命令"""
+        """轮询获取待处理命令
+
+        RUN-10: 客户端超时/放弃的命令带 .cancel 标记——执行前跳过并清理，
+        不再为无人等待的采访烧 LLM 配额，也不让 .cancel 文件无限累积。
+        """
         if not os.path.exists(self.commands_dir):
             return None
-        
+
         # 获取命令文件（按时间排序）
         command_files = []
         for filename in os.listdir(self.commands_dir):
             if filename.endswith('.json'):
                 filepath = os.path.join(self.commands_dir, filename)
-                command_files.append((filepath, os.path.getmtime(filepath)))
-        
+                try:
+                    command_files.append((filepath, os.path.getmtime(filepath)))
+                except OSError:
+                    continue
+
         command_files.sort(key=lambda x: x[1])
-        
+
         for filepath, _ in command_files:
+            command_id = os.path.basename(filepath)[:-len('.json')]
+            cancel_file = os.path.join(
+                self.commands_dir, f"{command_id}{IPC_CANCEL_SUFFIX}")
+            if os.path.exists(cancel_file):
+                for path in (filepath, cancel_file):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+                continue
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
                     return json.load(f)
             except (json.JSONDecodeError, OSError):
                 continue
-        
+
         return None
-    
+
     def send_response(self, command_id: str, status: str, result: Dict = None, error: str = None):
-        """发送响应"""
+        """发送响应
+
+        RUN-10 (F-6-6): 客户端超时后会删除命令文件并写 .cancel——此时跳过写出，
+        避免 ipc_responses/ 里堆积无人消费的孤儿响应；响应本身原子写，
+        防止客户端轮询读到半截 JSON。
+        """
+        command_file = os.path.join(self.commands_dir, f"{command_id}.json")
+        cancel_file = os.path.join(
+            self.commands_dir, f"{command_id}{IPC_CANCEL_SUFFIX}")
+
+        if os.path.exists(cancel_file) or not os.path.exists(command_file):
+            for path in (command_file, cancel_file):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+            print(f"  客户端已放弃命令，跳过写出响应: command_id={command_id}")
+            return
+
         response = {
             "command_id": command_id,
             "status": status,
@@ -292,17 +748,16 @@ class ParallelIPCHandler:
             "error": error,
             "timestamp": datetime.now().isoformat()
         }
-        
+
         response_file = os.path.join(self.responses_dir, f"{command_id}.json")
-        with open(response_file, 'w', encoding='utf-8') as f:
-            json.dump(response, f, ensure_ascii=False, indent=2)
-        
-        # 删除命令文件
-        command_file = os.path.join(self.commands_dir, f"{command_id}.json")
-        try:
-            os.remove(command_file)
-        except OSError:
-            pass
+        _ipc_write_json(response_file, response)
+
+        # 删除命令文件及取消标记（尽力而为）
+        for path in (command_file, cancel_file):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
     
     def _get_env_and_graph(self, platform: str):
         """
@@ -574,7 +1029,10 @@ class ParallelIPCHandler:
         command = self.poll_command()
         if not command:
             return True
-        
+
+        # XRUN-14: 有命令到达即刷新空闲计时（采访期间不会被空闲超时误关）。
+        self.last_command_at = time.monotonic()
+
         command_id = command.get("command_id")
         command_type = command.get("command_type")
         args = command.get("args", {})
@@ -588,14 +1046,18 @@ class ParallelIPCHandler:
                 args.get("prompt", ""),
                 args.get("platform")
             )
+            # XRUN-14: 长采访结束后再刷新一次，避免执行耗时被计入空闲时间
+            self.last_command_at = time.monotonic()
             return True
-            
+
         elif command_type == CommandType.BATCH_INTERVIEW:
             await self.handle_batch_interview(
                 command_id,
                 args.get("interviews", []),
                 args.get("platform")
             )
+            # XRUN-14: 长采访结束后再刷新一次，避免执行耗时被计入空闲时间
+            self.last_command_at = time.monotonic()
             return True
             
         elif command_type == CommandType.CLOSE_ENV:
@@ -1013,9 +1475,42 @@ def _weighted_sample_without_replacement(items: List, k: int) -> List:
     keyed = []
     for item_id, w in items:
         w = max(1e-6, float(w))
-        keyed.append((random.random() ** (1.0 / w), item_id))
+        keyed.append((_RNG.random() ** (1.0 / w), item_id))  # EXECPLAN2 I-7-2: 可复现采样
     keyed.sort(reverse=True)
     return [item_id for _, item_id in keyed[:k]]
+
+
+def _resolve_hour_multiplier(time_config: Dict[str, Any], current_hour: int) -> float:
+    """RUN-5: 完整消费配置生成器给出的时段乘子阶梯。此前只认 peak/off_peak，
+    morning_hours/work_hours（生成器一直在产出）被静默忽略——白天非高峰全按 1.0 跑，
+    配置承诺的昼夜活跃曲线并未实现。缺失的键行为与旧逻辑逐字节一致（回退 1.0）。"""
+    peak_hours = time_config.get("peak_hours", [9, 10, 11, 14, 15, 20, 21, 22])
+    off_peak_hours = time_config.get("off_peak_hours", [0, 1, 2, 3, 4, 5])
+    morning_hours = time_config.get("morning_hours", [])
+    work_hours = time_config.get("work_hours", [])
+
+    if current_hour in peak_hours:
+        return time_config.get("peak_activity_multiplier", 1.5)
+    if current_hour in off_peak_hours:
+        return time_config.get("off_peak_activity_multiplier", 0.3)
+    if current_hour in morning_hours:
+        return time_config.get("morning_activity_multiplier", 0.4)
+    if current_hour in work_hours:
+        return time_config.get("work_activity_multiplier", 0.7)
+    return 1.0
+
+
+def _resolve_start_hour(time_config: Dict[str, Any]) -> int:
+    """RUN-4: 模拟起始小时。此前恒从 0 点（午夜）起跑，而生成的 agent active_hours
+    普遍从 9 点开始——前 9 轮结构性零激活，24 轮预算里近半是死轮。
+    优先级: time_config.start_hour > SIM_START_HOUR（env/Config）> 0（与旧行为逐字节一致）。"""
+    raw = time_config.get("start_hour")
+    if raw is None:
+        raw = _cfg_flag("SIM_START_HOUR", "0")
+    try:
+        return int(float(raw)) % 24
+    except (TypeError, ValueError):
+        return 0
 
 
 def get_active_agents_for_round(
@@ -1039,15 +1534,7 @@ def get_active_agents_for_round(
 
     base_max = time_config.get("agents_per_hour_max", 20)
 
-    peak_hours = time_config.get("peak_hours", [9, 10, 11, 14, 15, 20, 21, 22])
-    off_peak_hours = time_config.get("off_peak_hours", [0, 1, 2, 3, 4, 5])
-
-    if current_hour in peak_hours:
-        multiplier = time_config.get("peak_activity_multiplier", 1.5)
-    elif current_hour in off_peak_hours:
-        multiplier = time_config.get("off_peak_activity_multiplier", 0.3)
-    else:
-        multiplier = 1.0
+    multiplier = _resolve_hour_multiplier(time_config, current_hour)
 
     # 影响力归一化（用于激活概率与采样权重）
     influences = [float(c.get("influence_weight", 1.0) or 1.0) for c in agent_configs]
@@ -1066,7 +1553,7 @@ def get_active_agents_for_round(
         p = activity_level * (0.5 + 0.5 * (infl / max_infl)) * multiplier
         if agent_id in last_active_ids:
             p *= 1.5  # 近因加成：上一轮活跃/被提及 → 形成级联
-        if random.random() < min(1.0, p):
+        if _RNG.random() < min(1.0, p):  # EXECPLAN2 I-7-2: 可复现激活概率
             candidates.append((agent_id, infl))
 
     # 目标人数：随 cast 规模放大，封顶 3×base_max
@@ -1084,6 +1571,224 @@ def get_active_agents_for_round(
             pass
 
     return active_agents
+
+
+# ============================================================================
+# EXECPLAN2 I-2-1: per-agent affective-state dynamics (mood/energy/opinion/fatigue)
+# threaded into each round's prompt. All gated behind Config.SIM_AGENT_DYNAMICS;
+# when off these helpers are never called → static-persona behavior is byte-identical.
+# The pure update math lives in app.services.agent_dynamics (offline-tested); here
+# we (a) extract received-interaction signals from the round's actions, (b) inject
+# the rendered state line into each active agent's system message before env.step.
+# ============================================================================
+def _build_dynamics_tracker(config, log_info):
+    """Build an AgentDynamicsTracker if SIM_AGENT_DYNAMICS is on; else None (no-op)."""
+    try:
+        from app.config import Config
+        if not getattr(Config, "SIM_AGENT_DYNAMICS", False):
+            return None
+        from app.services.agent_dynamics import AgentDynamicsTracker
+        tracker = AgentDynamicsTracker.from_config(config.get("agent_configs", []), config_obj=Config)
+        log_info("已启用逐智能体动态情感状态 (SIM_AGENT_DYNAMICS)")
+        return tracker
+    except Exception as e:  # never let an init bug break the run
+        log_info(f"动态情感状态初始化失败，按静态人设运行: {e}")
+        return None
+
+
+def _inject_agent_dynamics(active_agents, tracker, log_info):
+    """Append each active agent's current-state line as a fresh SYSTEM memory record
+    for this round. astep() reads memory.get_context(), so the note becomes the
+    most-recent system message before the action prompt (maximal salience) WITHOUT
+    clearing the agent's accumulated conversation memory. Best-effort per agent.
+
+    (EXECPLAN2 I-2-1. Memory-preserving via update_memory rather than the earlier
+    init_messages() re-seed, which the adversarial review flagged as silently wiping
+    cross-round agent memory once an agent developed non-baseline state.)"""
+    if tracker is None:
+        return
+    try:
+        from camel.messages import BaseMessage
+        from camel.types import OpenAIBackendRole
+    except Exception:
+        return
+    for aid, agent in active_agents:
+        try:
+            line = tracker.state_line(aid)
+            if not line:
+                continue
+            note = BaseMessage.make_user_message(role_name="StateUpdater", content=line)
+            agent.update_memory(note, OpenAIBackendRole.SYSTEM)
+        except Exception as e:
+            log_info(f"动态状态注入失败 (agent {aid}): {e}")
+
+
+def _observe_agent_dynamics(tracker, actual_actions, name_to_id):
+    """Feed this round's signals into the tracker (best-effort, never raises)."""
+    if tracker is None:
+        return
+    try:
+        from app.services.agent_dynamics import extract_round_signals
+        received, activity = extract_round_signals(actual_actions, name_to_id)
+        tracker.observe_round(received, activity)
+    except Exception:
+        pass
+
+
+# ============================================================================
+# RUN-2: 逐调用 LLM 健康计数。OASIS 在 agent.astep 内部吞掉每个 agent 的模型异常
+# （只留一行 'Error processing with model'），env.step 正常返回——历史上出现过
+# 416/416 全部失败仍报 simulation_health='ok' 的整场空跑。模型请求层是唯一可靠的
+# 观测点：在这里计数调用/异常，循环结束落 llm_health.json 供健康门消费。
+# ============================================================================
+def _wrap_model_llm_counter(model) -> Dict[str, int]:
+    """包装模型的 chat-completion 请求方法以计数调用与异常。只包异步路径
+    （OASIS astep 全走 _arequest_chat_completion；CLIModel 的异步实现委托同步方法，
+    双包会重复计数），无异步方法时才包同步路径。包装失败不影响建模（计数保持 0）。"""
+    counter = {"calls": 0, "errors": 0}
+    try:
+        _aorig = getattr(model, "_arequest_chat_completion", None)
+        if _aorig is not None:
+            async def _acounted(*args, **kwargs):
+                counter["calls"] += 1
+                try:
+                    return await _aorig(*args, **kwargs)
+                except Exception:
+                    counter["errors"] += 1
+                    raise
+            model._arequest_chat_completion = _acounted
+        else:
+            _orig = model._request_chat_completion
+
+            def _counted(*args, **kwargs):
+                counter["calls"] += 1
+                try:
+                    return _orig(*args, **kwargs)
+                except Exception:
+                    counter["errors"] += 1
+                    raise
+            model._request_chat_completion = _counted
+    except Exception:  # noqa: BLE001 — 遥测是附加物，绝不阻断模型创建
+        pass
+    return counter
+
+
+def _write_llm_health(simulation_dir: str, platform: str, counter: Dict[str, int], log_info) -> None:
+    """RUN-2: 把本平台 LLM 调用/失败计数合并写入 llm_health.json（原子）。
+    error_rate 超过 SIM_LLM_ERROR_RATE_THRESHOLD（默认 0.5）标记 degraded=True，
+    供 write_run_summary 把 simulation_health 降级。纯附加遥测，失败不影响模拟。"""
+    try:
+        calls = int(counter.get("calls", 0) or 0)
+        errors = int(counter.get("errors", 0) or 0)
+        rate = (errors / calls) if calls > 0 else 0.0
+        try:
+            threshold = float(_cfg_flag("SIM_LLM_ERROR_RATE_THRESHOLD", "0.5"))
+        except (TypeError, ValueError):
+            threshold = 0.5
+        path = os.path.join(simulation_dir, "llm_health.json")
+        data: Dict[str, Any] = {"platforms": {}}
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+                if isinstance(existing, dict) and isinstance(existing.get("platforms"), dict):
+                    data = existing
+            except (json.JSONDecodeError, OSError):
+                pass
+        degraded = bool(calls > 0 and rate > threshold)
+        data["platforms"][platform] = {
+            "llm_calls": calls,
+            "llm_errors": errors,
+            "error_rate": round(rate, 4),
+            "degraded": degraded,
+        }
+        data["threshold"] = threshold
+        data["updated_at"] = datetime.now().isoformat()
+        from app.utils.atomic import write_json_atomic
+        write_json_atomic(path, data)
+        if degraded:
+            log_info(f"⚠ LLM 调用失败率 {rate:.0%} ({errors}/{calls}) 超阈值 {threshold:.0%}——本平台产出不可信")
+        else:
+            log_info(f"LLM 调用健康: {errors}/{calls} 失败")
+    except Exception as e:  # noqa: BLE001
+        log_info(f"llm_health.json 写出失败（不影响模拟）: {e}")
+
+
+# ============================================================================
+# XRUN-14: 工具参数规整。模型（尤其 MiniMax-M3）会幻觉工具参数名（实测
+# like_comment(post_id=...)，签名是 comment_id），camel 把异常吞成 warning 后
+# 该类动作被整体丢弃。这里在 FunctionTool.func 外套一层：可安全改名的按别名映射，
+# 其余未知关键字丢弃并记录降级；规整后仍非法则照旧抛错（与今日行为一致）。
+# SIM_TOOL_ARG_NORMALIZE=false 可整体关闭（恢复原生行为）。
+# ============================================================================
+_TOOL_ARG_ALIASES = {
+    "like_comment": {"post_id": "comment_id"},
+    "dislike_comment": {"post_id": "comment_id"},
+}
+
+
+def _normalize_tool_kwargs(kwargs: Dict[str, Any], params, tool_name: str) -> Dict[str, Any]:
+    """纯函数：按目标签名过滤/改名 LLM 给出的工具关键字参数。"""
+    aliases = _TOOL_ARG_ALIASES.get(tool_name, {})
+    out: Dict[str, Any] = {}
+    for k, v in kwargs.items():
+        if k in params:
+            out[k] = v
+            continue
+        target = aliases.get(k)
+        if target and target in params and target not in kwargs:
+            print(f"[tool-args] {tool_name}: 幻觉参数 {k} 已改名为 {target}（动作保留执行）")
+            out[target] = v
+        else:
+            print(f"[tool-args] {tool_name}: 丢弃未知参数 {k}（模型幻觉，尽力保留动作）")
+    return out
+
+
+def _wrap_agent_tool_arg_normalizer(agent_graph, log_info) -> None:
+    """给 agent_graph 中每个 agent 的已注册工具套上参数规整层（幂等，best-effort）。"""
+    if not _flag_true("SIM_TOOL_ARG_NORMALIZE", "true"):
+        return
+    import functools
+    import inspect
+    wrapped = 0
+    try:
+        agents = list(agent_graph.get_agents())
+    except Exception:
+        return
+    for _aid, agent in agents:
+        tools = getattr(agent, "_internal_tools", None)
+        if not isinstance(tools, dict):
+            continue
+        for name, tool in tools.items():
+            func = getattr(tool, "func", None)
+            if func is None or getattr(func, "_sim_arg_normalized", False):
+                continue
+            try:
+                sig = inspect.signature(func)
+            except (TypeError, ValueError):
+                continue
+            if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+                continue  # **kwargs 函数本就接受任意关键字，无需规整
+            params = frozenset(sig.parameters)
+            if inspect.iscoroutinefunction(func):
+                def _make_async(f, ps, nm):
+                    @functools.wraps(f)
+                    async def _w(*args, **kwargs):
+                        return await f(*args, **_normalize_tool_kwargs(kwargs, ps, nm))
+                    return _w
+                new_func = _make_async(func, params, name)
+            else:
+                def _make_sync(f, ps, nm):
+                    @functools.wraps(f)
+                    def _w(*args, **kwargs):
+                        return f(*args, **_normalize_tool_kwargs(kwargs, ps, nm))
+                    return _w
+                new_func = _make_sync(func, params, name)
+            new_func._sim_arg_normalized = True
+            tool.func = new_func
+            wrapped += 1
+    if wrapped:
+        log_info(f"已启用工具参数规整（{wrapped} 个工具；SIM_TOOL_ARG_NORMALIZE=false 关闭）")
 
 
 async def inject_initial_follows(env, event_config, log_info, agent_names=None, action_logger=None):
@@ -1198,6 +1903,34 @@ def build_oasis_platform(kind: str, db_path: str, config: Dict[str, Any], log_in
     viral_threshold 是展示性权重，OASIS 不消费，此处不再谎称生效。
     """
     if os.environ.get("SIM_WIRE_RECSYS", "false").strip().lower() != "true":
+        # RUN-6 (S8): DefaultPlatformType.TWITTER 用 twhin-bert recsys——运行期要从
+        # HuggingFace 下载 transformer，语料里该下载成百次 ConnectTimeout → 空 feed →
+        # 500 帖 0 评论 0 赞的纯广播模拟。S8 的模型无关 recsys 修复此前只在
+        # SIM_WIRE_RECSYS=true 时可达，而默认 false → 默认跑的仍是坏 feed。这里把
+        # Twitter 的 recsys_type 缺省提升到 'reddit'（工程无关、纯启发式排序），
+        # 其余参数与 DefaultPlatformType.TWITTER 逐项一致；SIM_TWITTER_RECSYS 可显式
+        # 覆盖（模型已缓存时设回 twhin-bert）。SIM_TWITTER_MODEL_FREE_FEED=false 或
+        # 构建失败 → 回退默认平台（今日行为）。
+        if kind == "twitter" and _flag_true("SIM_TWITTER_MODEL_FREE_FEED", "true"):
+            try:
+                from oasis.social_platform.platform import Platform
+                from oasis.social_platform.channel import Channel
+                _mf_recsys = os.environ.get("SIM_TWITTER_RECSYS", "").strip() or "reddit"
+                platform = Platform(
+                    db_path=db_path,
+                    channel=Channel(),
+                    recsys_type=_mf_recsys,
+                    refresh_rec_post_count=2,
+                    max_rec_post_len=2,
+                    following_post_count=3,
+                )
+                log_info(
+                    f"已启用模型无关 Twitter feed: recsys_type={_mf_recsys}"
+                    "（SIM_TWITTER_MODEL_FREE_FEED=false 恢复 twhin-bert 默认平台）"
+                )
+                return platform
+            except Exception as e:  # noqa: BLE001
+                log_info(f"模型无关 feed 构建失败，回退默认平台: {e}")
         return None
     try:
         from oasis.social_platform.platform import Platform
@@ -1218,10 +1951,20 @@ def build_oasis_platform(kind: str, db_path: str, config: Dict[str, Any], log_in
     try:
         channel = Channel()
         if kind == "twitter":
+            # QUALITY-OPT S8: default Twitter to the MODEL-FREE "reddit" recsys (engagement +
+            # recency ranking) instead of "twhin-bert"/"twitter", which load a HuggingFace
+            # transformer (twhin-bert-base) at runtime. In the corpus that download failed
+            # (hundreds of huggingface.co ConnectTimeouts) → empty feed → 500 posts but 0
+            # comments/0 likes (broadcast-only). A heuristic feed that WORKS beats an
+            # embedding feed that doesn't. Override with SIM_TWITTER_RECSYS=twhin-bert once the
+            # model is cached (HF_HUB_OFFLINE=1). pcfg.recsys_type still wins if explicitly set.
+            _tw_recsys = (pcfg.get("recsys_type")
+                          or os.environ.get("SIM_TWITTER_RECSYS", "").strip()
+                          or "reddit")
             platform = Platform(
                 db_path=db_path,
                 channel=channel,
-                recsys_type=(pcfg.get("recsys_type") or "twhin-bert"),
+                recsys_type=_tw_recsys,
                 refresh_rec_post_count=int(pcfg.get("refresh_rec_post_count") or 2),
                 max_rec_post_len=int(pcfg.get("max_rec_post_len") or 2),
                 following_post_count=int(round(2 + echo * 4)),
@@ -1248,6 +1991,515 @@ def build_oasis_platform(kind: str, db_path: str, config: Dict[str, Any], log_in
         return None
 
 
+# ============================================================
+# EXECPLAN2 I-2-0: 涌现结构 / 观点动力学度量层
+# ------------------------------------------------------------
+# 模拟结束后（只读地）在 {platform}_simulation.db + actions.jsonl 上计算：
+#   1) 观点/立场轨迹 —— 每轮按 stance 桶（supportive/opposing/neutral/observer）
+#      统计发声量（CREATE_POST/CREATE_COMMENT/QUOTE_POST），并对内容做轻量情感打分；
+#   2) 极化指数 —— 每 agent 净情感分布的方差/双峰性 + 跨立场 vs 同立场互动比；
+#   3) 关注图社区检测 —— 在真实 follow 表上跑 networkx（贪婪模块度/标签传播），
+#      给出每个社区的主导立场与桥接 agent；
+#   4) 级联/传播 —— top 帖的回复+转发+引用深度与广度。
+# 全部行为默认关闭（SIM_EMERGENT_METRICS!=true 时不计算），networkx 缺失时社区检测
+# 自动跳过，情感使用离线 CN/EN 极性词典（无 LLM 成本）。任何异常都不影响已完成的模拟，
+# 仅在调用方以 try/except 包裹，结果写入 {platform}_emergent_metrics.json 与 emergent_metrics.json。
+# ============================================================
+
+# 影响立场表达的发声动作（用于立场轨迹加权与跨立场互动判定）
+_SPEECH_ACTIONS = {"CREATE_POST", "CREATE_COMMENT", "QUOTE_POST", "REPOST"}
+# 直接产生“agent→agent”互动的动作（用于跨立场 vs 同立场互动比）
+_INTERACTION_ACTIONS = {
+    "REPOST", "QUOTE_POST", "CREATE_COMMENT", "LIKE_POST", "DISLIKE_POST",
+    "LIKE_COMMENT", "DISLIKE_COMMENT", "FOLLOW", "MUTE",
+}
+_STANCE_BUCKETS = ("supportive", "opposing", "neutral", "observer")
+
+# 离线情感词典（CN + EN 极性词），用于 LLM 成本过高时的回退打分。
+# 仅作粗粒度净情感方向估计；命中即 ±1，无命中记 0（中性）。
+_POS_LEXICON = {
+    # EN
+    "good", "great", "excellent", "positive", "support", "growth", "win", "gain",
+    "strong", "bullish", "optimistic", "agree", "love", "best", "advantage",
+    "lead", "leading", "dominate", "success", "breakthrough", "soar", "surge",
+    # CN
+    "好", "强", "优势", "增长", "领先", "成功", "突破", "看好", "利好", "支持",
+    "同意", "赞", "上涨", "飙升", "主导", "碾压", "双赢", "乐观",
+}
+_NEG_LEXICON = {
+    # EN
+    "bad", "poor", "negative", "oppose", "decline", "lose", "loss", "weak",
+    "bearish", "pessimistic", "disagree", "hate", "worst", "risk", "fail",
+    "failure", "crash", "plunge", "drop", "threat", "concern", "doubt",
+    # CN
+    "差", "弱", "下跌", "崩", "失败", "风险", "反对", "不同意", "看空", "利空",
+    "暴跌", "担忧", "质疑", "威胁", "落后", "亏损", "悲观", "泡沫",
+}
+
+
+def _load_stance_by_agent(config: Dict[str, Any]) -> Dict[int, str]:
+    """agent_id -> 归一化 stance 桶映射（缺省 neutral）。"""
+    stance_map: Dict[int, str] = {}
+    for cfg in config.get("agent_configs", []) or []:
+        aid = cfg.get("agent_id")
+        if aid is None:
+            continue
+        raw = str(cfg.get("stance", "neutral") or "neutral").strip().lower()
+        stance_map[int(aid)] = raw if raw in _STANCE_BUCKETS else "neutral"
+    return stance_map
+
+
+def _lexicon_sentiment(text: str) -> float:
+    """离线极性打分：返回 [-1, 1] 的净情感方向（无命中 → 0）。"""
+    if not text:
+        return 0.0
+    low = text.lower()
+    pos = sum(1 for w in _POS_LEXICON if w in low)
+    neg = sum(1 for w in _NEG_LEXICON if w in low)
+    if pos == 0 and neg == 0:
+        return 0.0
+    return (pos - neg) / float(pos + neg)
+
+
+def _iter_action_lines(actions_jsonl_path: str):
+    """逐行产出 actions.jsonl 中的“真实动作”记录（跳过 event_type 控制行）。"""
+    if not os.path.exists(actions_jsonl_path):
+        return
+    try:
+        with open(actions_jsonl_path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                # 控制行（simulation_start/round_start/round_end/simulation_end）无 action_type
+                if rec.get("event_type") or not rec.get("action_type"):
+                    continue
+                yield rec
+    except OSError:
+        return
+
+
+def _score_stance_trajectory(
+    actions_jsonl_path: str,
+    stance_by_agent: Dict[int, str],
+) -> Tuple[List[Dict[str, Any]], float, Dict[int, float]]:
+    """计算每轮立场轨迹 + 全局极化指数（按 agent 净情感分布方差）。
+
+    Returns:
+        (trajectory, polarization_index, net_sentiment_by_agent)
+        - trajectory: [{round, by_stance:{...发声量...}, net_sentiment}]
+        - polarization_index: agent 级净情感分布的方差（[0,1] 量级，越大越极化）
+        - net_sentiment_by_agent: agent_id -> 平均净情感（供互动比/社区主导立场使用）
+    """
+    from collections import defaultdict
+
+    per_round: Dict[int, Dict[str, Any]] = {}
+    sent_sum_by_agent: Dict[int, float] = defaultdict(float)
+    sent_cnt_by_agent: Dict[int, int] = defaultdict(int)
+
+    for rec in _iter_action_lines(actions_jsonl_path):
+        action_type = str(rec.get("action_type", ""))
+        if action_type not in _SPEECH_ACTIONS:
+            continue
+        agent_id = rec.get("agent_id")
+        round_num = rec.get("round")
+        if agent_id is None or round_num is None:
+            continue
+        agent_id = int(agent_id)
+        round_num = int(round_num)
+        stance = stance_by_agent.get(agent_id, "neutral")
+
+        bucket = per_round.setdefault(
+            round_num,
+            {"round": round_num, "by_stance": {s: 0 for s in _STANCE_BUCKETS}, "_sent": 0.0, "_n": 0},
+        )
+        bucket["by_stance"][stance] = bucket["by_stance"].get(stance, 0) + 1
+
+        # 情感仅对带内容的动作打分
+        content = ""
+        args = rec.get("action_args") or {}
+        if isinstance(args, dict):
+            content = str(args.get("content") or args.get("quote_content") or "")
+        if content:
+            s = _lexicon_sentiment(content)
+            bucket["_sent"] += s
+            bucket["_n"] += 1
+            sent_sum_by_agent[agent_id] += s
+            sent_cnt_by_agent[agent_id] += 1
+
+    trajectory: List[Dict[str, Any]] = []
+    for round_num in sorted(per_round.keys()):
+        b = per_round[round_num]
+        net = (b["_sent"] / b["_n"]) if b["_n"] else 0.0
+        trajectory.append({
+            "round": round_num,
+            "by_stance": b["by_stance"],
+            "net_sentiment": round(net, 4),
+        })
+
+    net_by_agent: Dict[int, float] = {}
+    for aid, total in sent_sum_by_agent.items():
+        cnt = sent_cnt_by_agent.get(aid, 0)
+        if cnt:
+            net_by_agent[aid] = total / cnt
+
+    # 极化指数：发声 agent 净情感分布的方差（0=完全一致，越大越极化）
+    polarization = 0.0
+    vals = list(net_by_agent.values())
+    if len(vals) >= 2:
+        mean = sum(vals) / len(vals)
+        polarization = sum((v - mean) ** 2 for v in vals) / len(vals)
+
+    return trajectory, round(polarization, 4), net_by_agent
+
+
+def _compute_interaction_ratio(
+    conn: "sqlite3.Connection",
+    stance_by_agent: Dict[int, str],
+) -> Dict[str, Any]:
+    """跨立场 vs 同立场互动比。
+
+    通过 follow（关注边）、post.original_post_id（转发/引用）、comment（回复）三类
+    “agent→agent”边，按双方 stance 是否相同计数。比值 = 跨立场 / (同立场 + 跨立场)。
+    """
+    cursor = conn.cursor()
+
+    # user_id -> agent_id -> stance
+    uid_to_stance: Dict[int, str] = {}
+    try:
+        cursor.execute("SELECT user_id, agent_id FROM user")
+        for user_id, agent_id in cursor.fetchall():
+            if agent_id is None:
+                continue
+            uid_to_stance[user_id] = stance_by_agent.get(int(agent_id), "neutral")
+    except sqlite3.Error:
+        return {"cross_stance_interaction_ratio": 0.0, "cross_stance": 0, "within_stance": 0}
+
+    cross = 0
+    within = 0
+
+    def _tally(src_uid, dst_uid):
+        nonlocal cross, within
+        if src_uid is None or dst_uid is None or src_uid == dst_uid:
+            return
+        s_src = uid_to_stance.get(src_uid)
+        s_dst = uid_to_stance.get(dst_uid)
+        if s_src is None or s_dst is None:
+            return
+        if s_src == s_dst:
+            within += 1
+        else:
+            cross += 1
+
+    # 关注边
+    try:
+        cursor.execute("SELECT follower_id, followee_id FROM follow")
+        for follower, followee in cursor.fetchall():
+            _tally(follower, followee)
+    except sqlite3.Error:
+        pass
+
+    # 转发/引用边：reposter -> 原帖作者
+    try:
+        cursor.execute(
+            "SELECT p.user_id, orig.user_id "
+            "FROM post p JOIN post orig ON p.original_post_id = orig.post_id "
+            "WHERE p.original_post_id IS NOT NULL"
+        )
+        for reposter, author in cursor.fetchall():
+            _tally(reposter, author)
+    except sqlite3.Error:
+        pass
+
+    # 评论边：评论者 -> 被评论帖作者
+    try:
+        cursor.execute(
+            "SELECT c.user_id, p.user_id "
+            "FROM comment c JOIN post p ON c.post_id = p.post_id"
+        )
+        for commenter, author in cursor.fetchall():
+            _tally(commenter, author)
+    except sqlite3.Error:
+        pass
+
+    total = cross + within
+    ratio = (cross / total) if total else 0.0
+    return {
+        "cross_stance_interaction_ratio": round(ratio, 4),
+        "cross_stance": cross,
+        "within_stance": within,
+    }
+
+
+def _detect_follow_communities(
+    conn: "sqlite3.Connection",
+    stance_by_agent: Dict[int, str],
+    log_info,
+) -> List[Dict[str, Any]]:
+    """在真实 follow 表上做社区检测（networkx 缺失 → 返回 [] 并跳过）。"""
+    try:
+        import networkx as nx  # 可选依赖，缺失即优雅跳过
+        from networkx.algorithms import community as nx_community
+    except Exception as e:  # noqa: BLE001
+        log_info(f"涌现度量：networkx 不可用，跳过社区检测: {e}")
+        return []
+
+    cursor = conn.cursor()
+    # user_id -> agent_id
+    uid_to_agent: Dict[int, Optional[int]] = {}
+    try:
+        cursor.execute("SELECT user_id, agent_id FROM user")
+        for user_id, agent_id in cursor.fetchall():
+            uid_to_agent[user_id] = int(agent_id) if agent_id is not None else None
+    except sqlite3.Error:
+        return []
+
+    g = nx.DiGraph()
+    try:
+        cursor.execute("SELECT follower_id, followee_id FROM follow")
+        for follower, followee in cursor.fetchall():
+            if follower is None or followee is None or follower == followee:
+                continue
+            g.add_edge(follower, followee)
+    except sqlite3.Error:
+        return []
+
+    if g.number_of_nodes() == 0:
+        return []
+
+    # 贪婪模块度在无向图上运行；用无向投影
+    ug = g.to_undirected()
+    try:
+        comms = list(nx_community.greedy_modularity_communities(ug))
+    except Exception:
+        try:
+            comms = list(nx_community.label_propagation_communities(ug))
+        except Exception as e:  # noqa: BLE001
+            log_info(f"涌现度量：社区检测失败，跳过: {e}")
+            return []
+
+    # 桥接节点：跨社区出/入度高者（按 betweenness 近似——用跨社区边计数）
+    node_to_comm: Dict[int, int] = {}
+    for idx, members in enumerate(comms):
+        for node in members:
+            node_to_comm[node] = idx
+
+    cross_links: Dict[int, int] = {}
+    for u, v in ug.edges():
+        if node_to_comm.get(u) != node_to_comm.get(v):
+            cross_links[u] = cross_links.get(u, 0) + 1
+            cross_links[v] = cross_links.get(v, 0) + 1
+
+    result: List[Dict[str, Any]] = []
+    for idx, members in enumerate(comms):
+        member_agents = [uid_to_agent.get(uid) for uid in members]
+        member_agents = [a for a in member_agents if a is not None]
+        # 主导立场
+        from collections import Counter
+        stance_counts = Counter(stance_by_agent.get(a, "neutral") for a in member_agents)
+        dominant = stance_counts.most_common(1)[0][0] if stance_counts else "neutral"
+        # 桥接 agent（跨社区连接数最高的前 3 个）
+        bridges = sorted(
+            (uid for uid in members if cross_links.get(uid, 0) > 0),
+            key=lambda uid: cross_links.get(uid, 0),
+            reverse=True,
+        )[:3]
+        bridge_agents = [uid_to_agent.get(uid) for uid in bridges]
+        bridge_agents = [a for a in bridge_agents if a is not None]
+        result.append({
+            "size": len(members),
+            "members": sorted(member_agents),
+            "dominant_stance": dominant,
+            "stance_breakdown": dict(stance_counts),
+            "bridge_agents": bridge_agents,
+        })
+    # 大社区在前
+    result.sort(key=lambda c: c["size"], reverse=True)
+    return result
+
+
+def _compute_cascades(
+    conn: "sqlite3.Connection",
+    top_n: int = 10,
+) -> List[Dict[str, Any]]:
+    """每个原帖的级联/传播统计：回复数(breadth) + 转发/引用数 + 综合互动深度。"""
+    cursor = conn.cursor()
+
+    # 转发/引用：original_post_id -> 计数
+    repost_counts: Dict[int, int] = {}
+    try:
+        cursor.execute(
+            "SELECT original_post_id, COUNT(*) FROM post "
+            "WHERE original_post_id IS NOT NULL GROUP BY original_post_id"
+        )
+        for orig_id, cnt in cursor.fetchall():
+            if orig_id is not None:
+                repost_counts[orig_id] = cnt
+    except sqlite3.Error:
+        repost_counts = {}
+
+    # 评论数
+    comment_counts: Dict[int, int] = {}
+    try:
+        cursor.execute("SELECT post_id, COUNT(*) FROM comment GROUP BY post_id")
+        for post_id, cnt in cursor.fetchall():
+            if post_id is not None:
+                comment_counts[post_id] = cnt
+    except sqlite3.Error:
+        comment_counts = {}
+
+    # 原帖（original_post_id 为空）的基础信息
+    cascades: List[Dict[str, Any]] = []
+    try:
+        cursor.execute(
+            "SELECT post_id, num_likes, num_shares FROM post "
+            "WHERE original_post_id IS NULL"
+        )
+        rows = cursor.fetchall()
+    except sqlite3.Error:
+        return []
+
+    for post_id, num_likes, num_shares in rows:
+        reposts = repost_counts.get(post_id, 0)
+        replies = comment_counts.get(post_id, 0)
+        likes = num_likes or 0
+        breadth = reposts + replies
+        # 综合级联“深度”：直接互动总量（回复 + 转发 + 点赞）
+        depth = breadth + likes
+        if breadth == 0 and likes == 0:
+            continue
+        cascades.append({
+            "post_id": post_id,
+            "replies": replies,
+            "reposts": reposts,
+            "likes": likes,
+            "breadth": breadth,
+            "depth": depth,
+        })
+
+    cascades.sort(key=lambda c: c["depth"], reverse=True)
+    return cascades[:top_n]
+
+
+def compute_emergent_metrics(
+    simulation_dir: str,
+    config: Dict[str, Any],
+    platform: str,
+    log_info,
+) -> Optional[Dict[str, Any]]:
+    """EXECPLAN2 I-2-0: 为单个平台计算涌现度量并返回字典（失败 → None）。
+
+    只读 {platform}_simulation.db + {platform}/actions.jsonl，绝不修改模拟产物。
+    """
+    db_path = os.path.join(simulation_dir, f"{platform}_simulation.db")
+    actions_path = os.path.join(simulation_dir, platform, "actions.jsonl")
+    if not os.path.exists(db_path):
+        log_info(f"涌现度量[{platform}]：数据库不存在，跳过")
+        return None
+
+    stance_by_agent = _load_stance_by_agent(config)
+
+    trajectory, polarization, net_by_agent = _score_stance_trajectory(actions_path, stance_by_agent)
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        interaction = _compute_interaction_ratio(conn, stance_by_agent)
+        communities = _detect_follow_communities(conn, stance_by_agent, log_info)
+        cascades = _compute_cascades(conn)
+    except Exception as e:  # noqa: BLE001
+        log_info(f"涌现度量[{platform}]：数据库读取失败，部分跳过: {e}")
+        interaction = {"cross_stance_interaction_ratio": 0.0, "cross_stance": 0, "within_stance": 0}
+        communities = []
+        cascades = []
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
+
+    # 末轮立场占比（供报告 agent 直接引用“支持率从 X% 跌至 Y%”）
+    final_stance_share: Dict[str, float] = {}
+    if trajectory:
+        last = trajectory[-1]["by_stance"]
+        total = sum(last.values()) or 1
+        final_stance_share = {s: round(v / total, 4) for s, v in last.items()}
+
+    metrics = {
+        "platform": platform,
+        "polarization_index": polarization,
+        "cross_stance_interaction_ratio": interaction.get("cross_stance_interaction_ratio", 0.0),
+        "interaction_counts": {
+            "cross_stance": interaction.get("cross_stance", 0),
+            "within_stance": interaction.get("within_stance", 0),
+        },
+        "final_stance_share": final_stance_share,
+        "stance_trajectory": trajectory,
+        "follow_communities": communities,
+        "cascades": cascades,
+        "num_speaking_agents": len(net_by_agent),
+        "sentiment_method": "lexicon",
+    }
+    return metrics
+
+
+def write_emergent_metrics(
+    simulation_dir: str,
+    config: Dict[str, Any],
+    platforms: List[str],
+    log_info,
+) -> None:
+    """EXECPLAN2 I-2-0: 计算并原子写出涌现度量产物（仅 SIM_EMERGENT_METRICS=true 时调用）。
+
+    产出：
+      - {platform}_emergent_metrics.json（每平台）
+      - emergent_metrics.json（聚合，供报告 agent 读取）
+    全程 try/except 隔离，任何失败都不影响已完成的模拟。
+    """
+    from app.utils.atomic import write_json_atomic  # 复用原子写助手
+
+    aggregate: Dict[str, Any] = {
+        "simulation_id": config.get("simulation_id"),
+        "generated_at": datetime.now().isoformat(),
+        "platforms": {},
+    }
+    for platform in platforms:
+        try:
+            metrics = compute_emergent_metrics(simulation_dir, config, platform, log_info)
+        except Exception as e:  # noqa: BLE001
+            log_info(f"涌现度量[{platform}]：计算异常，跳过该平台: {e}")
+            metrics = None
+        if metrics is None:
+            continue
+        aggregate["platforms"][platform] = metrics
+        try:
+            write_json_atomic(
+                os.path.join(simulation_dir, f"{platform}_emergent_metrics.json"),
+                metrics,
+            )
+            log_info(
+                f"涌现度量[{platform}]：极化={metrics['polarization_index']}, "
+                f"跨立场互动比={metrics['cross_stance_interaction_ratio']}, "
+                f"社区数={len(metrics['follow_communities'])}"
+            )
+        except Exception as e:  # noqa: BLE001
+            log_info(f"涌现度量[{platform}]：写出失败: {e}")
+
+    if aggregate["platforms"]:
+        try:
+            write_json_atomic(
+                os.path.join(simulation_dir, "emergent_metrics.json"),
+                aggregate,
+            )
+        except Exception as e:  # noqa: BLE001
+            log_info(f"涌现度量：聚合产物写出失败: {e}")
+
+
 class PlatformSimulation:
     """平台模拟结果容器"""
     def __init__(self):
@@ -1256,23 +2508,182 @@ class PlatformSimulation:
         self.total_actions = 0
 
 
+# ============== NEXTSTEPS P1-1/P1-2/P1-4: post-sim decision channel helpers ==============
+def _read_actions_for_decision_channel(simulation_dir: str) -> List[Dict[str, Any]]:
+    """读取两平台 actions.jsonl 的动作记录（跳过 round_start/end/sim_end 事件），
+    汇成 [{round, agent_id, agent_name}] 供决策通道按轮回放。失败/缺失 → []。"""
+    out: List[Dict[str, Any]] = []
+    for plat in ("twitter", "reddit"):
+        path = os.path.join(simulation_dir, plat, "actions.jsonl")
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except (ValueError, TypeError):
+                        continue
+                    if rec.get("event_type") or rec.get("agent_id") is None:
+                        continue
+                    out.append({"round": rec.get("round", 0),
+                                "agent_id": rec.get("agent_id"),
+                                "agent_name": rec.get("agent_name", "")})
+        except OSError:
+            continue
+    return out
+
+
+def _build_round_to_date(seed: Dict[str, Any], config: Dict[str, Any]):
+    """NEXTSTEPS P1-2: round(1-based) → ISO 日期，as_of_date→horizon_date 线性映射。
+    无法确定（缺日期/非法/horizon≤as_of）→ None（不做日期映射）。"""
+    from datetime import datetime as _dt, timedelta as _td
+    as_of, horizon = seed.get("as_of_date"), seed.get("horizon_date")
+    if not as_of or not horizon:
+        return None
+    try:
+        d0 = _dt.fromisoformat(str(as_of)[:10])
+        d1 = _dt.fromisoformat(str(horizon)[:10])
+    except (ValueError, TypeError):
+        return None
+    if d1 <= d0:
+        return None
+    tc = config.get("time_config", {}) if isinstance(config, dict) else {}
+    try:
+        total_hours = float(tc.get("total_simulation_hours", 72) or 72)
+        mpr = float(tc.get("minutes_per_round", 60) or 60)
+    except (TypeError, ValueError):
+        total_hours, mpr = 72.0, 60.0
+    total_rounds = max(1, int(total_hours * 60 / mpr))
+    span_days = (d1 - d0).days
+
+    def _r2d(rnd: int) -> str:
+        frac = min(1.0, max(0.0, float(rnd) / total_rounds))
+        return (d0 + _td(days=int(span_days * frac))).date().isoformat()
+
+    return _r2d
+
+
+# ============================================================================
+# RUN-7: 轮级检查点与断点续跑（默认关，SIM_RESUME=true 开启）。
+# 每轮 ~32 次 LLM 调用，崩溃/被杀/后端重启曾意味着 100% 花费作废并从第 0 轮重烧。
+# 检查点只记「已完成轮次 + trace 游标 + 累计动作数」；续跑保留模拟 DB——OASIS 的
+# sign_up 用 user_id=agent_id 显式主键插入，重登录冲突被静默容忍且旧行不受影响，
+# 故 DB 复用安全。已知取舍（诚实降级，不假装无损）：agent 的进程内会话记忆与
+# Twitter sandbox 时钟在续跑后重置；崩溃时进行到一半的轮次被整轮丢弃。
+# XRUN-4: 磁盘预检 + 连续同类 env.step 失败熔断（磁盘耗尽曾导致 10+ 轮静默跳过、
+# LLM 额度对着死 SQLite 连烧 5 小时）。
+# ============================================================================
+def _resume_checkpointing_enabled() -> bool:
+    """SIM_RESUME=true 时每轮落检查点（默认关 → 运行产物与现状逐字节一致）。"""
+    return _flag_true("SIM_RESUME", "false")
+
+
+def _checkpoint_file(simulation_dir: str, platform: str) -> str:
+    return os.path.join(simulation_dir, platform, "checkpoint.json")
+
+
+def _write_round_checkpoint(
+    simulation_dir: str,
+    platform: str,
+    completed_round: int,
+    last_rowid: int,
+    total_rounds: int,
+    total_actions: int,
+) -> None:
+    """每轮结束后原子落盘微型检查点（best-effort；开关关闭时 no-op）。"""
+    if not _resume_checkpointing_enabled():
+        return
+    try:
+        from app.utils.atomic import write_json_atomic
+        write_json_atomic(_checkpoint_file(simulation_dir, platform), {
+            "platform": platform,
+            "completed_round": int(completed_round),
+            "last_rowid": int(last_rowid),
+            "total_rounds": int(total_rounds),
+            "total_actions": int(total_actions),
+            "updated_at": datetime.now().isoformat(),
+        })
+    except Exception:  # noqa: BLE001 — 检查点是旁路持久化，绝不影响模拟主循环
+        pass
+
+
+def _load_round_checkpoint(simulation_dir: str, platform: str) -> Optional[Dict[str, Any]]:
+    """读取并校验平台检查点；缺失/损坏/未完成任何轮次 → None（全新运行）。"""
+    path = _checkpoint_file(simulation_dir, platform)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and int(data.get("completed_round", 0)) >= 1:
+            return data
+    except (OSError, ValueError, TypeError):
+        pass
+    return None
+
+
+def _max_trace_rowid(db_path: str) -> int:
+    """trace 表当前最大 rowid；任何失败返回 0（退化为从头重放的旧行为）。"""
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("SELECT COALESCE(MAX(rowid), 0) FROM trace")
+        row = cur.fetchone()
+        conn.close()
+        return int(row[0] or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _free_disk_error(simulation_dir: str) -> Optional[str]:
+    """XRUN-4: 可用磁盘低于 SIM_MIN_FREE_DISK_GB（默认 2；<=0 关闭）时返回错误描述。"""
+    try:
+        min_gb = float(_cfg_flag("SIM_MIN_FREE_DISK_GB", "2"))
+    except (TypeError, ValueError):
+        min_gb = 2.0
+    if min_gb <= 0:
+        return None
+    try:
+        free = shutil.disk_usage(simulation_dir).free
+    except OSError:
+        return None  # 查询失败不阻断（degrade-safe）
+    if free < min_gb * (1024 ** 3):
+        return (f"可用磁盘 {free / 1024 ** 3:.2f} GB 低于阈值 {min_gb} GB"
+                f"（SIM_MIN_FREE_DISK_GB）——SQLite/日志随时会写失败")
+    return None
+
+
+def _step_failure_limit() -> int:
+    """XRUN-4: 连续同类 env.step 失败的熔断阈值（默认 3；0=不熔断，维持旧的无限跳轮）。"""
+    try:
+        return max(0, int(_cfg_flag("SIM_STEP_FAILURE_LIMIT", "3")))
+    except (TypeError, ValueError):
+        return 3
+
+
 async def run_twitter_simulation(
     config: Dict[str, Any],
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
     max_rounds: Optional[int] = None,
-    semaphore_platforms: int = 1
+    semaphore_platforms: int = 1,
+    resume: bool = False
 ) -> PlatformSimulation:
     """运行Twitter模拟
-    
+
     Args:
         config: 模拟配置
         simulation_dir: 模拟目录
         action_logger: 动作日志记录器
         main_logger: 主日志管理器
         max_rounds: 最大模拟轮数（可选，用于截断过长的模拟）
-        
+        resume: RUN-7 断点续跑——存在有效检查点时保留 DB、跳过种子注入并从检查点轮次继续
+
     Returns:
         PlatformSimulation: 包含env和agent_graph的结果对象
     """
@@ -1287,7 +2698,9 @@ async def run_twitter_simulation(
     
     # Twitter 使用通用 LLM 配置
     model = create_model(config, use_boost=False)
-    
+    # RUN-2: OASIS 吞掉逐 agent 模型异常，模型请求层是唯一可靠的失败观测点
+    llm_counter = _wrap_model_llm_counter(model)
+
     # OASIS Twitter使用CSV格式
     profile_path = os.path.join(simulation_dir, "twitter_profiles.csv")
     if not os.path.exists(profile_path):
@@ -1299,16 +2712,43 @@ async def run_twitter_simulation(
         model=model,
         available_actions=TWITTER_ACTIONS,
     )
-    
+
+    # EXECPLAN2 I-2-3: 按角色裁剪每个 Agent 的动作可供性（默认关闭；开关 SIM_ROLE_ACTION_PROFILES）。
+    # 必须在 oasis.make()/env.reset() 之前，对 generate_*_agent_graph 产出的同一批 Agent 直接生效。
+    if _role_action_profiles_enabled():
+        try:
+            _apply_role_action_profiles(result.agent_graph, config, TWITTER_ACTIONS, log_info)
+        except Exception as _rap_err:  # noqa: BLE001
+            log_info(f"角色动作可供性应用失败（已隔离，回退全局动作清单）: {_rap_err}")
+
+    # NEXTSTEPS SIM_WORLD_BRIEF: 全体 Agent 共享世界底稿（默认开）。与角色动作裁剪一样必须在
+    # env.reset() 之前注入；config 无 world_brief 字段（旧配置）→ no-op。
+    if _world_brief_enabled():
+        try:
+            _inject_world_brief(result.agent_graph, config.get("world_brief"), log_info)
+        except Exception as _wb_err:  # noqa: BLE001
+            log_info(f"世界简报注入失败（已隔离，系统提示保持原样）: {_wb_err}")
+
+    # XRUN-14: 幻觉工具参数（如 like_comment(post_id=...)）降级为改名/丢参而非整个动作被吞
+    try:
+        _wrap_agent_tool_arg_normalizer(result.agent_graph, log_info)
+    except Exception as _tan_err:  # noqa: BLE001
+        log_info(f"工具参数规整启用失败（已隔离，保持原生工具行为）: {_tan_err}")
+
     # 从配置文件获取 Agent 真实名称映射（使用 entity_name 而非默认的 Agent_X）
     agent_names = get_agent_names_from_config(config)
     # 如果配置中没有某个 agent，则使用 OASIS 的默认名称
     for agent_id, agent in result.agent_graph.get_agents():
         if agent_id not in agent_names:
             agent_names[agent_id] = getattr(agent, 'name', f'Agent_{agent_id}')
-    
+
     db_path = os.path.join(simulation_dir, "twitter_simulation.db")
-    if os.path.exists(db_path):
+    # RUN-7: 续跑时保留模拟 DB（世界状态所在）；检查点或 DB 缺失 → 退化为全新运行。
+    resume_ckpt = _load_round_checkpoint(simulation_dir, "twitter") if resume else None
+    if resume_ckpt is not None and not os.path.exists(db_path):
+        log_info("检查点存在但模拟 DB 缺失，无法续跑 → 从头重跑")
+        resume_ckpt = None
+    if os.path.exists(db_path) and resume_ckpt is None:
         os.remove(db_path)
     
     # T3.12: 优先用 config 的 recsys 旋钮构建自定义平台；未启用/失败则回退默认平台类型
@@ -1328,15 +2768,27 @@ async def run_twitter_simulation(
     
     total_actions = 0
     last_rowid = 0  # 跟踪数据库中最后处理的行号（使用 rowid 避免 created_at 格式差异）
-    
+
+    # RUN-7: 续跑——动作累计从检查点接续；trace 游标推进到 DB 末尾（崩溃时进行到一半
+    # 的轮次宁可整轮丢弃也不错记到新轮次；重登录产生的失败 sign_up 不写 trace）。
+    if resume_ckpt is not None:
+        total_actions = int(resume_ckpt.get("total_actions", 0) or 0)
+        last_rowid = max(int(resume_ckpt.get("last_rowid", 0) or 0), _max_trace_rowid(db_path))
+
     # 执行初始事件
     event_config = config.get("event_config", {})
     initial_posts = event_config.get("initial_posts", [])
-    
-    # 记录 round 0 开始（初始事件阶段）
-    if action_logger:
-        action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
-    
+    if resume_ckpt is not None:
+        initial_posts = []  # RUN-7: 种子帖在原始运行的 round-0 已注入，续跑不得重复
+
+    # RUN-4: 模拟起始小时（默认 0 与旧行为逐字节一致）。对齐 agent active_hours
+    # （生成器普遍从 9 点起）可消除开局的结构性死轮。
+    start_hour = _resolve_start_hour(config.get("time_config", {}) or {})
+
+    # 记录 round 0 开始（初始事件阶段）；RUN-7: 续跑时 round 0 已在原始运行记录过
+    if action_logger and resume_ckpt is None:
+        action_logger.log_round_start(0, start_hour)  # round 0（RUN-4: 起始小时，默认 0）
+
     initial_action_count = 0
     if initial_posts:
         initial_actions = {}
@@ -1345,11 +2797,21 @@ async def run_twitter_simulation(
             content = post.get("content", "")
             try:
                 agent = result.env.agent_graph.get_agent(agent_id)
-                initial_actions[agent] = ManualAction(
-                    action_type=ActionType.CREATE_POST,
-                    action_args={"content": content}
-                )
-                
+                # 修复：同一 agent 的多条初始帖此前会相互覆盖（dict 单键单值），第一条被静默丢弃。
+                # 与 Reddit 路径一致地把同 agent 的多条合并成 list（env.step 接受 list 值）。
+                if agent in initial_actions:
+                    if not isinstance(initial_actions[agent], list):
+                        initial_actions[agent] = [initial_actions[agent]]
+                    initial_actions[agent].append(ManualAction(
+                        action_type=ActionType.CREATE_POST,
+                        action_args={"content": content}
+                    ))
+                else:
+                    initial_actions[agent] = ManualAction(
+                        action_type=ActionType.CREATE_POST,
+                        action_args={"content": content}
+                    )
+
                 if action_logger:
                     action_logger.log_action(
                         round_num=0,
@@ -1362,7 +2824,7 @@ async def run_twitter_simulation(
                     initial_action_count += 1
             except Exception:
                 pass
-        
+
         if initial_actions:
             try:
                 await result.env.step(initial_actions)
@@ -1371,14 +2833,39 @@ async def run_twitter_simulation(
                 log_info(f"初始帖子发布失败，跳过（继续进入主循环）: {init_err}")
     
     # T3.3: 注入研究/图谱驱动的初始关注边（建图 add_edge + FOLLOW 动作），让社交图不再从空起步
-    try:
-        await inject_initial_follows(result.env, event_config, log_info, agent_names, action_logger)
-    except Exception as follow_err:
-        log_info(f"初始关注注入失败，跳过（继续进入主循环）: {follow_err}")
+    # RUN-7: 续跑时关注边已在 DB 的 follow 表里（世界状态被保留），不得重复注入。
+    if resume_ckpt is None:
+        try:
+            await inject_initial_follows(result.env, event_config, log_info, agent_names, action_logger)
+        except Exception as follow_err:
+            log_info(f"初始关注注入失败，跳过（继续进入主循环）: {follow_err}")
 
-    # 记录 round 0 结束
-    if action_logger:
-        action_logger.log_round_end(0, initial_action_count)
+    # RUN-1: 立即消化 round-0 注入（初始帖 + 初始关注）在 trace 表里产生的积压——
+    # 否则 last_rowid 停在 0，首个活跃轮的 fetch 会把整个 backlog（种子帖的第二份
+    # 逐字节拷贝 + 全部种子 FOLLOW）记成该轮动作并被计为"有机"，击穿 hollow-sim
+    # 健康门（sim_440: 全 LLM 失败仍报 health='ok'）。种子 FOLLOW 按 round 0 +
+    # is_seed_action 记录；CREATE_POST 已手动记录过，直接丢弃避免重复。
+    try:
+        _seed_rows, last_rowid = fetch_new_actions_from_db(db_path, last_rowid, agent_names)
+        for _sr in _seed_rows:
+            if _sr['action_type'] == 'CREATE_POST':
+                continue
+            if action_logger:
+                action_logger.log_action(
+                    round_num=0,
+                    agent_id=_sr['agent_id'],
+                    agent_name=_sr['agent_name'],
+                    action_type=_sr['action_type'],
+                    action_args={**_sr['action_args'], 'is_seed_action': True},
+                )
+                total_actions += 1
+                initial_action_count += 1
+    except Exception as _seed_err:  # noqa: BLE001 — 消化失败退回旧行为（首轮统计重复），不中断模拟
+        log_info(f"round-0 注入积压消化失败（退回旧行为）: {_seed_err}")
+
+    # 记录 round 0 结束（RUN-7: 续跑时 round 0 不重复记账）
+    if action_logger and resume_ckpt is None:
+        action_logger.log_round_end(0, initial_action_count, simulated_hours=0.0)
     
     # 主模拟循环
     time_config = config.get("time_config", {})
@@ -1394,9 +2881,33 @@ async def run_twitter_simulation(
             log_info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
     
     start_time = datetime.now()
-    
+
     last_active_ids: set = set()  # T3.5: 近因加成——上一轮活跃的 agent 下一轮更易被激活
-    for round_num in range(total_rounds):
+    # RUN-4: 默认 false = 死轮清空近因集（旧行为）；true 时跨死轮保留，级联不被时段空档打断
+    _recency_carry = _flag_true("SIM_RECENCY_CARRY", "false")
+    # I-2-1: 逐智能体动态情感状态（默认关；SIM_AGENT_DYNAMICS=true 时生效）
+    dynamics_tracker = _build_dynamics_tracker(config, log_info)
+    dyn_name_to_id = {name: aid for aid, name in agent_names.items()}
+
+    # RUN-7: 每轮结束后落轮级检查点（SIM_RESUME 开启时）；续跑则跳过已完成的轮次。
+    _ckpt_platform = "reddit" if os.path.basename(db_path).startswith("reddit") else "twitter"
+
+    def _write_ckpt(completed_round: int) -> None:
+        # 闭包按调用时读取 last_rowid / total_actions 的当前值
+        _write_round_checkpoint(simulation_dir, _ckpt_platform, completed_round,
+                                last_rowid, total_rounds, total_actions)
+
+    start_round = 0
+    if resume_ckpt is not None:
+        start_round = min(int(resume_ckpt.get("completed_round", 0) or 0), total_rounds)
+        log_info(f"断点续跑：跳过已完成的 {start_round}/{total_rounds} 轮，从第 {start_round + 1} 轮继续")
+
+    # XRUN-4: 连续同类 env.step 失败熔断（默认 3；0=关闭）——磁盘耗尽等系统性死亡
+    # 曾被逐轮"跳过本轮"吞成静默僵死，LLM 额度对着死 SQLite 连烧数小时。
+    step_failure_limit = _step_failure_limit()
+    consec_step_failures = 0
+    last_step_err_cls = None
+    for round_num in range(start_round, total_rounds):
         # 检查是否收到退出信号
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
@@ -1404,8 +2915,14 @@ async def run_twitter_simulation(
             break
         
         simulated_minutes = round_num * minutes_per_round
-        simulated_hour = (simulated_minutes // 60) % 24
+        simulated_hour = (start_hour + simulated_minutes // 60) % 24  # RUN-4: 从起始小时推进
         simulated_day = simulated_minutes // (60 * 24) + 1
+
+        # XRUN-4: 每轮磁盘预检——磁盘耗尽后 SQLite 已死，继续跑只会烧 LLM 额度；
+        # 硬失败让平台异常被隔离上抛，run_state/管线健康门看见真实原因而非静默僵死。
+        _disk_err = _free_disk_error(simulation_dir)
+        if _disk_err:
+            raise RuntimeError(f"第 {round_num + 1} 轮前磁盘预检失败: {_disk_err}")
 
         # T3.8: 在活跃 agent 选择前回放本轮到期的研究时间线事件（CREATE_POST），使其对本轮可见
         try:
@@ -1413,13 +2930,19 @@ async def run_twitter_simulation(
                 result.env, event_config, round_num, agent_names, action_logger, log_info
             )
             total_actions += fired
+            if fired:
+                # RUN-14: 定时事件已在 fire_scheduled_events 内手动记录（is_scheduled_event），
+                # 立即推进 last_rowid 丢弃其 trace 行，否则本轮 fetch 会再记一次并伪装成有机动作
+                _, last_rowid = fetch_new_actions_from_db(db_path, last_rowid, agent_names)
         except Exception as _ev_err:
             log_info(f"定时事件触发异常，跳过（不中断模拟）: {_ev_err}")
 
         active_agents = get_active_agents_for_round(
             result.env, config, simulated_hour, round_num, last_active_ids
         )
-        last_active_ids = {aid for aid, _ in active_agents}  # T3.5: 供下一轮近因加成
+        # T3.5/RUN-4: 供下一轮近因加成；SIM_RECENCY_CARRY=true 时死轮不清空（级联跨空档保留）
+        if active_agents or not _recency_carry:
+            last_active_ids = {aid for aid, _ in active_agents}
         
         # 无论是否有活跃agent，都记录round开始
         if action_logger:
@@ -1428,18 +2951,39 @@ async def run_twitter_simulation(
         if not active_agents:
             # 没有活跃agent时也记录round结束（actions_count=0）
             if action_logger:
-                action_logger.log_round_end(round_num + 1, 0)
+                action_logger.log_round_end(
+                    round_num + 1, 0,
+                    simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2))
+            _write_ckpt(round_num + 1)  # RUN-7: 死轮也推进检查点
             continue
         
+        # I-2-1: 注入本轮动态情感状态到各活跃 agent 的系统提示（默认关 → no-op）
+        _inject_agent_dynamics(active_agents, dynamics_tracker, log_info)
         actions = {agent: LLMAction() for _, agent in active_agents}
         # 健壮性：单次 env.step 内的某个 agent LLM 调用失败（超时/降级/异常）不应中断整场模拟。
         # 记录并跳过本轮，让模拟继续，保住此前所有轮次的进度。
         try:
             await result.env.step(actions)
+            consec_step_failures = 0  # XRUN-4: 成功轮清零连续失败计数
+            last_step_err_cls = None
         except Exception as step_err:
+            # XRUN-4: 同类异常连续 N 轮（如 disk full → unable to open database file）
+            # 是系统性死亡而非单轮抖动——达到阈值即硬失败，停止对死环境烧额度。
+            _err_cls = type(step_err).__name__
+            consec_step_failures = (consec_step_failures + 1
+                                    if _err_cls == last_step_err_cls else 1)
+            last_step_err_cls = _err_cls
             log_info(f"第 {round_num + 1} 轮 env.step 失败，跳过本轮（不中断整场模拟）: {step_err}")
             if action_logger:
-                action_logger.log_round_end(round_num + 1, 0)
+                action_logger.log_round_end(
+                    round_num + 1, 0,
+                    simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2))
+            _write_ckpt(round_num + 1)  # RUN-7: 失败轮同样推进检查点（该轮已按 0 动作记账）
+            if step_failure_limit > 0 and consec_step_failures >= step_failure_limit:
+                raise RuntimeError(
+                    f"env.step 连续 {consec_step_failures} 轮以同类异常（{_err_cls}）失败，"
+                    f"硬失败以避免继续烧额度: {step_err}"
+                )
             continue
 
         # 从数据库获取实际执行的动作并记录
@@ -1460,15 +3004,37 @@ async def run_twitter_simulation(
                 total_actions += 1
                 round_action_count += 1
         
+        # I-2-1: 用本轮实际动作更新动态情感状态（默认关 → no-op）
+        _observe_agent_dynamics(dynamics_tracker, actual_actions, dyn_name_to_id)
+
         if action_logger:
-            action_logger.log_round_end(round_num + 1, round_action_count)
-        
+            action_logger.log_round_end(
+                round_num + 1, round_action_count,
+                simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2))
+        _write_ckpt(round_num + 1)  # RUN-7: 本轮已完整记账，落轮级检查点
+
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
             log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
     
     # 注意：不关闭环境，保留给Interview使用
     
+    # RUN-2/RUN-9: 循环结束落 LLM 健康计数与情感动态摘要（附加遥测，供 write_run_summary
+    # 健康门与报告 caveat 消费；platform 名由本函数的 db 文件名推导，两平台共用此代码块）。
+    _plat = "reddit" if os.path.basename(db_path).startswith("reddit") else "twitter"
+    _write_llm_health(simulation_dir, _plat, llm_counter, log_info)
+    if dynamics_tracker is not None:
+        # RUN-9 (QUALITY-OPT C6): dynamics_summary 若不落盘，"情感演化是否真的发生"
+        # 死在模拟进程内，报告阶段无法对 hollow sim 施加"不得叙述情绪演化"的 caveat。
+        try:
+            from app.utils.atomic import write_json_atomic
+            write_json_atomic(
+                os.path.join(simulation_dir, f"{_plat}_dynamics_summary.json"),
+                dynamics_tracker.dynamics_summary(),
+            )
+        except Exception as _dyn_err:  # noqa: BLE001
+            log_info(f"dynamics_summary 写出失败（不影响模拟）: {_dyn_err}")
+
     if action_logger:
         action_logger.log_simulation_end(total_rounds, total_actions)
     
@@ -1485,17 +3051,19 @@ async def run_reddit_simulation(
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
     max_rounds: Optional[int] = None,
-    semaphore_platforms: int = 1
+    semaphore_platforms: int = 1,
+    resume: bool = False
 ) -> PlatformSimulation:
     """运行Reddit模拟
-    
+
     Args:
         config: 模拟配置
         simulation_dir: 模拟目录
         action_logger: 动作日志记录器
         main_logger: 主日志管理器
         max_rounds: 最大模拟轮数（可选，用于截断过长的模拟）
-        
+        resume: RUN-7 断点续跑——存在有效检查点时保留 DB、跳过种子注入并从检查点轮次继续
+
     Returns:
         PlatformSimulation: 包含env和agent_graph的结果对象
     """
@@ -1510,7 +3078,9 @@ async def run_reddit_simulation(
     
     # Reddit 使用加速 LLM 配置（如果有的话，否则回退到通用配置）
     model = create_model(config, use_boost=True)
-    
+    # RUN-2: OASIS 吞掉逐 agent 模型异常，模型请求层是唯一可靠的失败观测点
+    llm_counter = _wrap_model_llm_counter(model)
+
     profile_path = os.path.join(simulation_dir, "reddit_profiles.json")
     if not os.path.exists(profile_path):
         log_info(f"错误: Profile文件不存在: {profile_path}")
@@ -1521,16 +3091,43 @@ async def run_reddit_simulation(
         model=model,
         available_actions=REDDIT_ACTIONS,
     )
-    
+
+    # EXECPLAN2 I-2-3: 按角色裁剪每个 Agent 的动作可供性（默认关闭；开关 SIM_ROLE_ACTION_PROFILES）。
+    # Reddit 平台以 REDDIT_ACTIONS 为 union，白名单与之求交，绝不授予平台不存在的动作。
+    if _role_action_profiles_enabled():
+        try:
+            _apply_role_action_profiles(result.agent_graph, config, REDDIT_ACTIONS, log_info)
+        except Exception as _rap_err:  # noqa: BLE001
+            log_info(f"角色动作可供性应用失败（已隔离，回退全局动作清单）: {_rap_err}")
+
+    # NEXTSTEPS SIM_WORLD_BRIEF: 全体 Agent 共享世界底稿（默认开）。与角色动作裁剪一样必须在
+    # env.reset() 之前注入；config 无 world_brief 字段（旧配置）→ no-op。
+    if _world_brief_enabled():
+        try:
+            _inject_world_brief(result.agent_graph, config.get("world_brief"), log_info)
+        except Exception as _wb_err:  # noqa: BLE001
+            log_info(f"世界简报注入失败（已隔离，系统提示保持原样）: {_wb_err}")
+
+    # XRUN-14: 幻觉工具参数（如 like_comment(post_id=...)）降级为改名/丢参而非整个动作被吞
+    try:
+        _wrap_agent_tool_arg_normalizer(result.agent_graph, log_info)
+    except Exception as _tan_err:  # noqa: BLE001
+        log_info(f"工具参数规整启用失败（已隔离，保持原生工具行为）: {_tan_err}")
+
     # 从配置文件获取 Agent 真实名称映射（使用 entity_name 而非默认的 Agent_X）
     agent_names = get_agent_names_from_config(config)
     # 如果配置中没有某个 agent，则使用 OASIS 的默认名称
     for agent_id, agent in result.agent_graph.get_agents():
         if agent_id not in agent_names:
             agent_names[agent_id] = getattr(agent, 'name', f'Agent_{agent_id}')
-    
+
     db_path = os.path.join(simulation_dir, "reddit_simulation.db")
-    if os.path.exists(db_path):
+    # RUN-7: 续跑时保留模拟 DB（世界状态所在）；检查点或 DB 缺失 → 退化为全新运行。
+    resume_ckpt = _load_round_checkpoint(simulation_dir, "reddit") if resume else None
+    if resume_ckpt is not None and not os.path.exists(db_path):
+        log_info("检查点存在但模拟 DB 缺失，无法续跑 → 从头重跑")
+        resume_ckpt = None
+    if os.path.exists(db_path) and resume_ckpt is None:
         os.remove(db_path)
     
     # T3.12: 优先用 config 的 recsys 旋钮构建自定义平台；未启用/失败则回退默认平台类型
@@ -1550,15 +3147,27 @@ async def run_reddit_simulation(
     
     total_actions = 0
     last_rowid = 0  # 跟踪数据库中最后处理的行号（使用 rowid 避免 created_at 格式差异）
-    
+
+    # RUN-7: 续跑——动作累计从检查点接续；trace 游标推进到 DB 末尾（崩溃时进行到一半
+    # 的轮次宁可整轮丢弃也不错记到新轮次；重登录产生的失败 sign_up 不写 trace）。
+    if resume_ckpt is not None:
+        total_actions = int(resume_ckpt.get("total_actions", 0) or 0)
+        last_rowid = max(int(resume_ckpt.get("last_rowid", 0) or 0), _max_trace_rowid(db_path))
+
     # 执行初始事件
     event_config = config.get("event_config", {})
     initial_posts = event_config.get("initial_posts", [])
-    
-    # 记录 round 0 开始（初始事件阶段）
-    if action_logger:
-        action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
-    
+    if resume_ckpt is not None:
+        initial_posts = []  # RUN-7: 种子帖在原始运行的 round-0 已注入，续跑不得重复
+
+    # RUN-4: 模拟起始小时（默认 0 与旧行为逐字节一致）。对齐 agent active_hours
+    # （生成器普遍从 9 点起）可消除开局的结构性死轮。
+    start_hour = _resolve_start_hour(config.get("time_config", {}) or {})
+
+    # 记录 round 0 开始（初始事件阶段）；RUN-7: 续跑时 round 0 已在原始运行记录过
+    if action_logger and resume_ckpt is None:
+        action_logger.log_round_start(0, start_hour)  # round 0（RUN-4: 起始小时，默认 0）
+
     initial_action_count = 0
     if initial_posts:
         initial_actions = {}
@@ -1601,14 +3210,39 @@ async def run_reddit_simulation(
                 log_info(f"初始帖子发布失败，跳过（继续进入主循环）: {init_err}")
     
     # T3.3: 注入研究/图谱驱动的初始关注边（建图 add_edge + FOLLOW 动作），让社交图不再从空起步
-    try:
-        await inject_initial_follows(result.env, event_config, log_info, agent_names, action_logger)
-    except Exception as follow_err:
-        log_info(f"初始关注注入失败，跳过（继续进入主循环）: {follow_err}")
+    # RUN-7: 续跑时关注边已在 DB 的 follow 表里（世界状态被保留），不得重复注入。
+    if resume_ckpt is None:
+        try:
+            await inject_initial_follows(result.env, event_config, log_info, agent_names, action_logger)
+        except Exception as follow_err:
+            log_info(f"初始关注注入失败，跳过（继续进入主循环）: {follow_err}")
 
-    # 记录 round 0 结束
-    if action_logger:
-        action_logger.log_round_end(0, initial_action_count)
+    # RUN-1: 立即消化 round-0 注入（初始帖 + 初始关注）在 trace 表里产生的积压——
+    # 否则 last_rowid 停在 0，首个活跃轮的 fetch 会把整个 backlog（种子帖的第二份
+    # 逐字节拷贝 + 全部种子 FOLLOW）记成该轮动作并被计为"有机"，击穿 hollow-sim
+    # 健康门（sim_440: 全 LLM 失败仍报 health='ok'）。种子 FOLLOW 按 round 0 +
+    # is_seed_action 记录；CREATE_POST 已手动记录过，直接丢弃避免重复。
+    try:
+        _seed_rows, last_rowid = fetch_new_actions_from_db(db_path, last_rowid, agent_names)
+        for _sr in _seed_rows:
+            if _sr['action_type'] == 'CREATE_POST':
+                continue
+            if action_logger:
+                action_logger.log_action(
+                    round_num=0,
+                    agent_id=_sr['agent_id'],
+                    agent_name=_sr['agent_name'],
+                    action_type=_sr['action_type'],
+                    action_args={**_sr['action_args'], 'is_seed_action': True},
+                )
+                total_actions += 1
+                initial_action_count += 1
+    except Exception as _seed_err:  # noqa: BLE001 — 消化失败退回旧行为（首轮统计重复），不中断模拟
+        log_info(f"round-0 注入积压消化失败（退回旧行为）: {_seed_err}")
+
+    # 记录 round 0 结束（RUN-7: 续跑时 round 0 不重复记账）
+    if action_logger and resume_ckpt is None:
+        action_logger.log_round_end(0, initial_action_count, simulated_hours=0.0)
     
     # 主模拟循环
     time_config = config.get("time_config", {})
@@ -1624,9 +3258,33 @@ async def run_reddit_simulation(
             log_info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
     
     start_time = datetime.now()
-    
+
     last_active_ids: set = set()  # T3.5: 近因加成——上一轮活跃的 agent 下一轮更易被激活
-    for round_num in range(total_rounds):
+    # RUN-4: 默认 false = 死轮清空近因集（旧行为）；true 时跨死轮保留，级联不被时段空档打断
+    _recency_carry = _flag_true("SIM_RECENCY_CARRY", "false")
+    # I-2-1: 逐智能体动态情感状态（默认关；SIM_AGENT_DYNAMICS=true 时生效）
+    dynamics_tracker = _build_dynamics_tracker(config, log_info)
+    dyn_name_to_id = {name: aid for aid, name in agent_names.items()}
+
+    # RUN-7: 每轮结束后落轮级检查点（SIM_RESUME 开启时）；续跑则跳过已完成的轮次。
+    _ckpt_platform = "reddit" if os.path.basename(db_path).startswith("reddit") else "twitter"
+
+    def _write_ckpt(completed_round: int) -> None:
+        # 闭包按调用时读取 last_rowid / total_actions 的当前值
+        _write_round_checkpoint(simulation_dir, _ckpt_platform, completed_round,
+                                last_rowid, total_rounds, total_actions)
+
+    start_round = 0
+    if resume_ckpt is not None:
+        start_round = min(int(resume_ckpt.get("completed_round", 0) or 0), total_rounds)
+        log_info(f"断点续跑：跳过已完成的 {start_round}/{total_rounds} 轮，从第 {start_round + 1} 轮继续")
+
+    # XRUN-4: 连续同类 env.step 失败熔断（默认 3；0=关闭）——磁盘耗尽等系统性死亡
+    # 曾被逐轮"跳过本轮"吞成静默僵死，LLM 额度对着死 SQLite 连烧数小时。
+    step_failure_limit = _step_failure_limit()
+    consec_step_failures = 0
+    last_step_err_cls = None
+    for round_num in range(start_round, total_rounds):
         # 检查是否收到退出信号
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
@@ -1634,8 +3292,14 @@ async def run_reddit_simulation(
             break
         
         simulated_minutes = round_num * minutes_per_round
-        simulated_hour = (simulated_minutes // 60) % 24
+        simulated_hour = (start_hour + simulated_minutes // 60) % 24  # RUN-4: 从起始小时推进
         simulated_day = simulated_minutes // (60 * 24) + 1
+
+        # XRUN-4: 每轮磁盘预检——磁盘耗尽后 SQLite 已死，继续跑只会烧 LLM 额度；
+        # 硬失败让平台异常被隔离上抛，run_state/管线健康门看见真实原因而非静默僵死。
+        _disk_err = _free_disk_error(simulation_dir)
+        if _disk_err:
+            raise RuntimeError(f"第 {round_num + 1} 轮前磁盘预检失败: {_disk_err}")
 
         # T3.8: 在活跃 agent 选择前回放本轮到期的研究时间线事件（CREATE_POST），使其对本轮可见
         try:
@@ -1643,13 +3307,19 @@ async def run_reddit_simulation(
                 result.env, event_config, round_num, agent_names, action_logger, log_info
             )
             total_actions += fired
+            if fired:
+                # RUN-14: 定时事件已在 fire_scheduled_events 内手动记录（is_scheduled_event），
+                # 立即推进 last_rowid 丢弃其 trace 行，否则本轮 fetch 会再记一次并伪装成有机动作
+                _, last_rowid = fetch_new_actions_from_db(db_path, last_rowid, agent_names)
         except Exception as _ev_err:
             log_info(f"定时事件触发异常，跳过（不中断模拟）: {_ev_err}")
 
         active_agents = get_active_agents_for_round(
             result.env, config, simulated_hour, round_num, last_active_ids
         )
-        last_active_ids = {aid for aid, _ in active_agents}  # T3.5: 供下一轮近因加成
+        # T3.5/RUN-4: 供下一轮近因加成；SIM_RECENCY_CARRY=true 时死轮不清空（级联跨空档保留）
+        if active_agents or not _recency_carry:
+            last_active_ids = {aid for aid, _ in active_agents}
         
         # 无论是否有活跃agent，都记录round开始
         if action_logger:
@@ -1658,18 +3328,39 @@ async def run_reddit_simulation(
         if not active_agents:
             # 没有活跃agent时也记录round结束（actions_count=0）
             if action_logger:
-                action_logger.log_round_end(round_num + 1, 0)
+                action_logger.log_round_end(
+                    round_num + 1, 0,
+                    simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2))
+            _write_ckpt(round_num + 1)  # RUN-7: 死轮也推进检查点
             continue
         
+        # I-2-1: 注入本轮动态情感状态到各活跃 agent 的系统提示（默认关 → no-op）
+        _inject_agent_dynamics(active_agents, dynamics_tracker, log_info)
         actions = {agent: LLMAction() for _, agent in active_agents}
         # 健壮性：单次 env.step 内的某个 agent LLM 调用失败（超时/降级/异常）不应中断整场模拟。
         # 记录并跳过本轮，让模拟继续，保住此前所有轮次的进度。
         try:
             await result.env.step(actions)
+            consec_step_failures = 0  # XRUN-4: 成功轮清零连续失败计数
+            last_step_err_cls = None
         except Exception as step_err:
+            # XRUN-4: 同类异常连续 N 轮（如 disk full → unable to open database file）
+            # 是系统性死亡而非单轮抖动——达到阈值即硬失败，停止对死环境烧额度。
+            _err_cls = type(step_err).__name__
+            consec_step_failures = (consec_step_failures + 1
+                                    if _err_cls == last_step_err_cls else 1)
+            last_step_err_cls = _err_cls
             log_info(f"第 {round_num + 1} 轮 env.step 失败，跳过本轮（不中断整场模拟）: {step_err}")
             if action_logger:
-                action_logger.log_round_end(round_num + 1, 0)
+                action_logger.log_round_end(
+                    round_num + 1, 0,
+                    simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2))
+            _write_ckpt(round_num + 1)  # RUN-7: 失败轮同样推进检查点（该轮已按 0 动作记账）
+            if step_failure_limit > 0 and consec_step_failures >= step_failure_limit:
+                raise RuntimeError(
+                    f"env.step 连续 {consec_step_failures} 轮以同类异常（{_err_cls}）失败，"
+                    f"硬失败以避免继续烧额度: {step_err}"
+                )
             continue
 
         # 从数据库获取实际执行的动作并记录
@@ -1690,15 +3381,37 @@ async def run_reddit_simulation(
                 total_actions += 1
                 round_action_count += 1
         
+        # I-2-1: 用本轮实际动作更新动态情感状态（默认关 → no-op）
+        _observe_agent_dynamics(dynamics_tracker, actual_actions, dyn_name_to_id)
+
         if action_logger:
-            action_logger.log_round_end(round_num + 1, round_action_count)
-        
+            action_logger.log_round_end(
+                round_num + 1, round_action_count,
+                simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2))
+        _write_ckpt(round_num + 1)  # RUN-7: 本轮已完整记账，落轮级检查点
+
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
             log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
     
     # 注意：不关闭环境，保留给Interview使用
     
+    # RUN-2/RUN-9: 循环结束落 LLM 健康计数与情感动态摘要（附加遥测，供 write_run_summary
+    # 健康门与报告 caveat 消费；platform 名由本函数的 db 文件名推导，两平台共用此代码块）。
+    _plat = "reddit" if os.path.basename(db_path).startswith("reddit") else "twitter"
+    _write_llm_health(simulation_dir, _plat, llm_counter, log_info)
+    if dynamics_tracker is not None:
+        # RUN-9 (QUALITY-OPT C6): dynamics_summary 若不落盘，"情感演化是否真的发生"
+        # 死在模拟进程内，报告阶段无法对 hollow sim 施加"不得叙述情绪演化"的 caveat。
+        try:
+            from app.utils.atomic import write_json_atomic
+            write_json_atomic(
+                os.path.join(simulation_dir, f"{_plat}_dynamics_summary.json"),
+                dynamics_tracker.dynamics_summary(),
+            )
+        except Exception as _dyn_err:  # noqa: BLE001
+            log_info(f"dynamics_summary 写出失败（不影响模拟）: {_dyn_err}")
+
     if action_logger:
         action_logger.log_simulation_end(total_rounds, total_actions)
     
@@ -1730,8 +3443,11 @@ async def main():
     parser.add_argument(
         '--max-rounds',
         type=int,
-        default=40,
-        help='最大模拟轮数（默认 40，用于截断过长的模拟；传 0/负数视为不限制）'
+        default=None,
+        # RUN-3: 默认 None=不截断（T3.7 契约"max_rounds=None → 跑满配置时长"）。
+        # 此前默认 40 会让未显式传参的调用被静默截断，而 run_state.total_rounds
+        # 仍按不限制计算 → 进度永远卡在中途。0/负数同样视为不限制。
+        help='最大模拟轮数（默认不限制=跑满配置时长；传 0/负数亦视为不限制）'
     )
     parser.add_argument(
         '--no-wait',
@@ -1739,7 +3455,15 @@ async def main():
         default=False,
         help='模拟完成后立即关闭环境，不进入等待命令模式'
     )
-    
+    parser.add_argument(
+        '--resume',
+        action='store_true',
+        default=False,
+        # RUN-7: 由 SimulationRunner 在发现有效轮级检查点时传入；保留模拟 DB、
+        # 跳过种子注入并从 checkpoint.completed_round 之后继续（无检查点则退化为全新运行）。
+        help='断点续跑：从上次轮级检查点继续（需 SIM_RESUME=true 生成的 checkpoint.json）'
+    )
+
     args = parser.parse_args()
     
     # 在 main 函数开始时创建 shutdown 事件，确保整个程序都能响应退出信号
@@ -1767,7 +3491,16 @@ async def main():
     log_manager.info(f"配置文件: {args.config}")
     log_manager.info(f"模拟ID: {config.get('simulation_id', 'unknown')}")
     log_manager.info(f"等待命令模式: {'启用' if wait_for_commands else '禁用'}")
+    if args.resume:
+        log_manager.info("断点续跑模式: 启用（存在有效检查点的平台将跳过已完成轮次）")
     log_manager.info("=" * 60)
+
+    # XRUN-4: 启动前磁盘预检——磁盘耗尽时 SQLite/动作日志全都会写失败，与其静默僵死
+    # 数小时不如立刻以明确原因退出（exit 1 → runner 标记 FAILED 并带出日志尾部）。
+    _disk_err = _free_disk_error(simulation_dir)
+    if _disk_err:
+        log_manager.error(f"磁盘预检失败，拒绝启动模拟: {_disk_err}")
+        sys.exit(1)
     
     time_config = config.get("time_config", {})
     total_hours = time_config.get('total_simulation_hours', 72)
@@ -1783,7 +3516,22 @@ async def main():
         if args.max_rounds < config_total_rounds:
             log_manager.info(f"  - 实际执行轮数: {args.max_rounds} (已截断)")
     log_manager.info(f"  - Agent数量: {len(config.get('agent_configs', []))}")
-    
+
+    # 加固：OASIS 按 profile 数组下标分配 agent_id，全链路（poster_agent_id / initial_follows /
+    # agent_configs 查找）都假设 agent_configs[i].agent_id == i。此前无任何运行时校验——生成器
+    # 一旦错位会表现为"语义错误但不崩溃"的模拟。这里在启动时做一次软校验，错位则显著告警（不中断）。
+    _acfgs = config.get("agent_configs", []) or []
+    _misaligned = [
+        i for i, _c in enumerate(_acfgs)
+        if isinstance(_c, dict) and str(_c.get("agent_id", i)) != str(i)
+    ]
+    if _misaligned:
+        log_manager.warning(
+            f"  - ⚠ agent_configs 下标与 agent_id 错位 {len(_misaligned)} 处"
+            f"（首例 index={_misaligned[0]} agent_id={_acfgs[_misaligned[0]].get('agent_id')}）；"
+            f"poster/follows/查找可能指向错误 persona——疑似生成器 bug，请检查。"
+        )
+
     log_manager.info("日志结构:")
     log_manager.info(f"  - 主日志: simulation.log")
     log_manager.info(f"  - Twitter动作: twitter/actions.jsonl")
@@ -1797,18 +3545,20 @@ async def main():
     reddit_result: Optional[PlatformSimulation] = None
     
     if args.twitter_only:
-        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds)
+        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds,
+                                                      resume=args.resume)
     elif args.reddit_only:
-        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds)
+        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds,
+                                                    resume=args.resume)
     else:
         # 并行运行（每个平台使用独立的日志记录器）
         # return_exceptions=True：一个平台抛异常不会取消另一个平台、也不会让 main() 崩溃；
         # 异常作为结果返回，下面单独降级为 None 并记录，保证平台之间相互隔离。
         results = await asyncio.gather(
             run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds,
-                                   semaphore_platforms=2),
+                                   semaphore_platforms=2, resume=args.resume),
             run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds,
-                                  semaphore_platforms=2),
+                                  semaphore_platforms=2, resume=args.resume),
             return_exceptions=True,
         )
         twitter_result, reddit_result = results
@@ -1822,7 +3572,64 @@ async def main():
     total_elapsed = (datetime.now() - start_time).total_seconds()
     log_manager.info("=" * 60)
     log_manager.info(f"模拟循环完成! 总耗时: {total_elapsed:.1f}秒")
-    
+
+    # EXECPLAN2 I-2-0: 模拟结束后（只读）计算涌现结构 / 观点动力学度量。
+    # 默认关闭（SIM_EMERGENT_METRICS!=true 时完全跳过，run 产物逐字节不变）；
+    # 全程 try/except 隔离，失败不影响已完成的模拟与后续 interview/关闭流程。
+    if os.environ.get("SIM_EMERGENT_METRICS", "false").strip().lower() == "true":
+        emergent_platforms: List[str] = []
+        if twitter_result is not None and twitter_result.env is not None:
+            emergent_platforms.append("twitter")
+        if reddit_result is not None and reddit_result.env is not None:
+            emergent_platforms.append("reddit")
+        if emergent_platforms:
+            try:
+                write_emergent_metrics(
+                    simulation_dir, config, emergent_platforms, log_manager.info
+                )
+                log_manager.info("已生成涌现度量: emergent_metrics.json")
+            except Exception as _em_err:  # noqa: BLE001
+                log_manager.error(f"涌现度量计算失败（已隔离，不影响模拟结果）: {_em_err}")
+
+    # NEXTSTEPS P1-1/P1-2/P1-4: 模拟结束后演化"结果世界态"——按轮 elicit 各活跃 agent 的承诺
+    # （朝哪个 forecast 情景），资源加权步进 WorldState，落 world_state_trajectory.json +
+    # decisions.jsonl + 终局 outcome（report/集成读它而非声量份额 final_stance_share）。
+    # 默认关（SIM_DECISION_CHANNEL!=true 完全跳过，与现状一致）；全程 try/except 隔离。
+    _ws_seed = config.get("world_state_seed") if isinstance(config, dict) else None
+    if (os.environ.get("SIM_DECISION_CHANNEL", "false").strip().lower() == "true"
+            and isinstance(_ws_seed, dict) and _ws_seed.get("scenarios")):
+        try:
+            from app.services.decision_channel import run_decision_channel
+            from app.utils.llm_client import LLMClient
+            from app.utils.atomic import write_json_atomic
+            _acts = _read_actions_for_decision_channel(simulation_dir)
+            try:
+                _inertia = float(os.environ.get("SIM_DECISION_INERTIA", "0.7") or "0.7")
+            except ValueError:
+                _inertia = 0.7
+            try:
+                _eps = float(os.environ.get("SIM_CONVERGENCE_EPS", "0.02") or "0.02")
+            except ValueError:
+                _eps = 0.02
+            _res = run_decision_channel(
+                _acts, config.get("agent_configs"), _ws_seed, LLMClient(),
+                inertia=_inertia, conv_eps=_eps,
+                round_to_date=_build_round_to_date(_ws_seed, config),
+            )
+            if _res:
+                write_json_atomic(
+                    os.path.join(simulation_dir, "world_state_trajectory.json"), _res)
+                with open(os.path.join(simulation_dir, "decisions.jsonl"), "w",
+                          encoding="utf-8") as _df:
+                    for _d in _res.get("decisions", []):
+                        _df.write(json.dumps(_d, ensure_ascii=False) + "\n")
+                _oc = _res.get("outcome", {})
+                log_manager.info(
+                    f"决策通道·结果世界态: leader={_oc.get('leader')} "
+                    f"share={_oc.get('leader_share')} converged_at={_res.get('converged_at')}")
+        except Exception as _dc_err:  # noqa: BLE001
+            log_manager.error(f"决策通道演化失败（已隔离，不影响模拟结果）: {_dc_err}")
+
     # 是否进入等待命令模式
     if wait_for_commands:
         log_manager.info("")
@@ -1840,12 +3647,27 @@ async def main():
             reddit_agent_graph=reddit_result.agent_graph if reddit_result else None
         )
         ipc_handler.update_status("alive")
-        
+
+        # XRUN-14: 空闲超时自动关环境——语料里出现过 loop 完成后 15+ 小时无命令仍占着
+        # DB/进程等 close_env（孤儿回收只在 backend 重启时跑）。任何 IPC 命令都会重置
+        # 计时（采访期间不会误关）；SIM_IDLE_CLOSE_MIN<=0 恢复无限等待旧行为。
+        try:
+            _idle_close_min = float(_cfg_flag("SIM_IDLE_CLOSE_MIN", "60"))
+        except (TypeError, ValueError):
+            _idle_close_min = 60.0
+
         # 等待命令循环（使用全局 _shutdown_event）
         try:
             while not _shutdown_event.is_set():
                 should_continue = await ipc_handler.process_commands()
                 if not should_continue:
+                    break
+                if (_idle_close_min > 0
+                        and time.monotonic() - ipc_handler.last_command_at > _idle_close_min * 60):
+                    log_manager.info(
+                        f"等待命令空闲超过 {_idle_close_min:.0f} 分钟，自动关闭环境"
+                        "（SIM_IDLE_CLOSE_MIN，<=0 恢复无限等待）"
+                    )
                     break
                 # 使用 wait_for 替代 sleep，这样可以响应 shutdown_event
                 try:

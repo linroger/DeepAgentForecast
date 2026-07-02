@@ -1,0 +1,428 @@
+{
+ "entity_types": [
+  {
+   "name": "Hyperscaler",
+   "description": "全球超大规模云厂商，AWS/Azure/GCP等，掌控最大份额与算力集群",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "云厂商官方名称"
+    },
+    {
+     "name": "market_share",
+     "type": "text",
+     "description": "全球公有云IaaS/PaaS市场份额(%)"
+    },
+    {
+     "name": "core_chip",
+     "type": "text",
+     "description": "自研AI芯片系列(如Trainium/TPU/Maia)"
+    }
+   ],
+   "examples": [
+    "Amazon / AWS",
+    "Microsoft Azure",
+    "Google Cloud"
+   ]
+  },
+  {
+   "name": "CloudChallenger",
+   "description": "在超大规模云之外的云基础设施挑战者，如Oracle OCI、IBM Cloud",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "组织正式名称"
+    },
+    {
+     "name": "strategic_position",
+     "type": "text",
+     "description": "差异化竞争定位(如数据库护城河/混合云)"
+    }
+   ],
+   "examples": [
+    "Oracle OCI",
+    "IBM Cloud"
+   ]
+  },
+  {
+   "name": "ChineseCloud",
+   "description": "中国本土云厂商，受信创与出口管制约束，出海受限",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "中国云厂商中文/英文名称"
+    },
+    {
+     "name": "domestic_share",
+     "type": "text",
+     "description": "中国市场份额(%)"
+    }
+   ],
+   "examples": [
+    "Alibaba Cloud",
+    "Huawei Cloud",
+    "Tencent Cloud"
+   ]
+  },
+  {
+   "name": "Neocloud",
+   "description": "新兴GPU云服务商，以GPUaaS为核心业务，面临再融资风险",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "Neocloud公司名称"
+    },
+    {
+     "name": "gpu_fleet_size",
+     "type": "text",
+     "description": "GPU集群规模(万卡级别)"
+    }
+   ],
+   "examples": [
+    "CoreWeave",
+    "Nebius",
+    "Crusoe",
+    "Lambda"
+   ]
+  },
+  {
+   "name": "AILab",
+   "description": "前沿AI模型实验室，模型/应用层王者，需求端算力大客户",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "AI实验室名称"
+    },
+    {
+     "name": "model_family",
+     "type": "text",
+     "description": "主力模型族(如GPT/Claude/Gemini)"
+    },
+    {
+     "name": "cloud_strategy",
+     "type": "text",
+     "description": "多云/单云/自建策略"
+    }
+   ],
+   "examples": [
+    "OpenAI",
+    "Anthropic"
+   ]
+  },
+  {
+   "name": "ChipVendor",
+   "description": "AI芯片供给侧厂商，AI算力产业链上游定价者",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "芯片厂商名称"
+    },
+    {
+     "name": "product_roadmap",
+     "type": "text",
+     "description": "核心产品路线图(如Blackwell/Vera Rubin)"
+    }
+   ],
+   "examples": [
+    "Nvidia"
+   ]
+  },
+  {
+   "name": "SovereignCloud",
+   "description": "新主权云玩家，由国家主权基金或政府主导的区域算力基础设施",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "主权云实体名称"
+    },
+    {
+     "name": "compute_target",
+     "type": "text",
+     "description": "规划算力规模(GW)"
+    }
+   ],
+   "examples": [
+    "Saudi PIF / HUMAIN",
+    "OpenAI Stargate JV"
+   ]
+  },
+  {
+   "name": "Regulator",
+   "description": "政府监管机构，制定云计算行业合规、出口管制与竞争政策",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "监管机构名称"
+    },
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "管辖区域(如EU/US/CN)"
+    }
+   ],
+   "examples": [
+    "EU委员会 / DG-COMP",
+    "MIIT(中国工信部)",
+    "CFIUS / BIS"
+   ]
+  },
+  {
+   "name": "Person",
+   "description": "兜底类型：任何自然人个体(如CEO、行业分析师、意见领袖)",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "个人姓名"
+    },
+    {
+     "name": "title",
+     "type": "text",
+     "description": "职务头衔"
+    }
+   ],
+   "examples": [
+    "Satya Nadella",
+    "Safra Catz",
+    "John Dinsdale"
+   ]
+  },
+  {
+   "name": "Organization",
+   "description": "兜底类型：任何其他组织机构(投行、调研机构、媒体等)",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "组织机构名称"
+    },
+    {
+     "name": "industry_sector",
+     "type": "text",
+     "description": "所属行业领域"
+    }
+   ],
+   "examples": [
+    "Synergy Research",
+    "Goldman Sachs",
+    "Gartner",
+    "IDC"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "PARTNERS_WITH",
+   "description": "战略合作/投资关系，如云厂商与AI实验室的算力绑定",
+   "source_targets": [
+    {
+     "source": "Hyperscaler",
+     "target": "AILab"
+    },
+    {
+     "source": "AILab",
+     "target": "Neocloud"
+    },
+    {
+     "source": "AILab",
+     "target": "CloudChallenger"
+    },
+    {
+     "source": "SovereignCloud",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "SovereignCloud",
+     "target": "ChipVendor"
+    },
+    {
+     "source": "Neocloud",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "CloudChallenger",
+     "target": "ChipVendor"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "COMPETES_WITH",
+   "description": "市场竞争关系，同一赛道争夺份额与客户",
+   "source_targets": [
+    {
+     "source": "Hyperscaler",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "Hyperscaler",
+     "target": "CloudChallenger"
+    },
+    {
+     "source": "CloudChallenger",
+     "target": "Neocloud"
+    },
+    {
+     "source": "Neocloud",
+     "target": "Neocloud"
+    },
+    {
+     "source": "ChineseCloud",
+     "target": "ChineseCloud"
+    },
+    {
+     "source": "ChineseCloud",
+     "target": "Hyperscaler"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "REGULATES",
+   "description": "监管/合规约束关系，政府机构对云厂商的市场准入与行为约束",
+   "source_targets": [
+    {
+     "source": "Regulator",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "Regulator",
+     "target": "CloudChallenger"
+    },
+    {
+     "source": "Regulator",
+     "target": "ChineseCloud"
+    },
+    {
+     "source": "Regulator",
+     "target": "SovereignCloud"
+    },
+    {
+     "source": "Regulator",
+     "target": "AILab"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "INFLUENCES",
+   "description": "供给侧/基础设施层影响关系，芯片厂商对云厂商算力供给的约束",
+   "source_targets": [
+    {
+     "source": "ChipVendor",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "ChipVendor",
+     "target": "CloudChallenger"
+    },
+    {
+     "source": "ChipVendor",
+     "target": "Neocloud"
+    },
+    {
+     "source": "ChipVendor",
+     "target": "SovereignCloud"
+    },
+    {
+     "source": "ChipVendor",
+     "target": "AILab"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "SUPPLIES_TO",
+   "description": "算力供给/算力租赁关系，云厂商向AI实验室提供训练/推理资源",
+   "source_targets": [
+    {
+     "source": "Hyperscaler",
+     "target": "AILab"
+    },
+    {
+     "source": "Neocloud",
+     "target": "AILab"
+    },
+    {
+     "source": "CloudChallenger",
+     "target": "AILab"
+    },
+    {
+     "source": "SovereignCloud",
+     "target": "AILab"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "INVESTS_IN",
+   "description": "股权投资/资本注入关系，含追加投资与战略持股",
+   "source_targets": [
+    {
+     "source": "Hyperscaler",
+     "target": "AILab"
+    },
+    {
+     "source": "CloudChallenger",
+     "target": "Neocloud"
+    },
+    {
+     "source": "SovereignCloud",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "Organization",
+     "target": "Neocloud"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "BACKS",
+   "description": "主权基金/资本方对主权云或大型AI基础设施项目的背书与资助",
+   "source_targets": [
+    {
+     "source": "SovereignCloud",
+     "target": "AILab"
+    },
+    {
+     "source": "SovereignCloud",
+     "target": "Hyperscaler"
+    },
+    {
+     "source": "Organization",
+     "target": "SovereignCloud"
+    }
+   ],
+   "attributes": []
+  },
+  {
+   "name": "RESTRICTS",
+   "description": "出口管制/实体清单限制关系，限制特定厂商获取技术或市场准入",
+   "source_targets": [
+    {
+     "source": "Regulator",
+     "target": "ChineseCloud"
+    },
+    {
+     "source": "Regulator",
+     "target": "ChipVendor"
+    },
+    {
+     "source": "Regulator",
+     "target": "AILab"
+    }
+   ],
+   "attributes": []
+  }
+ ],
+ "analysis_summary": "本报告分析全球云计算市场2030年竞争格局，涉及的核心主体包括三大超大规模云厂商（AWS/Azure/GCP）、挑战者（Oracle OCI/IBM Cloud）、中国云（阿里/华为/腾讯）、Neocloud（CoreWeave/Nebius等）、AI实验室（OpenAI/Anthropic）、芯片供给侧（Nvidia）、新主权云（Saudi HUMAIN/Stargate）以及多国监管机构（EU/MIIT/BIS）。实体类型设计按赛道划分：Hyperscaler、CloudChallenger、ChineseCloud、Neocloud、AILab、ChipVendor、SovereignCloud、Regulator为8个具体类型，Person与Organization为兜底类型。关系类型覆盖战略合作（PARTNERS_WITH）、市场竞争（COMPETES_WITH）、监管约束（REGULATES/RESTRICTS）、供给侧影响（INFLUENCES/SUPPLIES_TO）、资本注入（INVESTS_IN/BACKS），完整映射AI算力产业链中各方的互动、绑定与对抗关系，支持模拟AI实验室多云策略、capex泡沫争议、DMA守门人裁定、地缘合规碎片化、Neocloud再融资悬崖等关键舆论热点的多主体互动。"
+}

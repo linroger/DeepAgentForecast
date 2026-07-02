@@ -1,11 +1,13 @@
-import service, { requestWithRetry } from './index'
+import service from './index'
+
+// EXECPLAN2 F-10-12: report 生成/对话为非幂等 POST（触发整轮 LLM 报告 agent），不自动重试。
 
 /**
  * 开始报告生成
  * @param {Object} data - { simulation_id, force_regenerate? }
  */
 export const generateReport = (data) => {
-  return requestWithRetry(() => service.post('/api/report/generate', data), 3, 1000)
+  return service.post('/api/report/generate', data)  // non-idempotent: do not retry
 }
 
 /**
@@ -47,5 +49,5 @@ export const getReport = (reportId) => {
  * @param {Object} data - { simulation_id, message, chat_history? }
  */
 export const chatWithReport = (data) => {
-  return requestWithRetry(() => service.post('/api/report/chat', data), 3, 1000)
+  return service.post('/api/report/chat', data)  // non-idempotent: do not retry
 }

@@ -43,21 +43,45 @@ models:
   # `claude` CLI writes). Detects sk-ant-oat tokens and bills the Max/Pro plan.
   # Keeps NATIVE tool calling (required for the deep-research tool loop).
   - name: claude
-    display_name: Claude (Code plan)
+    display_name: Claude Opus 4.8 (Code plan)
     use: deerflow.models.claude_provider:ClaudeChatModel
-    model: claude-sonnet-4-6
-    # Sonnet 4.6 supports up to 64K output tokens. A deep-research dossier and the
-    # tool-free synthesis report are long-form deliverables, so give the model a
-    # generous output ceiling — with thinking on, ClaudeChatModel reserves part of
-    # this for the thinking budget (see THINKING_BUDGET_RATIO), so a high ceiling
-    # is what keeps the *visible* report from being truncated.
-    max_tokens: 64000
-    supports_thinking: true
+    # ULTIMATE-RUN: deep research on the flagship Opus 4.8 via the Code-plan OAuth
+    # subscription (no per-model quota, unlike the Antigravity free tier). Strongest
+    # reasoning + best at following the deep-research search/grounding discipline.
+    model: claude-opus-4-8
+    # Extended thinking DISABLED: the `when_thinking_enabled: {thinking:{type:enabled}}` config
+    # was double-nested into the request payload (-> `thinking.thinking`), causing the Anthropic
+    # API to reject EVERY call with `thinking.thinking: Field required` (8/8 failures = empty
+    # research). Opus 4.8's base reasoning is more than enough for tool-driven deep research, and
+    # disabling thinking removes the entire error class. 32K visible-output ceiling (safe for opus;
+    # a deep dossier is ~15K tokens). Re-enable only with the correct `thinking:{type,budget_tokens}`.
+    max_tokens: 32000
+    supports_thinking: false
     supports_vision: true
     enable_prompt_caching: true
-    when_thinking_enabled:
-      thinking:
-        type: enabled
+
+  # === ACTIVE: Antigravity via vibeproxy (OpenAI-compatible local proxy) ===
+  # Use with `--model antigravity` (deerflow_research.py) or set MiroFish's
+  # DEERFLOW_MODEL=antigravity. vibeproxy exposes an OpenAI-compatible gateway at
+  # http://localhost:8317/v1 that fronts Antigravity / Google Gemini models. Auth is
+  # a placeholder (the local proxy ignores the value), so the key is the literal
+  # `sk-dummy`. Native tool calling is supported (verified), which the deep-research
+  # tool loop requires. The bare id `gemini-3.5-flash` is NOT served (proxy returns
+  # "unknown provider"); only the reasoning-tier variants exist — `gemini-3.5-flash-low`
+  # (used here) and `gemini-3.5-flash-extra-low`. PatchedChatOpenAI preserves Gemini
+  # tool-call thought_signature values across multi-turn tool calls.
+  - name: antigravity
+    display_name: Gemini 3.5 Flash (Antigravity/vibeproxy)
+    use: deerflow.models.patched_openai:PatchedChatOpenAI
+    model: gemini-3.5-flash-low
+    api_key: sk-dummy
+    base_url: http://localhost:8317/v1
+    request_timeout: 900.0
+    max_retries: 2
+    # gemini-3.5-flash: 1,048,576 input / 65,536 output token limits. Long-form dossier +
+    # tool-free synthesis report want the full output ceiling to avoid truncation.
+    max_tokens: 65536
+    supports_vision: false
 
   # === MiniMax code plan (api.minimaxi.com 国内版, OpenAI-compatible) ===
   # Use with `--model minimax` (deerflow_research.py) or set as MiroFish's
@@ -131,6 +155,14 @@ models:
   # https://dashscope.aliyuncs.com/compatible-mode/v1. DashScope toggles reasoning
   # via the non-standard extra_body.enable_thinking flag (text-only model).
   # Fallback model ids if qwen3.7-max is unavailable: qwen-plus / qwen-max-latest.
+  # EXECPLAN2 I-8-4: qwen already carries BOTH when_thinking_enabled and
+  # when_thinking_disabled blocks (DashScope toggles via the non-standard
+  # enable_thinking flag), so the thinking budget is controlled in both the
+  # research (thinking-on) and the parse-critical tool-free synthesis/extraction
+  # (thinking-off) passes — at parity with deepseek/minimax for parse-stability.
+  # Remaining cross-file follow-up (not config): a patched ChatOpenAI subclass
+  # that replays reasoning_content across multi-turn tool loops (as
+  # PatchedChatDeepSeek does) would further harden the agentic research turn.
   - name: qwen
     display_name: Qwen 3.7 Max
     use: langchain_openai:ChatOpenAI
@@ -155,6 +187,14 @@ models:
   # https://open.bigmodel.cn/api/paas/v4. GLM toggles reasoning via
   # extra_body.thinking.type. Default model glm-4.6; newer flagship is glm-5.1
   # (change `model` to glm-5.1 if your account has it).
+  # EXECPLAN2 I-8-4: glm already carries BOTH when_thinking_enabled and
+  # when_thinking_disabled blocks (toggled via extra_body.thinking.type, same
+  # mechanism as deepseek), so reasoning is controlled in both the research
+  # (thinking-on) and the parse-critical tool-free synthesis/extraction
+  # (thinking-off) passes — at parity with deepseek/minimax for parse-stability.
+  # Remaining cross-file follow-up (not config): a patched ChatOpenAI subclass
+  # replaying reasoning_content across multi-turn tool loops would further harden
+  # the agentic research turn (raw ChatOpenAI drops it between tool calls).
   - name: glm
     display_name: GLM-4.6 (Z.ai)
     use: langchain_openai:ChatOpenAI
@@ -199,9 +239,9 @@ models:
   # provider uses). kimi-for-coding is a reasoning model; thinking stays ON for
   # research (deerflow_research.py strips residual <think> from the report).
   - name: kimi
-    display_name: Kimi-for-coding (code plan)
+    display_name: Kimi K2.7 (code plan)
     use: langchain_openai:ChatOpenAI
-    model: kimi-for-coding
+    model: kimi-k2.7
     api_key: $KIMI_API_KEY
     base_url: https://api.kimi.com/coding/v1
     default_headers:
@@ -211,7 +251,30 @@ models:
     max_tokens: 32768
     supports_thinking: true
     supports_vision: false
+    # K2.7 Code gateway HARD-VALIDATES sampling temperature: it accepts ONLY
+    # `1` when thinking is enabled and ONLY `0.6` when thinking is disabled —
+    # any other value (including ChatOpenAI's default) is rejected with
+    # `400 invalid_request_error: invalid temperature`. The temperature is set
+    # inside each thinking block below so the research pass (thinking-on → 1) and
+    # the tool-free synthesis/extraction pass (thinking-off → 0.6) each send the
+    # single allowed value. (MiroFish's own kimi path enforces the same in
+    # backend/app/utils/llm_client.py::_coerce_temperature.)
+    # EXECPLAN2 I-8-4: provider parity with the patched reasoning stanzas
+    # (minimax/deepseek). kimi-for-coding is a reasoning model, but this stanza
+    # used the raw langchain_openai:ChatOpenAI with ONLY a when_thinking_disabled
+    # block — so the research stage (DeerFlowClient thinking_enabled=True) left
+    # reasoning at the gateway default (uncontrolled), while the parse-critical
+    # tool-free synthesis/extraction passes (create_chat_model thinking_enabled=
+    # False) hit when_thinking_disabled. Make BOTH toggle states explicit so the
+    # thinking budget is controlled symmetrically with glm/deepseek and the
+    # research output is as parse-stable as the report/sim (thinking-off) stage.
+    when_thinking_enabled:
+      temperature: 1.0      # gateway requires exactly 1 when thinking is on
+      extra_body:
+        thinking:
+          type: enabled
     when_thinking_disabled:
+      temperature: 0.6      # gateway requires exactly 0.6 when thinking is off
       extra_body:
         thinking:
           type: disabled

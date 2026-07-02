@@ -1,0 +1,16 @@
+{
+  "name": "china-storage-2035",
+  "question": "By 2035, China's energy-storage & battery market: structured forecast of market size, segments, drivers, risks, and CR5/CR10 concentration / winners & losers.",
+  "report_path": "docs/demos/china-storage-2035/report.md",
+  "expected_outcome": {
+    "scenario": "Continued capacity growth with price-war shakeout; concentration rises; winners are integrated cell+system players with overseas channels",
+    "key_signals": [
+      "market size in GWh and value with CAGR",
+      "segment breakdown (grid / C&I / residential / portable)",
+      "overcapacity & price-war risk; CR5/CR10 trajectory",
+      "calibrated scenarios with named drivers"
+    ],
+    "rationale": "Reward quantitative grounding (GWh, CAGR, CR-N), segment coverage, and explicit risk/uncertainty handling."
+  },
+  "created_date": "2026-06-15"
+}

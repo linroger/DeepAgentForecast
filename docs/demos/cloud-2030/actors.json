@@ -1,0 +1,558 @@
+{
+  "central_question": "到2030年,AWS、Azure、Google Cloud、Oracle OCI等主要超大规模云服务商在全球云计算(IaaS/PaaS/私有云,不含SaaS)市场的份额格局将如何演变?哪些厂商将胜出或承压?",
+  "as_of_date": "2026-06-30",
+  "situation_brief": {
+    "current_situation": "2025年全球公有云基础设施市场规模达4190亿美元,同比增长约30%;Q4单季1191亿美元,AI驱动的IaaS/PaaS贡献增量34%。AWS以30%份额仍居第一但较2021年的32%下滑,Azure以39%增速逼近,Google Cloud营业利润率高达32.9%为行业之最。Oracle OCI凭借6380亿美元RPO(同比+363%)跻身第四,成为最大变量。四大hyperscaler 2025年capex同比增长76%,2026年预计合计6000-7250亿美元,集体进入'万亿级资本开支时代'。",
+    "context": "2022年底ChatGPT引爆生成式AI需求,2023-2024年hyperscaler开启第一波AI基础设施军备竞赛;2024-2025年Anthropic Claude/OpenAI GPT/Google Gemini三大模型体系形成,锁定超大规模云算力需求。2025年1月Stargate项目(5000亿美元)、5月Saudi HUMAIN成立标志着'新主权云'时代开启。10月Microsoft-OpenAI关系重构(从独家云转为2500亿美元Azure承诺+任意云服务非API产品)与Anthropic 100万TPU协议标志AI实验室多云策略成型。",
+    "dynamics": "上行力量:AI推理需求爆发(2030年AI占公有云增量60-70%)、主权云与本地化合规溢价、企业数字化转型不可逆。下行力量:capex/收入比失衡(Goldman Sachs警示2027-2028估值修正风险)、电力瓶颈(AMD警告2030年前美国30-50GW缺口)、Neocloud 2027-2028再融资悬崖、地缘合规碎片化。整体处于'超支未闭环'阶段,capex增长已持续两年超共识,2026年Q4增速预计放缓至25%。",
+    "fault_lines": [
+      "Big Three内部排位重塑:Azure能否在2030年持平或反超AWS",
+      "Oracle OCI 6380亿美元RPO的兑现率与Stargate治理复杂度",
+      "Neocloud在2027-2028年GPU折旧周期与再融资压力下的存活数量",
+      "中国云(阿里/华为/腾讯)受BIS出口管制与MIIT信创限制下的出海天花板",
+      "EU DMA守门人调查对AWS/Azure欧洲55%市场份额的潜在强制互操作要求",
+      "AI实验室多云策略对hyperscaler锁定效应与毛利率的稀释",
+      "Nvidia供给侧定价权 vs AWS Trainium/Google TPU的垂直整合替代率"
+    ],
+    "catalysts": [
+      "2026年底EU委员会对AWS/Azure DMA守门人裁定结果",
+      "2027-2028年OpenAI/Anthropic是否宣布AGI候选(触发Microsoft-OpenAI营收分成条款终止)",
+      "hyperscaler 2026 Q4 capex增速若放缓至25%以下触发市场修正",
+      "Nvidia Blackwell GB200/GB300季度实际交付量与Vera Rubin路线图",
+      "Saudi HUMAIN 18GW电力交付进度与Stargate五大数据中心建设",
+      "CoreWeave/Nebius市销率跌破10x的Neocloud再融资信号",
+      "Anthropic算力三方分配(AWS Trainium/Google TPU/Azure)季度变化",
+      "美国ERCOT/PJM互联队列释放速度决定数据中心落地节奏"
+    ]
+  },
+  "actors": [
+    {
+      "name": "Amazon / AWS",
+      "type": "Organization",
+      "role": "全球市场份额第一(30%)的超大规模云,执行确定性最强",
+      "stance": "加速AI与主权云投资,押注自研芯片脱钩",
+      "influence": "high",
+      "memory": "2025年增速24%(三年来最快);Trainium2芯片50万→100万颗;Project Rainier集群;Anthropic追加40亿美元投资(2024-11);欧洲主权云76亿欧元;Trainium3 3nm 4倍性能;市场份额从2021年32%下滑至30%"
+    },
+    {
+      "name": "Microsoft Azure",
+      "type": "Organization",
+      "role": "增速最快(39% CC)的超大规模云,OpenAI锁定条款受益者",
+      "stance": "AI是新的操作系统,Capex先行锁定产能",
+      "influence": "high",
+      "memory": "FY26 Q2营收813亿美元Azure +39% CC;OpenAI 27%持股(1350亿美元);Stargate 2500亿美元Azure承诺;商业RPO 6250亿美元(+110%);2026 capex 1400亿美元(+59%);AGI独立专家小组验证条款"
+    },
+    {
+      "name": "Google Cloud",
+      "type": "Organization",
+      "role": "利润率最高(32.9%)的超大规模云,TPU垂直整合者",
+      "stance": "AI时代的纵向整合者,押注Anthropic与Gemini双轮",
+      "influence": "high",
+      "memory": "Q4 2025营收增长48% YoY;Q1 FY26营收200.3亿美元(+63%);TPU v6e Trillium→v7 Ironwood;Anthropic 100万TPU协议(2025-10-23)带来2026年1GW算力;积压订单4600亿美元近翻倍;反垄断诉讼溢出风险"
+    },
+    {
+      "name": "Oracle OCI",
+      "type": "Organization",
+      "role": "后起之秀,AI算力租赁赛道领跑者",
+      "stance": "AI算力之王,押注RPO与Stargate承建",
+      "influence": "high",
+      "memory": "FY26 Q4 RPO 6380亿美元(+363%);Q3 OCI营收49亿美元(+63%);Stargate核心承建方(2027年起4.5GW);自由现金流-237亿美元;债务970亿美元;数据库护城河最强"
+    },
+    {
+      "name": "Alibaba Cloud",
+      "type": "Organization",
+      "role": "中国市场份额第一(约33%)的本土云龙头",
+      "stance": "AI普惠,押注Qwen模型族与东南亚出海",
+      "influence": "medium",
+      "memory": "2025 Q2增长34% YoY;Qwen AI App下载1000万+;目标2030年云+AI营收1000亿美元;海外扩张依赖东南亚/韩国/中东节点;信创目录保护下外资份额<5%"
+    },
+    {
+      "name": "Huawei Cloud",
+      "type": "Organization",
+      "role": "中国第二(约15.5%)的本土云,昇腾芯片+政企关系",
+      "stance": "全栈AI,押注昇腾国产替代",
+      "influence": "medium",
+      "memory": "昇腾芯片自研路线;与电信运营商协同;海外节点印尼/非洲;受BIS 14nm以下AI芯片出口管制限制"
+    },
+    {
+      "name": "Tencent Cloud",
+      "type": "Organization",
+      "role": "中国第三(约15.1%)的本土云,产业互联网定位",
+      "stance": "产业互联网,押注游戏与一带一路节点",
+      "influence": "medium",
+      "memory": "2025年2月沙特首个MENA区域上线(LEAP 2025);国际化能力相对薄弱;海外业务受地缘合规约束"
+    },
+    {
+      "name": "IBM Cloud",
+      "type": "Organization",
+      "role": "传统巨头转型者,退守混合云细分赛道",
+      "stance": "混合AI by design,押注Red Hat OpenShift + watsonx",
+      "influence": "medium",
+      "memory": "Red Hat OpenShift生态;watsonx平台增长慢;AI创新速度落后hyperscaler;2025年被Oracle超越;2030年份额预测1-2%"
+    },
+    {
+      "name": "CoreWeave",
+      "type": "Organization",
+      "role": "Neocloud头部,GPUaaS专家",
+      "stance": "GPU基础设施专家,押注AI实验室大客户",
+      "influence": "medium",
+      "memory": "2025年3月IPO市值峰值800亿美元;2025 Q2营收10.6-11亿美元;OpenAI合同119亿美元+3.5亿入股;60%收入来自Microsoft+OpenAI;已进入Top 10(季度收入>15亿美元)"
+    },
+    {
+      "name": "Nebius",
+      "type": "Organization",
+      "role": "Neocloud第二大,主权+多元化定位",
+      "stance": "主权+多元化,押注阿联酋/欧洲节点",
+      "influence": "medium",
+      "memory": "2025年ARR指引9-11亿美元;2025年估值翻倍;阿联酋/欧洲节点布局;再融资2027-2028集中到期风险"
+    },
+    {
+      "name": "OpenAI",
+      "type": "Organization",
+      "role": "AI实验室+新云玩家,模型/应用层王者",
+      "stance": "AGI需独立基础设施,押注Stargate自建",
+      "influence": "high",
+      "memory": "Stargate项目5000亿美元承诺(2025-01 Trump宣布);CoreWeave 119亿美元合同+3.5亿入股;Oracle 4.5GW承建;与Microsoft关系重构(2025-10-28):Azure仍为'主要云'但非API产品可任意云;AGI需独立专家小组验证(非单方宣布)"
+    },
+    {
+      "name": "Anthropic",
+      "type": "Organization",
+      "role": "AI实验室,模型层第二,三云架构典范",
+      "stance": "AI安全+多云,押注AWS Trainium+Google TPU并行",
+      "influence": "high",
+      "memory": "2024年Amazon追加40亿美元投资;锁定AWS Trainium为主要训练芯片;2025-10-23与Google Cloud达成100万TPU协议(2026年带来1GW算力);Series F估值1830亿美元;并行使用Azure形成三云架构避免单点依赖"
+    },
+    {
+      "name": "Saudi PIF / HUMAIN",
+      "type": "Organization",
+      "role": "新主权云玩家,沙特Vision 2030旗舰",
+      "stance": "主权基金驱动,18GW算力目标",
+      "influence": "medium",
+      "memory": "2025年5月成立,PIF全资;与Nvidia/AWS/Google/Microsoft全面合作;目标18GW算力;电力交付与人才稀缺为关键约束"
+    },
+    {
+      "name": "Nvidia",
+      "type": "Organization",
+      "role": "芯片供给侧实际定价者",
+      "stance": "AI工厂叙事,押注Blackwell/Vera Rubin路线图",
+      "influence": "high",
+      "memory": "毛利率75%+;Blackwell GB200/GB300预订至2026年底/2027年初;微软/谷歌/Meta/亚马逊全面预订;实际定价权使hyperscaler自研芯片(Trainium/TPU/Maia)替代率成为关键变量"
+    },
+    {
+      "name": "EU委员会 / DG-COMP",
+      "type": "Government",
+      "role": "竞争守门人,DMA框架执行方",
+      "stance": "促进可竞争性,对AWS/Azure启动市场调查",
+      "influence": "medium",
+      "memory": "2025-11-18启动AWS/Azure DMA调查;评估是否指定为'守门人';潜在义务包括互操作性、数据可携带、禁止自我优待;AWS/Azure欧洲合计份额约55%可能受冲击"
+    },
+    {
+      "name": "MIIT(中国工信部)",
+      "type": "Government",
+      "role": "行业准入与信创目录管理",
+      "stance": "国产替代,信创目录准入",
+      "influence": "medium",
+      "memory": "2025年2月13家外资获增值电信试点(北京/上海/海南/深圳);AWS/Azure/GCP在中国IaaS市场份额<5%;央国企优先采购国产云;支持阿里/华为/腾讯本土三强"
+    },
+    {
+      "name": "CFIUS / BIS",
+      "type": "Government",
+      "role": "美国国家安全与出口管制",
+      "stance": "对等竞争,限制先进AI芯片出口",
+      "influence": "medium",
+      "memory": "BIS实体清单限制14nm以下AI芯片/H100/H200对华出口;Section 721审查外资交易;对中国云海外扩张构成结构性约束"
+    },
+    {
+      "name": "Synergy Research",
+      "type": "Other",
+      "role": "S2市场调研机构,季度份额数据口径标尺",
+      "stance": "中性观察,提供Big Three+Oracle+Neocloud口径",
+      "influence": "medium",
+      "memory": "Q3 2025总规模1070亿美元Big Three 63%;Q4 2025单季1191亿美元;2025全年4190亿美元;John Dinsdale:'GenAI has simply put the cloud market into overdrive'"
+    },
+    {
+      "name": "Goldman Sachs",
+      "type": "Other",
+      "role": "S2投行研究,长期规模与capex预测口径",
+      "stance": "中性偏多但警示capex回报周期风险",
+      "influence": "medium",
+      "memory": "2030年达2万亿美元预测(Kash Rangan 22% CAGR框架);2026 AI capex至少5000亿美元;警示1990s电信投资周期峰值占GDP 1.5%,当前AI capex仅0.8% GDP有2000亿上修空间;capex增速放缓将触发2027-2028估值修正"
+    },
+    {
+      "name": "Anthropic(双重列名)",
+      "type": "Organization",
+      "role": "AI模型层第二,推动hyperscaler多云格局",
+      "stance": "AI安全+多云架构,锁定算力三家分散",
+      "influence": "high",
+      "memory": "2025-10与Google 100万TPU协议;AWS追加40亿投资;Azure并行使用;三云架构避免单点依赖;Series F估值1830亿美元"
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Amazon / AWS",
+      "target": "Anthropic",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "AWS Trainium为Anthropic主要训练芯片;Amazon 2024年追加40亿美元投资;Project Rainier 50万→100万Trainium2为Anthropic构建(aboutamazon.com 2024-11、2025-10-29)"
+    },
+    {
+      "source": "Microsoft Azure",
+      "target": "OpenAI",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "OpenAI承诺2500亿美元Azure服务;Microsoft持股27%(约1350亿美元);Azure仍为OpenAI'主要云'(blogs.microsoft.com 2025-10-28)"
+    },
+    {
+      "source": "Google Cloud",
+      "target": "Anthropic",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Anthropic锁定100万Google TPU;2026年带来1GW算力(googlecloudpresscorner.com 2025-10-23)"
+    },
+    {
+      "source": "OpenAI",
+      "target": "CoreWeave",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "OpenAI与CoreWeave 119亿美元算力合同+3.5亿美元入股(techcrunch.com 2025-03-10)"
+    },
+    {
+      "source": "OpenAI",
+      "target": "Oracle OCI",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Oracle为Stargate核心承建方,2027年起4.5GW容量(openai.com/index/announcing-the-stargate-project)"
+    },
+    {
+      "source": "Microsoft Azure",
+      "target": "OpenAI",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "2025-10-28关系重构后,OpenAI非API产品可在任意云服务,Azure独家性减弱;AGI触发后Microsoft IP权延伸至2032,营收分成条款终止(blogs.microsoft.com 2025-10-28)"
+    },
+    {
+      "source": "Saudi PIF / HUMAIN",
+      "target": "Nvidia",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "HUMAIN与Nvidia全面合作,18GW算力计划采用Blackwell芯片(nvidianews.nvidia.com 2025-05)"
+    },
+    {
+      "source": "Saudi PIF / HUMAIN",
+      "target": "Amazon / AWS",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "HUMAIN与AWS全面合作,主权云模式(nvidianews.nvidia.com 2025-05;vision2030.ai/analysis/humain-ai-infrastructure)"
+    },
+    {
+      "source": "Saudi PIF / HUMAIN",
+      "target": "Google Cloud",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "HUMAIN与Google Cloud全面合作,主权云模式(nvidianews.nvidia.com 2025-05)"
+    },
+    {
+      "source": "Saudi PIF / HUMAIN",
+      "target": "Microsoft Azure",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "HUMAIN与Microsoft全面合作,主权云模式(nvidianews.nvidia.com 2025-05)"
+    },
+    {
+      "source": "Nvidia",
+      "target": "Amazon / AWS",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "high",
+      "basis": "Amazon预订Blackwell至2026年底;但AWS Trainium自研芯片为脱钩路径(spheron.network)"
+    },
+    {
+      "source": "Nvidia",
+      "target": "Microsoft Azure",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "high",
+      "basis": "Microsoft预订Blackwell至2026年底/2027年初;同时研发Maia自研芯片(spheron.network)"
+    },
+    {
+      "source": "Nvidia",
+      "target": "Google Cloud",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "high",
+      "basis": "Google预订Blackwell;但TPU垂直整合度最高,v6e/v7对外部客户开放度提升(spheron.network;appeconomyinsights.com)"
+    },
+    {
+      "source": "Nvidia",
+      "target": "Oracle OCI",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "high",
+      "basis": "Oracle无自研芯片,重度依赖Nvidia供给支撑6380亿美元RPO(spheron.network)"
+    },
+    {
+      "source": "EU委员会 / DG-COMP",
+      "target": "Amazon / AWS",
+      "type": "REGULATES",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "2025-11-18启动AWS DMA市场调查,评估守门人指定(digital-markets-act.ec.europa.eu)"
+    },
+    {
+      "source": "EU委员会 / DG-COMP",
+      "target": "Microsoft Azure",
+      "type": "REGULATES",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "2025-11-18启动Azure DMA市场调查,评估守门人指定(digital-markets-act.ec.europa.eu)"
+    },
+    {
+      "source": "CFIUS / BIS",
+      "target": "Alibaba Cloud",
+      "type": "REGULATES",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "BIS实体清单限制14nm以下AI芯片对华出口;H100/H200出口管制(BIS 实体清单)"
+    },
+    {
+      "source": "CFIUS / BIS",
+      "target": "Huawei Cloud",
+      "type": "REGULATES",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "BIS实体清单限制14nm以下AI芯片对华出口;华为直接制裁(BIS 实体清单)"
+    },
+    {
+      "source": "CFIUS / BIS",
+      "target": "Tencent Cloud",
+      "type": "REGULATES",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "BIS实体清单限制14nm以下AI芯片对华出口;腾讯列入相关清单(BIS 实体清单)"
+    },
+    {
+      "source": "MIIT(中国工信部)",
+      "target": "Alibaba Cloud",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "信创目录保护本土云;央国企优先采购国产云(Trivium China政策追踪)"
+    },
+    {
+      "source": "MIIT(中国工信部)",
+      "target": "Huawei Cloud",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "信创目录保护本土云;昇腾芯片进入采购清单(Trivium China政策追踪)"
+    },
+    {
+      "source": "MIIT(中国工信部)",
+      "target": "Tencent Cloud",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "信创目录保护本土云(Trivium China政策追踪)"
+    },
+    {
+      "source": "Amazon / AWS",
+      "target": "Microsoft Azure",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "AWS(30%份额)与Azure(增速39% CC)争夺全球第一;Anthropic同为双方关键客户形成间接竞争(srgresearch.com 2025-11-19)"
+    },
+    {
+      "source": "Amazon / AWS",
+      "target": "Google Cloud",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "AWS(30%)与Google Cloud(份额第三,利润率32.9%最高)争夺AI算力客户;Anthropic双重绑定(humai.blog)"
+    },
+    {
+      "source": "Microsoft Azure",
+      "target": "Google Cloud",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "Azure(增速39%)与Google Cloud(利润率32.9%)争夺企业AI客户与Gemini vs OpenAI生态(srgresearch.com 2025-11-19)"
+    },
+    {
+      "source": "Amazon / AWS",
+      "target": "Oracle OCI",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "AWS与Oracle争夺数据库与企业客户;Oracle RPO 6380亿跻身Top 4挑战AWS(investor.oracle.com 2026-06-10)"
+    },
+    {
+      "source": "Oracle OCI",
+      "target": "CoreWeave",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "Oracle Stargate承建分流CoreWeave的OpenAI/Meta/xAI客户需求(OpenAI官网公告)"
+    },
+    {
+      "source": "CoreWeave",
+      "target": "Nebius",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "CoreWeave与Nebius争夺Neocloud头部地位;2027-2028再融资悬崖下竞争加剧(fool.com 2025-11-29)"
+    },
+    {
+      "source": "Tencent Cloud",
+      "target": "Alibaba Cloud",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "Tencent(15.1%)与Alibaba(33%)在中国市场争夺第二/第三地位;海外节点重叠(alertify.eu)"
+    },
+    {
+      "source": "Tencent Cloud",
+      "target": "Huawei Cloud",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "Tencent(15.1%)与Huawei(15.5%)在中国市场争夺第二;海外一带一路节点竞争(alertify.eu)"
+    },
+    {
+      "source": "Anthropic",
+      "target": "Amazon / AWS",
+      "type": "DEPENDS_ON",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "AWS Trainium为Anthropic主要训练芯片;Project Rainier 50万Trainium2为Anthropic构建(aboutamazon.com 2025-10-29)"
+    },
+    {
+      "source": "Anthropic",
+      "target": "Google Cloud",
+      "type": "DEPENDS_ON",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Anthropic锁定100万Google TPU;2026年带来1GW算力(googlecloudpresscorner.com 2025-10-23)"
+    },
+    {
+      "source": "CoreWeave",
+      "target": "OpenAI",
+      "type": "DEPENDS_ON",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "CoreWeave 60%收入来自Microsoft+OpenAI大客户,客户高度集中(crn.com 2026)"
+    },
+    {
+      "source": "Synergy Research",
+      "target": "Goldman Sachs",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "medium",
+      "basis": "Synergy季度数据为Goldman Sachs长期规模预测(2万亿2030)提供基线(srgresearch.com;goldmansachs.com)"
+    }
+  ],
+  "key_events": [
+    {
+      "date": "2024-11-19",
+      "event": "Amazon首次追加投资Anthropic 12.5亿美元(总40亿)"
+    },
+    {
+      "date": "2025-01-21",
+      "event": "Trump宣布Stargate 5000亿美元投资计划"
+    },
+    {
+      "date": "2025-02-09",
+      "event": "Tencent Cloud沙特首个MENA区域上线(LEAP 2025)"
+    },
+    {
+      "date": "2025-03-10",
+      "event": "OpenAI与CoreWeave 119亿美元算力合同+3.5亿入股"
+    },
+    {
+      "date": "2025-05-01",
+      "event": "AWS推出欧洲主权云(76亿欧元投资)"
+    },
+    {
+      "date": "2025-05-13",
+      "event": "Saudi PIF成立HUMAIN,18GW算力目标"
+    },
+    {
+      "date": "2025-09-04",
+      "event": "Goldman Sachs预测2030年全球云市场达2万亿美元"
+    },
+    {
+      "date": "2025-09-09",
+      "event": "Oracle FY26 Q1 RPO达4550亿美元(+359%)"
+    },
+    {
+      "date": "2025-10-23",
+      "event": "Anthropic与Google Cloud达成100万TPU协议"
+    },
+    {
+      "date": "2025-10-28",
+      "event": "Microsoft-OpenAI关系重构(独家云→2500亿Azure承诺+任意云非API)"
+    },
+    {
+      "date": "2025-10-29",
+      "event": "AWS Project Rainier 50万Trainium2上线"
+    },
+    {
+      "date": "2025-11-18",
+      "event": "EU委员会启动AWS/Azure DMA市场调查"
+    },
+    {
+      "date": "2025-11-19",
+      "event": "Synergy Q3:公有云1070亿美元,Big Three 63%份额"
+    },
+    {
+      "date": "2025-12-04",
+      "event": "AWS re:Invent 2025:Trainium3 + Nova 2发布"
+    },
+    {
+      "date": "2026-01-28",
+      "event": "Microsoft FY26 Q2:营收813亿美元,Azure +39% CC"
+    },
+    {
+      "date": "2026-03-10",
+      "event": "Oracle FY26 Q3 RPO 5530亿美元"
+    },
+    {
+      "date": "2026-04-01",
+      "event": "IDC预测AI累计影响22.3万亿美元"
+    },
+    {
+      "date": "2026-04-27",
+      "event": "Microsoft-OpenAI关系进入新阶段"
+    },
+    {
+      "date": "2026-06-10",
+      "event": "Oracle FY26 Q4 RPO达6380亿美元(+363%)"
+    },
+    {
+      "date": "2026-12-01",
+      "event": "Trainium3量产计划"
+    }
+  ],
+  "hot_topics": [
+    "capex泡沫vs长期增长(Goldman Sachs警示2027-2028估值修正)",
+    "AGI触发机制(OpenAI独立专家小组验证条款)",
+    "EU DMA守门人裁定(AWS/Azure欧洲55%份额风险)",
+    "中国信创替代与出海受限(外资中国份额<5%)",
+    "Neocloud再融资悬崖(2027-2028 GPU折旧周期)",
+    "电力/水资源瓶颈(AMD警告美国30-50GW缺口)",
+    "AI实验室多云策略稀释hyperscaler锁定效应",
+    "Oracle Stargate治理复杂度与6380亿美元RPO兑现率",
+    "Nvidia Blackwell实际交付vs hyperscaler自研芯片替代",
+    "Saudi HUMAIN 18GW电力交付与主权云规模化"
+  ]
+}

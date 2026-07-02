@@ -1,0 +1,5 @@
+# DRF-2 KG 引擎 MCP 服务器依赖（安装进 backend/.venv：
+#   backend/.venv/bin/pip install -r drf2/engines/kg/requirements.txt）
+# 图谱本体（graphiti-core / FalkorDB / sentence-transformers 等）复用 legacy
+# backend/requirements.txt，此处只声明 MCP 传输层新增依赖。
+mcp>=1.24.0

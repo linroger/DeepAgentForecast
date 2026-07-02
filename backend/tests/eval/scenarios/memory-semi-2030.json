@@ -1,0 +1,15 @@
+{
+  "name": "memory-semi-2030",
+  "question": "By 2030, the global memory-semiconductor (DRAM/NAND/HBM) competitive landscape: vendor share evolution, technology roadmaps, AI-driven HBM demand, and export-control / geopolitics effects.",
+  "report_path": "docs/demos/memory-semi-2030/report.md",
+  "expected_outcome": {
+    "scenario": "AI-driven HBM demand reshapes vendor share; SK Hynix/Samsung/Micron contend; export controls constrain CXMT/YMTC",
+    "key_signals": [
+      "HBM share and capex as the decisive driver",
+      "export-control impact on Chinese vendors",
+      "multiple scenarios for share evolution with drivers and uncertainties"
+    ],
+    "rationale": "Reward scenario coverage of vendor-share paths with calibrated language and grounding to named vendors/technologies."
+  },
+  "created_date": "2026-06-15"
+}

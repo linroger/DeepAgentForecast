@@ -30,6 +30,9 @@ _VALID_DEPTH = {"quick", "standard", "deep"}
 _VALID_MODE = {"full", "research_only"}
 # T5.5: 每次运行可选的研究语言（与 DeerFlow --target-language 对齐；auto=交给模型自选）
 _VALID_LANGUAGES = {"Chinese", "English", "auto"}
+# B2: 人工编辑档案时报告的最小字符门。与编排器 research_report>=400 复用守卫语义一致：
+# <400 字符（含 LLM 降级/错误短串）一律拒绝，避免空/垃圾报告悄悄退化下游本体/图谱/模拟。
+MIN_DOSSIER_CHARS = 400
 
 
 @research_bp.route('/run', methods=['POST'])
@@ -141,7 +144,10 @@ def resume_pipeline(pipeline_id: str):
                 "error": "恢复前检查未通过：\n" + "\n".join(f"• {e}" for e in preflight_errors),
                 "preflight_errors": preflight_errors,
             }), 400
-        state = PipelineOrchestrator.resume(pipeline_id)
+        # ORCH-3: force=true 允许恢复一条 completed 但 pipeline_health 降级/失败的管线
+        # （仅重置 REPORT 阶段重生成报告）；默认请求形状不变。
+        _force = bool((request.get_json(silent=True) or {}).get("force"))
+        state = PipelineOrchestrator.resume(pipeline_id, force=_force)
         return jsonify({
             "success": True,
             "data": {
@@ -239,13 +245,25 @@ def fork_scenario(pipeline_id: str):
 
 @research_bp.route('/<pipeline_id>', methods=['DELETE'])
 def delete_pipeline(pipeline_id: str):
-    """删除一条已结束的管线记录（含 handoff 产物）。在飞管线须先取消。"""
+    """删除一条已结束的管线记录（含 handoff 产物）。在飞管线须先取消。
+
+    若有 fork（what-if 情景）依赖其共享 handoff 目录，默认拒绝（409 has_dependents）；
+    传 ?force=true 可强制删除（会同时破坏这些 fork 的恢复/产物复用）。
+    """
     try:
-        result = PipelineOrchestrator.delete_pipeline(pipeline_id)
+        force = str(request.args.get('force', '')).strip().lower() in ('1', 'true', 'yes')
+        result = PipelineOrchestrator.delete_pipeline(pipeline_id, force=force)
         if result["status"] == "not_found":
             return jsonify({"success": False, "error": "管线不存在"}), 404
         if result["status"] == "still_running":
             return jsonify({"success": False, "error": "管线正在运行，请先取消再删除"}), 409
+        if result["status"] == "has_dependents":
+            deps = result.get("dependents", [])
+            return jsonify({
+                "success": False,
+                "error": f"仍有 {len(deps)} 个 fork 依赖其 handoff 目录，请先删除这些 fork 或加 ?force=true 强制删除",
+                "data": result,
+            }), 409
         return jsonify({"success": True, "data": result})
     except Exception as e:
         logger.error(f"删除管线失败: {e}", exc_info=True)
@@ -287,10 +305,34 @@ def list_pipelines():
 
 @research_bp.route('/preflight', methods=['GET'])
 def preflight():
-    """T5.6: 启动前就绪检查（不发起管线）。复用 POST /run 的同一套检查，避免漂移。"""
+    """T5.6: 启动前就绪检查（不发起管线）。复用 POST /run 的同一套检查，避免漂移。
+
+    EXECPLAN2 I-8-0: 默认行为不变（返回 {ready, errors, mode}）。可选 ?format=full
+    走单一真源的 environment_report()（与 doctor.sh / preflight CLI 共用），返回带
+    provider/deerflow_model/graph_backend + 结构化 checks[{id,severity,ok,message,fix}]
+    的就绪文档，供前端设置页渲染实时就绪面板；?deep=true 追加 live 凭据/嵌入缓存/磁盘探针。
+    """
     mode = request.args.get('mode', 'full')
     if mode not in ('full', 'research_only'):
         mode = 'full'
+
+    if (request.args.get('format') or '').strip().lower() == 'full':
+        # 复用 backend/scripts/preflight.py 的 environment_report()（同一引擎，零漂移）。
+        # 容错降级：脚本不可导入时回退到旧版精简响应，绝不让设置页因此 500。
+        try:
+            import sys
+            _scripts_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'scripts')
+            _scripts_dir = os.path.abspath(_scripts_dir)
+            if _scripts_dir not in sys.path:
+                sys.path.insert(0, _scripts_dir)
+            from preflight import environment_report  # type: ignore
+            deep = (request.args.get('deep') or '').strip().lower() in ('1', 'true', 'yes')
+            model = (request.args.get('model') or '').strip() or None
+            report = environment_report(mode=mode, model=model, deep=deep)
+            return jsonify({"success": True, "data": report})
+        except Exception as e:
+            logger.warning(f"preflight format=full 降级到精简响应: {e}")
+
     errors = preflight_pipeline(mode=mode)
     return jsonify({"success": True, "data": {"ready": not errors, "errors": errors, "mode": mode}})
 
@@ -354,6 +396,18 @@ def edit_dossier(pipeline_id: str):
     handoff = PipelineManager.handoff_dir(pipeline_id)
     if not os.path.isdir(handoff):
         return jsonify({"success": False, "error": "管线产物目录不存在"}), 404
+
+    # B2: 写入前质量门。若提交了 report，去空白后须 >= MIN_DOSSIER_CHARS，否则硬拒绝（400），
+    # 杜绝空/过短报告被原子写入后悄悄退化下游本体/图谱/模拟。actors/sources 为可选，缺失不拦。
+    if isinstance(body.get("report"), str):
+        if len(body["report"].strip()) < MIN_DOSSIER_CHARS:
+            return jsonify({
+                "success": False,
+                "error": (
+                    f"研究报告过短（去空白后须 >= {MIN_DOSSIER_CHARS} 字符），拒绝写入以免退化下游。"
+                    f" Research report too short (must be >= {MIN_DOSSIER_CHARS} chars after trimming)."
+                ),
+            }), 400
 
     def _atomic_write(name, text):
         path = os.path.join(handoff, name)

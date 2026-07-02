@@ -8,20 +8,68 @@ Zep检索工具服务
 3. QuickSearch（简单搜索）- 快速检索
 """
 
+import re
 import time
 import json
-from typing import Dict, Any, List, Optional
+import threading
+from datetime import datetime
+from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass, field
 
 from .graphiti_client import Zep
+# F-4-6: 引入后端错误类型，使 search_graph 只对预期的后端/连接/服务端错误降级，
+# 而把编程/解析类缺陷暴露出来（ERROR + 重抛），不再被宽泛的 except 掩盖。
+from .graphiti_client import ApiError, InternalServerError
 
 from ..config import Config
 from ..utils.logger import get_logger
 from ..utils.llm_client import LLMClient
 from ..utils.zep_paging import fetch_all_nodes, fetch_all_edges
 from ..utils.zep_rate_limit import is_zep_rate_limit_error, zep_retry_delay_seconds
+# EXECPLAN2 I-1-1: 宽松日期解析（ISO/斜杠/中文「年月日」/仅年月/仅年份 → UTC tz-aware），
+# 用于 as-of（按时点）检索把字符串/日期统一成可下推到图谱时态过滤的 datetime。
+from ..utils.dates import parse_as_of
 
 logger = get_logger('mirofish.zep_tools')
+
+
+def compact_graph_query(text: str, max_chars: int = 350) -> str:
+    """RPT-8/XRUN-5: 把整段需求书压成可用于图谱检索的紧凑查询（确定性，无 LLM）。
+
+    整段 3388 字的预测需求书被当作 query 时，clamp 只保留开头的修辞性引言，检索
+    从此锚定在「Two seismic forces …」而非真正的核心问题。这里按句界取前缀（避免
+    截在半句中间），供调用方在把长文档当查询前先行压缩。文本不超限时原样返回。
+    """
+    t = " ".join(str(text or "").split())
+    if len(t) <= max_chars:
+        return t
+    head = t[:max_chars]
+    for sep in ("。", ". ", "! ", "? ", "！", "？", "；", "; "):
+        idx = head.rfind(sep)
+        if idx >= 40:  # 句界太靠前则弃用（避免只剩一个短标题）
+            return head[:idx + len(sep)].strip()
+    return (head.rsplit(" ", 1)[0] or head).strip()
+
+
+def _semantic_clamp_query(query: str, max_chars: int) -> str:
+    """KG-2: 语义保全式钳制——保留前缀 + 从被截尾部提取专名/数字 token 补进预算内，
+    使尾部实体名与阈值数字在嵌入与 BM25 两条腿上都存活，而非被盲切丢弃。纯函数。"""
+    head_budget = max(80, int(max_chars * 0.7))
+    head = query[:head_budget].rsplit(" ", 1)[0] or query[:head_budget]
+    tail = query[len(head):]
+    # 专名（大写开头的词）与数字/年份 token；CJK 文本无大小写，数字仍可提取
+    toks = re.findall(r"[A-Z][A-Za-z0-9\-\.]{2,}|\d[\d.,/%]*", tail)
+    seen: set = set()
+    out = head
+    for t in toks:
+        tl = t.lower()
+        if tl in seen:
+            continue
+        seen.add(tl)
+        if len(out) + 1 + len(t) > max_chars:
+            break
+        out += " " + t
+    return out
 
 
 @dataclass
@@ -32,6 +80,9 @@ class SearchResult:
     nodes: List[Dict[str, Any]]
     query: str
     total_count: int
+    # F-4-6: 标记本次结果是否来自本地降级搜索（语义检索失败后的关键词兜底），
+    # 让调用方能识别持续性降级，而非把降级结果误当成高质量语义命中。
+    degraded: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -39,12 +90,15 @@ class SearchResult:
             "edges": self.edges,
             "nodes": self.nodes,
             "query": self.query,
-            "total_count": self.total_count
+            "total_count": self.total_count,
+            "degraded": self.degraded
         }
 
     def to_text(self) -> str:
         """转换为文本格式，供LLM理解"""
-        text_parts = [f"搜索查询: {self.query}", f"找到 {self.total_count} 条相关信息"]
+        # F-4-6: 降级搜索结果带上显式标记，便于人工/调用方察觉质量下降。
+        degraded_marker = "（降级搜索）" if self.degraded else ""
+        text_parts = [f"搜索查询: {self.query}{degraded_marker}", f"找到 {self.total_count} 条相关信息"]
 
         if self.facts:
             text_parts.append("\n### 相关事实:")
@@ -278,6 +332,17 @@ class PanoramaResult:
                 entity_type = next((l for l in node.labels if l not in ["Entity", "Node"]), "实体")
                 text_parts.append(f"- **{node.name}** ({entity_type})")
 
+        # 类型化关系链（KG cookbook：把有向带类型边显式序列化为三元组行，并带边引用 [E<uuid8>]，
+        # 让报告可在论断旁标注支撑边）。past to_text 只渲染自由文本 fact，丢掉了 typed 边结构。
+        if self.all_edges:
+            text_parts.append(f"\n### 【关系链】(有向带类型边，可作支撑引用)")
+            for edge in self.all_edges[:40]:
+                src = edge.source_node_name or (edge.source_node_uuid or "")[:8]
+                tgt = edge.target_node_name or (edge.target_node_uuid or "")[:8]
+                eref = (edge.uuid or "")[:8]
+                prefix = f"[E{eref}] " if eref else ""
+                text_parts.append(f"- {prefix}{src} --[{edge.name}]--> {tgt}")
+
         return "\n".join(text_parts)
 
 
@@ -432,7 +497,78 @@ class ZepToolsService:
         self._llm_client = llm_client
         self._nodes_cache: Dict[str, List[NodeInfo]] = {}
         self._edges_cache: Dict[tuple[str, bool], List[EdgeInfo]] = {}
+        # I-6-1: 跨 section 复用的检索缓存（图谱在报告阶段不可变）。默认关闭以保持现有行为，
+        # 通过 Config.REPORT_RETRIEVAL_CACHE 开启；采访写图后通过 invalidate_search_cache 失效。
+        self._search_cache: Dict[tuple, SearchResult] = {}
+        self._forge_cache: Dict[tuple, InsightForgeResult] = {}
+        # EXECPLAN2 I-6-3: guard the retrieval caches so concurrent section threads
+        # (REPORT_SECTION_CONCURRENCY>1) can't crash on invalidate-during-iterate or
+        # produce torn reads. Re-entrant (a cached path may re-enter via copy helpers).
+        self._cache_lock = threading.RLock()
+        # EXECPLAN2 I-1-6: 检索覆盖度追踪器（纯观测，try/except 包裹，绝不影响报告输出）。
+        # 按 graph_id 累计本次报告运行中所有工具调用「触达」过的实体 uuid / 社区 id / 边类型，
+        # 报告收尾时可 flush 成 handoff/retrieval_coverage.json，并对高影响 actor 覆盖不足告警。
+        self._coverage: Dict[str, Dict[str, set]] = {}
+        # EXECPLAN2 I-1-6: MMR 嵌入冗余抑制用的句向量缓存（事实文本 → 单位向量）。仅在
+        # GRAPH_SEARCH_RECIPE=='mmr' 时按需填充；嵌入器懒加载失败则整体回退到精确字符串去重。
+        self._fact_embed_cache: Dict[str, List[float]] = {}
+        self._embedder = None  # 懒构建的本地句向量嵌入器（与图谱检索同源）
+        self._embedder_unavailable = False  # 嵌入器不可用时置位，避免反复尝试
         logger.info("ZepToolsService 初始化完成")
+
+    # I-6-1: 集中读取性能开关，默认 False/串行，缺少 Config 字段时回退到当前行为。
+    @staticmethod
+    def _retrieval_cache_enabled() -> bool:
+        return bool(getattr(Config, "REPORT_RETRIEVAL_CACHE", False))
+
+    @staticmethod
+    def _retrieval_parallel_enabled() -> bool:
+        return bool(getattr(Config, "REPORT_RETRIEVAL_PARALLEL", False))
+
+    @staticmethod
+    def _retrieval_parallel_workers() -> int:
+        try:
+            workers = int(getattr(Config, "REPORT_RETRIEVAL_PARALLEL_WORKERS", 4))
+        except (TypeError, ValueError):
+            workers = 4
+        return max(1, workers)
+
+    # EXECPLAN2 I-1-6: 集中读取检索 recipe 选择器。默认 'rrf'（与历史 RRF 行为逐字节一致）；
+    # 设为 'mmr' 时 insight_forge 改用多样性感知检索并以嵌入冗余抑制替代精确字符串去重。
+    @staticmethod
+    def _search_recipe() -> str:
+        val = getattr(Config, "GRAPH_SEARCH_RECIPE", "rrf")
+        return (str(val).strip().lower() if val else "rrf")
+
+    @staticmethod
+    def _mmr_enabled() -> bool:
+        return ZepToolsService._search_recipe() == "mmr"
+
+    # EXECPLAN2 I-1-6: 高影响 actor 覆盖率告警阈值（[0,1]）。低于该值时记 WARNING（仅咨询性，
+    # 不改变报告输出）。未配置 Config 字段时回退 0.6。
+    @staticmethod
+    def _min_actor_coverage() -> float:
+        try:
+            val = float(getattr(Config, "REPORT_MIN_ACTOR_COVERAGE", 0.6))
+        except (TypeError, ValueError):
+            val = 0.6
+        # 夹到 [0,1]，避免误配置（如 60）触发恒为真/恒为假的告警。
+        return min(1.0, max(0.0, val))
+
+    def invalidate_search_cache(self, graph_id: Optional[str] = None) -> None:
+        """I-6-1: 失效检索/洞察缓存。采访等写图操作后调用，避免返回陈旧检索结果。
+
+        传入 graph_id 时仅清理该图谱相关缓存键；否则清空全部。"""
+        with self._cache_lock:  # I-6-3: consistent vs concurrent get/set in other section threads
+            if graph_id is None:
+                self._search_cache.clear()
+                self._forge_cache.clear()
+                return
+            # 缓存键首元素均为 graph_id，按图谱定向清理。
+            for key in [k for k in self._search_cache if k and k[0] == graph_id]:
+                self._search_cache.pop(key, None)
+            for key in [k for k in self._forge_cache if k and k[0] == graph_id]:
+                self._forge_cache.pop(key, None)
 
     @property
     def llm(self) -> LLMClient:
@@ -479,7 +615,9 @@ class ZepToolsService:
         graph_id: str,
         query: str,
         limit: int = 10,
-        scope: str = "edges"
+        scope: str = "edges",
+        recipe: Optional[str] = None,
+        search_filter: Optional[Dict[str, Any]] = None,
     ) -> SearchResult:
         """
         图谱语义搜索
@@ -492,22 +630,62 @@ class ZepToolsService:
             query: 搜索查询
             limit: 返回结果数量
             scope: 搜索范围，"edges" 或 "nodes"
+            recipe: EXECPLAN2 I-1-6 可选检索 recipe 选择器（'rrf'|'mmr'|...）。None 时由
+                runtime 用 Config.GRAPH_SEARCH_RECIPE（默认 'rrf'）决定，保持现有行为。
+            search_filter: EXECPLAN2 I-1-1 可选时态/类型过滤字典（含 as_of/valid_at_*/
+                invalid_at_* 等键），下推到图谱查询实现「按时点检索」。None 时不加过滤。
 
         Returns:
             SearchResult: 搜索结果
         """
+        # QUALITY-OPT (a90b) + KG-2: 查询长度钳制。380 的紧限是 Zep Cloud 的 ~400 字符 400
+        # 残留——本地 Graphiti/FalkorDB 没有该限制，盲用 380 会把 3388 字的需求书砍到只剩
+        # 开头修辞句（嵌入与 BM25 都只见第一句）。默认改为：远端 Zep 380 / 本地 1200，可经
+        # GRAPH_QUERY_MAX_CHARS 覆盖（0=自动）。仍超限时做语义保全钳制（前缀+尾部专名/数字
+        # token），GRAPH_QUERY_CLAMP_SEMANTIC=False 回退旧的纯前缀切法。
+        _default_max = 380 if getattr(Config, "GRAPHITI_REMOTE", False) else 1200
+        _max_q = int(getattr(Config, "GRAPH_QUERY_MAX_CHARS", 0) or 0) or _default_max
+        if isinstance(query, str) and len(query) > _max_q:
+            _orig_len = len(query)
+            if getattr(Config, "GRAPH_QUERY_CLAMP_SEMANTIC", True):
+                query = _semantic_clamp_query(query, _max_q)
+                logger.info(f"图谱搜索 query 过长（{_orig_len}>{_max_q}），已压缩至 {len(query)} 字符（保留前缀+尾部实体词）")
+            else:
+                query = query[:_max_q].rsplit(" ", 1)[0] or query[:_max_q]
+                logger.info(f"图谱搜索 query 过长（{_orig_len}>{_max_q}），截断至 {len(query)} 字符")
         logger.info(f"图谱搜索: graph_id={graph_id}, query={query[:50]}...")
+
+        # I-6-1: 命中跨 section 检索缓存则直接返回拷贝（避免调用方修改污染缓存）。
+        # EXECPLAN2 I-1-1/I-1-6: 缓存键纳入 recipe 与 search_filter，避免不同 recipe / as-of
+        # 时点的结果互相串档（同 query 但不同时态切片必须各自缓存）。
+        cache_enabled = self._retrieval_cache_enabled()
+        filter_key = json.dumps(search_filter, sort_keys=True, default=str) if search_filter else ""
+        cache_key = (graph_id, (query or "").strip().lower(), limit, scope,
+                     (recipe or "").strip().lower(), filter_key)
+        if cache_enabled:
+            with self._cache_lock:  # I-6-3
+                cached = self._search_cache.get(cache_key)
+            if cached is not None:
+                logger.info("复用检索缓存命中（search_graph）")
+                return self._copy_search_result(cached)
 
         # 尝试使用Zep Cloud Search API
         try:
+            # EXECPLAN2 I-1-1/I-1-6: 仅在显式给出 recipe/search_filter 时透传，未给出则保持
+            # 历史 4 参调用形态（runtime 默认 recipe + 无过滤），行为逐字节不变。
+            search_kwargs: Dict[str, Any] = {
+                "graph_id": graph_id,
+                "query": query,
+                "limit": limit,
+                "scope": scope,
+                "reranker": "cross_encoder",
+            }
+            if recipe:
+                search_kwargs["recipe"] = recipe
+            if search_filter:
+                search_kwargs["search_filter"] = search_filter
             search_results = self._call_with_retry(
-                func=lambda: self.client.graph.search(
-                    graph_id=graph_id,
-                    query=query,
-                    limit=limit,
-                    scope=scope,
-                    reranker="cross_encoder"
-                ),
+                func=lambda: self.client.graph.search(**search_kwargs),
                 operation_name=f"图谱搜索(graph={graph_id})"
             )
 
@@ -543,18 +721,59 @@ class ZepToolsService:
 
             logger.info(f"搜索完成: 找到 {len(facts)} 条相关事实")
 
-            return SearchResult(
+            result = SearchResult(
                 facts=facts,
                 edges=edges,
                 nodes=nodes,
                 query=query,
                 total_count=len(facts)
             )
+            if cache_enabled:
+                with self._cache_lock:  # I-6-3
+                    self._search_cache[cache_key] = self._copy_search_result(result)
+            return result
 
+        except (ApiError, InternalServerError, ConnectionError, TimeoutError, OSError) as e:
+            # F-4-6: 仅对预期的后端/连接/服务端错误降级，保留对真实 API 故障的优雅退化。
+            logger.warning(f"Zep Search API失败（已知后端/连接错误），降级为本地搜索: {str(e)}")
+            return self._fallback_local_search(graph_id, query, limit, scope, cache_enabled, cache_key)
         except Exception as e:
-            logger.warning(f"Zep Search API失败，降级为本地搜索: {str(e)}")
-            # 降级：使用本地关键词匹配搜索
-            return self._local_search(graph_id, query, limit, scope)
+            # F-4-6: 限流错误依然降级（_call_with_retry 已耗尽重试）；其余未知异常很可能是
+            # 编程/解析类缺陷——记 ERROR + 堆栈并重抛，使真实回归可被诊断而非被静默掩盖。
+            if is_zep_rate_limit_error(e):
+                logger.warning(f"Zep Search API 限流，降级为本地搜索: {str(e)}")
+                return self._fallback_local_search(graph_id, query, limit, scope, cache_enabled, cache_key)
+            logger.error(f"Zep Search API 未预期异常（疑似程序/解析缺陷）: {str(e)}", exc_info=True)
+            raise
+
+    @staticmethod
+    def _copy_search_result(result: SearchResult) -> SearchResult:
+        """I-6-1: 返回 SearchResult 的浅拷贝（拷贝可变容器），避免缓存被调用方就地修改。"""
+        return SearchResult(
+            facts=list(result.facts),
+            edges=[dict(e) for e in result.edges],
+            nodes=[dict(n) for n in result.nodes],
+            query=result.query,
+            total_count=result.total_count,
+            degraded=result.degraded,
+        )
+
+    def _fallback_local_search(
+        self,
+        graph_id: str,
+        query: str,
+        limit: int,
+        scope: str,
+        cache_enabled: bool,
+        cache_key: tuple,
+    ) -> SearchResult:
+        """F-4-6/I-6-1: 统一的本地降级搜索出口，打上 degraded 标记并写入缓存。"""
+        result = self._local_search(graph_id, query, limit, scope)
+        result.degraded = True
+        if cache_enabled:
+            with self._cache_lock:  # I-6-3
+                self._search_cache[cache_key] = self._copy_search_result(result)
+        return result
 
     def _local_search(
         self,
@@ -660,6 +879,266 @@ class ZepToolsService:
             total_count=len(facts)
         )
 
+    def search_from_cache(
+        self,
+        graph_id: str,
+        query: str,
+        limit: int = 10,
+        scope: str = "both",
+    ) -> SearchResult:
+        """I-6-5: 纯本地、基于已缓存全图节点/边的关键词匹配检索。
+
+        供画像富集等阶段在 PROFILE_ENRICH_FROM_CACHE 模式下复用：当同一不可变图谱被按实体
+        反复检索时（如 80 个 agent 各跑 2 次嵌入检索），可改为一次性 bulk 拉取（已缓存）+ 内存
+        匹配评分，把 O(agents) 次嵌入往返收敛为 O(1) 次拉取。返回结果标记 degraded=True 以示其
+        来自本地匹配而非嵌入语义检索。默认不被任何路径调用，仅由调用方显式选用，保持现有行为。
+        """
+        result = self._local_search(graph_id, query, limit, scope)
+        result.degraded = True
+        return result
+
+    # ==================================================================
+    # EXECPLAN2 I-1-1: 双时态「按时点」检索（as-of retrieval）
+    # 预测本质是状态随时间演变。pipeline 已经在种子边（valid_at=as_of）与逐轮反馈边
+    # （round 推导的 valid_at）上构建了真实的双时态轴，但此前检索从不按时间过滤，报告只能
+    # 看到时间压平后的快照。as_of_search 把「valid_at <= D 且（invalid_at 为空 或 > D）」
+    # 下推到图谱查询，只返回在时点 D 成立的事实，让「立场 X 在 T0 与 T_end 之间如何漂移」
+    # 之类的轨迹/拐点论断有图谱级证据支撑。
+    # ==================================================================
+    @staticmethod
+    def _as_of_filter(as_of: datetime) -> Dict[str, Any]:
+        """构造下推到图谱查询的 as-of 时态过滤字典（runtime._to_search_filters 解析）。
+
+        语义：valid_at <= as_of 且（invalid_at IS NULL OR invalid_at > as_of）。
+        runtime 端把 null invalid_at 视为「仍然有效」并纳入结果，配合「null valid_at = 始终
+        有效」的兜底，避免 LLM 文本抽取出的无时间戳边被时点过滤误删（覆盖率风险见 bundle）。
+        """
+        return {"as_of": as_of.isoformat()}
+
+    def as_of_search(
+        self,
+        graph_id: str,
+        query: str,
+        as_of: Union[str, datetime, None],
+        limit: int = 20,
+        scope: str = "edges",
+    ) -> SearchResult:
+        """【AsOfSearch - 按时点检索】只返回在给定时点 ``as_of`` 成立的事实。
+
+        Args:
+            graph_id: 图谱ID
+            query: 搜索查询
+            as_of: 时点（datetime / ISO / 斜杠 / 中文「年月日」/ 仅年月 / 仅年份，宽松解析）。
+                解析失败或为 None 时退化为全时段检索（等价 search_graph），保持现有行为。
+            limit: 返回结果数量
+            scope: 搜索范围
+
+        Returns:
+            SearchResult: 该时点成立的搜索结果。
+        """
+        parsed = parse_as_of(as_of)
+        if parsed is None:
+            # 无法解析 → 不加时态过滤，等价于普通语义检索（OFF-by-default 退化语义）。
+            if as_of:
+                logger.warning(f"as_of_search 无法解析时点 {as_of!r}，退化为全时段检索")
+            return self.search_graph(graph_id=graph_id, query=query, limit=limit, scope=scope)
+        logger.info(f"AsOfSearch 按时点检索: as_of={parsed.isoformat()}, query={query[:40]}...")
+        return self.search_graph(
+            graph_id=graph_id,
+            query=query,
+            limit=limit,
+            scope=scope,
+            search_filter=self._as_of_filter(parsed),
+        )
+
+    # ==================================================================
+    # EXECPLAN2 I-1-6: MMR 多样性感知去重（嵌入冗余抑制）
+    # insight_forge 此前用精确字符串集合去重，语义近重复的事实仍会挤占不同证据。当
+    # GRAPH_SEARCH_RECIPE=='mmr' 时，改用本地句向量的余弦冗余抑制：若某事实与已选事实的
+    # 最大余弦相似度超过阈值则丢弃，使最终事实集既相关又多样。嵌入器不可用 → 自动回退精确去重。
+    # ==================================================================
+    def _get_embedder(self):
+        """懒构建与图谱检索同源的本地句向量嵌入器；不可用时置位并返回 None。"""
+        if self._embedder_unavailable:
+            return None
+        if self._embedder is None:
+            try:
+                from .graphiti_client.embedder import LocalSentenceTransformerEmbedder
+                self._embedder = LocalSentenceTransformerEmbedder()
+            except Exception as e:  # 缺依赖/加载失败 → 回退精确去重，不影响检索
+                logger.warning(f"MMR 嵌入器不可用，回退精确字符串去重: {e}")
+                self._embedder_unavailable = True
+                return None
+        return self._embedder
+
+    def _embed_facts(self, facts: List[str]) -> Dict[str, List[float]]:
+        """批量嵌入事实文本（带进程内缓存），返回 {fact: 单位向量}；失败返回空 dict。"""
+        embedder = self._get_embedder()
+        if embedder is None:
+            return {}
+        # B8: 所有对 _fact_embed_cache 的 dict 读写加锁（与 insight_forge 并发 fan-out 一致），
+        # 但**不**在持锁期间做慢速嵌入调用，避免串行化并发检索。
+        with self._cache_lock:
+            todo = [f for f in facts if f and f not in self._fact_embed_cache]
+        if todo:
+            try:
+                # 嵌入器在后台事件循环线程上运行；通过 runtime 桥接同步取回 create_batch。
+                from .graphiti_client.runtime import get_runtime
+                vecs = get_runtime().run(embedder.create_batch(todo))
+                with self._cache_lock:
+                    for f, v in zip(todo, vecs):
+                        self._fact_embed_cache[f] = v
+            except Exception as e:
+                logger.warning(f"MMR 事实嵌入失败，回退精确去重: {e}")
+                self._embedder_unavailable = True
+                return {}
+        with self._cache_lock:
+            return {f: self._fact_embed_cache[f] for f in facts if f in self._fact_embed_cache}
+
+    @staticmethod
+    def _cosine(a: List[float], b: List[float]) -> float:
+        """两个单位向量的余弦相似度（嵌入器已 normalize，故为点积）。"""
+        if not a or not b:
+            return 0.0
+        n = min(len(a), len(b))
+        return sum(a[i] * b[i] for i in range(n))
+
+    def _dedupe_facts_mmr(self, facts: List[str], threshold: float = 0.92) -> List[str]:
+        """嵌入冗余抑制：按入参顺序贪心保留，与已选集最大余弦相似度 > 阈值者丢弃。
+
+        先做精确字符串去重（保留首次出现），再做语义去重；嵌入不可用时只做精确去重，
+        与历史 seen_facts 行为一致（OFF-by-default 退化）。"""
+        exact: List[str] = []
+        seen = set()
+        for f in facts:
+            if f and f not in seen:
+                exact.append(f)
+                seen.add(f)
+        if not self._mmr_enabled():
+            return exact
+        embeds = self._embed_facts(exact)
+        if not embeds:
+            return exact  # 嵌入不可用 → 仅精确去重
+        kept: List[str] = []
+        kept_vecs: List[List[float]] = []
+        for f in exact:
+            v = embeds.get(f)
+            if v is None:
+                kept.append(f)  # 无向量者无法判冗余，保守保留
+                continue
+            if any(self._cosine(v, kv) > threshold for kv in kept_vecs):
+                continue  # 语义近重复，丢弃
+            kept.append(f)
+            kept_vecs.append(v)
+        if len(kept) < len(exact):
+            logger.info(f"MMR 冗余抑制: {len(exact)} → {len(kept)} 条事实（阈值 {threshold}）")
+        return kept
+
+    # ==================================================================
+    # EXECPLAN2 I-1-6: 检索覆盖度追踪（纯观测，绝不影响报告输出）
+    # 记录本次报告运行中所有工具调用「触达」过的实体 uuid / 社区 id / 边类型，报告收尾时
+    # 可 flush 成 handoff/retrieval_coverage.json，并对高影响 actor 覆盖不足发出咨询性告警，
+    # 捕捉「自信地写了忽略整个派系的预测」这一最危险的静默质量缺陷。
+    # ==================================================================
+    def record_coverage(
+        self,
+        graph_id: str,
+        *,
+        entity_uuids: Optional[List[str]] = None,
+        entity_names: Optional[List[str]] = None,
+        community_ids: Optional[List[str]] = None,
+        edge_types: Optional[List[str]] = None,
+    ) -> None:
+        """累计某次工具调用触达过的图谱元素。全程 try/except，任何异常都不外溢。"""
+        try:
+            bucket = self._coverage.setdefault(
+                graph_id,
+                {"entity_uuids": set(), "entity_names": set(), "community_ids": set(), "edge_types": set()},
+            )
+            for u in entity_uuids or []:
+                if u:
+                    bucket["entity_uuids"].add(str(u))
+            for n in entity_names or []:
+                if n:
+                    bucket["entity_names"].add(str(n).strip().lower())
+            for c in community_ids or []:
+                if c:
+                    bucket["community_ids"].add(str(c))
+            for et in edge_types or []:
+                if et:
+                    bucket["edge_types"].add(str(et))
+        except Exception as e:  # 观测代码绝不影响主流程
+            logger.debug(f"record_coverage 跳过（不影响报告）: {e}")
+
+    def get_coverage_report(
+        self,
+        graph_id: str,
+        high_influence_actors: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """汇总本次运行对 ``graph_id`` 的检索覆盖度。
+
+        Args:
+            high_influence_actors: 高影响 actor 名（来自 actors.json influence=='high'）。
+                提供时计算其被触达比例，低于阈值时返回 below_threshold=True 并记 WARNING。
+
+        Returns:
+            覆盖度摘要字典（可直接 json.dumps 写入 handoff/retrieval_coverage.json）。
+        """
+        bucket = self._coverage.get(graph_id) or {
+            "entity_uuids": set(), "entity_names": set(), "community_ids": set(), "edge_types": set()
+        }
+        report: Dict[str, Any] = {
+            "graph_id": graph_id,
+            "surfaced_entity_count": len(bucket["entity_uuids"]) or len(bucket["entity_names"]),
+            "surfaced_entity_uuids": sorted(bucket["entity_uuids"]),
+            "surfaced_community_count": len(bucket["community_ids"]),
+            "surfaced_edge_types": sorted(bucket["edge_types"]),
+        }
+        actors = [str(a).strip().lower() for a in (high_influence_actors or []) if str(a).strip()]
+        if actors:
+            surfaced_names = bucket["entity_names"]
+            # 名字匹配：精确或子串（图谱实体名可能含头衔/限定词）。
+            covered = [
+                a for a in actors
+                if a in surfaced_names or any(a in s or s in a for s in surfaced_names)
+            ]
+            ratio = len(covered) / len(actors) if actors else 1.0
+            threshold = self._min_actor_coverage()
+            below = ratio < threshold
+            report.update({
+                "high_influence_actor_total": len(actors),
+                "high_influence_actor_covered": len(covered),
+                "high_influence_actor_coverage": round(ratio, 3),
+                "coverage_threshold": threshold,
+                "below_threshold": below,
+                "uncovered_high_influence_actors": sorted(set(actors) - set(covered)),
+            })
+            if below:
+                logger.warning(
+                    f"检索覆盖度告警: 高影响 actor 覆盖率 {ratio:.0%} < 阈值 {threshold:.0%}"
+                    f"（{len(covered)}/{len(actors)}），报告可能忽略了重要参与者/派系"
+                )
+        return report
+
+    def flush_coverage(
+        self,
+        graph_id: str,
+        output_path: str,
+        high_influence_actors: Optional[List[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """把覆盖度摘要原子写入 ``output_path``（如 handoff/retrieval_coverage.json）。
+
+        全程 try/except；写盘失败只记 WARNING 并返回摘要，绝不影响报告产出。"""
+        try:
+            report = self.get_coverage_report(graph_id, high_influence_actors)
+            from ..utils.atomic import write_json_atomic
+            write_json_atomic(output_path, report)
+            logger.info(f"检索覆盖度已写入 {output_path}")
+            return report
+        except Exception as e:
+            logger.warning(f"flush_coverage 跳过（不影响报告）: {e}")
+            return None
+
     def get_all_nodes(self, graph_id: str) -> List[NodeInfo]:
         """
         获取图谱的所有节点（分页获取）
@@ -670,9 +1149,11 @@ class ZepToolsService:
         Returns:
             节点列表
         """
-        if graph_id in self._nodes_cache:
-            logger.info(f"复用图谱 {graph_id} 的节点缓存: {len(self._nodes_cache[graph_id])} 个节点")
-            return list(self._nodes_cache[graph_id])
+        # B8: 读缓存加锁（与并发章节线程的写保持一致，RLock 可重入）。
+        with self._cache_lock:
+            if graph_id in self._nodes_cache:
+                logger.info(f"复用图谱 {graph_id} 的节点缓存: {len(self._nodes_cache[graph_id])} 个节点")
+                return list(self._nodes_cache[graph_id])
 
         logger.info(f"获取图谱 {graph_id} 的所有节点...")
 
@@ -697,8 +1178,11 @@ class ZepToolsService:
             ))
 
         logger.info(f"获取到 {len(result)} 个节点")
-        self._nodes_cache[graph_id] = result
-        return list(result)
+        # B8: 写缓存双检加锁，避免并发章节线程交错写 dict 撕裂；先到者写入，都返回一致结果。
+        with self._cache_lock:
+            if graph_id not in self._nodes_cache:
+                self._nodes_cache[graph_id] = result
+            return list(self._nodes_cache[graph_id])
 
     def get_all_edges(self, graph_id: str, include_temporal: bool = True) -> List[EdgeInfo]:
         """
@@ -712,9 +1196,11 @@ class ZepToolsService:
             边列表（包含created_at, valid_at, invalid_at, expired_at）
         """
         cache_key = (graph_id, include_temporal)
-        if cache_key in self._edges_cache:
-            logger.info(f"复用图谱 {graph_id} 的边缓存: {len(self._edges_cache[cache_key])} 条边")
-            return list(self._edges_cache[cache_key])
+        # B8: 读缓存加锁（与并发章节线程的写一致）。
+        with self._cache_lock:
+            if cache_key in self._edges_cache:
+                logger.info(f"复用图谱 {graph_id} 的边缓存: {len(self._edges_cache[cache_key])} 条边")
+                return list(self._edges_cache[cache_key])
 
         logger.info(f"获取图谱 {graph_id} 的所有边...")
 
@@ -748,8 +1234,11 @@ class ZepToolsService:
             result.append(edge_info)
 
         logger.info(f"获取到 {len(result)} 条边")
-        self._edges_cache[cache_key] = result
-        return list(result)
+        # B8: 写缓存双检加锁，避免并发章节线程交错写 dict 撕裂。
+        with self._cache_lock:
+            if cache_key not in self._edges_cache:
+                self._edges_cache[cache_key] = result
+            return list(self._edges_cache[cache_key])
 
     def get_node_detail(self, node_uuid: str) -> Optional[NodeInfo]:
         """
@@ -935,7 +1424,8 @@ class ZepToolsService:
         self,
         graph_id: str,
         simulation_requirement: str,
-        limit: int = 30
+        limit: int = 30,
+        search_query: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         获取模拟相关的上下文信息
@@ -946,16 +1436,20 @@ class ZepToolsService:
             graph_id: 图谱ID
             simulation_requirement: 模拟需求描述
             limit: 每类信息的数量限制
+            search_query: RPT-8/XRUN-5 可选的紧凑检索查询。整段需求书作 query 会被长度
+                钳制砍到只剩开头修辞句；调用方可传入预蒸馏的紧凑查询用于图谱检索，
+                simulation_requirement 仍原样回显在返回值中。缺省 None → 行为与历史一致。
 
         Returns:
             模拟上下文信息
         """
-        logger.info(f"获取模拟上下文: {simulation_requirement[:50]}...")
+        _q = (search_query or "").strip() or simulation_requirement
+        logger.info(f"获取模拟上下文: {_q[:50]}...")
 
         # 搜索与模拟需求相关的信息
         search_result = self.search_graph(
             graph_id=graph_id,
-            query=simulation_requirement,
+            query=_q,
             limit=limit
         )
 
@@ -991,7 +1485,8 @@ class ZepToolsService:
         query: str,
         simulation_requirement: str,
         report_context: str = "",
-        max_sub_queries: int = 5
+        max_sub_queries: int = 5,
+        as_of: Union[str, datetime, None] = None,
     ) -> InsightForgeResult:
         """
         【InsightForge - 深度洞察检索】
@@ -1009,11 +1504,33 @@ class ZepToolsService:
             simulation_requirement: 模拟需求描述
             report_context: 报告上下文（可选，用于更精准的子问题生成）
             max_sub_queries: 最大子问题数量
+            as_of: EXECPLAN2 I-1-1 可选时点。给出时只检索在该时点成立的事实（按时点视图，
+                如「round 0 状态 vs 最终轮」）；None（默认）保持全时段行为不变。
 
         Returns:
             InsightForgeResult: 深度洞察检索结果
         """
         logger.info(f"InsightForge 深度洞察检索: {query[:50]}...")
+
+        # EXECPLAN2 I-1-1: 解析 as-of 时点；可解析时构造下推过滤字典，否则不加时态过滤。
+        as_of_dt = parse_as_of(as_of)
+        as_of_filter = self._as_of_filter(as_of_dt) if as_of_dt is not None else None
+        # EXECPLAN2 I-1-6: MMR 时改用多样性感知 recipe；'rrf' 时不传 recipe（保持默认）。
+        recipe = "mmr" if self._mmr_enabled() else None
+
+        # I-6-1: 命中跨 section 的 InsightForge 缓存则直接返回（图谱在报告阶段不可变）。
+        # 默认关闭，由 Config.REPORT_RETRIEVAL_CACHE 控制；采访写图后通过 invalidate_search_cache 失效。
+        # EXECPLAN2 I-1-1/I-1-6: 缓存键纳入 as_of 与 recipe，避免不同时点/不同 recipe 串档。
+        forge_cache_enabled = self._retrieval_cache_enabled()
+        forge_key = (graph_id, (query or "").strip().lower(), (simulation_requirement or "").strip().lower(),
+                     hash((report_context or "").strip()), max_sub_queries,
+                     as_of_dt.isoformat() if as_of_dt else "", recipe or "")
+        if forge_cache_enabled:
+            with self._cache_lock:  # I-6-3
+                cached_forge = self._forge_cache.get(forge_key)
+            if cached_forge is not None:
+                logger.info("复用 InsightForge 缓存命中")
+                return cached_forge
 
         result = InsightForgeResult(
             query=query,
@@ -1031,37 +1548,54 @@ class ZepToolsService:
         result.sub_queries = sub_queries
         logger.info(f"生成 {len(sub_queries)} 个子问题")
 
-        # Step 2: 对每个子问题进行语义搜索
+        # Step 2: 对每个子问题进行语义搜索（I-6-1: 可选并行扇出，默认串行保持原顺序）
         all_facts = []
         all_edges = []
-        seen_facts = set()
 
-        for sub_query in sub_queries:
-            search_result = self.search_graph(
-                graph_id=graph_id,
-                query=sub_query,
-                limit=15,
-                scope="edges"
-            )
+        # (子问题, limit) 列表 + 原始问题，统一调度，便于并行。
+        search_specs = [(sq, 15) for sq in sub_queries]
+        search_specs.append((query, 20))  # 原始问题用更大的 limit
 
-            for fact in search_result.facts:
-                if fact not in seen_facts:
-                    all_facts.append(fact)
-                    seen_facts.add(fact)
+        if self._retrieval_parallel_enabled() and len(search_specs) > 1:
+            # 检索路径是 I/O 密集且线程安全（与 oasis_profile_generator 的并行边/点检索同源），
+            # 用有界线程池并发扇出，墙钟时间趋近最慢的单次检索而非求和。
+            from concurrent.futures import ThreadPoolExecutor
 
+            ordered_results: List[Optional[SearchResult]] = [None] * len(search_specs)
+            workers = min(self._retrieval_parallel_workers(), len(search_specs))
+            with ThreadPoolExecutor(max_workers=workers) as ex:
+                # EXECPLAN2 I-1-1/I-1-6: 透传 recipe（MMR）与 as-of 时态过滤到每次检索。
+                future_to_idx = {
+                    ex.submit(
+                        self.search_graph, graph_id, spec_q, spec_limit, "edges",
+                        recipe, as_of_filter,
+                    ): idx
+                    for idx, (spec_q, spec_limit) in enumerate(search_specs)
+                }
+                for fut, idx in future_to_idx.items():
+                    try:
+                        ordered_results[idx] = fut.result()
+                    except Exception as e:  # noqa: BLE001  保持单次检索失败不影响整体扇出
+                        logger.warning(f"子问题并行检索失败（跳过该项）: {e}")
+            search_results_list = [r for r in ordered_results if r is not None]
+        else:
+            search_results_list = [
+                self.search_graph(
+                    graph_id=graph_id, query=spec_q, limit=spec_limit, scope="edges",
+                    recipe=recipe, search_filter=as_of_filter,
+                )
+                for spec_q, spec_limit in search_specs
+            ]
+
+        # 合并所有事实（保持确定性先后次序），再统一去重。
+        merged_facts: List[str] = []
+        for search_result in search_results_list:
+            merged_facts.extend(search_result.facts)
             all_edges.extend(search_result.edges)
 
-        # 对原始问题也进行搜索
-        main_search = self.search_graph(
-            graph_id=graph_id,
-            query=query,
-            limit=20,
-            scope="edges"
-        )
-        for fact in main_search.facts:
-            if fact not in seen_facts:
-                all_facts.append(fact)
-                seen_facts.add(fact)
+        # EXECPLAN2 I-1-6: MMR 开启时用嵌入冗余抑制（含精确去重）替代纯字符串去重，
+        # 使事实集既相关又多样；关闭时 _dedupe_facts_mmr 仅做精确去重，等价历史行为。
+        all_facts = self._dedupe_facts_mmr(merged_facts)
 
         result.semantic_facts = all_facts
         result.total_facts = len(all_facts)
@@ -1081,12 +1615,17 @@ class ZepToolsService:
         entity_insights = []
         node_map = {}  # 用于后续关系链构建
 
+        # F-4-3: 用一次（已缓存的）全图节点快照取代每个 UUID 一次的 get_node_detail 阻塞往返。
+        # get_all_nodes(graph_id) 会分页拉全图并缓存；本会话若已调用过则直接命中缓存。
+        # 仅当 UUID 不在快照中（跨图/陈旧）时才回退 get_node_detail，行为保持等价。
+        snapshot = {n.uuid: n for n in self.get_all_nodes(graph_id) if n.uuid}
+
         for uuid in list(entity_uuids):  # 处理所有实体，不截断
             if not uuid:
                 continue
             try:
-                # 单独获取每个相关节点的信息
-                node = self.get_node_detail(uuid)
+                # F-4-3: 优先用快照命中，缺失才回退单点查询（保留原跨图/陈旧 UUID 兜底语义）。
+                node = snapshot.get(uuid) or self.get_node_detail(uuid)
                 if node:
                     node_map[uuid] = node
                     entity_type = next((l for l in node.labels if l not in ["Entity", "Node"]), "实体")
@@ -1111,6 +1650,55 @@ class ZepToolsService:
         result.entity_insights = entity_insights
         result.total_entities = len(entity_insights)
 
+        # R2-KG-9: 追加一次 node-scope 混合检索，把节点摘要直接折叠进 entity_insights。
+        # 边检索（scope="edges"）只能触达「有出/入边」的实体；摘要丰富但少边的关键节点
+        # （如刚被提及的机构、概念性 actor）会被漏掉。node-scope 检索按原始 query 召回这些
+        # 节点，去重后补进洞察集；节点摘要经 MMR 冗余抑制（_mmr_enabled 时语义去冗，否则精确
+        # 去重）避免与已有实体重复。全程 try/except，失败跳过，保持现有行为不变。
+        node_scope_names: List[str] = []
+        try:
+            node_search = self.search_graph(
+                graph_id=graph_id, query=query, limit=10, scope="nodes",
+                recipe=recipe, search_filter=as_of_filter,
+            )
+            existing_uuids = {ei.get("uuid") for ei in entity_insights if ei.get("uuid")}
+            existing_names = {(ei.get("name") or "").strip().lower()
+                              for ei in entity_insights if ei.get("name")}
+            candidates: List[tuple] = []  # (node_dict, summary_blob)
+            for nd in node_search.nodes:
+                nm = str(nd.get("name", "") or "").strip()
+                summ = str(nd.get("summary", "") or "").strip()
+                uid = nd.get("uuid") or ""
+                if not nm or not summ:
+                    continue
+                if (uid and uid in existing_uuids) or nm.lower() in existing_names:
+                    continue
+                candidates.append((nd, f"[{nm}]: {summ}"))
+            # MMR/精确去重补充节点摘要，去掉与彼此语义近重复的条目。
+            kept_blobs = set(self._dedupe_facts_mmr([blob for _, blob in candidates]))
+            for nd, blob in candidates:
+                if blob not in kept_blobs:
+                    continue
+                nm = str(nd.get("name", "")).strip()
+                if nm.lower() in existing_names:  # 防止本批内重名重复
+                    continue
+                labels = nd.get("labels") or []
+                entity_type = next((l for l in labels if l not in ["Entity", "Node"]), "实体")
+                entity_insights.append({
+                    "uuid": nd.get("uuid") or "",
+                    "name": nm,
+                    "type": entity_type,
+                    "summary": str(nd.get("summary", "") or ""),
+                    "related_facts": [f for f in all_facts if nm.lower() in f.lower()],
+                })
+                existing_names.add(nm.lower())
+                node_scope_names.append(nm)
+            if node_scope_names:
+                result.total_entities = len(entity_insights)
+                logger.info(f"InsightForge: node-scope 检索折叠 {len(node_scope_names)} 个补充实体")
+        except Exception as exc:  # noqa: BLE001  node-scope 是增强项，失败不影响主流程
+            logger.debug(f"InsightForge node-scope 检索跳过（不影响报告）: {exc}")
+
         # Step 4: 构建所有关系链（不限制数量）
         relationship_chains = []
         for edge_data in all_edges:  # 处理所有边，不截断
@@ -1122,7 +1710,12 @@ class ZepToolsService:
                 source_name = node_map.get(source_uuid, NodeInfo('', '', [], '', {})).name or source_uuid[:8]
                 target_name = node_map.get(target_uuid, NodeInfo('', '', [], '', {})).name or target_uuid[:8]
 
+                # 边引用句柄（KG cookbook 可追溯检索）：给关系链加 [E<uuid8>] 前缀，
+                # 让报告能在论断旁标注具体支撑边。保持 "src --[rel]--> tgt" 为子串不变。
+                eref = str(edge_data.get('uuid') or edge_data.get('uuid_') or '')[:8]
                 chain = f"{source_name} --[{relation_name}]--> {target_name}"
+                if eref:
+                    chain = f"[E{eref}] {chain}"
                 if chain not in relationship_chains:
                     relationship_chains.append(chain)
 
@@ -1130,6 +1723,23 @@ class ZepToolsService:
         result.total_relationships = len(relationship_chains)
 
         logger.info(f"InsightForge完成: {result.total_facts}条事实, {result.total_entities}个实体, {result.total_relationships}条关系")
+
+        # EXECPLAN2 I-1-6: 记录本次检索触达的实体（uuid+name）与边类型，供报告收尾时
+        # 评估覆盖度。纯观测，record_coverage 内部已 try/except 兜底。
+        self.record_coverage(
+            graph_id,
+            entity_uuids=list(node_map.keys()),
+            # R2-KG-9: node-scope 补充实体也计入覆盖度，避免低估触达面。
+            entity_names=[n.name for n in node_map.values() if n.name] + node_scope_names,
+            edge_types=[
+                e.get("name", "") for e in all_edges if isinstance(e, dict) and e.get("name")
+            ],
+        )
+
+        # I-6-1: 写入 InsightForge 缓存，供后续 section 复用（写图后会被 invalidate_search_cache 失效）。
+        if forge_cache_enabled:
+            with self._cache_lock:  # I-6-3
+                self._forge_cache[forge_key] = result
         return result
 
     def _generate_sub_queries(
@@ -1163,12 +1773,15 @@ class ZepToolsService:
 返回JSON格式的子问题列表。"""
 
         try:
+            # EXECPLAN2 I-6-2: 子问题分解是机械型结构化任务，路由到 fast 档省钱省时；
+            # 关闭 tiered routing 或 CLI 订阅提供方时 tier 为 no-op，行为不变。
             response = self.llm.chat_json(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.3
+                temperature=0.3,
+                tier="fast"
             )
 
             sub_queries = response.get("sub_queries", [])
@@ -1177,12 +1790,14 @@ class ZepToolsService:
 
         except Exception as e:
             logger.warning(f"生成子问题失败: {str(e)}，使用默认子问题")
-            # 降级：返回基于原问题的变体
+            # 降级：返回基于原问题的变体。RPT-8：超长原问题（如整段需求书）的四个变体
+            # 会在检索钳制时被切成同一段前缀，先压缩再派生变体，变体才有区分度。
+            base = compact_graph_query(query, 300)
             return [
-                query,
-                f"{query} 的主要参与者",
-                f"{query} 的原因和影响",
-                f"{query} 的发展过程"
+                base,
+                f"{base} 的主要参与者",
+                f"{base} 的原因和影响",
+                f"{base} 的发展过程"
             ][:max_queries]
 
     def panorama_search(
@@ -1190,7 +1805,8 @@ class ZepToolsService:
         graph_id: str,
         query: str,
         include_expired: bool = True,
-        limit: int = 50
+        limit: int = 50,
+        as_of: Union[str, datetime, None] = None,
     ) -> PanoramaResult:
         """
         【PanoramaSearch - 广度搜索】
@@ -1207,11 +1823,18 @@ class ZepToolsService:
             query: 搜索查询（用于相关性排序）
             include_expired: 是否包含过期内容（默认True）
             limit: 返回结果数量限制
+            as_of: EXECPLAN2 I-1-1 可选时点。给出时按「在该时点是否成立」划分有效/历史
+                （valid_at<=as_of 且 invalid_at 为空或晚于 as_of → 有效；已在 as_of 前失效/
+                过期 → 历史），用于「某时点的全景快照」。None（默认）保持原「当前是否过期/失效」
+                的划分，行为不变。
 
         Returns:
             PanoramaResult: 广度搜索结果
         """
         logger.info(f"PanoramaSearch 广度搜索: {query[:50]}...")
+
+        # EXECPLAN2 I-1-1: 解析 as-of 时点（无法解析则退化为全时段/当前划分）。
+        as_of_dt = parse_as_of(as_of)
 
         result = PanoramaResult(query=query)
 
@@ -1234,13 +1857,24 @@ class ZepToolsService:
             if not edge.fact:
                 continue
 
-            # 为事实添加实体名称
-            source_name = node_map.get(edge.source_node_uuid, NodeInfo('', '', [], '', {})).name or edge.source_node_uuid[:8]
-            target_name = node_map.get(edge.target_node_uuid, NodeInfo('', '', [], '', {})).name or edge.target_node_uuid[:8]
+            if as_of_dt is not None:
+                # EXECPLAN2 I-1-1: 按时点划分。无 valid_at 视为「始终有效」（避免文本抽取的
+                # 无时间戳边被误删，见 bundle 风险缓解）；invalid_at/expired_at 早于 as_of → 历史。
+                valid_dt = parse_as_of(edge.valid_at)
+                end_dt = parse_as_of(edge.invalid_at) or parse_as_of(edge.expired_at)
+                started = (valid_dt is None) or (valid_dt <= as_of_dt)
+                ended = (end_dt is not None) and (end_dt <= as_of_dt)
+                if started and not ended:
+                    active_facts.append(edge.fact)
+                elif ended:
+                    valid_at = edge.valid_at or "未知"
+                    invalid_at = edge.invalid_at or edge.expired_at or "未知"
+                    historical_facts.append(f"[{valid_at} - {invalid_at}] {edge.fact}")
+                # else: 在 as_of 时尚未生效 → 既非有效也非历史，跳过（未来事实）。
+                continue
 
-            # 判断是否过期/失效
+            # 默认（无 as_of）：按「当前是否过期/失效」划分，行为不变。
             is_historical = edge.is_expired or edge.is_invalid
-
             if is_historical:
                 # 历史/过期事实，添加时间标记
                 valid_at = edge.valid_at or "未知"
@@ -1273,6 +1907,14 @@ class ZepToolsService:
         result.historical_facts = historical_facts[:limit] if include_expired else []
         result.active_count = len(active_facts)
         result.historical_count = len(historical_facts)
+
+        # EXECPLAN2 I-1-6: panorama 触达全图，记录覆盖的实体与边类型供覆盖度评估（纯观测）。
+        self.record_coverage(
+            graph_id,
+            entity_uuids=[n.uuid for n in all_nodes if n.uuid],
+            entity_names=[n.name for n in all_nodes if n.name],
+            edge_types=[e.name for e in all_edges if e.name],
+        )
 
         logger.info(f"PanoramaSearch完成: {result.active_count}条有效, {result.historical_count}条历史")
         return result
@@ -1517,6 +2159,9 @@ class ZepToolsService:
                         if _updater.write_interview_fact(itv.agent_name, itv.response):
                             _written += 1
                     logger.info(f"采访事实已写入图谱 {graph_id}: {_written}/{len(result.interviews)} 条")
+                    # I-6-1: 采访写入了新事实，使该图谱的检索/洞察缓存失效，避免后续返回陈旧检索结果。
+                    if _written:
+                        self.invalidate_search_cache(graph_id)
                 except Exception as _persist_err:
                     logger.warning(f"采访事实持久化跳过（不影响采访）: {_persist_err}")
 
@@ -1664,12 +2309,15 @@ class ZepToolsService:
 请选择最多{max_agents}个最适合采访的Agent，并说明选择理由。"""
 
         try:
+            # EXECPLAN2 I-6-2: 受访者选择是低风险结构化任务，路由到 fast 档；tier 在关闭路由/
+            # CLI 订阅提供方时为 no-op，行为不变。
             response = self.llm.chat_json(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.3
+                temperature=0.3,
+                tier="fast"
             )
 
             selected_indices = response.get("selected_indices", [])[:max_agents]
@@ -1723,12 +2371,15 @@ class ZepToolsService:
 请生成3-5个采访问题。"""
 
         try:
+            # EXECPLAN2 I-6-2: 采访问题生成是机械型结构化任务，路由到 fast 档；tier 在关闭
+            # 路由/CLI 订阅提供方时为 no-op，行为不变。
             response = self.llm.chat_json(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.5
+                temperature=0.5,
+                tier="fast"
             )
 
             return response.get("questions", [f"关于{interview_requirement}，您有什么看法？"])
@@ -1844,8 +2495,11 @@ class ZepToolsService:
         except Exception as e:
             return f"（无法读取模拟动作数据：{e}）"
         # agent → 其互动过的目标名集合
+        # 修复：FOLLOW/MUTE 等动作的目标名由模拟侧写在 "target_user_name"（_enrich_action_context
+        # 的规范键），此前只读 followee_name/target_name → 关注/拉黑关系被静默漏掉，派系聚类失真。
+        # 把 target_user_name 纳入候选键。
         target_keys = ("post_author_name", "original_author_name", "comment_author_name",
-                       "quoted_author_name", "followee_name", "target_name")
+                       "quoted_author_name", "target_user_name", "followee_name", "target_name")
         agent_targets: Dict[int, set] = {}
         agent_name: Dict[int, str] = {}
         for a in actions:
@@ -1894,6 +2548,222 @@ class ZepToolsService:
             lines.append("- （未发现 ≥2 人的互动派系）")
         return "\n".join(lines)
 
+    def faction_brief(self, graph_id: str, query: str = "", simulation_id: str = "") -> str:
+        """派系简报（EXECPLAN2 I-1-2）：基于图谱已检测的社区(Community)节点 + LLM 摘要，
+        列出各派系的成员实体与定位，给报告「图谱原生」的阵营证据（互补于 coalition_map 的
+        行为日志聚类）。无社区节点（或未启用 GRAPH_COMMUNITY_RETRIEVAL）时降级到 coalition_map。"""
+        if not getattr(Config, "GRAPH_COMMUNITY_RETRIEVAL", False):
+            return (self.coalition_map(graph_id, simulation_id) if simulation_id
+                    else "（GRAPH_COMMUNITY_RETRIEVAL 未启用；无 simulation_id 可回退到行为聚类）")
+        try:
+            from .graphiti_client.runtime import get_runtime
+            communities = get_runtime().list_communities(graph_id) or []
+        except Exception as e:
+            logger.warning(f"faction_brief: 读取社区失败，降级到 coalition_map: {e}")
+            communities = []
+        if not communities:
+            # 图谱无社区节点 → 降级到行为日志派系聚类
+            return (self.coalition_map(graph_id, simulation_id) if simulation_id
+                    else "（图谱无社区节点，且无 simulation_id 可回退到行为聚类）")
+        q = (query or "").strip().lower()
+
+        def _relevance(c):
+            if not q:
+                return 0
+            hay = (str(c.get("name", "")) + " " + str(c.get("summary", "")) + " "
+                   + " ".join(str(m) for m in (c.get("members") or []))).lower()
+            return hay.count(q)
+
+        # 有查询时优先相关社区，其次按成员数；无查询时纯按成员数（派系规模）排序。
+        communities.sort(key=lambda c: (_relevance(c), len(c.get("members") or [])), reverse=True)
+        lines = ["## 派系/社区简报（基于图谱社区检测 + LLM 摘要）"]
+        for i, c in enumerate(communities[:8], 1):
+            members = c.get("members") or []
+            lines.append(f"### 派系 {i}: {c.get('name') or f'社区{i}'}（{len(members)} 个实体）")
+            if c.get("summary"):
+                lines.append(c["summary"].strip())
+            if members:
+                shown = "、".join(str(m) for m in members[:20])
+                lines.append(f"成员: {shown}" + ("…" if len(members) > 20 else ""))
+        # R2-KG-11: 追加确定性的社区间张力矩阵（跨界边按极性加权）。失败 → 不追加（degrade-safe）。
+        tension_lines = self._inter_community_tension(graph_id, communities)
+        if tension_lines:
+            lines.extend(tension_lines)
+        return "\n".join(lines)
+
+    def _inter_community_tension(self, graph_id: str,
+                                 communities: List[Dict[str, Any]]) -> List[str]:
+        """R2-KG-11: 确定性的「社区间张力矩阵」——把跨社区边按关系极性
+        （actors.relation_polarity，allied→正 / adversarial→负）加权汇总，给报告
+        「派系 A 与派系 B 整体对抗还是结盟」的图谱级证据（互补于派系内部的成员清单）。
+        纯聚合无 LLM；读图失败或无跨界边 → 返回 []（faction_brief 照常输出，degrade-safe）。"""
+        try:
+            from ..utils.actors import normalize_name, relation_polarity
+            # 只取有成员的前若干社区，避免社区极多时 O(K^2) 渲染爆炸。
+            comms = [c for c in (communities or []) if (c.get("members") or [])][:12]
+            if len(comms) < 2:
+                return []
+            # 标准化成员名 → 社区下标（重名归最先出现的社区，保持确定性）。
+            member_to_comm: Dict[str, int] = {}
+            for idx, c in enumerate(comms):
+                for m in (c.get("members") or []):
+                    nm = normalize_name(str(m))
+                    if nm and nm not in member_to_comm:
+                        member_to_comm[nm] = idx
+            if not member_to_comm:
+                return []
+            nodes = self.get_all_nodes(graph_id)
+            uuid_to_norm = {n.uuid: normalize_name(n.name)
+                            for n in nodes if n.uuid and n.name}
+            edges = self.get_all_edges(graph_id)
+            # (min社区,max社区) → [净极性累计, 跨界边数, 负向边数]
+            pair_stats: Dict[tuple, List[float]] = {}
+            for e in edges:
+                sn = uuid_to_norm.get(e.source_node_uuid)
+                tn = uuid_to_norm.get(e.target_node_uuid)
+                if not sn or not tn:
+                    continue
+                ci = member_to_comm.get(sn)
+                cj = member_to_comm.get(tn)
+                if ci is None or cj is None or ci == cj:
+                    continue
+                pol = relation_polarity({"type": e.name})
+                key = (min(ci, cj), max(ci, cj))
+                st = pair_stats.setdefault(key, [0.0, 0, 0])
+                st[0] += pol
+                st[1] += 1
+                if pol < 0:
+                    st[2] += 1
+            if not pair_stats:
+                return []
+
+            def _cname(i: int) -> str:
+                return comms[i].get("name") or f"社区{i + 1}"
+
+            # 净极性越负越靠前（最对抗的派系对置顶），再以边数稳定排序。
+            ordered = sorted(pair_stats.items(), key=lambda kv: (kv[1][0], -kv[1][1]))
+            lines = ["", "### 社区间张力矩阵（跨界边按关系极性加权，确定性）"]
+            for (i, j), (net, cnt, neg) in ordered[:12]:
+                if net < -0.05:
+                    tag = "对抗"
+                elif net > 0.05:
+                    tag = "结盟"
+                else:
+                    tag = "中性/混合"
+                lines.append(
+                    f"- {_cname(i)} ↔ {_cname(j)}: {cnt} 条跨界边，净极性 {net:+.2f}"
+                    f"（{neg} 条负向）→ {tag}"
+                )
+            return lines
+        except Exception as exc:  # noqa: BLE001  张力矩阵是增强项，失败不影响 faction_brief
+            logger.debug(f"inter-community tension 跳过（不影响 faction_brief）: {exc}")
+            return []
+
+    # NEXTSTEPS P3-6: 多跳传导/级联追踪（图谱原生结构推理，互补于 1-hop 检索）。
+    _CAUSAL_EDGE_NAMES = ["CAUSES", "ENABLES", "CONSTRAINS", "TRIGGERS", "ACCELERATES"]
+
+    def _resolve_entity_name(self, graph_id: str, name: str) -> str:
+        """R2-KG-2: 把工具/LLM 传入的实体名解析为图谱里实际存在的规范节点名，供
+        trace_cascade 的精确 `a.name = $src` Cypher 匹配使用（否则大小写/空格/公司后缀
+        的细微差异会让多跳查询无谓地返回空）。解析顺序对齐 actors.match_actor 语义：
+        标准化精确匹配 → 双向包含（取较长名，避免「AI」类短名误配）。无命中或读取失败 →
+        原样返回（degrade-safe，绝不因解析失败而阻断遍历）。"""
+        raw = (name or "").strip()
+        if not raw:
+            return raw
+        try:
+            from ..utils.actors import normalize_name
+            nodes = self.get_all_nodes(graph_id)
+        except Exception as exc:  # noqa: BLE001  解析是增强项，失败按原名走
+            logger.debug(f"_resolve_entity_name 读取节点失败，按原名匹配: {exc}")
+            return raw
+        target = normalize_name(raw)
+        if not target:
+            return raw
+        exact: Optional[str] = None
+        best: Optional[str] = None
+        best_len = 0
+        for node in nodes:
+            cand = normalize_name(node.name)
+            if not cand:
+                continue
+            if cand == target:
+                exact = node.name
+                break
+            if len(cand) >= 2 and (cand in target or target in cand) and len(cand) > best_len:
+                best, best_len = node.name, len(cand)
+        resolved = exact or best
+        if resolved and resolved != raw:
+            logger.info(f"trace_cascade 名称解析: {raw!r} → 规范节点 {resolved!r}")
+            return resolved
+        return raw
+
+    @staticmethod
+    def _fmt_edge_label(edge: Any) -> str:
+        """渲染一跳的边标签。runtime 当前返回边 name 字符串；若图谱侧升级为带
+        {name/sign/strength/lag/polarity} 的富投影（见因果遍历投影契约），这里把它渲染成
+        `REL, sign=-, strength=high, lag=...` 而不是把整个 dict 直接 str 出来。两种形态都
+        安全处理（forward-compat，degrade-safe）。"""
+        if isinstance(edge, dict):
+            parts = [str(edge.get("name") or edge.get("edge") or edge.get("rel") or "REL")]
+            for key in ("sign", "strength", "lag", "polarity", "family"):
+                val = edge.get(key)
+                if val not in (None, ""):
+                    parts.append(f"{key}={val}")
+            return ", ".join(parts)
+        return str(edge)
+
+    def trace_cascade(self, graph_id: str, source: str = "", target: str = "",
+                      center: str = "", causal_only: bool = True) -> str:
+        """沿图谱多跳追踪传导/级联。给 source+target → 列出二者间的有向路径（优先因果族边）；
+        只给 center → 列出其多跳因果邻域。用于"追踪级联、哪个节点一动就翻盘"的结构推理。
+        无路径/遍历失败 → 友好降级串（不抛出）。"""
+        try:
+            from .graphiti_client.runtime import get_runtime
+            rt = get_runtime()
+        except Exception:  # noqa: BLE001
+            return "（图谱遍历不可用）"
+        edge_types = self._CAUSAL_EDGE_NAMES if causal_only else None
+        try:
+            if source and target:
+                # R2-KG-2: 先把 source/target 解析为规范节点名再下推 Cypher（并记录解析）。
+                rsource = self._resolve_entity_name(graph_id, source)
+                rtarget = self._resolve_entity_name(graph_id, target)
+                paths = rt.causal_paths(graph_id, rsource, rtarget, edge_types=edge_types) or []
+                note = ""
+                if not paths and causal_only:
+                    paths = rt.causal_paths(graph_id, rsource, rtarget, edge_types=None) or []
+                    note = "（无纯因果路径，下列为一般关系路径）"
+                if not paths:
+                    return f"（{rsource} → {rtarget} 间未找到 ≤6 跳路径）"
+                lines = [f"【传导路径：{rsource} → {rtarget}】{note}"]
+                for p in paths[:12]:
+                    nodes, edges = p.get("nodes", []), p.get("edges", [])
+                    chain = ""
+                    for i, n in enumerate(nodes):
+                        chain += str(n)
+                        if i < len(edges):
+                            chain += f" --[{self._fmt_edge_label(edges[i])}]--> "
+                    lines.append(f"· ({p.get('hops')}跳) {chain}")
+                return "\n".join(lines)
+            if center:
+                rcenter = self._resolve_entity_name(graph_id, center)
+                edges = rt.n_hop_subgraph(graph_id, rcenter, edge_types=edge_types) or []
+                if not edges and causal_only:
+                    edges = rt.n_hop_subgraph(graph_id, rcenter, edge_types=None) or []
+                if not edges:
+                    return f"（{rcenter} 的多跳邻域为空）"
+                lines = [f"【{rcenter} 的多跳传导邻域（{len(edges)} 条边）】"]
+                for e in edges[:40]:
+                    lines.append(
+                        f"· {e.get('source')} --[{self._fmt_edge_label(e.get('edge'))}]--> {e.get('target')}"
+                    )
+                return "\n".join(lines)
+            return "（trace_cascade 需要 source+target 或 center）"
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"trace_cascade 失败（降级）: {exc}")
+            return "（图谱遍历失败）"
+
     def opinion_shift(self, simulation_id: str, actor_name: str) -> str:
         """单个 actor 的逐轮行为轨迹（动作量/类型随轮次变化），用于观察立场/参与度演变。"""
         from .simulation_runner import SimulationRunner
@@ -1903,6 +2773,9 @@ class ZepToolsService:
             return f"（无法读取模拟动作数据：{e}）"
         from ..utils.actors import normalize_name
         target = normalize_name(actor_name)
+        # RPT-13：空 target 时 str.find('') 恒为 0，会把全体动作日志误标成单一 actor 的轨迹。
+        if not target:
+            return "（opinion_shift 需要 actor_name 参数：请提供要追踪的 Agent/角色名）"
         mine = [a for a in actions if normalize_name(a.agent_name) == target or normalize_name(a.agent_name).find(target) >= 0]
         if not mine:
             return f"（未找到名为「{actor_name}」的 agent 的动作记录）"

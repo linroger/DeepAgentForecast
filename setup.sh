@@ -19,7 +19,7 @@
 #     .env provider, so pressing Enter never clobbers an existing config).
 #   * Installs root + frontend + backend dependencies.
 #   * ASSEMBLES the DeerFlow 2.0 engine into ./deer-flow inside this repo
-#     (gitignored): seeds from the vendored ./deer-flow-2.0-m1-rc3 build when
+#     (gitignored): seeds from the vendored ./deer-flow-2.0.0 build when
 #     present, else falls back to a pinned upstream clone; then applies the bridge
 #     overlay (research driver, patched model providers, loop-detection middleware,
 #     deep-research skill, and a ready-to-use config.yaml with claude / minimax /
@@ -394,13 +394,21 @@ if [ -n "$LLM_API_KEY_INPUT" ] && have curl; then
     UA_HEADER=(-H "User-Agent: claude-cli/1.0.0")
   fi
   # ${arr[@]+...} guards the empty-array expansion (bash 3.2 + set -u safe).
-  HTTP_CODE="$(curl -sS -o /tmp/setup_llm_test.$$ -w '%{http_code}' --max-time 25 \
+  # Secret hygiene: feed the bearer token via a curl config on stdin
+  # (--config -) so it never lands in argv (ps / /proc/<pid>/cmdline); write
+  # the response to a mktemp 0600 file instead of a predictable /tmp name.
+  SETUP_LLM_TEST_TMP="$(mktemp "${TMPDIR:-/tmp}/setup_llm_test.XXXXXX")"
+  chmod 600 "$SETUP_LLM_TEST_TMP" 2>/dev/null || true
+  HTTP_CODE="$(curl -sS -o "$SETUP_LLM_TEST_TMP" -w '%{http_code}' --max-time 25 \
     "${PROVIDER_BASE[$CHOSEN_IDX]}/chat/completions" \
-    -H "Authorization: Bearer $LLM_API_KEY_INPUT" \
     -H "Content-Type: application/json" \
     ${UA_HEADER[@]+"${UA_HEADER[@]}"} \
+    --config - \
     -d "{\"model\":\"${PROVIDER_MODEL[$CHOSEN_IDX]}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1}" \
-    2>/dev/null || printf '000')"
+    2>/dev/null <<EOF || printf '000'
+header = "Authorization: Bearer ${LLM_API_KEY_INPUT}"
+EOF
+)"
   if [ "$HTTP_CODE" = "200" ]; then
     ok "API key works (HTTP 200 from ${PROVIDER_MODEL[$CHOSEN_IDX]})"
   elif [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
@@ -411,8 +419,8 @@ if [ -n "$LLM_API_KEY_INPUT" ] && have curl; then
   else
     warn "Provider returned HTTP $HTTP_CODE — key saved; verify from the UI Settings menu."
   fi
-  rm -f "/tmp/setup_llm_test.$$" 2>/dev/null || true
-  unset LLM_API_KEY_INPUT
+  rm -f "$SETUP_LLM_TEST_TMP" 2>/dev/null || true
+  unset SETUP_LLM_TEST_TMP LLM_API_KEY_INPUT
 fi
 
 # --- Knowledge graph: local Graphiti (no API key) ---------------------------
@@ -481,7 +489,7 @@ step "Setting up DeerFlow research engine (./deer-flow)"
 # Where to put deer-flow, and where to get the engine from.
 #   * DEERFLOW_DIR        — runtime location (default: ./deer-flow in this repo).
 #   * DEERFLOW_VENDOR_DIR — PREFERRED source: a DeerFlow 2.0 build dropped into
-#     the repo (default: ./deer-flow-2.0-m1-rc3). This is the EXACT engine the
+#     the repo (default: ./deer-flow-2.0.0). This is the EXACT engine the
 #     bridge overlay targets, so the integration is deterministic and offline.
 #   * DEERFLOW_REPO / DEERFLOW_REF — FALLBACK only (when the vendor dir is
 #     absent): a shallow upstream clone pinned to the commit the bridge overlay's
@@ -490,7 +498,7 @@ step "Setting up DeerFlow research engine (./deer-flow)"
 #     regions, so the overlay applies cleanly either way). Set DEERFLOW_REF=main
 #     to track upstream HEAD instead.
 DEERFLOW_DIR="${DEERFLOW_DIR:-$ROOT_DIR/deer-flow}"
-DEERFLOW_VENDOR_DIR="${DEERFLOW_VENDOR_DIR:-$ROOT_DIR/deer-flow-2.0-m1-rc3}"
+DEERFLOW_VENDOR_DIR="${DEERFLOW_VENDOR_DIR:-$ROOT_DIR/deer-flow-2.0.0}"
 DEERFLOW_REPO="${DEERFLOW_REPO:-https://github.com/bytedance/deer-flow.git}"
 DEERFLOW_REF="${DEERFLOW_REF:-799bef6d9dbc3a2cb37ce8177eeeabe2a33d8971}"
 BRIDGE_DIR="$ROOT_DIR/deerflow_bridge"
@@ -592,6 +600,19 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
     ok "Applied deep-research skill overhaul (source tiering + budget discipline)"
   fi
 
+  # (b2b) Actor/ontology research skill: an actor-centric, ontology-ready
+  #     specialization of deep-research (rank the real key actors over
+  #     reporters/outlets, profile each in depth, map directed/typed/valenced
+  #     relations + their evolution) with a multipass + AI-judge quality loop.
+  #     Feeds the ontology generator and actors.json. It is a NEW skill dir, so
+  #     create it under the runtime's public skills.
+  DF_AOR="$DEERFLOW_DIR/skills/public/actor-ontology-research"
+  if [ -f "$BRIDGE_DIR/skills/actor-ontology-research/SKILL.md" ] && [ -d "$DEERFLOW_DIR/skills/public" ]; then
+    mkdir -p "$DF_AOR"
+    cp "$BRIDGE_DIR/skills/actor-ontology-research/SKILL.md" "$DF_AOR/SKILL.md"
+    ok "Installed actor-ontology-research skill (actor-centric, ontology-ready research)"
+  fi
+
   # (b3) Patched middlewares: loop-detection counters reset per agent run.
   #     Upstream accumulates per-tool call counts across ALL turns of a thread,
   #     so multi-pass deep research permanently force-stops web_search from
@@ -637,6 +658,84 @@ else
   warn "deer-flow not available at: $DEERFLOW_DIR"
   warn "Deep research (pipeline stage 1) needs it. Re-run ./setup.sh once you have"
   warn "network access, or set DEERFLOW_DIR to an existing checkout."
+fi
+
+# ---------------------------------------------------------------------------
+# 5b) OPTIONAL — DRF-2 preview (next-generation architecture)
+# ---------------------------------------------------------------------------
+# DRF-2 (drf2/ + REDESIGN.md) rebuilds the pipeline around the DeerFlow 2.0
+# super-agent harness: methodology as skills, the knowledge graph and OASIS
+# simulation exposed as MCP servers, and a deterministic Pipeline Driver for
+# gates/resume/ensemble. It is a PREVIEW — the legacy pipeline installed above
+# remains the working system. This step is OFF by default; opt in with:
+#     SETUP_DRF2=1 ./setup.sh
+# It only installs the engines' extra dependency (the python 'mcp' package,
+# pinned per drf2/engines/kg/requirements.txt) into backend/.venv and prints
+# the registration / run commands. Idempotent and guarded like everything else.
+if [ "${SETUP_DRF2:-0}" = "1" ]; then
+  step "Setting up DRF-2 preview (optional, SETUP_DRF2=1)"
+
+  DRF2_KG_REQS="$ROOT_DIR/drf2/engines/kg/requirements.txt"
+  DRF2_SIM_REQS="$ROOT_DIR/drf2/engines/simulation/requirements.txt"
+  BACKEND_PY="$ROOT_DIR/backend/.venv/bin/python"
+
+  if [ ! -d "$ROOT_DIR/drf2" ]; then
+    warn "drf2/ directory not found — skipping DRF-2 setup."
+  elif [ ! -x "$BACKEND_PY" ]; then
+    warn "backend/.venv is not built yet (the engines run from it). Re-run"
+    warn "    ./setup.sh so the backend 'uv sync' step succeeds, then retry with"
+    warn "    SETUP_DRF2=1 ./setup.sh"
+  else
+    # Install the MCP transport dependency into backend/.venv. Both engine
+    # requirement files pin only 'mcp' (kg: mcp>=1.24.0, sim: mcp>=1.2);
+    # everything else is reused from the legacy backend venv by import.
+    DRF2_MCP_OK=0
+    if have uv; then
+      if uv pip install --python "$BACKEND_PY" \
+           -r "$DRF2_KG_REQS" -r "$DRF2_SIM_REQS"; then
+        DRF2_MCP_OK=1
+      fi
+    elif [ -x "$ROOT_DIR/backend/.venv/bin/pip" ]; then
+      if "$ROOT_DIR/backend/.venv/bin/pip" install \
+           -r "$DRF2_KG_REQS" -r "$DRF2_SIM_REQS"; then
+        DRF2_MCP_OK=1
+      fi
+    fi
+    if [ "$DRF2_MCP_OK" = "1" ]; then
+      ok "DRF-2 engine dependency installed ('mcp' in backend/.venv)"
+    else
+      warn "Could not install the 'mcp' package into backend/.venv. Retry with:"
+      warn "    uv pip install --python \"$BACKEND_PY\" 'mcp>=1.24.0'"
+    fi
+
+    # How to register the two MCP engines + run the harness/driver. The two
+    # engines are stdio MCP servers the harness SPAWNS per extensions_config
+    # (you do not start them by hand); FalkorDB must be reachable for the KG
+    # engine. Full details: drf2/README.md and drf2/engines/*/README.md.
+    cat <<DRF2NEXT
+  DRF-2 next steps (preview — the legacy pipeline stays authoritative):
+
+  1) Register the two MCP engines with the harness. drf2/config/extensions_config.json
+     already carries both stdio server entries; re-point its absolute paths
+     (venv python, PYTHONPATH) at this checkout if needed:
+       drf2-kg:         backend/.venv/bin/python -m drf2.engines.kg.server --graph-id <id>
+       drf2-simulation: backend/.venv/bin/python drf2/engines/simulation/server.py
+
+  2) Start the DeerFlow 2.0 harness with the DRF-2 config:
+       cd "$ROOT_DIR/deer-flow-2.0.0"
+       export DEER_FLOW_CONFIG_PATH="$ROOT_DIR/drf2/config/config.yaml"
+       export DEER_FLOW_EXTENSIONS_CONFIG_PATH="$ROOT_DIR/drf2/config/extensions_config.json"
+       export PYTHONPATH="$ROOT_DIR:\${PYTHONPATH:-}"
+       make dev        # gateway :8001, UI :3000, nginx :2026
+
+  3) Drive a deterministic pipeline run (health gates, resume, ensemble):
+       cd "$ROOT_DIR"
+       PYTHONPATH="$ROOT_DIR" backend/.venv/bin/python -m drf2.driver.cli \\
+         run --question "..." --config drf2/config/config.yaml
+     (add --dry-run to smoke-test the whole state machine offline; see
+      drf2/README.md §3 and drf2/engines/*/README.md for details)
+DRF2NEXT
+  fi
 fi
 
 # ---------------------------------------------------------------------------

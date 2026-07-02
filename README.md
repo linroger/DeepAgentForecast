@@ -182,7 +182,7 @@ flowchart LR
 | **Python 3.11 – 3.12** | For the backend — the `camel-ai`/`camel-oasis` simulation stack targets ≤ 3.12, so the venv is **pinned to 3.12** (`backend/.python-version` + `uv sync --python 3.12`). A 3.13/3.14 default interpreter would break the install. |
 | **Python 3.12** | DeerFlow's deep-research engine runs in its **own, separate venv**. |
 | **uv** | The Python package manager used for both venvs. Install: `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| **git** | Needed only for the optional upstream-clone fallback; by default `setup.sh` seeds the DeerFlow research engine from the vendored `deer-flow-2.0-m1-rc3/` build. |
+| **git** | Needed only for the optional upstream-clone fallback; by default `setup.sh` seeds the DeerFlow research engine from the vendored `deer-flow-2.0.0/` build. |
 | **Knowledge graph** | Runs **locally** via the open-source Graphiti engine on an embedded FalkorDB — **no account, no API key, no Docker**. The local graph DB and a multilingual sentence-transformers embedding model (~470MB, downloaded once on first graph build) are installed by `setup.sh` / `uv sync`. |
 | **An LLM** | By default the local `claude` or `codex` CLI (no API key). The OpenAI-compatible API providers (`openai`, `kimi`, `minimax`, `deepseek`, `qwen`, `glm`) need `LLM_API_KEY`. The same provider also performs local graph entity/relation extraction. |
 
@@ -200,7 +200,7 @@ Three steps: **install → configure → run**. DeerFlow lives in `deer-flow/` *
 ./setup.sh
 ```
 
-It checks prerequisites, then walks you through an **interactive provider picker**: choose between the local `claude` / `codex` CLIs (zero config, no API key — the detected CLI is pre-selected as the default) and six hosted API providers (OpenAI-compatible / Kimi / MiniMax / DeepSeek / Qwen / GLM). If you pick an API provider it prompts for your **API key** (silent input, never echoed) and **live-tests it** with a one-token completion so a typo'd key fails in seconds, not 40 minutes into a research run. It then scaffolds `.env` from `.env.example`, installs the root + frontend npm deps, builds the backend venv (**pinned to Python 3.12**, including the local Graphiti graph stack), then **assembles DeerFlow automatically**: it seeds `deer-flow/` from the vendored 2.0 build `deer-flow-2.0-m1-rc3/` (falling back to a pinned shallow clone from <https://github.com/bytedance/deer-flow> if that vendor dir is absent, gitignored), **trims it to runtime essentials** (`backend/`, `skills/`, `config.yaml` — the upstream web frontend, docs, docker and CI are dead weight here), applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` + middleware patches, the overhauled source-tiering deep-research skill, and `config.yaml`), and builds DeerFlow's isolated venv on Python 3.12. Re-running it is idempotent and safe.
+It checks prerequisites, then walks you through an **interactive provider picker**: choose between the local `claude` / `codex` CLIs (zero config, no API key — the detected CLI is pre-selected as the default) and six hosted API providers (OpenAI-compatible / Kimi / MiniMax / DeepSeek / Qwen / GLM). If you pick an API provider it prompts for your **API key** (silent input, never echoed) and **live-tests it** with a one-token completion so a typo'd key fails in seconds, not 40 minutes into a research run. It then scaffolds `.env` from `.env.example`, installs the root + frontend npm deps, builds the backend venv (**pinned to Python 3.12**, including the local Graphiti graph stack), then **assembles DeerFlow automatically**: it seeds `deer-flow/` from the vendored 2.0 build `deer-flow-2.0.0/` (falling back to a pinned shallow clone from <https://github.com/bytedance/deer-flow> if that vendor dir is absent, gitignored), **trims it to runtime essentials** (`backend/`, `skills/`, `config.yaml` — the upstream web frontend, docs, docker and CI are dead weight here), applies the **bridge overlay** from `deerflow_bridge/` (the `deerflow_research.py` driver, the `patches/models/*.py` + middleware patches, the overhauled source-tiering deep-research skill, and `config.yaml`), and builds DeerFlow's isolated venv on Python 3.12. Re-running it is idempotent and safe.
 
 Override the defaults via env vars if needed: `DEERFLOW_DIR` (location), `DEERFLOW_REPO` (clone URL), `DEERFLOW_REF` (pinned commit; set `=main` to track HEAD), `SETUP_NONINTERACTIVE=1` (skip the picker and auto-detect — what CI / piped runs do automatically). These are read by `setup.sh` from the shell environment (they are not `.env` keys), e.g. `DEERFLOW_REF=main ./setup.sh`. Re-runs are idempotent: the picker defaults to your current `.env` provider, so pressing Enter never clobbers an existing configuration.
 
@@ -211,7 +211,7 @@ Override the defaults via env vars if needed: `DEERFLOW_DIR` (location), `DEERFL
 npm run setup:all
 
 # 2. Seed the DeerFlow research engine into the repo root from the vendored 2.0 build
-cp -R deer-flow-2.0-m1-rc3 deer-flow
+cp -R deer-flow-2.0.0 deer-flow
 # Fallback if the vendor dir is absent (git required):
 #   git clone --depth 1 https://github.com/bytedance/deer-flow deer-flow
 
@@ -471,6 +471,7 @@ The six-stage pipeline above is the skeleton; recent releases hardened every joi
 
 ### Simulation realism
 
+- **Actor-cast discipline (new).** Every forecast is distilled to a hard cap of **≤20 main actors** — only entities whose decisions or actions causally affect the outcome make the cast; reporters, outlets, and other media are demoted to *sources* rather than actors. The cap (`ACTOR_CAST_MAX`, default 20) runs end-to-end through research extraction, ontology, personas, and the simulation roster, with optional non-LLM programmatic "audience" filler via `SIM_AUDIENCE_AGENTS` — cutting simulation cost roughly **4×** while concentrating LLM spend on the actual decision-makers.
 - **Dossier-grounded seed posts.** Initial posts are synthesized from the researched actor dossier (each actor opens on a researched hot topic with its researched stance), so agents never wake up to an empty feed — the root cause of hollow sims.
 - **World-state briefing.** A compact world-state brief (situation, timeline, contested claims) is injected into every agent's system prompt each round, keeping the population grounded in the researched world rather than drifting into generic chatter.
 - **Heterogeneous personas.** Eight distinct analytical frameworks are deterministically distributed across the persona population, so disagreement is structural — the epistemic diversity that makes wisdom-of-crowds aggregation meaningful.
@@ -492,6 +493,14 @@ The six-stage pipeline above is the skeleton; recent releases hardened every joi
 ### Knowledge graph
 
 The local Graphiti + FalkorDB graph gained **causal edges** (typed cause→effect relations extracted alongside the standard ontology), **multi-hop causal traversal** (causal-path and n-hop-subgraph queries plus cascade tracing for the ReportAgent), **centrality priors** that feed actor salience ranking in persona selection, **semantic query compaction** to keep graph-search calls inside token budgets, and a **dead-letter replay** queue so failed ingest episodes are retried rather than silently dropped.
+
+---
+
+## DRF-2: next-generation architecture (preview)
+
+The `deerflow2-redesign` branch carries **DRF-2**, a ground-up rebuild of the orchestration layer. The redesign verdict (full analysis in [`REDESIGN.md`](REDESIGN.md)): rebuild around the **DeerFlow 2.0 super-agent harness** — everything *knowledge-shaped* becomes harness primitives (the research / ontology / simulation-design / forecast methodology ports as **skills**; the four pipeline stages become **custom sub-agents** with **per-stage model routing** — MiniMax-M3 for cheap stages, claude-cli for strong ones), while the two *heavy engines* stay outside the harness: the **knowledge graph** (Graphiti + FalkorDB) and the **OASIS simulation** are exposed *to* the harness as external **MCP servers**. The deterministic machinery that must never be LLM-mediated — health gates (research quality floor, hollow-sim gate, binary conviction gate), schema-versioned resume, artifact manifests, and multi-seed **ensemble** fan-out — lives in a thin **Pipeline Driver** (`drf2/driver/`).
+
+**Status, honestly:** the scaffold is complete (skills, engines, driver, config — the backend suite now collects **756 tests**, including the DRF-2 drift guards), but **no live end-to-end shakedown has been run through the harness yet**. Until DRF-2 passes the same deliverable gates on a live run, **the legacy pipeline documented in this README remains the working system.** To try the preview, see [`drf2/README.md`](drf2/README.md) (or run `SETUP_DRF2=1 ./setup.sh` for the optional dependency install plus a command cheatsheet).
 
 ---
 
@@ -518,7 +527,7 @@ DeepAgentForecast/
     └── backend/.venv/       #   gitignored; isolated LangGraph venv (Python 3.12).
 ```
 
-> DeerFlow lives **inside the repo** but is gitignored — your clone stays a single folder and `git status` stays clean. `setup.sh` seeds it from the vendored 2.0 build `deer-flow-2.0-m1-rc3/` (falling back to a pinned shallow clone if that vendor dir is absent — git required only then), trims it to the runtime essentials (`backend/`, `skills/`, `config.yaml`), applies the `deerflow_bridge/` overlay (driver + patches + the overhauled deep-research skill + `config.yaml`), and builds its venv with:
+> DeerFlow lives **inside the repo** but is gitignored — your clone stays a single folder and `git status` stays clean. `setup.sh` seeds it from the vendored 2.0 build `deer-flow-2.0.0/` (falling back to a pinned shallow clone if that vendor dir is absent — git required only then), trims it to the runtime essentials (`backend/`, `skills/`, `config.yaml`), applies the `deerflow_bridge/` overlay (driver + patches + the overhauled deep-research skill + `config.yaml`), and builds its venv with:
 > `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.12`
 
 ---
@@ -534,7 +543,7 @@ DeepAgentForecast/
 | **First graph build is slow / appears to hang downloading a model** | On the first graph build the local embedding model (`GRAPHITI_EMBED_MODEL`, default `paraphrase-multilingual-MiniLM-L12-v2`, ~470MB) is downloaded once and cached. Let it finish; later runs skip the download. Behind a firewall, pre-cache the model or point `GRAPHITI_EMBED_MODEL` at a locally available one (and set `GRAPHITI_EMBED_DIM` to match). |
 | **Backend install fails (camel-ai / tiktoken build errors)** | Your default Python is 3.13+. The backend venv must be on **3.11–3.12**: `( cd backend && uv sync --python 3.12 )` — `setup.sh` and `backend/.python-version` already pin this. |
 | **Research stage runs on Claude even though I picked another provider** | The research stage is configured separately via `DEERFLOW_MODEL` (`claude` *(default)*, `minimax`, `deepseek`, `qwen`, `glm`, `codex`, `kimi`), not by `LLM_PROVIDER`. Only `openai` maps to the `claude` stanza. Set `DEERFLOW_MODEL` (and its key, e.g. `MINIMAX_API_KEY`) to run research on a different model. |
-| **DeerFlow / research stage fails to start** | `setup.sh` assembles `deer-flow/` into the repo (seeded from the vendored `deer-flow-2.0-m1-rc3/` build, or a pinned shallow clone if that vendor dir is absent — git required only then) and applies the `deerflow_bridge/` overlay. Ensure its venv is built with Python 3.12: `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.12`. Re-running `setup.sh` is idempotent; to update the engine, delete `deer-flow/` and re-run `./setup.sh`. Optionally set `DEERFLOW_DIR` / `DEERFLOW_PYTHON` (or `DEERFLOW_REPO` / `DEERFLOW_REF` for `setup.sh`). |
+| **DeerFlow / research stage fails to start** | `setup.sh` assembles `deer-flow/` into the repo (seeded from the vendored `deer-flow-2.0.0/` build, or a pinned shallow clone if that vendor dir is absent — git required only then) and applies the `deerflow_bridge/` overlay. Ensure its venv is built with Python 3.12: `UV_PROJECT_ENVIRONMENT=deer-flow/backend/.venv uv sync --project deer-flow/backend --python 3.12`. Re-running `setup.sh` is idempotent; to update the engine, delete `deer-flow/` and re-run `./setup.sh`. Optionally set `DEERFLOW_DIR` / `DEERFLOW_PYTHON` (or `DEERFLOW_REPO` / `DEERFLOW_REF` for `setup.sh`). |
 | **No API key but hosted provider selected** | `openai`, `kimi`, `minimax`, `deepseek`, `qwen`, and `glm` need `LLM_API_KEY` (with `LLM_BASE_URL` / `LLM_MODEL_NAME`; `kimi`/`minimax`/`deepseek`/`qwen`/`glm` default those). For no-key operation use `claude-cli` or `codex-cli`. |
 | **`claude-cli` returns 401 / bills the API instead of my subscription** | A stray `ANTHROPIC_API_KEY` in your environment. It is stripped from the CLI subprocess automatically; run `claude` once to refresh the OAuth login. (Set `LLM_CLI_USE_API_KEY=true` if you *want* API-key billing.) |
 | **Provider switch didn't take effect** | The runtime switch applies to **new runs** only. Start a fresh pipeline after switching. |

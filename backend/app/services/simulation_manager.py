@@ -5,6 +5,7 @@ OASIS模拟管理器
 """
 
 import os
+import csv
 import json
 import shutil
 from typing import Dict, Any, List, Optional
@@ -19,6 +20,189 @@ from .oasis_profile_generator import OasisProfileGenerator, OasisAgentProfile
 from .simulation_config_generator import SimulationConfigGenerator, SimulationParameters
 
 logger = get_logger('mirofish.simulation')
+
+
+def select_agent_pool(
+    entities: List[Any],
+    actors: Optional[Dict[str, Any]] = None,
+    graph_priors: Optional[Dict[str, float]] = None,
+) -> List[Any]:
+    """选择进入模拟 agent 池的实体（T3.13 上限 + ACTOR-CAST discipline）。
+
+    两条路径（按 Config 旗标取值二选一）：
+
+    * **主阵容路径（默认）** —— 当 ``ACTOR_CAST_MAX``>0 且小于 ``OASIS_MAX_AGENTS``
+      （或 OASIS_MAX_AGENTS=0 不设上限）、且至少有一个实体匹配到研究 actor 时：
+      agent 池只从**主阵容**派生 —— 匹配研究 actor 且过 tier 1/2 能动准入门
+      （``is_agent_eligible``；ACTOR_EXCLUDE_MEDIA 时媒体/观察者推断 tier 3 被挡）
+      的实体，按 (salience×tier 权重+中心度先验, 影响力, 邻边数) 排序取
+      top ≤ ACTOR_CAST_MAX。**不再**向 OASIS_MAX_AGENTS 填充未匹配的图谱通用节点
+      （这正是此前池子被填充到 ~80、persona 与每轮模拟 LLM 调用 4 倍膨胀的根因）；
+      「受众/填充」persona 改由 SIM_AUDIENCE_AGENTS 程序化生成（零 LLM 成本）。
+      全部匹配 actor 都被媒体准入门挡下时回退保留全部匹配者（安全网：池子绝不因
+      过滤而空掉）。
+
+    * **旧 T3.13 路径（degrade-safe 恢复口）** —— ACTOR_CAST_MAX<=0、或设为
+      ≥ OASIS_MAX_AGENTS（unset-high）、或没有任何实体匹配到研究 actor 时：
+      与现状逐字节一致 —— 仅当实体数超过有效上限（min(OASIS_MAX_AGENTS,
+      ACTOR_CAST_MAX)，取正值）时按 (是否匹配 actor, 影响力, 邻边数)（或
+      salience/tier 元组）排序保留 top N，且所有匹配 actor 必留。
+
+    Args:
+        entities: ZepEntityReader 过滤后的实体列表（EntityNode）。
+        actors: 深度研究 actors.json 顶层对象（可选）。
+        graph_priors: 建图阶段算出的中心度先验 {实体名: [0,1]}（可选，P3-7）。
+
+    Returns:
+        保留的实体列表（原列表不被修改）。
+    """
+    from ..utils.actors import (
+        match_actor as _match_actor,
+        influence_weight as _influence_weight,
+        salience_score as _salience_score,
+        is_agent_eligible as _is_agent_eligible,
+        entity_simulation_tier as _entity_simulation_tier,
+        normalize_name as _normalize_name,
+    )
+
+    entities = list(entities or [])
+    if not entities:
+        return entities
+
+    # NEXTSTEPS P3-7: 中心度先验查找（GRAPH 阶段算出，按 NFKC 归一名匹配实体→[0,1]）。
+    # 缺失/旗标关 → _centrality 恒返回 0.0，排序逐字节退化为现状（degrade-safe）。
+    _cent_on = (bool(getattr(Config, 'GRAPH_CENTRALITY_PRIORS', True))
+                and isinstance(graph_priors, dict) and bool(graph_priors))
+    _cent_lookup = {
+        _normalize_name(str(k)): float(v)
+        for k, v in (graph_priors or {}).items()
+        if _cent_on and isinstance(v, (int, float))
+    }
+
+    def _centrality(e) -> float:
+        if not _cent_lookup:
+            return 0.0
+        return _cent_lookup.get(_normalize_name(getattr(e, "name", "") or ""), 0.0)
+
+    _oasis_max = int(getattr(Config, 'OASIS_MAX_AGENTS', 0) or 0)
+    try:
+        _cast_max = int(getattr(Config, 'ACTOR_CAST_MAX', 20) or 0)
+    except (TypeError, ValueError):
+        _cast_max = 20
+
+    _matched = {id(e): (_match_actor(e.name, actors) if actors else None) for e in entities}
+    _matched_count = sum(1 for v in _matched.values() if v)
+
+    _salience_rank_on = getattr(Config, 'SIM_SALIENCE_RANKING', True)
+    _tier_eligibility_on = getattr(Config, 'SIM_TIER_ELIGIBILITY', True)
+
+    # 显式 salience 字段是否真实存在：只有任一匹配 actor 携带 dict 形态的 salience 时，
+    # 才启用 salience 主排序；否则强制退回现状元组，保证旧数据逐字节一致。
+    def _has_explicit_salience(a) -> bool:
+        return isinstance(a, dict) and isinstance(a.get("salience"), dict)
+
+    _use_salience = _salience_rank_on and any(
+        _has_explicit_salience(_matched.get(id(e))) for e in entities
+    )
+
+    # tier 偏好：仅当开启 tier 准入门、且确有实体携带本体分类信号（archetype/
+    # simulation_tier）时才生效；否则今天的数据 tier 恒为 1，该项对所有实体相同，
+    # 排序结果与现状一致（degrade-safe）。
+    def _has_tier_signal(a) -> bool:
+        return isinstance(a, dict) and (
+            a.get("archetype") is not None or a.get("simulation_tier") is not None
+        )
+
+    _use_tier = _tier_eligibility_on and any(
+        _has_tier_signal(_matched.get(id(e))) for e in entities
+    )
+
+    def _legacy_rank(e):
+        """现状排序键：(是否匹配 actor, 影响力权重+中心度先验, 邻边度数)。"""
+        a = _matched.get(id(e))
+        iw = (_influence_weight(a) or 0.0) if a else 0.0
+        # P3-7: 把中心度先验叠加到影响力轴（缺失时 +0.0 → 与现状逐字节一致）。
+        return (1 if a else 0, iw + 0.5 * _centrality(e), len(e.related_edges or []))
+
+    def _rank(e):
+        if not _use_salience and not _use_tier:
+            # 无任何本体信号：逐字节退化为现状元组。
+            return _legacy_rank(e)
+        a = _matched.get(id(e))
+        matched_flag = 1 if a else 0
+        # tier 偏好：能动 agent（tier 1/2）优先于被动信息源/抽象概念（tier 3/4）。
+        eligible_flag = 1
+        if _use_tier:
+            eligible_flag = 1 if (a is None or _is_agent_eligible(a)) else 0
+        # salience 主键：核心决策者(tier=1)的决策权重高于利益相关方(tier=2)，
+        # 让同 salience 下 principal 不被 amplifier/stakeholder 盖过。
+        if _use_salience:
+            sal = _salience_score(a) if a else _salience_score(None)
+            tier = _entity_simulation_tier(a) if a else 1
+            # tier 1 → 1.0；tier 2 → 0.85；tier 3 → 0.5；tier 4 → 0.3（核心方更重）
+            _tier_weight = {1: 1.0, 2: 0.85, 3: 0.5, 4: 0.3}.get(tier, 1.0)
+            sal_key = sal * _tier_weight
+        else:
+            sal_key = 0.0
+        iw = (_influence_weight(a) or 0.0) if a else 0.0
+        # P3-7: 中心度先验叠加到 salience 键（高中心度=更枢纽，比原始度数更强的影响力先验）。
+        sal_key = sal_key + 0.5 * _centrality(e)
+        return (matched_flag, eligible_flag, sal_key, iw, len(e.related_edges or []))
+
+    # ---- 主阵容路径（ACTOR-CAST discipline，默认开）----
+    _cast_discipline = (
+        _cast_max > 0
+        and (_oasis_max <= 0 or _cast_max < _oasis_max)
+        and _matched_count > 0
+    )
+    if _cast_discipline:
+        matched_entities = [e for e in entities if _matched.get(id(e))]
+        # tier 1/2 能动准入门：ACTOR_EXCLUDE_MEDIA 时媒体/观察者（type=Media/媒体类
+        # role，无显式 tier 1/2）被 entity_simulation_tier→3 挡下；无任何分类信号的
+        # 旧档案行推断 tier 1，全部放行（degrade-safe）。
+        eligible = [
+            e for e in matched_entities if _is_agent_eligible(_matched.get(id(e)))
+        ]
+        excluded_n = len(matched_entities) - len(eligible)
+        if not eligible:
+            # 安全网：过滤绝不把池子清空（全是媒体/tier3-4 时保留全部匹配者）。
+            logger.warning(
+                "[actor-cast] 全部 %d 个匹配 actor 都被 tier/媒体准入门挡下，"
+                "回退保留全部匹配者", len(matched_entities)
+            )
+            eligible = matched_entities
+            excluded_n = 0
+        kept = sorted(eligible, key=_rank, reverse=True)
+        truncated_n = max(0, len(kept) - _cast_max)
+        kept = kept[:_cast_max]
+        logger.info(
+            f"[actor-cast] 主阵容纪律（cast_max={_cast_max}）: 实体 {len(entities)} 个"
+            f"（匹配研究 actor {_matched_count} 个）→ 保留 {len(kept)} 个主阵容 agent"
+            f"（媒体/tier 排除 {excluded_n}，超上限裁剪 {truncated_n}，"
+            f"未匹配图谱节点不再填充 {len(entities) - _matched_count} 个）"
+        )
+        return kept
+
+    # ---- 旧 T3.13 路径（无匹配 actor / 旗标恢复旧行为）----
+    _max_agents = min((m for m in (_oasis_max, _cast_max) if m > 0), default=0)
+    if not _max_agents or len(entities) <= _max_agents:
+        return entities
+
+    kept = [e for e in entities if _matched.get(id(e))]  # 所有匹配 actor 必留
+    kept_ids = {id(e) for e in kept}
+    for e in sorted(entities, key=_rank, reverse=True):
+        if len(kept) >= _max_agents:
+            break
+        if id(e) not in kept_ids:
+            kept.append(e)
+            kept_ids.add(id(e))
+    _rank_mode = "salience" if _use_salience else ("tier" if _use_tier else "legacy")
+    logger.info(
+        f"[T3.13] 智能体上限 {_max_agents}: {len(entities)} → 保留 {len(kept)} "
+        f"(匹配研究 actor {_matched_count} 个全部保留，排序={_rank_mode})，"
+        f"丢弃 {len(entities) - len(kept)}"
+    )
+    return kept
 
 
 class SimulationStatus(str, Enum):
@@ -143,19 +327,18 @@ class SimulationManager:
     
     def _save_simulation_state(self, state: SimulationState):
         """保存模拟状态到文件"""
+        from ..utils.atomic import write_json_atomic
+        from .simulation_runner import SimulationRunner
         sim_dir = self._get_simulation_dir(state.simulation_id)
         state_file = os.path.join(sim_dir, "state.json")
-        
+
         state.updated_at = datetime.now().isoformat()
 
-        # 原子写入（tmp + os.replace）：关闭清理时 SimulationRunner 会重写同一个 state.json，
-        # 直接 'w' 截断可能让并发读者读到半截 JSON。
-        tmp_file = state_file + ".tmp"
-        with open(tmp_file, 'w', encoding='utf-8') as f:
-            json.dump(state.to_dict(), f, ensure_ascii=False, indent=2)
-        os.replace(tmp_file, state_file)
-
-        self._simulations[state.simulation_id] = state
+        # 原子写入 + 与 SimulationRunner 共享同一把锁（EXECPLAN2 F-6-9）：关闭清理 /
+        # 孤儿回收时 SimulationRunner 也会写同一个 state.json，串行化避免基于陈旧快照的覆盖。
+        with SimulationRunner._run_state_lock:
+            write_json_atomic(state_file, state.to_dict())
+            self._simulations[state.simulation_id] = state
     
     def _load_simulation_state(self, simulation_id: str) -> Optional[SimulationState]:
         """从文件加载模拟状态"""
@@ -239,7 +422,12 @@ class SimulationManager:
         use_llm_for_profiles: bool = True,
         progress_callback: Optional[callable] = None,
         parallel_profile_count: int = 3,
-        actors: Optional[Dict[str, Any]] = None
+        actors: Optional[Dict[str, Any]] = None,
+        graph_priors: Optional[Dict[str, float]] = None,
+        # PREP-1/PREP-4: 编排器把 options.max_rounds 与 research_language 透传到配置生成——
+        # 定时事件按真实执行窗排期、英文调研自动切 global_market 画像/英文人设。None=旧行为。
+        max_rounds: Optional[int] = None,
+        research_language: Optional[str] = None,
     ) -> SimulationState:
         """
         准备模拟环境（全程自动化）
@@ -290,34 +478,15 @@ class SimulationManager:
                 enrich_with_edges=True
             )
 
-            # T3.13: 上限智能体数，按 (是否匹配研究 actor, 影响力, 邻边数) 排序保留 top N，
-            # 但始终保留每个 actors.json 匹配到的 actor（避免深度档案被海量通用节点稀释，
-            # 也省去每个 persona 1 次 LLM + 2 次检索的成本）。
-            from ..utils.actors import match_actor as _match_actor, influence_weight as _influence_weight
-            _max_agents = Config.OASIS_MAX_AGENTS
-            if _max_agents and len(filtered.entities) > _max_agents:
-                _matched = {id(e): (_match_actor(e.name, actors) if actors else None) for e in filtered.entities}
-                _matched_count = sum(1 for v in _matched.values() if v)
-
-                def _rank(e):
-                    a = _matched.get(id(e))
-                    iw = (_influence_weight(a) or 0.0) if a else 0.0
-                    return (1 if a else 0, iw, len(e.related_edges or []))
-
-                kept = [e for e in filtered.entities if _matched.get(id(e))]  # 所有匹配 actor 必留
-                kept_ids = {id(e) for e in kept}
-                for e in sorted(filtered.entities, key=_rank, reverse=True):
-                    if len(kept) >= _max_agents:
-                        break
-                    if id(e) not in kept_ids:
-                        kept.append(e)
-                        kept_ids.add(id(e))
-                logger.info(
-                    f"[T3.13] 智能体上限 {_max_agents}: {len(filtered.entities)} → 保留 {len(kept)} "
-                    f"(匹配研究 actor {_matched_count} 个全部保留)，丢弃 {len(filtered.entities) - len(kept)}"
-                )
-                filtered.entities = kept
-                filtered.filtered_count = len(kept)
+            # T3.13 + ACTOR-CAST discipline：agent 池选择（抽取为模块级 select_agent_pool，
+            # 便于单测）。默认（ACTOR_CAST_MAX=20 < OASIS_MAX_AGENTS=80）：池子从主阵容派生
+            # （匹配研究 actor 且 tier 1/2 能动者，按 salience/影响力排序取 top ≤cast_max），
+            # 不再向 80 填充图谱通用节点；ACTOR_CAST_MAX 设为 ≥ OASIS_MAX_AGENTS（或 0）时
+            # 走旧的 T3.13 路径，行为与现状逐字节一致（degrade-safe）。
+            filtered.entities = select_agent_pool(
+                filtered.entities, actors=actors, graph_priors=graph_priors
+            )
+            filtered.filtered_count = len(filtered.entities)
 
             state.entities_count = filtered.filtered_count
             state.entity_types = list(filtered.entity_types)
@@ -348,7 +517,12 @@ class SimulationManager:
                 )
             
             # 传入graph_id以启用Zep检索功能，获取更丰富的上下文
-            generator = OasisProfileGenerator(graph_id=state.graph_id)
+            # PREP-4(2): 英文调研 → 人设生成默认英文（persona_language='en'）；否则 None=
+            # 生成器自己的探测逻辑，行为不变。
+            generator = OasisProfileGenerator(
+                graph_id=state.graph_id,
+                persona_language=("en" if str(research_language or "").strip().lower().startswith("en") else None),
+            )
             
             def profile_progress(current, total, msg):
                 if progress_callback:
@@ -445,21 +619,58 @@ class SimulationManager:
                 entities=filtered.entities,
                 enable_twitter=state.enable_twitter,
                 enable_reddit=state.enable_reddit,
-                actors=actors  # 深度研究档案（可选）：实证立场/热点/时间线进配置
+                actors=actors,  # 深度研究档案（可选）：实证立场/热点/时间线进配置
+                max_rounds=max_rounds,  # PREP-1: 定时事件按真实执行轮数窗排期
+                research_language=research_language,  # PREP-4: 英文调研→global_market 画像
             )
             
             if progress_callback:
                 progress_callback(
-                    "generating_config", 70, 
+                    "generating_config", 70,
                     "正在保存配置文件...",
                     current=2,
                     total=3
                 )
-            
-            # 保存配置文件
+
+            # ========== ACTOR-CAST：受众填充 persona（SIM_AUDIENCE_AGENTS，零 LLM）==========
+            # 配置生成器把 M 个受众 agent 配置追加在具名角色之后（agent_id 连续）；OASIS 按
+            # profile 数组下标建 agent_id（F-5-1 不变式），故 profile 也须按同序追加 M 个
+            # 规则生成的受众 persona 并重存，否则受众 agent 在 agent 图中不存在、激活时被
+            # 静默跳过。SIM_AUDIENCE_AGENTS=0（默认）→ 无受众配置 → 本段整体 no-op。
+            try:
+                _aud_type = SimulationConfigGenerator.AUDIENCE_ENTITY_TYPE
+                _aud_cfgs = [
+                    c for c in (sim_params.agent_configs or [])
+                    if str(getattr(c, "entity_type", "") or "") == _aud_type
+                ]
+                if _aud_cfgs:
+                    _aud_profiles = generator.generate_audience_profiles(
+                        _aud_cfgs, start_user_id=len(profiles)
+                    )
+                    profiles.extend(_aud_profiles)
+                    state.profiles_count = len(profiles)
+                    if state.enable_reddit:
+                        generator.save_profiles(
+                            profiles=profiles,
+                            file_path=os.path.join(sim_dir, "reddit_profiles.json"),
+                            platform="reddit",
+                        )
+                    if state.enable_twitter:
+                        generator.save_profiles(
+                            profiles=profiles,
+                            file_path=os.path.join(sim_dir, "twitter_profiles.csv"),
+                            platform="twitter",
+                        )
+                    logger.info(
+                        f"受众填充 persona: +{len(_aud_profiles)} 个（合计 {len(profiles)}，零 LLM 成本）"
+                    )
+            except Exception as e:
+                logger.warning(f"受众 persona 生成失败（降级跳过，受众 agent 不会被激活）: {e}")
+
+            # 保存配置文件（原子写，避免并发/中断时读到半写的 simulation_config.json）
+            from ..utils.atomic import write_text_atomic
             config_path = os.path.join(sim_dir, "simulation_config.json")
-            with open(config_path, 'w', encoding='utf-8') as f:
-                f.write(sim_params.to_json())
+            write_text_atomic(config_path, sim_params.to_json())
             
             state.config_generated = True
             state.config_reasoning = sim_params.generation_reasoning
@@ -522,11 +733,29 @@ class SimulationManager:
             raise ValueError(f"模拟不存在: {simulation_id}")
         
         sim_dir = self._get_simulation_dir(simulation_id)
+
+        # Twitter 人设保存为 CSV（OASIS 要求），Reddit 保存为 JSON。
+        # 与 /profiles/realtime 的 CSV 解析保持一致：直接 csv.DictReader -> list（不做数值/JSON 转换），
+        # 字段名沿用 twitter_profiles.csv 的表头，避免前端拿到形状不一致的数据。
+        if platform == "twitter":
+            profile_path = os.path.join(sim_dir, "twitter_profiles.csv")
+
+            if not os.path.exists(profile_path):
+                return []
+
+            try:
+                with open(profile_path, 'r', encoding='utf-8') as f:
+                    return list(csv.DictReader(f))
+            except Exception as e:
+                # 文件可能正在写入中或行损坏：保持防御性，返回空列表而非抛错
+                logger.warning(f"读取 twitter_profiles.csv 失败: {e}")
+                return []
+
         profile_path = os.path.join(sim_dir, f"{platform}_profiles.json")
-        
+
         if not os.path.exists(profile_path):
             return []
-        
+
         with open(profile_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     
@@ -557,10 +786,12 @@ class SimulationManager:
                 "parallel": f"python {scripts_dir}/run_parallel_simulation.py --config {config_path}",
             },
             "instructions": (
-                f"1. 激活conda环境: conda activate MiroFish\n"
+                f"1. 进入后端目录并使用 uv 隔离环境（项目已从 conda 迁移到 uv）:\n"
+                f"   - 前端开发服务器: npm run dev\n"
+                f"   - 后端脚本统一通过 uv 运行: uv run python <脚本> （在 backend/ 目录下执行）\n"
                 f"2. 运行模拟 (脚本位于 {scripts_dir}):\n"
-                f"   - 单独运行Twitter: python {scripts_dir}/run_twitter_simulation.py --config {config_path}\n"
-                f"   - 单独运行Reddit: python {scripts_dir}/run_reddit_simulation.py --config {config_path}\n"
-                f"   - 并行运行双平台: python {scripts_dir}/run_parallel_simulation.py --config {config_path}"
+                f"   - 单独运行Twitter: uv run python {scripts_dir}/run_twitter_simulation.py --config {config_path}\n"
+                f"   - 单独运行Reddit: uv run python {scripts_dir}/run_reddit_simulation.py --config {config_path}\n"
+                f"   - 并行运行双平台: uv run python {scripts_dir}/run_parallel_simulation.py --config {config_path}"
             )
         }

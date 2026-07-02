@@ -215,7 +215,7 @@ flowchart LR
 | **Python 3.11 – 3.12** | 后端需要 —— `camel-ai`/`camel-oasis` 模拟技术栈仅支持 ≤ 3.12，因此后端 venv **固定使用 3.12**（`backend/.python-version` + `uv sync --python 3.12`）。若系统默认解释器是 3.13/3.14，会直接导致安装失败。 |
 | **Python 3.12** | DeerFlow 深度研究引擎运行在**自己独立的 venv** 中（DeerFlow 2.0 固定使用 Python 3.12）。 |
 | **uv** | 两套 venv 共用的 Python 包管理器。安装：`curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| **git** | 仅在可选的上游克隆回退路径下需要 —— `setup.sh` 默认从仓库内随附的 `deer-flow-2.0-m1-rc3/` 源码播种引擎；仅当该目录不存在时才回退到用 git 浅克隆上游。 |
+| **git** | 仅在可选的上游克隆回退路径下需要 —— `setup.sh` 默认从仓库内随附的 `deer-flow-2.0.0/` 源码播种引擎；仅当该目录不存在时才回退到用 git 浅克隆上游。 |
 | **知识图谱** | 无需任何账号或 API Key。时序知识图谱由开源 **Graphiti** 在**嵌入式 FalkorDB**（`falkordblite`）上本地运行 —— 无需 Docker、无需服务进程。首次建图会自动下载一次本地嵌入模型（约 470MB）并缓存。 |
 | **LLM** | 默认使用本机 `claude` 或 `codex` CLI（无需 API Key）；`openai` / `kimi` / `minimax` / `deepseek` / `qwen` / `glm` 等 OpenAI 兼容 API 提供方需要 `LLM_API_KEY`。建图阶段复用同一个 `LLM_PROVIDER`，连免 Key 的 CLI 提供方也能用。 |
 
@@ -233,7 +233,7 @@ flowchart LR
 ./setup.sh
 ```
 
-它会检查前置条件，然后进入**交互式提供方选择器**：在本机 `claude` / `codex` CLI（零配置、无需 API Key——检测到的 CLI 会被预选为默认项）与六个托管 API 提供方（OpenAI 兼容 / Kimi / MiniMax / DeepSeek / Qwen / GLM）之间选择。选择 API 提供方时会提示你输入 **API Key**（静默输入、绝不回显），并用一次 1-token 补全**实时验证该 Key**——写错的 Key 几秒内即被发现，而不是在研究跑了 40 分钟后才暴露。随后它会从 `.env.example` 生成 `.env`、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**，其中包含本地知识图谱依赖 `graphiti-core` / `falkordblite` / sentence-transformers），然后**装配 DeerFlow**：**优先从随附的 2.0 源码 `deer-flow-2.0-m1-rc3/` 播种 `deer-flow/`**（若该目录不存在则回退到从 <https://github.com/bytedance/deer-flow> 固定到一个已知可用提交的浅克隆），并**裁剪到运行所需的最小集合**（`backend/`、`skills/`、`config.yaml`——上游的 Web 前端、文档、docker 与 CI 在本工作流中均用不到），再应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁与中间件补丁、经过强化的来源分级 deep-research 技能、`config.yaml`），并在 **Python 3.12** 上构建 DeerFlow 的隔离 venv。脚本幂等，可安全地重复运行。
+它会检查前置条件，然后进入**交互式提供方选择器**：在本机 `claude` / `codex` CLI（零配置、无需 API Key——检测到的 CLI 会被预选为默认项）与六个托管 API 提供方（OpenAI 兼容 / Kimi / MiniMax / DeepSeek / Qwen / GLM）之间选择。选择 API 提供方时会提示你输入 **API Key**（静默输入、绝不回显），并用一次 1-token 补全**实时验证该 Key**——写错的 Key 几秒内即被发现，而不是在研究跑了 40 分钟后才暴露。随后它会从 `.env.example` 生成 `.env`、安装根目录 + 前端 npm 依赖、构建后端 venv（**固定使用 Python 3.12**，其中包含本地知识图谱依赖 `graphiti-core` / `falkordblite` / sentence-transformers），然后**装配 DeerFlow**：**优先从随附的 2.0 源码 `deer-flow-2.0.0/` 播种 `deer-flow/`**（若该目录不存在则回退到从 <https://github.com/bytedance/deer-flow> 固定到一个已知可用提交的浅克隆），并**裁剪到运行所需的最小集合**（`backend/`、`skills/`、`config.yaml`——上游的 Web 前端、文档、docker 与 CI 在本工作流中均用不到），再应用 `deerflow_bridge/` 中的**桥接覆盖层**（`deerflow_research.py` 研究驱动、`patches/models/*.py` 提供方补丁与中间件补丁、经过强化的来源分级 deep-research 技能、`config.yaml`），并在 **Python 3.12** 上构建 DeerFlow 的隔离 venv。脚本幂等，可安全地重复运行。
 
 如需覆盖默认值，可通过环境变量：`DEERFLOW_DIR`（位置）、`DEERFLOW_REPO`（克隆地址）、`DEERFLOW_REF`（固定提交；设为 `=main` 可跟踪 HEAD）、`SETUP_NONINTERACTIVE=1`（跳过选择器、走自动探测——CI / 管道运行会自动如此）。它们由 `setup.sh` 从 **shell 环境**读取（不是 `.env` 配置项），例如 `DEERFLOW_REF=main ./setup.sh`。重复运行是幂等的：选择器默认选中你当前 `.env` 里的提供方，直接回车绝不会覆盖既有配置。
 
@@ -244,7 +244,7 @@ flowchart LR
 npm run setup:all
 
 # 2. 从随附的 DeerFlow 2.0 源码播种研究引擎到仓库内（已被 gitignore）
-cp -R deer-flow-2.0-m1-rc3 deer-flow
+cp -R deer-flow-2.0.0 deer-flow
 # 回退方式（仅当随附目录不存在时，需要 git）：
 #   git clone --depth 1 https://github.com/bytedance/deer-flow deer-flow
 
@@ -488,6 +488,7 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 
 ### 模拟真实感
 
+- **主角色阵容纪律（actor-cast discipline，新）**：每次预测都被蒸馏到**不超过 20 个主角色**的硬上限 —— 只有其决策 / 行动会因果性影响预测结果的实体才能进入阵容；记者、媒体与渠道被降级为*信息来源*而非行动者。该上限（`ACTOR_CAST_MAX`，默认 20）贯穿研究抽取、本体、人格与模拟名册全程，并可通过 `SIM_AUDIENCE_AGENTS` 追加免 LLM 的程序化「受众」填充 —— 模拟成本约降至 **1/4**，把 LLM 开销集中在真正的决策者身上。
 - **档案驱动的种子帖**：初始帖子由调研得来的行动者档案合成（每位行动者就其被调研出的热点话题、以其被调研出的立场开场），智能体不会再面对空白信息流醒来 —— 这正是空心模拟的根因。
 - **世界状态简报**：每一轮都会把一份紧凑的世界状态简报（局势、时间线、争议论断）注入每个智能体的系统提示词，让群体扎根于被调研出的世界，而不是漂移进泛泛而谈。
 - **异质化人格设计**：八种截然不同的分析框架被确定性地分布到人格群体中，让分歧成为结构性的 —— 这正是让「群体智慧」聚合有意义的认知多样性。
@@ -509,6 +510,14 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 ### 知识图谱
 
 本地 Graphiti + FalkorDB 图谱新增了**因果边**（随标准本体一同抽取的带类型因果关系）、**多跳因果遍历**（供 ReportAgent 使用的因果路径 / n 跳子图查询与级联追溯）、**中心性先验**（为人格遴选中的行动者显著度排序提供输入）、**语义查询压缩**（让图检索调用保持在 token 预算之内），以及**死信重放**队列（失败的灌入片段会被重试，而不是被静默丢弃）。
+
+---
+
+## DRF-2：下一代架构（预览）
+
+`deerflow2-redesign` 分支承载着 **DRF-2** —— 对编排层的彻底重建。重设计结论（完整分析见 [`REDESIGN.md`](REDESIGN.md)）：围绕 **DeerFlow 2.0 超级智能体运行时（super-agent harness）** 重建 —— 所有*知识形态*的能力落到 harness 原语上（研究 / 本体 / 模拟设计 / 预测方法论移植为**技能（skills）**；四个管线阶段成为**自定义子智能体**，并支持**按阶段的模型路由** —— 便宜阶段用 MiniMax-M3、强阶段用 claude-cli），而两大*重型引擎*留在 harness 之外：**知识图谱**（Graphiti + FalkorDB）与 **OASIS 模拟**以外部 **MCP 服务器**的形式暴露给 harness 调用。绝不能交给 LLM 裁决的确定性机制 —— 健康门（研究质量下限、空心模拟门、二元信念门）、带 schema 版本的恢复、产物清单、多种子**集成（ensemble）**扇出 —— 全部收敛进一个轻量的**管线驱动器**（`drf2/driver/`）。
+
+**状态如实说明**：脚手架已完成（技能、引擎、驱动器、配置 —— 后端套件现可收集 **756 个测试**，含 DRF-2 漂移守卫测试），但**尚未通过 harness 完成一次端到端的实跑验证**。在 DRF-2 于实跑中通过同一套交付物门槛之前，**本 README 所述的既有管线仍是可用的工作系统**。预览运行方式见 [`drf2/README.md`](drf2/README.md)（或运行 `SETUP_DRF2=1 ./setup.sh` 安装可选依赖并打印命令速查）。
 
 ---
 

@@ -12,6 +12,8 @@
 
 import json
 import math
+import os
+import random
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -21,9 +23,14 @@ from ..utils.actors import (
     actors_digest,
     build_initial_follow_graph,
     events_to_schedule,
+    extract_actor_rows,
+    extract_relationship_rows,
+    forecast_inputs_block,
     influence_weight,
     match_actor,
     normalize_name,
+    relation_polarity,
+    relation_valence,
     situation_brief_block,
 )
 from ..utils.llm_client import LLMClient
@@ -31,6 +38,15 @@ from ..utils.logger import get_logger
 from .zep_entity_reader import EntityNode, ZepEntityReader
 
 logger = get_logger('mirofish.simulation_config')
+
+# C5: 旧 8 类关系（valence 价感知前就存在的类型）。仅当 relationships[] 出现「新信号」
+# ——任一关系带显式 valence/polarity 字段，或带一个超出这 8 类的新关系类型——才认为
+# 研究档案携带了价感知数据，从而启用价感知的同温层关注与情感种子。否则（今日数据：
+# 只有这 8 类、且无 valence/polarity 字段）价感知逻辑整体跳过，跟随图与情感逐字节不变。
+_LEGACY_REL_TYPES = frozenset({
+    "ALLY_OF", "OPPOSES", "COMPETES_WITH", "REGULATES",
+    "DEPENDS_ON", "PARTNERS_WITH", "INFLUENCES", "OTHER",
+})
 
 # 中国作息时间配置（北京时间）
 CHINA_TIMEZONE_CONFIG = {
@@ -53,6 +69,99 @@ CHINA_TIMEZONE_CONFIG = {
         "night": 0.5       # 深夜下降
     }
 }
+
+
+# ====================================================================
+# 活动作息画像（activity profile）抽象
+# ----------------------------------------------------------------
+# 历史上时间/Agent 配置的作息节奏（北京时间）、提示词措辞、默认回退值都硬编码为
+# 中国社交媒体语境。这里把这一整套口径抽象成可切换的「画像」，由
+# getattr(Config, 'SIM_ACTIVITY_PROFILE', 'china_social') 选择：
+#   - 'china_social'：完全等价于历史行为，常量/提示词/默认值逐字节不变（默认）
+#   - 'us_business' ：美国商务作息口径（英文倾向的引导语）
+#   - 'global_market'：跨时区市场口径（24 小时更平坦，无明显深夜真空）
+# 缺省（未配置 SIM_ACTIVITY_PROFILE）= 'china_social'，产出与今日完全一致。
+# 注意：china_social 各字段的字符串/数值即今日代码内联使用的原文，切勿改动，
+# 否则默认输出会发生字节级漂移。
+# ====================================================================
+ACTIVITY_PROFILES = {
+    "china_social": {
+        # _generate_time_config 提示词内「基本原则」段（与原内联逐字一致）
+        "time_prompt_principles": (
+            "- 用户群体为中国人，需符合北京时间作息习惯\n"
+            "- 凌晨0-5点几乎无人活动（活跃度系数0.05）\n"
+            "- 早上6-8点逐渐活跃（活跃度系数0.4）\n"
+            "- 工作时间9-18点中等活跃（活跃度系数0.7）\n"
+            "- 晚间19-22点是高峰期（活跃度系数1.5）\n"
+            "- 23点后活跃度下降（活跃度系数0.5）\n"
+            "- 一般规律：凌晨低活跃、早间渐增、工作时段中等、晚间高峰"
+        ),
+        # _generate_time_config 的 system_prompt（与原内联逐字一致）
+        "time_system_prompt": "你是社交媒体模拟专家。返回纯JSON格式，时间配置需符合中国人作息习惯。",
+        # _get_default_time_config 的 reasoning 文案（与原内联逐字一致）
+        "default_time_reasoning": "使用默认中国人作息配置（每轮1小时）",
+        # _generate_agent_config 提示词首条作息要点（与原内联逐字一致）
+        "agent_prompt_rhythm": "- **时间符合中国人作息**：凌晨0-5点几乎不活动，晚间19-22点最活跃",
+        # active_hours 占位说明（与原内联逐字一致）
+        "agent_active_hours_hint": "活跃小时列表，考虑中国人作息",
+        # _generate_agent_config 的 system_prompt（与原内联逐字一致）
+        "agent_system_prompt": "你是社交媒体行为分析专家。返回纯JSON，配置需符合中国人作息习惯。",
+        # 时间配置数值口径（与原内联默认逐字一致）
+        "peak_hours": [19, 20, 21, 22],
+        "off_peak_hours": [0, 1, 2, 3, 4, 5],
+        "morning_hours": [6, 7, 8],
+        "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    },
+    "us_business": {
+        "time_prompt_principles": (
+            "- 用户群体为美国受众，需符合美东/美西商务作息习惯\n"
+            "- 凌晨0-5点几乎无人活动（活跃度系数0.05）\n"
+            "- 早上6-8点逐渐活跃（活跃度系数0.4）\n"
+            "- 工作时间9-17点最活跃（活跃度系数1.5）\n"
+            "- 午休及午后12-14点保持中等活跃（活跃度系数0.7）\n"
+            "- 18点后逐渐回落，晚间19-22点中等活跃（活跃度系数0.7）\n"
+            "- 一般规律：凌晨低活跃、早间渐增、工作时段高峰、晚间中等"
+        ),
+        "time_system_prompt": "你是社交媒体模拟专家。返回纯JSON格式，时间配置需符合美国商务作息习惯。",
+        "default_time_reasoning": "使用默认美国商务作息配置（每轮1小时）",
+        "agent_prompt_rhythm": "- **时间符合美国商务作息**：凌晨0-5点几乎不活动，工作时间9-17点最活跃",
+        "agent_active_hours_hint": "活跃小时列表，考虑美国商务作息",
+        "agent_system_prompt": "你是社交媒体行为分析专家。返回纯JSON，配置需符合美国商务作息习惯。",
+        "peak_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17],
+        "off_peak_hours": [0, 1, 2, 3, 4, 5],
+        "morning_hours": [6, 7, 8],
+        "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17],
+    },
+    "global_market": {
+        "time_prompt_principles": (
+            "- 用户群体为跨时区全球市场受众，作息相对平坦、无明显深夜真空\n"
+            "- 凌晨0-5点活跃度偏低但非归零（活跃度系数0.3）\n"
+            "- 各主要交易时段轮替接力，全天保持中高活跃（活跃度系数0.7-1.0）\n"
+            "- 欧美时段重叠的13-21点为相对高峰（活跃度系数1.2）\n"
+            "- 一般规律：24小时连续活跃、随交易时段切换而起伏，而非单一作息曲线"
+        ),
+        "time_system_prompt": "你是社交媒体模拟专家。返回纯JSON格式，时间配置需符合跨时区全球市场作息习惯。",
+        "default_time_reasoning": "使用默认跨时区全球市场作息配置（每轮1小时）",
+        "agent_prompt_rhythm": "- **时间符合全球市场作息**：全天24小时连续活跃，欧美重叠的13-21点相对最活跃",
+        "agent_active_hours_hint": "活跃小时列表，考虑跨时区全球市场作息",
+        "agent_system_prompt": "你是社交媒体行为分析专家。返回纯JSON，配置需符合跨时区全球市场作息习惯。",
+        "peak_hours": [13, 14, 15, 16, 17, 18, 19, 20, 21],
+        "off_peak_hours": [0, 1, 2, 3, 4, 5],
+        "morning_hours": [6, 7, 8],
+        "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    },
+}
+
+
+def get_activity_profile() -> Dict[str, Any]:
+    """读取当前活动作息画像。
+
+    通过 getattr(Config, 'SIM_ACTIVITY_PROFILE', 'china_social') 选择画像；
+    非法/未识别取值一律回退到 'china_social'，确保默认与未配置时行为完全一致。
+    """
+    raw = getattr(Config, "SIM_ACTIVITY_PROFILE", "china_social")
+    name = str(raw or "china_social").strip().lower()
+    return ACTIVITY_PROFILES.get(name, ACTIVITY_PROFILES["china_social"])
 
 
 @dataclass
@@ -88,6 +197,12 @@ class AgentActivityConfig:
 
     # 关注议题（用于 T3.4 同温层聚类；LLM 未给出时为空，聚类退化为仅按 stance）
     interested_topics: List[str] = field(default_factory=list)
+
+    # R2-SIM-3: 角色的「得失结构」（来自深度研究 actors-and-incentives 的 incentives[]）。
+    # 决策通道（decision_channel）按这些利害判断角色本轮承诺朝哪个情景，让承诺跟随激励而非
+    # 只跟随 stance 标签。缺失即空串 → asdict 仍输出空值、子进程忽略、决策通道退化为仅按立场。
+    gains_if: str = ""
+    loses_if: str = ""
 
 
 @dataclass
@@ -195,6 +310,11 @@ class SimulationParameters:
     # 研究截止日（T3.9：锚定模拟时钟 round→date 映射；来自 actors.as_of_date，可空）
     as_of_date: Optional[str] = None
 
+    # NEXTSTEPS SIM_WORLD_BRIEF: 全体 Agent 共享的紧凑世界底稿（预测问题 + 局势简报 + 热点话题，
+    # 确定性拼装、无 LLM 调用）。运行脚本据此把同一份世界背景注入每个 Agent 的 system prompt。
+    # 空串 → to_dict() 省略该字段（可降级不变式：未启用时配置 JSON 与今日逐字节一致）。
+    world_brief: str = ""
+
     # 生成元数据
     generated_at: str = field(default_factory=lambda: datetime.now().isoformat())
     generation_reasoning: str = ""  # LLM的推理说明
@@ -202,7 +322,7 @@ class SimulationParameters:
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         time_dict = asdict(self.time_config)
-        return {
+        data = {
             "simulation_id": self.simulation_id,
             "project_id": self.project_id,
             "graph_id": self.graph_id,
@@ -219,6 +339,11 @@ class SimulationParameters:
             "generated_at": self.generated_at,
             "generation_reasoning": self.generation_reasoning,
         }
+        # NEXTSTEPS SIM_WORLD_BRIEF: 空简报省略字段——运行脚本以 config.get("world_brief")
+        # 消费，缺失即整体跳过注入（degrade-safe）。
+        if self.world_brief:
+            data["world_brief"] = self.world_brief
+        return data
     
     def to_json(self, indent: int = 2) -> str:
         """转换为JSON字符串"""
@@ -282,6 +407,8 @@ class SimulationConfigGenerator:
         enable_reddit: bool = True,
         progress_callback: Optional[Callable[[int, int, str], None]] = None,
         actors: Optional[Dict[str, Any]] = None,
+        max_rounds: Optional[int] = None,
+        research_language: Optional[str] = None,
     ) -> SimulationParameters:
         """
         智能生成完整的模拟配置（分步生成）
@@ -299,11 +426,28 @@ class SimulationConfigGenerator:
             actors: 深度研究 actors.json 顶层对象（可选）。提供时：上下文与事件
                     配置注入调研实证（立场/影响力/时间线/热点），初始帖子可按
                     actor 名字定向到对应 Agent，Agent 配置以实证立场为准
+            max_rounds: 运行阶段实际执行的轮数预算（可选）。PREP-1：定时事件按
+                        min(配置轮数, max_rounds) 排期，避免关键 flashpoint 落在
+                        截断窗口之外被静默丢弃。None → 按 SIM_SCHEDULE_CLAMP_ROUNDS
+                        回退到 OASIS_DEFAULT_MAX_ROUNDS（0/关 → 行为不变）
+            research_language: 调研语言（可选）。PREP-4：为 English 且未显式设置
+                        SIM_ACTIVITY_PROFILE 环境变量时，本次配置切换到
+                        global_market 活动画像；未传 → 画像选择不变
 
         Returns:
             SimulationParameters: 完整的模拟参数
         """
         logger.info(f"开始智能生成模拟配置: simulation_id={simulation_id}, 实体数={len(entities)}")
+
+        # PREP-4(2): 英文调研 + 未显式设置 SIM_ACTIVITY_PROFILE 环境变量 → 本实例切换
+        # global_market 画像（作息/提示词口径与英文语料一致）。显式 env 永远优先；
+        # research_language 未传（旧调用方）→ 覆盖为 None，画像选择与今日完全一致。
+        self._profile_override = None
+        if (research_language
+                and str(research_language).strip().lower().startswith("en")
+                and not str(os.environ.get("SIM_ACTIVITY_PROFILE", "") or "").strip()):
+            self._profile_override = "global_market"
+            logger.info("活动画像: research_language=English 且未显式配置 SIM_ACTIVITY_PROFILE → global_market")
         
         # 计算总步骤数
         num_batches = math.ceil(len(entities) / self.AGENTS_PER_BATCH)
@@ -326,6 +470,8 @@ class SimulationConfigGenerator:
         )
 
         reasoning_parts = []
+        if self._profile_override:
+            reasoning_parts.append(f"活动画像: {self._profile_override}（英文调研自动选择）")
 
         # ========== 步骤1: 生成时间配置 ==========
         report_progress(1, "生成时间配置...")
@@ -340,7 +486,25 @@ class SimulationConfigGenerator:
         event_config = self._parse_event_config(event_config_result, actors=actors)
         reasoning_parts.append(f"事件配置: {event_config_result.get('reasoning', '成功')}")
         
+        # ========== 世界底稿（NEXTSTEPS SIM_WORLD_BRIEF）==========
+        # 预测问题 + 局势简报 + 热点话题的确定性拼装（无 LLM 调用），写入配置顶层
+        # world_brief 字段；运行脚本据此把同一份世界背景注入全体 Agent 的 system prompt。
+        # 任何一段缺失 → 简报变短；全部缺失 / 开关关闭 → 空串（to_dict 省略字段）。
+        world_brief = ""
+        try:
+            world_brief = self._build_world_brief(
+                simulation_requirement, actors, event_config.hot_topics
+            )
+            if world_brief:
+                reasoning_parts.append(f"世界简报: {len(world_brief)} 字")
+        except Exception as e:
+            logger.warning(f"世界简报构建失败（降级省略，不影响模拟）: {e}")
+            world_brief = ""
+
         # ========== 步骤3-N: 分批生成Agent配置 ==========
+        # PREP-4(1): 按批记录 LLM 成功/规则回退，让 generation_reasoning 能区分
+        # 「LLM 塑形的角色阵容」与「全默认值阵容」（此前无条件报「成功生成 N 个」）。
+        self._agent_batch_stats = {"llm_batches": 0, "rule_batches": 0, "rule_agents": 0}
         all_agent_configs = []
         for batch_idx in range(num_batches):
             start_idx = batch_idx * self.AGENTS_PER_BATCH
@@ -361,13 +525,42 @@ class SimulationConfigGenerator:
             )
             all_agent_configs.extend(batch_configs)
         
-        reasoning_parts.append(f"Agent配置: 成功生成 {len(all_agent_configs)} 个")
+        _bs = self._agent_batch_stats
+        reasoning_parts.append(
+            f"Agent配置: LLM {_bs['llm_batches']}/{num_batches} 批, 规则回退 {_bs['rule_batches']} 批"
+            f"（规则兜底 {_bs['rule_agents']} 个Agent）, 共 {len(all_agent_configs)} 个"
+        )
+        if _bs["rule_batches"]:
+            logger.warning(
+                f"Agent配置: {_bs['rule_batches']}/{num_batches} 批 LLM 失败退化为规则生成"
+                f"（{_bs['rule_agents']} 个Agent为默认口径）"
+            )
         
         # ========== 为初始帖子分配发布者 Agent ==========
         logger.info("为初始帖子分配合适的发布者 Agent...")
         event_config = self._assign_initial_post_agents(event_config, all_agent_configs)
         assigned_count = len([p for p in event_config.initial_posts if p.get("poster_agent_id") is not None])
         reasoning_parts.append(f"初始帖子分配: {assigned_count} 个帖子已分配发布者")
+
+        # ========== 追加「沉默的大多数」受众群体（I-2-2）==========
+        # 在具名调研角色（all_agent_configs）之后，按 SIM_AUDIENCE_AGENTS（兼容旧名
+        # SIM_AUDIENCE_SIZE）追加 M 个程序化生成的
+        # 低影响力受众 Agent（不做逐个 LLM 调研）：立场按调研立场分布抽样、议题复用热点话题、
+        # 高潜水偏好（低活跃度 + 低影响力）。它们的 agent_id 与具名角色连续，使 OASIS 的
+        # agent_graph 下标保持一致；并在 _build_echo_chamber_follows 之前追加，从而自然加入同温层
+        # 聚类。SIM_AUDIENCE_AGENTS 默认 0 → 完全保持当前行为（不生成受众，池子只含主阵容）。
+        try:
+            audience_configs = self._generate_audience_agent_configs(
+                start_idx=len(all_agent_configs),
+                event_config=event_config,
+                actors=actors,
+            )
+            if audience_configs:
+                all_agent_configs.extend(audience_configs)
+                reasoning_parts.append(f"受众群体: 追加 {len(audience_configs)} 个沉默大多数 Agent")
+                logger.info(f"受众群体（沉默大多数）: 追加 {len(audience_configs)} 个 Agent")
+        except Exception as e:
+            logger.warning(f"受众群体生成失败（降级跳过，不影响模拟）: {e}")
 
         # ========== 构建初始关注图（T3.2）==========
         # 研究 relationships[] → 有向关注边（方向遵循 actors.build_initial_follow_graph 的语义），
@@ -385,7 +578,7 @@ class SimulationConfigGenerator:
         # 运行脚本在对应轮次以 CREATE_POST 触发。无 key_events / 无法解析 → 空，不影响模拟。
         try:
             event_config.scheduled_events = self._build_scheduled_events(
-                actors, time_config, all_agent_configs
+                actors, time_config, all_agent_configs, max_rounds=max_rounds
             )
             if event_config.scheduled_events:
                 reasoning_parts.append(f"定时事件: {len(event_config.scheduled_events)} 个")
@@ -396,7 +589,9 @@ class SimulationConfigGenerator:
 
         # ========== 把 echo-chamber 同温层关注补进初始关注图（T3.4）==========
         try:
-            extra = self._build_echo_chamber_follows(all_agent_configs, twitter_config_strength=None)
+            extra = self._build_echo_chamber_follows(
+                all_agent_configs, twitter_config_strength=None, actors=actors
+            )
             if extra:
                 merged = {(a, b) for (a, b) in (tuple(p) for p in event_config.initial_follows)}
                 before = len(merged)
@@ -444,6 +639,7 @@ class SimulationConfigGenerator:
             twitter_config=twitter_config,
             reddit_config=reddit_config,
             as_of_date=(str((actors or {}).get("as_of_date")) if isinstance(actors, dict) and actors.get("as_of_date") else None),
+            world_brief=world_brief,
             llm_provider=self.provider,
             llm_model=self.model_name,
             llm_base_url=self.base_url,
@@ -457,6 +653,13 @@ class SimulationConfigGenerator:
     # 每个 agent 从图谱邻边最多派生的关注数（防止稠密图把关注表撑爆）
     MAX_GRAPH_FOLLOWS_PER_AGENT = 8
 
+    def _activity_profile(self) -> Dict[str, Any]:
+        """本实例生效的活动画像：generate_config 计算的覆盖（PREP-4(2)）优先，否则读全局配置。"""
+        name = getattr(self, "_profile_override", None)
+        if name:
+            return ACTIVITY_PROFILES.get(name, ACTIVITY_PROFILES["china_social"])
+        return get_activity_profile()
+
     def _build_initial_follows(
         self,
         agent_configs: List[AgentActivityConfig],
@@ -469,10 +672,22 @@ class SimulationConfigGenerator:
         依赖方→被依赖方、受众→影响者……）；图谱邻边作为补充，让 relationships[] 稀疏时
         也能形成初始社交结构。自环/越界 id 一律剔除。
         """
-        agent_id_by_name = {
-            normalize_name(c.entity_name): c.agent_id
-            for c in agent_configs if c.entity_name
-        }
+        # PREP-10: 同名归一实体的平局裁决与 _build_echo_chamber_follows 保持一致——首个胜出。
+        # （此前 dict 推导为末个胜出，两处跟随图会把关系边挂到不同的物理 agent。）
+        agent_id_by_name: Dict[str, int] = {}
+        dup_names: List[str] = []
+        for c in agent_configs:
+            if not c.entity_name:
+                continue
+            key = normalize_name(c.entity_name)
+            if key in agent_id_by_name:
+                dup_names.append(c.entity_name)
+            else:
+                agent_id_by_name[key] = c.agent_id
+        if dup_names:
+            logger.warning(
+                f"初始关注图: {len(dup_names)} 个重名实体（首个胜出，上游实体解析可能有泄漏）: {dup_names[:5]}"
+            )
         pairs: set = set()
         # 1. 研究关系（带方向语义）
         for f in build_initial_follow_graph(actors, agent_id_by_name):
@@ -511,19 +726,36 @@ class SimulationConfigGenerator:
         actors: Optional[Dict[str, Any]],
         time_config: "TimeSimulationConfig",
         agent_configs: List[AgentActivityConfig],
+        max_rounds: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """T3.8: 研究 key_events → 映射到 [0,total_rounds) 的定时事件，附最相关高影响力发布者。
 
         每个事件优先定向到事件文本里提到的真实角色 Agent；否则回退到全局影响力最高的 Agent。
         无 key_events / 无法解析日期 → []（模拟不变）。返回项形如
         ``{"round","content","date","poster_agent_id","poster_name"}``。
+
+        PREP-1: 运行阶段按 options.max_rounds / OASIS_DEFAULT_MAX_ROUNDS 截断实际轮数，
+        而事件此前按配置全轮数（如 72）排期——关键 flashpoint 落在截断窗口外被静默丢弃。
+        排期域改为 min(配置轮数, 执行轮数预算)：显式 max_rounds 优先；未接线时按
+        SIM_SCHEDULE_CLAMP_ROUNDS 回退到 OASIS_DEFAULT_MAX_ROUNDS。预算<=0 → 不变。
         """
         if not isinstance(actors, dict) or not agent_configs:
             return []
-        total_rounds = max(
+        config_rounds = max(
             1,
             int(time_config.total_simulation_hours * 60 / max(1, time_config.minutes_per_round)),
         )
+        budget = 0
+        try:
+            if max_rounds is not None and int(max_rounds) > 0:
+                budget = int(max_rounds)
+            elif getattr(Config, "SIM_SCHEDULE_CLAMP_ROUNDS", True):
+                budget = int(getattr(Config, "OASIS_DEFAULT_MAX_ROUNDS", 0) or 0)
+        except (TypeError, ValueError):
+            budget = 0
+        total_rounds = min(config_rounds, budget) if budget > 0 else config_rounds
+        if total_rounds < config_rounds:
+            logger.info(f"定时事件: 排期轮数按执行预算钳制 {config_rounds} -> {total_rounds}")
         as_of = actors.get("as_of_date")
         schedule = events_to_schedule(actors, total_rounds, as_of)
         if not schedule:
@@ -553,16 +785,89 @@ class SimulationConfigGenerator:
             })
         return out
 
+    def _valence_signal_active(self, actors: Optional[Dict[str, Any]]) -> bool:
+        """C5 准入门：研究档案是否携带「价感知」信号。
+
+        仅当 SIM_VALENCED_RELATIONS 为真，且 relationships[] 中至少有一条边携带显式
+        valence/polarity 字段、或一个超出旧 8 类的新关系类型时返回 True。否则（今日数据）
+        返回 False，从而让价感知的同温层关注与情感种子整体跳过，行为逐字节不变。
+
+        端点能否匹配到 actor 不在判定范围内——只要研究方写出了新字段/新类型，就视为意图
+        启用价感知；不携带新信号的旧 8 类档案永远走 False 分支。
+        """
+        if not getattr(Config, "SIM_VALENCED_RELATIONS", True):
+            return False
+        if not isinstance(actors, dict):
+            return False
+        rels = actors.get("relationships")
+        if not isinstance(rels, list):
+            return False
+        for r in rels:
+            if not isinstance(r, dict):
+                continue
+            # 显式 valence/polarity 字段 → 新信号
+            if str(r.get("valence", "") or "").strip():
+                return True
+            pol = r.get("polarity")
+            if isinstance(pol, (int, float)) and not isinstance(pol, bool):
+                return True
+            # 超出旧 8 类的关系类型 → 新信号
+            typ = str(r.get("type", "") or "").strip().upper()
+            if typ and typ not in _LEGACY_REL_TYPES:
+                return True
+        return False
+
+    def _relation_sentiment_nudge(
+        self,
+        actor_name: str,
+        actors: Optional[Dict[str, Any]],
+    ) -> float:
+        """C5: 由一个具名角色的关系边聚合出对其整体情感偏置的「加性微调」∈ [-0.5, 0.5]。
+
+        对该角色参与的每条关系取 relation_polarity（盟友为正、对手为负、交易性微正），
+        以涉及自身的边的平均极性作为方向，再缩到一个温和幅度（×0.5），叠加到既有
+        sentiment_bias 上。匿名受众（名字不在 relationships[] 中）→ 0.0，故受众情感不变。
+
+        仅在 _valence_signal_active 为真时被调用；今日数据下整体跳过，返回值不会被使用。
+        """
+        if not actor_name:
+            return 0.0
+        rows = extract_relationship_rows(actors)
+        if not rows:
+            return 0.0
+        me = normalize_name(actor_name)
+        if not me:
+            return 0.0
+        polarities: List[float] = []
+        for r in rows:
+            s = normalize_name(str(r.get("source", "") or ""))
+            t = normalize_name(str(r.get("target", "") or ""))
+            if me != s and me != t:
+                continue
+            polarities.append(relation_polarity(r))
+        if not polarities:
+            return 0.0
+        avg = sum(polarities) / len(polarities)
+        # 温和幅度：均值极性 ×0.5，再夹到 [-0.5, 0.5]，避免覆盖 LLM/规则给出的主立场。
+        return max(-0.5, min(0.5, avg * 0.5))
+
     def _build_echo_chamber_follows(
         self,
         agent_configs: List[AgentActivityConfig],
         twitter_config_strength: Optional[float] = None,
+        actors: Optional[Dict[str, Any]] = None,
     ) -> "set":
         """T3.4: 按 (stance 桶, 主导议题) 聚类，在簇内加同温层关注边，高影响力 Agent 留跨簇桥。
 
         强度由 echo_chamber_strength 控制（默认 0.5）：簇内每个 Agent 关注最多 ``round(3×强度)``
         个同簇高影响力 Agent；少数高影响力 Agent 额外关注几个其他簇的高影响力 Agent（让叙事仍能
         外溢）。确定性实现（不依赖随机数），避免运行间漂移。返回 ``{(follower, followee), ...}``。
+
+        C5（价感知，gated by SIM_VALENCED_RELATIONS）：在上述 (stance, topic, influence) 聚类
+        基线之上，额外按关系价补边——盟友/伙伴/支持等「allied」边互相关注（把同盟拉得更紧），
+        对抗/制裁/批评等「adversarial」边让双方互相关注（跨阵营的「桥接式对立」，使对立叙事彼此
+        可见而非各自回声）。仅当 _valence_signal_active 为真（研究档案带显式 valence/polarity 或
+        新关系类型）才追加；今日数据（只有旧 8 类、无新字段）下该段整体跳过，返回逐字节不变。
         """
         from collections import defaultdict
 
@@ -602,7 +907,73 @@ class SimulationConfigGenerator:
                 bridges += 1
                 if bridges >= 2:
                     break
+
+        # ---- C5 价感知补边（仅当研究档案携带 valence/polarity/新关系类型时）----
+        # 旧 8 类、无新字段的今日数据走 _valence_signal_active==False，整段跳过 → pairs 不变。
+        if self._valence_signal_active(actors):
+            agent_by_name: Dict[str, AgentActivityConfig] = {}
+            for c in agent_configs:
+                if c.entity_name:
+                    # 同名只保留首个（与初始关注图按出现序的口径一致）
+                    agent_by_name.setdefault(normalize_name(c.entity_name), c)
+            for r in extract_relationship_rows(actors):
+                src = agent_by_name.get(normalize_name(str(r.get("source", "") or "")))
+                dst = agent_by_name.get(normalize_name(str(r.get("target", "") or "")))
+                if src is None or dst is None or src.agent_id == dst.agent_id:
+                    continue
+                valence = relation_valence(r)
+                if valence == "allied":
+                    # 盟友互相关注，把同盟拉得更紧
+                    pairs.add((src.agent_id, dst.agent_id))
+                    pairs.add((dst.agent_id, src.agent_id))
+                elif valence == "adversarial":
+                    # 桥接式对立：对立双方互相关注（盯住对方阵营），narratives 跨阵营可见
+                    pairs.add((src.agent_id, dst.agent_id))
+                    pairs.add((dst.agent_id, src.agent_id))
         return pairs
+
+    # NEXTSTEPS SIM_WORLD_BRIEF: 世界底稿的确定性长度上限（无 LLM 调用，纯拼装）。
+    WORLD_BRIEF_MAX_CHARS = 1400
+    WORLD_BRIEF_QUESTION_CHARS = 400
+
+    def _build_world_brief(
+        self,
+        simulation_requirement: str,
+        actors: Optional[Dict[str, Any]],
+        hot_topics: Optional[List[str]],
+    ) -> str:
+        """NEXTSTEPS SIM_WORLD_BRIEF: 拼装全体 Agent 共享的紧凑世界底稿（≤1400 字）。
+
+        组成（全部确定性拼接，不调 LLM）：
+        (a) 预测问题（simulation_requirement 前 400 字——让每个 Agent 知道这个世界
+            正在争论什么问题）；
+        (b) 局势简报（复用 utils.actors.situation_brief_block：当前态势/来龙去脉/
+            张力动态/争议断层/潜在触发）；
+        (c) 热点话题清单。
+
+        可降级：任一段缺失 → 简报变短；全部缺失或 SIM_WORLD_BRIEF=false → 空串
+        （调用方省略配置字段，运行脚本整体跳过注入）。
+        """
+        raw_flag = getattr(Config, "SIM_WORLD_BRIEF", True)
+        if str(raw_flag).strip().lower() in ("false", "0", "no", "off"):
+            return ""
+
+        parts: List[str] = []
+        question = " ".join(str(simulation_requirement or "").split()).strip()
+        if question:
+            parts.append("## 核心预测问题（这个世界正在争论什么）\n"
+                         + question[:self.WORLD_BRIEF_QUESTION_CHARS])
+        try:
+            brief_block = situation_brief_block(actors)
+        except Exception:  # noqa: BLE001 — 局势简报渲染失败绝不阻断配置生成
+            brief_block = ""
+        if brief_block:
+            parts.append(brief_block)
+        topics = [str(t).strip() for t in (hot_topics or []) if str(t).strip()]
+        if topics:
+            parts.append("## 热点话题\n" + "、".join(topics[:8]))
+
+        return "\n\n".join(parts).strip()[:self.WORLD_BRIEF_MAX_CHARS]
 
     def _build_context(
         self,
@@ -633,6 +1004,14 @@ class SimulationConfigGenerator:
         digest = actors_digest(actors)
         if digest:
             context_parts.append(f"\n## 深度研究档案（调研实证，生成配置时优先采信）\n{digest}")
+
+        # NEXTSTEPS P0-4: 注入 forecast_inputs（参考类基率/驱动因素/观察指标/候选情景）。
+        # 此前这些研究painstakingly抽取的分析锚点只渲染进最终报告，模拟侧零使用——智能体只能
+        # 自由联想而非对照分析锚点推理。把它喂进配置生成上下文（事件/议题/逐智能体配置），让模拟
+        # 围绕真实的基率与驱动因素展开。actors 无 forecast_inputs 时返回空串（degrade-safe）。
+        fi_block = forecast_inputs_block(actors)
+        if fi_block:
+            context_parts.append(f"\n## 预测输入（分析锚点：基率/驱动/指标/情景，模拟应据此推理）\n{fi_block}")
 
         current_length = sum(len(p) for p in context_parts)
         remaining_length = self.MAX_CONTEXT_LENGTH - current_length - 500  # 留500字符余量
@@ -767,10 +1146,14 @@ class SimulationConfigGenerator:
         """生成时间配置"""
         # 使用配置的上下文截断长度
         context_truncated = context[:self.TIME_CONFIG_CONTEXT_LENGTH]
-        
-        # 计算最大允许值（80%的agent数）
+
+        # 计算最大允许值（90%的agent数）
         max_agents_allowed = max(1, int(num_entities * 0.9))
-        
+
+        # 作息口径由活动画像决定；china_social 分支与历史措辞逐字节一致
+        profile = self._activity_profile()
+        time_prompt_principles = profile["time_prompt_principles"]
+
         prompt = f"""基于以下模拟需求，生成时间模拟配置。
 
 {context_truncated}
@@ -779,13 +1162,7 @@ class SimulationConfigGenerator:
 请生成时间配置JSON。
 
 ### 基本原则（仅供参考，需根据具体事件和参与群体灵活调整）：
-- 用户群体为中国人，需符合北京时间作息习惯
-- 凌晨0-5点几乎无人活动（活跃度系数0.05）
-- 早上6-8点逐渐活跃（活跃度系数0.4）
-- 工作时间9-18点中等活跃（活跃度系数0.7）
-- 晚间19-22点是高峰期（活跃度系数1.5）
-- 23点后活跃度下降（活跃度系数0.5）
-- 一般规律：凌晨低活跃、早间渐增、工作时段中等、晚间高峰
+{time_prompt_principles}
 - **重要**：以下示例值仅供参考，你需要根据事件性质、参与群体特点来调整具体时段
   - 例如：学生群体高峰可能是21-23点；媒体全天活跃；官方机构只在工作时间
   - 例如：突发热点可能导致深夜也有讨论，off_peak_hours 可适当缩短
@@ -798,10 +1175,10 @@ class SimulationConfigGenerator:
     "minutes_per_round": 60,
     "agents_per_hour_min": 5,
     "agents_per_hour_max": 50,
-    "peak_hours": [19, 20, 21, 22],
-    "off_peak_hours": [0, 1, 2, 3, 4, 5],
-    "morning_hours": [6, 7, 8],
-    "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    "peak_hours": {json.dumps(profile["peak_hours"])},
+    "off_peak_hours": {json.dumps(profile["off_peak_hours"])},
+    "morning_hours": {json.dumps(profile["morning_hours"])},
+    "work_hours": {json.dumps(profile["work_hours"])},
     "reasoning": "针对该事件的时间配置说明"
 }}
 
@@ -816,8 +1193,8 @@ class SimulationConfigGenerator:
 - work_hours (int数组): 工作时段
 - reasoning (string): 简要说明为什么这样配置"""
 
-        system_prompt = "你是社交媒体模拟专家。返回纯JSON格式，时间配置需符合中国人作息习惯。"
-        
+        system_prompt = profile["time_system_prompt"]
+
         try:
             return self._call_llm_with_retry(prompt, system_prompt)
         except Exception as e:
@@ -826,24 +1203,53 @@ class SimulationConfigGenerator:
     
     def _get_default_time_config(self, num_entities: int) -> Dict[str, Any]:
         """获取默认时间配置（中国人作息）"""
+        # 默认时段口径随活动画像切换；china_social 各数值/文案与历史逐字节一致
+        profile = self._activity_profile()
         return {
             "total_simulation_hours": 72,
             "minutes_per_round": 60,  # 每轮1小时，加快时间流速
             "agents_per_hour_min": max(1, num_entities // 15),
             "agents_per_hour_max": max(5, num_entities // 5),
-            "peak_hours": [19, 20, 21, 22],
-            "off_peak_hours": [0, 1, 2, 3, 4, 5],
-            "morning_hours": [6, 7, 8],
-            "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
-            "reasoning": "使用默认中国人作息配置（每轮1小时）"
+            "peak_hours": list(profile["peak_hours"]),
+            "off_peak_hours": list(profile["off_peak_hours"]),
+            "morning_hours": list(profile["morning_hours"]),
+            "work_hours": list(profile["work_hours"]),
+            "reasoning": profile["default_time_reasoning"]
         }
     
+    @staticmethod
+    def _coerce_int(value: Any, default: int) -> int:
+        """PREP-9: LLM 数值字段防御性转换——int(float(x))；0/负数/字符串等失败回默认值。"""
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return default
+
     def _parse_time_config(self, result: Dict[str, Any], num_entities: int) -> TimeSimulationConfig:
         """解析时间配置结果，并验证agents_per_hour值不超过总agent数"""
-        # 获取原始值
-        agents_per_hour_min = result.get("agents_per_hour_min", max(1, num_entities // 15))
-        agents_per_hour_max = result.get("agents_per_hour_max", max(5, num_entities // 5))
-        
+        # 时段缺省值随活动画像切换；china_social 与历史默认逐字节一致
+        profile = self._activity_profile()
+        # PREP-9: 时长/轮长不做类型与区间校验会在运行脚本的整数除法里迟发爆炸
+        # （0 → ZeroDivisionError，"60分钟" → TypeError），或产出病态的 336 轮计划。
+        # 统一 coerce + 夹取到提示词承诺的区间（24-168h / 30-120min）；合规输出不变。
+        total_hours = self._coerce_int(result.get("total_simulation_hours", 72), 72)
+        clamped_hours = min(168, max(24, total_hours))
+        if clamped_hours != total_hours:
+            logger.warning(f"total_simulation_hours={total_hours!r} 越界，已夹取到 {clamped_hours}")
+        minutes_per_round = self._coerce_int(result.get("minutes_per_round", 60), 60)
+        clamped_mpr = min(120, max(30, minutes_per_round))
+        if clamped_mpr != minutes_per_round:
+            logger.warning(f"minutes_per_round={minutes_per_round!r} 越界，已夹取到 {clamped_mpr}")
+        # 获取原始值（同样先 coerce，避免非数值直接进入下方的大小比较抛 TypeError）
+        agents_per_hour_min = self._coerce_int(
+            result.get("agents_per_hour_min", max(1, num_entities // 15)),
+            max(1, num_entities // 15),
+        )
+        agents_per_hour_max = self._coerce_int(
+            result.get("agents_per_hour_max", max(5, num_entities // 5)),
+            max(5, num_entities // 5),
+        )
+
         # 验证并修正：确保不超过总agent数
         if agents_per_hour_min > num_entities:
             logger.warning(f"agents_per_hour_min ({agents_per_hour_min}) 超过总Agent数 ({num_entities})，已修正")
@@ -859,16 +1265,16 @@ class SimulationConfigGenerator:
             logger.warning(f"agents_per_hour_min >= max，已修正为 {agents_per_hour_min}")
         
         return TimeSimulationConfig(
-            total_simulation_hours=result.get("total_simulation_hours", 72),
-            minutes_per_round=result.get("minutes_per_round", 60),  # 默认每轮1小时
+            total_simulation_hours=clamped_hours,
+            minutes_per_round=clamped_mpr,  # 默认每轮1小时
             agents_per_hour_min=agents_per_hour_min,
             agents_per_hour_max=agents_per_hour_max,
-            peak_hours=result.get("peak_hours", [19, 20, 21, 22]),
-            off_peak_hours=result.get("off_peak_hours", [0, 1, 2, 3, 4, 5]),
+            peak_hours=result.get("peak_hours", list(profile["peak_hours"])),
+            off_peak_hours=result.get("off_peak_hours", list(profile["off_peak_hours"])),
             off_peak_activity_multiplier=0.05,  # 凌晨几乎无人
-            morning_hours=result.get("morning_hours", [6, 7, 8]),
+            morning_hours=result.get("morning_hours", list(profile["morning_hours"])),
             morning_activity_multiplier=0.4,
-            work_hours=result.get("work_hours", list(range(9, 19))),
+            work_hours=result.get("work_hours", list(profile["work_hours"])),
             work_activity_multiplier=0.7,
             peak_activity_multiplier=1.5
         )
@@ -976,12 +1382,103 @@ class SimulationConfigGenerator:
             researched = actors.get("hot_topics")
             if isinstance(researched, list):
                 hot_topics = [str(t) for t in researched[:12]]
+        # QUALITY-OPT C5: remember the run's real forecast topics so agents whose
+        # interested_topics the LLM left blank get anchored to the ACTUAL subject (export
+        # controls, tariffs, AI compute…) instead of the generic "Public Opinion" — agents
+        # then engage with the forecast's themes, not nothing.
+        self._run_hot_topics = [str(t).strip() for t in (hot_topics or []) if str(t).strip()][:8]
+        initial_posts = result.get("initial_posts", []) or []
+        # Seed-content fallback (SIM_SYNTH_SEED_POSTS): the event-config LLM sometimes returns
+        # zero initial_posts, which leaves the opening feed empty — agents then have nothing to
+        # react to and can only FOLLOW, producing 0 organic posts (the "hollow sim" root cause).
+        # Synthesize seed posts from the research dossier so the sim opens on real, contested
+        # positions. Narrow (only the empty case) + degrade-safe (any error → empty, unchanged).
+        if not initial_posts and getattr(Config, "SIM_SYNTH_SEED_POSTS", True):
+            try:
+                initial_posts = self._synthesize_initial_posts(actors, hot_topics)
+                if initial_posts:
+                    logger.info(
+                        "事件配置: LLM 返回 0 初始帖 → 已从研究档案合成 %d 条种子帖"
+                        "（避免空 feed 导致模拟空转）", len(initial_posts))
+            except Exception as _syn_err:  # noqa: BLE001
+                logger.warning("初始帖合成失败（降级为空）: %s", _syn_err)
+                initial_posts = []
         return EventConfig(
-            initial_posts=result.get("initial_posts", []),
+            initial_posts=initial_posts,
             scheduled_events=[],
             hot_topics=hot_topics,
             narrative_direction=result.get("narrative_direction", "")
         )
+
+    def _synthesize_initial_posts(
+        self,
+        actors: Optional[Dict[str, Any]],
+        hot_topics: Optional[List[str]],
+    ) -> List[Dict[str, Any]]:
+        """从研究档案合成种子帖（SIM_SYNTH_SEED_POSTS 兜底）。
+
+        取头部影响力/tier 的角色，各自就一个热点议题陈述其实证立场（stance），作为开局帖子，
+        让智能体开局即有真实、对立的内容可评论/转发/引用，避免"空 feed → 只能 FOLLOW → 空转"。
+        字段与 LLM 产出一致（content/poster_type/poster_name），交由 _assign_initial_post_agents
+        定向到具体 agent。best-effort：数据缺失/异常 → 返回 []（与关闭时逐字节一致）。
+        """
+        if not isinstance(actors, dict):
+            return []
+        rows = actors.get("actors")
+        if not isinstance(rows, list):
+            return []
+        _inf = {"high": 0, "medium": 1, "low": 2}
+
+        def _tier(v: Any) -> int:
+            try:
+                return int(str(v).strip())
+            except (TypeError, ValueError):
+                return 9
+
+        cand = [
+            r for r in rows
+            if isinstance(r, dict)
+            and str(r.get("name") or "").strip()
+            and str(r.get("stance") or "").strip()
+        ]
+        # 头部优先：影响力高→低，再按 simulation_tier 升序（tier 1 = 主角）。
+        cand.sort(key=lambda r: (
+            _inf.get(str(r.get("influence", "")).strip().lower(), 3),
+            _tier(r.get("simulation_tier")),
+        ))
+        topics = [str(t).strip() for t in (hot_topics or []) if str(t).strip()]
+        max_posts = max(1, int(getattr(Config, "SIM_SYNTH_SEED_POSTS_MAX", 10) or 10))
+        # PREP-11: 种子帖语言随活动画像走（中文画像 → 中文连接词，避免与中文 persona 语言
+        # 冲突），并交替使用「立场陈述 / 争议提问」两种模板，让开局 feed 里有可反驳的问题
+        # 而非清一色第一人称机构声明。SIM_SEED_POST_VARIANTS=false → 回到单一英文旧模板。
+        use_variants = bool(getattr(Config, "SIM_SEED_POST_VARIANTS", True))
+        zh = self._activity_profile() is ACTIVITY_PROFILES["china_social"]
+        posts: List[Dict[str, Any]] = []
+        for i, r in enumerate(cand[:max_posts]):
+            name = str(r.get("name")).strip()
+            stance = str(r.get("stance")).strip()
+            etype = str(r.get("type") or "").strip() or "Organization"
+            topic = topics[i % len(topics)] if topics else ""
+            if not topic:
+                content = stance
+            elif not use_variants:
+                content = f"On {topic} — our position: {stance}"
+            elif i % 2 == 1:
+                content = (
+                    f"{topic}：我们的立场——{stance} 这一走向下，谁受益、谁受损？" if zh
+                    else f"{topic}: our position — {stance} Who gains and who loses if this holds?"
+                )
+            else:
+                content = (
+                    f"关于{topic}——我们的立场：{stance}" if zh
+                    else f"On {topic} — our position: {stance}"
+                )
+            posts.append({
+                "content": content[:600],
+                "poster_type": etype,
+                "poster_name": name,
+            })
+        return posts
     
     def _assign_initial_post_agents(
         self,
@@ -1139,6 +1636,11 @@ class SimulationConfigGenerator:
                 "medium≈1.5-2.0, low≈0.8-1.2），不要凭空另行猜测"
             )
 
+        # 作息口径由活动画像决定；china_social 分支与历史措辞逐字节一致
+        profile = self._activity_profile()
+        agent_prompt_rhythm = profile["agent_prompt_rhythm"]
+        agent_active_hours_hint = profile["agent_active_hours_hint"]
+
         prompt = f"""基于以下信息，为每个实体生成社交媒体活动配置。
 
 模拟需求: {simulation_requirement}
@@ -1150,7 +1652,7 @@ class SimulationConfigGenerator:
 
 ## 任务
 为每个实体生成活动配置，注意：
-- **时间符合中国人作息**：凌晨0-5点几乎不活动，晚间19-22点最活跃
+{agent_prompt_rhythm}
 - **官方机构**（University/GovernmentAgency）：活跃度低(0.1-0.3)，工作时间(9-17)活动，响应慢(60-240分钟)，影响力高(2.5-3.0)
 - **媒体**（MediaOutlet）：活跃度中(0.4-0.6)，全天活动(8-23)，响应快(5-30分钟)，影响力高(2.0-2.5)
 - **个人**（Student/Person/Alumni）：活跃度高(0.6-0.9)，主要晚间活动(18-23)，响应快(1-15分钟)，影响力低(0.8-1.2)
@@ -1164,35 +1666,67 @@ class SimulationConfigGenerator:
             "activity_level": <0.0-1.0>,
             "posts_per_hour": <发帖频率>,
             "comments_per_hour": <评论频率>,
-            "active_hours": [<活跃小时列表，考虑中国人作息>],
+            "active_hours": [<{agent_active_hours_hint}>],
             "response_delay_min": <最小响应延迟分钟>,
             "response_delay_max": <最大响应延迟分钟>,
             "sentiment_bias": <-1.0到1.0>,
             "stance": "<supportive/opposing/neutral/observer>",
-            "influence_weight": <影响力权重>
+            "influence_weight": <影响力权重>,
+            "interested_topics": [<关注议题，1-3个；用于同温层聚类>]
         }},
         ...
     ]
 }}"""
 
-        system_prompt = "你是社交媒体行为分析专家。返回纯JSON，配置需符合中国人作息习惯。"
+        system_prompt = profile["agent_system_prompt"]
         
+        # EXECPLAN F-5-2: 防御式构建 agent_id -> 配置 映射，避免单条畸形配置（缺 agent_id / 类型不符）
+        # 让 dict 推导原子失败，从而把整批 15 个 Agent 静默退化为规则生成；同时把 key 统一 int 化，
+        # 修正 LLM 把 agent_id 输出成字符串（"5"）导致 int 查找全部 miss 的隐性退化。
+        raw_cfgs: List[Any] = []
+        llm_configs: Dict[int, Dict[str, Any]] = {}
         try:
             result = self._call_llm_with_retry(prompt, system_prompt)
-            llm_configs = {cfg["agent_id"]: cfg for cfg in result.get("agent_configs", [])}
+            raw_cfgs = result.get("agent_configs", []) or []
+            for cfg in raw_cfgs:
+                if not isinstance(cfg, dict):
+                    continue
+                aid = cfg.get("agent_id")
+                if aid is None:
+                    continue
+                try:
+                    llm_configs[int(aid)] = cfg  # 强制 int 化："5" / 5.0 -> 5
+                except (TypeError, ValueError):
+                    logger.warning(f"跳过无法解析 agent_id 的配置: {aid!r}")
         except Exception as e:
             logger.warning(f"Agent配置批次LLM生成失败: {e}, 使用规则生成")
+            raw_cfgs = []
             llm_configs = {}
-        
+
+        # PREP-4(1): 按批记录 LLM 成功/规则回退（generate_config 初始化；直接调用本方法时缺省跳过）
+        _stats = getattr(self, "_agent_batch_stats", None)
+        if isinstance(_stats, dict):
+            _stats["llm_batches" if (llm_configs or raw_cfgs) else "rule_batches"] += 1
+
         # 构建AgentActivityConfig对象
         configs = []
+        # C5：是否启用价感知情感种子（旧 8 类/无新字段的今日数据 → False，逐批跳过 → 情感不变）
+        valence_on = self._valence_signal_active(actors)
         for i, entity in enumerate(entities):
             agent_id = start_idx + i
-            cfg = llm_configs.get(agent_id, {})
+            # EXECPLAN F-5-2: 优先按 id 命中；miss 时按位置回退（覆盖 LLM 漏写/写错 agent_id
+            # 但仍按输入顺序返回配置的情况），最后再退化到规则生成。
+            from_rule = False
+            cfg = llm_configs.get(agent_id)
+            if not cfg and i < len(raw_cfgs) and isinstance(raw_cfgs[i], dict):
+                cfg = raw_cfgs[i]
 
             # 如果LLM没有生成，使用规则生成
             if not cfg:
                 cfg = self._generate_agent_config_by_rule(entity)
+                from_rule = True
+                if isinstance(_stats, dict):
+                    _stats["rule_agents"] += 1
                 # 规则路径没有 LLM 参与：直接落研究档案的实证影响力
                 researched_weight = influence_weight(matched_actors.get(agent_id))
                 if researched_weight is not None:
@@ -1212,22 +1746,119 @@ class SimulationConfigGenerator:
                 sentiment_bias=cfg.get("sentiment_bias", 0.0),
                 stance=cfg.get("stance", "neutral"),
                 influence_weight=cfg.get("influence_weight", 1.0),
-                interested_topics=[str(t) for t in (cfg.get("interested_topics") or [])][:5],
+                # EXECPLAN F-5-3: cfg 未给 interested_topics 时按实体类型回退到确定性话题，
+                # 保证 T3.4 同温层聚类键 (stance, topic) 不退化为仅按 stance。
+                interested_topics=(
+                    [str(t) for t in (cfg.get("interested_topics") or [])][:5]
+                    or self._default_interested_topics(entity)
+                ),
             )
             # T3.6: 在两条路径（LLM 成功 / 规则兜底）上都强制落研究档案的实证影响力，
             # 避免 LLM-success 路径只被「提示」而给出任意权重，破坏 T3.5 的影响力加权激活。
             researched_weight = influence_weight(matched_actors.get(agent_id))
             if researched_weight is not None:
                 config.influence_weight = researched_weight
+            # R2-SIM-3: 把研究档案的得失结构（incentives 的 gains_if/loses_if）落到配置，
+            # 供决策通道按利害驱动承诺。缺失即空串，行为不变（degrade-safe）。
+            gains_if, loses_if = self._extract_actor_incentive_summary(matched_actors.get(agent_id))
+            config.gains_if = gains_if
+            config.loses_if = loses_if
+            # C5: 价感知情感种子——把该角色关系网的聚合极性（盟友为正、对手为负）加性叠到
+            # sentiment_bias 上，让对立双方开局即带方向性情绪，而非清一色由 stance 推。
+            # 仅 valence_on（研究档案带新信号）时生效；今日数据走 valence_on==False，情感不变。
+            if valence_on:
+                nudge = self._relation_sentiment_nudge(entity.name, actors)
+                if nudge:
+                    config.sentiment_bias = max(-1.0, min(1.0, config.sentiment_bias + nudge))
+            # PREP-2: 规则兜底路径此前丢弃调研立场——LLM 整批失败时全体 neutral，产出零对比度
+            # 话语场（0.58-0.82 聚簇预测的直接成因之一）。命中研究档案且配置来自规则兜底
+            # （或 LLM 也只给了 neutral）时，按档案 stance 分桶覆盖，并为 supportive/opposing
+            # 播下方向性情感种子。LLM 明确给出非 neutral 立场的路径不受影响。
+            if getattr(Config, "SIM_RULE_FALLBACK_STANCE", True):
+                actor_row = matched_actors.get(agent_id)
+                if isinstance(actor_row, dict) and (from_rule or config.stance == "neutral"):
+                    bucket = self._classify_stance(str(actor_row.get("stance", "") or ""))
+                    if bucket != "neutral" and bucket != config.stance:
+                        config.stance = bucket
+                        if config.sentiment_bias == 0.0 and bucket in ("supportive", "opposing"):
+                            config.sentiment_bias = 0.3 if bucket == "supportive" else -0.3
             configs.append(config)
 
         return configs
     
+    # EXECPLAN F-5-3: 按实体类型确定性映射关注议题，让 T3.4 同温层聚类键 (stance, topic)
+    # 稳定且有意义；LLM 未给 interested_topics 时作为兜底，杜绝聚类静默退化为仅按 stance。
+    _RULE_INTERESTED_TOPICS = {
+        "university": ["Public Affairs"],
+        "governmentagency": ["Public Affairs"],
+        "ngo": ["Public Affairs"],
+        "mediaoutlet": ["General News"],
+        "professor": ["Academic"],
+        "expert": ["Academic"],
+        "official": ["Public Affairs"],
+        "student": ["Education"],
+        "alumni": ["Education"],
+    }
+
+    def _default_interested_topics(self, entity: EntityNode) -> List[str]:
+        """EXECPLAN F-5-3 + QUALITY-OPT C5: deterministic interested-topics fallback.
+
+        Keeps the entity-type topic FIRST (preserves echo-chamber cluster diversity — the
+        cluster key is interested_topics[0]) and APPENDS the run's real forecast hot topics so
+        agents engage with the actual subject. For entity types with no type-topic, spread agents
+        deterministically across the hot topics (so clusters don't all collapse into one), and
+        only fall back to the generic "Public Opinion" when no forecast topics exist at all.
+        """
+        entity_type = (entity.get_entity_type() or "Unknown").lower()
+        base = list(self._RULE_INTERESTED_TOPICS.get(entity_type, []))
+        hot = [str(t).strip() for t in (getattr(self, "_run_hot_topics", []) or []) if str(t).strip()]
+        if base:
+            primary = base[0]
+        elif hot:
+            # deterministic spread across the forecast's hot topics → diverse clusters
+            primary = hot[sum(map(ord, (entity.name or "x"))) % len(hot)]
+        else:
+            primary = "Public Opinion"
+        out: List[str] = [primary]
+        for h in hot[:2]:
+            if h.lower() != primary.lower() and h not in out:
+                out.append(h)
+        return out
+
+    @staticmethod
+    def _extract_actor_incentive_summary(actor: Optional[Dict[str, Any]]) -> tuple:
+        """R2-SIM-3: aggregate an actor's incentives[] into compact (gains_if, loses_if)
+        strings for the decision channel. Each incentive is ``{driver, gains_if, loses_if,
+        intensity}`` (deep-research actors-and-incentives schema). Missing/empty → ("", ""),
+        so old dossiers without the field leave the config unchanged (degrade-safe)."""
+        if not isinstance(actor, dict):
+            return "", ""
+        incentives = actor.get("incentives")
+        if not isinstance(incentives, list):
+            return "", ""
+        gains: List[str] = []
+        loses: List[str] = []
+        for inc in incentives[:4]:  # cap so the prompt stays compact
+            if not isinstance(inc, dict):
+                continue
+            g = str(inc.get("gains_if", "") or "").strip()
+            l = str(inc.get("loses_if", "") or "").strip()
+            if g and g not in gains:
+                gains.append(g)
+            if l and l not in loses:
+                loses.append(l)
+        return "；".join(gains), "；".join(loses)
+
     def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
         """基于规则生成单个Agent配置（中国人作息）"""
         entity_type = (entity.get_entity_type() or "Unknown").lower()
-        
-        if entity_type in ["university", "governmentagency", "ngo"]:
+        # EXECPLAN F-5-3: 规则路径同样产出 interested_topics，保证聚类键在确定性兜底路径下可用
+        interested_topics = self._default_interested_topics(entity)
+
+        # PREP-2: 规则表补齐现行动态本体的实体类型（Government/Organization/StrategicAsset/
+        # PolicyInstrument/MarketSignal…）——此前只认旧校园本体，动态本体的全部实体跌入
+        # 「普通人」else 分支（全体 activity 0.7 / 0.5帖/时 / neutral，零对比度）。
+        if entity_type in ["university", "governmentagency", "ngo", "government", "country"]:
             # 官方机构：工作时间活动，低频率，高影响力
             return {
                 "activity_level": 0.2,
@@ -1238,7 +1869,8 @@ class SimulationConfigGenerator:
                 "response_delay_max": 240,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 3.0
+                "influence_weight": 3.0,
+                "interested_topics": interested_topics
             }
         elif entity_type in ["mediaoutlet"]:
             # 媒体：全天活动，中等频率，高影响力
@@ -1251,7 +1883,8 @@ class SimulationConfigGenerator:
                 "response_delay_max": 30,
                 "sentiment_bias": 0.0,
                 "stance": "observer",
-                "influence_weight": 2.5
+                "influence_weight": 2.5,
+                "interested_topics": interested_topics
             }
         elif entity_type in ["professor", "expert", "official"]:
             # 专家/教授：工作+晚间活动，中等频率
@@ -1264,7 +1897,8 @@ class SimulationConfigGenerator:
                 "response_delay_max": 90,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 2.0
+                "influence_weight": 2.0,
+                "interested_topics": interested_topics
             }
         elif entity_type in ["student"]:
             # 学生：晚间为主，高频率
@@ -1277,7 +1911,8 @@ class SimulationConfigGenerator:
                 "response_delay_max": 15,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 0.8
+                "influence_weight": 0.8,
+                "interested_topics": interested_topics
             }
         elif entity_type in ["alumni"]:
             # 校友：晚间为主
@@ -1290,7 +1925,37 @@ class SimulationConfigGenerator:
                 "response_delay_max": 30,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 1.0
+                "influence_weight": 1.0,
+                "interested_topics": interested_topics
+            }
+        elif entity_type in ["organization", "company"]:
+            # PREP-2: 机构/企业：中等活跃、工作时段为主、响应偏慢、影响力中高
+            return {
+                "activity_level": 0.35,
+                "posts_per_hour": 0.3,
+                "comments_per_hour": 0.3,
+                "active_hours": list(range(8, 20)),  # 8:00-19:59
+                "response_delay_min": 30,
+                "response_delay_max": 120,
+                "sentiment_bias": 0.0,
+                "stance": "neutral",
+                "influence_weight": 2.0,
+                "interested_topics": interested_topics
+            }
+        elif entity_type in ["strategicasset", "policyinstrument", "marketsignal", "concept"]:
+            # PREP-2: 资产/政策工具/市场信号等非能动实体：低活跃观察者，
+            # 避免以「普通人」的高活跃度刷屏
+            return {
+                "activity_level": 0.15,
+                "posts_per_hour": 0.1,
+                "comments_per_hour": 0.2,
+                "active_hours": list(range(9, 18)),  # 9:00-17:59
+                "response_delay_min": 60,
+                "response_delay_max": 240,
+                "sentiment_bias": 0.0,
+                "stance": "observer",
+                "influence_weight": 1.2,
+                "interested_topics": interested_topics
             }
         else:
             # 普通人：晚间高峰
@@ -1303,7 +1968,194 @@ class SimulationConfigGenerator:
                 "response_delay_max": 20,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 1.0
+                "influence_weight": 1.0,
+                "interested_topics": interested_topics
             }
-    
+
+    # ====================================================================
+    # I-2-2: 「沉默的大多数」受众群体生成（程序化、零 LLM/Zep 调用）
+    # ====================================================================
+
+    # 受众 Agent 在配置里的实体类型标记，便于运行脚本/指标按群体区分。
+    AUDIENCE_ENTITY_TYPE = "Audience"
+
+    # 受众立场 → AgentActivityConfig.stance 的取值（与具名 Agent 同一桶集合，
+    # 以便 T3.4 同温层聚类键 (stance, topic) 自然把受众并入对应阵营）。
+    _AUDIENCE_STANCE_BUCKETS = ["supportive", "opposing", "neutral", "observer"]
+
+    # 研究档案里 actor.stance 自由文本 → 标准化立场桶的关键词映射（中英文）。
+    _STANCE_KEYWORDS = {
+        "supportive": ["support", "favor", "pro-", "拥护", "支持", "赞成", "看多", "利好"],
+        "opposing": ["oppos", "against", "critic", "反对", "批评", "抵制", "看空", "质疑"],
+        "observer": ["observ", "report", "neutral coverage", "中立报道", "观察", "旁观", "报道"],
+    }
+
+    def _build_audience_rng(self) -> "random.Random":
+        """I-2-2: 受众抽样 RNG。SIM_SEED>0 时确定性可复现，否则系统熵播种。
+
+        复用 run_parallel_simulation 的 SIM_SEED 语义；优先读环境变量（与运行脚本一致），
+        缺省回退到 Config.SIM_SEED。0/空/非整数一律退化为非确定性，与历史行为一致。
+        """
+        raw = os.environ.get("SIM_SEED")
+        if raw is None or str(raw).strip() == "":
+            raw = getattr(Config, "SIM_SEED", 0)
+        try:
+            seed = int(str(raw).strip())
+        except (TypeError, ValueError):
+            return random.Random()
+        if seed == 0:
+            return random.Random()
+        # 受众用独立子种子（与调度采样错开），避免两处采样耦合。
+        return random.Random(seed ^ 0x4155_4449)  # "AUDI"
+
+    def _audience_stance_distribution(
+        self, actors: Optional[Dict[str, Any]]
+    ) -> Dict[str, float]:
+        """I-2-2: 由调研 actor 立场推导受众立场抽样分布。
+
+        统计每个 actor 的 stance 落入哪个标准化立场桶（supportive/opposing/observer/neutral），
+        归一化为概率分布。无 actor 或全部无法解析 → 返回均匀分布（不偏向任何阵营）。
+        受众默认偏向「沉默」，因此把无法明确归类者计入 neutral，使大多数保持中立潜水。
+        """
+        counts: Dict[str, float] = {b: 0.0 for b in self._AUDIENCE_STANCE_BUCKETS}
+        for row in extract_actor_rows(actors):
+            bucket = self._classify_stance(str(row.get("stance", "") or ""))
+            counts[bucket] += 1.0
+        total = sum(counts.values())
+        if total <= 0:
+            # 无实证立场：均匀分布
+            n = len(self._AUDIENCE_STANCE_BUCKETS)
+            return {b: 1.0 / n for b in self._AUDIENCE_STANCE_BUCKETS}
+        return {b: c / total for b, c in counts.items()}
+
+    def _classify_stance(self, raw_stance: str) -> str:
+        """I-2-2: actor.stance 自由文本 → 标准化立场桶；无法识别归为 neutral。"""
+        s = raw_stance.strip().lower()
+        if not s:
+            return "neutral"
+        for bucket, keywords in self._STANCE_KEYWORDS.items():
+            for kw in keywords:
+                if kw in s:
+                    return bucket
+        return "neutral"
+
+    def _sample_audience_stance(
+        self, rng: "random.Random", distribution: Dict[str, float]
+    ) -> str:
+        """I-2-2: 按立场分布抽一个受众立场。分布退化（全 0）时回退均匀抽样。"""
+        buckets = list(distribution.keys()) or list(self._AUDIENCE_STANCE_BUCKETS)
+        weights = [max(0.0, distribution.get(b, 0.0)) for b in buckets]
+        if sum(weights) <= 0:
+            return rng.choice(self._AUDIENCE_STANCE_BUCKETS)
+        return rng.choices(buckets, weights=weights, k=1)[0]
+
+    def _generate_audience_agent_configs(
+        self,
+        start_idx: int,
+        event_config: EventConfig,
+        actors: Optional[Dict[str, Any]],
+    ) -> List[AgentActivityConfig]:
+        """I-2-2: 程序化生成 M 个低影响力「沉默大多数」受众 Agent 配置。
+
+        - 数量由 SIM_AUDIENCE_AGENTS 控制（默认 0 → 返回 []，agent 池只含主阵容；
+          兼容旧名 SIM_AUDIENCE_SIZE）。ACTOR-CAST discipline：主阵容 ≤ ACTOR_CAST_MAX
+          个具名 main actors + 本函数的 M 个零 LLM 成本受众填充，取代旧的
+          「向 OASIS_MAX_AGENTS≈80 填充图谱通用节点（每个都烧 persona LLM 调用）」。
+        - 立场按调研立场分布抽样（无调研 → 均匀），议题复用热点话题（无则留空，
+          聚类退化为仅按 stance）。
+        - 高潜水偏好：低 activity_level、低 posts_per_hour、低 influence_weight，
+          response_delay 较长——绝大多数只 LIKE/REPOST/潜水，偶尔冒泡。
+        - agent_id 从 start_idx 连续编号，与具名角色衔接，保证 OASIS agent_graph 下标一致。
+        - 不做逐 Agent 的 LLM/Zep 调用，生成成本可忽略，可廉价压到 300-1000 规模。
+        """
+        try:
+            size = int(getattr(Config, "SIM_AUDIENCE_AGENTS", 0) or 0)
+        except (TypeError, ValueError):
+            size = 0
+        if size <= 0:
+            # 兼容旧名 SIM_AUDIENCE_SIZE（I-2-2 时代的属性注入口径）。
+            try:
+                size = int(getattr(Config, "SIM_AUDIENCE_SIZE", 0) or 0)
+            except (TypeError, ValueError):
+                size = 0
+        if size <= 0:
+            return []
+        # 防御性上限：避免极端配置一次性撑出超大配置文件（仍远超具名上限）。
+        size = min(size, 5000)
+
+        rng = self._build_audience_rng()
+        distribution = self._audience_stance_distribution(actors)
+
+        # 受众默认每轮激活上限（仅记录到 reasoning / 供运行脚本采样限流参考）——
+        # 真正的「每轮只激活一小撮受众」由运行脚本的加权激活采样配合低 activity_level 实现。
+        try:
+            active_cap = int(getattr(Config, "SIM_AUDIENCE_ACTIVE_CAP", 0) or 0)
+        except (TypeError, ValueError):
+            active_cap = 0
+        if active_cap > 0:
+            logger.info(f"受众每轮激活上限（SIM_AUDIENCE_ACTIVE_CAP）: {active_cap}")
+
+        # 受众关注议题：复用研究/事件得到的热点话题（最多 3 个），让受众落入真实议题的同温层。
+        hot_topics = [str(t) for t in (event_config.hot_topics or []) if str(t).strip()]
+
+        # C5：是否启用价感知情感种子。受众为匿名「公众_k」，名字不在 relationships[] 中，
+        # _relation_sentiment_nudge 恒返回 0.0 → 受众情感逐字节不变；此处保持与具名路径一致的写法。
+        valence_on = self._valence_signal_active(actors)
+
+        configs: List[AgentActivityConfig] = []
+        for k in range(size):
+            agent_id = start_idx + k
+            stance = self._sample_audience_stance(rng, distribution)
+
+            # 高潜水：低活跃度、低发帖、几乎只评论/点赞，影响力低。
+            activity_level = round(rng.uniform(0.2, 0.6), 3)
+            influence = round(rng.uniform(0.3, 0.8), 3)
+            posts_per_hour = round(rng.uniform(0.02, 0.15), 3)
+            comments_per_hour = round(rng.uniform(0.1, 0.5), 3)
+
+            # 立场决定轻微的情感偏置（与具名角色同向，但幅度更小、噪声更多）。
+            if stance == "supportive":
+                sentiment_bias = round(rng.uniform(0.1, 0.6), 3)
+            elif stance == "opposing":
+                sentiment_bias = round(rng.uniform(-0.6, -0.1), 3)
+            else:
+                sentiment_bias = round(rng.uniform(-0.2, 0.2), 3)
+
+            # C5: 价感知情感种子，加性叠加（不消耗 RNG，故不扰乱受众抽样的确定性）。匿名受众名
+            # 不在 relationships[] 中 → nudge 恒为 0.0 → 受众情感保持原值，今日数据逐字节不变。
+            if valence_on:
+                nudge = self._relation_sentiment_nudge(f"公众_{k}", actors)
+                if nudge:
+                    sentiment_bias = round(max(-1.0, min(1.0, sentiment_bias + nudge)), 3)
+
+            # 活跃时段：普通公众的白天 + 晚间高峰作息（与规则「普通人」一致，略加抖动）。
+            base_hours = [9, 10, 11, 12, 13, 18, 19, 20, 21, 22, 23]
+            active_hours = sorted(rng.sample(base_hours, k=rng.randint(5, len(base_hours))))
+
+            # 关注议题：从热点话题里随机取 1-2 个（无热点 → 空，聚类退化为仅按 stance）。
+            if hot_topics:
+                pick = min(len(hot_topics), rng.randint(1, 2))
+                interested_topics = rng.sample(hot_topics, k=pick)
+            else:
+                interested_topics = []
+
+            configs.append(AgentActivityConfig(
+                agent_id=agent_id,
+                entity_uuid=f"audience:{agent_id}",  # 合成 uuid，不指向任何图谱节点
+                entity_name=f"公众_{k}",
+                entity_type=self.AUDIENCE_ENTITY_TYPE,
+                activity_level=activity_level,
+                posts_per_hour=posts_per_hour,
+                comments_per_hour=comments_per_hour,
+                active_hours=active_hours,
+                response_delay_min=rng.randint(5, 30),
+                response_delay_max=rng.randint(60, 240),
+                sentiment_bias=sentiment_bias,
+                stance=stance,
+                influence_weight=influence,
+                interested_topics=interested_topics,
+            ))
+
+        return configs
+
 

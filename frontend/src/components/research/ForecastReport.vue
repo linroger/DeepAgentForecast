@@ -62,6 +62,16 @@
           </div>
         </header>
 
+        <div v-if="isPartial" class="partial-warning">
+          <span class="partial-icon" aria-hidden="true">⚠</span>
+          <div class="partial-body">
+            <div class="partial-text">{{ L('部分章节生成失败，以下章节为占位内容：','Some sections failed to generate and are shown as placeholders:') }}</div>
+            <ul v-if="failedSections.length" class="partial-list">
+              <li v-for="(title, idx) in failedSections" :key="(title || 'sec') + '-' + idx">{{ title }}</li>
+            </ul>
+          </div>
+        </div>
+
         <div ref="scrollEl" class="report-scroll">
           <div class="md-body" v-html="renderedHtml"></div>
         </div>
@@ -149,6 +159,19 @@ const statusClass = computed(() => {
   if (s.includes('fail') || s.includes('error')) return 'pill-err'
   if (s.includes('run') || s.includes('progress') || s.includes('pending') || s.includes('generat')) return 'pill-run'
   return ''
+})
+
+// 部分章节生成失败时的占位章节标题（老报告无此字段，视为空数组）
+const failedSections = computed(() => {
+  const list = meta.value && meta.value.failed_sections
+  if (!Array.isArray(list)) return []
+  return list.filter(t => typeof t === 'string' && t)
+})
+
+// partial 字段优先；缺失时回退到 failed_sections 是否非空
+const isPartial = computed(() => {
+  if (meta.value && typeof meta.value.partial === 'boolean') return meta.value.partial
+  return failedSections.value.length > 0
 })
 
 function navIndent(h) {
@@ -411,6 +434,41 @@ watch(() => props.reportId, load)
   color: var(--paper);
 }
 
+/* ---------- Partial-report warning ---------- */
+.partial-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 16px 28px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--err);
+  border-left-width: 3px;
+  background: var(--soft);
+}
+.partial-icon {
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--err);
+  flex-shrink: 0;
+}
+.partial-body { min-width: 0; }
+.partial-text {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  color: var(--err);
+}
+.partial-list {
+  margin: 6px 0 0;
+  padding-left: 1.3em;
+  font-family: var(--display);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.partial-list li { margin: 2px 0; word-break: break-word; }
+
 .report-scroll {
   flex: 1;
   min-height: 0;
@@ -561,6 +619,7 @@ watch(() => props.reportId, load)
   }
   .report-scroll { padding: 20px 18px 48px; }
   .report-head { padding: 16px 18px 14px; }
+  .partial-warning { margin: 14px 18px 0; }
   .report-title { font-size: 19px; }
 }
 </style>

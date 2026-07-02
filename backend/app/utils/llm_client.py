@@ -35,6 +35,129 @@ OPENAI_COMPATIBLE_PROVIDERS = tuple(
 # CLI 调用的瞬时失败重试配置
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2.0  # 秒
+RETRY_AFTER_CAP = 30.0  # 秒：尊重 429 的 Retry-After，但封顶避免硬额度耗尽时长时间挂起
+
+# OpenAI 兼容提供方（kimi/minimax/…）的瞬时 API 错误：429 限流、超时、连接抖动、5xx。
+# 这些异常默认不是 RuntimeError，历史上会绕过 chat() 的退避重试直达上层（报告章节因此
+# 一遇 429 即降级为占位符 —— 见 2026-06-21 失败）。在此显式纳入退避重试。
+# 注意：不含 BadRequestError(400)/AuthenticationError(401)/NotFoundError(404) —— 这些是
+# 确定性错误，重试无益，应快速失败。openai 在极简环境可能缺失，故 import 容错。
+try:
+    import openai as _openai  # noqa: F401
+    _RETRYABLE_API_ERRORS = (
+        _openai.RateLimitError,
+        _openai.APITimeoutError,
+        _openai.APIConnectionError,
+        _openai.InternalServerError,
+    )
+except Exception:  # noqa: BLE001 — openai 不可导入时退化为仅重试 RuntimeError
+    _RETRYABLE_API_ERRORS = ()
+
+
+def _err_brief(exc: Exception) -> str:
+    """Short, classified error description for failover logging (S9)."""
+    s = str(exc)
+    low = s.lower()
+    if "new_sensitive" in low or "content" in low and "filter" in low:
+        kind = "content-filter(422)"
+    elif "429" in s or "rate_limit" in low or "quota" in low or "usage limit" in low:
+        kind = "quota/rate-limit(429)"
+    else:
+        kind = type(exc).__name__
+    return f"{kind}: {s[:160]}"
+
+
+# QUALITY-OPT (live-surfaced): content-filter CIRCUIT BREAKER. When a provider blanket-filters a
+# topic (MiniMax returned 422 new_sensitive on ~100% of a geopolitical run → 1585 futile primary
+# attempts that flooded the single claude-cli fallback and exhausted it), trip a breaker after K
+# consecutive 422s and route straight to the fallback for a cooldown — skipping the doomed primary
+# call entirely. Halves latency + spares the fallback from a needless 2× call volume.
+_CB_STATE: Dict[str, Dict[str, float]] = {}
+try:
+    _CB_THRESHOLD = max(1, int(os.environ.get("LLM_CB_422_THRESHOLD", "5") or "5"))
+except ValueError:
+    _CB_THRESHOLD = 5
+try:
+    _CB_COOLDOWN_S = float(os.environ.get("LLM_CB_COOLDOWN_S", "300") or "300")
+except ValueError:
+    _CB_COOLDOWN_S = 300.0
+
+
+def _is_content_filter(exc: Exception) -> bool:
+    s = str(exc).lower()
+    return ("new_sensitive" in s or "unprocessable" in s
+            or ("content" in s and "filter" in s) or " 422" in s or "code: 422" in s)
+
+
+# LLM-3: 429/quota 熔断（与 422 熔断共用 tripped_until）。MiniMax 硬配额耗尽后 ~1h 内每次调用
+# 仍会烧 3 次退避重试（≥6s）才失败转移——SIM 阶段的调用洪峰会把该延迟放大数百倍。连续配额类
+# 失败达阈值后同样进入冷却、直连回退提供方。阈值比 422 高（限流可能是瞬时的，配额耗尽才持续）。
+try:
+    _CB_429_THRESHOLD = max(1, int(os.environ.get("LLM_CB_429_THRESHOLD", "8") or "8"))
+except ValueError:
+    _CB_429_THRESHOLD = 8
+try:
+    _CB_429_COOLDOWN_S = float(os.environ.get("LLM_CB_429_COOLDOWN_S", "120") or "120")
+except ValueError:
+    _CB_429_COOLDOWN_S = 120.0
+
+
+def _is_quota(exc: Exception) -> bool:
+    s = str(exc)
+    low = s.lower()
+    return ("429" in s or "rate_limit" in low or "rate limit" in low
+            or "quota" in low or "usage limit" in low)
+
+
+def _cb_tripped(provider: str) -> bool:
+    st = _CB_STATE.get(provider)
+    return bool(st and st.get("tripped_until", 0.0) > time.monotonic())
+
+
+def _cb_record_422(provider: str) -> None:
+    st = _CB_STATE.setdefault(provider, {"consec": 0.0, "tripped_until": 0.0})
+    st["consec"] = st.get("consec", 0.0) + 1
+    if st["consec"] >= _CB_THRESHOLD and st.get("tripped_until", 0.0) <= time.monotonic():
+        st["tripped_until"] = time.monotonic() + _CB_COOLDOWN_S
+        logger.warning("熔断器：提供方 %s 连续 %d 次内容审查(422)，冷却 %ds，期间直连回退提供方",
+                       provider, int(st["consec"]), int(_CB_COOLDOWN_S))
+
+
+def _cb_record_429(provider: str) -> None:
+    """LLM-3: 记一次配额/限流失败；连续达 _CB_429_THRESHOLD 次即冷却（期间直连回退）。"""
+    st = _CB_STATE.setdefault(provider, {"consec": 0.0, "tripped_until": 0.0})
+    st["consec429"] = st.get("consec429", 0.0) + 1
+    if st["consec429"] >= _CB_429_THRESHOLD and st.get("tripped_until", 0.0) <= time.monotonic():
+        st["tripped_until"] = time.monotonic() + _CB_429_COOLDOWN_S
+        logger.warning("熔断器：提供方 %s 连续 %d 次配额/限流(429)，冷却 %ds，期间直连回退提供方",
+                       provider, int(st["consec429"]), int(_CB_429_COOLDOWN_S))
+
+
+def _cb_reset(provider: str) -> None:
+    st = _CB_STATE.get(provider)
+    if st:
+        st["consec"] = 0.0
+        st["consec429"] = 0.0
+
+
+# LLM-3: 回退提供方的 OpenAI 连接池缓存。此前每次失败转移都重建 LLMClient/OpenAI 客户端
+# （每次一个新 httpx 连接池 + TLS 握手）；键=(provider, model, base_url)。只缓存底层 OpenAI
+# 客户端（官方文档保证线程安全），LLMClient 实例仍逐调用新建，避免 _last_usage 跨线程串档。
+_FB_OPENAI_CLIENTS: Dict[tuple, Any] = {}
+
+
+def _retry_delay(exc: Exception, attempt: int) -> float:
+    """退避时长：默认指数退避；若 429 错误带 Retry-After 头则尊重之（封顶 RETRY_AFTER_CAP）。"""
+    base = RETRY_BASE_DELAY * (2 ** attempt)
+    headers = getattr(getattr(exc, "response", None), "headers", None)
+    if headers:
+        retry_after = headers.get("retry-after") or headers.get("Retry-After")
+        if retry_after:
+            try:
+                return min(max(base, float(retry_after)), RETRY_AFTER_CAP)
+            except (TypeError, ValueError):
+                pass
+    return base
 
 
 class LLMClient:
@@ -48,6 +171,9 @@ class LLMClient:
         model: Optional[str] = None
     ):
         self.provider = (provider or Config.LLM_PROVIDER or "claude-cli").lower()
+
+        # 最近一次调用的精确 token 用量（OpenAI 兼容路径填充；CLI 路径为 None→按文本粗估）。
+        self._last_usage: Optional[Dict[str, int]] = None
 
         # openai 提供方所需的连接参数（CLI 模式下不使用）
         self.api_key = api_key or Config.LLM_API_KEY
@@ -63,15 +189,109 @@ class LLMClient:
         # 仅在使用 OpenAI 兼容提供方（openai/kimi）时才创建 OpenAI 客户端（CLI 模式无需 API Key）
         self._openai_client = None
         if self.provider in OPENAI_COMPATIBLE_PROVIDERS:
-            from openai import OpenAI
-            if not self.api_key:
-                raise ValueError(f"LLM_PROVIDER={self.provider} 时必须配置 LLM_API_KEY")
-            client_kwargs: Dict[str, Any] = {"api_key": self.api_key, "base_url": self.base_url}
-            # Kimi-for-coding 网关按 User-Agent 校验 coding-agent 身份；
-            # 不带可识别的 UA 会被拒绝（access_terminated_error）。
-            if self.provider == "kimi":
-                client_kwargs["default_headers"] = {"User-Agent": Config.LLM_USER_AGENT}
-            self._openai_client = OpenAI(**client_kwargs)
+            self._openai_client = self._build_openai_client(self.provider, self.api_key, self.base_url)
+
+        # EXECPLAN2 I-6-2: 当 fast tier 指向一个完全不同的 OpenAI 兼容提供方时，按需懒构建
+        # 的第二个客户端（如本地廉价抽取 + 远端旗舰合成）。仅在 tiered routing 开启且配齐
+        # LLM_FAST_PROVIDER/BASE_URL/API_KEY 时才会真正实例化；否则保持 None（同提供方切模型）。
+        self._fast_openai_client = None
+        # S9: set True on a fallback client so failover never recurses.
+        self._is_fallback = False
+
+    @staticmethod
+    def _build_openai_client(provider: str, api_key: Optional[str], base_url: Optional[str]):
+        """构造一个 OpenAI 兼容客户端（供主客户端与 fast-tier 第二客户端复用）。"""
+        from openai import OpenAI
+        if not api_key:
+            raise ValueError(f"LLM_PROVIDER={provider} 时必须配置 LLM_API_KEY")
+        client_kwargs: Dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+        # Kimi-for-coding 网关按 User-Agent 校验 coding-agent 身份；
+        # 不带可识别的 UA 会被拒绝（access_terminated_error）。
+        if provider == "kimi":
+            client_kwargs["default_headers"] = {"User-Agent": Config.LLM_USER_AGENT}
+        # R2-EXEC-6: 当 LLM_HTTP2 开启时，注入一个调优过的 httpx 客户端（HTTP/2 多路复用 +
+        # 更大 keepalive 池）并把 SDK 自带重试关掉（max_retries=0，由 chat() 的退避循环统一负责）。
+        # 默认（未配置 LLM_HTTP2 / 为 false）返回 None → 沿用 OpenAI SDK 自带 httpx 客户端，
+        # 行为与现状逐字节一致（degrade-safe）。
+        http_client = LLMClient._build_http_client()
+        if http_client is not None:
+            client_kwargs["http_client"] = http_client
+            client_kwargs["max_retries"] = 0
+        return OpenAI(**client_kwargs)
+
+    @staticmethod
+    def _build_http_client():
+        """R2-EXEC-6: 为同步 OpenAI 客户端构造调优过的 httpx 客户端，未启用时返回 None。
+
+        默认 httpx 客户端把 keepalive 连接封顶在 20 且无多路复用，使 R2-EXEC-1 放开的并发
+        实际上仍被连接池/每调用 TLS 握手卡住。开启 LLM_HTTP2 后：
+          - http2=LLM_HTTP2（默认配置层置 true）：单连接多路复用，去掉逐调用 TLS 建连；
+          - keepalive=LLM_HTTP_KEEPALIVE（默认 128，原 20）：去掉 20 槽 keepalive 抖动；
+          - 显式设置宽松超时：自带 httpx.Client 默认 5s 读超时会腰斩长章节生成，故对齐
+            OpenAI SDK 的 600s 量级；
+          - h2 未安装 / HTTP/2 协商失败时优雅回退 HTTP/1.1（仍保留调优的 keepalive/超时）。
+
+        gate：仅当 getattr(Config, 'LLM_HTTP2', False) 为真时才构造；否则返回 None 保持现状。
+        """
+        if not getattr(Config, "LLM_HTTP2", False):
+            return None
+        try:
+            import httpx
+        except Exception:  # httpx 理应随 openai 安装；缺失则回退 SDK 默认客户端
+            return None
+        keepalive = int(getattr(Config, "LLM_HTTP_KEEPALIVE", 128) or 128)
+        limits = httpx.Limits(
+            max_keepalive_connections=keepalive,
+            max_connections=keepalive + 32,
+        )
+        # 连接快、读/写慢：长文生成需要大读超时，避免 httpx 默认 5s 腰斩。
+        timeout = httpx.Timeout(600.0, connect=10.0)
+        try:
+            return httpx.Client(http2=True, limits=limits, timeout=timeout)
+        except Exception as exc:  # h2 未安装或协商失败 → 回退 HTTP/1.1（不影响管线运行）
+            logger.warning(f"HTTP/2 客户端构建失败，回退 HTTP/1.1: {exc}")
+            try:
+                return httpx.Client(http2=False, limits=limits, timeout=timeout)
+            except Exception as exc2:  # 极端情况下连 http1 调优客户端也失败 → 回退 SDK 默认
+                logger.warning(f"调优 httpx 客户端构建失败，回退 SDK 默认客户端: {exc2}")
+                return None
+
+    # ------------------------------------------------------------------
+    # EXECPLAN2 I-6-2: 双层模型路由（fast / strong）
+    # ------------------------------------------------------------------
+    def _model_for_tier(self, tier: Optional[str]) -> str:
+        """按 tier 解析实际使用的模型名。
+
+        - tiered routing 关闭（默认）→ 一律返回 self.model（行为与现状逐字节一致）。
+        - tier='fast'  → Config.fast_model()（未配置 LLM_FAST_MODEL 时回退到当前模型，不报错）。
+        - tier='strong'/None/未知 → Config.strong_model()（同样回退到当前模型）。
+        CLI 订阅提供方只有单一订阅模型，tier 在 _chat_* 中被忽略，此处返回值仅用于计量一致性。
+        """
+        if not getattr(Config, "LLM_TIERED_ROUTING", False):
+            return self.model
+        if tier == "fast":
+            return Config.fast_model() or self.model
+        return Config.strong_model() or self.model
+
+    def _fast_provider_client(self):
+        """若 fast tier 指向不同的 OpenAI 兼容提供方，返回（懒构建的）第二客户端，否则 None。
+
+        需要 LLM_FAST_PROVIDER + LLM_FAST_BASE_URL + LLM_FAST_API_KEY 三者齐备且该提供方
+        为 OpenAI 兼容；缺任一则回退为「同提供方切模型」（返回 None）。构建失败同样回退 None，
+        绝不让 fast tier 的误配置把整条调用打挂（graceful degradation）。
+        """
+        fp = getattr(Config, "LLM_FAST_PROVIDER", None)
+        fb = getattr(Config, "LLM_FAST_BASE_URL", None)
+        fk = getattr(Config, "LLM_FAST_API_KEY", None)
+        if not (fp and fb and fk) or fp not in OPENAI_COMPATIBLE_PROVIDERS:
+            return None
+        if self._fast_openai_client is None:
+            try:
+                self._fast_openai_client = self._build_openai_client(fp, fk, fb)
+            except Exception as exc:  # 误配置不应中断调用，记录后回退主客户端
+                logger.warning(f"fast-tier 第二客户端构建失败，回退主客户端: {exc}")
+                return None
+        return self._fast_openai_client
 
     # ------------------------------------------------------------------
     # 公共接口
@@ -81,7 +301,8 @@ class LLMClient:
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        response_format: Optional[Dict] = None
+        response_format: Optional[Dict] = None,
+        tier: str = "strong"
     ) -> str:
         """
         发送聊天请求，返回模型响应文本。
@@ -89,35 +310,153 @@ class LLMClient:
         所有提供方在瞬时失败（RuntimeError，含 CLI 错误、超时、推理模型空 content）
         时自动指数退避重试（3 次）。OpenAI SDK 自身的 APIError 子类不在此重试范围，
         会按原样抛出（SDK 内部已有自己的重试与限流处理）。
+
+        tier（EXECPLAN2 I-6-2）: 'strong'（默认，= 当前模型，行为不变）| 'fast'（廉价/快速档）。
+        仅当 Config.LLM_TIERED_ROUTING=true 且为 OpenAI 兼容提供方时，fast 才路由到更便宜的
+        模型/提供方；CLI 订阅提供方与关闭路由时一律 no-op（graceful degradation）。
         """
+        # EXECPLAN2 I-6-2: 解析本次调用实际使用的模型（fast/strong）。关闭路由时 = self.model。
+        model = self._model_for_tier(tier)
+        # EXECPLAN2 I-6-0/I-5-0/I-5-3: 内容寻址缓存命中直接返回；否则正常调用后记录
+        # token/延迟/成本计量并做预算检查。计量默认开（开销极小），缓存/预算默认关。
+        from .telemetry import LLMMeter, LLMCache, get_run_context, check_budget, estimate_tokens
+        run_id, stage = get_run_context()
+        cache_key = None
+        if Config.LLM_CACHE_ENABLED:
+            # 缓存键纳入解析后的 model，避免 fast/strong 两档结果互相串档。
+            cache_key = LLMCache.key(self.provider, model, messages, temperature, max_tokens, response_format)
+            hit = LLMCache.get(cache_key)
+            if hit is not None:
+                if Config.LLM_TELEMETRY_ENABLED:
+                    LLMMeter.record(self.provider, model, 0, 0, 0.0, cached=True, stage=stage, run_id=run_id)
+                return hit
+
         last_error: Optional[Exception] = None
+        result: Optional[str] = None
+        # LLM-2: 回退提供方接管时，回退客户端自己的 chat() 已经计量过这次调用（provider=回退方、
+        # 精确 token）。外层若再按主提供方记一次，失败转移最多的 run 的 token/成本会 ~2x 虚增且
+        # by_model 归属错乱。置位后跳过外层计量。
+        served_by_fallback = False
+        started = time.monotonic()
+        self._last_usage = None
+        # Circuit breaker: if the primary is in a content-filter/quota cooldown, skip the doomed
+        # primary attempt entirely and go straight to the fallback (prevents the futile-call flood).
+        if _cb_tripped(self.provider) and not self._is_fallback:
+            _fb = self._try_fallback(messages, temperature, max_tokens, response_format,
+                                     RuntimeError(f"circuit-breaker: {self.provider} in 422/429 cooldown"))
+            if _fb is not None:
+                result = _fb
+                served_by_fallback = True
         for attempt in range(MAX_RETRIES):
+            if result is not None:
+                break
             try:
                 if self.provider in OPENAI_COMPATIBLE_PROVIDERS:
-                    return self._chat_openai(messages, temperature, max_tokens, response_format)
-                if self.provider == "codex-cli":
-                    return self._chat_codex_cli(messages, temperature, max_tokens, response_format)
-                return self._chat_claude_cli(messages, temperature, max_tokens, response_format)
-            except RuntimeError as exc:
+                    result = self._chat_openai(messages, temperature, max_tokens, response_format, tier=tier)
+                elif self.provider == "codex-cli":
+                    # CLI 订阅提供方只有单一订阅模型，tier 在此为 no-op。
+                    result = self._chat_codex_cli(messages, temperature, max_tokens, response_format)
+                else:
+                    result = self._chat_claude_cli(messages, temperature, max_tokens, response_format)
+                _cb_reset(self.provider)  # primary succeeded → clear its 422/429 streaks
+                break
+            except (RuntimeError, *_RETRYABLE_API_ERRORS) as exc:
                 last_error = exc
+                if _is_quota(exc):
+                    _cb_record_429(self.provider)  # LLM-3: 连续配额失败达阈值 → 冷却直连回退
                 if attempt < MAX_RETRIES - 1:
-                    delay = RETRY_BASE_DELAY * (2 ** attempt)
+                    delay = _retry_delay(exc, attempt)
                     logger.warning(
                         f"LLM 调用失败 (第 {attempt + 1}/{MAX_RETRIES} 次)，{delay}s 后重试: {exc}"
                     )
                     time.sleep(delay)
-        raise last_error if last_error is not None else RuntimeError("LLM 调用失败")
+            except Exception as exc:  # noqa: BLE001 — non-retryable (e.g. 422 content-filter): stop retrying, try fallback
+                last_error = exc
+                if _is_content_filter(exc):
+                    _cb_record_422(self.provider)  # count toward tripping the breaker
+                logger.warning(f"LLM 调用遇不可重试错误，转回退提供方: {_err_brief(exc)}")
+                break
+        if result is None:
+            # QUALITY-OPT S9: provider failover. On exhausted quota (429) or a content-filter
+            # rejection (422 new_sensitive) the same provider will keep failing; retry the SAME
+            # request once on a configured fallback provider so the run recovers instead of
+            # shipping placeholders. The pipeline health gate (S1) still catches the case where
+            # neither provider succeeds. Off unless LLM_FALLBACK_PROVIDER is set.
+            fb = self._try_fallback(messages, temperature, max_tokens, response_format, last_error)
+            if fb is not None:
+                result = fb
+                served_by_fallback = True
+            else:
+                raise last_error if last_error is not None else RuntimeError("LLM 调用失败")
+
+        if Config.LLM_TELEMETRY_ENABLED and not served_by_fallback:
+            latency_ms = (time.monotonic() - started) * 1000.0
+            usage = self._last_usage
+            if usage:
+                pt, ct = int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", 0))
+            else:
+                # 无精确 usage（CLI 提供方）→ 按文本长度粗估
+                pt = sum(estimate_tokens(str(m.get("content", ""))) for m in messages)
+                ct = estimate_tokens(result)
+            # 用解析后的 model 计量，使 by_model 维度区分 fast/strong 用量与成本。
+            LLMMeter.record(self.provider, model, pt, ct, latency_ms, cached=False, stage=stage, run_id=run_id)
+        if Config.LLM_CACHE_ENABLED and cache_key is not None:
+            LLMCache.put(cache_key, result)
+        if Config.LLM_RUN_BUDGET_TOKENS or Config.LLM_RUN_BUDGET_USD:
+            check_budget(run_id)  # 超预算抛 BudgetExceeded
+        return result
+
+    def _try_fallback(self, messages: List[Dict[str, str]], temperature: float,
+                      max_tokens: int, response_format: Optional[Dict],
+                      primary_error: Optional[Exception]) -> Optional[str]:
+        """QUALITY-OPT S9: retry the request once on a configured fallback provider when the
+        primary exhausts retries / hits a content-filter. Off unless LLM_FALLBACK_PROVIDER is
+        set; never recurses (the fallback client has failover disabled). Returns text or None."""
+        if getattr(self, "_is_fallback", False):
+            return None
+        fb_provider = (os.environ.get("LLM_FALLBACK_PROVIDER", "") or "").strip().lower()
+        if not fb_provider or fb_provider == self.provider:
+            return None
+        try:
+            fb = LLMClient(
+                provider=fb_provider,
+                model=(os.environ.get("LLM_FALLBACK_MODEL", "") or None),
+                api_key=(os.environ.get("LLM_FALLBACK_API_KEY", "") or None),
+                base_url=(os.environ.get("LLM_FALLBACK_BASE_URL", "") or None),
+            )
+            fb._is_fallback = True  # prevent recursive failover
+            # LLM-3: 复用回退提供方的 OpenAI 连接池（每次失败转移重建 httpx 池 = 每调用一次
+            # TLS 握手放大）。OpenAI 同步客户端线程安全；LLMClient 实例本身仍逐调用新建。
+            if fb._openai_client is not None:
+                _fb_key = (fb.provider, fb.model, fb.base_url)
+                _cached = _FB_OPENAI_CLIENTS.get(_fb_key)
+                if _cached is None:
+                    _FB_OPENAI_CLIENTS[_fb_key] = fb._openai_client
+                else:
+                    fb._openai_client = _cached
+            logger.warning(f"主提供方 {self.provider} 失败（{_err_brief(primary_error) if primary_error else '?'}），"
+                           f"切换到回退提供方 {fb_provider}")
+            out = fb.chat(messages, temperature, max_tokens, response_format)
+            logger.info(f"回退提供方 {fb_provider} 成功接管本次调用")
+            return out
+        except Exception as e:  # noqa: BLE001 — fallback failed too; caller raises the primary error
+            logger.error(f"回退提供方 {fb_provider} 也失败: {_err_brief(e)}")
+            return None
 
     def chat_json(
         self,
         messages: List[Dict[str, str]],
         temperature: float = 0.3,
-        max_tokens: int = 4096
+        max_tokens: int = 4096,
+        tier: str = "strong"
     ) -> Dict[str, Any]:
         """发送聊天请求并返回解析后的 JSON。
 
         解析失败时先做本地修复（提取 JSON 块、补全被 max_tokens 截断的括号），
         仍失败则降温重发一次。单次格式抖动不再让上层（如报告大纲）直接退化。
+
+        tier（EXECPLAN2 I-6-2）透传给 chat()：结构化/机械型 JSON 调用（子查询分解、
+        受访者选择、图谱抽取）可传 tier='fast' 路由到廉价档；默认 'strong' 行为不变。
         """
         last_response = ""
         for attempt in range(2):
@@ -125,7 +464,8 @@ class LLMClient:
                 messages=messages,
                 temperature=max(0.0, temperature - attempt * 0.2),
                 max_tokens=max_tokens,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                tier=tier
             )
             last_response = response
             parsed = self._parse_json_response(response)
@@ -141,15 +481,28 @@ class LLMClient:
     def supports_native_tools(self) -> bool:
         """是否支持原生 function/tool calling。
 
-        OpenAI 兼容提供方（openai/kimi/minimax/deepseek/qwen/glm）通过 OpenAI SDK 的 ``tools=``
+        OpenAI 兼容提供方（openai/kimi/deepseek/qwen/glm）通过 OpenAI SDK 的 ``tools=``
         原生支持；CLI 提供方（claude-cli/codex-cli）无原生工具，返回 False → 报告退回 ReAct 兜底。
-        仅当 Config.REPORT_NATIVE_TOOLS=true 时启用（默认关，保持现有行为）。
+        受 Config.REPORT_NATIVE_TOOLS 总开关控制（config.py 默认开，REPORT-4）。
+
+        LLM-6: 逐提供方能力位 PROVIDER_META[provider]['native_tools']（缺省 True）——MiniMax-M3
+        的 agentic 工具调用不可靠（0-tool-call 推理残段），在 config 里置 False，退回 ReAct+回退链。
+        可用 LLM_NATIVE_TOOLS_PROVIDERS（逗号分隔白名单）整体覆盖能力位。
+        RPT-10: 提供方处于 422/429 熔断冷却时也返回 False——chat_with_tools 无法失败转移到 CLI
+        回退（CLI 无 tools=），审查风暴期直接走 ReAct（其底层 chat() 自带回退链）。
         """
-        return bool(
-            getattr(Config, "REPORT_NATIVE_TOOLS", False)
-            and self.provider in OPENAI_COMPATIBLE_PROVIDERS
-            and self._openai_client is not None
-        )
+        if not (getattr(Config, "REPORT_NATIVE_TOOLS", False)
+                and self.provider in OPENAI_COMPATIBLE_PROVIDERS
+                and self._openai_client is not None):
+            return False
+        _override = (os.environ.get("LLM_NATIVE_TOOLS_PROVIDERS", "") or "").strip()
+        if _override:
+            _allowed = {p.strip().lower() for p in _override.split(",") if p.strip()}
+            if self.provider not in _allowed:
+                return False
+        elif not Config.PROVIDER_META.get(self.provider, {}).get("native_tools", True):
+            return False
+        return not _cb_tripped(self.provider)
 
     def chat_with_tools(
         self,
@@ -157,12 +510,14 @@ class LLMClient:
         tools_schema: List[Dict[str, Any]],
         temperature: float = 0.4,
         max_tokens: int = 4096,
+        tier: str = "strong",
     ) -> Dict[str, Any]:
         """原生 tool calling 单轮调用。
 
         Args:
             messages: OpenAI 格式消息（可含 role=tool 的工具结果回填）。
             tools_schema: OpenAI tools schema 列表（[{type:'function', function:{name,description,parameters}}]）。
+            tier: EXECPLAN2 I-6-2 模型档位；默认 'strong'（报告合成保持旗舰模型，行为不变）。
         Returns:
             {"content": str, "tool_calls": [{"id","name","arguments"(dict)}]}。无工具调用时 tool_calls=[]。
         Raises:
@@ -170,8 +525,19 @@ class LLMClient:
         """
         if self._openai_client is None:
             raise RuntimeError("chat_with_tools 仅支持 OpenAI 兼容提供方")
+        # LLM-1/RPT-10: 熔断预检——冷却期内直接抛错（调用方 report_agent 捕获后降级 ReAct，
+        # ReAct 走 chat() 自带的重试+回退链），不再对被审查/限流的提供方发一次注定失败的原生调用。
+        if _cb_tripped(self.provider):
+            raise RuntimeError(f"chat_with_tools: 提供方 {self.provider} 处于 422/429 熔断冷却，回退 ReAct")
+        # EXECPLAN2 I-6-2: 解析模型/客户端（默认 strong = 当前模型/主客户端，工具调用行为不变）。
+        model = self._model_for_tier(tier)
+        client = self._openai_client
+        if getattr(Config, "LLM_TIERED_ROUTING", False) and tier == "fast":
+            fast_client = self._fast_provider_client()
+            if fast_client is not None:
+                client = fast_client
         kwargs: Dict[str, Any] = {
-            "model": self.model,
+            "model": model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -181,7 +547,52 @@ class LLMClient:
         extra_body = Config.reasoning_extra_body()
         if extra_body:
             kwargs["extra_body"] = extra_body
-        response = self._openai_client.chat.completions.create(**kwargs)
+        # Kimi K2.7 Code 网关按推理开关硬校验温度（开=1/关=0.6），覆盖调用方温度。
+        kwargs["temperature"] = self._coerce_temperature(temperature, extra_body)
+        # LLM-1: 此前原生工具路径完全绕过 chat() 的韧性/观测栈（无重试、无熔断记账、无计量、
+        # 无预算门）——REPORT_NATIVE_TOOLS 默认开时每章一次裸调用。对齐 chat()：瞬时错误退避重试、
+        # 422 记入熔断、成功后计量+预算检查。原生工具没有 CLI 回退（CLI 无 tools=），最终失败原样
+        # 抛出，由 report_agent 的 per-section 捕获降级 ReAct。
+        from .telemetry import LLMMeter, get_run_context, check_budget
+        _run_id, _stage = get_run_context()
+        _started = time.monotonic()
+        response = None
+        last_error: Optional[Exception] = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = client.chat.completions.create(**kwargs)
+                _cb_reset(self.provider)
+                break
+            except (RuntimeError, *_RETRYABLE_API_ERRORS) as exc:
+                last_error = exc
+                if _is_quota(exc):
+                    _cb_record_429(self.provider)
+                if attempt < MAX_RETRIES - 1:
+                    delay = _retry_delay(exc, attempt)
+                    logger.warning(
+                        f"chat_with_tools 调用失败 (第 {attempt + 1}/{MAX_RETRIES} 次)，{delay}s 后重试: {_err_brief(exc)}"
+                    )
+                    time.sleep(delay)
+            except Exception as exc:  # noqa: BLE001 — 不可重试（如 422 内容审查）：记熔断后快速失败
+                last_error = exc
+                if _is_content_filter(exc):
+                    _cb_record_422(self.provider)
+                logger.warning(f"chat_with_tools 遇不可重试错误: {_err_brief(exc)}")
+                break
+        if response is None:
+            raise last_error if last_error is not None else RuntimeError("chat_with_tools 调用失败")
+        if Config.LLM_TELEMETRY_ENABLED:
+            try:
+                _u = getattr(response, "usage", None)
+                _pt = int(getattr(_u, "prompt_tokens", 0) or 0) if _u is not None else 0
+                _ct = int(getattr(_u, "completion_tokens", 0) or 0) if _u is not None else 0
+                LLMMeter.record(self.provider, model, _pt, _ct,
+                                (time.monotonic() - _started) * 1000.0,
+                                cached=False, stage=_stage, run_id=_run_id)
+            except Exception:  # noqa: BLE001 — 计量失败不影响返回
+                pass
+        if Config.LLM_RUN_BUDGET_TOKENS or Config.LLM_RUN_BUDGET_USD:
+            check_budget(_run_id)  # 超预算抛 BudgetExceeded
         choice = response.choices[0]
         msg = choice.message
         tool_calls = []
@@ -305,6 +716,21 @@ class LLMClient:
         """移除推理模型的 <think> 标签。"""
         return re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
 
+    def _coerce_temperature(self, temperature: float, extra_body: Optional[Dict]) -> float:
+        """按提供方约束修正采样温度。
+
+        Kimi K2.7 Code 网关（api.kimi.com/coding，model=kimi-k2.7 / kimi-for-coding）对
+        temperature 做硬校验，只接受单一允许值：开启推理时必须 ``1``，关闭推理
+        (thinking.type=disabled) 时必须 ``0.6``，传入其它值一律 400 invalid_request_error。
+        本仓库各调用点（report/oasis/graphiti/zep）会传 0.0~0.7 等任意温度并对失败重试
+        （graphiti 还做升温重试），全部会被网关拒绝。故在此对 kimi 提供方按本次实际发送的
+        ``extra_body``（是否关推理）强制为网关允许值；其它提供方原样返回，行为不变。
+        """
+        if self.provider != 'kimi':
+            return temperature
+        thinking_disabled = bool(extra_body and (extra_body.get("thinking") or {}).get("type") == "disabled")
+        return 0.6 if thinking_disabled else 1.0
+
     # ------------------------------------------------------------------
     # openai 提供方
     # ------------------------------------------------------------------
@@ -313,10 +739,19 @@ class LLMClient:
         messages: List[Dict[str, str]],
         temperature: float,
         max_tokens: int,
-        response_format: Optional[Dict] = None
+        response_format: Optional[Dict] = None,
+        tier: str = "strong"
     ) -> str:
+        # EXECPLAN2 I-6-2: 解析本次实际模型与客户端。fast tier 指向不同提供方时用第二客户端，
+        # 否则同提供方仅切模型名；关闭路由时 model=self.model、client=self._openai_client。
+        model = self._model_for_tier(tier)
+        client = self._openai_client
+        if getattr(Config, "LLM_TIERED_ROUTING", False) and tier == "fast":
+            fast_client = self._fast_provider_client()
+            if fast_client is not None:
+                client = fast_client
         kwargs: Dict[str, Any] = {
-            "model": self.model,
+            "model": model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -330,7 +765,20 @@ class LLMClient:
         if extra_body:
             kwargs["extra_body"] = extra_body
 
-        response = self._openai_client.chat.completions.create(**kwargs)
+        # Kimi K2.7 Code 网关按推理开关硬校验温度（开=1/关=0.6），覆盖调用方温度。
+        kwargs["temperature"] = self._coerce_temperature(temperature, extra_body)
+
+        response = client.chat.completions.create(**kwargs)
+        # 捕获精确 token 用量供计量（I-5-0）；无 usage 字段时留空走粗估。
+        try:
+            _u = getattr(response, "usage", None)
+            if _u is not None:
+                self._last_usage = {
+                    "prompt_tokens": int(getattr(_u, "prompt_tokens", 0) or 0),
+                    "completion_tokens": int(getattr(_u, "completion_tokens", 0) or 0),
+                }
+        except Exception:
+            self._last_usage = None
         choice = response.choices[0]
         content = choice.message.content
         # 推理模型在 content 被推理耗尽时会返回空串/None（finish_reason=length）。
@@ -385,17 +833,38 @@ class LLMClient:
         """
         prompt = self._flatten_prompt(messages, response_format)
 
+        # Pin the model when one is configured (e.g. LLM_MODEL_NAME=claude-opus-4-8) so the
+        # CLI doesn't silently fall back to the account's default model. Pass through only
+        # claude model ids/aliases; anything else → let the CLI choose (defensive).
+        cmd = ["claude", "-p", "--output-format", "json"]
+        # XRUN-3: 隔离操作员的全局 ~/.claude hooks——SessionEnd 钩子（claude-island-state.py）曾
+        # 让 2769+ 次管线 CLI 调用以空 'Claude CLI failed: ' 失败（钩子被取消 → CLI 非零退出）。
+        # --settings 内联 disableAllHooks 已实测保留 OAuth 登录（--bare 会丢登录态，不可用）。
+        # LLM_CLI_ISOLATE_HOOKS=false 可恢复继承用户钩子的旧行为。
+        if bool(getattr(Config, "LLM_CLI_ISOLATE_HOOKS", True)):
+            cmd += ["--settings", '{"disableAllHooks": true}']
+        _m = (self.model or "").strip()
+        if _m and (_m.startswith("claude") or _m in ("opus", "sonnet", "haiku")):
+            cmd += ["--model", _m]
+
         try:
             result = subprocess.run(
-                ["claude", "-p", "--output-format", "json"],
+                cmd,
                 input=prompt,
                 capture_output=True, text=True, timeout=CLI_TIMEOUT,
                 cwd="/tmp", env=self._claude_cli_env()
             )
 
             if result.returncode != 0:
-                logger.error(f"Claude CLI error: {result.stderr[:200]}")
-                raise RuntimeError(f"Claude CLI failed: {result.stderr[:200]}")
+                # stderr may be empty when claude-cli outputs errors to stdout as JSON
+                err_detail = (result.stderr or result.stdout or "")[:300]
+                logger.error(f"Claude CLI error (rc={result.returncode}): {err_detail}")
+                # LLM-5/RPT-14: 两流全空时报告 rc + 合成占位说明，而非裸 'Claude CLI failed: '
+                # （曾让整轮报告失败不可诊断）。
+                raise RuntimeError(
+                    f"Claude CLI failed (rc={result.returncode}): "
+                    f"{err_detail or '<no output (timeout/rate-limit/hook suspected)>'}"
+                )
 
             try:
                 output = json.loads(result.stdout)
@@ -405,9 +874,12 @@ class LLMClient:
                 if isinstance(output, dict) and (
                     output.get("is_error") or output.get("subtype") not in (None, "success")
                 ):
+                    # LLM-5: 附带 result/error 载荷——CLI 把人类可读原因放在 result 里
+                    # （如 'Claude AI usage limit reached'），丢掉它 = 不可诊断的失败。
+                    _payload = str(output.get("result") or output.get("error") or "")[:200]
                     raise RuntimeError(
                         f"Claude CLI error envelope: subtype={output.get('subtype')!r} "
-                        f"is_error={output.get('is_error')!r}"
+                        f"is_error={output.get('is_error')!r} detail={_payload!r}"
                     )
                 content = output.get("result", result.stdout) if isinstance(output, dict) else result.stdout
             except json.JSONDecodeError:
@@ -465,7 +937,12 @@ class LLMClient:
                 content = "\n".join(clean_lines).strip()
             else:
                 content = raw
-            return self._clean_content(content)
+            cleaned = self._clean_content(content)
+            # 与 claude 路径对称：空结果抛 RuntimeError 触发上层退避重试，避免把空串喂给下游 JSON 解析。
+            if not cleaned or not cleaned.strip():
+                logger.error(f"Codex CLI 返回空结果（stdout 前200: {raw[:200]}）")
+                raise RuntimeError("Codex CLI 返回空结果")
+            return cleaned
 
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"Codex CLI timed out after {CLI_TIMEOUT}s")
@@ -473,3 +950,8 @@ class LLMClient:
             raise RuntimeError(
                 "未找到 `codex` 可执行文件，请确认已安装 Codex CLI 并加入 PATH"
             )
+        except OSError as exc:
+            # 与 claude 路径对称（此前缺失）：非 ENOENT 的进程启动失败（EACCES/ENOMEM…）原本会以
+            # 裸 OSError 冒泡，不在 chat() 的重试集合 (RuntimeError, *_RETRYABLE_API_ERRORS) 内
+            # → 不重试且直接抛给调用方。包成 RuntimeError 让退避重试生效。
+            raise RuntimeError(f"Codex CLI 进程启动失败: {exc}") from exc

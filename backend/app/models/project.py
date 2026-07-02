@@ -166,12 +166,16 @@ class ProjectManager:
     
     @classmethod
     def save_project(cls, project: Project) -> None:
-        """保存项目元数据"""
+        """保存项目元数据（原子写：tmp+fsync+os.replace）。
+
+        修复：此前用裸 open()+json.dump，是全库唯一的非原子/无锁写——/build 线程写
+        graph_id 与请求线程写 status 交错时可能丢写，或读到半截 project.json。改为原子写，
+        与其它持久化路径（run_state/pipeline_state…）一致。
+        """
+        from ..utils.atomic import write_json_atomic
         project.updated_at = datetime.now().isoformat()
         meta_path = cls._get_project_meta_path(project.project_id)
-        
-        with open(meta_path, 'w', encoding='utf-8') as f:
-            json.dump(project.to_dict(), f, ensure_ascii=False, indent=2)
+        write_json_atomic(meta_path, project.to_dict())
     
     @classmethod
     def get_project(cls, project_id: str) -> Optional[Project]:
