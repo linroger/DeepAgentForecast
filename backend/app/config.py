@@ -818,6 +818,26 @@ class Config:
     # --- 模拟（Phase 3）---
     # 智能体数量上限；超过则按 (是否匹配 actor, 影响力, 邻边数) 排序保留，始终保留研究 actor（T3.13）
     OASIS_MAX_AGENTS = int(os.environ.get('OASIS_MAX_AGENTS', '80'))
+    # 主角色阵容硬上限（actor-cast discipline）：任何真实预测模拟都应蒸馏到 ≤20 个主角色——
+    # 只保留其决策/行动会因果性影响预测结果的 main actors。该上限贯穿全管线：研究抽取
+    # （deerflow bridge 按影响力/tier 排序截断 actors.json）、本体生成提示词、以及模拟
+    # agent 池（entity 池按主阵容派生，不再向 OASIS_MAX_AGENTS 填充图谱通用节点）。
+    # 同时是最大成本杠杆：80→20 个 persona 把画像 LLM 调用与每轮模拟调用都砍 4 倍。
+    # 设为 ≥ OASIS_MAX_AGENTS（unset-high）可恢复旧的「填充到 80」行为（degrade-safe）。
+    # Hard cap on MAIN actors kept through the pipeline; media/observers are context, not cast.
+    ACTOR_CAST_MAX = int(os.environ.get('ACTOR_CAST_MAX', '20') or '20')
+    # 媒体/观察者降级：媒体机构、记者、评论员、分析师、智库等「报道/评论方」不是能动 actor
+    # ——它们是 context（信息源，tier 3），不应占据主阵容席位或被实例化为模拟 agent。
+    # true（默认）时：type=Media / 媒体类 role 的 actor 推断为 simulation_tier=3（显式
+    # simulation_tier/archetype 标注仍优先），从而被 agent 准入门（tier 1/2）挡在池外。
+    # false 恢复旧行为（media 默认 tier 1 全放行）。Media orgs are demoted to context, never agents.
+    ACTOR_EXCLUDE_MEDIA = os.environ.get('ACTOR_EXCLUDE_MEDIA', 'true').strip().lower() == 'true'
+    # 主阵容之外的「填充/受众」persona 数（程序化生成的沉默大多数，无逐个 LLM 调研成本）。
+    # 默认 0 = agent 池只含主阵容（此前池子会被图谱通用节点填充到 ~80）。兼容旧名
+    # SIM_AUDIENCE_SIZE（I-2-2）。Number of filler/audience personas beyond the main cast.
+    SIM_AUDIENCE_AGENTS = int(
+        os.environ.get('SIM_AUDIENCE_AGENTS', os.environ.get('SIM_AUDIENCE_SIZE', '0') or '0') or '0'
+    )
     # 人设活动节律/时区预设：选择 simulation_config_generator 用哪套作息-时区模板。
     # 默认 'china_social' 完整保留当前的北京作息行为（与现状逐字节一致）；
     # 'us_business' / 'global_market' 是另两套预设，由 simulation_config_generator 消费。

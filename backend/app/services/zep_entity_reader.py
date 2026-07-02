@@ -16,6 +16,7 @@ from ..utils.actors import (
     entity_archetype,
     entity_simulation_tier,
     is_agent_eligible,
+    is_media_entity,
     match_actor,
 )
 
@@ -70,11 +71,19 @@ def _explicit_classification(
             return signal
 
     # 2) 匹配回 actors.json 的行，且该行**显式**带 archetype/simulation_tier 才算信号。
+    #    ACTOR-CAST（ACTOR_EXCLUDE_MEDIA，默认开）：媒体/观察者行（type=Media / 媒体类
+    #    role）即使不带显式 archetype/simulation_tier 也算分类信号 —— is_media_entity 在
+    #    entity_simulation_tier 中把它们推断为 tier 3，从而被准入门挡在 agent 池外。
+    #    旗标关闭时 is_media_entity 分支不触发，与旧行为一致（无显式字段 → 无信号）。
     if actors is not None:
         row = match_actor(node.get("name", ""), actors)
         if isinstance(row, dict) and (
             str(row.get("archetype", "") or "").strip()
             or row.get("simulation_tier") is not None
+            or (
+                bool(getattr(Config, "ACTOR_EXCLUDE_MEDIA", True))
+                and is_media_entity(row)
+            )
         ):
             return row
 

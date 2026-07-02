@@ -80,6 +80,9 @@ deer-flow/
 # pin a different build.
 deer-flow-2.0-m1-rc3/
 deer-flow-2.0-*/
+# 当前的 vendored DeerFlow 2.0 正式版源码（setup.sh DEERFLOW_VENDOR_DIR 默认指向此处；
+# 大体量第三方源码树，保持 local-only 不入库）
+deer-flow-2.0.0/
 
 # Local agent/session artifacts (never commit)
 CLAUDE.md

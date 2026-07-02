@@ -1,0 +1,441 @@
+# ============================================================================
+# DRF-2 harness configuration (deer-flow 2.0)
+# ----------------------------------------------------------------------------
+# REDESIGN.md 目标架构的 harness 侧配置：模型路由（claude-cli 强模型 / MiniMax-M3
+# 便宜模型）、四个 pipeline 子代理（researcher / ontology-builder / sim-configurer /
+# forecaster，各带技能与工具白名单）、deferred tool_search（两台 MCP 引擎的 kg_* /
+# sim 工具目录较大）。与本文件同目录的 extensions_config.json 注册两台引擎。
+#
+# 用法（见 drf2/README.md）：把本文件与 extensions_config.json 复制/链接到
+# deer-flow 2.0 部署的项目根（或 export DEER_FLOW_CONFIG_PATH /
+# DEER_FLOW_EXTENSIONS_CONFIG_PATH 指向它们），再启动 harness。
+# schema 依据 deer-flow-2.0.0/config.example.yaml（config_version 14）。
+# ============================================================================
+
+config_version: 14
+
+log_level: info
+
+token_usage:
+  enabled: true
+
+# ============================================================================
+# Models — per-stage routing
+# ----------------------------------------------------------------------------
+# claude-sonnet: ClaudeChatModel（claude-cli 订阅 OAuth 自动加载：
+#   $ANTHROPIC_API_KEY → $CLAUDE_CODE_OAUTH_TOKEN → ~/.claude/.credentials.json）。
+#   研究与预测两个重推理阶段用它。
+# minimax-m3: PatchedChatMiniMax（reasoning_split + name 字段修正）。
+#   本体/模拟配置两个结构化 JSON 阶段用它，$MINIMAX_API_KEY 从环境注入。
+# ============================================================================
+
+models:
+  - name: claude-sonnet
+    display_name: Claude Sonnet (claude-cli)
+    use: deerflow.models.claude_provider:ClaudeChatModel
+    model: claude-sonnet-4-6
+    # api_key 留空 → ClaudeChatModel 自动从 claude-cli 凭据链加载（OAuth Bearer）。
+    # 也可显式：api_key: $ANTHROPIC_API_KEY
+    max_tokens: 16000
+    default_request_timeout: 600.0
+    max_retries: 2
+    enable_prompt_caching: true
+    supports_vision: true
+    supports_thinking: true
+    when_thinking_enabled:
+      thinking:
+        type: enabled
+        budget_tokens: 4096   # 必填；min 1024；须 < max_tokens
+    when_thinking_disabled:
+      thinking:
+        type: disabled
+
+  - name: minimax-m3
+    display_name: MiniMax M3
+    use: deerflow.models.patched_minimax:PatchedChatMiniMax
+    model: MiniMax-M3
+    api_key: $MINIMAX_API_KEY
+    base_url: https://api.minimax.io/v1
+    request_timeout: 600.0
+    max_retries: 2
+    max_tokens: 8192            # 本体/模拟配置产出大 JSON，比默认 4096 高一档
+    temperature: 1.0            # MiniMax 要求 temperature ∈ (0.0, 1.0]
+    supports_vision: true
+    supports_thinking: true
+    when_thinking_enabled:
+      extra_body:
+        thinking:
+          type: adaptive
+    when_thinking_disabled:
+      extra_body:
+        thinking:
+          type: disabled
+
+# ============================================================================
+# Tools
+# ============================================================================
+
+tool_groups:
+  - name: web
+  - name: file:read
+  - name: file:write
+  - name: bash
+
+tools:
+  # Web 检索（DuckDuckGo，无 key；生产可按 config.example.yaml 换 Serper/Tavily 等）
+  - name: web_search
+    group: web
+    use: deerflow.community.ddg_search.tools:web_search_tool
+    max_results: 5
+
+  # Web 抓取（Jina reader）
+  - name: web_fetch
+    group: web
+    use: deerflow.community.jina_ai.tools:web_fetch_tool
+    timeout: 10
+
+  # DRF-2 config-reflected tool：Oddpool 预测市场快照（校准锚点，degrade-safe）。
+  # 需要 harness 进程能 import drf2（PYTHONPATH 含仓库根）且设置 $ODDPOOL_API_KEY。
+  - name: prediction_market_search
+    group: web
+    use: drf2.config.market_tools:prediction_market_search_tool
+
+  # 文件操作
+  - name: ls
+    group: file:read
+    use: deerflow.sandbox.tools:ls_tool
+
+  - name: read_file
+    group: file:read
+    use: deerflow.sandbox.tools:read_file_tool
+
+  - name: glob
+    group: file:read
+    use: deerflow.sandbox.tools:glob_tool
+    max_results: 200
+
+  - name: grep
+    group: file:read
+    use: deerflow.sandbox.tools:grep_tool
+    max_results: 100
+
+  - name: write_file
+    group: file:write
+    use: deerflow.sandbox.tools:write_file_tool
+
+  - name: str_replace
+    group: file:write
+    use: deerflow.sandbox.tools:str_replace_tool
+
+  - name: bash
+    group: bash
+    use: deerflow.sandbox.tools:bash_tool
+
+# 两台 MCP 引擎（kg_* + 模拟 job 工具）目录较大 → 延迟加载，按需 tool_search 提升。
+tool_search:
+  enabled: true
+
+# 工具大输出外置（kg_search / sim_results 的长产出落盘 + 预览，防吹爆上下文）
+tool_output:
+  enabled: true
+  externalize_min_chars: 12000
+  preview_head_chars: 2000
+  preview_tail_chars: 1000
+  fallback_max_chars: 30000
+  fallback_head_chars: 8000
+  fallback_tail_chars: 3000
+  storage_subdir: ".tool-results"
+  exempt_tools:
+    - read_file
+    - read_file_tool
+
+suggestions:
+  enabled: false   # pipeline 线程不需要追问建议（省一次模型调用）
+
+loop_detection:
+  enabled: true
+  warn_threshold: 3
+  hard_limit: 5
+  window_size: 20
+  max_tracked_threads: 100
+  tool_freq_warn: 30
+  tool_freq_hard_limit: 50
+  # 研究/建图阶段合法地高频使用检索与图谱工具，放宽这些工具的频率阈值。
+  tool_freq_overrides:
+    web_search:
+      warn: 80
+      hard_limit: 150
+    web_fetch:
+      warn: 80
+      hard_limit: 150
+    kg_search:
+      warn: 80
+      hard_limit: 150
+    kg_add_episode:
+      warn: 120
+      hard_limit: 240
+
+safety_finish_reason:
+  enabled: true
+
+# ============================================================================
+# Sandbox（本地；bash 仅限受信单用户本机流程）
+# ============================================================================
+
+uploads:
+  max_files: 10
+  max_file_size: 52428800
+  max_total_size: 104857600
+  auto_convert_documents: false
+  pdf_converter: auto
+
+sandbox:
+  use: deerflow.sandbox.local:LocalSandboxProvider
+  allow_host_bash: true   # 本机单用户流水线；技能脚本/驱动器交接需要 bash
+  bash_output_max_chars: 20000
+  read_file_output_max_chars: 50000
+  ls_output_max_chars: 20000
+
+# ============================================================================
+# Subagents — the four pipeline stages
+# ----------------------------------------------------------------------------
+# 一次性 checkpointer=False、最多 3 并发、结果以纯文本返回（harness 事实）。
+# 重活（KG 构建、OASIS 模拟）不在子代理里跑——子代理只调 MCP 工具下发/查询，
+# 引擎在自己的进程里干活。超时按 REDESIGN：research/forecast 2700s，sim-config 900s。
+# ============================================================================
+
+subagents:
+  timeout_seconds: 1800
+  agents:
+    general-purpose:
+      timeout_seconds: 2700
+      max_turns: 250
+
+  custom_agents:
+    researcher:
+      description: "Deep research + actor-ontology dossier stage: produces research_report.md and actor_dossier.md for a forecast question, following the deep-research and actor-ontology-research skills (S1-S4 tiering, judge loop, ontology-ready output)."
+      system_prompt: |
+        You are the DRF-2 research sub-agent. Your job is stage 1 of the forecasting
+        pipeline: decision-grade research for the given forecast question.
+
+        Follow the `deep-research` skill for all tradecraft (KIQ decomposition, search
+        craft, S1–S4 source tiering, evidence grading, triangulation, adversarial
+        analysis, synthesis gate) and the `actor-ontology-research` skill for the
+        actor-centric dossier (cast triage, per-actor depth, directed/typed/valenced
+        relationship network, evolution timeline, AI-judge quality loop).
+
+        Deliverables, written to /mnt/user-data/outputs/:
+        - research_report.md — the deep-research report with the structured handoff
+          (situation brief, relationship graph, tiered source list, quantitative
+          table, contested claims).
+        - actor_dossier.md — the ontology-ready actor dossier (cast, network, roster,
+          timeline, drivers/indicators/scenarios).
+        Optionally fetch prediction-market anchors with prediction_market_search
+        (per the `prediction-markets` skill) and include a "Prediction Market
+        Signals" section. Never fabricate sources, URLs, dates, or market prices.
+      tools:
+        - web_search
+        - web_fetch
+        - prediction_market_search
+        - read_file
+        - write_file
+        - ls
+        - grep
+        - glob
+        - tool_search
+        - kg_search
+        - kg_get_entities
+      skills:
+        - deep-research
+        - actor-ontology-research
+        - prediction-markets
+      model: claude-sonnet
+      max_turns: 250
+      timeout_seconds: 2700
+
+    ontology-builder:
+      description: "Ontology + knowledge-graph construction stage: designs the domain ontology (ontology.json) from the dossier and builds the temporal KG through the kg_* MCP tools (chunked episodes, entity-resolution checks, causal edges)."
+      system_prompt: |
+        You are the DRF-2 ontology & knowledge-graph sub-agent (stage 2). Inputs:
+        actor_dossier.md, research_report.md, actors.json from stage 1.
+
+        First follow the `ontology-generation` skill: pick the domain template,
+        seed types from the dossier cast (keep seed types verbatim), and write the
+        full JSON contract — archetype/simulation_tier/role_class per entity type,
+        family/valence/direction_semantics per edge type — to
+        /mnt/user-data/outputs/ontology.json (the pipeline driver applies it to
+        the graph deterministically). Then follow the `kg-construction` skill:
+        ingest the dossier and report as ~500-char chunked episodes with
+        reference_time anchored to content dates, wait for processing, verify
+        entity resolution against the canonical cast with kg_get_entities /
+        kg_get_edges, and spot-check typed/valenced retrieval and at least one
+        causal path. Finish by writing kg_build_summary.json (episodes
+        submitted/processed/failed, per-type entity counts, resolution and
+        spot-check results) to /mnt/user-data/outputs/ — the driver gates the
+        graph stage on it. Report the verification results honestly — duplicate
+        principals or missing edges are defects to surface, not to hide.
+      tools:
+        - read_file
+        - write_file
+        - ls
+        - grep
+        - glob
+        - tool_search
+        - kg_add_episode
+        - kg_search
+        - kg_get_entities
+        - kg_get_edges
+        - kg_causal_paths
+        - kg_n_hop_subgraph
+        - kg_trace_cascade
+        - kg_centrality_priors
+      skills:
+        - ontology-generation
+        - kg-construction
+      model: minimax-m3
+      max_turns: 120
+      timeout_seconds: 1200
+
+    sim-configurer:
+      description: "Simulation design stage: builds simulation_config.json (dossier-grounded personas, world brief, seed posts, scheduled events, follow graph) and submits it to the simulation engine via sim_start."
+      system_prompt: |
+        You are the DRF-2 simulation-design sub-agent (stage 3). Inputs: actors.json,
+        the knowledge graph (kg_* tools), and the run's round budget.
+
+        Follow the `simulation-design` skill exactly: dossier-grounded persona_design
+        (identity / views_beliefs / incentives / objectives / relations /
+        constraints_red_lines / decision_style / rhetoric — never invent stances),
+        the shared world brief (question + situation brief + hot topics, ~1400 chars),
+        seed posts from researched stances, activity profiles and scheduled events
+        clamped to the round budget, and the valence-aware clustered follow graph.
+        Write simulation_config.json to /mnt/user-data/outputs/, then submit it with
+        sim_start (config_path = that file) and return the sim_id. Do NOT wait for
+        the simulation to finish — it runs 60–120 minutes as a detached job in the
+        engine's own process; the driver polls sim_status.
+      tools:
+        - read_file
+        - write_file
+        - ls
+        - grep
+        - glob
+        - tool_search
+        - kg_search
+        - kg_get_entities
+        - kg_n_hop_subgraph
+        - kg_centrality_priors
+        - sim_start
+        - sim_status
+      skills:
+        - simulation-design
+      model: minimax-m3
+      max_turns: 80
+      timeout_seconds: 900
+
+    forecaster:
+      description: "Forecast report stage: assembles the three-part Bridgewater-style brief (10+ binary forecasts with sharp resolution criteria, framework synthesis, detailed appendix) from research + KG + simulation results + market anchors."
+      system_prompt: |
+        You are the DRF-2 forecaster sub-agent (stage 4, the deliverable). Inputs:
+        research_report.md, actor_dossier.md, the knowledge graph (kg_* tools), the
+        finished simulation (sim_results / sim_interview_agents), and
+        prediction-market anchors (prediction_market_search).
+
+        Follow the `forecast-report` skill exactly: Part 1 — at least 10 independent
+        binary forecasts (one-sentence statements with number and date inside;
+        resolution criteria = metric + numeric threshold + date + resolving source;
+        probabilities 0.02–0.98 with genuine conviction: stdev >= 0.12, >= 3 calls at
+        >=0.70 or <=0.30, 40–50% of statements framed below 0.5 without negations);
+        Part 2 — framework & synthesis; Part 3 — detailed appendix. Cite market
+        anchors and explain divergences over 10 percentage points. Observe the
+        provenance discipline: simulation output is a labeled signal, never quoted
+        as research evidence; every probability's source names a simulation signal
+        or research-prior. Write BOTH full_report.md AND forecast.json (the
+        structured mirror of Part 1: binary_forecasts[] + scenarios[]) to
+        /mnt/user-data/outputs/ — the driver's conviction gate reads forecast.json.
+      tools:
+        - read_file
+        - write_file
+        - ls
+        - grep
+        - glob
+        - web_search
+        - web_fetch
+        - prediction_market_search
+        - tool_search
+        - kg_search
+        - kg_get_entities
+        - kg_causal_paths
+        - kg_trace_cascade
+        - sim_results
+        - sim_interview_agents
+      skills:
+        - forecast-report
+        - prediction-markets
+        - deep-research
+      model: claude-sonnet
+      max_turns: 150
+      timeout_seconds: 2700
+
+# ============================================================================
+# Skills — DRF-2 的 7 个技能在本仓库 drf2/skills/{custom}/ 下
+# ============================================================================
+
+skills:
+  path: /Users/rogerlin/Downloads/DeepResearchForecast/drf2/skills
+  container_path: /mnt/skills
+
+title:
+  enabled: true
+  max_words: 6
+  max_chars: 60
+  model_name: minimax-m3   # 标题生成走便宜模型
+
+summarization:
+  enabled: true
+  model_name: minimax-m3   # 长研究线程的上下文压缩走便宜模型
+  trigger:
+    - type: tokens
+      value: 60000         # 研究/报告线程很长，阈值高于聊天默认，少压缩少丢证据
+  keep:
+    type: messages
+    value: 10
+  trim_tokens_to_summarize: 15564
+  summary_prompt: null
+  preserve_recent_skill_count: 5
+  preserve_recent_skill_tokens: 25000
+  preserve_recent_skill_tokens_per_skill: 5000
+  skill_file_read_tool_names:
+    - read_file
+    - read
+    - view
+    - cat
+
+# pipeline 线程是一次性的，不需要跨会话个人记忆；关闭以省 LLM 调用并保证运行确定性。
+memory:
+  enabled: false
+  injection_enabled: false
+  storage_path: memory.json
+  debounce_seconds: 30
+  model_name: null
+  max_facts: 100
+  fact_confidence_threshold: 0.7
+  max_injection_tokens: 2000
+  token_counting: char   # 免网络（tiktoken 首用会外联下载 BPE）
+
+agents_api:
+  enabled: false
+
+skill_evolution:
+  enabled: false
+
+# ============================================================================
+# Persistence
+# ============================================================================
+
+database:
+  backend: sqlite
+  sqlite_dir: .deer-flow/data
+
+run_events:
+  backend: jsonl          # 驱动器要能回放 run 事件做审计/恢复 → 轻量落盘
+  max_trace_content: 10240
+  track_token_usage: true

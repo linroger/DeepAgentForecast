@@ -19,7 +19,7 @@
 #     .env provider, so pressing Enter never clobbers an existing config).
 #   * Installs root + frontend + backend dependencies.
 #   * ASSEMBLES the DeerFlow 2.0 engine into ./deer-flow inside this repo
-#     (gitignored): seeds from the vendored ./deer-flow-2.0-m1-rc3 build when
+#     (gitignored): seeds from the vendored ./deer-flow-2.0.0 build when
 #     present, else falls back to a pinned upstream clone; then applies the bridge
 #     overlay (research driver, patched model providers, loop-detection middleware,
 #     deep-research skill, and a ready-to-use config.yaml with claude / minimax /
@@ -489,7 +489,7 @@ step "Setting up DeerFlow research engine (./deer-flow)"
 # Where to put deer-flow, and where to get the engine from.
 #   * DEERFLOW_DIR        — runtime location (default: ./deer-flow in this repo).
 #   * DEERFLOW_VENDOR_DIR — PREFERRED source: a DeerFlow 2.0 build dropped into
-#     the repo (default: ./deer-flow-2.0-m1-rc3). This is the EXACT engine the
+#     the repo (default: ./deer-flow-2.0.0). This is the EXACT engine the
 #     bridge overlay targets, so the integration is deterministic and offline.
 #   * DEERFLOW_REPO / DEERFLOW_REF — FALLBACK only (when the vendor dir is
 #     absent): a shallow upstream clone pinned to the commit the bridge overlay's
@@ -498,7 +498,7 @@ step "Setting up DeerFlow research engine (./deer-flow)"
 #     regions, so the overlay applies cleanly either way). Set DEERFLOW_REF=main
 #     to track upstream HEAD instead.
 DEERFLOW_DIR="${DEERFLOW_DIR:-$ROOT_DIR/deer-flow}"
-DEERFLOW_VENDOR_DIR="${DEERFLOW_VENDOR_DIR:-$ROOT_DIR/deer-flow-2.0-m1-rc3}"
+DEERFLOW_VENDOR_DIR="${DEERFLOW_VENDOR_DIR:-$ROOT_DIR/deer-flow-2.0.0}"
 DEERFLOW_REPO="${DEERFLOW_REPO:-https://github.com/bytedance/deer-flow.git}"
 DEERFLOW_REF="${DEERFLOW_REF:-799bef6d9dbc3a2cb37ce8177eeeabe2a33d8971}"
 BRIDGE_DIR="$ROOT_DIR/deerflow_bridge"

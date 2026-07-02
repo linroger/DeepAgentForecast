@@ -323,6 +323,44 @@ ONTOLOGY_RICH_SCHEMA_ADDENDUM = """
 """
 
 
+# ============================================================================
+# ACTOR-CAST DISCIPLINE：主角色纪律提示块（动态拼接，随 Config 旗标取值）。
+# 任何真实预测模拟都应蒸馏到 ≤ACTOR_CAST_MAX（默认 20）个 main actors——只有其
+# 决策/行动会**因果性影响预测结果**的主体才该成为模拟 agent；媒体机构/记者/评论员/
+# 分析师/智库是 context（信息来源，archetype=source / tier 3），绝不是能动 actor。
+# 该块指导本体 LLM 把实体类型预算聚焦在 main actors 上、并把媒体/观察者类型正确
+# 归为 source，从而让下游 agent 准入门（is_agent_eligible）一致地把它们挡在池外。
+# ACTOR_CAST_MAX<=0 且 ACTOR_EXCLUDE_MEDIA=false 时返回 ""（提示词与旧行为一致）。
+# ============================================================================
+def _actor_cast_discipline_block() -> str:
+    cap = 20
+    exclude_media = True
+    try:
+        if _Config is not None:
+            cap = int(getattr(_Config, "ACTOR_CAST_MAX", 20) or 0)
+            exclude_media = bool(getattr(_Config, "ACTOR_EXCLUDE_MEDIA", True))
+    except (TypeError, ValueError):
+        cap = 20
+    parts: List[str] = []
+    if cap > 0:
+        parts.append(
+            f"- 本体服务于一个多智能体预测模拟，模拟的 agent 阵容会被硬性收敛到 **≤{cap} 个主角色"
+            "（main actors）**：只有「其决策与行动会**因果性影响预测结果**」的真实主体才会被实例化为"
+            "模拟 agent。设计实体类型与 examples 时请聚焦这些 main actors（核心决策者与关键利益相关方），"
+            "不要为仅被顺带提及、与结果无因果关联的边缘实体设计专属类型或示例。"
+        )
+    if exclude_media:
+        parts.append(
+            "- **媒体机构、记者、评论员、分析师、民调机构、智库等「报道/评论方」是 context（信息来源），"
+            "不是能动 actor**：它们不决策、不推动结局，只报道结局。若确需为它们设实体类型，必须把该类型"
+            "标注为 archetype=source、simulation_tier=3（被动信息源），且不要把媒体实体列为能动主体类型的"
+            "examples——除非该媒体本身就是推动结局的当事方（此时按当事方建模并说明理由）。"
+        )
+    if not parts:
+        return ""
+    return "\n\n## 主角色纪律（actor-cast discipline，务必遵守）\n\n" + "\n".join(parts) + "\n"
+
+
 # F1: 自动选模板用的双语关键词集。命中"公众反应/舆情/民意/社交媒体"语义即判定为
 # social_opinion，否则归入领域自适应的 general_forecast。仅在 Config.ONTOLOGY_AUTO_SELECT 打开
 # 且调用方未显式指定模板时才生效；默认（旗标关闭）路径逐字节不变。
@@ -470,8 +508,8 @@ class OntologyGenerator:
         """
         base = ONTOLOGY_TEMPLATES[template_name]
         if cls._rich_schema_enabled():
-            return base + ONTOLOGY_RICH_SCHEMA_ADDENDUM
-        return base
+            base = base + ONTOLOGY_RICH_SCHEMA_ADDENDUM
+        return base + _actor_cast_discipline_block()
 
     @staticmethod
     def _auto_select_template(prompt: str, default_template: str) -> str:

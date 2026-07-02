@@ -1,0 +1,4 @@
+# drf2 simulation engine (MCP server) — 额外依赖。
+# 其余全部复用 backend/.venv（SimulationRunner 及其依赖）。
+# backend/.venv 已装 mcp 1.24.0；此文件仅为独立部署时的依赖声明。
+mcp>=1.2

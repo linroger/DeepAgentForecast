@@ -1702,6 +1702,74 @@ class OasisProfileGenerator:
         # 只输出到控制台（避免重复，logger不再输出完整内容）
         print(output)
     
+    def generate_audience_profiles(
+        self,
+        audience_configs: List[Any],
+        start_user_id: int,
+    ) -> List[OasisAgentProfile]:
+        """ACTOR-CAST discipline：为 SIM_AUDIENCE_AGENTS 的受众 agent 生成填充 persona。
+
+        纯规则生成、零 LLM/Zep 成本 —— 受众是主阵容（≤ ACTOR_CAST_MAX 个 main actors）
+        之外的「沉默大多数」，不需要逐个调研。profile 顺序紧接具名角色之后追加
+        （OASIS 按数组下标建 agent_id，F-5-1 不变式），name/立场/议题与
+        simulation_config_generator 生成的受众 agent 配置一一对应。
+
+        Args:
+            audience_configs: 受众 AgentActivityConfig 列表（或等价对象/dict，duck-typed），
+                              按 agent_id 升序。
+            start_user_id: 首个受众 profile 的 user_id（= 具名 profile 数量）。
+
+        Returns:
+            与 audience_configs 等长的 OasisAgentProfile 列表。
+        """
+        def _get(cfg: Any, key: str, default: Any = None) -> Any:
+            if isinstance(cfg, dict):
+                return cfg.get(key, default)
+            return getattr(cfg, key, default)
+
+        _english = str(self.persona_language or "").strip().lower().startswith("en")
+        _stance_line = {
+            "supportive": "leans supportive of the mainstream position on this issue",
+            "opposing": "is skeptical and leans against the mainstream position on this issue",
+            "neutral": "has no strong prior stance and mostly watches the debate unfold",
+            "observer": "has no strong prior stance and mostly watches the debate unfold",
+        }
+        profiles: List[OasisAgentProfile] = []
+        for i, cfg in enumerate(audience_configs):
+            name = str(_get(cfg, "entity_name") or f"公众_{i}")
+            stance = str(_get(cfg, "stance") or "neutral").strip().lower()
+            topics = [str(t) for t in (_get(cfg, "interested_topics") or []) if str(t).strip()]
+            topics_str = ", ".join(topics) if topics else "current events"
+            stance_txt = _stance_line.get(stance, _stance_line["neutral"])
+            bio = f"Ordinary member of the public following {topics_str}."
+            persona = (
+                f"{name} is an ordinary member of the general public — part of the silent "
+                f"majority following the discussion around {topics_str}. They mostly read, "
+                f"like, or occasionally repost and comment; they rarely write original posts. "
+                f"{name} {stance_txt}."
+            )
+            profiles.append(OasisAgentProfile(
+                user_id=start_user_id + i,
+                user_name=self._generate_username(name),
+                name=name,
+                bio=bio,
+                persona=persona,
+                karma=random.randint(50, 800),
+                friend_count=random.randint(20, 200),
+                follower_count=random.randint(5, 120),
+                statuses_count=random.randint(10, 400),
+                age=random.randint(18, 65),
+                gender=random.choice(["male", "female"]),
+                mbti=random.choice(self.MBTI_TYPES),
+                country=("" if _english else "中国"),
+                profession="General public",
+                interested_topics=topics,
+                source_entity_uuid=str(_get(cfg, "entity_uuid") or f"audience:{start_user_id + i}"),
+                source_entity_type=str(_get(cfg, "entity_type") or "Audience"),
+                generation_path="rule",
+            ))
+        return profiles
+
     def save_profiles(
         self,
         profiles: List[OasisAgentProfile],

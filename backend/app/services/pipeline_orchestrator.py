@@ -682,6 +682,10 @@ class DeerFlowResearchRunner:
         # Track A（深度研究→research_report.md）的同时并行跑 Track B（角色本体研究→actor_dossier.md）。
         # 关闭时子进程行为与今日逐字节一致（只跑 Track A，不产出 actor_dossier.md）。
         env["DEERFLOW_DUAL_TRACK"] = "true" if getattr(Config, "DEERFLOW_DUAL_TRACK", True) else "false"
+        # ACTOR-CAST discipline：主角色上限 + 媒体降级从 Config 单一真源下发给 bridge
+        # （抽取提示词的 actor 范围、enforce_actor_cast 的截断/降级都按此执行）。
+        env["ACTOR_CAST_MAX"] = str(getattr(Config, "ACTOR_CAST_MAX", 20))
+        env["ACTOR_EXCLUDE_MEDIA"] = "true" if getattr(Config, "ACTOR_EXCLUDE_MEDIA", True) else "false"
 
         logger.info(f"启动 DeerFlow 研究子进程: {' '.join(cmd[:1])} … (cwd={deerflow_dir})")
         on_progress(2, "启动深度研究子进程…")

@@ -543,11 +543,12 @@ class SimulationConfigGenerator:
         reasoning_parts.append(f"初始帖子分配: {assigned_count} 个帖子已分配发布者")
 
         # ========== 追加「沉默的大多数」受众群体（I-2-2）==========
-        # 在具名调研角色（all_agent_configs）之后，按 SIM_AUDIENCE_SIZE 追加 M 个程序化生成的
+        # 在具名调研角色（all_agent_configs）之后，按 SIM_AUDIENCE_AGENTS（兼容旧名
+        # SIM_AUDIENCE_SIZE）追加 M 个程序化生成的
         # 低影响力受众 Agent（不做逐个 LLM 调研）：立场按调研立场分布抽样、议题复用热点话题、
         # 高潜水偏好（低活跃度 + 低影响力）。它们的 agent_id 与具名角色连续，使 OASIS 的
         # agent_graph 下标保持一致；并在 _build_echo_chamber_follows 之前追加，从而自然加入同温层
-        # 聚类。SIM_AUDIENCE_SIZE 默认 0 → 完全保持当前行为（不生成受众）。
+        # 聚类。SIM_AUDIENCE_AGENTS 默认 0 → 完全保持当前行为（不生成受众，池子只含主阵容）。
         try:
             audience_configs = self._generate_audience_agent_configs(
                 start_idx=len(all_agent_configs),
@@ -2056,7 +2057,10 @@ class SimulationConfigGenerator:
     ) -> List[AgentActivityConfig]:
         """I-2-2: 程序化生成 M 个低影响力「沉默大多数」受众 Agent 配置。
 
-        - 数量由 SIM_AUDIENCE_SIZE 控制（默认 0 → 返回 []，完全保持当前行为）。
+        - 数量由 SIM_AUDIENCE_AGENTS 控制（默认 0 → 返回 []，agent 池只含主阵容；
+          兼容旧名 SIM_AUDIENCE_SIZE）。ACTOR-CAST discipline：主阵容 ≤ ACTOR_CAST_MAX
+          个具名 main actors + 本函数的 M 个零 LLM 成本受众填充，取代旧的
+          「向 OASIS_MAX_AGENTS≈80 填充图谱通用节点（每个都烧 persona LLM 调用）」。
         - 立场按调研立场分布抽样（无调研 → 均匀），议题复用热点话题（无则留空，
           聚类退化为仅按 stance）。
         - 高潜水偏好：低 activity_level、低 posts_per_hour、低 influence_weight，
@@ -2065,9 +2069,15 @@ class SimulationConfigGenerator:
         - 不做逐 Agent 的 LLM/Zep 调用，生成成本可忽略，可廉价压到 300-1000 规模。
         """
         try:
-            size = int(getattr(Config, "SIM_AUDIENCE_SIZE", 0) or 0)
+            size = int(getattr(Config, "SIM_AUDIENCE_AGENTS", 0) or 0)
         except (TypeError, ValueError):
             size = 0
+        if size <= 0:
+            # 兼容旧名 SIM_AUDIENCE_SIZE（I-2-2 时代的属性注入口径）。
+            try:
+                size = int(getattr(Config, "SIM_AUDIENCE_SIZE", 0) or 0)
+            except (TypeError, ValueError):
+                size = 0
         if size <= 0:
             return []
         # 防御性上限：避免极端配置一次性撑出超大配置文件（仍远超具名上限）。

@@ -1,11 +1,22 @@
 ---
 name: actor-ontology-research
-description: Use this skill for the DeepResearchForecast/DeerFlow forecasting pipeline whenever the research output must seed an ontology, a knowledge graph, and an actor-based simulation — i.e. any "forecast X" / "who wins / what happens to X" prediction run. It specializes the deep-research tradecraft toward an ACTOR-CENTRIC, ONTOLOGY-READY dossier: identify the real key actors (and demote mere reporters/outlets/sources), profile each in depth (role, values, beliefs, incentives, goals, constraints, resources, vulnerabilities, allies/opponents/customers/competitors/backers/investors), map their directed, typed, valenced relationships, and trace how the actors and their relationships have evolved over time. Runs a multipass, iteratively-refined workflow with an AI-judge quality gate that loops until the dossier is sufficiently detailed, rich, and excellent. Builds on (does not replace) the `deep-research` skill — use that skill's search craft, source tiering (S1–S4), evidence grading, and verification tradecraft as the foundation, and this skill for the mission, structure, and quality loop.
+description: Use this skill for the DRF-2 forecasting pipeline whenever the research output must seed an ontology, a knowledge graph, and an actor-based simulation — i.e. any "forecast X" / "who wins / what happens to X" prediction run. It specializes the deep-research tradecraft toward an ACTOR-CENTRIC, ONTOLOGY-READY dossier — identify the real key actors (demoting mere reporters/outlets/sources), profile each in depth (role, values, beliefs, incentives, goals, constraints, resources, vulnerabilities, relational roster), map their directed, typed, valenced relationships, and trace how the cast evolved over time. Runs a multipass workflow with an AI-judge quality gate that loops until the dossier is excellent. Builds on (does not replace) the deep-research skill.
+allowed-tools:
+  - web_search
+  - web_fetch
+  - read_file
+  - write_file
+  - ls
+  - grep
+  - glob
+  - tool_search
+  - kg_search
+  - kg_get_entities
 ---
 
 # Actor & Ontology Research Skill
 
-> This skill produces the seed material for the rest of the pipeline. The downstream ontology generator reads your report and builds the entity/edge type ontology; a structured-extraction pass converts your report into `actors.json` (the cast), `relationships[]` (the network), `sources.json`, and the situation brief; those become the knowledge graph, the simulation personas, the social/follow graph, and the final forecast. **The quality of every later stage is capped by the quality of this dossier.** Your job is to make the cast and their network *legible* — richly profiled, correctly ranked, and explicitly connected — so the ontology step can build a rich knowledge map without re-mining from scratch.
+> This skill produces the seed material for the rest of the pipeline. The downstream `ontology-generation` skill reads your report and builds the entity/edge type ontology; a structured-extraction pass converts your report into `actors.json` (the cast), `relationships[]` (the network), `sources.json`, and the situation brief; those become the knowledge graph, the simulation personas, the social/follow graph, and the final forecast. **The quality of every later stage is capped by the quality of this dossier.** Your job is to make the cast and their network *legible* — richly profiled, correctly ranked, and explicitly connected — so the ontology step can build a rich knowledge map without re-mining from scratch.
 
 > Foundation: follow the `deep-research` skill for all search craft, source-quality tiering (S1–S4), evidence grading (Admiralty B2 bar), triangulation, circular-source detection, temporal awareness, and the synthesis gate. This skill adds the *actor/ontology mission*, the *per-actor depth standard*, the *relationship/evolution requirements*, the *multipass workflow*, and the *AI-judge quality loop*. Where the two conflict, the underlying evidence discipline of `deep-research` always wins.
 
@@ -15,7 +26,7 @@ description: Use this skill for the DeepResearchForecast/DeerFlow forecasting pi
 
 Produce a **decision-grade, ontology-ready actor dossier**: the complete, correctly-ranked cast of the forecast question, each actor profiled deeply enough to drive a realistic persona and a grounded forecast, and the full directed/typed/valenced relationship network between them, with the **history and evolution** of both the actors and their relationships.
 
-Five operating principles specialize the base tradecraft:
+Six operating principles specialize the base tradecraft:
 
 1. **Actors are the spine.** The forecast turns on *who decides, who is affected, and how they are connected*. Spend the majority of the budget profiling the key actors and mapping their relationships — not on generic topic description.
 2. **Rank by causal role, not prominence.** The most-quoted name is often not the most important actor. Identify who can actually *move the outcome* (principals) and separate them from those who merely *talk about it* (amplifiers) or are *only cited* (sources). See §2 — this is the single most common failure.
@@ -62,9 +73,11 @@ For each candidate actor, judge salience from five independent signals and recor
 - **evidence_grade** — how well-attested is its role? (source tier behind it)
 - **recency** — how current is its relevance to the forecast horizon?
 
-Output a salience **tier (high / medium / low)** per actor, with the basis, and **force-rank the cast by causal influence over the outcome** (most influential first). The downstream cap keeps the highest-salience actors; **do not let a well-covered amplifier outrank a pivotal principal.**
+Output a salience **tier (high / medium / low)** per actor, with the basis. The downstream cap keeps the highest-salience actors; **do not let a well-covered amplifier outrank a pivotal principal.**
 
-**Cast size is hard-capped.** Any real forecast simulation distills to **fewer than ~20 main actors** — only those whose *decisions and actions will causally affect the event being forecasted*. Aim for roughly **8–20 cast members** (fewer for narrow questions) and never exceed the deployment's `ACTOR_CAST_MAX` (default **20**); the extraction pass truncates anything beyond it, so an oversized cast just wastes profile depth on entries that will be cut. Do **not** spend cast slots on irrelevant entities or on media organizations/journalists/commentators/analysts/pollsters — per §2.1 they are SOURCES (context), never cast members, unless one of them is itself an outcome-mover. When over budget, cut the least causally-influential entries, not the profile depth of the principals.
+### 2.4 The hard cast cap (binding)
+
+**A real forecast distills to fewer than 20 main actors. The cast is capped at 20 — no exceptions.** Target **12–20** profiled actors: only entities whose **decisions and actions will causally affect the event being forecasted**. If research surfaces more candidates, force-rank by salience (§2.3, decision_power dominant) and cut from the bottom; record what was cut and why in the dossier's coverage notes. Media organizations, journalists, commentators, analysts, pollsters, and think tanks are **never** cast members under this cap (they are SOURCES per §2.1, unless the forecast is literally about media behavior). A 40-name cast is a research failure, not thoroughness: every actor beyond the true principals dilutes persona quality, burns simulation budget, and adds no forecast signal.
 
 ---
 
@@ -139,7 +152,7 @@ Tie evolution facts to dates and sources. The downstream pipeline maps dated eve
 
 ## 6. The multipass research workflow
 
-Run the investigation in deliberate passes, checkpointing the evidence ledger after each so it survives summarization. This mirrors and uses the pipeline's deep fan-out: a landscape pass, parallel per-actor/per-KIQ deep dives, then synthesis.
+Run the investigation in deliberate passes, checkpointing the evidence ledger after each so it survives summarization. When the harness supports sub-agent fan-out, per-actor deep dives may be delegated; otherwise run them sequentially, highest salience first.
 
 **Pass 0 — Design (no tool calls).** Restate the forecast question, its object, horizon, and as-of date. Hypothesize the candidate cast and the 3–7 load-bearing KIQs (per `deep-research` §2). Name the S1/S2 sources likely to hold the answers. State priors and what would change them.
 
@@ -195,7 +208,7 @@ The loop converges on *excellence*, not mere completeness: each round should rai
 - Dimensions **1, 3, 4, 8** (cast correctness, per-actor depth, relationship completeness, ontology-readiness) are each ≥ **4** — these are non-negotiable for this pipeline, AND
 - The **mean** across all eight dimensions is ≥ **4**.
 
-(A stricter deployment may additionally require **every** dimension ≥ 4 — `ACTOR_DOSSIER_JUDGE_STRICT` — but the default bar tolerates a single non-critical dimension at 3 to absorb judge-score noise.)
+(A stricter deployment may additionally require **every** dimension ≥ 4, but the default bar tolerates a single non-critical dimension at 3 to absorb judge-score noise.)
 
 If the bar is not met, the judge FAILS the draft and emits the targeted gap list (§7.3).
 
@@ -221,8 +234,8 @@ Write the report so the downstream ontology generator and the structured-extract
 
 | Dossier section | Feeds | Becomes |
 |---|---|---|
-| §9.1 situation brief | extraction → `situation_brief` | report background + simulation fault-line posts |
-| §9.2 cast (archetype/role-class/salience) | ontology generation + `actors.json` + agent selection | entity types/archetypes; persona-eligible cast; salience-ranked agents (so amplifiers don't crowd out principals) |
+| §9.1 situation brief | extraction → `situation_brief` | report background + simulation fault-line posts + the shared world brief |
+| §9.2 cast (archetype/role-class/salience) | `ontology-generation` skill + `actors.json` + agent selection | entity types/archetypes; persona-eligible cast; salience-ranked agents (so amplifiers don't crowd out principals) |
 | §9.2 per-actor values/beliefs/incentives/goals/etc. | `actors.json` actor detail | rich personas (not generic templates) and grounded report context |
 | §9.3 relationship network (typed/valenced/directed) | `relationships[]` → graph seeding + follow graph + sentiment | the knowledge-graph edges, the simulation's initial follows, and ally/rival sentiment (valence preserved) |
 | §9.4 relational roster | report + persona prompts | "who to @, ally with, or oppose"; report coalition reasoning |
@@ -230,7 +243,7 @@ Write the report so the downstream ontology generator and the structured-extract
 | §9.6 drivers/indicators/scenarios | `forecast_inputs` | structured forecast: drivers, indicators, scenario probabilities |
 | §9.7 contested claims + tiered sources | `contested_claims` / `sources.json` | calibrated confidence + provenance |
 
-(For the precise target schema — archetypes, role-class, salience scoring, the relational roster, and valenced relations — see `CLAUDE_ONTOLOGY.md` in the repo root. This skill produces exactly what that schema consumes.)
+(For the precise ontology target schema — archetypes, edge families, valences, tiers — see the `ontology-generation` skill. This skill produces exactly what that schema consumes.)
 
 ---
 

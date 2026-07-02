@@ -597,6 +597,187 @@ def _env_flag(name: str, default: bool) -> bool:
     return str(raw).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _actor_cast_max() -> int:
+    """ACTOR-CAST DISCIPLINE: hard cap on MAIN actors extracted/kept through the pipeline.
+
+    Any real forecast simulation should distill to <20 main actors — only those whose
+    decisions and actions causally affect the forecasted outcome. Env-read (the backend
+    orchestrator forwards its env verbatim); unset/invalid → 20. 0 disables the cap
+    (recovers the old uncapped extraction).
+    """
+    raw = os.environ.get("ACTOR_CAST_MAX")
+    try:
+        v = int(str(raw).strip()) if raw is not None and str(raw).strip() else 20
+    except (TypeError, ValueError):
+        v = 20
+    return max(0, v)
+
+
+# Media/observer markers for ACTOR_EXCLUDE_MEDIA (mirrors backend actors.is_media_entity):
+# reporting/commentary entities are CONTEXT (sources), never cast members, unless the
+# researcher explicitly marks them simulation_tier 1/2 (i.e. they themselves move the outcome).
+_MEDIA_ROLE_KEYWORDS = (
+    "journalist", "reporter", "correspondent", "columnist", "commentator", "pundit",
+    "news outlet", "news agency", "newswire", "wire service", "newspaper", "broadcaster",
+    "news channel", "media outlet", "media organization", "media organisation", "media company",
+    "pollster", "think tank", "think-tank", "blogger", "podcaster", "media analyst",
+    "记者", "评论员", "专栏作家", "媒体机构", "新闻机构", "通讯社", "报社", "电视台", "智库", "民调机构",
+)
+
+
+def _actor_explicit_tier(actor: dict) -> "int | None":
+    """The actor's explicit simulation_tier (1-4) if the extraction provided one, else None."""
+    raw = actor.get("simulation_tier")
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int) and raw in (1, 2, 3, 4):
+        return raw
+    if isinstance(raw, str):
+        m = re.search(r"[1-4]", raw)
+        if m:
+            return int(m.group(0))
+    return None
+
+
+def _actor_is_media(actor: dict) -> bool:
+    """True if the actor row looks like a media/observer entity (context, not cast).
+
+    Signals: type=="Media", archetype=="source", or a reporting/commentary keyword in
+    role/role_class. An EXPLICIT simulation_tier of 1/2 overrides — the researcher
+    deliberately judged that this entity itself moves the outcome.
+    """
+    if not isinstance(actor, dict):
+        return False
+    if _actor_explicit_tier(actor) in (1, 2):
+        return False
+    if str(actor.get("type", "") or "").strip().lower() == "media":
+        return True
+    if str(actor.get("archetype", "") or "").strip().lower() == "source":
+        return True
+    haystack = " ".join(
+        str(actor.get(k, "") or "") for k in ("role", "role_class", "description")
+    ).lower()
+    return any(kw in haystack for kw in _MEDIA_ROLE_KEYWORDS)
+
+
+_INFLUENCE_RANK = {"high": 3, "medium": 2, "low": 1}
+
+
+def _actor_cast_rank(actor: dict) -> tuple:
+    """Sort key (higher = more causally influential): tier weight, salience, influence."""
+    tier = _actor_explicit_tier(actor)
+    if tier is None:
+        arch = str(actor.get("archetype", "") or "").strip().lower()
+        if arch == "source":
+            tier = 3
+        elif arch and arch not in ("actor", "collective"):
+            tier = 4
+        else:
+            infl = str(actor.get("influence", "") or "").strip().lower()
+            tier = 1 if infl == "high" else 2
+    tier_weight = {1: 4, 2: 3, 3: 2, 4: 1}.get(tier, 3)
+    sal = 0.0
+    sal_obj = actor.get("salience")
+    if isinstance(sal_obj, dict):
+        score = sal_obj.get("score")
+        if isinstance(score, (int, float)) and not isinstance(score, bool):
+            sal = max(0.0, min(1.0, float(score)))
+        else:
+            sal = {"high": 0.85, "medium": 0.55, "low": 0.3}.get(
+                str(sal_obj.get("tier", "") or "").strip().lower(), 0.0)
+    if sal == 0.0:
+        sal = {"high": 0.85, "medium": 0.55, "low": 0.3}.get(
+            str(actor.get("influence", "") or "").strip().lower(), 0.3)
+    infl_rank = _INFLUENCE_RANK.get(str(actor.get("influence", "") or "").strip().lower(), 2)
+    return (tier_weight, sal, infl_rank)
+
+
+def _cast_norm(name: Any) -> str:
+    return " ".join(str(name or "").strip().casefold().split())
+
+
+def enforce_actor_cast(obj: dict, meta: dict, plog: "ProgressLog | None" = None) -> None:
+    """ACTOR-CAST DISCIPLINE (post-extraction, in place, degrade-safe).
+
+    1. ACTOR_EXCLUDE_MEDIA (default on): demote media/observer rows (type=Media,
+       archetype=source, journalist/commentator/pollster/think-tank roles) out of
+       actors[] — they are context, not decision-makers with causal agency.
+    2. ACTOR_CAST_MAX (default 20): if more actors remain, keep the top-ranked by
+       (simulation tier, salience, influence) and record the cut in
+       meta["actors_truncated_from"].
+
+    Demoted/cut rows are preserved under obj["context_entities"] (downstream readers
+    only consume obj["actors"], so the extra key is purely additive); relationships
+    whose endpoints left the cast are dropped (edges MUST connect cast members).
+    Never empties the cast: if media-demotion would remove everything, it is skipped.
+    """
+    actors = obj.get("actors")
+    if not isinstance(actors, list) or not actors:
+        return
+    rows = [a for a in actors if isinstance(a, dict)]
+    if not rows:
+        return
+    original_n = len(rows)
+    cap = _actor_cast_max()
+    exclude_media = _env_flag("ACTOR_EXCLUDE_MEDIA", True)
+
+    demoted: list = []
+    kept: list = []
+    if exclude_media:
+        for a in rows:
+            (demoted if _actor_is_media(a) else kept).append(a)
+        if not kept:  # safety net: never empty the cast
+            kept, demoted = rows, []
+    else:
+        kept = list(rows)
+
+    truncated: list = []
+    if cap > 0 and len(kept) > cap:
+        kept = sorted(kept, key=_actor_cast_rank, reverse=True)
+        truncated = kept[cap:]
+        kept = kept[:cap]
+
+    if not demoted and not truncated:
+        return
+
+    obj["actors"] = kept
+    obj["context_entities"] = (obj.get("context_entities") or []) + demoted + truncated
+
+    # Keep the relationship invariant: every edge endpoint MUST be a cast member.
+    kept_names = set()
+    for a in kept:
+        kept_names.add(_cast_norm(a.get("name")))
+        for alias in (a.get("aliases") or []):
+            kept_names.add(_cast_norm(alias))
+    kept_names.discard("")
+    rels = obj.get("relationships")
+    rels_dropped = 0
+    if isinstance(rels, list) and rels:
+        kept_rels = [
+            r for r in rels
+            if isinstance(r, dict)
+            and _cast_norm(r.get("source")) in kept_names
+            and _cast_norm(r.get("target")) in kept_names
+        ]
+        rels_dropped = len(rels) - len(kept_rels)
+        if rels_dropped:
+            obj["relationships"] = kept_rels
+
+    if truncated:
+        meta["actors_truncated_from"] = original_n
+    if demoted:
+        meta["actors_media_demoted"] = len(demoted)
+    if rels_dropped:
+        meta["relationships_dropped_offcast"] = rels_dropped
+    if plog is not None:
+        plog.write(
+            "ok",
+            f"actor-cast discipline: {original_n} extracted → {len(kept)} main actors kept "
+            f"(cap={cap}, media demoted={len(demoted)}, rank-cut={len(truncated)}, "
+            f"off-cast edges dropped={rels_dropped})",
+        )
+
+
 def _utcnow() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat()
 
@@ -1051,7 +1232,18 @@ def build_extraction_prompt(
         source_diversity = _env_flag("RESEARCH_SOURCE_DIVERSITY", True)
 
     lang = target_language or "the same language as the research report"
-    actor_range = "10-35" if depth == "deep" else "5-20"
+    # ACTOR-CAST DISCIPLINE: any real forecast simulation distills to <=ACTOR_CAST_MAX
+    # (default 20) MAIN actors. The old "10-35" range let extraction balloon (a wedged
+    # run produced 56 actors → 56 personas → per-round sim cost). Cap=0 restores the
+    # old uncapped ranges (degrade-safe).
+    _cast_cap = _actor_cast_max()
+    if _cast_cap > 0:
+        actor_range = (
+            f"{min(8, _cast_cap)}-{_cast_cap}" if depth == "deep"
+            else f"{min(5, _cast_cap)}-{min(_cast_cap, 20)}"
+        )
+    else:
+        actor_range = "10-35" if depth == "deep" else "5-20"
     source_hint = (
         "For deep runs, preserve a broad source set: include the most important "
         "primary and high-authority sources across regions, actors, and opposing views."
@@ -1319,9 +1511,17 @@ def build_extraction_prompt(
         "type fits; multiple edges between the same pair are allowed when they hold simultaneously "
         "(e.g. REGULATES and DEPENDS_ON). For a single-actor situation use an empty "
         'relationships array ("relationships": []). '
-        "ACTORS: include ONLY actors CENTRAL to the central_question — those whose decisions, "
-        "incentives, or capabilities materially move the outcome; exclude entities mentioned only in "
-        "passing. Give each a one-sentence description (disambiguating identity) and known aliases. "
+        "ACTORS — MAIN ACTORS ONLY: identify ONLY the actors whose decisions and actions will "
+        "causally affect the outcome of the central_question — decision-makers with real agency "
+        "over the forecasted event. Exclude irrelevant entities and entities mentioned only in "
+        "passing. Explicitly EXCLUDE media organizations, journalists, commentators, analysts, "
+        "pollsters, and think-tanks that merely report on or discuss the situation — they are "
+        "context (put them in sources[]), NOT actors; include such an entity ONLY if it itself "
+        f"moves the outcome. FORCE-RANK the cast by causal influence over the outcome and list "
+        f"actors in that order (most influential first); output AT MOST {_cast_cap or 35} actors — "
+        "a real forecast distills to a small cast of main actors, and if you are tempted to exceed "
+        "the cap, cut the least causally-influential entries rather than thinning the profiles. "
+        "Give each a one-sentence description (disambiguating identity) and known aliases. "
         "When the evidence supports it, populate goals/constraints/assets/vulnerabilities/"
         "stated_vs_revealed from your actors-and-incentives analysis; omit any you did not research, "
         "and do NOT fold them into memory. SITUATION_BRIEF: populate it from your "
@@ -2443,6 +2643,21 @@ def build_actor_ontology_prompt(question: str, depth: str, target_language: str 
     lang_line = ""
     if target_language:
         lang_line = f"\n\nWrite the dossier in {target_language}."
+    # ACTOR-CAST DISCIPLINE: the dossier cast is capped like the extraction cast.
+    _cast_cap = _actor_cast_max()
+    if _cast_cap > 0:
+        cast_size_line = (
+            f"Aim for roughly {min(8, _cast_cap)}–{_cast_cap} deeply-profiled cast members and "
+            f"NEVER more than {_cast_cap} — any real forecast distills to a small cast of main "
+            "actors, chosen strictly by causal role (whose decisions and actions move the "
+            "outcome), not by how often a name appeared. When over the cap, cut the least "
+            "causally-influential entries, never the profile depth."
+        )
+    else:
+        cast_size_line = (
+            "Aim for roughly 8–20 deeply-profiled cast members (up to ~35 for sprawling "
+            "multi-party situations), chosen by causal role, not by how often a name appeared."
+        )
     return (
         "You are an actor-ontology research lead producing the SEED material for a "
         "forecasting pipeline (knowledge graph + ontology + actor-based simulation). "
@@ -2466,10 +2681,10 @@ def build_actor_ontology_prompt(question: str, depth: str, target_language: str 
         "outlets, wire services, and pollsters to SOURCES, not actors (simulation_tier 3); "
         "abstract concepts, products, metrics, rules, and other context objects are tier 4 "
         "— NOT cast members; the core decision-makers whose choices move the outcome are "
-        "tier 1 (principals); materially-affected stakeholders are tier 2. An outlet is an "
-        "actor ONLY if it itself moves the outcome. Aim for roughly 8–20 deeply-profiled "
-        "cast members (up to ~35 for sprawling multi-party situations), chosen by causal "
-        "role, not by how often a name appeared.\n"
+        "tier 1 (principals); materially-affected stakeholders are tier 2. Media "
+        "organizations, journalists, commentators, analysts, and pollsters that merely "
+        "report on or discuss the situation are NEVER cast members — an outlet is an "
+        f"actor ONLY if it itself moves the outcome. {cast_size_line}\n"
         "   For EACH key actor, go deep (a thin label is a failure): canonical name + "
         "aliases and a one-line disambiguator; archetype (actor vs collective); "
         "simulation_tier (1 principal / 2 stakeholder / 3 source / 4 context-object) and "
@@ -3399,6 +3614,14 @@ def main() -> int:
                     except ValueError:
                         stale_days = 365
                     _recency_on = _env_flag("RESEARCH_RECENCY_WEIGHTING", True)
+                    # ACTOR-CAST DISCIPLINE: demote media/observer rows to context and cap the
+                    # main cast at ACTOR_CAST_MAX (top-ranked by tier/salience/influence),
+                    # recording any cut in meta (actors_truncated_from). Best-effort: a
+                    # malformed obj must never fail the run.
+                    try:
+                        enforce_actor_cast(obj, meta, plog)
+                    except Exception as _cast_err:  # noqa: BLE001 — discipline is additive
+                        plog.write("warn", f"actor-cast discipline skipped (non-fatal): {_cast_err}")
                     # actors.json keeps the full object (incl. situation_brief, relationships,
                     # key_events, quantitative_facts, contested_claims) so one dossier read
                     # carries the whole enriched contract.

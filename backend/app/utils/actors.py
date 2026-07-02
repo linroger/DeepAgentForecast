@@ -95,6 +95,7 @@ handoff 契约中的 actors.json 形如（NEW 字段均为可选，缺失即降�
 * ``contested_claims_block`` / ``extract_contested_rows``      — I-0-1：争议证据块渲染 / 安全抽取。
 * ``forecast_inputs_block`` / ``extract_forecast_inputs``      — I-0-2：预测输入块渲染 / 安全抽取。
 * ``entity_archetype`` / ``entity_simulation_tier`` / ``is_agent_eligible`` — ONTOLOGY：实体分类与「能动 agent」准入门。
+* ``is_media_entity``         — ACTOR-CAST：媒体/观察者判定（ACTOR_EXCLUDE_MEDIA 时推断为 tier 3，降级为 context）。
 * ``salience_score``         — ONTOLOGY：actor 的显著度评分（salience.score → influence 回退）。
 * ``relation_valence`` / ``relation_polarity`` — ONTOLOGY：关系边的价（allied/adversarial/…）与极性（-1..1）。
 * ``relational_roster`` / ``roster_block`` — ONTOLOGY：把 relationships[] 投影为 10 个命名关系桶 / 渲染关系网角色块。
@@ -502,31 +503,90 @@ def entity_archetype(actor: Optional[Dict[str, Any]]) -> str:
     return raw if raw in ENTITY_ARCHETYPES else "actor"
 
 
-def entity_simulation_tier(actor: Optional[Dict[str, Any]]) -> int:
-    """读取 actor 的 ``simulation_tier`` ∈ {1,2,3,4}；缺失时按 archetype/type/influence 推断。
+# ACTOR-CAST DISCIPLINE（ACTOR_EXCLUDE_MEDIA）：媒体/观察者的判定信号。
+# type=Media / archetype=source / role·role_class·description 命中「报道/评论方」关键词。
+# 媒体机构、记者、评论员、分析师、民调机构、智库是 context（被动信息源），不是对预测结果
+# 有因果能动性的 main actor —— 除非研究方显式给了 simulation_tier ∈ {1,2}（它本身推动结局）。
+_MEDIA_TYPE_VALUES = {"media", "mediaoutlet", "media_outlet", "媒体"}
+_MEDIA_ROLE_KEYWORDS = (
+    "journalist", "reporter", "correspondent", "columnist", "commentator", "pundit",
+    "news outlet", "news agency", "newswire", "wire service", "newspaper", "broadcaster",
+    "news channel", "media outlet", "media organization", "media organisation", "media company",
+    "pollster", "think tank", "think-tank", "blogger", "podcaster", "media analyst",
+    "记者", "评论员", "专栏作家", "媒体机构", "新闻机构", "通讯社", "报社", "电视台", "智库", "民调机构",
+)
 
-    推断规则（与契约一致）：
-    * source archetype 或「仅被引用的媒体」→ 3（被动信息源）。
-    * 其余非 actor/collective 的 archetype（事件/概念/资源/地点等）→ 4（抽象）。
-    * actor/collective：influence=high → 1（核心决策者），否则 → 2（利益相关方）。
-    * 完全无信号 → 1（默认能动，保持旧行为）。
-    """
-    if not isinstance(actor, dict):
-        return 1
+
+def _explicit_simulation_tier(actor: Dict[str, Any]) -> Optional[int]:
+    """actor 行上**显式**携带的 simulation_tier ∈ {1,2,3,4}；缺失/非法 → None。"""
     raw = actor.get("simulation_tier")
     if isinstance(raw, bool):  # bool 是 int 子类，需先排除
-        raw = None
+        return None
     if isinstance(raw, int) and raw in (1, 2, 3, 4):
         return raw
     if isinstance(raw, str):
         m = re.search(r"[1-4]", raw)
         if m:
             return int(m.group(0))
+    return None
+
+
+def _media_exclusion_enabled() -> bool:
+    """ACTOR_EXCLUDE_MEDIA 旗标（默认开）。延迟导入 Config，避免 utils→config 顶层环依赖。"""
+    try:
+        from ..config import Config as _Cfg
+        return bool(getattr(_Cfg, "ACTOR_EXCLUDE_MEDIA", True))
+    except Exception:  # noqa: BLE001 — Config 不可导入（独立脚本）时按默认开处理
+        return True
+
+
+def is_media_entity(actor: Optional[Dict[str, Any]]) -> bool:
+    """媒体/观察者实体判定：type=Media、archetype=source，或角色文本命中媒体关键词。
+
+    显式 simulation_tier ∈ {1,2} 时返回 False —— 研究方已判定该实体本身推动结局
+    （例如预测问题就是关于媒体影响力的），不应被降级。
+    """
+    if not isinstance(actor, dict):
+        return False
+    if _explicit_simulation_tier(actor) in (1, 2):
+        return False
+    if str(actor.get("type", "") or "").strip().lower() in _MEDIA_TYPE_VALUES:
+        return True
+    raw_arch = str(actor.get("archetype", "") or "").strip().lower()
+    if raw_arch == "source":
+        return True
+    haystack = " ".join(
+        str(actor.get(k, "") or "") for k in ("role", "role_class", "description")
+    ).lower()
+    return any(kw in haystack for kw in _MEDIA_ROLE_KEYWORDS)
+
+
+def entity_simulation_tier(actor: Optional[Dict[str, Any]]) -> int:
+    """读取 actor 的 ``simulation_tier`` ∈ {1,2,3,4}；缺失时按 archetype/type/influence 推断。
+
+    推断规则（与契约一致）：
+    * source archetype 或「仅被引用的媒体」→ 3（被动信息源）。
+    * 其余非 actor/collective 的 archetype（事件/概念/资源/地点等）→ 4（抽象）。
+    * ACTOR_EXCLUDE_MEDIA（默认开）：无显式 tier 的媒体/观察者实体（type=Media /
+      媒体类 role）→ 3 —— 报道方是 context，不是有因果能动性的 main actor。
+      旗标关闭时跳过该分支（旧行为：media 默认 tier 1 放行）。
+    * actor/collective：influence=high → 1（核心决策者），否则 → 2（利益相关方）。
+    * 完全无信号 → 1（默认能动，保持旧行为）。
+    """
+    if not isinstance(actor, dict):
+        return 1
+    explicit = _explicit_simulation_tier(actor)
+    if explicit is not None:
+        return explicit
     arch = entity_archetype(actor)
     if arch == "source":
         return 3
     if arch not in _AGENT_ARCHETYPES:
         return 4
+    # ACTOR-CAST DISCIPLINE：媒体/观察者（type=Media 等）此前因缺省 archetype 落到
+    # 「能动 actor」分支被推断为 tier 1/2 —— 正是媒体挤占 agent 池席位的根因。
+    if _media_exclusion_enabled() and is_media_entity(actor):
+        return 3
     # actor / collective：按影响力分核心 / 利益相关方
     w = influence_weight(actor)
     if w is not None and w >= INFLUENCE_WEIGHTS["high"]:
