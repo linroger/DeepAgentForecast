@@ -29,7 +29,7 @@ See [Requirements](#requirements) and [Getting started](#getting-started) for th
 
 ## Demo
 
-🔗 **[Live demo site](https://linroger.github.io/DeepAgentForecast/)** (English + 中文) — walk through **every stage** of real end-to-end runs: the deep-research console log, the research dossier with actors & sources, the generated ontology, an interactive knowledge graph, the simulated Twitter/Reddit forum, and the final forecast (US AI race 2030, global EV industry 2035, Russia–Ukraine endgame, global semiconductors 2030, global memory chips 2030, China energy storage 2035, US–Iran war endgame 2026).
+🔗 **[Live demo site](https://linroger.github.io/DeepAgentForecast/)** (English + 中文) — walk through **every stage** of real end-to-end runs: the deep-research console log, the research dossier with actors & sources, the generated ontology, an interactive knowledge graph, the simulated Twitter/Reddit forum, and the final forecast (Modern Mercantilism × AI 2026–2031, storage semiconductors 2027–2028, global cloud computing 2030, US AI race 2030, global EV industry 2035, Russia–Ukraine endgame, global semiconductors 2030, global memory chips 2030, China energy storage 2035, US–Iran war endgame 2026).
 
 One prompt — *"Who wins the US AI race by 2030?"* — taken from question to interactive forecast (research → knowledge graph → 40-round population simulation → report):
 
@@ -37,9 +37,15 @@ One prompt — *"Who wins the US AI race by 2030?"* — taken from question to i
 
 ▶ **[Watch the full demo video (47s, MP4)](docs/media/demo.mp4)**
 
-### Latest run — global semiconductors through 2030
+### Latest run — The Collision Decade: Modern Mercantilism × AI, 2026–2031
 
-The most recent showcase run: a deep-mode research pass on the full semiconductor value chain (memory / HBM / logic / foundry across 17 named companies), a 285-node knowledge graph, **115 personas** over **40 dual-platform rounds**, and a sectioned forecast report.
+The newest featured run answers a Bridgewater-style challenge brief in full, end to end: a deep-mode English research pass on the collision of modern mercantilism and AI, a 14-actor dossier of the principals (US executive, China, EU, Nvidia, TSMC, the hyperscalers, the Fed …) with typed, valenced relationships, an **80-persona dual-platform simulation**, and a 3-part forecast brief containing **13 binary forecasts** — each with a probability and objective resolution criteria — and **4 probability-weighted scenarios**.
+
+🔗 **[Explore it live](https://linroger.github.io/DeepAgentForecast/demo.html?run=collision-decade-2031)**
+
+### Showcase run — global semiconductors through 2030
+
+An earlier showcase run: a deep-mode research pass on the full semiconductor value chain (memory / HBM / logic / foundry across 17 named companies), a 285-node knowledge graph, **115 personas** over **40 dual-platform rounds**, and a sectioned forecast report.
 
 ▶ **[Watch the semiconductor run walkthrough (42s at 4× speed, MP4)](docs/media/demo-semiconductors.mp4)** · 🔗 **[Explore it live](https://linroger.github.io/DeepAgentForecast/demo.html?run=semiconductors-2030)**
 
@@ -65,8 +71,8 @@ The most recent showcase run: a deep-mode research pass on the full semiconducto
 
 Given one natural-language prediction question (for example, *"Will product X reach mainstream adoption within 18 months?"*), DeepAgentForecast:
 
-1. **Researches the web autonomously** — a deep-research super-agent performs multi-angle web search and full-text fetching, then writes a structured research dossier with the actors, sources, and the precise prediction requirement.
-2. **Builds a parallel world** — the dossier is converted into a temporal knowledge graph, and one digital persona is generated per key entity in that graph.
+1. **Researches the web autonomously (dual-track)** — two research workflows run **concurrently**: a broad *deep-research* pass that writes an evidence-graded dossier, and an *actor-ontology* pass that profiles the real key actors in depth — their roles, values, beliefs, incentives, resources, and their directed, typed, **valenced** relationships — while demoting mere reporters/outlets/sources to context rather than actors.
+2. **Builds a parallel world** — the research is distilled into a temporal knowledge graph with a **tiered, behaviorally-rich ontology**, and a digital persona is generated for each **key actor** (decision-makers and stakeholders), ranked by salience rather than raw connectivity.
 3. **Simulates a population** — hundreds of LLM personas interact across a simulated Twitter and Reddit for a configurable number of rounds, producing emergent social dynamics around the question.
 4. **Forecasts and reports** — a report agent retrieves from both the knowledge graph and the simulation and writes an interactive, sectioned forecast report.
 
@@ -80,7 +86,7 @@ DeepAgentForecast chains **two engines** through a **shared temporal knowledge g
 
 | Component | Role |
 |---|---|
-| **DeerFlow** | **DeerFlow 2.0**, a LangGraph-based super agent harness: web search + full-text fetch, multi-angle research, writes a structured dossier. Runs in its **own subprocess and isolated venv**. |
+| **DeerFlow** | **DeerFlow 2.0**, a LangGraph-based super-agent harness: web search + full-text fetch, multi-angle research. Runs in its **own subprocess and isolated venv**, executing two research skills **concurrently** — `deep-research` (a broad evidence dossier) and `actor-ontology-research` (an actor-centric, ontology-ready dossier of the key cast and their relationships). |
 | **MiroFish / OASIS** | A multi-agent social-simulation engine (built on CAMEL-AI's OASIS). Spins up hundreds of LLM personas interacting on a simulated **Twitter + Reddit**. |
 | **Local Graphiti KG** | A **temporal knowledge graph (GraphRAG)** that glues the two engines together — the open-source [Graphiti](https://github.com/getzep/graphiti) engine (`graphiti-core==0.29.2`, the same engine Zep Cloud was built on) running **locally on an embedded FalkorDB** (the `falkordblite` package — no Docker, no server process, no account, **no API key**). The dossier is ingested here; entities and relations are extracted locally via your configured `LLM_PROVIDER` (so it works even with the no-key CLI providers), and vector embeddings are computed locally by a sentence-transformers multilingual model. |
 | **ReportAgent** | A **ReAct loop** with an `insight_forge` tool that performs tool-augmented retrieval over the graph **and** the simulation, then writes the final forecast report. |
@@ -113,7 +119,7 @@ flowchart LR
     P([One prompt]) --> R
 
     subgraph DeerFlow["DeerFlow (subprocess + isolated venv)"]
-        R["1. research<br/>web search + fetch<br/>writes handoff contract"]
+        R["1. research (dual-track)<br/>deep-research + actor-ontology<br/>writes handoff contract"]
     end
 
     R --> O["2. ontology<br/>LLM derives entity<br/>+ edge types"]
@@ -136,16 +142,14 @@ flowchart LR
 
 **Stage by stage:**
 
-1. **research** — DeerFlow runs in its own subprocess (its own Python venv), researches the web, and writes a **file-based handoff contract**:
-   - `research_report.md` — the structured research dossier
-   - `actors.json` — the key actors
-   - `sources.json` — the cited sources
-   - `prediction_requirement.txt` — the precise prediction question
-   - `meta.json` — run metadata
-   - `research_progress.log` — the live research console log
-2. **ontology** — an LLM derives **entity types + edge types** from the dossier and the prediction question.
-3. **graph** — the dossier is **chunked and ingested** into a local Graphiti temporal knowledge graph (GraphRAG) on an embedded FalkorDB; entities and relations are extracted locally via your configured `LLM_PROVIDER`, and vector embeddings are computed locally by a sentence-transformers model — no cloud service or API key involved.
-4. **prepare** — **digital personas** (one per key graph entity) and the **simulation config** are generated; an "environment agent" sets the rounds and timing.
+1. **research (dual-track)** — DeerFlow runs in its own subprocess (its own Python venv) and runs **two research workflows at once**, writing a **file-based handoff contract**:
+   - `research_report.md` — the broad *deep-research* dossier (Track A; augments the graph, ontology, and situation context)
+   - `actor_dossier.md` — the *actor-ontology* dossier (Track B): the ranked cast with roles, values, beliefs, incentives, resources, and their directed/typed/valenced relationships
+   - `actors.json` — the structured cast + relationships extracted from both (the actor dossier is the **primary** source; the report augments it)
+   - `sources.json` · `prediction_requirement.txt` · `timeline.json` · `meta.json` · `research_progress.log`
+2. **ontology** — an LLM derives **entity types + edge types** from the dossiers and the prediction question, tagging each entity with an **archetype + simulation tier** (so reporters, outlets, and abstract concepts become graph *context* rather than actors) and each edge with a **family + valence** (so allies, rivals, suppliers, and backers are distinguished, not collapsed together).
+3. **graph** — both dossiers are **chunked and ingested** into a local Graphiti temporal knowledge graph (GraphRAG) on an embedded FalkorDB; entities and relations are extracted locally via your configured `LLM_PROVIDER`, and vector embeddings are computed locally by a sentence-transformers model — no cloud service or API key involved.
+4. **prepare** — **digital personas** are generated for the **key actors only** (tier-1 decision-makers and tier-2 stakeholders — minor entities stay as graph context), ranked by **salience** rather than raw graph degree, each carrying its **behavioral DNA** (values, beliefs, incentives, resources) and its researched ally/rival/supplier/backer network; an "environment agent" sets the rounds and timing.
 5. **run** — OASIS runs a **dual-platform (Twitter + Reddit)** multi-agent simulation for *N* rounds; personas post, comment, and like, and social dynamics emerge.
 6. **report** — the **ReportAgent** (a ReAct loop with the `insight_forge` tool) retrieves from the graph + simulation and writes a **sectioned forecast report**.
 
@@ -449,6 +453,45 @@ The entire UI is **bilingual** (English + 中文).
 - **Tool-free "synthesis net".** If the research agent exhausts its step budget on tool calls before writing, or hits a provider **structural** error on the final write, the report is synthesized directly from the gathered (checkpointed) research via a clean single-turn call.
 - **Per-section graceful degradation.** In the ReportAgent, a single section's LLM error becomes a placeholder while the rest of the report still produces a partial result.
 - **Robust state management.** Atomic state writes, process-group cleanup, and orphan reconciliation across restarts keep runs consistent.
+
+---
+
+## Architecture & recent enhancements
+
+The six-stage pipeline above is the skeleton; recent releases hardened every joint of it. The changes below are architectural rather than incremental — most of them change what the system *refuses to do* (fake success, fabricate narrative, hedge forecasts) as much as what it can do. The backend suite now runs **528+ tests**.
+
+### Pipeline hardening — no false success
+
+- **Completion health gate.** A pipeline only reports `completed` when every stage's deliverables actually exist and pass validation — a run that limps to the end without a real simulation or report can no longer masquerade as a success.
+- **Quote-provenance wall.** Quoted material in the report must trace back to actual research or simulation artifacts; unattributable quotes are rejected rather than passed through.
+- **Honest simulation accounting.** Run summaries separate **organic** agent actions from **seed** actions and count rounds-with-activity, so a "hollow" simulation (agents present but silent) is detected and flagged instead of inflating the numbers.
+- **Anti-fabrication.** The ReportAgent never narrativizes a dead simulation: if the sim produced no organic signal, the report says so and reasons from research alone, rather than inventing "the agents converged on…" prose.
+- **Per-section retry with early-abort.** Failed report sections are retried with backoff; systemic failure aborts the report early instead of burning quota on a doomed run.
+- **Deliverable-validated report reuse.** On resume, a previously written report is only reused after its deliverables re-validate — a half-written or placeholder report is regenerated, not trusted.
+
+### Simulation realism
+
+- **Dossier-grounded seed posts.** Initial posts are synthesized from the researched actor dossier (each actor opens on a researched hot topic with its researched stance), so agents never wake up to an empty feed — the root cause of hollow sims.
+- **World-state briefing.** A compact world-state brief (situation, timeline, contested claims) is injected into every agent's system prompt each round, keeping the population grounded in the researched world rather than drifting into generic chatter.
+- **Heterogeneous personas.** Eight distinct analytical frameworks are deterministically distributed across the persona population, so disagreement is structural — the epistemic diversity that makes wisdom-of-crowds aggregation meaningful.
+- **Runtime controls.** A configurable simulated start hour, a model-free recommender-system default (no extra LLM calls inside the recsys loop), and flag-gated mid-simulation checkpoint/resume for long runs.
+
+### Forecast quality
+
+- **Binary-forecast contract.** Part 1 of every report must carry **10+ binary forecasts**, each a single sentence with a probability and objective resolution criteria (metric · threshold · date · source) — enforced structurally, not stylistically.
+- **Contrarian reframing + conviction gate.** Each forecast is stress-tested against its strongest counter-case, and hedged probabilities (everything ~50%) are pushed back toward genuine conviction.
+- **Simulation-signal integration.** Organic simulation dynamics feed into forecast probabilities as an explicit adjustment with stated direction and rationale.
+- **Prose ↔ `forecast.json` consistency audit.** The machine-readable forecast object and the written report are cross-checked so a number can't say 82% while the prose argues 60%.
+- **Bridgewater-style 3-part skeleton.** Part 1 (forecast table) / Part 2 (framework & holistic synthesis) / Part 3 (analytical appendix) — the structure of the featured Collision Decade run.
+- **Prediction-market grounding (new).** During research, implied probabilities are pulled from **Kalshi and Polymarket via Oddpool** and injected as calibration anchors; the final brief reports forecast-vs-market divergence, so every disagreement with the market is deliberate and argued.
+
+### Provider architecture
+
+**MiniMax-M3 primary with `claude-cli` fallback**, wrapped in circuit breakers for both **422 content-filter** rejections and **429 quota** exhaustion: a provider that starts failing structurally is benched and traffic fails over (S9) instead of poisoning the run. CLI providers run with hook isolation so a user's local Claude/Codex hooks can't interfere with pipeline subprocess calls.
+
+### Knowledge graph
+
+The local Graphiti + FalkorDB graph gained **causal edges** (typed cause→effect relations extracted alongside the standard ontology), **multi-hop causal traversal** (causal-path and n-hop-subgraph queries plus cascade tracing for the ReportAgent), **centrality priors** that feed actor salience ranking in persona selection, **semantic query compaction** to keep graph-search calls inside token budgets, and a **dead-letter replay** queue so failed ingest episodes are retried rather than silently dropped.
 
 ---
 
