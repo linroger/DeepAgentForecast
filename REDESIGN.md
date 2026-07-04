@@ -76,7 +76,7 @@ shoehorned; each capability lands on the primitive that actually fits it.
 | `graphiti_client/*`, `graph_builder`, `zep_entity_*`, `zep_tools` | **KG engine + MCP server** | `zep_tools` already returns `to_text()` tool payloads; heavy deps (FalkorDB, sentence-transformers) need a persistent process |
 | `run_parallel_simulation.py`, `simulation_runner`, `agent_dynamics`, profile/config generators | **Simulation engine + MCP tools** | Multi-hour stateful compute; keeps world-brief injection, persona_design, checkpoint/resume |
 | `report_agent` ReACT + `forecast_extractor` rubric | **forecast-report skill** + forecaster sub-agent; deterministic extractors as config-reflected tools | The methodology is prompt; the conviction gate/ledger is code |
-| `prediction_markets` (Oddpool) | config-reflected **tool** + thin skill | Simple HTTP tool |
+| `prediction_markets` (Polymarket, keyless) | config-reflected **tool** + thin skill | Simple HTTP tool |
 | `worldstate`, `decision_channel`, `ensemble`, `backtest`, `forecast_ledger` | **Driver-side deterministic modules** (unchanged) | Calibration math must not be LLM-mediated |
 | `llm_client.py` provider/failover | **Harness model layer** for agentic stages (ClaudeChatModel / PatchedChatMiniMax); engines keep a slim client for their internal calls | Deletes the worst-duplicated subsystem |
 | `pipeline_orchestrator.py` (4.2K), Flask API, `TaskManager` | **Replaced** by Pipeline Driver + harness Runs API | The studies' unanimous "replaceable shell" |

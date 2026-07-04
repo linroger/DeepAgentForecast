@@ -484,7 +484,7 @@ The six-stage pipeline above is the skeleton; recent releases hardened every joi
 - **Simulation-signal integration.** Organic simulation dynamics feed into forecast probabilities as an explicit adjustment with stated direction and rationale.
 - **Prose ↔ `forecast.json` consistency audit.** The machine-readable forecast object and the written report are cross-checked so a number can't say 82% while the prose argues 60%.
 - **Bridgewater-style 3-part skeleton.** Part 1 (forecast table) / Part 2 (framework & holistic synthesis) / Part 3 (analytical appendix) — the structure of the featured Collision Decade run.
-- **Prediction-market grounding (new).** During research, implied probabilities are pulled from **Kalshi and Polymarket via Oddpool** and injected as calibration anchors; the final brief reports forecast-vs-market divergence, so every disagreement with the market is deliberate and argued.
+- **Prediction-market grounding (new).** During research, implied probabilities are pulled from **Polymarket's public Gamma API** (no API key required) and injected as calibration anchors; the snapshot is capped per event for topic diversity, and the final brief reports forecast-vs-market divergence, so every disagreement with the market is deliberate and argued.
 
 ### Provider architecture
 

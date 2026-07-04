@@ -1,21 +1,28 @@
-"""Oddpool 预测市场客户端（聚合 Kalshi + Polymarket）——市场隐含概率作为预测校准锚点。
+"""Polymarket 预测市场客户端（Gamma public-search，无需 API key）——市场隐含概率作为预测校准锚点。
 
 深研管线在报告/预测阶段把「与研究问题相关的真实预测市场」的隐含概率注入提示词：
 市场价格是持币者的聚合信念，是极好的**校准锚点**（calibration anchor）——但不是真值。
-本模块保持依赖极轻（httpx + Config），全链路 degrade-safe：无 key / 网络失败 / 解析失败
+本模块保持依赖极轻（httpx + Config），全链路 degrade-safe：网络失败 / 解析失败 / 关闭旗标
 一律记一条 warning 并返回空结果，绝不向调用方抛异常、绝不阻断主流程。
 
-API（已验证）：
-    GET https://api.oddpool.com/search/markets?q=<全文检索>&status=active&limit=N
-    GET https://api.oddpool.com/search/events?q=...&limit=N
-    GET https://api.oddpool.com/search/events/{event_id}/markets
-    鉴权头 X-API-Key；key 只从 参数 → Config.ODDPOOL_API_KEY → 环境变量 读取，绝不硬编码。
+数据源（已验证，keyless）：Polymarket 官方公开 Gamma API——浏览/检索公开市场无需 API key、
+无需钱包（`polymarket-cli` 亦仅是这套公开 API 的薄封装）。
+
+    GET https://gamma-api.polymarket.com/public-search?q=<全文检索>&limit_per_type=N&events_status=active
+      → {"events": [{"title", "slug", "markets": [{id, question, outcomes, outcomePrices,
+                                                    volume, liquidity, closed, ...}], ...}], ...}
+
+规整规则（隐含概率作为锚点的资格）：
+  * `closed`（而非 `active`——已判定市场仍 active=True）是「是否可用作锚点」的可靠闸门；
+  * `outcomes`/`outcomePrices` 是 JSON 串列表，隐含 P(yes) = "Yes" 对应下标的价格；
+  * 价格必须严格落在 (0,1)——恰为 0/1 = 实质已定盘，作为锚点无意义；
+  * 按 volume 过滤噪声（默认 ≥200），按 volume 降序去重限量。
 """
 
 from __future__ import annotations
 
+import json
 import logging
-import os
 import re
 from typing import Any, Dict, List, Optional
 
@@ -23,9 +30,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-ODDPOOL_BASE_URL = "https://api.oddpool.com"
+POLYMARKET_BASE_URL = "https://gamma-api.polymarket.com"
 
-# 可重试的瞬时错误状态码（限流/网关抖动）；4xx 鉴权/参数错误不重试。
+# 可重试的瞬时错误状态码（限流/网关抖动）；4xx 参数错误不重试。
 _TRANSIENT_STATUS = frozenset({429, 500, 502, 503, 504})
 
 
@@ -39,7 +46,7 @@ def _cfg(name: str, default: Any) -> Any:
 
 
 def _coerce_float(v: Any) -> Optional[float]:
-    """把 API 的字符串数值（如 last_yes_price="0.2100"）安全转成 float；失败返回 None。"""
+    """把 API 的字符串数值（如 volume="32970.32"）安全转成 float；失败返回 None。"""
     try:
         f = float(v)
         if f != f:  # NaN
@@ -49,24 +56,68 @@ def _coerce_float(v: Any) -> Optional[float]:
         return None
 
 
-class OddpoolClient:
-    """极薄的 Oddpool REST 客户端：15s 超时、瞬时错误重试一次、任何失败降级为空结果。"""
+def _as_list(v: Any) -> List[Any]:
+    """Polymarket 的 outcomes/outcomePrices 常是 JSON 串（'["Yes","No"]'）也可能已是 list；
+    统一解析成 list，失败返回 []。"""
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str):
+        try:
+            parsed = json.loads(v)
+            return parsed if isinstance(parsed, list) else []
+        except (ValueError, TypeError):
+            return []
+    return []
 
-    def __init__(self, api_key: Optional[str] = None,
-                 base_url: str = ODDPOOL_BASE_URL, timeout: float = 15.0):
-        key = str(api_key or "").strip()
-        if not key:
-            key = str(_cfg("ODDPOOL_API_KEY", "") or "").strip()
-        if not key:
-            key = os.environ.get("ODDPOOL_API_KEY", "").strip()
-        self.api_key = key
-        self.base_url = str(base_url or ODDPOOL_BASE_URL).rstrip("/")
+
+def _yes_price(outcomes: Any, prices: Any) -> Optional[float]:
+    """从 outcomes/outcomePrices 取 "Yes" 对应的隐含概率；无法定位则 None。"""
+    names = _as_list(outcomes)
+    px = _as_list(prices)
+    if not names or not px or len(names) != len(px):
+        return None
+    for i, name in enumerate(names):
+        if str(name).strip().lower() == "yes":
+            return _coerce_float(px[i])
+    return None
+
+
+def _cap_per_event(ranked: List[Dict[str, Any]], max_per_event: int,
+                   max_total: int) -> List[Dict[str, Any]]:
+    """在已按 volume 降序的市场列表上，限制每个事件最多 max_per_event 条，再截到 max_total。
+
+    保证多事件的多样性：一个多结局事件的子市场阶梯（如「N 次降息」0~12）不会靠高成交量
+    霸占全部名额、把其他相关事件挤出。event_title 为空时以 market_id 兜底（视作独立事件）。
+    max_per_event<=0 视为不限制。
+    """
+    if int(max_per_event) <= 0:
+        return ranked[:max(0, int(max_total))]
+    per_event: Dict[str, int] = {}
+    out: List[Dict[str, Any]] = []
+    for m in ranked:
+        key = str(m.get("event_title") or "").strip() or m.get("market_id") or ""
+        n = per_event.get(key, 0)
+        if n >= int(max_per_event):
+            continue
+        per_event[key] = n + 1
+        out.append(m)
+    return out[:max(0, int(max_total))]
+
+
+class PolymarketClient:
+    """极薄的 Polymarket Gamma 客户端：15s 超时、瞬时错误重试一次、任何失败降级为空结果。
+
+    无需 API key（公开 API）；仅 PREDICTION_MARKETS_ENABLED（默认开）时才发请求。
+    """
+
+    def __init__(self, base_url: str = POLYMARKET_BASE_URL, timeout: float = 15.0):
+        self.base_url = str(base_url or POLYMARKET_BASE_URL).rstrip("/")
         self.timeout = timeout
 
     @property
     def enabled(self) -> bool:
-        """有 key 且 PREDICTION_MARKETS_ENABLED（默认开）时才发请求。"""
-        return bool(self.api_key) and bool(_cfg("PREDICTION_MARKETS_ENABLED", True))
+        """PREDICTION_MARKETS_ENABLED（默认开）时启用。keyless——无需 key。"""
+        return bool(_cfg("PREDICTION_MARKETS_ENABLED", True))
 
     # ------------------------------------------------------------------ HTTP
     def _get(self, path: str, params: Dict[str, Any]) -> Any:
@@ -77,8 +128,7 @@ class OddpoolClient:
         for attempt in (1, 2):
             try:
                 resp = httpx.get(url, params=params, timeout=self.timeout,
-                                 headers={"X-API-Key": self.api_key,
-                                          "Accept": "application/json"})
+                                 headers={"Accept": "application/json"})
                 if resp.status_code in _TRANSIENT_STATUS and attempt == 1:
                     last_err = f"HTTP {resp.status_code}"
                     continue
@@ -90,42 +140,33 @@ class OddpoolClient:
             except Exception as e:  # noqa: BLE001 — 4xx/JSON 解析等非瞬时错误不重试
                 last_err = e
                 break
-        logger.warning(f"Oddpool GET {path} 失败（降级为空结果）: {last_err}")
+        logger.warning(f"Polymarket GET {path} 失败（降级为空结果）: {last_err}")
         return None
 
     # ------------------------------------------------------------- endpoints
-    def search_markets(self, query: str, status: str = "active",
-                       limit: int = 10) -> List[Dict[str, Any]]:
-        """全文检索市场；失败/未启用返回 []。"""
+    def search_events(self, query: str, limit: int = 8) -> List[Dict[str, Any]]:
+        """全文检索活跃事件（每个事件下挂多个市场）；失败/未启用返回 []。"""
         if not self.enabled or not str(query or "").strip():
             return []
-        data = self._get("/search/markets",
-                         {"q": str(query).strip(), "status": status, "limit": limit})
-        return [m for m in data if isinstance(m, dict)] if isinstance(data, list) else []
-
-    def search_events(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """全文检索事件（一个事件下挂多个市场）；失败/未启用返回 []。"""
-        if not self.enabled or not str(query or "").strip():
+        data = self._get("/public-search", {"q": str(query).strip(),
+                                            "limit_per_type": limit,
+                                            "events_status": "active"})
+        if not isinstance(data, dict):
             return []
-        data = self._get("/search/events", {"q": str(query).strip(), "limit": limit})
-        return [e for e in data if isinstance(e, dict)] if isinstance(data, list) else []
-
-    def event_markets(self, event_id: str) -> List[Dict[str, Any]]:
-        """列出某事件下的全部市场；失败/未启用返回 []。"""
-        if not self.enabled or not str(event_id or "").strip():
-            return []
-        data = self._get(f"/search/events/{str(event_id).strip()}/markets", {})
-        return [m for m in data if isinstance(m, dict)] if isinstance(data, list) else []
+        events = data.get("events")
+        return [e for e in events if isinstance(e, dict)] if isinstance(events, list) else []
 
     # -------------------------------------------------------------- snapshot
     def snapshot_for_queries(self, queries: List[str], per_query: int = 8,
-                             max_total: int = 20,
-                             min_volume: float = 200) -> List[Dict[str, Any]]:
+                             max_total: int = 20, min_volume: float = 200,
+                             max_per_event: int = 3) -> List[Dict[str, Any]]:
         """对一组检索词取市场快照并规整化。
 
-        规则：按 market_id 去重（首个命中的 query 记入 matched_query）；剔除已结算 /
-        零流动性 / 成交量低于 min_volume / 无可解析价格的市场；按 volume 降序取前
-        max_total 条。输出统一 schema：
+        规则：从每个匹配事件展开其市场，按 market_id 去重（首个命中的 query 记入
+        matched_query）；剔除已关闭 / 无可解析价格 / 价格恰为 0/1 / 成交量低于
+        min_volume 的市场；按 volume 降序，且**每个事件最多取 max_per_event 条**
+        （避免一个多结局事件的子市场阶梯——如「N 次降息」0~12——霸占全部名额、把其他
+        相关事件挤出），最后取前 max_total 条。输出统一 schema：
             {market_id, exchange, question, implied_yes_prob, volume, liquidity,
              event_title, matched_query}
         Degrade-safe：任一 query 失败只丢那一批，整体绝不抛。
@@ -135,44 +176,49 @@ class OddpoolClient:
             q = str(q or "").strip()
             if not q:
                 continue
-            for raw in self.search_markets(q, status="active", limit=per_query):
-                norm = self._normalize_market(raw, matched_query=q,
-                                              min_volume=min_volume)
-                if norm is None:
-                    continue
-                if norm["market_id"] not in by_id:
-                    by_id[norm["market_id"]] = norm
-        markets = sorted(by_id.values(), key=lambda m: -(m.get("volume") or 0.0))
-        return markets[:max(0, int(max_total))]
+            for event in self.search_events(q, limit=per_query):
+                event_title = str(event.get("title") or "").strip()
+                for raw in event.get("markets") or []:
+                    norm = self._normalize_market(raw, matched_query=q,
+                                                  event_title=event_title,
+                                                  min_volume=min_volume)
+                    if norm is None:
+                        continue
+                    if norm["market_id"] not in by_id:
+                        by_id[norm["market_id"]] = norm
+        ranked = sorted(by_id.values(), key=lambda m: -(m.get("volume") or 0.0))
+        return _cap_per_event(ranked, max_per_event, max_total)
 
     @staticmethod
-    def _normalize_market(raw: Dict[str, Any], matched_query: str,
-                          min_volume: float) -> Optional[Dict[str, Any]]:
-        """单条市场规整化；不合格（已结算/无价/低量/零流动性）返回 None。"""
+    def _normalize_market(raw: Any, matched_query: str,
+                          event_title: str = "",
+                          min_volume: float = 200) -> Optional[Dict[str, Any]]:
+        """单条 Polymarket 市场规整化；不合格（已关闭/无价/定盘价/低量）返回 None。"""
         if not isinstance(raw, dict):
             return None
-        market_id = str(raw.get("market_id") or "").strip()
+        market_id = str(raw.get("id") or "").strip()
         question = str(raw.get("question") or "").strip()
         if not market_id or not question:
             return None
-        status = str(raw.get("status") or "").strip().lower()
-        if raw.get("settled_at") or status in ("settled", "closed", "finalized", "resolved"):
+        # 已关闭/已判定 → 不配当锚点（active 旗标在已判定市场上仍为 True，不可靠）。
+        if raw.get("closed") is True or str(raw.get("closed")).strip().lower() == "true":
             return None
-        prob = _coerce_float(raw.get("last_yes_price"))
-        if prob is None or not (0.0 <= prob <= 1.0):
-            return None  # 无可解析的隐含概率 → 作为校准锚点没有意义
+        prob = _yes_price(raw.get("outcomes"), raw.get("outcomePrices"))
+        # 价格须严格落在 (0,1)：恰为 0/1 = 市场实质已定盘，作为校准锚点没有意义。
+        if prob is None or not (0.0 < prob < 1.0):
+            return None
         volume = _coerce_float(raw.get("volume")) or 0.0
         liquidity = _coerce_float(raw.get("liquidity")) or 0.0
-        if liquidity <= 0 or volume < float(min_volume):
-            return None  # 零流动性/极低量的价格是噪声，不配当锚点
+        if volume < float(min_volume):
+            return None  # 极低量的价格是噪声，不配当锚点
         return {
             "market_id": market_id,
-            "exchange": str(raw.get("exchange") or "").strip().lower(),
+            "exchange": "polymarket",
             "question": question,
             "implied_yes_prob": round(prob, 4),
             "volume": volume,
             "liquidity": liquidity,
-            "event_title": str(raw.get("event_title") or "").strip(),
+            "event_title": event_title or str(raw.get("groupItemTitle") or "").strip(),
             "matched_query": matched_query,
         }
 
@@ -189,7 +235,7 @@ def render_markets_block(markets: List[Dict[str, Any]], lang: str = "en") -> str
     if not rows:
         return ""
     zh = str(lang or "").lower().startswith("zh")
-    title = "### Prediction Market Signals (Kalshi/Polymarket via Oddpool)"
+    title = "### Prediction Market Signals (Polymarket)"
     if zh:
         cols = "| # | 市场问题 | 交易所 | 隐含 P(yes) | 成交量 |"
         caveat = ("_以上为机器抓取的活跃市场快照，价格随时变动；市场隐含概率是校准锚点，"

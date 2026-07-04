@@ -293,13 +293,13 @@ _BINARY_LOW_P_RULE = (
     "(not negations of earlier statements)."
 )
 
-# 预测市场校准锚点（Oddpool 聚合 Kalshi/Polymarket）：与所列市场重叠的预测须引用市场
+# 预测市场校准锚点（Polymarket 公开 Gamma API）：与所列市场重叠的预测须引用市场
 # 隐含概率，偏离 >10 个百分点须显式解释分歧；市场是校准锚点，不是真值。命中时模型给出
 # market_anchor 字段，_normalize_binaries 用我们自己的市场数据回填/校验隐含概率并计算
 # divergence（不盲信模型转录的数字）。
 _BINARY_MARKET_RULE = (
     "\nMARKET CALIBRATION: real prediction-market implied probabilities "
-    "(Kalshi/Polymarket via Oddpool) are listed below. Where a forecast overlaps a listed "
+    "(Polymarket) are listed below. Where a forecast overlaps a listed "
     "market, CITE that market's implied probability in adjustment_rationale, and when your "
     "probability diverges from it by MORE than 10 percentage points, EXPLAIN the divergence "
     "explicitly (what the market is missing or mispricing). Markets are calibration anchors, "
@@ -685,11 +685,11 @@ def derive_forecast_spine(llm, *, central_question: str = "", horizon: str = "",
         user += f"\n\n[研究输入：参考类基率 / 驱动因素 / 观察指标 / 候选情景]\n{forecast_inputs[:cap_inputs]}"
     if signal_pack:
         user += f"\n\n[模拟量化信号]\n{signal_pack[:cap_signal]}"
-    # 预测市场校准锚点（Oddpool 聚合 Kalshi/Polymarket）：市场隐含概率是外部视角的
+    # 预测市场校准锚点（Polymarket 公开 Gamma API）：市场隐含概率是外部视角的
     # 聚合信念——与所列市场重叠的情景概率应对照之，偏离 >10 个百分点须在
     # adjustment_rationale 说明依据（市场是校准锚点，不是真值）。空串时提示词不变。
     if market_block:
-        user += ("\n\n[预测市场隐含概率（Kalshi/Polymarket 实盘·校准锚点，非真值）]\n"
+        user += ("\n\n[预测市场隐含概率（Polymarket 实盘·校准锚点，非真值）]\n"
                  + str(market_block)[:2500]
                  + "\n与上述市场重叠的情景，其概率须对照市场隐含概率；偏离超过 10 个百分点时"
                    "在 adjustment_rationale 中显式解释分歧（市场遗漏/错价了什么）。")
@@ -834,14 +834,14 @@ def render_binary_forecasts_block(forecast: Optional[Dict[str, Any]],
         intro = ("以下为可独立判定的二元（是/否）预测，每条含概率与客观判定标准"
                  "（指标·阈值·日期·来源）。概率反映真实研判，非对冲。")
         cols = "| # | 预测（一句话） | 概率 | 判定标准 | 主题 |"
-        anchor_col = " 市场隐含 P(yes)（Kalshi/Polymarket） |"
+        anchor_col = " 市场隐含 P(yes)（Polymarket） |"
     else:
         head = "## Part 1 — Binary Forecasts"
         intro = ("Independent binary (yes/no) forecasts, each with a probability and an "
                  "objective resolution test (metric · threshold · date · source). "
                  "Probabilities express genuine conviction, not hedging.")
         cols = "| # | Forecast (one sentence) | Prob. | Resolution criteria | Theme |"
-        anchor_col = " Market P(yes) (Kalshi/Polymarket) |"
+        anchor_col = " Market P(yes) (Polymarket) |"
     sep = "|---|---|---|---|---|"
     if has_anchor:
         cols += anchor_col

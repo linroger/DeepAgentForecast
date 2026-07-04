@@ -1130,9 +1130,9 @@ class ReportAgent:
         # EXECPLAN2 I-3-2: 模拟量化信号包（确定性接地下限），懒构建一次后缓存；
         # 关闭 REPORT_SIGNAL_PACK 时始终为空串，_prepend_research_background 自动跳过（行为不变）。
         self._signal_pack = ""
-        # 预测市场信号包（Oddpool 聚合 Kalshi/Polymarket）：市场隐含概率作为**校准锚点**
+        # 预测市场信号包（Polymarket 公开 Gamma API，keyless）：市场隐含概率作为**校准锚点**
         # 注入章节/骨架/二元预测提示词。优先读研究 handoff 的 prediction_markets.json，
-        # 缺失时经 OddpoolClient 现抓。懒构建一次后缓存；无 key/无数据/关闭
+        # 缺失时经 PolymarketClient 现抓。懒构建一次后缓存；无数据/关闭
         # PREDICTION_MARKETS_ENABLED 时为空串，注入自动跳过（degrade-safe，行为不变）。
         self._market_pack = ""
         self._prediction_markets: List[Dict[str, Any]] = []
@@ -1440,7 +1440,7 @@ class ReportAgent:
         NEXTSTEPS P0-1: 还钉入预测骨架块（self._forecast_spine_block），让每章叙事对齐并捍卫
         先于叙事确定的情景概率与判定标准。骨架未推导/为空时自动跳过（行为与历史一致）。
 
-        预测市场：还钉入市场信号包（self._market_pack，Oddpool 聚合 Kalshi/Polymarket 的
+        预测市场：还钉入市场信号包（self._market_pack，Polymarket 公开 Gamma API 的
         隐含概率表）——涉及概率的论断须与市场锚点对照。为空时自动跳过（行为与历史一致）。
         """
         # 市场包经 getattr 读取：部分离线测试用 __new__ 绕过 __init__ 构造 agent，
@@ -1554,18 +1554,18 @@ class ReportAgent:
         return "\n".join(lines)
 
     # ──────────────────────────────────────────────────────────────
-    # 预测市场信号包（Oddpool 聚合 Kalshi/Polymarket；市场隐含概率 = 校准锚点）
+    # 预测市场信号包（Polymarket 公开 Gamma API；市场隐含概率 = 校准锚点）
     # ──────────────────────────────────────────────────────────────
     def _load_prediction_markets(self) -> List[Dict[str, Any]]:
         """加载本次运行的预测市场快照（规整化 schema，见 utils.prediction_markets）。
 
         优先级：① 研究阶段落盘的 handoff/prediction_markets.json（经 PipelineManager 按
         simulation_id 定位，与 load_research_dossier_for_simulation 同模式）；② 文件缺失
-        且 OddpoolClient 可用时现抓一次（检索词由需求书 + hot_topics + 头部 actor 名确定性
+        且 PolymarketClient 可用时现抓一次（检索词由需求书 + hot_topics + 头部 actor 名确定性
         派生）。任何失败返回 []（degrade-safe，绝不阻断报告生成）。
         """
         try:
-            max_n = int(getattr(Config, "ODDPOOL_MAX_MARKETS", 20) or 20)
+            max_n = int(getattr(Config, "PREDICTION_MARKETS_MAX", 20) or 20)
         except (TypeError, ValueError):
             max_n = 20
         # ① 研究 handoff 产物（延迟导入避免与 pipeline_orchestrator 的模块级循环依赖）。
@@ -1592,8 +1592,8 @@ class ReportAgent:
             logger.debug(f"读取 handoff prediction_markets.json 失败（转现抓兜底）: {e}")
         # ② 现抓兜底（仅当 client 可用；一次快照，15s 超时 + 单次重试在 client 内部）。
         try:
-            from ..utils.prediction_markets import OddpoolClient, derive_market_queries
-            client = OddpoolClient()
+            from ..utils.prediction_markets import PolymarketClient, derive_market_queries
+            client = PolymarketClient()
             if not client.enabled:
                 return []
             hot_topics: List[str] = []
@@ -1616,7 +1616,17 @@ class ReportAgent:
                                             actor_names=actor_names)
             if not queries:
                 return []
-            markets = client.snapshot_for_queries(queries, max_total=max_n)
+            try:
+                min_vol = float(getattr(Config, "PREDICTION_MARKETS_MIN_VOLUME", 200) or 200)
+            except (TypeError, ValueError):
+                min_vol = 200.0
+            try:
+                max_per_event = int(getattr(Config, "PREDICTION_MARKETS_MAX_PER_EVENT", 3) or 3)
+            except (TypeError, ValueError):
+                max_per_event = 3
+            markets = client.snapshot_for_queries(queries, max_total=max_n,
+                                                  min_volume=min_vol,
+                                                  max_per_event=max_per_event)
             if markets:
                 logger.info(f"预测市场现抓兜底：{len(markets)} 个活跃市场（queries={queries}）")
             return markets
@@ -1643,7 +1653,7 @@ class ReportAgent:
         if not table:
             return ""
         header = (
-            "【预测市场信号（Kalshi/Polymarket 实盘隐含概率·校准锚点，非真值）】\n"
+            "【预测市场信号（Polymarket 实盘隐含概率·校准锚点，非真值）】\n"
             "以下为与本预测问题相关的真实预测市场当前定价（机器抓取）。撰写涉及概率的论断时"
             "须与之对照：与所列市场重叠的预测应引用其隐含概率，偏离超过 10 个百分点时须显式"
             "解释分歧依据（市场遗漏/错价了什么）。市场价格是聚合信念，不是事实真值。"
@@ -4005,7 +4015,7 @@ class ReportAgent:
                     logger.warning(f"构建模拟量化信号包失败（忽略）: {_sp_err}")
                     self._signal_pack = ""
 
-            # 预测市场信号包（Oddpool 聚合 Kalshi/Polymarket）：与模拟信号包并列注入每章
+            # 预测市场信号包（Polymarket 公开 Gamma API）：与模拟信号包并列注入每章
             # 提示词与预测骨架（下方 _derive_and_pin_forecast_spine 复用）。无 key/无数据/
             # 关闭旗标时为空串 → 注入自动跳过（degrade-safe，提示词与历史逐字节一致）。
             if (getattr(Config, "PREDICTION_MARKETS_ENABLED", True)

@@ -47,16 +47,15 @@ class FakeLLMClient:
 
 @pytest.fixture(autouse=True)
 def _no_prediction_market_network(monkeypatch):
-    """预测市场客户端离线化（offline-first 契约）：开发机 .env 的真实 ODDPOOL_API_KEY
-    会被 Config 的 load_dotenv 带进测试进程，任何走到 OddpoolClient 兜底现抓的路径都可能
-    发真实请求。测试一律摘除 key → client.enabled=False → 快速降级为空结果。
-    需要 client 行为的测试显式传 api_key= 并 mock httpx（见 test_prediction_markets.py）。"""
-    monkeypatch.delenv("ODDPOOL_API_KEY", raising=False)
+    """预测市场客户端离线化（offline-first 契约）：Polymarket 公开 API 是 keyless 的，
+    任何走到 PolymarketClient 兜底现抓的路径都可能发真实请求。测试一律关闭
+    PREDICTION_MARKETS_ENABLED → client.enabled=False → 快速降级为空结果。
+    需要 client 行为的测试显式打开旗标并 mock httpx（见 test_prediction_markets.py）。"""
+    monkeypatch.setenv("PREDICTION_MARKETS_ENABLED", "false")
     try:
         from app.config import Config
-        if getattr(Config, "ODDPOOL_API_KEY", None):
-            monkeypatch.setattr(Config, "ODDPOOL_API_KEY", "", raising=False)
-    except Exception:  # noqa: BLE001 — Config 不可导入时无 key 可摘
+        monkeypatch.setattr(Config, "PREDICTION_MARKETS_ENABLED", False, raising=False)
+    except Exception:  # noqa: BLE001 — Config 不可导入时旗标已由环境变量兜底
         pass
 
 
