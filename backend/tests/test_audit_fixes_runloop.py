@@ -339,6 +339,25 @@ def test_build_oasis_platform_model_free_twitter_default(tmp_path, monkeypatch):
     assert str(getattr(platform.recsys_type, "value", platform.recsys_type)) == "reddit"
 
 
+def test_build_oasis_platform_model_free_twitter_feed_not_starved(tmp_path, monkeypatch):
+    """2026-07-03 live-surfaced: max_rec_post_len=2 on this (default, model-free) code
+    path predates the S8 recsys fix and was harmless under the old broken twhin-bert
+    feed (always empty), but became a severe winner-take-all bug once Twitter's recsys
+    switched to the WORKING reddit-style hot-score algorithm — rec_sys_reddit() hands
+    EVERY agent the identical top-N list each round, so N=2 meant whichever post got
+    an early like-lead permanently monopolized both slots. A real 24-round/54-post run
+    put 32 of 33 total comments on ONE seed post. Must be raised well above a small
+    cast's total post count so rec_sys_reddit's full-list branch (no ranking bias) fires."""
+    monkeypatch.delenv("SIM_WIRE_RECSYS", raising=False)
+    monkeypatch.delenv("SIM_TWITTER_MODEL_FREE_FEED", raising=False)
+    monkeypatch.delenv("SIM_TWITTER_RECSYS", raising=False)
+    platform = rps.build_oasis_platform(
+        "twitter", str(tmp_path / "t.db"), {}, lambda m: None)
+    assert platform is not None
+    assert platform.max_rec_post_len >= 50
+    assert platform.refresh_rec_post_count >= 5
+
+
 def test_build_oasis_platform_model_free_can_be_disabled(tmp_path, monkeypatch):
     monkeypatch.delenv("SIM_WIRE_RECSYS", raising=False)
     monkeypatch.setenv("SIM_TWITTER_MODEL_FREE_FEED", "false")

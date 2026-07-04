@@ -13,6 +13,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
 from typing import Optional, Dict, Any, List
 
@@ -73,6 +74,12 @@ def _err_brief(exc: Exception) -> str:
 # consecutive 422s and route straight to the fallback for a cooldown — skipping the doomed primary
 # call entirely. Halves latency + spares the fallback from a needless 2× call volume.
 _CB_STATE: Dict[str, Dict[str, float]] = {}
+# 2026-07-03 live-surfaced: graphiti 图谱阶段用 GRAPH_LLM_EXECUTOR_WORKERS/
+# GRAPHITI_MAX_COROUTINES 并发调用 chat()，多线程下 `st["consec"] = st.get(...) + 1`
+# 是无锁的「读-改-写」——并发 422 会互相踩掉彼此的自增（经典 lost-update），导致一次真实
+# forecast run 里连续 30 次 minimax content-filter 失败也从未凑够 _CB_THRESHOLD=5 触发熔断，
+# 每次都白白多付一次注定失败的 minimax 往返延迟才转回退。用一把锁保护 _CB_STATE 的全部读改写。
+_CB_LOCK = threading.Lock()
 try:
     _CB_THRESHOLD = max(1, int(os.environ.get("LLM_CB_422_THRESHOLD", "5") or "5"))
 except ValueError:
@@ -110,34 +117,38 @@ def _is_quota(exc: Exception) -> bool:
 
 
 def _cb_tripped(provider: str) -> bool:
-    st = _CB_STATE.get(provider)
-    return bool(st and st.get("tripped_until", 0.0) > time.monotonic())
+    with _CB_LOCK:
+        st = _CB_STATE.get(provider)
+        return bool(st and st.get("tripped_until", 0.0) > time.monotonic())
 
 
 def _cb_record_422(provider: str) -> None:
-    st = _CB_STATE.setdefault(provider, {"consec": 0.0, "tripped_until": 0.0})
-    st["consec"] = st.get("consec", 0.0) + 1
-    if st["consec"] >= _CB_THRESHOLD and st.get("tripped_until", 0.0) <= time.monotonic():
-        st["tripped_until"] = time.monotonic() + _CB_COOLDOWN_S
-        logger.warning("熔断器：提供方 %s 连续 %d 次内容审查(422)，冷却 %ds，期间直连回退提供方",
-                       provider, int(st["consec"]), int(_CB_COOLDOWN_S))
+    with _CB_LOCK:
+        st = _CB_STATE.setdefault(provider, {"consec": 0.0, "tripped_until": 0.0})
+        st["consec"] = st.get("consec", 0.0) + 1
+        if st["consec"] >= _CB_THRESHOLD and st.get("tripped_until", 0.0) <= time.monotonic():
+            st["tripped_until"] = time.monotonic() + _CB_COOLDOWN_S
+            logger.warning("熔断器：提供方 %s 连续 %d 次内容审查(422)，冷却 %ds，期间直连回退提供方",
+                           provider, int(st["consec"]), int(_CB_COOLDOWN_S))
 
 
 def _cb_record_429(provider: str) -> None:
     """LLM-3: 记一次配额/限流失败；连续达 _CB_429_THRESHOLD 次即冷却（期间直连回退）。"""
-    st = _CB_STATE.setdefault(provider, {"consec": 0.0, "tripped_until": 0.0})
-    st["consec429"] = st.get("consec429", 0.0) + 1
-    if st["consec429"] >= _CB_429_THRESHOLD and st.get("tripped_until", 0.0) <= time.monotonic():
-        st["tripped_until"] = time.monotonic() + _CB_429_COOLDOWN_S
-        logger.warning("熔断器：提供方 %s 连续 %d 次配额/限流(429)，冷却 %ds，期间直连回退提供方",
-                       provider, int(st["consec429"]), int(_CB_429_COOLDOWN_S))
+    with _CB_LOCK:
+        st = _CB_STATE.setdefault(provider, {"consec": 0.0, "tripped_until": 0.0})
+        st["consec429"] = st.get("consec429", 0.0) + 1
+        if st["consec429"] >= _CB_429_THRESHOLD and st.get("tripped_until", 0.0) <= time.monotonic():
+            st["tripped_until"] = time.monotonic() + _CB_429_COOLDOWN_S
+            logger.warning("熔断器：提供方 %s 连续 %d 次配额/限流(429)，冷却 %ds，期间直连回退提供方",
+                           provider, int(st["consec429"]), int(_CB_429_COOLDOWN_S))
 
 
 def _cb_reset(provider: str) -> None:
-    st = _CB_STATE.get(provider)
-    if st:
-        st["consec"] = 0.0
-        st["consec429"] = 0.0
+    with _CB_LOCK:
+        st = _CB_STATE.get(provider)
+        if st:
+            st["consec"] = 0.0
+            st["consec429"] = 0.0
 
 
 # LLM-3: 回退提供方的 OpenAI 连接池缓存。此前每次失败转移都重建 LLMClient/OpenAI 客户端

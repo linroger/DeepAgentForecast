@@ -138,6 +138,31 @@
             <div class="post-metrics" v-if="hasLikes(post)">
               <span class="metric">♥ {{ likeCount(post) }}</span>
             </div>
+
+            <!-- Replies (nested under their parent post) -->
+            <div class="post-replies" v-if="repliesFor(post).length">
+              <div class="replies-head">
+                <span class="replies-count">{{ repliesFor(post).length }}
+                  {{ L('条回复','repl' + (repliesFor(post).length === 1 ? 'y' : 'ies')) }}</span>
+              </div>
+              <article
+                class="reply-card"
+                v-for="(c, cidx) in repliesFor(post)"
+                :key="commentKey(c, cidx)"
+              >
+                <div class="reply-head">
+                  <div class="reply-avatar" :style="avatarStyle(commentAuthorName(c))">
+                    {{ initialOf(commentAuthorName(c)) }}
+                  </div>
+                  <span class="reply-author">{{ commentAuthorName(c) }}</span>
+                  <span class="reply-time mono" v-if="relativeTime(c)">· {{ relativeTime(c) }}</span>
+                </div>
+                <p class="reply-text">{{ commentText(c) }}</p>
+                <div class="reply-metrics" v-if="commentLikeCount(c)">
+                  <span class="metric">♥ {{ commentLikeCount(c) }}</span>
+                </div>
+              </article>
+            </div>
           </article>
         </div>
 
@@ -161,6 +186,7 @@ import { L } from '../../i18n'
 import {
   getSimulationProfilesRealtime,
   getSimulationPosts,
+  getSimulationComments,
   getAgentStats,
   getRunStatus
 } from '../../api/simulation'
@@ -173,6 +199,7 @@ const props = defineProps({
 const platform = ref('twitter') // 'twitter' | 'reddit'
 const profiles = ref([])
 const posts = ref([])
+const comments = ref([])
 const stats = ref({})
 const runState = ref({})
 const userMap = ref({})
@@ -270,6 +297,69 @@ function postKey(post, idx) {
     if (id !== undefined && id !== null) return 'post-' + id + '-' + idx
   }
   return 'post-' + idx
+}
+
+// ===== Comment accessors (all guarded) =====
+function commentText(c) {
+  if (!isPlainObject(c)) return ''
+  const raw = c.content ?? c.text ?? c.message ?? ''
+  return raw == null ? '' : String(raw).trim()
+}
+
+function commentAuthorName(c) {
+  if (!isPlainObject(c)) return 'Agent'
+  const id = c.user_id ?? c.agent_id ?? c.author_id ?? c.id
+  if (id !== undefined && id !== null) {
+    const mapped = userMap.value[String(id)]
+    if (mapped) return mapped
+    return 'Agent ' + id
+  }
+  return 'Agent'
+}
+
+function commentLikeCount(c) {
+  if (!isPlainObject(c)) return 0
+  const v = c.num_likes ?? c.likes ?? c.like_count
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+function commentKey(c, idx) {
+  if (isPlainObject(c)) {
+    const id = c.comment_id ?? c.id
+    if (id !== undefined && id !== null) return 'comment-' + id + '-' + idx
+  }
+  return 'comment-' + idx
+}
+
+// Group comments by their parent post_id, oldest-first within each thread so a
+// reply chain reads top-to-bottom in chronological order (comments arrive from
+// the API newest-first, matching the posts feed's ordering).
+const commentsByPost = computed(() => {
+  const map = {}
+  for (const c of asArray(comments.value)) {
+    if (!isPlainObject(c)) continue
+    const pid = c.post_id
+    if (pid === undefined || pid === null) continue
+    const key = String(pid)
+    if (!map[key]) map[key] = []
+    map[key].push(c)
+  }
+  for (const key of Object.keys(map)) {
+    map[key].sort((a, b) => {
+      const ta = Date.parse(a.created_at ?? a.timestamp ?? '') || 0
+      const tb = Date.parse(b.created_at ?? b.timestamp ?? '') || 0
+      return ta - tb
+    })
+  }
+  return map
+})
+
+function repliesFor(post) {
+  if (!isPlainObject(post)) return []
+  const pid = post.post_id ?? post.id
+  if (pid === undefined || pid === null) return []
+  return commentsByPost.value[String(pid)] || []
 }
 
 // ===== Time formatting =====
@@ -397,6 +487,7 @@ async function loadAll() {
   if (!props.simulationId) {
     profiles.value = []
     posts.value = []
+    comments.value = []
     stats.value = {}
     runState.value = {}
     userMap.value = {}
@@ -412,6 +503,7 @@ async function loadAll() {
   const results = await Promise.allSettled([
     getSimulationProfilesRealtime(simId, plat),
     getSimulationPosts(simId, plat, 60, 0),
+    getSimulationComments(simId, plat, 200, 0),
     getAgentStats(simId),
     getRunStatus(simId)
   ])
@@ -422,7 +514,7 @@ async function loadAll() {
     return
   }
 
-  const [profilesRes, postsRes, statsRes, runRes] = results
+  const [profilesRes, postsRes, commentsRes, statsRes, runRes] = results
 
   // Profiles
   if (profilesRes.status === 'fulfilled') {
@@ -441,6 +533,14 @@ async function loadAll() {
     posts.value = asArray(isPlainObject(data) ? data.posts : null)
   } else {
     posts.value = []
+  }
+
+  // Comments (replies) — grouped under their parent post in the template
+  if (commentsRes.status === 'fulfilled') {
+    const data = commentsRes.value && commentsRes.value.data
+    comments.value = asArray(isPlainObject(data) ? data.comments : null)
+  } else {
+    comments.value = []
   }
 
   // Stats
@@ -948,6 +1048,82 @@ onUnmounted(() => {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--faint);
+}
+
+/* ===== Replies (nested under a post) ===== */
+.post-replies {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.replies-head {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.reply-card {
+  margin-left: 16px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--border);
+  background: transparent;
+}
+
+.reply-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reply-avatar {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.reply-author {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reply-time {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.reply-text {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.reply-metrics {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
 }
 
 /* ===== Empty / loading state ===== */

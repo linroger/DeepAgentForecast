@@ -1213,6 +1213,13 @@ class GraphitiRuntime:
                         "name": n.name,
                         "labels": list(getattr(n, "labels", []) or []),
                         "summary": getattr(n, "summary", "") or "",
+                        # 2026-07-03 live-surfaced：此前不带 attributes，导致
+                        # zep_entity_resolver._node_aliases() 永远读不到任何别名信号
+                        # （同一真实主体的多个别名表面形——如「China」「CCP」「Beijing」
+                        # 「MOFCOM」——因此从未被识别为待合并对象，各自独立成节点，
+                        # 挤占模拟 agent 池席位）。带上 attributes 让 alias-aware 合并
+                        # 真正生效；缺失时默认 {}，与现状完全一致（degrade-safe）。
+                        "attributes": dict(getattr(n, "attributes", {}) or {}),
                     })
                 if len(batch) < page:
                     break

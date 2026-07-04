@@ -2068,29 +2068,37 @@ def get_simulation_posts(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/comments', methods=['GET'])
 def get_simulation_comments(simulation_id: str):
     """
-    获取模拟中的评论（仅Reddit）
-    
+    获取模拟中的评论
+
     Query参数：
+        platform: 平台类型（twitter/reddit，默认 reddit——与 /posts 端点保持一致）
         post_id: 过滤帖子ID（可选）
         limit: 返回数量
         offset: 偏移量
     """
     try:
+        platform = request.args.get('platform', 'reddit')
         post_id = request.args.get('post_id')
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
-        
+
         sim_dir = os.path.join(
             os.path.dirname(__file__),
             f'../../uploads/simulations/{simulation_id}'
         )
-        
-        db_path = os.path.join(sim_dir, "reddit_simulation.db")
-        
+
+        # 此前硬编码只读 reddit_simulation.db（"仅Reddit"）——Twitter 平台其实同样有
+        # comment 表且写满了真实评论（CREATE_COMMENT 动作两平台都会产生），只是这个
+        # 端点从未读过，导致前端 Feed 只能看到帖子、看不到任何回复。与 /posts 端点
+        # 保持一致，按 platform 选库。
+        db_file = f"{platform}_simulation.db"
+        db_path = os.path.join(sim_dir, db_file)
+
         if not os.path.exists(db_path):
             return jsonify({
                 "success": True,
                 "data": {
+                    "platform": platform,
                     "count": 0,
                     "comments": []
                 }
@@ -2126,11 +2134,12 @@ def get_simulation_comments(simulation_id: str):
         return jsonify({
             "success": True,
             "data": {
+                "platform": platform,
                 "count": len(comments),
                 "comments": comments
             }
         })
-        
+
     except Exception as e:
         logger.error(f"获取评论失败: {str(e)}")
         return jsonify({

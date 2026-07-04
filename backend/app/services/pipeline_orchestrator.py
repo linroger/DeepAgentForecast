@@ -26,9 +26,11 @@
 from __future__ import annotations
 
 import atexit
+import hashlib
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -608,6 +610,56 @@ def _kill_process_group(proc: Optional[subprocess.Popen], sig: int = signal.SIGK
             pass
 
 
+def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
+    """启动研究子进程前的漂移防护（2026-07-03 live-surfaced）。
+
+    ``deerflow_bridge/``（仓库内、git 跟踪的源）与实际执行的
+    ``$DEERFLOW_DIR/deerflow_research.py``（默认 ``deer-flow/``，setup.sh 从 bridge
+    拷贝生成）是两份独立文件。此前所有对 deerflow_bridge 的修复（audit wave、
+    actor-cast 纪律等）只有重新运行 ``./setup.sh`` 才会同步到部署副本——一次实机
+    forecast run 验证时发现子进程仍在跑没有 enforce_actor_cast 的旧代码（3217 行
+    vs 源 3792 行），导致 28-actor 的档案未按 ACTOR_CAST_MAX=20 截断。
+    此函数在每次启动子进程前做一次内容哈希比对，检测到漂移就按 setup.sh 同款的
+    ``cp`` 逻辑自动重新同步（deerflow_research.py + 两个种子 skill），并记录一条
+    WARNING——不再依赖人工记得重跑 setup.sh。退化安全：找不到 bridge 目录（例如
+    生产环境只部署了 deer-flow/、没有 bridge 源）或任何异常都仅记录警告，不阻断管线。
+    """
+    try:
+        # backend/app/services/pipeline_orchestrator.py -> repo root 是三层上级，
+        # 与 config.py 里 DEERFLOW_DIR 默认值的算法一致（同样以 __file__ 为基准）。
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+        bridge_dir = os.path.join(repo_root, "deerflow_bridge")
+        bridge_script = os.path.join(bridge_dir, "deerflow_research.py")
+        deployed_script = os.path.join(deerflow_dir, "deerflow_research.py")
+        if not os.path.isfile(bridge_script) or not os.path.isfile(deployed_script):
+            return  # 没有 bridge 源（如纯生产部署）——无法比对，也无需比对
+
+        def _digest(path: str) -> str:
+            with open(path, "rb") as fh:
+                return hashlib.sha256(fh.read()).hexdigest()
+
+        pairs = [(bridge_script, deployed_script)]
+        for skill in ("actor-ontology-research", "deep-research"):
+            src = os.path.join(bridge_dir, "skills", skill, "SKILL.md")
+            dst = os.path.join(deerflow_dir, "skills", "public", skill, "SKILL.md")
+            if os.path.isfile(src) and os.path.isfile(dst):
+                pairs.append((src, dst))
+
+        synced = []
+        for src, dst in pairs:
+            if _digest(src) != _digest(dst):
+                shutil.copyfile(src, dst)
+                synced.append(os.path.relpath(dst, deerflow_dir))
+        if synced:
+            logger.warning(
+                "DeerFlow 部署副本与 deerflow_bridge/ 源不同步，已自动重新同步（%s）——"
+                "研究子进程刚才会用旧代码运行。建议提交后运行一次 ./setup.sh 使其保持最新。",
+                ", ".join(synced),
+            )
+    except Exception as sync_err:  # noqa: BLE001 — 漂移防护本身绝不能阻断研究阶段
+        logger.warning("DeerFlow 部署副本漂移检测失败（忽略，不影响本次运行）: %s", sync_err)
+
+
 class DeerFlowResearchRunner:
     """启动 deerflow_research.py 子进程并把进度回传给回调。"""
 
@@ -648,6 +700,7 @@ class DeerFlowResearchRunner:
             raise RuntimeError(f"DeerFlow 目录不存在: {deerflow_dir}（设置 DEERFLOW_DIR）")
         if not os.path.exists(script):
             raise RuntimeError(f"未找到 deerflow_research.py: {script}")
+        _sync_deerflow_bridge_if_stale(deerflow_dir)
 
         os.makedirs(handoff_dir, exist_ok=True)
         # 把（可能敏感的）研究问题写入文件，经 --prompt-file 传给子进程，避免出现在

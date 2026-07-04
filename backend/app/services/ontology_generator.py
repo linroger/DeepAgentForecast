@@ -132,6 +132,7 @@ B. **具体类型（8个，根据文本内容设计）**：
 - **注意**：属性名不能使用 `name`、`uuid`、`group_id`、`created_at`、`summary`（这些是系统保留字）
 - 推荐使用：`full_name`, `title`, `role`, `position`, `location`, `description` 等
 - 对「会决策/发声」的主体，推荐补充能驱动智能体行为的属性：`role`、`stance`（立场）、`influence_tier`（影响力档位）、`motivation`/`goals`（动机/目标）、`interests`（关注议题）。
+- **对能动主体（actor/collective），强烈建议加一个 `aliases` 属性**（该主体的别名/简称/外文名列表，如「CCP」「Beijing」之于「Government of the People's Republic of China」）。抽取时若模型据研究档案填出该属性，会话检索的实体解析（entity resolution）能据此把同一真实主体的多个别名表面形合并为一个图节点——避免「China」「CCP」「Beijing」「MOFCOM」被误判为 4 个不同实体，挤占主阵容（main-cast）席位。即使模型此次没填，图谱构建阶段仍会用 actors.json 的 aliases 字段做兜底合并（不依赖此属性），故此建议是锦上添花，不是强制项。
 
 ## 实体类型参考
 
@@ -408,8 +409,12 @@ _ARCHETYPE_NAME_HINTS = (
     (("resource", "constraint", "supply", "capacity", "reserve", "budget",
       "资源", "约束", "产能", "储备", "预算"), "constraint_resource"),
     # 地点 / 管辖区 / 国家经济体 → place_jurisdiction
-    (("place", "jurisdiction", "region", "country", "nation", "state",
-      "city", "market_place", "地点", "管辖", "地区", "国家", "城市"),
+    # 注意：不含裸词 "state" —— 子串匹配下它会命中 HeadOfState / SecretaryOfState 等
+    # 常见的能动 actor 类型名（2026-07-03 live-surfaced：一次真实预测跑里 HeadOfState
+    # 被误判为 place_jurisdiction，导致该类型的图节点在 tier 推断中被排出 agent 池）。
+    # "nation"/"country"/"jurisdiction" 已覆盖同样的国家/地区语义，无需再靠泛化的 "state"。
+    (("place", "jurisdiction", "region", "country", "nation", "nation_state",
+      "nationstate", "city", "market_place", "地点", "管辖", "地区", "国家", "城市"),
      "place_jurisdiction"),
     # 情景 → scenario
     (("scenario", "case", "情景", "情境"), "scenario"),

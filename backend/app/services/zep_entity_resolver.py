@@ -41,6 +41,39 @@ def canonical_norm_set(actors: Any) -> set:
             if normalize_name(r.get("name", ""))}
 
 
+def actor_alias_map(actors: Any) -> Dict[str, str]:
+    """2026-07-03 live-surfaced: normalized alias name -> normalized canonical name,
+    built directly from actors.json's ``aliases`` field (the AUTHORITATIVE ground
+    truth the research/dossier stage already extracted), independent of whether the
+    graphiti-extracted GRAPH NODE itself carries any alias attribute.
+
+    Why this is needed in addition to ``_node_aliases``/``_alias_match``: those read
+    alias metadata off the graph node's own ``attributes`` dict, which only gets
+    populated if graphiti's per-chunk LLM extractor happened to fill an ``aliases``
+    attribute for that entity type — in practice it usually doesn't (each chunk sees
+    isolated prose, not the dossier's curated alias list). A real forecast run
+    produced 6 separate un-merged nodes ("China"/"CCP"/"Beijing"x2/"MOFCOM"/
+    "Government of the People's Republic of China") for ONE actors.json record whose
+    ``aliases`` field already correctly listed all five — this map lets plan_merges
+    treat any of those exact alias strings as high-precision merge signals even when
+    the graph node carries zero alias metadata of its own.
+    """
+    out: Dict[str, str] = {}
+    for row in extract_actor_rows(actors):
+        canon = normalize_name(row.get("name", ""))
+        if not canon:
+            continue
+        raw_aliases = row.get("aliases")
+        if not isinstance(raw_aliases, list):
+            continue
+        for al in raw_aliases:
+            if isinstance(al, str):
+                na = normalize_name(al)
+                if na and na != canon:
+                    out[na] = canon
+    return out
+
+
 def _cosine(a: Optional[List[float]], b: Optional[List[float]]) -> Optional[float]:
     """Cosine similarity, or None if either vector is missing/empty."""
     if not a or not b or len(a) != len(b):
@@ -144,18 +177,24 @@ class _UnionFind:
 
 
 def plan_merges(nodes: List[Dict[str, Any]], embeddings: Optional[List[List[float]]],
-                canonical_norms: set, threshold: float) -> List[Dict[str, Any]]:
+                canonical_norms: set, threshold: float,
+                alias_map: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
     """Pure: cluster near-duplicate nodes and choose survivors. No graph access.
 
     Returns [{survivor_uuid, survivor_name, primary_label, cross_label,
     victims:[{uuid,name,similarity,label}]}].
     A pair is mergeable iff: labels mergeable (same primary label OR one is the
-    generic 'Entity') AND (name-match exact/containment OR explicit-alias match)
-    AND (embedding cosine ≥ threshold when both embeddings exist, else exact-norm /
-    exact-alias match as a safe fallback) AND not both DISTINCT canonical.
+    generic 'Entity') AND (name-match exact/containment OR explicit-alias match OR
+    dossier-alias match) AND (embedding cosine ≥ threshold when both embeddings
+    exist, else exact-norm / exact-alias match as a safe fallback) AND not both
+    DISTINCT canonical.
     R2-KG-8: a generic-'Entity' bridge can never transitively merge two DISTINCT
     typed labels (per-root typed-label set guard). Components with ≥2 canonicals are
     split so each canonical anchors its own cluster (never merge two canonicals).
+    2026-07-03: ``alias_map`` (normalized alias -> normalized canonical, built from
+    actors.json by ``actor_alias_map``) is an additional exact-signal match,
+    independent of whatever alias metadata the graph node itself carries — see
+    ``actor_alias_map``'s docstring for why this is necessary.
     """
     n = len(nodes)
     if n < 2:
@@ -164,6 +203,11 @@ def plan_merges(nodes: List[Dict[str, Any]], embeddings: Optional[List[List[floa
     norms = [normalize_name(nd.get("name", "")) for nd in nodes]
     labels = [_primary_label(nd) for nd in nodes]
     aliases = [_node_aliases(nd) for nd in nodes]  # R2-KG-8: alias-aware matching
+    amap = alias_map or {}
+    # dossier_canon[i] = the canonical this node resolves to via actors.json aliases,
+    # whether the node's OWN name is that canonical or a known alias of it.
+    dossier_canon = [amap.get(norms[i], norms[i] if norms[i] in canonical_norms else None)
+                     for i in range(n)]
     is_canon = [norms[i] in canonical_norms and bool(norms[i]) for i in range(n)]
 
     uf = _UnionFind(n)
@@ -198,16 +242,23 @@ def plan_merges(nodes: List[Dict[str, Any]], embeddings: Optional[List[List[floa
                 continue  # never merge two DISTINCT canonicals (same-canonical dups are fine)
             name_ok = _name_match(norms[i], norms[j])
             alias_ok = _alias_match(norms[i], norms[j], aliases[i], aliases[j])
-            if not (name_ok or alias_ok):
+            # 2026-07-03: dossier_ok — both nodes resolve to the SAME actors.json
+            # canonical via the authoritative alias_map, independent of whatever
+            # (usually absent) alias metadata the graph node itself carries.
+            dossier_ok = bool(dossier_canon[i]) and dossier_canon[i] == dossier_canon[j]
+            if not (name_ok or alias_ok or dossier_ok):
                 continue
             cos = _cosine(emb[i], emb[j])
             if cos is None:
                 # no embeddings → safe fallback: require an EXACT signal
-                # (exact normalized name OR explicit-alias match).
-                if norms[i] != norms[j] and not alias_ok:
+                # (exact normalized name OR explicit-alias match OR dossier-alias match).
+                if norms[i] != norms[j] and not (alias_ok or dossier_ok):
                     continue
                 cos = 1.0
-            elif cos < threshold:
+            elif cos < threshold and not dossier_ok:
+                # dossier-alias match is authoritative ground truth (the research
+                # stage already confirmed these are the same real actor) — bypass
+                # the cosine gate exactly like the explicit-alias exact signal.
                 continue
             _try_union(i, j, cos)
 
@@ -258,12 +309,16 @@ def _finalize_clusters(nodes, uf, n: int, is_canon: List[bool], norms: List[str]
 
 
 def plan_merges_fast(nodes: List[Dict[str, Any]], embeddings: Optional[List[List[float]]],
-                     canonical_norms: set, threshold: float) -> List[Dict[str, Any]]:
+                     canonical_norms: set, threshold: float,
+                     alias_map: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
     """O(N) duplicate clustering for LARGE graphs — bucket by EXACT normalized name and
     by shared explicit alias, union within buckets (still embedding-gated + canonical-
     protected + label-mergeable), then finalize. Skips the O(N²) containment+cosine scan
     that wedges plan_merges on big node sets. Catches the highest-value duplicates (the
-    same surface form appearing many times) without the all-pairs blow-up. Pure."""
+    same surface form appearing many times) without the all-pairs blow-up. Pure.
+    2026-07-03: also buckets by ``dossier_canon`` (actors.json alias_map resolution,
+    see ``actor_alias_map``) so alias surface forms with zero character overlap and
+    zero graph-node alias metadata still land in the same bucket and get merged."""
     from collections import defaultdict
     n = len(nodes)
     if n < 2:
@@ -272,6 +327,9 @@ def plan_merges_fast(nodes: List[Dict[str, Any]], embeddings: Optional[List[List
     norms = [normalize_name(nd.get("name", "")) for nd in nodes]
     labels = [_primary_label(nd) for nd in nodes]
     aliases = [_node_aliases(nd) for nd in nodes]
+    amap = alias_map or {}
+    dossier_canon = [amap.get(norms[i], norms[i] if norms[i] in canonical_norms else None)
+                     for i in range(n)]
     is_canon = [norms[i] in canonical_norms and bool(norms[i]) for i in range(n)]
 
     uf = _UnionFind(n)
@@ -293,13 +351,16 @@ def plan_merges_fast(nodes: List[Dict[str, Any]], embeddings: Optional[List[List
         typed_by_root[uf.find(a)] = merged_typed
         sim_cache[key] = round(cos, 4)
 
-    # Build candidate buckets: exact normalized name, plus each explicit alias key.
+    # Build candidate buckets: exact normalized name, plus each explicit alias key,
+    # plus the dossier-resolved canonical (actors.json alias_map — 2026-07-03).
     buckets: Dict[str, List[int]] = defaultdict(list)
     for i in range(n):
         if norms[i]:
             buckets[norms[i]].append(i)
         for al in aliases[i]:
             buckets[al].append(i)
+        if dossier_canon[i]:
+            buckets[f"__dossier__{dossier_canon[i]}"].append(i)
 
     for idxs in buckets.values():
         if len(idxs) < 2:
@@ -388,12 +449,15 @@ def resolve_entities(graph_id: str, actors: Any, threshold: Optional[float] = No
     # full containment refinement (byte-identical to before).
     cap = int(getattr(Config, "GRAPH_RESOLVE_MAX_NODES", 1200) or 1200)
     canon = canonical_norm_set(actors)
+    # 2026-07-03: actors.json 的 aliases 字段是研究阶段已确认的权威真相（不依赖图节点
+    # 自身是否恰好带了 alias 元数据）——见 actor_alias_map 文档。
+    amap = actor_alias_map(actors)
     if cap > 0 and len(nodes) > cap:
         logger.info("resolve_entities[%s]: %d nodes > cap %d → O(N) exact-name/alias fast path "
                     "(skipping O(N²) containment refinement)", graph_id, len(nodes), cap)
-        plan = plan_merges_fast(nodes, embeddings, canon, threshold)
+        plan = plan_merges_fast(nodes, embeddings, canon, threshold, alias_map=amap)
     else:
-        plan = plan_merges(nodes, embeddings, canon, threshold)
+        plan = plan_merges(nodes, embeddings, canon, threshold, alias_map=amap)
 
     merged = 0
     for cluster in plan:

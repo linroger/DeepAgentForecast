@@ -177,6 +177,21 @@ class AppGraphitiLLMClient(GraphitiLLMClient):
 
             if not isinstance(result, dict):
                 raise EmptyResponseError(f"Expected JSON object, got {type(result).__name__}")
+            if self._looks_like_schema(result):
+                # GRAPH-12: MiniMax-M3 sometimes wraps genuine extracted values inside a
+                # schema-shaped envelope instead of a bare instance — e.g.
+                # {"type": "object", "properties": {"name": "Elon Musk", ...}} where
+                # `properties` already holds concrete values, not nested sub-schemas.
+                # Salvage the call by unwrapping instead of burning a retry / hard-failing;
+                # under concurrent graph-build load (GRAPH_BUILD_CONCURRENCY) the rising-
+                # temperature retry budget (GRAPH-11) is the first thing to run out.
+                unwrapped = self._try_unwrap_schema_echo(result, response_model)
+                if unwrapped is not None:
+                    logger.info(
+                        "graphiti extraction: unwrapped schema-echo envelope into instance (tier=%s)",
+                        tier,
+                    )
+                    result = unwrapped
             if not self._looks_like_schema(result):
                 # JSON parsed and is not a schema echo. If a response_model is provided,
                 # confirm it actually CONFORMS before returning — graphiti validates the
@@ -231,3 +246,24 @@ class AppGraphitiLLMClient(GraphitiLLMClient):
         if obj.get("type") == "object" and "properties" in obj:
             return True
         return False
+
+    @staticmethod
+    def _try_unwrap_schema_echo(
+        obj: dict, response_model: type[BaseModel] | None
+    ) -> dict | None:
+        """Best-effort salvage for a schema-echo envelope whose ``properties`` key
+        already holds concrete extracted values (not nested sub-schema descriptors).
+        Returns the unwrapped instance dict, or None if the envelope doesn't actually
+        contain usable data (in which case the caller falls back to retrying)."""
+        inner = obj.get("properties")
+        if not isinstance(inner, dict) or not inner:
+            return None
+        for v in inner.values():
+            if isinstance(v, dict) and ("type" in v or "$ref" in v or "properties" in v):
+                return None  # still schema-shaped one level down — not real data
+        if response_model is not None:
+            try:
+                response_model(**inner)
+            except Exception:  # noqa: BLE001 — unwrap didn't actually conform, don't force it
+                return None
+        return inner

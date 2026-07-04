@@ -1916,12 +1916,28 @@ def build_oasis_platform(kind: str, db_path: str, config: Dict[str, Any], log_in
                 from oasis.social_platform.platform import Platform
                 from oasis.social_platform.channel import Channel
                 _mf_recsys = os.environ.get("SIM_TWITTER_RECSYS", "").strip() or "reddit"
+                # 2026-07-03 live-surfaced: max_rec_post_len=2 predates the S8 model-free
+                # feed fix — harmless back when Twitter used twhin-bert (its HuggingFace
+                # download routinely failed → empty feed regardless of this value), but
+                # became a severe winner-take-all bug once S8 switched Twitter to the
+                # WORKING reddit-style hot-score recsys. rec_sys_reddit() gives every
+                # single agent the IDENTICAL top-N-by-hot-score list every round (no
+                # personalization); with N=2, whichever post gets an early like-lead
+                # permanently occupies both slots (more visibility → more likes → higher
+                # score → stays in the top 2), starving every other post of exposure for
+                # the entire run. Observed live: a 24-round/54-post run put 32 of 33 total
+                # comments on ONE seed post while 52 posts got zero. Reddit's own recsys_type
+                # already defaults max_rec_post_len to 100 (see the else-branch below) — with
+                # our small ≤20-actor casts (~50-60 total posts/run), 100 lets rec_sys_reddit's
+                # `len(post_ids) <= max_rec_post_len` branch fire, handing every agent the
+                # FULL post list with zero algorithmic bias — the dense mutual-awareness a
+                # small principals-only cast needs. Mirrors that default here for consistency.
                 platform = Platform(
                     db_path=db_path,
                     channel=Channel(),
                     recsys_type=_mf_recsys,
-                    refresh_rec_post_count=2,
-                    max_rec_post_len=2,
+                    refresh_rec_post_count=5,
+                    max_rec_post_len=100,
                     following_post_count=3,
                 )
                 log_info(
@@ -1965,8 +1981,12 @@ def build_oasis_platform(kind: str, db_path: str, config: Dict[str, Any], log_in
                 db_path=db_path,
                 channel=channel,
                 recsys_type=_tw_recsys,
-                refresh_rec_post_count=int(pcfg.get("refresh_rec_post_count") or 2),
-                max_rec_post_len=int(pcfg.get("max_rec_post_len") or 2),
+                # 2026-07-03: matches the model-free fallback path's fix above (and
+                # Reddit's own defaults below) — a tiny max_rec_post_len under the
+                # working reddit-style hot-score recsys creates a winner-take-all
+                # feed monopoly instead of the intended per-config tunable depth.
+                refresh_rec_post_count=int(pcfg.get("refresh_rec_post_count") or 5),
+                max_rec_post_len=int(pcfg.get("max_rec_post_len") or 100),
                 following_post_count=int(round(2 + echo * 4)),
                 start_time=start_time,
             )

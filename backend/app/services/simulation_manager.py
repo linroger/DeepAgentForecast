@@ -172,14 +172,36 @@ def select_agent_pool(
             )
             eligible = matched_entities
             excluded_n = 0
+
+        # 2026-07-03 live-surfaced（真实 forecast run）：图谱实体解析未把同一真实主体
+        # 的多个别名表面形（如「China」「CCP」「Beijing」「MOFCOM」「Government of the
+        # People's Republic of China」）合并为一个节点时，它们各自都会通过 _match_actor
+        # 命中 actors.json 里同一条记录（该记录已正确把这些列为 aliases），却是不同的
+        # 图谱节点（不同 id(e)）——过滤/排序对它们一视同仁，导致同一个真实 actor 挤占
+        # ≤ACTOR_CAST_MAX 里的多个席位（实测一次 20 席的阵容里，中国政府一家就占了
+        # China/CCP×2/Beijing×2/Government of PRC/MOFCOM 共 6 席，把其余真实主体挤出）。
+        # 这里按「匹配到的 actor 记录」的规范名去重——同一 actor 的多个图谱节点只保留
+        # 排序最靠前的一个，再进入 top-N 截断；未匹配到 actor 的节点各自独立（不互相合并）。
+        _by_actor: Dict[str, Any] = {}
+        _dedup_dropped = 0
+        for e in sorted(eligible, key=_rank, reverse=True):
+            a = _matched.get(id(e))
+            actor_key = _normalize_name(str(a.get("name", "")) if isinstance(a, dict) else "")
+            key = actor_key if actor_key else f"__unmatched_{id(e)}"
+            if key in _by_actor:
+                _dedup_dropped += 1
+                continue
+            _by_actor[key] = e
+        eligible = list(_by_actor.values())
+
         kept = sorted(eligible, key=_rank, reverse=True)
         truncated_n = max(0, len(kept) - _cast_max)
         kept = kept[:_cast_max]
         logger.info(
             f"[actor-cast] 主阵容纪律（cast_max={_cast_max}）: 实体 {len(entities)} 个"
             f"（匹配研究 actor {_matched_count} 个）→ 保留 {len(kept)} 个主阵容 agent"
-            f"（媒体/tier 排除 {excluded_n}，超上限裁剪 {truncated_n}，"
-            f"未匹配图谱节点不再填充 {len(entities) - _matched_count} 个）"
+            f"（媒体/tier 排除 {excluded_n}，同一 actor 别名节点去重 {_dedup_dropped}，"
+            f"超上限裁剪 {truncated_n}，未匹配图谱节点不再填充 {len(entities) - _matched_count} 个）"
         )
         return kept
 

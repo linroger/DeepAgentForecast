@@ -138,6 +138,84 @@ def test_plan_merges_alias_requires_cosine_gate():
     assert plan == []
 
 
+# ---------------------------------------------------- 2026-07-03 dossier alias_map
+# Live-surfaced bug: graphiti's own per-chunk extraction has NO alias metadata on the
+# nodes it produces (attributes.aliases is empty in practice — the LLM extractor only
+# sees isolated prose per chunk). actors.json's aliases field is the actual ground
+# truth. actor_alias_map + the dossier_ok signal in plan_merges/plan_merges_fast let
+# these merge WITHOUT relying on the graph node carrying any alias attribute at all.
+
+def test_actor_alias_map_builds_from_actors_json():
+    actors = {"actors": [
+        {"name": "Government of the People's Republic of China",
+         "aliases": ["PRC", "CCP", "China", "Beijing", "MOFCOM"]},
+        {"name": "United States Congress", "aliases": ["US Congress", "Congress"]},
+    ]}
+    amap = er.actor_alias_map(actors)
+    assert amap[er.normalize_name("China")] == er.normalize_name(
+        "Government of the People's Republic of China")
+    assert amap[er.normalize_name("CCP")] == er.normalize_name(
+        "Government of the People's Republic of China")
+    assert amap[er.normalize_name("Congress")] == er.normalize_name("United States Congress")
+    # canonical name itself is never its own alias key
+    assert er.normalize_name("Government of the People's Republic of China") not in amap
+
+
+def test_plan_merges_dossier_alias_merges_zero_overlap_nodes_without_node_metadata():
+    """Reproduces the live bug exactly: 6 graph nodes for ONE real actor, NONE of them
+    carrying any attributes.aliases (i.e. _node_aliases returns empty for every one —
+    the realistic case), merged purely via the actors.json-derived alias_map."""
+    canonical = "Government of the People's Republic of China"
+    nodes = [
+        _node("u1", "China"),
+        _node("u2", "CCP"),
+        _node("u3", "Beijing"),
+        _node("u4", canonical),
+        _node("u5", "MOFCOM"),
+        _node("u6", "Beijing"),  # a second, independently-extracted "Beijing" node
+    ]
+    # Orthogonal/absent embeddings on purpose — proves the dossier signal alone
+    # (not cosine similarity) drives the merge, exactly like the exact-alias fallback.
+    emb = None
+    amap = er.actor_alias_map({"actors": [
+        {"name": canonical, "aliases": ["PRC", "CCP", "China", "Beijing", "MOFCOM"]},
+    ]})
+    canon_set = {er.normalize_name(canonical)}
+    plan = er.plan_merges(nodes, emb, canon_set, threshold=0.88, alias_map=amap)
+    assert len(plan) == 1
+    cluster = plan[0]
+    assert cluster["survivor_uuid"] == "u4"  # the canonical node wins survivorship
+    victim_uuids = {v["uuid"] for v in cluster["victims"]}
+    assert victim_uuids == {"u1", "u2", "u3", "u5", "u6"}  # all 5 alias nodes merged in
+
+
+def test_plan_merges_fast_dossier_alias_buckets_together():
+    canonical = "Government of the People's Republic of China"
+    nodes = [
+        _node("u1", "China"), _node("u2", "CCP"), _node("u3", "Beijing"),
+        _node("u4", canonical), _node("u5", "MOFCOM"),
+    ]
+    amap = er.actor_alias_map({"actors": [
+        {"name": canonical, "aliases": ["PRC", "CCP", "China", "Beijing", "MOFCOM"]},
+    ]})
+    canon_set = {er.normalize_name(canonical)}
+    plan = er.plan_merges_fast(nodes, None, canon_set, threshold=0.88, alias_map=amap)
+    assert len(plan) == 1
+    assert plan[0]["survivor_uuid"] == "u4"
+    assert {v["uuid"] for v in plan[0]["victims"]} == {"u1", "u2", "u3", "u5"}
+
+
+def test_dossier_alias_never_merges_two_distinct_canonicals():
+    # Two DISTINCT canonicals must never merge even if some quirk of alias_map
+    # construction (e.g. bad dossier data) tried to equate them.
+    nodes = [_node("u1", "United States Congress"), _node("u2", "European Parliament")]
+    amap = {}  # no aliasing between these two — sanity: distinct canonicals stay apart
+    canon_set = {er.normalize_name("United States Congress"),
+                er.normalize_name("European Parliament")}
+    plan = er.plan_merges(nodes, None, canon_set, threshold=0.88, alias_map=amap)
+    assert plan == []
+
+
 def test_plan_merges_cross_label_entity_generic():
     # an untyped 'Entity' duplicate of a typed node merges INTO the typed node and
     # the survivor keeps its type.

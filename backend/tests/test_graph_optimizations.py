@@ -248,6 +248,41 @@ def test_llm_adapter_bounded_inner_retries():
     assert attempts["n"] == 2  # bounded to 2 attempts (GRAPH-11)
 
 
+def test_llm_adapter_unwraps_schema_echo_with_real_values():
+    """GRAPH-12: when the envelope's `properties` key already holds concrete values
+    (not nested sub-schema descriptors), unwrap and return it instead of retrying/failing."""
+    pytest.importorskip("graphiti_core")
+    import asyncio
+    from app.services.graphiti_client.llm_adapter import AppGraphitiLLMClient
+
+    class SchemaEchoWithRealData:
+        def chat_json(self, messages, temperature=0.3, max_tokens=4096, tier="strong"):
+            return {"type": "object", "properties": {"name": "Elon Musk", "role": "CEO"}}
+
+    adapter = AppGraphitiLLMClient(app_llm=SchemaEchoWithRealData())
+    msgs = [_Msg("user", "extract")]
+    result = asyncio.run(adapter._generate_response(msgs, response_model=None))
+    assert result == {"name": "Elon Musk", "role": "CEO"}
+
+
+def test_llm_adapter_does_not_unwrap_genuine_nested_schema():
+    """A schema echo whose `properties` values are themselves schema descriptors
+    (real schema, not data) must NOT be unwrapped — still exhausts retries and fails."""
+    pytest.importorskip("graphiti_core")
+    import asyncio
+    from app.services.graphiti_client.llm_adapter import AppGraphitiLLMClient
+    from graphiti_core.llm_client.errors import EmptyResponseError
+
+    class GenuineSchemaEcho:
+        def chat_json(self, messages, temperature=0.3, max_tokens=4096, tier="strong"):
+            return {"type": "object", "properties": {"name": {"type": "string"}}}
+
+    adapter = AppGraphitiLLMClient(app_llm=GenuineSchemaEcho())
+    msgs = [_Msg("user", "extract")]
+    with pytest.raises(EmptyResponseError):
+        asyncio.run(adapter._generate_response(msgs, response_model=None))
+
+
 def test_add_batch_serial_skips_failed_episode(monkeypatch):
     """RESILIENCE: in the serial ingest path, one episode that raises (e.g. a weak model
     echoing the JSON schema) is skipped+logged; the other episodes still ingest."""

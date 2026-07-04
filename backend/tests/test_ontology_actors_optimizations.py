@@ -208,3 +208,43 @@ def test_split_text_default_honors_config(monkeypatch):
     chunks_small = TextProcessor.split_text(text, 500, 50)
     # larger configured chunk size → strictly fewer chunks (the wedge-fix lever)
     assert len(chunks_default) < len(chunks_small)
+
+
+# ── _infer_archetype_from_name: "state" substring collision (live-surfaced 2026-07-03) ─────
+# A real MiniMax forecast run produced an entity type named "HeadOfState" with no explicit
+# archetype; the name-hint fallback used to match the bare "state" hint (meant for
+# place/jurisdiction types) as a substring of "HeadOfState", misclassifying a top-tier
+# decision-maker actor type as a place — which would then get excluded from the simulation
+# agent pool by entity_simulation_tier's archetype-based tier-4 (abstract) branch.
+
+def test_infer_archetype_head_of_state_is_actor_not_place():
+    assert OntologyGenerator._infer_archetype_from_name("HeadOfState") == "actor"
+
+
+def test_infer_archetype_secretary_of_state_is_actor_not_place():
+    assert OntologyGenerator._infer_archetype_from_name("SecretaryOfState") == "actor"
+
+
+def test_infer_archetype_state_department_is_actor_not_place():
+    assert OntologyGenerator._infer_archetype_from_name("StateDepartment") == "actor"
+
+
+def test_infer_archetype_genuine_place_types_still_classify():
+    # nation/country/jurisdiction/region still correctly resolve to place_jurisdiction —
+    # removing the bare "state" hint must not break real place-type names.
+    assert OntologyGenerator._infer_archetype_from_name("NationState") == "place_jurisdiction"
+    assert OntologyGenerator._infer_archetype_from_name("Country") == "place_jurisdiction"
+    assert OntologyGenerator._infer_archetype_from_name("Jurisdiction") == "place_jurisdiction"
+    assert OntologyGenerator._infer_archetype_from_name("Region") == "place_jurisdiction"
+
+
+def test_infer_archetype_does_not_override_explicit_llm_value():
+    # _normalize_rich_schema only backfills when archetype is missing/empty — an explicit
+    # (even if seemingly wrong) LLM-provided value is never overwritten.
+    result = {"entity_types": [
+        {"name": "HeadOfState", "archetype": "collective"},
+        {"name": "HeadOfState", "archetype": ""},
+    ]}
+    OntologyGenerator._normalize_rich_schema(result)
+    assert result["entity_types"][0]["archetype"] == "collective"  # explicit, kept as-is
+    assert result["entity_types"][1]["archetype"] == "actor"       # empty, backfilled correctly

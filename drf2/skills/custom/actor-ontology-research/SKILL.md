@@ -86,7 +86,7 @@ Output a salience **tier (high / medium / low)** per actor, with the basis. The 
 For **every key actor**, research and write a profile that a downstream model could use to *role-play that actor convincingly and forecast its behavior*. Thin labels ("a major player", "an influential regulator") are failures. Each profile carries, evidence-backed wherever possible:
 
 **Identity & classification**
-- **Canonical name** + **aliases** (abbreviations, tickers, foreign-language forms, handles) — for entity resolution.
+- **Canonical name** + **aliases** (abbreviations, tickers, foreign-language forms, handles) — for entity resolution. **This is not decorative.** This is the authoritative signal the knowledge-graph engine uses to recognize that different surface forms ("China" / "CCP" / "Beijing" / "MOFCOM") are one real actor — the KG's own extraction sees only isolated text and cannot infer this alone. Be exhaustive: every abbreviation, nickname, foreign-language form, or handle used anywhere in the dossier belongs here, or it becomes a phantom duplicate node stealing a cast slot from a genuinely distinct actor.
 - **One-line disambiguator** ("TSMC, the Taiwanese contract chip foundry") — pins identity.
 - **Archetype** (actor vs collective) and **role-class** (§2.2); **salience tier** + basis (§2.3); **jurisdiction / sector**.
 - **Role in the question** — *why this actor matters to the outcome*, not just what it is.

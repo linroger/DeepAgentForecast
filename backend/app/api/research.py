@@ -69,7 +69,9 @@ def run_pipeline():
 
         # T5.5: 每次运行可覆盖研究语言/模型（缺省回退 Config）。在任何子进程启动前校验，杜绝
         # 一个拼错的模型名烧完研究额度后才暴露。
-        language = (data.get('language') or '').strip() or None
+        # research_language 是内部字段名（PipelineState.options/scheduled_rerun.py 用它）；
+        # 接口契约字段是 language——同时接受两者，避免调用方按内部命名类比误传后静默退回默认语言。
+        language = (data.get('language') or data.get('research_language') or '').strip() or None
         if language is not None and language not in _VALID_LANGUAGES:
             return jsonify({"success": False, "error": f"language 必须是 {sorted(_VALID_LANGUAGES)} 之一"}), 400
         if language == 'auto':

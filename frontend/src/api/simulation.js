@@ -125,6 +125,19 @@ export const getSimulationPosts = (simulationId, platform = 'reddit', limit = 50
 }
 
 /**
+ * 获取模拟中的评论/回复（Twitter/Reddit 均支持）
+ * @param {string} simulationId
+ * @param {string} platform - 'reddit' | 'twitter'
+ * @param {number} limit - 返回数量
+ * @param {number} offset - 偏移量
+ */
+export const getSimulationComments = (simulationId, platform = 'reddit', limit = 200, offset = 0) => {
+  return service.get(`/api/simulation/${simulationId}/comments`, {
+    params: { platform, limit, offset }
+  })
+}
+
+/**
  * 获取模拟时间线（按轮次汇总）
  * @param {string} simulationId
  * @param {number} startRound - 起始轮次

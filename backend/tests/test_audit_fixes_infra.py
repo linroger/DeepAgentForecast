@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import subprocess
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -136,6 +137,31 @@ def test_llm3_429_breaker_trips_after_threshold():
     lc._cb_reset("minimax")
     assert lc._CB_STATE["minimax"]["consec429"] == 0.0
     assert not lc._cb_tripped("minimax")
+
+
+def test_cb_record_422_survives_concurrent_calls(monkeypatch):
+    """2026-07-03 live-surfaced: graphiti 的图谱阶段用多线程并发调用 chat()。修复前
+    `_cb_record_422` 的 `st["consec"] = st.get(...) + 1` 是无锁读改写——并发场景下的
+    经典 lost-update 会让计数器永远追不上 _CB_THRESHOLD，即使连续几十次真实失败也
+    从未熔断（一次真实 forecast run 里连续 30 次 minimax 422 从未触发熔断日志）。
+    用真实线程（而非仅靠 mock）跑 N 个并发调用，验证锁保护下计数不丢。
+    """
+    monkeypatch.setattr(lc, "_CB_THRESHOLD", 10_000)  # 避免测试中途触发冷却，只验证计数准确
+    n_threads, calls_per_thread = 20, 25
+    barrier = threading.Barrier(n_threads)
+
+    def _worker():
+        barrier.wait()  # 所有线程同时起跑，最大化竞争窗口
+        for _ in range(calls_per_thread):
+            lc._cb_record_422("minimax")
+
+    threads = [threading.Thread(target=_worker) for _ in range(n_threads)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+
+    assert lc._CB_STATE["minimax"]["consec"] == n_threads * calls_per_thread
 
 
 def _minimax_client(monkeypatch):

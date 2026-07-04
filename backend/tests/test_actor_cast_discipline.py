@@ -360,6 +360,41 @@ def test_pool_no_actors_falls_back_to_cap(monkeypatch):
     assert {e.name for e in kept} == {f"E{i}" for i in range(40, 60)}
 
 
+def test_pool_dedupes_unresolved_alias_nodes_of_same_actor(monkeypatch):
+    """2026-07-03 live-surfaced：一次真实 forecast run 的图谱把「China」「CCP」×2
+    「Beijing」×2「Government of the People's Republic of China」「MOFCOM」解析成 6 个
+    不同图谱节点，而 actors.json 里这些全是同一条记录的 aliases——select_agent_pool
+    过滤/排序对它们一视同仁，20 席阵容里同一个真实 actor 就占了 6 席。
+    修复：按匹配到的 actor 规范名去重，同一 actor 的多个别名节点只保留排序最靠前的一个。
+    """
+    monkeypatch.setattr(Config, "OASIS_MAX_AGENTS", 80, raising=False)
+    monkeypatch.setattr(Config, "ACTOR_CAST_MAX", 20, raising=False)
+    monkeypatch.setattr(Config, "ACTOR_EXCLUDE_MEDIA", True, raising=False)
+    rows = [
+        _actor(
+            "Government of the People's Republic of China",
+            influence="high",
+            aliases=["PRC", "CCP", "China", "Beijing", "MOFCOM"],
+        ),
+    ]
+    rows += [_actor(f"Cast{i}", influence="medium") for i in range(10)]
+    # 6 个不同图谱节点，全部别名匹配同一条 actor 记录 —— 邻边数递增以制造明确的排序优先级。
+    alias_surface_forms = ["China", "CCP", "Beijing", "Government of the People's Republic of China",
+                           "MOFCOM", "Beijing"]
+    entities = [_entity(name, n_edges=i) for i, name in enumerate(alias_surface_forms)]
+    entities += [_entity(f"Cast{i}", n_edges=100) for i in range(10)]  # 确保阵容其余席位不受影响
+    kept = select_agent_pool(entities, actors=_make_actors(rows))
+    kept_names = [e.name for e in kept]
+    china_alias_hits = sum(1 for n in kept_names if n in alias_surface_forms)
+    assert china_alias_hits == 1, f"same real actor should occupy exactly one seat, got {kept_names}"
+    # 去重后应保留邻边数最高（排序最靠前）的别名节点：alias_surface_forms 里最后一个
+    # "Beijing"（index 5, n_edges=5）优先于其它同名/同 actor 的低邻边数节点。
+    assert "Beijing" in kept_names
+    # 其余 10 个 distinct Cast 主体一个都不应因去重而被误伤。
+    for i in range(10):
+        assert f"Cast{i}" in kept_names
+
+
 def test_pool_legacy_recovery_unset_high(monkeypatch):
     # ACTOR_CAST_MAX ≥ OASIS_MAX_AGENTS → 旧 T3.13 行为：匹配 actor 必留 + 填充到 80
     monkeypatch.setattr(Config, "OASIS_MAX_AGENTS", 80, raising=False)
