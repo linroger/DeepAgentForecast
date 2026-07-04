@@ -1,29 +1,29 @@
-# The 2028 US Midterm Election Forecast: A Comprehensive Dossier
+# The 2026 US Midterm Election Forecast: A Comprehensive Dossier
 
-*Forecast date: July 3, 2026 | Election Day: November 7, 2028 (anticipated) | Research base: January 2025 – July 2026*
+*Forecast date: July 3, 2026 | Election Day: November 3, 2026 (anticipated) | Research base: January 2025 – July 2026*
 
 ---
 
 ## Executive Summary
 
-The 2028 midterm cycle will take place in the back half of a second Trump term that, by every available indicator, has produced the most adverse political environment for an in-party midterm since George W. Bush in 2006. Trump's approval is stuck in the mid- to high-30s despite a June 17, 2026 ceasefire that ended a 3.5-month war with Iran; the effective tariff rate sits at roughly 16.8% (the highest since 1933); the One Big Beautiful Bill Act (OBBBA) has produced a fiscal trajectory that even the Yale Budget Lab describes as regressive; the issue-by-issue agenda (inflation 22%, gas prices 19%, economy 30% per Marquette) is deeply underwater; and a special-election track record of D+17.1 overperformance in 2025–2026 congressional specials is the single strongest structural predictor of an in-party midterm loss in modern political science.
+The 2026 midterm cycle will take place in the back half of a second Trump term that, by every available indicator, has produced the most adverse political environment for an in-party midterm since George W. Bush in 2006. Trump's approval is stuck in the mid- to high-30s despite a June 17, 2026 ceasefire that ended a 3.5-month war with Iran; the effective tariff rate sits at roughly 16.8% (the highest since 1933); the One Big Beautiful Bill Act (OBBBA) has produced a fiscal trajectory that even the Yale Budget Lab describes as regressive; the issue-by-issue agenda (inflation 22%, gas prices 19%, economy 30% per Marquette) is deeply underwater; and a special-election track record of D+17.1 overperformance in 2025–2026 congressional specials is the single strongest structural predictor of an in-party midterm loss in modern political science.
 
-**The single load-bearing thesis of this dossier:** *The 2028 midterms will deliver the US House to the Democrats with high probability (75–85%) and the US Senate to the Democrats with moderate probability (45–55%) — a full Democratic sweep of Congress is the single most likely outcome (38–48%) but a divided government of D-House and R-Senate is the next most likely (35–45%), with the wildcard being whether Trump's second-term economic and foreign-policy drag is severe enough to put four or more Republican Senate seats in play simultaneously.*
+**The single load-bearing thesis of this dossier:** *The 2026 midterms will deliver the US House to the Democrats with high probability (75–85%) and the US Senate to the Democrats with moderate probability (45–55%) — a full Democratic sweep of Congress is the single most likely outcome (38–48%) but a divided government of D-House and R-Senate is the next most likely (35–45%), with the wildcard being whether Trump's second-term economic and foreign-policy drag is severe enough to put four or more Republican Senate seats in play simultaneously.*
 
 **The three-line core thesis:**
 1. **Trump approval has stabilized in the mid-to-high 30s** despite the late-June 2026 ceasefire that ended the Iran war. The "Iran deal rally" did not occur. AP-NORC (June 11–17, 2026) has him at 37%; Reuters/Ipsos (June 12–15) at 36%; right-track is 21%/74%, a historically negative reading.
 2. **The House tilts decisively Democratic.** Republicans are defending 14 of 17 Cook Political Report toss-ups; the DCCC raised a cycle-record $45.3M in Q2 2026 (edging 2024's $44M). Nate Silver's Silver Bulletin moved D-House probability from 72% (spring) to 85–90% by late June. The 2022 redux (D+3 popular vote, zero House seats) is the cautionary tale, but 2026 has stronger fundamentals at D+5–7.
 3. **Democrats have a real but narrow Senate path.** Cook shifted four races toward D on April 13: NC and GA to Lean D, OH-special to Toss-Up, NE to Likely R. Sabato's Crystal Ball (June 11) added AK to Toss-Up. Even sweeping all Toss-Ups plus one Lean D, Democrats come up one seat short of majority per Cook's analyst Jessica Taylor: *"the likeliest outcome is a 1 to 3 seat Democratic pickup — just short of 4 they need."*
 
-By the time 2028 arrives, the structural conditions will be more acute, not less: presidential-year turnout disadvantages for the in-party are larger in the second midterm of a presidency; the 2028 presidential election cycle will produce high-salience ballot drop-off patterns that historically benefit the out-party; and the redistricting effects of the 2026 cycle (NC, OH, MO, VA) will reshape the House map for the decade.
+As the second midterm of a presidency (2018 was the first), the structural conditions are more acute, not less: presidential-year turnout disadvantages for the in-party are larger in a second-term president's second midterm; the 2026 result will shape the redistricting effects that reshape the House map for the decade (NC, OH, MO, VA); and the outcome will set the stage for how the coming 2028 presidential election cycle's high-salience ballot drop-off patterns play out for whichever party is then the out-party.
 
 ---
 
 ## The Load-Bearing Thesis
 
-> **"The 2028 midterms will return the US House of Representatives to Democratic control with high probability and, for the first time in the cycle, deliver the US Senate to the Democrats with moderate probability — but the Senate outcome will hinge on a small set of Trump-era structural conditions (approval floor, Iran-war legacy, tariff inflation, OBBBA fiscal drag) that have already stabilized rather than degraded, making the Senate band a 45–55% Democratic majority rather than a 70%+ certainty."**
+> **"The 2026 midterms will return the US House of Representatives to Democratic control with high probability and, for the first time in the cycle, deliver the US Senate to the Democrats with moderate probability — but the Senate outcome will hinge on a small set of Trump-era structural conditions (approval floor, Iran-war legacy, tariff inflation, OBBBA fiscal drag) that have already stabilized rather than degraded, making the Senate band a 45–55% Democratic majority rather than a 70%+ certainty."**
 
-This thesis is falsifiable. It would be disproven if (a) Trump's approval recovers to 45%+ by summer 2028, (b) the tariff regime is struck down by SCOTUS and the effective rate falls below 8%, (c) the Iran ceasefire holds for two full years and is followed by a sustained economic boom, or (d) the 2028 Democratic presidential nominee is so divisive that the in-party fails to consolidate a midterm coalition. None of these is the central case.
+This thesis is falsifiable. It would be disproven if (a) Trump's approval recovers to 45%+ by summer 2026, (b) the tariff regime is struck down by SCOTUS and the effective rate falls below 8%, (c) the Iran ceasefire holds for two full years and is followed by a sustained economic boom, or (d) intra-Democratic coalition tensions (e.g., the AIPAC-progressive primary fallout) are severe enough that the party fails to consolidate a unified midterm coalition. None of these is the central case.
 
 ---
 
@@ -46,33 +46,33 @@ To produce a calibrated probabilistic forecast, we anchor on the historical reco
 
 **Reference class outcome for a 36–38% approval second-term in-party midterm:** The closest historical analogue is **1974 (Nixon/Ford)** and **2006 (Bush)**. In both cases, the in-party lost both chambers decisively. The 1974 cycle, with a 36% approval at midterm, produced D + 49 House seats and D + 3 Senate seats. The 2006 cycle, with a 39% approval, produced D + 30 House and D + 6 Senate.
 
-**Adjusted case-specific base rate for 2028 with Trump at ~37% approval in mid-2026 (extrapolated forward):** The House swing is almost certain to be a D pickup (D+ 7–15 seats most likely, with a long tail to D+ 20+). The Senate swing is a coin flip to slight-D-favorite depending on the 2028 class composition.
+**Adjusted case-specific base rate for 2026 with Trump at ~37% approval in mid-2026 (extrapolated forward):** The House swing is almost certain to be a D pickup (D+ 7–15 seats most likely, with a long tail to D+ 20+). The Senate swing is a coin flip to slight-D-favorite depending on the 2026 class composition.
 
 ### Base Rate 2: Presidential-year turnout disadvantage for in-party
 
 Since 1950, the in-party in a second-term president's first midterm has lost House seats 8 out of 9 times (the lone exception being Clinton 1998, when impeachment backlash helped the in-party). The mean net seat loss in those 8 cycles is **-26 House seats**. The median is **-15 House seats**.
 
-**Base rate for 2028 (second midterm of Trump II):** The historical record for *third-cycle* in-party performance is thinner, but in modern American politics the third cycle almost always amplifies rather than dampens the in-party drag: 1958 (Eisenhower's second midterm) produced D + 49; 2018 (Trump's first midterm) produced D + 41. The longer a party holds the White House, the more structural the anti-incumbent coalition becomes.
+**Base rate for 2026 (second midterm of Trump II):** The historical record for *third-cycle* in-party performance is thinner, but in modern American politics the third cycle almost always amplifies rather than dampens the in-party drag: 1958 (Eisenhower's second midterm) produced D + 49; 2018 (Trump's first midterm) produced D + 41. The longer a party holds the White House, the more structural the anti-incumbent coalition becomes.
 
-**Adjusted case-specific base rate for 2028 House net swing:** D + 7 to D + 22 seats, with a central tendency around D + 12 to D + 15.
+**Adjusted case-specific base rate for 2026 House net swing:** D + 7 to D + 22 seats, with a central tendency around D + 12 to D + 15.
 
 ### Base Rate 3: Senate class composition in presidential years
 
-The 2028 Senate class will be the 2020 cycle (Trump I) winners: the Senate map going into the 2026 cycle had 22 R seats and 13 D seats up. The *2028* Senate class (i.e., the senators elected in 2028) will be the senators whose six-year terms started in 2022 — meaning the seats that were up in 2022 cycle. The 2022 cycle had 14 R seats and 21 D seats up, a D-favorable map. By 2028, those 14 R seats (including several competitive ones in states Trump won narrowly) and 21 D seats will be up. This is a **modestly R-favorable map** for 2028 — but the macro environment (Trump drag) can override the structural map.
+The 2026 Senate class is the 2020 cycle (Trump I) winners: the Senate map going into the 2026 cycle has 22 R seats and 13 D seats up — a **modestly R-favorable map** on paper, though the macro environment (Trump drag) is currently overriding the structural map in Democrats' favor. The *next* (2028) Senate class — the senators whose six-year terms started in 2022, meaning the seats that were up in the 2022 cycle — is a different, more D-favorable map: 14 R seats (including several competitive ones in states Trump won narrowly) and 21 D seats. So the 2028 map will be structurally friendlier to Democrats than the 2026 map is, independent of whatever the macro environment looks like by then.
 
-**Adjusted case-specific base rate for 2028 Senate:** The structural map favors R by 1–2 seats, but the macro environment (37% approval) flips it to a D-flip of 1–3 seats, with a long tail to a D-flip of 4+.
+**Adjusted case-specific base rate for 2026 Senate:** The structural map favors R by 1–2 seats, but the macro environment (37% approval) flips it to a D-flip of 1–3 seats, with a long tail to a D-flip of 4+.
 
 ---
 
 ## 1. Key Real-World Actors
 
-The following actors are the principal decision-makers whose actions and stances will most directly shape the 2028 midterm outcome.
+The following actors are the principal decision-makers whose actions and stances will most directly shape the 2026 midterm outcome.
 
 ### 1.1 Government Bodies
 
-| Actor | Role | Public stance | Influence on 2028 | What they know/believe |
+| Actor | Role | Public stance | Influence on 2026 | What they know/believe |
 |---|---|---|---|---|
-| **Donald J. Trump** (R) | 47th/48th President of the United States (second term) | Defensive; blaming Biden, "radical left," and Senate Republicans for any setbacks. Confident of being vindicated by the 2026 Iran deal. | The single most influential actor. His approval rating is the dominant variable. His decision to campaign heavily (or not) in vulnerable GOP districts will determine turnout. | Believes the Iran deal will be remembered as a 2028 asset. Privately concerned about tariff-induced inflation but unwilling to reverse course. Views the OBBBA as his signature domestic achievement. |
+| **Donald J. Trump** (R) | 47th/48th President of the United States (second term) | Defensive; blaming Biden, "radical left," and Senate Republicans for any setbacks. Confident of being vindicated by the 2026 Iran deal. | The single most influential actor. His approval rating is the dominant variable. His decision to campaign heavily (or not) in vulnerable GOP districts will determine turnout. | Believes the Iran deal will be remembered as a 2026 asset. Privately concerned about tariff-induced inflation but unwilling to reverse course. Views the OBBBA as his signature domestic achievement. |
 | **JD Vance** (R) | Vice President (elevated from OH-Senate seat) | Loyal Trump surrogate; positioning for 2028 presidential run. | Senate tiebreaker, prominent campaign surrogate, potential 2028 presidential nominee. | Believes the 2028 presidential primary will be his to lose. Calculates that a strong 2026 GOP midterm is essential for his 2028 path. |
 | **Mike Johnson** (R-LA) | Speaker of the House | Defending the GOP majority. Vulnerable to a motion to vacate if the chamber flips. | His leadership tenure is directly tied to the 2026 House outcome. | Knows the math: a 3-seat net loss flips the chamber. Has prioritized candidate quality in primaries. |
 | **John Thune** (R-SD) | Senate Majority Leader | Replacing Mitch McConnell's institutional posture. | Sets the Senate campaign agenda. | Believes the 2026 cycle is defensible if the economic story improves. Worried about the OH and ME specials. |
@@ -84,11 +84,11 @@ The following actors are the principal decision-makers whose actions and stances
 
 ### 1.2 Campaign Committees and Party Organizations
 
-| Actor | Role | Public stance | Influence on 2028 | What they know/believe |
+| Actor | Role | Public stance | Influence on 2026 | What they know/believe |
 |---|---|---|---|---|
 | **DCCC (Democratic Congressional Campaign Committee)** | House campaign arm for Democrats | $45.3M Q2 2026, cycle record. Targeting 18 toss-ups. | The single most influential House campaign operation. | Believes a D House majority is 75–85% likely if the macro environment holds. |
 | **NRCC (National Republican Congressional Committee)** | House campaign arm for Republicans | Trailing DCCC in fundraising. Defending 14 of 17 toss-ups. | Will determine whether the GOP can hold the House. | Knows the math is brutal. Has prioritized candidate quality in primaries. |
-| **DSCC (Democratic Senatorial Campaign Committee)** | Senate campaign arm for Democrats | Targeting NC, OH, ME, AK, GA, MI, NH. | The most consequential committee for 2028 Senate. | Believes a Senate flip is possible but uncertain. |
+| **DSCC (Democratic Senatorial Campaign Committee)** | Senate campaign arm for Democrats | Targeting NC, OH, ME, AK, GA, MI, NH. | The most consequential committee for 2026 Senate. | Believes a Senate flip is possible but uncertain. |
 | **NRSC (National Republican Senatorial Committee)** | Senate campaign arm for Republicans | Defending 22 seats including 5 in states Trump won by <13 points. | Will determine whether the GOP can hold the Senate. | In a statement to Newsweek: "The 2026 Senate battleground is going to come down to a small number of very competitive races in true swing states that no one can take for granted, but Republicans remain favored to hold the Senate Majority." |
 | **AIPAC / United Democracy Project / EDW Action** | Pro-Israel super-PAC | Intervening in Democratic primaries to defeat progressive candidates (Abughazaleh in IL-09, Kiros in CO-01). | Reshaping the Democratic primary electorate in ways that may depress Dem base turnout in November. | Believes Democratic moderates are more electable in swing districts. May be overconfident in its ability to suppress progressive turnout. |
 | **Senate Leadership Fund (SLF) / Congressional Leadership Fund (CLF)** | McConnell-aligned super-PACs | Defending vulnerable GOP incumbents. | Largest single dark-money conduit in 2026. | Will be the GOP's primary financial backstop. |
@@ -98,7 +98,7 @@ The following actors are the principal decision-makers whose actions and stances
 
 ### 1.3 Key Individuals (Candidates, Strategists, and Influencers)
 
-| Actor | Role | Public stance | Influence on 2028 | What they know/believe |
+| Actor | Role | Public stance | Influence on 2026 | What they know/believe |
 |---|---|---|---|---|
 | **Roy Cooper** (D) | 2026 NC Senate candidate; former two-term NC Governor | Running against former RNC Chair Michael Whatley. Polling at D+7 in Cook. | The single most likely Dem Senate pickup. | Believes he can win by 4–6 points. Has the strongest candidate-quality advantage of any 2026 Senate candidate. |
 | **Sherrod Brown** (D-OH)** | Former OH Senator, running for the Vance vacancy | Polling 45–48% against Jon Husted (R) in July 2026; Cook rates Toss-Up. | The OH special is the wildcard that gives Ds a path to a 51-seat Senate. | Believes the 2018 template (when he won OH by 7 in a Trump +8 year) is repeatable. |
@@ -213,11 +213,11 @@ The following actors are the principal decision-makers whose actions and stances
 | Q2 2027 | OBBBA implementation phase 1 | Defines fiscal drag. |
 | Q3 2027 | 2028 presidential primary begins | Trump succession race. |
 | Q4 2027 | 2028 primary calendar crystallizes | First presidential debates. |
-| Jan 2028 | 118th Congress second session | Pre-election legislative agenda. |
+| Jan 2028 | 120th Congress second session | Pre-election legislative agenda. |
 | Mar 2028 | SCOTUS hears NRSC v. FEC | Campaign finance reset. |
 | May 2028 | 2028 presidential primaries conclude | Nominee determined. |
 | **Sep 2028** | **First presidential debate** | Defines presidential-year dynamics. |
-| **Nov 7, 2028** | **2028 presidential + midterm election** | The cycle's endpoint. |
+| **Nov 7, 2028** | **2028 presidential election** | The cycle's endpoint. |
 
 ---
 
@@ -567,7 +567,7 @@ The 2026 cycle is unusual in that three independent but reinforcing anti-Trump f
 
 ### Chain 5: 2028 Presidential Election → Ballot Drop-Off → Midterm Turnout Differential → Senate Outcome
 
-**Mechanism:** The 2028 presidential election will be a high-salience event with 65%+ turnout. The 2028 midterm will have ~50% turnout. The drop-off is most acute among low-propensity voters who vote in presidential years but skip midterms. In a 2-party race, the drop-off is roughly equal. But in 2028, if the presidential race features a charismatic Dem nominee (e.g., Josh Shapiro, Gretchen Whitmer, or AOC) vs. a Trump-endorsed successor (e.g., Vance, DeSantis, or a Trump family member), the Dem nominee's coattails could push Dem Senate candidates in competitive races.
+**Mechanism:** The 2028 presidential election will be a high-salience event with 65%+ turnout, unlike a typical midterm's ~50% turnout. The drop-off is most acute among low-propensity voters who vote in presidential years but skip midterms. In a 2-party race, the drop-off is roughly equal. But in 2028, if the presidential race features a charismatic Dem nominee (e.g., Josh Shapiro, Gretchen Whitmer, or AOC) vs. a Trump-endorsed successor (e.g., Vance, DeSantis, or a Trump family member), the Dem nominee's coattails could push Dem Senate candidates in competitive races.
 
 **Second-order effects:**
 - The 2028 Senate map (14 R, 21 D) has several competitive R seats in states the Dem presidential nominee may win (MI, WI, PA, NC, GA)
@@ -600,7 +600,7 @@ The 2026 cycle's outcomes will significantly influence the 2028 Dem primary. If 
 
 **Wildcard 2: The Trump Succession**
 
-JD Vance is the leading 2028 GOP contender. He is positioning as Trump's heir. If he wins the 2028 GOP primary and the general, the 2028 cycle is the beginning of a new political era and the 2028 midterm is largely a referendum on Vance's first two years. If he loses the primary to a more traditional Republican (e.g., Glenn Youngkin, Brian Kemp), the 2028 cycle is a different beast.
+JD Vance is the leading 2028 GOP contender. He is positioning as Trump's heir. If he wins the 2028 GOP primary and the general, the 2028 cycle is the beginning of a new political era and the 2030 midterm becomes largely a referendum on Vance's first two years. If he loses the primary to a more traditional Republican (e.g., Glenn Youngkin, Brian Kemp), the 2028 cycle is a different beast.
 
 **Wildcard 3: A Black-Swan Event**
 
@@ -635,8 +635,8 @@ If 2022 is the reference class (not 2018 or 2006), then:
 **For the thesis to break, the following would have to be true:**
 1. The 2026 generic ballot stays at D+ 2–3 rather than D+ 5–7
 2. The 2026 special-election overperformance decays to D+ 5–8 rather than D+ 17
-3. Trump's approval rises to 42–45% by mid-2028
-4. The 2028 Dem presidential nominee is a divisive progressive who fails to consolidate the center
+3. Trump's approval rises to 42–45% by mid-2026
+4. Intra-Democratic coalition tensions (e.g., the AIPAC-progressive primary fallout) leave the party unable to consolidate a unified midterm coalition
 5. The Iran ceasefire holds and produces a durable economic recovery
 6. The SCOTUS IEEPA decision strikes down tariffs and the inflation narrative breaks
 
@@ -686,7 +686,7 @@ If 2022 is the reference class (not 2018 or 2006), then:
 | Q1 2027 | 120th Congress convenes | D-House + ? Senate |
 | Q2 2027 | Iran ceasefire renewal | Foreign-policy reset |
 | Q3 2027 | 2028 primary begins | Trump succession race |
-| Q1 2028 | 118th Congress second session | Pre-election agenda |
+| Q1 2028 | 120th Congress second session | Pre-election agenda |
 | May 2028 | 2028 primary concludes | Nominee determined |
 | **Nov 7, 2028** | **2028 election** | The cycle's endpoint |
 
@@ -747,7 +747,7 @@ If 2022 is the reference class (not 2018 or 2006), then:
 
 ## 11. Bottom-Line Forecast Statement
 
-> **The 2028 midterm will almost certainly deliver the US House to Democrats (75–85% probability) and very nearly deliver the US Senate to them — but probably not quite. The most likely outcome of the 2026 cycle is a Democratic House + Republican Senate (35–45% probability), with a Democratic sweep of both chambers at 38–48%, Republican status quo at 8–12%, and Republican gains at 2–5%. Democrats probably gain 1–3 Senate seats in 2026 (NC is the most likely Dem pickup, with OH-special and ME as coin flips) and 7–14 House seats (PA-08, NY-17, CA-13, CA-27, MI-7, NE-2, VA-2, OH-01 all flip with sustained D+5–6 generic ballot). By 2028, with Trump approval still in the 35–38% range and the Iran ceasefire's legacy unresolved, the structural conditions will favor a continued Democratic House majority and a competitive Senate where the 2028 presidential election's coattail effect is the determining factor.**
+> **The 2026 midterm will almost certainly deliver the US House to Democrats (75–85% probability) and very nearly deliver the US Senate to them — but probably not quite. The most likely outcome of the 2026 cycle is a Democratic House + Republican Senate (35–45% probability), with a Democratic sweep of both chambers at 38–48%, Republican status quo at 8–12%, and Republican gains at 2–5%. Democrats probably gain 1–3 Senate seats in 2026 (NC is the most likely Dem pickup, with OH-special and ME as coin flips) and 7–14 House seats (PA-08, NY-17, CA-13, CA-27, MI-7, NE-2, VA-2, OH-01 all flip with sustained D+5–6 generic ballot). Looking beyond 2026: by 2028, with Trump approval still in the 35–38% range and the Iran ceasefire's legacy unresolved, the structural conditions will favor a continued Democratic House majority and a competitive Senate where the 2028 presidential election's coattail effect is the determining factor.**
 
 The three key variables that will determine the 2028 outcome are:
 
@@ -830,7 +830,7 @@ None of these flip the House forecast (which is 75–85% Democratic); all of the
 
 ## 13. Final Forecast Statement (One Paragraph)
 
-> **The 2028 midterm elections will be held in the second midterm of Donald Trump's second term, with Trump's approval likely still in the mid-to-high 30s (extrapolated from June 2026 baselines), the effective tariff rate at 10–17% (depending on the SCOTUS IEEPA decision), the Iran ceasefire's legacy still contested, and the OBBBA's fiscal drag still active. The House of Representatives will almost certainly be in Democratic hands after 2028 (75–85% probability in 2026; rising to 80–90% by 2028 if the 2026 cycle confirms the anti-Trump pattern). The Senate is the contested body: Ds have a 45–55% probability of gaining control by 2028, with the 2026 cycle's outcomes (state-legislature, redistricting) and the 2028 presidential election's coattail effect as the determining factors. The most likely single outcome is a Democratic House + a 50-50 Senate with VP tiebreaker, but a full Democratic sweep is the next most likely. The three-pillar anti-Trump story (tariffs + war + OBBBA) is the central mechanism, and it is structurally durable through the 2028 cycle absent a major economic or foreign-policy reversal. The 2028 midterm is best understood as the second-stage confirmation of an anti-Trump political realignment that began in 2025 and crystallized in 2026.**
+> **The 2026 midterm elections will be held as the second midterm of Donald Trump's second term, with Trump's approval likely still in the mid-to-high 30s (extrapolated from June 2026 baselines), the effective tariff rate at 10–17% (depending on the SCOTUS IEEPA decision), the Iran ceasefire's legacy still contested, and the OBBBA's fiscal drag still active. The House of Representatives will almost certainly flip to Democratic hands in 2026 (75–85% probability), with that Democratic majority likely strengthening further by 2028 if the 2026 cycle confirms the anti-Trump pattern. The Senate is the contested body: Ds have a 45–55% probability of gaining control in 2026, with the 2028 presidential election's coattail effect as an additional factor shaping the Senate's trajectory beyond this cycle. The most likely single outcome is a Democratic House + a 50-50 Senate with VP tiebreaker, but a full Democratic sweep is the next most likely. The three-pillar anti-Trump story (tariffs + war + OBBBA) is the central mechanism, and it is structurally durable through the 2028 cycle absent a major economic or foreign-policy reversal. The 2026 midterm is best understood as the second-stage confirmation of an anti-Trump political realignment that began in 2025.**
 
 ## Prediction Market Signals
 

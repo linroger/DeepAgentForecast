@@ -2,7 +2,7 @@
  "entity_types": [
   {
    "name": "Person",
-   "description": "Individual political actors whose decisions shape the 2026/2028 midterm outcome (incumbents, chal...",
+   "description": "Individual political actors whose decisions shape the 2026 midterm outcome (incumbents, chal...",
    "attributes": [
     {
      "name": "full_name",

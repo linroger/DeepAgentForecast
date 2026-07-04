@@ -1,6 +1,6 @@
 {
  "pipeline_id": "pipe_aa0fb94abe92",
- "prompt": "Forecast the outcome of the 2028 US midterm election. Cover: which party controls the House and Senate after the election, key factors shaping the outcome (presidential approval rating, economic conditions/inflation, redistricting/gerrymandering effects, candidate quality, fundraising, turnout dynamics for each party coalition), the most competitive Senate and House races/states, the role of the 2028 presidential election cycle dynamics on midterm turnout, and how any major policy developments (trade/tariffs, AI regulation, immigration) by 2028 shape voter sentiment. Identify which actors decisions and actions will most shape this electoral outcome and produce a calibrated probabilistic forecast.",
+ "prompt": "Forecast the outcome of the 2026 US midterm election. Cover: which party controls the House and Senate after the election, key factors shaping the outcome (presidential approval rating, economic conditions/inflation, redistricting/gerrymandering effects, candidate quality, fundraising, turnout dynamics for each party coalition), the most competitive Senate and House races/states, the role of the 2028 presidential election cycle dynamics on midterm turnout, and how any major policy developments (trade/tariffs, AI regulation, immigration) by 2026 shape voter sentiment. Identify which actors decisions and actions will most shape this electoral outcome and produce a calibrated probabilistic forecast.",
  "created_at": "2026-07-03T06:25:08.429052+00:00",
  "mode": "full",
  "rounds": 36,
