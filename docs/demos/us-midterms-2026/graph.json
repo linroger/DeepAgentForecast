@@ -1,0 +1,3509 @@
+{
+ "nodes": [
+  {
+   "id": "f97f8b6c-e301-4801-9cb9-989e306ef09d",
+   "name": "Longwell",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Anti-Trump Republican analyst at The Bulwark. Conducts focus groups on Trump-product buyers vs. non-buyers (62% vs. 45% motivated), important for understanding the Democratic intensity edge.\nUMass found 17% of 2024 Trump voters expressed reservations in its March 30, 2026 poll, paralleling Longwell/Bulwark focus group findings on defection risk among Trump-product buyers (62% motivated to vote D).\nLongwell/Bulwark focus groups showing 62% of Trump-product buyers motivated to vote Democratic support UMass's finding that 17% of 2024 Trump voters express reservations.\nThe Boston Globe carries Lon"
+  },
+  {
+   "id": "f969b0c4-e315-403f-b343-c017f7a21f9f",
+   "name": "Brian Kemp",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Brian Kemp is cited as a potential more traditional Republican who could win the 2028 GOP primary if Vance loses it."
+  },
+  {
+   "id": "f69bd2e5-4fbb-4d93-a66d-ddbd1fa95231",
+   "name": "Cassidy (R-LA)",
+   "labels": [
+    "Person"
+   ],
+   "summary": "In June 2025, Cassidy (R-LA) drew primary challengers with Trump endorsement, making Louisiana a primary-driven open and signaling intra-GOP opposition."
+  },
+  {
+   "id": "f15ea05e-0b67-4621-92d8-5cc0fff1d150",
+   "name": "MI-7",
+   "labels": [
+    "Person"
+   ],
+   "summary": "MI-7 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "id": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "name": "One Big Beautiful Bill Act (OBBBA)",
+   "labels": [
+    "PolicyRegime"
+   ],
+   "summary": "The One Big Beautiful Bill Act (OBBBA)'s Medicaid/SNAP cuts fuel an affordability backlash in suburban districts, a key fault line for the 2028 US Midterm Election.\nMike Johnson faces fiscal demands from OBBBA implementation while managing his House majority.\nThe OBBBA combines business tax cuts with tariff-revenue offsets and is the signature legislative item of the Trump administration; critics call it fiscally regressive while supporters note tariff revenue offsets, making it Pillar 3 of the anti-incumbent story into 2028.\nNatasha Sarin, alongside Yale Budget Lab, has produced analysis crit"
+  },
+  {
+   "id": "ecb3d045-4051-4b68-af8d-0cf8c74d663b",
+   "name": "Gallup",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "In October 2025, Gallup reported Trump approval at 38% (with a July 2025 baseline), the first major warning of declining Trump approval."
+  },
+  {
+   "id": "ec23a6f9-ad9d-4c7d-baa4-b391936f4fbe",
+   "name": "Mike Collins",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Mike Collins is the Republican candidate in the Georgia Senate Race 2026, trailing 43–56 in a Fox News poll."
+  },
+  {
+   "id": "eb864511-7c98-4ab2-ab0f-ed9d46a88016",
+   "name": "Iowa state Senate Democrats",
+   "labels": [
+    "CampaignCommittee"
+   ],
+   "summary": "On December 30, 2025, Iowa state Senate Democrats broke the GOP supermajority in a special election, the first concrete evidence of anti-Trump overperformance against Republicans."
+  },
+  {
+   "id": "eb068edc-f22b-477f-895d-0d27633639a0",
+   "name": "Angie Nixon (D)",
+   "labels": [
+    "Person"
+   ],
+   "summary": "On January 22, 2026, Angie Nixon (D) announced her FL Senate special bid, becoming the first Dem recruit in the Rubio vacancy."
+  },
+  {
+   "id": "e96706a1-62c9-4a56-bc9d-bc6417038f0f",
+   "name": "2026 generic ballot",
+   "labels": [
+    "ForecastSignal"
+   ],
+   "summary": "The 2026 generic ballot is a Tier 4 forecast signal indicating Democrats +5 on average (direction toward Democrats). Generic-ballot averages in 2026 range from D +2 to D +6 points, anchoring calibrated probabilities for the 2028 midterm House and Senate control forecasts."
+  },
+  {
+   "id": "e8fef2bc-f313-43bb-92d1-8423a5076fb9",
+   "name": "2026 United States House of Representatives elections",
+   "labels": [],
+   "summary": "If the Iran ceasefire holds and produces a durable economic recovery, it would weaken the projected Democratic gains in the 2026 House elections."
+  },
+  {
+   "id": "e3d6c069-0f13-4f4f-bd62-c6f4f4cc0d4c",
+   "name": "California",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "California's Prop 50 redistricting nets Democrats +3 to +5 CA seats as part of the redistricting war."
+  },
+  {
+   "id": "e3923561-028f-459b-9e7f-bdda7a35a6a8",
+   "name": "2028 presidential election",
+   "labels": [],
+   "summary": "The 2026 midterm results shape the 2028 presidential election's coattail effect, which is described as the determining factor for the competitive 2028 Senate.\nOBBBA implementation is listed as a macro-environment variable that will influence the 2028 presidential election dynamics.\nThe 2028 presidential election dynamics (nominee quality, turnout differential, ballot drop-off) are identified as a key variable that cannot flip the Democratic House majority forecast (75-85%) but shapes the surrounding environment.\nThe Iran ceasefire status is listed as one of the macro-environment factors (along"
+  },
+  {
+   "id": "e2279273-95e5-4a3a-9e68-ce087da59e7a",
+   "name": "BNN Bloomberg",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "BNN Bloomberg reported on February 24, 2026, covering the brief tariff reprieve relevant to the Iran-era macro environment."
+  },
+  {
+   "id": "e14d692b-7be7-43c4-9958-751a10c7056f",
+   "name": "Jon Ossoff",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Senator Jon Ossoff (D-Georgia), defending a seat Trump won by 2.2 in 2024 against Trump-endorsed former R Mike Collins; leads 56-43 in Fox News July 1, 2026 polling; $32.5M cash on hand.\nJon Ossoff is the Democratic candidate in the Georgia Senate Race 2026, leading 56–43 in a Fox News poll."
+  },
+  {
+   "id": "de840b00-e9e3-4ef8-bac8-0f42529fb4b4",
+   "name": "The Bulwark",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Anti-Trump Republican outlet conducting focus groups on Trump-product buyers vs. non-buyers (62% vs. 45% motivated). Important for understanding the Democratic intensity edge."
+  },
+  {
+   "id": "dc97973d-5164-4a73-9c0b-c2ced8367f2f",
+   "name": "Glenn Youngkin",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Glenn Youngkin is cited as a potential more traditional Republican who could win the 2028 GOP primary if Vance loses it."
+  },
+  {
+   "id": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "name": "Roy Cooper",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Roy Cooper, two-term former governor of North Carolina (2017-2025), running for the open Senate seat vacated by R Senator Thom Tillis; leads Michael Whatley (R, former RNC Chair) 49-42 in Carolina For\nRoy Cooper is the Democratic candidate in the North Carolina Senate Race 2026, leading by D+7 in an April 2026 Cook poll."
+  },
+  {
+   "id": "d916993c-1581-4b0c-a138-84401d6c394e",
+   "name": "Sherrod Brown",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Sherrod Brown, former two-term Ohio senator (2007-2025), running to reclaim the seat vacated by JD Vance (now Vice President); polls split — Brown 48-45 Fabrizio/Anzalone vs. Husted +6 Nexstar/Emerson\nSherrod Brown is the Democratic candidate in the Ohio Special Senate Race 2026, polling 45–48 in June 2026 surveys."
+  },
+  {
+   "id": "d75eb697-1e58-4464-9ec5-260e7a1e45d8",
+   "name": "House Majority PAC",
+   "labels": [
+    "OutsideSpendingGroup"
+   ],
+   "summary": "Priorities USA and House Majority PAC are Dem-aligned super-PACs that together raised $200M+ for 2026 and will determine whether Democrats can defend their 2024 Biden-district incumbents.\nHouse Majority PAC, a Dem-aligned super-PAC that raised $200M+ for 2026, will partner with DCCC-aligned efforts to defend 2024 Biden-district House incumbents.\nHouse Majority PAC raised $200M+ cumulatively through Q2 2026, coordinating with DCCC as a Democratic-aligned super-PAC."
+  },
+  {
+   "id": "d6c32b41-e1d0-46e4-810b-bea53f00a501",
+   "name": "Illinois primary",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "On February 11, 2026, Sabato's Crystal Ball published its 2026 state-legislative map handicapping, the first major 2026 race-by-race rating including contests like the Illinois primary."
+  },
+  {
+   "id": "d214a6f7-2c8f-4db8-af69-6a940f05bfe2",
+   "name": "Des Moines Register",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "The Des Moines Register reports on Grassley's 2026 Senate filing, noting he is 95 and the longest-serving senator."
+  },
+  {
+   "id": "d1ae064f-2707-450b-963d-681478328a93",
+   "name": "Trump job approval",
+   "labels": [
+    "ForecastSignal"
+   ],
+   "summary": "A poll published June 30 by The Economist and YouGov found 58% disapprove of Trump's job performance.\nA poll published June 30 by The Economist and YouGov found 58% disapprove of Trump's job performance.\nAP-NORC Center for Public Affairs Research measured Trump approval polling on June 11–17, 2026.\nReuters/Ipsos measured Trump approval polling on June 12–15, 2026.\nMarquette Law School National Survey published June 2026 polling on Trump with declining approval but retaining strong influence on GOP primary voters.\nBrookings Institution published 'GOP midterm prospects darken as Trump approval f"
+  },
+  {
+   "id": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "name": "Cook Political Report",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "Nonpartisan election-forecasting outlet publishing race ratings. The industry standard in the 2026–2028 US election cycle.\nCook Political Report rated the North Carolina Senate race as Lean Democrat with Cooper leading by D+7 in April 2026.\nCook Political Report rated the Maine Senate race as a Toss-Up as of July 2026.\nCook Political Report classified the Georgia Senate race as Lean Democrat as part of its post-April 13, 2026 Senate map.\nCook Political Report classified the North Carolina Senate race as Lean Democrat as part of its post-April 13, 2026 Senate map.\nCook Political Report classifi"
+  },
+  {
+   "id": "d002aacd-c759-422d-86ca-cf0cf21bfc5b",
+   "name": "Israel",
+   "labels": [],
+   "summary": "Israel is a central factor in US domestic electoral politics through the Iran war (Feb 28 – June 17, 2026) and AIPAC's intervention in Democratic primaries. AIPAC / United Democracy Project / EDW Action has defeated progressive candidates Abughazaleh in IL-09 (March 17, 2026) and Kiros in CO-01, installing more centrist Democrats on Israel. Flashpoint: ceasefire expires mid-August 2026; 34% approve Trump's Iran handling (AP-NORC); 53% say military action went too far; 67% disapprove of Trump's Iran handling. Trump went to war with Iran for Israel per NYT (June 29, 2026). AIPAC dollars may supp"
+  },
+  {
+   "id": "cf2e2c8c-733f-4d1b-87f4-7dd98ee6e55e",
+   "name": "Kat Abughazaleh",
+   "labels": [
+    "Person"
+   ],
+   "summary": "On March 17, 2026 in the Illinois primary, AIPAC defeated Kat Abughazaleh in IL-09, marking the first major AIPAC intervention in a Democratic primary."
+  },
+  {
+   "id": "cf2c7678-c152-479b-be2d-76201e7b15da",
+   "name": "IL-09",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "Illinois 9th Congressional District. Democratic-held seat. On March 17, 2026, AIPAC defeated Kat Abughazaleh in the Democratic primary, marking the first major AIPAC-in-Dem-primary intervention of the cycle.\nAIPAC's intervention in the IL-09 race produced a more centrist Democratic primary winner on Israel\nAIPAC intervened in the IL-09 Democratic primary, opposing progressive candidate Kat Abughazaleh."
+  },
+  {
+   "id": "ce58b523-fc69-4f42-92da-80236125e7a2",
+   "name": "The Hill",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "The Hill, citing Al-Manar, reported a 62% disapproval ceiling for Trump in June 2026."
+  },
+  {
+   "id": "cdca5115-3d88-48b6-a094-b014e00ee520",
+   "name": "Alaska Senate Race 2026",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "Sabato's Crystal Ball rated the Alaska Senate race as a Toss-Up in June 2026 following Sullivan's retirement.\nDan Sullivan is the retiring Republican incumbent in the Alaska Senate Race 2026, rated Toss-Up by Sabato in June 2026.\nCook Political Report classified the Alaska Senate race as a Toss-Up as part of its post-April 13, 2026 Senate map."
+  },
+  {
+   "id": "cdbad96d-34d5-4482-b682-7d001b2e866c",
+   "name": "US Senate",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "The 2028 US Midterm Election decides control of the Class 3 Senate cohort (terms 2029–2035).\nThe Republican Party holds a 53–47 majority in the US Senate as of mid-2026.\nJohn Thune, as Senate Majority Leader, controls the Senate floor and the Trump-era legislative vehicle in the upper chamber.\nThe DSCC stated on April 13, 2026 that Democrats have a clear path to taking back the Senate majority through strong candidate recruitment and infrastructure.\nThe 2026 midterm forecast gives Democrats a 45-55% probability of gaining 1-3 Senate seats, with a combined 38-48% chance of a Democratic sweep of"
+  },
+  {
+   "id": "cb7438fc-14ed-46ad-bab9-820801bea1c5",
+   "name": "BEA (Bureau of Economic Analysis)",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "Yale Budget Lab's effective tariff rate calculations (16.8% mid-2026, 28% April 2026 peak, 9.1% February 2026 brief) quantify the inflation impact alongside BEA's PCE inflation data of 4.5% for Q1 2026.\nConference Board's consumer confidence reading of 57 in mid-2026 reflects weak sentiment against BEA-reported Q1 2026 GDP growth of +2.0% and PCE inflation of 4.5%."
+  },
+  {
+   "id": "cb6866be-fe45-476f-9768-83ebe675453c",
+   "name": "DOGE (Department of Government Efficiency)",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "In March 2025, DOGE (Department of Government Efficiency) under Musk began government workforce reductions."
+  },
+  {
+   "id": "cb4e31f4-bc64-4109-927b-693367c0155e",
+   "name": "John Cornyn",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Donald Trump endorsed Paxton over John Cornyn in the 2026 TX Senate GOP runoff, revealing distance from institutional incumbents."
+  },
+  {
+   "id": "cb4b6931-3f73-4459-9480-082ab4678b87",
+   "name": "UMass poll",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "On March 30, 2026, the UMass poll reported Trump approval at 33%, a new low.\nUMass found 17% of 2024 Trump voters expressed reservations in its March 30, 2026 poll, paralleling Longwell/Bulwark focus group findings on defection risk among Trump-product buyers (62% motivated to vote D).\nLongwell/Bulwark focus groups showing 62% of Trump-product buyers motivated to vote Democratic support UMass's finding that 17% of 2024 Trump voters express reservations."
+  },
+  {
+   "id": "ca03dd4c-d034-4fc9-ac3e-e0cc1ab5c0c1",
+   "name": "PA-10 Special Election",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "DCCC memo dated March 18, 2026 cited PA-10 special election as part of aggregate D+17.1 overperformance from 2025–2026."
+  },
+  {
+   "id": "c8836a42-b170-4380-964c-0b769d45f393",
+   "name": "CA-13",
+   "labels": [
+    "Person"
+   ],
+   "summary": "CA-13 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "id": "c7f00486-7976-4aaf-ae96-b17b4a5738df",
+   "name": "PA-08",
+   "labels": [
+    "Person"
+   ],
+   "summary": "PA-08 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "id": "c6a6c8c9-25b0-40be-99d6-ce53631012d0",
+   "name": "2028 Senate elections",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "The 2028 Democratic presidential nominee's quality is identified as the single biggest variable in the 2028 Senate outcome.\nThe 2026 cycle's outcomes set up a 2028 Senate cycle that is structurally more difficult for Democrats, and could be the high-water mark of the Democratic wave rather than the floor.\nThe 2028 Senate map is structurally easier for Democrats than the 2026 Senate map, with 14 R seats versus 21 D seats."
+  },
+  {
+   "id": "c49e5710-3719-4ed6-8ee9-8517e7a39c76",
+   "name": "Florida",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "Republican-led redistricting in Florida nets Republicans additional seats in the redistricting war."
+  },
+  {
+   "id": "bfefbfc8-a4d8-498e-93c8-b5a26b0fe02b",
+   "name": "Reuters/Ipsos",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "AP-NORC and Reuters/Ipsos both measured Trump approval in mid-June 2026, with AP-NORC at 37% and Reuters/Ipsos at 36%.\nReuters/Ipsos and Marquette Law School both measured Trump approval in June 2026, with Reuters/Ipsos at 36% and Marquette at 38%.\nReuters/Ipsos measured Trump approval polling on June 12–15, 2026."
+  },
+  {
+   "id": "beab9e71-079f-4a6e-be1f-4c25e8b84f49",
+   "name": "susan_collins_190",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "be8109ee-0422-40f6-a6a6-35a32bee30fd",
+   "name": "NY-17",
+   "labels": [
+    "Person"
+   ],
+   "summary": "NY-17 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "id": "be30c39b-9e95-4bfd-9061-22d0e172d917",
+   "name": "Josh Shapiro",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Josh Shapiro is identified as a potential 2028 Democratic presidential nominee who could face off against JD Vance, a Trump-endorsed Republican successor, creating a high-salience race that could push Democratic Senate candidates in competitive states.\nIf Josh Shapiro wins re-election as PA Governor and governs effectively, he is a top-tier 2028 Democratic presidential contender."
+  },
+  {
+   "id": "bd97046c-8c4f-4a84-83d6-f6ca3993efde",
+   "name": "2026 Cycle",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "Unlike the 2022 cycle which had only inflation as an active anti-incumbent force, the 2026 cycle has tariffs, war, and OBBBA deficits all in active circulation simultaneously."
+  },
+  {
+   "id": "bb369a48-4dc4-4892-9bf2-de41f6735a58",
+   "name": "Reuters",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Reuters/Ipsos polling places the presidential approval rating in the 36–40% range with lows at 30–34% in May–June 2026, shaping 2028 midterm conditions."
+  },
+  {
+   "id": "bab61d01-5bbb-4af5-a50f-7b57bb7d53c5",
+   "name": "Daily Wire",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Far-right media outlet producing America First content. Drives the populist right in the 2026–2028 US political cycle alongside Breitbart and Newsmax."
+  },
+  {
+   "id": "baa615de-045f-4dbf-b201-3537bedb0f51",
+   "name": "2028 GOP Presidential Nominee",
+   "labels": [],
+   "summary": "JD Vance is positioning as Trump's heir and is the leading 2028 GOP presidential contender; if he wins the primary, the 2028 midterm becomes largely a referendum on Vance's first two years.\nGlenn Youngkin is cited as a potential more traditional Republican who could win the 2028 GOP primary if Vance loses it.\nBrian Kemp is cited as a potential more traditional Republican who could win the 2028 GOP primary if Vance loses it."
+  },
+  {
+   "id": "b9a22fcb-67a6-4fc7-b310-0f21bcdb6022",
+   "name": "Dan Sullivan",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Dan Sullivan is the retiring Republican incumbent in the Alaska Senate Race 2026, rated Toss-Up by Sabato in June 2026."
+  },
+  {
+   "id": "b95d0d36-93ad-4266-afe2-0af8d3b4dd71",
+   "name": "Ron DeSantis",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Ron DeSantis is identified as a possible Trump-endorsed successor in the 2028 Republican presidential primary."
+  },
+  {
+   "id": "b94bd791-9e30-4270-84de-f2f138e608a7",
+   "name": "FEC",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "Federal Election Commission; independent federal agency regulating campaign finance. FEC fundraising data is cited as high-quality, publicly available, and auditable evidence in the 2028 midterm forecast dossier. Used to verify campaign finance figures for committees like DCCC ($45.3M Q2 2026)."
+  },
+  {
+   "id": "b9466239-8d09-4abb-a0d9-b0748c15f778",
+   "name": "Kiros",
+   "labels": [
+    "Person"
+   ],
+   "summary": "AIPAC intervened in the CO-01 Democratic primary to defeat Kiros"
+  },
+  {
+   "id": "b6f6b84f-afb2-43d3-86b6-ae39ddc8fd39",
+   "name": "Iran ceasefire",
+   "labels": [
+    "PolicyRegime"
+   ],
+   "summary": "The unresolved legacy of the Iran ceasefire is cited as a structural condition favoring a continued Democratic House majority alongside Trump's approval in the 35-38% range.\nThe Iran ceasefire status is listed as one of the macro-environment factors (alongside Trump approval, inflation, and OBBBA implementation) that will shape the 2028 presidential election.\nThe 2028 midterm outlook depends on whether the Iran ceasefire's legacy holds, with the ceasefire's status still contested."
+  },
+  {
+   "id": "b5f4c760-ffda-4133-97a1-49f29f61b834",
+   "name": "Wisconsin",
+   "labels": [],
+   "summary": "Wisconsin is identified as a competitive 2028 Republican Senate state whose Republican incumbent could be flipped by a Democratic presidential nominee facing JD Vance."
+  },
+  {
+   "id": "b3157c67-7657-4700-a1f4-0cc2f2695d1b",
+   "name": "Graham Platner",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Graham Platner, progressive Democrat and military veteran who clinched the Maine Senate nomination despite 2026 revelations of a Nazi-era skull tattoo on his arm and prior-relationship allegations (Ly"
+  },
+  {
+   "id": "b206d066-5567-4809-8e0e-11339ff61fc7",
+   "name": "Trump Iran handling approval",
+   "labels": [
+    "ForecastSignal"
+   ],
+   "summary": "AP-NORC polling shows 34% approve of Trump's Iran handling."
+  },
+  {
+   "id": "b0e0784a-655c-47c8-a6dc-02284db89ab6",
+   "name": "ElectionBettingOdds",
+   "labels": [
+    "ForecastSignal"
+   ],
+   "summary": "ElectionBettingOdds is a prediction-market forecast signal for the 2028 US midterm elections. In its model-comparison (cross-validation) with other forecasters, it gives Democrats a 60–70% probability of winning US House control and a 40–45% probability of winning US Senate control. These figures sit above Polymarket (D-House 70%, D-Senate 38%) and Kalshi (65%, 35%) on the Senate but below on the House, and near the triangulated central tendency of 75–85% (House) and 45–55% (Senate) as of the July 3, 2026 dossier."
+  },
+  {
+   "id": "af579b40-0019-4c85-89e2-9e4faf830c64",
+   "name": "Pennsylvania",
+   "labels": [],
+   "summary": "Pennsylvania is identified as a competitive 2028 Republican Senate state that could be flipped by a Democratic presidential nominee running against JD Vance."
+  },
+  {
+   "id": "ac01d559-873d-4745-aa73-b2e2e74f31e9",
+   "name": "NY-13 Democratic Primary",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "Polymarket listed a market on whether another outcome would occur in the NY-13 Democratic Primary, with a 0% probability and 1,869 in volume."
+  },
+  {
+   "id": "abe6ebfa-feea-4be6-8bca-64cf9c60ed63",
+   "name": "NRSC v. FEC",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "SCOTUS is set to decide the NRSC v. FEC case, with its timing and direction listed as medium-to-lower confidence factors."
+  },
+  {
+   "id": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "National Republican Senatorial Committee",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The National Republican Senatorial Committee (NRSC), the official Republican Senate campaign arm raising $8.0M in June 2026 (vs. DSCC $8.3M); central challenge is defending 22 R-held seats with toss-u\nJohn Thune coordinates with the NRSC and holds a leadership PAC as resources for his Senate leadership role.\nSenate Leadership Fund (SLF) partners with NRSC-aligned efforts to defend vulnerable GOP incumbents in 2026, serving as a financial backstop for the Senate majority defense.\nDSCC and NRSC are opposing Senate campaign arms, with DSCC targeting NC, OH, ME, AK, GA, MI, and NH, while NRSC defe"
+  },
+  {
+   "id": "ab49c1ab-b007-458b-95e5-e4e0168e622d",
+   "name": "ActBlue",
+   "labels": [
+    "OutsideSpendingGroup"
+   ],
+   "summary": "DCCC and ActBlue have a symbiotic relationship; ActBlue powers the small-dollar fundraising engine that gives DCCC its scale advantage."
+  },
+  {
+   "id": "a714fb2f-6eb5-471e-8f0f-70720bb0afb3",
+   "name": "FL Senate special",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "On January 22, 2026, Angie Nixon (D) announced her FL Senate special bid, becoming the first Dem recruit in the Rubio vacancy."
+  },
+  {
+   "id": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "Donald Trump",
+   "labels": [
+    "Person"
+   ],
+   "summary": "President Donald Trump, second non-consecutive term, inaugurated January 2025 after defeating Harris on November 5, 2024 with GOP holding House 220–215 and Senate 53–47. Constitutionally barred from a third term under the 22nd Amendment, making 2028 an open-seat presidential race alongside the 2028 midterms.\n\nApproval trajectory (2025–2026): ~47% at inauguration → 38% Gallup (Oct 2025/July 2025 baseline) → 43% Harvard CAPS/Harris → 33% UMass (Mar 30, 2026, new low) → 36–40% range by mid-2026 with lows at 30–34% (May–June 2026, Reuters/Ipsos, Silver Bulletin, NYT).\n\nThree-pillar anti-incumbent "
+  },
+  {
+   "id": "a35ffe3f-55c4-4811-834d-e8c515768889",
+   "name": "House Democratic Caucus",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Hakeem Jeffries chairs the House Democratic Caucus and leads House Democratic strategy."
+  },
+  {
+   "id": "a280e8ed-ff79-4713-9e0b-cf0acd23e1ec",
+   "name": "Georgia",
+   "labels": [],
+   "summary": "Georgia is identified as a competitive 2028 Republican Senate state that a Democratic presidential nominee facing JD Vance could potentially flip via downballot coattail effects."
+  },
+  {
+   "id": "a22d82ed-0f96-4f57-abcb-520fe2b6ad27",
+   "name": "MAGA movement",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "MAGA is an institutional label classified as a Tier 4 context object in the 2028 US midterm election actor-ontology forecast. It functions as a salient political force affecting GOP primary dynamics, candidate positioning, and Trump's endorsement power, which influences senators like John Thune and John Cornyn. Mike Johnson depends on Trump/MAGA support to retain the speakership, and the movement is tied to revealed-preference distance from institutional incumbents."
+  },
+  {
+   "id": "9f7ddabb-81eb-4195-8665-994d4bed9ebe",
+   "name": "Jessica Taylor",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Jessica Taylor, an analyst at the Cook Political Report, stated on April 13, 2026 that the likeliest Senate outcome is a 1 to 3 seat Democratic pickup, just short of the 4 needed."
+  },
+  {
+   "id": "9dcb5802-dd89-45c6-9a14-2c48eace2b54",
+   "name": "Mitch McConnell",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Mitch McConnell was replaced by John Thune as Senate Majority Leader in late 2024."
+  },
+  {
+   "id": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "name": "AIPAC",
+   "labels": [
+    "OutsideSpendingGroup"
+   ],
+   "summary": "AIPAC partners with United Democracy Project and EDW Action as a pro-Israel super-PAC cluster intervening in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01.\nAIPAC partners with EDW Action and United Democracy Project as a pro-Israel super-PAC cluster intervening in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01.\nAIPAC (via United Democracy Project and EDW Action) intervenes in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01, reshapi"
+  },
+  {
+   "id": "9ae4ce5e-17ba-4c01-b348-eee37b9452a4",
+   "name": "Biden",
+   "labels": [
+    "Person"
+   ],
+   "summary": "In 2022, Biden's approval was 42% during the midterm cycle."
+  },
+  {
+   "id": "99da38aa-5d06-4981-8f98-fb09f9031094",
+   "name": "Newsmax",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Far-right media outlet producing America First content. Drives the populist right in the 2026–2028 US political cycle alongside Breitbart and Daily Wire."
+  },
+  {
+   "id": "986d7610-83d9-4336-b2c4-e3edb0bc5ffb",
+   "name": "Michigan",
+   "labels": [],
+   "summary": "Michigan is identified as a competitive 2028 Republican Senate state that a Democratic presidential nominee (such as JD Vance's opponent) could flip, given that the Democratic nominee may win the state by 4-6 points."
+  },
+  {
+   "id": "9834e16e-685d-48c0-903c-670e60094ed4",
+   "name": "Silver Bulletin",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "Silver Bulletin aggregator tracks presidential approval in the 36–40% range as a midterm input."
+  },
+  {
+   "id": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "name": "JD Vance",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Donald Trump is the heir-apparent figure for JD Vance; Trump endorses Vance as the structural MAGA dynasty successor.\nJosh Shapiro is identified as a potential 2028 Democratic presidential nominee who could face off against JD Vance, a Trump-endorsed Republican successor, creating a high-salience race that could push Democratic Senate candidates in competitive states.\nGretchen Whitmer is identified as a potential 2028 Democratic presidential nominee who could face off against JD Vance, a Trump-endorsed Republican successor, with the result that her coattails could flip competitive Republican S"
+  },
+  {
+   "id": "97b36e7c-647d-4602-a5dc-ac572d71060c",
+   "name": "SCOTUS",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "The current 6-3 conservative composition of SCOTUS makes a full strike-down of Trump's IEEPA tariff authority less likely; a narrowed ruling that preserves some presidential tariff authority is the central case."
+  },
+  {
+   "id": "940fe91d-a8bb-4eb6-ad80-22d76cc67414",
+   "name": "North Carolina Senate Race 2026",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "Cook Political Report rated the North Carolina Senate race as Lean Democrat with Cooper leading by D+7 in April 2026.\nRoy Cooper is the Democratic candidate in the North Carolina Senate Race 2026, leading by D+7 in an April 2026 Cook poll.\nBrad Whatley is the Republican candidate in the North Carolina Senate Race 2026, trailing Cooper by D+7 in an April 2026 Cook poll.\nCook Political Report classified the North Carolina Senate race as Lean Democrat as part of its post-April 13, 2026 Senate map.\nCook Political Report provides nonpartisan, methodologically transparent race ratings used as high-q"
+  },
+  {
+   "id": "933544d4-a16c-4efe-ae5f-806768024821",
+   "name": "OH-12 Special Election",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "DCCC memo dated March 18, 2026 cited OH-12 special election as part of aggregate D+17.1 overperformance from 2025–2026."
+  },
+  {
+   "id": "92f60c51-005d-4dff-a1ee-7266af8f59f5",
+   "name": "New York Times",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "The New York Times tracks presidential approval in the 36–40% range as a midterm input.\nThe New York Times published a critique of MIGA on June 29, 2026 that was republished via Occidental Dissent, stating Trump went to war with Iran for Israel, tumbled in polls to 35%, and forfeited immigration wins.\nThe New York Times published an op-ed on June 29, 2026 arguing there is no practical case for being attached to MIGA, citing Trump's war with Iran, 35% approval, and forfeited immigration wins."
+  },
+  {
+   "id": "90f75808-f167-4762-a325-38f9dfc51e37",
+   "name": "China-Taiwan conflict",
+   "labels": [
+    "PolicyRegime"
+   ],
+   "summary": "Identified as a potential major foreign-policy wildcard event that could reshape the 2026–2028 electoral cycle. No specific dates, probabilities, or scenario details provided in the available material. Listed alongside Iran ceasefire collapse and recession as one of three categories of unforeseen major events that could alter the forecast."
+  },
+  {
+   "id": "90cd78e0-8c71-45aa-80bb-e7242b905afb",
+   "name": "Grassley 2026 Senate campaign",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "The Des Moines Register reports on Grassley's 2026 Senate filing, noting he is 95 and the longest-serving senator."
+  },
+  {
+   "id": "8ed17daa-2b89-4a54-8089-6aa1c65d5e51",
+   "name": "Right-track poll",
+   "labels": [
+    "ForecastSignal"
+   ],
+   "summary": "AP-NORC polling shows right-track direction at 21% positive versus 74% negative, a historically low reading."
+  },
+  {
+   "id": "8dc74904-1cb6-44d8-bbd3-7dc7b6cad58f",
+   "name": "The Economist",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Center-left, international outlet providing 2026 election forecasting. June 30, 2026: 58% disapprove of Trump. Influences elite and international opinion.\nA poll published June 30 by The Economist and YouGov found 58% disapprove of Trump's job performance.\nThe Economist and YouGov jointly published a poll on June 30, 2026 finding 58% of US respondents disapprove of Trump's job performance.\nAn Economist/YouGov poll on June 30, 2026 found 58% of respondents in the US disapproved of Trump's job performance."
+  },
+  {
+   "id": "8d890e10-47d4-4894-8360-f10c3c740a00",
+   "name": "DSCC (Democratic Senatorial Campaign Committee)",
+   "labels": [
+    "CampaignCommittee"
+   ],
+   "summary": "DSCC and NRSC are opposing Senate campaign arms, with DSCC targeting NC, OH, ME, AK, GA, MI, and NH, while NRSC defends 22 seats including 5 in states Trump won by under 13 points.\nThe DSCC stated on April 13, 2026 that Democrats have a clear path to taking back the Senate majority through strong candidate recruitment and infrastructure.\nThe DSCC stated on April 13, 2026 that it is capitalizing on a Republican Senate field defined by weak and deeply flawed nominees."
+  },
+  {
+   "id": "8c5e36ef-34a4-43d9-b880-9800cc8e575c",
+   "name": "YouGov",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "A poll published June 30 by The Economist and YouGov found 58% disapprove of Trump's job performance.\nThe Economist and YouGov jointly published a poll on June 30, 2026 finding 58% of US respondents disapprove of Trump's job performance.\nThe Economist/YouGov polling showed 38% Trump approval in late June 2026, after the Iran ceasefire, indicating no post-war approval bump."
+  },
+  {
+   "id": "889584e9-e629-4007-9a7c-0d53f4f38308",
+   "name": "2026 Democratic Presidential Nominee",
+   "labels": [],
+   "summary": "No 2026 Democratic presidential nominee is relevant because Trump is constitutionally barred from a third term under the 22nd Amendment, making 2028 the next presidential contest. The 2028 open-seat Democratic primary is a coin flip, with Hakeem Jeffries (if he becomes House Speaker and governs effectively), Josh Shapiro (if re-elected PA Governor), and Gretchen Whitmer (leading contender if she stays out of 2026) identified as top-tier candidates. The 2028 nominee's quality is the single biggest variable in the 2028 Senate outcome."
+  },
+  {
+   "id": "8834a9a1-ceb8-41fe-87a5-3e73cbb0d50d",
+   "name": "CO-01",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "AIPAC's intervention in the CO-01 race produced a more centrist Democratic primary winner on Israel\nAIPAC intervened in the CO-01 Democratic primary, opposing progressive candidate Kiros."
+  },
+  {
+   "id": "882afc8f-eaac-4fb4-a19b-126e81cce255",
+   "name": "Chuck Schumer",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Chuck Schumer (D-NY), Senate Minority Leader since 2025, who runs DSCC targeting and frames Democratic offensive Senate strategy.\nDonald Trump and Chuck Schumer publicly spar; they cooperate transactionally only on existential matters like judicial-pack shuffles.\nChuck Schumer has high internal friction with Alexandria Ocasio-Cortez, who poses a 2028 primary threat as the NY Democratic primary opened by the Mamdani victory."
+  },
+  {
+   "id": "875afb3a-733b-4dda-a8c2-a34de28e6065",
+   "name": "Fabrizio/Anzalone",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "Fabrizio/Anzalone poll in June 2026 showed Brown leading Husted 48–45 (D+3) in the Ohio Special Senate race."
+  },
+  {
+   "id": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "模拟终局陈述",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "841f6cd0-5f5f-407c-911d-2db7a1473fd1",
+   "name": "Ipsos",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "Ipsos polling (via Reuters) places presidential approval in the 36–40% range with lows at 30–34% in May–June 2026, a key input for 2028 midterm forecasting."
+  },
+  {
+   "id": "8414daed-9afa-454a-b16b-cb2e3cfeb52d",
+   "name": "Sabato",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "Sabato's Crystal Ball race ratings show a D-favorable 2026 Senate map."
+  },
+  {
+   "id": "83ac14ae-5e92-4a95-b0d3-4540e57370b5",
+   "name": "Natasha Sarin",
+   "labels": [],
+   "summary": "Natasha Sarin, alongside Yale Budget Lab, has produced analysis critical of the OBBBA, characterizing it as fiscally regressive and a transfer of wealth upward.\nYale Budget Lab, with Natasha Sarin, published tariff analysis and OBBBA unpacking referenced in the dossier."
+  },
+  {
+   "id": "820b65d1-74dd-406d-a310-0b7fde91b96d",
+   "name": "Oddpool",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Oddpool machine-fetches prediction-market data from Kalshi and Polymarket as of 2026-07-03T08:37:52Z.\nOddpool machine-fetches prediction-market data from Kalshi and Polymarket as of 2026-07-03T08:37:52Z."
+  },
+  {
+   "id": "81d13882-6741-47d2-a4f6-5c55a81fcef2",
+   "name": "Brookings",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "On December 4, 2025, Brookings published 'Republican prospects in 2026 grow darker', the first major think-tank warning about GOP prospects.\nBrookings polling in mid-2026 found that 38% approve of Trump's tariffs, contributing to Pillar 1 of the anti-incumbent story.\nBrookings found 38% approval of tariffs in mid-2026, complementing AP-NORC's 34% approval of Trump's Iran handling during the same period.\nBrookings Institution published 'GOP midterm prospects darken as Trump approval falls' on April 28, 2026.\nBrookings Institution published 'As President Trump loses support, Republican prospects"
+  },
+  {
+   "id": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "name": "Sabato's Crystal Ball",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "Sabato's Crystal Ball is an election analyst based at the UVA Center for Politics.\nOn February 11, 2026, Sabato's Crystal Ball published its 2026 state-legislative map handicapping, the first major 2026 race-by-race rating including contests like the Illinois primary.\nSabato's Crystal Ball rated the Alaska Senate race as a Toss-Up in June 2026 following Sullivan's retirement.\nCook Political Report and Sabato's Crystal Ball agree on recent Senate race rating shifts toward Democrats.\nSabato's Crystal Ball provides nonpartisan, methodologically transparent race ratings used as high-quality eviden"
+  },
+  {
+   "id": "7fb05aa3-8721-4a02-8548-13d2873d31a9",
+   "name": "Congressional Budget Office (CBO)",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "The Congressional Budget Office (CBO) is producing scoring updates on the OBBBA during its Q3 2027 implementation phase."
+  },
+  {
+   "id": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "Democratic Congressional Campaign Committee",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "DCCC (Democratic Congressional Campaign Committee), the official House campaign arm for Democrats, raised $45.3M in Q2 2026 — a cycle record edging 2024's $44M — and targets 18 toss-up seats, giving it the single most influential House campaign operation and a scale advantage over the NRCC (which trails in fundraising and defends 14 of 17 toss-ups). DCCC believes a Democratic House majority is 75–85% likely if the macro environment holds; Democrats need a net gain of 5 seats. A DCCC memo (Mar 18, 2026) tallies aggregate 2025–2026 special-election overperformance at D+17.1, which its analysis f"
+  },
+  {
+   "id": "7f492692-5373-4ed4-a8a8-7486b6ee2de6",
+   "name": "Ohio Special Senate Race 2026",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "Fabrizio/Anzalone poll in June 2026 showed Brown leading Husted 48–45 (D+3) in the Ohio Special Senate race.\nNexstar/Emerson poll in June 2026 showed Husted leading Brown 51–45 (R+6) in the Ohio Special Senate race.\nSherrod Brown is the Democratic candidate in the Ohio Special Senate Race 2026, polling 45–48 in June 2026 surveys.\nJon Husted is the Republican candidate in the Ohio Special Senate Race 2026, polling 45–51 in June 2026 surveys.\nCook Political Report classified the Ohio Special Senate race as a Toss-Up as part of its post-April 13, 2026 Senate map.\nCook Political Report provides no"
+  },
+  {
+   "id": "7eca5428-37e3-406b-997e-325e7bc53586",
+   "name": "Dobbs decision",
+   "labels": [
+    "PolicyRegime"
+   ],
+   "summary": "The Dobbs decision (June 2022) was a major Democratic motivator in the 2022 midterm cycle."
+  },
+  {
+   "id": "7e9cf430-323a-4e0f-86b9-099877b1507c",
+   "name": "MIGA",
+   "labels": [],
+   "summary": "The New York Times published an op-ed on June 29, 2026 arguing there is no practical case for being attached to MIGA, citing Trump's war with Iran, 35% approval, and forfeited immigration wins."
+  },
+  {
+   "id": "7fb05aa3-8721-4a02-8548-13d2873d31a9",
+   "name": "Congressional Budget Office (CBO)",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "The Congressional Budget Office (CBO) is producing scoring updates on the OBBBA during its Q3 2027 implementation phase."
+  },
+  {
+   "id": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "Democratic Congressional Campaign Committee",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "DCCC (Democratic Congressional Campaign Committee), the official House campaign arm for Democrats, raised $45.3M in Q2 2026 — a cycle record edging 2024's $44M — and targets 18 toss-up seats, giving it the single most influential House campaign operation and a scale advantage over the NRCC (which trails in fundraising and defends 14 of 17 toss-ups). DCCC believes a Democratic House majority is 75–85% likely if the macro environment holds; Democrats need a net gain of 5 seats. A DCCC memo (Mar 18, 2026) tallies aggregate 2025–2026 special-election overperformance at D+17.1, which its analysis f"
+  },
+  {
+   "id": "7f492692-5373-4ed4-a8a8-7486b6ee2de6",
+   "name": "Ohio Special Senate Race 2026",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "Fabrizio/Anzalone poll in June 2026 showed Brown leading Husted 48–45 (D+3) in the Ohio Special Senate race.\nNexstar/Emerson poll in June 2026 showed Husted leading Brown 51–45 (R+6) in the Ohio Special Senate race.\nSherrod Brown is the Democratic candidate in the Ohio Special Senate Race 2026, polling 45–48 in June 2026 surveys.\nJon Husted is the Republican candidate in the Ohio Special Senate Race 2026, polling 45–51 in June 2026 surveys.\nCook Political Report classified the Ohio Special Senate race as a Toss-Up as part of its post-April 13, 2026 Senate map.\nCook Political Report provides no"
+  },
+  {
+   "id": "7eca5428-37e3-406b-997e-325e7bc53586",
+   "name": "Dobbs decision",
+   "labels": [
+    "PolicyRegime"
+   ],
+   "summary": "The Dobbs decision (June 2022) was a major Democratic motivator in the 2022 midterm cycle."
+  },
+  {
+   "id": "7e9cf430-323a-4e0f-86b9-099877b1507c",
+   "name": "MIGA",
+   "labels": [],
+   "summary": "The New York Times published an op-ed on June 29, 2026 arguing there is no practical case for being attached to MIGA, citing Trump's war with Iran, 35% approval, and forfeited immigration wins."
+  },
+  {
+   "id": "7d56eeba-6a62-4731-bfb1-def720a784c7",
+   "name": "Israel-Iran Cross-Pressure",
+   "labels": [
+    "PolicyRegime"
+   ],
+   "summary": "The Israel-Iran cross-pressure forces Democrats into a difficult position where AIPAC dollars suppress base turnout but the party cannot afford to be on the wrong side of Israel."
+  },
+  {
+   "id": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "name": "John Thune",
+   "labels": [
+    "Person"
+   ],
+   "summary": "John Thune (R-SD), Senate Majority Leader since 2025, responsible for defending the Republican Senate majority across 22 R seats up in 2026.\nJohn Thune, as Senate Majority Leader, controls the Senate floor and the Trump-era legislative vehicle in the upper chamber.\nMitch McConnell was replaced by John Thune as Senate Majority Leader in late 2024.\nJohn Thune coordinates with the NRSC and holds a leadership PAC as resources for his Senate leadership role.\nJohn Thune has prioritized coordination with Donald Trump and the White House over senatorial independence on judicial and budget votes.\nDonal"
+  },
+  {
+   "id": "7a4f9732-6974-4d33-9d88-bf860e3851d5",
+   "name": "Polymarket",
+   "labels": [
+    "ForecastSignal"
+   ],
+   "summary": "Polymarket prediction markets give Democrats a high probability of winning the House in the 2028 US Midterm Election.\nPolymarket and Kalshi are aggregated prediction markets cited as medium-quality evidence, subject to liquidity constraints and trader bias.\nOddpool machine-fetches prediction-market data from Kalshi and Polymarket as of 2026-07-03T08:37:52Z.\nPolymarket listed a market on whether another outcome would occur in the NY-13 Democratic Primary, with a 0% probability and 1,869 in volume.\nPolymarket listed a market on whether another outcome would occur in the NY-07 Democratic Primary,"
+  },
+  {
+   "id": "78f4baff-b7b6-4b96-b01b-ce3b9d8ca0dc",
+   "name": "Jon Husted",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Jon Husted is the Republican candidate in the Ohio Special Senate Race 2026, polling 45–51 in June 2026 surveys."
+  },
+  {
+   "id": "778bbfab-fbbb-47a8-81db-75f45bc07f4b",
+   "name": "Missouri",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "Republican-led redistricting in Missouri nets Republicans additional seats in the redistricting war."
+  },
+  {
+   "id": "7595fdad-2d93-46e0-bb86-4dc3f086ea4a",
+   "name": "House Freedom Caucus",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Mike Johnson has high internal friction with the House Freedom Caucus, with procedural threats on the floor tied to his hold on the speakership."
+  },
+  {
+   "id": "751255c0-51e6-4678-8610-031b44d3d0c7",
+   "name": "Chuck Grassley",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Chuck Grassley is a Republican Senator from Iowa, age 95, the longest-serving senator, referenced in the context of his 2026 filing (per Des Moines Register, source 63). No further dossier details on his 2028 posture are provided."
+  },
+  {
+   "id": "74146900-ad39-4934-b92b-5ca888c747b2",
+   "name": "Cam Schlittler",
+   "labels": [],
+   "summary": "Polymarket listed a market on whether Cam Schlittler will be on the cover of MLB The Show 27, with a 2% probability and 2,000 in volume.\nA Polymarket market priced the probability of Cam Schlittler appearing on the cover of MLB The Show 27 at 2%."
+  },
+  {
+   "id": "73bf98ff-e065-45fa-aab7-6f6b78ee3d63",
+   "name": "Senate Leadership Fund (SLF)",
+   "labels": [
+    "OutsideSpendingGroup"
+   ],
+   "summary": "Senate Leadership Fund (SLF) and Congressional Leadership Fund (CLF) are McConnell-aligned super-PACs operating together as the largest single dark-money conduit in 2026, defending vulnerable GOP incumbents.\nSenate Leadership Fund (SLF) partners with NRSC-aligned efforts to defend vulnerable GOP incumbents in 2026, serving as a financial backstop for the Senate majority defense."
+  },
+  {
+   "id": "722a6e02-8f05-4837-9815-224a63a9aa69",
+   "name": "WinRed",
+   "labels": [
+    "OutsideSpendingGroup"
+   ],
+   "summary": "NRCC and WinRed have a symbiotic relationship analogous to DCCC/ActBlue, though Republicans trail in small-dollar fundraising."
+  },
+  {
+   "id": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "name": "Yale Budget Lab",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Yale Budget Lab calculated in April 2025 that tariffs imposed a $3,800/year household cost, the first major economic warning shot related to the IEEPA tariff regime.\nYale Budget Lab reported on February 24, 2026 a 13.7% effective tariff rate after 15% global tariffs, reasserting tariff pressure on the IEEPA regime.\nYale Budget Lab has calculated that the effective tariff rate has risen from 2.5% in early 2025 to 9% in spring 2025 to 13.7% in February 2026 to 16.8% in mid-2026, costing households $1,500–2,500 annually and reaching the highest level since 1933, contributing to the anti-Trump Pil"
+  },
+  {
+   "id": "6fce848f-ffe0-4fee-a8c3-d8464fc63480",
+   "name": "Kalshi",
+   "labels": [
+    "ForecastSignal"
+   ],
+   "summary": "Kalshi prediction markets show Republicans as a clear favorite on the Senate in the 2028 US Midterm Election.\nPolymarket and Kalshi are aggregated prediction markets cited as medium-quality evidence, subject to liquidity constraints and trader bias.\nOddpool machine-fetches prediction-market data from Kalshi and Polymarket as of 2026-07-03T08:37:52Z.\nKalshi listed multiple markets on whether DoorDash Inc. will report Q2 2026 total orders above specified thresholds (940M at 90%, 960M at 80%, 1040M at 1%, 1060M at 1%)."
+  },
+  {
+   "id": "6f1f6090-fb55-42cd-975f-54eeb7bc6f0e",
+   "name": "Democratic House majority",
+   "labels": [],
+   "summary": "The unresolved legacy of the Iran ceasefire is cited as a structural condition favoring a continued Democratic House majority alongside Trump's approval in the 35-38% range.\nThe 2026 midterm results (state-legislature control, redistricting power, and 2028 Senate defending map) are identified as one of the three key variables determining whether the Democratic House majority forecast (75-85%) holds.\nThe 2028 presidential election dynamics (nominee quality, turnout differential, ballot drop-off) are identified as a key variable that cannot flip the Democratic House majority forecast (75-85%) bu"
+  },
+  {
+   "id": "6dad8902-328d-4925-8c03-159b2801bd55",
+   "name": "AP",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "AP reported the Iran war ceasefire was signed on June 17, 2026.\nAP reported a 60-day interim deadline in mid-August 2026 for the Iran war ceasefire."
+  },
+  {
+   "id": "6cf3b1b8-4644-48d1-8e08-3a7f867e377d",
+   "name": "NPR",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Center-left outlet providing issue coverage. Influences the 2026–2028 cycle through the moderate center alongside PBS."
+  },
+  {
+   "id": "6c70f968-5670-4bea-9ec9-44bfc49ff248",
+   "name": "2028 Democratic Presidential Nominee",
+   "labels": [],
+   "summary": "If Hakeem Jeffries becomes Speaker and governs effectively, he is a top-tier 2028 Democratic presidential contender.\nIf Josh Shapiro wins re-election as PA Governor and governs effectively, he is a top-tier 2028 Democratic presidential contender.\nIf Gretchen Whitmer stays out of the 2026 cycle, she is the leading 2028 Democratic presidential contender.\nThe 2028 Democratic presidential nominee's quality is identified as the single biggest variable in the 2028 Senate outcome."
+  },
+  {
+   "id": "6bc7371a-ad99-44a3-987e-620fefbbae01",
+   "name": "UVA Center for Politics",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Sabato's Crystal Ball is an election analyst based at the UVA Center for Politics."
+  },
+  {
+   "id": "6b6cb027-b852-4020-a482-371b77699735",
+   "name": "donald_trump_426",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "6a5a94ff-5531-4222-b452-afe36b56718e",
+   "name": "Alexandria Ocasio-Cortez",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Hakeem Jeffries has visible medium friction with Alexandria Ocasio-Cortez, with left-flank tension following the NYC mayoral primary.\nChuck Schumer has high internal friction with Alexandria Ocasio-Cortez, who poses a 2028 primary threat as the NY Democratic primary opened by the Mamdani victory.\nAlexandria Ocasio-Cortez is identified as a potential 2028 Democratic presidential nominee who could face off against JD Vance, a Trump-endorsed Republican successor, in a race whose coattails could push Democratic Senate candidates."
+  },
+  {
+   "id": "67896ea3-58db-4d9d-8263-3a67119b81a2",
+   "name": "NE-2",
+   "labels": [
+    "Person"
+   ],
+   "summary": "NE-2 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "id": "659d7fd5-d016-45bc-a061-7a1e7bab5437",
+   "name": "Occidental Dissent",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "The New York Times published a critique of MIGA on June 29, 2026 that was republished via Occidental Dissent, stating Trump went to war with Iran for Israel, tumbled in polls to 35%, and forfeited immigration wins."
+  },
+  {
+   "id": "632b4e45-48a4-415f-800e-4a49c6d1046e",
+   "name": "Washington Post",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Center-left major national newspaper covering election forecasts, polling, and policy. Holds major influence in the 2026–2028 US election cycle."
+  },
+  {
+   "id": "5f029803-5cb1-4a15-8798-9ba0b180e29b",
+   "name": "Breitbart",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Far-right media outlet producing America First content. Drives the populist right in the 2026–2028 US political cycle alongside Newsmax and Daily Wire."
+  },
+  {
+   "id": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "name": "Republican Party",
+   "labels": [
+    "CampaignCommittee"
+   ],
+   "summary": "The Republican Party holds a structurally weak majority in the US House of approximately 2–4 seats as of mid-2026.\nThe Republican Party holds a 53–47 majority in the US Senate as of mid-2026.\nRepublican-led redistricting in Texas nets Republicans a similar number of seats in the redistricting war.\nRepublican-led redistricting in Missouri nets Republicans additional seats in the redistricting war.\nRepublican-led redistricting in Florida nets Republicans additional seats in the redistricting war.\nThe Democratic Party and Republican Party are in adversarial political opposition on the 2028 midter"
+  },
+  {
+   "id": "5ecafd38-4914-43fc-b227-645e57443e80",
+   "name": "Susan Collins",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Senator Susan Collins (R-Maine), the 5-term incumbent seeking re-election in a D+7 state; leads Graham Platner (D) 50-47 in Fox News July 2 polling, but trails 53-44 Platner among 'extremely motivated\nSusan Collins is the Republican candidate in the Maine Senate Race 2026, rated Toss-Up by Cook Political Report in July 2026."
+  },
+  {
+   "id": "5cdd196b-fb8f-4b13-b546-d05a35bc82f9",
+   "name": "MLB The Show 27",
+   "labels": [],
+   "summary": "A Polymarket market priced the probability of Cam Schlittler appearing on the cover of MLB The Show 27 at 2%."
+  },
+  {
+   "id": "5a38c9a8-2992-4822-a6ed-c2ecb9f5b16e",
+   "name": "United Democracy Project",
+   "labels": [
+    "OutsideSpendingGroup"
+   ],
+   "summary": "AIPAC partners with United Democracy Project and EDW Action as a pro-Israel super-PAC cluster intervening in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01.\nUnited Democracy Project partners with AIPAC and EDW Action as a pro-Israel super-PAC cluster intervening in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01.\nUnited Democracy Project intervenes in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01, which may depress Dem base turnout"
+  },
+  {
+   "id": "5a05eaf4-533d-40eb-be65-f27b2f4da7f3",
+   "name": "North Carolina",
+   "labels": [],
+   "summary": "North Carolina is identified as a competitive 2028 Republican Senate state that a Democratic presidential nominee (running against JD Vance) could win, flipping the seat."
+  },
+  {
+   "id": "5861445f-c43c-478a-9090-f0a9338ac943",
+   "name": "22nd Amendment",
+   "labels": [
+    "PolicyRegime"
+   ],
+   "summary": "Trump is constitutionally barred from a third term under the 22nd Amendment, shaping the open-seat 2028 presidential race that overlaps with the 2028 midterms."
+  },
+  {
+   "id": "582c51cc-d253-4682-ba3f-bb80f62a156c",
+   "name": "Rubio",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Vacancy in Rubio's Florida Senate seat prompted Angie Nixon (D) to announce a special election bid on January 22, 2026, marking the first Democratic recruit in the Rubio vacancy."
+  },
+  {
+   "id": "56bfd81b-ae87-4208-b155-e59177edf3d5",
+   "name": "Mary Peltola",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Mary Peltola, former Alaska House member (2023-2025, narrowly lost re-election to Nick Begich by ~2 pts in 2024), now running for the Alaska Senate seat Dan Sullivan (R) is vacating; Cook and Sabato m"
+  },
+  {
+   "id": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "name": "AP-NORC",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "AP-NORC polling in June 2026 found that 53% of Americans said the Iran war military action has gone too far, 67% disapprove of Trump's handling, and 54% say it was the wrong decision.\nAP-NORC polling in June 2026 found 67% disapproval and 54% opposition to Trump's Iran war decision.\nAP-NORC polling shows 34% approve of Trump's Iran handling.\nAP-NORC polling shows right-track direction at 21% positive versus 74% negative, a historically low reading.\nAP-NORC and Marquette Law School both polled Trump approval in June 2026, recording 37% and 38% respectively.\nAP-NORC and Reuters/Ipsos both measur"
+  },
+  {
+   "id": "5253a749-958c-4010-b766-168a23aa91d7",
+   "name": "Prop 50",
+   "labels": [
+    "PolicyRegime"
+   ],
+   "summary": "California's Prop 50 redistricting nets Democrats +3 to +5 CA seats as part of the redistricting war."
+  },
+  {
+   "id": "5107ffa7-d0f0-483a-ae0b-3e0616ae8222",
+   "name": "graham_platner_678",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "4ab0ebc9-177d-46a5-99c4-08dab617c087",
+   "name": "PBS",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Center-left outlet providing issue coverage. Influences the 2026–2028 cycle through the moderate center alongside NPR."
+  },
+  {
+   "id": "4a71d412-2873-48b6-b262-d2d7f2ff624d",
+   "name": "EDW Action",
+   "labels": [
+    "OutsideSpendingGroup"
+   ],
+   "summary": "AIPAC partners with EDW Action and United Democracy Project as a pro-Israel super-PAC cluster intervening in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01.\nUnited Democracy Project partners with AIPAC and EDW Action as a pro-Israel super-PAC cluster intervening in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01.\nEDW Action intervenes in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01, which may depress Dem base turnout in November.\n"
+  },
+  {
+   "id": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "name": "Supreme Court of the United States",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The Supreme Court of the United States, conservative-majority 6-3 after Trump's 2025-2026 appointments; pending decisions in NRSC v. FEC (party-coordination caps could fall) and the IEEPA tariff case \nSupreme Court signaled in August 2025 that the IEEPA tariff case would be heard, making the tariff regime a legal question.\nOn February 11, 2026, SCOTUS ruled on a 9.1% global tariff brief window, providing a brief reprieve from tariff pressure.\nSCOTUS is set to decide the NRSC v. FEC case, with its timing and direction listed as medium-to-lower confidence factors.\nThe Supreme Court will rule on "
+  },
+  {
+   "id": "45f0959b-4e92-40f5-8ca1-d8abf6c36a02",
+   "name": "Blavity",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Blavity reported in April 2025 that Trump tariff policy imposes a $3,800 per-household cost annually."
+  },
+  {
+   "id": "40f3a07c-7921-4dfd-9bc7-89f58784157e",
+   "name": "Maine Senate Race 2026",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "Cook Political Report rated the Maine Senate race as a Toss-Up as of July 2026.\nSusan Collins is the Republican candidate in the Maine Senate Race 2026, rated Toss-Up by Cook Political Report in July 2026.\nCook Political Report classified the Maine Senate race as a Toss-Up as part of its post-April 13, 2026 Senate map.\nCook Political Report provides nonpartisan, methodologically transparent race ratings used as high-quality evidence for 2026 Senate races including Maine.\nSabato's Crystal Ball provides nonpartisan, methodologically transparent race ratings used as high-quality evidence for 2026"
+  },
+  {
+   "id": "3b2c6f50-1726-423d-8585-c0bff61bf9c2",
+   "name": "Harvard CAPS/Harris",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "Harvard CAPS/Harris poll cited in Republican circles reported Trump approval at 43%, with a Republican-house orientation.\nHarvard CAPS/Harris polled Trump approval at 43% in June 2026, notably higher than Marquette Law School's 38% for the same period."
+  },
+  {
+   "id": "381c9b82-2dae-4696-9d11-93041035065b",
+   "name": "120th Congress",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "The 2028 US Midterm Election determines control of the 120th Congress."
+  },
+  {
+   "id": "37e1ac27-9e7a-4d6c-9894-a0bd674cc6d2",
+   "name": "VA-2",
+   "labels": [
+    "Person"
+   ],
+   "summary": "VA-2 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "id": "35d62e93-0310-4405-b20e-e5231b255777",
+   "name": "2028 United States House of Representatives elections",
+   "labels": [],
+   "summary": "If the Iran ceasefire holds and produces a durable economic recovery, it would weaken the projected Democratic gains in the 2028 House elections."
+  },
+  {
+   "id": "2f420fae-70d3-406f-a7cc-8616810cc10e",
+   "name": "Jerome Powell",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Donald Trump demanded rate cuts from Federal Reserve Chair Jerome Powell, who refused."
+  },
+  {
+   "id": "2e173c92-e5a8-47e3-87a4-b4a0b20ef8fd",
+   "name": "2026 United States Senate elections",
+   "labels": [],
+   "summary": "If the Iran ceasefire holds and produces a durable economic recovery, it would weaken the projected Democratic gains in the 2026 Senate elections."
+  },
+  {
+   "id": "2c90f8ae-b22d-4128-883a-31ca961f256a",
+   "name": "OH-01",
+   "labels": [
+    "Person"
+   ],
+   "summary": "OH-01 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "id": "2bc058fc-b54a-4ff8-a1e5-adbee8789114",
+   "name": "538",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "Data-driven nonpartisan election-forecasting outlet. The single most cited forecasting outlet in the 2026–2028 US election cycle, operating alongside Silver Bulletin."
+  },
+  {
+   "id": "2a0bd759-8a0e-4c2f-a319-31fea7ffe64d",
+   "name": "Politico",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Bipartisan professional political-media outlet. Playbook and election coverage make it the primary political-professional outlet of the 2026–2028 cycle."
+  },
+  {
+   "id": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "name": "US-Iran war",
+   "labels": [
+    "PolicyRegime"
+   ],
+   "summary": "Began February 28, 2026. Described as the single most consequential event of the 2026 midterm cycle.\nTrump's handling of the Iran war (February 28 – June 17, 2026, ~3.5 months) is opposed by 67% of the public, with 53% saying military action has gone too far (AP-NORC, June 2026) and 54% saying it was the wrong decision, forming Pillar 2 of the anti-incumbent story.\nAP-NORC polling in June 2026 found that 53% of Americans said the Iran war military action has gone too far, 67% disapprove of Trump's handling, and 54% say it was the wrong decision.\nThe Iran war (Feb 28 – June 17, 2026) and its af"
+  },
+  {
+   "id": "28718ab2-cfd1-49ab-a617-fc465faeb996",
+   "name": "Immigration and Customs Enforcement (ICE)",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "The salience of Immigration and Customs Enforcement (ICE) raids is identified as a fault line shaping the 2028 US Midterm Election outcome."
+  },
+  {
+   "id": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "name": "Democratic Party",
+   "labels": [
+    "CampaignCommittee"
+   ],
+   "summary": "The Democratic Party and Republican Party are in adversarial political opposition on the 2028 midterm fault lines, including redistricting, OBBBA backlash, and House control.\nAIPAC continues to fund Democratic incumbents who support Israel, which progressives argue suppresses Democratic base turnout.\nThe Israel-Iran cross-pressure forces Democrats into a difficult position where AIPAC dollars suppress base turnout but the party cannot afford to be on the wrong side of Israel.\nThe NRSC stated to Newsweek on April 13, 2026 that Republicans remain favored to hold the Senate Majority against Democ"
+  },
+  {
+   "id": "282d0399-dc71-490f-9a4b-c1248582fffc",
+   "name": "Wall Street Journal",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Center-right outlet covering the IEEPA decision and OBBBA fiscal analysis. Influences donor and business elite opinion in the 2026–2028 cycle."
+  },
+  {
+   "id": "2783afc8-6819-48d1-b07a-f7f3289fc08c",
+   "name": "Al-Manar",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "The Hill, citing Al-Manar, reported a 62% disapproval ceiling for Trump in June 2026."
+  },
+  {
+   "id": "2759d7db-4843-49e7-8bbb-edc002e54b3b",
+   "name": "Boston Globe",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "The Boston Globe carries Longwell/Bulwark focus group reporting."
+  },
+  {
+   "id": "26d3de3f-bdc3-49a4-8604-77def66628df",
+   "name": "DoorDash Inc.",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Kalshi listed multiple markets on whether DoorDash Inc. will report Q2 2026 total orders above specified thresholds (940M at 90%, 960M at 80%, 1040M at 1%, 1060M at 1%)."
+  },
+  {
+   "id": "26488525-98be-4bb6-9a6e-a7058d3fdc95",
+   "name": "Axios",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Bipartisan, business-focused outlet covering economic and policy developments. Drives the insider narrative in the 2026–2028 cycle."
+  },
+  {
+   "id": "242593a1-4d59-460c-a661-4f7d9667a6c3",
+   "name": "Priorities USA",
+   "labels": [
+    "OutsideSpendingGroup"
+   ],
+   "summary": "Priorities USA and House Majority PAC are Dem-aligned super-PACs that together raised $200M+ for 2026 and will determine whether Democrats can defend their 2024 Biden-district incumbents.\nPriorities USA, a Dem-aligned super-PAC that raised $200M+ for 2026, will partner with DCCC-aligned efforts to defend 2024 Biden-district House incumbents."
+  },
+  {
+   "id": "21f6042a-f517-4615-aad9-d21f56ecd5af",
+   "name": "hakeem_jeffries_737",
+   "labels": [],
+   "summary": ""
+  },
+  {
+   "id": "1e0208ce-be02-403d-b785-f633559ebb11",
+   "name": "Nexstar/Emerson",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "Nexstar/Emerson poll in June 2026 showed Husted leading Brown 51–45 (R+6) in the Ohio Special Senate race."
+  },
+  {
+   "id": "1cd56a10-44b2-4443-bc86-2e9c44835918",
+   "name": "2028 presidential open seat",
+   "labels": [
+    "ForecastSignal"
+   ],
+   "summary": "The 2028 presidential open seat is a Tier 4 structural forecast signal. Trump is constitutionally barred from a third term under the 22nd Amendment, creating an open-seat 2028 presidential race that bleeds directly into midterm turnout. It coincides with all 435 House seats, 34 Class 3 Senate seats, and 39 governorships on the same ballot, shaping the MAGA-succession Republican primary and open Democratic primary dynamics."
+  },
+  {
+   "id": "1ca6e781-6da0-4b88-a351-379fcac93522",
+   "name": "Mike Johnson",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Mike Johnson (R-LA-4), Speaker of the House since 2023, tasked with defending the 220-215 GOP House majority in 2026.\nHakeem Jeffries, as House Minority Leader, is the Democratic counterpart and principal adversary to Mike Johnson in the House.\nMike Johnson has personally campaigned with Donald Trump in vulnerable GOP districts, signaling identification rather than differentiation.\nMike Johnson faces fiscal demands from OBBBA implementation while managing his House majority.\nMike Johnson, as Speaker of the House, controls committee assignments, floor schedule, referral, recognition, and the mo"
+  },
+  {
+   "id": "1a9e4323-1663-4a91-906e-cdcbd7061012",
+   "name": "NRCC",
+   "labels": [
+    "CampaignCommittee"
+   ],
+   "summary": "NRCC and WinRed have a symbiotic relationship analogous to DCCC/ActBlue, though Republicans trail in small-dollar fundraising.\nPartisan polls sponsored by the NRCC are useful for tracking but not for central tendency on 2026 races including North Carolina."
+  },
+  {
+   "id": "19501bdd-b21a-4104-9d8d-f0a44651eed0",
+   "name": "Marquette Law School",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "AP-NORC and Marquette Law School both polled Trump approval in June 2026, recording 37% and 38% respectively.\nReuters/Ipsos and Marquette Law School both measured Trump approval in June 2026, with Reuters/Ipsos at 36% and Marquette at 38%.\nHarvard CAPS/Harris polled Trump approval at 43% in June 2026, notably higher than Marquette Law School's 38% for the same period.\nMarquette Law School's June 2026 issue-specific polls (economy 30%, inflation 22%, gas prices 19%) corroborate the weak economic approval picture found by AP-NORC.\nMarquette poll found 18% said Iran war goals were achieved, in Ju"
+  },
+  {
+   "id": "1901ede1-8ad6-40ac-b547-9a809e6aedb7",
+   "name": "VA-10 Special Election",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "DCCC memo dated March 18, 2026 cited VA-10 special election as part of aggregate D+17.1 overperformance from 2025–2026."
+  },
+  {
+   "id": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "IEEPA tariff case",
+   "labels": [
+    "PolicyRegime"
+   ],
+   "summary": "The IEEPA tariff case is a Supreme Court case on Trump's tariff regime, signaled for hearing in August 2025 and ruled partially on February 11, 2026 (9.1% global tariff brief reprieve). Yale Budget Lab tracked effective tariff rate from 2.5% (early 2025) to 28% peak (April 2026) to 16.8% (mid-2026), with per-household cost of $1,500–2,500/yr. A final SCOTUS decision is due December 2026 and could halve the effective rate if IEEPA is struck down; if upheld in modified form, tariffs likely persist into 2028 at 10–17%. Tariffs poll at 38% approval (Brookings, mid-2026). The case is the central ta"
+  },
+  {
+   "id": "1841ec29-84b4-4352-b90c-ed285bee1c87",
+   "name": "Congressional Leadership Fund (CLF)",
+   "labels": [
+    "OutsideSpendingGroup"
+   ],
+   "summary": "Senate Leadership Fund (SLF) and Congressional Leadership Fund (CLF) are McConnell-aligned super-PACs operating together as the largest single dark-money conduit in 2026, defending vulnerable GOP incumbents.\nCongressional Leadership Fund (CLF) partners with NRCC-aligned efforts to defend vulnerable GOP House incumbents in 2026 as the GOP's primary financial backstop."
+  },
+  {
+   "id": "17e8334a-73b4-41e2-bfc1-c8ee1c063e35",
+   "name": "Brad Whatley",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Brad Whatley is the Republican candidate in the North Carolina Senate Race 2026, trailing Cooper by D+7 in an April 2026 Cook poll."
+  },
+  {
+   "id": "16ba3ad9-b500-4a47-b7a9-f7248875382e",
+   "name": "Hakeem Jeffries",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Hakeem Jeffries (D-NY-8), House Minority Leader since 2023, who runs the DCCC targeting map and frames Democratic messaging strategy.\nHakeem Jeffries, as House Minority Leader, sets the targeting, message, and procedural strategy for Democrats in the House.\nHakeem Jeffries chairs the House Democratic Caucus and leads House Democratic strategy.\nHakeem Jeffries, as House Minority Leader, is the Democratic counterpart and principal adversary to Mike Johnson in the House.\nDonald Trump and Hakeem Jeffries are engaged in a public rhetorical war with revealed structural loathing.\nHakeem Jeffries has "
+  },
+  {
+   "id": "168d5ab1-b04e-4217-98dd-5de033be7a65",
+   "name": "Harvard-Harris",
+   "labels": [
+    "Pollster"
+   ],
+   "summary": "Harvard CAPS/Harris poll; cited in Republican circles with 43% Trump approval. Known for its Republican-house orientation. National scope; respected polling source."
+  },
+  {
+   "id": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "name": "2028 US Midterm Election",
+   "labels": [
+    "PolicyRegime"
+   ],
+   "summary": "The 2028 US Midterm Election (November 7, 2028) decides control of the US House (120th Congress) and the Class 3 Senate cohort (terms 2029–2035), plus 39 governorships. Forecast probability: D House gain 75–85%; D Senate gain 1–3 seats with majority uncertain at 45–55%; full D sweep 38–48%; R status quo 8–12%. Polymarket favors D House; Kalshi favors R Senate. Central fault lines: Trump approval (36–40% range, lows 30–34% May–June 2026 per Reuters/Ipsos, AP-NORC, Marquette, Silver Bulletin, NYT; 58% disapprove per Economist/YouGov June 30, 2026); the three-pillar anti-Trump regime (tariffs 16."
+  },
+  {
+   "id": "143a94d8-2e5b-4191-ab8e-92e6b3a669ad",
+   "name": "Musk",
+   "labels": [
+    "Person"
+   ],
+   "summary": "In March 2025, DOGE (Department of Government Efficiency) under Musk began government workforce reductions."
+  },
+  {
+   "id": "14044b86-34bb-4940-b794-209569a8ad3a",
+   "name": "Stephen Miller",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Donald Trump coordinates with Stephen Miller on immigration policy, with revealed structural integration of Miller into Trump policy."
+  },
+  {
+   "id": "12e88998-5dfa-44ef-9039-393ecba3479a",
+   "name": "2022 Cycle",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "Unlike the 2022 cycle which had only inflation as an active anti-incumbent force, the 2026 cycle has tariffs, war, and OBBBA deficits all in active circulation simultaneously.\nIn 2022, Biden's approval was 42% during the midterm cycle.\nThe Dobbs decision (June 2022) was a major Democratic motivator in the 2022 midterm cycle.\nIn 2022, Democrats had a D+3 popular vote, zero House seats gained, and held the Senate with +1 seat.\nThe 2022 midterm cycle is cited as a reference class for analyzing potential 2026 and 2028 outcomes."
+  },
+  {
+   "id": "118cd94f-be06-4607-9df8-6f142494492c",
+   "name": "NY-07 Democratic Primary",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "Polymarket listed a market on whether another outcome would occur in the NY-07 Democratic Primary, with a 0% probability and 1,406 in volume."
+  },
+  {
+   "id": "1089f69c-fde1-4a80-a08d-0d7cf13dc9d9",
+   "name": "2026 midterm",
+   "labels": [
+    "PolicyRegime"
+   ],
+   "summary": "The 2026 midterm results (state-legislature control, redistricting power, and 2028 Senate defending map) are identified as one of the three key variables determining whether the Democratic House majority forecast (75-85%) holds.\nThe 2026 midterm results shape the 2028 presidential election's coattail effect, which is described as the determining factor for the competitive 2028 Senate.\nThe 2028 midterm outcomes are determined by the 2026 cycle's outcomes (state-legislature, redistricting) and the 2028 presidential election's coattail effect.\nThe 2026 cycle features a three-pillar anti-Trump sto"
+  },
+  {
+   "id": "0e6860f5-1286-4da4-a340-bd40427ef45d",
+   "name": "Harris",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Defeated by Trump on November 5, 2024, alongside GOP holding the House (220–215) and Senate (53–47). Referenced in connection with Harvard CAPS/Harris polling."
+  },
+  {
+   "id": "0ad6a829-3156-433a-ad9d-cf7e4b46785e",
+   "name": "2026 Senate elections",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "The 2026 cycle is defined in part by the Iran war, which shapes the electoral environment for the 2026 Senate elections.\nThe 2026 cycle is defined in part by tariffs, which shape the electoral environment for the 2026 Senate elections.\nThe 2026 cycle's outcomes set up a 2028 Senate cycle that is structurally more difficult for Democrats, and could be the high-water mark of the Democratic wave rather than the floor.\nCook Political Report race ratings show a D-favorable 2026 Senate map.\nSabato's Crystal Ball race ratings show a D-favorable 2026 Senate map.\nThe 2028 Senate map is structurally eas"
+  },
+  {
+   "id": "0acf6be7-5b5f-48a6-9bc7-e420932fb6d8",
+   "name": "Tillis (R-NC)",
+   "labels": [
+    "Person"
+   ],
+   "summary": "US Senator (R-NC), Republican, retiring. Announced retirement in Spring 2025 following Joni Ernst. Open seat in North Carolina — a state Trump won — creates a Democratic pickup opportunity and is part of the 2026 GOP primary battleground."
+  },
+  {
+   "id": "0a579ddd-fede-4424-8479-6f53256fe395",
+   "name": "Fox News",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "Conservative media outlet driving the right-leaning information ecosystem in the 2026–2028 cycle. Coverage focus: Trump approval polling in the 36–44% range.\nFox News poll on July 1, 2026 showed Ossoff leading Collins 56–43 (D+13) in the Georgia Senate race."
+  },
+  {
+   "id": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "name": "US House",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "The 2028 US Midterm Election decides control of the US House in the 120th Congress.\nThe Republican Party holds a structurally weak majority in the US House of approximately 2–4 seats as of mid-2026.\nHakeem Jeffries, as House Minority Leader, sets the targeting, message, and procedural strategy for Democrats in the House.\nMike Johnson, as Speaker of the House, controls committee assignments, floor schedule, referral, recognition, and the motion to vacate process.\nThe 2026 midterm forecast gives Democrats a 75-85% probability of gaining control of the US House with 225-232 seats (net +7-14).\nPA-"
+  },
+  {
+   "id": "08f5306b-ffd3-4d84-8d39-fb4c3895382a",
+   "name": "Gretchen Whitmer",
+   "labels": [
+    "Person"
+   ],
+   "summary": "Gretchen Whitmer is identified as a potential 2028 Democratic presidential nominee who could face off against JD Vance, a Trump-endorsed Republican successor, with the result that her coattails could flip competitive Republican Senate seats.\nIf Gretchen Whitmer stays out of the 2026 cycle, she is the leading 2028 Democratic presidential contender."
+  },
+  {
+   "id": "08c2c290-477b-4c87-b5c9-d507b69e689a",
+   "name": "Conference Board",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Conference Board's consumer confidence reading of 57 in mid-2026 reflects weak sentiment against BEA-reported Q1 2026 GDP growth of +2.0% and PCE inflation of 4.5%."
+  },
+  {
+   "id": "06b46944-5fa8-4733-82cf-2dc69958d3c3",
+   "name": "CA-27",
+   "labels": [
+    "Person"
+   ],
+   "summary": "CA-27 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "id": "05a2407d-4af0-487b-9e8f-2a6b1e7f1d4c",
+   "name": "Joni Ernst (R-IA)",
+   "labels": [
+    "Person"
+   ],
+   "summary": "US Senator (R-IA), Republican. Announced retirement in Spring 2025, creating a GOP Senate opening. Departure narrows the GOP's margin and contributes to the 2026 primary battleground."
+  },
+  {
+   "id": "049b01ca-641c-482c-a830-cf66011c9331",
+   "name": "Texas",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "Republican-led redistricting in Texas nets Republicans a similar number of seats in the redistricting war."
+  },
+  {
+   "id": "045e50ef-f7ad-4e5d-8343-5a3742b04fa5",
+   "name": "Newsweek",
+   "labels": [
+    "MediaOutlet"
+   ],
+   "summary": "The NRSC provided a statement to Newsweek on April 13, 2026 saying Republicans remain favored to hold the Senate Majority."
+  },
+  {
+   "id": "04208866-c48f-4c75-b0b5-811ef78a015c",
+   "name": "BLS (Bureau of Labor Statistics)",
+   "labels": [
+    "GovernmentBody"
+   ],
+   "summary": "Yale Budget Lab's per-household tariff cost estimates ($1,500–2,500/yr) measure consumer burden against BLS unemployment of 4.3% in mid-2026."
+  },
+  {
+   "id": "037c098c-f764-47a5-a7ea-eef41efc0bdc",
+   "name": "Georgia Senate Race 2026",
+   "labels": [
+    "SenateRace"
+   ],
+   "summary": "Fox News poll on July 1, 2026 showed Ossoff leading Collins 56–43 (D+13) in the Georgia Senate race.\nJon Ossoff is the Democratic candidate in the Georgia Senate Race 2026, leading 56–43 in a Fox News poll.\nMike Collins is the Republican candidate in the Georgia Senate Race 2026, trailing 43–56 in a Fox News poll.\nCook Political Report classified the Georgia Senate race as Lean Democrat as part of its post-April 13, 2026 Senate map."
+  },
+  {
+   "id": "0054fbcb-596b-4ff8-a430-1b6a18ae24df",
+   "name": "MAHA movement",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "MAHA is RFK Jr.'s health policy movement, classified as a Tier 4 context object. It features an ongoing anti-vaccine pivot and operates as a load-bearing contextual force in the 2028 midterm forecast landscape."
+  }
+ ],
+ "links": [
+  {
+   "source": "1ca6e781-6da0-4b88-a351-379fcac93522",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "BACKS",
+   "fact": "Mike Johnson has personally campaigned with Donald Trump in vulnerable GOP districts, signaling identification rather than differentiation."
+  },
+  {
+   "source": "eb068edc-f22b-477f-895d-0d27633639a0",
+   "target": "a714fb2f-6eb5-471e-8f0f-70720bb0afb3",
+   "name": "PARTNERS_WITH",
+   "fact": "On January 22, 2026, Angie Nixon (D) announced her FL Senate special bid, becoming the first Dem recruit in the Rubio vacancy."
+  },
+  {
+   "source": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "target": "7f492692-5373-4ed4-a8a8-7486b6ee2de6",
+   "name": "RATES",
+   "fact": "Sabato's Crystal Ball provides nonpartisan, methodologically transparent race ratings used as high-quality evidence for 2026 Senate races including the Ohio special election."
+  },
+  {
+   "source": "6b6cb027-b852-4020-a482-371b77699735",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "donald_trump_426: 【Twitter平台回答】\n问题1：他们所谓的\"普选偏差\"完全是假民调、假新闻、假数据搞出来的骗局！就像2016、2020、2024每一次一样，同一批民调机构、同一批赞助人、同一套偏向民主党的抽样方法——他们就是要给激进左翼打气、压制我们基本盘的投票热情。我们最大的结构性阻力不是选区，而是我们自己人太相信这些假数字而松懈。克服的办法很简单：第一，9月9-10达拉斯大会把红潮彻底点燃；第二，挨家挨户敲门，基层动员从不靠算法；第三，让每一个美国人都知道真相——共和党带来工作、带来安全、带来全世界最伟大的经济。民主党带来的是通胀、犯罪、边境失控和战争。\n\n问题2：首先，伊朗停火是历史性的胜利——没有花美国人一毛钱、没死人、还保住了霍尔木兹海峡的\"零过路费\"地位，全世界都看到了总统的谈判天才。其次，支持率回升是必然的，因为经济数据本来就支持我们——能源主导、薪资"
+  },
+  {
+   "source": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "target": "67896ea3-58db-4d9d-8263-3a67119b81a2",
+   "name": "INCLUDES_RACE",
+   "fact": "NE-2 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "source": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "target": "0ad6a829-3156-433a-ad9d-cf7e4b46785e",
+   "name": "OPPOSES",
+   "fact": "GOP analysts argue the 2026 cycle could resemble 2022, where similar fundamentals produced no House seat gains for Democrats, limiting the Dem ceiling."
+  },
+  {
+   "source": "73bf98ff-e065-45fa-aab7-6f6b78ee3d63",
+   "target": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "PARTNERS_WITH",
+   "fact": "Senate Leadership Fund (SLF) partners with NRSC-aligned efforts to defend vulnerable GOP incumbents in 2026, serving as a financial backstop for the Senate majority defense."
+  },
+  {
+   "source": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "target": "940fe91d-a8bb-4eb6-ad80-22d76cc67414",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "Partisan polls sponsored by the DCCC are useful for tracking but not for central tendency on 2026 Senate races including North Carolina."
+  },
+  {
+   "source": "92f60c51-005d-4dff-a1ee-7266af8f59f5",
+   "target": "7e9cf430-323a-4e0f-86b9-099877b1507c",
+   "name": "OPPOSES",
+   "fact": "The New York Times published an op-ed on June 29, 2026 arguing there is no practical case for being attached to MIGA, citing Trump's war with Iran, 35% approval, and forfeited immigration wins."
+  },
+  {
+   "source": "7a4f9732-6974-4d33-9d88-bf860e3851d5",
+   "target": "118cd94f-be06-4607-9df8-6f142494492c",
+   "name": "RATES",
+   "fact": "Polymarket listed a market on whether another outcome would occur in the NY-07 Democratic Primary, with a 0% probability and 1,406 in volume."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "40f3a07c-7921-4dfd-9bc7-89f58784157e",
+   "name": "RATES",
+   "fact": "Cook Political Report classified the Maine Senate race as a Toss-Up as part of its post-April 13, 2026 Senate map."
+  },
+  {
+   "source": "e14d692b-7be7-43c4-9958-751a10c7056f",
+   "target": "e14d692b-7be7-43c4-9958-751a10c7056f",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Jon Ossoff 亦称 Senator Ossoff"
+  },
+  {
+   "source": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "target": "cdbad96d-34d5-4482-b682-7d001b2e866c",
+   "name": "INFLUENCES",
+   "fact": "The Republican Party holds a 53–47 majority in the US Senate as of mid-2026."
+  },
+  {
+   "source": "08f5306b-ffd3-4d84-8d39-fb4c3895382a",
+   "target": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "name": "OPPOSES",
+   "fact": "Gretchen Whitmer is identified as a potential 2028 Democratic presidential nominee who could face off against JD Vance, a Trump-endorsed Republican successor, with the result that her coattails could flip competitive Republican Senate seats."
+  },
+  {
+   "source": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "target": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "PARTNERS_WITH",
+   "fact": "John Thune coordinates with the NRSC and holds a leadership PAC as resources for his Senate leadership role."
+  },
+  {
+   "source": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "target": "f15ea05e-0b67-4621-92d8-5cc0fff1d150",
+   "name": "INCLUDES_RACE",
+   "fact": "MI-7 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "8834a9a1-ceb8-41fe-87a5-3e73cbb0d50d",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "AIPAC's intervention in the CO-01 race produced a more centrist Democratic primary winner on Israel"
+  },
+  {
+   "source": "882afc8f-eaac-4fb4-a19b-126e81cce255",
+   "target": "882afc8f-eaac-4fb4-a19b-126e81cce255",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Chuck Schumer 亦称 Leader Schumer"
+  },
+  {
+   "source": "5107ffa7-d0f0-483a-ae0b-3e0616ae8222",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "graham_platner_678: 【Twitter平台回答】\n问题1：诚实讲，一个温和的蓝色浪潮但参议院留在共和党手里的剧本，对我这条赛道既是机会也是警告。机会在于，全国环境在往我们这边走——特朗普的就业支持率在37%上下晃着，普通选民在D+5到D+7那一边，2025到2026年的特别选举我们平均超预期17个点。这些结构性因素对Cook把缅因从Safe R挪到Toss-Up起了作用，也解释了我为什么能在极有动力投票的那批选民里以53-44领先Collins。\n\n但警告也真实——如果全国叙事是\"参议院没翻\"，Collins会把它包装成\"缅因人也否定了激进派\"，然后把我二十多年的NRA评级拿来用，把我画的Totenkopf纹身和我被Lyndsey Fifield指控的事情（我坚决否认，但承认关系不完美）当成弹药。她会试图把我框成\"Cuellar 2.0\"——民主党建制派最怕的那种人物，那"
+  },
+  {
+   "source": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "target": "12e88998-5dfa-44ef-9039-393ecba3479a",
+   "name": "PARTICIPATED_IN",
+   "fact": "In 2022, Democrats had a D+3 popular vote, zero House seats gained, and held the Senate with +1 seat."
+  },
+  {
+   "source": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "target": "b6f6b84f-afb2-43d3-86b6-ae39ddc8fd39",
+   "name": "SHAPED_BY",
+   "fact": "The 2028 midterm outlook depends on whether the Iran ceasefire's legacy holds, with the ceasefire's status still contested."
+  },
+  {
+   "source": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "target": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "name": "TARGETS_CONTROL_OF",
+   "fact": "The DCCC is a House campaign committee targeting control of the House of Representatives, with $45.3M raised in Q2 2026."
+  },
+  {
+   "source": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "target": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "name": "RATES",
+   "fact": "AP-NORC polling in June 2026 found that 53% of Americans said the Iran war military action has gone too far, 67% disapprove of Trump's handling, and 54% say it was the wrong decision."
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "OPPOSES",
+   "fact": "Yale Budget Lab has calculated that the effective tariff rate has risen from 2.5% in early 2025 to 9% in spring 2025 to 13.7% in February 2026 to 16.8% in mid-2026, costing households $1,500–2,500 annually and reaching the highest level since 1933, contributing to the anti-Trump Pillar 1 (tariffs) anti-incumbent story."
+  },
+  {
+   "source": "08f5306b-ffd3-4d84-8d39-fb4c3895382a",
+   "target": "6c70f968-5670-4bea-9ec9-44bfc49ff248",
+   "name": "INFLUENCES",
+   "fact": "If Gretchen Whitmer stays out of the 2026 cycle, she is the leading 2028 Democratic presidential contender."
+  },
+  {
+   "source": "ec23a6f9-ad9d-4c7d-baa4-b391936f4fbe",
+   "target": "037c098c-f764-47a5-a7ea-eef41efc0bdc",
+   "name": "PARTICIPATES_IN",
+   "fact": "Mike Collins is the Republican candidate in the Georgia Senate Race 2026, trailing 43–56 in a Fox News poll."
+  },
+  {
+   "source": "820b65d1-74dd-406d-a310-0b7fde91b96d",
+   "target": "6fce848f-ffe0-4fee-a8c3-d8464fc63480",
+   "name": "AGGREGATES_DATA_FROM",
+   "fact": "Oddpool machine-fetches prediction-market data from Kalshi and Polymarket as of 2026-07-03T08:37:52Z."
+  },
+  {
+   "source": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "target": "940fe91d-a8bb-4eb6-ad80-22d76cc67414",
+   "name": "RATES",
+   "fact": "Sabato's Crystal Ball provides nonpartisan, methodologically transparent race ratings used as high-quality evidence for 2026 Senate races including North Carolina."
+  },
+  {
+   "source": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "target": "1089f69c-fde1-4a80-a08d-0d7cf13dc9d9",
+   "name": "INFLUENCED_BY",
+   "fact": "The 2028 midterm outcomes are determined by the 2026 cycle's outcomes (state-legislature, redistricting) and the 2028 presidential election's coattail effect."
+  },
+  {
+   "source": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "target": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "name": "INFLUENCES",
+   "fact": "The 2028 US Midterm Election decides control of the US House in the 120th Congress."
+  },
+  {
+   "source": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "target": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "name": "SHAPED_BY",
+   "fact": "The 2028 midterm outlook depends on the OBBBA's fiscal drag, which will remain an active political issue."
+  },
+  {
+   "source": "841f6cd0-5f5f-407c-911d-2db7a1473fd1",
+   "target": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "name": "RATES",
+   "fact": "Ipsos polling (via Reuters) places presidential approval in the 36–40% range with lows at 30–34% in May–June 2026, a key input for 2028 midterm forecasting."
+  },
+  {
+   "source": "242593a1-4d59-460c-a661-4f7d9667a6c3",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "PARTNERS_WITH",
+   "fact": "Priorities USA, a Dem-aligned super-PAC that raised $200M+ for 2026, will partner with DCCC-aligned efforts to defend 2024 Biden-district House incumbents."
+  },
+  {
+   "source": "0ad6a829-3156-433a-ad9d-cf7e4b46785e",
+   "target": "c6a6c8c9-25b0-40be-99d6-ce53631012d0",
+   "name": "INFLUENCES",
+   "fact": "The 2026 cycle's outcomes set up a 2028 Senate cycle that is structurally more difficult for Democrats, and could be the high-water mark of the Democratic wave rather than the floor."
+  },
+  {
+   "source": "e14d692b-7be7-43c4-9958-751a10c7056f",
+   "target": "037c098c-f764-47a5-a7ea-eef41efc0bdc",
+   "name": "PARTICIPATES_IN",
+   "fact": "Jon Ossoff is the Democratic candidate in the Georgia Senate Race 2026, leading 56–43 in a Fox News poll."
+  },
+  {
+   "source": "5a38c9a8-2992-4822-a6ed-c2ecb9f5b16e",
+   "target": "4a71d412-2873-48b6-b262-d2d7f2ff624d",
+   "name": "PARTNERS_WITH",
+   "fact": "United Democracy Project partners with AIPAC and EDW Action as a pro-Israel super-PAC cluster intervening in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01."
+  },
+  {
+   "source": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "john_thune_715: 【Twitter平台回答】\n问题1：结构性阻力主要在三个方面：第一，22个共和党席位对13个民主党席位的地图不对称，这要求我们几乎零失误；第二，D+5到D+7的普选偏差意味着我们必须在摇摆州跑赢基础盘3到5个点；第三，特朗普总统的支持率在37%左右徘徊，这会向下传导到所有共和党候选人。我们在北卡、俄亥俄、缅因、阿拉斯加四个战场州投入集中资源，依靠NRSC的协调能力和最高法院在NRSC诉FEC案中可能带来的资金结构改善来对冲。候选人质量和基层动员的纪律性是我们守住多数的关键。\n\n问题2：伊朗停火是本周期最重要的地缘事件之一，它稳定了选情结构但尚未完全恢复总统支持率。我们的策略是把停火和边境安全、能源主导这些具体成果打包，在付费媒体和上门拜访中持续向选民展示实际成果。在北卡和俄亥俄这种特朗普曾以3到11点赢下的州，每恢复1点总统支持率就足以抵消D+5的普选偏差。"
+  },
+  {
+   "source": "9f7ddabb-81eb-4195-8665-994d4bed9ebe",
+   "target": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "name": "RATES",
+   "fact": "Jessica Taylor, an analyst at the Cook Political Report, stated on April 13, 2026 that the likeliest Senate outcome is a 1 to 3 seat Democratic pickup, just short of the 4 needed."
+  },
+  {
+   "source": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "target": "c7f00486-7976-4aaf-ae96-b17b4a5738df",
+   "name": "INCLUDES_RACE",
+   "fact": "PA-08 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "source": "16ba3ad9-b500-4a47-b7a9-f7248875382e",
+   "target": "16ba3ad9-b500-4a47-b7a9-f7248875382e",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Hakeem Jeffries 亦称 Leader Jeffries"
+  },
+  {
+   "source": "16ba3ad9-b500-4a47-b7a9-f7248875382e",
+   "target": "1ca6e781-6da0-4b88-a351-379fcac93522",
+   "name": "OPPOSES",
+   "fact": "Hakeem Jeffries, as House Minority Leader, is the Democratic counterpart and principal adversary to Mike Johnson in the House."
+  },
+  {
+   "source": "81d13882-6741-47d2-a4f6-5c55a81fcef2",
+   "target": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "name": "INFLUENCES",
+   "fact": "On December 4, 2025, Brookings published 'Republican prospects in 2026 grow darker', the first major think-tank warning about GOP prospects."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "4a71d412-2873-48b6-b262-d2d7f2ff624d",
+   "name": "PARTNERS_WITH",
+   "fact": "AIPAC and EDW Action jointly intervened in Democratic primaries in 2025–2026 with multi-million spending."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "7f492692-5373-4ed4-a8a8-7486b6ee2de6",
+   "name": "RATES",
+   "fact": "Cook Political Report provides nonpartisan, methodologically transparent race ratings used as high-quality evidence for 2026 Senate races including the Ohio special election."
+  },
+  {
+   "source": "08c2c290-477b-4c87-b5c9-d507b69e689a",
+   "target": "cb7438fc-14ed-46ad-bab9-820801bea1c5",
+   "name": "MEASURES_SENTIMENT_AGAINST",
+   "fact": "Conference Board's consumer confidence reading of 57 in mid-2026 reflects weak sentiment against BEA-reported Q1 2026 GDP growth of +2.0% and PCE inflation of 4.5%."
+  },
+  {
+   "source": "5a05eaf4-533d-40eb-be65-f27b2f4da7f3",
+   "target": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "name": "OPPOSES",
+   "fact": "North Carolina is identified as a competitive 2028 Republican Senate state that a Democratic presidential nominee (running against JD Vance) could win, flipping the seat."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "940fe91d-a8bb-4eb6-ad80-22d76cc67414",
+   "name": "RATES",
+   "fact": "Cook Political Report rated the North Carolina Senate race as Lean Democrat with Cooper leading by D+7 in April 2026."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "940fe91d-a8bb-4eb6-ad80-22d76cc67414",
+   "name": "RATES",
+   "fact": "Cook Political Report classified the North Carolina Senate race as Lean Democrat as part of its post-April 13, 2026 Senate map."
+  },
+  {
+   "source": "0a579ddd-fede-4424-8479-6f53256fe395",
+   "target": "037c098c-f764-47a5-a7ea-eef41efc0bdc",
+   "name": "POLLED",
+   "fact": "Fox News poll on July 1, 2026 showed Ossoff leading Collins 56–43 (D+13) in the Georgia Senate race."
+  },
+  {
+   "source": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "roy_cooper_706: 【Twitter平台回答】\n问题1：Honest read — a modest Democratic wave that still leaves Republicans holding the Senate is the environment I'm built for, but it isn't the environment that gets me across the finish line on its own. I've won twice in North Carolina by turning out the 2020 electorate one notch higher, and that's still the playbook. Cook moved us from Toss-Up to Lean D, Sabato's got"
+  },
+  {
+   "source": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "PARTNERS_WITH",
+   "fact": "The OBBBA combines business tax cuts with tariff-revenue offsets and is the signature legislative item of the Trump administration; critics call it fiscally regressive while supporters note tariff revenue offsets, making it Pillar 3 of the anti-incumbent story into 2028."
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "cb7438fc-14ed-46ad-bab9-820801bea1c5",
+   "name": "MEASURES_INFLATION_IMPACT_VIA",
+   "fact": "Yale Budget Lab's effective tariff rate calculations (16.8% mid-2026, 28% April 2026 peak, 9.1% February 2026 brief) quantify the inflation impact alongside BEA's PCE inflation data of 4.5% for Q1 2026."
+  },
+  {
+   "source": "1089f69c-fde1-4a80-a08d-0d7cf13dc9d9",
+   "target": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "name": "DRIVES_NARRATIVE_OF",
+   "fact": "The 2026 cycle features a three-pillar anti-Trump story centered on tariffs, war, and the OBBBA, which is structurally durable through the 2028 cycle."
+  },
+  {
+   "source": "cb6866be-fe45-476f-9768-83ebe675453c",
+   "target": "143a94d8-2e5b-4191-ab8e-92e6b3a669ad",
+   "name": "PARTNERS_WITH",
+   "fact": "In March 2025, DOGE (Department of Government Efficiency) under Musk began government workforce reductions."
+  },
+  {
+   "source": "882afc8f-eaac-4fb4-a19b-126e81cce255",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "chuck_schumer_544: 【Twitter平台回答】\n问题1：If I had to pick a single event, it would be the IEEPA tariff ruling — whenever it lands. The August-November window has a lot of noise: Iran ceasefire deadline, Michigan and Maine primaries, the Dallas convention, the funding deadline in late September, and a string of CPI prints. Most of those I can plan around or absorb. The tariff ruling is the one that can"
+  },
+  {
+   "source": "8dc74904-1cb6-44d8-bbd3-7dc7b6cad58f",
+   "target": "d1ae064f-2707-450b-963d-681478328a93",
+   "name": "RATES",
+   "fact": "A poll published June 30 by The Economist and YouGov found 58% disapprove of Trump's job performance."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "INFLUENCES",
+   "fact": "AIPAC is in tension with the Democratic establishment; it supports establishment Democrats in primaries (e.g., against Abughazaleh and Kiros), which the establishment welcomes in spending but worries depresses base turnout."
+  },
+  {
+   "source": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "target": "37e1ac27-9e7a-4d6c-9894-a0bd674cc6d2",
+   "name": "INCLUDES_RACE",
+   "fact": "VA-2 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "source": "7a4f9732-6974-4d33-9d88-bf860e3851d5",
+   "target": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "name": "RATES",
+   "fact": "Polymarket prediction markets give Democrats a high probability of winning the House in the 2028 US Midterm Election."
+  },
+  {
+   "source": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "target": "e8fef2bc-f313-43bb-92d1-8423a5076fb9",
+   "name": "INFLUENCES",
+   "fact": "If the Iran ceasefire holds and produces a durable economic recovery, it would weaken the projected Democratic gains in the 2026 House elections."
+  },
+  {
+   "source": "b3157c67-7657-4700-a1f4-0cc2f2695d1b",
+   "target": "b3157c67-7657-4700-a1f4-0cc2f2695d1b",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Graham Platner 亦称 Platner"
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "INFLUENCES",
+   "fact": "Yale Budget Lab reported on February 24, 2026 a 13.7% effective tariff rate after 15% global tariffs, reasserting tariff pressure on the IEEPA regime."
+  },
+  {
+   "source": "8dc74904-1cb6-44d8-bbd3-7dc7b6cad58f",
+   "target": "8c5e36ef-34a4-43d9-b880-9800cc8e575c",
+   "name": "PARTNERS_WITH",
+   "fact": "The Economist and YouGov jointly published a poll on June 30, 2026 finding 58% of US respondents disapprove of Trump's job performance."
+  },
+  {
+   "source": "bfefbfc8-a4d8-498e-93c8-b5a26b0fe02b",
+   "target": "d1ae064f-2707-450b-963d-681478328a93",
+   "name": "MEASURES",
+   "fact": "Reuters/Ipsos measured Trump approval polling on June 12–15, 2026."
+  },
+  {
+   "source": "1e0208ce-be02-403d-b785-f633559ebb11",
+   "target": "7f492692-5373-4ed4-a8a8-7486b6ee2de6",
+   "name": "POLLED",
+   "fact": "Nexstar/Emerson poll in June 2026 showed Husted leading Brown 51–45 (R+6) in the Ohio Special Senate race."
+  },
+  {
+   "source": "7a4f9732-6974-4d33-9d88-bf860e3851d5",
+   "target": "74146900-ad39-4934-b92b-5ca888c747b2",
+   "name": "RATES",
+   "fact": "Polymarket listed a market on whether Cam Schlittler will be on the cover of MLB The Show 27, with a 2% probability and 2,000 in volume."
+  },
+  {
+   "source": "16ba3ad9-b500-4a47-b7a9-f7248875382e",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "PARTNERS_WITH",
+   "fact": "Jeffries runs the Democratic House strategy and coordinates the DCCC; the DCCC is the principal Democratic House targeting/campaign arm.（sign=ally，strength=high，valence=allied，polarity=0.95）"
+  },
+  {
+   "source": "242593a1-4d59-460c-a661-4f7d9667a6c3",
+   "target": "d75eb697-1e58-4464-9ec5-260e7a1e45d8",
+   "name": "PARTNERS_WITH",
+   "fact": "Priorities USA and House Majority PAC are Dem-aligned super-PACs that together raised $200M+ for 2026 and will determine whether Democrats can defend their 2024 Biden-district incumbents."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "cf2e2c8c-733f-4d1b-87f4-7dd98ee6e55e",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "On March 17, 2026 in the Illinois primary, AIPAC defeated Kat Abughazaleh in IL-09, marking the first major AIPAC intervention in a Democratic primary."
+  },
+  {
+   "source": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "target": "045e50ef-f7ad-4e5d-8343-5a3742b04fa5",
+   "name": "INFLUENCES",
+   "fact": "The NRSC provided a statement to Newsweek on April 13, 2026 saying Republicans remain favored to hold the Senate Majority."
+  },
+  {
+   "source": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "target": "bfefbfc8-a4d8-498e-93c8-b5a26b0fe02b",
+   "name": "CONCURRENT_POLLING_OF",
+   "fact": "AP-NORC and Reuters/Ipsos both measured Trump approval in mid-June 2026, with AP-NORC at 37% and Reuters/Ipsos at 36%."
+  },
+  {
+   "source": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "target": "ca03dd4c-d034-4fc9-ac3e-e0cc1ab5c0c1",
+   "name": "PARTNERS_WITH",
+   "fact": "DCCC memo dated March 18, 2026 cited PA-10 special election as part of aggregate D+17.1 overperformance from 2025–2026."
+  },
+  {
+   "source": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "target": "381c9b82-2dae-4696-9d11-93041035065b",
+   "name": "INFLUENCES",
+   "fact": "The 2028 US Midterm Election determines control of the 120th Congress."
+  },
+  {
+   "source": "b9a22fcb-67a6-4fc7-b310-0f21bcdb6022",
+   "target": "cdca5115-3d88-48b6-a094-b014e00ee520",
+   "name": "PARTICIPATES_IN",
+   "fact": "Dan Sullivan is the retiring Republican incumbent in the Alaska Senate Race 2026, rated Toss-Up by Sabato in June 2026."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "5a38c9a8-2992-4822-a6ed-c2ecb9f5b16e",
+   "name": "PARTNERS_WITH",
+   "fact": "AIPAC partners with United Democracy Project and EDW Action as a pro-Israel super-PAC cluster intervening in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01."
+  },
+  {
+   "source": "19501bdd-b21a-4104-9d8d-f0a44651eed0",
+   "target": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "name": "MEASURED",
+   "fact": "Marquette poll found 18% said Iran war goals were achieved, in June 2026."
+  },
+  {
+   "source": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "national_republican_senatorial_committee_700: 【Twitter平台回答】\n问题1：在D+5到D+7的全国普选偏差环境下，NRSC认为三大结构性阻力最为突出：第一，22个共和党现任席位所构成的历史性暴露图——这种地图本身就要求我们在超过二十个州同时具备竞争力，资源稀释效应是结构性的；第二，16.8%的有效关税率被民主党系统性地框定为\"消费税\"，对独立选民尤其是摇摆州女性选民的情绪渗透比2024年更深；第三，总统支持率在AP-NORC为37%、Reuters/Ipsos为36%，历史规律表明中期选举中低于45%的支持率几乎总是转化为席位流失。克服这些阻力的策略核心是三条腿：一是候选人质量优先——我们寻找的候选人能够与所在州的票仓结构精准匹配，无论Maine、North Carolina、Georgia还是Ohio-special，候选人的本土化叙事"
+  },
+  {
+   "source": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "target": "6bc7371a-ad99-44a3-987e-620fefbbae01",
+   "name": "AFFILIATED_WITH",
+   "fact": "Sabato's Crystal Ball is an election analyst based at the UVA Center for Politics."
+  },
+  {
+   "source": "bb369a48-4dc4-4892-9bf2-de41f6735a58",
+   "target": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "name": "RATES",
+   "fact": "Reuters/Ipsos polling places the presidential approval rating in the 36–40% range with lows at 30–34% in May–June 2026, shaping 2028 midterm conditions."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "name": "AGREES_WITH",
+   "fact": "Cook Political Report and Sabato's Crystal Ball agree on recent Senate race rating shifts toward Democrats."
+  },
+  {
+   "source": "83ac14ae-5e92-4a95-b0d3-4540e57370b5",
+   "target": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "name": "OPPOSES",
+   "fact": "Natasha Sarin, alongside Yale Budget Lab, has produced analysis critical of the OBBBA, characterizing it as fiscally regressive and a transfer of wealth upward."
+  },
+  {
+   "source": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "target": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "name": "INFLUENCES",
+   "fact": "The One Big Beautiful Bill Act (OBBBA)'s Medicaid/SNAP cuts fuel an affordability backlash in suburban districts, a key fault line for the 2028 US Midterm Election."
+  },
+  {
+   "source": "8c5e36ef-34a4-43d9-b880-9800cc8e575c",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "RATES",
+   "fact": "The Economist/YouGov polling showed 38% Trump approval in late June 2026, after the Iran ceasefire, indicating no post-war approval bump."
+  },
+  {
+   "source": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "democratic_congressional_campaign_committee_550: 【Twitter平台回答】\n问题1：The single most consequential event in the August-November 2026 trigger sequence is the CPI release window in mid-October overlapping with the Q3 FEC reporting deadline on October 15. A bad print — food inflation sticky, gas spiking on the back of a 16.8% effective tariff — collides with the headline that either validates or invali"
+  },
+  {
+   "source": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "target": "8ed17daa-2b89-4a54-8089-6aa1c65d5e51",
+   "name": "RATES",
+   "fact": "AP-NORC polling shows right-track direction at 21% positive versus 74% negative, a historically low reading."
+  },
+  {
+   "source": "d916993c-1581-4b0c-a138-84401d6c394e",
+   "target": "7f492692-5373-4ed4-a8a8-7486b6ee2de6",
+   "name": "PARTICIPATES_IN",
+   "fact": "Sherrod Brown is the Democratic candidate in the Ohio Special Senate Race 2026, polling 45–48 in June 2026 surveys."
+  },
+  {
+   "source": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "target": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "John Thune 亦称 Leader Thune"
+  },
+  {
+   "source": "5a38c9a8-2992-4822-a6ed-c2ecb9f5b16e",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "INFLUENCES",
+   "fact": "UDP, alongside AIPAC, intervenes in Democratic primaries in tension with the Democratic establishment, spending against progressive candidates but raising concerns about depressed base turnout."
+  },
+  {
+   "source": "882afc8f-eaac-4fb4-a19b-126e81cce255",
+   "target": "6a5a94ff-5531-4222-b452-afe36b56718e",
+   "name": "OPPOSES",
+   "fact": "Chuck Schumer has high internal friction with Alexandria Ocasio-Cortez, who poses a 2028 primary threat as the NY Democratic primary opened by the Mamdani victory."
+  },
+  {
+   "source": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "target": "cdbad96d-34d5-4482-b682-7d001b2e866c",
+   "name": "INFLUENCES",
+   "fact": "The 2026 midterm forecast gives Democrats a 45-55% probability of gaining 1-3 Senate seats, with a combined 38-48% chance of a Democratic sweep of both chambers."
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "04208866-c48f-4c75-b0b5-811ef78a015c",
+   "name": "MEASURES_ECONOMIC_CONDITION_VIA",
+   "fact": "Yale Budget Lab's per-household tariff cost estimates ($1,500–2,500/yr) measure consumer burden against BLS unemployment of 4.3% in mid-2026."
+  },
+  {
+   "source": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "target": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "OPPOSES",
+   "fact": "Cooper is the leading NC-Senate D-flip candidate against the NRSC's preferred R (Whatley); their contest is the binary NC-Senate race.（sign=rival，strength=high，valence=adversarial，polarity=-0.90）"
+  },
+  {
+   "source": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "target": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "name": "INFLUENCES",
+   "fact": "The Republican Party holds a structurally weak majority in the US House of approximately 2–4 seats as of mid-2026."
+  },
+  {
+   "source": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "INFLUENCES",
+   "fact": "The Iran ceasefire (if held for 2+ years and producing durable peace) could dissipate the war's drag and allow Trump's foreign-policy approval to rise to 45%+ by 2028, indirectly relieving anti-incumbent pressure on the tariff regime's political salience"
+  },
+  {
+   "source": "bd97046c-8c4f-4a84-83d6-f6ca3993efde",
+   "target": "12e88998-5dfa-44ef-9039-393ecba3479a",
+   "name": "DIFFERS_FROM",
+   "fact": "Unlike the 2022 cycle which had only inflation as an active anti-incumbent force, the 2026 cycle has tariffs, war, and OBBBA deficits all in active circulation simultaneously."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "cf2c7678-c152-479b-be2d-76201e7b15da",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "AIPAC intervened in the IL-09 Democratic primary, opposing progressive candidate Kat Abughazaleh."
+  },
+  {
+   "source": "7d56eeba-6a62-4731-bfb1-def720a784c7",
+   "target": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "name": "CONSTRAINS",
+   "fact": "The Israel-Iran cross-pressure forces Democrats into a difficult position where AIPAC dollars suppress base turnout but the party cannot afford to be on the wrong side of Israel."
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "INFLUENCES",
+   "fact": "Yale Budget Lab calculated in April 2025 that tariffs imposed a $3,800/year household cost, the first major economic warning shot related to the IEEPA tariff regime."
+  },
+  {
+   "source": "16ba3ad9-b500-4a47-b7a9-f7248875382e",
+   "target": "a35ffe3f-55c4-4811-834d-e8c515768889",
+   "name": "INFLUENCES",
+   "fact": "Hakeem Jeffries chairs the House Democratic Caucus and leads House Democratic strategy."
+  },
+  {
+   "source": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "target": "cdbad96d-34d5-4482-b682-7d001b2e866c",
+   "name": "INFLUENCES",
+   "fact": "The 2028 US Midterm Election decides control of the Class 3 Senate cohort (terms 2029–2035)."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "name": "AGREES_WITH",
+   "fact": "Cook Political Report and Sabato's Crystal Ball agree on recent Senate race rating shifts toward Democrats."
+  },
+  {
+   "source": "83ac14ae-5e92-4a95-b0d3-4540e57370b5",
+   "target": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "name": "OPPOSES",
+   "fact": "Natasha Sarin, alongside Yale Budget Lab, has produced analysis critical of the OBBBA, characterizing it as fiscally regressive and a transfer of wealth upward."
+  },
+  {
+   "source": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "target": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "name": "INFLUENCES",
+   "fact": "The One Big Beautiful Bill Act (OBBBA)'s Medicaid/SNAP cuts fuel an affordability backlash in suburban districts, a key fault line for the 2028 US Midterm Election."
+  },
+  {
+   "source": "8c5e36ef-34a4-43d9-b880-9800cc8e575c",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "RATES",
+   "fact": "The Economist/YouGov polling showed 38% Trump approval in late June 2026, after the Iran ceasefire, indicating no post-war approval bump."
+  },
+  {
+   "source": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "democratic_congressional_campaign_committee_550: 【Twitter平台回答】\n问题1：The single most consequential event in the August-November 2026 trigger sequence is the CPI release window in mid-October overlapping with the Q3 FEC reporting deadline on October 15. A bad print — food inflation sticky, gas spiking on the back of a 16.8% effective tariff — collides with the headline that either validates or invali"
+  },
+  {
+   "source": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "target": "8ed17daa-2b89-4a54-8089-6aa1c65d5e51",
+   "name": "RATES",
+   "fact": "AP-NORC polling shows right-track direction at 21% positive versus 74% negative, a historically low reading."
+  },
+  {
+   "source": "d916993c-1581-4b0c-a138-84401d6c394e",
+   "target": "7f492692-5373-4ed4-a8a8-7486b6ee2de6",
+   "name": "PARTICIPATES_IN",
+   "fact": "Sherrod Brown is the Democratic candidate in the Ohio Special Senate Race 2026, polling 45–48 in June 2026 surveys."
+  },
+  {
+   "source": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "target": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "John Thune 亦称 Leader Thune"
+  },
+  {
+   "source": "5a38c9a8-2992-4822-a6ed-c2ecb9f5b16e",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "INFLUENCES",
+   "fact": "UDP, alongside AIPAC, intervenes in Democratic primaries in tension with the Democratic establishment, spending against progressive candidates but raising concerns about depressed base turnout."
+  },
+  {
+   "source": "882afc8f-eaac-4fb4-a19b-126e81cce255",
+   "target": "6a5a94ff-5531-4222-b452-afe36b56718e",
+   "name": "OPPOSES",
+   "fact": "Chuck Schumer has high internal friction with Alexandria Ocasio-Cortez, who poses a 2028 primary threat as the NY Democratic primary opened by the Mamdani victory."
+  },
+  {
+   "source": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "target": "cdbad96d-34d5-4482-b682-7d001b2e866c",
+   "name": "INFLUENCES",
+   "fact": "The 2026 midterm forecast gives Democrats a 45-55% probability of gaining 1-3 Senate seats, with a combined 38-48% chance of a Democratic sweep of both chambers."
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "04208866-c48f-4c75-b0b5-811ef78a015c",
+   "name": "MEASURES_ECONOMIC_CONDITION_VIA",
+   "fact": "Yale Budget Lab's per-household tariff cost estimates ($1,500–2,500/yr) measure consumer burden against BLS unemployment of 4.3% in mid-2026."
+  },
+  {
+   "source": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "target": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "OPPOSES",
+   "fact": "Cooper is the leading NC-Senate D-flip candidate against the NRSC's preferred R (Whatley); their contest is the binary NC-Senate race.（sign=rival，strength=high，valence=adversarial，polarity=-0.90）"
+  },
+  {
+   "source": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "target": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "name": "INFLUENCES",
+   "fact": "The Republican Party holds a structurally weak majority in the US House of approximately 2–4 seats as of mid-2026."
+  },
+  {
+   "source": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "INFLUENCES",
+   "fact": "The Iran ceasefire (if held for 2+ years and producing durable peace) could dissipate the war's drag and allow Trump's foreign-policy approval to rise to 45%+ by 2028, indirectly relieving anti-incumbent pressure on the tariff regime's political salience"
+  },
+  {
+   "source": "bd97046c-8c4f-4a84-83d6-f6ca3993efde",
+   "target": "12e88998-5dfa-44ef-9039-393ecba3479a",
+   "name": "DIFFERS_FROM",
+   "fact": "Unlike the 2022 cycle which had only inflation as an active anti-incumbent force, the 2026 cycle has tariffs, war, and OBBBA deficits all in active circulation simultaneously."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "cf2c7678-c152-479b-be2d-76201e7b15da",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "AIPAC intervened in the IL-09 Democratic primary, opposing progressive candidate Kat Abughazaleh."
+  },
+  {
+   "source": "7d56eeba-6a62-4731-bfb1-def720a784c7",
+   "target": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "name": "CONSTRAINS",
+   "fact": "The Israel-Iran cross-pressure forces Democrats into a difficult position where AIPAC dollars suppress base turnout but the party cannot afford to be on the wrong side of Israel."
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "INFLUENCES",
+   "fact": "Yale Budget Lab calculated in April 2025 that tariffs imposed a $3,800/year household cost, the first major economic warning shot related to the IEEPA tariff regime."
+  },
+  {
+   "source": "16ba3ad9-b500-4a47-b7a9-f7248875382e",
+   "target": "a35ffe3f-55c4-4811-834d-e8c515768889",
+   "name": "INFLUENCES",
+   "fact": "Hakeem Jeffries chairs the House Democratic Caucus and leads House Democratic strategy."
+  },
+  {
+   "source": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "target": "cdbad96d-34d5-4482-b682-7d001b2e866c",
+   "name": "INFLUENCES",
+   "fact": "The 2028 US Midterm Election decides control of the Class 3 Senate cohort (terms 2029–2035)."
+  },
+  {
+   "source": "17e8334a-73b4-41e2-bfc1-c8ee1c063e35",
+   "target": "940fe91d-a8bb-4eb6-ad80-22d76cc67414",
+   "name": "PARTICIPATES_IN",
+   "fact": "Brad Whatley is the Republican candidate in the North Carolina Senate Race 2026, trailing Cooper by D+7 in an April 2026 Cook poll."
+  },
+  {
+   "source": "ecb3d045-4051-4b68-af8d-0cf8c74d663b",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "RATES",
+   "fact": "In October 2025, Gallup reported Trump approval at 38% (with a July 2025 baseline), the first major warning of declining Trump approval."
+  },
+  {
+   "source": "28718ab2-cfd1-49ab-a617-fc465faeb996",
+   "target": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "name": "INFLUENCES",
+   "fact": "The salience of Immigration and Customs Enforcement (ICE) raids is identified as a fault line shaping the 2028 US Midterm Election outcome."
+  },
+  {
+   "source": "cb4b6931-3f73-4459-9480-082ab4678b87",
+   "target": "f97f8b6c-e301-4801-9cb9-989e306ef09d",
+   "name": "PARALLEL_FINDING_TO",
+   "fact": "UMass found 17% of 2024 Trump voters expressed reservations in its March 30, 2026 poll, paralleling Longwell/Bulwark focus group findings on defection risk among Trump-product buyers (62% motivated to vote D)."
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "MEASURED",
+   "fact": "Yale Budget Lab measured the pre-Trump tariff rate at 2.5% in early 2025."
+  },
+  {
+   "source": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "target": "049b01ca-641c-482c-a830-cf66011c9331",
+   "name": "REGULATES",
+   "fact": "Republican-led redistricting in Texas nets Republicans a similar number of seats in the redistricting war."
+  },
+  {
+   "source": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "target": "940fe91d-a8bb-4eb6-ad80-22d76cc67414",
+   "name": "PARTICIPATES_IN",
+   "fact": "Roy Cooper is the Democratic candidate in the North Carolina Senate Race 2026, leading by D+7 in an April 2026 Cook poll."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "AIPAC continues to fund Democratic incumbents who support Israel, which progressives argue suppresses Democratic base turnout."
+  },
+  {
+   "source": "19501bdd-b21a-4104-9d8d-f0a44651eed0",
+   "target": "d1ae064f-2707-450b-963d-681478328a93",
+   "name": "MEASURES",
+   "fact": "Marquette Law School National Survey published June 2026 polling on Trump with declining approval but retaining strong influence on GOP primary voters."
+  },
+  {
+   "source": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "CONSTRAINS",
+   "fact": "Supreme Court signaled in August 2025 that the IEEPA tariff case would be heard, making the tariff regime a legal question."
+  },
+  {
+   "source": "1ca6e781-6da0-4b88-a351-379fcac93522",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "mike_johnson_573: 【Twitter平台回答】\n问题1：The Iran ceasefire deadline in late August is the single most consequential trigger on the calendar, and I say that as someone who has been through a Speaker's office during an OPEC-spike cycle. If the ceasefire holds and Brent crude stays in the $70s through September, the CPI release in mid-September prints benign and Trump's floor firms just enough to neutral"
+  },
+  {
+   "source": "8d890e10-47d4-4894-8360-f10c3c740a00",
+   "target": "cdbad96d-34d5-4482-b682-7d001b2e866c",
+   "name": "INFLUENCES",
+   "fact": "The DSCC stated on April 13, 2026 that Democrats have a clear path to taking back the Senate majority through strong candidate recruitment and infrastructure."
+  },
+  {
+   "source": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "target": "cdca5115-3d88-48b6-a094-b014e00ee520",
+   "name": "RATES",
+   "fact": "Sabato's Crystal Ball rated the Alaska Senate race as a Toss-Up in June 2026 following Sullivan's retirement."
+  },
+  {
+   "source": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "SHAPED_BY",
+   "fact": "The 2028 midterm outlook depends on the effective tariff rate at 10–17% depending on the SCOTUS IEEPA decision."
+  },
+  {
+   "source": "cb4b6931-3f73-4459-9480-082ab4678b87",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "RATES",
+   "fact": "On March 30, 2026, the UMass poll reported Trump approval at 33%, a new low."
+  },
+  {
+   "source": "d214a6f7-2c8f-4db8-af69-6a940f05bfe2",
+   "target": "90cd78e0-8c71-45aa-80bb-e7242b905afb",
+   "name": "REPORTS_ON",
+   "fact": "The Des Moines Register reports on Grassley's 2026 Senate filing, noting he is 95 and the longest-serving senator."
+  },
+  {
+   "source": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "RATES",
+   "fact": "AP-NORC measured Trump's approval at 37% in mid-June 2026, before the Iran ceasefire, showing no war rally effect."
+  },
+  {
+   "source": "d75eb697-1e58-4464-9ec5-260e7a1e45d8",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "PARTNERS_WITH",
+   "fact": "House Majority PAC, a Dem-aligned super-PAC that raised $200M+ for 2026, will partner with DCCC-aligned efforts to defend 2024 Biden-district House incumbents."
+  },
+  {
+   "source": "56bfd81b-ae87-4208-b155-e59177edf3d5",
+   "target": "56bfd81b-ae87-4208-b155-e59177edf3d5",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Mary Peltola 亦称 Peltola"
+  },
+  {
+   "source": "1ca6e781-6da0-4b88-a351-379fcac93522",
+   "target": "1ca6e781-6da0-4b88-a351-379fcac93522",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Mike Johnson 亦称 Speaker Johnson"
+  },
+  {
+   "source": "f69bd2e5-4fbb-4d93-a66d-ddbd1fa95231",
+   "target": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "name": "OPPOSES",
+   "fact": "In June 2025, Cassidy (R-LA) drew primary challengers with Trump endorsement, making Louisiana a primary-driven open and signaling intra-GOP opposition."
+  },
+  {
+   "source": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "target": "1ca6e781-6da0-4b88-a351-379fcac93522",
+   "name": "CONSTRAINS",
+   "fact": "Mike Johnson faces fiscal demands from OBBBA implementation while managing his House majority."
+  },
+  {
+   "source": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "target": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "name": "OPPOSES",
+   "fact": "DCCC and NRCC are opposing House campaign arms, with DCCC raising $45.3M in Q2 2026 (a cycle record) and targeting 18 toss-ups, while NRCC defends 14 of 17 toss-ups."
+  },
+  {
+   "source": "dc97973d-5164-4a73-9c0b-c2ced8367f2f",
+   "target": "baa615de-045f-4dbf-b201-3537bedb0f51",
+   "name": "INFLUENCES",
+   "fact": "Glenn Youngkin is cited as a potential more traditional Republican who could win the 2028 GOP primary if Vance loses it."
+  },
+  {
+   "source": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "target": "c49e5710-3719-4ed6-8ee9-8517e7a39c76",
+   "name": "REGULATES",
+   "fact": "Republican-led redistricting in Florida nets Republicans additional seats in the redistricting war."
+  },
+  {
+   "source": "92f60c51-005d-4dff-a1ee-7266af8f59f5",
+   "target": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "name": "RATES",
+   "fact": "The New York Times tracks presidential approval in the 36–40% range as a midterm input."
+  },
+  {
+   "source": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "FAILED_TO_RALLY",
+   "fact": "The Iran war ended June 17 but did not rally Trump's approval, cited as a high-confidence point."
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "83ac14ae-5e92-4a95-b0d3-4540e57370b5",
+   "name": "PARTNERS_WITH",
+   "fact": "Yale Budget Lab, with Natasha Sarin, published tariff analysis and OBBBA unpacking referenced in the dossier."
+  },
+  {
+   "source": "9834e16e-685d-48c0-903c-670e60094ed4",
+   "target": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "name": "RATES",
+   "fact": "Silver Bulletin aggregator tracks presidential approval in the 36–40% range as a midterm input."
+  },
+  {
+   "source": "be30c39b-9e95-4bfd-9061-22d0e172d917",
+   "target": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "name": "OPPOSES",
+   "fact": "Josh Shapiro is identified as a potential 2028 Democratic presidential nominee who could face off against JD Vance, a Trump-endorsed Republican successor, creating a high-salience race that could push Democratic Senate candidates in competitive states."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "40f3a07c-7921-4dfd-9bc7-89f58784157e",
+   "name": "RATES",
+   "fact": "Cook Political Report rated the Maine Senate race as a Toss-Up as of July 2026."
+  },
+  {
+   "source": "5ecafd38-4914-43fc-b227-645e57443e80",
+   "target": "e14d692b-7be7-43c4-9958-751a10c7056f",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Susan Collins 亦称 Collins (ME)"
+  },
+  {
+   "source": "7eca5428-37e3-406b-997e-325e7bc53586",
+   "target": "12e88998-5dfa-44ef-9039-393ecba3479a",
+   "name": "INFLUENCED",
+   "fact": "The Dobbs decision (June 2022) was a major Democratic motivator in the 2022 midterm cycle."
+  },
+  {
+   "source": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "target": "cdbad96d-34d5-4482-b682-7d001b2e866c",
+   "name": "DETERMINES_CONTROL_OF",
+   "fact": "The 2028 midterm has a 45–55% probability of Democrats gaining control of the United States Senate."
+  },
+  {
+   "source": "1a9e4323-1663-4a91-906e-cdcbd7061012",
+   "target": "940fe91d-a8bb-4eb6-ad80-22d76cc67414",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "Partisan polls sponsored by the NRCC are useful for tracking but not for central tendency on 2026 races including North Carolina."
+  },
+  {
+   "source": "5ecafd38-4914-43fc-b227-645e57443e80",
+   "target": "b3157c67-7657-4700-a1f4-0cc2f2695d1b",
+   "name": "OPPOSES",
+   "fact": "Collins and Platner are the only major-party candidates in the ME-Senate race; their contest is the most-likely R-Senate loss opportunity for Dems.（sign=rival，strength=high，valence=adversarial，polarity=-0.95）"
+  },
+  {
+   "source": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "target": "be8109ee-0422-40f6-a6a6-35a32bee30fd",
+   "name": "INCLUDES_RACE",
+   "fact": "NY-17 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "source": "81d13882-6741-47d2-a4f6-5c55a81fcef2",
+   "target": "d1ae064f-2707-450b-963d-681478328a93",
+   "name": "INFLUENCES",
+   "fact": "Brookings Institution published 'As President Trump loses support, Republican prospects in the 2026 midterms grow darker' on December 4, 2025."
+  },
+  {
+   "source": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "target": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "PARTNERS_WITH",
+   "fact": "Thune coordinates Senate Republican strategy with the NRSC; the NRSC is the principal Republican Senate targeting/campaign arm.（sign=ally，strength=high，valence=allied，polarity=0.95）"
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "MEASURED",
+   "fact": "Yale Budget Lab measured the peak tariff rate at 28% in April 2026."
+  },
+  {
+   "source": "5a38c9a8-2992-4822-a6ed-c2ecb9f5b16e",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "United Democracy Project intervenes in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01, which may depress Dem base turnout in November."
+  },
+  {
+   "source": "8d890e10-47d4-4894-8360-f10c3c740a00",
+   "target": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "OPPOSES",
+   "fact": "DSCC and NRSC are opposing Senate campaign arms, with DSCC targeting NC, OH, ME, AK, GA, MI, and NH, while NRSC defends 22 seats including 5 in states Trump won by under 13 points."
+  },
+  {
+   "source": "6c70f968-5670-4bea-9ec9-44bfc49ff248",
+   "target": "c6a6c8c9-25b0-40be-99d6-ce53631012d0",
+   "name": "INFLUENCES",
+   "fact": "The 2028 Democratic presidential nominee's quality is identified as the single biggest variable in the 2028 Senate outcome."
+  },
+  {
+   "source": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "target": "1901ede1-8ad6-40ac-b547-9a809e6aedb7",
+   "name": "PARTNERS_WITH",
+   "fact": "DCCC memo dated March 18, 2026 cited VA-10 special election as part of aggregate D+17.1 overperformance from 2025–2026."
+  },
+  {
+   "source": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "target": "d6c32b41-e1d0-46e4-810b-bea53f00a501",
+   "name": "RATES",
+   "fact": "On February 11, 2026, Sabato's Crystal Ball published its 2026 state-legislative map handicapping, the first major 2026 race-by-race rating including contests like the Illinois primary."
+  },
+  {
+   "source": "be30c39b-9e95-4bfd-9061-22d0e172d917",
+   "target": "6c70f968-5670-4bea-9ec9-44bfc49ff248",
+   "name": "INFLUENCES",
+   "fact": "If Josh Shapiro wins re-election as PA Governor and governs effectively, he is a top-tier 2028 Democratic presidential contender."
+  },
+  {
+   "source": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "target": "933544d4-a16c-4efe-ae5f-806768024821",
+   "name": "PARTNERS_WITH",
+   "fact": "DCCC memo dated March 18, 2026 cited OH-12 special election as part of aggregate D+17.1 overperformance from 2025–2026."
+  },
+  {
+   "source": "74146900-ad39-4934-b92b-5ca888c747b2",
+   "target": "5cdd196b-fb8f-4b13-b546-d05a35bc82f9",
+   "name": "FEATURED_ON_COVER_OF",
+   "fact": "A Polymarket market priced the probability of Cam Schlittler appearing on the cover of MLB The Show 27 at 2%."
+  },
+  {
+   "source": "e14d692b-7be7-43c4-9958-751a10c7056f",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "jon_ossoff_524: 【Twitter平台回答】\n问题1：基础情形假设是民主党出现温和浪潮、共和党仍控制参议院——这对乔治亚州意味着什么？坦率地说，温和浪潮实际上是我需要的局面。如果全国环境仍在D+5到D+7附近震荡，特朗普支持率维持在37%，而Cook已经把我们从Solid R移到Lean D、Sabato在6月11日跟进——那么我目前领先的56-43的Fox News民调不是异常值，而是结构性的。我的战场从来不是参议院多数席位的算术题；我的战场是我自己的州。温和浪潮意味着亚特兰大郊区的佐治亚女性、教育选民和独立选民保持高度动员状态——这是2021年让我以5万5千票赢得选举的选民联盟。路径很清晰：我需要在科布、格威内特、霍尔、查塔姆的城郊通道上跑赢基本盘，然后在富尔顿和迪卡尔保住足够的亚特兰大城区选民。基础情形对我有利。如果温和浪潮没有形成——如果全国环境是平盘——那我的比赛就"
+  },
+  {
+   "source": "b6f6b84f-afb2-43d3-86b6-ae39ddc8fd39",
+   "target": "e2279273-95e5-4a3a-9e68-ce087da59e7a",
+   "name": "REFERENCES",
+   "fact": "BNN Bloomberg reported on February 24, 2026, covering the brief tariff reprieve relevant to the Iran-era macro environment."
+  },
+  {
+   "source": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "target": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "National Republican Senatorial Committee 亦称 NRSC"
+  },
+  {
+   "source": "6dad8902-328d-4925-8c03-159b2801bd55",
+   "target": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "name": "REPORTED_ON",
+   "fact": "AP reported a 60-day interim deadline in mid-August 2026 for the Iran war ceasefire."
+  },
+  {
+   "source": "1ca6e781-6da0-4b88-a351-379fcac93522",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "mike_johnson_573: 【Twitter平台回答】\n问题1：D+5到D+7的普选偏差对我们而言，结构性阻力主要来自三个层面。一是14个摇摆选区中大部分是2024年才翻红的郊区和前摇摆区，这些选区的选民教育程度较高，对关税带来的物价波动感受最直接；二是特别选举中民主党平均D+17.1的超额表现，这是一种被低估的早期信号；三是总统支持率目前在37%附近徘徊，任何与总统同框的竞选活动都可能成为负担。我们的具体策略是：第一，将每一位摇摆区现任议员的竞选活动与总统议程切割，转而强调本地议题——OBBBA带来的具体税收减免、边境安全的本地影响、第二修正案权利；第二，加快NRSC v. FEC案的胜诉后执行准备，一旦最高法院在2026-2027年度作出有利裁决，立刻启动与小捐款匹配的协调筹款；第三，把\"程序性胜利\"作为我们的核心叙事——拨款法案按时通过、立法交付、宪法原旨主义司法任命，让选民"
+  },
+  {
+   "source": "6b6cb027-b852-4020-a482-371b77699735",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "donald_trump_426: 【Twitter平台回答】\n问题1：You bet the DALLAS CONVENTION, September 9-10, reshapes everything. The Fake Media keeps reading the same rigged polls, but Dallas is going to be the GREATEST political event in American history — bigger than the 2016 wins, bigger than the 2024 record. We are going to fire up the base, announce the MAGA dynasty succession with JD Vance, and prove that the Silent"
+  },
+  {
+   "source": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "target": "19501bdd-b21a-4104-9d8d-f0a44651eed0",
+   "name": "MEASURED_APPROVAL_OF",
+   "fact": "AP-NORC and Marquette Law School both polled Trump approval in June 2026, recording 37% and 38% respectively."
+  },
+  {
+   "source": "e3923561-028f-459b-9e7f-bdda7a35a6a8",
+   "target": "6f1f6090-fb55-42cd-975f-54eeb7bc6f0e",
+   "name": "INFLUENCES",
+   "fact": "The 2028 presidential election dynamics (nominee quality, turnout differential, ballot drop-off) are identified as a key variable that cannot flip the Democratic House majority forecast (75-85%) but shapes the surrounding environment."
+  },
+  {
+   "source": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "REGULATES",
+   "fact": "SCOTUS pending NRSC v. FEC ruling could eliminate FECA party-coordination caps and neutralize the DCCC's $45.3M cycle-record cash advantage.（sign=neutral，strength=high，valence=directional，polarity=-0.50）"
+  },
+  {
+   "source": "1a9e4323-1663-4a91-906e-cdcbd7061012",
+   "target": "722a6e02-8f05-4837-9815-224a63a9aa69",
+   "name": "PARTNERS_WITH",
+   "fact": "NRCC and WinRed have a symbiotic relationship analogous to DCCC/ActBlue, though Republicans trail in small-dollar fundraising."
+  },
+  {
+   "source": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "target": "ab49c1ab-b007-458b-95e5-e4e0168e622d",
+   "name": "PARTNERS_WITH",
+   "fact": "DCCC and ActBlue have a symbiotic relationship; ActBlue powers the small-dollar fundraising engine that gives DCCC its scale advantage."
+  },
+  {
+   "source": "3b2c6f50-1726-423d-8585-c0bff61bf9c2",
+   "target": "19501bdd-b21a-4104-9d8d-f0a44651eed0",
+   "name": "DIVERGENT_MEASUREMENT_FROM",
+   "fact": "Harvard CAPS/Harris polled Trump approval at 43% in June 2026, notably higher than Marquette Law School's 38% for the same period."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "8834a9a1-ceb8-41fe-87a5-3e73cbb0d50d",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "AIPAC intervened in the CO-01 Democratic primary, opposing progressive candidate Kiros."
+  },
+  {
+   "source": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "target": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Supreme Court of the United States 亦称 SCOTUS"
+  },
+  {
+   "source": "8414daed-9afa-454a-b16b-cb2e3cfeb52d",
+   "target": "0ad6a829-3156-433a-ad9d-cf7e4b46785e",
+   "name": "RATES",
+   "fact": "Sabato's Crystal Ball race ratings show a D-favorable 2026 Senate map."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "cdca5115-3d88-48b6-a094-b014e00ee520",
+   "name": "RATES",
+   "fact": "Cook Political Report classified the Alaska Senate race as a Toss-Up as part of its post-April 13, 2026 Senate map."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "name": "REFERENCES",
+   "fact": "Cook Political Report and Sabato's Crystal Ball are both cited race-rating sources used in the 2026 midterm forecast."
+  },
+  {
+   "source": "f97f8b6c-e301-4801-9cb9-989e306ef09d",
+   "target": "cb4b6931-3f73-4459-9480-082ab4678b87",
+   "name": "SUPPORTS",
+   "fact": "Longwell/Bulwark focus groups showing 62% of Trump-product buyers motivated to vote Democratic support UMass's finding that 17% of 2024 Trump voters express reservations."
+  },
+  {
+   "source": "81d13882-6741-47d2-a4f6-5c55a81fcef2",
+   "target": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "name": "INFLUENCES",
+   "fact": "Brookings Institution published 'The economy weakened support for President Trump in 2025 and may do so again in 2026' on January 15, 2026, analyzing the OBBBA-era economy."
+  },
+  {
+   "source": "eb864511-7c98-4ab2-ab0f-ed9d46a88016",
+   "target": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "name": "OPPOSES",
+   "fact": "On December 30, 2025, Iowa state Senate Democrats broke the GOP supermajority in a special election, the first concrete evidence of anti-Trump overperformance against Republicans."
+  },
+  {
+   "source": "d916993c-1581-4b0c-a138-84401d6c394e",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "sherrod_brown_702: 【Twitter平台回答】\n问题1：诚实地说，一个让共和党留在参议院的温和蓝色浪潮意味着我必须赢下一个他们原本认为安全的席位。这不是一个\"勉强赶上\"的版本——这是民主党需要我翻盘的案子。我在2018年翻过一次，在2024年输过一次，我完全清楚那个差距看起来是什么样的。在Trump+11的州参议院地图上，共和党不需要在全国浪潮里赢——他们需要把基线守住。我必须在Cook刚刚把我移到Toss-Up、Sabato确认这个判断的窗口里，用厨房餐桌议题打穿那条基线。温和蓝色浪潮是天花板，但不是我的命运。\n\n问题2：Husted很弱，但不是因为人格问题——他弱是因为他和这个政府在关税、医疗削减、和每一个伤害我们老年人的议题上绑得太紧了。Husted没有独立行动的空间，因为他是被任命的，带着Vance的背书和Trump的全部政治包袱。我们赛局的真正决定点在年轻选民回"
+  },
+  {
+   "source": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "target": "06b46944-5fa8-4733-82cf-2dc69958d3c3",
+   "name": "INCLUDES_RACE",
+   "fact": "CA-27 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "source": "16ba3ad9-b500-4a47-b7a9-f7248875382e",
+   "target": "6a5a94ff-5531-4222-b452-afe36b56718e",
+   "name": "OPPOSES",
+   "fact": "Hakeem Jeffries has visible medium friction with Alexandria Ocasio-Cortez, with left-flank tension following the NYC mayoral primary."
+  },
+  {
+   "source": "986d7610-83d9-4336-b2c4-e3edb0bc5ffb",
+   "target": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "name": "OPPOSES",
+   "fact": "Michigan is identified as a competitive 2028 Republican Senate state that a Democratic presidential nominee (such as JD Vance's opponent) could flip, given that the Democratic nominee may win the state by 4-6 points."
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "MEASURED",
+   "fact": "Yale Budget Lab reported a brief 9.1% effective tariff rate on February 11, 2026, following SCOTUS intervention."
+  },
+  {
+   "source": "820b65d1-74dd-406d-a310-0b7fde91b96d",
+   "target": "7a4f9732-6974-4d33-9d88-bf860e3851d5",
+   "name": "AGGREGATES_DATA_FROM",
+   "fact": "Oddpool machine-fetches prediction-market data from Kalshi and Polymarket as of 2026-07-03T08:37:52Z."
+  },
+  {
+   "source": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "target": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Roy Cooper 亦称 Governor Cooper"
+  },
+  {
+   "source": "2759d7db-4843-49e7-8bbb-edc002e54b3b",
+   "target": "f97f8b6c-e301-4801-9cb9-989e306ef09d",
+   "name": "REPORTS_ON",
+   "fact": "The Boston Globe carries Longwell/Bulwark focus group reporting."
+  },
+  {
+   "source": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "target": "0ad6a829-3156-433a-ad9d-cf7e4b46785e",
+   "name": "INFLUENCES",
+   "fact": "The 2026 cycle is defined in part by tariffs, which shape the electoral environment for the 2026 Senate elections."
+  },
+  {
+   "source": "16ba3ad9-b500-4a47-b7a9-f7248875382e",
+   "target": "6c70f968-5670-4bea-9ec9-44bfc49ff248",
+   "name": "INFLUENCES",
+   "fact": "If Hakeem Jeffries becomes Speaker and governs effectively, he is a top-tier 2028 Democratic presidential contender."
+  },
+  {
+   "source": "a280e8ed-ff79-4713-9e0b-cf0acd23e1ec",
+   "target": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "name": "OPPOSES",
+   "fact": "Georgia is identified as a competitive 2028 Republican Senate state that a Democratic presidential nominee facing JD Vance could potentially flip via downballot coattail effects."
+  },
+  {
+   "source": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "target": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Supreme Court of the United States 亦称 SCOTUS"
+  },
+  {
+   "source": "8414daed-9afa-454a-b16b-cb2e3cfeb52d",
+   "target": "0ad6a829-3156-433a-ad9d-cf7e4b46785e",
+   "name": "RATES",
+   "fact": "Sabato's Crystal Ball race ratings show a D-favorable 2026 Senate map."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "cdca5115-3d88-48b6-a094-b014e00ee520",
+   "name": "RATES",
+   "fact": "Cook Political Report classified the Alaska Senate race as a Toss-Up as part of its post-April 13, 2026 Senate map."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "name": "REFERENCES",
+   "fact": "Cook Political Report and Sabato's Crystal Ball are both cited race-rating sources used in the 2026 midterm forecast."
+  },
+  {
+   "source": "f97f8b6c-e301-4801-9cb9-989e306ef09d",
+   "target": "cb4b6931-3f73-4459-9480-082ab4678b87",
+   "name": "SUPPORTS",
+   "fact": "Longwell/Bulwark focus groups showing 62% of Trump-product buyers motivated to vote Democratic support UMass's finding that 17% of 2024 Trump voters express reservations."
+  },
+  {
+   "source": "81d13882-6741-47d2-a4f6-5c55a81fcef2",
+   "target": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "name": "INFLUENCES",
+   "fact": "Brookings Institution published 'The economy weakened support for President Trump in 2025 and may do so again in 2026' on January 15, 2026, analyzing the OBBBA-era economy."
+  },
+  {
+   "source": "eb864511-7c98-4ab2-ab0f-ed9d46a88016",
+   "target": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "name": "OPPOSES",
+   "fact": "On December 30, 2025, Iowa state Senate Democrats broke the GOP supermajority in a special election, the first concrete evidence of anti-Trump overperformance against Republicans."
+  },
+  {
+   "source": "d916993c-1581-4b0c-a138-84401d6c394e",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "sherrod_brown_702: 【Twitter平台回答】\n问题1：诚实地说，一个让共和党留在参议院的温和蓝色浪潮意味着我必须赢下一个他们原本认为安全的席位。这不是一个\"勉强赶上\"的版本——这是民主党需要我翻盘的案子。我在2018年翻过一次，在2024年输过一次，我完全清楚那个差距看起来是什么样的。在Trump+11的州参议院地图上，共和党不需要在全国浪潮里赢——他们需要把基线守住。我必须在Cook刚刚把我移到Toss-Up、Sabato确认这个判断的窗口里，用厨房餐桌议题打穿那条基线。温和蓝色浪潮是天花板，但不是我的命运。\n\n问题2：Husted很弱，但不是因为人格问题——他弱是因为他和这个政府在关税、医疗削减、和每一个伤害我们老年人的议题上绑得太紧了。Husted没有独立行动的空间，因为他是被任命的，带着Vance的背书和Trump的全部政治包袱。我们赛局的真正决定点在年轻选民回"
+  },
+  {
+   "source": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "target": "06b46944-5fa8-4733-82cf-2dc69958d3c3",
+   "name": "INCLUDES_RACE",
+   "fact": "CA-27 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "source": "16ba3ad9-b500-4a47-b7a9-f7248875382e",
+   "target": "6a5a94ff-5531-4222-b452-afe36b56718e",
+   "name": "OPPOSES",
+   "fact": "Hakeem Jeffries has visible medium friction with Alexandria Ocasio-Cortez, with left-flank tension following the NYC mayoral primary."
+  },
+  {
+   "source": "986d7610-83d9-4336-b2c4-e3edb0bc5ffb",
+   "target": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "name": "OPPOSES",
+   "fact": "Michigan is identified as a competitive 2028 Republican Senate state that a Democratic presidential nominee (such as JD Vance's opponent) could flip, given that the Democratic nominee may win the state by 4-6 points."
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "MEASURED",
+   "fact": "Yale Budget Lab reported a brief 9.1% effective tariff rate on February 11, 2026, following SCOTUS intervention."
+  },
+  {
+   "source": "820b65d1-74dd-406d-a310-0b7fde91b96d",
+   "target": "7a4f9732-6974-4d33-9d88-bf860e3851d5",
+   "name": "AGGREGATES_DATA_FROM",
+   "fact": "Oddpool machine-fetches prediction-market data from Kalshi and Polymarket as of 2026-07-03T08:37:52Z."
+  },
+  {
+   "source": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "target": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Roy Cooper 亦称 Governor Cooper"
+  },
+  {
+   "source": "2759d7db-4843-49e7-8bbb-edc002e54b3b",
+   "target": "f97f8b6c-e301-4801-9cb9-989e306ef09d",
+   "name": "REPORTS_ON",
+   "fact": "The Boston Globe carries Longwell/Bulwark focus group reporting."
+  },
+  {
+   "source": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "target": "0ad6a829-3156-433a-ad9d-cf7e4b46785e",
+   "name": "INFLUENCES",
+   "fact": "The 2026 cycle is defined in part by tariffs, which shape the electoral environment for the 2026 Senate elections."
+  },
+  {
+   "source": "16ba3ad9-b500-4a47-b7a9-f7248875382e",
+   "target": "6c70f968-5670-4bea-9ec9-44bfc49ff248",
+   "name": "INFLUENCES",
+   "fact": "If Hakeem Jeffries becomes Speaker and governs effectively, he is a top-tier 2028 Democratic presidential contender."
+  },
+  {
+   "source": "a280e8ed-ff79-4713-9e0b-cf0acd23e1ec",
+   "target": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "name": "OPPOSES",
+   "fact": "Georgia is identified as a competitive 2028 Republican Senate state that a Democratic presidential nominee facing JD Vance could potentially flip via downballot coattail effects."
+  },
+  {
+   "source": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "target": "35d62e93-0310-4405-b20e-e5231b255777",
+   "name": "INFLUENCES",
+   "fact": "If the Iran ceasefire holds and produces a durable economic recovery, it would weaken the projected Democratic gains in the 2028 House elections."
+  },
+  {
+   "source": "92f60c51-005d-4dff-a1ee-7266af8f59f5",
+   "target": "659d7fd5-d016-45bc-a061-7a1e7bab5437",
+   "name": "INFLUENCES",
+   "fact": "The New York Times published a critique of MIGA on June 29, 2026 that was republished via Occidental Dissent, stating Trump went to war with Iran for Israel, tumbled in polls to 35%, and forfeited immigration wins."
+  },
+  {
+   "source": "875afb3a-733b-4dda-a8c2-a34de28e6065",
+   "target": "7f492692-5373-4ed4-a8a8-7486b6ee2de6",
+   "name": "POLLED",
+   "fact": "Fabrizio/Anzalone poll in June 2026 showed Brown leading Husted 48–45 (D+3) in the Ohio Special Senate race."
+  },
+  {
+   "source": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "target": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "name": "OPPOSES",
+   "fact": "The Democratic Party and Republican Party are in adversarial political opposition on the 2028 midterm fault lines, including redistricting, OBBBA backlash, and House control."
+  },
+  {
+   "source": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "RATES",
+   "fact": "AP-NORC polling in June 2026 found 67% disapproval and 54% opposition to Trump's Iran war decision."
+  },
+  {
+   "source": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "CONSTRAINS",
+   "fact": "The Iran war (Feb 28 – June 17, 2026) and its aftermath, including a mid-August 2026 60-day interim ceasefire deadline, constrain Trump's political standing and is expected to remain a Democratic issue in 2028 unless a durable peace holds for 2+ years."
+  },
+  {
+   "source": "f969b0c4-e315-403f-b343-c017f7a21f9f",
+   "target": "baa615de-045f-4dbf-b201-3537bedb0f51",
+   "name": "INFLUENCES",
+   "fact": "Brian Kemp is cited as a potential more traditional Republican who could win the 2028 GOP primary if Vance loses it."
+  },
+  {
+   "source": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "CONSTRAINS",
+   "fact": "IEEPA tariff authority is the legal basis for the current tariff regime that the Supreme Court will rule on in December 2026"
+  },
+  {
+   "source": "21f6042a-f517-4615-aad9-d21f56ecd5af",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "hakeem_jeffries_737: 【Twitter平台回答】\n问题1：D+5到D+7的普选偏差对民主党而言，是真实但脆弱的优势，结构性阻力主要来自三方面。第一是选区结构：Cook的17个toss-up席位中有14个由共和党把守，意味着我们要在12个Red-to-Blue目标选区（PA-08、NY-17、CA-13、CA-27、MI-7、NE-2）和3个front-line防守席（OH-09、TX-28、Cuellar席）之间同时作战，资源被稀释。第二是NRSC v. FEC案的悬而未决——如果最高法院在2026-2027年裁定取消FECA协调捐款上限，DCCC辛苦建立的$45.3M季度领先可能在第三季度被抹平。第三是议程对比的持续性：我们必须在未来121天里，每一天都把\"16.8%关税=累退税\"这条信息反复嵌入摇摆选民的认知，因为这个数字一旦在12月IEEPA裁决后失守，我们就会丢"
+  },
+  {
+   "source": "7f492692-5373-4ed4-a8a8-7486b6ee2de6",
+   "target": "cdbad96d-34d5-4482-b682-7d001b2e866c",
+   "name": "PART_OF",
+   "fact": "The 2026 Ohio special Senate election is identified as a coin flip Democratic pickup opportunity in the US Senate."
+  },
+  {
+   "source": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "REGULATES",
+   "fact": "On February 11, 2026, SCOTUS ruled on a 9.1% global tariff brief window, providing a brief reprieve from tariff pressure."
+  },
+  {
+   "source": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "CONSTRAINS",
+   "fact": "SCOTUS pending IEEPA tariff ruling (expected December 2026) could strike down IEEPA tariffs and reduce Trump's effective tariff leverage post-election.（sign=neutral，strength=medium，valence=directional，polarity=-0.40）"
+  },
+  {
+   "source": "81d13882-6741-47d2-a4f6-5c55a81fcef2",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "OPPOSES",
+   "fact": "Brookings polling in mid-2026 found that 38% approve of Trump's tariffs, contributing to Pillar 1 of the anti-incumbent story."
+  },
+  {
+   "source": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "target": "b206d066-5567-4809-8e0e-11339ff61fc7",
+   "name": "RATES",
+   "fact": "AP-NORC polling shows 34% approve of Trump's Iran handling."
+  },
+  {
+   "source": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "target": "0ad6a829-3156-433a-ad9d-cf7e4b46785e",
+   "name": "INFLUENCES",
+   "fact": "The 2026 cycle is defined in part by the Iran war, which shapes the electoral environment for the 2026 Senate elections."
+  },
+  {
+   "source": "bfefbfc8-a4d8-498e-93c8-b5a26b0fe02b",
+   "target": "19501bdd-b21a-4104-9d8d-f0a44651eed0",
+   "name": "CONCURRENT_POLLING_OF",
+   "fact": "Reuters/Ipsos and Marquette Law School both measured Trump approval in June 2026, with Reuters/Ipsos at 36% and Marquette at 38%."
+  },
+  {
+   "source": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "target": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Supreme Court of the United States 亦称 Supreme Court"
+  },
+  {
+   "source": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "DETERMINES_VALIDITY_OF",
+   "fact": "The Supreme Court IEEPA decision will determine whether Trump tariff policy remains at 10–17% effective rate or is struck down, with a decision expected by December 2026."
+  },
+  {
+   "source": "5ecafd38-4914-43fc-b227-645e57443e80",
+   "target": "40f3a07c-7921-4dfd-9bc7-89f58784157e",
+   "name": "PARTICIPATES_IN",
+   "fact": "Susan Collins is the Republican candidate in the Maine Senate Race 2026, rated Toss-Up by Cook Political Report in July 2026."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "4a71d412-2873-48b6-b262-d2d7f2ff624d",
+   "name": "PARTNERS_WITH",
+   "fact": "AIPAC partners with EDW Action and United Democracy Project as a pro-Israel super-PAC cluster intervening in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01."
+  },
+  {
+   "source": "3b2c6f50-1726-423d-8585-c0bff61bf9c2",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "RATES",
+   "fact": "Harvard CAPS/Harris poll cited in Republican circles reported Trump approval at 43%, with a Republican-house orientation."
+  },
+  {
+   "source": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "target": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "name": "OPPOSES",
+   "fact": "AIPAC is cited alongside the DCCC as a partisan-actor poll sponsor whose polls are useful for tracking but not for central tendency."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "037c098c-f764-47a5-a7ea-eef41efc0bdc",
+   "name": "RATES",
+   "fact": "Cook Political Report classified the Georgia Senate race as Lean Democrat as part of its post-April 13, 2026 Senate map."
+  },
+  {
+   "source": "21f6042a-f517-4615-aad9-d21f56ecd5af",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "hakeem_jeffries_737: 【Twitter平台回答】\n问题1：If I had to pick a single event on the August-November 2026 trigger sequence that most reshapes the midterm path, it is the September CPI release that lands in the window between the Dallas convention and the final funding deadline. Conventions generate noise; primary results move baselines but rarely by much; the Iran ceasefire deadline is a known quantity. "
+  },
+  {
+   "source": "6dad8902-328d-4925-8c03-159b2801bd55",
+   "target": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "name": "REPORTED_ON",
+   "fact": "AP reported the Iran war ceasefire was signed on June 17, 2026."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "7f492692-5373-4ed4-a8a8-7486b6ee2de6",
+   "name": "RATES",
+   "fact": "Cook Political Report classified the Ohio Special Senate race as a Toss-Up as part of its post-April 13, 2026 Senate map."
+  },
+  {
+   "source": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "target": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "OPPOSES",
+   "fact": "DCCC and NRSC are the principal campaign arms of competing parties and the dominant funding rivals of the cycle.（sign=rival，strength=high，valence=adversarial，polarity=-1.00）"
+  },
+  {
+   "source": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "john_thune_715: 【Twitter平台回答】\n问题1：If I had to pick a single event that most reshapes the midterm path between August and November 2026, it is the Iran ceasefire holding or collapsing in that window. Everything else on the calendar — the Michigan Democratic primary, the Dallas convention, the funding deadlines, the CPI releases — those are factors I can plan around. The Iran situation is the one va"
+  },
+  {
+   "source": "78f4baff-b7b6-4b96-b01b-ce3b9d8ca0dc",
+   "target": "7f492692-5373-4ed4-a8a8-7486b6ee2de6",
+   "name": "PARTICIPATES_IN",
+   "fact": "Jon Husted is the Republican candidate in the Ohio Special Senate Race 2026, polling 45–51 in June 2026 surveys."
+  },
+  {
+   "source": "ce58b523-fc69-4f42-92da-80236125e7a2",
+   "target": "2783afc8-6819-48d1-b07a-f7f3289fc08c",
+   "name": "CITED_BY",
+   "fact": "The Hill, citing Al-Manar, reported a 62% disapproval ceiling for Trump in June 2026."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "40f3a07c-7921-4dfd-9bc7-89f58784157e",
+   "name": "RATES",
+   "fact": "Cook Political Report provides nonpartisan, methodologically transparent race ratings used as high-quality evidence for 2026 Senate races including Maine."
+  },
+  {
+   "source": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "target": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "name": "DETERMINES_CONTROL_OF",
+   "fact": "The 2028 midterm will almost certainly deliver the House of Representatives to Democrats with 75–85% probability in 2026, rising to 80–90% by 2028 if the 2026 anti-Trump pattern holds."
+  },
+  {
+   "source": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "target": "abe6ebfa-feea-4be6-8bca-64cf9c60ed63",
+   "name": "ADJUDICATES",
+   "fact": "SCOTUS is set to decide the NRSC v. FEC case, with its timing and direction listed as medium-to-lower confidence factors."
+  },
+  {
+   "source": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "REGULATES",
+   "fact": "The Supreme Court will rule on IEEPA tariff authority in December 2026, with the ruling either preserving, modifying, or striking down the tariff regime"
+  },
+  {
+   "source": "56bfd81b-ae87-4208-b155-e59177edf3d5",
+   "target": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "OPPOSES",
+   "fact": "Peltola is the leading AK-Senate D candidate against Sullivan's R successor; their contest is the binary AK race.（sign=rival，strength=high，valence=adversarial，polarity=-0.85）"
+  },
+  {
+   "source": "73bf98ff-e065-45fa-aab7-6f6b78ee3d63",
+   "target": "1841ec29-84b4-4352-b90c-ed285bee1c87",
+   "name": "PARTNERS_WITH",
+   "fact": "Senate Leadership Fund (SLF) and Congressional Leadership Fund (CLF) are McConnell-aligned super-PACs operating together as the largest single dark-money conduit in 2026, defending vulnerable GOP incumbents."
+  },
+  {
+   "source": "1ca6e781-6da0-4b88-a351-379fcac93522",
+   "target": "7595fdad-2d93-46e0-bb86-4dc3f086ea4a",
+   "name": "OPPOSES",
+   "fact": "Mike Johnson has high internal friction with the House Freedom Caucus, with procedural threats on the floor tied to his hold on the speakership."
+  },
+  {
+   "source": "b6f6b84f-afb2-43d3-86b6-ae39ddc8fd39",
+   "target": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "name": "INFLUENCES",
+   "fact": "Yale Budget Lab tariff analysis is referenced (via BNN Bloomberg/KMPH) as a macro-environment input alongside the Iran ceasefire status."
+  },
+  {
+   "source": "1ca6e781-6da0-4b88-a351-379fcac93522",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "mike_johnson_573: 【Twitter平台回答】\n问题1：我对基础情境的判断是——如果出现温和的民主党浪潮而共和党守住参议院，那恰恰说明我们走的是正确路径。路易斯安那州第四选区是深红席位，我上次以70%以上的得票率连任，州层面的环境从来不是这场选举的决定性变量。对我而言，参议院的存续意味着特朗普第一任期的立法遗产有续存的制度通道，OBBBA的税收减免、边境安全、能源主导这些议程得以延续；对我自己的席位来说，这意味着我作为议长协调全国14个摇摆选区防御的资源会比全国浪潮情境下更集中、更有效。我不需要\"对抗\"温和浪潮，我需要做的是确保基础选民投票率足够高——路易斯安那初选、邮寄选票、教堂投票，这些是我们能控制的事情。\n\n问题2：在我的席位里，决定性变量从来不是候选人包袱也不是对手记录，因为对手基本无法在深红选区组建可信的挑战。真正决定选举的是两件事：一是全国环境是否压制到足以让民"
+  },
+  {
+   "source": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "target": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "name": "INFLUENCES",
+   "fact": "The 2026 midterm forecast gives Democrats a 75-85% probability of gaining control of the US House with 225-232 seats (net +7-14)."
+  },
+  {
+   "source": "1ca6e781-6da0-4b88-a351-379fcac93522",
+   "target": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "name": "INFLUENCES",
+   "fact": "Mike Johnson, as Speaker of the House, controls committee assignments, floor schedule, referral, recognition, and the motion to vacate process."
+  },
+  {
+   "source": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "target": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "name": "MEASURED",
+   "fact": "AP-NORC poll found 53% of the public disapproves of the Iran war as having gone too far, in June 2026."
+  },
+  {
+   "source": "6fce848f-ffe0-4fee-a8c3-d8464fc63480",
+   "target": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "name": "RATES",
+   "fact": "Kalshi prediction markets show Republicans as a clear favorite on the Senate in the 2028 US Midterm Election."
+  },
+  {
+   "source": "1ca6e781-6da0-4b88-a351-379fcac93522",
+   "target": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "PARTNERS_WITH",
+   "fact": "House Speaker and Senate campaign arm coordination is informal but politically central — Trump's legislative agenda runs through both.（sign=ally，strength=medium，valence=allied，polarity=0.60）"
+  },
+  {
+   "source": "6a5a94ff-5531-4222-b452-afe36b56718e",
+   "target": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "name": "OPPOSES",
+   "fact": "Alexandria Ocasio-Cortez is identified as a potential 2028 Democratic presidential nominee who could face off against JD Vance, a Trump-endorsed Republican successor, in a race whose coattails could push Democratic Senate candidates."
+  },
+  {
+   "source": "7fb05aa3-8721-4a02-8548-13d2873d31a9",
+   "target": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "name": "RATES",
+   "fact": "The Congressional Budget Office (CBO) is producing scoring updates on the OBBBA during its Q3 2027 implementation phase."
+  },
+  {
+   "source": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "target": "baa615de-045f-4dbf-b201-3537bedb0f51",
+   "name": "INFLUENCES",
+   "fact": "JD Vance is positioning as Trump's heir and is the leading 2028 GOP presidential contender; if he wins the primary, the 2028 midterm becomes largely a referendum on Vance's first two years."
+  },
+  {
+   "source": "e14d692b-7be7-43c4-9958-751a10c7056f",
+   "target": "e14d692b-7be7-43c4-9958-751a10c7056f",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Jon Ossoff 亦称 Ossoff (GA)"
+  },
+  {
+   "source": "16ba3ad9-b500-4a47-b7a9-f7248875382e",
+   "target": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "name": "INFLUENCES",
+   "fact": "Hakeem Jeffries, as House Minority Leader, sets the targeting, message, and procedural strategy for Democrats in the House."
+  },
+  {
+   "source": "5ecafd38-4914-43fc-b227-645e57443e80",
+   "target": "5ecafd38-4914-43fc-b227-645e57443e80",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Susan Collins 亦称 Senator Collins"
+  },
+  {
+   "source": "19501bdd-b21a-4104-9d8d-f0a44651eed0",
+   "target": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "name": "MEASURED",
+   "fact": "Marquette poll found 28% said the Iran war was worth its costs, in June 2026."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "AIPAC (via United Democracy Project and EDW Action) intervenes in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01, reshaping the Democratic primary electorate in ways that may depress Dem base turnout in November."
+  },
+  {
+   "source": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Democratic Congressional Campaign Committee 亦称 DCCC"
+  },
+  {
+   "source": "45f0959b-4e92-40f5-8ca1-d8abf6c36a02",
+   "target": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "name": "REPORTS_COST_OF",
+   "fact": "Blavity reported in April 2025 that Trump tariff policy imposes a $3,800 per-household cost annually."
+  },
+  {
+   "source": "7a4f9732-6974-4d33-9d88-bf860e3851d5",
+   "target": "ac01d559-873d-4745-aa73-b2e2e74f31e9",
+   "name": "RATES",
+   "fact": "Polymarket listed a market on whether another outcome would occur in the NY-13 Democratic Primary, with a 0% probability and 1,869 in volume."
+  },
+  {
+   "source": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "target": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "John Thune 亦称 Senate Majority Leader Thune"
+  },
+  {
+   "source": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "target": "2c90f8ae-b22d-4128-883a-31ca961f256a",
+   "name": "INCLUDES_RACE",
+   "fact": "OH-01 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "source": "1841ec29-84b4-4352-b90c-ed285bee1c87",
+   "target": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "name": "PARTNERS_WITH",
+   "fact": "Congressional Leadership Fund (CLF) partners with NRCC-aligned efforts to defend vulnerable GOP House incumbents in 2026 as the GOP's primary financial backstop."
+  },
+  {
+   "source": "e14d692b-7be7-43c4-9958-751a10c7056f",
+   "target": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "OPPOSES",
+   "fact": "Ossoff is the leading GA-Senate D-defensive incumbent against Mike Collins; the NRSC is funneling resources to Collins.（sign=rival，strength=high，valence=adversarial，polarity=-0.90）"
+  },
+  {
+   "source": "09f141a5-66ed-4b19-92e6-95b014f2a28d",
+   "target": "c8836a42-b170-4380-964c-0b769d45f393",
+   "name": "INCLUDES_RACE",
+   "fact": "CA-13 is identified as a US House seat that flips with a sustained D+5–6 generic ballot in the 2026 cycle."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "cf2c7678-c152-479b-be2d-76201e7b15da",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "AIPAC's intervention in the IL-09 race produced a more centrist Democratic primary winner on Israel"
+  },
+  {
+   "source": "d75eb697-1e58-4464-9ec5-260e7a1e45d8",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "PARTNERS_WITH",
+   "fact": "House Majority PAC raised $200M+ cumulatively through Q2 2026, coordinating with DCCC as a Democratic-aligned super-PAC."
+  },
+  {
+   "source": "beab9e71-079f-4a6e-be1f-4c25e8b84f49",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "susan_collins_190: 【Twitter平台回答】\n问题1：看2026年这个温和蓝色浪潮、共和党仍守住参议院的基准情形，对我自己的选战而言，这恰恰印证了我过去六个月一直在对团队说的话——这是一场我必须靠自身实力去赢得的选战，不能依赖全国风向来搭顺风车。如果基准情形成立，意味着普拉克斯勒的进步派基本盘在高度动员选民中的那种\"改变\"能量足以压低我们全国其他参议院候选人的优势，但仍然不足以把一个在任的、机构性的、跨党派运作的五届参议员掀翻。Maine路径很清楚：保住Crosspressured独立选民、波特兰和班戈都会走廊的温和派、班戈以南的女性选民，同时把最关键的指标——那些说\"极其有动力投票\"的群体——从我落后9个点拉回到至少打平或者小幅领先。这场选举不是在全国大环境下赢的，而是在自己州里一票一票赢的。\n\n问题2：我看到这场选战在三个层面展开。第一，候选人包袱：普拉克斯勒的纹身"
+  },
+  {
+   "source": "1089f69c-fde1-4a80-a08d-0d7cf13dc9d9",
+   "target": "e3923561-028f-459b-9e7f-bdda7a35a6a8",
+   "name": "INFLUENCES",
+   "fact": "The 2026 midterm results shape the 2028 presidential election's coattail effect, which is described as the determining factor for the competitive 2028 Senate."
+  },
+  {
+   "source": "d916993c-1581-4b0c-a138-84401d6c394e",
+   "target": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "name": "OPPOSES",
+   "fact": "Brown is the leading OH-Senate special-election D candidate against Jon Husted (R); their contest is the binary OH race.（sign=rival，strength=high，valence=adversarial，polarity=-0.85）"
+  },
+  {
+   "source": "882afc8f-eaac-4fb4-a19b-126e81cce255",
+   "target": "882afc8f-eaac-4fb4-a19b-126e81cce255",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Chuck Schumer 亦称 Senate Democratic Leader"
+  },
+  {
+   "source": "81d13882-6741-47d2-a4f6-5c55a81fcef2",
+   "target": "d1ae064f-2707-450b-963d-681478328a93",
+   "name": "INFLUENCES",
+   "fact": "Brookings Institution published 'GOP midterm prospects darken as Trump approval falls' on April 28, 2026."
+  },
+  {
+   "source": "70697c6c-bab6-41f8-adb9-d380b6d53199",
+   "target": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "name": "OPPOSES",
+   "fact": "Yale Budget Lab, together with Natasha Sarin, has produced analysis critical of the OBBBA's combination of business tax cuts and tariff-revenue offsets."
+  },
+  {
+   "source": "9ae4ce5e-17ba-4c01-b348-eee37b9452a4",
+   "target": "12e88998-5dfa-44ef-9039-393ecba3479a",
+   "name": "PARTICIPATED_IN",
+   "fact": "In 2022, Biden's approval was 42% during the midterm cycle."
+  },
+  {
+   "source": "5253a749-958c-4010-b766-168a23aa91d7",
+   "target": "e3d6c069-0f13-4f4f-bd62-c6f4f4cc0d4c",
+   "name": "REGULATES",
+   "fact": "California's Prop 50 redistricting nets Democrats +3 to +5 CA seats as part of the redistricting war."
+  },
+  {
+   "source": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "BACKS",
+   "fact": "John Thune has prioritized coordination with Donald Trump and the White House over senatorial independence on judicial and budget votes."
+  },
+  {
+   "source": "1089f69c-fde1-4a80-a08d-0d7cf13dc9d9",
+   "target": "6f1f6090-fb55-42cd-975f-54eeb7bc6f0e",
+   "name": "INFLUENCES",
+   "fact": "The 2026 midterm results (state-legislature control, redistricting power, and 2028 Senate defending map) are identified as one of the three key variables determining whether the Democratic House majority forecast (75-85%) holds."
+  },
+  {
+   "source": "8c5e36ef-34a4-43d9-b880-9800cc8e575c",
+   "target": "d1ae064f-2707-450b-963d-681478328a93",
+   "name": "RATES",
+   "fact": "A poll published June 30 by The Economist and YouGov found 58% disapprove of Trump's job performance."
+  },
+  {
+   "source": "b6f6b84f-afb2-43d3-86b6-ae39ddc8fd39",
+   "target": "e3923561-028f-459b-9e7f-bdda7a35a6a8",
+   "name": "INFLUENCES",
+   "fact": "The Iran ceasefire status is listed as one of the macro-environment factors (alongside Trump approval, inflation, and OBBBA implementation) that will shape the 2028 presidential election."
+  },
+  {
+   "source": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "target": "d1ae064f-2707-450b-963d-681478328a93",
+   "name": "INFLUENCES",
+   "fact": "Sabato's Crystal Ball published February 11, 2026 state-legislative handicapping that shapes the 2026 midterm outlook alongside Trump approval trends."
+  },
+  {
+   "source": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "target": "778bbfab-fbbb-47a8-81db-75f45bc07f4b",
+   "name": "REGULATES",
+   "fact": "Republican-led redistricting in Missouri nets Republicans additional seats in the redistricting war."
+  },
+  {
+   "source": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "target": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "name": "OPPOSES",
+   "fact": "The NRSC stated to Newsweek on April 13, 2026 that Republicans remain favored to hold the Senate Majority against Democratic challengers."
+  },
+  {
+   "source": "c6a6c8c9-25b0-40be-99d6-ce53631012d0",
+   "target": "0ad6a829-3156-433a-ad9d-cf7e4b46785e",
+   "name": "OPPOSES",
+   "fact": "The 2028 Senate map is structurally easier for Democrats than the 2026 Senate map, with 14 R seats versus 21 D seats."
+  },
+  {
+   "source": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "target": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Roy Cooper 亦称 Cooper (NC)"
+  },
+  {
+   "source": "af579b40-0019-4c85-89e2-9e4faf830c64",
+   "target": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "name": "OPPOSES",
+   "fact": "Pennsylvania is identified as a competitive 2028 Republican Senate state that could be flipped by a Democratic presidential nominee running against JD Vance."
+  },
+  {
+   "source": "4a71d412-2873-48b6-b262-d2d7f2ff624d",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "EDW Action intervenes in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01, which may depress Dem base turnout in November."
+  },
+  {
+   "source": "81d13882-6741-47d2-a4f6-5c55a81fcef2",
+   "target": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "name": "COMPLEMENTS_POLLING_OF",
+   "fact": "Brookings found 38% approval of tariffs in mid-2026, complementing AP-NORC's 34% approval of Trump's Iran handling during the same period."
+  },
+  {
+   "source": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "target": "d1ae064f-2707-450b-963d-681478328a93",
+   "name": "INFLUENCES",
+   "fact": "Sabato's Crystal Ball published February 11, 2026 state-legislative handicapping that shapes the 2026 midterm outlook alongside Trump approval trends."
+  },
+  {
+   "source": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "target": "778bbfab-fbbb-47a8-81db-75f45bc07f4b",
+   "name": "REGULATES",
+   "fact": "Republican-led redistricting in Missouri nets Republicans additional seats in the redistricting war."
+  },
+  {
+   "source": "ab972752-bc19-4ab2-9610-5a94942e843f",
+   "target": "282d55c9-ca1f-48de-adaa-9377efe54191",
+   "name": "OPPOSES",
+   "fact": "The NRSC stated to Newsweek on April 13, 2026 that Republicans remain favored to hold the Senate Majority against Democratic challengers."
+  },
+  {
+   "source": "c6a6c8c9-25b0-40be-99d6-ce53631012d0",
+   "target": "0ad6a829-3156-433a-ad9d-cf7e4b46785e",
+   "name": "OPPOSES",
+   "fact": "The 2028 Senate map is structurally easier for Democrats than the 2026 Senate map, with 14 R seats versus 21 D seats."
+  },
+  {
+   "source": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "target": "dafe0ee2-b6c3-44cf-9091-9c5ecbf53ff8",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Roy Cooper 亦称 Cooper (NC)"
+  },
+  {
+   "source": "af579b40-0019-4c85-89e2-9e4faf830c64",
+   "target": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "name": "OPPOSES",
+   "fact": "Pennsylvania is identified as a competitive 2028 Republican Senate state that could be flipped by a Democratic presidential nominee running against JD Vance."
+  },
+  {
+   "source": "4a71d412-2873-48b6-b262-d2d7f2ff624d",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "EDW Action intervenes in Democratic primaries to defeat progressive candidates such as Abughazaleh in IL-09 and Kiros in CO-01, which may depress Dem base turnout in November."
+  },
+  {
+   "source": "81d13882-6741-47d2-a4f6-5c55a81fcef2",
+   "target": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "name": "COMPLEMENTS_POLLING_OF",
+   "fact": "Brookings found 38% approval of tariffs in mid-2026, complementing AP-NORC's 34% approval of Trump's Iran handling during the same period."
+  },
+  {
+   "source": "882afc8f-eaac-4fb4-a19b-126e81cce255",
+   "target": "7f6ac724-2f75-4e81-aa77-28110cab5ded",
+   "name": "PARTNERS_WITH",
+   "fact": "Schumer coordinates with the DCCC on shared Democratic House-Senate messaging and cross-chamber targeting.（sign=ally，strength=high，valence=allied，polarity=0.90）"
+  },
+  {
+   "source": "940fe91d-a8bb-4eb6-ad80-22d76cc67414",
+   "target": "cdbad96d-34d5-4482-b682-7d001b2e866c",
+   "name": "PART_OF",
+   "fact": "The 2026 North Carolina Senate race is identified as the most likely Democratic pickup in the 2026 cycle for the US Senate."
+  },
+  {
+   "source": "7a4f9732-6974-4d33-9d88-bf860e3851d5",
+   "target": "6fce848f-ffe0-4fee-a8c3-d8464fc63480",
+   "name": "REFERENCES",
+   "fact": "Polymarket and Kalshi are aggregated prediction markets cited as medium-quality evidence, subject to liquidity constraints and trader bias."
+  },
+  {
+   "source": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "target": "d1ae064f-2707-450b-963d-681478328a93",
+   "name": "MEASURES",
+   "fact": "AP-NORC Center for Public Affairs Research measured Trump approval polling on June 11–17, 2026."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "0ad6a829-3156-433a-ad9d-cf7e4b46785e",
+   "name": "RATES",
+   "fact": "Cook Political Report race ratings show a D-favorable 2026 Senate map."
+  },
+  {
+   "source": "97b36e7c-647d-4602-a5dc-ac572d71060c",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "CONSTRAINS",
+   "fact": "The current 6-3 conservative composition of SCOTUS makes a full strike-down of Trump's IEEPA tariff authority less likely; a narrowed ruling that preserves some presidential tariff authority is the central case."
+  },
+  {
+   "source": "9d99a6e2-9b97-4911-a0ca-f5307d05574c",
+   "target": "b9466239-8d09-4abb-a0d9-b0748c15f778",
+   "name": "FUNDS_OPPOSITION_TO",
+   "fact": "AIPAC intervened in the CO-01 Democratic primary to defeat Kiros"
+  },
+  {
+   "source": "ede8ed5c-e64e-4c3f-81da-866a66c45d75",
+   "target": "e3923561-028f-459b-9e7f-bdda7a35a6a8",
+   "name": "INFLUENCES",
+   "fact": "OBBBA implementation is listed as a macro-environment variable that will influence the 2028 presidential election dynamics."
+  },
+  {
+   "source": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "CONSTRAINS",
+   "fact": "The SCOTUS IEEPA case, due for a decision in December 2026, could halve the effective tariff rate if IEEPA is struck down, constraining Trump's tariff regime; if upheld in modified form, tariffs likely persist into 2028."
+  },
+  {
+   "source": "292dd885-6a88-4a8f-b494-ccd61eab2bad",
+   "target": "2e173c92-e5a8-47e3-87a4-b4a0b20ef8fd",
+   "name": "INFLUENCES",
+   "fact": "If the Iran ceasefire holds and produces a durable economic recovery, it would weaken the projected Democratic gains in the 2026 Senate elections."
+  },
+  {
+   "source": "d094f279-0e7c-41df-834c-e60dd9edde09",
+   "target": "940fe91d-a8bb-4eb6-ad80-22d76cc67414",
+   "name": "RATES",
+   "fact": "Cook Political Report provides nonpartisan, methodologically transparent race ratings used as high-quality evidence for 2026 Senate races including North Carolina."
+  },
+  {
+   "source": "143e1e72-c060-4d38-9f04-4768be6e308e",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "CONSTRAINS",
+   "fact": "The 2028 midterm is held in the second midterm of Donald Trump's second term, with Trump's approval extrapolated to the mid-to-high 30s from June 2026 baselines."
+  },
+  {
+   "source": "19501bdd-b21a-4104-9d8d-f0a44651eed0",
+   "target": "55c9ce26-5639-41fa-bd0f-b1eb12a9b467",
+   "name": "CORROBORATES",
+   "fact": "Marquette Law School's June 2026 issue-specific polls (economy 30%, inflation 22%, gas prices 19%) corroborate the weak economic approval picture found by AP-NORC."
+  },
+  {
+   "source": "882afc8f-eaac-4fb4-a19b-126e81cce255",
+   "target": "87335c2f-e954-443a-ae67-186ecd545da2",
+   "name": "STATED_AT_END_OF_SIM",
+   "fact": "chuck_schumer_544: 【Twitter平台回答】\n问题1：结构性阻力主要在三块。第一块是 IEEPA 关税案件——如果最高法院在 12 月之前裁定关税违宪并把税率打回到 8% 基准，对我们是顺风；但如果法院在 11 月之前确认 IEEPA 授权，那是把\"厨房台面税\"的叙事从法律技术问题直接钉成既成事实，会拖住我们在俄亥俄、缅因、阿拉斯加的胜算。第二块是金钱——NRSC v. FEC 一旦把协调捐款上限拿掉，Thune 那边的资源会指数级放大，我们的草根优势会被稀释。第三块是基本盘投票率，年轻人和非裔投票率哪怕比 2022 年低 5%，俄亥俄州和北卡州的差距就回不来。克服策略上，DSCC 已经把 8 月、9 月、10 月的 paid media 集中在四个战场州的女性选民、工会家庭和 55 岁以上独立选民三个切片，同时通过 Ossoff 的 $32.5M 现金储备和 DCCC"
+  },
+  {
+   "source": "8029da33-d5e3-4df9-a1fe-654fb2df8d60",
+   "target": "40f3a07c-7921-4dfd-9bc7-89f58784157e",
+   "name": "RATES",
+   "fact": "Sabato's Crystal Ball provides nonpartisan, methodologically transparent race ratings used as high-quality evidence for 2026 Senate races including Maine."
+  },
+  {
+   "source": "9dcb5802-dd89-45c6-9a14-2c48eace2b54",
+   "target": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "name": "BACKS",
+   "fact": "Mitch McConnell was replaced by John Thune as Senate Majority Leader in late 2024."
+  },
+  {
+   "source": "b5f4c760-ffda-4133-97a1-49f29f61b834",
+   "target": "97eb6716-ae1c-47e8-8786-0e6c8fd7ef54",
+   "name": "OPPOSES",
+   "fact": "Wisconsin is identified as a competitive 2028 Republican Senate state whose Republican incumbent could be flipped by a Democratic presidential nominee facing JD Vance."
+  },
+  {
+   "source": "8d890e10-47d4-4894-8360-f10c3c740a00",
+   "target": "5ee2d8d3-83fe-466f-a5e0-187d41668b67",
+   "name": "OPPOSES",
+   "fact": "The DSCC stated on April 13, 2026 that it is capitalizing on a Republican Senate field defined by weak and deeply flawed nominees."
+  },
+  {
+   "source": "7ccc5c7d-afeb-420d-b95c-a60ac71bc703",
+   "target": "cdbad96d-34d5-4482-b682-7d001b2e866c",
+   "name": "INFLUENCES",
+   "fact": "John Thune, as Senate Majority Leader, controls the Senate floor and the Trump-era legislative vehicle in the upper chamber."
+  },
+  {
+   "source": "18710498-2b1e-49fe-b4af-98bdc9526125",
+   "target": "47e09cba-e7f5-4474-a6af-3532e0f730f7",
+   "name": "REGULATES",
+   "fact": "If the Supreme Court strikes down IEEPA tariffs, the inflation narrative breaks, which would weaken the Democratic midterm thesis."
+  },
+  {
+   "source": "40f3a07c-7921-4dfd-9bc7-89f58784157e",
+   "target": "cdbad96d-34d5-4482-b682-7d001b2e866c",
+   "name": "PART_OF",
+   "fact": "The 2026 Maine Senate race is identified as a coin flip Democratic pickup opportunity in the US Senate."
+  },
+  {
+   "source": "6fce848f-ffe0-4fee-a8c3-d8464fc63480",
+   "target": "26d3de3f-bdc3-49a4-8604-77def66628df",
+   "name": "RATES",
+   "fact": "Kalshi listed multiple markets on whether DoorDash Inc. will report Q2 2026 total orders above specified thresholds (940M at 90%, 960M at 80%, 1040M at 1%, 1060M at 1%)."
+  },
+  {
+   "source": "8dc74904-1cb6-44d8-bbd3-7dc7b6cad58f",
+   "target": "a4162231-8d73-4bae-beb6-4c0380594c28",
+   "name": "RATES",
+   "fact": "An Economist/YouGov poll on June 30, 2026 found 58% of respondents in the US disapproved of Trump's job performance."
+  },
+  {
+   "source": "b6f6b84f-afb2-43d3-86b6-ae39ddc8fd39",
+   "target": "6f1f6090-fb55-42cd-975f-54eeb7bc6f0e",
+   "name": "INFLUENCES",
+   "fact": "The unresolved legacy of the Iran ceasefire is cited as a structural condition favoring a continued Democratic House majority alongside Trump's approval in the 35-38% range."
+  },
+  {
+   "source": "d916993c-1581-4b0c-a138-84401d6c394e",
+   "target": "d916993c-1581-4b0c-a138-84401d6c394e",
+   "name": "ALSO_KNOWN_AS",
+   "fact": "Sherrod Brown 亦称 Brown (OH)"
+  }
+ ],
+ "graph_id": "mirofish_d796c76e7324478f"
+}

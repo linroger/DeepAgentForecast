@@ -1,0 +1,673 @@
+{
+ "entity_types": [
+  {
+   "name": "Person",
+   "description": "Individual political actors whose decisions shape the 2026/2028 midterm outcome (incumbents, chal...",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full legal name of the individual"
+    },
+    {
+     "name": "current_role",
+     "type": "text",
+     "description": "Current office or position (e.g., President, Speaker, Senate Minority Leader, Senate candidate)"
+    },
+    {
+     "name": "party",
+     "type": "text",
+     "description": "Party affiliation (Republican, Democratic, Independent)"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "Tier of causal influence on the forecast outcome: tier1 (core decision-maker), tier2 (key stakeholder), tier3 (amplifier/context)"
+    },
+    {
+     "name": "stance",
+     "type": "text",
+     "description": "Stated public stance on the central forecast drivers (affordability, Iran, tariffs)"
+    },
+    {
+     "name": "state_or_district",
+     "type": "text",
+     "description": "State or district represented or running in"
+    }
+   ],
+   "examples": [
+    "Donald Trump",
+    "Hakeem Jeffries",
+    "Mike Johnson",
+    "John Thune",
+    "Chuck Schumer",
+    "Susan Collins",
+    "Graham Platner",
+    "Roy Cooper",
+    "Sherrod Brown",
+    "Jon Ossoff",
+    "Mary Peltola"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "CampaignCommittee",
+   "description": "Official party campaign arms that raise and deploy funds for House and Senate candidates (DCCC, N...",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full official name of the committee"
+    },
+    {
+     "name": "chamber",
+     "type": "text",
+     "description": "Chamber targeted: House or Senate"
+    },
+    {
+     "name": "party",
+     "type": "text",
+     "description": "Party affiliation: Republican or Democratic"
+    },
+    {
+     "name": "q2_2026_raise",
+     "type": "text",
+     "description": "Q2 2026 fundraising total (e.g., $45.3M for DCCC)"
+    },
+    {
+     "name": "stance",
+     "type": "text",
+     "description": "Strategic posture: defensive (protecting incumbents) or offensive (targeting flips)"
+    }
+   ],
+   "examples": [
+    "Democratic Congressional Campaign Committee",
+    "National Republican Senatorial Committee"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "GovernmentBody",
+   "description": "Federal or state governmental institutions whose rulings, policies, or actions materially shape t...",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Official name of the institution"
+    },
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "Federal or state-level authority"
+    },
+    {
+     "name": "branch",
+     "type": "text",
+     "description": "Branch of government: executive, legislative, judicial, or independent"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "Tier of influence on midterm outcome"
+    },
+    {
+     "name": "stance",
+     "type": "text",
+     "description": "Current posture or pending decisions relevant to the forecast (e.g., pending IEEPA tariff case)"
+    }
+   ],
+   "examples": [
+    "Supreme Court of the United States"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "Pollster",
+   "description": "Nonpartisan polling and election-forecasting organizations that publish horse-race, approval, and...",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full name of the organization"
+    },
+    {
+     "name": "track_record",
+     "type": "text",
+     "description": "Historical accuracy and methodology reputation"
+    },
+    {
+     "name": "scope",
+     "type": "text",
+     "description": "Coverage scope: national, state, or both"
+    }
+   ],
+   "examples": [
+    "Cook Political Report",
+    "Sabato's Crystal Ball"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "MediaOutlet",
+   "description": "National media organizations whose editorial framing and reporting shape public perception of the...",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full name of the outlet"
+    },
+    {
+     "name": "editorial_stance",
+     "type": "text",
+     "description": "Editorial orientation: center-left, center-right, bipartisan, etc."
+    }
+   ],
+   "examples": [
+    "New York Times",
+    "Wall Street Journal",
+    "Fox News",
+    "Politico",
+    "The Economist"
+   ],
+   "archetype": "source"
+  },
+  {
+   "name": "SenateRace",
+   "description": "Individual 2026 Senate contests as trackable objects (state, candidates, rating)",
+   "attributes": [
+    {
+     "name": "state",
+     "type": "text",
+     "description": "State holding the election"
+    },
+    {
+     "name": "incumbent_party",
+     "type": "text",
+     "description": "Party of the incumbent or open-seat precedent"
+    },
+    {
+     "name": "race_type",
+     "type": "text",
+     "description": "Regular election, special election, or open seat"
+    },
+    {
+     "name": "cook_rating",
+     "type": "text",
+     "description": "Latest Cook Political Report rating (Solid, Likely, Lean, Toss-Up)"
+    },
+    {
+     "name": "sabato_rating",
+     "type": "text",
+     "description": "Latest Sabato's Crystal Ball rating"
+    }
+   ],
+   "examples": [
+    "2026 North Carolina Senate Race",
+    "2026 Ohio Senate Special Election",
+    "2026 Maine Senate Race",
+    "2026 Alaska Senate Race",
+    "2026 Georgia Senate Race"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "ForecastSignal",
+   "description": "Quantitative indicators and prediction-market instruments used to anchor the calibrated probabili...",
+   "attributes": [
+    {
+     "name": "signal_name",
+     "type": "text",
+     "description": "Name of the indicator or market"
+    },
+    {
+     "name": "current_value",
+     "type": "text",
+     "description": "Latest reading (e.g., Trump approval 37%, generic ballot D+5, Polymarket Dem-Senate 30%)"
+    },
+    {
+     "name": "direction",
+     "type": "text",
+     "description": "Direction of recent movement: toward D, toward R, or stable"
+    },
+    {
+     "name": "source",
+     "type": "text",
+     "description": "Originating source (Reuters/Ipsos, Polymarket, Kalshi, AP-NORC)"
+    }
+   ],
+   "examples": [
+    "Trump Job Approval (Reuters/Ipsos)",
+    "Generic Congressional Ballot Average",
+    "Polymarket Dem Wins House 2026",
+    "Kalshi Dem Wins Ohio Senate 2026",
+    "Special Election Overperformance Index"
+   ],
+   "archetype": "signal"
+  },
+  {
+   "name": "PolicyRegime",
+   "description": "Distinct federal policy regimes (tariffs, OBBBA, immigration enforcement, Iran war) whose salienc...",
+   "attributes": [
+    {
+     "name": "regime_name",
+     "type": "text",
+     "description": "Name of the policy regime"
+    },
+    {
+     "name": "effective_date",
+     "type": "text",
+     "description": "Date the regime took effect or was signed"
+    },
+    {
+     "name": "salience_score",
+     "type": "text",
+     "description": "Voter salience ranking (e.g., inflation 22%, gas 19%, economy 30%)"
+    },
+    {
+     "name": "electoral_effect",
+     "type": "text",
+     "description": "Net electoral effect: D-favorable, R-favorable, or contested"
+    }
+   ],
+   "examples": [
+    "Trump Tariff Regime (IEEPA, ~16.8% effective rate)",
+    "One Big Beautiful Bill Act (OBBBA)",
+    "ICE Immigration Enforcement Surge",
+    "Iran War and June 17 Ceasefire"
+   ],
+   "archetype": "institution_rule"
+  },
+  {
+   "name": "OutsideSpendingGroup",
+   "description": "Super-PACs, dark-money conduits, and aligned lobbies that deploy independent expenditures in targ...",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full name of the group"
+    },
+    {
+     "name": "party_alignment",
+     "type": "text",
+     "description": "Partisan alignment: R, D, or bipartisan"
+    },
+    {
+     "name": "issue_focus",
+     "type": "text",
+     "description": "Primary policy or electoral focus (e.g., pro-Israel, business, labor)"
+    },
+    {
+     "name": "stance",
+     "type": "text",
+     "description": "Strategic posture in 2026 cycle"
+    }
+   ],
+   "examples": [
+    "AIPAC / United Democracy Project",
+    "Senate Leadership Fund",
+    "House Majority PAC",
+    "Koch Americans for Prosperity Action"
+   ],
+   "archetype": "collective"
+  },
+  {
+   "name": "Organization",
+   "description": "Any organization not fitting other specific organization types.",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "Name of the organization"
+    },
+    {
+     "name": "org_type",
+     "type": "text",
+     "description": "Type of organization"
+    }
+   ],
+   "examples": [
+    "small business",
+    "community group"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "OPPOSES",
+   "description": "Adversarial political opposition (rhetorical, electoral, or procedural)",
+   "source_targets": [
+    {
+     "source": "Person",
+     "target": "Person"
+    },
+    {
+     "source": "Person",
+     "target": "CampaignCommittee"
+    },
+    {
+     "source": "CampaignCommittee",
+     "target": "CampaignCommittee"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Sentiment polarity: adversarial"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Intensity: high, medium, or low"
+    },
+    {
+     "name": "context",
+     "type": "text",
+     "description": "Domain of opposition (legislative, electoral, rhetorical)"
+    }
+   ],
+   "family": "antagonism",
+   "valence": "adversarial"
+  },
+  {
+   "name": "BACKS",
+   "description": "Sustained support, alliance, or cover between a senior figure and a chamber leader",
+   "source_targets": [
+    {
+     "source": "Person",
+     "target": "Person"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Sentiment polarity: allied"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Intensity: high, medium, or low"
+    },
+    {
+     "name": "mechanism",
+     "type": "text",
+     "description": "Channel of support (endorsements, Whip operations, political cover)"
+    }
+   ],
+   "family": "economic",
+   "valence": "transactional"
+  },
+  {
+   "name": "ENDORSES",
+   "description": "Explicit public endorsement of a candidate or incumbent by a principal figure",
+   "source_targets": [
+    {
+     "source": "Person",
+     "target": "Person"
+    },
+    {
+     "source": "Person",
+     "target": "SenateRace"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Sentiment polarity: allied or adversarial (anti-endorsement)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Intensity: high, medium, or low"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Date of endorsement announcement"
+    },
+    {
+     "name": "primacy",
+     "type": "text",
+     "description": "Whether the endorsement is primary (sole/lead) or contested (vs. counter-endorsement)"
+    }
+   ],
+   "family": "alignment",
+   "valence": "allied"
+  },
+  {
+   "name": "INFLUENCES",
+   "description": "Indirect influence on another actor through public posture, signaling, or agenda-setting",
+   "source_targets": [
+    {
+     "source": "Person",
+     "target": "GovernmentBody"
+    },
+    {
+     "source": "Person",
+     "target": "PolicyRegime"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Sentiment polarity: directional, neutral, or adversarial"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Intensity: high, medium, or low"
+    },
+    {
+     "name": "channel",
+     "type": "text",
+     "description": "Mechanism of influence (rhetorical, agenda, appointment)"
+    }
+   ],
+   "family": "influence",
+   "valence": "directional"
+  },
+  {
+   "name": "PARTNERS_WITH",
+   "description": "Operational partnership in campaign strategy, fundraising coordination, or legislative action",
+   "source_targets": [
+    {
+     "source": "Person",
+     "target": "CampaignCommittee"
+    },
+    {
+     "source": "Person",
+     "target": "OutsideSpendingGroup"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Sentiment polarity: allied"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Intensity: high, medium, or low"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "When the partnership became operative"
+    }
+   ],
+   "family": "alignment",
+   "valence": "allied"
+  },
+  {
+   "name": "REGULATES",
+   "description": "Formal regulatory or jurisdictional authority over another actor's actions or funds",
+   "source_targets": [
+    {
+     "source": "GovernmentBody",
+     "target": "CampaignCommittee"
+    },
+    {
+     "source": "GovernmentBody",
+     "target": "PolicyRegime"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Sentiment polarity: neutral or adversarial"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Intensity: high, medium, or low"
+    },
+    {
+     "name": "ruling_status",
+     "type": "text",
+     "description": "Pending, decided, or under review"
+    }
+   ],
+   "family": "governance",
+   "valence": "directional"
+  },
+  {
+   "name": "CONSTRAINS",
+   "description": "Structural limitation on an actor's choices (constitutional, legal, institutional, or political)",
+   "source_targets": [
+    {
+     "source": "GovernmentBody",
+     "target": "Person"
+    },
+    {
+     "source": "PolicyRegime",
+     "target": "Person"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Sentiment polarity: adversarial or neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Intensity: high, medium, or low"
+    },
+    {
+     "name": "constraint_type",
+     "type": "text",
+     "description": "Type of constraint (constitutional, statutory, judicial, political)"
+    }
+   ],
+   "family": "causal",
+   "valence": "directional"
+  },
+  {
+   "name": "RATES",
+   "description": "Race-rating or forecast-signal assignment by an analyst or forecasting organization",
+   "source_targets": [
+    {
+     "source": "Pollster",
+     "target": "SenateRace"
+    },
+    {
+     "source": "ForecastSignal",
+     "target": "SenateRace"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "rating_value",
+     "type": "text",
+     "description": "Current rating (Solid R, Likely R, Lean R, Toss-Up, Lean D, Likely D, Solid D)"
+    },
+    {
+     "name": "direction",
+     "type": "text",
+     "description": "Movement of rating: toward D, toward R, or stable"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Date of the latest rating update"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Confidence in the rating"
+    }
+   ],
+   "family": "other",
+   "valence": "neutral"
+  },
+  {
+   "name": "MEASURED_BY",
+   "description": "A demographic group's electoral behavior is measured or tracked by a polling signal",
+   "source_targets": [],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Sentiment polarity: neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Intensity: high, medium, or low"
+    },
+    {
+     "name": "turnout_delta",
+     "type": "text",
+     "description": "Observed turnout swing vs. baseline"
+    }
+   ],
+   "family": "other",
+   "valence": "neutral"
+  },
+  {
+   "name": "FUNDS_OPPOSITION_TO",
+   "description": "Independent expenditure deployed by an outside spending group targeting a specific candidate or p...",
+   "source_targets": [
+    {
+     "source": "OutsideSpendingGroup",
+     "target": "Person"
+    },
+    {
+     "source": "OutsideSpendingGroup",
+     "target": "CampaignCommittee"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "Sentiment polarity: adversarial or allied"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "Intensity: high, medium, or low"
+    },
+    {
+     "name": "amount",
+     "type": "text",
+     "description": "Spend magnitude in USD"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Date of expenditure"
+    }
+   ],
+   "family": "other",
+   "valence": "neutral"
+  }
+ ],
+ "analysis_summary": "本预测问题聚焦2026年11月3日美国中期选举的众议院与参议院控制权归属，并需识别驱动结果的关键行为者与传导链条。角色阵容以Person类主体为主（11位，含两党领袖、关键候选人、现任议员），辅以两类组织型CampaignCommittee（DCCC、NRSC等竞选委员会）与一类GovernmentBody（联邦最高法院）。考虑到本领域需要追踪竞选手势、选情评级、预测市场信号、政策议题与人口学群体动员，需在Person/Organization/Government基础之上扩充：（1）Pollster——非党派选情评级机构（Cook、Sabato）；（2）MediaOutlet——影响叙事框架的全国性媒体；（3）SenateRace——将参议院选战作为可追踪客体建模，以承载评级与翻转概率；（4）ForecastSignal——预测市场与民调聚合信号（如Polymarket、Kalshi、Reuters/Ipsos）；（5）PolicyRegime——关税、OBBBA、ICE执法、伊朗战争等议题集群作为选民情绪驱动因素；（6）OutsideSpendingGroup——AIPAC、Koch网络等外部支出组织；（7）RacialDemographicGroup——郊区高知选民、蓝领白人选民等决定胜负的选民联盟。关系类型需保留OPPOSES/BACKS/ENDORSES/INFLUENCES/PARTNERS_WITH/REGULATES/CONSTRAINS七种核心种子关系，并新增RATES（评级机构→选战）、MEASURED_BY（人口学群体→预测信号）、FUNDS_OPPOSITION_TO（外部支出→候选人）三种领域专属关系，以建模评级变化、群体动员与暗钱传导等高预测价值机制。"
+}

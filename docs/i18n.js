@@ -43,6 +43,10 @@
     'card.iran.meta':   { en: '40-round dual-platform simulation · 135 personas · endgame scenarios, peace-deal terms & post-war Middle East order', zh: '40 轮双平台模拟 · 135 个人格 · 终局情景、终战协议条款与战后中东秩序重构' },
     'card.collision.title': { en: 'The Collision Decade — Modern Mercantilism × AI, 2026–2031', zh: '碰撞的十年 —— 现代重商主义 × AI（2026–2031）' },
     'card.collision.meta':  { en: '24-round dual-platform simulation · 80 personas · 13 binary forecasts & 4 scenarios · Bridgewater-style 3-part brief — tariffs, chip export controls & the AI-capex supercycle to 2031', zh: '24 轮双平台模拟 · 80 个人格 · 13 条二元预测与 4 个情景 · 桥水式三部分简报——关税、芯片出口管制与 AI 资本开支超级周期推演至 2031' },
+    'card.midterms.title': { en: 'The 2026 US midterms — House & Senate control scenarios', zh: '2026 年美国中期选举 —— 参众两院控制权情景' },
+    'card.midterms.meta':  { en: "36-round dual-platform simulation · 14 personas · 194-node knowledge graph · 13 binary forecasts & 4 scenarios · prediction-market-benchmarked — the pipeline self-corrected the prompt's 2028 framing to the real next midterm, Nov 3 2026", zh: '36 轮双平台模拟 · 14 个人格 · 194 节点知识图谱 · 13 条二元预测与 4 个情景 · 对标预测市场——系统自动将提示词中的"2028"框架修正为真实的下一次中期选举（2026 年 11 月 3 日）' },
+    'card.trade.title': { en: "America's trading system in 2028 — tariffs, reshoring & the AI-productivity race", zh: '2028 年美国贸易体系 —— 关税、供应链回流与 AI 生产力竞赛' },
+    'card.trade.meta':  { en: '36-round dual-platform simulation · 20 personas · 263-node knowledge graph · 11 binary forecasts & 3 scenarios — high tariffs, fragmented alliances & AI-enabled resilience through 2028', zh: '36 轮双平台模拟 · 20 个人格 · 263 节点知识图谱 · 11 条二元预测与 3 个情景——高关税、联盟分化与 AI 驱动韧性推演至 2028 年' },
     'card.storage.title': { en: 'Storage semiconductors — the 2027–2028 outlook', zh: '2027—2028 年存储半导体前景预判' },
     'card.storage.meta':  { en: '40-round dual-platform simulation · 80 personas · 213-node knowledge graph · competitive landscape, next-gen tech (HBM4E / DDR6 / CXL 4.0), supply-demand & pricing, 40-year cycle history', zh: '40 轮双平台模拟 · 80 个人格 · 213 节点知识图谱 · 厂商格局、新一代技术（HBM4E / DDR6 / CXL 4.0）、供需与价格、四十年周期史' },
     'card.cloud.title':   { en: 'Global cloud computing — the 2030 endgame', zh: '2030 年全球云计算竞争格局推演' },
@@ -116,7 +120,9 @@
     'run.iran.title':   { en: 'How does the 2026 US–Iran war end?', zh: '2026 年美伊战争如何收场？' },
     'run.storage.title': { en: 'Storage semiconductors — the 2027–2028 outlook', zh: '2027—2028 年存储半导体前景预判' },
     'run.cloud.title':   { en: 'Global cloud computing — the 2030 endgame', zh: '2030 年全球云计算竞争格局推演' },
-    'run.collision.title': { en: 'The Collision Decade — Modern Mercantilism × AI, 2026–2031', zh: '碰撞的十年 —— 现代重商主义 × AI（2026–2031）' }
+    'run.collision.title': { en: 'The Collision Decade — Modern Mercantilism × AI, 2026–2031', zh: '碰撞的十年 —— 现代重商主义 × AI（2026–2031）' },
+    'run.midterms.title': { en: 'The 2026 US midterms — House & Senate control scenarios', zh: '2026 年美国中期选举 —— 参众两院控制权情景' },
+    'run.trade.title': { en: "America's trading system in 2028 — tariffs, reshoring & the AI-productivity race", zh: '2028 年美国贸易体系 —— 关税、供应链回流与 AI 生产力竞赛' }
   };
 
   var lang = null;

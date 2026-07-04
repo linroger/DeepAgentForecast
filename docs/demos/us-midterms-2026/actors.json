@@ -1,0 +1,1897 @@
+{
+  "central_question": "What will the November 3, 2026 US midterm elections produce in terms of House and Senate control, including which party wins each chamber and the magnitude of seat gains or losses?",
+  "as_of_date": "2026-07-03",
+  "situation_brief": {
+    "current_situation": "With Election Day 122 days away, the 2026 midterm environment is structurally Democratic-leaning: Trump's job approval sits in the mid-to-high 30s (37% AP-NORC, 36% Reuters/Ipsos, 38% Marquette, 43% Harvard CAPS/Harris), the generic ballot reads D+5 to D+7, and 2025-2026 congressional special-election overperformance has averaged D+17.1. The Cook Political Report has shifted 4 Senate races toward Democrats in its single-largest one-sided move this cycle (NC and GA to Lean D, OH-special to Toss-Up, NE to Likely R); Sabato's Crystal Ball on June 11 added AK to Toss-Up alongside NC and OH-special. The Cook analyst's central estimate is '1 to 3 seat Democratic pickup, just short of 4' needed for a Senate majority. House: 17 of 435 toss-up seats per the April 7 update, with Republicans defending 14 of them. The June 17 Iran ceasefire has stabilized — but not recovered — Trump's approval, leaving the structural environment intact for the next four months.",
+    "context": "Donald Trump returned to office in January 2025; by April 2026 his approval had collapsed to a record 33-34% low as effective tariff rates peaked near 28% (Yale Budget Lab) and an unanticipated 3.5-month war with Iran (Feb 28 – Jun 17, 2026) imposed roughly $1,500-2,500 per-household tariff costs plus an unpopular war footing. Partial recovery followed: tariffs dialed back to a 16.8% effective rate (down from 28% peak), gas prices eased as the Strait of Hormuz reopened, and a Jun 17 ceasefire ended combat — but 53% (AP-NORC) say Iran military action went 'too far' and 54% (Economist/YouGov) say going to war was the wrong decision, so the public has not rewarded Trump for ending an unpopular war. The cumulative effect has been Democratic underdog overperformances in congressional specials, a historically reliable leading indicator of the House majority.",
+    "dynamics": "The principal tension is between a structural Democratic-leaning environment (Trump 35-37% approval, D+5 to D+7 generic ballot, D+17 special-election overperformance) and asymmetric chamber math — Democrats need a net of 4 Senate seats but the Lean D + Toss-Up seats total only 6-7, leaving no margin for error. The Iranian ceasefire is fragile: fire was traded across the Strait of Hormuz the weekend of June 27-29; the 60-day interim expires mid-August. The Supreme Court is the single biggest unknown variable: a ruling on NRSC v. FEC could neutralize the DCCC's $45.3M cycle-record cash lead, while the IEEPA tariff case (expected December 2026) could halve the effective tariff rate if SCOTUS strikes IEEPA tariffs. Trump announced a first-of-its-kind midterm convention (Sept 9-10 Dallas) to rally the GOP base — historically analog conventions (1994 'Contract with America,' 2010 'Pledge to America') preceded R+54 and R+63 House waves, but those were offensive rather than defensive relaunches. The base-case trajectory is for a modest D House wave (75-85% probability) and Rs holding the Senate by 1-3 seats (65-78% probability).",
+    "fault_lines": [
+      "Cost of living and tariffs — 16.8% effective tariff rate, ~$1,500-2,500/household annual burden (Yale Budget Lab); Trump economy approval 30%, inflation 22%, gas 19% (Marquette May 2026)",
+      "Iran war conduct and ceasefire durability — June 17 ceasefire deal fragile, 60-day interim expires mid-August; 67% disapprove of Trump's Iran approach (NBC); 53% say military action went 'too far' (AP-NORC)",
+      "Medicaid cuts and Big Beautiful Bill implementation — rollout risk concentrated around October 1 government-funding deadline; Dems framing healthcare cuts as the cycle's hinge",
+      "SCOTUS NRSC v. FEC ruling — could eliminate FECA party-coordination caps, neutralizing the DCCC's $45.3M Q2 cycle-record fundraising lead",
+      "SCOTUS IEEPA tariff case — expected December 2026; if SCOTUS strikes IEEPA tariffs, effective rate falls from 16.8% to ~8%, a major post-election 'stimulus' Trump could use",
+      "Candidate-quality risk — Graham Platner (D-ME) baggage (Nazi-era tattoo, prior-relationship allegations); Sherrod Brown (D-OH) comeback; Mike Collins (R-GA) underfunded primary winner",
+      "Trump midterm convention (Sept 9-10 Dallas) — first GOP midterm convention in modern history; could add +1-3 pts to R base turnout if successful"
+    ],
+    "catalysts": [
+      "Mid-August 2026 — Iran ceasefire 60-day interim deadline (binary risk: hold = modest Trump recovery; collapse = D+5 wave trigger)",
+      "Aug 4 — Michigan Democratic Senate primary (El-Sayed vs. Stevens vs. McMorrow)",
+      "Aug 18 — Alaska primary",
+      "Sep 9-10 — Trump midterm convention in Dallas",
+      "Sep/Oct — economic data releases (Aug CPI Sep 11, Q2 GDP final Sep 25, Sep CPI Oct 24)",
+      "Oct 1 — Government funding deadline (potential shutdown scenario, +/-5 House seats)",
+      "SCOTUS NRSC v. FEC ruling (any time before Election Day)",
+      "SCOTUS IEEPA tariff ruling (expected December 2026; if accelerated via emergency docket, could be Q4 affordability win for Trump)",
+      "NC redistricting litigation — state legislature refused to redraw maps June 17; will use existing maps for 2026"
+    ]
+  },
+  "actors": [
+    {
+      "name": "Donald Trump",
+      "type": "Person",
+      "role": "Incumbent President whose approval rating, executive actions (tariffs, Iran war, convention announcement), and cabinet appointments drive the structural environment of the 2026 cycle.",
+      "stance": "Defends tariffs, the Iran-war ceasefire, and a 'toll-free' Strait of Hormuz pledge; frames the cycle as an affordability win attributed to his administration.",
+      "influence": "high",
+      "grade": "B1",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 1,
+        "basis": "Trump's approval and executive actions (tariffs, Iran war, convention) are THE single most-cited variables by forecasters and dictate the structural lean of the cycle."
+      },
+      "description": "President Donald Trump, serving his second non-consecutive term (inaugurated January 2025), whose approval rating drives the structural 2026 environment for both parties.",
+      "aliases": [
+        "President Trump",
+        "Trump administration"
+      ],
+      "goals": [
+        "Maintain Republican Senate majority",
+        "Minimize House losses",
+        "Recover approval to 40%+",
+        "Deliver 'affordability win' before midterms",
+        "Set up 2028 re-election viability"
+      ],
+      "constraints": [
+        "Approval stuck at 35-37% despite Iran deal",
+        "IEEPA tariffs likely struck down by SCOTUS (Dec 2026)",
+        "Iran ceasefire fragile; mid-August deadline",
+        "Republican House defense arithmetic (Rs hold 14 of 17 toss-ups)"
+      ],
+      "assets": [
+        "Presidential megaphone",
+        "Incumbency advantage",
+        "Republican Senate majority",
+        "Conservative Supreme Court majority",
+        "Tariff revenue ~$300B/year",
+        "Sept 9-10 Dallas midterm convention",
+        "Executive action on immigration, tariffs, regulation"
+      ],
+      "vulnerabilities": [
+        "Approval floor at 33-34% in UMass/AP polling",
+        "Iran approval 34%; 53% say 'too far'",
+        "Cost-of-living issue approval at 24-30%",
+        "House defense arithmetic; presidential-party losses in midterms are historical norm"
+      ],
+      "stated_vs_revealed": "Stated: 'we are winning on every front'; revealed by polling: approval stuck at 35-37%, no rally effect from Iran ceasefire.",
+      "worldview": {
+        "values": [
+          "America First",
+          "Winning",
+          "Tariff protectionism",
+          "Strong executive action",
+          "Judicial conservatism"
+        ],
+        "beliefs": [
+          "Tariffs restore US manufacturing",
+          "Iran deal is a major foreign-policy win",
+          "The 'affordability' story favors Rs",
+          "Base turnout can be rallied through convention"
+        ],
+        "identity": "Outsider president restoring American greatness",
+        "frame": "America First"
+      },
+      "incentives": [
+        {
+          "driver": "Re-election viability for 2028",
+          "gains_if": "Approval recovers to 42%+; GOP holds Senate; loses only narrow House",
+          "loses_if": "Approval collapses below 32%; Rs lose both chambers; 2028 primary challenge",
+          "intensity": "high"
+        },
+        {
+          "driver": "Legislative legacy preservation",
+          "gains_if": "Big Beautiful Bill survives; tariffs upheld at SCOTUS; SCOTUS nominees confirmed",
+          "loses_if": "Both chambers flip; reconciliation agenda stalled",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Presidential schedule and press access",
+        "Republican Senate majority",
+        "Conservative SCOTUS majority",
+        "Tariff and regulatory executive actions",
+        "Cabinet messaging apparatus"
+      ],
+      "risk_tolerance": "high",
+      "memory": "Believes approval will recover to 40%+ post-Iran deal by November; sees SCOTUS IEEPA ruling as Q4 stimulus; thinks the convention can deliver a 1994-style base-turnout bump despite hostile environment."
+    },
+    {
+      "name": "Hakeem Jeffries",
+      "type": "Person",
+      "role": "House Minority Leader who runs the Democratic House campaign strategy and coordinates the DCCC.",
+      "stance": "Frame the cycle as a cost-of-living and anti-corruption referendum; protect Dem-held seats; flip 12 Trump-district seats.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.9,
+        "basis": "Sets DCCC targeting and Democratic messaging; directly determines the Democratic House map."
+      },
+      "description": "Hakeem Jeffries (D-NY-8), House Minority Leader since 2023, who runs the DCCC targeting map and frames Democratic messaging strategy.",
+      "aliases": [
+        "Leader Jeffries",
+        "House Democratic Leader"
+      ],
+      "goals": [
+        "Flip House majority",
+        "Narrow Senate majority",
+        "Block Trump second-term agenda",
+        "Position for 2028 presidential cycle"
+      ],
+      "constraints": [
+        "NRSC v. FEC SCOTUS threat",
+        "Platner (ME) candidate-quality baggage",
+        "Dem front-line of 213-215 seats to defend",
+        "No declared 2028 candidate means reduced base motivation"
+      ],
+      "assets": [
+        "DCCC cycle-record $45.3M Q2 2026",
+        "DSCC coordination",
+        "Generic ballot D+5-7 advantage",
+        "Special-election D+17.1 overperformance track record",
+        "DCCC Red-to-Blue targeting 12 Trump-district flips"
+      ],
+      "vulnerabilities": [
+        "AOC progressive faction pressure",
+        "Candidate-quality issues in some Dem primaries",
+        "Platner (ME) baggage",
+        "Swing-district Dem incumbents in Trump+ terrain (OH-09, TX-28, Cuellar)"
+      ],
+      "stated_vs_revealed": "Stated: 'we will take back the House'; revealed: DCCC's $45.3M lead is contingent on NRSC v. FEC ruling not striking FECA caps.",
+      "worldview": {
+        "values": [
+          "Rule of law",
+          "Affordability",
+          "Civil rights",
+          "Multi-racial democracy",
+          "Koch-network rejection"
+        ],
+        "beliefs": [
+          "Trump administration threatens constitutional norms",
+          "Tariffs are a regressive tax",
+          "Iran war conduct is reckless",
+          "Republican turnout collapsing in special elections signals a House wave",
+          "Cook/Sabato ratings understate D-flip opportunity"
+        ],
+        "identity": "Defender of constitutional democracy",
+        "frame": "Koch-network-and-corruption contrast"
+      },
+      "incentives": [
+        {
+          "driver": "House Democratic majority",
+          "gains_if": "D+10+ net seats; DCCC $50M+ Q3 fundraising; NRSC v. FEC rules for Rs",
+          "loses_if": "Rs hold 220+; DCCC cycle-record is neutralized; ME-Senate loss plus other toss-up losses",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "DCCC cash",
+        "Caucus messaging apparatus",
+        "AOC-progressive outreach",
+        "Affordability framing platform"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "D House majority at 75-85% probability; 50/50 Senate coin flip; sees the cycle tilting D since the Iran war (Feb-Jun) but cautious on absolute Senate majority."
+    },
+    {
+      "name": "Mike Johnson",
+      "type": "Person",
+      "role": "Speaker of the House, sets the Republican House defense strategy and shepherds Trump legislative priorities.",
+      "stance": "Defend the 220-215 House majority; sell Trump's first-term record; pivot to affordability framing where possible.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.85,
+        "basis": "Speaker controls the House floor agenda and is the Republican face of the chamber; determines whether Rs hold 14 of 17 toss-ups."
+      },
+      "description": "Mike Johnson (R-LA-4), Speaker of the House since 2023, tasked with defending the 220-215 GOP House majority in 2026.",
+      "aliases": [
+        "Speaker Johnson"
+      ],
+      "goals": [
+        "Hold House majority",
+        "Pass reconciliation legislation",
+        "Defend Trump agenda",
+        "Position for 2028 (potentially VP or presidential)"
+      ],
+      "constraints": [
+        "House Freedom Caucus pressure",
+        "Trump approval at 35-37%",
+        "14 of 17 toss-ups R-held",
+        "Medicaid-cut implementation timing"
+      ],
+      "assets": [
+        "Speaker's gavel and floor agenda",
+        "NRCC coordination",
+        "Redistricting wins in TX/LA/SC",
+        "Trump endorsement",
+        "Conservative media amplification"
+      ],
+      "vulnerabilities": [
+        "14 of 17 House toss-ups R-held",
+        "Trump approval at 35-37%",
+        "PA-08 Bresnahan stock-trading scandal",
+        "Special elections D+17 overperformance"
+      ],
+      "stated_vs_revealed": "Stated: 'we will hold the House'; revealed by campaign data: R defensive deployment of resources to 14 of 17 toss-ups.",
+      "worldview": {
+        "values": [
+          "Constitutional conservatism",
+          "Religious liberty",
+          "Limited government",
+          "Trump-style populism",
+          "Anti-AOC-progressive"
+        ],
+        "beliefs": [
+          "Trump second-term is making America strong",
+          "Affordability narrative can be re-framed as Trump-win",
+          "House majority insulation is critical for 2028",
+          "AOC-progressive Ds are vulnerable in swing districts"
+        ],
+        "identity": "Evangelical constitutionalist",
+        "frame": "Constitutional Originalism"
+      },
+      "incentives": [
+        {
+          "driver": "House Republican majority",
+          "gains_if": "Rs hold 218+; pass OBBBA implementation; Trump approval recovery",
+          "loses_if": "Rs lose majority; Trump agenda blocked; 2028 contenders see Speaker as liability",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Speaker's schedule",
+        "NRCC deployed cash",
+        "Redistricting wins",
+        "Conservative media airtime"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Holds Senate race ratings are not as friendly as House; sees House defense as 50/50 to 60/40 R-hold; pinning hopes on Trump's convention bump and SCOTUS NRSC v. FEC ruling."
+    },
+    {
+      "name": "John Thune",
+      "type": "Person",
+      "role": "Senate Majority Leader who runs the Senate Republican strategy and coordinates the NRSC.",
+      "stance": "Defend all 22 R-held Senate seats; offset any D flips with 1-2 Dem seats; hold Senate 51-53.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.85,
+        "basis": "Set Senate floor schedule and coordinates Senate R campaigns through NRSC."
+      },
+      "description": "John Thune (R-SD), Senate Majority Leader since 2025, responsible for defending the Republican Senate majority across 22 R seats up in 2026.",
+      "aliases": [
+        "Senate Majority Leader Thune",
+        "Leader Thune"
+      ],
+      "goals": [
+        "Hold Senate majority",
+        "Confirm Trump executive/judicial nominees",
+        "Pass reconciliation",
+        "Position for 2028",
+        "Block Dem Senate offensive pickups"
+      ],
+      "constraints": [
+        "22 R Senate seats up (vs. 13 D)",
+        "Cook '1-3 Dem pickup' projection",
+        "ME/OH-special/AK toss-up exposure",
+        "NRSC $8.0M June fundraising trails DSCC's $8.3M"
+      ],
+      "assets": [
+        "Senate floor agenda",
+        "NRSC $8.0M June + cycle totals",
+        "Trump endorsements in Senate primaries",
+        "Conservative SCOTUS backing on judicial confirmations",
+        "Center-right policy think tanks",
+        "Institutional Senate rules (filibuster)"
+      ],
+      "vulnerabilities": [
+        "Cook shifted 4 Senate races to Ds (NC/GA to Lean D; OH-special to Toss-Up; NE to Likely R)",
+        "Sabato added AK to Toss-Up",
+        "NRSC v. FEC SCOTUS pending",
+        "Collins (ME) is the most vulnerable R incumbent"
+      ],
+      "stated_vs_revealed": "Stated: 'we will hold the Senate'; revealed by Cook analyst quote: 'Democrats have a clearer path to winning the Senate majority.'",
+      "worldview": {
+        "values": [
+          "Limited government",
+          "Free-market economics",
+          "Senate institutional norms",
+          "Free-trade residual Republicanism",
+          "Decentralization"
+        ],
+        "beliefs": [
+          "Senate is the chamber of sober second-look",
+          "Tariffs have downsides",
+          "Iran war should end quickly",
+          "Trump populism is a tool, not an identity",
+          "Judicial appointments are the longest-lasting legacy"
+        ],
+        "identity": "Republican institutionalist",
+        "frame": "Senate as cooler-headed chamber"
+      },
+      "incentives": [
+        {
+          "driver": "Republican Senate majority",
+          "gains_if": "Hold 53+; NRSC v. FEC Rs win; lose ME only",
+          "loses_if": "Lose 4 seats (Ds take 51+); Trump approval is sub-32%; Cook ratings shift more toward D",
+          "intensity": "high"
+        },
+        {
+          "driver": "Reconciliation agenda passage",
+          "gains_if": "OBBBA survives; SCOTUS upholds IEEPA tariffs",
+          "loses_if": "Both chambers flip",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Senate floor schedule",
+        "NRSC $8.0M June + cycle totals",
+        "Trump endorsement power",
+        "Conservative SCOTUS",
+        "Center-right think tanks (AEI, Heritage)"
+      ],
+      "risk_tolerance": "low",
+      "memory": "Cook April 13 + Sabato June 11 Senate shifts moved against Rs but Rs remain favored at 65-78%; relying on SCOTUS NRSC v. FEC and Trump approval stabilization post-Iran deal."
+    },
+    {
+      "name": "Chuck Schumer",
+      "type": "Person",
+      "role": "Senate Minority Leader who runs the Democratic Senate campaign strategy and coordinates the DSCC.",
+      "stance": "Frame the cycle as an affordability referendum; pick off NC, OH, ME, AK as must-wins; hold GA, MI, NH.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.85,
+        "basis": "Sets DSCC targeting and Democratic Senate messaging; controls whether Dems reach the 51-seat majority."
+      },
+      "description": "Chuck Schumer (D-NY), Senate Minority Leader since 2025, who runs DSCC targeting and frames Democratic offensive Senate strategy.",
+      "aliases": [
+        "Leader Schumer",
+        "Senate Democratic Leader"
+      ],
+      "goals": [
+        "Flip Senate majority",
+        "Block Trump judicial confirmations",
+        "Position Ds for 2028",
+        "Defend GA, MI, NH Senate seats"
+      ],
+      "constraints": [
+        "D Senate path requires NC + at least 1 Toss-Up win",
+        "DC primary infighting (AOC/progressive wing)",
+        "AIPAC-aligned D Senate primaries (IL-09 etc.)",
+        "Senate institutional headwinds"
+      ],
+      "assets": [
+        "DSCC $8.3M June (vs. NRSC $8.0M)",
+        "Schumer donor network",
+        "Cooper (NC) as top recruit",
+        "Ossoff $32.5M cash on hand",
+        "Generic ballot D+5-7 platform"
+      ],
+      "vulnerabilities": [
+        "ME Sen (Platner baggage)",
+        "OH Sen (Brown split-polling)",
+        "Trump approval recovery to 40%",
+        "SCOTUS IEEPA ruling pre-November if accelerated"
+      ],
+      "stated_vs_revealed": "Stated: 'we will flip the Senate'; revealed: Ds come up 1 seat short even if sweeping Cook Toss-Ups + 1 Lean D per analyst Jessica Taylor.",
+      "worldview": {
+        "values": [
+          "Affordability",
+          "Healthcare access",
+          "Democratic institutions",
+          "Jewish-American civil-rights tradition",
+          "Anti-corruption"
+        ],
+        "beliefs": [
+          "Trump tariffs hurt working families",
+          "Iran war was unnecessary",
+          "Senate floor obstruction can pause Trump judicial agenda",
+          "Cook/Sabato shifts toward Ds are real but modest",
+          "DC-based race-rating analysts understate D-flip probability"
+        ],
+        "identity": "Democratic Senate leader",
+        "frame": "Affordability-first"
+      },
+      "incentives": [
+        {
+          "driver": "Democratic Senate majority",
+          "gains_if": "NC + ME/OH/AK sweep; 51+ D seats",
+          "loses_if": "Rs hold 52+; incumbent Dem losses in MI/NH/GA",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "DSCC cash",
+        "Cooper (NC) star recruit",
+        "Ossoff $32.5M",
+        "AOC-progressive alliance where useful"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "D Senate majority probability 22-32%; D-House 75-85%; a partial D Senate outcome (R 52, D 48) is the modal combined forecast."
+    },
+    {
+      "name": "Democratic Congressional Campaign Committee",
+      "type": "Organization",
+      "role": "Democratic House campaign arm; funds and targets Dem House candidates; raised $45.3M in Q2 2026 (cycle record).",
+      "stance": "Targeting 12 Trump-district flips via Red-to-Blue; protect 3 defensive seats; D+12-25 expected net House gain.",
+      "influence": "high",
+      "grade": "A2",
+      "archetype": "institution_rule",
+      "simulation_tier": 2,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.9,
+        "basis": "Single most-cited institutional driver of Democratic House gains; $45.3M cash on hand vs. NRCC trails."
+      },
+      "description": "The Democratic Congressional Campaign Committee (DCCC), the official Democratic House campaign arm, which raised $45.3M in Q2 2026 — a cycle record edging 2024's $44M and providing the resource backbone for Democratic targeting.",
+      "aliases": [
+        "DCCC",
+        "D-Trip"
+      ],
+      "goals": [
+        "Flip House to Democratic majority",
+        "Hold Dem front-line 213 seats",
+        "Fund 12 Trump-district Red-to-Blue flips",
+        "Pass 218 majority threshold"
+      ],
+      "constraints": [
+        "SCOTUS NRSC v. FEC ruling could strike FECA caps",
+        "Soft Dem fundraising in some defensive seats",
+        "AOC-progressive splits with establishment in deep-blue primaries",
+        "Limited cash to defend all 213 Dem seats + open 12 offensive targets"
+      ],
+      "assets": [
+        "$45.3M Q2 2026 cycle-record",
+        "Red-to-Blue targeting 12 Trump districts",
+        "Generic ballot D+5-7 platform",
+        "Internal polling on Trump-district battlegrounds",
+        "Donor bundler network"
+      ],
+      "vulnerabilities": [
+        "NRSC v. FEC: SCOTUS ruling could eliminate FECA caps",
+        "Redistricting losses in some R-favoring states",
+        "AOC-vs-establishment Dem primaries",
+        "Cook ratings still show Rs defending 14 of 17 toss-ups"
+      ],
+      "stated_vs_revealed": "Stated: 'We are on track to flip the House'; revealed: NRSC v. FEC SCOTUS case could neutralize cycle-record cash advantage by eliminating party-coordinated caps.",
+      "worldview": {
+        "values": [
+          "Democratic electoral success",
+          "Affordability framing",
+          "Healthcare access",
+          "Tariff opposition",
+          "Bipartisan governance where possible"
+        ],
+        "beliefs": [
+          "Trump approval is unsustainable",
+          "Generic ballot structurally favors D",
+          "Dem House majority would constrain Trump second term",
+          "Star-recruit (Cooper, Stevens, etc.) outperforms generic Dem"
+        ],
+        "identity": "House Democratic campaign institution",
+        "frame": "Offensive offense (Red-to-Blue)"
+      },
+      "incentives": [
+        {
+          "driver": "Democratic House majority",
+          "gains_if": "D + 10+ net seats; SCOTUS strikes FECA caps in Dems' favor; Q3 fundraising exceeds Q2",
+          "loses_if": "Rs hold 220+; SCOTUS NRSC v. FEC neutralizes DCCC edge; Trump approval recovers to 42%+",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "$45.3M Q2 cash",
+        "Red-to-Blue targeting list",
+        "Internal polling",
+        "Bundler and small-donor network"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Q2 $45.3M is cycle record (vs. 2024 $44M); SCOTUS NRSC v. FEC ruling could neutralize this lead by removing FECA party-coordination caps; Q3 numbers due Oct 15 are next major data point."
+    },
+    {
+      "name": "National Republican Senatorial Committee",
+      "type": "Organization",
+      "role": "Republican Senate campaign arm; funds and targets R Senate candidates; raises $8.0M in June 2026.",
+      "stance": "Defend all 22 R-held Senate seats; pick off 1-2 Dem seats; limit Dem pickups to 1-3.",
+      "influence": "high",
+      "grade": "A2",
+      "archetype": "institution_rule",
+      "simulation_tier": 2,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.85,
+        "basis": "Senate chamber defense hinges on NRSC's 22-seat defense; tied to SCOTUS NRSC v. FEC lifeline."
+      },
+      "description": "The National Republican Senatorial Committee (NRSC), the official Republican Senate campaign arm raising $8.0M in June 2026 (vs. DSCC $8.3M); central challenge is defending 22 R-held seats with toss-up exposure in ME, OH-special, AK.",
+      "aliases": [
+        "NRSC"
+      ],
+      "goals": [
+        "Hold 53+ Senate seats",
+        "Defend ME/OH-special/AK toss-ups",
+        "Pick up 1-2 D seats",
+        "Maintain 51+ majority for 2027-28 judicial confirmations"
+      ],
+      "constraints": [
+        "22 R seats exposed (vs. 13 D)",
+        "Cook shifted 4 Senate races toward D in Apr 13",
+        "Sabato added AK to Toss-Up Jun 11",
+        "NRSC v. FEC SCOTUS decision pending",
+        "Trump approval at 35-37%"
+      ],
+      "assets": [
+        "$8.0M June fundraising + cycle totals",
+        "Trump endorsements",
+        "Senate incumbency",
+        "Conservative Senate policy staff",
+        "Center-right think tank network"
+      ],
+      "vulnerabilities": [
+        "NRSC v. FEC SCOTUS could limit coordinated spending",
+        "ME/OH-special/AK toss-ups all need defensive resources",
+        "Trump approval at 35-37% neutralizes presidential coattail",
+        "Senate 22 R v 13 D asymmetry"
+      ],
+      "stated_vs_revealed": "Stated: 'Senate battleground is going to come down to small number of very competitive races'; revealed: Rs have zero margin for error — even 1 D pickup + Ds holding all seats = 50-50 R minority risk.",
+      "worldview": {
+        "values": [
+          "Republican Senate majority",
+          "Judicial confirmations",
+          "Limited government",
+          "Free-market economics",
+          "Senate institutional norms"
+        ],
+        "beliefs": [
+          "Trump approval can be rescued by Iran deal + tariff cuts",
+          "AK/ME/OH toss-ups winnable with resources",
+          "Star-recruit Senate candidates (e.g., Goodwine) outperform generic R",
+          "SCOTUS IEEPA ruling could be post-election fiscal stimulus"
+        ],
+        "identity": "Republican Senate defense institution",
+        "frame": "Defensive defense (22 seats to 13)"
+      },
+      "incentives": [
+        {
+          "driver": "Republican Senate majority",
+          "gains_if": "Hold 53+; SCOTUS NRSC v. FEC Rs win; Trump approval recovers to 40%+",
+          "loses_if": "Ds flip 4+ seats; SCOTUS NRSC v. FEC Ds win; Trump approval falls to 32%",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "$8.0M June + cycle totals",
+        "Trump endorsement",
+        "Senate institutional support"
+      ],
+      "risk_tolerance": "low",
+      "memory": "Cook analyst Jessica Taylor: 'Likeliest outcome is 1 to 3 seat Democratic pickup, just short of 4'; SCOTUS NRSC v. FEC is the lifeline; pinned hopes on convention + Iran stabilization."
+    },
+    {
+      "name": "Susan Collins",
+      "type": "Person",
+      "role": "R-Maine incumbent Senator (5-term) running for 6th term in a D+7 state; a potential R Senate loss if Platner recovers.",
+      "stance": "Independent-moderate case ('average constituent service'); keep distance from Trump endorsements.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.9,
+        "basis": "Indivisible R Senator in a D+7 state; the most likely R-Senate loss among incumbents."
+      },
+      "description": "Senator Susan Collins (R-Maine), the 5-term incumbent seeking re-election in a D+7 state; leads Graham Platner (D) 50-47 in Fox News July 2 polling, but trails 53-44 Platner among 'extremely motivated' voters — making turnout the decisive variable.",
+      "aliases": [
+        "Senator Collins",
+        "Collins (ME)"
+      ],
+      "goals": [
+        "Win 6th term",
+        "Maintain Senate committee chairmanships",
+        "Position for 2028 (potentially presidential)",
+        "Stay independent from Trump when strategically useful"
+      ],
+      "constraints": [
+        "D+7 state partisan baseline",
+        "Age/health questions",
+        "Close Trump association",
+        "Platner scandal timing uncertainty"
+      ],
+      "assets": [
+        "5-term incumbent + 26-year brand",
+        "Maine moderate reputation",
+        "Independent voter appeal",
+        "Strong fundraising network",
+        "Trump endorsement flexibility"
+      ],
+      "vulnerabilities": [
+        "Behind +9 among 'extremely motivated' voters (Fox News)",
+        "D+7 baseline partisan lean",
+        "2026 is 2020 redux if Platner survives scandal",
+        "Reed-endorsement AARP formula only goes so far in 2026"
+      ],
+      "stated_vs_revealed": "Stated: 'I work for Maine'; revealed by Cook Oct 14 Toss-Up shift + Sabato confirmation: the race is genuinely competitive, not a Safe-R.",
+      "worldview": {
+        "values": [
+          "Moderate Republicanism",
+          "Senate institutional norms",
+          "Bipartisanship",
+          "Maine independent streak",
+          "Federalism"
+        ],
+        "beliefs": [
+          "Senate is the chamber of compromise",
+          "Maine voters value experience",
+          "Independent voting record is an asset",
+          "Trump-era polarization is harmful but real"
+        ],
+        "identity": "Maine moderate Republican",
+        "frame": "Work-for-Maine substantive representation"
+      },
+      "incentives": [
+        {
+          "driver": "Re-election",
+          "gains_if": "Reed-endorsement formula works; Platner scandals deepen; Dem enthusiasm collapses",
+          "loses_if": "Platner cleans up scandal; Dem turnout approaches 2020 levels; Maine generic Dem at 50%+",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "5-term incumbency",
+        "Maine institutional network",
+        "Independent voter profile"
+      ],
+      "risk_tolerance": "low",
+      "memory": "Leads 50-47 but aware of +9 gap among extremely motivated voters; relying on Platner scandal salience; turnout differential is the existential variable."
+    },
+    {
+      "name": "Graham Platner",
+      "type": "Person",
+      "role": "D-Maine Senate candidate (progressive); the candidate-quality wildcard whose scandals or recovery can swing ME-Senate 5-10 points.",
+      "stance": "Progressive populist; medicare-for-all-y; anti-establishment.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.85,
+        "basis": "D-flip candidate in ME-Senate, currently behind in topline polls but ahead in enthusiasm subgroup; binary scandal risk."
+      },
+      "description": "Graham Platner, progressive Democrat and military veteran who clinched the Maine Senate nomination despite 2026 revelations of a Nazi-era skull tattoo on his arm and prior-relationship allegations (Lyndsey Fifield).",
+      "aliases": [
+        "Platner"
+      ],
+      "goals": [
+        "Defeat Susan Collins",
+        "Become ME Senator",
+        "Run progressive policy agenda",
+        "Avoid Cuellar-2.0 path"
+      ],
+      "constraints": [
+        "Nazi-era tattoo scandal",
+        "Lyndsey Fifield abuse allegations",
+        "Progressive primary baggage",
+        "Limited national DSCC enthusiasm for primary-alienated Dems"
+      ],
+      "assets": [
+        "Progressive primary win",
+        "Fox News July 2 +9 lead among extremely motivated voters",
+        "Anti-establishment appeal",
+        "Small-donor network",
+        "Dem base enthusiasm bump potential"
+      ],
+      "vulnerabilities": [
+        "Tattoo scandal",
+        "Abuse allegations",
+        "Dem strategist 'Cuellar 2.0' fears",
+        "Collins' 5-term incumbency",
+        "Dem turnout collapse risk"
+      ],
+      "stated_vs_revealed": "Stated: 'I am running for Maine'; revealed: scandals hitting at exactly the moment when Collins is most vulnerable, raising fears of self-inflicted Dem loss.",
+      "worldview": {
+        "values": [
+          "Progressive populism",
+          "Anti-establishment",
+          "Working-class",
+          "Anti-corporate",
+          "Universal healthcare",
+          "Labor rights"
+        ],
+        "beliefs": [
+          "Maine ready for progressive change",
+          "Collins is a Washington insider",
+          "D+7 baseline is enough to win with strong Dem turnout",
+          "Senate Rs are Trump puppets"
+        ],
+        "identity": "Maine progressive patriot",
+        "frame": "Anti-establishment progressive"
+      },
+      "incentives": [
+        {
+          "driver": "Defeat Susan Collins",
+          "gains_if": "Recovers from scandal; Dem turnout near 2018 levels; party-line Dem consolidation",
+          "loses_if": "Scandal deepens; Dem strategists disavow; Collins consolidates moderate-Maine voters",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Progressive primary infrastructure",
+        "Small-donor network",
+        "Fox News enthusiasm lead (R+3 topline but D+9 motivated)"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Behind 50-47 topline; ahead 53-44 in 'extremely motivated' subgroup; Cook moved ME-Senate from Safe-R to Toss-Up on Oct 14, 2025; scandal recovery is the binary variable."
+    },
+    {
+      "name": "Roy Cooper",
+      "type": "Person",
+      "role": "D-NC Senate candidate; the strongest Dem Senate recruit of the cycle; leads Whatley 49-42.",
+      "stance": "Moderate Democrat; Medicaid, abortion access, popular-vote-style campaign.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.9,
+        "basis": "Most likely D Senate pickup per Cook + Sabato; the bellwether Dem-offensive race."
+      },
+      "description": "Roy Cooper, two-term former governor of North Carolina (2017-2025), running for the open Senate seat vacated by R Senator Thom Tillis; leads Michael Whatley (R, former RNC Chair) 49-42 in Carolina Forward polling — the strongest Dem Senate recruit of the 2026 cycle.",
+      "aliases": [
+        "Governor Cooper",
+        "Cooper (NC)"
+      ],
+      "goals": [
+        "Win NC Senate seat",
+        "Help D Senate majority path",
+        "Frame race on Medicaid/access",
+        "Position for future role"
+      ],
+      "constraints": [
+        "Trump won NC twice (2020 +3, 2024 +3)",
+        "Whatley is Trump-endorsed former RNC Chair",
+        "Carolina Forward (D-affiliated pollster) may overstate lead",
+        "Open seat's volatility"
+      ],
+      "assets": [
+        "2-term governorship (2017-2025)",
+        "Statewide win margins",
+        "Moderate-Democrat brand",
+        "Cooper fundraising network",
+        "Black turnout mobilization (NC has 22% Black pop.)"
+      ],
+      "vulnerabilities": [
+        "Trump state 2x wins",
+        "Whatley's RNC chair + Trump endorsement",
+        "National generic-ballot volatility",
+        "Cook + Sabato both Lean D (not Likely D yet)"
+      ],
+      "stated_vs_revealed": "Stated: 'I am the unity candidate'; revealed by D+7 poll lead: Whatley is benefiting from a tied-with-Trump dynamic but structural D demographic advantages are real.",
+      "worldview": {
+        "values": [
+          "Moderate Democratic governance",
+          "Healthcare access",
+          "Public education",
+          "Medicaid expansion",
+          "North Carolina pragmatism"
+        ],
+        "beliefs": [
+          "NC voters want results over ideology",
+          "Tillis's retirement makes the open seat winnable",
+          "Whatley is a Trump-surrogate liability",
+          "Abortion-rights surge is a real D coalition tool",
+          "Black turnout is structural for Dems in NC"
+        ],
+        "identity": "Two-term former governor",
+        "frame": "Practical Democratic governance"
+      },
+      "incentives": [
+        {
+          "driver": "Win NC Senate",
+          "gains_if": "Maintain 7+ point lead; turnout near 2008 Black turnout levels; Whatley's RNC ties become net negative",
+          "loses_if": "Whatley consolidates suburban Rs; Cooper faced as too 'establishment'; Trump NC remains structurally R",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "2-term governorship",
+        "Statewide network",
+        "Cooper fundraising reach"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Leads 49-42 in Carolina Forward polling; Cook + Sabato both moved NC-Senate to Lean D on Apr 13/Jun 11; the most likely D Senate pickup (60-70% probability)."
+    },
+    {
+      "name": "Sherrod Brown",
+      "type": "Person",
+      "role": "D-OH Senate candidate running in the Vance-vacated special election; the OH-Senate bellwether.",
+      "stance": "Working-class populist; pro-union; 2024 populist playbook comeback.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.85,
+        "basis": "Special-election Senate candidate in a Trump+11 state; binary result depends on turnout and split polling."
+      },
+      "description": "Sherrod Brown, former two-term Ohio senator (2007-2025), running to reclaim the seat vacated by JD Vance (now Vice President); polls split — Brown 48-45 Fabrizio/Anzalone vs. Husted +6 Nexstar/Emerson — and Cook moved OH-special from Lean-R to Toss-Up on April 13, 2026.",
+      "aliases": [
+        "Brown (OH)",
+        "Sherrod Brown"
+      ],
+      "goals": [
+        "Win OH Senate",
+        "Reclaim populist-Dem working-class coalition",
+        "Frame race as anti-Vance referendum",
+        "Position for future role"
+      ],
+      "constraints": [
+        "Trump won OH by 11 in 2024",
+        "Husted is appointed incumbent",
+        "Special-election turnout different from general",
+        "Split polling (D+3 vs. R+6)"
+      ],
+      "assets": [
+        "Former senator brand (2007-2025)",
+        "Populist-Dem coalition",
+        "Working-class Dem base",
+        "Union endorsement power",
+        "Ohio statewide name-ID"
+      ],
+      "vulnerabilities": [
+        "Trump +11 state",
+        "Husted cash on hand",
+        "OH Dem bench thin",
+        "Special-election structural headwinds",
+        "Population loss in Youngstown/Cleveland industrial base"
+      ],
+      "stated_vs_revealed": "Stated: 'I will fight for Ohio workers'; revealed: split polling (Fabrizio/Anzalone D+3; Nexstar/Emerson R+6) makes this a coin-flip race.",
+      "worldview": {
+        "values": [
+          "Working-class populism",
+          "Pro-labor",
+          "Anti-trade-deal establishment",
+          "Universal healthcare",
+          "Anti-Trump authoritarian"
+        ],
+        "beliefs": [
+          "OH working-class voters are reachable",
+          "Vance+Trump brand is a liability",
+          "Populist-Dem coalition can win in Trump+11 states",
+          "Union mobilization can offset population loss",
+          "Tariffs hurt OH manufacturing consumers",
+          "Brown-vintage Dem can win Midwest with populist framing"
+        ],
+        "identity": "Working-class Democrat",
+        "frame": "Pro-worker, anti-establishment"
+      },
+      "incentives": [
+        {
+          "driver": "OH Senate win",
+          "gains_if": "Recaptures populist working-class Dem voters; turnout near 2020; union mobilization solid",
+          "loses_if": "Trump+11 baseline overwhelms; Husted outraises; special-election turnout favors R",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Former 2-term senator brand",
+        "Union network",
+        "Populist-Dem coalition"
+      ],
+      "risk_tolerance": "high",
+      "memory": "Cook shifted OH-special from Lean-R to Toss-Up Apr 13; Sabato confirmed Jun 11; polls split between Fabrizio/Anzalone D+3 and Nexstar/Emerson R+6."
+    },
+    {
+      "name": "Jon Ossoff",
+      "type": "Person",
+      "role": "D-GA incumbent Senator defending a seat Trump won in 2024; leads by D+13 in Fox News polling.",
+      "stance": "Anti-Trump affordability messaging; civil rights; institutional progressive.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.85,
+        "basis": "Strongest Dem-held defense; if Ossoff holds, Cook Lean D rating likely becomes Likely D."
+      },
+      "description": "Senator Jon Ossoff (D-Georgia), defending a seat Trump won by 2.2 in 2024 against Trump-endorsed former R Mike Collins; leads 56-43 in Fox News July 1, 2026 polling; $32.5M cash on hand.",
+      "aliases": [
+        "Senator Ossoff",
+        "Ossoff (GA)"
+      ],
+      "goals": [
+        "Win re-election",
+        "Maintain D Senate defensive holds",
+        "Frame race as anti-Trump referendum",
+        "Position for future role"
+      ],
+      "constraints": [
+        "Trump won GA in 2024 (+2.2)",
+        "Mike Collins (R) is Trump-endorsed",
+        "Special election overperformance benefits Ds but GA ballot structure is unique",
+        "Trump-populist policy opportunities"
+      ],
+      "assets": [
+        "Incumbency",
+        "$32.5M cash on hand",
+        "D+13 Fox News lead",
+        "GA Dem coalition (Atlanta + Black Belt)",
+        "DSCC + Schumer support"
+      ],
+      "vulnerabilities": [
+        "GA ballot structure (jungle primary)",
+        "Trump+2.2 baseline",
+        "Collins could consolidate suburban Rs",
+        "Mike Collins is a Trump loyalist (no primary baggage)"
+      ],
+      "stated_vs_revealed": "Stated: 'I fight for Georgia families'; revealed by D+13 lead: Collins as Trump-endorsed underfunded challenger is structurally weak in GA.",
+      "worldview": {
+        "values": [
+          "Civil rights",
+          "Affordability",
+          "Independent journalism",
+          "Anti-corruption",
+          "Institutional democracy"
+        ],
+        "beliefs": [
+          "GA is competitive",
+          "Trump-style polarization is a D asset in GA suburbs",
+          "Mike Collins is a Trump liability",
+          "Dem coalition can hold in Trump-won states",
+          "Suburban Rs will split with Trump on affordability"
+        ],
+        "identity": "Independent Democratic incumbent",
+        "frame": "Suburban Dem institutionalist"
+      },
+      "incentives": [
+        {
+          "driver": "Re-election + D Senate holds",
+          "gains_if": "Holds D+10+ lead; reduces to Lean D/Likely D by Labor Day",
+          "loses_if": "Collins consolidates Trump Rs; suburban R defection to Collins; Senate control slides",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "$32.5M cash",
+        "Incumbency",
+        "GA Dem coalition"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Fox News July 1: Ossoff 56 - Collins 43; $32.5M cash on hand; Cook and Sabato both Lean D (Apr 13/Jun 11); 75-85% probability D-Hold."
+    },
+    {
+      "name": "Mary Peltola",
+      "type": "Person",
+      "role": "D-AK Senate candidate; former House member (AK-AL 2023-2025); lost 2024 narrowly to Begich.",
+      "stance": "Moderate 'Tundra Democrat'; bipartisan record; Alaska Natives + union fishing industry.",
+      "influence": "medium",
+      "grade": "B3",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "medium",
+        "score": 0.7,
+        "basis": "D-flip candidate in an open AK-Senate race (Sullivan retiring); Cook/Sabato both moved AK to Toss-Up."
+      },
+      "description": "Mary Peltola, former Alaska House member (2023-2025, narrowly lost re-election to Nick Begich by ~2 pts in 2024), now running for the Alaska Senate seat Dan Sullivan (R) is vacating; Cook and Sabato moved AK-Senate to Toss-Up in their updates.",
+      "aliases": [
+        "Peltola",
+        "Mary Peltola"
+      ],
+      "goals": [
+        "Win AK Senate",
+        "Hold Democratic House majority",
+        "Position Alaska Dem coalition",
+        "Defeat Sullivan successor"
+      ],
+      "constraints": [
+        "R+10 baseline Trump state",
+        "Begich narrowly defeated her 2024",
+        "Ranked-choice voting complicates polling",
+        "AK-Senate primary volatility"
+      ],
+      "assets": [
+        "Former House member network",
+        "Alaska Native coalition",
+        "Ranked-choice crossover appeal",
+        "Bipartisan House record",
+        "National Dem small-donor network"
+      ],
+      "vulnerabilities": [
+        "Trump +10 state",
+        "Lost 2024 House race narrowly",
+        "R primary winner might consolidate Trump-Rs",
+        "AK ballot structure",
+        "Ranked-choice unknown effects"
+      ],
+      "stated_vs_revealed": "Stated: 'Alaska deserves a senator who listens'; revealed: AK-Senate moved from Lean-R to Toss-Up in both Cook and Sabato updates.",
+      "worldview": {
+        "values": [
+          "Bipartisanship",
+          "Alaska Native rights",
+          "Fishing industry protection",
+          "Moderate Democratic governance",
+          "Climate adaptation",
+          "Federalism for AK"
+        ],
+        "beliefs": [
+          "Alaska is competitive for Dems",
+          "Sullivan open seat is winnable",
+          "Bipartisan record is an asset, not liability",
+          "Ranked-choice favors moderate Ds",
+          "Alaska Natives + union voters can be combined into a D coalition"
+        ],
+        "identity": "Moderate Alaska Democrat",
+        "frame": "Alaska-first bipartisanship"
+      },
+      "incentives": [
+        {
+          "driver": "AK Senate win",
+          "gains_if": "Consolidates moderate Dems; ranked-choice + Alaska Native turnout solidifies lead",
+          "loses_if": "Trump+10 overwhelms; R primary winner consolidates; ranked-choice + suburban split favors R",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Former House network",
+        "Alaska Native coalition",
+        "National Dem infrastructure"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Cook/Sabato moved AK-Senate to Toss-Up; lost 2024 House race narrowly to Begich; D-flip probability 40-50%."
+    },
+    {
+      "name": "Supreme Court of the United States",
+      "type": "Government",
+      "role": "Pending binary rulings: NRSC v. FEC (FECA party-coordination caps) and IEEPA tariffs (post-midterm expected December 2026).",
+      "stance": "Conservative majority 6-3; case-by-case.",
+      "influence": "high",
+      "grade": "A2",
+      "archetype": "institution_rule",
+      "simulation_tier": 2,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "score": 0.95,
+        "basis": "Two pending binary rulings: NRSC v. FEC could eliminate FECA caps neutralizing DCCC $45.3M lead; IEEPA tariff ruling expected December 2026 post-election but if accelerated could be Q4 stimulus."
+      },
+      "description": "The Supreme Court of the United States, conservative-majority 6-3 after Trump's 2025-2026 appointments; pending decisions in NRSC v. FEC (party-coordination caps could fall) and the IEEPA tariff case (expected December 2026, could be Q4 stimulus if Trump survives lower-court losses).",
+      "aliases": [
+        "SCOTUS",
+        "Supreme Court"
+      ],
+      "goals": [
+        "Adjudicate based on textualism/originalism",
+        "Maintain institutional authority",
+        "Avoid election-period legitimacy crisis"
+      ],
+      "constraints": [
+        "Election-period legitimacy considerations",
+        "Conservative 6-3 majority with internal divisions",
+        "FEC vs SCOTUS deference",
+        "Trump appointee loyalty"
+      ],
+      "assets": [
+        "Final say on constitutional questions",
+        "Stays lower-court rulings",
+        "Electoral law final arbiter",
+        "Tariff revenue fate (federal impact ~$300B/year)"
+      ],
+      "vulnerabilities": [
+        "Perceived politicization risk",
+        "Election-period legitimacy critiques",
+        "Internal majority splits (e.g., Roberts on institutional questions)"
+      ],
+      "stated_vs_revealed": "Stated: 'Justice is one'; revealed by case scheduling: NRSC v. FEC will be decided in time for 2026 cycle application.",
+      "worldview": {
+        "values": [
+          "Textualism",
+          "Originalism",
+          "Institutional restraint",
+          "Religious liberty",
+          "Free-market economics"
+        ],
+        "beliefs": [
+          "Constitutional questions are non-political",
+          "Stare decisis is not absolute",
+          "Administrative agencies have limited authority",
+          "Election law is a clear SCOTUS domain"
+        ],
+        "identity": "Co-equal branch",
+        "frame": "Constitutional adjudication"
+      },
+      "incentives": [
+        {
+          "driver": "Two pending binary rulings",
+          "gains_if": "Decides NRSC v. FEC + IEEPA consistently with conservative principles",
+          "loses_if": "Perceived as election-period political actor",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Final judicial authority",
+        "Election-law final arbiter role",
+        "Conservatism 6-3 majority"
+      ],
+      "risk_tolerance": "low",
+      "memory": "IEEPA tariff ruling expected December 2026 (post-election); NRSC v. FEC ruling pending; timing and direction of both are the most important binary unknowns in the forecast."
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Donald Trump",
+      "target": "Hakeem Jeffries",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "high",
+      "valence": "adversarial",
+      "polarity": -0.95,
+      "basis": "Trump and Jeffries are the partisan principal opponents in the 2026 House cycle; their clash over Trump's second-term record defines the contest.",
+      "since": "2026-01-01"
+    },
+    {
+      "source": "Donald Trump",
+      "target": "Chuck Schumer",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "high",
+      "valence": "adversarial",
+      "polarity": -0.95,
+      "basis": "Trump and Schumer are the partisan Senate opponents; Schumer's offense against Trump defines the Democratic Senate playbook.",
+      "since": "2026-01-01"
+    },
+    {
+      "source": "Donald Trump",
+      "target": "Mike Johnson",
+      "type": "BACKS",
+      "sign": "ally",
+      "strength": "high",
+      "valence": "allied",
+      "polarity": 0.9,
+      "basis": "Trump endorsed Mike Johnson for Speaker and supports his House strategy; Johnson's policy agenda is dedicated to Trump's legislative priorities.",
+      "since": "2025-01-01"
+    },
+    {
+      "source": "Donald Trump",
+      "target": "John Thune",
+      "type": "BACKS",
+      "sign": "ally",
+      "strength": "high",
+      "valence": "allied",
+      "polarity": 0.85,
+      "basis": "Trump and Thune coordinate on Senate reconciliation and judicial confirmations; Trump's endorsement in R primaries aligns with Thune's institutional Republican strategy.",
+      "since": "2025-01-01"
+    },
+    {
+      "source": "Donald Trump",
+      "target": "Susan Collins",
+      "type": "ENDORSES",
+      "sign": "ally",
+      "strength": "medium",
+      "valence": "transactional",
+      "polarity": 0.4,
+      "basis": "Trump endorsed Collins in the past despite her independence; their relationship is transactional rather than ideologically committed.",
+      "since": "2020-01-01"
+    },
+    {
+      "source": "Donald Trump",
+      "target": "Jon Ossoff",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "high",
+      "valence": "adversarial",
+      "polarity": -0.95,
+      "basis": "Trump endorsed Mike Collins (R) to defeat Ossoff in 2026; their relationship is the prototypical Trump-Democratic-incumbent opposition.",
+      "since": "2020-01-01"
+    },
+    {
+      "source": "Donald Trump",
+      "target": "Supreme Court of the United States",
+      "type": "INFLUENCES",
+      "sign": "ally",
+      "strength": "high",
+      "valence": "allied",
+      "polarity": 0.85,
+      "basis": "Trump appointed the conservative SCOTUS majority through 2025-2026 nominations; the Court hears NRSC v. FEC and IEEPA tariff cases with conservative predisposition.",
+      "since": "2025-01-01"
+    },
+    {
+      "source": "Hakeem Jeffries",
+      "target": "Democratic Congressional Campaign Committee",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "valence": "allied",
+      "polarity": 0.95,
+      "basis": "Jeffries runs the Democratic House strategy and coordinates the DCCC; the DCCC is the principal Democratic House targeting/campaign arm.",
+      "since": "2023-01-01"
+    },
+    {
+      "source": "Chuck Schumer",
+      "target": "Democratic Congressional Campaign Committee",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "valence": "allied",
+      "polarity": 0.9,
+      "basis": "Schumer coordinates with the DCCC on shared Democratic House-Senate messaging and cross-chamber targeting.",
+      "since": "2025-01-01"
+    },
+    {
+      "source": "John Thune",
+      "target": "National Republican Senatorial Committee",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "valence": "allied",
+      "polarity": 0.95,
+      "basis": "Thune coordinates Senate Republican strategy with the NRSC; the NRSC is the principal Republican Senate targeting/campaign arm.",
+      "since": "2025-01-01"
+    },
+    {
+      "source": "Mike Johnson",
+      "target": "National Republican Senatorial Committee",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "medium",
+      "valence": "allied",
+      "polarity": 0.6,
+      "basis": "House Speaker and Senate campaign arm coordination is informal but politically central — Trump's legislative agenda runs through both.",
+      "since": "2025-01-01"
+    },
+    {
+      "source": "Roy Cooper",
+      "target": "National Republican Senatorial Committee",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "high",
+      "valence": "adversarial",
+      "polarity": -0.9,
+      "basis": "Cooper is the leading NC-Senate D-flip candidate against the NRSC's preferred R (Whatley); their contest is the binary NC-Senate race.",
+      "since": "2026-03-01"
+    },
+    {
+      "source": "Jon Ossoff",
+      "target": "National Republican Senatorial Committee",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "high",
+      "valence": "adversarial",
+      "polarity": -0.9,
+      "basis": "Ossoff is the leading GA-Senate D-defensive incumbent against Mike Collins; the NRSC is funneling resources to Collins.",
+      "since": "2026-03-01"
+    },
+    {
+      "source": "Sherrod Brown",
+      "target": "National Republican Senatorial Committee",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "high",
+      "valence": "adversarial",
+      "polarity": -0.85,
+      "basis": "Brown is the leading OH-Senate special-election D candidate against Jon Husted (R); their contest is the binary OH race.",
+      "since": "2026-06-01"
+    },
+    {
+      "source": "Susan Collins",
+      "target": "Graham Platner",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "high",
+      "valence": "adversarial",
+      "polarity": -0.95,
+      "basis": "Collins and Platner are the only major-party candidates in the ME-Senate race; their contest is the most-likely R-Senate loss opportunity for Dems.",
+      "since": "2026-06-01"
+    },
+    {
+      "source": "Mary Peltola",
+      "target": "National Republican Senatorial Committee",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "high",
+      "valence": "adversarial",
+      "polarity": -0.85,
+      "basis": "Peltola is the leading AK-Senate D candidate against Sullivan's R successor; their contest is the binary AK race.",
+      "since": "2026-08-01"
+    },
+    {
+      "source": "Democratic Congressional Campaign Committee",
+      "target": "National Republican Senatorial Committee",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "high",
+      "valence": "adversarial",
+      "polarity": -1.0,
+      "basis": "DCCC and NRSC are the principal campaign arms of competing parties and the dominant funding rivals of the cycle.",
+      "since": "2026-01-01"
+    },
+    {
+      "source": "Supreme Court of the United States",
+      "target": "Democratic Congressional Campaign Committee",
+      "type": "REGULATES",
+      "sign": "neutral",
+      "strength": "high",
+      "valence": "directional",
+      "polarity": -0.5,
+      "basis": "SCOTUS pending NRSC v. FEC ruling could eliminate FECA party-coordination caps and neutralize the DCCC's $45.3M cycle-record cash advantage.",
+      "since": "2026-06-01"
+    },
+    {
+      "source": "Supreme Court of the United States",
+      "target": "Donald Trump",
+      "type": "CONSTRAINS",
+      "sign": "neutral",
+      "strength": "medium",
+      "valence": "directional",
+      "polarity": -0.4,
+      "basis": "SCOTUS pending IEEPA tariff ruling (expected December 2026) could strike down IEEPA tariffs and reduce Trump's effective tariff leverage post-election.",
+      "since": "2026-06-01"
+    }
+  ],
+  "key_events": [
+    {
+      "date": "2025-01-20",
+      "event": "Trump inaugurated for second non-consecutive term"
+    },
+    {
+      "date": "2026-02-28",
+      "event": "US/Israel military strikes Iran — start of 2026 Iran war"
+    },
+    {
+      "date": "2026-04-07",
+      "event": "Cook Political Report updates House ratings — 6 changes including PA-08 (Lean R → Toss-Up), OH-01 (Toss-Up → Lean D), OH-13 (Lean D → Likely D), NJ-09 (Lean D → Likely D), FL-27 (Solid R → Likely R), CO-03 (Likely R → Solid R)"
+    },
+    {
+      "date": "2026-04-13",
+      "event": "Cook Political Report updates Senate ratings — 4 changes toward D: NC (Toss-Up → Lean D), GA (Toss-Up → Lean D), OH (Lean R → Toss-Up), NE (Solid R → Likely R); largest one-sided Senate shift this cycle"
+    },
+    {
+      "date": "2026-05-20",
+      "event": "Marquette Law School national survey: Trump approval 38%, economy 30%, inflation 22%, gas prices 19%; 53% say Iran military action went too far"
+    },
+    {
+      "date": "2026-05-29",
+      "event": "Harvard CAPS/Harris poll: Trump approval 43% (highest major-poll reading); 17% of 2024 Trump voters report reservations about their vote"
+    },
+    {
+      "date": "2026-06-11",
+      "event": "Sabato's Crystal Ball Senate update — NC → Lean D, OH-special → Toss-Up, AK → Toss-Up; 4 Toss-Ups total (ME, MI, OH-special, AK)"
+    },
+    {
+      "date": "2026-06-11",
+      "event": "AP-NORC poll: Trump approval 37%, 62% disapprove (3,040 adults, MOE 2.8)"
+    },
+    {
+      "date": "2026-06-12",
+      "event": "Reuters/Ipsos poll: Trump approval 36% (N=1,537, MOE 3)"
+    },
+    {
+      "date": "2026-06-17",
+      "event": "Trump signs Iran ceasefire; Hormuz 'toll-free' pledge; 60-day interim begins; Strait of Hormuz fire traded weekend of June 27-29"
+    },
+    {
+      "date": "2026-06-30",
+      "event": "Trump announces GOP midterm convention Sept 9-10 Dallas — first GOP midterm convention in modern history"
+    },
+    {
+      "date": "2026-07-01",
+      "event": "Fox News Senate poll: Ossoff 56, Collins 43 (D+13) in Georgia"
+    },
+    {
+      "date": "2026-07-02",
+      "event": "Fox News Senate poll: Collins 50, Platner 47 in Maine (topline R+3); Platner +9 among 'extremely motivated' voters"
+    },
+    {
+      "date": "2026-07-03",
+      "event": "Silver Bulletin generic ballot D+6.1; USPollingData generic ballot D+7; Cook Senate NH/misc minor updates"
+    },
+    {
+      "date": "2026-07-15",
+      "event": "FEC Q2 2026 filing deadline — DCCC reported $45.3M cycle record; DSCC $8.3M June (vs. NRSC $8.0M)"
+    },
+    {
+      "date": "2026-08-04",
+      "event": "Michigan Democratic Senate primary — El-Sayed vs. Stevens vs. McMorrow (El-Sayed leads at 42% per MIRS)"
+    },
+    {
+      "date": "2026-08-18",
+      "event": "Alaska primary"
+    },
+    {
+      "date": "2026-08-25",
+      "event": "Oklahoma Democratic Senate runoff (Thomas vs. Priest)"
+    },
+    {
+      "date": "2026-09-08",
+      "event": "New Hampshire Senate primary"
+    },
+    {
+      "date": "2026-09-09",
+      "event": "Trump midterm convention Day 1, Dallas TX"
+    },
+    {
+      "date": "2026-09-10",
+      "event": "Trump midterm convention Day 2, Dallas TX"
+    },
+    {
+      "date": "2026-09-25",
+      "event": "Final Q2 2026 GDP estimate"
+    },
+    {
+      "date": "2026-10-01",
+      "event": "Government funding deadline (potential shutdown risk)"
+    },
+    {
+      "date": "2026-10-07",
+      "event": "September CPI report"
+    },
+    {
+      "date": "2026-10-15",
+      "event": "FEC Q3 2026 filing deadline"
+    },
+    {
+      "date": "2026-10-31",
+      "event": "Last day of early voting in many states"
+    },
+    {
+      "date": "2026-11-03",
+      "event": "Election Day"
+    },
+    {
+      "date": "2026-12-01",
+      "event": "SCOTUS IEEPA tariff ruling expected (decision expected December 2026)"
+    },
+    {
+      "date": "2027-01-03",
+      "event": "119th Congress convenes"
+    }
+  ],
+  "hot_topics": [
+    "DCCC cycle-record $45.3M Q2 2026 fundraising",
+    "Iran war ceasefire and its fragility (60-day deadline mid-August)",
+    "Cook Senate shifts toward Democrats (NC, GA to Lean D; OH-special to Toss-Up; NE to Likely R)",
+    "Sabato Senate shifts toward Democrats (NC, OH-special, AK to Toss-Up)",
+    "Generic ballot sustained at D+5 to D+7",
+    "Trump approval stuck at 35-37% despite Iran deal",
+    "Special election D+17.1 overperformance",
+    "Effective tariff rate 16.8% (Yale Budget Lab) and household cost $1,500-2,500/year",
+    "Graham Platner Maine Senate scandal controversy",
+    "Sherrod Brown-OH special election competitiveness",
+    "North Carolina Senate open seat (Cooper vs. Whatley)",
+    "Georgia Senate incumbent Ossoff's strong D+13 polling",
+    "Trump Sept 9-10 Dallas midterm convention (first-of-its-kind)",
+    "SCOTUS NRSC v. FEC pending ruling on FECA party-coordination caps",
+    "Effective tariff rate 16.8% and SCOTUS IEEPA tariff ruling (December 2026)"
+  ],
+  "quantitative_facts": [
+    {
+      "metric": "Trump approval rating",
+      "value": "37",
+      "unit": "%",
+      "as_of_date": "2026-06-17",
+      "definition": "AP-NORC national survey, N=3,040 adults, MOE ±2.8; Trump approve vs. 62% disapprove",
+      "source": "AP-NORC June 11-17, 2026",
+      "tier": "S1"
+    },
+    {
+      "metric": "Trump approval rating",
+      "value": "36",
+      "unit": "%",
+      "as_of_date": "2026-06-15",
+      "definition": "Reuters/Ipsos national poll, N=1,537 adults, MOE ±3; Trump approve vs. ~60% disapprove",
+      "source": "Reuters/Ipsos June 12-15, 2026",
+      "tier": "S1"
+    },
+    {
+      "metric": "Trump approval rating",
+      "value": "38",
+      "unit": "%",
+      "as_of_date": "2026-05-26",
+      "definition": "Marquette Law School national survey, N=1,001 adults, MOE ±3.4; Trump approve vs. 62% disapprove",
+      "source": "Marquette Law School May 20-26, 2026",
+      "tier": "S1"
+    },
+    {
+      "metric": "Trump approval rating",
+      "value": "43",
+      "unit": "%",
+      "as_of_date": "2026-05-31",
+      "definition": "Harvard CAPS/Harris poll, N=1,725 registered voters, MOE ±2.4",
+      "source": "Harvard CAPS/Harris May 29-31, 2026",
+      "tier": "S1"
+    },
+    {
+      "metric": "Generic ballot (D advantage)",
+      "value": "5.4",
+      "unit": "percentage points",
+      "as_of_date": "2026-04-21",
+      "definition": "Race to the WH inside-elections generic ballot polling average; Democrats plus 5.4 pts over Republicans",
+      "source": "Inside Elections / Race to the WH",
+      "tier": "S1"
+    },
+    {
+      "metric": "Generic ballot (D advantage)",
+      "value": "6.1",
+      "unit": "percentage points",
+      "as_of_date": "2026-07-02",
+      "definition": "Silver Bulletin national generic-ballot tracking average; Democrats plus 6.1 pts over Republicans",
+      "source": "Silver Bulletin generic ballot tracker",
+      "tier": "S1"
+    },
+    {
+      "metric": "Effective tariff rate",
+      "value": "16.8",
+      "unit": "%",
+      "as_of_date": "2026-06-30",
+      "definition": "Yale Budget Lab effective US tariff rate, down from 28% peak April 2026 after 'reciprocal' tariff rollbacks; up from ~2% in 2025",
+      "source": "Yale Budget Lab tariff tracker",
+      "tier": "S1"
+    },
+    {
+      "metric": "Q1 2026 GDP",
+      "value": "2.0",
+      "unit": "% annualized",
+      "as_of_date": "2026-03-31",
+      "definition": "Bureau of Economic Analysis advance estimate, real GDP percent change Q1 2026",
+      "source": "BEA Q1 2026 advance estimate",
+      "tier": "S1"
+    },
+    {
+      "metric": "PCE inflation (year-over-year)",
+      "value": "4.5",
+      "unit": "%",
+      "as_of_date": "2026-05-31",
+      "definition": "Personal Consumption Expenditures price index, year-over-year change, May 2026",
+      "source": "BEA PCE May 2026",
+      "tier": "S1"
+    },
+    {
+      "metric": "Civilian unemployment rate",
+      "value": "4.3",
+      "unit": "%",
+      "as_of_date": "2026-05-31",
+      "definition": "Bureau of Labor Statistics U-3 unemployment rate, May 2026",
+      "source": "BLS May 2026 employment situation",
+      "tier": "S1"
+    },
+    {
+      "metric": "Consumer Confidence Index",
+      "value": "57",
+      "unit": "index points",
+      "as_of_date": "2026-04-30",
+      "definition": "Conference Board Consumer Confidence Index, April 2026 (long-term average ~95; sub-80 indicates recession-level consumer concern)",
+      "source": "Conference Board April 2026",
+      "tier": "S1"
+    },
+    {
+      "metric": "DCCC fundraising (Q2 2026)",
+      "value": "45.3",
+      "unit": "USD million",
+      "as_of_date": "2026-06-30",
+      "definition": "Democratic Congressional Campaign Committee total fundraising Q2 2026 (April-June); cycle record edging 2024's $44M; before SCOTUS NRSC v. FEC ruling",
+      "source": "DCCC Q2 2026 self-reported July 2026",
+      "tier": "S1"
+    },
+    {
+      "metric": "DSCC fundraising (June 2026)",
+      "value": "8.3",
+      "unit": "USD million",
+      "as_of_date": "2026-06-30",
+      "definition": "Democratic Senatorial Campaign Committee fundraising in June 2026 (one-month)",
+      "source": "DSCC June 2026 self-report",
+      "tier": "S1"
+    },
+    {
+      "metric": "NRSC fundraising (June 2026)",
+      "value": "8.0",
+      "unit": "USD million",
+      "as_of_date": "2026-06-30",
+      "definition": "National Republican Senatorial Committee fundraising in June 2026 (one-month)",
+      "source": "NRSC June 2026 self-report",
+      "tier": "S1"
+    },
+    {
+      "metric": "DCCC special election overperformance",
+      "value": "17.1",
+      "unit": "percentage points",
+      "as_of_date": "2026-03-18",
+      "definition": "Average Democratic overperformance vs. partisan baseline in tracked 2025-2026 congressional special elections, per DCCC March 18, 2026 memo",
+      "source": "DCCC March 18, 2026 memo",
+      "tier": "S1"
+    },
+    {
+      "metric": "House Majority PAC projected spending",
+      "value": "380-400",
+      "unit": "USD million",
+      "as_of_date": "2026-07-03",
+      "definition": "Projected 2026 cycle spending by House Majority PAC (D-aligned outside spending)",
+      "source": "USPollingData projected outside spending tracker",
+      "tier": "S2"
+    },
+    {
+      "metric": "Congressional Leadership Fund projected spending",
+      "value": "330-360",
+      "unit": "USD million",
+      "as_of_date": "2026-07-03",
+      "definition": "Projected 2026 cycle spending by Congressional Leadership Fund (R-aligned outside spending)",
+      "source": "USPollingData projected outside spending tracker",
+      "tier": "S2"
+    },
+    {
+      "metric": "Georgia Senate poll (Ossoff vs. Collins)",
+      "value": "Ossoff 56, Collins 43",
+      "unit": "%",
+      "as_of_date": "2026-07-01",
+      "definition": "Fox News Senate poll, Georgia; Ossoff leads by 13 pts",
+      "source": "Fox News GA Senate July 1, 2026",
+      "tier": "S1"
+    },
+    {
+      "metric": "Maine Senate poll (Collins vs. Platner)",
+      "value": "Collins 50, Platner 47",
+      "unit": "%",
+      "as_of_date": "2026-07-02",
+      "definition": "Fox News Senate poll, Maine; Collins leads by 3 pts top-line; Platner leads 53-44 among 'extremely motivated' voters",
+      "source": "Fox News ME Senate July 2, 2026",
+      "tier": "S1"
+    },
+    {
+      "metric": "North Carolina Senate poll (Cooper vs. Whatley)",
+      "value": "Cooper 49, Whatley 42",
+      "unit": "%",
+      "as_of_date": "2026-04-30",
+      "definition": "Carolina Forward poll, NC; Cooper leads by 7 pts",
+      "source": "Carolina Forward",
+      "tier": "S2"
+    },
+    {
+      "metric": "Ohio Senate special poll (Brown vs. Husted)",
+      "value": "Brown 48, Husted 45",
+      "unit": "%",
+      "as_of_date": "2026-06-30",
+      "definition": "Fabrizio/Anzalone poll, OH; Brown leads by 3 pts. (Counter: Nexstar/Emerson poll: Husted +6 — see contested_claims)",
+      "source": "Fabrizio/Anzalone",
+      "tier": "S2"
+    },
+    {
+      "metric": "Michigan Democratic Senate primary poll",
+      "value": "El-Sayed 42, Stevens 33, McMorrow 6",
+      "unit": "%",
+      "as_of_date": "2026-05-30",
+      "definition": "MIRS/Mitchell polling on Aug 4 Michigan Dem Senate primary",
+      "source": "MIRS/Mitchell May 2026",
+      "tier": "S2"
+    },
+    {
+      "metric": "Iran military action disapproval ('too far')",
+      "value": "53",
+      "unit": "%",
+      "as_of_date": "2026-06-30",
+      "definition": "AP-NORC June 2026 question: 'Has US military action against Iran gone too far?' 53% yes (down 6 pts from March)",
+      "source": "AP-NORC June 2026",
+      "tier": "S1"
+    },
+    {
+      "metric": "Iran war approval (Trump handling)",
+      "value": "34",
+      "unit": "%",
+      "as_of_date": "2026-06-30",
+      "definition": "AP-NORC June 2026 question: 'Approve/Disapprove of Trump's handling of Iran situation' 34% approve",
+      "source": "AP-NORC June 2026",
+      "tier": "S1"
+    },
+    {
+      "metric": "Iran war death toll",
+      "value": "13-15",
+      "unit": "US service members killed in action",
+      "as_of_date": "2026-06-17",
+      "definition": "Cumulative US KIA during Feb 28 – June 17, 2026 Iran war",
+      "source": "USPollingData tracker aggregate",
+      "tier": "S3"
+    }
+  ],
+  "contested_claims": [
+    {
+      "claim": "Generic ballot D+ advantage between D+3 (CNN/Enten) and D+7 (USPollingData / Silver Bulletin)",
+      "positions": [
+        {
+          "stance": "D+3 (lowest plausible)",
+          "sources": [
+            "CNN/Enten 3-poll average June 15, 2026"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "D+5.4 (mid-range)",
+          "sources": [
+            "Race to the WH April 21, 2026",
+            "Inside Elections"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "D+6.1 to D+7.0 (highest plausible)",
+          "sources": [
+            "Silver Bulletin July 2, 2026",
+            "USPollingData July 3, 2026"
+          ],
+          "tier": "S1"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Different pollster weightings; LV vs. RV screening; with/without 'Republican control' question framing. Silver Bulletin is methodology-conservative; USPollingData is the open-ended figure."
+    },
+    {
+      "claim": "Trump approval rating ranges from 33% (UMass progressive-house outlier) to 43% (Harvard CAPS/Harris pro-R outlier) with consensus 35-37%",
+      "positions": [
+        {
+          "stance": "33% (UMass March 2026, lowest major-poll reading)",
+          "sources": [
+            "UMass poll March 30, 2026"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "35-38% (consensus mid-to-high 30s post-Iran deal)",
+          "sources": [
+            "AP-NORC June 11-17",
+            "Reuters/Ipsos June 12-15",
+            "Marquette May 20-26",
+            "Emerson May 2026"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "43% (Harvard CAPS/Harris, highest major-poll reading)",
+          "sources": [
+            "Harvard CAPS/Harris May 29-31"
+          ],
+          "tier": "S1"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "House effects differ: UMass has progressive lean; Harvard CAPS/Harris has slight Republican lean. Reuters/Ipsos and AP-NORC (the cleanest) cluster at 35-37%."
+    },
+    {
+      "claim": "Ohio Senate special-election poll lead — Democrats cite Fabrizio/Anzalone D+3; Republicans cite Nexstar/Emerson R+6",
+      "positions": [
+        {
+          "stance": "Brown +3 (D-Lead)",
+          "sources": [
+            "Fabrizio/Anzalone"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "Husted +6 (R-Lead)",
+          "sources": [
+            "Nexstar/Emerson"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Different pollster house effects; Fabrizio/Anzalone is a Democratic-aligned pollster with R-favorable shift; Nexstar/Emerson is a partisan-Republican-pollster with similar house effect. Split poll signals a coin-flip race."
+    },
+    {
+      "claim": "Maine Senate — Collins R+3 topline but Platner +9 among 'extremely motivated' voters",
+      "positions": [
+        {
+          "stance": "Collins +3 (Fox News July 2, 2026 topline)",
+          "sources": [
+            "Fox News July 2, 2026"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "Platner +9 among extremely motivated",
+          "sources": [
+            "Fox News July 2, 2026 (subgroup)",
+            "Nate Silver All-In June 23 ME at 50-50"
+          ],
+          "tier": "S1"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Methodological: 'extremely motivated' subgroup is a turnout-indicator; top-line is full-LV. Platinum candidate baggage and Dem turnout uncertainty both affect the final election outcome. Silver calls ME '50-50 coin flip'."
+    },
+    {
+      "claim": "Iran ceasefire durability — currently 60-day interim ceasefire (signed June 17); fire traded weekend of June 27-29; risk of collapse by mid-August",
+      "positions": [
+        {
+          "stance": "Ceasefire holds; modest Trump recovery",
+          "sources": [
+            "AP-NORC June 11-17",
+            "Reuters/Ipsos June 12-15",
+            "BBC Iran ceasefire report"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "Ceasefire collapses; D wave trigger",
+          "sources": [
+            "BBC Iran ceasefire report",
+            "The Hill Iran polling analysis",
+            "Polymarket Iran-Hormuz market"
+          ],
+          "tier": "S1"
+        }
+      ],
+      "status": "speculative",
+      "why_they_differ": "60-day interim deadline mid-August is the binary trigger; Strait of Hormuz 'fire-traded' weekend of June 27-29 already indicates fragility; either direction is a ±3-5 pt swing in Trump approval."
+    },
+    {
+      "claim": "SCOTUS NRSC v. FEC ruling direction pending — could strike FECA party-coordination caps and neutralize DCCC $45.3M cycle-record cash lead",
+      "positions": [
+        {
+          "stance": "Rs win — FECA caps fall — DCCC $45.3M edge neutralized",
+          "sources": [
+            "Cook Political Report April 13 outlook",
+            "USPollingData projected outside spending tracker"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "Ds win — FECA caps upheld — DCCC lead protected",
+          "sources": [
+            "Cook Political Report April 13 outlook",
+            "DCCC memo March 18"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "speculative",
+      "why_they_differ": "SCOTUS conservative-majority 6-3 is institutionally favorable to Rs, but election-period legitimacy concerns could affect timing. Pre-election ruling has high stakes for D+5+ generic ballot interpretation."
+    }
+  ]
+}

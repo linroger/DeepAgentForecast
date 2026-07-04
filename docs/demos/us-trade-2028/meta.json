@@ -1,0 +1,9 @@
+{
+ "pipeline_id": "pipe_bf2bb3095d11",
+ "prompt": "Forecast the future state of the US trading system by 2028. Cover: tariff policy trajectory and the effective US tariff rate, the fate of the IEEPA-based reciprocal tariff regime post-Supreme-Court ruling, reshoring/nearshoring of supply chains, trade relationships with China/EU/Mexico/Canada, the role of industrial policy (CHIPS Act, export controls), the WTO/multilateral trade order, and how AI-driven productivity and automation interact with trade competitiveness. Identify which actors decisions will most shape this outcome and produce a calibrated probabilistic forecast.",
+ "created_at": "2026-07-02T18:50:02.567717+00:00",
+ "mode": "full",
+ "rounds": 36,
+ "personas": 20,
+ "has_actors": true
+}

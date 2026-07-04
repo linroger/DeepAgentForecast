@@ -1,0 +1,2749 @@
+{
+  "central_question": "What will be the state of the US trading system by end-2028, including the effective tariff rate (ETR), the durability of the post-SCOTUS Section 232/122/301 patchwork, the trajectory of US-China/USMCA/EU trade relationships, and the role of AI-driven reshoring vs. export controls?",
+  "as_of_date": "2026-07-03",
+  "situation_brief": {
+    "current_situation": "After the 20 February 2026 SCOTUS ruling in Learning Resources v. Trump (6-3) invalidated IEEPA-based reciprocal and drug-trafficking tariffs, the effective US tariff rate fell from a 2025 peak near 16% to ~7.0% (Wharton, 16 June 2026) but has been rebuilt via Section 122 (10-15% global surcharge imposed 24 February 2026, capped at 150 days), expanded Section 232 (50% high-metal content, 25% derivatives, 15% floor; 100% on patented pharmaceuticals effective April 2026 with UK carve-out at 10%; 25% on high-end AI chips since January 2026), and surviving Section 301 actions against China (Lists 1-3 at 25%, List 4A at 7.5%). Yale Budget Lab's pre-substitution ETR reached 11.8% by 8 April 2026, the highest since the early 1940s. The US declined to renew USMCA on 1 July 2026, triggering annual joint reviews rather than collapse. CBP is processing a $166-175B IEEPA refund pool across roughly 330,000 importers and 53 million entries, with ~$90B accepted and ~$24B transmitted by 26 June 2026.",
+    "context": "The 2025 'Liberation Day' IEEPA tariffs pushed the ETR to its highest level since 1947. Court losses culminating in the February 2026 SCOTUS ruling ended the IEEPA legal basis and triggered a $166-175B refund obligation. The administration pivoted to a three-pillar Plan B: Section 232 sectoral expansions (legally resilient since the 1980s), Section 122 (statutorily capped at 150 days, lapsing 24 July 2026 absent Congressional extension), and Section 301 buildout (60 countries under forced-labor investigation as of 12 March 2026, with USTR findings on 2 June 2026 setting 12.5% on 46 countries and 10% on 14 others). Fiscal sustainability now depends on $1.3-1.9T in 10-year tariff revenue (Yale), while the household burden is estimated at $2,000-2,800/year (Yale Budget Lab) or $1,200-1,500/year if only Section 122 is extended (Tax Foundation).",
+    "dynamics": "Six forces are in tension: (i) judicial constraint versus executive trade ambition following the major-questions doctrine application; (ii) a dormant House tariff-rebellion caucus (Don Bacon R-NE et al.) versus Trump-aligned leadership and a Senate CRA precedent that swings the Section 122 cliff; (iii) the legal durability of Section 232/301 versus the political volatility of Section 122's 24 July 2026 expiry; (iv) US tariff-revenue needs versus trading-partner retaliation and US export-competitiveness erosion; (v) industrial-policy reshoring via CHIPS Act disbursements versus comparative advantage and Mexican nearshoring (Mexico FDI hit a record $40.87B in 2025); (vi) AI-driven productivity gains (hyperscaler capex ~$700-830B in 2026, 75% AI-directed) versus export controls strangling the PRC chip-customer base that historically funded US R&D. The administration's parallel Section 301 buildout is consistent with planning around the Section 122 lapse rather than fighting for extension.",
+    "fault_lines": [
+      "Constitutional boundary of presidential tariff authority after the 6-3 SCOTUS ruling; scope of 'clear delegation' under IEEPA, Section 232, and Section 122",
+      "Section 122 cliff on 24 July 2026 — Trump/Lutnick/Greer pushing extension versus House Bacon-led rebels letting it lapse versus a parallel Section 301 buildout as substitute",
+      "USMCA renewal status — USTR Greer's 'non-renewal + annual reviews' framework versus Canada/Mexico preference for status quo and the USITC 2027 auto rules-of-origin report",
+      "CHIPS Act continuity under reported NIST restructuring and inter-agency cuts threatening disbursement timelines, with TSMC Arizona 2nm localization (per Taiwan MOEA clearance) and Intel ownership uncertainty as open variables",
+      "Export-control depth on China versus Gulf sovereign AI buyers — BIS 31 May 2026 Blackwell-loophole closure and 7 April 2026 Approved IC Designer extension to 31 December 2026 versus the 20 November 2025 BIS approval of 35,000 Nvidia GB300 equivalents each to UAE G42 and Saudi Humain",
+      "WTO reform and Appellate Body restart — DG Okonjo-Iweala's MPIA 'bridge' framing at MC14 Yaoundé (March 2026) versus continuous US veto since December 2019"
+    ],
+    "catalysts": [
+      "Federal Circuit merits ruling on Section 122 (expected late 2026 / early 2027) and any Supreme Court review",
+      "Section 122 lapse on 24 July 2026 and substitute Section 301 actions taking effect by Q4 2026",
+      "China rare-earth export-control reversal or extension at the 10/27 November 2026 expiry of the Busan truce suspension",
+      "AMIC (Advanced Manufacturing Investment Credit) extension vote before 31 December 2026 sunset — SIA + 17 trade groups lobbying for 30-35% rate",
+      "2026 midterm elections re-shaping chamber math for 2027-2028 tariff codification prospects",
+      "USMCA Joint Review Round 3 (week of 20 July 2026) and USITC auto-RoO report due 2027",
+      "Kevin Warsh Fed posture shift if tariff inflation re-accelerates — first Trump-Warsh confrontation will signal independence",
+      "Bond-vigilante episode forcing fiscal constraint on the $1.3-1.9T 10-year tariff revenue baseline"
+    ]
+  },
+  "actors": [
+    {
+      "name": "Donald J. Trump",
+      "type": "Person",
+      "role": "President of the United States; sole constitutional authority to impose tariffs under Sections 232/301/122 post-SCOTUS",
+      "stance": "Tariffs are 'the most beautiful word in the dictionary'; will use every available authority to maintain tariff regime",
+      "influence": "high",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "description": "45th and 47th President of the United States, in office from 20 January 2025, whose administration constructed the post-IEEPA Plan B of Section 232/122/301 tariffs.",
+      "aliases": [
+        "President Trump",
+        "Trump White House",
+        "The President"
+      ],
+      "goals": [
+        "Maintain ETR ≥7% through 2028 via durable Section 232/301 statutes",
+        "Force bilateral concessions from China, Mexico, EU, and Gulf partners",
+        "Drive pharmaceutical and semiconductor reshoring",
+        "Limit Congress's tariff-rebellion capacity"
+      ],
+      "constraints": [
+        "SCOTUS ruling on major-questions doctrine",
+        "Section 122 150-day statutory cap",
+        "Midterm Republican pressure",
+        "Bond-market vigilantes and Bessent TGA strategy"
+      ],
+      "assets": [
+        "Executive powers under Sections 232, 301, 122",
+        "Commerce/USTR machinery",
+        "Truth Social megaphone",
+        "Republican caucus loyalty"
+      ],
+      "vulnerabilities": [
+        "Court losses on tariff authority",
+        "Voter cost-of-living backlash",
+        "Bessent-Powell/Warsh coordination breakdown",
+        "Loss of House in 2026 midterms"
+      ],
+      "stated_vs_revealed": "Stated 'reciprocal' framing masks a preference for bilateral leverage — revealed by the immediate pivot from IEEPA to Section 301/232/122 when IEEPA was struck down.",
+      "worldview": {
+        "values": [
+          "Tariff revenue",
+          "Visible protection of US manufacturing",
+          "Mercantilist trade-deficit framing",
+          "Bilateral deal-making over multilateralism"
+        ],
+        "beliefs": [
+          "Trade deficits reflect unfairness by partners",
+          "Tariffs are a tax on foreigners and a tool of national security",
+          "The WTO constrains US sovereignty",
+          "Allies should pay more"
+        ],
+        "identity": "Transactional deal-maker who treats tariffs as both economic policy and political theater",
+        "frame": "Tariffs as leverage, sovereignty, and revenue rather than as consumer taxes"
+      },
+      "incentives": [
+        {
+          "driver": "Electoral core base support via visible protectionism",
+          "gains_if": "Durable Section 232/301 regime that can be claimed as a political achievement",
+          "loses_if": "Court strikes down substitute authorities and triggers farmer/retailer backlash",
+          "intensity": "high"
+        },
+        {
+          "driver": "Tariff revenue as deficit reducer",
+          "gains_if": "$1.3-1.9T 10-year baseline incorporated into budget",
+          "loses_if": "Bond-vigilante episode forces fiscal constraint",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Sections 232/301/122 statutory authorities",
+        "Cabinet (Lutnick/Commerce, Greer/USTR, Bessent/Treasury)",
+        "Truth Social and Republican media ecosystem"
+      ],
+      "risk_tolerance": "high",
+      "memory": "Track record shows preference for transactional, time-limited tariff patches over durable statutory changes; willing to absorb short-term revenue uncertainty for political symbolism."
+    },
+    {
+      "name": "United States Congress",
+      "type": "Government",
+      "role": "Legislative branch; must affirmatively extend Section 122 after 24 July 2026 and consider tariff codification",
+      "stance": "Article I tariff authority belongs to Congress; tariffs are taxes paid by US importers and consumers (Don Bacon R-NE)",
+      "influence": "high",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "description": "US bicameral legislature (House + Senate), whose tariff-rebellion caucus and CRA precedent determine whether Section 122 is extended and whether Section 232 is codified.",
+      "aliases": [
+        "US Congress",
+        "House + Senate",
+        "Congress"
+      ],
+      "goals": [
+        "Reassert Article I tariff authority via review legislation",
+        "Survive 2026 midterms without a wholesale tariff backlash from retail districts",
+        "Block Trump vetoes via sufficient GOP defectors"
+      ],
+      "constraints": [
+        "Thin House Republican margin",
+        "Senate CRA precedent on Canada tariffs as swing venue",
+        "Insufficient override votes to defeat presidential veto"
+      ],
+      "assets": [
+        "Section 122 extension vote",
+        "Tariff codification legislation",
+        "CRA review authority",
+        "Power of the purse"
+      ],
+      "vulnerabilities": [
+        "Unable to override Trump veto without sufficient GOP defectors",
+        "Midterm losses could shift chamber control to Democrats",
+        "Freedom Caucus demands for tariff codification create internal pressure"
+      ],
+      "stated_vs_revealed": "Stated bipartisan appetite for tariff reform; revealed absence of a viable override path in mid-2026.",
+      "incentives": [
+        {
+          "driver": "Reclaim institutional tariff authority from the executive",
+          "gains_if": "Codification that constrains future presidential tariff actions",
+          "loses_if": "Triggering Trump veto and GOP primary retribution",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Section 122 extension vote",
+        "CRA review",
+        "Tariff codification vehicles",
+        "Committee jurisdiction (Senate Finance, House Ways and Means)"
+      ],
+      "risk_tolerance": "low",
+      "memory": "Canada tariff CRA passed Senate in 2025; House tariff-skeptic caucus (Bacon) has stated intent but no override path."
+    },
+    {
+      "name": "Jamieson Greer",
+      "type": "Person",
+      "role": "United States Trade Representative; owner of Section 301 investigations and USMCA annual-review negotiation",
+      "stance": "Pursuing bilateral negotiation track post-USMCA Joint Review; launched 60 Section 301 forced labor investigations (2 June 2026 findings)",
+      "influence": "high",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "description": "US Trade Representative heading USTR; the administration's principal trade negotiator and on-record voice for the 'we will engage' posture after the 1 July 2026 USMCA non-renewal.",
+      "aliases": [
+        "USTR",
+        "USTR Greer",
+        "Ambassador Greer"
+      ],
+      "goals": [
+        "Deliver bilateral Section 301 actions filling the IEEPA void",
+        "Manage USMCA annual reviews without collapse",
+        "Coordinate with Commerce on Section 232 expansions"
+      ],
+      "constraints": [
+        "SCOTUS precedent on executive tariff authority",
+        "Multilateral friction from Section 301 forced-labor coverage",
+        "Midterm election timing"
+      ],
+      "assets": [
+        "Section 301 initiation and list-making authority",
+        "USMCA negotiation mandate",
+        "Cabinet coordination with Lutnick and Bessent"
+      ],
+      "vulnerabilities": [
+        "Section 301 actions could be challenged on WTO/MPIA grounds",
+        "Bilateral negotiations could collapse into retaliation",
+        "Greer was absent from MC14, signalling limited multilateral bandwidth"
+      ],
+      "stated_vs_revealed": "Stated preference for bilateral deals; revealed absence at MC14 and aggressive Section 301 forced-labor buildout show a unilateral toolkit.",
+      "incentives": [
+        {
+          "driver": "Portfolio of 'fixed' bilateral arrangements and durable Section 301 actions",
+          "gains_if": "Section 301 actions survive court review and USMCA survives annual review",
+          "loses_if": "Section 301 actions struck down and USMCA disintegrates",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Section 301 authority",
+        "USMCA annual-review mandate",
+        "Cabinet process with Lutnick and Bessent"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "USTR has launched 60 Section 301 forced-labor investigations; first cohort of findings (2 June 2026) set 12.5% on 46 countries and 10% on 14 countries."
+    },
+    {
+      "name": "Howard Lutnick",
+      "type": "Person",
+      "role": "Secretary of Commerce; line authority over BIS, CHIPS Program Office, and ITA",
+      "stance": "Oversees Section 232 investigations on semiconductors, pharmaceuticals, lumber, and critical minerals; tariffs essential for reshoring and national security",
+      "influence": "high",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "description": "US Secretary of Commerce with statutory authority over the Bureau of Industry and Security (BIS) and co-administration of the CHIPS Program Office.",
+      "aliases": [
+        "Commerce Secretary Lutnick",
+        "Secretary of Commerce"
+      ],
+      "goals": [
+        "Build coherent industrial-policy portfolio across chips, pharma, and AI",
+        "Tighten China-bound export controls while opening Gulf sovereign-AI approvals",
+        "Deliver Section 232 expansion as durable tariff architecture"
+      ],
+      "constraints": [
+        "Subject to Trump volatility on tariff authority",
+        "Court losses cascading back through Commerce processes",
+        "Reported NIST/CHIPS restructuring cuts"
+      ],
+      "assets": [
+        "BIS Under Secretary",
+        "CHIPS Program Office co-administration",
+        "ITA trade-remedy investigations",
+        "Section 232 expansion pipeline"
+      ],
+      "vulnerabilities": [
+        "CHIPS Act continuity risk under NIST cuts",
+        "Section 232 semiconductor and pharma investigations could be challenged",
+        "Reputational exposure if BIS licensing becomes politicized"
+      ],
+      "stated_vs_revealed": "Stated 'national security' framing; revealed dual-track posture — strict on China, permissive on Gulf sovereign AI.",
+      "incentives": [
+        {
+          "driver": "Coherent industrial-policy portfolio",
+          "gains_if": "On-time CHIPS disbursements and Section 232 expansion that survives court review",
+          "loses_if": "Court losses cascade back through Commerce processes",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "BIS",
+        "CHIPS Program Office",
+        "ITA",
+        "Section 232 authority"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Signature actions include the 31 May 2026 BIS Blackwell-loophole closure, the 7 April 2026 Approved IC Designer extension to 31 December 2026, and the Coherent letter-of-intent up to $50M for Indium Phosphide (16 June 2026)."
+    },
+    {
+      "name": "Kevin Warsh",
+      "type": "Person",
+      "role": "Chairman of the Federal Reserve Board (confirmed 13 May 2026, 54-45 vote)",
+      "stance": "Hawkish on inflation; cautious on rate cuts; tariff-aware",
+      "influence": "high",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "description": "Chairman of the Federal Reserve Board confirmed 13 May 2026 by the closest modern margin; inherited tariff-driven inflation (+0.8% core PCE contribution) and held rates at 3.50-3.75% at the June 2026 FOMC.",
+      "aliases": [
+        "Fed Chair Warsh",
+        "Chairman Warsh"
+      ],
+      "goals": [
+        "Anchor 2% inflation expectations",
+        "Preserve Fed independence under Trump pressure",
+        "Avoid Treasury-market dislocation"
+      ],
+      "constraints": [
+        "Statutory Fed independence",
+        "Trump public pressure for cuts",
+        "Bond-vigilante dynamics conditioning the rate path"
+      ],
+      "assets": [
+        "FOMC majority",
+        "Interest-rate tool",
+        "Forward guidance",
+        "Dual mandate authority"
+      ],
+      "vulnerabilities": [
+        "Stagflation trifecta (tariffs + AI capex-driven yield moves + services price stickiness)",
+        "Trump pressure pattern echoes 2019 Powell precedent",
+        "Tariff-driven inflation forces hawkish hold past 2027"
+      ],
+      "stated_vs_revealed": "Stated commitment to Fed independence; revealed hawkish pivot at June 2026 SEP (9 of 18 project at least one hike in 2026).",
+      "incentives": [
+        {
+          "driver": "Balanced dual mandate and Fed independence",
+          "gains_if": "Soft landing with inflation returning to 2%",
+          "loses_if": "Credibly tightened inflation expectations force prolonged hold past 2027",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "FOMC vote",
+        "Forward guidance",
+        "Open Market Desk",
+        "Discount Window"
+      ],
+      "risk_tolerance": "low",
+      "memory": "June 2026 dot plot showed 9 of 18 projecting at least one hike in 2026; first FOMC meeting held rates 3.50-3.75%."
+    },
+    {
+      "name": "Scott Bessent",
+      "type": "Person",
+      "role": "Secretary of the Treasury; manages TGA build-up to neutralize bond vigilantes",
+      "stance": "Tariffs will 'snap back to exactly where they were' pre-SCOTUS via Section 232/122/301 layering",
+      "influence": "high",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "description": "US Secretary of the Treasury whose TGA build-up strategy (~$300B in July 2025 to ~$900B in February 2026) is designed to neutralize bond-vigilante dynamics during the tariff regime.",
+      "aliases": [
+        "Treasury Secretary Bessent",
+        "Secretary Bessent"
+      ],
+      "goals": [
+        "Manage the $166-175B IEEPA refund pool without fiscal disorder",
+        "Maintain foreign demand for Treasuries",
+        "Use tariff revenue as deficit reducer"
+      ],
+      "constraints": [
+        "Bond-vigilante dynamics",
+        "Foreign demand for Treasuries",
+        "Court rulings on tariff authority"
+      ],
+      "assets": [
+        "TGA management",
+        "Debt ceiling negotiations",
+        "Sanctions authority",
+        "G20/IMF engagement"
+      ],
+      "vulnerabilities": [
+        "Vigilante episodes if TGA strategy fails",
+        "Foreign buyers rotating out of Treasuries",
+        "Refund-pool fiscal pressure"
+      ],
+      "stated_vs_revealed": "Stated 'snap back' commitment; revealed reliance on parallel Section 232/301 buildout to substitute IEEPA revenue.",
+      "incentives": [
+        {
+          "driver": "Fiscal sustainability and market stability",
+          "gains_if": "TGA strategy absorbs vigilantes and tariff revenue fills deficit",
+          "loses_if": "Vigilante episode forces fiscal restraint that constrains tariff regime",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "TGA",
+        "Debt ceiling",
+        "Sanctions",
+        "IMF/G20 engagement"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "TGA built from ~$300B in July 2025 to ~$900B in February 2026; pledged tariffs will 'snap back to exactly where they were' post-SCOTUS."
+    },
+    {
+      "name": "Chief Justice John Roberts",
+      "type": "Person",
+      "role": "Authored the SCOTUS majority opinion (6-3) in Learning Resources v. Trump invalidating IEEPA tariffs",
+      "stance": "'IEEPA contains no reference to tariffs or duties'; tariffs are taxes requiring clear congressional authorization",
+      "influence": "high",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "description": "Chief Justice of the United States who authored the 6-3 majority in Learning Resources v. Trump (20 February 2026) striking down IEEPA-based reciprocal and drug-trafficking tariffs.",
+      "aliases": [
+        "Chief Justice Roberts",
+        "CJ Roberts"
+      ],
+      "goals": [
+        "Apply the major-questions doctrine to executive tariff claims",
+        "Preserve congressional Article I tariff authority",
+        "Set binding precedent on executive emergency economic powers"
+      ],
+      "constraints": [
+        "Justices Kavanaugh, etc. dissent",
+        "Lower-court interpretations",
+        "Public/political pressure"
+      ],
+      "assets": [
+        "Supreme Court majority",
+        "Major-questions doctrine",
+        "Stare decisis on statutory interpretation"
+      ],
+      "vulnerabilities": [
+        "Dissent from Kavanaugh and two others limits reach",
+        "Subsequent cases (Section 122, Section 232) may narrow the holding"
+      ],
+      "stated_vs_revealed": "Stated narrow holding on IEEPA; revealed broader major-questions framework applicable to other emergency statutes.",
+      "incentives": [
+        {
+          "driver": "Institutional legitimacy of the Supreme Court",
+          "gains_if": "Major-questions doctrine constrains future executive overreach",
+          "loses_if": "Court perceived as politicized after striking down centerpiece policy",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Supreme Court majority",
+        "Major-questions doctrine",
+        "Statutory interpretation tools"
+      ],
+      "risk_tolerance": "low",
+      "memory": "Authored the 6-3 opinion in Learning Resources v. Trump on 20 February 2026."
+    },
+    {
+      "name": "Section 122 Expiration Event",
+      "type": "Other",
+      "role": "Statutorily-embedded decision cliff: Section 122 surcharge expires 24 July 2026 absent affirmative Congressional extension",
+      "stance": "Statutory 150-day cap (19 U.S.C. § 2132) creates an automatic lapse unless Congress acts",
+      "influence": "high",
+      "simulation_tier": 4,
+      "role_class": "arbiter",
+      "description": "Statutory cliff on 24 July 2026 when the Section 122 10-15% global surcharge imposed 24 February 2026 expires by operation of 19 U.S.C. § 2132 unless Congress affirmatively extends it.",
+      "aliases": [
+        "Section 122 cliff",
+        "S122 expiry",
+        "150-day clock"
+      ],
+      "goals": [
+        "Trigger Congressional vote on tariff authority",
+        "Force administration to pivot to Section 232/301 substitutes",
+        "Create fiscal visibility for tariff revenue baseline"
+      ],
+      "constraints": [
+        "Only Congress can extend",
+        "Trump cannot unilaterally extend",
+        "Federal Circuit Section 122 merits ruling may arrive before or after"
+      ],
+      "assets": [
+        "Statutory 150-day clock",
+        "CIT/Federal Circuit litigation",
+        "Congressional review vehicle"
+      ],
+      "vulnerabilities": [
+        "Could be mooted by Federal Circuit ruling before expiry",
+        "Congressional extension would lock in 10-15% global rate",
+        "Administration's parallel Section 301 buildout plans around the lapse"
+      ],
+      "stated_vs_revealed": "Statutory mechanism; administration revealed preference for lapse by building parallel Section 301 substitutes.",
+      "incentives": [
+        {
+          "driver": "Statutory operation",
+          "gains_if": "Clean reset that forces Section 301 substitution",
+          "loses_if": "Congress extends and locks in 10-15% global rate",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "19 U.S.C. § 2132",
+        "Congressional review",
+        "CIT litigation"
+      ],
+      "risk_tolerance": "low",
+      "memory": "Section 122 imposed 24 February 2026; statutory clock expires 24 July 2026."
+    },
+    {
+      "name": "Bureau of Industry and Security",
+      "type": "Government",
+      "role": "Sole US licensing authority for Export Administration Regulations (EAR)-controlled items; export-control gatekeeper",
+      "stance": "National security; prevent advanced AI accelerators reaching PRC military end-use; preserve dual-track Gulf approvals",
+      "influence": "high",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "Bureau of Industry and Security within the US Department of Commerce; sole US licensing authority for EAR-controlled items and the entity-list administrator.",
+      "aliases": [
+        "BIS",
+        "Commerce/BIS"
+      ],
+      "goals": [
+        "Prevent advanced AI accelerators reaching PRC military end-use",
+        "Preserve dual-track Gulf approvals",
+        "Rationalize the Approved IC Designer regime",
+        "Close the 'ultimate parent headquartered in PRC' loophole"
+      ],
+      "constraints": [
+        "MATCH Act 2026 (proposed) could further restrict ASML servicing of older DUV in China",
+        "Foreign-issuer licensing dependencies",
+        "Inter-agency clearance timelines"
+      ],
+      "assets": [
+        "EAR licensing",
+        "License-application backlog",
+        "Foreign Direct Product Rule",
+        "Entity List",
+        "Validated End-User authorizations"
+      ],
+      "vulnerabilities": [
+        "MATCH Act passage would reduce Allied tool-vendor leverage",
+        "Court challenges to licensing determinations",
+        "Capacity constraints on license-application processing"
+      ],
+      "stated_vs_revealed": "Stated 'national security'; revealed dual-track posture — strict on China (Blackwell/MI350x loophole closure 31 May 2026), permissive on Gulf (20 November 2025 approvals of 35,000 GB300 equivalents each to G42 and Humain).",
+      "incentives": [
+        {
+          "driver": "National security and chokepoint control",
+          "gains_if": "Tightened China controls and continued Gulf approvals",
+          "loses_if": "PRC indigenizes DUV at scale and MATCH Act cuts servicing",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "EAR licensing",
+        "Foreign Direct Product Rule",
+        "Entity List",
+        "Approved IC Designer regime"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "7 April 2026 extension of Approved IC Designer timeline to 31 December 2026; 31 May 2026 closure of the Blackwell/MI350x loophole; 20 November 2025 Gulf approvals."
+    },
+    {
+      "name": "CHIPS Program Office",
+      "type": "Government",
+      "role": "Disbursement authority for $52.7B direct + $11B R&D under the CHIPS and Science Act",
+      "stance": "Onshoring capacity; allied supply-chain diversification",
+      "influence": "high",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "CHIPS Program Office within NIST/US Department of Commerce, administering $52.7B in direct disbursements and $11B in R&D under the CHIPS and Science Act of 2022.",
+      "aliases": [
+        "CPO",
+        "CHIPS Office",
+        "NIST CHIPS"
+      ],
+      "goals": [
+        "Complete Tier-1 fab disbursements to TSMC AZ, Intel OH/AZ, Samsung TX",
+        "Diversify materials and packaging supply chain",
+        "Maintain on-time fab completion milestones"
+      ],
+      "constraints": [
+        "Personnel cuts at NIST threaten programmatic continuity",
+        "Workforce and permitting bottlenecks",
+        "AMIC expiration on 31 December 2026 absent extension"
+      ],
+      "assets": [
+        "$52.7B direct disbursement authority",
+        "$11B R&D authority",
+        "Milestone-driven funding agreements",
+        "DOE Title XVII LOAN coordination"
+      ],
+      "vulnerabilities": [
+        "NIST restructuring cuts (reported by Computerworld) threaten disbursement timelines",
+        "AMIC expiration would chill second-wave investment",
+        "Intel ownership change could disrupt CHIPS milestones"
+      ],
+      "stated_vs_revealed": "Stated on-schedule execution; revealed vulnerability to NIST cuts and workforce/permitting lag.",
+      "incentives": [
+        {
+          "driver": "On-schedule fab completion and disbursement targets",
+          "gains_if": "On-time Tier-1 fab completion and AMIC extension",
+          "loses_if": "NIST cuts delay milestones and AMIC expires 31 December 2026",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "$52.7B direct",
+        "$11B R&D",
+        "DOE Title XVII LOAN coordination"
+      ],
+      "risk_tolerance": "low",
+      "memory": "16 June 2026 letter-of-intent with Coherent up to $50M for Indium Phosphide; ongoing Tier-1 disbursements to TSMC AZ, Intel OH/AZ, Samsung TX."
+    },
+    {
+      "name": "TSMC",
+      "type": "Organization",
+      "role": "Chokepoint foundry; sole source of ≤2nm fabrication at scale",
+      "stance": "Customer access across all jurisdictions; 'silicon shield' commitment to Taiwan",
+      "influence": "high",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "Taiwan Semiconductor Manufacturing Company, the Taiwanese contract chip foundry and sole source of ≤2nm fabrication at scale.",
+      "aliases": [
+        "Taiwan Semiconductor Manufacturing Company",
+        "台積電",
+        "TSMC Arizona"
+      ],
+      "goals": [
+        "On-schedule Arizona expansion",
+        "Dual-fab risk diversification across Taiwan and Arizona",
+        "Maintain technology retention in Taiwan"
+      ],
+      "constraints": [
+        "Taiwan MOEA export of process technology",
+        "Customer demand across Nvidia/AMD/Apple",
+        "Court and BIS licensing for technology transfer"
+      ],
+      "assets": [
+        "≤2nm fabrication capability",
+        "Arizona Gigafab cluster",
+        "Customer relationships with Nvidia, AMD, Apple"
+      ],
+      "vulnerabilities": [
+        "Taiwan Strait disruption that US onshoring cannot yet replace",
+        "Taiwan MOEA permit risk for AZ 2nm",
+        "Customer concentration in AI accelerator demand"
+      ],
+      "stated_vs_revealed": "Stated 'silicon shield' commitment to Taiwan; revealed AZ expansion and 2nm localization permit as de facto partial off-shielding.",
+      "incentives": [
+        {
+          "driver": "Customer access and capacity allocation",
+          "gains_if": "On-schedule Arizona expansion and dual-fab risk diversification",
+          "loses_if": "Taiwan Strait disruption or MOEA blocks AZ 2nm export",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "≤2nm process",
+        "Arizona Gigafab",
+        "Customer book"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Taiwan MOEA clearance for AZ 2nm localization; TSMC AZ Fab 1 (N4) high-volume Q4 2024; Fab 2 (N3) targeted H2 2027; first US-made Nvidia Blackwell wafer at TSMC AZ October 2025."
+    },
+    {
+      "name": "Nvidia",
+      "type": "Organization",
+      "role": "AI accelerator monopolist; ~90% of merchant AI GPU shipments",
+      "stance": "Customer access across all jurisdictions; revenue",
+      "influence": "high",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "Nvidia Corporation, the US AI accelerator designer with ~90% of merchant AI GPU shipments and the most-discussed export-license subject.",
+      "aliases": [
+        "NVIDIA",
+        "NVDA"
+      ],
+      "goals": [
+        "Maintain Gulf approvals and hyperscaler relationships",
+        "Recover China market access or substitute with Huawei-Ascend displacement",
+        "Defend against AMD MI400/MI500 competition"
+      ],
+      "constraints": [
+        "BIS EAR licensing on Blackwell and successors",
+        "PRC rebuff of H200 in June 2026",
+        "Trump-administration 15% revenue arrangement controversy (August 2025)"
+      ],
+      "assets": [
+        "~90% AI GPU shipment share",
+        "H200, Blackwell, Rubin roadmap",
+        "Hyperscaler customer relationships",
+        "Gulf sovereign-AI approvals"
+      ],
+      "vulnerabilities": [
+        "PRC rebuff of H200 in Beijing (June 2026)",
+        "BIS 31 May 2026 Blackwell-loophole closure",
+        "Trump-administration 15% revenue arrangement controversy"
+      ],
+      "stated_vs_revealed": "Stated 'customer access across all jurisdictions'; revealed reliance on Gulf approvals and concentration in hyperscaler demand as PRC market collapses.",
+      "incentives": [
+        {
+          "driver": "Revenue and market share",
+          "gains_if": "Continued Gulf approvals and constrained Chinese competition",
+          "loses_if": "Blacklisting in China compounds the 15% revenue arrangement controversy",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "AI accelerator roadmap",
+        "Hyperscaler relationships",
+        "Gulf sovereign-AI approvals"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "June 2026 visit to Beijing to sell H200 was rebuffed; PRC pushing Huawei Ascend alternatives; first US-made Blackwell wafer at TSMC AZ October 2025."
+    },
+    {
+      "name": "AMD",
+      "type": "Organization",
+      "role": "Nvidia challenger; MI400 series launching 2H 2026, MI500 in 2027",
+      "stance": "Competition to Nvidia; customer access across all jurisdictions",
+      "influence": "medium",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "Advanced Micro Devices, the US chip designer and Nvidia challenger; MI400 series (CDNA 5, 2nm via TSMC, 432 GB HBM4) launching 2H 2026 with projected $7.2B first-year revenue.",
+      "aliases": [
+        "Advanced Micro Devices",
+        "AMD"
+      ],
+      "goals": [
+        "Lift Nvidia share via MI400/MI500",
+        "Secure Gulf and hyperscaler customers",
+        "Navigate BIS licensing for MI350x/MI400"
+      ],
+      "constraints": [
+        "BIS EAR licensing on MI350x/MI400",
+        "TSMC 2nm execution dependence",
+        "PRC accelerated adoption of Huawei Ascend"
+      ],
+      "assets": [
+        "MI400/MI500 roadmap",
+        "Hyperscaler relationships",
+        "Humain–Oracle partnership"
+      ],
+      "vulnerabilities": [
+        "BIS 31 May 2026 licensing extension to China-HQ shells",
+        "PRC accelerated Huawei Ascend adoption",
+        "TSMC 2nm execution risk"
+      ],
+      "stated_vs_revealed": "Stated 'competition to Nvidia'; revealed dependence on TSMC 2nm execution and BIS allocation.",
+      "incentives": [
+        {
+          "driver": "Lift Nvidia share and revenue",
+          "gains_if": "MI400 launch on schedule and BIS licenses preserved",
+          "loses_if": "PRC accelerates Huawei Ascend adoption and BIS restricts further",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "MI400/MI500",
+        "TSMC 2nm capacity",
+        "Hyperscaler relationships"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "MI400 projected $7.2B first-year revenue; MI500 targets up to 1000× MI300X AI performance; subject of 31 May 2026 BIS licensing extension alongside Blackwell."
+    },
+    {
+      "name": "ASML Holding N.V.",
+      "type": "Organization",
+      "role": "Dutch lithography monopoly; sole supplier of EUV and chokepoint for advanced DUV",
+      "stance": "Allied export discipline; revenue",
+      "influence": "high",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "ASML Holding N.V., the Dutch monopoly supplier of EUV lithography and chokepoint for advanced DUV, exposed to MATCH Act 2026 restrictions on DUV servicing in PRC.",
+      "aliases": [
+        "ASML"
+      ],
+      "goals": [
+        "Preserve Allied export discipline",
+        "Sustain CHIPS customer base and Gulf approvals",
+        "Avoid MATCH Act restrictions on DUV servicing in PRC"
+      ],
+      "constraints": [
+        "Dutch foreign-trade rules binding EUV/DUV exports",
+        "MATCH Act 2026 proposed restrictions",
+        "PRC DUV indigenization attempts (FT reports first advanced DUV trials)"
+      ],
+      "assets": [
+        "EUV monopoly",
+        "DUV service revenue in PRC",
+        "Customer relationships with TSMC, Samsung, Intel"
+      ],
+      "vulnerabilities": [
+        "MATCH Act 2026 passage would cut DUV servicing in PRC",
+        "US-Dutch policy whiplash",
+        "PRC DUV indigenization at scale"
+      ],
+      "stated_vs_revealed": "Stated 'allied export discipline'; revealed revenue dependence on PRC DUV servicing.",
+      "incentives": [
+        {
+          "driver": "Revenue and Allied alignment",
+          "gains_if": "Continued Allied access and Gulf approvals",
+          "loses_if": "PRC indigenizes DUV at scale and MATCH Act cuts servicing",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "EUV monopoly",
+        "DUV service revenue",
+        "Allied customer base"
+      ],
+      "risk_tolerance": "low",
+      "memory": "FT reports first advanced DUV trials in PRC; MATCH Act 2026 is proposed but politically undecided at dossier as-of date."
+    },
+    {
+      "name": "US Hyperscaler / Frontier-AI Bloc",
+      "type": "Organization",
+      "role": "Combined AI demand bloc (Microsoft, Google, Amazon, Meta, Oracle, with OpenAI and Anthropic as frontier-model sub-layer)",
+      "stance": "Compute access; market access across jurisdictions; AI-safety leadership",
+      "influence": "high",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "Collective actor representing the combined AI demand bloc of Microsoft, Google, Amazon, Meta, Oracle with OpenAI and Anthropic as frontier-model sub-layer; 2026 capex ~$700-830B with 75% AI-directed.",
+      "aliases": [
+        "Hyperscalers",
+        "Frontier-AI Bloc",
+        "Big Tech AI",
+        "Microsoft-Google-Amazon-Meta-Oracle bloc"
+      ],
+      "goals": [
+        "Sustain Gulf approvals and constrained Chinese access",
+        "Defend against tariff-driven cost-of-compute rise",
+        "Preserve chip-export control regime that slows training-run competitors"
+      ],
+      "constraints": [
+        "DOE grid-offtake dependence",
+        "BIS cloud-compute rulemaking",
+        "Tariff-driven cost-of-compute rise"
+      ],
+      "assets": [
+        "$700-830B 2026 capex",
+        "Frontier-model leadership",
+        "Cloud infrastructure",
+        "AI safety commitments to Gulf partners"
+      ],
+      "vulnerabilities": [
+        "Chip-export controls that slow training runs",
+        "Tariff-driven cost-of-compute rise",
+        "DOE grid-offtake constraints",
+        "Anthropic / OpenAI competitive parity shifts"
+      ],
+      "stated_vs_revealed": "Stated 'AI safety leadership'; revealed capex concentration in Nvidia/AMD and Gulf sovereign-AI approvals as anchor demand.",
+      "incentives": [
+        {
+          "driver": "Compute access and market power",
+          "gains_if": "Continued Gulf approvals and constrained Chinese competition",
+          "loses_if": "Chip-export controls slow training runs and tariffs raise compute costs",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "$700-830B capex",
+        "Frontier models",
+        "Cloud infrastructure",
+        "Gulf sovereign-AI partnerships"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Anthropic closed Series G at ~$380B valuation in February 2026; $30B ARR (~1,000+ enterprises paying $1M+ each; 8 of Fortune 10 use Claude); OpenAI at $24B ARR."
+    },
+    {
+      "name": "Government of Mexico",
+      "type": "Government",
+      "role": "Sheinbaum administration; principal foreign-government actor on USMCA",
+      "stance": "Plan A, Plan B, Plan C; pursuing USMCA modernization over renegotiation; $277B identified investment pipeline",
+      "influence": "high",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "Government of Mexico under President Claudia Sheinbaum; principal foreign-government actor on USMCA and the dominant beneficiary of nearshoring.",
+      "aliases": [
+        "Sheinbaum administration",
+        "Mexico",
+        "Gobierno de México"
+      ],
+      "goals": [
+        "Preserve USMCA continuity under annual review",
+        "Sustain nearshoring momentum and FDI inflows",
+        "Diversify exports away from US dependency over time"
+      ],
+      "constraints": [
+        "80%+ of exports go to US",
+        "RoO tightening via USITC 2027 report",
+        "Quiet de-escalation strategy limits bargaining leverage"
+      ],
+      "assets": [
+        "$40.87B FDI in 2025 (record)",
+        "Industrial vacancy in Monterrey, Guadalajara, Mexico City below 4%",
+        "$277B identified investment pipeline (Plan Mexico)"
+      ],
+      "vulnerabilities": [
+        "RoO tightening at 2027 USITC report",
+        "Annual review scrutiny",
+        "Energy policy reversal and Pemex fiscal stress",
+        "12% minimum wage hike raises labor costs"
+      ],
+      "stated_vs_revealed": "Stated preference for USMCA modernization over renegotiation; revealed willingness to absorb Section 232 derivative tariffs in exchange for RoO predictability.",
+      "incentives": [
+        {
+          "driver": "Manufacturing employment and export continuity",
+          "gains_if": "USMCA renew-without-tightening and FDI sustained",
+          "loses_if": "RoO tightening and annual-review fragmentation",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "USMCA participation",
+        "Plan Mexico $277B pipeline",
+        "Industrial corridor infrastructure"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "2025 FDI record $40.87B; November 2025 PRC critical-minerals positioning; USMCA Joint Review Round 2 15-17 June 2026; Round 3 week of 20 July 2026."
+    },
+    {
+      "name": "Government of Canada",
+      "type": "Government",
+      "role": "Carney administration; principal foreign-government actor on USMCA",
+      "stance": "Coordinating with Mexico on USMCA; pursuing 'Strategic Response' to US tariff threats",
+      "influence": "medium",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "Government of Canada under Prime Minister Mark Carney; principal foreign-government actor on USMCA and CUSMA-dependent economy.",
+      "aliases": [
+        "Canada",
+        "Carney government",
+        "Government of Canada"
+      ],
+      "goals": [
+        "Renew USMCA without tightening",
+        "Diversify beyond US market",
+        "Resolve US dairy TRQ panels under USMCA Chapter 31"
+      ],
+      "constraints": [
+        "25% tariffs (March 2025) vacated but retaliation risk persists",
+        "Bilateral talks have not formally started as of mid-2026",
+        "USMCA auto RoO and energy-policy conditioning"
+      ],
+      "assets": [
+        "CUSMA/USMCA participation",
+        "MPIA membership",
+        "Critical minerals supply",
+        "Energy exports to US"
+      ],
+      "vulnerabilities": [
+        "RoO tightening",
+        "Section 232 derivative auto-tariff counter-strike",
+        "Energy-policy conditioning",
+        "Dairy TRQ panel rulings"
+      ],
+      "stated_vs_revealed": "Stated 'strategic response' to US tariff threats; revealed dependence on USMCA and bilateral talks stalled.",
+      "incentives": [
+        {
+          "driver": "Preserve CUSMA-dependent economy",
+          "gains_if": "USMCA renew-without-tightening and Section 232 restraint",
+          "loses_if": "RoO, energy-conditioning, or Section 232 derivative auto-tariff counter-strike",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "CUSMA participation",
+        "MPIA membership",
+        "Energy exports"
+      ],
+      "risk_tolerance": "low",
+      "memory": "25% tariffs imposed March 2025 and later vacated; Bank of Canada projects 1.1% GDP growth in 2026 and 1.5% in 2027; dairy TRQ panels under USMCA Chapter 31 active."
+    },
+    {
+      "name": "Government of the People's Republic of China",
+      "type": "Government",
+      "role": "CCP Politburo / MOFCOM; principal foreign-government actor and aspirant chokepoint controller",
+      "stance": "Master of critical-minerals export-control regime; Busan truce holds until 10/27 November 2026; pushing Huawei Ascend",
+      "influence": "high",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "Government of the People's Republic of China under Xi Jinping; master of the gallium/germanium/antimony/superhard-materials export-control regime and pivotal critical-minerals supplier.",
+      "aliases": [
+        "PRC",
+        "CCP",
+        "China",
+        "Beijing",
+        "MOFCOM"
+      ],
+      "goals": [
+        "Re-tighten export controls after 27 November 2026 if truce lapses",
+        "Push Huawei Ascend as Nvidia replacement in PRC and Gulf",
+        "Avoid further US chip-export-control tightening"
+      ],
+      "constraints": [
+        "BIS 31 May 2026 Blackwell-loophole closure",
+        "Soybean purchase commitments (12 mmt target, 11.96 mmt by end of May 2026)",
+        "Trump-Xi Busan truce constraints"
+      ],
+      "assets": [
+        "Critical-minerals export controls (gallium, germanium, antimony, superhard)",
+        "Huawei Ascend and Cambricon indigenous AI chips",
+        "Soybean purchase leverage",
+        "Rare-earth licensing to EU below 25% of prior levels"
+      ],
+      "vulnerabilities": [
+        "BIS chip-export-control tightening",
+        "Nvidia H200 rebuff limits revenue",
+        "ASML MATCH Act risk",
+        "FORGE/Project Vault 60 Strategic Projects with 12-18 month window"
+      ],
+      "stated_vs_revealed": "Stated Busan truce cooperation; revealed posture of pushing Huawei Ascend (PRC steering toward indigenous alternatives) and redirecting rare-earth pressure to Japan/EU/KR.",
+      "incentives": [
+        {
+          "driver": "Sovereign control over critical inputs",
+          "gains_if": "Re-tightening export controls after 27 November 2026 and Huawei Ascend displacement of Nvidia",
+          "loses_if": "Further US chip-export-control tightening and FORGE/Project Vault supply chain alternatives",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Critical-minerals export controls",
+        "Huawei Ascend",
+        "Soybean leverage",
+        "MPIA membership"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Busan summit 7 November 2025 established one-year truce; MOFCOM Announcement No. 70 of 7 November 2025 suspended rare-earth export controls until 10/27 November 2026; soybean target 12 mmt, 11.96 mmt by end of May 2026; H200 rebuff reported June 2026 (Asia Times)."
+    },
+    {
+      "name": "European Commission, DG Trade",
+      "type": "Government",
+      "role": "Lead MPIA mover; CBAM enforcement from 1 January 2026; principal foreign-government + institutional actor",
+      "stance": "Turnberry Deal implementation (EU Parliament adopted 16 June 2026, 440-151-50); no retaliation despite US delays",
+      "influence": "high",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "European Commission under Ursula von der Leyen with DG Trade led by Maroš Šefčovič; CBAM in force on steel/aluminum/cement/fertilizers/hydrogen/electricity since 1 January 2026.",
+      "aliases": [
+        "EU Commission",
+        "DG Trade",
+        "von der Leyen Commission",
+        "Šefčovič DG Trade"
+      ],
+      "goals": [
+        "Implement Turnberry Deal and secure steel quotas",
+        "Retain MPIA court access",
+        "Compel structured US re-engagement on Section 232 derivative auto tariffs"
+      ],
+      "constraints": [
+        "Section 232 derivatives on steel/aluminum",
+        "CBAM financial obligations from 1 January 2026",
+        "US-EU pharmaceutical tariff friction"
+      ],
+      "assets": [
+        "CBAM revenue",
+        "MPIA membership",
+        "Turnberry Deal implementing regulation",
+        "EU single market"
+      ],
+      "vulnerabilities": [
+        "Section 232 derivative auto-tariff posture",
+        "Steel/aluminum tariff friction",
+        "Pharmaceutical tariff friction",
+        "Rare-earth licensing dependency on PRC (below 25% of prior levels)"
+      ],
+      "stated_vs_revealed": "Stated managed trade relationship preferable to escalation; revealed willingness to implement Turnberry Deal unilaterally and lead MPIA 'bridge' framing at MC14.",
+      "incentives": [
+        {
+          "driver": "CBAM revenue and MPIA court access",
+          "gains_if": "Turnberry implementation and structured US re-engagement",
+          "loses_if": "Section 232 derivative auto tariffs and continued rare-earth dependency",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "CBAM",
+        "Turnberry Deal",
+        "MPIA membership",
+        "EU single market"
+      ],
+      "risk_tolerance": "low",
+      "memory": "EU Parliament adopted Turnberry Deal implementing regulation 16 June 2026, 440-151-50; CBAM in force on steel/aluminum/cement/fertilizers/hydrogen/electricity since 1 January 2026."
+    },
+    {
+      "name": "Ngozi Okonjo-Iweala",
+      "type": "Person",
+      "role": "WTO Director-General; institutional arbiter on multilateral reform",
+      "stance": "'Reform or die'; MC14 Yaoundé Package drafted; MPIA 'bridge' framing",
+      "influence": "medium",
+      "simulation_tier": 2,
+      "role_class": "arbiter",
+      "description": "Director-General of the World Trade Organization since 2020; pushed WTO reform as central MC14 priority and explicitly elevated MPIA as 'bridge' at the Yaoundé Package.",
+      "aliases": [
+        "WTO DG",
+        "DG Okonjo-Iweala"
+      ],
+      "goals": [
+        "Deliver MC14 / MC15 substantive outcomes",
+        "Sustain MPIA as operative court",
+        "Restore WTO relevance through reform"
+      ],
+      "constraints": [
+        "Continuous US veto of Appellate Body appointments since December 2019",
+        "MC14 'Yaoundé rupture' on Appellate Body",
+        "Greer absent from MC14"
+      ],
+      "assets": [
+        "WTO secretariat",
+        "Agenda-setting influence",
+        "MC14/15 convening authority"
+      ],
+      "vulnerabilities": [
+        "Continued US veto",
+        "Lack of US engagement",
+        "MC15 limited substantive outcomes if reform stalls"
+      ],
+      "stated_vs_revealed": "Stated 'reform or die' urgency; revealed pragmatic MPIA 'bridge' framing as fallback to Appellate Body paralysis.",
+      "incentives": [
+        {
+          "driver": "WTO institutional relevance",
+          "gains_if": "Reform package adoption and MPIA bridge consolidation",
+          "loses_if": "Continued US veto and MC15 deadlock",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "WTO secretariat",
+        "MC14/15 agenda-setting",
+        "MPIA bridge framing"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "MC14 Yaoundé (March 2026) framed as 'reform or die'; fisheries subsidies negotiation continues to MC15; small economies package adopted; e-commerce moratorium unresolved."
+    },
+    {
+      "name": "Gulf Sovereign AI Procurement Bloc",
+      "type": "Organization",
+      "role": "UAE G42 + Saudi Humain collective; largest non-China export-control pressure-relief valve",
+      "stance": "AI-capacity buildout with allied chips; AI-safety/security MoU commitments",
+      "influence": "high",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "Collective actor comprising UAE's G42 and Saudi Arabia's Humain; received BIS approval on 20 November 2025 of up to 35,000 Nvidia GB300 equivalents each, the single largest non-China export-control pressure-relief valve.",
+      "aliases": [
+        "G42 + Humain",
+        "Gulf AI bloc",
+        "UAE-Saudi AI procurement"
+      ],
+      "goals": [
+        "AI-capacity buildout with allied chips",
+        "Sustain AI-safety/security MoU commitments",
+        "Diversify beyond US/EU/China dependencies"
+      ],
+      "constraints": [
+        "BIS licensing approval",
+        "US national-security conditions",
+        "PRC pushback via Huawei Ascend offers"
+      ],
+      "assets": [
+        "35,000 GB300 equivalent approvals each (20 November 2025)",
+        "AI-safety/security MoUs",
+        "Sovereign-wealth funding"
+      ],
+      "vulnerabilities": [
+        "White House re-tightening",
+        "Huawei Ascend counter-offers from PRC",
+        "AI-safety compliance failures"
+      ],
+      "stated_vs_revealed": "Stated AI-safety leadership; revealed dependence on BIS approvals and Huawei Ascend counter-pressure from PRC.",
+      "incentives": [
+        {
+          "driver": "Sovereign AI capacity and allied alignment",
+          "gains_if": "Continued BIS approvals and AI-safety MoU compliance",
+          "loses_if": "White House re-tightening and Huawei Ascend displacement",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "35,000 GB300 approvals",
+        "Sovereign-wealth funding",
+        "AI-safety MoUs"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "20 November 2025 BIS approval of up to 35,000 Nvidia GB300 equivalents each; MoU-style AI-safety/security commitments; Microsoft–G42 and Humain–Oracle–AMD deals."
+    },
+    {
+      "name": "Auto OEM & Parts Coalition",
+      "type": "Organization",
+      "role": "Toyota NA, VW NA, Stellantis NA, GM, Ford plus Unifor, UAW and parts suppliers",
+      "stance": "Status-quo USMCA renewal; certainty on RoO",
+      "influence": "medium",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "description": "Coalition of North American auto OEMs and parts suppliers plus UAW and Unifor; constituency with most to lose from USMCA rules-of-origin tightening.",
+      "aliases": [
+        "Auto OEMs",
+        "Big Three plus transplants",
+        "UAW/Unifor + OEMs"
+      ],
+      "goals": [
+        "USMCA renewal without RoO tightening",
+        "Predictable annual review cycle",
+        "Manageable Section 232 derivative auto-tariff exposure"
+      ],
+      "constraints": [
+        "75% RoO under USMCA",
+        "USITC February 2026 probe (report due 2027)",
+        "Section 232 derivative auto-tariff risk"
+      ],
+      "assets": [
+        "North American manufacturing footprint",
+        "UAW/Unifor political alignment",
+        "Bipartisan congressional support"
+      ],
+      "vulnerabilities": [
+        "RoO tightening at 2027 USITC report",
+        "Annual review fragmentation",
+        "Tariff cost pass-through to consumers"
+      ],
+      "stated_vs_revealed": "Stated 'we want certainty'; revealed willingness to accept manageable RoO changes provided annual review cycle is predictable.",
+      "incentives": [
+        {
+          "driver": "Status-quo USMCA and RoO certainty",
+          "gains_if": "USMCA renewal without RoO tightening",
+          "loses_if": "RoO tightening forces multi-billion cost step-up",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "North American manufacturing",
+        "UAW/Unifor alignment",
+        "Bipartisan congressional support"
+      ],
+      "risk_tolerance": "low",
+      "memory": "USITC launched February 2026 USMCA auto RoO probe with report due 2027; 75% RoO is the central commercial rule on North American vehicle trade."
+    },
+    {
+      "name": "U.S. International Trade Commission",
+      "type": "Government",
+      "role": "§332 fact-finding authority; USMCA auto-RoO 2027 report; pre-substitution vs post-substitution ETR methodology",
+      "stance": "Institutional methodology on ETR and RoO",
+      "influence": "medium",
+      "simulation_tier": 3,
+      "role_class": "intermediary",
+      "description": "USITC; independent federal agency with §332 fact-finding authority, USMCA auto rules-of-origin report (due 2027), and primary methodology for pre-substitution versus post-substitution ETR measurement.",
+      "aliases": [
+        "USITC",
+        "International Trade Commission"
+      ],
+      "goals": [
+        "Deliver USMCA auto-RoO report by 2027",
+        "Maintain methodology consistency on ETR measurement",
+        "Inform Congressional tariff deliberations"
+      ],
+      "constraints": [
+        "§332 statutory scope",
+        "Inter-agency data dependencies"
+      ],
+      "assets": [
+        "§332 fact-finding authority",
+        "Trade data infrastructure",
+        "Methodological expertise"
+      ],
+      "vulnerabilities": [
+        "Political pressure on methodology",
+        "Resource constraints on fact-finding reports"
+      ],
+      "stated_vs_revealed": "Institutional methodology; revealed political exposure on pre-substitution versus post-substitution ETR framing.",
+      "incentives": [
+        {
+          "driver": "Methodological consistency and statutory delivery",
+          "gains_if": "On-time USMCA auto-RoO report and stable ETR methodology",
+          "loses_if": "Methodology politicized or report delayed",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "§332 authority",
+        "Trade data",
+        "Methodology"
+      ],
+      "risk_tolerance": "low",
+      "memory": "February 2026 USMCA auto RoO probe launched with report due 2027."
+    },
+    {
+      "name": "U.S. Department of Energy",
+      "type": "Government",
+      "role": "Title XVII LOAN authority for AI fabs; grid siting for data centers",
+      "stance": "Grid reliability and industrial-policy alignment",
+      "influence": "medium",
+      "simulation_tier": 3,
+      "role_class": "intermediary",
+      "description": "US Department of Energy; Title XVII LOAN authority for AI fabs and grid siting authority for data centers; DOE–NIST MOU on packaging.",
+      "aliases": [
+        "DOE",
+        "Department of Energy"
+      ],
+      "goals": [
+        "Coordinate Title XVII LOAN with CHIPS Program Office",
+        "Grid siting for hyperscaler data centers",
+        "Packaging and R&D coordination"
+      ],
+      "constraints": [
+        "Loan-loss reserve constraints",
+        "Inter-agency clearance timelines",
+        "Grid interconnection bottlenecks"
+      ],
+      "assets": [
+        "Title XVII LOAN authority",
+        "DOE–NIST MOU on packaging",
+        "Grid siting authority"
+      ],
+      "vulnerabilities": [
+        "Loan-default risk on AI fabs",
+        "Grid interconnection delays",
+        "Political turnover in DOE leadership"
+      ],
+      "stated_vs_revealed": "Stated grid reliability and industrial-policy alignment; revealed Title XVII LOAN coordination with CHIPS Program Office as a key chokepoint.",
+      "incentives": [
+        {
+          "driver": "Industrial-policy and grid reliability",
+          "gains_if": "Title XVII LOAN deployments and on-time hyperscaler grid siting",
+          "loses_if": "Loan defaults or grid siting delays",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Title XVII LOAN",
+        "DOE–NIST MOU",
+        "Grid siting"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Title XVII LOAN authority for AI fabs; DOE–NIST MOU on packaging."
+    },
+    {
+      "name": "Centers for Medicare & Medicaid Services",
+      "type": "Government",
+      "role": "Formulary guidance (5 June 2026) as de facto price-setting venue for branded drugs",
+      "stance": "Drug-coverage and rebate economics",
+      "influence": "medium",
+      "simulation_tier": 3,
+      "role_class": "intermediary",
+      "description": "CMS within HHS; formulary guidance (5 June 2026) functions as the de facto price-setting venue for branded drugs and conditions whether 100% Section 232 pharma tariff is politically survivable.",
+      "aliases": [
+        "CMS",
+        "Medicare/Medicaid"
+      ],
+      "goals": [
+        "Sustain formulary access for Part B/D",
+        "Manage rebate economics under 100% Section 232 pharma tariff",
+        "Coordinate with FDA on ANDA/NDA approvals"
+      ],
+      "constraints": [
+        "Statutory Medicare/Medicaid scope",
+        "FTC insulin-pricing litigation overhang",
+        "PBM rebate-economics pressure"
+      ],
+      "assets": [
+        "Formulary guidance",
+        "Part B/D reimbursement",
+        "Rebate rule-making"
+      ],
+      "vulnerabilities": [
+        "100% Section 232 pharma tariff cost pass-through",
+        "PBM rebate-economics disputes",
+        "FTC litigation overhang"
+      ],
+      "stated_vs_revealed": "Stated formulary access; revealed that formulary guidance (5 June 2026) is the de facto price-setting venue conditioning Big Pharma onshoring decisions.",
+      "incentives": [
+        {
+          "driver": "Formulary access and rebate economics",
+          "gains_if": "Part B/D formulary stability under 100% Section 232 pharma tariff",
+          "loses_if": "Cost pass-through destabilizes coverage",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Formulary guidance",
+        "Part B/D reimbursement",
+        "Rebate rule-making"
+      ],
+      "risk_tolerance": "low",
+      "memory": "5 June 2026 formulary guidance; FTC v. Express Scripts insulin-pricing litigation context."
+    },
+    {
+      "name": "PBM Trio",
+      "type": "Organization",
+      "role": "Express Scripts/Cigna, Caremark/CVS, OptumRx/UnitedHealth; rebate-economics pressure point on Big Pharma onshoring",
+      "stance": "Rebate economics under Section 232 pharma tariff",
+      "influence": "medium",
+      "simulation_tier": 3,
+      "role_class": "stakeholder",
+      "description": "Collective actor comprising Express Scripts (Cigna), Caremark (CVS), and OptumRx (UnitedHealth); their rebate economics become the political pressure point on Big Pharma to onshore rather than absorb the 100% Section 232 tariff.",
+      "aliases": [
+        "PBMs",
+        "Pharmacy Benefit Managers",
+        "Express Scripts/Caremark/OptumRx"
+      ],
+      "goals": [
+        "Preserve rebate economics",
+        "Avoid FTC insulin-pricing liability expansion",
+        "Shape Section 232 pharma tariff carve-outs"
+      ],
+      "constraints": [
+        "FTC v. Express Scripts settled 4 February 2026",
+        "CMS formulary guidance",
+        "Section 232 pharma tariff carve-outs"
+      ],
+      "assets": [
+        "Rebate negotiation leverage",
+        "Formulary placement",
+        "PBM scale"
+      ],
+      "vulnerabilities": [
+        "FTC insulin-pricing litigation",
+        "CMS formulary guidance changes",
+        "Section 232 carve-outs that bypass rebate economics"
+      ],
+      "stated_vs_revealed": "Stated patient access; revealed reliance on rebate economics as political pressure point on Big Pharma.",
+      "incentives": [
+        {
+          "driver": "Rebate economics and PBM scale",
+          "gains_if": "Section 232 carve-outs preserve rebate flow",
+          "loses_if": "CMS formulary guidance or FTC action reduces rebate leverage",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Rebate negotiation",
+        "Formulary placement",
+        "Scale"
+      ],
+      "risk_tolerance": "low",
+      "memory": "FTC v. Express Scripts settled 4 February 2026 (STAT reporting)."
+    },
+    {
+      "name": "MPIA Member-State Coalition",
+      "type": "Organization",
+      "role": "Multi-Party Interim Appeal Arbitration Arrangement; binding alternative dispute resolution since 2020",
+      "stance": "Operative court in absence of WTO Appellate Body",
+      "influence": "medium",
+      "simulation_tier": 3,
+      "role_class": "intermediary",
+      "description": "MPIA comprising EU, China, Australia, Brazil, Canada, Japan, Singapore, UK, and 12 other members; binding alternative dispute-resolution arrangement since 2020, functioning as the operative court in place of the paralyzed WTO Appellate Body.",
+      "aliases": [
+        "Multi-Party Interim Appeal Arbitration Arrangement",
+        "MPIA"
+      ],
+      "goals": [
+        "Sustain binding dispute resolution",
+        "Compensate for WTO Appellate Body paralysis",
+        "Aggregate case-law across members"
+      ],
+      "constraints": [
+        "Non-US participation limits enforcement against US measures",
+        "Procedural compatibility with WTO DSU",
+        "Member-state ratification variance"
+      ],
+      "assets": [
+        "Binding arbitration",
+        "Cross-member case-law",
+        "EU/China participation"
+      ],
+      "vulnerabilities": [
+        "Non-US participation limits reach",
+        "US measures not subject to MPIA jurisdiction",
+        "Procedural drift from WTO DSU"
+      ],
+      "stated_vs_revealed": "Stated neutrality; revealed EU/China participation as a structural constraint on US measures.",
+      "incentives": [
+        {
+          "driver": "Operative binding dispute resolution",
+          "gains_if": "Continued EU/China participation and case-law aggregation",
+          "loses_if": "Member withdrawal or procedural drift from WTO DSU",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Binding arbitration",
+        "Cross-member case-law"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Established 2020; 19+ members; explicitly elevated by WTO DG Okonjo-Iweala as 'bridge' at MC14 Yaoundé."
+    },
+    {
+      "name": "Bond-Market Vigilantes",
+      "type": "Other",
+      "role": "Collective abstract actor whose reactions condition the tariff + 5T debt-ceiling-expansion regime",
+      "stance": "Quiescence conditioned on Bessent TGA strategy",
+      "influence": "high",
+      "simulation_tier": 4,
+      "role_class": "stakeholder",
+      "description": "Abstract collective actor representing bond-market vigilantes whose quiescence (Economist 22 January 2026) is a condition for the high tariff + 5T debt-ceiling-expansion regime.",
+      "aliases": [
+        "Bond vigilantes",
+        "Treasury-market vigilantes"
+      ],
+      "goals": [
+        "Quiescence conditioned on Bessent TGA continuity",
+        "Episode if TGA strategy fails or foreign demand rotates out"
+      ],
+      "constraints": [
+        "Bessent TGA build-up (~$300B July 2025 → ~$900B February 2026)",
+        "Foreign demand for Treasuries",
+        "Inflation expectations"
+      ],
+      "assets": [
+        "Treasury-market repricing",
+        "Foreign demand rotation",
+        "Credit-spread widening"
+      ],
+      "vulnerabilities": [
+        "Bessent TGA continuity",
+        "Foreign demand persistence",
+        "Inflation expectation anchoring"
+      ],
+      "stated_vs_revealed": "Quiescence is a condition, not a baseline; revealed by Economist 22 January 2026 framing.",
+      "incentives": [
+        {
+          "driver": "Treasury-market stability",
+          "gains_if": "Bessent TGA continuity and foreign demand persistence",
+          "loses_if": "TGA strategy fails or foreign demand rotates",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Treasury-market repricing",
+        "Foreign demand rotation"
+      ],
+      "risk_tolerance": "low",
+      "memory": "Economist 22 January 2026 documented vigilantes' quiescence as a condition; Bessent TGA buildup from ~$300B to ~$900B."
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Donald J. Trump",
+      "target": "Howard Lutnick",
+      "type": "ALLY_OF",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Appointment; line authority through Commerce over BIS and CHIPS Program Office.",
+      "valence": "allied",
+      "polarity": 0.9,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Donald J. Trump",
+      "target": "Jamieson Greer",
+      "type": "ALLY_OF",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "On-record voice for 'we will engage' posture; line authority on Section 301 and USMCA negotiation.",
+      "valence": "allied",
+      "polarity": 0.9,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Donald J. Trump",
+      "target": "Scott Bessent",
+      "type": "ALLY_OF",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Appointment and TGA strategy coordination on tariff transition.",
+      "valence": "allied",
+      "polarity": 0.8,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Donald J. Trump",
+      "target": "Government of Canada",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "June 2025 statement 'We don't need anything Canada has'; non-renewal of USMCA 1 July 2026.",
+      "valence": "adversarial",
+      "polarity": -0.6,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Donald J. Trump",
+      "target": "Government of Mexico",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "25% IEEPA tariffs (vacated); USMCA non-renewal review footings.",
+      "valence": "adversarial",
+      "polarity": -0.5,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Donald J. Trump",
+      "target": "Government of the People's Republic of China",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "Continuous Section 301 + IEEPA-era tariffs; Huawei-blocking posture; December 2025 China-skepticism.",
+      "valence": "adversarial",
+      "polarity": -0.6,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Donald J. Trump",
+      "target": "Section 122 Expiration Event",
+      "type": "SUPPORTS",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "24 July 2026 cliff; administration built parallel Section 301 buildout, consistent with planning around the lapse.",
+      "valence": "allied",
+      "polarity": 0.4,
+      "since": "2026-02-24"
+    },
+    {
+      "source": "Donald J. Trump",
+      "target": "European Commission, DG Trade",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "Section 232 derivatives on steel/aluminum/auto; pharmaceutical tariff friction.",
+      "valence": "adversarial",
+      "polarity": -0.5,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Chief Justice John Roberts",
+      "target": "Donald J. Trump",
+      "type": "CONSTRAINS",
+      "sign": "neutral",
+      "strength": "high",
+      "basis": "20 February 2026 Learning Resources v. Trump ruling (6-3) stripping IEEPA tariff authority.",
+      "valence": "directional",
+      "polarity": -0.7,
+      "since": "2026-02-20"
+    },
+    {
+      "source": "United States Congress",
+      "target": "Section 122 Expiration Event",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "high",
+      "basis": "Section 122 expires automatically 24 July 2026 absent affirmative Congressional action; CRA precedent in upper chamber.",
+      "valence": "directional",
+      "polarity": 0.0,
+      "since": "2026-02-24"
+    },
+    {
+      "source": "Jamieson Greer",
+      "target": "Section 301 China actions",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Section 301 initiation and list-making authority.",
+      "valence": "allied",
+      "polarity": 0.9,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Howard Lutnick",
+      "target": "Bureau of Industry and Security",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Statutory appointment chain within Commerce.",
+      "valence": "allied",
+      "polarity": 0.9,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Howard Lutnick",
+      "target": "CHIPS Program Office",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Co-administration of $52.7B CHIPS disbursement.",
+      "valence": "allied",
+      "polarity": 0.9,
+      "since": "2022-08-09"
+    },
+    {
+      "source": "Jamieson Greer",
+      "target": "Howard Lutnick",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Joint Section 301/232/122 build-out via Cabinet process.",
+      "valence": "allied",
+      "polarity": 0.8,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Bureau of Industry and Security",
+      "target": "Nvidia",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "EAR licensing on Blackwell and successor chips; 31 May 2026 Blackwell-loophole closure.",
+      "valence": "allied",
+      "polarity": 0.7,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Bureau of Industry and Security",
+      "target": "AMD",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "EAR licensing on MI350x/MI400; 31 May 2026 loophole extension.",
+      "valence": "allied",
+      "polarity": 0.7,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Bureau of Industry and Security",
+      "target": "ASML Holding N.V.",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "MATCH Act 2026 restricts DUV servicing in PRC; BIS licensing on downstream tools.",
+      "valence": "allied",
+      "polarity": 0.6,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Bureau of Industry and Security",
+      "target": "Gulf Sovereign AI Procurement Bloc",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "20 November 2025 approval of 35,000 GB300 equivalents each; AI-safety MoUs.",
+      "valence": "allied",
+      "polarity": 0.9,
+      "since": "2025-11-20"
+    },
+    {
+      "source": "Nvidia",
+      "target": "US Hyperscaler / Frontier-AI Bloc",
+      "type": "SUPPLIES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "$700-830B 2026 capex includes chip-line procurement; reciprocal customer relationship.",
+      "valence": "transactional",
+      "polarity": 0.9,
+      "since": "2016-01-01"
+    },
+    {
+      "source": "AMD",
+      "target": "Nvidia",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "MI400/MI500 series direct accelerator competition.",
+      "valence": "adversarial",
+      "polarity": -0.8,
+      "since": "2017-01-01"
+    },
+    {
+      "source": "TSMC",
+      "target": "Nvidia",
+      "type": "SUPPLIES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "2nm and below fabrication of Blackwell, Rubin, and successors.",
+      "valence": "transactional",
+      "polarity": 0.9,
+      "since": "2014-01-01"
+    },
+    {
+      "source": "TSMC",
+      "target": "AMD",
+      "type": "SUPPLIES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "CDNA 5 / MI400 2nm fabrication.",
+      "valence": "transactional",
+      "polarity": 0.9,
+      "since": "2018-01-01"
+    },
+    {
+      "source": "CHIPS Program Office",
+      "target": "TSMC",
+      "type": "FUNDS",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "CHIPS disbursement milestone-driven for Arizona Gigafab cluster.",
+      "valence": "transactional",
+      "polarity": 0.9,
+      "since": "2024-04-01"
+    },
+    {
+      "source": "CHIPS Program Office",
+      "target": "CHIPS Program Office",
+      "type": "FUNDS",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "Intel Ohio/Arizona CHIPS disbursement (self-reference placeholder — Intel is a separate beneficiary).",
+      "valence": "transactional",
+      "polarity": 0.8,
+      "since": "2024-01-01"
+    },
+    {
+      "source": "CHIPS Program Office",
+      "target": "AMD",
+      "type": "FUNDS",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "16 June 2026 letter-of-intent up to $50M for Indium Phosphide with Coherent (materials supplier supporting AMD chip substrate supply).",
+      "valence": "transactional",
+      "polarity": 0.7,
+      "since": "2026-06-16"
+    },
+    {
+      "source": "U.S. Department of Energy",
+      "target": "CHIPS Program Office",
+      "type": "FUNDS",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "Title XVII LOAN authority; DOE–NIST MOU on packaging.",
+      "valence": "allied",
+      "polarity": 0.7,
+      "since": "2022-08-09"
+    },
+    {
+      "source": "Government of the People's Republic of China",
+      "target": "European Commission, DG Trade",
+      "type": "CONSTRAINS",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "10/27 November 2026 critical-minerals export-control suspension expiry; PRC remains primary-source supplier and has redirected rare-earth pressure to EU (licensing below 25% of prior levels).",
+      "valence": "adversarial",
+      "polarity": -0.7,
+      "since": "2025-11-07"
+    },
+    {
+      "source": "Government of the People's Republic of China",
+      "target": "Government of Mexico",
+      "type": "CONSTRAINS",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "Critical-minerals export-control leverage on Mexican manufacturing inputs.",
+      "valence": "adversarial",
+      "polarity": -0.5,
+      "since": "2025-11-07"
+    },
+    {
+      "source": "Government of the People's Republic of China",
+      "target": "Government of Canada",
+      "type": "CONSTRAINS",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "Critical-minerals export-control leverage on Canadian manufacturing inputs.",
+      "valence": "adversarial",
+      "polarity": -0.5,
+      "since": "2025-11-07"
+    },
+    {
+      "source": "European Commission, DG Trade",
+      "target": "Government of the People's Republic of China",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "MPIA membership (2020 EEAS ministerial).",
+      "valence": "allied",
+      "polarity": 0.4,
+      "since": "2020-01-01"
+    },
+    {
+      "source": "Ngozi Okonjo-Iweala",
+      "target": "MPIA Member-State Coalition",
+      "type": "SUPPORTS",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "MC14 Yaoundé 'bridge' framing explicitly elevates MPIA as stop-gap.",
+      "valence": "allied",
+      "polarity": 0.9,
+      "since": "2026-03-26"
+    },
+    {
+      "source": "Ngozi Okonjo-Iweala",
+      "target": "Donald J. Trump",
+      "type": "CRITICIZES",
+      "sign": "rival",
+      "strength": "low",
+      "basis": "Frustration with continuous Appellate Body appointment veto since December 2019.",
+      "valence": "adversarial",
+      "polarity": -0.4,
+      "since": "2019-12-01"
+    },
+    {
+      "source": "Donald J. Trump",
+      "target": "Appellate Body / WTO DSB",
+      "type": "CONSTRAINS",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "Continuous veto of Appellate Body appointments since December 2019.",
+      "valence": "adversarial",
+      "polarity": -0.9,
+      "since": "2019-12-01"
+    },
+    {
+      "source": "Government of Mexico",
+      "target": "United States Congress",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "high",
+      "basis": "80%+ of Mexico exports go to US; bipartisan congressional support for USMCA continuation.",
+      "valence": "transactional",
+      "polarity": 0.5,
+      "since": "2020-07-01"
+    },
+    {
+      "source": "Government of Canada",
+      "target": "United States Congress",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "medium",
+      "basis": "CUSMA-dependent economy; bipartisan congressional support for USMCA continuation.",
+      "valence": "transactional",
+      "polarity": 0.4,
+      "since": "2020-07-01"
+    },
+    {
+      "source": "Auto OEM & Parts Coalition",
+      "target": "Section 122 Expiration Event",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "medium",
+      "basis": "Constituency with most to lose from Section 232 derivative auto-tariff exposure.",
+      "valence": "transactional",
+      "polarity": 0.3,
+      "since": "2026-02-24"
+    },
+    {
+      "source": "Scott Bessent",
+      "target": "Bond-Market Vigilantes",
+      "type": "CONSTRAINS",
+      "sign": "neutral",
+      "strength": "high",
+      "basis": "TGA build-up (~$300B July 2025 → ~$900B February 2026) specifically designed to neutralize vigilantes.",
+      "valence": "directional",
+      "polarity": -0.5,
+      "since": "2025-07-01"
+    },
+    {
+      "source": "Scott Bessent",
+      "target": "Kevin Warsh",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "Statutorily independent Fed; policy interdependence on TGA and rate path.",
+      "valence": "transactional",
+      "polarity": 0.4,
+      "since": "2026-05-13"
+    },
+    {
+      "source": "Kevin Warsh",
+      "target": "Donald J. Trump",
+      "type": "CONSTRAINS",
+      "sign": "neutral",
+      "strength": "high",
+      "basis": "Interest-rate path conditions 2027/28 macro outcomes and constrains tariff-revenue financing.",
+      "valence": "directional",
+      "polarity": -0.3,
+      "since": "2026-05-13"
+    },
+    {
+      "source": "Centers for Medicare & Medicaid Services",
+      "target": "PBM Trio",
+      "type": "REGULATES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Formulary guidance (5 June 2026) conditions drug-coverage and rebate economics.",
+      "valence": "allied",
+      "polarity": 0.8,
+      "since": "2026-06-05"
+    },
+    {
+      "source": "PBM Trio",
+      "target": "AMD",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "FTC v. Express Scripts insulin-pricing settlement 4 February 2026; rebate dispute against branded pharma manufacturers.",
+      "valence": "adversarial",
+      "polarity": -0.5,
+      "since": "2026-02-04"
+    },
+    {
+      "source": "Gulf Sovereign AI Procurement Bloc",
+      "target": "Nvidia",
+      "type": "CUSTOMER_OF",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "20 November 2025 BIS approval of 35,000 GB300 equivalents each; chip procurement.",
+      "valence": "transactional",
+      "polarity": 0.9,
+      "since": "2025-11-20"
+    },
+    {
+      "source": "Gulf Sovereign AI Procurement Bloc",
+      "target": "US Hyperscaler / Frontier-AI Bloc",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "medium",
+      "basis": "Microsoft–G42; Humain–Oracle–AMD deals.",
+      "valence": "allied",
+      "polarity": 0.7,
+      "since": "2024-01-01"
+    },
+    {
+      "source": "Gulf Sovereign AI Procurement Bloc",
+      "target": "Government of the People's Republic of China",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "low",
+      "basis": "Security-aligned procurement; PRC responds by steering Huawei Ascend.",
+      "valence": "adversarial",
+      "polarity": -0.4,
+      "since": "2025-11-20"
+    },
+    {
+      "source": "Government of the People's Republic of China",
+      "target": "Nvidia",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "H200 rebuff (June 2026, Asia Times) — PRC steering toward Huawei Ascend.",
+      "valence": "adversarial",
+      "polarity": -0.6,
+      "since": "2026-06-01"
+    },
+    {
+      "source": "TSMC",
+      "target": "CHIPS Program Office",
+      "type": "CONSTRAINED_BY",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "2nm technology export to AZ requires MOEA clearance ('silicon shield' debate); CHIPS funding milestone-driven.",
+      "valence": "allied",
+      "polarity": 0.7,
+      "since": "2024-04-01"
+    },
+    {
+      "source": "Government of Mexico",
+      "target": "Donald J. Trump",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "low",
+      "basis": "Quiet de-escalation; CSIS Mexico de-escalation strategy.",
+      "valence": "adversarial",
+      "polarity": -0.3,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Government of Canada",
+      "target": "Donald J. Trump",
+      "type": "OPPOSES",
+      "sign": "rival",
+      "strength": "medium",
+      "basis": "Sharper tone; bilateral talks stalled.",
+      "valence": "adversarial",
+      "polarity": -0.5,
+      "since": "2025-01-20"
+    },
+    {
+      "source": "Government of the People's Republic of China",
+      "target": "United States Congress",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "medium",
+      "basis": "Soybean purchase commitments (12 mmt target, 11.96 mmt by end of May 2026); rare-earth leverage via farm-belt politics.",
+      "valence": "transactional",
+      "polarity": 0.3,
+      "since": "2025-11-07"
+    },
+    {
+      "source": "Section 301 China actions",
+      "target": "Government of the People's Republic of China",
+      "type": "SANCTIONS",
+      "sign": "rival",
+      "strength": "high",
+      "basis": "Section 301 Lists 1-3 at 25%, List 4A at 7.5% (~3,200 HTS lines) survived IEEPA ruling.",
+      "valence": "adversarial",
+      "polarity": -0.9,
+      "since": "2018-01-01"
+    },
+    {
+      "source": "Section 301 China actions",
+      "target": "Section 122 Expiration Event",
+      "type": "ENABLES",
+      "sign": "ally",
+      "strength": "high",
+      "basis": "Parallel Section 301 buildout (60 forced-labor investigations; 12.5% on 46 countries, 10% on 14 others as of 2 June 2026) substitutes IEEPA void and reduces pressure to extend Section 122.",
+      "valence": "allied",
+      "polarity": 0.8,
+      "since": "2026-03-12"
+    },
+    {
+      "source": "Section 122 Expiration Event",
+      "target": "Donald J. Trump",
+      "type": "CONSTRAINS",
+      "sign": "neutral",
+      "strength": "high",
+      "basis": "Statutory 150-day cap (19 U.S.C. § 2132) limits unilateral extension; expires 24 July 2026.",
+      "valence": "directional",
+      "polarity": -0.7,
+      "since": "2026-02-24"
+    }
+  ],
+  "key_events": [
+    {
+      "date": "2025-04-16",
+      "event": "Federal Register notice initiates Section 232 investigation on pharmaceuticals"
+    },
+    {
+      "date": "2025-07-30",
+      "event": "50% Section 232 tariff imposed on semi-finished copper and intensive copper derivative products"
+    },
+    {
+      "date": "2025-11-07",
+      "event": "China MOFCOM Announcement No. 70 suspends rare-earth export controls until 10/27 November 2026; Trump-Xi Busan summit establishes one-year truce"
+    },
+    {
+      "date": "2025-11-20",
+      "event": "BIS approval of up to 35,000 Nvidia GB300 equivalents each to UAE G42 and Saudi Humain"
+    },
+    {
+      "date": "2026-01-12",
+      "event": "House passes bill closing the AI cloud-export loophole"
+    },
+    {
+      "date": "2026-01-01",
+      "event": "EU CBAM enters into force on steel/aluminum/cement/fertilizers/hydrogen/electricity"
+    },
+    {
+      "date": "2026-02-04",
+      "event": "FTC v. Express Scripts insulin-pricing case settled"
+    },
+    {
+      "date": "2026-02-20",
+      "event": "SCOTUS issues 6-3 ruling in Learning Resources v. Trump invalidating IEEPA tariff authority"
+    },
+    {
+      "date": "2026-02-24",
+      "event": "Trump imposes Section 122 10% global surcharge; statutory 150-day clock starts"
+    },
+    {
+      "date": "2026-03-12",
+      "event": "USTR initiates Section 301 investigations into 60 countries over forced-labor enforcement failures"
+    },
+    {
+      "date": "2026-03-26",
+      "event": "WTO MC14 concludes in Yaoundé ('Yaoundé rupture'); DG Okonjo-Iweala calls 'reform or die'"
+    },
+    {
+      "date": "2026-04-02",
+      "event": "White House Proclamation 11020 imposes up to 100% Section 232 tariff on patented pharmaceuticals with UK carve-out at 10%"
+    },
+    {
+      "date": "2026-04-06",
+      "event": "Section 232 metals restructured to four-annex system (50%, 25%, 15% floor)"
+    },
+    {
+      "date": "2026-04-07",
+      "event": "BIS extends Approved IC Designer timeline to 31 December 2026"
+    },
+    {
+      "date": "2026-04-08",
+      "event": "Yale Budget Lab ETR 11.8% (pre-substitution, highest since early 1940s)"
+    },
+    {
+      "date": "2026-04-20",
+      "event": "CBP launches CAPE in ACE for IEEPA tariff refunds"
+    },
+    {
+      "date": "2026-05-07",
+      "event": "CIT rules 2-1 against Section 122 tariffs; injunction applies only to three plaintiffs"
+    },
+    {
+      "date": "2026-05-12",
+      "event": "SIA + 17 trade groups letter to Congress urging AMIC extension"
+    },
+    {
+      "date": "2026-05-13",
+      "event": "Senate confirms Kevin Warsh as Fed Chair, 54-45"
+    },
+    {
+      "date": "2026-05-20",
+      "event": "GAO procedural ruling makes AI Diffusion Rule non-enforcement legally binding"
+    },
+    {
+      "date": "2026-05-31",
+      "event": "BIS closes the 'ultimate parent headquartered in PRC' loophole (Blackwell, MI350x shipments to China-HQ shells)"
+    },
+    {
+      "date": "2026-06-02",
+      "event": "USTR announces Section 301 forced-labor findings: 46 countries → 12.5%; 14 countries → 10%"
+    },
+    {
+      "date": "2026-06-11",
+      "event": "Federal Circuit grants stay of CIT injunction on Section 122 tariffs pending appeal"
+    },
+    {
+      "date": "2026-06-15",
+      "event": "USMCA Joint Review Round 2 (Washington, D.C.)"
+    },
+    {
+      "date": "2026-06-16",
+      "event": "EU Parliament adopts Turnberry Deal implementing regulation 440-151-50; CPO letter-of-intent with Coherent up to $50M for Indium Phosphide; Wharton Budget Model ETR ~7.0% post-SCOTUS"
+    },
+    {
+      "date": "2026-06-17",
+      "event": "FOMC holds rates at 3.50-3.75%; first Warsh-led meeting; dot plot reveals hawkish pivot (9 of 18 project ≥1 hike in 2026)"
+    },
+    {
+      "date": "2026-06-26",
+      "event": "~$90B in IEEPA refund claims accepted; ~$24B transmitted to Treasury of $166B total pool"
+    },
+    {
+      "date": "2026-07-01",
+      "event": "US declines to renew USMCA; shifts to rolling bilateral talks; 10-year sunset review clock starts"
+    },
+    {
+      "date": "2026-07-24",
+      "event": "Section 122 cliff — surcharge expires at 12:01 am unless extended by Congress"
+    },
+    {
+      "date": "2026-11-10",
+      "event": "China rare-earth export-control suspension (Busan truce) expires"
+    },
+    {
+      "date": "2026-12-31",
+      "event": "AMIC (Advanced Manufacturing Investment Credit) at 25% expires unless extended"
+    }
+  ],
+  "hot_topics": [
+    "Section 122 expiry cliff on 24 July 2026",
+    "Federal Circuit Section 122 merits ruling (late 2026 / early 2027)",
+    "USMCA non-renewal and annual review (1 July 2026)",
+    "Section 232 metals (50%/25%/15% floor) and pharma (100%) durability",
+    "Section 301 forced-labor tariffs effective ~24 July 2026 on 60 countries",
+    "BIS Blackwell-loophole closure (31 May 2026) and Gulf GB300 approvals (20 November 2025)",
+    "China rare-earth export-control suspension expiry 10/27 November 2026",
+    "AMIC tax credit extension before 31 December 2026",
+    "CHIPS Act continuity under NIST restructuring cuts",
+    "Kevin Warsh Fed independence test against tariff-driven inflation",
+    "IEEPA refund pool of $166-175B and processing throughput",
+    "WTO Appellate Body restart after MC14 Yaoundé rupture",
+    "USMCA auto rules-of-origin USITC report due 2027",
+    "Bessent TGA strategy and bond-vigilante quiescence",
+    "Trump-Xi Busan truce durability and soybean compliance"
+  ],
+  "quantitative_facts": [
+    {
+      "metric": "Effective Tariff Rate (pre-substitution)",
+      "value": "11.8",
+      "unit": "%",
+      "as_of_date": "2026-04-08",
+      "definition": "Yale Budget Lab pre-substitution ETR; highest since early 1940s",
+      "source": "Yale Budget Lab, State of US Tariffs",
+      "tier": "S2"
+    },
+    {
+      "metric": "Effective Tariff Rate (post-substitution)",
+      "value": "~7.0",
+      "unit": "%",
+      "as_of_date": "2026-06-16",
+      "definition": "Wharton Budget Model ETR post-SCOTUS",
+      "source": "Penn Wharton Budget Model",
+      "tier": "S2"
+    },
+    {
+      "metric": "Section 122 global surcharge rate",
+      "value": "10",
+      "unit": "%",
+      "as_of_date": "2026-02-24",
+      "definition": "Reduced from initial 15% by CIT injunction; statutory 150-day cap expires 24 July 2026",
+      "source": "Section 122 proclamation",
+      "tier": "S1"
+    },
+    {
+      "metric": "Section 232 metals rate (Annex I-A)",
+      "value": "50",
+      "unit": "%",
+      "as_of_date": "2026-04-06",
+      "definition": "High-metal content steel/aluminum/copper",
+      "source": "CBP CSMS #68253075",
+      "tier": "S1"
+    },
+    {
+      "metric": "Section 232 metals rate (Annex II)",
+      "value": "25",
+      "unit": "%",
+      "as_of_date": "2026-04-06",
+      "definition": "Derivatives",
+      "source": "CBP CSMS #68253075",
+      "tier": "S1"
+    },
+    {
+      "metric": "Section 232 metals floor",
+      "value": "15",
+      "unit": "%",
+      "as_of_date": "2026-04-06",
+      "definition": "Floor on full customs value",
+      "source": "CBP CSMS #68253075",
+      "tier": "S1"
+    },
+    {
+      "metric": "Section 232 pharma rate (patented)",
+      "value": "100",
+      "unit": "%",
+      "as_of_date": "2026-04-02",
+      "definition": "Up to 100% on patented pharmaceuticals and pharmaceutical ingredients; UK carve-out at 10%",
+      "source": "White House Proclamation 11020",
+      "tier": "S1"
+    },
+    {
+      "metric": "Section 232 semiconductor rate (H200/MI325X)",
+      "value": "25",
+      "unit": "%",
+      "as_of_date": "2026-01-01",
+      "definition": "High-performance AI chips",
+      "source": "White House / DOC",
+      "tier": "S1"
+    },
+    {
+      "metric": "Section 301 forced-labor rate (46 countries)",
+      "value": "12.5",
+      "unit": "%",
+      "as_of_date": "2026-06-02",
+      "definition": "USTR forced-labor findings",
+      "source": "USTR announcement",
+      "tier": "S1"
+    },
+    {
+      "metric": "Section 301 forced-labor rate (14 countries)",
+      "value": "10",
+      "unit": "%",
+      "as_of_date": "2026-06-02",
+      "definition": "USTR forced-labor findings",
+      "source": "USTR announcement",
+      "tier": "S1"
+    },
+    {
+      "metric": "Section 301 countries under investigation",
+      "value": "60",
+      "unit": "countries",
+      "as_of_date": "2026-03-12",
+      "definition": "USTR forced-labor investigation scope",
+      "source": "USTR announcement",
+      "tier": "S1"
+    },
+    {
+      "metric": "IEEPA refund pool",
+      "value": "166-175",
+      "unit": "USD billion",
+      "as_of_date": "2026-02-20",
+      "definition": "Refund obligation created by SCOTUS ruling",
+      "source": "CBP, Penn Wharton, Bessent",
+      "tier": "S1"
+    },
+    {
+      "metric": "IEEPA refund claims accepted (cumulative)",
+      "value": "~90",
+      "unit": "USD billion",
+      "as_of_date": "2026-06-26",
+      "definition": "CBP CAPE accepted claims",
+      "source": "CBP CAPE tracker",
+      "tier": "S1"
+    },
+    {
+      "metric": "IEEPA refund transmitted to Treasury",
+      "value": "~24",
+      "unit": "USD billion",
+      "as_of_date": "2026-06-26",
+      "definition": "Of $166B total pool",
+      "source": "CBP CAPE tracker",
+      "tier": "S1"
+    },
+    {
+      "metric": "IEEPA refund importers affected",
+      "value": "~330,000",
+      "unit": "importers",
+      "as_of_date": "2026-06-26",
+      "definition": "Importers in CBP CAPE pool",
+      "source": "CBP",
+      "tier": "S1"
+    },
+    {
+      "metric": "IEEPA refund entries affected",
+      "value": "~53,000,000",
+      "unit": "entries",
+      "as_of_date": "2026-06-26",
+      "definition": "Entries in CBP CAPE pool",
+      "source": "CBP",
+      "tier": "S1"
+    },
+    {
+      "metric": "Annual household burden estimate",
+      "value": "2,000-2,800",
+      "unit": "USD/year",
+      "as_of_date": "2026-04-01",
+      "definition": "Yale Budget Lab estimate of full tariff passthrough",
+      "source": "Yale Budget Lab",
+      "tier": "S2"
+    },
+    {
+      "metric": "10-year tariff revenue",
+      "value": "1.3-1.9",
+      "unit": "USD trillion",
+      "as_of_date": "2026-04-08",
+      "definition": "Cumulative tariff revenue under Yale baseline",
+      "source": "Yale Budget Lab",
+      "tier": "S2"
+    },
+    {
+      "metric": "Core PCE contribution from tariffs",
+      "value": "+0.8",
+      "unit": "%",
+      "as_of_date": "2026-04-08",
+      "definition": "Federal Reserve FEDS Notes estimate",
+      "source": "Federal Reserve FEDS Notes",
+      "tier": "S1"
+    },
+    {
+      "metric": "Core goods PCE contribution from tariffs",
+      "value": "+3.1",
+      "unit": "%",
+      "as_of_date": "2026-04-08",
+      "definition": "Federal Reserve FEDS Notes estimate",
+      "source": "Federal Reserve FEDS Notes",
+      "tier": "S1"
+    },
+    {
+      "metric": "Cumulative tariff revenue above 2022-24 avg",
+      "value": "214.7",
+      "unit": "USD billion",
+      "as_of_date": "2026-02-01",
+      "definition": "Inflation-adjusted",
+      "source": "Yale Budget Lab",
+      "tier": "S2"
+    },
+    {
+      "metric": "Mexico FDI 2025",
+      "value": "40.87",
+      "unit": "USD billion",
+      "as_of_date": "2025-12-31",
+      "definition": "Record annual FDI inflow",
+      "source": "Tetakawi / FreightWaves / MexicoBusiness.News",
+      "tier": "S3"
+    },
+    {
+      "metric": "Plan Mexico identified investment pipeline",
+      "value": "277",
+      "unit": "USD billion",
+      "as_of_date": "2025-12-31",
+      "definition": "Sheinbaum-announced investment pipeline",
+      "source": "Sheinbaum announcement / Prensa Libre",
+      "tier": "S3"
+    },
+    {
+      "metric": "Bank of Canada GDP forecast 2026",
+      "value": "1.1",
+      "unit": "%",
+      "as_of_date": "2026-04-29",
+      "definition": "Bank of Canada Monetary Policy Report",
+      "source": "Bank of Canada",
+      "tier": "S1"
+    },
+    {
+      "metric": "Bank of Canada GDP forecast 2027",
+      "value": "1.5",
+      "unit": "%",
+      "as_of_date": "2026-04-29",
+      "definition": "Bank of Canada Monetary Policy Report",
+      "source": "Bank of Canada",
+      "tier": "S1"
+    },
+    {
+      "metric": "China soybean purchases (cumulative Busan commitment)",
+      "value": "11.96",
+      "unit": "million metric tons",
+      "as_of_date": "2026-05-31",
+      "definition": "USDA FAS export sales through May 2026",
+      "source": "USDA FAS",
+      "tier": "S1"
+    },
+    {
+      "metric": "China soybean target",
+      "value": "12",
+      "unit": "million metric tons",
+      "as_of_date": "2026-08-01",
+      "definition": "Busan deal target through August 2026",
+      "source": "Busan deal",
+      "tier": "S1"
+    },
+    {
+      "metric": "China rare-earth licensing to EU",
+      "value": "<25",
+      "unit": "% of prior levels",
+      "as_of_date": "2026-06-01",
+      "definition": "Industry reports",
+      "source": "Informed Clearly",
+      "tier": "S3"
+    },
+    {
+      "metric": "Tungsten/antimony price spike",
+      "value": "6",
+      "unit": "× baseline",
+      "as_of_date": "2026-06-04",
+      "definition": "Sixfold price spike",
+      "source": "Informed Clearly",
+      "tier": "S3"
+    },
+    {
+      "metric": "Hyperscaler 2026 capex",
+      "value": "700-830",
+      "unit": "USD billion",
+      "as_of_date": "2026-05-01",
+      "definition": "Combined hyperscaler 2026 capex; 75% AI-directed",
+      "source": "TimeWell / Evertiq",
+      "tier": "S3"
+    },
+    {
+      "metric": "Anthropic Series G valuation",
+      "value": "~380",
+      "unit": "USD billion",
+      "as_of_date": "2026-02-01",
+      "definition": "Series G round closed February 2026",
+      "source": "Industry reporting",
+      "tier": "S3"
+    },
+    {
+      "metric": "Anthropic ARR",
+      "value": "30",
+      "unit": "USD billion",
+      "as_of_date": "2026-02-01",
+      "definition": "Annualized recurring revenue",
+      "source": "Industry reporting",
+      "tier": "S3"
+    },
+    {
+      "metric": "OpenAI ARR",
+      "value": "24",
+      "unit": "USD billion",
+      "as_of_date": "2026-02-01",
+      "definition": "Annualized recurring revenue",
+      "source": "Industry reporting",
+      "tier": "S3"
+    },
+    {
+      "metric": "AMD MI400 first-year revenue projection",
+      "value": "7.2",
+      "unit": "USD billion",
+      "as_of_date": "2026-06-01",
+      "definition": "Projected first-year revenue for MI400 launch 2H 2026",
+      "source": "Industry reporting",
+      "tier": "S3"
+    },
+    {
+      "metric": "FOMC rate (June 2026)",
+      "value": "3.50-3.75",
+      "unit": "%",
+      "as_of_date": "2026-06-17",
+      "definition": "Federal funds rate range",
+      "source": "Federal Reserve",
+      "tier": "S1"
+    },
+    {
+      "metric": "Hawkish FOMC members (projecting ≥1 hike)",
+      "value": "9",
+      "unit": "of 18",
+      "as_of_date": "2026-06-17",
+      "definition": "June 2026 SEP",
+      "source": "Federal Reserve",
+      "tier": "S1"
+    },
+    {
+      "metric": "BIS Gulf approval (G42 + Humain each)",
+      "value": "35,000",
+      "unit": "Nvidia GB300 equivalents",
+      "as_of_date": "2025-11-20",
+      "definition": "BIS approval of chip exports to UAE G42 and Saudi Humain",
+      "source": "CNBC",
+      "tier": "S3"
+    },
+    {
+      "metric": "Bessent TGA build-up",
+      "value": "300 → 900",
+      "unit": "USD billion",
+      "as_of_date": "2026-02-01",
+      "definition": "Treasury General Account build-up from July 2025 to February 2026",
+      "source": "The Economist / Reversestreet",
+      "tier": "S2"
+    },
+    {
+      "metric": "CHIPS Act direct disbursement",
+      "value": "52.7",
+      "unit": "USD billion",
+      "as_of_date": "2022-08-09",
+      "definition": "CHIPS and Science Act direct disbursement authority",
+      "source": "CHIPS Program Office",
+      "tier": "S1"
+    },
+    {
+      "metric": "CHIPS Act R&D",
+      "value": "11",
+      "unit": "USD billion",
+      "as_of_date": "2022-08-09",
+      "definition": "CHIPS and Science Act R&D authority",
+      "source": "CHIPS Program Office",
+      "tier": "S1"
+    },
+    {
+      "metric": "CPO letter-of-intent with Coherent",
+      "value": "50",
+      "unit": "USD million",
+      "as_of_date": "2026-06-16",
+      "definition": "Indium Phosphide materials",
+      "source": "CHIPS Program Office",
+      "tier": "S1"
+    },
+    {
+      "metric": "AMIC rate (current)",
+      "value": "25",
+      "unit": "%",
+      "as_of_date": "2026-06-30",
+      "definition": "IRC §48D Advanced Manufacturing Investment Credit",
+      "source": "IRC §48D",
+      "tier": "S1"
+    },
+    {
+      "metric": "EU Parliament Turnberry vote",
+      "value": "440-151-50",
+      "unit": "votes",
+      "as_of_date": "2026-06-16",
+      "definition": "Turnberry Deal implementing regulation",
+      "source": "EU Parliament",
+      "tier": "S1"
+    },
+    {
+      "metric": "SCOTUS vote in Learning Resources v. Trump",
+      "value": "6-3",
+      "unit": "majority",
+      "as_of_date": "2026-02-20",
+      "definition": "Majority opinion by Chief Justice Roberts",
+      "source": "U.S. Supreme Court",
+      "tier": "S1"
+    },
+    {
+      "metric": "Warsh confirmation vote",
+      "value": "54-45",
+      "unit": "Senate roll call",
+      "as_of_date": "2026-05-13",
+      "definition": "Closest modern Fed Chair confirmation",
+      "source": "Senate roll call",
+      "tier": "S1"
+    }
+  ],
+  "contested_claims": [
+    {
+      "claim": "Full tariff passthrough to consumers",
+      "positions": [
+        {
+          "stance": "Yale Budget Lab and Federal Reserve FEDS Notes support full passthrough; Dallas Fed notes passthrough peaked February 2026",
+          "sources": [
+            "Yale Budget Lab",
+            "Federal Reserve FEDS Notes April 2026",
+            "Dallas Fed May 2026"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "Fed Governor Stephen Miran argues passthrough 'smaller than widely reported'; foreign firms absorbing cost",
+          "sources": [
+            "Trenbuzz / Boston University speech"
+          ],
+          "tier": "S3"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Different assumptions about foreign-exporter margin absorption and incidence allocation; the dispute is about magnitude, not direction."
+    },
+    {
+      "claim": "Bond vigilante quiescence",
+      "positions": [
+        {
+          "stance": "Economist 22 January 2026 documents vigilantes' quiescence as conditioned on Bessent TGA strategy",
+          "sources": [
+            "The Economist 22 January 2026",
+            "The Economist 11 December 2025"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "Critics argue quiescence is conditional on foreign demand and not a baseline; reversal possible",
+          "sources": [
+            "Morningstar 22 September 2025"
+          ],
+          "tier": "S3"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Quiescence is treated as a condition by Bessent's framework but as a baseline by critics; framing difference drives the dispute."
+    },
+    {
+      "claim": "CHIPS Act continuity under inter-agency restructuring",
+      "positions": [
+        {
+          "stance": "Computerworld reports NIST cuts threaten disbursement timelines",
+          "sources": [
+            "Computerworld"
+          ],
+          "tier": "S3"
+        },
+        {
+          "stance": "CHIPS Program Office denies disruption; dollar disbursement ahead",
+          "sources": [
+            "CHIPS Program Office"
+          ],
+          "tier": "S1"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Dollar-disbursed milestones vs workforce/permitting lag are tracked separately; near-term cash flow is fine but execution risk remains."
+    },
+    {
+      "claim": "Section 122 extension probability",
+      "positions": [
+        {
+          "stance": "Wharton/Yale/Budget Lab base cases assume lapse (~70%); parallel Section 301 buildout plans around it",
+          "sources": [
+            "Penn Wharton Budget Model",
+            "Yale Budget Lab",
+            "CNBC / Foreign Policy / Treasury stack"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "Tariff-rebel Republican caucus (Don Bacon) has stated intent but no override path",
+          "sources": [
+            "NOTUS / Punchbowl"
+          ],
+          "tier": "S3"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Analyst base cases weight administration behavior; congressional reporting weights Republican caucus appetite."
+    },
+    {
+      "claim": "MATCH Act 2026 effect on ASML DUV servicing in PRC",
+      "positions": [
+        {
+          "stance": "Proposed MATCH Act would restrict DUV servicing in China; reduces Allied tool-vendor leverage",
+          "sources": [
+            "MATCH Act 2026 text / industry reporting"
+          ],
+          "tier": "S3"
+        },
+        {
+          "stance": "Politically undecided at dossier as-of date; downgrade passage probability to ~40% absent US-EU follow-through",
+          "sources": [
+            "FT advanced DUV trials reporting"
+          ],
+          "tier": "S3"
+        }
+      ],
+      "status": "single-origin",
+      "why_they_differ": "Single-origin framing as a proposed legislative risk with no enacted text; passage probability is analyst-imputed."
+    },
+    {
+      "claim": "Nvidia H200 in PRC",
+      "positions": [
+        {
+          "stance": "Asia Times (June 2026) reports Nvidia H200 rebuff in Beijing",
+          "sources": [
+            "Asia Times June 2026"
+          ],
+          "tier": "S3"
+        },
+        {
+          "stance": "Nvidia pursuing H200 China sales; PRC pushes Huawei Ascend as formal channel",
+          "sources": [
+            "Industry reporting"
+          ],
+          "tier": "S3"
+        }
+      ],
+      "status": "single-origin",
+      "why_they_differ": "Single-source Asia Times report; Nvidia revenue stream in PRC materially reduced through 2028 is the working assumption."
+    }
+  ]
+}

@@ -49,6 +49,10 @@ RUNS = {
     # MiniMax (minimax-m3) demo runs — added 2026-06-21
     "storage-semi-2028": "pipe_41522d5d9790",
     "cloud-2030": "pipe_85d91bafe6fd",
+    "collision-decade-2031": "pipe_a335177097fb",
+    # added 2026-07-04 — GRAPH-12 schema-echo-unwrap validation runs
+    "us-trade-2028": "pipe_bf2bb3095d11",
+    "us-midterms-2026": "pipe_aa0fb94abe92",
 }
 
 PLACEHOLDER_MARKER = "本章节生成失败"

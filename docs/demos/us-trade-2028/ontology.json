@@ -1,0 +1,603 @@
+{
+ "entity_types": [
+  {
+   "name": "HeadOfState",
+   "description": "国家元首或政府首脑，对关税、贸易与产业政策拥有最高决策权（US President, Xi, Sheinbaum, Carney, von der Leyen）",
+   "attributes": [
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "所代表的国家或经济体"
+    },
+    {
+     "name": "trade_posture",
+     "type": "text",
+     "description": "mercantilist / bilateral-deal / rules-based / managed-detente 等立场标签"
+    },
+    {
+     "name": "tenure_horizon",
+     "type": "text",
+     "description": "任期至何时，便于评估2028年前决策窗口"
+    }
+   ],
+   "examples": [
+    "Donald J. Trump",
+    "Xi Jinping",
+    "Claudia Sheinbaum",
+    "Mark Carney",
+    "Ursula von der Leyen"
+   ],
+   "archetype": "place_jurisdiction"
+  },
+  {
+   "name": "CabinetMinister",
+   "description": "总统内阁部长或对等位阶的外国部长，掌握具体贸易、产业、财政、货币执行权（Lutnick, Greer, Bessent, Warsh, Ebrard）",
+   "attributes": [
+    {
+     "name": "portfolio",
+     "type": "text",
+     "description": "管辖领域: Commerce/USTR/Treasury/Fed/Economy等"
+    },
+    {
+     "name": "statutory_tools",
+     "type": "text",
+     "description": "所掌握的法定工具: S232/S301/S122/IEEPA/TGA/EAR licensing等"
+    },
+    {
+     "name": "decision_rights",
+     "type": "text",
+     "description": "可在不需总统签发下自主行使的决策权"
+    }
+   ],
+   "examples": [
+    "Howard Lutnick",
+    "Jamieson Greer",
+    "Scott Bessent",
+    "Kevin Warsh",
+    "Marcelo Ebrard"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "LegislativeBody",
+   "description": "立法机构整体，作为单一集体 actor 处理关税法定授权与codification（US Congress as bicameral actor; Mexican/Canadian 立法机构仅作...",
+   "attributes": [
+    {
+     "name": "chamber_math_2026",
+     "type": "text",
+     "description": "2026 中期选举前的两院控制与边际"
+    },
+    {
+     "name": "tariff_prerogative_stance",
+     "type": "text",
+     "description": "reassert Article I / defer to executive / case-by-case"
+    },
+    {
+     "name": "key_committee_chairs",
+     "type": "text",
+     "description": "持有贸易立法管辖权的关键委员会主席"
+    }
+   ],
+   "examples": [
+    "United States Congress",
+    "House Republican tariff-skeptic caucus",
+    "U.S. Senate Finance Committee"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "JudicialActor",
+   "description": "对关税与行政权力拥有裁判权的司法主体（SCOTUS, CIT, Federal Circuit）",
+   "attributes": [
+    {
+     "name": "doctrine_lever",
+     "type": "text",
+     "description": "major-questions / non-delegation / clear-statement 等可援用教义"
+    },
+    {
+     "name": "jurisdiction_scope",
+     "type": "text",
+     "description": "裁判范围: 全境 / 仅限原告 / 仅限特定部门"
+    },
+    {
+     "name": "precedent_track",
+     "type": "text",
+     "description": "对总统贸易权力的历史立场"
+    }
+   ],
+   "examples": [
+    "Chief Justice John Roberts",
+    "U.S. Supreme Court majority bloc",
+    "Court of International Trade",
+    "U.S. Court of Appeals for the Federal Circuit"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "TradeAgency",
+   "description": "美国贸易与产业政策执行机构（USTR、Commerce、BIS、CHIPS Program Office、USITC、CMS、DOE、FDA 等）",
+   "attributes": [
+    {
+     "name": "function",
+     "type": "text",
+     "description": "regulation / disbursement / fact-finding / licensing / pricing 等具体职能"
+    },
+    {
+     "name": "statutory_basis",
+     "type": "text",
+     "description": "S232/S301/S122/EAR/CHIPS Act/CBAM 等法律基础"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "T1/T2/T3 影响力档位"
+    }
+   ],
+   "examples": [
+    "Bureau of Industry and Security",
+    "CHIPS Program Office",
+    "U.S. International Trade Commission",
+    "Centers for Medicare & Medicaid Services",
+    "U.S. Department of Energy"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "MultilateralBody",
+   "description": "多边贸易体系机构或其代理人（WTO DG、AB/DSB、MPIA Coalition）",
+   "attributes": [
+    {
+     "name": "institutional_status",
+     "type": "text",
+     "description": "operative / paralyzed / bridge / reform-pending"
+    },
+    {
+     "name": "membership_coverage",
+     "type": "text",
+     "description": "覆盖的成员国或经济体"
+    },
+    {
+     "name": "reform_window",
+     "type": "text",
+     "description": "MC15 或下次部长级会议的可见时间表"
+    }
+   ],
+   "examples": [
+    "Ngozi Okonjo-Iweala (WTO DG)",
+    "Appellate Body / WTO DSB",
+    "MPIA Member-State Coalition"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "ChokepointCorporate",
+   "description": "在半导体、AI 加速器、晶圆代工、光刻等环节握有不可替代产能或工艺的私营主体（TSMC、Nvidia、AMD、ASML）",
+   "attributes": [
+    {
+     "name": "node_position",
+     "type": "text",
+     "description": "sole-source / duopoly / challenger 在全球供应链中的位置"
+    },
+    {
+     "name": "home_jurisdiction",
+     "type": "text",
+     "description": "总部与受哪国出口管制"
+    },
+    {
+     "name": "export_license_exposure",
+     "type": "text",
+     "description": "受BIS EAR约束的产品线"
+    }
+   ],
+   "examples": [
+    "TSMC",
+    "Nvidia",
+    "AMD",
+    "ASML Holding N.V."
+   ],
+   "archetype": "signal"
+  },
+  {
+   "name": "DemandBloc",
+   "description": "集体买家/需求侧主体（US Hyperscalers + Frontier-AI、Gulf Sovereign AI、Auto OEM & Parts Coalition）",
+   "attributes": [
+    {
+     "name": "aggregate_demand_signal",
+     "type": "text",
+     "description": "capex 总额、订单可见度、ARR 等量化需求信号"
+    },
+    {
+     "name": "constituency",
+     "type": "text",
+     "description": "成员清单或典型代表"
+    },
+    {
+     "name": "policy_stance",
+     "type": "text",
+     "description": "对关税/出口管制/产业政策的整体立场"
+    }
+   ],
+   "examples": [
+    "US Hyperscaler / Frontier-AI Bloc",
+    "Gulf Sovereign AI Procurement Bloc",
+    "Auto OEM & Parts Coalition"
+   ],
+   "archetype": "collective"
+  },
+  {
+   "name": "Person",
+   "description": "Any individual person not fitting other specific person types.",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Full name of the person"
+    },
+    {
+     "name": "role",
+     "type": "text",
+     "description": "Role or occupation"
+    }
+   ],
+   "examples": [
+    "ordinary citizen",
+    "anonymous netizen"
+   ]
+  },
+  {
+   "name": "Organization",
+   "description": "Any organization not fitting other specific organization types.",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "Name of the organization"
+    },
+    {
+     "name": "org_type",
+     "type": "text",
+     "description": "Type of organization"
+    }
+   ],
+   "examples": [
+    "small business",
+    "community group"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "ALLY_OF",
+   "description": "政治同盟/同阵营协作（Cabinet process 内、跨部门一致立场）",
+   "source_targets": [
+    {
+     "source": "HeadOfState",
+     "target": "CabinetMinister"
+    },
+    {
+     "source": "CabinetMinister",
+     "target": "CabinetMinister"
+    },
+    {
+     "source": "CabinetMinister",
+     "target": "TradeAgency"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive / negative / neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high / medium / low"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "关系可考起始时间"
+    }
+   ],
+   "family": "alignment",
+   "valence": "allied",
+   "direction_semantics": "source 与 target 在贸易政策上同向合作；source 任命或支持 target 的行动"
+  },
+  {
+   "name": "OPPOSES",
+   "description": "对抗/制裁/批评/拒绝对话",
+   "source_targets": [
+    {
+     "source": "DemandBloc",
+     "target": "ChokepointCorporate"
+    },
+    {
+     "source": "MultilateralBody",
+     "target": "HeadOfState"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "negative 为默认"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high / medium / low"
+    },
+    {
+     "name": "channel",
+     "type": "text",
+     "description": "retaliation / public-statement / export-control / litigation"
+    }
+   ],
+   "family": "antagonism",
+   "valence": "adversarial",
+   "direction_semantics": "source 对 target 采取对抗立场或行动"
+  },
+  {
+   "name": "REGULATES",
+   "description": "法定监管/许可/裁决权（EAR licensing、S232 调查、CBAM 征收、CHIPS 拨款条款）",
+   "source_targets": [
+    {
+     "source": "TradeAgency",
+     "target": "ChokepointCorporate"
+    },
+    {
+     "source": "TradeAgency",
+     "target": "DemandBloc"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "statutory_basis",
+     "type": "text",
+     "description": "S232/S301/S122/EAR/CHIPS/CBAM 等"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high / medium / low"
+    },
+    {
+     "name": "as_of_date",
+     "type": "text",
+     "description": "该监管关系存在的最新确认日期"
+    }
+   ],
+   "family": "governance",
+   "valence": "directional",
+   "direction_semantics": "source 依据法定权限对 target 行使监管/许可/裁决"
+  },
+  {
+   "name": "FUNDS",
+   "description": "出资/补贴/税收抵免/贷款（CHIPS disbursement、DOE Title XVII LOAN、AMIC）",
+   "source_targets": [
+    {
+     "source": "TradeAgency",
+     "target": "ChokepointCorporate"
+    },
+    {
+     "source": "TradeAgency",
+     "target": "TradeAgency"
+    },
+    {
+     "source": "LegislativeBody",
+     "target": "TradeAgency"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "amount_usd_bn",
+     "type": "text",
+     "description": "已披露的美元金额或区间"
+    },
+    {
+     "name": "milestone_status",
+     "type": "text",
+     "description": "on-track / delayed / ahead"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "起始日期或拨付意向书日期"
+    }
+   ],
+   "family": "economic",
+   "valence": "transactional",
+   "direction_semantics": "source 向 target 提供资金/税收抵免，target 承担相应产能或合规义务"
+  },
+  {
+   "name": "SUPPLIES",
+   "description": "供应/制造依赖关系（TSMC 供 Nvidia、AMD；中国供 EU/MX/CA 关键矿产）",
+   "source_targets": [
+    {
+     "source": "ChokepointCorporate",
+     "target": "ChokepointCorporate"
+    },
+    {
+     "source": "ChokepointCorporate",
+     "target": "DemandBloc"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "chokepoint_degree",
+     "type": "text",
+     "description": "sole / primary / diversified"
+    },
+    {
+     "name": "exposure_to_tariff",
+     "type": "text",
+     "description": "high / medium / low"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "关系可考起始时间"
+    }
+   ],
+   "family": "economic",
+   "valence": "transactional",
+   "direction_semantics": "source 向 target 供应关键投入/制成品"
+  },
+  {
+   "name": "COMPETES_WITH",
+   "description": "市场份额/技术路线/地缘阵营上的直接竞争",
+   "source_targets": [
+    {
+     "source": "ChokepointCorporate",
+     "target": "ChokepointCorporate"
+    },
+    {
+     "source": "DemandBloc",
+     "target": "ChokepointCorporate"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "arena",
+     "type": "text",
+     "description": "AI-accelerator / foundry / memory / 等细分赛道"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high / medium / low"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "竞争关系可考起始时间"
+    }
+   ],
+   "family": "antagonism",
+   "valence": "adversarial",
+   "direction_semantics": "source 与 target 在同一市场争夺份额或技术领先"
+  },
+  {
+   "name": "CONSTRAINS",
+   "description": "约束/否决/阻断/重大问题原则的司法或政治限制",
+   "source_targets": [
+    {
+     "source": "JudicialActor",
+     "target": "HeadOfState"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "constraint_type",
+     "type": "text",
+     "description": "judicial / statutory / veto / export-control"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high / medium / low"
+    },
+    {
+     "name": "as_of_date",
+     "type": "text",
+     "description": "约束关系确认日期"
+    }
+   ],
+   "family": "causal",
+   "valence": "directional",
+   "direction_semantics": "source 对 target 的政策空间施加实质限制"
+  },
+  {
+   "name": "INFLUENCES",
+   "description": "通过议程设置、游说、报告或公开表态影响决策（不含直接监管或对抗）",
+   "source_targets": [
+    {
+     "source": "DemandBloc",
+     "target": "TradeAgency"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "channel",
+     "type": "text",
+     "description": "legislation / lobbying / technical-report / public-comment"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high / medium / low"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "影响关系起始"
+    }
+   ],
+   "family": "influence",
+   "valence": "neutral",
+   "direction_semantics": "source 通过非强制渠道影响 target 的决策或立场"
+  },
+  {
+   "name": "PARTNERS_WITH",
+   "description": "正式伙伴关系（MPIA成员、双边贸易谈判轨道、行业联盟）",
+   "source_targets": [
+    {
+     "source": "ChokepointCorporate",
+     "target": "DemandBloc"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "framework",
+     "type": "text",
+     "description": "MPIA / bilateral-deal / consortium / 等"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high / medium / low"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "伙伴关系起始"
+    }
+   ],
+   "family": "alignment",
+   "valence": "allied",
+   "direction_semantics": "source 与 target 在多边/双边框架或产业联盟中结成伙伴"
+  },
+  {
+   "name": "TRIGGERS",
+   "description": "触发/激活一项法定事件或政策子程序（S301 initiation触发关税生效、Section 122 cliff触发立法讨论、SCOTUS ruling触发Plan B）",
+   "source_targets": [],
+   "attributes": [
+    {
+     "name": "mechanism",
+     "type": "text",
+     "description": "filing / ruling / lapse / signing"
+    },
+    {
+     "name": "lag_days",
+     "type": "text",
+     "description": "触发到实际生效的滞后天数"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high / medium / low"
+    },
+    {
+     "name": "as_of_date",
+     "type": "text",
+     "description": "触发日期"
+    }
+   ],
+   "family": "causal",
+   "valence": "directional",
+   "direction_semantics": "source 的行动导致/激活 target 法定事件"
+  }
+ ],
+ "analysis_summary": "本预测问题聚焦2028年美国贸易体系，涉及关税授权（IEEPA已被SCOTUS推翻、Section 122/232/301堆叠）、产业政策（CHIPS/出口管制）、双边关系（USMCA、中、欧、墨、加、Gulf）以及AI生产力×贸易竞争力的耦合。基于角色阵容（Government×10, Organization×9, Person×7, Other×2），实体类型围绕'主权决策者—执行官员—立法/司法—贸易执行机构—多边机构—卡脖子企业—需求集体—对手政府—法定事件断崖'九类设计，每类都有专门的属性（jurisdiction、statutory_basis、chokepoint_degree、expiry_date 等）以服务下游过滤与画像。关系类型在保留已实现的 ALLY_OF/OPPOSES/REGULATES/SUPPLIES/COMPETES_WITH/FUNDS/CONSTRAINS/INFLUENCES/PARTNERS_WITH 基础上，加入 TRIGGERS 作为对法定事件断崖的关键因果边，确保 24 July 2026 S122 cliff、27 Nov 2026 中国稀土断崖、AMIC sunset 等时点性节点能在图谱中被显式建模。所有关系附带 sentiment/strength/since_date 属性以支撑检索排序；媒体与智库被有意排除在能动 actor 类型之外，符合主角色纪律。"
+}

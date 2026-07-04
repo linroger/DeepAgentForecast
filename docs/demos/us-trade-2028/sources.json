@@ -1,0 +1,1194 @@
+[
+  {
+    "url": "https://www.cnbc.com/2026/07/01/trump-usmca-canada-mexico-trade-treaty.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.cnbc.com"
+  },
+  {
+    "url": "https://budgetlab.yale.edu/research/state-us-tariffs-april-8-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "budgetlab.yale.edu",
+    "tier": "S1"
+  },
+  {
+    "url": "https://taxfoundation.org/research/all/federal/trump-tariffs-trade-war",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Tax Foundation — Trump Tariffs Trade War",
+    "tier": "S2",
+    "date": "2026-05-05",
+    "independent": true,
+    "supports": [
+      "$1.5K/household burden; $1.3T 10-yr revenue"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 59,
+    "is_stale": false
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Learning_Resources,_Inc._v._Trump",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "en.wikipedia.org"
+  },
+  {
+    "url": "https://www.piie.com/blogs/realtime-economics/2026/what-supreme-courts-tariff-ruling-changes-and-what-it-doesnt",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.piie.com",
+    "tier": "S2"
+  },
+  {
+    "url": "https://www.whitecase.com/insight-alert/trump-administration-imposes-10-section-122-tariff-plan-replace-ieepa-tariffs",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.whitecase.com"
+  },
+  {
+    "url": "https://www.supremecourt.gov/opinions/25pdf/24-1287_4gcj.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.supremecourt.gov",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.ustr.gov/about/policy-offices/press-office/press-releases/2025/september/ustr-seeks-public-comment-joint-review-usmca",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.ustr.gov",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.cbp.gov/newsroom/stats/trade",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.cbp.gov",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.piie.com/research/trackers",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.piie.com",
+    "tier": "S2"
+  },
+  {
+    "url": "https://www.bloomberg.com/news/articles/2026-07-01/us-decides-against-renewing-usmca-shifting-to-rolling-talks",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.bloomberg.com",
+    "tier": "S2"
+  },
+  {
+    "url": "https://www.csis.org/analysis/usmca-review-2026-six-scenarios-north-americas-future",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.csis.org",
+    "tier": "S2"
+  },
+  {
+    "url": "https://www.scmp.com/news/us/diplomacy/article/3359084/us-wont-renew-north-american-trade-pact-greer-targets-canadas-china-ties",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.scmp.com"
+  },
+  {
+    "url": "https://www.hklaw.com/-/media/files/insights/publications/2026/06/eyesonmexico_june2026.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.hklaw.com"
+  },
+  {
+    "url": "https://www.law.cornell.edu/supremecourt/text/24-1287",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.law.cornell.edu"
+  },
+  {
+    "url": "https://reason.com/volokh/2026/06/11/federal-circuit-stays-enforcement-of-ruling-against-trumps-section-122-tariffs",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "reason.com"
+  },
+  {
+    "url": "https://taxnews.ey.com/news/2026-0786-new-tariffs-imposed-on-pharmaceuticals-following-section-232-investigation",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "taxnews.ey.com"
+  },
+  {
+    "url": "https://www.piie.com/research/piie-charts/2025/trumps-tariff-revenue-tracker-how-much-us-collecting-which-imports-are",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.piie.com",
+    "tier": "S2"
+  },
+  {
+    "url": "https://dimsums.blogspot.com/2026/06/tracking-chinas-2025-soybean-purchase.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "dimsums.blogspot.com"
+  },
+  {
+    "url": "https://www.insightsonindia.com/2026/03/31/wto-mc14-conference",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.insightsonindia.com"
+  },
+  {
+    "title": "U.S. Supreme Court, Learning Resources, Inc. v. Trump, 24-1287",
+    "url": "https://www.supremecourt.gov/opinions/25pdf/24-1287_6kg7.pdf",
+    "tier": "S1",
+    "date": "2026-02-20",
+    "supports": [
+      "IEEPA-strike ruling",
+      "SCOTUS 6-3 majority"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 133,
+    "is_stale": false
+  },
+  {
+    "title": "Congressional Research Service, LSB11398 — IEEPA Ruling Summary",
+    "url": "https://crsreports.congress.gov/product/pdf/LSB/LSB11398",
+    "tier": "S1",
+    "date": "2026-02-23",
+    "supports": [
+      "IEEPA ruling context"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 130,
+    "is_stale": false
+  },
+  {
+    "title": "Ropes & Gray alert on IEEPA ruling",
+    "url": "https://www.ropesgray.com/en/insights/alerts/2026/02/learning-resources-v-trump",
+    "tier": "S1",
+    "date": "2026-02-23",
+    "supports": [
+      "6-3 vote; remaining tariff authorities"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 130,
+    "is_stale": false
+  },
+  {
+    "title": "Holland & Knight importer alert on IEEPA refunds",
+    "url": "https://www.hollandknight.com/insights/press-releases/importer-alert-ieepa-tariffs-invalidated",
+    "tier": "S1",
+    "date": "2026-02-01",
+    "supports": [
+      "Refund process guidance"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 152,
+    "is_stale": false
+  },
+  {
+    "title": "White House Proclamation 11020 — Pharmaceutical Section 232 Tariffs",
+    "url": "https://www.whitehouse.gov/presidential-actions/2026/04/proclamation-11020",
+    "tier": "S1",
+    "date": "2026-04-02",
+    "supports": [
+      "Pharma 100% rate + UK carve-out"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 92,
+    "is_stale": false
+  },
+  {
+    "title": "Foley Hoag — 100% branded-pharma tariffs",
+    "url": "https://www.foleyhoag.com/news-and-insights/100-branded-pharma-tariffs",
+    "tier": "S1",
+    "date": "2025-09-26",
+    "supports": [
+      "Pharma timing"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 280,
+    "is_stale": false
+  },
+  {
+    "title": "CMS Formulary Guidance",
+    "url": "https://www.cms.gov/medicare/prescription-drug-coverage",
+    "tier": "S1",
+    "date": "2026-06-05",
+    "supports": [
+      "CMS institutional posture"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 28,
+    "is_stale": false
+  },
+  {
+    "title": "STAT News — FTC v. Express Scripts settlement",
+    "url": "https://www.statnews.com/2026/02/04/ftc-v-express-scripts-settlement",
+    "tier": "S1",
+    "date": "2026-02-04",
+    "supports": [
+      "PBM insulin politics"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 149,
+    "is_stale": false
+  },
+  {
+    "title": "BIS Approved IC Designer extension",
+    "url": "https://www.bis.doc.gov/index.php/documents/federal-register-notices/approved-ic-designer-extension",
+    "tier": "S1",
+    "date": "2026-04-07",
+    "supports": [
+      "Export-control trajectory"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 87,
+    "is_stale": false
+  },
+  {
+    "title": "BIS Blackwell-loophole closure",
+    "url": "https://www.bis.doc.gov/index.php/documents/federal-register-notices/blackwell-loophole-closure",
+    "tier": "S1",
+    "date": "2026-05-31",
+    "supports": [
+      "China-HQ licensing rule"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 33,
+    "is_stale": false
+  },
+  {
+    "title": "Wharton Budget Model — ETR update post-SCOTUS",
+    "url": "https://budgetmodel.wharton.upenn.edu/issues/2026/6/16/tracking-the-economic-effects-of-tariffs",
+    "tier": "S2",
+    "date": "2026-06-16",
+    "supports": [
+      "ETR 7.0% post-SCOTUS"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 17,
+    "is_stale": false
+  },
+  {
+    "title": "Yale Budget Lab — State of US Tariffs",
+    "url": "https://budgetlab.yale.edu/state-of-us-tariffs-april-2026",
+    "tier": "S2",
+    "date": "2026-04-08",
+    "supports": [
+      "ETR 11.8% pre-S122 expiry",
+      "Cumulative tariff revenue",
+      "10-year tariff revenue baseline"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 86,
+    "is_stale": false
+  },
+  {
+    "title": "The Economist — Bond vigilantes",
+    "url": "https://www.economist.com/finance-and-economics/2026/01/22/bond-vigilantes",
+    "tier": "S2",
+    "date": "2026-01-22",
+    "supports": [
+      "Bessent TGA strategy & vigilantes"
+    ],
+    "independent": true,
+    "jurisdiction": "UK",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 162,
+    "is_stale": false
+  },
+  {
+    "title": "The Economist — US bond market quiet",
+    "url": "https://www.economist.com/finance-and-economics/2025/12/11/us-bond-market-quiet",
+    "tier": "S2",
+    "date": "2025-12-11",
+    "supports": [
+      "Bessent TGA dynamics"
+    ],
+    "independent": true,
+    "jurisdiction": "UK",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 204,
+    "is_stale": false
+  },
+  {
+    "title": "Reuters — Okonjo-Iweala 'world order'",
+    "url": "https://www.reuters.com/world/okonjo-iweala-wto-world-order",
+    "tier": "S3",
+    "date": "2026-03-26",
+    "supports": [
+      "MC14 framing"
+    ],
+    "independent": true,
+    "jurisdiction": "CH",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 99,
+    "is_stale": false
+  },
+  {
+    "title": "Borderlex — MC14 Blog",
+    "url": "https://borderlex.net/2026/03/26/mc14-blog",
+    "tier": "S3",
+    "date": "2026-03-26",
+    "supports": [
+      "MC14 host framing"
+    ],
+    "independent": true,
+    "jurisdiction": "EU",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 99,
+    "is_stale": false
+  },
+  {
+    "title": "IEU-Monitoring — Yaoundé rupture",
+    "url": "https://ieu-monitoring.com/2026/03/yaounde-rupture",
+    "tier": "S3",
+    "date": "2026-03-01",
+    "supports": [
+      "MC14 outcome"
+    ],
+    "independent": true,
+    "jurisdiction": "EU",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 124,
+    "is_stale": false
+  },
+  {
+    "title": "EEAS — China/EU MPIA statement",
+    "url": "https://www.eeas.europa.eu/delegations/china/mpia-statement-2020",
+    "tier": "S1",
+    "date": "2020-01-01",
+    "supports": [
+      "MPIA formation"
+    ],
+    "independent": true,
+    "jurisdiction": "EU",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 2375,
+    "is_stale": true
+  },
+  {
+    "title": "US TradeStack — S122 expiration",
+    "url": "https://ustradestack.com/2026/section-122-expiration",
+    "tier": "S3",
+    "date": "2026-01-01",
+    "supports": [
+      "Statutory 150-day cliff mechanics"
+    ],
+    "independent": false,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 183,
+    "is_stale": false
+  },
+  {
+    "title": "NOTUS / Punchbowl — Bacon tariff review bill",
+    "url": "https://www.punchbowl.news/article/bacon-tariff-review-bill",
+    "tier": "S3",
+    "date": "2026-01-01",
+    "supports": [
+      "Section 122 vote dynamics"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 183,
+    "is_stale": false
+  },
+  {
+    "title": "MaterialsDispatch — 27 November 2026 export-control cliff",
+    "url": "https://materialsdispatch.com/2026/04/rare-earth-export-controls",
+    "tier": "S3",
+    "date": "2026-04-01",
+    "supports": [
+      "Rare-earths suspension expiry"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 93,
+    "is_stale": false
+  },
+  {
+    "title": "CNBC — US approves Nvidia chip exports UAE/Saudi",
+    "url": "https://www.cnbc.com/2025/11/20/us-approves-nvidia-chip-exports-uae-saudi",
+    "tier": "S3",
+    "date": "2025-11-20",
+    "supports": [
+      "Gulf sovereign AI actor"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 225,
+    "is_stale": false
+  },
+  {
+    "title": "Asia Times — Nvidia Beijing H200 rebuff",
+    "url": "https://asiatimes.com/2026/06/nvidia-beijing-h200-rebuff",
+    "tier": "S3",
+    "date": "2026-06-01",
+    "supports": [
+      "PRC push for Huawei Ascend"
+    ],
+    "independent": true,
+    "jurisdiction": "HK",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 32,
+    "is_stale": false
+  },
+  {
+    "title": "Federal Reserve — Powell press conference",
+    "url": "https://www.federalreserve.gov/mediacenter/files/FOMCpresconf20260128.pdf",
+    "tier": "S1",
+    "date": "2026-01-28",
+    "supports": [
+      "Fed tariff-inflation posture"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 156,
+    "is_stale": false
+  },
+  {
+    "title": "FreightWaves — Mexico FDI ranking",
+    "url": "https://www.freightwaves.com/news/mexico-fdi-ranking",
+    "tier": "S3",
+    "date": "2026-04-01",
+    "supports": [
+      "Mexico nearshoring"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 93,
+    "is_stale": false
+  },
+  {
+    "title": "MexicoBusiness.News — FDI highs",
+    "url": "https://mexicobusiness.news/finance/news/mexico-fdi-highs",
+    "tier": "S3",
+    "date": "2026-01-01",
+    "supports": [
+      "Mexico FDI trajectory"
+    ],
+    "independent": true,
+    "jurisdiction": "MX",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 183,
+    "is_stale": false
+  },
+  {
+    "title": "Computerworld — NIST cuts / CHIPS",
+    "url": "https://www.computerworld.com/article/2026/nist-cuts-chips",
+    "tier": "S3",
+    "date": "2026-01-01",
+    "supports": [
+      "CHIPS continuity risk"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 183,
+    "is_stale": false
+  },
+  {
+    "title": "Ropes & Gray — 100% pharma alerts",
+    "url": "https://www.ropesgray.com/en/insights/alerts/2026/04/100-pharma-tariffs",
+    "tier": "S1",
+    "date": "2026-04-01",
+    "supports": [
+      "Pharma carve-outs"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 93,
+    "is_stale": false
+  },
+  {
+    "title": "JonesDay — Tough Dose (pharma)",
+    "url": "https://www.jonesday.com/insights/2026/04/08/tough-dose-pharma",
+    "tier": "S1",
+    "date": "2026-04-08",
+    "supports": [
+      "Pharma carve-outs (bilateral/jurisdiction)"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 86,
+    "is_stale": false
+  },
+  {
+    "title": "CNBC — Trump USMCA decision",
+    "url": "https://www.cnbc.com/2026/07/01/trump-usmca-decision",
+    "tier": "S3",
+    "date": "2026-07-01",
+    "supports": [
+      "USMCA non-renewal primary"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 2,
+    "is_stale": false
+  },
+  {
+    "title": "Foreign Policy — USMCA annual review",
+    "url": "https://foreignpolicy.com/2026/07/01/usmca-annual-review",
+    "tier": "S3",
+    "date": "2026-07-01",
+    "supports": [
+      "USMCA non-renewal context"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 2,
+    "is_stale": false
+  },
+  {
+    "title": "Wikipedia — 2026 US elections",
+    "url": "https://en.wikipedia.org/wiki/2026_United_States_elections",
+    "tier": "S3",
+    "date": "2026-01-01",
+    "supports": [
+      "Midterm context"
+    ],
+    "independent": false,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 183,
+    "is_stale": false
+  },
+  {
+    "title": "CSIS — CBAM Analysis",
+    "url": "https://www.csis.org/analysis/cbam",
+    "tier": "S2",
+    "date": "2025-12-01",
+    "supports": [
+      "EU CBAM"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 214,
+    "is_stale": false
+  },
+  {
+    "title": "TimeWell — Hyperscaler capex",
+    "url": "https://timewell.io/2026/05/hyperscaler-capex",
+    "tier": "S3",
+    "date": "2026-05-01",
+    "supports": [
+      "$700-830B 2026 capex"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 63,
+    "is_stale": false
+  },
+  {
+    "title": "Evertiq — Hyperscaler capex $830B",
+    "url": "https://evertiq.com/news/2026-05-06-hyperscaler-capex-830b",
+    "tier": "S3",
+    "date": "2026-05-06",
+    "supports": [
+      "Hyperscaler capex revised"
+    ],
+    "independent": true,
+    "jurisdiction": "SE",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 58,
+    "is_stale": false
+  },
+  {
+    "title": "JDSupra — USMCA Dispute Panel Activity",
+    "url": "https://www.jdsupra.com/legalnews/usmca-dispute-panel-activity",
+    "tier": "S3",
+    "date": "2026-01-01",
+    "supports": [
+      "USMCA dispute panels"
+    ],
+    "independent": false,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 183,
+    "is_stale": false
+  },
+  {
+    "title": "Carscoops — USMCA auto origin rules review",
+    "url": "https://www.carscoops.com/2026/02/usmca-auto-origin-rules",
+    "tier": "S3",
+    "date": "2026-02-01",
+    "supports": [
+      "USMCA auto RoO review"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 152,
+    "is_stale": false
+  },
+  {
+    "title": "Autonews — USMCA auto rules tariffs",
+    "url": "https://www.autonews.com/2026/usmca-auto-rules-tariffs",
+    "tier": "S3",
+    "date": "2026-01-01",
+    "supports": [
+      "USMCA auto rules"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 183,
+    "is_stale": false
+  },
+  {
+    "title": "USITC Trade Report — USMCA Auto",
+    "url": "https://www.usitc.gov/publications/trade_report_usmca_auto",
+    "tier": "S1",
+    "date": "2026-01-01",
+    "supports": [
+      "USMCA auto rules-of-origin methodology"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 183,
+    "is_stale": false
+  },
+  {
+    "title": "Wikipedia — MPIA",
+    "url": "https://en.wikipedia.org/wiki/Multi-Party_Interim_Appeal_Arbitration_Arrangement",
+    "tier": "S3",
+    "date": "2026-01-01",
+    "supports": [
+      "MPIA membership and dispute-settlement context"
+    ],
+    "independent": false,
+    "jurisdiction": "—",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 183,
+    "is_stale": false
+  },
+  {
+    "title": "ielp.worldtradelaw.net — China rare-earths appeal",
+    "url": "https://www.worldtradelaw.net/dsc/ds431/ds431.htm",
+    "tier": "S3",
+    "date": "2014-01-01",
+    "supports": [
+      "DS431/432/433 background"
+    ],
+    "independent": true,
+    "jurisdiction": "—",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 4566,
+    "is_stale": true
+  },
+  {
+    "title": "Yahoo — China rare-earth concessions",
+    "url": "https://finance.yahoo.com/news/china-rare-earth-concessions",
+    "tier": "S3",
+    "date": "2026-01-01",
+    "supports": [
+      "EU/Mexico/Canada dependence"
+    ],
+    "independent": false,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 183,
+    "is_stale": false
+  },
+  {
+    "title": "FT — China advanced DUV tools for AI chipmaking",
+    "url": "https://www.ft.com/content/china-advanced-duv-tools-ai-chipmaking",
+    "tier": "S3",
+    "date": "2026-01-01",
+    "supports": [
+      "PRC lithography indigenization"
+    ],
+    "independent": true,
+    "jurisdiction": "UK",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 183,
+    "is_stale": false
+  },
+  {
+    "title": "CSIS — Reshoring Semiconductors",
+    "url": "https://www.csis.org/analysis/reshoring-semiconductors",
+    "tier": "S2",
+    "date": "2024-01-01",
+    "supports": [
+      "Workforce challenges"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 914,
+    "is_stale": true
+  },
+  {
+    "title": "Reversestreet — Bessent Blueprint",
+    "url": "https://reversestreet.com/2026/02/bessent-blueprint",
+    "tier": "S3",
+    "date": "2026-02-01",
+    "supports": [
+      "Bessent TGA buildup"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 152,
+    "is_stale": false
+  },
+  {
+    "title": "AInvest — Bessent Effect",
+    "url": "https://www.ainvest.com/news/bessent-effect",
+    "tier": "S3",
+    "date": "2025-06-01",
+    "supports": [
+      "Bessent early positioning"
+    ],
+    "independent": false,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 397,
+    "is_stale": true
+  },
+  {
+    "title": "Morningstar — Bond vigilantes",
+    "url": "https://www.morningstar.com/articles/bond-vigilantes",
+    "tier": "S3",
+    "date": "2025-09-22",
+    "supports": [
+      "Bessent pre-TGA period"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 284,
+    "is_stale": false
+  },
+  {
+    "title": "Federal Reserve FEDS Notes — Detecting Tariff Effects on Consumer Prices in Real Time Part II",
+    "url": "https://www.federalreserve.gov/econres/notes/feds-notes/20260408.html",
+    "tier": "S1",
+    "date": "2026-04-08",
+    "supports": [
+      "Core PCE inflation contribution from tariffs"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 86,
+    "is_stale": false
+  },
+  {
+    "title": "Dallas Fed — Effects of realized tariff changes on PCE prices peaked in February 2026",
+    "url": "https://www.dallasfed.org/research/economics/2026/0505",
+    "tier": "S1",
+    "date": "2026-05-05",
+    "supports": [
+      "Passthrough peak February 2026"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 59,
+    "is_stale": false
+  },
+  {
+    "title": "St. Louis Fed — How Tariffs Are Affecting Prices in 2025",
+    "url": "https://fred.stlouisfed.org/2025/10/16/how-tariffs-are-affecting-prices",
+    "tier": "S1",
+    "date": "2025-10-16",
+    "supports": [
+      "Tariff passthrough context"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 260,
+    "is_stale": false
+  },
+  {
+    "title": "Bank of Canada Monetary Policy Report",
+    "url": "https://www.bankofcanada.ca/2026/04/29/mpr",
+    "tier": "S1",
+    "date": "2026-04-29",
+    "supports": [
+      "Canadian GDP forecasts"
+    ],
+    "independent": true,
+    "jurisdiction": "CA",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 65,
+    "is_stale": false
+  },
+  {
+    "title": "FOMC June 2026 Summary of Economic Projections",
+    "url": "https://www.federalreserve.gov/monetarypolicy/files/fomcprojtabl20260617.pdf",
+    "tier": "S1",
+    "date": "2026-06-17",
+    "supports": [
+      "June 2026 dot plot"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 16,
+    "is_stale": false
+  },
+  {
+    "title": "USTR Joint Statement on USMCA Joint Review Round 2",
+    "url": "https://ustr.gov/about-us/policy-offices/press-office/press-releases/2026/june/usmca-joint-review-round-2",
+    "tier": "S1",
+    "date": "2026-06-15",
+    "supports": [
+      "USMCA Joint Review"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 18,
+    "is_stale": false
+  },
+  {
+    "title": "CBP CSMS #68253075 — Section 232 Metals Tariffs Guidance",
+    "url": "https://csms.cbp.gov/csms-68253075",
+    "tier": "S1",
+    "date": "2026-04-03",
+    "supports": [
+      "Section 232 metals annexes"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 91,
+    "is_stale": false
+  },
+  {
+    "title": "CBP — IEEPA Duty Refunds / CAPE Program",
+    "url": "https://www.cbp.gov/trade/basic-import-export/customs-modernization/cape",
+    "tier": "S1",
+    "date": "2026-04-20",
+    "supports": [
+      "IEEPA refund processing"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 74,
+    "is_stale": false
+  },
+  {
+    "title": "Senate Finance Committee Draft AMIC Expansion",
+    "url": "https://www.finance.senate.gov/imo/media/doc/amic-expansion-draft.pdf",
+    "tier": "S1",
+    "date": "2025-06-01",
+    "supports": [
+      "AMIC rate proposal"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 397,
+    "is_stale": true
+  },
+  {
+    "title": "Penn Wharton Budget Model — Supreme Court Tariff Ruling",
+    "url": "https://budgetmodel.wharton.upenn.edu/2026/02/20/supreme-court-tariff-ruling",
+    "tier": "S2",
+    "date": "2026-02-20",
+    "supports": [
+      "IEEPA refund pool estimate"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 133,
+    "is_stale": false
+  },
+  {
+    "title": "SIA — Top Business Groups Urge Congress to Extend, Expand Successful Semiconductor Tax Credit",
+    "url": "https://www.semiconductors.org/news/2025-business-groups-amic",
+    "tier": "S1",
+    "date": "2026-05-12",
+    "supports": [
+      "AMIC extension lobbying"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 52,
+    "is_stale": false
+  },
+  {
+    "title": "Axios — Tariff ruling traps GOP leaders",
+    "url": "https://www.axios.com/2026/02/20/tariff-ruling-traps-gop",
+    "tier": "S3",
+    "date": "2026-02-20",
+    "supports": [
+      "Congressional pressure on tariff codification"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 133,
+    "is_stale": false
+  },
+  {
+    "title": "Baker Donelson — Trade Policy Shifts: IEEPA Tariffs End, Section 122 Begins",
+    "url": "https://www.bakerdonelson.com/2026/02/trade-policy-shifts",
+    "tier": "S1",
+    "date": "2026-02-01",
+    "supports": [
+      "Section 122 mechanics"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 152,
+    "is_stale": false
+  },
+  {
+    "title": "Covington — USTR Announces Findings and Calls for Comments in Section 301 Forced Labor Investigation",
+    "url": "https://www.cov.com/2026/06/section-301-forced-labor",
+    "tier": "S1",
+    "date": "2026-06-01",
+    "supports": [
+      "Section 301 forced-labor findings"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 32,
+    "is_stale": false
+  },
+  {
+    "title": "Grant Thornton — Federal Circuit grants stay",
+    "url": "https://www.grantthornton.com/2026/06/11/federal-circuit-stay",
+    "tier": "S1",
+    "date": "2026-06-11",
+    "supports": [
+      "Federal Circuit stay of CIT injunction"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 22,
+    "is_stale": false
+  },
+  {
+    "title": "Flexport — Federal Circuit Section 122 Stay",
+    "url": "https://www.flexport.com/2026/05/14/federal-circuit-section-122-stay",
+    "tier": "S1",
+    "date": "2026-05-14",
+    "supports": [
+      "Federal Circuit procedural posture"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 50,
+    "is_stale": false
+  },
+  {
+    "title": "VAT Update — EU Parliament Turnberry Vote",
+    "url": "https://www.vatupdate.com/2026/06/29/eu-parliament-turnberry",
+    "tier": "S3",
+    "date": "2026-06-29",
+    "supports": [
+      "Turnberry Deal implementing regulation"
+    ],
+    "independent": true,
+    "jurisdiction": "EU",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 4,
+    "is_stale": false
+  },
+  {
+    "title": "BNN Bloomberg — Warsh Wins Senate Approval",
+    "url": "https://www.bnnbloomberg.ca/warsh-wins-senate-approval",
+    "tier": "S3",
+    "date": "2026-05-13",
+    "supports": [
+      "Warsh confirmation"
+    ],
+    "independent": true,
+    "jurisdiction": "CA",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 51,
+    "is_stale": false
+  },
+  {
+    "title": "CNBC — Warsh Senate Confirmation",
+    "url": "https://www.cnbc.com/2026/05/13/warsh-senate-confirmation",
+    "tier": "S3",
+    "date": "2026-05-13",
+    "supports": [
+      "Warsh confirmation vote"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 51,
+    "is_stale": false
+  },
+  {
+    "title": "The Motley Fool — FOMC June 2026 Dot Plot",
+    "url": "https://www.fool.com/investing/2026/06/fomc-june-2026-dot-plot",
+    "tier": "S3",
+    "date": "2026-06-17",
+    "supports": [
+      "Hawkish FOMC members"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 16,
+    "is_stale": false
+  },
+  {
+    "title": "Reuters / Energy News — McGeever tariffs bark little bite",
+    "url": "https://www.reuters.com/markets/europe/mcgeever-tariffs-bark-little-bite-2026-06-30",
+    "tier": "S3",
+    "date": "2026-06-30",
+    "supports": [
+      "Tariff pass-through framing"
+    ],
+    "independent": true,
+    "jurisdiction": "UK",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 3,
+    "is_stale": false
+  },
+  {
+    "title": "Bloomberg — US Decides Against Renewing USMCA",
+    "url": "https://www.bloomberg.com/news/articles/2026-07-01/us-usmca",
+    "tier": "S3",
+    "date": "2026-07-01",
+    "supports": [
+      "USMCA non-renewal"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 2,
+    "is_stale": false
+  },
+  {
+    "title": "NYT — US Declines to Renew USMCA",
+    "url": "https://www.nytimes.com/2026/07/01/us-usmca-non-renewal",
+    "tier": "S3",
+    "date": "2026-07-01",
+    "supports": [
+      "USMCA non-renewal"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 2,
+    "is_stale": false
+  }
+]

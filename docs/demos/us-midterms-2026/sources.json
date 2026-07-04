@@ -1,0 +1,855 @@
+[
+  {
+    "url": "https",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "https"
+  },
+  {
+    "url": "https://us",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "us"
+  },
+  {
+    "url": "https://uspollingdata.com/news/democrats-2028-presidential-field",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/2028_United_States_Senate_elections",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "en.wikipedia.org"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/2028_United_States_House_of_Representatives_elections",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "en.wikipedia.org"
+  },
+  {
+    "url": "https://news.gallup.com/poll/242093/midterm-seat-loss-averages-unpopular-presidents.aspx",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "news.gallup.com"
+  },
+  {
+    "url": "https://www.brookings.edu/articles/gop-midterm-prospects-darken-as-trump-approval-falls",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.brookings.edu",
+    "tier": "S2"
+  },
+  {
+    "url": "https://uspollingdata.com/polls/trump-approval",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://budgetlab.yale.edu/research/tracking-economic-effects-tariffs",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "budgetlab.yale.edu",
+    "tier": "S1"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/2028_United_States_presidential_election",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "en.wikipedia.org"
+  },
+  {
+    "url": "https://americanpolitics.fandom.com/wiki/2028_United_States_Senate_elections",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "americanpolitics.fandom.com"
+  },
+  {
+    "url": "https://www.cfr.org/articles/ice-and-deportations-how-trump-reshaping-immigration-enforcement",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.cfr.org"
+  },
+  {
+    "url": "https://www.cookpolitical.com/analysis/house/redistricting/behind-republicans-risky-bid-draw-themselves-five-more-seats-texas",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.cookpolitical.com"
+  },
+  {
+    "url": "https://www.whitecase.com/insight-alert/state-ai-laws-under-federal-scrutiny-key-takeaways-executive-order-establishing",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.whitecase.com"
+  },
+  {
+    "url": "https://uspollingdata.com/news/republican-senate-defense-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://time.com/7299044/senators-reject-10-year-ban-on-state-level-ai-regulation-in-blow-to-big-tech",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "time.com"
+  },
+  {
+    "url": "https://votehub.com/2026-forecast",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "votehub.com"
+  },
+  {
+    "url": "https://prri.org/spotlight/new-poll-amid-ongoing-war-in-iran-trump-support-drops-among-independents-and-republican-leaners",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "prri.org"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/2025%E2%80%932026_United_States_redistricting",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "en.wikipedia.org"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Timeline_of_the_2026_Iran_war",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "en.wikipedia.org"
+  },
+  {
+    "url": "https://ballotpedia.org/Presidential_candidates,_2028",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "ballotpedia.org"
+  },
+  {
+    "url": "https://www.latimes.com/politics/story/2025-10-05/senate-2028-election-texas-cornyn-paxton-allred-talarico",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.latimes.com"
+  },
+  {
+    "url": "https://uspollingdata.com/news/2028-republican-field",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://news.kalshi.com/p/2026-senate-odds-democrats-now-favored",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "news.kalshi.com"
+  },
+  {
+    "url": "https://uspollingdata.com/news/campaign-finance-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Casualties_of_the_2026_Iran_war",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "en.wikipedia.org"
+  },
+  {
+    "url": "https://www.270towin.com/2026-senate-election/cook-political-report-2026-senate",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.270towin.com"
+  },
+  {
+    "url": "https://budgetlab.yale.edu/research/state-us-tariffs-april-2-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "budgetlab.yale.edu",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.poly",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.poly"
+  },
+  {
+    "url": "https://uspollingdata.com/news/n",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://www.270towin",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.270towin"
+  },
+  {
+    "url": "https://www.fox",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.fox"
+  },
+  {
+    "url": "https://www.polytrackhq.app/blog/polymarket-2026-midterm-elections",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.polytrackhq.app"
+  },
+  {
+    "url": "https://uspollingdata.com/news/nate-silver-2026-forecast",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://uspollingdata.com/news/cook-political-ratings-april-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://www.newsweek.com/donald-trump-approval-ratings-2026-polls-inflation-economy-12026520",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.newsweek.com"
+  },
+  {
+    "url": "https://www.forbes.com/sites/saradorn/2026/06/19/trump-approval-rating-holds-steady-at-37-amid-iran-deal",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.forbes.com"
+  },
+  {
+    "url": "https://www.foxnews.com/politics/challenger-primed-face-gops-longtime-senate-dissenter-trump-brings-new-focus-alaska.print",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.foxnews.com"
+  },
+  {
+    "url": "https://www.semafor.com/article/06/01/2026/democratic-primaries-get-an-even-bigger-aipac-problem",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.semafor.com"
+  },
+  {
+    "url": "https:",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "https:"
+  },
+  {
+    "url": "https://www.campaignnow.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.campaignnow.com"
+  },
+  {
+    "url": "https://www.faf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.faf"
+  },
+  {
+    "url": "https://uspollingdata.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://uspollingdata.com/elections/2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://themidtermproject.org/redistricting-",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "themidtermproject.org"
+  },
+  {
+    "url": "https://trustpost.org/democrats-5-point",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "trustpost.org"
+  },
+  {
+    "url": "https://bobnews24.com/trump-predicts-impeachment-republicans-lose-midterms-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "bobnews24.com"
+  },
+  {
+    "url": "https://www",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www"
+  },
+  {
+    "url": "https://uspollingdata.com/news/senate-majority-math-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://tinhn.com/en/2026-midterm-senate-map",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "tinhn.com"
+  },
+  {
+    "url": "https://factually.co/fact-checks/politics/2026-senate-house-ratings-cook-sabato-inside-elections",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "factually.co"
+  },
+  {
+    "url": "https://uspollingdata.com/polls/special-elections-tracker",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://www.b",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.b"
+  },
+  {
+    "url": "https://www.brookings.edu/articles/what-history-tells-us-about-the-2026-midterm-elections",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.brookings.edu",
+    "tier": "S2"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/2026_United_States_elections",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Wikipedia — 2026 United States elections",
+    "tier": "S3",
+    "date": "2026-07-01",
+    "independent": true,
+    "supports": [
+      "Elections scheduled for November 3, 2026",
+      "US federal/statewide election calendar",
+      "Midterm class composition (35 Senate seats, 435 House, 36 governors)"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 2,
+    "is_stale": false
+  },
+  {
+    "url": "https://uspollingdata.com/news/presidential-approval-midterm-correlation",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://www.presidency.ucsb.edu/statistics",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.presidency.ucsb.edu"
+  },
+  {
+    "url": "https://projects.gelliottmorris.com/midterms-approval",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "projects.gelliottmorris.com"
+  },
+  {
+    "url": "https://www.davemanuel.com/us-midterm-elections-history.php",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.davemanuel.com"
+  },
+  {
+    "url": "https://www.aljazeera.com/news/2026/6/30/a-rally-like-no-other-trump-announces-2026-midterm-convention",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Al Jazeera — A rally like none other: Trump unveils 2026 Republican midterm convention",
+    "tier": "S2",
+    "date": "2026-06-30",
+    "independent": true,
+    "supports": [
+      "Trump announced GOP midterm convention Sept 9-10, 2026 in Dallas",
+      "First GOP midterm convention in modern history",
+      "The Economist/YouGov poll referenced: 58% disapprove Trump job performance"
+    ],
+    "jurisdiction": "International",
+    "lang": "en",
+    "staleness_days": 3,
+    "is_stale": false
+  },
+  {
+    "url": "https://dccc.org/memo-democratic-overperformance-in-trump-won-territory-significantly-expands-the-map-in-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "dccc.org"
+  },
+  {
+    "url": "https://uspollingdata.com/news/midterm-enthusiasm-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://uspollingdata.com/news/super-pac-spending-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://uspollingdata.com/polls/generic-ballot",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://www.campaignnow.com/blog/democrats-have-the-polls-but-republicans-have-the-map",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.campaignnow.com"
+  },
+  {
+    "url": "https://www.faf.ae/home/2026/6/28/trumps-road-to-the-midterms-seat-maps-economic-signals-and-the-ai-information-war-part-ii",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Foreign Affairs Forum — Trump's Road to the Midterms: Seat Maps, Economic Signals, and the AI Information War Part II",
+    "tier": "S2",
+    "date": "2026-06-28",
+    "independent": true,
+    "supports": [
+      "Democrats need to win 11 of 18 House toss-up races to reach 218 + hold Lean D",
+      "Democrats need to flip 14 of 17 toss-up seats",
+      "Cook has 17 House toss-ups in 2026"
+    ],
+    "jurisdiction": "International",
+    "lang": "en",
+    "staleness_days": 5,
+    "is_stale": false
+  },
+  {
+    "url": "https://uspollingdata.com/news/2026-election-results-scenarios",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uspollingdata.com"
+  },
+  {
+    "url": "https://themidtermproject.org/redistricting-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "themidtermproject.org"
+  },
+  {
+    "url": "https://trustpost.org/democrats-5-point-lead-gop-midterms-2026-poll",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "trustpost.org"
+  },
+  {
+    "url": "https://www.notus.org/2026-election/illinois-democratic-primaries-outside-money-ai-aipac",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.notus.org"
+  },
+  {
+    "url": "https://factually.co/fact-checks/politics/2026-senate-house-ratings-cook-sabato-inside-elections-toss-up-lean-df3462",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "factually.co"
+  },
+  {
+    "url": "https://www.presidency.ucsb.edu/statistics/data/seats-congress-gainedlost-the-presidents-party-mid-term-elections",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.presidency.ucsb.edu"
+  },
+  {
+    "url": "https://factually.co/fact-checks/politics/2026-house-control-forecast-models-predictions-a19dc2",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "factually.co"
+  },
+  {
+    "url": "https://modeldiplomat.com/story/democrats-impeachment-debate-threatens-midterm-success",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "modeldiplomat.com"
+  },
+  {
+    "url": "https://www.cnn.com/2025/07/17/politics/democrats-republicans-midterms-poll",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.cnn.com"
+  },
+  {
+    "url": "https://budgetlab.yale.edu/tariffs",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "budgetlab.yale.edu",
+    "tier": "S1"
+  },
+  {
+    "url": "https://ballotpedia.org/Party_committee_fundraising,_2025-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "ballotpedia.org"
+  },
+  {
+    "url": "https://www.forbes.com/sites/saradorn/2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.forbes.com"
+  },
+  {
+    "url": "https://www.livemint.com/global/tariffs-could-inch-lower-in-2026-but-another-ticking-time-bomb",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.livemint.com"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "en.wikipedia.org"
+  },
+  {
+    "url": "https://electiontracker.live",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "electiontracker.live"
+  },
+  {
+    "url": "https://www.campaignnow.com/blog/fourteen-toss-up-seats-and-a-shrinking-shield-are-putting-the-house-majority-at-risk",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.campaignnow.com"
+  },
+  {
+    "url": "https://lowdown.today/t/us-midterms-2026/10/dccc-banks-record-quarter-on-b",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lowdown.today"
+  },
+  {
+    "url": "https://www.huffpost.com/entry/nate-silver-house-senate-predictions-2026-midterms_n_6a438823e4b0f259890f7d5d",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.huffpost.com"
+  },
+  {
+    "url": "https://www.natesilver.net/p/generic-ballot-average-2026-nate-silver-bulletin-congress-polls",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.natesilver.net"
+  },
+  {
+    "url": "https://bostonglobe-prod.cdn.arcpublishing.com/2026/06/02/nation/us-senate-midterm-elections-tracker",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "bostonglobe-prod.cdn.arcpublishing.com"
+  },
+  {
+    "url": "https://conservativebrief.com/new-senate-102505",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "conservativebrief.com"
+  },
+  {
+    "url": "https://www.newsmax.com/newsfront/jon-ossoff-mike-collins-georgia/2026/07/02",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.newsmax.com"
+  },
+  {
+    "url": "https://www.ntd.com/cook-shifts-4-senate-races-toward-democrats-but-gop-still-favored-to-hold-majority_1138696.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "NTD / The Epoch Times — Cook Shifts 4 Senate Races Toward Democrats, but GOP Still Favored to Hold Majority",
+    "tier": "S1",
+    "date": "2026-04-13",
+    "independent": true,
+    "supports": [
+      "Cook Senate ratings: NC Toss-Up→Lean D, GA Toss-Up→Lean D, OH Lean R→Toss-Up, NE Solid R→Likely R",
+      "Jessica Taylor quote: 'the likeliest outcome is a 1 to 3 seat Democratic pickup, just short of 4'",
+      "April 13 was the largest one-sided Senate shift this cycle"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 81,
+    "is_stale": false
+  },
+  {
+    "title": "BBC — US House delivers rebuke to Trump as it votes to halt Iran war",
+    "url": "https://www.bbc.com/news/articles/cj6pldg39deo",
+    "tier": "S1",
+    "date": "2026-06-15",
+    "supports": [
+      "Iran war ended June 17, 2026 with ceasefire",
+      "Petrol prices spiked during war",
+      "Public opposition to war increased",
+      "Fourth House attempt to rein in Trump's war powers"
+    ],
+    "independent": true,
+    "jurisdiction": "UK",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 18,
+    "is_stale": false
+  },
+  {
+    "title": "NBC News — Trump Iran handling poll",
+    "url": "https://www.nbcnews.com",
+    "tier": "S1",
+    "date": "2026-06-25",
+    "supports": [
+      "67% disapprove of Trump's Iran approach (NBC polling)",
+      "Only one-third express approval",
+      "Trump approval at 33% in some readings",
+      "17% of 2024 Trump voters express reservations about their vote"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 8,
+    "is_stale": false
+  },
+  {
+    "title": "Yahoo News — Ohio 2026 poll: Sen. Husted starts matchup with 6-point lead over Brown",
+    "url": "https://www.yahoo.com/news/articles/ohio-2026-poll-sen-husted-100000989.html",
+    "tier": "S2",
+    "date": "2026-06-15",
+    "supports": [
+      "Nexstar/Emerson poll: Husted leads Brown by 6 pts in OH special",
+      "7% undecided",
+      "First look at OH special election",
+      "Senator Husted appointed to Vance vacancy"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 18,
+    "is_stale": false
+  },
+  {
+    "title": "Newsweek — Democrats' Chances of Beating GOP's Jon Husted in Ohio",
+    "url": "https://www.newsweek.com/jon-husted-ohio-senate-race-poll-2066822",
+    "tier": "S2",
+    "date": "2026-06-20",
+    "supports": [
+      "BGSU poll: Husted leads Brown 6 pts, Ryan 7 pts",
+      "Trump won Ohio by 11 pts in 2024, 8 pts in 2016 and 2020",
+      "OH special election polls split"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 13,
+    "is_stale": false
+  },
+  {
+    "title": "Common Dreams — Warren Says Trump Knows Iran War and Price Hikes Hurt Midterms",
+    "url": "https://www.commondreams.org/news/iran-war-2026-midterms",
+    "tier": "S2",
+    "date": "2026-06-15",
+    "supports": [
+      "Sen. Warren accuses Trump of sabotaging 2026 midterms",
+      "Iran war illegal in Warren's framing",
+      "Gas prices spiking",
+      "Inflation threat across the political spectrum"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 18,
+    "is_stale": false
+  },
+  {
+    "title": "RealClearPolling — Senate Election Polls 2026",
+    "url": "https://www.realclearpolling.com/latest-polls/senate",
+    "tier": "S2",
+    "date": "2026-07-02",
+    "supports": [
+      "Fabrizio/Anzalone: Brown 48, Husted 45 in OH special",
+      "Poll aggregator for 2026 Senate races",
+      "National Senate polling snapshot"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 1,
+    "is_stale": false
+  },
+  {
+    "title": "Indian Express / AP-NORC — Trump Approval Sinks to Record Lows",
+    "url": "https://indianexpress.com/article/world/trump-approval-ratings-2026-us-midterm-polls-10652089",
+    "tier": "S1",
+    "date": "2026-06-25",
+    "supports": [
+      "NBC polling: 67% disapprove of Trump's Iran approach",
+      "70% of Americans cite concerns that drove approval decline",
+      "Trump approval trajectory 50%+ Jan 2025 → 40% Feb 2026 → 34% April 2026"
+    ],
+    "independent": true,
+    "jurisdiction": "International",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 8,
+    "is_stale": false
+  },
+  {
+    "title": "UMass Lowell Center for Public Opinion — President Trump's Approval Sinks to 33% in New UMass Poll",
+    "url": "https://www.umass.edu/news/article/president-trumps-approval-sinks-33-new-umass-poll",
+    "tier": "S1",
+    "date": "2026-03-30",
+    "supports": [
+      "Trump approval 33% in UMass polling",
+      "17% of 2024 Trump voters express reservations about their vote",
+      "Disapproval over inflation, immigration, jobs, tariffs",
+      "War with Iran a factor"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 95,
+    "is_stale": false
+  },
+  {
+    "title": "USPollingData — Maine Senate Race 2026: Susan Collins Seeks...",
+    "url": "https://uspollingdata.com/senate-2026/maine",
+    "tier": "S2",
+    "date": "2026-07-03",
+    "supports": [
+      "Cook rate change: Maine Senate now Toss-Up",
+      "Toss-Up status confirmed by Sabato and Cook",
+      "ME-Senate has both Collins' brand and Platner baggage",
+      "National polling snapshot"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 0,
+    "is_stale": false
+  },
+  {
+    "title": "USPollingData — Why Midterm Turnout Matters: The 40% Problem",
+    "url": "https://uspollingdata.com/explainers/midterm-turnout-explained",
+    "tier": "S2",
+    "date": "2026-06-15",
+    "supports": [
+      "Eligible voter 2022 turnout: 52.2% (high for midterm)",
+      "2022 age 18-29 turnout: 28-32%",
+      "Democratic enthusiasm is high heading into 2026",
+      "Midterm turnout typically 28-32% for young voters, 60-65% for older"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 18,
+    "is_stale": false
+  },
+  {
+    "title": "Cook Political Report — One Year Out: Assessing the 2026 Midterm Landscape",
+    "url": "https://www.cookpolitical.com/analysis/video/briefings/one-year-out-assessing-2026-midterm-landscape",
+    "tier": "S1",
+    "date": "2026-06-15",
+    "supports": [
+      "PollTracker reinstated for 2026 cycle",
+      "Trump approval tracking",
+      "Cook qualitative framing of cycle",
+      "National environment forecast"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 18,
+    "is_stale": false
+  },
+  {
+    "title": "Wikipedia — 2026 United States Senate special election in Ohio",
+    "url": "https://en.wikipedia.org/wiki/2026_United_States_Senate_special_election_in_Ohio",
+    "tier": "S3",
+    "date": "2026-06-25",
+    "supports": [
+      "Special election concurrent with Nov 3, 2026 election",
+      "Gov. Mike DeWine chose Jon Husted to replace Vance",
+      "Special election context"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 8,
+    "is_stale": false
+  },
+  {
+    "title": "The Hill — Iran polling aggregate June 2026",
+    "url": "https://thehill.com",
+    "tier": "S2",
+    "date": "2026-06-25",
+    "supports": [
+      "Iran war polling aggregates",
+      "Trump Iran handling under 40%",
+      "Ceasefire effect on Trump approval",
+      "Gas price impact data"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 8,
+    "is_stale": false
+  },
+  {
+    "title": "270toWin — 2026 Senate Election Interactive Map",
+    "url": "https://www.270towin.com/2026-senate-election",
+    "tier": "S3",
+    "date": "2026-06-30",
+    "supports": [
+      "3-part Senate interactive map",
+      "State-by-state rating",
+      "Forecasting composition tool",
+      "Class III Senate composition"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 3,
+    "is_stale": false
+  },
+  {
+    "title": "Boston Globe — 9 key Senate races tracker",
+    "url": "https://www.bostonglobe.com",
+    "tier": "S1",
+    "date": "2026-06-02",
+    "supports": [
+      "Longwell / Bulwark focus groups on 'buyer's remorse'",
+      "Trump-product buyers 62% motivated vs. 45% non-buyers in R voter file",
+      "Senate race-by-race polling tracker",
+      "2026 cycle D-flip probability analysis"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 31,
+    "is_stale": false
+  }
+]
