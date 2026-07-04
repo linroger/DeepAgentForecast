@@ -94,8 +94,8 @@ tools:
     use: deerflow.community.jina_ai.tools:web_fetch_tool
     timeout: 10
 
-  # DRF-2 config-reflected tool：Oddpool 预测市场快照（校准锚点，degrade-safe）。
-  # 需要 harness 进程能 import drf2（PYTHONPATH 含仓库根）且设置 $ODDPOOL_API_KEY。
+  # DRF-2 config-reflected tool：Polymarket 预测市场快照（校准锚点，degrade-safe，无需 API key）。
+  # 需要 harness 进程能 import drf2（PYTHONPATH 含仓库根）；数据源是 Polymarket 公开 Gamma API。
   - name: prediction_market_search
     group: web
     use: drf2.config.market_tools:prediction_market_search_tool

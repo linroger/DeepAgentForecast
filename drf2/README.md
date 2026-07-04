@@ -24,11 +24,11 @@ drf2/
       kg-construction/         # when/how to call the kg_* MCP tools
       simulation-design/       # persona/world-brief/config methodology
       forecast-report/         # 3-part Bridgewater brief + calibration rubric
-      prediction-markets/      # Oddpool anchors usage
+      prediction-markets/      # Polymarket anchors usage (keyless public API)
   config/
     config.yaml              # harness config: models, tools, 4 custom sub-agents
     extensions_config.json   # MCP registration for the two engines + skill enablement
-    market_tools.py          # config-reflected Oddpool tool (prediction_market_search)
+    market_tools.py          # config-reflected Polymarket tool (prediction_market_search, keyless)
   README.md                  # this file
 ```
 
@@ -42,10 +42,10 @@ only the orchestration/agentic shell is being replaced.
   own installed environment (`cd deer-flow-2.0.0/backend && make install`).
 - The legacy backend venv at `backend/.venv` (used by the two engine processes).
 - FalkorDB reachable (`FALKORDB_HOST` / `FALKORDB_PORT`) for the KG engine.
-- Env vars: `MINIMAX_API_KEY` (MiniMax-M3 stages), `ODDPOOL_API_KEY` (optional —
-  prediction-market anchors degrade to empty without it), and claude-cli credentials
+- Env vars: `MINIMAX_API_KEY` (MiniMax-M3 stages) and claude-cli credentials
   for `ClaudeChatModel` (it auto-loads `$ANTHROPIC_API_KEY` →
   `$CLAUDE_CODE_OAUTH_TOKEN` → `~/.claude/.credentials.json`).
+  Prediction-market anchors use Polymarket's keyless public API — no key needed.
 - `PYTHONPATH` for the harness process must include this repo root so the
   config-reflected tool `drf2.config.market_tools` resolves.
 
@@ -125,7 +125,7 @@ cd backend
 The test parses every `drf2/skills/**/SKILL.md` with the **actual** deer-flow 2.0
 parser/validator (path-injected from `deer-flow-2.0.0/`; skipped cleanly if that
 tree is absent), validates `config.yaml` structure + `$ENV` placeholders +
-sub-agent wiring, validates `extensions_config.json`, and unit-tests the Oddpool
+sub-agent wiring, validates `extensions_config.json`, and unit-tests the Polymarket
 tool's pure logic with mocked fetches. No network, no LLM, no engines needed.
 
 ### Verified import paths

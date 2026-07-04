@@ -1,15 +1,17 @@
-"""预测市场集成（Oddpool 聚合 Kalshi/Polymarket）的离线测试。
+"""预测市场集成（Polymarket 公开 Gamma API，keyless）的离线测试。
 
 全部 mock httpx，绝不发真实请求：客户端解析/规整化/去重/降级、markdown 渲染、
 检索词派生启发式、以及 forecast_extractor 的 market_anchor 贯通。
 """
+
+import json
 
 import httpx
 import pytest
 
 from app.utils import prediction_markets as pm
 from app.utils.prediction_markets import (
-    OddpoolClient,
+    PolymarketClient,
     derive_market_queries,
     render_markets_block,
 )
@@ -37,60 +39,68 @@ class FakeResponse:
         return self._payload
 
 
-def _mk(mid, vol=1000, liq=50, price="0.2100", **kw):
-    """一条 Oddpool /search/markets 返回行（字符串价，镜像真实 API）。"""
+def _raw(mid, vol=1000, liq=50, yes="0.2100", closed=False,
+         outcomes='["Yes","No"]', prices=None, **kw):
+    """一条 Polymarket /public-search 里嵌套的 market 行（字符串价，镜像真实 API）。"""
+    if prices is None:
+        prices = json.dumps([yes, f"{1 - float(yes):.4f}"])
     d = {
-        "market_id": mid, "exchange": "kalshi", "series_id": "SER",
-        "question": f"Will {mid} resolve yes?", "category": "economics",
-        "status": "active", "volume": vol, "liquidity": liq,
-        "last_yes_price": price, "last_no_price": "0.7900",
-        "event_id": "EV1", "event_title": "Some event", "settled_at": None,
+        "id": mid, "question": f"Will {mid} resolve yes?",
+        "outcomes": outcomes, "outcomePrices": prices,
+        "volume": vol, "liquidity": liq, "closed": closed, "active": True,
+        "groupItemTitle": "",
     }
     d.update(kw)
     return d
 
 
+def _event(title, markets):
+    return {"title": title, "slug": "s", "markets": markets}
+
+
+def _payload(events):
+    return {"events": events, "pagination": {}}
+
+
 @pytest.fixture
-def no_env_key(monkeypatch):
-    """隔离开发机 .env 里的真实 key，保证测试确定性。"""
-    monkeypatch.delenv("ODDPOOL_API_KEY", raising=False)
-    try:
-        from app.config import Config
-        monkeypatch.setattr(Config, "ODDPOOL_API_KEY", "", raising=False)
-    except Exception:
-        pass
+def enabled(monkeypatch):
+    """打开 PREDICTION_MARKETS_ENABLED（覆盖 conftest 的 autouse 关闭），使 client.enabled=True。"""
+    monkeypatch.setenv("PREDICTION_MARKETS_ENABLED", "true")
+    from app.config import Config
+    monkeypatch.setattr(Config, "PREDICTION_MARKETS_ENABLED", True, raising=False)
 
 
 # ---------------------------------------------------------------- client
 
-def test_disabled_without_key_makes_no_http_call(no_env_key, monkeypatch):
+def test_disabled_makes_no_http_call(monkeypatch):
+    """默认（conftest）关闭时：client.enabled=False，绝不发请求。"""
     calls = []
     monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: calls.append(1))
-    client = OddpoolClient(api_key="")
+    client = PolymarketClient()
     assert client.enabled is False
-    assert client.search_markets("tariff") == []
     assert client.search_events("tariff") == []
-    assert client.event_markets("EV1") == []
+    assert client.snapshot_for_queries(["tariff"]) == []
     assert calls == []  # 未启用时绝不发请求
 
 
-def test_search_markets_parses_and_sends_auth_header(monkeypatch):
+def test_search_events_parses_and_keyless(enabled, monkeypatch):
     seen = {}
 
     def fake_get(url, params=None, timeout=None, headers=None):
         seen.update(url=url, params=params, headers=headers, timeout=timeout)
-        return FakeResponse([_mk("m1"), "not-a-dict", _mk("m2")])
+        return FakeResponse(_payload([_event("Ev", [_raw("m1")]), "not-a-dict"]))
 
     monkeypatch.setattr(pm.httpx, "get", fake_get)
-    out = OddpoolClient(api_key="test-key").search_markets("tariff", limit=5)
-    assert [m["market_id"] for m in out] == ["m1", "m2"]  # 非 dict 行被丢弃
-    assert seen["url"].endswith("/search/markets")
-    assert seen["params"] == {"q": "tariff", "status": "active", "limit": 5}
-    assert seen["headers"]["X-API-Key"] == "test-key"
+    out = PolymarketClient().search_events("tariff", limit=5)
+    assert [e["title"] for e in out] == ["Ev"]           # 非 dict 事件被丢弃
+    assert seen["url"].endswith("/public-search")
+    assert seen["params"] == {"q": "tariff", "limit_per_type": 5,
+                              "events_status": "active"}
+    assert "X-API-Key" not in seen["headers"]            # keyless：不发鉴权头
     assert seen["timeout"] == 15.0
 
 
-def test_transport_error_retries_once_then_degrades_to_empty(monkeypatch):
+def test_transport_error_retries_once_then_degrades_to_empty(enabled, monkeypatch):
     calls = []
 
     def fake_get(*a, **k):
@@ -98,92 +108,109 @@ def test_transport_error_retries_once_then_degrades_to_empty(monkeypatch):
         raise httpx.ConnectError("boom")
 
     monkeypatch.setattr(pm.httpx, "get", fake_get)
-    assert OddpoolClient(api_key="k").search_markets("tariff") == []
+    assert PolymarketClient().search_events("tariff") == []
     assert len(calls) == 2  # 瞬时错误恰好重试一次，然后降级为空（绝不抛）
 
 
-def test_transient_5xx_retries_then_succeeds(monkeypatch):
-    responses = [FakeResponse(status_code=503), FakeResponse([_mk("m1")])]
+def test_transient_5xx_retries_then_succeeds(enabled, monkeypatch):
+    responses = [FakeResponse(status_code=503),
+                 FakeResponse(_payload([_event("Ev", [_raw("m1")])]))]
     monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: responses.pop(0))
-    out = OddpoolClient(api_key="k").search_markets("tariff")
-    assert [m["market_id"] for m in out] == ["m1"]
+    out = PolymarketClient().search_events("tariff")
+    assert [e["title"] for e in out] == ["Ev"]
 
 
-def test_non_transient_4xx_does_not_retry(monkeypatch):
+def test_non_transient_4xx_does_not_retry(enabled, monkeypatch):
     calls = []
 
     def fake_get(*a, **k):
         calls.append(1)
-        return FakeResponse(status_code=401)
+        return FakeResponse(status_code=404)
 
     monkeypatch.setattr(pm.httpx, "get", fake_get)
-    assert OddpoolClient(api_key="bad").search_markets("tariff") == []
-    assert len(calls) == 1  # 鉴权失败不重试
-
-
-def test_event_markets_hits_event_path(monkeypatch):
-    seen = {}
-
-    def fake_get(url, params=None, timeout=None, headers=None):
-        seen["url"] = url
-        return FakeResponse([_mk("m9")])
-
-    monkeypatch.setattr(pm.httpx, "get", fake_get)
-    out = OddpoolClient(api_key="k").event_markets("EV42")
-    assert seen["url"].endswith("/search/events/EV42/markets")
-    assert out[0]["market_id"] == "m9"
+    assert PolymarketClient().search_events("tariff") == []
+    assert len(calls) == 1  # 4xx 不重试
 
 
 # ------------------------------------------------------------- snapshot
 
-def test_snapshot_normalizes_filters_dedupes_and_sorts(monkeypatch):
+def test_snapshot_normalizes_filters_dedupes_and_sorts(enabled, monkeypatch):
     by_query = {
-        "tariff": [
-            _mk("m-big", vol=9000, price="0.6400"),
-            _mk("m-settled", vol=8000, settled_at="2026-01-01T00:00:00Z"),  # 已结算 → 剔除
-            _mk("m-resolved", vol=8000, status="resolved"),                  # 已判定 → 剔除
-            _mk("m-thin", vol=50),                                           # 低于 min_volume → 剔除
-            _mk("m-dry", vol=5000, liq=0),                                   # 零流动性 → 剔除
-            _mk("m-noprice", vol=5000, last_yes_price=None),                 # 无价 → 剔除
-        ],
-        "semiconductor export": [
-            _mk("m-big", vol=9000, price="0.6400"),                          # 跨 query 重复 → 去重
-            _mk("m-small", vol=500, price="0.2100"),
-        ],
+        "tariff": _payload([
+            _event("Big", [_raw("m-big", vol=9000, yes="0.6400")]),
+            _event("Bad", [
+                _raw("m-closed", vol=8000, closed=True),                    # 已关闭 → 剔除
+                _raw("m-resolved", vol=8000, prices='["1","0"]'),           # 价=1 定盘 → 剔除
+                _raw("m-thin", vol=50),                                     # 低于 min_volume → 剔除
+                _raw("m-noprice", vol=5000, prices='["","x"]'),            # 无可解析价 → 剔除
+            ]),
+        ]),
+        "semiconductor export": _payload([
+            _event("Big", [_raw("m-big", vol=9000, yes="0.6400")]),         # 跨 query 重复 → 去重
+            _event("Small", [_raw("m-small", vol=500, yes="0.2100")]),
+        ]),
     }
 
     def fake_get(url, params=None, timeout=None, headers=None):
         return FakeResponse(by_query[params["q"]])
 
     monkeypatch.setattr(pm.httpx, "get", fake_get)
-    out = OddpoolClient(api_key="k").snapshot_for_queries(
+    out = PolymarketClient().snapshot_for_queries(
         ["tariff", "semiconductor export"], min_volume=200)
     assert [m["market_id"] for m in out] == ["m-big", "m-small"]  # volume 降序
     big = out[0]
     assert big["implied_yes_prob"] == 0.64          # "0.6400" 字符串 → float
     assert big["matched_query"] == "tariff"          # 首个命中的 query
-    assert big["exchange"] == "kalshi"
-    assert big["event_title"] == "Some event"
+    assert big["exchange"] == "polymarket"
+    assert big["event_title"] == "Big"               # 事件标题回填
     assert out[1]["matched_query"] == "semiconductor export"
 
 
-def test_snapshot_max_total_cap_and_query_failure_isolation(monkeypatch):
+def test_snapshot_max_total_cap_and_query_failure_isolation(enabled, monkeypatch):
     def fake_get(url, params=None, timeout=None, headers=None):
         if params["q"] == "bad":
             raise httpx.ConnectError("down")
-        return FakeResponse([_mk(f"m{i}-{params['q']}", vol=1000 + i) for i in range(5)])
+        return FakeResponse(_payload([
+            _event("E", [_raw(f"m{i}-{params['q']}", vol=1000 + i) for i in range(5)])]))
 
     monkeypatch.setattr(pm.httpx, "get", fake_get)
-    out = OddpoolClient(api_key="k").snapshot_for_queries(["a", "bad", "b"], max_total=3)
+    out = PolymarketClient().snapshot_for_queries(["a", "bad", "b"], max_total=3)
     assert len(out) == 3                            # 限量
     assert all("bad" not in m["market_id"] for m in out)  # 失败 query 只丢那一批
+
+
+def test_snapshot_caps_markets_per_event_for_diversity(enabled, monkeypatch):
+    """一个多结局事件的高成交量子市场阶梯不得霸占全部名额——每事件默认最多 3 条，
+    其余名额留给其他事件（用户诉求：surface 多个不同事件的市场，而非一个事件的阶梯）。"""
+    ladder = [_raw(f"cut{i}", vol=9000 - i, yes="0.01") for i in range(8)]   # 同一事件 8 个子市场
+    payload = _payload([
+        _event("Fed rate cuts count", ladder),
+        _event("House control", [_raw("house", vol=100, yes="0.55")]),        # 另一事件（低量）
+    ])
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: FakeResponse(payload))
+    out = PolymarketClient().snapshot_for_queries(["x"], min_volume=50, max_per_event=3)
+    fed = [m for m in out if m["event_title"] == "Fed rate cuts count"]
+    assert len(fed) == 3                                    # 阶梯被限到 3 条
+    assert any(m["event_title"] == "House control" for m in out)  # 其他事件仍能露出
+    # max_per_event<=0 → 不限制
+    unlimited = PolymarketClient().snapshot_for_queries(["x"], min_volume=50, max_per_event=0)
+    assert len([m for m in unlimited if m["event_title"] == "Fed rate cuts count"]) == 8
+
+
+def test_snapshot_yes_price_by_outcome_index(enabled, monkeypatch):
+    """outcomes 顺序颠倒时，仍按 "Yes" 的下标取价，而非盲取第一个。"""
+    payload = _payload([_event("E", [
+        _raw("m-rev", vol=3000, outcomes='["No","Yes"]', prices='["0.30","0.70"]')])])
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: FakeResponse(payload))
+    out = PolymarketClient().snapshot_for_queries(["x"])
+    assert out[0]["implied_yes_prob"] == 0.70       # 取 "Yes"（下标 1）而非 0.30
 
 
 # ------------------------------------------------------------- rendering
 
 def test_render_markets_block_deterministic_table():
     markets = [
-        {"market_id": "m1", "exchange": "kalshi", "question": "Will tariffs exceed 10%?",
+        {"market_id": "m1", "exchange": "polymarket", "question": "Will tariffs exceed 10%?",
          "implied_yes_prob": 0.64, "volume": 9000, "liquidity": 50,
          "event_title": "Tariffs", "matched_query": "tariff"},
         {"market_id": "m2", "exchange": "polymarket", "question": "Fed cuts | twice?",
@@ -191,8 +218,8 @@ def test_render_markets_block_deterministic_table():
          "event_title": "Fed", "matched_query": "Fed rate"},
     ]
     block = render_markets_block(markets, lang="en")
-    assert "Prediction Market Signals (Kalshi/Polymarket via Oddpool)" in block
-    assert "| 1 | Will tariffs exceed 10%? (m1) | kalshi | 64% | 9,000 |" in block
+    assert "Prediction Market Signals (Polymarket)" in block
+    assert "| 1 | Will tariffs exceed 10%? (m1) | polymarket | 64% | 9,000 |" in block
     assert "Fed cuts ／ twice?" in block             # 管道符转义
     assert "calibration anchors, not ground truth" in block  # 时效/非真值告示
     # 中文渲染 + 空列表降级
@@ -237,14 +264,14 @@ def test_derive_market_queries_cjk_question():
 # --------------------------------------------- forecast_extractor plumbing
 
 _MARKETS = [
-    {"market_id": "mkt-1", "exchange": "kalshi", "question": "Tariffs > 10%?",
+    {"market_id": "mkt-1", "exchange": "polymarket", "question": "Tariffs > 10%?",
      "implied_yes_prob": 0.30, "volume": 9000, "liquidity": 50,
      "event_title": "Tariffs", "matched_query": "tariff"},
 ]
 _MARKET_PACK = render_markets_block(_MARKETS, lang="en")
 
 
-def test_binary_forecasts_market_anchor_plumbing():
+def test_binary_forecasts_market_anchor_plumbing(enabled):
     fake = FakeLLMClient(json_responses=[{
         "binary_forecasts": [
             {"id": "F1", "statement": "US effective tariff rate averages over 10% from 2026-2028",

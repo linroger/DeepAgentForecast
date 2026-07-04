@@ -3026,18 +3026,19 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
 
 
 # ---------------------------------------------------------------------------
-# Prediction-market signals (Oddpool aggregates Kalshi + Polymarket)
+# Prediction-market signals (Polymarket public Gamma API, keyless)
 # ---------------------------------------------------------------------------
 # 研究报告落盘后，用研究问题/hot_topics/头部 actor 名确定性派生几条短检索词，抓取
 # 相关活跃预测市场的隐含概率，落 prediction_markets.json 并向 research_report.md
 # 追加一个机器抓取的确定性 markdown 节——下游（合成/报告/预测抽取）把市场价格当
 # **校准锚点**（非真值）。本 bridge 跑在 DeerFlow 自己的 venv 里，只用 stdlib
 # urllib（镜像 backend/app/utils/prediction_markets.py 的同一批端点与规整规则）。
-# 全程 degrade-safe：无 ODDPOOL_API_KEY / 无结果 / 网络错误 → 一行日志静默跳过。
+# 数据源是 Polymarket 官方公开 Gamma API——检索/浏览公开市场无需 API key、无需钱包。
+# 全程 degrade-safe：关闭旗标 / 无结果 / 网络错误 → 一行日志静默跳过。
 
 PREDICTION_MARKETS_FILENAME = "prediction_markets.json"
-_ODDPOOL_BASE_URL = "https://api.oddpool.com"
-_ODDPOOL_TRANSIENT = (429, 500, 502, 503, 504)
+_POLYMARKET_BASE_URL = "https://gamma-api.polymarket.com"
+_POLYMARKET_TRANSIENT = (429, 500, 502, 503, 504)
 
 # 与 backend/app/utils/prediction_markets.py 保持一致的停用词/短语启发式（无 LLM）。
 _PM_STOPWORDS = frozenset("""
@@ -3059,6 +3060,31 @@ def _pm_float(v: Any) -> float | None:
         return None if f != f else f
     except (TypeError, ValueError):
         return None
+
+
+def _pm_as_list(v: Any) -> list:
+    """Polymarket 的 outcomes/outcomePrices 常是 JSON 串（'["Yes","No"]'）也可能已是 list。"""
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str):
+        try:
+            parsed = json.loads(v)
+            return parsed if isinstance(parsed, list) else []
+        except (ValueError, TypeError):
+            return []
+    return []
+
+
+def _pm_yes_price(outcomes: Any, prices: Any) -> float | None:
+    """从 outcomes/outcomePrices 取 "Yes" 对应的隐含概率；无法定位则 None。"""
+    names = _pm_as_list(outcomes)
+    px = _pm_as_list(prices)
+    if not names or not px or len(names) != len(px):
+        return None
+    for i, name in enumerate(names):
+        if str(name).strip().lower() == "yes":
+            return _pm_float(px[i])
+    return None
 
 
 def _pm_salient_phrases(text: str, max_words: int = 3) -> list[str]:
@@ -3121,16 +3147,15 @@ def _pm_derive_queries(question: str, hot_topics: list | None = None,
     return out
 
 
-def _oddpool_get(path: str, params: dict, api_key: str, timeout: float = 15.0) -> Any:
-    """stdlib GET + JSON。瞬时错误（网络/超时/5xx/429）重试一次；仍失败则抛（调用方兜底）。"""
+def _polymarket_get(path: str, params: dict, timeout: float = 15.0) -> Any:
+    """stdlib GET + JSON（keyless）。瞬时错误（网络/超时/5xx/429）重试一次；仍失败则抛（调用方兜底）。"""
     import urllib.error
     import urllib.parse
     import urllib.request
-    url = _ODDPOOL_BASE_URL + path
+    url = _POLYMARKET_BASE_URL + path
     if params:
         url += "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={"X-API-Key": api_key,
-                                               "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
     last_err: Any = None
     for attempt in (1, 2):
         try:
@@ -3138,67 +3163,93 @@ def _oddpool_get(path: str, params: dict, api_key: str, timeout: float = 15.0) -
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             last_err = e
-            if e.code in _ODDPOOL_TRANSIENT and attempt == 1:
+            if e.code in _POLYMARKET_TRANSIENT and attempt == 1:
                 continue
-            break  # 4xx 鉴权/参数错误不重试
+            break  # 4xx 参数错误不重试
         except Exception as e:  # noqa: BLE001 — URLError/超时/JSON 解析 → 重试一次
             last_err = e
             continue
-    raise RuntimeError(f"oddpool GET {path} failed: {last_err}")
+    raise RuntimeError(f"polymarket GET {path} failed: {last_err}")
 
 
-def _pm_normalize_market(raw: Any, matched_query: str, min_volume: float) -> dict | None:
-    """单条市场规整化（镜像 backend 规则）；已结算/无价/低量/零流动性 → None。"""
+def _pm_normalize_market(raw: Any, matched_query: str, min_volume: float,
+                         event_title: str = "") -> dict | None:
+    """单条 Polymarket 市场规整化（镜像 backend 规则）；已关闭/无价/定盘价/低量 → None。"""
     if not isinstance(raw, dict):
         return None
-    market_id = str(raw.get("market_id") or "").strip()
+    market_id = str(raw.get("id") or "").strip()
     question = str(raw.get("question") or "").strip()
     if not market_id or not question:
         return None
-    status = str(raw.get("status") or "").strip().lower()
-    if raw.get("settled_at") or status in ("settled", "closed", "finalized", "resolved"):
+    # 已关闭/已判定 → 不配当锚点（active 旗标在已判定市场上仍为 True，不可靠）。
+    if raw.get("closed") is True or str(raw.get("closed")).strip().lower() == "true":
         return None
-    prob = _pm_float(raw.get("last_yes_price"))
-    if prob is None or not (0.0 <= prob <= 1.0):
+    prob = _pm_yes_price(raw.get("outcomes"), raw.get("outcomePrices"))
+    # 价格须严格落在 (0,1)：恰为 0/1 = 市场实质已定盘，作为校准锚点没有意义。
+    if prob is None or not (0.0 < prob < 1.0):
         return None
     volume = _pm_float(raw.get("volume")) or 0.0
     liquidity = _pm_float(raw.get("liquidity")) or 0.0
-    if liquidity <= 0 or volume < float(min_volume):
+    if volume < float(min_volume):
         return None
     return {
         "market_id": market_id,
-        "exchange": str(raw.get("exchange") or "").strip().lower(),
+        "exchange": "polymarket",
         "question": question,
         "implied_yes_prob": round(prob, 4),
         "volume": volume,
         "liquidity": liquidity,
-        "event_title": str(raw.get("event_title") or "").strip(),
+        "event_title": event_title or str(raw.get("groupItemTitle") or "").strip(),
         "matched_query": matched_query,
     }
 
 
-def _pm_snapshot(queries: list[str], api_key: str, per_query: int = 8,
-                 max_total: int = 20, min_volume: float = 200) -> list[dict]:
-    """对一组检索词取市场快照：按 market_id 去重、过滤、按成交量降序限量。
-    单个 query 失败只丢那一批（degrade-safe）。"""
+def _pm_cap_per_event(ranked: list[dict], max_per_event: int, max_total: int) -> list[dict]:
+    """在已按 volume 降序的市场列表上，限制每个事件最多 max_per_event 条，再截到 max_total。
+    保证多事件多样性（一个多结局事件的子市场阶梯不霸占全部名额）。<=0 视为不限制。"""
+    if int(max_per_event) <= 0:
+        return ranked[:max(0, int(max_total))]
+    per_event: dict[str, int] = {}
+    out: list[dict] = []
+    for m in ranked:
+        key = str(m.get("event_title") or "").strip() or m.get("market_id") or ""
+        n = per_event.get(key, 0)
+        if n >= int(max_per_event):
+            continue
+        per_event[key] = n + 1
+        out.append(m)
+    return out[:max(0, int(max_total))]
+
+
+def _pm_snapshot(queries: list[str], per_query: int = 8, max_total: int = 20,
+                 min_volume: float = 200, max_per_event: int = 3) -> list[dict]:
+    """对一组检索词取市场快照：public-search 返回活跃事件，展开其市场，按 market_id 去重、
+    过滤、按成交量降序，每个事件最多 max_per_event 条，最后限量。单个 query 失败只丢那一批。"""
     by_id: dict[str, dict] = {}
     for q in queries:
         q = str(q or "").strip()
         if not q:
             continue
         try:
-            data = _oddpool_get("/search/markets",
-                                {"q": q, "status": "active", "limit": per_query}, api_key)
+            data = _polymarket_get("/public-search",
+                                   {"q": q, "limit_per_type": per_query,
+                                    "events_status": "active"})
         except Exception:  # noqa: BLE001 — 单 query 失败不影响其余
             continue
-        if not isinstance(data, list):
+        events = data.get("events") if isinstance(data, dict) else None
+        if not isinstance(events, list):
             continue
-        for raw in data:
-            norm = _pm_normalize_market(raw, matched_query=q, min_volume=min_volume)
-            if norm is not None and norm["market_id"] not in by_id:
-                by_id[norm["market_id"]] = norm
-    markets = sorted(by_id.values(), key=lambda m: -(m.get("volume") or 0.0))
-    return markets[:max(0, int(max_total))]
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            event_title = str(event.get("title") or "").strip()
+            for raw in event.get("markets") or []:
+                norm = _pm_normalize_market(raw, matched_query=q, min_volume=min_volume,
+                                            event_title=event_title)
+                if norm is not None and norm["market_id"] not in by_id:
+                    by_id[norm["market_id"]] = norm
+    ranked = sorted(by_id.values(), key=lambda m: -(m.get("volume") or 0.0))
+    return _pm_cap_per_event(ranked, max_per_event, max_total)
 
 
 def _pm_render_section(markets: list[dict], as_of: str) -> str:
@@ -3206,11 +3257,11 @@ def _pm_render_section(markets: list[dict], as_of: str) -> str:
     lines = [
         "## Prediction Market Signals",
         "",
-        (f"> Machine-fetched from Oddpool (Kalshi + Polymarket) as of {as_of}. "
+        (f"> Machine-fetched from Polymarket (public Gamma API) as of {as_of}. "
          "Market-implied probabilities are **calibration anchors, not ground truth** — "
          "prices move continuously; mind freshness before relying on them."),
         "",
-        "### Prediction Market Signals (Kalshi/Polymarket via Oddpool)",
+        "### Prediction Market Signals (Polymarket)",
         "",
         "| # | Market question | Venue | Implied P(yes) | Volume |",
         "|---|---|---|---|---|",
@@ -3239,9 +3290,8 @@ def _collect_prediction_markets(out_dir: Path, question: str, report: str,
 
     调用方包 try/except；本函数内部对「无 key/无结果」也只记一行日志（degrade-safe）。
     """
-    api_key = os.environ.get("ODDPOOL_API_KEY", "").strip()
-    if not api_key or not _env_flag("PREDICTION_MARKETS_ENABLED", True):
-        plog.write("warn", "prediction markets skipped (no ODDPOOL_API_KEY or disabled)")
+    if not _env_flag("PREDICTION_MARKETS_ENABLED", True):
+        plog.write("warn", "prediction markets skipped (PREDICTION_MARKETS_ENABLED=false)")
         return
     # hot_topics / 头部 actor 名来自已落盘的 actors.json（缺失/未抽取时仅用研究问题）。
     hot_topics: list = []
@@ -3262,15 +3312,25 @@ def _collect_prediction_markets(out_dir: Path, question: str, report: str,
         plog.write("warn", "prediction markets skipped (no derivable queries)")
         return
     try:
-        max_total = int(os.environ.get("ODDPOOL_MAX_MARKETS", "20") or "20")
+        max_total = int(os.environ.get("PREDICTION_MARKETS_MAX",
+                                       os.environ.get("ODDPOOL_MAX_MARKETS", "20")) or "20")
     except ValueError:
         max_total = 20
-    markets = _pm_snapshot(queries, api_key, max_total=max_total)
+    try:
+        min_volume = float(os.environ.get("PREDICTION_MARKETS_MIN_VOLUME", "200") or "200")
+    except ValueError:
+        min_volume = 200.0
+    try:
+        max_per_event = int(os.environ.get("PREDICTION_MARKETS_MAX_PER_EVENT", "3") or "3")
+    except ValueError:
+        max_per_event = 3
+    markets = _pm_snapshot(queries, max_total=max_total, min_volume=min_volume,
+                           max_per_event=max_per_event)
     if not markets:
         plog.write("warn", f"prediction markets: no relevant active markets (queries={queries})")
         return
     as_of = _utcnow()
-    payload = {"as_of": as_of, "source": "oddpool", "queries": queries, "markets": markets}
+    payload = {"as_of": as_of, "source": "polymarket", "queries": queries, "markets": markets}
     _atomic_write_text(out_dir / PREDICTION_MARKETS_FILENAME,
                        json.dumps(payload, ensure_ascii=False, indent=2))
     # 追加确定性 markdown 节到已落盘的 research_report.md（下游合成/报告阶段读文件即得）。
@@ -3759,10 +3819,10 @@ def main() -> int:
             except Exception as e:  # extraction must never fail the whole run
                 plog.write("warn", f"structured extraction failed (non-fatal): {e}")
 
-        # --- Stage 3: 预测市场信号（Oddpool 聚合 Kalshi/Polymarket；best effort）---
+        # --- Stage 3: 预测市场信号（Polymarket 公开 Gamma API，keyless；best effort）---
         # 报告与结构化抽取都已落盘后再抓取（可复用 actors.json 的 hot_topics/actor 名派生
         # 检索词）。市场隐含概率作为下游报告/预测的「校准锚点」（非真值）。Degrade-safe：
-        # 无 key/无结果/网络错误 → 一行日志跳过，绝不影响已产出的研究契约。
+        # 无结果/网络错误 → 一行日志跳过，绝不影响已产出的研究契约。
         try:
             _collect_prediction_markets(out_dir, question, report, meta, plog)
             write_meta()

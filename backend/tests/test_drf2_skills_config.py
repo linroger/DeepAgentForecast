@@ -8,7 +8,7 @@
 2. drf2/config/config.yaml：YAML 合法、必备块齐全、$ENV 占位符、子代理与技能/
    工具白名单互相一致（漂移守卫）。
 3. drf2/config/extensions_config.json：两台引擎的 stdio 注册 + 7 技能启用。
-4. drf2/config/market_tools.py：Oddpool 快照纯逻辑（过滤/去重/排序/降级），
+4. drf2/config/market_tools.py：Polymarket 快照纯逻辑（过滤/去重/排序/每事件封顶/降级），
    全程 mock fetch，离线可跑。
 """
 
@@ -328,33 +328,37 @@ def market_tools():
 
 
 def _raw_market(**over):
+    """一条 Polymarket /public-search 里嵌套的 market 行（字符串价，镜像真实 API）。"""
     base = {
-        "market_id": "m1", "exchange": "Kalshi", "question": "Will X happen by 2027?",
-        "status": "active", "last_yes_price": "0.2100",
-        "volume": "1000", "liquidity": "50", "event_title": "X",
+        "id": "m1", "question": "Will X happen by 2027?",
+        "closed": False, "outcomes": '["Yes","No"]', "outcomePrices": '["0.2100","0.7900"]',
+        "volume": "1000", "liquidity": "50", "groupItemTitle": "",
     }
     base.update(over)
     return base
 
 
+def _event(markets, title="X"):
+    return {"title": title, "slug": "s", "markets": markets}
+
+
 class TestMarketToolsLogic:
     def test_normalize_good_market(self, market_tools):
-        norm = market_tools.normalize_market(_raw_market(), matched_query="x")
+        norm = market_tools.normalize_market(_raw_market(), matched_query="x", event_title="X")
         assert norm == {
-            "market_id": "m1", "exchange": "kalshi",
+            "market_id": "m1", "exchange": "polymarket",
             "question": "Will X happen by 2027?", "implied_yes_prob": 0.21,
             "volume": 1000.0, "liquidity": 50.0, "event_title": "X",
             "matched_query": "x",
         }
 
     @pytest.mark.parametrize("over", [
-        {"status": "settled"},                      # 已结算
-        {"settled_at": "2026-01-01"},               # 已结算（时间戳）
-        {"last_yes_price": None},                   # 无价
-        {"last_yes_price": "1.5"},                  # 价格越界
+        {"closed": True},                           # 已关闭
+        {"outcomePrices": None},                    # 无价
+        {"outcomePrices": '["1","0"]'},             # 价=1 定盘
+        {"outcomePrices": '["0","1"]'},             # 价=0 定盘
         {"volume": "10"},                           # 低量（< 200）
-        {"liquidity": "0"},                         # 零流动性
-        {"market_id": ""},                          # 无 id
+        {"id": ""},                                 # 无 id
     ])
     def test_normalize_rejects_bad_markets(self, market_tools, over):
         assert market_tools.normalize_market(_raw_market(**over), matched_query="x") is None
@@ -362,32 +366,39 @@ class TestMarketToolsLogic:
     def test_snapshot_dedupes_sorts_and_limits(self, market_tools):
         def fetch(q, limit):
             if q == "tariff":
-                return [_raw_market(market_id="a", volume="500"),
-                        _raw_market(market_id="b", volume="9000")]
-            return [_raw_market(market_id="a", volume="500"),   # 跨 query 重复 → 去重
-                    _raw_market(market_id="c", volume="3000")]
+                return [_event([_raw_market(id="a", volume="500"),
+                                _raw_market(id="b", volume="9000")])]
+            return [_event([_raw_market(id="a", volume="500"),   # 跨 query 重复 → 去重
+                            _raw_market(id="c", volume="3000")])]
         out = market_tools.snapshot_for_queries(["tariff", "chips"], fetch=fetch)
         assert [m["market_id"] for m in out] == ["b", "c", "a"]  # volume 降序
         assert out[2]["matched_query"] == "tariff"               # 首个命中的 query 保留
         capped = market_tools.snapshot_for_queries(["tariff", "chips"], fetch=fetch, max_total=2)
         assert [m["market_id"] for m in capped] == ["b", "c"]
 
+    def test_snapshot_caps_per_event(self, market_tools):
+        # 一个事件的 5 个高量子市场不得霸占全部名额；默认每事件≤3。
+        def fetch(q, limit):
+            ladder = [_raw_market(id=f"c{i}", volume=str(9000 - i)) for i in range(5)]
+            return [_event(ladder, title="Ladder"),
+                    _event([_raw_market(id="other", volume="100")], title="Other")]
+        out = market_tools.snapshot_for_queries(["x"], fetch=fetch, min_volume=50)
+        assert len([m for m in out if m["event_title"] == "Ladder"]) == 3
+        assert any(m["event_title"] == "Other" for m in out)
+        unlimited = market_tools.snapshot_for_queries(["x"], fetch=fetch, min_volume=50,
+                                                      max_per_event=0)
+        assert len([m for m in unlimited if m["event_title"] == "Ladder"]) == 5
+
     def test_snapshot_survives_query_failure(self, market_tools):
         def fetch(q, limit):
             if q == "boom":
                 raise RuntimeError("network down")
-            return [_raw_market(market_id="ok")]
+            return [_event([_raw_market(id="ok")])]
         out = market_tools.snapshot_for_queries(["boom", "fine"], fetch=fetch)
         assert [m["market_id"] for m in out] == ["ok"]  # 单 query 失败不阻断整体
 
-    def test_impl_without_key_degrades_with_note(self, market_tools, monkeypatch):
-        monkeypatch.delenv("ODDPOOL_API_KEY", raising=False)
-        payload = json.loads(market_tools.prediction_market_search_impl("tariff, chips"))
-        assert payload["markets"] == []
-        assert "ODDPOOL_API_KEY" in payload["note"]
-
-    def test_impl_with_key_uses_snapshot(self, market_tools, monkeypatch):
-        monkeypatch.setenv("ODDPOOL_API_KEY", "test-key")
+    def test_impl_uses_snapshot_keyless(self, market_tools, monkeypatch):
+        # keyless：无需任何环境变量，直接走 snapshot。
         monkeypatch.setattr(
             market_tools, "snapshot_for_queries",
             lambda qlist, **kw: [{"market_id": "m9", "implied_yes_prob": 0.4}])
@@ -395,6 +406,12 @@ class TestMarketToolsLogic:
         assert payload["queries"] == ["tariff", "chips"]
         assert payload["markets"][0]["market_id"] == "m9"
         assert "calibration anchors" in payload["note"]
+
+    def test_impl_empty_markets_note(self, market_tools, monkeypatch):
+        monkeypatch.setattr(market_tools, "snapshot_for_queries", lambda qlist, **kw: [])
+        payload = json.loads(market_tools.prediction_market_search_impl("tariff, chips"))
+        assert payload["markets"] == []
+        assert "No active" in payload["note"]
 
     def test_impl_empty_queries(self, market_tools):
         payload = json.loads(market_tools.prediction_market_search_impl("  \n , "))

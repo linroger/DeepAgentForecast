@@ -867,12 +867,18 @@ class Config:
     # 结构化 persona_design（identity/views_beliefs/incentives/objectives/relations/red_lines/
     # decision_style/rhetoric），严格接地于研究档案、禁止发明立场；多样性来自真实主体的真实差异。
     SIM_PERSONA_DESIGN = os.environ.get('SIM_PERSONA_DESIGN', 'true').strip().lower() == 'true'
-    # Oddpool 预测市场（Kalshi/Polymarket 聚合）：研究阶段拉取与题目相关的活跃市场，把市场隐含
-    # 概率（last_yes_price）作为校准锚注入研究报告 + 报告章节 + 二元预测抽取（预测 vs 市场分歧
-    # >10pt 须解释）。无 key / 网络失败 → 静默跳过（degrade-safe），不影响主流程。
-    ODDPOOL_API_KEY = os.environ.get('ODDPOOL_API_KEY', '')
+    # Polymarket 预测市场（官方公开 Gamma API，keyless）：研究阶段拉取与题目相关的活跃市场，
+    # 把市场隐含概率（Yes 价）作为校准锚注入研究报告 + 报告章节 + 二元预测抽取（预测 vs 市场
+    # 分歧 >10pt 须解释）。无需 API key；网络失败 → 静默跳过（degrade-safe），不影响主流程。
     PREDICTION_MARKETS_ENABLED = os.environ.get('PREDICTION_MARKETS_ENABLED', 'true').strip().lower() == 'true'
-    ODDPOOL_MAX_MARKETS = int(os.environ.get('ODDPOOL_MAX_MARKETS', '20') or '20')
+    # 市场快照上限（按成交量降序取头部）。新名 PREDICTION_MARKETS_MAX；旧名 ODDPOOL_MAX_MARKETS 仍读作兜底以平滑迁移。
+    PREDICTION_MARKETS_MAX = int(os.environ.get('PREDICTION_MARKETS_MAX',
+                                                os.environ.get('ODDPOOL_MAX_MARKETS', '20')) or '20')
+    # 成交量噪声下限（USDC）：低于此量的市场价格是噪声，不配当锚点。
+    PREDICTION_MARKETS_MIN_VOLUME = float(os.environ.get('PREDICTION_MARKETS_MIN_VOLUME', '200') or '200')
+    # 每个事件最多取几条市场：防止一个多结局事件的子市场阶梯（如「N 次降息」0~12）霸占全部名额，
+    # 保证快照的事件多样性。<=0 视为不限制。
+    PREDICTION_MARKETS_MAX_PER_EVENT = int(os.environ.get('PREDICTION_MARKETS_MAX_PER_EVENT', '3') or '3')
     # B2 三部结构：按 Bridgewater 简报把成稿组织为 Part 1（二元预测表）/ Part 2（框架综合，
     # 单次 LLM 调用、字数按 requirement_spec 的 page_budget 收敛）/ Part 3（附录 = 原详细章节）。
     # 无 Part 1 或综合产出过短 → 跳过不改文档（degrade-safe，幂等）。
