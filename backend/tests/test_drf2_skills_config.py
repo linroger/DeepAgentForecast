@@ -18,6 +18,7 @@ import importlib
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 import types as pytypes
 from pathlib import Path
@@ -51,6 +52,81 @@ KG_MCP_TOOLS = {
 }
 SIM_MCP_TOOLS = {"sim_start", "sim_status", "sim_results", "sim_stop", "sim_interview_agents"}
 HARNESS_BUILTIN_TOOLS = {"tool_search"}  # tool_search.enabled=true 时由 harness 注入
+
+# ---------------------------------------------------------------------------
+# INT-3 跨树技能漂移守卫。同一份 SKILL.md 方法论有**三处副本**，各自的角色不同：
+#   deerflow_bridge/skills/<name>/          —— 源（Wave-1-3 的方法论升级都落在这里）
+#   deer-flow/skills/public/<name>/         —— orchestrator 的 glob 同步 + gate 部署的运行副本
+#   drf2/skills/custom/<name>/              —— DRF-2 新脚手架里的副本
+# 两个不变式需要长期守卫：
+#   (1) bridge↔drf2 共享方法论不能悄悄结构性分叉；
+#   (2) bridge→deer-flow 部署必须逐字节一致（glob 同步 + gate 的直接结果）。
+# ---------------------------------------------------------------------------
+BRIDGE_SKILLS_ROOT = REPO_ROOT / "deerflow_bridge" / "skills"
+DEERFLOW_PUBLIC_ROOT = REPO_ROOT / "deer-flow" / "skills" / "public"
+
+# bridge 已吸收 Wave-1-3 升级（深度档位、市场自取、prediction-markets 口径重构），所以
+# bridge 与 drf2 的正文已**合法分叉** —— 逐行 body-diff 会长期误报。改为守一个更弱但仍
+# 有用的**结构不变式**：drf2 副本里出现的每个小节标题（归一化后）都必须在 bridge 副本里
+# 存在，从而在任一方未来**新增/删除/改名共享方法论小节**时先变红提示复核。
+# 已知的合法「drf2 独有」小节在下方 warn-list 放行：bridge 把「硬性演员上限」并进了
+# actor-ontology 的 §2.3 正文，而 drf2 把它拆成了独立的 §2.4 子节 —— 这是有意的结构差异，
+# 不是漂移。除此之外任何**新**的 drf2 独有标题都不在白名单里，会让守卫变红。
+KNOWN_DRF2_ONLY_HEADINGS = {
+    "actor-ontology-research": {"2.4 the hard cast cap"},
+}
+
+_HEADING_RE = re.compile(r"^#{1,6}\s")
+
+
+def _normalize_heading(line: str) -> str:
+    """把一行 Markdown 标题归一化到「稳定核」：去掉 #、截断括注/破折号之后的描述性尾巴、
+    小写、压缩空白。小节编号（`1.` / `2.3` / …）本身承担同一性，因此截掉描述尾巴既能吸收
+    「§2 Query craft (full-text search likes short phrases)」↔「§2 Query craft (match how
+    markets are titled)」这类合法措辞分叉，又不会把不同编号的小节误合并成一个。"""
+    text = re.sub(r"^#+\s*", "", line.strip())
+    text = re.split(r"\(|—|--", text, maxsplit=1)[0]
+    text = text.strip().lower().rstrip(".:—- ")
+    return re.sub(r"\s+", " ", text)
+
+
+def _skill_headings(skill_md: Path) -> list[str]:
+    return [_normalize_heading(ln)
+            for ln in skill_md.read_text(encoding="utf-8").splitlines()
+            if _HEADING_RE.match(ln)]
+
+
+def _bridge_skill_names() -> set[str]:
+    if not BRIDGE_SKILLS_ROOT.is_dir():
+        return set()
+    return {p.parent.name for p in BRIDGE_SKILLS_ROOT.glob("*/SKILL.md")}
+
+
+def _drf2_custom_skill_names() -> set[str]:
+    custom = SKILLS_ROOT / "custom"
+    if not custom.is_dir():
+        return set()
+    return {p.parent.name for p in custom.glob("*/SKILL.md")}
+
+
+def _git_tracked_bridge_skill_files() -> list[Path] | None:
+    """git 已跟踪（= 已提交基线）的 bridge SKILL.md 路径列表；git 不可用/失败时返回 None。
+
+    并发工作树里，兄弟 subagent 常有尚未提交的在途新技能（git `??` 状态），此时 orchestrator
+    的 glob 同步 / gate 还没把它部署到 deer-flow/。对这类在途技能做「必须已部署」的硬断言会
+    误报。因此「存在性 + 逐字节」强不变式只锚定**已提交基线**（gate 真正负责同步的集合），
+    在途技能改由更宽的漂移网（部署副本≠源即红）覆盖 —— 既不误报，又不漏掉真实内容漂移。"""
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "-z", "--", "deerflow_bridge/skills"],
+            cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    files = [rel for rel in out.stdout.split("\0")
+             if rel.strip() and rel.endswith("/SKILL.md")]
+    return sorted(REPO_ROOT / rel for rel in files)
 
 
 def _skill_dirs() -> list[Path]:
@@ -420,3 +496,110 @@ class TestMarketToolsLogic:
     def test_module_importable_without_langchain(self, market_tools):
         # backend venv 无 langchain：模块必须仍可导入，tool 变量为 None（harness 环境才非 None）
         assert hasattr(market_tools, "prediction_market_search_tool")
+
+
+# ---------------------------------------------------------------------------
+# INT-3：三副本技能漂移守卫
+# ---------------------------------------------------------------------------
+class TestCrossTreeSkillStructureDrift:
+    """bridge↔drf2 共享方法论的结构不变式（正文已合法分叉 → 守小节结构而非逐行 body）。"""
+
+    def test_expected_shared_skills_present(self):
+        # bridge 与 drf2/custom 都是入库源码：三个方法论技能必须三树同源，缺一即真实回归。
+        common = _bridge_skill_names() & _drf2_custom_skill_names()
+        if not common:
+            pytest.skip("neither deerflow_bridge/skills nor drf2/skills/custom present")
+        expected = {"deep-research", "actor-ontology-research", "prediction-markets"}
+        missing = expected - common
+        assert not missing, (
+            f"shared methodology skills missing from a tree (bridge={sorted(_bridge_skill_names())}, "
+            f"drf2={sorted(_drf2_custom_skill_names())}): {sorted(missing)}")
+
+    def test_drf2_section_headings_subset_of_bridge(self):
+        # 对 bridge∩drf2 的每个技能：drf2 副本的小节标题（归一化）须是 bridge 副本标题的子集，
+        # KNOWN_DRF2_ONLY_HEADINGS 里已登记的合法分叉除外。任一方未来动了共享小节结构 → 变红。
+        common = sorted(_bridge_skill_names() & _drf2_custom_skill_names())
+        if not common:
+            pytest.skip("no skill present in both deerflow_bridge/skills and drf2/skills/custom")
+        for name in common:
+            drf2_headings = _skill_headings(SKILLS_ROOT / "custom" / name / "SKILL.md")
+            bridge_headings = set(_skill_headings(BRIDGE_SKILLS_ROOT / name / "SKILL.md"))
+            allowed = bridge_headings | KNOWN_DRF2_ONLY_HEADINGS.get(name, set())
+            missing = [h for h in drf2_headings if h and h not in allowed]
+            assert not missing, (
+                f"{name}: drf2/custom section heading(s) absent from the deerflow_bridge copy — "
+                f"shared methodology drift: {missing}. If this divergence is intentional, register "
+                f"it in KNOWN_DRF2_ONLY_HEADINGS with a rationale comment.")
+
+    def test_known_drf2_only_headings_stay_relevant(self):
+        # warn-list 卫生：登记项必须仍是「drf2 有、bridge 无」的真实分叉。若某项已被 bridge
+        # 追平（两边都出现或 drf2 已删除），它就成了僵尸豁免，应从白名单移除 —— 此处强制变红。
+        for name, headings in KNOWN_DRF2_ONLY_HEADINGS.items():
+            drf2_md = SKILLS_ROOT / "custom" / name / "SKILL.md"
+            bridge_md = BRIDGE_SKILLS_ROOT / name / "SKILL.md"
+            if not (drf2_md.is_file() and bridge_md.is_file()):
+                pytest.skip(f"{name}: one of the two skill copies is absent")
+            drf2_set = set(_skill_headings(drf2_md))
+            bridge_set = set(_skill_headings(bridge_md))
+            for h in headings:
+                assert h in drf2_set, (
+                    f"{name}: warn-listed heading {h!r} no longer in drf2 copy — drop it from "
+                    f"KNOWN_DRF2_ONLY_HEADINGS")
+                assert h not in bridge_set, (
+                    f"{name}: warn-listed heading {h!r} now ALSO in bridge copy — the divergence "
+                    f"is resolved; drop it from KNOWN_DRF2_ONLY_HEADINGS")
+
+
+class TestBridgeSkillsDeployedByteIdentical:
+    """deerflow_bridge/skills/*/SKILL.md 必须逐字节部署到 deer-flow/skills/public/<name>/SKILL.md。
+    orchestrator 的 glob 同步 + gate 维持这一点；fresh checkout 无 deer-flow/ 时干净 skip。
+
+    两层守卫：committed 基线走「存在性 + 逐字节」强断言（gate 负责同步的集合），全部已部署
+    副本再走一层「内容不得与源分叉」的宽漂移网 —— 后者连并发在途、尚未纳入基线的技能也一并
+    监控内容一致性，同时对「新增但尚未同步」这种瞬时状态不误报。"""
+
+    def test_committed_bridge_skills_deployed_byte_identical(self):
+        # 已提交的 bridge 技能是 gate 负责的部署基线：必须存在于 deer-flow/public 且逐字节一致。
+        if not DEERFLOW_PUBLIC_ROOT.is_dir():
+            pytest.skip("deer-flow/skills/public absent (fresh checkout without the deployed tree)")
+        tracked = _git_tracked_bridge_skill_files()
+        if tracked is None:
+            pytest.skip("git unavailable — cannot determine the committed bridge-skill baseline")
+        if not tracked:
+            pytest.skip("no git-tracked deerflow_bridge/skills/*/SKILL.md in this checkout")
+        for src in tracked:
+            name = src.parent.name
+            deployed = DEERFLOW_PUBLIC_ROOT / name / "SKILL.md"
+            assert deployed.is_file(), (
+                f"{name}: committed bridge skill not deployed at "
+                f"{deployed.relative_to(REPO_ROOT)} — orchestrator glob sync / gate did not run")
+            src_bytes = src.read_bytes()
+            deployed_bytes = deployed.read_bytes()
+            assert src_bytes == deployed_bytes, (
+                f"{name}: deployed SKILL.md drifted from the deerflow_bridge source "
+                f"(bridge={len(src_bytes)}B, deployed={len(deployed_bytes)}B) — "
+                f"re-run the orchestrator skill sync to redeploy byte-identical")
+
+    def test_deployed_copies_never_diverge_from_bridge_source(self):
+        # 宽漂移网：任何**已部署**的技能（含尚未提交的在途新技能）其部署副本都不得与 bridge 源
+        # 分叉。未部署的在途技能（同步尚未追平）跳过，不误报；已部署却内容漂移则立刻变红。
+        if not DEERFLOW_PUBLIC_ROOT.is_dir():
+            pytest.skip("deer-flow/skills/public absent (fresh checkout without the deployed tree)")
+        bridge_skill_files = sorted(BRIDGE_SKILLS_ROOT.glob("*/SKILL.md"))
+        if not bridge_skill_files:
+            pytest.skip("deerflow_bridge/skills has no SKILL.md")
+        checked = 0
+        for src in bridge_skill_files:
+            name = src.parent.name
+            deployed = DEERFLOW_PUBLIC_ROOT / name / "SKILL.md"
+            if not deployed.is_file():
+                continue  # 在途新增、glob 同步尚未部署 —— 属瞬时状态，非内容漂移
+            checked += 1
+            src_bytes = src.read_bytes()
+            deployed_bytes = deployed.read_bytes()
+            assert src_bytes == deployed_bytes, (
+                f"{name}: deployed SKILL.md diverged from the deerflow_bridge source "
+                f"(bridge={len(src_bytes)}B, deployed={len(deployed_bytes)}B) — "
+                f"re-run the orchestrator skill sync to redeploy byte-identical")
+        if checked == 0:
+            pytest.skip("no bridge skill is currently deployed under deer-flow/skills/public")

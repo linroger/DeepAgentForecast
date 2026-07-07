@@ -1,11 +1,19 @@
 """Golden tests for structured forecast extraction + citation audit (EXECPLAN2 I-3-0/I-3-1)."""
 
 from app.services.forecast_extractor import (
+    _binary_quality,
+    anchor_binaries_to_markets,
+    apply_horizon_consistency,
     audit_citation_grounding,
+    build_market_comparison,
     derive_forecast_spine,
+    enforce_market_divergence,
+    extract_binary_forecasts,
     extract_structured_forecast,
+    parse_requirement_years,
     render_forecast_spine_block,
     render_resolution_block,
+    slice_head_tail,
 )
 from tests.conftest import FakeLLMClient
 
@@ -117,3 +125,226 @@ def test_render_resolution_block_lists_criteria_and_indicators():
 def test_render_resolution_block_empty_without_scenarios():
     assert render_resolution_block(None) == ""
     assert render_resolution_block({"scenarios": []}) == ""
+
+
+# ---------------------------------------- RQ-6: requirement-horizon consistency
+def _binaries(*years):
+    return [{"id": f"F{i}", "statement": f"Event {i} happens by {y}",
+             "probability": 0.7, "horizon_year": y}
+            for i, y in enumerate(years, start=1)]
+
+
+def test_parse_requirement_years_filters_historical_context():
+    txt = "Since the 2008 crisis tariffs rose. Forecast the November 2026 US midterm elections."
+    assert parse_requirement_years(txt, now_year=2026) == [2026]   # 2008 = context, not a target
+    assert parse_requirement_years("no target date given", now_year=2026) == []
+    assert parse_requirement_years(None, now_year=2026) == []
+
+
+def test_horizon_mismatch_flag_merges_into_quality():
+    fc = {"binary_forecasts": _binaries(2028, 2028),
+          "quality": {"vague_criteria": ["X"]}}
+    out = apply_horizon_consistency(fc, "Forecast the 2026 US midterm elections.", now_year=2026)
+    hm = out["quality"]["horizon_mismatch"]
+    assert hm["requirement_years"] == [2026]
+    assert hm["binary_years"] == [2028]
+    assert "no overlap" in hm["detail"]
+    assert out["quality"]["vague_criteria"] == ["X"]   # merged, never overwritten
+
+
+def test_horizon_year_read_from_statement_when_field_missing():
+    fc = {"binary_forecasts": [{"id": "F1", "statement": "Tariffs exceed 10% by 2028",
+                                "probability": 0.6, "horizon_year": None}]}
+    out = apply_horizon_consistency(fc, "the 2026 midterms", now_year=2026)
+    assert out["quality"]["horizon_mismatch"]["binary_years"] == [2028]
+
+
+def test_horizon_overlap_or_unparseable_adds_no_flag():
+    # any overlap between brief years and binary resolution years → consistent, untouched
+    out = apply_horizon_consistency({"binary_forecasts": _binaries(2026, 2028)},
+                                    "the 2026 midterms", now_year=2026)
+    assert "quality" not in out
+    # brief without a parseable target year → no flag (degrade-safe)
+    assert "quality" not in apply_horizon_consistency(
+        {"binary_forecasts": _binaries(2028)}, "no target date given", now_year=2026)
+    # no binaries / no binary-side years → no flag
+    assert "quality" not in apply_horizon_consistency(
+        {"binary_forecasts": []}, "by 2026", now_year=2026)
+
+
+def test_horizon_check_disabled_by_flag(monkeypatch):
+    from app.config import Config
+    monkeypatch.setattr(Config, "FORECAST_HORIZON_CHECK", False, raising=False)
+    fc = {"binary_forecasts": _binaries(2028)}
+    assert "quality" not in apply_horizon_consistency(fc, "the 2026 midterms", now_year=2026)
+
+
+# ---------------------------------------------------- RQ-2: slice_head_tail math
+def test_slice_head_tail_keeps_head_and_tail():
+    text = "A" * 100 + "B" * 100                      # 200 chars, head=A tail=B
+    out = slice_head_tail(text, budget=100, head_ratio=0.6)
+    assert out.startswith("A" * 60)                    # head 60% of budget
+    assert out.endswith("B" * 40)                      # tail 40% of budget
+    assert "…(中段略)…" in out                          # elision marker between segments
+
+
+def test_slice_head_tail_noop_when_within_budget():
+    assert slice_head_tail("short", budget=1000) == "short"
+    assert slice_head_tail("abc", budget=0) == "abc"   # non-positive budget → unchanged
+    assert slice_head_tail("", budget=10) == ""
+
+
+# ------------------------------------------------- RQ-2: theme cardinality flag
+def test_binary_quality_flags_single_theme():
+    single = [{"probability": 0.8, "theme": "ai", "criteria_sharp": True},
+              {"probability": 0.2, "theme": "ai", "criteria_sharp": True}]
+    q1 = _binary_quality(single, min_count=2)
+    assert q1["theme_cardinality"] == 1
+    assert any("single theme" in s for s in q1["issues"])
+    multi = [{"probability": 0.8, "theme": "ai", "criteria_sharp": True},
+             {"probability": 0.2, "theme": "trade", "criteria_sharp": True}]
+    q2 = _binary_quality(multi, min_count=2)
+    assert q2["theme_cardinality"] == 2
+    assert not any("single theme" in s for s in q2["issues"])
+
+
+# ----------------------------------------- PM-2: deterministic market anchoring
+_ANCHOR_MARKETS = [
+    {"market_id": "mkt-1", "question": "Tariffs > 10%?", "implied_yes_prob": 0.30,
+     "url": "https://polymarket.com/event/tariffs", "end_date": "2028-12-31"},
+]
+
+
+def test_anchor_binaries_to_markets_backfills_rich_anchor():
+    binaries = [
+        {"id": "F1", "statement": "US tariff rate averages over 10% 2026-2028",
+         "probability": 0.25, "adjustment_rationale": "base rate"},
+        {"id": "F2", "statement": "AI capex exceeds $500B in 2027",
+         "probability": 0.80, "adjustment_rationale": ""},
+    ]
+    fake = FakeLLMClient(json_responses=[{"matches": [
+        {"forecast_id": "F1", "market_id": "mkt-1", "resolution_equivalence": "exact", "confidence": 0.9},
+        {"forecast_id": "F2", "market_id": None, "resolution_equivalence": "loose", "confidence": 0.2},
+    ]}])
+    n = anchor_binaries_to_markets(binaries, _ANCHOR_MARKETS, fake)
+    assert n == 1
+    a = binaries[0]["market_anchor"]
+    assert a["market_id"] == "mkt-1" and a["question"] == "Tariffs > 10%?"
+    # implied 以我们的快照价为准；price_at_research 同源；divergence 本地计算。
+    assert a["implied_yes_prob"] == 0.30 and a["price_at_research"] == 0.30
+    assert a["divergence"] == round(0.25 - 0.30, 4)
+    assert a["url"].endswith("/tariffs") and a["endDate"] == "2028-12-31"
+    assert a["resolution_equivalence"] == "exact" and a["match_confidence"] == 0.9
+    assert "market_anchor" not in binaries[1]           # null market_id → no anchor
+
+
+def test_anchor_skips_loose_match_below_min_equivalence():
+    binaries = [{"id": "F1", "statement": "X happens", "probability": 0.5}]
+    fake = FakeLLMClient(json_responses=[{"matches": [
+        {"forecast_id": "F1", "market_id": "mkt-1", "resolution_equivalence": "loose", "confidence": 0.9}]}])
+    assert anchor_binaries_to_markets(binaries, _ANCHOR_MARKETS, fake) == 0
+    assert "market_anchor" not in binaries[0]           # loose < default 'near' → dropped
+
+
+def test_anchor_no_markets_or_bad_json_leaves_no_anchor():
+    binaries = [{"id": "F1", "statement": "X happens", "probability": 0.5}]
+    # no markets → no LLM call, no anchor
+    assert anchor_binaries_to_markets(binaries, [], FakeLLMClient()) == 0
+    # malformed reply → today's behavior (no anchors)
+    assert anchor_binaries_to_markets(
+        binaries, _ANCHOR_MARKETS, FakeLLMClient(json_responses=[{"nope": 1}])) == 0
+    assert "market_anchor" not in binaries[0]
+
+
+def test_anchor_disabled_by_flag(monkeypatch):
+    from app.config import Config
+    monkeypatch.setattr(Config, "FORECAST_MARKET_ANCHORING", False, raising=False)
+    binaries = [{"id": "F1", "statement": "X happens", "probability": 0.5}]
+    fake = FakeLLMClient(json_responses=[{"matches": [
+        {"forecast_id": "F1", "market_id": "mkt-1", "resolution_equivalence": "exact", "confidence": 1.0}]}])
+    assert anchor_binaries_to_markets(binaries, _ANCHOR_MARKETS, fake) == 0
+    assert fake.calls == []                              # flag off → no LLM call at all
+
+
+# --------------------------------------------------- PM-2: 10pp divergence rule
+def _divergent_binary():
+    return {"id": "F1", "statement": "X happens", "probability": 0.20,
+            "adjustment_rationale": "base rate says low",
+            "market_anchor": {"market_id": "m", "implied_yes_prob": 0.55,
+                              "divergence": round(0.20 - 0.55, 4)}}
+
+
+def test_enforce_market_divergence_revises_when_rationale_cites_market():
+    b = _divergent_binary()
+    fake = FakeLLMClient(json_responses=[{"revisions": [
+        {"id": "F1", "probability": 0.35,
+         "adjustment_rationale": "The market implies 55%; I move up but it overweights the base case."}]}])
+    assert enforce_market_divergence([b], fake) == 1
+    assert b["probability"] == 0.35
+    assert b["market_anchor"]["divergence"] == round(0.35 - 0.55, 4)   # recomputed
+
+
+def test_enforce_market_divergence_rejects_silent_move():
+    b = _divergent_binary()
+    # revision moves the probability but never mentions the market → rejected, prob untouched
+    fake = FakeLLMClient(json_responses=[{"revisions": [
+        {"id": "F1", "probability": 0.55, "adjustment_rationale": "just moved it higher"}]}])
+    assert enforce_market_divergence([b], fake) == 0
+    assert b["probability"] == 0.20                     # never silently moved
+
+
+def test_enforce_market_divergence_skips_when_already_cited():
+    b = _divergent_binary()
+    b["adjustment_rationale"] = "market prices 55% but I disagree because of the tail risk"
+    fake = FakeLLMClient()                              # no responses queued
+    assert enforce_market_divergence([b], fake) == 0
+    assert fake.calls == []                             # already explained → no revision call
+
+
+def test_enforce_market_divergence_ignores_within_10pp():
+    b = _divergent_binary()
+    b["probability"] = 0.50
+    b["market_anchor"]["divergence"] = round(0.50 - 0.55, 4)   # |−0.05| <= 0.10
+    fake = FakeLLMClient()
+    assert enforce_market_divergence([b], fake) == 0
+    assert fake.calls == []
+
+
+def test_build_market_comparison_flags_10pp_breaches():
+    binaries = [
+        {"id": "F1", "statement": "X", "probability": 0.20,
+         "adjustment_rationale": "the market prices 55%",
+         "market_anchor": {"market_id": "m", "question": "Q", "implied_yes_prob": 0.55,
+                           "price_at_research": 0.55, "divergence": -0.35}},
+        {"id": "F2", "statement": "Y", "probability": 0.5},          # no anchor
+    ]
+    mc = build_market_comparison(binaries)
+    assert mc["anchored_count"] == 1
+    row = mc["comparisons"][0]
+    assert row["forecast_id"] == "F1" and row["exceeds_10pp"] is True
+    assert row["abs_divergence"] == 0.35 and row["rationale_cites_market"] is True
+
+
+def test_extract_binary_forecasts_anchors_and_emits_comparison():
+    markets = [{"market_id": "mkt-1", "question": "Tariffs > 10%?", "implied_yes_prob": 0.30,
+                "url": "https://polymarket.com/event/t", "end_date": "2028-12-31"}]
+    fake = FakeLLMClient(json_responses=[
+        {"binary_forecasts": [
+            {"id": "F1", "statement": "US tariff averages over 10% 2026-2028", "probability": 0.25,
+             "resolution_criteria": "USITC > 10% by 2028", "theme": "trade", "horizon_year": 2028,
+             "adjustment_rationale": "base rate"},
+            {"id": "F2", "statement": "AI capex exceeds $500B in 2027", "probability": 0.80,
+             "resolution_criteria": "capex > $500B in 2027", "theme": "ai", "horizon_year": 2027,
+             "adjustment_rationale": "trend"},
+        ]},
+        {"matches": [                                    # deterministic anchoring call
+            {"forecast_id": "F1", "market_id": "mkt-1", "resolution_equivalence": "exact", "confidence": 0.9}]},
+    ])
+    out = extract_binary_forecasts("dossier", fake, min_count=2, language="English",
+                                   market_pack="table", markets=markets)
+    f1 = next(b for b in out["binary_forecasts"] if b["id"] == "F1")
+    assert f1["market_anchor"]["market_id"] == "mkt-1"
+    assert f1["market_anchor"]["implied_yes_prob"] == 0.30          # our snapshot price
+    assert "market_comparison" in out and out["market_comparison"]["anchored_count"] == 1
+    # F1 divergence 0.25-0.30 = -0.05 (<=10pp) → no revision call was needed
+    assert "market_anchor" not in next(b for b in out["binary_forecasts"] if b["id"] == "F2")

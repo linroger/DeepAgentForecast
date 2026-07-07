@@ -187,6 +187,33 @@ def _anchor_to_prob(anchor: str) -> Optional[float]:
     return None
 
 
+def slice_head_tail(text: str, budget: int, head_ratio: float = 0.6) -> str:
+    """RQ-2：在同一字符预算内取「前 head_ratio + 后 (1-head_ratio)」两段拼接。
+
+    成稿后抽取此前只取正文开头 [:budget]，但预测报告的收敛判断（"综上/因此/展望/
+    结论"）几乎总在文末——head-only 截断恰好把最关键的结论切掉。本函数取前段（导言/
+    框架）与尾段（结论/情景概率）各一半预算并以省略标记拼接，让抽取同时看到问题设定与
+    最终判断。Pure / offline：budget 覆盖全文或非正 → 原样返回（degrade-safe）。
+    """
+    t = text or ""
+    try:
+        budget = int(budget)
+    except (TypeError, ValueError):
+        return t
+    if budget <= 0 or len(t) <= budget:
+        return t
+    try:
+        hr = float(head_ratio)
+    except (TypeError, ValueError):
+        hr = 0.6
+    hr = min(0.95, max(0.05, hr))
+    head_n = int(budget * hr)
+    tail_n = budget - head_n
+    if head_n <= 0 or tail_n <= 0:
+        return t[:budget]
+    return t[:head_n] + "\n…(中段略)…\n" + t[-tail_n:]
+
+
 def extract_structured_forecast(report_markdown: str, llm,
                                 situation_brief: Optional[str] = None) -> Dict[str, Any]:
     """Run one LLM pass to produce a validated structured forecast object.
@@ -194,10 +221,16 @@ def extract_structured_forecast(report_markdown: str, llm,
     ``llm`` must expose ``chat_json(messages, temperature, max_tokens)``. Returns a
     dict with normalized scenarios; raises nothing on a malformed model reply
     beyond what chat_json raises (caller wraps in try/except and degrades).
+
+    RQ-2：成稿后切片改为 head+tail（结论在文末，不能只取开头）；抽取 max_tokens 2048→4096
+    （5 情景 × anchor/rationale/criteria 常被 2048 截断成断裂 JSON）。默认值即新行为。
     """
     content = report_markdown or ""
-    if len(content) > 40000:
-        content = content[:40000] + "\n…(truncated)…"
+    budget = int(_cfg("FORECAST_EXTRACT_BUDGET", 40000))
+    head_ratio = _coerce_float(_cfg("FORECAST_EXTRACT_HEAD_RATIO", 0.6))
+    if head_ratio is None:
+        head_ratio = 0.6
+    content = slice_head_tail(content, budget, head_ratio)
     user = _FORECAST_INSTRUCTIONS
     if situation_brief:
         user += f"\n\n[态势简报]\n{situation_brief[:2000]}"
@@ -205,7 +238,7 @@ def extract_structured_forecast(report_markdown: str, llm,
     raw = llm.chat_json(
         messages=[{"role": "user", "content": user}],
         temperature=0.2,
-        max_tokens=2048,
+        max_tokens=int(_cfg("FORECAST_EXTRACT_MAX_TOKENS", 4096)),
     )
     if not isinstance(raw, dict):
         raw = {}
@@ -403,6 +436,10 @@ def _binary_quality(binaries: List[Dict[str, Any]], *, min_count: int,
         t = str(b.get("theme") or "")
         if t:
             themes[t] = themes.get(t, 0) + 1
+    # RQ-2：主题基数（实际出现的不同主题数）。二元集合全部塌成同一主题（如 _normalize_binaries
+    # 把未知主题钳到残余主题、或模型对所有条目复读同一 theme）= 主题多样性丢失，交付物看似
+    # 覆盖多个驱动力实则单一。基数<=1 时记诊断标记（不阻断发布门，避免回归既有合法单主题跑）。
+    theme_cardinality = sum(1 for _t, _c in themes.items() if _c > 0)
     midband_share = (midband / n) if n else 1.0
     passed = (
         n >= min_count
@@ -422,11 +459,280 @@ def _binary_quality(binaries: List[Dict[str, Any]], *, min_count: int,
         issues.append("fewer than 3 high-conviction calls (p>=0.70 or <=0.30)")
     if sharp < int(0.8 * n):
         issues.append(f"only {sharp}/{n} have objective metric+number+date criteria")
+    if n > 1 and theme_cardinality <= 1:
+        issues.append("all forecasts share a single theme — no thematic spread")
     return {
         "count": n, "prob_stdev": round(std, 3), "midband_share": round(midband_share, 3),
         "conviction_count": conviction, "sharp_criteria_count": sharp, "themes": themes,
+        "theme_cardinality": theme_cardinality,
         "passed": bool(passed), "issues": issues,
     }
+
+
+# --------------------------------------------- PM-2: deterministic market anchoring
+# 此前市场锚点走「模型自愿在 market_anchor 里给 market_id」的 opt-in 路径，取证 0/13 与
+# 0/11 条二元被锚定——模型几乎从不主动转录 id。PM-2 改为**确定性**：先跑一次批处理 LLM
+# 匹配（预测陈述表 × 相关性门控后的市场表[含 endDate]），每条预测得 {market_id|null,
+# resolution_equivalence: exact|near|loose, confidence}；再由本模块确定性回填 rich
+# market_anchor（question/implied/price_at_research/url/endDate/divergence，隐含概率一律
+# 以我们的快照价为准、divergence 本地计算）。匹配调用失败/无市场 → 不加锚点（今日行为）。
+_MARKET_MATCH_INSTRUCTIONS = (
+    "You are matching binary forecasts to real prediction markets for CALIBRATION. Below is a "
+    "numbered list of binary (yes/no) FORECASTS and a list of live prediction MARKETS (each with "
+    "an implied YES probability and a market end date). For EACH forecast decide whether ANY "
+    "listed market resolves to the SAME real-world event on a compatible timeframe.\n"
+    "Return JSON ONLY: {\"matches\": [ {\"forecast_id\": \"F1\", "
+    "\"market_id\": \"<id copied verbatim from the MARKETS list, or null>\", "
+    "\"resolution_equivalence\": \"exact|near|loose\", \"confidence\": 0.0-1.0} , ... ] }\n"
+    "RULES: market_id MUST be copied verbatim from the MARKETS list or be null when nothing "
+    "matches — never invent an id. resolution_equivalence = exact (same metric, threshold AND "
+    "window), near (same event, slightly different threshold/date), loose (related theme only). "
+    "A forecast matches at most ONE market; a market may be cited by several forecasts."
+)
+
+# 10pp 分歧有界重述：锚定后 |model_p − market_p| > 0.10 且理由未提及市场的预测，做一次
+# 批处理重述——模型须**要么**把概率移向市场、**要么**保留分歧，但两种情形都必须在
+# adjustment_rationale 里显式引用市场隐含概率并解释（绝不静默移动概率）。
+_MARKET_DIVERGENCE_INSTRUCTIONS = (
+    "You are reconciling forecasts against live prediction-market prices. Each item below is a "
+    "binary forecast whose probability diverges from a matched market's implied probability by "
+    "MORE than 10 percentage points, and whose rationale does NOT yet address that market. For "
+    "EACH item decide deliberately: EITHER move your probability toward the market, OR keep your "
+    "divergence — but in BOTH cases you MUST rewrite adjustment_rationale to explicitly cite the "
+    "market's implied probability and explain the divergence (what the market is missing / "
+    "mispricing, or why you now defer to it). Markets are calibration anchors, not ground truth.\n"
+    "Return JSON ONLY: {\"revisions\": [ {\"id\": \"F1\", \"probability\": 0.02-0.98, "
+    "\"adjustment_rationale\": \"...must mention the market and its implied probability...\"} , ... ] }"
+)
+
+_MARKET_EQUIVALENCE_RANK = {"exact": 3, "near": 2, "loose": 1}
+# 理由「提及市场」的判据：命中关键词（market/Polymarket/市场/预测市场/implied）即算。
+_MARKET_MENTION_RE = re.compile(r"market|polymarket|市场|預測|预测市场|implied", re.I)
+
+
+def _market_end_date(market: Dict[str, Any]) -> str:
+    """规整化市场快照用 end_date（见 prediction_markets），锚点对外用 endDate（camelCase）。"""
+    return str((market or {}).get("end_date") or (market or {}).get("endDate") or "").strip()
+
+
+def _rationale_cites_market(text: Any, anchor: Optional[Dict[str, Any]] = None) -> bool:
+    """理由是否引用了市场——关键词命中，或文本里出现了市场隐含概率的百分数。Pure。"""
+    t = str(text or "")
+    if not t.strip():
+        return False
+    if _MARKET_MENTION_RE.search(t):
+        return True
+    if isinstance(anchor, dict):
+        ip = _coerce_float(anchor.get("implied_yes_prob"))
+        if ip is not None and re.search(rf"\b{int(round(ip * 100))}\s*%", t):
+            return True
+    return False
+
+
+def _build_market_anchor(prob: Optional[float], market: Dict[str, Any], *,
+                         equivalence: Optional[str] = None,
+                         match_confidence: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    """确定性组装 rich market_anchor：隐含概率取我们的快照价，divergence 本地计算。
+
+    price_at_research 记研究时点的快照价（与 implied_yes_prob 同源，供日后与实时价对比）。
+    市场缺 id / 隐含概率非法 → None（不加锚点，degrade-safe）。"""
+    mid = str((market or {}).get("market_id") or "").strip()
+    ip = _coerce_float((market or {}).get("implied_yes_prob"))
+    p = _coerce_float(prob)
+    if not mid or ip is None or not (0.0 <= ip <= 1.0):
+        return None
+    anchor: Dict[str, Any] = {
+        "market_id": mid,
+        "question": str(market.get("question") or ""),
+        "implied_yes_prob": round(ip, 4),
+        "price_at_research": round(ip, 4),
+        "divergence": round((p if p is not None else 0.0) - ip, 4),
+    }
+    url = str(market.get("url") or "").strip()
+    if url:
+        anchor["url"] = url
+    ed = _market_end_date(market)
+    if ed:
+        anchor["endDate"] = ed
+    eq = str(equivalence or "").strip().lower()
+    if eq:
+        anchor["resolution_equivalence"] = eq
+    mc = _coerce_float(match_confidence)
+    if mc is not None:
+        anchor["match_confidence"] = round(max(0.0, min(1.0, mc)), 3)
+    return anchor
+
+
+def anchor_binaries_to_markets(binaries: List[Dict[str, Any]], markets: Optional[List[Dict[str, Any]]],
+                               llm, *, language: str = "English", max_markets: int = 24) -> int:
+    """PM-2：一次批处理 LLM 匹配 + 确定性回填 market_anchor（就地改写 binaries）。返回锚定条数。
+
+    只接受 resolution_equivalence 严格度 ≥ FORECAST_MARKET_ANCHOR_MIN_EQUIVALENCE（默认 near，
+    即 exact/near 采纳、loose 丢弃）的匹配。旗标 FORECAST_MARKET_ANCHORING 关闭 / 无市场 /
+    无二元 / 匹配调用异常或非法 JSON → 不加锚点（今日行为，degrade-safe）。"""
+    if not _cfg("FORECAST_MARKET_ANCHORING", True):
+        return 0
+    bins = [b for b in (binaries or []) if isinstance(b, dict) and str(b.get("statement") or "").strip()]
+    mkts = []
+    for m in (markets or []):
+        if not isinstance(m, dict):
+            continue
+        mid = str(m.get("market_id") or "").strip()
+        ip = _coerce_float(m.get("implied_yes_prob"))
+        if mid and ip is not None and 0.0 <= ip <= 1.0:
+            mkts.append(m)
+    if not bins or not mkts:
+        return 0
+    mkts = mkts[:max_markets]
+    market_by_id = {str(m.get("market_id")).strip(): m for m in mkts}
+    min_eq = str(_cfg("FORECAST_MARKET_ANCHOR_MIN_EQUIVALENCE", "near")).strip().lower()
+    min_rank = _MARKET_EQUIVALENCE_RANK.get(min_eq, 2)
+    flines = [f"[{b.get('id')}] {str(b.get('statement') or '')[:220]}" for b in bins]
+    mlines = []
+    for m in mkts:
+        ip = _coerce_float(m.get("implied_yes_prob"))
+        pct = f"{ip * 100:.0f}%" if ip is not None else "—"
+        ed = _market_end_date(m)
+        mlines.append(f"[{str(m.get('market_id')).strip()}] {str(m.get('question') or '')[:200]} "
+                      f"(implied YES {pct}{', ends ' + ed if ed else ''})")
+    user = (_MARKET_MATCH_INSTRUCTIONS + f"\n\nWrite any prose in {language}."
+            + "\n\n[FORECASTS]\n" + "\n".join(flines)
+            + "\n\n[MARKETS]\n" + "\n".join(mlines))
+    try:
+        raw = llm.chat_json(messages=[{"role": "user", "content": user}],
+                            temperature=0.1, max_tokens=1500)
+    except Exception as _me:  # noqa: BLE001 — 匹配失败 → 不加锚点（degrade-safe）
+        logger.warning(f"预测市场匹配调用失败（忽略，不加锚点）: {_me}")
+        return 0
+    matches = raw.get("matches") if isinstance(raw, dict) else None
+    if not isinstance(matches, list):
+        return 0
+    bin_by_id = {str(b.get("id")): b for b in bins}
+    anchored = 0
+    for mt in matches:
+        if not isinstance(mt, dict):
+            continue
+        fid = str(mt.get("forecast_id") or "").strip()
+        mid = str(mt.get("market_id") or "").strip()
+        if not mid or mid.lower() == "null":
+            continue
+        b = bin_by_id.get(fid)
+        m = market_by_id.get(mid)
+        if b is None or m is None:
+            continue
+        eq = str(mt.get("resolution_equivalence") or "").strip().lower()
+        if _MARKET_EQUIVALENCE_RANK.get(eq, 0) < min_rank:
+            continue  # 严格度不足（如 loose）→ 不锚定
+        anchor = _build_market_anchor(b.get("probability"), m, equivalence=eq,
+                                      match_confidence=mt.get("confidence"))
+        if anchor:
+            b["market_anchor"] = anchor  # 确定性回填（覆盖模型自愿转录的最小锚点）
+            anchored += 1
+    return anchored
+
+
+def enforce_market_divergence(binaries: List[Dict[str, Any]], llm, *,
+                              language: str = "English") -> int:
+    """PM-2 的 10pp 规则：锚定后 |divergence|>0.10 且理由未提及市场的预测做一次有界重述。
+
+    重述须在理由中引用市场；否则不接受（绝不静默移动概率）。就地改写 binaries，重算
+    market_anchor.divergence。旗标 FORECAST_MARKET_DIVERGENCE_REVISION 关闭 / 无候选 /
+    调用异常 → 原样返回。返回被接受的重述条数。"""
+    if not _cfg("FORECAST_MARKET_DIVERGENCE_REVISION", True):
+        return 0
+    candidates = []
+    for b in (binaries or []):
+        if not isinstance(b, dict):
+            continue
+        anchor = b.get("market_anchor")
+        if not isinstance(anchor, dict):
+            continue
+        dv = _coerce_float(anchor.get("divergence"))
+        if dv is None or abs(dv) <= 0.10:
+            continue
+        if _rationale_cites_market(b.get("adjustment_rationale"), anchor):
+            continue  # 已解释分歧 → 无需重述
+        candidates.append(b)
+    if not candidates:
+        return 0
+    items = []
+    for b in candidates:
+        anchor = b["market_anchor"]
+        ip = _coerce_float(anchor.get("implied_yes_prob"))
+        items.append(
+            f"[{b.get('id')}] statement: {str(b.get('statement') or '')[:220]}\n"
+            f"    your probability: {b.get('probability')}; market implied YES: {ip}; "
+            f"market question: {str(anchor.get('question') or '')[:160]}\n"
+            f"    current rationale: {str(b.get('adjustment_rationale') or '')[:200]}")
+    user = (_MARKET_DIVERGENCE_INSTRUCTIONS + f"\n\nWrite all text in {language}."
+            + "\n\n[Divergent forecasts]\n" + "\n".join(items))
+    try:
+        raw = llm.chat_json(messages=[{"role": "user", "content": user}],
+                            temperature=0.2, max_tokens=2048)
+    except Exception as _re:  # noqa: BLE001 — 重述失败 → 保留原分歧（degrade-safe）
+        logger.warning(f"预测市场分歧重述调用失败（忽略，保留原概率/理由）: {_re}")
+        return 0
+    revs = raw.get("revisions") if isinstance(raw, dict) else None
+    if not isinstance(revs, list):
+        return 0
+    by_id = {str(b.get("id")): b for b in candidates}
+    revised = 0
+    for r in revs:
+        if not isinstance(r, dict):
+            continue
+        b = by_id.get(str(r.get("id") or "").strip())
+        if b is None:
+            continue
+        anchor = b.get("market_anchor")
+        if not isinstance(anchor, dict):
+            continue
+        new_rat = str(r.get("adjustment_rationale") or "").strip()
+        if not new_rat or not _rationale_cites_market(new_rat, anchor):
+            continue  # 重述未引用市场 → 拒绝（绝不静默移动概率）
+        b["adjustment_rationale"] = new_rat
+        new_p = _coerce_float(r.get("probability"))
+        if new_p is not None:
+            new_p = round(max(0.02, min(0.98, new_p)), 2)
+            b["probability"] = new_p
+            ip = _coerce_float(anchor.get("implied_yes_prob"))
+            if ip is not None:
+                anchor["divergence"] = round(new_p - ip, 4)
+        revised += 1
+    return revised
+
+
+def build_market_comparison(binaries: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """PM-2：从已锚定的二元预测汇出确定性的 market_comparison 负载（供落 market_comparison.json）。
+
+    Pure / 无副作用：扫描 binaries 的 market_anchor，逐条给出 预测概率 vs 市场隐含概率、
+    分歧、是否超 10pp、是否已在理由中引用市场。无锚定预测 → comparisons 为空列表。"""
+    comps: List[Dict[str, Any]] = []
+    for b in (binaries or []):
+        if not isinstance(b, dict):
+            continue
+        anchor = b.get("market_anchor")
+        if not isinstance(anchor, dict):
+            continue
+        p = _coerce_float(b.get("probability"))
+        dv = _coerce_float(anchor.get("divergence"))
+        comps.append({
+            "forecast_id": b.get("id"),
+            "statement": b.get("statement"),
+            "model_probability": p,
+            "market_id": anchor.get("market_id"),
+            "market_question": anchor.get("question"),
+            "market_implied_yes_prob": _coerce_float(anchor.get("implied_yes_prob")),
+            "price_at_research": _coerce_float(anchor.get("price_at_research")),
+            "divergence": dv,
+            "abs_divergence": round(abs(dv), 4) if dv is not None else None,
+            "exceeds_10pp": (abs(dv) > 0.10) if dv is not None else False,
+            "resolution_equivalence": anchor.get("resolution_equivalence"),
+            "match_confidence": anchor.get("match_confidence"),
+            "url": anchor.get("url"),
+            "endDate": anchor.get("endDate"),
+            "rationale_cites_market": _rationale_cites_market(b.get("adjustment_rationale"), anchor),
+        })
+    return {"anchored_count": len(comps), "comparisons": comps}
 
 
 def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
@@ -449,10 +755,14 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
     注入模拟量化信号包并要求每个概率说明其相对 base_rate_anchor 的位移与来源。
     预测市场（PREDICTION_MARKETS_ENABLED，默认开）：``market_pack``（渲染好的市场表）
     注入提示词要求对照市场隐含概率；``markets``（规整化快照）用于回填/校验 market_anchor。
+    PM-2：抽取后跑一次确定性市场匹配（anchor_binaries_to_markets）+ 10pp 分歧有界重述
+    （enforce_market_divergence），并把对照负载放进返回值 ``market_comparison``（供落
+    market_comparison.json）。RQ-2：dossier 切片改为 head+tail（结论在文末）。
     """
     content = (report_markdown or "")
-    if len(content) > 48000:
-        content = content[:48000] + "\n…(truncated)…"
+    _bbudget = int(_cfg("FORECAST_BINARY_EXTRACT_BUDGET", 48000))
+    _bhr = _coerce_float(_cfg("FORECAST_EXTRACT_HEAD_RATIO", 0.6))
+    content = slice_head_tail(content, _bbudget, _bhr if _bhr is not None else 0.6)
     themes = [str(t).strip().lower() for t in (themes or []) if str(t).strip()] or None
     contrarian = bool(_cfg("FORECAST_BINARY_CONTRARIAN", True))
     sim_sensitive = bool(_cfg("FORECAST_SIM_SENSITIVITY", True)) and bool((signal_pack or "").strip())
@@ -493,7 +803,8 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
         if sim_sensitive:
             user += f"\n\n[Simulation quantitative signals]\n{str(signal_pack)[:4000]}"
         if market_aware:
-            user += f"\n\n[Prediction market signals]\n{str(market_pack)[:4000]}"
+            # PM-2：市场表切片 4000→8000，让相关性门控后的更多市场进入锚定视野。
+            user += f"\n\n[Prediction market signals]\n{str(market_pack)[:8000]}"
         user += f"\n\n[Research dossier]\n{content}"
         raw = llm.chat_json(messages=[{"role": "user", "content": user}],
                             temperature=0.25, max_tokens=4096)
@@ -525,12 +836,109 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
                 _merge(binaries, _draw(low_n, [b["statement"] for b in binaries], low_p=True))
             except Exception as _le:  # noqa: BLE001 — 补足失败保留首轮结果（degrade-safe）
                 logger.warning(f"二元预测低概率重述补足失败（忽略）: {_le}")
-    # renumber ids stably F1..Fn
+    # renumber ids stably F1..Fn（锚定用稳定 id 匹配，故在此之后再跑市场锚定）
     for i, b in enumerate(binaries, start=1):
         b["id"] = f"F{i}"
-    return {"binary_forecasts": binaries,
-            "binary_quality": _binary_quality(binaries, min_count=min_count,
-                                              themes_expected=themes)}
+    # PM-2：确定性市场锚定 + 10pp 分歧有界重述 + 对照负载。任何失败 → 保留无锚点结果
+    # （_normalize_binaries 已回填的模型自愿锚点仍在），即今日行为（degrade-safe）。
+    market_comparison: Optional[Dict[str, Any]] = None
+    if binaries and (markets or []):
+        try:
+            anchor_binaries_to_markets(binaries, markets, llm, language=language)
+            enforce_market_divergence(binaries, llm, language=language)
+            market_comparison = build_market_comparison(binaries)
+        except Exception as _ae:  # noqa: BLE001 — 锚定为增强，绝不阻断二元抽取
+            logger.warning(f"预测市场锚定失败（忽略，保留无锚点结果）: {_ae}")
+            market_comparison = None
+    out: Dict[str, Any] = {
+        "binary_forecasts": binaries,
+        "binary_quality": _binary_quality(binaries, min_count=min_count,
+                                          themes_expected=themes),
+    }
+    if market_comparison and market_comparison.get("comparisons"):
+        out["market_comparison"] = market_comparison
+    return out
+
+
+# ------------------------------------------ requirement-horizon consistency (RQ-6)
+# 一个 2026 年期中选举 brief 抽出的二元预测若全部落在 2028 年结算 = 交付物答非所问。
+# requirement_spec 不解析目标日期（只有 themes/page_budget 等），这里直接用正则从需求
+# 文本抽取「目标年份」，与二元预测的结算年份（horizon_year 字段 + 陈述/判定标准中出现
+# 的年份）对比；两侧都解析出年份且**完全不相交**时，在 forecast['quality'] 合并写入
+# ``horizon_mismatch`` 标记（镜像 _apply_publish_gate 的 merge 行为，绝不覆盖既有
+# quality 键），供发布门（RQ-6 gate 半）降级 confidence。Degrade-safe：任一侧解析不出
+# 年份 → 不加标记；任何异常 → 原 forecast 原样返回。
+_REQ_YEAR_RE = re.compile(r"\b(20\d{2})\b")
+
+
+def _plausible_years(text: Any, lo: int, hi: int) -> set:
+    """Years mentioned in ``text`` that fall inside the plausible window [lo, hi]."""
+    out: set = set()
+    for m in _REQ_YEAR_RE.finditer(str(text or "")):
+        y = int(m.group(1))
+        if lo <= y <= hi:
+            out.add(y)
+    return out
+
+
+def parse_requirement_years(requirement_text: Optional[str], *,
+                            now_year: Optional[int] = None) -> List[int]:
+    """Extract the brief's candidate TARGET years from the requirement text (sorted).
+
+    过滤到 [now-1, now+30] 窗口：历史背景年份（"since the 2008 crisis"）不是结算目标，
+    保留会造成假阳性。Pure / offline；解析不出 → []（调用方随之不加标记，degrade-safe）。
+    """
+    if now_year is None:
+        from datetime import datetime
+        now_year = datetime.now().year
+    return sorted(_plausible_years(requirement_text, now_year - 1, now_year + 30))
+
+
+def apply_horizon_consistency(forecast: Dict[str, Any], requirement_text: Optional[str], *,
+                              now_year: Optional[int] = None) -> Dict[str, Any]:
+    """RQ-6（extractor 半）：抽取时校验二元预测结算年份与 brief 目标年份的一致性。
+
+    需求文本目标年份集合与二元预测结算年份集合均非空且**无交集**时（例：2026 brief 抽出
+    全 2028 结算且无一条 2026 的二元），把结构化标记 merge 进 ``forecast['quality']``
+    （绝不覆盖既有键——镜像 _apply_publish_gate 的 merge 行为），供发布门降信心。
+    Mutates + returns ``forecast``。FORECAST_HORIZON_CHECK 旗标关闭、年份解析不出、
+    或任何异常 → 原样返回（degrade-safe，不阻断抽取）。
+    """
+    try:
+        if not isinstance(forecast, dict) or not _cfg("FORECAST_HORIZON_CHECK", True):
+            return forecast
+        if now_year is None:
+            from datetime import datetime
+            now_year = datetime.now().year
+        req_years = set(parse_requirement_years(requirement_text, now_year=now_year))
+        if not req_years:
+            return forecast  # brief 未给出可解析的目标年份 → 无从比对（不加标记）
+        lo, hi = now_year - 1, now_year + 30
+        bin_years: set = set()
+        for b in (forecast.get("binary_forecasts") or []):
+            if not isinstance(b, dict):
+                continue
+            hy = _coerce_float(b.get("horizon_year"))
+            if hy is not None and lo <= int(hy) <= hi:
+                bin_years.add(int(hy))
+            bin_years |= _plausible_years(
+                f"{b.get('statement') or ''} {b.get('resolution_criteria') or ''}", lo, hi)
+        if not bin_years or (req_years & bin_years):
+            return forecast  # 二元侧无年份可比 / 存在交集 → 视为一致，不加标记
+        req_s, bin_s = sorted(req_years), sorted(bin_years)
+        _q0 = forecast.get("quality")
+        quality = dict(_q0) if isinstance(_q0, dict) else {}
+        quality["horizon_mismatch"] = {
+            "requirement_years": req_s,
+            "binary_years": bin_s,
+            "detail": (f"binary forecasts resolve in {'/'.join(map(str, bin_s))} but the "
+                       f"brief targets {'/'.join(map(str, req_s))} (no overlap)"),
+        }
+        forecast["quality"] = quality
+        return forecast
+    except Exception as _he:  # noqa: BLE001 — 一致性检查绝不阻断抽取（degrade-safe）
+        logger.warning(f"需求-预测时间范围一致性检查失败（忽略）: {_he}")
+        return forecast
 
 
 # ----------------------------------------------------------- forecast spine (P0-1)
@@ -669,10 +1077,11 @@ def derive_forecast_spine(llm, *, central_question: str = "", horizon: str = "",
       * ``REPORT_SPINE_SELFCONSISTENCY_K`` — K self-consistency draws pooled to
         mean + spread (R2-CAL-1 / R2-CAL-17).
     """
-    # R2-DETAIL-3：每块输入上限可配置（默认沿用旧值 → 不改变默认路径的提示内容）。
+    # R2-DETAIL-3：每块输入上限可配置。RQ-4：signal/inputs 两块 4000→6000（骨架情景/概率
+    # 由这两块驱动，4000 会把驱动因素与量化信号截断，让骨架欠地气）；brief/facts 维持旧值。
     cap_brief = int(_cfg("REPORT_SPINE_INPUT_CAP_BRIEF", 2000))
-    cap_inputs = int(_cfg("REPORT_SPINE_INPUT_CAP_INPUTS", 4000))
-    cap_signal = int(_cfg("REPORT_SPINE_INPUT_CAP_SIGNAL", 4000))
+    cap_inputs = int(_cfg("REPORT_SPINE_INPUT_CAP_INPUTS", 6000))
+    cap_signal = int(_cfg("REPORT_SPINE_INPUT_CAP_SIGNAL", 6000))
     cap_facts = int(_cfg("REPORT_SPINE_INPUT_CAP_FACTS", 3000))
     user = _SPINE_INSTRUCTIONS
     if central_question:
@@ -689,8 +1098,9 @@ def derive_forecast_spine(llm, *, central_question: str = "", horizon: str = "",
     # 聚合信念——与所列市场重叠的情景概率应对照之，偏离 >10 个百分点须在
     # adjustment_rationale 说明依据（市场是校准锚点，不是真值）。空串时提示词不变。
     if market_block:
+        # PM-2：市场块切片 2500→6000，让相关性门控后的更多市场进入骨架校准视野。
         user += ("\n\n[预测市场隐含概率（Polymarket 实盘·校准锚点，非真值）]\n"
-                 + str(market_block)[:2500]
+                 + str(market_block)[:6000]
                  + "\n与上述市场重叠的情景，其概率须对照市场隐含概率；偏离超过 10 个百分点时"
                    "在 adjustment_rationale 中显式解释分歧（市场遗漏/错价了什么）。")
     # R2-CAL-16：S 级量化事实数字底座，要求锚点引用 指标 + as_of 日期。

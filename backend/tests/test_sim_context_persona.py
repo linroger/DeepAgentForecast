@@ -140,8 +140,11 @@ def test_world_brief_total_length_cap():
             "dynamics": "动" * 900,
         }
     }
-    brief = _config_gen()._build_world_brief("问" * 500, fat_actors, ["题" * 100] * 8)
-    assert len(brief) <= SimulationConfigGenerator.WORLD_BRIEF_MAX_CHARS
+    # RQ-7: 上限从固定 1400 升级为预算化（floor=1400，ceiling=SIM_WORLD_BRIEF_MAX_CHARS）；
+    # 断言实际生效上限（ADAPTIVE_CONTEXT 关闭时即 1400，逐字节兼容旧契约）。
+    gen = _config_gen()
+    brief = gen._build_world_brief("问" * 500, fat_actors, ["题" * 100] * 8)
+    assert len(brief) <= gen._world_brief_max_chars()
 
 
 def test_world_brief_flag_off_returns_empty(monkeypatch):

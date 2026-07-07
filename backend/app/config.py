@@ -88,21 +88,30 @@ class Config:
     LLM_FAST_BASE_URL = (os.environ.get('LLM_FAST_BASE_URL') or '').strip() or None
     LLM_FAST_API_KEY = (os.environ.get('LLM_FAST_API_KEY') or '').strip() or None
 
-    # —— 自适应上下文预算（EXECPLAN2 I-6-4）——
-    # ⚠️ CFG-2 诚实声明：该特性**尚未接线**——token_budget.py（context_budget/fit_to_budget/
-    # truncate_to_tokens）目前没有任何生产调用点，打开 ADAPTIVE_CONTEXT 不改变任何行为。
-    # 保留旋钮与工具模块作为未来接线的契约（首选消费点：report_agent 的前文[:8000] 切片与
-    # persona context[:3000]）；在接线落地前，请勿依赖此块的任何描述性收益。
-    # 原设计：把散落在各处的硬编码字符切片（persona context[:3000] / 前文章节[:8000] /
-    #  related_facts[:25] 等）换成「按提供方上下文窗口动态计算」的预算化截断：
+    # —— 自适应上下文预算（EXECPLAN2 I-6-4；RQ-7 已接线）——
+    # RQ-7 状态：**已接线**——token_budget.py（estimate_tokens/truncate_to_tokens/context_budget/
+    # slice_budget_chars/clamp_chars/fit_to_budget）现由三处生产调用点消费：
+    #  (1) report_agent._prior_section_char_budget —— 前序章节 [:8000] 切片按提供方窗口预算化；
+    #  (2) oasis_profile_generator —— 人设上下文 [:3000] 切片按窗口放宽（floor=PERSONA_CONTEXT_FLOOR_CHARS）；
+    #  (3) simulation_config_generator —— 世界简报上限 1400→SIM_WORLD_BRIEF_MAX_CHARS（大窗口）。
+    # 设计：把散落各处的硬编码字符切片换成「按提供方上下文窗口动态计算」的预算化截断——
     #  大窗口模型（MiniMax 512K / DeepSeek 1M）塞入更多事实与更长前文以提升 grounding，
-    #  小窗口模型收紧以规避静默截断导致的 JSON 断裂。估算器为近似值（≈4 字符/token），
+    #  小窗口模型守住今天的固定切片作为 floor（绝不收紧）。估算器为近似值（≈4 字符/token），
     #  故保留充裕的 RESERVED_COMPLETION_TOKENS 安全余量。
-    ADAPTIVE_CONTEXT = os.environ.get('ADAPTIVE_CONTEXT', 'False').strip().lower() == 'true'
+    # 默认开（true）：接线后打开即让长研究报告真正抵达下游提示词（大窗口提供方）；
+    #  任何 token_budget 异常/小窗口/未知提供方一律退回固定切片（degrade-safe），故默认开是安全的。
+    #  设 false 可逐字节复现接线前的固定切片行为。
+    ADAPTIVE_CONTEXT = os.environ.get('ADAPTIVE_CONTEXT', 'True').strip().lower() == 'true'
     # 预留给「补全输出」的 token 余量（从可用窗口中扣除，避免 prompt 顶满窗口后无处生成）。
     RESERVED_COMPLETION_TOKENS = int(os.environ.get('RESERVED_COMPLETION_TOKENS', '8192') or '8192')
     # 单条上下文条目（单个事实/单段前文）允许占用的硬上限 token 数，防止某一超长条目吃光整个预算。
     CONTEXT_ITEM_MAX_TOKENS = int(os.environ.get('CONTEXT_ITEM_MAX_TOKENS', '4096') or '4096')
+    # RQ-7：人设上下文切片的 floor（字符）。ADAPTIVE_CONTEXT=false 或小窗口时即用此值（=接线前的
+    # context[:3000]，行为不变）；ADAPTIVE_CONTEXT=true 且大窗口时以此为下限向上放宽。
+    PERSONA_CONTEXT_FLOOR_CHARS = int(os.environ.get('PERSONA_CONTEXT_FLOOR_CHARS', '3000') or '3000')
+    # RQ-7：模拟世界简报的字符上限（ceiling）。ADAPTIVE_CONTEXT=true 且大窗口时把 ≤1400（floor）
+    # 抬到此值以承载更完整的世界背景；ADAPTIVE_CONTEXT=false 或小窗口 → 守住 1400 floor（行为不变）。
+    SIM_WORLD_BRIEF_MAX_CHARS = int(os.environ.get('SIM_WORLD_BRIEF_MAX_CHARS', '3000') or '3000')
     # 各提供方上下文窗口（token）。未列出的提供方回退到保守默认 32K（见 context_window_for）。
     # 注意：这里按提供方粒度而非具体模型；fast/strong 同提供方时共用此窗口。
     PROVIDER_CONTEXT_WINDOWS = {
@@ -158,6 +167,31 @@ class Config:
     # 标准 + 来自 forecast_inputs 的带日期/触发观察指标，并把指标-情景映射写进 forecast.json 供
     # 解析调度器使用。默认开；无结构化预测/无情景时自动跳过（degrade-safe）。
     REPORT_RESOLUTION_SECTION = os.environ.get('REPORT_RESOLUTION_SECTION', 'True').strip().lower() == 'true'
+    # VIZ-1：确定性报告可视化器（无 LLM）。把已落盘的结构化工件（forecast/timeline/actors/
+    # world_state_trajectory/comparison/校准账本）渲染成 Mermaid 代码块 + matplotlib PNG，落盘
+    # reports/{id}/charts/ 与 viz_manifest.json。主开关默认开；关闭=完全不生成图（degrade-safe）。
+    REPORT_VISUALIZER = os.environ.get('REPORT_VISUALIZER', 'True').strip().lower() == 'true'
+    # VIZ-1：Mermaid 族（零依赖）开关——时间线/因果路径/派系/角色关系网络。默认开。
+    REPORT_VIZ_MERMAID = os.environ.get('REPORT_VIZ_MERMAID', 'True').strip().lower() == 'true'
+    # VIZ-1：matplotlib PNG 族开关——情景误差棒/模型 vs 市场哑铃/世界态堆叠面积/对比分组柱/校准
+    # 曲线。默认开；matplotlib 未安装时该族自动无效（仅 Mermaid），无需改此旋钮。
+    REPORT_VIZ_CHARTS = os.environ.get('REPORT_VIZ_CHARTS', 'True').strip().lower() == 'true'
+    # VIZ-1：PNG 渲染 dpi（PDF 宽度下可读性；下限 72）。
+    REPORT_VIZ_DPI = int(os.environ.get('REPORT_VIZ_DPI', '160') or '160')
+    # VIZ-1：网络图/因果图/派系图的节点上限（防止巨图不可读；超出即截断，确定性保留首现节点）。
+    REPORT_VIZ_MAX_NODES = int(os.environ.get('REPORT_VIZ_MAX_NODES', '40') or '40')
+    # VIZ-1 钩子：把 ReportVisualizer 产出的图表/图注注入成稿 full_report.md——Mermaid 块按章节
+    # 标题关键词模糊匹配就地插入，未匹配的图与全部 PNG 归入文末「Visual Annex / 可视化附录」（双语
+    # 随报告语言）。与 REPORT_VISUALIZER 正交：后者管「是否生成图 + 落 charts/」，此旋钮管「是否
+    # 注入正文」。默认开；关闭或注入失败=成稿不含图区（图仍落盘，degrade-safe）。
+    REPORT_VISUALIZATIONS = os.environ.get('REPORT_VISUALIZATIONS', 'True').strip().lower() == 'true'
+    # PDF-1：GET /api/report/{id}/pdf 惰性把 full_report.md 导出为 full_report.pdf——相对图表路径
+    # 绝对化 +（PATH 有 mmdc 时）预渲染 Mermaid 为 PNG，pandoc+xelatex（CJKmainfont=PingFang SC、
+    # geometry margin 2.5cm、--toc），失败回退 markdown→HTML→PyMuPDF Story。按成稿 mtime 缓存。
+    # 默认开；关闭=端点 404（degrade-safe）。
+    REPORT_PDF_EXPORT = os.environ.get('REPORT_PDF_EXPORT', 'True').strip().lower() == 'true'
+    # PDF-1：单次 pandoc 构建超时秒数（防挂死；超时即回退 PyMuPDF）。
+    REPORT_PDF_TIMEOUT = int(os.environ.get('REPORT_PDF_TIMEOUT', '180') or '180')
     # NEXTSTEPS P2-4：把每份 forecast.json 追加进校准账本（horizon/resolution date 为键），已解析
     # 预测的历史 Brier/ECE surfacing 进新预测 confidence_rationale——让信心由 track record 赚得而非
     # 自评。默认开（仅 jsonl 追加/读取，无 LLM）；初期无已解析样本时对信心无影响（degrade-safe）。
@@ -171,8 +205,17 @@ class Config:
     SIM_SEED = int(os.environ.get('SIM_SEED', '0') or '0')
     # NEXTSTEPS P0-3：同问多种子集成。LLM 驱动的模拟是随机生成器，单次=单抽样；对同一图谱用
     # 不同 SIM_SEED 跑 N 次 sim+report，聚合各自 forecast.json→ensemble_forecast.json，把点估计
-    # 变成带区间的分布，inter-seed 一致度→报告信心。默认 1 = 仅一次（与现状逐字节一致）。
-    N_FORECAST_SEEDS = max(1, int(os.environ.get('N_FORECAST_SEEDS', '1') or '1'))
+    # 变成带区间的分布，inter-seed 一致度→报告信心。CONF-1：默认 1→3——单抽样过度自信是最大的
+    # 校准短板；额外种子只重跑 sim+report（不重跑研究/图谱），且严格串行（见 _maybe_run_seed_ensemble），
+    # 故 wall-clock 只放大模拟+报告段（约 ×3），非整条管线。设 1 复现旧行为。
+    N_FORECAST_SEEDS = max(1, int(os.environ.get('N_FORECAST_SEEDS', '3') or '3'))
+    # PAR-3：多种子集成的并行度。此前额外种子严格串行（wall-clock ≈ ×N_FORECAST_SEEDS 的
+    # sim+report 段）；每个种子跑在独立 simulation_id → 独立目录/DB/文件式 IPC/仅注入子进程的
+    # env（见 _run_one_seed 的线程安全论证），故可安全并行。默认 2、上限 3（并行度越高对
+    # LLM provider 的瞬时压力越大——每个种子子进程内部还各自受 OASIS 信号量约束）。设 1 =
+    # 复现旧的严格串行行为（degrade-safe）。注意：共享的 graph_id 会被并发种子的图谱反馈同时
+    # 写入——串行版本本就共享同一张图，Zep 服务端处理并发写；每种子的 updater 按 sim_id 独立键。
+    ENSEMBLE_SEED_CONCURRENCY = max(1, min(3, int(os.environ.get('ENSEMBLE_SEED_CONCURRENCY', '2') or '2')))
 
     # —— 二元预测契约（QUALITY-OPT A1/A4：briefs 常要求「>=N 个二元 yes/no 预测，各含客观判定」）——
     # 研究阶段往往已产出合规的二元预测（如 research_report 的 F1-Fn），但下游 finalizer 之前只输出
@@ -247,7 +290,14 @@ class Config:
     # REPORT-3：默认开——把确定性 sim 聚合（top actors/volumes/coalition sizes/P(outcome)/scenario diff）
     # 钉进每章作可引用的数字底座，提升引用覆盖、减少探索式工具调用。
     REPORT_SIGNAL_PACK = os.environ.get('REPORT_SIGNAL_PACK', 'True').strip().lower() == 'true'  # I-3-2 每章注入定量信号包
-    REPORT_COMPARISON_TABLE = os.environ.get('REPORT_COMPARISON_TABLE', 'False').strip().lower() == 'true'  # I-3-4 基线-情景对比表
+    # RQ-4：默认 False→True。基线-情景对比表是 what-if 报告的核心可引用工件；仅在有 base
+    # 模拟 + 命中「对比/反事实」章节时注入，缺基线时自动 no-op（degrade-safe）。
+    REPORT_COMPARISON_TABLE = os.environ.get('REPORT_COMPARISON_TABLE', 'True').strip().lower() == 'true'  # I-3-4 基线-情景对比表
+    # R2-KG-7 / RQ-4：确定性「因果骨架」块——以图谱显著度最高的若干 chokepoint 为中心渲染多跳
+    # 因果邻域 + 最强 source→outcome 路径，钉进信号包。此前是 getattr 幽灵旋钮（config 从未定义，
+    # 在 .env 里设了也无效）；RQ-4 收编为一等属性并默认 True——因果骨架显著抬升报告的机制密度与
+    # 引用覆盖。图层多跳遍历有界、任意失败降级为空串，无 actors/无能动角色时为 no-op（degrade-safe）。
+    REPORT_CAUSAL_SPINE = os.environ.get('REPORT_CAUSAL_SPINE', 'True').strip().lower() == 'true'
     # 报告背景注入 actor 关系名册 + 激励结构（盟友/对手/竞争者/客户/供应商/出资方…），让叙事更贴角色。
     # 默认开；仅当 actor 携带 relational_roster/incentives 时生效，缺失时为 no-op（与现状一致）。
     REPORT_RELATIONAL_ROSTER = os.environ.get('REPORT_RELATIONAL_ROSTER', 'True').strip().lower() == 'true'
@@ -288,6 +338,10 @@ class Config:
     PIPELINE_LIVE_ARTIFACTS = os.environ.get('PIPELINE_LIVE_ARTIFACTS', 'true').strip().lower() == 'true'
     PIPELINE_PARTIAL_SCAN_EVERY_S = float(os.environ.get('PIPELINE_PARTIAL_SCAN_EVERY_S', '10') or '10')
     PIPELINE_VALIDATE_ARTIFACTS = os.environ.get('PIPELINE_VALIDATE_ARTIFACTS', 'true').strip().lower() == 'true'
+    # VIZ-2 可视化产物通道：把 handoff/charts/*.png|svg(+charts.json 清单) 与 handoff/data/*.csv
+    # 纳入产物 specs（→ manifest 完整性登记 + 运行中 *_partial 深链）。老跑不产出这些文件时，
+    # 各机制按「文件缺失即跳过」自然降级，从不误伤健康/完整性校验。默认 true（缺文件即 no-op）。
+    PIPELINE_VIZ_ARTIFACTS = os.environ.get('PIPELINE_VIZ_ARTIFACTS', 'true').strip().lower() == 'true'
     # I-8-1 run.json 是否附带关键包版本（pip 枚举有开销，默认关）。
     MANIFEST_CAPTURE_VERSIONS = os.environ.get('MANIFEST_CAPTURE_VERSIONS', 'false').strip().lower() == 'true'
     # SIM-11 persona 并行扇出（HTTP 提供方；CLI 固定 3）。
@@ -357,14 +411,56 @@ class Config:
 
     # —— 报告组（RPT-*/XRUN-1/XRUN-5/RPT-6/RPT-8；report_agent / forecast_extractor 经 getattr 读取）——
     REPORT_ABORT_ON_LLM_OUTAGE = os.environ.get('REPORT_ABORT_ON_LLM_OUTAGE', 'true').strip().lower() == 'true'
-    REPORT_SECTION_RETRY_MAX = int(os.environ.get('REPORT_SECTION_RETRY_MAX', '1') or '1')  # 0=旧的无重试
+    REPORT_SECTION_RETRY_MAX = int(os.environ.get('REPORT_SECTION_RETRY_MAX', '2') or '2')  # RQ-1 1→2；0=旧的无重试
     REPORT_SECTION_RETRY_BACKOFF_S = float(os.environ.get('REPORT_SECTION_RETRY_BACKOFF_S', '8.0') or '8.0')
     REPORT_CRITIQUE_BEFORE_PROSE = os.environ.get('REPORT_CRITIQUE_BEFORE_PROSE', 'true').strip().lower() == 'true'
     FORECAST_BINARY_CONTRARIAN = os.environ.get('FORECAST_BINARY_CONTRARIAN', 'true').strip().lower() == 'true'
     FORECAST_SIM_SENSITIVITY = os.environ.get('FORECAST_SIM_SENSITIVITY', 'true').strip().lower() == 'true'
     FORECAST_BINARY_THEMES = os.environ.get('FORECAST_BINARY_THEMES', '').strip()  # 空=由 brief/主题自适应
+    FORECAST_HORIZON_CHECK = os.environ.get('FORECAST_HORIZON_CHECK', 'true').strip().lower() == 'true'  # RQ-6 需求↔二元预测结算年份一致性标记
     REPORT_QUOTE_AUDIT_V2 = os.environ.get('REPORT_QUOTE_AUDIT_V2', 'true').strip().lower() == 'true'
     REPORT_COMPACT_RETRIEVAL_QUERY = os.environ.get('REPORT_COMPACT_RETRIEVAL_QUERY', 'true').strip().lower() == 'true'
+    # RQ-2 报告修复门：质量门失败时按维度单次定向修复（引用回填 / 引文接地 / 占位符解析），
+    # 然后重跑审计一次并把 before/after 记进 forecast['quality']['repair']（合并，不覆盖）。默认开；
+    # 任一步失败仅告警（degrade-safe），绝不影响主报告。
+    REPORT_REPAIR_PASSES = os.environ.get('REPORT_REPAIR_PASSES', 'true').strip().lower() == 'true'
+    # RQ-2 成稿语言纯度扫描：检测非 CJK 目标报告中的 CJK 片段（反之亦然），一次批量 LLM 调用内联翻译，
+    # 引用型原文以括注/脚注保留。默认开；任何错误 degrade-safe 跳过（保留原文）。
+    REPORT_LANGUAGE_PURITY = os.environ.get('REPORT_LANGUAGE_PURITY', 'true').strip().lower() == 'true'
+    # RQ-5 每章反思：草稿通过基本有效性后做一次廉价批判（骨架概率一致性 / 硬数字接地 / 篇幅下限 /
+    # 不复述前序章节），返回 PASS 或单条修订指令；至多一次修订抽取。轮数由 MAX_REFLECTION_ROUNDS 上限。
+    REPORT_SECTION_REFLECTION = os.environ.get('REPORT_SECTION_REFLECTION', 'true').strip().lower() == 'true'
+
+    # —— BILINGUAL：双语报告（自动生成另一语种版本）——
+    # 报告生成末尾（finalize/可视化/纯度之后）自动生成成稿的「另一语种」版本：英文报告 → 简体中文
+    # 版，中文报告 → analyst-grade 英文版。按 H2（'## '）章节边界切块、并发逐章翻译（严格保留
+    # markdown 结构 / 表格列数 / 代码 & mermaid 围栏原样 / 图片 URL / 引用标记 / 数字概率逐字节），
+    # 落 reports/{id}/full_report.{en|zh}.md 并把 translations 条目写入 meta。完全 degrade-safe：
+    # 任何失败/非中英文脚本 → 跳过，主交付物（full_report.md）绝不受影响。默认开；设 false 关闭。
+    REPORT_BILINGUAL = os.environ.get('REPORT_BILINGUAL', 'true').strip().lower() == 'true'
+    # 逐章节翻译的并发度（ThreadPoolExecutor 线程数）；下限 1（串行）。默认 4。
+    REPORT_TRANSLATION_CONCURRENCY = max(1, int(os.environ.get('REPORT_TRANSLATION_CONCURRENCY', '4') or '4'))
+
+    # —— PM-2：确定性逐预测市场锚定（forecast_extractor 经 getattr 读取）——
+    # 抽取二元预测后跑一次批处理 LLM 匹配（陈述表 × 相关性门控市场表），确定性回填
+    # rich market_anchor（隐含概率取我们的快照、divergence 本地计算）。默认开；关闭则回到
+    # 「仅模型自愿转录 market_anchor」的 opt-in 行为（取证 0/13 命中，degrade-safe）。
+    FORECAST_MARKET_ANCHORING = os.environ.get('FORECAST_MARKET_ANCHORING', 'true').strip().lower() == 'true'
+    # 锚定采纳的最小 resolution_equivalence 严格度：exact|near|loose（默认 near，即采纳
+    # exact/near、丢弃 loose 的宽泛主题匹配，避免把不同结算口径的市场硬贴成锚点）。
+    FORECAST_MARKET_ANCHOR_MIN_EQUIVALENCE = os.environ.get('FORECAST_MARKET_ANCHOR_MIN_EQUIVALENCE', 'near').strip().lower()
+    # 10pp 规则：锚定后 |model_p − market_p|>0.10 且理由未提及市场的预测，做一次有界重述，
+    # 须在理由中引用市场或有依据地保留分歧（绝不静默移动概率）。默认开；关闭=不重述。
+    FORECAST_MARKET_DIVERGENCE_REVISION = os.environ.get('FORECAST_MARKET_DIVERGENCE_REVISION', 'true').strip().lower() == 'true'
+
+    # —— RQ-2：成稿后抽取切片（head+tail，结论在文末）+ 抽取 max_tokens（forecast_extractor 经 getattr 读取）——
+    # 情景/二元抽取此前只取正文开头 [:budget]，把文末的收敛判断切掉；改为「前 head_ratio +
+    # 后 (1-head_ratio)」两段拼接。默认值即新行为；调小 head_ratio 偏向结论、调大偏向导言。
+    FORECAST_EXTRACT_BUDGET = int(os.environ.get('FORECAST_EXTRACT_BUDGET', '40000') or '40000')
+    FORECAST_BINARY_EXTRACT_BUDGET = int(os.environ.get('FORECAST_BINARY_EXTRACT_BUDGET', '48000') or '48000')
+    FORECAST_EXTRACT_HEAD_RATIO = float(os.environ.get('FORECAST_EXTRACT_HEAD_RATIO', '0.6') or '0.6')
+    # 情景抽取 max_tokens 2048→4096（5 情景 × anchor/rationale/criteria 常被 2048 截断成断裂 JSON）。
+    FORECAST_EXTRACT_MAX_TOKENS = int(os.environ.get('FORECAST_EXTRACT_MAX_TOKENS', '4096') or '4096')
 
     # LLM提供方（默认使用 Claude Code CLI 订阅）
     # claude-cli: 通过本机 `claude` CLI 调用（使用 Claude Code 订阅，无需 API Key）
@@ -688,8 +784,10 @@ class Config:
     ]
     
     # Report Agent配置
-    # T4.4: 默认 8 = 与原硬编码 MAX_TOOL_CALLS_PER_SECTION 一致（接入 Config 后行为不变）。
-    REPORT_AGENT_MAX_TOOL_CALLS = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS', '8'))
+    # T4.4/RQ-1: 每章最多工具调用。默认 8→12——展开后的长章节（目标 3000-6000 字 + 2-4 个
+    # ### 子小节）需要更多实证检索轮次才能填满机制密度；小 page_budget 的报告经 derive_report_shape
+    # 收敛回 8（见 report_agent._report_shape）。运维可下调以省成本。
+    REPORT_AGENT_MAX_TOOL_CALLS = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS', '12'))
     REPORT_AGENT_MAX_REFLECTION_ROUNDS = int(os.environ.get('REPORT_AGENT_MAX_REFLECTION_ROUNDS', '2'))
     REPORT_AGENT_TEMPERATURE = float(os.environ.get('REPORT_AGENT_TEMPERATURE', '0.5'))
     # 章节正文生成的输出 token 上限（OpenAI 兼容提供方生效；CLI 提供方由 prompt 篇幅下限驱动）。
@@ -699,7 +797,27 @@ class Config:
     # REPORT-9：中间「工具选择」回合的较小补全预算。32768 用在决定工具的回合上会诱发冗长推理；
     # 仅压中间回合，最终答案回合仍用 REPORT_AGENT_SECTION_MAX_TOKENS（32768），不缩短成稿章节长度。
     REPORT_AGENT_TOOL_TURN_MAX_TOKENS = int(os.environ.get('REPORT_AGENT_TOOL_TURN_MAX_TOKENS', '8192') or '8192')
-    
+    # RQ-1：章节篇幅契约（展开默认）。REPORT_SECTION_TARGET_CHARS 为 'lo-hi' 目标区间（字符数，
+    # 模板进 SECTION_SYSTEM/USER_PROMPT），REPORT_SECTION_FLOOR_CHARS 为硬下限。默认 3000-6000 /
+    # 下限 2000，取代旧的 1800-2800 / 1500。小 page_budget 报告经 derive_report_shape 收敛回旧的
+    # 紧凑值（1800-2800 / 1500），故此处仅设「无/大 page_budget」时采用的展开上限。解析失败回退默认。
+    REPORT_SECTION_TARGET_CHARS = os.environ.get('REPORT_SECTION_TARGET_CHARS', '3000-6000').strip()
+    REPORT_SECTION_FLOOR_CHARS = int(os.environ.get('REPORT_SECTION_FLOOR_CHARS', '2000') or '2000')
+
+    @classmethod
+    def report_section_target_chars(cls):
+        """把 REPORT_SECTION_TARGET_CHARS('lo-hi') 解析成 (lo, hi) 两个正整数；
+        任何解析失败（缺分隔符/非数字/lo>=hi）回退到展开默认 (3000, 6000)（degrade-safe）。"""
+        raw = (cls.REPORT_SECTION_TARGET_CHARS or '').strip()
+        try:
+            lo_s, hi_s = raw.split('-', 1)
+            lo, hi = int(lo_s.strip()), int(hi_s.strip())
+            if lo > 0 and hi > lo:
+                return lo, hi
+        except (ValueError, AttributeError):
+            pass
+        return 3000, 6000
+
     # 支持的 LLM 提供方（直接从 PROVIDER_META 派生，新增提供方只需改一处）
     SUPPORTED_LLM_PROVIDERS = tuple(PROVIDER_META.keys())
 
@@ -719,20 +837,33 @@ class Config:
     # DeerFlow config.yaml 中的模型名（默认 claude → Claude Code 订阅 OAuth；
     # 可选 claude | minimax | deepseek | qwen | glm | codex | kimi）
     DEERFLOW_MODEL = os.environ.get('DEERFLOW_MODEL', 'claude').strip()
-    # 研究深度：quick / standard / deep
-    DEERFLOW_RESEARCH_DEPTH = os.environ.get('DEERFLOW_RESEARCH_DEPTH', 'standard').strip().lower()
-    # 研究报告/结构化输出语言（MiroFish 面向中文舆论，默认中文；留空交给模型自选）
-    DEERFLOW_RESEARCH_LANGUAGE = os.environ.get('DEERFLOW_RESEARCH_LANGUAGE', 'Chinese').strip() or None
+    # 研究深度：quick / standard / deep。CONF-1：默认 standard→deep——deep 的多轮调研协议
+    # （source map → primary evidence → contradictions → synthesis）是报告证据密度的最大杠杆。
+    DEERFLOW_RESEARCH_DEPTH = os.environ.get('DEERFLOW_RESEARCH_DEPTH', 'deep').strip().lower()
+    # 研究报告/结构化输出语言。CONF-1：默认 Chinese→空 = 不传 --target-language，由模型按
+    # brief 自动检测语言（英文 brief → 英文报告）。所有消费方均 None-safe：编排器空值不加
+    # CLI 参数；report_agent 先走 detect_output_language(brief) 再回退。显式设值仍强制该语言。
+    DEERFLOW_RESEARCH_LANGUAGE = os.environ.get('DEERFLOW_RESEARCH_LANGUAGE', '').strip() or None
     # 研究阶段最长等待秒数（仅作为兜底/显式覆盖；正常由研究深度自适应）
     DEERFLOW_RESEARCH_TIMEOUT = int(os.environ.get('DEERFLOW_RESEARCH_TIMEOUT', '10800'))
-    # 是否启用 DeerFlow 子代理（并行 scoped workers，更深但更慢）
-    DEERFLOW_SUBAGENTS = os.environ.get('DEERFLOW_SUBAGENTS', 'false').strip().lower() == 'true'
+    # 是否启用 DeerFlow 子代理（并行 scoped workers，更深但更慢）。CONF-1：默认 false→true——
+    # 并行 scoped workers 的覆盖增益远超时延成本（时延由 deerflow_depth_budget 的 ×1.5 兜住）。
+    DEERFLOW_SUBAGENTS = os.environ.get('DEERFLOW_SUBAGENTS', 'true').strip().lower() == 'true'
     # 深度研究 per-KIQ / per-actor 子代理扇出（EXECPLAN2 I-0-4）：开场 scope pass 产出种子清单后，
-    # 并行派发若干 scoped 子调查，合并工作笔记再做矛盾核验+综合。默认关 = 线性协议不变。
-    # 经 env 下发给 deerflow 子进程（独立 venv）读取。
-    RESEARCH_DEEP_FANOUT = os.environ.get('RESEARCH_DEEP_FANOUT', 'false').strip().lower() == 'true'
-    # 扇出宽度上限（并行子调查数）；防止子代理把工具/LLM 预算放大失控。
-    RESEARCH_FANOUT_WIDTH = int(os.environ.get('RESEARCH_FANOUT_WIDTH', '4') or '4')
+    # 并行派发若干 scoped 子调查，合并工作笔记再做矛盾核验+综合。CONF-1：默认 false→true——
+    # per-KIQ 扇出显著抬高证据覆盖；关闭则回到线性协议。经 env 下发给 deerflow 子进程（独立 venv）读取。
+    RESEARCH_DEEP_FANOUT = os.environ.get('RESEARCH_DEEP_FANOUT', 'true').strip().lower() == 'true'
+    # 扇出宽度上限（并行子调查数）；防止子代理把工具/LLM 预算放大失控。CONF-1：4→8 与扇出默认开配套。
+    RESEARCH_FANOUT_WIDTH = int(os.environ.get('RESEARCH_FANOUT_WIDTH', '8') or '8')
+    # PAR-2：编排器级「多角度并行研究轨」。>1 时研究阶段并行跑 K 个 DeerFlowResearchRunner
+    # 子进程，每个带角度特化前缀（轨1=基线证据扫描，即原始 brief 逐字；轨2=基率/参照类/历史
+    # 类比；轨3=行为者激励+反面证伪+市场定价），各写入 handoff/track_<k>/，随后确定性合并回
+    # handoff/（报告按 '# Track N' H1 拼接、来源按 URL 去重保最高层级、actors 走 reconcile_cast、
+    # quantitative/contested/timeline 拼接去重、research_quality 取各轨最小值、预测市场取最新）。
+    # 各轨看门狗用既有 per-run 预算故 wall-clock ≈ 1 轨。默认 3；某轨失败 → 用存活轨（≥1）继续
+    # 并打降级标；全失败 → 阶段失败（与今日一致）。设 1 = 今日单轨路径逐字节一致（degrade-safe）。
+    # 上限受已定义角度数约束（当前 3）；>3 的值被夹到 3。
+    RESEARCH_PARALLEL_TRACKS = max(1, int(os.environ.get('RESEARCH_PARALLEL_TRACKS', '3') or '3'))
     # 双轨研究：在研究阶段「同时」跑两套调研工作流——Track A = 既有 deep-research 工作流
     # （deep-research skill）产出 research_report.md（广覆盖证据报告，角色不变）；Track B =
     # 新增 actor-ontology 研究工作流（actor-ontology-research skill）产出 actor_dossier.md
@@ -879,6 +1010,18 @@ class Config:
     # 每个事件最多取几条市场：防止一个多结局事件的子市场阶梯（如「N 次降息」0~12）霸占全部名额，
     # 保证快照的事件多样性。<=0 视为不限制。
     PREDICTION_MARKETS_MAX_PER_EVENT = int(os.environ.get('PREDICTION_MARKETS_MAX_PER_EVENT', '3') or '3')
+    # 每个检索词最多取几个匹配事件（Gamma public-search 的 limit_per_type，8→15）：检索词已被
+    # LLM/启发式收敛到题目相关，放宽召回不放噪声——快照仍受 MAX/MIN_VOLUME/MAX_PER_EVENT 收口。
+    PREDICTION_MARKETS_PER_QUERY = int(os.environ.get('PREDICTION_MARKETS_PER_QUERY', '15') or '15')
+    # 相关性门槛（0~10）：调用方提供 llm_call 时对快照批量打相关性分，低于此分的市场剔除、
+    # 其余按 (relevance_score, volume) 重排——错误锚点比没有锚点更糟。未打分/打分失败 →
+    # 保持 volume 排序（与今天一致，degrade-safe）。
+    PREDICTION_MARKETS_MIN_RELEVANCE = float(os.environ.get('PREDICTION_MARKETS_MIN_RELEVANCE', '5') or '5')
+    # PM-3：报告阶段对研究期落盘的市场快照做实时重报价（handoff-PLUS-refresh）——保留研究期价
+    # price_at_research 与当下价，算 Δ 呈现「研究→现在」的价格移动，并在二元预测抽取前再重报价一次
+    # 使 market_anchor 用现价。关闭 → 只用研究期快照（在包头标注时效性）。重报价失败一律 degrade-safe：
+    # 保留研究期价 + 时效性说明，绝不阻断报告（PolymarketClient.requote_markets 每行自带失败标记）。
+    PREDICTION_MARKETS_REQUOTE = os.environ.get('PREDICTION_MARKETS_REQUOTE', 'true').strip().lower() == 'true'
     # B2 三部结构：按 Bridgewater 简报把成稿组织为 Part 1（二元预测表）/ Part 2（框架综合，
     # 单次 LLM 调用、字数按 requirement_spec 的 page_budget 收敛）/ Part 3（附录 = 原详细章节）。
     # 无 Part 1 或综合产出过短 → 跳过不改文档（degrade-safe，幂等）。
@@ -929,7 +1072,9 @@ class Config:
     # 并发生成报告章节（EXECPLAN2 I-6-3）：>1 时正文章节走线程池并行，摘要/结论章节最后串行
     # （依赖正文全文）。章节级 LLM 并发受 OASIS 信号量同源约束。
     # REPORT-1：1→3。正文章节相互独立，并行 ~2.5-3.5x 加速；正文段自动走 brief 上下文避免 O(N²) token。
-    REPORT_SECTION_CONCURRENCY = int(os.environ.get('REPORT_SECTION_CONCURRENCY', '3') or '3')
+    # PAR-3：3→6——正文章节彼此独立、并发受 OASIS 信号量同源约束封顶，进一步抬高并发上限压缩
+    # 报告阶段 wall-clock；实际并发始终 min(此值, 正文章节数)，故对短报告无副作用。
+    REPORT_SECTION_CONCURRENCY = int(os.environ.get('REPORT_SECTION_CONCURRENCY', '6') or '6')
     # 章节上下文模式（I-6-3）：full = 每章注入此前所有章节全文；brief = 注入大纲+各章 1-2 句摘要
     # （去除 O(N²) 上下文膨胀）。并发模式下正文章节强制用 brief（并行时拿不到彼此全文）。
     # REPORT-2：默认 brief——大致砍半报告输入 token；尾/摘要章节仍拿全文，执行摘要不受影响。
@@ -945,9 +1090,34 @@ class Config:
         'qwen': 'DASHSCOPE_API_KEY', 'glm': 'ZHIPUAI_API_KEY', 'kimi': 'KIMI_API_KEY',
     }
     # 研究深度 → 超时预算（秒）；DEERFLOW_RESEARCH_TIMEOUT 为显式覆盖（优先级最高）(T6.6)
-    DEERFLOW_DEPTH_BUDGETS = {'quick': 900, 'standard': 2400, 'deep': 10800}
+    # CONF-1：standard 2400→7200、deep 10800→21600——旧预算下 deep 的多轮协议经常被看门狗
+    # 无差别 SIGKILL 在综合阶段之前。原始 dict 保留为兼容契约；内部读者应走 deerflow_depth_budget()。
+    DEERFLOW_DEPTH_BUDGETS = {'quick': 900, 'standard': 7200, 'deep': 21600}
     # deep 开场 pass 的递归上限（旧版在 bridge 内直接读 os.environ；提升为 Config 属性）(T6.6)
-    DEERFLOW_DEEP_OPENING_RECURSION_LIMIT = int(os.environ.get('DEERFLOW_DEEP_OPENING_RECURSION_LIMIT', '220'))
+    # CONF-1：220→400——扇出/双轨默认开后开场 pass 的工具调用数近乎翻倍，220 会提前截断 scope。
+    DEERFLOW_DEEP_OPENING_RECURSION_LIMIT = int(os.environ.get('DEERFLOW_DEEP_OPENING_RECURSION_LIMIT', '400'))
+
+    @classmethod
+    def deerflow_depth_budget(cls, depth) -> int:
+        """研究深度 → 生效超时预算（秒），带并行模式自动放大（CONF-1）。
+
+        DEERFLOW_DUAL_TRACK / DEERFLOW_SUBAGENTS / RESEARCH_DEEP_FANOUT 任一开启时，
+        研究阶段的工作量近乎翻倍（双轨两套工作流 / 子代理扇出），固定档位预算会把
+        更深的跑法无差别 SIGKILL——故生效预算 ×1.5。原始 DEERFLOW_DEPTH_BUDGETS dict
+        保持不变（兼容契约）；显式 timeout 参数 / 用户 .env 里的 DEERFLOW_RESEARCH_TIMEOUT
+        仍由调用方优先（本方法只负责档位默认值）。degrade-safe：任何异常回退到未放大的
+        原始档位值。
+        """
+        raw = cls.DEERFLOW_DEPTH_BUDGETS.get(
+            str(depth or '').strip().lower(), cls.DEERFLOW_RESEARCH_TIMEOUT)
+        try:
+            if (getattr(cls, 'DEERFLOW_DUAL_TRACK', False)
+                    or getattr(cls, 'DEERFLOW_SUBAGENTS', False)
+                    or getattr(cls, 'RESEARCH_DEEP_FANOUT', False)):
+                return int(raw * 1.5)
+            return int(raw)
+        except (TypeError, ValueError):  # noqa: BLE001 — 预算计算绝不阻塞研究启动
+            return raw
 
     # 统一管线产物目录
     PIPELINE_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/pipelines')

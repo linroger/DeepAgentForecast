@@ -5,6 +5,7 @@
 """
 
 import json
+import time
 
 import httpx
 import pytest
@@ -13,7 +14,9 @@ from app.utils import prediction_markets as pm
 from app.utils.prediction_markets import (
     PolymarketClient,
     derive_market_queries,
+    derive_market_queries_llm,
     render_markets_block,
+    score_market_relevance,
 )
 from app.services.forecast_extractor import (
     derive_forecast_spine,
@@ -206,6 +209,289 @@ def test_snapshot_yes_price_by_outcome_index(enabled, monkeypatch):
     assert out[0]["implied_yes_prob"] == 0.70       # 取 "Yes"（下标 1）而非 0.30
 
 
+def test_snapshot_per_query_limit_widened_to_15_and_knob(enabled, monkeypatch):
+    """每词 limit_per_type 从 8 放宽到 15（默认），且尊重 PREDICTION_MARKETS_PER_QUERY 旋钮。"""
+    seen = {}
+
+    def fake_get(url, params=None, timeout=None, headers=None):
+        seen["params"] = params
+        return FakeResponse(_payload([]))
+
+    monkeypatch.setattr(pm.httpx, "get", fake_get)
+    client = PolymarketClient()
+    client.snapshot_for_queries(["tariff"])
+    assert seen["params"]["limit_per_type"] == 15   # 新默认（8→15）
+    client.search_events("tariff")
+    assert seen["params"]["limit_per_type"] == 15   # search_events 默认同步放宽
+    from app.config import Config
+    monkeypatch.setattr(Config, "PREDICTION_MARKETS_PER_QUERY", 7, raising=False)
+    client.snapshot_for_queries(["tariff"])
+    assert seen["params"]["limit_per_type"] == 7    # 旋钮生效
+    client.snapshot_for_queries(["tariff"], per_query=4)
+    assert seen["params"]["limit_per_type"] == 4    # 显式入参优先于旋钮
+
+
+def test_normalize_enrichment_url_enddate_and_book(enabled, monkeypatch):
+    """API 行带 endDate/oneDayPriceChange/bestBid/bestAsk、事件带 slug 时富化输出；
+    缺失字段不造假（键不出现）。"""
+    rich = _raw("m-rich", vol=5000, yes="0.4000", endDate="2026-12-31T00:00:00Z",
+                oneDayPriceChange="-0.021", bestBid=0.39, bestAsk="0.41")
+    lean = _raw("m-lean", vol=4000, yes="0.3000")
+    payload = {"events": [
+        {"title": "Ev", "slug": "us-tariffs-2026", "markets": [rich]},
+        {"title": "Lean", "slug": "", "markets": [lean]},
+    ], "pagination": {}}
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: FakeResponse(payload))
+    out = PolymarketClient().snapshot_for_queries(["x"])
+    by = {m["market_id"]: m for m in out}
+    r = by["m-rich"]
+    assert r["url"] == "https://polymarket.com/event/us-tariffs-2026"  # 事件 slug → URL
+    assert r["end_date"] == "2026-12-31T00:00:00Z"
+    assert r["one_day_price_change"] == -0.021       # 字符串数值 → float
+    assert r["best_bid"] == 0.39 and r["best_ask"] == 0.41
+    for key in ("url", "end_date", "one_day_price_change", "best_bid", "best_ask"):
+        assert key not in by["m-lean"]               # 缺失不造假
+    block = render_markets_block(out, lang="en")     # 渲染把问题变成可点链接
+    assert "[Will m-rich resolve yes?](https://polymarket.com/event/us-tariffs-2026)" in block
+    assert "| 2 | Will m-lean resolve yes? (m-lean) |" in block  # 无 URL 行保持旧格式
+
+
+# ------------------------------------------------------------- requote
+
+def test_requote_markets_merges_fresh_prices_and_flags_failures(enabled, monkeypatch):
+    """批量重报价：拉当前价覆盖 implied_yes_prob、保留研究期价、算 price_delta；
+    已关闭 / 未返回的市场保留旧价并标 requote_failed=True，传入行不被原地污染。"""
+    seen = {}
+
+    def fake_get(url, params=None, timeout=None, headers=None):
+        seen.update(url=url, params=params)
+        return FakeResponse([
+            _raw("m1", yes="0.4100"),                    # 现价 0.41（研究期 0.34）
+            _raw("m2", yes="0.2000", closed=True),        # 已关闭 → requote_failed
+        ])
+
+    monkeypatch.setattr(pm.httpx, "get", fake_get)
+    markets = [
+        {"market_id": "m1", "exchange": "polymarket", "question": "Q1",
+         "implied_yes_prob": 0.34, "volume": 9000},
+        {"market_id": "m2", "exchange": "polymarket", "question": "Q2",
+         "implied_yes_prob": 0.55, "volume": 500},
+        {"market_id": "m3", "exchange": "polymarket", "question": "Q3",
+         "implied_yes_prob": 0.60, "volume": 100},        # 未在响应里 → requote_failed
+    ]
+    out = PolymarketClient().requote_markets(markets)
+    assert seen["url"].endswith("/markets")
+    assert seen["params"] == {"id": ["m1", "m2", "m3"]}   # 批量重复 id 参数
+    by = {m["market_id"]: m for m in out}
+    m1 = by["m1"]
+    assert m1["price_at_research"] == 0.34               # 研究期价被保留
+    assert m1["implied_yes_prob"] == 0.41                # 现价覆盖
+    assert m1["price_delta"] == round(0.41 - 0.34, 4)    # 分歧确定性计算
+    assert "requote_failed" not in m1
+    assert by["m2"]["implied_yes_prob"] == 0.55          # 已关闭 → 保留旧价
+    assert by["m2"]["price_at_research"] == 0.55
+    assert by["m2"]["requote_failed"] is True
+    assert "price_delta" not in by["m2"]
+    assert by["m3"]["implied_yes_prob"] == 0.60          # 未返回 → 保留旧价
+    assert by["m3"]["requote_failed"] is True
+    assert all("price_at_research" not in m for m in markets)  # 传入行不被污染
+
+
+def test_requote_markets_disabled_and_empty_and_idempotent(monkeypatch):
+    """未启用 → 不发请求、各行标 requote_failed 但保留旧价；空输入 → []；
+    幂等重入：已有 price_at_research 时沿用（不把上一轮的现价误当研究期价）。"""
+    calls = []
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: calls.append(1))
+    assert PolymarketClient().requote_markets([]) == []
+    assert PolymarketClient().requote_markets(None) == []
+    out = PolymarketClient().requote_markets([
+        {"market_id": "m1", "implied_yes_prob": 0.40}])   # conftest 默认关闭
+    assert out[0]["requote_failed"] is True
+    assert out[0]["implied_yes_prob"] == 0.40             # 旧价保留
+    assert out[0]["price_at_research"] == 0.40
+    assert calls == []                                    # 未启用绝不发请求
+    # 幂等：已带 price_at_research 的行再次重报价失败时，研究期价不被现价覆盖。
+    out2 = PolymarketClient().requote_markets([
+        {"market_id": "m1", "implied_yes_prob": 0.48, "price_at_research": 0.34}])
+    assert out2[0]["price_at_research"] == 0.34
+
+
+def test_requote_markets_transport_failure_degrades_to_flag(enabled, monkeypatch):
+    """取数网络失败（重试后仍失败）→ 各行标 requote_failed、保留旧价，绝不抛。"""
+    def boom(*a, **k):
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(pm.httpx, "get", boom)
+    out = PolymarketClient().requote_markets([
+        {"market_id": "m1", "implied_yes_prob": 0.40, "volume": 100}])
+    assert out[0]["requote_failed"] is True
+    assert out[0]["implied_yes_prob"] == 0.40
+
+
+# ------------------------------------------------------------- price history
+
+def test_fetch_price_history_parses_and_degrades(enabled, monkeypatch):
+    """解析 {"history": [{t, p}]} → [{t, p}]（脏点跳过）；命中正确的 clob 宿主与参数。"""
+    seen = {}
+
+    def fake_get(url, params=None, timeout=None, headers=None):
+        seen.update(url=url, params=params)
+        return FakeResponse({"history": [
+            {"t": 1750000000, "p": "0.41"},              # 字符串价 → float
+            {"t": 1750086400, "p": 0.43},
+            {"t": 1750172800, "p": "bad"},               # 不可解析价 → 跳过
+            {"p": 0.5},                                  # 缺时间戳 → 跳过
+        ]})
+
+    monkeypatch.setattr(pm.httpx, "get", fake_get)
+    out = PolymarketClient().fetch_price_history("0xTOKEN", interval="1d", days=0)
+    assert seen["url"] == "https://clob.polymarket.com/prices-history"  # CLOB 宿主
+    assert seen["params"] == {"market": "0xTOKEN", "interval": "1d"}     # keyless
+    assert out == [{"t": 1750000000, "p": 0.41}, {"t": 1750086400, "p": 0.43}]
+
+    def boom(*a, **k):
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(pm.httpx, "get", boom)
+    assert PolymarketClient().fetch_price_history("0xTOKEN") == []       # 网络失败 → []
+    assert PolymarketClient().fetch_price_history("") == []              # 空 token → []
+
+
+def test_fetch_price_history_disabled_makes_no_call(monkeypatch):
+    """未启用（conftest 默认）→ 不发请求、返回 []。"""
+    calls = []
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: calls.append(1))
+    assert PolymarketClient().fetch_price_history("0xTOKEN") == []
+    assert calls == []
+
+
+def test_fetch_price_history_trims_by_days(enabled, monkeypatch):
+    """days>0 → 客户端裁剪，只保留最近 days 天的点。"""
+    now = time.time()
+    old = int(now - 100 * 86400)
+    recent = int(now - 10 * 86400)
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: FakeResponse(
+        {"history": [{"t": old, "p": "0.30"}, {"t": recent, "p": "0.40"}]}))
+    out = PolymarketClient().fetch_price_history("0xTOK", days=90)
+    assert out == [{"t": recent, "p": 0.40}]             # 100 天前的点被 days=90 截掉
+
+
+def test_normalize_preserves_clob_token_ids(enabled, monkeypatch):
+    """规整化保留 Gamma 的 clobTokenIds（JSON 串 → list）；缺失不造假（键不出现）。"""
+    payload = _payload([_event("Ev", [
+        _raw("m-clob", vol=5000, yes="0.4000", clobTokenIds='["0xYES","0xNO"]'),
+        _raw("m-noclob", vol=5000, yes="0.4000"),
+    ])])
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: FakeResponse(payload))
+    by = {m["market_id"]: m for m in PolymarketClient().snapshot_for_queries(["x"])}
+    assert by["m-clob"]["clob_token_ids"] == ["0xYES", "0xNO"]
+    assert "clob_token_ids" not in by["m-noclob"]        # 缺失不造假
+
+
+def test_render_markets_block_shows_delta_column_on_requote():
+    """重报价后有价格移动 → 追加 Δ 列（34%→41%）；未移动的行留占位符；
+    无 price_at_research → 不加 Δ 列（与旧渲染一致）。"""
+    markets = [
+        {"market_id": "m1", "exchange": "polymarket", "question": "Q1",
+         "implied_yes_prob": 0.41, "price_at_research": 0.34, "price_delta": 0.07,
+         "volume": 9000},
+        {"market_id": "m2", "exchange": "polymarket", "question": "Q2",
+         "implied_yes_prob": 0.50, "price_at_research": 0.50, "volume": 500},  # 未变动
+    ]
+    block = render_markets_block(markets, lang="en")
+    assert "Δ (research→now)" in block
+    assert "34%→41%" in block
+    m2_line = next(l for l in block.splitlines() if l.startswith("| 2 |"))
+    assert "→" not in m2_line                            # 未变动行 Δ 为占位符
+    # 无 price_at_research → 不加 Δ 列，逐字节与旧渲染一致
+    plain = render_markets_block([{"market_id": "m1", "exchange": "polymarket",
+                                   "question": "Q", "implied_yes_prob": 0.4, "volume": 100}])
+    assert "Δ" not in plain
+    assert "| 1 | Q (m1) | polymarket | 40% | 100 |" in plain
+    zh = render_markets_block(markets, lang="zh")
+    assert "Δ（研究→现在）" in zh and "34%→41%" in zh
+
+
+# ------------------------------------------------------- relevance scoring
+
+def _rel_markets():
+    return [
+        {"market_id": "m1", "exchange": "polymarket", "question": "Sports parlay hits?",
+         "implied_yes_prob": 0.5, "volume": 9000, "liquidity": 10,
+         "event_title": "Sports", "matched_query": "fed"},
+        {"market_id": "m2", "exchange": "polymarket", "question": "Tariffs above 10%?",
+         "implied_yes_prob": 0.3, "volume": 500, "liquidity": 10,
+         "event_title": "Tariffs", "matched_query": "tariff"},
+        {"market_id": "m3", "exchange": "polymarket", "question": "Export controls tighten?",
+         "implied_yes_prob": 0.6, "volume": 8000, "liquidity": 10,
+         "event_title": "Chips", "matched_query": "export"},
+    ]
+
+
+def test_score_market_relevance_gates_and_reranks(monkeypatch):
+    from app.config import Config
+    monkeypatch.setattr(Config, "PREDICTION_MARKETS_MIN_RELEVANCE", 5.0, raising=False)
+    prompts = []
+
+    def llm(prompt):
+        prompts.append(prompt)
+        return json.dumps([
+            {"market_id": "m1", "score": 2, "rationale": "sports, unrelated"},
+            {"market_id": "m2", "score": 9, "rationale": "direct bet"},
+            {"market_id": "m3", "score": 7, "rationale": "adjacent"},
+        ])
+
+    mkts = _rel_markets()
+    out = score_market_relevance(llm, "Will tariffs rise?", mkts)
+    assert len(prompts) == 1                                 # 单次批量调用
+    assert "m1" in prompts[0] and "Tariffs above 10%?" in prompts[0]
+    assert [m["market_id"] for m in out] == ["m2", "m3"]     # 相关性优先于 volume；m1 被门槛剔除
+    assert out[0]["relevance_score"] == 9.0
+    assert out[0]["relevance_rationale"] == "direct bet"
+    assert all("relevance_score" not in m for m in mkts)     # 传入行不被原地污染（返回浅拷贝）
+
+
+def test_score_market_relevance_optional_and_degrade_safe():
+    mkts = _rel_markets()
+    assert score_market_relevance(None, "q", mkts) == mkts                 # llm_call=None → 跳过
+    assert score_market_relevance(None, "q", None) == []                   # 空输入 → []
+
+    def boom(prompt):
+        raise RuntimeError("llm down")
+
+    assert score_market_relevance(boom, "q", mkts) == mkts                 # 异常 → 原样（volume 排序不变）
+    assert score_market_relevance(lambda p: "no json", "q", mkts) == mkts  # 不可解析 → 原样
+    assert score_market_relevance(lambda p: "[]", "q", mkts) == mkts       # 空打分 → 原样
+
+
+def test_score_market_relevance_unscored_rows_kept():
+    def llm(prompt):
+        return json.dumps([{"market_id": "m1", "score": 1}])  # 只覆盖 m1
+
+    out = score_market_relevance(llm, "q", _rel_markets(), min_relevance=5)
+    # m1 低分剔除；m2/m3 未被覆盖 → 保留（不因缺分丢信号），同视作门槛分后按 volume 排序
+    assert [m["market_id"] for m in out] == ["m3", "m2"]
+    assert all("relevance_score" not in m for m in out)
+
+
+def test_snapshot_applies_relevance_gate_when_llm_call_given(enabled, monkeypatch):
+    payload = _payload([_event("Big", [_raw("m-big", vol=9000, yes="0.6400"),
+                                       _raw("m-small", vol=500, yes="0.2100")])])
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: FakeResponse(payload))
+
+    def llm(prompt):
+        return json.dumps([{"market_id": "m-big", "score": 2, "rationale": "unrelated"},
+                           {"market_id": "m-small", "score": 8, "rationale": "on point"}])
+
+    out = PolymarketClient().snapshot_for_queries(["x"], llm_call=llm, question="research q")
+    assert [m["market_id"] for m in out] == ["m-small"]      # 高量但不相关的 m-big 被剔除
+    assert out[0]["relevance_score"] == 8.0
+    # llm_call 未提供 → 今天的行为：volume-only 排序、无打分字段
+    out2 = PolymarketClient().snapshot_for_queries(["x"])
+    assert [m["market_id"] for m in out2] == ["m-big", "m-small"]
+    assert all("relevance_score" not in m for m in out2)
+
+
 # ------------------------------------------------------------- rendering
 
 def test_render_markets_block_deterministic_table():
@@ -239,7 +525,7 @@ def test_derive_market_queries_heuristic():
     )
     assert q  # 非空
     assert all(len(x.split()) <= 5 for x in q)       # 每条 ≤5 词
-    assert len(q) <= 6                               # 限量
+    assert len(q) <= 12                              # 限量（6→12 放宽）
     assert len({x.lower() for x in q}) == len(q)     # 去重
     joined = " || ".join(q)
     assert "semiconductor" in joined                 # 问题关键短语被抽出
@@ -259,6 +545,84 @@ def test_derive_market_queries_cjk_question():
     q = derive_market_queries("美联储会在2026年降息吗？关税战是否升级？")
     assert q  # CJK 串作为整体 token 被抽出
     assert any("关税" in x or "美联储" in x for x in q)
+
+
+def test_derive_market_queries_keeps_four_digit_years():
+    q = derive_market_queries("Will a US recession start in 2026?")
+    assert any("2026" in x for x in q)               # 年份 token 不再被 regex 丢弃
+    assert "recession start" in " || ".join(q)
+
+
+def test_derive_market_queries_blacklists_generic_words():
+    q = derive_market_queries("Key factors impact the outcome of tariff policy escalation")
+    words = {w.lower() for x in q for w in x.split()}
+    assert not words & {"key", "factors", "impact", "outcome", "cover"}  # 泛化空词被滤掉
+    assert "tariff policy escalation" in q           # 实义短语完整保留
+
+
+def test_salient_phrases_break_at_clause_boundaries():
+    # 短语不得跨逗号拼出无意义组合（"rise china"）；两个子句各自成短语。
+    assert pm._salient_phrases("tariffs rise, china retaliates") == \
+        ["tariffs rise", "china retaliates"]
+
+
+def test_derive_market_queries_reserves_slots_for_actors():
+    q = derive_market_queries(
+        "alpha beta, gamma delta, epsilon zeta",
+        hot_topics=["topic one", "topic two", "topic three"],
+        actor_names=["Federal Reserve", "NVIDIA"],
+        max_queries=4,
+    )
+    assert len(q) == 4
+    assert "Federal Reserve" in q and "NVIDIA" in q  # 短语/话题填满也挤不掉 actor 名
+
+
+# --------------------------------------------- LLM query derivation
+
+def test_derive_market_queries_llm_happy_path():
+    titles = [f"Fed rate cut {2026 + i}" for i in range(12)]
+    prompts = []
+
+    def llm(prompt):
+        prompts.append(prompt)
+        return "Sure, here you go:\n```json\n" + json.dumps(titles) + "\n```"
+
+    q = derive_market_queries_llm(llm, "Will the Fed cut rates?",
+                                  hot_topics=["inflation"], actors=["Federal Reserve"])
+    assert q == titles                               # 代码栅栏 + 散文包裹被鲁棒解析
+    assert 10 <= len(q) <= 16
+    assert "Will the Fed cut rates?" in prompts[0]   # 问题/话题/actor 全部入 prompt
+    assert "inflation" in prompts[0] and "Federal Reserve" in prompts[0]
+
+
+def test_derive_market_queries_llm_wrapped_payload_dedup_and_topup():
+    def llm(prompt):
+        return json.dumps({"queries": [
+            {"query": "US recession 2026"},          # dict 元素也接受
+            "China Taiwan blockade",
+            "US recession 2026",                     # 重复 → 去重
+        ]})
+
+    question = "Will the US semiconductor export controls tighten before 2027?"
+    q = derive_market_queries_llm(llm, question, actors=["NVIDIA"])
+    assert q[0] == "US recession 2026" and q[1] == "China Taiwan blockade"
+    assert [x.lower() for x in q].count("us recession 2026") == 1
+    assert "NVIDIA" in q                             # 产出不足 → 启发式确定性补足
+    assert len({x.lower() for x in q}) == len(q)
+
+
+def test_derive_market_queries_llm_falls_back_to_heuristic():
+    question = "Will the US semiconductor export controls tighten before 2027?"
+    heur = derive_market_queries(question, hot_topics=["tariff escalation"],
+                                 actor_names=["NVIDIA"], max_queries=12)
+
+    def boom(prompt):
+        raise RuntimeError("llm down")
+
+    for bad_call in (None, boom, lambda p: "no json here at all", lambda p: "[]"):
+        assert derive_market_queries_llm(
+            bad_call, question, hot_topics=["tariff escalation"],
+            actors=["NVIDIA"]) == heur               # 任何失败 → 与启发式逐条一致
 
 
 # --------------------------------------------- forecast_extractor plumbing

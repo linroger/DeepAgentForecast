@@ -94,10 +94,10 @@ npm run dev       # 后端 :5001 + 前端 :3000
 
 把一个开放性问题（例如「2035 年电动车市场会怎样演化？」）交给 DeepAgentForecast，它会：
 
-- **自动联网研究（双轨并行）**：两个研究工作流**同时运行** —— 一路「深度研究」写出循证研究档案，一路「角色本体研究」深挖真正的关键行动者：其角色、价值观、信念、动机、资源，以及彼此之间有向、带类型、**带极性（盟友≠对手≠交易方）**的关系；同时把仅被引用的记者/媒体/来源降级为上下文，而非行动者。
+- **自动联网研究（规模化）**：**三条多角度研究轨并行**运行（基础证据 · 基率与参照类 · 激励/反面/市场），每条轨再**并行**跑「双轨」DeerFlow 工作流 —— 一路「深度研究」写出循证研究档案，一路「角色本体研究」深挖真正的关键行动者：其角色、价值观、信念、动机、资源，以及彼此之间有向、带类型、**带极性（盟友≠对手≠交易方）**的关系；同时把仅被引用的记者/媒体/来源降级为上下文。底层每一路都会运行**分阶段多轮协议**、**8 路 per-KIQ/per-actor 扇出**+ harness **子代理**的智能体式检索、**研究 judge→refine 环**、通用 **S1–S4 来源分级**+三角验证补充，以及**多段并行合成**，最终产出 **1.5–2.5 万字**的深度档案。研究阶段还会从 **Polymarket** 拉取实时市场隐含概率作为校准锚点。
 - **构建高保真平行世界**：把研究成果蒸馏进一张带**分层、行为画像丰富的本体**的时序知识图谱（GraphRAG），并为每位**关键行动者**（决策者与利益相关方）生成一位数字人格 —— 按显著度（salience）而非单纯连接度排序。
-- **运行群体模拟**：在模拟的 Twitter + Reddit 双平台上，让数以百计、各具人格的 LLM 智能体发帖、评论、点赞，让群体动态自然涌现。
-- **产出可交互预测报告**：由报告 Agent 在图谱与模拟之上做工具增强的检索，综合写出一份分章节的预测报告。
+- **运行群体模拟**：在模拟的 Twitter + Reddit 双平台上，让数以百计、各具人格的 LLM 智能体发帖、评论、点赞，让群体动态自然涌现；可选的**多种子集成**会重跑模拟+报告并聚合概率。
+- **产出可交互预测报告**：由报告 Agent 在图谱与模拟之上做工具增强的检索，综合写出一份分章节的预测报告 —— 内嵌**图表**（Mermaid + matplotlib）、**逐条预测的 Polymarket 锚定**，并支持一键 **PDF 导出**。
 
 整条链路由 **一个提示词（one prompt）** 触发，全程自动衔接，无需人工在各阶段之间手动搬运中间产物。
 
@@ -108,7 +108,7 @@ npm run dev       # 后端 :5001 + 前端 :3000
 DeepAgentForecast 是一条统一管线，串联两大引擎，并由一张知识图谱与一个报告 Agent 黏合：
 
 - **DeerFlow 2.0 —— 深度研究引擎（双轨）**
-  一个基于 LangGraph 的超级智能体框架：联网搜索 + 全文抓取，多角度研究。它运行在**自己的子进程与独立的 Python 虚拟环境**中，与后端依赖隔离，并**同时执行两个研究技能** —— `deep-research`（广覆盖的循证档案）与 `actor-ontology-research`（以行动者为中心、可直接喂给本体生成的角色与关系档案）。
+  一个基于 LangGraph 的超级智能体框架：联网搜索 + 全文抓取、多角度研究、**子代理**扇出，以及一套**技能（skills）**系统。它运行在**自己的子进程与独立的 Python 虚拟环境**中，与后端依赖隔离，并**同时执行两个研究技能** —— `deep-research`（广覆盖的循证档案）与 `actor-ontology-research`（以行动者为中心、可直接喂给本体生成的角色与关系档案）—— 配合 8 路 per-KIQ 扇出、judge→refine 环与多段并行合成。四个技能被部署到该 harness：`deep-research`、`actor-ontology-research`、`prediction-markets`、`forecast-visuals`。
 
 - **MiroFish / OASIS —— 群体模拟引擎**
   基于 CAMEL-AI 的 **OASIS** 多智能体社会模拟引擎：拉起成百上千个 LLM 人格，在模拟的 Twitter + Reddit 上互动。
@@ -179,19 +179,23 @@ flowchart LR
 
 | 阶段 | 名称 | 说明 |
 |------|------|------|
-| 1 | **research（深度研究 · 双轨）** | DeerFlow 在自己的子进程（独立 Python venv）中**同时运行两个研究工作流**，写出基于文件的「交接契约」：`research_report.md`（Track A 广覆盖深度研究档案，用于增强图谱/本体/局势上下文）、`actor_dossier.md`（Track B 角色本体档案：分层排序的行动者阵容 + 价值观/信念/动机/资源 + 有向带极性的关系网）、`actors.json`（从两者抽取的结构化阵容与关系，**以角色档案为主、研究报告为辅**）、`sources.json`、`prediction_requirement.txt`、`timeline.json`、`meta.json`、`research_progress.log`。 |
+| 1 | **research（多角度 · 双轨 · 规模化）** | 编排器扇出**三条并行研究轨**（基础证据 · 基率与参照类 · 激励/反面/市场），每条轨是一个 DeerFlow 子进程（独立 Python venv），在其中**同时运行两个研究工作流**；各轨结果确定性合并（来源取并集保留最高分级、阵容去重对账、质量取最小、市场取最新）。底层每一路运行分阶段**多轮协议**、**8 路 per-KIQ/per-actor 扇出**+ harness **子代理**、**研究 judge→refine 环**、通用 **S1–S4 来源分级**+三角验证补充、**多段并行合成**，产出 **1.5–2.5 万字**深度档案；并捕获 **Polymarket** 实时市场作为校准锚。全部写入基于文件的「交接契约」：`research_report.md`（Track A 广覆盖深度研究档案，用于增强图谱/本体/局势上下文）、`actor_dossier.md`（Track B 角色本体档案：分层排序的行动者阵容 + 价值观/信念/动机/资源 + 有向带极性的关系网）、`actors.json`（从两者抽取的结构化阵容与关系，**以角色档案为主、研究报告为辅**）、`sources.json`、`prediction_requirement.txt`、`timeline.json`、`meta.json`、`research_progress.log`、`market_price_history.json`（被锚定市场的 90 天 Polymarket 价格序列）。 |
 | 2 | **ontology（本体生成）** | 由 LLM 依据两份档案与预测问题，推导实体类型与关系类型，并为每个实体打上**原型（archetype）+ 模拟层级（tier）**标签（让记者/媒体/抽象概念成为图谱*上下文*而非行动者），为每条关系打上**族（family）+ 极性（valence）**（盟友、对手、供应商、投资方互不混淆）。 |
 | 3 | **graph（图谱构建）** | 将**两份档案**分块灌入本地运行的 Graphiti 时序知识图谱（GraphRAG，嵌入式 FalkorDB）；实体/关系由你配置的本地 LLM 抽取，向量嵌入由本地 sentence-transformers 多语言模型计算。 |
 | 4 | **prepare（环境搭建）** | **仅为关键行动者**（第 1 层决策者 + 第 2 层利益相关方，次要实体留作图谱上下文）生成数字人格，按**显著度（salience）**而非单纯邻边数排序；每位人格携带其**行为画像（行为 DNA：价值观/信念/动机/资源）**与调研得来的盟友/对手/供应商/投资方关系网。再由一个「环境 Agent」生成模拟配置（轮数/时序）。 |
 | 5 | **run（群体模拟）** | OASIS 运行 N 轮双平台（Twitter + Reddit）多智能体模拟；人格们发帖/评论/点赞，群体动态自然涌现。 |
-| 6 | **report（预测报告）** | ReportAgent（一个带 `insight_forge` 工具的 ReAct 循环）从图谱 + 模拟结果中检索，写出一份分章节的预测报告。 |
+| 6 | **report（预测报告）** | ReportAgent（一个带 `insight_forge` 工具的 ReAct 循环）从图谱 + 模拟结果中检索，写出一份分章节的预测报告：桥水式三部分骨架（二元预测表 · 框架综合 · 附录）、**逐条预测的 Polymarket 锚定**（含 10pp 分歧须说明规则）、确定性**可视化层**（Mermaid + matplotlib 图表内嵌进报告），并支持一键 **PDF 导出**。可选的**多种子集成**会重跑模拟+报告并聚合概率。 |
 
 ---
 
 ## 功能特性
 
 - **一句话 → 完整预测**：单个问题端到端驱动「研究 → 模拟 → 报告」整条管线，无需在阶段间手动搬运中间产物。
-- **自主深度研究**：多角度联网搜索 + 全文抓取，沉淀为带行动者与来源的结构化研究档案。选择 `deep` 深度时，DeerFlow 会执行分阶段多轮协议：来源版图、原始证据、行动者/激励、矛盾/风险、预测输入，再进入最终长文综合。
+- **规模化自主深度研究**：**三条并行多角度轨**各自多角度联网搜索 + 全文抓取，沉淀为带行动者与来源的结构化研究档案。选择 `deep` 深度时，DeerFlow 会执行分阶段多轮协议（来源版图、原始证据、行动者/激励、矛盾/风险、预测输入、最终长文综合），并配合 **8 路 per-KIQ 扇出**、harness **子代理**、**研究 judge→refine 环**、通用 **S1–S4 来源分级**+三角验证补充，以及**多段并行合成** —— 突破单次补全的字数天花板，产出 **1.5–2.5 万字**深度档案。
+- **预测市场锚定（Polymarket）**：研究阶段通过 LLM 生成的**市场化检索词**+**相关性门控**，从 Polymarket 官方 **Gamma + CLOB** API **无需 Key** 拉取隐含概率，注入为研究前**校准锚点**；报告阶段做**逐条预测锚定**（10pp 分歧须说明规则）、**双时态重报价**（研究期价 vs 现价 + Δ），并渲染 **90 天价格历史**图表。
+- **确定性报告可视化 + PDF**：一个免 LLM 的可视化层渲染 **Mermaid** 图（时间线 / 因果路径 / 派系 / 角色关系网络）与 **matplotlib** 图（情景误差棒、模型 vs 市场哑铃、世界态堆叠面积、对比柱、校准曲线）并内嵌进报告；可按需 **PDF 导出**（pandoc / XeLaTeX，中文安全）。
+- **多种子集成 & 自适应上下文**：可选的多种子集成会重跑模拟+报告并聚合概率；上下文切片（前序章节、人设、世界简报）会**按提供方上下文窗口预算化**。
+- **DeerFlow harness 技能**：四个技能 —— `deep-research`、`actor-ontology-research`、`prediction-markets`、`forecast-visuals` —— 被部署到 DeerFlow 2.0 超级智能体 harness，并被智能体提示词引用。
 - **研究档案驱动的人设**：结构化行动者档案（`actors.json`：每位真实世界行动者的角色、立场、影响力、记忆）为本体生成、**智能体人格、每个智能体的立场/影响力配置以及模拟的初始帖子**提供种子 —— 智能体从调研得来的事实出发，而非 LLM 的凭空猜测。
 - **时序知识图谱（GraphRAG）**：研究成果灌入本地运行的 Graphiti（嵌入式 FalkorDB），由本地 LLM 抽取实体与关系、本地嵌入模型建索引，可随时检索查询 —— 全程本地、无需云端账号或 API Key。
 - **多智能体群体模拟**：数以百计的 LLM 人格在模拟的 Twitter + Reddit 上互动；涌现的群体动态为预测提供输入。
@@ -325,6 +329,31 @@ npm run dev        # 后端 :5001 + 前端 :3000
 
 在项目根目录创建 `.env` 文件（`setup.sh` 会从 `.env.example` 自动生成）。
 
+### 关键配置
+
+每一项都有 degrade-safe 默认值，因此一个空 `.env`（甚至没有 `.env`）也能跑完整套阶跃式管线。下面是最值得了解的 ~15 个旋钮；完整清单见 [`.env.example`](.env.example)。
+
+| 旋钮 | 默认值 | 用途 |
+|---|---|---|
+| `LLM_PROVIDER` | `claude-cli` | 报告 + 模拟阶段的当前提供方（也驱动本地图谱抽取）。 |
+| `DEERFLOW_MODEL` | `claude` | 深度研究阶段的模型（独立于 `LLM_PROVIDER` 配置）。 |
+| `DEERFLOW_RESEARCH_DEPTH` | `deep` | `quick` / `standard` / `deep`；`deep` 跑完整多轮协议。 |
+| `RESEARCH_PARALLEL_TRACKS` | `3` | 并行多角度研究轨（基础证据 / 基率 / 激励-市场），确定性合并。 |
+| `RESEARCH_MULTIPART_SYNTHESIS` | *（空 → 仅 deep）* | 大纲 → 并行分节撰写 → 缝合 → 长度门，产出 1.5–2.5 万字档案。 |
+| `RESEARCH_FANOUT_WIDTH` | `8` | scope pass 后并行 per-KIQ / per-actor 子调查的宽度上限。 |
+| `DEERFLOW_SUBAGENTS` | `true` | 启用 DeerFlow harness 子代理（并行 scoped workers）。 |
+| `PREDICTION_MARKETS_ENABLED` | `true` | 拉取无 Key 的 Polymarket 先验并注入为校准锚。 |
+| `FORECAST_MARKET_ANCHORING` | `true` | 把每条二元预测确定性锚定到相关性门控的市场（10pp 分歧须说明规则）。 |
+| `REPORT_VISUALIZER` | `true` | 把 Mermaid + matplotlib 图表渲染进 `reports/{id}/charts/` + `viz_manifest.json`。 |
+| `REPORT_PDF_EXPORT` | `true` | 启用 `/pdf` 端点（pandoc + XeLaTeX，中文安全）。 |
+| `REPORT_OUTPUT_LANGUAGE` | *（空 → 自动侦测）* | 强制报告语言（如 `English` / `Chinese`）；否则从 brief 侦测。 |
+| `N_FORECAST_SEEDS` | `3` | 多种子集成：以 N 个种子重跑 sim + report 并聚合概率（`1` = 单跑）。 |
+| `ADAPTIVE_CONTEXT` | `true` | 按提供方上下文窗口预算化上下文切片（大窗口携带全量前文）。 |
+| `ACTOR_CAST_MAX` | `20` | 主角色（仅决策者）硬上限，贯穿研究 → 本体 → 人设 → 模拟。 |
+| `OASIS_SEMAPHORE` | `24` | 模拟期间 API 提供方的 LLM 并发上限（CLI 用 `OASIS_CLI_SEMAPHORE`，默认 `8`）。 |
+
+下方的参考表按分组完整记录每个旋钮。
+
 ```bash
 LLM_PROVIDER=claude-cli      # claude-cli | codex-cli | openai | kimi | minimax | deepseek | qwen | glm
 
@@ -435,6 +464,14 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/report/<report_id>` | 返回报告 `{markdown_content, ...}`。 |
+| `GET` | `/report/<report_id>/download` | 下载报告 **Markdown**（`full_report.md`）。 |
+| `GET` | `/report/<report_id>/pdf` | **PDF 导出** —— 由 `full_report.md` 经 pandoc + XeLaTeX 惰性构建（中文安全、`--toc`；失败回退 PyMuPDF），按 mtime 缓存。未开 `REPORT_PDF_EXPORT` / 构建失败 → `404`。 |
+| `GET` | `/report/<report_id>/charts/<file>` | 服务报告**可视化产物**（`reports/{id}/charts/*.png` / Mermaid `.mmd`），防目录穿越。 |
+| `GET` | `/report/<report_id>/viz-manifest` | **可视化清单** → `[{path, type, source, caption, placement_hint}]`（无图表时返回空列表）。 |
+
+### 导出与可视化
+
+报告阶段会在 `full_report.md` 之外同时产出：一个 **charts/** 目录（Mermaid `.mmd` 代码块 + matplotlib PNG）与一份 **`viz_manifest.json`**（描述每个工件），均由上面的端点服务。报告以 brief 的语言**原生撰写**（EN 或 ZH；可用 `REPORT_OUTPUT_LANGUAGE` 强制），并经纯度扫描保持单一语言 —— 没有单独的「翻译文件」，而是按报告生成时的语言请求其 **PDF**（`/pdf`）或 **Markdown**（`/download`）。图表生成、注入正文与 PDF 导出各自独立可开关（`REPORT_VISUALIZER`、`REPORT_VISUALIZATIONS`、`REPORT_PDF_EXPORT`）。
 
 ### 设置（`/api/settings`）
 
@@ -475,7 +512,33 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 
 ## 架构与最新增强
 
-上文的六阶段管线是骨架；近期的版本把它的每一个关节都加固了一遍。以下改动是架构性的而非零敲碎打 —— 其中大多数改变的是系统*拒绝做什么*（伪造成功、编造叙事、对冲预测），而不仅是它能做什么。后端测试套件现已覆盖 **528+ 个测试**。
+上文的六阶段管线是骨架；近期的版本既把它的每一个关节都加固了一遍，**又**把研究与报告阶段做了一次阶跃式扩容。以下改动是架构性的而非零敲碎打 —— 有些改变的是系统*拒绝做什么*（伪造成功、编造叙事、对冲预测），有些则成倍放大它能做什么（1.5–2.5 万字档案、并行研究、内嵌图表、市场锚定）。后端测试套件现已覆盖 **1074 个测试**。
+
+### 规模化深度研究
+
+- **多段并行合成**：不再用单次补全（其长度就是档案的物理天花板），合成阶段先推导大纲，**并行**撰写各分节（各带关键词分片上下文），确定性缝合，并强制散文词数下限 —— 产出 **1.5–2.5 万字**的深度档案（`RESEARCH_MULTIPART_SYNTHESIS`、`RESEARCH_SYNTHESIS_MIN_WORDS`）。
+- **多角度并行研究轨**：编排器同时跑**三个**研究子进程 —— 基础证据、基率与参照类、激励/反面/市场 —— 各带看门狗，再确定性合并（来源取并集保留最高分级、阵容对账、质量取最小、市场取最新）；某轨失败时优雅降级而非拖垮整次运行（`RESEARCH_PARALLEL_TRACKS`）。
+- **8 路扇出 + 子代理**：开场 scope pass 后并行派发 per-KIQ / per-actor 子调查（`RESEARCH_DEEP_FANOUT`、`RESEARCH_FANOUT_WIDTH`），深度协议 phase 2–4 并行跑（`RESEARCH_PARALLEL_PHASES`）—— harness 的子代理智能体式检索终于被打开。
+- **judge→refine 环**：Track-A 报告与 Track-B 角色档案在被采纳前都要通过 AI-judge → 定向 refine 环，对照 INSIGHT / 角色质量契约（`RESEARCH_REPORT_JUDGE`、`ACTOR_DOSSIER_JUDGE`）。
+- **通用来源分级 + 三角验证**：每个已抓取来源都拿到 S1–S4 分级（域名表与模型都命不中时给基线分级），最强的单源载重声明在最终合成前跑一次专门的三角验证 pass（`RESEARCH_UNIVERSAL_TIERING`、`RESEARCH_TRIANGULATION_TOPUP`）。
+
+### 预测市场锚定（Polymarket，无需 Key）
+
+- **无 Key 的 Gamma + CLOB**：隐含概率从 Polymarket 官方 **Gamma** API 与 **CLOB** 价格历史端点拉取，**无需 API Key**；任何网络失败都 degrade-safe（一行日志后跳过）（`PREDICTION_MARKETS_ENABLED`）。
+- **LLM 市场化检索词 + 相关性门**：检索短语由 LLM 从真实预测生成（而非朴素关键词切片），候选市场经**相关性打分**并门控，把离题市场剔除，而非只按成交量排序（`PREDICTION_MARKETS_MIN_RELEVANCE`）。
+- **研究前先验 → 逐条预测锚定**：市场快照注入研究作为校准锚；报告阶段每条二元预测被**确定性匹配**到某个市场并携带丰富的 `market_anchor`，任何模型 vs 市场差距 **> 10pp** 必须引用市场或论证分歧（`FORECAST_MARKET_ANCHORING`、`FORECAST_MARKET_DIVERGENCE_REVISION`）。
+- **双时态重报价 + 价格历史**：快照在报告阶段重报价（研究期价 → 现价 + Δ）（`PREDICTION_MARKETS_REQUOTE`），并为被锚定市场抓取 **90 天价格历史**序列渲染成图（`PREDICTION_MARKETS_PRICE_HISTORY`）。
+
+### 报告可视化、PDF 与语言
+
+- **确定性可视化层**：`report_visualizer.py` 渲染 **Mermaid**（时间线 / 因果路径 / 派系 / 角色关系网络）与 **matplotlib**（情景误差棒、模型 vs 市场哑铃、世界态堆叠面积、对比柱、校准曲线、市场价格历史），**不产生任何 LLM 调用**，落 `reports/{id}/charts/` + `viz_manifest.json`；图表被注入 `full_report.md`（匹配的 Mermaid 就地插入，其余归入 Visual Annex）（`REPORT_VISUALIZER`、`REPORT_VIZ_*`、`REPORT_VISUALIZATIONS`）。
+- **PDF 导出**：`GET /api/report/{id}/pdf` 惰性把 `full_report.md` 经 **pandoc + XeLaTeX** 导出为 PDF（图表路径绝对化、`CJKmainfont=PingFang SC`、`--toc`；失败回退 PyMuPDF），按报告 mtime 缓存（`REPORT_PDF_EXPORT`）。
+- **原生语言报告（EN ↔ ZH）**：报告以 brief 的语言**原生撰写** —— 自动侦测，或经 `REPORT_OUTPUT_LANGUAGE` 强制 —— 写完后一道**语言纯度扫描**内联翻译零散的 CJK / 非 CJK 片段，使成稿保持单一语言（`REPORT_LANGUAGE_PURITY`）。仪表盘 UI 与演示站均为双语（English + 中文）。
+
+### 集成与上下文预算
+
+- **并行种子集成**：当 `N_FORECAST_SEEDS > 1` 时，同一知识图谱在不同种子下跑模拟 + 报告并聚合概率（对数几率外推池化）；各种子以有界并发在隔离的 sim 目录中运行（`N_FORECAST_SEEDS`、`ENSEMBLE_SEED_CONCURRENCY`）。
+- **自适应上下文预算**：上下文切片（前序章节、人设、世界简报）按当前提供方的上下文窗口定尺 —— 大窗口（MiniMax 512K、DeepSeek 1M）携带全量前文，小窗口守下限（`ADAPTIVE_CONTEXT`）。
 
 ### 管线加固 —— 杜绝虚假成功
 
@@ -501,7 +564,7 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 - **模拟信号并入概率**：模拟中的自发群体动态作为一项显式调整（写明方向与理由）进入预测概率。
 - **正文 ↔ `forecast.json` 一致性审计**：机器可读的预测对象与书面报告会交叉核对，杜绝数字写着 82% 而正文却在论证 60% 的情况。
 - **桥水式三部分骨架**：Part 1（预测表）/ Part 2（框架与整体综合）/ Part 3（分析附录）—— 即特色运行「碰撞的十年」所采用的结构。
-- **预测市场锚定（新）**：调研阶段会通过 **Polymarket 官方公开 Gamma API（无需 API key）拉取市场隐含概率**并注入为校准锚点；快照按事件封顶以保证主题多样性，最终简报会报告预测与市场的分歧，让每一次与市场的不同意见都是深思熟虑、有论证支撑的。
+- **预测市场锚定**：每条预测都对照 **Polymarket**（无 Key 的 Gamma + CLOB）做校准 —— 详见上文 [预测市场锚定](#预测市场锚定polymarket无需-key) —— 逐条锚定 + 10pp 分歧须说明规则，让每一次与市场的不同意见都是深思熟虑、有论证支撑的。
 
 ### 提供方架构
 
@@ -517,7 +580,7 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 
 `deerflow2-redesign` 分支承载着 **DRF-2** —— 对编排层的彻底重建。重设计结论（完整分析见 [`REDESIGN.md`](REDESIGN.md)）：围绕 **DeerFlow 2.0 超级智能体运行时（super-agent harness）** 重建 —— 所有*知识形态*的能力落到 harness 原语上（研究 / 本体 / 模拟设计 / 预测方法论移植为**技能（skills）**；四个管线阶段成为**自定义子智能体**，并支持**按阶段的模型路由** —— 便宜阶段用 MiniMax-M3、强阶段用 claude-cli），而两大*重型引擎*留在 harness 之外：**知识图谱**（Graphiti + FalkorDB）与 **OASIS 模拟**以外部 **MCP 服务器**的形式暴露给 harness 调用。绝不能交给 LLM 裁决的确定性机制 —— 健康门（研究质量下限、空心模拟门、二元信念门）、带 schema 版本的恢复、产物清单、多种子**集成（ensemble）**扇出 —— 全部收敛进一个轻量的**管线驱动器**（`drf2/driver/`）。
 
-**状态如实说明**：脚手架已完成（技能、引擎、驱动器、配置 —— 后端套件现可收集 **756 个测试**，含 DRF-2 漂移守卫测试），但**尚未通过 harness 完成一次端到端的实跑验证**。在 DRF-2 于实跑中通过同一套交付物门槛之前，**本 README 所述的既有管线仍是可用的工作系统**。预览运行方式见 [`drf2/README.md`](drf2/README.md)（或运行 `SETUP_DRF2=1 ./setup.sh` 安装可选依赖并打印命令速查）。
+**状态如实说明**：脚手架已完成（技能、引擎、驱动器、配置 —— 后端套件现可收集 **1074 个测试**，含 DRF-2 漂移守卫测试），但**尚未通过 harness 完成一次端到端的实跑验证**。在 DRF-2 于实跑中通过同一套交付物门槛之前，**本 README 所述的既有管线仍是可用的工作系统**。预览运行方式见 [`drf2/README.md`](drf2/README.md)（或运行 `SETUP_DRF2=1 ./setup.sh` 安装可选依赖并打印命令速查）。
 
 ---
 

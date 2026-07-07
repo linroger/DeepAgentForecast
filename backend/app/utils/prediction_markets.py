@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -31,6 +32,9 @@ import httpx
 logger = logging.getLogger(__name__)
 
 POLYMARKET_BASE_URL = "https://gamma-api.polymarket.com"
+# CLOB 官方公开端点（keyless）：某个 CLOB token 的历史价格序列，用于给锚点市场画时间线。
+# 与 Gamma（gamma-api）不同宿主——重报价走 Gamma /markets，历史价走 clob /prices-history。
+CLOB_BASE_URL = "https://clob.polymarket.com"
 
 # 可重试的瞬时错误状态码（限流/网关抖动）；4xx 参数错误不重试。
 _TRANSIENT_STATUS = frozenset({429, 500, 502, 503, 504})
@@ -70,6 +74,32 @@ def _as_list(v: Any) -> List[Any]:
     return []
 
 
+def _extract_json_payload(text: Any) -> Any:
+    """从 LLM 回复中鲁棒提取 JSON：容忍 markdown 代码栅栏与前后缀散文；失败返回 None。
+
+    解析顺序：整段直接 json.loads → 剥 ``` 栅栏后再试 → 抓最外层平衡的 [] / {} 片段。
+    绝不抛异常（degrade-safe——调用方在 None 时回退确定性启发式）。
+    """
+    s = str(text or "").strip()
+    if not s:
+        return None
+    fence = re.search(r"```(?:json)?\s*(.*?)```", s, re.S)
+    if fence:
+        s = fence.group(1).strip()
+    try:
+        return json.loads(s)
+    except (ValueError, TypeError):
+        pass
+    for open_ch, close_ch in (("[", "]"), ("{", "}")):
+        start, end = s.find(open_ch), s.rfind(close_ch)
+        if 0 <= start < end:
+            try:
+                return json.loads(s[start:end + 1])
+            except (ValueError, TypeError):
+                continue
+    return None
+
+
 def _yes_price(outcomes: Any, prices: Any) -> Optional[float]:
     """从 outcomes/outcomePrices 取 "Yes" 对应的隐含概率；无法定位则 None。"""
     names = _as_list(outcomes)
@@ -80,6 +110,20 @@ def _yes_price(outcomes: Any, prices: Any) -> Optional[float]:
         if str(name).strip().lower() == "yes":
             return _coerce_float(px[i])
     return None
+
+
+def _fresh_yes_price(raw: Any) -> Optional[float]:
+    """重报价用：从一条 Gamma /markets 行取当前 "Yes" 隐含概率，套用与规整化一致的锚点资格
+    （已关闭 / 无可解析价 / 价格恰为 0/1 = 定盘 → 视作无效，返回 None）。不做成交量过滤——
+    重报价对象是研究期已选中的市场，只关心价格新鲜度，不再重判噪声下限。"""
+    if not isinstance(raw, dict):
+        return None
+    if raw.get("closed") is True or str(raw.get("closed")).strip().lower() == "true":
+        return None  # 已关闭/已判定 → 不再是有效锚点
+    prob = _yes_price(raw.get("outcomes"), raw.get("outcomePrices"))
+    if prob is None or not (0.0 < prob < 1.0):
+        return None
+    return prob
 
 
 def _cap_per_event(ranked: List[Dict[str, Any]], max_per_event: int,
@@ -120,10 +164,10 @@ class PolymarketClient:
         return bool(_cfg("PREDICTION_MARKETS_ENABLED", True))
 
     # ------------------------------------------------------------------ HTTP
-    def _get(self, path: str, params: Dict[str, Any]) -> Any:
-        """GET 一个端点并解析 JSON。瞬时错误（网络/超时/5xx/429）重试一次；
-        其余失败记 warning 后返回 None（degrade-safe，绝不向上抛）。"""
-        url = self.base_url + path
+    def _request(self, url: str, params: Dict[str, Any]) -> Any:
+        """GET 一个绝对 URL 并解析 JSON。瞬时错误（网络/超时/5xx/429）重试一次；
+        其余失败记 warning 后返回 None（degrade-safe，绝不向上抛）。Gamma 与 CLOB 两个
+        宿主共用这套超时/重试/降级纪律。"""
         last_err: Any = None
         for attempt in (1, 2):
             try:
@@ -140,11 +184,15 @@ class PolymarketClient:
             except Exception as e:  # noqa: BLE001 — 4xx/JSON 解析等非瞬时错误不重试
                 last_err = e
                 break
-        logger.warning(f"Polymarket GET {path} 失败（降级为空结果）: {last_err}")
+        logger.warning(f"Polymarket GET {url} 失败（降级为空结果）: {last_err}")
         return None
 
+    def _get(self, path: str, params: Dict[str, Any]) -> Any:
+        """相对 Gamma 端点（self.base_url + path）的 GET；复用 _request 的降级纪律。"""
+        return self._request(self.base_url + path, params)
+
     # ------------------------------------------------------------- endpoints
-    def search_events(self, query: str, limit: int = 8) -> List[Dict[str, Any]]:
+    def search_events(self, query: str, limit: int = 15) -> List[Dict[str, Any]]:
         """全文检索活跃事件（每个事件下挂多个市场）；失败/未启用返回 []。"""
         if not self.enabled or not str(query or "").strip():
             return []
@@ -157,9 +205,10 @@ class PolymarketClient:
         return [e for e in events if isinstance(e, dict)] if isinstance(events, list) else []
 
     # -------------------------------------------------------------- snapshot
-    def snapshot_for_queries(self, queries: List[str], per_query: int = 8,
+    def snapshot_for_queries(self, queries: List[str], per_query: Optional[int] = None,
                              max_total: int = 20, min_volume: float = 200,
-                             max_per_event: int = 3) -> List[Dict[str, Any]]:
+                             max_per_event: int = 3, llm_call: Any = None,
+                             question: str = "") -> List[Dict[str, Any]]:
         """对一组检索词取市场快照并规整化。
 
         规则：从每个匹配事件展开其市场，按 market_id 去重（首个命中的 query 记入
@@ -168,9 +217,18 @@ class PolymarketClient:
         （避免一个多结局事件的子市场阶梯——如「N 次降息」0~12——霸占全部名额、把其他
         相关事件挤出），最后取前 max_total 条。输出统一 schema：
             {market_id, exchange, question, implied_yes_prob, volume, liquidity,
-             event_title, matched_query}
+             event_title, matched_query [, url, end_date, one_day_price_change,
+             best_bid, best_ask]}
+        per_query 留空 = 读 PREDICTION_MARKETS_PER_QUERY（默认 15，每词的 limit_per_type）。
+        可选 LLM 相关性门（llm_call+question 同时给出才生效）：对截断后的快照批量打分，
+        剔除低相关市场并按 (relevance_score, volume) 重排；失败 → 保持 volume 排序。
         Degrade-safe：任一 query 失败只丢那一批，整体绝不抛。
         """
+        if per_query is None:
+            try:
+                per_query = int(_cfg("PREDICTION_MARKETS_PER_QUERY", 15) or 15)
+            except (TypeError, ValueError):
+                per_query = 15
         by_id: Dict[str, Dict[str, Any]] = {}
         for q in queries or []:
             q = str(q or "").strip()
@@ -178,21 +236,155 @@ class PolymarketClient:
                 continue
             for event in self.search_events(q, limit=per_query):
                 event_title = str(event.get("title") or "").strip()
+                event_slug = str(event.get("slug") or "").strip()
                 for raw in event.get("markets") or []:
                     norm = self._normalize_market(raw, matched_query=q,
                                                   event_title=event_title,
-                                                  min_volume=min_volume)
+                                                  min_volume=min_volume,
+                                                  event_slug=event_slug)
                     if norm is None:
                         continue
                     if norm["market_id"] not in by_id:
                         by_id[norm["market_id"]] = norm
         ranked = sorted(by_id.values(), key=lambda m: -(m.get("volume") or 0.0))
-        return _cap_per_event(ranked, max_per_event, max_total)
+        capped = _cap_per_event(ranked, max_per_event, max_total)
+        # 可选相关性门：全文检索召回的市场常与题目只沾边（如搜 "Fed" 命中体育盘口）。
+        # score_market_relevance 自带 degrade-safe——llm_call=None / 打分失败 → 原样返回。
+        if llm_call is not None and str(question or "").strip():
+            capped = score_market_relevance(llm_call, question, capped)
+        return capped
+
+    # -------------------------------------------------------------- requote
+    def requote_markets(self, markets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """对研究期已抓取的市场批量重报价：拉当前隐含概率，把研究期价与现价并陈。
+
+        动机：报告成稿到用户读到之间市场会漂移；把研究期锚点（price_at_research）与
+        当下价（新 implied_yes_prob）一起呈现，读者能一眼看到「34%→41%」这样的移动，
+        判断锚点是否还成立。规则（对每行都返回，绝不丢行）：
+          * price_at_research ← 原 implied_yes_prob（若已有 price_at_research 则沿用，幂等重入）；
+          * implied_yes_prob  ← Gamma /markets 拉到的当前 "Yes" 价（覆盖旧值）；
+          * price_delta       ← 现价 − 研究期价（有研究期价时才写）；
+          * 未知 / 已关闭 / 无可解析价 / 未启用 → 保留旧价并置 requote_failed=True。
+        批量走 Gamma `/markets?id=<id>&id=<id>...`（httpx 把 list 值编码为重复 id 参数），
+        超过 chunk 大小时分批（PREDICTION_MARKETS_REQUOTE_CHUNK，默认 20）。
+        Degrade-safe：任一批失败只丢那一批的新价（对应行标 requote_failed），整体绝不抛。
+        """
+        rows = [m for m in (markets or []) if isinstance(m, dict)]
+        if not rows:
+            return []
+        # 收集待重报价的 market_id（去重保序）——未启用时跳过取数，各行走 requote_failed 分支。
+        ids: List[str] = []
+        seen_ids: set = set()
+        for m in rows:
+            mid = str(m.get("market_id") or "").strip()
+            if mid and mid not in seen_ids:
+                seen_ids.add(mid)
+                ids.append(mid)
+        fresh = self._fetch_fresh_markets(ids) if (self.enabled and ids) else {}
+        out: List[Dict[str, Any]] = []
+        for m in rows:
+            m2 = dict(m)  # 浅拷贝：绝不原地污染调用方传入的行
+            mid = str(m.get("market_id") or "").strip()
+            # 研究期价：优先已有 price_at_research（幂等），否则取当前 implied_yes_prob。
+            research = _coerce_float(m.get("price_at_research"))
+            if research is None:
+                research = _coerce_float(m.get("implied_yes_prob"))
+            if research is not None:
+                m2["price_at_research"] = round(research, 4)
+            prob = _fresh_yes_price(fresh.get(mid)) if mid else None
+            if prob is None:
+                # 未知/已关闭/无价/未启用 → 保留旧价，标记失败，清掉可能残留的旧 delta。
+                m2["requote_failed"] = True
+                m2.pop("price_delta", None)
+            else:
+                m2["implied_yes_prob"] = round(prob, 4)
+                m2.pop("requote_failed", None)
+                if research is not None:
+                    m2["price_delta"] = round(prob - research, 4)
+                else:
+                    m2.pop("price_delta", None)
+            out.append(m2)
+        return out
+
+    def _fetch_fresh_markets(self, ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """按 id 批量拉 Gamma /markets，返回 {market_id: raw_row}；任一批失败只丢那一批。
+
+        Gamma `/markets` 支持重复 id 参数（?id=a&id=b）批量取；httpx 会把 {"id": [...]}
+        编码为重复 key。响应通常是市场对象数组，也容忍 {"markets": [...]} / {"data": [...]} 包装。
+        """
+        out: Dict[str, Dict[str, Any]] = {}
+        try:
+            chunk = int(_cfg("PREDICTION_MARKETS_REQUOTE_CHUNK", 20) or 20)
+        except (TypeError, ValueError):
+            chunk = 20
+        if chunk <= 0:
+            chunk = 20  # 分批大小非法 → 回落默认，避免 range 步长为 0 死循环
+        for start in range(0, len(ids), chunk):
+            batch = ids[start:start + chunk]
+            data = self._get("/markets", {"id": batch})
+            if isinstance(data, list):
+                raw_rows = data
+            elif isinstance(data, dict):
+                raw_rows = data.get("markets") or data.get("data") or []
+            else:
+                raw_rows = []
+            for raw in raw_rows if isinstance(raw_rows, list) else []:
+                if isinstance(raw, dict):
+                    mid = str(raw.get("id") or "").strip()
+                    if mid:
+                        out[mid] = raw
+        return out
+
+    # -------------------------------------------------------- price history
+    def fetch_price_history(self, clob_token_id: str, interval: str = "1d",
+                            days: int = 90) -> List[Dict[str, Any]]:
+        """拉某个 CLOB token 的历史价格序列（keyless）；返回 [{t, p}] 或 [] （任何失败）。
+
+        端点：GET https://clob.polymarket.com/prices-history?market=<clobTokenId>&interval=<interval>
+        （interval 为回看窗口档位：1h/6h/1d/1w/1m/max）。响应形如 {"history": [{t, p}, ...]}。
+        days>0 时对返回序列做时间裁剪，只保留最近 days 天的点（客户端裁剪，不额外发请求，
+        与 interval 档位叠加取更严的一边）。t 转 int、p 转 float 并四舍五入；不可解析的点跳过。
+        Degrade-safe：未启用 / 空 token / 网络或解析失败 → []（绝不抛）。
+        """
+        token = str(clob_token_id or "").strip()
+        if not self.enabled or not token:
+            return []
+        params = {"market": token, "interval": str(interval or "1d").strip()}
+        data = self._request(CLOB_BASE_URL + "/prices-history", params)
+        if isinstance(data, dict):
+            hist = data.get("history")
+        elif isinstance(data, list):
+            hist = data  # 少数形态直接是点数组
+        else:
+            hist = None
+        if not isinstance(hist, list):
+            return []
+        # days>0 → 截断到最近 days 天（多数调用 interval 已收窄，这层是二次保险）。
+        cutoff: Optional[float] = None
+        try:
+            d = int(days)
+            if d > 0:
+                cutoff = time.time() - d * 86400
+        except (TypeError, ValueError):
+            cutoff = None
+        out: List[Dict[str, Any]] = []
+        for pt in hist:
+            if not isinstance(pt, dict):
+                continue
+            tf = _coerce_float(pt.get("t"))
+            p = _coerce_float(pt.get("p"))
+            if tf is None or p is None:
+                continue  # 缺时间戳/价格的点是脏数据，跳过
+            if cutoff is not None and tf < cutoff:
+                continue
+            out.append({"t": int(tf), "p": round(p, 4)})
+        return out
 
     @staticmethod
     def _normalize_market(raw: Any, matched_query: str,
                           event_title: str = "",
-                          min_volume: float = 200) -> Optional[Dict[str, Any]]:
+                          min_volume: float = 200,
+                          event_slug: str = "") -> Optional[Dict[str, Any]]:
         """单条 Polymarket 市场规整化；不合格（已关闭/无价/定盘价/低量）返回 None。"""
         if not isinstance(raw, dict):
             return None
@@ -211,7 +403,7 @@ class PolymarketClient:
         liquidity = _coerce_float(raw.get("liquidity")) or 0.0
         if volume < float(min_volume):
             return None  # 极低量的价格是噪声，不配当锚点
-        return {
+        out: Dict[str, Any] = {
             "market_id": market_id,
             "exchange": "polymarket",
             "question": question,
@@ -221,6 +413,23 @@ class PolymarketClient:
             "event_title": event_title or str(raw.get("groupItemTitle") or "").strip(),
             "matched_query": matched_query,
         }
+        # —— 富化字段：API 行里有才带上，缺失不造假（旧消费方按键存在性取用，schema 向后兼容）——
+        if str(event_slug or "").strip():
+            out["url"] = f"https://polymarket.com/event/{str(event_slug).strip()}"
+        end_date = str(raw.get("endDate") or "").strip()
+        if end_date:
+            out["end_date"] = end_date  # 市场截止时间——锚点时效性判断的关键上下文
+        for src_key, dst_key in (("oneDayPriceChange", "one_day_price_change"),
+                                 ("bestBid", "best_bid"), ("bestAsk", "best_ask")):
+            val = _coerce_float(raw.get(src_key))
+            if val is not None:
+                out[dst_key] = round(val, 4)
+        # CLOB token id（Yes/No 各一）：画历史价时间线（fetch_price_history）与重报价核对的入口；
+        # Gamma 里是 JSON 串 '["0x..","0x.."]'，规整成 list 保留；缺失不造假（键不出现）。
+        clob_ids = [str(t).strip() for t in _as_list(raw.get("clobTokenIds")) if str(t).strip()]
+        if clob_ids:
+            out["clob_token_ids"] = clob_ids
+        return out
 
 
 # ------------------------------------------------------------------ rendering
@@ -229,36 +438,60 @@ def _esc_cell(x: Any) -> str:
     return str(x).replace("|", "／").replace("\n", " ").strip()
 
 
+def _requote_move(m: Dict[str, Any]) -> Optional[str]:
+    """重报价后研究期价与现价不同 → 返回 '34%→41%'；无 price_at_research 或价未变 → None。"""
+    r = _coerce_float(m.get("price_at_research"))
+    c = _coerce_float(m.get("implied_yes_prob"))
+    if r is None or c is None or round(r, 4) == round(c, 4):
+        return None
+    return f"{r * 100:.0f}%→{c * 100:.0f}%"
+
+
 def render_markets_block(markets: List[Dict[str, Any]], lang: str = "en") -> str:
-    """把市场快照渲染为确定性的 markdown 表（无 LLM；空列表 → ""，注入自动跳过）。"""
+    """把市场快照渲染为确定性的 markdown 表（无 LLM；空列表 → ""，注入自动跳过）。
+
+    若任一行经过重报价（有 price_at_research 且现价与之不同）→ 追加一列 Δ 展示
+    '研究期价→现价'（如 34%→41%）；没有任何行发生移动时不加该列，与旧渲染逐字节一致。
+    """
     rows = [m for m in (markets or []) if isinstance(m, dict)]
     if not rows:
         return ""
     zh = str(lang or "").lower().startswith("zh")
+    show_delta = any(_requote_move(m) for m in rows)  # 有价格移动才加 Δ 列
     title = "### Prediction Market Signals (Polymarket)"
     if zh:
-        cols = "| # | 市场问题 | 交易所 | 隐含 P(yes) | 成交量 |"
+        headers = ["#", "市场问题", "交易所", "隐含 P(yes)"]
+        if show_delta:
+            headers.append("Δ（研究→现在）")
+        headers.append("成交量")
         caveat = ("_以上为机器抓取的活跃市场快照，价格随时变动；市场隐含概率是校准锚点，"
                   "不是真值——引用前注意时效。_")
     else:
-        cols = "| # | Market question | Venue | Implied P(yes) | Volume |"
+        headers = ["#", "Market question", "Venue", "Implied P(yes)"]
+        if show_delta:
+            headers.append("Δ (research→now)")
+        headers.append("Volume")
         caveat = ("_Machine-fetched snapshot of active markets; prices move continuously. "
                   "Market-implied probabilities are calibration anchors, not ground truth — "
                   "mind freshness before relying on them._")
-    lines = [title, "", cols, "|---|---|---|---|---|"]
+    cols = "| " + " | ".join(headers) + " |"
+    sep = "|" + "|".join(["---"] * len(headers)) + "|"
+    lines = [title, "", cols, sep]
     for i, m in enumerate(rows, 1):
         prob = _coerce_float(m.get("implied_yes_prob"))
         pct = f"{prob * 100:.0f}%" if prob is not None else "—"
         vol = _coerce_float(m.get("volume"))
         vol_s = f"{vol:,.0f}" if vol is not None else "—"
-        lines.append("| {i} | {q} ({mid}) | {ex} | {p} | {v} |".format(
-            i=i,
-            q=_esc_cell(str(m.get("question") or "")[:160]),
-            mid=_esc_cell(m.get("market_id") or ""),
-            ex=_esc_cell(m.get("exchange") or "—"),
-            p=pct,
-            v=vol_s,
-        ))
+        q_cell = _esc_cell(str(m.get("question") or "")[:160])
+        url = str(m.get("url") or "").strip()
+        if url:  # 有事件 URL → 市场问题渲染为可点链接（读者可核对实时价格/规则）
+            q_cell = f"[{q_cell}]({_esc_cell(url)})"
+        cells = [str(i), f"{q_cell} ({_esc_cell(m.get('market_id') or '')})",
+                 _esc_cell(m.get("exchange") or "—"), pct]
+        if show_delta:
+            cells.append(_requote_move(m) or "—")  # 未移动/无锚点的行留占位符
+        cells.append(vol_s)
+        lines.append("| " + " | ".join(cells) + " |")
     lines += ["", caveat]
     return "\n".join(lines)
 
@@ -278,12 +511,25 @@ year years month months week weeks day days future likely impact effect effects 
 research question forecast prediction predict analysis analyze scenario scenarios
 """.split())
 
-# 英文/数字词 或 连续 CJK 串（CJK 不按空格分词，整段作为一个候选 token）。
-_QUERY_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9\-]*|[一-鿿]{2,}")
+# 英文/数字词、4 位年份（如 2026——市场标题几乎总带结算年份，必须保留）或
+# 连续 CJK 串（CJK 不按空格分词，整段作为一个候选 token）。
+_QUERY_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9\-]*|(?<!\d)\d{4}(?!\d)|[一-鿿]{2,}")
+
+# 泛化空词黑名单：这些词在市场标题全文检索里零区分度（搜 "key factors impact" 命中不了
+# 任何市场），与停用词同等对待、且作为短语边界（部分与停用词重叠是刻意的显式声明）。
+_QUERY_GENERIC_BLACKLIST = frozenset("""
+outcome outcomes cover covers covering key factor factors impact impacts
+effect effects implication implications
+""".split())
+
+# 子句边界（中英逗号/分号/句号/问号/括号/引号等）：显著短语不得跨子句拼接——
+# "tariffs rise, china retaliates" 应产出两个短语，而非无意义的 "rise china"。
+_CLAUSE_SPLIT_RE = re.compile(r"[,;:.!?，、。；：！？…()（）【】\[\]{}<>\"“”‘’]+")
 
 
 def _salient_phrases(text: str, max_words: int = 3) -> List[str]:
-    """从文本抽取显著短语：连续的非停用词 token 聚成 ≤max_words 词的短语（确定性启发式）。"""
+    """从文本抽取显著短语：**子句内**连续的非停用词 token 聚成 ≤max_words 词的短语
+    （确定性启发式；子句边界强制断句，短语绝不跨逗号/句号等标点拼接）。"""
     phrases: List[str] = []
     cur: List[str] = []
 
@@ -292,20 +538,23 @@ def _salient_phrases(text: str, max_words: int = 3) -> List[str]:
             phrases.append(" ".join(cur))
             cur.clear()
 
-    for tok in _QUERY_TOKEN_RE.findall(str(text or "")):
-        is_cjk = bool(re.match(r"[一-鿿]", tok))
-        if is_cjk:
-            cur.append(tok[:12])  # CJK 串过长时截断（全文检索短词更有效）
-            _flush()
-            continue
-        # 全大写缩略词（AI/EU/GDP）即使短也保留；其余 <3 字符的英文词按噪声丢弃。
-        if tok.lower() in _QUERY_STOPWORDS or (len(tok) < 3 and not tok.isupper()):
-            _flush()
-            continue
-        cur.append(tok)
-        if len(cur) >= max_words:
-            _flush()
-    _flush()
+    for clause in _CLAUSE_SPLIT_RE.split(str(text or "")):
+        for tok in _QUERY_TOKEN_RE.findall(clause):
+            is_cjk = bool(re.match(r"[一-鿿]", tok))
+            if is_cjk:
+                cur.append(tok[:12])  # CJK 串过长时截断（全文检索短词更有效）
+                _flush()
+                continue
+            low = tok.lower()
+            # 全大写缩略词（AI/EU/GDP）即使短也保留；其余 <3 字符的英文词按噪声丢弃。
+            if (low in _QUERY_STOPWORDS or low in _QUERY_GENERIC_BLACKLIST
+                    or (len(tok) < 3 and not tok.isupper())):
+                _flush()
+                continue
+            cur.append(tok)
+            if len(cur) >= max_words:
+                _flush()
+        _flush()  # 子句结束 → 强制断句
     # 去重保序
     seen: set = set()
     out: List[str] = []
@@ -319,16 +568,17 @@ def _salient_phrases(text: str, max_words: int = 3) -> List[str]:
 
 def derive_market_queries(question: str, hot_topics: Optional[List[str]] = None,
                           actor_names: Optional[List[str]] = None,
-                          max_queries: int = 6, max_words: int = 5) -> List[str]:
+                          max_queries: int = 12, max_words: int = 5) -> List[str]:
     """确定性派生市场检索词：研究问题关键短语 + hot_topics + 高显著度 actor 名。
 
-    每条 ≤max_words 词（全文检索短词效果最好），去重限量到 max_queries。纯启发式、
-    无 LLM 调用；空输入返回 []。
+    每条 ≤max_words 词（全文检索短词效果最好），去重限量到 max_queries；为 actor 名
+    保留 ≥2 个名额（主要主体的名字是最强的市场检索词，不得被短语/话题挤出）。
+    纯启发式、无 LLM 调用；空输入返回 []。
     """
     out: List[str] = []
     seen: set = set()
 
-    def _add(q: Any) -> None:
+    def _add(q: Any, limit: int) -> None:
         s = re.sub(r"\s+", " ", str(q or "")).strip(" \t\"'.,;:!?()[]{}")
         if not s:
             return
@@ -336,15 +586,169 @@ def derive_market_queries(question: str, hot_topics: Optional[List[str]] = None,
         if len(words) > max_words:
             s = " ".join(words[:max_words])
         k = s.lower()
-        if k in seen or len(out) >= max_queries:
+        if k in seen or len(out) >= limit:
             return
         seen.add(k)
         out.append(s)
 
-    for ph in _salient_phrases(question, max_words=3)[:3]:
-        _add(ph)
-    for t in (hot_topics or [])[:4]:
-        _add(t)
-    for n in (actor_names or [])[:3]:
-        _add(n)
+    actors = [a for a in (actor_names or []) if str(a or "").strip()][:3]
+    reserved = min(2, len(actors))  # actor 名保留名额（≤2，按实际 actor 数收缩）
+    general_cap = max(0, max_queries - reserved)
+    for ph in _salient_phrases(question, max_words=3)[:6]:
+        _add(ph, general_cap)
+    for t in (hot_topics or [])[:6]:
+        _add(t, general_cap)
+    for n in actors:
+        _add(n, max_queries)
     return out
+
+
+# LLM 派生检索词的条数窗口：Polymarket 全文检索召回窄，10~16 条「市场标题形」检索词
+# 才能覆盖一个多面研究问题的各个可下注侧面。
+_LLM_QUERY_MIN = 10
+_LLM_QUERY_MAX = 16
+
+
+def _clean_query(q: Any, max_words: int = 8) -> str:
+    """单条检索词清洗：压空白、剥引号/标点、截到 ≤max_words 词；无效返回 ""。"""
+    s = re.sub(r"\s+", " ", str(q or "")).strip(" \t\"'.,;:!?()[]{}")
+    words = s.split()
+    return " ".join(words[:max_words]) if words else ""
+
+
+def derive_market_queries_llm(llm_call: Any, question: str,
+                              hot_topics: Optional[List[str]] = None,
+                              actors: Optional[List[str]] = None) -> List[str]:
+    """LLM 派生市场检索词（provider-agnostic：llm_call 接收 prompt 字符串、返回文本）。
+
+    启发式短语（如 "semiconductor export controls"）常与真实市场标题的措辞对不上
+    （市场写的是 "Will the US ban Nvidia chip sales to China in 2026?"）；让 LLM 把研究
+    问题翻译成 10~16 条「市场标题形」的短检索词能显著提升召回。JSON 解析鲁棒（容忍
+    代码栅栏/散文包裹/{"queries": [...]} 包装/字典元素）；产出不足时用启发式确定性补足。
+    Degrade-safe：llm_call 为 None/不可调用/抛异常/完全不可解析 → 回退
+    derive_market_queries 启发式（今天的行为），绝不抛异常。
+    """
+    fallback = derive_market_queries(question, hot_topics=hot_topics,
+                                     actor_names=actors, max_queries=12)
+    if llm_call is None or not callable(llm_call) or not str(question or "").strip():
+        return fallback
+    try:
+        topics_line = ", ".join(str(t) for t in (hot_topics or [])[:8] if str(t or "").strip())
+        actors_line = ", ".join(str(a) for a in (actors or [])[:8] if str(a or "").strip())
+        prompt = (
+            "You generate full-text search queries for Polymarket (a prediction market).\n"
+            f"Research question: {str(question).strip()}\n"
+            + (f"Hot topics: {topics_line}\n" if topics_line else "")
+            + (f"Key actors: {actors_line}\n" if actors_line else "")
+            + f"\nProduce {_LLM_QUERY_MIN}-{_LLM_QUERY_MAX} short queries (2-6 words each) "
+            "phrased the way prediction-market titles are phrased: concrete events, named "
+            "actors, numbers/dates (e.g. \"Fed rate cut 2026\", \"China Taiwan blockade\", "
+            "\"US recession 2026\"). Cover the question's distinct bettable angles; no "
+            "duplicates, no generic filler words.\n"
+            "Return ONLY a JSON array of strings, no prose."
+        )
+        payload = _extract_json_payload(llm_call(prompt))
+        if isinstance(payload, dict):  # 容忍 {"queries": [...]} 包装
+            payload = payload.get("queries")
+        queries: List[str] = []
+        seen: set = set()
+
+        def _push(candidate: Any) -> None:
+            s = _clean_query(candidate)
+            if s and s.lower() not in seen and len(queries) < _LLM_QUERY_MAX:
+                seen.add(s.lower())
+                queries.append(s)
+
+        for item in payload if isinstance(payload, list) else []:
+            if isinstance(item, dict):  # 容忍 [{"query": "..."}] 形状
+                item = item.get("query") or item.get("q") or item.get("title")
+            if isinstance(item, (str, int, float)):
+                _push(item)
+        if not queries:
+            return fallback
+        for fq in fallback:  # 产出不足 → 用启发式确定性补足到下限
+            if len(queries) >= _LLM_QUERY_MIN:
+                break
+            _push(fq)
+        return queries
+    except Exception as e:  # noqa: BLE001 — LLM 派生失败绝不阻断：回退确定性启发式
+        logger.warning(f"LLM 市场检索词派生失败（回退启发式）: {e}")
+        return fallback
+
+
+# ---------------------------------------------------------- relevance scoring
+def score_market_relevance(llm_call: Any, question: str,
+                           markets: List[Dict[str, Any]],
+                           min_relevance: Optional[float] = None) -> List[Dict[str, Any]]:
+    """一次批量 LLM 调用给市场按题目相关性打 0~10 分，过滤 + 重排（可选增强）。
+
+    全文检索召回的市场常与研究问题只沾边（搜 "Fed" 会命中体育/娱乐盘口）；单次批量
+    打分（llm_call 接收 prompt 字符串、返回文本，provider-agnostic）后：
+      * 得分 < min_relevance（默认 Config.PREDICTION_MARKETS_MIN_RELEVANCE=5）→ 剔除；
+      * 通过者写入 relevance_score（0~10）+ relevance_rationale（一句话理由）；
+      * 按 (relevance_score, volume) 双键降序重排（相关性优先，同分看成交量）。
+    Degrade-safe：llm_call=None / 空列表 / 调用抛异常 / 回复完全不可解析 → 原列表
+    原顺序返回（今天的 volume-only 行为）；个别市场缺分 → 保留该行并按门槛分参与排序
+    （不因打分覆盖不全而丢真实信号）。不改传入行（返回打分行的浅拷贝）。
+    """
+    rows = [m for m in (markets or []) if isinstance(m, dict)]
+    if llm_call is None or not callable(llm_call) or not rows or not str(question or "").strip():
+        return rows
+    try:
+        threshold = float(min_relevance if min_relevance is not None
+                          else _cfg("PREDICTION_MARKETS_MIN_RELEVANCE", 5.0))
+    except (TypeError, ValueError):
+        threshold = 5.0
+    try:
+        listing = "\n".join(
+            f'- market_id={m.get("market_id")}: {str(m.get("question") or "")[:160]}'
+            for m in rows)
+        prompt = (
+            "Score how relevant each prediction market is to the research question, "
+            "0-10 (10 = directly bets on the question's outcome, 0 = unrelated).\n"
+            f"Research question: {str(question).strip()}\n\nMarkets:\n{listing}\n\n"
+            "Return ONLY a JSON array like "
+            '[{"market_id": "...", "score": 7, "rationale": "one short sentence"}] '
+            "covering every market, no prose."
+        )
+        payload = _extract_json_payload(llm_call(prompt))
+        if isinstance(payload, dict):  # 容忍 {"scores": [...]} / {"markets": [...]} 包装
+            payload = payload.get("scores") or payload.get("markets")
+        scores: Dict[str, Any] = {}
+        for item in payload if isinstance(payload, list) else []:
+            if not isinstance(item, dict):
+                continue
+            mid = str(item.get("market_id") or item.get("id") or "").strip()
+            sc = _coerce_float(item.get("score", item.get("relevance")))
+            if not mid or sc is None:
+                continue
+            scores[mid] = (max(0.0, min(10.0, sc)),
+                           str(item.get("rationale") or "").strip()[:200])
+        if not scores:
+            return rows  # 整批解析失败 → 保持今天的 volume 排序
+        kept: List[Dict[str, Any]] = []
+        for m in rows:
+            got = scores.get(str(m.get("market_id") or "").strip())
+            if got is None:
+                kept.append(m)  # 未被覆盖的行保留（degrade-safe，不因缺分丢信号）
+                continue
+            sc, why = got
+            if sc < threshold:
+                continue  # 低相关市场剔除——错误锚点比没有锚点更糟
+            m2 = dict(m)
+            m2["relevance_score"] = round(sc, 1)
+            if why:
+                m2["relevance_rationale"] = why
+            kept.append(m2)
+
+        def _rank_key(m: Dict[str, Any]) -> Any:
+            sc = _coerce_float(m.get("relevance_score"))
+            # 缺分行按门槛分参与排序（既不置顶也不垫底），同分内仍按 volume 降序。
+            return (-(sc if sc is not None else threshold),
+                    -(_coerce_float(m.get("volume")) or 0.0))
+
+        kept.sort(key=_rank_key)
+        return kept
+    except Exception as e:  # noqa: BLE001 — 打分失败绝不阻断：保持 volume-only 排序
+        logger.warning(f"市场相关性打分失败（保持 volume 排序）: {e}")
+        return rows

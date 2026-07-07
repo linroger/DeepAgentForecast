@@ -973,7 +973,34 @@ class SimulationConfigGenerator:
         if topics:
             parts.append("## 热点话题\n" + "、".join(topics[:8]))
 
-        return "\n\n".join(parts).strip()[:self.WORLD_BRIEF_MAX_CHARS]
+        # RQ-7 / I-6-4：世界简报上限从固定 1400 升级为按提供方窗口预算化——大窗口模型
+        # （MiniMax 512K / DeepSeek 1M）抬到 SIM_WORLD_BRIEF_MAX_CHARS（默认 3000）以承载更完整的
+        # 世界背景，小窗口/未知提供方守住 WORLD_BRIEF_MAX_CHARS（1400 floor）。ADAPTIVE_CONTEXT=false
+        # 或任何异常 → 1400（degrade-safe，逐字节与历史一致）。
+        max_chars = self._world_brief_max_chars()
+        return "\n\n".join(parts).strip()[:max_chars]
+
+    def _world_brief_max_chars(self) -> int:
+        """RQ-7：世界简报的预算化字符上限，钳在 [WORLD_BRIEF_MAX_CHARS(=1400 floor),
+        SIM_WORLD_BRIEF_MAX_CHARS(=3000 ceiling)]。关闭 ADAPTIVE_CONTEXT/异常 → floor。"""
+        floor = int(self.WORLD_BRIEF_MAX_CHARS)
+        if not getattr(Config, "ADAPTIVE_CONTEXT", False):
+            return floor
+        ceiling = int(getattr(Config, "SIM_WORLD_BRIEF_MAX_CHARS", 3000))
+        try:
+            from ..utils import token_budget as _tb
+            provider = getattr(self, "provider", None) or Config.LLM_PROVIDER
+            window = Config.context_window_for(provider)
+            budget = _tb.slice_budget_chars(
+                window_tokens=window,
+                reserved_tokens=getattr(Config, "RESERVED_COMPLETION_TOKENS", 8192),
+                floor_chars=floor,
+                share=0.05,          # 世界简报是全体 Agent 共享的紧凑底稿，仅占窗口极小份额
+                num_items=1,
+            )
+            return _tb.clamp_chars(budget, floor, ceiling)
+        except Exception:  # noqa: BLE001 — 预算化仅为增强，任何失败退回固定 floor
+            return floor
 
     def _build_context(
         self,

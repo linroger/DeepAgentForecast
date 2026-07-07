@@ -71,10 +71,10 @@ An earlier showcase run: a deep-mode research pass on the full semiconductor val
 
 Given one natural-language prediction question (for example, *"Will product X reach mainstream adoption within 18 months?"*), DeepAgentForecast:
 
-1. **Researches the web autonomously (dual-track)** — two research workflows run **concurrently**: a broad *deep-research* pass that writes an evidence-graded dossier, and an *actor-ontology* pass that profiles the real key actors in depth — their roles, values, beliefs, incentives, resources, and their directed, typed, **valenced** relationships — while demoting mere reporters/outlets/sources to context rather than actors.
+1. **Researches the web autonomously at scale** — **three multi-angle research tracks** run **in parallel** (base-evidence · base-rates & analogs · incentives / contrarian / markets), and each track runs the **dual-track** DeerFlow workflow **concurrently**: a broad *deep-research* pass that writes an evidence-graded dossier, and an *actor-ontology* pass that profiles the real key actors in depth — their roles, values, beliefs, incentives, resources, and their directed, typed, **valenced** relationships — while demoting mere reporters/outlets/sources to context. Under the hood each pass runs a **staged multi-pass protocol**, an **8-wide per-KIQ/per-actor fan-out** plus harness **sub-agent** agentic search, a **research judge→refine loop**, universal **S1–S4 source tiering** with triangulation top-up, and a **multi-part parallel synthesis** that assembles **15–25K-word dossiers**. Live prediction-market priors are pulled from **Polymarket** and injected as calibration anchors.
 2. **Builds a parallel world** — the research is distilled into a temporal knowledge graph with a **tiered, behaviorally-rich ontology**, and a digital persona is generated for each **key actor** (decision-makers and stakeholders), ranked by salience rather than raw connectivity.
-3. **Simulates a population** — hundreds of LLM personas interact across a simulated Twitter and Reddit for a configurable number of rounds, producing emergent social dynamics around the question.
-4. **Forecasts and reports** — a report agent retrieves from both the knowledge graph and the simulation and writes an interactive, sectioned forecast report.
+3. **Simulates a population** — hundreds of LLM personas interact across a simulated Twitter and Reddit for a configurable number of rounds, producing emergent social dynamics around the question; an optional **multi-seed ensemble** re-runs the simulation + report and aggregates the probabilities.
+4. **Forecasts and reports** — a report agent retrieves from both the knowledge graph and the simulation and writes an interactive, sectioned forecast report with **embedded charts** (mermaid + matplotlib), **per-forecast Polymarket anchoring**, and one-click **PDF export**.
 
 Everything is observable in real time: a live research console, the rendered dossier, the knowledge graph, the simulated social feed, and the final forecast all live in one dashboard.
 
@@ -86,7 +86,7 @@ DeepAgentForecast chains **two engines** through a **shared temporal knowledge g
 
 | Component | Role |
 |---|---|
-| **DeerFlow** | **DeerFlow 2.0**, a LangGraph-based super-agent harness: web search + full-text fetch, multi-angle research. Runs in its **own subprocess and isolated venv**, executing two research skills **concurrently** — `deep-research` (a broad evidence dossier) and `actor-ontology-research` (an actor-centric, ontology-ready dossier of the key cast and their relationships). |
+| **DeerFlow** | **DeerFlow 2.0**, a LangGraph-based super-agent harness: web search + full-text fetch, multi-angle research, **sub-agent** fan-out, and a **skills** system. Runs in its **own subprocess and isolated venv**, executing two research skills **concurrently** — `deep-research` (a broad evidence dossier) and `actor-ontology-research` (an actor-centric, ontology-ready dossier of the key cast and their relationships) — with an 8-wide per-KIQ fan-out, a judge→refine loop, and multi-part parallel synthesis. Four skills are deployed onto the harness: `deep-research`, `actor-ontology-research`, `prediction-markets`, and `forecast-visuals`. |
 | **MiroFish / OASIS** | A multi-agent social-simulation engine (built on CAMEL-AI's OASIS). Spins up hundreds of LLM personas interacting on a simulated **Twitter + Reddit**. |
 | **Local Graphiti KG** | A **temporal knowledge graph (GraphRAG)** that glues the two engines together — the open-source [Graphiti](https://github.com/getzep/graphiti) engine (`graphiti-core==0.29.2`, the same engine Zep Cloud was built on) running **locally on an embedded FalkorDB** (the `falkordblite` package — no Docker, no server process, no account, **no API key**). The dossier is ingested here; entities and relations are extracted locally via your configured `LLM_PROVIDER` (so it works even with the no-key CLI providers), and vector embeddings are computed locally by a sentence-transformers multilingual model. |
 | **ReportAgent** | A **ReAct loop** with an `insight_forge` tool that performs tool-augmented retrieval over the graph **and** the simulation, then writes the final forecast report. |
@@ -142,23 +142,27 @@ flowchart LR
 
 **Stage by stage:**
 
-1. **research (dual-track)** — DeerFlow runs in its own subprocess (its own Python venv) and runs **two research workflows at once**, writing a **file-based handoff contract**:
+1. **research (multi-angle, dual-track, at scale)** — the orchestrator fans out **three parallel research tracks** (base-evidence · base-rates & analogs · incentives / contrarian / markets), each a DeerFlow subprocess (its own Python venv) running **two research workflows at once**; the tracks are deterministically merged (source union keeping the highest tier, cast reconciliation, min-quality, freshest markets). Under the hood each pass runs a staged **multi-pass protocol**, an **8-wide per-KIQ/per-actor fan-out** plus harness **sub-agents**, a **research judge→refine loop**, universal **S1–S4 source tiering** with triangulation top-up, and a **multi-part parallel synthesis** producing **15–25K-word dossiers**. Live **Polymarket** market priors are captured as calibration anchors. Everything is written to a **file-based handoff contract**:
    - `research_report.md` — the broad *deep-research* dossier (Track A; augments the graph, ontology, and situation context)
    - `actor_dossier.md` — the *actor-ontology* dossier (Track B): the ranked cast with roles, values, beliefs, incentives, resources, and their directed/typed/valenced relationships
    - `actors.json` — the structured cast + relationships extracted from both (the actor dossier is the **primary** source; the report augments it)
-   - `sources.json` · `prediction_requirement.txt` · `timeline.json` · `meta.json` · `research_progress.log`
+   - `sources.json` · `prediction_requirement.txt` · `timeline.json` · `meta.json` · `research_progress.log` · `market_price_history.json` (90-day Polymarket price series for anchored markets)
 2. **ontology** — an LLM derives **entity types + edge types** from the dossiers and the prediction question, tagging each entity with an **archetype + simulation tier** (so reporters, outlets, and abstract concepts become graph *context* rather than actors) and each edge with a **family + valence** (so allies, rivals, suppliers, and backers are distinguished, not collapsed together).
 3. **graph** — both dossiers are **chunked and ingested** into a local Graphiti temporal knowledge graph (GraphRAG) on an embedded FalkorDB; entities and relations are extracted locally via your configured `LLM_PROVIDER`, and vector embeddings are computed locally by a sentence-transformers model — no cloud service or API key involved.
 4. **prepare** — **digital personas** are generated for the **key actors only** (tier-1 decision-makers and tier-2 stakeholders — minor entities stay as graph context), ranked by **salience** rather than raw graph degree, each carrying its **behavioral DNA** (values, beliefs, incentives, resources) and its researched ally/rival/supplier/backer network; an "environment agent" sets the rounds and timing.
 5. **run** — OASIS runs a **dual-platform (Twitter + Reddit)** multi-agent simulation for *N* rounds; personas post, comment, and like, and social dynamics emerge.
-6. **report** — the **ReportAgent** (a ReAct loop with the `insight_forge` tool) retrieves from the graph + simulation and writes a **sectioned forecast report**.
+6. **report** — the **ReportAgent** (a ReAct loop with the `insight_forge` tool) retrieves from the graph + simulation and writes a **sectioned forecast report**: a Bridgewater-style 3-part skeleton (binary-forecast table · framework synthesis · appendix), **per-forecast Polymarket anchoring** with a 10pp-divergence rationale rule, a deterministic **visualization layer** (mermaid + matplotlib charts embedded in the report), and one-click **PDF export**. An optional **multi-seed ensemble** re-runs the simulation + report and aggregates probabilities.
 
 ---
 
 ## Features
 
 - **One prompt → full forecast.** A single question drives the entire research → simulation → report pipeline end to end.
-- **Autonomous deep research.** Multi-angle web search and full-text fetch, distilled into a structured dossier with actors and sources. At `deep` depth, DeerFlow runs a staged multi-pass protocol: source mapping, primary-evidence sweep, actor/incentive analysis, contradiction/risk testing, forecast-input synthesis, then final long-form synthesis.
+- **Autonomous deep research at scale.** Three **parallel multi-angle tracks** each run multi-angle web search and full-text fetch, distilled into a structured dossier with actors and sources. At `deep` depth, DeerFlow runs a staged multi-pass protocol (source mapping, primary-evidence sweep, actor/incentive analysis, contradiction/risk testing, forecast-input synthesis, final long-form synthesis) with an **8-wide per-KIQ fan-out**, harness **sub-agents**, a **research judge→refine loop**, universal **S1–S4 source tiering** + triangulation top-up, and a **multi-part parallel synthesis** that assembles **15–25K-word dossiers** (past the single-completion word ceiling).
+- **Prediction-market grounding (Polymarket).** During research, implied probabilities are pulled **keyless** from Polymarket's public **Gamma + CLOB** APIs via LLM **market-shaped queries** with a **relevance gate**, injected as pre-research **calibration anchors**; the report performs **per-forecast anchoring** (with a 10pp-divergence rationale rule), **dual-time requoting** (research-time vs. now, with Δ), and renders **90-day price-history** charts.
+- **Deterministic report visualization + PDF.** A no-LLM visualization layer renders **mermaid** diagrams (timeline / causal path / coalitions / actor network) and **matplotlib** charts (scenario error-bars, model-vs-market dumbbell, world-state stacked area, comparison bars, calibration curve) and embeds them in the report; a **PDF export** (pandoc / XeLaTeX, CJK-safe) is available on demand.
+- **Multi-seed ensemble & adaptive context.** An optional multi-seed ensemble re-runs the simulation + report and pools the probabilities; context slices (prior sections, personas, world brief) are **budgeted to the provider's context window**.
+- **Skills on the DeerFlow harness.** Four skills — `deep-research`, `actor-ontology-research`, `prediction-markets`, and `forecast-visuals` — are deployed onto the DeerFlow 2.0 super-agent harness and referenced by the agent prompts.
 - **Research-grounded personas.** The structured actor dossier (`actors.json`: role, stance, influence, memory per real-world actor) seeds the ontology, **the agent personas, the per-agent stance/influence config, and the simulation's initial posts** — agents start from researched facts, not LLM guesses.
 - **Temporal knowledge graph (GraphRAG).** The research is ingested into a **local** Graphiti knowledge graph (embedded FalkorDB, no API key), where entities and relations are extracted locally — via your configured `LLM_PROVIDER` plus local sentence-transformers embeddings — and made queryable.
 - **Multi-agent population simulation.** Hundreds of LLM personas interact on a simulated Twitter + Reddit; emergent dynamics inform the forecast.
@@ -300,6 +304,31 @@ The **deep-research** stage is driven separately by `DEERFLOW_MODEL` (7 options)
 
 Create a `.env` file at the project root (`setup.sh` scaffolds it from `.env.example`).
 
+### Key configuration
+
+Everything has a degrade-safe default, so a bare `.env` (or none) already runs the full step-change pipeline. These are the ~15 knobs most worth knowing; the exhaustive list lives in [`.env.example`](.env.example).
+
+| Knob | Default | Purpose |
+|---|---|---|
+| `LLM_PROVIDER` | `claude-cli` | Active provider for the report + simulation stages (also drives local graph extraction). |
+| `DEERFLOW_MODEL` | `claude` | Model for the deep-research stage (configured independently from `LLM_PROVIDER`). |
+| `DEERFLOW_RESEARCH_DEPTH` | `deep` | `quick` / `standard` / `deep`; `deep` runs the full multi-pass protocol. |
+| `RESEARCH_PARALLEL_TRACKS` | `3` | Parallel multi-angle research tracks (base-evidence / base-rates / incentives-markets), merged deterministically. |
+| `RESEARCH_MULTIPART_SYNTHESIS` | *(empty → deep-only)* | Outline → parallel section writing → stitch → length gate, for 15–25K-word dossiers. |
+| `RESEARCH_FANOUT_WIDTH` | `8` | Max parallel per-KIQ / per-actor sub-investigations after the scope pass. |
+| `DEERFLOW_SUBAGENTS` | `true` | Enable DeerFlow harness sub-agents (parallel scoped workers). |
+| `PREDICTION_MARKETS_ENABLED` | `true` | Pull keyless Polymarket priors and inject them as calibration anchors. |
+| `FORECAST_MARKET_ANCHORING` | `true` | Deterministically anchor each binary forecast to a relevance-gated market (10pp-divergence rationale rule). |
+| `REPORT_VISUALIZER` | `true` | Render mermaid + matplotlib charts into `reports/{id}/charts/` + `viz_manifest.json`. |
+| `REPORT_PDF_EXPORT` | `true` | Enable the `/pdf` endpoint (pandoc + XeLaTeX, CJK-safe). |
+| `REPORT_OUTPUT_LANGUAGE` | *(empty → auto-detect)* | Force the report's language (e.g. `English` / `Chinese`); otherwise detected from the brief. |
+| `N_FORECAST_SEEDS` | `3` | Multi-seed ensemble: re-run sim + report under N seeds and pool the probabilities (`1` = single run). |
+| `ADAPTIVE_CONTEXT` | `true` | Budget context slices to the provider's context window (large windows carry full prior context). |
+| `ACTOR_CAST_MAX` | `20` | Hard cap on main actors (decision-makers only), end-to-end through research → ontology → personas → simulation. |
+| `OASIS_SEMAPHORE` | `24` | Concurrent LLM calls during simulation for API providers (`OASIS_CLI_SEMAPHORE`, default `8`, for CLIs). |
+
+The reference table below documents each knob group in full.
+
 ```bash
 LLM_PROVIDER=claude-cli      # claude-cli | codex-cli | openai | kimi | minimax | deepseek | qwen | glm
 # No knowledge-graph API key is needed — the graph runs locally (see GRAPH_* below).
@@ -411,6 +440,14 @@ The backend is a **Flask** app at `http://localhost:5001`. All endpoints are und
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/report/<report_id>` | The forecast report → `{markdown_content, ...}`. |
+| `GET` | `/report/<report_id>/download` | Download the report as **Markdown** (`full_report.md`). |
+| `GET` | `/report/<report_id>/pdf` | **PDF export** — lazily built from `full_report.md` via pandoc + XeLaTeX (CJK-safe, `--toc`; PyMuPDF fallback), cached by report mtime. `404` if `REPORT_PDF_EXPORT` is off or the build fails. |
+| `GET` | `/report/<report_id>/charts/<file>` | Serve a report **visualization asset** (`reports/{id}/charts/*.png` / mermaid `.mmd`). Directory-traversal-safe. |
+| `GET` | `/report/<report_id>/viz-manifest` | The **visualization manifest** → `[{path, type, source, caption, placement_hint}]` (empty list when no charts were rendered). |
+
+### Export & visualization
+
+The report stage emits, alongside `full_report.md`: a **charts/** folder (mermaid `.mmd` blocks + matplotlib PNGs) and a **`viz_manifest.json`** describing each artifact, both served by the endpoints above. The report is written **natively** in the brief's language (EN or ZH; force with `REPORT_OUTPUT_LANGUAGE`) and kept single-language by a purity sweep — there is no separate translated file; instead request the **PDF** (`/pdf`) or **Markdown** (`/download`) of the report in whichever language it was generated. Chart generation, injection, and PDF export are each independently toggleable (`REPORT_VISUALIZER`, `REPORT_VISUALIZATIONS`, `REPORT_PDF_EXPORT`).
 
 ### Settings
 
@@ -458,7 +495,33 @@ The entire UI is **bilingual** (English + 中文).
 
 ## Architecture & recent enhancements
 
-The six-stage pipeline above is the skeleton; recent releases hardened every joint of it. The changes below are architectural rather than incremental — most of them change what the system *refuses to do* (fake success, fabricate narrative, hedge forecasts) as much as what it can do. The backend suite now runs **528+ tests**.
+The six-stage pipeline above is the skeleton; recent releases both hardened every joint of it **and** scaled the research + report stages up by a step-change. The changes below are architectural rather than incremental — some change what the system *refuses to do* (fake success, fabricate narrative, hedge forecasts), others multiply what it can do (15–25K-word dossiers, parallel research, embedded charts, market anchoring). The backend suite now runs **1074 tests**.
+
+### Deep research at scale
+
+- **Multi-part parallel synthesis.** Instead of a single completion (whose length is the physical ceiling on a dossier), the synthesis stage derives an outline, writes the sections **in parallel** (each with keyword-sharded context), stitches them deterministically, and enforces a prose word-count floor — producing **15–25K-word** deep dossiers (`RESEARCH_MULTIPART_SYNTHESIS`, `RESEARCH_SYNTHESIS_MIN_WORDS`).
+- **Parallel multi-angle tracks.** The orchestrator runs **three** research subprocesses at once — base-evidence, base-rates & analogs, incentives / contrarian / markets — each with its own watchdog, then merges them deterministically (source union keeping the highest tier, cast reconciliation, min-quality, freshest markets); a failed track degrades gracefully instead of failing the run (`RESEARCH_PARALLEL_TRACKS`).
+- **8-wide fan-out + sub-agents.** After the opening scope pass, per-KIQ / per-actor sub-investigations are dispatched in parallel (`RESEARCH_DEEP_FANOUT`, `RESEARCH_FANOUT_WIDTH`), and deep protocol phases 2–4 run in parallel (`RESEARCH_PARALLEL_PHASES`) — the harness's sub-agent agentic search, finally switched on.
+- **Judge→refine loops.** Both the Track-A report and the Track-B actor dossier run an AI-judge → targeted-refine loop against an INSIGHT / actor-quality contract before they are accepted (`RESEARCH_REPORT_JUDGE`, `ACTOR_DOSSIER_JUDGE`).
+- **Universal source tiering + triangulation.** Every fetched source gets an S1–S4 tier (a baseline tier when the domain table and model both miss), and the top single-sourced load-bearing claims get a dedicated triangulation pass before final synthesis (`RESEARCH_UNIVERSAL_TIERING`, `RESEARCH_TRIANGULATION_TOPUP`).
+
+### Prediction-market grounding (Polymarket, keyless)
+
+- **Keyless Gamma + CLOB.** Implied probabilities are pulled from Polymarket's public **Gamma** API and **CLOB** price-history endpoint with **no API key**; every network failure is degrade-safe (one log line, then skip) (`PREDICTION_MARKETS_ENABLED`).
+- **LLM market-shaped queries + relevance gate.** Search phrases are generated by the LLM from the actual forecast (not naive keyword slicing), and candidate markets are **relevance-scored** and gated so off-topic markets are dropped rather than ranked by volume alone (`PREDICTION_MARKETS_MIN_RELEVANCE`).
+- **Pre-research priors → per-forecast anchoring.** A market snapshot is injected into research as calibration anchors; at report time each binary forecast is **deterministically matched** to a market and carries a rich `market_anchor`, and any model-vs-market gap **> 10pp** must cite the market or argue the divergence (`FORECAST_MARKET_ANCHORING`, `FORECAST_MARKET_DIVERGENCE_REVISION`).
+- **Dual-time requoting + price history.** Snapshots are re-quoted at report time (research-price → now, with Δ) (`PREDICTION_MARKETS_REQUOTE`), and a **90-day price-history** series is fetched for anchored markets and rendered as a chart (`PREDICTION_MARKETS_PRICE_HISTORY`).
+
+### Report visualization, PDF & language
+
+- **Deterministic visualization layer.** `report_visualizer.py` renders **mermaid** (timeline / causal path / coalitions / actor-relationship network) and **matplotlib** (scenario error-bars, model-vs-market dumbbell, world-state stacked area, comparison bars, calibration curve, market price-history) with **no LLM calls**, writing `reports/{id}/charts/` + `viz_manifest.json`; the charts are injected into `full_report.md` (matched mermaid inline, the rest in a Visual Annex) (`REPORT_VISUALIZER`, `REPORT_VIZ_*`, `REPORT_VISUALIZATIONS`).
+- **PDF export.** `GET /api/report/{id}/pdf` lazily builds a PDF from `full_report.md` via **pandoc + XeLaTeX** (chart paths absolutized, `CJKmainfont=PingFang SC`, `--toc`; PyMuPDF fallback), cached by report mtime (`REPORT_PDF_EXPORT`).
+- **Native-language reporting (EN ↔ ZH).** The report is written natively in the brief's language — auto-detected, or forced via `REPORT_OUTPUT_LANGUAGE` — and a post-write **language-purity sweep** inline-translates stray CJK/non-CJK fragments so the deliverable stays in one language (`REPORT_LANGUAGE_PURITY`). The dashboard UI and the demo site are bilingual (English + 中文).
+
+### Ensemble & context budgeting
+
+- **Parallel seed ensemble.** With `N_FORECAST_SEEDS > 1`, the same knowledge graph is run through the simulation + report under different seeds and the probabilities are pooled (log-odds extremized); the seeds run with bounded concurrency over isolated sim dirs (`N_FORECAST_SEEDS`, `ENSEMBLE_SEED_CONCURRENCY`).
+- **Adaptive context budgeting.** Context slices (prior sections, personas, world brief) are sized to the active provider's context window — large windows (MiniMax 512K, DeepSeek 1M) carry full prior context, small windows hold a floor (`ADAPTIVE_CONTEXT`).
 
 ### Pipeline hardening — no false success
 
@@ -484,7 +547,7 @@ The six-stage pipeline above is the skeleton; recent releases hardened every joi
 - **Simulation-signal integration.** Organic simulation dynamics feed into forecast probabilities as an explicit adjustment with stated direction and rationale.
 - **Prose ↔ `forecast.json` consistency audit.** The machine-readable forecast object and the written report are cross-checked so a number can't say 82% while the prose argues 60%.
 - **Bridgewater-style 3-part skeleton.** Part 1 (forecast table) / Part 2 (framework & holistic synthesis) / Part 3 (analytical appendix) — the structure of the featured Collision Decade run.
-- **Prediction-market grounding (new).** During research, implied probabilities are pulled from **Polymarket's public Gamma API** (no API key required) and injected as calibration anchors; the snapshot is capped per event for topic diversity, and the final brief reports forecast-vs-market divergence, so every disagreement with the market is deliberate and argued.
+- **Prediction-market grounding.** Each forecast is calibrated against **Polymarket** (keyless Gamma + CLOB) — see [Prediction-market grounding](#prediction-market-grounding-polymarket-keyless) above — with per-forecast anchoring and a 10pp-divergence rationale rule, so every disagreement with the market is deliberate and argued.
 
 ### Provider architecture
 
@@ -500,7 +563,7 @@ The local Graphiti + FalkorDB graph gained **causal edges** (typed cause→effec
 
 The `deerflow2-redesign` branch carries **DRF-2**, a ground-up rebuild of the orchestration layer. The redesign verdict (full analysis in [`REDESIGN.md`](REDESIGN.md)): rebuild around the **DeerFlow 2.0 super-agent harness** — everything *knowledge-shaped* becomes harness primitives (the research / ontology / simulation-design / forecast methodology ports as **skills**; the four pipeline stages become **custom sub-agents** with **per-stage model routing** — MiniMax-M3 for cheap stages, claude-cli for strong ones), while the two *heavy engines* stay outside the harness: the **knowledge graph** (Graphiti + FalkorDB) and the **OASIS simulation** are exposed *to* the harness as external **MCP servers**. The deterministic machinery that must never be LLM-mediated — health gates (research quality floor, hollow-sim gate, binary conviction gate), schema-versioned resume, artifact manifests, and multi-seed **ensemble** fan-out — lives in a thin **Pipeline Driver** (`drf2/driver/`).
 
-**Status, honestly:** the scaffold is complete (skills, engines, driver, config — the backend suite now collects **756 tests**, including the DRF-2 drift guards), but **no live end-to-end shakedown has been run through the harness yet**. Until DRF-2 passes the same deliverable gates on a live run, **the legacy pipeline documented in this README remains the working system.** To try the preview, see [`drf2/README.md`](drf2/README.md) (or run `SETUP_DRF2=1 ./setup.sh` for the optional dependency install plus a command cheatsheet).
+**Status, honestly:** the scaffold is complete (skills, engines, driver, config — the backend suite now collects **1074 tests**, including the DRF-2 drift guards), but **no live end-to-end shakedown has been run through the harness yet**. Until DRF-2 passes the same deliverable gates on a live run, **the legacy pipeline documented in this README remains the working system.** To try the preview, see [`drf2/README.md`](drf2/README.md) (or run `SETUP_DRF2=1 ./setup.sh` for the optional dependency install plus a command cheatsheet).
 
 ---
 

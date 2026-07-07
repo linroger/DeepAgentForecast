@@ -182,12 +182,13 @@ def _react_agent(responses):
 def _run_react(a):
     section = ReportSection(title="正文1", description="")
     outline = ReportOutline(title="T", summary="S", sections=[section])
-    body = "这是一段足够长的中文正文内容。" * 30
+    # RQ-1: 正文须 >= MIN_VALID_SECTION_CHARS(800)，否则会被判无效而重试/落占位符。
+    body = "这是一段足够长的中文正文内容。" * 60
     return a._generate_section_react(section, outline, previous_sections=[]), body
 
 
 def test_react_turn_budgets_and_temperature():
-    body = "这是一段足够长的中文正文内容。" * 30
+    body = "这是一段足够长的中文正文内容。" * 60  # RQ-1: >= 800 字符
     a = _react_agent([
         '<tool_call>\n{"name": "insight_forge", "parameters": {"query": "q"}}\n</tool_call>',
         "Final Answer: " + body,
@@ -207,7 +208,7 @@ def test_react_turn_budgets_and_temperature():
 
 def test_react_unused_hint_excludes_interview_agents():
     """REPORT-8: the 'tools you haven't used' nudge must never recommend interview_agents."""
-    body = "这是一段足够长的中文正文内容。" * 30
+    body = "这是一段足够长的中文正文内容。" * 60  # RQ-1: >= MIN_VALID_SECTION_CHARS(800)
     a = _react_agent([
         '<tool_call>\n{"name": "insight_forge", "parameters": {"query": "q"}}\n</tool_call>',
         "Final Answer: " + body,
@@ -221,3 +222,129 @@ def test_react_unused_hint_excludes_interview_agents():
     assert hint_msgs, "expected an unused-tools nudge to be emitted"
     for msg in hint_msgs:
         assert "interview_agents" not in msg
+
+
+# ─────────────────────────── RQ-1: report shape helper ──────────────────────
+from app.services.report_agent import (  # noqa: E402
+    derive_report_shape, MIN_VALID_SECTION_CHARS, _looks_contaminated, ReportManager,
+)
+
+
+def test_derive_report_shape_no_budget_is_expanded():
+    """无 page_budget → 展开默认（6-14 节 / 2000 下限 / 3000-6000 目标 / 12 工具）。"""
+    s = derive_report_shape(None)
+    assert s == {"min_sections": 6, "max_sections": 14, "floor_chars": 2000,
+                 "target_lo": 3000, "target_hi": 6000, "tool_budget": 12}
+
+
+def test_derive_report_shape_small_budget_is_compact():
+    """小 page_budget（<=8 页）→ 紧凑（5-8 节 / 1500 下限 / 1800-2800 目标 / 8 工具）。"""
+    for pb in (1, 4, 8):
+        s = derive_report_shape(pb)
+        assert s == {"min_sections": 5, "max_sections": 8, "floor_chars": 1500,
+                     "target_lo": 1800, "target_hi": 2800, "tool_budget": 8}
+
+
+def test_derive_report_shape_large_budget_is_expanded():
+    """大 page_budget（>8 页）→ 展开默认。"""
+    assert derive_report_shape(20)["max_sections"] == 14
+    assert derive_report_shape(9)["tool_budget"] == 12
+
+
+def test_derive_report_shape_bad_or_zero_budget_falls_back_expanded():
+    """非法/<=0 的 page_budget 视作「无预算」→ 展开（degrade-safe）。"""
+    assert derive_report_shape(0)["min_sections"] == 6
+    assert derive_report_shape(-3)["min_sections"] == 6
+    assert derive_report_shape("garbage")["min_sections"] == 6
+
+
+def test_derive_report_shape_honours_expanded_overrides():
+    """展开默认由调用方注入（Config 单一真源），本函数保持纯净。"""
+    s = derive_report_shape(None, expanded_min_sections=7, expanded_max_sections=12,
+                            expanded_floor_chars=2500, expanded_target_lo=3500,
+                            expanded_target_hi=7000, expanded_tool_budget=10)
+    assert s == {"min_sections": 7, "max_sections": 12, "floor_chars": 2500,
+                 "target_lo": 3500, "target_hi": 7000, "tool_budget": 10}
+
+
+def _shape_agent(requirement=""):
+    a = ReportAgent.__new__(ReportAgent)
+    a.simulation_requirement = requirement
+    a.research_report = ""
+    a._report_shape_cache = None
+    a.MIN_TOOL_CALLS_PER_SECTION = ReportAgent.MIN_TOOL_CALLS_PER_SECTION
+    a.MAX_TOOL_CALLS_PER_SECTION = ReportAgent.MAX_TOOL_CALLS_PER_SECTION
+    return a
+
+
+def test_report_shape_expands_without_page_budget():
+    """需求书无页数预算 → _report_shape 展开（6-14 节）。"""
+    a = _shape_agent("What will happen to the market next year?")
+    shape = a._report_shape()
+    assert shape["min_sections"] == 6 and shape["max_sections"] == 14
+    assert shape["target_hi"] == 6000
+
+
+def test_report_shape_compacts_on_small_page_budget():
+    """需求书要求 <=6 页 → _report_shape 收敛回紧凑（5-8 节 / 1800-2800 目标 / 8 工具）。"""
+    a = _shape_agent("Please keep the submission to 6 pages or less.")
+    shape = a._report_shape()
+    assert shape["min_sections"] == 5 and shape["max_sections"] == 8
+    assert shape["target_lo"] == 1800 and shape["target_hi"] == 2800
+    assert shape["tool_budget"] == 8
+    # 提示词槽位随形状收敛
+    kw = a._section_prompt_kwargs()
+    assert kw["section_target_lo"] == 1800 and kw["section_target_hi"] == 2800
+
+
+def test_section_prompt_kwargs_expanded_defaults():
+    """无预算 → 提示词槽位用展开默认（下限 2000 / 目标 3000-6000）。"""
+    a = _shape_agent("Deep multi-decade geopolitical outlook, no page limit.")
+    kw = a._section_prompt_kwargs()
+    assert kw["section_floor_chars"] == 2000
+    assert kw["section_target_lo"] == 3000 and kw["section_target_hi"] == 6000
+
+
+# ─────────────────────────── RQ-1: H3 sub-heading whitelist ──────────────────
+def test_clean_section_content_preserves_h3_flattens_others():
+    """章节体内 ### 三级小标题保留；#/##/#### 降级为粗体。"""
+    content = (
+        "开篇总论。\n\n"
+        "### 首发引爆阶段\n\n正文一。\n\n"
+        "## 不该出现的二级标题\n\n正文二。\n\n"
+        "#### 太深的四级标题\n\n正文三。"
+    )
+    out = ReportManager._clean_section_content(content, "某章节")
+    assert "### 首发引爆阶段" in out                 # H3 保留
+    assert "**不该出现的二级标题**" in out            # H2 降级为粗体
+    assert "## 不该出现的二级标题" not in out
+    assert "**太深的四级标题**" in out                # H4 降级为粗体
+    assert "#### 太深的四级标题" not in out
+
+
+def test_post_process_report_preserves_h3():
+    """整稿后处理保留 # 主标题 / ## 章节标题 / ### 子小节；#### 降级粗体。"""
+    outline = ReportOutline(title="报告主标题", summary="S", sections=[
+        ReportSection(title="章节甲"),
+    ])
+    content = (
+        "# 报告主标题\n\n"
+        "## 章节甲\n\n"
+        "### 子小节一\n\n正文。\n\n"
+        "#### 过深标题\n\n更多正文。"
+    )
+    out = ReportManager._post_process_report(content, outline)
+    assert "# 报告主标题" in out
+    assert "## 章节甲" in out
+    assert "### 子小节一" in out                      # H3 保留
+    assert "**过深标题**" in out and "#### 过深标题" not in out
+
+
+def test_looks_contaminated_length_floor_and_figure_exemption():
+    """RQ-1：短于下限判无效，但含图表标记的短章节豁免长度门。"""
+    short = "太短了。" * 5                              # 远小于 800
+    assert len(short.strip()) < MIN_VALID_SECTION_CHARS
+    assert _looks_contaminated(short) is True
+    # 含 Mermaid/内嵌图标记的短章节是合法图表产出 → 豁免
+    assert _looks_contaminated(short + "\n```mermaid\ngraph TD;A-->B\n```") is False
+    assert _looks_contaminated("图注。\n![chart](chart.png)") is False

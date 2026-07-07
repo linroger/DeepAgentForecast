@@ -53,9 +53,9 @@ models:
     # was double-nested into the request payload (-> `thinking.thinking`), causing the Anthropic
     # API to reject EVERY call with `thinking.thinking: Field required` (8/8 failures = empty
     # research). Opus 4.8's base reasoning is more than enough for tool-driven deep research, and
-    # disabling thinking removes the entire error class. 32K visible-output ceiling (safe for opus;
-    # a deep dossier is ~15K tokens). Re-enable only with the correct `thinking:{type,budget_tokens}`.
-    max_tokens: 32000
+    # disabling thinking removes the entire error class. 64K visible-output ceiling (safe for
+    # opus). Re-enable only with the correct `thinking:{type,budget_tokens}`.
+    max_tokens: 64000
     supports_thinking: false
     supports_vision: true
     enable_prompt_caching: true
@@ -708,7 +708,8 @@ tools:
   - name: web_search
     group: web
     use: deerflow.community.ddg_search.tools:web_search_tool
-    max_results: 5
+    # 深研究单轮吃 10 条结果比 5 条覆盖面翻倍，且成本只在 prompt 长度上（无额外请求）。
+    max_results: 10
     # backend: auto          # DDGS backend(s): auto, duckduckgo, brave, wikipedia, etc.
     # region: wt-wt          # wt-wt is normalized for Wikipedia when backend includes auto/all/wikipedia.
     # safesearch: moderate   # on, moderate, off
@@ -762,10 +763,12 @@ tools:
   #   # api_key: $EXA_API_KEY
 
   # Web fetch tool (uses Jina AI reader)
+  # 30s：重量级一手来源（监管文件/年报/长 PDF 转写）经 Jina reader 常超过 10s，
+  # 超时=整条来源丢失；research 回合本身是分钟级的，等 30s 换全文值得。
   - name: web_fetch
     group: web
     use: deerflow.community.jina_ai.tools:web_fetch_tool
-    timeout: 10
+    timeout: 30
 
   # Web fetch tool (uses InfoQuest)
   # - name: web_fetch
@@ -783,6 +786,15 @@ tools:
   #   group: web
   #   use: deerflow.community.firecrawl.tools:web_fetch_tool
   #   # api_key: $FIRECRAWL_API_KEY
+
+  # Prediction-market search (Polymarket 官方公开 Gamma API——keyless、无需钱包)。
+  # `use:` 是裸模块路径：deerflow_research.py 以 `python <deer-flow>/deerflow_research.py`
+  # 启动（pipeline_orchestrator cwd=deer-flow/），sys.path[0] 即脚本目录，market_tools.py
+  # 与本 config 同步部署在同一目录后即可导入。工具本身 degrade-safe（网络失败→空结果）；
+  # 配套 skill：skills/prediction-markets/SKILL.md（查询构造/过滤/校准锚点纪律）。
+  - name: prediction_market_search
+    group: web
+    use: market_tools:prediction_market_search_tool
 
   # Image search tool (uses DuckDuckGo)
   # Use this to find reference images before image generation
@@ -830,6 +842,9 @@ tools:
   # Bash execution tool
   # Active only when using an isolated shell sandbox or when
   # sandbox.allow_host_bash: true explicitly opts into host bash.
+  # 本部署已在下方 sandbox.allow_host_bash: true——故此 stanza 当前对 agent
+  # 可见（group==bash 触发 tools/tools.py 的 host-bash 过滤，仅在开关为 true 时放行）。
+  # 它是 chart-visualization / data-analysis / forecast-visuals 等脚本型技能的执行面。
   - name: bash
     group: bash
     use: deerflow.sandbox.tools:bash_tool
@@ -870,9 +885,10 @@ tool_output:
   exempt_tools:
     - read_file
     - read_file_tool
-  # tool_overrides:
-  #   web_search: 8000
-  #   bash: 20000
+  # web_fetch 的全文是研究的主食：把外部化阈值从全局 12000 提到 25000，让一手来源
+  # 的正文多留在上下文里（超过 25000 仍落盘 + 预览，防爆窗的保护不变）。
+  tool_overrides:
+    web_fetch: 25000
 
 # ============================================================================
 # Loop Detection Configuration
@@ -899,11 +915,11 @@ loop_detection:
   # per-pass limits, not per-thread.
   tool_freq_overrides:
     web_search:
-      warn: 60
-      hard_limit: 100
+      warn: 100
+      hard_limit: 150
     web_fetch:
-      warn: 60
-      hard_limit: 100
+      warn: 100
+      hard_limit: 150
 
 # ============================================================================
 # Provider Safety Termination Configuration
@@ -972,7 +988,20 @@ sandbox:
   # Host bash execution is disabled by default because LocalSandboxProvider is
   # not a secure isolation boundary for shell access. Enable only for fully
   # trusted, single-user local workflows.
-  allow_host_bash: false
+  #
+  # ENABLED HERE (allow_host_bash: true) — 这是一个受信任的本地单用户部署
+  # (trusted local single-user deployment)：整条 forecasting pipeline 在本机以
+  # 当前用户身份运行，没有多租户 / 不接收外部不可信输入，因此把 LocalSandbox 当
+  # 作「与用户同权限的执行面」是可接受的取舍。打开 host bash 的直接收益：解锁
+  # 那些以脚本形式打包的 skills——chart-visualization（`node scripts/generate.js`
+  # 渲染 26 种 AntV 图表）与 data-analysis 之类需要真实 shell / node / python 才
+  # 能出图出表的技能；forecast-visuals 路由技能正是靠它把 pipeline 工件渲染成
+  # 图。作用机制见上方 tools: 段的 `bash` 条目——tools/tools.py::_is_host_bash_tool
+  # 会在 is_host_bash_allowed(config)==False 时把 group==bash / bash_tool 的工具
+  # 过滤掉；本开关置 true 后该过滤解除，bash 工具正式对 agent 暴露（激活 tools:
+  # 段的 bash stanza）。任何一台不满足「完全受信任、单用户」前提的机器都应改回
+  # false，并让 forecast-visuals 走它的 NO-BASH mermaid 降级路径。
+  allow_host_bash: true
   # Optional: Mount additional host directories into the sandbox.
   # Each mount maps a host path to a virtual container path accessible by the agent.
   # mounts:
@@ -1090,6 +1119,76 @@ sandbox:
 #   # Set `model` to use a different model (e.g., a local Ollama model for cost savings).
 #   # The model name must match a name defined in the `models:` section above.
 
+# ---------------------------------------------------------------------------
+# ACTIVE subagents block（真委派：给 deep-research lead agent 一个可派活的 scoped 子代理）
+# ---------------------------------------------------------------------------
+# 只有当本轮以 `--subagents` 启动（deerflow_research.py 把 subagent_enabled=True 传给
+# DeerFlowClient，解锁 harness 内建 `task` 工具，lead agent 才能委派）时，下面这些配置才
+# 有意义——它们不「打开」委派（那由运行期 subagent_enabled 决定），而是**配置**被委派的
+# 子代理长什么样、能用哪些工具/技能、跑多久。未加 `--subagents` 时该块被解析但从不触达。
+# 字段名对齐 harness 的 SubagentsAppConfig / CustomSubagentConfig（config/subagents_config.py）。
+#
+# 并发上限说明（NOT configurable）：harness 把单条 model 回复里的并行 `task` 调用数硬性
+# 截到 MAX_CONCURRENT_SUBAGENTS=3（SubagentLimitMiddleware，取值域被 clamp 到 [2,4]），
+# 且调度/执行线程池各 max_workers=3——均为模块级常量，无 env/config 旋钮可调，故**无法**抬到 5；
+# 实测上限是 4（需改 harness 源码，本轮不动 deer-flow 门控目录）。研究提示词因此只让 lead
+# 一次派 2–3 个并行子任务，与该硬上限对齐。
+subagents:
+  # 默认超时/步进：deep 子调查是 search→fetch→read 的多步活，给足预算（对齐内建 general-purpose
+  # 已抬到的 1800s）。这两项是 built-in 子代理（general-purpose/bash）的全局默认；custom 子代理
+  # 用它自己 custom_agents 段里的 timeout_seconds/max_turns（除非在 agents: 段给同名 per-agent 覆盖）。
+  timeout_seconds: 1800   # 30 min —— 复杂多步子调查的默认上限
+  max_turns: 160          # built-in 子代理的全局默认步数上限（custom 见其自身 max_turns）
+  # 自定义子代理类型：scoped-researcher —— 面向「一个 KIQ / 一个 actor / 一个 driver」的并行
+  # 定域网页调查员。经 `task` 工具与 general-purpose/bash 并列可选。其 system_prompt 内嵌
+  # deep-research 的核心纪律（S1–S4 分级、2 个独立来源三角验证、只记真实已抓取 URL、回传带
+  # 分级的证据笔记 + 来源清单——不是成稿报告），让子代理产出可直接被 lead 校验并入的证据。
+  custom_agents:
+    scoped-researcher:
+      description: "parallel scoped web investigator for one KIQ/actor/driver — dispatch it for breadth (per-actor profiles, per-KIQ evidence sweeps, regional/language pivots, disconfirmation hunts); returns graded evidence notes + a real fetched-URL list, NOT a polished report"
+      system_prompt: |
+        You are a SCOPED-RESEARCHER sub-agent inside a larger forecasting research effort.
+        Your dispatcher (the lead analyst) gave you exactly ONE narrow focus — one Key
+        Intelligence Question, one actor, one driver, or one language/region pivot. Investigate
+        ONLY that, in depth, and hand back evidence the lead can verify and integrate. You do
+        NOT write the report; another agent synthesizes.
+
+        TOOLING: This is WEB research. Work via `web_search` and `web_fetch` ONLY. There is no
+        local corpus — do not expect a filesystem dataset. Your evidence comes entirely from
+        pages you actually fetch off the web.
+
+        CORE DISCIPLINE (deep-research tradecraft — non-negotiable):
+        - SOURCE TIERING: grade every source S1 (primary: filings, official records, datasets,
+          first-party statements), S2 (high-authority secondary: major press, expert analysis),
+          S3 (ordinary secondary), S4 (weak/unknown). Prefer S1/S2; label each note's tier.
+        - TRIANGULATION: a load-bearing claim needs ≥2 INDEPENDENT origins (not two outlets
+          re-printing one wire). If you have only a single origin, say so explicitly.
+        - REAL FETCHED URLS ONLY: record only a source you ACTUALLY fetched and read, with its
+          real URL and its on-page publication date. NEVER fabricate or future-date a source,
+          URL, title, or date. A claim with no real fetched URL is not evidence — drop it.
+        - SEARCH DISCIPLINE: one fact, at most two attempts; never reissue a near-duplicate
+          query — change the ANGLE (different actor/mechanism/document type/language/time
+          window). Breadth over hunting a white whale within your focus.
+        - DISCONFIRMATION: actively look for the strongest evidence AGAINST your focus's
+          load-bearing claim, not just confirming sources.
+
+        RETURN FORMAT — graded evidence notes, NOT a report. End with Markdown:
+        ## Evidence gathered (each item: the claim, its source tier S1–S4, and the fetched URL)
+        ## Contradictions / uncertainty (disputed claims, the differing positions + their sources)
+        ## Sources (title + REAL fetched URL + on-page date, one per line)
+        Keep it dense and sourced. Do not editorialize beyond what your fetched pages support.
+      tools:                  # 工具白名单（只给检索+读写笔记；不含 bash/task，杜绝越权与递归委派）
+        - web_search
+        - web_fetch
+        - read_file
+        - write_file
+      skills:                 # 技能白名单：搜证纪律 + 市场锚点
+        - deep-research
+        - prediction-markets
+      model: inherit          # 继承 lead 的模型（与主研究同一档推理/工具调用能力）
+      max_turns: 120          # 单个定域子调查的步数上限（多步 search→fetch→read 够用、又有界）
+      timeout_seconds: 1800   # 30 min —— 与全局默认一致，deep 子调查不被过早掐断
+
 # ============================================================================
 # ACP Agents Configuration
 # ============================================================================
@@ -1188,9 +1287,11 @@ summarization:
   # Context retention policy after summarization
   # Specifies how much recent history to preserve
   keep:
-    # Keep the most recent 10 messages (recommended)
+    # Keep the most recent 20 messages — deep-research turns are search→fetch→read
+    # chains; keeping only 10 messages dropped the just-fetched sources right after
+    # a compression pass. 120K-token trigger leaves ample headroom for 20.
     type: messages
-    value: 10
+    value: 20
     # Alternative: Keep specific token count
     # type: tokens
     # value: 3000

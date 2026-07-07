@@ -329,7 +329,7 @@ def test_parse_tool_calls_normalizes_xml_keys():
 
 
 def test_react_unknown_tool_corrected_without_budget_burn():
-    body = "这是一段足够长的中文正文内容。" * 30
+    body = "这是一段足够长的中文正文内容。" * 60  # RQ-1: >= MIN_VALID_SECTION_CHARS(800)
     executed = []
 
     class _LLM:

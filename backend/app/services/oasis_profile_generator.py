@@ -1188,6 +1188,30 @@ class OasisProfileGenerator:
         base_prompt = "你是社交媒体用户画像生成专家。生成详细、真实的人设用于舆论模拟,最大程度还原已有现实情况。必须返回有效的JSON格式，所有字符串值不能包含未转义的换行符。使用中文。"
         return base_prompt
     
+    def _persona_context_cap(self) -> int:
+        """RQ-7 / I-6-4：人设上下文切片的预算化字符上限。
+
+        ADAPTIVE_CONTEXT=true 时按当前提供方上下文窗口放宽（大窗口如 MiniMax 512K / DeepSeek 1M
+        携带更完整的实证上下文），否则/任何异常回退到 PERSONA_CONTEXT_FLOOR_CHARS（=接线前的
+        context[:3000]，degrade-safe，行为不变）。返回值恒 >= floor。
+        """
+        floor = int(getattr(Config, "PERSONA_CONTEXT_FLOOR_CHARS", 3000))
+        if not getattr(Config, "ADAPTIVE_CONTEXT", False):
+            return floor
+        try:
+            from ..utils import token_budget as _tb
+            provider = getattr(self, "provider", None) or Config.LLM_PROVIDER
+            window = Config.context_window_for(provider)
+            return _tb.slice_budget_chars(
+                window_tokens=window,
+                reserved_tokens=getattr(Config, "RESERVED_COMPLETION_TOKENS", 8192),
+                floor_chars=floor,
+                share=0.4,          # 人设上下文只是画像提示词的一部分，取保守份额
+                num_items=1,
+            )
+        except Exception:  # noqa: BLE001 — 预算化仅为增强，任何失败退回固定 floor
+            return floor
+
     def _build_individual_persona_prompt(
         self,
         entity_name: str,
@@ -1199,7 +1223,9 @@ class OasisProfileGenerator:
         """构建个人实体的详细人设提示词"""
 
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "无"
-        context_str = context[:3000] if context else "无额外上下文"
+        # RQ-7: 固定 [:3000] → 按提供方窗口预算化（floor=PERSONA_CONTEXT_FLOOR_CHARS，默认 3000）。
+        _ctx_cap = self._persona_context_cap()
+        context_str = context[:_ctx_cap] if context else "无额外上下文"
 
         # XRUN-10(a/b): 结构化字段从档案/上下文抽取而非套默认值（Lutnick 档案写明 ENTJ 却落
         # ISTJ；US Congress 落 country 中国）。示例国家去掉「中国」锚定；无法推断的字段省略、
@@ -1277,7 +1303,9 @@ class OasisProfileGenerator:
         """构建群体/机构实体的详细人设提示词"""
 
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "无"
-        context_str = context[:3000] if context else "无额外上下文"
+        # RQ-7: 固定 [:3000] → 按提供方窗口预算化（floor=PERSONA_CONTEXT_FLOOR_CHARS，默认 3000）。
+        _ctx_cap = self._persona_context_cap()
+        context_str = context[:_ctx_cap] if context else "无额外上下文"
 
         # XRUN-10(b/c): 机构 country 按总部/主要管辖地推断（TSMC→台湾），不再以「中国」示例
         # 锚定。PERSONA_FIELD_EXTRACTION=false → 回到旧措辞。

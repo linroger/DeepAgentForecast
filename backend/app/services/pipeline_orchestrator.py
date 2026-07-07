@@ -610,6 +610,38 @@ def _kill_process_group(proc: Optional[subprocess.Popen], sig: int = signal.SIGK
             pass
 
 
+# ORCH-1(5): 建图切块前的内嵌图片清洗。Markdown 形式 ![alt](data:image/...;base64,...)
+# 与 HTML 形式 <img src="data:..."> 各一条正则；仅捕获 data-URI 本体，外部 URL 图片不动。
+_MD_DATA_URI_IMG_RE = re.compile(r"!\[([^\]]*)\]\(\s*data:[^)]*\)")
+_HTML_DATA_URI_IMG_RE = re.compile(
+    r"<img\b[^>]*\bsrc\s*=\s*[\"']data:[^\"']*[\"'][^>]*>", re.IGNORECASE)
+_HTML_ALT_ATTR_RE = re.compile(r"\balt\s*=\s*[\"']([^\"']*)[\"']", re.IGNORECASE)
+
+
+def _strip_data_uri_images(text: str) -> str:
+    """建图切块前剔除 base64/data-URI 内嵌图片，保留 alt 文本/图注。
+
+    带图表的研究报告（图被渲染成 base64 PNG 内嵌）若原样切块，单张图就是成千上万
+    字符的 base64 噪声 episode，会污染图谱实体抽取。此函数把 data-URI 图片本体替换
+    为其 alt 文本（无 alt 则移除标签），正文与外部 URL 图片逐字节不动。
+    GRAPH_STRIP_DATA_URI_IMAGES=false 可整体关闭（回到今日行为）；清洗过程任何异常
+    也回退原文——degrade-safe，绝不因清洗失败阻断建图。
+    （knob 就地读 env：config.py 归属其它 wave item，此处不新增 Config 属性。）
+    """
+    if os.environ.get("GRAPH_STRIP_DATA_URI_IMAGES", "true").strip().lower() == "false":
+        return text
+    try:
+        stripped = _MD_DATA_URI_IMG_RE.sub(lambda m: m.group(1), text)
+
+        def _img_alt(m: "re.Match[str]") -> str:
+            alt = _HTML_ALT_ATTR_RE.search(m.group(0))
+            return alt.group(1) if alt else ""
+
+        return _HTML_DATA_URI_IMG_RE.sub(_img_alt, stripped)
+    except Exception:  # noqa: BLE001 — 清洗只是降噪增强，失败回退原文
+        return text
+
+
 def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
     """启动研究子进程前的漂移防护（2026-07-03 live-surfaced）。
 
@@ -639,17 +671,36 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
                 return hashlib.sha256(fh.read()).hexdigest()
 
         pairs = [(bridge_script, deployed_script)]
-        for skill in ("actor-ontology-research", "deep-research"):
-            src = os.path.join(bridge_dir, "skills", skill, "SKILL.md")
-            dst = os.path.join(deerflow_dir, "skills", "public", skill, "SKILL.md")
-            if os.path.isfile(src) and os.path.isfile(dst):
-                pairs.append((src, dst))
+        # ORCH-1(1): skill 同步从硬编码 2 个种子 skill 改为 glob 全量枚举——此前 bridge 侧
+        # 新增第 3 个 skill 只有重跑 ./setup.sh 才会部署，这里会静默漂移。与 setup.sh 语义
+        # 一致：仅当部署侧存在 skills/public/ 时才同步；目标 skill 目录缺失（新 skill 首次
+        # 部署）则按 setup.sh 的 mkdir -p 逻辑创建后拷贝。已存在的目标沿用内容哈希比对。
+        import glob as _glob
+        public_skills_dir = os.path.join(deerflow_dir, "skills", "public")
+        if os.path.isdir(public_skills_dir):
+            for src in sorted(_glob.glob(os.path.join(bridge_dir, "skills", "*", "SKILL.md"))):
+                skill = os.path.basename(os.path.dirname(src))
+                pairs.append((src, os.path.join(public_skills_dir, skill, "SKILL.md")))
 
         synced = []
         for src, dst in pairs:
-            if _digest(src) != _digest(dst):
-                shutil.copyfile(src, dst)
-                synced.append(os.path.relpath(dst, deerflow_dir))
+            if os.path.isfile(dst) and _digest(src) == _digest(dst):
+                continue
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copyfile(src, dst)
+            synced.append(os.path.relpath(dst, deerflow_dir))
+
+        # ORCH-1(1) config.yaml：setup.sh 明确「绝不覆盖已存在的 deer-flow/config.yaml」
+        # （部署侧可能有本地 provider stanza 改动），故此处只做漂移检测 + 提示手工 diff，
+        # 不自动拷贝——与 setup.sh 的 never-clobber 语义保持一致。
+        bridge_cfg = os.path.join(bridge_dir, "config.yaml")
+        deployed_cfg = os.path.join(deerflow_dir, "config.yaml")
+        if (os.path.isfile(bridge_cfg) and os.path.isfile(deployed_cfg)
+                and _digest(bridge_cfg) != _digest(deployed_cfg)):
+            logger.warning(
+                "deer-flow/config.yaml 与 deerflow_bridge/config.yaml 内容不一致（按 setup.sh "
+                "约定不自动覆盖——部署副本可能包含本地 provider 改动）。请手工 diff 两份文件"
+                "以拾取新的 provider stanza。")
         if synced:
             logger.warning(
                 "DeerFlow 部署副本与 deerflow_bridge/ 源不同步，已自动重新同步（%s）——"
@@ -735,10 +786,24 @@ class DeerFlowResearchRunner:
         # Track A（深度研究→research_report.md）的同时并行跑 Track B（角色本体研究→actor_dossier.md）。
         # 关闭时子进程行为与今日逐字节一致（只跑 Track A，不产出 actor_dossier.md）。
         env["DEERFLOW_DUAL_TRACK"] = "true" if getattr(Config, "DEERFLOW_DUAL_TRACK", True) else "false"
+        # CONF-1：深度扇出开关/宽度同样从 Config 单一真源下发给 bridge（bridge 侧经
+        # _env_flag/os.environ 读取，自带默认值）。不下发时 Config 里的默认（true/8）对
+        # 研究子进程静默失效（与 ACTOR_CAST_MAX 曾经的漂移同因）。
+        env["RESEARCH_DEEP_FANOUT"] = (
+            "true" if getattr(Config, "RESEARCH_DEEP_FANOUT", True) else "false")
+        env["RESEARCH_FANOUT_WIDTH"] = str(getattr(Config, "RESEARCH_FANOUT_WIDTH", 8))
         # ACTOR-CAST discipline：主角色上限 + 媒体降级从 Config 单一真源下发给 bridge
         # （抽取提示词的 actor 范围、enforce_actor_cast 的截断/降级都按此执行）。
         env["ACTOR_CAST_MAX"] = str(getattr(Config, "ACTOR_CAST_MAX", 20))
         env["ACTOR_EXCLUDE_MEDIA"] = "true" if getattr(Config, "ACTOR_EXCLUDE_MEDIA", True) else "false"
+        # ORCH-1(3): Polymarket 预测市场快照参数同样从 Config 单一真源下发给 bridge
+        # （bridge 侧经 _env_flag/os.environ 读取）。不下发时子进程只看到自己的 env 默认值，
+        # 后端 .env 里的配置对研究子进程静默失效（与 ACTOR_CAST_MAX 曾经的漂移同因）。
+        env["PREDICTION_MARKETS_ENABLED"] = (
+            "true" if getattr(Config, "PREDICTION_MARKETS_ENABLED", True) else "false")
+        env["PREDICTION_MARKETS_MAX"] = str(getattr(Config, "PREDICTION_MARKETS_MAX", 20))
+        env["PREDICTION_MARKETS_MIN_VOLUME"] = str(getattr(Config, "PREDICTION_MARKETS_MIN_VOLUME", 200.0))
+        env["PREDICTION_MARKETS_MAX_PER_EVENT"] = str(getattr(Config, "PREDICTION_MARKETS_MAX_PER_EVENT", 3))
 
         logger.info(f"启动 DeerFlow 研究子进程: {' '.join(cmd[:1])} … (cwd={deerflow_dir})")
         on_progress(2, "启动深度研究子进程…")
@@ -763,14 +828,15 @@ class DeerFlowResearchRunner:
         # 看门狗预算按研究深度缩放：deep 是多轮研究协议（source map →
         # primary evidence → actors → contradictions → forecast implications →
         # synthesis），在固定 2400s 下经常被无差别 SIGKILL。优先级（T6.6）：显式 timeout 参数 >
-        # 用户在 .env 里显式设置的 DEERFLOW_RESEARCH_TIMEOUT > Config.DEERFLOW_DEPTH_BUDGETS 档位默认值。
+        # 用户在 .env 里显式设置的 DEERFLOW_RESEARCH_TIMEOUT > Config.deerflow_depth_budget() 档位默认值
+        # （CONF-1：档位值在双轨/子代理/扇出开启时 ×1.5，避免并行模式下更重的协议被无差别 SIGKILL）。
         effective_depth = (depth or Config.DEERFLOW_RESEARCH_DEPTH or "standard").lower()
         if timeout:
             budget = timeout
         elif os.environ.get("DEERFLOW_RESEARCH_TIMEOUT", "").strip():
             budget = Config.DEERFLOW_RESEARCH_TIMEOUT
         else:
-            budget = Config.DEERFLOW_DEPTH_BUDGETS.get(effective_depth, Config.DEERFLOW_RESEARCH_TIMEOUT)
+            budget = Config.deerflow_depth_budget(effective_depth)
         deadline = time.time() + budget
         # 看门狗：即使子进程长时间无输出（模型思考），也能在超时后被杀掉。
         timed_out = {"hit": False}
@@ -1028,6 +1094,219 @@ def _load_research_handoff(handoff_dir: str) -> dict[str, Any]:
     }
 
 
+# ===========================================================================
+# PAR-2: 多角度并行研究轨 —— 角度特化前缀 + 确定性合并（纯函数，可单测）
+# ---------------------------------------------------------------------------
+# 研究阶段并行跑 K 条角度特化的研究轨（每条一个 DeerFlowResearchRunner 子进程，写入
+# handoff/track_<k>/），随后把各轨产物确定性地合并回 handoff/，下游各阶段读合并后的
+# handoff/ 与今日完全一致。轨 1 = 基线证据扫描（原始 brief 逐字，无前缀）；轨 2/3 = 附加
+# 角度前缀。合并规则见各 merge_* 函数 docstring。
+# ===========================================================================
+
+# 角度定义：(short_key, H1 标题, prompt 前缀)。轨 1 前缀为空 → track_prompt == 原始 prompt
+# 逐字节（RESEARCH_PARALLEL_TRACKS=1 时整条路径与今日一致）。上限即本列表长度。
+_TRACK2_PREFIX = (
+    "【研究视角：基率、参照类与历史类比】在回答下述预测问题时，请以「参照类预测"
+    "（reference-class forecasting）」为主线：系统识别与本问题结构相似的历史先例与可比"
+    "事件，估计相关基率（base rates）、历史发生频率与典型时间尺度，用它们为每个可能结局"
+    "建立外部视角（outside view）的锚。优先搜集可量化的历史类比、长周期统计与既往类似情形"
+    "的实际结局分布，而非仅当下叙事。\n\n原始预测问题：\n"
+)
+_TRACK3_PREFIX = (
+    "【研究视角：行为者激励、反面论证与市场定价】在回答下述预测问题时，请聚焦三条线："
+    "(1) 关键行为者的激励结构与约束——谁想要什么、面临何种约束、其理性策略如何影响结局；"
+    "(2) 反面/证伪论证——主动搜寻能推翻主流叙事的反向证据、被忽视的风险与非共识情景"
+    "（contrarian case）；(3) 市场定价信号——预测市场、期货、赔率、隐含概率等对相关结局的"
+    "定价。优先搜集能挑战共识的一手证据与可交易的定价信号。\n\n原始预测问题：\n"
+)
+
+# (short_key, H1 标题, prefix)。合并后的 research_report.md 用 H1 标题作章节头。
+_RESEARCH_TRACK_ANGLES: list[tuple[str, str, str]] = [
+    ("base-evidence", "基线证据扫描 (Base Evidence Sweep)", ""),
+    ("base-rates", "基率·参照类·历史类比 (Base Rates & Reference Classes)", _TRACK2_PREFIX),
+    ("incentives-contrarian",
+     "行为者激励·反面论证·市场定价 (Incentives, Contrarian Case & Market Pricing)",
+     _TRACK3_PREFIX),
+]
+
+
+def _track_tier_rank(tier: Any) -> int:
+    """来源层级 → 排序秩：S1 最高（rank 1）… S4（rank 4），缺失/非法 → 9（最低）。
+    合并去重时「保最高层级」= 取 rank 最小者。"""
+    if not isinstance(tier, str):
+        return 9
+    m = re.match(r"[sS]([1-4])", tier.strip())
+    return int(m.group(1)) if m else 9
+
+
+def _track_norm_url(url: Any) -> str:
+    """URL 去重规范化：去空白、去尾部 '/'、整体小写。仅用于去重键，不改写落盘的原 url。"""
+    if not isinstance(url, str):
+        return ""
+    return url.strip().rstrip("/").lower()
+
+
+def merge_track_reports(labeled_reports: list[tuple[str, str]]) -> str:
+    """PAR-2（纯）：把各轨报告拼接到 '# Track N: <angle>' 一级标题之下。
+
+    labeled_reports = [(angle_title, report_text), ...]（保持轨顺序）。空文本的轨跳过。
+    Track 编号按传入顺序从 1 起（跳过的轨不占号，编号连续）。
+    """
+    parts: list[str] = []
+    n = 0
+    for angle, text in labeled_reports:
+        body = (text or "").strip()
+        if not body:
+            continue
+        n += 1
+        parts.append(f"# Track {n}: {angle}\n\n{body}")
+    return "\n\n".join(parts)
+
+
+def merge_sources_union(track_sources: list[Any]) -> list[dict]:
+    """PAR-2（纯）：跨轨合并来源，按规范化 URL 去重，冲突时保最高层级（S1>S2>…）。
+
+    非 dict / 缺 url 的行原样保留（无法去重）。相同 URL：保留首见行，把更高层级写回、
+    并用任一轨的非空字段回填缺失字段（保守合并，绝不丢信息）。保持首见顺序（确定性）。
+    """
+    out: list[dict] = []
+    index: dict[str, int] = {}
+    for sources in track_sources:
+        if not isinstance(sources, list):
+            continue
+        for s in sources:
+            if not isinstance(s, dict):
+                continue
+            key = _track_norm_url(s.get("url"))
+            if not key:
+                out.append(dict(s))
+                continue
+            if key not in index:
+                index[key] = len(out)
+                out.append(dict(s))
+            else:
+                existing = out[index[key]]
+                if _track_tier_rank(s.get("tier")) < _track_tier_rank(existing.get("tier")):
+                    existing["tier"] = s.get("tier")
+                for k, v in s.items():
+                    if v and not existing.get(k):
+                        existing[k] = v
+    return out
+
+
+def merge_list_dedup(track_lists: list[Any]) -> list:
+    """PAR-2（纯）：跨轨拼接数组并按规范 JSON 恒等去重（quantitative/contested/timeline 用）。
+    保持首见顺序；不可序列化的元素回退 repr 作键。"""
+    out: list = []
+    seen: set[str] = set()
+    for lst in track_lists:
+        if not isinstance(lst, list):
+            continue
+        for item in lst:
+            try:
+                key = json.dumps(item, sort_keys=True, ensure_ascii=False)
+            except (TypeError, ValueError):
+                key = repr(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+    return out
+
+
+def merge_actors_objs(track_actor_objs: list[Any]) -> tuple[Optional[dict], dict]:
+    """PAR-2：跨轨合并 actors.json 对象，再走既有 reconcile_cast 去重。
+
+    先并集各轨的 actors[]/relationships[]/key_events[]，标量字段（central_question/
+    as_of_date/situation_brief/hot_topics…）取首个非空轨；然后调用 reconcile_cast 对重复
+    actor 做规范化合并并改写关系端点。返回 (merged_obj|None, audit)。全轨无 actors → (None, 空 audit)。
+    """
+    base: Optional[dict] = None
+    all_actors: list = []
+    all_rel: list = []
+    all_events: list = []
+    for obj in track_actor_objs:
+        if not isinstance(obj, dict):
+            continue
+        if base is None:
+            base = {k: v for k, v in obj.items()
+                    if k not in ("actors", "relationships", "key_events")}
+        all_actors.extend(obj.get("actors") or [])
+        all_rel.extend(obj.get("relationships") or [])
+        all_events.extend(obj.get("key_events") or [])
+    if base is None:
+        return None, {"merged": [], "n_before": 0, "n_after": 0}
+    merged = dict(base)
+    merged["actors"] = all_actors
+    if all_rel:
+        merged["relationships"] = all_rel
+    if all_events:
+        merged["key_events"] = all_events
+    try:
+        from ..utils.actors import reconcile_cast as _reconcile
+        recon, audit = _reconcile(merged)
+        return recon, audit
+    except Exception:  # noqa: BLE001 — 去重失败回退未去重并集（union-dedup 兜底）
+        return merged, {"merged": [], "n_before": len(all_actors), "n_after": len(all_actors)}
+
+
+def merge_research_quality(track_metas: list[Any]) -> dict:
+    """PAR-2（纯）：合并 research_quality = 各轨 score 的最小值（保守），附每轨明细。
+
+    以 score 最小的轨的 research_quality 块为基底（其 components 内部自洽），加 per_track
+    明细与 merged_from_tracks 计数。无任何轨带评分 → 仅返回 {per_track, merged_from_tracks}。
+    """
+    per_track: list[dict] = []
+    min_rq: Optional[dict] = None
+    min_score: Optional[float] = None
+    for i, meta in enumerate(track_metas, start=1):
+        rq = meta.get("research_quality") if isinstance(meta, dict) else None
+        if not isinstance(rq, dict):
+            per_track.append({"track": i, "research_quality": None})
+            continue
+        score = rq.get("score")
+        per_track.append({"track": i, "score": score, "components": rq.get("components")})
+        if isinstance(score, (int, float)):
+            if min_score is None or score < min_score:
+                min_score = score
+                min_rq = rq
+    merged = dict(min_rq) if isinstance(min_rq, dict) else {}
+    merged["per_track"] = per_track
+    merged["merged_from_tracks"] = len(track_metas)
+    return merged
+
+
+def _source_tier_histogram(sources: Any) -> dict[str, int]:
+    """PAR-2（纯）：从（合并后的）sources 重算 {s1_count..s4_count,s_unknown}，键名与 bridge 一致。"""
+    hist = {"s1_count": 0, "s2_count": 0, "s3_count": 0, "s4_count": 0, "s_unknown": 0}
+    if not isinstance(sources, list):
+        return hist
+    for s in sources:
+        r = _track_tier_rank(s.get("tier")) if isinstance(s, dict) else 9
+        hist[f"s{r}_count" if 1 <= r <= 4 else "s_unknown"] += 1
+    return hist
+
+
+def pick_freshest_markets(track_markets: list[Any]) -> Optional[dict]:
+    """PAR-2（纯）：跨轨取「最新」预测市场快照（按 as_of ISO 字符串字典序=时间序，取最大）。
+
+    优先含非空 markets 的快照；全为空则回退任一 dict；全无 → None。
+    """
+    best: Optional[dict] = None
+    best_key: str = ""
+    for pm in track_markets:
+        if not isinstance(pm, dict) or not pm.get("markets"):
+            continue
+        k = str(pm.get("as_of") or "")
+        if best is None or k > best_key:
+            best, best_key = pm, k
+    if best is None:
+        for pm in track_markets:
+            if isinstance(pm, dict):
+                return pm
+    return best
+
+
 def load_research_dossier_for_simulation(simulation_id: Optional[str]) -> dict[str, Any]:
     """T4.1: best-effort 找到含该 simulation_id 的管线 handoff，加载研究档案。
 
@@ -1251,10 +1530,15 @@ def _build_run_manifest(state: "PipelineState") -> dict[str, Any]:
     opts = state.options or {}
     depth = (opts.get("depth") or getattr(Config, "DEERFLOW_RESEARCH_DEPTH", "standard"))
     research_model = opts.get("research_model") or getattr(Config, "DEERFLOW_MODEL", "claude")
-    depth_budgets = getattr(Config, "DEERFLOW_DEPTH_BUDGETS", {}) or {}
-    research_timeout = depth_budgets.get(
-        str(depth).lower(), getattr(Config, "DEERFLOW_RESEARCH_TIMEOUT", 0)
-    )
+    # CONF-1：快照记录「生效」预算（含双轨/子代理/扇出的 ×1.5 放大），与看门狗实际用值一致；
+    # 老 Config（无该 classmethod）时回退原始档位 dict（degrade-safe）。
+    try:
+        research_timeout = Config.deerflow_depth_budget(depth)
+    except (AttributeError, TypeError):  # noqa: BLE001 — 快照绝不阻塞管线启动
+        depth_budgets = getattr(Config, "DEERFLOW_DEPTH_BUDGETS", {}) or {}
+        research_timeout = depth_budgets.get(
+            str(depth).lower(), getattr(Config, "DEERFLOW_RESEARCH_TIMEOUT", 0)
+        )
     max_rounds = opts.get("max_rounds") or (getattr(Config, "OASIS_DEFAULT_MAX_ROUNDS", 0) or None)
 
     manifest: dict[str, Any] = {
@@ -1475,6 +1759,10 @@ class PipelineOrchestrator:
                     data = PipelineManager.load(pipeline_id) or {}
                     # 杀掉上一进程遗留、仍在烧额度的孤儿研究子进程（按持久化的 PID）。
                     cls._kill_orphan_research(pipeline_id, data.get("research_pid"))
+                    # PAR-2：并行研究轨会派生多个子进程，逐一清理（_kill_orphan_research 内部
+                    # 会校验命令行含本 pipeline_id + deerflow_research.py，防 PID 复用误杀）。
+                    for _tpid in (data.get("options") or {}).get("research_track_pids") or []:
+                        cls._kill_orphan_research(pipeline_id, _tpid)
                     tid = data.get("task_id")
                     if tid:
                         try:
@@ -1746,6 +2034,9 @@ class PipelineOrchestrator:
                 # 这样即使删除中途失败，状态也不会停在 running 误导前端。
                 PipelineManager.mark_failed(pipeline_id, "已被用户删除", status="cancelled")
                 cls._kill_orphan_research(pipeline_id, data.get("research_pid"))
+                # PAR-2：并行研究轨的各子进程 PID 逐一清理（同上，含 pipeline_id 校验）。
+                for _tpid in (data.get("options") or {}).get("research_track_pids") or []:
+                    cls._kill_orphan_research(pipeline_id, _tpid)
             ok = PipelineManager.delete(pipeline_id)
             if ok:
                 cls._cancel_events.pop(pipeline_id, None)
@@ -2125,26 +2416,65 @@ class PipelineOrchestrator:
         _mr = state.options.get("max_rounds") or (Config.OASIS_DEFAULT_MAX_ROUNDS or None)
         max_rounds = int(_mr) if _mr else None
         handoff_dir = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
-        for k in range(2, n_seeds + 1):
-            cancel_ev = type(self)._cancel_events.get(state.pipeline_id)
-            if cancel_ev is not None and cancel_ev.is_set():
-                raise PipelineCancelled("多种子集成期间被取消")
-            seed = (base_seed or 0) + k * 7919  # 派生互异种子（base=0 时也确定性互异）
+        # 派生互异种子（base=0 时也确定性互异）；每个种子跑一次独立 (prepare→run→report)。
+        seed_jobs = [(k, (base_seed or 0) + k * 7919) for k in range(2, n_seeds + 1)]
+        cancel_ev0 = type(self)._cancel_events.get(state.pipeline_id)
+        if cancel_ev0 is not None and cancel_ev0.is_set():
+            raise PipelineCancelled("多种子集成期间被取消")
+
+        # PAR-3：额外种子并行跑。_run_one_seed 线程安全（各种子独立 simulation_id → 独立
+        # 目录/DB/文件式 IPC/仅注入子进程 env；SimulationRunner 类级映射均按 sim_id 独立键；
+        # 共享的 graph_id 由 Zep 服务端处理并发写，串行版本本就共享同一张图）。并发度
+        # ENSEMBLE_SEED_CONCURRENCY（默认 2、上限 3）；=1 或仅 1 个额外种子时走串行（逐字节
+        # 复现旧行为）。共享 cancel_event + 每种子内建停滞看门狗均保留（在 _run_one_seed 内）。
+        try:
+            seed_conc = max(1, min(3, int(getattr(Config, "ENSEMBLE_SEED_CONCURRENCY", 2) or 2)))
+        except (TypeError, ValueError):
+            seed_conc = 2
+
+        def _do_seed(k: int, seed: int) -> None:
+            """跑一个额外种子并把结果并入 forecasts/extra_runs（GIL 下 list.append 线程安全）。"""
+            sim_id, rid, fc = self._run_one_seed(
+                state, project, graph_id, actors, research, report_md,
+                seed=seed, max_rounds=max_rounds,
+            )
+            extra_runs.append({"seed": seed, "simulation_id": sim_id, "report_id": rid})
+            if fc and fc.get("scenarios"):
+                forecasts.append(fc)
+
+        if seed_conc <= 1 or len(seed_jobs) <= 1:
+            # 串行路径（与今日逐字节一致）
+            for k, seed in seed_jobs:
+                cancel_ev = type(self)._cancel_events.get(state.pipeline_id)
+                if cancel_ev is not None and cancel_ev.is_set():
+                    raise PipelineCancelled("多种子集成期间被取消")
+                st = state.stages.setdefault(STAGE_REPORT, StageState(name=STAGE_REPORT))
+                st.message = f"多种子集成 {k}/{n_seeds}（种子 {seed}）…"
+                PipelineManager.save(state)
+                try:
+                    _do_seed(k, seed)
+                except PipelineCancelled:
+                    raise
+                except Exception as _se:  # noqa: BLE001 — 单个种子失败不拖垮集成
+                    logger.warning("[%s] 集成种子 %s 失败（跳过）: %s", state.pipeline_id, k, _se)
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
             st = state.stages.setdefault(STAGE_REPORT, StageState(name=STAGE_REPORT))
-            st.message = f"多种子集成 {k}/{n_seeds}（种子 {seed}）…"
+            st.message = f"多种子集成：并行 {len(seed_jobs)} 个额外种子（并发 {seed_conc}）…"
             PipelineManager.save(state)
-            try:
-                sim_id, rid, fc = self._run_one_seed(
-                    state, project, graph_id, actors, research, report_md,
-                    seed=seed, max_rounds=max_rounds,
-                )
-                extra_runs.append({"seed": seed, "simulation_id": sim_id, "report_id": rid})
-                if fc and fc.get("scenarios"):
-                    forecasts.append(fc)
-            except PipelineCancelled:
-                raise
-            except Exception as _se:  # noqa: BLE001 — 单个种子失败不拖垮集成
-                logger.warning("[%s] 集成种子 %s 失败（跳过）: %s", state.pipeline_id, k, _se)
+            cancelled: Optional[PipelineCancelled] = None
+            with ThreadPoolExecutor(max_workers=seed_conc, thread_name_prefix="ens-seed") as ex:
+                futs = {ex.submit(_do_seed, k, seed): (k, seed) for k, seed in seed_jobs}
+                for fut in as_completed(futs):
+                    k, seed = futs[fut]
+                    try:
+                        fut.result()
+                    except PipelineCancelled as pc:
+                        cancelled = pc  # 取消须穿透（其余种子按同一 cancel_event 各自停机）
+                    except Exception as _se:  # noqa: BLE001 — 单个种子失败不拖垮集成
+                        logger.warning("[%s] 集成种子 %s 失败（跳过）: %s", state.pipeline_id, k, _se)
+            if cancelled is not None:
+                raise cancelled
         if len(forecasts) < 2:
             logger.info("[%s] 有效集成样本<2，不写 ensemble_forecast.json", state.pipeline_id)
             state.options["ensemble_done"] = True
@@ -2460,7 +2790,16 @@ class PipelineOrchestrator:
                 body = open(s, encoding="utf-8", errors="ignore").read()
             except OSError:
                 continue
-            if ("生成失败" in body) or ("本章节" in body and "失败" in body) or len(body.strip()) < 200:
+            # ORCH-1(2): 占位符判定收紧为 report_agent 实际写入的失败模板——
+            # SECTION_FAILURE_PLACEHOLDER 与「LLM 返回空响应」变体均以「（本章节生成失败：」
+            # 开头。旧的 '生成失败' / '本章节'+'失败' 松散子串会把正文里合法讨论
+            # 「××失败」的章节误判为占位符。另外，含图表标记的短章节（一张 Mermaid/内嵌图
+            # + 简短图注是合法产出）豁免 <200 字符规则，不再按占位符计。
+            _is_placeholder = "（本章节生成失败：" in body
+            if not _is_placeholder and len(body.strip()) < 200:
+                _is_placeholder = not any(
+                    m in body for m in ("![", "<img", "<svg", "```mermaid"))
+            if _is_placeholder:
                 placeholder += 1
         fc_ok = False
         fcp = os.path.join(folder, "forecast.json")
@@ -2667,6 +3006,7 @@ class PipelineOrchestrator:
             specs.append(("dossier", os.path.join(hd, "actors.json")))
             specs.append(("timeline", os.path.join(hd, "timeline.json")))
             specs.append(("sources", os.path.join(hd, "sources.json")))
+            specs.extend(PipelineOrchestrator._viz_artifact_specs(hd))
         elif stage == STAGE_ONTOLOGY:
             specs.append(("ontology", os.path.join(hd, "ontology.json")))
         elif stage == STAGE_GRAPH:
@@ -2685,8 +3025,27 @@ class PipelineOrchestrator:
                               os.path.join(SimulationRunner.RUN_STATE_DIR, sim_id, "run_summary.json")))
         elif stage == STAGE_REPORT:
             # 报告章节逐节落盘（section_NN.md）；运行中可作临时产物深链（见 _discover_partial_artifacts）。
-            pass
+            specs.extend(PipelineOrchestrator._viz_artifact_specs(hd))
         return specs
+
+    @staticmethod
+    def _viz_artifact_specs(hd: str) -> list[tuple[str, str]]:
+        """VIZ-2: 可视化产物通道的「索引文件」候选 (name, 绝对路径)——供 RESEARCH/REPORT 两阶段共用。
+
+        单文件锚点（与 charts/data 目录内动态命名的 png|svg|csv 一一对应地登记不现实，故以索引清单
+        为完整性/深链锚）：
+          - charts    → handoff/charts/charts.json（图表清单：{title, caption, source_data}）
+          - datasets  → handoff/data/datasets.json（数据集清单，与 charts.json 平行）
+        二者均为可选、且在旧跑上不存在：调用方（登记/复用校验/临时产物发现）一律按「文件缺失即跳过」
+        自然降级，绝不误伤健康/完整性校验。原始 *.png|svg / *.csv 作为增量证据另经
+        _discover_partial_artifacts 目录扫描透出（见该方法）。关闭 PIPELINE_VIZ_ARTIFACTS 时整段返回空。
+        """
+        if not bool(getattr(Config, "PIPELINE_VIZ_ARTIFACTS", True)):
+            return []
+        return [
+            ("charts", os.path.join(hd, "charts", "charts.json")),
+            ("datasets", os.path.join(hd, "data", "datasets.json")),
+        ]
 
     def _record_stage_artifacts(self, state: PipelineState, stage: str) -> None:
         """T6.3: 阶段完成时登记其产物的可深链路径（存在且非空才登记）。
@@ -2865,6 +3224,21 @@ class PipelineOrchestrator:
                         for fn in sorted(os.listdir(rep_dir)):
                             if fn.startswith("section_") and fn.endswith(".md"):
                                 _stat(fn[:-3], os.path.join(rep_dir, fn))
+            # VIZ-2: charts/data 目录内动态命名的原始产物（png|svg|csv）作为增量证据逐个透出，
+            # 与索引清单 charts.json/datasets.json（经 specs 枚举登记）互补。RESEARCH/REPORT 皆可产出；
+            # 目录不存在（旧跑/尚未产出）时 os.listdir 抛 OSError 被外层 except 兜住 → 自然 no-op。
+            if stage in (STAGE_RESEARCH, STAGE_REPORT) and bool(getattr(Config, "PIPELINE_VIZ_ARTIFACTS", True)):
+                hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+                _cdir = os.path.join(hd, "charts")
+                if os.path.isdir(_cdir):
+                    for fn in sorted(os.listdir(_cdir)):
+                        if fn.endswith(".png") or fn.endswith(".svg"):
+                            _stat(f"chart_{fn}", os.path.join(_cdir, fn))
+                _ddir = os.path.join(hd, "data")
+                if os.path.isdir(_ddir):
+                    for fn in sorted(os.listdir(_ddir)):
+                        if fn.endswith(".csv"):
+                            _stat(f"dataset_{fn}", os.path.join(_ddir, fn))
         except Exception:  # noqa: BLE001 — 发现是观测增益，永不抛出
             pass
         return out
@@ -3282,6 +3656,198 @@ class PipelineOrchestrator:
         # as_of_date 存在但无效且无来源日可回退 → 运行日兜底（优于带脏日期入图）。
         return run_dt, note
 
+    # -- 内部：PAR-2 多角度并行研究轨 ------------------------------------
+
+    def _run_parallel_research_tracks(
+        self, state: "PipelineState", handoff_dir: str,
+        upd: "Callable[[int, str], None]", n_tracks: int,
+    ) -> dict[str, Any]:
+        """PAR-2：并行跑 K 条角度特化研究轨，确定性合并回 handoff_dir，返回 research 摘要。
+
+        每轨 = 一个 DeerFlowResearchRunner 子进程（角度前缀 + 原始 prompt），写入
+        handoff/track_<k>/。各轨用既有 per-run 看门狗预算 → wall-clock ≈ 1 轨。某轨失败仅
+        跳过（存活 ≥1 即继续并打降级标）；全失败 → RuntimeError（阶段失败，与今日一致）。
+        取消（cancel_event）穿透所有轨并向上重抛。返回 dict 的键与 DeerFlowResearchRunner.run
+        一致（report/report_path/actor_dossier/actors/sources/timeline/exit_code/research_telemetry），
+        供下游各阶段无差别消费。
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from ..utils.atomic import write_json_atomic, write_text_atomic
+
+        cls = type(self)
+        angles = _RESEARCH_TRACK_ANGLES[:max(1, n_tracks)]
+        n = len(angles)
+        os.makedirs(handoff_dir, exist_ok=True)
+        # PAR-2：先在启动任何轨之前把 bridge→deployed 同步做一次。每个 .run 内部也会调
+        # _sync_deerflow_bridge_if_stale，但 K 条轨并发时它们会同时 shutil.copyfile 同一组
+        # 文件（非原子）→ 竞态可能让某轨读到半写的脚本。预同步后各轨内的同步退化为只读哈希
+        # 比对（no-op），消除该竞态。失败仅记录（同函数语义，绝不阻断研究）。
+        try:
+            _sync_deerflow_bridge_if_stale(Config.DEERFLOW_DIR)
+        except Exception:  # noqa: BLE001
+            pass
+        upd(2, f"并行研究：启动 {n} 条多角度研究轨…")
+
+        # 进度聚合：取各轨 local 的最小值作为阶段进度，让进度条随「最慢轨」诚实推进
+        # （wall-clock ≈ 1 轨）。upd 自身也会在取消时抛 PipelineCancelled。
+        prog_lock = threading.Lock()
+        track_local = [0] * n
+        pids_lock = threading.Lock()
+
+        def _make_cb(idx: int) -> "Callable[[int, str], None]":
+            def _cb(local: int, msg: str) -> None:
+                ev = cls._cancel_events.get(state.pipeline_id)
+                if ev is not None and ev.is_set():
+                    raise PipelineCancelled("并行研究期间被取消")
+                with prog_lock:
+                    track_local[idx] = int(local)
+                    agg = min(track_local)
+                upd(max(2, agg), f"[轨{idx + 1}] {_tail(msg)}")
+            return _cb
+
+        def _make_spawn(idx: int) -> "Callable[[int], None]":
+            def _spawn(pid: int) -> None:
+                # 持久化各轨 PID，供后端重启时 reconcile_orphans 逐一清理孤儿研究子进程。
+                # 单一 state.research_pid 字段保留首个 PID（back-compat）；完整清单入 options。
+                with pids_lock:
+                    lst = state.options.setdefault("research_track_pids", [])
+                    if int(pid) not in lst:
+                        lst.append(int(pid))
+                    if state.research_pid is None:
+                        state.research_pid = int(pid)
+                PipelineManager.save(state)
+            return _spawn
+
+        def _run_track(idx: int, angle_title: str, prefix: str) -> tuple:
+            track_dir = os.path.join(handoff_dir, f"track_{idx + 1}")
+            os.makedirs(track_dir, exist_ok=True)
+            track_prompt = (prefix + state.prompt) if prefix else state.prompt
+            res = DeerFlowResearchRunner.run(
+                track_prompt,
+                track_dir,
+                on_progress=_make_cb(idx),
+                depth=state.options.get("depth"),
+                language=state.options.get("research_language"),
+                model=state.options.get("research_model"),
+                cancel_event=cls._cancel_events.get(state.pipeline_id),
+                on_spawn=_make_spawn(idx),
+            )
+            return idx, angle_title, track_dir, res
+
+        results: dict[int, tuple] = {}
+        cancelled: Optional[PipelineCancelled] = None
+        with ThreadPoolExecutor(max_workers=n, thread_name_prefix="research-track") as ex:
+            futs = {ex.submit(_run_track, i, angles[i][1], angles[i][2]): i for i in range(n)}
+            for fut in as_completed(futs):
+                i = futs[fut]
+                try:
+                    idx, angle_title, track_dir, res = fut.result()
+                    results[idx] = (angle_title, track_dir, res)
+                except PipelineCancelled as pc:
+                    cancelled = pc  # 取消须穿透，不当作「可跳过的轨失败」
+                except Exception as te:  # noqa: BLE001 — 单轨失败用存活轨继续
+                    logger.warning("[%s] 研究轨 %d 失败（跳过，用存活轨继续）: %s",
+                                   state.pipeline_id, i + 1, te)
+        if cancelled is not None:
+            raise cancelled
+        if not results:
+            raise RuntimeError("所有并行研究轨均失败，研究阶段失败")
+
+        survived = len(results)
+        degraded = survived < n
+        upd(96, f"合并 {survived}/{n} 条研究轨…")
+
+        # 按轨序确定性合并
+        ordered = [results[i] for i in sorted(results)]
+        labeled_reports = [(title, res["report"]) for (title, _td, res) in ordered]
+        labeled_dossiers = [(title, res.get("actor_dossier") or "") for (title, _td, res) in ordered]
+        track_dirs = [td for (_t, td, _r) in ordered]
+
+        merged_report = merge_track_reports(labeled_reports)
+        merged_dossier = merge_track_reports(labeled_dossiers)
+        merged_sources = merge_sources_union([res.get("sources") for (_t, _td, res) in ordered])
+        merged_actors, _cast_audit = merge_actors_objs([res.get("actors") for (_t, _td, res) in ordered])
+        merged_timeline = merge_list_dedup([res.get("timeline") for (_t, _td, res) in ordered])
+        merged_quant = merge_list_dedup([_read_json(os.path.join(td, "quantitative.json")) for td in track_dirs])
+        merged_contested = merge_list_dedup([_read_json(os.path.join(td, "contested.json")) for td in track_dirs])
+        track_metas = [(_read_json(os.path.join(td, "meta.json")) or {}) for td in track_dirs]
+        merged_rq = merge_research_quality(track_metas)
+        merged_pm = pick_freshest_markets(
+            [_read_json(os.path.join(td, "prediction_markets.json")) for td in track_dirs])
+
+        if degraded:
+            merged_rq["degraded"] = True
+            merged_rq.setdefault("degradation", [])
+            merged_rq["degradation"].append(f"parallel-tracks {survived}/{n} survived")
+
+        # 合并 meta：以首个非空轨 meta 为基底（其它观测字段自洽），覆写 research_quality
+        # 为「取最小值」的合并块，并按合并后的 sources 重算 source_tiers/计数（诚实）。
+        base_meta: dict = next((m for m in track_metas if m), {})
+        merged_meta = dict(base_meta)
+        merged_meta["research_quality"] = merged_rq
+        merged_meta["source_tiers"] = _source_tier_histogram(merged_sources)
+        merged_meta["sources_count"] = len(merged_sources)
+        if isinstance(merged_actors, dict):
+            merged_meta["actors_count"] = len(merged_actors.get("actors") or [])
+            merged_meta["relationships_count"] = len(merged_actors.get("relationships") or [])
+        merged_meta["parallel_research"] = {
+            "requested": n, "survived": survived,
+            "angles": [angles[i][0] for i in sorted(results)],
+        }
+
+        # 落盘合并产物到 handoff_dir（下游/resume 读的正是这些文件）
+        report_path = os.path.join(handoff_dir, "research_report.md")
+        write_text_atomic(report_path, merged_report)
+        if merged_dossier.strip():
+            write_text_atomic(os.path.join(handoff_dir, "actor_dossier.md"), merged_dossier)
+        if isinstance(merged_actors, dict):
+            write_json_atomic(os.path.join(handoff_dir, "actors.json"), merged_actors)
+        if merged_sources:
+            write_json_atomic(os.path.join(handoff_dir, "sources.json"), merged_sources)
+        if merged_timeline:
+            write_json_atomic(os.path.join(handoff_dir, "timeline.json"), merged_timeline)
+        if merged_quant:
+            write_json_atomic(os.path.join(handoff_dir, "quantitative.json"), merged_quant)
+        if merged_contested:
+            write_json_atomic(os.path.join(handoff_dir, "contested.json"), merged_contested)
+        if isinstance(merged_pm, dict):
+            write_json_atomic(os.path.join(handoff_dir, "prediction_markets.json"), merged_pm)
+        write_json_atomic(os.path.join(handoff_dir, "meta.json"), merged_meta)
+
+        # 合并遥测：token/工具量求和；wall_s 取最大（并行）；model/depth 取首轨。
+        tels = [res.get("research_telemetry") or {} for (_t, _td, res) in ordered]
+
+        def _sum(key: str) -> int:
+            return sum(int(t.get(key) or 0) for t in tels)
+
+        merged_tel = {
+            "model": (tels[0].get("model") if tels else None) or Config.DEERFLOW_MODEL,
+            "depth": tels[0].get("depth") if tels else None,
+            "tokens_in": _sum("tokens_in"),
+            "tokens_out": _sum("tokens_out"),
+            "tokens_total": _sum("tokens_total") or (_sum("tokens_in") + _sum("tokens_out")),
+            "tool_calls": _sum("tool_calls"),
+            "results": _sum("results"),
+            "wall_s": max((float(t.get("wall_s") or 0.0) for t in tels), default=0.0),
+            "parallel_tracks": survived,
+        }
+
+        state.options["parallel_research"] = merged_meta["parallel_research"]
+        if degraded:
+            logger.warning("[%s] 并行研究降级：%d/%d 轨存活", state.pipeline_id, survived, n)
+        PipelineManager.save(state)
+
+        return {
+            "report": merged_report,
+            "report_path": report_path,
+            "actor_dossier": merged_dossier if merged_dossier.strip() else "",
+            "actors": merged_actors,
+            "sources": merged_sources,
+            "timeline": merged_timeline,
+            "exit_code": 0,
+            "research_telemetry": merged_tel,
+        }
+
     # -- 内部：嵌入预热 (R2-EXEC-7) ---------------------------------------
 
     def _maybe_warm_embedder(self, state: PipelineState, actors: Any) -> None:
@@ -3363,17 +3929,29 @@ class PipelineOrchestrator:
                     state.research_pid = pid
                     PipelineManager.save(state)
 
-                research = DeerFlowResearchRunner.run(
-                    state.prompt,
-                    handoff_dir,
-                    on_progress=upd,
-                    depth=state.options.get("depth"),
-                    language=state.options.get("research_language"),  # T5.5
-                    model=state.options.get("research_model"),        # T5.5
-                    cancel_event=cls._cancel_events.get(state.pipeline_id),
-                    on_spawn=_persist_research_pid,
-                )
+                # PAR-2：多角度并行研究轨。>1 时并行跑 K 个研究子进程（每轨角度特化）后
+                # 确定性合并回 handoff/；=1 时走今日单轨路径（下方 else 逐字节不变）。
+                try:
+                    _n_tracks = max(1, int(getattr(Config, "RESEARCH_PARALLEL_TRACKS", 3) or 3))
+                except (TypeError, ValueError):
+                    _n_tracks = 3
+                if _n_tracks > 1:
+                    research = self._run_parallel_research_tracks(
+                        state, handoff_dir, upd, _n_tracks)
+                else:
+                    research = DeerFlowResearchRunner.run(
+                        state.prompt,
+                        handoff_dir,
+                        on_progress=upd,
+                        depth=state.options.get("depth"),
+                        language=state.options.get("research_language"),  # T5.5
+                        model=state.options.get("research_model"),        # T5.5
+                        cancel_event=cls._cancel_events.get(state.pipeline_id),
+                        on_spawn=_persist_research_pid,
+                    )
                 state.research_pid = None  # 子进程已结束，清掉以免 reconcile 误杀复用 PID
+                # PAR-2：并行轨 PID 清单也一并清空（研究阶段已结束，避免 reconcile 误杀复用 PID）。
+                state.options.pop("research_track_pids", None)
                 self._complete_stage(state, STAGE_RESEARCH, "研究完成")
             report_md: str = research["report"]
             # 双轨 Track B：角色本体档案（actor_dossier.md）。它是本体/角色抽取的主种子，
@@ -3577,7 +4155,12 @@ class PipelineOrchestrator:
             else:
                 upd(5, "构建知识图谱…")
                 builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
-                chunks = TextProcessor.split_text(report_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP)
+                # ORCH-1(5): 切块前剔除 base64/data-URI 内嵌图片（保留 alt/图注）——
+                # 图表型报告的单张内嵌图就是数万字符的 base64 噪声，切块后会整段
+                # 灌进图谱 episode。仅影响建图输入；本体/报告落盘仍用原文。
+                _graph_report_md = _strip_data_uri_images(report_md)
+                _graph_dossier_md = _strip_data_uri_images(dossier_md) if dossier_md else dossier_md
+                chunks = TextProcessor.split_text(_graph_report_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP)
                 # 双轨：角色本体档案非空时也切块并前置注入（角色中心内容先种入图谱，
                 # 再由广覆盖研究报告补充）。dynamic-band 用 len(chunks) 重算仍成立。旗标关闭/
                 # Track B 缺失时 dossier_md 为 None/""，chunks 与今日逐字节一致。
@@ -3591,13 +4174,13 @@ class PipelineOrchestrator:
                 _chunk_src = str(getattr(Config, "GRAPH_CHUNK_SOURCE", "both") or "both").strip().lower()
                 _have_dossier = bool(dossier_md and dossier_md.strip())
                 if _have_dossier and _chunk_src == "dossier_only":
-                    chunks = TextProcessor.split_text(dossier_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP)
+                    chunks = TextProcessor.split_text(_graph_dossier_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP)
                     state.options["graph_chunk_source"] = "dossier_only"
                 elif _chunk_src == "report_only":
                     # 报告 chunk 已在 `chunks` 中；dossier 有意不再切块。
                     state.options["graph_chunk_source"] = "report_only"
                 elif _have_dossier:
-                    chunks = TextProcessor.split_text(dossier_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP) + chunks
+                    chunks = TextProcessor.split_text(_graph_dossier_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP) + chunks
                     state.options["graph_chunk_source"] = "both"
                 self._recompute_dynamic_bands(state, chunk_count=len(chunks))  # T6.7: 已知 chunk 数→重排区间
                 graph_id = builder.create_graph(name=project.name)
@@ -4121,6 +4704,12 @@ class PipelineOrchestrator:
                         _base_sim_id = _bd.get("simulation_id")
                     except Exception:
                         _base_sim_id = None
+                # VIZ-2: 图表清单（charts.json：{title, caption, source_data}）随研究 handoff 一并
+                # 钉入报告构造（缺失/关闭 PIPELINE_VIZ_ARTIFACTS 时为 None，报告链自行按需消费）。
+                _charts_manifest = None
+                if bool(getattr(Config, "PIPELINE_VIZ_ARTIFACTS", True)):
+                    _hd_viz = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+                    _charts_manifest = _read_json(os.path.join(_hd_viz, "charts", "charts.json"))
                 agent = ReportAgent(
                     graph_id=graph_id,
                     simulation_id=sim_state.simulation_id,
@@ -4132,6 +4721,7 @@ class PipelineOrchestrator:
                     research_report=report_md,
                     scenario_label=_scenario_label,
                     base_simulation_id=_base_sim_id,
+                    charts_manifest=_charts_manifest,
                 )
 
                 def report_cb(stage: str, progress: int, message: str):

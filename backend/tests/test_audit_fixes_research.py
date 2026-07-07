@@ -317,9 +317,31 @@ class TestCoverageProbe:
         assert "Modern Mercantilism" not in gaps["missing_named_entities"]
         assert "Ray Dalio" in gaps["missing_named_entities"]
 
-    def test_standard_depth_gate_is_opt_in(self, mod, tmp_path, monkeypatch):
-        # flag off (default): one turn, no top-up even with 0 fetched sources
+    def test_standard_depth_gate_defaults_on(self, mod, tmp_path, monkeypatch):
+        # SCALE-2: flag now defaults ON — with 0 fetched sources the standard turn is
+        # followed by bounded top-up passes (RESEARCH_COVERAGE_GATE_MAX_ROUNDS, default 2
+        # for standard); the run still returns the original report when re-synthesis fails.
         monkeypatch.delenv("RESEARCH_COVERAGE_GATE_STANDARD", raising=False)
+        monkeypatch.delenv("RESEARCH_COVERAGE_GATE_MAX_ROUNDS", raising=False)
+        monkeypatch.delenv("RESEARCH_MIN_SOURCES", raising=False)
+        calls = []
+
+        def _stream(message, thread_id=None, recursion_limit=None):
+            calls.append(message)
+            return iter([SimpleNamespace(type="messages-tuple", data={"type": "ai", "id": "m", "content": "report body"})])
+
+        client = SimpleNamespace(stream=_stream)  # no get_thread → re-synthesis degrades safely
+        plog = _plog(mod, tmp_path)
+        try:
+            out = mod.run_research_stage(client, "q", "standard", None, "claude", "tid", plog)
+        finally:
+            plog.close()
+        assert out == "report body"
+        assert len(calls) == 3  # opening turn + 2 top-up rounds
+
+    def test_standard_depth_gate_opt_out_restores_single_turn(self, mod, tmp_path, monkeypatch):
+        # flag explicitly off: one turn, no top-up even with 0 fetched sources (old default)
+        monkeypatch.setenv("RESEARCH_COVERAGE_GATE_STANDARD", "false")
         calls = []
 
         def _stream(message, thread_id=None, recursion_limit=None):

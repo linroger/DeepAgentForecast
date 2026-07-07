@@ -112,7 +112,7 @@ def test_skeleton_inserts_part2_and_part3_in_order(report_folder):
     # ONE LLM call，提示词含骨架/市场包/各章要点与默认词数上限
     assert len(fake.calls) == 1
     prompt = fake.calls[0]["messages"][0]["content"]
-    assert "AT MOST 1800 words" in prompt
+    assert "AT MOST 2800 words" in prompt            # RQ-1 默认词数上限 1800→2800
     assert "MARKET-PACK" in prompt
     assert "[Section key points]" in prompt and "Section A" in prompt
     assert "[Forecast spine]" in prompt
@@ -125,7 +125,7 @@ def test_skeleton_consumes_page_budget(report_folder):
     a = _mk_agent(requirement="Please keep the submission to 8 pages or less.", llm=fake)
     a._apply_three_part_skeleton("rid-2", ReportStub(_ASSEMBLED_MD))
     prompt = fake.calls[0]["messages"][0]["content"]
-    assert "AT MOST 1200 words" in prompt            # 8 页 × 150 词/页，钳在 [600, 1800]
+    assert "AT MOST 1200 words" in prompt            # 8 页 × 150 词/页，钳在 [600, 2800]（RQ-1）
 
 
 def test_skeleton_idempotent_and_single_llm_call(report_folder):

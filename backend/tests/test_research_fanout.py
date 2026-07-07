@@ -80,7 +80,14 @@ def test_scoped_worker_prompt_contains_focus_and_question():
 
 
 def test_fanout_absorption_prompt_truncates_and_embeds_notes():
-    big = "N" * 30000
+    # PAR-1: absorption cap raised 24000→100000 so parallel worker notes reach the main
+    # thread mostly uncut. Truncation now only kicks in past the new cap; a 30k note that
+    # used to be truncated must now pass through whole.
+    mid = "N" * 30000
+    p_mid = dr.build_fanout_absorption_prompt("Q?", mid, None)
+    assert "truncated" not in p_mid
+    assert mid in p_mid
+    big = "N" * 120000
     p = dr.build_fanout_absorption_prompt("Q?", big, None)
     assert "truncated" in p
     assert "Q?" in p

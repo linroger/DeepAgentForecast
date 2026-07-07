@@ -6,7 +6,7 @@ Report API路由
 import os
 import traceback
 import threading
-from flask import request, jsonify, send_file, Response
+from flask import request, jsonify, send_file, send_from_directory, Response
 
 from . import report_bp
 from ..config import Config
@@ -448,6 +448,161 @@ def download_report(report_id: str):
             "success": False,
             "error": str(e),
             "traceback": traceback.format_exc()
+        }), 500
+
+
+# ============== 双语报告 Markdown 接口（BILINGUAL）==============
+
+@report_bp.route('/<report_id>/full_report.<lang>.md', methods=['GET'])
+def get_report_translation_md(report_id: str, lang: str):
+    """服务自动生成的双语版本 reports/{id}/full_report.<lang>.md（lang ∈ {en, zh}）。
+
+    镜像 /download 的原文件返回约定：文件存在则以 text/markdown 返回，否则 404。lang 非
+    {en, zh} 或该语种版本未生成（REPORT_BILINGUAL 关闭 / 同语种 / 翻译失败）→ 404（degrade-safe）。
+    """
+    try:
+        lang = (lang or '').strip().lower()
+        if lang not in ReportManager._TRANSLATION_LANGS:
+            return jsonify({
+                "success": False,
+                "error": f"不支持的语种: {lang}（仅 en / zh）"
+            }), 404
+
+        md_path = ReportManager._get_report_translation_path(report_id, lang)
+        if not os.path.exists(md_path):
+            return jsonify({
+                "success": False,
+                "error": f"该报告暂无 {lang} 版本: {report_id}"
+            }), 404
+
+        return send_file(
+            md_path,
+            mimetype="text/markdown",
+            as_attachment=True,
+            download_name=f"{report_id}.{lang}.md",
+        )
+
+    except Exception as e:
+        logger.error(f"获取双语报告失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+# ============== 报告 PDF 导出接口（PDF-1）==============
+
+@report_bp.route('/<report_id>/pdf', methods=['GET'])
+def get_report_pdf(report_id: str):
+    """惰性构建并返回报告 PDF（reports/{id}/full_report.pdf）。
+
+    首次访问（或 full_report.md 更新后）触发一次 pandoc+xelatex 构建（相对图表路径绝对化、
+    CJK 字体 PingFang SC、--toc；失败回退 markdown→HTML→PyMuPDF），随后按 full_report.md
+    的 mtime 缓存复用。REPORT_PDF_EXPORT 关闭 / 报告缺失 / 构建失败 → 404（degrade-safe）。
+
+    BILINGUAL：可选 ?lang=en|zh 从双语版 full_report.<lang>.md 构建 full_report.<lang>.pdf
+    （复用同一套 export 机制）；缺省/非法 lang → 主报告 PDF（默认，行为与历史一致）。
+
+    与同蓝图的 /download（Markdown）、/charts（图表资源）共用 /api/report/<id>/... 前缀约定。
+    """
+    try:
+        report = ReportManager.get_report(report_id)
+        if not report:
+            return jsonify({
+                "success": False,
+                "error": f"报告不存在: {report_id}"
+            }), 404
+
+        # BILINGUAL：?lang= 仅接受 {en, zh}，其余（含缺省）回退主报告。
+        lang = (request.args.get('lang') or '').strip().lower()
+        lang = lang if lang in ReportManager._TRANSLATION_LANGS else None
+
+        pdf_path = ReportManager.export_pdf(report_id, lang=lang)
+        if not pdf_path or not os.path.exists(pdf_path):
+            return jsonify({
+                "success": False,
+                "error": "PDF 导出不可用（未开启 REPORT_PDF_EXPORT、缺该语种版本或构建失败）"
+            }), 404
+
+        download_name = f"{report_id}.{lang}.pdf" if lang else f"{report_id}.pdf"
+        return send_file(
+            pdf_path,
+            as_attachment=True,
+            download_name=download_name,
+            mimetype="application/pdf",
+        )
+
+    except Exception as e:
+        logger.error(f"导出报告 PDF 失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+# ============== 报告可视化资源接口（VIZ-1）==============
+
+@report_bp.route('/<report_id>/charts/<path:filename>', methods=['GET'])
+def get_report_chart(report_id: str, filename: str):
+    """服务报告可视化产物 reports/{id}/charts/<file>（PNG 图表 / Mermaid .mmd 代码块）。
+
+    与 full_report.md 同源：文件都落在报告文件夹下，这里以 charts/ 子目录暴露。viz_manifest.json
+    里的相对路径（'charts/xxx.png'）对 Web（经此端点）与 PDF（相对 report_dir 的文件系统路径）
+    都成立。send_from_directory 负责防目录穿越（filename 越界解析会 404）。
+    """
+    try:
+        charts_dir = os.path.join(
+            ReportManager._get_report_folder(report_id), "charts"
+        )
+        if not os.path.isdir(charts_dir):
+            return jsonify({
+                "success": False,
+                "error": f"报告无可视化产物: {report_id}"
+            }), 404
+        # send_from_directory 对 filename 做安全解析（拒绝 ../ 逃逸），越界或缺失 → 404
+        return send_from_directory(charts_dir, filename)
+    except Exception as e:
+        # werkzeug 对非法路径抛 NotFound（404）；其余异常统一 404 避免泄漏路径细节
+        logger.warning(f"获取报告图表失败: report_id={report_id}, file={filename}, err={e}")
+        return jsonify({
+            "success": False,
+            "error": f"图表不存在: {filename}"
+        }), 404
+
+
+@report_bp.route('/<report_id>/viz-manifest', methods=['GET'])
+def get_report_viz_manifest(report_id: str):
+    """获取报告可视化清单 reports/{id}/viz_manifest.json（[{path,type,source,caption,placement_hint}]）。
+
+    无清单（未开启可视化 / 无可渲染工件）→ 返回空列表（degrade-safe，前端据此不渲染图区）。
+    """
+    try:
+        import json as _json
+        manifest_path = os.path.join(
+            ReportManager._get_report_folder(report_id), "viz_manifest.json"
+        )
+        if not os.path.exists(manifest_path):
+            return jsonify({
+                "success": True,
+                "data": [],
+                "count": 0
+            })
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = _json.load(f)
+        if not isinstance(manifest, list):
+            manifest = []
+        return jsonify({
+            "success": True,
+            "data": manifest,
+            "count": len(manifest)
+        })
+    except Exception as e:
+        logger.error(f"获取可视化清单失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
         }), 500
 
 

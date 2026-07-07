@@ -33,3 +33,8 @@ python-dotenv>=1.0.0
 
 # 数据验证
 pydantic>=2.0.0
+
+# ============= 报告可视化（VIZ-1）=============
+# 确定性报告图表渲染（Agg 无头后端生成 PNG）。可选依赖：未安装时可视化器自动降级为
+# 仅 Mermaid 模式（见 app/services/report_visualizer.py 的 MATPLOTLIB_AVAILABLE 标志）。
+matplotlib>=3.7.0
