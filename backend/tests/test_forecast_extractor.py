@@ -11,10 +11,12 @@ from app.services.forecast_extractor import (
     extract_binary_forecasts,
     extract_structured_forecast,
     parse_requirement_years,
+    render_binary_forecasts_block,
     render_forecast_spine_block,
     render_resolution_block,
     slice_head_tail,
 )
+from app.services.ensemble import pool_binary_forecasts
 from tests.conftest import FakeLLMClient
 
 
@@ -348,3 +350,139 @@ def test_extract_binary_forecasts_anchors_and_emits_comparison():
     assert "market_comparison" in out and out["market_comparison"]["anchored_count"] == 1
     # F1 divergence 0.25-0.30 = -0.05 (<=10pp) → no revision call was needed
     assert "market_anchor" not in next(b for b in out["binary_forecasts"] if b["id"] == "F2")
+
+
+# ------------------------------------------------- ITEM 12: multi-model ensemble
+def _ensemble_config(monkeypatch, *, models="modelb", extremize=None, threshold=0.15):
+    """Configure the multi-model ensemble deterministically for a test.
+
+    ``extremize=None`` → arithmetic-mean pooling (predictable math); contrarian /
+    sim-sensitivity top-ups disabled so the primary makes exactly one draw call."""
+    from app.config import Config
+    monkeypatch.setattr(Config, "FORECAST_ENSEMBLE_MODELS", models, raising=False)
+    monkeypatch.setattr(Config, "ENSEMBLE_EXTREMIZE_A", extremize, raising=False)
+    monkeypatch.setattr(Config, "FORECAST_ENSEMBLE_SPREAD_THRESHOLD", threshold, raising=False)
+    monkeypatch.setattr(Config, "FORECAST_BINARY_CONTRARIAN", False, raising=False)
+    monkeypatch.setattr(Config, "FORECAST_SIM_SENSITIVITY", False, raising=False)
+
+
+def _binary(bid, stmt, prob, theme="t1"):
+    return {"id": bid, "statement": stmt, "probability": prob,
+            "resolution_criteria": f"metric > 10% by 2027 ({bid})", "theme": theme,
+            "horizon_year": 2027}
+
+
+def test_ensemble_pools_across_models_and_flags_spread(monkeypatch):
+    _ensemble_config(monkeypatch)
+    primary = FakeLLMClient(provider="primary", json_responses=[
+        {"binary_forecasts": [_binary("F1", "Alpha exceeds 10% by 2027", 0.20),
+                              _binary("F2", "Beta exceeds 500 by 2027", 0.80, theme="t2")]}])
+    secondary = FakeLLMClient(provider="modelb", json_responses=[
+        {"binary_forecasts": [_binary("F1", "Alpha exceeds 10% by 2027", 0.60),
+                              _binary("F2", "Beta exceeds 500 by 2027", 0.82, theme="t2")]}])
+    out = extract_binary_forecasts(
+        "dossier", primary, min_count=2, language="English",
+        ensemble_client_factory=lambda name: {"modelb": secondary}.get(name))
+    f1 = next(b for b in out["binary_forecasts"] if b["id"] == "F1")
+    f2 = next(b for b in out["binary_forecasts"] if b["id"] == "F2")
+    # statement-keyed match; arithmetic-mean pooling overrides the published probability
+    assert f1["ensemble"]["models"] == ["primary", "modelb"]
+    assert f1["ensemble"]["probs"] == [0.2, 0.6]
+    assert f1["ensemble"]["pooled"] == 0.4
+    assert f1["probability"] == 0.4
+    assert f1["ensemble"]["spread"] > 0.15          # stdev([0.2,0.6]) ≈ 0.2828 → disagreement
+    assert f2["ensemble"]["spread"] < 0.15          # stdev([0.8,0.82]) ≈ 0.0141 → agreement
+    assert f2["probability"] == 0.81
+    ens = out["binary_quality"]["ensemble"]
+    assert ens["pooled_models"] == ["modelb"]
+    assert ens["low_agreement"] == ["F1"]
+    assert ens["skipped"] == []
+    assert any("cross-model disagreement" in s for s in out["binary_quality"].get("issues", []))
+    # the secondary client was invoked exactly once (one draw)
+    assert sum(1 for c in secondary.calls if c["kind"] == "chat_json") == 1
+
+
+def test_ensemble_id_matching_when_statements_differ(monkeypatch):
+    _ensemble_config(monkeypatch, models="mb")
+    primary = FakeLLMClient(provider="primary", json_responses=[
+        {"binary_forecasts": [_binary("F1", "Alpha exceeds 10% by 2027", 0.30)]}])
+    # different wording → statement key won't match, but id "F1" does (id fallback)
+    secondary = FakeLLMClient(provider="mb", json_responses=[
+        {"binary_forecasts": [_binary("F1", "Paraphrased alpha clause over ten percent", 0.50)]}])
+    out = extract_binary_forecasts(
+        "d", primary, min_count=1, language="English",
+        ensemble_client_factory=lambda name: secondary if name == "mb" else None)
+    f1 = out["binary_forecasts"][0]
+    assert f1["ensemble"]["models"] == ["primary", "mb"]
+    assert f1["ensemble"]["probs"] == [0.3, 0.5]
+    assert f1["probability"] == 0.4
+
+
+def test_ensemble_off_by_default_is_byte_identical(monkeypatch):
+    # FORECAST_ENSEMBLE_MODELS empty → the entire ensemble path is skipped.
+    from app.config import Config
+    monkeypatch.setattr(Config, "FORECAST_ENSEMBLE_MODELS", "", raising=False)
+    monkeypatch.setattr(Config, "FORECAST_BINARY_CONTRARIAN", False, raising=False)
+    monkeypatch.setattr(Config, "FORECAST_SIM_SENSITIVITY", False, raising=False)
+    primary = FakeLLMClient(provider="primary", json_responses=[
+        {"binary_forecasts": [_binary("F1", "Alpha exceeds 10% by 2027", 0.30)]}])
+    out = extract_binary_forecasts("d", primary, min_count=1, language="English")
+    assert all("ensemble" not in b for b in out["binary_forecasts"])
+    assert "ensemble" not in out["binary_quality"]
+    assert out["binary_forecasts"][0]["probability"] == 0.3   # untouched primary
+
+
+def test_ensemble_secondary_failure_is_skipped_never_blocks(monkeypatch):
+    _ensemble_config(monkeypatch, models="badmodel")
+
+    def _factory(name):
+        raise RuntimeError(f"cannot build client for {name}")
+
+    primary = FakeLLMClient(provider="primary", json_responses=[
+        {"binary_forecasts": [_binary("F1", "Alpha exceeds 10% by 2027", 0.30)]}])
+    out = extract_binary_forecasts("d", primary, min_count=1, language="English",
+                                   ensemble_client_factory=_factory)
+    f1 = out["binary_forecasts"][0]
+    assert "ensemble" not in f1                      # nothing pooled
+    assert f1["probability"] == 0.3                  # primary preserved
+    ens = out["binary_quality"]["ensemble"]
+    assert ens["skipped"] == ["badmodel"]
+    assert ens["pooled_models"] == [] and ens["low_agreement"] == []
+
+
+def test_pool_binary_unmatched_keeps_primary():
+    primary = [{"id": "F1", "statement": "alpha", "probability": 0.30},
+               {"id": "F2", "statement": "beta", "probability": 0.70}]
+    secondary = {"mb": [{"id": "F1", "statement": "alpha", "probability": 0.50}]}  # only F1
+    low = pool_binary_forecasts(primary, secondary, primary_model="primary",
+                                extremize_a=None, spread_threshold=0.05)
+    assert primary[0]["ensemble"]["probs"] == [0.3, 0.5]
+    assert primary[0]["probability"] == 0.4
+    assert "ensemble" not in primary[1]              # F2 had no secondary → keep primary
+    assert primary[1]["probability"] == 0.70
+    assert low == ["F1"]                             # stdev([0.3,0.5]) ≈ 0.1414 > 0.05
+
+
+def test_render_binary_block_shows_pm_spread_and_low_agreement():
+    forecast = {
+        "binary_forecasts": [
+            {"id": "F1", "statement": "Alpha", "probability": 0.40, "resolution_criteria": "x",
+             "theme": "t1", "ensemble": {"models": ["a", "b"], "probs": [0.2, 0.6],
+                                         "pooled": 0.4, "spread": 0.2828}},
+            {"id": "F2", "statement": "Beta", "probability": 0.81, "resolution_criteria": "y",
+             "theme": "t2", "ensemble": {"models": ["a", "b"], "probs": [0.8, 0.82],
+                                         "pooled": 0.81, "spread": 0.0141}},
+        ],
+        "binary_quality": {"count": 2, "conviction_count": 1, "sharp_criteria_count": 0,
+                           "ensemble": {"pooled_models": ["b"], "low_agreement": ["F1"],
+                                        "spread_threshold": 0.15}},
+    }
+    md = render_binary_forecasts_block(forecast, language="English")
+    assert "±28%" in md            # F1 spread rendered
+    assert "⚠" in md               # F1 exceeds threshold → low-agreement marker
+    assert "±1%" in md             # F2 spread rendered (tight)
+    assert "cross-model disagreement" in md
+    # a plain (non-ensemble) forecast is byte-unchanged (no ± column noise)
+    plain = {"binary_forecasts": [{"id": "F1", "statement": "X", "probability": 0.5,
+                                   "resolution_criteria": "z", "theme": "t"}]}
+    assert "±" not in render_binary_forecasts_block(plain, language="English")

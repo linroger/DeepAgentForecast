@@ -88,6 +88,35 @@ def test_syncs_skill_files_too(tmp_path, monkeypatch):
     assert deployed_skill.read_text() == "NEW cast-cap rule\n"
 
 
+def test_syncs_config_reflected_tool_modules(tmp_path, monkeypatch):
+    """market_tools/search_tools/cached_fetch are registered in config.yaml as BARE
+    module names and imported via sys.path[0]==deer-flow/; a bridge-only edit must
+    re-sync them to the deployed dir or web_search/web_fetch/prediction_market tools
+    fail to import at runtime (regression: search_tools/cached_fetch were absent from
+    deer-flow/ entirely while config.yaml referenced them)."""
+    repo_root = tmp_path
+    bridge_dir = repo_root / "deerflow_bridge"
+    deployed_dir = repo_root / "deer-flow"
+    _write(bridge_dir / "deerflow_research.py", "same\n")
+    _write(deployed_dir / "deerflow_research.py", "same\n")
+    # market_tools already deployed but stale; search_tools/cached_fetch missing entirely.
+    _write(bridge_dir / "market_tools.py", "# NEW market_tools\n")
+    _write(deployed_dir / "market_tools.py", "# OLD market_tools\n")
+    _write(bridge_dir / "search_tools.py", "# search_tools body\n")
+    _write(bridge_dir / "cached_fetch.py", "# cached_fetch body\n")
+
+    monkeypatch.setattr(
+        "app.services.pipeline_orchestrator.__file__",
+        str(repo_root / "backend" / "app" / "services" / "pipeline_orchestrator.py"),
+    )
+
+    _sync_deerflow_bridge_if_stale(str(deployed_dir))
+
+    assert (deployed_dir / "market_tools.py").read_text() == "# NEW market_tools\n"
+    assert (deployed_dir / "search_tools.py").read_text() == "# search_tools body\n"
+    assert (deployed_dir / "cached_fetch.py").read_text() == "# cached_fetch body\n"
+
+
 def test_degrades_safely_when_bridge_dir_missing(tmp_path, monkeypatch):
     """No deerflow_bridge/ source (e.g. pure production deploy) -> silent no-op, never raises."""
     repo_root = tmp_path

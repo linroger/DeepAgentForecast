@@ -88,6 +88,125 @@ def test_status_snapshot_shape():
     assert s["total"]["total_tokens"] == 200
 
 
+# ---------------------------------------------------------------- ITEM-18 tests
+def test_cost_override_from_env(monkeypatch):
+    # LLM_COST_PER_MTOK ($/Mtok) overrides/extends the built-in per-1K table.
+    from app.config import Config
+    # 7.0 $/Mtok in, 21.0 $/Mtok out -> $/1K = 0.007 / 0.021.
+    monkeypatch.setattr(
+        Config, "LLM_COST_PER_MTOK",
+        '{"openai": [7.0, 21.0], "myprov": [1.0, 2.0]}', raising=False)
+    # Override wins over the built-in openai (5.0/15.0) rate.
+    assert T.estimate_cost("openai", 1000, 1000) == pytest.approx(0.007 + 0.021)
+    # New provider absent from built-ins is now priced from the override.
+    assert T.estimate_cost("myprov", 1000, 0) == pytest.approx(0.001)
+
+
+def test_cost_override_empty_falls_back_to_builtin(monkeypatch):
+    from app.config import Config
+    monkeypatch.setattr(Config, "LLM_COST_PER_MTOK", "", raising=False)
+    # Built-in minimax rate stays authoritative; unknown provider -> 0 (tokens only).
+    assert T.estimate_cost("minimax", 1000, 1000) == pytest.approx(0.0003 + 0.0011)
+    assert T.estimate_cost("no-such-provider-xyz", 5000, 5000) == 0.0
+
+
+def test_cost_override_malformed_is_ignored(monkeypatch):
+    from app.config import Config
+    monkeypatch.setattr(Config, "LLM_COST_PER_MTOK", "{not valid json", raising=False)
+    # Parse failure -> no override, behaves exactly as built-in default (degrade-safe).
+    assert T.estimate_cost("minimax", 1000, 1000) == pytest.approx(0.0003 + 0.0011)
+
+
+def test_build_stage_telemetry_merges_tokens_cost_and_walls():
+    T.LLMMeter.reset("stg")
+    T.LLMMeter.record("openai", "gpt", 1000, 500, 120.0, stage="research", run_id="stg")
+    T.LLMMeter.record("openai", "gpt", 2000, 800, 80.0, stage="report", run_id="stg")
+    # graph stage has wall time but zero LLM calls; run stage has neither here.
+    tel = T.build_stage_telemetry("stg", {"research": 42.0, "graph": 5.5, "report": 10.0})
+    stages = tel["by_stage"]
+    # union of meter stages and wall stages.
+    assert set(stages) == {"research", "graph", "report"}
+    assert stages["research"] == {
+        "calls": 1, "input_tokens": 1000, "output_tokens": 500,
+        "est_cost_usd": pytest.approx(0.0050 * 1 + 0.0150 * 0.5),
+        "wall_seconds": 42.0,
+    }
+    # wall-only stage: zero token/call, wall preserved.
+    assert stages["graph"]["calls"] == 0
+    assert stages["graph"]["input_tokens"] == 0
+    assert stages["graph"]["wall_seconds"] == 5.5
+    # totals sum across stages.
+    assert tel["total"]["calls"] == 2
+    assert tel["total"]["input_tokens"] == 3000
+    assert tel["total"]["output_tokens"] == 1300
+    assert tel["total"]["wall_seconds"] == pytest.approx(57.5)
+    assert tel["total"]["est_cost_usd"] == pytest.approx(
+        sum(s["est_cost_usd"] for s in stages.values()))
+
+
+def test_build_stage_telemetry_empty_meter_wall_only_skeleton():
+    T.LLMMeter.reset("stg-empty")
+    tel = T.build_stage_telemetry("stg-empty", {"prepare": 3.0})
+    assert tel["by_stage"]["prepare"] == {
+        "calls": 0, "input_tokens": 0, "output_tokens": 0,
+        "est_cost_usd": 0.0, "wall_seconds": 3.0,
+    }
+    assert tel["total"]["calls"] == 0
+    # No stage_walls and empty meter -> empty by_stage (degrade-safe, no raise).
+    tel2 = T.build_stage_telemetry("stg-empty", None)
+    assert tel2["by_stage"] == {}
+    assert tel2["total"]["wall_seconds"] == 0.0
+
+
+def test_render_telemetry_appendix_deterministic_table():
+    tel = {
+        "by_stage": {
+            "report": {"calls": 3, "input_tokens": 2000, "output_tokens": 800,
+                       "est_cost_usd": 0.0221, "wall_seconds": 10.0},
+            "research": {"calls": 1, "input_tokens": 1000, "output_tokens": 500,
+                         "est_cost_usd": 0.0125, "wall_seconds": 42.0},
+            "custom_stage": {"calls": 2, "input_tokens": 10, "output_tokens": 20,
+                             "est_cost_usd": 0.0, "wall_seconds": 1.0},
+        },
+        "total": {"calls": 6, "input_tokens": 3010, "output_tokens": 1320,
+                  "est_cost_usd": 0.0346, "wall_seconds": 53.0},
+        "cost_estimated": False,
+        "cost_basis": "api",
+    }
+    md = T.render_telemetry_appendix(tel)
+    assert md.startswith("## Run Telemetry")
+    lines = md.splitlines()
+    # research (known order) precedes report (known order) precedes custom_stage (extra, appended).
+    order = [i for i, ln in enumerate(lines)
+             if ln.startswith("| research") or ln.startswith("| report")
+             or ln.startswith("| custom_stage")]
+    labels = [lines[i].split("|")[1].strip() for i in order]
+    assert labels == ["research", "report", "custom_stage"]
+    # thousands separators + TOTAL row present.
+    assert "| 2,000 |" in md
+    assert "**TOTAL**" in md
+    assert "0.0346" in md
+
+
+def test_render_telemetry_appendix_empty_returns_blank():
+    assert T.render_telemetry_appendix(None) == ""
+    assert T.render_telemetry_appendix({"by_stage": {}}) == ""
+
+
+def test_render_telemetry_appendix_estimated_and_basis_footnote():
+    tel = {
+        "by_stage": {"run": {"calls": 1, "input_tokens": 5, "output_tokens": 5,
+                             "est_cost_usd": 0.0, "wall_seconds": 2.0}},
+        "total": {"calls": 1, "input_tokens": 5, "output_tokens": 5,
+                  "est_cost_usd": 0.0, "wall_seconds": 2.0},
+        "cost_estimated": True,
+        "cost_basis": "subscription",
+    }
+    md = T.render_telemetry_appendix(tel)
+    assert "rough estimate" in md
+    assert "Cost basis: subscription" in md
+
+
 # ---------------------------------------------------------------- R2-EXEC-6 tests
 def test_http_client_disabled_by_default(monkeypatch):
     from app.config import Config

@@ -704,16 +704,27 @@ tool_groups:
 # Configure available tools for the agent to use
 
 tools:
-  # Web search tool (uses DuckDuckGo, no API key required)
+  # ITEM 6 —— web_search 后端调度器（degrade-safe，env 择优选后端）。
+  # YAML 无法按 env 条件在 serper/tavily/ddg 之间挑选，故用一个**单一** web_search 工具在
+  # 调用时按已配的 key 择优：SERPER_API_KEY→Serper（Google），否则 TAVILY_API_KEY→Tavily，
+  # 都没配（零 key）→ 社区 DDG。它把调用**原样委派**给 harness 自带的对应 community 工具函数
+  # （deerflow.community.{serper,tavily,ddg_search}.tools），因此行为与直接在此选那个 provider
+  # 逐字节一致；被委派工具仍读**本** stanza 的 max_results（10），同参。零 key → byte-equivalent
+  # DDG 行为。裸模块名（search_tools:web_search_tool）经 reflection 从脚本目录导入，同 market_tools。
   - name: web_search
     group: web
-    use: deerflow.community.ddg_search.tools:web_search_tool
+    use: search_tools:web_search_tool
     # 深研究单轮吃 10 条结果比 5 条覆盖面翻倍，且成本只在 prompt 长度上（无额外请求）。
+    # 本值同时被调度器委派的后端读取（serper/tavily/ddg 都读 get_tool_config("web_search")）。
     max_results: 10
-    # backend: auto          # DDGS backend(s): auto, duckduckgo, brave, wikipedia, etc.
-    # region: wt-wt          # wt-wt is normalized for Wikipedia when backend includes auto/all/wikipedia.
-    # safesearch: moderate   # on, moderate, off
+    # backend: auto          # DDG 后端专用：DDGS backend(s) — auto, duckduckgo, brave, wikipedia, ...
+    # region: wt-wt          # DDG 后端专用：wt-wt is normalized for Wikipedia when backend includes auto/all/wikipedia.
+    # safesearch: moderate   # DDG 后端专用：on, moderate, off
 
+  # 说明：下面几段单一 provider 的 web_search stanza 现由上方 search_tools 调度器统一取代
+  # （启用其一会与调度器的 web_search 同名冲突，请保持注释）。要**强制**只用某个后端，可注释掉
+  # 上方 search_tools 段并解开对应段——不改变各 provider 的实现路径，仅换回静态选择。
+  #
   # Web search tool (uses Serper - Google Search API, requires SERPER_API_KEY)
   # Serper provides real-time Google Search results. Sign up at https://serper.dev
   # Note: set SERPER_API_KEY in your environment before starting the app, or
@@ -762,12 +773,16 @@ tools:
   #   use: deerflow.community.exa.tools:web_fetch_tool
   #   # api_key: $EXA_API_KEY
 
-  # Web fetch tool (uses Jina AI reader)
+  # ITEM 10 —— web_fetch 跨 run 源缓存（透明包裹 Jina AI reader）。
+  # cached_fetch 在 jina 之外加一层磁盘缓存：同一 URL 跨 pass/跨 run（续跑/双轨/fan-out/覆盖
+  # top-up）命中即秒回，返回类型与 jina 一致（str），对 agent 透明。缓存目录/TTL/上限经 env
+  # RESEARCH_SOURCE_CACHE_DIR / _TTL_H(默认72) / _MAX_MB(默认500) 调；失败/哨兵/死抓取(<200字符)
+  # 绝不落盘。真正抓取仍走 jina，且它读**本** stanza 的 timeout(30)——与直接配置 jina 同参。
   # 30s：重量级一手来源（监管文件/年报/长 PDF 转写）经 Jina reader 常超过 10s，
   # 超时=整条来源丢失；research 回合本身是分钟级的，等 30s 换全文值得。
   - name: web_fetch
     group: web
-    use: deerflow.community.jina_ai.tools:web_fetch_tool
+    use: cached_fetch:web_fetch_tool
     timeout: 30
 
   # Web fetch tool (uses InfoQuest)
@@ -1128,17 +1143,18 @@ sandbox:
 # 子代理长什么样、能用哪些工具/技能、跑多久。未加 `--subagents` 时该块被解析但从不触达。
 # 字段名对齐 harness 的 SubagentsAppConfig / CustomSubagentConfig（config/subagents_config.py）。
 #
-# 并发上限说明（NOT configurable）：harness 把单条 model 回复里的并行 `task` 调用数硬性
-# 截到 MAX_CONCURRENT_SUBAGENTS=3（SubagentLimitMiddleware，取值域被 clamp 到 [2,4]），
-# 且调度/执行线程池各 max_workers=3——均为模块级常量，无 env/config 旋钮可调，故**无法**抬到 5；
-# 实测上限是 4（需改 harness 源码，本轮不动 deer-flow 门控目录）。研究提示词因此只让 lead
-# 一次派 2–3 个并行子任务，与该硬上限对齐。
+# 并发上限（可调）：harness 把单条 model 回复里的并行 `task` 调用数截到 subagents.max_concurrent
+# （SubagentLimitMiddleware，取值域 clamp 到 [1,8]），调度线程池按 clamp 上限（8）固定开池以提供余量，
+# 实际并发由本字段封顶；因 `task` 工具在单响应内 await 各子代理至终态，后台同时在飞数即等于该上限。
+# env DEER_FLOW_MAX_CONCURRENT_SUBAGENTS 覆盖本 config 值（同样 clamp [1,8]，越界降级到边界、非法值忽略）。
+# 本轮设 5，研究提示词因此让 lead 一次派 3–5 个并行子任务，与该上限对齐。
 subagents:
   # 默认超时/步进：deep 子调查是 search→fetch→read 的多步活，给足预算（对齐内建 general-purpose
   # 已抬到的 1800s）。这两项是 built-in 子代理（general-purpose/bash）的全局默认；custom 子代理
   # 用它自己 custom_agents 段里的 timeout_seconds/max_turns（除非在 agents: 段给同名 per-agent 覆盖）。
   timeout_seconds: 1800   # 30 min —— 复杂多步子调查的默认上限
   max_turns: 160          # built-in 子代理的全局默认步数上限（custom 见其自身 max_turns）
+  max_concurrent: 5       # 同时在飞的并行子代理上限（clamp [1,8]；env DEER_FLOW_MAX_CONCURRENT_SUBAGENTS 覆盖）——本轮从 3 抬到 5
   # 自定义子代理类型：scoped-researcher —— 面向「一个 KIQ / 一个 actor / 一个 driver」的并行
   # 定域网页调查员。经 `task` 工具与 general-purpose/bash 并列可选。其 system_prompt 内嵌
   # deep-research 的核心纪律（S1–S4 分级、2 个独立来源三角验证、只记真实已抓取 URL、回传带

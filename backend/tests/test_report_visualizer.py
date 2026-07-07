@@ -237,7 +237,7 @@ def test_build_all_manifest_and_persist(tmp_path):
     # 每项字段齐全
     for e in manifest:
         assert set(e.keys()) == {"path", "type", "source", "caption", "placement_hint"}
-        assert e["type"] in ("mermaid", "png")
+        assert e["type"] in ("mermaid", "png", "html")
         # 相对路径落在 charts/ 且文件真实存在
         assert e["path"].startswith("charts/")
         assert os.path.exists(str(tmp_path / e["path"]))
@@ -265,13 +265,14 @@ def test_build_all_includes_png_when_matplotlib(tmp_path):
 
 
 def test_build_all_mermaid_only_fallback(tmp_path, monkeypatch):
-    # 模拟 matplotlib 缺失：build_all 只产 mermaid，绝不含 png
+    # 模拟两个可选绘图依赖（matplotlib + plotly）都缺失：build_all 只产 mermaid，绝不含 png/html
     monkeypatch.setattr(rv, "MATPLOTLIB_AVAILABLE", False)
+    monkeypatch.setattr(rv, "PLOTLY_AVAILABLE", False)
     viz = ReportVisualizer()
     manifest = viz.build_all("report_nomat", str(tmp_path), _full_artifacts())
     assert manifest  # 仍有 mermaid
     assert all(e["type"] == "mermaid" for e in manifest)
-    # charts/ 下只有 .mmd，无 .png
+    # charts/ 下只有 .mmd，无 .png/.html
     files = os.listdir(str(tmp_path / "charts"))
     assert files and all(f.endswith(".mmd") for f in files)
 
@@ -416,10 +417,11 @@ def test_build_all_price_history_from_artifact(tmp_path):
     arts = dict(_full_artifacts())
     arts["market_price_history"] = _synthetic_price_history()
     manifest = viz.build_all("report_ph", str(tmp_path), arts)
-    ph_entries = [e for e in manifest if e["source"] == "market_price_history"]
-    assert len(ph_entries) == 1
-    e = ph_entries[0]
-    assert e["type"] == "png"
+    # PNG 族恰一张市场价格历史（HTML 族若 plotly 可用会另有一张，单独校验）
+    ph_pngs = [e for e in manifest
+               if e["source"] == "market_price_history" and e["type"] == "png"]
+    assert len(ph_pngs) == 1
+    e = ph_pngs[0]
     assert e["placement_hint"] == "binary_forecasts"
     assert e["path"].startswith("charts/market_price_history_")
     _assert_png(str(tmp_path / e["path"]))
@@ -489,3 +491,123 @@ def test_price_history_deterministic_and_dedup(tmp_path):
     b = rv._normalize_price_anchors(anchors, ph)
     assert len(a) == 1 and a[0]["label"] == "F5a"
     assert [x["market_id"] for x in a] == [x["market_id"] for x in b]
+
+
+# ============================ (C) ITEM-16 plotly 交互式 HTML 族 ============================
+
+def _assert_offline_html(path):
+    """自包含 HTML 断言：文件存在、含 <html>、且整份 plotly.js 已内联（离线可开）。
+
+    离线判据用「文件体量」而非扫描 URL 子串：include_plotlyjs='inline' 会把 ~3.5MB 的 plotly.js
+    整体嵌入文档，故 HTML 必然 >1MB；若是 CDN/directory 模式则只会外链一个 <script src=...> 且
+    文档仅几 KB。（plotly.js 捆绑源码内含 mapbox/topojson 等 URL 字符串常量——仅地理图 trace 才
+    用到，我们只画 bar/scatter/stackplot，运行期零网络——故不能据 URL 子串判定「外链」。）"""
+    assert os.path.exists(path)
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    assert "<html" in html.lower()
+    assert "Plotly" in html            # plotly 运行时存在
+    # >1MB ⟺ 整份 plotly.js 已内联（CDN 模式的 HTML 仅数 KB）→ 真正离线自包含
+    assert len(html) > 1_000_000
+
+
+@pytest.mark.skipif(not rv.PLOTLY_AVAILABLE, reason="plotly not installed")
+def test_html_builders_write_self_contained_files(tmp_path):
+    charts = str(tmp_path / "charts")
+    viz = ReportVisualizer()
+    h1 = viz.build_scenario_bars_html(FORECAST, charts)
+    h2 = viz.build_model_vs_market_html(FORECAST, charts)
+    h3 = viz.build_worldstate_area_html(WORLD_STATE, charts)
+    for rel in (h1, h2, h3):
+        assert rel is not None
+        assert rel.startswith("charts/") and rel.endswith(".html")
+        _assert_offline_html(str(tmp_path / rel))
+
+
+@pytest.mark.skipif(not rv.PLOTLY_AVAILABLE, reason="plotly not installed")
+def test_html_builders_none_on_empty(tmp_path):
+    charts = str(tmp_path / "charts")
+    viz = ReportVisualizer()
+    assert viz.build_scenario_bars_html({"scenarios": []}, charts) is None
+    assert viz.build_model_vs_market_html({"binary_forecasts": []}, charts) is None
+    # 无 market_anchor → None
+    assert viz.build_model_vs_market_html(
+        {"binary_forecasts": [{"id": "F1", "probability": 0.5}]}, charts) is None
+    # 单个时间点 → 面积图无意义 → None
+    assert viz.build_worldstate_area_html(
+        {"trajectory": [{"round": 0, "shares": {"A": 1.0}}]}, charts) is None
+
+
+@pytest.mark.skipif(not rv.PLOTLY_AVAILABLE, reason="plotly not installed")
+def test_html_price_history_writes_files(tmp_path):
+    viz = ReportVisualizer()
+    charts = str(tmp_path / "charts")
+    ph = _synthetic_price_history()
+    # 恰 1 个命中锚点（F5 → SENATEOHS-26-D）→ 1 张交互式 HTML
+    paths = viz.render_market_price_history_html(ph, FORECAST["binary_forecasts"], charts)
+    assert len(paths) == 1
+    rel = paths[0]
+    assert rel.startswith("charts/market_price_history_") and rel.endswith(".html")
+    _assert_offline_html(str(tmp_path / rel))
+
+
+@pytest.mark.skipif(not rv.PLOTLY_AVAILABLE, reason="plotly not installed")
+def test_html_price_history_missing_input_safety(tmp_path):
+    viz = ReportVisualizer()
+    charts = str(tmp_path / "charts")
+    bf = FORECAST["binary_forecasts"]
+    assert viz.render_market_price_history_html(None, bf, charts) == []
+    assert viz.render_market_price_history_html({}, bf, charts) == []
+    assert viz.render_market_price_history_html(_synthetic_price_history(), None, charts) == []
+    # market_id 不命中 → []
+    assert viz.render_market_price_history_html(
+        {"OTHER": [{"t": 1, "p": 0.5}, {"t": 2, "p": 0.6}]}, bf, charts) == []
+
+
+def test_html_builders_plotly_missing_returns_none(tmp_path, monkeypatch):
+    # plotly 缺失 → 全部构建器返回 None/[]（不触碰 plotly）
+    monkeypatch.setattr(rv, "PLOTLY_AVAILABLE", False)
+    viz = ReportVisualizer()
+    charts = str(tmp_path / "charts")
+    assert viz.build_scenario_bars_html(FORECAST, charts) is None
+    assert viz.build_model_vs_market_html(FORECAST, charts) is None
+    assert viz.build_worldstate_area_html(WORLD_STATE, charts) is None
+    assert viz.render_market_price_history_html(
+        _synthetic_price_history(), FORECAST["binary_forecasts"], charts) == []
+
+
+@pytest.mark.skipif(not rv.PLOTLY_AVAILABLE, reason="plotly not installed")
+def test_build_all_includes_html_when_plotly(tmp_path):
+    viz = ReportVisualizer()
+    arts = dict(_full_artifacts())
+    arts["market_price_history"] = _synthetic_price_history()
+    manifest = viz.build_all("report_html", str(tmp_path), arts)
+    htmls = [e for e in manifest if e["type"] == "html"]
+    # scenario + model-vs-market + worldstate + 1 市场价格历史 = 4 张 HTML
+    assert len(htmls) == 4
+    hints = {e["placement_hint"] for e in htmls}
+    assert {"scenarios", "binary_forecasts", "simulation"} <= hints
+    for e in htmls:
+        assert e["path"].startswith("charts/") and e["path"].endswith(".html")
+        _assert_offline_html(str(tmp_path / e["path"]))
+
+
+@pytest.mark.skipif(not rv.PLOTLY_AVAILABLE, reason="plotly not installed")
+def test_build_all_interactive_knob_off(tmp_path, monkeypatch):
+    # REPORT_VIZ_INTERACTIVE=False → 无 html 项（PNG/Mermaid 仍生成）
+    monkeypatch.setattr(
+        rv, "_cfg",
+        lambda name, default: False if name == "REPORT_VIZ_INTERACTIVE" else default)
+    viz = ReportVisualizer()
+    manifest = viz.build_all("report_nohtml", str(tmp_path), _full_artifacts())
+    assert not any(e["type"] == "html" for e in manifest)
+    assert manifest  # 其余族仍在
+
+
+def test_build_all_plotly_missing_no_html(tmp_path, monkeypatch):
+    # plotly 缺失 → build_all 不含任何 html 项（degrade-safe），其余族不受影响
+    monkeypatch.setattr(rv, "PLOTLY_AVAILABLE", False)
+    viz = ReportVisualizer()
+    manifest = viz.build_all("report_noplotly", str(tmp_path), _full_artifacts())
+    assert not any(e["type"] == "html" for e in manifest)
+    assert manifest

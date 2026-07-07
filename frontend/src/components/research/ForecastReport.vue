@@ -13,8 +13,44 @@
       <button class="retry-btn" type="button" @click="load">{{ L('重试','Retry') }}</button>
     </div>
 
+    <!-- Progressive state: 报告生成期，按章节增量展示已完成内容（PROGRESSIVE）。 -->
+    <div v-else-if="isGenerating" class="progressive">
+      <header class="report-head">
+        <div class="report-head-left">
+          <div class="report-eyebrow">
+            <span class="diamond">◇</span>
+            <span class="panel-label">{{ L('预测报告 · 生成中','Forecast report · generating') }}</span>
+          </div>
+          <h1 class="report-title">{{ reportTitle }}</h1>
+        </div>
+        <div class="report-head-right">
+          <span class="status-pill pill-run">{{ L('生成中','Generating') }}</span>
+        </div>
+      </header>
+      <div class="report-scroll">
+        <div class="md-body">
+          <template v-if="completedPartials.length">
+            <section
+              v-for="sec in completedPartials"
+              :key="'partial-' + sec.index"
+              class="partial-section"
+            >
+              <div class="md-body-inner" v-html="renderPartial(sec.content_md)"></div>
+            </section>
+          </template>
+          <div v-else class="partial-empty">
+            {{ L('报告正在生成，章节将在完成后陆续显示…','Report is being generated; sections will appear as they complete…') }}
+          </div>
+          <div class="writing-indicator">
+            <span class="writing-dot" aria-hidden="true"></span>
+            <span class="writing-text">{{ writingSectionLabel }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Empty state -->
-    <div v-else-if="!md" class="state-panel">
+    <div v-else-if="!currentMd" class="state-panel">
       <div class="state-icon">◇</div>
       <div class="state-text">{{ L('预测报告生成后在此显示…','Forecast report will appear here once generated…') }}</div>
     </div>
@@ -56,6 +92,22 @@
             <span v-if="statusLabel" class="status-pill" :class="statusClass">
               {{ statusLabel }}
             </span>
+            <!-- BILINGUAL：语种切换（仅在存在自动翻译版本时出现）。 -->
+            <div v-if="langOptions.length > 1" class="lang-toggle" role="group" :aria-label="L('语言','Language')">
+              <button
+                v-for="opt in langOptions"
+                :key="opt.key == null ? '__primary__' : opt.key"
+                type="button"
+                class="lang-btn"
+                :class="{ active: activeLang === opt.key }"
+                :disabled="langLoading"
+                @click="switchLang(opt.key)"
+              >{{ opt.label }}</button>
+            </div>
+            <!-- PDF-1：下载当前视图对应的 PDF（原文或所选语种）。 -->
+            <a class="pdf-btn" :href="pdfHref" target="_blank" rel="noopener noreferrer">
+              {{ L('下载 PDF','Download PDF') }}
+            </a>
             <button class="copy-btn" type="button" @click="copyMarkdown">
               {{ copied ? L('已复制','Copied') : L('复制 Markdown','Copy Markdown') }}
             </button>
@@ -73,6 +125,19 @@
         </div>
 
         <div ref="scrollEl" class="report-scroll">
+          <!-- VIZ-1：图表画廊（确定性生成的 PNG/SVG 图表 + 图注）。无工件时整体不渲染。 -->
+          <section v-if="galleryCharts.length" class="chart-gallery">
+            <div class="gallery-head">
+              <span class="diamond">◇</span>
+              <span class="panel-label">{{ L('图表','Charts') }}</span>
+            </div>
+            <div class="gallery-grid">
+              <figure v-for="(c, idx) in galleryCharts" :key="'chart-' + idx" class="chart-fig">
+                <img class="chart-img" :src="c.src" :alt="c.caption || ('chart ' + (idx + 1))" loading="lazy" />
+                <figcaption v-if="c.caption" class="chart-cap">{{ c.caption }}</figcaption>
+              </figure>
+            </div>
+          </section>
           <div class="md-body" v-html="renderedHtml"></div>
         </div>
       </section>
@@ -81,8 +146,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { getReport } from '../../api/report'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import {
+  getReport, getVizManifest, getSectionsPartial,
+  getReportTranslationMd, reportPdfUrl, reportAssetUrl
+} from '../../api/report'
 import { renderMarkdown, extractHeadings } from '../../utils/markdown'
 import { L } from '../../i18n'
 
@@ -97,14 +165,41 @@ const error = ref('')
 const copied = ref(false)
 const scrollEl = ref(null)
 
+// VIZ-1：可视化清单（PNG 图表 + 图注）。空数组 → 不渲染图区（degrade-safe）。
+const vizManifest = ref([])
+// BILINGUAL：当前展示语种。null=原文（markdown_content）；否则为某翻译语种码（'en'|'zh'）。
+const activeLang = ref(null)
+const langMdCache = ref({})       // 翻译成稿缓存 { lang: markdown }
+const langLoading = ref(false)    // 翻译版本拉取中
+// PROGRESSIVE：生成期章节增量 [{index,title,status,content_md}]。
+const partialSections = ref([])
+
 let copyTimer = null
+let pollTimer = null            // sections-partial 轮询句柄
+let pollStopped = false         // 端点缺失(404)/完成后置真，避免无谓重试
+let partialUnavailable = false  // sections-partial 端点缺失(404) → 仅靠 getReport 探测完成
+
+// 生成中判定：报告已创建但尚未产出成稿（status ∈ pending/planning/generating 或成稿为空）。
+function isGeneratingStatus(s) {
+  const v = String(s || '').toLowerCase()
+  return v === 'pending' || v === 'planning' || v === 'generating'
+}
+const isGenerating = computed(() => {
+  const s = meta.value && meta.value.status
+  return !md.value && (isGeneratingStatus(s) || (!s && partialSections.value.length > 0))
+})
 
 async function load() {
+  stopPolling()
   if (!props.reportId) {
     md.value = ''
     meta.value = {}
     error.value = ''
     loading.value = false
+    vizManifest.value = []
+    activeLang.value = null
+    langMdCache.value = {}
+    partialSections.value = []
     return
   }
   loading.value = true
@@ -114,6 +209,13 @@ async function load() {
     const data = (res && res.data) || {}
     md.value = data.markdown_content || ''
     meta.value = data || {}
+    activeLang.value = null
+    // 成稿已就绪 → 拉可视化清单；否则进入生成期章节轮询（degrade-safe）。
+    if (md.value) {
+      loadVizManifest()
+    } else {
+      startPolling()
+    }
   } catch (e) {
     error.value = (e && (e.message || e.msg)) || L('报告加载失败','Failed to load report')
     md.value = ''
@@ -123,9 +225,34 @@ async function load() {
   }
 }
 
+// VIZ-1：拉取可视化清单。失败/为空 → 空数组（前端不渲染图区）。
+async function loadVizManifest() {
+  try {
+    const res = await getVizManifest(props.reportId)
+    const list = (res && res.data) || []
+    vizManifest.value = Array.isArray(list) ? list : []
+  } catch (e) {
+    vizManifest.value = []
+  }
+}
+
+// ---------- 当前展示成稿（原文 / 翻译）----------
+const currentMd = computed(() => {
+  if (activeLang.value && langMdCache.value[activeLang.value]) {
+    return langMdCache.value[activeLang.value]
+  }
+  return md.value || ''
+})
+
+// resolveUrl：把报告内相对资源路径（charts/…）重写到 /charts 端点，使内嵌图片可显示。
+const resolveAsset = (rel) => {
+  if (!props.reportId) return ''
+  return reportAssetUrl(props.reportId, rel)
+}
+
 const renderedHtml = computed(() => {
   try {
-    return renderMarkdown(md.value || '')
+    return renderMarkdown(currentMd.value || '', { resolveUrl: resolveAsset })
   } catch (e) {
     return ''
   }
@@ -133,12 +260,166 @@ const renderedHtml = computed(() => {
 
 const headings = computed(() => {
   try {
-    const list = extractHeadings(md.value || '')
+    const list = extractHeadings(currentMd.value || '')
     return Array.isArray(list) ? list : []
   } catch (e) {
     return []
   }
 })
+
+// ---------- BILINGUAL：可选语种与切换 ----------
+// translations 每条形如 {lang, source_lang, path, chars, ...}。据此构造语种切换项：
+// 首项为原文（primary，加载 markdown_content），其余为各翻译语种。
+const translations = computed(() => {
+  const list = meta.value && meta.value.translations
+  return Array.isArray(list) ? list.filter(t => t && t.lang) : []
+})
+
+function langLabel(code) {
+  const c = String(code || '').toLowerCase()
+  if (c === 'en') return 'EN'
+  if (c === 'zh') return '中文'
+  return c ? c.toUpperCase() : L('原文', 'Original')
+}
+
+const langOptions = computed(() => {
+  const t = translations.value
+  if (!t.length) return []
+  // 原文语种：取首条翻译的 source_lang（缺省则用中性 'primary'）。
+  const primaryCode = (t[0] && t[0].source_lang) || ''
+  const opts = [{ key: null, code: primaryCode, label: primaryCode ? langLabel(primaryCode) : L('原文', 'Original') }]
+  t.forEach(entry => {
+    opts.push({ key: entry.lang, code: entry.lang, label: langLabel(entry.lang) })
+  })
+  // 按语种码去重（原文语种若与某翻译重合极少见；保底避免重复项）。
+  const seen = new Set()
+  return opts.filter(o => {
+    const k = o.key == null ? '__primary__' : o.key
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+})
+
+async function switchLang(key) {
+  if (key === activeLang.value) return
+  if (key == null) { activeLang.value = null; return }
+  if (langMdCache.value[key]) { activeLang.value = key; return }
+  langLoading.value = true
+  try {
+    const res = await getReportTranslationMd(props.reportId, key)
+    // 端点返回 text/markdown 原文；axios 响应拦截器对非 JSON 直接透传字符串。
+    const text = typeof res === 'string' ? res : (res && res.data ? res.data : '')
+    if (text) {
+      langMdCache.value = { ...langMdCache.value, [key]: text }
+      activeLang.value = key
+    }
+  } catch (e) {
+    // 该语种版本不可用 → 保持当前展示（degrade-safe）。
+  } finally {
+    langLoading.value = false
+  }
+}
+
+// ---------- PDF-1：当前视图对应的 PDF 直链 ----------
+const pdfHref = computed(() => reportPdfUrl(props.reportId, activeLang.value || undefined))
+
+// ---------- VIZ-1：图表画廊（仅取图片类工件）----------
+const galleryCharts = computed(() => {
+  const list = vizManifest.value || []
+  return list
+    .filter(item => {
+      const p = String((item && item.path) || '').toLowerCase()
+      const ty = String((item && item.type) || '').toLowerCase()
+      // 仅渲染位图/矢量图；Mermaid(.mmd)/CSV 等非图片工件排除在画廊外。
+      return /\.(png|svg|jpe?g|gif|webp)$/.test(p) || ty === 'png' || ty === 'svg' || ty === 'image'
+    })
+    .map(item => ({
+      src: resolveAsset(item.path),
+      caption: (item && item.caption) || ''
+    }))
+    .filter(c => c.src)
+})
+
+// ---------- PROGRESSIVE：生成期章节轮询 ----------
+function stopPolling() {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
+}
+
+function startPolling() {
+  stopPolling()
+  pollStopped = false
+  partialUnavailable = false
+  pollOnce()
+}
+
+async function pollOnce() {
+  if (pollStopped || !props.reportId) return
+
+  // ① 章节增量（若端点可用）：驱动生成期的逐章展示。
+  if (!partialUnavailable) {
+    try {
+      const res = await getSectionsPartial(props.reportId)
+      // 契约 { sections:[...], done:bool }；容错兼容 { success, data:{...} } 包裹形态。
+      const body = (res && Array.isArray(res.sections)) ? res
+        : (res && res.data && Array.isArray(res.data.sections)) ? res.data
+        : null
+      if (body) {
+        partialSections.value = Array.isArray(body.sections) ? body.sections : []
+      }
+    } catch (e) {
+      // 端点尚未上线(404)：改为仅靠 getReport 探测完成（degrade-safe）；其它错误忽略后重试。
+      if (e && e.response && e.response.status === 404) partialUnavailable = true
+    }
+  }
+
+  // ② 完成探测（权威信号）：getReport 一旦产出成稿或进入终态，就重载渲染最终报告。
+  try {
+    const res = await getReport(props.reportId)
+    const data = (res && res.data) || {}
+    const finalMd = data.markdown_content || ''
+    const s = String(data.status || '').toLowerCase()
+    // 同步最新元信息（状态/失败章节等），即便尚未完成也让 UI 反映真实进度。
+    meta.value = data || {}
+    if (finalMd || s === 'completed' || s === 'failed') {
+      pollStopped = true
+      stopPolling()
+      md.value = finalMd
+      if (finalMd) { activeLang.value = null; loadVizManifest() }
+      return
+    }
+  } catch (e) {
+    // getReport 暂时失败：忽略，下一轮重试。
+  }
+
+  if (!pollStopped) {
+    pollTimer = setTimeout(pollOnce, 3000)
+  }
+}
+
+// 生成期已完成章节（按 index 排序）与仍在写入的下一章序号。
+const completedPartials = computed(() => {
+  const secs = (partialSections.value || []).filter(s => s && String(s.status).toLowerCase() === 'completed')
+  return secs.slice().sort((a, b) => (Number(a.index) || 0) - (Number(b.index) || 0))
+})
+const writingSectionLabel = computed(() => {
+  const secs = partialSections.value || []
+  const writing = secs.find(s => s && String(s.status).toLowerCase() !== 'completed')
+  if (writing) {
+    const idx = (Number(writing.index) || completedPartials.value.length) + 1
+    const title = writing.title || ''
+    return L(`正在撰写第 ${idx} 章${title ? '：' + title : ''}…`, `Writing section ${idx}${title ? ': ' + title : ''}…`)
+  }
+  const n = completedPartials.value.length + 1
+  return L(`正在撰写第 ${n} 章…`, `Writing section ${n}…`)
+})
+function renderPartial(mdText) {
+  try {
+    return renderMarkdown(mdText || '', { resolveUrl: resolveAsset })
+  } catch (e) {
+    return ''
+  }
+}
 
 const reportTitle = computed(() => {
   const h1 = headings.value.find(h => h && Number(h.level) === 1)
@@ -193,7 +474,7 @@ function scrollToHeading(h) {
 }
 
 async function copyMarkdown() {
-  const text = md.value || ''
+  const text = currentMd.value || ''
   if (!text) return
   try {
     if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
@@ -218,6 +499,10 @@ async function copyMarkdown() {
 
 onMounted(load)
 watch(() => props.reportId, load)
+onBeforeUnmount(() => {
+  stopPolling()
+  if (copyTimer) clearTimeout(copyTimer)
+})
 </script>
 
 <style scoped>
@@ -604,6 +889,147 @@ watch(() => props.reportId, load)
   font-weight: 600;
 }
 .md-body :deep(.md-table tbody tr:hover) { background: var(--soft); }
+/* 宽表（如 Market Cross-Check）横向滚动容器：超出正文宽度时容器内滚动，绝不撑破整页。 */
+.md-body :deep(.md-table-wrap) {
+  overflow-x: auto;
+  margin: 1.4em 0;
+  -webkit-overflow-scrolling: touch;
+}
+.md-body :deep(.md-table-wrap) .md-table,
+.md-body :deep(.md-table-wrap) table { margin: 0; }
+/* 内嵌图片（报告 markdown 中的 charts/… 相对路径经 resolveUrl 重写后渲染）。 */
+.md-body :deep(.md-img) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.2em auto;
+  border: 1px solid var(--border);
+  background: var(--paper);
+}
+
+/* ---------- Header: PDF button + language toggle ---------- */
+.pdf-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 14px;
+  border: 1px solid var(--orange);
+  background: var(--orange);
+  color: var(--paper);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+.pdf-btn:hover { transform: translateY(-1px); opacity: 0.9; }
+.lang-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.lang-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 6px 11px;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: var(--paper);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.lang-btn:first-child { border-left: none; }
+.lang-btn:hover:not(:disabled) { color: var(--ink); background: var(--soft); }
+.lang-btn.active { background: var(--ink); color: var(--paper); }
+.lang-btn:disabled { opacity: 0.55; cursor: default; }
+
+/* ---------- Chart gallery (VIZ-1) ---------- */
+.chart-gallery {
+  max-width: 760px;
+  margin: 0 auto 28px;
+}
+.gallery-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+.chart-fig {
+  margin: 0;
+  border: 1px solid var(--border);
+  background: var(--soft);
+  padding: 12px;
+}
+.chart-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--paper);
+}
+.chart-cap {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin-top: 8px;
+  letter-spacing: 0.01em;
+}
+
+/* ---------- Progressive generation view ---------- */
+.progressive {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.md-body-inner { color: var(--ink); }
+.partial-section { margin-bottom: 0.4em; }
+.partial-empty {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--muted);
+  padding: 8px 0 4px;
+}
+.writing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 12px 0 4px;
+  border-top: 1px dashed var(--border);
+}
+.writing-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--orange);
+  animation: fr-pulse 1.1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes fr-pulse { 0%,100% { opacity: 0.35; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1); } }
+.writing-text {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: var(--orange);
+}
+/* 生成期正文继承 md-body 排版（复用 :deep 规则）。 */
+.progressive .md-body-inner :deep(h1),
+.progressive .md-body-inner :deep(h2),
+.progressive .md-body-inner :deep(h3),
+.progressive .md-body-inner :deep(p),
+.progressive .md-body-inner :deep(li) { color: var(--ink); }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 980px) {

@@ -735,13 +735,74 @@ def build_market_comparison(binaries: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {"anchored_count": len(comps), "comparisons": comps}
 
 
+# --------------------------------------------------- ITEM 12: multi-model ensemble
+def _build_ensemble_client(provider: str) -> Any:
+    """ITEM 12：按（副模型）提供方名构造一个 LLMClient，复用 llm_client 的提供方选择机制。
+
+    与 LLMClient/Config 的现有约定完全一致：
+      - CLI 订阅提供方（claude-cli / codex-cli，PROVIDER_META 里 openai_compat=False）无需 Key，
+        直接 ``LLMClient(provider=p)``；
+      - OpenAI 兼容提供方从 PROVIDER_META 取 default_base/default_model，Key 依次尝试
+        ``<PROVIDER>_API_KEY`` → 该提供方的 key_env（如 DEEPSEEK_API_KEY）→ 当且仅当与主提供方
+        同名时的 Config.LLM_API_KEY；缺 Key 时 LLMClient 构造抛 ValueError。
+    未知提供方（不在 PROVIDER_META）→ LLMClient 构造抛 ValueError。两类异常都由
+    ``_run_ensemble_draws`` 捕获 → 跳过该模型并记 flag（绝不阻断主抽取）。"""
+    import os as _os
+    from ..config import Config
+    from ..utils.llm_client import LLMClient
+    p = str(provider or "").strip().lower()
+    meta = Config.PROVIDER_META.get(p) or {}
+    if not meta.get("openai_compat"):
+        # CLI 订阅提供方 / 未知名：交给 LLMClient 构造决定（合法 CLI 通过，未知名抛 ValueError）。
+        return LLMClient(provider=p)
+    key = (_os.environ.get(f"{p.upper()}_API_KEY")
+           or (_os.environ.get(str(meta.get("key_env"))) if meta.get("key_env") else None)
+           or (Config.LLM_API_KEY if p == str(Config.LLM_PROVIDER or "").lower() else None))
+    return LLMClient(provider=p, api_key=key,
+                     base_url=meta.get("default_base"),
+                     model=meta.get("default_model"))
+
+
+def _run_ensemble_draws(models: List[str], draw_fn: Any, min_count: int, *,
+                        primary_provider: str, client_factory: Any,
+                        skipped: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+    """ITEM 12：对每个（非主）副模型各跑一次同提示词二元抽取，返回 {provider: [binaries]}。
+
+    ``draw_fn`` 即 ``extract_binary_forecasts`` 内的 ``_draw`` 闭包（``client=`` 指定副模型
+    客户端，共用主抽取的提示词与切片）。与主提供方同名或重复的名字被去重跳过（主模型已抽过）。
+    某副模型构造/抽取失败或产出空列表 → 记入 ``skipped`` 并继续（绝不阻断，degrade-safe）。"""
+    secondary: Dict[str, List[Dict[str, Any]]] = {}
+    seen: set = set()
+    prim = str(primary_provider or "").strip().lower()
+    for name in (models or []):
+        m = str(name or "").strip().lower()
+        if not m or m == prim or m in seen:
+            continue
+        seen.add(m)
+        try:
+            client = client_factory(m)
+            if client is None:
+                skipped.append(m)
+                continue
+            drawn = draw_fn(min_count, [], client=client)
+            if drawn:
+                secondary[m] = drawn
+            else:
+                skipped.append(m)  # 空抽取（全被过滤）视同该模型无贡献
+        except Exception as _de:  # noqa: BLE001 — 单个副模型失败绝不阻断集成/主抽取
+            skipped.append(m)
+            logger.warning(f"集成副模型 {m} 抽取失败（跳过）: {_de}")
+    return secondary
+
+
 def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
                              language: str = "English",
                              situation_brief: Optional[str] = None,
                              themes: Optional[List[str]] = None,
                              signal_pack: Optional[str] = None,
                              market_pack: Optional[str] = None,
-                             markets: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+                             markets: Optional[List[Dict[str, Any]]] = None,
+                             ensemble_client_factory: Optional[Any] = None) -> Dict[str, Any]:
     """Extract/derive >=min_count INDEPENDENT binary forecasts from the dossier.
 
     Returns ``{"binary_forecasts": [...], "binary_quality": {...}}``. Degrade-safe:
@@ -778,7 +839,10 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
         if mid and ip is not None and 0.0 <= ip <= 1.0:
             market_lookup[mid] = ip
 
-    def _draw(instr_min: int, exclude: List[str], *, low_p: bool = False) -> List[Dict[str, Any]]:
+    def _draw(instr_min: int, exclude: List[str], *, low_p: bool = False,
+              client: Any = None) -> List[Dict[str, Any]]:
+        # ITEM 12：client 指定时用该（副模型）客户端抽取，否则用主 llm——集成各模型共用同一提示词。
+        _llm = client if client is not None else llm
         user = _BINARY_FORECAST_INSTRUCTIONS.format(
             min_count=instr_min, language=language,
             theme_enum=("|".join(themes) if themes else _BINARY_DEFAULT_THEME_ENUM),
@@ -806,8 +870,8 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
             # PM-2：市场表切片 4000→8000，让相关性门控后的更多市场进入锚定视野。
             user += f"\n\n[Prediction market signals]\n{str(market_pack)[:8000]}"
         user += f"\n\n[Research dossier]\n{content}"
-        raw = llm.chat_json(messages=[{"role": "user", "content": user}],
-                            temperature=0.25, max_tokens=4096)
+        raw = _llm.chat_json(messages=[{"role": "user", "content": user}],
+                             temperature=0.25, max_tokens=4096)
         items = raw.get("binary_forecasts") if isinstance(raw, dict) else None
         return _normalize_binaries(items or [], allowed_themes=themes,
                                    market_lookup=market_lookup or None)
@@ -839,6 +903,39 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
     # renumber ids stably F1..Fn（锚定用稳定 id 匹配，故在此之后再跑市场锚定）
     for i, b in enumerate(binaries, start=1):
         b["id"] = f"F{i}"
+    # ITEM 12：多模型集成——主模型抽完后，对每个所列（非主）提供方各跑一次同提示词二元抽取，
+    # 按 id/陈述匹配同一条预测，用与种子集成同一套 extremizing log-odds（ENSEMBLE_EXTREMIZE_A）
+    # 把各模型概率池化为发布概率，记 binary['ensemble']={models,probs,pooled,spread}。置于市场锚定
+    # **之前** ⇒ 锚定/分歧重述基于池化后的概率，market_anchor.divergence 一次算准。任一副提供方
+    # 失败→跳过该模型并记 flag，绝不阻断；FORECAST_ENSEMBLE_MODELS 空=整段跳过（逐字节复现旧行为）。
+    ensemble_low_agreement: List[str] = []
+    ensemble_skipped: List[str] = []
+    ensemble_pooled_models: List[str] = []
+    _ens_models = [m.strip().lower() for m in str(_cfg("FORECAST_ENSEMBLE_MODELS", "") or "").split(",")
+                   if m.strip()]
+    if binaries and _ens_models:
+        try:
+            secondary = _run_ensemble_draws(
+                _ens_models, _draw, min_count,
+                primary_provider=str(getattr(llm, "provider", "") or "primary").lower(),
+                client_factory=ensemble_client_factory or _build_ensemble_client,
+                skipped=ensemble_skipped)
+            if secondary:
+                ensemble_pooled_models = sorted(secondary.keys())
+                from .ensemble import pool_binary_forecasts as _pool
+                a_raw = _cfg("ENSEMBLE_EXTREMIZE_A", None)
+                try:
+                    _a = float(a_raw) if a_raw is not None else None
+                except (TypeError, ValueError):
+                    _a = None
+                _thr = _coerce_float(_cfg("FORECAST_ENSEMBLE_SPREAD_THRESHOLD", 0.15))
+                ensemble_low_agreement = _pool(
+                    binaries, secondary,
+                    primary_model=str(getattr(llm, "provider", "") or "primary").lower(),
+                    extremize_a=_a,
+                    spread_threshold=_thr if _thr is not None else 0.15)
+        except Exception as _ee:  # noqa: BLE001 — 集成为增强，绝不阻断二元抽取
+            logger.warning(f"多模型预测集成失败（忽略，保留主模型结果）: {_ee}")
     # PM-2：确定性市场锚定 + 10pp 分歧有界重述 + 对照负载。任何失败 → 保留无锚点结果
     # （_normalize_binaries 已回填的模型自愿锚点仍在），即今日行为（degrade-safe）。
     market_comparison: Optional[Dict[str, Any]] = None
@@ -855,6 +952,25 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
         "binary_quality": _binary_quality(binaries, min_count=min_count,
                                           themes_expected=themes),
     }
+    # ITEM 12：把多模型集成诊断落进 binary_quality（该块经 report_agent 落到 forecast['binary_quality']
+    # 并被 render_binary_forecasts_block 消费）。仅当 FORECAST_ENSEMBLE_MODELS 非空时附加（默认整段不加
+    # → schema 逐字节不变）。low_agreement 收 spread>阈值的预测 id，其陈述在报表以 ±spread 高亮分歧；
+    # skipped 记构造/抽取失败被跳过的副提供方；pooled_models 记真正参与池化的副提供方。
+    if _ens_models:
+        _ens_block: Dict[str, Any] = {
+            "enabled_models": _ens_models,
+            "pooled_models": ensemble_pooled_models,
+            "skipped": ensemble_skipped,
+            "low_agreement": ensemble_low_agreement,
+            "spread_threshold": (_coerce_float(_cfg("FORECAST_ENSEMBLE_SPREAD_THRESHOLD", 0.15)) or 0.15),
+        }
+        _bq = out["binary_quality"]
+        if isinstance(_bq, dict):
+            _bq["ensemble"] = _ens_block
+            if ensemble_low_agreement:
+                _bq.setdefault("issues", []).append(
+                    f"{len(ensemble_low_agreement)} forecast(s) show cross-model disagreement "
+                    f"(spread > {_ens_block['spread_threshold']}): {', '.join(ensemble_low_agreement)}")
     if market_comparison and market_comparison.get("comparisons"):
         out["market_comparison"] = market_comparison
     return out
@@ -1261,6 +1377,14 @@ def render_binary_forecasts_block(forecast: Optional[Dict[str, Any]],
                   " Forecasts with a market-implied probability are benchmarked against live "
                   "prediction markets (markets are calibration anchors, not ground truth).")
     lines = [head, "", intro, "", cols, sep]
+    # ITEM 12：多模型集成开启时，概率列以 ±spread（跨模型样本 stdev）显示分歧；spread 超阈值
+    # （binary_quality.ensemble.spread_threshold，缺省 0.15）的预测加 ⚠ 低一致性标记。无 ensemble
+    # 块（默认单模型）→ 概率列逐字节不变（degrade-safe）。
+    _ens_meta = (forecast.get("binary_quality") or {}).get("ensemble") if isinstance(
+        forecast.get("binary_quality"), dict) else None
+    _ens_thr = _coerce_float((_ens_meta or {}).get("spread_threshold"))
+    if _ens_thr is None:
+        _ens_thr = 0.15
     for b in binaries:
         if not isinstance(b, dict):
             continue
@@ -1268,6 +1392,13 @@ def render_binary_forecasts_block(forecast: Optional[Dict[str, Any]],
             pct = f"{float(b.get('probability') or 0.0) * 100:.0f}%"
         except (TypeError, ValueError):
             pct = "—"
+        _ens = b.get("ensemble")
+        if isinstance(_ens, dict):
+            _spread = _coerce_float(_ens.get("spread"))
+            if _spread is not None and _spread > 0:
+                pct += f" ±{_spread * 100:.0f}%"
+                if _spread > _ens_thr:
+                    pct += " ⚠"
         line = "| {id} | {st} | {p} | {rc} | {th} |".format(
             id=_esc_cell(b.get("id") or ""),
             st=_esc_cell(b.get("statement") or ""),
@@ -1295,6 +1426,18 @@ def render_binary_forecasts_block(forecast: Optional[Dict[str, Any]],
         else:
             lines += ["", (f"_{q.get('count')} forecasts; {q.get('conviction_count')} high-conviction "
                            f"(≥70% or ≤30%); {q.get('sharp_criteria_count')} with objective criteria._")]
+    # ITEM 12：集成低一致性脚注——列出跨模型 spread 超阈值的预测 id（±spread 已在概率列高亮）。
+    _ens_meta2 = q.get("ensemble") if isinstance(q, dict) else None
+    if isinstance(_ens_meta2, dict) and _ens_meta2.get("low_agreement"):
+        _la = ", ".join(str(x) for x in _ens_meta2.get("low_agreement") or [])
+        _pm = ", ".join(str(x) for x in _ens_meta2.get("pooled_models") or [])
+        if zh:
+            lines += ["", (f"_多模型集成（{_pm}）：{_la} 存在跨模型分歧（±spread 超 "
+                           f"{_ens_meta2.get('spread_threshold')}，概率列以 ⚠ 标记，谨慎解读）。_")]
+        else:
+            lines += ["", (f"_Multi-model ensemble ({_pm}): {_la} show cross-model disagreement "
+                           f"(spread > {_ens_meta2.get('spread_threshold')}, flagged ⚠ in the "
+                           f"probability column — interpret with caution)._")]
     return "\n".join(lines)
 
 

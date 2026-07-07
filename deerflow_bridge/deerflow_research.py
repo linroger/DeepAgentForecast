@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import hashlib
 import json
 import logging
 import os
@@ -283,6 +284,202 @@ META_FILENAME = "meta.json"
 # Recognized source-quality tiers (SKILL.md §4). Used for the meta tier histogram
 # and to validate model-emitted tiers; anything else is dropped to "unknown".
 _VALID_TIERS = ("S1", "S2", "S3", "S4")  # EXECPLAN2 I-0-0
+
+# ---------------------------------------------------------------------------
+# ITEM-3 RESEARCH CHECKPOINTING — 断点续跑
+#
+# 桥跑在一个持久化的 LangGraph checkpointer 上（config.yaml database: sqlite
+# .deer-flow/data），线程状态（每 pass 的搜索/抓取笔记）按 thread_id 持久落盘。但每次
+# run 都会 mint 一个全新的随机 thread_id，且编排器崩溃/超时重试时从 pass 0 全量重启——
+# 一整轮已完成的 deep 研究（数十个已抓取来源、多轮多相位）在崩溃时被整体丢弃。
+#
+# 修复：每完成一个 pass/phase/worker，就把 research_checkpoint.json 原子落到 out_dir，
+# 记录 {thread_id, completed_passes, fetched_source_count, gaps, depth, question_hash,
+# updated_at}。--resume 时（且 checkpoint 存在、question_hash 匹配、depth 一致）复用记录
+# 的 thread_id（checkpointer 仍持有该线程的全部笔记），跳过 completed_passes 列出的 pass，
+# 从下一 pass 续跑（覆盖门 + 合成照常重跑——合成相对研究很便宜）。stale/缺失/hash 不匹配
+# 的 checkpoint → 全量重启并打标。RESEARCH_CHECKPOINT=false 时所有记录为 no-op（degrade-safe）。
+# ---------------------------------------------------------------------------
+RESEARCH_CHECKPOINT_FILENAME = "research_checkpoint.json"
+_RESEARCH_CHECKPOINT_VERSION = 1
+_RESEARCH_CHECKPOINT_MAX_GAPS = 60  # gaps 列表落盘上限（护栏：避免 checkpoint 无界膨胀）
+
+
+def _question_hash(question: str) -> str:
+    """研究问题的稳定归一化哈希（首 16 位 sha256）。
+
+    归一化：折叠空白 + 去首尾 + 小写，让「同一问题」的表层差异（多余空格/大小写）
+    不影响续跑判定；不同问题则 hash 不同 → plan_research_resume 拒绝续跑、全量重启。
+    """
+    norm = " ".join((question or "").split()).strip().lower()
+    return hashlib.sha256(norm.encode("utf-8")).hexdigest()[:16]
+
+
+def _checkpoint_enabled() -> bool:
+    """RESEARCH_CHECKPOINT（默认 true）——研究断点续跑总开关。"""
+    return _env_flag("RESEARCH_CHECKPOINT", True)
+
+
+def _extract_only_min_chars() -> int:
+    """ITEM-14 --extract-only：既存 research_report.md 的最短字符门（不足=诚实非零退出）。
+
+    RESEARCH_EXTRACT_ONLY_MIN_CHARS 覆盖（默认 400，与 RES-1 的报告下限同量级）；非法/非正
+    值回退 400。抽取-only 打捞的前提是「已有一份可抽取的报告」，太小的残段抽不出有用结构。
+    """
+    try:
+        return max(1, int(os.environ.get("RESEARCH_EXTRACT_ONLY_MIN_CHARS", "400") or "400"))
+    except ValueError:
+        return 400
+
+
+def write_research_checkpoint(out_dir, *, thread_id: str, completed_passes,
+                              fetched_source_count: int, gaps, depth: str,
+                              question_hash: str, updated_at: str | None = None) -> None:
+    """把 research_checkpoint.json 原子写到 out_dir（out_dir=None → no-op）。
+
+    与其余契约文件同一原子写保证：watchdog SIGKILL 时机不巧也不会留下半写的 JSON。
+    """
+    if out_dir is None:
+        return
+    payload = {
+        "version": _RESEARCH_CHECKPOINT_VERSION,
+        "thread_id": thread_id,
+        "question_hash": question_hash,
+        "depth": depth,
+        "completed_passes": list(completed_passes or []),
+        "fetched_source_count": int(fetched_source_count or 0),
+        "gaps": list(gaps or [])[:_RESEARCH_CHECKPOINT_MAX_GAPS],
+        "updated_at": updated_at or _utcnow(),
+    }
+    _atomic_write_text(Path(out_dir) / RESEARCH_CHECKPOINT_FILENAME,
+                       json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def load_research_checkpoint(out_dir):
+    """读回 research_checkpoint.json；缺失/损坏/非 dict → None（degrade-safe，绝不抛）。"""
+    if out_dir is None:
+        return None
+    p = Path(out_dir) / RESEARCH_CHECKPOINT_FILENAME
+    try:
+        if not p.exists():
+            return None
+        obj = json.loads(p.read_text(encoding="utf-8"))
+        return obj if isinstance(obj, dict) else None
+    except Exception:  # noqa: BLE001 — 损坏的 checkpoint 视为无 checkpoint（全量重启）
+        return None
+
+
+def plan_research_resume(checkpoint, question: str, depth: str) -> dict:
+    """纯函数：给定磁盘上的 checkpoint 与当前 question/depth，判定能否续跑。
+
+    返回 ``{resume: bool, thread_id: str|None, completed_passes: list, reason: str}``。
+    仅当 checkpoint 是 dict、含非空 thread_id、question_hash 与当前问题匹配、depth 一致
+    时 resume=True；任一不满足 → resume=False + 原因（调用方据此全量重启并打标）。
+    零 I/O、零副作用，便于单测。
+    """
+    _miss = {"resume": False, "thread_id": None, "completed_passes": [], "reason": ""}
+    if not isinstance(checkpoint, dict):
+        return {**_miss, "reason": "no checkpoint"}
+    tid = checkpoint.get("thread_id")
+    if not tid:
+        return {**_miss, "reason": "checkpoint missing thread_id"}
+    want = _question_hash(question)
+    got = checkpoint.get("question_hash")
+    if got != want:
+        return {**_miss, "reason": f"question hash mismatch ({got} != {want})"}
+    ckpt_depth = checkpoint.get("depth")
+    if ckpt_depth is not None and depth is not None and ckpt_depth != depth:
+        return {**_miss, "reason": f"depth mismatch ({ckpt_depth} != {depth})"}
+    completed = checkpoint.get("completed_passes")
+    if not isinstance(completed, list):
+        completed = []
+    return {"resume": True, "thread_id": tid, "completed_passes": list(completed), "reason": "ok"}
+
+
+def should_run_pass(pass_id: str, completed_passes, resume: bool) -> bool:
+    """纯函数（pass-skip planner）：续跑时已记完成的 pass 跳过，其余照跑。
+
+    非续跑（resume=False）→ 恒 True（逐字节不改今日行为）。续跑时：pass_id 已在
+    completed_passes 中 → False（跳过，其笔记已在复用线程的 checkpoint 里）。
+    """
+    if not resume:
+        return True
+    return pass_id not in set(completed_passes or [])
+
+
+class ResearchCheckpointer:
+    """研究阶段的断点续跑记录器：每完成一个 pass 就把 research_checkpoint.json 落盘。
+
+    线程安全（deep 并行相位/扇出 worker 并发调用 record_pass）。``enabled=False`` 或
+    ``out_dir=None`` 时所有方法为 no-op（degrade-safe，逐字节不改今日无 checkpoint 行为）。
+    completed_passes 存的是稳定的 pass-id（deep-opening / deep-phase-N / standard），
+    与并行/回退无关，供 --resume 侧的 should_run_pass 判跳过。
+    """
+
+    def __init__(self, out_dir, thread_id: str, depth: str, question: str, *, enabled: bool = True):
+        self.out_dir = Path(out_dir) if out_dir is not None else None
+        self.thread_id = thread_id
+        self.depth = depth
+        self.question_hash = _question_hash(question)
+        self.enabled = bool(enabled) and self.out_dir is not None
+        self._lock = threading.Lock()
+        self.completed_passes: list[str] = []
+        self.gaps: list[str] = []
+        self.fetched_source_count = 0
+
+    def seed_completed(self, completed_passes) -> None:
+        """续跑时用磁盘 checkpoint 里已完成的 pass-id 预置本记录器（保留历史，不覆盖）。"""
+        with self._lock:
+            for pid in (completed_passes or []):
+                if pid and pid not in self.completed_passes:
+                    self.completed_passes.append(pid)
+
+    def _flush_locked(self) -> None:
+        if not self.enabled:
+            return
+        try:
+            write_research_checkpoint(
+                self.out_dir,
+                thread_id=self.thread_id,
+                completed_passes=self.completed_passes,
+                fetched_source_count=self.fetched_source_count,
+                gaps=self.gaps,
+                depth=self.depth,
+                question_hash=self.question_hash,
+            )
+        except Exception:  # noqa: BLE001 — 断点记录纯增益，绝不阻断研究
+            pass
+
+    def _refresh_fetched_locked(self, fetched_source_count) -> None:
+        if fetched_source_count is not None:
+            self.fetched_source_count = int(fetched_source_count)
+        else:
+            try:
+                self.fetched_source_count = distinct_fetched_count()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def record_pass(self, pass_id: str, *, gaps=None, fetched_source_count=None) -> None:
+        """记录一个已完成 pass（其笔记确已落在复用线程的 checkpoint 里）+ 刷新进度落盘。"""
+        if not self.enabled or not pass_id:
+            return
+        with self._lock:
+            if pass_id not in self.completed_passes:
+                self.completed_passes.append(pass_id)
+            if gaps is not None:
+                self.gaps = list(gaps)
+            self._refresh_fetched_locked(fetched_source_count)
+            self._flush_locked()
+
+    def update_progress(self, *, gaps=None, fetched_source_count=None) -> None:
+        """只刷新进度（gaps/来源数），不新增 completed pass（覆盖门/自适应轮用）。"""
+        if not self.enabled:
+            return
+        with self._lock:
+            if gaps is not None:
+                self.gaps = list(gaps)
+            self._refresh_fetched_locked(fetched_source_count)
+            self._flush_locked()
 
 # ---------------------------------------------------------------------------
 # #1 STRUCTURAL SOURCE CAPTURE — collect URLs the agent ACTUALLY FETCHED.
@@ -828,6 +1025,19 @@ def _env_flag(name: str, default: bool) -> bool:
     return str(raw).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _bash_sandbox_enabled() -> bool:
+    """ITEM-7 门控：data-analysis / 图表落盘的提示只在 host bash 执行面可用时才注入。
+
+    权威开关是 config.yaml 的 ``sandbox.allow_host_bash``（本部署为 true——脚本型技能
+    chart-visualization / data-analysis / forecast-visuals 靠它才有真实 shell/node/python
+    执行面）。桥进程用 env 镜像 ``DEERFLOW_ALLOW_HOST_BASH`` 读它（编排器可下发），缺省 True
+    与部署 config 对齐。任何不满足「完全受信任、单用户」前提、把 config 改回 allow_host_bash:
+    false 的机器，应同时设 DEERFLOW_ALLOW_HOST_BASH=false——两处一致后，这些依赖 bash 的
+    提示句自动消失（degrade-safe：agent 不会被指向一个它其实没有的执行面）。
+    """
+    return _env_flag("DEERFLOW_ALLOW_HOST_BASH", True)
+
+
 def _actor_cast_max() -> int:
     """ACTOR-CAST DISCIPLINE: hard cap on MAIN actors extracted/kept through the pipeline.
 
@@ -1073,7 +1283,7 @@ def _market_pricing_prompt_block() -> str:
 # （_AGENTIC_DELEGATION，client 侧已 subagent_enabled=True、harness `task` 工具可用）且
 # (b) env RESEARCH_AGENTIC_SEARCH（默认 true）为真时返回指令文本+空行，否则空串（逐字节
 # 不改无委派路径）。指令告诉本回合的 lead agent：把 breadth 工作（逐 actor/逐 KIQ/语言与
-# 地域 pivot/反证搜寻）拆成 2–3 个 single-focus 并行 scoped-researcher 子任务，收回后先
+# 地域 pivot/反证搜寻）拆成 3–5 个 single-focus 并行 scoped-researcher 子任务，收回后先
 # 校验（子代理会出错——对承重声明逐条对 URL 抽检）再并入自己的笔记；synthesis / 承重声明
 # 的证据分级 / 来源账本永不外包。中英双语版本对齐两类提示词（英文 pass 提示 / 中文 top-up）。
 def _agentic_delegation_enabled() -> bool:
@@ -1087,7 +1297,7 @@ def _agentic_delegation_block(chinese: bool = False) -> str:
         return (
             "主动委派（AGENTIC DELEGATION）——你有一个 `task` 工具，接的是 `scoped-researcher` "
             "子代理（并行的定域网页调查员）。用它做 BREADTH（广度）而非判断深度：\n"
-            "- 委派（一次派 2–3 个并行子任务，每个一个 SINGLE-FOCUS 简报）：逐 actor 画像、逐 KIQ 取证扫、"
+            "- 委派（一次派 3–5 个并行子任务，每个一个 SINGLE-FOCUS 简报）：逐 actor 画像、逐 KIQ 取证扫、"
             "地域/其它语言的来源 pivot、以及反证搜寻（为某条承重声明找最强的反面证据）。\n"
             "- 每份简报只问 ONE 个问题 + 你期望的来源类别（一手申报/监管·官方/本地语言媒体/数据集），"
             "并要求回传带分级的证据笔记 + 真实已抓取 URL 列表——不要成稿报告。\n"
@@ -1097,7 +1307,7 @@ def _agentic_delegation_block(chinese: bool = False) -> str:
     return (
         "AGENTIC DELEGATION — you have a `task` tool wired to `scoped-researcher` sub-agents "
         "(parallel scoped web investigators). Use it for BREADTH, not depth-of-judgment:\n"
-        "- DELEGATE (dispatch 2–3 parallel tasks, each a tight SINGLE-FOCUS brief): per-actor "
+        "- DELEGATE (dispatch 3–5 parallel tasks, each a tight SINGLE-FOCUS brief): per-actor "
         "profiles, per-KIQ evidence sweeps, regional / other-language source pivots, and "
         "disconfirmation hunts (find the strongest case AGAINST a load-bearing claim).\n"
         "- Each brief states ONE question + the source classes you expect (primary filings, "
@@ -1198,13 +1408,21 @@ def build_deep_phase_prompt(question: str, phase: dict[str, Any], index: int, to
             "(search/fetch specifically for them) before broadening:\n"
             f"{gap_lines}\n\n"
         )
-    # SKILL-1: 定量取证的 pass 指向 data-analysis 技能（表格/数列/口径核对）。一句话，保持紧凑。
+    # SKILL-1 / ITEM-7: 定量取证的 pass 指向 data-analysis 技能（表格/数列/口径核对），并把
+    # agent 产出的图表落到 out_dir 的 charts/ + charts.json 清单（编排器工件通道会拾取）。
+    # 两句都只在 host bash 执行面可用（sandbox.allow_host_bash）时注入——脚本型技能靠 bash 才能跑。
     _label = str(phase.get("label") or "")
     skill_line = ""
-    if "primary" in _label or "evidence" in _label:
+    if ("primary" in _label or "evidence" in _label) and _bash_sandbox_enabled():
         skill_line = (
-            "For quantitative work in this pass — reconciling figures, building data "
-            "series, checking units/definitions — load the data-analysis skill.\n\n"
+            "For quantitative work on the numbers you gather in this pass — reconciling "
+            "figures, fitting trends, computing reference-class base rates, checking sums "
+            "and units/definitions — load the data-analysis skill and run the computations "
+            "in the sandbox via bash (do NOT eyeball the arithmetic).\n"
+            "If you produce any charts (via the forecast-visuals / chart-visualization "
+            "skills), write the rendered files into a charts/ subdirectory of your output "
+            "directory and register each in a charts.json manifest "
+            "({title, caption, source_data}) so the pipeline's artifact channel picks them up.\n\n"
         )
     return (
         f"DEEP RESEARCH PASS {index}/{total}: {phase['label']}\n\n"
@@ -1352,6 +1570,19 @@ def build_synthesis_prompt(question: str, target_language: str | None, depth: st
             "scenarios, leading indicators to monitor, and a section on contested claims "
             "or evidence quality.\n\n"
         )
+    # ITEM-7: 图表落盘句——只在 host bash 执行面可用（sandbox.allow_host_bash）时追加，且明确
+    # 把「渲染图表」框定为本写作步唯一允许的工具动作（仍禁止 search/fetch），故不重开研究之门。
+    # bash 关闭时 charts_line 为空串 → 合成提示词与今日逐字节一致。
+    charts_line = ""
+    if _bash_sandbox_enabled():
+        charts_line = (
+            "\n\nOPTIONAL CHARTS — the ONLY tool use permitted in this write step is "
+            "rendering charts from data you ALREADY gathered above (via the forecast-visuals "
+            "/ chart-visualization skills); do NOT search or fetch. If you render any, write "
+            "the files into a charts/ subdirectory of your output directory and register each "
+            "in a charts.json manifest ({title, caption, source_data}) so the pipeline's "
+            "artifact channel picks them up."
+        )
     return (
         "STOP researching. Do NOT call any tools, do NOT search, do NOT fetch — you "
         "have already gathered enough material in this conversation.\n\n"
@@ -1391,6 +1622,7 @@ def build_synthesis_prompt(question: str, target_language: str | None, depth: st
         f"OUTPUT-LENGTH CONTRACT: {word_target} of prose is a hard requirement, not a "
         "suggestion — a dossier materially shorter than this is treated as a failed write.\n"
         "Write the report directly — no preamble, no tool calls."
+        f"{charts_line}"
         f"{lang_line}"
     )
 
@@ -3644,24 +3876,42 @@ def run_triangulation_topup(client, thread_id: str, question: str, depth: str,
     return report
 
 
-def run_research_stage(client, question: str, depth: str, target_language: str | None, model_name: str, thread_id: str, plog: ProgressLog) -> str:
+def run_research_stage(client, question: str, depth: str, target_language: str | None, model_name: str, thread_id: str, plog: ProgressLog, *, resume_completed=None, out_dir=None) -> str:
     """Run the research stage.
 
     Quick/standard remain one DeerFlow turn. Deep is intentionally multi-pass:
     several scoped research turns share the same thread/checkpointer, then a
     tool-free synthesis turn writes the final dossier from all accumulated notes
     and fetched sources.
+
+    ITEM-3 断点续跑：``out_dir`` 非空时每完成一个 pass 就把 research_checkpoint.json
+    落盘（记录复用所需的 thread_id + 已完成 pass-id + gaps + 抓取数）。``resume_completed``
+    非空时进入续跑模式——已在该集合里的 pass 跳过（其笔记已在复用线程的 checkpointer 里），
+    只补跑未完成 pass，覆盖门 + 合成照常重跑。两者均缺省时逐字节不改今日行为。
     """
     preset = DEPTH_PRESETS[depth]
+    # ITEM-3：续跑集合 + 断点记录器。resume_completed 空 → resume=False（should_run_pass 恒
+    # True，逐字节不改行为）；out_dir 空或 RESEARCH_CHECKPOINT=false → ckpt 记录为 no-op。
+    _resume_done = set(resume_completed or [])
+    _resume = bool(_resume_done)
+    ckpt = ResearchCheckpointer(out_dir, thread_id, depth, question, enabled=_checkpoint_enabled())
+    ckpt.seed_completed(_resume_done)
     if depth != "deep":
-        text = run_streamed_turn(
-            client,
-            build_research_prompt(question, depth, target_language),
-            thread_id,
-            preset["recursion_limit"],
-            plog,
-            "research",
-        )
+        if should_run_pass("standard", _resume_done, _resume):
+            text = run_streamed_turn(
+                client,
+                build_research_prompt(question, depth, target_language),
+                thread_id,
+                preset["recursion_limit"],
+                plog,
+                "research",
+            )
+            if text.strip():
+                ckpt.record_pass("standard")
+        else:
+            # 续跑：唯一的 research pass 已完成 → 不重跑该轮，从复用线程重合成即可（便宜）。
+            plog.write("resume", "跳过已完成 pass: standard（从复用线程重合成）")
+            text = synthesize_from_thread(client, thread_id, question, target_language, model_name, plog, depth=depth)
         # RES-11: RESEARCH_COVERAGE_GATE 文档上是通用默认开的门，但此前只在 deep 生效——
         # 默认深度 standard 完全没有来源下限。SCALE-2: RESEARCH_COVERAGE_GATE_STANDARD
         # 默认改为 true（原 false）——standard 也该有来源下限；=false 恢复旧的无门槛行为。
@@ -3701,16 +3951,23 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
     # SCALE-2: 开场默认 220→300（环境覆盖照旧生效）——开场负责铺源图/定 KIQ，预算与
     # 各 pass 的 ×1.5 扩容保持同一比例。
     opening_limit = int(os.environ.get("DEERFLOW_DEEP_OPENING_RECURSION_LIMIT", "300"))
-    opening = run_streamed_turn(
-        client,
-        build_research_prompt(question, depth, target_language),
-        thread_id,
-        opening_limit,
-        plog,
-        "research:deep-opening",
-    )
-    if opening.strip():
-        reports.append(opening)
+    if should_run_pass("deep-opening", _resume_done, _resume):
+        opening = run_streamed_turn(
+            client,
+            build_research_prompt(question, depth, target_language),
+            thread_id,
+            opening_limit,
+            plog,
+            "research:deep-opening",
+        )
+        if opening.strip():
+            reports.append(opening)
+            ckpt.record_pass("deep-opening")
+    else:
+        # 续跑：开场 pass 已完成（其源图/KIQ 笔记已在复用线程里）；空串让下方 drift/fanout
+        # 跳过（都 gated on opening.strip()），gap 线程由后续 pass 重新累积。
+        plog.write("resume", "跳过已完成 pass: deep-opening")
+        opening = ""
 
     # RQ-6: 开场后一个便宜的无工具核对——若开场笔记的核心年份与 brief 指定年份不符（如
     # brief 是 2026 midterm、开场却围着 2028 转），在进入 phase 2 前往线程注入一条纠偏消息
@@ -3780,21 +4037,26 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
         _final_phase = DEEP_RESEARCH_PHASES[-1]             # forecast-implications
 
         # (1) scope —— 顺序、主线程（与今日一致，其缺口为并行组铺路）。
-        _scope_text = run_streamed_turn(
-            client,
-            build_deep_phase_prompt(
-                question, _scope_phase, 1, _total_phases, target_language,
-                prior_gaps=accumulated_gaps if _gap_threading else None,
-            ),
-            thread_id,
-            _phase_budget(int(_scope_phase["recursion_limit"])),
-            plog,
-            f"research:deep-1-{_scope_phase['label']}",
-        )
-        if _scope_text.strip():
-            reports.append(_scope_text)
-            if _gap_threading:
-                accumulated_gaps = _merge_gaps(accumulated_gaps, parse_gaps_from_notes(_scope_text))
+        if should_run_pass("deep-phase-1", _resume_done, _resume):
+            _scope_text = run_streamed_turn(
+                client,
+                build_deep_phase_prompt(
+                    question, _scope_phase, 1, _total_phases, target_language,
+                    prior_gaps=accumulated_gaps if _gap_threading else None,
+                ),
+                thread_id,
+                _phase_budget(int(_scope_phase["recursion_limit"])),
+                plog,
+                f"research:deep-1-{_scope_phase['label']}",
+            )
+            if _scope_text.strip():
+                reports.append(_scope_text)
+                if _gap_threading:
+                    accumulated_gaps = _merge_gaps(accumulated_gaps, parse_gaps_from_notes(_scope_text))
+                ckpt.record_pass("deep-phase-1", gaps=accumulated_gaps)
+        else:
+            plog.write("resume", "跳过已完成 pass: deep-phase-1（scope）")
+            _scope_text = ""
 
         # (2) 中间三 pass —— 并行 scoped worker（隔离线程 + 各自 phase 预算）。种子缺口在派发
         # 时冻结（worker 无法互传缺口），全文经 _record_worker_notes 保留供最终合成折叠。
@@ -3815,31 +4077,44 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                 _record_worker_notes(f"阶段并行调查：{phase['label']}", _txt)
             return _txt
 
-        plog.write("stage", f"deep: running {len(_parallel_group)} middle phases in parallel — " + ", ".join(p["label"] for p in _parallel_group))
-        _phase_results: dict[int, str] = {}
+        # ITEM-3 续跑：已完成的中间相位不重派 worker（其笔记已在上一轮吸收进复用的主线程
+        # checkpoint 里）。跳过的相位记入 _skipped_phases，视同成功（不走顺序补跑、不重复吸收）。
+        _skipped_phases: set[int] = set()
+        _to_run: list[tuple[int, dict]] = []
+        for _i, _p in enumerate(_parallel_group, start=2):
+            if should_run_pass(f"deep-phase-{_i}", _resume_done, _resume):
+                _to_run.append((_i, _p))
+            else:
+                plog.write("resume", f"跳过已完成 pass: deep-phase-{_i}（{_p['label']}）")
+                _skipped_phases.add(_i)
+
+        plog.write("stage", f"deep: running {len(_to_run)} middle phases in parallel — " + ", ".join(p["label"] for _i, p in _to_run))
+        _phase_results: dict[int, str] = {_i: "" for _i in _skipped_phases}
         _parallel_success: set[int] = set()
-        try:
-            with _cf.ThreadPoolExecutor(max_workers=len(_parallel_group)) as _ex:
-                _futs = {
-                    _ex.submit(_run_phase_worker, _i, _p): _i
-                    for _i, _p in enumerate(_parallel_group, start=2)
-                }
-                for _fut in _cf.as_completed(_futs):
-                    _i = _futs[_fut]
-                    try:
-                        _res = _fut.result() or ""
-                    except Exception as _exc:  # noqa: BLE001 — 单 worker 失败不拖垮其余
-                        plog.write("warn", f"deep parallel phase {_i} failed: {_exc}; will run sequential fallback")
-                        _res = ""
-                    _phase_results[_i] = _res
-                    if _res.strip():
-                        _parallel_success.add(_i)
-        except Exception as _exc:  # noqa: BLE001 — 执行器层异常 → 整组回退顺序
-            plog.write("warn", f"deep parallel phases pool failed: {_exc}; falling back to sequential for the group")
+        if _to_run:
+            try:
+                with _cf.ThreadPoolExecutor(max_workers=len(_to_run)) as _ex:
+                    _futs = {
+                        _ex.submit(_run_phase_worker, _i, _p): _i
+                        for _i, _p in _to_run
+                    }
+                    for _fut in _cf.as_completed(_futs):
+                        _i = _futs[_fut]
+                        try:
+                            _res = _fut.result() or ""
+                        except Exception as _exc:  # noqa: BLE001 — 单 worker 失败不拖垮其余
+                            plog.write("warn", f"deep parallel phase {_i} failed: {_exc}; will run sequential fallback")
+                            _res = ""
+                        _phase_results[_i] = _res
+                        if _res.strip():
+                            _parallel_success.add(_i)
+            except Exception as _exc:  # noqa: BLE001 — 执行器层异常 → 整组回退顺序
+                plog.write("warn", f"deep parallel phases pool failed: {_exc}; falling back to sequential for the group")
 
         # (3) 任一 pass 并行未出笔记 → 主线程顺序补跑（其笔记本就落主线程 checkpoint，不再折叠）。
+        # 续跑跳过的相位（_skipped_phases）不补跑。
         for _i, _phase in enumerate(_parallel_group, start=2):
-            if _i in _parallel_success:
+            if _i in _parallel_success or _i in _skipped_phases:
                 continue
             plog.write("warn", f"deep phase {_i} ({_phase['label']}): parallel worker empty; running sequential fallback on main thread")
             try:
@@ -3858,6 +4133,9 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                 plog.write("warn", f"deep phase {_i} sequential fallback failed: {_exc}")
                 _fb = ""
             _phase_results[_i] = _fb
+            # 顺序补跑直接写主线程 checkpoint → 立即记完成（其笔记无需再经吸收）。
+            if _fb.strip():
+                ckpt.record_pass(f"deep-phase-{_i}")
 
         # (4) 把并行成功的三 pass 笔记吸收进主线程（uncut 至 cap），让顺序收尾 pass 看得到。
         _merged_parallel = "\n\n---\n\n".join(
@@ -3865,6 +4143,7 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
             for _i, _phase in enumerate(_parallel_group, start=2)
             if _i in _parallel_success and _phase_results.get(_i, "").strip()
         )
+        _absorbed_ok = False
         if _merged_parallel.strip():
             try:
                 run_streamed_turn(
@@ -3875,8 +4154,17 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                     plog,
                     "research:deep-parallel-phase-merge",
                 )
+                _absorbed_ok = True
             except Exception as _exc:  # noqa: BLE001 — 吸收是加法，绝不破坏本轮
                 plog.write("warn", f"deep parallel-phase absorption skipped: {_exc}")
+
+        # ITEM-3：并行相位的笔记跑在隔离线程（随机 uuid 后缀，不可复用），只有经上面的吸收
+        # turn 才落进可复用的主线程 checkpoint。故仅在吸收成功后才把这些相位记为完成——保证
+        # 续跑跳过它们时，其证据确已在主线程里（吸收前崩溃 → 未记 → 续跑重跑，无丢证据）。
+        if _absorbed_ok:
+            for _i in sorted(_parallel_success):
+                if _phase_results.get(_i, "").strip():
+                    ckpt.record_pass(f"deep-phase-{_i}")
 
         # (5) 按 pass 顺序并入 reports + 合并全部中间 pass 携出的缺口（join 后统一喂收尾 pass）。
         for _i in sorted(_phase_results):
@@ -3887,23 +4175,31 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                     accumulated_gaps = _merge_gaps(accumulated_gaps, parse_gaps_from_notes(_txt))
 
         # (6) forecast-implications —— 顺序、主线程，看得到 scope + 三并行 pass 的全部证据与缺口。
-        _final_text = run_streamed_turn(
-            client,
-            build_deep_phase_prompt(
-                question, _final_phase, _total_phases, _total_phases, target_language,
-                prior_gaps=accumulated_gaps if _gap_threading else None,
-            ),
-            thread_id,
-            _phase_budget(int(_final_phase["recursion_limit"])),
-            plog,
-            f"research:deep-{_total_phases}-{_final_phase['label']}",
-        )
-        if _final_text.strip():
-            reports.append(_final_text)
-            if _gap_threading:
-                accumulated_gaps = _merge_gaps(accumulated_gaps, parse_gaps_from_notes(_final_text))
+        if should_run_pass(f"deep-phase-{_total_phases}", _resume_done, _resume):
+            _final_text = run_streamed_turn(
+                client,
+                build_deep_phase_prompt(
+                    question, _final_phase, _total_phases, _total_phases, target_language,
+                    prior_gaps=accumulated_gaps if _gap_threading else None,
+                ),
+                thread_id,
+                _phase_budget(int(_final_phase["recursion_limit"])),
+                plog,
+                f"research:deep-{_total_phases}-{_final_phase['label']}",
+            )
+            if _final_text.strip():
+                reports.append(_final_text)
+                if _gap_threading:
+                    accumulated_gaps = _merge_gaps(accumulated_gaps, parse_gaps_from_notes(_final_text))
+                ckpt.record_pass(f"deep-phase-{_total_phases}", gaps=accumulated_gaps)
+        else:
+            plog.write("resume", f"跳过已完成 pass: deep-phase-{_total_phases}（{_final_phase['label']}）")
     else:
         for idx, phase in enumerate(DEEP_RESEARCH_PHASES, start=1):
+            _seq_pass_id = f"deep-phase-{idx}"
+            if not should_run_pass(_seq_pass_id, _resume_done, _resume):
+                plog.write("resume", f"跳过已完成 pass: {_seq_pass_id}（{phase['label']}）")
+                continue
             limit = _phase_budget(int(phase["recursion_limit"]))  # SCALE-2: 读取时应用倍率
             phase_text = run_streamed_turn(
                 client,
@@ -3920,6 +4216,7 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                 reports.append(phase_text)
                 if _gap_threading:
                     accumulated_gaps = _merge_gaps(accumulated_gaps, parse_gaps_from_notes(phase_text))
+                ckpt.record_pass(_seq_pass_id, gaps=accumulated_gaps)
 
     # #2 COVERAGE GATE — actionable, not just a warning. If too few DISTINCT sources were
     # actually fetched-and-read, run a bounded number of top-up passes that broaden
@@ -3993,6 +4290,10 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                 break
         if _adaptive_ran and _adaptive_ran >= _budget:
             plog.write("stage", f"adaptive gap-closing: hit pass ceiling (total {_max_adaptive_total}); proceeding to synthesis")
+
+    # ITEM-3：合成前刷新一次 checkpoint 的 gaps/抓取数（覆盖门 + 自适应轮跑完后的最新状态）。
+    # 不新增 completed pass —— 合成本身很便宜、续跑照常重跑，无需被跳过。
+    ckpt.update_progress(gaps=accumulated_gaps)
 
     synth = synthesize_from_thread(client, thread_id, question, target_language, model_name, plog, depth=depth)
     if synth.strip():
@@ -5133,6 +5434,101 @@ def _collect_market_price_history(out_dir: Path, markets: list[dict],
 
 
 # ---------------------------------------------------------------------------
+# ITEM-14 EXTRACT-ONLY 打捞 —— 跳过全部研究，只从既存报告跑结构化抽取 + 预测市场
+# ---------------------------------------------------------------------------
+
+
+def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "ProgressLog",
+                     write_meta) -> int:
+    """ITEM-14：跳过所有研究阶段，只对既存 research_report.md 跑结构化抽取 + 预测市场。
+
+    前置：main() 已做过「报告存在且 ≥ _extract_only_min_chars()」的门（不满足直接非零退出）。
+    此函数不构造 DeerFlow 研究客户端、不发起任何研究 turn——extract_structured_tool_free 与
+    _collect_prediction_markets 各自用裸模型调用。用途：watchdog 超时打捞（研究报告已落盘、
+    结构化档案还没跑）时，用一个有界子进程把 actors/sources/timeline/quantitative 补出来。
+
+    抽取用的是与正常 Stage 2 相同的原语（extract_structured_tool_free / extract_json_object /
+    enforce_actor_cast / reconcile_quantitative / source_tier_histogram / _collect_prediction_markets），
+    但故意省去依赖「本 run 现场抓取」的增强（来源 grounding、research_quality 记分牌）——本进程没有
+    发起过抓取，那些信号不适用。抽取失败为软失败（报告仍在，返回 0）；报告缺失/过小已在 main 拦截。
+    """
+    report_path = out_dir / REPORT_FILENAME
+    report = report_path.read_text(encoding="utf-8") if report_path.exists() else ""
+    dossier_path = out_dir / ACTOR_DOSSIER_FILENAME
+    dossier = dossier_path.read_text(encoding="utf-8") if dossier_path.exists() else ""
+    meta["extract_only"] = True
+    plog.write("stage", f"extract-only: 跳过研究，仅对既存 {REPORT_FILENAME} 跑结构化抽取 + 预测市场")
+
+    if not args.no_actors:
+        try:
+            # 卷宗（若有）作为 actor 抽取「主」输入，报告作为附加上下文（与正常 Stage 2 一致）。
+            if dossier.strip():
+                extraction_input = (
+                    dossier
+                    + "\n\n---\n\n## 补充：广度深度研究报告（附加上下文）\n\n"
+                    + report
+                )
+            else:
+                extraction_input = report
+            raw = extract_structured_tool_free(extraction_input, args.target_language, args.model, args.depth, plog)
+            obj = extract_json_object(raw)
+            if obj is None:
+                plog.write("warn", "extract-only: 结构化 JSON 解析失败；actors.json/sources.json 跳过")
+            else:
+                sources = obj.pop("sources", None)
+                try:
+                    enforce_actor_cast(obj, meta, plog)
+                except Exception as _cast_err:  # noqa: BLE001 — 阵容纪律是加法
+                    plog.write("warn", f"extract-only: actor-cast discipline skipped (non-fatal): {_cast_err}")
+                _atomic_write_text(out_dir / ACTORS_FILENAME, json.dumps(obj, ensure_ascii=False, indent=2))
+                meta["actors_count"] = len(obj.get("actors", []) or [])
+                meta["relationships_count"] = len(obj.get("relationships", []) or [])
+                meta["has_situation_brief"] = bool(obj.get("situation_brief"))
+                plog.write("ok", f"extract-only: wrote {ACTORS_FILENAME} ({meta['actors_count']} actors, {meta['relationships_count']} relationships)")
+                key_events = obj.get("key_events")
+                if isinstance(key_events, list) and key_events:
+                    _atomic_write_text(out_dir / TIMELINE_FILENAME, json.dumps(key_events, ensure_ascii=False, indent=2))
+                    meta["timeline_count"] = len(key_events)
+                    plog.write("ok", f"extract-only: wrote {TIMELINE_FILENAME} ({len(key_events)} events)")
+                quant = _clean_optional_rows(obj.get("quantitative_facts"))
+                extra_contested: list = []
+                if quant and _env_flag("RESEARCH_QUANT_RECONCILE", True):
+                    try:
+                        extra_contested, _unit_errors = reconcile_quantitative(quant)
+                    except Exception:  # noqa: BLE001 — 数值对账是加法
+                        extra_contested = []
+                if quant:
+                    _atomic_write_text(out_dir / QUANTITATIVE_FILENAME, json.dumps(quant, ensure_ascii=False, indent=2))
+                    meta["quantitative_count"] = len(quant)
+                    plog.write("ok", f"extract-only: wrote {QUANTITATIVE_FILENAME} ({len(quant)} facts)")
+                contested = _clean_optional_rows(obj.get("contested_claims")) + extra_contested
+                if contested:
+                    _atomic_write_text(out_dir / CONTESTED_FILENAME, json.dumps(contested, ensure_ascii=False, indent=2))
+                    meta["contested_count"] = len(contested)
+                    plog.write("ok", f"extract-only: wrote {CONTESTED_FILENAME} ({len(contested)} contested claims)")
+                if isinstance(sources, list) and sources:
+                    _atomic_write_text(out_dir / SOURCES_FILENAME, json.dumps(sources, ensure_ascii=False, indent=2))
+                    meta["sources_count"] = len(sources)
+                    meta["source_tiers"] = source_tier_histogram(sources)
+                    plog.write("ok", f"extract-only: wrote {SOURCES_FILENAME} ({len(sources)} sources; tiers={meta['source_tiers']})")
+        except Exception as _e:  # noqa: BLE001 — 抽取绝不令打捞失败（报告仍在）
+            plog.write("warn", f"extract-only: structured extraction failed (non-fatal): {_e}")
+
+    # 预测市场（与正常 Stage 3 一致的可选锚点；失败一行日志跳过）。
+    try:
+        _collect_prediction_markets(out_dir, question, report, meta, plog, model_name=args.model)
+        write_meta()
+    except Exception as _pm_err:  # noqa: BLE001 — 市场信号为可选增强
+        plog.write("warn", f"extract-only: prediction markets skipped (non-fatal): {_pm_err}")
+
+    meta.update(status="completed", finished_at=_utcnow())
+    write_meta()
+    plog.write("done", "extract-only complete")
+    plog.close()
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -5150,6 +5546,12 @@ def main() -> int:
     parser.add_argument("--no-actors", action="store_true", help="Skip the structured actors.json extraction pass.")
     parser.add_argument("--subagents", action="store_true", help="Enable sub-agent delegation (parallel scoped workers).")
     parser.add_argument("--config", default=None, help="Path to DeerFlow config.yaml (default: repo config resolution).")
+    # ITEM-3：续跑。既存 research_checkpoint.json 且 question_hash 匹配时复用其 thread_id、
+    # 跳过已完成 pass，从下一 pass 续跑（否则全量重启并打标）。
+    parser.add_argument("--resume", action="store_true", help="Resume research from research_checkpoint.json (reuse thread, skip completed passes).")
+    # ITEM-14：只抽取。跳过所有研究，只对既存 research_report.md 跑结构化抽取 + 预测市场；
+    # 报告缺失/过小 → 诚实非零退出。用于 watchdog 超时打捞已落盘但缺结构化档案的报告。
+    parser.add_argument("--extract-only", action="store_true", dest="extract_only", help="Skip research; only run structured extraction + prediction markets against an existing research_report.md.")
     args = parser.parse_args()
 
     # Resolve the question.
@@ -5176,6 +5578,23 @@ def main() -> int:
     # 与 RESEARCH_AGENTIC_SEARCH（默认 true，在 _agentic_delegation_block 内二次门控）才注入指令。
     _set_agentic_delegation(bool(getattr(args, "subagents", False)))
     thread_id = args.thread_id or f"research-{uuid.uuid4().hex[:12]}"
+    # ITEM-3 续跑：--resume 且 checkpoint 存在、question_hash 匹配、depth 一致 → 复用记录的
+    # thread_id（LangGraph checkpointer 仍持有该线程全部笔记），把已完成 pass 传给研究阶段跳过。
+    # 否则（缺失/stale/hash 不匹配）→ 全量重启并把原因记入 meta（打标）。--extract-only 不续跑。
+    resume_completed: set[str] = set()
+    resume_info: dict[str, Any] = {}
+    if getattr(args, "resume", False) and not getattr(args, "extract_only", False) and _checkpoint_enabled():
+        _ckpt = load_research_checkpoint(out_dir)
+        _plan = plan_research_resume(_ckpt, question, args.depth)
+        if _plan["resume"]:
+            thread_id = _plan["thread_id"]
+            resume_completed = set(_plan["completed_passes"])
+            resume_info = {"resumed": True, "thread_id": thread_id,
+                           "skipped_passes": sorted(resume_completed)}
+            plog.write("resume", f"续跑研究：复用线程 {thread_id}，跳过 {len(resume_completed)} 个已完成 pass")
+        else:
+            resume_info = {"resumed": False, "reason": _plan["reason"]}
+            plog.write("resume", f"--resume 但无法续跑（{_plan['reason']}）→ 全量重启")
     started_at = _utcnow()
     meta: dict[str, Any] = {
         "status": "running",
@@ -5186,6 +5605,8 @@ def main() -> int:
         "started_at": started_at,
         "target_language": args.target_language,
     }
+    if resume_info:
+        meta["resume"] = resume_info
     if args.depth == "deep":
         meta["deep_research_phases"] = [
             # SCALE-2: 与 run_research_stage 的实际读值保持一致（开场默认 300；各 pass
@@ -5229,6 +5650,20 @@ def main() -> int:
         print(f"ERROR: {msg}", file=sys.stderr)
         return 3
 
+    # ITEM-14 --extract-only 前置门（在凭据校验/客户端构造之前，故 argparse 路由可零 LLM 测）：
+    # 既存 research_report.md 必须存在且 ≥ _extract_only_min_chars()，否则诚实非零退出——
+    # 打捞的前提是「已有一份可抽取的报告」，无报告/残段抽不出有用结构。
+    if getattr(args, "extract_only", False):
+        _rp = out_dir / REPORT_FILENAME
+        _existing = _rp.read_text(encoding="utf-8") if _rp.exists() else ""
+        _min_chars = _extract_only_min_chars()
+        if len(_existing.strip()) < _min_chars:
+            return _preflight_fail(
+                f"--extract-only 需要既存的 {REPORT_FILENAME}（≥{_min_chars} 字符）："
+                f"当前 {len(_existing.strip())} 字符，无法抽取。",
+                "extract-only: missing/too-small research_report.md",
+            )
+
     # --- Selected-model credential preflight (BEFORE client/config construction) ---
     # Models are built lazily on the first stream() call, so a missing key or an
     # absent/stale OAuth token would otherwise surface as an opaque 401/exit-2
@@ -5268,6 +5703,11 @@ def main() -> int:
             )
 
     try:
+        # ITEM-14：只抽取路径不构造研究客户端、不发起研究 turn（抽取/市场各自用裸模型）。
+        # 前置门已确保 research_report.md 存在且够长。
+        if getattr(args, "extract_only", False):
+            return run_extract_only(question, out_dir, args, meta, plog, write_meta)
+
         plog.write("init", f"importing DeerFlow client (model={args.model})")
         from deerflow.client import DeerFlowClient
 
@@ -5315,6 +5755,8 @@ def main() -> int:
                     args.model,
                     thread_id,
                     plog,
+                    resume_completed=resume_completed,  # ITEM-3 续跑：跳过已完成 pass
+                    out_dir=out_dir,                    # ITEM-3：每完成一 pass 落 checkpoint
                 )
                 _fut_b = _ex.submit(
                     run_actor_ontology_stage,
@@ -5344,6 +5786,8 @@ def main() -> int:
                 args.model,
                 thread_id,
                 plog,
+                resume_completed=resume_completed,  # ITEM-3 续跑：跳过已完成 pass
+                out_dir=out_dir,                    # ITEM-3：每完成一 pass 落 checkpoint
             )
 
         # SAFETY NET: the primary path is the real agentic research turn above (tools +

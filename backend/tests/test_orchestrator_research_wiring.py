@@ -202,6 +202,31 @@ def test_viz_present_files_surface_as_partials(monkeypatch, tmp_path):
     assert "dataset_fig1.csv" in names      # 原始 csv 经目录扫描逐个透出
 
 
+# ── ITEM-18: 阶段级墙钟提取 ──────────────────────────────────────────────────
+
+def test_stage_walls_computes_seconds_and_skips_incomplete():
+    # 各阶段 started_at→finished_at 差值（秒）；缺一端/未结束的阶段跳过（degrade-safe）。
+    st = _po.PipelineState(pipeline_id="pipe-walls-1", prompt="x")
+    st.stages = {
+        "research": _po.StageState(
+            name="research", started_at="2026-05-01T00:00:00+00:00",
+            finished_at="2026-05-01T00:00:42+00:00"),
+        "graph": _po.StageState(
+            name="graph", started_at="2026-05-01T00:01:00+00:00",
+            finished_at="2026-05-01T00:01:05.500000+00:00"),
+        "run": _po.StageState(name="run", started_at="2026-05-01T00:02:00+00:00"),  # 未结束
+        "report": _po.StageState(name="report"),  # 未开始
+    }
+    walls = _po._stage_walls(st)
+    assert walls == {"research": 42.0, "graph": 5.5}
+    assert "run" not in walls and "report" not in walls
+
+
+def test_stage_walls_empty_state_is_empty():
+    st = _po.PipelineState(pipeline_id="pipe-walls-2", prompt="x")
+    assert _po._stage_walls(st) == {}
+
+
 def test_report_agent_accepts_charts_manifest_kwarg():
     # 附加 kwarg：仅存储、默认 None、不改变旧构造行为。
     from app.services.report_agent import ReportAgent

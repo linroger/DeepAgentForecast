@@ -5,6 +5,9 @@ comparison.json / 校准账本统计）渲染成两族可视化：
   (A) Mermaid 代码块（零依赖，纯字符串）——时间线、因果路径、派系聚类、角色关系网络。
   (B) matplotlib PNG（Agg 后端，可选依赖）——情景概率误差棒、模型 vs 市场哑铃图、
       结果世界态堆叠面积、基线-情景分组柱、校准曲线。
+  (C) plotly 交互式 HTML（ITEM-16，可选依赖）——(B) 中四类图的可交互等价物：情景误差棒、
+      模型 vs 市场哑铃、市场价格历史折线、世界态堆叠面积。每图为自包含 charts/<name>.html
+      （plotly.js 内联，完全离线可开），manifest type='html'。plotly 缺失 → 整族静默跳过。
 
 设计约束（与 report_agent 的确定性工具族一致）：
   · 纯函数式的 render_mermaid_* 助手：入参是普通 dict/list，返回 markdown 字符串；
@@ -23,6 +26,7 @@ env 旋钮（Config，全部 degrade-safe 默认）：
   REPORT_VIZ_DPI         PNG dpi（默认 160）
   REPORT_VIZ_MAX_NODES   网络图/因果图节点上限（默认 40，防止巨图不可读；PM-6 也用作锚点上限）
   REPORT_VIZ_PRICE_HISTORY  PM-6 市场价格历史折线族开关（默认开；Config 缺该键时回退读 os.environ）
+  REPORT_VIZ_INTERACTIVE ITEM-16 交互式 plotly HTML 图表族开关（默认开；plotly 缺失时自动无效）
 """
 
 from __future__ import annotations
@@ -44,6 +48,19 @@ try:  # pragma: no cover - 导入分支由 monkeypatch 测试覆盖
 except Exception:  # noqa: BLE001 - 任何导入/后端失败都降级为仅 Mermaid
     plt = None  # type: ignore
     MATPLOTLIB_AVAILABLE = False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# plotly 可选依赖（ITEM-16 交互式 HTML 图表族）：导入失败 → PLOTLY_AVAILABLE=False，
+# HTML 族整体静默跳过（镜像 MATPLOTLIB_AVAILABLE 模式）。与 matplotlib 完全正交，二者可各自
+# 缺失/可用而互不影响。plotly 生成的 HTML 在浏览器渲染，CJK 字形由浏览器字体处理（无需字形过滤）。
+# ─────────────────────────────────────────────────────────────────────────────
+try:  # pragma: no cover - 导入分支由 monkeypatch 测试覆盖
+    import plotly.graph_objects as go  # noqa: E402
+    PLOTLY_AVAILABLE = True
+except Exception:  # noqa: BLE001 - 任何导入失败都降级（不生成 HTML 图族）
+    go = None  # type: ignore
+    PLOTLY_AVAILABLE = False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -99,6 +116,19 @@ def _mpl_text(text: Any, fallback: str = "", max_len: int = 60) -> str:
     if len(kept) > max_len:
         kept = kept[: max_len - 1].rstrip() + "…"
     return kept
+
+
+def _html_text(text: Any, fallback: str = "", max_len: int = 60) -> str:
+    """plotly HTML 标签的文本规整（ITEM-16）：先套用已知中文维度→英文映射（与图注一致），但
+    保留 CJK/非拉丁字形（浏览器字体可渲染，无缺字方块问题），仅折叠空白并截断。空 → fallback。"""
+    s = str(text if text is not None else "").strip()
+    s = _COMPARISON_DIM_EN.get(s, s)
+    s = re.sub(r"\s+", " ", s).strip()
+    if not s:
+        return fallback
+    if len(s) > max_len:
+        s = s[: max_len - 1].rstrip() + "…"
+    return s
 
 
 def _node_id(counter: Dict[str, str], name: str) -> str:
@@ -700,6 +730,259 @@ class ReportVisualizer:
         except Exception:  # noqa: BLE001
             return []
 
+    # ============================ (C) plotly 交互式 HTML 族 ============================
+    # ITEM-16：全部为实例方法，入参普通 dict/list + 输出目录，成功落盘自包含 HTML 返回相对路径，
+    # 否则 None（或 []）。plotly 缺失/关闭 → 直接跳过（build_all 会整族略过）。每个 HTML 用
+    # include_plotlyjs='inline' 内联 plotly.js，完全离线可开（不依赖 CDN/外链）。数据抽取逻辑与
+    # 对应 matplotlib 构建器逐字对齐（复用 _to_float / _first_float / _normalize_price_anchors），
+    # 保证同一工件下 PNG 与 HTML 描绘同一份数据。
+
+    def _interactive_ok(self) -> bool:
+        """ITEM-16 交互式 HTML 图表族开关（默认开）。plotly 缺失时恒为 False（整族跳过）。"""
+        return PLOTLY_AVAILABLE and bool(_cfg("REPORT_VIZ_INTERACTIVE", True))
+
+    def _save_html(self, fig, charts_dir: str, filename: str) -> Optional[str]:
+        """把 plotly figure 存成自包含 HTML（plotly.js 内联，离线可开）并返回相对 report_dir 的
+        路径 'charts/<file>'。原子写（.tmp→replace），失败 → None。"""
+        try:
+            os.makedirs(charts_dir, exist_ok=True)
+            out_path = os.path.join(charts_dir, filename)
+            # include_plotlyjs='inline'：把整份 plotly.js 内联进 HTML → 无外链、完全离线自包含。
+            html = fig.to_html(include_plotlyjs="inline", full_html=True,
+                               config={"displayModeBar": True, "responsive": True})
+            tmp = out_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(html)
+            os.replace(tmp, out_path)
+            return os.path.join("charts", filename)
+        except Exception:  # noqa: BLE001 - 落盘失败不阻断其余可视化
+            return None
+
+    def build_scenario_bars_html(self, forecast: Any, charts_dir: str) -> Optional[str]:
+        """(C1) 情景概率横向柱 + p_low/p_high 误差棒的交互式 HTML（对应 build_scenario_bars）。
+
+        数据抽取与 PNG 版逐字对齐；无区间时不画误差棒。无情景 → None。"""
+        if not self._interactive_ok():
+            return None
+        try:
+            scenarios = forecast.get("scenarios") if isinstance(forecast, dict) else forecast
+            if not isinstance(scenarios, list) or not scenarios:
+                return None
+            names: List[str] = []
+            probs: List[float] = []
+            lo_err: List[float] = []
+            hi_err: List[float] = []
+            has_err = False
+            for i, s in enumerate(scenarios, 1):
+                if not isinstance(s, dict):
+                    continue
+                p = _to_float(s.get("probability"))
+                if p is None:
+                    p = _to_float(s.get("prob"))
+                if p is None:
+                    p = _to_float(s.get("p"))
+                if p is None:
+                    continue
+                nm = _html_text(s.get("name") or s.get("label"), fallback=f"Scenario {i}", max_len=48)
+                names.append(nm)
+                probs.append(p)
+                lo = _first_float(s, ("p_low", "prob_low", "ci_low", "low"))
+                hi = _first_float(s, ("p_high", "prob_high", "ci_high", "high"))
+                if lo is not None and hi is not None and lo <= p <= hi:
+                    lo_err.append(max(0.0, p - lo))
+                    hi_err.append(max(0.0, hi - p))
+                    has_err = True
+                else:
+                    lo_err.append(0.0)
+                    hi_err.append(0.0)
+            if not probs:
+                return None
+            err_x = (dict(type="data", symmetric=False, array=hi_err, arrayminus=lo_err)
+                     if has_err else None)
+            fig = go.Figure(go.Bar(
+                x=probs, y=names, orientation="h", marker_color="#3b6fb0",
+                error_x=err_x,
+                text=[f"{p * 100:.0f}%" for p in probs], textposition="outside",
+                hovertemplate="%{y}: %{x:.1%}<extra></extra>",
+            ))
+            fig.update_layout(
+                title="Scenario Probabilities" + (" (with p_low/p_high)" if has_err else ""),
+                xaxis_title="Probability",
+                xaxis=dict(range=[0, max(1.0, max(probs) * 1.15)]),
+                yaxis=dict(autorange="reversed"),  # 第一个情景显示在顶部（对齐 PNG 版）
+                template="plotly_white", margin=dict(l=10, r=10, t=50, b=40),
+            )
+            return self._save_html(fig, charts_dir, "scenario_probabilities.html")
+        except Exception:  # noqa: BLE001
+            return None
+
+    def build_model_vs_market_html(self, forecast: Any, charts_dir: str) -> Optional[str]:
+        """(C2) 模型 vs 市场哑铃图的交互式 HTML（对应 build_model_vs_market）。
+
+        每条带 market_anchor 的二元预测连模型概率与市场隐含概率两点。无可比条目 → None。"""
+        if not self._interactive_ok():
+            return None
+        try:
+            bfs = forecast.get("binary_forecasts") if isinstance(forecast, dict) else forecast
+            if not isinstance(bfs, list) or not bfs:
+                return None
+            labels: List[str] = []
+            model_p: List[float] = []
+            market_p: List[float] = []
+            for bf in bfs:
+                if not isinstance(bf, dict):
+                    continue
+                anchor = bf.get("market_anchor")
+                if not isinstance(anchor, dict):
+                    continue
+                mp = _to_float(bf.get("probability"))
+                kp = _to_float(anchor.get("implied_yes_prob"))
+                if kp is None:
+                    kp = _to_float(anchor.get("implied_prob"))
+                if mp is None or kp is None:
+                    continue
+                lab = _html_text(bf.get("id") or bf.get("statement") or bf.get("market_id")
+                                 or anchor.get("market_id"), fallback=f"F{len(labels) + 1}", max_len=46)
+                labels.append(lab)
+                model_p.append(mp)
+                market_p.append(kp)
+            if not labels:
+                return None
+            fig = go.Figure()
+            # 先画连线段（哑铃杆），每条一 trace 但不进图例。
+            for lab, mp, kp in zip(labels, model_p, market_p):
+                fig.add_trace(go.Scatter(
+                    x=[kp, mp], y=[lab, lab], mode="lines",
+                    line=dict(color="#9aa5b1", width=2),
+                    showlegend=False, hoverinfo="skip",
+                ))
+            fig.add_trace(go.Scatter(
+                x=market_p, y=labels, mode="markers", name="Market implied",
+                marker=dict(color="#c0603a", size=12),
+                hovertemplate="%{y} — market: %{x:.1%}<extra></extra>",
+            ))
+            fig.add_trace(go.Scatter(
+                x=model_p, y=labels, mode="markers", name="Model",
+                marker=dict(color="#3b6fb0", size=12),
+                hovertemplate="%{y} — model: %{x:.1%}<extra></extra>",
+            ))
+            fig.update_layout(
+                title="Model vs Market (binary forecasts)",
+                xaxis_title="P(yes)", xaxis=dict(range=[0, 1]),
+                yaxis=dict(autorange="reversed"),
+                template="plotly_white", margin=dict(l=10, r=10, t=50, b=40),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            )
+            return self._save_html(fig, charts_dir, "model_vs_market.html")
+        except Exception:  # noqa: BLE001
+            return None
+
+    def build_worldstate_area_html(self, trajectory: Any, charts_dir: str) -> Optional[str]:
+        """(C3) 结果世界态堆叠面积的交互式 HTML（对应 build_worldstate_area）。
+
+        兼容 {trajectory:[{round,shares:{name:share}}]} 或直接列表；<2 时间点 → None。"""
+        if not self._interactive_ok():
+            return None
+        try:
+            rows = trajectory.get("trajectory") if isinstance(trajectory, dict) else trajectory
+            if not isinstance(rows, list) or len(rows) < 2:
+                return None
+            names: List[str] = []
+            snaps: List[Tuple[float, Dict[str, float]]] = []
+            for i, r in enumerate(rows):
+                if not isinstance(r, dict):
+                    continue
+                shares = r.get("shares")
+                if not isinstance(shares, dict) or not shares:
+                    continue
+                x = _to_float(r.get("round"))
+                if x is None:
+                    x = float(i)
+                clean: Dict[str, float] = {}
+                for k, v in shares.items():
+                    fv = _to_float(v)
+                    if fv is None:
+                        continue
+                    clean[str(k)] = fv
+                    if str(k) not in names:
+                        names.append(str(k))
+                if clean:
+                    snaps.append((x, clean))
+            if len(snaps) < 2 or not names:
+                return None
+            xs = [x for x, _ in snaps]
+            fig = go.Figure()
+            for i, nm in enumerate(names):
+                ser = [snap.get(nm, 0.0) for _, snap in snaps]
+                fig.add_trace(go.Scatter(
+                    x=xs, y=ser, mode="lines", name=_html_text(nm, fallback=f"Series {i + 1}", max_len=40),
+                    stackgroup="one",  # 堆叠面积
+                    hovertemplate="round %{x}: %{y:.2f}<extra>" + _html_text(nm, max_len=40) + "</extra>",
+                ))
+            fig.update_layout(
+                title="Modeled Outcome-Share Trajectory",
+                xaxis_title="Simulation round", yaxis_title="Outcome share",
+                template="plotly_white", margin=dict(l=10, r=10, t=50, b=40),
+            )
+            return self._save_html(fig, charts_dir, "worldstate_trajectory.html")
+        except Exception:  # noqa: BLE001
+            return None
+
+    def render_market_price_history_html(self, price_history: Any, anchors: Any,
+                                         out_dir: str) -> List[str]:
+        """(C4) 市场价格历史折线的交互式 HTML（对应 render_market_price_history）。
+
+        每个「有市场锚点且 market_id 命中 price_history」的二元预测 → 一张自包含 HTML：市场隐含
+        P(yes) 随时间折线 + 模型概率水平参考线 + 分歧标注（交互 hover）。锚点总数超
+        REPORT_VIZ_MAX_NODES 确定性截断（保留首现）。返回相对 report_dir 路径列表；
+        plotly 缺失/关闭、无 price_history、无可用锚点 → []（never raises）。"""
+        if not self._interactive_ok():
+            return []
+        try:
+            if not isinstance(price_history, dict) or not price_history:
+                return []
+            norm = _normalize_price_anchors(anchors, price_history)
+            if not norm:
+                return []
+            cap = int(_cfg("REPORT_VIZ_MAX_NODES", 40) or 40)
+            if cap > 0 and len(norm) > cap:
+                norm = norm[:cap]  # 病态超长输入的确定性上限（保留首现锚点）
+            paths: List[str] = []
+            for gi, a in enumerate(norm, 1):
+                xs = [t for t, _ in a["series"]]
+                ys = [p for _, p in a["series"]]
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=xs, y=ys, mode="lines+markers", name="Market implied P(yes)",
+                    line=dict(color="#c0603a", width=2), marker=dict(size=5),
+                    hovertemplate="%{x|%Y-%m-%d}: %{y:.1%}<extra></extra>",
+                ))
+                mp = a["model_p"]
+                if mp is not None:
+                    fig.add_hline(y=mp, line_dash="dash", line_color="#3b6fb0",
+                                  annotation_text=f"Model P(yes) = {mp * 100:.0f}%",
+                                  annotation_position="top left")
+                div = a["divergence"]
+                if div is not None:
+                    fig.add_annotation(
+                        xref="paper", yref="paper", x=0.02, y=0.04, showarrow=False,
+                        text=f"Divergence (model − market): {div * 100:+.0f} pp",
+                        bgcolor="#f2f2f2", bordercolor="#9aa5b1", borderwidth=1,
+                        font=dict(size=11, color="#2b2b2b"),
+                    )
+                fig.update_layout(
+                    title=a["label"],
+                    xaxis_title="Date", yaxis_title="P(yes)", yaxis=dict(range=[0, 1]),
+                    template="plotly_white", margin=dict(l=10, r=10, t=50, b=40),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                )
+                rel = self._save_html(fig, out_dir, f"market_price_history_{gi}.html")
+                if rel:
+                    paths.append(rel)
+            return paths
+        except Exception:  # noqa: BLE001
+            return []
+
     # ============================ 编排入口 ============================
 
     def build_all(self, report_id: str, report_dir: str,
@@ -721,8 +1004,8 @@ class ReportVisualizer:
           handoff_dir           PM-6 可选：研究 handoff 目录（用于定位 handoff/market_price_history.json）
 
         manifest 每项：{path,type,source,caption,placement_hint}
-          path            相对 report_dir 的路径（'charts/xxx.png' 或 'charts/xxx.mmd'）
-          type            'png' | 'mermaid'
+          path            相对 report_dir 的路径（'charts/xxx.png' / 'charts/xxx.mmd' / 'charts/xxx.html'）
+          type            'png' | 'mermaid' | 'html'（html 为 ITEM-16 交互式 plotly 图）
           source          来源工件键名
           caption         人类可读英文标题
           placement_hint  报告装配语义锚（'scenarios'/'timeline'/'actors'/... 供钩子放置）
@@ -792,6 +1075,37 @@ class ReportVisualizer:
                         "caption": "Market-Implied P(yes) History vs Model",
                         "placement_hint": "binary_forecasts",
                     })
+
+        # ---- (C) ITEM-16：plotly 交互式 HTML 族（plotly 缺失/关闭 → 整族跳过）----
+        # 与 (B) matplotlib PNG 族并存：同一工件同时产出 PNG（PDF 内嵌）与 HTML（Web 交互）。
+        # plotly 缺失或 REPORT_VIZ_INTERACTIVE=False 时该族完全不生成（degrade-safe）。
+        if self._interactive_ok():
+            fc_html = artifacts.get("forecast")
+            html_specs = [
+                (self.build_scenario_bars_html(fc_html, charts_dir),
+                 "forecast", "Scenario Probabilities (interactive)", "scenarios"),
+                (self.build_model_vs_market_html(fc_html, charts_dir),
+                 "forecast", "Model vs Market (interactive)", "binary_forecasts"),
+                (self.build_worldstate_area_html(artifacts.get("world_state_trajectory"), charts_dir),
+                 "world_state_trajectory", "Modeled Outcome-Share Trajectory (interactive)", "simulation"),
+            ]
+            for rel, source, caption, hint in html_specs:
+                if rel:
+                    manifest.append({
+                        "path": rel, "type": "html", "source": source,
+                        "caption": caption, "placement_hint": hint,
+                    })
+            # ITEM-16 + PM-6：市场价格历史交互式 HTML（复用 (B2) 的 price_history 加载与锚点）。
+            if self._price_hist_ok():
+                ph_html = self._load_price_history(report_dir, artifacts)
+                ph_anchors_html = fc_html.get("binary_forecasts") if isinstance(fc_html, dict) else None
+                if isinstance(ph_html, dict) and ph_html and isinstance(ph_anchors_html, list):
+                    for rel in self.render_market_price_history_html(ph_html, ph_anchors_html, charts_dir):
+                        manifest.append({
+                            "path": rel, "type": "html", "source": "market_price_history",
+                            "caption": "Market-Implied P(yes) History vs Model (interactive)",
+                            "placement_hint": "binary_forecasts",
+                        })
 
         # ---- 落盘 manifest（原子写；失败不影响已生成的图表）----
         self._persist_manifest(report_dir, manifest)

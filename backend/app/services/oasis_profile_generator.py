@@ -201,6 +201,16 @@ class OasisProfileGenerator:
         "mediaoutlet", "company", "institution", "group", "community"
     ]
 
+    # ITEM 11 SIM_MARKET_PRIORS: 「分析师/媒体」类角色的 entity_type 白名单（小写）——只有这些
+    # 角色的人设才追加市场感知提示（其关注话题与市场问题词重叠时）。与 INDIVIDUAL/GROUP 分类
+    # 口径一致：analyst/expert/journalist 属分析评论者，mediaoutlet/media 属媒体机构；其余角色
+    # （政府/企业/个人/群体）不感知市场，避免每个 persona 都被灌市场价而失真。
+    MARKET_AWARE_ENTITY_TYPES = frozenset({
+        "analyst", "expert", "journalist", "columnist", "commentator",
+        "pundit", "researcher", "economist", "strategist",
+        "mediaoutlet", "media",
+    })
+
     # EXECPLAN2 I-1-5: 社会关系类边类型——用于 ego 网检索的 edge_types 过滤，
     # 让 persona 的「实际位置」只聚焦立场/结盟/对抗等关系边（而非随机事实边）。
     # 与 utils/actors.py 的关系类型表 / 本体 edge_types 命名保持一致。
@@ -801,6 +811,138 @@ class OasisProfileGenerator:
         raw = getattr(Config, "SIM_PERSONA_DESIGN", True)
         return str(raw).strip().lower() not in ("false", "0", "no", "off")
 
+    # ITEM 11 SIM_MARKET_PRIORS: 市场问题词切分/匹配的最小词长与停用词（英文题目为主，
+    # 保留 4 位年份如 2026——市场标题几乎总带结算年份）。轻量本地实现，避免与 utils 过度耦合。
+    _MARKET_TERM_STOPWORDS = frozenset("""
+    will would could should the a an and or of to in on for with by from at as is are be
+    been being this that these those it its their his her our your my we they you he she
+    who whom whose which what when where why how whether if than then so such very just now
+    per via about into over under between among during before after above below up down out
+    off again once more most other some any all both each few own same too year years month
+    market markets prob probability yes no vs
+    """.split())
+
+    def _market_priors_enabled(self) -> bool:
+        """ITEM 11: 市场先验注入开关（SIM_MARKET_PRIORS，默认开）。
+
+        关闭 → 不加载市场、不追加市场感知提示，提示词与产物逐字节不变。
+        __new__ 构造的实例（测试）走 getattr 缺省 True。
+        """
+        raw = getattr(Config, "SIM_MARKET_PRIORS", True)
+        return str(raw).strip().lower() not in ("false", "0", "no", "off")
+
+    def _is_market_aware_role(self, entity_type: str) -> bool:
+        """ITEM 11: 该 entity_type 是否属「分析师/媒体」类（市场感知提示仅面向这类角色）。"""
+        return str(entity_type or "").strip().lower() in self.MARKET_AWARE_ENTITY_TYPES
+
+    def _prediction_markets(self) -> List[Dict[str, Any]]:
+        """ITEM 11: 懒加载 + 缓存本次运行 handoff 的 prediction_markets.json（relevance-gated）。
+
+        persona 生成器不持有 simulation_id——按 self.graph_id 定位管线 handoff（与
+        report_agent 按 simulation_id 定位同模式）；延迟导入 PipelineManager 规避循环依赖。
+        开关关 / 无 graph_id / 无对应管线 / 文件缺失 / 解析失败 → []（人设提示词逐字节不变）。
+        缓存于 self._market_priors_cache，避免每个 persona 都重新扫描管线目录。
+        """
+        cached = getattr(self, "_market_priors_cache", None)
+        if cached is not None:
+            return cached
+        rows: List[Dict[str, Any]] = []
+        graph_id = getattr(self, "graph_id", None)
+        if self._market_priors_enabled() and graph_id:
+            try:
+                from .pipeline_orchestrator import PipelineManager
+                for entry in PipelineManager.list_pipelines():
+                    pid = entry.get("pipeline_id")
+                    if not pid:
+                        continue
+                    data = PipelineManager.load(pid)
+                    if not data or data.get("graph_id") != graph_id:
+                        continue
+                    hd = data.get("handoff_dir") or PipelineManager.handoff_dir(pid)
+                    path = os.path.join(hd, "prediction_markets.json")
+                    if os.path.exists(path):
+                        with open(path, "r", encoding="utf-8") as f:
+                            payload = json.load(f)
+                        markets = payload.get("markets") if isinstance(payload, dict) else payload
+                        rows = [m for m in (markets or []) if isinstance(m, dict)]
+                        break
+            except Exception as e:  # noqa: BLE001 — best-effort，失败即降级空
+                logger.debug(f"读取 handoff prediction_markets.json 失败（降级跳过）: {e}")
+        self._market_priors_cache = rows
+        return rows
+
+    def _topic_terms(self, text: str) -> set:
+        """ITEM 11: 把一段文本切成用于话题重叠判定的显著词集（小写、去停用词、词长>=4，
+        含 4 位年份如 2026）。用于近似 persona 的「关注话题」与市场问题词的重叠。CJK 词一并
+        保留（图谱题材常含中文实体/议题名）。"""
+        import re
+        terms = set()
+        for tok in re.split(r"[^0-9a-zA-Z一-鿿]+", str(text or "").lower()):
+            if not tok or tok in self._MARKET_TERM_STOPWORDS:
+                continue
+            if len(tok) >= 4:
+                terms.add(tok)
+        return terms
+
+    def _market_awareness_hint(
+        self,
+        entity_name: str,
+        entity_type: str,
+        entity_summary: str,
+        actor: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """ITEM 11 SIM_MARKET_PRIORS: 为「分析师/媒体」类角色生成一行市场感知提示。
+
+        当该角色的话题指纹（name + summary + 档案 role/stance——近似其 interested_topics）与
+        某个市场问题的关键词重叠时，取重叠最强的那个市场，追加一行
+        「markets currently price <q> at NN%」，让这类角色在生成人设时把市场隐含概率纳入世界观
+        （可引用/可反驳的先验），而非凭空臆测概率。
+
+        非分析师/媒体角色 / 无市场 / 无话题重叠 / 开关关闭 → ""（提示词逐字节不变）。
+        """
+        if not self._market_priors_enabled() or not self._is_market_aware_role(entity_type):
+            return ""
+        markets = self._prediction_markets()
+        if not markets:
+            return ""
+        # 话题指纹：角色自身文本 + 档案 role/stance（interested_topics 由这些同源材料派生）。
+        signal = f"{entity_name} {entity_summary}"
+        if isinstance(actor, dict):
+            signal += " " + " ".join(
+                str(actor.get(k) or "") for k in ("role", "stance")
+            )
+        text_terms = self._topic_terms(signal)
+        if not text_terms:
+            return ""
+        best_q = ""
+        best_prob = None
+        best_overlap = 0
+        for m in markets:
+            q = str(m.get("question") or "").strip()
+            prob = m.get("implied_yes_prob")
+            if not q or not isinstance(prob, (int, float)) or isinstance(prob, bool):
+                continue
+            overlap = len(self._topic_terms(q) & text_terms)
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_q = q
+                best_prob = float(prob)
+        if best_overlap <= 0 or best_prob is None:
+            return ""
+        pct = f"{best_prob * 100:.0f}%"
+        if self._english_persona():
+            return (
+                "## Market awareness\n"
+                f"Prediction markets currently price \"{best_q[:160]}\" at {pct}. "
+                "As an analyst/media voice you track this market-implied probability — "
+                "cite it or push back on it in your views (it is a calibration anchor, not ground truth)."
+            )
+        return (
+            "## 市场先验感知\n"
+            f"预测市场目前把「{best_q[:160]}」定价在 {pct}。作为分析/媒体类角色，你了解这一"
+            "市场隐含概率，会在观点里引用或质疑它（它是校准锚点，不是真值）。"
+        )
+
     def _build_persona_design_block(self) -> str:
         """NEXTSTEPS SIM_PERSONA_DESIGN: 人格设计指令块（拼在提示词尾部，与实证档案同区）。
 
@@ -1006,6 +1148,15 @@ class OasisProfileGenerator:
                 "persona 的「立场观点」必须与档案立场一致，"
                 "「个人记忆/机构记忆」必须涵盖档案中的已知事实/记忆。"
             )
+
+        # ITEM 11 SIM_MARKET_PRIORS: 仅对「分析师/媒体」类角色，且其话题指纹与某市场问题词重叠时，
+        # 追加一行市场感知提示（market currently prices <q> at NN%）——让这类角色把市场隐含概率
+        # 纳入世界观。非该类角色 / 无重叠 / 无市场 / 开关关闭 → 空串（no-op，提示词逐字节不变）。
+        market_hint = self._market_awareness_hint(
+            entity_name, entity_type, entity_summary, actor=actor
+        )
+        if market_hint:
+            prompt += f"\n\n{market_hint}"
 
         # NEXTSTEPS SIM_PERSONA_DESIGN: 对匹配到调研档案的真实角色做逐角色情境工程——同一次
         # LLM 调用里额外产出结构化 persona_design，并要求 persona 正文体现这份设计。认知多样性

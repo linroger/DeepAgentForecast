@@ -1820,6 +1820,21 @@ async def inject_initial_follows(env, event_config, log_info, agent_names=None, 
             pass
         by_follower[follower].append(followee)
 
+    # ITEM 20 (SIM_MAX_FOLLOWS_PER_AGENT_ROUND): 种子 FOLLOW 风暴节流。上面的 add_edge 已对
+    # 全量边建图（推荐器看到的社交拓扑完整），此处仅截断写 trace/follow 表的 FOLLOW **动作**
+    # 数量——630 条种子关注一次性灌入会把早期动作日志淹没（其余动作看不见）。cap<=0 = 不限（旧行为）。
+    _follow_cap = _max_follows_per_agent_round()
+    if _follow_cap and _follow_cap > 0:
+        try:
+            from app.services.agent_dynamics import throttle_seed_follows
+            _capped, _dropped = throttle_seed_follows(dict(by_follower), _follow_cap)
+            by_follower = _capped
+            if _dropped:
+                log_info(f"种子 FOLLOW 节流：每 follower ≤{_follow_cap} 条 FOLLOW 动作，"
+                         f"丢弃 {_dropped} 条（社交图 add_edge 已建全量边，不受影响）")
+        except Exception as _thr_err:  # noqa: BLE001 — 节流失败退回旧的全量注入（不中断模拟）
+            log_info(f"种子 FOLLOW 节流失败，退回全量注入（不中断模拟）: {_thr_err}")
+
     # 2. FOLLOW 动作多趟注入（每趟每个 follower 处理一个 followee）
     applied = 0
     max_passes = max((len(v) for v in by_follower.values()), default=0)
@@ -2598,12 +2613,58 @@ def _build_round_to_date(seed: Dict[str, Any], config: Dict[str, Any]):
 # LLM 额度对着死 SQLite 连烧 5 小时）。
 # ============================================================================
 def _resume_checkpointing_enabled() -> bool:
-    """SIM_RESUME=true 时每轮落检查点（默认关 → 运行产物与现状逐字节一致）。"""
+    """SIM_RESUME=true 时每轮落检查点（历史契约：开启续跑者必然需要写检查点）。"""
     return _flag_true("SIM_RESUME", "false")
+
+
+def _checkpoint_enabled() -> bool:
+    """ITEM 3: 轮级检查点写入开关。SIM_CHECKPOINT（默认 true）主控——每轮原子落盘 checkpoint.json，
+    使任意崩溃/被杀/后端重启后的运行都可被续跑（续跑本身另由 SIM_RESUME/--resume 触发，见
+    start_simulation）。置 SIM_CHECKPOINT=false → 完全不产出 checkpoint.json（回到 RUN-7 早期
+    degrade-safe 行为）。SIM_RESUME=true 视为隐式开启写检查点（向后兼容），故任一为真即写。"""
+    return _flag_true("SIM_CHECKPOINT", "true") or _resume_checkpointing_enabled()
 
 
 def _checkpoint_file(simulation_dir: str, platform: str) -> str:
     return os.path.join(simulation_dir, platform, "checkpoint.json")
+
+
+def _config_hash(config: Dict[str, Any]) -> str:
+    """ITEM 3: 稳定 config 指纹（整份 config 规范化 JSON 的 sha256）。用于续跑前校验——
+    配置若变更（agent/事件/时长/recsys 任一改动），旧 DB/世界与新意图不一致，必须放弃续跑、
+    从头重跑（诚实降级）。任何异常返回 ""（视为无指纹 → 向后兼容旧检查点，不阻断续跑）。"""
+    try:
+        import hashlib
+        blob = json.dumps(config, ensure_ascii=False, sort_keys=True, default=str)
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+    except Exception:  # noqa: BLE001 — 指纹计算失败退化为无指纹，绝不中断模拟
+        return ""
+
+
+def _capture_rng_state() -> Optional[Dict[str, Any]]:
+    """ITEM 3: 捕获采样 RNG（_RNG，即 python random）当前状态，供续跑时精确恢复采样流。
+    仅在 SIM_SEED 设定（确定性采样）时有实际意义；未设定时恢复也无害。numpy 未被本脚本使用
+    （"numpy if used" —— 此处未用），故不捕获。任何异常返回 None（降级：不恢复，等价旧行为）。"""
+    try:
+        st = _RNG.getstate()
+        # getstate() -> (version:int, internalstate:tuple[int], gauss_next:float|None)；tuple→list 以可 JSON 序列化
+        return {"py_random": [st[0], list(st[1]), st[2]]}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _restore_rng_state(rng_state: Optional[Dict[str, Any]]) -> bool:
+    """ITEM 3: 从检查点恢复 _RNG 状态（与 _capture_rng_state 对称）。成功 True，否则 False（降级）。"""
+    if not isinstance(rng_state, dict):
+        return False
+    py = rng_state.get("py_random")
+    if not py:
+        return False
+    try:
+        _RNG.setstate((int(py[0]), tuple(int(x) for x in py[1]), py[2]))
+        return True
+    except Exception:  # noqa: BLE001 — 状态非法则不恢复（续跑采样流回退为非复现，但不崩溃）
+        return False
 
 
 def _write_round_checkpoint(
@@ -2613,20 +2674,31 @@ def _write_round_checkpoint(
     last_rowid: int,
     total_rounds: int,
     total_actions: int,
+    config_hash: str = "",
+    rng_state: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """每轮结束后原子落盘微型检查点（best-effort；开关关闭时 no-op）。"""
-    if not _resume_checkpointing_enabled():
+    """每轮结束后原子落盘微型检查点（best-effort；开关关闭时 no-op）。
+
+    ITEM 3: 追加两个可选、向后兼容字段——config_hash（续跑前校验配置未变）与 rng_state
+    （python random 采样流，SIM_SEED 设定时可跨崩溃边界复现）。缺省二者时，产物与 RUN-7 逐字节一致。
+    """
+    if not _checkpoint_enabled():
         return
     try:
         from app.utils.atomic import write_json_atomic
-        write_json_atomic(_checkpoint_file(simulation_dir, platform), {
+        payload = {
             "platform": platform,
             "completed_round": int(completed_round),
             "last_rowid": int(last_rowid),
             "total_rounds": int(total_rounds),
             "total_actions": int(total_actions),
             "updated_at": datetime.now().isoformat(),
-        })
+        }
+        if config_hash:
+            payload["config_hash"] = str(config_hash)
+        if rng_state is not None:
+            payload["rng_state"] = rng_state
+        write_json_atomic(_checkpoint_file(simulation_dir, platform), payload)
     except Exception:  # noqa: BLE001 — 检查点是旁路持久化，绝不影响模拟主循环
         pass
 
@@ -2683,6 +2755,175 @@ def _step_failure_limit() -> int:
         return max(0, int(_cfg_flag("SIM_STEP_FAILURE_LIMIT", "3")))
     except (TypeError, ValueError):
         return 3
+
+
+# ============================================================================
+# ITEM 20 — 参与度采样（LIKE_POST）运行时接入。纯采样算法在 app.services.agent_dynamics
+# .sample_engagement_likes（确定性、可离线单测）；这里只做 DB 取本轮新帖 + 构造 ManualAction
+# 注入 env + 记录动作三件副作用。全部 env 门控、默认开、降级安全（任何异常 → 0，不中断模拟）。
+# ============================================================================
+def _engagement_sampler_enabled() -> bool:
+    """SIM_ENGAGEMENT_SAMPLER：每轮有机动作后补一层被动点赞（默认开）。"""
+    return _flag_true("SIM_ENGAGEMENT_SAMPLER", "true")
+
+
+def _engagement_rate() -> float:
+    """SIM_ENGAGEMENT_RATE：每个活跃 agent 本轮产生一次点赞的概率（clamp 到 [0,1]，默认 0.3）。"""
+    try:
+        r = float(_cfg_flag("SIM_ENGAGEMENT_RATE", "0.3"))
+    except (TypeError, ValueError):
+        return 0.3
+    return min(1.0, max(0.0, r))
+
+
+def _max_follows_per_agent_round() -> int:
+    """SIM_MAX_FOLLOWS_PER_AGENT_ROUND：每个 follower 的种子 FOLLOW 动作上限（默认 3；<=0=不限）。"""
+    try:
+        return int(_cfg_flag("SIM_MAX_FOLLOWS_PER_AGENT_ROUND", "3"))
+    except (TypeError, ValueError):
+        return 3
+
+
+def _max_post_id(db_path: str) -> int:
+    """取当前 post 表最大 post_id（作为参与度采样的初始水位，跳过 round-0 种子帖）。缺表/异常 → 0。"""
+    if not os.path.exists(db_path):
+        return 0
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute("SELECT MAX(post_id) FROM post").fetchone()
+        finally:
+            conn.close()
+        return int(row[0]) if row and row[0] is not None else 0
+    except Exception:  # noqa: BLE001 — 采样是附加真实感层，取水位失败退回 0（首轮会含种子帖，仍安全）
+        return 0
+
+
+def _fetch_round_posts(
+    db_path: str, last_post_id: int, agent_names: Dict[int, str]
+) -> Tuple[Dict[int, int], int]:
+    """取 post_id > last_post_id 的本轮新帖及其作者 agent_id（join user 表）。
+    返回 ({post_id: author_agent_id}, 新水位)。缺表/异常 → ({}, last_post_id)。"""
+    posts: Dict[int, int] = {}
+    hw = int(last_post_id or 0)
+    if not os.path.exists(db_path):
+        return posts, hw
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT p.post_id, u.agent_id
+                FROM post p LEFT JOIN user u ON p.user_id = u.user_id
+                WHERE p.post_id > ?
+                """,
+                (int(last_post_id or 0),),
+            )
+            for post_id, agent_id in cur.fetchall():
+                if post_id is None:
+                    continue
+                pid = int(post_id)
+                posts[pid] = int(agent_id) if agent_id is not None else -1
+                if pid > hw:
+                    hw = pid
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 — 取帖失败即本轮不采样（degrade-safe）
+        return {}, int(last_post_id or 0)
+    return posts, hw
+
+
+async def inject_engagement_likes(
+    env,
+    db_path: str,
+    engagement_state: Dict[str, int],
+    active_agents: List[Tuple[int, Any]],
+    actual_actions: List[Dict[str, Any]],
+    round_num: int,
+    agent_names: Dict[int, str],
+    action_logger,
+    rng,
+    rate: float,
+    last_rowid: int,
+    log_info,
+) -> Tuple[int, int]:
+    """ITEM 20 (SIM_ENGAGEMENT_SAMPLER): 每轮有机动作后，确定性采样 LIKE_POST 从本轮活跃 agent
+    落到本轮新帖上（权重 = 1 + 该帖本轮已获评论/点赞），补足 OASIS 默认 feed「满屏帖 0 赞」的
+    纯广播失真。注入的赞标记 is_engagement_sample=True——run_summary 的有机比例侦测器据此排除
+    （诚实：采样赞不得掩盖 agent 自身零点赞的塌缩）。
+
+    返回 (注入的点赞数, 新 last_rowid)。任何异常 → (0, 原 last_rowid)（degrade-safe）。
+    """
+    try:
+        from app.services.agent_dynamics import sample_engagement_likes
+
+        # 1. 本轮新帖（post_id > 上轮水位）及作者
+        prev_hw = int(engagement_state.get("last_post_id", 0) or 0)
+        new_posts, hw = _fetch_round_posts(db_path, prev_hw, agent_names)
+        if hw > prev_hw:
+            engagement_state["last_post_id"] = hw
+        if not new_posts:
+            return 0, last_rowid
+
+        # 2. 权重 = 1 + 本轮该帖收到的评论/点赞（winner-take-all 真实感）
+        from collections import defaultdict as _dd
+        engaged = _dd(int)
+        for a in actual_actions:
+            at = a.get("action_type")
+            pid = (a.get("action_args") or {}).get("post_id")
+            if pid is not None and at in ("CREATE_COMMENT", "LIKE_POST", "DISLIKE_POST"):
+                try:
+                    engaged[int(pid)] += 1
+                except (TypeError, ValueError):
+                    continue
+        post_weights = {pid: 1.0 + engaged.get(pid, 0) for pid in new_posts}
+        post_authors = dict(new_posts)
+
+        # 3. 采样（纯函数，rng 确定性）
+        id_to_agent = {int(aid): ag for aid, ag in active_agents}
+        pairs = sample_engagement_likes(
+            post_weights, post_authors, list(id_to_agent.keys()), rate, rng
+        )
+        if not pairs:
+            return 0, last_rowid
+
+        # 4. 构造 LIKE_POST ManualAction 注入 env（每个 liker 至多一次，满足单 step 单动作约束）
+        step_actions = {}
+        for liker, pid in pairs:
+            ag = id_to_agent.get(int(liker))
+            if ag is None:
+                continue
+            step_actions[ag] = ManualAction(
+                action_type=ActionType.LIKE_POST,
+                action_args={"post_id": int(pid)},
+            )
+        if not step_actions:
+            return 0, last_rowid
+        await env.step(step_actions)
+
+        # 5. 推进 last_rowid 丢弃这些赞的 trace 行（避免下一轮 fetch 重复记账），改为
+        #    手动按本轮记录（带 is_engagement_sample 标记——比例侦测器据此排除）。
+        _, last_rowid = fetch_new_actions_from_db(db_path, last_rowid, agent_names)
+        injected = 0
+        if action_logger:
+            for liker, pid in pairs:
+                if int(liker) not in id_to_agent:
+                    continue
+                action_logger.log_action(
+                    round_num=round_num + 1,
+                    agent_id=int(liker),
+                    agent_name=agent_names.get(int(liker), f"Agent_{int(liker)}"),
+                    action_type="LIKE_POST",
+                    action_args={"post_id": int(pid), "is_engagement_sample": True},
+                )
+                injected += 1
+        else:
+            injected = len(step_actions)
+        return injected, last_rowid
+    except Exception as e:  # noqa: BLE001 — 采样是附加真实感层，失败绝不中断模拟
+        log_info(f"参与度采样注入失败，跳过（不中断模拟）: {e}")
+        return 0, last_rowid
 
 
 async def run_twitter_simulation(
@@ -2768,6 +3009,14 @@ async def run_twitter_simulation(
     if resume_ckpt is not None and not os.path.exists(db_path):
         log_info("检查点存在但模拟 DB 缺失，无法续跑 → 从头重跑")
         resume_ckpt = None
+    # ITEM 3: 续跑前校验 config_hash——配置自上次运行以来若已变更，旧 DB/世界与新意图不一致，
+    # 必须放弃续跑、从头重跑（诚实降级）。旧检查点无 config_hash 字段时不阻断（向后兼容）。
+    if resume_ckpt is not None:
+        _saved_hash = str(resume_ckpt.get("config_hash", "") or "")
+        _cur_hash = _config_hash(config)
+        if _saved_hash and _cur_hash and _saved_hash != _cur_hash:
+            log_info("检查点 config_hash 与当前配置不匹配（配置已变更）→ 放弃续跑，从头重跑")
+            resume_ckpt = None
     if os.path.exists(db_path) and resume_ckpt is None:
         os.remove(db_path)
     
@@ -2794,6 +3043,9 @@ async def run_twitter_simulation(
     if resume_ckpt is not None:
         total_actions = int(resume_ckpt.get("total_actions", 0) or 0)
         last_rowid = max(int(resume_ckpt.get("last_rowid", 0) or 0), _max_trace_rowid(db_path))
+        # ITEM 3: 恢复采样 RNG 状态，使 SIM_SEED 确定性运行跨崩溃边界仍可复现采样流。
+        if _restore_rng_state(resume_ckpt.get("rng_state")):
+            log_info("已从检查点恢复采样 RNG 状态（续跑采样流可复现）")
 
     # 执行初始事件
     event_config = config.get("event_config", {})
@@ -2909,13 +3161,21 @@ async def run_twitter_simulation(
     dynamics_tracker = _build_dynamics_tracker(config, log_info)
     dyn_name_to_id = {name: aid for aid, name in agent_names.items()}
 
-    # RUN-7: 每轮结束后落轮级检查点（SIM_RESUME 开启时）；续跑则跳过已完成的轮次。
+    # ITEM 20: 参与度采样状态——初始水位取当前最大 post_id，使采样只落到主循环各轮的新帖上，
+    # 不去点赞 round-0 种子帖。门控与 rate 只读一次（子进程内不变），关闭则整段 no-op。
+    _engagement_on = _engagement_sampler_enabled()
+    _engagement_rate_val = _engagement_rate()
+    _engagement_state = {"last_post_id": _max_post_id(db_path) if _engagement_on else 0}
+
+    # RUN-7: 每轮结束后落轮级检查点（SIM_CHECKPOINT 默认开）；续跑则跳过已完成的轮次。
     _ckpt_platform = "reddit" if os.path.basename(db_path).startswith("reddit") else "twitter"
+    _cfg_hash = _config_hash(config)  # ITEM 3: 每轮检查点写入配置指纹，供续跑前校验（只算一次）
 
     def _write_ckpt(completed_round: int) -> None:
-        # 闭包按调用时读取 last_rowid / total_actions 的当前值
+        # 闭包按调用时读取 last_rowid / total_actions 的当前值；ITEM 3: 附带 config_hash 与实时 RNG 状态
         _write_round_checkpoint(simulation_dir, _ckpt_platform, completed_round,
-                                last_rowid, total_rounds, total_actions)
+                                last_rowid, total_rounds, total_actions,
+                                config_hash=_cfg_hash, rng_state=_capture_rng_state())
 
     start_round = 0
     if resume_ckpt is not None:
@@ -3026,6 +3286,17 @@ async def run_twitter_simulation(
         
         # I-2-1: 用本轮实际动作更新动态情感状态（默认关 → no-op）
         _observe_agent_dynamics(dynamics_tracker, actual_actions, dyn_name_to_id)
+
+        # ITEM 20 (SIM_ENGAGEMENT_SAMPLER): 有机动作落账后补一层被动点赞（本轮活跃者→本轮新帖）。
+        # 关闭 → no-op；异常内部吞掉并返回 0（degrade-safe），round_action_count/total_actions 据实增量。
+        if _engagement_on:
+            _liked, last_rowid = await inject_engagement_likes(
+                result.env, db_path, _engagement_state, active_agents, actual_actions,
+                round_num, agent_names, action_logger, _RNG, _engagement_rate_val,
+                last_rowid, log_info,
+            )
+            total_actions += _liked
+            round_action_count += _liked
 
         if action_logger:
             action_logger.log_round_end(
@@ -3147,6 +3418,14 @@ async def run_reddit_simulation(
     if resume_ckpt is not None and not os.path.exists(db_path):
         log_info("检查点存在但模拟 DB 缺失，无法续跑 → 从头重跑")
         resume_ckpt = None
+    # ITEM 3: 续跑前校验 config_hash——配置自上次运行以来若已变更，旧 DB/世界与新意图不一致，
+    # 必须放弃续跑、从头重跑（诚实降级）。旧检查点无 config_hash 字段时不阻断（向后兼容）。
+    if resume_ckpt is not None:
+        _saved_hash = str(resume_ckpt.get("config_hash", "") or "")
+        _cur_hash = _config_hash(config)
+        if _saved_hash and _cur_hash and _saved_hash != _cur_hash:
+            log_info("检查点 config_hash 与当前配置不匹配（配置已变更）→ 放弃续跑，从头重跑")
+            resume_ckpt = None
     if os.path.exists(db_path) and resume_ckpt is None:
         os.remove(db_path)
     
@@ -3173,6 +3452,9 @@ async def run_reddit_simulation(
     if resume_ckpt is not None:
         total_actions = int(resume_ckpt.get("total_actions", 0) or 0)
         last_rowid = max(int(resume_ckpt.get("last_rowid", 0) or 0), _max_trace_rowid(db_path))
+        # ITEM 3: 恢复采样 RNG 状态，使 SIM_SEED 确定性运行跨崩溃边界仍可复现采样流。
+        if _restore_rng_state(resume_ckpt.get("rng_state")):
+            log_info("已从检查点恢复采样 RNG 状态（续跑采样流可复现）")
 
     # 执行初始事件
     event_config = config.get("event_config", {})
@@ -3286,13 +3568,21 @@ async def run_reddit_simulation(
     dynamics_tracker = _build_dynamics_tracker(config, log_info)
     dyn_name_to_id = {name: aid for aid, name in agent_names.items()}
 
-    # RUN-7: 每轮结束后落轮级检查点（SIM_RESUME 开启时）；续跑则跳过已完成的轮次。
+    # ITEM 20: 参与度采样状态——初始水位取当前最大 post_id，使采样只落到主循环各轮的新帖上，
+    # 不去点赞 round-0 种子帖。门控与 rate 只读一次（子进程内不变），关闭则整段 no-op。
+    _engagement_on = _engagement_sampler_enabled()
+    _engagement_rate_val = _engagement_rate()
+    _engagement_state = {"last_post_id": _max_post_id(db_path) if _engagement_on else 0}
+
+    # RUN-7: 每轮结束后落轮级检查点（SIM_CHECKPOINT 默认开）；续跑则跳过已完成的轮次。
     _ckpt_platform = "reddit" if os.path.basename(db_path).startswith("reddit") else "twitter"
+    _cfg_hash = _config_hash(config)  # ITEM 3: 每轮检查点写入配置指纹，供续跑前校验（只算一次）
 
     def _write_ckpt(completed_round: int) -> None:
-        # 闭包按调用时读取 last_rowid / total_actions 的当前值
+        # 闭包按调用时读取 last_rowid / total_actions 的当前值；ITEM 3: 附带 config_hash 与实时 RNG 状态
         _write_round_checkpoint(simulation_dir, _ckpt_platform, completed_round,
-                                last_rowid, total_rounds, total_actions)
+                                last_rowid, total_rounds, total_actions,
+                                config_hash=_cfg_hash, rng_state=_capture_rng_state())
 
     start_round = 0
     if resume_ckpt is not None:
@@ -3403,6 +3693,17 @@ async def run_reddit_simulation(
         
         # I-2-1: 用本轮实际动作更新动态情感状态（默认关 → no-op）
         _observe_agent_dynamics(dynamics_tracker, actual_actions, dyn_name_to_id)
+
+        # ITEM 20 (SIM_ENGAGEMENT_SAMPLER): 有机动作落账后补一层被动点赞（本轮活跃者→本轮新帖）。
+        # 关闭 → no-op；异常内部吞掉并返回 0（degrade-safe），round_action_count/total_actions 据实增量。
+        if _engagement_on:
+            _liked, last_rowid = await inject_engagement_likes(
+                result.env, db_path, _engagement_state, active_agents, actual_actions,
+                round_num, agent_names, action_logger, _RNG, _engagement_rate_val,
+                last_rowid, log_info,
+            )
+            total_actions += _liked
+            round_action_count += _liked
 
         if action_logger:
             action_logger.log_round_end(

@@ -28,15 +28,39 @@ export function slugify(text) {
     .slice(0, 80) || 'h'
 }
 
+// 相对资源地址解析（图片/链接）：绝对 http(s)/data 原样；以 / 开头的同源绝对路径原样；
+// 其它显式协议（javascript: 等）拒绝为空串；相对路径（如 'charts/xxx.png'）交给 resolve()
+// 重写到 API base。无 resolve 时相对路径无法定位 → 返回空串（调用方据此退化）。
+function safeAssetUrl(url, resolve) {
+  if (/^(https?:|data:)/i.test(url)) return url
+  if (/^\//.test(url)) return url
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return ''   // 未知/危险协议一律拒绝
+  return resolve ? (resolve(url) || '') : ''
+}
+
 // Inline formatting on an already-escaped string.
-function renderInline(text) {
+// opts.resolveUrl(rel) —— 可选：把报告内相对资源路径（charts/…）重写为可访问 URL。
+// 提供时图片渲染为 <img>；不提供时保持历史行为（图片退化为 alt 文本，供 Dossier 等无资源上下文复用）。
+function renderInline(text, opts) {
+  const resolve = opts && typeof opts.resolveUrl === 'function' ? opts.resolveUrl : null
   let t = text
-  // images are not supported as raw HTML; strip to alt text
-  t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+  // 图片：有 resolveUrl 时渲染 <img>（相对 charts/… 重写到 API base，PNG 图表得以显示）；
+  // 否则退化为 alt 文本（与历史一致，避免 Dossier 等上下文出现坏图）。
+  if (resolve) {
+    t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g, (m, alt, url) => {
+      const src = safeAssetUrl(url, resolve)
+      if (!src) return alt
+      return `<img class="md-img" src="${src}" alt="${alt}" loading="lazy" />`
+    })
+  } else {
+    t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+  }
   // links: [label](url)  — also handles [citation:Label](url)
   t = t.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g, (m, label, url) => {
     const clean = label.replace(/^citation:/i, '')
-    const safeUrl = /^(https?:|mailto:|#|\/)/i.test(url) ? url : '#'
+    const safeUrl = /^(https?:|mailto:|#|\/)/i.test(url)
+      ? url
+      : (resolve ? (safeAssetUrl(url, resolve) || '#') : '#')
     const external = /^https?:/i.test(safeUrl)
     return `<a href="${safeUrl}"${external ? ' target="_blank" rel="noopener noreferrer"' : ''}>${clean}</a>`
   })
@@ -48,26 +72,28 @@ function renderInline(text) {
   return t
 }
 
-function renderTable(rows) {
+function renderTable(rows, opts) {
   // rows: array of raw markdown table lines (without the separator row)
   const parseRow = (line) => line.replace(/^\||\|$/g, '').split('|').map(c => c.trim())
   const header = parseRow(rows[0])
   const body = rows.slice(2) // skip header + separator
   let html = '<table class="md-table"><thead><tr>'
-  header.forEach(h => { html += `<th>${renderInline(escapeHtml(h))}</th>` })
+  header.forEach(h => { html += `<th>${renderInline(escapeHtml(h), opts)}</th>` })
   html += '</tr></thead><tbody>'
   body.forEach(line => {
     if (!line.trim()) return
     const cells = parseRow(line)
     html += '<tr>'
-    cells.forEach(c => { html += `<td>${renderInline(escapeHtml(c))}</td>` })
+    cells.forEach(c => { html += `<td>${renderInline(escapeHtml(c), opts)}</td>` })
     html += '</tr>'
   })
   html += '</tbody></table>'
-  return html
+  // 宽表（如 Market Cross-Check）用横向滚动容器包裹，避免撑破正文导致整页横向滚动。
+  return '<div class="md-table-wrap">' + html + '</div>'
 }
 
-export function renderMarkdown(md) {
+// opts.resolveUrl(rel) —— 可选相对资源解析器（见 renderInline）。缺省时行为与历史完全一致。
+export function renderMarkdown(md, opts) {
   if (!md) return ''
   const src = String(md).replace(/\r\n/g, '\n').replace(/\r/g, '\n')
   const lines = src.split('\n')
@@ -76,7 +102,7 @@ export function renderMarkdown(md) {
 
   const flushParagraph = (buf) => {
     if (buf.length) {
-      out.push('<p>' + renderInline(escapeHtml(buf.join(' '))) + '</p>')
+      out.push('<p>' + renderInline(escapeHtml(buf.join(' ')), opts) + '</p>')
       buf.length = 0
     }
   }
@@ -102,7 +128,7 @@ export function renderMarkdown(md) {
       flushParagraph(paraBuf)
       const tbl = []
       while (i < lines.length && /\|/.test(lines[i]) && lines[i].trim()) { tbl.push(lines[i]); i++ }
-      out.push(renderTable(tbl))
+      out.push(renderTable(tbl, opts))
       continue
     }
 
@@ -113,7 +139,7 @@ export function renderMarkdown(md) {
       const level = h[1].length
       const text = h[2].replace(/\s+#*\s*$/, '')
       const id = slugify(text)
-      out.push(`<h${level} id="${id}" class="md-h md-h${level}">${renderInline(escapeHtml(text))}</h${level}>`)
+      out.push(`<h${level} id="${id}" class="md-h md-h${level}">${renderInline(escapeHtml(text), opts)}</h${level}>`)
       i++
       continue
     }
@@ -134,7 +160,7 @@ export function renderMarkdown(md) {
         quote.push(lines[i].replace(/^\s*>\s?/, ''))
         i++
       }
-      out.push('<blockquote class="md-quote">' + renderInline(escapeHtml(quote.join(' '))) + '</blockquote>')
+      out.push('<blockquote class="md-quote">' + renderInline(escapeHtml(quote.join(' ')), opts) + '</blockquote>')
       continue
     }
 
@@ -146,7 +172,7 @@ export function renderMarkdown(md) {
       out.push(`<${tag} class="md-list">`)
       while (i < lines.length && /^\s*([-*+]|\d+\.)\s+/.test(lines[i])) {
         const item = lines[i].replace(/^\s*([-*+]|\d+\.)\s+/, '')
-        out.push('<li>' + renderInline(escapeHtml(item)) + '</li>')
+        out.push('<li>' + renderInline(escapeHtml(item), opts) + '</li>')
         i++
       }
       out.push(`</${tag}>`)

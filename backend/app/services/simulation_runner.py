@@ -920,12 +920,34 @@ class SimulationRunner:
                     logger.warning(f"轮转旧派生产物失败（{stale}）: {e}")
 
     @classmethod
+    def _current_config_hash(cls, sim_dir: str) -> str:
+        """ITEM 3: 计算当前 simulation_config.json 的稳定指纹（与脚本侧 run_parallel_simulation
+        ._config_hash 同法：整份 config 规范化 JSON 的 sha256）。用于续跑决策时校验配置未变；
+        文件缺失/读失败/异常一律返回 ""（视为无指纹 → 不阻断续跑，向后兼容）。"""
+        import hashlib
+        cfg_path = os.path.join(sim_dir, "simulation_config.json")
+        if not os.path.exists(cfg_path):
+            return ""
+        try:
+            with open(cfg_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            blob = json.dumps(config, ensure_ascii=False, sort_keys=True, default=str)
+            return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+        except (OSError, ValueError, TypeError):
+            return ""
+
+    @classmethod
     def _resume_checkpoint_round(cls, sim_dir: str) -> Optional[int]:
         """RUN-7: 读取平台轮级检查点，返回可续跑的已完成轮次（无有效检查点 → None）。
 
         取各平台 completed_round 的最大值（进度以最快的平台记账；慢平台的检查点由
         子进程各自读取）。检查点损坏/字段非法一律视为不可续跑，绝不抛出。
+
+        ITEM 3: 若检查点带 config_hash 且与当前 simulation_config.json 指纹不符（配置已变更），
+        则该平台检查点不可续跑（跳过，不计入 best）——避免把旧世界续进新意图。检查点无 config_hash
+        或当前配置读不到时不阻断（向后兼容旧检查点）。脚本侧在续跑时还会二次校验，构成纵深防御。
         """
+        cur_hash = cls._current_config_hash(sim_dir)
         best: Optional[int] = None
         for plat in ("twitter", "reddit"):
             ckpt_path = os.path.join(sim_dir, plat, "checkpoint.json")
@@ -935,6 +957,10 @@ class SimulationRunner:
                 with open(ckpt_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 completed = int(data.get("completed_round", 0))
+                saved_hash = str(data.get("config_hash", "") or "")
+                # ITEM 3: config 指纹存在且不匹配 → 该平台不可续跑（配置已变更）
+                if saved_hash and cur_hash and saved_hash != cur_hash:
+                    continue
                 if completed >= 1 and (best is None or completed > best):
                     best = completed
             except (OSError, ValueError, TypeError):
@@ -1698,6 +1724,51 @@ class SimulationRunner:
             except (OSError, ValueError):
                 continue
 
+        # ITEM 20 (SIMULATED_HOURS 记账): run_summary 历史上从不落 simulated_hours（round_end 事件
+        # 的累计值没回传到这里），报告读到恒 0 的模拟时长。这里从 simulation_config.json 读
+        # minutes_per_round，据唯一权威公式 rounds_executed × minutes_per_round / 60 重算。
+        _minutes_per_round = 60.0
+        try:
+            _cfgp = os.path.join(cls.RUN_STATE_DIR, simulation_id, "simulation_config.json")
+            if os.path.exists(_cfgp):
+                with open(_cfgp, encoding="utf-8") as _cf:
+                    _sc = json.load(_cf)
+                _mpr = (_sc.get("time_config") or {}).get("minutes_per_round", 60)
+                _minutes_per_round = float(_mpr) if _mpr else 60.0
+        except (OSError, ValueError, TypeError):
+            _minutes_per_round = 60.0
+        try:
+            from app.services.agent_dynamics import simulated_hours_from_rounds
+            simulated_hours = simulated_hours_from_rounds(rounds_executed, _minutes_per_round)
+        except Exception:  # noqa: BLE001 — 记账辅助失败退回 0.0（degrade-safe）
+            simulated_hours = 0.0
+
+        # ITEM 20 (SIM_ORGANIC_RATIO_DETECTOR): 逐平台逐轮 post:comment:like 比例塌缩侦测。只用
+        # agent 自发的有机动作，显式排除 is_engagement_sample（采样赞）——诚实优先：采样赞不得
+        # 掩盖 agent 自身零点赞的塌缩。连续 ≥K 轮 posts>0 而 comments+likes==0 → 结构化告警。
+        organic_ratio_warnings: List[Dict[str, Any]] = []
+        try:
+            from app.config import Config
+            if getattr(Config, "SIM_ORGANIC_RATIO_DETECTOR", True):
+                from app.services.agent_dynamics import (
+                    classify_organic_action, detect_organic_ratio_collapse,
+                )
+                _prc: Dict[str, Dict[int, Dict[str, int]]] = {}
+                for a in organic:
+                    if (a.action_args or {}).get("is_engagement_sample"):
+                        continue  # 采样赞不计入有机比例
+                    _plat_name = getattr(a, "platform", None) or "unknown"
+                    _rnd = a.round_num or 0
+                    _bucket = _prc.setdefault(_plat_name, {}).setdefault(
+                        _rnd, {"posts": 0, "comments": 0, "likes": 0})
+                    _key = classify_organic_action(getattr(a, "action_type", ""))
+                    if _key:
+                        _bucket[_key] += 1
+                _minc = int(getattr(Config, "SIM_ORGANIC_RATIO_MIN_CONSECUTIVE", 3) or 3)
+                organic_ratio_warnings = detect_organic_ratio_collapse(_prc, _minc)
+        except Exception:  # noqa: BLE001 — 侦测器失败不阻断 run_summary（degrade-safe）
+            organic_ratio_warnings = []
+
         summary = {
             "simulation_id": simulation_id,
             "agent_count": len(agent_stats),
@@ -1705,6 +1776,7 @@ class SimulationRunner:
             "organic_action_count": organic_count,
             "seed_action_count": seed_count,
             "rounds_executed": rounds_executed,
+            "simulated_hours": simulated_hours,
             "rounds_with_organic_actions": rounds_with_organic,
             "total_rounds": total_rounds,
             "truncated": truncated,
@@ -1722,6 +1794,9 @@ class SimulationRunner:
             summary["agent_dynamics"] = agent_dynamics  # RUN-9: 报告端可据 active=false 抑制情绪叙事
         if communities:
             summary["communities"] = communities
+        if organic_ratio_warnings:
+            # ITEM 20: 有机互动塌缩告警——报告端据此对相关平台样本施加「不得叙述为活跃讨论」caveat。
+            summary["organic_ratio_warnings"] = organic_ratio_warnings
 
         try:
             sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)

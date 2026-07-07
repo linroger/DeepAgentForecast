@@ -62,6 +62,15 @@ service.interceptors.response.use(
   }
 )
 
+// 直链 URL 构造：用于 <img src> / <a href> / 文件下载等无法走 axios 实例的场景（PDF、图表 PNG）。
+// 与 service.baseURL 同源：默认相对根（'' → 同源，开发经 Vite 代理），仅当后端跨源时由
+// VITE_API_BASE_URL 提供绝对前缀。返回值可直接放进浏览器可解析的 URL。
+export const apiUrl = (path) => {
+  const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
+  const p = String(path || '')
+  return base + (p.startsWith('/') ? p : '/' + p)
+}
+
 // 带重试的请求函数
 export const requestWithRetry = async (requestFn, maxRetries = 3, delay = 1000) => {
   for (let i = 0; i < maxRetries; i++) {

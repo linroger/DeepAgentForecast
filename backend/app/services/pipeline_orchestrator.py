@@ -671,6 +671,17 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
                 return hashlib.sha256(fh.read()).hexdigest()
 
         pairs = [(bridge_script, deployed_script)]
+        # ORCH-1(2): config-reflected tool modules registered in config.yaml as BARE
+        # module names (`use: market_tools:...` / `search_tools:...` / `cached_fetch:...`).
+        # deerflow_research.py runs with sys.path[0]==deer-flow/, so the harness
+        # reflection resolver imports these by bare name — they MUST sit next to the
+        # deployed script or web_search/web_fetch/prediction_market tools fail to load.
+        # setup.sh copies them, but a bridge-only edit (no ./setup.sh rerun) would
+        # otherwise drift exactly like deerflow_research.py did; mirror that guard here.
+        for _tool_mod in ("market_tools.py", "search_tools.py", "cached_fetch.py"):
+            _tool_src = os.path.join(bridge_dir, _tool_mod)
+            if os.path.isfile(_tool_src):
+                pairs.append((_tool_src, os.path.join(deerflow_dir, _tool_mod)))
         # ORCH-1(1): skill 同步从硬编码 2 个种子 skill 改为 glob 全量枚举——此前 bridge 侧
         # 新增第 3 个 skill 只有重跑 ./setup.sh 才会部署，这里会静默漂移。与 setup.sh 语义
         # 一致：仅当部署侧存在 skills/public/ 时才同步；目标 skill 目录缺失（新 skill 首次
@@ -738,8 +749,14 @@ class DeerFlowResearchRunner:
         timeout: Optional[int] = None,
         cancel_event: Optional[threading.Event] = None,
         on_spawn: Optional[Callable[[int], None]] = None,
+        resume: bool = False,
     ) -> dict[str, Any]:
         """运行研究子进程，阻塞直到结束。返回 handoff 摘要。
+
+        ITEM-3 ``resume``：True 时给子进程加 ``--resume``——bridge 若在 handoff_dir 找到
+        question_hash 匹配的 research_checkpoint.json，就复用其 LangGraph thread、跳过已完成
+        pass、从下一 pass 续跑（否则全量重启）。调用方仅在既存 checkpoint 时置 True（崩溃/超时
+        重试路径），故正常首跑逐字节不变。
 
         Raises:
             PipelineCancelled: cancel_event 被置位（用户取消），子进程组已被终止。
@@ -776,6 +793,9 @@ class DeerFlowResearchRunner:
             cmd += ["--target-language", lang]
         if (subagents if subagents is not None else Config.DEERFLOW_SUBAGENTS):
             cmd += ["--subagents"]
+        # ITEM-3：崩溃/超时重试时若 handoff_dir 已有 checkpoint，续跑而非全量重启。
+        if resume:
+            cmd += ["--resume"]
 
         env = dict(os.environ)
         env.setdefault("PYTHONUNBUFFERED", "1")
@@ -931,6 +951,20 @@ class DeerFlowResearchRunner:
                     f"DeerFlow 研究超时（>{budget}s），但 research_report.md 已写出——打捞继续"
                 )
                 on_progress(95, "研究超时，但报告已生成——打捞继续（无结构化档案）")
+                # ITEM-14：报告已落盘但结构化抽取还没跑（'无结构化档案'）。花一个有界的
+                # --extract-only 子进程把 actors/sources/timeline/quantitative 抢救出来，
+                # 让下游本体/图谱/模拟仍有真实结构可用，而非带着空档案降级。best-effort。
+                actors_path = os.path.join(handoff_dir, "actors.json")
+                _salvage_on = os.environ.get(
+                    "RESEARCH_EXTRACT_ONLY_SALVAGE", "true").strip().lower() not in ("0", "false", "no")
+                if _salvage_on and not os.path.exists(actors_path):
+                    try:
+                        _run_extract_only_salvage(
+                            deerflow_dir, handoff_dir, prompt, model or Config.DEERFLOW_MODEL,
+                            effective_depth, language, env, on_progress,
+                        )
+                    except Exception as _sv_err:  # noqa: BLE001 — 打捞绝不令研究失败
+                        logger.warning("ITEM-14：extract-only 打捞异常（降级继续）: %s", _sv_err)
             else:
                 raise RuntimeError(
                     f"DeerFlow 研究超时（>{budget}s，depth={effective_depth}）。"
@@ -1059,6 +1093,118 @@ def _read_json(path: str) -> Optional[Any]:
             return json.load(f)
     except Exception:
         return None
+
+
+# ITEM-3：bridge 每完成一个研究 pass 就在 handoff_dir 落一个 research_checkpoint.json。崩溃/
+# 超时重试时若它存在（且非空），就给重试的研究子进程加 --resume 复用 LangGraph 线程、跳过已完成
+# pass，而非从 pass 0 全量重启（一整轮 deep 研究的数十个已抓来源不再被白白丢弃）。空文件/读失败
+# 一律当作「无 checkpoint」→ 全量重启（degrade-safe）。
+def _has_research_checkpoint(handoff_dir: str) -> bool:
+    """handoff_dir 是否有一个可用于续跑的 research_checkpoint.json（存在且非空）。"""
+    try:
+        p = os.path.join(handoff_dir, "research_checkpoint.json")
+        return os.path.exists(p) and os.path.getsize(p) > 0
+    except OSError:
+        return False
+
+
+def _run_extract_only_salvage(
+    deerflow_dir: str, handoff_dir: str, prompt: str,
+    model: str, depth: str, language: Optional[str], env: dict,
+    on_progress: Callable[[int, str], None],
+) -> bool:
+    """ITEM-14：watchdog 超时打捞——用一个有界（默认 10 分钟）--extract-only 子进程，对已落盘的
+    research_report.md 补跑结构化抽取 + 预测市场，恢复 actors/sources/timeline/quantitative。
+
+    研究主 turn 被看门狗 SIGKILL 时，research_report.md 常已落盘、但 Stage 2 结构化抽取还没跑
+    （'无结构化档案'）。此前只能带着空 actors/sources 降级继续；这里花一个短子进程把结构化档案
+    抢救出来，让下游本体/图谱/模拟仍有真实的 actor/source 可用。
+
+    有界（RESEARCH_EXTRACT_ONLY_TIMEOUT，默认 600s）、best-effort：任何失败/超时只记一行日志并
+    返回 False，绝不让打捞本身把已成功的研究翻成失败。成功（exit 0）返回 True。
+    """
+    script = os.path.join(deerflow_dir, "deerflow_research.py")
+    if not os.path.exists(script):
+        return False
+    try:
+        _timeout = max(1, int(os.environ.get("RESEARCH_EXTRACT_ONLY_TIMEOUT", "600") or "600"))
+    except ValueError:
+        _timeout = 600
+
+    # prompt 来源：优先复用 bridge 落在 handoff_dir 的 prediction_requirement.txt（不暴露在
+    # cmdline，与 --prompt-file 既有约定一致）；缺失则写一个 0600 临时文件。
+    _tmp_prompt: Optional[str] = None
+    req_file = os.path.join(handoff_dir, "prediction_requirement.txt")
+    if os.path.exists(req_file) and os.path.getsize(req_file) > 0:
+        prompt_file = req_file
+    else:
+        fd, _tmp_prompt = tempfile.mkstemp(prefix=".extract-prompt-", suffix=".txt", dir=handoff_dir)
+        with os.fdopen(fd, "w", encoding="utf-8") as _pf:
+            _pf.write(prompt or "")
+        try:
+            os.chmod(_tmp_prompt, 0o600)
+        except OSError:
+            pass
+        prompt_file = _tmp_prompt
+
+    cmd = _detect_deerflow_python(deerflow_dir) + [
+        script,
+        "--extract-only",
+        "--prompt-file", prompt_file,
+        "--out-dir", handoff_dir,
+        "--model", model or Config.DEERFLOW_MODEL,
+        "--depth", depth or Config.DEERFLOW_RESEARCH_DEPTH,
+    ]
+    _lang = language if language is not None else Config.DEERFLOW_RESEARCH_LANGUAGE
+    if _lang:
+        cmd += ["--target-language", _lang]
+
+    logger.info("ITEM-14：启动 --extract-only 打捞子进程（≤%ds）以恢复结构化档案", _timeout)
+    try:
+        on_progress(96, "超时打捞：补跑结构化抽取（actors/sources/timeline）…")
+    except Exception:  # noqa: BLE001 — 进度回调失败不影响打捞
+        pass
+    try:
+        r = subprocess.run(
+            cmd, cwd=deerflow_dir, env=env,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, timeout=_timeout, start_new_session=True,
+        )
+        ok = (r.returncode == 0)
+        if ok:
+            logger.info("ITEM-14：--extract-only 打捞成功（结构化档案已补出）")
+        else:
+            logger.warning("ITEM-14：--extract-only 打捞退出码 %s（保留已有报告，降级继续）", r.returncode)
+        return ok
+    except subprocess.TimeoutExpired:
+        logger.warning("ITEM-14：--extract-only 打捞超时（>%ds），降级继续", _timeout)
+        return False
+    except (OSError, subprocess.SubprocessError) as _e:
+        logger.warning("ITEM-14：--extract-only 打捞失败（%s），降级继续", _e)
+        return False
+    finally:
+        if _tmp_prompt is not None:
+            try:
+                os.unlink(_tmp_prompt)
+            except OSError:
+                pass
+
+
+def _stage_walls(state: "PipelineState") -> dict[str, float]:
+    """ITEM-18：从各阶段的 started_at→finished_at 时间戳算出每阶段墙钟秒数（stage → seconds）。
+
+    供 build_stage_telemetry 把编排器的阶段级墙钟与 LLMMeter 的 token/成本合并。仅在两端时间戳
+    都存在且差值非负时计入（未开始/未结束/时钟回拨 → 跳过，degrade-safe，绝不抛）。"""
+    walls: dict[str, float] = {}
+    for name, st in (getattr(state, "stages", None) or {}).items():
+        started = _parse_iso(getattr(st, "started_at", None))
+        finished = _parse_iso(getattr(st, "finished_at", None))
+        if started is None or finished is None:
+            continue
+        dt = (finished - started).total_seconds()
+        if dt >= 0:
+            walls[str(name)] = dt
+    return walls
 
 
 def _load_research_handoff(handoff_dir: str) -> dict[str, Any]:
@@ -3722,6 +3868,9 @@ class PipelineOrchestrator:
             track_dir = os.path.join(handoff_dir, f"track_{idx + 1}")
             os.makedirs(track_dir, exist_ok=True)
             track_prompt = (prefix + state.prompt) if prefix else state.prompt
+            # ITEM-3：每轨各写自己的 track_<k>/research_checkpoint.json；重试时逐轨判定续跑
+            # （某轨已完成的 pass 不重跑，只补未完成的）。首跑无 checkpoint → 全量跑该轨。
+            _resume_track = _has_research_checkpoint(track_dir)
             res = DeerFlowResearchRunner.run(
                 track_prompt,
                 track_dir,
@@ -3731,6 +3880,7 @@ class PipelineOrchestrator:
                 model=state.options.get("research_model"),
                 cancel_event=cls._cancel_events.get(state.pipeline_id),
                 on_spawn=_make_spawn(idx),
+                resume=_resume_track,
             )
             return idx, angle_title, track_dir, res
 
@@ -3939,6 +4089,11 @@ class PipelineOrchestrator:
                     research = self._run_parallel_research_tracks(
                         state, handoff_dir, upd, _n_tracks)
                 else:
+                    # ITEM-3：本次研究阶段是 resume/orphan-reclaim 重试且 handoff_dir 已有
+                    # checkpoint（上一轮崩溃/超时前写下）→ 续跑而非全量重启。首跑无 checkpoint → False。
+                    _resume_research = _has_research_checkpoint(handoff_dir)
+                    if _resume_research:
+                        upd(1, "检测到研究断点，续跑（复用已完成 pass）…")
                     research = DeerFlowResearchRunner.run(
                         state.prompt,
                         handoff_dir,
@@ -3948,6 +4103,7 @@ class PipelineOrchestrator:
                         model=state.options.get("research_model"),        # T5.5
                         cancel_event=cls._cancel_events.get(state.pipeline_id),
                         on_spawn=_persist_research_pid,
+                        resume=_resume_research,
                     )
                 state.research_pid = None  # 子进程已结束，清掉以免 reconcile 误杀复用 PID
                 # PAR-2：并行轨 PID 清单也一并清空（研究阶段已结束，避免 reconcile 误杀复用 PID）。
@@ -4833,6 +4989,44 @@ class PipelineOrchestrator:
                 if isinstance(state.artifacts, dict):
                     state.artifacts["run_telemetry"] = tpath
                     PipelineManager.save(state)
+                # ITEM-18: 阶段级遥测（stage × 调用/tokens/成本/墙钟）。把 LLMMeter 的 per-stage 快照
+                # 与编排器记录的每阶段墙钟合并，落 telemetry.json（区别于 run_telemetry.json 的原始计量
+                # 转储），把紧凑摘要折入 state.options.llm_telemetry（经 GET /status 返回 options 暴露给
+                # 前端），并在成功完成时把确定性「Run Telemetry」附录追加到最终报告。必须在 reset 前算——
+                # 用独立 try/except 兜底，任何失败都不得跳过下方的 LLMMeter.reset。
+                try:
+                    from ..utils.atomic import write_json_atomic, write_text_atomic
+                    from ..utils.telemetry import build_stage_telemetry, render_telemetry_appendix
+                    _stage_tel = build_stage_telemetry(state.pipeline_id, _stage_walls(state))
+                    try:
+                        _stpath = os.path.join(
+                            PipelineManager._dir(state.pipeline_id), "telemetry.json")
+                        write_json_atomic(_stpath, _stage_tel)
+                        if isinstance(state.artifacts, dict):
+                            state.artifacts["telemetry"] = _stpath
+                    except Exception as _swe:  # noqa: BLE001 — 工件落盘失败不影响摘要/附录
+                        logger.debug(f"[{state.pipeline_id}] 写入 telemetry.json 失败（忽略）: {_swe}")
+                    # 只把紧凑摘要折入 options（避免状态文件因 per-model 明细膨胀）
+                    state.options["llm_telemetry"] = {
+                        "total": _stage_tel.get("total"),
+                        "by_stage": _stage_tel.get("by_stage"),
+                        "cost_estimated": _stage_tel.get("cost_estimated"),
+                        "cost_basis": _stage_tel.get("cost_basis"),
+                    }
+                    PipelineManager.save(state)
+                    # 报告附录：仅在成功完成且报告存在时追加；幂等（已含则跳过），resume/re-report 安全。
+                    if (getattr(Config, "REPORT_TELEMETRY_APPENDIX", True)
+                            and state.status == "completed" and state.report_id):
+                        _appendix = render_telemetry_appendix(_stage_tel)
+                        if _appendix:
+                            _rpath = os.path.join(
+                                ReportManager._get_report_folder(state.report_id), "full_report.md")
+                            _existing = _read_text(_rpath)
+                            if _existing and "## Run Telemetry" not in _existing:
+                                write_text_atomic(
+                                    _rpath, _existing.rstrip() + "\n\n" + _appendix.rstrip() + "\n")
+                except Exception as _ste:  # noqa: BLE001 — 阶段遥测为观测增益，失败不影响管线终态
+                    logger.debug(f"[{state.pipeline_id}] 阶段级遥测处理失败（忽略）: {_ste}")
                 LLMMeter.reset(state.pipeline_id)
             except Exception as _te:
                 logger.debug(f"[{state.pipeline_id}] 写入 run_telemetry 失败（忽略）: {_te}")

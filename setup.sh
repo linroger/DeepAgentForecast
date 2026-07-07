@@ -580,6 +580,20 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
     ok "Installed deerflow_research.py (bridge entry point)"
   fi
 
+  # (a2) Config-reflected tool modules registered in config.yaml as BARE module
+  #     names (`use: market_tools:...`, `use: search_tools:...`, `use: cached_fetch:...`).
+  #     deerflow_research.py runs as `python <deer-flow>/deerflow_research.py`, so
+  #     sys.path[0] is the deer-flow dir and the harness reflection resolver
+  #     (resolve_variable -> import_module) imports these by bare name — they MUST
+  #     sit next to config.yaml in deer-flow/ or web_search/web_fetch/prediction_market
+  #     tools fail to load. Deploy all three so the wiring is reproducible.
+  for _tool_mod in market_tools.py search_tools.py cached_fetch.py; do
+    if [ -f "$BRIDGE_DIR/$_tool_mod" ]; then
+      cp "$BRIDGE_DIR/$_tool_mod" "$DEERFLOW_DIR/$_tool_mod"
+      ok "Installed $_tool_mod (config-reflected bridge tool)"
+    fi
+  done
+
   # (b) Patched model providers: macOS-Keychain OAuth + OAuth-preference for
   #     claude_provider (fixes the 'claude' 401) and credential_loader. The
   #     patched_minimax.py shipped here is DeerFlow 2.0's own upstreamed

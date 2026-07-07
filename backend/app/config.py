@@ -57,6 +57,10 @@ class Config:
     # 每个 run 的 token / 成本上限（0=不限）。超限后下一次 LLM 调用抛 BudgetExceeded，止血式中止。
     LLM_RUN_BUDGET_TOKENS = int(os.environ.get('LLM_RUN_BUDGET_TOKENS', '0') or '0')
     LLM_RUN_BUDGET_USD = float(os.environ.get('LLM_RUN_BUDGET_USD', '0') or '0')
+    # ITEM-18：每个 provider 的 $/Mtok 成本覆盖表（JSON），形如 {"openai":[5.0,15.0],"myprov":[0.5,1.5]}
+    # （每百万 token 的 [输入, 输出] 美元价）。叠加在 telemetry._COST_PER_1K 的保守内建默认之上（同名覆盖、
+    # 新名新增）。留空=纯用内建默认；解析失败=退回无覆盖（degrade-safe，见 telemetry._cost_overrides）。
+    LLM_COST_PER_MTOK = os.environ.get('LLM_COST_PER_MTOK', '').strip()
 
     # —— 调优后的 LLM HTTP 客户端（R2-EXEC-6）——
     # 默认 httpx 把 keepalive 连接上限压在 20 且无多路复用，并发抬高后每次调用都要重做 TLS 握手，
@@ -180,6 +184,11 @@ class Config:
     REPORT_VIZ_DPI = int(os.environ.get('REPORT_VIZ_DPI', '160') or '160')
     # VIZ-1：网络图/因果图/派系图的节点上限（防止巨图不可读；超出即截断，确定性保留首现节点）。
     REPORT_VIZ_MAX_NODES = int(os.environ.get('REPORT_VIZ_MAX_NODES', '40') or '40')
+    # VIZ-1（ITEM-16）：交互式 HTML 图表族开关——用 plotly 生成 matplotlib PNG 的可交互等价物
+    # （情景误差棒/模型vs市场哑铃/市场价格历史折线/世界态堆叠面积），落 reports/{id}/charts/*.html
+    # （plotly.js 内联，完全离线自包含），manifest type='html'。默认开；plotly 未安装时该族自动
+    # 无效（与 PNG 族并存，互不影响）。关闭=不生成 HTML 图（degrade-safe）。
+    REPORT_VIZ_INTERACTIVE = os.environ.get('REPORT_VIZ_INTERACTIVE', 'True').strip().lower() == 'true'
     # VIZ-1 钩子：把 ReportVisualizer 产出的图表/图注注入成稿 full_report.md——Mermaid 块按章节
     # 标题关键词模糊匹配就地插入，未匹配的图与全部 PNG 归入文末「Visual Annex / 可视化附录」（双语
     # 随报告语言）。与 REPORT_VISUALIZER 正交：后者管「是否生成图 + 落 charts/」，此旋钮管「是否
@@ -287,6 +296,9 @@ class Config:
     API_V1_ENABLED = os.environ.get('API_V1_ENABLED', 'False').strip().lower() == 'true'       # I-9-5 稳定版程序化 API /api/v1
     MODEL_COMPARISON_ENABLED = os.environ.get('MODEL_COMPARISON_ENABLED', 'False').strip().lower() == 'true'  # I-9-4 模型对比
     REPORT_TELEMETRY = os.environ.get('REPORT_TELEMETRY', 'True').strip().lower() == 'true'     # I-5-4 报告级 LLM 计量汇总
+    # ITEM-18：完成时把确定性的「Run Telemetry」附录表（stage × 调用/tokens/成本/墙钟）追加到最终报告
+    # full_report.md（无 LLM、幂等）。默认开；置 false 关闭附录（run 遥测仍落 telemetry.json / state.options）。
+    REPORT_TELEMETRY_APPENDIX = os.environ.get('REPORT_TELEMETRY_APPENDIX', 'True').strip().lower() == 'true'
     # REPORT-3：默认开——把确定性 sim 聚合（top actors/volumes/coalition sizes/P(outcome)/scenario diff）
     # 钉进每章作可引用的数字底座，提升引用覆盖、减少探索式工具调用。
     REPORT_SIGNAL_PACK = os.environ.get('REPORT_SIGNAL_PACK', 'True').strip().lower() == 'true'  # I-3-2 每章注入定量信号包
@@ -403,11 +415,28 @@ class Config:
     SIM_IDLE_CLOSE_MIN = float(os.environ.get('SIM_IDLE_CLOSE_MIN', '60') or '60')  # <=0 = 无限等待
     SIM_LLM_ERROR_RATE_THRESHOLD = float(os.environ.get('SIM_LLM_ERROR_RATE_THRESHOLD', '0.5') or '0.5')
     SIM_RESUME = os.environ.get('SIM_RESUME', 'false').strip().lower() == 'true'
+    # ITEM 3: 轮级检查点写入开关（默认开）。开启时每轮原子落盘 <platform>/checkpoint.json
+    # （含 config_hash + python-random RNG 状态），使任意崩溃/被杀/后端重启后的运行可被续跑；
+    # 续跑本身仍由 SIM_RESUME/--resume 触发。置 false → 不产出 checkpoint.json（RUN-7 早期 degrade-safe 行为）。
+    SIM_CHECKPOINT = os.environ.get('SIM_CHECKPOINT', 'true').strip().lower() == 'true'
     INTERVIEW_TIMEOUT_PER_AGENT = float(os.environ.get('INTERVIEW_TIMEOUT_PER_AGENT', '30') or '30')
     SIM_CLI_TOOL_EMULATION = os.environ.get('SIM_CLI_TOOL_EMULATION', 'true').strip().lower() == 'true'
     SIM_LLM_FALLBACK = os.environ.get('SIM_LLM_FALLBACK', 'true').strip().lower() == 'true'
     SIM_MIN_FREE_DISK_GB = float(os.environ.get('SIM_MIN_FREE_DISK_GB', '2') or '2')  # <=0 关闭
     SIM_STEP_FAILURE_LIMIT = int(os.environ.get('SIM_STEP_FAILURE_LIMIT', '3') or '3')  # 0 = 旧的无限跳轮
+    # ITEM 20 模拟真实感四件套（均 env 门控、默认安全、可降级）：
+    # (1) 参与度采样：每轮有机动作后从活跃 agent 确定性采样 LIKE_POST 落到本轮新帖上（权重∝该帖
+    #     本轮已获互动），补足 OASIS 默认 feed「满屏帖 0 赞」的纯广播失真。采样赞标记 is_engagement_sample，
+    #     供有机比例侦测器排除（诚实：采样赞不掩盖 agent 自身零点赞）。rate=每个活跃者本轮产生一次赞的概率。
+    SIM_ENGAGEMENT_SAMPLER = os.environ.get('SIM_ENGAGEMENT_SAMPLER', 'true').strip().lower() == 'true'
+    SIM_ENGAGEMENT_RATE = float(os.environ.get('SIM_ENGAGEMENT_RATE', '0.3') or '0.3')  # [0,1] clamp
+    # (3) 种子 FOLLOW 风暴节流：每个 follower 的种子 FOLLOW 动作上限（add_edge 建图不受影响，仅截断
+    #     写 trace/follow 表的 FOLLOW 动作），避免 630 条种子关注淹没早期动作日志。<=0 = 不限（旧行为）。
+    SIM_MAX_FOLLOWS_PER_AGENT_ROUND = int(os.environ.get('SIM_MAX_FOLLOWS_PER_AGENT_ROUND', '3') or '3')
+    # (2) 有机比例塌缩侦测：逐平台逐轮跟踪 post:comment:like，连续 ≥K 轮 posts>0 而 comments+likes==0
+    #     时把结构化告警写入 run_summary（检测+诚实优先，绝不伪造互动）。
+    SIM_ORGANIC_RATIO_DETECTOR = os.environ.get('SIM_ORGANIC_RATIO_DETECTOR', 'true').strip().lower() == 'true'
+    SIM_ORGANIC_RATIO_MIN_CONSECUTIVE = int(os.environ.get('SIM_ORGANIC_RATIO_MIN_CONSECUTIVE', '3') or '3')
 
     # —— 报告组（RPT-*/XRUN-1/XRUN-5/RPT-6/RPT-8；report_agent / forecast_extractor 经 getattr 读取）——
     REPORT_ABORT_ON_LLM_OUTAGE = os.environ.get('REPORT_ABORT_ON_LLM_OUTAGE', 'true').strip().lower() == 'true'
@@ -418,6 +447,15 @@ class Config:
     FORECAST_SIM_SENSITIVITY = os.environ.get('FORECAST_SIM_SENSITIVITY', 'true').strip().lower() == 'true'
     FORECAST_BINARY_THEMES = os.environ.get('FORECAST_BINARY_THEMES', '').strip()  # 空=由 brief/主题自适应
     FORECAST_HORIZON_CHECK = os.environ.get('FORECAST_HORIZON_CHECK', 'true').strip().lower() == 'true'  # RQ-6 需求↔二元预测结算年份一致性标记
+    # ITEM 12：多模型二元预测集成。逗号分隔的（副）提供方名清单（如 'openai,deepseek,glm'）；
+    # 空=关闭（默认，逐字节复现旧单模型行为）。开启时对每个所列提供方各跑一次同提示词二元抽取，
+    # 按 id/陈述匹配同一条预测，用与种子集成同一套 extremizing log-odds（ENSEMBLE_EXTREMIZE_A）
+    # 把各模型概率池化为发布概率，记 binary['ensemble']={models,probs,pooled,spread}。任一副提供方
+    # 构造/抽取失败仅跳过并记 flag，绝不阻断主抽取。
+    FORECAST_ENSEMBLE_MODELS = os.environ.get('FORECAST_ENSEMBLE_MODELS', '').strip()
+    # 跨模型概率样本 stdev 超此阈值 → 该预测记入 low-agreement（binary_quality.ensemble），
+    # 二元预测表渲染以 ±spread 显示分歧。默认 0.15。
+    FORECAST_ENSEMBLE_SPREAD_THRESHOLD = float(os.environ.get('FORECAST_ENSEMBLE_SPREAD_THRESHOLD', '0.15') or '0.15')
     REPORT_QUOTE_AUDIT_V2 = os.environ.get('REPORT_QUOTE_AUDIT_V2', 'true').strip().lower() == 'true'
     REPORT_COMPACT_RETRIEVAL_QUERY = os.environ.get('REPORT_COMPACT_RETRIEVAL_QUERY', 'true').strip().lower() == 'true'
     # RQ-2 报告修复门：质量门失败时按维度单次定向修复（引用回填 / 引文接地 / 占位符解析），
@@ -998,6 +1036,12 @@ class Config:
     # 结构化 persona_design（identity/views_beliefs/incentives/objectives/relations/red_lines/
     # decision_style/rhetoric），严格接地于研究档案、禁止发明立场；多样性来自真实主体的真实差异。
     SIM_PERSONA_DESIGN = os.environ.get('SIM_PERSONA_DESIGN', 'true').strip().lower() == 'true'
+    # ITEM 11 市场先验注入（SIM_MARKET_PRIORS）：把本次运行 handoff/prediction_markets.json 里
+    # relevance-gated 的市场隐含概率（Yes 价）灌进模拟侧——(1) 世界底稿 world_brief 追加一段
+    # 「市场定价」块（top 5 相关市场：question + 隐含 P），让全体 Agent 知道priced beliefs 并据此
+    # 争论；(2) 对「分析师/媒体」类人设追加一行市场感知提示（其关注话题与市场问题词重叠时）。
+    # 文件缺失/解析失败 / 无对应 handoff → 与今日行为逐字节一致（degrade-safe）。默认开。
+    SIM_MARKET_PRIORS = os.environ.get('SIM_MARKET_PRIORS', 'true').strip().lower() == 'true'
     # Polymarket 预测市场（官方公开 Gamma API，keyless）：研究阶段拉取与题目相关的活跃市场，
     # 把市场隐含概率（Yes 价）作为校准锚注入研究报告 + 报告章节 + 二元预测抽取（预测 vs 市场
     # 分歧 >10pt 须解释）。无需 API key；网络失败 → 静默跳过（degrade-safe），不影响主流程。

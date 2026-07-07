@@ -72,8 +72,53 @@ _COST_PER_1K: Dict[str, Tuple[float, float]] = {
 _ESTIMATED_COST_PROVIDERS = frozenset({"gemini", "proxy", "antigravity"})
 
 
+# ITEM-18: per-provider $/Mtok 成本表可经 env 覆盖（Config.LLM_COST_PER_MTOK，JSON），形如
+# {"openai": [5.0, 15.0], "myprovider": [0.5, 1.5]}（每百万 token 的 [输入, 输出] 美元价）。
+# 解析后转成「每 1K token」并叠加在内建保守默认 _COST_PER_1K 之上（同名覆盖、新名新增）。env
+# 未设/解析失败 → 空覆盖，estimate_cost 行为与历史完全一致（degrade-safe）。既不在覆盖表也不在
+# 内建默认的未知 provider → (0,0)：只计 token，不臆测成本。按原始 env 串缓存，避免每次调用重解析。
+_COST_OVERRIDE_CACHE: Dict[str, Dict[str, Tuple[float, float]]] = {}
+
+
+def _cost_overrides() -> Dict[str, Tuple[float, float]]:
+    """ITEM-18：解析 Config.LLM_COST_PER_MTOK（$/Mtok JSON）为 {provider(lower): ($/1K in, out)}。"""
+    try:
+        from ..config import Config
+        raw = (getattr(Config, "LLM_COST_PER_MTOK", "") or "").strip()
+    except Exception:  # noqa: BLE001 — 配置不可用时退回无覆盖
+        return {}
+    if not raw:
+        return {}
+    cached = _COST_OVERRIDE_CACHE.get(raw)
+    if cached is not None:
+        return cached
+    out: Dict[str, Tuple[float, float]] = {}
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            for prov, pair in parsed.items():
+                if isinstance(pair, (list, tuple)) and len(pair) >= 2:
+                    try:
+                        cin = float(pair[0]) / 1000.0   # $/Mtok → $/1K
+                        cout = float(pair[1]) / 1000.0
+                    except (TypeError, ValueError):
+                        continue
+                    out[str(prov).strip().lower()] = (cin, cout)
+    except (ValueError, TypeError):
+        out = {}
+    _COST_OVERRIDE_CACHE[raw] = out
+    return out
+
+
 def estimate_cost(provider: str, prompt_tokens: int, completion_tokens: int) -> float:
-    cin, cout = _COST_PER_1K.get(provider, (0.0, 0.0))
+    # ITEM-18: 先查 env 覆盖表（区分大小写命中 → 再退小写），未命中回退内建默认，仍无 → (0,0)。
+    ov = _cost_overrides()
+    if provider in ov:
+        cin, cout = ov[provider]
+    elif provider and provider.lower() in ov:
+        cin, cout = ov[provider.lower()]
+    else:
+        cin, cout = _COST_PER_1K.get(provider, (0.0, 0.0))
     return (prompt_tokens / 1000.0) * cin + (completion_tokens / 1000.0) * cout
 
 
@@ -287,6 +332,95 @@ def estimate_tokens(text: str) -> int:
     if not text:
         return 0
     return max(1, len(text) // 4)
+
+
+# ---------------------------------------------------------------- ITEM-18: 阶段级遥测
+# 把 LLMMeter 的 per-stage token/调用/成本，与编排器记录的每阶段墙钟时长（started_at→
+# finished_at）合并成一份紧凑的「阶段 × 调用/tokens/成本/墙钟」视图，供落 telemetry.json、
+# 折入 state.options（经 GET /status 暴露）、并确定性渲染进报告附录。纯函数、可测；计量缺失/
+# 为空 → 静默产出（仅墙钟或全零骨架），绝不抛。
+_PIPELINE_STAGE_ORDER = ("research", "ontology", "graph", "prepare", "run", "report")
+
+
+def build_stage_telemetry(run_id: Optional[str],
+                          stage_walls: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+    """ITEM-18：构建 {stage: {calls, input_tokens, output_tokens, est_cost_usd, wall_seconds}}。
+
+    token/调用/成本取自 :meth:`LLMMeter.snapshot` 的 ``by_stage``（成本已按 estimate_cost 计入，
+    含 LLM_COST_PER_MTOK 覆盖）；``wall_seconds`` 取自编排器传入的 ``stage_walls``（各阶段
+    started_at→finished_at 墙钟差——反映整段阶段耗时，与纯 LLM 在飞延迟不同）。某阶段可能只在
+    一侧出现（graph/prepare 常有墙钟但 0 LLM 调用；run 阶段 LLM 在子进程、计量归 0）——两侧取
+    并集，缺失侧填 0。degrade-safe：snapshot 空 → 仅墙钟骨架。"""
+    walls: Dict[str, float] = {}
+    for k, v in (stage_walls or {}).items():
+        if isinstance(v, (int, float)) and v >= 0:
+            walls[str(k)] = float(v)
+    snap = LLMMeter.snapshot(run_id)
+    by_stage = snap.get("by_stage") or {}
+    stages: Dict[str, Dict[str, Any]] = {}
+    for name in set(by_stage.keys()) | set(walls.keys()):
+        c = by_stage.get(name) or {}
+        stages[name] = {
+            "calls": int(c.get("calls", 0) or 0),
+            "input_tokens": int(c.get("prompt_tokens", 0) or 0),
+            "output_tokens": int(c.get("completion_tokens", 0) or 0),
+            "est_cost_usd": round(float(c.get("cost_usd", 0.0) or 0.0), 6),
+            "wall_seconds": round(walls.get(name, 0.0), 1),
+        }
+    total = {
+        "calls": sum(s["calls"] for s in stages.values()),
+        "input_tokens": sum(s["input_tokens"] for s in stages.values()),
+        "output_tokens": sum(s["output_tokens"] for s in stages.values()),
+        "est_cost_usd": round(sum(s["est_cost_usd"] for s in stages.values()), 6),
+        "wall_seconds": round(sum(s["wall_seconds"] for s in stages.values()), 1),
+    }
+    return {
+        "run_id": snap.get("run_id") or run_id or _DEFAULT_BUCKET,
+        "by_stage": stages,
+        "total": total,
+        "cost_estimated": bool(snap.get("cost_estimated")),
+        "cost_basis": snap.get("cost_basis", "api"),
+    }
+
+
+def render_telemetry_appendix(stage_telemetry: Optional[Dict[str, Any]],
+                              title: str = "Run Telemetry") -> str:
+    """ITEM-18：把 stage_telemetry 渲染成确定性 Markdown「Run Telemetry」附录表（无 LLM）。
+
+    列：Stage | Calls | Input tok | Output tok | Est. cost (USD) | Wall (s)。阶段按固定管线顺序
+    （research→ontology→graph→prepare→run→report）排列，未知阶段按名称字典序附后；末行 TOTAL。
+    成本为估算/非 API 计价基准时以脚注标注。空/无阶段 → 返回空串（调用方据此跳过追加）。"""
+    if not isinstance(stage_telemetry, dict):
+        return ""
+    stages = stage_telemetry.get("by_stage") or {}
+    if not stages:
+        return ""
+    known = [s for s in _PIPELINE_STAGE_ORDER if s in stages]
+    extra = sorted(k for k in stages if k not in _PIPELINE_STAGE_ORDER)
+    ordered = known + extra
+
+    def _row(name: str, d: Dict[str, Any]) -> str:
+        return (f"| {name} | {int(d.get('calls', 0) or 0)} | "
+                f"{int(d.get('input_tokens', 0) or 0):,} | "
+                f"{int(d.get('output_tokens', 0) or 0):,} | "
+                f"{float(d.get('est_cost_usd', 0.0) or 0.0):.4f} | "
+                f"{float(d.get('wall_seconds', 0.0) or 0.0):.1f} |")
+
+    lines = [f"## {title}", "",
+             "| Stage | Calls | Input tok | Output tok | Est. cost (USD) | Wall (s) |",
+             "|---|---:|---:|---:|---:|---:|"]
+    for name in ordered:
+        lines.append(_row(name, stages.get(name) or {}))
+    lines.append(_row("**TOTAL**", stage_telemetry.get("total") or {}))
+    note = ("_Est. cost is a rough estimate from a per-provider $/Mtok table; "
+            "treat as indicative, not billing-exact._"
+            if stage_telemetry.get("cost_estimated") else
+            "_Est. cost derived from a per-provider $/Mtok table._")
+    basis = stage_telemetry.get("cost_basis")
+    if basis and basis != "api":
+        note = note.rstrip("_") + f" Cost basis: {basis}._"
+    lines += ["", note, ""]
+    return "\n".join(lines)
 
 
 class LLMCache:

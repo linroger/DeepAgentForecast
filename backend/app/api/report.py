@@ -828,6 +828,95 @@ def get_report_sections(report_id: str):
         }), 500
 
 
+@report_bp.route('/<report_id>/sections-partial', methods=['GET'])
+def get_report_sections_partial(report_id: str):
+    """ITEM-17：为「仍在生成中」的报告增量返回已完成章节，供前端 2s 轮询渐进式发布。
+
+    返回契约（前端据此逐章渲染，无需等整篇完成）：
+        {
+            "success": true,
+            "sections": [
+                {"index": 1, "title": "执行摘要", "status": "completed",
+                 "content_md": "## 执行摘要\\n\\n..."},
+                {"index": 2, "title": "预测场景", "status": "generating", "content_md": ""}
+            ],
+            "done": false
+        }
+
+    实现完全基于磁盘文件读取（cheap，安全用于 2s 轮询）：
+      · sections 取自已落盘的 section_XX.md（每个即一段已完成章节，status='completed'）；
+        title 从章节正文首个 markdown 标题行解析，缺失回退 'Section N'。
+      · 若 progress.json 记录了 current_section 且不在已完成集合中，追加一个占位条目
+        （status='generating'，content_md=''），让前端能显示「正在生成: X」。
+      · done=true 当且仅当 full_report.md 已落盘（终稿组装完成）。
+    任一底层读取异常都 degrade 成安全空集（不 500，保证轮询稳定）。
+    """
+    try:
+        import re as _re
+
+        def _parse_title(md: str, fallback: str) -> str:
+            """从章节正文抽首个 markdown 标题（# ~ ######）作为标题；无标题 → fallback。"""
+            for line in (md or "").splitlines():
+                m = _re.match(r'^\s*#{1,6}\s+(.+?)\s*$', line)
+                if m:
+                    return m.group(1).strip()
+            return fallback
+
+        # ① 已完成章节（section_XX.md）——每段 status='completed'
+        raw_sections = ReportManager.get_generated_sections(report_id)
+        sections = []
+        completed_titles = set()
+        for s in raw_sections:
+            idx = s.get("section_index")
+            content = s.get("content", "") or ""
+            title = _parse_title(content, fallback=f"Section {idx}")
+            completed_titles.add(title)
+            sections.append({
+                "index": idx,
+                "title": title,
+                "status": "completed",
+                "content_md": content,
+            })
+
+        # ② 正在生成的章节（来自 progress.json 的 current_section，占位、无正文）
+        try:
+            progress = ReportManager.get_progress(report_id)
+        except Exception:  # noqa: BLE001 - 进度文件缺失/损坏不影响已完成章节返回
+            progress = None
+        if isinstance(progress, dict):
+            current = (progress.get("current_section") or "").strip()
+            status = progress.get("status")
+            # 仅当报告仍在生成、当前章节有名且尚未落盘时，追加 generating 占位。
+            if current and current not in completed_titles and status not in ("completed", "failed"):
+                next_index = (max((s["index"] for s in sections if isinstance(s["index"], int)),
+                                  default=0) + 1)
+                sections.append({
+                    "index": next_index,
+                    "title": current,
+                    "status": "generating",
+                    "content_md": "",
+                })
+
+        # ③ done：终稿 full_report.md 已落盘即视为完成
+        done = os.path.exists(ReportManager._get_report_markdown_path(report_id))
+
+        return jsonify({
+            "success": True,
+            "sections": sections,
+            "done": done,
+        })
+
+    except Exception as e:
+        logger.error(f"获取分章节增量失败: {str(e)}")
+        # degrade-safe：轮询端点即便异常也返回稳定空集，避免前端轮询中断
+        return jsonify({
+            "success": False,
+            "sections": [],
+            "done": False,
+            "error": str(e),
+        }), 500
+
+
 @report_bp.route('/<report_id>/section/<int:section_index>', methods=['GET'])
 def get_single_section(report_id: str, section_index: int):
     """

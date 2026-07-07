@@ -490,10 +490,17 @@ class SimulationConfigGenerator:
         # 预测问题 + 局势简报 + 热点话题的确定性拼装（无 LLM 调用），写入配置顶层
         # world_brief 字段；运行脚本据此把同一份世界背景注入全体 Agent 的 system prompt。
         # 任何一段缺失 → 简报变短；全部缺失 / 开关关闭 → 空串（to_dict 省略字段）。
+        # ITEM 11 SIM_MARKET_PRIORS: 载入本次运行 handoff 的 relevance-gated 市场快照
+        # （prediction_markets.json），供世界底稿注入「市场定价」块。开关关/无对应 handoff/
+        # 文件缺失/解析失败 → []（world_brief 与今日逐字节一致）。
+        market_priors = self._load_prediction_markets(simulation_id)
+        if market_priors:
+            logger.info(f"市场先验: 载入 {len(market_priors)} 个 relevance-gated 市场")
         world_brief = ""
         try:
             world_brief = self._build_world_brief(
-                simulation_requirement, actors, event_config.hot_topics
+                simulation_requirement, actors, event_config.hot_topics,
+                prediction_markets=market_priors,
             )
             if world_brief:
                 reasoning_parts.append(f"世界简报: {len(world_brief)} 字")
@@ -935,12 +942,95 @@ class SimulationConfigGenerator:
     # NEXTSTEPS SIM_WORLD_BRIEF: 世界底稿的确定性长度上限（无 LLM 调用，纯拼装）。
     WORLD_BRIEF_MAX_CHARS = 1400
     WORLD_BRIEF_QUESTION_CHARS = 400
+    # ITEM 11 SIM_MARKET_PRIORS: 世界底稿注入的头部相关市场数（top N：question + 隐含 P）。
+    MARKET_PRIORS_TOP_N = 5
+
+    def _market_priors_enabled(self) -> bool:
+        """ITEM 11: 市场先验注入开关（SIM_MARKET_PRIORS，默认开）。
+
+        关闭 → 不加载 prediction_markets.json，世界底稿/人设与今日逐字节一致。
+        __new__ 构造的实例（测试）走 getattr 缺省 True。
+        """
+        raw = getattr(Config, "SIM_MARKET_PRIORS", True)
+        return str(raw).strip().lower() not in ("false", "0", "no", "off")
+
+    def _load_prediction_markets(self, simulation_id: Optional[str]) -> List[Dict[str, Any]]:
+        """ITEM 11: 加载本次运行 handoff 的 prediction_markets.json（relevance-gated 市场）。
+
+        与 report_agent._load_prediction_markets / load_research_dossier_for_simulation 同模式：
+        按 simulation_id 定位管线 handoff 目录，读 prediction_markets.json 的 markets[]（研究阶段
+        已做相关性门控，带 question/implied_yes_prob/relevance_score/volume）。延迟导入
+        PipelineManager 规避与 pipeline_orchestrator 的模块级循环依赖。
+
+        开关关 / 无 simulation_id / 无对应管线 / 文件缺失 / 解析失败 → []（degrade-safe，
+        world_brief 与今日逐字节一致）。
+        """
+        if not self._market_priors_enabled() or not simulation_id:
+            return []
+        try:
+            from .pipeline_orchestrator import PipelineManager
+            for entry in PipelineManager.list_pipelines():
+                pid = entry.get("pipeline_id")
+                if not pid:
+                    continue
+                data = PipelineManager.load(pid)
+                if not data or data.get("simulation_id") != simulation_id:
+                    continue
+                hd = data.get("handoff_dir") or PipelineManager.handoff_dir(pid)
+                path = os.path.join(hd, "prediction_markets.json")
+                if os.path.exists(path):
+                    with open(path, "r", encoding="utf-8") as f:
+                        payload = json.load(f)
+                    markets = payload.get("markets") if isinstance(payload, dict) else payload
+                    return [m for m in (markets or []) if isinstance(m, dict)]
+                break  # 找到对应管线即停（无论有无市场文件）
+        except Exception as e:  # noqa: BLE001 — 加载失败 → 空，绝不阻断配置生成
+            logger.debug(f"读取 handoff prediction_markets.json 失败（降级跳过）: {e}")
+        return []
+
+    def _build_market_pricing_block(
+        self, prediction_markets: Optional[List[Dict[str, Any]]]
+    ) -> str:
+        """ITEM 11: top-N 相关市场的紧凑「市场定价」块（question + 隐含 P），进世界底稿。
+
+        市场已在研究阶段做过相关性门控（relevance_score/volume 排序）；此处防御性再按
+        (relevance_score, volume) 降序排一次，取头部 N 条渲染为一行一市场。无有效
+        question/implied_yes_prob → 跳过该行；全部无效或空列表 → ""（不注入）。
+        """
+        rows = [m for m in (prediction_markets or []) if isinstance(m, dict)]
+        if not rows:
+            return ""
+
+        def _num(v: Any) -> float:
+            return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else -1.0
+
+        rows = sorted(
+            rows,
+            key=lambda m: (_num(m.get("relevance_score")), _num(m.get("volume"))),
+            reverse=True,
+        )
+        lines: List[str] = []
+        for m in rows:
+            q = str(m.get("question") or "").strip()
+            prob = m.get("implied_yes_prob")
+            if not q or not isinstance(prob, (int, float)) or isinstance(prob, bool):
+                continue
+            lines.append(f"- 「{q[:160]}」：{float(prob) * 100:.0f}%")
+            if len(lines) >= self.MARKET_PRIORS_TOP_N:
+                break
+        if not lines:
+            return ""
+        return (
+            "## 市场定价（预测市场隐含概率——可引用/可争论的校准先验，非真值）\n"
+            + "\n".join(lines)
+        )
 
     def _build_world_brief(
         self,
         simulation_requirement: str,
         actors: Optional[Dict[str, Any]],
         hot_topics: Optional[List[str]],
+        prediction_markets: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """NEXTSTEPS SIM_WORLD_BRIEF: 拼装全体 Agent 共享的紧凑世界底稿（≤1400 字）。
 
@@ -949,7 +1039,9 @@ class SimulationConfigGenerator:
             正在争论什么问题）；
         (b) 局势简报（复用 utils.actors.situation_brief_block：当前态势/来龙去脉/
             张力动态/争议断层/潜在触发）；
-        (c) 热点话题清单。
+        (c) 热点话题清单；
+        (d) ITEM 11 SIM_MARKET_PRIORS: 市场定价块（top 5 相关市场 question + 隐含 P，
+            让全体 Agent 知道 priced beliefs 并据此争论）——仅当传入非空市场且开关开。
 
         可降级：任一段缺失 → 简报变短；全部缺失或 SIM_WORLD_BRIEF=false → 空串
         （调用方省略配置字段，运行脚本整体跳过注入）。
@@ -972,6 +1064,13 @@ class SimulationConfigGenerator:
         topics = [str(t).strip() for t in (hot_topics or []) if str(t).strip()]
         if topics:
             parts.append("## 热点话题\n" + "、".join(topics[:8]))
+
+        # ITEM 11: 市场定价块（top 5 相关市场）——仅当开关开且传入非空市场；否则整体跳过，
+        # 与今日逐字节一致（degrade-safe）。
+        if self._market_priors_enabled():
+            market_block = self._build_market_pricing_block(prediction_markets)
+            if market_block:
+                parts.append(market_block)
 
         # RQ-7 / I-6-4：世界简报上限从固定 1400 升级为按提供方窗口预算化——大窗口模型
         # （MiniMax 512K / DeepSeek 1M）抬到 SIM_WORLD_BRIEF_MAX_CHARS（默认 3000）以承载更完整的

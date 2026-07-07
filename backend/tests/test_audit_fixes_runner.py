@@ -196,6 +196,99 @@ def test_run_summary_seed_only_run_is_hollow(sim_env):
     assert summary["top_posts"] == []
 
 
+# ---------------------------------------------------------------- ITEM 20 (4) simulated_hours
+def _write_run_state(sim_dir, current_round, total_rounds):
+    os.makedirs(str(sim_dir), exist_ok=True)
+    with open(os.path.join(str(sim_dir), "run_state.json"), "w", encoding="utf-8") as f:
+        json.dump({"current_round": current_round, "total_rounds": total_rounds}, f)
+
+
+def _write_sim_config(sim_dir, minutes_per_round):
+    os.makedirs(str(sim_dir), exist_ok=True)
+    with open(os.path.join(str(sim_dir), "simulation_config.json"), "w", encoding="utf-8") as f:
+        json.dump({"time_config": {"minutes_per_round": minutes_per_round}}, f)
+
+
+def test_run_summary_simulated_hours_from_rounds(sim_env):
+    """ITEM20(4): simulated_hours = rounds_executed × minutes_per_round / 60（历史上恒 0）。"""
+    sim_id = "sim_item20_hours"
+    _write_actions(sim_env / sim_id, "twitter", [
+        {"round": 1, "timestamp": "2026-07-02T00:01:00", "agent_id": 5,
+         "agent_name": "O", "action_type": "CREATE_POST", "action_args": {"content": "p"}},
+    ])
+    _write_run_state(sim_env / sim_id, current_round=12, total_rounds=24)
+    _write_sim_config(sim_env / sim_id, minutes_per_round=30)
+    summary = SimulationRunner.write_run_summary(sim_id)
+    assert summary["rounds_executed"] == 12
+    assert summary["simulated_hours"] == 6.0    # 12 × 30 / 60
+
+
+def test_run_summary_simulated_hours_defaults_minutes_60(sim_env):
+    """无 simulation_config.json → minutes_per_round 缺省 60（degrade-safe）。"""
+    sim_id = "sim_item20_hours_default"
+    _write_actions(sim_env / sim_id, "twitter", [
+        {"round": 1, "timestamp": "2026-07-02T00:01:00", "agent_id": 5,
+         "agent_name": "O", "action_type": "CREATE_POST", "action_args": {"content": "p"}},
+    ])
+    _write_run_state(sim_env / sim_id, current_round=3, total_rounds=10)
+    summary = SimulationRunner.write_run_summary(sim_id)
+    assert summary["simulated_hours"] == 3.0    # 3 × 60 / 60
+
+
+# ---------------------------------------------------------------- ITEM 20 (2) ratio detector
+def test_run_summary_flags_organic_ratio_collapse(sim_env, monkeypatch):
+    """ITEM20(2): 连续 ≥K 轮 posts>0 而 comments+likes==0 → organic_ratio_warnings。"""
+    monkeypatch.setattr(Config, "SIM_ORGANIC_RATIO_DETECTOR", True, raising=False)
+    monkeypatch.setattr(Config, "SIM_ORGANIC_RATIO_MIN_CONSECUTIVE", 3, raising=False)
+    sim_id = "sim_item20_collapse"
+    entries = []
+    for rnd in (1, 2, 3):        # 三连轮只发帖、零评论/点赞
+        entries.append({"round": rnd, "timestamp": f"2026-07-02T00:0{rnd}:00",
+                        "agent_id": rnd, "agent_name": f"A{rnd}",
+                        "action_type": "CREATE_POST", "action_args": {"content": "x"}})
+    _write_actions(sim_env / sim_id, "twitter", entries)
+    _write_run_state(sim_env / sim_id, current_round=3, total_rounds=3)
+    summary = SimulationRunner.write_run_summary(sim_id)
+    warns = summary.get("organic_ratio_warnings")
+    assert warns and warns[0]["platform"] == "twitter"
+    assert warns[0]["rounds"] == 3
+
+
+def test_run_summary_engagement_sample_likes_excluded_from_ratio(sim_env, monkeypatch):
+    """ITEM20 诚实性交叉验证：is_engagement_sample 采样赞不得掩盖 agent 零点赞塌缩。"""
+    monkeypatch.setattr(Config, "SIM_ORGANIC_RATIO_DETECTOR", True, raising=False)
+    monkeypatch.setattr(Config, "SIM_ORGANIC_RATIO_MIN_CONSECUTIVE", 3, raising=False)
+    sim_id = "sim_item20_sample_excluded"
+    entries = []
+    for rnd in (1, 2, 3):
+        entries.append({"round": rnd, "timestamp": f"2026-07-02T00:0{rnd}:00",
+                        "agent_id": rnd, "agent_name": f"A{rnd}",
+                        "action_type": "CREATE_POST", "action_args": {"content": "x"}})
+        # 采样赞（is_engagement_sample）——应被侦测器排除，仍判定为塌缩
+        entries.append({"round": rnd, "timestamp": f"2026-07-02T00:0{rnd}:30",
+                        "agent_id": 100 + rnd, "agent_name": f"S{rnd}",
+                        "action_type": "LIKE_POST",
+                        "action_args": {"post_id": rnd, "is_engagement_sample": True}})
+    _write_actions(sim_env / sim_id, "twitter", entries)
+    _write_run_state(sim_env / sim_id, current_round=3, total_rounds=3)
+    summary = SimulationRunner.write_run_summary(sim_id)
+    warns = summary.get("organic_ratio_warnings")
+    assert warns and warns[0]["rounds"] == 3     # 采样赞未粉饰塌缩
+
+
+def test_run_summary_ratio_detector_disabled(sim_env, monkeypatch):
+    """SIM_ORGANIC_RATIO_DETECTOR=False → 不写 organic_ratio_warnings（关闭即 no-op）。"""
+    monkeypatch.setattr(Config, "SIM_ORGANIC_RATIO_DETECTOR", False, raising=False)
+    sim_id = "sim_item20_detector_off"
+    entries = [{"round": rnd, "timestamp": f"2026-07-02T00:0{rnd}:00", "agent_id": rnd,
+                "agent_name": f"A{rnd}", "action_type": "CREATE_POST",
+                "action_args": {"content": "x"}} for rnd in (1, 2, 3)]
+    _write_actions(sim_env / sim_id, "twitter", entries)
+    _write_run_state(sim_env / sim_id, current_round=3, total_rounds=3)
+    summary = SimulationRunner.write_run_summary(sim_id)
+    assert "organic_ratio_warnings" not in summary
+
+
 # ---------------------------------------------------------------- RUN-15
 def test_rotate_stale_logs_rotates_derived_artifacts(sim_env):
     sim_id = "sim_run15"
@@ -308,6 +401,31 @@ def test_resume_checkpoint_round_rejects_invalid(sim_env):
     assert SimulationRunner._resume_checkpoint_round(str(sim_dir)) is None
 
 
+def test_resume_checkpoint_round_config_hash_gate(sim_env):
+    # ITEM 3: 检查点 config_hash 与当前 simulation_config.json 指纹匹配则可续跑，不匹配则阻断。
+    import hashlib
+    sim_dir = sim_env / "sim_item3_hash"
+    (sim_dir / "twitter").mkdir(parents=True)
+    cfg = {"agent_configs": [{"agent_id": 1}], "time_config": {"minutes_per_round": 60}}
+    (sim_dir / "simulation_config.json").write_text(
+        json.dumps(cfg), encoding="utf-8")
+    cur = hashlib.sha256(
+        json.dumps(cfg, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+    # 指纹匹配 → 可续跑
+    (sim_dir / "twitter" / "checkpoint.json").write_text(
+        json.dumps({"completed_round": 6, "config_hash": cur}), encoding="utf-8")
+    assert SimulationRunner._resume_checkpoint_round(str(sim_dir)) == 6
+    # 指纹不匹配（配置已变更）→ 阻断续跑
+    (sim_dir / "twitter" / "checkpoint.json").write_text(
+        json.dumps({"completed_round": 6, "config_hash": "deadbeef"}), encoding="utf-8")
+    assert SimulationRunner._resume_checkpoint_round(str(sim_dir)) is None
+    # 无 config_hash 字段（旧检查点）→ 不阻断（向后兼容）
+    (sim_dir / "twitter" / "checkpoint.json").write_text(
+        json.dumps({"completed_round": 6}), encoding="utf-8")
+    assert SimulationRunner._resume_checkpoint_round(str(sim_dir)) == 6
+
+
 def test_run_state_persists_resumed_from_round(sim_env):
     sim_id = "sim_run7_state"
     state = SimulationRunState(
@@ -332,11 +450,71 @@ def test_round_checkpoint_roundtrip(tmp_path, monkeypatch):
     assert ckpt["total_actions"] == 88
 
 
-def test_round_checkpoint_disabled_by_default(tmp_path, monkeypatch):
+def test_round_checkpoint_default_writes_without_resume(tmp_path, monkeypatch):
+    # ITEM 3: SIM_CHECKPOINT 默认 true——即使未开启 SIM_RESUME 也逐轮落盘，使崩溃后可续跑。
     monkeypatch.delenv("SIM_RESUME", raising=False)
+    monkeypatch.delenv("SIM_CHECKPOINT", raising=False)
+    os.makedirs(tmp_path / "twitter")
+    rps._write_round_checkpoint(str(tmp_path), "twitter", 1, 1, 10, 1)
+    assert os.path.exists(rps._checkpoint_file(str(tmp_path), "twitter"))
+
+
+def test_round_checkpoint_disabled_when_sim_checkpoint_false(tmp_path, monkeypatch):
+    # ITEM 3: 显式 SIM_CHECKPOINT=false 且未开 SIM_RESUME → 完全不产出 checkpoint.json（degrade-safe）。
+    monkeypatch.delenv("SIM_RESUME", raising=False)
+    monkeypatch.setenv("SIM_CHECKPOINT", "false")
     os.makedirs(tmp_path / "twitter")
     rps._write_round_checkpoint(str(tmp_path), "twitter", 1, 1, 10, 1)
     assert not os.path.exists(rps._checkpoint_file(str(tmp_path), "twitter"))
+
+
+def test_round_checkpoint_sim_resume_forces_write_even_if_checkpoint_off(tmp_path, monkeypatch):
+    # ITEM 3 向后兼容：SIM_RESUME=true 隐含写检查点，即使 SIM_CHECKPOINT=false 也照写。
+    monkeypatch.setenv("SIM_RESUME", "true")
+    monkeypatch.setenv("SIM_CHECKPOINT", "false")
+    os.makedirs(tmp_path / "reddit")
+    rps._write_round_checkpoint(str(tmp_path), "reddit", 2, 5, 10, 9)
+    assert os.path.exists(rps._checkpoint_file(str(tmp_path), "reddit"))
+
+
+def test_checkpoint_config_hash_and_rng_roundtrip(tmp_path, monkeypatch):
+    # ITEM 3: config_hash 稳定且随配置变化；rng_state 可随检查点往返落盘/读取。
+    monkeypatch.setenv("SIM_CHECKPOINT", "true")
+    os.makedirs(tmp_path / "twitter")
+    cfg = {"agent_configs": [{"agent_id": 1}], "time_config": {"minutes_per_round": 60}}
+    h = rps._config_hash(cfg)
+    assert h and rps._config_hash(cfg) == h              # 稳定：同 config 同指纹
+    assert rps._config_hash({"agent_configs": []}) != h  # 配置变更 → 指纹变
+    rng_state = rps._capture_rng_state()
+    assert rng_state and "py_random" in rng_state
+    rps._write_round_checkpoint(str(tmp_path), "twitter", 3, 9, 20, 40,
+                                config_hash=h, rng_state=rng_state)
+    ckpt = rps._load_round_checkpoint(str(tmp_path), "twitter")
+    assert ckpt["config_hash"] == h
+    assert ckpt["rng_state"]["py_random"][0] == rng_state["py_random"][0]
+
+
+def test_restore_rng_state_reproduces_stream(monkeypatch):
+    # ITEM 3: 恢复 RNG 状态后，后续采样序列与捕获点之后的序列逐值一致（确定性可复现）。
+    monkeypatch.setenv("SIM_SEED", "12345")
+    orig = rps._RNG
+    try:
+        rps._RNG = rps._build_sampling_rng()
+        _ = [rps._RNG.random() for _ in range(5)]   # 推进若干步
+        snap = rps._capture_rng_state()
+        expected = [rps._RNG.random() for _ in range(5)]
+        assert rps._restore_rng_state(snap) is True
+        got = [rps._RNG.random() for _ in range(5)]
+        assert got == expected
+    finally:
+        rps._RNG = orig                              # 隔离：不污染其它测试的模块级 RNG
+
+
+def test_restore_rng_state_rejects_garbage():
+    # ITEM 3: 非法/缺失 RNG 状态一律降级为 False（不崩溃）。
+    assert rps._restore_rng_state(None) is False
+    assert rps._restore_rng_state({}) is False
+    assert rps._restore_rng_state({"py_random": None}) is False
 
 
 def test_load_round_checkpoint_rejects_zero_rounds(tmp_path):

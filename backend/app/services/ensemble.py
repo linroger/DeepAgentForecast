@@ -143,6 +143,93 @@ def aggregate_forecasts(forecasts: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def pool_binary_forecasts(primary: List[Dict[str, Any]],
+                          secondary: Dict[str, List[Dict[str, Any]]], *,
+                          primary_model: str = "primary",
+                          extremize_a: Optional[float] = None,
+                          spread_threshold: float = 0.15) -> List[str]:
+    """ITEM 12：多模型二元预测集成——把主模型与各副模型对同一条二元预测的概率池化（就地改写 primary）。
+
+    ``primary`` 是权威二元预测列表（其陈述/id/判定标准为准）；``secondary`` 为 {模型名: 二元预测列表}
+    （各副模型对同一研究档案独立抽取的一遍结果）。逐条 primary 预测，用「归一化陈述」优先、其次「id」
+    与每个副模型的预测匹配（同源 F1-Fn 表，故 id/陈述应对齐）；把匹配到的各模型概率与主模型概率一起，
+    用与种子集成同一套 extremizing log-odds 池化（``extremize_a`` 给出时；否则退回算术均值）得到发布概率，
+    并把 ``{models, probs, pooled, spread}`` 记入 ``binary['ensemble']``、用 pooled 覆盖 ``binary['probability']``。
+    ``spread``（各模型概率的样本 stdev）> ``spread_threshold`` 的预测其 id 收进返回列表（low-agreement）。
+    某条 primary 无任何副模型匹配 → 保留主模型概率、不加 ensemble 块（unmatched→keep primary）。Pure。
+    """
+    prim = [b for b in (primary or []) if isinstance(b, dict)]
+    if not prim or not secondary:
+        return []
+    # 复用 forecast_extractor 的陈述归一化键（惰性导入避免模块级循环依赖）。
+    try:
+        from .forecast_extractor import _binary_key as _bk
+    except Exception:  # noqa: BLE001 — 退回等价内联实现
+        def _bk(s: Any) -> str:
+            return re.sub(r"\W+", " ", str(s or "").lower()).strip()
+
+    # 为每个副模型建两张查找表：陈述键→概率、id→概率（各取首现，忽略非法概率）。
+    indexed: Dict[str, Any] = {}
+    for model, blist in (secondary or {}).items():
+        by_key: Dict[str, float] = {}
+        by_id: Dict[str, float] = {}
+        for b in (blist or []):
+            if not isinstance(b, dict):
+                continue
+            try:
+                pf = float(b.get("probability"))
+            except (TypeError, ValueError):
+                continue
+            k = _bk(b.get("statement"))
+            if k and k not in by_key:
+                by_key[k] = pf
+            bid = str(b.get("id") or "").strip()
+            if bid and bid not in by_id:
+                by_id[bid] = pf
+        indexed[str(model)] = (by_key, by_id)
+
+    try:
+        a = float(extremize_a) if extremize_a is not None else None
+    except (TypeError, ValueError):
+        a = None
+
+    low_agreement: List[str] = []
+    for b in prim:
+        try:
+            p0 = float(b.get("probability"))
+        except (TypeError, ValueError):
+            continue
+        models = [str(primary_model)]
+        probs = [p0]
+        k = _bk(b.get("statement"))
+        bid = str(b.get("id") or "").strip()
+        for model, (by_key, by_id) in indexed.items():
+            mp: Optional[float] = None
+            if k and k in by_key:
+                mp = by_key[k]
+            elif bid and bid in by_id:
+                mp = by_id[bid]
+            if mp is not None:
+                models.append(model)
+                probs.append(mp)
+        if len(probs) <= 1:
+            continue  # 无副模型匹配 → 保留主模型概率（unmatched→keep primary）
+        pooled = _extremized_logodds(probs, a) if a is not None else _mean(probs)
+        spread = _stdev(probs)
+        b["ensemble"] = {
+            "models": models,
+            "probs": [round(x, 4) for x in probs],
+            "pooled": round(pooled, 4),
+            "spread": round(spread, 4),
+        }
+        b["probability"] = round(pooled, 2)  # 与 _normalize_binaries 的 2 位约定一致
+        if spread > spread_threshold:
+            _bid = str(b.get("id") or "").strip()
+            if _bid:
+                low_agreement.append(_bid)
+    return low_agreement
+
+
 def _ensemble_agreement(runs: List[Dict[str, Any]]) -> Optional[float]:
     """R2-CAL-9: inter-run agreement = (1 - mean pairwise total-variation distance)
     between each run's scenario distribution, penalized by low scenario support.
