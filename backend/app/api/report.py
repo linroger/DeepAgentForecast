@@ -542,6 +542,151 @@ def get_report_pdf(report_id: str):
         }), 500
 
 
+# ============== 执行交付物接口（DELIV-1）==============
+
+@report_bp.route('/<report_id>/exec-brief', methods=['GET'])
+def get_report_exec_brief(report_id: str):
+    """惰性构建并返回一页高管简报 reports/{id}/exec_brief[.<lang>].md（DELIV-1）。
+
+    与 /pdf 同思路：首次访问（或 full_report.md / forecast.json 更新后）确定性再生（NO LLM，只从
+    成稿 + forecast.json 抽取），随后按源 mtime 缓存复用。REPORT_EXEC_BRIEF 关闭 / 报告缺失 / 简报
+    未生成 → 404（degrade-safe）。
+
+    BILINGUAL：可选 ?lang=en|zh 从译文简报 exec_brief.<lang>.md 取（缺省/非法 → 主语言简报，行为默认）。
+    与同蓝图的 /pdf、/charts、/download 共用 /api/report/<id>/... 前缀约定。
+    """
+    try:
+        from ..services.exec_brief import ExecBriefBuilder
+
+        report = ReportManager.get_report(report_id)
+        if not report:
+            return jsonify({
+                "success": False,
+                "error": f"报告不存在: {report_id}"
+            }), 404
+
+        lang = (request.args.get('lang') or '').strip().lower()
+        lang = lang if lang in ExecBriefBuilder._TRANSLATION_LANGS else None
+
+        report_dir = ReportManager._get_report_folder(report_id)
+        ExecBriefBuilder.build(report_id, report_dir)
+
+        brief_path = ExecBriefBuilder.brief_path(report_dir, lang)
+        if not os.path.exists(brief_path):
+            return jsonify({
+                "success": False,
+                "error": "执行简报不可用（未开启 REPORT_EXEC_BRIEF、缺该语种版本或构建失败）"
+            }), 404
+
+        return send_file(
+            brief_path,
+            mimetype="text/markdown",
+            as_attachment=True,
+            download_name=(f"{report_id}.exec_brief.{lang}.md" if lang
+                           else f"{report_id}.exec_brief.md"),
+        )
+
+    except Exception as e:
+        logger.error(f"获取执行简报失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@report_bp.route('/<report_id>/exec-brief.pdf', methods=['GET'])
+def get_report_exec_brief_pdf(report_id: str):
+    """惰性构建并返回一页高管简报 PDF reports/{id}/exec_brief[.<lang>].pdf（DELIV-1）。
+
+    先确保简报 md 存在（build），再复用 pandoc 引擎选择 + PyMuPDF 回退导出（去 --toc、收紧边距做单
+    页），按简报 md 的 mtime 缓存。REPORT_EXEC_BRIEF / REPORT_PDF_EXPORT 关闭、报告/简报缺失、构建
+    失败 → 404（degrade-safe）。BILINGUAL：?lang=en|zh 取译文简报 PDF。
+    """
+    try:
+        from ..services.exec_brief import ExecBriefBuilder
+
+        report = ReportManager.get_report(report_id)
+        if not report:
+            return jsonify({
+                "success": False,
+                "error": f"报告不存在: {report_id}"
+            }), 404
+
+        lang = (request.args.get('lang') or '').strip().lower()
+        lang = lang if lang in ExecBriefBuilder._TRANSLATION_LANGS else None
+
+        report_dir = ReportManager._get_report_folder(report_id)
+        # 先构建 md（PDF 依赖简报 md），再导 PDF。
+        ExecBriefBuilder.build(report_id, report_dir)
+        pdf_path = ExecBriefBuilder.build_pdf(report_id, report_dir, lang=lang)
+        if not pdf_path or not os.path.exists(pdf_path):
+            return jsonify({
+                "success": False,
+                "error": "执行简报 PDF 不可用（未开启 REPORT_EXEC_BRIEF/REPORT_PDF_EXPORT、缺该语种版本或构建失败）"
+            }), 404
+
+        download_name = (f"{report_id}.exec_brief.{lang}.pdf" if lang
+                         else f"{report_id}.exec_brief.pdf")
+        return send_file(
+            pdf_path,
+            as_attachment=True,
+            download_name=download_name,
+            mimetype="application/pdf",
+        )
+
+    except Exception as e:
+        logger.error(f"导出执行简报 PDF 失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@report_bp.route('/<report_id>/digest', methods=['GET'])
+def get_report_digest(report_id: str):
+    """惰性构建并返回 ~15 行 newsletter 式速览 reports/{id}/digest.md（DELIV-1）。
+
+    与 /exec-brief 同源（build 一次同时产简报 + 速览），按 full_report.md / forecast.json 的 mtime
+    缓存。REPORT_EXEC_BRIEF 关闭 / 报告缺失 / 速览未生成 → 404（degrade-safe）。
+    """
+    try:
+        from ..services.exec_brief import ExecBriefBuilder
+
+        report = ReportManager.get_report(report_id)
+        if not report:
+            return jsonify({
+                "success": False,
+                "error": f"报告不存在: {report_id}"
+            }), 404
+
+        report_dir = ReportManager._get_report_folder(report_id)
+        ExecBriefBuilder.build(report_id, report_dir)
+
+        digest_path = ExecBriefBuilder.digest_path(report_dir)
+        if not os.path.exists(digest_path):
+            return jsonify({
+                "success": False,
+                "error": "速览不可用（未开启 REPORT_EXEC_BRIEF 或构建失败）"
+            }), 404
+
+        return send_file(
+            digest_path,
+            mimetype="text/markdown",
+            as_attachment=True,
+            download_name=f"{report_id}.digest.md",
+        )
+
+    except Exception as e:
+        logger.error(f"获取速览失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
 # ============== 报告可视化资源接口（VIZ-1）==============
 
 @report_bp.route('/<report_id>/charts/<path:filename>', methods=['GET'])

@@ -201,11 +201,24 @@ class Config:
     REPORT_PDF_EXPORT = os.environ.get('REPORT_PDF_EXPORT', 'True').strip().lower() == 'true'
     # PDF-1：单次 pandoc 构建超时秒数（防挂死；超时即回退 PyMuPDF）。
     REPORT_PDF_TIMEOUT = int(os.environ.get('REPORT_PDF_TIMEOUT', '180') or '180')
+    # DELIV-1：从每份完成报告惰性派生「一页高管简报 + 可分享速览」——GET /api/report/{id}/
+    # exec-brief（md）、/exec-brief.pdf、/digest 按源 mtime 缓存构建（与 PDF 端点同思路）。纯确定性
+    # （NO LLM，只从成稿/forecast.json 抽取）：预测问题 + 3 句论点 + TOP 二元预测表（≤8 行，概率±集成
+    # 离散/市场锚 Δ/判定日期）+ 关键情景概率 + scenario-bars 图 + 3 个带日期观察指标 + 一行诚实声明；
+    # 双语（随成稿语言，另按 meta.translations[] 生成 exec_brief.<lang>.md）。PDF 复用 pandoc 引擎选择/
+    # PyMuPDF 回退但去 --toc 收紧边距做单页。默认开；关闭=三端点 404（degrade-safe）。
+    REPORT_EXEC_BRIEF = os.environ.get('REPORT_EXEC_BRIEF', 'True').strip().lower() == 'true'
     # NEXTSTEPS P2-4：把每份 forecast.json 追加进校准账本（horizon/resolution date 为键），已解析
     # 预测的历史 Brier/ECE surfacing 进新预测 confidence_rationale——让信心由 track record 赚得而非
     # 自评。默认开（仅 jsonl 追加/读取，无 LLM）；初期无已解析样本时对信心无影响（degrade-safe）。
     REPORT_FORECAST_LEDGER = os.environ.get('REPORT_FORECAST_LEDGER', 'True').strip().lower() == 'true'
     FORECAST_LEDGER_DIR = os.environ.get('FORECAST_LEDGER_DIR', '').strip()  # 空=PIPELINE_DATA_DIR/_forecast_ledger
+    # MON-1 持续预测/判定监测（scripts/resolution_monitor.py，cron 驱动）：对已发布报告的锚定
+    # 市场周期性重报价 + 查询判定终态，落 price_track.jsonl / resolutions.jsonl / monitor_report.md。
+    # 纯脚本旁路，不改任何在线管线语义；下列旋钮仅被该脚本读取（degrade-safe，默认保守）。
+    RESOLUTION_MONITOR_RECENT_N = int(os.environ.get('RESOLUTION_MONITOR_RECENT_N', '10') or '10')  # --all-recent 缺省处理的最近报告条数
+    RESOLUTION_MONITOR_LOOKBACK_DAYS = int(os.environ.get('RESOLUTION_MONITOR_LOOKBACK_DAYS', '0') or '0')  # 0=不限；>0 仅监测 created_at 在近 N 天内的报告
+    RESOLUTION_MONITOR_DRIFT_THRESHOLD = float(os.environ.get('RESOLUTION_MONITOR_DRIFT_THRESHOLD', '0.05') or '0.05')  # 研究期价→现价 |Δ|≥此值才计入「biggest movers」
     # NEXTSTEPS P3-8：把已实现关系按价投影一个「到预测时点的轨迹」（allied→likely_persists /
     # adversarial→persists_or_escalates / transactional→contingent），喂进报告信号包帮助情景分叉
     # 分析（contingent 纽带=支点）。**模型先验非证据**，块内显式标注。默认关（保守，避免被当成证据）。
@@ -319,6 +332,10 @@ class Config:
     # 预测质量回归评测开关（EXECPLAN2 I-7-7）：opt-in，绝不进默认 CI。开启后 eval_forecast_quality.py
     # 用 LLM-judge 按 rubric 给固定情景集打分并与 baseline 对比。默认关。
     EVAL_ENABLED = os.environ.get('EVAL_ENABLED', 'False').strip().lower() == 'true'  # I-7-7 预测质量评测
+    # EVAL-1 黄金题评测账本写入开关：opt-in。golden_eval.py 默认只读打分（写 eval_report.json/markdown）；
+    # 仅当本旋钮开启（或 CLI 显式 --to-ledger）时才把已解析黄金题作为二元(YES/NO)预测追加进校准账本，
+    # 让 report_visualizer 校准曲线累积黄金题结局。默认关=不污染生产账本（degrade-safe）。
+    GOLDEN_EVAL_LEDGER = os.environ.get('GOLDEN_EVAL_LEDGER', 'False').strip().lower() == 'true'  # EVAL-1
 
     # —— 运维脚本旋钮（此前各脚本用 getattr(Config, ...) 读但 config.py 从未定义 → "幽灵旋钮"：
     #    在 .env 里设了也无效。这里收口为真实可读项 + .env.example 文档化，消除该反模式）——

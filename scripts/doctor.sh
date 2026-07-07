@@ -117,6 +117,18 @@ if [ -x "$BE_PY" ]; then
     else
       warn ".env.example drift — run: ( cd backend && uv run python scripts/check_env_drift.py )"
     fi
+    # ENV-1: advisory pin-divergence audit. Runtime .env pins can silently
+    # override improved Config defaults (live example: REPORT_SECTION_CONCURRENCY=1
+    # vs default 6 serialises report synthesis). `--pins --strict` exits 1 only
+    # when a performance-critical pin diverges — surfaced as a non-blocking warn
+    # (never a ✗), preserving doctor's offline/free/advisory contract.
+    if [ -f "$ROOT_DIR/.env" ]; then
+      if "$BE_PY" "$ROOT_DIR/backend/scripts/check_env_drift.py" --pins --strict >/dev/null 2>&1; then
+        ok ".env pins align with current Config defaults (no perf-critical drift)"
+      else
+        warn ".env pins override improved defaults — audit: ( cd backend && uv run python scripts/check_env_drift.py --pins )"
+      fi
+    fi
   fi
 else
   bad "backend venv missing — run: ( cd backend && uv sync --python 3.12 )  (or ./setup.sh)"

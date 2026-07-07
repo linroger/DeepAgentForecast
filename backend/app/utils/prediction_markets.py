@@ -39,6 +39,11 @@ CLOB_BASE_URL = "https://clob.polymarket.com"
 # 可重试的瞬时错误状态码（限流/网关抖动）；4xx 参数错误不重试。
 _TRANSIENT_STATUS = frozenset({429, 500, 502, 503, 504})
 
+# MON-1 解析终态阈值：已判定市场的 outcomePrices 收敛到 ~0/1。某一结局价 ≥ HI 视作该
+# 结局实现（胜出），另一结局对称落到 ≤ LO。留 0.99/0.01 的余量吸收浮点/微量残余流动性。
+_RESOLVED_PRICE_HI = 0.99
+_RESOLVED_PRICE_LO = 0.01
+
 
 def _cfg(name: str, default: Any) -> Any:
     """读取 Config 旗标（degrade-safe；Config 不可导入/属性缺失时用默认值，绝不抛异常）。"""
@@ -124,6 +129,47 @@ def _fresh_yes_price(raw: Any) -> Optional[float]:
     if prob is None or not (0.0 < prob < 1.0):
         return None
     return prob
+
+
+def _parse_resolution(raw: Any) -> Optional[Dict[str, Any]]:
+    """MON-1：从一条 Gamma /markets 行防御式解析判定终态；不可判定 → resolved=False（unknown）。
+
+    已判定市场：`closed=true` 且某一结局价收敛到 ~1（另一 ~0）。据此定胜出结局名与
+    "Yes" 结局的最终价（二元真值）。任一字段缺失/形状异常都不抛，退化为 unknown。
+    返回 None 仅当输入根本不是 dict（无 market_id 可键）。"""
+    if not isinstance(raw, dict):
+        return None
+    market_id = str(raw.get("id") or "").strip()
+    closed = raw.get("closed") is True or str(raw.get("closed")).strip().lower() == "true"
+    # UMA 判定阶段（诊断透传）：不同 Gamma 版本键名略有差异，容忍单/复数两种拼写。
+    uma_raw = raw.get("umaResolutionStatus")
+    if uma_raw is None:
+        uma_raw = raw.get("umaResolutionStatuses")
+    uma_status = str(uma_raw).strip() if uma_raw not in (None, "") else None
+
+    names = _as_list(raw.get("outcomes"))
+    px = _as_list(raw.get("outcomePrices"))
+    resolved_outcome: Optional[str] = None
+    if names and px and len(names) == len(px):
+        for i, name in enumerate(names):
+            p = _coerce_float(px[i])
+            if p is not None and p >= _RESOLVED_PRICE_HI:
+                resolved_outcome = str(name).strip()
+                break
+    # "Yes" 结局的最终价（胜出=~1 / 落败=~0）——据此定二元真值；无法定位则 None。
+    resolved_yes_price = _yes_price(raw.get("outcomes"), raw.get("outcomePrices"))
+    # 判定成立：已关闭 且 能定位到一个价收敛到 ~1 的胜出结局。仅 uma/closed 但价未收敛 →
+    # 仍视为 unknown（避免把「关闭但争议中/未定盘」误记为已判定）。
+    resolved = bool(closed and resolved_outcome is not None)
+    return {
+        "market_id": market_id,
+        "closed": closed,
+        "resolved": resolved,
+        "resolved_outcome": resolved_outcome,
+        "resolved_yes_price": (round(resolved_yes_price, 4)
+                               if resolved_yes_price is not None else None),
+        "uma_status": uma_status,
+    }
 
 
 def _cap_per_event(ranked: List[Dict[str, Any]], max_per_event: int,
@@ -378,6 +424,44 @@ class PolymarketClient:
             if cutoff is not None and tf < cutoff:
                 continue
             out.append({"t": int(tf), "p": round(p, 4)})
+        return out
+
+    # --------------------------------------------------------- resolutions
+    def fetch_resolutions(self, market_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """MON-1：查询一批市场的 closed/resolved 终态（keyless Gamma /markets）。
+
+        动机：持续预测需要知道锚定市场何时**判定**——市场一旦 resolve，模型概率就有了
+        真值标签，可回算 Brier。已判定市场的 outcomePrices 收敛到 ~0/1，`closed=true`，且
+        Gamma 常带 `umaResolutionStatus`（UMA 预言机判定阶段）。本方法复用 `_fetch_fresh_markets`
+        的批量取数与降级纪律，逐条防御式解析终态：
+
+            {market_id: {market_id, closed, resolved, resolved_outcome,
+                         resolved_yes_price, uma_status}}
+
+        * closed              —— 市场是否已关闭（active 旗标在已判定市场上仍 True，不可靠）；
+        * resolved            —— 是否可判定为确定结局（closed 且某结局价 ≥ HI，收敛到 0/1）；
+        * resolved_outcome    —— 胜出结局名（"Yes"/"No"/…），无法判定为 None；
+        * resolved_yes_price  —— 判定后 "Yes" 结局的价（胜出=~1 / 落败=~0），据此定二元真值；
+        * uma_status          —— 原样透传的 UMA 判定阶段字符串（诊断用；缺失为 None）。
+
+        Degrade-safe：未启用 / 空输入 / 整批网络失败 → {}；单条字段缺失/形状异常 →
+        该市场 resolved=False（unknown），绝不抛异常、绝不阻断监测主流程。
+        """
+        ids: List[str] = []
+        seen: set = set()
+        for mid in market_ids or []:
+            s = str(mid or "").strip()
+            if s and s not in seen:
+                seen.add(s)
+                ids.append(s)
+        if not self.enabled or not ids:
+            return {}
+        fresh = self._fetch_fresh_markets(ids)
+        out: Dict[str, Dict[str, Any]] = {}
+        for mid, raw in fresh.items():
+            parsed = _parse_resolution(raw)
+            if parsed is not None:
+                out[mid] = parsed
         return out
 
     @staticmethod
