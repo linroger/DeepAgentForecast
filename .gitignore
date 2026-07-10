@@ -53,6 +53,10 @@ mytest/
 backend/logs/
 *.log
 
+# start.sh 进程 pid 文件
+.backend.pid
+.frontend.pid
+
 # Claude Code / agent session logs & transcripts (MAY CONTAIN SECRETS — never commit)
 logs/
 /logs/
