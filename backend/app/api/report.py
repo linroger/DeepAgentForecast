@@ -707,7 +707,19 @@ def get_report_chart(report_id: str, filename: str):
                 "error": f"报告无可视化产物: {report_id}"
             }), 404
         # send_from_directory 对 filename 做安全解析（拒绝 ../ 逃逸），越界或缺失 → 404
-        return send_from_directory(charts_dir, filename)
+        response = send_from_directory(charts_dir, filename)
+        if str(filename).lower().endswith(".html"):
+            # Interactive charts may contain agent-produced inline JS. Run them
+            # in an opaque sandboxed origin: scripts work, app cookies/storage
+            # and network access do not.
+            response.headers["Content-Security-Policy"] = (
+                "sandbox allow-scripts; default-src 'none'; "
+                "script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                "img-src data: blob:; font-src data:; connect-src 'none'"
+            )
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Referrer-Policy"] = "no-referrer"
+        return response
     except Exception as e:
         # werkzeug 对非法路径抛 NotFound（404）；其余异常统一 404 避免泄漏路径细节
         logger.warning(f"获取报告图表失败: report_id={report_id}, file={filename}, err={e}")
@@ -719,10 +731,46 @@ def get_report_chart(report_id: str, filename: str):
 
 @report_bp.route('/<report_id>/viz-manifest', methods=['GET'])
 def get_report_viz_manifest(report_id: str):
-    """获取报告可视化清单 reports/{id}/viz_manifest.json（[{path,type,source,caption,placement_hint}]）。
+    """获取报告可视化清单，兼容 legacy list 与 ReportVisualizer schema-v2。
 
     无清单（未开启可视化 / 无可渲染工件）→ 返回空列表（degrade-safe，前端据此不渲染图区）。
     """
+    def safe_chart_path(value):
+        from pathlib import PurePosixPath
+        if (not isinstance(value, str) or not value.strip() or '\\' in value
+                or '%' in value or any(ord(char) < 32 or ord(char) == 127 for char in value)):
+            return None
+        raw = value.strip().removeprefix('./')
+        path = PurePosixPath(raw)
+        if path.is_absolute() or '..' in path.parts or not path.parts:
+            return None
+        # 报告图表端点只服务 report-owned charts/；其它相对路径不能借 manifest
+        # 变成浏览器请求或泄漏本机绝对路径。
+        if path.parts[0] != 'charts' or len(path.parts) < 2:
+            return None
+        return path.as_posix()
+
+    def normalize_items(value):
+        if not isinstance(value, list):
+            return []
+        out = []
+        for row in value:
+            if not isinstance(row, dict):
+                continue
+            primary = safe_chart_path(row.get('path'))
+            if not primary:
+                continue
+            item = dict(row)
+            item['path'] = primary
+            if 'png_path' in item:
+                png_path = safe_chart_path(item.get('png_path'))
+                if png_path:
+                    item['png_path'] = png_path
+                else:
+                    item.pop('png_path', None)
+            out.append(item)
+        return out
+
     try:
         import json as _json
         manifest_path = os.path.join(
@@ -731,17 +779,32 @@ def get_report_viz_manifest(report_id: str):
         if not os.path.exists(manifest_path):
             return jsonify({
                 "success": True,
+                "schema_version": 1,
                 "data": [],
-                "count": 0
+                "count": 0,
+                "skipped": [],
             })
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = _json.load(f)
-        if not isinstance(manifest, list):
-            manifest = []
+        if isinstance(manifest, dict):
+            try:
+                schema_version = int(manifest.get('schema_version', 2) or 2)
+            except (TypeError, ValueError):
+                schema_version = 2
+            items = normalize_items(manifest.get('items'))
+            skipped = manifest.get('skipped')
+            if not isinstance(skipped, list):
+                skipped = []
+        else:
+            schema_version = 1
+            items = normalize_items(manifest)
+            skipped = []
         return jsonify({
             "success": True,
-            "data": manifest,
-            "count": len(manifest)
+            "schema_version": schema_version,
+            "data": items,
+            "count": len(items),
+            "skipped": skipped,
         })
     except Exception as e:
         logger.error(f"获取可视化清单失败: {str(e)}")

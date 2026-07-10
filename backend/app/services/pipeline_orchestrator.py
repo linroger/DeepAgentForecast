@@ -422,6 +422,60 @@ class PipelineManager:
             return True
 
     @classmethod
+    def mark_salvaged_completed(cls, pipeline_id: str, note: str) -> bool:
+        """W9-1: 把「报告已完整落盘」的孤儿管线直接落成 completed（pipeline_health=degraded）。
+
+        与 mark_failed 同款的轻量直写（load → 改键 → 原子替换，全程持锁）。语义：主报告
+        （full_report.md + forecast.json）已经是完整交付物，中断只发生在其后的多种子集成/
+        收尾窗口——整线判 failed 会把 $10+ 的成品当废品；改为 completed + degraded 健康块 +
+        「集成已跳过」留痕。同时置 options.ensemble_done=True，使后续 resume 不再重烧集成窗口。
+        """
+        with cls._state_lock(pipeline_id):
+            data = cls.load(pipeline_id)
+            if not data or cls.INCOMPATIBLE_KEY in data:
+                return False
+            data["status"] = "completed"
+            data["error"] = None
+            data["global_progress"] = 100
+            data["updated_at"] = _utcnow()
+            opts = data.get("options")
+            if not isinstance(opts, dict):
+                opts = {}
+                data["options"] = opts
+            ph = opts.get("pipeline_health")
+            if not isinstance(ph, dict):
+                ph = {"status": "degraded", "issues": []}
+            elif ph.get("status") == "ok":
+                ph["status"] = "degraded"
+            ph.setdefault("status", "degraded")
+            issues = ph.get("issues")
+            if not isinstance(issues, list):
+                issues = []
+            if note not in issues:
+                issues.append(note)
+            ph["issues"] = issues
+            opts["pipeline_health"] = ph
+            opts["ensemble_done"] = True   # 集成窗口被中断 → 按「已跳过」处理，不再重烧
+            opts["ensemble_skipped"] = note
+            opts["salvaged_orphan_at"] = _utcnow()
+            stages = data.get("stages") or {}
+            _rs = stages.get(STAGE_REPORT)
+            if isinstance(_rs, dict):
+                _rs["status"] = "completed"
+                _rs["progress"] = 100
+                _rs["error"] = None
+                if not _rs.get("finished_at"):
+                    _rs["finished_at"] = _utcnow()
+                # 阶段消息可能冻结在「多种子集成 …」——替换为诚实的终态描述。
+                if "多种子集成" in str(_rs.get("message") or ""):
+                    _rs["message"] = "报告完成（多种子集成被中断，已跳过）"
+            data["current_stage"] = STAGE_REPORT
+            cls.ensure_dirs(pipeline_id)
+            from ..utils.atomic import write_json_atomic
+            write_json_atomic(cls.state_path(pipeline_id), data)
+            return True
+
+    @classmethod
     def touch_heartbeat(cls, pipeline_id: str, pid: Optional[int] = None) -> bool:
         """I-4-1: 仅刷新 heartbeat_at（+ 可选 owner_pid/owner_boot_id），不重建 dataclass。
 
@@ -682,6 +736,12 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
             _tool_src = os.path.join(bridge_dir, _tool_mod)
             if os.path.isfile(_tool_src):
                 pairs.append((_tool_src, os.path.join(deerflow_dir, _tool_mod)))
+        # W9-9：MCP 扩展注册文件也同步到部署目录。该文件是 OPT-IN 的（harness 仅在
+        # DEER_FLOW_EXTENSIONS_CONFIG_PATH 指向它时才加载），部署副本本身惰性无副作用；
+        # DeerFlowResearchRunner 在「图谱已存在」的路径把该 env 指向此部署副本。
+        _ext_src = os.path.join(bridge_dir, "extensions_config.json")
+        if os.path.isfile(_ext_src):
+            pairs.append((_ext_src, os.path.join(deerflow_dir, "extensions_config.json")))
         # ORCH-1(1): skill 同步从硬编码 2 个种子 skill 改为 glob 全量枚举——此前 bridge 侧
         # 新增第 3 个 skill 只有重跑 ./setup.sh 才会部署，这里会静默漂移。与 setup.sh 语义
         # 一致：仅当部署侧存在 skills/public/ 时才同步；目标 skill 目录缺失（新 skill 首次
@@ -692,6 +752,12 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
             for src in sorted(_glob.glob(os.path.join(bridge_dir, "skills", "*", "SKILL.md"))):
                 skill = os.path.basename(os.path.dirname(src))
                 pairs.append((src, os.path.join(public_skills_dir, skill, "SKILL.md")))
+            # GATE-W9：技能捆绑脚本（如 forecast-visuals/scripts/render.py）也随 SKILL.md
+            # 一并同步——渲染器只部署 SKILL.md 时确定性图表步会静默降级为「renderer missing」。
+            for src in sorted(_glob.glob(os.path.join(bridge_dir, "skills", "*", "scripts", "*.py"))):
+                skill_dir = os.path.dirname(os.path.dirname(src))
+                skill = os.path.basename(skill_dir)
+                pairs.append((src, os.path.join(public_skills_dir, skill, "scripts", os.path.basename(src))))
 
         synced = []
         for src, dst in pairs:
@@ -750,6 +816,7 @@ class DeerFlowResearchRunner:
         cancel_event: Optional[threading.Event] = None,
         on_spawn: Optional[Callable[[int], None]] = None,
         resume: bool = False,
+        kg_graph_id: Optional[str] = None,
     ) -> dict[str, Any]:
         """运行研究子进程，阻塞直到结束。返回 handoff 摘要。
 
@@ -757,6 +824,11 @@ class DeerFlowResearchRunner:
         question_hash 匹配的 research_checkpoint.json，就复用其 LangGraph thread、跳过已完成
         pass、从下一 pass 续跑（否则全量重启）。调用方仅在既存 checkpoint 时置 True（崩溃/超时
         重试路径），故正常首跑逐字节不变。
+
+        W9-9 ``kg_graph_id``：非空且 RESEARCH_MCP_KG 开启时，把 DEER_FLOW_EXTENSIONS_CONFIG_PATH
+        指向部署目录的 extensions_config.json 并注入 DRF_MCP_KG_GRAPH_ID——研究子进程可经 MCP
+        （kg_search/kg_trace_cascade 等）直查既有基线图谱。调用方仅在图谱已存在的路径
+        （fork/continue/resume-with-graph）传入；首跑传 None，env 与今日逐字节一致。
 
         Raises:
             PipelineCancelled: cancel_event 被置位（用户取消），子进程组已被终止。
@@ -824,6 +896,19 @@ class DeerFlowResearchRunner:
         env["PREDICTION_MARKETS_MAX"] = str(getattr(Config, "PREDICTION_MARKETS_MAX", 20))
         env["PREDICTION_MARKETS_MIN_VOLUME"] = str(getattr(Config, "PREDICTION_MARKETS_MIN_VOLUME", 200.0))
         env["PREDICTION_MARKETS_MAX_PER_EVENT"] = str(getattr(Config, "PREDICTION_MARKETS_MAX_PER_EVENT", 3))
+        # W9-9：图谱已存在（fork/continue/resume-with-graph）时把 KG MCP server 暴露给研究子进程。
+        # extensions_config.json 由 _sync_deerflow_bridge_if_stale 同步到部署目录；两台 server 均
+        # 设计为图谱缺失时返回结构化错误、绝不 hang（见该文件 _comment），接线本身 degrade-safe。
+        if kg_graph_id and bool(getattr(Config, "RESEARCH_MCP_KG", True)):
+            _ext_cfg = os.path.join(deerflow_dir, "extensions_config.json")
+            if os.path.isfile(_ext_cfg):
+                env["DEER_FLOW_EXTENSIONS_CONFIG_PATH"] = _ext_cfg
+                env["DRF_MCP_KG_GRAPH_ID"] = str(kg_graph_id)
+                logger.info("研究子进程已接入 KG MCP（graph_id=%s）", kg_graph_id)
+            else:
+                logger.warning(
+                    "RESEARCH_MCP_KG 开启且 graph_id=%s，但部署目录缺 extensions_config.json"
+                    "——跳过 MCP 接线（研究照常运行）", kg_graph_id)
 
         logger.info(f"启动 DeerFlow 研究子进程: {' '.join(cmd[:1])} … (cwd={deerflow_dir})")
         on_progress(2, "启动深度研究子进程…")
@@ -927,7 +1012,31 @@ class DeerFlowResearchRunner:
                     on_progress(max(local, 4), _tail(line))
                 if timed_out["hit"] or time.time() > deadline:
                     break
-            returncode = proc.wait(timeout=30)
+            try:
+                returncode = proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                # W9-4：stdout 已经 EOF 但子进程组 30s 内没退出（bridge 的孙子进程/线程收尾慢）。
+                # 旧行为让 TimeoutExpired 直接冒泡 → 整条轨被当失败丢弃——pipe_0f2bee 因此把
+                # 2/3 条健康续跑轨（报告+checkpoint 都已落盘）判死、降级到只剩基率轨。
+                # 改为：先杀进程组，再按盘上产物判定——research_report.md 完整且结构化产物/
+                # checkpoint 表明协议已推进 → 该轨按存活处理；否则仍按失败抛出（信息更明确）。
+                _kill_process_group(proc)
+                try:
+                    returncode = proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    returncode = -9  # 进程组已被 SIGKILL，wait 仍超时视作强杀
+                if _track_artifacts_survived(handoff_dir):
+                    logger.warning(
+                        "研究子进程收尾超时（stdout 已关闭但进程组未在 30s 内退出，exit=%s）"
+                        "——盘上产物完整，按存活轨继续", returncode,
+                    )
+                    on_progress(95, "子进程收尾超时，但研究产物完整——按存活轨继续")
+                    returncode = 0
+                else:
+                    raise RuntimeError(
+                        "研究子进程收尾超时（30s）且产物不完整"
+                        "（research_report.md 缺失/过短，或无结构化产物/checkpoint）——该轨失败"
+                    )
         finally:
             watchdog.cancel()
             if proc.poll() is None:
@@ -1108,6 +1217,22 @@ def _has_research_checkpoint(handoff_dir: str) -> bool:
         return False
 
 
+def _track_artifacts_survived(handoff_dir: str) -> bool:
+    """W9-4（纯，可单测）：研究子进程「收尾超时」后的产物判定——该轨是否实际已成功。
+
+    判据：research_report.md 已落盘且非降级短串（≥400 字符，与 _load_research_handoff 同
+    语义），且（actors.json 已产出 或 research_checkpoint.json 带非空 completed_passes）
+    ——两者之一即证明研究协议真实推进过，报告不是半写残段。全部满足 → 该轨按存活处理。
+    """
+    report = _read_text(os.path.join(handoff_dir, "research_report.md")).strip()
+    if len(report) < 400:
+        return False
+    if os.path.exists(os.path.join(handoff_dir, "actors.json")):
+        return True
+    ckpt = _read_json(os.path.join(handoff_dir, "research_checkpoint.json"))
+    return bool(isinstance(ckpt, dict) and ckpt.get("completed_passes"))
+
+
 def _run_extract_only_salvage(
     deerflow_dir: str, handoff_dir: str, prompt: str,
     model: str, depth: str, language: Optional[str], env: dict,
@@ -1204,6 +1329,17 @@ def _stage_walls(state: "PipelineState") -> dict[str, float]:
         dt = (finished - started).total_seconds()
         if dt >= 0:
             walls[str(name)] = dt
+    # W9-2：多种子集成不占 stages（避免污染阶段带/前端渲染），墙钟从 options.ensemble_wall
+    # 补入——此前 report 完成后的 +1h31m 集成窗口不归属任何阶段带（遥测里凭空消失）。
+    try:
+        ew = (getattr(state, "options", None) or {}).get("ensemble_wall") or {}
+        e0, e1 = _parse_iso(ew.get("started_at")), _parse_iso(ew.get("finished_at"))
+        if e0 is not None and e1 is not None:
+            edt = (e1 - e0).total_seconds()
+            if edt >= 0:
+                walls["ensemble"] = edt
+    except Exception:  # noqa: BLE001 — 纯观测，绝不抛
+        pass
     return walls
 
 
@@ -1307,6 +1443,99 @@ def merge_track_reports(labeled_reports: list[tuple[str, str]]) -> str:
         n += 1
         parts.append(f"# Track {n}: {angle}\n\n{body}")
     return "\n\n".join(parts)
+
+
+# W9-7: 多轨卷宗的一次有界 LLM 整理 —— merge_track_reports 的纯拼接会把 3 份执行摘要、
+# 互相矛盾的头条数字原封不动地交付（诊断实测：同一轨内 2030 基线 $1.45-1.55T vs $1.7-1.9T）。
+# 这里补一个「合并开篇 + 跨轨分歧表 + H1 降级」的编辑整理；degrade-safe：任何失败回退纯拼接。
+
+_TRACK_H1_RE = re.compile(r"(?m)^# Track (\d+): (.+?)\s*$")
+
+
+def _track_title_en(title: str) -> str:
+    """W9-7（纯）：从 '基线证据扫描 (Base Evidence Sweep)' 提取英文标题；无括号英文时原样返回。"""
+    m = re.search(r"[（(]([A-Za-z][^)）]*)[)）]\s*$", str(title or ""))
+    return (m.group(1).strip() if m else str(title or "").strip())
+
+
+def demote_track_headings(md: str) -> str:
+    """W9-7（纯）：把 '# Track N: <title>' H1 降级为 '## Part N — <english title>' H2。
+
+    合并卷宗只应有一个文档级叙事层级；'# Track N' H1 把 3 份独立报告的骨架原样漏给读者。
+    仅改写 merge_track_reports 生成的行（正则锚定行首），正文其余内容逐字节不动。
+    """
+    def _sub(m: "re.Match[str]") -> str:
+        return f"## Part {m.group(1)} — {_track_title_en(m.group(2))}"
+    return _TRACK_H1_RE.sub(_sub, md or "")
+
+
+def extract_exec_summary(report_md: str, max_chars: int = 4000) -> str:
+    """W9-7（纯）：提取单轨报告的 Executive Summary 小节正文（到下一个 H1/H2 为止）。
+
+    找不到该标题时回退取开头 ``max_chars``（多数轨的头部即摘要性内容）。"""
+    text = report_md or ""
+    m = re.search(r"(?mi)^#{1,3}\s+.*executive summary.*$", text)
+    if m:
+        start = m.end()
+        nxt = re.search(r"(?m)^#{1,2}\s+", text[start:])
+        seg = text[start:start + nxt.start()] if nxt else text[start:]
+        seg = seg.strip()
+        if seg:
+            return seg[:max_chars]
+    return text.strip()[:max_chars]
+
+
+def reconcile_track_reports(merged_report: str,
+                            labeled_reports: list[tuple[str, str]],
+                            llm: Any = None, *,
+                            max_prompt_chars: int = 30000) -> tuple[str, dict]:
+    """W9-7：合并卷宗的一次有界 LLM 编辑整理，返回 (整理后的卷宗, 审计 dict)。
+
+    输入只喂各轨标题 + 执行摘要（总量 cap ``max_prompt_chars``≈30K 字符，绝不喂全文），
+    产出一个「合并执行摘要 + 跨轨分歧（Cross-track disagreements）」开篇；随后确定性地把
+    '# Track N' H1 降级为 '## Part N — <english title>' H2 并把开篇前置。degrade-safe：
+    LLM 失败/输出可疑（过短/错误串）→ 返回 (merged_report 原文, audit{applied:False})，
+    与今日纯拼接逐字节一致。
+    """
+    audit: dict[str, Any] = {"applied": False, "reason": ""}
+    try:
+        tracks = [(t, r) for t, r in (labeled_reports or []) if (r or "").strip()]
+        if len(tracks) < 2:
+            audit["reason"] = "tracks<2"
+            return merged_report, audit
+        per = max(2000, (max_prompt_chars - 2000) // len(tracks))
+        blocks = []
+        for i, (title, rep) in enumerate(tracks, 1):
+            blocks.append(f"### Track {i}: {title}\n{extract_exec_summary(rep, per)}")
+        payload = "\n\n".join(blocks)[:max_prompt_chars]
+        prompt = (
+            "你是一名研究卷宗的终审编辑。下面是同一预测问题的多条并行研究轨各自的执行摘要"
+            "（轨 1 = 基线证据扫描；其余轨为角度特化视角）。请产出合并卷宗的统一开篇，"
+            "要求：\n"
+            "1. 以 '## Executive Summary' 开头，把各轨执行摘要合并为一份连贯的摘要"
+            "（去重、保留各轨独有的关键结论，不要逐轨罗列）。\n"
+            "2. 紧随其后输出 '### Cross-track disagreements' 小节：用列表逐条点名各轨"
+            "互相冲突的头条数字/结论（指标、各轨口径、差异），没有实质冲突就写"
+            "「未发现实质性跨轨分歧」。\n"
+            "3. 只输出上述 markdown，不要前言/解释；绝不提及研究 pass、working notes、"
+            "轨道机制等管线内部词汇；语言与输入摘要的主要语言一致。\n\n"
+            f"{payload}"
+        )
+        if llm is None:
+            from ..utils.llm_client import LLMClient
+            llm = LLMClient()
+        out = llm.chat([{"role": "user", "content": prompt}],
+                       temperature=0.2, max_tokens=4000)
+        out = (out or "").strip()
+        if len(out) < 200 or any(mk in out for mk in _LLM_ERROR_MARKERS):
+            audit["reason"] = f"llm output rejected (len={len(out)})"
+            return merged_report, audit
+        body = demote_track_headings(merged_report)
+        audit.update({"applied": True, "opening_chars": len(out), "tracks": len(tracks)})
+        return out.rstrip() + "\n\n" + body.lstrip(), audit
+    except Exception as e:  # noqa: BLE001 — 整理是增强，失败必回退纯拼接
+        audit["reason"] = f"{type(e).__name__}: {e}"
+        return merged_report, audit
 
 
 def merge_sources_union(track_sources: list[Any]) -> list[dict]:
@@ -1847,6 +2076,98 @@ class PipelineOrchestrator:
     def __init__(self) -> None:
         # I-4-6: 运行中临时产物扫描的「上次扫描壁钟」按阶段节流戳（仅本实例/本次运行有效）。
         self._partial_scan_at: dict[str, float] = {}
+        # W9-3: run_telemetry.json 增量落盘状态（attempt 起点由 _init_telemetry_flush 填充）。
+        self._tel_lock = threading.Lock()
+        self._tel_path: Optional[str] = None
+        self._tel_prev: Optional[dict] = None
+        self._tel_prev_cum: Optional[dict] = None
+        self._tel_last_flush_calls: int = 0
+
+    # -- W9-3: run 遥测增量落盘 --------------------------------------------
+    # 两条失败跑的教训：LLMMeter 是进程内存累加器，重启即清零；run_telemetry.json 只在
+    # _run 的 finally 落一次盘——被 SIGTERM 的跑整跑 $20+ 的 token/成本账直接归零。
+    # 这里把落盘改成增量：attempt 起点一次性捕获上一 attempt 的账（合并基底），此后每次
+    # 阶段转换 + 每 PIPELINE_TELEMETRY_FLUSH_EVERY_CALLS 次新 LLM 调用（在心跳/进度回调上
+    # 检查）都把当前快照原子落盘。与 LLMMeter.write_run_telemetry 的关键差异：合并基底
+    # 固定在 attempt 起点，反复 flush 不会把本 attempt 的中间快照误当「上一 attempt」重复
+    # 累进 cumulative_total。
+
+    def _init_telemetry_flush(self, state: "PipelineState") -> None:
+        """attempt 起点：定位 run_telemetry.json 并捕获上一 attempt 的账作为合并基底。"""
+        self._tel_path = os.path.join(PipelineManager._dir(state.pipeline_id), "run_telemetry.json")
+        self._tel_prev = None
+        self._tel_prev_cum = None
+        self._tel_last_flush_calls = 0
+        try:
+            prev = _read_json(self._tel_path)
+            if isinstance(prev, dict) and (prev.get("total") or {}).get("calls"):
+                self._tel_prev = {
+                    "total": prev.get("total"),
+                    "report_id": prev.get("report_id"),
+                    "status": prev.get("status"),
+                }
+                self._tel_prev_cum = prev.get("cumulative_total") or prev.get("total") or {}
+        except Exception:  # noqa: BLE001 — 基底捕获失败按首写处理
+            pass
+
+    def _flush_run_telemetry(self, state: "PipelineState", *, final: bool = False,
+                             extra: Optional[dict] = None) -> None:
+        """把 LLMMeter 快照原子落盘 run_telemetry.json（增量 in_flight / 终态 final）。
+
+        degrade-safe：任何失败仅 debug 日志，绝不影响管线。未经 _init_telemetry_flush
+        初始化（_tel_path 为 None）时为 no-op。
+        """
+        tpath = self._tel_path
+        if not tpath:
+            return
+        from ..utils.telemetry import LLMMeter
+        from ..utils.atomic import write_json_atomic
+        with self._tel_lock:
+            try:
+                data = LLMMeter.snapshot(state.pipeline_id)
+                data.update({
+                    "pipeline_id": state.pipeline_id,
+                    "status": state.status,
+                    "report_id": state.report_id,
+                })
+                if extra:
+                    data.update(extra)
+                if not final:
+                    data["in_flight"] = True  # 运行中快照标记（终版落盘时消失）
+                if self._tel_prev:
+                    data["previous_attempt"] = self._tel_prev
+                    base = self._tel_prev_cum or {}
+                    cur = data.get("total") or {}
+                    cum: dict[str, Any] = {}
+                    for k in ("calls", "cached", "prompt_tokens", "completion_tokens",
+                              "total_tokens", "latency_ms", "cost_usd"):
+                        try:
+                            cum[k] = round((base.get(k) or 0) + (cur.get(k) or 0), 6)
+                        except TypeError:
+                            continue
+                    data["cumulative_total"] = cum
+                write_json_atomic(tpath, data, fsync=final)
+                self._tel_last_flush_calls = int((data.get("total") or {}).get("calls") or 0)
+            except Exception as _fe:  # noqa: BLE001 — 遥测落盘失败不得影响管线
+                logger.debug("[%s] run_telemetry 增量落盘失败（忽略）: %s", state.pipeline_id, _fe)
+
+    def _maybe_flush_run_telemetry(self, state: "PipelineState") -> None:
+        """按 LLM 调用增量节流 flush：距上次落盘新增 ≥N 次调用才写。N<=0 关闭增量 flush。"""
+        if not self._tel_path:
+            return
+        try:
+            n = int(getattr(Config, "PIPELINE_TELEMETRY_FLUSH_EVERY_CALLS", 20) or 0)
+        except (TypeError, ValueError):
+            n = 20
+        if n <= 0:
+            return
+        try:
+            from ..utils.telemetry import LLMMeter
+            calls = int((LLMMeter.snapshot(state.pipeline_id).get("total") or {}).get("calls") or 0)
+        except Exception:  # noqa: BLE001
+            return
+        if calls - self._tel_last_flush_calls >= n:
+            self._flush_run_telemetry(state)
 
     # -- 生命周期：启动回收 + 关闭清理 ------------------------------------
 
@@ -1899,6 +2220,37 @@ class PipelineOrchestrator:
                         pipeline_id,
                     )
                     continue
+                # W9-1：打捞——主报告已完整落盘（report 阶段 completed + full_report.md +
+                # forecast.json 在盘）的孤儿不再整线判死。中断只发生在报告之后的多种子集成/
+                # 收尾窗口（pipe_a8986bffd918 / pipe_0f2bee7bd649 两条 $10+ 的跑正是这样被
+                # 误判 failed 的）→ 落成 completed(degraded)，集成按已跳过处理。
+                if bool(getattr(Config, "PIPELINE_SALVAGE_COMPLETED_ORPHANS", True)):
+                    _data0 = PipelineManager.load(pipeline_id) or {}
+                    _arts = cls._orphan_completed_report(_data0)
+                    if _arts is not None:
+                        _note = ("后端在多种子集成/收尾期间被中断；主报告已完整落盘，"
+                                 "管线按 completed(degraded) 打捞恢复，多种子集成已跳过。")
+                        if PipelineManager.mark_salvaged_completed(pipeline_id, _note):
+                            logger.warning(
+                                "[%s] 启动时打捞孤儿管线 → completed(degraded)"
+                                "（报告 %s 完整在盘，集成跳过）",
+                                pipeline_id, _arts.get("report_id"),
+                            )
+                            # 孤儿研究子进程仍要清理（打捞≠允许旧进程继续烧额度）。
+                            cls._kill_orphan_research(pipeline_id, _data0.get("research_pid"))
+                            for _tpid in (_data0.get("options") or {}).get("research_track_pids") or []:
+                                cls._kill_orphan_research(pipeline_id, _tpid)
+                            _tid = _data0.get("task_id")
+                            if _tid:
+                                try:
+                                    task_manager.complete_task(_tid, result={
+                                        "pipeline_id": pipeline_id,
+                                        "report_id": _arts.get("report_id"),
+                                        "salvaged": True,
+                                    })
+                                except Exception:  # noqa: BLE001
+                                    pass
+                            continue
                 msg = "后端在运行中被中断（进程重启），该管线已标记为失败。"
                 if PipelineManager.mark_failed(pipeline_id, msg):
                     logger.warning(f"[{pipeline_id}] 启动时回收孤儿管线 → failed")
@@ -1915,8 +2267,80 @@ class PipelineOrchestrator:
                             task_manager.fail_task(tid, msg)
                         except Exception:
                             pass
+            # W9-10：启动时顺带做一次图谱 GC（保留最近 GRAPH_RETAIN_COUNT 张）。
+            cls._gc_stale_graphs()
         except Exception as e:  # noqa: BLE001 — 回收失败不应阻断启动
             logger.error(f"回收孤儿管线失败: {e}", exc_info=True)
+
+    @staticmethod
+    def _orphan_completed_report(data: dict, report_dir: Optional[str] = None) -> Optional[dict]:
+        """W9-1（可单测）：孤儿管线是否已有「完整报告交付物」可打捞。
+
+        判据（全部满足才打捞，宁可漏捞不可把真坏的跑洗白）：
+          - state.report_id 存在；
+          - report 阶段 status == 'completed'（报告链自己宣布过成功）；
+          - 报告目录下 full_report.md 非空 且 forecast.json 可解析为非空 dict。
+        满足 → 返回 {'report_id', 'report_dir'}；任一不满足 → None（沿用判死路径）。
+        ``report_dir`` 缺省时经 ReportManager 解析（测试可显式传入临时目录）。
+        """
+        if not isinstance(data, dict):
+            return None
+        report_id = data.get("report_id")
+        if not report_id:
+            return None
+        st = (data.get("stages") or {}).get(STAGE_REPORT)
+        if not (isinstance(st, dict) and st.get("status") == "completed"):
+            return None
+        if report_dir is None:
+            try:
+                report_dir = ReportManager._get_report_folder(report_id)
+            except Exception:  # noqa: BLE001 — 解析不了报告目录 → 无从验证 → 不打捞
+                return None
+        try:
+            fr = os.path.join(report_dir, "full_report.md")
+            if not (os.path.isfile(fr) and os.path.getsize(fr) > 0):
+                return None
+        except OSError:
+            return None
+        fc = _read_json(os.path.join(report_dir, "forecast.json"))
+        if not (isinstance(fc, dict) and fc):
+            return None
+        return {"report_id": report_id, "report_dir": report_dir}
+
+    @staticmethod
+    def _gc_stale_graphs() -> None:
+        """W9-10: best-effort 图谱 GC——保留最近 GRAPH_RETAIN_COUNT 张图，回收更老的存储。
+
+        实现体在 graph_builder.gc_stale_graphs（kg-backend 工作流并行落地）；模块/函数尚未
+        部署（ImportError/AttributeError）或 retain<=0 时静默跳过，任何失败绝不阻断调用方
+        （启动回收 / 管线删除）。
+        """
+        try:
+            retain = int(getattr(Config, "GRAPH_RETAIN_COUNT", 5) or 0)
+        except (TypeError, ValueError):
+            retain = 5
+        if retain <= 0:
+            return
+        try:
+            from . import graph_builder as _gb
+            # 兼容两种落地形态：模块级函数 gc_stale_graphs(retain=)，或
+            # GraphBuilderService 实例方法（kg-backend 实际落地的形态）。
+            _fn = getattr(_gb, "gc_stale_graphs", None)
+            if _fn is None:
+                _fn = getattr(_gb.GraphBuilderService(api_key=Config.ZEP_API_KEY),
+                              "gc_stale_graphs")
+            _res = _fn(retain=retain)
+            if isinstance(_res, dict) and _res:
+                logger.info(
+                    "图谱 GC 完成（retain=%d）: total=%s kept=%d deleted=%s skipped=%s",
+                    retain, _res.get("total"), len(_res.get("kept") or []),
+                    _res.get("deleted"), _res.get("skipped_reason"))
+            elif _res:
+                logger.info("图谱 GC 完成（retain=%d）: %s", retain, _res)
+        except (ImportError, AttributeError):
+            logger.debug("graph_builder.gc_stale_graphs 未部署，跳过图谱 GC")
+        except Exception as _gc_err:  # noqa: BLE001 — GC 纯回收，失败无声
+            logger.warning("图谱 GC 失败（忽略）: %s", _gc_err)
 
     @classmethod
     def _orphan_is_dead(cls, pipeline_id: str, stale_s: float) -> bool:
@@ -2188,6 +2612,8 @@ class PipelineOrchestrator:
                 cls._cancel_events.pop(pipeline_id, None)
                 cls._threads.pop(pipeline_id, None)
                 logger.info(f"[{pipeline_id}] 管线记录已删除")
+                # W9-10：管线删除后顺带回收陈旧图谱（best-effort，绝不影响删除结果）。
+                cls._gc_stale_graphs()
             return {"ok": ok, "status": "deleted" if ok else "not_found"}
 
     @classmethod
@@ -2568,6 +2994,55 @@ class PipelineOrchestrator:
         if cancel_ev0 is not None and cancel_ev0.is_set():
             raise PipelineCancelled("多种子集成期间被取消")
 
+        # W9-5：主跑的情景脊柱（名 + 判定标准）钉给每个额外种子——种子间共享同一组命名情景
+        # （概率自由），集成聚合才有稳定的对齐坐标（此前 3 种子自由起名 → 11 桶全 support=1）。
+        _spine: Optional[list] = None
+        try:
+            _spine = [
+                {"name": s.get("name"), "resolution_criteria": s.get("resolution_criteria")}
+                for s in (primary_fc.get("scenarios") or [])
+                if isinstance(s, dict) and s.get("name")
+            ] or None
+        except Exception:  # noqa: BLE001 — 脊柱纯增强，坏数据回退自由起名
+            _spine = None
+
+        # W9-2：集成 checkpoint + 遥测阶段带 + 心跳。此前集成运行在「report 完成之后」的
+        # 无保护窗口：无 checkpoint、心跳陈旧、墙钟不归属任何阶段——两条失败跑都死在这里。
+        from ..utils.telemetry import set_run_context as _set_run_ctx, set_stage as _set_stage
+        _ckpt_path = os.path.join(handoff_dir, "ensemble_checkpoint.json")
+        _done_seeds: dict[int, dict] = {}
+        _prev_ckpt = _read_json(_ckpt_path)
+        if isinstance(_prev_ckpt, dict):
+            for _row in (_prev_ckpt.get("completed") or []):
+                if not isinstance(_row, dict):
+                    continue
+                try:
+                    _done_seeds[int(_row.get("seed"))] = _row
+                except (TypeError, ValueError):
+                    continue
+        _ckpt_lock = threading.Lock()
+
+        def _persist_ckpt() -> None:
+            """把已完成种子清单原子落盘（调用方持 _ckpt_lock）。失败仅告警，不拦集成。"""
+            try:
+                write_json_atomic(_ckpt_path, {
+                    "schema_version": 1,
+                    "pipeline_id": state.pipeline_id,
+                    "primary_report_id": state.report_id,
+                    "n_seeds_requested": n_seeds,
+                    "completed": list(_done_seeds.values()),
+                    "updated_at": _utcnow(),
+                })
+            except Exception as _ce:  # noqa: BLE001
+                logger.warning("[%s] ensemble_checkpoint.json 落盘失败（忽略）: %s",
+                               state.pipeline_id, _ce)
+
+        state.options.setdefault("ensemble_wall", {})["started_at"] = _utcnow()
+        try:
+            _set_stage("ensemble")
+        except Exception:  # noqa: BLE001
+            pass
+
         # PAR-3：额外种子并行跑。_run_one_seed 线程安全（各种子独立 simulation_id → 独立
         # 目录/DB/文件式 IPC/仅注入子进程 env；SimulationRunner 类级映射均按 sim_id 独立键；
         # 共享的 graph_id 由 Zep 服务端处理并发写，串行版本本就共享同一张图）。并发度
@@ -2579,91 +3054,147 @@ class PipelineOrchestrator:
             seed_conc = 2
 
         def _do_seed(k: int, seed: int) -> None:
-            """跑一个额外种子并把结果并入 forecasts/extra_runs（GIL 下 list.append 线程安全）。"""
+            """跑一个额外种子并把结果并入 forecasts/extra_runs（GIL 下 list.append 线程安全）。
+
+            W9-2 幂等：checkpoint 里已完成、且其报告仍能读出结构化预测的种子直接复用结果，
+            重启后 resume 不再重烧已完成的种子。ThreadPoolExecutor 不继承 contextvars，
+            这里显式重设 run/stage 上下文，种子的 LLM 调用才会归入 ensemble 阶段带
+            （此前落 '_global' 桶，per-run 成本失真）。
+            """
+            try:
+                _set_run_ctx(state.pipeline_id, "ensemble")
+            except Exception:  # noqa: BLE001
+                pass
+            _prev = _done_seeds.get(seed)
+            if _prev and _prev.get("report_id"):
+                _fc_prev = self._read_report_forecast(_prev.get("report_id"))
+                if _fc_prev and _fc_prev.get("scenarios"):
+                    logger.info("[%s] 集成种子 %s 已在 checkpoint 中完成，复用其报告 %s",
+                                state.pipeline_id, seed, _prev.get("report_id"))
+                    extra_runs.append({"seed": seed,
+                                       "simulation_id": _prev.get("simulation_id"),
+                                       "report_id": _prev.get("report_id"),
+                                       "resumed_from_checkpoint": True})
+                    forecasts.append(_fc_prev)
+                    return
             sim_id, rid, fc = self._run_one_seed(
                 state, project, graph_id, actors, research, report_md,
-                seed=seed, max_rounds=max_rounds,
+                seed=seed, max_rounds=max_rounds, scenario_spine=_spine,
             )
+            with _ckpt_lock:
+                _done_seeds[seed] = {
+                    "k": k, "seed": seed, "simulation_id": sim_id, "report_id": rid,
+                    "has_forecast": bool(fc and fc.get("scenarios")),
+                    "completed_at": _utcnow(),
+                }
+                _persist_ckpt()
+            try:  # W9-2：每完成一个种子即刷新心跳（集成窗口内心跳不再冻结）
+                PipelineManager.touch_heartbeat(state.pipeline_id, pid=os.getpid())
+            except Exception:  # noqa: BLE001
+                pass
             extra_runs.append({"seed": seed, "simulation_id": sim_id, "report_id": rid})
             if fc and fc.get("scenarios"):
                 forecasts.append(fc)
 
-        if seed_conc <= 1 or len(seed_jobs) <= 1:
-            # 串行路径（与今日逐字节一致）
-            for k, seed in seed_jobs:
-                cancel_ev = type(self)._cancel_events.get(state.pipeline_id)
-                if cancel_ev is not None and cancel_ev.is_set():
-                    raise PipelineCancelled("多种子集成期间被取消")
-                st = state.stages.setdefault(STAGE_REPORT, StageState(name=STAGE_REPORT))
-                st.message = f"多种子集成 {k}/{n_seeds}（种子 {seed}）…"
-                PipelineManager.save(state)
-                try:
-                    _do_seed(k, seed)
-                except PipelineCancelled:
-                    raise
-                except Exception as _se:  # noqa: BLE001 — 单个种子失败不拖垮集成
-                    logger.warning("[%s] 集成种子 %s 失败（跳过）: %s", state.pipeline_id, k, _se)
-        else:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            st = state.stages.setdefault(STAGE_REPORT, StageState(name=STAGE_REPORT))
-            st.message = f"多种子集成：并行 {len(seed_jobs)} 个额外种子（并发 {seed_conc}）…"
-            PipelineManager.save(state)
-            cancelled: Optional[PipelineCancelled] = None
-            with ThreadPoolExecutor(max_workers=seed_conc, thread_name_prefix="ens-seed") as ex:
-                futs = {ex.submit(_do_seed, k, seed): (k, seed) for k, seed in seed_jobs}
-                for fut in as_completed(futs):
-                    k, seed = futs[fut]
+        try:
+            if seed_conc <= 1 or len(seed_jobs) <= 1:
+                # 串行路径（与今日逐字节一致）
+                for k, seed in seed_jobs:
+                    cancel_ev = type(self)._cancel_events.get(state.pipeline_id)
+                    if cancel_ev is not None and cancel_ev.is_set():
+                        raise PipelineCancelled("多种子集成期间被取消")
+                    st = state.stages.setdefault(STAGE_REPORT, StageState(name=STAGE_REPORT))
+                    st.message = f"多种子集成 {k}/{n_seeds}（种子 {seed}）…"
+                    if state.owner_boot_id is not None:  # W9-2：save 不得用陈旧心跳覆写看护线程
+                        state.heartbeat_at = _utcnow()
+                    PipelineManager.save(state)
                     try:
-                        fut.result()
-                    except PipelineCancelled as pc:
-                        cancelled = pc  # 取消须穿透（其余种子按同一 cancel_event 各自停机）
+                        _do_seed(k, seed)
+                    except PipelineCancelled:
+                        raise
                     except Exception as _se:  # noqa: BLE001 — 单个种子失败不拖垮集成
                         logger.warning("[%s] 集成种子 %s 失败（跳过）: %s", state.pipeline_id, k, _se)
-            if cancelled is not None:
-                raise cancelled
-        if len(forecasts) < 2:
-            logger.info("[%s] 有效集成样本<2，不写 ensemble_forecast.json", state.pipeline_id)
+            else:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                st = state.stages.setdefault(STAGE_REPORT, StageState(name=STAGE_REPORT))
+                st.message = f"多种子集成：并行 {len(seed_jobs)} 个额外种子（并发 {seed_conc}）…"
+                if state.owner_boot_id is not None:  # W9-2
+                    state.heartbeat_at = _utcnow()
+                PipelineManager.save(state)
+                cancelled: Optional[PipelineCancelled] = None
+                with ThreadPoolExecutor(max_workers=seed_conc, thread_name_prefix="ens-seed") as ex:
+                    futs = {ex.submit(_do_seed, k, seed): (k, seed) for k, seed in seed_jobs}
+                    for fut in as_completed(futs):
+                        k, seed = futs[fut]
+                        try:
+                            fut.result()
+                        except PipelineCancelled as pc:
+                            cancelled = pc  # 取消须穿透（其余种子按同一 cancel_event 各自停机）
+                        except Exception as _se:  # noqa: BLE001 — 单个种子失败不拖垮集成
+                            logger.warning("[%s] 集成种子 %s 失败（跳过）: %s", state.pipeline_id, k, _se)
+                if cancelled is not None:
+                    raise cancelled
+            if len(forecasts) < 2:
+                logger.info("[%s] 有效集成样本<2，不写 ensemble_forecast.json", state.pipeline_id)
+                state.options["ensemble_done"] = True
+                PipelineManager.save(state)
+                return
+            from .ensemble import aggregate_forecasts
+            agg = aggregate_forecasts(forecasts)
+            agg["n_seeds_requested"] = n_seeds
+            agg["extra_runs"] = extra_runs
+            agreement = agg.get("agreement")
+            agg["confidence"] = self._agreement_to_confidence(agreement)
+            # 落 ensemble_forecast.json（handoff + 主报告目录），并把一致度/信心回写主 forecast.json
+            try:
+                write_json_atomic(os.path.join(handoff_dir, "ensemble_forecast.json"), agg)
+                state.artifacts["ensemble_forecast"] = os.path.join(handoff_dir, "ensemble_forecast.json")
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                from .report_agent import ReportManager
+                rfolder = ReportManager._get_report_folder(state.report_id)
+                write_json_atomic(os.path.join(rfolder, "ensemble_forecast.json"), agg)
+                primary_fc["confidence"] = agg["confidence"]
+                primary_fc["ensemble"] = {
+                    "n_runs": agg.get("n_runs"), "agreement": agreement,
+                    "scenarios": agg.get("scenarios"),
+                }
+                write_json_atomic(os.path.join(rfolder, "forecast.json"), primary_fc)
+            except Exception as _we:  # noqa: BLE001
+                logger.warning("[%s] 写集成结果失败: %s", state.pipeline_id, _we)
             state.options["ensemble_done"] = True
-            PipelineManager.save(state)
-            return
-        from .ensemble import aggregate_forecasts
-        agg = aggregate_forecasts(forecasts)
-        agg["n_seeds_requested"] = n_seeds
-        agg["extra_runs"] = extra_runs
-        agreement = agg.get("agreement")
-        agg["confidence"] = self._agreement_to_confidence(agreement)
-        # 落 ensemble_forecast.json（handoff + 主报告目录），并把一致度/信心回写主 forecast.json
-        try:
-            write_json_atomic(os.path.join(handoff_dir, "ensemble_forecast.json"), agg)
-            state.artifacts["ensemble_forecast"] = os.path.join(handoff_dir, "ensemble_forecast.json")
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            from .report_agent import ReportManager
-            rfolder = ReportManager._get_report_folder(state.report_id)
-            write_json_atomic(os.path.join(rfolder, "ensemble_forecast.json"), agg)
-            primary_fc["confidence"] = agg["confidence"]
-            primary_fc["ensemble"] = {
-                "n_runs": agg.get("n_runs"), "agreement": agreement,
-                "scenarios": agg.get("scenarios"),
+            state.options["ensemble"] = {
+                "n_runs": agg.get("n_runs"), "agreement": agreement, "confidence": agg["confidence"],
             }
-            write_json_atomic(os.path.join(rfolder, "forecast.json"), primary_fc)
-        except Exception as _we:  # noqa: BLE001
-            logger.warning("[%s] 写集成结果失败: %s", state.pipeline_id, _we)
-        state.options["ensemble_done"] = True
-        state.options["ensemble"] = {
-            "n_runs": agg.get("n_runs"), "agreement": agreement, "confidence": agg["confidence"],
-        }
-        PipelineManager.save(state)
-        logger.info("[%s] 多种子集成完成: n=%s, 一致度=%s, 信心=%s",
-                    state.pipeline_id, agg.get("n_runs"), agreement, agg["confidence"])
+            PipelineManager.save(state)
+            logger.info("[%s] 多种子集成完成: n=%s, 一致度=%s, 信心=%s",
+                        state.pipeline_id, agg.get("n_runs"), agreement, agg["confidence"])
+        finally:
+            # W9-2：无论正常/取消/异常，把集成墙钟收口进 options（遥测的 'ensemble' 阶段带）
+            # 并恢复 LLM 计量阶段上下文；save 前刷新内存心跳，避免用陈旧值覆写看护线程。
+            state.options.setdefault("ensemble_wall", {})["finished_at"] = _utcnow()
+            if state.owner_boot_id is not None:
+                state.heartbeat_at = _utcnow()
+            try:
+                PipelineManager.save(state)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                _set_stage(STAGE_REPORT)
+            except Exception:  # noqa: BLE001
+                pass
+            self._flush_run_telemetry(state)  # W9-3：集成窗口结束即落一版遥测
 
     def _run_one_seed(self, state: "PipelineState", project: Any, graph_id: str,
                       actors: Any, research: dict, report_md: str, *,
-                      seed: int, max_rounds: Optional[int]) -> tuple:
+                      seed: int, max_rounds: Optional[int],
+                      scenario_spine: Optional[list] = None) -> tuple:
         """对同一图谱跑一次额外 (prepare→run→report)，返回 (sim_id, report_id, forecast|None)。
 
         自包含、串行、运行在管线线程内；不触碰主 sim/report 的 id 与状态。带停滞看门狗。
+        W9-5 ``scenario_spine``：主跑的情景脊柱（名+判定标准），钉给种子的 ReportAgent 使
+        种子对同一组命名情景打分（概率自由）；报告链尚未支持该参数时回退旧签名。
         """
         sim_manager = SimulationManager()
         _is_http = bool(Config.PROVIDER_META.get(Config.LLM_PROVIDER, {}).get('openai_compat'))
@@ -2674,12 +3205,22 @@ class PipelineOrchestrator:
         # persona fan-out; raise the default 8→16 (configurable via PARALLEL_PROFILE_COUNT).
         # CLI providers stay capped at 3 (local CLI throughput bound).
         _pp = int(getattr(Config, "PARALLEL_PROFILE_COUNT", 16) or 16)
+        # W9-5：与主路径（PREPARE 阶段）对齐——把 GRAPH 阶段持久化的中心度先验也喂给种子跑的
+        # salience 排序（此前种子跑漏传 graph_priors，agent 选池与主跑系统性不一致）。
+        _graph_priors = None
+        try:
+            _graph_priors = _read_json(os.path.join(
+                state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id),
+                "graph_priors.json"))
+        except Exception:  # noqa: BLE001
+            _graph_priors = None
         sim_manager.prepare_simulation(
             simulation_id=sim_id,
             simulation_requirement=state.prompt,
             document_text=report_md,
             parallel_profile_count=_pp if _is_http else 3,
             actors=actors,
+            graph_priors=_graph_priors,  # W9-5: 与主路径一致（P3-7 中心度先验）
             max_rounds=max_rounds,  # PREP-1: 集成种子跑同样按真实执行窗排期
             research_language=state.options.get("research_language"),  # PREP-4
         )
@@ -2697,6 +3238,12 @@ class PipelineOrchestrator:
             stall_s = float(getattr(Config, "PIPELINE_RUN_STALL_S", 1800) or 1800)
         except (TypeError, ValueError):
             stall_s = 1800.0
+        # W9-2：种子轮询内的心跳刷新节律（与看护线程同参）。
+        try:
+            _hb_interval = float(getattr(Config, "PIPELINE_HEARTBEAT_INTERVAL_S", 30) or 30)
+        except (TypeError, ValueError):
+            _hb_interval = 30.0
+        _last_hb = time.monotonic()
         while True:
             if cancel_ev is not None and cancel_ev.is_set():
                 try:
@@ -2721,6 +3268,14 @@ class PipelineOrchestrator:
                 except Exception:  # noqa: BLE001
                     pass
                 raise RuntimeError(f"集成种子模拟约 {int(stall_s)}s 无进展，看门狗终止")
+            # W9-2：种子轮询期间按心跳节律刷新 heartbeat_at——集成窗口内心跳不再冻结，
+            # 别的进程的 reconcile_orphans 能看到「这条管线还活着」。
+            if (time.monotonic() - _last_hb) >= _hb_interval:
+                _last_hb = time.monotonic()
+                try:
+                    PipelineManager.touch_heartbeat(state.pipeline_id, pid=os.getpid())
+                except Exception:  # noqa: BLE001
+                    pass
             time.sleep(5)
         # 反馈写入器排空（与主跑一致），保证报告读到完整图谱
         if Config.SIM_GRAPH_FEEDBACK and graph_id:
@@ -2734,11 +3289,22 @@ class PipelineOrchestrator:
         except Exception:  # noqa: BLE001
             pass
         rid = f"report_{uuid.uuid4().hex[:12]}"
-        agent = ReportAgent(
+        _agent_kwargs: dict[str, Any] = dict(
             graph_id=graph_id, simulation_id=sim_id, simulation_requirement=state.prompt,
             situation_brief=situation_brief(actors), actors=actors,
             sources=research.get("sources"), research_report=report_md,
         )
+        # W9-5：把主跑情景脊柱钉给种子报告（scenario_spine 参数由报告链工作流并行落地；
+        # 尚未支持时 TypeError → 回退旧签名，落地顺序无关）。
+        try:
+            if scenario_spine:
+                agent = ReportAgent(scenario_spine=scenario_spine, **_agent_kwargs)
+            else:
+                agent = ReportAgent(**_agent_kwargs)
+        except TypeError:
+            logger.info("[%s] ReportAgent 尚未支持 scenario_spine，种子 %s 回退自由情景命名",
+                        state.pipeline_id, seed)
+            agent = ReportAgent(**_agent_kwargs)
         agent.generate_report(report_id=rid)
         return sim_id, rid, self._read_report_forecast(rid)
 
@@ -2833,6 +3399,11 @@ class PipelineOrchestrator:
             # 不覆盖完成时登记的正式产物），让用户在阶段完成前就能查看增量证据。
             self._register_partial_artifacts(state, stage)
             PipelineManager.save(state)
+            # W9-3：进度回调即机会性遥测 flush 检查点（每新增 N 次 LLM 调用落一版账）。
+            try:
+                self._maybe_flush_run_telemetry(state)
+            except Exception:  # noqa: BLE001
+                pass
             if state.task_id:
                 task_manager.update_task(
                     state.task_id,
@@ -2856,6 +3427,8 @@ class PipelineOrchestrator:
         except Exception:
             pass
         PipelineManager.save(state)
+        # W9-3：阶段转换必落一版遥测账（重启只丢「上一次阶段边界之后」的增量）。
+        self._flush_run_telemetry(state)
 
     # ---------------------------------------------------------------- S1 health gate
     # The corpus review found 8/13 runs reported status=completed/100%/error=null while
@@ -3114,15 +3687,29 @@ class PipelineOrchestrator:
                 health["stages"]["run"] = {"health": sh, "issues": si, **sm}
                 if sh != "ok" and "run" in state.stages and not state.stages["run"].error:
                     state.stages["run"].error = "；".join(si) or None
-            # KG-5: 建图跳块比例超阈值（graph 阶段留痕于 options）→ graph 阶段降级。
+            # KG-5/LOOP-003: 建图跳块或 destructive prune 未通过物理后置条件 → graph 降级。
+            graph_issues: list[str] = []
+            graph_meta: dict = {}
             _gskip = state.options.get("graph_ingest_degraded_ratio")
             if _gskip is not None:
+                graph_issues.append(
+                    f"graph build skipped {float(_gskip) * 100:.0f}% of chunks "
+                    f"({state.options.get('graph_skipped_chunks')}/"
+                    f"{state.options.get('graph_total_chunks')})"
+                )
+                graph_meta["skipped_ratio"] = _gskip
+            _gprune = state.options.get("graph_prune") or {}
+            if isinstance(_gprune, dict) and _gprune.get("degraded"):
+                graph_issues.append(
+                    str(_gprune.get("error") or _gprune.get("skipped_reason")
+                        or "graph pruning hard-cap postcondition was not satisfied")
+                )
+                graph_meta["prune"] = _gprune
+            if graph_issues:
                 health["stages"]["graph"] = {
                     "health": "degraded",
-                    "issues": [f"graph build skipped {float(_gskip) * 100:.0f}% of chunks "
-                               f"({state.options.get('graph_skipped_chunks')}/"
-                               f"{state.options.get('graph_total_chunks')})"],
-                    "skipped_ratio": _gskip,
+                    "issues": graph_issues,
+                    **graph_meta,
                 }
             degraded = any(s.get("health") in ("degraded", "failed")
                            for s in health["stages"].values())
@@ -3171,8 +3758,26 @@ class PipelineOrchestrator:
                               os.path.join(SimulationRunner.RUN_STATE_DIR, sim_id, "run_summary.json")))
         elif stage == STAGE_REPORT:
             # 报告章节逐节落盘（section_NN.md）；运行中可作临时产物深链（见 _discover_partial_artifacts）。
-            specs.extend(PipelineOrchestrator._viz_artifact_specs(hd))
+            if state.report_id and bool(getattr(Config, "PIPELINE_VIZ_ARTIFACTS", True)):
+                report_dir = ReportManager._get_report_folder(state.report_id)
+                specs.append(("report_viz_manifest",
+                              os.path.join(report_dir, "viz_manifest.json")))
         return specs
+
+    @staticmethod
+    def _charts_manifest_path(hd: str) -> str:
+        """Return the producer-aligned charts manifest, with legacy fallback.
+
+        The deterministic research renderer writes ``handoff/charts.json`` and
+        keeps rendered assets under ``handoff/charts/``. Older experimental
+        producers wrote ``handoff/charts/charts.json``; accept that layout only
+        when the canonical file is absent.
+        """
+        canonical = os.path.join(hd, "charts.json")
+        legacy = os.path.join(hd, "charts", "charts.json")
+        if os.path.exists(canonical) or not os.path.exists(legacy):
+            return canonical
+        return legacy
 
     @staticmethod
     def _viz_artifact_specs(hd: str) -> list[tuple[str, str]]:
@@ -3180,7 +3785,7 @@ class PipelineOrchestrator:
 
         单文件锚点（与 charts/data 目录内动态命名的 png|svg|csv 一一对应地登记不现实，故以索引清单
         为完整性/深链锚）：
-          - charts    → handoff/charts/charts.json（图表清单：{title, caption, source_data}）
+          - charts    → handoff/charts.json（图表清单；兼容旧 handoff/charts/charts.json）
           - datasets  → handoff/data/datasets.json（数据集清单，与 charts.json 平行）
         二者均为可选、且在旧跑上不存在：调用方（登记/复用校验/临时产物发现）一律按「文件缺失即跳过」
         自然降级，绝不误伤健康/完整性校验。原始 *.png|svg / *.csv 作为增量证据另经
@@ -3189,8 +3794,40 @@ class PipelineOrchestrator:
         if not bool(getattr(Config, "PIPELINE_VIZ_ARTIFACTS", True)):
             return []
         return [
-            ("charts", os.path.join(hd, "charts", "charts.json")),
+            ("charts", PipelineOrchestrator._charts_manifest_path(hd)),
             ("datasets", os.path.join(hd, "data", "datasets.json")),
+        ]
+
+    @staticmethod
+    def _viz_dynamic_artifact_specs(hd: str) -> list[tuple[str, str]]:
+        """Enumerate bounded chart assets under one artifact root for deep links.
+
+        These files appear only after the final deterministic research-chart
+        step, so completion-time registration must not depend on an earlier
+        progress-poll scan. Symlinks and unsupported files are excluded.
+        """
+        charts_dir = os.path.join(hd, "charts")
+        if not os.path.isdir(charts_dir):
+            return []
+        allowed = {".png", ".svg", ".jpg", ".jpeg", ".webp", ".html"}
+        out: list[tuple[str, str]] = []
+        try:
+            for filename in sorted(os.listdir(charts_dir)):
+                path = os.path.join(charts_dir, filename)
+                if (os.path.splitext(filename)[1].lower() not in allowed
+                        or os.path.islink(path) or not os.path.isfile(path)):
+                    continue
+                out.append((f"chart_{filename}", path))
+        except OSError:
+            return []
+        return out
+
+    @staticmethod
+    def _report_viz_dynamic_artifact_specs(report_dir: str) -> list[tuple[str, str]]:
+        """Report-owned chart assets, namespaced away from research chart keys."""
+        return [
+            (f"report_{name}", path)
+            for name, path in PipelineOrchestrator._viz_dynamic_artifact_specs(report_dir)
         ]
 
     def _record_stage_artifacts(self, state: PipelineState, stage: str) -> None:
@@ -3221,6 +3858,19 @@ class PipelineOrchestrator:
             for name, path in self._stage_artifact_specs(state, stage):
                 add_if(name, path)
 
+        # Research charts are created at the very end of the subprocess. Register
+        # them again at the completion boundary so deep links never depend on a
+        # lucky progress-poll scan occurring after rendering.
+        if stage == STAGE_RESEARCH and bool(getattr(Config, "PIPELINE_VIZ_ARTIFACTS", True)):
+            hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+            for name, path in self._viz_dynamic_artifact_specs(hd):
+                add_if(name, path)
+        elif (stage == STAGE_REPORT and state.report_id
+              and bool(getattr(Config, "PIPELINE_VIZ_ARTIFACTS", True))):
+            report_dir = ReportManager._get_report_folder(state.report_id)
+            for name, path in self._report_viz_dynamic_artifact_specs(report_dir):
+                add_if(name, path)
+
         # I-4-3: 把本阶段实际登记到的产物写入完整性清单。
         if recorded and bool(getattr(Config, "PIPELINE_VALIDATE_ARTIFACTS", True)):
             try:
@@ -3239,6 +3889,8 @@ class PipelineOrchestrator:
         st.error = error
         st.finished_at = _utcnow()
         PipelineManager.save(state)
+        # W9-3：失败也是阶段转换——立即落一版遥测账（失败跑的花费不再消失）。
+        self._flush_run_telemetry(state)
 
     # -- 内部：产物完整性校验（复用前守卫） (I-4-3) ------------------------
 
@@ -3370,21 +4022,23 @@ class PipelineOrchestrator:
                         for fn in sorted(os.listdir(rep_dir)):
                             if fn.startswith("section_") and fn.endswith(".md"):
                                 _stat(fn[:-3], os.path.join(rep_dir, fn))
-            # VIZ-2: charts/data 目录内动态命名的原始产物（png|svg|csv）作为增量证据逐个透出，
-            # 与索引清单 charts.json/datasets.json（经 specs 枚举登记）互补。RESEARCH/REPORT 皆可产出；
-            # 目录不存在（旧跑/尚未产出）时 os.listdir 抛 OSError 被外层 except 兜住 → 自然 no-op。
-            if stage in (STAGE_RESEARCH, STAGE_REPORT) and bool(getattr(Config, "PIPELINE_VIZ_ARTIFACTS", True)):
+            # VIZ-2: each stage scans its own visual root. Research assets live in
+            # handoff/charts; final-report assets live in reports/<id>/charts.
+            if stage == STAGE_RESEARCH and bool(getattr(Config, "PIPELINE_VIZ_ARTIFACTS", True)):
                 hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
-                _cdir = os.path.join(hd, "charts")
-                if os.path.isdir(_cdir):
-                    for fn in sorted(os.listdir(_cdir)):
-                        if fn.endswith(".png") or fn.endswith(".svg"):
-                            _stat(f"chart_{fn}", os.path.join(_cdir, fn))
+                for _name, _path in PipelineOrchestrator._viz_dynamic_artifact_specs(hd):
+                    _stat(_name, _path)
                 _ddir = os.path.join(hd, "data")
                 if os.path.isdir(_ddir):
                     for fn in sorted(os.listdir(_ddir)):
                         if fn.endswith(".csv"):
                             _stat(f"dataset_{fn}", os.path.join(_ddir, fn))
+            elif (stage == STAGE_REPORT and state.report_id
+                  and bool(getattr(Config, "PIPELINE_VIZ_ARTIFACTS", True))):
+                _report_dir = ReportManager._get_report_folder(state.report_id)
+                for _name, _path in PipelineOrchestrator._report_viz_dynamic_artifact_specs(
+                        _report_dir):
+                    _stat(_name, _path)
         except Exception:  # noqa: BLE001 — 发现是观测增益，永不抛出
             pass
         return out
@@ -3529,6 +4183,12 @@ class PipelineOrchestrator:
                         return
                 except Exception as e:  # noqa: BLE001 — 心跳失败不得拖垮管线
                     logger.debug("[%s] 心跳刷新跳过: %s", state.pipeline_id, e)
+                # W9-3：心跳节律上的遥测 flush 检查点——覆盖长时间无进度回调的窗口
+                # （集成种子/深研究静默期），LLM 调用每新增 N 次都会被落盘。
+                try:
+                    self._maybe_flush_run_telemetry(state)
+                except Exception:  # noqa: BLE001
+                    pass
 
         t = threading.Thread(target=_beat, name=f"pipeline-hb-{state.pipeline_id}", daemon=True)
         t.start()
@@ -3881,6 +4541,7 @@ class PipelineOrchestrator:
                 cancel_event=cls._cancel_events.get(state.pipeline_id),
                 on_spawn=_make_spawn(idx),
                 resume=_resume_track,
+                kg_graph_id=state.graph_id,  # W9-9：图谱已存在时接入 KG MCP（首跑为 None → no-op）
             )
             return idx, angle_title, track_dir, res
 
@@ -3944,6 +4605,17 @@ class PipelineOrchestrator:
             "requested": n, "survived": survived,
             "angles": [angles[i][0] for i in sorted(results)],
         }
+
+        # W9-7：合并卷宗的一次有界 LLM 整理——合并 K 份执行摘要为统一开篇、点名跨轨冲突的
+        # 头条数字、'# Track N' H1 降级为 Part H2。只喂各轨执行摘要（cap ~30K 字符）；
+        # 失败回退纯拼接（与今日逐字节一致）。存活 <2 轨时无需整理。
+        if survived >= 2 and bool(getattr(Config, "RESEARCH_TRACK_RECONCILE", True)):
+            upd(97, "整理多轨卷宗（合并执行摘要 + 跨轨分歧）…")
+            merged_report, _rec_audit = reconcile_track_reports(merged_report, labeled_reports)
+            state.options["research_track_reconcile"] = _rec_audit
+            if not _rec_audit.get("applied"):
+                logger.info("[%s] 卷宗整理未应用（%s），保留纯拼接",
+                            state.pipeline_id, _rec_audit.get("reason"))
 
         # 落盘合并产物到 handoff_dir（下游/resume 读的正是这些文件）
         report_path = os.path.join(handoff_dir, "research_report.md")
@@ -4057,6 +4729,8 @@ class PipelineOrchestrator:
         # EXECPLAN2 I-5-0/I-5-2: 把本次管线所有 LLM 调用归属到该 pipeline_id（contextvars）。
         from ..utils.telemetry import set_run_context, LLMMeter
         set_run_context(state.pipeline_id)
+        # W9-3: attempt 起点初始化遥测增量落盘（捕获上一 attempt 的账作合并基底）。
+        self._init_telemetry_flush(state)
         # I-8-1: 管线起飞即写首版 run.json（解析后的研究深度/模型/图谱/环境指纹），
         # 后续每阶段进入时把热切换出的报告/模拟 provider 钉入。
         self._write_run_manifest(state)
@@ -4104,12 +4778,49 @@ class PipelineOrchestrator:
                         cancel_event=cls._cancel_events.get(state.pipeline_id),
                         on_spawn=_persist_research_pid,
                         resume=_resume_research,
+                        # W9-9：图谱已存在（resume-with-graph/fork/continue 血统）时接入 KG MCP；
+                        # 首跑 graph_id 为 None → env 与今日逐字节一致。
+                        kg_graph_id=state.graph_id,
                     )
                 state.research_pid = None  # 子进程已结束，清掉以免 reconcile 误杀复用 PID
                 # PAR-2：并行轨 PID 清单也一并清空（研究阶段已结束，避免 reconcile 误杀复用 PID）。
                 state.options.pop("research_track_pids", None)
                 self._complete_stage(state, STAGE_RESEARCH, "研究完成")
             report_md: str = research["report"]
+            # W9-11: 研究卷宗定稿后跑确定性编辑 lint（report_lint 由报告链工作流并行落地；
+            # 模块缺失 → ImportError → 静默跳过）。清理 [citation:...] 残渣、pass/working-notes
+            # 叙述泄漏等机器语法；清洗结果写回 handoff 的 research_report.md（下游/resume 同源）。
+            if bool(getattr(Config, "REPORT_LINT", True)):
+                try:
+                    from .report_lint import lint_report
+                    _lint_lang = (state.options.get("research_language")
+                                  or getattr(Config, "DEERFLOW_RESEARCH_LANGUAGE", None))
+                    if not _lint_lang:
+                        # 无显式语言时按正文 CJK 占比推断（lint 用它决定改写文案的语言；
+                        # report_lint._is_zh 会把空串当中文，英文卷宗须显式给 'English'）。
+                        _sample = report_md[:20000]
+                        _cjk_n = len(re.findall(r"[一-鿿]", _sample))
+                        _lint_lang = "Chinese" if _cjk_n > max(1, len(_sample)) * 0.05 else "English"
+                    _cleaned, _lint_rep = lint_report(report_md, _lint_lang, mode="research")
+                    if isinstance(_cleaned, str) and _cleaned.strip() and _cleaned != report_md:
+                        report_md = _cleaned
+                        research["report"] = _cleaned
+                        try:
+                            from ..utils.atomic import write_text_atomic
+                            write_text_atomic(
+                                os.path.join(handoff_dir, "research_report.md"), _cleaned)
+                        except Exception as _lw:  # noqa: BLE001 — 写回失败不阻断（内存版已清洗）
+                            logger.warning("[%s] lint 后写回 research_report.md 失败: %s",
+                                           state.pipeline_id, _lw)
+                    if isinstance(_lint_rep, dict):
+                        state.options["research_lint"] = {
+                            k: v for k, v in _lint_rep.items()
+                            if isinstance(v, (int, float, str, bool))
+                        }
+                except ImportError:
+                    logger.debug("report_lint 未部署，跳过研究卷宗 lint")
+                except Exception as _lint_err:  # noqa: BLE001 — lint 是增强，失败保留原文
+                    logger.warning("[%s] 研究卷宗 lint 跳过: %s", state.pipeline_id, _lint_err)
             # 双轨 Track B：角色本体档案（actor_dossier.md）。它是本体/角色抽取的主种子，
             # 研究报告（Track A）作为补充上下文。旗标关闭或 Track B 缺失时为 None/""，
             # 下游 document_texts/chunks 退化为单轨，与今日逐字节一致。
@@ -4446,6 +5157,34 @@ class PipelineOrchestrator:
                                     audit.get("merged_nodes", 0))
                     except Exception as e:
                         logger.warning("[%s] entity resolution skipped: %s", state.pipeline_id, e)
+
+                # W9-10: 图谱裁剪——把 KG 收敛到研究确认的关键 actor 周边（用户明确要求）。
+                # 在实体消解之后、中心度先验计算之前执行，使 graph_priors 反映裁剪后的图。
+                # graph_pruner 由 kg-backend 工作流并行落地（模块缺失 → ImportError → 静默跳过）。
+                if bool(getattr(Config, "GRAPH_PRUNE_ENABLED", False)):
+                    try:
+                        from .graph_pruner import prune_graph
+                        upd(99, "裁剪外围图谱节点（收敛到关键 actor）…")
+                        _actor_rows = (actors.get("actors") if isinstance(actors, dict) else None) or []
+                        _prune_audit = prune_graph(graph_id=graph_id, actors=_actor_rows)
+                        if isinstance(_prune_audit, dict) and _prune_audit:
+                            state.options["graph_prune"] = {
+                                k: v for k, v in _prune_audit.items()
+                                if isinstance(v, (int, float, str, bool))
+                            }
+                            try:
+                                from ..utils.atomic import write_json_atomic
+                                _hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+                                write_json_atomic(os.path.join(_hd, "graph_prune.json"), _prune_audit)
+                                state.artifacts["graph_prune"] = os.path.join(_hd, "graph_prune.json")
+                            except Exception:  # noqa: BLE001 — 审计落盘失败不影响裁剪本身
+                                pass
+                            logger.info("[%s] 图谱裁剪完成: %s", state.pipeline_id,
+                                        state.options.get("graph_prune"))
+                    except ImportError:
+                        logger.debug("graph_pruner 未部署，跳过图谱裁剪")
+                    except Exception as _pr_err:  # noqa: BLE001 — 裁剪失败绝不拖垮建图
+                        logger.warning("[%s] 图谱裁剪跳过: %s", state.pipeline_id, _pr_err)
 
                 # J1: 并发抽取（GRAPH_BUILD_CONCURRENCY>1）的重名实体守卫。
                 # add_episodes_concurrent 的 read-before-commit dedup 在并发下可能让两个 episode
@@ -4860,13 +5599,12 @@ class PipelineOrchestrator:
                         _base_sim_id = _bd.get("simulation_id")
                     except Exception:
                         _base_sim_id = None
-                # VIZ-2: 图表清单（charts.json：{title, caption, source_data}）随研究 handoff 一并
-                # 钉入报告构造（缺失/关闭 PIPELINE_VIZ_ARTIFACTS 时为 None，报告链自行按需消费）。
-                _charts_manifest = None
-                if bool(getattr(Config, "PIPELINE_VIZ_ARTIFACTS", True)):
-                    _hd_viz = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
-                    _charts_manifest = _read_json(os.path.join(_hd_viz, "charts", "charts.json"))
-                agent = ReportAgent(
+                # Visual ownership boundary: research charts remain relative to the
+                # dossier handoff. The final report consumes the shared structured
+                # artifacts below and ReportVisualizer generates its own richer,
+                # report-owned Plotly set. Passing research paths into every section
+                # prompt would duplicate timeline/actor/quantitative figures.
+                _ra_kwargs: dict[str, Any] = dict(
                     graph_id=graph_id,
                     simulation_id=sim_state.simulation_id,
                     simulation_requirement=state.prompt,
@@ -4877,8 +5615,26 @@ class PipelineOrchestrator:
                     research_report=report_md,
                     scenario_label=_scenario_label,
                     base_simulation_id=_base_sim_id,
-                    charts_manifest=_charts_manifest,
                 )
+                # W9-8: 研究昂贵产物直通报告链——quantitative(339 行)/contested(29 条)/
+                # timeline(101 事件)/graph_priors(_structural) 此前落盘后零下游读者。
+                # 构造参数由报告链工作流并行落地（None 默认）；尚未支持时 TypeError →
+                # 回退旧签名（落地顺序无关）。缺文件时 _read_json 返回 None（同 None 默认）。
+                _hd_ra = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+                _ra_artifacts: dict[str, Any] = {
+                    "quantitative": _read_json(os.path.join(_hd_ra, "quantitative.json")),
+                    "contested": _read_json(os.path.join(_hd_ra, "contested.json")),
+                    "timeline_events": _read_json(os.path.join(_hd_ra, "timeline.json")),
+                    "graph_priors": _read_json(os.path.join(_hd_ra, "graph_priors.json")),
+                    "graph_priors_structural": _read_json(
+                        os.path.join(_hd_ra, "graph_priors_structural.json")),
+                }
+                try:
+                    agent = ReportAgent(**_ra_kwargs, **_ra_artifacts)
+                except TypeError:
+                    logger.info("[%s] ReportAgent 尚未支持研究工件直通参数，回退旧签名",
+                                state.pipeline_id)
+                    agent = ReportAgent(**_ra_kwargs)
 
                 def report_cb(stage: str, progress: int, message: str):
                     upd(max(5, min(99, int(progress))), f"{stage}: {message}")
@@ -4984,7 +5740,12 @@ class PipelineOrchestrator:
                             _tel_extra["sim_llm_health"] = _lh
                 except Exception:  # noqa: BLE001
                     pass
-                LLMMeter.write_run_telemetry(tpath, run_id=state.pipeline_id, extra=_tel_extra)
+                # W9-3: 终版落盘走增量 flush 的同一路径——合并基底在 attempt 起点捕获
+                # （_init_telemetry_flush），与运行中的多次 flush 不会重复累计 cumulative_total。
+                # （旧的 LLMMeter.write_run_telemetry 每次调用都把盘上文件当「上一 attempt」
+                # 合并，与增量 flush 组合会把本 attempt 的中间快照重复累进账里。）
+                self._tel_path = self._tel_path or tpath
+                self._flush_run_telemetry(state, final=True, extra=_tel_extra)
                 state.artifacts = getattr(state, "artifacts", None) or {}
                 if isinstance(state.artifacts, dict):
                     state.artifacts["run_telemetry"] = tpath
@@ -5014,17 +5775,27 @@ class PipelineOrchestrator:
                         "cost_basis": _stage_tel.get("cost_basis"),
                     }
                     PipelineManager.save(state)
-                    # 报告附录：仅在成功完成且报告存在时追加；幂等（已含则跳过），resume/re-report 安全。
-                    if (getattr(Config, "REPORT_TELEMETRY_APPENDIX", True)
-                            and state.status == "completed" and state.report_id):
+                    # W9-6: 遥测默认不再进入客户交付物——「Run Telemetry」表写到报告目录的
+                    # 独立 telemetry.md（$26.28 的内部成本表曾随 full_report.md 一并交付）。
+                    # REPORT_TELEMETRY_APPENDIX=true 时额外保留旧的 full_report.md 附录行为
+                    # （幂等：已含则跳过，resume/re-report 安全）。
+                    if state.status == "completed" and state.report_id:
                         _appendix = render_telemetry_appendix(_stage_tel)
                         if _appendix:
-                            _rpath = os.path.join(
-                                ReportManager._get_report_folder(state.report_id), "full_report.md")
-                            _existing = _read_text(_rpath)
-                            if _existing and "## Run Telemetry" not in _existing:
+                            _rdir = ReportManager._get_report_folder(state.report_id)
+                            try:
                                 write_text_atomic(
-                                    _rpath, _existing.rstrip() + "\n\n" + _appendix.rstrip() + "\n")
+                                    os.path.join(_rdir, "telemetry.md"),
+                                    _appendix.rstrip() + "\n")
+                            except Exception as _tme:  # noqa: BLE001 — telemetry.md 纯观测
+                                logger.debug(
+                                    f"[{state.pipeline_id}] 写入 telemetry.md 失败（忽略）: {_tme}")
+                            if getattr(Config, "REPORT_TELEMETRY_APPENDIX", False):
+                                _rpath = os.path.join(_rdir, "full_report.md")
+                                _existing = _read_text(_rpath)
+                                if _existing and "## Run Telemetry" not in _existing:
+                                    write_text_atomic(
+                                        _rpath, _existing.rstrip() + "\n\n" + _appendix.rstrip() + "\n")
                 except Exception as _ste:  # noqa: BLE001 — 阶段遥测为观测增益，失败不影响管线终态
                     logger.debug(f"[{state.pipeline_id}] 阶段级遥测处理失败（忽略）: {_ste}")
                 LLMMeter.reset(state.pipeline_id)

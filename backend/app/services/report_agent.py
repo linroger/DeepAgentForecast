@@ -633,58 +633,68 @@ TOOL_DESC_QUICK_SEARCH = """\
 - 与查询最相关的事实列表"""
 
 TOOL_DESC_INTERVIEW_AGENTS = """\
-【深度采访 - 真实Agent采访（双平台）】
-调用OASIS模拟环境的采访API，对正在运行的模拟Agent进行真实采访！
-这不是LLM模拟，而是调用真实的采访接口获取模拟Agent的原始回答。
-默认在Twitter和Reddit两个平台同时采访，获取更全面的观点。
+【内部专家视角素材 - 情景推演小组问询（双平台）】
+调用OASIS推演环境的问询API，获取内部情景推演小组中各代表性角色的第一人称观点。
+这是内部结构化推演（类似桌面演练/Delphi）的产出，只能作为**分析素材**使用。
 
 功能流程：
-1. 自动读取人设文件，了解所有模拟Agent
-2. 智能选择与采访主题最相关的Agent（如学生、媒体、官方等）
-3. 自动生成采访问题
-4. 调用 /api/simulation/interview/batch 接口在双平台进行真实采访
-5. 整合所有采访结果，提供多视角分析
+1. 自动读取人设文件，了解推演小组的角色构成
+2. 智能选择与问题最相关的角色（如企业、监管方、媒体等代表视角）
+3. 自动生成问询问题
+4. 调用 /api/simulation/interview/batch 接口获取各角色回答
+5. 整合所有回答，提供多视角分析
 
 【使用场景】
-- 需要从不同角色视角了解事件看法（学生怎么看？媒体怎么看？官方怎么说？）
-- 需要收集多方意见和立场
-- 需要获取模拟Agent的真实回答（来自OASIS模拟环境）
-- 想让报告更生动，包含"采访实录"
+- 需要多方立场与利益视角来压力测试某个判断
+- 需要为论证补充一个可归因的分析视角
+
+【使用规则 - 必须遵守】
+- 返回内容须**转写**为专家小组式的分析视角后使用（如「> 情景推演专家视角——「<机构>」：…」），
+  绝不能呈现为真实采访、真实人物原话或「采访实录」
+- 不得在正文描述问询/推演过程本身
 
 【返回内容】
-- 被采访Agent的身份信息
-- 各Agent在Twitter和Reddit两个平台的采访回答
-- 关键引言（可直接引用）
-- 采访摘要和观点对比
+- 各角色的身份信息与回答
+- 关键观点（转写后可引用）
+- 观点摘要与立场对比
 
-【重要】需要OASIS模拟环境正在运行才能使用此功能！"""
+【重要】需要OASIS推演环境正在运行才能使用此功能！"""
 
 # ── 大纲规划 prompt ──
 
 PLAN_SYSTEM_PROMPT = """\
-你是一个「未来预测报告」的撰写专家，拥有对模拟世界的「上帝视角」——你可以洞察模拟中每一位Agent的行为、言论和互动。
+你是一名机构级预测报告的首席分析师。交付物是对目标问题的**专业预测**：结论、概率、
+关键驱动、判定/证伪标准——报告的主语永远是现实世界的行为者与结果。
 
-【核心理念】
-我们构建了一个模拟世界，并向其中注入了特定的「模拟需求」作为变量。模拟世界的演化结果，就是对未来可能发生情况的预测。你正在观察的不是"实验数据"，而是"未来的预演"。
+【方法定位】
+多智能体情景推演是本所的一种内部结构化专家推演方法（类似桌面演练/Delphi）。它的产出
+只能作为**证据输入**，绝不能成为报告的叙述对象。读者不应从报告中察觉任何内部方法学机制。
 
 【你的任务】
-撰写一份「未来预测报告」，回答：
-1. 在我们设定的条件下，未来发生了什么？
-2. 各类Agent（人群）是如何反应和行动？
-3. 这个模拟揭示了哪些值得关注的未来趋势和风险？
+规划一份「未来预测报告」的大纲，回答：
+1. 在设定条件下，未来最可能如何演化？各情景的概率与判定标准是什么？
+2. 哪些现实世界的行为者、驱动机制与转折点决定了这些结果？
+3. 有哪些值得关注的趋势、风险与决策启示？
+
+【硬性禁令 - 章节标题与正文均适用】
+- ❌ 禁止出现以下方法学词汇：模拟、Agent/智能体、轮次、动作次数、发帖/评论/点赞/关注、
+  共识形成、派系聚类、因果图、图谱、simulation、agents、rounds、action counts
+- ❌ 不得为内部推演方法本身设立章节（如「Agent 行为分析」「模拟证据」一类标题一律禁止）
+
+【证据转写规则】
+- 推演中某角色的观点须转写为：『在本所情景推演中，代表<机构>视角的分析立场认为…』
+- 行为统计只能转写为现实世界结论（如『定价权集中于TSMC与NVIDIA』），严禁给出动作/轮次数字
 
 【报告定位】
-- ✅ 这是一份基于模拟的未来预测报告，揭示"如果这样，未来会怎样"
-- ✅ 聚焦于预测结果：事件走向、群体反应、涌现现象、潜在风险
-- ✅ 模拟世界中的Agent言行就是对未来人群行为的预测
-- ❌ 不是对现实世界现状的分析
-- ❌ 不是泛泛而谈的舆情综述
+- ✅ 这是一份专业预测报告，揭示"如果这样，未来会怎样"
+- ✅ 聚焦于预测结果：事件走向、群体反应、涌现现象、潜在风险、概率与判定标准
+- ❌ 不是对现实世界现状的泛泛综述，也绝不是对内部推演过程的叙述
 
 【章节数量限制】
 - 最少6个章节，最多14个章节
 - 每个章节直接撰写完整内容（每章为一个深入的长篇分析），章节内部可用 ### 三级小标题分子小节
 - 内容要丰富详实、层层递进，全面覆盖核心预测发现的不同维度
-- 章节结构由你根据预测结果自主设计（例如：未来全景 / 群体博弈 / 涌现信号 / 风险暗面 / 关键转折 / 应对建议 等）
+- 章节结构由你根据预测结果自主设计（例如：未来全景 / 关键行为者博弈 / 涌现信号 / 风险暗面 / 关键转折 / 应对建议 等）
 
 请输出JSON格式的报告大纲，格式如下：
 {
@@ -701,24 +711,25 @@ PLAN_SYSTEM_PROMPT = """\
 注意：sections数组最少6个，最多14个元素！每个章节都应是一篇深入详实的长篇分析。"""
 
 PLAN_USER_PROMPT_TEMPLATE = """\
-【预测场景设定】
-我们向模拟世界注入的变量（模拟需求）：{simulation_requirement}
+【预测问题设定】
+本报告要回答的核心问题：{simulation_requirement}
 
-【模拟世界规模】
-- 参与模拟的实体数量: {total_nodes}
-- 实体间产生的关系数量: {total_edges}
+【内部情景推演规模（方法学材料，不得写入报告）】
+- 涉及实体数量: {total_nodes}
+- 实体间关系数量: {total_edges}
 - 实体类型分布: {entity_types}
-- 活跃Agent数量: {total_entities}
+- 参与推演的角色数量: {total_entities}
 
-【模拟预测到的部分未来事实样本】
+【情景推演产出的部分未来事实样本（证据输入）】
 {related_facts_json}
 
-请以「上帝视角」审视这个未来预演：
-1. 在我们设定的条件下，未来呈现出了什么样的状态？
-2. 各类人群（Agent）是如何反应和行动的？
-3. 这个模拟揭示了哪些值得关注的未来趋势？
+请以首席分析师的立场审视以上证据：
+1. 在设定条件下，未来最可能呈现出什么样的状态？各情景概率如何？
+2. 哪些现实世界的行为者与驱动机制决定了这些结果？
+3. 证据揭示了哪些值得关注的未来趋势与风险？
 
-根据预测结果，设计最合适的报告章节结构。
+根据预测发现，设计最合适的报告章节结构。章节标题与描述不得出现
+模拟/Agent/智能体/轮次/simulation 等方法学词汇——报告的主语是现实世界。
 
 【再次提醒】报告章节数量：最少6个，最多14个；每章都是一篇深入详实的长篇分析，全面覆盖核心预测发现的不同维度。"""
 
@@ -737,35 +748,44 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 【核心理念】
 ═══════════════════════════════════════════════════════════════
 
-模拟世界是对未来的预演。我们向模拟世界注入了特定条件（模拟需求），
-模拟中Agent的行为和互动，就是对未来人群行为的预测。
+你正在撰写一份专业预测报告的章节。**内部情景推演**（本所的结构化专家推演方法，
+类似桌面演练/Delphi）与**研究材料**是你的两类证据来源；报告的主语永远是现实世界的
+行为者与结果，绝不是推演本身。读者不应从报告中察觉任何内部方法学机制。
 
 你的任务是：
-- 揭示在设定条件下，未来发生了什么
-- 预测各类人群（Agent）是如何反应和行动的
+- 揭示在设定条件下，未来最可能发生什么，以及为什么
+- 预测现实世界中各类行为者（企业、监管方、人群等）将如何反应和行动
 - 发现值得关注的未来趋势、风险和机会
 
-❌ 不要写成对现实世界现状的分析
-✅ 要聚焦于"未来会怎样"——模拟结果就是预测的未来
+❌ 不要写成对现实世界现状的泛泛分析，更不要叙述内部推演过程
+✅ 要聚焦于"未来会怎样"——推演产出与研究材料共同支撑这个预测
+
+【硬性禁令】章节标题与正文不得出现以下方法学词汇：
+模拟、Agent/智能体、轮次、动作次数、发帖/评论/点赞/关注、共识形成、派系聚类、
+因果图、图谱、simulation、agents、rounds、action counts
 
 ═══════════════════════════════════════════════════════════════
 【最重要的规则 - 必须遵守】
 ═══════════════════════════════════════════════════════════════
 
-1. 【必须调用工具观察模拟世界】
-   - 你正在以「上帝视角」观察未来的预演
-   - 所有内容必须来自模拟世界中发生的事件和Agent言行
+1. 【必须调用工具检索证据】
+   - 所有内容必须来自工具检索到的推演产出与研究材料
    - 禁止使用你自己的知识来编写报告内容
-   - 每个章节至少调用{min_tool_calls}次工具（最多{max_tool_calls}次）来观察模拟的世界，它代表了未来
+   - 每个章节至少调用{min_tool_calls}次工具（最多{max_tool_calls}次）获取证据
 
-2. 【引用Agent言行——必须标注为「模拟推演」，严禁伪装成真实信源】
-   - 模拟中 Agent 的发言/行为是对未来人群行为的**推演**，不是真实世界已发生的事实
-   - 引用时必须显式标注来源为模拟代理人，例如：
-     > 模拟代理人「<角色名>」推演：原文内容...
-   - ❌ 严禁把模拟 Agent 的发言伪装成真实人物/真实采访/分析师/媒体的话
-     （禁止「某分析师在采访中表示」「据<真实媒体>报道」之类把模拟内容嫁接到真实信源）
-   - ❌ 严禁把知识图谱里的关系描述、或系统自己推导的概率，当作某人/某机构的「原话」引用
-   - 真实世界的事实/数据/观点只能来自研究材料（用 [S] 引用索引标注），不得与模拟推演混为一谈
+2. 【引用推演观点——专家小组式转述，严禁伪装成真实信源】
+   - 内部推演中各角色的观点是**分析立场**，不是真实世界已发生的言论
+   - 引用推演观点时用专家小组式转述规范（按报告语言二选一）：
+     > 情景推演专家视角——「<机构/角色>」："…"
+     > Analytical perspective — <Institution> (scenario panel): "…"
+   - 更好的做法是把观点改写进论证并标注（内部情景推演）
+   - ❌ 禁止『模拟代理人』『Simulation Agent』『Deduction/Reasoning』等机械标签
+   - ❌ 严禁把推演观点伪装成真实人物/真实采访/分析师/媒体的话
+     （禁止「某分析师在采访中表示」「据<真实媒体>报道」之类把推演内容嫁接到真实信源）
+   - ❌ 严禁把关系数据、或系统自己推导的概率，当作某人/某机构的「原话」引用
+   - ❌ 严禁引用内容为发帖/点赞/评论等平台行为的推演片段
+   - 真实世界的事实/数据/观点只能来自研究材料（用来源索引里的数字编号标注，规范形状是
+     裸 [S12]——照抄索引给出的编号，严禁自创编号或改写成 [S1-a] 等变体），不得与推演观点混为一谈
 
 3. 【语言一致性 - 引用内容必须翻译为报告语言】
    - 工具返回的内容可能包含英文或中英文混杂的表述
@@ -777,7 +797,8 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 4. 【忠实呈现 —— 反捏造纪律（最高优先级）】
    - 报告内容必须反映模拟推演结果与研究材料，且二者来源分明
    - ❌ 严禁编造研究材料/模拟中不存在的数字、引文、来源、URL、日期或事件
-   - 每个**承重数字**：要么能在研究材料中找到并标 [S]，要么明确标注为「模拟推演所得」
+   - 每个**承重数字**：要么能在研究材料中找到并标注来源编号（如 [S12]，编号取自来源索引），
+     要么明确标注为「模拟推演所得」
    - 若模拟为空洞/未产生有机互动（系统会在 simulation_health 标注），**不得**虚构 Agent 言行或「共识」，
      转而基于研究证据做因果推理，并显式说明「本轮模拟信号有限」
    - 信息不足时如实说明，绝不用流畅叙事填补证据空白
@@ -866,19 +887,19 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
    - 正文长度不少于 {section_floor_chars} 字，目标 {section_target_lo}–{section_target_hi} 字（不含引用块）
    - 用 2-4 个「### 三级小标题」把这篇长正文切成清晰的子小节，每个子小节围绕一个论点展开
    - 必须层层展开：先给出整体判断，再分多个角度深入论证，每个角度都要有
-     具体的模拟证据（数据、事件、Agent 原话）支撑
+     具体证据（研究材料 [S#]、预测市场、内部情景推演产出）支撑
    - 充分展开因果链条、二阶效应、不同人群的分化反应、潜在转折点
    - ❌ 严禁写成几百字的提纲式摘要或泛泛而谈——那是不合格的章节
    - ✅ 像撰写一篇严肃深度报告的章节那样，写得充实、有洞察、有层次
-1. 内容必须基于工具检索到的模拟数据
-2. 大量引用原文来展示模拟效果
-3. 使用Markdown格式：
+1. 内容必须基于工具检索到的证据（研究材料 [S#]、预测市场、内部情景推演产出），
+   且推演产出须按【证据转写规则】转写为现实世界结论后使用
+2. 使用Markdown格式：
    - ✅ 用「### 三级小标题」组织 2-4 个子小节（章节内部结构）
    - 使用 **粗体文字** 标记子小节内的重点
    - 使用列表（-或1.2.3.）组织要点
    - 使用空行分隔不同段落
    - ❌ 禁止使用 # 或 ##（报告主标题/章节标题层级），也不要用 #### 及更深层级
-4. 【引用格式规范 - 必须单独成段】
+3. 【引用格式规范 - 必须单独成段】
    引用必须独立成段，前后各有一个空行，不能混在段落中：
 
    ✅ 正确格式：
@@ -894,9 +915,9 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
    ```
    校方的回应被认为缺乏实质内容。> "校方的应对模式..." 这一评价反映了...
    ```
-5. 保持与其他章节的逻辑连贯性
-6. 【避免重复】仔细阅读下方已完成的章节内容，不要重复描述相同的信息
-7. 【再次强调】用 2-4 个「### 三级小标题」组织本章子小节；禁止 # 或 ##，也不要 #### 及更深层级"""
+4. 保持与其他章节的逻辑连贯性
+5. 【避免重复】仔细阅读下方已完成的章节内容，不要重复描述相同的信息
+6. 【再次强调】用 2-4 个「### 三级小标题」组织本章子小节；禁止 # 或 ##，也不要 #### 及更深层级"""
 
 SECTION_USER_PROMPT_TEMPLATE = """\
 已完成的章节内容（请仔细阅读，避免重复）：
@@ -908,9 +929,11 @@ SECTION_USER_PROMPT_TEMPLATE = """\
 
 【重要提醒】
 1. 仔细阅读上方已完成的章节，避免重复相同的内容！
-2. 开始前必须先调用工具获取模拟数据
+2. 开始前必须先调用工具获取证据
 3. 请混合使用不同工具，不要只用一种
 4. 报告内容必须来自检索结果，不要使用自己的知识
+5. 报告主语是现实世界的行为者与结果——正文与小标题不得出现
+   模拟/Agent/智能体/轮次/动作次数/simulation 等方法学词汇
 
 【⚠️ 格式警告 - 必须遵守】
 - ✅ 用 2-4 个「### 三级小标题」组织本章子小节（章节内部结构）
@@ -919,7 +942,7 @@ SECTION_USER_PROMPT_TEMPLATE = """\
 
 请开始：
 1. 首先思考（Thought）这个章节需要什么信息
-2. 然后调用工具（Action）获取模拟数据（建议 {min_tool_calls}-{max_tool_calls} 次，覆盖多个角度）
+2. 然后调用工具（Action）获取证据（建议 {min_tool_calls}-{max_tool_calls} 次，覆盖多个角度）
 3. 收集足够信息后输出 Final Answer（正文用 ### 三级小标题分节，不要用 # 或 ##）
 4. 【篇幅】Final Answer 必须充实详尽，不少于 {section_floor_chars} 字、目标 {section_target_lo}–{section_target_hi} 字，层层深入、证据扎实，不要写成简短摘要"""
 
@@ -933,19 +956,19 @@ Observation（检索结果）:
 
 ═══════════════════════════════════════════════════════════════
 已调用工具 {tool_calls_count}/{max_tool_calls} 次（已用: {used_tools_str}）{unused_hint}
-- 如果信息充分：以 "Final Answer:" 开头输出章节内容（必须引用上述原文）
-- 凡基于图谱关系链（形如 A --[关系]--> B）得出的论断，请在句末标注支撑边，例如（依据：OpenAI --[COMPETES_WITH]--> Anthropic）；其它结论仍照常引用访谈原话与 [S] 研究来源
+- 如果信息充分：以 "Final Answer:" 开头输出章节内容（须以上述证据支撑论断）
+- 凡基于实体关系链得出的论断，用自然语言在句中说明依据（例如：基于 ASML 对 TSMC 的独家光刻机供应关系）；❌ 严禁在正文输出「A --[关系]--> B」原始边格式或任何机器记号；其它结论仍照常标注研究来源编号（规范形状 [S12]，编号照抄来源索引）
 - 如果需要更多信息：调用一个工具继续检索
 ═══════════════════════════════════════════════════════════════"""
 
 REACT_INSUFFICIENT_TOOLS_MSG = (
     "【注意】你只调用了{tool_calls_count}次工具，至少需要{min_tool_calls}次。"
-    "请再调用工具获取更多模拟数据，然后再输出 Final Answer。{unused_hint}"
+    "请再调用工具获取更多证据，然后再输出 Final Answer。{unused_hint}"
 )
 
 REACT_INSUFFICIENT_TOOLS_MSG_ALT = (
     "当前只调用了 {tool_calls_count} 次工具，至少需要 {min_tool_calls} 次。"
-    "请调用工具获取模拟数据。{unused_hint}"
+    "请调用工具获取证据。{unused_hint}"
 )
 
 REACT_TOOL_LIMIT_MSG = (
@@ -1043,6 +1066,43 @@ def derive_report_shape(
         return dict(compact)
     return dict(expanded)
 
+# WAVE9：simulation_outcomes 的「最活跃 Agent」行（zep_tools 确定性输出格式）。
+_OUTCOME_ACTOR_LINE_RE = re.compile(r"^-\s*(.+?)\(id=\d+\):\s*共\s*(\d+)\s*次动作")
+
+
+def salience_tiers_from_outcomes(outcomes_text: str) -> str:
+    """WAVE9：把 simulation_outcomes 的原始动作计数**确定性转写**为定性「议程设置力分层」。
+
+    动作次数/轮次等机制数字是方法学细节，直接注入章节提示词会诱使模型把它们写进正文
+    （'TSMC 以 48 次动作居首' 型泄漏）。此处按相对活跃度分三档转写为可直接引用的定性
+    结论；解析不到至少 2 个行为者时返回 ""（调用方回退原始文本）。纯函数，便于单测。"""
+    actors: List[Tuple[str, int]] = []
+    for ln in (outcomes_text or "").splitlines():
+        m = _OUTCOME_ACTOR_LINE_RE.match(ln.strip())
+        if m:
+            try:
+                actors.append((m.group(1).strip(), int(m.group(2))))
+            except ValueError:
+                continue
+    if len(actors) < 2:
+        return ""
+    top = max(c for _, c in actors)
+    if top <= 0:
+        return ""
+    tier1 = [n for n, c in actors if c >= 0.6 * top]
+    tier2 = [n for n, c in actors if 0.25 * top <= c < 0.6 * top]
+    tier3 = [n for n, c in actors if c < 0.25 * top]
+    lines = ["【内部情景推演·议程设置力分层（已确定性转写为定性结论；正文只可引用分层结论，"
+             "不得出现任何动作/轮次等机制数字）】"]
+    if tier1:
+        lines.append("· 第一梯队（议程主导）：" + "、".join(tier1))
+    if tier2:
+        lines.append("· 第二梯队（显著参与）：" + "、".join(tier2))
+    if tier3:
+        lines.append("· 第三梯队（边缘参与）：" + "、".join(tier3))
+    return "\n".join(lines)
+
+
 REACT_CONTAMINATED_RETRY_MSG = (
     "【格式错误】你上一条输出不是合格的章节正文（疑似系统提示泄漏、工具调用残留或采访超时提示）。"
     '请立即以 "Final Answer:" 开头，只输出本章节的中文正文：必须引用前面工具返回的模拟数据与人物原话，'
@@ -1054,6 +1114,42 @@ SECTION_FAILURE_PLACEHOLDER = (
     "（本章节生成失败：模型多次未能产出合格正文，常见于采访接口超时或 claude-cli 输出被系统提示污染。"
     "已跳过以避免写入无效内容，可在修复后重试本章节。）"
 )
+
+
+# WAVE9：疑似截断的收尾模式——孤悬的「（依据」「(According to」引子（S2 章节即
+# 以 '(依据' 戛然而止）。
+_TRUNCATED_TAIL_RE = re.compile(r"[（(]\s*(?:依据|According to)\s*[:：]?\s*$")
+
+
+def _looks_truncated(text: Optional[str]) -> bool:
+    """WAVE9：启发式判断章节正文是否在句中被截断（模型 finish_reason=length 型故障）。
+
+    判定为截断：结尾是孤悬的「（依据/(According to」引子；或最后一个**散文**行以
+    字母/数字/逗号/冒号收尾（英文句必以句末标点收束；'…$46.' 带句点不误报）。
+    列表/表格/标题/引用/围栏收尾不判截断（这些行合法地没有句末标点）。纯函数。"""
+    if not text or not text.strip():
+        return False
+    t = text.rstrip()
+    if _TRUNCATED_TAIL_RE.search(t[-40:]):
+        return True
+    last_line = t.splitlines()[-1].strip()
+    if not last_line or last_line.startswith(("#", ">", "|", "-", "*", "!", "```", "~~~")):
+        return False
+    if re.match(r"^\d+[.、)]", last_line):
+        return False
+    if last_line.endswith("**"):
+        return False                          # 整行粗体标签（**结论** 型）不是截断
+    if len(last_line) < 30:
+        return False                          # 短尾行多为标签/图注，截断句通常很长
+    tail = last_line.rstrip("*_`\"'”’」』）)]")
+    if not tail:
+        return False
+    c = tail[-1]
+    if c.isalnum() and not re.match(r"[一-鿿]", c):
+        return True                       # 以英文字母/数字裸收尾 → 句中截断
+    if c in ",;:：，、；":
+        return True                       # 以逗号/冒号收尾 → 句中截断
+    return False
 
 
 def _looks_contaminated(text: Optional[str]) -> bool:
@@ -1101,6 +1197,51 @@ CHAT_SYSTEM_PROMPT_TEMPLATE = """\
 - 优先给出结论，再解释原因"""
 
 CHAT_OBSERVATION_SUFFIX = "\n\n请简洁回答问题。"
+
+
+# ═══════════════════════════════════════════════════════════════
+# WAVE10（无缝引用）：参考来源渲染的 URL 卫生小工具（finalizer 与 PDF 脚注共用）
+# ═══════════════════════════════════════════════════════════════
+# 参考来源标题（zh/en）——finalizer 幂等去重、PDF 改写跳过附录、双语切块均按此识别。
+_REFS_HEADINGS = ("## References", "## 参考来源")
+# 常见 TLD 白名单：末段命中即认为域名完整；未命中但带真实路径的少见 TLD 也放行。
+_COMMON_TLDS = frozenset({
+    "com", "org", "net", "gov", "edu", "mil", "int", "io", "ai", "co", "info", "biz",
+    "news", "media", "tech", "dev", "app", "cn", "hk", "tw", "jp", "kr", "sg", "in",
+    "uk", "de", "fr", "it", "es", "nl", "se", "ch", "eu", "us", "ca", "au", "br", "mx",
+    "ru", "il", "ae", "sa",
+})
+
+
+def _citation_domain(url: str) -> str:
+    """取 URL 的展示域名（去 scheme / www. 前缀 / 端口）；解析失败返回空串。"""
+    try:
+        from urllib.parse import urlparse
+        netloc = urlparse(str(url or "").strip()).netloc.split(":")[0].lower()
+        return netloc[4:] if netloc.startswith("www.") else netloc
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _citation_url_ok(url: str) -> bool:
+    """URL 有效性守卫：拦截 'https://www.mckinsey' 型截断域名，避免渲染成坏链接。
+
+    规则：http(s) scheme + 域名含点 + （末段是常见 TLD，或带真实路径——罕见 TLD 但
+    明显有内容路径的仍放行）。宁可保守标记 invalid（条目仍列出，只是不渲染成链接）。"""
+    try:
+        from urllib.parse import urlparse
+        p = urlparse(str(url or "").strip())
+        if p.scheme not in ("http", "https") or not p.netloc:
+            return False
+        host = p.netloc.split(":")[0].lower()
+        labels = [x for x in host.split(".") if x]
+        if len(labels) < 2:
+            return False
+        if labels[-1] in _COMMON_TLDS:
+            return True
+        return len(p.path.strip("/")) > 1        # 罕见 TLD：有真实路径才放行
+    except Exception:  # noqa: BLE001
+        return False
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1289,7 +1430,7 @@ class ReportAgent:
     _FALLBACK_SECTION_TITLES = [
         "预测场景与核心发现",
         "关键行为者与系统动力",
-        "模拟证据与行为轨迹",
+        "关键驱动与证据链",
         "趋势展望与情景推演",
         "风险信号与决策启示",
         "关键转折与不确定性",
@@ -1310,6 +1451,12 @@ class ReportAgent:
         scenario_label: Optional[str] = None,
         base_simulation_id: Optional[str] = None,
         charts_manifest: Optional[Any] = None,
+        quantitative: Optional[List[Dict[str, Any]]] = None,
+        contested: Optional[List[Dict[str, Any]]] = None,
+        timeline_events: Optional[List[Dict[str, Any]]] = None,
+        graph_priors: Optional[Dict[str, Any]] = None,
+        graph_priors_structural: Optional[Dict[str, Any]] = None,
+        scenario_spine: Optional[List[Dict[str, Any]]] = None,
     ):
         """
         初始化Report Agent
@@ -1326,6 +1473,17 @@ class ReportAgent:
             sources: 研究来源列表 [{title,url}]（可选）；渲染为 [S1]/[S2] 引用索引。
             research_report: 原始研究报告 markdown（可选）。
             三者全部缺省时，行为与旧 3 参构造完全一致（冷图盲搜路径）。
+
+        W9-8（研究昂贵产物直通，全部可选、None 默认 → 行为与旧构造逐字节一致）：
+            quantitative: 研究 handoff 的 quantitative.json 全量列表（339 行级富指标，
+                含 tier/staleness_days/is_stale），替代 actors 内嵌 20 行副本渲染「关键指标」表。
+            contested: contested.json 全量争议声明列表，渲染「承重争议声明」表注入风险章节。
+            timeline_events: timeline.json 事件列表 [{date,event}]，渲染紧凑时间线注入背景章节。
+            graph_priors: graph_priors.json（node_name→[0,1] 中心度，别名组已折叠）。
+            graph_priors_structural: graph_priors_structural.json（{betweenness, chokepoints}），
+                因果骨架的 chokepoint 支点优先取自此处（研究显著度回退）。
+            scenario_spine: 主跑情景脊柱 [{name, resolution_criteria}]（W9-5 多种子集成对齐）——
+                钉进骨架推导，让种子对同一组命名情景打分（概率自由，新情景可追加）。
         """
         self.graph_id = graph_id
         self.simulation_id = simulation_id
@@ -1356,6 +1514,19 @@ class ReportAgent:
         # VIZ-2: 图表清单（charts.json：{title, caption, source_data}），由编排器随 handoff 钉入。
         # 仅存储、不在此进一步接线（报告链按需消费）；缺省 None 时行为与旧构造逐字节一致。
         self.charts_manifest = charts_manifest
+        # W9-8: 研究昂贵产物直通（见类 docstring）。形状不符/空值一律归一为 None（绝不抛），
+        # 全部缺省时行为与旧构造逐字节一致（degrade-safe）。须在 _build_background_block 之前
+        # 赋值——背景块的「关键指标」表消费 self.quantitative。
+        self.quantitative = quantitative if isinstance(quantitative, list) and quantitative else None
+        self.contested = contested if isinstance(contested, list) and contested else None
+        self.timeline_events = (timeline_events
+                                if isinstance(timeline_events, list) and timeline_events else None)
+        self.graph_priors = graph_priors if isinstance(graph_priors, dict) and graph_priors else None
+        self.graph_priors_structural = (
+            graph_priors_structural
+            if isinstance(graph_priors_structural, dict) and graph_priors_structural else None)
+        self.scenario_spine = (scenario_spine
+                               if isinstance(scenario_spine, list) and scenario_spine else None)
         # VIZ-2: 研究期图表清单渲染成「可引用图表」块，钉进各章节提示词（章节据此用标准 markdown
         # 图片语法引用图形）；charts_manifest 缺省/空/解析失败时为空串 → 注入自动跳过（degrade-safe）。
         try:
@@ -1363,7 +1534,20 @@ class ReportAgent:
         except Exception:  # noqa: BLE001 — 图表清单为可选增强，绝不阻断构造
             self._charts_block = ""
         self._background_block = self._build_background_block()
-        self._sources_index = self._build_sources_index()
+        # W9-8: 争议声明表（风险/不确定性章节）+ 紧凑时间线（背景/时间线章节）——章节标题命中
+        # 关键词时经 _prepend_research_background(section_title=...) 追加注入；对应工件缺省 /
+        # 构建失败时为空串 → 注入自动跳过（degrade-safe，行为与历史一致）。
+        try:
+            self._contested_table_block = self._build_contested_table_block()
+        except Exception:  # noqa: BLE001 — 证据块为可选增强，绝不阻断构造
+            self._contested_table_block = ""
+        try:
+            self._chronology_block = self._build_chronology_block()
+        except Exception:  # noqa: BLE001
+            self._chronology_block = ""
+        # WAVE10（无缝引用）：索引文本随提示词注入；_citation_index（记号→来源）供
+        # 引用最终化 / 悬空修复 / 解析度审计解析同一套编号（单一事实源）。
+        self._sources_index, self._citation_index = self._build_sources_index()
         # EXECPLAN2 I-3-2: 模拟量化信号包（确定性接地下限），懒构建一次后缓存；
         # 关闭 REPORT_SIGNAL_PACK 时始终为空串，_prepend_research_background 自动跳过（行为不变）。
         self._signal_pack = ""
@@ -1500,19 +1684,19 @@ class ReportAgent:
     def _available_charts(self) -> List[Dict[str, str]]:
         """VIZ-2：把 self.charts_manifest 规整成可引用图表条目 [{title, caption, path}]。
 
-        charts_manifest 由编排器随研究 handoff 钉入（charts.json，形如
-        [{title, caption, source_data}]，也容忍 {"charts": [...]} 包装或缺字段）。逐条规整：
+        也容忍 {"charts": [...]} 包装或缺字段。逐条规整：
           * title / caption 取字符串（缺失留空串）；
-          * path 依次探测常见图形路径键（path/image/figure/file/png/svg/src/source_data），
-            取第一个非空值 → 章节可用标准 markdown 图片语法 ![caption](path) 引用；
-          * title / caption / path 全空的条目丢弃（无可引用信息）。
+          * path 依次探测常见图形路径键（path/image/figure/file/png/svg/src），且必须是
+            report-owned charts/ 下的图片或 HTML；source_data 是溯源数据，不是图；
+          * 没有安全可渲染 path 的条目丢弃，避免把 actors.json/csv 当成坏图。
         纯函数、无副作用、degrade-safe：manifest 缺省/非列表/元素非字典 → []（绝不抛）。"""
         manifest = getattr(self, "charts_manifest", None)
         if isinstance(manifest, dict):  # 容忍 {"charts": [...]} 包装
             manifest = manifest.get("charts") or manifest.get("figures")
         if not isinstance(manifest, list):
             return []
-        _path_keys = ("path", "image", "figure", "file", "png", "svg", "src", "source_data")
+        _path_keys = ("path", "image", "figure", "file", "png", "svg", "src")
+        _allowed_ext = {".png", ".svg", ".jpg", ".jpeg", ".gif", ".webp", ".html"}
         out: List[Dict[str, str]] = []
         for e in manifest:
             if not isinstance(e, dict):
@@ -1521,12 +1705,17 @@ class ReportAgent:
             caption = str(e.get("caption") or e.get("description") or "").strip()
             path = ""
             for k in _path_keys:
-                v = str(e.get(k) or "").strip()
-                if v:
-                    path = v
+                v = str(e.get(k) or "").strip().removeprefix("./")
+                parts = v.split("/")
+                if (v and len(parts) >= 2 and parts[0] == "charts"
+                        and all(part not in ("", ".", "..") for part in parts)
+                        and "\\" not in v and "%" not in v
+                        and not any(ord(char) < 32 or ord(char) == 127 for char in v)
+                        and os.path.splitext(parts[-1])[1].lower() in _allowed_ext):
+                    path = "/".join(parts)
                     break
-            if not (title or caption or path):
-                continue  # 三者全空 → 无可引用信息，丢弃
+            if not path:
+                continue
             out.append({"title": title, "caption": caption, "path": path})
         return out
 
@@ -1549,7 +1738,9 @@ class ReportAgent:
             seg = f"{i}. {title}"
             if c.get("caption") and c.get("caption") != title:
                 seg += f" — {c['caption']}"
-            if c.get("path"):
+            if c.get("path", "").lower().endswith(".html"):
+                seg += f"  [interactive]({c['path']})"
+            elif c.get("path"):
                 seg += f"  ![{c.get('caption') or title}]({c['path']})"
             lines.append(seg)
         return "\n".join(lines)
@@ -1588,8 +1779,18 @@ class ReportAgent:
         try:
             from ..utils import actors as _actors
             if getattr(Config, "RESEARCH_FORECAST_INPUTS", True):
-                for blk in (_actors.quantitative_facts_block(self.actors),
-                            _actors.forecast_inputs_block(self.actors)):
+                # W9-8: 优先用研究 handoff 的全量 quantitative.json 渲染「关键指标」表
+                # （tier+时效排序过滤，上限 REPORT_KEY_METRICS_MAX），替代 actors 内嵌的
+                # 20 行副本；全量列表缺省/渲染为空/旗标关闭 → 回退内嵌副本（行为不变）。
+                qb = ""
+                if getattr(Config, "REPORT_EVIDENCE_BLOCKS", True):
+                    try:
+                        qb = self._build_key_metrics_block()
+                    except Exception:  # noqa: BLE001 — 关键指标表为可选增强
+                        qb = ""
+                if not qb:
+                    qb = _actors.quantitative_facts_block(self.actors)
+                for blk in (qb, _actors.forecast_inputs_block(self.actors)):
                     if blk:
                         parts.append(blk)
             if getattr(Config, "RESEARCH_EVIDENCE_GRADING", True):
@@ -1710,6 +1911,14 @@ class ReportAgent:
                 lines.append("  - 关系网：" + "；".join(roster_segs))
             if inc_segs:
                 lines.append("  - 核心激励：" + "；".join(inc_segs))
+            # W9-8: 「结构影响力（KG 中心度）」列——图谱结构先验的确定性注记（别名组内
+            # MAX 去重，TSMC/2330.TW/TSM 型并列不重复计入）；无先验/关闭旗标时为空（行为不变）。
+            try:
+                kg_note = self._kg_structural_note(name, row)
+            except Exception:  # noqa: BLE001 — 结构注记为可选增强，绝不阻断名册渲染
+                kg_note = ""
+            if kg_note:
+                lines.append("  - 结构影响力（KG 中心度）：" + kg_note)
             rendered += 1
 
         if not lines:
@@ -1721,6 +1930,154 @@ class ReportAgent:
         if len(block) > max_chars:
             block = block[:max_chars] + "\n…(关系网名册已截断)"
         return block
+
+    _TIER_RANK = {"S1": 0, "S2": 1, "S3": 2, "": 3, None: 3, "S4": 4}
+
+    @staticmethod
+    def _md_cell(v: Any, cap: int = 80) -> str:
+        """W9-8: markdown 表格单元清洗——去竖线/换行并截断，防表格结构被数据破坏。"""
+        s = str(v if v is not None else "").replace("|", "\\|").replace("\n", " ").strip()
+        return (s[: cap - 1] + "…") if len(s) > cap else s
+
+    def _build_key_metrics_block(self) -> str:
+        """W9-8: 用研究 handoff 的全量 quantitative.json 渲染「关键指标」表。
+
+        排序：证据层级（S1>S2>S3>未知>S4）优先、时点新鲜度次之；上限
+        REPORT_KEY_METRICS_MAX（默认 40）。陈旧行（is_stale/staleness_days>180）
+        加 ⚠ 标注。无数据/形状不符返回空串（调用方回退 actors 内嵌副本）。"""
+        rows = self.quantitative if isinstance(getattr(self, "quantitative", None), list) else None
+        if not rows:
+            return ""
+        try:
+            cap = int(getattr(Config, "REPORT_KEY_METRICS_MAX", 40) or 40)
+        except (TypeError, ValueError):
+            cap = 40
+        usable = [r for r in rows if isinstance(r, dict) and (r.get("metric") or r.get("definition"))]
+        if not usable:
+            return ""
+        usable.sort(key=lambda r: (
+            self._TIER_RANK.get(str(r.get("tier") or "").upper(), 3),
+            str(r.get("as_of_date") or ""),
+        ))
+        # 层级升序 + 同层级内时点降序：分层后各自反转时点
+        usable.sort(key=lambda r: str(r.get("as_of_date") or ""), reverse=True)
+        usable.sort(key=lambda r: self._TIER_RANK.get(str(r.get("tier") or "").upper(), 3))
+        lines = [
+            "## 关键量化指标（研究实证全量表——引用时保持数值与时点原样）",
+            "| 指标 | 数值 | 单位 | 时点 | 层级 | 来源 |",
+            "|---|---|---|---|---|---|",
+        ]
+        for r in usable[:cap]:
+            stale = bool(r.get("is_stale")) or (
+                isinstance(r.get("staleness_days"), (int, float)) and r["staleness_days"] > 180)
+            metric = self._md_cell(r.get("metric") or r.get("definition"), 90)
+            if stale:
+                metric = f"⚠ {metric}"
+            lines.append("| " + " | ".join([
+                metric, self._md_cell(r.get("value"), 40), self._md_cell(r.get("unit"), 24),
+                self._md_cell(r.get("as_of_date"), 16), self._md_cell(r.get("tier"), 8),
+                self._md_cell(r.get("source"), 60),
+            ]) + " |")
+        return "\n".join(lines)
+
+    def _build_contested_table_block(self, max_claims: int = 15) -> str:
+        """W9-8: 争议性关键论断块（contested.json 全量，上限 15 条）。
+
+        注入命中风险/不确定性关键词的章节提示词——报告必须正面处理证据分歧而非
+        单边引用。无数据返回空串（注入自动跳过）。"""
+        rows = self.contested if isinstance(getattr(self, "contested", None), list) else None
+        if not rows:
+            return ""
+        lines = ["## 争议性关键论断（证据分歧——本章须正面呈现两侧立场与依据，不得单边引用）"]
+        rendered = 0
+        for r in rows:
+            if not isinstance(r, dict) or not r.get("claim"):
+                continue
+            segs = []
+            for p in (r.get("positions") or [])[:3]:
+                if not isinstance(p, dict) or not p.get("stance"):
+                    continue
+                src = "；".join(str(s) for s in (p.get("sources") or [])[:2])
+                tier = str(p.get("tier") or "").strip()
+                tag = f"（{tier}{'，' if tier and src else ''}{src}）" if (tier or src) else ""
+                segs.append(f"{self._md_cell(p['stance'], 160)}{tag}")
+            if not segs:
+                continue
+            lines.append(f"- **{self._md_cell(r['claim'], 120)}** — " + " ⇄ ".join(segs))
+            rendered += 1
+            if rendered >= max_claims:
+                break
+        return "\n".join(lines) if rendered else ""
+
+    def _build_chronology_block(self, max_events: int = 25) -> str:
+        """W9-8: 紧凑时间线块（timeline.json 取最近 max_events 条、按时间升序渲染）。
+
+        注入命中背景/时间线关键词的章节提示词；图表侧另有全量 plotly 时间线。
+        无数据返回空串（注入自动跳过）。"""
+        rows = (self.timeline_events
+                if isinstance(getattr(self, "timeline_events", None), list) else None)
+        if not rows:
+            return ""
+        evts = [r for r in rows if isinstance(r, dict) and r.get("date") and r.get("event")]
+        if not evts:
+            return ""
+        evts.sort(key=lambda r: str(r.get("date") or ""))
+        recent = evts[-max_events:]
+        lines = ["## 关键事件时间线（研究实证，按时序——叙事因果链须与之一致）"]
+        seen = set()
+        for r in recent:
+            key = (str(r["date"]), str(r["event"])[:60].lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            lines.append(f"- {self._md_cell(r['date'], 16)}：{self._md_cell(r['event'], 160)}")
+        return "\n".join(lines) if len(lines) > 1 else ""
+
+    def _kg_structural_note(self, name: str, row: Dict[str, Any]) -> str:
+        """W9-8: 单个 actor 的「结构影响力（KG 中心度）」确定性注记。
+
+        取 graph_priors（度中心度先验，别名组内取 MAX 去重）+ graph_priors_structural
+        的 chokepoints（结构瓶颈点标记）。无先验数据返回空串（名册渲染不变）。"""
+        priors = self.graph_priors if isinstance(getattr(self, "graph_priors", None), dict) else None
+        gps = (self.graph_priors_structural
+               if isinstance(getattr(self, "graph_priors_structural", None), dict) else None)
+        if not priors and not gps:
+            return ""
+        names = [str(name)]
+        for a in (row.get("aliases") or []) if isinstance(row, dict) else []:
+            if a:
+                names.append(str(a))
+        lower_map = {str(k).strip().lower(): float(v) for k, v in (priors or {}).items()
+                     if isinstance(v, (int, float))}
+        vals = [lower_map[n.strip().lower()] for n in names if n.strip().lower() in lower_map]
+        segs = []
+        if vals:
+            v = max(vals)
+            ranked = sorted(set(lower_map.values()), reverse=True)
+            try:
+                rank = ranked.index(v) + 1
+                segs.append(f"度中心度先验 {v:.2f}（全图第{rank}）")
+            except ValueError:
+                segs.append(f"度中心度先验 {v:.2f}")
+        if gps:
+            chokes = gps.get("chokepoints")
+            names_l = {n.strip().lower() for n in names}
+            if isinstance(chokes, list) and any(
+                    str(c).strip().lower() in names_l for c in chokes):
+                segs.append("结构瓶颈点（介数中心性识别）")
+        return "；".join(segs)
+
+    @staticmethod
+    def _simleak_skip_line(s: str) -> bool:
+        """W9 泄漏扫描的行分类：True=跳过（非散文）。'**' 加粗导语行按散文处理
+        （旧实现把 '*' 一并跳过，导致 '**…**:' 机制段落逃过 Tier-2/3 清洗）。"""
+        if s.startswith(("#", ">", "|", "!", "```", "~~~")):
+            return True
+        if s.startswith("*") and not s.startswith("**"):
+            return True
+        if s.startswith("-"):
+            return True
+        return False
 
     def _compact_retrieval_query(self) -> str:
         """XRUN-5/RPT-8: 派生一次报告级紧凑检索查询并缓存。
@@ -1763,23 +2120,44 @@ class ReportAgent:
             self._retrieval_query = req
         return self._retrieval_query
 
-    def _build_sources_index(self) -> str:
-        """T4.1: 把研究来源渲染成 [S1]/[S2] 引用索引；缺省返回空串。
+    def _build_sources_index(self) -> Tuple[str, Dict[str, Dict[str, Any]]]:
+        """T4.1/WAVE10: 把研究来源渲染成引用索引 → ``(索引文本, 记号→来源映射)``。
 
-        EXECPLAN2 I-0-0: 当 RESEARCH_EVIDENCE_GRADING 开启且来源带 tier/date 时，改用
-        按可信度分层（S1-S4）的索引渲染（actors.sources_index_tiered），否则回退到原始位置索引。
+        WAVE10（无缝引用，单一语法）：默认走 actors.sources_index_unified——正文引用记号
+        只有一种形状（裸 [S<n>]，n=来源原始位置），层级降级为标题后的展示注记；条目按
+        「研究报告中被引用优先 → 层级 → 原始顺序」相关性排序后截取
+        REPORT_SOURCES_INDEX_MAX（默认 60，替代旧的盲切 [:40]）。记号映射供引用最终化 /
+        悬空修复 / 解析度审计解析。
+
+        REPORT_CITATION_SINGLE_GRAMMAR=false 时回退旧行为（分层 [S1-a] 或位置 [:40]），
+        映射按对应旧格式构建（degrade-safe）。缺省来源返回 ("", {})。
         """
         if not self.sources:
-            return ""
+            return "", {}
+        try:
+            max_n = int(getattr(Config, "REPORT_SOURCES_INDEX_MAX", 60) or 60)
+        except (TypeError, ValueError):
+            max_n = 60
+        if getattr(Config, "REPORT_CITATION_SINGLE_GRAMMAR", True):
+            try:
+                from ..utils import actors as _actors
+                text, tag_map = _actors.sources_index_unified(
+                    self.sources, research_report=self.research_report,
+                    max_sources=max_n)
+                if text:
+                    return text, tag_map
+            except Exception as _e:  # noqa: BLE001 — 统一索引失败回退旧路径
+                logger.warning(f"统一来源索引渲染失败，回退旧索引: {_e}")
         if getattr(Config, "RESEARCH_EVIDENCE_GRADING", True):
             try:
                 from ..utils import actors as _actors
                 tiered = _actors.sources_index_tiered(self.sources)
                 if tiered:
-                    return tiered
+                    return tiered, _actors.sources_index_tiered_map(self.sources)
             except Exception as _e:
                 logger.debug(f"分层来源索引渲染跳过，回退位置索引: {_e}")
         lines = ["【可引用来源（正文用 [S1]/[S2] 形式标注）】"]
+        tag_map: Dict[str, Dict[str, Any]] = {}
         for i, s in enumerate(self.sources[:40], 1):
             if not isinstance(s, dict):
                 continue
@@ -1789,10 +2167,16 @@ class ReportAgent:
             if url:
                 seg += f" — {url}"
             lines.append(seg)
-        return "\n".join(lines) if len(lines) > 1 else ""
+            tag_map[f"S{i}"] = s
+        if len(lines) <= 1:
+            return "", {}
+        return "\n".join(lines), tag_map
 
-    def _prepend_research_background(self, prompt: str) -> str:
+    def _prepend_research_background(self, prompt: str, section_title: str = "") -> str:
         """T4.1: 把背景档案 + 来源索引钉到提示词最前；二者皆空时原样返回（回退冷图路径）。
+
+        W9-8: section_title 命中风险/不确定性关键词时追加争议性论断表；命中背景/时间线
+        关键词时追加紧凑时间线块。未传/未命中/块为空时行为与历史逐字节一致。
 
         EXECPLAN2 I-3-2: 同时钉入模拟量化信号包（self._signal_pack），使每个章节都获得确定性的
         量化接地下限。信号包为空（未开启或无结构化数据）时自动跳过，行为与历史一致。
@@ -1814,6 +2198,20 @@ class ReportAgent:
             getattr(self, "_market_pack", ""),
             getattr(self, "_charts_block", ""),
         ) if p]
+        # W9-8: 章节定向证据块——标题命中关键词时追加争议表 / 时间线（块为空时自动跳过）。
+        title_l = (section_title or "").lower()
+        if title_l:
+            if any(k in title_l for k in (
+                    "风险", "不确定", "争议", "分歧", "risk", "uncertaint", "contested", "disagree")):
+                blk = getattr(self, "_contested_table_block", "")
+                if blk:
+                    prefix_parts.append(blk)
+            if any(k in title_l for k in (
+                    "时间线", "背景", "沿革", "演进", "历史", "timeline", "background",
+                    "chronolog", "history", "context")):
+                blk = getattr(self, "_chronology_block", "")
+                if blk:
+                    prefix_parts.append(blk)
         if not prefix_parts:
             return prompt
         return "\n\n".join(prefix_parts) + "\n\n" + prompt
@@ -1874,11 +2272,16 @@ class ReportAgent:
                     parts.append(pe_blk)
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"信号包 projected_edges 失败（忽略）: {e}")
-        # 1) 量化结果（Top actor / 逐轮动作量 + 峰值 / 动作类型分布）——RQ-4：截断到 ~3600 字
+        # 1) 量化结果——WAVE9：默认把原始动作计数确定性转写为定性「议程设置力分层」再注入
+        # （REPORT_SIGNAL_PACK_QUALITATIVE，默认开）；转写失败或旗标关闭回退原始文本（截断 ~3600 字）。
         try:
             outcomes = self.zep_tools.simulation_outcomes(self.simulation_id, top_n=8)
             if outcomes and not outcomes.strip().startswith("（"):
-                parts.append(outcomes[:3600])
+                if getattr(Config, "REPORT_SIGNAL_PACK_QUALITATIVE", True):
+                    tiers = salience_tiers_from_outcomes(outcomes)
+                    parts.append(tiers if tiers else outcomes[:3600])
+                else:
+                    parts.append(outcomes[:3600])
         except Exception as e:  # noqa: BLE001 — 信号包为可选增强，失败仅告警不影响主流程
             logger.warning(f"信号包 simulation_outcomes 计算失败（忽略）: {e}")
         # 2) 派系/联盟结构——RQ-4：截断到 ~1600 字
@@ -1910,10 +2313,12 @@ class ReportAgent:
         if not parts:
             return ""
         header = (
-            "【模拟量化信号（确定性·权威·可直接引用）】\n"
-            "以下数字直接来自本次模拟的结构化聚合，撰写本章时应至少引用其中相关的具体数值"
-            "（如最活跃 Agent、逐轮动作量、峰值轮次、派系规模、基线-情景差值），"
-            "避免出现「只有叙事、没有数字」的章节。需要更细粒度时再调用工具深挖。"
+            "【内部情景推演·结构化产出（方法学材料——仅供你分析，绝不进入正文表述）】\n"
+            "使用规则：把以下产出**转写**为关于现实世界行为者的判断（权力集中度、联盟结构、"
+            "脆弱节点、议程设置力、结果概率），并结合研究材料给出具体、可核查的现实世界数字与 "
+            "[S#] 引用，避免「只有叙事、没有数字」的章节。"
+            "❌ 严禁在正文引用动作次数、轮次、动作类型、发帖/点赞/评论等机制细节；"
+            "❌ 严禁把推演本身当作叙述对象。需要更细粒度时再调用工具深挖。"
         )
         return header + "\n\n" + "\n\n".join(parts)
 
@@ -2310,7 +2715,10 @@ class ReportAgent:
                 logger.warning(f"情景数漂移：骨架 {_pin_n} 情景 → 最终 {_fin_n} 情景（正文与交付可能矛盾）")
         except Exception:  # noqa: BLE001
             pass
-        forecast["citation_audit"] = audit_citation_grounding(report_markdown)
+        # WAVE10（无缝引用）：传入记号→来源映射 ⇒ 审计额外报告 resolved_cited /
+        # resolved_coverage（仅可解析记号计入的严格口径，独立观测指标；发布门仍读 coverage）。
+        forecast["citation_audit"] = audit_citation_grounding(
+            report_markdown, index_map=getattr(self, "_citation_index", None))
         # QUALITY-OPT S2: flag quotes presented as real but neither labeled simulation nor found
         # in the research material (laundered sim/graph text or fabrication). Observability →
         # forecast.quality.quote_provenance; loud warning when any are found.
@@ -2518,18 +2926,49 @@ class ReportAgent:
         qp = quality.get("quote_provenance") or {}
         ungrounded0 = int(qp.get("ungrounded", 0) or 0)
         placeholder0 = len(self._PLACEHOLDER_TOKEN_RE.findall(md))
+        # WAVE9：模拟机制泄漏计数（Tier-1 机器语法 + Tier-2 泄漏模式）——命中即触发泄漏修复。
+        simleak0 = 0
+        if getattr(Config, "REPORT_SIMLEAK_REPAIR", True):
+            try:
+                from . import report_lint as _rl
+                simleak0 = len(_rl.leakage_hits(md))
+            except Exception as _sle:  # noqa: BLE001 — 计数失败视作无泄漏（不触发）
+                logger.warning(f"泄漏计数失败（跳过泄漏修复）: {_sle}")
+                simleak0 = 0
+        # WAVE10（无缝引用）：悬空记号计数——正文里无法在注入索引解析的 [S246] 型记号。
+        # 无索引映射（旧运行/离线测试经 __new__ 构造）时回退全量位置映射兜底。
+        dangling0: List[str] = []
+        if getattr(Config, "REPORT_CITATION_REPAIR", True):
+            try:
+                from .forecast_extractor import validate_citation_markers as _vcm
+                dangling0 = _vcm(md, self._citation_index_or_fallback())["dangling"]
+            except Exception as _dce:  # noqa: BLE001 — 计数失败视作无悬空（不触发）
+                logger.warning(f"悬空引用计数失败（跳过悬空修复）: {_dce}")
+                dangling0 = []
 
         need_citation = has_quant and cov < min_cov
         need_quote = ungrounded0 > 0
         need_placeholder = placeholder0 > 0
-        if not (need_citation or need_quote or need_placeholder):
+        need_simleak = simleak0 > 0
+        need_dangling = len(dangling0) > 0
+        if not (need_citation or need_quote or need_placeholder or need_simleak
+                or need_dangling):
             return md
 
         before = {"citation_coverage": round(cov, 3),
                   "quote_ungrounded": ungrounded0,
-                  "placeholder_tokens": placeholder0}
+                  "placeholder_tokens": placeholder0,
+                  "sim_leakage_hits": simleak0,
+                  "dangling_citations": len(dangling0)}
         passes: List[Dict[str, Any]] = []
         new_md = md
+        # 泄漏修复放最前：标签先转写为白名单规范，后续引文接地修复才不会误删合法推演引文。
+        if need_simleak:
+            try:
+                new_md, _sl_info = self._repair_simulation_leakage(new_md)
+                passes.append({"dimension": "simulation_leakage", **_sl_info})
+            except Exception as _sre:  # noqa: BLE001 — 泄漏修复失败不阻断其余维度
+                logger.warning(f"模拟泄漏修复失败（忽略，继续其余修复）: {_sre}")
         if need_citation:
             new_md, n = self._repair_citation_backfill(new_md)
             passes.append({"dimension": "citation_backfill", "citations_inserted": n})
@@ -2539,8 +2978,19 @@ class ReportAgent:
         if need_placeholder:
             new_md, n = self._repair_placeholder_tokens(new_md)
             passes.append({"dimension": "placeholder_resolution", "tokens_resolved": n})
+        if need_dangling:
+            try:
+                new_md, _dg_info = self._repair_dangling_citations(new_md, dangling0)
+                passes.append({"dimension": "citation_dangling", **_dg_info})
+            except Exception as _dre:  # noqa: BLE001 — 悬空修复失败不阻断其余维度
+                logger.warning(f"悬空引用修复失败（忽略，保留原记号）: {_dre}")
 
-        if new_md == md:
+        # 悬空修复可能只是把记号登记进索引（kept_verified，markdown 不变）——此时审计
+        # 口径已变（resolved 指标），仍需重跑审计而非走 no-op 分支。
+        _index_registered = any(
+            p.get("dimension") == "citation_dangling" and p.get("kept_verified")
+            for p in passes)
+        if new_md == md and not _index_registered:
             # 命中维度但无处可修（如无匹配来源）——仍记录，before==after，不动 markdown。
             quality["repair"] = {"applied": False, "passes": passes,
                                  "before": before, "after": before}
@@ -2548,7 +2998,7 @@ class ReportAgent:
             return md
 
         # 重跑受影响审计一次（覆盖旧值，让发布门对修复后的状态打分）。
-        new_ca = _acg(new_md)
+        new_ca = _acg(new_md, index_map=getattr(self, "_citation_index", None))
         forecast["citation_audit"] = new_ca
         try:
             _qp2 = self._audit_quote_provenance(new_md)
@@ -2568,10 +3018,28 @@ class ReportAgent:
                 quality["implausible_stats"] = _sp2
         except Exception:  # noqa: BLE001
             pass
+        simleak_after = simleak0
+        if need_simleak:
+            try:
+                from . import report_lint as _rl
+                simleak_after = len(_rl.leakage_hits(new_md))
+            except Exception:  # noqa: BLE001
+                pass
+            quality["sim_leakage"] = {"before": simleak0, "after": simleak_after}
+        dangling_after = len(dangling0)
+        if need_dangling:
+            try:
+                from .forecast_extractor import validate_citation_markers as _vcm2
+                dangling_after = len(
+                    _vcm2(new_md, self._citation_index_or_fallback())["dangling"])
+            except Exception:  # noqa: BLE001
+                pass
         after = {
             "citation_coverage": round(float(new_ca.get("coverage", cov) or 0.0), 3),
             "quote_ungrounded": int((quality.get("quote_provenance") or {}).get("ungrounded", 0) or 0),
             "placeholder_tokens": len(self._PLACEHOLDER_TOKEN_RE.findall(new_md)),
+            "sim_leakage_hits": simleak_after,
+            "dangling_citations": dangling_after,
         }
         quality["repair"] = {"applied": True, "passes": passes,
                              "before": before, "after": after}
@@ -2588,7 +3056,8 @@ class ReportAgent:
             f"报告修复 passes: {report_id} 引用覆盖 {before['citation_coverage']}→"
             f"{after['citation_coverage']}，未接地引用 {before['quote_ungrounded']}→"
             f"{after['quote_ungrounded']}，占位符 {before['placeholder_tokens']}→"
-            f"{after['placeholder_tokens']}"
+            f"{after['placeholder_tokens']}，悬空引用 {before['dangling_citations']}→"
+            f"{after['dangling_citations']}"
         )
         return new_md
 
@@ -2642,15 +3111,21 @@ class ReportAgent:
         return "\n".join(out_lines), inserted
 
     def _repair_quote_grounding(self, md: str) -> Tuple[str, int]:
-        """RQ-2 引文接地修复：删除既非模拟标注、又未在研究材料中逐字命中、且不带 [S#] 来源的
+        """RQ-2 引文接地修复：删除既非模拟/推演标注、又未在研究材料中逐字命中、且不带 [S#] 来源的
         blockquote 行（S2 判定为嫁接/捏造的引文）。与 _audit_quote_provenance 同源判定，但按整行
-        操作以便精确删除。返回 (新 markdown, 删除行数)。删除是最诚实且可度量的动作（重跑审计后
-        未接地计数必降）。"""
+        操作以便精确删除。返回 (新 markdown, 删除的引文行数)。删除是最诚实且可度量的动作（重跑
+        审计后未接地计数必降）。
+
+        WAVE9 修复两个系统性缺陷：
+          (a) 推演标签常写在引文**上一行**的归因行里（'情景推演专家视角——「X」：' + 下一行
+              blockquote）——此前只查 '>' 行本身，导致合法标注的引文被误删；
+          (b) 整段 blockquote 被删后，紧邻其上的『X 表示：』归因行会孤悬（上一份报告残留
+              ~12 处空引子）——现同步删除该引子行。"""
         v2 = bool(getattr(Config, "REPORT_QUOTE_AUDIT_V2", True))
         ground_raw = ((self.research_report or "") + "\n" + (self._background_block or "")
                       + "\n" + (getattr(self, "situation_brief", "") or ""))
         ground = self._norm_quote_text(ground_raw) if v2 else ground_raw.lower()
-        sim_labels = ("模拟", "simulation", "代理人", "推演", "sim-agent", "simulated agent")
+        sim_labels = self._SIM_QUOTE_LABELS
         _summary_n = self._norm_quote_text(getattr(self, "_outline_summary", "") or "")
         _table_note_n = self._norm_quote_text(self._TABLE_NOTE_TEXT)
 
@@ -2678,18 +3153,58 @@ class ReportAgent:
                 probes.append(qn[-40:])
             return not any(p and p in ground for p in probes)
 
-        removed = 0
-        out_lines: List[str] = []
-        for ln in md.splitlines():
+        lines = md.splitlines()
+
+        def _preceding_attr_idx(i: int) -> int:
+            """引文行 i 上方最近的非空行下标（-1 = 无）。"""
+            j = i - 1
+            while j >= 0 and not lines[j].strip():
+                j -= 1
+            return j
+
+        # 第一遍：决定删除哪些引文行（归因行带推演标签的引文豁免——(a)）。
+        delete: set = set()
+        for i, ln in enumerate(lines):
             s = ln.strip()
-            if s.startswith(">"):
-                raw_q = s[1:].strip()
-                if _is_ungrounded(raw_q):
-                    removed += 1
-                    continue  # 丢弃该 blockquote 行（不写入输出）
-            out_lines.append(ln)
-        if not removed:
+            if not s.startswith(">"):
+                continue
+            raw_q = s[1:].strip()
+            j = _preceding_attr_idx(i)
+            if j >= 0:
+                prev = lines[j].strip()
+                if (prev and not prev.startswith(">") and not prev.startswith("#")
+                        and any(t in prev.lower() for t in sim_labels)):
+                    continue  # 上一行归因已诚实标注为推演 → 引文合法保留
+            if _is_ungrounded(raw_q):
+                delete.add(i)
+        if not delete:
             return md, 0
+
+        # 第二遍：对「整段 blockquote 全被删」的段落，同步删除孤悬的引子归因行——(b)。
+        intro_removed = 0
+        i = 0
+        n = len(lines)
+        while i < n:
+            if not lines[i].strip().startswith(">"):
+                i += 1
+                continue
+            run_start = i
+            while i < n and lines[i].strip().startswith(">"):
+                i += 1
+            run = range(run_start, i)
+            if all(k in delete for k in run):
+                j = _preceding_attr_idx(run_start)
+                if j >= 0:
+                    prev = lines[j].strip()
+                    if (prev.endswith((":", "：")) and not prev.startswith((">", "#", "|"))
+                            and j not in delete):
+                        delete.add(j)
+                        intro_removed += 1
+
+        removed = sum(1 for k in delete if lines[k].strip().startswith(">"))
+        out_lines = [ln for k, ln in enumerate(lines) if k not in delete]
+        if intro_removed:
+            logger.info(f"引文接地修复：删除 {removed} 行未接地引文，并清理 {intro_removed} 行孤悬引子")
         return "\n".join(out_lines), removed
 
     def _repair_placeholder_tokens(self, md: str) -> Tuple[str, int]:
@@ -2712,8 +3227,262 @@ class ReportAgent:
             )
         return new_md, n
 
+    def _citation_index_or_fallback(self) -> Dict[str, Any]:
+        """WAVE10：取记号→来源映射；无 _citation_index（旧运行 / __new__ 测试构造）时
+        回退为**全量**位置映射（{"S{i}": sources[i-1]}，编号与 _source_haystacks 对齐）。"""
+        imap = getattr(self, "_citation_index", None)
+        if isinstance(imap, dict) and imap:
+            return imap
+        out: Dict[str, Any] = {}
+        for i, s in enumerate(getattr(self, "sources", None) or [], 1):
+            if isinstance(s, dict):
+                out[f"S{i}"] = s
+        return out
+
+    def _repair_dangling_citations(self, md: str,
+                                   dangling: List[str]) -> Tuple[str, Dict[str, int]]:
+        """WAVE10 悬空引用修复：正文记号在注入索引里解析不到（[S246] 型幻觉编号）时，
+        按记号做三步定向处置（全部确定性，无 LLM）：
+
+          (1) 保留验证——编号落在**全量**来源列表内（索引截取造成的假悬空），且记号所在行
+              的数字锚点在该来源底料中命中 → 记号合法保留，并登记进 self._citation_index
+              （引用最终化随后把它列入参考来源）；
+          (2) 重映射——否则复用引用回填的数字锚定在全量来源中找命中 → 记号改写为命中
+              来源的 [S{i}] 并登记；
+          (3) 删除——两者皆失败的记号从行内剥离（与占位符解析同样的诚实动作），
+              清理遗留的双空格与孤立标点。
+
+        围栏（```/~~~）内的记号是字面内容，不动。返回
+        (新 markdown, {"kept_verified", "remapped", "stripped"})（按记号计数）。"""
+        info = {"kept_verified": 0, "remapped": 0, "stripped": 0}
+        if not dangling:
+            return md, info
+        haystacks = self._source_haystacks()          # [("[S1]", 归一化底料), ...]
+        hay_by_tag = {t.strip("[]"): h for t, h in haystacks}
+        num_re = re.compile(r"\d+(?:\.\d+)?%|\b\d{2,}(?:\.\d+)?\b")
+        any_tag_re = re.compile(r"[\[【]\s*S\d+(?:-[A-Za-z])?\s*[\]】]", re.I)
+        sources = getattr(self, "sources", None) or []
+        imap = getattr(self, "_citation_index", None)
+        if not isinstance(imap, dict):
+            imap = {}
+            self._citation_index = imap
+
+        lines = md.split("\n")
+
+        def _anchor_numbers(tag_re: "re.Pattern") -> List[str]:
+            """该记号出现行上的数字锚点（先剥掉所有 [S…] 记号，避免记号编号自证）。"""
+            nums: List[str] = []
+            in_fence = False
+            for ln in lines:
+                s = ln.lstrip()
+                if s.startswith("```") or s.startswith("~~~"):
+                    in_fence = not in_fence
+                    continue
+                if in_fence or not tag_re.search(ln):
+                    continue
+                bare = any_tag_re.sub(" ", ln)
+                nums.extend(m.group(0).lower() for m in num_re.finditer(bare))
+            return nums
+
+        # 按记号决定处置：keep（无操作）/ remap（改写为新记号）/ strip（删除）。
+        actions: List[Tuple["re.Pattern", str, str]] = []   # (记号正则, 动作, 新记号)
+        for tag in dict.fromkeys(dangling):                 # 去重保序
+            tag_re = re.compile(r"[\[【]\s*" + re.escape(tag) + r"\s*[\]】]", re.I)
+            nums = _anchor_numbers(tag_re)
+            m_num = re.fullmatch(r"S(\d+)", tag)
+            # (1) 全量列表内编号 + 数字锚点命中 → 合法，登记进索引。
+            if m_num and nums:
+                n = int(m_num.group(1))
+                if 1 <= n <= len(sources) and isinstance(sources[n - 1], dict):
+                    hay = hay_by_tag.get(tag, "")
+                    if any(x in hay for x in nums):
+                        imap.setdefault(tag, sources[n - 1])
+                        info["kept_verified"] += 1
+                        continue
+            # (2) 数字锚定重映射到首个命中的来源。
+            new_tag = ""
+            if nums:
+                for cand_tag, hay in haystacks:
+                    if any(x in hay for x in nums):
+                        new_tag = cand_tag.strip("[]")
+                        break
+            if new_tag and new_tag != tag:
+                n2 = int(new_tag[1:])
+                imap.setdefault(new_tag, sources[n2 - 1])
+                actions.append((tag_re, "remap", new_tag))
+                info["remapped"] += 1
+            else:
+                actions.append((tag_re, "strip", ""))
+                info["stripped"] += 1
+        if not actions:
+            return md, info
+
+        out_lines: List[str] = []
+        in_fence = False
+        for ln in lines:
+            s = ln.lstrip()
+            if s.startswith("```") or s.startswith("~~~"):
+                in_fence = not in_fence
+                out_lines.append(ln)
+                continue
+            if in_fence:
+                out_lines.append(ln)
+                continue
+            new_ln = ln
+            changed = False
+            for tag_re, action, new_tag in actions:
+                if not tag_re.search(new_ln):
+                    continue
+                new_ln = tag_re.sub(f"[{new_tag}]" if action == "remap" else "", new_ln)
+                changed = True
+            if changed:
+                # 删除后清理遗留的「空格+标点」与双空格（与占位符解析同一套行内清理）。
+                new_ln = re.sub(r"[ \t]{2,}", " ",
+                                re.sub(r"\s+([，。,.;；、])", r"\1", new_ln)).rstrip()
+            out_lines.append(new_ln)
+        logger.info(
+            f"悬空引用修复：保留验证 {info['kept_verified']}，重映射 {info['remapped']}，"
+            f"删除 {info['stripped']}（候选 {len(dict.fromkeys(dangling))} 个记号）")
+        return "\n".join(out_lines), info
+
     # 任意 [S…] 记号（位置式 [S1]、分层 [S1-a]、或占位符 [S?]/[S#]）——引用回填判定「本行是否已带记号」。
     _ANY_S_TAG_RE = re.compile(r"[\[【]\s*S[\d?#]", re.I)
+
+    # WAVE9：泄漏章节标题（方法学词汇进标题）——修复与大纲 lint 共用。\bagents?\b 带词界，
+    # 避免误伤 agenda/agency 等词。
+    _LEAK_TITLE_RE = re.compile(
+        r"模拟|智能体|行为轨迹|推演轨迹|\bagents?\b|simulation|behaviou?r", re.I)
+    # 泄漏标题的安全替换标题（ZH/EN 各一组，循环取用）。
+    _SAFE_TITLES_ZH = ("关键行为者与权力结构", "驱动机制与证据链", "群体动态与联盟结构")
+    _SAFE_TITLES_EN = ("Power Centers & Key Actors", "Drivers, Mechanisms & Evidence",
+                       "Coalition Dynamics & Emerging Signals")
+    # 段落中的数字 token（泄漏重写的逐字节数字校验）。
+    _NUM_TOKEN_RE = re.compile(r"\d+(?:\.\d+)?%?")
+
+    def _repair_simulation_leakage(self, md: str) -> Tuple[str, Dict[str, Any]]:
+        """WAVE9 模拟泄漏修复：报告必须是关于现实世界的预测，推演机制绝不能成为叙述对象。
+
+        三级流水（全部有界、degrade-safe）：
+          Tier-1 确定性改写：旧模拟标签 → 专家小组转述规范；原始边转储 → 自然语言关系；
+                 [simulation_outcomes] 等工具记号删除；平台行为引文（发帖/点赞）删除；
+                 泄漏章节标题（模拟/Agent/Simulation…）确定性改名。
+          Tier-2 每个仍命中泄漏模式的散文段落做**一次**有界 LLM 重写（至多
+                 REPORT_SIMLEAK_MAX_LLM_PARAGRAPHS 段）；重写必须保留原段全部数字 token
+                 逐字节不变，否则弃用重写。
+          Tier-3 重写后重扫，仍命中的句子直接删除（与引文接地修复同样的诚实动作）。
+
+        返回 (新 markdown, 统计 dict)。无 LLM（离线/测试）时跳过 Tier-2，直接句子级删除。"""
+        from . import report_lint as _rl
+        lang = getattr(self, "output_language", None) or "English"
+        zh = not str(lang).strip().lower().startswith("en")
+        info: Dict[str, Any] = {}
+        text = md or ""
+
+        # ── Tier-1：确定性改写 ──
+        text, info["labels_rewritten"] = _rl.rewrite_sim_labels(text, lang)
+        text, info["edge_dumps_rewritten"], info["dangling_edge_intros"] = (
+            _rl.rewrite_edge_dumps(text, lang))
+        text, info["tool_tokens_stripped"] = _rl.strip_tool_tokens(text)
+        text, info["platform_quotes_dropped"] = _rl.drop_platform_behavior_quotes(text)
+
+        # 泄漏章节标题改名（保留编号前缀与章节数量契约——改名而非删除）。
+        lines = text.split("\n")
+        mask = _rl._fence_mask(lines)
+        safe_titles = self._SAFE_TITLES_ZH if zh else self._SAFE_TITLES_EN
+        renamed = 0
+        for i, ln in enumerate(lines):
+            if mask[i]:
+                continue
+            m = re.match(r"^(#{2,3})\s*(\d+[\.、]?\s*)?(.+)$", ln)
+            if not m or not self._LEAK_TITLE_RE.search(m.group(3)):
+                continue
+            new_title = safe_titles[renamed % len(safe_titles)]
+            if renamed >= len(safe_titles):
+                new_title = f"{new_title}（{renamed + 1}）" if zh else f"{new_title} ({renamed + 1})"
+            lines[i] = f"{m.group(1)} {m.group(2) or ''}{new_title}".rstrip()
+            renamed += 1
+        info["headings_renamed"] = renamed
+        text = "\n".join(lines)
+
+        # ── Tier-2/3：散文段落级扫描 ──
+        llm = getattr(self, "llm", None)
+        can_llm = llm is not None and hasattr(llm, "chat")
+        try:
+            budget = int(getattr(Config, "REPORT_SIMLEAK_MAX_LLM_PARAGRAPHS", 12) or 0)
+        except (TypeError, ValueError):
+            budget = 12
+        lines = text.split("\n")
+        mask = _rl._fence_mask(lines)
+        rewritten = 0
+        sentences_deleted = 0
+        i = 0
+        n = len(lines)
+        while i < n:
+            s = lines[i].strip()
+            if (mask[i] or not s or self._simleak_skip_line(s)
+                    or re.match(r"^\d+[.、)]", s)):
+                i += 1
+                continue
+            # 聚合一个散文段落（连续的非空散文行）
+            start = i
+            while (i < n and lines[i].strip() and not mask[i]
+                   and not self._simleak_skip_line(lines[i].strip())):
+                i += 1
+            para = "\n".join(lines[start:i])
+            if not _rl.leakage_hits(para):
+                continue
+            new_para = None
+            if can_llm and rewritten < budget:
+                new_para = self._simleak_rewrite_paragraph(para, lang)
+                if new_para:
+                    rewritten += 1
+            if new_para is None:
+                new_para = para
+            # Tier-3：重扫，仍命中的句子删除
+            cleaned, removed = _rl.strip_leakage_sentences(new_para.replace("\n", " "))
+            sentences_deleted += removed
+            repl = cleaned if cleaned else ""
+            lines[start:i] = [repl]
+            delta = 1 - (i - start)
+            i = start + 1
+            n += delta
+            mask = _rl._fence_mask(lines)
+        info["paragraphs_rewritten"] = rewritten
+        info["sentences_deleted"] = sentences_deleted
+        text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
+        return text, info
+
+    def _simleak_rewrite_paragraph(self, para: str, lang: str) -> Optional[str]:
+        """对单个泄漏段落做一次有界 LLM 重写；数字 token 逐字节校验失败/输出异常 → None。"""
+        nums = self._NUM_TOKEN_RE.findall(para)
+        sys_prompt = (
+            f"You are the chief editor of an institutional forecast written in {lang}. "
+            "Rewrite the paragraph as forecast prose about the REAL WORLD. Keep every number, "
+            "probability, [S#] citation tag and quotation byte-identical. Replace "
+            "simulation-mechanics references (simulation, agents, rounds, action counts, "
+            "posting/liking/commenting, consensus formation, factions, causal graph, "
+            "模拟/智能体/轮次/动作/派系/因果图) with 'our scenario analysis indicates' or an "
+            "attributed analytical viewpoint; remove action counts, round numbers and platform "
+            "mechanics entirely. Output ONLY the rewritten paragraph — no preamble, no fences."
+        )
+        try:
+            out = self.llm.chat(
+                messages=[{"role": "system", "content": sys_prompt},
+                          {"role": "user", "content": para[:4000]}],
+                temperature=0.1, max_tokens=2048, tier="fast",
+            )
+        except Exception as _e:  # noqa: BLE001 — 重写失败退回句子级删除
+            logger.warning(f"泄漏段落重写调用失败（退回句子删除）: {_e}")
+            return None
+        out = (out or "").strip()
+        if not out or len(out) > max(600, len(para) * 3):
+            return None
+        # 数字逐字节校验：原段每个数字 token 必须原样出现在重写里（防概率/数据漂移）。
+        for tok in nums:
+            if tok not in out:
+                logger.warning(f"泄漏段落重写丢失数字 token「{tok}」，弃用重写")
+                return None
+        return out
 
     def _check_binary_sim_sensitivity(self, report_id: str,
                                       forecast: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -2778,7 +3547,10 @@ class ReportAgent:
             indicators = _actors.extract_forecast_inputs(self.actors).get("indicators") or []
         except Exception:  # noqa: BLE001
             indicators = []
-        block = render_resolution_block(self._forecast_spine, indicators)
+        # WAVE9：判定章节跟随报告输出语言（此前硬编码中文标题，英文报告里出现整段中文章节）。
+        block = render_resolution_block(
+            self._forecast_spine, indicators,
+            language=getattr(self, "output_language", None) or "Chinese")
         if not block:
             return
         new_md = (report.markdown_content or "").rstrip() + "\n\n" + block + "\n"
@@ -2794,6 +3566,13 @@ class ReportAgent:
     # 永远不可能命中研究材料，必须豁免。
     _TABLE_NOTE_TEXT = "上表为确定性聚合结果，正文请围绕这些权威差值展开解读，勿自行复算或反转方向。"
     _S_CITATION_RE = re.compile(r"[\[【]\s*S\d+\s*[\]】]", re.I)
+    # WAVE9：诚实标注为内部推演的引文标签白名单（引文接地审计/修复共用）。旧标签
+    # （模拟/代理人）与新专家小组转述规范（scenario panel / 情景推演专家视角 /
+    # analytical perspective）必须同批收录——否则按新规范转写的引文会被当作未接地删除。
+    _SIM_QUOTE_LABELS = (
+        "模拟", "simulation", "代理人", "推演", "sim-agent", "simulated agent",
+        "scenario panel", "analytical perspective", "情景推演专家视角",
+    )
 
     @staticmethod
     def _norm_quote_text(text: str) -> str:
@@ -2816,24 +3595,39 @@ class ReportAgent:
         头探针对强调符/弯引号极脆）；(3) 带 [S#] 引用但非逐字的引文单列为
         cited_unverbatim（仍是缺陷，但非捏造，发布门仅对 ungrounded 降级）。"""
         import re as _re
-        lines = [ln.strip()[1:].strip() for ln in (report_markdown or "").splitlines()
-                 if ln.strip().startswith(">")]
-        quotes = [q for q in lines if len(q) >= 12]
+        # WAVE9：保留行位置，使推演标签可写在引文**上一行**的归因行里（与
+        # _repair_quote_grounding 同源判定，否则审计与修复对同一引文给出相反结论）。
+        raw_lines = (report_markdown or "").splitlines()
+        pairs: List[Tuple[str, str]] = []                # (quote, 上方最近非空行)
+        for _i, _ln in enumerate(raw_lines):
+            _s = _ln.strip()
+            if not _s.startswith(">"):
+                continue
+            _j = _i - 1
+            while _j >= 0 and not raw_lines[_j].strip():
+                _j -= 1
+            _prev = raw_lines[_j].strip() if _j >= 0 else ""
+            pairs.append((_s[1:].strip(), _prev))
+        pairs = [(q, p) for q, p in pairs if len(q) >= 12]
+        quotes = [q for q, _ in pairs]
         if not quotes:
             return {}
         v2 = bool(getattr(Config, "REPORT_QUOTE_AUDIT_V2", True))
         ground_raw = ((self.research_report or "") + "\n" + (self._background_block or "")
                       + "\n" + (getattr(self, "situation_brief", "") or ""))
         ground = self._norm_quote_text(ground_raw) if v2 else ground_raw.lower()
-        sim_labels = ("模拟", "simulation", "代理人", "推演", "sim-agent", "simulated agent")
+        sim_labels = self._SIM_QUOTE_LABELS  # WAVE9：含新专家小组转述标签（scenario panel 等）
         _summary_n = self._norm_quote_text(getattr(self, "_outline_summary", "") or "")
         _table_note_n = self._norm_quote_text(self._TABLE_NOTE_TEXT)
         ungrounded: List[str] = []
         unverbatim: List[str] = []
-        for q in quotes:
+        for q, prev in pairs:
             ql = q.lower()
             if any(t in ql for t in sim_labels):       # honestly labeled as simulation → fine
                 continue
+            if (prev and not prev.startswith(">") and not prev.startswith("#")
+                    and any(t in prev.lower() for t in sim_labels)):
+                continue                                # 归因行诚实标注为推演 → fine（WAVE9）
             if not v2:
                 probe = _re.sub(r'^["“”「『\'\s]+', '', q)[:40].lower().strip()
                 if probe and probe in ground:           # matches real research material → fine
@@ -2952,11 +3746,54 @@ class ReportAgent:
     # 长英文散文片段（>=40 字符且含 >=4 空格 ⇒ 5+ 词），避开品牌/型号/代号等短拉丁 token。
     _LATIN_RUN_RE = re.compile(r"[A-Za-z][A-Za-z0-9 ,.'’\-()%/&]{39,}")
 
+    def _collect_impurity_segments(self, chunk_md: str, target_is_cjk: bool,
+                                   cap: int = 60) -> List[str]:
+        """WAVE9：从一个 H2 块采集跨语言污染片段（原 _apply_language_purity 步骤 1 抽出，
+        逐块统计以支持「重污染章节整章重译」决策）。规则与历史逐字节一致。"""
+        segments: List[str] = []
+        seen = set()
+        in_fence = False
+        for line in (chunk_md or "").splitlines():
+            s = line.strip()
+            if s.startswith("```"):
+                in_fence = not in_fence
+                continue
+            if in_fence or not s:
+                continue
+            if target_is_cjk:
+                # 只扫散文行：跳过标题 / 表格 / 引用块 / 含 URL 的行，降低误伤品牌/链接。
+                if (s.startswith("#") or s.startswith(">") or "|" in s
+                        or "http://" in s or "https://" in s):
+                    continue
+                candidates = self._LATIN_RUN_RE.findall(line)
+                candidates = [c for c in candidates if c.count(" ") >= 4]
+            else:
+                candidates = self._CJK_RUN_RE.findall(line)
+            for c in candidates:
+                seg = c.strip().strip("（）()「」\"'“”")
+                if len(seg) < 2:
+                    continue
+                if (not target_is_cjk) and len(re.findall(r"[" + self._CJK_CHAR + r"]", seg)) < 2:
+                    continue
+                seg = seg[:300]
+                if seg and seg not in seen:
+                    seen.add(seg)
+                    segments.append(seg)
+                if len(segments) >= cap:
+                    break
+            if len(segments) >= cap:
+                break
+        return segments
+
     def _apply_language_purity(self, report_id: str, report: "Report") -> None:
         """RQ-2：成稿语言纯度扫描。目标语言为非 CJK（英文）时检测残留 CJK 片段，反之检测残留长
         英文散文片段；一次批量 chat_json 调用译成目标语言并逐行内联替换。引用型片段（blockquote /
         引号内）保留原文为括注。无片段或任何错误一律 degrade-safe 跳过（保留原文），并改写
-        full_report.md。幂等：纯净成稿命中零片段即为 no-op。"""
+        full_report.md。幂等：纯净成稿命中零片段即为 no-op。
+
+        WAVE9：按 H2 块统计污染密度——单块片段数 > REPORT_PURITY_RETRANSLATE_SEGMENTS 时
+        该块**整章重译**（走 _translate_section，结构无损），不再做子串内联补丁（子串补丁在
+        重污染章节上产出 'SK SK Hynix' 型混合垃圾）；轻污染块仍走历史内联路径。"""
         try:
             if not getattr(Config, "REPORT_LANGUAGE_PURITY", True):
                 return
@@ -2969,40 +3806,53 @@ class ReportAgent:
             lang = getattr(self, "output_language", None) or "English"
             target_is_cjk = not str(lang).strip().lower().startswith("en")
 
-            # 1) 采集污染片段（跳过围栏代码块；CJK-目标时对拉丁检测额外保守）。
+            # 1) 按 H2 块采集污染片段；重污染块记入整章重译名单（有界：至多 6 块）。
+            try:
+                retrans_thresh = int(getattr(Config, "REPORT_PURITY_RETRANSLATE_SEGMENTS",
+                                             8) or 8)
+            except (TypeError, ValueError):
+                retrans_thresh = 8
+            chunks = self._split_markdown_h2_sections(md)
             segments: List[str] = []
             seen = set()
-            in_fence = False
-            for line in md.splitlines():
-                s = line.strip()
-                if s.startswith("```"):
-                    in_fence = not in_fence
-                    continue
-                if in_fence or not s:
-                    continue
-                if target_is_cjk:
-                    # 只扫散文行：跳过标题 / 表格 / 引用块 / 含 URL 的行，降低误伤品牌/链接。
-                    if (s.startswith("#") or s.startswith(">") or "|" in s
-                            or "http://" in s or "https://" in s):
-                        continue
-                    candidates = self._LATIN_RUN_RE.findall(line)
-                    candidates = [c for c in candidates if c.count(" ") >= 4]
-                else:
-                    candidates = self._CJK_RUN_RE.findall(line)
-                for c in candidates:
-                    seg = c.strip().strip("（）()「」\"'“”")
-                    if len(seg) < 2:
-                        continue
-                    if (not target_is_cjk) and len(re.findall(r"[" + self._CJK_CHAR + r"]", seg)) < 2:
-                        continue
-                    seg = seg[:300]
-                    if seg and seg not in seen:
+            retranslate_idx: List[int] = []
+            for ci, chunk in enumerate(chunks):
+                chunk_segments = self._collect_impurity_segments(chunk, target_is_cjk)
+                if retrans_thresh > 0 and len(chunk_segments) > retrans_thresh \
+                        and len(retranslate_idx) < 6 and hasattr(llm, "chat"):
+                    retranslate_idx.append(ci)
+                    continue                             # 整块重译 → 不进内联片段池
+                for seg in chunk_segments:
+                    if seg not in seen and len(segments) < 60:
                         seen.add(seg)
                         segments.append(seg)
-                    if len(segments) >= 60:              # 有界：单次批量最多 60 片段
-                        break
-                if len(segments) >= 60:
-                    break
+
+            # 1b) 整章重译重污染块（结构无损；失败保留原块）。
+            retranslated = 0
+            if retranslate_idx:
+                tgt_name = ("简体中文（Simplified Chinese）" if target_is_cjk
+                            else "professional analyst-grade English")
+                for ci in retranslate_idx:
+                    try:
+                        new_chunk = self._translate_section(chunks[ci], tgt_name)
+                    except Exception as _rte:  # noqa: BLE001 — 单块重译失败保留原块
+                        logger.warning(f"语言纯度：重污染块整章重译失败（保留原块）: {_rte}")
+                        continue
+                    if new_chunk and new_chunk.strip() and new_chunk != chunks[ci]:
+                        chunks[ci] = new_chunk
+                        retranslated += 1
+                if retranslated:
+                    md = "\n".join(chunks)
+                    report.markdown_content = md
+                    logger.info(
+                        f"语言纯度扫描: {report_id} 重污染章节整章重译 {retranslated} 块"
+                        f"（阈值 >{retrans_thresh} 片段/块）")
+                    # 立即落盘——后续内联路径存在多个 degrade-safe 早退点，不能指望末尾的回写。
+                    try:
+                        folder = ReportManager._get_report_folder(report_id)
+                        write_text_atomic(os.path.join(folder, "full_report.md"), md)
+                    except Exception as _we:  # noqa: BLE001
+                        logger.warning(f"回写语言纯度成稿 full_report.md 失败（忽略）: {_we}")
             if not segments:
                 return
 
@@ -3076,6 +3926,48 @@ class ReportAgent:
         except Exception as _lpe:  # noqa: BLE001 — 纯度扫描为旁路增强，失败保留原文
             logger.warning(f"语言纯度扫描失败（忽略，保留原文）: {_lpe}")
 
+    def _apply_report_lint(self, report_id: str, report: "Report") -> None:
+        """WAVE9：确定性编辑纪律 lint（report_lint.lint_report）——修复 passes 之后、
+        双语翻译之前的最后一道确定性清理：引用残留 / 边转储 / 旧模拟标签 / 孤悬归因行 /
+        引用记号变体 / 重复整句等。lint 报告 dict 记入 forecast.json 的 quality['lint']。
+
+        完全 degrade-safe：任何失败仅告警，保留原成稿。"""
+        from . import report_lint as _rl
+        md = report.markdown_content or ""
+        if not md.strip():
+            return
+        lang = getattr(self, "output_language", None) or "English"
+        spine = self._forecast_spine if isinstance(getattr(self, "_forecast_spine", None),
+                                                   dict) else None
+        cleaned, lint_rep = _rl.lint_report(md, lang, mode="final", spine=spine)
+        if lint_rep.get("changed") and cleaned.strip():
+            report.markdown_content = cleaned
+            try:
+                folder = ReportManager._get_report_folder(report_id)
+                write_text_atomic(os.path.join(folder, "full_report.md"), cleaned)
+            except Exception as _we:  # noqa: BLE001
+                logger.warning(f"回写编辑 lint 成稿 full_report.md 失败（忽略）: {_we}")
+        # lint 报告并入 forecast.json 的 quality（读-改-写；文件缺失/损坏时仅记内存副本）。
+        try:
+            fpath = os.path.join(ReportManager._get_report_folder(report_id), "forecast.json")
+            if os.path.exists(fpath):
+                with open(fpath, "r", encoding="utf-8") as f:
+                    fc = json.load(f)
+                if isinstance(fc, dict):
+                    fc.setdefault("quality", {})["lint"] = lint_rep
+                    write_text_atomic(fpath, json.dumps(fc, ensure_ascii=False, indent=2))
+                    if isinstance(getattr(self, "_forecast_spine", None), dict):
+                        self._forecast_spine.setdefault("quality", {})["lint"] = lint_rep
+        except Exception as _fe:  # noqa: BLE001 — quality 记录失败不影响成稿
+            logger.warning(f"编辑 lint 报告写入 forecast.json 失败（忽略）: {_fe}")
+        logger.info(
+            f"编辑 lint: {report_id} changed={lint_rep.get('changed')} "
+            f"引用残留 {lint_rep.get('citation_residue')}｜边转储 {lint_rep.get('edge_dumps')}"
+            f"｜旧标签 {lint_rep.get('legacy_sim_labels')}｜孤悬归因 "
+            f"{lint_rep.get('dangling_attributions')}｜重复句 "
+            f"{lint_rep.get('duplicate_sentences_removed')}｜泄漏残留 {lint_rep.get('leakage_flags')}"
+        )
+
     # ──────────────────────────────────────────────────────────────
     # BILINGUAL：自动生成成稿的另一语种版本（英⇄中），逐 H2 章节并发翻译
     # ──────────────────────────────────────────────────────────────
@@ -3132,9 +4024,13 @@ class ReportAgent:
             chunks.append(cur)
         return ["\n".join(c) for c in chunks]
 
-    def _translate_section(self, section_md: str, target_language_name: str) -> str:
+    def _translate_section(self, section_md: str, target_language_name: str,
+                           extra_rules: str = "") -> str:
         """把单个章节（H2 块）译成目标语言，严格保留 markdown 结构、围栏、表格列数、引用标记、
-        数字概率。调用失败 / 空输出 → 返回原文（degrade-safe，交由数字完整性核对标记）。"""
+        数字概率。调用失败 / 空输出 → 返回原文（degrade-safe，交由数字完整性核对标记）。
+
+        WAVE10：``extra_rules`` 追加到系统提示词末尾——引用记号对账重试用它枚举本章的
+        精确记号清单（缺省空串时提示词与历史逐字节一致）。"""
         if not section_md.strip():
             return section_md
         sys_prompt = (
@@ -3146,13 +4042,17 @@ class ReportAgent:
             "columns and the |---| separator row.\n"
             "2. Copy every fenced code block and mermaid block (``` or ~~~ fences, and everything "
             "inside them) UNCHANGED — never translate content inside fences.\n"
-            "3. Keep image references, URLs, citation markers ([S1] / 【S1】 / [S?]), numbers, "
-            "percentages and probabilities BYTE-IDENTICAL (e.g. '37%' stays '37%').\n"
+            "3. Keep image references, URLs, citation markers (canonical form [S12]; also any "
+            "legacy 【S12】 / [S1-a] variants), numbers, percentages and probabilities "
+            "BYTE-IDENTICAL (e.g. '37%' stays '37%', '[S12]' stays '[S12]'). Never drop, merge "
+            "or renumber a citation marker.\n"
             "4. Keep proper nouns and source names as-is; do not invent name translations. You may "
             "add a target-language rendering in parentheses only where it aids readability.\n"
             "5. Output ONLY the translated Markdown — no preamble, no commentary, and do NOT wrap "
             "the whole answer in a code fence."
         )
+        if extra_rules:
+            sys_prompt += "\n" + extra_rules
         # 输出预算：中文比英文更紧凑，英译中略膨胀；给宽裕上限（有界，防单章截断）。
         est = max(2048, min(16384, len(section_md) // 2 + 1024))
         try:
@@ -3222,6 +4122,52 @@ class ReportAgent:
             for i, ch in enumerate(chunks):
                 translated[i] = self._translate_section(ch, tgt_name)
 
+        # WAVE10（无缝引用）：逐 H2 块引用记号多重集对账——译文丢记号（实测 321→300，
+        # 6.5% 漂移）时对该块做**一次**重译，提示词枚举本块的精确记号清单；仍漂移 →
+        # 保留译文并把 citation_drift 细节记进 translations 条目（quality=warning）。
+        citation_drift: List[Dict[str, Any]] = []
+        if getattr(Config, "REPORT_TRANSLATION_CITATION_PARITY", True):
+            from collections import Counter
+            _marker_re = re.compile(r"[\[【]\s*(S\d+(?:-[A-Za-z])?)\s*[\]】]")
+
+            def _marker_multiset(t: str) -> "Counter":
+                # 归一为规范形（去括号/空白、大写 S、后缀小写），CJK 括号变体与方括号同计。
+                return Counter(
+                    "S" + m.group(1)[1:].lower() if m.group(1)[:1] in "sS" else m.group(1)
+                    for m in _marker_re.finditer(t or ""))
+
+            for i, ch in enumerate(chunks):
+                src_ms = _marker_multiset(ch)
+                cur = translated[i] if translated[i] is not None else ch
+                dst_ms = _marker_multiset(cur)
+                if src_ms == dst_ms:
+                    continue
+                inventory = "，".join(f"[{t}] x{n}" for t, n in sorted(
+                    src_ms.items(), key=lambda kv: (len(kv[0]), kv[0]))) or "(none)"
+                extra = (
+                    "6. CITATION TOKEN INVENTORY — this section contains EXACTLY these "
+                    f"citation tokens (token x count): {inventory}. Your translation MUST "
+                    "reproduce every occurrence byte-identical, in the corresponding "
+                    "sentences. Do not add, drop, merge or renumber any of them.")
+                try:
+                    retry = self._translate_section(ch, tgt_name, extra_rules=extra)
+                except Exception as _pe:  # noqa: BLE001 — 重试失败保留首译
+                    logger.warning(f"双语报告：引用对账重译失败，保留首译: {_pe}")
+                    retry = ""
+                if retry and _marker_multiset(retry) == src_ms:
+                    translated[i] = retry
+                    continue
+                # 仍漂移：保留首译（重译未证明更优），记录漂移细节供下游告警。
+                diff = {t: {"src": src_ms.get(t, 0), "dst": dst_ms.get(t, 0)}
+                        for t in set(src_ms) | set(dst_ms)
+                        if src_ms.get(t, 0) != dst_ms.get(t, 0)}
+                citation_drift.append({"chunk": i, "diff": diff})
+            if citation_drift:
+                logger.warning(
+                    f"双语报告引用对账告警: {report_id} {len(citation_drift)} 个章节的"
+                    f"引用记号多重集在重译后仍漂移: "
+                    f"{[d['chunk'] for d in citation_drift][:8]}")
+
         # 逐章 strip 后以空行拼接，保证 H2 章节间有标准 markdown 空行分隔（各段已含自身标题）。
         translated_md = "\n\n".join(
             (t if t is not None else chunks[i]) for i, t in enumerate(translated)
@@ -3238,7 +4184,7 @@ class ReportAgent:
         def _num_tokens(t: str) -> set:
             return {m.replace(" ", "") for m in self._NUMBER_INTEGRITY_RE.findall(t or "")}
         missing = sorted(_num_tokens(md) - _num_tokens(translated_md))
-        quality = "warning" if missing else "ok"
+        quality = "warning" if (missing or citation_drift) else "ok"
         if missing:
             logger.warning(
                 f"双语报告数字完整性告警: {report_id} 译文缺失 {len(missing)} 个"
@@ -3263,6 +4209,9 @@ class ReportAgent:
             "translation_quality": quality,
             "missing_numbers": missing[:20],
         }
+        # WAVE10：引用记号漂移细节（对账重译后仍不齐的块）——仅在有漂移时挂载（有界）。
+        if citation_drift:
+            entry["citation_drift"] = citation_drift[:8]
         existing = [
             e for e in (report.translations or [])
             if not (isinstance(e, dict) and e.get("lang") == tgt_code)
@@ -3272,6 +4221,99 @@ class ReportAgent:
         logger.info(
             f"双语报告已生成: {report_id} {src_code}→{tgt_code}，{len(chunks)} 章，"
             f"{len(translated_md)} 字，quality={quality}")
+
+    def _finalize_citations(self, report_id: str, report: "Report") -> None:
+        """WAVE10 引用最终化：把正文 [S12] 记号解析为文末「References/参考来源」附录 +
+        citations.json 工件——此前 321 个内联记号全是无处可去的死端。
+
+        语言纯度/编辑 lint 之后、双语翻译**之前**调用（附录作为一个 H2 块随章节一并翻译）。
+        确定性、无 LLM：
+          ① 围栏感知采集正文记号（validate_citation_markers，首现顺序）；
+          ② 对照记号→来源索引（_citation_index，悬空修复可能已扩充；无索引时回退全量
+             位置映射），附录**只列被引用**的来源，按首现顺序给展示序号；
+          ③ 条目 = 展示序号 + 原记号 + 标题 — 域名，日期，可点击 URL（URL 有效性守卫
+             拦截 'https://www.mckinsey' 型截断域名——条目仍列出但不渲染为链接）；
+          ④ 记号→条目映射写 <report_dir>/citations.json（前端悬浮 / PDF 脚注消费）。
+        正文内联记号**不可变**（保持 [Sxx]——改写会让审计正则、修复 passes 与译文失配）。
+        幂等：重跑先按 H2 块剥离旧附录再重建。任何失败由调用方捕获（degrade-safe）。"""
+        md = report.markdown_content or ""
+        if not md.strip():
+            return
+        from .forecast_extractor import validate_citation_markers, _norm_citation_tag
+        imap = self._citation_index_or_fallback()
+        # 幂等：剥离既有参考来源附录（围栏感知的 H2 块级删除）。
+        chunks = self._split_markdown_h2_sections(md)
+        body_chunks = [c for c in chunks
+                       if c.split("\n", 1)[0].strip() not in _REFS_HEADINGS]
+        body = "\n".join(body_chunks).rstrip() + "\n"
+        v = validate_citation_markers(body, imap)
+        norm_map = {_norm_citation_tag(k): s for k, s in imap.items()
+                    if isinstance(s, dict)}
+        cited = [t for t in v["order"] if t in norm_map]
+        if v["dangling"]:
+            logger.warning(
+                f"引用最终化: {report_id} 有 {len(v['dangling'])} 个无法解析的悬空记号"
+                f"（保留原样、不入附录）: {v['dangling'][:8]}")
+
+        lang = str(getattr(self, "output_language", "") or "").strip().lower()
+        zh = not lang.startswith("en")
+        heading = _REFS_HEADINGS[1] if zh else _REFS_HEADINGS[0]
+        sep = "，" if zh else ", "
+        bad_note = "（原始链接不完整）" if zh else " (source link incomplete)"
+
+        marker_entries: List[Dict[str, Any]] = []
+        ref_lines: List[str] = [heading, ""]
+        for disp, tag in enumerate(cited, 1):
+            src = norm_map[tag]
+            url = str(src.get("url") or "").strip()
+            domain = _citation_domain(url)
+            title = str(src.get("title") or "").strip() or domain or tag
+            date = str(src.get("date") or "").strip()
+            url_ok = _citation_url_ok(url)
+            seg = f"{disp}. [{tag}] {title}"
+            meta = [x for x in (domain, date) if x]
+            if meta:
+                seg += " — " + sep.join(meta)
+            if url:
+                seg += f" — [{url}]({url})" if url_ok else f" — `{url}`{bad_note}"
+            ref_lines.append(seg)
+            marker_entries.append({
+                "tag": tag,
+                "display": disp,
+                "count": int(v["counts"].get(tag, 0)),
+                "title": title,
+                "url": url,
+                "url_valid": url_ok,
+                "domain": domain,
+                "date": date,
+                "tier": str(src.get("tier") or "").strip(),
+            })
+
+        payload = {
+            "grammar": "[S<n>]",
+            "generated_at": datetime.now().isoformat(),
+            "heading": heading,
+            "markers": marker_entries,
+            "unresolved": [{"tag": t, "count": int(v["counts"].get(t, 0))}
+                           for t in v["dangling"]],
+        }
+        folder = ReportManager._get_report_folder(report_id)
+        try:
+            write_json_atomic(os.path.join(folder, "citations.json"), payload)
+        except Exception as _je:  # noqa: BLE001 — 工件落盘失败不阻断附录追加
+            logger.warning(f"落 citations.json 失败（忽略）: {_je}")
+
+        new_md = (body.rstrip() + "\n\n" + "\n".join(ref_lines) + "\n") if cited else body
+        if new_md == md:
+            return                                    # 无被引用来源且无旧附录 → 不动成稿
+        report.markdown_content = new_md
+        try:
+            write_text_atomic(os.path.join(folder, "full_report.md"), new_md)
+        except Exception as _we:  # noqa: BLE001
+            logger.warning(f"回写含参考来源的 full_report.md 失败（忽略）: {_we}")
+        logger.info(
+            f"引用最终化完成: {report_id} 被引用来源 {len(cited)}，"
+            f"内联记号 {v['total_markers']}，悬空 {len(v['dangling'])}")
 
     def _prepend_binary_forecasts_section(self, report_id: str, report: "Report") -> None:
         """QUALITY-OPT B1: insert the deterministic Part-1 binary-forecast table right after
@@ -3388,7 +4430,15 @@ class ReportAgent:
             sections.append((cur_title, cur_body))
         segs: List[str] = []
         for title, body in sections[:max_sections]:
-            text = " ".join(x.strip() for x in body if x.strip())[:per_section_chars]
+            text = " ".join(x.strip() for x in body if x.strip())
+            # WAVE9：先剔除泄漏模式句（模拟机制叙述/元评论），再截 350 字——否则章节开头的
+            # 泄漏元叙述会被原样喂给 Part-2 综合，催生自指句（full_report.md:66 型故障）。
+            try:
+                from . import report_lint as _rl
+                text, _ = _rl.strip_leakage_sentences(text)
+            except Exception:  # noqa: BLE001 — 剔除失败退回原文截断
+                pass
+            text = text[:per_section_chars]
             segs.append(f"- {title}: {text}")
         out = "\n".join(segs)
         return out[:max_chars]
@@ -3436,7 +4486,10 @@ class ReportAgent:
             "the decisive evidence, and how the prediction-market anchors (when present) were "
             "weighed. DEFEND the spine's probabilities — do not introduce numbers that contradict "
             "them. Use short paragraphs and at most '###' sub-headings; do NOT emit a '## Part 2' "
-            "top-level heading (the system adds it); no placeholders or meta commentary.\n\n"
+            "top-level heading (the system adds it); no placeholders or meta commentary. "
+            "NEVER mention the simulation, agents, rounds, action counts, factions, causal graphs, "
+            "or this report's own drafting process; attribute analytical viewpoints to our "
+            "scenario analysis instead — the subject is always the real world.\n\n"
             + "\n\n".join(parts)
         )
         text = self.llm.chat(
@@ -3574,6 +4627,23 @@ class ReportAgent:
             arts["comparison"] = comp
         if isinstance(self.actors, dict):
             arts["actors"] = self.actors
+        # GATE-W9 seam fix：build_all（schema v2）新增 plotly 构建器消费 ensemble /
+        # quantitative / sources / contested / graph_priors(_structural)，此前从未接线
+        # （diag-viz-audit「dead builders」）。ensemble_forecast.json 由编排器同步落到报告
+        # 目录；其余直接取构造期钉入的内存工件（W9-8 直通），缺失即跳过（degrade-safe）。
+        ens = _rj(os.path.join(folder, "ensemble_forecast.json"))
+        if isinstance(ens, dict) and ens:
+            arts["ensemble"] = ens
+        if isinstance(getattr(self, "quantitative", None), list) and self.quantitative:
+            arts["quantitative"] = self.quantitative
+        if isinstance(getattr(self, "sources", None), list) and self.sources:
+            arts["sources"] = self.sources
+        if isinstance(getattr(self, "contested", None), list) and self.contested:
+            arts["contested"] = self.contested
+        if isinstance(getattr(self, "graph_priors", None), dict) and self.graph_priors:
+            arts["graph_priors"] = self.graph_priors
+        if isinstance(getattr(self, "graph_priors_structural", None), dict) and self.graph_priors_structural:
+            arts["graph_priors_structural"] = self.graph_priors_structural
         # world_state_trajectory.json（决策通道产物，模拟数据目录）
         try:
             wst_path = os.path.join(
@@ -3586,6 +4656,8 @@ class ReportAgent:
             pass
         # timeline.json（研究 handoff；best-effort，找不到即不画时间线）
         tl = self._locate_timeline()
+        if not tl and isinstance(getattr(self, "timeline_events", None), list) and self.timeline_events:
+            tl = self.timeline_events  # GATE-W9：handoff 定位失败时回退构造期钉入的 timeline（W9-8 直通）
         if tl:
             arts["timeline"] = tl
         # PM-6 修复：把研究 handoff 目录钉进工件，供 ReportVisualizer._load_price_history 定位
@@ -3642,8 +4714,8 @@ class ReportAgent:
 
     def _place_visualizations(self, md: str, folder: str,
                               manifest: List[Dict[str, str]]) -> str:
-        """把 manifest 的图注入成稿：Mermaid 块按 placement_hint 关键词匹配到最近详细章节标题后
-        就地插入；未匹配的 Mermaid + 全部 PNG 汇入文末「Visual Annex」。逐图带唯一标记 → 幂等
+        """把 manifest 的图注入成稿：所有可视化类型都按 placement_hint 匹配到相关章节后
+        就地插入；只有未匹配项才汇入文末「Visual Annex」。逐图带唯一标记 → 幂等
         （已注入的图跳过）。无可注入项 → 原样返回 md。"""
         zh = not str(getattr(self, "output_language", "") or "English").lower().startswith("en")
         lines = md.split("\n")
@@ -3667,10 +4739,12 @@ class ReportAgent:
             vtype = str(item.get("type") or "").strip().lower()
             caption = str(item.get("caption") or "").strip()
             hint = str(item.get("placement_hint") or item.get("hint") or "").strip().lower()
-            block = self._render_viz_block(folder, path, vtype, caption, marker, zh)
+            png_path = str(item.get("png_path") or "").strip()
+            block = self._render_viz_block(folder, path, vtype, caption, marker, zh,
+                                           png_path=png_path)
             if not block:
                 continue
-            target = self._match_section(headings, hint) if vtype == "mermaid" else None
+            target = self._match_section(headings, hint)
             if target is not None:
                 inserts.setdefault(target, []).append(block)
             else:
@@ -3702,10 +4776,13 @@ class ReportAgent:
 
     @staticmethod
     def _render_viz_block(folder: str, path: str, vtype: str,
-                          caption: str, marker: str, zh: bool) -> str:
+                          caption: str, marker: str, zh: bool,
+                          png_path: str = "") -> str:
         """把单个 manifest 图渲染成 markdown 块：Mermaid 读 charts/*.mmd 内联其 ```mermaid 围栏；
-        PNG 用相对图片语法（charts/xxx.png）。每块以唯一 HTML 注释标记打头（幂等定位）。
-        读不到/空/未知类型 → ''。"""
+        PNG 用相对图片语法（charts/xxx.png）；plotly HTML（schema v2）优先内嵌其 png_path 静态
+        对（kaleido/matplotlib 回退产物）并附交互版链接，无 PNG 对则退化为纯链接——此前无
+        'html' 分支导致 plotly 图整族孤儿在盘上（diag-viz-audit）。每块以唯一 HTML 注释标记
+        打头（幂等定位）。读不到/空/未知类型 → ''。"""
         cap = caption or ("图示" if zh else "Figure")
         if vtype == "mermaid":
             try:
@@ -3718,6 +4795,15 @@ class ReportAgent:
             return f"{marker}\n**{cap}**\n\n{code}"
         if vtype == "png":
             return f"{marker}\n![{cap}]({path})\n\n*{cap}*"
+        if vtype == "html":
+            link_txt = "交互版" if zh else "interactive version"
+            if png_path and os.path.exists(os.path.join(folder, png_path)):
+                return (f"{marker}\n![{cap}]({png_path})\n\n"
+                        f"*{cap}（[{link_txt}]({path})）*" if zh else
+                        f"{marker}\n![{cap}]({png_path})\n\n"
+                        f"*{cap} ([{link_txt}]({path}))*")
+            return f"{marker}\n**{cap}**：[{link_txt}]({path})" if zh else \
+                   f"{marker}\n**{cap}**: [{link_txt}]({path})"
         return ""
 
     @classmethod
@@ -4346,8 +5432,8 @@ class ReportAgent:
         "insight_forge": "深度洞察分析，自动分解问题并多维度检索事实和关系",
         "panorama_search": "广角全景搜索，了解事件全貌、时间线和演变过程",
         "quick_search": "快速验证某个具体信息点",
-        "interview_agents": "采访模拟Agent，获取不同角色的第一人称观点和真实反应",
-        "simulation_outcomes": "模拟量化结果：最活跃 Agent、逐轮动作量、动作类型分布",
+        "interview_agents": "内部专家视角素材：情景推演小组各角色的第一人称观点（须转写为分析视角后使用，禁止呈现为真实采访）",
+        "simulation_outcomes": "推演量化信号（内部方法学材料，须转写为现实世界结论后使用，正文不得引用动作/轮次数字）",
         "coalition_map": "派系/联盟结构（对相同对象互动的 Agent 聚类，确定性）",
         "opinion_shift": "单个 Agent 的逐轮行为轨迹（立场/参与度演变）",
         "trace_cascade": "图谱多跳传导/级联追踪（哪个节点一动就翻盘）",
@@ -4360,7 +5446,31 @@ class ReportAgent:
         lines = [f"- {name}: {self._TOOL_HINT_SUMMARIES[name]}"
                  for name in self.tools if name in self._TOOL_HINT_SUMMARIES]
         return "\n".join(lines) if lines else "（按上方工具描述使用）"
-    
+
+    def _lint_outline_titles(self, sections: List["ReportSection"]) -> int:
+        """WAVE9：把含方法学词汇的大纲章节标题**就地改名**为客户可读的安全标题。
+
+        改名而非删除——保住 6-14 节的章节数契约；同批多个泄漏标题循环取安全标题并
+        加序号去重。返回改名数。"""
+        zh = not str(getattr(self, "output_language", "") or "English").lower().startswith("en")
+        safe_titles = self._SAFE_TITLES_ZH if zh else self._SAFE_TITLES_EN
+        existing = {s.title for s in sections}
+        renamed = 0
+        for s in sections:
+            title = s.title or ""
+            if not self._LEAK_TITLE_RE.search(title):
+                continue
+            new_title = safe_titles[renamed % len(safe_titles)]
+            if new_title in existing:
+                new_title = (f"{new_title}（{renamed + 1}）" if zh
+                             else f"{new_title} ({renamed + 1})")
+            logger.info(f"大纲标题改名：「{title}」→「{new_title}」")
+            existing.discard(s.title)
+            s.title = new_title
+            existing.add(new_title)
+            renamed += 1
+        return renamed
+
     def plan_outline(
         self,
         progress_callback: Optional[Callable] = None,
@@ -4433,7 +5543,14 @@ class ReportAgent:
         try:
             outcomes = self.zep_tools.simulation_outcomes(self.simulation_id, top_n=10)
             if outcomes:
-                sweeps.append("【模拟量化结果摘要】\n" + outcomes[:5000])  # RQ-4: 2500→5000
+                # WAVE9：包成内部方法学材料——它只用于判断哪些行为者/议题值得设章深挖，
+                # 绝不能催生「Agent 行为分析」型章节（940-actor 章节即此前的泄漏产物）。
+                sweeps.append(
+                    "【内部方法学材料——情景推演量化产出（仅供规划参考）】\n"
+                    "使用规则：仅据此判断哪些现实世界行为者/议题值得设立章节深挖；"
+                    "不得为推演本身单设章节，任何章节标题不得含"
+                    "『模拟/Agent/智能体/行为轨迹/Simulation/Behavior』等方法学词汇。\n"
+                    + outcomes[:5000])  # RQ-4: 2500→5000
         except Exception as e:
             logger.warning(f"plan_outline simulation_outcomes 扫描失败（忽略）: {e}")
         if sweeps:
@@ -4486,6 +5603,16 @@ class ReportAgent:
                     content="",
                     description=section_data.get("description", "")
                 ))
+
+            # WAVE9：大纲标题 lint——含方法学词汇（模拟/智能体/Agent/Simulation/Behavior/
+            # 行为轨迹）的标题确定性改名（改名而非删除，保住 6-14 节章节数契约）。
+            if getattr(Config, "REPORT_OUTLINE_TITLE_LINT", True):
+                try:
+                    _renamed = self._lint_outline_titles(sections)
+                    if _renamed:
+                        logger.warning(f"大纲标题 lint：{_renamed} 个章节标题含方法学词汇，已改名")
+                except Exception as _tle:  # noqa: BLE001 — lint 失败保留原标题
+                    logger.warning(f"大纲标题 lint 失败（忽略）: {_tle}")
 
             # RQ-1(4): 钳制到本次报告形状的章节数区间（PLAN_SYSTEM_PROMPT 的硬约束）：不足补齐，
             # 超出截断。小 page_budget → 5-8 节（紧凑），无/大 page_budget → 6-14 节（展开）。
@@ -4669,6 +5796,12 @@ class ReportAgent:
                     f"{attempt}/{retries}: {e}"
                 )
                 time.sleep(wait_s)
+        # WAVE9：章节语言验收（一次重写重申 _lang_override）——先于反思，让反思与
+        # 后续修复都在目标语言的稿件上进行。degrade-safe：任何失败返回原草稿。
+        try:
+            content = self._enforce_section_language(section, content)
+        except Exception as _lang_e:  # noqa: BLE001 — 语言验收为旁路增强
+            logger.debug(f"章节语言验收跳过（忽略）: {_lang_e}")
         # RQ-5：草稿通过基本有效性后，做一次廉价批判 + 至多一次修订（全程 degrade-safe，
         # 失败/关闭一律返回原草稿）。留在本方法内 ⇒ 仍处于 telemetry/并发包装之内。
         return self._reflect_and_maybe_revise_section(
@@ -4701,17 +5834,42 @@ class ReportAgent:
             # 仅对通过基本有效性的草稿反思——污染/过短草稿交由既有重试/占位符逻辑处理。
             if _looks_contaminated(content):
                 return content
+            result = content
             instruction = self._critique_section_draft(section, content, previous_sections)
-            if not instruction:                           # PASS → 采纳原草稿
-                return content
-            revised = self._revise_section_draft(section, outline, content, instruction)
-            if revised and not _looks_contaminated(revised):
-                logger.info(
-                    f"章节 {section.title}: 反思修订已采纳（{len(content)}→{len(revised)} 字符）"
-                    f" ｜指令: {instruction[:80]}"
-                )
-                return revised
-            return content
+            if instruction:
+                revised = self._revise_section_draft(section, outline, content, instruction)
+                if revised and not _looks_contaminated(revised):
+                    # WAVE9：反收缩护栏——修订稿短于 max(60% 原稿, 章节字符下限) 且确实
+                    # 缩水时拒绝采纳（14824→1518 的「章节销毁」型故障即此路径漏防）。
+                    _min_len = max(
+                        int(len(content) * self._revision_min_ratio()),
+                        self._section_char_floor(),
+                    )
+                    if len(revised) < _min_len and len(revised) < len(content):
+                        logger.warning(
+                            f"章节 {section.title}: 反思修订被拒绝——修订稿 {len(revised)} 字符 "
+                            f"< 下限 {_min_len}（原稿 {len(content)}），保留原稿"
+                        )
+                    else:
+                        logger.info(
+                            f"章节 {section.title}: 反思修订已采纳（{len(content)}→{len(revised)} 字符）"
+                            f" ｜指令: {instruction[:80]}"
+                        )
+                        result = revised
+            # WAVE9：截断检测——采纳稿以句中截断收尾（'(依据' / 裸字母数字 / 冒号）时
+            # 做一次续写调用补全，绝不交付半句话章节。
+            if (getattr(Config, "REPORT_SECTION_TRUNCATION_CONTINUE", True)
+                    and _looks_truncated(result)):
+                # 孤悬的「（依据/(According to」引子先剪掉（续写无法接续半个括注）。
+                _base = _TRUNCATED_TAIL_RE.sub("", result.rstrip()).rstrip()
+                cont = self._continue_section_draft(section, _base)
+                if cont:
+                    logger.info(
+                        f"章节 {section.title}: 检测到句中截断，已续写补全（+{len(cont)} 字符）"
+                    )
+                    _joiner = " " if (_base and _base[-1].isalnum()) else "\n\n"
+                    result = _base + _joiner + cont
+            return result
         except Exception as _re:  # noqa: BLE001 — 反思为旁路增强，失败绝不影响章节产出
             logger.debug(f"章节反思跳过（忽略）: {_re}")
             return content
@@ -4742,7 +5900,7 @@ class ReportAgent:
         spine_txt = self._reflection_spine_probs()
         signal_txt = (getattr(self, "_signal_pack", "") or "")[:1500]
         prior = "\n\n".join((s or "")[:600] for s in (previous_sections or [])[:6])[:2400]
-        floor = MIN_VALID_SECTION_CHARS
+        floor = self._section_char_floor()  # WAVE9：800 → 章节目标的 40%（随形状伸缩）
         lang = getattr(self, "output_language", None) or "English"
         sys_prompt = (
             "你是一名严格的报告章节质检员。仅依据下方给定材料，判断本章草稿是否同时满足四条标准：\n"
@@ -4770,8 +5928,14 @@ class ReportAgent:
         text = (resp or "").strip()
         if not text:
             return None                                   # 空响应 → 视为 PASS（不冒险改稿）
-        head = re.sub(r"[\s`*_\"'。.，,：:]+", "", text)[:8].upper()
+        normalized = re.sub(r"[\s`*_\"'。.，,：:！!？?-]+", "", text).upper()
+        head = normalized[:8]
         if head.startswith("PASS"):
+            return None
+        # WAVE9：裸「FAIL」不是修订指令——把它喂给修订员会诱发整章重写/销毁
+        # （console_log 实锤：'指令: FAIL' → 15031→1538 字符）。视为无指令，跳过修订。
+        if normalized in ("FAIL", "FAILED", "不通过", "未通过"):
+            logger.warning(f"章节 {section.title}: 质检只回了「{text[:20]}」（无具体指令），跳过修订")
             return None
         return text[:600]
 
@@ -4797,6 +5961,137 @@ class ReportAgent:
             max_tokens=Config.REPORT_AGENT_SECTION_MAX_TOKENS,
         )
         return (revised or "").strip()
+
+    def _section_char_floor(self) -> int:
+        """WAVE9：反思护栏使用的章节字符下限 = max(MIN_VALID_SECTION_CHARS, 章节目标下限 ×
+        REPORT_SECTION_MIN_VALID_RATIO)。此前固定 800，远低于 3000-6000 的章节目标，
+        1.5KB 的销毁性修订稿能溜过长度门。任何失败回退 MIN_VALID_SECTION_CHARS。"""
+        try:
+            ratio = float(getattr(Config, "REPORT_SECTION_MIN_VALID_RATIO", 0.4) or 0.4)
+            shape = self._report_shape()
+            return max(MIN_VALID_SECTION_CHARS, int(shape["target_lo"] * ratio))
+        except Exception:  # noqa: BLE001 — 形状派生失败回退旧下限
+            return MIN_VALID_SECTION_CHARS
+
+    def _revision_min_ratio(self) -> float:
+        """WAVE9：修订稿允许的最小长度比例（相对原稿）。默认 0.6。"""
+        try:
+            return float(getattr(Config, "REPORT_REVISION_MIN_RATIO", 0.6) or 0.6)
+        except (TypeError, ValueError):
+            return 0.6
+
+    def _continue_section_draft(self, section: "ReportSection", content: str) -> str:
+        """WAVE9：对句中截断的章节做**一次**续写调用，返回续写文本（失败/无效返回 ""）。
+
+        续写只补完剩余内容（先接完被打断的句子），不复述已有正文；输出再判污染。"""
+        lang = getattr(self, "output_language", None) or "English"
+        sys_prompt = self._lang_override() + (
+            "你是报告章节的续写员。下面的章节正文在句中被截断了。请从截断处**无缝续写**："
+            "先把被打断的句子写完，再自然收束本章剩余论证（可含 1-2 段）。"
+            "只输出续写部分（不要复述已有正文、不要输出任何解释或标题），"
+            f"用{lang}书写，保持原文的风格与证据纪律。"
+        )
+        tail = (content or "")[-3000:]
+        try:
+            out = self.llm.chat(
+                messages=[{"role": "system", "content": sys_prompt},
+                          {"role": "user", "content": f"【已截断的章节结尾】\n…{tail}"}],
+                temperature=Config.REPORT_AGENT_TEMPERATURE,
+                max_tokens=4096,
+            )
+        except Exception as _ce:  # noqa: BLE001 — 续写失败保留原稿（截断但不销毁）
+            logger.warning(f"章节续写调用失败（保留截断稿）: {_ce}")
+            return ""
+        out = (out or "").strip()
+        if not out or any(m in out for m in CONTAMINATION_MARKERS):
+            return ""
+        return out
+
+    # WAVE9：章节语言验收的 CJK/拉丁字符统计（跳过围栏与 URL）。
+    @staticmethod
+    def _lang_char_stats(text: str) -> Tuple[int, int]:
+        """返回 (CJK 字符数, 拉丁字母数)；围栏代码块内不计。纯函数。"""
+        cjk = 0
+        latin = 0
+        in_fence = False
+        for ln in (text or "").splitlines():
+            s = ln.strip()
+            if s.startswith("```") or s.startswith("~~~"):
+                in_fence = not in_fence
+                continue
+            if in_fence or "http://" in s or "https://" in s:
+                continue
+            for ch in ln:
+                if "一" <= ch <= "鿿":
+                    cjk += 1
+                elif "a" <= ch.lower() <= "z":
+                    latin += 1
+        return cjk, latin
+
+    def _enforce_section_language(self, section: "ReportSection", content: str) -> str:
+        """WAVE9：章节语言验收——成稿语言与 output_language 不符时做**一次**重写重申
+        _lang_override（S3/S9 整章英文报告里写中文的故障；事后 purity 补丁只会产出
+        'SK SK Hynix' 型混合垃圾）。重写无效/仍不达标 → 保留原稿（degrade-safe）。"""
+        try:
+            if not getattr(Config, "REPORT_SECTION_LANG_ENFORCE", True):
+                return content
+            llm = getattr(self, "llm", None)
+            if llm is None or not hasattr(llm, "chat"):
+                return content
+            if _looks_contaminated(content):
+                return content
+            lang = getattr(self, "output_language", None) or "English"
+            target_is_cjk = not str(lang).strip().lower().startswith("en")
+
+            def _foreign_ratio(text: str) -> float:
+                cjk, latin = self._lang_char_stats(text)
+                total = cjk + latin
+                if total < 200:            # 太短没有区分力
+                    return 0.0
+                return (latin / total) if target_is_cjk else (cjk / total)
+
+            try:
+                thresh = float(getattr(Config, "REPORT_SECTION_LANG_MAX_FOREIGN_RATIO",
+                                       0.25) or 0.25)
+            except (TypeError, ValueError):
+                thresh = 0.25
+            if target_is_cjk:
+                # 中文报告合法保留大量拉丁 token（公司名/型号/[S#]），阈值放宽。
+                thresh = max(thresh, 0.6)
+            ratio = _foreign_ratio(content)
+            if ratio <= thresh:
+                return content
+            logger.warning(
+                f"章节 {section.title}: 语言验收失败（外语字符占比 {ratio:.0%} > {thresh:.0%}，"
+                f"目标 {lang}），触发一次整章重写"
+            )
+            sys_prompt = self._lang_override() + (
+                f"下面的章节正文混入了大量非目标语言内容。请把全文完整改写为{lang}："
+                "保留全部论点、结构（### 小标题/列表/表格/引用块）、数字、百分比与 [S#] 引用标记"
+                "逐字节不变；专有名词保持原样。只输出改写后的完整 Markdown 正文，"
+                "不要任何解释或前后缀。"
+            )
+            try:
+                rewritten = self.llm.chat(
+                    messages=[{"role": "system", "content": sys_prompt},
+                              {"role": "user", "content": content}],
+                    temperature=0.1,
+                    max_tokens=Config.REPORT_AGENT_SECTION_MAX_TOKENS,
+                )
+            except Exception as _le:  # noqa: BLE001 — 重写失败保留原稿
+                logger.warning(f"章节语言重写调用失败（保留原稿）: {_le}")
+                return content
+            rewritten = (rewritten or "").strip()
+            if (rewritten and not _looks_contaminated(rewritten)
+                    and _foreign_ratio(rewritten) <= thresh
+                    and len(rewritten) >= int(len(content) * 0.5)):
+                logger.info(f"章节 {section.title}: 语言重写已采纳（{len(content)}→{len(rewritten)} 字符）")
+                return rewritten
+            logger.warning(f"章节 {section.title}: 语言重写无效（仍不达标/过短），保留原稿")
+            return content
+        except Exception as _lee:  # noqa: BLE001 — 语言验收为旁路增强
+            logger.debug(f"章节语言验收跳过（忽略）: {_lee}")
+            return content
 
     def _to_openai_tool_schemas(self) -> List[Dict[str, Any]]:
         """T4.5: 把内部 tools 定义转成 OpenAI function tool schema。
@@ -4849,7 +6144,8 @@ class ReportAgent:
             tool_usage_hints=self._tool_usage_hints(),  # RPT-7: live 工具集
             **self._section_prompt_kwargs(),  # RQ-1: 篇幅+工具调用范围槽位（随形状伸缩）
         )
-        system_prompt = self._prepend_research_background(system_prompt)
+        system_prompt = self._prepend_research_background(system_prompt,
+                                                          section_title=section.title)
         # 原生路径：覆盖 ReAct 的格式要求，改为「自然调用工具，最后直接输出 Markdown 正文」
         system_prompt += (
             "\n\n【输出模式】你已具备原生工具调用能力：需要数据时直接发起工具调用（可多次），"
@@ -5019,7 +6315,8 @@ class ReportAgent:
             **self._section_prompt_kwargs(),  # RQ-1: 篇幅+工具调用范围槽位（随形状伸缩）
         )
         # T4.1: 钉入研究背景档案 + 来源索引，让每章撰写复用真实角色/关系/时间线并按 [S#] 引用。
-        system_prompt = self._prepend_research_background(system_prompt)
+        system_prompt = self._prepend_research_background(system_prompt,
+                                                          section_title=section.title)
 
         # 构建用户prompt - 每个已完成章节各传入最大4000字
         if previous_sections:
@@ -5785,6 +7082,26 @@ class ReportAgent:
                     except Exception as _lp_err:  # noqa: BLE001
                         logger.warning(f"语言纯度扫描失败（忽略，保留原文）: {_lp_err}")
 
+            # WAVE9：确定性编辑纪律 lint——所有修复/注入/纯度处理之后、双语翻译之前跑一遍
+            # report_lint.lint_report（引用残留/边转储/旧模拟标签/孤悬归因行/重复句…），
+            # lint 报告记入 forecast.json quality['lint']。放在 REPORT_STRUCTURED_FORECAST
+            # 块之外，无结构化预测时同样生效。失败仅告警（degrade-safe）。
+            if getattr(Config, "REPORT_EDITORIAL_LINT", True):
+                try:
+                    self._apply_report_lint(report_id, report)
+                except Exception as _el_err:  # noqa: BLE001 — lint 为旁路品控
+                    logger.warning(f"编辑 lint 失败（忽略，保留原文）: {_el_err}")
+
+            # WAVE10（无缝引用）：引用最终化——正文 [S12] 记号解析为文末「References/参考来源」
+            # 附录（只列被引用来源）+ citations.json 工件。放在语言纯度/lint 之后（附录不进
+            # lint 扫描——参考条目天然 URL 密集）、双语翻译之前（附录随章节一并翻译）。
+            # 失败仅告警（degrade-safe，成稿不含附录）。
+            if getattr(Config, "REPORT_CITATION_FINALIZER", True):
+                try:
+                    self._finalize_citations(report_id, report)
+                except Exception as _cf_err:  # noqa: BLE001 — 附录为增强，绝不影响正文
+                    logger.warning(f"引用最终化失败（忽略，成稿不含参考来源附录）: {_cf_err}")
+
             # BILINGUAL：在所有最终化/可视化/纯度处理之后（成稿已定型），自动生成另一语种版本
             # （英⇄中）。逐 H2 章节并发翻译，落 full_report.{en|zh}.md 并把 translations 条目写入
             # report（下方 save_report 持久化进 meta.json）。放在 REPORT_STRUCTURED_FORECAST 块之外，
@@ -6146,17 +7463,21 @@ class ReportManager:
 
     @staticmethod
     def _rewrite_chart_paths_for_pdf(md: str, folder: str) -> str:
-        """PDF-1 预处理：把成稿里相对图表引用（(./)?charts/<file>）重写为绝对文件路径，供 PDF
-        构建器（pandoc / PyMuPDF）在任意工作目录都能定位图片。纯字符串变换（可测，无子进程）。"""
+        """PDF-1 预处理：只把 Markdown 图片的相对 charts/<file> 重写为绝对路径，供 PDF
+        构建器定位图片。普通交互链接保持相对，绝不把工作站私有路径写进可点击文本。"""
         abs_charts = os.path.join(os.path.abspath(folder), "charts")
 
         def _sub(m: "re.Match") -> str:
             rel = m.group("rel")                       # 形如 charts/foo.png 或 ./charts/foo.png
             fname = rel.split("charts/", 1)[1]
-            return "(" + os.path.join(abs_charts, fname) + ")"
+            return m.group("prefix") + os.path.join(abs_charts, fname) + ")"
 
-        # 仅匹配 markdown 图片/链接目标括号里的相对 charts 路径；绝对路径（/…/charts）不受影响。
-        return re.sub(r"\((?P<rel>\.{0,2}/?charts/[^)\s]+)\)", _sub, md)
+        # 仅匹配 ![alt](relative-chart)；普通 [link](charts/x.html) 与绝对图片不受影响。
+        return re.sub(
+            r"(?P<prefix>!\[[^\]\n]*\]\()(?P<rel>\.{0,2}/?charts/[^)\s]+)\)",
+            _sub,
+            md,
+        )
 
     @staticmethod
     def _prerender_mermaid_for_pdf(md: str, folder: str) -> str:
@@ -6195,6 +7516,88 @@ class ReportManager:
 
         return fence_re.sub(_sub, md)
 
+    @staticmethod
+    def _load_citations_map(folder: str) -> Dict[str, Dict[str, Any]]:
+        """WAVE10：读 reports/{id}/citations.json → {记号: 条目}；缺失/坏 JSON → {}
+        （degrade-safe，PDF 保留字面记号 + 参考来源附录）。"""
+        path = os.path.join(folder, "citations.json")
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            out: Dict[str, Dict[str, Any]] = {}
+            for m in (data.get("markers") or []):
+                if isinstance(m, dict) and m.get("tag"):
+                    out[str(m["tag"])] = m
+            return out
+        except (OSError, json.JSONDecodeError, TypeError) as e:
+            logger.warning(f"读取 citations.json 失败（PDF 保留字面引用记号）: {e}")
+            return {}
+
+    @staticmethod
+    def _rewrite_citations_for_pdf(md: str, citations: Dict[str, Dict[str, Any]]) -> str:
+        """WAVE10 PDF 预处理：可解析 [S12] → pandoc 脚注（xelatex 渲染为真脚注 + 可点击链接）。
+
+        规则（纯字符串变换，可测）：
+          * 每个记号仅**首次**出现改写为 [^s12] 引用（重复引用同一脚注 id 会让 pandoc 在
+            每处重复整段脚注文本——[S2] x90 会把 PDF 撑爆），后续出现保留字面记号，读者
+            靠文末 References 附录对照；
+          * 围栏（```/~~~）内是字面内容不动；「References/参考来源」附录章节整体跳过
+            （附录里的 [S12] 是条目标签，改写会产生自引用脚注）；
+          * 不可解析记号原样保留；
+          * 脚注定义追加到文末：标题 — 域名，日期 + 短链接文本 [domain](url)（链接文本用
+            域名而非原始长 URL——脚注里的裸长 URL 是 xelatex 边距溢出的主因）；
+          * 无效 URL（citations.json url_valid=false）不渲染链接。
+        citations 为空 → 原样返回。"""
+        if not citations:
+            return md
+        marker_re = re.compile(r"[\[【]\s*(S\d+(?:-[A-Za-z])?)\s*[\]】]")
+        footnoted: List[str] = []          # 保序：已改写为脚注引用的记号
+        out_lines: List[str] = []
+        in_fence = False
+        in_refs = False
+        for ln in md.split("\n"):
+            s = ln.lstrip()
+            if s.startswith("```") or s.startswith("~~~"):
+                in_fence = not in_fence
+                out_lines.append(ln)
+                continue
+            if not in_fence and ln.startswith("## "):
+                in_refs = ln.strip() in _REFS_HEADINGS
+            if in_fence or in_refs:
+                out_lines.append(ln)
+                continue
+
+            def _sub(m: "re.Match") -> str:
+                tag = m.group(1)
+                tag = "S" + tag[1:].lower() if tag[:1] in "sS" else tag
+                if tag not in citations:
+                    return m.group(0)                  # 不可解析 → 原样
+                if tag in footnoted:
+                    return m.group(0)                  # 非首次 → 保留字面记号
+                footnoted.append(tag)
+                return f"[^{tag.lower()}]"
+
+            out_lines.append(marker_re.sub(_sub, ln))
+        if not footnoted:
+            return md
+        defs: List[str] = []
+        for tag in footnoted:
+            entry = citations[tag]
+            title = str(entry.get("title") or "").strip() or tag
+            domain = str(entry.get("domain") or "").strip()
+            date = str(entry.get("date") or "").strip()
+            url = str(entry.get("url") or "").strip()
+            body = title
+            meta = [x for x in (domain, date) if x]
+            if meta:
+                body += " — " + ", ".join(meta)
+            if url and entry.get("url_valid"):
+                body += f" [{domain or 'link'}]({url})"
+            defs.append(f"[^{tag.lower()}]: {body}")
+        return "\n".join(out_lines).rstrip() + "\n\n" + "\n".join(defs) + "\n"
+
     @classmethod
     def _resolve_pandoc(cls):
         """返回 (pandoc_path, xelatex_path|None)；pandoc 不可用 → None。"""
@@ -6230,8 +7633,12 @@ class ReportManager:
             "-V", "CJKmainfont=PingFang SC",
             "-V", "geometry:margin=2.5cm",
             "--toc",
-            "-o", tmp_pdf,
         ]
+        # WAVE10（无缝引用）：脚注/参考来源链接着色为可见的可点击链接（colorlinks 是
+        # hyperref 内建选项，无额外宏包依赖；zh 路径 PingFang SC 下同样安全）。
+        if getattr(Config, "REPORT_PDF_CITATION_FOOTNOTES", True):
+            cmd += ["-V", "colorlinks=true"]
+        cmd += ["-o", tmp_pdf]
         try:
             proc = subprocess.run(
                 cmd, capture_output=True, cwd=folder,
@@ -6436,8 +7843,20 @@ class ReportManager:
         except Exception as e:  # noqa: BLE001
             logger.warning(f"PDF 预处理失败，回退用原始成稿: {e}")
             proc_md = md
+        # WAVE10（无缝引用）：仅 pandoc 路径把可解析 [S12] 改写为真脚注（citations.json 驱动；
+        # zh 译文与主报告共用同一套记号）。PyMuPDF 回退跳过变换——字面记号 + References 附录
+        # 是可接受的降级产物。失败回退未变换成稿（degrade-safe）。
+        pandoc_md = proc_md
+        if getattr(Config, "REPORT_PDF_CITATION_FOOTNOTES", True):
+            try:
+                _citations = cls._load_citations_map(folder)
+                if _citations:
+                    pandoc_md = cls._rewrite_citations_for_pdf(proc_md, _citations)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"PDF 引用脚注预处理失败（保留字面记号）: {e}")
+                pandoc_md = proc_md
         # 主路径：pandoc + xelatex；失败回退 PyMuPDF Story。
-        if cls._export_pdf_pandoc(report_id, proc_md, folder, pdf_path):
+        if cls._export_pdf_pandoc(report_id, pandoc_md, folder, pdf_path):
             return pdf_path
         if cls._export_pdf_pymupdf(proc_md, folder, pdf_path):
             return pdf_path

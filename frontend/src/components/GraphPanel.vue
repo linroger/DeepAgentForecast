@@ -48,6 +48,22 @@
           </button>
         </div>
         
+        <!-- 聚焦模式提示条：大图默认只渲染 Top-K 子图，点击节点可展开邻居 -->
+        <div v-if="focusModeActive" class="graph-focus-banner">
+          <span class="focus-text">
+            {{ L('聚焦模式', 'Focus mode') }}: {{ renderedNodeCount }}/{{ totalNodeCount }}
+            {{ L('个节点 · 点击节点展开邻居', 'nodes · click a node to expand neighbors') }}
+            <span v-if="expandingNode" class="focus-expanding">{{ L('（展开中…）', '(expanding…)') }}</span>
+          </span>
+          <button class="focus-btn" @click="loadFullGraph()" :disabled="fullGraphLoading">
+            {{ fullGraphLoading ? L('加载中…', 'Loading…') : L('加载完整图谱', 'Load full graph') }}
+          </button>
+        </div>
+        <div v-else-if="fullGraphRequested && totalNodeCount > GRAPH_UI_MAX_NODES" class="graph-focus-banner">
+          <span class="focus-text">{{ L('已加载完整图谱', 'Full graph loaded') }} ({{ totalNodeCount }} {{ L('个节点', 'nodes') }})</span>
+          <button class="focus-btn" @click="backToFocusMode">{{ L('返回聚焦模式', 'Back to focus mode') }}</button>
+        </div>
+
         <!-- 节点/边详情面板 -->
         <div v-if="selectedItem" class="detail-panel">
           <div class="detail-panel-header">
@@ -56,6 +72,13 @@
               {{ selectedItem.entityType }}
             </span>
             <button class="detail-close" @click="closeDetailPanel">×</button>
+          </div>
+
+          <div v-if="selectedItem.detailLoading" class="detail-status">
+            {{ L('正在加载完整详情…', 'Loading full details…') }}
+          </div>
+          <div v-else-if="selectedItem.detailError" class="detail-status detail-error">
+            {{ L('完整详情暂时不可用', 'Full details are temporarily unavailable') }}
           </div>
           
           <!-- 节点详情 -->
@@ -127,6 +150,12 @@
                   </div>
                   
                   <div class="self-loop-item-content" v-show="expandedSelfLoops.has(loop.uuid || idx)">
+                    <div v-if="loop._detailLoading" class="detail-status">
+                      {{ L('正在加载完整详情…', 'Loading full details…') }}
+                    </div>
+                    <div v-else-if="loop._detailError" class="detail-status detail-error">
+                      {{ L('完整详情暂时不可用', 'Full details are temporarily unavailable') }}
+                    </div>
                     <div class="detail-row" v-if="loop.uuid">
                       <span class="detail-label">UUID:</span>
                       <span class="detail-value uuid-text">{{ loop.uuid }}</span>
@@ -232,7 +261,7 @@
     <!-- 显示边标签开关 -->
     <div v-if="graphData" class="edge-labels-toggle">
       <label class="toggle-switch">
-        <input type="checkbox" v-model="showEdgeLabels" />
+        <input type="checkbox" v-model="showEdgeLabels" @change="userTouchedEdgeLabels = true" />
         <span class="slider"></span>
       </label>
       <span class="toggle-label">{{ L('显示边标签', 'Show Edge Labels') }}</span>
@@ -244,6 +273,29 @@
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import * as d3 from 'd3'
 import { L } from '../i18n'
+import {
+  getGraphData,
+  getGraphNeighbors,
+  getGraphNodeDetail,
+  getGraphEdgeDetail,
+} from '../api/graph'
+import {
+  DEFAULT_GRAPH_UI_MAX_NODES,
+  boundedFocusNodeIds,
+  graphPayloadMeta,
+  graphPayloadRevision,
+} from '../utils/graphPayload'
+
+// ===== KG 渲染性能参数 =====
+// 聚焦模式阈值：节点数超过该值时默认只渲染 Top-K 子图（可用 VITE_GRAPH_UI_MAX_NODES 覆盖）
+const _envMaxNodes = Number(import.meta.env.VITE_GRAPH_UI_MAX_NODES)
+const GRAPH_UI_MAX_NODES = Number.isFinite(_envMaxNodes) && _envMaxNodes > 0
+  ? Math.floor(_envMaxNodes)
+  : DEFAULT_GRAPH_UI_MAX_NODES
+const EDGE_LABELS_AUTO_OFF_EDGES = 300 // 边数超过该值时默认关闭边标签（用户手动开过则尊重用户选择）
+const LOD_LABEL_MIN_ZOOM = 0.8         // 缩放倍率低于该值时隐藏节点/边标签（LOD）
+const DRAG_REHEAT_MAX_NODES = 300      // 节点数超过该值时拖拽不重启全局仿真，只移动被拖拽节点
+const RESIZE_DEBOUNCE_MS = 200         // 窗口尺寸变化去抖
 
 const props = defineProps({
   graphData: Object,
@@ -287,6 +339,7 @@ const showEdgeLabels = ref(true) // 默认显示边标签
 const expandedSelfLoops = ref(new Set()) // 展开的自环项
 const showSimulationFinishedHint = ref(false) // 模拟结束后的提示
 const wasSimulating = ref(false) // 追踪之前是否在模拟中
+let detailSelectionVersion = 0 // 使切图/刷新/快速改选后的旧详情请求失效
 
 // 关闭模拟结束提示
 const dismissFinishedHint = () => {
@@ -309,8 +362,55 @@ const toggleSelfLoop = (id) => {
     newSet.delete(id)
   } else {
     newSet.add(id)
+    hydrateSelfLoopDetail(id)
   }
   expandedSelfLoops.value = newSet
+}
+
+function replaceSelectedSelfLoop(uuid, updater) {
+  const current = selectedItem.value
+  const loops = current?.data?.selfLoopEdges
+  if (current?.type !== 'edge' || !current.data?.isSelfLoopGroup || !Array.isArray(loops)) return
+  selectedItem.value = {
+    ...current,
+    data: {
+      ...current.data,
+      selfLoopEdges: loops.map(loop => loop?.uuid === uuid ? updater(loop) : loop),
+    },
+  }
+}
+
+async function hydrateSelfLoopDetail(id) {
+  const current = selectedItem.value
+  const loops = current?.data?.selfLoopEdges
+  if (current?.type !== 'edge' || !current.data?.isSelfLoopGroup || !Array.isArray(loops)) return
+  const loop = loops.find((item, index) => (item?.uuid || index) === id)
+  const uuid = loop?.uuid
+  if (!uuid || loop._detailLoaded || loop._detailLoading) return
+
+  const gid = props.graphData?.graph_id
+  if (!gid) return
+  const selectionVersion = detailSelectionVersion
+  replaceSelectedSelfLoop(uuid, item => ({ ...item, _detailLoading: true, _detailError: false }))
+  try {
+    const res = await getGraphEdgeDetail(gid, uuid)
+    if (selectionVersion !== detailSelectionVersion || props.graphData?.graph_id !== gid) return
+    if (res?.success && res.data) {
+      replaceSelectedSelfLoop(uuid, item => ({
+        ...item,
+        ...res.data,
+        _detailLoaded: true,
+        _detailLoading: false,
+        _detailError: false,
+      }))
+    } else {
+      replaceSelectedSelfLoop(uuid, item => ({ ...item, _detailLoading: false, _detailError: true }))
+    }
+  } catch (_error) {
+    if (selectionVersion === detailSelectionVersion && props.graphData?.graph_id === gid) {
+      replaceSelectedSelfLoop(uuid, item => ({ ...item, _detailLoading: false, _detailError: true }))
+    }
+  }
 }
 
 // 计算实体类型用于图例
@@ -349,30 +449,447 @@ const formatDateTime = (dateStr) => {
 }
 
 const closeDetailPanel = () => {
+  detailSelectionVersion += 1
   selectedItem.value = null
   expandedSelfLoops.value = new Set() // 重置展开状态
 }
 
+async function selectNodeItem(nodeDatum, color) {
+  const base = nodeDatum.rawData
+  const uuid = base?.uuid
+  const gid = props.graphData?.graph_id
+  const selectionVersion = ++detailSelectionVersion
+  expandedSelfLoops.value = new Set()
+  selectedItem.value = {
+    type: 'node',
+    data: base,
+    entityType: nodeDatum.type,
+    color,
+    detailLoading: Boolean(gid && uuid),
+    detailError: false,
+  }
+  if (!gid || !uuid) return
+  try {
+    const res = await getGraphNodeDetail(gid, uuid)
+    const current = selectedItem.value
+    if (selectionVersion !== detailSelectionVersion || props.graphData?.graph_id !== gid) return
+    if (current?.type !== 'node' || current.data?.uuid !== uuid) return
+    selectedItem.value = res?.success && res.data
+      ? { ...current, data: { ...current.data, ...res.data }, detailLoading: false, detailError: false }
+      : { ...current, detailLoading: false, detailError: true }
+  } catch (_error) {
+    const current = selectedItem.value
+    if (selectionVersion === detailSelectionVersion && current?.type === 'node' && current.data?.uuid === uuid) {
+      selectedItem.value = { ...current, detailLoading: false, detailError: true }
+    }
+  }
+}
+
+async function selectEdgeItem(base) {
+  const isGroup = Boolean(base?.isSelfLoopGroup)
+  const uuid = base?.uuid
+  const gid = props.graphData?.graph_id
+  const selectionVersion = ++detailSelectionVersion
+  expandedSelfLoops.value = new Set()
+  selectedItem.value = {
+    type: 'edge',
+    data: base,
+    detailLoading: Boolean(!isGroup && gid && uuid),
+    detailError: false,
+  }
+  if (isGroup || !gid || !uuid) return
+  try {
+    const res = await getGraphEdgeDetail(gid, uuid)
+    const current = selectedItem.value
+    if (selectionVersion !== detailSelectionVersion || props.graphData?.graph_id !== gid) return
+    if (current?.type !== 'edge' || current.data?.uuid !== uuid) return
+    selectedItem.value = res?.success && res.data
+      ? { ...current, data: { ...current.data, ...res.data }, detailLoading: false, detailError: false }
+      : { ...current, detailLoading: false, detailError: true }
+  } catch (_error) {
+    const current = selectedItem.value
+    if (selectionVersion === detailSelectionVersion && current?.type === 'edge' && current.data?.uuid === uuid) {
+      selectedItem.value = { ...current, detailLoading: false, detailError: true }
+    }
+  }
+}
+
 let currentSimulation = null
-let linkLabelsRef = null
-let linkLabelBgRef = null
 // EXECPLAN2 F-10-1: 跨刷新保留布局与视口，避免每次 refresh 全量重建 D3 仿真而丢失
 // 缩放/平移与既有节点位置。
 let zoomBehavior = null
 let savedTransform = null
 
+// 边标签开关 watcher 使用的模块级句柄（每次 renderGraph 重新赋值，闭包持有当前选择集）
+let updateLabelLayerVisibilityFn = null
+
+// ===== 聚焦模式（大图 Top-K 子图）状态 =====
+let lastGraphId = null            // 检测图谱切换，切换时重置聚焦/展开状态
+let lastOverviewRevision = null   // 同图轮询发生结构变化时使缓存失效
+let expandedNodeIds = new Set()   // 聚焦模式下点击展开加入视图的节点 uuid
+let expandedCenterIds = new Set() // 已请求过邻域的中心节点（与仅作为邻居出现的节点分开）
+let activeFocusNodeId = null      // 最近点击的聚焦中心，预算收缩时优先保留
+let extraNodes = []               // 服务端 slim/neighbors 返回、不在原始载荷中的节点
+let extraEdges = []               // 同上，额外的边
+let serverFilterSupport = null    // null=未探测；false=后端不支持 ?top_k/slim（忽略参数），本会话内不再尝试
+let serverNeighborsSupport = null // null=未探测；false=/neighbors 端点不存在（404），回退本地展开
+let serverFocusData = null        // 服务端过滤视图缓存 { key, nodes, edges }
+let serverFocusFetching = false
+let serverFocusRequestVersion = 0
+let focusStateVersion = 0
+let neighborRequestVersion = 0
+let fullGraphDataRevision = null
+let fullGraphRequestVersion = 0
+
+const focusModeActive = ref(false)       // 当前渲染是否为聚焦（Top-K）视图
+const fullGraphRequested = ref(false)    // 用户点击「加载完整图谱」的逃生阀
+const fullGraphData = ref(null)          // 仅显式点击后获取；初始载荷永远不预下载完整图
+const fullGraphLoading = ref(false)
+const expandingNode = ref(false)         // 邻居展开请求进行中
+const renderedNodeCount = ref(0)
+const totalNodeCount = ref(0)
+const userTouchedEdgeLabels = ref(false) // 用户手动动过边标签开关后，不再自动关闭
+
+// 渲染合并调度：同一 tick 内的多个触发只重建一次
+let renderPending = false
+function scheduleRender() {
+  if (renderPending) return
+  renderPending = true
+  nextTick(() => {
+    renderPending = false
+    renderGraph()
+  })
+}
+
+const loadFullGraph = async ({ force = false } = {}) => {
+  const gid = props.graphData?.graph_id
+  if (!gid || fullGraphLoading.value) return
+  const overviewRevision = graphPayloadRevision(props.graphData)
+  if (!force && fullGraphData.value?.graph_id === gid && fullGraphDataRevision === overviewRevision) {
+    fullGraphRequested.value = true
+    scheduleRender()
+    return
+  }
+  const requestVersion = ++fullGraphRequestVersion
+  fullGraphLoading.value = true
+  try {
+    const res = await getGraphData(gid, { full: true })
+    if (
+      requestVersion === fullGraphRequestVersion &&
+      props.graphData?.graph_id === gid &&
+      graphPayloadRevision(props.graphData) === overviewRevision &&
+      res?.success && res.data
+    ) {
+      fullGraphData.value = res.data
+      fullGraphDataRevision = overviewRevision
+      fullGraphRequested.value = true
+      scheduleRender()
+    }
+  } catch (e) {
+    console.warn('完整图谱加载失败:', e?.message || e)
+  } finally {
+    if (requestVersion === fullGraphRequestVersion) fullGraphLoading.value = false
+  }
+}
+
+const backToFocusMode = () => {
+  fullGraphRequested.value = false
+  scheduleRender()
+}
+
+// 边的去重键：优先 uuid，无 uuid 时用端点+名称+时间组合
+function edgeKey(e) {
+  return e.uuid || `${e.source_node_uuid}|${e.target_node_uuid}|${e.name || ''}|${e.created_at || ''}`
+}
+
+function focusCacheKey(raw) {
+  const total = graphPayloadMeta(raw, GRAPH_UI_MAX_NODES).totalNodes
+  return `${raw.graph_id || ''}|${GRAPH_UI_MAX_NODES}|${total}`
+}
+
+// 探测/获取服务端 Top-K 过滤视图（后端不支持时会原样返回完整图，则本会话降级为客户端过滤）
+async function maybeFetchServerFocus(raw) {
+  if (!raw || !raw.graph_id || serverFilterSupport === false || serverFocusFetching) return
+  const key = focusCacheKey(raw)
+  if (serverFocusData && serverFocusData.key === key) return
+  const requestVersion = ++serverFocusRequestVersion
+  serverFocusFetching = true
+  try {
+    const res = await getGraphData(raw.graph_id, { topK: GRAPH_UI_MAX_NODES, slim: true })
+    if (requestVersion !== serverFocusRequestVersion || props.graphData?.graph_id !== raw.graph_id) return
+    const data = res && res.success ? res.data : null
+    const total = graphPayloadMeta(raw, GRAPH_UI_MAX_NODES).totalNodes
+    if (data && Array.isArray(data.nodes) && data.nodes.length > 0 && data.nodes.length < total) {
+      serverFilterSupport = true
+      serverFocusData = { key, nodes: data.nodes, edges: Array.isArray(data.edges) ? data.edges : [] }
+      scheduleRender()
+    } else {
+      // 服务端忽略了 top_k/slim 参数（旧版后端）：改走客户端 Top-K 过滤
+      serverFilterSupport = false
+    }
+  } catch (e) {
+    if (requestVersion === serverFocusRequestVersion) {
+      console.warn('服务端 Top-K 过滤视图不可用，回退客户端过滤:', e?.message || e)
+      serverFilterSupport = false
+    }
+  } finally {
+    if (requestVersion === serverFocusRequestVersion) serverFocusFetching = false
+  }
+}
+
+// 客户端 Top-K：按度数排名取前 K 个节点
+function clientTopKNodeIds(allNodes, allEdges) {
+  const degree = new Map()
+  for (const e of allEdges) {
+    degree.set(e.source_node_uuid, (degree.get(e.source_node_uuid) || 0) + 1)
+    if (e.target_node_uuid !== e.source_node_uuid) {
+      degree.set(e.target_node_uuid, (degree.get(e.target_node_uuid) || 0) + 1)
+    }
+  }
+  const ranked = allNodes.slice().sort((a, b) => (degree.get(b.uuid) || 0) - (degree.get(a.uuid) || 0))
+  const kept = new Set()
+  for (const n of ranked) {
+    if (kept.size >= GRAPH_UI_MAX_NODES) break
+    kept.add(n.uuid)
+  }
+  return kept
+}
+
+// 计算本次渲染的数据集：小图直接全量；大图走聚焦（服务端过滤优先，客户端 Top-K 兜底）
+function resolveRenderData() {
+  const raw = (fullGraphRequested.value && fullGraphData.value) || props.graphData || {}
+  const meta = graphPayloadMeta(raw, GRAPH_UI_MAX_NODES)
+  const allNodes = meta.nodes
+  const allEdges = meta.edges
+  totalNodeCount.value = meta.totalNodes
+
+  const needFocus = !fullGraphRequested.value && meta.needsFocus
+  focusModeActive.value = needFocus
+  if (!needFocus) {
+    renderedNodeCount.value = allNodes.length
+    return { nodesData: allNodes, edgesData: allEdges }
+  }
+
+  // 父视图的首个请求已是服务端 slim/top-K overview 时，不再发第二次 focus 请求。
+  // 邻域展开仍会经过下方的统一预算选择，避免多次点击重新累积成大图。
+  const boundedOverview = meta.truncated && allNodes.length <= GRAPH_UI_MAX_NODES
+  if (boundedOverview) {
+    serverFilterSupport = true
+  } else {
+    maybeFetchServerFocus(raw) // 异步探测；命中后会触发一次重渲染
+  }
+
+  const useServerView = !boundedOverview && serverFocusData && serverFocusData.key === focusCacheKey(raw)
+  const serverNodes = useServerView ? serverFocusData.nodes : []
+  const serverEdges = useServerView ? serverFocusData.edges : []
+  const candidateMap = new Map()
+  for (const node of allNodes.concat(serverNodes, extraNodes)) {
+    if (node?.uuid && !candidateMap.has(node.uuid)) candidateMap.set(node.uuid, node)
+  }
+
+  const seen = new Set()
+  const candidateEdges = []
+  for (const e of allEdges.concat(serverEdges, extraEdges)) {
+    if (!e?.source_node_uuid || !e?.target_node_uuid) continue
+    const k = edgeKey(e)
+    if (seen.has(k)) continue
+    seen.add(k)
+    candidateEdges.push(e)
+  }
+
+  const baseNodeIds = boundedOverview
+    ? allNodes.map(node => node.uuid)
+    : useServerView
+      ? serverNodes.map(node => node.uuid)
+      : [...clientTopKNodeIds(allNodes, allEdges)]
+  const candidateNodes = [...candidateMap.values()]
+  const seedNodeIds = candidateNodes.filter(isSeedNode).map(node => node.uuid)
+  const kept = boundedFocusNodeIds({
+    candidateNodes,
+    edges: candidateEdges,
+    baseNodeIds,
+    expandedNodeIds: [...expandedNodeIds],
+    seedNodeIds,
+    activeNodeId: activeFocusNodeId,
+    limit: GRAPH_UI_MAX_NODES,
+  })
+  const nodesData = candidateNodes.filter(node => kept.has(node.uuid))
+  const edgesData = candidateEdges.filter(
+    edge => kept.has(edge.source_node_uuid) && kept.has(edge.target_node_uuid)
+  )
+
+  renderedNodeCount.value = nodesData.length
+  return { nodesData, edgesData }
+}
+
+// 聚焦模式：点击节点展开其 1 跳邻居（服务端 /neighbors 优先，404/失败回退到完整载荷的本地查找）
+async function expandNodeNeighbors(nodeDatum) {
+  if (!focusModeActive.value || expandingNode.value) return
+  const uuid = nodeDatum.id
+  if (expandedCenterIds.has(uuid)) return
+  const requestVersion = ++neighborRequestVersion
+  const stateVersion = focusStateVersion
+  expandingNode.value = true
+  try {
+    let merged = false
+    const gid = props.graphData?.graph_id
+    if (gid && serverNeighborsSupport !== false) {
+      try {
+        const res = await getGraphNeighbors(gid, uuid, 1)
+        if (
+          requestVersion === neighborRequestVersion &&
+          stateVersion === focusStateVersion &&
+          props.graphData?.graph_id === gid &&
+          res?.success && res.data
+        ) {
+          mergeNeighborPayload(res.data)
+          serverNeighborsSupport = true
+          merged = true
+        }
+      } catch (e) {
+        if (requestVersion === neighborRequestVersion && stateVersion === focusStateVersion) {
+          serverNeighborsSupport = false
+          console.warn('邻居子图端点不可用，回退本地展开:', e?.message || e)
+        }
+      }
+    }
+    if (requestVersion !== neighborRequestVersion || stateVersion !== focusStateVersion) return
+    if (!merged) mergeNeighborsFromLocal(uuid)
+    expandedNodeIds.add(uuid)
+    expandedCenterIds.add(uuid)
+    activeFocusNodeId = uuid
+    scheduleRender()
+  } finally {
+    if (requestVersion === neighborRequestVersion) expandingNode.value = false
+  }
+}
+
+function mergeNeighborPayload(data) {
+  const localIds = new Set((props.graphData?.nodes || []).map(n => n.uuid))
+  const extraIds = new Set(extraNodes.map(n => n.uuid))
+  for (const n of (data.nodes || [])) {
+    if (!n || !n.uuid) continue
+    expandedNodeIds.add(n.uuid)
+    if (!localIds.has(n.uuid) && !extraIds.has(n.uuid)) {
+      extraNodes.push(n)
+      extraIds.add(n.uuid)
+    }
+  }
+  const extraEdgeKeys = new Set(extraEdges.map(edgeKey))
+  for (const e of (data.edges || [])) {
+    if (!e || !e.source_node_uuid || !e.target_node_uuid) continue
+    const k = edgeKey(e)
+    if (!extraEdgeKeys.has(k)) {
+      extraEdges.push(e)
+      extraEdgeKeys.add(k)
+    }
+  }
+}
+
+function mergeNeighborsFromLocal(uuid) {
+  for (const e of (props.graphData?.edges || [])) {
+    if (e.source_node_uuid === uuid) expandedNodeIds.add(e.target_node_uuid)
+    else if (e.target_node_uuid === uuid) expandedNodeIds.add(e.source_node_uuid)
+  }
+}
+
+// 图谱切换或同图结构版本变化时清理派生缓存；同图刷新后若用户在 full 模式则重新拉取。
+// 返回值仅表示 graph_id 是否变化，用于决定是否保留视口。
+function synchronizeGraphState() {
+  const gid = props.graphData?.graph_id || null
+  const revision = graphPayloadRevision(props.graphData)
+  const graphChanged = gid !== lastGraphId
+  const revisionChanged = !graphChanged && lastOverviewRevision !== null && revision !== lastOverviewRevision
+  if (!graphChanged && !revisionChanged) return false
+
+  const restoreFullMode = revisionChanged && fullGraphRequested.value
+  lastGraphId = gid
+  lastOverviewRevision = revision
+  focusStateVersion += 1
+  neighborRequestVersion += 1
+  serverFocusRequestVersion += 1
+  fullGraphRequestVersion += 1
+  expandedNodeIds = new Set()
+  expandedCenterIds = new Set()
+  activeFocusNodeId = null
+  extraNodes = []
+  extraEdges = []
+  fullGraphRequested.value = false
+  fullGraphData.value = null
+  fullGraphDataRevision = null
+  fullGraphLoading.value = false
+  expandingNode.value = false
+  serverFocusData = null
+  serverFocusFetching = false
+  serverFilterSupport = null
+  serverNeighborsSupport = null
+  closeDetailPanel()
+
+  if (graphChanged) {
+    userTouchedEdgeLabels.value = false
+    showEdgeLabels.value = true
+    savedTransform = null // 新图不继承旧图的视口
+  }
+  if (restoreFullMode) nextTick(() => loadFullGraph({ force: true }))
+  return graphChanged
+}
+
+// 后端预计算布局（graphData.positions: {uuid: [x,y] | {x,y}}，如 networkx spring_layout 输出）。
+// 坐标按整体包围盒线性映射到当前视口；命中时仿真以极低 alpha 启动，只做微调。
+function buildPositionLookup(raw, width, height) {
+  const posMap = raw && raw.positions
+  if (!posMap || typeof posMap !== 'object') return null
+  const norm = new Map()
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const [uuid, v] of Object.entries(posMap)) {
+    let x, y
+    if (Array.isArray(v)) {
+      x = Number(v[0])
+      y = Number(v[1])
+    } else if (v && typeof v === 'object') {
+      x = Number(v.x)
+      y = Number(v.y)
+    }
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+    norm.set(uuid, { x, y })
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  if (!norm.size) return null
+  const pad = 60
+  const spanX = (maxX - minX) || 1
+  const spanY = (maxY - minY) || 1
+  return (uuid) => {
+    const p = norm.get(uuid)
+    if (!p) return null
+    return {
+      x: pad + (p.x - minX) / spanX * Math.max(width - pad * 2, 1),
+      y: pad + (p.y - minY) / spanY * Math.max(height - pad * 2, 1)
+    }
+  }
+}
+
+// 标签隐藏无法 getBBox 时按字符宽度估算：CJK/全角 ≈ 9px，其他 ≈ 5.5px（font-size 9px）
+function estimateLabelSize(text) {
+  let w = 0
+  const cjkRe = new RegExp('[\\u2E80-\\u9FFF\\uF900-\\uFAFF\\uFF00-\\uFF60\\uFFE0-\\uFFE6\\u3000-\\u303F]')
+  for (const ch of String(text || '')) {
+    w += cjkRe.test(ch) ? 9 : 5.5
+  }
+  return { w: Math.max(w, 12), h: 11 }
+}
+
 const renderGraph = () => {
   if (!graphSvg.value || !props.graphData) return
-  
-  // 停止之前的仿真
-  if (currentSimulation) {
-    currentSimulation.stop()
-  }
-  
+
+  const graphChanged = synchronizeGraphState()
+
   const container = graphContainer.value
   const width = container.clientWidth
   const height = container.clientHeight
-  
+
   const svg = d3.select(graphSvg.value)
     .attr('width', width)
     .attr('height', height)
@@ -386,34 +903,48 @@ const renderGraph = () => {
         prevPositions.set(n.id, { x: n.x, y: n.y })
       }
     }
+    // 停止之前的仿真（在读取旧坐标之后）
+    currentSimulation.stop()
   }
   try {
     const t = d3.zoomTransform(svg.node())
-    if (t && (t.k !== 1 || t.x !== 0 || t.y !== 0)) savedTransform = t
+    // 图谱切换时不回存旧图的视口变换
+    if (!graphChanged && t && (t.k !== 1 || t.x !== 0 || t.y !== 0)) savedTransform = t
   } catch (_e) { /* 首次渲染无变换 */ }
 
   svg.selectAll('*').remove()
 
-  const nodesData = props.graphData.nodes || []
-  const edgesData = props.graphData.edges || []
+  // 大图走聚焦（Top-K 子图）数据集，小图全量
+  const { nodesData, edgesData } = resolveRenderData()
 
   if (nodesData.length === 0) return
+
+  // 边太多时默认关闭边标签（除非用户手动开过）——每帧标签定位是主要开销之一
+  if (!userTouchedEdgeLabels.value && showEdgeLabels.value && edgesData.length > EDGE_LABELS_AUTO_OFF_EDGES) {
+    showEdgeLabels.value = false
+  }
 
   // Prep data
   const nodeMap = {}
   nodesData.forEach(n => nodeMap[n.uuid] = n)
 
-  // 为已存在的节点种入上一次的坐标，仅新节点重新布局（F-10-1）。
+  // 为已存在的节点种入上一次的坐标，仅新节点重新布局（F-10-1）；
+  // 无旧坐标时用后端预计算布局（graphData.positions）作为初始位置。
+  const posLookup = buildPositionLookup(props.graphData, width, height)
   let survived = 0
+  let preSeeded = 0
   const nodes = nodesData.map(n => {
     const prev = prevPositions.get(n.uuid)
     if (prev) survived++
+    const pre = !prev && posLookup ? posLookup(n.uuid) : null
+    if (pre) preSeeded++
+    const seed = prev || pre
     return {
       id: n.uuid,
       name: n.name || 'Unnamed',
       type: n.labels?.find(l => l !== 'Entity') || 'Entity',
       rawData: n,
-      ...(prev ? { x: prev.x, y: prev.y } : {})
+      ...(seed ? { x: seed.x, y: seed.y } : {})
     }
   })
   
@@ -545,17 +1076,46 @@ const renderGraph = () => {
   // F-10-1: 多数节点存活时降低初始 alpha，让布局微调而非整体重排（保留位置感）。
   if (nodes.length > 0 && survived / nodes.length > 0.5) {
     simulation.alpha(0.3)
+  } else if (nodes.length > 0 && (survived + preSeeded) / nodes.length > 0.9) {
+    // 预计算布局覆盖绝大多数节点：以极低 alpha 启动，仅做微调后即刻静止
+    simulation.alpha(0.08)
   }
 
   const g = svg.append('g')
 
+  // 标签 LOD：低倍率下隐藏节点/边标签，减少缩放/平移时需要重绘的矢量元素数量
+  let lodLabelsHidden = (savedTransform ? savedTransform.k : 1) < LOD_LABEL_MIN_ZOOM
+  let latestTransform = savedTransform || d3.zoomIdentity
+  let zoomRaf = null
+  let sceneReady = false // 防止恢复视口时同步触发的 zoom/end 事件在选择集构建完成前访问它们
+
+  const applyZoomFrame = () => {
+    zoomRaf = null
+    g.attr('transform', latestTransform)
+    if (!sceneReady) return
+    const hide = latestTransform.k < LOD_LABEL_MIN_ZOOM
+    if (hide !== lodLabelsHidden) {
+      lodLabelsHidden = hide
+      updateLabelLayerVisibility()
+    }
+  }
+
   // Zoom —— 复用具名 behavior，便于刷新后用 svg.call(zoomBehavior.transform, savedTransform) 复原视口。
-  zoomBehavior = d3.zoom().extent([[0, 0], [width, height]]).scaleExtent([0.1, 4]).on('zoom', (event) => {
-    g.attr('transform', event.transform)
-  })
+  // 变换在 requestAnimationFrame 中应用，把高频滚轮/拖动事件合并为每帧一次重绘。
+  zoomBehavior = d3.zoom().extent([[0, 0], [width, height]]).scaleExtent([0.1, 4])
+    .on('zoom', (event) => {
+      latestTransform = event.transform
+      if (zoomRaf == null) zoomRaf = requestAnimationFrame(applyZoomFrame)
+    })
+    .on('end', () => {
+      // 缩放/平移结束后做一次标签视口剔除
+      if (sceneReady) applyViewportCull()
+    })
   svg.call(zoomBehavior)
   if (savedTransform) {
     svg.call(zoomBehavior.transform, savedTransform)  // 复原上次的平移/缩放
+  } else if (graphChanged) {
+    svg.call(zoomBehavior.transform, d3.zoomIdentity) // 新图重置视口，清掉 svg 上残留的旧变换
   }
 
   // Links - 使用 path 支持曲线
@@ -649,14 +1209,14 @@ const renderGraph = () => {
       // 高亮当前选中的边
       d3.select(event.target).attr('stroke', '#3498db').attr('stroke-width', 3)
       
-      selectedItem.value = {
-        type: 'edge',
-        data: d.rawData
-      }
+      selectEdgeItem(d.rawData)
     })
 
+  // 边标签独立成组：显隐（开关/LOD）只需切换一个 <g> 的 display，而非逐元素改样式
+  const edgeLabelGroup = g.append('g').attr('class', 'edge-labels')
+
   // Link labels background (白色背景使文字更清晰)
-  const linkLabelBg = linkGroup.selectAll('rect')
+  const linkLabelBg = edgeLabelGroup.selectAll('rect')
     .data(edges)
     .enter().append('rect')
     .attr('fill', 'rgba(255,255,255,0.95)')
@@ -664,7 +1224,6 @@ const renderGraph = () => {
     .attr('ry', 3)
     .style('cursor', 'pointer')
     .style('pointer-events', 'all')
-    .style('display', showEdgeLabels.value ? 'block' : 'none')
     .on('click', (event, d) => {
       event.stopPropagation()
       linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
@@ -674,14 +1233,11 @@ const renderGraph = () => {
       link.filter(l => l === d).attr('stroke', '#3498db').attr('stroke-width', 3)
       d3.select(event.target).attr('fill', 'rgba(52, 152, 219, 0.1)')
       
-      selectedItem.value = {
-        type: 'edge',
-        data: d.rawData
-      }
+      selectEdgeItem(d.rawData)
     })
 
   // Link labels
-  const linkLabels = linkGroup.selectAll('text')
+  const linkLabels = edgeLabelGroup.selectAll('text')
     .data(edges)
     .enter().append('text')
     .text(d => d.name)
@@ -692,7 +1248,6 @@ const renderGraph = () => {
     .style('cursor', 'pointer')
     .style('pointer-events', 'all')
     .style('font-family', 'system-ui, sans-serif')
-    .style('display', showEdgeLabels.value ? 'block' : 'none')
     .on('click', (event, d) => {
       event.stopPropagation()
       linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
@@ -702,15 +1257,101 @@ const renderGraph = () => {
       link.filter(l => l === d).attr('stroke', '#3498db').attr('stroke-width', 3)
       d3.select(event.target).attr('fill', '#3498db')
       
-      selectedItem.value = {
-        type: 'edge',
-        data: d.rawData
-      }
+      selectEdgeItem(d.rawData)
     })
   
-  // 保存引用供外部控制显隐
-  linkLabelsRef = linkLabels
-  linkLabelBgRef = linkLabelBg
+  // ===== 边标签测量与定位（性能关键：绝不在 tick 中调用 getBBox）=====
+  let edgeLabelsMeasured = false
+
+  function edgeLabelsVisible() {
+    return showEdgeLabels.value && !lodLabelsHidden
+  }
+
+  // 创建后只测量一次：批量 getBBox（纯读）后写入 datum 缓存，避免读写交错导致的逐元素回流
+  function ensureEdgeLabelsMeasured() {
+    if (edgeLabelsMeasured || !edgeLabelsVisible()) return
+    linkLabels.each(function (d) {
+      let w = 0
+      let h = 0
+      try {
+        const b = this.getBBox()
+        w = b.width
+        h = b.height
+      } catch (_e) { /* 隐藏元素在部分浏览器会抛错，走估算 */ }
+      if (!(w > 0)) {
+        const est = estimateLabelSize(d.name)
+        w = est.w
+        h = est.h
+      }
+      d._lw = w
+      d._lh = h
+    })
+    edgeLabelsMeasured = true
+  }
+
+  // 用缓存的 bbox 写标签/背景位置（labelSel 与 bgSel 必须来自同一 data 顺序）
+  function placeEdgeLabels(labelSel, bgSel) {
+    const bgs = bgSel.nodes()
+    labelSel.each(function (d, i) {
+      const mid = getLinkMidpoint(d)
+      this.setAttribute('x', mid.x)
+      this.setAttribute('y', mid.y)
+      const bg = bgs[i]
+      if (!bg) return
+      const w = d._lw || 24
+      const h = d._lh || 11
+      bg.setAttribute('x', mid.x - w / 2 - 4)
+      bg.setAttribute('y', mid.y - h / 2 - 2)
+      bg.setAttribute('width', w + 8)
+      bg.setAttribute('height', h + 4)
+    })
+  }
+
+  function placeAllEdgeLabels() {
+    placeEdgeLabels(linkLabels, linkLabelBg)
+  }
+
+  function placeNodeLabels() {
+    nodeLabels.attr('x', d => d.x).attr('y', d => d.y)
+  }
+
+  function updateLabelLayerVisibility() {
+    const showEdge = edgeLabelsVisible()
+    edgeLabelGroup.style('display', showEdge ? null : 'none')
+    nodeLabelGroup.style('display', lodLabelsHidden ? 'none' : null)
+    if (showEdge) {
+      ensureEdgeLabelsMeasured()
+      placeAllEdgeLabels() // 隐藏期间 tick 跳过了标签定位，重新显示时补一次
+    }
+    if (!lodLabelsHidden) placeNodeLabels()
+  }
+
+  // 视口剔除：缩放/平移结束或仿真静止后，隐藏视口外的标签（节点/边保留以维持整体形态感知）
+  function applyViewportCull() {
+    const t = latestTransform || d3.zoomIdentity
+    const margin = 80
+    const x0 = (0 - t.x) / t.k - margin
+    const x1 = (width - t.x) / t.k + margin
+    const y0 = (0 - t.y) / t.k - margin
+    const y1 = (height - t.y) / t.k + margin
+    const inView = (x, y) => !Number.isFinite(x) || !Number.isFinite(y) ||
+      (x >= x0 && x <= x1 && y >= y0 && y <= y1)
+    if (!lodLabelsHidden) {
+      nodeLabels.style('display', d => inView(d.x, d.y) ? null : 'none')
+    }
+    if (edgeLabelsVisible()) {
+      const bgs = linkLabelBg.nodes()
+      linkLabels.each(function (d, i) {
+        const mid = getLinkMidpoint(d)
+        const disp = inView(mid.x, mid.y) ? '' : 'none'
+        this.style.display = disp
+        if (bgs[i]) bgs[i].style.display = disp
+      })
+    }
+  }
+
+  // 拖拽期间只更新被拖拽节点及其关联元素的选择集缓存（大图不重启全局仿真）
+  let dragSelections = null
 
   // Nodes group
   const nodeGroup = g.append('g').attr('class', 'nodes')
@@ -745,32 +1386,57 @@ const renderGraph = () => {
         d._dragStartX = event.x
         d._dragStartY = event.y
         d._isDragging = false
+        // 大图拖拽不重热全局仿真：预取被拖拽节点及其关联元素，逐帧只更新这些元素
+        d._reheat = nodes.length <= DRAG_REHEAT_MAX_NODES
+        if (!d._reheat) {
+          dragSelections = {
+            node: node.filter(n => n.id === d.id),
+            ring: seedRings.filter(n => n.id === d.id),
+            label: nodeLabels.filter(n => n.id === d.id),
+            links: link.filter(l => l.source.id === d.id || l.target.id === d.id),
+            linkLabels: linkLabels.filter(l => l.source.id === d.id || l.target.id === d.id),
+            linkLabelBgs: linkLabelBg.filter(l => l.source.id === d.id || l.target.id === d.id)
+          }
+        }
       })
       .on('drag', (event, d) => {
         // 检测是否真正开始拖拽（移动超过阈值）
         const dx = event.x - d._dragStartX
         const dy = event.y - d._dragStartY
         const distance = Math.sqrt(dx * dx + dy * dy)
-        
+
         if (!d._isDragging && distance > 3) {
-          // 首次检测到真正拖拽，才重启仿真
           d._isDragging = true
-          simulation.alphaTarget(0.3).restart()
+          if (d._reheat) {
+            // 小图：温和重热（0.1 而非 0.3），避免整图大幅重排
+            simulation.alphaTarget(0.1).restart()
+          }
         }
-        
+
         if (d._isDragging) {
           d.fx = event.x
           d.fy = event.y
+          if (!d._reheat && dragSelections) {
+            // 大图：不惊动仿真，手动移动该节点及其关联边/标签
+            d.x = event.x
+            d.y = event.y
+            dragSelections.node.attr('cx', d.x).attr('cy', d.y)
+            dragSelections.ring.attr('cx', d.x).attr('cy', d.y)
+            if (!lodLabelsHidden) dragSelections.label.attr('x', d.x).attr('y', d.y)
+            dragSelections.links.attr('d', l => getLinkPath(l))
+            if (edgeLabelsVisible()) placeEdgeLabels(dragSelections.linkLabels, dragSelections.linkLabelBgs)
+          }
         }
       })
       .on('end', (event, d) => {
-        // 只有真正拖拽过才让仿真逐渐停止
-        if (d._isDragging) {
+        // 只有小图（重热过）才需要让仿真逐渐停止
+        if (d._isDragging && d._reheat) {
           simulation.alphaTarget(0)
         }
         d.fx = null
         d.fy = null
         d._isDragging = false
+        dragSelections = null
       })
     )
     .on('click', (event, d) => {
@@ -785,12 +1451,10 @@ const renderGraph = () => {
         .attr('stroke', '#E91E63')
         .attr('stroke-width', 2.5)
       
-      selectedItem.value = {
-        type: 'node',
-        data: d.rawData,
-        entityType: d.type,
-        color: getColor(d.type)
-      }
+      selectNodeItem(d, getColor(d.type))
+
+      // 聚焦模式：点击同时展开该节点的一跳邻居（保留现有节点位置，仅新节点参与布局）
+      if (focusModeActive.value) expandNodeNeighbors(d)
     })
     .on('mouseenter', (event, d) => {
       if (!selectedItem.value || selectedItem.value.data?.uuid !== d.rawData.uuid) {
@@ -803,8 +1467,9 @@ const renderGraph = () => {
       }
     })
 
-  // Node Labels
-  const nodeLabels = nodeGroup.selectAll('text')
+  // Node Labels —— 独立成组，LOD 显隐只切换组的 display
+  const nodeLabelGroup = g.append('g').attr('class', 'node-labels')
+  const nodeLabels = nodeLabelGroup.selectAll('text')
     .data(nodes)
     .enter().append('text')
     .text(d => d.name.length > 8 ? d.name.substring(0, 8) + '…' : d.name)
@@ -816,31 +1481,17 @@ const renderGraph = () => {
     .style('pointer-events', 'none')
     .style('font-family', 'system-ui, sans-serif')
 
-  simulation.on('tick', () => {
+  // tick 处理器：只写坐标属性，不做任何 getBBox 等强制回流的读操作；
+  // 标签隐藏（开关关闭或低倍率 LOD）时整段跳过标签定位。
+  function ticked() {
     // 更新曲线路径
     link.attr('d', d => getLinkPath(d))
-    
-    // 更新边标签位置（无旋转，水平显示更清晰）
-    linkLabels.each(function(d) {
-      const mid = getLinkMidpoint(d)
-      d3.select(this)
-        .attr('x', mid.x)
-        .attr('y', mid.y)
-        .attr('transform', '') // 移除旋转，保持水平
-    })
-    
-    // 更新边标签背景
-    linkLabelBg.each(function(d, i) {
-      const mid = getLinkMidpoint(d)
-      const textEl = linkLabels.nodes()[i]
-      const bbox = textEl.getBBox()
-      d3.select(this)
-        .attr('x', mid.x - bbox.width / 2 - 4)
-        .attr('y', mid.y - bbox.height / 2 - 2)
-        .attr('width', bbox.width + 8)
-        .attr('height', bbox.height + 4)
-        .attr('transform', '') // 移除旋转
-    })
+
+    // 更新边标签位置（bbox 用创建时缓存的尺寸，无旋转，水平显示更清晰）
+    if (edgeLabelsVisible()) {
+      ensureEdgeLabelsMeasured()
+      placeAllEdgeLabels()
+    }
 
     node
       .attr('cx', d => d.x)
@@ -850,45 +1501,69 @@ const renderGraph = () => {
       .attr('cx', d => d.x)
       .attr('cy', d => d.y)
 
-    nodeLabels
-      .attr('x', d => d.x)
-      .attr('y', d => d.y)
+    if (!lodLabelsHidden) placeNodeLabels()
+  }
+
+  simulation.on('tick', ticked).on('end', () => {
+    // 布局静止后做一次标签视口剔除
+    if (sceneReady) applyViewportCull()
   })
-  
+
   // 点击空白处关闭详情面板
   svg.on('click', () => {
-    selectedItem.value = null
+    closeDetailPanel()
     node.attr('stroke', '#fff').attr('stroke-width', 2.5)
     linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
     linkLabelBg.attr('fill', 'rgba(255,255,255,0.95)')
     linkLabels.attr('fill', '#666')
   })
+
+  // 初始可见性 + 首帧绘制（预计算布局/低 alpha 时也能即刻成图）
+  updateLabelLayerVisibility()
+  ticked()
+
+  // 模块级句柄：边标签开关 watcher 使用
+  updateLabelLayerVisibilityFn = updateLabelLayerVisibility
+  sceneReady = true
 }
 
-watch(() => props.graphData, () => {
-  nextTick(renderGraph)
-}, { deep: true })
+// 廉价响应式触发：监听引用与节点/边数量变化，替代对整个 graphData 的 deep watch
+// （深度遍历上千节点/边的代价与全量重建一样高，且节点内部字段变化并不需要重绘）
+watch(
+  () => [props.graphData, props.graphData?.nodes?.length ?? 0, props.graphData?.edges?.length ?? 0],
+  () => {
+    scheduleRender()
+  }
+)
 
-// 监听边标签显示开关
-watch(showEdgeLabels, (newVal) => {
-  if (linkLabelsRef) {
-    linkLabelsRef.style('display', newVal ? 'block' : 'none')
-  }
-  if (linkLabelBgRef) {
-    linkLabelBgRef.style('display', newVal ? 'block' : 'none')
-  }
+// 监听边标签显示开关：组级 display 切换 + 重新显示时补测量/定位
+watch(showEdgeLabels, () => {
+  if (updateLabelLayerVisibilityFn) updateLabelLayerVisibilityFn()
 })
 
+// 窗口尺寸变化去抖（约 200ms），避免连续 resize 触发多次全量重建
+let resizeTimer = null
 const handleResize = () => {
-  nextTick(renderGraph)
+  if (resizeTimer) clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(() => {
+    resizeTimer = null
+    scheduleRender()
+  }, RESIZE_DEBOUNCE_MS)
 }
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  // 组件挂载时若已有数据（如视图切换回来），立即渲染一次
+  if (props.graphData) scheduleRender()
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  if (resizeTimer) {
+    clearTimeout(resizeTimer)
+    resizeTimer = null
+  }
+  updateLabelLayerVisibilityFn = null
   if (currentSimulation) {
     currentSimulation.stop()
   }
@@ -1050,6 +1725,59 @@ onUnmounted(() => {
   height: 12px;
 }
 
+/* 聚焦模式提示条（大图 Top-K 子图） */
+.graph-focus-banner {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #E0E0E0;
+  border-radius: 20px;
+  padding: 8px 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  z-index: 15;
+  max-width: calc(100% - 48px);
+}
+
+.graph-focus-banner .focus-text {
+  font-size: 12px;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.graph-focus-banner .focus-expanding {
+  color: #7B2D8E;
+}
+
+.graph-focus-banner .focus-btn {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid #7B2D8E;
+  background: #FFF;
+  color: #7B2D8E;
+  border-radius: 13px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.graph-focus-banner .focus-btn:hover {
+  background: #7B2D8E;
+  color: #FFF;
+}
+
+.graph-focus-banner .focus-btn:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 /* Edge Labels Toggle - Top Right */
 .edge-labels-toggle {
   position: absolute;
@@ -1179,6 +1907,19 @@ input:checked + .slider:before {
   padding: 16px;
   overflow-y: auto;
   flex: 1;
+}
+
+.detail-status {
+  padding: 8px 16px;
+  color: #666;
+  background: #F7F7FA;
+  border-bottom: 1px solid #EEE;
+  font-size: 12px;
+}
+
+.detail-status.detail-error {
+  color: #9B4B00;
+  background: #FFF8ED;
 }
 
 .detail-row {

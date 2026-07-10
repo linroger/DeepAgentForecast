@@ -125,6 +125,50 @@
         </div>
 
         <div ref="scrollEl" class="report-scroll">
+          <!-- FORECAST-DASH：结构化预测仪表盘（情景概率卡 + 置信徽章 + 市场分歧瓦片）。
+               端点 404/409（旧报告 / 未启用结构化预测）→ 整体隐藏（degrade-safe）。 -->
+          <section v-if="showDashboard" class="forecast-dash">
+            <div class="dash-head">
+              <span class="diamond">◇</span>
+              <span class="panel-label">{{ L('预测仪表盘','Forecast Dashboard') }}</span>
+              <span
+                v-if="confidenceLevel"
+                class="conf-badge"
+                :class="'conf-' + confidenceLevel"
+                :title="confidenceTitle"
+              >{{ L('置信度','Confidence') }} · {{ confidenceLabel }}</span>
+              <span v-if="ensembleInfo" class="ens-note">
+                {{ L('集成一致度','Ensemble agreement') }} {{ ensembleInfo.agreement != null ? pct(ensembleInfo.agreement) : '—' }}<template v-if="ensembleInfo.nRuns"> · {{ ensembleInfo.nRuns }} {{ L('次运行','runs') }}</template><template v-if="ensembleInfo.spread != null"> · {{ L('离散度','spread') }} σ {{ pct(ensembleInfo.spread) }}</template>
+              </span>
+            </div>
+            <p v-if="fcHeadline" class="dash-headline">{{ fcHeadline }}</p>
+            <div class="dash-grid">
+              <article v-for="(s, idx) in dashScenarios" :key="'sc-' + idx" class="dash-card">
+                <div class="dash-prob">{{ pct(s.probability) }}</div>
+                <div class="dash-bar" aria-hidden="true"><span :style="{ width: pct(s.probability) }"></span></div>
+                <div class="dash-name" :title="s.name">{{ s.name }}</div>
+                <div v-if="s.resolution_criteria" class="dash-criteria" :title="s.resolution_criteria">{{ s.resolution_criteria }}</div>
+              </article>
+            </div>
+            <div v-if="marketTiles.length" class="dash-market">
+              <div class="dash-sub">{{ L('市场分歧','Market Divergence') }}</div>
+              <div class="market-grid">
+                <div
+                  v-for="(m, idx) in marketTiles"
+                  :key="'mk-' + idx"
+                  class="market-tile"
+                  :class="{ 'tile-hot': m.exceeds_10pp }"
+                >
+                  <div class="mt-statement" :title="m.statement">{{ m.statement }}</div>
+                  <div class="mt-nums">
+                    <span class="mt-num">{{ L('模型','Model') }} {{ pct(m.model_probability) }}</span>
+                    <span class="mt-num">{{ L('市场','Market') }} {{ pct(m.market_implied_yes_prob) }}</span>
+                    <span class="mt-delta">Δ {{ divergencePP(m) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
           <!-- VIZ-1：图表画廊（确定性生成的 PNG/SVG 图表 + 图注）。无工件时整体不渲染。 -->
           <section v-if="galleryCharts.length" class="chart-gallery">
             <div class="gallery-head">
@@ -132,9 +176,27 @@
               <span class="panel-label">{{ L('图表','Charts') }}</span>
             </div>
             <div class="gallery-grid">
-              <figure v-for="(c, idx) in galleryCharts" :key="'chart-' + idx" class="chart-fig">
-                <img class="chart-img" :src="c.src" :alt="c.caption || ('chart ' + (idx + 1))" loading="lazy" />
+              <figure v-for="(c, idx) in galleryCharts" :key="c.id || ('chart-' + idx)" class="chart-fig">
+                <img v-if="c.src" class="chart-img" :src="c.src" :alt="c.caption || ('chart ' + (idx + 1))" loading="lazy" />
+                <a
+                  v-else-if="c.interactive"
+                  class="chart-html-card"
+                  :href="c.interactive"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span class="chart-html-icon">◇</span>
+                  <span>{{ L('打开交互式可视化','Open interactive visualization') }} ↗</span>
+                </a>
                 <figcaption v-if="c.caption" class="chart-cap">{{ c.caption }}</figcaption>
+                <!-- VIZ-2：manifest 中存在同名 .html 孪生 → 新标签页打开交互版。 -->
+                <a
+                  v-if="c.interactive && c.src"
+                  class="chart-interactive"
+                  :href="c.interactive"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >{{ L('交互版','Interactive') }} ↗</a>
               </figure>
             </div>
           </section>
@@ -149,9 +211,15 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import {
   getReport, getVizManifest, getSectionsPartial,
-  getReportTranslationMd, reportPdfUrl, reportAssetUrl
+  getReportTranslationMd, reportPdfUrl, reportAssetUrl, getForecast
 } from '../../api/report'
 import { renderMarkdown, extractHeadings } from '../../utils/markdown'
+import {
+  chartAssetKind,
+  filterVizGalleryByMarkdown,
+  normalizeVizGallery,
+  safeChartPath,
+} from '../../utils/vizManifest'
 import { L } from '../../i18n'
 
 const props = defineProps({
@@ -167,6 +235,9 @@ const scrollEl = ref(null)
 
 // VIZ-1：可视化清单（PNG 图表 + 图注）。空数组 → 不渲染图区（degrade-safe）。
 const vizManifest = ref([])
+// FORECAST-DASH：结构化预测对象（GET /api/v1/forecast/<id> 的 data.forecast）。
+// 404/409/网络错误（旧报告 / 未启用 REPORT_STRUCTURED_FORECAST / API_V1 关闭）→ null → 仪表盘隐藏。
+const forecastPayload = ref(null)
 // BILINGUAL：当前展示语种。null=原文（markdown_content）；否则为某翻译语种码（'en'|'zh'）。
 const activeLang = ref(null)
 const langMdCache = ref({})       // 翻译成稿缓存 { lang: markdown }
@@ -197,6 +268,7 @@ async function load() {
     error.value = ''
     loading.value = false
     vizManifest.value = []
+    forecastPayload.value = null
     activeLang.value = null
     langMdCache.value = {}
     partialSections.value = []
@@ -204,15 +276,17 @@ async function load() {
   }
   loading.value = true
   error.value = ''
+  forecastPayload.value = null
   try {
     const res = await getReport(props.reportId)
     const data = (res && res.data) || {}
     md.value = data.markdown_content || ''
     meta.value = data || {}
     activeLang.value = null
-    // 成稿已就绪 → 拉可视化清单；否则进入生成期章节轮询（degrade-safe）。
+    // 成稿已就绪 → 拉可视化清单 + 结构化预测；否则进入生成期章节轮询（degrade-safe）。
     if (md.value) {
       loadVizManifest()
+      loadForecast()
     } else {
       startPolling()
     }
@@ -236,6 +310,18 @@ async function loadVizManifest() {
   }
 }
 
+// FORECAST-DASH：拉取结构化预测。任何失败（404 报告不存在/API_V1 关闭、409 未启用、网络错误）
+// → null → 仪表盘整体隐藏，报告正文不受影响（degrade-safe）。
+async function loadForecast() {
+  try {
+    const res = await getForecast(props.reportId)
+    const data = (res && res.data) || {}
+    forecastPayload.value = (data.forecast && typeof data.forecast === 'object') ? data.forecast : null
+  } catch (e) {
+    forecastPayload.value = null
+  }
+}
+
 // ---------- 当前展示成稿（原文 / 翻译）----------
 const currentMd = computed(() => {
   if (activeLang.value && langMdCache.value[activeLang.value]) {
@@ -250,9 +336,68 @@ const resolveAsset = (rel) => {
   return reportAssetUrl(props.reportId, rel)
 }
 
+// ---------- VIZ-2：manifest 驱动的交互图孪生 ----------
+// 清单中所有 .html 工件路径集合（规范化去掉 './' 前缀）。
+const htmlTwinSet = computed(() => {
+  const s = new Set()
+  ;(vizManifest.value || []).forEach(item => {
+    const p = safeChartPath(item?.path)
+    if (chartAssetKind(p, item?.type) === 'html') s.add(p)
+  })
+  return s
+})
+
+// 仅当 charts/<x>.png 在 viz_manifest 中存在同名 .html 孪生时返回其可访问 URL；
+// 其余（含 markdown 里手写的任意路径）一律返回空串 → 不出现交互链接（No XSS surface）。
+function interactiveHref(rel) {
+  const p = safeChartPath(rel)
+  if (chartAssetKind(p) !== 'image') return ''
+  const twin = p.replace(/\.[^/.]+$/i, '.html')
+  if (!htmlTwinSet.value.has(twin)) return ''
+  return resolveAsset(twin)
+}
+
+// ---------- CITE-1：从成稿 References/参考来源 章节解析引文提示映射 ----------
+// { 'S3': '来源标题…' }，供 renderMarkdown 给引文上标加 hover title。
+// 成稿无 References 章节 → 空映射（上标仍渲染，只是无提示；Dossier 场景则完全不传）。
+const REF_HEADING_RE = /references|sources|bibliography|参考|来源|文献/i
+const citationsMap = computed(() => {
+  const map = {}
+  const src = String(currentMd.value || '')
+  if (!src) return map
+  let inRefs = false
+  let inFence = false
+  for (const line of src.split('\n')) {
+    if (/^```/.test(line)) { inFence = !inFence; continue }
+    if (inFence) continue
+    const h = line.match(/^(#{1,6})\s+(.*)$/)
+    if (h) { inRefs = REF_HEADING_RE.test(h[2]); continue }
+    if (!inRefs) continue
+    const m = line.match(/^\s*(?:[-*+]|\d+\.)\s+\[S(\d+)(-[A-Za-z])?\]\s*[:：.、,，—–-]?\s*(.*)$/)
+    if (!m) continue
+    const key = 'S' + m[1] + (m[2] ? m[2].toLowerCase() : '')
+    if (map[key]) continue
+    // 去掉 markdown 链接/强调噪音，压成单行提示文本。
+    const plain = m[3]
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/[*_`]/g, '')
+      .trim()
+    if (plain) map[key] = plain.length > 180 ? plain.slice(0, 177) + '…' : plain
+  }
+  return map
+})
+
+// renderMarkdown 统一渲染选项（资源解析 + 引文提示 + 交互图孪生）。
+const renderOpts = computed(() => ({
+  resolveUrl: resolveAsset,
+  citations: citationsMap.value,
+  interactiveHref
+}))
+
 const renderedHtml = computed(() => {
   try {
-    return renderMarkdown(currentMd.value || '', { resolveUrl: resolveAsset })
+    return renderMarkdown(currentMd.value || '', renderOpts.value)
   } catch (e) {
     return ''
   }
@@ -324,22 +469,99 @@ async function switchLang(key) {
 // ---------- PDF-1：当前视图对应的 PDF 直链 ----------
 const pdfHref = computed(() => reportPdfUrl(props.reportId, activeLang.value || undefined))
 
-// ---------- VIZ-1：图表画廊（仅取图片类工件）----------
+// ---------- VIZ-1：图表画廊（静态预览优先；Plotly HTML-only 也可直接打开）----------
 const galleryCharts = computed(() => {
-  const list = vizManifest.value || []
-  return list
-    .filter(item => {
-      const p = String((item && item.path) || '').toLowerCase()
-      const ty = String((item && item.type) || '').toLowerCase()
-      // 仅渲染位图/矢量图；Mermaid(.mmd)/CSV 等非图片工件排除在画廊外。
-      return /\.(png|svg|jpe?g|gif|webp)$/.test(p) || ty === 'png' || ty === 'svg' || ty === 'image'
-    })
-    .map(item => ({
-      src: resolveAsset(item.path),
-      caption: (item && item.caption) || ''
+  const fallbackOnly = filterVizGalleryByMarkdown(
+    normalizeVizGallery(vizManifest.value),
+    currentMd.value,
+  )
+  return fallbackOnly.map(item => ({
+      id: item.id,
+      src: item.imagePath ? resolveAsset(item.imagePath) : '',
+      caption: item.caption,
+      // schema-v2 的主 path 是 Plotly HTML、png_path 是静态孪生；legacy
+      // PNG+HTML 双行同样被纯函数折叠为一个预览和一个交互链接。
+      interactive: item.interactivePath ? resolveAsset(item.interactivePath) : ''
     }))
-    .filter(c => c.src)
+    .filter(c => c.src || c.interactive)
 })
+
+// ---------- FORECAST-DASH：结构化预测仪表盘 ----------
+const fc = computed(() => forecastPayload.value || null)
+
+// 0..1 概率 → 百分比字符串（保留 1 位小数，去掉尾零由 Math.round 保证）。
+function pct(v) {
+  const n = Number(v)
+  if (!isFinite(n)) return '—'
+  return (Math.round(n * 1000) / 10) + '%'
+}
+
+const dashScenarios = computed(() => {
+  const list = fc.value && Array.isArray(fc.value.scenarios) ? fc.value.scenarios : []
+  return list
+    .filter(s => s && s.name && isFinite(Number(s.probability)))
+    .slice()
+    .sort((a, b) => Number(b.probability) - Number(a.probability))
+    .slice(0, 6)
+})
+
+// 仪表盘可见性：至少有一个可展示情景才渲染（旧报告/无结构化预测 → 隐藏）。
+const showDashboard = computed(() => dashScenarios.value.length > 0)
+
+const fcHeadline = computed(() => {
+  const h = fc.value && fc.value.headline
+  return typeof h === 'string' ? h.trim() : ''
+})
+
+const confidenceLevel = computed(() => {
+  const c = String((fc.value && fc.value.confidence) || '').toLowerCase().trim()
+  if (!c) return ''
+  return (c === 'low' || c === 'medium' || c === 'high') ? c : 'other'
+})
+
+const confidenceLabel = computed(() => {
+  const c = confidenceLevel.value
+  if (c === 'low') return L('低', 'Low')
+  if (c === 'medium') return L('中', 'Medium')
+  if (c === 'high') return L('高', 'High')
+  return String((fc.value && fc.value.confidence) || '')
+})
+
+// hover 展示置信度理由（后端 confidence_rationale，可能为空）。
+const confidenceTitle = computed(() => {
+  const r = fc.value && fc.value.confidence_rationale
+  return typeof r === 'string' ? r : ''
+})
+
+// 集成（多种子 ensemble）统计：一致度 / 运行次数 / 概率离散度（各情景 stdev 均值）。
+const ensembleInfo = computed(() => {
+  const e = fc.value && fc.value.ensemble
+  if (!e || typeof e !== 'object') return null
+  const n = Number(e.n_runs)
+  const agreement = Number(e.agreement)
+  const scen = Array.isArray(e.scenarios) ? e.scenarios : []
+  const sds = scen.map(s => Number(s && s.stdev)).filter(v => isFinite(v))
+  const spread = sds.length ? sds.reduce((a, b) => a + b, 0) / sds.length : null
+  return {
+    nRuns: isFinite(n) && n > 0 ? n : null,
+    agreement: isFinite(agreement) ? agreement : null,
+    spread
+  }
+})
+
+// 市场分歧瓦片：market_comparison.comparisons（PM-2 负载）。缺失/为空 → 区块不渲染。
+const marketTiles = computed(() => {
+  const mc = fc.value && fc.value.market_comparison
+  const comps = mc && Array.isArray(mc.comparisons) ? mc.comparisons : []
+  return comps.filter(c => c && c.statement).slice(0, 6)
+})
+
+function divergencePP(m) {
+  const d = Number(m && m.divergence)
+  if (!isFinite(d)) return '—'
+  const pp = Math.round(d * 1000) / 10
+  return (pp > 0 ? '+' : '') + pp + 'pp'
+}
 
 // ---------- PROGRESSIVE：生成期章节轮询 ----------
 function stopPolling() {
@@ -385,7 +607,7 @@ async function pollOnce() {
       pollStopped = true
       stopPolling()
       md.value = finalMd
-      if (finalMd) { activeLang.value = null; loadVizManifest() }
+      if (finalMd) { activeLang.value = null; loadVizManifest(); loadForecast() }
       return
     }
   } catch (e) {
@@ -415,7 +637,8 @@ const writingSectionLabel = computed(() => {
 })
 function renderPartial(mdText) {
   try {
-    return renderMarkdown(mdText || '', { resolveUrl: resolveAsset })
+    // 生成期单章通常尚无 References 章节 → 引文自动降级为纯上标（markdown.js 预扫描决定）。
+    return renderMarkdown(mdText || '', renderOpts.value)
   } catch (e) {
     return ''
   }
@@ -906,6 +1129,65 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border);
   background: var(--paper);
 }
+/* VIZ-2：内嵌图片的交互孪生链接（仅 manifest 中存在同名 .html 时出现）。 */
+.md-body :deep(.md-img-wrap) {
+  display: block;
+  margin: 1.2em 0;
+  text-align: center;
+}
+.md-body :deep(.md-img-wrap .md-img) { margin: 0 auto; }
+.md-body :deep(.md-img-interactive) {
+  display: inline-block;
+  margin-top: 7px;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--soft);
+  text-decoration: none;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.md-body :deep(.md-img-interactive:hover) {
+  color: var(--orange);
+  border-color: var(--orange);
+}
+
+/* CITE-1：引文上标（[Sxx] → sup），保持阅读流不被打断。 */
+.md-body :deep(.md-cite) {
+  font-family: var(--mono);
+  font-size: 0.68em;
+  line-height: 0;
+  vertical-align: super;
+  margin: 0 1px;
+  color: var(--muted);
+}
+.md-body :deep(.md-cite a) {
+  color: var(--orange);
+  border-bottom: none;
+  padding: 0 2px;
+  border-radius: 2px;
+  transition: background 0.12s ease;
+}
+.md-body :deep(.md-cite a:hover) { background: rgba(255, 69, 0, 0.12); }
+/* References 条目：锚点定位余量 + 标记标签样式。 */
+.md-body :deep(.md-ref) { scroll-margin-top: 16px; }
+.md-body :deep(.md-ref-tag) {
+  font-family: var(--mono);
+  font-size: 0.76em;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 5px;
+  margin-right: 5px;
+  white-space: nowrap;
+  background: var(--soft);
+}
+/* 被 #ref-Sxx 锚点命中的条目短暂高亮，帮助读者定位。 */
+.md-body :deep(.md-ref:target) { background: rgba(255, 69, 0, 0.08); }
 
 /* ---------- Header: PDF button + language toggle ---------- */
 .pdf-btn {
@@ -946,6 +1228,158 @@ onBeforeUnmount(() => {
 .lang-btn.active { background: var(--ink); color: var(--paper); }
 .lang-btn:disabled { opacity: 0.55; cursor: default; }
 
+/* ---------- Forecast dashboard (FORECAST-DASH) ---------- */
+.forecast-dash {
+  max-width: 760px;
+  margin: 0 auto 28px;
+  border: 1px solid var(--border);
+  background: var(--soft);
+  padding: 16px 18px 18px;
+}
+.dash-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.conf-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  background: var(--paper);
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: default;
+}
+.conf-badge.conf-high { color: var(--ok); border-color: var(--ok); }
+.conf-badge.conf-medium { color: var(--orange); border-color: var(--orange); }
+.conf-badge.conf-low { color: var(--err); border-color: var(--err); }
+.ens-note {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.dash-headline {
+  font-family: var(--display);
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  margin: 0 0 12px;
+}
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.dash-card {
+  border: 1px solid var(--border);
+  background: var(--paper);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.dash-prob {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+}
+.dash-bar {
+  height: 4px;
+  background: var(--border);
+  margin: 8px 0 10px;
+  overflow: hidden;
+}
+.dash-bar span {
+  display: block;
+  height: 100%;
+  background: var(--orange);
+}
+.dash-name {
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dash-criteria {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--faint);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dash-market { margin-top: 14px; }
+.dash-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.market-tile {
+  border: 1px solid var(--border);
+  background: var(--paper);
+  padding: 10px 12px;
+  min-width: 0;
+}
+.market-tile.tile-hot { border-left: 3px solid var(--orange); }
+.mt-statement {
+  font-family: var(--display);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.mt-nums {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 7px;
+}
+.mt-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.mt-delta {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--orange);
+  white-space: nowrap;
+}
+
 /* ---------- Chart gallery (VIZ-1) ---------- */
 .chart-gallery {
   max-width: 760px;
@@ -976,6 +1410,34 @@ onBeforeUnmount(() => {
   height: auto;
   background: var(--paper);
 }
+.chart-html-card {
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  border: 1px dashed var(--border);
+  color: var(--ink);
+  background: linear-gradient(145deg, var(--paper), var(--soft));
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-align: center;
+  text-decoration: none;
+  transition: color 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+.chart-html-card:hover {
+  color: var(--orange);
+  border-color: var(--orange);
+  transform: translateY(-1px);
+}
+.chart-html-icon {
+  font-size: 30px;
+  line-height: 1;
+  color: var(--orange);
+}
 .chart-cap {
   font-family: var(--mono);
   font-size: 11px;
@@ -983,6 +1445,25 @@ onBeforeUnmount(() => {
   color: var(--muted);
   margin-top: 8px;
   letter-spacing: 0.01em;
+}
+/* VIZ-2：画廊图的交互孪生链接。 */
+.chart-interactive {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--paper);
+  text-decoration: none;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.chart-interactive:hover {
+  color: var(--orange);
+  border-color: var(--orange);
 }
 
 /* ---------- Progressive generation view ---------- */

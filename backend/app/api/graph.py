@@ -456,6 +456,10 @@ def build_graph():
                 
                 builder._wait_for_episodes(episode_uuids, wait_progress_callback)
                 
+                # Wave9-KG（布局预计算）：建图完成即持久化 positions.json（失败只告警）。
+                if getattr(Config, "GRAPH_LAYOUT_PRECOMPUTE", True):
+                    builder.compute_layout(graph_id)
+
                 # 获取图谱数据
                 task_manager.update_task(
                     task_id,
@@ -561,10 +565,26 @@ def list_tasks():
 
 # ============== 图谱数据接口 ==============
 
+def _parse_bool_arg(name: str, default: bool = False) -> bool:
+    """query 参数的宽松布尔解析（1/true/yes/on）。"""
+    raw = (request.args.get(name, "") or "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on")
+
+
 @graph_bp.route('/data/<graph_id>', methods=['GET'])
 def get_graph_data(graph_id: str):
     """
-    获取图谱数据（节点和边）
+    获取图谱数据（节点和边）。
+
+    Wave9-KG 可选 query 参数（全部缺省 = 旧的全量行为，逐字节兼容）：
+        top_k:      按度数排名只返回前 K 个节点及导出边；0/负值 = 用
+                    Config.GRAPH_UI_MAX_NODES（默认 400）。
+        min_degree: 只保留度数 ≥ 该值的节点。
+        slim:       true 时剥掉 summary/fact/episodes/attributes 等重字段
+                    （明细走 /data/<graph_id>/node|edge/<uuid>）。
+        full:       true 时强制全量（覆盖 top_k/min_degree，调试逃生门）。
     """
     try:
         if not Config.ZEP_API_KEY:
@@ -572,15 +592,103 @@ def get_graph_data(graph_id: str):
                 "success": False,
                 "error": "ZEP_API_KEY未配置"
             }), 500
-        
+
+        top_k = request.args.get('top_k', None, type=int)
+        min_degree = request.args.get('min_degree', None, type=int)
+        slim = _parse_bool_arg('slim')
+        if _parse_bool_arg('full'):
+            top_k = None
+            min_degree = None
+
         builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
-        graph_data = builder.get_graph_data(graph_id)
-        
+        graph_data = builder.get_graph_data(
+            graph_id, top_k=top_k, min_degree=min_degree, slim=slim
+        )
+
         return jsonify({
             "success": True,
             "data": graph_data
         })
-        
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@graph_bp.route('/data/<graph_id>/neighbors/<node_uuid>', methods=['GET'])
+def get_graph_neighbors(graph_id: str, node_uuid: str):
+    """
+    Wave9-KG（点击展开）：返回某节点 depth 跳内的邻域子图。
+
+    query 参数：depth（默认 1，上限 3）、slim（默认 true）。
+    """
+    try:
+        depth = request.args.get('depth', 1, type=int)
+        slim = _parse_bool_arg('slim', default=True)
+        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+        data = builder.get_node_neighborhood(graph_id, node_uuid, depth=depth, slim=slim)
+        return jsonify({"success": True, "data": data})
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@graph_bp.route('/data/<graph_id>/node/<node_uuid>', methods=['GET'])
+def get_graph_node_detail(graph_id: str, node_uuid: str):
+    """Wave9-KG（详情面板）：单节点全字段（slim 列表剥掉的字段从这里取）。"""
+    try:
+        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+        node = builder.get_node_detail(graph_id, node_uuid)
+        if node is None:
+            return jsonify({"success": False, "error": f"节点不存在: {node_uuid}"}), 404
+        return jsonify({"success": True, "data": node})
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@graph_bp.route('/data/<graph_id>/edge/<edge_uuid>', methods=['GET'])
+def get_graph_edge_detail(graph_id: str, edge_uuid: str):
+    """Wave9-KG（详情面板）：单边全字段（fact/episodes/attributes/时间戳）。"""
+    try:
+        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+        edge = builder.get_edge_detail(graph_id, edge_uuid)
+        if edge is None:
+            return jsonify({"success": False, "error": f"边不存在: {edge_uuid}"}), 404
+        return jsonify({"success": True, "data": edge})
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@graph_bp.route('/gc', methods=['POST'])
+def gc_stale_graphs():
+    """
+    Wave9-KG（陈旧图谱 GC）：回收不再被任何管线/项目引用的历史图谱。
+
+    请求（JSON，可选）：{"retain": 5}  // 未引用图中额外保留的最新个数
+    返回 GC 审计（kept/deleted/failed/skipped_reason）。
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        retain = data.get('retain')
+        if retain is not None:
+            retain = int(retain)
+        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+        audit = builder.gc_stale_graphs(retain=retain)
+        return jsonify({"success": True, "data": audit})
     except Exception as e:
         return jsonify({
             "success": False,

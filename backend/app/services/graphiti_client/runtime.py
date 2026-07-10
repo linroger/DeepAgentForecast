@@ -165,6 +165,13 @@ class GraphitiRuntime:
         # creation needs no extra lock.
         self._graph_locks: dict = {}   # graph_id -> asyncio.Lock
         self._resolved_backend: str | None = None
+        # Wave9-KG（抽取加固）：episode 级 skip 原因计数（graph_id -> {reason: count}），
+        # 供 graph_builder 把「为什么 48-60% 的 chunk 被跳过」写进 ingest 审计；以及
+        # LLM_FALLBACK_PROVIDER 兜底客户端（懒构建）与换入引用计数（fan-out 并发安全）。
+        self._ingest_skip_reasons: dict = {}   # graph_id -> {reason: count}
+        self._fallback_llm = None              # AppGraphitiLLMClient | False(不可用) | None(未探测)
+        self._fb_depth: dict = {}              # graph_id -> 当前处于兜底模式的 episode 数
+        self._fb_primary: dict = {}            # graph_id -> 换出的主 LLM client
         atexit.register(self._shutdown)
 
     # ------------------------------------------------------------------
@@ -449,11 +456,164 @@ class GraphitiRuntime:
                 reference_time=reference_time,
             )
 
+    # ------------------------------------------------------------------
+    # Wave9-KG 抽取加固：episode 级重试阶梯。llm_adapter 内部已有「schema-echo 检测 +
+    # 纠正提示 + 升温(0.0→0.4)」的调用级阶梯，但一次 episode 的抽取由多个 LLM 调用组成，
+    # 任一调用耗尽内层阶梯就让整个 episode 报废（实测一次完整 run 有 48-60% 的 chunk
+    # 因 'LLM returned a JSON schema instead of an instance' 被跳过）。这里在 episode
+    # 层再补两级：(1) 整 episode 重试（重滚内层非确定性的 0.4 档升温）；(2) 重试耗尽后
+    # 换入 LLM_FALLBACK_PROVIDER 兜底客户端再抽一次（GRAPH_INGEST_FALLBACK，默认开）。
+    # 最终仍失败才记 skip 原因并上抛（调用方照旧隔离/记账）。
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _classify_ingest_error(exc: BaseException) -> str:
+        """把 episode 抽取异常归类为可审计的 skip 原因（用于计数与重试路由）。"""
+        msg = str(exc).lower()
+        if "schema instead of an instance" in msg or "schema echo" in msg:
+            return "schema_echo"
+        if "validation" in msg and ("failed" in msg or "error" in msg):
+            return "schema_validation"
+        if "rate limit" in msg or "429" in msg:
+            return "rate_limit"
+        if isinstance(exc, (asyncio.TimeoutError, TimeoutError)) or "timeout" in msg:
+            return "timeout"
+        if "content" in msg and ("filter" in msg or "sensitive" in msg):
+            return "content_filter"
+        return "other"
+
+    def _record_skip_reason(self, graph_id: str, reason: str) -> None:
+        by_reason = self._ingest_skip_reasons.setdefault(graph_id, {})
+        by_reason[reason] = by_reason.get(reason, 0) + 1
+
+    def pop_ingest_skip_reasons(self, graph_id: str) -> dict:
+        """取走并清零该图累计的 episode skip 原因计数（graph_builder 折进 ingest 审计）。"""
+        return dict(self._ingest_skip_reasons.pop(graph_id, {}) or {})
+
+    def _get_fallback_llm(self):
+        """懒构建 LLM_FALLBACK_PROVIDER 的 graphiti 适配客户端；不可用返回 None。"""
+        if self._fallback_llm is False:
+            return None
+        if self._fallback_llm is not None:
+            return self._fallback_llm
+        try:
+            from ...config import Config
+
+            if not getattr(Config, "GRAPH_INGEST_FALLBACK", True):
+                self._fallback_llm = False
+                return None
+            provider = (os.environ.get("LLM_FALLBACK_PROVIDER", "") or "").strip().lower()
+            if not provider or provider == (getattr(Config, "LLM_PROVIDER", "") or "").strip().lower():
+                self._fallback_llm = False
+                return None
+            from ...utils.llm_client import LLMClient as AppLLMClient
+            from .llm_adapter import AppGraphitiLLMClient
+
+            app_llm = AppLLMClient(
+                provider=provider,
+                model=(os.environ.get("LLM_FALLBACK_MODEL", "") or None),
+                api_key=(os.environ.get("LLM_FALLBACK_API_KEY", "") or None),
+                base_url=(os.environ.get("LLM_FALLBACK_BASE_URL", "") or None),
+            )
+            app_llm._is_fallback = True  # 与 llm_client S9 一致：兜底客户端禁止再失败转移
+            self._fallback_llm = AppGraphitiLLMClient(app_llm=app_llm)
+            logger.info("graphiti ingest fallback LLM ready: provider=%s", provider)
+            return self._fallback_llm
+        except Exception as exc:  # noqa: BLE001 — 兜底不可用 → 只用重试阶梯
+            logger.warning("graphiti ingest fallback LLM unavailable: %s", exc)
+            self._fallback_llm = False
+            return None
+
+    @contextlib.asynccontextmanager
+    async def _fallback_llm_swapped(self, graph_id: str, g):
+        """把该图的 Graphiti LLM 客户端临时换成兜底客户端（引用计数，fan-out 安全）。
+
+        仅在 bg loop 单线程上执行；计数 0→1 换入、归 0 换回，期间其他并发 episode
+        也走兜底（可接受——它们同样处于主提供方 schema-echo 风暴中）。"""
+        fb = self._get_fallback_llm()
+        if fb is None:
+            yield False
+            return
+        depth = self._fb_depth.get(graph_id, 0)
+        if depth == 0:
+            self._fb_primary[graph_id] = g.llm_client
+            with contextlib.suppress(Exception):
+                fb.set_tracer(getattr(g, "tracer", None))
+            g.llm_client = fb
+            with contextlib.suppress(Exception):
+                g.clients.llm_client = fb  # add_episode 经 self.clients 取用
+        self._fb_depth[graph_id] = depth + 1
+        try:
+            yield True
+        finally:
+            d = self._fb_depth.get(graph_id, 1) - 1
+            self._fb_depth[graph_id] = d
+            if d <= 0:
+                self._fb_depth.pop(graph_id, None)
+                primary = self._fb_primary.pop(graph_id, None)
+                if primary is not None:
+                    g.llm_client = primary
+                    with contextlib.suppress(Exception):
+                        g.clients.llm_client = primary
+
     async def _add_episode_locked(
         self, graph_id, *, name, body, source_type, source_description, reference_time
     ) -> str:
         """Write one episode. Caller MUST hold ``self._graph_lock(graph_id)``."""
         g = await self._ensure_graph(graph_id)
+        try:
+            from ...config import Config
+
+            schema_retries = max(0, int(getattr(Config, "GRAPH_EPISODE_SCHEMA_RETRIES", 1) or 0))
+        except Exception:  # noqa: BLE001
+            schema_retries = 1
+
+        last_exc: Exception | None = None
+        reason = "other"
+        for attempt in range(1 + schema_retries):
+            try:
+                if attempt:
+                    logger.info("[%s] episode %s: schema-echo retry %d/%d (re-rolls the "
+                                "corrective+temperature ladder)", graph_id, name, attempt,
+                                schema_retries)
+                return await self._add_episode_once(
+                    g, graph_id, name=name, body=body, source_type=source_type,
+                    source_description=source_description, reference_time=reference_time,
+                )
+            except Exception as exc:  # noqa: BLE001 — 分类后决定重试/兜底/上抛
+                # CancelledError 是 BaseException，自然穿透（不吞取消）。
+                last_exc = exc
+                reason = self._classify_ingest_error(exc)
+                # 只有 schema 类失败值得整 episode 重滚；限流/超时等已有各自的内层处理。
+                if reason not in ("schema_echo", "schema_validation"):
+                    break
+
+        # 重试耗尽：schema 类失败换入兜底提供方再抽一次（若配置且可用）。
+        if reason in ("schema_echo", "schema_validation"):
+            async with self._fallback_llm_swapped(graph_id, g) as swapped:
+                if swapped:
+                    try:
+                        logger.info("[%s] episode %s: retrying with fallback provider after "
+                                    "%s", graph_id, name, reason)
+                        uuid = await self._add_episode_once(
+                            g, graph_id, name=name, body=body, source_type=source_type,
+                            source_description=source_description,
+                            reference_time=reference_time,
+                        )
+                        logger.info("[%s] episode %s: fallback provider recovered the "
+                                    "extraction", graph_id, name)
+                        return uuid
+                    except Exception as exc:  # noqa: BLE001 — CancelledError 自然穿透
+                        last_exc = exc
+                        reason = f"fallback_{self._classify_ingest_error(exc)}"
+
+        self._record_skip_reason(graph_id, reason)
+        assert last_exc is not None
+        raise last_exc
+
+    async def _add_episode_once(
+        self, g, graph_id, *, name, body, source_type, source_description, reference_time
+    ) -> str:
+        """单次 graphiti add_episode（无重试）。"""
         entity_types, edge_types, edge_type_map = self._ontologies.get(
             graph_id, (None, None, None)
         )
@@ -609,17 +769,22 @@ class GraphitiRuntime:
             )
         out = []
         n_failed = 0
+        reasons: dict = {}  # Wave9-KG：本批 skip 原因分布（累计计数在 _add_episode_locked）
         for idx, r in enumerate(results):
             if isinstance(r, BaseException):
                 n_failed += 1
-                logger.warning("[%s] episode %d ingest failed (skipped): %s",
-                               graph_id, idx, str(r)[:160])
+                reason = self._classify_ingest_error(r)
+                reasons[reason] = reasons.get(reason, 0) + 1
+                logger.warning("[%s] episode %d ingest failed (skipped, reason=%s): %s",
+                               graph_id, idx, reason, str(r)[:160])
                 continue
             if r:
                 out.append(r)
         if n_failed:
-            logger.warning("[%s] add_episodes_concurrent: %d/%d episodes skipped due to errors",
-                           graph_id, n_failed, len(episodes))
+            logger.warning("[%s] add_episodes_concurrent: %d/%d episodes skipped due to "
+                           "errors (reasons: %s)",
+                           graph_id, n_failed, len(episodes),
+                           ", ".join(f"{k}={v}" for k, v in sorted(reasons.items())))
         return out
 
     def build_communities(self, graph_id: str) -> list:
@@ -1119,6 +1284,102 @@ class GraphitiRuntime:
             results = await g.search_(query, **kwargs)
         return list(results.edges), list(results.nodes)
 
+    # ------------------------------------------------------------------
+    # Wave9-KG PAGINATION FIX（实测验证的 falkordblite bug）：graphiti 的
+    # get_by_group_ids 用 `WHERE uuid < $cursor ... ORDER BY uuid DESC LIMIT n`
+    # 做游标分页，但 falkordblite 在 ORDER BY+LIMIT 计划里会**丢弃该属性谓词**
+    # （实测 graph mirofish_2ef732b011fc4182：第 2 页返回的首行 uuid 大于游标，
+    # 分页循环因此反复取回同一批行，直到 10,000 上限——UI 边负载 ~3x 重复、
+    # graph_edge_count/components 指标全被污染）。修复：不再依赖 WHERE 范围谓词，
+    # 先取全量**有序 uuid 列表**（本地嵌入库，代价可忽略），在 Python 侧定位游标
+    # 偏移（= ORDER BY uuid SKIP $offset LIMIT $limit 的等价语义），再按 uuid IN
+    # 批量取回（等值/IN 谓词不受该 bug 影响——merge/get_by_uuid 全线依赖它们）。
+    # ------------------------------------------------------------------
+    async def _list_uuids_ordered(self, g, graph_id: str, kind: str) -> list:
+        """返回该图全部 node/edge uuid，按 uuid DESC 排序（与 graphiti 游标语义一致）。
+
+        刻意**不带任何 WHERE 属性谓词**：实测（gdb 副本，graph mirofish_2ef732b011fc4182）
+        falkordblite 连 `WHERE e.group_id = $gid` 这样的**等值**谓词都会静默丢行
+        （3,306 条边只回 3,123，而按 group_id 聚合证明全部 3,306 条的 group_id 正确）。
+        本仓库两个 falkor 后端都是「一图一租户库」（driver database=graph_id），Kuzu 也
+        按图分目录，group 过滤本就冗余；仍取回 group_id 在 Python 侧过滤，双保险。
+        """
+        if kind != "node":
+            raise ValueError("edges 不走 uuid 分页——WHERE uuid IN 对边同样丢行，"
+                             "请用 _fetch_edges_unfiltered（零谓词全量取回）")
+        cypher = (
+            "MATCH (n:Entity) "
+            "RETURN n.uuid AS uuid, n.group_id AS gid ORDER BY n.uuid DESC"
+        )
+        records, _, _ = await g.driver.execute_query(cypher)
+        # Python 侧 group 过滤（属性读取可靠，谓词不可靠）+ 去重保序（防御：异常后端把
+        # 同一 uuid 返回多次时，分页也绝不放大它）。
+        return list(dict.fromkeys(
+            r.get("uuid") for r in (records or [])
+            if r.get("uuid") and (r.get("gid") in (graph_id, None))
+        ))
+
+    async def _fetch_edges_unfiltered(self, g, graph_id: str) -> list:
+        """一次性取回该图全部 RELATES_TO 实体边（EntityEdge 对象，uuid DESC 排序）。
+
+        为什么不用 EntityEdge.get_by_uuids / get_by_group_ids：falkordblite 对**边**
+        属性的任何 WHERE 谓词（含 `e.uuid IN $uuids` 与 `e.group_id = $gid` 等值匹配）
+        都会静默丢行（实测 3,306 条丢到 3,123）。此处查询零 WHERE，投影复用 graphiti
+        自己的 return query / record parser，group 过滤与去重在 Python 侧完成。
+        本地嵌入库全量扫描代价可忽略（数千行）。
+        """
+        from graphiti_core.edges import (
+            get_entity_edge_from_record,
+            get_entity_edge_return_query,
+        )
+
+        provider = getattr(getattr(g, "driver", None), "provider", None)
+        provider_name = str(getattr(provider, "value", provider) or "").lower()
+        if provider_name == "kuzu":
+            match = ("MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_)"
+                     "-[:RELATES_TO]->(m:Entity) ")
+        else:
+            match = "MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity) "
+        cypher = (match + "RETURN " + get_entity_edge_return_query(provider)
+                  + " ORDER BY e.uuid DESC")
+        records, _, _ = await g.driver.execute_query(cypher)
+        edges = []
+        seen: set = set()
+        for rec in (records or []):
+            try:
+                e = get_entity_edge_from_record(rec, provider)
+            except Exception as exc:  # noqa: BLE001 — 单条坏记录不中断全量读取
+                logger.debug("edge record parse failed for %s: %s", graph_id, exc)
+                continue
+            gid = getattr(e, "group_id", None)
+            if gid not in (graph_id, None):
+                continue
+            if e.uuid in seen:
+                continue
+            seen.add(e.uuid)
+            edges.append(e)
+        edges.sort(key=lambda e: getattr(e, "uuid", "") or "", reverse=True)
+        return edges
+
+    @staticmethod
+    def _page_after_cursor(uuids_desc: list, uuid_cursor, limit: int) -> list:
+        """在 DESC 有序 uuid 列表上取「游标之后」的一页（游标本身不含在内）。
+
+        游标不在列表中（并发删除/合并）时按序定位到第一个 < 游标的元素，语义仍单调
+        前进、绝不回绕——这是旧 WHERE 谓词方案在本后端上做不到的保证。
+        """
+        lim = max(0, int(limit or 0))
+        if not uuids_desc or lim == 0:
+            return []
+        if not uuid_cursor:
+            return uuids_desc[:lim]
+        try:
+            start = uuids_desc.index(uuid_cursor) + 1
+        except ValueError:
+            # DESC 序：> cursor 的元素全部在前，跳过它们即为游标位置。
+            start = sum(1 for u in uuids_desc if u > uuid_cursor)
+        return uuids_desc[start:start + lim]
+
     def list_nodes(self, graph_id: str, limit: int, uuid_cursor):
         return self.run(self._list_nodes(graph_id, limit, uuid_cursor))
 
@@ -1128,26 +1389,29 @@ class GraphitiRuntime:
 
         # EXECPLAN2 F-12-8: optionally serialize read-vs-write on this graph_id.
         async with self._read_guard(graph_id):
-            return await EntityNode.get_by_group_ids(
-                g.driver, [graph_id], limit=limit, uuid_cursor=uuid_cursor
-            )
+            uuids = await self._list_uuids_ordered(g, graph_id, "node")
+            page = self._page_after_cursor(uuids, uuid_cursor, limit)
+            if not page:
+                return []
+            nodes = await EntityNode.get_by_uuids(g.driver, page)
+        # get_by_uuids 不保证顺序；恢复 DESC 序，保证 batch[-1] 游标语义稳定。
+        nodes.sort(key=lambda n: getattr(n, "uuid", "") or "", reverse=True)
+        return nodes
 
     def list_edges(self, graph_id: str, limit: int, uuid_cursor):
         return self.run(self._list_edges(graph_id, limit, uuid_cursor))
 
     async def _list_edges(self, graph_id, limit, uuid_cursor):
         g = await self._ensure_graph(graph_id)
-        from graphiti_core.edges import EntityEdge
-        from graphiti_core.errors import GroupsEdgesNotFoundError
 
         # EXECPLAN2 F-12-8: optionally serialize read-vs-write on this graph_id.
-        try:
-            async with self._read_guard(graph_id):
-                return await EntityEdge.get_by_group_ids(
-                    g.driver, [graph_id], limit=limit, uuid_cursor=uuid_cursor
-                )
-        except GroupsEdgesNotFoundError:
-            return []
+        async with self._read_guard(graph_id):
+            # 边不能走 get_by_uuids（falkordblite 对边属性谓词静默丢行，见
+            # _fetch_edges_unfiltered 注释）——全量取回后在 Python 侧按游标切页。
+            edges = await self._fetch_edges_unfiltered(g, graph_id)
+        by_uuid = {e.uuid: e for e in edges}
+        page = self._page_after_cursor([e.uuid for e in edges], uuid_cursor, limit)
+        return [by_uuid[u] for u in page]
 
     def get_node(self, uuid: str, graph_id: str | None = None):
         return self.run(self._get_node(uuid, graph_id))
@@ -1199,14 +1463,13 @@ class GraphitiRuntime:
         from graphiti_core.nodes import EntityNode
 
         out: list = []
-        cursor = None
         async with self._read_guard(graph_id):
-            while True:
-                batch = await EntityNode.get_by_group_ids(
-                    g.driver, [graph_id], limit=page, uuid_cursor=cursor
-                )
-                if not batch:
-                    break
+            # Wave9-KG：改走「有序 uuid 全列表 + IN 批量取回」——旧的 uuid_cursor 分页
+            # 在 falkordblite 上因谓词被丢弃而重复取页（entity_merges.json 实测
+            # nodes_scanned=823 vs 真实 740）。
+            uuids = await self._list_uuids_ordered(g, graph_id, "node")
+            for i in range(0, len(uuids), page):
+                batch = await EntityNode.get_by_uuids(g.driver, uuids[i:i + page])
                 for n in batch:
                     out.append({
                         "uuid": n.uuid,
@@ -1221,10 +1484,47 @@ class GraphitiRuntime:
                         # 真正生效；缺失时默认 {}，与现状完全一致（degrade-safe）。
                         "attributes": dict(getattr(n, "attributes", {}) or {}),
                     })
-                if len(batch) < page:
-                    break
-                cursor = batch[-1].uuid
         return out
+
+    def all_entity_edges(self, graph_id: str) -> list:
+        """Wave9-KG：返回该图全部 RELATES_TO 实体边（轻量 dict），供剪枝/子图分析。"""
+        return self.run(self._all_entity_edges(graph_id))
+
+    async def _all_entity_edges(self, graph_id):
+        g = await self._ensure_graph(graph_id)
+        async with self._read_guard(graph_id):
+            edges = await self._fetch_edges_unfiltered(g, graph_id)
+        return [{
+            "uuid": e.uuid,
+            "name": getattr(e, "name", "") or "",
+            "source_node_uuid": getattr(e, "source_node_uuid", "") or "",
+            "target_node_uuid": getattr(e, "target_node_uuid", "") or "",
+        } for e in edges]
+
+    def mention_counts(self, graph_id: str) -> dict:
+        """Wave9-KG：每个实体节点被 Episodic MENTIONS 的次数（重要度信号之一）。
+
+        失败返回 {}（degrade-safe：剪枝重要度退化为 度数+is_core）。"""
+        return self.run(self._mention_counts(graph_id))
+
+    async def _mention_counts(self, graph_id):
+        try:
+            g = await self._ensure_graph(graph_id)
+            async with self._read_guard(graph_id):
+                # 不用 WHERE 谓词（falkordblite 连等值谓词都可能静默丢行，见
+                # _list_uuids_ordered）；group 过滤在 Python 侧做（一图一租户库，冗余双保险）。
+                records, _, _ = await g.driver.execute_query(
+                    "MATCH (ep:Episodic)-[:MENTIONS]->(n:Entity) "
+                    "RETURN n.uuid AS uuid, n.group_id AS gid, count(ep) AS c",
+                )
+            return {
+                r.get("uuid"): int(r.get("c") or 0)
+                for r in (records or [])
+                if r.get("uuid") and (r.get("gid") in (graph_id, None))
+            }
+        except Exception as exc:  # noqa: BLE001 — 重要度先验缺失不应中断剪枝
+            logger.warning("mention_counts failed for %s: %s", graph_id, exc)
+            return {}
 
     def embed_texts(self, texts: list) -> list:
         """Embed a list of strings into unit vectors (local sentence-transformer)."""
@@ -1318,6 +1618,110 @@ class GraphitiRuntime:
             except Exception as exc:
                 logger.warning("merge_nodes: victim delete failed (%s): %s", graph_id, exc)
         return {"rewired": rewired, "deleted": deleted}
+
+    def delete_entity_nodes(self, graph_id: str, uuids: list) -> dict:
+        """Wave9-KG（graph_pruner 的删除原语，与 merge_nodes 同族）：批量 DETACH-DELETE
+        实体节点。走 graphiti 自己的 ``EntityNode.delete``（各后端方言——含 Kuzu 的
+        reified 边节点——由库处理，而非手写 Cypher），整批持有 per-graph 写锁串行化；
+        逐节点 best-effort：单个删除失败只记账，绝不中断其余删除。
+        返回 {"requested": n, "deleted": d, "failed": f}。"""
+        return self.run(self._delete_entity_nodes(graph_id, uuids))
+
+    async def _delete_entity_nodes(self, graph_id, uuids, page: int = 200):
+        from graphiti_core.nodes import EntityNode
+
+        wanted = [u for u in dict.fromkeys(uuids or []) if u]
+        if not wanted:
+            return {"requested": 0, "deleted": 0, "failed": 0}
+        g = await self._ensure_graph(graph_id)
+        deleted = 0
+        failed = 0
+        async with self._graph_lock(graph_id):
+            for i in range(0, len(wanted), page):
+                chunk = wanted[i:i + page]
+                try:
+                    nodes = await EntityNode.get_by_uuids(g.driver, chunk)
+                except Exception as exc:  # noqa: BLE001 — 加载失败整批记为 failed
+                    logger.warning("delete_entity_nodes: load batch failed (%s): %s",
+                                   graph_id, exc)
+                    failed += len(chunk)
+                    continue
+                loaded = {getattr(n, "uuid", None) for n in nodes}
+                failed += len([u for u in chunk if u not in loaded])
+                for n in nodes:
+                    try:
+                        await n.delete(g.driver)
+                        deleted += 1
+                    except Exception as exc:  # noqa: BLE001 — 单点失败不中断
+                        failed += 1
+                        logger.warning("delete_entity_nodes: delete %s failed (%s): %s",
+                                       getattr(n, "uuid", "?"), graph_id, exc)
+        return {"requested": len(wanted), "deleted": deleted, "failed": failed}
+
+    def list_graph_ids(self) -> list:
+        """Wave9-KG（陈旧图谱 GC）：枚举后端上的全部图谱名（GRAPH.LIST）。
+
+        best-effort：不支持枚举的后端返回 []（GC 会自然 no-op，绝不误删）。"""
+        return self.run(self._list_graph_ids())
+
+    async def _list_graph_ids(self):
+        try:
+            backend = self._resolve_backend()
+            if backend == "falkordblite":
+                client = await self._get_falkor_client()
+                if hasattr(client, "list_graphs"):
+                    names = await client.list_graphs()
+                    return [n for n in (names or []) if isinstance(n, str)]
+            elif backend == "falkordb":
+                from falkordb.asyncio import FalkorDB  # type: ignore
+
+                host = os.environ.get("FALKORDB_HOST", "localhost")
+                port = int(os.environ.get("FALKORDB_PORT", "6379"))
+                db = FalkorDB(
+                    host=host, port=port,
+                    username=os.environ.get("FALKORDB_USERNAME") or None,
+                    password=os.environ.get("FALKORDB_PASSWORD") or None,
+                )
+                try:
+                    names = await db.list_graphs()
+                    return [n for n in (names or []) if isinstance(n, str)]
+                finally:
+                    with contextlib.suppress(Exception):
+                        await db.connection.aclose()
+        except Exception as exc:  # noqa: BLE001 — 枚举失败 → GC no-op
+            logger.warning("list_graph_ids failed: %s", exc)
+        return []
+
+    def graph_last_created_at(self, graph_id: str) -> str | None:
+        """Wave9-KG（GC 的新旧排序信号）：该图最新节点的 created_at（ISO 字符串）。
+
+        直接经 falkor 客户端查询，避免为 40 个死图各自实例化 Graphiti（建索引/预热
+        embedder 的代价）。失败返回 None（GC 把它当作最旧的）。"""
+        return self.run(self._graph_last_created_at(graph_id))
+
+    async def _graph_last_created_at(self, graph_id):
+        try:
+            if self._resolve_backend() != "falkordblite":
+                # 非嵌入后端退回完整 driver 路径（图已缓存时零额外成本）。
+                g = await self._ensure_graph(graph_id)
+                records, _, _ = await g.driver.execute_query(
+                    "MATCH (n) RETURN max(n.created_at) AS latest"
+                )
+            else:
+                client = await self._get_falkor_client()
+                graph = client.select_graph(graph_id)
+                result = await graph.query("MATCH (n) RETURN max(n.created_at) AS latest")
+                rows = getattr(result, "result_set", None) or []
+                records = [{"latest": rows[0][0]}] if rows and rows[0] else []
+            latest = records[0].get("latest") if records else None
+            if latest is None:
+                return None
+            if isinstance(latest, datetime):
+                return latest.isoformat()
+            return str(latest)
+        except Exception as exc:  # noqa: BLE001 — 排序信号缺失即视为最旧
+            logger.debug("graph_last_created_at failed for %s: %s", graph_id, exc)
+            return None
 
     def delete_graph(self, graph_id: str) -> None:
         self.run(self._delete_graph(graph_id))

@@ -524,10 +524,22 @@ _INITIAL_PM_MARKETS: list[dict] = []
 # RESEARCH_AGENTIC_SEARCH（默认 true）二次门控，可独立于 --subagents 关掉指令注入。
 _AGENTIC_DELEGATION: bool = False
 
+# WAVE9-RQ2: 合成时钉进提示词的引注索引（[S<n>] → 已抓取真实来源，与
+# merge_fetched_into_sources 的 fetched 主干同顺序）。由 synthesize_multipart /
+# 单调用合成在注入 SOURCE INDEX 块时设置；finalize_report_citations 据此在落盘前
+# 校验记号、剔悬空、补确定性 '## References' 节。空表 = 本轮未钉过索引
+# （standard 主路径由 agent 自编号参考节，或引注功能关闭）。
+_PINNED_CITATION_INDEX: list[dict] = []
+
 
 def _set_agentic_delegation(enabled: bool) -> None:
     global _AGENTIC_DELEGATION
     _AGENTIC_DELEGATION = bool(enabled)
+
+
+def _set_pinned_citation_index(entries: "list[dict]") -> None:
+    global _PINNED_CITATION_INDEX
+    _PINNED_CITATION_INDEX = list(entries or [])
 
 
 def _set_market_pricing_block(text: str) -> None:
@@ -579,6 +591,7 @@ def _reset_fetched_sources() -> None:
     _RESEARCH_FLAGS.clear()
     _set_market_pricing_block("")   # PM-4: 每 run 重置注入的市场定价块
     _set_initial_pm_markets([])
+    _set_pinned_citation_index([])  # WAVE9-RQ2: 每 run 重置钉住的引注索引
     _set_agentic_delegation(False)  # AGENTIC-SEARCH: 每 run 复位；main() 依 --subagents 重设
     with _FANOUT_NOTES_LOCK:
         _FANOUT_WORKER_NOTES.clear()
@@ -1320,6 +1333,219 @@ def _agentic_delegation_block(chinese: bool = False) -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# WAVE9-RQ: DOSSIER STYLE + CITATION CONTRACT —— 卷宗是客户交付物，不是流程日志。
+# 三条治理线（各自独立 env 开关，关闭即与旧提示词/旧行为逐字节一致，degrade-safe）：
+#   RQ1 禁流程叙事：三次真实运行都把「Pass N working notes」泄进成稿散文——所有合成/
+#       分节提示词注入硬风格规则（禁 passes/working notes/tracks/coverage gates/字数目标/
+#       [citation:...] 语法/自指编辑注记）。
+#   RQ2 内联引注：研究阶段就定义 [S<n>] 记号 + 机器可解析 '## References' 节；合成路径
+#       钉一个与 sources.json fetched 主干同序的 SOURCE INDEX 进提示词，落盘前跑确定性
+#       校验（悬空记号剔除并计数，参考节缺失时确定性补齐）。
+#   RQ3 跨节去重：多段合成的缝合步跑归一化 12-gram shingle 检测，剔除跨节逐字重复段。
+# ---------------------------------------------------------------------------
+
+
+def _ban_process_narration() -> bool:
+    """WAVE9-RQ1: 禁流程叙事硬规则开关（默认开）。=false → 各提示词与旧文本逐字节一致。"""
+    return _env_flag("RESEARCH_BAN_PROCESS_NARRATION", True)
+
+
+def _inline_citations_enabled() -> bool:
+    """WAVE9-RQ2: 内联引注（[S<n>] + References 节 + 落盘前校验）开关（默认开）。"""
+    return _env_flag("RESEARCH_INLINE_CITATIONS", True)
+
+
+def _dedup_shingles_enabled() -> bool:
+    """WAVE9-RQ3: 多段合成跨节 shingle 去重开关（默认开）。"""
+    return _env_flag("RESEARCH_DEDUP_SHINGLES", True)
+
+
+def _citation_index_cap() -> int:
+    """WAVE9-RQ2: 钉进合成提示词的引注索引条数上限（防提示词膨胀）。非法/非正值回退 100。"""
+    try:
+        v = int(os.environ.get("RESEARCH_CITATION_INDEX_MAX", "100") or "100")
+    except ValueError:
+        v = 100
+    return v if v > 0 else 100
+
+
+def _research_charts_min() -> int:
+    """WAVE9-RQ4: 卷宗最少图表数（actor 网络 / 时间线 / 定量 Top 指标）。0 = 关闭强制图表
+    （write-step 提示词回退旧 OPTIONAL 措辞，确定性渲染步跳过）。非法值回退 3。"""
+    try:
+        v = int(os.environ.get("RESEARCH_CHARTS_MIN", "3") or "3")
+    except ValueError:
+        v = 3
+    return max(0, v)
+
+
+def _dossier_style_rules_block() -> str:
+    """WAVE9-RQ1: 卷宗散文的硬风格规则块（注入所有写作/合成提示词）。开关关 → 空串。"""
+    if not _ban_process_narration():
+        return ""
+    return (
+        "\n\nHARD STYLE RULES — the dossier is a client-facing deliverable; violations are defects:\n"
+        "- NEVER reference the research process in dossier prose: no mention of research "
+        "passes ('Pass 3', 'Pass 2 working notes'), working notes, tracks, coverage gates, "
+        "word counts/targets, prompts, or any internal tooling. The reader must see only "
+        "subject-matter analysis, never how it was produced.\n"
+        "- NEVER use [citation:...](url) syntax anywhere. Cite sources by name and date in "
+        "prose (e.g. (Reuters, 2026-05-12)) or with [S<n>] reference markers where a source "
+        "index is provided.\n"
+        "- NEVER include self-referential editing notes such as 'corrected attribution', "
+        "'was mislabeled in early passes', or 'as flagged in a previous draft'. Fix the text "
+        "silently — do not narrate the fix."
+    )
+
+
+# WAVE9-RQ2: 引注记号与参考节的确定性解析（纯函数，均可离线单测）。
+_CITATION_MARKER_RE = re.compile(r"\[\s*S(\d+)\s*\]")
+_REFERENCES_HEADING_RE = re.compile(r"^#{2,3}\s*(?:References|参考来源|参考文献)\s*$", re.IGNORECASE)
+# 参考条目行：'- [S3] ...' / '[S3] ...' / '3. ...' / '3) ...' 四种形态都认。
+_REFERENCE_ENTRY_RE = re.compile(r"^\s*(?:[-*+]\s*)?(?:\[\s*S(\d+)\s*\]|(\d+)[.)])\s*(\S.*)$")
+
+
+def build_citation_index(fetched: "list[dict]", cap: int = 100) -> "list[dict]":
+    """WAVE9-RQ2（纯函数）：从已抓取来源表构造 [S<n>] 引注索引。
+
+    与 :func:`merge_fetched_into_sources` 的 fetched 主干同谓词/同顺序（合法 http URL、
+    按规整化 URL 去重、剔除 ok=False 的死抓取），因此确定性参考节的编号顺序与
+    sources.json 的 fetched 主干结构性对齐。行形态 {"n": 1 起的序号, "title", "url"}。
+    """
+    entries: list[dict] = []
+    seen: set[str] = set()
+    for f in fetched or []:
+        if not isinstance(f, dict):
+            continue
+        u = _norm_url(f.get("url"))
+        if not _is_valid_http_url(u) or u in seen or f.get("ok") is False:
+            continue
+        seen.add(u)
+        title = str(f.get("title") or "").strip() or _title_from_url(u)
+        entries.append({"n": len(entries) + 1, "title": title, "url": u})
+        if len(entries) >= max(1, int(cap)):
+            break
+    return entries
+
+
+def render_citation_index_block(entries: "list[dict]") -> str:
+    """WAVE9-RQ2: 渲染钉进合成提示词的 CITATION CONVENTION + SOURCE INDEX 块。空索引 → 空串。"""
+    if not entries:
+        return ""
+    lines = "\n".join(f"[S{e['n']}] {e['title']} — {e['url']}" for e in entries)
+    return (
+        "\n\nCITATION CONVENTION (mandatory): tag every load-bearing claim, figure, and "
+        "quote inline with a marker [S<n>] drawn ONLY from the SOURCE INDEX below, e.g. "
+        "'TSMC guided 2026 capex to $54B [S7].'. Never invent an index number, never use "
+        "[citation:...] syntax, and do NOT write your own references/sources section — "
+        "the pipeline appends a machine-parsable '## References' section from these exact "
+        "numbers after assembly.\n"
+        "=== SOURCE INDEX (the ONLY valid [S<n>] targets) ===\n"
+        f"{lines}"
+    )
+
+
+def parse_references_section(report: str) -> "dict[int, str]":
+    """WAVE9-RQ2（纯函数）：解析报告的 '## References'（或中文「参考来源/参考文献」）节
+    → {编号: 条目文本}。节缺失/无可解析条目 → {}。遇到下一个 H1-H3 标题即视为节结束。"""
+    refs: dict[int, str] = {}
+    in_refs = False
+    for ln in (report or "").splitlines():
+        stripped = ln.strip()
+        if _REFERENCES_HEADING_RE.match(stripped):
+            in_refs = True
+            continue
+        if in_refs:
+            if re.match(r"^#{1,3}\s+\S", stripped):
+                break  # 下一个标题 → 参考节结束
+            m = _REFERENCE_ENTRY_RE.match(ln)
+            if m:
+                try:
+                    n = int(m.group(1) or m.group(2))
+                except (TypeError, ValueError):
+                    continue
+                refs[n] = m.group(3).strip()
+    return refs
+
+
+def strip_dangling_citation_markers(report: str, valid: "set[int]") -> "tuple[str, int, int]":
+    """WAVE9-RQ2（纯函数）：剔除解析不到参考条目的 [S<n>] 记号（连同前导空白，保留可解析
+    的记号原样）。返回 (新文本, 保留记号数, 剔除记号数)。valid 为空集 → 剔除全部记号。"""
+    kept = 0
+    stripped = 0
+
+    def _sub(m: "re.Match[str]") -> str:
+        nonlocal kept, stripped
+        try:
+            n = int(m.group(1))
+        except (TypeError, ValueError):
+            n = -1
+        if n in valid:
+            kept += 1
+            return m.group(0)
+        stripped += 1
+        return ""
+
+    out = re.sub(r"[ \t]*\[\s*S(\d+)\s*\]", _sub, report or "")
+    return out, kept, stripped
+
+
+def render_references_section(entries: "list[dict]", cited: "set[int] | list[int]") -> str:
+    """WAVE9-RQ2（纯函数）：从钉住的引注索引渲染机器可解析的 '## References' 节 —— 只列
+    被正文引用的条目，保留 [S<n>] 原编号（与正文记号 1:1，且与 sources.json fetched
+    主干顺序对齐）。无可列条目 → 空串。"""
+    by_n = {e.get("n"): e for e in entries or [] if isinstance(e, dict)}
+    rows = [
+        f"- [S{n}] {by_n[n].get('title') or 'source'} — {by_n[n].get('url') or ''}".rstrip(" —")
+        for n in sorted(set(int(c) for c in cited))
+        if n in by_n
+    ]
+    if not rows:
+        return ""
+    return "## References\n\n" + "\n".join(rows)
+
+
+def finalize_report_citations(report: str, plog: "ProgressLog") -> str:
+    """WAVE9-RQ2: 落盘前的确定性引注校验/修复（合成后跑，幂等）。
+
+    1) 报告自带 References 节 → 以该节为准校验记号，剔悬空并计数。
+    2) 无 References 节但本轮钉过 SOURCE INDEX → 按索引校验、剔越界记号，并确定性
+       补一个只含被引条目的 '## References' 节（编号与索引/sources.json 主干对齐）。
+    3) 两者皆无（模型自造编号）→ 诚实降级：剔除全部 [S<n>] 记号并告警。
+    开关关 / 无记号 → 原样返回。任何路径都只做确定性文本操作，不发 LLM 调用。
+    """
+    if not _inline_citations_enabled() or not (report or "").strip():
+        return report
+    markers = [int(n) for n in _CITATION_MARKER_RE.findall(report)]
+    if not markers:
+        plog.write("stage", "citations: no inline [S<n>] markers in the report; nothing to validate")
+        return report
+    refs = parse_references_section(report)
+    if refs:
+        out, kept, dangling = strip_dangling_citation_markers(report, set(refs))
+        plog.write("warn" if dangling else "ok",
+                   f"citations: {kept} marker(s) resolved against the report's References section; "
+                   f"stripped {dangling} dangling marker(s)")
+        return out
+    if _PINNED_CITATION_INDEX:
+        valid = {e.get("n") for e in _PINNED_CITATION_INDEX}
+        out, kept, dangling = strip_dangling_citation_markers(report, valid)
+        cited = sorted({n for n in markers if n in valid})
+        section = render_references_section(_PINNED_CITATION_INDEX, cited) if cited else ""
+        if section:
+            out = out.rstrip() + "\n\n" + section + "\n"
+        plog.write("warn" if dangling else "ok",
+                   f"citations: {kept} marker(s) resolved against the pinned source index "
+                   f"({len(cited)} distinct); stripped {dangling} dangling; "
+                   f"{'appended deterministic References section' if section else 'no References section appended'}")
+        return out
+    out, _, dangling = strip_dangling_citation_markers(report, set())
+    plog.write("warn", f"citations: {dangling} [S<n>] marker(s) had neither a References "
+                       "section nor a pinned source index (model-invented numbering); stripped all")
+    return out
+
+
 def build_research_prompt(question: str, depth: str, target_language: str | None) -> str:
     preset = DEPTH_PRESETS.get(depth, DEPTH_PRESETS["standard"])
     lang_line = ""
@@ -1351,6 +1577,19 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
             "timelines, incentives, and disputed claims gathered across multiple passes."
             f"{lang_line}"
         )
+    # WAVE9-RQ2: standard 主路径由 agent 在同一条消息里自编号——[S<n>] 记号必须与其
+    # 自写的机器可解析 '## References' 节 1:1 对应（落盘前 finalize_report_citations
+    # 以该节为准校验）。开关关 → 空串，提示词与旧文本逐字节一致。
+    citation_line = ""
+    if _inline_citations_enabled():
+        citation_line = (
+            "CITATIONS: tag every load-bearing claim, figure, and quote inline with a "
+            "marker [S<n>], and make item 6 a machine-parsable '## References' section "
+            "whose entries are numbered to match — one line per source, formatted "
+            "'<n>. <Title> — <publication date> — <URL>', listing ONLY sources you "
+            "actually fetched. Every [S<n>] in the text MUST resolve to entry <n>; "
+            "never use [citation:...] syntax.\n\n"
+        )
     return (
         "You are a deep-research analyst. Use the deep-research methodology: search "
         "the web from multiple angles, fetch and read important primary sources in "
@@ -1373,6 +1612,7 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
         "  4. The main points of contention, hot topics, and likely flashpoints.\n"
         "  5. Relevant facts, figures, and quotes, each attributable to a source.\n"
         "  6. A short list of the sources you used (titles + URLs).\n\n"
+        f"{citation_line}"
         "LENGTH & DEPTH: This dossier is the sole ground-truth a downstream simulation "
         "will reason over, so it must be LONG and richly detailed — aim for at least "
         # SCALE-1: 3,500–6,000 → 6,000–10,000 —— standard 档的一手报告目标与多段合成的
@@ -1385,6 +1625,7 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
         "MUST stop calling tools and write the full report as your very next message. The "
         "written report is the deliverable — do not keep searching for marginal extra "
         "detail. A run that never writes the report has failed."
+        f"{_dossier_style_rules_block()}"
         f"{lang_line}"
     )
 
@@ -1472,7 +1713,13 @@ def build_deep_phase_prompt(question: str, phase: dict[str, Any], index: int, to
         # conflicts (positions + sources + why they differ), not just that uncertainty exists.
         "## Contradictions or uncertainty (for each: the disputed claim, the differing positions with their sources, and WHY they differ)\n"
         "## Gaps to carry into the next pass\n\n"
-        "Do NOT write the final report yet. Do NOT say the research is complete. "
+        # WAVE9-RQ1: working notes 是内部脚手架——三次真实运行都把「Pass N working notes」
+        # 泄进成稿散文，从 pass 阶段就声明这些标签绝不能作为最终卷宗的引用对象。
+        + ("These working notes are INTERNAL SCAFFOLDING for later passes — the final "
+           "dossier must never quote or reference them ('Pass N', 'working notes', "
+           "'flagged in Pass 4') as if they were sources; attribute every claim to its "
+           "real fetched source instead.\n\n" if _ban_process_narration() else "")
+        + "Do NOT write the final report yet. Do NOT say the research is complete. "
         "This pass is one layer of a longer investigation."
         f"{lang_line}"
     )
@@ -1573,16 +1820,36 @@ def build_synthesis_prompt(question: str, target_language: str | None, depth: st
     # ITEM-7: 图表落盘句——只在 host bash 执行面可用（sandbox.allow_host_bash）时追加，且明确
     # 把「渲染图表」框定为本写作步唯一允许的工具动作（仍禁止 search/fetch），故不重开研究之门。
     # bash 关闭时 charts_line 为空串 → 合成提示词与今日逐字节一致。
+    # WAVE9-RQ4: RESEARCH_CHARTS_MIN>0（默认 3）时从「OPTIONAL」升级为硬性最少图表数
+    # （actor 网络 / 时间线 / 定量 Top 指标），并要求以 ![](charts/x.png) 内嵌进卷宗；
+    # =0 回退旧 OPTIONAL 措辞。渲染失败一律降级续写，绝不阻断报告。
     charts_line = ""
     if _bash_sandbox_enabled():
-        charts_line = (
-            "\n\nOPTIONAL CHARTS — the ONLY tool use permitted in this write step is "
-            "rendering charts from data you ALREADY gathered above (via the forecast-visuals "
-            "/ chart-visualization skills); do NOT search or fetch. If you render any, write "
-            "the files into a charts/ subdirectory of your output directory and register each "
-            "in a charts.json manifest ({title, caption, source_data}) so the pipeline's "
-            "artifact channel picks them up."
-        )
+        _charts_min = _research_charts_min()
+        if _charts_min > 0:
+            charts_line = (
+                f"\n\nREQUIRED CHARTS — the dossier MUST embed at least {_charts_min} charts "
+                "as markdown images: (1) the actor relationship network, (2) the dated event "
+                "timeline, (3) the top quantitative metrics. The ONLY tool use permitted in "
+                "this write step is rendering them from data you ALREADY gathered above (do "
+                "NOT search or fetch): load the forecast-visuals skill and run its bundled "
+                "scripts/render.py, which writes self-contained charts/*.html + charts/*.png "
+                "plus a charts.json manifest ({title, caption, source_data, path}) into your "
+                "output directory; then reference each figure inline where it belongs, e.g. "
+                "![Actor network](charts/actor_network.png). If python/plotly is unavailable "
+                "or a render fails, fall back to the skill's mermaid/table fallback and KEEP "
+                "WRITING — a missing chart must never block the dossier, and the failure must "
+                "never be mentioned in the dossier prose."
+            )
+        else:
+            charts_line = (
+                "\n\nOPTIONAL CHARTS — the ONLY tool use permitted in this write step is "
+                "rendering charts from data you ALREADY gathered above (via the forecast-visuals "
+                "/ chart-visualization skills); do NOT search or fetch. If you render any, write "
+                "the files into a charts/ subdirectory of your output directory and register each "
+                "in a charts.json manifest ({title, caption, source_data}) so the pipeline's "
+                "artifact channel picks them up."
+            )
     return (
         "STOP researching. Do NOT call any tools, do NOT search, do NOT fetch — you "
         "have already gathered enough material in this conversation.\n\n"
@@ -1622,6 +1889,7 @@ def build_synthesis_prompt(question: str, target_language: str | None, depth: st
         f"OUTPUT-LENGTH CONTRACT: {word_target} of prose is a hard requirement, not a "
         "suggestion — a dossier materially shorter than this is treated as a failed write.\n"
         "Write the report directly — no preamble, no tool calls."
+        f"{_dossier_style_rules_block()}"
         f"{charts_line}"
         f"{lang_line}"
     )
@@ -1897,6 +2165,54 @@ def count_prose_words(text: str) -> int:
     return len(_PROSE_WORD_RE.findall(t)) + len(_PROSE_CJK_RE.findall(t))
 
 
+# WAVE9-RQ3: 跨节去重 —— 归一化 12-gram shingle。分词：ASCII 词一个 token，CJK 逐字
+# 一个 token（中文段无空格也能成 shingle）。
+_SHINGLE_TOKEN_RE = re.compile(r"[a-z0-9]+|[一-鿿]")
+
+
+def paragraph_shingles(text: str, n: int = 12) -> "set[str]":
+    """WAVE9-RQ3（纯函数）：段落的归一化 n-gram shingle 集（小写、去标点）。token 数
+    不足 n → 空集（太短的段不参与判重，避免误杀短小过渡句）。"""
+    toks = _SHINGLE_TOKEN_RE.findall((text or "").lower())
+    if len(toks) < max(2, int(n)):
+        return set()
+    return {" ".join(toks[i:i + n]) for i in range(len(toks) - n + 1)}
+
+
+def dedup_cross_section_paragraphs(texts: "list[str]", n: int = 12,
+                                   threshold: float = 0.75) -> "tuple[list[str], int]":
+    """WAVE9-RQ3（纯函数）：跨节逐字重复段检测/剔除（保首现）。
+
+    按节序处理：段落（空行分隔）的 shingle 集与**此前各节**已见 shingle 的重叠率
+    ≥ ``threshold`` → 判为跨节 verbatim 重复，剔除该段。标题（#）/表格行（|）/含代码
+    围栏的段不参与判重（结构性内容不是散文重复）。同节内的重复不动——那是写手自己
+    的结构选择，判重只跨节。返回 (新 texts, 剔除段数)。确定性、无 LLM 调用。
+    """
+    seen: set[str] = set()
+    removed = 0
+    out: list[str] = []
+    for t in texts:
+        if not (t or "").strip():
+            out.append(t)
+            continue
+        paras = re.split(r"\n{2,}", t)
+        kept: list[str] = []
+        section_sh: set[str] = set()
+        for p in paras:
+            ps = p.strip()
+            sh: set[str] = set()
+            if ps and not ps.startswith("#") and not ps.startswith("|") and "```" not in ps:
+                sh = paragraph_shingles(ps, n)
+            if sh and seen and len(sh & seen) / len(sh) >= threshold:
+                removed += 1
+                continue
+            kept.append(p)
+            section_sh |= sh
+        seen |= section_sh
+        out.append("\n\n".join(kept))
+    return out, removed
+
+
 def stitch_synthesis_sections(outline: list[dict], texts: list[str]) -> str:
     """SCALE-1（纯函数）：按大纲顺序确定性拼接分节 —— 每节冠 '## <title>' 标题；
     空节跳过；分节正文若以重复大纲标题的 markdown 标题开头则去掉那一行（写手常
@@ -1930,8 +2246,13 @@ def _section_lead(text: str, max_words: int = 200) -> str:
 
 def build_synthesis_section_prompt(question: str, outline: list[dict], section: dict,
                                    index: int, total: int, notes_digest: str,
-                                   context: str, target_language: str | None) -> str:
-    """SCALE-1 分节调用提示词：大纲全貌 + 本节任务书 + 需求原文 + 笔记摘要 + 分片证据。"""
+                                   context: str, target_language: str | None,
+                                   citation_block: str = "") -> str:
+    """SCALE-1 分节调用提示词：大纲全貌 + 本节任务书 + 需求原文 + 笔记摘要 + 分片证据。
+
+    WAVE9-RQ: ``citation_block``（钉住的 SOURCE INDEX，可空）+ 硬风格规则 + 头条数字
+    纪律 —— 三次真实运行的流程叙事泄漏 / 跨节重复陈述头条数字都在这一层修。
+    """
     lang_line = f"\nWrite this section in {target_language}." if target_language else ""
     outline_lines = "\n".join(
         f"{i + 1}. {s['title']}" + (" ← YOU ARE WRITING THIS ONE" if i == index else "")
@@ -1939,8 +2260,12 @@ def build_synthesis_section_prompt(question: str, outline: list[dict], section: 
     )
     covers_line = ("\nEVIDENCE / KEY QUESTIONS THIS SECTION COVERS:\n" +
                    "\n".join(f"- {c}" for c in section.get("covers", []))) if section.get("covers") else ""
-    digest_block = (f"\n\n=== WORKING-NOTES DIGEST (one line per research pass) ===\n{notes_digest}"
-                    if notes_digest else "")
+    # WAVE9-RQ1: 摘要块标头明示 INTERNAL——digest 里的「Pass N」字样绝不能进成稿散文。
+    digest_block = (
+        "\n\n=== WORKING-NOTES DIGEST (INTERNAL — one line per research pass; use the "
+        "facts, but NEVER cite, quote, or mention these notes/passes in the section "
+        f"text) ===\n{notes_digest}"
+        if notes_digest else "")
     return (
         f"You are writing SECTION {index + 1} of {total} of a long research dossier. "
         "Other writers handle the other sections in parallel — write ONLY yours.\n\n"
@@ -1958,7 +2283,19 @@ def build_synthesis_section_prompt(question: str, outline: list[dict], section: 
         "whole dossier, no preamble, no meta-commentary.\n"
         "- Go deep: specific numbers with units and as-of dates, dated events, named "
         "actors and their incentives, competing views, second-order effects.\n"
-        "- Do not summarize other sections' territory; a one-line cross-reference is fine."
+        "- Do not summarize other sections' territory; a one-line cross-reference is fine.\n"
+        # WAVE9-RQ3: 头条数字纪律 + 跨节矛盾守卫——同一头条数字只在「所属节」完整展开一次，
+        # 其余节短引；证据相左时显式呈现分歧，绝不在不同节里静默给出互相矛盾的数字。
+        "- HEADLINE-NUMBER DISCIPLINE: a headline figure (the dossier's top-line forecast "
+        "numbers, market sizes, key probabilities) may be stated IN FULL — with derivation "
+        "and context — only in the ONE section that owns that topic per the outline. If "
+        "your section is not the owner, reference it briefly (e.g. 'the ~$1.5T base case; "
+        "see the scenarios section') without re-deriving it, and NEVER state a variant "
+        "that contradicts the owning section — when your evidence disagrees, present the "
+        "disagreement explicitly with both sources instead of silently picking a different "
+        "number."
+        f"{_dossier_style_rules_block()}"
+        f"{citation_block}"
         f"{lang_line}"
         f"{digest_block}\n\n"
         "=== GATHERED RESEARCH FOR THIS SECTION (write ONLY from this) ===\n"
@@ -1976,8 +2313,10 @@ def build_synthesis_expand_prompt(question: str, section: dict, current_text: st
         f"{section['target_words']} words of analytical prose — while keeping every "
         "existing fact. Add the depth from the gathered research: more numbers with "
         "units/dates, more dated events, more named actors and incentives, competing "
-        "views, and second-order effects. NEVER invent facts or sources. Start directly "
+        "views, and second-order effects. NEVER invent facts or sources. Keep every "
+        "existing [S<n>] citation marker attached to its claim. Start directly "
         "with the section body; do not repeat the section title as a heading."
+        f"{_dossier_style_rules_block()}"
         f"{lang_line}\n\n"
         f"RESEARCH BRIEF:\n{question}\n\n"
         f"SECTION: {section['title']}\nSCOPE: {section['scope']}\n\n"
@@ -2002,6 +2341,7 @@ def build_synthesis_summary_prompt(question: str, leads: list[tuple[str, str]],
         "tying the sections together — which sections carry the evidence for which claims.\n"
         "Do NOT rewrite or summarize each section one by one, do NOT invent facts not "
         "implied below, and do NOT output anything after these two blocks."
+        f"{_dossier_style_rules_block()}"
         f"{lang_line}\n\n"
         f"RESEARCH BRIEF:\n{question}\n\n"
         f"=== SECTION OPENINGS ===\n{lead_block}"
@@ -2040,8 +2380,18 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
     # (2) SECTION CALLS —— 逐节并行裸调用（镜像 run_deep_fanout 的执行器模式）。
     # 每节吃：大纲全貌 + 本节任务书 + 需求原文 + working-notes 摘要 + 关键词分片证据。
     notes_digest = build_notes_digest(ai_parts)
+    # WAVE9-RQ2: 并行写手无法互相协调编号 —— 由管线钉一个共享 SOURCE INDEX（与
+    # sources.json fetched 主干同序）进每个分节提示词，[S<n>] 编号全局一致；落盘前
+    # finalize_report_citations 据同一索引校验并确定性补 '## References' 节。
+    citation_block = ""
+    if _inline_citations_enabled():
+        _cit_entries = build_citation_index(_FETCHED_SOURCES, _citation_index_cap())
+        if _cit_entries:
+            _set_pinned_citation_index(_cit_entries)
+            citation_block = render_citation_index_block(_cit_entries)
+            plog.write("stage", f"synthesize/multipart: pinned citation index ({len(_cit_entries)} fetched sources) into section prompts")
     cap = _synthesis_context_cap(synth_model)
-    section_cap = max(20000, cap - len(notes_digest) - 6000)  # 给提示词骨架+摘要留余量
+    section_cap = max(20000, cap - len(notes_digest) - len(citation_block) - 6000)  # 给提示词骨架+摘要+索引留余量
     workers = min(_synthesis_workers(), len(outline))
     texts: list[str] = [""] * len(outline)
 
@@ -2050,7 +2400,8 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
         scope_text = " ".join([sec["title"], sec["scope"], " ".join(sec["covers"])])
         sec_ctx = pack_context_for_section(blocks, scope_text, section_cap)
         return _bare_synth_invoke(synth_model, build_synthesis_section_prompt(
-            question, outline, sec, i, len(outline), notes_digest, sec_ctx, target_language))
+            question, outline, sec, i, len(outline), notes_digest, sec_ctx, target_language,
+            citation_block=citation_block))
 
     plog.write("stage", f"synthesize/multipart: writing {len(outline)} sections in parallel (workers={workers})")
     with _cf.ThreadPoolExecutor(max_workers=workers) as ex:
@@ -2097,6 +2448,17 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
         total_words = count_prose_words(body)
         if total_words < min_words:
             _flag_research_degradation(f"multipart synthesis: dossier {total_words} prose words < floor {min_words} even after re-expansion")
+
+    # (4b) WAVE9-RQ3: 跨节去重 —— 归一化 12-gram shingle 检测跨节逐字重复段并剔除
+    # （保首现；同节内不动）。放在长度门之后：再扩写可能重新引入重复。确定性、无 LLM。
+    if _dedup_shingles_enabled():
+        try:
+            texts, _dups = dedup_cross_section_paragraphs(texts)
+            if _dups:
+                plog.write("warn", f"synthesize/multipart: removed {_dups} paragraph(s) repeated verbatim across sections (12-gram shingle dedup)")
+                body = stitch_synthesis_sections(outline, texts)
+        except Exception as _dd_err:  # noqa: BLE001 — 去重是加法，失败保留原文
+            plog.write("warn", f"synthesize/multipart: cross-section dedup skipped (non-fatal): {_dd_err}")
 
     # (3b) EXEC SUMMARY —— 一次轻量调用：只喂分节清单 + 每节开头 ~200 词。
     summary = ""
@@ -2206,8 +2568,17 @@ def synthesize_from_thread(client, thread_id: str, question: str, target_languag
         from langchain_core.messages import HumanMessage
 
         model = create_chat_model(synth_model, thinking_enabled=False)
+        # WAVE9-RQ2: 单调用合成同样钉 SOURCE INDEX（与多段路径同一索引构造），
+        # [S<n>] 编号由管线派发而非模型自造；落盘前 finalize_report_citations 校验。
+        _cit_block = ""
+        if _inline_citations_enabled():
+            _cit_entries = build_citation_index(_FETCHED_SOURCES, _citation_index_cap())
+            if _cit_entries:
+                _set_pinned_citation_index(_cit_entries)
+                _cit_block = render_citation_index_block(_cit_entries)
         prompt = (
             build_synthesis_prompt(question, target_language, depth)
+            + _cit_block
             + "\n\n=== GATHERED RESEARCH (base the report ONLY on this; do not invent) ===\n"
             + context
         )
@@ -3288,11 +3659,48 @@ def unwrap_markdown_fence(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+class _DegenerateToolLoopError(RuntimeError):
+    """WAVE9：连续被拒的工具调用达到熔断阈值——中断回合、按既有 salvage 路径打捞已有文本。"""
+
+
+# WAVE9：注入的单行纠偏消息（确定性文本，无需模型生成）。实测一条轨里 201 次空-query
+# web_search 被拒——每次仍是一步全上下文模型调用（~8 分钟纯损耗），而 _validate_tool_args
+# 只跳过记账、无人终止或纠正这种退化环。
+_DEGEN_CORRECTIVE_MESSAGE = (
+    "CORRECTION: your recent tool calls were REJECTED as malformed (e.g. web_search with an "
+    "empty/too-short query, web_fetch without a full http(s) URL). Every web_search MUST carry "
+    "a non-empty, specific query string and every web_fetch a complete URL. Stop repeating the "
+    "broken call — either fix the arguments or move on and write your working notes now."
+)
+
+
+def _degen_loop_thresholds() -> "tuple[int, int]":
+    """WAVE9 退化工具环阈值（纠偏阈值, 熔断阈值）。
+
+    env RESEARCH_DEGENERATE_TOOL_CORRECT_AT（默认 8）/ RESEARCH_DEGENERATE_TOOL_BREAK_AT
+    （默认 16）；<=0 关闭对应动作；非法值回退默认（degrade-safe）。连续（中间无有效工具
+    调用）被拒到纠偏阈值 → 注入一条单行纠偏消息续跑（一次为限）；到熔断阈值 → 中断本回合
+    并按 GraphRecursionError 同一 salvage 路径打捞。
+    """
+    def _read(name: str, default: int) -> int:
+        raw = os.environ.get(name, "").strip()
+        try:
+            return int(raw) if raw else default
+        except ValueError:
+            return default
+    return (_read("RESEARCH_DEGENERATE_TOOL_CORRECT_AT", 8),
+            _read("RESEARCH_DEGENERATE_TOOL_BREAK_AT", 16))
+
+
 def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int, plog: ProgressLog, label: str) -> str:
     """Run one agent turn, logging tool activity, returning the final AI text.
 
     Mirrors ``DeerFlowClient.chat`` (accumulate AI text deltas per id, return the
     last completed message) but also emits progress lines for tool calls/results.
+
+    WAVE9：退化工具环熔断——连续被拒（malformed）的工具调用到纠偏阈值时结束当前流段、
+    以一条单行纠偏消息开新流段续跑（同一 thread、剩余预算）；到熔断阈值时抛
+    :class:`_DegenerateToolLoopError` 走既有 salvage。阈值关闭（<=0）时行为与旧版一致。
     """
     chunks: dict[str, list[str]] = {}
     last_id = ""
@@ -3301,53 +3709,84 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
     # 杜绝跨线程 LIFO 错配（Track B 的结果确认/删除 Track A 的 URL）。
     _v2 = _fetch_accounting_v2()
     _pending_fetches: list[dict] = []
+    _correct_at, _break_at = _degen_loop_thresholds()
+    _consec_rejected = 0        # 连续被拒计数；任一有效工具调用即清零
+    _corrective_pending = False  # 已到纠偏阈值，待结束本流段注入纠偏消息
+    _corrective_sent = False     # 纠偏消息只注入一次
+    _next_message = message
+    _next_limit = recursion_limit
     plog.write("stage", f"{label}: starting agent turn (recursion_limit={recursion_limit})")
 
     try:
-        for event in client.stream(message, thread_id=thread_id, recursion_limit=recursion_limit):
-            etype = event.type
-            data = event.data or {}
-            if etype == "messages-tuple":
-                mtype = data.get("type")
-                if mtype == "ai":
-                    if data.get("tool_calls"):
-                        for tc in data["tool_calls"]:
-                            tool_calls += 1
-                            _tname = tc.get("name")
-                            # INT-2: 在记账/写 sources 前校验并（尽量）修复完整工具参数——
-                            # query 过短的 web_search、无 scheme+host 的 web_fetch 直接拒（不计入
-                            # 抓取账）。参数分块到达时，这里看到的是已组装好的整条 args。
-                            _targs, _ok, _why = _validate_tool_args(_tname, tc.get("args"))
-                            plog.write("tool", f"{_tname}( {_summarize_tool_args(_targs)} )")
-                            if not _ok:
-                                plog.write("warn", f"{label}: rejected malformed {_tname} tool args ({_why}); not counted")
-                                continue
-                            if _v2:  # #1 capture fetched URLs (turn-local, id-paired)
-                                _pending_record_fetch(_pending_fetches, _tname, _targs, call_id=tc.get("id"))
-                            else:
-                                _record_fetched_url(_tname, _targs)
-                    delta = data.get("content", "")
-                    if delta:
-                        msg_id = data.get("id") or ""
-                        chunks.setdefault(msg_id, []).append(delta)
-                        last_id = msg_id
-                elif mtype == "tool":
-                    plog.write("result", f"{data.get('name')} → {_truncate(data.get('content', ''))}")
-                    if _v2:  # R1: drop dead fetches (exact tool_call_id pairing, FIFO fallback)
-                        _pending_mark_result(_pending_fetches, data.get("name"), data.get("content"), call_id=data.get("tool_call_id"))
-                    else:
-                        _mark_fetch_result(data.get("name"), data.get("content"))
-            elif etype == "custom":
-                plog.write("custom", _truncate(json.dumps(data, ensure_ascii=False)))
-            elif etype == "end":
-                usage = data.get("usage", {})
-                plog.write("usage", f"tokens in={usage.get('input_tokens')} out={usage.get('output_tokens')} total={usage.get('total_tokens')}")
+        while True:
+            for event in client.stream(_next_message, thread_id=thread_id, recursion_limit=_next_limit):
+                if _corrective_pending:
+                    break  # 触发事件已完整处理；结束本流段去注入纠偏消息（生成器随 break 关闭）
+                etype = event.type
+                data = event.data or {}
+                if etype == "messages-tuple":
+                    mtype = data.get("type")
+                    if mtype == "ai":
+                        if data.get("tool_calls"):
+                            for tc in data["tool_calls"]:
+                                tool_calls += 1
+                                _tname = tc.get("name")
+                                # INT-2: 在记账/写 sources 前校验并（尽量）修复完整工具参数——
+                                # query 过短的 web_search、无 scheme+host 的 web_fetch 直接拒（不计入
+                                # 抓取账）。参数分块到达时，这里看到的是已组装好的整条 args。
+                                _targs, _ok, _why = _validate_tool_args(_tname, tc.get("args"))
+                                plog.write("tool", f"{_tname}( {_summarize_tool_args(_targs)} )")
+                                if not _ok:
+                                    plog.write("warn", f"{label}: rejected malformed {_tname} tool args ({_why}); not counted")
+                                    _consec_rejected += 1
+                                    if _break_at > 0 and _consec_rejected >= _break_at:
+                                        raise _DegenerateToolLoopError(
+                                            f"{_consec_rejected} consecutive rejected/malformed tool calls"
+                                        )
+                                    if _correct_at > 0 and not _corrective_sent and _consec_rejected >= _correct_at:
+                                        _corrective_pending = True
+                                    continue
+                                _consec_rejected = 0
+                                if _v2:  # #1 capture fetched URLs (turn-local, id-paired)
+                                    _pending_record_fetch(_pending_fetches, _tname, _targs, call_id=tc.get("id"))
+                                else:
+                                    _record_fetched_url(_tname, _targs)
+                        delta = data.get("content", "")
+                        if delta:
+                            msg_id = data.get("id") or ""
+                            chunks.setdefault(msg_id, []).append(delta)
+                            last_id = msg_id
+                    elif mtype == "tool":
+                        plog.write("result", f"{data.get('name')} → {_truncate(data.get('content', ''))}")
+                        if _v2:  # R1: drop dead fetches (exact tool_call_id pairing, FIFO fallback)
+                            _pending_mark_result(_pending_fetches, data.get("name"), data.get("content"), call_id=data.get("tool_call_id"))
+                        else:
+                            _mark_fetch_result(data.get("name"), data.get("content"))
+                elif etype == "custom":
+                    plog.write("custom", _truncate(json.dumps(data, ensure_ascii=False)))
+                elif etype == "end":
+                    usage = data.get("usage", {})
+                    plog.write("usage", f"tokens in={usage.get('input_tokens')} out={usage.get('output_tokens')} total={usage.get('total_tokens')}")
+            if _corrective_pending and not _corrective_sent:
+                _corrective_pending = False
+                _corrective_sent = True
+                plog.write("warn", f"{label}: {_consec_rejected} consecutive rejected tool calls — injecting one-line corrective message and continuing the turn")
+                _flag_research_degradation(f"{label}: degenerate tool loop ({_consec_rejected} consecutive rejections); corrective message injected")  # S10
+                _next_message = _DEGEN_CORRECTIVE_MESSAGE
+                _next_limit = max(32, int(recursion_limit) - tool_calls)  # 续跑段用剩余预算的近似值
+                continue
+            break
     except Exception as exc:  # noqa: BLE001 — salvage partial output; never discard accumulated report text
         # LangGraph raises GraphRecursionError when the step budget (recursion_limit)
         # is exhausted; other transient errors can also break the stream mid-turn.
         # Whatever text was accumulated so far is still useful, so we fall through to
         # the existing return instead of letting the exception nuke the whole report.
-        kind = "recursion-limit/budget exhausted" if type(exc).__name__ == "GraphRecursionError" else type(exc).__name__
+        if isinstance(exc, _DegenerateToolLoopError):
+            kind = "degenerate tool-loop break"
+        elif type(exc).__name__ == "GraphRecursionError":
+            kind = "recursion-limit/budget exhausted"
+        else:
+            kind = type(exc).__name__
         salvaged_len = len("".join(chunks.get(last_id, ())))
         plog.write("warn", f"{label}: stream ended early ({kind}: {exc}); salvaging {salvaged_len} chars")
         _flag_research_degradation(f"{label}: {kind} (salvaged {salvaged_len} chars)")  # S10
@@ -3358,6 +3797,30 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
     final_text = strip_think("".join(chunks.get(last_id, ())))
     plog.write("stage", f"{label}: turn complete ({tool_calls} tool calls, {len(final_text)} chars)")
     return final_text
+
+
+def inject_thread_message(client, thread_id: str, text: str) -> bool:
+    """WAVE9：把一条**确定性**消息直接写进线程 checkpoint——零工具、零模型调用、零 agent 回合。
+
+    走 LangGraph 编译图的 ``update_state``（messages 走 add_messages reducer 追加），供
+    「注入即够」的场景（如 brief-drift 纠偏：纠偏文本本就是确定性生成的，此前却烧一个
+    recursion_limit=8 的完整 agent 回合、实测 40 次工具调用后 budget exhausted）。
+    依赖 client 的内部 agent 句柄（embedded DeerFlowClient，仓内 API）；任何异常/句柄
+    缺失 → False，调用方回退旧的 agent-turn 注入路径（degrade-safe）。
+    """
+    try:
+        cfg = client._get_runnable_config(thread_id)
+        client._ensure_agent(cfg)
+        agent = getattr(client, "_agent", None)
+        if agent is None or not hasattr(agent, "update_state"):
+            return False
+        from langchain_core.messages import HumanMessage
+
+        agent.update_state({"configurable": {"thread_id": thread_id}},
+                           {"messages": [HumanMessage(content=text)]})
+        return True
+    except Exception:  # noqa: BLE001 — 注入失败绝不阻断；调用方回退 agent 回合
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -3440,7 +3903,15 @@ def build_scoped_worker_prompt(question: str, kiq: str, target_language: str | N
         "primary sources in depth on this focus, ~1/4 actively disconfirming. Use your "
         "search/read tools. Return concise, evidence-backed working notes (with source "
         "URLs/titles) on this focus ONLY — do not write the full report; another agent "
-        f"synthesizes.{lang}"
+        "synthesizes.\n\n"
+        # WAVE9：notes-first —— worker 的步进预算是硬的（预算耗尽即整段被打捞），实测 40–75
+        # 次工具调用的 worker 只交出 121–2,318 字符的残稿：证据都搜到了、却没写下来就被截断。
+        "WRITE NOTES AS YOU GO — your tool-step budget is HARD and findings never written "
+        "down are LOST when it runs out. After each batch of searching/reading, immediately "
+        "record what you learned (specific facts with units/dates, source URL + title) in "
+        "your running notes. Well BEFORE ~80% of your budget is spent, STOP searching and "
+        "write out your complete final notes — a finished, evidence-backed note set beats an "
+        f"unfinished search trail every time.{lang}"
     )
 
 
@@ -3484,29 +3955,41 @@ def run_scoped_worker(client, kiq: str, question: str, parent_thread_id: str, de
     )
 
 
-def run_deep_fanout(client, opening_text: str, question: str, depth: str,
-                    target_language: str | None, model_name: str, thread_id: str,
-                    plog: "ProgressLog", width: int) -> str:
-    """Fan out scoped workers over the opening pass's seed list; merge their notes.
+def start_deep_fanout(client, opening_text: str, question: str, depth: str,
+                      target_language: str | None, model_name: str, thread_id: str,
+                      plog: "ProgressLog", width: int):
+    """WAVE9：**非阻塞**启动 fan-out worker 池，返回 (executor, {future: seed}) 句柄。
 
-    Returns a single merged markdown block (or '' if no seeds / no notes). Workers
-    run concurrently (bounded by ``width``) on isolated thread_ids; a failed worker
-    contributes nothing.
+    无种子可派 → None（调用方按「无 fan-out」继续）。worker 各自跑在隔离 thread_id 上，
+    与主线程回合可安全并发（抓取记账走 per-turn pending 表）。句柄必须交给
+    :func:`join_deep_fanout` 收割——executor 的 shutdown 在 join 内完成。
     """
     import concurrent.futures as _cf
 
     seeds = extract_kiqs_from_opening(opening_text, width)
     if not seeds:
         plog.write("warn", "deep fan-out: no KIQ/actor seeds parsed from opening; skipping")
-        return ""
+        return None
     plog.write("stage", f"deep fan-out: {len(seeds)} scoped workers — {', '.join(seeds)}")
+    ex = _cf.ThreadPoolExecutor(max_workers=min(width, len(seeds)))
+    futs = {
+        ex.submit(run_scoped_worker, client, s, question, thread_id, depth,
+                  target_language, model_name, plog, i): s
+        for i, s in enumerate(seeds)
+    }
+    return (ex, futs)
+
+
+def join_deep_fanout(handle, plog: "ProgressLog") -> str:
+    """WAVE9：收割 :func:`start_deep_fanout` 的 worker 池，合并笔记（与旧阻塞版同一合并逻辑）。
+
+    返回单块合并 markdown（无笔记 → ''）；单 worker 失败只贡献空。无论成败都 shutdown executor。
+    """
+    import concurrent.futures as _cf
+
+    ex, futs = handle
     notes: list[str] = []
-    with _cf.ThreadPoolExecutor(max_workers=min(width, len(seeds))) as ex:
-        futs = {
-            ex.submit(run_scoped_worker, client, s, question, thread_id, depth,
-                      target_language, model_name, plog, i): s
-            for i, s in enumerate(seeds)
-        }
+    try:
         for fut in _cf.as_completed(futs):
             s = futs[fut]
             try:
@@ -3517,9 +4000,28 @@ def run_deep_fanout(client, opening_text: str, question: str, depth: str,
                     _record_worker_notes(f"子调查：{s}", txt)
             except Exception as exc:  # noqa: BLE001 — best-effort per worker
                 plog.write("warn", f"deep fan-out worker '{s}' failed: {exc}")
+    finally:
+        ex.shutdown(wait=False)
     if not notes:
         return ""
     return "# 并行子调查汇总（per-KIQ/per-actor fan-out）\n\n" + "\n\n---\n\n".join(notes)
+
+
+def run_deep_fanout(client, opening_text: str, question: str, depth: str,
+                    target_language: str | None, model_name: str, thread_id: str,
+                    plog: "ProgressLog", width: int) -> str:
+    """Fan out scoped workers over the opening pass's seed list; merge their notes.
+
+    Returns a single merged markdown block (or '' if no seeds / no notes). Workers
+    run concurrently (bounded by ``width``) on isolated thread_ids; a failed worker
+    contributes nothing. WAVE9 起为 :func:`start_deep_fanout` + :func:`join_deep_fanout`
+    的阻塞组合（行为与旧实现一致）；overlap 路径直接用 start/join 两段式。
+    """
+    handle = start_deep_fanout(client, opening_text, question, depth,
+                               target_language, model_name, thread_id, plog, width)
+    if handle is None:
+        return ""
+    return join_deep_fanout(handle, plog)
 
 
 _GAP_HEADING_RE = re.compile(r"gaps?\b", re.I)
@@ -3569,6 +4071,34 @@ def _merge_gaps(accumulated: list[str], new_gaps: list[str], cap: int = 20) -> l
             seen.add(g.lower())
             accumulated.append(g)
     return accumulated[:cap]
+
+
+def _normalize_gap(gap: Any) -> str:
+    """WAVE9 纯 helper：gap 文本归一化（strip + 空白折叠 + 小写 + 去尾部标点）供集合比较。"""
+    s = re.sub(r"\s+", " ", str(gap or "").strip()).lower()
+    return s.rstrip(" 。.;；,，")
+
+
+def advance_gap_set(previous: "list[str] | None", fresh: "list[str] | None", *,
+                    replace: bool = True, cap: int = 20) -> "tuple[list[str], bool]":
+    """WAVE9 纯 helper：一轮收口 pass 后推进缺口集合，返回 (新集合, 是否平台期)。
+
+    自适应收口环的旧写法 ``accumulated_gaps = _merge_gaps(accumulated, fresh)`` 只增不减
+    ——已闭合的缺口永不出清单，缺口集**按构造不可能收敛**（实测最慢轨跑满全部预算、每轮
+    都报 "20 unresolved gap(s)"，44 分钟 / ~15.6M prompt tokens 纯尾巴）。而收口提示词
+    （build_gap_closing_prompt）本就要求「只列**仍未决**的 gaps」，故：
+
+    * replace=True（默认）：直接用本轮 fresh **整体替换**（截 cap 条）——闭合即出清单；
+    * replace=False：恢复旧 merge 语义（RESEARCH_GAP_SET_REPLACE=false 的回退路径）；
+    * 平台期：fresh 非空且归一化后与上一轮集合完全相同 → True（连续两轮零进展，调用方停）。
+    """
+    fresh_list = [str(g) for g in (fresh or []) if str(g or "").strip()][:max(1, int(cap))]
+    prev_norm = {_normalize_gap(g) for g in (previous or []) if _normalize_gap(g)}
+    new_norm = {_normalize_gap(g) for g in fresh_list if _normalize_gap(g)}
+    plateau = bool(new_norm) and new_norm == prev_norm
+    if replace:
+        return fresh_list, plateau
+    return _merge_gaps(list(previous or []), list(fresh or []), cap=cap), plateau
 
 
 def adaptive_passes_remaining(coverage_rounds_run: int, max_adaptive_total: int) -> int:
@@ -3787,7 +4317,7 @@ def run_report_judge_refine(client, thread_id: str, question: str, depth: str,
             break
         plog.write("stage", f"research-report refine round {r + 1}: addressing {len(gaps)} INSIGHT-CONTRACT gap(s)")
         try:
-            run_streamed_turn(
+            refine_notes = run_streamed_turn(
                 client,
                 build_report_refine_prompt(question, gaps, depth, target_language),
                 thread_id,
@@ -3795,7 +4325,11 @@ def run_report_judge_refine(client, thread_id: str, question: str, depth: str,
                 plog,
                 f"research:report-refine-{r + 1}",
             )
-            new_report = synthesize_from_thread(client, thread_id, question, target_language, model_name, plog, depth=depth)
+            # WAVE9：top-up 笔记优先走一次有界小节级补丁（只强化 judge 点名的小节）；
+            # 补丁不可用（None）→ 回退整份重合成（今日行为）。
+            new_report = run_incremental_report_patch(question, report, refine_notes, target_language, model_name, plog, "judge-refine")
+            if new_report is None:
+                new_report = synthesize_from_thread(client, thread_id, question, target_language, model_name, plog, depth=depth)
             # 只在新稿真正更充实时替换：非空 + 非 LLM 错误 + 长度不短于当前稿（与覆盖门同一"绝不回退"约定）。
             if (new_report.strip() and not looks_like_llm_error(new_report)
                     and len(new_report.strip()) >= len(report.strip())):
@@ -3807,6 +4341,208 @@ def run_report_judge_refine(client, thread_id: str, question: str, depth: str,
             plog.write("warn", f"research-report refine failed ({type(e).__name__}: {e}); shipping current report")
             break
     return report
+
+
+# ===================== WAVE9: incremental report patch (top-up / judge-refine 共用) ==============
+# 三角 top-up 与 judge-refine 此前都在 verify/top-up 回合后**整份**重跑 14 节多段合成
+# （synthesize_from_thread）——每次 ~14 次分节调用 × 至多 890K 字符打包上下文（~3M tokens、
+# 6–15 分钟），而实测 track_3 的整份重合成因「不比原稿长」被整体丢弃（15 分钟纯损耗）。
+# 这里改为：verify/top-up 回合产出的**笔记**直接喂一次有界裸模型调用，产出「小节级补丁」
+# （替换受影响小节 / 追加核验小节），确定性拼回原报告。受影响小节 > 上限（默认 4）、解析
+# 失败、补丁净负（更短）或任何异常 → 返回 None，调用方回退整份重合成（今日行为）。
+# 默认开（RESEARCH_INCREMENTAL_TOPUP）；上限 RESEARCH_TOPUP_PATCH_MAX_SECTIONS。
+
+_H2_HEADING_RE = re.compile(r"^##\s+(\S.*)$")
+_PATCH_BLOCK_RE = re.compile(
+    r"<<<\s*(?:SECTION\s*:\s*(?P<title>[^>\n]+?)|(?P<append>APPEND))\s*>>>\s*\n?(?P<body>.*?)<<<\s*END\s*>>>",
+    re.S,
+)
+_PATCH_NO_CHANGES_RE = re.compile(r"<<<\s*NO_CHANGES\s*>>>")
+
+
+def _normalize_heading(heading: Any) -> str:
+    """小节标题归一化（strip 井号/星号/反引号 + 空白折叠 + 小写）供补丁标题匹配。纯函数。"""
+    return re.sub(r"\s+", " ", str(heading or "").strip().strip("#*` ").strip()).lower()
+
+
+def list_report_section_titles(report: str) -> "list[str]":
+    """列出报告的 H2（'## '）小节标题（按出现顺序，原文大小写）。纯函数。"""
+    return [m.group(1).strip() for ln in (report or "").split("\n") if (m := _H2_HEADING_RE.match(ln))]
+
+
+def parse_report_patch(text: str) -> "tuple[list[tuple[str, str]], list[str], bool] | None":
+    """解析裸模型输出的补丁块（纯函数）。
+
+    返回 (replacements[(标题, 新正文)], appends[整节 markdown], no_changes)；一个可解析块都
+    没有 → None（调用方回退整份重合成）。约定格式：
+        <<<SECTION: 既有小节标题>>> …新正文（不含 '## 标题' 行）… <<<END>>>
+        <<<APPEND>>> …自带 '## 标题' 的新小节… <<<END>>>
+        <<<NO_CHANGES>>>  —— 明确声明无需任何修改
+    """
+    if not (text or "").strip():
+        return None
+    t = strip_think(text)
+    no_changes = bool(_PATCH_NO_CHANGES_RE.search(t))
+    replacements: list[tuple[str, str]] = []
+    appends: list[str] = []
+    for m in _PATCH_BLOCK_RE.finditer(t):
+        body = (m.group("body") or "").strip()
+        if not body:
+            continue
+        title = m.group("title")
+        if title:
+            replacements.append((title.strip(), body))
+        else:
+            appends.append(body)
+    if not replacements and not appends and not no_changes:
+        return None
+    return replacements, appends, no_changes
+
+
+def apply_report_patch(report: str, replacements: "list[tuple[str, str]]",
+                       appends: "list[str]") -> "tuple[str, int]":
+    """把补丁确定性拼回报告（纯函数）。返回 (patched, 匹配替换的小节数)。
+
+    按 H2（'## '，多段合成 stitch 的固定层级）切段；replacement 标题归一化匹配既有小节则
+    整节替换正文（保留原 '## 标题' 行），匹配不到则**降级为追加**新小节（证据只增不减）；
+    appends 原样追加文末。前言（首个 H2 之前）与未受影响小节逐字节保留。
+    """
+    lines = (report or "").split("\n")
+    h2_idx = [i for i, ln in enumerate(lines) if _H2_HEADING_RE.match(ln)]
+    rep_map: dict[str, str] = {}
+    for title, body in replacements:
+        rep_map.setdefault(_normalize_heading(title), body)  # 同题多块取首块
+    segments: list[tuple[int, int, "str | None"]] = []
+    if h2_idx:
+        if h2_idx[0] > 0:
+            segments.append((0, h2_idx[0], None))
+        for k, s in enumerate(h2_idx):
+            e = h2_idx[k + 1] if k + 1 < len(h2_idx) else len(lines)
+            segments.append((s, e, _H2_HEADING_RE.match(lines[s]).group(1).strip()))
+    else:
+        segments.append((0, len(lines), None))
+    matched = 0
+    consumed: set[str] = set()
+    out_parts: list[str] = []
+    for s, e, title in segments:
+        if title is not None:
+            key = _normalize_heading(title)
+            if key in rep_map and key not in consumed:
+                consumed.add(key)
+                matched += 1
+                out_parts.append(lines[s] + "\n\n" + rep_map[key].strip())
+                continue
+        out_parts.append("\n".join(lines[s:e]).rstrip("\n"))
+    for title, body in replacements:  # 匹配不到的 replacement 降级为追加（不丢补丁内容）
+        key = _normalize_heading(title)
+        if key not in consumed:
+            consumed.add(key)
+            out_parts.append(f"## {title.strip()}\n\n{body.strip()}")
+    for body in appends:
+        if body.strip():
+            out_parts.append(body.strip())
+    return "\n\n".join(p for p in out_parts if p.strip()), matched
+
+
+def build_report_patch_prompt(question: str, section_titles: "list[str]", report: str,
+                              notes: str, target_language: "str | None", kind: str,
+                              max_sections: int) -> str:
+    """构造一次有界补丁调用的提示词：现报告 + verify/top-up 笔记 → 小节级补丁块。"""
+    lang = f"\nWrite all patched content in {target_language}." if target_language else ""
+    titles_block = "\n".join(f"- {t}" for t in section_titles) or "- (report has no '## ' sections)"
+    if kind == "triangulation":
+        intent = (
+            "A triangulation-verification pass just corroborated / refuted / qualified the "
+            "report's single-origin load-bearing claims. Fold those findings into the report: "
+            "update the affected claims' wording and status, and add the new corroborating or "
+            "refuting sources (with URL and date)."
+        )
+    else:
+        intent = (
+            "An INSIGHT-CONTRACT judge flagged specific gaps, and a targeted top-up research "
+            "pass gathered new material for them. Strengthen ONLY the affected sections with "
+            "that new material (reference-class base rates, cause→effect mechanism chains, "
+            "quantitative facts with units/dates, contrarian evidence, source attributions)."
+        )
+    return (
+        "You are PATCHING an existing long research report — NOT rewriting it.\n\n"
+        f"RESEARCH BRIEF:\n{question}\n\n"
+        f"CONTEXT: {intent}\n\n"
+        "OUTPUT FORMAT — output ONLY patch blocks, nothing else (no preamble, no commentary):\n"
+        "<<<SECTION: exact existing section title>>>\n"
+        "...the FULL replacement body for that section (do NOT repeat the '## title' line)...\n"
+        "<<<END>>>\n"
+        "<<<APPEND>>>\n"
+        "## New Section Title\n"
+        "...body...\n"
+        "<<<END>>>\n"
+        "<<<NO_CHANGES>>>  — output this token alone if the new findings require no change.\n\n"
+        "HARD RULES:\n"
+        f"- Patch AT MOST {max_sections} sections total; pick ONLY those materially affected "
+        "by the new findings below.\n"
+        "- A replacement body must KEEP every existing fact, number, and source of that "
+        "section and INTEGRATE the new material — never drop evidence, never shorten.\n"
+        "- Base every new claim strictly on the VERIFICATION / TOP-UP NOTES below; never "
+        "invent facts, numbers, or sources.\n"
+        "- Use the EXACT section titles listed below when replacing."
+        f"{lang}\n\n"
+        f"=== EXISTING SECTION TITLES ===\n{titles_block}\n\n"
+        f"=== VERIFICATION / TOP-UP NOTES (the new material) ===\n{notes}\n\n"
+        f"=== CURRENT REPORT ===\n{report}"
+    )
+
+
+def run_incremental_report_patch(question: str, report: str, notes: str,
+                                 target_language: "str | None", model_name: str,
+                                 plog: "ProgressLog", kind: str) -> "str | None":
+    """WAVE9：一次有界裸模型调用把 verify/top-up 笔记补进现报告，替代整份多段重合成。
+
+    返回打好补丁的报告（NO_CHANGES 时原样返回，重合成整个跳过）；以下情况一律返回 None，
+    由调用方回退 synthesize_from_thread 整份重合成（今日行为）：开关关（RESEARCH_INCREMENTAL_TOPUP
+    =false）/ 报告或笔记为空 / 补丁解析失败 / 受影响小节数 > RESEARCH_TOPUP_PATCH_MAX_SECTIONS
+    （默认 4）/ 补丁后更短（净负，与覆盖门同一「绝不回退」约定）/ 任何异常。
+    """
+    if not _env_flag("RESEARCH_INCREMENTAL_TOPUP", True):
+        return None
+    if not (report or "").strip() or not (notes or "").strip():
+        return None
+    try:
+        _max_secs = max(1, int(os.environ.get("RESEARCH_TOPUP_PATCH_MAX_SECTIONS", "4") or "4"))
+    except ValueError:
+        _max_secs = 4
+    try:
+        titles = list_report_section_titles(report)
+        # SCALE-4 同款路由：合成走 DEERFLOW_SYNTHESIS_MODEL（未设置 → 研究模型）。
+        synth_model = os.environ.get("DEERFLOW_SYNTHESIS_MODEL", "").strip() or model_name
+        prompt = build_report_patch_prompt(
+            question, titles, (report or "")[:_JUDGE_INPUT_CAP], (notes or "")[:60000],
+            target_language, kind, _max_secs,
+        )
+        raw = strip_think(_bare_synth_invoke(synth_model, prompt))
+        parsed = parse_report_patch(raw)
+        if parsed is None:
+            plog.write("warn", f"incremental patch ({kind}): no parseable patch blocks; falling back to full re-synthesis")
+            return None
+        replacements, appends, no_changes = parsed
+        if no_changes and not replacements and not appends:
+            plog.write("ok", f"incremental patch ({kind}): model reports NO_CHANGES; keeping report as-is (full re-synthesis skipped)")
+            return report
+        affected = len({_normalize_heading(t) for t, _ in replacements}) + len(appends)
+        if affected > _max_secs:
+            plog.write("warn", f"incremental patch ({kind}): {affected} sections affected (> {_max_secs}); falling back to full re-synthesis")
+            return None
+        patched, matched = apply_report_patch(report, replacements, appends)
+        if not patched.strip() or looks_like_llm_error(patched):
+            plog.write("warn", f"incremental patch ({kind}): patched output empty/error-like; falling back to full re-synthesis")
+            return None
+        if len(patched.strip()) < len(report.strip()):
+            plog.write("warn", f"incremental patch ({kind}): patched report shorter than current ({len(patched)} < {len(report)}); falling back to full re-synthesis")
+            return None
+        plog.write("ok", f"incremental patch ({kind}): replaced {matched} section(s), appended {affected - matched}; report {len(report.strip())} → {len(patched.strip())} chars")
+        return patched
+    except Exception as e:  # noqa: BLE001 — 补丁只做加法；任何失败回退整份重合成
+        plog.write("warn", f"incremental patch ({kind}) failed ({type(e).__name__}: {e}); falling back to full re-synthesis")
+        return None
 
 
 # ===================== SCALE-5: triangulation top-up (single-origin claim verification) =========
@@ -3857,7 +4593,7 @@ def run_triangulation_topup(client, thread_id: str, question: str, depth: str,
         return report
     plog.write("stage", f"triangulation top-up: verifying {len(claims)} single-origin load-bearing claim(s)")
     try:
-        run_streamed_turn(
+        verify_notes = run_streamed_turn(
             client,
             build_triangulation_verification_prompt(question, claims, target_language),
             thread_id,
@@ -3865,7 +4601,11 @@ def run_triangulation_topup(client, thread_id: str, question: str, depth: str,
             plog,
             "research:triangulation-verify",
         )
-        new_report = synthesize_from_thread(client, thread_id, question, target_language, model_name, plog, depth=depth)
+        # WAVE9：verify 笔记优先走**一次有界**小节级补丁（替换/追加受影响小节），替代整份
+        # 14 节多段重合成；补丁不可用（None）→ 回退整份重合成（今日行为）。
+        new_report = run_incremental_report_patch(question, report, verify_notes, target_language, model_name, plog, "triangulation")
+        if new_report is None:
+            new_report = synthesize_from_thread(client, thread_id, question, target_language, model_name, plog, depth=depth)
         if (new_report.strip() and not looks_like_llm_error(new_report)
                 and len(new_report.strip()) >= len(report.strip())):
             plog.write("ok", f"triangulation top-up: adopted re-synthesized report ({len(new_report)} chars)")
@@ -3977,38 +4717,25 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
             _drift = _detect_year_drift(question, opening)
             if _drift:
                 plog.write("warn", f"brief-drift: opening notes centered on {_drift['notes_year']} but brief specifies {_drift['brief_years']}; injecting correction before phase 2")
-                run_streamed_turn(
-                    client,
-                    build_brief_correction_prompt(question, _drift, target_language),
-                    thread_id, 8, plog, "research:brief-drift-correction",
-                )
+                _correction_text = build_brief_correction_prompt(question, _drift, target_language)
+                # WAVE9：纠偏文本是确定性生成的，注入线程消息即可锚定后续 pass——不必烧一个
+                # 会调工具的 agent 回合（实测该回合 recursion_limit=8 却跑了 40 次工具调用、
+                # budget exhausted）。注入失败 → 回退旧 agent-turn 路径（degrade-safe）。
+                _injected = (_env_flag("RESEARCH_BRIEF_DRIFT_AS_MESSAGE", True)
+                             and inject_thread_message(client, thread_id, _correction_text))
+                if _injected:
+                    plog.write("ok", "brief-drift: correction injected as a plain thread message (no agent turn)")
+                else:
+                    run_streamed_turn(
+                        client,
+                        _correction_text,
+                        thread_id, 8, plog, "research:brief-drift-correction",
+                    )
                 _flag_research_degradation(
                     f"brief drift: opening centered on {_drift['notes_year']} vs brief {_drift['brief_years']}; injected correction"
                 )
         except Exception as _bd_err:  # noqa: BLE001 — 纠偏是加法，绝不破坏本轮
             plog.write("warn", f"brief-drift check skipped (non-fatal): {_bd_err}")
-
-    # I-0-4: optional per-KIQ/per-actor fan-out (default off). Runs scoped parallel
-    # sub-investigations off the opening's seed list, then absorbs the merged notes
-    # into THIS thread so the contradiction + synthesis passes below see the breadth.
-    if _env_flag("RESEARCH_DEEP_FANOUT", False) and opening.strip():
-        try:
-            width = max(1, int(os.environ.get("RESEARCH_FANOUT_WIDTH", "4") or "4"))
-            fanout_notes = run_deep_fanout(
-                client, opening, question, depth, target_language, model_name, thread_id, plog, width
-            )
-            if fanout_notes.strip():
-                reports.append(fanout_notes)
-                run_streamed_turn(
-                    client,
-                    build_fanout_absorption_prompt(question, fanout_notes, target_language),
-                    thread_id,
-                    120,
-                    plog,
-                    "research:deep-fanout-merge",
-                )
-        except Exception as exc:  # noqa: BLE001 — fan-out is additive; never break the run
-            plog.write("warn", f"deep fan-out skipped: {exc}")
 
     # R2-RES-9: carry unresolved gaps forward between deep passes so each pass is
     # steered to close earlier open questions (default on; degrade-safe — empty gap
@@ -4029,6 +4756,47 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
         and _total_phases >= 3
         and len(DEEP_RESEARCH_PHASES[1:-1]) >= 1
     )
+
+    # I-0-4: optional per-KIQ/per-actor fan-out (default off). Runs scoped parallel
+    # sub-investigations off the opening's seed list, then absorbs the merged notes
+    # into THIS thread so the contradiction + synthesis passes below see the breadth.
+    # WAVE9 OVERLAP：fan-out worker（隔离 thread_id）与主线程的 deep-phase-1 scope 回合
+    # 互不依赖——两者都只吃 opening。默认（RESEARCH_FANOUT_OVERLAP_SCOPE=true 且并行相位
+    # 路径可用且 scope 本轮要跑）改为**非阻塞**启动 worker 池，scope 回合与之并发，scope
+    # 结束后 join 并跑吸收回合（吸收本就是喂给 scope **之后**的相位，顺序语义不变）——
+    # 实测省 11–15 分钟关键路径。overlap 不可用/关闭 → 走原阻塞路径（逐字节同今日）。
+    _fanout_pending = None
+    if _env_flag("RESEARCH_DEEP_FANOUT", False) and opening.strip():
+        try:
+            width = max(1, int(os.environ.get("RESEARCH_FANOUT_WIDTH", "4") or "4"))
+            _overlap_ok = (
+                _env_flag("RESEARCH_FANOUT_OVERLAP_SCOPE", True)
+                and _parallel_ok
+                and should_run_pass("deep-phase-1", _resume_done, _resume)
+            )
+            if _overlap_ok:
+                _fanout_pending = start_deep_fanout(
+                    client, opening, question, depth, target_language, model_name, thread_id, plog, width
+                )
+                if _fanout_pending is not None:
+                    plog.write("stage", "deep fan-out: overlapping workers with the scope pass (join after scope)")
+            if _fanout_pending is None:
+                fanout_notes = run_deep_fanout(
+                    client, opening, question, depth, target_language, model_name, thread_id, plog, width
+                )
+                if fanout_notes.strip():
+                    reports.append(fanout_notes)
+                    run_streamed_turn(
+                        client,
+                        build_fanout_absorption_prompt(question, fanout_notes, target_language),
+                        thread_id,
+                        120,
+                        plog,
+                        "research:deep-fanout-merge",
+                    )
+        except Exception as exc:  # noqa: BLE001 — fan-out is additive; never break the run
+            plog.write("warn", f"deep fan-out skipped: {exc}")
+
     if _parallel_ok:
         import concurrent.futures as _cf
 
@@ -4057,6 +4825,27 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
         else:
             plog.write("resume", "跳过已完成 pass: deep-phase-1（scope）")
             _scope_text = ""
+
+        # WAVE9 OVERLAP：scope 回合已在 fan-out worker 飞行期间跑完 —— 此处 join worker 池、
+        # 吸收合并笔记进主线程。吸收回合先于并行中间相位（吸收喂的本就是 LATER phases），
+        # 与旧阻塞路径的下游可见性一致；任何失败只丢 fan-out 增量，绝不破坏本轮。
+        if _fanout_pending is not None:
+            try:
+                fanout_notes = join_deep_fanout(_fanout_pending, plog)
+                if fanout_notes.strip():
+                    reports.append(fanout_notes)
+                    run_streamed_turn(
+                        client,
+                        build_fanout_absorption_prompt(question, fanout_notes, target_language),
+                        thread_id,
+                        120,
+                        plog,
+                        "research:deep-fanout-merge",
+                    )
+            except Exception as exc:  # noqa: BLE001 — fan-out is additive; never break the run
+                plog.write("warn", f"deep fan-out skipped: {exc}")
+            finally:
+                _fanout_pending = None
 
         # (2) 中间三 pass —— 并行 scoped worker（隔离线程 + 各自 phase 预算）。种子缺口在派发
         # 时冻结（worker 无法互传缺口），全文经 _record_worker_notes 保留供最终合成折叠。
@@ -4256,13 +5045,15 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
 
     # SCALE-5: 自适应收尾 pass —— 覆盖门（源数量）满足后，只要**上一轮笔记仍报出未决 gaps**
     # 且总 pass 数未触顶，就再跑一次**定向**收口调研（补 gaps，而非泛化拓源）。总 pass 上限
-    # RESEARCH_MAX_ADAPTIVE_PASSES（默认 12，含固定的 1 开场 + N 相位 + 已用覆盖轮）。收敛条件：
-    # 新 pass 不再报出 gaps → 停。任何异常绝不破坏本轮（degrade-safe）。默认对 deep 开。
+    # RESEARCH_MAX_ADAPTIVE_PASSES（WAVE9 默认 12→9：5 相位 + 开场固定占 6，有效收口预算
+    # 6→3——旧 merge-only 缺口集按构造不收敛，实测每轮都跑满 6 轮预算、44 分钟纯尾巴；
+    # 收口集合改为整体替换后 3 轮足够，env 显式设置照旧生效）。收敛条件：新 pass 不再报出
+    # gaps → 停；或缺口集连续两轮零变化（平台期）→ 停。任何异常绝不破坏本轮（degrade-safe）。
     if _gap_threading and accumulated_gaps and _env_flag("RESEARCH_ADAPTIVE_PASSES", True):
         try:
-            _max_adaptive_total = max(0, int(os.environ.get("RESEARCH_MAX_ADAPTIVE_PASSES", "12") or "12"))
+            _max_adaptive_total = max(0, int(os.environ.get("RESEARCH_MAX_ADAPTIVE_PASSES", "9") or "9"))
         except ValueError:
-            _max_adaptive_total = 12
+            _max_adaptive_total = 9
         _budget = adaptive_passes_remaining(_coverage_rounds_run, _max_adaptive_total)  # 剩余自适应 pass 预算
         _adaptive_ran = 0
         while accumulated_gaps and _adaptive_ran < _budget:
@@ -4284,9 +5075,18 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                 break
             reports.append(_gtxt)
             _fresh = parse_gaps_from_notes(_gtxt)
-            accumulated_gaps = _merge_gaps(accumulated_gaps, _fresh)
+            # WAVE9：收口提示词已要求「只列**仍未决**的 gaps」——缺口集改为整体替换（闭合即
+            # 出清单，环才可能收敛），并加平台期检测（归一化后与上一轮零变化 → 停，别再烧
+            # 同一批打不动的缺口）。RESEARCH_GAP_SET_REPLACE=false 恢复旧 merge-only 语义。
+            accumulated_gaps, _plateau = advance_gap_set(
+                accumulated_gaps, _fresh,
+                replace=_env_flag("RESEARCH_GAP_SET_REPLACE", True),
+            )
             if not _fresh:  # 本轮不再报出新 gaps → 视为收敛，停止
                 plog.write("ok", f"adaptive gap-closing: converged after {_adaptive_ran} pass(es) (no fresh gaps surfaced)")
+                break
+            if _plateau:
+                plog.write("ok", f"adaptive gap-closing: gap set unchanged after pass {_adaptive_ran} (plateau); stopping — remaining gaps deemed unclosable")
                 break
         if _adaptive_ran and _adaptive_ran >= _budget:
             plog.write("stage", f"adaptive gap-closing: hit pass ceiling (total {_max_adaptive_total}); proceeding to synthesis")
@@ -4867,6 +5667,47 @@ def _pm_derive_queries(question: str, hot_topics: list | None = None,
     return out[:max_queries]
 
 
+def degrade_market_queries(queries: "list[str]") -> "list[tuple[str, list[str]]]":
+    """PM-HZ（纯函数，可单测）：远期问题的检索词降级阶梯。
+
+    2030 级远期检索词（'TSMC market share 2030'）常在 Polymarket 零命中——市场目录
+    以近端事件为主。零命中时按两级放宽重试：
+      1. 'year_stripped'：剥掉查询里的 4 位年份（'TSMC market share 2030' →
+         'TSMC market share'），保留主题词。
+      2. 'event_level'：进一步收敛到事件级短词（剥年份后的前 3 个词），把子结果
+         检索拓宽为事件目录检索。
+    每阶段去重、剔除与原始集合重复的词；空阶段不返回。降级词更易捞进无关市场，
+    调用方必须以 LLM 相关性门为**硬前提**（fail-closed）消费本阶梯的命中。
+    """
+    year_re = re.compile(r"\b(?:19|20)\d{2}\b")
+
+    def _clean(rows: "list[str]", exclude: "set[str]") -> "list[str]":
+        out: list[str] = []
+        seen: set[str] = set()
+        for r in rows:
+            s = re.sub(r"\s+", " ", str(r or "")).strip(" \t\"'.,;:!?()[]{}-–—")
+            key = s.lower()
+            if not s or key in seen or key in exclude:
+                continue
+            seen.add(key)
+            out.append(s)
+        return out
+
+    orig = {str(q or "").strip().lower() for q in queries if str(q or "").strip()}
+    stripped_all = [year_re.sub(" ", str(q or "")) for q in queries]
+    stage1 = _clean(stripped_all, orig)
+    # 事件级：在剥年份后的词上取前 3 个词（stage1 为空——即没词带年份——也照样收敛原词）。
+    base = stage1 or _clean(stripped_all, set())
+    stage2 = _clean([" ".join(q.split()[:3]) for q in base],
+                    orig | {q.lower() for q in stage1})
+    stages: list[tuple[str, list[str]]] = []
+    if stage1:
+        stages.append(("year_stripped", stage1))
+    if stage2:
+        stages.append(("event_level", stage2))
+    return stages
+
+
 def build_market_queries_prompt(question: str, hot_topics: list | None = None,
                                 actor_names: list | None = None) -> str:
     """PM-1: LLM 主派生路径的提示词——从问题+热点+actor 名产出 10-16 条『市场标题形状』
@@ -5359,23 +6200,69 @@ def _collect_prediction_markets(out_dir: Path, question: str, report: str,
         pass
     queries = _pm_resolve_queries(question, hot_topics, actor_names, model_name, plog)
     if not queries:
-        plog.write("warn", "prediction markets skipped (no derivable queries)")
+        # PM-HZ: 无检索词也**始终落盘**显式空标记——下游（报告市场包/置信度理由）能
+        # 陈述「无市场锚点」而非在静默缺文件与「阶段没跑」之间无法区分。
+        payload = {"as_of": _utcnow(), "source": "polymarket", "queries": [],
+                   "markets": [], "no_relevant_markets": True,
+                   "reason": "no derivable queries"}
+        _atomic_write_text(out_dir / PREDICTION_MARKETS_FILENAME,
+                           json.dumps(payload, ensure_ascii=False, indent=2))
+        meta["prediction_markets_count"] = 0
+        plog.write("warn", f"prediction markets: no derivable queries; wrote {PREDICTION_MARKETS_FILENAME} no_relevant_markets marker")
         return
     max_total, min_volume, max_per_event = _pm_env_caps()
     markets = _pm_snapshot(queries, max_total=max_total, min_volume=min_volume,
                            max_per_event=max_per_event)
-    if not markets:
+    if markets:
+        # PM-1: LLM 相关性门——为每个候选市场打 0-10 分，丢弃 <PM_MIN_RELEVANCE，按 (relevance,
+        # volume) 重排；打分失败 → 放行全部候选（仅按 volume，主路径语义不变）。
+        _scores = score_market_relevance(question, markets, model_name, plog)
+        markets = _apply_relevance_gate(markets, _scores, _pm_min_relevance())
+        if not markets:
+            plog.write("warn", "prediction markets: all candidates below relevance floor")
+    else:
         plog.write("warn", f"prediction markets: no relevant active markets (queries={queries})")
-        return
-    # PM-1: LLM 相关性门——为每个候选市场打 0-10 分，丢弃 <PM_MIN_RELEVANCE，按 (relevance,
-    # volume) 重排；打分失败 → 放行全部候选（仅按 volume）。
-    _scores = score_market_relevance(question, markets, model_name, plog)
-    markets = _apply_relevance_gate(markets, _scores, _pm_min_relevance())
-    if not markets:
-        plog.write("warn", "prediction markets: all candidates below relevance floor; nothing to append")
-        return
+    # PM-HZ: 远期降级阶梯——主检索词零命中/全被门挡时，剥年份→事件级宽词重试。降级词
+    # 更易捞进无关市场，相关性门在此是**硬前提**（fail-closed：打分不可用 → 整阶段丢弃，
+    # 与主路径的 fail-open 不同）；降级命中逐行打 horizon_degraded 标签留痕。
+    degraded_stage = ""
+    degraded_queries: list[str] = []
+    if not markets and _env_flag("PREDICTION_MARKETS_HORIZON_RETRY", True):
+        for _stage, _stage_queries in degrade_market_queries(queries):
+            plog.write("warn", f"prediction markets: horizon-degradation retry ({_stage}) with {len(_stage_queries)} broadened queries")
+            _cand = _pm_snapshot(_stage_queries, max_total=max_total, min_volume=min_volume,
+                                 max_per_event=max_per_event)
+            if not _cand:
+                continue
+            _sc = score_market_relevance(question, _cand, model_name, plog)
+            if not _sc:
+                plog.write("warn", f"prediction markets: relevance gate unavailable for degraded ({_stage}) candidates; discarding {len(_cand)} (fail-closed)")
+                continue
+            _kept = _apply_relevance_gate(_cand, _sc, _pm_min_relevance())
+            if not _kept:
+                plog.write("warn", f"prediction markets: degraded ({_stage}) candidates all below relevance floor")
+                continue
+            for _row in _kept:
+                _row["horizon_degraded"] = _stage
+            markets = _kept
+            degraded_stage = _stage
+            degraded_queries = _stage_queries
+            plog.write("ok", f"prediction markets: horizon-degradation ({_stage}) matched {len(_kept)} relevance-gated market(s)")
+            break
     as_of = _utcnow()
     payload = {"as_of": as_of, "source": "polymarket", "queries": queries, "markets": markets}
+    if degraded_stage:
+        payload["horizon_degraded"] = degraded_stage
+        payload["degraded_queries"] = degraded_queries
+    if not markets:
+        # PM-HZ: 空结果也**始终落盘**——显式 no_relevant_markets 标记（含尝试过的检索词），
+        # 报告节不追加（没有市场行可渲染）。
+        payload["no_relevant_markets"] = True
+        _atomic_write_text(out_dir / PREDICTION_MARKETS_FILENAME,
+                           json.dumps(payload, ensure_ascii=False, indent=2))
+        meta["prediction_markets_count"] = 0
+        plog.write("warn", f"wrote {PREDICTION_MARKETS_FILENAME} (no_relevant_markets marker; no report section appended)")
+        return
     _atomic_write_text(out_dir / PREDICTION_MARKETS_FILENAME,
                        json.dumps(payload, ensure_ascii=False, indent=2))
     # 追加确定性 markdown 节到已落盘的 research_report.md（下游合成/报告阶段读文件即得）。
@@ -5431,6 +6318,140 @@ def _collect_market_price_history(out_dir: Path, markets: list[dict],
     plog.write("ok", f"wrote {PRICE_HISTORY_FILENAME} ({len(hist_map)} market price series, "
                      f"≤{days}d @ {interval})")
     return len(hist_map)
+
+
+# ---------------------------------------------------------------------------
+# WAVE9-RQ4: 研究图表 —— forecast-visuals 技能捆绑的 plotly 渲染器（scripts/render.py）
+# 的确定性调用步。结构化工件（actors/timeline/quantitative）落盘后直接子进程渲染
+# charts/*.html + charts/*.png + charts.json，并把 PNG 以 Visual Annex 内嵌进
+# research_report.md —— 不依赖 agent 记得跑技能（三次真实运行 0 张图的根因）。
+# ---------------------------------------------------------------------------
+
+CHARTS_MANIFEST_FILENAME = "charts.json"
+
+
+def _charts_timeout() -> float:
+    """WAVE9-RQ4: 渲染子进程超时（秒）。非法/非正值回退 180。"""
+    try:
+        v = float(os.environ.get("RESEARCH_CHARTS_TIMEOUT", "180") or "180")
+    except ValueError:
+        v = 180.0
+    return v if v > 0 else 180.0
+
+
+def _charts_python() -> str:
+    """WAVE9-RQ4: 选择跑 render.py 的解释器——RESEARCH_CHARTS_PYTHON 显式覆盖 >
+    backend/.venv（部署里带 plotly/kaleido 的解释器）> 当前 sys.executable。
+    只做存在性检查；plotly/matplotlib 的导入可用性由 render.py 自检并降级。"""
+    envp = (os.environ.get("RESEARCH_CHARTS_PYTHON", "") or "").strip()
+    if envp and Path(envp).exists():
+        return envp
+    backend_py = Path(__file__).resolve().parents[1] / "backend" / ".venv" / "bin" / "python"
+    if backend_py.exists():
+        return str(backend_py)
+    return sys.executable
+
+
+def embed_chart_refs(report_text: str, charts: "list[dict]") -> str:
+    """WAVE9-RQ4（纯函数）：把 charts.json 清单的图表以 '## Visual Annex' 节内嵌进报告 ——
+    PNG 条目走 markdown 图片 ``![title](charts/x.png)`` + 交互版链接 + 斜体 caption；
+    仅 HTML 的条目退化为交互版链接。正文已引用的 path 不重复；已有 Visual Annex 时只追加
+    尚缺条目（不重复标题）。空清单/无有效条目 → 原样返回。"""
+    rows = [c for c in (charts or [])
+            if isinstance(c, dict) and str(c.get("path") or "").strip()]
+    # The research agent may already have placed figures beside the relevant
+    # evidence. Annex only genuinely missing paths; do not duplicate a correct
+    # contextual embed merely because the deterministic renderer ran later.
+    rows = [c for c in rows
+            if f"]({str(c.get('path') or '').strip()})" not in (report_text or "")]
+    if not rows:
+        return report_text
+    lines: list[str] = [] if "## Visual Annex" in (report_text or "") else ["## Visual Annex", ""]
+    for c in rows:
+        title = str(c.get("title") or "Chart").strip()
+        path = str(c.get("path") or "").strip()
+        caption = str(c.get("caption") or "").strip()
+        html_path = str(c.get("html_path") or "").strip()
+        lines.append(f"### {title}")
+        lines.append("")
+        if path.lower().endswith(".png"):
+            lines.append(f"![{title}]({path})")
+            if html_path:
+                lines.append("")
+                lines.append(f"[Interactive version]({html_path})")
+        else:
+            lines.append(f"[Interactive version]({path})")
+        if caption:
+            lines.append("")
+            lines.append(f"_{caption}_")
+        lines.append("")
+    return (report_text or "").rstrip() + "\n\n" + "\n".join(lines).rstrip() + "\n"
+
+
+def _render_research_charts(out_dir: Path, meta: dict, plog: "ProgressLog") -> None:
+    """WAVE9-RQ4: 确定性图表渲染步（best effort，调用方再包一层 try/except）。
+
+    子进程跑 skills/forecast-visuals/scripts/render.py --dir <out_dir>：渲染器读
+    actors.json / timeline.json / quantitative.json（缺哪个跳哪张，绝不造数据），写
+    charts/*.html + charts/*.png + charts.json。随后把 PNG 内嵌进 research_report.md
+    （读盘上最新版本——预测市场节可能已追加）。python/plotly 缺失、超时、渲染失败 →
+    一行日志跳过，绝不影响已产出的研究契约（degrade-safe）。
+    """
+    if _research_charts_min() <= 0:
+        return
+    # GATE-W9: 双布局探测——bridge 源树是 skills/<name>/，部署树（deer-flow/）是
+    # skills/public/<name>/（setup.sh / _sync_deerflow_bridge_if_stale 的部署语义）。
+    _base = Path(__file__).resolve().parent
+    _candidates = [
+        _base / "skills" / "forecast-visuals" / "scripts" / "render.py",
+        _base / "skills" / "public" / "forecast-visuals" / "scripts" / "render.py",
+    ]
+    render_py = next((p for p in _candidates if p.exists()), None)
+    if render_py is None:
+        plog.write("warn", f"research charts: bundled renderer missing (tried {', '.join(str(p) for p in _candidates)}); skipped")
+        return
+    import subprocess
+    py = _charts_python()
+    plog.write("stage", f"research charts: rendering via {py} {render_py.name} (out={out_dir})")
+    try:
+        proc = subprocess.run(
+            [py, str(render_py), "--dir", str(out_dir)],
+            capture_output=True, text=True, timeout=_charts_timeout(),
+        )
+    except subprocess.TimeoutExpired:
+        plog.write("warn", f"research charts: render.py timed out after {_charts_timeout():.0f}s; skipped")
+        return
+    _out_tail = ((proc.stderr or proc.stdout or "").strip().splitlines() or [""])[-1]
+    if proc.returncode != 0:
+        plog.write("warn", f"research charts: render.py exited {proc.returncode} ({_out_tail}); skipped")
+        return
+    manifest_path = out_dir / CHARTS_MANIFEST_FILENAME
+    if not manifest_path.exists():
+        plog.write("warn", "research charts: render.py produced no charts.json; skipped")
+        return
+    try:
+        charts = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        plog.write("warn", f"research charts: charts.json unreadable ({e}); skipped")
+        return
+    if not isinstance(charts, list) or not charts:
+        plog.write("warn", "research charts: charts.json empty; nothing to embed")
+        return
+    meta["charts_count"] = len(charts)
+    if len(charts) < _research_charts_min():
+        plog.write("warn", f"research charts: only {len(charts)}/{_research_charts_min()} required charts rendered (missing input artifacts?)")
+    report_path = out_dir / REPORT_FILENAME
+    if report_path.exists():
+        try:
+            cur = report_path.read_text(encoding="utf-8")
+            new = embed_chart_refs(cur, charts)
+            if new != cur:
+                _atomic_write_text(report_path, new)
+                meta["report_chars"] = len(new)
+                plog.write("ok", f"research charts: embedded {len(charts)} chart(s) into {REPORT_FILENAME} (Visual Annex)")
+        except OSError as e:
+            plog.write("warn", f"research charts: could not embed into {REPORT_FILENAME} ({e}); charts remain on disk")
+    plog.write("ok", f"wrote {CHARTS_MANIFEST_FILENAME} ({len(charts)} charts) + charts/ files")
 
 
 # ---------------------------------------------------------------------------
@@ -5520,6 +6541,14 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
         write_meta()
     except Exception as _pm_err:  # noqa: BLE001 — 市场信号为可选增强
         plog.write("warn", f"extract-only: prediction markets skipped (non-fatal): {_pm_err}")
+
+    # WAVE9-RQ4: 打捞路径同样补渲染研究图表（结构化工件刚补出来；与正常 Stage 4 一致，
+    # degrade-safe——渲染失败绝不令打捞失败）。
+    try:
+        _render_research_charts(out_dir, meta, plog)
+        write_meta()
+    except Exception as _ch_err:  # noqa: BLE001 — 图表为可选增强
+        plog.write("warn", f"extract-only: research charts skipped (non-fatal): {_ch_err}")
 
     meta.update(status="completed", finished_at=_utcnow())
     write_meta()
@@ -5845,6 +6874,12 @@ def main() -> int:
             return 2
 
         report = unwrap_markdown_fence(report)
+        # WAVE9-RQ2: 落盘前确定性引注校验——[S<n>] 必须解析到参考条目（报告自带 References
+        # 节或本轮钉住的 SOURCE INDEX），悬空记号剔除并计数；绝不阻断落盘（degrade-safe）。
+        try:
+            report = finalize_report_citations(report, plog)
+        except Exception as _cit_err:  # noqa: BLE001 — 引注校验为可选增强
+            plog.write("warn", f"citation finalize skipped (non-fatal): {_cit_err}")
         _atomic_write_text(out_dir / REPORT_FILENAME, report)
         meta["report_chars"] = len(report)
         plog.write("ok", f"wrote {REPORT_FILENAME} ({len(report)} chars)")
@@ -6097,6 +7132,9 @@ def main() -> int:
                 if (_new_report.strip() and _new_report != report
                         and len(_new_report.strip()) >= len(report.strip())):
                     report = unwrap_markdown_fence(_new_report)
+                    # WAVE9-RQ2: top-up 补写可能引入新的悬空 [S<n>] 记号 → 重校验（幂等：
+                    # 已有 References 节则按该节校验，不重复追加）。
+                    report = finalize_report_citations(report, plog)
                     _atomic_write_text(out_dir / REPORT_FILENAME, report)
                     meta["report_chars"] = len(report)
                     meta["triangulation_topup_applied"] = True
@@ -6114,6 +7152,16 @@ def main() -> int:
             write_meta()
         except Exception as _pm_err:  # noqa: BLE001 — 市场信号为可选增强
             plog.write("warn", f"prediction markets skipped (non-fatal): {_pm_err}")
+
+        # --- Stage 4: 研究图表（WAVE9-RQ4；forecast-visuals/scripts/render.py，确定性）---
+        # 结构化工件都已落盘后直接子进程渲染 actor 网络/时间线/定量 Top 指标图，并把 PNG
+        # 内嵌进 research_report.md 的 Visual Annex。Degrade-safe：python/plotly 缺失或
+        # 渲染失败 → 一行日志跳过，绝不影响已产出的研究契约。
+        try:
+            _render_research_charts(out_dir, meta, plog)
+            write_meta()
+        except Exception as _ch_err:  # noqa: BLE001 — 图表为可选增强
+            plog.write("warn", f"research charts skipped (non-fatal): {_ch_err}")
 
         meta.update(status="completed", finished_at=_utcnow())
         write_meta()

@@ -14,6 +14,14 @@ from app.services import report_visualizer as rv
 from app.services.report_visualizer import ReportVisualizer
 
 
+@pytest.fixture(autouse=True)
+def _no_png_export(monkeypatch):
+    """WAVE9：本文件不测 kaleido PNG 导出（每次导出要起一次 Chromium，全套会慢数分钟）。
+    统一关掉，让 build_all 走「HTML + matplotlib 回退 PNG」路径；kaleido 专项测试见
+    test_wave9_visualizer.py。"""
+    monkeypatch.setattr(ReportVisualizer, "_png_export_ok", lambda self: False)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 最小真实工件样本（键名与真实落盘一致）
 # ─────────────────────────────────────────────────────────────────────────────
@@ -234,47 +242,58 @@ def test_build_all_manifest_and_persist(tmp_path):
     viz = ReportVisualizer()
     manifest = viz.build_all("report_x", str(tmp_path), _full_artifacts())
     assert isinstance(manifest, list) and manifest
-    # 每项字段齐全
+    # WAVE9 每项字段齐全（含 id/title；png_path 可选）
     for e in manifest:
-        assert set(e.keys()) == {"path", "type", "source", "caption", "placement_hint"}
-        assert e["type"] in ("mermaid", "png", "html")
+        assert {"id", "path", "type", "title", "caption", "source",
+                "placement_hint"} <= set(e.keys())
+        assert e["type"] in ("png", "html")
         # 相对路径落在 charts/ 且文件真实存在
         assert e["path"].startswith("charts/")
         assert os.path.exists(str(tmp_path / e["path"]))
-    # 至少含 4 个 mermaid（timeline/causal/coalition/actor_network）
-    mermaids = [e for e in manifest if e["type"] == "mermaid"]
-    assert len(mermaids) == 4
-    sources = {e["source"] for e in mermaids}
-    assert {"timeline", "causal_paths", "coalition", "actors"} <= sources
-    # manifest 落盘且可回读
+        if e.get("png_path"):
+            assert os.path.exists(str(tmp_path / e["png_path"]))
+    # WAVE9：build_all 不再产出 mermaid（plotly 泳道/网络图取代）
+    assert not any(e["type"] == "mermaid" for e in manifest)
+    # manifest 落盘为 schema v2 dict 且 items 可回读
     mpath = tmp_path / "viz_manifest.json"
     assert mpath.exists()
     reloaded = json.loads(mpath.read_text(encoding="utf-8"))
-    assert reloaded == manifest
+    assert reloaded["schema_version"] == 2
+    assert reloaded["items"] == manifest
+    assert isinstance(reloaded["skipped"], list)
+    for s in reloaded["skipped"]:
+        assert set(s.keys()) == {"builder", "reason"}
 
 
 @pytest.mark.skipif(not rv.MATPLOTLIB_AVAILABLE, reason="matplotlib not installed")
 def test_build_all_includes_png_when_matplotlib(tmp_path):
+    # PNG 导出关闭（autouse fixture）→ matplotlib 回退族补 PNG：核心图挂 png_path，
+    # comparison/calibration 作为独立 png 项。
     viz = ReportVisualizer()
     manifest = viz.build_all("report_png", str(tmp_path), _full_artifacts())
+    by_id = {e["id"]: e for e in manifest}
+    if rv.PLOTLY_AVAILABLE:
+        assert by_id["scenario_probabilities"]["type"] == "html"
+        assert by_id["scenario_probabilities"]["png_path"].endswith(".png")
+        assert os.path.exists(str(tmp_path / by_id["scenario_probabilities"]["png_path"]))
     pngs = [e for e in manifest if e["type"] == "png"]
-    # 5 张图全部生成（scenario/model-vs-market/worldstate/comparison/calibration）
-    assert len(pngs) == 5
     hints = {e["placement_hint"] for e in pngs}
-    assert {"scenarios", "binary_forecasts", "simulation", "comparison", "calibration"} <= hints
+    assert {"comparison", "calibration"} <= hints
 
 
-def test_build_all_mermaid_only_fallback(tmp_path, monkeypatch):
-    # 模拟两个可选绘图依赖（matplotlib + plotly）都缺失：build_all 只产 mermaid，绝不含 png/html
+def test_build_all_no_renderers_reports_skips(tmp_path, monkeypatch):
+    # 模拟两个可选绘图依赖（matplotlib + plotly）都缺失：无图可产，但 skipped 必须完整记录
+    # （WAVE9：不再有沉默跳过；旧 mermaid 回退已随 mermaid 族退出 build_all）
     monkeypatch.setattr(rv, "MATPLOTLIB_AVAILABLE", False)
     monkeypatch.setattr(rv, "PLOTLY_AVAILABLE", False)
     viz = ReportVisualizer()
     manifest = viz.build_all("report_nomat", str(tmp_path), _full_artifacts())
-    assert manifest  # 仍有 mermaid
-    assert all(e["type"] == "mermaid" for e in manifest)
-    # charts/ 下只有 .mmd，无 .png/.html
-    files = os.listdir(str(tmp_path / "charts"))
-    assert files and all(f.endswith(".mmd") for f in files)
+    assert manifest == []
+    reloaded = json.loads((tmp_path / "viz_manifest.json").read_text(encoding="utf-8"))
+    assert reloaded["items"] == []
+    reasons = {s["builder"]: s["reason"] for s in reloaded["skipped"]}
+    assert reasons["scenario_probabilities"] == "plotly_unavailable_or_disabled"
+    assert reasons["matplotlib_family"] == "matplotlib_unavailable_or_disabled"
 
 
 def test_build_all_master_switch_off(tmp_path, monkeypatch):
@@ -288,12 +307,15 @@ def test_build_all_master_switch_off(tmp_path, monkeypatch):
 
 
 def test_build_all_empty_artifacts(tmp_path):
-    # 无任何工件 → 空 manifest，仍安全落盘空清单
+    # 无任何工件 → 空 items，仍安全落盘清单（skipped 记录全部 no_input）
     viz = ReportVisualizer()
     manifest = viz.build_all("report_empty", str(tmp_path), {})
     assert manifest == []
     assert (tmp_path / "viz_manifest.json").exists()
-    assert json.loads((tmp_path / "viz_manifest.json").read_text(encoding="utf-8")) == []
+    reloaded = json.loads((tmp_path / "viz_manifest.json").read_text(encoding="utf-8"))
+    assert reloaded["items"] == []
+    if rv.PLOTLY_AVAILABLE:
+        assert any(s["reason"] == "no_input" for s in reloaded["skipped"])
 
 
 def test_build_all_none_artifacts_safe(tmp_path):
@@ -417,17 +439,22 @@ def test_build_all_price_history_from_artifact(tmp_path):
     arts = dict(_full_artifacts())
     arts["market_price_history"] = _synthetic_price_history()
     manifest = viz.build_all("report_ph", str(tmp_path), arts)
-    # PNG 族恰一张市场价格历史（HTML 族若 plotly 可用会另有一张，单独校验）
-    ph_pngs = [e for e in manifest
-               if e["source"] == "market_price_history" and e["type"] == "png"]
-    assert len(ph_pngs) == 1
-    e = ph_pngs[0]
+    ph_items = [e for e in manifest if e["source"] == "market_price_history"]
+    assert len(ph_items) == 1
+    e = ph_items[0]
     assert e["placement_hint"] == "binary_forecasts"
     assert e["path"].startswith("charts/market_price_history_")
-    _assert_png(str(tmp_path / e["path"]))
+    # plotly 可用 → HTML 主图 + matplotlib 回退 PNG 挂 png_path；否则纯 PNG 项
+    if rv.PLOTLY_AVAILABLE:
+        assert e["type"] == "html"
+        assert e["png_path"].startswith("charts/market_price_history_")
+        _assert_png(str(tmp_path / e["png_path"]))
+    else:
+        assert e["type"] == "png"
+        _assert_png(str(tmp_path / e["path"]))
     # manifest 落盘可回读
     reloaded = json.loads((tmp_path / "viz_manifest.json").read_text(encoding="utf-8"))
-    assert reloaded == manifest
+    assert reloaded["items"] == manifest
 
 
 @pytest.mark.skipif(not rv.MATPLOTLIB_AVAILABLE, reason="matplotlib not installed")
@@ -583,10 +610,11 @@ def test_build_all_includes_html_when_plotly(tmp_path):
     arts["market_price_history"] = _synthetic_price_history()
     manifest = viz.build_all("report_html", str(tmp_path), arts)
     htmls = [e for e in manifest if e["type"] == "html"]
-    # scenario + model-vs-market + worldstate + 1 市场价格历史 = 4 张 HTML
-    assert len(htmls) == 4
+    # WAVE9：至少 scenario + binary dotplot + model-vs-market + timeline + actor network +
+    # actor bubble + worldstate + 1 市场价格历史
+    assert len(htmls) >= 6
     hints = {e["placement_hint"] for e in htmls}
-    assert {"scenarios", "binary_forecasts", "simulation"} <= hints
+    assert {"scenarios", "binary_forecasts", "simulation", "timeline", "actors"} <= hints
     for e in htmls:
         assert e["path"].startswith("charts/") and e["path"].endswith(".html")
         _assert_offline_html(str(tmp_path / e["path"]))

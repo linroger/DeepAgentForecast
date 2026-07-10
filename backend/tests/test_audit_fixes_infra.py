@@ -36,7 +36,7 @@ NEW_FLAGS_AND_DEFAULTS = {
     "PARALLEL_PROFILE_COUNT": 16,
     "EMBED_WARM_AT_RESEARCH": False,
     "VALIDATE_AS_OF_DATE": True,
-    "GRAPH_CHUNK_SOURCE": "both",
+    "GRAPH_CHUNK_SOURCE": "dossier_only",  # W9-10：默认改 dossier_only（KG 收敛到关键 actor）
     # 本组新增
     "PIPELINE_RECLAIM_PORT_PROBE": True,
     "REPORT_LLM_PREFLIGHT": True,
@@ -449,6 +449,29 @@ def test_kg5_graph_degraded_folded_into_pipeline_health(monkeypatch):
     ph = state.options["pipeline_health"]
     assert ph["stages"]["graph"]["health"] == "degraded"
     assert ph["status"] == "degraded"
+
+
+def test_loop003_prune_postcondition_degrades_pipeline_health(monkeypatch):
+    orch = po.PipelineOrchestrator()
+    state = po.PipelineState(pipeline_id="pipe_prune", prompt="q", mode="full", status="running")
+    state.options["graph_prune"] = {
+        "degraded": True,
+        "postcondition_ok": False,
+        "actual_after": 610,
+        "effective_cap": 400,
+        "error": "graph pruning postcondition failed: actual graph exceeds effective hard cap",
+    }
+    monkeypatch.setattr(po.PipelineOrchestrator, "_assess_report_health",
+                        lambda self, rid: ("ok", [], {}))
+    monkeypatch.setattr(Config, "PIPELINE_HEALTH_GATE", True, raising=False)
+
+    orch._enforce_pipeline_health(state)
+
+    ph = state.options["pipeline_health"]
+    assert ph["status"] == "degraded"
+    assert ph["stages"]["graph"]["health"] == "degraded"
+    assert "exceeds effective hard cap" in ph["stages"]["graph"]["issues"][0]
+    assert ph["stages"]["graph"]["prune"]["actual_after"] == 610
 
 
 def test_xrun11_run_health_prefers_run_summary(tmp_path, monkeypatch):

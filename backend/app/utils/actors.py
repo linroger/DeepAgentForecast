@@ -1193,6 +1193,119 @@ def sources_index_tiered(sources: Optional[Any], max_sources: int = 40) -> str:
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
+def sources_index_tiered_map(sources: Optional[Any],
+                             max_sources: int = 40) -> Dict[str, Dict[str, Any]]:
+    """复现 sources_index_tiered 的分桶/字母序，返回 ``{"S1-a": 来源行, ...}`` 记号映射。
+
+    供旧式（REPORT_CITATION_SINGLE_GRAMMAR=false）路径解析分层记号；与渲染函数
+    逐字节同序（同样的 max_sources 截取 + 桶内字母序）。空数据返回 {}。
+    """
+    rows = extract_source_rows(sources)
+    if not rows:
+        return {}
+    buckets: Dict[str, List[Dict[str, Any]]] = {t: [] for t in SOURCE_TIERS}
+    buckets["S?"] = []
+    used = 0
+    for r in rows:
+        if used >= max_sources:
+            break
+        tier = _norm_tier(r.get("tier")) or "S?"
+        buckets[tier].append(r)
+        used += 1
+    letters = "abcdefghijklmnopqrstuvwxyz"
+    out: Dict[str, Dict[str, Any]] = {}
+    for tier in (*SOURCE_TIERS, "S?"):
+        for i, s in enumerate(buckets.get(tier) or []):
+            tag = letters[i] if i < len(letters) else str(i)
+            out[f"{tier}-{tag}"] = s
+    return out
+
+
+def _raw_source_rows(sources: Optional[Any]) -> List[Any]:
+    """取出**保位置**的原始来源列表（含非法行，编号按原始下标对齐 _source_haystacks）。
+
+    与 extract_source_rows 不同：不过滤非 dict 行——统一引用语法 [S<n>] 的 n 是来源在
+    原始列表中的 1 起位置，过滤会让编号漂移、与回填/悬空修复的位置锚定失配。
+    """
+    rows: Any = sources
+    if isinstance(sources, dict):
+        rows = sources.get("sources")
+    return rows if isinstance(rows, list) else []
+
+
+def _source_cited_in_research(row: Dict[str, Any], research_norm: str) -> bool:
+    """相关性排序信号：该来源的 URL 片段或标题是否出现在研究报告正文里。
+
+    仅用于排序（决定哪些来源进入注入索引），非精确匹配也无碍——宁可多选不漏选。
+    """
+    if not research_norm:
+        return False
+    url = str(row.get("url", "") or "").strip().lower()
+    if url:
+        frag = re.sub(r"^https?://", "", url).rstrip("/")
+        if len(frag) >= 12 and frag in research_norm:
+            return True
+    title = str(row.get("title", "") or "").strip().lower()
+    return bool(len(title) >= 8 and title in research_norm)
+
+
+def sources_index_unified(
+    sources: Optional[Any],
+    research_report: Optional[str] = None,
+    max_sources: int = 60,
+) -> "tuple[str, Dict[str, Dict[str, Any]]]":
+    """单一引用语法渲染：→ ``(索引文本, {"S<n>": 来源行})``；空数据返回 ("", {})。
+
+    设计（WAVE10 无缝引用）：
+      * 正文引用记号只有一种形状——裸 [S<n>]，n = 来源在**原始列表**中的位置（1 起、
+        固定不变）。分层记号 [S1-a] 降级为标题后的展示注记（层级仍可见，语法不再分叉）。
+      * 相关性排序截取：研究报告中被实际引用（URL/标题命中）的来源优先，其次按证据
+        层级（S1→S4→未分层），再按原始顺序；截取 max_sources 条后**按编号升序**渲染
+        （编号不连续无妨——索引头已声明编号固定）。
+    """
+    raw = _raw_source_rows(sources)
+    if not raw:
+        return "", {}
+    research_norm = re.sub(r"\s+", " ", str(research_report or "")).lower()
+    tier_rank = {"S1": 1, "S2": 2, "S3": 3, "S4": 4}
+    candidates: List["tuple[int, int, int, Dict[str, Any]]"] = []
+    for pos, row in enumerate(raw, 1):
+        if not isinstance(row, dict) or not (row.get("title") or row.get("url")):
+            continue
+        cited = 0 if _source_cited_in_research(row, research_norm) else 1
+        rank = tier_rank.get(_norm_tier(row.get("tier")), 5)
+        candidates.append((cited, rank, pos, row))
+    if not candidates:
+        return "", {}
+    candidates.sort(key=lambda c: (c[0], c[1], c[2]))
+    selected = sorted(candidates[:max(1, int(max_sources))], key=lambda c: c[2])
+
+    lines = ["【可引用来源（正文引用一律用形如 [S12] 的数字编号标注；"
+             "编号固定，不得自创或改写编号）】"]
+    tag_map: Dict[str, Dict[str, Any]] = {}
+    for _cited, _rank, pos, row in selected:
+        tag = f"S{pos}"
+        tag_map[tag] = row
+        title = str(row.get("title", "") or "").strip()
+        url = str(row.get("url", "") or "").strip()
+        seg = f"[{tag}] {title}".rstrip()
+        extras: List[str] = []
+        tier = _norm_tier(row.get("tier"))
+        if tier:
+            extras.append(f"{tier}·{_TIER_DESC.get(tier, '')}")
+        date = str(row.get("date", "") or "").strip()
+        if date:
+            extras.append(date)
+        if row.get("independent") is False:
+            extras.append("非独立")
+        if extras:
+            seg += f"（{'，'.join(extras)}）"
+        if url:
+            seg += f" — {url}"
+        lines.append(seg)
+    return ("\n".join(lines) if len(lines) > 1 else ""), tag_map
+
+
 def actor_grade(actor: Optional[Dict[str, Any]]) -> str:
     """取出 actor/relationship 行上的可选 Admiralty 定级（如 "B2"）；缺失返回空串。"""
     if not isinstance(actor, dict):

@@ -182,7 +182,7 @@
 import { ref, computed } from 'vue'
 import { renderMarkdown } from '../../utils/markdown'
 import { L } from '../../i18n'
-import { editDossier } from '../../api/research'
+import { editDossier, researchChartUrl } from '../../api/research'
 
 const props = defineProps({
   dossier: {
@@ -316,7 +316,11 @@ const hasReport = computed(() => {
 const renderedReport = computed(() => {
   if (!hasReport.value) return ''
   try {
-    return renderMarkdown(props.dossier.report)
+    // GATE-W9：研究卷宗的 Visual Annex 内嵌相对 charts/*.png（W9 确定性渲染步产出），
+    // 经产物深链端点（chart_<文件名>，原始字节直出）解析；无 pipelineId 时优雅降级。
+    return renderMarkdown(props.dossier.report, {
+      resolveUrl: (rel) => researchChartUrl(props.pipelineId, rel)
+    })
   } catch (e) {
     return ''
   }
@@ -1114,5 +1118,33 @@ function sourceHref(src) {
 .md-body :deep(img) {
   max-width: 100%;
   height: auto;
+}
+
+/* CITE-1（降级形态）：Dossier 不传 citations 映射，[Sxx] 渲染为无链接的纯上标；
+   若研究报告自带 References 条目，锚点/标签样式同样适用。 */
+.md-body :deep(.md-cite) {
+  font-family: var(--mono);
+  font-size: 0.68em;
+  line-height: 0;
+  vertical-align: super;
+  margin: 0 1px;
+  color: #666;
+}
+.md-body :deep(.md-cite a) {
+  color: var(--orange);
+  text-decoration: none;
+  padding: 0 2px;
+}
+.md-body :deep(.md-ref) { scroll-margin-top: 16px; }
+.md-body :deep(.md-ref-tag) {
+  font-family: var(--mono);
+  font-size: 0.76em;
+  color: #666;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 5px;
+  margin-right: 5px;
+  white-space: nowrap;
+  background: #FAFAFA;
 }
 </style>

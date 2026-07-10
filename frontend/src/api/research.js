@@ -1,4 +1,20 @@
-import service from './index'
+import service, { apiUrl } from './index'
+
+/**
+ * GATE-W9：把研究卷宗内的相对图表路径（'charts/xxx.png'）重写为产物深链 URL。
+ * 后端把 handoff/charts 下的静态图与交互式 HTML 逐个登记为名为 'chart_<文件名>' 的产物
+ * （VIZ-2），经 GET /api/research/<pid>/artifact/chart_<文件名> 以原始字节直出。
+ * 非 charts/ 相对路径（无法定位）返回 ''，renderMarkdown 据此优雅降级。
+ * @param {string} pipelineId
+ * @param {string} rel - 卷宗内相对路径（'charts/…'）
+ * @returns {string}
+ */
+export function researchChartUrl(pipelineId, rel) {
+  const clean = String(rel || '').replace(/^\.?\//, '')
+  const m = clean.match(/^charts\/([^/]+)$/)
+  if (!pipelineId || !m) return ''
+  return apiUrl(`/api/research/${pipelineId}/artifact/chart_${encodeURIComponent(m[1])}`)
+}
 
 /**
  * 启动统一研究→预测管线（Step 0）

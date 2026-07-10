@@ -22,6 +22,15 @@ from app.config import Config
 from app.services.report_agent import ReportAgent, ReportManager
 
 
+@pytest.fixture(autouse=True)
+def _no_png_export(monkeypatch):
+    """GATE-W9：本文件测注入编排，不测 kaleido PNG 导出——每次导出要起一次 Chromium
+    （慢 ~50s 且 choreographer 退出线程偶发挂死 pytest 收尾）。统一关掉走
+    「HTML + matplotlib 回退 PNG」路径；kaleido 专项见 test_wave9_visualizer.py。"""
+    from app.services.report_visualizer import ReportVisualizer
+    monkeypatch.setattr(ReportVisualizer, "_png_export_ok", lambda self: False)
+
+
 # ---------------------------------------------------------------- fixtures
 
 class _ReportStub:
@@ -64,7 +73,7 @@ def test_match_section_keyword_fuzzy():
 
 
 def test_place_visualizations_inline_and_annex(report_folder):
-    """Mermaid 图按 hint 就地插入匹配章节；PNG + 未匹配 Mermaid 入 Visual Annex；
+    """所有图按 hint 就地插入匹配章节；未匹配图入 Visual Annex；
     PNG 用相对路径；逐图标记幂等（重跑不变）。"""
     charts = report_folder / "charts"
     charts.mkdir()
@@ -83,6 +92,7 @@ def test_place_visualizations_inline_and_annex(report_folder):
 
     a = _agent()
     md = ("# Report\n\n## Key Actors and Coalitions\n\nActor body.\n\n"
+          "## Scenario Analysis\n\nScenario body.\n\n"
           "## Conclusion\n\nEnd.\n")
     new_md = a._place_visualizations(md, str(report_folder), manifest)
 
@@ -91,16 +101,51 @@ def test_place_visualizations_inline_and_annex(report_folder):
     actors_pos = new_md.index("## Key Actors")
     concl_pos = new_md.index("## Conclusion")
     assert actors_pos < new_md.index("<!-- viz:charts/actor_network.mmd -->") < concl_pos
-    # Visual Annex 存在，含 PNG（相对路径）与未匹配的 orphan timeline。
+    # PNG 同样按 hint 就地插入情景章节，而非统一倾倒进附录。
+    scenario_pos = new_md.index("## Scenario Analysis")
+    scenario_marker = new_md.index("<!-- viz:charts/scenario_probabilities.png -->")
+    annex_pos = new_md.index("## Visual Annex")
+    assert scenario_pos < scenario_marker < annex_pos
+
+    # Visual Annex 仅承接未匹配的 orphan timeline。
     assert "## Visual Annex" in new_md
     assert "![Scenario Probabilities](charts/scenario_probabilities.png)" in new_md
     assert "<!-- viz:charts/orphan.mmd -->" in new_md
-    # Annex 在最后：PNG 标记应晚于 Visual Annex 标题。
-    assert new_md.index("## Visual Annex") < new_md.index(
-        "<!-- viz:charts/scenario_probabilities.png -->")
 
     # 幂等：以新成稿为输入再跑一次，全部图已带标记 → 原样返回。
     assert a._place_visualizations(new_md, str(report_folder), manifest) == new_md
+
+
+def test_place_visualizations_html_items(report_folder):
+    """GATE-W9 回归：schema v2 的 plotly 'html' 项必须被注入（此前无 html 分支 → 图整族孤儿）。
+    有 png_path 静态对 → 内嵌 PNG + 交互版链接；无 png_path → 退化为纯链接。
+    匹配到章节的 HTML 就地插入，未匹配项才进入 Visual Annex。"""
+    charts = report_folder / "charts"
+    charts.mkdir()
+    (charts / "scenario_probabilities.html").write_text("<html></html>", encoding="utf-8")
+    (charts / "scenario_probabilities.png").write_bytes(b"\x89PNG\r\n")
+    (charts / "actor_network.html").write_text("<html></html>", encoding="utf-8")
+    manifest = [
+        {"path": "charts/scenario_probabilities.html", "type": "html", "source": "forecast",
+         "caption": "Scenario Probabilities", "placement_hint": "scenarios",
+         "png_path": "charts/scenario_probabilities.png"},
+        {"path": "charts/actor_network.html", "type": "html", "source": "actors",
+         "caption": "Actor Network", "placement_hint": "actors"},  # 无 png_path → 链接降级
+    ]
+    a = _agent()
+    md = "# Report\n\n## Scenarios\n\nbody\n"
+    out = a._place_visualizations(md, str(report_folder), manifest)
+    assert "<!-- viz:charts/scenario_probabilities.html -->" in out
+    assert "![Scenario Probabilities](charts/scenario_probabilities.png)" in out
+    assert "(charts/scenario_probabilities.html)" in out  # 交互版链接
+    assert "<!-- viz:charts/actor_network.html -->" in out
+    assert "(charts/actor_network.html)" in out
+    assert "![Actor Network]" not in out  # 无静态对 → 不嵌图
+    assert "## Visual Annex" in out
+    assert out.index("## Scenarios") < out.index(
+        "<!-- viz:charts/scenario_probabilities.html -->") < out.index("## Visual Annex")
+    # 幂等重跑：原样返回。
+    assert a._place_visualizations(out, str(report_folder), manifest) == out
 
 
 def test_collect_viz_artifacts_populates_handoff_dir(report_folder, monkeypatch):
@@ -194,10 +239,11 @@ def test_inject_visualizations_end_to_end(report_folder, monkeypatch):
 # ---------------------------------------------------------------- PDF-1: preprocessing
 
 def test_rewrite_chart_paths_to_absolute(tmp_path):
-    """相对 charts 路径（含 ./charts）→ 绝对；已是绝对路径不受影响。"""
+    """相对图片 → 绝对；普通 HTML 链接和已是绝对的图片不受影响。"""
     folder = str(tmp_path / "reports" / "rid")
     md = ("![a](charts/scenario.png)\n"
           "![b](./charts/model_vs_market.png)\n"
+          "[Interactive](charts/actor_network.html)\n"
           "![c](/already/abs/charts/x.png)\n")
     out = ReportManager._rewrite_chart_paths_for_pdf(md, folder)
     abs_charts = os.path.join(os.path.abspath(folder), "charts")
@@ -205,6 +251,8 @@ def test_rewrite_chart_paths_to_absolute(tmp_path):
     assert f"![b]({os.path.join(abs_charts, 'model_vs_market.png')})" in out
     # 绝对路径原样保留（不匹配 (./)?charts/ 的相对模式）。
     assert "![c](/already/abs/charts/x.png)" in out
+    assert "[Interactive](charts/actor_network.html)" in out
+    assert "[Interactive](/" not in out
 
 
 def test_markdown_to_basic_html_covers_core_forms():

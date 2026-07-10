@@ -116,6 +116,7 @@ def fetch_all_nodes(
     if max_items is None:
         max_items = _resolve_max_nodes()
     all_nodes: list[Any] = []
+    seen_uuids: set = set()  # Wave9-KG：跨页 uuid 去重（belt-and-braces，见下）
     cursor: str | None = None
     page_num = 0
 
@@ -138,7 +139,27 @@ def fetch_all_nodes(
         if not batch:
             break
 
-        all_nodes.extend(batch)
+        # Wave9-KG PAGINATION FIX（belt-and-braces）：falkordblite 曾在 ORDER BY+LIMIT
+        # 计划里丢弃 uuid 游标谓词，使每页返回重复行、循环空转到 10,000 上限（实测把
+        # 3,306 条真实边放大成 10,000 条重复行）。runtime 侧已改用 SKIP 等价分页修复；
+        # 这里再兜一层：逐页按 uuid 去重，且当整页都无新 uuid 时立刻终止并大声告警
+        # （游标失效的确定性特征），绝不再累积重复或空转。
+        new_in_page = 0
+        for item in batch:
+            item_uuid = getattr(item, "uuid_", None) or getattr(item, "uuid", None)
+            if item_uuid is not None and item_uuid in seen_uuids:
+                continue
+            if item_uuid is not None:
+                seen_uuids.add(item_uuid)
+            all_nodes.append(item)
+            new_in_page += 1
+        if new_in_page == 0:
+            logger.warning(
+                f"Node pagination returned a page with no new uuids (cursor ineffective, "
+                f"falkordblite cursor bug guard) — stopping at {len(all_nodes)} nodes "
+                f"for graph {graph_id}"
+            )
+            break
         if len(all_nodes) >= max_items:
             all_nodes = all_nodes[:max_items]
             logger.warning(f"Node count reached limit ({max_items}), stopping pagination for graph {graph_id}")
@@ -166,6 +187,7 @@ def fetch_all_edges(
 ) -> list[Any]:
     """分页获取图谱所有边，最多返回 max_items 条（默认 _MAX_EDGES）。每页请求自带重试。"""
     all_edges: list[Any] = []
+    seen_uuids: set = set()  # Wave9-KG：跨页 uuid 去重（belt-and-braces，同 fetch_all_nodes）
     cursor: str | None = None
     page_num = 0
 
@@ -188,7 +210,25 @@ def fetch_all_edges(
         if not batch:
             break
 
-        all_edges.extend(batch)
+        # Wave9-KG PAGINATION FIX（belt-and-braces）：见 fetch_all_nodes 内的同名注释。
+        # 该 bug 在边上危害最大：实测 3,306 条真实 RELATES_TO 被放大成 10,000 条重复行，
+        # 直接喂给 UI 力导布局与 graph_edge_count/components 指标。
+        new_in_page = 0
+        for item in batch:
+            item_uuid = getattr(item, "uuid_", None) or getattr(item, "uuid", None)
+            if item_uuid is not None and item_uuid in seen_uuids:
+                continue
+            if item_uuid is not None:
+                seen_uuids.add(item_uuid)
+            all_edges.append(item)
+            new_in_page += 1
+        if new_in_page == 0:
+            logger.warning(
+                f"Edge pagination returned a page with no new uuids (cursor ineffective, "
+                f"falkordblite cursor bug guard) — stopping at {len(all_edges)} edges "
+                f"for graph {graph_id}"
+            )
+            break
         # F-4-4: 与 fetch_all_nodes 一致地限制总量，防止无界载入/缓存。
         # 一旦截断，下游 _local_search/panorama_search/get_node_edges/coalition
         # 会在不完整的边集上静默运行，因此截断警告必须显眼可见于日志。

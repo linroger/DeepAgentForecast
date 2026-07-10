@@ -444,9 +444,37 @@ def get_artifact(pipeline_id: str, name: str):
         return jsonify({"success": False, "error": "管线不存在"}), 404
     artifacts = (data.get("artifacts") or {})
     path = artifacts.get(name)
+    # Live scans store provisional assets as <name>_partial; chart URLs stay
+    # stable before and after stage completion by accepting that pointer until
+    # the completion boundary registers the formal key.
+    if not path and name.startswith("chart_"):
+        path = artifacts.get(f"{name}_partial")
     if not path or not os.path.exists(path):
         return jsonify({"success": False, "error": f"产物 '{name}' 不存在"}), 404
     try:
+        # GATE-W9：二进制图表产物（VIZ-2 登记的 chart_*.png / *.svg）按原始字节 + 正确
+        # mimetype 直出——此前统一按 utf-8 文本读取，PNG 解码即抛 500，注册了也取不到。
+        _ext = os.path.splitext(path)[1].lower()
+        _asset_mime = {
+            '.png': 'image/png',
+            '.svg': 'image/svg+xml',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.webp': 'image/webp',
+            '.html': 'text/html; charset=utf-8',
+        }.get(_ext)
+        if _asset_mime:
+            from flask import send_file
+            response = send_file(path, mimetype=_asset_mime)
+            if _ext == '.html':
+                response.headers["Content-Security-Policy"] = (
+                    "sandbox allow-scripts; default-src 'none'; "
+                    "script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                    "img-src data: blob:; font-src data:; connect-src 'none'"
+                )
+                response.headers["X-Content-Type-Options"] = "nosniff"
+                response.headers["Referrer-Policy"] = "no-referrer"
+            return response
         with open(path, 'r', encoding='utf-8') as f:
             raw = f.read()
         import json as _json

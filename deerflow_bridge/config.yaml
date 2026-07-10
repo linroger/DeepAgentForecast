@@ -711,6 +711,11 @@ tools:
   # （deerflow.community.{serper,tavily,ddg_search}.tools），因此行为与直接在此选那个 provider
   # 逐字节一致；被委派工具仍读**本** stanza 的 max_results（10），同参。零 key → byte-equivalent
   # DDG 行为。裸模块名（search_tools:web_search_tool）经 reflection 从脚本目录导入，同 market_tools。
+  # WAVE9 —— 调度器内置**搜索结果磁盘缓存**（镜像 web_fetch 的 cached_fetch 模式）：3 条并行
+  # 研究轨 × 至多 8 个 fan-out worker 围着同一 brief 搜索，近重复 query 不再重发。env 旋钮：
+  # RESEARCH_SEARCH_CACHE_TTL_H（默认 6h，0=关闭）/ RESEARCH_SEARCH_CACHE_DIR /
+  # RESEARCH_SEARCH_CACHE_MAX_MB（默认 200，mtime LRU 淘汰）。只缓存成功非空结果；缓存层
+  # 任何异常 → 透明直连，不改变搜索结果本身。
   - name: web_search
     group: web
     use: search_tools:web_search_tool

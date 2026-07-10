@@ -47,3 +47,10 @@ mcp>=1.10.0
 # ITEM-16：交互式 HTML 图表族（plotly.js 内联、离线自包含）。可选依赖：未安装时 HTML 族
 # 自动跳过（见 report_visualizer.py 的 PLOTLY_AVAILABLE 标志），PNG/Mermaid 族不受影响。
 plotly>=5.18.0
+# WAVE9：plotly → 静态 PNG 导出（kaleido v1 经 choreographer 驱动本机 Chrome/Chromium，
+# scale=2、宽 1200，供 PDF/exec-brief 内嵌）。可选依赖：缺失/运行期渲染失败时自动回退
+# matplotlib 等价图或仅保留 HTML（见 report_visualizer.py 的 KALEIDO_AVAILABLE 与熔断标志）。
+kaleido>=1.3.0
+# WAVE9：角色关系网络图 spring 布局（固定 seed，确定性）。可选依赖：缺失时回退确定性
+# 同心圆布局（见 report_visualizer.py 的 NETWORKX_AVAILABLE 标志）。
+networkx>=3.2

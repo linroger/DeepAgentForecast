@@ -32,6 +32,13 @@ from pydantic import PrivateAttr
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
+# WAVE9: cap on an honored Retry-After header. Weekly/plan-limit 429s carry multi-day
+# Retry-After values (observed: 467,421s ≈ 5.4 days) which used to be slept verbatim,
+# hanging a whole research track until SIGTERM. Headers at or below the cap are honored;
+# anything above it is treated as hard quota exhaustion and the call FAILS FAST with
+# RetryAfterCapExceededError instead of sleeping. Override with CLAUDE_RETRY_AFTER_CAP_S
+# (seconds); 0 restores the old uncapped sleep-forever behavior.
+DEFAULT_RETRY_AFTER_CAP_S = 120.0
 # Fraction of max_tokens reserved for the extended-thinking budget when thinking is
 # enabled. Anthropic's max_tokens is the TOTAL of thinking + visible output, so a high
 # ratio starves the visible report (at 0.8 a 64K ceiling leaves only ~12K for text).
@@ -44,6 +51,24 @@ THINKING_BUDGET_RATIO = 0.5
 # Override with ANTHROPIC_BILLING_HEADER env var if the hardcoded version drifts.
 _DEFAULT_BILLING_HEADER = "x-anthropic-billing-header: cc_version=2.1.85.351; cc_entrypoint=cli; cch=6c6d5;"
 OAUTH_BILLING_HEADER = os.environ.get("ANTHROPIC_BILLING_HEADER", _DEFAULT_BILLING_HEADER)
+
+
+class RetryAfterCapExceededError(RuntimeError):
+    """Retry-After exceeds the configured cap — a weekly/plan quota limit, not a transient 429.
+
+    Raised from the retry loop so the call fails fast instead of sleeping for days; the
+    caller's track-survival / fallback logic already tolerates a failed call.
+    """
+
+
+def _retry_after_cap_ms() -> int:
+    """Resolve the Retry-After cap in ms (env CLAUDE_RETRY_AFTER_CAP_S, default 120s; 0 disables)."""
+    raw = os.environ.get("CLAUDE_RETRY_AFTER_CAP_S", "").strip()
+    try:
+        cap_s = float(raw) if raw else DEFAULT_RETRY_AFTER_CAP_S
+    except (TypeError, ValueError):
+        cap_s = DEFAULT_RETRY_AFTER_CAP_S
+    return int(max(0.0, cap_s) * 1000)
 
 
 class ClaudeChatModel(ChatAnthropic):
@@ -374,9 +399,23 @@ class ClaudeChatModel(ChatAnthropic):
         if hasattr(error, "response") and error.response is not None:
             retry_after = error.response.headers.get("Retry-After")
             if retry_after:
+                retry_after_ms = None
                 try:
-                    total_ms = int(retry_after) * 1000
+                    retry_after_ms = int(retry_after) * 1000
                 except (ValueError, TypeError):
                     pass
+                if retry_after_ms is not None:
+                    # WAVE9: honor short Retry-After values verbatim, but a header beyond the
+                    # cap (weekly/plan quota resets) must fail the call fast — sleeping 5+ days
+                    # inside a research track is strictly worse than an explicit failure.
+                    cap_ms = _retry_after_cap_ms()
+                    if cap_ms > 0 and retry_after_ms > cap_ms:
+                        raise RetryAfterCapExceededError(
+                            f"Retry-After of {retry_after_ms / 1000:.0f}s exceeds the "
+                            f"{cap_ms / 1000:.0f}s cap (CLAUDE_RETRY_AFTER_CAP_S) — likely a "
+                            f"weekly/plan quota limit; failing fast instead of sleeping. "
+                            f"Original error: {error}"
+                        )
+                    total_ms = retry_after_ms
 
         return total_ms

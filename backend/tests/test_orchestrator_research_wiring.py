@@ -162,11 +162,40 @@ def _viz_state(tmp_path):
 def test_viz_specs_present_for_research_and_report(monkeypatch, tmp_path):
     monkeypatch.setattr(_po.Config, "PIPELINE_VIZ_ARTIFACTS", True, raising=False)
     st = _viz_state(tmp_path)
-    for stage in (_po.STAGE_RESEARCH, _po.STAGE_REPORT):
-        specs = dict(_po.PipelineOrchestrator._stage_artifact_specs(st, stage))
-        assert "charts" in specs and "datasets" in specs
-        assert specs["charts"].endswith(os.path.join("charts", "charts.json"))
-        assert specs["datasets"].endswith(os.path.join("data", "datasets.json"))
+    specs = dict(_po.PipelineOrchestrator._stage_artifact_specs(st, _po.STAGE_RESEARCH))
+    assert "charts" in specs and "datasets" in specs
+    assert specs["charts"] == os.path.join(str(tmp_path), "charts.json")
+    assert specs["datasets"].endswith(os.path.join("data", "datasets.json"))
+
+
+def test_report_viz_specs_point_to_report_folder(monkeypatch, tmp_path):
+    monkeypatch.setattr(_po.Config, "PIPELINE_VIZ_ARTIFACTS", True, raising=False)
+    report_dir = tmp_path / "report"
+    monkeypatch.setattr(_po.ReportManager, "_get_report_folder",
+                        classmethod(lambda cls, rid: str(report_dir)))
+    st = _viz_state(tmp_path / "handoff")
+    st.report_id = "rid"
+    specs = dict(_po.PipelineOrchestrator._stage_artifact_specs(st, _po.STAGE_REPORT))
+    assert specs == {"report_viz_manifest": str(report_dir / "viz_manifest.json")}
+
+
+def test_viz_specs_accept_legacy_nested_chart_manifest(monkeypatch, tmp_path):
+    monkeypatch.setattr(_po.Config, "PIPELINE_VIZ_ARTIFACTS", True, raising=False)
+    legacy = tmp_path / "charts" / "charts.json"
+    legacy.parent.mkdir()
+    legacy.write_text("[]", encoding="utf-8")
+    specs = dict(_po.PipelineOrchestrator._stage_artifact_specs(
+        _viz_state(tmp_path), _po.STAGE_RESEARCH))
+    assert specs["charts"] == str(legacy)
+
+
+def test_dynamic_chart_specs_include_static_and_interactive_assets(tmp_path):
+    charts = tmp_path / "charts"
+    charts.mkdir()
+    for name in ("actor.png", "timeline.svg", "actor.html", "ignore.json"):
+        (charts / name).write_text("x", encoding="utf-8")
+    specs = dict(_po.PipelineOrchestrator._viz_dynamic_artifact_specs(str(tmp_path)))
+    assert set(specs) == {"chart_actor.png", "chart_timeline.svg", "chart_actor.html"}
 
 
 def test_viz_specs_absent_when_disabled(monkeypatch, tmp_path):
@@ -191,15 +220,77 @@ def test_viz_present_files_surface_as_partials(monkeypatch, tmp_path):
     (tmp_path / "charts").mkdir()
     (tmp_path / "data").mkdir()
     (tmp_path / "charts" / "fig1.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (tmp_path / "charts" / "fig1.html").write_text("<html></html>", encoding="utf-8")
     (tmp_path / "charts" / "charts.json").write_text(
         '[{"title": "t", "caption": "c", "source_data": "data/fig1.csv"}]', encoding="utf-8")
     (tmp_path / "data" / "fig1.csv").write_text("a,b\n1,2\n", encoding="utf-8")
     st = _viz_state(tmp_path)
     # report_id 为空 → section_*.md 扫描分支自然跳过；不触碰 ReportManager。
-    names = {p["name"] for p in _po.PipelineOrchestrator._discover_partial_artifacts(st, _po.STAGE_REPORT)}
+    names = {p["name"] for p in _po.PipelineOrchestrator._discover_partial_artifacts(st, _po.STAGE_RESEARCH)}
     assert "charts" in names                # charts.json 经 specs 枚举登记为索引锚点
     assert "chart_fig1.png" in names        # 原始 png 经目录扫描逐个透出
+    assert "chart_fig1.html" in names       # 交互式 HTML 同样可深链
     assert "dataset_fig1.csv" in names      # 原始 csv 经目录扫描逐个透出
+
+
+def test_report_partial_scan_uses_report_owned_charts(monkeypatch, tmp_path):
+    monkeypatch.setattr(_po.Config, "PIPELINE_VIZ_ARTIFACTS", True, raising=False)
+    handoff = tmp_path / "handoff"
+    report_dir = tmp_path / "report"
+    (report_dir / "charts").mkdir(parents=True)
+    (report_dir / "charts" / "timeline.html").write_text("<html></html>", encoding="utf-8")
+    (report_dir / "viz_manifest.json").write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(_po.ReportManager, "_get_report_folder",
+                        classmethod(lambda cls, rid: str(report_dir)))
+    st = _viz_state(handoff)
+    st.report_id = "rid"
+
+    names = {p["name"] for p in _po.PipelineOrchestrator._discover_partial_artifacts(
+        st, _po.STAGE_REPORT)}
+
+    assert "report_viz_manifest" in names
+    assert "report_chart_timeline.html" in names
+
+
+def test_research_completion_registers_chart_assets_without_partial_suffix(
+        monkeypatch, tmp_path):
+    monkeypatch.setattr(_po.Config, "PIPELINE_VIZ_ARTIFACTS", True, raising=False)
+    monkeypatch.setattr(_po.Config, "PIPELINE_VALIDATE_ARTIFACTS", False, raising=False)
+    charts = tmp_path / "charts"
+    charts.mkdir()
+    (tmp_path / "charts.json").write_text("[]", encoding="utf-8")
+    (charts / "actor.png").write_bytes(b"png")
+    (charts / "actor.html").write_text("<html></html>", encoding="utf-8")
+    st = _viz_state(tmp_path)
+    orch = _po.PipelineOrchestrator.__new__(_po.PipelineOrchestrator)
+
+    orch._record_stage_artifacts(st, _po.STAGE_RESEARCH)
+
+    assert st.artifacts["chart_actor.png"] == str(charts / "actor.png")
+    assert st.artifacts["chart_actor.html"] == str(charts / "actor.html")
+    assert "chart_actor.png_partial" not in st.artifacts
+
+
+def test_research_html_artifact_is_raw_served_in_opaque_sandbox(monkeypatch, tmp_path):
+    chart = tmp_path / "actor.html"
+    chart.write_text("<html><script>window.ok=1</script></html>", encoding="utf-8")
+    monkeypatch.setattr(
+        _po.PipelineManager,
+        "load",
+        classmethod(lambda cls, pid: {
+            "artifacts": {"chart_actor.html_partial": str(chart)},
+        }),
+    )
+    from app import create_app
+    client = create_app().test_client()
+
+    resp = client.get("/api/research/pipe/artifact/chart_actor.html")
+
+    assert resp.status_code == 200
+    assert resp.mimetype == "text/html"
+    assert resp.data.startswith(b"<html>")
+    assert "sandbox allow-scripts" in resp.headers["Content-Security-Policy"]
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"
 
 
 # ── ITEM-18: 阶段级墙钟提取 ──────────────────────────────────────────────────

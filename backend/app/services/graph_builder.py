@@ -215,6 +215,284 @@ def fold_priors_with_aliases(
     return out
 
 
+# ============================================================
+# Wave9-KG：UI 子图 / TTL 缓存 / 布局预计算 / 陈旧图谱 GC 的纯函数与模块级设施。
+# 模块级（而非实例方法）是刻意的：graph_pruner 无需构造 GraphBuilderService/Zep
+# 客户端即可复用布局与缓存失效；纯函数可离线单测。
+# ============================================================
+
+_UI_CACHE: Dict[str, Any] = {}          # cache_key -> (monotonic_ts, payload)
+_UI_CACHE_LOCK = threading.Lock()
+
+
+def _ui_cache_ttl() -> float:
+    try:
+        return max(0.0, float(getattr(Config, "GRAPH_UI_CACHE_TTL_S", 60) or 0))
+    except (TypeError, ValueError):
+        return 60.0
+
+
+def _ui_cache_get(key: str) -> Optional[Any]:
+    ttl = _ui_cache_ttl()
+    if ttl <= 0:
+        return None
+    with _UI_CACHE_LOCK:
+        entry = _UI_CACHE.get(key)
+        if entry is None:
+            return None
+        ts, payload = entry
+        if (time.monotonic() - ts) >= ttl:
+            _UI_CACHE.pop(key, None)
+            return None
+        return payload
+
+
+def _ui_cache_put(key: str, payload: Any) -> None:
+    if _ui_cache_ttl() <= 0:
+        return
+    with _UI_CACHE_LOCK:
+        _UI_CACHE[key] = (time.monotonic(), payload)
+
+
+def invalidate_graph_cache(graph_id: str) -> None:
+    """图谱内容变化（剪枝/删除/增量落库）后使该图的 UI 缓存失效。"""
+    prefix = f"{graph_id}|"
+    with _UI_CACHE_LOCK:
+        for key in [k for k in _UI_CACHE if k.startswith(prefix)]:
+            _UI_CACHE.pop(key, None)
+
+
+def compute_node_degrees(edges_data: List[Dict[str, Any]]) -> Dict[str, int]:
+    """按（去重后的）边列表计算节点度数；自环计 1。纯函数，供子图/布局/剪枝复用。"""
+    degree: Dict[str, int] = {}
+    for e in edges_data or []:
+        s = e.get("source_node_uuid")
+        t = e.get("target_node_uuid")
+        if s:
+            degree[s] = degree.get(s, 0) + 1
+        if t and t != s:
+            degree[t] = degree.get(t, 0) + 1
+    return degree
+
+
+def filter_subgraph(
+    nodes_data: List[Dict[str, Any]],
+    edges_data: List[Dict[str, Any]],
+    top_k: Optional[int] = None,
+    min_degree: Optional[int] = None,
+) -> tuple:
+    """UI 子图筛选：先按 min_degree 过滤，再按度数取 top-K，最后取导出边。
+
+    两个参数都为 None 时原样返回（全量行为不变）。返回 (nodes, edges)。
+    """
+    if top_k is None and min_degree is None:
+        return list(nodes_data or []), list(edges_data or [])
+    degree = compute_node_degrees(edges_data)
+    kept = list(nodes_data or [])
+    if min_degree is not None and min_degree > 0:
+        kept = [n for n in kept if degree.get(n.get("uuid"), 0) >= min_degree]
+    if top_k is not None:
+        k = int(top_k)
+        if k <= 0:  # top_k=0/负 = 「用配置默认上限」（前端可传 top_k=0 表示默认收敛视图）
+            k = max(1, int(getattr(Config, "GRAPH_UI_MAX_NODES", 400) or 400))
+        # 度数降序，同度按名字升序（确定性排序，前端刷新不抖动）。
+        kept = sorted(
+            kept,
+            key=lambda n: (-degree.get(n.get("uuid"), 0), str(n.get("name") or "")),
+        )[:k]
+    kept_ids = {n.get("uuid") for n in kept}
+    induced = [
+        e for e in (edges_data or [])
+        if e.get("source_node_uuid") in kept_ids and e.get("target_node_uuid") in kept_ids
+    ]
+    return kept, induced
+
+
+# slim 模式保留的字段（heavy 字段 summary/attributes/fact/episodes/时间戳走 detail 接口）。
+_SLIM_NODE_KEYS = ("uuid", "name", "labels")
+_SLIM_EDGE_KEYS = (
+    "uuid", "name", "fact_type",
+    "source_node_uuid", "target_node_uuid", "source_node_name", "target_node_name",
+)
+
+
+def slim_graph_payload(
+    nodes_data: List[Dict[str, Any]], edges_data: List[Dict[str, Any]]
+) -> tuple:
+    """slim=true：剥掉 UI 列表用不到的重字段（summary/fact/episodes/attributes 等）。"""
+    nodes = [{k: n.get(k) for k in _SLIM_NODE_KEYS} for n in (nodes_data or [])]
+    edges = [{k: e.get(k) for k in _SLIM_EDGE_KEYS} for e in (edges_data or [])]
+    return nodes, edges
+
+
+# --------------------------- 布局预计算（positions.json） ---------------------------
+def layout_positions_path(graph_id: str) -> str:
+    """positions.json 紧邻图谱工件（GRAPHITI_DATA_DIR/layouts/<graph_id>/positions.json）。"""
+    return os.path.join(Config.GRAPHITI_DATA_DIR, "layouts", graph_id, "positions.json")
+
+
+def load_layout_positions(graph_id: str) -> Dict[str, List[float]]:
+    """读预计算布局；缺失/损坏返回 {}（前端退回客户端力导布局，degrade-safe）。"""
+    import json
+
+    path = layout_positions_path(graph_id)
+    try:
+        if not os.path.isfile(path):
+            return {}
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {}
+        out: Dict[str, List[float]] = {}
+        for k, v in data.items():
+            if isinstance(k, str) and isinstance(v, (list, tuple)) and len(v) >= 2:
+                try:
+                    out[k] = [float(v[0]), float(v[1])]
+                except (TypeError, ValueError):
+                    continue
+        return out
+    except Exception as exc:  # noqa: BLE001 — 布局是增强，绝不让读取失败影响主数据
+        logger.warning("[%s] load_layout_positions failed: %s", graph_id, exc)
+        return {}
+
+
+def compute_layout_positions(
+    nodes_data: List[Dict[str, Any]], edges_data: List[Dict[str, Any]]
+) -> Dict[str, List[float]]:
+    """计算 {uuid: [x, y]}（坐标域约 [0, 1000]²）。
+
+    优先 networkx spring_layout（seed 固定，确定性）；networkx 不可用/失败时退化为
+    确定性的「按度数径向」布局：度数最高的节点靠近圆心，向外做黄金角螺旋。
+    """
+    ids = [n.get("uuid") for n in (nodes_data or []) if n.get("uuid")]
+    if not ids:
+        return {}
+    try:
+        import networkx as nx
+
+        G = nx.Graph()
+        G.add_nodes_from(ids)
+        id_set = set(ids)
+        for e in edges_data or []:
+            s, t = e.get("source_node_uuid"), e.get("target_node_uuid")
+            if s in id_set and t in id_set and s != t:
+                G.add_edge(s, t)
+        pos = nx.spring_layout(G, seed=42, iterations=60)
+        # spring_layout 输出 ~[-1,1]²；线性映射到 [0,1000]²。
+        return {
+            str(k): [round(float(p[0]) * 500.0 + 500.0, 2),
+                     round(float(p[1]) * 500.0 + 500.0, 2)]
+            for k, p in pos.items()
+        }
+    except Exception as exc:  # noqa: BLE001 — 含 ImportError：退化为径向布局
+        logger.info("spring layout unavailable (%s); falling back to radial-by-degree", exc)
+        import math
+
+        degree = compute_node_degrees(edges_data)
+        ordered = sorted(ids, key=lambda u: (-degree.get(u, 0), u))
+        golden = math.pi * (3.0 - math.sqrt(5.0))  # 黄金角 ≈ 2.39996
+        out: Dict[str, List[float]] = {}
+        for i, uid in enumerate(ordered):
+            r = 16.0 * math.sqrt(i)
+            theta = i * golden
+            out[uid] = [round(500.0 + r * math.cos(theta), 2),
+                        round(500.0 + r * math.sin(theta), 2)]
+        return out
+
+
+def store_layout_positions(graph_id: str, positions: Dict[str, List[float]]) -> str:
+    """原子写 positions.json，返回路径。"""
+    import json
+    import tempfile
+
+    path = layout_positions_path(graph_id)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(positions, f, ensure_ascii=False)
+        os.replace(tmp, path)
+    except Exception:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+    return path
+
+
+# --------------------------- 陈旧图谱 GC（纯规划 + 引用扫描） ---------------------------
+# 终态之外的 pipeline 状态一律视为「活动中」（running/pending/cancelling/…）。
+_TERMINAL_PIPELINE_STATUSES = {"completed", "failed", "cancelled", "error"}
+
+
+def _collect_graph_ids(obj: Any, out: set) -> None:
+    """递归收集 JSON 结构里所有 "graph_id" 字符串值（顶层与各阶段结果都可能带）。"""
+    if isinstance(obj, dict):
+        gid = obj.get("graph_id")
+        if isinstance(gid, str) and gid.strip():
+            out.add(gid.strip())
+        for v in obj.values():
+            _collect_graph_ids(v, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            _collect_graph_ids(v, out)
+
+
+def referenced_graph_ids() -> tuple:
+    """扫描 uploads/pipelines/*/pipeline_state.json 与 uploads/projects/ 的项目档案，
+    返回 (referenced: set, active_pipelines_without_graph: int)。
+
+    后者 > 0 表示有活动管线尚未把 graph_id 写进状态——此时 GC 必须整体跳过
+    （新建图谱可能暂时无引用，误删不可逆）。
+    """
+    import glob
+    import json
+
+    referenced: set = set()
+    active_without_graph = 0
+    pipeline_glob = os.path.join(Config.PIPELINE_DATA_DIR, "*", "pipeline_state.json")
+    for path in glob.glob(pipeline_glob):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except Exception as exc:  # noqa: BLE001 — 坏状态文件：保守起见视为活动且无图
+            logger.warning("GC: unreadable pipeline state %s (%s) — treating as active", path, exc)
+            active_without_graph += 1
+            continue
+        before = len(referenced)
+        _collect_graph_ids(state, referenced)
+        status = str(state.get("status") or "").strip().lower()
+        if status not in _TERMINAL_PIPELINE_STATUSES and len(referenced) == before:
+            active_without_graph += 1
+    # 项目档案（/graph/build 的独立项目路径）也持有 graph_id。
+    projects_glob = os.path.join(Config.UPLOAD_FOLDER, "projects", "*", "*.json")
+    for path in glob.glob(projects_glob):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                _collect_graph_ids(json.load(f), referenced)
+        except Exception:  # noqa: BLE001 — 项目档案坏了不阻断（管线引用已覆盖主路径）
+            continue
+    return referenced, active_without_graph
+
+
+def plan_graph_gc(
+    all_ids: List[str],
+    referenced: set,
+    recency: Dict[str, Optional[str]],
+    retain: int,
+) -> tuple:
+    """纯规划：返回 (keep: set, victims: list)。
+
+    keep = 被引用的图 ∪ 未引用中最新的 retain 个（按 recency ISO 串降序；未知视为最旧）。
+    """
+    keep = {g for g in all_ids if g in referenced}
+    others = [g for g in all_ids if g not in keep]
+    others.sort(key=lambda g: (recency.get(g) or "", g), reverse=True)
+    retain = max(0, int(retain))
+    keep |= set(others[:retain])
+    victims = list(others[retain:])
+    return keep, victims
+
+
 @dataclass
 class GraphInfo:
     """图谱信息"""
@@ -388,7 +666,12 @@ class GraphBuilderService:
             )
             
             graph_info = self._get_graph_info(graph_id)
-            
+
+            # Wave9-KG（布局预计算）：建图完成即算一次弹簧布局并持久化 positions.json，
+            # 前端首屏免跑客户端力导仿真。失败只告警（compute_layout 内部已兜）。
+            if getattr(Config, "GRAPH_LAYOUT_PRECOMPUTE", True):
+                self.compute_layout(graph_id)
+
             # 完成
             self.task_manager.complete_task(task_id, {
                 "graph_id": graph_id,
@@ -747,11 +1030,26 @@ class GraphBuilderService:
         # KG-5: 记账落到实例（不改签名/返回值）：只丢一条 WARNING 时，30% 语料丢失的图谱
         # 在 pipeline_state 里显示为全绿。编排器读 last_ingest_stats 即可量化 ingest 丢失
         # （MiniMax 内容过滤 422 + claude-cli 兜底耗尽是当前主要失败形态）。
+        # Wave9-KG（抽取加固审计）：从 runtime 取走本图累计的 episode skip 原因分布
+        # （schema_echo / schema_validation / rate_limit / …）与 skip 比例，一并入账——
+        # 「为什么 48-60% 的 chunk 被跳过」从此可量化归因，而非只有一行 warning。
+        skip_reasons: Dict[str, int] = {}
+        try:
+            from .graphiti_client.runtime import get_runtime
+
+            skip_reasons = get_runtime().pop_ingest_skip_reasons(graph_id)
+        except Exception as exc:  # noqa: BLE001 — 审计增强绝不影响建图主流程
+            logger.debug("[%s] pop_ingest_skip_reasons failed: %s", graph_id, exc)
         self.last_ingest_stats = {
             "total": total_chunks,
             "failed": failed_chunks,
             "succeeded": len(episode_uuids),
+            "skip_ratio": round(failed_chunks / total_chunks, 4) if total_chunks else 0.0,
+            "skip_reasons": skip_reasons,
         }
+        if skip_reasons:
+            logger.warning("[%s] episode skip reasons: %s", graph_id,
+                           ", ".join(f"{k}={v}" for k, v in sorted(skip_reasons.items())))
 
         # 硬护栏：所有文本块都抽取失败 → 不能静默产出空图谱（下游 prepare/模拟/报告会退化）。
         # 明确失败，给出可诊断信息（最常见诱因：模型 JSON 输出异常/回显 schema）。
@@ -936,16 +1234,19 @@ class GraphBuilderService:
             chokepoints=chokepoints or None,
         )
     
-    def get_graph_data(self, graph_id: str) -> Dict[str, Any]:
+    def _fetch_graph_raw(self, graph_id: str, use_cache: bool = True) -> Dict[str, Any]:
+        """取全量 nodes/edges 明细 dict（TTL 缓存，Wave9-KG）。
+
+        前端 10s 轮询打在 /graph/data 上，此前每次都重分页读库（~30 次上游调用）；
+        缓存原始明细（60s TTL，GRAPH_UI_CACHE_TTL_S），各参数组合的派生视图在内存里
+        便宜地现算。图谱变更（剪枝/删除/建图完成）走 invalidate_graph_cache。
         """
-        获取完整图谱数据（包含详细信息）
-        
-        Args:
-            graph_id: 图谱ID
-            
-        Returns:
-            包含nodes和edges的字典，包括时间信息、属性等详细数据
-        """
+        cache_key = f"{graph_id}|raw"
+        if use_cache:
+            cached = _ui_cache_get(cache_key)
+            if cached is not None:
+                return cached
+
         nodes = fetch_all_nodes(self.client, graph_id)
         edges = fetch_all_edges(self.client, graph_id)
 
@@ -953,14 +1254,14 @@ class GraphBuilderService:
         node_map = {}
         for node in nodes:
             node_map[node.uuid_] = node.name or ""
-        
+
         nodes_data = []
         for node in nodes:
             # 获取创建时间
             created_at = getattr(node, 'created_at', None)
             if created_at:
                 created_at = str(created_at)
-            
+
             nodes_data.append({
                 "uuid": node.uuid_,
                 "name": node.name,
@@ -969,7 +1270,7 @@ class GraphBuilderService:
                 "attributes": node.attributes or {},
                 "created_at": created_at,
             })
-        
+
         edges_data = []
         for edge in edges:
             # 获取时间信息
@@ -977,17 +1278,17 @@ class GraphBuilderService:
             valid_at = getattr(edge, 'valid_at', None)
             invalid_at = getattr(edge, 'invalid_at', None)
             expired_at = getattr(edge, 'expired_at', None)
-            
+
             # 获取 episodes
             episodes = getattr(edge, 'episodes', None) or getattr(edge, 'episode_ids', None)
             if episodes and not isinstance(episodes, list):
                 episodes = [str(episodes)]
             elif episodes:
                 episodes = [str(e) for e in episodes]
-            
+
             # 获取 fact_type
             fact_type = getattr(edge, 'fact_type', None) or edge.name or ""
-            
+
             edges_data.append({
                 "uuid": edge.uuid_,
                 "name": edge.name or "",
@@ -1004,16 +1305,209 @@ class GraphBuilderService:
                 "expired_at": str(expired_at) if expired_at else None,
                 "episodes": episodes or [],
             })
-        
-        return {
+
+        raw = {"nodes": nodes_data, "edges": edges_data}
+        if use_cache:
+            _ui_cache_put(cache_key, raw)
+        return raw
+
+    def get_graph_data(
+        self,
+        graph_id: str,
+        top_k: Optional[int] = None,
+        min_degree: Optional[int] = None,
+        slim: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        获取图谱数据（包含详细信息）。
+
+        Args:
+            graph_id: 图谱ID
+            top_k: （Wave9-KG，可选）按度数排名只返回前 K 个节点及其导出边；
+                   传 0/负值 = 用 Config.GRAPH_UI_MAX_NODES（默认 400）。缺省 None = 全量。
+            min_degree: （可选）只保留度数 ≥ 该值的节点。缺省 None = 不过滤。
+            slim: True 时剥掉 summary/fact/episodes/attributes 等重字段
+                  （明细走 /graph/data/<id>/node|edge/<uuid> 接口）。
+
+        Returns:
+            包含nodes和edges的字典；不传任何新参数时行为与旧版一致（全量+全字段），
+            另附 total_node_count/total_edge_count/truncated 与（若已预计算）positions。
+        """
+        raw = self._fetch_graph_raw(graph_id)
+        nodes_data, edges_data = raw["nodes"], raw["edges"]
+        total_nodes, total_edges = len(nodes_data), len(edges_data)
+
+        nodes_out, edges_out = filter_subgraph(nodes_data, edges_data, top_k, min_degree)
+
+        # 布局预计算（positions.json）：只带返回节点的坐标；文件缺失时不带该键。
+        positions = load_layout_positions(graph_id)
+        if positions:
+            kept_ids = {n.get("uuid") for n in nodes_out}
+            positions = {k: v for k, v in positions.items() if k in kept_ids}
+
+        if slim:
+            nodes_out, edges_out = slim_graph_payload(nodes_out, edges_out)
+
+        result: Dict[str, Any] = {
             "graph_id": graph_id,
-            "nodes": nodes_data,
-            "edges": edges_data,
-            "node_count": len(nodes_data),
-            "edge_count": len(edges_data),
+            "nodes": nodes_out,
+            "edges": edges_out,
+            "node_count": len(nodes_out),
+            "edge_count": len(edges_out),
+            "total_node_count": total_nodes,
+            "total_edge_count": total_edges,
+            "truncated": len(nodes_out) < total_nodes or len(edges_out) < total_edges,
         }
-    
+        if positions:
+            result["positions"] = positions
+        return result
+
+    def get_node_neighborhood(
+        self, graph_id: str, node_uuid: str, depth: int = 1, slim: bool = True
+    ) -> Dict[str, Any]:
+        """Wave9-KG（点击展开）：返回某节点 depth 跳内的邻域子图（默认 slim）。
+
+        基于 TTL 缓存的全量明细做 BFS，节点数上限 Config.GRAPH_UI_MAX_NODES。
+        """
+        depth = max(1, min(int(depth or 1), 3))
+        raw = self._fetch_graph_raw(graph_id)
+        nodes_data, edges_data = raw["nodes"], raw["edges"]
+        adj: Dict[str, set] = {}
+        for e in edges_data:
+            s, t = e.get("source_node_uuid"), e.get("target_node_uuid")
+            if s and t and s != t:
+                adj.setdefault(s, set()).add(t)
+                adj.setdefault(t, set()).add(s)
+
+        max_nodes = max(1, int(getattr(Config, "GRAPH_UI_MAX_NODES", 400) or 400))
+        visited = {node_uuid}
+        frontier = {node_uuid}
+        for _ in range(depth):
+            nxt: set = set()
+            for u in frontier:
+                for v in adj.get(u, ()):
+                    if v not in visited:
+                        nxt.add(v)
+            visited |= nxt
+            frontier = nxt
+            if len(visited) >= max_nodes or not frontier:
+                break
+
+        nodes_out = [n for n in nodes_data if n.get("uuid") in visited]
+        if len(nodes_out) > max_nodes:
+            # 超限时按度数保留最重要的邻居（中心节点恒保留）。
+            degree = compute_node_degrees(edges_data)
+            nodes_out.sort(key=lambda n: (n.get("uuid") != node_uuid,
+                                          -degree.get(n.get("uuid"), 0),
+                                          str(n.get("name") or "")))
+            nodes_out = nodes_out[:max_nodes]
+        kept_ids = {n.get("uuid") for n in nodes_out}
+        edges_out = [
+            e for e in edges_data
+            if e.get("source_node_uuid") in kept_ids and e.get("target_node_uuid") in kept_ids
+        ]
+        positions = load_layout_positions(graph_id)
+        if positions:
+            positions = {k: v for k, v in positions.items() if k in kept_ids}
+        if slim:
+            nodes_out, edges_out = slim_graph_payload(nodes_out, edges_out)
+        result: Dict[str, Any] = {
+            "graph_id": graph_id,
+            "center_uuid": node_uuid,
+            "depth": depth,
+            "nodes": nodes_out,
+            "edges": edges_out,
+            "node_count": len(nodes_out),
+            "edge_count": len(edges_out),
+        }
+        if positions:
+            result["positions"] = positions
+        return result
+
+    def get_node_detail(self, graph_id: str, node_uuid: str) -> Optional[Dict[str, Any]]:
+        """Wave9-KG（详情面板）：单节点全字段（slim 列表剥掉的字段从这里取）。"""
+        raw = self._fetch_graph_raw(graph_id)
+        for n in raw["nodes"]:
+            if n.get("uuid") == node_uuid:
+                return dict(n)
+        return None
+
+    def get_edge_detail(self, graph_id: str, edge_uuid: str) -> Optional[Dict[str, Any]]:
+        """Wave9-KG（详情面板）：单边全字段（fact/episodes/attributes/时间戳）。"""
+        raw = self._fetch_graph_raw(graph_id)
+        for e in raw["edges"]:
+            if e.get("uuid") == edge_uuid:
+                return dict(e)
+        return None
+
+    def compute_layout(self, graph_id: str, persist: bool = True) -> Dict[str, List[float]]:
+        """Wave9-KG（布局预计算）：对当前图算一次弹簧布局并持久化 positions.json。
+
+        建图完成/剪枝完成后调用；失败只告警（布局是增强，绝不影响建图结果）。
+        """
+        try:
+            raw = self._fetch_graph_raw(graph_id, use_cache=False)
+            positions = compute_layout_positions(raw["nodes"], raw["edges"])
+            if persist and positions:
+                path = store_layout_positions(graph_id, positions)
+                logger.info("[%s] layout precomputed: %d positions -> %s",
+                            graph_id, len(positions), path)
+            invalidate_graph_cache(graph_id)
+            return positions
+        except Exception as exc:  # noqa: BLE001 — 布局失败不阻断建图
+            logger.warning("[%s] layout precompute failed: %s", graph_id, exc)
+            return {}
+
+    def gc_stale_graphs(self, retain: Optional[int] = None) -> Dict[str, Any]:
+        """Wave9-KG（陈旧图谱 GC）：回收不再被任何管线/项目引用的历史图谱。
+
+        保留：所有被 uploads/pipelines/*/pipeline_state.json 或项目档案引用的图 +
+        未引用图中最新的 ``retain`` 个（缺省 Config.GRAPH_RETAIN_COUNT=5）。
+        护栏：存在「尚未写出 graph_id 的活动管线」时整体跳过（新图可能暂时无引用，
+        删除不可逆）。返回审计 dict。
+        """
+        if retain is None:
+            retain = int(getattr(Config, "GRAPH_RETAIN_COUNT", 5) or 5)
+        from .graphiti_client.runtime import get_runtime
+
+        rt = get_runtime()
+        all_ids = rt.list_graph_ids()
+        audit: Dict[str, Any] = {
+            "total": len(all_ids), "retain": retain,
+            "kept": [], "deleted": [], "failed": [], "skipped_reason": None,
+        }
+        if not all_ids:
+            audit["skipped_reason"] = "backend returned no graph list (enumeration unsupported or empty)"
+            return audit
+
+        referenced, active_without_graph = referenced_graph_ids()
+        if active_without_graph:
+            audit["skipped_reason"] = (
+                f"{active_without_graph} active pipeline(s) without a recorded graph_id — "
+                "GC skipped to avoid deleting an in-flight graph"
+            )
+            logger.warning("[GC] %s", audit["skipped_reason"])
+            return audit
+
+        # 只为未引用的图取 recency（避免为已保留的图做无谓查询）。
+        unreferenced = [g for g in all_ids if g not in referenced]
+        recency = {g: rt.graph_last_created_at(g) for g in unreferenced}
+        keep, victims = plan_graph_gc(all_ids, referenced, recency, retain)
+        audit["kept"] = sorted(keep)
+
+        for gid in victims:
+            try:
+                self.delete_graph(gid)
+                invalidate_graph_cache(gid)
+                audit["deleted"].append(gid)
+            except Exception as exc:  # noqa: BLE001 — 单图删除失败不中断 GC
+                logger.warning("[GC] delete_graph %s failed: %s", gid, exc)
+                audit["failed"].append(gid)
+        logger.info("[GC] stale graphs: total=%d kept=%d deleted=%d failed=%d",
+                    len(all_ids), len(keep), len(audit["deleted"]), len(audit["failed"]))
+        return audit
+
     def delete_graph(self, graph_id: str):
         """删除图谱"""
         self.client.graph.delete(graph_id=graph_id)
-
+        invalidate_graph_cache(graph_id)  # Wave9-KG：同时清 UI 缓存，避免读到幽灵图

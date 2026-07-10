@@ -189,11 +189,28 @@ class Config:
     # （plotly.js 内联，完全离线自包含），manifest type='html'。默认开；plotly 未安装时该族自动
     # 无效（与 PNG 族并存，互不影响）。关闭=不生成 HTML 图（degrade-safe）。
     REPORT_VIZ_INTERACTIVE = os.environ.get('REPORT_VIZ_INTERACTIVE', 'True').strip().lower() == 'true'
+    # WAVE9-VIZ：plotly 静态 PNG 导出开关——每张 plotly HTML 图经 kaleido 同步导出 PNG 对
+    # （scale=2、宽 1200px，供 PDF/exec-brief 内嵌，manifest 项挂 png_path）。默认开；kaleido
+    # 未安装或运行时渲染失败自动回退 matplotlib（有等价图时）或仅保留 HTML（degrade-safe）。
+    REPORT_VIZ_PNG_EXPORT = os.environ.get('REPORT_VIZ_PNG_EXPORT', 'True').strip().lower() == 'true'
+    # WAVE9-VIZ：plotly 时间线泳道图的事件上限（同日高重合去重后按显著度截断，再按时间升序）。
+    REPORT_VIZ_TIMELINE_MAX_EVENTS = int(os.environ.get('REPORT_VIZ_TIMELINE_MAX_EVENTS', '40') or '40')
+    # WAVE9-VIZ：plotly 角色关系网络图的节点上限（按 graph_priors 权重+度数排序保留；边随节点裁剪）。
+    REPORT_VIZ_NETWORK_MAX_NODES = int(os.environ.get('REPORT_VIZ_NETWORK_MAX_NODES', '60') or '60')
     # VIZ-1 钩子：把 ReportVisualizer 产出的图表/图注注入成稿 full_report.md——Mermaid 块按章节
     # 标题关键词模糊匹配就地插入，未匹配的图与全部 PNG 归入文末「Visual Annex / 可视化附录」（双语
     # 随报告语言）。与 REPORT_VISUALIZER 正交：后者管「是否生成图 + 落 charts/」，此旋钮管「是否
     # 注入正文」。默认开；关闭或注入失败=成稿不含图区（图仍落盘，degrade-safe）。
     REPORT_VISUALIZATIONS = os.environ.get('REPORT_VISUALIZATIONS', 'True').strip().lower() == 'true'
+    # W9-8（报告链融合）：交互式 HTML 图注入正文——manifest 里 type=html 且带 png_path 的项内嵌
+    # 静态 PNG 并附「[交互版 Interactive](charts/x.html)」链接行；纯 html 项只留链接行；html/png
+    # 项按 placement_hint 就地插入命中章节（此前仅 mermaid 参与就地放置，html 项一直被静默丢弃）。
+    # 关闭=html 项不注入、png 全部归附录（与历史行为一致，degrade-safe）。
+    REPORT_VIZ_INTERACTIVE_EMBED = os.environ.get('REPORT_VIZ_INTERACTIVE_EMBED', 'True').strip().lower() == 'true'
+    # W9-8：Mermaid 退役——正文不再注入裸 ```mermaid 围栏（前端无 mermaid 渲染器，围栏只会显示为
+    # 源码；PDF 侧 mmdc 亦未安装）。可视化器若仍产出 mermaid 项，改以 <details> 折叠代码块的形式
+    # 仅归入文末 Visual Annex。关闭=回退旧行为（按关键词就地插入裸围栏）。
+    REPORT_VIZ_MERMAID_ANNEX_ONLY = os.environ.get('REPORT_VIZ_MERMAID_ANNEX_ONLY', 'True').strip().lower() == 'true'
     # PDF-1：GET /api/report/{id}/pdf 惰性把 full_report.md 导出为 full_report.pdf——相对图表路径
     # 绝对化 +（PATH 有 mmdc 时）预渲染 Mermaid 为 PNG，pandoc+xelatex（CJKmainfont=PingFang SC、
     # geometry margin 2.5cm、--toc），失败回退 markdown→HTML→PyMuPDF Story。按成稿 mtime 缓存。
@@ -201,6 +218,26 @@ class Config:
     REPORT_PDF_EXPORT = os.environ.get('REPORT_PDF_EXPORT', 'True').strip().lower() == 'true'
     # PDF-1：单次 pandoc 构建超时秒数（防挂死；超时即回退 PyMuPDF）。
     REPORT_PDF_TIMEOUT = int(os.environ.get('REPORT_PDF_TIMEOUT', '180') or '180')
+    # —— WAVE10：无缝引用（[S12] 记号 → 参考来源附录 / 悬空修复 / 译文对账 / PDF 脚注）——
+    # 单一引用语法：来源索引用 actors.sources_index_unified 渲染——正文记号只有裸 [S<n>]
+    # 一种形状（n=来源原始位置），层级 [S1-a] 降级为标题后的展示注记；条目按「研究报告中被
+    # 引用优先 → 层级 → 原始顺序」相关性排序截取。关闭=回退旧分层/位置索引（degrade-safe）。
+    REPORT_CITATION_SINGLE_GRAMMAR = os.environ.get('REPORT_CITATION_SINGLE_GRAMMAR', 'true').strip().lower() == 'true'
+    # 注入索引的来源条数上限（替代旧的盲切 [:40]；688 条全量注入会撑爆章节提示词）。
+    REPORT_SOURCES_INDEX_MAX = int(os.environ.get('REPORT_SOURCES_INDEX_MAX', '60') or '60')
+    # 引用最终化：语言纯度/lint 之后、双语翻译之前，把正文 [S12] 解析为文末「References/
+    # 参考来源」附录（只列被引用来源，URL 有效性守卫拦截截断域名）+ citations.json 工件。
+    # 关闭=不追加附录、不落工件（记号保持字面，行为与历史一致）。
+    REPORT_CITATION_FINALIZER = os.environ.get('REPORT_CITATION_FINALIZER', 'true').strip().lower() == 'true'
+    # 悬空引用修复（注册进 REPORT_REPAIR_PASSES 修复链）：索引解析不到的 [S246] 型记号 →
+    # 全量来源列表内数字锚定验证保留 / 重映射到命中来源 / 删除（三步确定性处置）。
+    REPORT_CITATION_REPAIR = os.environ.get('REPORT_CITATION_REPAIR', 'true').strip().lower() == 'true'
+    # 双语译文引用对账：逐 H2 块记号多重集比较，漂移块用精确记号清单重译一次；仍漂移 →
+    # 保留译文并把 citation_drift 记进 translations 条目（quality=warning）。
+    REPORT_TRANSLATION_CITATION_PARITY = os.environ.get('REPORT_TRANSLATION_CITATION_PARITY', 'true').strip().lower() == 'true'
+    # PDF 引用脚注：pandoc 路径把可解析 [S12] 首次出现改写为真脚注（citations.json 驱动，
+    # 脚注链接文本用短域名防边距溢出，colorlinks 高亮）；PyMuPDF 回退跳过变换。
+    REPORT_PDF_CITATION_FOOTNOTES = os.environ.get('REPORT_PDF_CITATION_FOOTNOTES', 'true').strip().lower() == 'true'
     # DELIV-1：从每份完成报告惰性派生「一页高管简报 + 可分享速览」——GET /api/report/{id}/
     # exec-brief（md）、/exec-brief.pdf、/digest 按源 mtime 缓存构建（与 PDF 端点同思路）。纯确定性
     # （NO LLM，只从成稿/forecast.json 抽取）：预测问题 + 3 句论点 + TOP 二元预测表（≤8 行，概率±集成
@@ -260,6 +297,14 @@ class Config:
     # R2-CAL-2：集成聚合用 log-odds（几何）pooling 的 extremizing 因子；算术均值作为诊断保留。
     # 算术平均欠自信（拉向 0.5）；extremized log-odds pooling 跨 seed/自一致抽样锐化校准。
     ENSEMBLE_EXTREMIZE_A = float(os.environ.get('ENSEMBLE_EXTREMIZE_A', '2.0') or '2.0')
+    # W9-5：多种子集成的语义情景对齐。种子间对同一情景常起不同的自由名（中英混排、
+    # 'S1 — …' 前缀等），仅按精确规范名分桶会把它们打散成 support=1 的孤桶、一致度误报 0.0
+    # （实测 3 种子 11 桶全 support=1、信心被误降为 low）。开启后名字不中时按
+    # resolution_criteria 的 token Jaccard（阈值 ENSEMBLE_ALIGN_MIN_OVERLAP）把跨 run 同义
+    # 情景并进同一桶；同 run 情景绝不互并；有效共识桶（support≥2）不足 2 个时一致度置 None
+    # （无法判定，而非误报）。设 false 复现旧的「仅精确名匹配」行为（degrade-safe）。
+    ENSEMBLE_SEMANTIC_ALIGN = os.environ.get('ENSEMBLE_SEMANTIC_ALIGN', 'true').strip().lower() == 'true'
+    ENSEMBLE_ALIGN_MIN_OVERLAP = float(os.environ.get('ENSEMBLE_ALIGN_MIN_OVERLAP', '0.34') or '0.34')
     # R2-CAL-3：把 WorldState.shares 作为结构化 base_distribution 传入脊柱推导，约束情景集 + 把概率
     # 限制在建模份额的一个 band 内（除非有依据）。仅当 SIM_DECISION_CHANNEL 开启时生效。
     REPORT_SPINE_ANCHOR_WORLDSTATE = os.environ.get('REPORT_SPINE_ANCHOR_WORLDSTATE', 'true').strip().lower() == 'true'
@@ -309,9 +354,11 @@ class Config:
     API_V1_ENABLED = os.environ.get('API_V1_ENABLED', 'False').strip().lower() == 'true'       # I-9-5 稳定版程序化 API /api/v1
     MODEL_COMPARISON_ENABLED = os.environ.get('MODEL_COMPARISON_ENABLED', 'False').strip().lower() == 'true'  # I-9-4 模型对比
     REPORT_TELEMETRY = os.environ.get('REPORT_TELEMETRY', 'True').strip().lower() == 'true'     # I-5-4 报告级 LLM 计量汇总
-    # ITEM-18：完成时把确定性的「Run Telemetry」附录表（stage × 调用/tokens/成本/墙钟）追加到最终报告
-    # full_report.md（无 LLM、幂等）。默认开；置 false 关闭附录（run 遥测仍落 telemetry.json / state.options）。
-    REPORT_TELEMETRY_APPENDIX = os.environ.get('REPORT_TELEMETRY_APPENDIX', 'True').strip().lower() == 'true'
+    # ITEM-18 / W9-6：完成时把确定性的「Run Telemetry」附录表（stage × 调用/tokens/成本/墙钟）
+    # 写到报告目录的独立 telemetry.md（无 LLM、幂等）。W9-6 默认改 False——此前默认 True 把
+    # $26.28 的内部成本表追加进了 full_report.md（客户交付物）；置 true 恢复旧的「附录进
+    # full_report.md」行为（telemetry.md 两种取值下都会写；run 遥测仍落 telemetry.json / state.options）。
+    REPORT_TELEMETRY_APPENDIX = os.environ.get('REPORT_TELEMETRY_APPENDIX', 'False').strip().lower() == 'true'
     # REPORT-3：默认开——把确定性 sim 聚合（top actors/volumes/coalition sizes/P(outcome)/scenario diff）
     # 钉进每章作可引用的数字底座，提升引用覆盖、减少探索式工具调用。
     REPORT_SIGNAL_PACK = os.environ.get('REPORT_SIGNAL_PACK', 'True').strip().lower() == 'true'  # I-3-2 每章注入定量信号包
@@ -326,6 +373,22 @@ class Config:
     # 报告背景注入 actor 关系名册 + 激励结构（盟友/对手/竞争者/客户/供应商/出资方…），让叙事更贴角色。
     # 默认开；仅当 actor 携带 relational_roster/incentives 时生效，缺失时为 no-op（与现状一致）。
     REPORT_RELATIONAL_ROSTER = os.environ.get('REPORT_RELATIONAL_ROSTER', 'True').strip().lower() == 'true'
+    # —— W9-8：研究昂贵产物直通报告正文（quantitative/contested/timeline 此前落盘后零下游读者）——
+    # 证据块总开关：完整 quantitative.json 渲染「关键指标」表（tier+时效排序过滤，替代 actors 内嵌
+    # 20 行副本）；完整 contested.json 渲染「承重争议声明」表注入风险/不确定性章节；timeline.json
+    # 渲染紧凑时间线注入背景/时间线章节。关闭=回退 actors 内嵌副本（行为与历史一致，degrade-safe）。
+    REPORT_EVIDENCE_BLOCKS = os.environ.get('REPORT_EVIDENCE_BLOCKS', 'True').strip().lower() == 'true'
+    REPORT_KEY_METRICS_MAX = int(os.environ.get('REPORT_KEY_METRICS_MAX', '40') or '40')          # 关键指标表行数上限
+    REPORT_CONTESTED_TABLE_MAX = int(os.environ.get('REPORT_CONTESTED_TABLE_MAX', '15') or '15')  # 争议声明表行数上限
+    REPORT_CHRONOLOGY_MAX_EVENTS = int(os.environ.get('REPORT_CHRONOLOGY_MAX_EVENTS', '25') or '25')  # 紧凑时间线事件上限
+    # W9-8：KG 结构先验进报告——因果骨架的 chokepoint 支点优先取 graph_priors_structural.json 的
+    # 结构咽喉/介数中心度（研究显著度回退）；关系名册每个 actor 附「结构影响力（KG 中心度）」行
+    # （按 actors 别名组折叠去重）。关闭=纯显著度选点、不加中心度行（行为与历史一致）。
+    REPORT_KG_STRUCTURAL_SPINE = os.environ.get('REPORT_KG_STRUCTURAL_SPINE', 'True').strip().lower() == 'true'
+    # W9-5：集成种子报告按主跑情景脊柱打分——scenario_spine 传入时把命名情景钉进骨架推导提示词，
+    # 推导后把返回情景名确定性对齐回钉定名（概率自由、新情景可追加），集成聚合才有稳定的按名对齐
+    # 坐标。关闭 / scenario_spine 缺省 = 自由起名（行为与历史一致）。
+    REPORT_SCENARIO_SPINE_PIN = os.environ.get('REPORT_SCENARIO_SPINE_PIN', 'True').strip().lower() == 'true'
     RECORD_RUN_MANIFEST = os.environ.get('RECORD_RUN_MANIFEST', 'True').strip().lower() == 'true'  # I-8-1 复现清单 run.json
 
     # —— EXECPLAN2 第三波改进旋钮（剩余 L-effort 新能力；全部默认关，留空即保持当前行为）——
@@ -378,7 +441,19 @@ class Config:
     # R2-EXEC-7 研究阶段后台预热嵌入器；R2-RES-7 as_of 双时态锚校验；建图输入源。
     EMBED_WARM_AT_RESEARCH = os.environ.get('EMBED_WARM_AT_RESEARCH', 'false').strip().lower() == 'true'
     VALIDATE_AS_OF_DATE = os.environ.get('VALIDATE_AS_OF_DATE', 'true').strip().lower() == 'true'
-    GRAPH_CHUNK_SOURCE = os.environ.get('GRAPH_CHUNK_SOURCE', 'both').strip().lower()  # both|dossier_only|report_only
+    # W9-10：建图输入源默认 both→dossier_only——用户明确要求 KG 收敛到关键 actor：actor 中心的
+    # 卷宗切块入图，广覆盖研究报告只喂本体/报告上下文（graph 阶段 8h38m/60% 跳块的主要输入面）。
+    # dossier 缺失/为空时代码自动回退 both 语义（全量报告切块），设 'both' 可显式恢复旧行为。
+    GRAPH_CHUNK_SOURCE = os.environ.get('GRAPH_CHUNK_SOURCE', 'dossier_only').strip().lower()  # both|dossier_only|report_only
+    # W9-1/W9-3：孤儿回收打捞 + run 遥测增量落盘。
+    # 打捞：reconcile_orphans 遇到「report 阶段已完成且 full_report.md+forecast.json 在盘」的
+    # running 孤儿时，落成 completed(pipeline_health=degraded, 集成跳过) 而非 failed——两条 $10+
+    # 的跑曾带着完整报告被整线判死。设 false 回退「一律判 failed」。
+    PIPELINE_SALVAGE_COMPLETED_ORPHANS = os.environ.get('PIPELINE_SALVAGE_COMPLETED_ORPHANS', 'true').strip().lower() == 'true'
+    # 遥测增量 flush 的调用步长：每新增 N 次 LLM 调用（在心跳/进度回调上检查）+ 每次阶段转换，
+    # 把 LLMMeter 快照落盘 run_telemetry.json——重启不再清零整跑的 token/成本账。<=0 关增量
+    # flush（仅保留终态一次性落盘 = 旧行为）。
+    PIPELINE_TELEMETRY_FLUSH_EVERY_CALLS = int(os.environ.get('PIPELINE_TELEMETRY_FLUSH_EVERY_CALLS', '20') or '20')
 
     # —— ORCH-2/ORCH-8/XRUN-3：编排器/CLI 鲁棒性 ——
     # 启动回收前先探测本机端口是否已有后端在服务：占用则整体跳过孤儿回收（注定 Address-in-use
@@ -400,6 +475,19 @@ class Config:
     RESEARCH_QUALITY_GROUNDING = os.environ.get('RESEARCH_QUALITY_GROUNDING', 'true').strip().lower() == 'true'
     ACTOR_DOSSIER_JUDGE_STRICT = os.environ.get('ACTOR_DOSSIER_JUDGE_STRICT', 'false').strip().lower() == 'true'
     RESEARCH_COVERAGE_GATE_STANDARD = os.environ.get('RESEARCH_COVERAGE_GATE_STANDARD', 'false').strip().lower() == 'true'
+    # W9-9：研究子进程接入后端 KG MCP server（deerflow_bridge/extensions_config.json 部署副本）。
+    # 仅在图谱已存在的路径（fork/continue/resume-with-graph，即 state.graph_id 非空）下发
+    # DEER_FLOW_EXTENSIONS_CONFIG_PATH + DRF_MCP_KG_GRAPH_ID——what-if/续跑研究可直接查基线 KG
+    # （kg_search/kg_trace_cascade）而非重搜网页。首跑无图谱时不下发，行为与今日逐字节一致。
+    RESEARCH_MCP_KG = os.environ.get('RESEARCH_MCP_KG', 'true').strip().lower() == 'true'
+    # W9-7：多轨研究卷宗合并后的一次有界 LLM 整理——合并 K 份执行摘要为单一开篇、'# Track N' H1
+    # 降级为 '## Part N — <english title>' H2、输出「跨轨分歧」小节点名冲突的头条数字。仅喂各轨
+    # 执行摘要（cap ~30K 字符）；任何失败降级为纯拼接（与今日逐字节一致）。
+    RESEARCH_TRACK_RECONCILE = os.environ.get('RESEARCH_TRACK_RECONCILE', 'true').strip().lower() == 'true'
+    # W9-11：研究卷宗定稿后跑确定性编辑 lint（report_lint.lint_report(md, lang, mode='research')，
+    # 清理 [citation:...] 残渣、pass/working-notes 叙述泄漏等机器语法）。模块未部署（ImportError）
+    # 或本旋钮为 false 时静默跳过（degrade-safe）。
+    REPORT_LINT = os.environ.get('REPORT_LINT', 'true').strip().lower() == 'true'
 
     # —— 本体/准备组（ONT-1/PREP-*/XRUN-10；utils/actors.py 与 config 生成器经 getattr 读取）——
     ONTOLOGY_SEED_ADAPTIVE_BUDGET = os.environ.get('ONTOLOGY_SEED_ADAPTIVE_BUDGET', 'true').strip().lower() == 'true'
@@ -485,6 +573,39 @@ class Config:
     # RQ-5 每章反思：草稿通过基本有效性后做一次廉价批判（骨架概率一致性 / 硬数字接地 / 篇幅下限 /
     # 不复述前序章节），返回 PASS 或单条修订指令；至多一次修订抽取。轮数由 MAX_REFLECTION_ROUNDS 上限。
     REPORT_SECTION_REFLECTION = os.environ.get('REPORT_SECTION_REFLECTION', 'true').strip().lower() == 'true'
+
+    # —— WAVE9-FOCUS：报告焦点与编辑纪律（模拟=内部方法，报告主语=现实世界）——
+    # 确定性编辑 lint（report_lint.lint_report）：修复 passes 之后、双语翻译之前清理引用残留 /
+    # 边转储 / 旧模拟标签 / 孤悬归因行 / 引用记号变体 / 重复整句；lint 报告记入 forecast.json
+    # quality['lint']。默认开；失败仅告警（degrade-safe）。
+    REPORT_EDITORIAL_LINT = os.environ.get('REPORT_EDITORIAL_LINT', 'true').strip().lower() == 'true'
+    # 模拟机制泄漏修复（_repair_simulation_leakage，注册进 REPORT_REPAIR_PASSES 修复链）：
+    # Tier-1 确定性改写（标签/边/工具记号/平台行为引文/泄漏标题）→ Tier-2 每个泄漏段落一次
+    # 有界 LLM 重写（数字 token 逐字节校验，失败弃用）→ 重扫后删除仍泄漏句子。默认开。
+    REPORT_SIMLEAK_REPAIR = os.environ.get('REPORT_SIMLEAK_REPAIR', 'true').strip().lower() == 'true'
+    # Tier-2 泄漏段落 LLM 重写的段数上限（超出预算的段落直接句子级删除）。默认 12。
+    REPORT_SIMLEAK_MAX_LLM_PARAGRAPHS = int(os.environ.get('REPORT_SIMLEAK_MAX_LLM_PARAGRAPHS', '12') or '12')
+    # 大纲标题 lint：含方法学词汇（模拟/智能体/Agent/Simulation/Behavior/行为轨迹）的章节标题
+    # 确定性改名（改名而非删除，保住 6-14 节章节数契约）。默认开。
+    REPORT_OUTLINE_TITLE_LINT = os.environ.get('REPORT_OUTLINE_TITLE_LINT', 'true').strip().lower() == 'true'
+    # 信号包量化结果的定性转写：simulation_outcomes 的动作计数转写为「议程设置力分层」再注入
+    # 章节提示词（防 'TSMC 以 48 次动作居首' 型机制泄漏）；关闭则注入原始文本（旧行为）。默认开。
+    REPORT_SIGNAL_PACK_QUALITATIVE = os.environ.get('REPORT_SIGNAL_PACK_QUALITATIVE', 'true').strip().lower() == 'true'
+    # 章节语言验收：成稿章节的外语字符占比超阈值时做一次整章重写重申输出语言（S3/S9 整章
+    # 中文进英文报告的故障）。默认开；阈值对 CJK 目标自动放宽到 >=0.6（合法拉丁 token 多）。
+    REPORT_SECTION_LANG_ENFORCE = os.environ.get('REPORT_SECTION_LANG_ENFORCE', 'true').strip().lower() == 'true'
+    REPORT_SECTION_LANG_MAX_FOREIGN_RATIO = float(os.environ.get('REPORT_SECTION_LANG_MAX_FOREIGN_RATIO', '0.25') or '0.25')
+    # 语言纯度：单个 H2 块污染片段数超此阈值 → 整章重译（子串内联补丁在重污染章节产出
+    # 'SK SK Hynix' 型混合垃圾）；<=0 关闭整章重译（恒走内联路径）。默认 8。
+    REPORT_PURITY_RETRANSLATE_SEGMENTS = int(os.environ.get('REPORT_PURITY_RETRANSLATE_SEGMENTS', '8') or '8')
+    # 反思修订反收缩护栏：修订稿长度下限 = max(原稿 × 此比例, 章节字符下限)；短于下限且确实
+    # 缩水的修订一律拒绝（14824→1518 的「章节销毁」故障）。默认 0.6。
+    REPORT_REVISION_MIN_RATIO = float(os.environ.get('REPORT_REVISION_MIN_RATIO', '0.6') or '0.6')
+    # 反思护栏的章节有效下限比例：章节字符下限 = max(MIN_VALID_SECTION_CHARS(800),
+    # 章节目标下限 × 此比例)。默认 0.4（3000 目标 → 1200）。
+    REPORT_SECTION_MIN_VALID_RATIO = float(os.environ.get('REPORT_SECTION_MIN_VALID_RATIO', '0.4') or '0.4')
+    # 截断续写：章节以句中截断收尾（'(依据' / 裸字母数字 / 冒号）时做一次续写调用补全。默认开。
+    REPORT_SECTION_TRUNCATION_CONTINUE = os.environ.get('REPORT_SECTION_TRUNCATION_CONTINUE', 'true').strip().lower() == 'true'
 
     # —— BILINGUAL：双语报告（自动生成另一语种版本）——
     # 报告生成末尾（finalize/可视化/纯度之后）自动生成成稿的「另一语种」版本：英文报告 → 简体中文
@@ -993,6 +1114,40 @@ class Config:
     # KG-8：默认 0.5→0.2。graph_builder 现已按浮点比较（>1 下限保留），0.2 让审计里
     # 132 节点/30 分量的建图真正触发欠合并告警（0.5 时静默放行）。
     GRAPH_COMPONENT_WARN_RATIO = float(os.environ.get('GRAPH_COMPONENT_WARN_RATIO', '0.2') or '0.2')
+    # ---（Wave9-KG）图谱收敛：核心 actor 约束 + 建后剪枝 + UI 子图 + 陈旧图谱 GC ---
+    # 建后剪枝总开关（graph_pruner.prune_graph）。关闭时 prune_graph 直接返回空审计，
+    # 图谱与现状逐字节一致（degrade-safe）。
+    GRAPH_PRUNE_ENABLED = os.environ.get('GRAPH_PRUNE_ENABLED', 'true').strip().lower() == 'true'
+    # 剪枝后图谱的硬实体上限：核心 actor 恒保留，因此有效上限为
+    # max(GRAPH_MAX_ENTITIES, 已匹配核心节点数)。其余只从 N-hop 内按重要度补位。
+    GRAPH_MAX_ENTITIES = int(os.environ.get('GRAPH_MAX_ENTITIES', '400'))
+    # 以核心 actor（actors.json names+aliases）为起点保留 N 跳邻域；0 = 仅核心。
+    GRAPH_CORE_ACTOR_HOPS = int(os.environ.get('GRAPH_CORE_ACTOR_HOPS', '2'))
+    # destructive prune 的 actor 行命中率下限；低于阈值整体跳过并标 degraded，防止围绕
+    # 少数误命中核心删除其它真正关键 actor。范围由 graph_pruner clamp 到 [0,1]。
+    GRAPH_PRUNE_MIN_CORE_COVERAGE = float(
+        os.environ.get('GRAPH_PRUNE_MIN_CORE_COVERAGE', '0.8')
+    )
+    # 已弃用兼容项：硬剪枝不再以度数或任意长连通路径豁免 keep-set 外节点。
+    GRAPH_PRUNE_MIN_DEGREE = int(os.environ.get('GRAPH_PRUNE_MIN_DEGREE', '2'))
+    # keep-set 内单一实体类型（主标签）的数量上限，防止某一类型（如 Organization）挤占全部席位。
+    GRAPH_MAX_ENTITIES_PER_TYPE = int(os.environ.get('GRAPH_MAX_ENTITIES_PER_TYPE', '150'))
+    # UI 子图默认节点上限：前端传 top_k<=0 时按此值取度数 top-K（不传 top_k = 全量，行为不变）。
+    GRAPH_UI_MAX_NODES = int(os.environ.get('GRAPH_UI_MAX_NODES', '400') or '400')
+    # /graph/data 响应的 TTL 缓存秒数（前端 10s 轮询不再每次重分页读库）。0 = 关闭缓存。
+    GRAPH_UI_CACHE_TTL_S = float(os.environ.get('GRAPH_UI_CACHE_TTL_S', '60') or '60')
+    # 陈旧图谱 GC：除被 uploads/pipelines/*/pipeline_state.json（及项目档案）引用的图谱外，
+    # 额外按新旧保留最近 N 个未引用图谱，其余 delete_graph 回收（falkor.db 40 图中 39 个已死）。
+    GRAPH_RETAIN_COUNT = int(os.environ.get('GRAPH_RETAIN_COUNT', '5') or '5')
+    # 建图完成后服务端预计算弹簧布局（networkx spring_layout，缺 networkx 时退化为
+    # 确定性的按度数径向布局），持久化 positions.json 供前端免仿真直出。
+    GRAPH_LAYOUT_PRECOMPUTE = os.environ.get('GRAPH_LAYOUT_PRECOMPUTE', 'true').strip().lower() == 'true'
+    # episode 抽取失败（模型回显 JSON schema 而非实例）时，episode 级重试次数——
+    # 每次重试都会重滚 llm_adapter 的升温阶梯（0.4 档非确定性，重滚真正有效）。
+    GRAPH_EPISODE_SCHEMA_RETRIES = int(os.environ.get('GRAPH_EPISODE_SCHEMA_RETRIES', '1') or '1')
+    # schema-echo 重试耗尽后，是否用 LLM_FALLBACK_PROVIDER（若已配置）再兜底重抽一次该 episode。
+    GRAPH_INGEST_FALLBACK = os.environ.get('GRAPH_INGEST_FALLBACK', 'true').strip().lower() == 'true'
+
     # 远程 Graphiti/Zep 才需要分批限流停顿；本地 FalkorDB 关闭死延迟（T2.6）
     GRAPHITI_REMOTE = os.environ.get('GRAPHITI_REMOTE', 'false').strip().lower() == 'true'
     # 每个 Graphiti 操作（add_episode/search/list…）的挂钟上限（秒）。sync→async 桥兜底，
@@ -1083,6 +1238,30 @@ class Config:
     # 使 market_anchor 用现价。关闭 → 只用研究期快照（在包头标注时效性）。重报价失败一律 degrade-safe：
     # 保留研究期价 + 时效性说明，绝不阻断报告（PolymarketClient.requote_markets 每行自带失败标记）。
     PREDICTION_MARKETS_REQUOTE = os.environ.get('PREDICTION_MARKETS_REQUOTE', 'true').strip().lower() == 'true'
+    # PM-HZ（WAVE9）：预测市场远期降级阶梯——主检索词零命中/全被相关性门挡时，按「剥 4 位年份 →
+    # 事件级宽词（前 3 词）」两级放宽重试。降级候选必须过 LLM 相关性门（fail-closed：打分不可用
+    # 即整阶段丢弃），命中行打 horizon_degraded 标签留痕。同时研究阶段**始终**落盘
+    # prediction_markets.json（空结果带显式 no_relevant_markets 标记），让下游能陈述「无市场锚点」。
+    # bridge 侧经环境变量读取（编排器 env=dict(os.environ) 原样透传）。
+    PREDICTION_MARKETS_HORIZON_RETRY = os.environ.get('PREDICTION_MARKETS_HORIZON_RETRY', 'true').strip().lower() == 'true'
+    # WAVE9-RQ（研究卷宗质量；bridge 经环境变量读取，同上透传）：
+    # RQ1 禁流程叙事——所有合成/分节提示词注入硬风格规则（禁 passes/working notes/tracks/
+    # coverage gates/字数目标/[citation:...] 语法/自指编辑注记出现在卷宗散文里）。
+    RESEARCH_BAN_PROCESS_NARRATION = os.environ.get('RESEARCH_BAN_PROCESS_NARRATION', 'true').strip().lower() == 'true'
+    # RQ2 内联引注——研究阶段定义 [S<n>] 记号 + 机器可解析 '## References' 节；合成路径钉一个
+    # 与 sources.json fetched 主干同序的 SOURCE INDEX，落盘前确定性校验（悬空记号剔除并计数）。
+    RESEARCH_INLINE_CITATIONS = os.environ.get('RESEARCH_INLINE_CITATIONS', 'true').strip().lower() == 'true'
+    # 钉进合成提示词的引注索引条数上限（防提示词膨胀）。
+    RESEARCH_CITATION_INDEX_MAX = int(os.environ.get('RESEARCH_CITATION_INDEX_MAX', '100') or '100')
+    # RQ3 跨节去重——多段合成缝合步跑归一化 12-gram shingle 检测，剔除跨节逐字重复段（保首现）。
+    RESEARCH_DEDUP_SHINGLES = os.environ.get('RESEARCH_DEDUP_SHINGLES', 'true').strip().lower() == 'true'
+    # RQ4 强制研究图表——卷宗最少图表数（actor 网络/时间线/定量 Top 指标；0=关闭强制图表与
+    # 确定性渲染步，write-step 提示词回退旧 OPTIONAL 措辞）。渲染经 forecast-visuals 技能捆绑的
+    # scripts/render.py（plotly 本地、degrade-safe），PNG 内嵌进 research_report.md 的 Visual Annex。
+    RESEARCH_CHARTS_MIN = int(os.environ.get('RESEARCH_CHARTS_MIN', '3') or '3')
+    # 图表渲染子进程超时（秒）与解释器显式覆盖（缺省自动探测 backend/.venv → sys.executable）。
+    RESEARCH_CHARTS_TIMEOUT = int(os.environ.get('RESEARCH_CHARTS_TIMEOUT', '180') or '180')
+    RESEARCH_CHARTS_PYTHON = os.environ.get('RESEARCH_CHARTS_PYTHON', '').strip()
     # B2 三部结构：按 Bridgewater 简报把成稿组织为 Part 1（二元预测表）/ Part 2（框架综合，
     # 单次 LLM 调用、字数按 requirement_spec 的 page_budget 收敛）/ Part 3（附录 = 原详细章节）。
     # 无 Part 1 或综合产出过短 → 跳过不改文档（degrade-safe，幂等）。

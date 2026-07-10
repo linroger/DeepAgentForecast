@@ -299,30 +299,36 @@ def test_available_charts_normalizes_entries():
     manifest = [
         {"title": "Fig 1", "caption": "trend", "source_data": "data/fig1.csv"},
         {"title": "", "caption": "", "path": "charts/fig2.png"},   # 仅路径也保留
+        {"title": "Interactive", "path": "charts/fig3.html"},
+        {"title": "Unsafe", "path": "../secret.png"},
         {"title": "", "caption": "", "source_data": ""},           # 三者全空 → 丢弃
         "not a dict",                                              # 非字典 → 跳过
     ]
     a = _agent(charts_manifest=manifest)
     charts = a._available_charts()
     assert len(charts) == 2
-    assert charts[0] == {"title": "Fig 1", "caption": "trend", "path": "data/fig1.csv"}
-    assert charts[1]["path"] == "charts/fig2.png"
+    assert charts[0]["path"] == "charts/fig2.png"
+    assert charts[1]["path"] == "charts/fig3.html"
 
 
 def test_available_charts_tolerates_dict_wrapper_and_missing():
     assert _agent(charts_manifest=None)._available_charts() == []
     assert _agent(charts_manifest="bad")._available_charts() == []
-    wrapped = {"charts": [{"title": "T", "caption": "C", "source_data": "d.csv"}]}
+    wrapped = {"charts": [{"title": "T", "caption": "C", "path": "charts/t.png"}]}
     charts = _agent(charts_manifest=wrapped)._available_charts()
     assert charts and charts[0]["title"] == "T"
 
 
 def test_build_charts_block_references_figures():
-    manifest = [{"title": "Scenario fan", "caption": "P bands", "source_data": "data/fan.csv"}]
+    manifest = [
+        {"title": "Scenario fan", "caption": "P bands", "path": "charts/fan.png"},
+        {"title": "Actor network", "path": "charts/actors.html"},
+    ]
     a = _agent(charts_manifest=manifest)
     block = a._build_charts_block()
     assert "Available research figures" in block
     assert "Scenario fan" in block
-    assert "![P bands](data/fan.csv)" in block          # 标准 markdown 图片语法
+    assert "![P bands](charts/fan.png)" in block          # 标准 markdown 图片语法
+    assert "[interactive](charts/actors.html)" in block
     # 空清单 → 空串（注入自动跳过）。
     assert _agent(charts_manifest=[])._build_charts_block() == ""

@@ -136,7 +136,11 @@ class TestIngestStats:
         b = self._run(monkeypatch, add_batch)
         uuids = b.add_text_batches("g1", ["c1", "c2", "c3", "c4", "c5", "c6"], batch_size=2)
         assert len(uuids) == 4
-        assert b.last_ingest_stats == {"total": 6, "failed": 2, "succeeded": 4}
+        # Wave9-KG 起 last_ingest_stats 额外携带 skip_ratio/skip_reasons（ADD-only），
+        # 这里断言原三键语义不变 + 新增 skip_ratio 正确。
+        stats = b.last_ingest_stats
+        assert (stats["total"], stats["failed"], stats["succeeded"]) == (6, 2, 4)
+        assert stats["skip_ratio"] == pytest.approx(2 / 6, abs=1e-4)
 
     def test_total_failure_still_raises_and_records(self, monkeypatch):
         def add_batch(graph_id, episodes):
@@ -145,8 +149,10 @@ class TestIngestStats:
         b = self._run(monkeypatch, add_batch)
         with pytest.raises(ValueError):
             b.add_text_batches("g1", ["c1", "c2"], batch_size=2)
-        # 记账发生在硬护栏 raise 之前，失败路径也可观测
-        assert b.last_ingest_stats == {"total": 2, "failed": 2, "succeeded": 0}
+        # 记账发生在硬护栏 raise 之前，失败路径也可观测（Wave9-KG 起含 skip_ratio 等新键）
+        stats = b.last_ingest_stats
+        assert (stats["total"], stats["failed"], stats["succeeded"]) == (2, 2, 0)
+        assert stats["skip_ratio"] == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------

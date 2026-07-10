@@ -99,6 +99,20 @@ export const reportPdfUrl = (reportId, lang) => {
 }
 
 /**
+ * FORECAST-DASH：获取报告的机器可读结构化预测对象（/api/v1 稳定表面，后端 sdk.py）。
+ * 返回 { success, data: { report_id, simulation_id, forecast, resolved } }；
+ * forecast 内含 scenarios / confidence / ensemble / market_comparison 等字段。
+ * 降级路径（调用方一律按「无仪表盘」处理，不报错）：
+ *   · 报告不存在 → 404；
+ *   · 报告存在但未启用 REPORT_STRUCTURED_FORECAST（旧报告）→ 409；
+ *   · API_V1_ENABLED 关闭（蓝图未注册）→ 404。
+ * @param {string} reportId
+ */
+export const getForecast = (reportId) => {
+  return service.get(`/api/v1/forecast/${reportId}`)
+}
+
+/**
  * 把报告内相对可视化资源路径（如 'charts/xxx.png'）重写为可访问 URL。
  * 与 /charts 端点同源：/api/report/<id>/charts/<file>。用于 renderMarkdown 的 resolveUrl 及图表画廊。
  * @param {string} reportId

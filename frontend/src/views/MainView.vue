@@ -303,8 +303,8 @@ const fetchGraphData = async () => {
       const gRes = await getGraphData(projRes.data.graph_id)
       if (gRes.success) {
         graphData.value = gRes.data
-        const nodeCount = gRes.data.node_count || gRes.data.nodes?.length || 0
-        const edgeCount = gRes.data.edge_count || gRes.data.edges?.length || 0
+        const nodeCount = gRes.data.total_node_count || gRes.data.node_count || gRes.data.nodes?.length || 0
+        const edgeCount = gRes.data.total_edge_count || gRes.data.edge_count || gRes.data.edges?.length || 0
         addLog(`Graph data refreshed. Nodes: ${nodeCount}, Edges: ${edgeCount}`)
       }
     }
@@ -356,7 +356,7 @@ const pollTaskStatus = async (taskId) => {
 
 const loadGraph = async (graphId) => {
   graphLoading.value = true
-  addLog(`Loading full graph data: ${graphId}`)
+  addLog(`Loading focused graph overview: ${graphId}`)
   try {
     const res = await getGraphData(graphId)
     if (res.success) {

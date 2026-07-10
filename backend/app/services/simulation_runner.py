@@ -643,6 +643,29 @@ class SimulationRunner:
             raise
         
         return state
+
+    @staticmethod
+    def _read_log_tail(path: str, max_bytes: int = 2000) -> str:
+        """Read a bounded UTF-8 tail without loading an arbitrarily large simulation log."""
+        try:
+            limit = max(1, int(max_bytes))
+            with open(path, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                size = f.tell()
+                f.seek(max(0, size - limit), os.SEEK_SET)
+                return f.read(limit).decode("utf-8", errors="replace")
+        except (OSError, TypeError, ValueError):
+            return ""
+
+    @staticmethod
+    def _missing_platform_completions(state: SimulationRunState) -> List[str]:
+        """Return enabled platforms that have not emitted ``simulation_end``."""
+        missing: List[str] = []
+        if state.twitter_enabled and not state.twitter_completed:
+            missing.append("twitter")
+        if state.reddit_enabled and not state.reddit_completed:
+            missing.append("reddit")
+        return missing
     
     @classmethod
     def _monitor_simulation(cls, simulation_id: str):
@@ -689,28 +712,54 @@ class SimulationRunner:
             # 进程结束
             exit_code = process.returncode
             
-            if exit_code == 0:
+            all_platforms_completed = cls._check_all_platforms_completed(state)
+            status_before_exit = state.runner_status
+
+            # 结果生命周期与 command-mode 子进程生命周期是两件事：平台写出
+            # simulation_end 后，模拟结果已经权威 COMPLETED；子进程仍可能继续存活供
+            # 报告采访，随后因空闲、显式 stop 或服务器 cleanup 退出。这个资源退出不得
+            # 改写既有终态。STOPPING 则是显式终止意图，观察到进程退出后收敛为 STOPPED。
+            if status_before_exit in {
+                RunnerStatus.COMPLETED,
+                RunnerStatus.FAILED,
+                RunnerStatus.STOPPED,
+            }:
+                logger.info(
+                    "模拟进程退出，保留既有终态: %s, status=%s, exit_code=%s",
+                    simulation_id,
+                    status_before_exit.value,
+                    exit_code,
+                )
+            elif status_before_exit == RunnerStatus.STOPPING:
+                state.runner_status = RunnerStatus.STOPPED
+                if state.completed_at is None:
+                    state.completed_at = datetime.now().isoformat()
+                logger.info(f"模拟按停止请求退出: {simulation_id}")
+            elif exit_code == 0 and all_platforms_completed:
                 state.runner_status = RunnerStatus.COMPLETED
                 state.completed_at = datetime.now().isoformat()
-                # RUN-17: 平台在进入主循环前中止（如 profile 缺失）时子进程仍会 0 退出——
-                # 交叉核验各启用平台是否都发出了 simulation_end，未齐则把退化记入 error，
-                # 让管线健康门/UI 看见「COMPLETED 但部分平台未产出」的自相矛盾终态。
-                if not cls._check_all_platforms_completed(state):
-                    state.error = "部分平台未产出 simulation_end（可能启动失败或中途异常被隔离）"
-                    logger.warning(f"模拟完成但存在未完成平台: {simulation_id}")
                 logger.info(f"模拟完成: {simulation_id}")
             else:
                 state.runner_status = RunnerStatus.FAILED
+                state.completed_at = None
                 # 从主日志文件读取错误信息
                 main_log_path = os.path.join(sim_dir, "simulation.log")
-                error_info = ""
-                try:
-                    if os.path.exists(main_log_path):
-                        with open(main_log_path, 'r', encoding='utf-8') as f:
-                            error_info = f.read()[-2000:]  # 取最后2000字符
-                except Exception:
-                    pass
-                state.error = f"进程退出码: {exit_code}, 错误: {error_info}"
+                error_info = cls._read_log_tail(main_log_path, max_bytes=2000)
+                if exit_code == 0:
+                    # RUN-17/LOOP-001: 子进程在真正进入模拟前拒绝启动（磁盘预检、profile/
+                    # config 缺失等）时可能以 0 退出。进程退出码不是完成证据；每个启用平台
+                    # 都必须在 actions.jsonl 写出 simulation_end。此前这里仍标 COMPLETED，
+                    # 使编排器继续烧数小时生成一份基于 0 轮/0 动作的报告。
+                    missing = cls._missing_platform_completions(state)
+                    missing_text = ", ".join(missing) if missing else "unknown"
+                    state.error = (
+                        "进程退出码为 0，但启用平台未产出 simulation_end "
+                        f"({missing_text})；模拟未真正完成"
+                    )
+                    if error_info.strip():
+                        state.error += f"。模拟日志尾部: {error_info.strip()}"
+                else:
+                    state.error = f"进程退出码: {exit_code}, 错误: {error_info}"
                 logger.error(f"模拟失败: {simulation_id}, error={state.error}")
             
             state.twitter_running = False
@@ -807,14 +856,28 @@ class SimulationRunner:
                                             state.reddit_running = False
                                             logger.info(f"Reddit 模拟已完成: {state.simulation_id}, total_rounds={action_data.get('total_rounds')}, total_actions={action_data.get('total_actions')}")
 
-                                        # 检查是否所有启用的平台都已完成
-                                        # 如果只运行了一个平台，只检查那个平台
-                                        # 如果运行了两个平台，需要两个都完成
+                                        # simulation_end 是模拟阶段的权威完成证据。子进程随后会故意
+                                        # 留在 command mode 供报告 agent 采访，不能等进程退出才发布
+                                        # COMPLETED（否则正常管线会阻塞到 60min idle close）。进程若在
+                                        # 这些事件齐全前退出，则由 _monitor_simulation 的 post-exit 分支
+                                        # 标 FAILED，即使 exit_code==0（LOOP-001）。
                                         all_completed = cls._check_all_platforms_completed(state)
-                                        if all_completed:
+                                        if all_completed and state.runner_status in {
+                                            RunnerStatus.STARTING,
+                                            RunnerStatus.RUNNING,
+                                        }:
                                             state.runner_status = RunnerStatus.COMPLETED
                                             state.completed_at = datetime.now().isoformat()
                                             logger.info(f"所有平台模拟已完成: {state.simulation_id}")
+                                        elif all_completed:
+                                            # 最后一批日志可能与 stop/cleanup/失败处理竞速到达。
+                                            # 事件仍用于完整性记账，但不得把 STOPPING/STOPPED/FAILED
+                                            # 重新晋升为 COMPLETED，也不得刷新既有 COMPLETED 时间戳。
+                                            logger.info(
+                                                "所有平台完成事件已记账，保留既有状态: %s, status=%s",
+                                                state.simulation_id,
+                                                state.runner_status.value,
+                                            )
 
                                 # 更新轮次信息（从 round_end 事件）
                                 elif event_type == "round_end":
@@ -1938,6 +2001,20 @@ class SimulationRunner:
                 if process.poll() is None:  # 进程仍在运行
                     logger.info(f"终止模拟进程: {simulation_id}, pid={process.pid}")
                     
+                    # 先发布终止意图，再发送信号。监控线程可能在 terminate()/kill()
+                    # 返回前就观察到子进程退出；预先落 STOPPING 可让它收敛到 STOPPED，
+                    # 而不是把服务器主动回收误判成意外 FAILED。
+                    state = cls.get_run_state(simulation_id)
+                    was_terminal = bool(state and state.runner_status in {
+                        RunnerStatus.COMPLETED,
+                        RunnerStatus.FAILED,
+                        RunnerStatus.STOPPED,
+                    })
+                    if state and not was_terminal:
+                        state.runner_status = RunnerStatus.STOPPING
+                        state.error = "服务器关闭，模拟被终止"
+                        cls._save_run_state(state)
+
                     try:
                         # 使用跨平台的进程终止方法
                         cls._terminate_process(process, simulation_id, timeout=5)
@@ -1949,18 +2026,23 @@ class SimulationRunner:
                         except Exception:
                             process.kill()
                     
-                    # 更新 run_state.json
-                    state = cls.get_run_state(simulation_id)
+                    # 更新 run_state.json。simulation_end 已经结束「模拟结果」生命周期，
+                    # 但子进程会继续留在 command mode 供报告阶段采访；服务器关闭只是在
+                    # 回收这个运行时资源，不能把已经完成/失败的权威结果改写成 stopped。
+                    # 只有仍处于非终态的模拟才是被服务器实际中止。
+                    durable_status = RunnerStatus.STOPPED
                     if state:
-                        state.runner_status = RunnerStatus.STOPPED
+                        if not was_terminal:
+                            state.runner_status = RunnerStatus.STOPPED
+                            state.completed_at = datetime.now().isoformat()
                         state.twitter_running = False
                         state.reddit_running = False
-                        state.completed_at = datetime.now().isoformat()
-                        state.error = "服务器关闭，模拟被终止"
                         cls._save_run_state(state)
+                        durable_status = state.runner_status
                     
-                    # 同时更新 state.json，将状态设为 stopped（原子 + 共享锁，F-6-9）
-                    cls._sync_state_json_status(simulation_id, 'stopped')
+                    # 同时更新 state.json（原子 + 共享锁，F-6-9），保持两个持久化视图
+                    # 对同一结果的叙述一致；env_status 仍应为 stopped，因为 IPC 已关闭。
+                    cls._sync_state_json_status(simulation_id, durable_status.value)
                     cls._mark_env_stopped(simulation_id)  # RUN-11: 服务器关闭已杀进程，环境同步落 stopped
 
             except Exception as e:
@@ -2515,4 +2597,3 @@ class SimulationRunner:
             results = results[:limit]
         
         return results
-

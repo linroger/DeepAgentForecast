@@ -1403,7 +1403,9 @@ def render_binary_forecasts_block(forecast: Optional[Dict[str, Any]],
             id=_esc_cell(b.get("id") or ""),
             st=_esc_cell(b.get("statement") or ""),
             p=pct,
-            rc=_esc_cell(str(b.get("resolution_criteria") or "")[:200]),
+            # WAVE9：去掉 [:200] 硬截断——判定标准被切成 'used in Q3 202' 型断句是交付缺陷；
+            # _esc_cell 已转义管道符/换行，长单元格由渲染端自然换行。
+            rc=_esc_cell(str(b.get("resolution_criteria") or "")),
             th=_esc_cell(b.get("theme") or ""),
         )
         if has_anchor:
@@ -1442,24 +1444,38 @@ def render_binary_forecasts_block(forecast: Optional[Dict[str, Any]],
 
 
 def render_resolution_block(forecast: Optional[Dict[str, Any]],
-                            indicators: Optional[List[Dict[str, Any]]] = None) -> str:
+                            indicators: Optional[List[Dict[str, Any]]] = None,
+                            language: str = "Chinese") -> str:
     """NEXTSTEPS P2-2: 渲染一个**确定性**的「如何验证本预测」章节。
 
     逐情景列出可证伪的判定标准 + 来自 forecast_inputs 的带日期/触发型观察指标（并把指标绑定到
     它所判别的情景）。一个没有明确、可观测、带日期指标的预测无法被追踪或打分——这正是"利率可能
     上升" vs "若指标 X 于日期 Z 前超过 Y，则情景 A 确认"的区别。forecast 无情景 → ""（不追加）。
+
+    WAVE9：新增 language 参数（默认 "Chinese"，与历史输出逐字节一致）——此前标题/表头硬编码
+    中文，英文报告末尾出现整段中文章节。调用方（report_agent）传入报告输出语言。
     """
     if not isinstance(forecast, dict):
         return ""
     scenarios = forecast.get("scenarios") or []
     if not scenarios:
         return ""
-    lines = [
-        "## 如何验证本预测（判定标准与观察指标）",
-        "本节给出每个情景**可证伪、可追踪**的判定标准与到期/触发型观察指标，供日后核对与校准。",
-        "",
-        "### 各情景判定标准",
-    ]
+    zh = not str(language or "").strip().lower().startswith("en")
+    if zh:
+        lines = [
+            "## 如何验证本预测（判定标准与观察指标）",
+            "本节给出每个情景**可证伪、可追踪**的判定标准与到期/触发型观察指标，供日后核对与校准。",
+            "",
+            "### 各情景判定标准",
+        ]
+    else:
+        lines = [
+            "## How to Verify This Forecast (Resolution Criteria & Indicators)",
+            "This section lists **falsifiable, trackable** resolution criteria for each scenario, "
+            "plus dated/triggered indicators for future scoring and calibration.",
+            "",
+            "### Per-Scenario Resolution Criteria",
+        ]
     for s in scenarios:
         if not isinstance(s, dict):
             continue
@@ -1467,14 +1483,21 @@ def render_resolution_block(forecast: Optional[Dict[str, Any]],
             pct = f"{float(s.get('probability') or 0.0) * 100:.0f}%"
         except (TypeError, ValueError):
             pct = "—"
-        name = str(s.get("name") or "未命名情景")
-        crit = str(s.get("resolution_criteria") or "").strip() or "（缺明确判定标准——需补全）"
-        lines.append(f"- **[{pct}] {name}**：{crit}")
+        name = str(s.get("name") or ("未命名情景" if zh else "Unnamed scenario"))
+        crit = str(s.get("resolution_criteria") or "").strip() or (
+            "（缺明确判定标准——需补全）" if zh
+            else "(no explicit resolution criteria — needs completion)")
+        sep = "：" if zh else ": "
+        lines.append(f"- **[{pct}] {name}**{sep}{crit}")
     inds = [i for i in (indicators or []) if isinstance(i, dict)]
     if inds:
         lines.append("")
-        lines.append("### 观察指标（到期/触发即核对）")
-        lines.append("| 指标 | 到期/触发 | 关联情景 |")
+        if zh:
+            lines.append("### 观察指标（到期/触发即核对）")
+            lines.append("| 指标 | 到期/触发 | 关联情景 |")
+        else:
+            lines.append("### Indicators to Watch (check at expiry/trigger)")
+            lines.append("| Indicator | Due / trigger | Discriminates scenario |")
         lines.append("|---|---|---|")
         for i in inds[:20]:
             name = _esc_cell(i.get("indicator") or i.get("name") or i.get("metric") or "—")
@@ -1633,7 +1656,8 @@ _SIM_GROUNDING_RE = re.compile(
     re.I)
 
 
-def audit_citation_grounding(report_markdown: str) -> Dict[str, Any]:
+def audit_citation_grounding(report_markdown: str,
+                             index_map: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Heuristic, offline audit (I-3-1 + REPORT-6): of the lines making a quantitative
     claim, how many are *grounded* — i.e. carry a source citation ([S1]) OR a
     simulation/edge-grounding marker (agent quote, causal-edge render, sim/edge ref)?
@@ -1641,12 +1665,21 @@ def audit_citation_grounding(report_markdown: str) -> Dict[str, Any]:
     ``coverage`` now counts sim/edge grounding as valid; ``source_coverage`` keeps the
     strict source-only ratio as a separate metric so a regression in real-citation
     discipline is still visible. Fast guardrail, not a semantic verifier; deterministic.
+
+    WAVE10（无缝引用）：可选 ``index_map``（记号→来源，如 {"S12": {...}}）——传入时额外
+    报告 **resolved** 指标（记号必须能在注入索引里解析才算引用，悬空的 [S246] 不再充数）：
+    ``resolved_cited`` / ``resolved_coverage``。这是**独立观测指标**，发布门仍读 ``coverage``
+    （本波不移动门槛，先观测一轮再收紧）。缺省 None 时输出与历史逐字节一致。
     """
     lines = [ln.strip() for ln in (report_markdown or "").splitlines() if ln.strip()]
     quant_lines = [ln for ln in lines if _NUMBER_RE.search(ln) and not ln.startswith("#")]
     if not quant_lines:
-        return {"quantitative_claims": 0, "cited": 0, "coverage": 1.0,
-                "source_cited": 0, "source_coverage": 1.0, "unsupported_samples": []}
+        out = {"quantitative_claims": 0, "cited": 0, "coverage": 1.0,
+               "source_cited": 0, "source_coverage": 1.0, "unsupported_samples": []}
+        if index_map is not None:
+            out["resolved_cited"] = 0
+            out["resolved_coverage"] = 1.0
+        return out
 
     def _grounded(ln: str) -> bool:
         return bool(_CITATION_RE.search(ln) or _SIM_GROUNDING_RE.search(ln))
@@ -1654,11 +1687,82 @@ def audit_citation_grounding(report_markdown: str) -> Dict[str, Any]:
     grounded = [ln for ln in quant_lines if _grounded(ln)]
     source_cited = [ln for ln in quant_lines if _CITATION_RE.search(ln)]
     unsupported = [ln for ln in quant_lines if not _grounded(ln)]
-    return {
+    out = {
         "quantitative_claims": len(quant_lines),
         "cited": len(grounded),                                   # grounded (source or sim/edge)
         "coverage": round(len(grounded) / len(quant_lines), 3),
         "source_cited": len(source_cited),                        # source-only (separate metric)
         "source_coverage": round(len(source_cited) / len(quant_lines), 3),
         "unsupported_samples": [ln[:200] for ln in unsupported[:8]],
+    }
+    if index_map is not None:
+        resolvable = {_norm_citation_tag(k) for k in index_map}
+
+        def _resolves(ln: str) -> bool:
+            return any(_norm_citation_tag(m.group(1)) in resolvable
+                       for m in _CITATION_TAG_RE.finditer(ln))
+
+        resolved = [ln for ln in quant_lines if _resolves(ln)]
+        out["resolved_cited"] = len(resolved)
+        out["resolved_coverage"] = round(len(resolved) / len(quant_lines), 3)
+    return out
+
+
+# WAVE10（无缝引用）：带捕获组的引用记号（位置式 S12 与遗留分层 S1-a 均接受，方/全角括号）。
+_CITATION_TAG_RE = re.compile(r"[\[【]\s*(S\d+(?:-[A-Za-z])?)\s*[\]】]", re.I)
+
+
+def _norm_citation_tag(tag: str) -> str:
+    """把记号归一为规范键：去括号/空白、S 大写、分层后缀小写（"[ s12 ]"→"S12"）。"""
+    t = re.sub(r"[\[【\]】\s]", "", str(tag or ""))
+    if not t:
+        return ""
+    t = "S" + t[1:].lower() if t[:1] in ("s", "S") else t
+    return t
+
+
+def validate_citation_markers(report_markdown: str,
+                              index_map: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """WAVE10（无缝引用）：正文引用记号 vs 注入索引的确定性完整性校验。
+
+    围栏感知（``` / ~~~ 内的记号不计——代码/mermaid 块里的 [S1] 是字面内容），按首现顺序
+    采集全部 [S<n>]（含遗留 [S1-a]/【S1】变体，归一后计数）。返回：
+      * ``total_markers`` / ``distinct_tags`` —— 出现总数与去重数；
+      * ``order`` —— 记号首现顺序（引用最终化按此给参考来源编号）；
+      * ``counts`` —— {记号: 出现次数}；
+      * ``dangling`` —— 在 ``index_map`` 中无法解析的记号（[S246] 型幻觉编号）；
+      * ``uncited`` —— 索引里从未被正文引用的记号（观测「索引膨胀」）。
+    ``index_map`` 为 None 时 dangling/uncited 恒为空（仅做记号盘点）。纯函数、无副作用。
+    """
+    order: List[str] = []
+    counts: Dict[str, int] = {}
+    in_fence = False
+    for ln in (report_markdown or "").split("\n"):
+        s = ln.lstrip()
+        if s.startswith("```") or s.startswith("~~~"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        for m in _CITATION_TAG_RE.finditer(ln):
+            tag = _norm_citation_tag(m.group(1))
+            if not tag:
+                continue
+            if tag not in counts:
+                order.append(tag)
+            counts[tag] = counts.get(tag, 0) + 1
+    dangling: List[str] = []
+    uncited: List[str] = []
+    if index_map is not None:
+        resolvable = {_norm_citation_tag(k) for k in index_map if _norm_citation_tag(k)}
+        dangling = [t for t in order if t not in resolvable]
+        uncited = sorted(resolvable - set(order),
+                         key=lambda t: (len(t), t))  # S2 < S10 的自然序
+    return {
+        "total_markers": sum(counts.values()),
+        "distinct_tags": len(order),
+        "order": order,
+        "counts": counts,
+        "dangling": dangling,
+        "uncited": uncited,
     }

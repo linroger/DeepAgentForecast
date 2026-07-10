@@ -34,7 +34,11 @@ def sim_env(tmp_path, monkeypatch):
     monkeypatch.setattr(SimulationRunner, "_run_states", {})
     monkeypatch.setattr(SimulationRunner, "_run_state_last_save", {})
     monkeypatch.setattr(SimulationRunner, "_processes", {})
+    monkeypatch.setattr(SimulationRunner, "_action_queues", {})
+    monkeypatch.setattr(SimulationRunner, "_stdout_files", {})
+    monkeypatch.setattr(SimulationRunner, "_stderr_files", {})
     monkeypatch.setattr(SimulationRunner, "_graph_memory_enabled", {})
+    monkeypatch.setattr(SimulationRunner, "_cleanup_done", False)
     return tmp_path
 
 
@@ -331,13 +335,91 @@ def test_cleanup_simulation_logs_removes_derived_artifacts(sim_env):
 # ---------------------------------------------------------------- RUN-17
 class _DummyProc:
     pid = 424242
-    returncode = 0
+
+    def __init__(self, returncode=0):
+        self.returncode = returncode
 
     def poll(self):
-        return 0
+        return self.returncode
 
 
-def test_monitor_flags_partial_completion(sim_env):
+def test_action_log_publishes_completion_after_all_platform_evidence(sim_env):
+    sim_id = "sim_run17_evidence"
+    sim_dir = sim_env / sim_id
+    state = SimulationRunState(
+        simulation_id=sim_id,
+        runner_status=RunnerStatus.RUNNING,
+        twitter_enabled=True,
+        reddit_enabled=True,
+    )
+    SimulationRunner._save_run_state(state)
+    _write_actions(sim_dir, "twitter", [
+        {"event_type": "simulation_end", "total_rounds": 2, "total_actions": 3},
+    ])
+    _write_actions(sim_dir, "reddit", [
+        {"event_type": "simulation_end", "total_rounds": 2, "total_actions": 4},
+    ])
+
+    SimulationRunner._read_action_log(
+        str(sim_dir / "twitter" / "actions.jsonl"), 0, state, "twitter")
+    SimulationRunner._read_action_log(
+        str(sim_dir / "reddit" / "actions.jsonl"), 0, state, "reddit")
+
+    assert state.twitter_completed is True
+    assert state.reddit_completed is True
+    assert state.runner_status == RunnerStatus.COMPLETED
+    assert state.completed_at is not None
+
+
+def test_final_completion_event_during_stop_converges_to_stopped(sim_env):
+    """A final buffered event may be recorded after stop intent, but cannot cancel the stop."""
+    sim_id = "sim_run17_final_event_during_stop"
+    sim_dir = sim_env / sim_id
+    state = SimulationRunState(
+        simulation_id=sim_id,
+        runner_status=RunnerStatus.STOPPING,
+        twitter_enabled=True,
+        twitter_running=True,
+    )
+    SimulationRunner._save_run_state(state)
+    _write_actions(sim_dir, "twitter", [
+        {"event_type": "simulation_end", "total_rounds": 2, "total_actions": 3},
+    ])
+    SimulationRunner._processes[sim_id] = _DummyProc(returncode=0)
+
+    SimulationRunner._monitor_simulation(sim_id)
+
+    final = SimulationRunner.get_run_state(sim_id)
+    assert final.twitter_completed is True
+    assert final.runner_status == RunnerStatus.STOPPED
+    assert final.completed_at is not None
+
+
+def test_final_completion_event_cannot_overwrite_failed_result(sim_env):
+    """Late log flushes preserve failure truth and its diagnostic details."""
+    sim_id = "sim_run17_final_event_after_failure"
+    sim_dir = sim_env / sim_id
+    state = SimulationRunState(
+        simulation_id=sim_id,
+        runner_status=RunnerStatus.FAILED,
+        twitter_enabled=True,
+        error="provider failed before shutdown",
+    )
+    SimulationRunner._save_run_state(state)
+    _write_actions(sim_dir, "twitter", [
+        {"event_type": "simulation_end", "total_rounds": 2, "total_actions": 3},
+    ])
+    SimulationRunner._processes[sim_id] = _DummyProc(returncode=0)
+
+    SimulationRunner._monitor_simulation(sim_id)
+
+    final = SimulationRunner.get_run_state(sim_id)
+    assert final.twitter_completed is True
+    assert final.runner_status == RunnerStatus.FAILED
+    assert final.error == "provider failed before shutdown"
+
+
+def test_monitor_rejects_exit_zero_without_all_platform_completion(sim_env):
     sim_id = "sim_run17"
     state = SimulationRunState(
         simulation_id=sim_id,
@@ -348,13 +430,19 @@ def test_monitor_flags_partial_completion(sim_env):
         reddit_completed=False,  # Reddit 从未发出 simulation_end
     )
     SimulationRunner._save_run_state(state)
+    (sim_env / sim_id / "simulation.log").write_text(
+        "磁盘预检失败，拒绝启动模拟: 可用磁盘 1.61 GB 低于阈值 2.0 GB\n",
+        encoding="utf-8",
+    )
     SimulationRunner._processes[sim_id] = _DummyProc()
 
     SimulationRunner._monitor_simulation(sim_id)
 
     final = SimulationRunner.get_run_state(sim_id)
-    assert final.runner_status == RunnerStatus.COMPLETED
+    assert final.runner_status == RunnerStatus.FAILED
     assert final.error and "simulation_end" in final.error
+    assert "磁盘预检失败" in final.error
+    assert final.completed_at is None
     # RUN-11: 进程退出后环境必须标记 stopped
     assert SimulationRunner.check_env_alive(sim_id) is False
 
@@ -376,6 +464,193 @@ def test_monitor_no_error_when_all_platforms_completed(sim_env):
     final = SimulationRunner.get_run_state(sim_id)
     assert final.runner_status == RunnerStatus.COMPLETED
     assert final.error is None
+
+
+def test_monitor_completes_valid_dual_platform_exit_zero(sim_env):
+    sim_id = "sim_run17_dual_ok"
+    state = SimulationRunState(
+        simulation_id=sim_id,
+        runner_status=RunnerStatus.RUNNING,
+        twitter_enabled=True,
+        reddit_enabled=True,
+        twitter_completed=True,
+        reddit_completed=True,
+    )
+    SimulationRunner._save_run_state(state)
+    SimulationRunner._processes[sim_id] = _DummyProc(returncode=0)
+
+    SimulationRunner._monitor_simulation(sim_id)
+
+    final = SimulationRunner.get_run_state(sim_id)
+    assert final.runner_status == RunnerStatus.COMPLETED
+    assert final.completed_at is not None
+    assert final.error is None
+
+
+def test_monitor_nonzero_exit_is_failed_without_completion_timestamp(sim_env):
+    sim_id = "sim_run17_nonzero_incomplete"
+    state = SimulationRunState(
+        simulation_id=sim_id,
+        runner_status=RunnerStatus.RUNNING,
+        twitter_enabled=True,
+        reddit_enabled=True,
+        twitter_completed=False,
+        reddit_completed=False,
+    )
+    SimulationRunner._save_run_state(state)
+    SimulationRunner._processes[sim_id] = _DummyProc(returncode=7)
+
+    SimulationRunner._monitor_simulation(sim_id)
+
+    final = SimulationRunner.get_run_state(sim_id)
+    assert final.runner_status == RunnerStatus.FAILED
+    assert final.completed_at is None
+    assert final.error and "退出码: 7" in final.error
+
+
+def test_monitor_preserves_completed_result_when_command_process_exits_nonzero(sim_env):
+    """Post-result command-mode failure affects interviews, not the completed simulation result."""
+    sim_id = "sim_run17_nonzero_after_completion"
+    completed_at = "2026-07-10T12:00:00"
+    state = SimulationRunState(
+        simulation_id=sim_id,
+        runner_status=RunnerStatus.COMPLETED,
+        twitter_enabled=True,
+        reddit_enabled=True,
+        twitter_completed=True,
+        reddit_completed=True,
+        completed_at=completed_at,
+    )
+    SimulationRunner._save_run_state(state)
+    SimulationRunner._processes[sim_id] = _DummyProc(returncode=7)
+
+    SimulationRunner._monitor_simulation(sim_id)
+
+    final = SimulationRunner.get_run_state(sim_id)
+    assert final.runner_status == RunnerStatus.COMPLETED
+    assert final.completed_at == completed_at
+    assert final.error is None
+
+
+def test_read_log_tail_is_bounded_and_keeps_last_failure(sim_env):
+    path = sim_env / "large.log"
+    path.write_bytes((b"x" * 100_000) + "\n磁盘预检失败\n".encode("utf-8"))
+
+    tail = SimulationRunner._read_log_tail(str(path), max_bytes=256)
+
+    assert "磁盘预检失败" in tail
+    assert len(tail.encode("utf-8")) <= 260  # mid-codepoint replacement may add a few bytes
+
+
+# -------------------------------------------------------------- LOOP-002
+def _install_cleanup_spies(monkeypatch):
+    calls = {"terminated": [], "synced": [], "env_stopped": []}
+
+    def fake_terminate(cls, process, simulation_id, timeout=10):
+        calls["terminated"].append((simulation_id, timeout))
+        process.returncode = -15
+
+    def fake_sync(cls, simulation_id, status):
+        calls["synced"].append((simulation_id, status))
+
+    def fake_mark_env_stopped(cls, simulation_id):
+        calls["env_stopped"].append(simulation_id)
+
+    monkeypatch.setattr(
+        SimulationRunner, "_terminate_process", classmethod(fake_terminate))
+    monkeypatch.setattr(
+        SimulationRunner, "_sync_state_json_status", classmethod(fake_sync))
+    monkeypatch.setattr(
+        SimulationRunner, "_mark_env_stopped", classmethod(fake_mark_env_stopped))
+    return calls
+
+
+def _replay_monitor_after_cleanup(simulation_id, process):
+    """Replay the production ordering where the monitor observes cleanup's process exit last."""
+    SimulationRunner._processes[simulation_id] = process
+    SimulationRunner._monitor_simulation(simulation_id)
+
+
+def test_shutdown_cleanup_preserves_completed_simulation_result(sim_env, monkeypatch):
+    """Killing the post-simulation interview process must not erase completion truth."""
+    sim_id = "sim_loop002_completed"
+    completed_at = "2026-07-10T12:00:00"
+    state = SimulationRunState(
+        simulation_id=sim_id,
+        runner_status=RunnerStatus.COMPLETED,
+        twitter_enabled=True,
+        twitter_completed=True,
+        completed_at=completed_at,
+    )
+    SimulationRunner._save_run_state(state)
+    process = _DummyProc(returncode=None)
+    SimulationRunner._processes[sim_id] = process
+    calls = _install_cleanup_spies(monkeypatch)
+
+    SimulationRunner.cleanup_all_simulations()
+    _replay_monitor_after_cleanup(sim_id, process)
+
+    final = SimulationRunner.get_run_state(sim_id)
+    assert final.runner_status == RunnerStatus.COMPLETED
+    assert final.completed_at == completed_at
+    assert final.error is None
+    assert calls["terminated"] == [(sim_id, 5)]
+    assert calls["synced"] == [(sim_id, "completed")]
+    assert calls["env_stopped"] == [sim_id, sim_id]
+
+
+def test_shutdown_cleanup_preserves_failed_simulation_result(sim_env, monkeypatch):
+    """Cleanup must not hide an existing failure behind a later stopped status."""
+    sim_id = "sim_loop002_failed"
+    state = SimulationRunState(
+        simulation_id=sim_id,
+        runner_status=RunnerStatus.FAILED,
+        twitter_enabled=True,
+        twitter_running=True,
+        error="provider failed during simulation",
+    )
+    SimulationRunner._save_run_state(state)
+    process = _DummyProc(returncode=None)
+    SimulationRunner._processes[sim_id] = process
+    calls = _install_cleanup_spies(monkeypatch)
+
+    SimulationRunner.cleanup_all_simulations()
+    _replay_monitor_after_cleanup(sim_id, process)
+
+    final = SimulationRunner.get_run_state(sim_id)
+    assert final.runner_status == RunnerStatus.FAILED
+    assert final.completed_at is None
+    assert final.error == "provider failed during simulation"
+    assert final.twitter_running is False
+    assert calls["synced"] == [(sim_id, "failed")]
+    assert calls["env_stopped"] == [sim_id, sim_id]
+
+
+def test_shutdown_cleanup_marks_active_simulation_stopped(sim_env, monkeypatch):
+    """Cleanup still records a truthful operator stop for an unfinished simulation."""
+    sim_id = "sim_loop002_running"
+    state = SimulationRunState(
+        simulation_id=sim_id,
+        runner_status=RunnerStatus.RUNNING,
+        twitter_enabled=True,
+        twitter_running=True,
+    )
+    SimulationRunner._save_run_state(state)
+    process = _DummyProc(returncode=None)
+    SimulationRunner._processes[sim_id] = process
+    calls = _install_cleanup_spies(monkeypatch)
+
+    SimulationRunner.cleanup_all_simulations()
+    _replay_monitor_after_cleanup(sim_id, process)
+
+    final = SimulationRunner.get_run_state(sim_id)
+    assert final.runner_status == RunnerStatus.STOPPED
+    assert final.completed_at is not None
+    assert final.error == "服务器关闭，模拟被终止"
+    assert final.twitter_running is False
+    assert calls["terminated"] == [(sim_id, 5)]
+    assert calls["synced"] == [(sim_id, "stopped")]
+    assert calls["env_stopped"] == [sim_id, sim_id]
 
 
 # ---------------------------------------------------------------- RUN-7 (runner side)

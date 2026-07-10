@@ -248,8 +248,8 @@ const selectOntologyItem = (item, type) => {
 }
 
 const graphStats = computed(() => {
-  const nodes = props.graphData?.node_count || props.graphData?.nodes?.length || 0
-  const edges = props.graphData?.edge_count || props.graphData?.edges?.length || 0
+  const nodes = props.graphData?.total_node_count || props.graphData?.node_count || props.graphData?.nodes?.length || 0
+  const edges = props.graphData?.total_edge_count || props.graphData?.edge_count || props.graphData?.edges?.length || 0
   const types = props.projectData?.ontology?.entity_types?.length || 0
   return { nodes, edges, types }
 })
