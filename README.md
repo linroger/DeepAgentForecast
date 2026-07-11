@@ -2,6 +2,10 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/linroger/DeepAgentForecast)
+
+> 📖 **Documentation:** [DeepWiki — interactive AI-generated docs](https://deepwiki.com/linroger/DeepAgentForecast) · [`DRF_ARCHITECTURE.md`](DRF_ARCHITECTURE.md) — the full code-grounded system map (every stage, service, and cross-stage contract with `file:line` references).
+
 > **Type a single question. Get an interactive forecast.**
 > DeepAgentForecast auto-researches the web, builds a high-fidelity parallel world, runs a multi-agent population simulation, and produces an interactive forecast report — all from one prompt.
 
@@ -73,7 +77,7 @@ Given one natural-language prediction question (for example, *"Will product X re
 
 1. **Researches the web autonomously at scale** — **three multi-angle research tracks** run **in parallel** (base-evidence · base-rates & analogs · incentives / contrarian / markets), and each track runs the **dual-track** DeerFlow workflow **concurrently**: a broad *deep-research* pass that writes an evidence-graded dossier, and an *actor-ontology* pass that profiles the real key actors in depth — their roles, values, beliefs, incentives, resources, and their directed, typed, **valenced** relationships — while demoting mere reporters/outlets/sources to context. Under the hood each pass runs a **staged multi-pass protocol**, an **8-wide per-KIQ/per-actor fan-out** plus harness **sub-agent** agentic search, a **research judge→refine loop**, universal **S1–S4 source tiering** with triangulation top-up, and a **multi-part parallel synthesis** that assembles **15–25K-word dossiers**. Live prediction-market priors are pulled from **Polymarket** and injected as calibration anchors.
 2. **Builds a parallel world** — the research is distilled into a temporal knowledge graph with a **tiered, behaviorally-rich ontology**, and a digital persona is generated for each **key actor** (decision-makers and stakeholders), ranked by salience rather than raw connectivity.
-3. **Simulates a population** — hundreds of LLM personas interact across a simulated Twitter and Reddit for a configurable number of rounds, producing emergent social dynamics around the question; an optional **multi-seed ensemble** re-runs the simulation + report and aggregates the probabilities.
+3. **Simulates the future unfolding in calendar time** — the forecast **horizon is extracted from your question** ("by 2030", "next 18 months", "2035年底" …) and the span from the research as-of date to that horizon is divided into rounds of **one even calendar unit each** (day / week / half-month / month / quarter / half-year), so the round count **scales with the horizon** (a 2035 question gets more rounds than a 2029 one) and the unit always fits the question — *"by 2030"* → 18 quarterly rounds, *"3 weeks"* → 21 daily rounds. Each round, the LLM personas act as their real-world actors would **over that entire period** — decisions, announcements, alliances, strategic patience — under a per-round **world clock**; researched real-world events fire in the round containing their actual date, and a **world state** evolves between rounds (calendar-scaled inertia + a base-rate entropy floor), feeding a qualitative "what changed last period" digest back to the agents. An optional **multi-seed ensemble** re-runs the simulation + report and aggregates the probabilities.
 4. **Forecasts and reports** — a report agent retrieves from both the knowledge graph and the simulation and writes an interactive, sectioned forecast report with **embedded charts** (mermaid + matplotlib), **per-forecast Polymarket anchoring**, and one-click **PDF export**.
 
 Everything is observable in real time: a live research console, the rendered dossier, the knowledge graph, the simulated social feed, and the final forecast all live in one dashboard.
@@ -127,7 +131,7 @@ flowchart LR
     G --> PR["4. prepare<br/>digital personas +<br/>simulation config"]
 
     subgraph OASIS["MiroFish / OASIS"]
-        RUN["5. run<br/>dual-platform<br/>Twitter + Reddit<br/>multi-agent sim, N rounds"]
+        RUN["5. run<br/>dual-platform Twitter + Reddit<br/>calendar-time multi-agent sim<br/>one unit per round → horizon"]
     end
 
     PR --> RUN
@@ -149,8 +153,8 @@ flowchart LR
    - `sources.json` · `prediction_requirement.txt` · `timeline.json` · `meta.json` · `research_progress.log` · `market_price_history.json` (90-day Polymarket price series for anchored markets)
 2. **ontology** — an LLM derives **entity types + edge types** from the dossiers and the prediction question, tagging each entity with an **archetype + simulation tier** (so reporters, outlets, and abstract concepts become graph *context* rather than actors) and each edge with a **family + valence** (so allies, rivals, suppliers, and backers are distinguished, not collapsed together).
 3. **graph** — both dossiers are **chunked and ingested** into a local Graphiti temporal knowledge graph (GraphRAG) on an embedded FalkorDB; entities and relations are extracted locally via your configured `LLM_PROVIDER`, and vector embeddings are computed locally by a sentence-transformers model — no cloud service or API key involved.
-4. **prepare** — **digital personas** are generated for the **key actors only** (tier-1 decision-makers and tier-2 stakeholders — minor entities stay as graph context), ranked by **salience** rather than raw graph degree, each carrying its **behavioral DNA** (values, beliefs, incentives, resources) and its researched ally/rival/supplier/backer network; an "environment agent" sets the rounds and timing.
-5. **run** — OASIS runs a **dual-platform (Twitter + Reddit)** multi-agent simulation for *N* rounds; personas post, comment, and like, and social dynamics emerge.
+4. **prepare** — **digital personas** are generated for the **key actors only** (tier-1 decision-makers and tier-2 stakeholders — minor entities stay as graph context), ranked by **salience** rather than raw graph degree, each carrying its **behavioral DNA** (values, beliefs, incentives, resources) and its researched ally/rival/supplier/backer network; the **simulation timeline is derived deterministically** from the question's forecast horizon (unit + round count + dated round boundaries, written as a versioned `temporal_config`).
+5. **run** — OASIS runs a **dual-platform (Twitter + Reddit)** multi-agent simulation in **calendar time**: each round is one even calendar unit (day / week / half-month / month / quarter / half-year) between the research as-of date and the extracted horizon — *"by 2030"* → 18 quarterly rounds, *"by 2035"* → 19 half-year rounds. Agents act under a per-round **world clock** as their actors would over that period (top-cast **principal** actors act every round), dated real-world events fire in their true rounds, and an in-band **world-state probability trajectory** evolves round-by-round to the horizon (numeric shares are hidden from agents to prevent herding). The legacy news-cycle mode remains available via `SIM_TEMPORAL_MODE=hours`.
 6. **report** — the **ReportAgent** (a ReAct loop with the `insight_forge` tool) retrieves from the graph + simulation and writes a **sectioned forecast report**: a Bridgewater-style 3-part skeleton (binary-forecast table · framework synthesis · appendix), **per-forecast Polymarket anchoring** with a 10pp-divergence rationale rule, a deterministic **visualization layer** (mermaid + matplotlib charts embedded in the report), and one-click **PDF export**. An optional **multi-seed ensemble** re-runs the simulation + report and aggregates probabilities.
 
 ---
@@ -165,7 +169,8 @@ flowchart LR
 - **Skills on the DeerFlow harness.** Four skills — `deep-research`, `actor-ontology-research`, `prediction-markets`, and `forecast-visuals` — are deployed onto the DeerFlow 2.0 super-agent harness and referenced by the agent prompts.
 - **Research-grounded personas.** The structured actor dossier (`actors.json`: role, stance, influence, memory per real-world actor) seeds the ontology, **the agent personas, the per-agent stance/influence config, and the simulation's initial posts** — agents start from researched facts, not LLM guesses.
 - **Temporal knowledge graph (GraphRAG).** The research is ingested into a **local** Graphiti knowledge graph (embedded FalkorDB, no API key), where entities and relations are extracted locally — via your configured `LLM_PROVIDER` plus local sentence-transformers embeddings — and made queryable.
-- **Multi-agent population simulation.** Hundreds of LLM personas interact on a simulated Twitter + Reddit; emergent dynamics inform the forecast.
+- **Calendar-temporal simulation (the future in real time units).** The forecast horizon is auto-extracted from the prompt (explicit dates, "end of 2030", "next 18 months", bare years — EN + 中文), and a deterministic timeline module divides the as-of→horizon span into rounds of one even calendar unit (day / week / half-month / month / quarter / half-year), targeting ~16 rounds: more distant horizons get more rounds, and an explicit round cap **coarsens the unit instead of truncating the forecast period**. Each round carries a world clock, dated event injection, principal-actor cadence, and an evolving world-state trajectory with a base-rate entropy floor.
+- **Multi-agent population simulation.** Hundreds of LLM personas interact on a simulated Twitter + Reddit; each round is one calendar unit of simulated time, and emergent dynamics inform the forecast.
 - **Tool-augmented forecast synthesis.** A ReAct ReportAgent retrieves across both the graph and the simulation before writing.
 - **Single combined dashboard.** Live log, dossier, knowledge graph, simulation feed, and forecast — all in one view with a sticky 6-stage timeline.
 - **Runtime-switchable LLM providers.** Switch between local CLIs and hosted APIs from the Settings menu; the switch applies to new runs. A built-in **Test connection** button verifies an API key (or a local CLI) in one click before you commit to it.
@@ -322,6 +327,8 @@ Everything has a degrade-safe default, so a bare `.env` (or none) already runs t
 | `REPORT_VISUALIZER` | `true` | Render mermaid + matplotlib charts into `reports/{id}/charts/` + `viz_manifest.json`. |
 | `REPORT_PDF_EXPORT` | `true` | Enable the `/pdf` endpoint (pandoc + XeLaTeX, CJK-safe). |
 | `REPORT_OUTPUT_LANGUAGE` | *(empty → auto-detect)* | Force the report's language (e.g. `English` / `Chinese`); otherwise detected from the brief. |
+| `SIM_TEMPORAL_MODE` | `calendar` | Calendar-temporal simulation: each round = one even calendar unit between the research as-of date and the prompt's forecast horizon; `hours` restores the legacy news-cycle mode. |
+| `SIM_CALENDAR_TARGET_MAX_ROUNDS` | `36` | Soft round budget for calendar unit selection (~16 rounds targeted, hard cap 48; an explicit `max_rounds` coarsens the unit, never truncates the horizon). |
 | `N_FORECAST_SEEDS` | `3` | Multi-seed ensemble: re-run sim + report under N seeds and pool the probabilities (`1` = single run). |
 | `ADAPTIVE_CONTEXT` | `true` | Budget context slices to the provider's context window (large windows carry full prior context). |
 | `ACTOR_CAST_MAX` | `20` | Hard cap on main actors (decision-makers only), end-to-end through research → ontology → personas → simulation. |
