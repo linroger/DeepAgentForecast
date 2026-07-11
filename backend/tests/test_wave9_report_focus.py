@@ -21,6 +21,7 @@ from app.config import Config  # noqa: E402
 from app.services import report_lint as rl  # noqa: E402
 from app.services.forecast_extractor import (  # noqa: E402
     render_binary_forecasts_block, render_resolution_block,
+    upsert_binary_forecasts_block,
 )
 from app.services.report_agent import (  # noqa: E402
     ReportAgent, ReportOutline, ReportSection, _looks_truncated,
@@ -53,13 +54,13 @@ def test_lint_legacy_sim_labels_rewritten_en_and_zh():
     out, n = rl.rewrite_sim_labels(md, "English")
     assert n == 2
     assert "Simulation Agent" not in out and "模拟代理人" not in out
-    assert "Analytical perspective — Hyperscalers (scenario panel):" in out
-    assert "情景推演专家视角——「台积电」：" in out
+    assert "Evidence-based assessment — Hyperscalers:" in out
+    assert "证据分析——「台积电」：" in out
 
 
 def test_lint_dangling_attribution_line_removed():
     md = (
-        "Analytical perspective — TSMC (scenario panel) pushes back with evidence:\n\n"
+        "Evidence-based assessment — TSMC pushes back with evidence:\n\n"
         "## Next Section\n\nNormal prose continues here.\n"
     )
     out, n = rl.remove_dangling_attributions(md)
@@ -121,6 +122,277 @@ def test_lint_leakage_sentence_strip():
     assert "pricing power" in out and "[S2]" in out
 
 
+def test_final_lint_segments_chinese_without_spaces_and_preserves_citations():
+    md = (
+        "需求韧性仍强[S1]。"
+        "模拟中，第 3 轮产生 48 次动作。"
+        "监管约束仍是关键【S2】。"
+    )
+
+    out, rep = rl.lint_report(md, "Chinese", mode="final")
+
+    assert "需求韧性仍强[S1]。" in out
+    assert "监管约束仍是关键[S2]。" in out
+    assert "第 3 轮" not in out and "48 次动作" not in out
+    assert rep["simulation_mechanics"]["sentences_removed"] == 1
+
+
+def test_final_lint_keeps_real_world_consensus_and_revealed_preference():
+    md = (
+        "Customer purchasing data provide a revealed preference signal. "
+        "Consensus formation among regulators is advancing [S4].\n"
+        "市场价格反映消费者的揭示性偏好。监管者正在形成共识【S5】。"
+    )
+
+    out, rep = rl.lint_report(md, "English", mode="final")
+
+    assert "revealed preference signal" in out
+    assert "Consensus formation among regulators" in out
+    assert "消费者的揭示性偏好" in out and "监管者正在形成共识" in out
+    assert rep["simulation_mechanics"]["sentences_removed"] == 0
+
+
+def test_final_lint_removes_consensus_or_preference_only_with_simulation_context():
+    md = (
+        "The simulated agents exhibited revealed preferences in round 4. "
+        "Demand remains resilient [S1].\n"
+        "智能体行为信号被用于推断共识形成。供应仍然受限【S2】。"
+    )
+
+    out, rep = rl.lint_report(md, "English", mode="final")
+
+    assert "revealed preferences" not in out and "round 4" not in out
+    assert "智能体行为信号" not in out and "共识形成" not in out
+    assert "Demand remains resilient [S1]." in out
+    assert "供应仍然受限[S2]。" in out
+    assert rep["simulation_mechanics"]["sentences_removed"] == 2
+
+
+def test_final_lint_preserves_english_sentence_spacing():
+    md = "Demand remains resilient [S1]. Supply remains constrained [S2]."
+
+    out, rep = rl.lint_report(md, "English", mode="final")
+
+    assert out == md
+    assert ". Supply" in out
+    assert rep["simulation_mechanics"]["sentences_removed"] == 0
+
+
+def test_final_lint_repairs_legacy_sentence_joins_without_touching_initialisms():
+    md = "The cycle reached its sharpest standoff in history.SK Hynix led the turn [S1]. U.S. policy held."
+
+    out, rep = rl.lint_report(md, "English", mode="final")
+
+    assert "history. SK Hynix" in out
+    assert "U.S. policy" in out
+    assert rep["sentence_spaces_repaired"] == 1
+
+
+def test_final_lint_rewrites_real_legacy_chinese_simulation_forms():
+    md = (
+        "需求增长了12%[S1]。"
+        "仿真以清晰的细节捕捉到了产能爬坡至每月14万片[S2]。"
+        "仿真图记录供应约束持续到2028年[S3]。"
+        "仿真Agent「SK Hynix」演绎/推理：HBM份额将保持在50%以上[S4]。"
+        "模拟证据显示出口限制仍是约束[S5]。"
+        "模拟数据显示需求仍在增长[S6]。"
+    )
+
+    out, rep = rl.lint_report(md, "Chinese", mode="final")
+
+    for residue in ("仿真", "仿真Agent", "模拟证据", "模拟数据"):
+        assert residue not in out
+    for evidence in ("12%", "14万片", "2028年", "50%", "[S4]", "[S6]"):
+        assert evidence in out
+    assert "证据分析——「SK Hynix」：" in out
+    assert rep["leakage_flags"] == 0
+
+
+def test_final_lint_rewrites_role_qualified_legacy_agent_labels():
+    md = (
+        "仿真Agent「China」（作为产业政策制定者）演绎/推理："
+        "前沿逻辑制程份额将在2030年前增长[S1]。"
+        "仿真Agent「China」（中方视角）演绎/推理："
+        "出口管制仍将持续[S2]。"
+        "仿真Agent「Intel Foundry」的表述则更为直接："
+        "外部客户收入将在2027年超过20亿美元[S3]。"
+    )
+
+    out, rep = rl.lint_report(md, "Chinese", mode="final")
+
+    assert "仿真Agent" not in out and "演绎/推理" not in out
+    assert "证据分析——「China」（作为产业政策制定者）：" in out
+    assert "证据分析——「China」（中方视角）：" in out
+    assert "「Intel Foundry」的证据分析则更为直接：" in out
+    assert "2030年" in out and "[S1]" in out and "[S2]" in out and "[S3]" in out
+    assert rep["legacy_sim_labels"] == 3 and rep["leakage_flags"] == 0
+
+
+def test_final_lint_preserves_legitimate_simulation_industry_terms():
+    md = (
+        "工业仿真软件市场规模将在2030年超过1000亿元[S1]。"
+        "汽车碰撞仿真需求将随数字孪生部署增长[S2]。"
+        "芯片仿真工具收入预计在2028年前翻倍[S3]。"
+    )
+
+    out, rep = rl.lint_report(md, "Chinese", mode="final")
+
+    assert out == md
+    assert "工业仿真软件" in out and "汽车碰撞仿真" in out
+    assert "芯片仿真工具" in out
+    assert rep["simulation_mechanics"]["rewritten"] == 0
+    assert rep["simulation_mechanics"]["sentences_removed"] == 0
+
+
+def test_final_lint_preserves_agentic_ai_subject_matter():
+    md = (
+        "AI agent behavior in enterprise workflows will change by 2030 [S1]. "
+        "The most active agents in enterprise workflows handle support tickets [S2]. "
+        "AI智能体市场收入将在2030年超过1000亿美元[S3]。"
+        "AI智能体网络协议采用率将在2030年超过50%[S4]。"
+        "智能体动作规划软件收入将在2028年前翻倍[S5]。"
+        "智能体模拟环境市场将随机器人训练需求增长[S6]。"
+    )
+
+    out, rep = rl.lint_report(md, "English", mode="final")
+
+    assert "AI agent behavior" in out
+    assert "The most active agents in enterprise workflows" in out
+    assert "AI智能体市场收入" in out and "AI智能体网络协议" in out
+    assert "智能体动作规划软件" in out and "智能体模拟环境市场" in out
+    assert rep["simulation_mechanics"]["sentences_removed"] == 0
+
+
+def test_final_lint_reframes_outcomes_and_removes_simulation_mechanics():
+    md = (
+        "# Simulation Dynamics\n\n"
+        "The simulation suggests a 62% chance of approval by 2028 [S2].\n\n"
+        "Round 3 produced 48 actions and the most active agents amplified posts.\n\n"
+        "| Signal | Reading |\n|---|---|\n"
+        "| CREATE_POST | 54 actions |\n"
+    )
+    out, rep = rl.lint_report(md, "English", mode="final")
+    assert "Forecast Drivers and Outcome Pathways" in out
+    assert "The evidence indicates a 62% chance" in out
+    assert "[S2]" in out
+    assert "Round 3" not in out and "CREATE_POST" not in out and "54 actions" not in out
+    assert out.count("|") == md.count("|")
+    assert rep["simulation_mechanics"]["sentences_removed"] >= 1
+    assert rep["simulation_mechanics"]["table_cells_redacted"] >= 1
+    assert rep["leakage_flags"] == 0
+    assert rep["outcome_focus_ok"] is True
+
+
+def test_final_lint_removes_exact_harness_process_residue():
+    md = (
+        "# Forecast\n\n"
+        "The harness grouped stakeholders into three agent clusters. "
+        "The simulated environment then emitted world-state outputs. "
+        "A simulation-derived score drove the final recommendation.\n\n"
+        "The observable election outcome remains tied to turnout and district margins [S1].\n"
+    )
+
+    out, rep = rl.lint_report(md, "English", mode="final")
+
+    for residue in (
+        "harness", "agent cluster", "simulated environment",
+        "world-state output", "simulation-derived",
+    ):
+        assert residue not in out.lower()
+    assert "observable election outcome" in out
+    assert rep["simulation_mechanics"]["sentences_removed"] >= 3
+    assert rep["leakage_flags"] == 0
+
+
+def test_final_lint_removes_internal_telemetry_but_keeps_following_visuals():
+    md = (
+        "# Forecast\n\nUseful analysis.\n\n"
+        "## Run Telemetry\n\n| Stage | Input tok |\n|---|---:|\n| research | 78000000 |\n\n"
+        "## Visual Annex\n\n![Chart](charts/outcomes.png)\n"
+    )
+    out, rep = rl.lint_report(md, "English", mode="final")
+    assert "Run Telemetry" not in out
+    assert "78000000" not in out
+    assert "## Visual Annex" in out and "charts/outcomes.png" in out
+    assert rep["internal_telemetry_appendices"] == 1
+
+
+def test_final_lint_reframes_faction_cluster_method_language():
+    out, _ = rl.lint_report(
+        "The faction/cluster analysis shows a tightly coupled semiconductor coalition.",
+        "English", mode="final")
+    assert "faction/cluster analysis" not in out.lower()
+    assert "cross-actor evidence" in out.lower()
+
+
+def test_final_lint_removes_internal_graph_process_prose_and_relation_dumps():
+    md = (
+        "## The China Sub-Simulation — DeepSeek and SMIC\n\n"
+        "Causal relationships (CAUSES, ENABLES) are distinguished from "
+        "associative relationships (PARTNERS_WITH, COMPETES_WITH).\n\n"
+        "The research graph maps this through five edges, and the sub-simulation "
+        "predicts an entangled endgame.\n\n"
+        "Lutnick had a post-to-like ratio and 76 combined actions, or 17% of "
+        "network traffic.\n\n"
+        "- Donald J. Trump enables NVIDIA H200\n"
+        "- Donald J. Trump enables AMD\n"
+        "- Donald J. Trump enables IEEPA\n"
+        "- Donald J. Trump enables Masayoshi Son\n\n"
+        "The dossier's base case assigns 43% to the modal outcome.\n\n"
+        "TSMC's 2nm process node remains supply-constrained [S1] "
+        "(reflecting TSMC's dependency relationship with ASML).\n\n"
+        "Broadcom has a large backlog (According to: `Broadcom partners with Google`).\n"
+    )
+
+    out, rep = rl.lint_report(md, "English", mode="final")
+
+    assert "China Outcome Analysis" in out
+    assert "sub-simulation" not in out.lower()
+    assert "research graph" not in out.lower()
+    assert "CAUSES" not in out and "PARTNERS_WITH" not in out
+    assert "post-to-like" not in out and "combined actions" not in out
+    assert "Donald J. Trump enables" not in out
+    assert "dossier" not in out.lower()
+    assert "forecast's base case" in out
+    assert "2nm process node" in out  # real semiconductor terminology survives
+    assert "reflecting TSMC" not in out and "According to:" not in out
+    assert rep["internal_graph_parentheticals"] == 2
+    assert rep["internal_relation_bullets"] == 4
+    assert rep["leakage_flags"] == 0
+    assert rep["outcome_focus_ok"] is True
+
+
+def test_final_lint_removes_failed_empty_and_corrupted_legacy_sections():
+    md = (
+        "# Forecast\n\n"
+        "## Complete Section\n\nA useful forecast remains [S1].\n\n"
+        "## Failed Scenario\n\n"
+        "（Chapter generation failed: claude-cli output contamination by system prompt.）\n\n"
+        "## Broken Memory Section\n\n"
+        "### HBM5（2029–2030）：Hybrid bonding becomes the next-generation watershed\n\n"
+        "Capacity normalizes in 2027 second half，because all fabs reach scale。\n\n"
+        "| — | — | [S2] |\n|---|---|---|\n| — | 10–15% | [S2] |\n\n"
+        "## Forecast Drivers and Outcome Pathways\n\n[S2]\n\n"
+        "## Final Section\n\nThe final outcome remains observable.\n"
+    )
+
+    out, rep = rl.lint_report(md, "English", mode="final")
+
+    assert "Complete Section" in out and "Final Section" in out
+    assert "Chapter generation failed" not in out
+    assert "Failed Scenario" not in out
+    assert "Broken Memory Section" not in out
+    assert "| — | — |" not in out
+    assert "\n[S2]\n" not in out
+    assert "Forecast Drivers and Outcome Pathways" not in out
+    assert rep["generation_failure_placeholders"] == 1
+    assert rep["corrupted_mixed_punctuation_lines"] >= 2
+    assert rep["empty_tables"] == 1
+    assert rep["standalone_citation_lines"] >= 1
+    assert rep["empty_sections"] >= 3
+    assert rep["leakage_flags"] == 0
+
+
 def test_lint_platform_behavior_quote_dropped():
     md = "> The TSMC agent posted a thread and liked the post about HBM supply.\n\nProse.\n"
     out, n = rl.drop_platform_behavior_quotes(md)
@@ -139,7 +411,7 @@ def test_lint_report_end_to_end_fence_aware():
     assert "A --[SUPPLIES]--> B" in out          # 围栏内原样保留
     assert "(According to：BIS" not in out
     assert "[citation:" not in out
-    assert "Analytical perspective — X (scenario panel):" in out
+    assert "Evidence-based assessment — X:" in out
     assert rep["edge_dumps"] == 1 and rep["citation_residue"] == 1
     assert rep["legacy_sim_labels"] == 1
 
@@ -248,14 +520,15 @@ def _repair_agent(**over):
     return a
 
 
-def test_quote_grounding_respects_label_on_attribution_line():
+def test_quote_grounding_does_not_exempt_neutral_assessment_label():
     a = _repair_agent(research_report="irrelevant corpus")
     md = (
-        "Analytical perspective — TSMC (scenario panel) argues:\n\n"
+        "Evidence-based assessment — TSMC argues:\n\n"
         "> \"Advanced packaging stays the binding constraint through 2028 at least.\"\n"
     )
     new_md, removed = a._repair_quote_grounding(md)
-    assert removed == 0 and new_md == md      # 归因行带推演标签 → 引文豁免
+    assert removed == 1
+    assert "Advanced packaging stays" not in new_md
 
 
 def test_quote_grounding_removes_dangling_intro_with_quote():
@@ -358,3 +631,24 @@ def test_render_binary_forecasts_block_no_criteria_truncation():
                                 "resolution_criteria": crit, "theme": "market"}]}
     block = render_binary_forecasts_block(fc, language="English")
     assert crit in block                       # 不再被 [:200] 截断
+
+
+def test_upsert_binary_forecasts_replaces_legacy_truncated_part_one():
+    old = (
+        "# Forecast\n\n## Part 1 — Binary Forecasts\n\n"
+        "| # | Resolution criteria |\n|---|---|\n| F1 | criterion cut at NVI |\n\n"
+        "## Part 2 — Framework & Synthesis\n\nKeep this analysis.\n"
+    )
+    complete = (
+        "## Part 1 — Binary Forecasts\n\n"
+        "| # | Resolution criteria |\n|---|---|\n"
+        "| F1 | Complete criterion through 2027 per NVIDIA filings. |"
+    )
+
+    updated, action = upsert_binary_forecasts_block(old, complete)
+
+    assert action == "replaced"
+    assert "cut at NVI" not in updated
+    assert "Complete criterion through 2027" in updated
+    assert updated.count("## Part 1 — Binary Forecasts") == 1
+    assert "Keep this analysis." in updated

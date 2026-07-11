@@ -63,6 +63,32 @@ test('gallery keeps only fallback figures not already embedded in markdown', () 
   assert.equal(filtered[0].interactivePath, 'charts/actors.html')
 })
 
+test('a viz marker alone does not suppress a missing translated figure', () => {
+  const gallery = normalizeVizGallery([
+    { type: 'html', path: 'charts/timeline.html', png_path: 'charts/timeline.png' },
+  ])
+  const filtered = filterVizGalleryByMarkdown(
+    gallery,
+    '# Translated report\n\n<!-- viz:charts/timeline.html -->\nThe translated image was dropped.',
+  )
+  assert.equal(filtered.length, 1)
+  assert.equal(filtered[0].imagePath, 'charts/timeline.png')
+})
+
+test('an HTML-only chart is suppressed only by an actual markdown link', () => {
+  const gallery = normalizeVizGallery([
+    { type: 'html', path: 'charts/actor_network.html' },
+  ])
+  assert.equal(filterVizGalleryByMarkdown(
+    gallery,
+    '<!-- viz:charts/actor_network.html -->',
+  ).length, 1)
+  assert.equal(filterVizGalleryByMarkdown(
+    gallery,
+    '[Open chart](charts/actor_network.html)',
+  ).length, 0)
+})
+
 test('rejects traversal, encoded traversal, absolute, and backslash paths', () => {
   for (const path of [
     '../secret.png',

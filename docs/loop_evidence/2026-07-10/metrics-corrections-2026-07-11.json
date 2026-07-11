@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-07-11T11:35:16Z",
+  "applies_to": "metrics.json",
+  "preserves_original_snapshot": true,
+  "corrections": [
+    {
+      "path": "cross_run.research_search_calls",
+      "historical_value": 4974,
+      "correct_interpretation": "pipe_f23527f7d903 total tool calls",
+      "correct_search_calls": 3391,
+      "correct_no_result_searches": 1428,
+      "correct_no_result_ratio": 0.4211,
+      "scope": "pipe_f23527f7d903",
+      "reason": "The frozen field was mislabeled as a cross-run search denominator."
+    },
+    {
+      "path": "runs[2].research_tokens",
+      "historical_value": 82710000,
+      "current_telemetry_row_sum": 48837873,
+      "scope": "pipe_a8986bffd918",
+      "reason": "The historical value does not reconcile with the currently retained telemetry rows and must not be presented as current measured truth."
+    }
+  ]
+}

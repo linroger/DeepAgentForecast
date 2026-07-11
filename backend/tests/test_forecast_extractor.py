@@ -1,16 +1,23 @@
 """Golden tests for structured forecast extraction + citation audit (EXECPLAN2 I-3-0/I-3-1)."""
 
+import json
+
 from app.services.forecast_extractor import (
     _binary_quality,
+    _normalize_binaries,
     anchor_binaries_to_markets,
     apply_horizon_consistency,
     audit_citation_grounding,
+    audit_market_anchor_integrity,
+    audit_proposition_consistency,
+    audit_scenario_contract,
     build_market_comparison,
     derive_forecast_spine,
     enforce_market_divergence,
     extract_binary_forecasts,
     extract_structured_forecast,
     parse_requirement_years,
+    reconcile_forecast_contract,
     render_binary_forecasts_block,
     render_forecast_spine_block,
     render_resolution_block,
@@ -18,6 +25,10 @@ from app.services.forecast_extractor import (
 )
 from app.services.ensemble import pool_binary_forecasts
 from tests.conftest import FakeLLMClient
+
+
+def _scenario_issue_codes(audit):
+    return {example["code"] for example in audit["examples"]}
 
 
 def test_audit_citation_grounding_counts_and_coverage():
@@ -37,6 +48,399 @@ def test_audit_citation_grounding_counts_and_coverage():
 
 def test_audit_empty_is_full_coverage():
     assert audit_citation_grounding("no numbers here")["coverage"] == 1.0
+
+
+def test_scenario_contract_accepts_absent_or_valid_conservative_partition():
+    assert audit_scenario_contract({}) == {
+        "valid": True,
+        "issue_count": 0,
+        "issues": [],
+        "examples": [],
+    }
+
+    audit = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Lower band",
+                "probability": 0.30,
+                "resolution_criteria": (
+                    "Global revenue between $1.0T and $1.2T by 2030"
+                ),
+                "summary": (
+                    "Scenario probability is 30%. Product mix is 40% + 30%."
+                ),
+                "critique_note": "Adjusted probability to 30% after review.",
+            },
+            {
+                "name": "Upper band",
+                "probability": 0.50,
+                "resolution_criteria": "Global revenue: $1.3T-$1.5T by 2030",
+                "summary": (
+                    "Probability of the joint event is computed as 40% + 30% = 70%."
+                ),
+            },
+            {
+                "name": "All else",
+                "probability": 0.20,
+                "resolution_criteria": "All other measurable outcomes by 2030",
+            },
+        ],
+    })
+    assert audit["valid"] is True
+    assert audit["issue_count"] == 0
+
+
+def test_scenario_contract_rejects_non_list_and_empty_scenarios():
+    not_list = audit_scenario_contract({"scenarios": {"name": "Other"}})
+    empty = audit_scenario_contract({"scenarios": []})
+
+    assert not_list["valid"] is False
+    assert _scenario_issue_codes(not_list) == {"scenarios_not_list"}
+    assert empty["valid"] is False
+    assert _scenario_issue_codes(empty) == {"scenarios_empty"}
+
+
+def test_scenario_contract_rejects_row_schema_and_probability_defects():
+    audit = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Base case",
+                "probability": 0.40,
+                "resolution_criteria": "Revenue is at least $1.0T by 2030",
+            },
+            {
+                "name": " base CASE ",
+                "probability": "0.30",
+                "resolution_criteria": "Revenue is below $1.0T by 2030",
+            },
+            {
+                "name": "Other",
+                "probability": 10 ** 400,
+                "resolution_criteria": "",
+            },
+        ],
+    })
+
+    assert audit["valid"] is False
+    assert _scenario_issue_codes(audit) >= {
+        "duplicate_scenario_name",
+        "probability_not_numeric",
+        "probability_out_of_range",
+        "resolution_criteria_missing",
+    }
+
+
+def test_scenario_contract_rejects_bad_sum_and_missing_residual_bin():
+    audit = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Mother company expansion",
+                "probability": 0.40,
+                "resolution_criteria": "Revenue exceeds $1.2T by 2030",
+            },
+            {
+                "name": "Contested election",
+                "probability": 0.40,
+                "resolution_criteria": "Revenue remains below $1.0T by 2030",
+            },
+        ],
+    })
+
+    assert _scenario_issue_codes(audit) >= {
+        "probability_sum",
+        "residual_scenario_missing",
+    }
+
+
+def test_scenario_contract_rejects_stale_critique_and_bad_percentage_total():
+    audit = audit_scenario_contract({
+        "headline": (
+            "The scenario weights are 40%, 30%, and 20%, totaling 90%."
+        ),
+        "confidence_rationale": "Scenario probabilities sum to 90%.",
+        "scenarios": [
+            {
+                "name": "Primary",
+                "probability": 0.50,
+                "resolution_criteria": "Revenue exceeds $1.2T by 2030",
+                "critique_note": (
+                    "The probability was reduced from 50% to 27%. "
+                    "Scenario probability allocation: 40% + 30% + 20% = 90%."
+                ),
+            },
+            {
+                "name": "Other / status quo",
+                "probability": 0.50,
+                "resolution_criteria": "All other measurable outcomes by 2030",
+                "summary": "情景概率为40%、30%、20%，合计90%。",
+            },
+        ],
+    })
+
+    assert _scenario_issue_codes(audit) >= {
+        "stale_critique_probability",
+        "percentage_allocation_arithmetic",
+    }
+    percentage_findings = [
+        example for example in audit["examples"]
+        if example["code"] == "percentage_allocation_arithmetic"
+    ]
+    assert {finding["kind"] for finding in percentage_findings} >= {
+        "stated_total",
+        "allocation_total",
+    }
+    assert any("scenario weights" in finding["excerpt"].lower()
+               for finding in percentage_findings)
+    assert any("情景概率" in finding["excerpt"] for finding in percentage_findings)
+
+    direct_note = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Primary",
+                "probability": 0.50,
+                "resolution_criteria": "Revenue exceeds $1.2T by 2030",
+                "critique_note": "Probability: 27% after review.",
+            },
+            {
+                "name": "Other",
+                "probability": 0.50,
+                "resolution_criteria": "All other outcomes by 2030",
+                "critique_note": (
+                    "Base probability: 20%. 更新为2家公司进入决赛。"
+                ),
+            },
+        ],
+    })
+    stale = [
+        example for example in direct_note["examples"]
+        if example["code"] == "stale_critique_probability"
+    ]
+    assert len(stale) == 1
+    assert stale[0]["scenario"] == "Primary"
+
+
+def test_scenario_contract_range_overlap_requires_same_metric_and_positive_width():
+    overlap = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Revenue lower",
+                "probability": 0.30,
+                "resolution_criteria": "Global revenue: $1.0T-$1.3T by 2030",
+            },
+            {
+                "name": "Revenue upper",
+                "probability": 0.30,
+                "resolution_criteria": "Global revenue: $1.2T-$1.5T by 2030",
+            },
+            {
+                "name": "Margin band",
+                "probability": 0.20,
+                "resolution_criteria": "Operating margin: $1.2T-$1.5T by 2030",
+            },
+            {
+                "name": "Other",
+                "probability": 0.20,
+                "resolution_criteria": "All other measurable outcomes by 2030",
+            },
+        ],
+    })
+    overlap_examples = [
+        example for example in overlap["examples"]
+        if example["code"] == "overlapping_numeric_ranges"
+    ]
+    assert len(overlap_examples) == 1
+    assert overlap_examples[0]["metric"] == "global revenue"
+
+    touching = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Lower",
+                "probability": 0.40,
+                "resolution_criteria": "Global revenue: $1.0T-$1.2T by 2030",
+            },
+            {
+                "name": "Upper",
+                "probability": 0.40,
+                "resolution_criteria": "Global revenue: $1.2T-$1.4T by 2030",
+            },
+            {
+                "name": "Other",
+                "probability": 0.20,
+                "resolution_criteria": "All other measurable outcomes by 2030",
+            },
+        ],
+    })
+    assert touching["valid"] is True
+
+    scoped = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Product A band",
+                "probability": 0.40,
+                "resolution_criteria": "Revenue: $1.0T-$1.3T for Product A by 2030",
+            },
+            {
+                "name": "Product B band",
+                "probability": 0.40,
+                "resolution_criteria": "Revenue: $1.2T-$1.5T for Product B by 2030",
+            },
+            {
+                "name": "Other",
+                "probability": 0.20,
+                "resolution_criteria": "All other outcomes by 2030",
+            },
+        ],
+    })
+    assert scoped["valid"] is True
+
+    leading_date = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Lower",
+                "probability": 0.40,
+                "resolution_criteria": (
+                    "By 2030, global revenue between $1.0T and $1.3T"
+                ),
+            },
+            {
+                "name": "Upper",
+                "probability": 0.40,
+                "resolution_criteria": (
+                    "By 2030, global revenue between $1.2T and $1.5T"
+                ),
+            },
+            {
+                "name": "Other",
+                "probability": 0.20,
+                "resolution_criteria": "All other outcomes by 2030",
+            },
+        ],
+    })
+    assert "overlapping_numeric_ranges" in _scenario_issue_codes(leading_date)
+
+    chinese = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "低位",
+                "probability": 0.40,
+                "resolution_criteria": "到2030年，全球营收：$1.0T-$1.3T",
+            },
+            {
+                "name": "高位",
+                "probability": 0.40,
+                "resolution_criteria": "到2030年，全球营收：$1.2T-$1.5T",
+            },
+            {
+                "name": "其他",
+                "probability": 0.20,
+                "resolution_criteria": "到2030年的所有其他结果",
+            },
+        ],
+    })
+    chinese_overlaps = [
+        example for example in chinese["examples"]
+        if example["code"] == "overlapping_numeric_ranges"
+    ]
+    assert len(chinese_overlaps) == 1
+    assert chinese_overlaps[0]["metric"] == "全球营收"
+
+
+def test_scenario_contract_audit_is_strict_json_serializable():
+    audit = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Unbounded lower",
+                "probability": float("nan"),
+                "resolution_criteria": "Global revenue above $1.0T by 2030",
+            },
+            {
+                "name": "Unbounded upper",
+                "probability": 0.40,
+                "resolution_criteria": "Global revenue above $1.2T by 2030",
+            },
+            {
+                "name": "Other",
+                "probability": 0.60,
+                "resolution_criteria": "All other outcomes by 2030",
+            },
+        ],
+    })
+
+    assert _scenario_issue_codes(audit) >= {
+        "probability_not_numeric",
+        "overlapping_numeric_ranges",
+    }
+    overlap = next(
+        example for example in audit["examples"]
+        if example["code"] == "overlapping_numeric_ranges"
+    )
+    assert overlap["overlap"] == [1.2, None]
+    assert json.loads(json.dumps(audit, allow_nan=False))["valid"] is False
+
+
+def test_scenario_contract_probability_sum_tolerance_includes_boundary():
+    at_boundary = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Primary",
+                "probability": 0.500,
+                "resolution_criteria": "Primary outcome is recorded by 2030",
+            },
+            {
+                "name": "Other",
+                "probability": 0.485,
+                "resolution_criteria": "All other outcomes by 2030",
+            },
+        ],
+    })
+    outside = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Primary",
+                "probability": 0.500,
+                "resolution_criteria": "Primary outcome is recorded by 2030",
+            },
+            {
+                "name": "Other",
+                "probability": 0.484,
+                "resolution_criteria": "All other outcomes by 2030",
+            },
+        ],
+    })
+
+    assert at_boundary["valid"] is True
+    assert "probability_sum" in _scenario_issue_codes(outside)
+
+
+def test_scenario_contract_enforces_two_to_five_rows_and_nested_json_safety():
+    six_rows = [
+        {
+            "name": f"Case {index}" if index < 5 else "Other",
+            "probability": 1 / 6,
+            "resolution_criteria": f"Outcome bucket {index} is observed.",
+        }
+        for index in range(6)
+    ]
+    too_many = audit_scenario_contract({"scenarios": six_rows})
+    nested_nonfinite = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Primary",
+                "probability": [float("nan")],
+                "resolution_criteria": "Primary outcome is observed.",
+            },
+            {
+                "name": "Other",
+                "probability": 1.0,
+                "resolution_criteria": "All other outcomes are observed.",
+            },
+        ]
+    })
+
+    assert "scenario_count" in _scenario_issue_codes(too_many)
+    assert too_many["valid"] is False
+    assert json.loads(json.dumps(nested_nonfinite, allow_nan=False))["valid"] is False
+    assert nested_nonfinite["examples"][0]["value"] == ["nan"]
 
 
 def test_extract_structured_forecast_normalizes_probabilities():
@@ -325,6 +729,178 @@ def test_build_market_comparison_flags_10pp_breaches():
     row = mc["comparisons"][0]
     assert row["forecast_id"] == "F1" and row["exceeds_10pp"] is True
     assert row["abs_divergence"] == 0.35 and row["rationale_cites_market"] is True
+
+
+def test_reconcile_forecast_contract_uses_scenario_partition_and_moves_market_anchor():
+    forecast = {
+        "scenarios": [
+            {"name": "D House + D Senate (clean Dem sweep)", "probability": 0.19},
+            {"name": "D House + R Senate (split Congress)", "probability": 0.44},
+            {"name": "D House + 50-50 Senate (GOP VP tiebreaker)", "probability": 0.13},
+            {"name": "R trifecta preserved", "probability": 0.10},
+            {"name": "R House + D Senate", "probability": 0.06},
+            {"name": "Other / ambiguous / contested", "probability": 0.08},
+        ],
+        "binary_forecasts": [
+            {"id": "F2", "statement": "Democrats win a 218+ House majority.",
+             "resolution_criteria": "Democratic control of the House", "probability": 0.53},
+            {"id": "F3", "statement": "Republicans retain effective control of the Senate.",
+             "resolution_criteria": "51+ Republicans or 50/50 with a GOP VP tiebreaker",
+             "probability": 0.84},
+            {"id": "F4", "statement": "A divided result gives Democrats the House and Republicans the Senate.",
+             "resolution_criteria": "D House and R Senate, including 50/50 with GOP VP",
+             "probability": 0.46,
+             "market_anchor": {"market_id": "m-sweep", "question": "2026 Balance of Power: D Senate, D House",
+                               "implied_yes_prob": 0.44, "price_at_research": 0.44,
+                               "url": "https://polymarket.com/event/balance", "endDate": "2026-11-03",
+                               "resolution_equivalence": "near", "match_confidence": 0.95}},
+            {"id": "F10", "statement": "Republicans retain a 218+ House majority.",
+             "resolution_criteria": "Republicans control 218+ House seats", "probability": 0.18},
+            {"id": "F11", "statement": "Democrats win a sweep of both the House and Senate.",
+             "resolution_criteria": "Democratic House and Democratic Senate control",
+             "probability": 0.10,
+             "market_anchor": {"market_id": "m-sweep", "implied_yes_prob": 0.44}},
+        ],
+    }
+
+    result = reconcile_forecast_contract(forecast)
+    by_id = {row["id"]: row for row in forecast["binary_forecasts"]}
+
+    assert by_id["F2"]["probability"] == 0.76
+    assert by_id["F3"]["probability"] == 0.67
+    assert by_id["F4"]["probability"] == 0.57
+    assert by_id["F10"]["probability"] == 0.16
+    assert by_id["F11"]["probability"] == 0.19
+    assert "market_anchor" not in by_id["F4"]
+    assert by_id["F11"]["market_anchor"]["question"].startswith("2026 Balance")
+    assert by_id["F11"]["market_anchor"]["resolution_equivalence"] == "near"
+    assert forecast["market_comparison"]["anchored_count"] == 1
+    assert result["corrected_count"] == 5 and result["passed"] is True
+    assert audit_proposition_consistency(forecast)["passed"] is True
+    assert audit_market_anchor_integrity(forecast)["passed"] is True
+
+
+def test_membership_rejects_non_boolean_derivable_without_reconciling():
+    binaries = _normalize_binaries([{
+        "id": "F1",
+        "statement": "The event occurs by 2027.",
+        "probability": 0.20,
+        "resolution_criteria": "The named metric exceeds 1 by 2027.",
+        "scenario_membership": {
+            "derivable": "false",
+            "yes_scenarios": ["Event occurs"],
+        },
+    }])
+    forecast = {
+        "scenarios": [
+            {"name": "Event occurs", "probability": 0.40},
+            {"name": "Event does not occur", "probability": 0.60},
+        ],
+        "binary_forecasts": binaries,
+    }
+
+    result = reconcile_forecast_contract(forecast)
+    audit = audit_proposition_consistency(forecast)
+
+    assert binaries[0]["scenario_membership"]["derivable"] is None
+    assert "derivable must be a JSON boolean" in (
+        binaries[0]["scenario_membership"]["validation_errors"]
+    )
+    assert binaries[0]["probability"] == 0.20
+    assert result["corrected_count"] == 0
+    assert audit["passed"] is False
+    assert "JSON boolean" in audit["mismatches"][0]["reason"]
+
+
+def test_membership_rejects_duplicate_yes_scenarios_without_double_counting():
+    binaries = _normalize_binaries([{
+        "id": "F1",
+        "statement": "The event occurs by 2027.",
+        "probability": 0.20,
+        "resolution_criteria": "The named metric exceeds 1 by 2027.",
+        "scenario_membership": {
+            "derivable": True,
+            "yes_scenarios": ["Event occurs", "Event occurs"],
+        },
+    }])
+    forecast = {
+        "scenarios": [
+            {"name": "Event occurs", "probability": 0.40},
+            {"name": "Event does not occur", "probability": 0.60},
+        ],
+        "binary_forecasts": binaries,
+    }
+
+    result = reconcile_forecast_contract(forecast)
+    audit = audit_proposition_consistency(forecast)
+
+    assert binaries[0]["probability"] == 0.20
+    assert result["corrected_count"] == 0
+    assert audit["passed"] is False
+    assert "duplicates" in audit["mismatches"][0]["reason"]
+
+
+def test_net_seat_gain_statement_conflicts_with_house_control_criterion():
+    forecast = {
+        "scenarios": [
+            {"name": "R House", "probability": 0.20},
+            {"name": "D House", "probability": 0.80},
+        ],
+        "binary_forecasts": [{
+            "id": "F10",
+            "statement": "Republicans gain a net of zero or more House seats.",
+            "resolution_criteria": "Republicans control 218+ House seats.",
+            "probability": 0.18,
+        }],
+    }
+
+    result = reconcile_forecast_contract(forecast)
+    audit = audit_proposition_consistency(forecast)
+
+    assert forecast["binary_forecasts"][0]["probability"] == 0.18
+    assert result["corrected_count"] == 0
+    assert audit["passed"] is False
+    assert "different events" in audit["mismatches"][0]["reason"]
+
+
+def test_general_scenario_membership_and_unbound_market_equivalence_fail_closed():
+    forecast = {
+        "scenarios": [
+            {"name": "Launch succeeds", "probability": 0.65},
+            {"name": "Launch slips", "probability": 0.25},
+            {"name": "Program cancelled", "probability": 0.10},
+        ],
+        "binary_forecasts": [{
+            "id": "F1",
+            "proposition_id": "program-operational-by-2030",
+            "statement": "The program is operational by 2030.",
+            "resolution_criteria": "The regulator certifies operations by 2030.",
+            "probability": 0.40,
+            "scenario_membership": {
+                "derivable": True,
+                "yes_scenarios": ["Launch succeeds"],
+            },
+            "market_anchor": {
+                "market_id": "unrelated-1",
+                "question": "Will a different company merge by 2029?",
+                "implied_yes_prob": 0.5,
+                "url": "https://polymarket.com/event/unrelated",
+                "endDate": "2029-12-31",
+                "resolution_equivalence": "near",
+                "match_confidence": 0.9,
+            },
+        }],
+    }
+
+    before = audit_proposition_consistency(forecast)
+    market_before = audit_market_anchor_integrity(forecast)
+    result = reconcile_forecast_contract(forecast)
+
+    assert before["mismatch_count"] == 1
+    assert market_before["passed"] is False
+    assert forecast["binary_forecasts"][0]["probability"] == 0.65
+    assert "market_anchor" not in forecast["binary_forecasts"][0]
+    assert result["passed"] is True
 
 
 def test_extract_binary_forecasts_anchors_and_emits_comparison():

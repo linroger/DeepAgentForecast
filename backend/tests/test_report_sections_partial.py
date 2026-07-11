@@ -7,6 +7,8 @@
   · /api/report/{id}/charts/<file>.html 以 text/html 服务（离线自包含 HTML 图，ITEM-16）。
 全部离线、无 LLM、纯文件读写。"""
 
+import hashlib
+import json
 import os
 import sys
 
@@ -14,7 +16,9 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.services.report_agent import ReportManager  # noqa: E402
+from app.services.report_agent import (  # noqa: E402
+    Report, ReportManager, ReportStatus,
+)
 
 
 @pytest.fixture
@@ -38,6 +42,27 @@ def _write_section(report_id: str, idx: int, body: str):
     ReportManager._ensure_report_folder(report_id)
     with open(ReportManager._get_section_path(report_id, idx), "w", encoding="utf-8") as f:
         f.write(body)
+
+
+def _publish(report_id: str, markdown: str) -> None:
+    ReportManager.save_report(Report(
+        report_id=report_id,
+        simulation_id=f"sim_{report_id}",
+        graph_id="graph_test",
+        simulation_requirement="Forecast the outcome.",
+        status=ReportStatus.COMPLETED,
+        markdown_content=markdown,
+    ))
+    with open(ReportManager._get_report_final_audit_path(report_id), "w", encoding="utf-8") as f:
+        json.dump({
+            "policy_version": 3,
+            "hard_passed": True,
+            "hard_issues": [],
+            "markdown_sha256": hashlib.sha256(markdown.encode("utf-8")).hexdigest(),
+            "publish_gate": {"enabled": True, "passed": True},
+            "structured_forecast": {"required": False, "valid": True},
+            "citation_artifacts": {"required": False, "passed": True},
+        }, f)
 
 
 # ─────────────────────────── sections-partial ───────────────────────────
@@ -77,9 +102,7 @@ def test_sections_partial_done_when_full_report(client):
     rid = "report_partial_done"
     _write_section(rid, 1, "## 执行摘要\n\n正文。\n")
     # 终稿组装完成
-    full_path = ReportManager._get_report_markdown_path(rid)
-    with open(full_path, "w", encoding="utf-8") as f:
-        f.write("# 报告\n\n## 执行摘要\n\n正文。\n")
+    _publish(rid, "# 报告\n\n## 执行摘要\n\n正文。\n")
     # 终态进度
     ReportManager.update_progress(rid, status="completed", progress=100,
                                   message="完成", current_section=None,
@@ -129,6 +152,7 @@ def test_sections_partial_title_fallback(client):
 
 def test_charts_route_serves_html_mimetype(client):
     rid = "report_html_serve"
+    _publish(rid, "# 报告\n\n已审计正文。\n")
     charts_dir = os.path.join(ReportManager._get_report_folder(rid), "charts")
     os.makedirs(charts_dir, exist_ok=True)
     with open(os.path.join(charts_dir, "scenario_probabilities.html"), "w", encoding="utf-8") as f:

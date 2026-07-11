@@ -7,6 +7,7 @@ OASIS模拟管理器
 import os
 import csv
 import json
+import hashlib
 import shutil
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
@@ -20,6 +21,110 @@ from .oasis_profile_generator import OasisProfileGenerator, OasisAgentProfile
 from .simulation_config_generator import SimulationConfigGenerator, SimulationParameters
 
 logger = get_logger('mirofish.simulation')
+
+
+def _canonical_json_sha256(value: Any) -> str:
+    return hashlib.sha256(json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")).hexdigest()
+
+
+def ensure_dossier_actor_entities(
+    entities: List[Any],
+    actors: Optional[Dict[str, Any]],
+) -> tuple[List[Any], Dict[str, Any]]:
+    """Guarantee one graph/stand-in entity for every eligible dossier actor.
+
+    Graph ingestion is allowed to be partial; actor identity is not.  When a
+    curated DeerFlow actor row has no surviving graph node, create a bounded
+    stand-in entity from that exact row so the actor can still receive its role
+    contract. Non-agent/context rows remain explicit exclusions in the roster
+    decision manifest rather than silently becoming generic personas.
+    """
+    from ..utils.actors import (
+        extract_actor_rows,
+        is_agent_eligible,
+        match_actor,
+        normalize_name,
+    )
+    from .zep_entity_reader import EntityNode
+
+    base = list(entities or [])
+    rows = extract_actor_rows(actors)
+    dossier_sha = _canonical_json_sha256(actors) if isinstance(actors, dict) else ""
+    decisions: List[Dict[str, Any]] = []
+    matched_actor_names = {
+        normalize_name(str(row.get("name") or ""))
+        for entity in base
+        for row in [match_actor(getattr(entity, "name", ""), actors)]
+        if isinstance(row, dict)
+    }
+
+    for row in rows:
+        name = str(row.get("name") or "").strip()
+        canonical = normalize_name(name)
+        actor_id = str(row.get("actor_id") or row.get("id") or "").strip()
+        if not actor_id:
+            actor_id = "actor_" + hashlib.sha256(
+                canonical.encode("utf-8")
+            ).hexdigest()[:16]
+        decision: Dict[str, Any] = {
+            "actor_id": actor_id,
+            "actor_name": name,
+            "eligible": bool(is_agent_eligible(row)),
+            "synthetic_entity": False,
+        }
+        if not decision["eligible"]:
+            decision["status"] = "context_only"
+            decision["reason"] = "dossier classification is not an active simulation actor"
+            decisions.append(decision)
+            continue
+        if canonical in matched_actor_names:
+            decision["status"] = "candidate"
+            decision["reason"] = "matched existing graph entity"
+            decisions.append(decision)
+            continue
+
+        entity_type = str(row.get("type") or "Organization").strip() or "Organization"
+        entity_uuid = "dossier-" + hashlib.sha256(
+            (actor_id + "\0" + name).encode("utf-8")
+        ).hexdigest()[:24]
+        summary = str(
+            row.get("description") or row.get("role") or f"Dossier actor: {name}"
+        ).strip()
+        attributes = {
+            "dossier_actor_id": actor_id,
+            "dossier_actor_name": name,
+        }
+        for key in ("archetype", "simulation_tier", "role_class", "influence"):
+            if row.get(key) is not None:
+                attributes[key] = row.get(key)
+        base.append(EntityNode(
+            uuid=entity_uuid,
+            name=name,
+            labels=["Entity", entity_type],
+            summary=summary,
+            attributes=attributes,
+            related_edges=[],
+            related_nodes=[],
+        ))
+        matched_actor_names.add(canonical)
+        decision.update({
+            "status": "candidate",
+            "reason": "synthesized from dossier after graph omission",
+            "synthetic_entity": True,
+            "entity_uuid": entity_uuid,
+        })
+        decisions.append(decision)
+
+    return base, {
+        "schema_version": "actor-cast/v1",
+        "dossier_sha256": dossier_sha,
+        "dossier_actor_count": len(rows),
+        "eligible_actor_count": sum(1 for row in decisions if row["eligible"]),
+        "decisions": decisions,
+    }
 
 
 def select_agent_pool(
@@ -263,6 +368,10 @@ class SimulationState:
     entities_count: int = 0
     profiles_count: int = 0
     entity_types: List[str] = field(default_factory=list)
+    actor_role_contract_version: Optional[str] = None
+    actor_role_count: int = 0
+    actor_cast_manifest_sha256: Optional[str] = None
+    actor_role_manifest_sha256: Dict[str, str] = field(default_factory=dict)
     
     # 配置生成信息
     config_generated: bool = False
@@ -292,6 +401,10 @@ class SimulationState:
             "entities_count": self.entities_count,
             "profiles_count": self.profiles_count,
             "entity_types": self.entity_types,
+            "actor_role_contract_version": self.actor_role_contract_version,
+            "actor_role_count": self.actor_role_count,
+            "actor_cast_manifest_sha256": self.actor_cast_manifest_sha256,
+            "actor_role_manifest_sha256": self.actor_role_manifest_sha256,
             "config_generated": self.config_generated,
             "config_reasoning": self.config_reasoning,
             "current_round": self.current_round,
@@ -312,6 +425,9 @@ class SimulationState:
             "entities_count": self.entities_count,
             "profiles_count": self.profiles_count,
             "entity_types": self.entity_types,
+            "actor_role_contract_version": self.actor_role_contract_version,
+            "actor_role_count": self.actor_role_count,
+            "actor_role_manifest_sha256": self.actor_role_manifest_sha256,
             "config_generated": self.config_generated,
             "error": self.error,
         }
@@ -386,6 +502,14 @@ class SimulationManager:
             entities_count=data.get("entities_count", 0),
             profiles_count=data.get("profiles_count", 0),
             entity_types=data.get("entity_types", []),
+            actor_role_contract_version=data.get("actor_role_contract_version"),
+            actor_role_count=int(data.get("actor_role_count", 0) or 0),
+            actor_cast_manifest_sha256=data.get("actor_cast_manifest_sha256"),
+            actor_role_manifest_sha256=(
+                data.get("actor_role_manifest_sha256")
+                if isinstance(data.get("actor_role_manifest_sha256"), dict)
+                else {}
+            ),
             config_generated=data.get("config_generated", False),
             config_reasoning=data.get("config_reasoning", ""),
             current_round=data.get("current_round", 0),
@@ -497,9 +621,16 @@ class SimulationManager:
             filtered = reader.filter_defined_entities(
                 graph_id=state.graph_id,
                 defined_entity_types=defined_entity_types,
-                enrich_with_edges=True
+                enrich_with_edges=True,
             )
 
+            # LOOP-011: the curated actor dossier is an authoritative cast
+            # handoff. Partial graph ingestion may not silently erase an actor.
+            # Add bounded dossier stand-ins before cast selection, then record
+            # every include/context decision for audit and reuse validation.
+            filtered.entities, actor_cast_manifest = ensure_dossier_actor_entities(
+                filtered.entities, actors
+            )
             # T3.13 + ACTOR-CAST discipline：agent 池选择（抽取为模块级 select_agent_pool，
             # 便于单测）。默认（ACTOR_CAST_MAX=20 < OASIS_MAX_AGENTS=80）：池子从主阵容派生
             # （匹配研究 actor 且 tier 1/2 能动者，按 salience/影响力排序取 top ≤cast_max），
@@ -508,6 +639,39 @@ class SimulationManager:
             filtered.entities = select_agent_pool(
                 filtered.entities, actors=actors, graph_priors=graph_priors
             )
+            selected_rows: Dict[str, Any] = {}
+            from ..utils.actors import match_actor as _match_selected_actor
+            for entity in filtered.entities:
+                row = _match_selected_actor(entity.name, actors)
+                if isinstance(row, dict):
+                    selected_rows[str(row.get("name") or "").strip()] = entity
+            selected_names = set(selected_rows)
+            missing_eligible: List[str] = []
+            for decision in actor_cast_manifest["decisions"]:
+                if decision["actor_name"] in selected_names:
+                    entity = selected_rows[decision["actor_name"]]
+                    decision["status"] = "selected"
+                    decision["entity_uuid"] = getattr(entity, "uuid", None)
+                    if not decision.get("eligible"):
+                        decision["reason"] = (
+                            "selected by the all-context safety fallback; role remains explicit"
+                        )
+                elif decision.get("eligible"):
+                    decision["status"] = "excluded"
+                    decision["reason"] = "eligible dossier actor was dropped by cast selection"
+                    missing_eligible.append(decision["actor_name"])
+            if missing_eligible:
+                raise RuntimeError(
+                    "eligible dossier actors missing from simulation cast: "
+                    + ", ".join(missing_eligible[:12])
+                )
+            actor_cast_manifest["selected_actor_count"] = len(selected_names)
+            actor_cast_manifest["selected_actor_names"] = sorted(selected_names)
+            actor_cast_path = os.path.join(sim_dir, "actor_cast_manifest.json")
+            from ..utils.atomic import write_json_atomic
+            write_json_atomic(actor_cast_path, actor_cast_manifest, allow_nan=False)
+            with open(actor_cast_path, "rb") as actor_cast_handle:
+                actor_cast_sha = hashlib.sha256(actor_cast_handle.read()).hexdigest()
             filtered.filtered_count = len(filtered.entities)
 
             state.entities_count = filtered.filtered_count
@@ -545,6 +709,8 @@ class SimulationManager:
                 graph_id=state.graph_id,
                 persona_language=("en" if str(research_language or "").strip().lower().startswith("en") else None),
             )
+            generator.role_dossier_sha256 = actor_cast_manifest.get("dossier_sha256") or ""
+            generator.role_cast_manifest_sha256 = actor_cast_sha
             
             def profile_progress(current, total, msg):
                 if progress_callback:
@@ -577,6 +743,24 @@ class SimulationManager:
                 output_platform=realtime_platform,  # 输出格式
                 actors=actors  # 深度研究档案（可选）：实证立场/记忆注入 persona
             )
+
+            role_count = int(
+                (getattr(generator, "last_generation_stats", {}) or {}).get(
+                    "role_prompts", 0
+                ) or 0
+            )
+            expected_roles = int(actor_cast_manifest.get("selected_actor_count", 0) or 0)
+            if role_count != expected_roles:
+                raise RuntimeError(
+                    f"actor role coverage mismatch: expected {expected_roles}, got {role_count}"
+                )
+            if role_count:
+                from .actor_role_prompt import ROLE_CONTRACT_VERSION
+                state.actor_role_contract_version = ROLE_CONTRACT_VERSION
+            else:
+                state.actor_role_contract_version = None
+            state.actor_role_count = role_count
+            state.actor_cast_manifest_sha256 = actor_cast_sha
             
             state.profiles_count = len(profiles)
             
@@ -707,6 +891,30 @@ class SimulationManager:
             
             # 注意：运行脚本保留在 backend/scripts/ 目录，不再复制到模拟目录
             # 启动模拟时，simulation_runner 会从 scripts/ 目录运行脚本
+
+            if state.actor_role_count:
+                role_profile_paths: List[str] = []
+                if state.enable_reddit:
+                    role_profile_paths.append(os.path.join(sim_dir, "reddit_profiles.json"))
+                if state.enable_twitter:
+                    role_profile_paths.append(os.path.join(sim_dir, "twitter_profiles.csv"))
+                role_manifest_shas: Dict[str, str] = {}
+                for role_profile_path in role_profile_paths:
+                    OasisProfileGenerator.validate_role_prompt_manifest(
+                        role_profile_path,
+                        expected_role_count=state.actor_role_count,
+                        expected_cast_manifest_sha256=state.actor_cast_manifest_sha256,
+                    )
+                    role_manifest_path = OasisProfileGenerator._role_manifest_path(
+                        role_profile_path
+                    )
+                    with open(role_manifest_path, "rb") as role_manifest_handle:
+                        role_manifest_shas[
+                            "twitter" if role_profile_path.endswith(".csv") else "reddit"
+                        ] = hashlib.sha256(role_manifest_handle.read()).hexdigest()
+                state.actor_role_manifest_sha256 = role_manifest_shas
+            else:
+                state.actor_role_manifest_sha256 = {}
             
             # 更新状态
             state.status = SimulationStatus.READY

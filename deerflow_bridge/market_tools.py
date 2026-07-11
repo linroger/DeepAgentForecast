@@ -16,14 +16,20 @@ deerflow_research.py`` 启动（pipeline_orchestrator cwd=deer-flow/），``sys.
   无 langchain 的环境（离线单测纯逻辑）import 本模块仍成功，该变量为 None。
 * **env 旋钮沿用既有名字**（与 deerflow_research.py 落盘阶段同一组，缺省即今日行为）：
   PREDICTION_MARKETS_MIN_VOLUME（默认 200）、PREDICTION_MARKETS_MAX（默认 20）、
-  PREDICTION_MARKETS_MAX_PER_EVENT（默认 3）。非法值回落默认。
+  PREDICTION_MARKETS_MAX_PER_EVENT（默认 3）、PREDICTION_MARKETS_PER_QUERY（默认 8）。
+  非法值回落默认。
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import os
+import threading
+import time
+from collections import OrderedDict
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -39,6 +45,27 @@ DEFAULT_PER_QUERY = 8
 DEFAULT_MAX_TOTAL = 20
 DEFAULT_MAX_PER_EVENT = 3
 DEFAULT_TIMEOUT = 15.0
+DEFAULT_NEGATIVE_CACHE_TTL_SECONDS = 30.0
+DEFAULT_SINGLEFLIGHT_WAIT_SECONDS = 35.0
+
+# A market discovered inside an agent turn used to exist only in that turn's
+# chat transcript.  The later deterministic refresh could choose different
+# queries (or return no matches), which meant a market the researcher actually
+# used never reached the canonical handoff.  When the bridge supplies a run
+# artifact directory, retain every machine-fetched candidate set as append-only
+# JSONL.  The bridge performs the final relevance gate and compaction; this tool
+# only records provenance.  The lock protects concurrent DeerFlow subagents in
+# the same process and each record is emitted with one write.
+MARKET_CANDIDATES_FILENAME = "prediction_market_candidates.jsonl"
+_CAPTURE_LOCK = threading.Lock()
+_QUERY_CACHE_LOCK = threading.Lock()
+_QUERY_CACHE: "OrderedDict[tuple, Dict[str, Any]]" = OrderedDict()
+_QUERY_INFLIGHT: Dict[tuple, Dict[str, Any]] = {}
+_QUERY_CACHE_MAX = 128
+
+
+class _MarketTransportFailure(RuntimeError):
+    """Internal marker for a query whose provider response was not obtained."""
 
 
 def _env_float(name: str, default: float) -> float:
@@ -57,6 +84,14 @@ def _env_int(name: str, default: int) -> int:
         return int(raw) if raw else int(default)
     except (TypeError, ValueError):
         return int(default)
+
+
+def _bounded_env_seconds(name: str, default: float, maximum: float) -> float:
+    """Read an operator duration knob without permitting infinite waits/TTLs."""
+    value = _env_float(name, default)
+    if not math.isfinite(value):
+        value = float(default)
+    return min(max(0.0, value), float(maximum))
 
 
 def _coerce_float(v: Any) -> Optional[float]:
@@ -196,7 +231,8 @@ def snapshot_for_queries(queries: List[str],
                          max_total: int = DEFAULT_MAX_TOTAL,
                          min_volume: float = DEFAULT_MIN_VOLUME,
                          max_per_event: int = DEFAULT_MAX_PER_EVENT,
-                         fetch: Any = None) -> List[Dict[str, Any]]:
+                         fetch: Any = None,
+                         diagnostics: Optional[Dict[str, int]] = None) -> List[Dict[str, Any]]:
     """对一组检索词取活跃市场快照并规整化（按 market_id 去重，volume 降序，每事件≤max_per_event，限量）。
 
     ``fetch(query, limit) -> list[event]`` 可注入（单测 mock 网络）；缺省走 Polymarket
@@ -206,27 +242,41 @@ def snapshot_for_queries(queries: List[str],
     def _default_fetch(q: str, limit: int) -> List[Any]:
         data = _http_get("/public-search", {"q": q, "limit_per_type": limit,
                                             "events_status": "active"})
-        events = data.get("events") if isinstance(data, dict) else None
-        return events if isinstance(events, list) else []
+        if data is None:
+            raise _MarketTransportFailure("Polymarket public-search unavailable")
+        if not isinstance(data, dict) or not isinstance(data.get("events"), list):
+            raise _MarketTransportFailure(
+                "Polymarket public-search returned an invalid response schema"
+            )
+        return data["events"]
 
     fetch_fn = fetch if fetch is not None else _default_fetch
 
     by_id: Dict[str, Dict[str, Any]] = {}
+    attempted = 0
+    successful = 0
+    transport_failures = 0
+    raw_candidate_count = 0
     for q in queries or []:
         q = str(q or "").strip()
         if not q:
             continue
+        attempted += 1
         try:
             events = fetch_fn(q, per_query)
         except Exception as e:  # noqa: BLE001 — 单个 query 失败不阻断整体
+            transport_failures += 1
             logger.warning(f"prediction_market_search: query {q!r} 失败（跳过）: {e}")
             continue
+        successful += 1
         for event in events or []:
             if not isinstance(event, dict):
                 continue
             event_title = str(event.get("title") or "").strip()
             event_slug = str(event.get("slug") or "").strip()
             for raw in event.get("markets") or []:
+                if isinstance(raw, dict):
+                    raw_candidate_count += 1
                 norm = normalize_market(raw, matched_query=q, min_volume=min_volume,
                                         event_title=event_title, event_slug=event_slug)
                 if norm is None:
@@ -234,7 +284,229 @@ def snapshot_for_queries(queries: List[str],
                 if norm["market_id"] not in by_id:
                     by_id[norm["market_id"]] = norm
     ranked = sorted(by_id.values(), key=lambda m: -(m.get("volume") or 0.0))
+    if diagnostics is not None:
+        diagnostics.update({
+            "attempted_query_count": attempted,
+            "successful_query_count": successful,
+            "transport_failure_count": transport_failures,
+            "raw_candidate_count": raw_candidate_count,
+            "candidate_count": len(ranked),
+        })
     return _cap_per_event(ranked, max_per_event, max_total)
+
+
+def _capture_market_candidates(queries: List[str], markets: List[Dict[str, Any]],
+                               status: Optional[Dict[str, Any]] = None) -> None:
+    """Persist one tool result for the run-level market registry, best effort.
+
+    ``DEERFLOW_RUN_ARTIFACT_DIR`` is set by the trusted parent process.  When it
+    is absent (interactive/standalone use), malformed, or not an existing
+    directory, capture is a no-op.  Capture failures never affect the tool
+    response or the research run.
+    """
+    if not any(isinstance(row, dict) for row in (markets or [])):
+        return
+    root = str(os.environ.get("DEERFLOW_RUN_ARTIFACT_DIR") or "").strip()
+    if not root:
+        return
+    try:
+        resolved_root = os.path.realpath(root)
+        if not os.path.isdir(resolved_root):
+            return
+        path = os.path.realpath(os.path.join(resolved_root, MARKET_CANDIDATES_FILENAME))
+        if os.path.commonpath([resolved_root, path]) != resolved_root:
+            return
+        record = {
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+            "source": "polymarket",
+            "queries": [str(q) for q in (queries or []) if str(q).strip()],
+            "markets": [m for m in (markets or []) if isinstance(m, dict)],
+        }
+        if isinstance(status, dict):
+            record["status"] = dict(status)
+        encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+        # One pathological provider response must not turn this provenance log
+        # into an unbounded artifact.  Normal tool results are tens of KB.
+        if len(encoded) > 1_000_000:
+            logger.warning("prediction market candidate capture skipped: record exceeds 1 MB")
+            return
+        with _CAPTURE_LOCK:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            try:
+                view = memoryview(encoded)
+                while view:
+                    written = os.write(fd, view)
+                    if written <= 0:
+                        raise OSError("short write while appending prediction-market ledger")
+                    view = view[written:]
+            finally:
+                os.close(fd)
+    except Exception as exc:  # noqa: BLE001 — provenance capture is never fatal
+        logger.warning("prediction market candidate capture failed (non-fatal): %s", exc)
+
+
+def _reset_market_query_cache() -> None:
+    """Clear the process-local query cache (tests and explicit lifecycle resets)."""
+    with _QUERY_CACHE_LOCK:
+        _QUERY_CACHE.clear()
+        for flight in _QUERY_INFLIGHT.values():
+            event = flight.get("event")
+            if isinstance(event, threading.Event):
+                event.set()
+        _QUERY_INFLIGHT.clear()
+
+
+def _cached_snapshot(queries: List[str], *, per_query: int, max_total: int,
+                     min_volume: float, max_per_event: int
+                     ) -> tuple[List[Dict[str, Any]], bool, bool, Dict[str, Any]]:
+    """Track-local single-flight cache with explicit provider outcome semantics.
+
+    Successful positive responses remain in the bounded process-local LRU.
+    Verified empty responses have a finite TTL.  Any transport degradation or
+    waiter timeout is never cached, so a transient outage cannot become a
+    durable false assertion that no relevant market exists.
+    """
+    key = (
+        tuple(sorted(str(q).strip().casefold() for q in queries)),
+        int(per_query), int(max_total), float(min_volume), int(max_per_event),
+    )
+    owner = False
+    now = time.monotonic()
+    with _QUERY_CACHE_LOCK:
+        cached = _QUERY_CACHE.get(key)
+        if cached is not None:
+            expires_at = cached.get("expires_at")
+            if isinstance(expires_at, (int, float)) and now >= float(expires_at):
+                _QUERY_CACHE.pop(key, None)
+                cached = None
+        if cached is not None:
+            _QUERY_CACHE.move_to_end(key)
+            return (
+                [dict(row) for row in cached.get("markets") or []],
+                True,
+                False,
+                dict(cached.get("status") or {}),
+            )
+        flight = _QUERY_INFLIGHT.get(key)
+        if flight is None:
+            flight = {"event": threading.Event(), "result": None}
+            _QUERY_INFLIGHT[key] = flight
+            owner = True
+
+    if not owner:
+        # Wait for the owner instead of multiplying an identical request.  A
+        # timed-out waiter reports an unknown/in-flight outcome, never a cache
+        # hit and never a verified empty market search.
+        wait_seconds = _bounded_env_seconds(
+            "PREDICTION_MARKETS_SINGLEFLIGHT_WAIT_SECONDS",
+            DEFAULT_SINGLEFLIGHT_WAIT_SECONDS,
+            120.0,
+        )
+        completed = flight["event"].wait(timeout=wait_seconds)
+        result = flight.get("result")
+        if completed and isinstance(result, tuple) and len(result) == 2:
+            shared_markets, shared_status = result
+            return (
+                [dict(row) for row in shared_markets],
+                False,
+                True,
+                dict(shared_status),
+            )
+        return [], False, True, {
+            "state": "inflight_timeout",
+            "attempted": True,
+            "attempted_query_count": len(queries),
+            "query_count": len(queries),
+            "successful_query_count": 0,
+            "transport_failure_count": 0,
+            "inflight_timeout_count": len(queries),
+            "raw_candidate_count": 0,
+            "candidate_count": 0,
+            "empty_reason": "inflight_timeout",
+        }
+
+    markets: List[Dict[str, Any]] = []
+    diagnostics: Dict[str, int] = {}
+    status: Dict[str, Any]
+    try:
+        markets = snapshot_for_queries(
+            queries,
+            per_query=per_query,
+            max_total=max_total,
+            min_volume=min_volume,
+            max_per_event=max_per_event,
+            diagnostics=diagnostics,
+        )
+        attempted = max(0, int(diagnostics.get("attempted_query_count", len(queries))))
+        successful = max(0, int(diagnostics.get("successful_query_count", attempted)))
+        failures = max(0, int(diagnostics.get("transport_failure_count", 0)))
+        raw_candidates = max(0, int(diagnostics.get("raw_candidate_count", len(markets))))
+        candidate_count = max(0, int(diagnostics.get("candidate_count", len(markets))))
+        all_failed = attempted > 0 and successful == 0 and failures >= attempted
+        partial_failure = failures > 0 and not all_failed
+        if all_failed:
+            state = "transport_failure"
+            empty_reason = "transport_failure"
+        elif partial_failure:
+            state = "partial_success" if markets else "partial_transport_failure"
+            empty_reason = None if markets else "partial_transport_failure"
+        elif markets:
+            state = "success"
+            empty_reason = None
+        else:
+            state = "verified_empty"
+            empty_reason = "no_equivalent_market"
+        status = {
+            "state": state,
+            "attempted": True,
+            "attempted_query_count": attempted,
+            "query_count": attempted,
+            "successful_query_count": successful,
+            "transport_failure_count": failures,
+            "inflight_timeout_count": 0,
+            "raw_candidate_count": raw_candidates,
+            "candidate_count": candidate_count,
+            "empty_reason": empty_reason,
+        }
+    except Exception as exc:  # noqa: BLE001 — retain structured outage diagnostics
+        logger.warning("prediction_market_search snapshot failed (non-fatal): %s", exc)
+        status = {
+            "state": "transport_failure",
+            "attempted": True,
+            "attempted_query_count": len(queries),
+            "query_count": len(queries),
+            "successful_query_count": 0,
+            "transport_failure_count": len(queries),
+            "inflight_timeout_count": 0,
+            "raw_candidate_count": 0,
+            "candidate_count": 0,
+            "empty_reason": "transport_failure",
+        }
+    finally:
+        if owner:
+            with _QUERY_CACHE_LOCK:
+                cacheable = status.get("transport_failure_count", 0) == 0
+                if cacheable:
+                    expires_at = None
+                    if not markets:
+                        ttl = _bounded_env_seconds(
+                            "PREDICTION_MARKETS_NEGATIVE_CACHE_TTL_SECONDS",
+                            DEFAULT_NEGATIVE_CACHE_TTL_SECONDS,
+                            3600.0,
+                        )
+                        expires_at = time.monotonic() + ttl
+                    _QUERY_CACHE[key] = {
+                        "markets": [dict(row) for row in markets],
+                        "status": dict(status),
+                        "expires_at": expires_at,
+                    }
+                    _QUERY_CACHE.move_to_end(key)
+                    while len(_QUERY_CACHE) > _QUERY_CACHE_MAX:
+                        _QUERY_CACHE.popitem(last=False)
+                flight["result"] = ([dict(row) for row in markets], dict(status))
+                _QUERY_INFLIGHT.pop(key, None)
+                flight["event"].set()
+    return [dict(row) for row in markets], False, False, status
 
 
 def prediction_market_search_impl(queries: str) -> str:
@@ -246,26 +518,82 @@ def prediction_market_search_impl(queries: str) -> str:
     try:
         parts = [p.strip() for chunk in str(queries or "").splitlines()
                  for p in chunk.split(",")]
-        qlist = [p for p in parts if p][:6]
+        qlist: List[str] = []
+        seen_queries: set[str] = set()
+        for part in parts:
+            if not part:
+                continue
+            key = part.casefold()
+            if key in seen_queries:
+                continue
+            seen_queries.add(key)
+            qlist.append(part)
+            if len(qlist) >= 6:
+                break
         if not qlist:
-            return json.dumps({"markets": [], "note": "no queries given"}, ensure_ascii=False)
-        markets = snapshot_for_queries(
+            return json.dumps({
+                "queries": [],
+                "markets": [],
+                "cache_hit": False,
+                "singleflight_shared": False,
+                "status": {
+                    "state": "no_queries",
+                    "attempted": False,
+                    "attempted_query_count": 0,
+                    "query_count": 0,
+                    "successful_query_count": 0,
+                    "transport_failure_count": 0,
+                    "inflight_timeout_count": 0,
+                    "raw_candidate_count": 0,
+                    "candidate_count": 0,
+                    "empty_reason": "no_queries",
+                },
+                "note": "no queries given",
+            }, ensure_ascii=False)
+        markets, cache_hit, singleflight_shared, status = _cached_snapshot(
             qlist,
+            per_query=_env_int("PREDICTION_MARKETS_PER_QUERY", DEFAULT_PER_QUERY),
             max_total=_env_int("PREDICTION_MARKETS_MAX", DEFAULT_MAX_TOTAL),
             min_volume=_env_float("PREDICTION_MARKETS_MIN_VOLUME", DEFAULT_MIN_VOLUME),
             max_per_event=_env_int("PREDICTION_MARKETS_MAX_PER_EVENT", DEFAULT_MAX_PER_EVENT),
         )
+        if not cache_hit and not singleflight_shared:
+            _capture_market_candidates(qlist, markets, status)
         note = ("Machine-fetched snapshot of active Polymarket markets (public Gamma API, no key); "
                 "prices move continuously. Market-implied probabilities are calibration "
                 "anchors, not ground truth.")
-        if not markets:
+        if not markets and status.get("state") == "verified_empty":
             note = "No active, liquid markets matched these queries. " + note
-        return json.dumps({"queries": qlist, "markets": markets, "note": note},
+        elif not markets and status.get("state") == "transport_failure":
+            note = "Prediction-market provider unavailable; no absence conclusion was reached."
+        elif not markets and status.get("state") == "inflight_timeout":
+            note = "An identical market query is still in flight; this caller timed out without a result."
+        elif not markets and status.get("state") == "partial_transport_failure":
+            note = "Prediction-market search was incomplete because some queries failed in transport."
+        return json.dumps({"queries": qlist, "markets": markets, "cache_hit": cache_hit,
+                           "singleflight_shared": singleflight_shared, "status": status,
+                           "note": note},
                           ensure_ascii=False, indent=2)
     except Exception as e:  # noqa: BLE001 — 工具层最后兜底：绝不向 agent 循环抛异常
         logger.warning(f"prediction_market_search: 意外失败（降级为空结果）: {e}")
-        return json.dumps({"markets": [], "note": f"prediction market search unavailable: {e}"},
-                          ensure_ascii=False)
+        return json.dumps({
+            "markets": [],
+            "cache_hit": False,
+            "singleflight_shared": False,
+            "status": {
+                "state": "transport_failure",
+                "attempted": True,
+                "attempted_query_count": 0,
+                "query_count": 0,
+                "successful_query_count": 0,
+                "transport_failure_count": 1,
+                "inflight_timeout_count": 0,
+                "raw_candidate_count": 0,
+                "candidate_count": 0,
+                "empty_reason": "transport_failure",
+            },
+            "note": f"prediction market search unavailable: {e}",
+        }, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
@@ -289,8 +617,10 @@ try:
             JSON with the filtered market snapshot: for each market its market_id,
             exchange, question, implied_yes_prob (last yes price), volume, liquidity,
             event_title, matched_query, url and end_date. Closed, unpriced, resolved
-            (price 0/1), or low-volume markets are excluded. Empty markets list means
-            no liquid overlap — that is an answer, never fabricate market prices.
+            (price 0/1), or low-volume markets are excluded. Inspect ``status.state``
+            before interpreting an empty list: ``verified_empty`` is evidence of no
+            liquid overlap, while transport/in-flight states are unknown outcomes.
+            Never fabricate market prices.
         """
         return prediction_market_search_impl(queries)
 

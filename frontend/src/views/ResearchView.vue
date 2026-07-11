@@ -72,7 +72,7 @@
               </div>
             </div>
             <div class="param" v-if="mode==='full'">
-              <label>{{ L('模拟轮数（越多越丰富）','Simulation rounds (more = richer)') }}</label>
+              <label>{{ L('回合上限（日历模式下将粗化时间粒度，不截断预测期）','Round cap (calendar mode coarsens time granularity, never truncates the horizon)') }}</label>
               <input v-model.number="maxRounds" type="number" min="1" :placeholder="L('留空=按时长自动','blank = auto')" class="num-input" :disabled="starting"/>
             </div>
           </div>
@@ -190,6 +190,7 @@ import { useRouter } from 'vue-router'
 import { runPipeline, cancelPipeline, resumePipeline, getPipelineStatus, getProgressLog, getDossier, continuePipeline, getPreflight } from '../api/research'
 import { getGraphData } from '../api/graph'
 import { locale, setLocale, L } from '../i18n'
+import { liveLogRevision } from '../utils/liveProgress'
 import StageTimeline from '../components/research/StageTimeline.vue'
 import ResearchConsole from '../components/research/ResearchConsole.vue'
 import DossierViewer from '../components/research/DossierViewer.vue'
@@ -318,13 +319,16 @@ let pollActive = false          // 轮询是否处于活动状态（避免隐藏
 let pollDelay = POLL_MIN_MS     // 当前自适应间隔
 let lastFingerprint = ''        // 上一次轮询观测到的状态指纹，用于判定"有无变化"
 let visibilityHandler = null    // visibilitychange 监听器引用，便于卸载时移除
+let pollInFlightGeneration = null // 同一 generation 不叠加；新管线不被旧慢请求阻塞
+let pollGeneration = 0          // 丢弃上一条管线/上一轮轮询的迟到响应
 
-// 计算一份轻量状态指纹：状态/进度/当前阶段/各阶段状态/日志行数。任一变化即视为"有进展"。
+// 计算一份轻量状态指纹。固定 400 行的 rolling tail 也必须看最新行内容；只看 length
+// 会在控制台装满后误判为静止，把真正活跃的研究轮询退避到 12 秒。
 function pollFingerprint() {
   const stageSig = Object.keys(stages.value || {})
     .map(k => `${k}:${stages.value[k] && stages.value[k].status}`)
     .join('|')
-  return `${status.value}#${globalProgress.value}#${currentStage.value}#${stageSig}#${logLines.value.length}`
+  return `${status.value}#${globalProgress.value}#${currentStage.value}#${stageSig}#${liveLogRevision(logLines.value)}`
 }
 
 function stageLabel(name) {
@@ -440,6 +444,7 @@ async function resume() {
 function startPolling() {
   stopPolling()
   pollActive = true
+  pollGeneration += 1
   pollDelay = POLL_MIN_MS
   lastFingerprint = ''
   if (!visibilityHandler) {
@@ -458,6 +463,7 @@ function startPolling() {
 
 function stopPolling() {
   pollActive = false
+  pollGeneration += 1
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
   if (visibilityHandler) {
     document.removeEventListener('visibilitychange', visibilityHandler)
@@ -470,31 +476,46 @@ function stopPolling() {
 function scheduleNext(delay) {
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
   if (!pollActive) return
-  pollTimer = setTimeout(runPoll, delay)
+  const generation = pollGeneration
+  pollTimer = setTimeout(() => runPoll(generation), delay)
 }
 
-async function runPoll() {
-  if (!pollActive) return
+async function runPoll(generation) {
+  if (!pollActive || generation !== pollGeneration) return
   if (typeof document !== 'undefined' && document.hidden) {
     // 暂停：标签页不可见时跳过实际请求，留一个 POLL_MAX_MS 的兜底心跳。
     scheduleNext(POLL_MAX_MS)
     return
   }
-  await poll()
-  if (!pollActive) return  // poll() 命中终态/404 时会调用 stopPolling()
+  if (pollInFlightGeneration === generation) {
+    scheduleNext(POLL_MIN_MS)
+    return
+  }
+  pollInFlightGeneration = generation
+  try {
+    await poll(generation)
+  } finally {
+    // 新 generation 可能已在旧请求返回前取得 ownership；旧请求不得清掉它。
+    if (pollInFlightGeneration === generation) pollInFlightGeneration = null
+  }
+  if (!pollActive || generation !== pollGeneration) return
   scheduleNext(pollDelay)
 }
 
-async function poll() {
-  if (!pipelineId.value) return
+async function poll(generation) {
+  const requestedPipelineId = pipelineId.value
+  if (!requestedPipelineId) return
   try {
     // 研究日志只在研究阶段增长：研究完成后（已拿到过一次完整 tail）就不再
     // 每 2.5s 重新拉 400 行，省掉整个管线生命周期里的无效轮询。
     const researchRunning = !(stages.value.research && stages.value.research.status === 'completed') || logLines.value.length === 0
     const [st, lg] = await Promise.all([
-      getPipelineStatus(pipelineId.value),
-      researchRunning ? getProgressLog(pipelineId.value, 400) : Promise.resolve(null)
+      getPipelineStatus(requestedPipelineId),
+      researchRunning
+        ? getProgressLog(requestedPipelineId, 400).catch(() => null)
+        : Promise.resolve(null)
     ])
+    if (!pollActive || generation !== pollGeneration || requestedPipelineId !== pipelineId.value) return
     pollFailures = 0
     if (connErrorShown) { error.value = ''; connErrorShown = false }
     const d = st.data
@@ -520,19 +541,30 @@ async function poll() {
     const researchDone = stages.value.research && stages.value.research.status === 'completed'
     if (researchDone && !dossierFetched) {
       dossierFetched = true
-      try { dossier.value = (await getDossier(pipelineId.value)).data } catch (e) { /* noop */ }
+      try {
+        const dossierResult = await getDossier(requestedPipelineId)
+        if (pollActive && generation === pollGeneration && requestedPipelineId === pipelineId.value) {
+          dossier.value = dossierResult.data
+        }
+      } catch (e) { /* noop */ }
     }
 
     if (status.value === 'completed' || status.value === 'failed' || status.value === 'cancelled') {
       stopPolling()
       try { localStorage.removeItem(ACTIVE_PIPELINE_KEY) } catch (e) { /* noop */ }
-      if (!dossier.value) { try { dossier.value = (await getDossier(pipelineId.value)).data } catch (e) { /* noop */ } }
+      if (!dossier.value) {
+        try {
+          const dossierResult = await getDossier(requestedPipelineId)
+          if (requestedPipelineId === pipelineId.value) dossier.value = dossierResult.data
+        } catch (e) { /* noop */ }
+      }
       if (status.value === 'failed') {
         const failed = Object.values(stages.value).find(s => s.status === 'failed')
         error.value = (failed && failed.error) || d.error || L('运行失败', 'Run failed')
       }
     }
   } catch (e) {
+    if (!pollActive || generation !== pollGeneration || requestedPipelineId !== pipelineId.value) return
     if (e && e.response && e.response.status === 404) {
       stopPolling()
       try { localStorage.removeItem(ACTIVE_PIPELINE_KEY) } catch (_) { /* noop */ }

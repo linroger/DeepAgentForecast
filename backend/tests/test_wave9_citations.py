@@ -16,6 +16,7 @@
     记号不动、脚注定义用短域名链接。
 """
 
+import hashlib
 import json
 import os
 import sys
@@ -25,7 +26,10 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.config import Config  # noqa: E402
-from app.services.report_agent import ReportAgent, ReportManager  # noqa: E402
+from app.services.report_agent import (  # noqa: E402
+    ReportAgent, ReportManager, _citation_display_title,
+    _citation_source_admissible, _citation_url_ok,
+)
 from app.services.forecast_extractor import (  # noqa: E402
     audit_citation_grounding, validate_citation_markers,
 )
@@ -57,9 +61,11 @@ def reports_tmp(tmp_path, monkeypatch):
 _SOURCES = [
     {"title": "www.mckinsey", "url": "https://www.mckinsey", "tier": "S3"},   # S1 截断 URL
     {"title": "Reuters chip export report", "url": "https://www.reuters.com/tech/chips-2027",
-     "tier": "S2", "date": "2027-01-15"},                                     # S2
+     "tier": "S2", "date": "2027-01-15",
+     "supports": ["Regional revenue growth reached 42% and repeat citation"]},  # S2
     {"title": "BIS export control notice", "url": "https://bis.gov/notice/42",
-     "tier": "S1", "date": "2026-11-01"},                                     # S3
+     "tier": "S1", "date": "2026-11-01",
+     "supports": ["Controls tightened after growth hit 42%"]},                  # S3
     {"title": "Some blog take", "url": "https://blog.example.com/post/1"},    # S4 无层级
     "not-a-dict",                                                             # S5 非法行（保位）
     {"title": "Analyst tail note", "url": "https://note.example.com/a", "tier": "S4"},  # S6
@@ -83,6 +89,8 @@ def test_sources_index_unified_grammar_ranking_and_positions():
     # 记号映射与渲染一致：每个入选记号都出现在文本里。
     for tag in tag_map:
         assert f"[{tag}]" in text
+    assert "supports: Growth hit 42%" not in text  # old fixture wording is gone
+    assert "supports: Regional revenue growth reached 42%" in text
 
 
 def test_sources_index_unified_empty():
@@ -103,6 +111,7 @@ def test_build_sources_index_returns_text_and_map():
     text, tag_map = a._build_sources_index()
     assert text and isinstance(tag_map, dict) and tag_map
     assert all(t.startswith("S") for t in tag_map)
+    assert "S1" not in tag_map  # malformed host is excluded before prompt injection
 
 
 def test_build_sources_index_legacy_fallback(monkeypatch):
@@ -111,7 +120,7 @@ def test_build_sources_index_legacy_fallback(monkeypatch):
     a = _agent(sources=list(_SOURCES), research_report="")
     text, tag_map = a._build_sources_index()
     assert "【可引用来源（正文用 [S1]/[S2] 形式标注）】" in text
-    assert "S1" in tag_map and "S2" in tag_map
+    assert "S1" not in tag_map and "S2" in tag_map
     # 旧位置索引同样跳过非法行但保位（S5 缺、S6 在）。
     assert "S5" not in tag_map and "S6" in tag_map
 
@@ -119,6 +128,33 @@ def test_build_sources_index_legacy_fallback(monkeypatch):
 def test_build_sources_index_no_sources():
     a = _agent(sources=[])
     assert a._build_sources_index() == ("", {})
+
+
+def test_citation_source_admission_rejects_truncated_urls():
+    assert _citation_url_ok("https://en.wikipedia.org/wiki/AI")
+    for url in (
+        "https://en",
+        "https://en.wikipedia.org",
+        "https://en.wikipedia.org/wiki/St",
+        "https://en.wikipedia.org/wiki/ASML_H",
+        "https://en.wikipedia.org/wiki/Anduril_",
+    ):
+        assert not _citation_url_ok(url)
+        assert not _citation_source_admissible({"title": "source", "url": url})
+    assert not _citation_source_admissible({
+        "title": "Official", "url": "https://example.gov/a", "url_valid": False,
+    })
+
+
+def test_citation_display_title_uses_concrete_path_for_domain_fallback():
+    assert _citation_display_title({
+        "title": "en.wikipedia.org",
+        "url": "https://en.wikipedia.org/wiki/AI_Action_Plan",
+    }) == "AI Action Plan"
+    assert _citation_display_title({
+        "title": "Official SEC filing",
+        "url": "https://sec.gov/Archives/filing-42.html",
+    }) == "Official SEC filing"
 
 
 # ───────────────────── validate_citation_markers ────────────────────────
@@ -158,9 +194,9 @@ def test_audit_citation_grounding_resolved_metrics_are_separate():
     assert "resolved_coverage" not in base            # 缺省输出与历史一致
     assert base["coverage"] == 1.0
     strict = audit_citation_grounding(md, index_map={"S1": {}})
-    assert strict["coverage"] == 1.0                  # 发布门口径不动
+    assert strict["coverage"] == 1.0                  # legacy observation retained
     assert strict["resolved_cited"] == 1
-    assert strict["resolved_coverage"] == 0.5
+    assert strict["resolved_coverage"] == 0.5         # final gate prefers this strict basis
 
 
 # ───────────────────── citation finalizer ────────────────────────────────
@@ -170,7 +206,7 @@ _MD_FINAL = """# Report Title
 
 ## Findings
 
-Growth hit 42% [S2] and controls tightened [S3]. Weak take [S1].
+Regional revenue growth reached 42% [S2] and controls tightened [S3]. Weak take [S1].
 
 ```mermaid
 graph TD; A-->B; %% [S2] literal in fence
@@ -178,7 +214,8 @@ graph TD; A-->B; %% [S2] literal in fence
 
 ## Outlook
 
-Repeat citation [S2] and a dangling one [S99].
+Repeat regional revenue growth citation 42% [S2].
+A dangling reference [S99].
 """
 
 
@@ -197,27 +234,28 @@ def test_finalize_citations_appends_references_and_writes_json(reports_tmp):
     # References 附录追加在文末，只列被引用来源，按首现顺序编号。
     assert "## References" in md
     refs = md.split("## References", 1)[1]
-    assert refs.index("[S2]") < refs.index("[S3]") < refs.index("[S1]")
+    assert refs.index("[S2]") < refs.index("[S3]")
+    assert "[S1]" not in refs
     # 正文内联记号不可变；围栏内容原样。
     assert md.count("[S2]") >= 3 and "%% [S2] literal in fence" in md
-    # 悬空 [S99] 不入附录（保留在正文）。
-    assert "[S99]" in md.split("## References")[0]
+    # 无法唯一接地的坏来源/悬空记号都在发布前诚实删除。
+    assert "[S1]" not in md.split("## References")[0]
+    assert "[S99]" not in md.split("## References")[0]
     assert "[S99]" not in refs
-    # URL 守卫：S2 是可点击链接，S1（截断 mckinsey）不渲染为链接。
+    # URL 守卫：S2 是可点击链接，S1（截断 mckinsey）完全不入引用工件。
     assert "[https://www.reuters.com/tech/chips-2027](https://www.reuters.com/tech/chips-2027)" in refs
-    assert "](https://www.mckinsey)" not in refs
-    assert "`https://www.mckinsey`" in refs
+    assert "www.mckinsey" not in refs
     # citations.json 工件：markers + unresolved。
     cpath = os.path.join(reports_tmp, rid, "citations.json")
     assert os.path.exists(cpath)
     with open(cpath, encoding="utf-8") as f:
         data = json.load(f)
     tags = [m["tag"] for m in data["markers"]]
-    assert tags == ["S2", "S3", "S1"]
+    assert tags == ["S2", "S3"]
     by_tag = {m["tag"]: m for m in data["markers"]}
-    assert by_tag["S1"]["url_valid"] is False and by_tag["S2"]["url_valid"] is True
+    assert by_tag["S2"]["url_valid"] is True
     assert by_tag["S2"]["display"] == 1 and by_tag["S2"]["count"] == 2
-    assert data["unresolved"] == [{"tag": "S99", "count": 1}]
+    assert data["unresolved"] == []
     # full_report.md 已回写。
     with open(os.path.join(reports_tmp, rid, "full_report.md"), encoding="utf-8") as f:
         assert "## References" in f.read()
@@ -248,15 +286,135 @@ def test_finalize_citations_zh_heading_and_noop_without_citations(reports_tmp):
     assert "参考来源" not in rep2.markdown_content
 
 
+def test_finalize_repair_preserves_admissible_fallback_namespace(reports_tmp):
+    rid = "report_cite_fallback_namespace"
+    ReportManager._ensure_report_folder(rid)
+    sources = [
+        {"title": "Alpha", "url": "https://example.com/alpha",
+         "supports": ["Alpha policy evidence confirms outlook"]},
+        {"title": "Broken", "url": "https://en"},
+        {"title": "Gamma", "url": "https://example.com/gamma",
+         "supports": ["Gamma market evidence confirms outlook"]},
+    ]
+    a = _agent(sources=sources, output_language="English")
+    a._citation_index = {}
+
+    class _Rep:
+        markdown_content = (
+            "# Report\n\n"
+            "Alpha policy evidence confirms outlook [S1]. Broken evidence [S2]. "
+            "Gamma market evidence confirms outlook [S3].\n"
+        )
+
+    rep = _Rep()
+    a._finalize_citations(rid, rep)
+    body, refs = rep.markdown_content.split("## References", 1)
+    assert "[S1]" in body and "[S3]" in body
+    assert "[S2]" not in body
+    assert "[S1]" in refs and "[S3]" in refs
+    with open(os.path.join(reports_tmp, rid, "citations.json"), encoding="utf-8") as handle:
+        data = json.load(handle)
+    assert [row["tag"] for row in data["markers"]] == ["S1", "S3"]
+    assert data["unresolved"] == []
+
+
+def test_semantic_citation_repair_strips_wrong_source_without_guessing_remap():
+    sources = [
+        {
+            "title": "TSMC 2nm node",
+            "url": "https://example.com/tsmc-2nm",
+            "supports": ["TSMC starts 2nm production"],
+        },
+        {
+            "title": "Revenue filing",
+            "url": "https://example.gov/revenue",
+            "supports": ["Regional revenue growth reached 37% in 2027"],
+        },
+    ]
+    a = _agent(sources=sources)
+    a._citation_index = {"S1": sources[0], "S2": sources[1]}
+    md = (
+        "Regional revenue growth reached 37% in 2027 [S1].\n"
+        "Unrelated employment fell 19% in 2028 [S1].\n"
+    )
+
+    repaired, info = a._repair_semantic_citations(md)
+
+    assert "37% in 2027 [S2]" not in repaired
+    assert "37% in 2027 [S1]" not in repaired
+    assert "19% in 2028 [S1]" not in repaired
+    assert info["remapped"] == 0 and info["stripped"] == 2
+    audit = a._audit_semantic_citations(repaired, a._citation_index_or_fallback())
+    assert audit["unsupported"] == 0
+
+
+def test_semantic_citation_support_rejects_generic_metadata_and_wrong_number():
+    source = {
+        "title": "NCSL Mid-Decade Redistricting Tracker",
+        "url": "https://www.ncsl.org/redistricting-and-census/changing-the-maps",
+        "date": "2026-07-01",
+        "supports": ["Texas enacted mid-decade redistricting in August 2025"],
+    }
+    line = "The generic ballot moved to Democrats by 8 points in July 2026 [S2]."
+    assert ReportAgent._semantic_citation_support(line, source) is False
+
+
+def test_semantic_citation_support_accepts_multi_span_fact_from_same_source():
+    source = {
+        "title": "NY Fed: Who Is Paying for the U.S. Tariffs?",
+        "url": "https://example.gov/tariffs",
+        "supports": [
+            "Realized tariff rate rose from 2.6% to 13%",
+            "About 90% of incidence fell on US firms and consumers",
+        ],
+    }
+    line = (
+        "The effective tariff rate rose from 2.6% to 13%, with 90% of the "
+        "burden falling on firms and consumers [S1]."
+    )
+    assert ReportAgent._semantic_citation_support(line, source) is True
+
+
+def test_semantic_citation_audit_blocks_implausible_source_concentration(monkeypatch):
+    monkeypatch.setattr(Config, "REPORT_MAX_CITATIONS_PER_SOURCE", 2, raising=False)
+    source = {
+        "title": "Official revenue filing",
+        "url": "https://example.gov/revenue",
+        "supports": ["Regional revenue growth reached 37% in 2027"],
+    }
+    a = _agent(sources=[source])
+    md = "\n".join(
+        ["Regional revenue growth reached 37% in 2027 [S1]."] * 3
+    )
+    audit = a._audit_semantic_citations(md, {"S1": source})
+    assert audit["unsupported"] == 0
+    assert audit["overused_sources"] == [{"tag": "S1", "count": 3, "limit": 2}]
+    assert audit["passed"] is False
+
+
+def test_semantic_citation_audit_preserves_cross_language_as_unverifiable():
+    source = {
+        "title": "Official revenue filing",
+        "url": "https://example.gov/revenue",
+        "supports": ["Revenue reached 37% in 2027"],
+    }
+    a = _agent(sources=[source])
+    audit = a._audit_semantic_citations("收入增长达到37% [S1]。", {"S1": source})
+    assert audit["unsupported"] == 0
+    assert audit["unverifiable"] == 1
+
+
 # ───────────────────── dangling repair in the repair chain ───────────────
 def test_run_repair_passes_dangling_keep_and_strip(reports_tmp):
-    s1 = {"title": "Alpha dossier", "content": "alpha metric 37% detail"}
-    s2 = {"title": "Beta dossier", "content": "beta metric 55% detail"}
+    s1 = {"title": "Alpha dossier", "url": "https://example.com/alpha",
+          "content": "alpha metric 37% detail"}
+    s2 = {"title": "Beta dossier", "url": "https://example.com/beta",
+          "content": "beta metric 55% detail"}
     a = _agent(sources=[s1, s2])
     a._citation_index = {"S1": s1}          # 注入索引只含 S1 → [S2] 假悬空、[S77] 真悬空
     md = ("# T\n\n"
           "Line one 37% [S1].\n\n"
-          "Line two 55% [S2].\n\n"
+          "Beta metric reached 55% [S2].\n\n"
           "Line three 99% [S77].\n")
     forecast = {"citation_audit": {"coverage": 1.0, "quantitative_claims": 3}, "quality": {}}
     new_md = a._run_repair_passes("rid_dangle", forecast, md, report=None)
@@ -272,11 +430,13 @@ def test_run_repair_passes_dangling_keep_and_strip(reports_tmp):
 
 
 def test_run_repair_passes_dangling_remap():
-    s1 = {"title": "Alpha dossier", "content": "alpha metric 37% detail"}
-    s2 = {"title": "Beta dossier", "content": "beta metric 55% detail"}
+    s1 = {"title": "Alpha dossier", "url": "https://example.com/alpha",
+          "content": "alpha metric 37% detail"}
+    s2 = {"title": "Beta dossier", "url": "https://example.com/beta",
+          "content": "beta metric 55% detail"}
     a = _agent(sources=[s1, s2])
     a._citation_index = {"S1": s1}
-    md = "Line 55% [S246].\n"
+    md = "Beta metric reached 55% [S246].\n"
     forecast = {"citation_audit": {"coverage": 1.0, "quantitative_claims": 1}, "quality": {}}
     new_md = a._run_repair_passes("rid_remap", forecast, md, report=None)
     # 编号超全量列表 → 数字锚定重映射到命中来源 [S2]。
@@ -308,7 +468,23 @@ The Outlook base case is 42% [S1] with confirmation [S1] and a floor [S2].
 ## Tail
 
 The Outlook tail sits at 21%.
+
+## References
+
+1. [S1] Source One — [https://example.com/one](https://example.com/one)
+2. [S2] Source Two — [https://example.com/two](https://example.com/two)
 """
+
+
+def _write_primary_citations(reports_tmp, rid):
+    payload = {"markers": [
+        {"tag": "S1", "title": "Source One", "domain": "example.com",
+         "url": "https://example.com/one", "url_valid": True},
+        {"tag": "S2", "title": "Source Two", "domain": "example.com",
+         "url": "https://example.com/two", "url_valid": True},
+    ], "unresolved": []}
+    with open(os.path.join(reports_tmp, rid, "citations.json"), "w", encoding="utf-8") as f:
+        json.dump(payload, f)
 
 
 class _CiteLLM:
@@ -324,7 +500,21 @@ class _CiteLLM:
         self.calls.append(messages)
         sys_p = (messages or [{}])[0].get("content", "")
         user = (messages or [{}])[-1].get("content", "")
-        out = user.replace("Outlook", "展望")
+        replacements = {
+            "# Outlook Report": "# 展望报告",
+            "> Summary.": "> 摘要。",
+            "## Findings": "## 研究结果",
+            "The Outlook base case is 42% [S1] with confirmation [S1] and a floor [S2].":
+                "展望基准情景为 42% [S1]，且有确认 [S1] 与下限 [S2]。",
+            "## Tail": "## 尾部风险",
+            "The Outlook tail sits at 21%.": "展望尾部风险为 21%。",
+            "## References": "## 参考来源",
+            "1. [S1] Source One — [https://example.com/one](https://example.com/one)":
+                "1. [S1] 来源一 — [https://example.com/one](https://example.com/one)",
+            "2. [S2] Source Two — [https://example.com/two](https://example.com/two)":
+                "2. [S2] 来源二 — [https://example.com/two](https://example.com/two)",
+        }
+        out = "\n".join(replacements.get(line, line) for line in user.splitlines())
         is_retry = "CITATION TOKEN INVENTORY" in sys_p
         if self.drop_always or not is_retry:
             out = out.replace(" [S1]", "", 1)
@@ -339,6 +529,7 @@ def test_bilingual_parity_retry_restores_markers(reports_tmp, monkeypatch):
     report = Report(report_id=rid, simulation_id="s", graph_id="g",
                     simulation_requirement="req", status=ReportStatus.COMPLETED,
                     markdown_content=_EN_CITED)
+    _write_primary_citations(reports_tmp, rid)
     llm = _CiteLLM(drop_always=False)
     a = _agent(llm=llm, output_language="English")
     a._generate_bilingual_report(rid, report)
@@ -346,15 +537,17 @@ def test_bilingual_parity_retry_restores_markers(reports_tmp, monkeypatch):
     assert os.path.exists(zh_path)
     with open(zh_path, encoding="utf-8") as f:
         out = f.read()
-    assert out.count("[S1]") == 2 and out.count("[S2]") == 1   # 重译补齐
+    assert out.count("[S1]") == 3 and out.count("[S2]") == 2   # 正文 + References
     assert any("CITATION TOKEN INVENTORY" in (c or [{}])[0].get("content", "")
                for c in llm.calls)                              # 确实带清单重试过
     entry = report.translations[0]
     assert entry["translation_quality"] == "ok"
     assert "citation_drift" not in entry
+    assert os.path.exists(os.path.join(reports_tmp, rid, "citations.zh.json"))
+    assert os.path.exists(os.path.join(reports_tmp, rid, "final_audit.zh.json"))
 
 
-def test_bilingual_parity_persistent_drift_warns(reports_tmp, monkeypatch):
+def test_bilingual_parity_persistent_drift_blocks_publication(reports_tmp, monkeypatch):
     monkeypatch.setattr(Config, "REPORT_TRANSLATION_CONCURRENCY", 1, raising=False)
     rid = "report_parity_drift"
     ReportManager._ensure_report_folder(rid)
@@ -362,15 +555,19 @@ def test_bilingual_parity_persistent_drift_warns(reports_tmp, monkeypatch):
     report = Report(report_id=rid, simulation_id="s", graph_id="g",
                     simulation_requirement="req", status=ReportStatus.COMPLETED,
                     markdown_content=_EN_CITED)
+    _write_primary_citations(reports_tmp, rid)
     a = _agent(llm=_CiteLLM(drop_always=True), output_language="English")
     a._generate_bilingual_report(rid, report)
-    entry = report.translations[0]
-    assert entry["translation_quality"] == "warning"
-    assert entry["citation_drift"]
-    assert entry["citation_drift"][0]["diff"]["S1"] == {"src": 2, "dst": 1}
+    assert report.translations is None
+    assert not os.path.exists(os.path.join(reports_tmp, rid, "full_report.zh.md"))
+    with open(os.path.join(reports_tmp, rid, "final_audit.zh.json"), encoding="utf-8") as f:
+        audit = json.load(f)
+    assert audit["hard_passed"] is False
+    assert audit["citation_drift"]
+    assert audit["citation_drift"][0]["diff"]["S1"] == {"src": 2, "dst": 1}
 
 
-def test_bilingual_parity_disabled_keeps_first_pass(reports_tmp, monkeypatch):
+def test_bilingual_retry_toggle_cannot_bypass_final_parity_gate(reports_tmp, monkeypatch):
     monkeypatch.setattr(Config, "REPORT_TRANSLATION_CONCURRENCY", 1, raising=False)
     monkeypatch.setattr(Config, "REPORT_TRANSLATION_CITATION_PARITY", False, raising=False)
     rid = "report_parity_off"
@@ -379,13 +576,15 @@ def test_bilingual_parity_disabled_keeps_first_pass(reports_tmp, monkeypatch):
     report = Report(report_id=rid, simulation_id="s", graph_id="g",
                     simulation_requirement="req", status=ReportStatus.COMPLETED,
                     markdown_content=_EN_CITED)
+    _write_primary_citations(reports_tmp, rid)
     llm = _CiteLLM(drop_always=False)
     a = _agent(llm=llm, output_language="English")
     a._generate_bilingual_report(rid, report)
-    # 关闭对账：不重试（无 INVENTORY 调用）、丢标记不告警（历史行为）。
+    # 关闭只影响重译机会，不得绕过最终引用完整性门。
     assert not any("CITATION TOKEN INVENTORY" in (c or [{}])[0].get("content", "")
                    for c in llm.calls)
-    assert report.translations[0]["translation_quality"] == "ok"
+    assert report.translations is None
+    assert not os.path.exists(os.path.join(reports_tmp, rid, "full_report.zh.md"))
 
 
 # ───────────────────── PDF footnote rewrite ───────────────────────────────
@@ -449,8 +648,27 @@ def test_export_pdf_applies_citation_rewrite_only_to_pandoc(reports_tmp, monkeyp
     rid = "report_pdf_cite"
     ReportManager._ensure_report_folder(rid)
     folder = os.path.join(reports_tmp, rid)
+    md = "# T\n\n## Body\n\nClaim 42% [S1].\n"
     with open(os.path.join(folder, "full_report.md"), "w", encoding="utf-8") as f:
-        f.write("# T\n\n## Body\n\nClaim 42% [S1].\n")
+        f.write(md)
+    with open(os.path.join(folder, "meta.json"), "w", encoding="utf-8") as f:
+        json.dump({
+            "report_id": rid,
+            "simulation_id": "sim_pdf_cite",
+            "graph_id": "graph_pdf_cite",
+            "simulation_requirement": "test",
+            "status": "completed",
+            "failed_sections": [],
+            "partial": False,
+        }, f)
+    with open(os.path.join(folder, "final_audit.json"), "w", encoding="utf-8") as f:
+        json.dump({
+            "policy_version": 3,
+            "hard_passed": True,
+            "hard_issues": [],
+            "markdown_sha256": hashlib.sha256(md.encode("utf-8")).hexdigest(),
+            "publish_gate": {"enabled": False, "passed": True},
+        }, f)
     with open(os.path.join(folder, "citations.json"), "w", encoding="utf-8") as f:
         json.dump({"markers": [_CITATIONS_MAP["S1"]]}, f)
 

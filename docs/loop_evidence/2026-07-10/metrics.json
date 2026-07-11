@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-07-10T17:03:43Z",
+  "base_revision": "27b785a1831f343662d5bc5cea37e93ef308483c",
+  "worktree_status_sha256": "9180fb91e5c13de8d84f1038fb4e406600fd4e5b823c1694bea67f566b872f4a",
+  "runs": [
+    {
+      "pipeline_id": "pipe_f23527f7d903",
+      "created_at_utc": "2026-07-09T08:12:33.491844+00:00",
+      "persisted_status": "completed",
+      "deliverable_health": "degraded",
+      "research_seconds_approx": 9472,
+      "research_tokens": 79750000,
+      "graph_seconds_approx": 31051,
+      "graph_chunks_attempted": 466,
+      "graph_chunks_skipped": 278,
+      "graph_skipped_ratio": 0.597,
+      "graph_attributed_calls": 0,
+      "simulation_organic_actions": 398,
+      "ensemble_agreement": 0.0,
+      "report_id": "report_a03be154febc",
+      "citation_backfill_markers": 139
+    },
+    {
+      "pipeline_id": "pipe_0f2bee7bd649",
+      "created_at_utc": "2026-07-08T10:55:00+00:00",
+      "persisted_status": "failed",
+      "complete_primary_report_present": true,
+      "research_seconds_approx": 20088,
+      "graph_seconds_approx": 5868,
+      "report_seconds_approx": 734,
+      "post_report_orphan_seconds_approx": 49104,
+      "report_id": "report_1c312b400d33",
+      "citation_backfill_markers": 111
+    },
+    {
+      "pipeline_id": "pipe_a8986bffd918",
+      "created_at_utc": "2026-07-07T18:36:00+00:00",
+      "persisted_status": "failed",
+      "complete_primary_report_present": true,
+      "research_seconds_approx": 14652,
+      "research_tokens": 82710000,
+      "research_tool_calls": 2829,
+      "graph_seconds_approx": 26028,
+      "report_seconds_approx": 16704,
+      "report_tokens": 5990000,
+      "report_cost_usd": 1.892,
+      "simulation_id": "sim_cbbacd1a27a9",
+      "simulation_rounds_executed": 0,
+      "simulation_total_rounds": 36,
+      "simulation_organic_actions": 0,
+      "simulation_persisted_runner_status": "completed",
+      "simulation_health": "errored",
+      "report_id": "report_1b70ace5c9e8",
+      "citation_backfill_markers": 233
+    }
+  ],
+  "cross_run": {
+    "research_search_calls": 4974,
+    "research_search_no_result": 1428,
+    "research_search_no_result_ratio": 0.287,
+    "research_empty_tool_arguments": 442,
+    "reports_with_citation_quality_failure": 3,
+    "latest_reports_examined": 3
+  },
+  "verification": {
+    "loop_001_related_tests_passed": 76,
+    "loop_002_expanded_tests_passed": 81,
+    "loop_002_independent_review": "no_critical_important_or_minor_findings_after_two_race_fixes",
+    "full_backend_suite": "printed_100_percent_then_hung_during_interpreter_shutdown"
+  }
+}

@@ -6,6 +6,7 @@ OASIS模拟运行器
 import os
 import sys
 import json
+import hashlib
 import time
 import asyncio
 import threading
@@ -163,6 +164,18 @@ class SimulationRunState:
     # 报告/健康门可据此区分「一气呵成」与「崩溃后续跑」的样本。
     resumed_from_round: Optional[int] = None
 
+    # CAL-TEMPORAL（spec §4）：日历时序模式的运行态字段。仅当 simulation_config 带
+    # temporal_config.mode=="calendar" 时写入；hours 模式恒为 None 且不参与序列化
+    # （run_state.json 逐字节不变），旧检查点缺字段时 restore 为 None（absent-safe）。
+    temporal_mode: Optional[str] = None          # "calendar" | None
+    calendar_unit: Optional[str] = None          # day|week|half_month|month|quarter|half_year
+    current_period_end: Optional[str] = None     # 最近完成轮次覆盖时段的结束日（ISO）
+    horizon_date: Optional[str] = None           # 预测判定日（ISO）
+
+    # CAL-TEMPORAL：运行期选项记账（如 max_rounds_ignored）。空 dict 不序列化，
+    # 保证 hours 模式 run_state.json 逐字节不变。
+    options: Dict[str, Any] = field(default_factory=dict)
+
     # EXECPLAN2 F-6-1：守护本对象可变标量计数器的可重入锁。
     # get_run_state() 返回缓存的同一个对象；监控线程持续 mutate（add_action / current_round /
     # twitter_*/reddit_* / counts），而 Flask 请求线程并发调用 to_dict()/to_detail_dict() 序列化。
@@ -194,7 +207,7 @@ class SimulationRunState:
             return self._to_dict_unlocked()
 
     def _to_dict_unlocked(self) -> Dict[str, Any]:
-        return {
+        result = {
             "simulation_id": self.simulation_id,
             "runner_status": self.runner_status.value,
             "current_round": self.current_round,
@@ -229,6 +242,15 @@ class SimulationRunState:
             "rounds_truncated_to": self.rounds_truncated_to,
             "resumed_from_round": self.resumed_from_round,
         }
+        # CAL-TEMPORAL：日历字段仅在 calendar 模式序列化（hours 模式键缺失，逐字节不变）。
+        if self.temporal_mode is not None:
+            result["temporal_mode"] = self.temporal_mode
+            result["calendar_unit"] = self.calendar_unit
+            result["current_period_end"] = self.current_period_end
+            result["horizon_date"] = self.horizon_date
+        if self.options:
+            result["options"] = self.options
+        return result
 
     def to_detail_dict(self) -> Dict[str, Any]:
         """包含最近动作的详细信息"""
@@ -358,6 +380,12 @@ class SimulationRunner:
                 rounds_truncated_from=data.get("rounds_truncated_from"),
                 rounds_truncated_to=data.get("rounds_truncated_to"),
                 resumed_from_round=data.get("resumed_from_round"),
+                # CAL-TEMPORAL：旧 run_state.json 无这些键 → 恒为 None/{}（absent-safe）。
+                temporal_mode=data.get("temporal_mode"),
+                calendar_unit=data.get("calendar_unit"),
+                current_period_end=data.get("current_period_end"),
+                horizon_date=data.get("horizon_date"),
+                options=data.get("options") or {},
             )
             
             # 加载最近动作
@@ -433,6 +461,11 @@ class SimulationRunner:
         Returns:
             SimulationRunState
         """
+        if platform not in {"twitter", "reddit", "parallel"}:
+            raise ValueError(
+                f"不支持的模拟平台: {platform}; expected twitter, reddit, or parallel"
+            )
+
         # 检查是否已在运行 —— 但状态须与「确有存活进程」交叉验证（EXECPLAN2 F-12-6）：
         # 重启/崩溃后 runner_status 可能仍持久化为 RUNNING，但本进程没有对应 Popen，
         # 此时应允许重跑而非永久拒绝。仅当确有存活进程时才视为「已在运行」。
@@ -450,6 +483,83 @@ class SimulationRunner:
         
         if not os.path.exists(config_path):
             raise ValueError(f"模拟配置不存在，请先调用 /prepare 接口")
+
+        # LOOP-011: a researched cast is executable only while the exact
+        # profile/role manifests still match the prepared artifacts. This check
+        # sits at the runner boundary so API, pipeline, and direct service starts
+        # cannot bypass it.
+        state_path = os.path.join(sim_dir, "state.json")
+        try:
+            prepared_state: Dict[str, Any] = {}
+            state_exists = os.path.exists(state_path)
+            if state_exists:
+                with open(state_path, encoding="utf-8") as state_handle:
+                    prepared_state = json.load(state_handle)
+
+            # A missing/stale state file must not downgrade a researched cast to
+            # the legacy role_count=0 path. Inspect adjacent manifests only to
+            # detect that a role-bearing prepared artifact exists; the complete
+            # sealed validation below remains authoritative.
+            discovered_role_counts: List[int] = []
+            for profile_name in ("reddit_profiles.json", "twitter_profiles.csv"):
+                candidate = os.path.join(
+                    sim_dir,
+                    profile_name.rsplit(".", 1)[0] + "_roles.json",
+                )
+                if not os.path.exists(candidate):
+                    continue
+                with open(candidate, encoding="utf-8") as role_handle:
+                    candidate_manifest = json.load(role_handle)
+                if not isinstance(candidate_manifest, dict):
+                    raise ValueError("actor role manifest must be an object")
+                discovered_role_counts.append(
+                    int(candidate_manifest.get("actor_role_count", -1))
+                )
+            discovered_roles = max(discovered_role_counts, default=0)
+            if discovered_roles > 0 and not state_exists:
+                raise ValueError("prepared state is missing for role-bearing profiles")
+
+            role_count = int(prepared_state.get("actor_role_count", 0) or 0)
+            if discovered_roles > 0 and role_count <= 0:
+                raise ValueError("prepared state omits the discovered actor roles")
+            if role_count:
+                cast_path = os.path.join(sim_dir, "actor_cast_manifest.json")
+                with open(cast_path, "rb") as cast_handle:
+                    cast_sha = hashlib.sha256(cast_handle.read()).hexdigest()
+                if cast_sha != prepared_state.get("actor_cast_manifest_sha256"):
+                    raise ValueError("actor cast manifest fingerprint mismatch")
+                from .oasis_profile_generator import OasisProfileGenerator
+                role_manifest_shas = prepared_state.get(
+                    "actor_role_manifest_sha256"
+                )
+                if not isinstance(role_manifest_shas, dict):
+                    raise ValueError("prepared role manifest fingerprints are missing")
+                profile_names = []
+                if platform in ("parallel", "reddit"):
+                    profile_names.append("reddit_profiles.json")
+                if platform in ("parallel", "twitter"):
+                    profile_names.append("twitter_profiles.csv")
+                for profile_name in profile_names:
+                    profile_path = os.path.join(sim_dir, profile_name)
+                    platform_name = "twitter" if profile_name.endswith(".csv") else "reddit"
+                    role_manifest_path = OasisProfileGenerator._role_manifest_path(
+                        profile_path
+                    )
+                    with open(role_manifest_path, "rb") as role_manifest_handle:
+                        role_manifest_sha = hashlib.sha256(
+                            role_manifest_handle.read()
+                        ).hexdigest()
+                    if role_manifest_shas.get(platform_name) != role_manifest_sha:
+                        raise ValueError(
+                            f"{platform_name} role manifest fingerprint mismatch"
+                        )
+                    OasisProfileGenerator.validate_role_prompt_manifest(
+                        profile_path,
+                        expected_role_count=role_count,
+                        expected_cast_manifest_sha256=cast_sha,
+                    )
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"角色提示词完整性校验失败: {exc}") from exc
 
         # RUN-7: 断点续跑（默认关，SIM_RESUME=true 开启）。resume=None 时自动判定：
         # 仅当上次运行未 COMPLETED 且存在轮级检查点才续跑（COMPLETED 后的重跑视为要全新结果）。
@@ -486,17 +596,44 @@ class SimulationRunner:
         total_hours = time_config.get("total_simulation_hours", 72)
         # 与配置生成器默认值(60)保持一致：缺省字段时算出 72 轮而非 144 轮，消除潜在的 2x 差异。
         minutes_per_round = time_config.get("minutes_per_round", 60)
-        total_rounds = int(total_hours * 60 / minutes_per_round)
-        
-        # T3.7: 仅当显式给定 max_rounds 时才截断（默认 None=跑满）。截断时把「本应/实际」记为一等字段。
+
+        # CAL-TEMPORAL（spec §1/§4）：仅按 temporal_config.mode=="calendar" 的**存在性**分派，
+        # 不读环境变量——缺该块的旧配置（所有既有 fixture/检查点/在途运行）逐字节走 hours 旧路径。
+        temporal_config = config.get("temporal_config") or {}
+        calendar_mode = (
+            isinstance(temporal_config, dict)
+            and temporal_config.get("mode") == "calendar"
+        )
+
         truncated_from = None
         truncated_to = None
-        if max_rounds is not None and max_rounds > 0:
-            original_rounds = total_rounds
-            total_rounds = min(total_rounds, max_rounds)
-            if total_rounds < original_rounds:
-                truncated_from, truncated_to = original_rounds, total_rounds
-                logger.info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
+        max_rounds_ignored = False
+        if calendar_mode:
+            # 日历模式：轮数 = 时间线的 n_rounds（单一权威，= len(round_dates)）。
+            # 显式 max_rounds 在运行时**绝不截断**预测期覆盖——轮数上限只在配置生成期
+            # 粗化时间粒度（round_cap_coarsened），运行时截断会砍掉判定日前的覆盖。
+            total_rounds = int(temporal_config.get("n_rounds", 0) or 0)
+            if total_rounds <= 0:
+                # 兼容垫片兜底：calendar 模式下 time_config 的 total_simulation_hours=n_rounds、
+                # minutes_per_round=60，旧公式仍算出正确轮数。
+                total_rounds = int(total_hours * 60 / minutes_per_round)
+            if max_rounds is not None and max_rounds > 0:
+                max_rounds_ignored = True
+                logger.warning(
+                    f"[{simulation_id}] 日历模式忽略运行时 max_rounds={max_rounds}："
+                    f"轮数上限只在配置生成期粗化时间粒度，不截断预测期"
+                    f"（total_rounds={total_rounds}，horizon={temporal_config.get('horizon_date')}）"
+                )
+        else:
+            total_rounds = int(total_hours * 60 / minutes_per_round)
+
+            # T3.7: 仅当显式给定 max_rounds 时才截断（默认 None=跑满）。截断时把「本应/实际」记为一等字段。
+            if max_rounds is not None and max_rounds > 0:
+                original_rounds = total_rounds
+                total_rounds = min(total_rounds, max_rounds)
+                if total_rounds < original_rounds:
+                    truncated_from, truncated_to = original_rounds, total_rounds
+                    logger.info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
 
         state = SimulationRunState(
             simulation_id=simulation_id,
@@ -507,7 +644,12 @@ class SimulationRunner:
             rounds_truncated_from=truncated_from,
             rounds_truncated_to=truncated_to,
             resumed_from_round=resume_from_round if resume_active else None,
+            temporal_mode="calendar" if calendar_mode else None,
+            calendar_unit=temporal_config.get("unit") if calendar_mode else None,
+            horizon_date=temporal_config.get("horizon_date") if calendar_mode else None,
         )
+        if max_rounds_ignored:
+            state.options["max_rounds_ignored"] = True
         
         cls._save_run_state(state)
         
@@ -883,6 +1025,9 @@ class SimulationRunner:
                                 elif event_type == "round_end":
                                     round_num = action_data.get("round", 0)
                                     simulated_hours = action_data.get("simulated_hours", 0)
+                                    # CAL-TEMPORAL：日历模式的 round_end 可携带本轮覆盖时段的
+                                    # 结束日（ISO）；hours 模式事件无此键 → 恒为 None，行为不变。
+                                    period_end = action_data.get("period_end")
 
                                     # EXECPLAN2 F-6-1：轮次/模拟时间标量的更新同样持锁。
                                     with state._lock:
@@ -901,6 +1046,13 @@ class SimulationRunner:
                                             state.current_round = round_num
                                         # 总体时间取两个平台的最大值
                                         state.simulated_hours = max(state.twitter_simulated_hours, state.reddit_simulated_hours)
+                                        # CAL-TEMPORAL：推进已覆盖的日历时点（双平台取较晚者；
+                                        # ISO 日期字符串可按字典序比较）。
+                                        if period_end:
+                                            _pe = str(period_end)
+                                            if (state.current_period_end is None
+                                                    or _pe > state.current_period_end):
+                                                state.current_period_end = _pe
 
                                 continue
 
@@ -1736,6 +1888,9 @@ class SimulationRunner:
         # real round count + error/truncation from run_state.json
         current_round = total_rounds = None
         run_error = None
+        # CAL-TEMPORAL：run_state 的 current_period_end 由 round_end 事件实时推进，
+        # 是 coverage_end 的第一数据源（hours 模式无此键 → None）。
+        current_period_end = None
         try:
             _rsp = os.path.join(cls.RUN_STATE_DIR, simulation_id, "run_state.json")
             if os.path.exists(_rsp):
@@ -1744,6 +1899,7 @@ class SimulationRunner:
                 current_round = _rs.get("current_round")
                 total_rounds = _rs.get("total_rounds") or _rs.get("total_simulation_rounds")
                 run_error = _rs.get("error")
+                current_period_end = _rs.get("current_period_end")
         except (OSError, ValueError):
             pass
         rounds_executed = current_round if isinstance(current_round, int) else len(action_volume_by_round)
@@ -1791,6 +1947,9 @@ class SimulationRunner:
         # 的累计值没回传到这里），报告读到恒 0 的模拟时长。这里从 simulation_config.json 读
         # minutes_per_round，据唯一权威公式 rounds_executed × minutes_per_round / 60 重算。
         _minutes_per_round = 60.0
+        # CAL-TEMPORAL：顺带读取 temporal_config（仅 mode=="calendar" 时保留）；
+        # hours 模式恒为空 dict → run_summary 不写任何日历键（逐字节不变）。
+        _temporal_cfg: Dict[str, Any] = {}
         try:
             _cfgp = os.path.join(cls.RUN_STATE_DIR, simulation_id, "simulation_config.json")
             if os.path.exists(_cfgp):
@@ -1798,8 +1957,12 @@ class SimulationRunner:
                     _sc = json.load(_cf)
                 _mpr = (_sc.get("time_config") or {}).get("minutes_per_round", 60)
                 _minutes_per_round = float(_mpr) if _mpr else 60.0
+                _tc_block = _sc.get("temporal_config")
+                if isinstance(_tc_block, dict) and _tc_block.get("mode") == "calendar":
+                    _temporal_cfg = _tc_block
         except (OSError, ValueError, TypeError):
             _minutes_per_round = 60.0
+            _temporal_cfg = {}
         try:
             from app.services.agent_dynamics import simulated_hours_from_rounds
             simulated_hours = simulated_hours_from_rounds(rounds_executed, _minutes_per_round)
@@ -1849,6 +2012,38 @@ class SimulationRunner:
             "action_volume_by_round": action_volume_by_round,
             "top_posts": top_posts,
         }
+        # CAL-TEMPORAL（spec §4）：日历模式附加时序记账字段；simulated_hours 沿用上方
+        # 既有公式（兼容垫片使其 = 轮数，既有 pinned 测试不动）。hours 模式不写任何新键。
+        if _temporal_cfg:
+            # coverage_end = 最后一个已执行轮次的 period_end：优先取 run_state 实时推进的
+            # current_period_end，缺失时按 rounds_executed 回查 round_dates（round N ↔ 下标 N-1）。
+            _coverage_end = current_period_end if isinstance(current_period_end, str) else None
+            _round_dates = _temporal_cfg.get("round_dates") or []
+            if _coverage_end is None and isinstance(rounds_executed, int) and rounds_executed > 0 \
+                    and isinstance(_round_dates, list) and _round_dates:
+                try:
+                    _idx = min(rounds_executed, len(_round_dates)) - 1
+                    _coverage_end = (_round_dates[_idx] or {}).get("period_end")
+                except (TypeError, AttributeError, IndexError):
+                    _coverage_end = None
+            # simulated_span_days = as_of_date → coverage_end 的自然日数（不可得时为 0）。
+            _span_days = 0
+            try:
+                from datetime import date as _date
+                _as_of = _temporal_cfg.get("as_of_date")
+                if _coverage_end and _as_of:
+                    _span_days = (_date.fromisoformat(str(_coverage_end))
+                                  - _date.fromisoformat(str(_as_of))).days
+            except (ValueError, TypeError):
+                _span_days = 0
+            summary["temporal_mode"] = "calendar"
+            summary["calendar_unit"] = _temporal_cfg.get("unit")
+            summary["total_periods"] = _temporal_cfg.get("n_rounds")
+            summary["simulated_span_days"] = _span_days
+            summary["horizon_date"] = _temporal_cfg.get("horizon_date")
+            summary["horizon_source"] = _temporal_cfg.get("horizon_source")
+            summary["horizon_defaulted"] = _temporal_cfg.get("horizon_defaulted")
+            summary["coverage_end"] = _coverage_end
         if run_error:
             summary["error"] = str(run_error)[:300]
         if llm_health is not None:

@@ -17,6 +17,13 @@ def client(tmp_path, monkeypatch):
     reports = tmp_path / "reports"
     reports.mkdir()
     monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(reports))
+    # This suite isolates manifest/path/CSP behavior; publication-barrier
+    # behavior is covered end-to-end in test_report_publication_barrier.py.
+    monkeypatch.setattr(
+        ReportManager, "get_report", classmethod(lambda cls, report_id: object()))
+    monkeypatch.setattr(
+        ReportManager, "is_publishable",
+        classmethod(lambda cls, report_id, lang=None: True))
     from app import create_app
     app = create_app()
     app.config["TESTING"] = True
@@ -131,3 +138,35 @@ def test_interactive_chart_is_served_in_opaque_script_sandbox(client):
     assert "connect-src 'none'" in resp.headers["Content-Security-Policy"]
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
     assert resp.headers["Referrer-Policy"] == "no-referrer"
+
+
+def test_svg_chart_is_served_with_scripts_disabled(client):
+    rid = "report_viz_svg"
+    folder = ReportManager._ensure_report_folder(rid)
+    charts = os.path.join(folder, "charts")
+    os.makedirs(charts)
+    with open(os.path.join(charts, "active.svg"), "w", encoding="utf-8") as f:
+        f.write("<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>")
+
+    resp = client.get(f"/api/report/{rid}/charts/active.svg")
+
+    assert resp.status_code == 200
+    assert resp.mimetype == "image/svg+xml"
+    csp = resp.headers["Content-Security-Policy"]
+    assert "sandbox;" in csp and "script-src 'none'" in csp
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"
+    assert resp.headers["Referrer-Policy"] == "no-referrer"
+
+
+def test_chart_endpoint_rejects_post_registration_symlink_swap(client, tmp_path):
+    rid = "report_viz_link"
+    folder = ReportManager._ensure_report_folder(rid)
+    charts = os.path.join(folder, "charts")
+    os.makedirs(charts)
+    outside = tmp_path / "outside.html"
+    outside.write_text("<script>window.stolen=1</script>", encoding="utf-8")
+    os.symlink(outside, os.path.join(charts, "swapped.html"))
+
+    resp = client.get(f"/api/report/{rid}/charts/swapped.html")
+
+    assert resp.status_code == 404

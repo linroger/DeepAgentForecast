@@ -11,13 +11,22 @@ Prediction-market prices are the **aggregated, money-weighted belief of people w
 
 The `prediction_market_search` tool queries **Polymarket's public Gamma API** (`https://gamma-api.polymarket.com` `/public-search` — no key, no wallet) for active markets and returns, per market: `market_id`, `exchange` (`"polymarket"`), `question`, `implied_yes_prob` (the "Yes" price), `volume`, `liquidity`, `event_title`, `url`, and `end_date`. It is degrade-safe: network failure / nothing found → empty result. **An empty result is an answer** — note "no liquid markets overlap this question" and move on; never fabricate a market or a price.
 
-**Fallback if the tool is unavailable**: query the Gamma API directly via `web_fetch` — it is the same keyless endpoint:
+In this forecast workflow, every successful tool response is also captured in an append-only run ledger (`prediction_market_candidates.jsonl`). The deterministic finalizer relevance-gates and refreshes that ledger into the canonical `prediction_markets.json`. This is a first-class delivery contract: a useful market you found mid-research must survive even if a later query is phrased differently. Do not repeatedly issue an identical query payload—the tool caches normalized payloads for the life of the research process, and repetition adds no evidence.
+
+**Fallback if the tool is unavailable**: query the Gamma API directly via the available `web_fetch` tool — it is the same keyless endpoint:
 
 ```
 https://gamma-api.polymarket.com/public-search?q=<short query>&limit_per_type=8&events_status=active
 ```
 
 Each returned event carries a `markets` list; per market read `question`, `outcomes`/`outcomePrices` (the "Yes" index is the implied probability), `volume`, `closed`, `endDate`, `slug`. Apply the same filters as §3.
+
+These are the only two permitted access paths in this research agent: the narrow
+`prediction_market_search` tool first, then read-only `web_fetch` to the public Gamma
+endpoint. Do not invoke a shell, CLI, wallet, CLOB order endpoint, or any state-changing
+market operation. If both permitted paths have a real transport/protocol failure, record
+that degraded status and continue without a market anchor. A valid empty or
+relevance-filtered result is not a transport failure.
 
 ## 2. Query craft (match how markets are titled)
 
@@ -30,6 +39,7 @@ Market search is full-text over market/event **titles**, and Polymarket titles a
   3. The **top 2–3 actor names** by salience (candidates, agencies, companies).
 - Deduplicate case-insensitively; trim each query to ≤5 words.
 - Do not reissue near-duplicate queries; a thin result means change the phrase's *angle* (another actor, another driver, a concrete race or decision), not its word order.
+- Reuse the exact returned `market_id` and `url`; never reconstruct a URL from memory. Record `end_date`, volume, liquidity, and the fetch timestamp so downstream freshness checks and charts remain auditable.
 
 ## 3. Filtering (relevance is YOUR job)
 

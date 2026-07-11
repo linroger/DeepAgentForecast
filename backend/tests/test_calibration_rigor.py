@@ -61,6 +61,15 @@ def test_audit_source_only_unchanged_when_no_sim_markers():
 # ----------------------------------------------------------- R2-CAL-7 criteria
 def test_validate_resolution_criteria_sharpness():
     assert FE.validate_resolution_criteria("2030年 DRAM 份额>50%")["sharp"] is True
+    assert FE.validate_resolution_criteria(
+        "AP certifies 218 or more Democratic House seats after the November 3, 2026 election"
+    )["sharp"] is True
+    assert FE.validate_resolution_criteria(
+        "SEC acknowledges an S-1 registration statement by 2028-12-31"
+    )["sharp"] is True
+    assert FE.validate_resolution_criteria(
+        "FY26 cash capex totals between $630B and $770B"
+    )["sharp"] is True
     assert FE.validate_resolution_criteria("利率可能上升")["sharp"] is False
     assert FE.validate_resolution_criteria("")["sharp"] is False
 

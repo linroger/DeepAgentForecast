@@ -218,9 +218,11 @@ def test_extract_exec_summary():
 def test_reconcile_track_reports_applies_opening_and_demotes():
     reports = [
         ("基线证据扫描 (Base Evidence Sweep)",
-         "## Executive Summary\n\n" + "track one findings. " * 40),
+         "## Executive Summary\n\n" + "track one findings. " * 40
+         + "\n\n## Evidence\n\nbody one"),
         ("基率·参照类·历史类比 (Base Rates & Reference Classes)",
-         "## Executive Summary\n\n" + "track two findings. " * 40),
+         "## Executive Summary\n\n" + "track two findings. " * 40
+         + "\n\n## Base Rates\n\nbody two"),
     ]
     merged = merge_track_reports(reports)
     good = ("## Executive Summary\n\n" + "merged narrative. " * 30
@@ -231,22 +233,132 @@ def test_reconcile_track_reports_applies_opening_and_demotes():
     assert "### Cross-track disagreements" in out
     assert "## Part 1 — Base Evidence Sweep" in out
     assert "# Track 1:" not in out
+    # Unified opening supersedes each track-local summary; substantive bodies remain.
+    assert "track one findings" not in out and "track two findings" not in out
+    assert "body one" in out and "body two" in out
 
 
 def test_reconcile_track_reports_degrades_safely():
-    reports = [("T1 (Alpha)", "## Executive Summary\n\n" + "one. " * 50),
-               ("T2 (Beta)", "## Executive Summary\n\n" + "two. " * 50)]
+    reports = [
+        ("T1 (Alpha)", "## Executive Summary\n\n" + "one. " * 50
+         + "\n\n## Evidence\n\nalpha evidence"),
+        ("T2 (Beta)", "## Executive Summary\n\n" + "two. " * 50
+         + "\n\n## Evidence\n\nbeta evidence"),
+    ]
     merged = merge_track_reports(reports)
-    # LLM 抛异常 → 原文返回
+    # LLM 抛异常 → 确定性清理（一个摘要、无轨级 H1），而不是泄漏原始拼接。
     out, audit = reconcile_track_reports(merged, reports, llm=_StubLLM(RuntimeError("boom")))
-    assert out == merged and audit["applied"] is False
-    # 输出过短 → 拒绝
+    assert audit["applied"] is False and audit["fallback"] == "deterministic"
+    assert out.count("## Executive Summary") == 1
+    assert "# Track" not in out and "## Part 1 — Alpha" in out
+    assert "one." in out and "two." not in out
+    # 输出过短 → 同一确定性回退
     out2, audit2 = reconcile_track_reports(merged, reports, llm=_StubLLM("short"))
-    assert out2 == merged and audit2["applied"] is False
+    assert out2 == out and audit2["applied"] is False
     # 单轨 → 无需整理
     out3, audit3 = reconcile_track_reports("# Track 1: X\n\nbody", [("X", "body")],
                                            llm=_StubLLM("anything long " * 50))
     assert out3 == "# Track 1: X\n\nbody" and audit3["reason"] == "tracks<2"
+
+
+def test_three_track_merge_dedupes_multilingual_openings_on_llm_failure():
+    reports = [
+        (
+            "基线证据扫描 (Base Evidence Sweep)",
+            "## 执行摘要 (Executive Summary)\n\n"
+            + "Baseline conclusion is grounded [S1]. " * 12
+            + "\n\n## 如何阅读本报告\n\nRead probabilities as calibrated estimates.\n\n"
+            "## Evidence\n\nBaseline evidence remains [S2].",
+        ),
+        (
+            "基率 (Base Rates)",
+            "## Executive Overview\n\n" + "Second-track duplicate opening. " * 12
+            + "\n\n## Reader's Guide\n\nSecond guide must be removed.\n\n"
+            "## Reference Classes\n\nBase-rate evidence remains [S3].",
+        ),
+        (
+            "反证 (Disconfirmation)",
+            "## Research Summary\n\n" + "Third-track duplicate opening. " * 12
+            + "\n\n## 阅读指南\n\nThird guide must be removed.\n\n"
+            "## Disconfirming Evidence\n\nDisconfirming evidence remains [S4].",
+        ),
+    ]
+    merged = merge_track_reports(reports)
+
+    out, audit = reconcile_track_reports(
+        merged, reports, llm=_StubLLM(RuntimeError("offline")))
+
+    assert audit["applied"] is False and audit["fallback"] == "deterministic"
+    assert out.count("## Executive Summary") == 1
+    assert out.count("## How to Read This Dossier") == 1
+    assert all(alias not in out for alias in (
+        "## 执行摘要", "## Executive Overview", "## Research Summary",
+        "## 如何阅读本报告", "## Reader's Guide", "## 阅读指南",
+    ))
+    assert "Baseline conclusion is grounded [S1]" in out
+    assert "Second-track duplicate opening" not in out
+    assert "Third-track duplicate opening" not in out
+    assert all(f"## Part {n}" in out for n in (1, 2, 3))
+    assert "# Track" not in out
+    assert "Baseline evidence remains [S2]" in out
+    assert "Base-rate evidence remains [S3]" in out
+    assert "Disconfirming evidence remains [S4]" in out
+
+
+@pytest.mark.parametrize(
+    "opening, expected_reason",
+    [
+        (
+            "## Executive Summary\n\n" + "Ungrounded synthesis. " * 20
+            + "\n\n### Cross-track disagreements\n\nNone.",
+            "llm citation audit regressed",
+        ),
+        (
+            "## Executive Summary\n\n" + "Invented marker [S999]. " * 20
+            + "\n\n### Cross-track disagreements\n\nNone.",
+            "llm citation audit regressed",
+        ),
+    ],
+)
+def test_reconcile_rejects_citation_loss_or_dangling_markers(opening, expected_reason):
+    reports = [
+        ("T1 (Alpha)", "## Executive Summary\n\n" + "Grounded claim [S1]. " * 20
+         + "\n\n## Evidence\n\nBody [S2]."),
+        ("T2 (Beta)", "## Executive Summary\n\n" + "Other claim [S3]. " * 20
+         + "\n\n## Evidence\n\nOther body [S4]."),
+    ]
+    merged = merge_track_reports(reports)
+
+    out, audit = reconcile_track_reports(merged, reports, llm=_StubLLM(opening))
+
+    assert audit["applied"] is False and audit["reason"] == expected_reason
+    assert audit["citation_audit"]["passed"] is False
+    assert out.startswith("## Executive Summary\n\nGrounded claim [S1]")
+    assert "[S999]" not in out
+
+
+def test_reconcile_accepts_compact_opening_when_source_marker_coverage_survives():
+    reports = [
+        ("T1 (Alpha)", "## Executive Summary\n\n" + "Grounded claim [S1]. " * 20
+         + "\n\n## Evidence\n\nBody [S2]."),
+        ("T2 (Beta)", "## Executive Summary\n\n" + "Other claim [S3]. " * 20
+         + "\n\n## Evidence\n\nOther body [S4]."),
+    ]
+    opening = (
+        "## Executive Summary\n\n"
+        + "A concise synthesis retains the baseline source [S1]. "
+        + "It consolidates repeated claims without repeating their marker. " * 8
+        + "\n\n### Cross-track disagreements\n\nNo material disagreement."
+    )
+
+    out, audit = reconcile_track_reports(
+        merge_track_reports(reports), reports, llm=_StubLLM(opening))
+
+    assert audit["applied"] is True
+    assert audit["citation_audit"]["passed"] is True
+    assert out.count("## Executive Summary") == 1
+    assert "# Track" not in out
+    assert "Body [S2]" in out and "Other body [S4]" in out
 
 
 def test_reconcile_prompt_is_bounded():

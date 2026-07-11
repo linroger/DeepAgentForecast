@@ -14,6 +14,7 @@
 """
 
 import os
+import json
 import subprocess
 
 import pytest
@@ -55,6 +56,13 @@ def report_folder(tmp_path, monkeypatch):
     """把 ReportManager._get_report_folder 钉到 tmp_path，隔离磁盘副作用。"""
     monkeypatch.setattr(ReportManager, "_get_report_folder",
                         classmethod(lambda cls, rid: str(tmp_path)))
+    # These are low-level renderer/cache tests. The API publication barrier has
+    # its own end-to-end suite; isolate PDF mechanics here with an approved
+    # artifact contract.
+    monkeypatch.setattr(
+        ReportManager, "is_publishable",
+        classmethod(lambda cls, report_id, lang=None: True),
+    )
     return tmp_path
 
 
@@ -118,7 +126,8 @@ def test_place_visualizations_inline_and_annex(report_folder):
 
 def test_place_visualizations_html_items(report_folder):
     """GATE-W9 回归：schema v2 的 plotly 'html' 项必须被注入（此前无 html 分支 → 图整族孤儿）。
-    有 png_path 静态对 → 内嵌 PNG + 交互版链接；无 png_path → 退化为纯链接。
+    有 png_path 静态对 → 仅内嵌 PNG（交互链接由 manifest 驱动的前端统一附一次）；
+    无 png_path → Markdown 内退化为纯链接。
     匹配到章节的 HTML 就地插入，未匹配项才进入 Visual Annex。"""
     charts = report_folder / "charts"
     charts.mkdir()
@@ -137,7 +146,7 @@ def test_place_visualizations_html_items(report_folder):
     out = a._place_visualizations(md, str(report_folder), manifest)
     assert "<!-- viz:charts/scenario_probabilities.html -->" in out
     assert "![Scenario Probabilities](charts/scenario_probabilities.png)" in out
-    assert "(charts/scenario_probabilities.html)" in out  # 交互版链接
+    assert "(charts/scenario_probabilities.html)" not in out  # 避免与前端交互链接重复
     assert "<!-- viz:charts/actor_network.html -->" in out
     assert "(charts/actor_network.html)" in out
     assert "![Actor Network]" not in out  # 无静态对 → 不嵌图
@@ -146,6 +155,46 @@ def test_place_visualizations_html_items(report_folder):
         "<!-- viz:charts/scenario_probabilities.html -->") < out.index("## Visual Annex")
     # 幂等重跑：原样返回。
     assert a._place_visualizations(out, str(report_folder), manifest) == out
+
+
+def test_scenario_comparison_uses_outcomes_not_agent_activity(monkeypatch, tmp_path):
+    monkeypatch.setattr(Config, "OASIS_SIMULATION_DATA_DIR", str(tmp_path), raising=False)
+    for sim_id, shares in (
+        ("sim_base", {"Policy passes": 0.4, "Policy fails": 0.6}),
+        ("sim_scenario", {"Policy passes": 0.65, "Policy fails": 0.35}),
+    ):
+        folder = tmp_path / sim_id
+        folder.mkdir()
+        (folder / "world_state_trajectory.json").write_text(json.dumps({
+            "outcome": {"shares": shares},
+            # Deliberate mechanics junk must never enter the comparison.
+            "n_rounds": 36,
+            "decisions": [{"agent_name": "Actor", "total_actions": 99}],
+        }), encoding="utf-8")
+    agent = ReportAgent.__new__(ReportAgent)
+    agent.base_simulation_id = "sim_base"
+    agent.simulation_id = "sim_scenario"
+    agent.scenario_label = "Alternative policy"
+
+    result = agent._scenario_diff_structured()
+
+    assert result is not None
+    rendered = json.dumps(result, ensure_ascii=False)
+    assert "Policy passes" in rendered and "+25.0 pp" in rendered
+    assert "round" not in rendered.lower()
+    assert "Agent" not in rendered and "动作" not in rendered
+
+
+def test_scenario_comparison_skips_when_outcome_distribution_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(Config, "OASIS_SIMULATION_DATA_DIR", str(tmp_path), raising=False)
+    (tmp_path / "sim_base").mkdir()
+    (tmp_path / "sim_base" / "world_state_trajectory.json").write_text(
+        json.dumps({"outcome": {"shares": {"A": 1.0}}}), encoding="utf-8")
+    agent = ReportAgent.__new__(ReportAgent)
+    agent.base_simulation_id = "sim_base"
+    agent.simulation_id = "sim_missing"
+
+    assert agent._scenario_diff_structured() is None
 
 
 def test_collect_viz_artifacts_populates_handoff_dir(report_folder, monkeypatch):
@@ -241,6 +290,10 @@ def test_inject_visualizations_end_to_end(report_folder, monkeypatch):
 def test_rewrite_chart_paths_to_absolute(tmp_path):
     """相对图片 → 绝对；普通 HTML 链接和已是绝对的图片不受影响。"""
     folder = str(tmp_path / "reports" / "rid")
+    charts = tmp_path / "reports" / "rid" / "charts"
+    charts.mkdir(parents=True)
+    (charts / "scenario.png").write_bytes(b"png")
+    (charts / "model_vs_market.png").write_bytes(b"png")
     md = ("![a](charts/scenario.png)\n"
           "![b](./charts/model_vs_market.png)\n"
           "[Interactive](charts/actor_network.html)\n"
@@ -253,6 +306,24 @@ def test_rewrite_chart_paths_to_absolute(tmp_path):
     assert "![c](/already/abs/charts/x.png)" in out
     assert "[Interactive](charts/actor_network.html)" in out
     assert "[Interactive](/" not in out
+
+
+def test_rewrite_chart_paths_rejects_traversal_and_symlinks(tmp_path):
+    folder = tmp_path / "reports" / "rid"
+    charts = folder / "charts"
+    charts.mkdir(parents=True)
+    outside = tmp_path / "private.png"
+    outside.write_bytes(b"secret")
+    os.symlink(outside, charts / "linked.png")
+    md = ("![traversal](charts/../../private.png)\n"
+          "![encoded](charts/%2e%2e/private.png)\n"
+          "![link](charts/linked.png)\n"
+          "![missing](charts/missing.png)\n")
+
+    out = ReportManager._rewrite_chart_paths_for_pdf(md, str(folder))
+
+    assert out == md
+    assert str(outside) not in out
 
 
 def test_markdown_to_basic_html_covers_core_forms():

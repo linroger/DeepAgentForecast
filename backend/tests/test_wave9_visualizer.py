@@ -6,6 +6,7 @@ sunburst/量化点阵/驱动 tornado/争议哑铃）、ensemble 误差带、kale
 
 import json
 import os
+import re
 
 import pytest
 
@@ -254,6 +255,59 @@ def test_scenario_bars_uses_ensemble_error_bands(tmp_path):
     assert '"arrayminus":[' not in html2
 
 
+def test_scenario_rows_keep_canonical_taxonomy_and_only_match_uncertainty():
+    """Unmatched ensemble taxonomies must never become extra bars in the published chart."""
+    forecast = {
+        "scenarios": [
+            {"id": "base", "name": "Base case", "probability": 0.55},
+            {"id": "bear", "name": "Bear case", "probability": 0.30},
+            {"id": "tail", "name": "Tail risk", "probability": 0.15},
+        ],
+    }
+    ensemble = {
+        "scenarios": [
+            {"name": "Base case", "mean_probability": 0.55,
+             "probability": 0.22, "min": 0.50, "max": 0.60,
+             "stdev": 0.05, "support_ratio": 1.0},
+            {"name": "情景A：完全不同的分类", "mean_probability": 0.60,
+             "probability": 0.48, "min": 0.55, "max": 0.65},
+            {"name": "S2 — unrelated taxonomy", "mean_probability": 0.40,
+             "probability": 0.30, "min": 0.35, "max": 0.45},
+        ],
+    }
+
+    rows = rv._extract_scenario_rows(forecast, ensemble)
+
+    assert {row["name"] for row in rows} == {"Base case", "Bear case", "Tail risk"}
+    assert sum(row["p"] for row in rows) == pytest.approx(1.0)
+    assert next(row for row in rows if row["name"] == "Base case")["stdev"] == 0.05
+    assert next(row for row in rows if row["name"] == "Bear case")["stdev"] is None
+    assert not any("different" in row["name"].lower() or "情景" in row["name"]
+                   for row in rows)
+
+
+def test_ensemble_only_scenario_rows_prefer_normalized_probability():
+    ensemble = {
+        "scenarios": [
+            {"name": "A", "probability": 0.6, "mean_probability": 0.9},
+            {"name": "B", "probability": 0.4, "mean_probability": 0.8},
+        ],
+    }
+    rows = rv._extract_scenario_rows({}, ensemble)
+    assert [row["p"] for row in rows] == [0.6, 0.4]
+    assert sum(row["p"] for row in rows) == pytest.approx(1.0)
+
+
+def test_ensemble_only_scenario_rows_reject_incoherent_diagnostic_means():
+    ensemble = {
+        "scenarios": [
+            {"name": "Taxonomy A", "mean_probability": 0.8},
+            {"name": "Unrelated taxonomy B", "mean_probability": 0.7},
+        ],
+    }
+    assert rv._extract_scenario_rows({}, ensemble) == []
+
+
 @needs_plotly
 def test_binary_dotplot_market_markers_and_sorting(tmp_path):
     viz = ReportVisualizer()
@@ -281,6 +335,33 @@ def test_timeline_lanes_dedup_and_text_not_mangled(tmp_path):
     # 同日近重事件去重：完整 hover 文案只出现一次（若未去重会有两份 '…&gt;$1T scope' hover；
     # 用 hover 专属长针避免误命中截断的可见短标签）
     assert html.count("&gt;$1T scope") == 1
+
+
+@needs_plotly
+def test_timeline_plot_uses_numbered_key_instead_of_inline_prose(tmp_path, monkeypatch):
+    captured = {}
+    viz = ReportVisualizer()
+
+    def _capture(fig, _charts_dir, _stem, _item_id=None):
+        captured["fig"] = fig
+        return os.path.join("charts", "timeline_lanes.html")
+
+    monkeypatch.setattr(viz, "_save_pair", _capture)
+    dense = [
+        {"date": f"2026-{month:02d}-15",
+         "event": f"Company {month} announces a major capacity investment worth ${month}0B"}
+        for month in range(1, 13)
+    ]
+    assert viz.build_timeline_lanes_html(dense, str(tmp_path / "charts"))
+
+    fig = captured["fig"]
+    visible_text = [str(text) for trace in fig.data for text in (trace.text or []) if text]
+    assert visible_text
+    assert all(re.fullmatch(r"\d{2}", text) for text in visible_text)
+    annotation_text = [str(annotation.text) for annotation in fig.layout.annotations]
+    assert annotation_text[0] == "<b>Key events</b>"
+    assert any("capacity investment" in text for text in annotation_text[1:])
+    assert fig.layout.showlegend is False
 
 
 def test_prepare_timeline_events_cap_and_order(monkeypatch):
@@ -312,6 +393,40 @@ def test_actor_network_normalizes_names_and_dedupes_edges(tmp_path):
     assert rv._canonicalize("samsung electronics", canon) == "Samsung Electronics"
     assert rv._canonicalize("TSMC", canon) == "TSMC"
     assert rv._canonicalize("Unrelated Co", canon) == "Unrelated Co"
+
+
+@needs_plotly
+def test_actor_network_uses_collision_planned_annotations(tmp_path, monkeypatch):
+    captured = {}
+    viz = ReportVisualizer()
+
+    def _capture(fig, _charts_dir, _stem, _item_id=None):
+        captured["fig"] = fig
+        return os.path.join("charts", "actor_network.html")
+
+    monkeypatch.setattr(viz, "_save_pair", _capture)
+    actors = {
+        "actors": [
+            {"name": f"Actor Organization {index:02d}", "role_class": "principal"}
+            for index in range(18)
+        ],
+        "relationships": [
+            {"source": f"Actor Organization {index:02d}",
+             "target": f"Actor Organization {(index + 1) % 18:02d}",
+             "type": "DEPENDS_ON", "sign": "ally"}
+            for index in range(18)
+        ],
+    }
+    assert viz.build_actor_network_html(actors, str(tmp_path / "charts"))
+
+    fig = captured["fig"]
+    node_traces = [trace for trace in fig.data if trace.hoverinfo == "text"]
+    assert node_traces and all(trace.mode == "markers" for trace in node_traces)
+    assert fig.layout.annotations
+    assert all(annotation.axref == "x" and annotation.ayref == "y"
+               for annotation in fig.layout.annotations)
+    assert all(annotation.text.startswith("<b>Actor Organization")
+               for annotation in fig.layout.annotations)
 
 
 @needs_plotly

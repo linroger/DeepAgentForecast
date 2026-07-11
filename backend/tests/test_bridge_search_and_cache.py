@@ -98,6 +98,78 @@ def test_web_search_impl_query_only_delegate(monkeypatch):
     assert out == {"backend": "tavily", "query": "hello"}
 
 
+def test_search_filters_denied_domains_before_context_and_cache(monkeypatch, tmp_path):
+    monkeypatch.delenv("RESEARCH_ALLOW_LOW_QUALITY_SOURCES", raising=False)
+    monkeypatch.delenv("RESEARCH_SOURCE_DENY_DOMAINS", raising=False)
+    monkeypatch.delenv("SERPER_API_KEY", raising=False)
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.setenv("RESEARCH_SEARCH_CACHE_TTL_H", "6")
+    monkeypatch.setenv("RESEARCH_SEARCH_CACHE_DIR", str(tmp_path / "search-cache"))
+    calls = {"delegate": 0}
+
+    class _FakeTool:
+        @staticmethod
+        def func(query, max_results=10):
+            calls["delegate"] += 1
+            return json.dumps({"results": [
+                {"title": "AI summary", "url": "https://economicsummarizer.com/x"},
+                {"title": "Primary filing", "url": "https://sec.gov/filing"},
+            ]})
+
+    monkeypatch.setattr(
+        st, "_load_search_module",
+        lambda _provider: type("M", (), {"web_search_tool": _FakeTool})(),
+    )
+    result = json.loads(st.web_search_impl("semiconductor filing", 10))
+
+    assert calls["delegate"] == 1
+    assert [row["url"] for row in result["results"]] == ["https://sec.gov/filing"]
+    cache_path = st._search_cache_path(
+        st._search_cache_root(),
+        st._search_cache_key("ddg", "semiconductor filing", 10),
+    )
+    cached = json.loads(st._read_search_cache(cache_path, 6 * 3600))
+    assert [row["url"] for row in cached["results"]] == ["https://sec.gov/filing"]
+
+
+def test_old_all_denied_search_cache_is_a_miss(monkeypatch, tmp_path):
+    monkeypatch.delenv("RESEARCH_ALLOW_LOW_QUALITY_SOURCES", raising=False)
+    monkeypatch.delenv("RESEARCH_SOURCE_DENY_DOMAINS", raising=False)
+    monkeypatch.delenv("SERPER_API_KEY", raising=False)
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.setenv("RESEARCH_SEARCH_CACHE_TTL_H", "6")
+    monkeypatch.setenv("RESEARCH_SEARCH_CACHE_DIR", str(tmp_path / "search-cache"))
+    query = "replacement evidence"
+    cache_path = st._search_cache_path(
+        st._search_cache_root(), st._search_cache_key("ddg", query, 10))
+    st._write_search_cache(
+        cache_path, "ddg", query,
+        json.dumps({"results": [{
+            "title": "Old aggregator",
+            "url": "https://insights.triplegains.com/old",
+        }]}),
+    )
+    calls = {"delegate": 0}
+
+    class _FakeTool:
+        @staticmethod
+        def func(query, max_results=10):
+            calls["delegate"] += 1
+            return json.dumps({"results": [{
+                "title": "Authoritative replacement",
+                "url": "https://www.imf.org/replacement",
+            }]})
+
+    monkeypatch.setattr(
+        st, "_load_search_module",
+        lambda _provider: type("M", (), {"web_search_tool": _FakeTool})(),
+    )
+    result = json.loads(st.web_search_impl(query, 10))
+
+    assert calls["delegate"] == 1
+    assert result["results"][0]["url"] == "https://www.imf.org/replacement"
+
+
 # ================================================================ ITEM 10 —— 源缓存（tmp dir 注入 fetch）
 
 def _fresh_cache_dir(monkeypatch, tmp_path):
@@ -115,6 +187,19 @@ class _Counter:
     async def __call__(self, url):
         self.calls += 1
         return self.content
+
+
+def test_known_ai_seo_aggregator_is_rejected_before_fetch(monkeypatch, tmp_path):
+    _fresh_cache_dir(monkeypatch, tmp_path)
+    monkeypatch.delenv("RESEARCH_ALLOW_LOW_QUALITY_SOURCES", raising=False)
+    monkeypatch.delenv("RESEARCH_SOURCE_DENY_DOMAINS", raising=False)
+    fetch = _Counter("should never be returned " * 30)
+
+    result = json.loads(asyncio.run(cf.cached_fetch(
+        "https://economicsummarizer.com/sk-hynix-stock-analysis/", fetch)))
+
+    assert result["error"] == "source_quality_rejected"
+    assert fetch.calls == 0
 
 
 def test_cache_miss_then_hit(monkeypatch, tmp_path):

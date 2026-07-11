@@ -42,13 +42,12 @@ def test_table_row_sim_label_is_flagged_by_leakage_hits():
         "表格行里的 Simulation Agent 标签必须被 leakage_hits 计入 flag 遥测")
 
 
-def test_table_row_sim_label_survives_deterministic_repair_but_stays_flagged():
+def test_table_row_sim_label_is_cleared_by_final_editorial_lint():
     md = "## Section\n\nProse line.\n\n" + _TABLE_ROW + "\n\nMore prose.\n"
     out, info = _agent()._repair_simulation_leakage(md)
-    # 确定性层按设计不动表格结构（避免破坏表格），但 lint 报告必须继续 flag 它
-    _, rep = rl.lint_report(out, "English", mode="final")
-    if "Simulation Agent「" in out:
-        assert rep["leakage_flags"] >= 1
+    cleaned, rep = rl.lint_report(out, "English", mode="final")
+    assert "Simulation Agent" not in cleaned
+    assert rep["leakage_flags"] == 0
     # 无论走哪条路径，修复过程不得让文档丢失表格本体
     assert out.count("|") >= _TABLE_ROW.count("|") - 2
 
@@ -66,12 +65,77 @@ def test_bold_lead_mechanics_paragraph_is_flagged():
     assert any(h == "action_type_tokens" for h in hits)
 
 
-def test_bold_lead_paragraph_repair_never_crashes_and_flags_survive():
+def test_bold_lead_mechanics_paragraph_is_removed_by_final_editorial_lint():
     md = "## 第九章\n\n" + _BOLD_LEAD_PARA + "\n\n正文继续。\n"
     out, info = _agent("Chinese")._repair_simulation_leakage(md)
     assert isinstance(info, dict)
-    # 若确定性层没能清除（当前实现按 '*' 前缀跳过该段），flag 遥测必须仍然命中，
-    # 保证残留在 quality['sim_leakage'] 里可观测而不是静默通过。
-    if "CREATE_POST" in out or "round 10" in out:
-        _, rep = rl.lint_report(out, "Chinese", mode="final")
-        assert rep["leakage_flags"] >= 1
+    cleaned, rep = rl.lint_report(out, "Chinese", mode="final")
+    assert "CREATE_POST" not in cleaned and "round 10" not in cleaned
+    assert rep["leakage_flags"] == 0
+
+
+# ── 真实成稿形状 4：大小写 possessive + “simulated world” 绕过旧模式 ──
+
+def test_real_run_simulated_world_and_possessive_heading_are_reframed():
+    md = (
+        "Modern Mercantilism is colliding with AI, and the simulated world we "
+        "constructed, populated by 322 active agents and 1,055 relationships, "
+        "treats that simultaneity as the central fact.\n\n"
+        "### What the Simulation's Power Map Says About Who Decides the Rationing\n\n"
+        "In the simulated world, 10 binary forecasts are laid out as "
+        "falsifiable, quantifiable outcomes.\n"
+    )
+
+    out, rep = rl.lint_report(md, "English", mode="final")
+
+    assert "simulated world" not in out.lower()
+    assert "simulation's" not in out.lower()
+    assert "322 active agents" not in out
+    assert "the cross-actor evidence treats" in out
+    assert "the actor-power evidence" in out.lower()
+    assert "The report defines 10 binary forecasts as" in out
+    assert rep["leakage_flags"] == 0
+    assert rep["outcome_focus_ok"] is True
+
+
+def test_real_run_agent_counts_action_telemetry_and_basis_traces_are_removed():
+    md = (
+        "### A Coalition of Convenience: The Single 16-Agent Bloc That Holds the Game\n\n"
+        "Among 322 active agents and 1,055 relationships, the only cohesive "
+        "16-agent faction spans four camps. The coalition binds because each "
+        "actor needs access to compute.\n\n"
+        "The graph contains 1,055 directed edges, weighted by sign and lag.\n\n"
+        "The action-type distribution is diagnostic. The ratio of liking to "
+        "posting is 2:1, indicating a coalition-formation phase.\n\n"
+        "Policy remains exposed (Basis:Donald Trump enables NVIDIA H200; "
+        "Donald Trump enables IEEPA). The public record is independently testable.\n"
+    )
+
+    out, rep = rl.lint_report(md, "English", mode="final")
+
+    assert "16-Agent" not in out and "322 active agents" not in out
+    assert "1,055 directed edges" not in out
+    assert "liking to posting" not in out and "coalition-formation" not in out
+    assert "Basis:" not in out
+    assert "The coalition binds" in out
+    assert "The public record is independently testable" in out
+    assert rep["internal_basis_traces"] == 1
+    assert rep["leakage_flags"] == 0
+
+
+def test_real_run_named_proxy_and_simulated_evidence_are_reframed():
+    md = (
+        "The NVIDIA agent reads the displacement as structurally bounded. "
+        "The simulated data shows HBM supply is constrained. "
+        "The simulated evidence is that capacity moves offshore. "
+        "That sentence, restated dozens of times across rounds and across "
+        "clusters of agents, is the modal claim.\n"
+    )
+
+    out, rep = rl.lint_report(md, "English", mode="final")
+
+    assert "NVIDIA agent" not in out
+    assert "simulated data" not in out and "simulated evidence" not in out
+    assert "rounds" not in out and "clusters of agents" not in out
+    assert "available evidence" in out
+    assert rep["leakage_flags"] == 0

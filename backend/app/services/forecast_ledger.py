@@ -146,13 +146,27 @@ def append_golden_result(*, question_id: str, probability: Any, resolved_outcome
 
 
 def _year_end(horizon: Optional[str]) -> Optional[str]:
-    """A free-text horizon like '2030' → '2030-12-31' (resolution date proxy)."""
+    """A free-text horizon like '2030' → '2030-12-31' (resolution date proxy).
+
+    现为 ``sim_timeline.extract_horizon`` 的薄封装（签名不变，消灭重复的年份正则）：
+    富文本期限（"mid-2027"/"2027年底"）解析到真实判定日而非一律年底。as_of 锚点取
+    文本中最早年份的前一年（账本可能补录已过期的 horizon，判定日在过去也须解析出来，
+    供 due_for_resolution 追缴）；无年份时退回今天。解析不出 → None（旧行为）。
+    """
     if not horizon:
         return None
-    import re
-    # 数字边界（非 \b：\b 在中日韩字符旁不触发，故"到2027年底"取不到年份）。
-    m = re.search(r"(?<!\d)(20\d{2})(?!\d)", str(horizon))
-    return f"{m.group(1)}-12-31" if m else None
+    try:
+        from datetime import date
+
+        from ..utils import sim_timeline
+
+        text = str(horizon)
+        years = [int(y) for y in sim_timeline._TIER4.findall(text)]
+        as_of = date(min(years) - 1, 1, 1) if years else date.today()
+        res = sim_timeline.extract_horizon(text, as_of)
+        return res.horizon_date if res else None
+    except Exception:  # noqa: BLE001 — 判定日推导为 best-effort，绝不阻断入账
+        return None
 
 
 def read_ledger(d: Optional[str] = None) -> List[Dict[str, Any]]:

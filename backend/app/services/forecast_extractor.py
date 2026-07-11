@@ -13,6 +13,7 @@ so it is unit-testable offline with a fake client.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import re
@@ -108,15 +109,617 @@ def _normalize_scenarios(scenarios: Any) -> List[Dict[str, Any]]:
     return cleaned
 
 
+# ------------------------------------------------------ scenario contract audit
+_SCENARIO_SUM_TOLERANCE = 0.015
+_SCENARIO_VALUE_TOLERANCE = 0.015
+_SCENARIO_RESIDUAL_TERMS = (
+    "status quo", "status-quo", "baseline", "base case", "residual",
+    "other", "catch-all", "remainder", "everything else", "all else",
+    "none of the above", "otherwise",
+    "维持现状", "基准", "基线", "其它", "其他", "兜底", "剩余",
+)
+
+_CRITIQUE_TARGET_PATTERNS = (
+    re.compile(
+        r"\b(?:probability|likelihood|weight)\s+(?:was\s+|is\s+)?"
+        r"(?:revised|adjusted|updated|reduced|increased|lowered|raised|set)"
+        r"(?:\s+from\s+(?:0?\.\d+|\d+(?:\.\d+)?\s*%))?\s+"
+        r"(?:to|at|=|:)\s*(?P<value>0?\.\d+|\d+(?:\.\d+)?)\s*"
+        r"(?P<percent>%)?",
+        re.I,
+    ),
+    re.compile(
+        r"\b(?:revised|adjusted|updated|reduced|increased|lowered|raised|final|"
+        r"current|new)\s+(?:scenario\s+)?(?:probability|likelihood|weight)"
+        r"(?:\s+from\s+(?:0?\.\d+|\d+(?:\.\d+)?\s*%))?\s*"
+        r"(?:to|at|=|:|is)?\s*(?P<value>0?\.\d+|\d+(?:\.\d+)?)\s*"
+        r"(?P<percent>%)?",
+        re.I,
+    ),
+    re.compile(
+        r"(?:调整|修正|更新|下调|上调|降低|提高|最终)(?:后的)?"
+        r"(?:情景)?(?:概率|权重)(?:从\s*(?:0?\.\d+|\d+(?:\.\d+)?\s*%)\s*)?"
+        r"(?:为|至|到|=|：)\s*(?P<value>0?\.\d+|\d+(?:\.\d+)?)\s*"
+        r"(?P<percent>%)?",
+        re.I,
+    ),
+    re.compile(
+        r"\b(?:scenario\s+)?(?:probability|likelihood|weight)\s*"
+        r"(?:is|=|:)\s*(?P<value>0?\.\d+|\d+(?:\.\d+)?)\s*"
+        r"(?P<percent>%)?",
+        re.I,
+    ),
+    re.compile(
+        r"(?:当前|最终|调整后|修正后)?(?:情景)?(?:概率|权重)\s*"
+        r"(?:为|是|=|：)\s*(?P<value>0?\.\d+|\d+(?:\.\d+)?)\s*"
+        r"(?P<percent>%)?",
+        re.I,
+    ),
+)
+
+_SCENARIO_ALLOCATION_SUBJECT = (
+    r"(?:scenario(?:s)?\s+(?:probabilit(?:y|ies)|weights?|allocations?|"
+    r"split|distribution|partition)|(?:probabilit(?:y|ies)|weights?)\s+"
+    r"(?:across|among)\s+scenarios|probability\s+allocation|"
+    r"scenario\s+probability\s+allocation)"
+)
+_EXPLICIT_TOTAL_PERCENT_PATTERNS = (
+    re.compile(
+        rf"\b{_SCENARIO_ALLOCATION_SUBJECT}\b[^.!?\n]{{0,120}}?\b"
+        r"(?:sum(?:s|med)?|total(?:s|ed|ing)?|add(?:s|ed)?\s+up)\s*"
+        r"(?:to|at|of|=|:|is)?\s*(?P<total>\d+(?:\.\d+)?)\s*%",
+        re.I,
+    ),
+    re.compile(
+        rf"\b{_SCENARIO_ALLOCATION_SUBJECT}\b[^.!?\n]{{0,120}}?"
+        r"(?P<total>\d+(?:\.\d+)?)\s*%\s*(?:in\s+)?total\b",
+        re.I,
+    ),
+    re.compile(
+        r"(?:情景(?:概率|权重|分配|分布|组合)|概率分配)"
+        r"[^。！？\n]{0,120}?(?:之和|合计|总计|加总)"
+        r"(?:为|是|至|到|=|：)?\s*(?P<total>\d+(?:\.\d+)?)\s*%",
+        re.I,
+    ),
+)
+_PERCENT_ADDITION_RE = re.compile(
+    r"(?P<expression>\d+(?:\.\d+)?\s*%"
+    r"(?:\s*\+\s*\d+(?:\.\d+)?\s*%){1,})"
+    r"(?:\s*=\s*(?P<stated>\d+(?:\.\d+)?)\s*%)?"
+)
+_ALLOCATION_CONTEXT_RE = re.compile(
+    rf"\b{_SCENARIO_ALLOCATION_SUBJECT}\b|"
+    r"情景(?:概率|权重|分配|拆分|分布|组合)|概率分配",
+    re.I,
+)
+
+
+def _range_value_pattern(prefix: str) -> str:
+    return (
+        rf"(?P<{prefix}_currency>[$€£¥])?\s*"
+        rf"(?P<{prefix}_number>\d+(?:,\d{{3}})*(?:\.\d+)?)\s*"
+        rf"(?P<{prefix}_unit>%|[KMBT]\b|thousand\b|million\b|billion\b|"
+        rf"trillion\b|seats?\b|points?\b|units?\b|tons?\b|tonnes?\b|"
+        rf"barrels?\b|votes?\b)"
+    )
+
+
+_RANGE_METRIC = (
+    r"(?P<metric>[A-Za-z\u4e00-\u9fff]"
+    r"[A-Za-z0-9\u4e00-\u9fff /&()_-]{1,80}?)"
+)
+_BETWEEN_RANGE_RE = re.compile(
+    rf"^\s*{_RANGE_METRIC}\s+(?:(?:is|will\s+be|must\s+be|remains?)\s+)?"
+    rf"(?:between|from)\s+{_range_value_pattern('lo')}\s+"
+    rf"(?:and|to)\s+{_range_value_pattern('hi')}",
+    re.I,
+)
+_COLON_RANGE_RE = re.compile(
+    rf"^\s*{_RANGE_METRIC}\s*[:：]\s*{_range_value_pattern('lo')}\s*"
+    rf"(?:-|to)\s*{_range_value_pattern('hi')}",
+    re.I,
+)
+_CHINESE_RANGE_RE = re.compile(
+    rf"^\s*{_RANGE_METRIC}\s*(?:为|介于|在)?\s*"
+    rf"{_range_value_pattern('lo')}\s*(?:至|到|-)\s*"
+    rf"{_range_value_pattern('hi')}(?:\s*之间)?",
+    re.I,
+)
+_COMPARATOR_RANGE_RE = re.compile(
+    rf"^\s*{_RANGE_METRIC}\s+(?:(?:is|will\s+be|must\s+be|remains?|reaches?)\s+)?"
+    rf"(?P<operator>>=|<=|>|<|at\s+least|at\s+most|more\s+than|"
+    rf"less\s+than|above|below|exceeds?|under)\s+"
+    rf"{_range_value_pattern('bound')}",
+    re.I,
+)
+_CHINESE_COMPARATOR_RANGE_RE = re.compile(
+    rf"^\s*{_RANGE_METRIC}\s*(?P<operator>高于|超过|不低于|至少|"
+    rf"低于|少于|不超过|至多)\s*{_range_value_pattern('bound')}",
+    re.I,
+)
+
+
+def _normalise_metric_label(value: str) -> str:
+    text = re.sub(r"\s+", " ", str(value or "").strip().lower())
+    text = re.sub(
+        r"^(?:if|when|where|by|in|at|through)\s+(?:fy\s*)?20\d{2}\s*[,;:-]?\s*",
+        "",
+        text,
+    )
+    text = re.sub(r"^(?:the|a|an)\s+", "", text)
+    text = text.strip(" ,;:-")
+    has_named_metric = bool(
+        re.search(r"[a-z]{3}", text) or re.search(r"[\u4e00-\u9fff]{2}", text)
+    )
+    if len(text) < 2 or not has_named_metric:
+        return ""
+    ascii_tokens = re.findall(r"[a-z]+", text)
+    if ascii_tokens and all(
+        token in {"scenario", "outcome", "result", "metric", "value"}
+        for token in ascii_tokens
+    ):
+        return ""
+    return text
+
+
+def _is_residual_scenario_name(value: Any) -> bool:
+    """Match residual labels as terms, never as substrings of actor names."""
+    name = str(value or "").replace("–", "-").replace("—", "-")
+    name = re.sub(r"\s+", " ", name.strip().casefold())
+    for term in _SCENARIO_RESIDUAL_TERMS:
+        if re.search(r"[^\x00-\x7f]", term):
+            if term in name:
+                return True
+            continue
+        if re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", name):
+            return True
+    return False
+
+
+_LEADING_RANGE_TIME_RE = re.compile(
+    r"^\s*(?:(?:by|in|at|through|as\s+of|before|until)\s+"
+    r"(?:FY\s*|CY\s*)?20\d{2}(?:\s*Q[1-4])?"
+    r"|(?:到|截至|在)\s*20\d{2}年(?:底|末)?)\s*[,，;；:-]\s*",
+    re.I,
+)
+_ALLOWED_RANGE_TRAILING_RE = re.compile(
+    r"^\s*(?:(?:by|in|at|through|as\s+of|before|until|during)\s+"
+    r"(?:FY\s*|CY\s*)?20\d{2}(?:\s*Q[1-4])?"
+    r"|(?:到|截至|在)\s*20\d{2}年(?:底|末)?)\s*[,，。]?\s*$",
+    re.I,
+)
+_RANGE_TIME_TOKEN_RE = re.compile(
+    r"(?:FY\s*|CY\s*)?20\d{2}(?:\s*Q[1-4])?|20\d{2}年(?:底|末)?",
+    re.I,
+)
+
+
+def _range_time_scope(value: str) -> Optional[str]:
+    tokens = {
+        re.sub(r"\s+", "", match.group(0)).casefold()
+        for match in _RANGE_TIME_TOKEN_RE.finditer(value)
+    }
+    return "|".join(sorted(tokens)) if tokens else None
+
+
+def _supported_range_trailing(value: str) -> bool:
+    return not value.strip() or bool(_ALLOWED_RANGE_TRAILING_RE.fullmatch(value))
+
+
+def _range_value(match: "re.Match[str]", prefix: str) -> Optional[tuple[float, str]]:
+    try:
+        number = float(match.group(f"{prefix}_number").replace(",", ""))
+    except (AttributeError, TypeError, ValueError):
+        return None
+    currency = str(match.group(f"{prefix}_currency") or "").lower()
+    unit = str(match.group(f"{prefix}_unit") or "").lower()
+    normalized_unit = currency + unit
+    return (number, normalized_unit) if normalized_unit else None
+
+
+def _extract_comparable_numeric_range(criteria: Any) -> Optional[Dict[str, Any]]:
+    """Extract one explicit metric interval; ambiguous compound criteria are skipped."""
+    text = str(criteria or "").replace("–", "-").replace("—", "-")
+    clauses = [
+        clause.strip()
+        for clause in re.split(r"(?<!\d)[.;](?!\d)|\n+", text)
+        if clause.strip()
+    ]
+    candidates: List[Dict[str, Any]] = []
+    for clause in clauses:
+        # OR criteria are not a single comparable interval.  Do not infer which
+        # branch owns the scenario.
+        if re.search(r"\b(?:or|either)\b|(?:或者|或)", clause, re.I):
+            continue
+        match_clause = _LEADING_RANGE_TIME_RE.sub("", clause)
+        scope = _range_time_scope(clause)
+        for pattern, kind in (
+            (_BETWEEN_RANGE_RE, "interval"),
+            (_COLON_RANGE_RE, "interval"),
+            (_CHINESE_RANGE_RE, "interval"),
+            (_COMPARATOR_RANGE_RE, "comparator"),
+            (_CHINESE_COMPARATOR_RANGE_RE, "comparator"),
+        ):
+            match = pattern.search(match_clause)
+            if not match:
+                continue
+            metric = _normalise_metric_label(match.group("metric"))
+            if not metric:
+                break
+            trailing = match_clause[match.end():]
+            if not _supported_range_trailing(trailing):
+                break
+            if re.search(r"\b(?:and|or)\b\s+\S+\s*(?:>=|<=|>|<)|(?:以及|并且|或)",
+                         trailing, re.I):
+                break
+            if kind == "interval":
+                low = _range_value(match, "lo")
+                high = _range_value(match, "hi")
+                if not low or not high or low[1] != high[1] or low[0] > high[0]:
+                    break
+                candidates.append({
+                    "metric": metric,
+                    "unit": low[1],
+                    "low": low[0],
+                    "high": high[0],
+                    "scope": scope,
+                })
+            else:
+                bound = _range_value(match, "bound")
+                if not bound:
+                    break
+                operator = re.sub(r"\s+", " ", match.group("operator").lower())
+                lower_ops = {
+                    ">", ">=", "at least", "more than", "above", "exceed",
+                    "exceeds", "高于", "超过", "不低于", "至少",
+                }
+                upper_ops = {
+                    "<", "<=", "at most", "less than", "below", "under",
+                    "低于", "少于", "不超过", "至多",
+                }
+                if operator in lower_ops:
+                    low, high = bound[0], math.inf
+                elif operator in upper_ops:
+                    low, high = -math.inf, bound[0]
+                else:
+                    break
+                candidates.append({
+                    "metric": metric,
+                    "unit": bound[1],
+                    "low": low,
+                    "high": high,
+                    "scope": scope,
+                })
+            break
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _critique_probability_targets(note: Any) -> List[float]:
+    text = str(note or "")
+    targets: List[float] = []
+    seen: set[tuple[int, int]] = set()
+    for pattern in _CRITIQUE_TARGET_PATTERNS:
+        for match in pattern.finditer(text):
+            span = match.span("value")
+            if span in seen:
+                continue
+            historical_prefix = text[max(0, match.start() - 32):match.start()]
+            if re.search(
+                r"(?:\b(?:base|prior|previous|old|initial|starting|reference)\s+"
+                r"|(?:基准|先前|原始|初始|历史|之前)\s*)$",
+                historical_prefix,
+                re.I,
+            ):
+                continue
+            seen.add(span)
+            try:
+                raw = float(match.group("value"))
+            except (TypeError, ValueError):
+                continue
+            target = raw / 100.0 if match.group("percent") or raw > 1.0 else raw
+            if 0.0 <= target <= 1.0:
+                targets.append(target)
+    return targets
+
+
+def _bad_percentage_allocations(text: Any) -> List[Dict[str, Any]]:
+    value = str(text or "")
+    findings: List[Dict[str, Any]] = []
+    invalid_total_spans: List[tuple[int, int]] = []
+    for pattern in _EXPLICIT_TOTAL_PERCENT_PATTERNS:
+        for match in pattern.finditer(value):
+            total = float(match.group("total"))
+            if abs(total - 100.0) > 0.5:
+                findings.append({
+                    "kind": "stated_total",
+                    "total": total,
+                    "excerpt": match.group(0)[:180],
+                })
+                invalid_total_spans.append(match.span())
+    for match in _PERCENT_ADDITION_RE.finditer(value):
+        if any(start <= match.start() and match.end() <= end
+               for start, end in invalid_total_spans):
+            continue
+        left = 0
+        right = len(value)
+        for boundary in re.finditer(r"(?<!\d)[.!?](?!\d)|[。！？;；\n]", value):
+            if boundary.end() <= match.start():
+                left = boundary.end()
+            elif boundary.start() >= match.end():
+                right = boundary.start()
+                break
+        context = value[left:right]
+        if not _ALLOCATION_CONTEXT_RE.search(context):
+            continue
+        parts = [
+            float(number)
+            for number in re.findall(r"(\d+(?:\.\d+)?)\s*%", match.group("expression"))
+        ]
+        computed = sum(parts)
+        stated = float(match.group("stated")) if match.group("stated") else None
+        if stated is not None and abs(stated - computed) > 0.5:
+            findings.append({
+                "kind": "arithmetic_mismatch",
+                "computed": computed,
+                "stated": stated,
+                "excerpt": match.group(0)[:180],
+            })
+        elif abs((stated if stated is not None else computed) - 100.0) > 0.5:
+            findings.append({
+                "kind": "allocation_total",
+                "total": stated if stated is not None else computed,
+                "excerpt": match.group(0)[:180],
+            })
+    return findings
+
+
+def _json_safe_audit_value(value: Any) -> Any:
+    """Recursively normalize diagnostics so strict JSON can always persist them."""
+    if type(value) is float and not math.isfinite(value):
+        if math.isnan(value):
+            return "nan"
+        return "infinity" if value > 0 else "-infinity"
+    if isinstance(value, dict):
+        return {
+            str(key): _json_safe_audit_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe_audit_value(item) for item in value]
+    return value
+
+
+def _json_safe_range_endpoint(value: float) -> Optional[float]:
+    return value if math.isfinite(value) else None
+
+
+def audit_scenario_contract(forecast: Dict[str, Any]) -> Dict[str, Any]:
+    """Fail-closed structural audit for a mutually-exclusive scenario contract.
+
+    Range overlap is deliberately narrow: it is reported only when two criteria
+    expose one parseable numeric interval for the exact same normalized metric and
+    unit.  Free-text semantic similarity is never used.
+    """
+    issues: List[str] = []
+    examples: List[Dict[str, Any]] = []
+
+    def add(code: str, message: str, **context: Any) -> None:
+        issues.append(message)
+        if len(examples) < 24:
+            examples.append(_json_safe_audit_value({
+                "code": code, "message": message, **context,
+            }))
+
+    if not isinstance(forecast, dict):
+        add("forecast_not_object", "forecast must be an object")
+        return {
+            "valid": False,
+            "issue_count": len(issues),
+            "issues": issues,
+            "examples": examples,
+        }
+    if "scenarios" not in forecast:
+        return {"valid": True, "issue_count": 0, "issues": [], "examples": []}
+    scenarios = forecast.get("scenarios")
+    if not isinstance(scenarios, list):
+        add("scenarios_not_list", "scenarios must be a list when present")
+    elif not scenarios:
+        add("scenarios_empty", "scenarios must not be empty when present")
+    elif not 2 <= len(scenarios) <= 5:
+        add(
+            "scenario_count",
+            f"scenario partition must contain 2-5 rows, found {len(scenarios)}",
+            count=len(scenarios),
+        )
+    if not isinstance(scenarios, list) or not scenarios:
+        return {
+            "valid": False,
+            "issue_count": len(issues),
+            "issues": issues,
+            "examples": examples,
+        }
+
+    seen_names: Dict[str, int] = {}
+    valid_probabilities: List[float] = []
+    all_probabilities_valid = True
+    parsed_ranges: List[Dict[str, Any]] = []
+    text_fields: List[tuple[str, str]] = []
+    residual_present = False
+
+    for index, scenario in enumerate(scenarios):
+        label = f"scenario[{index}]"
+        if not isinstance(scenario, dict):
+            add("scenario_not_object", f"{label} must be an object", index=index)
+            all_probabilities_valid = False
+            continue
+        name = str(scenario.get("name") or "").strip()
+        if not name:
+            add("scenario_name_missing", f"{label} has no non-empty name", index=index)
+        else:
+            normalized_name = re.sub(r"\s+", " ", name).casefold()
+            if normalized_name in seen_names:
+                add(
+                    "duplicate_scenario_name",
+                    f"scenario name '{name}' is duplicated",
+                    scenario=name,
+                    first_index=seen_names[normalized_name],
+                    index=index,
+                )
+            else:
+                seen_names[normalized_name] = index
+            residual_present = residual_present or _is_residual_scenario_name(
+                normalized_name
+            )
+
+        probability = scenario.get("probability")
+        numeric_probability: Optional[float] = None
+        if (type(probability) not in (int, float)
+                or (type(probability) is float and not math.isfinite(probability))):
+            add(
+                "probability_not_numeric",
+                f"{label} probability must be a finite JSON number",
+                scenario=name,
+                value=_json_safe_audit_value(probability),
+            )
+            all_probabilities_valid = False
+        elif not 0 <= probability <= 1:
+            add(
+                "probability_out_of_range",
+                f"{label} probability is outside [0, 1]",
+                scenario=name,
+                value=_json_safe_audit_value(probability),
+            )
+            all_probabilities_valid = False
+        else:
+            numeric_probability = float(probability)
+            valid_probabilities.append(numeric_probability)
+
+        criteria = scenario.get("resolution_criteria")
+        if not isinstance(criteria, str) or not criteria.strip():
+            add(
+                "resolution_criteria_missing",
+                f"{label} has no non-empty resolution criteria",
+                scenario=name,
+            )
+        else:
+            parsed_range = _extract_comparable_numeric_range(criteria)
+            if parsed_range:
+                parsed_ranges.append({
+                    **parsed_range,
+                    "scenario": name or label,
+                    "index": index,
+                })
+
+        critique_note = scenario.get("critique_note")
+        if critique_note not in (None, "") and numeric_probability is not None:
+            current = numeric_probability
+            for target in _critique_probability_targets(critique_note):
+                if abs(target - current) > _SCENARIO_VALUE_TOLERANCE:
+                    add(
+                        "stale_critique_probability",
+                        f"{label} critique probability {target:.4f} contradicts current "
+                        f"probability {current:.4f}",
+                        scenario=name,
+                        current_probability=current,
+                        critique_probability=target,
+                        excerpt=str(critique_note)[:180],
+                    )
+
+        for field in ("summary", "resolution_criteria", "critique_note"):
+            field_value = scenario.get(field)
+            if isinstance(field_value, str) and field_value.strip():
+                text_fields.append((f"{label}.{field}", field_value))
+
+    if all_probabilities_valid and len(valid_probabilities) == len(scenarios):
+        probability_sum = sum(valid_probabilities)
+        if not math.isclose(
+            probability_sum,
+            1.0,
+            rel_tol=0.0,
+            abs_tol=_SCENARIO_SUM_TOLERANCE + 1e-12,
+        ):
+            add(
+                "probability_sum",
+                f"scenario probabilities sum to {probability_sum:.4f}, outside "
+                f"1±{_SCENARIO_SUM_TOLERANCE:.3f}",
+                probability_sum=round(probability_sum, 6),
+            )
+
+    if not residual_present:
+        add(
+            "residual_scenario_missing",
+            "scenario partition has no residual/status-quo/other bin",
+        )
+
+    for left_index, left in enumerate(parsed_ranges):
+        for right in parsed_ranges[left_index + 1:]:
+            if (left["metric"] != right["metric"]
+                    or left["unit"] != right["unit"]
+                    or left.get("scope") != right.get("scope")):
+                continue
+            overlap_low = max(left["low"], right["low"])
+            overlap_high = min(left["high"], right["high"])
+            # Touching endpoints are not enough: inclusive/exclusive language is
+            # often omitted, so require a positive-width intersection.
+            if overlap_low < overlap_high:
+                add(
+                    "overlapping_numeric_ranges",
+                    f"scenarios '{left['scenario']}' and '{right['scenario']}' overlap "
+                    f"on metric '{left['metric']}'",
+                    metric=left["metric"],
+                    unit=left["unit"],
+                    scope=left.get("scope"),
+                    scenarios=[left["scenario"], right["scenario"]],
+                    overlap=[
+                        _json_safe_range_endpoint(overlap_low),
+                        _json_safe_range_endpoint(overlap_high),
+                    ],
+                )
+
+    for field in ("headline", "confidence_rationale"):
+        value = forecast.get(field)
+        if isinstance(value, str) and value.strip():
+            text_fields.append((field, value))
+    seen_text: set[str] = set()
+    for field, text in text_fields:
+        if text in seen_text:
+            continue
+        seen_text.add(text)
+        for finding in _bad_percentage_allocations(text):
+            add(
+                "percentage_allocation_arithmetic",
+                f"{field} contains an explicit percentage allocation that does not "
+                "resolve to 100%",
+                field=field,
+                **finding,
+            )
+
+    return {
+        "valid": not issues,
+        "issue_count": len(issues),
+        "issues": issues,
+        "examples": examples,
+    }
+
+
 # ---------------------------------------------------------- resolution sharpness
 # A "sharp" resolution criterion must pin down WHAT (a metric/threshold), HOW MUCH
 # (a number) and WHEN (a date/trigger) so the forecast is later trackable & scorable
 # — the difference between "利率可能上升" and "若 X 于 Z 日前超过 Y% 则确认".
 _RC_DATE_RE = re.compile(
-    r"20\d{2}|Q[1-4]|H[12]|[年月日季]|\b\d{1,2}/\d{1,2}\b|前|底|内|by\s|until|before|deadline",
+    r"20\d{2}|FY\s*\d{2,4}|CY\s*\d{2,4}|Q[1-4]|H[12]|[年月日季]|"
+    r"\b\d{1,2}/\d{1,2}\b|前|底|内|by\s|until|before|deadline|"
+    r"election day|fiscal year|calendar year",
     re.I)
 _RC_METRIC_RE = re.compile(
-    r"[<>＜＞≥≤%]|份额|份額|占比|增速|增长|价格|股价|指数|数量|规模|阈值|超过|低于|达到|不低于|不超过|至少|以上|以下",
+    r"[<>＜＞≥≤%+$]|份额|份額|占比|增速|增长|价格|股价|指数|数量|规模|阈值|"
+    r"超过|低于|达到|不低于|不超过|至少|以上|以下|"
+    r"\b(?:share|rate|revenue|capex|demand|consumption|shipments?|wafers?|"
+    r"price|index|total|sum|count|tally|average|percentage points?|seats?|"
+    r"majority|composition|wins?|elects?|call(?:ed)?|certif(?:y|ies|ied)|"
+    r"filing|registration statement|ruling|opinion|upholds?|vacat(?:e|ing)|"
+    r"invalidat(?:e|ion)|regulation|decree|guidance|screening|export controls?|"
+    r"disclos(?:e|ure)|threshold|between|more than|less than|at least)\b",
     re.I)
 
 
@@ -294,11 +897,16 @@ _BINARY_FORECAST_INSTRUCTIONS = (
     '  "resolution_criteria": "Objective settle test: a named METRIC + a NUMERIC threshold + a DATE/window + the SOURCE that resolves it.",\n'
     '  "resolution_source": "the dataset/agency/publication that will settle it",\n'
     '  "theme": "{theme_enum}",\n'
-    '  "horizon_year": 2027,            // resolution year, within 1-5 years of now\n'
+    '  "horizon_year": {horizon_year_hint},            // {horizon_year_rule}\n'
     '  "base_rate_anchor": "reference-class base rate / outside view",\n'
     '  "adjustment_rationale": "why this case differs from the base rate (anchor-and-adjust)",\n'
     '  "source": "provenance of the probability: name the simulation signal that moved it (e.g. \\"world-state outcome shares\\", \\"coalition map\\") or \\"research-prior\\" when only research evidence informs it"\n'
     "}}\n\n"
+    "Each object MUST also include proposition_id (a stable kebab-case identifier for the exact "
+    "resolvable event) and a scenario_membership object with a derivable boolean and a "
+    "yes_scenarios list. Set derivable=true ONLY when the canonical mutually-exclusive "
+    "scenario partition fully determines the binary, and then copy every YES scenario name exactly. "
+    "Otherwise set derivable=false with an empty yes_scenarios list.\n\n"
     "RULES: produce AT LEAST {min_count} DISTINCT forecasts. Every statement is ONE sentence, "
     "falsifiable, and {tie_rule}. Probabilities "
     "express genuine CONVICTION — do not cluster in 0.40-0.60; commit where the evidence "
@@ -346,6 +954,134 @@ def _binary_key(stmt: str) -> str:
     return re.sub(r"\W+", " ", str(stmt or "").lower()).strip()
 
 
+_MARKET_ENTITY_EN_RE = re.compile(
+    r"\b(?:polymarket|prediction[- ]market|event[- ]contract|market[- ]contract|"
+    r"market[- ]implied)\b",
+    re.I,
+)
+_MARKET_QUOTE_EN_RE = re.compile(
+    r"\b(?:probabilit(?:y|ies)|prices?|odds|quotes?|(?:yes|no)\s+shares?|"
+    r"cents?)\b",
+    re.I,
+)
+_MARKET_QUOTE_MOVEMENT_EN_RE = re.compile(
+    r"\b(?:"
+    r"(?:will|would|shall)\s+(?:be|remain|rise|fall|increase|decrease|move|reach|"
+    r"exceed|drop|trade|double|halve|settle|close|resolve)"
+    r"|(?:is|are)\s+(?:expected|forecast|forecasted|projected)\s+to\s+"
+    r"(?:be|remain|rise|fall|increase|decrease|move|reach|exceed|drop|trade|"
+    r"double|halve|settle|close|resolve)"
+    r"|(?:rise|fall|increase|decrease|move|reach|exceed|drop|trade|double|halve)s?"
+    r")\b",
+    re.I,
+)
+_MARKET_SETTLEMENT_EN_RE = re.compile(
+    r"\b(?:resolve|resolves|resolved|resolving|settle|settles|settled|settling|"
+    r"close|closes|closed|closing)\b",
+    re.I,
+)
+_MARKET_CURRENT_EN_RE = re.compile(r"\b(?:currently|today|now|as\s+of)\b", re.I)
+_MODEL_FORECAST_EN_RE = re.compile(
+    r"\b(?:(?:our|the|this)\s+)?(?:model|forecast)(?:'s)?\b", re.I)
+_MARKET_ENTITY_ZH_RE = re.compile(r"Polymarket|预测市场|市场合约|事件合约|市场隐含", re.I)
+_MARKET_QUOTE_ZH_RE = re.compile(r"概率|价格|赔率|报价|(?:YES|NO|是|否)份额", re.I)
+_MARKET_QUOTE_MOVEMENT_ZH_RE = re.compile(
+    r"升至|涨至|降至|跌至|翻倍|减半|交易于|结算于|收于"
+    r"|(?:将|预计|预期)[^。！？\n]{0,24}"
+    r"(?:为|达到|超过|高于|低于|维持在|收于|交易于|结算|判定)",
+    re.I,
+)
+_MARKET_SETTLEMENT_ZH_RE = re.compile(r"结算|判定|收盘|解决为", re.I)
+_MARKET_CURRENT_ZH_RE = re.compile(r"目前|当前|现在|截至|现为", re.I)
+_MODEL_FORECAST_ZH_RE = re.compile(
+    r"(?:(?:我们(?:的)?|本报告(?:的)?|该)?(?:模型|预测))", re.I)
+_MARKET_DEADLINE_ZH_RE = re.compile(
+    r"(?:到|截至|在)?\s*(?:20\d{2}年(?:底)?|年底|年末)(?:前)?",
+    re.I,
+)
+_MARKET_QUOTE_LEVEL_ZH_RE = re.compile(
+    r"(?:概率|价格|赔率|报价)[^。！？\n]{0,24}(?:为|在)\s*"
+    r"(?:\d{1,3}(?:\.\d+)?\s*%|0?\.\d+|是|否|YES|NO)",
+    re.I,
+)
+
+
+def _has_market_scoped_movement(
+        text: str, quote_pattern: re.Pattern, movement_pattern: re.Pattern,
+        blocker_pattern: re.Pattern) -> bool:
+    """True when movement follows a market quote, not a model comparison.
+
+    Calibration prose commonly says "market currently 15%, while our model
+    will be 30%". An order-independent token bag misclassified the model's
+    movement as a forecast of the market quote. Keep the predicate local to a
+    preceding quote noun and reject spans that switch subject to the model.
+    """
+    for quote in quote_pattern.finditer(text):
+        for movement in movement_pattern.finditer(text, quote.end()):
+            if movement.start() - quote.end() > 120:
+                break
+            if blocker_pattern.search(text[quote.end():movement.start()]):
+                continue
+            return True
+    return False
+
+
+def _market_forecast_clause_is_circular(clause: str) -> bool:
+    """Classify a single market-bearing clause without substring ambiguity."""
+    text = str(clause or "").strip()
+    if not text:
+        return False
+    entity_en = _MARKET_ENTITY_EN_RE.search(text)
+    if entity_en:
+        current = bool(_MARKET_CURRENT_EN_RE.search(text))
+        movement = _has_market_scoped_movement(
+            text, _MARKET_QUOTE_EN_RE, _MARKET_QUOTE_MOVEMENT_EN_RE,
+            _MODEL_FORECAST_EN_RE)
+        # A contract-resolution sentence is circular unless it explicitly
+        # reports an already-current quote/outcome without forecasting another
+        # movement. Quote forecasts require an actual movement/level predicate;
+        # an event horizon or the noun "forecast" elsewhere in the clause is
+        # not enough (those are normal calibration prose).
+        if _MARKET_SETTLEMENT_EN_RE.search(text):
+            return not current or movement
+        return bool(_MARKET_QUOTE_EN_RE.search(text)) and movement
+
+    entity_zh = _MARKET_ENTITY_ZH_RE.search(text)
+    if entity_zh:
+        current = bool(_MARKET_CURRENT_ZH_RE.search(text))
+        movement = _has_market_scoped_movement(
+            text, _MARKET_QUOTE_ZH_RE, _MARKET_QUOTE_MOVEMENT_ZH_RE,
+            _MODEL_FORECAST_ZH_RE)
+        if _MARKET_SETTLEMENT_ZH_RE.search(text):
+            return not current or movement
+        if not _MARKET_QUOTE_ZH_RE.search(text):
+            return False
+        if movement:
+            return True
+        # Chinese often omits a future auxiliary: "到年底，...概率为60%".
+        # Only treat that as a future quote when the deadline leads the market
+        # phrase. A date inside the market's event question is current evidence.
+        deadline = _MARKET_DEADLINE_ZH_RE.search(text)
+        implicit_future_level = bool(
+            deadline
+            and deadline.start() < entity_zh.start()
+            and _MARKET_QUOTE_LEVEL_ZH_RE.search(text)
+        )
+        return not current and implicit_future_level
+    return False
+
+
+def _is_circular_market_forecast(
+        statement: Any, resolution_criteria: Any = None) -> bool:
+    """True when a forecast predicts a market quote/contract, not its event."""
+    for value in (statement, resolution_criteria):
+        clauses = re.split(
+            r"(?<!\d)[.!?](?!\d)|[。！？;；\n]+", str(value or ""))
+        if any(_market_forecast_clause_is_circular(clause) for clause in clauses):
+            return True
+    return False
+
+
 def _normalize_binaries(items: Any, *, start_index: int = 1,
                         allowed_themes: Optional[List[str]] = None,
                         market_lookup: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
@@ -368,7 +1104,8 @@ def _normalize_binaries(items: Any, *, start_index: int = 1,
             continue
         stmt = str(it.get("statement") or "").strip()
         p = _coerce_float(it.get("probability"))
-        if not stmt or p is None:
+        if not stmt or p is None or _is_circular_market_forecast(
+                stmt, it.get("resolution_criteria")):
             continue
         key = _binary_key(stmt)
         if not key or key in seen:
@@ -398,8 +1135,60 @@ def _normalize_binaries(items: Any, *, start_index: int = 1,
             "base_rate_anchor": str(it.get("base_rate_anchor") or ""),
             "adjustment_rationale": str(it.get("adjustment_rationale") or ""),
             "source": str(it.get("source") or "").strip() or "research-prior",
-            "criteria_sharp": bool(validate_resolution_criteria(rc).get("sharp")),
+            "proposition_id": (
+                re.sub(
+                    r"[^a-z0-9]+", "-",
+                    str(it.get("proposition_id") or "").lower(),
+                ).strip("-")
+                or "forecast-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+            ),
+            # The statement and criterion are rendered side by side as one
+            # resolvable row. Accept a date/metric stated once in either field,
+            # while still preserving the criterion verbatim.
+            "criteria_sharp": bool(validate_resolution_criteria(
+                f"{stmt} {rc}").get("sharp")),
         }
+        membership = it.get("scenario_membership")
+        if isinstance(membership, dict):
+            raw_derivable = membership.get("derivable")
+            raw_yes_scenarios = membership.get("yes_scenarios")
+            membership_errors: List[str] = []
+            if type(raw_derivable) is not bool:
+                membership_errors.append("derivable must be a JSON boolean")
+            if not isinstance(raw_yes_scenarios, list):
+                membership_errors.append("yes_scenarios must be a list")
+                raw_yes_scenarios = []
+            yes_scenarios = [
+                name.strip()
+                for name in raw_yes_scenarios
+                if isinstance(name, str) and name.strip()
+            ]
+            if len(yes_scenarios) != len(raw_yes_scenarios):
+                membership_errors.append(
+                    "yes_scenarios entries must be non-empty strings"
+                )
+            if len(set(yes_scenarios)) != len(yes_scenarios):
+                membership_errors.append("yes_scenarios contains duplicates")
+            row["scenario_membership"] = {
+                # Do not coerce strings such as ``"false"`` with ``bool()``:
+                # that silently turns an invalid model payload into permission
+                # to overwrite the binary probability from scenario bins.
+                "derivable": (
+                    raw_derivable if type(raw_derivable) is bool else None
+                ),
+                "yes_scenarios": yes_scenarios,
+            }
+            if membership_errors:
+                row["scenario_membership"]["validation_errors"] = membership_errors
+        elif membership is not None:
+            # Preserve an explicit invalid declaration as a rejected contract;
+            # dropping it would re-enable the legacy heuristic reconciliation
+            # path and hide the model's schema violation.
+            row["scenario_membership"] = {
+                "derivable": None,
+                "yes_scenarios": [],
+                "validation_errors": ["scenario_membership must be an object"],
+            }
         anchor = it.get("market_anchor")
         if isinstance(anchor, dict):
             mid = str(anchor.get("market_id") or "").strip()
@@ -430,6 +1219,8 @@ def _binary_quality(binaries: List[Dict[str, Any]], *, min_count: int,
     std = math.sqrt(sum((p - mean) ** 2 for p in probs) / n) if n else 0.0
     midband = sum(1 for p in probs if 0.40 <= p <= 0.60)
     conviction = sum(1 for p in probs if p >= 0.70 or p <= 0.30)
+    # 信任 _normalize_binaries 落盘的 criteria_sharp 标记（那里已按「陈述+判定标准
+    # 任一字段含日期/指标即可」规则计算）；此处不重算，门控/降级行为与存量跑保持一致。
     sharp = sum(1 for b in binaries if b.get("criteria_sharp"))
     themes: Dict[str, int] = {str(t): 0 for t in (themes_expected or [])}
     for b in binaries:
@@ -531,7 +1322,8 @@ def _rationale_cites_market(text: Any, anchor: Optional[Dict[str, Any]] = None) 
 
 def _build_market_anchor(prob: Optional[float], market: Dict[str, Any], *,
                          equivalence: Optional[str] = None,
-                         match_confidence: Optional[float] = None) -> Optional[Dict[str, Any]]:
+                         match_confidence: Optional[float] = None,
+                         binary: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     """确定性组装 rich market_anchor：隐含概率取我们的快照价，divergence 本地计算。
 
     price_at_research 记研究时点的快照价（与 implied_yes_prob 同源，供日后与实时价对比）。
@@ -560,6 +1352,23 @@ def _build_market_anchor(prob: Optional[float], market: Dict[str, Any], *,
     mc = _coerce_float(match_confidence)
     if mc is not None:
         anchor["match_confidence"] = round(max(0.0, min(1.0, mc)), 3)
+    if isinstance(binary, dict):
+        contract_text = (
+            str(binary.get("statement") or "").strip()
+            + "\n"
+            + str(binary.get("resolution_criteria") or "").strip()
+        )
+        question = str(market.get("question") or "").strip()
+        anchor.update({
+            "forecast_proposition_id": str(binary.get("proposition_id") or "").strip(),
+            "forecast_contract_sha256": hashlib.sha256(
+                contract_text.encode("utf-8")
+            ).hexdigest(),
+            "market_question_sha256": hashlib.sha256(
+                question.encode("utf-8")
+            ).hexdigest(),
+            "match_method": "bounded-semantic-equivalence-review",
+        })
     return anchor
 
 
@@ -624,7 +1433,7 @@ def anchor_binaries_to_markets(binaries: List[Dict[str, Any]], markets: Optional
         if _MARKET_EQUIVALENCE_RANK.get(eq, 0) < min_rank:
             continue  # 严格度不足（如 loose）→ 不锚定
         anchor = _build_market_anchor(b.get("probability"), m, equivalence=eq,
-                                      match_confidence=mt.get("confidence"))
+                                      match_confidence=mt.get("confidence"), binary=b)
         if anchor:
             b["market_anchor"] = anchor  # 确定性回填（覆盖模型自愿转录的最小锚点）
             anchored += 1
@@ -714,14 +1523,18 @@ def build_market_comparison(binaries: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not isinstance(anchor, dict):
             continue
         p = _coerce_float(b.get("probability"))
-        dv = _coerce_float(anchor.get("divergence"))
+        implied = _coerce_float(anchor.get("implied_yes_prob"))
+        # Derived values MUST come from the two canonical probabilities. A
+        # cached/model-supplied divergence can be stale after a probability
+        # revision and must never drive the published cross-check.
+        dv = round(p - implied, 4) if p is not None and implied is not None else None
         comps.append({
             "forecast_id": b.get("id"),
             "statement": b.get("statement"),
             "model_probability": p,
             "market_id": anchor.get("market_id"),
             "market_question": anchor.get("question"),
-            "market_implied_yes_prob": _coerce_float(anchor.get("implied_yes_prob")),
+            "market_implied_yes_prob": implied,
             "price_at_research": _coerce_float(anchor.get("price_at_research")),
             "divergence": dv,
             "abs_divergence": round(abs(dv), 4) if dv is not None else None,
@@ -733,6 +1546,513 @@ def build_market_comparison(binaries: List[Dict[str, Any]]) -> Dict[str, Any]:
             "rationale_cites_market": _rationale_cites_market(b.get("adjustment_rationale"), anchor),
         })
     return {"anchored_count": len(comps), "comparisons": comps}
+
+
+# ------------------------------------------ cross-artifact proposition contract
+def _proposition_key_text(value: Any) -> str:
+    """Classify one statement or criterion without blending contradictory text."""
+    text = str(value or "").lower().replace("–", "-").replace("—", "-")
+    has_house = "house" in text
+    has_senate = "senate" in text
+    d_house = bool(re.search(
+        r"(?:\b(?:democratic|democrats?)\b(?:(?!\b(?:republicans?|gop)\b)[^.!?]){0,100}\bhouse\b|"
+        r"\bhouse\b(?:(?!\b(?:republicans?|gop)\b)[^.!?]){0,100}\b(?:democratic|democrats?)\b|\bd house\b)",
+        text,
+    ))
+    d_senate = bool(re.search(
+        r"(?:\b(?:democratic|democrats?)\b(?:(?!\b(?:republicans?|gop)\b)[^.!?]){0,100}\bsenate\b|"
+        r"\bsenate\b(?:(?!\b(?:republicans?|gop)\b)[^.!?]){0,100}\b(?:democratic|democrats?)\b|\bd senate\b)",
+        text,
+    ))
+    r_house = bool(re.search(
+        r"(?:\b(?:republican|republicans?|gop)\b(?:(?!\b(?:democratic|democrats?)\b)[^.!?]){0,100}\bhouse\b|"
+        r"\bhouse\b(?:(?!\b(?:democratic|democrats?)\b)[^.!?]){0,100}\b(?:republican|republicans?|gop)\b|\br house\b)",
+        text,
+    ))
+    r_senate = bool(re.search(
+        r"(?:\b(?:republican|republicans?|gop)\b(?:(?!\b(?:democratic|democrats?)\b)[^.!?]){0,100}\bsenate\b|"
+        r"\bsenate\b(?:(?!\b(?:democratic|democrats?)\b)[^.!?]){0,100}\b(?:republican|republicans?|gop)\b|\br senate\b)",
+        text,
+    ))
+    if has_house and has_senate and d_house:
+        if d_senate or "sweep" in text:
+            return "d_sweep"
+        if r_senate:
+            return "d_house_r_senate"
+    if has_senate and r_senate and re.search(
+        r"\b(?:effective control|vice[- ]presidential tiebreaker|gop vp|50/50)\b",
+        text,
+    ):
+        return "r_effective_senate"
+    # A net seat gain is not equivalent to winning/retaining chamber control.
+    # Keep it in a distinct namespace so a statement about gaining >=0 seats
+    # cannot be silently reconciled against a criterion about reaching 218.
+    if has_house and (d_house or r_house) and re.search(
+        r"\b(?:gain(?:s|ed|ing)?|net)\b[^.!?]{0,80}\b(?:house\s+)?seats?\b",
+        text,
+    ):
+        return "d_house_net_seat_change" if d_house else "r_house_net_seat_change"
+    if has_house and d_house and re.search(r"\b(?:majority|control|218\+?)\b", text):
+        return "d_house"
+    if has_house and r_house and re.search(
+        r"\b(?:majority|control|218\+?)\b", text
+    ):
+        return "r_house"
+    return ""
+
+
+def _binary_proposition_key(binary: Dict[str, Any]) -> str:
+    """Return a key only when statement and criterion do not contradict."""
+    statement_key = _proposition_key_text(binary.get("statement"))
+    criteria_key = _proposition_key_text(binary.get("resolution_criteria"))
+    if statement_key and criteria_key and statement_key != criteria_key:
+        return ""
+    return statement_key or criteria_key
+
+
+def _binary_proposition_conflict(binary: Dict[str, Any]) -> Optional[str]:
+    """Describe a recognized statement/criterion event mismatch, if present."""
+    statement_key = _proposition_key_text(binary.get("statement"))
+    criteria_key = _proposition_key_text(binary.get("resolution_criteria"))
+    if statement_key and criteria_key and statement_key != criteria_key:
+        return (
+            "statement and resolution criteria describe different events "
+            f"({statement_key} vs {criteria_key})"
+        )
+    return None
+
+
+def _market_proposition_key(question: Any) -> str:
+    text = str(question or "").lower().replace("–", "-").replace("—", "-")
+    if not text:
+        return ""
+    if "house" in text and "senate" in text:
+        has_d_house = bool(re.search(r"\b(?:d|democratic|democrats?)\s+house\b", text))
+        has_d_senate = bool(re.search(r"\b(?:d|democratic|democrats?)\s+senate\b", text))
+        if has_d_house and has_d_senate:
+            return "d_sweep"
+        has_r_senate = bool(re.search(r"\b(?:r|republican|gop)\s+senate\b", text))
+        if has_d_house and has_r_senate:
+            return "d_house_r_senate"
+    if "house" in text and re.search(r"\b(?:democratic party|democrats?)\b", text):
+        return "d_house"
+    if "house" in text and re.search(r"\b(?:republican party|republicans?|gop)\b", text):
+        return "r_house"
+    return ""
+
+
+def _scenario_yes_membership(
+    binary: Dict[str, Any], scenarios: List[Dict[str, Any]]
+) -> Tuple[str, List[str], Optional[float], Optional[str]]:
+    """Map a fully partition-determined proposition to its YES scenario bins."""
+    proposition_conflict = _binary_proposition_conflict(binary)
+    if proposition_conflict:
+        return "conflicting-binary-contract", [], None, proposition_conflict
+    membership = binary.get("scenario_membership")
+    if membership is not None and not isinstance(membership, dict):
+        return (
+            "invalid-scenario-membership",
+            [],
+            None,
+            "scenario_membership must be an object",
+        )
+    if isinstance(membership, dict):
+        recorded_errors = [
+            str(error) for error in (membership.get("validation_errors") or [])
+            if str(error).strip()
+        ]
+        raw_derivable = membership.get("derivable")
+        raw_yes_scenarios = membership.get("yes_scenarios")
+        if type(raw_derivable) is not bool:
+            return (
+                "invalid-scenario-membership",
+                [],
+                None,
+                "; ".join(recorded_errors)
+                or "scenario_membership.derivable must be a JSON boolean",
+            )
+        if not isinstance(raw_yes_scenarios, list):
+            return (
+                "invalid-scenario-membership",
+                [],
+                None,
+                "; ".join(recorded_errors)
+                or "scenario_membership.yes_scenarios must be a list",
+            )
+        yes_names = [
+            name.strip()
+            for name in raw_yes_scenarios
+            if isinstance(name, str) and name.strip()
+        ]
+        if len(yes_names) != len(raw_yes_scenarios):
+            return (
+                "invalid-scenario-membership",
+                yes_names,
+                None,
+                "; ".join(recorded_errors)
+                or "scenario_membership.yes_scenarios entries must be non-empty strings",
+            )
+        if len(set(yes_names)) != len(yes_names):
+            return (
+                "invalid-scenario-membership",
+                yes_names,
+                None,
+                "; ".join(recorded_errors)
+                or "scenario_membership.yes_scenarios contains duplicates",
+            )
+        if recorded_errors:
+            return (
+                "invalid-scenario-membership",
+                yes_names,
+                None,
+                "; ".join(recorded_errors),
+            )
+        if not raw_derivable:
+            if yes_names:
+                return (
+                    "invalid-scenario-membership",
+                    yes_names,
+                    None,
+                    "non-derivable membership must have an empty yes_scenarios list",
+                )
+            return "", [], None, None
+        if not yes_names:
+            return (
+                "invalid-scenario-membership",
+                [],
+                None,
+                "derivable membership must declare at least one YES scenario",
+            )
+        scenario_by_name = {
+            str(row.get("name") or ""): _coerce_float(row.get("probability"))
+            for row in scenarios if isinstance(row, dict) and row.get("name")
+        }
+        scenario_names = [
+            str(row.get("name") or "")
+            for row in scenarios if isinstance(row, dict) and row.get("name")
+        ]
+        if len(set(scenario_names)) != len(scenario_names):
+            return (
+                "invalid-scenario-membership",
+                yes_names,
+                None,
+                "canonical scenario partition contains duplicate names",
+            )
+        if (
+            yes_names
+            and all(name in scenario_by_name for name in yes_names)
+            and all(scenario_by_name[name] is not None for name in yes_names)
+        ):
+            expected = round(sum(
+                float(scenario_by_name[name]) for name in yes_names
+            ), 4)
+            proposition_id = str(binary.get("proposition_id") or "").strip()
+            return (
+                proposition_id or "explicit-scenario-membership",
+                yes_names,
+                expected,
+                None,
+            )
+        return (
+            "invalid-scenario-membership",
+            yes_names,
+            None,
+            "declared scenario membership references missing/invalid bins",
+        )
+    key = _binary_proposition_key(binary)
+    if not key or not scenarios:
+        return "", [], None, None
+    text = " ".join(
+        str(binary.get(field) or "")
+        for field in ("statement", "resolution_criteria")
+    ).lower().replace("–", "-").replace("—", "-")
+    include_tie = bool(re.search(r"50/50|50-50|tiebreak", text))
+    yes_names: List[str] = []
+    total = 0.0
+    for scenario in scenarios:
+        if not isinstance(scenario, dict):
+            continue
+        name = str(scenario.get("name") or "")
+        normalized = name.lower().replace("–", "-").replace("—", "-")
+        probability = _coerce_float(scenario.get("probability"))
+        if not name or probability is None:
+            return "", [], None, None
+        d_house = "d house" in normalized or "democratic house" in normalized
+        r_house = "r house" in normalized or "republican house" in normalized
+        d_senate = "d senate" in normalized or "dem senate" in normalized
+        r_senate = "r senate" in normalized or "republican senate" in normalized
+        tie = bool(re.search(r"50/50|50-50", normalized))
+        r_trifecta = "r trifecta" in normalized or "republican trifecta" in normalized
+        yes = False
+        if key == "d_sweep":
+            yes = d_house and d_senate
+        elif key == "d_house_r_senate":
+            yes = d_house and (r_senate or (include_tie and tie))
+        elif key == "r_effective_senate":
+            yes = r_senate or tie or r_trifecta
+        elif key == "d_house":
+            yes = d_house
+        elif key == "r_house":
+            yes = r_house or r_trifecta
+        if yes:
+            yes_names.append(name)
+            total += probability
+    if not yes_names:
+        return "", [], None, None
+    return key, yes_names, round(total, 4), None
+
+
+def audit_proposition_consistency(forecast: Dict[str, Any]) -> Dict[str, Any]:
+    """Read-only audit of binary probabilities against the scenario partition."""
+    scenarios = [
+        row for row in (forecast.get("scenarios") or []) if isinstance(row, dict)
+    ]
+    checked: List[Dict[str, Any]] = []
+    mismatches: List[Dict[str, Any]] = []
+    for binary in (forecast.get("binary_forecasts") or []):
+        if not isinstance(binary, dict):
+            continue
+        key, names, expected, membership_error = _scenario_yes_membership(
+            binary, scenarios
+        )
+        actual = _coerce_float(binary.get("probability"))
+        if key in {
+            "invalid-scenario-membership",
+            "conflicting-binary-contract",
+        }:
+            mismatches.append({
+                "forecast_id": str(binary.get("id") or ""),
+                "proposition_key": key,
+                "binary_probability": round(actual, 4) if actual is not None else None,
+                "scenario_probability": None,
+                "delta": None,
+                "yes_scenarios": names,
+                "reason": membership_error or (
+                    "declared scenario membership references missing/invalid bins"
+                ),
+            })
+            continue
+        if not key or expected is None or actual is None:
+            continue
+        row = {
+            "forecast_id": str(binary.get("id") or ""),
+            "proposition_key": key,
+            "binary_probability": round(actual, 4),
+            "scenario_probability": expected,
+            "delta": round(actual - expected, 4),
+            "yes_scenarios": names,
+        }
+        checked.append(row)
+        if abs(actual - expected) > 0.015:
+            mismatches.append(row)
+    return {
+        "checked": len(checked),
+        "rows": checked,
+        "mismatches": mismatches,
+        "mismatch_count": len(mismatches),
+        "passed": not mismatches,
+    }
+
+
+def _market_anchor_complete(anchor: Dict[str, Any]) -> bool:
+    required_text = ("market_id", "question", "url", "endDate", "resolution_equivalence")
+    if not all(str(anchor.get(field) or "").strip() for field in required_text):
+        return False
+    implied = _coerce_float(anchor.get("implied_yes_prob"))
+    confidence = _coerce_float(anchor.get("match_confidence"))
+    return bool(
+        implied is not None and 0.0 <= implied <= 1.0
+        and confidence is not None and confidence >= 0.5
+        and str(anchor.get("resolution_equivalence") or "").lower() in {"exact", "near"}
+    )
+
+
+def _market_anchor_binding_valid(
+    binary: Dict[str, Any], anchor: Dict[str, Any]
+) -> bool:
+    """Verify that an unclassified semantic match is bound to the current bytes."""
+    proposition_id = str(binary.get("proposition_id") or "").strip()
+    if not proposition_id or str(anchor.get("forecast_proposition_id") or "") != proposition_id:
+        return False
+    contract_text = (
+        str(binary.get("statement") or "").strip()
+        + "\n"
+        + str(binary.get("resolution_criteria") or "").strip()
+    )
+    question = str(anchor.get("question") or "").strip()
+    return bool(
+        anchor.get("match_method") == "bounded-semantic-equivalence-review"
+        and anchor.get("forecast_contract_sha256")
+        == hashlib.sha256(contract_text.encode("utf-8")).hexdigest()
+        and anchor.get("market_question_sha256")
+        == hashlib.sha256(question.encode("utf-8")).hexdigest()
+    )
+
+
+def audit_market_anchor_integrity(forecast: Dict[str, Any]) -> Dict[str, Any]:
+    """Reject incomplete anchors and anchors resolving a different proposition."""
+    issues: List[Dict[str, Any]] = []
+    anchored = 0
+    for binary in (forecast.get("binary_forecasts") or []):
+        if not isinstance(binary, dict) or not isinstance(binary.get("market_anchor"), dict):
+            continue
+        anchored += 1
+        anchor = binary["market_anchor"]
+        binary_key = _binary_proposition_key(binary)
+        market_key = _market_proposition_key(anchor.get("question"))
+        reasons: List[str] = []
+        if not _market_anchor_complete(anchor):
+            reasons.append("incomplete provenance")
+        if binary_key and market_key:
+            if binary_key != market_key:
+                reasons.append(f"resolution mismatch ({binary_key} vs {market_key})")
+        elif not _market_anchor_binding_valid(binary, anchor):
+            reasons.append("unclassified equivalence lacks a byte-bound match contract")
+        if reasons:
+            issues.append({
+                "forecast_id": str(binary.get("id") or ""),
+                "market_id": str(anchor.get("market_id") or ""),
+                "reasons": reasons,
+            })
+    return {
+        "anchored_count": anchored,
+        "issues": issues,
+        "issue_count": len(issues),
+        "passed": not issues,
+    }
+
+
+def reconcile_forecast_contract(forecast: Dict[str, Any]) -> Dict[str, Any]:
+    """Make scenario-equivalent binaries and market anchors one canonical contract.
+
+    The function mutates ``forecast`` intentionally and returns a diagnostics
+    payload.  Only propositions fully determined by mutually exclusive scenario
+    bins are reconciled; unrelated binaries retain their independent estimates.
+    """
+    binaries = [
+        row for row in (forecast.get("binary_forecasts") or []) if isinstance(row, dict)
+    ]
+    scenarios = [
+        row for row in (forecast.get("scenarios") or []) if isinstance(row, dict)
+    ]
+    before = audit_proposition_consistency(forecast)
+    corrected: List[Dict[str, Any]] = []
+    for binary in binaries:
+        key, names, expected, _membership_error = _scenario_yes_membership(
+            binary, scenarios
+        )
+        actual = _coerce_float(binary.get("probability"))
+        if not key or expected is None or actual is None:
+            continue
+        binary["scenario_membership"] = {
+            "derivable": True,
+            "proposition_key": key,
+            "yes_scenarios": names,
+            "implied_probability": expected,
+            "method": "mutually-exclusive-scenario-partition",
+        }
+        if abs(actual - expected) <= 0.015:
+            continue
+        binary["pre_reconciliation_probability"] = round(actual, 4)
+        binary["probability"] = expected
+        binary["source"] = "scenario-partition"
+        note = (
+            f"Scenario-partition reconciliation implies {expected:.0%}; this canonical "
+            "value supersedes the earlier standalone estimate."
+        )
+        rationale = str(binary.get("adjustment_rationale") or "").strip()
+        if note not in rationale:
+            binary["adjustment_rationale"] = (rationale + " " + note).strip()
+        corrected.append({
+            "forecast_id": str(binary.get("id") or ""),
+            "from": round(actual, 4),
+            "to": expected,
+            "proposition_key": key,
+        })
+
+    # Build the richest available record for each market before removing wrong
+    # attachments; a correctly matching binary can inherit that provenance.
+    richest_by_id: Dict[str, Dict[str, Any]] = {}
+    for binary in binaries:
+        anchor = binary.get("market_anchor")
+        if not isinstance(anchor, dict):
+            continue
+        market_id = str(anchor.get("market_id") or "").strip()
+        if not market_id:
+            continue
+        score = sum(1 for value in anchor.values() if value not in (None, ""))
+        current = richest_by_id.get(market_id)
+        current_score = sum(
+            1 for value in (current or {}).values() if value not in (None, "")
+        )
+        if score > current_score:
+            richest_by_id[market_id] = dict(anchor)
+
+    removed_anchors: List[str] = []
+    for binary in binaries:
+        anchor = binary.get("market_anchor")
+        if not isinstance(anchor, dict):
+            continue
+        market_id = str(anchor.get("market_id") or "").strip()
+        merged = dict(richest_by_id.get(market_id) or {})
+        merged.update({key: value for key, value in anchor.items() if value not in (None, "")})
+        binary_key = _binary_proposition_key(binary)
+        market_key = _market_proposition_key(merged.get("question"))
+        proposition_matches = bool(
+            (binary_key and market_key and binary_key == market_key)
+            or _market_anchor_binding_valid(binary, merged)
+        )
+        if not proposition_matches or not _market_anchor_complete(merged):
+            binary.pop("market_anchor", None)
+            removed_anchors.append(str(binary.get("id") or ""))
+            continue
+        binary["market_anchor"] = merged
+
+    transferred: List[str] = []
+    for market_id, rich in richest_by_id.items():
+        market_key = _market_proposition_key(rich.get("question"))
+        if not market_key or not _market_anchor_complete(rich):
+            continue
+        candidates = [row for row in binaries if _binary_proposition_key(row) == market_key]
+        if len(candidates) != 1:
+            continue
+        binary = candidates[0]
+        existing = binary.get("market_anchor")
+        if not isinstance(existing, dict) or str(existing.get("market_id") or "") != market_id:
+            binary["market_anchor"] = dict(rich)
+            transferred.append(str(binary.get("id") or ""))
+        anchor = binary["market_anchor"]
+        anchor["price_at_research"] = (
+            _coerce_float(anchor.get("price_at_research"))
+            if _coerce_float(anchor.get("price_at_research")) is not None
+            else _coerce_float(anchor.get("implied_yes_prob"))
+        )
+
+    for binary in binaries:
+        anchor = binary.get("market_anchor")
+        if not isinstance(anchor, dict):
+            continue
+        probability = _coerce_float(binary.get("probability"))
+        implied = _coerce_float(anchor.get("implied_yes_prob"))
+        if probability is not None and implied is not None:
+            anchor["divergence"] = round(probability - implied, 4)
+
+    forecast["binary_forecasts"] = binaries
+    forecast["market_comparison"] = build_market_comparison(binaries)
+    after = audit_proposition_consistency(forecast)
+    market_audit = audit_market_anchor_integrity(forecast)
+    diagnostics = {
+        "corrected": corrected,
+        "corrected_count": len(corrected),
+        "removed_market_anchors": removed_anchors,
+        "transferred_market_anchors": transferred,
+        "before": before,
+        "after": after,
+        "market_anchors": market_audit,
+        "passed": after["passed"] and market_audit["passed"],
+    }
+    forecast["proposition_consistency"] = diagnostics
+    return diagnostics
 
 
 # --------------------------------------------------- ITEM 12: multi-model ensemble
@@ -802,7 +2122,9 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
                              signal_pack: Optional[str] = None,
                              market_pack: Optional[str] = None,
                              markets: Optional[List[Dict[str, Any]]] = None,
-                             ensemble_client_factory: Optional[Any] = None) -> Dict[str, Any]:
+                             scenarios: Optional[List[Dict[str, Any]]] = None,
+                             ensemble_client_factory: Optional[Any] = None,
+                             horizon_date: Optional[str] = None) -> Dict[str, Any]:
     """Extract/derive >=min_count INDEPENDENT binary forecasts from the dossier.
 
     Returns ``{"binary_forecasts": [...], "binary_quality": {...}}``. Degrade-safe:
@@ -838,6 +2160,19 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
         ip = _coerce_float(m.get("implied_yes_prob"))
         if mid and ip is not None and 0.0 <= ip <= 1.0:
             market_lookup[mid] = ip
+    # spec §4（日历模式）：确定性 horizon_date 可用时，horizon_year 提示直接用
+    # horizon_date.year（判定年即预测期限年）；缺省 None → 旧措辞逐字节不变。
+    _hz_year: Optional[int] = None
+    if horizon_date:
+        try:
+            from ..utils.dates import parse_as_of as _pao
+            _hd = _pao(str(horizon_date))
+            _hz_year = _hd.year if _hd else None
+        except Exception:  # noqa: BLE001 — 判定年提示为增强，失败退回旧措辞
+            _hz_year = None
+    _hz_hint = str(_hz_year) if _hz_year else "2027"
+    _hz_rule = (f"resolution year, at or before the forecast horizon {_hz_year}"
+                if _hz_year else "resolution year, within 1-5 years of now")
 
     def _draw(instr_min: int, exclude: List[str], *, low_p: bool = False,
               client: Any = None) -> List[Dict[str, Any]]:
@@ -847,6 +2182,7 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
             min_count=instr_min, language=language,
             theme_enum=("|".join(themes) if themes else _BINARY_DEFAULT_THEME_ENUM),
             tie_rule=(f"tied to {', '.join(themes)}" if themes else _BINARY_DEFAULT_TIE_RULE),
+            horizon_year_hint=_hz_hint, horizon_year_rule=_hz_rule,
         )
         if contrarian:
             user += _BINARY_LOW_P_RULE if low_p else _BINARY_CONTRARIAN_RULE
@@ -869,6 +2205,24 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
         if market_aware:
             # PM-2：市场表切片 4000→8000，让相关性门控后的更多市场进入锚定视野。
             user += f"\n\n[Prediction market signals]\n{str(market_pack)[:8000]}"
+        if scenarios:
+            scenario_rows = [
+                {
+                    "name": str(row.get("name") or ""),
+                    "probability": row.get("probability"),
+                    "resolution_criteria": str(row.get("resolution_criteria") or ""),
+                }
+                for row in scenarios
+                if isinstance(row, dict) and row.get("name")
+            ]
+            if scenario_rows:
+                user += (
+                    "\n\n[Canonical mutually-exclusive scenario partition]\n"
+                    + str(scenario_rows)[:6000]
+                    + "\nFor a binary fully determined by this partition, set "
+                    "scenario_membership.derivable=true and copy every YES scenario name "
+                    "exactly. Otherwise set derivable=false and leave yes_scenarios empty."
+                )
         user += f"\n\n[Research dossier]\n{content}"
         raw = _llm.chat_json(messages=[{"role": "user", "content": user}],
                              temperature=0.25, max_tokens=4096)
@@ -1011,7 +2365,8 @@ def parse_requirement_years(requirement_text: Optional[str], *,
 
 
 def apply_horizon_consistency(forecast: Dict[str, Any], requirement_text: Optional[str], *,
-                              now_year: Optional[int] = None) -> Dict[str, Any]:
+                              now_year: Optional[int] = None,
+                              horizon_date: Optional[str] = None) -> Dict[str, Any]:
     """RQ-6（extractor 半）：抽取时校验二元预测结算年份与 brief 目标年份的一致性。
 
     需求文本目标年份集合与二元预测结算年份集合均非空且**无交集**时（例：2026 brief 抽出
@@ -1019,6 +2374,11 @@ def apply_horizon_consistency(forecast: Dict[str, Any], requirement_text: Option
     （绝不覆盖既有键——镜像 _apply_publish_gate 的 merge 行为），供发布门降信心。
     Mutates + returns ``forecast``。FORECAST_HORIZON_CHECK 旗标关闭、年份解析不出、
     或任何异常 → 原样返回（degrade-safe，不阻断抽取）。
+
+    日历模式（spec §4）：可用**确定性** ``horizon_date`` 时（显式入参优先，否则用
+    ``sim_timeline.extract_horizon`` 对需求文本做确定性四层抽取——LLM 兜底不在此处），
+    额外把 ``horizon_date.year`` 并入需求侧目标年份参与同一交集比对——覆盖相对期限
+    （"within 18 months"）等 bare-year 正则取不到年份的 brief。门/降级行为不变。
     """
     try:
         if not isinstance(forecast, dict) or not _cfg("FORECAST_HORIZON_CHECK", True):
@@ -1027,9 +2387,26 @@ def apply_horizon_consistency(forecast: Dict[str, Any], requirement_text: Option
             from datetime import datetime
             now_year = datetime.now().year
         req_years = set(parse_requirement_years(requirement_text, now_year=now_year))
-        if not req_years:
-            return forecast  # brief 未给出可解析的目标年份 → 无从比对（不加标记）
         lo, hi = now_year - 1, now_year + 30
+        hz_year: Optional[int] = None
+        try:
+            if horizon_date:
+                from ..utils.dates import parse_as_of as _pao
+                _hd = _pao(str(horizon_date))
+                hz_year = _hd.year if _hd else None
+            else:
+                from datetime import date as _date
+                from ..utils.sim_timeline import extract_horizon as _eh
+                _res = _eh(str(requirement_text or ""), _date(int(now_year), 1, 1))
+                hz_year = int(str(_res.horizon_date)[:4]) if _res else None
+            if hz_year is not None and not (lo <= hz_year <= hi):
+                hz_year = None
+        except Exception:  # noqa: BLE001 — 判定年推导为增强，失败退回纯正则口径
+            hz_year = None
+        if hz_year is not None:
+            req_years.add(hz_year)
+        if not req_years:
+            return forecast  # brief 未给出可解析的目标年份/判定日 → 无从比对（不加标记）
         bin_years: set = set()
         for b in (forecast.get("binary_forecasts") or []):
             if not isinstance(b, dict):
@@ -1443,6 +2820,55 @@ def render_binary_forecasts_block(forecast: Optional[Dict[str, Any]],
     return "\n".join(lines)
 
 
+def upsert_binary_forecasts_block(markdown: str, block: str) -> tuple[str, str]:
+    """Insert or replace the deterministic Part-1 H2 section.
+
+    Earlier runs hard-truncated resolution cells and the old report finalizer
+    treated the mere presence of the heading as an idempotency success.  This
+    helper makes the structured ``forecast.json`` block authoritative on every
+    finalization while leaving all other H2 sections byte-for-byte intact.
+    Returns ``(markdown, action)`` where action is replaced/inserted/noop.
+    """
+    md = str(markdown or "")
+    rendered = str(block or "").strip()
+    if not rendered:
+        return md, "noop"
+    start_marker = "<!-- binary-forecast-block:start -->"
+    end_marker = "<!-- binary-forecast-block:end -->"
+    owned = f"{start_marker}\n{rendered}\n{end_marker}"
+    owned_start = md.find(start_marker)
+    owned_end = md.find(end_marker, owned_start + len(start_marker))
+    if owned_start >= 0 and owned_end >= 0:
+        owned_end += len(end_marker)
+        updated = md[:owned_start] + owned + md[owned_end:]
+        return updated, "noop" if updated == md else "replaced"
+    lines = md.splitlines()
+    marker_re = re.compile(
+        r"^##\s+(?:Part 1\s+[—-]\s+Binary Forecasts|"
+        r"第一部分\s*[·・]\s*二元预测(?:（Part 1\s+[—-]\s+Binary Forecasts）)?)\s*$",
+        re.I,
+    )
+    start = next((i for i, line in enumerate(lines) if marker_re.match(line.strip())), -1)
+    if start >= 0:
+        end = start + 1
+        while end < len(lines) and not re.match(r"^##\s+\S", lines[end].strip()):
+            end += 1
+        before = "\n".join(lines[:start]).rstrip()
+        after = "\n".join(lines[end:]).lstrip()
+        pieces = [piece for piece in (before, owned, after) if piece]
+        return "\n\n".join(pieces).rstrip() + "\n", "replaced"
+
+    first, sep, rest = md.partition("\n")
+    if first.lstrip().startswith("# "):
+        suffix = rest.lstrip("\n") if sep else ""
+        result = first.rstrip() + "\n\n" + owned
+        if suffix:
+            result += "\n\n" + suffix
+        return result.rstrip() + "\n", "inserted"
+    result = owned + ("\n\n" + md.lstrip() if md.strip() else "")
+    return result.rstrip() + "\n", "inserted"
+
+
 def render_resolution_block(forecast: Optional[Dict[str, Any]],
                             indicators: Optional[List[Dict[str, Any]]] = None,
                             language: str = "Chinese") -> str:
@@ -1668,8 +3094,8 @@ def audit_citation_grounding(report_markdown: str,
 
     WAVE10（无缝引用）：可选 ``index_map``（记号→来源，如 {"S12": {...}}）——传入时额外
     报告 **resolved** 指标（记号必须能在注入索引里解析才算引用，悬空的 [S246] 不再充数）：
-    ``resolved_cited`` / ``resolved_coverage``。这是**独立观测指标**，发布门仍读 ``coverage``
-    （本波不移动门槛，先观测一轮再收紧）。缺省 None 时输出与历史逐字节一致。
+    ``resolved_cited`` / ``resolved_coverage``。最终发布门在该字段存在时优先使用它，避免
+    悬空记号或内部模拟标记抬高引用覆盖；缺省 None 的遗留调用仍只输出历史 ``coverage``。
     """
     lines = [ln.strip() for ln in (report_markdown or "").splitlines() if ln.strip()]
     quant_lines = [ln for ln in lines if _NUMBER_RE.search(ln) and not ln.startswith("#")]

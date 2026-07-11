@@ -69,11 +69,41 @@ DEERFLOW_PUBLIC_ROOT = REPO_ROOT / "deer-flow" / "skills" / "public"
 # bridge 与 drf2 的正文已**合法分叉** —— 逐行 body-diff 会长期误报。改为守一个更弱但仍
 # 有用的**结构不变式**：drf2 副本里出现的每个小节标题（归一化后）都必须在 bridge 副本里
 # 存在，从而在任一方未来**新增/删除/改名共享方法论小节**时先变红提示复核。
-# 已知的合法「drf2 独有」小节在下方 warn-list 放行：bridge 把「硬性演员上限」并进了
-# actor-ontology 的 §2.3 正文，而 drf2 把它拆成了独立的 §2.4 子节 —— 这是有意的结构差异，
-# 不是漂移。除此之外任何**新**的 drf2 独有标题都不在白名单里，会让守卫变红。
+# 已知的合法「drf2 独有」小节在下方 warn-list 放行：
+#   - actor-ontology：bridge 把「硬性演员上限」并进了 §2.3 正文，而 drf2 把它拆成了独立的
+#     §2.4 子节 —— 这是有意的结构差异，不是漂移。
+#   - deep-research：bridge 副本已重构为「精简核心 + references/ 懒加载」形态（/deep-research
+#     每个独立 pass 都会激活，压缩常驻正文省 token），详细 tradecraft 移入
+#     references/source-tradecraft.md 与 references/final-dossier-contract.md，并已逐字节部署到
+#     deer-flow/skills/public/。drf2 副本保留完整长文结构（脚手架单次加载，无重复激活成本），
+#     故其 §1-§13 编号小节在 bridge 侧不再以标题形式存在 —— 有意分叉，非漂移。
+# 除此之外任何**新**的 drf2 独有标题都不在白名单里，会让守卫变红。
 KNOWN_DRF2_ONLY_HEADINGS = {
     "actor-ontology-research": {"2.4 the hard cast cap"},
+    "deep-research": {
+        "deep research skill",
+        "1. mission & operating principles",
+        "2. phase 0",
+        "3. search craft",
+        "3.1 operator toolkit",
+        "3.2 document-type targeting",
+        "3.3 pivots when results are thin",
+        "4. source quality framework",
+        "4.1 tiers",
+        "4.2 domain map",
+        "4.3 eight signal checks",
+        '4.4 evaluating an "expert"',
+        "5. the evidence ledger",
+        "6. verification tradecraft",
+        "7. adversarial analysis",
+        "8. forecast-oriented research",
+        "9. temporal awareness",
+        "10. budget & efficiency discipline",
+        "10.5 obstacle playbook",
+        "11. synthesis gate",
+        "12. output contract",
+        "13. failure modes",
+    },
 }
 
 _HEADING_RE = re.compile(r"^#{1,6}\s")

@@ -26,6 +26,12 @@ gains_if/loses_if incentives), SIM-5 (power-sort + DECISION_CHANNEL_MAX_ACTIVE c
 SIM-6 / R2-EXEC-8 (parallel two-phase elicit→replay), R2-EXEC-10 (collapse the audience
 tail into one weighted public block + per-roster cache), R2-SIM-12 (calendar-scaled
 inertia), SIM-1 (windowed convergence early-stop signal), abstention (R2-CAL-13/SIM-9).
+
+日历改造（temporal spec §4/§5/§6）：单轮核心抽为 ``elicit_round(roster, period_ctx)``，
+供轮内（in-band，run_parallel_simulation 日历回路）与本模块 post-hoc 回放共用；
+``run_decision_channel(round_dates=...)`` 提供精确 round→时段映射时，提示词切换为
+"时段"框架（基线锚定保留、演化份额继续隐藏）、缓存键为 (roster 签名, 时段 label)、
+decisions/轨迹行带 period_end，输出 schema v3。``round_dates=None`` → 旧路径逐字节不变。
 """
 
 from __future__ import annotations
@@ -42,6 +48,14 @@ PUBLIC_BLOCK_ID = "__public__"
 # Literal an agent may emit to opt out of committing this round (R2-CAL-13/SIM-9). It is
 # intentionally NOT in the candidate scenario set, so it is filtered to a no-op weight.
 ABSTAIN_TOKEN = "弃权"
+
+# 日历时段单位 → 中文（spec §5 verbatim 映射）。
+_UNIT_ZH = {"day": "天", "week": "周", "half_month": "半月", "month": "月",
+            "quarter": "季度", "half_year": "半年"}
+# 单位名义天数（与 sim_timeline 的 NOMINAL 一致），用于从时段长度反推单位、
+# 以及日历模式下 _inertia_for_gap 的 avg_gap（= 单位名义天数）。
+_UNIT_NOMINAL_DAYS = [("day", 1.0), ("week", 7.0), ("half_month", 15.22),
+                      ("month", 30.44), ("quarter", 91.31), ("half_year", 182.62)]
 
 
 def _cfg(name: str, default: Any) -> Any:
@@ -87,13 +101,77 @@ def _render_roster_line(a: Dict[str, Any]) -> str:
     return base
 
 
+def _period_days(period: Optional[Dict[str, Any]]) -> Optional[int]:
+    """一个时段覆盖的日历天数（含首尾）；日期缺失/不可解析 → None。"""
+    if not isinstance(period, dict):
+        return None
+    ps = _parse_date(period.get("period_start"))
+    pe = _parse_date(period.get("period_end"))
+    if ps is None or pe is None:
+        return None
+    d = (pe - ps).days + 1
+    return d if d > 0 else None
+
+
+def _unit_for_days(days: float) -> str:
+    """按名义天数取最近的日历单位（day/…/half_year）。"""
+    return min(_UNIT_NOMINAL_DAYS, key=lambda kv: abs(kv[1] - float(days)))[0]
+
+
+def _infer_calendar_unit(round_dates: Optional[List[Dict[str, Any]]]) -> Optional[str]:
+    """从 round_dates 的时段长度中位数反推日历单位（RoundPeriod 不携带 unit；
+    snap 产生的首/尾残段用中位数天然滤掉）。全部不可解析 → None。"""
+    lens = sorted(d for d in (_period_days(p) for p in (round_dates or [])
+                              if isinstance(p, dict)) if d)
+    if not lens:
+        return None
+    return _unit_for_days(lens[len(lens) // 2])
+
+
+def _render_period_block(round_num: int, n_rounds: Optional[int],
+                         period: Optional[Dict[str, Any]],
+                         horizon_date: Optional[str],
+                         unit: Optional[str]) -> str:
+    """spec §5 的时段框架（verbatim 模板）。period 缺失/不完整 → ""（走旧的轮次框架）。"""
+    if not isinstance(period, dict):
+        return ""
+    ps, pe = period.get("period_start"), period.get("period_end")
+    if not ps or not pe:
+        return ""
+    u = str(unit or period.get("unit") or "")
+    if not u:
+        d = _period_days(period)
+        u = _unit_for_days(d) if d else ""
+    unit_zh = _UNIT_ZH.get(u, u) or "时段"
+    total = ""
+    try:
+        if n_rounds:
+            total = f"/{int(n_rounds)}"
+    except (TypeError, ValueError):
+        total = ""
+    block = f"时段：第 {round_num}{total} 轮，覆盖 {ps} 至 {pe}（一个{unit_zh}）。\n"
+    hd, ped = _parse_date(horizon_date), _parse_date(str(pe))
+    if hd is not None and ped is not None:
+        block += f"距离判定日 {horizon_date} 还有 {(hd - ped).days} 天。\n"
+    block += "请给出你的行动体在这一整个时段内的实际投入方向与行动承诺。\n"
+    return block
+
+
 def _build_round_decision_prompt(scenarios: List[str], active: List[Dict[str, Any]],
                                  round_num: int, as_of: Optional[str],
                                  base_shares: Optional[Dict[str, float]] = None,
-                                 abstain_allowed: bool = True) -> str:
+                                 abstain_allowed: bool = True,
+                                 period: Optional[Dict[str, Any]] = None,
+                                 n_rounds: Optional[int] = None,
+                                 horizon_date: Optional[str] = None,
+                                 unit: Optional[str] = None) -> str:
     sc_list = "、".join(scenarios)
     roster = "\n".join(_render_roster_line(a) for a in active)
     when = f"（对应时点约 {as_of}）" if as_of else ""
+    # 日历模式（spec §5）：用"时段"框架替换"第 N 轮（对应时点约 …）"；
+    # 基线锚定与"只喂种子先验、绝不喂演化份额"的守卫在两种模式下原样保留。
+    period_block = _render_period_block(round_num, n_rounds, period, horizon_date, unit)
+    lead = period_block if period_block else f"第 {round_num} 轮{when}的"
     # R2-SIM-1: anchor on the modeled base distribution (the seeded prior). It is the
     # immutable reference for every round (NOT the evolving per-round shares), which is
     # what keeps elicitation a pure, parallel-safe function of the frozen log.
@@ -111,7 +189,7 @@ def _build_round_decision_prompt(scenarios: List[str], active: List[Dict[str, An
     return (
         f"这是一个预测推演。候选**互斥**情景：{sc_list}。\n"
         f"{base_line}"
-        f"第 {round_num} 轮{when}的活跃角色会基于其立场/利益，对**结果**做出本轮的实质承诺"
+        f"{lead}活跃角色会基于其立场/利益，对**结果**做出本轮的实质承诺"
         "（投票/下单/站队/分配，而非单纯发言）。为每个角色判断它本轮最倾向促成**哪一个**情景，"
         "以及力度 magnitude(0-1) 与信心 confidence(0-1)。\n"
         f"{abstain_line}"
@@ -125,12 +203,17 @@ def _build_round_decision_prompt(scenarios: List[str], active: List[Dict[str, An
 def _elicit_round_decisions(llm, scenarios: List[str], active: List[Dict[str, Any]],
                             round_num: int, as_of: Optional[str] = None,
                             base_shares: Optional[Dict[str, float]] = None,
-                            abstain_allowed: bool = True) -> List[Dict[str, Any]]:
+                            abstain_allowed: bool = True,
+                            period: Optional[Dict[str, Any]] = None,
+                            n_rounds: Optional[int] = None,
+                            horizon_date: Optional[str] = None,
+                            unit: Optional[str] = None) -> List[Dict[str, Any]]:
     """One batched structured call assigning each active agent a scenario commitment.
 
     Returns ``[{agent_id, scenario, magnitude, confidence}]`` (scenario validated against
     the candidate set; ``ABSTAIN_TOKEN`` and any other non-candidate value are dropped).
-    Degrade-safe: empty inputs or any failure → ``[]``.
+    Degrade-safe: empty inputs or any failure → ``[]``. ``period``/``n_rounds``/
+    ``horizon_date``/``unit`` 仅在日历模式提供，切换提示词为 spec §5 的时段框架。
     """
     if not active or not scenarios:
         return []
@@ -138,7 +221,9 @@ def _elicit_round_decisions(llm, scenarios: List[str], active: List[Dict[str, An
         raw = llm.chat_json(
             messages=[{"role": "user",
                        "content": _build_round_decision_prompt(
-                           scenarios, active, round_num, as_of, base_shares, abstain_allowed)}],
+                           scenarios, active, round_num, as_of, base_shares, abstain_allowed,
+                           period=period, n_rounds=n_rounds,
+                           horizon_date=horizon_date, unit=unit)}],
             temperature=0.2,
             max_tokens=2048,
         )
@@ -159,6 +244,52 @@ def _elicit_round_decisions(llm, scenarios: List[str], active: List[Dict[str, An
             "magnitude": d.get("magnitude", 1.0),
             "confidence": d.get("confidence", 0.7),
         })
+    return out
+
+
+def elicit_round(roster: List[Dict[str, Any]],
+                 period_ctx: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """日历改造（spec §4）：单轮 elicitation 核心，in-band（run_parallel_simulation 的
+    轮内世界演化）与 post-hoc（``run_decision_channel`` 回放）两条路径共用。
+
+    ``roster``：``_build_active_roster`` 的输出。``period_ctx`` 键：
+    ``llm``/``scenarios``（必需）；``base_shares``、``abstain_allowed``（默认 True）、
+    ``round_num``（1 基）、``n_rounds``、``as_of``（hours 兼容）、``horizon_date``、
+    ``unit``、``period``（``{period_start, period_end, label}``，日历模式）可选。
+
+    返回可直接喂给 ``WorldState.step`` 的 commitments（``weight`` = outcome_power ×
+    confidence，与 ``commitments_from_decisions`` 同口径），每项同时保留审计字段
+    ``{agent_id, scenario, magnitude, confidence, round, outcome_power?, period_end?}``。
+    Degrade-safe：空输入/任何失败 → ``[]``。
+    """
+    ctx = period_ctx or {}
+    llm = ctx.get("llm")
+    scenarios = [str(s) for s in (ctx.get("scenarios") or []) if str(s).strip()]
+    if llm is None or not scenarios or not roster:
+        return []
+    try:
+        rnd = int(ctx.get("round_num") or 0)
+    except (TypeError, ValueError):
+        rnd = 0
+    period = ctx.get("period") if isinstance(ctx.get("period"), dict) else None
+    decisions = _elicit_round_decisions(
+        llm, scenarios, roster, rnd, ctx.get("as_of"),
+        ctx.get("base_shares"), bool(ctx.get("abstain_allowed", True)),
+        period=period, n_rounds=ctx.get("n_rounds"),
+        horizon_date=ctx.get("horizon_date"), unit=ctx.get("unit"))
+    pmap = {e.get("agent_id"): e.get("outcome_power", 1.0) for e in roster}
+    period_end = str(period.get("period_end")) if period and period.get("period_end") else None
+    out: List[Dict[str, Any]] = []
+    for d in decisions:
+        c = dict(d)
+        c["round"] = rnd
+        if c.get("agent_id") in pmap:  # R2-SIM-2: carry the actor's outcome power
+            c["outcome_power"] = pmap[c["agent_id"]]
+        if period_end:
+            c["period_end"] = period_end  # spec §4/§6: decisions 行带 period_end
+        conv = commitments_from_decisions([c])
+        c["weight"] = conv[0]["weight"] if conv else 0.0
+        out.append(c)
     return out
 
 
@@ -311,23 +442,22 @@ def _avg_gap_days(seed: Dict[str, Any], as_of_by_round: Dict[int, Optional[str]]
     return (span / rounds) if (span > 0 and rounds > 0) else 0.0
 
 
-def _fan_out_elicit(llm, scenarios: List[str],
-                    tasks: Dict[Any, Tuple[List[Dict[str, Any]], int, Optional[str]]],
-                    base_shares: Optional[Dict[str, float]],
-                    abstain_allowed: bool, concurrency: int) -> Dict[Any, List[Dict[str, Any]]]:
+def _fan_out_elicit(tasks: Dict[Any, Tuple[List[Dict[str, Any]], Dict[str, Any]]],
+                    concurrency: int) -> Dict[Any, List[Dict[str, Any]]]:
     """SIM-6 / R2-EXEC-8: run one elicitation per *unique* roster key, in parallel under
-    a bounded pool. Returns ``{key: decisions}``. Each task is independent (pure over the
-    frozen log) so ordering does not matter; the WorldState is stepped later in round
-    order. A failing task degrades to ``[]`` for that key only.
+    a bounded pool. ``tasks[key] = (roster, period_ctx)``; each task runs through
+    ``elicit_round`` (the single per-round core shared with the in-band calendar path).
+    Returns ``{key: commitments}``. Each task is independent (pure over the frozen log)
+    so ordering does not matter; the WorldState is stepped later in round order. A
+    failing task degrades to ``[]`` for that key only.
     """
     results: Dict[Any, List[Dict[str, Any]]] = {}
     if not tasks:
         return results
 
     def _run(key):
-        active, rnd, as_of = tasks[key]
-        return key, _elicit_round_decisions(
-            llm, scenarios, active, rnd, as_of, base_shares, abstain_allowed)
+        active, ctx = tasks[key]
+        return key, elicit_round(active, ctx)
 
     workers = max(1, min(int(concurrency or 1), len(tasks)))
     if workers == 1:
@@ -350,6 +480,7 @@ def run_decision_channel(
     inertia: float = 0.7,
     conv_eps: float = 0.02,
     round_to_date=None,
+    round_dates: Optional[List[Dict[str, Any]]] = None,
     max_active_per_round: int = 60,
     concurrency: Optional[int] = None,
     abstain_allowed: bool = True,
@@ -362,7 +493,12 @@ def run_decision_channel(
     also carry ``post``/``text`` for R2-SIM-1). ``seed``: ``{scenarios, base_rates,
     as_of_date?, horizon_date?}`` (from ``actors.world_state_seed_from_actors``). ``llm``
     drives the per-round batched elicitation (``chat_json``). ``round_to_date`` maps a
-    1-based round int → ISO date (P1-2). ``posts_by_round[round][agent_id]`` and
+    1-based round int → ISO date (P1-2). ``round_dates``（日历模式，spec §4）：
+    ``temporal_config["round_dates"]`` 的精确映射（0 基 ``round`` →
+    ``{period_start, period_end, label}``）——提供时提示词切换为时段框架、缓存键改为
+    ``(roster 签名, 时段 label)``、decisions/轨迹行带 ``period_end``，并按
+    ``WORLDSTATE_ENTROPY_MIX`` 传入每时段天数做熵地板；缺省 ``None`` 走旧路径，逐字节不变。
+    ``posts_by_round[round][agent_id]`` and
     ``affect_by_agent[agent_id]`` optionally enrich the prompt (R2-SIM-1). Returns
     ``{outcome, trajectory, decisions, converged_at, n_rounds, ...}``; empty seed → ``{}``.
     """
@@ -412,26 +548,61 @@ def run_decision_channel(
         rnd: _build_active_roster(list(by_round[rnd].values()), activation, power, cap)
         for rnd in ordered_rounds
     }
-    as_of_by_round: Dict[int, Optional[str]] = {
-        rnd: _safe_round_to_date(round_to_date, rnd) for rnd in ordered_rounds
-    }
+
+    # 日历模式（spec §4）：round_dates 是精确的 round→时段映射（0 基 round，runtime 轮号
+    # 1 基）。as_of = period_end（喂 _inertia_for_gap 的是 snap 后不等长时段的真实 gap）。
+    period_by_round: Dict[int, Dict[str, Any]] = {}
+    for p in (round_dates or []):
+        if not isinstance(p, dict):
+            continue
+        try:
+            period_by_round[int(p.get("round")) + 1] = p
+        except (TypeError, ValueError):
+            continue
+    calendar_unit = _infer_calendar_unit(round_dates) if period_by_round else None
+    n_rounds_total = len(period_by_round) or None
+    as_of_by_round: Dict[int, Optional[str]] = {}
+    for rnd in ordered_rounds:
+        p = period_by_round.get(rnd)
+        as_of_by_round[rnd] = (str(p.get("period_end")) if p and p.get("period_end")
+                               else _safe_round_to_date(round_to_date, rnd))
 
     # Phase 1 (parallel): one elicitation per unique (roster, date) key (R2-EXEC-10 cache
-    # + SIM-6/R2-EXEC-8 fan-out). round_num for the prompt is the first round using the key.
-    tasks: Dict[Any, Tuple[List[Dict[str, Any]], int, Optional[str]]] = {}
+    # + SIM-6/R2-EXEC-8 fan-out). round_num for the prompt is the first round using the
+    # key. 日历模式缓存键 = (roster 签名, 时段 label)——机制同旧的 (签名, as_of)。
+    tasks: Dict[Any, Tuple[List[Dict[str, Any]], Dict[str, Any]]] = {}
     round_key: Dict[int, Any] = {}
     for rnd in ordered_rounds:
         active = rosters[rnd]
-        key = (_roster_signature(active), as_of_by_round[rnd])
+        p = period_by_round.get(rnd)
+        key = (_roster_signature(active),
+               str(p.get("label")) if p and p.get("label") else as_of_by_round[rnd])
         round_key[rnd] = key
         if key not in tasks:
-            tasks[key] = (active, rnd, as_of_by_round[rnd])
-    results = _fan_out_elicit(llm, scenarios, tasks, base_shares, abstain_allowed, concurrency)
+            ctx: Dict[str, Any] = {
+                "llm": llm, "scenarios": scenarios, "base_shares": base_shares,
+                "abstain_allowed": abstain_allowed, "round_num": rnd,
+                "as_of": as_of_by_round[rnd],
+            }
+            if p:
+                ctx.update({"period": p, "n_rounds": n_rounds_total,
+                            "horizon_date": seed.get("horizon_date"),
+                            "unit": calendar_unit})
+            tasks[key] = (active, ctx)
+    results = _fan_out_elicit(tasks, concurrency)
 
     # Phase 2 (serial replay, strict round order): step the single shared WorldState.
-    avg_gap = _avg_gap_days(seed, as_of_by_round)
+    # 日历模式下 avg_gap = 单位名义天数（spec §4）；snap 后的首/尾残段 gap 短/长于名义值，
+    # _inertia_for_gap 据此放行更少/更多变化。hours 路径沿用逐轮日期均值。
+    if calendar_unit:
+        avg_gap = dict(_UNIT_NOMINAL_DAYS).get(calendar_unit, 0.0)
+    else:
+        avg_gap = _avg_gap_days(seed, as_of_by_round)
+    entropy_mix_on = bool(period_by_round) and bool(_cfg("WORLDSTATE_ENTROPY_MIX", True))
     conv_window = max(1, int(_cfg("SIM_CONVERGENCE_WINDOW", 3) or 3))
     trajectory: List[Dict[str, Any]] = [{"round": 0, **ws.outcome()}]
+    if period_by_round and seed.get("as_of_date"):
+        trajectory[0]["as_of"] = str(seed.get("as_of_date"))  # spec §6: 第 0 行 as_of=as_of_date
     all_decisions: List[Dict[str, Any]] = []
     converged_at: Optional[int] = None
     stable_streak = 0
@@ -439,18 +610,34 @@ def run_decision_channel(
     for rnd in ordered_rounds:
         active = rosters[rnd]
         pmap = {e.get("agent_id"): e.get("outcome_power", 1.0) for e in active}
-        decisions = [dict(d) for d in results.get(round_key[rnd], [])]
-        for d in decisions:
+        p = period_by_round.get(rnd)
+        period_end = str(p.get("period_end")) if p and p.get("period_end") else None
+        decisions = []
+        for c in results.get(round_key[rnd], []):
+            # 审计行不含 step 用的 weight（旧口径不变）；round/outcome_power/period_end
+            # 按真实轮次重写（缓存命中的 commitments 带的是首个使用轮的值）。
+            d = {k: v for k, v in c.items() if k != "weight"}
             d["round"] = rnd
             if d.get("agent_id") in pmap:  # R2-SIM-2: carry the actor's outcome power
                 d["outcome_power"] = pmap[d["agent_id"]]
+            if period_end:
+                d["period_end"] = period_end  # spec §4: decisions.jsonl 行带 period_end
+            else:
+                d.pop("period_end", None)
+            decisions.append(d)
         all_decisions.extend(decisions)
         as_of = as_of_by_round[rnd]
         eff_inertia = _inertia_for_gap(inertia, prev_date, as_of, avg_gap)  # R2-SIM-12
-        ws.step(commitments_from_decisions(decisions), inertia=eff_inertia)
+        entropy_days = _period_days(p) if (entropy_mix_on and p) else None  # 熵地板（spec §4）
+        ws.step(commitments_from_decisions(decisions), inertia=eff_inertia,
+                entropy_mix_days=entropy_days)
         snap = {"round": rnd, **ws.outcome()}
         if as_of:
             snap["as_of"] = as_of
+        if p:  # spec §6: 轨迹行带时段字段
+            for fk in ("period_start", "period_end", "label"):
+                if p.get(fk):
+                    snap[fk] = str(p[fk])
         trajectory.append(snap)
         # SIM-1: windowed convergence — require the EWMA delta to stay below eps for
         # SIM_CONVERGENCE_WINDOW consecutive rounds (after a 2-round warmup) before the
@@ -468,7 +655,7 @@ def run_decision_channel(
     ws.converged_at = converged_at
     out = ws.outcome()
     out["converged_at"] = converged_at
-    return {
+    result = {
         "outcome": out,
         "trajectory": trajectory,
         "decisions": all_decisions,
@@ -477,3 +664,14 @@ def run_decision_channel(
         "scenarios": scenarios,
         "schema_version": 2,
     }
+    if period_by_round:
+        # 带日期轨迹 schema v3（spec §6）；v2 hours 路径原样。converged/converged_at
+        # 只是稳定性信号——日历模式从不据此早停，回放始终推演到判定日。
+        result["schema_version"] = 3
+        result["mode"] = "calendar"
+        if calendar_unit:
+            result["calendar_unit"] = calendar_unit
+        for fk in ("horizon_date", "horizon_source", "horizon_defaulted"):
+            if seed.get(fk) is not None:
+                result[fk] = seed.get(fk)
+    return result

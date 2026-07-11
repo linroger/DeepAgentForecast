@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import functools
 import hashlib
 import json
 import logging
@@ -48,8 +49,17 @@ import tempfile
 import threading
 import traceback
 import uuid
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
+
+try:
+    import research_budget as _research_budget
+except ImportError:  # package import path used by backend unit tests
+    try:
+        from deerflow_bridge import research_budget as _research_budget
+    except ImportError:  # deployed bridge without optional control module
+        _research_budget = None  # type: ignore[assignment]
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
@@ -85,14 +95,122 @@ DEPTH_PRESETS: dict[str, dict[str, Any]] = {
     # headroom to finish BOTH researching AND writing the final report. Set generously:
     # an eager model that keeps searching past this still gets caught by the tool-free
     # synthesis net, but a well-behaved run should conclude here on its own.
-    "quick": {"recursion_limit": 100, "guidance": "Do a focused, efficient pass: about 4-8 searches across the key angles, then STOP searching and write the report."},
-    "standard": {"recursion_limit": 360, "guidance": "Research thoroughly from multiple angles (roughly 14-28 searches), fetch the most important sources in full, cross-check the major claims, then STOP searching and write the report. Do not keep searching for marginal extra detail."},
+    "quick": {
+        "recursion_limit": 100,
+        "guidance": (
+            "Do a focused, efficient pass over the highest-priority KIQs. Every search or "
+            "fetch must earn its next call through a concrete evidence delta; stop when those "
+            "KIQs are resolved or the last two genuinely different angles yield no upgrade, "
+            "then write the report."
+        ),
+    },
+    "standard": {
+        "recursion_limit": 360,
+        "guidance": (
+            "Research every priority KIQ from multiple angles, fetch the strongest sources "
+            "in full, and test the opposing case. Continue only while a named unresolved KIQ "
+            "has a credible next evidence upgrade; stop on convergence or repeated no-yield "
+            "angles and write the report."
+        ),
+    },
     # SCALE-2: deep 档没有单回合预算 —— 它的步进预算来自 DEERFLOW_DEEP_OPENING_RECURSION_LIMIT
     # （开场）+ DEEP_RESEARCH_PHASES（各 pass，经 RESEARCH_PHASE_BUDGET_MULT 缩放）。原
     # recursion_limit=1660 字面量是死值：deep 路径从不读 preset["recursion_limit"]（2 处读点均在
     # depth != "deep" 分支），故删除以免误导调参。
     "deep": {"guidance": "Run the multi-pass deep research protocol. Do not compress the work into one short search pass: map the source landscape, read primary sources in full, profile actors, test contradictions, and only then synthesize a long evidence-backed dossier."},
 }
+
+
+def skill_activation_estimate(skill_name: str = "deep-research") -> dict[str, Any]:
+    """Return a cheap per-request context estimate for an activated skill core.
+
+    Slash activation injects ``SKILL.md`` into each independent provider request.
+    Keep this visible in telemetry so an accidentally re-expanded core cannot hide
+    inside aggregate model tokens. Lazy ``references/`` are deliberately excluded.
+    """
+
+    base = Path(__file__).resolve().parent
+    candidates = (
+        base / "skills" / skill_name / "SKILL.md",
+        base / "skills" / "public" / skill_name / "SKILL.md",
+    )
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        chars = len(text)
+        return {
+            "skill": skill_name,
+            "chars_per_activation": chars,
+            # Conservative language-agnostic planning estimate; actual provider
+            # tokenizers are recorded by the normal LLM meter.
+            "estimated_tokens_per_activation": (chars + 3) // 4,
+            "lazy_references_excluded": True,
+        }
+    return {
+        "skill": skill_name,
+        "chars_per_activation": None,
+        "estimated_tokens_per_activation": None,
+        "lazy_references_excluded": True,
+    }
+
+
+_FINAL_DOSSIER_CONTRACT_MAX_CHARS = 12000
+
+
+@functools.lru_cache(maxsize=1)
+def _read_final_dossier_contract() -> str:
+    """Read the final-write contract once, only when a synthesis prompt needs it."""
+
+    base = Path(__file__).resolve().parent
+    candidates = (
+        base / "skills" / "deep-research" / "references"
+        / "final-dossier-contract.md",
+        base / "skills" / "public" / "deep-research" / "references"
+        / "final-dossier-contract.md",
+    )
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if text:
+            return text
+    return ""
+
+
+def load_final_dossier_contract(max_chars: int | None = None) -> str:
+    """Return a deterministically bounded lazy final-dossier reference.
+
+    The hard ceiling prevents a future reference expansion from silently
+    multiplying section-writer input tokens.  A caller may request a smaller
+    slice for a constrained model, but never a larger one.
+    """
+
+    if max_chars is None:
+        requested = _FINAL_DOSSIER_CONTRACT_MAX_CHARS
+    else:
+        try:
+            requested = int(max_chars)
+        except (TypeError, ValueError):
+            requested = _FINAL_DOSSIER_CONTRACT_MAX_CHARS
+    limit = min(_FINAL_DOSSIER_CONTRACT_MAX_CHARS, max(1, requested))
+    return _read_final_dossier_contract()[:limit].rstrip()
+
+
+def _final_dossier_contract_block() -> str:
+    contract = load_final_dossier_contract()
+    if not contract:
+        return ""
+    return (
+        "\n\n=== FINAL DOSSIER CONTRACT (lazy reference; mandatory) ===\n"
+        "Apply the structure across the dossier as a whole. A section writer "
+        "must cover only its assigned scope while still obeying the universal "
+        "grounding, citation, anti-process-narration, and structured-data rules.\n\n"
+        f"{contract}\n"
+        "=== END FINAL DOSSIER CONTRACT ==="
+    )
 
 DEEP_RESEARCH_PHASES: list[dict[str, Any]] = [
     # SCALE-2: 各 pass 预算 ×1.5（220/360/300/300/260 → 330/540/450/450/390）——实测 deep 档
@@ -147,9 +265,9 @@ DEEP_RESEARCH_PHASES: list[dict[str, Any]] = [
         "recursion_limit": 390,
         "focus": (
             "Translate the gathered evidence into forecast inputs for the downstream "
-            "simulation: timelines, catalysts, leading indicators, measurable variables, "
+            "forecast: timelines, catalysts, leading indicators, measurable variables, "
             "base/upside/downside scenarios, likely winners and losers, and what each "
-            "actor would know or believe. Fill remaining evidence gaps. Do NOT write the "
+            "key actor is likely to know or believe. Fill remaining evidence gaps. Do NOT write the "
             "final report yet."
         ),
     },
@@ -201,41 +319,136 @@ def _synthesis_trigger_chars(depth: str) -> int:
             v = 15000
         return max(0, v)
     return SYNTHESIS_TRIGGER_CHARS
-# Cap on how much gathered-research context to feed the tool-free synthesis net.
-# Model-aware: MiniMax-M3 has a ~1M-token context window so it can ingest a very
-# large slice of the gathered sources for a richer, more detailed synthesis; Claude
-# (Sonnet 4.6, ~200K context) gets a smaller but still generous slice. Bigger context
-# in == richer dossier out.
-# SCALE-2: 400000→650000 —— Claude 类 ~200K token 窗口下 400K 字符（~100k tokens）留白过多，
-# 抬到 650000（~162k tokens）让合成吃进更多已抓取证据；LARGE 大窗口类保持 900000 不变。
-SYNTHESIS_MAX_CONTEXT_CHARS = 650000          # default / Claude-class (~162k tokens)
-SYNTHESIS_MAX_CONTEXT_CHARS_LARGE = 900000    # MiniMax-class 1M-context (~225k tokens)
+# Conservative fallback only. Normal runs read ``context_window_tokens`` and
+# ``max_tokens`` from the selected DeerFlow model profile, then reserve output
+# and prompt overhead before deriving an input budget. This avoids brittle
+# model-name heuristics and prevents configured output + packed input from
+# exceeding the provider window.
+SYNTHESIS_MAX_CONTEXT_CHARS = 400000
 
 
-def _synthesis_context_cap(model_name: str) -> int:
-    """Pick the gathered-research context cap by model context-window class.
+def _synthesis_context_cap(
+        model_name: str, context_text: str = "", *,
+        extra_prompt_chars: int = 0) -> int:
+    """Derive a safe gathered-input budget from the selected model profile.
 
-    RESEARCH-4: an explicit ``SYNTHESIS_MAX_CONTEXT_CHARS`` env override wins over
-    the model-class heuristic (so a deployment can dial the synthesis context up or
-    down without a code change); gemini / antigravity are added to the large-context
-    class (both expose ~1M-token windows like the MiniMax/Qwen/DeepSeek family), and
-    ``SYNTHESIS_MAX_CONTEXT_CHARS_LARGE`` can override the large-class default. Unset
-    → the original model-class behavior (byte-identical default path).
+    ``extra_prompt_chars`` charges lazily loaded prompt references against the
+    input envelope instead of letting them consume the output reserve.
     """
     try:
         override = int(os.environ.get("SYNTHESIS_MAX_CONTEXT_CHARS", "0") or "0")
     except ValueError:
         override = 0
     if override > 0:
-        return override
-    name = (model_name or "").lower()
-    if any(k in name for k in ("minimax", "qwen", "deepseek", "gemini", "antigravity")):
         try:
-            large = int(os.environ.get("SYNTHESIS_MAX_CONTEXT_CHARS_LARGE", "0") or "0")
+            override_charge = max(0, int(extra_prompt_chars or 0))
+        except (TypeError, ValueError):
+            override_charge = 0
+        # An explicit operator value is an upper bound, including intentionally
+        # tiny diagnostic/test caps. Never silently raise it to the automatic
+        # safety floor; only keep the downstream slice length positive.
+        return max(1, override - override_charge)
+    try:
+        context_tokens = int(
+            os.environ.get("SYNTHESIS_CONTEXT_WINDOW_TOKENS", "0") or "0")
+    except ValueError:
+        context_tokens = 0
+    try:
+        output_tokens = int(
+            os.environ.get("SYNTHESIS_OUTPUT_RESERVE_TOKENS", "0") or "0")
+    except ValueError:
+        output_tokens = 0
+    if context_tokens <= 0 or output_tokens <= 0:
+        try:
+            from deerflow.config import get_app_config
+
+            model_config = get_app_config().get_model_config(model_name)
+            if model_config is not None:
+                if context_tokens <= 0:
+                    context_tokens = int(
+                        getattr(model_config, "context_window_tokens", 0) or 0)
+                if output_tokens <= 0:
+                    output_tokens = int(
+                        getattr(model_config, "max_tokens", 0) or 0)
+        except Exception:  # noqa: BLE001 — conservative fallback below
+            pass
+    context_tokens = context_tokens if context_tokens > 0 else 200000
+    output_tokens = output_tokens if output_tokens > 0 else 64000
+    try:
+        overhead_tokens = max(
+            2000,
+            int(os.environ.get("SYNTHESIS_PROMPT_OVERHEAD_TOKENS", "8000") or "8000"),
+        )
+    except ValueError:
+        overhead_tokens = 8000
+    chars_override = os.environ.get("SYNTHESIS_CHARS_PER_TOKEN", "").strip()
+    if chars_override:
+        try:
+            chars_per_token = float(chars_override)
         except ValueError:
-            large = 0
-        return large if large > 0 else SYNTHESIS_MAX_CONTEXT_CHARS_LARGE
-    return SYNTHESIS_MAX_CONTEXT_CHARS
+            chars_per_token = 3.2
+    else:
+        sample = str(context_text or "")[:200000]
+        visible_chars = sum(1 for char in sample if not char.isspace())
+        cjk_chars = len(re.findall(r"[一-鿿]", sample))
+        cjk_ratio = cjk_chars / max(1, visible_chars)
+        # CJK commonly consumes roughly one token per 1-2 characters. The
+        # English heuristic is unsafe for Chinese reports and can overflow the
+        # window before the output reserve is considered.
+        chars_per_token = 1.6 if cjk_ratio >= 0.05 else 3.2
+    try:
+        safety_cap = max(
+            20000,
+            int(os.environ.get(
+                "SYNTHESIS_INPUT_SAFETY_CAP_CHARS", "1500000")
+                or "1500000"),
+        )
+    except ValueError:
+        safety_cap = 1500000
+    available_input_tokens = max(
+        16000, context_tokens - output_tokens - overhead_tokens)
+    raw_cap = max(
+        20000,
+        min(
+            int(available_input_tokens * max(1.0, chars_per_token)),
+            safety_cap,
+        ),
+    )
+    try:
+        prompt_charge = max(0, int(extra_prompt_chars or 0))
+    except (TypeError, ValueError):
+        prompt_charge = 0
+    return max(20000, raw_cap - prompt_charge)
+
+
+def _synthesis_section_context_cap(section_count: int, model_cap: int) -> int:
+    """Bound per-section and aggregate routed evidence replay."""
+    try:
+        per_section = max(
+            8000,
+            int(os.environ.get(
+                "SYNTHESIS_SECTION_CONTEXT_CHARS", "60000") or "60000"),
+        )
+    except ValueError:
+        per_section = 60000
+    try:
+        aggregate = max(
+            20000,
+            int(os.environ.get(
+                "SYNTHESIS_TOTAL_ROUTED_CONTEXT_CHARS", "600000") or "600000"),
+        )
+    except ValueError:
+        aggregate = 600000
+    count = max(1, int(section_count or 1))
+    return max(8000, min(per_section, aggregate // count, max(8000, model_cap)))
+
+
+def _synthesis_section_max_blocks() -> int:
+    try:
+        return max(1, int(os.environ.get(
+            "SYNTHESIS_SECTION_MAX_BLOCKS", "18") or "18"))
+    except ValueError:
+        return 18
 
 
 def _synth_min_context_chars() -> int:
@@ -251,13 +464,14 @@ def _synth_min_context_chars() -> int:
         return 3000
 
 
-def _research_min_sources(depth: str) -> int:
-    """SCALE-2: 深度感知的覆盖门来源下限（不同已抓取来源数）。
+def _research_source_count_reference(depth: str) -> int:
+    """Return a backward-compatible source-count *telemetry reference*.
 
-    显式设置的 ``RESEARCH_MIN_SOURCES`` 对所有深度一律生效（与旧语义一致，部署可统一
-    调门槛）；未设置时 deep 档默认 20→45 —— 多-pass ×1.5 预算下 20 个来源的门形同虚设，
-    45 才配得上「证据面够宽」；quick/standard 保持 20（成本/行为与现状一致）。非法值
-    回退按深度取默认（degrade-safe）。
+    This value MUST NOT trigger work, pass/fail quality, or confidence changes.  Absolute
+    source counts reward activity and duplicate breadth, while a narrow KIQ can be resolved
+    by a few excellent primary origins. ``RESEARCH_MIN_SOURCES`` is retained only so existing
+    dashboards keep their familiar comparison line during migration; KIQ convergence and
+    evidence yield own all continuation decisions.
     """
     raw = (os.environ.get("RESEARCH_MIN_SOURCES", "") or "").strip()
     if raw:
@@ -267,7 +481,26 @@ def _research_min_sources(depth: str) -> int:
             pass
     return 45 if depth == "deep" else 20
 
+
+def _source_grounding_ratio(sources: Any, fetched_count: Any) -> float:
+    """Fraction of claimed structured sources that were actually fetched and read.
+
+    This is intentionally independent of an absolute corpus-size target.  It answers
+    whether the dossier's own provenance is real, while KIQ convergence and
+    triangulation answer whether that evidence is sufficient for the question.
+    """
+    claimed = (
+        sum(1 for row in sources if isinstance(row, dict))
+        if isinstance(sources, list) else 0
+    )
+    try:
+        fetched = max(0.0, float(fetched_count or 0))
+    except (TypeError, ValueError):
+        fetched = 0.0
+    return round(min(1.0, fetched / max(1, claimed)), 3)
+
 REPORT_FILENAME = "research_report.md"
+EVIDENCE_PACK_FILENAME = "evidence_pack.md"
 REQUIREMENT_FILENAME = "prediction_requirement.txt"
 # 双轨：Track B（actor-ontology-research）产出的 actor 卷宗。卷宗作为「主」actor
 # 来源喂本体生成/抽取，Track A 的 research_report.md 作为「附加上下文」。关闭双轨或
@@ -510,6 +743,16 @@ _RESEARCH_FLAGS: list[str] = []
 # context。空表（standard/quick 或未开 fan-out）→ 逐字节不改今日行为。
 _FANOUT_WORKER_NOTES: list[str] = []
 _FANOUT_NOTES_LOCK = threading.Lock()
+_PARALLEL_EVIDENCE_PREFIX = "[DRF_PARALLEL_EVIDENCE_V1]"
+
+
+def _tag_parallel_evidence(text: str) -> str:
+    """Mark synthetic human messages as durable research evidence."""
+
+    body = str(text or "").strip()
+    if not body or body.startswith(_PARALLEL_EVIDENCE_PREFIX):
+        return body
+    return f"{_PARALLEL_EVIDENCE_PREFIX}\n{body}"
 
 # PM-4: 研究开跑前先取一份 Polymarket 快照，把一段紧凑「当前市场定价」块注入 pass-0
 # 提示词（让开场就带着「市场把 X 定在 NN%——去查为什么」的锚点搜）。空串 = 无块（默认，
@@ -603,10 +846,16 @@ def _norm_url(u: Any) -> str:
 
 
 def _title_from_url(u: str) -> str:
-    """Fallback display title = the host, when no model-supplied title exists."""
+    """Derive a deterministic display title from the final content-path slug."""
     try:
-        from urllib.parse import urlparse
-        return urlparse(u).netloc or u
+        from urllib.parse import unquote, urlparse
+        parsed = urlparse(u)
+        host = parsed.netloc or u
+        path = unquote(parsed.path or "").strip("/")
+        slug = path.split("/")[-1] if path else ""
+        slug = re.sub(r"\.(?:html?|php|aspx?)$", "", slug, flags=re.I)
+        title = re.sub(r"[_-]+", " ", slug).strip()
+        return title if len(title) >= 3 or (title.isalpha() and title.isupper()) else host
     except Exception:  # noqa: BLE001
         return u
 
@@ -617,11 +866,40 @@ _BARE_HOST_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?(\.[A-Za-z0
 
 
 def _is_valid_http_url(u: Any) -> bool:
-    """URL 合法性：必须有 http/https scheme 且有 host（netloc）。纯函数、可单测。"""
+    """Strict public-source URL guard used before fetch accounting/citation.
+
+    Besides scheme/host syntax, reject single-label hosts and common truncation
+    shapes observed in real runs (for example ``https://en``, ``/wiki/St``,
+    ``/wiki/ASML_H`` and ``/wiki/Anduril_``).  A fetch transport claiming success
+    must not override this source-integrity boundary.
+    """
     try:
-        from urllib.parse import urlparse
-        p = urlparse(str(u or "").strip())
-        return p.scheme in ("http", "https") and bool(p.netloc)
+        from urllib.parse import unquote, urlparse
+        raw = str(u or "").strip()
+        if not raw or any(ch.isspace() or ord(ch) < 32 for ch in raw):
+            return False
+        p = urlparse(raw)
+        if p.scheme not in ("http", "https") or not p.netloc:
+            return False
+        if p.username or p.password:
+            return False
+        host = (p.hostname or "").lower().rstrip(".")
+        if len([label for label in host.split(".") if label]) < 2:
+            return False
+        path = unquote(p.path or "")
+        if path.endswith(("_", "…", "...")):
+            return False
+        if host.endswith("wikipedia.org"):
+            if not path.startswith("/wiki/"):
+                return False
+            slug = path[len("/wiki/"):].strip("/")
+            if not slug:
+                return False
+            if len(slug) < 3 and not (slug.isalpha() and slug.isupper()):
+                return False
+            if re.search(r"_[A-Za-z]$", slug):
+                return False
+        return True
     except Exception:  # noqa: BLE001
         return False
 
@@ -723,9 +1001,27 @@ _FETCH_SENTINELS = (
 _FETCH_TOOLS = ("web_fetch", "fetch", "read_url", "browse", "open_url")
 
 
+def _structured_fetch_control_result(content: Any) -> "dict | None":
+    """Parse compact/error tool envelopes that are not fetched page content."""
+    raw = str(content or "").strip()
+    if not raw.startswith("{"):
+        return None
+    try:
+        obj = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(obj, dict):
+        return None
+    if obj.get("error") or obj.get("status") == "already_available":
+        return obj
+    return None
+
+
 def _is_dead_fetch(content: Any) -> bool:
     """A fetch result is dead if it's trivially short or matches a failure sentinel."""
     c = str(content or "").strip()
+    if _structured_fetch_control_result(c) is not None:
+        return True
     if len(c) < 200:
         return True
     cl = c.lower()
@@ -794,78 +1090,30 @@ def _pending_mark_result(pending: list, tool_name: Any, content: Any, call_id: A
         if entry is None:
             return
         entry["ok"] = not _is_dead_fetch(content)
+        control = _structured_fetch_control_result(content)
+        if control is not None:
+            # Policy/budget/cache-control envelopes are intentional outcomes,
+            # not transient Jina failures. Raw urllib retry would bypass both
+            # source policy and the shared network budget.
+            entry["retryable"] = False
+            entry["control_error"] = str(
+                control.get("error") or control.get("status") or "controlled")
+        elif entry["ok"]:
+            entry["excerpt"] = str(content or "").strip()[:1200]
     except Exception:  # noqa: BLE001
         pass
 
 
-# ---- R2: dead-fetch programmatic retry ------------------------------------
-# Jina 瞬时超时/空抽取（"timeout was reached" / "no content could be extracted"）会让一次
-# 真实可读的页面被当作死抓取整体丢弃（旧语料一轮就丢 ~32 个 Jina 超时）。在丢弃（合并期
-# 只并 ok=True 行）之前，对死抓取的 URL 程序化重试一次（~8s 退避 + stdlib 直抓判活）；
-# 复活的行标记 ok=True + retried=True 计回真实来源。注意：重试内容不会回灌给模型（模型
-# 已看到死结果），这是**来源记账层**的打捞——瞬时故障 ≠ 死页面。重试发生在回合结束、
-# 合并之前（不阻塞流式消费），仅 v2 记账路径（RESEARCH_FETCH_ACCOUNTING_V2，默认开）。
-# DEERFLOW_FETCH_RETRY = 每个 URL 的重试次数（默认 1；0 = 关闭）。每回合重试的 URL 数
-# 有界（_FETCH_RETRY_MAX_URLS），避免病态回合（几十个死抓取）把研究拖住数分钟。
-
-_FETCH_RETRY_BACKOFF_S = 8.0   # 每次重试前的退避秒数（测试打补丁置 0）
-_FETCH_RETRY_TIMEOUT_S = 15.0  # 判活直抓的超时
-_FETCH_RETRY_MAX_URLS = 6      # 每回合最多重试的死 URL 数（有界阻塞）
-
-
-def _fetch_retry_count() -> int:
-    """DEERFLOW_FETCH_RETRY：每个死 URL 的重试次数（默认 1，0 关闭；非法值回落 1）。"""
-    try:
-        return max(0, int(os.environ.get("DEERFLOW_FETCH_RETRY", "1") or "1"))
-    except ValueError:
-        return 1
-
-
-def _retry_fetch_url(url: str, timeout: float = _FETCH_RETRY_TIMEOUT_S) -> str:
-    """stdlib 直抓一次 URL 判活（截读 512KB 足够过 _is_dead_fetch）；失败向上抛（调用方兜底）。"""
-    import urllib.request
-    req = urllib.request.Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (compatible; DeepResearchBridge/1.0)",
-        "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
-    })
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        data = resp.read(512 * 1024)
-    return data.decode("utf-8", errors="replace")
-
-
 def _retry_dead_fetches(pending: list, plog: "ProgressLog | None" = None) -> None:
-    """R2: 回合结束时对本回合的死抓取行（ok=False）逐个重试判活，复活则改记 ok=True。
+    """Do not locally retry dead remote fetches after the model turn.
 
-    每个 URL：退避 ~8s → stdlib 直抓 → _is_dead_fetch 判定；每个重试过的 URL 记一行
-    日志（含结局）。绝不抛异常；DEERFLOW_FETCH_RETRY=0 或无死行时为纯 no-op。
+    The former urllib probe bypassed the remote-fetch policy/budget, introduced
+    SSRF risk, and could mark a URL citeable even though the model never saw the
+    recovered body. A later agent-requested retry goes through ``cached_fetch``
+    and the shared negative-cache allowance, so only content actually returned
+    to the research thread can become a source.
     """
-    try:
-        import time
-        retries = _fetch_retry_count()
-        if retries <= 0:
-            return
-        dead = [s for s in pending
-                if s.get("ok") is False and str(s.get("url", "")).startswith("http")]
-        for s in dead[:_FETCH_RETRY_MAX_URLS]:
-            url = str(s["url"])
-            revived = False
-            for _ in range(retries):
-                try:
-                    time.sleep(_FETCH_RETRY_BACKOFF_S)
-                    content = _retry_fetch_url(url)
-                    if not _is_dead_fetch(content):
-                        revived = True
-                        break
-                except Exception:  # noqa: BLE001 — 单 URL 重试失败只影响该行
-                    continue
-            if revived:
-                s["ok"] = True
-                s["retried"] = True
-            if plog is not None:
-                plog.write("retry", f"dead fetch retried: {url} → "
-                                    f"{'alive (kept as source)' if revived else 'still dead (dropped)'}")
-    except Exception:  # noqa: BLE001 — 打捞层绝不影响主流程
-        pass
+    return None
 
 
 def _merge_pending_fetches(pending: list) -> None:
@@ -884,9 +1132,14 @@ def _merge_pending_fetches(pending: list) -> None:
                     continue
                 existing = next((r for r in _FETCHED_SOURCES if _norm_url(r.get("url")) == url), None)
                 if existing is None:
-                    _FETCHED_SOURCES.append({"url": url, "ok": True})
+                    row = {"url": url, "ok": True}
+                    if s.get("excerpt"):
+                        row["excerpt"] = str(s["excerpt"])
+                    _FETCHED_SOURCES.append(row)
                 else:
                     existing["ok"] = True
+                    if s.get("excerpt") and not existing.get("excerpt"):
+                        existing["excerpt"] = str(s["excerpt"])
     except Exception:  # noqa: BLE001
         pass
 
@@ -902,7 +1155,29 @@ _S2_DOMAINS = ("reuters.com", "bloomberg.com", "ft.com", "wsj.com", "economist.c
                "piie.com", "rand.org", "chathamhouse.org", "nature.com", "science.org",
                "apnews.com", "caixinglobal.com", "nikkei.com")
 _S4_DOMAINS = ("opentools.ai", "awesomeagents.ai", "how2shout.com", "southfront",
-               "msadvisory.com", "atlaspcb.com", "edwardconard.com", "sozai.app")
+               "msadvisory.com", "atlaspcb.com", "edwardconard.com", "sozai.app",
+               "economicsummarizer.com", "insights.triplegains.com")
+
+
+def _source_domain_denied(url: Any) -> bool:
+    """Final admission predicate shared by fetched, cited, and citation paths."""
+    if _env_flag("RESEARCH_ALLOW_LOW_QUALITY_SOURCES", False):
+        return False
+    try:
+        from urllib.parse import urlparse
+
+        host = (urlparse(str(url or "")).hostname or "").lower().rstrip(".")
+    except Exception:
+        return False
+    raw = os.environ.get(
+        "RESEARCH_SOURCE_DENY_DOMAINS",
+        "economicsummarizer.com,insights.triplegains.com",
+    )
+    domains = {
+        item.strip().lower().lstrip(".")
+        for item in raw.split(",") if item.strip()
+    }
+    return any(host == domain or host.endswith("." + domain) for domain in domains)
 
 
 def _tier_from_domain(url: Any) -> "str | None":
@@ -974,6 +1249,8 @@ def merge_fetched_into_sources(extracted: Any) -> "tuple[list[dict], int]":
 
     def _finalize_tier(row: dict) -> bool:
         """Apply domain tiering when the model gave none; DROP S4 (D5). Returns keep?."""
+        if _source_domain_denied(row.get("url")):
+            return False
         t = str(row.get("tier") or "").strip().upper()
         if t not in _VALID_TIERS:
             t = _tier_from_domain(row.get("url")) or ""
@@ -1036,19 +1313,6 @@ def _env_flag(name: str, default: bool) -> bool:
     if raw is None or not str(raw).strip():
         return default
     return str(raw).strip().lower() in ("1", "true", "yes", "on")
-
-
-def _bash_sandbox_enabled() -> bool:
-    """ITEM-7 门控：data-analysis / 图表落盘的提示只在 host bash 执行面可用时才注入。
-
-    权威开关是 config.yaml 的 ``sandbox.allow_host_bash``（本部署为 true——脚本型技能
-    chart-visualization / data-analysis / forecast-visuals 靠它才有真实 shell/node/python
-    执行面）。桥进程用 env 镜像 ``DEERFLOW_ALLOW_HOST_BASH`` 读它（编排器可下发），缺省 True
-    与部署 config 对齐。任何不满足「完全受信任、单用户」前提、把 config 改回 allow_host_bash:
-    false 的机器，应同时设 DEERFLOW_ALLOW_HOST_BASH=false——两处一致后，这些依赖 bash 的
-    提示句自动消失（degrade-safe：agent 不会被指向一个它其实没有的执行面）。
-    """
-    return _env_flag("DEERFLOW_ALLOW_HOST_BASH", True)
 
 
 def _actor_cast_max() -> int:
@@ -1303,14 +1567,80 @@ def _agentic_delegation_enabled() -> bool:
     return _AGENTIC_DELEGATION and _env_flag("RESEARCH_AGENTIC_SEARCH", True)
 
 
+def _configured_subagent_slots() -> int:
+    """Actual harness worker cap injected by the outer orchestrator."""
+    try:
+        return max(1, min(8, int(
+            os.environ.get("DEER_FLOW_MAX_CONCURRENT_SUBAGENTS", "5") or "5"
+        )))
+    except (TypeError, ValueError):
+        return 5
+
+
+def _stream_model_lease_weight() -> int:
+    """Each harness model node now acquires one exact-call middleware permit."""
+    return 1
+
+
+def _model_parallel_slots(weight: int = 1) -> int:
+    """Static local executor bound; SQLite leases enforce the live global bound."""
+    try:
+        capacity = max(1, int(
+            os.environ.get("RESEARCH_MODEL_CONCURRENCY_GLOBAL", "12") or "12"
+        ))
+    except (TypeError, ValueError):
+        capacity = 12
+    return max(1, capacity // max(1, int(weight or 1)))
+
+
+def _model_call_lease(weight: int = 1):
+    if _research_budget is None or not hasattr(_research_budget, "model_call_lease"):
+        return nullcontext()
+    return _research_budget.model_call_lease(weight)
+
+
+def _invoke_model(model, messages):
+    """Invoke any bare model under the same cross-process provider envelope."""
+    with _model_call_lease(1):
+        return model.invoke(messages)
+
+
+def _leased_client_stream(client, message: str, *, thread_id: str, recursion_limit: int):
+    """Stream a workflow; exact model nodes are leased by harness middleware.
+
+    Do not hold a provider permit around the entire iterator: it includes long
+    web/tool intervals and would serialize tool-bound research while the model
+    is idle. Bare bridge model calls still use :func:`_invoke_model`.
+    """
+    yield from client.stream(
+        message, thread_id=thread_id, recursion_limit=recursion_limit)
+
+
+def _bridge_fanout_enabled() -> bool:
+    """Select exactly one KIQ breadth plane by default.
+
+    Harness ``task`` delegation and the bridge's legacy thread fan-out both split
+    the same opening KIQ/actor seeds.  Stacking them multiplied model streams and
+    context replay without owning distinct gaps.  An explicit escape hatch remains
+    for controlled experiments, but production defaults to harness delegation when
+    it is active and falls back to bridge fan-out otherwise.
+    """
+    if not _env_flag("RESEARCH_DEEP_FANOUT", False):
+        return False
+    if _agentic_delegation_enabled() and not _env_flag("RESEARCH_ALLOW_STACKED_FANOUT", False):
+        return False
+    return True
+
+
 def _agentic_delegation_block(chinese: bool = False) -> str:
     if not _agentic_delegation_enabled():
         return ""
+    slots = _configured_subagent_slots()
     if chinese:
         return (
             "主动委派（AGENTIC DELEGATION）——你有一个 `task` 工具，接的是 `scoped-researcher` "
             "子代理（并行的定域网页调查员）。用它做 BREADTH（广度）而非判断深度：\n"
-            "- 委派（一次派 3–5 个并行子任务，每个一个 SINGLE-FOCUS 简报）：逐 actor 画像、逐 KIQ 取证扫、"
+            f"- 委派（每批最多 {slots} 个并行子任务，严格服从本轨上限；每个一个 SINGLE-FOCUS 简报）：逐 actor 画像、逐 KIQ 取证扫、"
             "地域/其它语言的来源 pivot、以及反证搜寻（为某条承重声明找最强的反面证据）。\n"
             "- 每份简报只问 ONE 个问题 + 你期望的来源类别（一手申报/监管·官方/本地语言媒体/数据集），"
             "并要求回传带分级的证据笔记 + 真实已抓取 URL 列表——不要成稿报告。\n"
@@ -1320,7 +1650,7 @@ def _agentic_delegation_block(chinese: bool = False) -> str:
     return (
         "AGENTIC DELEGATION — you have a `task` tool wired to `scoped-researcher` sub-agents "
         "(parallel scoped web investigators). Use it for BREADTH, not depth-of-judgment:\n"
-        "- DELEGATE (dispatch 3–5 parallel tasks, each a tight SINGLE-FOCUS brief): per-actor "
+        f"- DELEGATE (dispatch at most {slots} parallel tasks per batch, obeying this lane's exact cap; each a tight SINGLE-FOCUS brief): per-actor "
         "profiles, per-KIQ evidence sweeps, regional / other-language source pivots, and "
         "disconfirmation hunts (find the strongest case AGAINST a load-bearing claim).\n"
         "- Each brief states ONE question + the source classes you expect (primary filings, "
@@ -1419,11 +1749,18 @@ def build_citation_index(fetched: "list[dict]", cap: int = 100) -> "list[dict]":
         if not isinstance(f, dict):
             continue
         u = _norm_url(f.get("url"))
-        if not _is_valid_http_url(u) or u in seen or f.get("ok") is False:
+        if (not _is_valid_http_url(u) or u in seen or f.get("ok") is False
+                or _source_domain_denied(u)):
             continue
         seen.add(u)
         title = str(f.get("title") or "").strip() or _title_from_url(u)
-        entries.append({"n": len(entries) + 1, "title": title, "url": u})
+        entries.append({
+            "n": len(entries) + 1,
+            "title": title,
+            "url": u,
+            # Internal routing hint only; render_citation_index_block omits it.
+            "excerpt": str(f.get("excerpt") or "")[:1200],
+        })
         if len(entries) >= max(1, int(cap)):
             break
     return entries
@@ -1546,22 +1883,27 @@ def finalize_report_citations(report: str, plog: "ProgressLog") -> str:
     return out
 
 
-def build_research_prompt(question: str, depth: str, target_language: str | None) -> str:
+def build_research_prompt(
+        question: str, depth: str, target_language: str | None, *,
+        evidence_only: bool = False) -> str:
     preset = DEPTH_PRESETS.get(depth, DEPTH_PRESETS["standard"])
     lang_line = ""
     if target_language:
-        lang_line = f"\n\nWrite the final report in {target_language}."
+        deliverable = "evidence notes" if evidence_only else "final report"
+        lang_line = f"\n\nWrite the {deliverable} in {target_language}."
     if depth == "deep":
         return (
+            "/deep-research\n"
             "You are a deep-research lead analyst starting a MULTI-PASS investigation. "
-            "This is pass 0: orient yourself, load the deep-research AND prediction-markets "
-            "skills, and begin the source map. You will receive several follow-up "
+            "This is pass 0: the deep-research skill is deterministically activated above; "
+            "its prediction-market procedure is part of the contract. Begin the source map. "
+            "You will receive several follow-up "
             "research-pass prompts in this same thread before final synthesis.\n\n"
-            "TOOLING: This is WEB research. Work via web_search and web_fetch ONLY. There is "
-            "NO local file corpus, dataset, or workspace to inspect — do NOT call ls / "
-            "read_file / glob / bash on the filesystem. If any filesystem/workspace tool "
-            "returns a permission error, IGNORE it and go straight to web_search. Your "
-            "evidence comes entirely from pages you fetch off the web.\n\n"
+            "TOOLING: This is WEB research. Use web_search and web_fetch; for forecast "
+            "calibration use prediction_market_search. There is NO arbitrary local corpus "
+            "to explore: do not call ls/glob/bash. read_file is permitted ONLY for a "
+            "harness-managed externalized tool-result path or activated skill resource. "
+            "Your evidence comes from pages and markets you actually fetch.\n\n"
             f"RESEARCH BRIEF:\n{question}\n\n"
             f"{_market_pricing_prompt_block()}"
             f"{_agentic_delegation_block()}"
@@ -1571,10 +1913,38 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
             "actors, the relationships between actors (who allies/opposes/regulates/"
             "depends-on/influences whom), primary-source targets, likely quantitative "
             "datasets, and open questions. Use tools aggressively where needed. End with "
-            "a concise research plan and gap list.\n\n"
+            "a concise research plan and an explicit `## Gaps to carry into the next "
+            "pass` section. That section MUST contain the complete current set of "
+            "still-open KIQs; leave it empty if none remain and do not use a 'none' "
+            "placeholder. It is the convergence ledger for scheduling later passes.\n\n"
             "IMPORTANT: Do NOT write the final dossier yet. Do NOT stop after a short "
-            "summary. The downstream simulation needs dense, sourced facts, named actors, "
+            "summary. The downstream forecast needs dense, sourced facts, named actors, "
             "timelines, incentives, and disputed claims gathered across multiple passes."
+            f"{lang_line}"
+        )
+    if evidence_only:
+        evidence_guidance = str(preset["guidance"]).replace(
+            "write the report", "finish the evidence notes")
+        return (
+            "/deep-research\n"
+            "You are an evidence-lane research analyst. Gather and verify the "
+            "source material that a separate global synthesis process will turn "
+            "into the final dossier. Use the deep-research methodology: search "
+            "the web from multiple angles, fetch and read important primary "
+            "sources in full, and test opposing explanations.\n\n"
+            f"RESEARCH BRIEF:\n{question}\n\n"
+            f"{_market_pricing_prompt_block()}"
+            f"{evidence_guidance}\n\n"
+            "Return dense, structured WORKING EVIDENCE NOTES, not an executive "
+            "summary and not a client-facing report. Preserve concrete figures "
+            "with units and as-of dates, named actors and incentives, dated "
+            "events, contradictions, forecast implications, source titles, and "
+            "the exact URLs you actually fetched. Do not spend tokens polishing "
+            "transitions, an introduction, a conclusion, or a References section; "
+            "the global writer owns outline, prose, citation numbering, and final "
+            "judgment. End with an explicit `## Gaps to carry into the next pass` "
+            "section containing the complete set of still-open KIQs, or leave the "
+            "section empty when all KIQs are resolved."
             f"{lang_line}"
         )
     # WAVE9-RQ2: standard 主路径由 agent 在同一条消息里自编号——[S<n>] 记号必须与其
@@ -1591,6 +1961,7 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
             "never use [citation:...] syntax.\n\n"
         )
     return (
+        "/deep-research\n"
         "You are a deep-research analyst. Use the deep-research methodology: search "
         "the web from multiple angles, fetch and read important primary sources in "
         "full, gather concrete data, real-world examples, expert opinion, opposing "
@@ -1599,7 +1970,7 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
         f"{_market_pricing_prompt_block()}"
         f"{preset['guidance']}\n\n"
         "Then produce a single comprehensive Markdown report (your final message) that a "
-        "downstream social-simulation engine will use as ground truth. The report MUST "
+        "downstream forecasting workflow will use as its evidence dossier. The report MUST "
         "be self-contained and include, where applicable:\n"
         "  1. An executive summary of the situation.\n"
         "  2. The KEY REAL-WORLD ACTORS involved — specific named people, companies, "
@@ -1613,11 +1984,11 @@ def build_research_prompt(question: str, depth: str, target_language: str | None
         "  5. Relevant facts, figures, and quotes, each attributable to a source.\n"
         "  6. A short list of the sources you used (titles + URLs).\n\n"
         f"{citation_line}"
-        "LENGTH & DEPTH: This dossier is the sole ground-truth a downstream simulation "
+        "LENGTH & DEPTH: This dossier is the principal evidence base for a downstream forecast "
         "will reason over, so it must be LONG and richly detailed — aim for at least "
         # SCALE-1: 3,500–6,000 → 6,000–10,000 —— standard 档的一手报告目标与多段合成的
         # 长度纪律对齐；短报告的结构性根因在合成侧，但一手 agent 回合也不该按几页纸交差。
-        "6,000–10,000 words for standard depth. Organize it with clear Markdown section headings (##), and "
+        "6,000 words for standard depth, with no final word or character maximum. Organize it with clear Markdown section headings (##), and "
         "under each actor and topic go deep: specific numbers, dated events, direct "
         "quotes, competing perspectives, second-order effects, and concrete scenarios. "
         "Do NOT write a terse summary — exhaustive, well-structured coverage is the goal.\n\n"
@@ -1649,28 +2020,27 @@ def build_deep_phase_prompt(question: str, phase: dict[str, Any], index: int, to
             "(search/fetch specifically for them) before broadening:\n"
             f"{gap_lines}\n\n"
         )
-    # SKILL-1 / ITEM-7: 定量取证的 pass 指向 data-analysis 技能（表格/数列/口径核对），并把
-    # agent 产出的图表落到 out_dir 的 charts/ + charts.json 清单（编排器工件通道会拾取）。
-    # 两句都只在 host bash 执行面可用（sandbox.allow_host_bash）时注入——脚本型技能靠 bash 才能跑。
+    # Quantitative passes produce chart-ready evidence, while deterministic
+    # post-processing owns computation/rendering.  Do not instruct this scoped web
+    # researcher to load unavailable analysis/chart skills or invoke bash.
     _label = str(phase.get("label") or "")
-    skill_line = ""
-    if ("primary" in _label or "evidence" in _label) and _bash_sandbox_enabled():
-        skill_line = (
+    quantitative_line = ""
+    if "primary" in _label or "evidence" in _label:
+        quantitative_line = (
             "For quantitative work on the numbers you gather in this pass — reconciling "
-            "figures, fitting trends, computing reference-class base rates, checking sums "
-            "and units/definitions — load the data-analysis skill and run the computations "
-            "in the sandbox via bash (do NOT eyeball the arithmetic).\n"
-            "If you produce any charts (via the forecast-visuals / chart-visualization "
-            "skills), write the rendered files into a charts/ subdirectory of your output "
-            "directory and register each in a charts.json manifest "
-            "({title, caption, source_data}) so the pipeline's artifact channel picks them up.\n\n"
+            "figures, reference-class base rates, sums, units, and definitions — record the "
+            "raw values, formulas, units, as-of dates, and source URLs explicitly. Emit "
+            "chart-ready series/tables in the notes; deterministic downstream tooling owns "
+            "the calculations and Plotly/static rendering. Do not invoke a shell or an "
+            "unavailable analysis/chart skill.\n\n"
         )
     return (
+        "/deep-research\n"
         f"DEEP RESEARCH PASS {index}/{total}: {phase['label']}\n\n"
         f"RESEARCH BRIEF:\n{question}\n\n"
         f"{gap_block}"
         f"PASS OBJECTIVE:\n{phase['focus']}\n\n"
-        f"{skill_line}"
+        f"{quantitative_line}"
         f"{_agentic_delegation_block()}"
         "Use web search and full-text fetching as needed. Prefer primary sources and "
         "high-authority sources. Capture concrete numbers, dates, organizations, named "
@@ -1679,19 +2049,18 @@ def build_deep_phase_prompt(question: str, phase: dict[str, Any], index: int, to
         "possible.\n\n"
         # —— ANTI-FIXATION / SEARCH DISCIPLINE (the #1 efficiency failure to avoid) ——
         "SEARCH DISCIPLINE — read before every search:\n"
-        "- ONE fact, at most TWO attempts. If a specific fact/quote/document isn't found "
-        "in 1–2 searches, it is probably not freely indexed: record it as an open gap and "
-        "MOVE ON. Do NOT keep hunting the same item.\n"
+        "- Every call names its owning KIQ and expected evidence upgrade. If genuinely "
+        "different access strategies stop yielding a new origin, stronger tier, verified "
+        "number, contradiction resolution, or disconfirmation, record the fact as an open "
+        "gap and MOVE ON. Do not keep hunting the same item.\n"
         "- NEVER reissue a near-duplicate query. A query that differs from a previous one "
         "ONLY by quotes, reordered OR-terms, an added `site:`/`filetype:`, or a synonym is "
         "a DUPLICATE and is forbidden — it wastes the budget and finds nothing new. If a "
         "result is thin, change the ANGLE (a different actor, mechanism, document type, "
         "language, or time window), not the wording.\n"
-        "- BREADTH BEATS A WHITE WHALE. Each search should target a DIFFERENT actor, driver, "
-        "relationship, number, or scenario from the brief. Covering 30 entities/drivers once "
-        "is far more valuable than 15 reworded attempts at one elusive quote. Spread coverage "
-        "across the whole cast and every key dimension; do not over-invest in any single "
-        "source or quotation.\n"
+        "- BREADTH BEATS A WHITE WHALE. Each search should target a DIFFERENT unresolved "
+        "actor, driver, relationship, number, or scenario from the KIQ ledger. Spread effort "
+        "across priority gaps; do not over-invest in any single source or quotation.\n"
         # —— SOURCE GROUNDING (the sources must be REAL and VERIFIABLE) ——
         "SOURCE GROUNDING — non-negotiable:\n"
         "- Only record a source you ACTUALLY FETCHED and read. Capture its REAL URL and its "
@@ -1713,6 +2082,11 @@ def build_deep_phase_prompt(question: str, phase: dict[str, Any], index: int, to
         # conflicts (positions + sources + why they differ), not just that uncertainty exists.
         "## Contradictions or uncertainty (for each: the disputed claim, the differing positions with their sources, and WHY they differ)\n"
         "## Gaps to carry into the next pass\n\n"
+        "Under the Gaps heading, emit the COMPLETE current set of still-open KIQs after "
+        "this pass, not merely newly discovered gaps. Omit every carried gap this pass "
+        "resolved. Leave the section empty when none remain; do not write a placeholder "
+        "such as 'none'. This section is the convergence ledger that decides whether any "
+        "further research turn is allowed.\n\n"
         # WAVE9-RQ1: working notes 是内部脚手架——三次真实运行都把「Pass N working notes」
         # 泄进成稿散文，从 pass 阶段就声明这些标签绝不能作为最终卷宗的引用对象。
         + ("These working notes are INTERNAL SCAFFOLDING for later passes — the final "
@@ -1737,10 +2111,13 @@ def build_coverage_topup_prompt(question: str, gaps: list | None, have: int, tar
         gap_block = "Known open gaps (good targets, but do not thrash on any single one):\n" + \
             "\n".join(f"- {str(g)}" for g in list(gaps)[:12]) + "\n\n"
     return (
+        "/deep-research\n"
         "COVERAGE TOP-UP PASS — broaden the evidence base.\n\n"
         f"RESEARCH BRIEF:\n{question}\n\n"
-        f"So far only ~{have} distinct sources have been fetched-and-read; the floor for a "
-        f"thorough dossier is ~{target}. The evidence base is too narrow.\n\n"
+        f"A coverage diagnostic observed ~{have} distinct fetched sources against a rough "
+        f"breadth reference of ~{target}. This count is a warning, NOT a quota: do not search "
+        "merely to raise it. Continue only on an under-evidenced named KIQ where a new "
+        "independent S1/S2 origin can upgrade the ledger.\n\n"
         f"{gap_block}"
         f"{_agentic_delegation_block()}"
         "OBJECTIVE: find and FETCH NEW, high-quality sources that cover parts of the brief "
@@ -1771,6 +2148,7 @@ def build_gap_closing_prompt(question: str, gaps: list | None, target_language: 
     lang_line = f"\n\nWrite your pass notes in {target_language}." if target_language else ""
     gap_block = "\n".join(f"- {str(g)}" for g in list(gaps or [])[:14]) or "- (see brief; close the most load-bearing open questions)"
     return (
+        "/deep-research\n"
         "TARGETED GAP-CLOSING PASS — resolve the specific open questions below.\n\n"
         f"RESEARCH BRIEF:\n{question}\n\n"
         "The evidence base is wide enough, but these gaps are still unresolved and are the "
@@ -1803,10 +2181,14 @@ def build_synthesis_prompt(question: str, target_language: str | None, depth: st
     final report.
     """
     lang_line = f"\n\nWrite the report in {target_language}." if target_language else ""
-    # SCALE-1: deep 8,000–12,000 → 15,000–25,000 —— 本提示词只服务单调用回退路径
+    # SCALE-1: the single-call fallback carries a floor, never a deliverable ceiling.
     # （multipart 关闭 / 大纲解析失败时），deep 主路径改走逐节多段合成，各节自带
     # 1,500–2,500 词目标；单调用回退也不该再按旧的缩水目标写。standard 保持原目标。
-    word_target = "15,000–25,000 words" if depth == "deep" else "3,500–6,000 words"
+    word_target = (
+        "at least 15,000 words, with no final word or character maximum"
+        if depth == "deep"
+        else "at least 6,000 words, with no final word or character maximum"
+    )
     extra_deep = ""
     if depth == "deep":
         extra_deep = (
@@ -1817,39 +2199,26 @@ def build_synthesis_prompt(question: str, target_language: str | None, depth: st
             "scenarios, leading indicators to monitor, and a section on contested claims "
             "or evidence quality.\n\n"
         )
-    # ITEM-7: 图表落盘句——只在 host bash 执行面可用（sandbox.allow_host_bash）时追加，且明确
-    # 把「渲染图表」框定为本写作步唯一允许的工具动作（仍禁止 search/fetch），故不重开研究之门。
-    # bash 关闭时 charts_line 为空串 → 合成提示词与今日逐字节一致。
-    # WAVE9-RQ4: RESEARCH_CHARTS_MIN>0（默认 3）时从「OPTIONAL」升级为硬性最少图表数
-    # （actor 网络 / 时间线 / 定量 Top 指标），并要求以 ![](charts/x.png) 内嵌进卷宗；
-    # =0 回退旧 OPTIONAL 措辞。渲染失败一律降级续写，绝不阻断报告。
-    charts_line = ""
-    if _bash_sandbox_enabled():
-        _charts_min = _research_charts_min()
-        if _charts_min > 0:
-            charts_line = (
-                f"\n\nREQUIRED CHARTS — the dossier MUST embed at least {_charts_min} charts "
-                "as markdown images: (1) the actor relationship network, (2) the dated event "
-                "timeline, (3) the top quantitative metrics. The ONLY tool use permitted in "
-                "this write step is rendering them from data you ALREADY gathered above (do "
-                "NOT search or fetch): load the forecast-visuals skill and run its bundled "
-                "scripts/render.py, which writes self-contained charts/*.html + charts/*.png "
-                "plus a charts.json manifest ({title, caption, source_data, path}) into your "
-                "output directory; then reference each figure inline where it belongs, e.g. "
-                "![Actor network](charts/actor_network.png). If python/plotly is unavailable "
-                "or a render fails, fall back to the skill's mermaid/table fallback and KEEP "
-                "WRITING — a missing chart must never block the dossier, and the failure must "
-                "never be mentioned in the dossier prose."
-            )
-        else:
-            charts_line = (
-                "\n\nOPTIONAL CHARTS — the ONLY tool use permitted in this write step is "
-                "rendering charts from data you ALREADY gathered above (via the forecast-visuals "
-                "/ chart-visualization skills); do NOT search or fetch. If you render any, write "
-                "the files into a charts/ subdirectory of your output directory and register each "
-                "in a charts.json manifest ({title, caption, source_data}) so the pipeline's "
-                "artifact channel picks them up."
-            )
+    # This is a bare, tool-free synthesis call. It cannot load a rendering skill
+    # or invoke bash, so asking it to create files was an impossible contract. It
+    # now owns only chart-ready DATA; deterministic post-processing reads the
+    # extracted artifacts and creates Plotly HTML + static PNGs afterward.
+    _charts_min = _research_charts_min()
+    charts_line = (
+        f"\n\nCHART-READY EVIDENCE — include enough explicit, sourced data to support "
+        f"at least {_charts_min} useful visual classes downstream (actor relationships, "
+        "dated events, quantitative metrics, market probabilities, and source "
+        "quality/freshness). For every series/table preserve labels, raw values, units, "
+        "definitions, as-of dates, and source URLs. Do NOT render files, invoke a shell, "
+        "or claim a chart exists in this tool-free write step. A deterministic "
+        "post-processing stage owns Plotly/static rendering."
+        if _charts_min > 0
+        else (
+            "\n\nPreserve chart-ready quantitative series and relationship/timeline tables "
+            "with labels, units, as-of dates, definitions, and source URLs; deterministic "
+            "post-processing may visualize them later."
+        )
+    )
     return (
         "STOP researching. Do NOT call any tools, do NOT search, do NOT fetch — you "
         "have already gathered enough material in this conversation.\n\n"
@@ -1891,6 +2260,7 @@ def build_synthesis_prompt(question: str, target_language: str | None, depth: st
         "Write the report directly — no preamble, no tool calls."
         f"{_dossier_style_rules_block()}"
         f"{charts_line}"
+        f"{_final_dossier_contract_block()}"
         f"{lang_line}"
     )
 
@@ -1935,23 +2305,25 @@ def _multipart_synthesis_enabled(depth: str) -> bool:
 
 
 def _synthesis_workers() -> int:
-    """SCALE-1: 逐节合成的并发上限（镜像 RESEARCH_FANOUT_WIDTH 的读法；非法值回退 4）。"""
+    """Section-writer concurrency bounded by the provider-wide model envelope."""
     try:
-        return max(1, int(os.environ.get("RESEARCH_SYNTHESIS_WORKERS", "4") or "4"))
+        configured = max(
+            1, int(os.environ.get("RESEARCH_SYNTHESIS_WORKERS", "4") or "4"))
     except ValueError:
-        return 4
+        configured = 4
+    return min(configured, _model_parallel_slots(1))
 
 
 def _synthesis_min_words(depth: str) -> int:
     """SCALE-1: 长度门的最少散文词数。env 显式设置对所有深度生效（0=关闭）；未设置 →
-    deep 9000 / 其余 4500（standard 的 6,000–10,000 词目标留出下限余量）。"""
+    deep 10000 / 其余 4500（仅为质量下限；最终交付物没有上限）。"""
     raw = (os.environ.get("RESEARCH_SYNTHESIS_MIN_WORDS", "") or "").strip()
     if raw:
         try:
             return max(0, int(raw))
         except ValueError:
             pass
-    return 9000 if depth == "deep" else 4500
+    return 10000 if depth == "deep" else 4500
 
 
 def build_synthesis_outline_prompt(question: str, target_language: str | None) -> str:
@@ -1965,17 +2337,21 @@ def build_synthesis_outline_prompt(question: str, target_language: str | None) -
         "markdown fence commentary) with this exact shape:\n"
         '{"sections": [{"title": string, "scope": string, "target_words": int, "covers": [string]}]}\n\n'
         "REQUIREMENTS:\n"
-        "- 10-14 sections that together cover EVERYTHING the brief demands: executive "
+        "- Choose 10-20 sections adaptively from the number of KIQs and independent "
+        "evidence clusters. Together they must cover EVERYTHING the brief demands: executive "
         "context, actors & relationships, timeline, quantitative evidence, contested "
         "claims, mechanisms/cause-effect chains, scenarios, contrarian view, leading "
         "indicators, and sources.\n"
         "- 'scope': 2-4 sentences of concrete keywords — the named actors, numbers, "
         "events, and questions THIS section must cover (used to route evidence to the "
         "section writer, so be specific).\n"
-        "- 'target_words': 1500-2500 per section.\n"
+        "- 'target_words': normally 1500-3000 per section; a genuinely dense evidence "
+        "cluster may request up to 3500. There is NO final dossier word/character maximum; "
+        "add sections or depth when the brief and evidence require it, never padding.\n"
         "- 'covers': the evidence clusters / key intelligence questions from the "
         "research this section is responsible for.\n"
         f"{lang_line}\n\n"
+        f"{_final_dossier_contract_block()}\n\n"
         "=== GATHERED RESEARCH (plan strictly from this) ===\n"
     )
 
@@ -2021,8 +2397,8 @@ def parse_synthesis_outline(text: str) -> list[dict]:
     （调用方据此回退单调用路径并打 _RESEARCH_FLAGS）。
 
     容错：``{"sections":[...]}`` / ``{"outline":[...]}`` / 裸顶层数组 / 围栏包裹均可；
-    行内缺 title 的条目丢弃；target_words 钳到 1500-2500（缺失/非法 → 2000）；
-    有效分节 <3 视为解析失败（一份 1-2 节的"大纲"不构成多段合成的骨架），>16 截断。
+    行内缺 title 的条目丢弃；target_words 钳到 1500-3500（缺失/非法 → 2200）；
+    有效分节 <3 视为解析失败（一份 1-2 节的"大纲"不构成多段合成的骨架），>24 截断。
     """
     rows: list | None = None
     obj = extract_json_object(text or "")
@@ -2047,14 +2423,14 @@ def parse_synthesis_outline(text: str) -> list[dict]:
             tw = int(row.get("target_words") or 0)
         except (TypeError, ValueError):
             tw = 0
-        tw = min(2500, max(1500, tw)) if tw > 0 else 2000
+        tw = min(3500, max(1500, tw)) if tw > 0 else 2200
         covers_raw = row.get("covers")
         covers = (
             [str(c).strip() for c in covers_raw if str(c).strip()][:12]
             if isinstance(covers_raw, list) else []
         )
         out.append({"title": title, "scope": scope, "target_words": tw, "covers": covers})
-        if len(out) >= 16:
+        if len(out) >= 24:
             break
     return out if len(out) >= 3 else []
 
@@ -2101,24 +2477,44 @@ def score_block_for_scope(block: str, terms: list[str]) -> int:
     return score
 
 
-def pack_context_for_section(blocks: list[str], scope_text: str, cap: int) -> str:
+def pack_context_for_section(
+    blocks: list[str],
+    scope_text: str,
+    cap: int,
+    *,
+    max_blocks: int | None = None,
+) -> str:
     """SCALE-1（纯函数）：按 scope 关键词给每个上下文块计分，贪心装入得分最高的块
     直到 ``cap`` 字符 —— 取代头部截断，让每个分节看到**属于它的**证据。
 
     确定性：得分降序、同分按原始下标升序选块；选出的块按**原始顺序**输出（保持
-    研究叙事的时间/线程顺序）。scope 提不出词项 → 退化为按原始顺序头部装填
-    （等价于现状的头截断，degrade-safe）。装不下任何整块时截断得分最高的单块。
+    研究叙事的时间/线程顺序）。有 scope 词项时，零相关块不会再为了填满巨大
+    上下文而被重复发送给每一节；完全没有正分块时只给一个有界的头部兜底。
+    ``max_blocks`` 进一步防止许多小块绕过字符预算的路由纪律。
     """
     if not blocks or cap <= 0:
         return ""
     terms = _scope_terms(scope_text)
     if terms:
-        order = sorted(range(len(blocks)), key=lambda i: (-score_block_for_scope(blocks[i], terms), i))
+        scored = [
+            (score_block_for_scope(block, terms), i)
+            for i, block in enumerate(blocks)
+        ]
+        order = [
+            i for score, i in sorted(scored, key=lambda row: (-row[0], row[1]))
+            if score > 0
+        ]
+        if not order:
+            order = [0]
     else:
         order = list(range(len(blocks)))
+    block_limit = max(1, int(
+        max_blocks if max_blocks is not None else _synthesis_section_max_blocks()))
     chosen: set[int] = set()
     used = 0
     for i in order:
+        if len(chosen) >= block_limit:
+            break
         need = len(blocks[i]) + (2 if chosen else 0)  # 计入 "\n\n" 接缝
         if used + need > cap:
             continue
@@ -2129,7 +2525,39 @@ def pack_context_for_section(blocks: list[str], scope_text: str, cap: int) -> st
     return "\n\n".join(blocks[i] for i in sorted(chosen))
 
 
-def build_notes_digest(ai_parts: list[str], per_note_chars: int = 600, total_cap: int = 9000) -> str:
+def route_citation_index_for_scope(
+    entries: list[dict],
+    scope_text: str,
+    *,
+    max_entries: int = 32,
+    evidence_text: str = "",
+) -> list[dict]:
+    """Keep global source numbers while routing only relevant entries per section."""
+    if not entries:
+        return []
+    terms = _scope_terms(scope_text)
+    if not terms:
+        return list(entries[:max(1, int(max_entries))])
+    scored = []
+    for index, entry in enumerate(entries):
+        url = str(entry.get("url") or "")
+        haystack = (
+            f"{entry.get('title', '')} {url} {entry.get('excerpt', '')}")
+        score = score_block_for_scope(haystack, terms)
+        if url and url in evidence_text:
+            score += 1000
+        if score > 0:
+            scored.append((score, index, entry))
+    if not scored:
+        return list(entries[:min(8, max(1, int(max_entries)))])
+    selected = sorted(
+        scored, key=lambda row: (-row[0], row[1]))[:max(1, int(max_entries))]
+    return [row[2] for row in sorted(selected, key=lambda row: row[1])]
+
+
+def build_notes_digest(
+        ai_parts: list[str], per_note_chars: int = 240,
+        total_cap: int = 4000) -> str:
     """SCALE-1（纯函数）：working-notes 摘要 —— 每条 AI 笔记取头部 ``per_note_chars``
     字符压成一行 bullet，总量封顶 ``total_cap``。每个分节调用都随附（连同需求原文），
     保证分片没选中的 pass 笔记也以摘要形态在场。"""
@@ -2296,6 +2724,7 @@ def build_synthesis_section_prompt(question: str, outline: list[dict], section: 
         "number."
         f"{_dossier_style_rules_block()}"
         f"{citation_block}"
+        f"{_final_dossier_contract_block()}"
         f"{lang_line}"
         f"{digest_block}\n\n"
         "=== GATHERED RESEARCH FOR THIS SECTION (write ONLY from this) ===\n"
@@ -2317,6 +2746,7 @@ def build_synthesis_expand_prompt(question: str, section: dict, current_text: st
         "existing [S<n>] citation marker attached to its claim. Start directly "
         "with the section body; do not repeat the section title as a heading."
         f"{_dossier_style_rules_block()}"
+        f"{_final_dossier_contract_block()}"
         f"{lang_line}\n\n"
         f"RESEARCH BRIEF:\n{question}\n\n"
         f"SECTION: {section['title']}\nSCOPE: {section['scope']}\n\n"
@@ -2356,7 +2786,7 @@ def _bare_synth_invoke(synth_model: str, prompt: str) -> str:
     from langchain_core.messages import HumanMessage
 
     model = create_chat_model(synth_model, thinking_enabled=False)
-    resp = model.invoke([HumanMessage(content=prompt)])
+    resp = _invoke_model(model, [HumanMessage(content=prompt)])
     return _message_text(getattr(resp, "content", resp))
 
 
@@ -2367,9 +2797,27 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
     调用方回退到今天的单调用路径；所有降级均已写入 _RESEARCH_FLAGS。"""
     import concurrent.futures as _cf
 
-    # (1) OUTLINE —— 一次裸调用产出 JSON 分节计划（喂已截断的 gathered context）。
-    plog.write("stage", "synthesize/multipart: requesting section outline (10-14 sections)")
-    outline_raw = _bare_synth_invoke(synth_model, build_synthesis_outline_prompt(question, target_language) + context)
+    # (1) OUTLINE —— only a compact representative slice is needed to plan
+    # ownership. Replaying the entire evidence corpus just to name sections is
+    # pure input-token waste.
+    plog.write("stage", "synthesize/multipart: requesting adaptive section outline (10-20 typical; no final output cap)")
+    try:
+        outline_context_cap = max(
+            20000,
+            int(os.environ.get(
+                "SYNTHESIS_OUTLINE_CONTEXT_CHARS", "120000") or "120000"),
+        )
+    except ValueError:
+        outline_context_cap = 120000
+    outline_prompt = build_synthesis_outline_prompt(question, target_language)
+    outline_evidence_cap = max(
+        0, outline_context_cap - len(_final_dossier_contract_block()))
+    outline_context = build_stratified_outline_context(
+        blocks, outline_evidence_cap)
+    outline_raw = _bare_synth_invoke(
+        synth_model,
+        outline_prompt + outline_context,
+    )
     outline = parse_synthesis_outline(outline_raw)
     if not outline:
         plog.write("warn", f"synthesize/multipart: outline JSON unparseable ({len(outline_raw)} chars); falling back to single-call synthesis")
@@ -2383,27 +2831,53 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
     # WAVE9-RQ2: 并行写手无法互相协调编号 —— 由管线钉一个共享 SOURCE INDEX（与
     # sources.json fetched 主干同序）进每个分节提示词，[S<n>] 编号全局一致；落盘前
     # finalize_report_citations 据同一索引校验并确定性补 '## References' 节。
-    citation_block = ""
+    citation_entries: list[dict] = []
     if _inline_citations_enabled():
         _cit_entries = build_citation_index(_FETCHED_SOURCES, _citation_index_cap())
         if _cit_entries:
             _set_pinned_citation_index(_cit_entries)
-            citation_block = render_citation_index_block(_cit_entries)
-            plog.write("stage", f"synthesize/multipart: pinned citation index ({len(_cit_entries)} fetched sources) into section prompts")
-    cap = _synthesis_context_cap(synth_model)
-    section_cap = max(20000, cap - len(notes_digest) - len(citation_block) - 6000)  # 给提示词骨架+摘要+索引留余量
+            citation_entries = _cit_entries
+            plog.write(
+                "stage",
+                f"synthesize/multipart: pinned {len(_cit_entries)} global source "
+                "IDs; each section receives only its routed subset",
+            )
+    cap = _synthesis_context_cap(
+        synth_model,
+        context,
+        extra_prompt_chars=len(_final_dossier_contract_block()),
+    )
+    section_cap = _synthesis_section_context_cap(
+        len(outline), max(8000, cap - len(notes_digest) - 12000))
     workers = min(_synthesis_workers(), len(outline))
     texts: list[str] = [""] * len(outline)
 
     def _write_section(i: int) -> str:
         sec = outline[i]
         scope_text = " ".join([sec["title"], sec["scope"], " ".join(sec["covers"])])
-        sec_ctx = pack_context_for_section(blocks, scope_text, section_cap)
+        sec_ctx = pack_context_for_section(
+            blocks,
+            scope_text,
+            section_cap,
+            max_blocks=_synthesis_section_max_blocks(),
+        )
+        section_citations = render_citation_index_block(
+            route_citation_index_for_scope(
+                citation_entries,
+                scope_text,
+                max_entries=32,
+                evidence_text=sec_ctx,
+            ))
         return _bare_synth_invoke(synth_model, build_synthesis_section_prompt(
             question, outline, sec, i, len(outline), notes_digest, sec_ctx, target_language,
-            citation_block=citation_block))
+            citation_block=section_citations))
 
-    plog.write("stage", f"synthesize/multipart: writing {len(outline)} sections in parallel (workers={workers})")
+    plog.write(
+        "stage",
+        f"synthesize/multipart: writing {len(outline)} sections in parallel "
+        f"(workers={workers}, routed evidence <= {section_cap} chars/section, "
+        f"<= {section_cap * len(outline)} chars aggregate)",
+    )
     with _cf.ThreadPoolExecutor(max_workers=workers) as ex:
         futs = {ex.submit(_write_section, i): i for i in range(len(outline))}
         for fut in _cf.as_completed(futs):
@@ -2435,7 +2909,12 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
         for i in thin:
             sec = outline[i]
             scope_text = " ".join([sec["title"], sec["scope"], " ".join(sec["covers"])])
-            sec_ctx = pack_context_for_section(blocks, scope_text, section_cap)
+            sec_ctx = pack_context_for_section(
+                blocks,
+                scope_text,
+                section_cap,
+                max_blocks=_synthesis_section_max_blocks(),
+            )
             try:
                 expanded = _bare_synth_invoke(synth_model, build_synthesis_expand_prompt(
                     question, sec, texts[i], sec_ctx, target_language)).strip()
@@ -2476,6 +2955,544 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
     return report
 
 
+def collect_synthesis_message_parts(
+        messages: list) -> "tuple[list[str], list[str]]":
+    """Collect durable evidence while excluding arbitrary human prompts.
+
+    Parallel worker notes are injected as typed human messages to avoid a
+    wasteful absorption model call. The prefix lets crash/resume synthesis
+    recover exactly those evidence messages without treating the original user
+    prompt or later instructions as research evidence.
+    """
+    parts: list[str] = []
+    ai_parts: list[str] = []
+    for message in messages or []:
+        if not isinstance(message, dict):
+            continue
+        message_type = message.get("type")
+        text = _message_text(message.get("content"))
+        if not text:
+            continue
+        if message_type == "tool":
+            name = message.get("name") or "source"
+            parts.append(f"[{name}] {text}")
+        elif message_type == "ai":
+            parts.append(text)
+            ai_parts.append(text)
+        elif (message_type in {"human", "user"}
+              and text.startswith(_PARALLEL_EVIDENCE_PREFIX)):
+            evidence = text[len(_PARALLEL_EVIDENCE_PREFIX):].lstrip()
+            if evidence:
+                parts.append(evidence)
+                ai_parts.append(evidence)
+    return parts, ai_parts
+
+
+def append_uncheckpointed_worker_notes(
+        parts: list[str], ai_parts: list[str],
+        worker_notes: list[str]) -> int:
+    """Fold in only worker notes not already present in tagged checkpoints.
+
+    Successful plain-message injection persists the aggregate notes for resume,
+    while the run-scoped table is the fallback when injection fails. During an
+    uninterrupted run both stores exist; exact containment prevents replaying
+    the same high-volume evidence twice and wasting synthesis input tokens.
+    """
+
+    corpus = "\n\n".join(parts)
+    appended = 0
+    for note in worker_notes or []:
+        block = str(note or "").strip()
+        if not block or block in corpus:
+            continue
+        parts.append(block)
+        ai_parts.append(block)
+        corpus = f"{corpus}\n\n{block}" if corpus else block
+        appended += 1
+    return appended
+
+
+def collect_thread_evidence_parts(
+        client, thread_id: str, plog: "ProgressLog") -> "tuple[list[str], list[str]]":
+    """Load the latest durable checkpoint and return deduplicated evidence."""
+    try:
+        thread = client.get_thread(thread_id)
+    except Exception as e:  # noqa: BLE001
+        plog.write(
+            "warn",
+            f"synthesize: could not load thread ({type(e).__name__}: {e})",
+        )
+        return [], []
+    messages: list = []
+    for checkpoint in reversed(thread.get("checkpoints") or []):
+        values = checkpoint.get("values") or {}
+        if values.get("messages"):
+            messages = values["messages"]
+            break
+    if not messages:
+        plog.write("warn", "synthesize: no messages found in thread checkpoints")
+        return [], []
+    parts, ai_parts = collect_synthesis_message_parts(messages)
+    append_uncheckpointed_worker_notes(
+        parts, ai_parts, _collected_worker_notes())
+    return parts, ai_parts
+
+
+def render_evidence_pack(parts: list[str]) -> str:
+    """Render a lossless internal lane artifact for later global synthesis."""
+    unique: list[str] = []
+    seen: set[str] = set()
+    for part in parts or []:
+        text = str(part or "").strip()
+        if not text:
+            continue
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        if digest in seen:
+            continue
+        seen.add(digest)
+        unique.append(text)
+    blocks = [
+        f"<!-- evidence-block:{index} -->\n{text}"
+        for index, text in enumerate(unique, start=1)
+    ]
+    return (
+        "# Internal Evidence Lane Pack\n\n"
+        "This is a machine-routed evidence artifact, not publishable prose.\n\n"
+        + "\n\n---\n\n".join(blocks)
+        + "\n"
+    )
+
+
+_EVIDENCE_BLOCK_MARKER_RE = re.compile(
+    r"^<!--\s*evidence-block:(\d+)\s*-->\s*$", re.MULTILINE)
+_LANE_CITATION_MARKER_RE = re.compile(r"\[\s*S(\d+)\s*\]", re.IGNORECASE)
+
+
+def parse_evidence_pack(text: str) -> list[str]:
+    """Recover the exact evidence blocks emitted by :func:`render_evidence_pack`.
+
+    Older/manual packs without block markers remain one block.  A rendered pack
+    is never treated as one giant routing unit: doing so lets a 100k first lane
+    consume both the outline head slice and every section's context budget.
+    """
+    raw = str(text or "")
+    matches = list(_EVIDENCE_BLOCK_MARKER_RE.finditer(raw))
+    if not matches:
+        stripped = raw.strip()
+        return [stripped] if stripped else []
+    blocks: list[str] = []
+    for index, marker in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(raw)
+        body = raw[marker.end():end]
+        if index + 1 < len(matches):
+            # ``render_evidence_pack`` inserts exactly one Markdown rule between
+            # blocks. Remove only that final separator, preserving rules inside
+            # the evidence itself.
+            body = re.sub(r"\n\s*\n---\s*\Z", "", body.rstrip())
+        body = body.strip()
+        if body:
+            blocks.append(body)
+    return blocks
+
+
+def _manifest_evidence_chunk_chars() -> int:
+    """Maximum size of one routable manifest block.
+
+    Tool results can exceed a section's complete input allowance.  Chunking is
+    lossless and lets the relevance scorer select the chunk containing the
+    matching fact instead of selecting only an oversized block's prefix.
+    """
+    try:
+        return max(4000, int(os.environ.get(
+            "SYNTHESIS_EVIDENCE_BLOCK_CHARS", "24000") or "24000"))
+    except (TypeError, ValueError):
+        return 24000
+
+
+def chunk_evidence_block(text: str, cap: int | None = None) -> list[str]:
+    """Split an oversized evidence block at a nearby textual boundary."""
+    remaining = str(text or "").strip()
+    if not remaining:
+        return []
+    limit = max(256, int(cap or _manifest_evidence_chunk_chars()))
+    chunks: list[str] = []
+    while len(remaining) > limit:
+        floor = max(1, limit // 2)
+        cut = -1
+        for separator in ("\n\n", "\n", " "):
+            candidate = remaining.rfind(separator, floor, limit + 1)
+            if candidate > cut:
+                cut = candidate + len(separator)
+        if cut <= 0:
+            cut = limit
+        chunk = remaining[:cut].strip()
+        if chunk:
+            chunks.append(chunk)
+        remaining = remaining[cut:].lstrip()
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
+
+def remap_lane_citations(
+        text: str, lane_sources: list[dict],
+        global_citation_entries: list[dict]) -> str:
+    """Translate a lane's local ``[S<n>]`` IDs into the global URL namespace.
+
+    Every outer lane starts numbering at S1.  Raw concatenation therefore makes
+    lane 2's S1 point at lane 1's first source.  Mapping is URL-based and stable;
+    a marker whose local source is missing or absent from the bounded global
+    citation index is stripped rather than silently attached to the wrong URL.
+    """
+    global_by_url = {
+        _norm_url(entry.get("url")).casefold(): int(entry["n"])
+        for entry in global_citation_entries or []
+        if isinstance(entry, dict) and entry.get("n")
+        and _norm_url(entry.get("url"))
+    }
+    local_entries = build_citation_index(
+        lane_sources or [], _citation_index_cap())
+    local_to_global = {
+        int(entry["n"]): global_by_url.get(
+            _norm_url(entry.get("url")).casefold())
+        for entry in local_entries
+    }
+
+    def _replace(match: "re.Match[str]") -> str:
+        try:
+            global_number = local_to_global.get(int(match.group(1)))
+        except (TypeError, ValueError):
+            global_number = None
+        return f"[S{global_number}]" if global_number is not None else ""
+
+    return _LANE_CITATION_MARKER_RE.sub(_replace, str(text or ""))
+
+
+def _read_manifest_lane_sources(
+        candidate: Path, row: dict, *, root: Path | None = None,
+        strict: bool = False) -> list[dict]:
+    """Read a lane's positional source ledger beside its evidence pack."""
+    embedded = row.get("sources")
+    if isinstance(embedded, list) and not strict:
+        return [dict(item) for item in embedded if isinstance(item, dict)]
+    raw_path = str(row.get("sources_path") or "").strip()
+    source_path = (
+        ((root or candidate.parent) / raw_path).resolve()
+        if raw_path else (candidate.parent / SOURCES_FILENAME).resolve()
+    )
+    if root is not None and not source_path.is_relative_to(root):
+        raise ValueError("evidence lane source ledger escapes manifest root")
+    if not source_path.is_file():
+        if strict:
+            raise ValueError("evidence lane source ledger is missing")
+        return []
+    try:
+        raw = source_path.read_bytes()
+        if strict:
+            expected_bytes = int(row.get("sources_bytes") or -1)
+            expected_sha = str(row.get("sources_sha256") or "")
+            if len(raw) != expected_bytes:
+                raise ValueError("evidence lane source ledger byte count mismatch")
+            if hashlib.sha256(raw).hexdigest() != expected_sha:
+                raise ValueError("evidence lane source ledger fingerprint mismatch")
+        obj = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, TypeError):
+        if strict:
+            raise
+        return []
+    if strict and not isinstance(obj, list):
+        raise ValueError("evidence lane source ledger is not a list")
+    return [dict(item) for item in obj if isinstance(item, dict)] \
+        if isinstance(obj, list) else []
+
+
+def build_stratified_outline_context(
+        blocks: list[str], cap: int, *, max_blocks: int = 48) -> str:
+    """Build a fair outline sample instead of truncating at lane 1's head.
+
+    Manifest blocks arrive round-robin by lane.  When the corpus exceeds the
+    outline allowance, each of the first bounded blocks receives an equal slice,
+    guaranteeing later lanes a voice even when lane 1 begins with a huge fetch.
+    """
+    clean = [str(block).strip() for block in blocks or [] if str(block).strip()]
+    if not clean or cap <= 0:
+        return ""
+    joined = "\n\n".join(clean)
+    if len(joined) <= cap:
+        return joined
+    limit = max(1, min(int(max_blocks or 1), len(clean), max(1, cap // 256)))
+    selected = clean[:limit]
+    separator_cost = 2 * max(0, len(selected) - 1)
+    available = max(1, cap - separator_cost)
+    base, extra = divmod(available, len(selected))
+    snippets = [
+        block[:base + (1 if index < extra else 0)]
+        for index, block in enumerate(selected)
+    ]
+    return "\n\n".join(snippets)[:cap]
+
+
+def load_evidence_manifest(
+        manifest_path: str | Path) -> "tuple[list[str], list[dict]]":
+    """Load lane packs and their global source ledger from a rooted manifest."""
+    path = Path(manifest_path).expanduser().resolve()
+    obj = json.loads(path.read_text(encoding="utf-8"))
+    version = int(obj.get("version") or 0) if isinstance(obj, dict) else 0
+    if not isinstance(obj, dict) or version not in (1, 2):
+        raise ValueError("evidence manifest must be a version-1 or version-2 object")
+    root = path.parent.resolve()
+    sources = [
+        dict(row) for row in (obj.get("sources") or [])
+        if isinstance(row, dict)
+    ]
+    if version >= 2:
+        canonical_sources = json.dumps(
+            sources,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        if int(obj.get("sources_count") or -1) != len(sources):
+            raise ValueError("global evidence source count mismatch")
+        if hashlib.sha256(canonical_sources).hexdigest() != str(
+                obj.get("sources_sha256") or ""):
+            raise ValueError("global evidence source fingerprint mismatch")
+    global_citation_entries = build_citation_index(
+        sources, _citation_index_cap())
+    lane_parts: list[list[str]] = []
+    lanes = obj.get("lanes") or []
+    if version >= 2 and (not isinstance(lanes, list) or not lanes):
+        raise ValueError("version-2 evidence manifest declares no lanes")
+    consumed_lanes = 0
+    for index, row in enumerate(lanes, start=1):
+        if not isinstance(row, dict):
+            if version >= 2:
+                raise ValueError(f"evidence lane {index} is not an object")
+            continue
+        raw = str(row.get("path") or "").strip()
+        candidate = (root / raw).resolve() if raw else None
+        if candidate is None or not candidate.is_relative_to(root):
+            raise ValueError(f"evidence lane {index} escapes manifest root")
+        try:
+            lane_bytes = candidate.read_bytes()
+        except OSError as exc:
+            raise ValueError(f"evidence lane {index} is missing") from exc
+        if version >= 2:
+            if len(lane_bytes) != int(row.get("bytes") or -1):
+                raise ValueError(f"evidence lane {index} byte count mismatch")
+            if hashlib.sha256(lane_bytes).hexdigest() != str(row.get("sha256") or ""):
+                raise ValueError(f"evidence lane {index} fingerprint mismatch")
+        text = lane_bytes.decode("utf-8").strip()
+        if not text:
+            if version >= 2:
+                raise ValueError(f"evidence lane {index} is empty")
+            continue
+        title = str(row.get("title") or f"Evidence lane {index}").strip()
+        lane_sources = _read_manifest_lane_sources(
+            candidate, row, root=root, strict=version >= 2)
+        blocks = parse_evidence_pack(text)
+        if version >= 2 and not blocks:
+            raise ValueError(f"evidence lane {index} has no routable blocks")
+        routed: list[str] = []
+        safe_title = re.sub(r"\s+", " ", title).replace("--", "—")[:160]
+        for block_index, block in enumerate(blocks, start=1):
+            remapped = remap_lane_citations(
+                block, lane_sources, global_citation_entries)
+            for chunk_index, chunk in enumerate(
+                    chunk_evidence_block(remapped), start=1):
+                routed.append(
+                    f"<!-- evidence-lane:{index} title:{safe_title} "
+                    f"block:{block_index} chunk:{chunk_index} -->\n{chunk}"
+                )
+        if routed:
+            lane_parts.append(routed)
+            consumed_lanes += 1
+        elif version >= 2:
+            raise ValueError(f"evidence lane {index} produced no routed chunks")
+    # Interleave chunks by lane.  Both the outline sampler and section router
+    # therefore see broad/base-rate/adversarial evidence before any single lane
+    # can exhaust the shared character budget.
+    parts: list[str] = []
+    for offset in range(max((len(rows) for rows in lane_parts), default=0)):
+        for rows in lane_parts:
+            if offset < len(rows):
+                parts.append(rows[offset])
+    if not parts:
+        raise ValueError("evidence manifest contains no readable lane packs")
+    if version >= 2 and consumed_lanes != len(lanes):
+        raise ValueError("not every declared evidence lane was consumed")
+    return parts, sources
+
+
+def seed_manifest_sources(sources: list[dict]) -> int:
+    """Seed the global citation namespace from evidence fetched by outer lanes."""
+    seeded: list[dict] = []
+    seen: set[str] = set()
+    for source in sources or []:
+        url = _norm_url(source.get("url"))
+        if (not _is_valid_http_url(url) or url in seen
+                or _source_domain_denied(url)):
+            continue
+        seen.add(url)
+        seeded.append({
+            "url": url,
+            "ok": True,
+            "title": str(source.get("title") or _title_from_url(url)),
+            "excerpt": str(
+                source.get("excerpt") or source.get("content") or "")[:1200],
+        })
+    with _FETCHED_LOCK:
+        _FETCHED_SOURCES[:] = seeded
+    return len(seeded)
+
+
+def export_fetched_sources_for_manifest() -> list[dict]:
+    """Persist real fetched evidence, including excerpts needed for routing."""
+    exported: list[dict] = []
+    seen: set[str] = set()
+    with _FETCHED_LOCK:
+        rows = [dict(row) for row in _FETCHED_SOURCES]
+    for source in rows:
+        url = _norm_url(source.get("url"))
+        if (source.get("ok") is not True or not _is_valid_http_url(url)
+                or url in seen or _source_domain_denied(url)):
+            continue
+        seen.add(url)
+        exported.append({
+            "url": url,
+            "title": str(source.get("title") or _title_from_url(url)),
+            "excerpt": str(source.get("excerpt") or "")[:1200],
+            "source_origin": "fetched",
+            "reachable": True,
+            "tier": _tier_from_domain(url) or _default_source_tier(),
+        })
+    return exported
+
+
+def seed_validated_resume_sources(out_dir: str | Path) -> int:
+    """Restore the prior fetched ledger only after checkpoint validation.
+
+    ``main`` resets all run globals before planning resume.  A completed lane may
+    then skip every pass, so its source URLs must be restored deliberately from
+    the same-question handoff rather than surviving accidentally as an untouched
+    ``sources.json`` file.
+    """
+    source_path = Path(out_dir) / SOURCES_FILENAME
+    if not source_path.is_file():
+        return 0
+    try:
+        obj = json.loads(source_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return 0
+    rows = [dict(item) for item in obj if isinstance(item, dict)] \
+        if isinstance(obj, list) else []
+    return seed_manifest_sources(rows) if rows else 0
+
+
+def persist_evidence_sources(out_dir: str | Path, source_rows: list[dict]) -> None:
+    """Atomically replace a lane source ledger, including with an empty list."""
+    rows = [dict(item) for item in (source_rows or []) if isinstance(item, dict)]
+    _atomic_write_text(
+        Path(out_dir) / SOURCES_FILENAME,
+        json.dumps(rows, ensure_ascii=False, indent=2),
+    )
+
+
+def synthesize_from_evidence_parts(
+        parts: list[str], ai_parts: list[str], question: str,
+        target_language: str | None, model_name: str, plog: "ProgressLog",
+        depth: str = "standard") -> str:
+    """Write one dossier from already-collected evidence blocks.
+
+    This is the shared synthesis boundary for a single research thread and for
+    the multi-lane architecture. Outer lanes may gather orthogonal evidence in
+    parallel, but all of them converge here for one outline, one set of routed
+    section writers, and one final document namespace.
+    """
+    parts = [str(part).strip() for part in (parts or []) if str(part).strip()]
+    ai_parts = [
+        str(part).strip() for part in (ai_parts or []) if str(part).strip()
+    ]
+    context = "\n\n".join(parts).strip()
+    if not context:
+        plog.write("warn", "synthesize: gathered research context is empty")
+        return ""
+    _min_ctx = _synth_min_context_chars()
+    if _min_ctx and len(context) < _min_ctx:
+        plog.write(
+            "warn",
+            f"synthesize: gathered context only {len(context)} chars "
+            f"(< {_min_ctx}); refusing tool-free synthesis (would fabricate)",
+        )
+        _flag_research_degradation(
+            "synthesize: near-empty research context; refused tool-free fabrication")
+        return ""
+    synth_model = os.environ.get(
+        "DEERFLOW_SYNTHESIS_MODEL", "").strip() or model_name
+    _cap = _synthesis_context_cap(
+        synth_model,
+        context,
+        extra_prompt_chars=len(_final_dossier_contract_block()),
+    )
+    if len(context) > _cap:
+        context = build_stratified_outline_context(
+            parts, _cap, max_blocks=min(96, max(1, len(parts)))
+        )
+        context += "\n\n[...research context sampled fairly across evidence blocks...]"
+
+    if _multipart_synthesis_enabled(depth):
+        try:
+            multi = synthesize_multipart(
+                question, target_language, depth, synth_model,
+                parts, ai_parts, context, plog)
+            if multi.strip():
+                return multi
+        except Exception as e:  # noqa: BLE001 — deterministic fallback below
+            plog.write(
+                "warn",
+                "synthesize/multipart: crashed "
+                f"({type(e).__name__}: {e}); falling back to single-call synthesis",
+            )
+            _flag_research_degradation(
+                f"multipart synthesis crashed ({type(e).__name__}); "
+                "fell back to single-call synthesis")
+
+    plog.write(
+        "stage",
+        f"synthesize: writing report (tool-free) from {len(context)} chars "
+        "of gathered research",
+    )
+    try:
+        from deerflow.models import create_chat_model
+        from langchain_core.messages import HumanMessage
+
+        model = create_chat_model(synth_model, thinking_enabled=False)
+        _cit_block = ""
+        if _inline_citations_enabled():
+            _cit_entries = build_citation_index(
+                _FETCHED_SOURCES, _citation_index_cap())
+            if _cit_entries:
+                _set_pinned_citation_index(_cit_entries)
+                _cit_block = render_citation_index_block(_cit_entries)
+        prompt = (
+            build_synthesis_prompt(question, target_language, depth)
+            + _cit_block
+            + "\n\n=== GATHERED RESEARCH "
+            "(base the report ONLY on this; do not invent) ===\n"
+            + context
+        )
+        resp = _invoke_model(model, [HumanMessage(content=prompt)])
+        text = _message_text(getattr(resp, "content", resp))
+        plog.write("stage", f"synthesize: produced {len(text)} chars")
+        return text
+    except Exception as e:  # noqa: BLE001
+        plog.write(
+            "warn",
+            f"synthesize: tool-free model call failed ({type(e).__name__}: {e})",
+        )
+        return ""
+
+
 def synthesize_from_thread(client, thread_id: str, question: str, target_language: str | None, model_name: str, plog: "ProgressLog", depth: str = "standard") -> str:
     """Tool-free report synthesis from a thread's already-gathered research.
 
@@ -2488,107 +3505,11 @@ def synthesize_from_thread(client, thread_id: str, question: str, target_languag
     available the model has no choice but to synthesize, reliably producing the
     report from real, already-fetched sources.
     """
-    # 1) Pull the most recent checkpoint that has messages.
-    try:
-        thread = client.get_thread(thread_id)
-    except Exception as e:  # noqa: BLE001
-        plog.write("warn", f"synthesize: could not load thread ({type(e).__name__}: {e})")
+    parts, ai_parts = collect_thread_evidence_parts(client, thread_id, plog)
+    if not parts:
         return ""
-    messages: list = []
-    for cp in reversed(thread.get("checkpoints") or []):
-        vals = cp.get("values") or {}
-        if vals.get("messages"):
-            messages = vals["messages"]
-            break
-    if not messages:
-        plog.write("warn", "synthesize: no messages found in thread checkpoints")
-        return ""
-
-    # 2) Build the gathered-research context (fetched sources + any partial analysis).
-    # SCALE-1: 保留 parts 的块级结构（多段合成按块做关键词分片）并单独收集 AI 笔记
-    # （working-notes 摘要的原料）；单调用路径仍消费拼接后的 context，行为不变。
-    parts: list[str] = []
-    ai_parts: list[str] = []
-    for m in messages:
-        if not isinstance(m, dict):
-            continue
-        mtype = m.get("type")
-        text = _message_text(m.get("content"))
-        if not text:
-            continue
-        if mtype == "tool":
-            name = m.get("name") or "source"
-            parts.append(f"[{name}] {text}")
-        elif mtype == "ai":
-            parts.append(text)  # keep any partial analysis the model already wrote
-            ai_parts.append(text)
-    # PAR-1: 折叠并行 worker 的**完整**笔记。这些 worker 跑在隔离 thread_id 上，其
-    # 证据不在本线程 checkpoint 里（主线程只吸收了一段简短摘要）；把保留的全文原料并入
-    # parts/ai_parts，让 ~70% 会被丢弃的 fan-out 证据同样进入单调用/多段两条合成路径。
-    # 空表（standard/quick 或未开 fan-out）→ 无操作，逐字节不改今日行为。
-    for _wn in _collected_worker_notes():
-        parts.append(_wn)
-        ai_parts.append(_wn)
-    context = "\n\n".join(parts).strip()
-    if not context:
-        plog.write("warn", "synthesize: gathered research context is empty")
-        return ""
-    # RES-1: 上下文低于门槛时拒绝无工具合成——裸模型只会凭记忆编造报告。返回空串：
-    # deep 路径降级为拼接 pass notes，safety-net 路径保留原 report 交由最短长度门处理。
-    _min_ctx = _synth_min_context_chars()
-    if _min_ctx and len(context) < _min_ctx:
-        plog.write("warn", f"synthesize: gathered context only {len(context)} chars (< {_min_ctx}); refusing tool-free synthesis (would fabricate)")
-        _flag_research_degradation("synthesize: near-empty research context; refused tool-free fabrication")
-        return ""
-    # SCALE-4: 复刻 DEERFLOW_JUDGE_MODEL 的路由模式 —— 合成可指到专门模型（例如大窗口
-    # 长文写手），走同一 create_chat_model 查表机制；未设置 → 沿用研究模型，逐字节不变。
-    # 上下文上限按**实际执笔的**合成模型判类：路由到 MiniMax/Qwen/Gemini 等大窗口类时，
-    # _synthesis_context_cap 的既有 large-class 逻辑自动选 900K 档。
-    synth_model = os.environ.get("DEERFLOW_SYNTHESIS_MODEL", "").strip() or model_name
-    _cap = _synthesis_context_cap(synth_model)
-    if len(context) > _cap:
-        context = context[:_cap] + "\n\n[...research context truncated...]"
-
-    # SCALE-1: 多段合成（大纲 → 并行分节 → 缝合+摘要 → 长度门）。RES-1 反编造门在
-    # 上方已把关；任何结构性失败（大纲解析失败/过半分节空/异常）→ 打 _RESEARCH_FLAGS
-    # 并落回下方的单调用路径（今天的行为），degrade-safe。
-    if _multipart_synthesis_enabled(depth):
-        try:
-            multi = synthesize_multipart(question, target_language, depth, synth_model, parts, ai_parts, context, plog)
-            if multi.strip():
-                return multi
-        except Exception as e:  # noqa: BLE001 — 多段合成绝不让整轮合成失败
-            plog.write("warn", f"synthesize/multipart: crashed ({type(e).__name__}: {e}); falling back to single-call synthesis")
-            _flag_research_degradation(f"multipart synthesis crashed ({type(e).__name__}); fell back to single-call synthesis")
-
-    # 3) Bare, tool-free model call — it cannot keep researching, so it writes.
-    plog.write("stage", f"synthesize: writing report (tool-free) from {len(context)} chars of gathered research")
-    try:
-        from deerflow.models import create_chat_model
-        from langchain_core.messages import HumanMessage
-
-        model = create_chat_model(synth_model, thinking_enabled=False)
-        # WAVE9-RQ2: 单调用合成同样钉 SOURCE INDEX（与多段路径同一索引构造），
-        # [S<n>] 编号由管线派发而非模型自造；落盘前 finalize_report_citations 校验。
-        _cit_block = ""
-        if _inline_citations_enabled():
-            _cit_entries = build_citation_index(_FETCHED_SOURCES, _citation_index_cap())
-            if _cit_entries:
-                _set_pinned_citation_index(_cit_entries)
-                _cit_block = render_citation_index_block(_cit_entries)
-        prompt = (
-            build_synthesis_prompt(question, target_language, depth)
-            + _cit_block
-            + "\n\n=== GATHERED RESEARCH (base the report ONLY on this; do not invent) ===\n"
-            + context
-        )
-        resp = model.invoke([HumanMessage(content=prompt)])
-        text = _message_text(getattr(resp, "content", resp))
-        plog.write("stage", f"synthesize: produced {len(text)} chars")
-        return text
-    except Exception as e:  # noqa: BLE001
-        plog.write("warn", f"synthesize: tool-free model call failed ({type(e).__name__}: {e})")
-        return ""
+    return synthesize_from_evidence_parts(
+        parts, ai_parts, question, target_language, model_name, plog, depth)
 
 
 def extract_structured_tool_free(report: str, target_language: str | None, model_name: str, depth: str, plog: "ProgressLog") -> str:
@@ -2625,7 +3546,7 @@ def extract_structured_tool_free(report: str, target_language: str | None, model
             + "\n\n=== RESEARCH REPORT (extract the JSON strictly from this; do not search, do not invent) ===\n"
             + _extraction_report_excerpt(report)
         )
-        resp = model.invoke([HumanMessage(content=prompt)])
+        resp = _invoke_model(model, [HumanMessage(content=prompt)])
         text = _message_text(getattr(resp, "content", resp))
         plog.write("stage", f"extract (tool-free): produced {len(text)} chars")
         return text
@@ -3719,7 +4640,9 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
 
     try:
         while True:
-            for event in client.stream(_next_message, thread_id=thread_id, recursion_limit=_next_limit):
+            for event in _leased_client_stream(
+                    client, _next_message, thread_id=thread_id,
+                    recursion_limit=_next_limit):
                 if _corrective_pending:
                     break  # 触发事件已完整处理；结束本流段去注入纠偏消息（生成器随 break 关闭）
                 etype = event.type
@@ -3896,12 +4819,16 @@ def extract_kiqs_from_opening(opening_text: str, width: int = 4) -> list[str]:
 def build_scoped_worker_prompt(question: str, kiq: str, target_language: str | None) -> str:
     lang = f" Write your notes in {target_language}." if target_language else ""
     return (
+        "/deep-research\n"
         "You are a scoped sub-investigator within a larger forecasting research effort.\n"
         f"OVERALL QUESTION: {question}\n\n"
         f"YOUR NARROW FOCUS — investigate ONLY this, in depth: {kiq}\n\n"
-        "Budget per deep-research tradecraft: ~1/4 scoping the best sources, ~1/2 reading "
-        "primary sources in depth on this focus, ~1/4 actively disconfirming. Use your "
-        "search/read tools. Return concise, evidence-backed working notes (with source "
+        "Use search/read tools only while they advance this KIQ: a new independent origin, "
+        "a stronger evidence grade, a verified number, a resolved contradiction, or a real "
+        "disconfirming result. Stop when its load-bearing claims are B2-or-better and the "
+        "opposing case has been checked, or when plausible S1/S2 source classes are exhausted. "
+        "Two genuinely different angles with no evidence upgrade end the search. Return "
+        "concise, evidence-backed working notes (with source "
         "URLs/titles) on this focus ONLY — do not write the full report; another agent "
         "synthesizes.\n\n"
         # WAVE9：notes-first —— worker 的步进预算是硬的（预算耗尽即整段被打捞），实测 40–75
@@ -3909,26 +4836,40 @@ def build_scoped_worker_prompt(question: str, kiq: str, target_language: str | N
         "WRITE NOTES AS YOU GO — your tool-step budget is HARD and findings never written "
         "down are LOST when it runs out. After each batch of searching/reading, immediately "
         "record what you learned (specific facts with units/dates, source URL + title) in "
-        "your running notes. Well BEFORE ~80% of your budget is spent, STOP searching and "
+        "your running notes. As soon as the KIQ stopping rule is met, STOP searching and "
         "write out your complete final notes — a finished, evidence-backed note set beats an "
         f"unfinished search trail every time.{lang}"
     )
 
 
-def build_fanout_absorption_prompt(question: str, fanout_notes: str, target_language: str | None) -> str:
+def build_fanout_absorption_prompt(
+    question: str,
+    fanout_notes: str,
+    target_language: str | None,
+    prior_gaps: list[str] | None = None,
+) -> str:
     # PAR-1: 24000→100000。旧 24000 上限对一个 8-worker fan-out 只放行约 30% 的合并笔记，
     # 主线程吸收回合看不到其余证据；抬到 100000 让并行子调查的笔记基本原封不动地进入主线程
     # 的吸收上下文（合成路径另有 _collected_worker_notes 折叠全文，两处互补）。
     cap = 100000
     notes = fanout_notes if len(fanout_notes) <= cap else fanout_notes[:cap] + "\n…(truncated)…"
     lang = f" Respond in {target_language}." if target_language else ""
+    gaps = "\n".join(f"- {gap}" for gap in (prior_gaps or [])[:20])
+    gap_context = (
+        "\n\n=== PRIOR OPEN KIQ LEDGER ===\n" + gaps if gaps else ""
+    )
     return (
+        "/deep-research\n"
         "Several parallel scoped sub-investigations were run on key actors / key questions "
         "for this research. Read and INTERNALIZE their findings below so the upcoming "
         "contradiction-testing and final synthesis account for this breadth. Briefly note "
         "(a few lines) the most important cross-cutting findings and any contradictions they "
-        f"surface; do not re-run searches now.{lang}\n\n"
-        f"OVERALL QUESTION: {question}\n\n=== PARALLEL SUB-INVESTIGATION NOTES ===\n{notes}"
+        "surface; do not re-run searches now. End with a `## Gaps to carry into the next "
+        "pass` heading containing the COMPLETE still-open KIQ set after reconciling all "
+        "notes and the prior ledger. Omit resolved items and leave the section empty if "
+        f"none remain.{lang}\n\n"
+        f"OVERALL QUESTION: {question}{gap_context}\n\n"
+        f"=== PARALLEL SUB-INVESTIGATION NOTES ===\n{notes}"
     )
 
 
@@ -3971,7 +4912,8 @@ def start_deep_fanout(client, opening_text: str, question: str, depth: str,
         plog.write("warn", "deep fan-out: no KIQ/actor seeds parsed from opening; skipping")
         return None
     plog.write("stage", f"deep fan-out: {len(seeds)} scoped workers — {', '.join(seeds)}")
-    ex = _cf.ThreadPoolExecutor(max_workers=min(width, len(seeds)))
+    ex = _cf.ThreadPoolExecutor(max_workers=min(
+        width, len(seeds), _model_parallel_slots(_stream_model_lease_weight())))
     futs = {
         ex.submit(run_scoped_worker, client, s, question, thread_id, depth,
                   target_language, model_name, plog, i): s
@@ -4099,6 +5041,119 @@ def advance_gap_set(previous: "list[str] | None", fresh: "list[str] | None", *,
     if replace:
         return fresh_list, plateau
     return _merge_gaps(list(previous or []), list(fresh or []), cap=cap), plateau
+
+
+def notes_have_gap_section(notes: str) -> bool:
+    """Return whether notes contain the explicit KIQ convergence heading."""
+    return any(
+        bool(match and _GAP_HEADING_RE.search(match.group(1)))
+        for line in str(notes or "").splitlines()
+        if (match := re.match(r"^\s*#{1,6}\s+(.*\S)", line))
+    )
+
+
+def planned_deep_phase_indices(
+    opening_notes: str,
+    *,
+    shared_actor_track: bool,
+    convergence_scheduler: bool = True,
+) -> list[int]:
+    """Select orthogonal fixed phases after pass 0 establishes KIQ ownership.
+
+    Pass 0 and the legacy ``scope`` phase both map the terrain. Once pass 0 has
+    emitted its contract-complete KIQ ledger, repeating scope adds little new
+    evidence. Likewise, an enabled actor/ontology Track B owns actor incentives,
+    so Track A should consume that shared dossier downstream instead of running
+    a duplicate actor phase in every outer angle. Primary evidence,
+    contradiction testing, and forecast implications always remain.
+    """
+    scheduled = list(range(1, len(DEEP_RESEARCH_PHASES) + 1))
+    if not convergence_scheduler:
+        return scheduled
+    if notes_have_gap_section(opening_notes) and 1 in scheduled:
+        scheduled.remove(1)
+    if shared_actor_track:
+        scheduled = [
+            index for index in scheduled
+            if str(DEEP_RESEARCH_PHASES[index - 1].get("label"))
+            != "actors-and-incentives"
+        ]
+    return scheduled
+
+
+def advance_gap_set_from_notes(
+    previous: "list[str] | None",
+    notes: str,
+    *,
+    replace: bool = True,
+    cap: int = 20,
+) -> "tuple[list[str], bool]":
+    """Advance only when a pass emitted its required complete gap section.
+
+    An explicitly empty ``## Gaps ...`` section closes the ledger. A missing
+    section violates the pass contract, so retain the prior gaps rather than
+    falsely declaring convergence.
+    """
+    if not notes_have_gap_section(notes):
+        return list(previous or [])[:max(1, int(cap))], False
+    return advance_gap_set(
+        previous,
+        parse_gaps_from_notes(notes, limit=cap),
+        replace=replace,
+        cap=cap,
+    )
+
+
+def reconcile_parallel_gap_sets(
+    previous: "list[str] | None",
+    note_sets: "list[str] | None",
+    *,
+    cap: int = 20,
+) -> "tuple[list[str], bool]":
+    """Merge complete KIQ ledgers emitted by independent parallel phases.
+
+    All workers receive the same carried ledger. A carried gap remains open
+    only when every contract-compliant worker still reports it; one worker's
+    sourced resolution closes it. Newly discovered gaps are unioned. Missing
+    gap sections are ignored instead of being mistaken for convergence.
+    """
+    previous_items = [
+        str(g) for g in (previous or []) if _normalize_gap(g)]
+    previous_by_norm = {_normalize_gap(g): g for g in previous_items}
+    parsed_sets: list[list[str]] = []
+    for notes in note_sets or []:
+        unchanged, _ = advance_gap_set_from_notes(
+            previous_items, notes, replace=True, cap=cap)
+        if notes_have_gap_section(notes):
+            parsed_sets.append(unchanged)
+    if not parsed_sets:
+        return previous_items[:max(1, int(cap))], False
+
+    normalized_sets = [
+        {_normalize_gap(g) for g in gaps if _normalize_gap(g)}
+        for gaps in parsed_sets
+    ]
+    still_open_old = set(previous_by_norm)
+    for normalized in normalized_sets:
+        still_open_old.intersection_update(normalized)
+
+    merged = [
+        gap for gap in previous_items if _normalize_gap(gap) in still_open_old]
+    seen = {_normalize_gap(gap) for gap in merged}
+    for gaps in parsed_sets:
+        for gap in gaps:
+            normalized = _normalize_gap(gap)
+            if not normalized or normalized in previous_by_norm or normalized in seen:
+                continue
+            seen.add(normalized)
+            merged.append(gap)
+            if len(merged) >= max(1, int(cap)):
+                break
+        if len(merged) >= max(1, int(cap)):
+            break
+    previous_norm = set(previous_by_norm)
+    merged_norm = {_normalize_gap(g) for g in merged if _normalize_gap(g)}
+    return merged, bool(merged_norm) and merged_norm == previous_norm
 
 
 def adaptive_passes_remaining(coverage_rounds_run: int, max_adaptive_total: int) -> int:
@@ -4251,6 +5306,7 @@ def build_report_refine_prompt(question: str, gaps: list, depth: str,
     gap_lines = "\n".join(f"- {str(g)}" for g in (gaps or [])[:12])
     lang = f"\n用{target_language}书写工作笔记。" if target_language else ""
     return (
+        "/deep-research\n"
         "对【预测问题】的研究报告，一名评审按 INSIGHT CONTRACT 指出了以下**具体缺口**。只针对这些"
         "缺口做定向研究（必要时搜索/取证），补齐相应的参照类基率与历史类比、因→果机制链与二阶效应、"
         "带单位/日期/来源的量化事实、非共识/反证据、或缺失的来源归属，**不要**重写整份报告、不要偏离"
@@ -4270,13 +5326,17 @@ def judge_research_report(report: str, question: str, target_language: str | Non
         # RQ-3: 复用 DEERFLOW_JUDGE_MODEL 路由（与 judge_dossier 同一批评家）；未设置 → model_name。
         judge_model = os.environ.get("DEERFLOW_JUDGE_MODEL", "").strip() or model_name
         model = create_chat_model(judge_model, thinking_enabled=False)
-        target_words = "15,000–25,000 words" if depth == "deep" else "3,500–6,000 words"
+        target_words = (
+            "at least 15,000 evidence-dense words, expanding as needed with no final maximum"
+            if depth == "deep"
+            else "at least 3,500 evidence-dense words, expanding as needed"
+        )
         prompt = (
             build_report_judge_prompt(question, target_language, target_words,
                                       _dossier_source_signal(report or ""))
             + "\n=== 研究报告 ===\n" + (report or "")[:_JUDGE_INPUT_CAP]
         )
-        resp = model.invoke([HumanMessage(content=prompt)])
+        resp = _invoke_model(model, [HumanMessage(content=prompt)])
         text = _message_text(getattr(resp, "content", resp))
         sc = extract_json_object(text)
         if isinstance(sc, dict):
@@ -4565,6 +5625,7 @@ def build_triangulation_verification_prompt(question: str, claims: list,
     lines = [f"- {t[:240]}" for t in (_claim_text(c) for c in list(claims or [])[:10]) if t]
     claim_block = "\n".join(lines) or "- (no parseable single-origin claims)"
     return (
+        "/deep-research\n"
         "TRIANGULATION VERIFICATION PASS — corroborate or refute the single-origin claims below.\n\n"
         f"RESEARCH BRIEF:\n{question}\n\n"
         "Each claim below is LOAD-BEARING but currently rests on a SINGLE source. For each, run "
@@ -4634,13 +5695,17 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
     # True，逐字节不改行为）；out_dir 空或 RESEARCH_CHECKPOINT=false → ckpt 记录为 no-op。
     _resume_done = set(resume_completed or [])
     _resume = bool(_resume_done)
+    _evidence_only = _env_flag("RESEARCH_EVIDENCE_ONLY", False)
     ckpt = ResearchCheckpointer(out_dir, thread_id, depth, question, enabled=_checkpoint_enabled())
     ckpt.seed_completed(_resume_done)
     if depth != "deep":
         if should_run_pass("standard", _resume_done, _resume):
             text = run_streamed_turn(
                 client,
-                build_research_prompt(question, depth, target_language),
+                build_research_prompt(
+                    question, depth, target_language,
+                    evidence_only=_evidence_only,
+                ),
                 thread_id,
                 preset["recursion_limit"],
                 plog,
@@ -4649,44 +5714,105 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
             if text.strip():
                 ckpt.record_pass("standard")
         else:
-            # 续跑：唯一的 research pass 已完成 → 不重跑该轮，从复用线程重合成即可（便宜）。
-            plog.write("resume", "跳过已完成 pass: standard（从复用线程重合成）")
-            text = synthesize_from_thread(client, thread_id, question, target_language, model_name, plog, depth=depth)
-        # RES-11: RESEARCH_COVERAGE_GATE 文档上是通用默认开的门，但此前只在 deep 生效——
-        # 默认深度 standard 完全没有来源下限。SCALE-2: RESEARCH_COVERAGE_GATE_STANDARD
-        # 默认改为 true（原 false）——standard 也该有来源下限；=false 恢复旧的无门槛行为。
-        # 开启时对 standard 跑有界 top-up + 重合成；任何失败保留原文。
+            # 续跑：唯一的 research pass 已完成。证据轨只需从 checkpoint
+            # 重建证据包，不应为每轨再烧一次报告合成；传统单轨续跑保持
+            # 原有「便宜重合成」回退。
+            if _evidence_only:
+                plog.write(
+                    "resume",
+                    "跳过已完成 pass: standard（从复用线程导出证据，不合成报告）",
+                )
+                text = ""
+            else:
+                plog.write("resume", "跳过已完成 pass: standard（从复用线程重合成）")
+                text = synthesize_from_thread(client, thread_id, question, target_language, model_name, plog, depth=depth)
+        # LOOP-010: source counts are diagnostics, never work quotas.  Standard
+        # depth receives a targeted top-up only when its own output explicitly
+        # carries unresolved KIQ gaps; a low raw source count alone no longer
+        # forces two broad research turns.  Each pass must shrink the gap set or
+        # add a newly fetched independent source, otherwise convergence stops.
         if (depth == "standard" and _env_flag("RESEARCH_COVERAGE_GATE", True)
                 and _env_flag("RESEARCH_COVERAGE_GATE_STANDARD", True)):
             try:
-                _min_src = _research_min_sources(depth)  # SCALE-2: standard 保持默认 20
+                _source_reference = _research_source_count_reference(depth)
+                _standard_gaps = parse_gaps_from_notes(text)
                 try:
                     _max_topups = max(0, int(os.environ.get("RESEARCH_COVERAGE_GATE_MAX_ROUNDS", "2") or "2"))
                 except ValueError:
                     _max_topups = 2
                 _ran_topup = False
+                _no_yield_rounds = 0
                 for _round in range(_max_topups):
-                    have = distinct_fetched_count()
-                    if have >= _min_src:
+                    if not _standard_gaps:
                         break
-                    plog.write("warn", f"coverage gate/standard (round {_round + 1}/{_max_topups}): only {have} distinct sources fetched (<{_min_src}); running a source-broadening top-up pass")
+                    _before_sources = distinct_fetched_count()
+                    _before_norm = {
+                        _normalize_gap(g) for g in _standard_gaps if _normalize_gap(g)
+                    }
+                    plog.write(
+                        "warn",
+                        f"KIQ convergence/standard (round {_round + 1}/{_max_topups}): "
+                        f"{len(_standard_gaps)} explicit unresolved gap(s); running a targeted pass",
+                    )
                     topup = run_streamed_turn(
                         client,
-                        build_coverage_topup_prompt(question, None, have, _min_src, target_language),
-                        thread_id, 240, plog, f"research:standard-coverage-topup-{_round + 1}",
+                        build_gap_closing_prompt(question, _standard_gaps, target_language),
+                        thread_id, 240, plog, f"research:standard-kiq-topup-{_round + 1}",
                     )
-                    _ran_topup = _ran_topup or bool(topup.strip())
-                if _ran_topup:
+                    if not topup.strip():
+                        break
+                    _ran_topup = True
+                    if not notes_have_gap_section(topup):
+                        plog.write(
+                            "warn",
+                            "KIQ convergence/standard: targeted pass omitted "
+                            "the complete KIQ ledger; retaining prior gaps and stopping",
+                        )
+                        break
+                    _fresh_gaps = parse_gaps_from_notes(topup)
+                    _standard_gaps, _plateau = advance_gap_set_from_notes(
+                        _standard_gaps,
+                        topup,
+                        replace=_env_flag("RESEARCH_GAP_SET_REPLACE", True),
+                    )
+                    _after_norm = {
+                        _normalize_gap(g) for g in _standard_gaps if _normalize_gap(g)
+                    }
+                    _source_delta = max(
+                        0, distinct_fetched_count() - _before_sources
+                    )
+                    _gaps_closed = len(_before_norm - _after_norm)
+                    if _source_delta == 0 and _gaps_closed == 0:
+                        _no_yield_rounds += 1
+                    else:
+                        _no_yield_rounds = 0
+                    if _plateau or _no_yield_rounds >= 2:
+                        plog.write(
+                            "warn",
+                            "KIQ convergence/standard: no evidence upgrade; stopping targeted top-ups",
+                        )
+                        break
+                if _ran_topup and not _evidence_only:
                     # top-up 的笔记在同一线程里；重合成把新证据并入报告，失败则保留原文。
                     synth = synthesize_from_thread(client, thread_id, question, target_language, model_name, plog, depth=depth)
                     if len(synth.strip()) > len(text.strip()):
                         text = synth
-                plog.write("stage", f"coverage gate/standard: {distinct_fetched_count()} distinct sources fetched (floor {_min_src})")
+                plog.write(
+                    "stage",
+                    f"KIQ convergence/standard: {len(_standard_gaps)} explicit gap(s) remain; "
+                    f"{distinct_fetched_count()} distinct sources fetched "
+                    f"(telemetry reference {_source_reference}, diagnostic only; "
+                    "never a work or quality quota)",
+                )
             except Exception as _te:  # noqa: BLE001 — top-up 只做加法，绝不破坏本轮
-                plog.write("warn", f"standard coverage top-up skipped (non-fatal): {_te}")
+                plog.write("warn", f"standard KIQ top-up skipped (non-fatal): {_te}")
+        if _evidence_only:
+            parts, _ai_parts = collect_thread_evidence_parts(
+                client, thread_id, plog)
+            return render_evidence_pack(parts or [text])
         return text
 
-    plog.write("stage", f"deep: starting multi-pass research protocol ({len(DEEP_RESEARCH_PHASES) + 1} research turns + final synthesis)")
+    plog.write("stage", f"deep: starting multi-pass research protocol (up to {len(DEEP_RESEARCH_PHASES) + 1} research turns; KIQ scheduler may skip redundant phases; final synthesis follows)")
     reports: list[str] = []
     # SCALE-2: 开场默认 220→300（环境覆盖照旧生效）——开场负责铺源图/定 KIQ，预算与
     # 各 pass 的 ×1.5 扩容保持同一比例。
@@ -4694,7 +5820,10 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
     if should_run_pass("deep-opening", _resume_done, _resume):
         opening = run_streamed_turn(
             client,
-            build_research_prompt(question, depth, target_language),
+            build_research_prompt(
+                question, depth, target_language,
+                evidence_only=_evidence_only,
+            ),
             thread_id,
             opening_limit,
             plog,
@@ -4742,6 +5871,24 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
     # list yields the original prompt). Seed from the opening pass's gap section.
     _gap_threading = _env_flag("RESEARCH_DEEP_GAP_THREADING", True)
     accumulated_gaps: list[str] = parse_gaps_from_notes(opening) if _gap_threading else []
+    _scheduled_phase_indices = planned_deep_phase_indices(
+        opening,
+        shared_actor_track=_env_flag("RESEARCH_SHARED_ACTOR_TRACK", False),
+        convergence_scheduler=_env_flag(
+            "RESEARCH_CONVERGENCE_SCHEDULER", True),
+    )
+    _skipped_by_scheduler = sorted(
+        set(range(1, len(DEEP_RESEARCH_PHASES) + 1))
+        - set(_scheduled_phase_indices))
+    if _skipped_by_scheduler:
+        plog.write(
+            "stage",
+            "KIQ convergence scheduler: skipping redundant fixed phase(s) "
+            + ", ".join(
+                str(DEEP_RESEARCH_PHASES[index - 1]["label"])
+                for index in _skipped_by_scheduler
+            ),
+        )
     # PAR-1: PHASE PARALLELISM（默认对 deep 开启）。scope（第 1 pass，为后续铺缺口）仍在
     # 主线程顺序跑；随后 primary-evidence / actors-and-incentives / contradictions-and-risks
     # 这三个中间 pass 改为**并行** scoped worker（各自隔离 thread_id + 各自 phase 预算，复用
@@ -4766,12 +5913,20 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
     # 结束后 join 并跑吸收回合（吸收本就是喂给 scope **之后**的相位，顺序语义不变）——
     # 实测省 11–15 分钟关键路径。overlap 不可用/关闭 → 走原阻塞路径（逐字节同今日）。
     _fanout_pending = None
-    if _env_flag("RESEARCH_DEEP_FANOUT", False) and opening.strip():
+    if (_env_flag("RESEARCH_DEEP_FANOUT", False) and opening.strip()
+            and not _bridge_fanout_enabled() and _agentic_delegation_enabled()):
+        plog.write(
+            "stage",
+            "breadth controller: harness scoped-researcher delegation active; "
+            "legacy bridge KIQ fan-out suppressed (single breadth plane)",
+        )
+    if _bridge_fanout_enabled() and opening.strip():
         try:
             width = max(1, int(os.environ.get("RESEARCH_FANOUT_WIDTH", "4") or "4"))
             _overlap_ok = (
                 _env_flag("RESEARCH_FANOUT_OVERLAP_SCOPE", True)
                 and _parallel_ok
+                and 1 in _scheduled_phase_indices
                 and should_run_pass("deep-phase-1", _resume_done, _resume)
             )
             if _overlap_ok:
@@ -4786,14 +5941,31 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                 )
                 if fanout_notes.strip():
                     reports.append(fanout_notes)
-                    run_streamed_turn(
-                        client,
-                        build_fanout_absorption_prompt(question, fanout_notes, target_language),
-                        thread_id,
-                        120,
-                        plog,
-                        "research:deep-fanout-merge",
+                    _fanout_payload = _tag_parallel_evidence(
+                        "Parallel evidence notes for the current research brief. "
+                        "Treat these as source-grounded internal evidence for later "
+                        "contradiction testing and synthesis; do not narrate the "
+                        "research process.\n\n" + fanout_notes
                     )
+                    if inject_thread_message(
+                            client, thread_id, _fanout_payload):
+                        plog.write(
+                            "ok",
+                            "deep fan-out: injected evidence as a plain thread "
+                            "message (no absorption model turn)",
+                        )
+                    else:
+                        run_streamed_turn(
+                            client,
+                            build_fanout_absorption_prompt(
+                                question, fanout_notes, target_language,
+                                prior_gaps=accumulated_gaps,
+                            ),
+                            thread_id,
+                            120,
+                            plog,
+                            "research:deep-fanout-merge:fallback",
+                        )
         except Exception as exc:  # noqa: BLE001 — fan-out is additive; never break the run
             plog.write("warn", f"deep fan-out skipped: {exc}")
 
@@ -4801,11 +5973,16 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
         import concurrent.futures as _cf
 
         _scope_phase = DEEP_RESEARCH_PHASES[0]
-        _parallel_group = list(DEEP_RESEARCH_PHASES[1:-1])  # primary-evidence / actors / contradictions
+        _parallel_group = [
+            (index, phase)
+            for index, phase in enumerate(DEEP_RESEARCH_PHASES[1:-1], start=2)
+            if index in _scheduled_phase_indices
+        ]
         _final_phase = DEEP_RESEARCH_PHASES[-1]             # forecast-implications
 
         # (1) scope —— 顺序、主线程（与今日一致，其缺口为并行组铺路）。
-        if should_run_pass("deep-phase-1", _resume_done, _resume):
+        if (1 in _scheduled_phase_indices
+                and should_run_pass("deep-phase-1", _resume_done, _resume)):
             _scope_text = run_streamed_turn(
                 client,
                 build_deep_phase_prompt(
@@ -4820,8 +5997,20 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
             if _scope_text.strip():
                 reports.append(_scope_text)
                 if _gap_threading:
-                    accumulated_gaps = _merge_gaps(accumulated_gaps, parse_gaps_from_notes(_scope_text))
+                    accumulated_gaps, _ = advance_gap_set_from_notes(
+                        accumulated_gaps,
+                        _scope_text,
+                        replace=_env_flag("RESEARCH_GAP_SET_REPLACE", True),
+                    )
                 ckpt.record_pass("deep-phase-1", gaps=accumulated_gaps)
+        elif 1 not in _scheduled_phase_indices:
+            plog.write(
+                "stage",
+                "KIQ convergence scheduler: pass 0 already owns scope mapping; "
+                "skipping deep-phase-1",
+            )
+            ckpt.record_pass("deep-phase-1", gaps=accumulated_gaps)
+            _scope_text = ""
         else:
             plog.write("resume", "跳过已完成 pass: deep-phase-1（scope）")
             _scope_text = ""
@@ -4834,14 +6023,31 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                 fanout_notes = join_deep_fanout(_fanout_pending, plog)
                 if fanout_notes.strip():
                     reports.append(fanout_notes)
-                    run_streamed_turn(
-                        client,
-                        build_fanout_absorption_prompt(question, fanout_notes, target_language),
-                        thread_id,
-                        120,
-                        plog,
-                        "research:deep-fanout-merge",
+                    _fanout_payload = _tag_parallel_evidence(
+                        "Parallel evidence notes for the current research brief. "
+                        "Treat these as source-grounded internal evidence for later "
+                        "contradiction testing and synthesis; do not narrate the "
+                        "research process.\n\n" + fanout_notes
                     )
+                    if inject_thread_message(
+                            client, thread_id, _fanout_payload):
+                        plog.write(
+                            "ok",
+                            "deep fan-out: injected evidence as a plain thread "
+                            "message (no absorption model turn)",
+                        )
+                    else:
+                        run_streamed_turn(
+                            client,
+                            build_fanout_absorption_prompt(
+                                question, fanout_notes, target_language,
+                                prior_gaps=accumulated_gaps,
+                            ),
+                            thread_id,
+                            120,
+                            plog,
+                            "research:deep-fanout-merge:fallback",
+                        )
             except Exception as exc:  # noqa: BLE001 — fan-out is additive; never break the run
                 plog.write("warn", f"deep fan-out skipped: {exc}")
             finally:
@@ -4870,7 +6076,7 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
         # checkpoint 里）。跳过的相位记入 _skipped_phases，视同成功（不走顺序补跑、不重复吸收）。
         _skipped_phases: set[int] = set()
         _to_run: list[tuple[int, dict]] = []
-        for _i, _p in enumerate(_parallel_group, start=2):
+        for _i, _p in _parallel_group:
             if should_run_pass(f"deep-phase-{_i}", _resume_done, _resume):
                 _to_run.append((_i, _p))
             else:
@@ -4882,7 +6088,9 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
         _parallel_success: set[int] = set()
         if _to_run:
             try:
-                with _cf.ThreadPoolExecutor(max_workers=len(_to_run)) as _ex:
+                with _cf.ThreadPoolExecutor(max_workers=min(
+                        len(_to_run),
+                        _model_parallel_slots(_stream_model_lease_weight()))) as _ex:
                     _futs = {
                         _ex.submit(_run_phase_worker, _i, _p): _i
                         for _i, _p in _to_run
@@ -4902,7 +6110,7 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
 
         # (3) 任一 pass 并行未出笔记 → 主线程顺序补跑（其笔记本就落主线程 checkpoint，不再折叠）。
         # 续跑跳过的相位（_skipped_phases）不补跑。
-        for _i, _phase in enumerate(_parallel_group, start=2):
+        for _i, _phase in _parallel_group:
             if _i in _parallel_success or _i in _skipped_phases:
                 continue
             plog.write("warn", f"deep phase {_i} ({_phase['label']}): parallel worker empty; running sequential fallback on main thread")
@@ -4929,21 +6137,42 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
         # (4) 把并行成功的三 pass 笔记吸收进主线程（uncut 至 cap），让顺序收尾 pass 看得到。
         _merged_parallel = "\n\n---\n\n".join(
             f"## 阶段并行调查：{_phase['label']}\n\n{_phase_results[_i].strip()}"
-            for _i, _phase in enumerate(_parallel_group, start=2)
+            for _i, _phase in _parallel_group
             if _i in _parallel_success and _phase_results.get(_i, "").strip()
         )
         _absorbed_ok = False
         if _merged_parallel.strip():
             try:
-                run_streamed_turn(
+                _absorbed_ok = inject_thread_message(
                     client,
-                    build_fanout_absorption_prompt(question, _merged_parallel, target_language),
                     thread_id,
-                    120,
-                    plog,
-                    "research:deep-parallel-phase-merge",
+                    _tag_parallel_evidence(
+                        "Parallel phase evidence for the current research brief. "
+                        "Treat it as source-grounded internal evidence for the final "
+                        "forecast, and never describe these phases in the published "
+                        "report.\n\n" + _merged_parallel),
                 )
-                _absorbed_ok = True
+                if _absorbed_ok:
+                    plog.write(
+                        "ok",
+                        "deep parallel phases: injected evidence as a plain "
+                        "thread message (no absorption model turn)",
+                    )
+                else:
+                    run_streamed_turn(
+                        client,
+                        build_fanout_absorption_prompt(
+                            question,
+                            _merged_parallel,
+                            target_language,
+                            prior_gaps=accumulated_gaps,
+                        ),
+                        thread_id,
+                        120,
+                        plog,
+                        "research:deep-parallel-phase-merge:fallback",
+                    )
+                    _absorbed_ok = True
             except Exception as _exc:  # noqa: BLE001 — 吸收是加法，绝不破坏本轮
                 plog.write("warn", f"deep parallel-phase absorption skipped: {_exc}")
 
@@ -4955,13 +6184,30 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                 if _phase_results.get(_i, "").strip():
                     ckpt.record_pass(f"deep-phase-{_i}")
 
-        # (5) 按 pass 顺序并入 reports + 合并全部中间 pass 携出的缺口（join 后统一喂收尾 pass）。
+        # Reconcile the complete KIQ ledgers emitted from the same seed. A
+        # prior gap closes when any scoped phase resolves it; newly discovered
+        # gaps remain unioned. If injection failed, retain the conservative old
+        # merge behavior because the main thread cannot verify the resolutions.
+        if _gap_threading:
+            if _absorbed_ok:
+                accumulated_gaps, _ = reconcile_parallel_gap_sets(
+                    accumulated_gaps,
+                    [
+                        _phase_results[i]
+                        for i in sorted(_phase_results)
+                        if _phase_results[i].strip()
+                    ],
+                )
+            else:
+                for _txt in _phase_results.values():
+                    accumulated_gaps = _merge_gaps(
+                        accumulated_gaps, parse_gaps_from_notes(_txt))
+
+        # (5) 按 pass 顺序并入 reports；缺口已由上面的状态账本一次性协调。
         for _i in sorted(_phase_results):
             _txt = _phase_results[_i]
             if _txt.strip():
                 reports.append(_txt)
-                if _gap_threading:
-                    accumulated_gaps = _merge_gaps(accumulated_gaps, parse_gaps_from_notes(_txt))
 
         # (6) forecast-implications —— 顺序、主线程，看得到 scope + 三并行 pass 的全部证据与缺口。
         if should_run_pass(f"deep-phase-{_total_phases}", _resume_done, _resume):
@@ -4979,13 +6225,25 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
             if _final_text.strip():
                 reports.append(_final_text)
                 if _gap_threading:
-                    accumulated_gaps = _merge_gaps(accumulated_gaps, parse_gaps_from_notes(_final_text))
+                    accumulated_gaps, _ = advance_gap_set_from_notes(
+                        accumulated_gaps,
+                        _final_text,
+                        replace=_env_flag("RESEARCH_GAP_SET_REPLACE", True),
+                    )
                 ckpt.record_pass(f"deep-phase-{_total_phases}", gaps=accumulated_gaps)
         else:
             plog.write("resume", f"跳过已完成 pass: deep-phase-{_total_phases}（{_final_phase['label']}）")
     else:
         for idx, phase in enumerate(DEEP_RESEARCH_PHASES, start=1):
             _seq_pass_id = f"deep-phase-{idx}"
+            if idx not in _scheduled_phase_indices:
+                plog.write(
+                    "stage",
+                    f"KIQ convergence scheduler: skipping {_seq_pass_id} "
+                    f"({phase['label']})",
+                )
+                ckpt.record_pass(_seq_pass_id, gaps=accumulated_gaps)
+                continue
             if not should_run_pass(_seq_pass_id, _resume_done, _resume):
                 plog.write("resume", f"跳过已完成 pass: {_seq_pass_id}（{phase['label']}）")
                 continue
@@ -5004,44 +6262,29 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
             if phase_text.strip():
                 reports.append(phase_text)
                 if _gap_threading:
-                    accumulated_gaps = _merge_gaps(accumulated_gaps, parse_gaps_from_notes(phase_text))
+                    accumulated_gaps, _ = advance_gap_set_from_notes(
+                        accumulated_gaps,
+                        phase_text,
+                        replace=_env_flag("RESEARCH_GAP_SET_REPLACE", True),
+                    )
                 ckpt.record_pass(_seq_pass_id, gaps=accumulated_gaps)
 
-    # #2 COVERAGE GATE — actionable, not just a warning. If too few DISTINCT sources were
-    # actually fetched-and-read, run a bounded number of top-up passes that broaden
-    # high-tier coverage (and FETCH the pages) BEFORE synthesis, so the dossier rests on a
-    # wide evidence base rather than a handful. Uses the #1 live fetched-URL count. Default
-    # on; degrade-safe (wrapped; never breaks the run; SOFT — only adds passes, never fails
-    # the run, distinct from the orchestrator's hard RESEARCH_QUALITY_GATE). Bounded by
-    # RESEARCH_COVERAGE_GATE_MAX_ROUNDS.
-    _coverage_rounds_run = 0  # SCALE-5: 计入自适应 pass 预算的实际补充轮数
+    # LOOP-010: breadth telemetry remains useful, but a fixed source floor is not
+    # a reason to spend another model turn.  The explicit KIQ gap ledger below is
+    # now the sole top-up trigger and already has convergence/plateau guards.
+    # This removes up to four unconditional broad passes from a deep run while
+    # preserving the source-count signal for observability.
+    _coverage_rounds_run = 0
     if _env_flag("RESEARCH_COVERAGE_GATE", True):
-        min_sources = _research_min_sources(depth)  # SCALE-2: deep 默认 20→45（env 显式设置则从 env）
-        try:
-            # SCALE-2: deep 档默认 2→4 轮 —— 45 源门槛下 2 轮 top-up 常常补不满就放行。
-            max_topups = max(0, int(os.environ.get("RESEARCH_COVERAGE_GATE_MAX_ROUNDS", "4") or "4"))
-        except ValueError:
-            max_topups = 4
-        for _round in range(max_topups):
-            have = distinct_fetched_count()
-            if have >= min_sources:
-                break
-            plog.write("warn", f"coverage gate (round {_round + 1}/{max_topups}): only {have} distinct sources fetched (<{min_sources}); running a source-broadening top-up pass")
-            try:
-                topup = run_streamed_turn(
-                    client,
-                    build_coverage_topup_prompt(question, accumulated_gaps, have, min_sources, target_language),
-                    thread_id, 360, plog, f"research:deep-coverage-topup-{_round + 1}",
-                )
-                _coverage_rounds_run += 1
-                if topup.strip():
-                    reports.append(topup)
-                    if _gap_threading:
-                        accumulated_gaps = _merge_gaps(accumulated_gaps, parse_gaps_from_notes(topup))
-            except Exception as _te:  # noqa: BLE001 — top-up is additive; never break the run
-                plog.write("warn", f"coverage top-up pass skipped (non-fatal): {_te}")
-                break
-        plog.write("stage", f"coverage gate: {distinct_fetched_count()} distinct sources fetched (floor {min_sources})")
+        _source_reference = _research_source_count_reference(depth)
+        _have_sources = distinct_fetched_count()
+        plog.write(
+            "stage",
+            f"coverage diagnostic: {_have_sources} distinct sources fetched "
+            f"(telemetry reference {_source_reference}, not a pass/fail floor; "
+            "no count-driven top-up; "
+            f"{len(accumulated_gaps)} explicit KIQ gap(s) govern continuation)",
+        )
 
     # SCALE-5: 自适应收尾 pass —— 覆盖门（源数量）满足后，只要**上一轮笔记仍报出未决 gaps**
     # 且总 pass 数未触顶，就再跑一次**定向**收口调研（补 gaps，而非泛化拓源）。总 pass 上限
@@ -5074,12 +6317,19 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
             if not _gtxt.strip():
                 break
             reports.append(_gtxt)
+            if not notes_have_gap_section(_gtxt):
+                plog.write(
+                    "warn",
+                    "adaptive gap-closing: pass omitted the required complete "
+                    "KIQ ledger; retaining prior gaps and stopping",
+                )
+                break
             _fresh = parse_gaps_from_notes(_gtxt)
             # WAVE9：收口提示词已要求「只列**仍未决**的 gaps」——缺口集改为整体替换（闭合即
             # 出清单，环才可能收敛），并加平台期检测（归一化后与上一轮零变化 → 停，别再烧
             # 同一批打不动的缺口）。RESEARCH_GAP_SET_REPLACE=false 恢复旧 merge-only 语义。
-            accumulated_gaps, _plateau = advance_gap_set(
-                accumulated_gaps, _fresh,
+            accumulated_gaps, _plateau = advance_gap_set_from_notes(
+                accumulated_gaps, _gtxt,
                 replace=_env_flag("RESEARCH_GAP_SET_REPLACE", True),
             )
             if not _fresh:  # 本轮不再报出新 gaps → 视为收敛，停止
@@ -5094,6 +6344,18 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
     # ITEM-3：合成前刷新一次 checkpoint 的 gaps/抓取数（覆盖门 + 自适应轮跑完后的最新状态）。
     # 不新增 completed pass —— 合成本身很便宜、续跑照常重跑，无需被跳过。
     ckpt.update_progress(gaps=accumulated_gaps)
+
+    if _evidence_only:
+        parts, _ai_parts = collect_thread_evidence_parts(
+            client, thread_id, plog)
+        if not parts:
+            parts = reports
+        plog.write(
+            "stage",
+            f"deep: evidence lane complete — exporting {len(parts)} blocks; "
+            "global synthesis owns outline, section writing, and judge",
+        )
+        return render_evidence_pack(parts)
 
     synth = synthesize_from_thread(client, thread_id, question, target_language, model_name, plog, depth=depth)
     if synth.strip():
@@ -5140,15 +6402,17 @@ def build_actor_ontology_prompt(question: str, depth: str, target_language: str 
             "multi-party situations), chosen by causal role, not by how often a name appeared."
         )
     return (
+        "/actor-ontology-research\n"
         "You are an actor-ontology research lead producing the SEED material for a "
         "forecasting pipeline (knowledge graph + ontology + actor-based simulation). "
-        "FOLLOW THE 'actor-ontology-research' skill: build on the deep-research skill's "
+        "The actor-ontology-research skill is deterministically activated above. Build on "
+        "the deep-research skill's "
         "search craft, source tiering (S1–S4), evidence grading, triangulation, and "
         "verification, but specialize the mission toward an ACTOR-CENTRIC, "
         "ONTOLOGY-READY dossier rather than a generic topic report.\n\n"
-        "TOOLING: This is WEB research — use web_search and web_fetch ONLY. There is NO local "
-        "file corpus or workspace to inspect; do NOT call ls / read_file / glob / bash, and if "
-        "a filesystem tool returns a permission error, ignore it and go straight to web_search.\n\n"
+        "TOOLING: This is WEB research — use web_search and web_fetch. There is NO arbitrary "
+        "local corpus to explore; do not call ls/glob/bash. read_file is permitted ONLY for "
+        "a harness-managed externalized tool-result path or activated skill resource.\n\n"
         f"FORECAST QUESTION:\n{question}\n\n"
         "Search the web from multiple angles, fetch and read the most important primary "
         "sources in full, then produce a SINGLE ontology-ready Markdown ACTOR DOSSIER "
@@ -5307,6 +6571,7 @@ def build_actor_refinement_prompt(question: str, gaps: list, depth: str,
     gap_lines = "\n".join(f"- {str(g)}" for g in (gaps or [])[:12])
     lang = f"\n用{target_language}书写。" if target_language else ""
     return (
+        "/actor-ontology-research\n"
         "对【预测问题】的 actor 卷宗，一名评审指出了以下**具体缺口**。只针对这些缺口做定向研究"
         "（必要时搜索/取证），补齐相应主体画像、关系 valence、来源分级或纠正误判，**不要**重写"
         "整份卷宗、不要偏离这些缺口。完成后把新发现以工作笔记形式给出，供随后合成采纳。\n\n"
@@ -5331,7 +6596,7 @@ def judge_dossier(dossier: str, question: str, target_language: str | None,
             # judge 只看到前半就打分（evidence_grounding/ontology_readiness 被系统性低估）。
             + "\n=== 卷宗 ===\n" + (dossier or "")[:_JUDGE_INPUT_CAP]
         )
-        resp = model.invoke([HumanMessage(content=prompt)])
+        resp = _invoke_model(model, [HumanMessage(content=prompt)])
         text = _message_text(getattr(resp, "content", resp))
         sc = extract_json_object(text)
         if isinstance(sc, dict):
@@ -5420,7 +6685,7 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
             plog.write("warn", f"actor-ontology synthesize: gathered context only {len(context)} chars (< {_min_ctx}); refusing tool-free fabrication")
             _flag_research_degradation("actor-ontology: near-empty research context; refused tool-free fabrication")
             return ""
-        _cap = _synthesis_context_cap(model_name)
+        _cap = _synthesis_context_cap(model_name, context)
         if len(context) > _cap:
             context = context[:_cap] + "\n\n[...research context truncated...]"
         plog.write("stage", f"actor-ontology synthesize: writing dossier (tool-free) from {len(context)} chars")
@@ -5436,7 +6701,7 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
                 "=== GATHERED RESEARCH ===\n"
                 + context
             )
-            resp = model.invoke([HumanMessage(content=prompt)])
+            resp = _invoke_model(model, [HumanMessage(content=prompt)])
             dossier = _message_text(getattr(resp, "content", resp))
             plog.write("stage", f"actor-ontology synthesize: produced {len(dossier)} chars")
             if len(dossier.strip()) >= len(research_text.strip()):
@@ -5527,6 +6792,7 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
 # 全程 degrade-safe：关闭旗标 / 无结果 / 网络错误 → 一行日志静默跳过。
 
 PREDICTION_MARKETS_FILENAME = "prediction_markets.json"
+PREDICTION_MARKET_CANDIDATES_FILENAME = "prediction_market_candidates.jsonl"
 # PM-6: 通过相关性门的锚点市场的 CLOB 历史价时间线，落这里 {market_id: [{t,p}]}。
 PRICE_HISTORY_FILENAME = "market_price_history.json"
 _POLYMARKET_BASE_URL = "https://gamma-api.polymarket.com"
@@ -5793,7 +7059,10 @@ def derive_market_queries_llm(question: str, hot_topics: list | None,
 def _pm_min_relevance() -> float:
     """PM-1: LLM 相关性门槛（0-10），低于此分的候选市场被丢弃。默认 5；非法值回退 5。"""
     try:
-        return float(os.environ.get("PM_MIN_RELEVANCE", "5") or "5")
+        return float(os.environ.get(
+            "PREDICTION_MARKETS_MIN_RELEVANCE",
+            os.environ.get("PM_MIN_RELEVANCE", "5"),
+        ) or "5")
     except ValueError:
         return 5.0
 
@@ -5997,7 +7266,9 @@ def _pm_normalize_market(raw: Any, matched_query: str, min_volume: float,
     # PM-1: 尽量携出可用的深链/时效/流动性信号（存在才写，缺失则降级为无该键）。
     slug = str(event_slug or "").strip()
     if slug:
-        row["event_url"] = f"https://polymarket.com/event/{slug}"
+        canonical_url = f"https://polymarket.com/event/{slug}"
+        row["event_url"] = canonical_url  # backwards-compatible bridge field
+        row["url"] = canonical_url        # canonical report/forecast field
     end_date = str(raw.get("endDate") or "").strip()
     if end_date:
         row["end_date"] = end_date
@@ -6036,20 +7307,27 @@ def _pm_cap_per_event(ranked: list[dict], max_per_event: int, max_total: int) ->
 
 
 def _pm_snapshot(queries: list[str], per_query: int = 8, max_total: int = 20,
-                 min_volume: float = 200, max_per_event: int = 3) -> list[dict]:
+                 min_volume: float = 200, max_per_event: int = 3,
+                 diagnostics: dict[str, int] | None = None) -> list[dict]:
     """对一组检索词取市场快照：public-search 返回活跃事件，展开其市场，按 market_id 去重、
     过滤、按成交量降序，每个事件最多 max_per_event 条，最后限量。单个 query 失败只丢那一批。"""
     by_id: dict[str, dict] = {}
+    attempted = 0
+    successful = 0
+    failures = 0
     for q in queries:
         q = str(q or "").strip()
         if not q:
             continue
+        attempted += 1
         try:
             data = _polymarket_get("/public-search",
                                    {"q": q, "limit_per_type": per_query,
                                     "events_status": "active"})
         except Exception:  # noqa: BLE001 — 单 query 失败不影响其余
+            failures += 1
             continue
+        successful += 1
         events = data.get("events") if isinstance(data, dict) else None
         if not isinstance(events, list):
             continue
@@ -6064,6 +7342,12 @@ def _pm_snapshot(queries: list[str], per_query: int = 8, max_total: int = 20,
                 if norm is not None and norm["market_id"] not in by_id:
                     by_id[norm["market_id"]] = norm
     ranked = sorted(by_id.values(), key=lambda m: -(m.get("volume") or 0.0))
+    if diagnostics is not None:
+        diagnostics.update({
+            "attempted_query_count": attempted,
+            "successful_query_count": successful,
+            "transport_failure_count": failures,
+        })
     return _pm_cap_per_event(ranked, max_per_event, max_total)
 
 
@@ -6118,6 +7402,15 @@ def _pm_env_caps() -> "tuple[int, float, int]":
     return max_total, min_volume, max_per_event
 
 
+def _pm_per_query() -> int:
+    """Canonical per-query catalog breadth (legacy bridge default remains 8)."""
+    try:
+        value = int(os.environ.get("PREDICTION_MARKETS_PER_QUERY", "8") or "8")
+    except ValueError:
+        value = 8
+    return max(1, min(value, 50))
+
+
 def _pm_render_pricing_block(markets: list[dict], as_of: str, limit: int = 8) -> str:
     """PM-4: 一段紧凑的『当前市场定价』块，注入 pass-0 提示词让开场带着锚点搜。
     确定性、无 LLM。空市场 → 空串。"""
@@ -6136,6 +7429,136 @@ def _pm_render_pricing_block(markets: list[dict], as_of: str, limit: int = 8) ->
         vtxt = f", volume ${vol:,.0f}" if vol is not None else ""
         lines.append(f"- {q}: market prices YES at {pct}{vtxt}")
     return "\n".join(lines)
+
+
+_MARKET_REPORT_STOPWORDS = {
+    "a", "an", "and", "are", "at", "be", "before", "by", "end", "for",
+    "from", "have", "in", "is", "of", "on", "or", "the", "this", "to",
+    "will", "win", "yes", "no",
+}
+
+
+def _market_report_tokens(text: str) -> set[str]:
+    """Distinctive ASCII/year tokens used for conservative report matching."""
+    return {
+        token for token in re.findall(r"[a-z0-9]+", str(text or "").lower())
+        if len(token) >= 2 and token not in _MARKET_REPORT_STOPWORDS
+    }
+
+
+def _market_is_cited_in_report(report: str, market: dict,
+                               report_tokens: set[str] | None = None) -> bool:
+    """Whether a machine-fetched market was substantively used by the researcher.
+
+    This is the fail-closed fallback when the LLM relevance scorer is unavailable.
+    It never trusts prose alone: the row came from the machine tool ledger, and the
+    report must either carry its URL/ID, or share distinctive title tokens plus the
+    exact fetched probability.  That preserves real mid-research discoveries without
+    promoting the many lexical junk matches returned by Polymarket full-text search.
+    """
+    if not isinstance(market, dict) or not str(report or "").strip():
+        return False
+    report_l = str(report).lower()
+    for key in ("url", "event_url"):
+        value = str(market.get(key) or "").strip().lower()
+        if value and value in report_l:
+            return True
+    market_id = str(market.get("market_id") or "").strip().lower()
+    if market_id and len(market_id) >= 6 and market_id in report_l:
+        return True
+
+    title = " ".join(
+        part for part in (
+            str(market.get("question") or "").strip(),
+            str(market.get("event_title") or "").strip(),
+        ) if part
+    )
+    title_tokens = _market_report_tokens(title)
+    if not title_tokens:
+        return False
+    effective_report_tokens = report_tokens if report_tokens is not None else _market_report_tokens(report_l)
+    overlap = len(title_tokens & effective_report_tokens)
+    if overlap >= 4:
+        return True
+
+    prob = _pm_float(market.get("implied_yes_prob"))
+    if prob is None:
+        return False
+    pct = prob * 100.0
+    probability_forms = {
+        f"{pct:.0f}%", f"{pct:.1f}%", f"{pct:.2f}%",
+        f"{pct:.0f} percent", f"{pct:.1f} percent", f"{pct:.2f} percent",
+    }
+    return overlap >= 2 and any(form.lower() in report_l for form in probability_forms)
+
+
+def _load_tool_market_candidates(out_dir: Path, *, max_bytes: int = 4_000_000) -> list[dict]:
+    """Load and compact agent-tool market discoveries from append-only JSONL.
+
+    Newer observations win by ``market_id`` (prices move); first-seen order remains
+    stable for deterministic output.  The bounded tail read prevents a pathological
+    agent loop from making finalization scale with an unbounded provenance file.
+    Malformed/partial lines are skipped.
+    """
+    path = out_dir / PREDICTION_MARKET_CANDIDATES_FILENAME
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as fh:
+            if size > max_bytes:
+                fh.seek(size - max_bytes)
+                fh.readline()  # discard the first partial record
+            raw_lines = fh.readlines()
+    except OSError:
+        return []
+
+    order: list[str] = []
+    by_id: dict[str, dict] = {}
+    for raw in raw_lines:
+        try:
+            item = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError, TypeError):
+            continue
+        if not isinstance(item, dict):
+            continue
+        captured_at = str(item.get("captured_at") or "").strip()
+        queries = [str(q) for q in (item.get("queries") or []) if str(q).strip()]
+        for market in item.get("markets") or []:
+            if not isinstance(market, dict):
+                continue
+            market_id = str(market.get("market_id") or "").strip()
+            if not market_id:
+                continue
+            row = dict(market)
+            row["captured_via"] = "prediction_market_search"
+            if captured_at:
+                row["captured_at"] = captured_at
+            if queries:
+                row["tool_queries"] = queries
+            if market_id not in by_id:
+                order.append(market_id)
+            by_id[market_id] = row
+    return [by_id[mid] for mid in order if mid in by_id]
+
+
+def _merge_market_rows(primary: list[dict], secondary: list[dict]) -> list[dict]:
+    """Merge market rows by ID; primary rows win fields, order is deterministic."""
+    order: list[str] = []
+    by_id: dict[str, dict] = {}
+    for rows, overwrite in ((secondary or [], True), (primary or [], True)):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            mid = str(row.get("market_id") or "").strip()
+            if not mid:
+                continue
+            if mid not in by_id:
+                order.append(mid)
+                by_id[mid] = dict(row)
+            elif overwrite:
+                combined = dict(by_id[mid])
+                combined.update(row)
+                by_id[mid] = combined
+    return [by_id[mid] for mid in order]
 
 
 def _pm_resolve_queries(question: str, hot_topics: list | None, actor_names: list | None,
@@ -6157,7 +7580,8 @@ def _pm_initial_snapshot(question: str, model_name: str, plog: "ProgressLog") ->
     if not queries:
         return []
     max_total, min_volume, max_per_event = _pm_env_caps()
-    markets = _pm_snapshot(queries, max_total=max_total, min_volume=min_volume,
+    markets = _pm_snapshot(queries, per_query=_pm_per_query(),
+                           max_total=max_total, min_volume=min_volume,
                            max_per_event=max_per_event)
     if not markets:
         plog.write("warn", f"prediction markets (pre-pass): no active markets (queries={queries})")
@@ -6198,28 +7622,72 @@ def _collect_prediction_markets(out_dir: Path, question: str, report: str,
                     actor_names += [n for n in ctx_names if n and n not in actor_names]
     except Exception:  # noqa: BLE001 — actors.json 只是查询词的可选增强
         pass
+    tool_candidates = _load_tool_market_candidates(out_dir)
     queries = _pm_resolve_queries(question, hot_topics, actor_names, model_name, plog)
-    if not queries:
+    if not queries and not tool_candidates:
         # PM-HZ: 无检索词也**始终落盘**显式空标记——下游（报告市场包/置信度理由）能
         # 陈述「无市场锚点」而非在静默缺文件与「阶段没跑」之间无法区分。
         payload = {"as_of": _utcnow(), "source": "polymarket", "queries": [],
                    "markets": [], "no_relevant_markets": True,
-                   "reason": "no derivable queries"}
+                   "reason": "no derivable queries",
+                   "status": {"attempted": True, "query_count": 0,
+                              "tool_observation_count": 0, "candidate_count": 0,
+                              "selected_count": 0, "empty_reason": "no_derivable_queries"}}
         _atomic_write_text(out_dir / PREDICTION_MARKETS_FILENAME,
                            json.dumps(payload, ensure_ascii=False, indent=2))
         meta["prediction_markets_count"] = 0
         plog.write("warn", f"prediction markets: no derivable queries; wrote {PREDICTION_MARKETS_FILENAME} no_relevant_markets marker")
         return
     max_total, min_volume, max_per_event = _pm_env_caps()
-    markets = _pm_snapshot(queries, max_total=max_total, min_volume=min_volume,
-                           max_per_event=max_per_event)
-    if markets:
-        # PM-1: LLM 相关性门——为每个候选市场打 0-10 分，丢弃 <PM_MIN_RELEVANCE，按 (relevance,
-        # volume) 重排；打分失败 → 放行全部候选（仅按 volume，主路径语义不变）。
-        _scores = score_market_relevance(question, markets, model_name, plog)
-        markets = _apply_relevance_gate(markets, _scores, _pm_min_relevance())
+    refresh_diagnostics: dict[str, int] = {}
+    refreshed_markets = _pm_snapshot(queries, per_query=_pm_per_query(),
+                                     max_total=max_total, min_volume=min_volume,
+                                     max_per_event=max_per_event,
+                                     diagnostics=refresh_diagnostics) if queries else []
+    # LOOP-009: one canonical relevance decision over the deterministic refresh
+    # and every market the agent actually fetched mid-research.  The refresh wins
+    # mutable fields (price/liquidity) for duplicate IDs; tool provenance remains.
+    combined_candidates = _merge_market_rows(refreshed_markets, tool_candidates)
+    markets: list[dict] = []
+    if combined_candidates:
+        _scores = score_market_relevance(question, combined_candidates, model_name, plog)
+        if _scores:
+            markets = _apply_relevance_gate(
+                combined_candidates, _scores, _pm_min_relevance())
+        else:
+            # Existing deterministic-refresh candidates retain the historical
+            # fail-open behavior.  Agent-tool candidates are fail-closed unless
+            # their exact machine-fetched price/title (or URL/ID) appears in the
+            # completed report, which proves the researcher vetted and used them.
+            refreshed_ids = {
+                str(row.get("market_id") or "").strip()
+                for row in refreshed_markets if isinstance(row, dict)
+            }
+            report_token_set = _market_report_tokens(report)
+            fallback_rows = [
+                row for row in combined_candidates
+                if str(row.get("market_id") or "").strip() in refreshed_ids
+                or _market_is_cited_in_report(report, row, report_token_set)
+            ]
+            markets = sorted(
+                fallback_rows,
+                key=lambda row: -(float(_pm_float(row.get("volume")) or 0.0)),
+            )
+            for row in markets:
+                if str(row.get("market_id") or "").strip() not in refreshed_ids:
+                    row["report_cited"] = True
         if not markets:
             plog.write("warn", "prediction markets: all candidates below relevance floor")
+        elif tool_candidates:
+            used_tool_ids = {
+                str(row.get("market_id") or "").strip()
+                for row in markets if row.get("captured_via") == "prediction_market_search"
+            }
+            if used_tool_ids:
+                plog.write(
+                    "ok",
+                    f"prediction markets: preserved {len(used_tool_ids)} agent-vetted tool candidate(s) in canonical registry",
+                )
     else:
         plog.write("warn", f"prediction markets: no relevant active markets (queries={queries})")
     # PM-HZ: 远期降级阶梯——主检索词零命中/全被门挡时，剥年份→事件级宽词重试。降级词
@@ -6230,8 +7698,17 @@ def _collect_prediction_markets(out_dir: Path, question: str, report: str,
     if not markets and _env_flag("PREDICTION_MARKETS_HORIZON_RETRY", True):
         for _stage, _stage_queries in degrade_market_queries(queries):
             plog.write("warn", f"prediction markets: horizon-degradation retry ({_stage}) with {len(_stage_queries)} broadened queries")
-            _cand = _pm_snapshot(_stage_queries, max_total=max_total, min_volume=min_volume,
-                                 max_per_event=max_per_event)
+            _stage_diagnostics: dict[str, int] = {}
+            _cand = _pm_snapshot(_stage_queries, per_query=_pm_per_query(),
+                                 max_total=max_total, min_volume=min_volume,
+                                 max_per_event=max_per_event,
+                                 diagnostics=_stage_diagnostics)
+            for _key in (
+                "attempted_query_count", "successful_query_count", "transport_failure_count"
+            ):
+                refresh_diagnostics[_key] = (
+                    refresh_diagnostics.get(_key, 0) + _stage_diagnostics.get(_key, 0)
+                )
             if not _cand:
                 continue
             _sc = score_market_relevance(question, _cand, model_name, plog)
@@ -6249,11 +7726,39 @@ def _collect_prediction_markets(out_dir: Path, question: str, report: str,
             degraded_queries = _stage_queries
             plog.write("ok", f"prediction markets: horizon-degradation ({_stage}) matched {len(_kept)} relevance-gated market(s)")
             break
+    # Cross-call tool capture can contain more rows than a single refresh.  Keep
+    # the same case-level diversity and size contract after reconciliation.
+    markets = _pm_cap_per_event(markets, max_per_event, max_total)
     as_of = _utcnow()
     payload = {"as_of": as_of, "source": "polymarket", "queries": queries, "markets": markets}
+    if tool_candidates:
+        payload["tool_candidates_seen"] = len(tool_candidates)
+        payload["registry_sources"] = ["deterministic_refresh", "prediction_market_search"]
     if degraded_stage:
         payload["horizon_degraded"] = degraded_stage
         payload["degraded_queries"] = degraded_queries
+    all_queries_failed = bool(
+        queries
+        and refresh_diagnostics.get("attempted_query_count", 0) > 0
+        and refresh_diagnostics.get("successful_query_count", 0) == 0
+        and refresh_diagnostics.get("transport_failure_count", 0)
+        >= refresh_diagnostics.get("attempted_query_count", 0)
+    )
+    payload["status"] = {
+        "attempted": True,
+        "query_count": len(queries),
+        "successful_query_count": refresh_diagnostics.get("successful_query_count", 0),
+        "transport_failure_count": refresh_diagnostics.get("transport_failure_count", 0),
+        "tool_observation_count": len(tool_candidates),
+        "refresh_candidate_count": len(refreshed_markets),
+        "candidate_count": len(combined_candidates),
+        "selected_count": len(markets),
+        "empty_reason": None if markets else (
+            "all_candidates_irrelevant" if combined_candidates else (
+                "transport_failure" if all_queries_failed else "no_equivalent_market"
+            )
+        ),
+    }
     if not markets:
         # PM-HZ: 空结果也**始终落盘**——显式 no_relevant_markets 标记（含尝试过的检索词），
         # 报告节不追加（没有市场行可渲染）。
@@ -6581,7 +8086,21 @@ def main() -> int:
     # ITEM-14：只抽取。跳过所有研究，只对既存 research_report.md 跑结构化抽取 + 预测市场；
     # 报告缺失/过小 → 诚实非零退出。用于 watchdog 超时打捞已落盘但缺结构化档案的报告。
     parser.add_argument("--extract-only", action="store_true", dest="extract_only", help="Skip research; only run structured extraction + prediction markets against an existing research_report.md.")
+    parser.add_argument(
+        "--evidence-only", action="store_true", dest="evidence_only",
+        help=("Run research/KIQ convergence and export evidence_pack.md, but skip "
+              "dossier synthesis, judge, extraction, markets, and charts."),
+    )
+    parser.add_argument(
+        "--synthesis-manifest", default=None,
+        help=("Version-1 JSON manifest of parallel evidence-lane paths and the "
+              "merged source ledger. Produces one global dossier/extraction run."),
+    )
     args = parser.parse_args()
+    if args.evidence_only and args.synthesis_manifest:
+        parser.error("--evidence-only and --synthesis-manifest are mutually exclusive")
+    os.environ["RESEARCH_EVIDENCE_ONLY"] = (
+        "true" if args.evidence_only else "false")
 
     # Resolve the question.
     if args.prompt_file:
@@ -6601,6 +8120,15 @@ def main() -> int:
     _atomic_write_text(out_dir / REQUIREMENT_FILENAME, question + "\n")
 
     plog = ProgressLog(out_dir / PROGRESS_FILENAME)
+    activation_telemetry = skill_activation_estimate()
+    if activation_telemetry.get("chars_per_activation") is not None:
+        plog.write(
+            "stage",
+            "skill activation: deep-research core "
+            f"{activation_telemetry['chars_per_activation']} chars / "
+            f"~{activation_telemetry['estimated_tokens_per_activation']} tokens per slash "
+            "activation (lazy references excluded)",
+        )
     _reset_fetched_sources()  # #1: fresh fetched-URL collector per run
     # AGENTIC-SEARCH: 依 --subagents 打开研究提示词里的「主动委派 scoped-researcher」指令块。
     # 必须在 _reset_fetched_sources()（其把该标志复位 False）之后设置。仅当同时开启 --subagents
@@ -6618,8 +8146,10 @@ def main() -> int:
         if _plan["resume"]:
             thread_id = _plan["thread_id"]
             resume_completed = set(_plan["completed_passes"])
+            restored_sources = seed_validated_resume_sources(out_dir)
             resume_info = {"resumed": True, "thread_id": thread_id,
-                           "skipped_passes": sorted(resume_completed)}
+                           "skipped_passes": sorted(resume_completed),
+                           "restored_sources": restored_sources}
             plog.write("resume", f"续跑研究：复用线程 {thread_id}，跳过 {len(resume_completed)} 个已完成 pass")
         else:
             resume_info = {"resumed": False, "reason": _plan["reason"]}
@@ -6633,6 +8163,11 @@ def main() -> int:
         "question": question,
         "started_at": started_at,
         "target_language": args.target_language,
+        "skill_activation": activation_telemetry,
+        "workflow_mode": (
+            "evidence_only" if args.evidence_only else
+            "global_synthesis" if args.synthesis_manifest else "full"
+        ),
     }
     if resume_info:
         meta["resume"] = resume_info
@@ -6745,6 +8280,16 @@ def main() -> int:
             model_name=args.model,
             thinking_enabled=True,
             subagent_enabled=args.subagents,
+            # LOOP-009: do not advertise the entire DeerFlow public-skill
+            # catalog to a forecast worker.  Slash activation below loads the
+            # exact workflow skill body; this whitelist keeps metadata/tool
+            # policy focused while retaining the related market/visual skills.
+            available_skills={
+                "deep-research",
+                "actor-ontology-research",
+                "prediction-markets",
+                "forecast-visuals",
+            },
         )
         plog.write("init", "client ready; available skills will load on demand (deep-research)")
 
@@ -6753,7 +8298,9 @@ def main() -> int:
         # NN%——去查为什么」的锚点搜；同一批市场也在 Stage 2 喂给结构化抽取（INT-1）。
         # Degrade-safe：任何市场失败 → 研究照常无块进行。
         try:
-            if _env_flag("PREDICTION_MARKETS_ENABLED", True) and _env_flag("PREDICTION_MARKETS_PREPASS", True):
+            if (not args.evidence_only
+                    and _env_flag("PREDICTION_MARKETS_ENABLED", True)
+                    and _env_flag("PREDICTION_MARKETS_PREPASS", True)):
                 _init_markets = _pm_initial_snapshot(question, args.model, plog)
                 if _init_markets:
                     _set_initial_pm_markets(_init_markets)
@@ -6768,15 +8315,102 @@ def main() -> int:
         # （沿用 run_deep_fanout 已验证安全的并发回合模式）。Track A 结果仍是 report，
         # 下游逻辑逐字节不变；Track B 结果记为 dossier。Track B 任何异常/空 → dossier=""
         # 并告警，整轮退回单轨继续。关闭双轨时走原始单轨调用，行为逐字节一致。
-        dossier = ""
-        if _env_flag("DEERFLOW_DUAL_TRACK", True):
+        existing_dossier_path = out_dir / ACTOR_DOSSIER_FILENAME
+        dossier = (
+            existing_dossier_path.read_text(encoding="utf-8")
+            if ((args.synthesis_manifest or args.resume)
+                and existing_dossier_path.exists())
+            else ""
+        )
+        if args.synthesis_manifest:
+            manifest_parts, manifest_sources = load_evidence_manifest(
+                args.synthesis_manifest)
+            seeded_sources = seed_manifest_sources(manifest_sources)
+            plog.write(
+                "stage",
+                f"global synthesis: {len(manifest_parts)} evidence lane(s), "
+                f"{seeded_sources} source IDs; one outline/judge namespace",
+            )
+            report = synthesize_from_evidence_parts(
+                manifest_parts,
+                manifest_parts,
+                question,
+                args.target_language,
+                args.model,
+                plog,
+                args.depth,
+            )
+            dossier_path = out_dir / ACTOR_DOSSIER_FILENAME
+            dossier = (
+                dossier_path.read_text(encoding="utf-8")
+                if dossier_path.exists() else ""
+            )
+            scorecard = (
+                judge_research_report(
+                    report,
+                    question,
+                    args.target_language,
+                    args.depth,
+                    args.model,
+                    plog,
+                )
+                if report.strip() else None
+            )
+            refined = False
+            if (isinstance(scorecard, dict) and not report_passes(scorecard)
+                    and scorecard.get("gaps")):
+                gap_text = "\n".join(
+                    f"- {gap}" for gap in scorecard.get("gaps") or [])
+                routed = pack_context_for_section(
+                    manifest_parts,
+                    gap_text,
+                    60000,
+                    max_blocks=12,
+                )
+                patch_notes = (
+                    "GLOBAL JUDGE GAPS:\n" + gap_text
+                    + "\n\nROUTED EXISTING EVIDENCE:\n" + routed
+                )
+                patched = run_incremental_report_patch(
+                    question,
+                    report,
+                    patch_notes,
+                    args.target_language,
+                    args.model,
+                    plog,
+                    "global-judge-refine",
+                )
+                if patched and patched != report:
+                    report = patched
+                    refined = True
+                    scorecard = judge_research_report(
+                        report,
+                        question,
+                        args.target_language,
+                        args.depth,
+                        args.model,
+                        plog,
+                    ) or scorecard
+            if isinstance(scorecard, dict):
+                _atomic_write_text(
+                    out_dir / "research_report_judge.json",
+                    json.dumps(scorecard, ensure_ascii=False, indent=2),
+                )
+                meta["global_synthesis_judge"] = {
+                    "verdict": scorecard.get("verdict"),
+                    "scores": scorecard.get("scores"),
+                    "passed": report_passes(scorecard),
+                    "targeted_refinement_applied": refined,
+                }
+        elif _env_flag("DEERFLOW_DUAL_TRACK", True):
             import concurrent.futures as _cf
 
             actor_thread_id = thread_id + "-actor"
-            plog.write("stage", "dual-track: running Track A (report) + Track B (actor dossier) concurrently")
-            with _cf.ThreadPoolExecutor(max_workers=2) as _ex:
-                _fut_a = _ex.submit(
-                    run_research_stage,
+            dual_workers = min(
+                2, _model_parallel_slots(_stream_model_lease_weight()))
+
+            def _run_track_a():
+                return run_research_stage(
                     client,
                     question,
                     args.depth,
@@ -6784,11 +8418,12 @@ def main() -> int:
                     args.model,
                     thread_id,
                     plog,
-                    resume_completed=resume_completed,  # ITEM-3 续跑：跳过已完成 pass
-                    out_dir=out_dir,                    # ITEM-3：每完成一 pass 落 checkpoint
+                    resume_completed=resume_completed,
+                    out_dir=out_dir,
                 )
-                _fut_b = _ex.submit(
-                    run_actor_ontology_stage,
+
+            def _run_track_b():
+                return run_actor_ontology_stage(
                     client,
                     question,
                     args.depth,
@@ -6796,11 +8431,33 @@ def main() -> int:
                     args.model,
                     actor_thread_id,
                     plog,
-                    out_dir,  # NEXTSTEPS P3-1: 让 Track B 把 AI-judge 记分牌落到 out_dir
+                    out_dir,
                 )
-                report = _fut_a.result()
+
+            if dual_workers >= 2:
+                plog.write(
+                    "stage",
+                    "dual-track: running Track A (report) + Track B "
+                    "(actor dossier) concurrently under the global model lease",
+                )
+                with _cf.ThreadPoolExecutor(max_workers=dual_workers) as _ex:
+                    _fut_a = _ex.submit(_run_track_a)
+                    _fut_b = _ex.submit(_run_track_b)
+                    report = _fut_a.result()
+                    try:
+                        dossier = _fut_b.result() or ""
+                    except Exception as _exc:  # noqa: BLE001 — Track B 失败退回单轨
+                        dossier = ""
+                        plog.write("warn", f"dual-track: Track B (actor dossier) failed; continuing single-track ({type(_exc).__name__}: {_exc})")
+            else:
+                plog.write(
+                    "stage",
+                    "dual-track: global model envelope has one lead slot; "
+                    "running Track A then Track B sequentially",
+                )
+                report = _run_track_a()
                 try:
-                    dossier = _fut_b.result() or ""
+                    dossier = _run_track_b() or ""
                 except Exception as _exc:  # noqa: BLE001 — Track B 失败退回单轨
                     dossier = ""
                     plog.write("warn", f"dual-track: Track B (actor dossier) failed; continuing single-track ({type(_exc).__name__}: {_exc})")
@@ -6819,6 +8476,42 @@ def main() -> int:
                 out_dir=out_dir,                    # ITEM-3：每完成一 pass 落 checkpoint
             )
 
+        if args.evidence_only:
+            evidence_pack = (
+                report if str(report or "").startswith(
+                    "# Internal Evidence Lane Pack")
+                else render_evidence_pack([report])
+            )
+            _atomic_write_text(out_dir / EVIDENCE_PACK_FILENAME, evidence_pack)
+            source_rows = export_fetched_sources_for_manifest()
+            # Replace even with []: leaving a prior file untouched makes a
+            # successful no-source retry silently inherit another attempt's
+            # citation ledger. Valid resume sources were explicitly restored
+            # only after question/depth checkpoint validation above.
+            persist_evidence_sources(out_dir, source_rows)
+            if dossier.strip() and not _is_degraded_artifact(dossier, 400):
+                dossier = unwrap_markdown_fence(dossier)
+                _atomic_write_text(
+                    out_dir / ACTOR_DOSSIER_FILENAME, dossier)
+                meta["actor_dossier_chars"] = len(dossier)
+            meta.update(
+                status="completed",
+                evidence_pack_chars=len(evidence_pack),
+                sources_count=len(source_rows),
+                finished_at=_utcnow(),
+            )
+            write_meta()
+            if _research_budget is not None and hasattr(
+                    _research_budget, "export_telemetry"):
+                _research_budget.export_telemetry(force=True)
+            plog.write(
+                "done",
+                f"evidence lane complete ({len(evidence_pack)} chars; "
+                f"{len(source_rows)} fetched sources)",
+            )
+            plog.close()
+            return 0
+
         # SAFETY NET: the primary path is the real agentic research turn above (tools +
         # thinking) writing its own report. But if the agent turn comes back with too
         # little usable text, fall back to a tool-free synthesis FROM the gathered,
@@ -6835,7 +8528,9 @@ def main() -> int:
         _stripped = report.strip()
         _is_content_block = bool(_stripped) and any(s in report for s in ("new_sensitive", "unprocessable_entity"))
         # SCALE-2: 触发线按深度取值 —— deep 15000 / 其余 4000（见 _synthesis_trigger_chars）。
-        if len(_stripped) < _synthesis_trigger_chars(args.depth) and not _is_content_block:
+        if (not args.synthesis_manifest
+                and len(_stripped) < _synthesis_trigger_chars(args.depth)
+                and not _is_content_block):
             plog.write("warn", f"research turn returned only {len(_stripped)} chars (budget exhausted or a provider error on the final write); synthesizing tool-free from gathered research")
             synth = synthesize_from_thread(client, thread_id, question, args.target_language, args.model, plog, depth=args.depth)
             if len(synth.strip()) > len(_stripped):
@@ -6933,9 +8628,19 @@ def main() -> int:
                 if obj is None:
                     # FALLBACK: the in-thread agent turn (older path) in case the bare call failed.
                     plog.write("warn", "tool-free extraction unparseable; falling back to in-thread agent extraction")
+                    extraction_prompt = build_extraction_prompt(
+                        args.target_language, args.depth)
+                    if args.synthesis_manifest:
+                        # The global synthesis thread has no research history;
+                        # give its fallback the actual dossier instead of an
+                        # empty checkpoint context.
+                        extraction_prompt += (
+                            "\n\n=== GLOBAL DOSSIER TO EXTRACT ===\n"
+                            + extraction_input[:_JUDGE_INPUT_CAP]
+                        )
                     raw = run_streamed_turn(
                         client,
-                        build_extraction_prompt(args.target_language, args.depth),
+                        extraction_prompt,
                         thread_id,  # same thread → research context preserved via checkpointer
                         80 if args.depth == "deep" else 40,
                         plog,
@@ -7073,8 +8778,9 @@ def main() -> int:
                             if flagged:
                                 meta["single_origin_loadbearing"] = flagged
                                 plog.write("warn", f"triangulation audit: {len(flagged)} single-origin load-bearing claim(s)")
-                        # RES-4: grounding 分量 = 真实抓取数/来源门槛 ×（合成曾拒绝编造→0.5 折扣），
-                        # 外加 quant_implausible 占比的封顶扣减（≤0.15）。全部来自现场已有信号；
+                        # RES-4/LOOP-010: grounding 分量 = 真实抓取来源 / 结构化档案声称的来源
+                        # （不是绝对数量门槛）× 合成拒绝编造折扣，外加 quant_implausible
+                        # 占比的封顶扣减（≤0.15）。全部来自现场已有信号；
                         # RESEARCH_QUALITY_GROUNDING=false 时回退旧三分量评分。
                         _grounding = None
                         _q_penalty = 0.0
@@ -7083,10 +8789,12 @@ def main() -> int:
                                 _fetched_n = meta.get("sources_fetched")
                                 if _fetched_n is None:
                                     _fetched_n = distinct_fetched_count()
-                                # SCALE-2: 与覆盖门共用同一深度感知下限（deep 默认 45），
-                                # grounding 分量的分母随门槛一起缩放。
-                                _min_src = _research_min_sources(args.depth)
-                                _grounding = min(1.0, float(_fetched_n) / max(1, _min_src))
+                                # LOOP-010: grounding measures provenance, not activity volume.
+                                # Divide real fetched-and-read origins by the source rows the
+                                # structured dossier actually claims.  An absolute source floor
+                                # rewarded broad duplicate searches and penalized narrow resolved
+                                # KIQs; source counts remain telemetry only.
+                                _grounding = _source_grounding_ratio(sources, _fetched_n)
                                 if any("refused tool-free fabrication" in f for f in _RESEARCH_FLAGS):
                                     _grounding *= 0.5  # 合成网曾因上下文近空拒绝编造：该 run 的落地度存疑
                                 _grounding = round(_grounding, 3)
@@ -7125,7 +8833,9 @@ def main() -> int:
         # degrade-safe：无标记声明 / 任何失败 → 保留已落盘报告，绝不影响已产出的研究契约。
         try:
             _flagged = meta.get("single_origin_loadbearing")
-            if args.depth == "deep" and _flagged and _env_flag("RESEARCH_TRIANGULATION_TOPUP", True):
+            if (not args.synthesis_manifest and args.depth == "deep"
+                    and _flagged
+                    and _env_flag("RESEARCH_TRIANGULATION_TOPUP", True)):
                 _new_report = run_triangulation_topup(
                     client, thread_id, question, args.depth, args.target_language, args.model,
                     report, _flagged, plog)
@@ -7165,6 +8875,12 @@ def main() -> int:
 
         meta.update(status="completed", finished_at=_utcnow())
         write_meta()
+        # Provider/subagent lease telemetry is intentionally coalesced off the
+        # hot call path. Flush once after every lifecycle has completed so the
+        # run artifact is current without two fsyncs per model invocation.
+        if _research_budget is not None and hasattr(
+                _research_budget, "export_telemetry"):
+            _research_budget.export_telemetry(force=True)
         plog.write("done", "research complete")
         plog.close()
         return 0
@@ -7173,6 +8889,9 @@ def main() -> int:
         meta.update(status="failed", error=str(e), traceback=traceback.format_exc(), finished_at=_utcnow())
         write_meta()
         try:
+            if _research_budget is not None and hasattr(
+                    _research_budget, "export_telemetry"):
+                _research_budget.export_telemetry(force=True)
             plog.write("error", f"{type(e).__name__}: {e}")
             plog.close()
         except Exception:

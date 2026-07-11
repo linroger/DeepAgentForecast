@@ -20,10 +20,19 @@ from app.services.pipeline_orchestrator import (
     merge_actors_objs,
     merge_research_quality,
     pick_freshest_markets,
+    merge_market_snapshots,
+    merge_market_price_histories,
     _source_tier_histogram,
     _track_tier_rank,
     _track_norm_url,
     _RESEARCH_TRACK_ANGLES,
+    research_subagent_cap_per_track,
+    research_outer_track_workers,
+    research_model_concurrency_cap,
+    research_lane_subagent_cap,
+    research_dual_track_for_outer_lane,
+    append_merged_references,
+    normalize_track_report_citations,
 )
 
 
@@ -73,6 +82,41 @@ def test_source_union_ignores_non_list_and_non_dict():
     assert merge_sources_union([None, "bad", [123, {"url": "u", "tier": "S1"}]]) == [
         {"url": "u", "tier": "S1"}
     ]
+
+
+def test_track_citations_are_remapped_to_one_global_source_namespace():
+    merged_sources = [
+        {"title": "A", "url": "https://a.test/source"},
+        {"title": "B", "url": "https://b.test/source"},
+    ]
+    track_report = (
+        "# Analysis\n\nClaim A [S1]. Claim B [S2]. Unknown [S9].\n\n"
+        "## References\n\n"
+        "- [S1] B source — https://b.test/source\n"
+        "- [S2] A source — https://a.test/source\n"
+    )
+    normalized, audit = normalize_track_report_citations(
+        track_report,
+        [{"url": "https://wrong.test/fallback"}, {"url": "https://wrong2.test"}],
+        merged_sources,
+    )
+
+    assert "Claim A [S2]. Claim B [S1]. Unknown." in normalized
+    assert "## References" not in normalized
+    assert audit == {"markers": 3, "remapped": 2, "stripped": 1}
+
+    merged = append_merged_references(normalized, merged_sources)
+    assert merged.count("## References") == 1
+    assert "- [S1] A — https://a.test/source" in merged
+    assert "- [S2] B — https://b.test/source" in merged
+
+
+def test_track_citation_remap_falls_back_to_track_source_positions():
+    report = "Metric reached 42% [S1]."
+    sources = [{"title": "Data", "url": "https://data.test/value"}]
+    normalized, audit = normalize_track_report_citations(report, sources, sources)
+    assert normalized == report
+    assert audit["remapped"] == 1 and audit["stripped"] == 0
 
 
 # ── report concat under '# Track N' headers ─────────────────────────────────
@@ -158,6 +202,152 @@ def test_pick_freshest_markets_prefers_nonempty_then_falls_back():
     assert pick_freshest_markets([None, "bad"]) is None
 
 
+def test_market_snapshot_merge_unions_tracks_and_keeps_freshest_quote():
+    first = {
+        "as_of": "2026-07-10T00:00:00Z", "queries": ["AI bubble"],
+        "markets": [
+            {"market_id": "a", "question": "A?", "implied_yes_prob": 0.2,
+             "volume": 1000, "event_title": "A"},
+            {"market_id": "b", "question": "B?", "implied_yes_prob": 0.3,
+             "volume": 500, "event_title": "B"},
+        ],
+    }
+    second = {
+        "as_of": "2026-07-11T00:00:00Z", "queries": ["AI bubble", "US recession"],
+        "markets": [
+            {"market_id": "a", "question": "A?", "implied_yes_prob": 0.25,
+             "volume": 1500, "event_title": "A"},
+            {"market_id": "c", "question": "C?", "implied_yes_prob": 0.4,
+             "volume": 800, "event_title": "C"},
+        ],
+    }
+
+    merged = merge_market_snapshots([first, {"as_of": "later", "markets": []}, second])
+
+    by_id = {row["market_id"]: row for row in merged["markets"]}
+    assert set(by_id) == {"a", "b", "c"}
+    assert by_id["a"]["implied_yes_prob"] == 0.25
+    assert len(by_id["a"]["track_provenance"]) == 2
+    assert merged["queries"] == ["AI bubble", "US recession"]
+    assert merged["status"]["selected_count"] == 3
+
+
+def test_market_price_history_merge_filters_selected_and_deduplicates_timestamps():
+    histories = [
+        {"a": [{"t": 1, "p": 0.2}, {"t": 2, "p": 0.3}],
+         "discard": [{"t": 1, "p": 0.9}]},
+        {"a": [{"t": 2, "p": 0.35}, {"t": 3, "p": 0.4}],
+         "b": [{"t": 1, "p": 0.6}]},
+    ]
+    assert merge_market_price_histories(histories, {"a", "b"}) == {
+        "a": [{"t": 1, "p": 0.2}, {"t": 2, "p": 0.35}, {"t": 3, "p": 0.4}],
+        "b": [{"t": 1, "p": 0.6}],
+    }
+
+
+def test_market_snapshot_merge_preserves_transport_failure_status():
+    merged = merge_market_snapshots([{
+        "as_of": "2026-07-11T00:00:00Z", "markets": [],
+        "status": {
+            "query_count": 4, "successful_query_count": 0,
+            "transport_failure_count": 4, "tool_observation_count": 0,
+        },
+    }])
+    assert merged["status"]["empty_reason"] == "transport_failure"
+    assert merged["status"]["transport_failure_count"] == 4
+
+
+def test_market_snapshot_merge_preserves_raw_candidates_and_empty_reasons():
+    merged = merge_market_snapshots([
+        {
+            "as_of": "2026-07-10T00:00:00Z", "markets": [],
+            "status": {
+                "attempted_query_count": 2, "query_count": 2,
+                "successful_query_count": 2, "transport_failure_count": 0,
+                "candidate_count": 5, "empty_reason": "all_candidates_irrelevant",
+            },
+        },
+        {
+            "as_of": "2026-07-11T00:00:00Z", "markets": [],
+            "status": {
+                "query_count": 1, "successful_query_count": 1,
+                "transport_failure_count": 0, "candidate_count": 3,
+                "empty_reason": "all_candidates_irrelevant",
+            },
+        },
+    ])
+
+    assert merged["status"]["candidate_count"] == 8
+    assert merged["status"]["raw_candidate_count"] == 8
+    assert merged["status"]["selected_input_count"] == 0
+    assert merged["status"]["query_count"] == 3  # no double count of alias fields
+    assert merged["status"]["attempted_query_count"] == 3
+    assert merged["status"]["empty_reason"] == "all_candidates_irrelevant"
+    assert merged["status"]["state"] == "all_candidates_irrelevant"
+    assert merged["status"]["empty_reason_counts"] == {"all_candidates_irrelevant": 2}
+
+
+def test_market_snapshot_merge_transport_requires_every_attempt_to_fail():
+    merged = merge_market_snapshots([
+        {
+            "markets": [],
+            "status": {
+                "query_count": 4, "successful_query_count": 0,
+                "transport_failure_count": 4, "candidate_count": 0,
+                "empty_reason": "transport_failure",
+            },
+        },
+        {
+            "markets": [],
+            "status": {
+                "query_count": 2, "successful_query_count": 2,
+                "transport_failure_count": 0, "candidate_count": 0,
+                "empty_reason": "no_equivalent_market",
+            },
+        },
+    ])
+
+    assert merged["status"]["query_count"] == 6
+    assert merged["status"]["successful_query_count"] == 2
+    assert merged["status"]["transport_failure_count"] == 4
+    assert merged["status"]["empty_reason"] == "no_equivalent_market"
+    assert merged["status"]["state"] == "partial_transport_failure"
+    assert merged["status"]["empty_reason_counts"] == {
+        "transport_failure": 1, "no_equivalent_market": 1,
+    }
+
+
+def test_market_snapshot_merge_exposes_inflight_timeout_without_calling_it_outage():
+    merged = merge_market_snapshots([{
+        "markets": [],
+        "status": {
+            "attempted_query_count": 2, "successful_query_count": 0,
+            "transport_failure_count": 0, "inflight_timeout_count": 2,
+            "candidate_count": 0, "empty_reason": "inflight_timeout",
+        },
+    }])
+
+    assert merged["status"]["empty_reason"] == "no_equivalent_market"
+    assert merged["status"]["state"] == "inflight_timeout"
+    assert merged["status"]["inflight_timeout_count"] == 2
+    assert merged["status"]["empty_reason_counts"] == {"inflight_timeout": 1}
+
+
+def test_market_snapshot_merge_raw_candidates_take_empty_reason_precedence():
+    merged = merge_market_snapshots([{
+        "markets": [],
+        "status": {
+            "query_count": 2, "successful_query_count": 0,
+            "transport_failure_count": 2, "candidate_count": 4,
+            "empty_reason": "transport_failure",
+        },
+    }])
+
+    assert merged["status"]["candidate_count"] == 4
+    assert merged["status"]["empty_reason"] == "all_candidates_irrelevant"
+    assert merged["status"]["state"] == "all_candidates_irrelevant"
+
+
 # ── actors merge via reconcile_cast machinery ───────────────────────────────
 
 def test_merge_actors_unions_rows_and_reconciles_duplicates():
@@ -201,4 +391,32 @@ def test_track_angles_track1_has_no_prefix():
     # tracks 2/3 carry angle-specialization prefixes
     assert _RESEARCH_TRACK_ANGLES[1][2].strip() != ""
     assert _RESEARCH_TRACK_ANGLES[2][2].strip() != ""
+
+
+def test_global_subagent_envelope_is_shared_across_outer_tracks():
+    assert research_subagent_cap_per_track(3, 9, 5) == 3
+    assert research_subagent_cap_per_track(2, 9, 5) == 4
+    assert research_subagent_cap_per_track(1, 9, 5) == 5
+    assert research_subagent_cap_per_track(3, 2, 5) == 1
     assert len(_RESEARCH_TRACK_ANGLES) == 3
+
+
+def test_outer_tracks_and_model_streams_share_one_global_envelope():
+    assert research_outer_track_workers(3, 9) == 3
+    assert research_outer_track_workers(3, 2) == 2
+    assert research_outer_track_workers(3, 1) == 1
+    assert research_outer_track_workers(3, 9, 2) == 2
+    assert research_model_concurrency_cap(3, 9, 0) == 12
+    assert research_model_concurrency_cap(2, 2, 0) == 4
+    assert research_model_concurrency_cap(3, 9, 7) == 7
+    assert research_lane_subagent_cap(3, 9, 5, 12) == 3
+    assert research_lane_subagent_cap(2, 9, 5, 4) == 1
+    assert research_lane_subagent_cap(2, 9, 5, 2) == 0
+
+
+def test_actor_ontology_track_runs_once_across_outer_angles():
+    assert [
+        research_dual_track_for_outer_lane(index, True)
+        for index in range(3)
+    ] == [True, False, False]
+    assert not research_dual_track_for_outer_lane(0, False)

@@ -295,6 +295,43 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
         
         status = state_data.get("status", "")
         config_generated = state_data.get("config_generated", False)
+
+        role_count = int(state_data.get("actor_role_count", 0) or 0)
+        if role_count:
+            cast_path = os.path.join(simulation_dir, "actor_cast_manifest.json")
+            try:
+                import hashlib
+                with open(cast_path, "rb") as cast_handle:
+                    cast_sha = hashlib.sha256(cast_handle.read()).hexdigest()
+                if cast_sha != state_data.get("actor_cast_manifest_sha256"):
+                    raise ValueError("actor cast manifest fingerprint mismatch")
+                role_manifest_shas = state_data.get("actor_role_manifest_sha256")
+                if not isinstance(role_manifest_shas, dict):
+                    raise ValueError("prepared role manifest fingerprints are missing")
+                for profile_name in ("reddit_profiles.json", "twitter_profiles.csv"):
+                    profile_path = os.path.join(simulation_dir, profile_name)
+                    platform_name = "twitter" if profile_name.endswith(".csv") else "reddit"
+                    role_manifest_path = OasisProfileGenerator._role_manifest_path(
+                        profile_path
+                    )
+                    with open(role_manifest_path, "rb") as role_manifest_handle:
+                        role_manifest_sha = hashlib.sha256(
+                            role_manifest_handle.read()
+                        ).hexdigest()
+                    if role_manifest_shas.get(platform_name) != role_manifest_sha:
+                        raise ValueError(
+                            f"{platform_name} role manifest fingerprint mismatch"
+                        )
+                    OasisProfileGenerator.validate_role_prompt_manifest(
+                        profile_path,
+                        expected_role_count=role_count,
+                        expected_cast_manifest_sha256=cast_sha,
+                    )
+            except (OSError, ValueError, TypeError) as exc:
+                return False, {
+                    "reason": "角色提示词完整性校验失败",
+                    "error": str(exc),
+                }
         
         # 详细日志
         logger.debug(f"检测模拟准备状态: {simulation_id}, status={status}, config_generated={config_generated}")

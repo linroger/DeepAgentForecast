@@ -11,6 +11,7 @@ Report Agent服务
 
 import os
 import json
+import hashlib
 import time
 import re
 import logging
@@ -18,7 +19,7 @@ import threading
 import contextvars
 from typing import Dict, Any, List, Optional, Callable, Tuple
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from ..config import Config
@@ -748,9 +749,9 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 【核心理念】
 ═══════════════════════════════════════════════════════════════
 
-你正在撰写一份专业预测报告的章节。**内部情景推演**（本所的结构化专家推演方法，
-类似桌面演练/Delphi）与**研究材料**是你的两类证据来源；报告的主语永远是现实世界的
-行为者与结果，绝不是推演本身。读者不应从报告中察觉任何内部方法学机制。
+你正在撰写一份专业预测报告的章节。**研究材料**是事实证据来源；内部计算与情景分析
+只能帮助你形成预测，绝不是可引用的事实或报告叙事对象。报告的主语永远是现实世界的
+行为者与结果，读者不应看到任何内部方法学机制。
 
 你的任务是：
 - 揭示在设定条件下，未来最可能发生什么，以及为什么
@@ -758,34 +759,31 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 - 发现值得关注的未来趋势、风险和机会
 
 ❌ 不要写成对现实世界现状的泛泛分析，更不要叙述内部推演过程
-✅ 要聚焦于"未来会怎样"——推演产出与研究材料共同支撑这个预测
+✅ 要聚焦于"未来会怎样"——结构化预测给出判断，研究材料提供可引用证据
 
 【硬性禁令】章节标题与正文不得出现以下方法学词汇：
 模拟、Agent/智能体、轮次、动作次数、发帖/评论/点赞/关注、共识形成、派系聚类、
-因果图、图谱、simulation、agents、rounds、action counts
+因果图、图谱、simulation、agents、rounds、action counts、harness、agent clusters、
+simulated environment、world-state outputs、simulation-derived
 
 ═══════════════════════════════════════════════════════════════
 【最重要的规则 - 必须遵守】
 ═══════════════════════════════════════════════════════════════
 
 1. 【必须调用工具检索证据】
-   - 所有内容必须来自工具检索到的推演产出与研究材料
+   - 所有事实内容必须来自工具检索到的研究材料；内部分析只用于形成预测判断
    - 禁止使用你自己的知识来编写报告内容
    - 每个章节至少调用{min_tool_calls}次工具（最多{max_tool_calls}次）获取证据
 
-2. 【引用推演观点——专家小组式转述，严禁伪装成真实信源】
-   - 内部推演中各角色的观点是**分析立场**，不是真实世界已发生的言论
-   - 引用推演观点时用专家小组式转述规范（按报告语言二选一）：
-     > 情景推演专家视角——「<机构/角色>」："…"
-     > Analytical perspective — <Institution> (scenario panel): "…"
-   - 更好的做法是把观点改写进论证并标注（内部情景推演）
-   - ❌ 禁止『模拟代理人』『Simulation Agent』『Deduction/Reasoning』等机械标签
-   - ❌ 严禁把推演观点伪装成真实人物/真实采访/分析师/媒体的话
-     （禁止「某分析师在采访中表示」「据<真实媒体>报道」之类把推演内容嫁接到真实信源）
-   - ❌ 严禁把关系数据、或系统自己推导的概率，当作某人/某机构的「原话」引用
-   - ❌ 严禁引用内容为发帖/点赞/评论等平台行为的推演片段
-   - 真实世界的事实/数据/观点只能来自研究材料（用来源索引里的数字编号标注，规范形状是
-     裸 [S12]——照抄索引给出的编号，严禁自创编号或改写成 [S1-a] 等变体），不得与推演观点混为一谈
+2. 【证据归属——内部分析不可伪装成信源】
+   - 内部计算、角色输出和情景分析一律综合为作者的预测推理；不得引用、署名、拟人化，
+     也不得出现“专家小组”“scenario panel”“模型中的某机构认为”等方法学归因
+   - ❌ 禁止『模拟代理人』『Simulation Agent』『Deduction/Reasoning』及任何直接引语
+   - ❌ 严禁把内部观点伪装成真实人物、采访、分析师或媒体的话
+   - 真实世界的事实、数据和外部观点只能来自研究材料，并在**具体支持的句子或表格行末**
+     标注来源索引中的裸 [S12]；照抄编号，严禁自创或自动替换编号
+   - 一条来源只可支持其 title/supports/excerpt 明示的事实；不能因为主题相近就把同一 [S#]
+     反复套到不同论断。若没有精确证据，保留无引文的预测判断并明确不确定性
 
 3. 【语言一致性 - 引用内容必须翻译为报告语言】
    - 工具返回的内容可能包含英文或中英文混杂的表述
@@ -795,12 +793,11 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
    - 这一规则同时适用于正文和引用块（> 格式）中的内容
 
 4. 【忠实呈现 —— 反捏造纪律（最高优先级）】
-   - 报告内容必须反映模拟推演结果与研究材料，且二者来源分明
-   - ❌ 严禁编造研究材料/模拟中不存在的数字、引文、来源、URL、日期或事件
-   - 每个**承重数字**：要么能在研究材料中找到并标注来源编号（如 [S12]，编号取自来源索引），
-     要么明确标注为「模拟推演所得」
-   - 若模拟为空洞/未产生有机互动（系统会在 simulation_health 标注），**不得**虚构 Agent 言行或「共识」，
-     转而基于研究证据做因果推理，并显式说明「本轮模拟信号有限」
+   - 报告内容必须反映预测判断与研究材料，且“模型估计”和“外部事实”来源分明
+   - ❌ 严禁编造研究材料中不存在的数字、引文、来源、URL、日期或事件
+   - 每个**承重数字**：要么在研究材料的明确证据片段中找到并标注 [S12]，要么属于
+     系统提供的结构化预测概率并称为“本报告估计”；绝不把估计写成已发生事实
+   - 内部信号不足时，只能基于研究证据和基率推理并扩大不确定性；不得在成稿中讨论内部信号质量
    - 信息不足时如实说明，绝不用流畅叙事填补证据空白
 
 5. 【写作质量 —— 拒绝「通用 LLM 腔」(评审一眼判死的就是这个)】
@@ -824,7 +821,7 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 
 【正确示例】
 ```
-本章节分析了事件的舆论传播态势。通过对模拟数据的深入分析，我们发现...
+本章节分析了事件的舆论传播态势。现有研究证据显示...
 
 ### 首发引爆阶段
 
@@ -887,26 +884,27 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
    - 正文长度不少于 {section_floor_chars} 字，目标 {section_target_lo}–{section_target_hi} 字（不含引用块）
    - 用 2-4 个「### 三级小标题」把这篇长正文切成清晰的子小节，每个子小节围绕一个论点展开
    - 必须层层展开：先给出整体判断，再分多个角度深入论证，每个角度都要有
-     具体证据（研究材料 [S#]、预测市场、内部情景推演产出）支撑
+     具体证据（研究材料 [S#]、预测市场）支撑，并与结构化预测概率保持一致
    - 充分展开因果链条、二阶效应、不同人群的分化反应、潜在转折点
    - ❌ 严禁写成几百字的提纲式摘要或泛泛而谈——那是不合格的章节
    - ✅ 像撰写一篇严肃深度报告的章节那样，写得充实、有洞察、有层次
-1. 内容必须基于工具检索到的证据（研究材料 [S#]、预测市场、内部情景推演产出），
-   且推演产出须按【证据转写规则】转写为现实世界结论后使用
+1. 内容必须基于工具检索到的证据（研究材料 [S#]、预测市场）和系统提供的结构化预测；
+   内部分析只能综合成现实世界判断，不得在成稿中出现或被引用
 2. 使用Markdown格式：
    - ✅ 用「### 三级小标题」组织 2-4 个子小节（章节内部结构）
    - 使用 **粗体文字** 标记子小节内的重点
    - 使用列表（-或1.2.3.）组织要点
    - 使用空行分隔不同段落
    - ❌ 禁止使用 # 或 ##（报告主标题/章节标题层级），也不要用 #### 及更深层级
-3. 【引用格式规范 - 必须单独成段】
-   引用必须独立成段，前后各有一个空行，不能混在段落中：
+3. 【直接引语格式规范】
+   只有研究材料中可逐字验证的真实引语才可使用 `>`，并必须在同一引语末尾标注 [S#]。
+   不能逐字验证时改写为普通转述；内部分析永远不得用直接引语。引语须独立成段：
 
    ✅ 正确格式：
    ```
    校方的回应被认为缺乏实质内容。
 
-   > "校方的应对模式在瞬息万变的社交媒体环境中显得僵化和迟缓。"
+   > "校方的应对模式在瞬息万变的社交媒体环境中显得僵化和迟缓。" [S12]
 
    这一评价反映了公众的普遍不满。
    ```
@@ -1105,8 +1103,8 @@ def salience_tiers_from_outcomes(outcomes_text: str) -> str:
 
 REACT_CONTAMINATED_RETRY_MSG = (
     "【格式错误】你上一条输出不是合格的章节正文（疑似系统提示泄漏、工具调用残留或采访超时提示）。"
-    '请立即以 "Final Answer:" 开头，只输出本章节的中文正文：必须引用前面工具返回的模拟数据与人物原话，'
-    "不要包含任何 <tool_call>、英文系统指令或元说明。"
+    '请立即以 "Final Answer:" 开头，只输出本章节的中文正文：用研究材料中的可验证事实与 [S#]，'
+    "把内部分析综合为现实世界预测，不得引用角色原话；不要包含任何 <tool_call>、英文系统指令或元说明。"
 )
 
 # 章节生成失败时写入的占位符（绝不写入被污染的原始输出）
@@ -1224,24 +1222,91 @@ def _citation_domain(url: str) -> str:
 
 
 def _citation_url_ok(url: str) -> bool:
-    """URL 有效性守卫：拦截 'https://www.mckinsey' 型截断域名，避免渲染成坏链接。
+    """URL 有效性守卫：拦截截断域名/路径，避免渲染成坏链接。
 
     规则：http(s) scheme + 域名含点 + （末段是常见 TLD，或带真实路径——罕见 TLD 但
-    明显有内容路径的仍放行）。宁可保守标记 invalid（条目仍列出，只是不渲染成链接）。"""
+    明显有内容路径的仍放行）。另拦截已在真实运行中出现的 Wikipedia 半截 slug
+    （``/wiki/St``、``/wiki/ASML_H``、``/wiki/Anduril_``）。"""
     try:
-        from urllib.parse import urlparse
-        p = urlparse(str(url or "").strip())
+        from urllib.parse import unquote, urlparse
+        raw = str(url or "").strip()
+        if not raw or any(ch.isspace() or ord(ch) < 32 for ch in raw):
+            return False
+        p = urlparse(raw)
         if p.scheme not in ("http", "https") or not p.netloc:
             return False
-        host = p.netloc.split(":")[0].lower()
+        if p.username or p.password:
+            return False
+        host = (p.hostname or "").lower().rstrip(".")
         labels = [x for x in host.split(".") if x]
         if len(labels) < 2:
             return False
-        if labels[-1] in _COMMON_TLDS:
-            return True
-        return len(p.path.strip("/")) > 1        # 罕见 TLD：有真实路径才放行
+        if labels[-1] not in _COMMON_TLDS and len(p.path.strip("/")) <= 1:
+            return False                         # 罕见 TLD：须有真实内容路径
+        path = unquote(p.path or "")
+        if path.endswith(("_", "…", "...")):
+            return False
+        if host.endswith("wikipedia.org"):
+            if not path.startswith("/wiki/"):
+                return False                     # Wikipedia 首页不是可核验的具体来源
+            slug = path[len("/wiki/"):].strip("/")
+            if not slug:
+                return False
+            # 两字母全大写词（如 AI）可以是真实条目；混合大小写半词（St/Al）不可。
+            if len(slug) < 3 and not (slug.isalpha() and slug.isupper()):
+                return False
+            if re.search(r"_[A-Za-z]$", slug):
+                return False
+        return True
     except Exception:  # noqa: BLE001
         return False
+
+
+def _citation_source_admissible(source: Any) -> bool:
+    """A publishable citation must resolve to a concrete, non-truncated URL.
+
+    ``url_valid=false`` is treated as authoritative negative provenance.  This
+    predicate intentionally rejects title-only rows: they may remain research
+    notes, but cannot become seamless end-user citations without a destination.
+    """
+    if not isinstance(source, dict) or source.get("url_valid") is False:
+        return False
+    url = str(source.get("url") or "").strip()
+    if not _citation_url_ok(url):
+        return False
+    title = str(source.get("title") or "").strip().lower()
+    if title in {"http", "https", "source", "untitled", "unknown", "en"}:
+        return False
+    return True
+
+
+def _citation_display_title(source: Dict[str, Any], tag: str = "") -> str:
+    """Return a reader-facing title, deriving one from a concrete URL path.
+
+    Research fetches occasionally preserve only the host as ``title``.  That is
+    valid provenance but poor report typography (29 rows named
+    ``en.wikipedia.org``).  Concrete path slugs are deterministic and more
+    informative; model text is never invented.
+    """
+    from urllib.parse import unquote, urlparse
+
+    url = str(source.get("url") or "").strip()
+    domain = _citation_domain(url)
+    title = str(source.get("title") or "").strip()
+    generic = not title or title.lower() in {
+        domain.lower(), f"www.{domain.lower()}", "source", "untitled", "unknown",
+    }
+    if generic and url:
+        try:
+            path = unquote(urlparse(url).path or "").strip("/")
+            slug = path.split("/")[-1] if path else ""
+            slug = re.sub(r"\.(?:html?|php|aspx?)$", "", slug, flags=re.I)
+            derived = re.sub(r"[_-]+", " ", slug).strip()
+            if len(derived) >= 3 or (derived.isalpha() and derived.isupper()):
+                title = derived
+        except Exception:  # noqa: BLE001 — display fallback only
+            pass
+    return title or domain or tag
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1770,7 +1835,8 @@ class ReportAgent:
         parts = [
             f"{header}\n"
             "以下为本次预测所依据的深度研究实证档案（角色/关系/时间线/热点均为调研确认）。"
-            "撰写时以此为权威背景：优先复用其中真实人名/机构/关系，再用工具补充模拟动态与量化结果。\n\n"
+            "撰写时以此为权威背景：优先复用其中真实人名/机构/关系，再用工具补充"
+            "可验证的预测驱动、结果路径与量化证据；不得描述内部推演机制。\n\n"
             f"{sb}"
         ]
         # EXECPLAN2 I-0-5/I-0-1/I-0-2: 钉入研究契约富化块（定量事实表/争议证据/预测输入）。
@@ -2134,6 +2200,13 @@ class ReportAgent:
         """
         if not self.sources:
             return "", {}
+        # Keep original list positions stable (S<n> is positional), but replace
+        # malformed/non-resolvable rows with sentinels so they can never enter
+        # the model-visible citation namespace.
+        admissible_sources = [
+            source if _citation_source_admissible(source) else None
+            for source in self.sources
+        ]
         try:
             max_n = int(getattr(Config, "REPORT_SOURCES_INDEX_MAX", 60) or 60)
         except (TypeError, ValueError):
@@ -2142,7 +2215,7 @@ class ReportAgent:
             try:
                 from ..utils import actors as _actors
                 text, tag_map = _actors.sources_index_unified(
-                    self.sources, research_report=self.research_report,
+                    admissible_sources, research_report=self.research_report,
                     max_sources=max_n)
                 if text:
                     return text, tag_map
@@ -2151,15 +2224,15 @@ class ReportAgent:
         if getattr(Config, "RESEARCH_EVIDENCE_GRADING", True):
             try:
                 from ..utils import actors as _actors
-                tiered = _actors.sources_index_tiered(self.sources)
+                tiered = _actors.sources_index_tiered(admissible_sources)
                 if tiered:
-                    return tiered, _actors.sources_index_tiered_map(self.sources)
+                    return tiered, _actors.sources_index_tiered_map(admissible_sources)
             except Exception as _e:
                 logger.debug(f"分层来源索引渲染跳过，回退位置索引: {_e}")
         lines = ["【可引用来源（正文用 [S1]/[S2] 形式标注）】"]
         tag_map: Dict[str, Dict[str, Any]] = {}
-        for i, s in enumerate(self.sources[:40], 1):
-            if not isinstance(s, dict):
+        for i, s in enumerate(admissible_sources[:40], 1):
+            if not _citation_source_admissible(s):
                 continue
             title = str(s.get("title", "") or "").strip()
             url = str(s.get("url", "") or "").strip()
@@ -2325,6 +2398,10 @@ class ReportAgent:
     def _world_state_block(self) -> str:
         """NEXTSTEPS P1-1: 读取模拟的 world_state_trajectory.json（决策通道产物），渲染**建模出的
         结果分布 P(outcome)**。未开 SIM_DECISION_CHANNEL / 无产物 → ""（degrade-safe）。
+
+        日历模式（轨迹 schema v3，spec §4/§6）：额外渲染 ~4 个带日期的演化航点
+        （首轮/⅓/⅔/末轮），趋稳判定改为日历口径（"于 {label} 前趋稳"），且
+        horizon_defaulted 时强制披露默认 12 个月期限。v2 轨迹渲染逐字节不变。
         """
         try:
             path = os.path.join(getattr(Config, "OASIS_SIMULATION_DATA_DIR", "") or "",
@@ -2338,16 +2415,73 @@ class ReportAgent:
         shares = ((data or {}).get("outcome") or {}).get("shares") or {}
         if not isinstance(shares, dict) or not shares:
             return ""
-        lines = ["【模拟建模结果·结果世界态 P(outcome)（权威·建模而非声量；情景概率应据此为主锚）】"]
+        lines = ["【预测结果分布 P(outcome)（内部分析先验；须与外部证据交叉验证）】"]
         for name, sh in sorted(shares.items(), key=lambda kv: -float(kv[1] or 0)):
             try:
                 lines.append(f"· {name}: {float(sh) * 100:.0f}%")
             except (TypeError, ValueError):
                 continue
         ca = (data or {}).get("converged_at")
-        lines.append(f"收敛于第 {ca} 轮（稳定 → 高信心）" if ca else "未收敛（→ 降低信心）")
-        lines.append("注：以上为按资源加权的智能体决策（非发帖声量）演化出的结果分布，更接近真实结果。")
+        traj = (data or {}).get("trajectory")
+        rows = [r for r in (traj if isinstance(traj, list) else [])
+                if isinstance(r, dict) and isinstance(r.get("shares"), dict) and r.get("shares")]
+        if (data or {}).get("schema_version") == 3 and rows:
+            # 日历航点：首轮/⅓/⅔/末轮（去重），每行 "截至 {period_end}: {A} 62% / {B} 38%"
+            n = len(rows)
+            lines.append("演化航点（按日历时段）：")
+            for i in sorted({0, n // 3, (2 * n) // 3, n - 1}):
+                row = rows[i]
+                pe = str(row.get("period_end") or row.get("as_of") or f"第{row.get('round')}轮")
+                segs = []
+                for k, v in sorted(row["shares"].items(), key=lambda kv: -float(kv[1] or 0)):
+                    try:
+                        segs.append(f"{k} {float(v) * 100:.0f}%")
+                    except (TypeError, ValueError):
+                        continue
+                if segs:
+                    lines.append(f"截至 {pe}: {' / '.join(segs)}")
+            if ca is not None:
+                label = ""
+                for row in rows:  # 趋稳轮所在时段（round 对不上时取其后第一个时段）
+                    rr = row.get("round")
+                    if isinstance(rr, (int, float)) and rr >= float(ca):
+                        label = str(row.get("label") or row.get("period_end") or "")
+                        break
+                if not label:
+                    label = str(rows[-1].get("label") or rows[-1].get("period_end") or "")
+                lines.append(f"于 {label} 前趋稳")
+            else:
+                lines.append("截至判定日尚未趋稳，应降低信心")
+            if (data or {}).get("horizon_defaulted"):
+                lines.append("预测期限未在问题中明确，默认取 12 个月"
+                             f"（截至 {(data or {}).get('horizon_date') or ''}）")
+        else:
+            lines.append("稳定性诊断：已趋稳" if ca else "稳定性诊断：尚未趋稳（应降低信心）")
+        lines.append("注：这是结构化情景分析先验，不是观察事实；正文结论必须以研究来源和现实指标校验。")
         return "\n".join(lines)
+
+    def _temporal_horizon_date(self) -> str:
+        """日历模式的判定日 horizon_date（轨迹 v3 优先，其次 simulation_config 的
+        temporal_config）；hours 模式/无产物 → ""（调用方回退旧行为，degrade-safe）。"""
+        try:
+            sim_dir = os.path.join(getattr(Config, "OASIS_SIMULATION_DATA_DIR", "") or "",
+                                   str(self.simulation_id or ""))
+            for fname in ("world_state_trajectory.json", "simulation_config.json"):
+                path = os.path.join(sim_dir, fname)
+                if not os.path.exists(path):
+                    continue
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, dict):
+                    continue
+                if fname == "simulation_config.json":
+                    data = data.get("temporal_config") or {}
+                if isinstance(data, dict) and data.get("mode") == "calendar" \
+                        and data.get("horizon_date"):
+                    return str(data["horizon_date"])
+        except Exception:  # noqa: BLE001 — 期限定位失败退回 as_of_date 旧行为
+            return ""
+        return ""
 
     # ──────────────────────────────────────────────────────────────
     # 预测市场信号包（Polymarket 公开 Gamma API；市场隐含概率 = 校准锚点）
@@ -2388,11 +2522,18 @@ class ReportAgent:
                 break  # 找到对应管线即停（无论有无市场文件），转现抓兜底
         except Exception as e:  # noqa: BLE001 — handoff 读取失败转现抓兜底
             logger.debug(f"读取 handoff prediction_markets.json 失败（转现抓兜底）: {e}")
-        # ② 现抓兜底（仅当 client 可用；一次快照，15s 超时 + 单次重试在 client 内部）。
+        # ② 现抓兜底（仅当 client + report LLM 可用）。Unlike the canonical research
+        # artifact, this late path has no researcher to vet lexical matches, so it is
+        # deliberately fail-closed: only rows carrying an explicit LLM relevance score
+        # may enter the report.
         try:
-            from ..utils.prediction_markets import PolymarketClient, derive_market_queries
+            from ..utils.prediction_markets import (
+                PolymarketClient,
+                derive_market_queries_llm,
+                score_market_relevance,
+            )
             client = PolymarketClient()
-            if not client.enabled:
+            if not client.enabled or not getattr(self, "llm", None):
                 return []
             hot_topics: List[str] = []
             actor_names: List[str] = []
@@ -2409,9 +2550,21 @@ class ReportAgent:
                     actor_names = [n for n in actor_names if n]
                 except Exception:  # noqa: BLE001 — actor 名为查询词的可选增强
                     pass
-            queries = derive_market_queries(getattr(self, "simulation_requirement", "") or "",
-                                            hot_topics=hot_topics,
-                                            actor_names=actor_names)
+            question = getattr(self, "simulation_requirement", "") or ""
+
+            def _market_llm(prompt: str) -> str:
+                return str(self.llm.chat(
+                    messages=[
+                        {"role": "system", "content": (
+                            "You are a strict prediction-market retrieval classifier. "
+                            "Return only the requested JSON; never invent a market ID.")},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.0,
+                ) or "")
+
+            queries = derive_market_queries_llm(
+                _market_llm, question, hot_topics=hot_topics, actors=actor_names)
             if not queries:
                 return []
             try:
@@ -2422,11 +2575,30 @@ class ReportAgent:
                 max_per_event = int(getattr(Config, "PREDICTION_MARKETS_MAX_PER_EVENT", 3) or 3)
             except (TypeError, ValueError):
                 max_per_event = 3
-            markets = client.snapshot_for_queries(queries, max_total=max_n,
-                                                  min_volume=min_vol,
-                                                  max_per_event=max_per_event)
+            candidates = client.snapshot_for_queries(
+                queries, max_total=max_n, min_volume=min_vol,
+                max_per_event=max_per_event)
+            scored = score_market_relevance(_market_llm, question, candidates)
+            markets = [row for row in scored if row.get("relevance_score") is not None]
             if markets:
                 logger.info(f"预测市场现抓兜底：{len(markets)} 个活跃市场（queries={queries}）")
+                report_id = str(getattr(self, "_active_report_id", "") or "")
+                if report_id:
+                    try:
+                        from ..utils.atomic import write_json_atomic
+                        write_json_atomic(
+                            os.path.join(ReportManager._get_report_folder(report_id),
+                                         "prediction_markets_recovered.json"),
+                            {"as_of": datetime.now(timezone.utc).isoformat(),
+                             "source": "report_fallback", "queries": queries,
+                             "markets": markets,
+                             "status": {"attempted": True,
+                                        "candidate_count": len(candidates),
+                                        "selected_count": len(markets),
+                                        "empty_reason": None}},
+                        )
+                    except Exception as persist_error:  # noqa: BLE001 — observability only
+                        logger.debug(f"写入报告期预测市场恢复工件失败（忽略）: {persist_error}")
             self._markets_stale = False  # PM-3：现抓即实时价，不陈旧
             return markets
         except Exception as e:  # noqa: BLE001 — 市场信号为可选增强
@@ -2625,6 +2797,11 @@ class ReportAgent:
             horizon = ""
             if isinstance(self.actors, dict):
                 horizon = str(self.actors.get("as_of_date", "") or "")
+            # Spine 修复（spec §4）：日历模式下预测期限应是 temporal_config/轨迹的
+            # horizon_date（判定日），而非 as_of_date（那是"现在"）；hours 模式保持旧行为。
+            _hz = self._temporal_horizon_date()
+            if _hz:
+                horizon = _hz
             spine = _fe.derive_forecast_spine(
                 self.llm,
                 central_question=self.simulation_requirement or "",
@@ -2762,7 +2939,11 @@ class ReportAgent:
         # views stay consistent. Additive + degrade-safe: failure leaves the scenario forecast intact.
         if getattr(Config, "FORECAST_EMIT_BINARY", True):
             try:
-                from .forecast_extractor import extract_binary_forecasts as _ebf
+                from .forecast_extractor import (
+                    _binary_quality as _binary_quality_score,
+                    extract_binary_forecasts as _ebf,
+                    reconcile_forecast_contract as _reconcile_forecast_contract,
+                )
                 _lang = (getattr(self, "output_language", None)
                          or getattr(Config, "DEERFLOW_RESEARCH_LANGUAGE", None) or "English")
                 _bsrc = self.research_report or report_markdown or ""
@@ -2812,14 +2993,23 @@ class ReportAgent:
                     signal_pack=_sig or None,
                     market_pack=_mkt or None,
                     markets=getattr(self, "_prediction_markets", None) or None,
+                    scenarios=forecast.get("scenarios") or None,
                 )
                 if _bres.get("binary_forecasts"):
                     forecast["binary_forecasts"] = _bres["binary_forecasts"]
                     forecast["binary_quality"] = _bres.get("binary_quality") or {}
+                    _contract = _reconcile_forecast_contract(forecast)
+                    _quality = _binary_quality_score(
+                        forecast["binary_forecasts"],
+                        min_count=self._binary_min_count(),
+                        themes_expected=_themes,
+                    )
+                    _quality["proposition_consistency"] = _contract
+                    forecast["binary_quality"] = _quality
                     # PM-2：确定性市场对照负载（预测 vs 市场隐含概率、|Δ|、>10pp 判定）——嵌入
                     # forecast.json 并独立落 market_comparison.json，供 Part-1 后的「Market Cross-Check」
                     # 渲染块与下游消费。无锚定预测时不写（degrade-safe）。
-                    _mc = _bres.get("market_comparison")
+                    _mc = forecast.get("market_comparison")
                     if isinstance(_mc, dict) and _mc.get("comparisons"):
                         forecast["market_comparison"] = _mc
                         try:
@@ -2852,8 +3042,12 @@ class ReportAgent:
                     report_id, forecast, report_markdown, report)
             except Exception as _rpe:  # noqa: BLE001 — 修复为旁路品控，失败不影响产物
                 logger.warning(f"报告修复 passes 失败（忽略，不影响产物）: {_rpe}")
-        if getattr(Config, "REPORT_PUBLISH_GATE", False):
-            forecast = self._apply_publish_gate(forecast)
+        # The authoritative publish gate runs only after every report mutation,
+        # including citation finalization.  At this point the Markdown is still a
+        # draft: binary tables, visual placement, the three-part skeleton,
+        # resolution criteria, language repair, editorial lint, and References can
+        # all change it below.  Applying the gate here made its citation/quality
+        # fields stale by construction and could demote confidence twice.
         # P2-2: 把观察指标随 forecast.json 落盘（供解析调度器对照判别情景）。
         try:
             from ..utils import actors as _actors
@@ -3067,40 +3261,105 @@ class ReportAgent:
         字符串字段（title/url/snippet/content/summary…）拼接后归一化。空来源返回 []。"""
         out: List[Tuple[str, str]] = []
         for i, s in enumerate(self.sources or [], 1):
-            if not isinstance(s, dict):
+            if not _citation_source_admissible(s):
                 continue
-            vals = [str(v) for v in s.values() if isinstance(v, (str, int, float))]
+            vals: List[str] = []
+            for value in s.values():
+                if isinstance(value, (str, int, float)):
+                    vals.append(str(value))
+                elif isinstance(value, (list, dict)):
+                    vals.append(json.dumps(value, ensure_ascii=False))
             hay = self._norm_quote_text(" ".join(vals))
             if hay:
                 out.append((f"[S{i}]", hay))
         return out
 
+    _CITATION_MATCH_STOPWORDS = {
+        "about", "above", "after", "again", "against", "among", "because", "before",
+        "below", "between", "could", "during", "evidence", "forecast", "from", "have",
+        "into", "line", "more", "most", "other", "over", "report", "than", "that",
+        "their", "there", "these", "this", "through", "under", "using", "were", "which",
+        "while", "with", "would", "year",
+    }
+
+    @classmethod
+    def _best_source_tag_for_line(
+            cls, line: str, haystacks: List[Tuple[str, str]]) -> str:
+        """Return one uniquely supported source tag for a quantitative line.
+
+        A candidate must match a discriminative numeric token (calendar years
+        alone never qualify) and at least two non-generic lexical anchors. If
+        multiple sources tie for best evidence, return empty rather than attach
+        an arbitrary citation.
+        """
+        bare = cls._ANY_S_TAG_RE.sub(" ", str(line or ""))
+        numeric: List[Tuple[str, bool]] = []
+        for match in re.finditer(r"(?<![\w.])(\d+(?:\.\d+)?)(\s*%)?", bare):
+            number = match.group(1)
+            is_percent = bool(match.group(2))
+            try:
+                as_float = float(number)
+            except ValueError:
+                continue
+            if not is_percent and as_float.is_integer() and 1900 <= as_float <= 2100:
+                continue
+            if not is_percent and len(number.replace(".", "")) < 2:
+                continue
+            numeric.append((number, is_percent))
+        if not numeric:
+            return ""
+
+        lexical = {
+            (token[:-1] if token.endswith("s") and len(token) > 5 else token)
+            for token in re.findall(r"[a-z][a-z0-9_-]{3,}", bare.lower())
+            if token not in cls._CITATION_MATCH_STOPWORDS
+        }
+        if len(lexical) < 2:
+            return ""
+
+        candidates: List[Tuple[int, str]] = []
+        for tag, hay in haystacks:
+            anchor_hits = 0
+            for number, is_percent in numeric:
+                suffix = r"\s*%" if is_percent else ""
+                if re.search(r"(?<![\d.])" + re.escape(number) + suffix + r"(?![\d.])", hay):
+                    anchor_hits += 1
+            if not anchor_hits:
+                continue
+            lexical_hits = sum(
+                1 for token in lexical
+                if re.search(r"(?<![a-z0-9])" + re.escape(token) + r"(?:s)?(?![a-z0-9])", hay)
+            )
+            if lexical_hits < 2:
+                continue
+            candidates.append((anchor_hits * 4 + lexical_hits, tag))
+        if not candidates:
+            return ""
+        candidates.sort(key=lambda item: (-item[0], item[1]))
+        if len(candidates) > 1 and candidates[0][0] == candidates[1][0]:
+            return ""
+        return candidates[0][1]
+
     def _repair_citation_backfill(self, md: str) -> Tuple[str, int]:
-        """RQ-2 引用回填：对缺引用的定量正文行，若其中某个数字/百分比逐字出现在某来源底料里，
-        追加该来源的 [S{i}] 记号。保守：仅当数字（>=2 位或带 %）在来源中精确命中才回填，
-        避免虚构归因；每行至多回填一个记号。返回 (新 markdown, 回填数)。"""
+        """RQ-2 引用回填：仅在数字 + 至少两个词汇锚点唯一指向同一来源时追加 [S{i}]。
+
+        Calendar years never qualify by themselves, ambiguous ties remain
+        uncited, and each line receives at most one marker. This deliberately
+        prefers a visible coverage gap over a seamless but false attribution.
+        """
         haystacks = self._source_haystacks()
         if not haystacks:
             return md, 0
-        num_re = re.compile(r"\d+(?:\.\d+)?%|\b\d{2,}(?:\.\d+)?\b")
         inserted = 0
         out_lines: List[str] = []
         for ln in md.splitlines():
             stripped = ln.strip()
-            # 跳过标题 / 引用块 / 已带任意 [S…] 记号（位置式 [S1]、分层 [S1-a] 或占位符 [S?]）/ 无数字的行
+            # 跳过标题 / 引用块 / 已带任意 [S…] 记号。
             if (not stripped or stripped.startswith("#") or stripped.startswith(">")
                     or self._ANY_S_TAG_RE.search(ln)):
                 out_lines.append(ln)
                 continue
-            nums = [m.group(0).lower() for m in num_re.finditer(stripped)]
-            if not nums:
-                out_lines.append(ln)
-                continue
-            matched_tag = None
-            for tag, hay in haystacks:
-                if any(n in hay for n in nums):
-                    matched_tag = tag
-                    break
+            matched_tag = self._best_source_tag_for_line(stripped, haystacks)
             if matched_tag:
                 out_lines.append(ln.rstrip() + " " + matched_tag)
                 inserted += 1
@@ -3112,9 +3371,9 @@ class ReportAgent:
 
     def _repair_quote_grounding(self, md: str) -> Tuple[str, int]:
         """RQ-2 引文接地修复：删除既非模拟/推演标注、又未在研究材料中逐字命中、且不带 [S#] 来源的
-        blockquote 行（S2 判定为嫁接/捏造的引文）。与 _audit_quote_provenance 同源判定，但按整行
-        操作以便精确删除。返回 (新 markdown, 删除的引文行数)。删除是最诚实且可度量的动作（重跑
-        审计后未接地计数必降）。
+        blockquote 行（S2 判定为嫁接/捏造的引文）。带有效来源记号但无法逐字接地的文本保留为
+        普通转述而不是伪装成直接引语。与 _audit_quote_provenance 同源判定，但按整行操作以便
+        精确删除/去引号。返回 (新 markdown, 删除的引文行数)。
 
         WAVE9 修复两个系统性缺陷：
           (a) 推演标签常写在引文**上一行**的归因行里（'情景推演专家视角——「X」：' + 下一行
@@ -3122,12 +3381,30 @@ class ReportAgent:
           (b) 整段 blockquote 被删后，紧邻其上的『X 表示：』归因行会孤悬（上一份报告残留
               ~12 处空引子）——现同步删除该引子行。"""
         v2 = bool(getattr(Config, "REPORT_QUOTE_AUDIT_V2", True))
-        ground_raw = ((self.research_report or "") + "\n" + (self._background_block or "")
+        ground_raw = ((self.research_report or "") + "\n"
+                      + (getattr(self, "_background_block", "") or "")
                       + "\n" + (getattr(self, "situation_brief", "") or ""))
-        ground = self._norm_quote_text(ground_raw) if v2 else ground_raw.lower()
+        ground = self._quote_ground_material() if v2 else ground_raw.lower()
         sim_labels = self._SIM_QUOTE_LABELS
         _summary_n = self._norm_quote_text(getattr(self, "_outline_summary", "") or "")
         _table_note_n = self._norm_quote_text(self._TABLE_NOTE_TEXT)
+
+        def _matches_ground(raw_q: str) -> bool:
+            if not v2:
+                probe = re.sub(r'^["“”「『\'\s]+', '', raw_q)[:40].lower().strip()
+                return bool(probe and probe in ground)
+            qn = self._norm_quote_text(raw_q)
+            if not qn:
+                return True
+            if (_summary_n and qn == _summary_n) or qn == _table_note_n:
+                return True
+            probes = [qn[:40]]
+            if len(qn) > 80:
+                mid = len(qn) // 2
+                probes.append(qn[mid:mid + 40])
+            if len(qn) > 40:
+                probes.append(qn[-40:])
+            return any(p and p in ground for p in probes)
 
         def _is_ungrounded(raw_q: str) -> bool:
             if len(raw_q) < 12:
@@ -3135,23 +3412,11 @@ class ReportAgent:
             ql = raw_q.lower()
             if any(t in ql for t in sim_labels):
                 return False
-            if self._S_CITATION_RE.search(raw_q):     # 带 [S#] 来源 → 不删（至多是非逐字，缺陷但非捏造）
+            if _matches_ground(raw_q):
                 return False
-            if not v2:
-                probe = re.sub(r'^["“”「『\'\s]+', '', raw_q)[:40].lower().strip()
-                return not (probe and probe in ground)
-            qn = self._norm_quote_text(raw_q)
-            if not qn:
+            if self._S_CITATION_RE.search(raw_q):
                 return False
-            if (_summary_n and qn == _summary_n) or qn == _table_note_n:
-                return False
-            probes = [qn[:40]]
-            if len(qn) > 80:
-                mid = len(qn) // 2
-                probes.append(qn[mid:mid + 40])
-            if len(qn) > 40:
-                probes.append(qn[-40:])
-            return not any(p and p in ground for p in probes)
+            return True
 
         lines = md.splitlines()
 
@@ -3164,6 +3429,7 @@ class ReportAgent:
 
         # 第一遍：决定删除哪些引文行（归因行带推演标签的引文豁免——(a)）。
         delete: set = set()
+        dequote: set = set()
         for i, ln in enumerate(lines):
             s = ln.strip()
             if not s.startswith(">"):
@@ -3175,9 +3441,12 @@ class ReportAgent:
                 if (prev and not prev.startswith(">") and not prev.startswith("#")
                         and any(t in prev.lower() for t in sim_labels)):
                     continue  # 上一行归因已诚实标注为推演 → 引文合法保留
+            if self._S_CITATION_RE.search(raw_q) and not _matches_ground(raw_q):
+                dequote.add(i)
+                continue
             if _is_ungrounded(raw_q):
                 delete.add(i)
-        if not delete:
+        if not delete and not dequote:
             return md, 0
 
         # 第二遍：对「整段 blockquote 全被删」的段落，同步删除孤悬的引子归因行——(b)。
@@ -3202,9 +3471,23 @@ class ReportAgent:
                         intro_removed += 1
 
         removed = sum(1 for k in delete if lines[k].strip().startswith(">"))
-        out_lines = [ln for k, ln in enumerate(lines) if k not in delete]
+        out_lines: List[str] = []
+        for k, ln in enumerate(lines):
+            if k in delete:
+                continue
+            if k in dequote:
+                prose = ln.strip()[1:].strip()
+                prose = re.sub(r'^["“”「『\']+\s*', '', prose)
+                prose = re.sub(
+                    r'["”」』\'](?=\s*(?:\[S\d+\])|[.!?]?\s*$)', '', prose
+                )
+                out_lines.append(prose)
+            else:
+                out_lines.append(ln)
         if intro_removed:
             logger.info(f"引文接地修复：删除 {removed} 行未接地引文，并清理 {intro_removed} 行孤悬引子")
+        if dequote:
+            logger.info(f"引文接地修复：将 {len(dequote)} 行非逐字来源引文改为普通转述")
         return "\n".join(out_lines), removed
 
     def _repair_placeholder_tokens(self, md: str) -> Tuple[str, int]:
@@ -3232,12 +3515,293 @@ class ReportAgent:
         回退为**全量**位置映射（{"S{i}": sources[i-1]}，编号与 _source_haystacks 对齐）。"""
         imap = getattr(self, "_citation_index", None)
         if isinstance(imap, dict) and imap:
-            return imap
+            filtered = {
+                str(tag): source for tag, source in imap.items()
+                if _citation_source_admissible(source)
+            }
+            if filtered:
+                return filtered
         out: Dict[str, Any] = {}
         for i, s in enumerate(getattr(self, "sources", None) or [], 1):
-            if isinstance(s, dict):
+            if _citation_source_admissible(s):
                 out[f"S{i}"] = s
         return out
+
+    @classmethod
+    def _semantic_citation_support(
+        cls, line: str, source: Dict[str, Any]
+    ) -> Optional[bool]:
+        """Verify a cited claim against persisted, source-specific evidence spans.
+
+        URL/domain/date/tier metadata is deliberately excluded: those fields can
+        create lexical coincidences but cannot support a claim.  ``None`` means
+        the pair is not deterministically auditable (for example cross-language
+        prose); callers preserve but report it rather than guessing.
+        """
+        bare = cls._ANY_S_TAG_RE.sub(" ", str(line or ""))
+
+        def _tokens(text: str) -> set[str]:
+            out: set[str] = set()
+            for token in re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", text.lower()):
+                if token in cls._CITATION_MATCH_STOPWORDS:
+                    continue
+                if token.endswith("s") and len(token) > 5:
+                    token = token[:-1]
+                out.add(token)
+            return out
+
+        line_tokens = _tokens(bare)
+        if len(line_tokens) < 2:
+            return None
+
+        spans: List[str] = []
+        title = str(source.get("title") or "").strip()
+        if title:
+            spans.append(title)
+        supports = source.get("supports")
+        if isinstance(supports, list):
+            spans.extend(str(value).strip() for value in supports if str(value).strip())
+        elif isinstance(supports, str) and supports.strip():
+            spans.append(supports.strip())
+        for key in ("excerpt", "snippet", "quote", "summary", "description", "content", "text"):
+            value = source.get(key)
+            if not isinstance(value, str) or not value.strip():
+                continue
+            # Treat individual persisted sentences/lines as evidence.  This
+            # avoids allowing an unrelated fact elsewhere in a large scraped
+            # document to combine with generic words from the cited claim.
+            pieces = re.split(r"(?<=[.!?。！？])\s+|[\r\n]+", value.strip())
+            spans.extend(piece.strip()[:1200] for piece in pieces[:200] if piece.strip())
+        if not spans:
+            return None
+
+        line_numbers = set(re.findall(r"(?<![\w.])\d+(?:\.\d+)?%?", bare))
+        discriminative_numbers = {
+            number for number in line_numbers
+            if not (number.isdigit() and 1900 <= int(number) <= 2100)
+        }
+        normalized_line = re.sub(r"\s+", " ", bare).strip().lower()
+        all_span_tokens: set[str] = set()
+        all_span_numbers: set[str] = set()
+        for span in spans:
+            all_span_tokens.update(_tokens(span))
+            all_span_numbers.update(re.findall(
+                r"(?<![\w.])\d+(?:\.\d+)?%?", span
+            ))
+        # One source may persist a multi-part fact as several concise `supports`
+        # spans (for example tariff rate and burden incidence). Aggregate only
+        # those trusted spans—not URL/metadata—and require every material number
+        # plus at least two source-specific lexical anchors.
+        if (discriminative_numbers
+                and discriminative_numbers.issubset(all_span_numbers)
+                and len(line_tokens & all_span_tokens) >= 2):
+            return True
+        for index, span in enumerate(spans):
+            span_tokens = _tokens(span)
+            if not span_tokens:
+                continue
+            overlap = line_tokens & span_tokens
+            normalized_span = re.sub(r"\s+", " ", span).strip().lower()
+            exact_phrase = (
+                len(normalized_span) >= 18
+                and (normalized_span in normalized_line or normalized_line in normalized_span)
+            )
+            if exact_phrase:
+                return True
+            span_numbers = set(re.findall(
+                r"(?<![\w.])\d+(?:\.\d+)?%?", span
+            ))
+            if discriminative_numbers:
+                if not discriminative_numbers.issubset(span_numbers):
+                    continue
+                if len(overlap) >= 2:
+                    return True
+                continue
+            if line_numbers and not (line_numbers & span_numbers):
+                continue
+            # Titles identify a source but rarely prove a detailed claim; two
+            # specific title anchors or three anchors in an explicit support /
+            # excerpt span are the minimum deterministic standard.
+            required = 2 if index == 0 and title else 3
+            if len(overlap) >= required:
+                return True
+        return False
+
+    @staticmethod
+    def _citation_claim_clause(line: str, start: int, end: int) -> str:
+        """Return the punctuation-bounded claim immediately owning a marker.
+
+        Citation decisions must not borrow a number or entity from a neighboring
+        sentence on the same Markdown line. Decimal points are not boundaries.
+        Table pipes are boundaries because each cell is a distinct claim surface.
+        """
+        text = str(line or "")
+        boundaries: List[Tuple[int, int]] = []
+        for match in re.finditer(r"(?:[.!?。！？；](?=\s|$)|\|)", text):
+            boundaries.append((match.start(), match.end()))
+        left = 0
+        right = len(text)
+        preceding = [pair for pair in boundaries if pair[1] <= start]
+        if preceding:
+            last_start, last_end = preceding[-1]
+            if not text[last_end:start].strip():
+                # Conventional Markdown puts a marker after the terminal period:
+                # ``Claim. [S1]``. It belongs to Claim, not an empty next clause.
+                left = preceding[-2][1] if len(preceding) > 1 else 0
+                right = last_start
+            else:
+                left = last_end
+        for boundary_start, _boundary_end in boundaries:
+            if boundary_start >= end:
+                if right == len(text):
+                    right = boundary_start
+                break
+        return text[left:right].strip()
+
+    def _best_semantic_source_tag_for_line(
+        self, line: str
+    ) -> str:
+        candidates: List[Tuple[int, int, str, Dict[str, Any]]] = []
+        bare = self._ANY_S_TAG_RE.sub(" ", str(line or ""))
+        line_words = set(re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", bare.lower()))
+        line_numbers = set(re.findall(r"(?<![\w.])\d+(?:\.\d+)?%?", bare))
+        for index, source in enumerate(getattr(self, "sources", None) or [], 1):
+            if not _citation_source_admissible(source):
+                continue
+            supported = self._semantic_citation_support(line, source)
+            if supported is not True:
+                continue
+            source_text = json.dumps(source, ensure_ascii=False)
+            source_words = set(re.findall(
+                r"[A-Za-z][A-Za-z0-9_-]{3,}", source_text.lower()))
+            source_numbers = set(re.findall(
+                r"(?<![\w.])\d+(?:\.\d+)?%?", source_text))
+            candidates.append((
+                len(line_numbers & source_numbers),
+                len(line_words & source_words),
+                f"S{index}",
+                source,
+            ))
+        if not candidates:
+            return ""
+        candidates.sort(key=lambda row: (row[0], row[1], row[2]), reverse=True)
+        best = candidates[0]
+        if len(candidates) > 1 and best[:2] == candidates[1][:2]:
+            return ""  # tied provenance is not a safe automatic remap
+        imap = getattr(self, "_citation_index", None)
+        if not isinstance(imap, dict):
+            imap = {}
+            self._citation_index = imap
+        imap.setdefault(best[2], best[3])
+        return best[2]
+
+    def _repair_semantic_citations(
+        self, md: str
+    ) -> Tuple[str, Dict[str, int]]:
+        """Keep supported markers and strip unsupported ones without guessing.
+
+        A lexical candidate is not provenance.  Automatic semantic remapping is
+        therefore forbidden here; a missing citation remains a visible coverage
+        gap for the publication gate instead of becoming a false footnote.
+        """
+        imap = self._citation_index_or_fallback()
+        current = getattr(self, "_citation_index", None)
+        if not isinstance(current, dict) or not current:
+            self._citation_index = dict(imap)
+        marker_re = re.compile(r"[\[【]\s*(S\d+)\s*[\]】]", re.I)
+        info = {"checked": 0, "kept": 0, "unverifiable": 0,
+                "remapped": 0, "stripped": 0}
+        out: List[str] = []
+        in_fence = False
+        for line in str(md or "").split("\n"):
+            stripped = line.lstrip()
+            if stripped.startswith(("```", "~~~")):
+                in_fence = not in_fence
+                out.append(line)
+                continue
+            if in_fence:
+                out.append(line)
+                continue
+
+            def _replace(match: "re.Match") -> str:
+                tag = match.group(1).upper()
+                source = imap.get(tag)
+                if not isinstance(source, dict):
+                    return match.group(0)
+                info["checked"] += 1
+                claim_clause = self._citation_claim_clause(
+                    line, match.start(), match.end()
+                )
+                supported = self._semantic_citation_support(claim_clause, source)
+                if supported is True:
+                    info["kept"] += 1
+                    return f"[{tag}]"
+                if supported is None:
+                    info["unverifiable"] += 1
+                    return f"[{tag}]"
+                info["stripped"] += 1
+                return ""
+
+            updated = marker_re.sub(_replace, line)
+            updated = re.sub(r"(?:\[(S\d+)\])(?:\s+\[\1\])+", r"[\1]", updated)
+            updated = re.sub(r"[ \t]{2,}", " ", updated).rstrip()
+            out.append(updated)
+        return "\n".join(out), info
+
+    def _audit_semantic_citations(
+        self, md: str, index_map: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        imap = index_map or self._citation_index_or_fallback()
+        marker_re = re.compile(r"[\[【]\s*(S\d+)\s*[\]】]", re.I)
+        unsupported: List[Dict[str, str]] = []
+        unverifiable = 0
+        checked = 0
+        tag_counts: Dict[str, int] = {}
+        in_fence = False
+        for line_no, line in enumerate(str(md or "").split("\n"), 1):
+            if line.lstrip().startswith(("```", "~~~")):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
+            for match in marker_re.finditer(line):
+                source = imap.get(match.group(1).upper())
+                if not isinstance(source, dict):
+                    continue
+                checked += 1
+                tag = match.group(1).upper()
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+                claim_clause = self._citation_claim_clause(
+                    line, match.start(), match.end()
+                )
+                supported = self._semantic_citation_support(claim_clause, source)
+                if supported is None:
+                    unverifiable += 1
+                elif not supported:
+                    unsupported.append({
+                        "tag": tag,
+                        "line": str(line_no),
+                        "excerpt": line.strip()[:180],
+                    })
+        max_per_source = max(
+            1, int(getattr(Config, "REPORT_MAX_CITATIONS_PER_SOURCE", 20) or 20)
+        )
+        overused = [
+            {"tag": tag, "count": count, "limit": max_per_source}
+            for tag, count in sorted(tag_counts.items())
+            if count > max_per_source
+        ]
+        unverifiable_ratio = round(unverifiable / checked, 3) if checked else 0.0
+        return {
+            "checked": checked,
+            "unsupported": len(unsupported),
+            "unverifiable": unverifiable,
+            "unverifiable_ratio": unverifiable_ratio,
+            "examples": unsupported[:8],
+            "max_per_source": max_per_source,
+            "overused_sources": overused,
+            "passed": not unsupported and not overused,
+        }
 
     def _repair_dangling_citations(self, md: str,
                                    dangling: List[str]) -> Tuple[str, Dict[str, int]]:
@@ -3245,9 +3809,9 @@ class ReportAgent:
         按记号做三步定向处置（全部确定性，无 LLM）：
 
           (1) 保留验证——编号落在**全量**来源列表内（索引截取造成的假悬空），且记号所在行
-              的数字锚点在该来源底料中命中 → 记号合法保留，并登记进 self._citation_index
+              的数字锚点与至少两个词汇锚点唯一指向该来源 → 记号合法保留，并登记进 self._citation_index
               （引用最终化随后把它列入参考来源）；
-          (2) 重映射——否则复用引用回填的数字锚定在全量来源中找命中 → 记号改写为命中
+          (2) 重映射——否则复用引用回填的数字 + 词汇唯一锚定在全量来源中找命中 → 记号改写为命中
               来源的 [S{i}] 并登记；
           (3) 删除——两者皆失败的记号从行内剥离（与占位符解析同样的诚实动作），
               清理遗留的双空格与孤立标点。
@@ -3257,89 +3821,65 @@ class ReportAgent:
         info = {"kept_verified": 0, "remapped": 0, "stripped": 0}
         if not dangling:
             return md, info
-        haystacks = self._source_haystacks()          # [("[S1]", 归一化底料), ...]
-        hay_by_tag = {t.strip("[]"): h for t, h in haystacks}
-        num_re = re.compile(r"\d+(?:\.\d+)?%|\b\d{2,}(?:\.\d+)?\b")
-        any_tag_re = re.compile(r"[\[【]\s*S\d+(?:-[A-Za-z])?\s*[\]】]", re.I)
+        haystacks = self._source_haystacks()
         sources = getattr(self, "sources", None) or []
         imap = getattr(self, "_citation_index", None)
         if not isinstance(imap, dict):
             imap = {}
             self._citation_index = imap
-
-        lines = md.split("\n")
-
-        def _anchor_numbers(tag_re: "re.Pattern") -> List[str]:
-            """该记号出现行上的数字锚点（先剥掉所有 [S…] 记号，避免记号编号自证）。"""
-            nums: List[str] = []
-            in_fence = False
-            for ln in lines:
-                s = ln.lstrip()
-                if s.startswith("```") or s.startswith("~~~"):
-                    in_fence = not in_fence
-                    continue
-                if in_fence or not tag_re.search(ln):
-                    continue
-                bare = any_tag_re.sub(" ", ln)
-                nums.extend(m.group(0).lower() for m in num_re.finditer(bare))
-            return nums
-
-        # 按记号决定处置：keep（无操作）/ remap（改写为新记号）/ strip（删除）。
-        actions: List[Tuple["re.Pattern", str, str]] = []   # (记号正则, 动作, 新记号)
-        for tag in dict.fromkeys(dangling):                 # 去重保序
-            tag_re = re.compile(r"[\[【]\s*" + re.escape(tag) + r"\s*[\]】]", re.I)
-            nums = _anchor_numbers(tag_re)
-            m_num = re.fullmatch(r"S(\d+)", tag)
-            # (1) 全量列表内编号 + 数字锚点命中 → 合法，登记进索引。
-            if m_num and nums:
-                n = int(m_num.group(1))
-                if 1 <= n <= len(sources) and isinstance(sources[n - 1], dict):
-                    hay = hay_by_tag.get(tag, "")
-                    if any(x in hay for x in nums):
-                        imap.setdefault(tag, sources[n - 1])
-                        info["kept_verified"] += 1
-                        continue
-            # (2) 数字锚定重映射到首个命中的来源。
-            new_tag = ""
-            if nums:
-                for cand_tag, hay in haystacks:
-                    if any(x in hay for x in nums):
-                        new_tag = cand_tag.strip("[]")
-                        break
-            if new_tag and new_tag != tag:
-                n2 = int(new_tag[1:])
-                imap.setdefault(new_tag, sources[n2 - 1])
-                actions.append((tag_re, "remap", new_tag))
-                info["remapped"] += 1
-            else:
-                actions.append((tag_re, "strip", ""))
-                info["stripped"] += 1
-        if not actions:
-            return md, info
+        dangling_set = {str(tag).upper() for tag in dangling}
+        marker_re = re.compile(r"[\[【]\s*(S\d+(?:-[A-Za-z])?)\s*[\]】]", re.I)
 
         out_lines: List[str] = []
         in_fence = False
-        for ln in lines:
-            s = ln.lstrip()
-            if s.startswith("```") or s.startswith("~~~"):
+        for line in md.split("\n"):
+            stripped = line.lstrip()
+            if stripped.startswith("```") or stripped.startswith("~~~"):
                 in_fence = not in_fence
-                out_lines.append(ln)
+                out_lines.append(line)
                 continue
             if in_fence:
-                out_lines.append(ln)
+                out_lines.append(line)
                 continue
-            new_ln = ln
             changed = False
-            for tag_re, action, new_tag in actions:
-                if not tag_re.search(new_ln):
-                    continue
-                new_ln = tag_re.sub(f"[{new_tag}]" if action == "remap" else "", new_ln)
+
+            def _replace(match: "re.Match") -> str:
+                nonlocal changed
+                original = match.group(1)
+                tag = original.upper()
+                if tag not in dangling_set:
+                    return match.group(0)
+                claim_clause = self._citation_claim_clause(
+                    line, match.start(), match.end()
+                )
+                best = self._best_source_tag_for_line(
+                    claim_clause, haystacks
+                ).strip("[]").upper()
+                if best:
+                    try:
+                        source_index = int(best[1:]) - 1
+                    except (TypeError, ValueError):
+                        source_index = -1
+                    if (0 <= source_index < len(sources)
+                            and _citation_source_admissible(sources[source_index])):
+                        imap.setdefault(best, sources[source_index])
+                        changed = True
+                        if best == tag:
+                            info["kept_verified"] += 1
+                            return f"[{tag}]"
+                        info["remapped"] += 1
+                        return f"[{best}]"
                 changed = True
+                info["stripped"] += 1
+                return ""
+
+            new_line = marker_re.sub(_replace, line)
             if changed:
-                # 删除后清理遗留的「空格+标点」与双空格（与占位符解析同一套行内清理）。
-                new_ln = re.sub(r"[ \t]{2,}", " ",
-                                re.sub(r"\s+([，。,.;；、])", r"\1", new_ln)).rstrip()
-            out_lines.append(new_ln)
+                new_line = re.sub(
+                    r"[ \t]{2,}", " ",
+                    re.sub(r"\s+([，。,.;；、])", r"\1", new_line),
+                ).rstrip()
+            out_lines.append(new_line)
         logger.info(
             f"悬空引用修复：保留验证 {info['kept_verified']}，重映射 {info['remapped']}，"
             f"删除 {info['stripped']}（候选 {len(dict.fromkeys(dangling))} 个记号）")
@@ -3583,6 +4123,16 @@ class ReportAgent:
         t = _re.sub(r"[\"'“”‘’„‟「」『』]", "", t)
         return _re.sub(r"\s+", " ", t).strip().lower()
 
+    def _quote_ground_material(self) -> str:
+        """Return normalized quote evidence from research and finalized sources."""
+        parts = [
+            self.research_report or "",
+            getattr(self, "_background_block", "") or "",
+            getattr(self, "situation_brief", "") or "",
+        ]
+        parts.extend(haystack for _tag, haystack in self._source_haystacks())
+        return self._norm_quote_text("\n".join(parts))
+
     def _audit_quote_provenance(self, report_markdown: str) -> Dict[str, Any]:
         """QUALITY-OPT S2 + RPT-5: detect laundered quotes. A blockquote presented as a
         REAL/factual quote (not labeled as simulation) must substring-match the research
@@ -3613,9 +4163,10 @@ class ReportAgent:
         if not quotes:
             return {}
         v2 = bool(getattr(Config, "REPORT_QUOTE_AUDIT_V2", True))
-        ground_raw = ((self.research_report or "") + "\n" + (self._background_block or "")
+        ground_raw = ((self.research_report or "") + "\n"
+                      + (getattr(self, "_background_block", "") or "")
                       + "\n" + (getattr(self, "situation_brief", "") or ""))
-        ground = self._norm_quote_text(ground_raw) if v2 else ground_raw.lower()
+        ground = self._quote_ground_material() if v2 else ground_raw.lower()
         sim_labels = self._SIM_QUOTE_LABELS  # WAVE9：含新专家小组转述标签（scenario panel 等）
         _summary_n = self._norm_quote_text(getattr(self, "_outline_summary", "") or "")
         _table_note_n = self._norm_quote_text(self._TABLE_NOTE_TEXT)
@@ -3667,6 +4218,7 @@ class ReportAgent:
         import re as _re
         md = report_markdown or ""
         flags: List[str] = []
+        cited_extremes: List[str] = []
         pat = _re.compile(
             r'(?:\+|增长|增幅|同比|环比|growth|increase|surg\w*|yoy|year[\- ]over[\- ]year)'
             r'[^0-9%]{0,10}([0-9]{3,4}(?:\.[0-9]+)?)\s*%', _re.I)
@@ -3677,13 +4229,25 @@ class ReportAgent:
                 continue
             if v > 100:
                 ctx = md[max(0, m.start() - 24):m.start() + 14].replace("\n", " ").strip()
-                flags.append(f"{v:.0f}% growth near '…{ctx}…'")
+                item = f"{v:.0f}% growth near '…{ctx}…'"
+                line_start = md.rfind("\n", 0, m.start()) + 1
+                line_end = md.find("\n", m.end())
+                if line_end < 0:
+                    line_end = len(md)
+                if self._S_CITATION_RE.search(md[line_start:line_end]):
+                    cited_extremes.append(item)
+                else:
+                    flags.append(item)
         # dedup
         seen = set(); uniq = []
         for f in flags:
             if f not in seen:
                 seen.add(f); uniq.append(f)
-        return {"implausible_stats": uniq[:8], "count": len(uniq)}
+        return {
+            "implausible_stats": uniq[:8],
+            "count": len(uniq),
+            "cited_extreme_stats": cited_extremes[:8],
+        }
 
     def _audit_numeric_consistency(self, report_markdown: str, forecast: Dict[str, Any]) -> Dict[str, Any]:
         """QUALITY-OPT S11: flag prose scenario-probabilities that disagree with forecast.json
@@ -3745,11 +4309,18 @@ class ReportAgent:
         r"[" + _CJK_CHAR + r"]" + r"[" + _CJK_CHAR + r"\s，。、；：？！…（）「」『』《》%\d\.\-]*")
     # 长英文散文片段（>=40 字符且含 >=4 空格 ⇒ 5+ 词），避开品牌/型号/代号等短拉丁 token。
     _LATIN_RUN_RE = re.compile(r"[A-Za-z][A-Za-z0-9 ,.'’\-()%/&]{39,}")
+    # Protect URL destinations and inline code while still scanning the human-readable
+    # Markdown around them (headings, quotes, table cells, and link labels included).
+    _LANG_INLINE_PROTECTED_RE = re.compile(r"`[^`\n]*`|https?://[^\s)>\]}]+", re.I)
 
     def _collect_impurity_segments(self, chunk_md: str, target_is_cjk: bool,
                                    cap: int = 60) -> List[str]:
-        """WAVE9：从一个 H2 块采集跨语言污染片段（原 _apply_language_purity 步骤 1 抽出，
-        逐块统计以支持「重污染章节整章重译」决策）。规则与历史逐字节一致。"""
+        """Collect foreign-language text from structured Markdown outside fences.
+
+        Headings, blockquotes, table cells, and URL-bearing prose are report text and
+        must be scanned. URL destinations and inline-code tokens are masked rather than
+        skipping their whole line, so repair cannot corrupt links/code.
+        """
         segments: List[str] = []
         seen = set()
         in_fence = False
@@ -3760,15 +4331,12 @@ class ReportAgent:
                 continue
             if in_fence or not s:
                 continue
+            scan_line = self._LANG_INLINE_PROTECTED_RE.sub(" ", line)
             if target_is_cjk:
-                # 只扫散文行：跳过标题 / 表格 / 引用块 / 含 URL 的行，降低误伤品牌/链接。
-                if (s.startswith("#") or s.startswith(">") or "|" in s
-                        or "http://" in s or "https://" in s):
-                    continue
-                candidates = self._LATIN_RUN_RE.findall(line)
+                candidates = self._LATIN_RUN_RE.findall(scan_line)
                 candidates = [c for c in candidates if c.count(" ") >= 4]
             else:
-                candidates = self._CJK_RUN_RE.findall(line)
+                candidates = self._CJK_RUN_RE.findall(scan_line)
             for c in candidates:
                 seg = c.strip().strip("（）()「」\"'“”")
                 if len(seg) < 2:
@@ -3785,10 +4353,69 @@ class ReportAgent:
                 break
         return segments
 
+    def _translate_impurity_segments(
+        self, segments: List[str], language: str
+    ) -> List[Tuple[str, str]]:
+        """Translate impurity segments in bounded batches.
+
+        The former single 60-item / 4096-token JSON call routinely returned a
+        truncated mapping, leaving the tail untranslated.  Batches are isolated:
+        one malformed response loses only that batch, and successful batches still
+        feed the final replacement pass.
+        """
+        if not segments:
+            return []
+        try:
+            batch_size = int(
+                getattr(Config, "REPORT_PURITY_TRANSLATION_BATCH_SIZE", 20) or 20
+            )
+        except (TypeError, ValueError):
+            batch_size = 20
+        batch_size = max(5, min(30, batch_size))
+        mapping: List[Tuple[str, str]] = []
+        sys_prompt = (
+            f"You are a precise translator. Translate each numbered segment into {language}. "
+            "Preserve numbers, percentages, [S#] citation tags, and proper nouns verbatim. "
+            "Return ONLY a JSON object mapping each segment index (as a string) to its "
+            f'{language} translation, e.g. {{"1": "...", "2": "..."}}.'
+        )
+        for start in range(0, len(segments), batch_size):
+            batch = segments[start:start + batch_size]
+            numbered = "\n".join(
+                f"{index}. {segment}" for index, segment in enumerate(batch, 1)
+            )
+            try:
+                parsed = self.llm.chat_json(
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": numbered},
+                    ],
+                    temperature=0.0,
+                    max_tokens=4096,
+                    tier="fast",
+                )
+            except Exception as exc:  # noqa: BLE001 — one bad batch must not discard prior work
+                logger.warning(
+                    f"语言纯度：片段翻译批次 {start // batch_size + 1} 失败（保留该批原文）: {exc}"
+                )
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            for index, segment in enumerate(batch, 1):
+                translated = parsed.get(str(index)) or parsed.get(index)
+                if isinstance(translated, str):
+                    translated = translated.strip()
+                    if translated and translated != segment:
+                        mapping.append((segment, translated))
+        # Longest first so a short phrase cannot split a longer one before it is replaced.
+        mapping.sort(key=lambda item: len(item[0]), reverse=True)
+        return mapping
+
     def _apply_language_purity(self, report_id: str, report: "Report") -> None:
         """RQ-2：成稿语言纯度扫描。目标语言为非 CJK（英文）时检测残留 CJK 片段，反之检测残留长
-        英文散文片段；一次批量 chat_json 调用译成目标语言并逐行内联替换。引用型片段（blockquote /
-        引号内）保留原文为括注。无片段或任何错误一律 degrade-safe 跳过（保留原文），并改写
+        英文散文片段；有界批次 chat_json 调用译成目标语言并逐行内联替换。引用型片段也只保留
+        目标语言译文（否则所谓“纯度修复”会故意重新注入污染）。无片段或任何错误一律
+        degrade-safe 跳过（保留原文），并改写
         full_report.md。幂等：纯净成稿命中零片段即为 no-op。
 
         WAVE9：按 H2 块统计污染密度——单块片段数 > REPORT_PURITY_RETRANSLATE_SEGMENTS 时
@@ -3813,19 +4440,12 @@ class ReportAgent:
             except (TypeError, ValueError):
                 retrans_thresh = 8
             chunks = self._split_markdown_h2_sections(md)
-            segments: List[str] = []
-            seen = set()
             retranslate_idx: List[int] = []
             for ci, chunk in enumerate(chunks):
                 chunk_segments = self._collect_impurity_segments(chunk, target_is_cjk)
                 if retrans_thresh > 0 and len(chunk_segments) > retrans_thresh \
                         and len(retranslate_idx) < 6 and hasattr(llm, "chat"):
                     retranslate_idx.append(ci)
-                    continue                             # 整块重译 → 不进内联片段池
-                for seg in chunk_segments:
-                    if seg not in seen and len(segments) < 60:
-                        seen.add(seg)
-                        segments.append(seg)
 
             # 1b) 整章重译重污染块（结构无损；失败保留原块）。
             retranslated = 0
@@ -3853,65 +4473,95 @@ class ReportAgent:
                         write_text_atomic(os.path.join(folder, "full_report.md"), md)
                     except Exception as _we:  # noqa: BLE001
                         logger.warning(f"回写语言纯度成稿 full_report.md 失败（忽略）: {_we}")
+            # 2) Re-scan the CURRENT chunks after whole-section translation.  The
+            # previous implementation skipped heavy chunks forever, even when the
+            # section translator left residual CJK/English lines behind.
+            try:
+                max_segments = int(
+                    getattr(Config, "REPORT_PURITY_MAX_SEGMENTS", 180) or 180
+                )
+            except (TypeError, ValueError):
+                max_segments = 180
+            max_segments = max(1, min(600, max_segments))
+
+            def _scan(current: str) -> List[str]:
+                found: List[str] = []
+                seen = set()
+                for chunk in self._split_markdown_h2_sections(current):
+                    remaining = max_segments - len(found)
+                    if remaining <= 0:
+                        break
+                    for segment in self._collect_impurity_segments(
+                        chunk, target_is_cjk, cap=min(60, remaining)
+                    ):
+                        if segment not in seen:
+                            seen.add(segment)
+                            found.append(segment)
+                return found
+
+            segments = _scan(md)
             if not segments:
+                if md != (report.markdown_content or ""):
+                    report.markdown_content = md
                 return
 
-            # 2) 一次批量翻译（chat_json，fast 档；失败/缺键则该片段保留原文）。
-            numbered = "\n".join(f"{i}. {seg}" for i, seg in enumerate(segments, 1))
-            sys_prompt = (
-                f"You are a precise translator. Translate each numbered segment into {lang}. "
-                "Preserve numbers, percentages, [S#] citation tags, and proper nouns verbatim. "
-                'Return ONLY a JSON object mapping each segment index (as a string) to its '
-                f'{lang} translation, e.g. {{"1": "...", "2": "..."}}.'
-            )
-            parsed = self.llm.chat_json(
-                messages=[{"role": "system", "content": sys_prompt},
-                          {"role": "user", "content": numbered}],
-                temperature=0.0, max_tokens=4096, tier="fast",
-            )
-            if not isinstance(parsed, dict) or not parsed:
-                return
-            mapping: List[Tuple[str, str]] = []
-            for i, seg in enumerate(segments, 1):
-                tr = parsed.get(str(i)) or parsed.get(i)
-                if isinstance(tr, str):
-                    tr = tr.strip()
-                    if tr and tr != seg:
-                        mapping.append((seg, tr))
-            if not mapping:
-                return
-            # 长片段优先替换，避免短片段先替换切断长片段。
-            mapping.sort(key=lambda kv: len(kv[0]), reverse=True)
-
-            # 3) 逐行内联替换；引用型行（blockquote / 引号内）保留原文为括注。
-            paren = (lambda t, o: f"{t}（{o}）") if target_is_cjk else (lambda t, o: f"{t} ({o})")
-            in_fence = False
-            replaced = 0
-            out_lines: List[str] = []
-            for line in md.splitlines():
-                if line.strip().startswith("```"):
-                    in_fence = not in_fence
-                    out_lines.append(line)
-                    continue
-                if in_fence:
-                    out_lines.append(line)
-                    continue
-                is_quote_line = line.lstrip().startswith(">")
-                new_line = line
-                for orig, tr in mapping:
-                    if orig not in new_line:
+            def _replace(current: str, replacements: List[Tuple[str, str]]) -> Tuple[str, int]:
+                # Quotes are translated too; retaining the original in parentheses
+                # would knowingly fail the final purity audit.
+                in_fence = False
+                count = 0
+                out_lines: List[str] = []
+                for line in current.splitlines():
+                    if line.strip().startswith("```"):
+                        in_fence = not in_fence
+                        out_lines.append(line)
                         continue
-                    quoted_inline = bool(re.search(
-                        r'["“”「『]\s*' + re.escape(orig) + r'\s*["”「』」]', new_line))
-                    if is_quote_line or quoted_inline:
-                        new_line = new_line.replace(orig, paren(tr, orig))
-                    else:
-                        new_line = new_line.replace(orig, tr)
-                    replaced += 1
-                out_lines.append(new_line)
+                    if in_fence:
+                        out_lines.append(line)
+                        continue
+                    protected: List[str] = []
+
+                    def _mask_inline(match: "re.Match[str]") -> str:
+                        protected.append(match.group(0))
+                        return f"\x00LANGPROTECTED{len(protected) - 1}\x00"
+
+                    new_line = self._LANG_INLINE_PROTECTED_RE.sub(_mask_inline, line)
+                    for original, translated in replacements:
+                        if original not in new_line:
+                            continue
+                        new_line = new_line.replace(original, translated)
+                        count += 1
+                    for protected_index, token in enumerate(protected):
+                        new_line = new_line.replace(
+                            f"\x00LANGPROTECTED{protected_index}\x00", token
+                        )
+                    out_lines.append(new_line)
+                return "\n".join(out_lines), count
+
+            # 3) Bounded batch translation + one bounded residual repair sweep.
+            # The second scan catches truncated/mixed translations without creating
+            # an open-ended self-repair loop; the final read-only audit remains the
+            # authoritative purity gate if anything still survives.
+            new_md = md
+            replaced = 0
+            mapped_kinds = 0
+            pending = segments
+            for _repair_round in range(2):
+                mapping = self._translate_impurity_segments(pending, lang)
+                if not mapping:
+                    break
+                candidate, round_replaced = _replace(new_md, mapping)
+                if not round_replaced or candidate == new_md:
+                    break
+                new_md = candidate
+                replaced += round_replaced
+                mapped_kinds += len(mapping)
+                pending = _scan(new_md)
+                if not pending:
+                    break
             if not replaced:
+                # Whole-section translations, if any, were already persisted above.
                 return
-            new_md = "\n".join(out_lines)
             if new_md == md:
                 return
             report.markdown_content = new_md
@@ -3921,7 +4571,7 @@ class ReportAgent:
             except Exception as _we:  # noqa: BLE001
                 logger.warning(f"回写语言纯度成稿 full_report.md 失败（忽略）: {_we}")
             logger.info(
-                f"语言纯度扫描: {report_id} 目标语言 {lang}，内联翻译 {len(mapping)} 类片段"
+                f"语言纯度扫描: {report_id} 目标语言 {lang}，内联翻译 {mapped_kinds} 类片段"
                 f"（{replaced} 处替换）")
         except Exception as _lpe:  # noqa: BLE001 — 纯度扫描为旁路增强，失败保留原文
             logger.warning(f"语言纯度扫描失败（忽略，保留原文）: {_lpe}")
@@ -3971,8 +4621,11 @@ class ReportAgent:
     # ──────────────────────────────────────────────────────────────
     # BILINGUAL：自动生成成稿的另一语种版本（英⇄中），逐 H2 章节并发翻译
     # ──────────────────────────────────────────────────────────────
-    # 百分比/概率 token 提取正则（数字完整性核对：原文所有此类 token 必须出现在译文中）。
-    _NUMBER_INTEGRITY_RE = re.compile(r"\d+(?:\.\d+)?\s*%")
+    # 译文数字完整性：提示词要求所有数字逐字节保留，因此不只校验百分比。
+    # 边界避免从标识符中拆数；逗号千分位/小数/正负号/% 保持为一个 token。
+    _NUMBER_INTEGRITY_RE = re.compile(
+        r"(?<![A-Za-z0-9_])[-+]?\d[\d,]*(?:\.\d+)?(?:\s*%)?"
+    )
 
     def _detect_translation_target(
         self, md: str
@@ -4023,6 +4676,277 @@ class ReportAgent:
         if cur:
             chunks.append(cur)
         return ["\n".join(c) for c in chunks]
+
+    @staticmethod
+    def _translation_heading_signature(md: str) -> List[int]:
+        """Return the heading-level sequence outside fenced blocks."""
+        levels: List[int] = []
+        in_fence = False
+        for line in (md or "").splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith(("```", "~~~")):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
+            match = re.match(r"^(#{1,6})\s+\S", line)
+            if match:
+                levels.append(len(match.group(1)))
+        return levels
+
+    @staticmethod
+    def _translation_table_signature(md: str) -> List[int]:
+        """Return the ordered Markdown-table row widths outside fenced blocks."""
+        widths: List[int] = []
+        in_fence = False
+        for line in (md or "").splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith(("```", "~~~")):
+                in_fence = not in_fence
+                continue
+            if in_fence or not stripped.startswith("|") or "|" not in stripped[1:]:
+                continue
+            # Translators are instructed to preserve table markup byte-for-byte.
+            # Count only unescaped separators so prose containing ``\|`` is safe.
+            widths.append(len(re.findall(r"(?<!\\)\|", stripped)) - 1)
+        return widths
+
+    @classmethod
+    def _translation_number_multiset(cls, md: str) -> Dict[str, int]:
+        """Return normalized numeric-token multiplicities for exact parity checks."""
+        from collections import Counter
+
+        return dict(Counter(
+            re.sub(r"\s+", "", match.group(0))
+            for match in cls._NUMBER_INTEGRITY_RE.finditer(md or "")
+        ))
+
+    @classmethod
+    def _translation_marker_multiset(cls, md: str) -> Dict[str, int]:
+        """Return canonical citation-token multiplicities outside fenced blocks."""
+        from collections import Counter
+        from .forecast_extractor import _norm_citation_tag
+
+        counter: "Counter[str]" = Counter()
+        in_fence = False
+        marker_re = re.compile(r"[\[【]\s*(S\d+(?:-[A-Za-z])?)\s*[\]】]", re.I)
+        for line in (md or "").splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith(("```", "~~~")):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
+            for match in marker_re.finditer(line):
+                tag = _norm_citation_tag(match.group(1))
+                if tag:
+                    counter[tag] += 1
+        return dict(counter)
+
+    @classmethod
+    def _translation_reference_parts(cls, md: str) -> Tuple[str, str, str]:
+        """Split a report into body, References block and its recognized heading."""
+        chunks = cls._split_markdown_h2_sections(md or "")
+        refs = [
+            chunk for chunk in chunks
+            if chunk.split("\n", 1)[0].strip() in _REFS_HEADINGS
+        ]
+        body = "\n".join(chunk for chunk in chunks if chunk not in refs).rstrip() + "\n"
+        reference_text = "\n".join(refs)
+        heading = refs[0].split("\n", 1)[0].strip() if refs else ""
+        return body, reference_text, heading
+
+    def _audit_translation_variant(
+        self,
+        report_id: str,
+        source_md: str,
+        variant_md: str,
+        source_lang: str,
+        target_lang: str,
+        primary_citations: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Audit a language variant and build its isolated citation artifact.
+
+        The audit is deterministic and read-only.  A variant is publishable only
+        when heading/table/number/citation parity is exact, target-language lint is
+        clean, and every body marker resolves through the primary report's finalized
+        citation namespace into a visible References entry.  The returned citation
+        payload is never persisted by this function.
+        """
+        from . import report_lint as _rl
+        from .forecast_extractor import _norm_citation_tag, validate_citation_markers
+
+        primary_citations = primary_citations if isinstance(primary_citations, dict) else {}
+        marker_rows = primary_citations.get("markers")
+        marker_rows = marker_rows if isinstance(marker_rows, list) else []
+        primary_by_tag = {
+            _norm_citation_tag(str(row.get("tag") or "")): row
+            for row in marker_rows if isinstance(row, dict) and row.get("tag")
+        }
+
+        source_body, source_refs, _source_heading = self._translation_reference_parts(source_md)
+        variant_body, variant_refs, variant_heading = self._translation_reference_parts(variant_md)
+        source_markers = self._translation_marker_multiset(source_md)
+        variant_markers = self._translation_marker_multiset(variant_md)
+        source_body_markers = self._translation_marker_multiset(source_body)
+        variant_body_markers = self._translation_marker_multiset(variant_body)
+
+        heading_source = self._translation_heading_signature(source_md)
+        heading_variant = self._translation_heading_signature(variant_md)
+        table_source = self._translation_table_signature(source_md)
+        table_variant = self._translation_table_signature(variant_md)
+        number_source = self._translation_number_multiset(source_md)
+        number_variant = self._translation_number_multiset(variant_md)
+
+        target_name = "Chinese" if target_lang == "zh" else "English"
+        _candidate, lint_audit = _rl.lint_report(
+            variant_body,
+            target_name,
+            mode="final",
+            spine=(self._forecast_spine if isinstance(
+                getattr(self, "_forecast_spine", None), dict) else None),
+        )
+
+        marker_audit = validate_citation_markers(variant_body, primary_by_tag)
+        expected_tags = list(marker_audit.get("order") or [])
+        invalid_urls = [
+            tag for tag, row in primary_by_tag.items()
+            if row.get("url_valid") is not True
+            or not _citation_url_ok(str(row.get("url") or ""))
+        ]
+        missing_reference_tags = [
+            tag for tag in expected_tags if f"[{tag}]" not in variant_refs
+        ]
+        missing_reference_urls = [
+            tag for tag in expected_tags
+            if str((primary_by_tag.get(tag) or {}).get("url") or "").strip()
+            and str((primary_by_tag.get(tag) or {}).get("url") or "").strip()
+            not in variant_refs
+        ]
+
+        issues: List[str] = []
+        if heading_source != heading_variant:
+            issues.append("translation heading-level sequence differs from primary")
+        if table_source != table_variant:
+            issues.append("translation table row/column structure differs from primary")
+        if number_source != number_variant:
+            issues.append("translation numeric-token multiset differs from primary")
+        if source_markers != variant_markers:
+            issues.append("translation citation-token multiset differs from primary")
+        if source_body_markers != variant_body_markers:
+            issues.append("translation body citation-token placement/count differs from primary")
+        if source_refs and not variant_refs:
+            issues.append("translation is missing a visible References appendix")
+        if variant_refs and variant_heading not in _REFS_HEADINGS:
+            issues.append("translation References heading is not canonical")
+        if source_body_markers and not primary_by_tag:
+            issues.append("primary citations.json is missing for a cited translation")
+        if marker_audit.get("dangling"):
+            issues.append(
+                f"translation contains {len(marker_audit['dangling'])} dangling citation tags"
+            )
+        if missing_reference_tags:
+            issues.append(
+                f"translation References misses {len(missing_reference_tags)} cited tags"
+            )
+        if missing_reference_urls:
+            issues.append(
+                f"translation References misses {len(missing_reference_urls)} source URLs"
+            )
+        if invalid_urls:
+            issues.append(
+                f"translation citation map contains {len(invalid_urls)} invalid source URLs"
+            )
+        if lint_audit.get("changed"):
+            issues.append("translation would still be rewritten by final editorial lint")
+        if lint_audit.get("leakage_flags"):
+            issues.append("translation contains internal process/simulation leakage")
+        contamination = int(
+            (lint_audit.get("language_contamination") or {}).get("lines", 0) or 0
+        )
+        if contamination:
+            issues.append(
+                f"translation contains {contamination} target-language contamination lines"
+            )
+
+        variant_rows: List[Dict[str, Any]] = []
+        for display, tag in enumerate(expected_tags, 1):
+            source_row = primary_by_tag.get(tag)
+            if not isinstance(source_row, dict):
+                continue
+            row = dict(source_row)
+            row["display"] = display
+            row["count"] = int(variant_body_markers.get(tag, 0))
+            variant_rows.append(row)
+        variant_sha = hashlib.sha256((variant_md or "").encode("utf-8")).hexdigest()
+        citations_payload: Dict[str, Any] = {
+            "grammar": "[S<n>]",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "language": target_lang,
+            "source_language": source_lang,
+            "source_artifact": "citations.json",
+            "markdown_sha256": variant_sha,
+            "heading": variant_heading,
+            "markers": variant_rows,
+            "unresolved": [
+                {"tag": tag, "count": int(variant_body_markers.get(tag, 0))}
+                for tag in marker_audit.get("dangling") or []
+            ],
+        }
+        audit: Dict[str, Any] = {
+            "schema_version": 2,
+            "policy_version": int(getattr(
+                Config, "REPORT_FINAL_AUDIT_POLICY_VERSION", 3
+            )),
+            "report_id": report_id,
+            "language": target_lang,
+            "source_language": source_lang,
+            "audited_at": datetime.now(timezone.utc).isoformat(),
+            "read_only": True,
+            "markdown_chars": len(variant_md or ""),
+            "markdown_sha256": variant_sha,
+            "source_markdown_sha256": hashlib.sha256(
+                (source_md or "").encode("utf-8")
+            ).hexdigest(),
+            "section_parity": {
+                "passed": heading_source == heading_variant,
+                "source_levels": heading_source,
+                "variant_levels": heading_variant,
+            },
+            "table_parity": {
+                "passed": table_source == table_variant,
+                "source_row_widths": table_source,
+                "variant_row_widths": table_variant,
+            },
+            "number_parity": {
+                "passed": number_source == number_variant,
+                "source": number_source,
+                "variant": number_variant,
+            },
+            "citation_parity": {
+                "passed": not any((
+                    source_markers != variant_markers,
+                    source_body_markers != variant_body_markers,
+                    marker_audit.get("dangling"),
+                    missing_reference_tags,
+                    missing_reference_urls,
+                    invalid_urls,
+                    bool(source_refs and not variant_refs),
+                )),
+                "source_markers": source_markers,
+                "variant_markers": variant_markers,
+                "source_body_markers": source_body_markers,
+                "variant_body_markers": variant_body_markers,
+                "dangling": list(marker_audit.get("dangling") or []),
+                "missing_reference_tags": missing_reference_tags,
+                "missing_reference_urls": missing_reference_urls,
+                "invalid_urls": invalid_urls,
+            },
+            "language_lint": lint_audit,
+            "issues": issues,
+            "hard_passed": not issues,
+        }
+        return audit, citations_payload
 
     def _translate_section(self, section_md: str, target_language_name: str,
                            extra_rules: str = "") -> str:
@@ -4080,12 +5004,11 @@ class ReportAgent:
         """BILINGUAL：在报告最终化/可视化/纯度处理之后，自动生成成稿的另一语种版本。
 
         流水：① 复用 detect_output_language 判定成稿语言（英⇄中，其它脚本跳过）；② 按 H2 边界
-        切块，用小 ThreadPoolExecutor（REPORT_TRANSLATION_CONCURRENCY）并发逐章翻译（严格保留
-        结构/围栏/表格/数字）；③ 拼装落 reports/{id}/full_report.{en|zh}.md；④ 数字完整性核对
-        （原文所有百分比/概率 token 必须出现在译文，否则 translation_quality=warning 仍发布）；
-        ⑤ 把 translations 条目写入 report.translations（save_report 随后持久化进 meta.json）。
-
-        完全 degrade-safe：绝不修改 report.markdown_content / full_report.md；任何失败仅告警。"""
+        切块，用小 ThreadPoolExecutor（REPORT_TRANSLATION_CONCURRENCY）并发逐章翻译；③ 逐章引用
+        记号对账重译；④ 对整篇做标题/表格/数字/引用/语言五重硬审计；⑤ 仅审计通过才原子落
+        full_report.{lang}.md + citations.{lang}.json + final_audit.{lang}.json；⑥ 用最终字节
+        刷新 report.translations。失败译文不发布，且删除任何同语种旧成稿/PDF，防止陈旧译文
+        伪装成本次运行产物。主报告永不被修改。"""
         if not getattr(Config, "REPORT_BILINGUAL", True):
             return
         llm = getattr(self, "llm", None)
@@ -4122,9 +5045,8 @@ class ReportAgent:
             for i, ch in enumerate(chunks):
                 translated[i] = self._translate_section(ch, tgt_name)
 
-        # WAVE10（无缝引用）：逐 H2 块引用记号多重集对账——译文丢记号（实测 321→300，
-        # 6.5% 漂移）时对该块做**一次**重译，提示词枚举本块的精确记号清单；仍漂移 →
-        # 保留译文并把 citation_drift 细节记进 translations 条目（quality=warning）。
+        # WAVE10（无缝引用）：逐 H2 块引用记号多重集对账。译文丢记号时对该块
+        # 做一次带精确库存的重译；仍漂移则最终硬审计拒绝这份译文，不再“warning 但照常发布”。
         citation_drift: List[Dict[str, Any]] = []
         if getattr(Config, "REPORT_TRANSLATION_CITATION_PARITY", True):
             from collections import Counter
@@ -4157,7 +5079,7 @@ class ReportAgent:
                 if retry and _marker_multiset(retry) == src_ms:
                     translated[i] = retry
                     continue
-                # 仍漂移：保留首译（重译未证明更优），记录漂移细节供下游告警。
+                # 仍漂移：记录细节，下方硬审计会拒绝落盘。
                 diff = {t: {"src": src_ms.get(t, 0), "dst": dst_ms.get(t, 0)}
                         for t in set(src_ms) | set(dst_ms)
                         if src_ms.get(t, 0) != dst_ms.get(t, 0)}
@@ -4172,29 +5094,78 @@ class ReportAgent:
         translated_md = "\n\n".join(
             (t if t is not None else chunks[i]) for i, t in enumerate(translated)
         ).strip() + "\n"
-        # no-op 守卫：译文为空、或与原文在「空白归一」意义上完全相同（如整篇翻译退化为原文——
-        # 同语种 / LLM 全程降级回退原文），跳过落盘，避免生成一份与主报告无异的冗余文件。
+        folder = ReportManager._get_report_folder(report_id)
+        out_path = ReportManager._get_report_translation_path(report_id, tgt_code)
+        pdf_path = ReportManager._get_report_pdf_path(report_id, tgt_code)
+        citations_path = ReportManager._get_report_citations_path(report_id, tgt_code)
+        audit_path = ReportManager._get_report_final_audit_path(report_id, tgt_code)
+
+        def _remove_stale_variant() -> None:
+            ReportManager._safe_unlink(out_path, pdf_path, citations_path)
+            remaining = [
+                entry for entry in (report.translations or [])
+                if not (isinstance(entry, dict) and entry.get("lang") == tgt_code)
+            ]
+            report.translations = remaining or None
+
+        # no-op 守卫：译文为空、或与原文在「空白归一」意义上完全相同（如整篇翻译退化为原文）。
         def _collapse(t: str) -> str:
             return re.sub(r"\s+", " ", t or "").strip()
         if not translated_md.strip() or _collapse(translated_md) == _collapse(md):
+            _remove_stale_variant()
             logger.info(f"双语报告：译文为空或与原文实质相同，跳过落盘: {report_id}")
             return
 
-        # 数字完整性核对：原文所有百分比/概率 token（归一去空格）须为译文的子集。
-        def _num_tokens(t: str) -> set:
-            return {m.replace(" ", "") for m in self._NUMBER_INTEGRITY_RE.findall(t or "")}
-        missing = sorted(_num_tokens(md) - _num_tokens(translated_md))
-        quality = "warning" if (missing or citation_drift) else "ok"
-        if missing:
-            logger.warning(
-                f"双语报告数字完整性告警: {report_id} 译文缺失 {len(missing)} 个"
-                f"百分比/概率 token: {missing[:12]}")
+        primary_citations: Dict[str, Any] = {}
+        try:
+            with open(ReportManager._get_report_citations_path(report_id), encoding="utf-8") as handle:
+                candidate = json.load(handle)
+            if isinstance(candidate, dict):
+                primary_citations = candidate
+        except (OSError, ValueError, TypeError):
+            primary_citations = {}
 
-        # 落盘 full_report.<lang>.md（原子写入；不触碰主 full_report.md）。
-        out_path = ReportManager._get_report_translation_path(report_id, tgt_code)
-        write_text_atomic(out_path, translated_md)
+        audit, citations_payload = self._audit_translation_variant(
+            report_id,
+            md,
+            translated_md,
+            str(src_code),
+            str(tgt_code),
+            primary_citations,
+        )
+        if citation_drift:
+            audit.setdefault("issues", []).append(
+                f"translation citation drift remained in {len(citation_drift)} sections"
+            )
+            audit["citation_drift"] = citation_drift[:8]
+            audit["hard_passed"] = False
 
-        # 记录 translations 条目（去重同语种旧条目后追加）。model 取本次 LLM 客户端模型名。
+        if not audit.get("hard_passed"):
+            _remove_stale_variant()
+            write_json_atomic(audit_path, audit)
+            logger.error(
+                "双语报告硬审计未通过，译文不发布: %s %s issues=%s",
+                report_id, tgt_code, (audit.get("issues") or [])[:8],
+            )
+            return
+
+        # Publish barrier: citation map + audit land before Markdown.  Readers can
+        # never observe a new variant without its language-specific integrity data.
+        try:
+            write_json_atomic(citations_path, citations_payload)
+            write_json_atomic(audit_path, audit)
+            write_text_atomic(out_path, translated_md)
+        except Exception as exc:  # noqa: BLE001 - partial variant must not publish
+            _remove_stale_variant()
+            audit.setdefault("issues", []).append(
+                f"translation artifact persistence failed ({type(exc).__name__})"
+            )
+            audit["hard_passed"] = False
+            write_json_atomic(audit_path, audit)
+            logger.error("双语报告工件落盘失败，已清理译文: %s", exc)
+            return
+
+        # 记录 translations 条目（去重同语种旧条目后追加）。所有字段取最终字节，不复用翻译前元数据。
         try:
             model_name = getattr(self.llm, "model", None) or getattr(Config, "LLM_MODEL_NAME", "")
         except Exception:  # noqa: BLE001
@@ -4204,14 +5175,16 @@ class ReportAgent:
             "source_lang": src_code,
             "path": f"full_report.{tgt_code}.md",
             "chars": len(translated_md),
-            "created_at": datetime.now().isoformat(),
+            "bytes": len(translated_md.encode("utf-8")),
+            "markdown_sha256": audit["markdown_sha256"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "model": model_name,
-            "translation_quality": quality,
-            "missing_numbers": missing[:20],
+            "translation_quality": "ok",
+            "available": True,
+            "citations_path": f"citations.{tgt_code}.json",
+            "final_audit_path": f"final_audit.{tgt_code}.json",
+            "missing_numbers": [],
         }
-        # WAVE10：引用记号漂移细节（对账重译后仍不齐的块）——仅在有漂移时挂载（有界）。
-        if citation_drift:
-            entry["citation_drift"] = citation_drift[:8]
         existing = [
             e for e in (report.translations or [])
             if not (isinstance(e, dict) and e.get("lang") == tgt_code)
@@ -4220,7 +5193,7 @@ class ReportAgent:
         report.translations = existing
         logger.info(
             f"双语报告已生成: {report_id} {src_code}→{tgt_code}，{len(chunks)} 章，"
-            f"{len(translated_md)} 字，quality={quality}")
+            f"{len(translated_md)} 字，variant_audit=passed")
 
     def _finalize_citations(self, report_id: str, report: "Report") -> None:
         """WAVE10 引用最终化：把正文 [S12] 记号解析为文末「References/参考来源」附录 +
@@ -4231,8 +5204,8 @@ class ReportAgent:
           ① 围栏感知采集正文记号（validate_citation_markers，首现顺序）；
           ② 对照记号→来源索引（_citation_index，悬空修复可能已扩充；无索引时回退全量
              位置映射），附录**只列被引用**的来源，按首现顺序给展示序号；
-          ③ 条目 = 展示序号 + 原记号 + 标题 — 域名，日期，可点击 URL（URL 有效性守卫
-             拦截 'https://www.mckinsey' 型截断域名——条目仍列出但不渲染为链接）；
+          ③ 条目 = 展示序号 + 原记号 + 标题 — 域名，日期，可点击 URL；不可解析或疑似
+             截断的来源在索引边界即被拒绝，其记号会被唯一重映射或诚实删除；
           ④ 记号→条目映射写 <report_dir>/citations.json（前端悬浮 / PDF 脚注消费）。
         正文内联记号**不可变**（保持 [Sxx]——改写会让审计正则、修复 passes 与译文失配）。
         幂等：重跑先按 H2 块剥离旧附录再重建。任何失败由调用方捕获（degrade-safe）。"""
@@ -4247,8 +5220,45 @@ class ReportAgent:
                        if c.split("\n", 1)[0].strip() not in _REFS_HEADINGS]
         body = "\n".join(body_chunks).rstrip() + "\n"
         v = validate_citation_markers(body, imap)
+        if v["dangling"]:
+            current_index = getattr(self, "_citation_index", None)
+            if not isinstance(current_index, dict) or not current_index:
+                # The offline/backfill path starts with an empty explicit map
+                # and obtains `imap` from the admissible positional fallback.
+                # Preserve that complete namespace before repair registers any
+                # remap; otherwise the first registration would make a tiny
+                # explicit map authoritative and orphan every other valid tag.
+                self._citation_index = dict(imap)
+            body, repair_info = self._repair_dangling_citations(
+                body, list(v["dangling"])
+            )
+            imap = self._citation_index_or_fallback()
+            v = validate_citation_markers(body, imap)
+            logger.info(
+                "citation finalization repair: remapped=%s stripped=%s unresolved=%s",
+                repair_info.get("remapped", 0),
+                repair_info.get("stripped", 0),
+                len(v["dangling"]),
+            )
+        semantic_totals = {"checked": 0, "kept": 0, "unverifiable": 0,
+                           "remapped": 0, "stripped": 0}
+        for _semantic_pass in range(3):
+            body, semantic_info = self._repair_semantic_citations(body)
+            for key in semantic_totals:
+                semantic_totals[key] += int(semantic_info.get(key, 0) or 0)
+            imap = self._citation_index_or_fallback()
+            if self._audit_semantic_citations(body, imap)["unsupported"] == 0:
+                break
+        v = validate_citation_markers(body, imap)
+        if semantic_totals["remapped"] or semantic_totals["stripped"]:
+            logger.info(
+                "semantic citation repair: checked=%s remapped=%s stripped=%s "
+                "unverifiable=%s",
+                semantic_totals["checked"], semantic_totals["remapped"],
+                semantic_totals["stripped"], semantic_totals["unverifiable"],
+            )
         norm_map = {_norm_citation_tag(k): s for k, s in imap.items()
-                    if isinstance(s, dict)}
+                    if _citation_source_admissible(s)}
         cited = [t for t in v["order"] if t in norm_map]
         if v["dangling"]:
             logger.warning(
@@ -4259,15 +5269,13 @@ class ReportAgent:
         zh = not lang.startswith("en")
         heading = _REFS_HEADINGS[1] if zh else _REFS_HEADINGS[0]
         sep = "，" if zh else ", "
-        bad_note = "（原始链接不完整）" if zh else " (source link incomplete)"
-
         marker_entries: List[Dict[str, Any]] = []
         ref_lines: List[str] = [heading, ""]
         for disp, tag in enumerate(cited, 1):
             src = norm_map[tag]
             url = str(src.get("url") or "").strip()
             domain = _citation_domain(url)
-            title = str(src.get("title") or "").strip() or domain or tag
+            title = _citation_display_title(src, tag)
             date = str(src.get("date") or "").strip()
             url_ok = _citation_url_ok(url)
             seg = f"{disp}. [{tag}] {title}"
@@ -4275,7 +5283,7 @@ class ReportAgent:
             if meta:
                 seg += " — " + sep.join(meta)
             if url:
-                seg += f" — [{url}]({url})" if url_ok else f" — `{url}`{bad_note}"
+                seg += f" — [{url}]({url})"
             ref_lines.append(seg)
             marker_entries.append({
                 "tag": tag,
@@ -4315,6 +5323,582 @@ class ReportAgent:
             f"引用最终化完成: {report_id} 被引用来源 {len(cited)}，"
             f"内联记号 {v['total_markers']}，悬空 {len(v['dangling'])}")
 
+    def _finalize_citations_for_publish(self, report_id: str, report: "Report") -> None:
+        """Finalize citations; fail hard only when body markers would otherwise be dead."""
+        body = "\n".join(
+            chunk for chunk in self._split_markdown_h2_sections(
+                report.markdown_content or ""
+            )
+            if chunk.split("\n", 1)[0].strip() not in _REFS_HEADINGS
+        )
+        body_has_markers = bool(self._ANY_S_TAG_RE.search(body))
+        try:
+            self._finalize_citations(report_id, report)
+        except Exception as exc:  # noqa: BLE001 — classification depends on body contract
+            if body_has_markers:
+                raise RuntimeError(
+                    "正文含引用记号但引用最终化失败，拒绝发布：" f"{exc}"
+                ) from exc
+            logger.warning(f"引用最终化失败（正文无引用记号，降级继续）: {exc}")
+
+    def _stabilize_publish_markdown(
+        self,
+        report_id: str,
+        report: "Report",
+        *,
+        max_passes: int = 4,
+    ) -> Dict[str, Any]:
+        """Converge citation repair, quote grounding, and editorial lint.
+
+        Citation repair can honestly remove a source marker that previously made
+        a blockquote look grounded.  Removing that marker can, in turn, leave an
+        unsupported quote and punctuation spacing that the earlier lint pass could
+        not have seen.  Publication therefore needs a bounded fixed-point pass,
+        not a single linear sequence.
+
+        Every pass finalizes citations, removes newly exposed ungrounded quotes,
+        applies deterministic lint, and finalizes citations again.  The method
+        succeeds only when a dry quote repair and dry lint are both byte-stable and
+        no semantically unsupported citation remains.  It persists the exact stable
+        bytes so the following read-only audit can require disk/memory identity.
+        """
+        from . import report_lint as _rl
+
+        try:
+            limit = max(1, min(8, int(max_passes)))
+        except (TypeError, ValueError):
+            limit = 4
+        lang = getattr(self, "output_language", None) or "English"
+        spine = (
+            self._forecast_spine
+            if isinstance(getattr(self, "_forecast_spine", None), dict)
+            else None
+        )
+        folder = ReportManager._get_report_folder(report_id)
+        totals: Dict[str, Any] = {
+            "passes": 0,
+            "quotes_removed": 0,
+            "lint_rewrites": 0,
+            "semantic_unsupported": None,
+            "stable": False,
+            "lint": {},
+        }
+
+        for pass_no in range(1, limit + 1):
+            totals["passes"] = pass_no
+            self._finalize_citations_for_publish(report_id, report)
+
+            repaired, removed = self._repair_quote_grounding(
+                report.markdown_content or ""
+            )
+            totals["quotes_removed"] += int(removed or 0)
+            cleaned, lint_info = _rl.lint_report(
+                repaired,
+                lang,
+                mode="final",
+                spine=spine,
+            )
+            if not cleaned.strip():
+                raise RuntimeError(
+                    "发布稳定化删除了全部报告正文，拒绝发布空报告"
+                )
+            if cleaned != (report.markdown_content or ""):
+                totals["lint_rewrites"] += 1
+            report.markdown_content = cleaned
+
+            # Lint can change the claim line that a marker annotates, so rebuild
+            # the citation appendix and semantic mapping from the resulting bytes.
+            self._finalize_citations_for_publish(report_id, report)
+            current = report.markdown_content or ""
+            write_text_atomic(os.path.join(folder, "full_report.md"), current)
+
+            body = "\n".join(
+                chunk for chunk in self._split_markdown_h2_sections(current)
+                if chunk.split("\n", 1)[0].strip() not in _REFS_HEADINGS
+            )
+            semantic = self._audit_semantic_citations(
+                body, self._citation_index_or_fallback()
+            )
+            quote_probe, _ = self._repair_quote_grounding(current)
+            lint_probe, final_lint = _rl.lint_report(
+                current,
+                lang,
+                mode="final",
+                spine=spine,
+            )
+            unsupported = int(semantic.get("unsupported", 0) or 0)
+            totals["semantic_unsupported"] = unsupported
+            totals["lint"] = final_lint
+            if (
+                quote_probe == current
+                and lint_probe == current
+                and not final_lint.get("changed")
+                and unsupported == 0
+            ):
+                totals["stable"] = True
+                logger.info(
+                    "发布 Markdown 已收敛: %s passes=%s quote_removed=%s "
+                    "lint_rewrites=%s",
+                    report_id,
+                    pass_no,
+                    totals["quotes_removed"],
+                    totals["lint_rewrites"],
+                )
+                return totals
+
+        raise RuntimeError(
+            "发布 Markdown 在限定轮次内未收敛："
+            f"passes={limit}, semantic_unsupported="
+            f"{totals['semantic_unsupported']}, lint_changed="
+            f"{bool((totals.get('lint') or {}).get('changed'))}"
+        )
+
+    @staticmethod
+    def _audit_final_citation_artifacts(
+        folder: str,
+        reference_text: str,
+        body_marker_audit: Dict[str, Any],
+        index_map: Dict[str, Any],
+        *,
+        enabled: bool,
+    ) -> Dict[str, Any]:
+        """Verify visible References and citations.json against body markers/index."""
+        from .forecast_extractor import _norm_citation_tag
+
+        norm_index = {
+            _norm_citation_tag(tag): source
+            for tag, source in (index_map or {}).items()
+            if _citation_source_admissible(source)
+        }
+        body_order = list(body_marker_audit.get("order") or [])
+        expected = [tag for tag in body_order if tag in norm_index]
+        required = bool(enabled and expected)
+        payload: Optional[Dict[str, Any]] = None
+        citations_path = os.path.join(folder, "citations.json")
+        payload_error: Optional[str] = None
+        try:
+            with open(citations_path, encoding="utf-8") as handle:
+                candidate = json.load(handle)
+            if isinstance(candidate, dict):
+                payload = candidate
+            else:
+                payload_error = "citations.json is not an object"
+        except FileNotFoundError:
+            payload_error = "citations.json missing"
+        except (OSError, ValueError, TypeError) as exc:
+            payload_error = f"citations.json invalid ({type(exc).__name__})"
+
+        marker_rows = (
+            payload.get("markers") if isinstance(payload, dict) else None
+        )
+        marker_rows = marker_rows if isinstance(marker_rows, list) else []
+        artifact_by_tag: Dict[str, Dict[str, Any]] = {}
+        for row in marker_rows:
+            if not isinstance(row, dict):
+                continue
+            tag = _norm_citation_tag(str(row.get("tag") or ""))
+            if tag:
+                artifact_by_tag[tag] = row
+        artifact_tags = list(artifact_by_tag)
+        missing_tags = [tag for tag in expected if tag not in artifact_by_tag]
+        extra_tags = [tag for tag in artifact_tags if tag not in expected]
+        mismatched_urls: List[str] = []
+        invalid_artifact_urls: List[str] = []
+        missing_reference_tags: List[str] = []
+        missing_reference_urls: List[str] = []
+        for tag in expected:
+            source_url = str((norm_index.get(tag) or {}).get("url") or "").strip()
+            row_url = str((artifact_by_tag.get(tag) or {}).get("url") or "").strip()
+            if row_url != source_url:
+                mismatched_urls.append(tag)
+            if f"[{tag}]" not in reference_text:
+                missing_reference_tags.append(tag)
+            if source_url and source_url not in reference_text:
+                missing_reference_urls.append(tag)
+        for tag, row in artifact_by_tag.items():
+            row_url = str(row.get("url") or "").strip()
+            if row.get("url_valid") is not True or not _citation_url_ok(row_url):
+                invalid_artifact_urls.append(tag)
+
+        issues: List[str] = []
+        if required and not reference_text.strip():
+            issues.append("正文含引用记号但最终 Markdown 缺少可见 References/参考来源附录")
+        if required and payload_error:
+            issues.append(payload_error)
+        if required and missing_tags:
+            issues.append(f"citations.json 缺少 {len(missing_tags)} 个正文引用记号")
+        if enabled and extra_tags:
+            issues.append(f"citations.json 含 {len(extra_tags)} 个非正文引用记号")
+        if required and mismatched_urls:
+            issues.append(f"citations.json 有 {len(mismatched_urls)} 个来源 URL 与索引不一致")
+        if required and missing_reference_tags:
+            issues.append(f"References 缺少 {len(missing_reference_tags)} 个正文引用记号")
+        if required and missing_reference_urls:
+            issues.append(f"References 缺少 {len(missing_reference_urls)} 个来源 URL")
+        if enabled and invalid_artifact_urls:
+            issues.append(
+                f"citations.json 含 {len(invalid_artifact_urls)} 个无效或截断来源 URL"
+            )
+        return {
+            "enabled": enabled,
+            "required": required,
+            "references_present": bool(reference_text.strip()),
+            "citations_json_present": os.path.exists(citations_path),
+            "citations_json_valid": payload is not None,
+            "expected_tags": expected,
+            "artifact_tags": artifact_tags,
+            "missing_tags": missing_tags,
+            "extra_tags": extra_tags,
+            "mismatched_urls": mismatched_urls,
+            "invalid_artifact_urls": invalid_artifact_urls,
+            "missing_reference_tags": missing_reference_tags,
+            "missing_reference_urls": missing_reference_urls,
+            "issues": issues,
+            "passed": not issues,
+        }
+
+    @staticmethod
+    def _final_audit_integrity_issues(audit: Dict[str, Any]) -> List[str]:
+        """Return non-epistemic defects in the exact publishable Markdown.
+
+        These are artifact-integrity failures, not uncertainty about the world:
+        confidence demotion cannot repair them and publication must stop.
+        """
+        issues: List[str] = []
+        failed_sections = list(audit.get("failed_sections") or [])
+        if failed_sections:
+            issues.append(
+                f"报告仍有 {len(failed_sections)} 个生成失败章节，拒绝发布部分成稿"
+            )
+        structured = audit.get("structured_forecast") or {}
+        if structured.get("required") and not structured.get("valid"):
+            issues.append(
+                "结构化预测已启用，但 forecast.json 缺失、无效或缺少情景/二元预测"
+            )
+        if not audit.get("disk_matches_memory", False):
+            issues.append("最终 Markdown 的内存内容与磁盘工件不一致")
+        marker_audit = audit.get("citation_markers") or {}
+        dangling = list(marker_audit.get("dangling") or [])
+        if dangling:
+            issues.append(f"最终 Markdown 含 {len(dangling)} 个悬空引用记号")
+        lint = audit.get("lint") or {}
+        if lint.get("leakage_flags"):
+            issues.append(
+                f"最终 Markdown 含 {lint['leakage_flags']} 处内部流程/模拟机制泄漏"
+            )
+        language_lines = int(
+            (lint.get("language_contamination") or {}).get("lines", 0) or 0
+        )
+        if language_lines:
+            issues.append(f"最终 Markdown 含 {language_lines} 行目标语言污染")
+        truncations = list(lint.get("table_cell_truncations") or [])
+        if truncations:
+            issues.append(f"最终 Markdown 含 {len(truncations)} 个疑似截断表格单元格")
+        scenario_mismatches = list(lint.get("scenario_prob_mismatches") or [])
+        if scenario_mismatches:
+            issues.append(
+                f"最终 Markdown 含 {len(scenario_mismatches)} 个情景概率/骨架不一致"
+            )
+        if lint.get("changed"):
+            issues.append("最终 Markdown 在发布后仍会被确定性编辑 lint 改写")
+        for issue in (audit.get("citation_artifacts") or {}).get("issues") or []:
+            if issue not in issues:
+                issues.append(str(issue))
+        unsupported_citations = int(
+            (audit.get("semantic_citations") or {}).get("unsupported", 0) or 0
+        )
+        if unsupported_citations:
+            issues.append(
+                f"最终 Markdown 含 {unsupported_citations} 个来源与论断不匹配的引用记号"
+            )
+        overused_sources = list(
+            (audit.get("semantic_citations") or {}).get("overused_sources") or []
+        )
+        if overused_sources:
+            labels = ", ".join(
+                f"{row.get('tag')}×{row.get('count')}" for row in overused_sources[:4]
+            )
+            issues.append(f"最终 Markdown 引用来源过度集中：{labels}")
+        semantic_audit = audit.get("semantic_citations") or {}
+        unverifiable = int(semantic_audit.get("unverifiable", 0) or 0)
+        unverifiable_ratio = float(
+            semantic_audit.get("unverifiable_ratio", 0.0) or 0.0
+        )
+        if unverifiable >= 10 and unverifiable_ratio > 0.25:
+            issues.append(
+                "最终 Markdown 有过多无法按证据片段验证的引用："
+                f"{unverifiable} 个（{unverifiable_ratio:.0%}）"
+            )
+        cited_unverbatim = int(
+            (audit.get("quote_provenance") or {}).get("cited_unverbatim", 0) or 0
+        )
+        if cited_unverbatim:
+            issues.append(
+                f"最终 Markdown 含 {cited_unverbatim} 条有来源但无法逐字接地的直接引语"
+            )
+        proposition_mismatches = int(
+            (audit.get("proposition_consistency") or {}).get("mismatch_count", 0) or 0
+        )
+        if proposition_mismatches:
+            issues.append(
+                f"结构化二元预测与互斥情景分区有 {proposition_mismatches} 个概率矛盾"
+            )
+        market_anchor_issues = int(
+            (audit.get("market_anchor_integrity") or {}).get("issue_count", 0) or 0
+        )
+        if market_anchor_issues:
+            issues.append(
+                f"预测市场锚点有 {market_anchor_issues} 个来源不完整或结算命题不等价"
+            )
+        scenario_contract = audit.get("scenario_contract") or {}
+        scenario_contract_issues = int(
+            scenario_contract.get("issue_count", 0) or 0
+        )
+        if structured.get("required") and scenario_contract.get("valid") is not True:
+            issues.append(
+                "结构化情景契约缺失或未通过"
+            )
+        elif scenario_contract_issues:
+            issues.append(
+                f"结构化情景契约有 {scenario_contract_issues} 个概率、边界或结算定义问题"
+            )
+        return issues
+
+    @staticmethod
+    def _require_final_publish_audit(audit: Dict[str, Any]) -> None:
+        """Raise when the final audit did not run cleanly enough to publish."""
+        if not isinstance(audit, dict) or not audit:
+            raise RuntimeError("最终只读审计未产生结果，拒绝标记报告为 completed")
+        hard = list(audit.get("hard_issues") or [])
+        gate = audit.get("publish_gate") or {}
+        hard.extend(
+            issue for issue in (gate.get("hard_issues") or []) if issue not in hard
+        )
+        if hard:
+            raise RuntimeError("最终发布完整性门未通过：" + "；".join(hard))
+        if gate.get("enabled") and gate.get("passed") is False:
+            quality_issues = [str(issue) for issue in (gate.get("issues") or [])]
+            raise RuntimeError(
+                "最终发布质量门未通过："
+                + ("；".join(quality_issues) or "未提供质量门失败原因")
+            )
+
+    def _enforce_final_publish_audit(
+        self, report_id: str, report: "Report"
+    ) -> Dict[str, Any]:
+        """Run the authoritative audit and convert execution failure into a hard stop."""
+        try:
+            audit = self._audit_final_published_markdown(report_id, report)
+            self._require_final_publish_audit(audit)
+            return audit
+        except Exception as exc:  # noqa: BLE001 — caller must enter the failed-report path
+            raise RuntimeError(
+                "最终只读审计/发布完整性门失败，报告不标记为 completed："
+                f"{exc}"
+            ) from exc
+
+    def _audit_final_published_markdown(
+        self, report_id: str, report: "Report"
+    ) -> Dict[str, Any]:
+        """Audit the exact, immutable main-report Markdown and persist the result.
+
+        This is the authoritative publish gate.  It MUST run after citation
+        finalization and after every other main-report rewrite.  The function is
+        deliberately read-only with respect to ``report.markdown_content`` and
+        ``full_report.md``: the lint pass is evaluated but its candidate rewrite is
+        discarded.  Audit evidence is written to ``final_audit.json`` and, when a
+        structured forecast exists, merged into ``forecast.json`` before the publish
+        gate is evaluated once.
+
+        The claim-grounding audit excludes the References appendix (reference-list
+        dates and display numbers are metadata, not forecast claims), while marker
+        integrity and the SHA-256 fingerprint cover the exact complete Markdown.
+        """
+        from . import report_lint as _rl
+        from .forecast_extractor import (
+            audit_market_anchor_integrity as _audit_market_anchors,
+            audit_proposition_consistency as _audit_propositions,
+            audit_scenario_contract as _audit_scenarios,
+            audit_citation_grounding as _acg,
+            validate_citation_markers as _vcm,
+        )
+
+        md = report.markdown_content or ""
+        if not md.strip():
+            return {}
+
+        folder = ReportManager._get_report_folder(report_id)
+        full_report_path = os.path.join(folder, "full_report.md")
+        memory_sha = hashlib.sha256(md.encode("utf-8")).hexdigest()
+        disk_md: Optional[str] = None
+        try:
+            with open(full_report_path, "r", encoding="utf-8") as handle:
+                disk_md = handle.read()
+        except OSError:
+            disk_md = None
+
+        # Audit forecast claims without letting the deterministic References
+        # appendix inflate citation coverage.  Marker integrity still scans the
+        # complete published document below.
+        chunks = self._split_markdown_h2_sections(md)
+        reference_chunks = [
+            chunk for chunk in chunks
+            if chunk.split("\n", 1)[0].strip() in _REFS_HEADINGS
+        ]
+        body = "\n".join(
+            chunk for chunk in chunks if chunk not in reference_chunks
+        ).rstrip() + "\n"
+        reference_text = "\n".join(reference_chunks)
+        index_map = self._citation_index_or_fallback()
+        citation_audit = _acg(body, index_map=index_map)
+        body_marker_audit = _vcm(body, index_map)
+        marker_audit = _vcm(md, index_map)
+        semantic_citation_audit = self._audit_semantic_citations(body, index_map)
+        citation_artifacts = self._audit_final_citation_artifacts(
+            folder,
+            reference_text,
+            body_marker_audit,
+            index_map,
+            enabled=bool(getattr(Config, "REPORT_CITATION_FINALIZER", True)),
+        )
+        quote_audit = self._audit_quote_provenance(body)
+
+        # Load the structured forecast before the numeric cross-check.  A report
+        # can still be audited without forecast.json; in that case the standalone
+        # final_audit.json remains the durable evidence artifact.
+        forecast: Optional[Dict[str, Any]] = None
+        forecast_path = os.path.join(folder, "forecast.json")
+        try:
+            with open(forecast_path, "r", encoding="utf-8") as handle:
+                candidate = json.load(handle)
+            if isinstance(candidate, dict):
+                forecast = candidate
+        except (OSError, ValueError, TypeError):
+            candidate = getattr(self, "_forecast_spine", None)
+            if isinstance(candidate, dict):
+                forecast = dict(candidate)
+
+        numeric_audit = self._audit_numeric_consistency(body, forecast or {})
+        structured_forecast_audit = {
+            "required": bool(getattr(Config, "REPORT_STRUCTURED_FORECAST", True)),
+            "present": isinstance(forecast, dict),
+            "scenario_count": len((forecast or {}).get("scenarios") or []),
+            "binary_count": len((forecast or {}).get("binary_forecasts") or []),
+        }
+        structured_forecast_audit["valid"] = bool(
+            (not structured_forecast_audit["required"])
+            or (
+                structured_forecast_audit["present"]
+                and structured_forecast_audit["scenario_count"] > 0
+                and structured_forecast_audit["binary_count"] > 0
+            )
+        )
+        proposition_audit = _audit_propositions(forecast or {})
+        market_anchor_audit = _audit_market_anchors(forecast or {})
+        scenario_contract_audit = _audit_scenarios(forecast or {})
+        stat_audit = self._audit_stat_plausibility(body)
+        lang = getattr(self, "output_language", None) or "English"
+        _candidate_cleaned, lint_audit = _rl.lint_report(
+            md,
+            lang,
+            mode="final",
+            spine=forecast if isinstance(forecast, dict) else None,
+        )
+
+        audit: Dict[str, Any] = {
+            "schema_version": 2,
+            "policy_version": int(getattr(
+                Config, "REPORT_FINAL_AUDIT_POLICY_VERSION", 3
+            )),
+            "report_id": report_id,
+            "audited_at": datetime.now(timezone.utc).isoformat(),
+            "read_only": True,
+            "markdown_chars": len(md),
+            "markdown_sha256": memory_sha,
+            "disk_sha256": (
+                hashlib.sha256(disk_md.encode("utf-8")).hexdigest()
+                if disk_md is not None else None
+            ),
+            "disk_matches_memory": disk_md == md if disk_md is not None else False,
+            "failed_sections": list(
+                getattr(report, "failed_sections", None) or []
+            ),
+            "citation_grounding": citation_audit,
+            "citation_body_markers": body_marker_audit,
+            "citation_markers": marker_audit,
+            "citation_artifacts": citation_artifacts,
+            "semantic_citations": semantic_citation_audit,
+            "quote_provenance": quote_audit,
+            "numeric_consistency": numeric_audit,
+            "structured_forecast": structured_forecast_audit,
+            "scenario_contract": scenario_contract_audit,
+            "proposition_consistency": proposition_audit,
+            "market_anchor_integrity": market_anchor_audit,
+            "stat_plausibility": stat_audit,
+            # ``changed`` means a deterministic final lint would still rewrite the
+            # published bytes; the candidate rewrite is intentionally discarded.
+            "lint": lint_audit,
+        }
+        audit["hard_issues"] = self._final_audit_integrity_issues(audit)
+        audit["hard_passed"] = not audit["hard_issues"]
+
+        if forecast is not None:
+            quality0 = forecast.get("quality")
+            quality = dict(quality0) if isinstance(quality0, dict) else {}
+            # Replace draft-stage audit values with measurements from the exact
+            # post-citation document, including zero-finding results so stale
+            # pre-finalization defects cannot survive.
+            forecast["citation_audit"] = citation_audit
+            quality["quote_provenance"] = quote_audit
+            quality["numeric_consistency"] = numeric_audit
+            quality["implausible_stats"] = stat_audit
+            quality["final_audit"] = audit
+            forecast["quality"] = quality
+            if getattr(Config, "REPORT_PUBLISH_GATE", False):
+                forecast = self._apply_publish_gate(forecast)
+
+            final_quality = forecast.get("quality") or {}
+            audit["publish_gate"] = {
+                "enabled": bool(getattr(Config, "REPORT_PUBLISH_GATE", False)),
+                "passed": final_quality.get("passed"),
+                "issues": list(final_quality.get("issues") or []),
+                "hard_issues": list(final_quality.get("hard_issues") or []),
+                "epistemic_issues": list(
+                    final_quality.get("epistemic_issues") or []
+                ),
+                "hard_passed": final_quality.get("hard_passed"),
+                "citation_coverage": final_quality.get("citation_coverage"),
+                "citation_coverage_basis": final_quality.get("citation_coverage_basis"),
+                "probability_sum": final_quality.get("probability_sum"),
+                "has_residual_scenario": final_quality.get("has_residual_scenario"),
+            }
+            # ``audit`` is already referenced by quality.final_audit; adding the
+            # compact gate result above therefore persists in both artifacts.
+            forecast_serialized = json.dumps(
+                forecast, ensure_ascii=False, indent=2, allow_nan=False
+            )
+            write_text_atomic(forecast_path, forecast_serialized)
+            # This external audit fingerprint intentionally seals the exact
+            # forecast bytes after all self-contained quality fields are written.
+            # It is not inserted back into forecast.json (which would be
+            # self-referential). Any later ensemble/config mutation therefore
+            # invalidates publication until the bundle is re-audited.
+            audit["forecast_sha256"] = hashlib.sha256(
+                forecast_serialized.encode("utf-8")
+            ).hexdigest()
+            self._forecast_spine = forecast
+
+        write_json_atomic(
+            os.path.join(folder, "final_audit.json"), audit, allow_nan=False
+        )
+        logger.info(
+            f"最终只读审计: {report_id} sha256={memory_sha[:12]} "
+            f"disk_match={audit['disk_matches_memory']} "
+            f"dangling={len(marker_audit.get('dangling') or [])} "
+            f"lint_would_change={lint_audit.get('changed')}"
+        )
+        return audit
+
     def _prepend_binary_forecasts_section(self, report_id: str, report: "Report") -> None:
         """QUALITY-OPT B1: insert the deterministic Part-1 binary-forecast table right after
         the report's H1 title, so the brief's headline deliverable leads the document and its
@@ -4326,7 +5910,9 @@ class ReportAgent:
         与二元表同处一次插入，受同一 Part-1 标记幂等门保护（重最终化绝不二次插入，H3 标记不干扰
         三部骨架对首个 "## " 详细章节的定位）。
         """
-        from .forecast_extractor import render_binary_forecasts_block
+        from .forecast_extractor import (
+            render_binary_forecasts_block, upsert_binary_forecasts_block,
+        )
         fc = self._forecast_spine or {}
         if not (fc.get("binary_forecasts")):
             return
@@ -4345,22 +5931,17 @@ class ReportAgent:
         if xcheck and not any(m in block for m in _MARKET_XCHECK_MARKERS):
             block = block + "\n\n" + xcheck
         md = report.markdown_content or ""
-        if "Part 1 — Binary Forecasts" in md or "第一部分 · 二元预测" in md:
-            return  # idempotent — never double-insert on re-finalize
-        lines = md.split("\n", 1)
-        if lines and lines[0].lstrip().startswith("# "):
-            # after the H1 title (+ any immediate blockquote summary stays below Part 1)
-            new_md = lines[0] + "\n\n" + block + "\n\n" + (lines[1] if len(lines) > 1 else "")
-        else:
-            new_md = block + "\n\n" + md
+        new_md, action = upsert_binary_forecasts_block(md, block)
+        if action == "noop" or new_md == md:
+            return
         report.markdown_content = new_md
         try:
             folder = ReportManager._get_report_folder(report_id)
             write_text_atomic(os.path.join(folder, "full_report.md"), new_md)
         except Exception as _we:  # noqa: BLE001
             logger.warning(f"重写 full_report.md（前置二元预测章节）失败（忽略）: {_we}")
-        logger.info(f"已前置 Part-1 二元预测章节: {report_id} "
-                    f"({len(fc.get('binary_forecasts') or [])} 条)")
+        logger.info(f"已{('替换' if action == 'replaced' else '前置')} Part-1 二元预测章节: "
+                    f"{report_id} ({len(fc.get('binary_forecasts') or [])} 条)")
 
     # ──────────────────────────────────────────────────────────────
     # B2: 三部结构骨架 — Part 1（二元预测）→ Part 2（框架综合）→ Part 3（附录详析）
@@ -4780,7 +6361,8 @@ class ReportAgent:
                           png_path: str = "") -> str:
         """把单个 manifest 图渲染成 markdown 块：Mermaid 读 charts/*.mmd 内联其 ```mermaid 围栏；
         PNG 用相对图片语法（charts/xxx.png）；plotly HTML（schema v2）优先内嵌其 png_path 静态
-        对（kaleido/matplotlib 回退产物）并附交互版链接，无 PNG 对则退化为纯链接——此前无
+        对（kaleido/matplotlib 回退产物）；Web 阅读器根据同一 manifest 在图片旁附一次交互
+        链接，无 PNG 对才在 Markdown 内退化为纯链接——此前无
         'html' 分支导致 plotly 图整族孤儿在盘上（diag-viz-audit）。每块以唯一 HTML 注释标记
         打头（幂等定位）。读不到/空/未知类型 → ''。"""
         cap = caption or ("图示" if zh else "Figure")
@@ -4798,10 +6380,7 @@ class ReportAgent:
         if vtype == "html":
             link_txt = "交互版" if zh else "interactive version"
             if png_path and os.path.exists(os.path.join(folder, png_path)):
-                return (f"{marker}\n![{cap}]({png_path})\n\n"
-                        f"*{cap}（[{link_txt}]({path})）*" if zh else
-                        f"{marker}\n![{cap}]({png_path})\n\n"
-                        f"*{cap} ([{link_txt}]({path}))*")
+                return f"{marker}\n![{cap}]({png_path})\n\n*{cap}*"
             return f"{marker}\n**{cap}**：[{link_txt}]({path})" if zh else \
                    f"{marker}\n**{cap}**: [{link_txt}]({path})"
         return ""
@@ -4828,13 +6407,21 @@ class ReportAgent:
         A calibrated forecaster must refuse to silently publish incoherent or
         ungrounded probability sets. Checks citation coverage of quantitative claims,
         probability-sum coherence, presence of a residual/status-quo scenario, and
-        degenerate entropy; records ``forecast['quality']`` and demotes ``confidence``
-        (at most one level) when any issue is found. Pure / best-effort; never raises.
+        degenerate entropy; records ``forecast['quality']``. Epistemic defects demote
+        ``confidence`` at most one level; artifact/coherence defects populate
+        ``hard_issues`` and must be blocked by the final audit caller. Pure; never raises.
         """
         try:
             scenarios = forecast.get("scenarios") or []
             audit = forecast.get("citation_audit") or {}
-            coverage = float(audit.get("coverage", 1.0) or 0.0)
+            # Post-citation audits carry ``resolved_coverage``: only markers that
+            # map to the real source index count.  Prefer that strict metric when
+            # available; legacy forecasts without an index retain ``coverage``.
+            _coverage_basis = (
+                "resolved_coverage"
+                if "resolved_coverage" in audit else "coverage"
+            )
+            coverage = float(audit.get(_coverage_basis, 1.0) or 0.0)
             min_cov = float(getattr(Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.5) or 0.0)
             probs: List[float] = []
             for s in scenarios:
@@ -4849,143 +6436,168 @@ class ReportAgent:
                 for s in scenarios
             )
             top = max(probs) if probs else 0.0
-            issues: List[str] = []
+            epistemic_issues: List[str] = []
+            hard_issues: List[str] = []
             if scenarios and coverage < min_cov:
-                issues.append(f"定量声明引用覆盖率 {coverage:.2f} < 阈值 {min_cov:.2f}")
+                epistemic_issues.append(
+                    f"定量声明引用覆盖率 {coverage:.2f} < 阈值 {min_cov:.2f}"
+                )
             if scenarios and abs(prob_sum - 1.0) > 0.05:
-                issues.append(f"情景概率之和 {prob_sum} 偏离 1")
+                hard_issues.append(f"情景概率之和 {prob_sum} 偏离 1")
             if scenarios and not has_residual:
-                issues.append("缺少『维持现状/兜底』情景")
+                hard_issues.append("缺少『维持现状/兜底』情景")
             if top >= 0.9 and len(probs) <= 1:
-                issues.append("概率分布退化（单情景≥0.9 且无对照情景）")
+                epistemic_issues.append("概率分布退化（单情景≥0.9 且无对照情景）")
             # QUALITY-OPT: fold the binary-forecast conviction/objectivity gate (A3/A4) +
             # the S2/S11/S12 audits into the publish gate so they actually demote confidence.
             bq = forecast.get("binary_quality") or {}
             if bq and not bq.get("passed", True):
-                issues.append("二元预测信心/客观性门未过：" + "；".join((bq.get("issues") or [])[:2]))
+                epistemic_issues.append(
+                    "二元预测信心/客观性门未过："
+                    + "；".join((bq.get("issues") or [])[:2])
+                )
             _q0 = forecast.get("quality")
             _existing_q = _q0 if isinstance(_q0, dict) else {}
             if (_existing_q.get("quote_provenance") or {}).get("ungrounded"):
-                issues.append(f"{_existing_q['quote_provenance']['ungrounded']} 条疑似嫁接/捏造引用 (S2)")
+                hard_issues.append(
+                    f"{_existing_q['quote_provenance']['ungrounded']} 条疑似嫁接/捏造引用 (S2)"
+                )
             if (_existing_q.get("numeric_consistency") or {}).get("mismatch_count"):
-                issues.append(f"{_existing_q['numeric_consistency']['mismatch_count']} 处正文概率与 forecast.json 不符 (S11)")
+                hard_issues.append(
+                    f"{_existing_q['numeric_consistency']['mismatch_count']} 处正文概率与 forecast.json 不符 (S11)"
+                )
             if (_existing_q.get("implausible_stats") or {}).get("count"):
-                issues.append(f"{_existing_q['implausible_stats']['count']} 处疑似不合理极端增长率 (S12)")
+                epistemic_issues.append(
+                    f"{_existing_q['implausible_stats']['count']} 处疑似不合理极端增长率 (S12)"
+                )
+            # LOOP-010: when called by the post-citation read-only audit, gate the
+            # exact published bytes rather than the earlier mutable draft.  A disk
+            # mismatch, dangling marker, residual process leakage, or a deterministic
+            # lint that would still rewrite the document is a publish-quality defect.
+            _final_audit = _existing_q.get("final_audit") or {}
+            if _final_audit:
+                for issue in ReportAgent._final_audit_integrity_issues(_final_audit):
+                    if issue not in hard_issues:
+                        hard_issues.append(issue)
+            issues = hard_issues + epistemic_issues
+            # Preserve the model's pre-publish confidence/rationale exactly once.
+            # Every re-audit derives from this baseline, so repeated backfills can
+            # never ratchet high→medium→low.  A clean re-audit restores the baseline.
+            levels = ["low", "medium", "high"]
+            order = {"low": 0, "medium": 1, "high": 2}
+            _baseline = str(
+                _existing_q.get("pre_publish_confidence")
+                or forecast.get("confidence", "medium")
+            ).lower()
+            if _baseline not in order:
+                _baseline = "medium"
+            _baseline_rationale = _existing_q.get("pre_publish_confidence_rationale")
+            if _baseline_rationale is None:
+                _baseline_rationale = str(
+                    forecast.get("confidence_rationale", "") or ""
+                ).strip()
+
             # MERGE into quality (do NOT overwrite the audit findings stored earlier).
             quality = dict(_existing_q)
             quality.update({
+                "pre_publish_confidence": _baseline,
+                "pre_publish_confidence_rationale": _baseline_rationale,
                 "citation_coverage": round(coverage, 3),
+                "citation_coverage_basis": _coverage_basis,
                 "probability_sum": prob_sum,
                 "has_residual_scenario": has_residual,
                 "max_probability": round(top, 3),
+                "hard_issues": hard_issues,
+                "epistemic_issues": epistemic_issues,
+                "hard_passed": not hard_issues,
                 "issues": issues,
                 "passed": not issues,
             })
             forecast["quality"] = quality
-            if issues:
-                levels = ["low", "medium", "high"]
-                order = {"low": 0, "medium": 1, "high": 2}
-                cur = order.get(str(forecast.get("confidence", "medium")).lower(), 1)
-                forecast["confidence"] = levels[max(0, cur - 1)]
-                rationale = (forecast.get("confidence_rationale", "") or "").strip()
+            if epistemic_issues:
+                forecast["confidence"] = levels[max(0, order[_baseline] - 1)]
                 forecast["confidence_rationale"] = (
-                    (rationale + " ｜发布门：" + "；".join(issues)).strip(" ｜")
+                    (
+                        str(_baseline_rationale)
+                        + " ｜证据/校准门："
+                        + "；".join(epistemic_issues)
+                    ).strip(" ｜")
                 )
-        except Exception as _qe:  # noqa: BLE001 — 发布门为旁路品控，失败不影响产物
-            logger.warning(f"发布门计算失败（忽略）: {_qe}")
+            else:
+                forecast["confidence"] = _baseline
+                forecast["confidence_rationale"] = str(_baseline_rationale)
+        except Exception as _qe:  # noqa: BLE001 — convert evaluator failure into a hard gate
+            logger.warning(f"发布门计算失败（标记为硬失败）: {_qe}")
+            _q0 = forecast.get("quality")
+            quality = dict(_q0) if isinstance(_q0, dict) else {}
+            failure = f"发布门计算失败：{type(_qe).__name__}"
+            hard = list(quality.get("hard_issues") or [])
+            if failure not in hard:
+                hard.append(failure)
+            epistemic = list(quality.get("epistemic_issues") or [])
+            quality.update({
+                "hard_issues": hard,
+                "epistemic_issues": epistemic,
+                "hard_passed": False,
+                "issues": hard + epistemic,
+                "passed": False,
+            })
+            forecast["quality"] = quality
         return forecast
 
     # ──────────────────────────────────────────────────────────────
     # EXECPLAN2 I-3-4: 结构化「基线 vs 情景」对比表（确定性，无 LLM）
-    # 数据源与 zep_tools.scenario_diff 完全一致（SimulationRunner 的
-    # get_timeline / get_agent_stats），保证「按构造即正确」，让 LLM 围绕
-    # 权威表格叙述而非自行复算差值（避免反转 delta 符号或漏维度）。
+    # 数据源是 decision-channel 的最终 P(outcome) 世界态。内部动作量、轮次、活跃度等
+    # 运行机制永不进入报告对比表；无结果分布时宁可跳过该表，也不拿平台活动当结果代理。
     # ──────────────────────────────────────────────────────────────
     def _scenario_diff_structured(self) -> Optional[Dict[str, Any]]:
-        """把基线/情景两次模拟归一化为可比维度的字典。
+        """把基线/情景两份最终 P(outcome) 归一化为可比维度的字典。
 
-        返回 {dimensions:[{name, baseline, scenario, delta, verdict}], rounds_*}；
-        无基线或两侧均无数据时返回 None（调用方自动跳过，行为不变）。
+        返回 {dimensions:[{name, baseline, scenario, delta, verdict}]}；任一侧缺少
+        world_state_trajectory.json / outcome.shares 时返回 None。
         """
         if not self.base_simulation_id:
             return None
-        try:
-            from .simulation_runner import SimulationRunner
-            base_tl = SimulationRunner.get_timeline(self.base_simulation_id) or []
-            scen_tl = SimulationRunner.get_timeline(self.simulation_id) or []
-            base_stats = SimulationRunner.get_agent_stats(self.base_simulation_id) or []
-            scen_stats = SimulationRunner.get_agent_stats(self.simulation_id) or []
-        except Exception as e:  # noqa: BLE001 — 对比表为可选增强，失败返回 None 即跳过
-            logger.warning(f"结构化对比表读取模拟数据失败（忽略）: {e}")
-            return None
-        if not (base_tl or scen_tl):
-            return None
+        def _shares(simulation_id: str) -> Dict[str, float]:
+            path = os.path.join(
+                getattr(Config, "OASIS_SIMULATION_DATA_DIR", "") or "",
+                str(simulation_id or ""), "world_state_trajectory.json",
+            )
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
+                    raw = ((json.load(handle) or {}).get("outcome") or {}).get("shares") or {}
+            except (OSError, ValueError, TypeError):
+                return {}
+            out: Dict[str, float] = {}
+            for name, value in raw.items() if isinstance(raw, dict) else []:
+                try:
+                    number = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if number >= 0:
+                    out[str(name)] = number
+            total = sum(out.values())
+            return ({name: value / total for name, value in out.items()} if total > 0 else {})
 
-        def _total(tl):
-            return sum(int(r.get("total_actions", 0)) for r in tl)
-
-        def _peak(tl):
-            return max(tl, key=lambda r: r.get("total_actions", 0), default=None)
+        base_shares = _shares(self.base_simulation_id)
+        scenario_shares = _shares(self.simulation_id)
+        if not base_shares or not scenario_shares:
+            return None
 
         dims: List[Dict[str, Any]] = []
-
-        # 维度1：总动作量（数值高低判定）
-        bt, st = _total(base_tl), _total(scen_tl)
-        pct = ((st - bt) / bt * 100) if bt else 0.0
-        dims.append({
-            "name": "总动作量",
-            "baseline": bt,
-            "scenario": st,
-            "delta": f"{st - bt:+d}（{pct:+.1f}%）",
-            "verdict": "更高" if st > bt else ("更低" if st < bt else "持平"),
-        })
-
-        # 维度2：峰值轮次（时间早晚判定 —— 情景峰值更早=更快爆发）
-        bp, sp = _peak(base_tl), _peak(scen_tl)
-        if bp and sp:
-            br, sr = int(bp["round_num"]), int(sp["round_num"])
+        names = sorted(set(base_shares) | set(scenario_shares), key=lambda name: (
+            -max(base_shares.get(name, 0.0), scenario_shares.get(name, 0.0)), name,
+        ))
+        for name in names:
+            baseline = base_shares.get(name, 0.0) * 100
+            scenario = scenario_shares.get(name, 0.0) * 100
+            delta = scenario - baseline
             dims.append({
-                "name": "峰值轮次",
-                "baseline": f"round {br}（{bp['total_actions']}）",
-                "scenario": f"round {sr}（{sp['total_actions']}）",
-                "delta": f"{sr - br:+d} 轮",
-                "verdict": "更早" if sr < br else ("更晚" if sr > br else "同轮"),
-            })
-
-        # 维度3：执行轮数（升温/降温速度的代理）
-        bl, sl = len(base_tl), len(scen_tl)
-        dims.append({
-            "name": "执行轮数",
-            "baseline": bl,
-            "scenario": sl,
-            "delta": f"{sl - bl:+d}",
-            "verdict": "更长" if sl > bl else ("更短" if sl < bl else "持平"),
-        })
-
-        # 维度4：参与 Agent 数（动员广度）
-        b_agents = len(base_stats)
-        s_agents = len(scen_stats)
-        dims.append({
-            "name": "参与 Agent 数",
-            "baseline": b_agents,
-            "scenario": s_agents,
-            "delta": f"{s_agents - b_agents:+d}",
-            "verdict": "更多" if s_agents > b_agents else ("更少" if s_agents < b_agents else "持平"),
-        })
-
-        # 维度5：变化最大的 Top mover（活跃度 delta 绝对值最大者）
-        b_by = {s.get("agent_name"): int(s.get("total_actions", 0)) for s in base_stats}
-        s_by = {s.get("agent_name"): int(s.get("total_actions", 0)) for s in scen_stats}
-        names = [n for n in (set(b_by) | set(s_by)) if n]
-        if names:
-            top_name = max(names, key=lambda n: abs(s_by.get(n, 0) - b_by.get(n, 0)))
-            d = s_by.get(top_name, 0) - b_by.get(top_name, 0)
-            dims.append({
-                "name": "活跃度变化最大 Agent",
-                "baseline": f"{top_name}: {b_by.get(top_name, 0)}",
-                "scenario": f"{top_name}: {s_by.get(top_name, 0)}",
-                "delta": f"{d:+d}",
-                "verdict": "升" if d > 0 else ("降" if d < 0 else "不变"),
+                "name": name,
+                "baseline": f"{baseline:.1f}%",
+                "scenario": f"{scenario:.1f}%",
+                "delta": f"{delta:+.1f} pp",
+                "verdict": "更可能" if delta > 0.05 else ("更不可能" if delta < -0.05 else "基本不变"),
             })
 
         return {
@@ -5579,7 +7191,8 @@ class ReportAgent:
                 "大纲必须显式覆盖以下三类章节："
                 "(1) 一节阐述「预测框架与方法」——研究证据基础、情景如何划分与定价（概率来源）；"
                 "(2) 围绕各核心情景的「逐情景预测」章节，逐一论证其概率、关键驱动与判定/证伪标准；"
-                "(3) 一节「校准与信心」——讨论不确定性、置信区间，以及模型与模拟之间的分歧。"
+                "(3) 一节「校准与信心」——讨论不确定性、置信区间，以及本模型与外部证据、"
+                "基率或预测市场之间的分歧。"
                 "其余章节可据预测发现自由设计，但上述三类必须被覆盖（标题可自拟，语义需对应）。"
             )
 
@@ -5639,7 +7252,7 @@ class ReportAgent:
                 sections = sections[:_max_sections]
 
             outline = ReportOutline(
-                title=response.get("title", "模拟分析报告"),
+                title=response.get("title", "未来预测报告"),
                 summary=response.get("summary", ""),
                 sections=sections
             )
@@ -5659,7 +7272,7 @@ class ReportAgent:
             # 返回默认大纲（5个章节，满足 5-8 节契约的下限，作为 fallback）
             return ReportOutline(
                 title="未来预测报告",
-                summary="基于模拟预测的未来趋势与风险分析",
+                summary="基于研究证据、情景推理与外部校准的未来趋势与风险预测",
                 sections=[
                     ReportSection(title=_title) for _title in self._FALLBACK_SECTION_TITLES
                 ]
@@ -6697,6 +8310,7 @@ class ReportAgent:
         # 如果没有传入 report_id，则自动生成
         if not report_id:
             report_id = f"report_{uuid.uuid4().hex[:12]}"
+        self._active_report_id = report_id
         start_time = datetime.now()
         
         report = Report(
@@ -7095,12 +8709,18 @@ class ReportAgent:
             # WAVE10（无缝引用）：引用最终化——正文 [S12] 记号解析为文末「References/参考来源」
             # 附录（只列被引用来源）+ citations.json 工件。放在语言纯度/lint 之后（附录不进
             # lint 扫描——参考条目天然 URL 密集）、双语翻译之前（附录随章节一并翻译）。
-            # 失败仅告警（degrade-safe，成稿不含附录）。
+            # 无正文记号时失败可降级；有正文记号时附录/映射是引用可用性的组成部分，
+            # 失败必须进入 failed-report 路径，不能发布一组死 [S#]。
             if getattr(Config, "REPORT_CITATION_FINALIZER", True):
-                try:
-                    self._finalize_citations(report_id, report)
-                except Exception as _cf_err:  # noqa: BLE001 — 附录为增强，绝不影响正文
-                    logger.warning(f"引用最终化失败（忽略，成稿不含参考来源附录）: {_cf_err}")
+                self._stabilize_publish_markdown(report_id, report)
+
+            # LOOP-010: authoritative, read-only audit of the exact publishable
+            # Markdown.  Nothing below mutates the main report (bilingual output is
+            # written to a separate file), so this fingerprint and its citation /
+            # lint / publish-gate fields cannot go stale.  The audit never repairs or
+            # rewrites Markdown; it only persists final_audit.json + forecast fields.
+            if getattr(Config, "REPORT_FINAL_READ_ONLY_AUDIT", True):
+                self._enforce_final_publish_audit(report_id, report)
 
             # BILINGUAL：在所有最终化/可视化/纯度处理之后（成稿已定型），自动生成另一语种版本
             # （英⇄中）。逐 H2 章节并发翻译，落 full_report.{en|zh}.md 并把 translations 条目写入
@@ -7209,6 +8829,7 @@ class ReportAgent:
         except Exception as e:
             logger.error(f"报告生成失败: {str(e)}")
             report.status = ReportStatus.FAILED
+            report.completed_at = None
             report.error = str(e)
             
             # 记录错误日志
@@ -7277,7 +8898,8 @@ class ReportAgent:
         report_content = ""
         try:
             report = self._resolve_report_cached()  # EXECPLAN2 F-7-3: 实例级记忆 + 索引快路径
-            if report and report.markdown_content:
+            if (report and report.markdown_content
+                    and ReportManager.is_publishable(report.report_id)):
                 # 限制报告长度，避免上下文过长（放宽到 40000 字以覆盖更长的报告）
                 report_content = report.markdown_content[:40000]
                 if len(report.markdown_content) > 40000:
@@ -7427,6 +9049,137 @@ class ReportManager:
         """获取双语版本 Markdown 文件路径 reports/{id}/full_report.<lang>.md（lang ∈ {en, zh}）。"""
         return os.path.join(cls._get_report_folder(report_id), f"full_report.{lang}.md")
 
+    @classmethod
+    def _get_report_citations_path(
+        cls, report_id: str, lang: Optional[str] = None
+    ) -> str:
+        """Return the primary or language-isolated citation artifact path."""
+        filename = (
+            f"citations.{lang}.json"
+            if lang in cls._TRANSLATION_LANGS else "citations.json"
+        )
+        return os.path.join(cls._get_report_folder(report_id), filename)
+
+    @classmethod
+    def _get_report_final_audit_path(
+        cls, report_id: str, lang: Optional[str] = None
+    ) -> str:
+        """Return the primary or language-isolated final-audit artifact path."""
+        filename = (
+            f"final_audit.{lang}.json"
+            if lang in cls._TRANSLATION_LANGS else "final_audit.json"
+        )
+        return os.path.join(cls._get_report_folder(report_id), filename)
+
+    @classmethod
+    def publication_status(
+        cls, report_id: str, lang: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Verify the exact bytes are safe for customer-facing publication.
+
+        File existence is never sufficient.  The report must be completed with
+        no failed sections, have a passing final audit, and the audit fingerprint
+        must match the current Markdown bytes.  Language variants additionally
+        require the primary report and their isolated citation artifact.
+        """
+        lang = lang if lang in cls._TRANSLATION_LANGS else None
+        result: Dict[str, Any] = {
+            "report_id": report_id,
+            "lang": lang,
+            "publishable": False,
+            "reasons": [],
+        }
+        try:
+            with open(cls._get_report_path(report_id), encoding="utf-8") as handle:
+                meta = json.load(handle)
+        except (OSError, ValueError, TypeError):
+            result["reasons"].append("meta.json missing or invalid")
+            return result
+        if not isinstance(meta, dict) or meta.get("status") != ReportStatus.COMPLETED.value:
+            result["reasons"].append("report status is not completed")
+        failed_sections = list(meta.get("failed_sections") or [])
+        if failed_sections or meta.get("partial"):
+            result["reasons"].append("report contains failed or partial sections")
+
+        if lang:
+            primary = cls.publication_status(report_id)
+            if not primary.get("publishable"):
+                result["reasons"].append("primary report is not publishable")
+            md_path = cls._get_report_translation_path(report_id, lang)
+        else:
+            md_path = cls._get_report_markdown_path(report_id)
+        try:
+            with open(md_path, encoding="utf-8") as handle:
+                markdown = handle.read()
+        except OSError:
+            result["reasons"].append("Markdown artifact missing")
+            return result
+        markdown_sha = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
+        result["markdown_sha256"] = markdown_sha
+
+        audit_path = cls._get_report_final_audit_path(report_id, lang)
+        try:
+            with open(audit_path, encoding="utf-8") as handle:
+                audit = json.load(handle)
+        except (OSError, ValueError, TypeError):
+            result["reasons"].append("final audit missing or invalid")
+            return result
+        if not isinstance(audit, dict) or audit.get("hard_passed") is not True:
+            result["reasons"].append("final audit did not hard-pass")
+        required_policy = int(getattr(
+            Config, "REPORT_FINAL_AUDIT_POLICY_VERSION", 3
+        ))
+        if audit.get("policy_version") != required_policy:
+            result["reasons"].append(
+                "final audit policy is stale; deterministic replay required"
+            )
+        if list(audit.get("hard_issues") or []):
+            result["reasons"].append("final audit contains hard issues")
+        if audit.get("markdown_sha256") != markdown_sha:
+            result["reasons"].append("final audit fingerprint does not match Markdown")
+        gate = audit.get("publish_gate") or {}
+        if gate.get("enabled") and gate.get("passed") is not True:
+            result["reasons"].append("professional publication gate did not pass")
+        if not lang:
+            structured = audit.get("structured_forecast") or {}
+            if structured.get("required") and not structured.get("valid"):
+                result["reasons"].append("structured forecast contract is invalid")
+            scenario_contract = audit.get("scenario_contract") or {}
+            if structured.get("required") and scenario_contract.get("valid") is not True:
+                result["reasons"].append("scenario contract is missing or invalid")
+            citation_artifacts = audit.get("citation_artifacts") or {}
+            if citation_artifacts.get("required") and not citation_artifacts.get("passed"):
+                result["reasons"].append("citation artifact contract is invalid")
+            if structured.get("required") or structured.get("present"):
+                forecast_path = os.path.join(
+                    cls._get_report_folder(report_id), "forecast.json"
+                )
+                try:
+                    with open(forecast_path, "rb") as handle:
+                        forecast_sha = hashlib.sha256(handle.read()).hexdigest()
+                except OSError:
+                    forecast_sha = None
+                result["forecast_sha256"] = forecast_sha
+                if not forecast_sha or audit.get("forecast_sha256") != forecast_sha:
+                    result["reasons"].append(
+                        "final audit fingerprint does not match structured forecast"
+                    )
+        else:
+            citations_path = cls._get_report_citations_path(report_id, lang)
+            try:
+                with open(citations_path, encoding="utf-8") as handle:
+                    citations = json.load(handle)
+                if not isinstance(citations, dict):
+                    raise ValueError("citation map is not an object")
+            except (OSError, ValueError, TypeError):
+                result["reasons"].append("language-isolated citation map is missing or invalid")
+        result["publishable"] = not result["reasons"]
+        return result
+
+    @classmethod
+    def is_publishable(cls, report_id: str, lang: Optional[str] = None) -> bool:
+        return bool(cls.publication_status(report_id, lang).get("publishable"))
+
     # ── PDF-1: full_report.md → full_report.pdf（pandoc+xelatex，回退 PyMuPDF；按 mtime 缓存）──
 
     # 已知的 pandoc / xelatex 绝对路径（Homebrew / MacTeX）——运行时校验存在，缺失回退 PATH
@@ -7464,17 +9217,37 @@ class ReportManager:
     @staticmethod
     def _rewrite_chart_paths_for_pdf(md: str, folder: str) -> str:
         """PDF-1 预处理：只把 Markdown 图片的相对 charts/<file> 重写为绝对路径，供 PDF
-        构建器定位图片。普通交互链接保持相对，绝不把工作站私有路径写进可点击文本。"""
-        abs_charts = os.path.join(os.path.abspath(folder), "charts")
+        构建器定位图片。普通交互链接保持相对，绝不把工作站私有路径写进可点击文本。
+        仅重写真实存在、非 symlink 且 realpath 仍位于本报告 charts/ 内的静态图片。"""
+        abs_charts = os.path.realpath(os.path.join(os.path.abspath(folder), "charts"))
+        allowed = {".png", ".svg", ".jpg", ".jpeg", ".gif", ".webp"}
 
         def _sub(m: "re.Match") -> str:
             rel = m.group("rel")                       # 形如 charts/foo.png 或 ./charts/foo.png
-            fname = rel.split("charts/", 1)[1]
-            return m.group("prefix") + os.path.join(abs_charts, fname) + ")"
+            raw = rel.removeprefix("./")
+            if ("\\" in raw or "%" in raw
+                    or any(ord(char) < 32 or ord(char) == 127 for char in raw)):
+                return m.group(0)
+            parts = raw.split("/")
+            if (len(parts) < 2 or parts[0] != "charts"
+                    or any(part in ("", ".", "..") for part in parts)
+                    or os.path.splitext(parts[-1])[1].lower() not in allowed):
+                return m.group(0)
+            candidate = os.path.join(abs_charts, *parts[1:])
+            resolved = os.path.realpath(candidate)
+            try:
+                contained = os.path.commonpath([resolved, abs_charts]) == abs_charts
+            except ValueError:
+                contained = False
+            if (not contained or not os.path.isfile(resolved)
+                    or any(os.path.islink(os.path.join(abs_charts, *parts[1:i]))
+                           for i in range(2, len(parts) + 1))):
+                return m.group(0)
+            return m.group("prefix") + resolved + ")"
 
         # 仅匹配 ![alt](relative-chart)；普通 [link](charts/x.html) 与绝对图片不受影响。
         return re.sub(
-            r"(?P<prefix>!\[[^\]\n]*\]\()(?P<rel>\.{0,2}/?charts/[^)\s]+)\)",
+            r"(?P<prefix>!\[[^\]\n]*\]\()(?P<rel>(?:\./)?charts/[^)\s]+)\)",
             _sub,
             md,
         )
@@ -7517,10 +9290,17 @@ class ReportManager:
         return fence_re.sub(_sub, md)
 
     @staticmethod
-    def _load_citations_map(folder: str) -> Dict[str, Dict[str, Any]]:
-        """WAVE10：读 reports/{id}/citations.json → {记号: 条目}；缺失/坏 JSON → {}
-        （degrade-safe，PDF 保留字面记号 + 参考来源附录）。"""
-        path = os.path.join(folder, "citations.json")
+    def _load_citations_map(
+        folder: str, lang: Optional[str] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """Load the citation namespace for exactly one published artifact.
+
+        A translation never falls back to ``citations.json``: doing so can bind a
+        legacy translation's positional ``[S#]`` namespace to unrelated primary
+        sources.  Missing/invalid language-specific artifacts therefore return ``{}``.
+        """
+        filename = f"citations.{lang}.json" if lang in ("en", "zh") else "citations.json"
+        path = os.path.join(folder, filename)
         if not os.path.exists(path):
             return {}
         try:
@@ -7532,8 +9312,38 @@ class ReportManager:
                     out[str(m["tag"])] = m
             return out
         except (OSError, json.JSONDecodeError, TypeError) as e:
-            logger.warning(f"读取 citations.json 失败（PDF 保留字面引用记号）: {e}")
+            logger.warning(f"读取 {filename} 失败（PDF 不做跨语种引用回退）: {e}")
             return {}
+
+    @staticmethod
+    def _translation_publish_audit_valid(
+        folder: str, lang: str, markdown: str
+    ) -> bool:
+        """Require a passing, byte-matched per-language audit before export."""
+        if lang not in ("en", "zh"):
+            return False
+        audit_path = os.path.join(folder, f"final_audit.{lang}.json")
+        citations_path = os.path.join(folder, f"citations.{lang}.json")
+        try:
+            with open(audit_path, encoding="utf-8") as handle:
+                audit = json.load(handle)
+            with open(citations_path, encoding="utf-8") as handle:
+                citations = json.load(handle)
+        except (OSError, ValueError, TypeError):
+            return False
+        expected_sha = hashlib.sha256((markdown or "").encode("utf-8")).hexdigest()
+        return bool(
+            isinstance(audit, dict)
+            and audit.get("hard_passed") is True
+            and audit.get("policy_version") == int(getattr(
+                Config, "REPORT_FINAL_AUDIT_POLICY_VERSION", 3
+            ))
+            and audit.get("language") == lang
+            and audit.get("markdown_sha256") == expected_sha
+            and isinstance(citations, dict)
+            and citations.get("language") == lang
+            and citations.get("markdown_sha256") == expected_sha
+        )
 
     @staticmethod
     def _rewrite_citations_for_pdf(md: str, citations: Dict[str, Dict[str, Any]]) -> str:
@@ -7809,8 +9619,8 @@ class ReportManager:
         （degrade-safe）。返回 PDF 绝对路径或 None。
 
         BILINGUAL：lang ∈ {en, zh} 时以双语版 full_report.<lang>.md 为源、产出
-        full_report.<lang>.pdf（复用同一套 export 机制）；非法/缺省 lang → 主报告
-        full_report.md → full_report.pdf（默认，行为与历史逐字节一致）。
+        full_report.<lang>.pdf。译文须有 SHA 一致且硬通过的 final_audit.<lang>.json，
+        并且只读 citations.<lang>.json；绝不回退主语种引用空间。非法/缺省 lang 仍走主报告。
 
         缓存：PDF 存在且 mtime ≥ 源 md mtime → 命中直接返回（force=True 强制重建）。"""
         if not getattr(Config, "REPORT_PDF_EXPORT", True):
@@ -7821,21 +9631,33 @@ class ReportManager:
                    if lang else cls._get_report_markdown_path(report_id))
         if not os.path.exists(md_path):
             return None
+        if not cls.is_publishable(report_id, lang):
+            logger.warning(
+                "PDF 拒绝导出：报告尚未通过最终发布屏障 report_id=%s lang=%s",
+                report_id, lang or "primary",
+            )
+            return None
         folder = cls._get_report_folder(report_id)
         pdf_path = cls._get_report_pdf_path(report_id, lang)
-        # mtime 缓存：PDF 不早于成稿即命中。full_report.md 更新后其 mtime 变新 → 自动失效重建。
-        try:
-            if (not force and os.path.exists(pdf_path)
-                    and os.path.getmtime(pdf_path) >= os.path.getmtime(md_path)):
-                return pdf_path
-        except OSError:
-            pass
         try:
             with open(md_path, "r", encoding="utf-8") as f:
                 md = f.read()
         except OSError as e:
             logger.warning(f"读取 full_report.md 失败，无法导出 PDF: {e}")
             return None
+        if lang and not cls._translation_publish_audit_valid(folder, lang, md):
+            logger.warning(
+                "译文 PDF 拒绝导出：%s 缺少通过且 SHA 一致的语种审计/引用工件",
+                lang,
+            )
+            return None
+        # mtime 缓存：先审计再命中，防止旧 PDF 绕过已失效的译文审计。
+        try:
+            if (not force and os.path.exists(pdf_path)
+                    and os.path.getmtime(pdf_path) >= os.path.getmtime(md_path)):
+                return pdf_path
+        except OSError:
+            pass
         # 预处理：绝对化图表路径 + 预渲染 Mermaid（无 mmdc 则保留围栏）。失败回退用原始成稿。
         try:
             proc_md = cls._rewrite_chart_paths_for_pdf(md, folder)
@@ -7843,13 +9665,12 @@ class ReportManager:
         except Exception as e:  # noqa: BLE001
             logger.warning(f"PDF 预处理失败，回退用原始成稿: {e}")
             proc_md = md
-        # WAVE10（无缝引用）：仅 pandoc 路径把可解析 [S12] 改写为真脚注（citations.json 驱动；
-        # zh 译文与主报告共用同一套记号）。PyMuPDF 回退跳过变换——字面记号 + References 附录
-        # 是可接受的降级产物。失败回退未变换成稿（degrade-safe）。
+        # WAVE10（无缝引用）：pandoc 路径把可解析 [S12] 改写为真脚注。
+        # 主报告读 citations.json；译文只读 citations.<lang>.json。
         pandoc_md = proc_md
         if getattr(Config, "REPORT_PDF_CITATION_FOOTNOTES", True):
             try:
-                _citations = cls._load_citations_map(folder)
+                _citations = cls._load_citations_map(folder, lang=lang)
                 if _citations:
                     pandoc_md = cls._rewrite_citations_for_pdf(proc_md, _citations)
             except Exception as e:  # noqa: BLE001

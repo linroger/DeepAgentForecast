@@ -56,6 +56,7 @@ models:
     # disabling thinking removes the entire error class. 64K visible-output ceiling (safe for
     # opus). Re-enable only with the correct `thinking:{type,budget_tokens}`.
     max_tokens: 64000
+    context_window_tokens: 200000
     supports_thinking: false
     supports_vision: true
     enable_prompt_caching: true
@@ -81,6 +82,7 @@ models:
     # gemini-3.5-flash: 1,048,576 input / 65,536 output token limits. Long-form dossier +
     # tool-free synthesis report want the full output ceiling to avoid truncation.
     max_tokens: 65536
+    context_window_tokens: 1048576
     supports_vision: false
 
   # === MiniMax code plan (api.minimaxi.com 国内版, OpenAI-compatible) ===
@@ -108,6 +110,7 @@ models:
     # output ceiling to the model's full capability — this removes truncation as a
     # constraint; the model still emits only what it needs.
     max_tokens: 512000
+    context_window_tokens: 1000000
     supports_vision: true
     supports_thinking: true
     when_thinking_enabled:
@@ -136,6 +139,7 @@ models:
     timeout: 600.0
     max_retries: 2
     max_tokens: 64000
+    context_window_tokens: 1000000
     supports_thinking: true
     supports_reasoning_effort: true
     supports_vision: false
@@ -172,6 +176,7 @@ models:
     request_timeout: 600.0
     max_retries: 2
     max_tokens: 32768
+    context_window_tokens: 1000000
     supports_thinking: true
     supports_vision: false
     when_thinking_enabled:
@@ -204,6 +209,7 @@ models:
     request_timeout: 600.0
     max_retries: 2
     max_tokens: 65536
+    context_window_tokens: 200000
     supports_thinking: true
     supports_vision: false
     when_thinking_enabled:
@@ -249,6 +255,7 @@ models:
     request_timeout: 900.0
     max_retries: 2
     max_tokens: 32768
+    context_window_tokens: 200000
     supports_thinking: true
     supports_vision: false
     # K2.7 Code gateway HARD-VALIDATES sampling temperature: it accepts ONLY
@@ -905,10 +912,11 @@ tool_output:
   exempt_tools:
     - read_file
     - read_file_tool
-  # web_fetch 的全文是研究的主食：把外部化阈值从全局 12000 提到 25000，让一手来源
-  # 的正文多留在上下文里（超过 25000 仍落盘 + 预览，防爆窗的保护不变）。
+  # LOOP-009: keep fetched primaries losslessly on disk but stop replaying each
+  # long page through every later model step.  The workflow prompts explicitly
+  # permit read_file for these harness-managed result paths.
   tool_overrides:
-    web_fetch: 25000
+    web_fetch: 12000
 
 # ============================================================================
 # Loop Detection Configuration
@@ -1174,9 +1182,11 @@ subagents:
         ONLY that, in depth, and hand back evidence the lead can verify and integrate. You do
         NOT write the report; another agent synthesizes.
 
-        TOOLING: This is WEB research. Work via `web_search` and `web_fetch` ONLY. There is no
-        local corpus — do not expect a filesystem dataset. Your evidence comes entirely from
-        pages you actually fetch off the web.
+        TOOLING: This is WEB research. Work via `web_search` and `web_fetch`; when the assigned
+        focus has a forecastable outcome, use `prediction_market_search` for calibration.
+        `read_file` is only for an activated skill or a harness-managed externalized tool
+        result; do not browse an arbitrary local corpus. Your evidence comes from pages and
+        markets you actually fetch.
 
         CORE DISCIPLINE (deep-research tradecraft — non-negotiable):
         - SOURCE TIERING: grade every source S1 (primary: filings, official records, datasets,
@@ -1201,6 +1211,7 @@ subagents:
       tools:                  # 工具白名单（只给检索+读写笔记；不含 bash/task，杜绝越权与递归委派）
         - web_search
         - web_fetch
+        - prediction_market_search
         - read_file
         - write_file
       skills:                 # 技能白名单：搜证纪律 + 市场锚点
@@ -1291,13 +1302,13 @@ summarization:
   # Summarization runs when ANY threshold is met (OR logic)
   # You can specify a single trigger or a list of triggers
   trigger:
-    # Deep research gathers dozens of full-text sources; compressing at 32K tokens
-    # repeatedly squeezed source detail out of the thread mid-run (and each pass is
-    # an extra LLM call). 120K leaves plenty of headroom below every wired model's
-    # context (Claude 200K / MiniMax-M3 ~1M / deepseek-v4-pro 1M / qwen3.7-max 1M)
-    # while still preventing unbounded growth on deep runs.
+    # LOOP-009: recent runs replayed 78M+ input tokens.  A million-token model
+    # window is capacity, not an efficient operating target: agent steps resend
+    # the whole thread.  Compress at 80K, after the evidence ledger/checkpoint has
+    # captured fetched URLs and working notes.  The forecast-specific summary
+    # prompt below preserves claims, numbers, gaps, markets, and provenance.
     - type: tokens
-      value: 120000
+      value: 80000
     # Uncomment to also trigger when message count reaches 50
     # - type: messages
     #   value: 50
@@ -1308,11 +1319,10 @@ summarization:
   # Context retention policy after summarization
   # Specifies how much recent history to preserve
   keep:
-    # Keep the most recent 20 messages — deep-research turns are search→fetch→read
-    # chains; keeping only 10 messages dropped the just-fetched sources right after
-    # a compression pass. 120K-token trigger leaves ample headroom for 20.
-    type: messages
-    value: 20
+    # Keep a bounded recent-token window, not a message count: one externalized
+    # tool message can be tiny while one fetched page can be enormous.
+    type: tokens
+    value: 16000
     # Alternative: Keep specific token count
     # type: tokens
     # value: 3000
@@ -1320,20 +1330,36 @@ summarization:
     # type: fraction
     # value: 0.3
 
-  # Maximum tokens to keep when preparing messages for summarization
-  # Set to null to skip trimming (not recommended for very long conversations)
-  trim_tokens_to_summarize: 15564
+  # Summarize the WHOLE discarded segment.  A 15K ``strategy=last`` trim used to
+  # expose only the tail of ~64K discarded tokens to the summarizer, silently
+  # deleting early KIQ evidence.  The 80K trigger + 16K preserved tail bounds a
+  # summary call to roughly 64K input tokens, which every configured research
+  # model supports; no evidence disappears before the ledger can represent it.
+  trim_tokens_to_summarize: null
 
-  # Custom summary prompt template (null = use default LangChain prompt)
-  # The prompt should guide the model to extract important context
-  summary_prompt: null
+  # Preserve the forecasting state instead of producing a generic chat recap.
+  # This is internal working memory, not user-facing prose.
+  summary_prompt: |
+    Compress the research conversation below into a dense FORECAST EVIDENCE LEDGER.
+    Preserve, without invention: the exact research question and horizon; KIQs and
+    their status; each load-bearing claim with numbers, units, as-of dates, source
+    title, real fetched URL, and S1-S4 tier; actor names, incentives, constraints,
+    and directed relationships; base rates and reference classes; contradictions;
+    prediction-market IDs, questions, probabilities, volumes, URLs, and timestamps;
+    quantitative series; resolved and unresolved gaps; failed/dead source paths;
+    and the next highest-value action. Deduplicate repeated searches and echoed
+    sources. Clearly mark inference versus evidence. Do not write a polished report.
+
+    <conversation>
+    {messages}
+    </conversation>
 
   # Recently-loaded skill files are excluded from summarization so the agent
   # does not lose skill instructions after a compression pass. Claude Code uses
   # a similar strategy (keep the most recent ~5 skills, ~25k total tokens, with
   # a ~5k cap per skill). Set preserve_recent_skill_count to 0 to disable.
-  preserve_recent_skill_count: 5
-  preserve_recent_skill_tokens: 25000
+  preserve_recent_skill_count: 3
+  preserve_recent_skill_tokens: 15000
   preserve_recent_skill_tokens_per_skill: 5000
   skill_file_read_tool_names:
     - read_file

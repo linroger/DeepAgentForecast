@@ -432,6 +432,12 @@ const roundLabel = computed(() => {
   const total = rs.total_rounds
   const curStr = cur === undefined || cur === null ? '—' : cur
   const totalStr = total === undefined || total === null ? '—' : total
+  // CAL-TEMPORAL: calendar-mode runs expose temporal_mode/current_period_end in the
+  // run-status payload — badge reads "{label} · r/N"; hours-mode payloads lack these
+  // fields and keep the legacy "r / N" badge unchanged.
+  if (rs.temporal_mode === 'calendar' && rs.current_period_end) {
+    return String(rs.current_period_end) + ' · ' + curStr + '/' + totalStr
+  }
   return curStr + ' / ' + totalStr
 })
 

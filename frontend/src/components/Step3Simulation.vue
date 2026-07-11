@@ -498,13 +498,18 @@ const fetchRunStatus = async () => {
       runStatus.value = data
       
       // 分别检测各平台的轮次变化并输出日志
+      // CAL-TEMPORAL：日历模式的 run-status 带 current_period_end（已覆盖到的日历日期），
+      // 日志显示「已推演至 {period_end}」；hours 模式无此字段 → 维持旧的 T:{hours}h。
+      const periodEnd = data.current_period_end
       if (data.twitter_current_round > prevTwitterRound.value) {
-        addLog(`[Plaza] R${data.twitter_current_round}/${data.total_rounds} | T:${data.twitter_simulated_hours || 0}h | A:${data.twitter_actions_count}`)
+        const twTime = periodEnd ? `已推演至 ${periodEnd}` : `T:${data.twitter_simulated_hours || 0}h`
+        addLog(`[Plaza] R${data.twitter_current_round}/${data.total_rounds} | ${twTime} | A:${data.twitter_actions_count}`)
         prevTwitterRound.value = data.twitter_current_round
       }
-      
+
       if (data.reddit_current_round > prevRedditRound.value) {
-        addLog(`[Community] R${data.reddit_current_round}/${data.total_rounds} | T:${data.reddit_simulated_hours || 0}h | A:${data.reddit_actions_count}`)
+        const rdTime = periodEnd ? `已推演至 ${periodEnd}` : `T:${data.reddit_simulated_hours || 0}h`
+        addLog(`[Community] R${data.reddit_current_round}/${data.total_rounds} | ${rdTime} | A:${data.reddit_actions_count}`)
         prevRedditRound.value = data.reddit_current_round
       }
       

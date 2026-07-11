@@ -187,84 +187,45 @@ def test_binary_min_count_takes_max_of_spec_and_config(monkeypatch):
     assert a3._binary_min_count() == 10              # spec 未解析出 → Config
 
 
-# ------------------------------------------------ R2: dead-fetch retry
+# ------------------------------------------------ R2: governed dead-fetch handling
 
-def test_fetch_retry_count_env_parsing(dfr, monkeypatch):
-    monkeypatch.delenv("DEERFLOW_FETCH_RETRY", raising=False)
-    assert dfr._fetch_retry_count() == 1             # 默认 1
-    monkeypatch.setenv("DEERFLOW_FETCH_RETRY", "0")
-    assert dfr._fetch_retry_count() == 0             # 0 = 关闭
-    monkeypatch.setenv("DEERFLOW_FETCH_RETRY", "2")
-    assert dfr._fetch_retry_count() == 2
-    monkeypatch.setenv("DEERFLOW_FETCH_RETRY", "garbage")
-    assert dfr._fetch_retry_count() == 1             # 非法值回落默认
-
-
-def test_retry_revives_transient_dead_fetch(dfr, monkeypatch):
-    monkeypatch.delenv("DEERFLOW_FETCH_RETRY", raising=False)
-    monkeypatch.setattr(dfr, "_FETCH_RETRY_BACKOFF_S", 0.0)
-    calls = []
-
-    def fake_fetch(url, timeout=15.0):
-        calls.append(url)
-        if url == "http://alive.example":
-            return "real page content " * 30         # >200 字符且无哨兵 → 判活
-        raise RuntimeError("still down")
-
-    monkeypatch.setattr(dfr, "_retry_fetch_url", fake_fetch)
+def test_dead_fetches_are_not_locally_retried_or_revived(dfr):
     pending = [
-        {"url": "http://alive.example", "call_id": "1", "ok": False},   # 瞬时死 → 复活
-        {"url": "http://ok.example", "call_id": "2", "ok": True},       # 本来就活 → 不动
-        {"url": "http://gone.example", "call_id": "3", "ok": False},    # 重试仍死 → 丢弃
+        {"url": "http://169.254.169.254/latest/meta-data", "ok": False},
+        {"url": "http://allowed.example", "ok": False},
     ]
-    plog = PlogStub()
-    dfr._retry_dead_fetches(pending, plog)
-    assert pending[0]["ok"] is True and pending[0].get("retried") is True
-    assert pending[1]["ok"] is True and "retried" not in pending[1]
-    assert pending[2]["ok"] is False
-    assert sorted(calls) == ["http://alive.example", "http://gone.example"]  # 只重试死行
-    # 每个重试过的 URL 恰好一行日志（含结局）
-    retry_lines = [m for k, m in plog.lines if k == "retry"]
-    assert len(retry_lines) == 2
-    assert any("http://alive.example" in m and "alive (kept as source)" in m for m in retry_lines)
-    assert any("http://gone.example" in m and "still dead (dropped)" in m for m in retry_lines)
-    # 复活的行随既有合并逻辑计回真实来源
+    before = [dict(row) for row in pending]
+    dfr._retry_dead_fetches(pending, PlogStub())
+    assert pending == before
+
+
+def test_structured_policy_and_budget_results_are_dead_nonretryable(dfr):
+    for error in (
+        "source_quality_rejected",
+        "research_budget_exhausted",
+        "research_negative_cache_suppressed",
+    ):
+        pending = [{"url": "https://example.test", "call_id": "x", "ok": None}]
+        dfr._pending_mark_result(
+            pending,
+            "web_fetch",
+            '{"error": "' + error + '", "padding": "' + "x" * 300 + '"}',
+            call_id="x",
+        )
+        assert pending[0]["ok"] is False
+        assert pending[0]["retryable"] is False
+
+
+def test_compact_repeat_envelope_is_not_counted_as_a_new_read(dfr):
+    pending = [{"url": "https://example.test", "call_id": "x", "ok": None}]
+    dfr._pending_mark_result(
+        pending,
+        "web_fetch",
+        '{"status": "already_available", "artifact_id": "fetch:abc", '
+        '"padding": "' + "x" * 300 + '"}',
+        call_id="x",
+    )
+    assert pending[0]["ok"] is False
     dfr._reset_fetched_sources()
     dfr._merge_pending_fetches(pending)
-    merged = [s["url"] for s in dfr._FETCHED_SOURCES]
-    assert "http://alive.example" in merged and "http://ok.example" in merged
-    assert "http://gone.example" not in merged
-
-
-def test_retry_disabled_by_env_zero(dfr, monkeypatch):
-    monkeypatch.setenv("DEERFLOW_FETCH_RETRY", "0")
-    monkeypatch.setattr(dfr, "_FETCH_RETRY_BACKOFF_S", 0.0)
-    calls = []
-    monkeypatch.setattr(dfr, "_retry_fetch_url",
-                        lambda url, timeout=15.0: calls.append(url) or "x" * 300)
-    pending = [{"url": "http://a.example", "call_id": "1", "ok": False}]
-    dfr._retry_dead_fetches(pending, PlogStub())
-    assert calls == []                               # 关闭 → 绝不发起重试
-    assert pending[0]["ok"] is False
-
-
-def test_retry_bounded_per_turn(dfr, monkeypatch):
-    monkeypatch.delenv("DEERFLOW_FETCH_RETRY", raising=False)
-    monkeypatch.setattr(dfr, "_FETCH_RETRY_BACKOFF_S", 0.0)
-    calls = []
-    monkeypatch.setattr(dfr, "_retry_fetch_url",
-                        lambda url, timeout=15.0: calls.append(url) or "")
-    pending = [{"url": f"http://u{i}.example", "call_id": str(i), "ok": False}
-               for i in range(10)]
-    dfr._retry_dead_fetches(pending, PlogStub())
-    assert len(calls) == dfr._FETCH_RETRY_MAX_URLS   # 每回合有界（默认 6）
-
-
-def test_retry_never_raises(dfr, monkeypatch):
-    monkeypatch.delenv("DEERFLOW_FETCH_RETRY", raising=False)
-    monkeypatch.setattr(dfr, "_FETCH_RETRY_BACKOFF_S", 0.0)
-    monkeypatch.setattr(dfr, "_retry_fetch_url",
-                        lambda url, timeout=15.0: (_ for _ in ()).throw(OSError("boom")))
-    pending = [{"url": "http://a.example", "call_id": "1", "ok": False}]
-    dfr._retry_dead_fetches(pending, None)           # plog=None 也不炸
-    assert pending[0]["ok"] is False
+    assert dfr._FETCHED_SOURCES == []

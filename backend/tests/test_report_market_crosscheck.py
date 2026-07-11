@@ -23,6 +23,7 @@ from app.services.report_agent import (
     render_market_comparison_block,
     _MARKET_XCHECK_MARKERS,
 )
+from app.services.forecast_extractor import _normalize_binaries
 
 
 # ---------------------------------------------------------------- fixtures
@@ -77,6 +78,80 @@ def _fresh(mid, yes):
     return {"id": mid, "question": f"Q{mid}", "closed": False,
             "outcomes": '["Yes","No"]',
             "outcomePrices": json.dumps([f"{yes:.4f}", f"{1 - yes:.4f}"])}
+
+
+def test_binary_normalization_drops_circular_market_contract_forecasts():
+    rows = _normalize_binaries([
+        {"statement": "Polymarket 'AI bubble' contract resolves YES by end-2026.",
+         "probability": 0.16, "resolution_criteria": "Polymarket resolves YES by 2026-12-31"},
+        {"statement": "NVIDIA revenue exceeds $400B by FY2028.",
+         "probability": 0.45, "resolution_criteria": "FY2028 10-K revenue >= $400B"},
+    ])
+    assert [row["statement"] for row in rows] == ["NVIDIA revenue exceeds $400B by FY2028."]
+
+
+@pytest.mark.parametrize("statement", [
+    "Polymarket probability will rise above 60% by 2027.",
+    "The prediction-market price will reach 72c before year-end.",
+    "Prediction market odds for recession will fall to 20% by Q4.",
+    "The event contract is expected to close at 0.65 in December.",
+    "预测市场概率将在年底前升至 60%。",
+    "市场合约价格预计降至 0.25。",
+    "预测市场将在 2027 年结算为是。",
+    "The probability on Polymarket will rise to 60% by year-end.",
+    "Polymarket's YES shares reach 60 cents before Q4.",
+    "YES shares will trade above 60 cents on Polymarket by 2027.",
+    "Polymarket's AI-bubble contract will resolve in the affirmative by 2027.",
+    "The event contract will settle against the proposition by year-end.",
+    "Prediction-market odds will double by year-end.",
+    "到年底，该事件在Polymarket上的概率为60%。",
+])
+def test_binary_normalization_drops_future_market_quote_forecasts(statement):
+    rows = _normalize_binaries([
+        {"statement": statement, "probability": 0.6,
+         "resolution_criteria": "Observe the quoted market level."},
+    ])
+    assert rows == []
+
+
+def test_binary_normalization_drops_circular_resolution_criteria_only():
+    rows = _normalize_binaries([
+        {"statement": "A recession occurs by 2027.", "probability": 0.3,
+         "resolution_criteria": "The Polymarket contract settles YES by 2027-12-31."},
+    ])
+    assert rows == []
+
+
+def test_binary_normalization_keeps_real_event_with_current_market_evidence():
+    statement = (
+        "A recession occurs by 2027; Polymarket currently prices the event at 15%."
+    )
+    rows = _normalize_binaries([
+        {"statement": statement, "probability": 0.3,
+         "resolution_criteria": "NBER dates a recession beginning by 2027-12-31."},
+    ])
+    assert [row["statement"] for row in rows] == [statement]
+
+
+@pytest.mark.parametrize("statement", [
+    "The labor market contracts as energy prices rise above $100 by 2027.",
+    "The housing market contracts and home prices fall below 2025 levels.",
+    "A recession occurs by 2027; Polymarket currently prices the event at 15%.",
+    "A recession occurs by 2027; Polymarket currently prices a recession by 2027 at 15%.",
+    "A recession occurs by 2027; Polymarket currently prices the event at 15%, below our forecast of 30%.",
+    "A recession occurs by 2027; the market-implied probability is 15%, below our forecast of 30%.",
+    "A recession occurs by 2027; Polymarket currently prices it at 15%, while our model will be at 30%.",
+    "A recession occurs by 2027; Polymarket currently prices it at 15%, while our model is projected to be at 30%.",
+    "衰退将在2027年前发生；Polymarket目前的概率为15%。",
+    "衰退将在2027年前发生；Polymarket目前概率为15%，低于我们的预计30%。",
+    "衰退将在2027年前发生；Polymarket目前概率为15%，而我们的模型预计为30%。",
+])
+def test_binary_normalization_keeps_real_outcomes_and_current_market_evidence(statement):
+    rows = _normalize_binaries([
+        {"statement": statement, "probability": 0.3,
+         "resolution_criteria": "Use an external real-world series by 2027-12-31."},
+    ])
+    assert [row["statement"] for row in rows] == [statement]
 
 
 # 对照负载（PM-2 抽取器 build_market_comparison 的确定性 schema）。
@@ -265,6 +340,64 @@ def test_requote_snapshot_all_failed_marks_stale(enabled, monkeypatch):
     out = a._requote_snapshot([{"market_id": "m1", "implied_yes_prob": 0.34}])
     assert out[0]["implied_yes_prob"] == 0.34
     assert a._markets_stale is True
+
+
+def test_report_market_fallback_is_relevance_scored_fail_closed(
+    enabled, monkeypatch, report_folder,
+):
+    from app.services.pipeline_orchestrator import PipelineManager
+
+    monkeypatch.setattr(PipelineManager, "list_pipelines", classmethod(lambda cls: []))
+    monkeypatch.setattr(pm, "derive_market_queries_llm",
+                        lambda *_args, **_kwargs: ["AI bubble 2026"])
+    candidates = [
+        {"market_id": "good", "question": "AI bubble burst in 2026?",
+         "implied_yes_prob": 0.15, "volume": 2000},
+        {"market_id": "junk", "question": "Celebrity movie market?",
+         "implied_yes_prob": 0.60, "volume": 5000},
+    ]
+    monkeypatch.setattr(pm.PolymarketClient, "snapshot_for_queries",
+                        lambda *_args, **_kwargs: candidates)
+    monkeypatch.setattr(pm, "score_market_relevance", lambda *_args, **_kwargs: [
+        {**candidates[0], "relevance_score": 9.0},
+    ])
+
+    class LLM:
+        def chat(self, **_kwargs):
+            return "[]"
+
+    agent = _agent(simulation_requirement="Will the AI investment boom unwind?")
+    agent.llm = LLM()
+    agent.actors = {}
+    agent._active_report_id = "report_test"
+    rows = agent._load_prediction_markets()
+
+    assert [row["market_id"] for row in rows] == ["good"]
+    recovered = json.loads((report_folder / "prediction_markets_recovered.json").read_text())
+    assert recovered["status"]["candidate_count"] == 2
+    assert recovered["status"]["selected_count"] == 1
+
+
+def test_report_market_fallback_drops_unscored_candidates(enabled, monkeypatch):
+    from app.services.pipeline_orchestrator import PipelineManager
+
+    monkeypatch.setattr(PipelineManager, "list_pipelines", classmethod(lambda cls: []))
+    monkeypatch.setattr(pm, "derive_market_queries_llm", lambda *_args, **_kwargs: ["broad"])
+    candidate = {"market_id": "junk", "question": "Unrelated?",
+                 "implied_yes_prob": 0.5, "volume": 9999}
+    monkeypatch.setattr(pm.PolymarketClient, "snapshot_for_queries",
+                        lambda *_args, **_kwargs: [candidate])
+    monkeypatch.setattr(pm, "score_market_relevance",
+                        lambda *_args, **_kwargs: [candidate])
+
+    class LLM:
+        def chat(self, **_kwargs):
+            raise RuntimeError("classifier unavailable")
+
+    agent = _agent(simulation_requirement="Forecast X")
+    agent.llm = LLM()
+    agent.actors = {}
+    assert agent._load_prediction_markets() == []
 
 
 def test_refresh_market_prices_updates_pack_and_snapshot(enabled, monkeypatch):

@@ -7,6 +7,7 @@
 
 import os
 import sys
+import json
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BRIDGE_DIR = os.path.join(_REPO_ROOT, "deerflow_bridge")
@@ -14,6 +15,19 @@ if _BRIDGE_DIR not in sys.path:
     sys.path.insert(0, _BRIDGE_DIR)
 
 import deerflow_research as d  # noqa: E402
+
+
+def test_agentic_delegation_prompt_uses_actual_lane_cap(monkeypatch):
+    monkeypatch.setenv("RESEARCH_AGENTIC_SEARCH", "true")
+    monkeypatch.setenv("DEER_FLOW_MAX_CONCURRENT_SUBAGENTS", "2")
+    d._set_agentic_delegation(True)
+    try:
+        prompt = d._agentic_delegation_block(False)
+        assert "at most 2 parallel tasks" in prompt
+        assert "3–5" not in prompt and "3-5" not in prompt
+        assert d._stream_model_lease_weight() == 1
+    finally:
+        d._set_agentic_delegation(False)
 
 
 # ---------------------------------------------------------------- PM-1 tokenizer / phrases
@@ -136,6 +150,28 @@ def test_apply_relevance_gate_empty_scores_keeps_all_by_volume():
     assert all("relevance_score" not in m for m in kept)
 
 
+def test_market_env_uses_canonical_relevance_and_per_query_names(monkeypatch):
+    monkeypatch.setenv("PM_MIN_RELEVANCE", "2")
+    monkeypatch.setenv("PREDICTION_MARKETS_MIN_RELEVANCE", "7")
+    monkeypatch.setenv("PREDICTION_MARKETS_PER_QUERY", "17")
+    assert d._pm_min_relevance() == 7.0
+    assert d._pm_per_query() == 17
+
+
+def test_market_snapshot_diagnostics_distinguish_transport_failure(monkeypatch):
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("offline")
+
+    monkeypatch.setattr(d, "_polymarket_get", fail)
+    diagnostics = {}
+    assert d._pm_snapshot(["AI bubble", "US recession"], diagnostics=diagnostics) == []
+    assert diagnostics == {
+        "attempted_query_count": 2,
+        "successful_query_count": 0,
+        "transport_failure_count": 2,
+    }
+
+
 # ---------------------------------------------------------------- PM-1 market normalization enrich
 
 def test_normalize_market_enriches_event_url_and_signals():
@@ -168,9 +204,15 @@ def test_normalize_market_missing_signals_degrade():
 def test_is_valid_http_url():
     assert d._is_valid_http_url("https://example.com/a")
     assert d._is_valid_http_url("http://x.io")
+    assert d._is_valid_http_url("https://en.wikipedia.org/wiki/AI")
     assert not d._is_valid_http_url("notaurl")
     assert not d._is_valid_http_url("ftp://x.com")
     assert not d._is_valid_http_url("https://")
+    assert not d._is_valid_http_url("https://en")
+    assert not d._is_valid_http_url("https://en.wikipedia.org")
+    assert not d._is_valid_http_url("https://en.wikipedia.org/wiki/St")
+    assert not d._is_valid_http_url("https://en.wikipedia.org/wiki/ASML_H")
+    assert not d._is_valid_http_url("https://en.wikipedia.org/wiki/Anduril_")
     assert not d._is_valid_http_url("")
 
 
@@ -179,6 +221,13 @@ def test_repair_url():
     assert d._repair_url("//cdn.x.com/a") == "https://cdn.x.com/a"
     assert d._repair_url("foo bar") == ""       # 含空格无法修复
     assert d._repair_url("just-a-word") == ""   # 非域名形状
+
+
+def test_title_from_url_prefers_human_readable_content_slug():
+    assert d._title_from_url(
+        "https://en.wikipedia.org/wiki/AI_Action_Plan"
+    ) == "AI Action Plan"
+    assert d._title_from_url("https://example.com") == "example.com"
 
 
 def test_validate_tool_args_web_search_query_len():
@@ -428,3 +477,106 @@ def test_normalize_market_extracts_clob_token_ids():
     raw2.pop("clobTokenIds")
     row2 = d._pm_normalize_market(raw2, matched_query="x", min_volume=200)
     assert "clob_token_ids" not in row2
+
+
+# ---------------------------------------------------------------- LOOP-009 canonical in-loop market delivery
+
+def test_market_report_match_prefers_machine_identity_and_is_conservative():
+    market = {
+        "market_id": "691340",
+        "question": "AI bubble burst in 2026?",
+        "implied_yes_prob": 0.1545,
+        "url": "https://polymarket.com/event/ai-bubble-burst-in-2026",
+    }
+    assert d._market_is_cited_in_report(
+        "The evidence diverges from market 691340, currently 15.45%.", market)
+    assert d._market_is_cited_in_report(
+        "See https://polymarket.com/event/ai-bubble-burst-in-2026 for the live quote.", market)
+    assert not d._market_is_cited_in_report(
+        "A celebrity election market has no bearing on semiconductor demand.", market)
+
+
+def test_tool_candidate_loader_skips_bad_lines_and_keeps_latest_quote(tmp_path):
+    path = tmp_path / d.PREDICTION_MARKET_CANDIDATES_FILENAME
+    path.write_text(
+        "not-json\n"
+        + json.dumps({
+            "captured_at": "2026-07-10T00:00:00Z", "queries": ["AI bubble"],
+            "markets": [{"market_id": "691340", "implied_yes_prob": 0.10}],
+        }) + "\n"
+        + json.dumps({
+            "captured_at": "2026-07-11T00:00:00Z", "queries": ["AI bubble 2026"],
+            "markets": [{"market_id": "691340", "implied_yes_prob": 0.1545}],
+        }) + "\n",
+        encoding="utf-8",
+    )
+
+    rows = d._load_tool_market_candidates(tmp_path)
+
+    assert len(rows) == 1
+    assert rows[0]["implied_yes_prob"] == 0.1545
+    assert rows[0]["captured_via"] == "prediction_market_search"
+    assert rows[0]["tool_queries"] == ["AI bubble 2026"]
+
+
+def test_collector_preserves_report_vetted_tool_market_when_refresh_has_no_queries(
+    tmp_path, monkeypatch,
+):
+    market = {
+        "market_id": "691340",
+        "question": "AI bubble burst in 2026?",
+        "implied_yes_prob": 0.1545,
+        "volume": 2_310_000.0,
+        "url": "https://polymarket.com/event/ai-bubble-burst-in-2026",
+        "end_date": "2026-12-31T00:00:00Z",
+    }
+    (tmp_path / d.PREDICTION_MARKET_CANDIDATES_FILENAME).write_text(
+        json.dumps({
+            "captured_at": "2026-07-11T00:00:00Z",
+            "queries": ["AI bubble 2026"], "markets": [market],
+        }) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(d, "_pm_resolve_queries", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(d, "score_market_relevance", lambda *_args, **_kwargs: {})
+    monkeypatch.setenv("PREDICTION_MARKETS_ENABLED", "true")
+    monkeypatch.setenv("PREDICTION_MARKETS_PRICE_HISTORY", "false")
+
+    class Log:
+        def __init__(self):
+            self.rows = []
+
+        def write(self, level, message):
+            self.rows.append((level, message))
+
+    meta = {}
+    log = Log()
+    report = "Our external calibration is Polymarket market 691340 at 15.45%."
+    d._collect_prediction_markets(
+        tmp_path, "Will the AI investment boom unwind in 2026?", report,
+        meta, log, model_name="test",
+    )
+
+    payload = json.loads((tmp_path / d.PREDICTION_MARKETS_FILENAME).read_text(encoding="utf-8"))
+    assert [row["market_id"] for row in payload["markets"]] == ["691340"]
+    assert payload["status"]["tool_observation_count"] == 1
+    assert payload["status"]["selected_count"] == 1
+    assert payload["status"]["empty_reason"] is None
+    assert meta["prediction_markets_count"] == 1
+    assert "Prediction Market Signals" in (tmp_path / d.REPORT_FILENAME).read_text(encoding="utf-8")
+
+
+def test_bridge_fanout_suppressed_when_harness_delegation_is_active(monkeypatch):
+    monkeypatch.setattr(d, "_AGENTIC_DELEGATION", True)
+    monkeypatch.setenv("RESEARCH_AGENTIC_SEARCH", "true")
+    monkeypatch.setenv("RESEARCH_DEEP_FANOUT", "true")
+    monkeypatch.delenv("RESEARCH_ALLOW_STACKED_FANOUT", raising=False)
+    assert d._bridge_fanout_enabled() is False
+    monkeypatch.setenv("RESEARCH_ALLOW_STACKED_FANOUT", "true")
+    assert d._bridge_fanout_enabled() is True
+
+
+def test_research_prompt_deterministically_activates_deep_research_skill():
+    d._set_market_pricing_block("")
+    prompt = d.build_research_prompt("Will X happen?", "standard", None)
+    assert prompt.startswith("/deep-research\n")

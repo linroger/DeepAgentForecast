@@ -13,6 +13,8 @@
   * 端点 —— /exec-brief、/exec-brief.pdf、/digest 的 200/404、mtime 复用、REPORT_EXEC_BRIEF 关闭。
 """
 
+import hashlib
+import json
 import os
 import sys
 
@@ -126,10 +128,34 @@ def _make_report_dir(reports_tmp, rid="report_test", full_md=_FULL_MD_EN,
     with open(os.path.join(folder, "full_report.md"), "w", encoding="utf-8") as f:
         f.write(full_md)
     if forecast is not None:
-        import json as _json
         with open(os.path.join(folder, "forecast.json"), "w", encoding="utf-8") as f:
-            _json.dump(forecast, f, ensure_ascii=False)
+            json.dump(forecast, f, ensure_ascii=False)
+    _write_passing_audit(rid, full_md)
     return rid, folder
+
+
+def _write_passing_audit(rid, markdown, lang=None):
+    with open(
+        ReportManager._get_report_final_audit_path(rid, lang),
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        json.dump({
+            "policy_version": 3,
+            "hard_passed": True,
+            "hard_issues": [],
+            "markdown_sha256": hashlib.sha256(markdown.encode("utf-8")).hexdigest(),
+            "publish_gate": {"enabled": True, "passed": True},
+            "structured_forecast": {"required": False, "valid": True},
+            "citation_artifacts": {"required": False, "passed": True},
+        }, handle)
+    if lang:
+        with open(
+            ReportManager._get_report_citations_path(rid, lang),
+            "w",
+            encoding="utf-8",
+        ) as handle:
+            json.dump({"language": lang, "markers": []}, handle)
 
 
 # ─────────────────────────── 纯函数 ───────────────────────────
@@ -348,8 +374,10 @@ def test_api_exec_brief_lang_param(client, reports_tmp):
         reports_tmp, forecast=_forecast_fixture(),
         translations=[{"lang": "zh", "path": "full_report.zh.md"}],
     )
+    zh_md = "# 中文报告\n\n## 执行摘要\n\n中文论点第一句。第二句。第三句。\n"
     with open(os.path.join(folder, "full_report.zh.md"), "w", encoding="utf-8") as f:
-        f.write("# 中文报告\n\n## 执行摘要\n\n中文论点第一句。第二句。第三句。\n")
+        f.write(zh_md)
+    _write_passing_audit(rid, zh_md, "zh")
     r = client.get(f"/api/report/{rid}/exec-brief?lang=zh")
     assert r.status_code == 200
     assert "高管简报" in r.get_data(as_text=True)
@@ -368,6 +396,10 @@ def test_api_exec_brief_disabled_404(client, reports_tmp, monkeypatch):
 
 def test_api_exec_brief_pdf_mock(client, reports_tmp, monkeypatch):
     rid, folder = _make_report_dir(reports_tmp, forecast=_forecast_fixture())
+    zh_md = "# 中文报告\n\n## 执行摘要\n\n中文正文。\n"
+    with open(os.path.join(folder, "full_report.zh.md"), "w", encoding="utf-8") as f:
+        f.write(zh_md)
+    _write_passing_audit(rid, zh_md, "zh")
 
     captured = {}
 

@@ -62,6 +62,10 @@ logs/
 /logs/
 .remember/
 *.jsonl
+.learnings/
+
+# 本地临时产物（截图/PDF 抓取等）
+/tmp/
 
 # 上传文件（运行时数据：研究档案/模拟/报告）
 backend/uploads/

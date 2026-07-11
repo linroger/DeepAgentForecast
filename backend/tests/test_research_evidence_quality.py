@@ -228,13 +228,17 @@ def test_merge_gaps_dedups_case_insensitive_and_caps():
 
 # --- RESEARCH-4 synthesis cap ----------------------------------------------
 
-def test_synthesis_cap_gemini_is_large_and_env_override(monkeypatch):
+def test_synthesis_cap_reserves_profile_output_and_env_override(monkeypatch):
     monkeypatch.delenv("SYNTHESIS_MAX_CONTEXT_CHARS", raising=False)
-    monkeypatch.delenv("SYNTHESIS_MAX_CONTEXT_CHARS_LARGE", raising=False)
-    assert dr._synthesis_context_cap("gemini-2.5-pro") == dr.SYNTHESIS_MAX_CONTEXT_CHARS_LARGE
-    assert dr._synthesis_context_cap("claude") == dr.SYNTHESIS_MAX_CONTEXT_CHARS
+    monkeypatch.setenv("SYNTHESIS_CONTEXT_WINDOW_TOKENS", "200000")
+    monkeypatch.setenv("SYNTHESIS_OUTPUT_RESERVE_TOKENS", "64000")
+    monkeypatch.setenv("SYNTHESIS_PROMPT_OVERHEAD_TOKENS", "8000")
+    monkeypatch.setenv("SYNTHESIS_CHARS_PER_TOKEN", "3.2")
+    assert dr._synthesis_context_cap("profile-name-is-not-a-heuristic") == 409600
     monkeypatch.setenv("SYNTHESIS_MAX_CONTEXT_CHARS", "123")
     assert dr._synthesis_context_cap("claude") == 123  # explicit override wins
+    assert dr._synthesis_context_cap(
+        "claude", extra_prompt_chars=23) == 100  # lazy contract is charged
 
 
 # --- RESEARCH-5 extraction excerpt cap -------------------------------------

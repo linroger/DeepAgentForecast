@@ -89,6 +89,7 @@ handoff 契约中的 actors.json 形如（NEW 字段均为可选，缺失即降�
 * ``relationship_briefing``  — 单个 actor 的社会关系网提示块（命名真实对手方）。
 * ``build_initial_follow_graph`` — relationships[] → 模拟初始关注边 [[follower_id, followee_id]]。
 * ``events_to_schedule``     — key_events → 映射到模拟轮次的事件计划。
+* ``events_to_calendar_rounds`` — TEMPORAL：key_events → 日历回合精确落轮 + 判定日外事件留档。
 * ``sources_index_tiered``   — I-0-0：按 S1-S4 分层渲染可引用来源索引（带日期/独立性/定级）。
 * ``source_tier_histogram``  — I-0-0：统计 s1_count..s4_count（meta 观测用）。
 * ``quantitative_facts_block`` / ``extract_quantitative_rows`` — I-0-5：定量事实表渲染 / 安全抽取。
@@ -110,7 +111,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # influence 的自由文本 → 数值权重（与 simulation_config 的 influence_weight 同标度）
 INFLUENCE_WEIGHTS = {
@@ -182,24 +183,41 @@ def match_actor(entity_name: str, actors: Optional[Any]) -> Optional[Dict[str, A
     if not target:
         return None
 
-    best: Optional[Dict[str, Any]] = None
-    best_len = 0
+    # Exact canonical/alias identity is authoritative.  Complete this pass for
+    # the whole roster before considering fuzzy containment so an early short
+    # name can never steal a later exact match.
+    exact_rows: Dict[str, Dict[str, Any]] = {}
     for row in rows:
         cand = normalize_name(str(row.get("name", "")))
-        if cand:
-            if cand == target:
-                return row
-            # 双向包含；要求重叠名至少 2 个字符，否则噪声太大
-            if len(cand) >= 2 and (cand in target or target in cand):
-                if len(cand) > best_len:
-                    best, best_len = row, len(cand)
-        # 别名表（可选）：零字符重叠的别名只能靠显式表解析。精确别名直接命中。
-        for al in _actor_norm_aliases(row):
-            if al == target:
-                return row
-            if len(al) >= 2 and (al in target or target in al) and len(al) > best_len:
-                best, best_len = row, len(al)
-    return best
+        if cand == target or target in _actor_norm_aliases(row):
+            exact_rows[cand] = row
+    if len(exact_rows) == 1:
+        return next(iter(exact_rows.values()))
+    if len(exact_rows) > 1:
+        return None
+
+    # Fuzzy containment is a last-resort compatibility path for suffix/prefix
+    # variants such as "OpenAI" versus "OpenAI Inc".  Two- and three-character
+    # names (US/EU/AI/UK, many initials) are never safe substring signals.
+    candidates: List[tuple[int, str, Dict[str, Any]]] = []
+    for row in rows:
+        surfaces = [normalize_name(str(row.get("name", ""))), *_actor_norm_aliases(row)]
+        for surface in surfaces:
+            if (min(len(surface), len(target)) >= 4
+                    and (surface in target or target in surface)):
+                canonical = normalize_name(str(row.get("name", "")))
+                candidates.append((len(surface), canonical, row))
+    if not candidates:
+        return None
+    best_len = max(item[0] for item in candidates)
+    best_rows: Dict[str, Dict[str, Any]] = {
+        canonical: row
+        for length, canonical, row in candidates
+        if length == best_len and canonical
+    }
+    # Ambiguous fuzzy identity is worse than a missing role: fail closed and let
+    # the cast/roster audit expose the unresolved actor.
+    return next(iter(best_rows.values())) if len(best_rows) == 1 else None
 
 
 def influence_weight(actor: Optional[Dict[str, Any]]) -> Optional[float]:
@@ -1086,6 +1104,72 @@ def events_to_schedule(
     return out
 
 
+def events_to_calendar_rounds(
+    actors: Optional[Any],
+    round_dates: List[Any],
+    as_of_date: Optional[Any],
+    horizon_date: Optional[Any],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """TEMPORAL spec §4: key_events → 日历回合精确落轮（与 ``events_to_schedule`` 并列）。
+
+    小时制的 ``events_to_schedule`` 按比例把日期压进轮数窗口；日历模式下每轮对应真实
+    日历区间，事件改用 ``sim_timeline.round_for_date`` 做区间包含定位——不做比例压缩、
+    不做 PREP-5 反应缓冲（日历模式 fire_scheduled_events 在每轮 agent 激活前触发，
+    同期反应有保障）。
+
+    逐条 ``key_events[]`` 的处理：
+
+    * 日期经 ``parse_as_of`` 解析；不可解析 → 排除（调用方按同一解析器统计并记
+      ``event_date_unparsed:<n>`` warning 到 temporal_config.warnings）；
+    * ``d ≤ as_of`` → 丢弃（沿用 events_to_schedule 的既有政策）；
+    * ``d > horizon`` → 完整条目追加到第二个返回值（beyond_horizon_events 留档）；
+    * 其余 → 精确落到包含该日期的回合。
+
+    返回 ``(scheduled, beyond_horizon)``：scheduled 形如 ``[{"round","event","date"}]``
+    （与 events_to_schedule 输出同形，poster 字段由调用方补齐）；beyond_horizon 是
+    原始事件 dict 的浅拷贝列表。``round_dates`` 兼容 RoundPeriod 与 JSON dict 行。
+    任何入参非法 → ``([], [])``，永不抛异常。
+    """
+    from .dates import parse_as_of  # 同包相对导入，匹配 events_to_schedule 的约定
+    from .sim_timeline import round_for_date
+
+    if not isinstance(actors, dict) or not round_dates:
+        return [], []
+    base = parse_as_of(as_of_date)
+    horizon = parse_as_of(horizon_date)
+    if base is None or horizon is None:
+        return [], []
+    base_d = base.date()
+    horizon_d = horizon.date()
+    evs = actors.get("key_events")
+    if not isinstance(evs, list):
+        return [], []
+
+    scheduled: List[Dict[str, Any]] = []
+    beyond: List[Dict[str, Any]] = []
+    for e in evs:
+        if not isinstance(e, dict):
+            continue
+        parsed = parse_as_of(e.get("date"))
+        if parsed is None:
+            continue  # 不可解析 → 排除（warning 由调用方统计）
+        d = parsed.date()
+        if d <= base_d:
+            continue  # 早于/等于研究截止日 → 丢弃（既有政策）
+        if d > horizon_d:
+            beyond.append(dict(e))  # 晚于判定日 → 完整留档，不落轮
+            continue
+        r = round_for_date(d, round_dates)
+        if r is None:
+            continue  # 防御：区间数据异常时静默跳过（永不抛异常）
+        scheduled.append({
+            "round": int(r),
+            "event": e.get("event"),
+            "date": e.get("date"),
+        })
+    return scheduled, beyond
+
+
 # ---------------------------------------------------------------------------
 # 来源分层 + 证据定级（EXECPLAN2 I-0-0）
 # ---------------------------------------------------------------------------
@@ -1249,6 +1333,27 @@ def _source_cited_in_research(row: Dict[str, Any], research_norm: str) -> bool:
     return bool(len(title) >= 8 and title in research_norm)
 
 
+def _source_evidence_preview(row: Dict[str, Any], max_chars: int = 280) -> str:
+    """Render a bounded, source-specific fact preview for citation selection."""
+    parts: List[str] = []
+    supports = row.get("supports")
+    if isinstance(supports, list):
+        parts.extend(str(value).strip() for value in supports[:3] if str(value).strip())
+    elif isinstance(supports, str) and supports.strip():
+        parts.append(supports.strip())
+    for key in ("excerpt", "snippet"):
+        value = row.get(key)
+        if isinstance(value, str) and value.strip():
+            parts.append(value.strip())
+    if not parts:
+        return ""
+    preview = "; ".join(dict.fromkeys(
+        re.sub(r"\s+", " ", part).replace("|", "\\|") for part in parts
+    ))
+    limit = max(40, int(max_chars))
+    return preview if len(preview) <= limit else preview[:limit - 1].rstrip() + "…"
+
+
 def sources_index_unified(
     sources: Optional[Any],
     research_report: Optional[str] = None,
@@ -1302,6 +1407,9 @@ def sources_index_unified(
             seg += f"（{'，'.join(extras)}）"
         if url:
             seg += f" — {url}"
+        evidence = _source_evidence_preview(row)
+        if evidence:
+            seg += f" ｜supports: {evidence}"
         lines.append(seg)
     return ("\n".join(lines) if len(lines) > 1 else ""), tag_map
 

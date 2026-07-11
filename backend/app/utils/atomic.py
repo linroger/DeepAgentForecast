@@ -57,6 +57,7 @@ def write_json_atomic(
     ensure_ascii: bool = False,
     indent: int | None = 2,
     fsync: bool = True,
+    allow_nan: bool = True,
 ) -> None:
     """Atomically serialize *obj* to JSON at *path*.
 
@@ -65,6 +66,12 @@ def write_json_atomic(
     """
     write_text_atomic(
         path,
-        json.dumps(obj, ensure_ascii=ensure_ascii, indent=indent, default=str),
+        json.dumps(
+            obj,
+            ensure_ascii=ensure_ascii,
+            indent=indent,
+            default=str,
+            allow_nan=allow_nan,
+        ),
         fsync=fsync,
     )

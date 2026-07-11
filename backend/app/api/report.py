@@ -20,6 +20,28 @@ from ..utils.logger import get_logger
 logger = get_logger('mirofish.api.report')
 
 
+def _report_publication_payload(report):
+    """Return report metadata without leaking an unaudited draft body."""
+    publication = ReportManager.publication_status(report.report_id)
+    payload = report.to_dict()
+    payload["publishable"] = bool(publication.get("publishable"))
+    payload["publication_issues"] = list(publication.get("reasons") or [])
+    if not payload["publishable"]:
+        payload["markdown_content"] = ""
+    return payload
+
+
+def _publication_rejection(report_id: str, lang=None):
+    """Build the shared fail-closed response for customer-facing artifacts."""
+    publication = ReportManager.publication_status(report_id, lang)
+    return jsonify({
+        "success": False,
+        "error": "报告尚未通过最终发布审计",
+        "publishable": False,
+        "publication_issues": list(publication.get("reasons") or []),
+    }), 409
+
+
 # ============== 报告生成接口 ==============
 
 @report_bp.route('/generate', methods=['POST'])
@@ -72,7 +94,8 @@ def generate_report():
         # 检查是否已有报告
         if not force_regenerate:
             existing_report = ReportManager.get_report_by_simulation(simulation_id)
-            if existing_report and existing_report.status == ReportStatus.COMPLETED:
+            if (existing_report and existing_report.status == ReportStatus.COMPLETED
+                    and ReportManager.is_publishable(existing_report.report_id)):
                 return jsonify({
                     "success": True,
                     "data": {
@@ -162,7 +185,11 @@ def generate_report():
 
                 # EXECPLAN2 F-7-0: force_regenerate 成功后清理同 simulation 的旧报告文件夹，
                 # 避免遗留多份导致 get_report_by_simulation 返回过期/不确定的报告。
-                if force_regenerate and report.status == ReportStatus.COMPLETED:
+                publishable = (
+                    report.status == ReportStatus.COMPLETED
+                    and ReportManager.is_publishable(report.report_id)
+                )
+                if force_regenerate and publishable:
                     try:
                         removed = ReportManager.delete_other_reports_for_simulation(
                             simulation_id, keep_report_id=report.report_id
@@ -172,7 +199,7 @@ def generate_report():
                     except Exception as _e:
                         logger.warning(f"清理旧报告失败（忽略）: {_e}")
 
-                if report.status == ReportStatus.COMPLETED:
+                if publishable:
                     task_manager.complete_task(
                         task_id,
                         result={
@@ -182,7 +209,12 @@ def generate_report():
                         }
                     )
                 else:
-                    task_manager.fail_task(task_id, report.error or "报告生成失败")
+                    publication = ReportManager.publication_status(report.report_id)
+                    reasons = "; ".join(publication.get("reasons") or [])
+                    task_manager.fail_task(
+                        task_id,
+                        report.error or reasons or "报告生成失败或未通过最终发布审计",
+                    )
                 
             except Exception as e:
                 logger.error(f"报告生成失败: {str(e)}")
@@ -244,7 +276,8 @@ def get_generate_status():
         # 如果提供了simulation_id，先检查是否已有完成的报告
         if simulation_id:
             existing_report = ReportManager.get_report_by_simulation(simulation_id)
-            if existing_report and existing_report.status == ReportStatus.COMPLETED:
+            if (existing_report and existing_report.status == ReportStatus.COMPLETED
+                    and ReportManager.is_publishable(existing_report.report_id)):
                 return jsonify({
                     "success": True,
                     "data": {
@@ -317,7 +350,7 @@ def get_report(report_id: str):
         
         return jsonify({
             "success": True,
-            "data": report.to_dict()
+            "data": _report_publication_payload(report)
         })
         
     except Exception as e:
@@ -355,7 +388,7 @@ def get_report_by_simulation(simulation_id: str):
         
         return jsonify({
             "success": True,
-            "data": report.to_dict(),
+            "data": _report_publication_payload(report),
             "has_report": True
         })
         
@@ -395,7 +428,7 @@ def list_reports():
         
         return jsonify({
             "success": True,
-            "data": [r.to_dict() for r in reports],
+            "data": [_report_publication_payload(r) for r in reports],
             "count": len(reports)
         })
         
@@ -423,6 +456,9 @@ def download_report(report_id: str):
                 "success": False,
                 "error": f"报告不存在: {report_id}"
             }), 404
+
+        if not ReportManager.is_publishable(report_id):
+            return _publication_rejection(report_id)
         
         md_path = ReportManager._get_report_markdown_path(report_id)
         
@@ -468,12 +504,21 @@ def get_report_translation_md(report_id: str, lang: str):
                 "error": f"不支持的语种: {lang}（仅 en / zh）"
             }), 404
 
+        report = ReportManager.get_report(report_id)
+        if not report:
+            return jsonify({
+                "success": False,
+                "error": f"报告不存在: {report_id}",
+            }), 404
+
         md_path = ReportManager._get_report_translation_path(report_id, lang)
         if not os.path.exists(md_path):
             return jsonify({
                 "success": False,
                 "error": f"该报告暂无 {lang} 版本: {report_id}"
             }), 404
+        if not ReportManager.is_publishable(report_id, lang):
+            return _publication_rejection(report_id, lang)
 
         return send_file(
             md_path,
@@ -518,6 +563,9 @@ def get_report_pdf(report_id: str):
         lang = (request.args.get('lang') or '').strip().lower()
         lang = lang if lang in ReportManager._TRANSLATION_LANGS else None
 
+        if not ReportManager.is_publishable(report_id, lang):
+            return _publication_rejection(report_id, lang)
+
         pdf_path = ReportManager.export_pdf(report_id, lang=lang)
         if not pdf_path or not os.path.exists(pdf_path):
             return jsonify({
@@ -558,6 +606,12 @@ def get_report_exec_brief(report_id: str):
     try:
         from ..services.exec_brief import ExecBriefBuilder
 
+        if not getattr(Config, "REPORT_EXEC_BRIEF", True):
+            return jsonify({
+                "success": False,
+                "error": "执行简报不可用（REPORT_EXEC_BRIEF 未开启）",
+            }), 404
+
         report = ReportManager.get_report(report_id)
         if not report:
             return jsonify({
@@ -567,6 +621,9 @@ def get_report_exec_brief(report_id: str):
 
         lang = (request.args.get('lang') or '').strip().lower()
         lang = lang if lang in ExecBriefBuilder._TRANSLATION_LANGS else None
+
+        if not ReportManager.is_publishable(report_id, lang):
+            return _publication_rejection(report_id, lang)
 
         report_dir = ReportManager._get_report_folder(report_id)
         ExecBriefBuilder.build(report_id, report_dir)
@@ -606,6 +663,13 @@ def get_report_exec_brief_pdf(report_id: str):
     try:
         from ..services.exec_brief import ExecBriefBuilder
 
+        if (not getattr(Config, "REPORT_EXEC_BRIEF", True)
+                or not getattr(Config, "REPORT_PDF_EXPORT", True)):
+            return jsonify({
+                "success": False,
+                "error": "执行简报 PDF 不可用（导出功能未开启）",
+            }), 404
+
         report = ReportManager.get_report(report_id)
         if not report:
             return jsonify({
@@ -615,6 +679,9 @@ def get_report_exec_brief_pdf(report_id: str):
 
         lang = (request.args.get('lang') or '').strip().lower()
         lang = lang if lang in ExecBriefBuilder._TRANSLATION_LANGS else None
+
+        if not ReportManager.is_publishable(report_id, lang):
+            return _publication_rejection(report_id, lang)
 
         report_dir = ReportManager._get_report_folder(report_id)
         # 先构建 md（PDF 依赖简报 md），再导 PDF。
@@ -654,12 +721,21 @@ def get_report_digest(report_id: str):
     try:
         from ..services.exec_brief import ExecBriefBuilder
 
+        if not getattr(Config, "REPORT_EXEC_BRIEF", True):
+            return jsonify({
+                "success": False,
+                "error": "速览不可用（REPORT_EXEC_BRIEF 未开启）",
+            }), 404
+
         report = ReportManager.get_report(report_id)
         if not report:
             return jsonify({
                 "success": False,
                 "error": f"报告不存在: {report_id}"
             }), 404
+
+        if not ReportManager.is_publishable(report_id):
+            return _publication_rejection(report_id)
 
         report_dir = ReportManager._get_report_folder(report_id)
         ExecBriefBuilder.build(report_id, report_dir)
@@ -695,20 +771,43 @@ def get_report_chart(report_id: str, filename: str):
 
     与 full_report.md 同源：文件都落在报告文件夹下，这里以 charts/ 子目录暴露。viz_manifest.json
     里的相对路径（'charts/xxx.png'）对 Web（经此端点）与 PDF（相对 report_dir 的文件系统路径）
-    都成立。send_from_directory 负责防目录穿越（filename 越界解析会 404）。
+    都成立。每次请求都重新做 realpath containment 并拒绝 symlink，防止登记后换链绕过。
     """
     try:
-        charts_dir = os.path.join(
-            ReportManager._get_report_folder(report_id), "charts"
-        )
-        if not os.path.isdir(charts_dir):
+        if not ReportManager.get_report(report_id):
+            return jsonify({
+                "success": False,
+                "error": f"报告不存在: {report_id}",
+            }), 404
+        if not ReportManager.is_publishable(report_id):
+            return _publication_rejection(report_id)
+        reports_root = os.path.realpath(ReportManager.REPORTS_DIR)
+        report_dir = os.path.realpath(ReportManager._get_report_folder(report_id))
+        charts_dir = os.path.realpath(os.path.join(report_dir, "charts"))
+        raw = str(filename or "")
+        parts = raw.split("/")
+        allowed = {".png", ".svg", ".jpg", ".jpeg", ".gif", ".webp", ".html"}
+        if (not raw or raw.startswith("/") or "\\" in raw or "%" in raw
+                or any(ord(char) < 32 or ord(char) == 127 for char in raw)
+                or any(part in ("", ".", "..") for part in parts)
+                or os.path.splitext(parts[-1])[1].lower() not in allowed
+                or os.path.commonpath([report_dir, reports_root]) != reports_root
+                or os.path.commonpath([charts_dir, report_dir]) != report_dir
+                or not os.path.isdir(charts_dir) or os.path.islink(charts_dir)):
             return jsonify({
                 "success": False,
                 "error": f"报告无可视化产物: {report_id}"
             }), 404
-        # send_from_directory 对 filename 做安全解析（拒绝 ../ 逃逸），越界或缺失 → 404
-        response = send_from_directory(charts_dir, filename)
-        if str(filename).lower().endswith(".html"):
+        candidate = os.path.join(charts_dir, *parts)
+        candidate_real = os.path.realpath(candidate)
+        if (os.path.commonpath([candidate_real, charts_dir]) != charts_dir
+                or not os.path.isfile(candidate_real)
+                or any(os.path.islink(os.path.join(charts_dir, *parts[:i]))
+                       for i in range(1, len(parts) + 1))):
+            return jsonify({"success": False, "error": f"图表不存在: {filename}"}), 404
+        response = send_file(candidate_real)
+        ext = os.path.splitext(candidate_real)[1].lower()
+        if ext == ".html":
             # Interactive charts may contain agent-produced inline JS. Run them
             # in an opaque sandboxed origin: scripts work, app cookies/storage
             # and network access do not.
@@ -716,6 +815,15 @@ def get_report_chart(report_id: str, filename: str):
                 "sandbox allow-scripts; default-src 'none'; "
                 "script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
                 "img-src data: blob:; font-src data:; connect-src 'none'"
+            )
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Referrer-Policy"] = "no-referrer"
+        elif ext == ".svg":
+            # SVG is an active document format when opened top-level. Keep it in
+            # an opaque sandbox and explicitly disable scripts/network access.
+            response.headers["Content-Security-Policy"] = (
+                "sandbox; default-src 'none'; script-src 'none'; "
+                "style-src 'unsafe-inline'; img-src data:; font-src data:"
             )
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["Referrer-Policy"] = "no-referrer"
@@ -773,6 +881,13 @@ def get_report_viz_manifest(report_id: str):
 
     try:
         import json as _json
+        if not ReportManager.get_report(report_id):
+            return jsonify({
+                "success": False,
+                "error": f"报告不存在: {report_id}",
+            }), 404
+        if not ReportManager.is_publishable(report_id):
+            return _publication_rejection(report_id)
         manifest_path = os.path.join(
             ReportManager._get_report_folder(report_id), "viz_manifest.json"
         )
@@ -1015,7 +1130,15 @@ def get_report_sections(report_id: str):
         
         # 获取报告状态
         report = ReportManager.get_report(report_id)
-        is_complete = report is not None and report.status == ReportStatus.COMPLETED
+        is_complete = bool(
+            report is not None
+            and report.status == ReportStatus.COMPLETED
+            and ReportManager.is_publishable(report_id)
+        )
+        publication = ReportManager.publication_status(report_id)
+        if report and report.status in (ReportStatus.COMPLETED, ReportStatus.FAILED) \
+                and not is_complete:
+            sections = []
         
         return jsonify({
             "success": True,
@@ -1023,7 +1146,9 @@ def get_report_sections(report_id: str):
                 "report_id": report_id,
                 "sections": sections,
                 "total_sections": len(sections),
-                "is_complete": is_complete
+                "is_complete": is_complete,
+                "publishable": bool(publication.get("publishable")),
+                "publication_issues": list(publication.get("reasons") or []),
             }
         })
         
@@ -1105,13 +1230,20 @@ def get_report_sections_partial(report_id: str):
                     "content_md": "",
                 })
 
-        # ③ done：终稿 full_report.md 已落盘即视为完成
-        done = os.path.exists(ReportManager._get_report_markdown_path(report_id))
+        # ③ done：最终 Markdown 的存在只是候选；只有 exact-byte audit
+        # 通过才可向客户宣告完成。终态失败/未审计报告也不得泄漏章节正文。
+        report = ReportManager.get_report(report_id)
+        publication = ReportManager.publication_status(report_id)
+        done = bool(publication.get("publishable"))
+        if report and report.status in (ReportStatus.COMPLETED, ReportStatus.FAILED) and not done:
+            sections = []
 
         return jsonify({
             "success": True,
             "sections": sections,
             "done": done,
+            "publishable": done,
+            "publication_issues": list(publication.get("reasons") or []),
         })
 
     except Exception as e:
@@ -1140,6 +1272,10 @@ def get_single_section(report_id: str, section_index: int):
         }
     """
     try:
+        report = ReportManager.get_report(report_id)
+        if report and report.status in (ReportStatus.COMPLETED, ReportStatus.FAILED) \
+                and not ReportManager.is_publishable(report_id):
+            return _publication_rejection(report_id)
         section_path = ReportManager._get_section_path(report_id, section_index)
         
         if not os.path.exists(section_path):
@@ -1197,8 +1333,12 @@ def check_report_status(simulation_id: str):
         report_status = report.status.value if report else None
         report_id = report.report_id if report else None
         
-        # 只有报告完成后才解锁interview
-        interview_unlocked = has_report and report.status == ReportStatus.COMPLETED
+        publication = (
+            ReportManager.publication_status(report_id) if report_id else
+            {"publishable": False, "reasons": []}
+        )
+        # 只有报告的 exact bytes 通过最终发布屏障后才解锁 interview。
+        interview_unlocked = bool(publication.get("publishable"))
         
         return jsonify({
             "success": True,
@@ -1207,7 +1347,9 @@ def check_report_status(simulation_id: str):
                 "has_report": has_report,
                 "report_status": report_status,
                 "report_id": report_id,
-                "interview_unlocked": interview_unlocked
+                "interview_unlocked": interview_unlocked,
+                "publishable": interview_unlocked,
+                "publication_issues": list(publication.get("reasons") or []),
             }
         })
         

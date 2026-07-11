@@ -71,6 +71,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 import argparse
 import asyncio
+import inspect
 import json
 import logging
 import multiprocessing
@@ -548,6 +549,45 @@ def _inject_behavior_hint(agent, hint: str) -> bool:
         return True
     except Exception:
         return False
+
+
+# CAL-TEMPORAL: 日历模式一次性动作词汇表（spec §5 verbatim）——一轮=一个日历时段，
+# 社交平台动作被重新语义化为"时段级战略动作"，开局注入一次即可（幂等）。
+_CALENDAR_ACTION_VOCAB_TEMPLATE = (
+    "In this simulation each round is one calendar {unit}. Action meanings:\n"
+    "CREATE_POST = your period communiqué (decision/announcement/strategic move);\n"
+    "QUOTE_POST / CREATE_COMMENT = strategic response or counter-move;\n"
+    "FOLLOW = alliance or coalition formation; LIKE / REPOST = public endorsement;\n"
+    "DO_NOTHING = strategic patience."
+)
+
+
+def _inject_calendar_vocabulary(agent_graph, temporal_config, log_info) -> None:
+    """CAL-TEMPORAL: 日历模式把动作词汇表一次性追加进每个 Agent 的 system prompt。
+
+    机制与 _inject_world_brief 完全一致（复用 _inject_behavior_hint 的幂等注入路径），
+    必须在 oasis.make()/env.reset() 之前调用。可降级：unit 缺失 / agent_graph 不可枚举 /
+    单个 Agent 失败均静默跳过，绝不中断模拟。hours 模式（无 temporal_config）从不调用。
+    """
+    unit = str((temporal_config or {}).get("unit", "") or "").strip()
+    if agent_graph is None or not unit:
+        return
+    hint = _CALENDAR_ACTION_VOCAB_TEMPLATE.format(unit=unit)
+    try:
+        agents = agent_graph.get_agents()
+    except Exception as e:  # noqa: BLE001
+        log_info(f"日历动作词汇注入跳过（无法枚举 Agent）: {e}")
+        return
+    injected = 0
+    total = 0
+    for _agent_id, agent in agents:
+        total += 1
+        try:
+            if _inject_behavior_hint(agent, hint):
+                injected += 1
+        except Exception:  # noqa: BLE001 — 单个 Agent 失败不影响其余（best-effort）
+            continue
+    log_info(f"日历动作词汇已注入 {injected}/{total} 个 Agent（unit={unit}）")
 
 
 def _inject_world_brief(agent_graph, world_brief, log_info) -> None:
@@ -1513,12 +1553,30 @@ def _resolve_start_hour(time_config: Dict[str, Any]) -> int:
         return 0
 
 
+def _supported_log_kwargs(logger, method_name: str, fields: Dict[str, Any]) -> Dict[str, Any]:
+    """CAL-TEMPORAL: 把日历时段字段过滤到 logger 方法真实支持的关键字参数子集。
+
+    hours 模式 fields 恒为空 → 恒返回 {}（旧调用逐字节等价）；日历模式下若 action_logger
+    尚未升级出新参数，则静默降级为不附字段（绝不因 TypeError 打断轮循环）；logger 带
+    **kwargs 时全量透传。任何反射失败一律返回 {}（degrade-safe）。"""
+    if not fields or logger is None:
+        return {}
+    try:
+        params = inspect.signature(getattr(logger, method_name)).parameters
+        if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()):
+            return {k: v for k, v in fields.items() if v is not None}
+        return {k: v for k, v in fields.items() if k in params and v is not None}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def get_active_agents_for_round(
     env,
     config: Dict[str, Any],
     current_hour: int,
     round_num: int,
     last_active_ids: Optional[set] = None,
+    calendar: bool = False,
 ) -> List:
     """根据时间、影响力与上一轮活跃情况决定本轮激活哪些 Agent（T3.5）。
 
@@ -1526,6 +1584,12 @@ def get_active_agents_for_round(
     - 上一轮活跃/被提及的 agent 获 ×1.5 近因加成（形成级联）；
     - 目标人数随 cast 规模放大（max(base_max, ceil(0.2N))，封顶 3×base_max），避免大规模 cast 被饿死；
     - 候选按影响力加权不放回采样。缺 influence_weight 时退化为 1.0（与旧行为接近）。
+
+    CAL-TEMPORAL（calendar=True，仅日历模式）：一轮=一个日历时段，昼夜节律无意义——
+    跳过 active_hours 过滤、时段乘子恒 1.0，激活概率退化为 activity_level × (0.5 + 0.5 × 归一化影响力)
+    （近因加成保留）；cadence=="principal" 的主角每轮无条件激活，绕过采样与
+    3×agents_per_hour_max 上限（一个季度里主要行动体毫无动作是建模错误），sampled agent
+    照旧填满上限。calendar=False（缺省）→ hours 路径逐字节不变。
     """
     time_config = config.get("time_config", {})
     agent_configs = config.get("agent_configs", [])
@@ -1534,7 +1598,7 @@ def get_active_agents_for_round(
 
     base_max = time_config.get("agents_per_hour_max", 20)
 
-    multiplier = _resolve_hour_multiplier(time_config, current_hour)
+    multiplier = 1.0 if calendar else _resolve_hour_multiplier(time_config, current_hour)
 
     # 影响力归一化（用于激活概率与采样权重）
     influences = [float(c.get("influence_weight", 1.0) or 1.0) for c in agent_configs]
@@ -1542,12 +1606,17 @@ def get_active_agents_for_round(
     if max_infl <= 0:
         max_infl = 1.0
 
+    principal_ids: List = []  # CAL-TEMPORAL: cadence=="principal" 的主角（每轮必激活）
     candidates = []  # (agent_id, influence_weight)
     for cfg in agent_configs:
         agent_id = cfg.get("agent_id", 0)
-        active_hours = cfg.get("active_hours", list(range(8, 23)))
-        if current_hour not in active_hours:
+        if calendar and str(cfg.get("cadence", "sampled") or "sampled") == "principal":
+            principal_ids.append(agent_id)
             continue
+        if not calendar:
+            active_hours = cfg.get("active_hours", list(range(8, 23)))
+            if current_hour not in active_hours:
+                continue
         activity_level = float(cfg.get("activity_level", 0.5) or 0.5)
         infl = float(cfg.get("influence_weight", 1.0) or 1.0)
         p = activity_level * (0.5 + 0.5 * (infl / max_infl)) * multiplier
@@ -1561,6 +1630,10 @@ def get_active_agents_for_round(
     target_count = max(1, int(min(base_max * 3, base_target) * multiplier))
 
     selected_ids = _weighted_sample_without_replacement(candidates, target_count)
+    if principal_ids:
+        # CAL-TEMPORAL: 主角无条件置前，不占 sampled 配额（上限外追加；主角在上面已
+        # continue 跳过采样候选池，故不会重复）
+        selected_ids = principal_ids + selected_ids
 
     active_agents = []
     for agent_id in selected_ids:
@@ -1633,6 +1706,75 @@ def _observe_agent_dynamics(tracker, actual_actions, name_to_id):
         tracker.observe_round(received, activity)
     except Exception:
         pass
+
+
+def _inject_period_context(env, active_ids, round_num, period, timeline,
+                           fired_events, world_delta) -> None:
+    """CAL-TEMPORAL: env.step 前给每个活跃 agent 追加一条本轮「世界时钟」SYSTEM 记忆。
+
+    机制与 _inject_agent_dynamics 一致（update_memory 追加最新 system 记录，不清空
+    跨轮会话记忆，astep 读 memory.get_context() 时它成为动作提示前最新的系统消息）。
+    头部含日历时段/轮次进度/预测判定日（spec §5 verbatim）；CONFIRMED EVENTS 列出
+    本轮已到期的日程事件；WHAT CHANGED LAST PERIOD 段由 SIM_WORLD_DELTA 开关控制
+    （默认开），摘要为空（首轮 / in-band 演化未产出）时显示 "(first period)"。
+    仅日历模式调用；全程 best-effort——无法构造/单个 agent 失败均静默跳过，绝不中断轮循环。
+    """
+    if not isinstance(period, dict) or not period:
+        return
+    try:
+        from camel.messages import BaseMessage
+        from camel.types import OpenAIBackendRole
+    except Exception:
+        return
+    timeline = timeline if isinstance(timeline, dict) else {}
+    label = str(period.get("label", "") or "")
+    period_start = str(period.get("period_start", "") or "")
+    period_end = str(period.get("period_end", "") or "")
+    unit = str(timeline.get("unit", "") or "")
+    horizon_date = str(timeline.get("horizon_date", "") or "")
+    try:
+        n_rounds = int(timeline.get("n_rounds") or 0)
+    except (TypeError, ValueError):
+        n_rounds = 0
+    periods_remaining = max(0, n_rounds - (round_num + 1))
+
+    event_lines = []
+    for ev in fired_events or []:
+        if not isinstance(ev, dict):
+            continue
+        content = str(ev.get("content", "") or "").strip()
+        if not content:
+            continue
+        date = str(ev.get("date", "") or "").strip()
+        # 配置生成器在日历模式已给 content 加 "[{date}] " 前缀；未加前缀时这里补上
+        if date and not content.startswith("["):
+            content = f"[{date}] {content}"
+        event_lines.append(content)
+    events_block = "\n".join(event_lines) if event_lines else "(none)"
+
+    lines = [
+        f"# WORLD CLOCK — {label} ({period_start} → {period_end}) | "
+        f"round {round_num + 1}/{n_rounds} | one {unit} per round | "
+        f"forecast horizon {horizon_date} ({periods_remaining} periods remain)",
+        f"You are acting as your real-world actor OVER THIS ENTIRE {unit}. Your post is the most",
+        "consequential public action you take this period — a decision, announcement, launch, deal,",
+        "alliance, investment, or policy move — not minute-by-minute chatter. Reacting to another",
+        "actor's move is a strategic response. Doing nothing is a legitimate strategic choice.",
+        "## CONFIRMED EVENTS THIS PERIOD",
+        events_block,
+    ]
+    if _flag_true("SIM_WORLD_DELTA", "true"):
+        lines.append("## WHAT CHANGED LAST PERIOD")
+        lines.append(str(world_delta or "").strip() or "(first period)")
+    text = "\n".join(lines)
+
+    for aid in active_ids or []:
+        try:
+            agent = env.agent_graph.get_agent(aid)
+            note = BaseMessage.make_user_message(role_name="WorldClock", content=text)
+            agent.update_memory(note, OpenAIBackendRole.SYSTEM)
+        except Exception:
+            continue
 
 
 # ============================================================================
@@ -1904,6 +2046,57 @@ async def fire_scheduled_events(env, event_config, loop_round, agent_names, acti
             log_info(f"定时事件触发失败，跳过（不中断模拟）: {e}")
             return 0
     return fired
+
+
+def _scheduled_events_due(event_config, loop_round) -> List[Dict[str, Any]]:
+    """CAL-TEMPORAL: 取 loop_round（0 基）到期的日程事件原始条目（供世界时钟头的
+    CONFIRMED EVENTS 段展示）。与 fire_scheduled_events 同一 round 匹配语义；
+    round 字段非法的条目静默跳过（fire 路径对其同样无能为力）。失败 → []。"""
+    out: List[Dict[str, Any]] = []
+    for ev in (event_config or {}).get("scheduled_events", []) or []:
+        if not isinstance(ev, dict):
+            continue
+        try:
+            if int(ev.get("round", -1)) == loop_round:
+                out.append(ev)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _resolve_total_rounds(config: Dict[str, Any], temporal_config: Dict[str, Any],
+                          calendar: bool, max_rounds: Optional[int], log_info) -> int:
+    """总轮数的唯一权威计算（在 log_simulation_start 之前调用一次，使其记录真实轮数）。
+
+    hours 模式：total_simulation_hours*60 // minutes_per_round，可被 max_rounds 截断
+    （旧行为逐字节不变）。
+    CAL-TEMPORAL 日历模式：temporal_config.n_rounds 为唯一权威（timeline 生成期已内建
+    ≤48 硬上限），且不做运行期 max_rounds 截断——轮数上限已在配置生成期通过粗化时间
+    粒度消化（spec：cap 粗化粒度、绝不截断预测期尾部）。
+    """
+    time_config = config.get("time_config", {})
+    total_hours = time_config.get("total_simulation_hours", 72)
+    minutes_per_round = time_config.get("minutes_per_round", 60)
+    total_rounds = (total_hours * 60) // minutes_per_round
+
+    if calendar:
+        try:
+            cal_rounds = int(temporal_config.get("n_rounds") or 0)
+        except (TypeError, ValueError):
+            cal_rounds = 0
+        if cal_rounds <= 0:  # 降级：n_rounds 缺失/非法 → round_dates 长度 → legacy 公式
+            cal_rounds = len(temporal_config.get("round_dates") or []) or total_rounds
+        total_rounds = cal_rounds
+        if max_rounds is not None and max_rounds > 0 and max_rounds < total_rounds:
+            log_info(f"日历模式：忽略运行期 max_rounds={max_rounds}"
+                     f"（总轮数 {total_rounds} 覆盖完整预测期，截断只会砍掉判定日前的尾部）")
+    # 如果指定了最大轮数，则截断（hours 模式旧行为，逐字节不变）
+    elif max_rounds is not None and max_rounds > 0:
+        original_rounds = total_rounds
+        total_rounds = min(total_rounds, max_rounds)
+        if total_rounds < original_rounds:
+            log_info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
+    return total_rounds
 
 
 def build_oasis_platform(kind: str, db_path: str, config: Dict[str, Any], log_info):
@@ -2573,9 +2766,40 @@ def _read_actions_for_decision_channel(simulation_dir: str) -> List[Dict[str, An
 
 
 def _build_round_to_date(seed: Dict[str, Any], config: Dict[str, Any]):
-    """NEXTSTEPS P1-2: round(1-based) → ISO 日期，as_of_date→horizon_date 线性映射。
-    无法确定（缺日期/非法/horizon≤as_of）→ None（不做日期映射）。"""
+    """NEXTSTEPS P1-2: round(1-based) → ISO 日期。
+
+    CAL-TEMPORAL: config 顶层 temporal_config.round_dates 存在时改用精确查表
+    {round+1: period_end}（日历模式每轮对应真实日历时段，不再线性内插；round<1 回
+    as_of_date，越界钳制到末时段）；否则回退 as_of_date→horizon_date 线性映射
+    （hours 模式旧行为逐字节不变）。无法确定（缺日期/非法/horizon≤as_of）→ None。"""
     from datetime import datetime as _dt, timedelta as _td
+    _tc_cal = (config.get("temporal_config") or {}) if isinstance(config, dict) else {}
+    _round_dates = _tc_cal.get("round_dates") if isinstance(_tc_cal, dict) else None
+    if _round_dates:
+        _mapping: Dict[int, str] = {}
+        for _rp_i, _rp in enumerate(_round_dates):
+            if not isinstance(_rp, dict):
+                continue
+            _pe = str(_rp.get("period_end", "") or "")[:10]
+            if not _pe:
+                continue
+            try:
+                _mapping[int(_rp.get("round", _rp_i)) + 1] = _pe
+            except (TypeError, ValueError):
+                _mapping[_rp_i + 1] = _pe
+        if _mapping:
+            _keys = sorted(_mapping)
+            _cal_as_of = (str((seed or {}).get("as_of_date", "") or "")[:10]
+                          or str(_tc_cal.get("as_of_date", "") or "")[:10])
+
+            def _r2d_exact(rnd: int) -> str:
+                if rnd in _mapping:
+                    return _mapping[rnd]
+                if rnd < _keys[0]:  # round 0 基线（决策通道首行等）→ as_of
+                    return _cal_as_of or _mapping[_keys[0]]
+                return _mapping[_keys[-1]]
+
+            return _r2d_exact
     as_of, horizon = seed.get("as_of_date"), seed.get("horizon_date")
     if not as_of or not horizon:
         return None
@@ -2600,6 +2824,376 @@ def _build_round_to_date(seed: Dict[str, Any], config: Dict[str, Any]):
         return (d0 + _td(days=int(span_days * frac))).date().isoformat()
 
     return _r2d
+
+
+# ============================================================================
+# CAL-TEMPORAL in-band 世界演化（spec §4，SIM_DECISION_CHANNEL_INBAND，默认开，仅日历模式）。
+# 每轮有机动作 + 参与度注入落账后：本轮动作 → 名册（decision_channel._build_active_roster）
+# → 承诺 elicit（decision_channel.elicit_round，时段框架）→ WorldState.step（真实时段 gap
+# 惯性 + WORLDSTATE_ENTROPY_MIX 熵地板）→ 定性摘要（world_delta.build_world_delta）喂下一轮
+# WORLD CLOCK 头 + 定量份额落 world_digest.jsonl（审计产物——份额只活在这里和轨迹里，
+# 绝不进 agent 可见文本，herding guard）。收尾写 world_state_trajectory.json（schema v3）。
+# ============================================================================
+_INBAND_EVOLUTIONS: Dict[str, "_InbandWorldEvolution"] = {}
+# 收尾兜底判据：本进程内该 sim 目录是否已由 in-band 写出轨迹（post-hoc 回退据此跳过）。
+_INBAND_TRAJ_WRITTEN: Dict[str, bool] = {}
+
+
+class _InbandWorldEvolution:
+    """日历模式的轮内世界演化——双平台共享的单一 WorldState（spec §4/§6）。
+
+    双平台并行时共用一个实例（按 sim 目录注册，expected=semaphore_platforms）：每轮
+    各平台交付（deliver）本轮有机动作与到期事件，凑齐全部平台的轮次水位后按轮序步进
+    一次（合并名册，一轮只 elicit/step 一次——与 post-hoc 回放的"单一共享 WorldState"
+    口径一致）；死轮/失败轮只推水位（heartbeat），防止双平台按轮配对停摆。
+
+    全程 degrade-safe：任何一步异常 → 告警日志 + 下一轮空摘要，模拟照常推进；LLM 不可用
+    → 承诺恒空（轨迹退化为先验 + 熵地板）；断点续跑重启进程后 WorldState 从种子重建，
+    轨迹只覆盖续跑轮次（诚实降级）。无收敛早停：轮循环永远跑满判定日，converged_at
+    仅作为稳定性信号记录（spec §6）。
+    """
+
+    def __init__(self, config: Dict[str, Any], simulation_dir: str,
+                 expected_platforms: int, log_info) -> None:
+        from app.services import decision_channel as _dc_mod
+        from app.services.worldstate import WorldState
+        self._dc = _dc_mod
+        self._log = log_info
+        self._dir = simulation_dir
+        self._expected = max(1, int(expected_platforms or 1))
+        tc = config.get("temporal_config") or {}
+        self._tc = tc if isinstance(tc, dict) else {}
+        seed = config.get("world_state_seed") or {}
+        self._seed = seed if isinstance(seed, dict) else {}
+        self._scenarios = [str(s) for s in (self._seed.get("scenarios") or []) if str(s).strip()]
+        # 与 post-hoc 决策通道同一组旋钮（SIM_DECISION_INERTIA / SIM_CONVERGENCE_EPS）
+        try:
+            self._inertia = float(os.environ.get("SIM_DECISION_INERTIA", "0.7") or "0.7")
+        except ValueError:
+            self._inertia = 0.7
+        try:
+            self._conv_eps = float(os.environ.get("SIM_CONVERGENCE_EPS", "0.02") or "0.02")
+        except ValueError:
+            self._conv_eps = 0.02
+        self._ws = WorldState(self._scenarios, self._seed.get("base_rates"), inertia=self._inertia)
+        self._base_shares = dict(self._ws.shares)  # 不变的种子先验（喂 elicit，绝不喂演化份额）
+        agent_configs = config.get("agent_configs")
+        self._activation = self._dc._activation_weight_map(agent_configs)
+        self._power = self._dc._outcome_power_map(agent_configs)
+        self._meta = self._dc._agent_meta_map(agent_configs)
+        self._cap = int(self._dc._cfg("DECISION_CHANNEL_MAX_ACTIVE", 60) or 60)
+        self._conv_window = max(1, int(self._dc._cfg("SIM_CONVERGENCE_WINDOW", 3) or 3))
+        self._entropy_on = _flag_true("WORLDSTATE_ENTROPY_MIX", "true")  # spec §1: 熵地板开关
+        unit = str(self._tc.get("unit") or "").strip() or None
+        if not unit:
+            unit = self._dc._infer_calendar_unit(self._tc.get("round_dates"))
+        self._unit = unit
+        # 日历模式 avg_gap = 单位名义天数（spec §4）；snap 后首/尾残段 gap 偏离名义值时
+        # _inertia_for_gap 据此放行更少/更多变化。
+        self._avg_gap = dict(self._dc._UNIT_NOMINAL_DAYS).get(unit or "", 0.0)
+        try:
+            self._n_rounds = int(self._tc.get("n_rounds") or 0) or None
+        except (TypeError, ValueError):
+            self._n_rounds = None
+        self._horizon_date = self._tc.get("horizon_date") or self._seed.get("horizon_date")
+        self._horizon_source = self._tc.get("horizon_source") or self._seed.get("horizon_source")
+        self._horizon_defaulted = self._tc.get("horizon_defaulted")
+        if self._horizon_defaulted is None:
+            self._horizon_defaulted = self._seed.get("horizon_defaulted")
+        self._as_of_date = str(self._tc.get("as_of_date") or self._seed.get("as_of_date") or "") or None
+        row0: Dict[str, Any] = {"round": 0, **self._ws.outcome()}
+        if self._as_of_date:
+            row0["as_of"] = self._as_of_date  # spec §6: 第 0 行 as_of=as_of_date
+        self._trajectory: List[Dict[str, Any]] = [row0]
+        self._decisions: List[Dict[str, Any]] = []
+        self._watermark: Dict[str, int] = {}   # 平台 → 已交付/心跳的最高轮次（0 基）
+        self._done: set = set()                # 已结束回路的平台
+        self._pending: Dict[int, Dict[str, Any]] = {}  # 轮次 → 合并缓冲（等齐平台水位）
+        self._delta_text = ""                  # 最近一次步进产出的定性摘要（喂下一轮头部）
+        self._prev_date = self._as_of_date
+        self._stepped = 0
+        self._max_round = 0
+        self._converged_at: Optional[int] = None
+        self._stable_streak = 0
+        self._finalized = False
+        try:
+            from app.utils.llm_client import LLMClient
+            self._llm = LLMClient()
+        except Exception as _llm_err:  # noqa: BLE001 — LLM 缺席时演化退化为先验+熵地板
+            self._llm = None
+            log_info(f"in-band 世界演化 LLM 初始化失败（承诺恒空，轨迹退化为先验+熵地板）: {_llm_err}")
+
+    # ------------------------------------------------------------------ 轮内接口
+    def deliver(self, platform: str, round_num: int, period: Optional[Dict[str, Any]],
+                round_actions: List[Dict[str, Any]],
+                fired_events: List[Dict[str, Any]]) -> None:
+        """交付某平台本轮（0 基）的有机动作与到期事件；凑齐全部平台水位后按轮序步进。
+        内部全隔离：任何异常 → 告警 + 下一轮空摘要，绝不中断轮循环（spec §4）。"""
+        try:
+            p = str(platform)
+            buf = self._pending.get(round_num)
+            if buf is None:
+                buf = {"period": None, "actions": [], "events": [], "event_keys": set()}
+                self._pending[round_num] = buf
+            if isinstance(period, dict) and period:
+                buf["period"] = period
+            for a in round_actions or []:
+                if isinstance(a, dict):
+                    buf["actions"].append(a)
+            # 同一份日程事件配置在两平台各触发一次 → 按 (date, content) 去重
+            for ev in fired_events or []:
+                if not isinstance(ev, dict):
+                    continue
+                key = (str(ev.get("date", "") or ""), str(ev.get("content", "") or ""))
+                if key in buf["event_keys"]:
+                    continue
+                buf["event_keys"].add(key)
+                buf["events"].append(ev)
+            self._watermark[p] = max(self._watermark.get(p, -1), round_num)
+            self._advance()
+        except Exception as _e:  # noqa: BLE001
+            self._delta_text = ""
+            self._log(f"第 {round_num + 1} 轮 in-band 世界演化交付失败（已隔离，下一轮空摘要）: {_e}")
+
+    def heartbeat(self, platform: str, round_num: int) -> None:
+        """死轮/env.step 失败轮的水位推进（本平台本轮无动作可交付），
+        防止双平台按轮配对停摆。绝不抛异常。"""
+        try:
+            p = str(platform)
+            self._watermark[p] = max(self._watermark.get(p, -1), round_num)
+            self._advance()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def latest_delta(self) -> str:
+        """最近一次步进产出的定性摘要（喂下一轮 WORLD CLOCK 头；未步进/失败 → ""）。"""
+        return self._delta_text
+
+    def platform_done(self, platform: str) -> None:
+        """本平台回路结束；全部平台完成时冲刷剩余轮并落轨迹（幂等）。"""
+        try:
+            self._done.add(str(platform))
+            self._advance()
+            if len(self._done) >= self._expected:
+                self.force_finalize()
+                _INBAND_EVOLUTIONS.pop(os.path.abspath(self._dir), None)
+        except Exception as _e:  # noqa: BLE001
+            self._log(f"in-band 世界演化收尾失败（已隔离）: {_e}")
+
+    def force_finalize(self) -> None:
+        """冲刷所有滞留轮次并写 world_state_trajectory.json（schema v3）+ decisions.jsonl。
+        幂等；平台回路异常中断时由 main() 的兜底调用触发。无任何演化轮 → 不写轨迹
+        （post-hoc 决策通道可按旧门控回退）。"""
+        if self._finalized:
+            return
+        try:
+            self._advance(flush_all=True)
+        except Exception as _e:  # noqa: BLE001
+            self._log(f"in-band 世界演化冲刷失败（已隔离）: {_e}")
+        self._finalized = True
+        if self._stepped <= 0:
+            return
+        try:
+            from app.utils.atomic import write_json_atomic
+            self._ws.converged_at = self._converged_at
+            out = self._ws.outcome()
+            result: Dict[str, Any] = {
+                "outcome": out,
+                "trajectory": self._trajectory,
+                "decisions": self._decisions,
+                "converged_at": self._converged_at,  # 稳定性信号——日历模式从不据此早停
+                "n_rounds": self._max_round,
+                "scenarios": self._scenarios,
+                "schema_version": 3,
+                "mode": "calendar",
+            }
+            if self._unit:
+                result["calendar_unit"] = self._unit
+            for fk, fv in (("horizon_date", self._horizon_date),
+                           ("horizon_source", self._horizon_source),
+                           ("horizon_defaulted", self._horizon_defaulted)):
+                if fv is not None:
+                    result[fk] = fv
+            write_json_atomic(os.path.join(self._dir, "world_state_trajectory.json"), result)
+            with open(os.path.join(self._dir, "decisions.jsonl"), "w", encoding="utf-8") as _df:
+                for _d in self._decisions:
+                    _df.write(json.dumps(_d, ensure_ascii=False) + "\n")
+            _INBAND_TRAJ_WRITTEN[os.path.abspath(self._dir)] = True
+            self._log(f"in-band 世界演化完成: leader={out.get('leader')} "
+                      f"share={out.get('leader_share')} converged_at={self._converged_at}"
+                      f"（稳定性信号，从不早停）")
+        except Exception as _e:  # noqa: BLE001
+            self._log(f"in-band 轨迹写出失败（已隔离）: {_e}")
+
+    # ------------------------------------------------------------------ 内部机制
+    def _advance(self, flush_all: bool = False) -> None:
+        """按轮序步进所有"已凑齐平台水位"的滞留轮。gate = 未完成平台的最低水位；
+        所有已知平台都完成 / flush_all → 全部放行。有平台尚未进场（双平台并行开局的
+        建图错峰）→ 不放行，摘要暂为 ""（诚实降级，绝不乱序步进）。"""
+        if not self._pending:
+            return
+        if flush_all:
+            gate: Optional[int] = None
+        else:
+            known = set(self._watermark) | self._done
+            if len(known) < self._expected:
+                return
+            live = [self._watermark.get(p, -1) for p in known if p not in self._done]
+            gate = min(live) if live else None
+        for r in sorted(self._pending):
+            if gate is not None and r > gate:
+                break
+            buf = self._pending.pop(r)
+            self._step_round(r, buf)
+
+    def _step_round(self, round_num: int, buf: Dict[str, Any]) -> None:
+        """步进一轮：名册 → elicit → WorldState.step → 摘要 + world_digest.jsonl 行。
+        任何异常 → 告警 + 空摘要（下一轮头部回落 "(first period)" 语义），模拟继续。"""
+        try:
+            period = buf.get("period") if isinstance(buf.get("period"), dict) else None
+            rnd = round_num + 1  # 轨迹/digest/decisions 与 actions.jsonl 同为 1 基轮号
+            period_end = (str(period.get("period_end")) if period and period.get("period_end")
+                          else None)
+            # 名册：本轮（两平台合并）去重行动者，附 meta + 本轮首条帖文（与 post-hoc 同口径）
+            entries: Dict[Any, Dict[str, Any]] = {}
+            for a in buf.get("actions") or []:
+                aid = a.get("agent_id")
+                if aid is None:
+                    continue
+                e = entries.get(aid)
+                if e is None:
+                    base = self._meta.get(aid, {"agent_id": aid,
+                                                "name": a.get("agent_name", ""),
+                                                "stance": "", "influence": ""})
+                    e = dict(base)
+                    entries[aid] = e
+                if "post" not in e:
+                    content = (a.get("action_args") or {}).get("content")
+                    if content:
+                        e["post"] = str(content)
+            roster = self._dc._build_active_roster(
+                list(entries.values()), self._activation, self._power, self._cap)
+            ctx: Dict[str, Any] = {
+                "llm": self._llm, "scenarios": self._scenarios,
+                "base_shares": self._base_shares, "abstain_allowed": True,
+                "round_num": rnd, "as_of": period_end,
+            }
+            if period:
+                ctx.update({"period": period, "n_rounds": self._n_rounds,
+                            "horizon_date": self._horizon_date, "unit": self._unit})
+            commitments = self._dc.elicit_round(roster, ctx) if roster else []
+            # 真实时段 gap 的惯性 + 熵地板（spec §4）；snap 后首/尾残段 gap 天然偏离名义值
+            eff_inertia = self._dc._inertia_for_gap(
+                self._inertia, self._prev_date, period_end, self._avg_gap)
+            entropy_days = (self._dc._period_days(period)
+                            if (self._entropy_on and period) else None)
+            prev_shares = dict(self._ws.shares)
+            self._ws.step(commitments, inertia=eff_inertia, entropy_mix_days=entropy_days)
+            out = self._ws.outcome()
+            leader = out.get("leader")
+            # leader_move：只取方向（up/down/flat），份额数值绝不进 agent 可见文本
+            leader_move = None
+            if leader:
+                diff = (float(self._ws.shares.get(leader, 0.0))
+                        - float(prev_shares.get(leader, 0.0)))
+                direction = "up" if diff > 1e-9 else ("down" if diff < -1e-9 else "flat")
+                leader_move = {"leader": leader, "direction": direction}
+            # 定性摘要（喂下一轮 WORLD CLOCK 头）——纯函数，出错自身返回 ""
+            from app.services.world_delta import build_world_delta
+            digest_actions = []
+            for a in buf.get("actions") or []:
+                content = (a.get("action_args") or {}).get("content")
+                if not content:
+                    continue
+                digest_actions.append({
+                    "content": str(content),
+                    "agent_name": a.get("agent_name", ""),
+                    "influence_weight": self._activation.get(a.get("agent_id"), 0.0),
+                })
+            delta_text = build_world_delta(digest_actions, buf.get("events") or [], leader_move)
+            # decisions 审计行：与 post-hoc 同口径（剥离 step 用的 weight）
+            for c in commitments:
+                self._decisions.append({k: v for k, v in c.items() if k != "weight"})
+            # 轨迹行（spec §6：日期化 + 时段字段；as_of = period_end）
+            snap: Dict[str, Any] = {"round": rnd, **out}
+            if period_end:
+                snap["as_of"] = period_end
+            if period:
+                for fk in ("period_start", "period_end", "label"):
+                    if period.get(fk):
+                        snap[fk] = str(period[fk])
+            self._trajectory.append(snap)
+            # world_digest.jsonl（审计产物）：定量份额只活在这里和轨迹里（spec §4）
+            digest_row = {
+                "round": rnd,
+                "period_start": (str(period.get("period_start"))
+                                 if period and period.get("period_start") else None),
+                "period_end": period_end,
+                "digest": delta_text,
+                "shares": dict(self._ws.shares),
+                "leader": leader,
+                "delta": {k: round(float(self._ws.shares.get(k, 0.0))
+                                   - float(prev_shares.get(k, 0.0)), 6)
+                          for k in self._ws.shares},
+            }
+            with open(os.path.join(self._dir, "world_digest.jsonl"), "a", encoding="utf-8") as _f:
+                _f.write(json.dumps(digest_row, ensure_ascii=False) + "\n")
+            # 收敛只记信号（SIM-1 同窗口口径），绝不早停
+            if self._ws.converged(self._conv_eps):
+                self._stable_streak += 1
+                if (self._converged_at is None and self._stable_streak >= self._conv_window
+                        and rnd >= 2):
+                    self._converged_at = rnd
+            else:
+                self._stable_streak = 0
+            self._stepped += 1
+            self._max_round = max(self._max_round, rnd)
+            if period_end:
+                self._prev_date = period_end
+            self._delta_text = delta_text
+        except Exception as _e:  # noqa: BLE001 — spec §4: 失败 → 告警 + 下一轮空摘要
+            self._delta_text = ""
+            self._log(f"第 {round_num + 1} 轮 in-band 世界演化失败（已隔离，下一轮空摘要）: {_e}")
+
+
+def _get_inband_evolution(config: Dict[str, Any], simulation_dir: str,
+                          expected_platforms: int, log_info) -> Optional[_InbandWorldEvolution]:
+    """取/建本 sim 目录共享的 in-band 演化器（仅日历模式调用方进入）。
+    SIM_DECISION_CHANNEL_INBAND 关闭 / world_state_seed.scenarios 为空 → None（静默关闭，
+    spec §4）；构建失败同样 None（degrade-safe，模拟照跑，只是没有世界演化）。"""
+    try:
+        if not _flag_true("SIM_DECISION_CHANNEL_INBAND", "true"):
+            return None
+        seed = config.get("world_state_seed") if isinstance(config, dict) else None
+        if not (isinstance(seed, dict) and seed.get("scenarios")):
+            return None
+        key = os.path.abspath(simulation_dir)
+        evo = _INBAND_EVOLUTIONS.get(key)
+        if evo is None:
+            _INBAND_TRAJ_WRITTEN.pop(key, None)  # 新一场演化 → 清掉同进程旧运行的落盘标记
+            evo = _InbandWorldEvolution(config, simulation_dir,
+                                        int(expected_platforms or 1), log_info)
+            _INBAND_EVOLUTIONS[key] = evo
+            log_info(f"in-band 世界演化已启用（SIM_DECISION_CHANNEL_INBAND，"
+                     f"platforms={evo._expected}，scenarios={len(evo._scenarios)}）")
+        return evo
+    except Exception as _e:  # noqa: BLE001
+        log_info(f"in-band 世界演化初始化失败（已隔离，世界演化关闭）: {_e}")
+        return None
+
+
+def _finalize_inband_world_evolution(simulation_dir: str, log_info) -> bool:
+    """CAL-TEMPORAL 收尾兜底（main() 在两平台 gather 之后调用）：平台回路异常中断导致
+    platform_done 未走到时，强制冲刷滞留轮并落轨迹。返回本次运行 in-band 是否已写出
+    world_state_trajectory.json（post-hoc 决策通道据此跳过/回退，spec §4）。"""
+    key = os.path.abspath(simulation_dir)
+    evo = _INBAND_EVOLUTIONS.pop(key, None)
+    if evo is not None:
+        try:
+            evo.force_finalize()
+        except Exception as _e:  # noqa: BLE001
+            log_info(f"in-band 世界演化兜底收尾失败（已隔离）: {_e}")
+    return bool(_INBAND_TRAJ_WRITTEN.get(key))
 
 
 # ============================================================================
@@ -2956,6 +3550,14 @@ async def run_twitter_simulation(
         print(f"[Twitter] {msg}")
     
     log_info("初始化...")
+
+    # CAL-TEMPORAL: presence-keyed 日历模式检测——只认 config 顶层 temporal_config.mode=="calendar"
+    # （spec §1：运行器不读 SIM_TEMPORAL_MODE 环境变量）。缺该块的旧配置/检查点/在途运行
+    # 全部走 hours 路径，行为逐字节不变。
+    temporal_config = config.get("temporal_config") or {}
+    if not isinstance(temporal_config, dict):
+        temporal_config = {}
+    calendar = str(temporal_config.get("mode") or "").strip().lower() == "calendar"
     
     # Twitter 使用通用 LLM 配置
     model = create_model(config, use_boost=False)
@@ -2989,6 +3591,14 @@ async def run_twitter_simulation(
             _inject_world_brief(result.agent_graph, config.get("world_brief"), log_info)
         except Exception as _wb_err:  # noqa: BLE001
             log_info(f"世界简报注入失败（已隔离，系统提示保持原样）: {_wb_err}")
+
+    # CAL-TEMPORAL: 日历模式开局一次性注入动作词汇表（与世界简报同一幂等注入机制，
+    # 必须在 env.reset() 之前）。hours 模式不进此分支，system prompt 逐字节不变。
+    if calendar:
+        try:
+            _inject_calendar_vocabulary(result.agent_graph, temporal_config, log_info)
+        except Exception as _cv_err:  # noqa: BLE001
+            log_info(f"日历动作词汇注入失败（已隔离，系统提示保持原样）: {_cv_err}")
 
     # XRUN-14: 幻觉工具参数（如 like_comment(post_id=...)）降级为改名/丢参而非整个动作被吞
     try:
@@ -3033,7 +3643,18 @@ async def run_twitter_simulation(
     log_info("环境已启动")
     
     if action_logger:
-        action_logger.log_simulation_start(config)
+        # simulation_start 的 total_rounds 显式传入（修复旧的 hours*2 陈旧硬编码）：
+        # 日历模式以 temporal_config.n_rounds 为准；hours 模式按时长公式 + max_rounds 截断。
+        _tcfg_log = config.get("temporal_config") or {}
+        if _tcfg_log.get("mode") == "calendar":
+            _tr_log = int(_tcfg_log.get("n_rounds", 0) or 0)
+        else:
+            _ttc_log = config.get("time_config", {}) or {}
+            _tr_log = int((_ttc_log.get("total_simulation_hours", 72) * 60)
+                          // (_ttc_log.get("minutes_per_round", 60) or 60))
+            if max_rounds is not None and max_rounds > 0:
+                _tr_log = min(_tr_log, max_rounds)
+        action_logger.log_simulation_start(config, _tr_log)
     
     total_actions = 0
     last_rowid = 0  # 跟踪数据库中最后处理的行号（使用 rowid 避免 created_at 格式差异）
@@ -3141,17 +3762,25 @@ async def run_twitter_simulation(
     
     # 主模拟循环
     time_config = config.get("time_config", {})
-    total_hours = time_config.get("total_simulation_hours", 72)
     minutes_per_round = time_config.get("minutes_per_round", 60)
-    total_rounds = (total_hours * 60) // minutes_per_round
-    
-    # 如果指定了最大轮数，则截断
-    if max_rounds is not None and max_rounds > 0:
-        original_rounds = total_rounds
-        total_rounds = min(total_rounds, max_rounds)
-        if total_rounds < original_rounds:
-            log_info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-    
+    # CAL-TEMPORAL: 总轮数唯一权威计算（_resolve_total_rounds）——日历模式取
+    # temporal_config.n_rounds 且不做运行期 max_rounds 截断（cap 已在配置生成期粗化消化）；
+    # hours 模式为时长公式 + max_rounds 截断（旧行为与日志逐字节不变）。
+    total_rounds = _resolve_total_rounds(config, temporal_config, calendar, max_rounds, log_info)
+
+    # CAL-TEMPORAL: 轮次(0基)→日历时段查表 + 上一时段世界演化摘要占位。
+    # world_delta_text 由后续 in-band 演化切片在每轮末填充；本切片恒为 ""（首轮语义）。
+    _round_periods: Dict[int, Dict[str, Any]] = {}
+    if calendar:
+        for _rp_i, _rp in enumerate(temporal_config.get("round_dates") or []):
+            if not isinstance(_rp, dict):
+                continue
+            try:
+                _round_periods[int(_rp.get("round", _rp_i))] = _rp
+            except (TypeError, ValueError):
+                _round_periods[_rp_i] = _rp
+    world_delta_text = ""
+
     start_time = datetime.now()
 
     last_active_ids: set = set()  # T3.5: 近因加成——上一轮活跃的 agent 下一轮更易被激活
@@ -3170,6 +3799,12 @@ async def run_twitter_simulation(
     # RUN-7: 每轮结束后落轮级检查点（SIM_CHECKPOINT 默认开）；续跑则跳过已完成的轮次。
     _ckpt_platform = "reddit" if os.path.basename(db_path).startswith("reddit") else "twitter"
     _cfg_hash = _config_hash(config)  # ITEM 3: 每轮检查点写入配置指纹，供续跑前校验（只算一次）
+
+    # CAL-TEMPORAL: in-band 世界演化器（SIM_DECISION_CHANNEL_INBAND，默认开，仅日历模式；
+    # world_state_seed.scenarios 为空 → None，静默关闭）。双平台共享同一实例（按 sim 目录
+    # 注册，expected=semaphore_platforms），凑齐两平台本轮水位后才按轮序步进一次。
+    _inband_evo = (_get_inband_evolution(config, simulation_dir, semaphore_platforms, log_info)
+                   if calendar else None)
 
     def _write_ckpt(completed_round: int) -> None:
         # 闭包按调用时读取 last_rowid / total_actions 的当前值；ITEM 3: 附带 config_hash 与实时 RNG 状态
@@ -3193,10 +3828,22 @@ async def run_twitter_simulation(
             if main_logger:
                 main_logger.info(f"收到退出信号，在第 {round_num + 1} 轮停止模拟")
             break
-        
+
         simulated_minutes = round_num * minutes_per_round
         simulated_hour = (start_hour + simulated_minutes // 60) % 24  # RUN-4: 从起始小时推进
         simulated_day = simulated_minutes // (60 * 24) + 1
+
+        # CAL-TEMPORAL: 本轮日历时段与 round_start/round_end 事件附加字段（hours 模式恒空 →
+        # 下方所有 log_round_* 调用经 _supported_log_kwargs 过滤后与旧行为逐字节等价）
+        _period = _round_periods.get(round_num) if calendar else None
+        _cal_extra: Dict[str, Any] = {}
+        if calendar and isinstance(_period, dict):
+            _cal_extra = {
+                "period_start": _period.get("period_start"),
+                "period_end": _period.get("period_end"),
+                "period_label": _period.get("label"),
+                "calendar_unit": temporal_config.get("unit"),
+            }
 
         # XRUN-4: 每轮磁盘预检——磁盘耗尽后 SQLite 已死，继续跑只会烧 LLM 额度；
         # 硬失败让平台异常被隔离上抛，run_state/管线健康门看见真实原因而非静默僵死。
@@ -3218,27 +3865,49 @@ async def run_twitter_simulation(
             log_info(f"定时事件触发异常，跳过（不中断模拟）: {_ev_err}")
 
         active_agents = get_active_agents_for_round(
-            result.env, config, simulated_hour, round_num, last_active_ids
+            result.env, config, simulated_hour, round_num, last_active_ids,
+            calendar=calendar,
         )
         # T3.5/RUN-4: 供下一轮近因加成；SIM_RECENCY_CARRY=true 时死轮不清空（级联跨空档保留）
         if active_agents or not _recency_carry:
             last_active_ids = {aid for aid, _ in active_agents}
-        
-        # 无论是否有活跃agent，都记录round开始
+
+        # 无论是否有活跃agent，都记录round开始（CAL-TEMPORAL: 日历模式附带时段字段）
         if action_logger:
-            action_logger.log_round_start(round_num + 1, simulated_hour)
-        
+            action_logger.log_round_start(
+                round_num + 1, simulated_hour,
+                **_supported_log_kwargs(action_logger, "log_round_start", _cal_extra))
+
         if not active_agents:
             # 没有活跃agent时也记录round结束（actions_count=0）
             if action_logger:
                 action_logger.log_round_end(
                     round_num + 1, 0,
-                    simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2))
+                    simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2),
+                    **_supported_log_kwargs(action_logger, "log_round_end", _cal_extra))
+            if _inband_evo is not None:
+                # CAL-TEMPORAL: 死轮只推演化水位（无动作交付），防止双平台按轮配对停摆
+                _inband_evo.heartbeat(_ckpt_platform, round_num)
+                world_delta_text = _inband_evo.latest_delta()
             _write_ckpt(round_num + 1)  # RUN-7: 死轮也推进检查点
             continue
-        
+
         # I-2-1: 注入本轮动态情感状态到各活跃 agent 的系统提示（默认关 → no-op）
         _inject_agent_dynamics(active_agents, dynamics_tracker, log_info)
+
+        # CAL-TEMPORAL: 日历模式注入本轮世界时钟头（时段/进度/本轮已确认事件/上一时段演化摘要）。
+        # world_delta_text 由 in-band 演化在上一轮末填充；首轮/演化失败 → "" → "(first period)"。
+        if calendar:
+            try:
+                _inject_period_context(
+                    result.env, [aid for aid, _ in active_agents], round_num,
+                    _period, temporal_config,
+                    _scheduled_events_due(event_config, round_num),
+                    world_delta_text,
+                )
+            except Exception as _pc_err:  # noqa: BLE001
+                log_info(f"世界时钟注入失败，跳过（不中断模拟）: {_pc_err}")
+
         actions = {agent: LLMAction() for _, agent in active_agents}
         # 健壮性：单次 env.step 内的某个 agent LLM 调用失败（超时/降级/异常）不应中断整场模拟。
         # 记录并跳过本轮，让模拟继续，保住此前所有轮次的进度。
@@ -3257,7 +3926,12 @@ async def run_twitter_simulation(
             if action_logger:
                 action_logger.log_round_end(
                     round_num + 1, 0,
-                    simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2))
+                    simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2),
+                    **_supported_log_kwargs(action_logger, "log_round_end", _cal_extra))
+            if _inband_evo is not None:
+                # CAL-TEMPORAL: 失败轮同样只推演化水位（该轮已按 0 动作记账）
+                _inband_evo.heartbeat(_ckpt_platform, round_num)
+                world_delta_text = _inband_evo.latest_delta()
             _write_ckpt(round_num + 1)  # RUN-7: 失败轮同样推进检查点（该轮已按 0 动作记账）
             if step_failure_limit > 0 and consec_step_failures >= step_failure_limit:
                 raise RuntimeError(
@@ -3270,7 +3944,7 @@ async def run_twitter_simulation(
         actual_actions, last_rowid = fetch_new_actions_from_db(
             db_path, last_rowid, agent_names
         )
-        
+
         round_action_count = 0
         for action_data in actual_actions:
             if action_logger:
@@ -3283,7 +3957,7 @@ async def run_twitter_simulation(
                 )
                 total_actions += 1
                 round_action_count += 1
-        
+
         # I-2-1: 用本轮实际动作更新动态情感状态（默认关 → no-op）
         _observe_agent_dynamics(dynamics_tracker, actual_actions, dyn_name_to_id)
 
@@ -3298,18 +3972,32 @@ async def run_twitter_simulation(
             total_actions += _liked
             round_action_count += _liked
 
+        # CAL-TEMPORAL in-band 世界演化（spec §4）：有机动作 + 参与度注入落账后，交付本轮
+        # 动作/到期事件给共享 WorldState；产出的定性摘要喂下一轮 WORLD CLOCK 头。deliver
+        # 内部全隔离——任何失败 → 告警 + 下一轮空摘要，绝不中断轮循环。
+        if _inband_evo is not None:
+            _inband_evo.deliver(_ckpt_platform, round_num, _period, actual_actions,
+                                _scheduled_events_due(event_config, round_num))
+            world_delta_text = _inband_evo.latest_delta()
+
         if action_logger:
             action_logger.log_round_end(
                 round_num + 1, round_action_count,
-                simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2))
+                simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2),
+                **_supported_log_kwargs(action_logger, "log_round_end", _cal_extra))
         _write_ckpt(round_num + 1)  # RUN-7: 本轮已完整记账，落轮级检查点
 
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
             log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
-    
+
     # 注意：不关闭环境，保留给Interview使用
-    
+
+    # CAL-TEMPORAL: 本平台回路结束 → 通知 in-band 演化；全部平台完成时冲刷剩余轮并落
+    # world_state_trajectory.json（schema v3）+ decisions.jsonl（main() 另有兜底收尾）。
+    if _inband_evo is not None:
+        _inband_evo.platform_done(_ckpt_platform)
+
     # RUN-2/RUN-9: 循环结束落 LLM 健康计数与情感动态摘要（附加遥测，供 write_run_summary
     # 健康门与报告 caveat 消费；platform 名由本函数的 db 文件名推导，两平台共用此代码块）。
     _plat = "reddit" if os.path.basename(db_path).startswith("reddit") else "twitter"
@@ -3328,11 +4016,11 @@ async def run_twitter_simulation(
 
     if action_logger:
         action_logger.log_simulation_end(total_rounds, total_actions)
-    
+
     result.total_actions = total_actions
     elapsed = (datetime.now() - start_time).total_seconds()
     log_info(f"模拟循环完成! 耗时: {elapsed:.1f}秒, 总动作: {total_actions}")
-    
+
     return result
 
 
@@ -3366,6 +4054,14 @@ async def run_reddit_simulation(
         print(f"[Reddit] {msg}")
     
     log_info("初始化...")
+
+    # CAL-TEMPORAL: presence-keyed 日历模式检测——只认 config 顶层 temporal_config.mode=="calendar"
+    # （spec §1：运行器不读 SIM_TEMPORAL_MODE 环境变量）。缺该块的旧配置/检查点/在途运行
+    # 全部走 hours 路径，行为逐字节不变。
+    temporal_config = config.get("temporal_config") or {}
+    if not isinstance(temporal_config, dict):
+        temporal_config = {}
+    calendar = str(temporal_config.get("mode") or "").strip().lower() == "calendar"
     
     # Reddit 使用加速 LLM 配置（如果有的话，否则回退到通用配置）
     model = create_model(config, use_boost=True)
@@ -3398,6 +4094,14 @@ async def run_reddit_simulation(
             _inject_world_brief(result.agent_graph, config.get("world_brief"), log_info)
         except Exception as _wb_err:  # noqa: BLE001
             log_info(f"世界简报注入失败（已隔离，系统提示保持原样）: {_wb_err}")
+
+    # CAL-TEMPORAL: 日历模式开局一次性注入动作词汇表（与世界简报同一幂等注入机制，
+    # 必须在 env.reset() 之前）。hours 模式不进此分支，system prompt 逐字节不变。
+    if calendar:
+        try:
+            _inject_calendar_vocabulary(result.agent_graph, temporal_config, log_info)
+        except Exception as _cv_err:  # noqa: BLE001
+            log_info(f"日历动作词汇注入失败（已隔离，系统提示保持原样）: {_cv_err}")
 
     # XRUN-14: 幻觉工具参数（如 like_comment(post_id=...)）降级为改名/丢参而非整个动作被吞
     try:
@@ -3442,7 +4146,18 @@ async def run_reddit_simulation(
     log_info("环境已启动")
     
     if action_logger:
-        action_logger.log_simulation_start(config)
+        # simulation_start 的 total_rounds 显式传入（修复旧的 hours*2 陈旧硬编码）：
+        # 日历模式以 temporal_config.n_rounds 为准；hours 模式按时长公式 + max_rounds 截断。
+        _tcfg_log = config.get("temporal_config") or {}
+        if _tcfg_log.get("mode") == "calendar":
+            _tr_log = int(_tcfg_log.get("n_rounds", 0) or 0)
+        else:
+            _ttc_log = config.get("time_config", {}) or {}
+            _tr_log = int((_ttc_log.get("total_simulation_hours", 72) * 60)
+                          // (_ttc_log.get("minutes_per_round", 60) or 60))
+            if max_rounds is not None and max_rounds > 0:
+                _tr_log = min(_tr_log, max_rounds)
+        action_logger.log_simulation_start(config, _tr_log)
     
     total_actions = 0
     last_rowid = 0  # 跟踪数据库中最后处理的行号（使用 rowid 避免 created_at 格式差异）
@@ -3548,17 +4263,25 @@ async def run_reddit_simulation(
     
     # 主模拟循环
     time_config = config.get("time_config", {})
-    total_hours = time_config.get("total_simulation_hours", 72)
     minutes_per_round = time_config.get("minutes_per_round", 60)
-    total_rounds = (total_hours * 60) // minutes_per_round
-    
-    # 如果指定了最大轮数，则截断
-    if max_rounds is not None and max_rounds > 0:
-        original_rounds = total_rounds
-        total_rounds = min(total_rounds, max_rounds)
-        if total_rounds < original_rounds:
-            log_info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-    
+    # CAL-TEMPORAL: 总轮数唯一权威计算（_resolve_total_rounds）——日历模式取
+    # temporal_config.n_rounds 且不做运行期 max_rounds 截断（cap 已在配置生成期粗化消化）；
+    # hours 模式为时长公式 + max_rounds 截断（旧行为与日志逐字节不变）。
+    total_rounds = _resolve_total_rounds(config, temporal_config, calendar, max_rounds, log_info)
+
+    # CAL-TEMPORAL: 轮次(0基)→日历时段查表 + 上一时段世界演化摘要占位。
+    # world_delta_text 由后续 in-band 演化切片在每轮末填充；本切片恒为 ""（首轮语义）。
+    _round_periods: Dict[int, Dict[str, Any]] = {}
+    if calendar:
+        for _rp_i, _rp in enumerate(temporal_config.get("round_dates") or []):
+            if not isinstance(_rp, dict):
+                continue
+            try:
+                _round_periods[int(_rp.get("round", _rp_i))] = _rp
+            except (TypeError, ValueError):
+                _round_periods[_rp_i] = _rp
+    world_delta_text = ""
+
     start_time = datetime.now()
 
     last_active_ids: set = set()  # T3.5: 近因加成——上一轮活跃的 agent 下一轮更易被激活
@@ -3577,6 +4300,12 @@ async def run_reddit_simulation(
     # RUN-7: 每轮结束后落轮级检查点（SIM_CHECKPOINT 默认开）；续跑则跳过已完成的轮次。
     _ckpt_platform = "reddit" if os.path.basename(db_path).startswith("reddit") else "twitter"
     _cfg_hash = _config_hash(config)  # ITEM 3: 每轮检查点写入配置指纹，供续跑前校验（只算一次）
+
+    # CAL-TEMPORAL: in-band 世界演化器（SIM_DECISION_CHANNEL_INBAND，默认开，仅日历模式；
+    # world_state_seed.scenarios 为空 → None，静默关闭）。双平台共享同一实例（按 sim 目录
+    # 注册，expected=semaphore_platforms），凑齐两平台本轮水位后才按轮序步进一次。
+    _inband_evo = (_get_inband_evolution(config, simulation_dir, semaphore_platforms, log_info)
+                   if calendar else None)
 
     def _write_ckpt(completed_round: int) -> None:
         # 闭包按调用时读取 last_rowid / total_actions 的当前值；ITEM 3: 附带 config_hash 与实时 RNG 状态
@@ -3605,6 +4334,18 @@ async def run_reddit_simulation(
         simulated_hour = (start_hour + simulated_minutes // 60) % 24  # RUN-4: 从起始小时推进
         simulated_day = simulated_minutes // (60 * 24) + 1
 
+        # CAL-TEMPORAL: 本轮日历时段与 round_start/round_end 事件附加字段（hours 模式恒空 →
+        # 下方所有 log_round_* 调用经 _supported_log_kwargs 过滤后与旧行为逐字节等价）
+        _period = _round_periods.get(round_num) if calendar else None
+        _cal_extra: Dict[str, Any] = {}
+        if calendar and isinstance(_period, dict):
+            _cal_extra = {
+                "period_start": _period.get("period_start"),
+                "period_end": _period.get("period_end"),
+                "period_label": _period.get("label"),
+                "calendar_unit": temporal_config.get("unit"),
+            }
+
         # XRUN-4: 每轮磁盘预检——磁盘耗尽后 SQLite 已死，继续跑只会烧 LLM 额度；
         # 硬失败让平台异常被隔离上抛，run_state/管线健康门看见真实原因而非静默僵死。
         _disk_err = _free_disk_error(simulation_dir)
@@ -3625,27 +4366,49 @@ async def run_reddit_simulation(
             log_info(f"定时事件触发异常，跳过（不中断模拟）: {_ev_err}")
 
         active_agents = get_active_agents_for_round(
-            result.env, config, simulated_hour, round_num, last_active_ids
+            result.env, config, simulated_hour, round_num, last_active_ids,
+            calendar=calendar,
         )
         # T3.5/RUN-4: 供下一轮近因加成；SIM_RECENCY_CARRY=true 时死轮不清空（级联跨空档保留）
         if active_agents or not _recency_carry:
             last_active_ids = {aid for aid, _ in active_agents}
         
-        # 无论是否有活跃agent，都记录round开始
+        # 无论是否有活跃agent，都记录round开始（CAL-TEMPORAL: 日历模式附带时段字段）
         if action_logger:
-            action_logger.log_round_start(round_num + 1, simulated_hour)
+            action_logger.log_round_start(
+                round_num + 1, simulated_hour,
+                **_supported_log_kwargs(action_logger, "log_round_start", _cal_extra))
         
         if not active_agents:
             # 没有活跃agent时也记录round结束（actions_count=0）
             if action_logger:
                 action_logger.log_round_end(
                     round_num + 1, 0,
-                    simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2))
+                    simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2),
+                    **_supported_log_kwargs(action_logger, "log_round_end", _cal_extra))
+            if _inband_evo is not None:
+                # CAL-TEMPORAL: 死轮只推演化水位（无动作交付），防止双平台按轮配对停摆
+                _inband_evo.heartbeat(_ckpt_platform, round_num)
+                world_delta_text = _inband_evo.latest_delta()
             _write_ckpt(round_num + 1)  # RUN-7: 死轮也推进检查点
             continue
-        
+
         # I-2-1: 注入本轮动态情感状态到各活跃 agent 的系统提示（默认关 → no-op）
         _inject_agent_dynamics(active_agents, dynamics_tracker, log_info)
+
+        # CAL-TEMPORAL: 日历模式注入本轮世界时钟头（时段/进度/本轮已确认事件/上一时段演化摘要）。
+        # world_delta_text 由 in-band 演化在上一轮末填充；首轮/演化失败 → "" → "(first period)"。
+        if calendar:
+            try:
+                _inject_period_context(
+                    result.env, [aid for aid, _ in active_agents], round_num,
+                    _period, temporal_config,
+                    _scheduled_events_due(event_config, round_num),
+                    world_delta_text,
+                )
+            except Exception as _pc_err:  # noqa: BLE001
+                log_info(f"世界时钟注入失败，跳过（不中断模拟）: {_pc_err}")
+
         actions = {agent: LLMAction() for _, agent in active_agents}
         # 健壮性：单次 env.step 内的某个 agent LLM 调用失败（超时/降级/异常）不应中断整场模拟。
         # 记录并跳过本轮，让模拟继续，保住此前所有轮次的进度。
@@ -3664,7 +4427,12 @@ async def run_reddit_simulation(
             if action_logger:
                 action_logger.log_round_end(
                     round_num + 1, 0,
-                    simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2))
+                    simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2),
+                    **_supported_log_kwargs(action_logger, "log_round_end", _cal_extra))
+            if _inband_evo is not None:
+                # CAL-TEMPORAL: 失败轮同样只推演化水位（该轮已按 0 动作记账）
+                _inband_evo.heartbeat(_ckpt_platform, round_num)
+                world_delta_text = _inband_evo.latest_delta()
             _write_ckpt(round_num + 1)  # RUN-7: 失败轮同样推进检查点（该轮已按 0 动作记账）
             if step_failure_limit > 0 and consec_step_failures >= step_failure_limit:
                 raise RuntimeError(
@@ -3705,18 +4473,32 @@ async def run_reddit_simulation(
             total_actions += _liked
             round_action_count += _liked
 
+        # CAL-TEMPORAL in-band 世界演化（spec §4）：有机动作 + 参与度注入落账后，交付本轮
+        # 动作/到期事件给共享 WorldState；产出的定性摘要喂下一轮 WORLD CLOCK 头。deliver
+        # 内部全隔离——任何失败 → 告警 + 下一轮空摘要，绝不中断轮循环。
+        if _inband_evo is not None:
+            _inband_evo.deliver(_ckpt_platform, round_num, _period, actual_actions,
+                                _scheduled_events_due(event_config, round_num))
+            world_delta_text = _inband_evo.latest_delta()
+
         if action_logger:
             action_logger.log_round_end(
                 round_num + 1, round_action_count,
-                simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2))
+                simulated_hours=round((round_num + 1) * minutes_per_round / 60, 2),
+                **_supported_log_kwargs(action_logger, "log_round_end", _cal_extra))
         _write_ckpt(round_num + 1)  # RUN-7: 本轮已完整记账，落轮级检查点
 
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
             log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
-    
+
     # 注意：不关闭环境，保留给Interview使用
-    
+
+    # CAL-TEMPORAL: 本平台回路结束 → 通知 in-band 演化；全部平台完成时冲刷剩余轮并落
+    # world_state_trajectory.json（schema v3）+ decisions.jsonl（main() 另有兜底收尾）。
+    if _inband_evo is not None:
+        _inband_evo.platform_done(_ckpt_platform)
+
     # RUN-2/RUN-9: 循环结束落 LLM 健康计数与情感动态摘要（附加遥测，供 write_run_summary
     # 健康门与报告 caveat 消费；platform 名由本函数的 db 文件名推导，两平台共用此代码块）。
     _plat = "reddit" if os.path.basename(db_path).startswith("reddit") else "twitter"
@@ -3912,13 +4694,21 @@ async def main():
             except Exception as _em_err:  # noqa: BLE001
                 log_manager.error(f"涌现度量计算失败（已隔离，不影响模拟结果）: {_em_err}")
 
+    # CAL-TEMPORAL: in-band 世界演化收尾兜底——平台回路异常中断导致 platform_done 未走到时，
+    # 强制冲刷滞留轮并落 world_state_trajectory.json（schema v3）。返回值 = 本次运行 in-band
+    # 是否已写出轨迹（True 时下方 post-hoc 决策通道跳过，避免覆盖轮内演化结果；spec §4）。
+    _inband_traj_written = _finalize_inband_world_evolution(simulation_dir, log_manager.info)
+
     # NEXTSTEPS P1-1/P1-2/P1-4: 模拟结束后演化"结果世界态"——按轮 elicit 各活跃 agent 的承诺
     # （朝哪个 forecast 情景），资源加权步进 WorldState，落 world_state_trajectory.json +
     # decisions.jsonl + 终局 outcome（report/集成读它而非声量份额 final_stance_share）。
     # 默认关（SIM_DECISION_CHANNEL!=true 完全跳过，与现状一致）；全程 try/except 隔离。
+    # CAL-TEMPORAL: 保留为 hours 模式主路径 + 日历模式 in-band 未产出轨迹时的回退
+    # （回退时传 round_dates → 输出同为带日期的 schema v3）。
     _ws_seed = config.get("world_state_seed") if isinstance(config, dict) else None
     if (os.environ.get("SIM_DECISION_CHANNEL", "false").strip().lower() == "true"
-            and isinstance(_ws_seed, dict) and _ws_seed.get("scenarios")):
+            and isinstance(_ws_seed, dict) and _ws_seed.get("scenarios")
+            and not _inband_traj_written):
         try:
             from app.services.decision_channel import run_decision_channel
             from app.utils.llm_client import LLMClient
@@ -3932,10 +4722,17 @@ async def main():
                 _eps = float(os.environ.get("SIM_CONVERGENCE_EPS", "0.02") or "0.02")
             except ValueError:
                 _eps = 0.02
+            _tc_posthoc = config.get("temporal_config") if isinstance(config, dict) else None
+            _tc_posthoc = _tc_posthoc if isinstance(_tc_posthoc, dict) else {}
             _res = run_decision_channel(
                 _acts, config.get("agent_configs"), _ws_seed, LLMClient(),
                 inertia=_inertia, conv_eps=_eps,
                 round_to_date=_build_round_to_date(_ws_seed, config),
+                # 日历模式回退：精确 round→时段映射（hours 模式无 temporal_config → None，
+                # 旧路径逐字节不变）
+                round_dates=(_tc_posthoc.get("round_dates")
+                             if str(_tc_posthoc.get("mode") or "").lower() == "calendar"
+                             else None),
             )
             if _res:
                 write_json_atomic(

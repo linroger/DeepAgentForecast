@@ -19,9 +19,11 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 
 from ..config import Config
+from ..utils import sim_timeline
 from ..utils.actors import (
     actors_digest,
     build_initial_follow_graph,
+    events_to_calendar_rounds,
     events_to_schedule,
     extract_actor_rows,
     extract_relationship_rows,
@@ -33,6 +35,7 @@ from ..utils.actors import (
     relation_valence,
     situation_brief_block,
 )
+from ..utils.dates import parse_as_of
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .zep_entity_reader import EntityNode, ZepEntityReader
@@ -204,6 +207,12 @@ class AgentActivityConfig:
     gains_if: str = ""
     loses_if: str = ""
 
+    # TEMPORAL: 激活节奏分层。"sampled"（默认）= 按活跃度概率采样激活；"principal" =
+    # 日历模式运行脚本每轮无条件激活的主角（非受众且 influence_weight ≥ 0.6 的前 20 名，
+    # 一个季度什么都不做的主角是建模错误）。小时制运行路径不读取该字段（additive 新键，
+    # 不改变旧行为）。
+    cadence: str = "sampled"
+
 
 @dataclass
 class TimeSimulationConfig:
@@ -315,6 +324,11 @@ class SimulationParameters:
     # 空串 → to_dict() 省略该字段（可降级不变式：未启用时配置 JSON 与今日逐字节一致）。
     world_brief: str = ""
 
+    # TEMPORAL spec §3: 顶层 temporal_config 块（日历模式时间线的序列化形态，
+    # schema_version=1）。运行侧只按该块是否存在分派新旧路径；None → to_dict() 省略字段
+    # （小时制 / SIM_TEMPORAL_MODE=hours 时配置 JSON 与今日逐字节一致）。
+    temporal_config: Optional[Dict[str, Any]] = None
+
     # 生成元数据
     generated_at: str = field(default_factory=lambda: datetime.now().isoformat())
     generation_reasoning: str = ""  # LLM的推理说明
@@ -343,6 +357,10 @@ class SimulationParameters:
         # 消费，缺失即整体跳过注入（degrade-safe）。
         if self.world_brief:
             data["world_brief"] = self.world_brief
+        # TEMPORAL spec §3: 日历模式附加顶层 temporal_config（additive；旧 time_config
+        # 永不改义）。None → 省略字段，运行侧据此走小时制旧路径（字节不变）。
+        if self.temporal_config:
+            data["temporal_config"] = self.temporal_config
         return data
     
     def to_json(self, indent: int = 2) -> str:
@@ -443,6 +461,9 @@ class SimulationConfigGenerator:
         # global_market 画像（作息/提示词口径与英文语料一致）。显式 env 永远优先；
         # research_language 未传（旧调用方）→ 覆盖为 None，画像选择与今日完全一致。
         self._profile_override = None
+        # TEMPORAL: 先复位，避免上一次 generate_config 的时间线泄漏到本次（下方按
+        # SIM_TEMPORAL_MODE 重建；hours / 构建失败 → 保持 None，全程走旧小时制分支）。
+        self._temporal_timeline = None
         if (research_language
                 and str(research_language).strip().lower().startswith("en")
                 and not str(os.environ.get("SIM_ACTIVITY_PROFILE", "") or "").strip()):
@@ -473,12 +494,50 @@ class SimulationConfigGenerator:
         if self._profile_override:
             reasoning_parts.append(f"活动画像: {self._profile_override}（英文调研自动选择）")
 
+        # ========== 日历时间线（TEMPORAL spec §4）==========
+        # SIM_TEMPORAL_MODE=calendar（默认）→ 解析 as_of / 判定日，把 (as_of, horizon]
+        # 按自然日历网格切成回合，随后作为顶层 temporal_config 序列化（运行侧只按该块
+        # 是否存在分派新旧路径）。hours / 构建失败 → temporal_timeline=None，下方所有
+        # 分支走旧小时制路径（字节不变，degrade-safe）。
+        temporal_timeline = None
+        if str(getattr(Config, "SIM_TEMPORAL_MODE", "hours") or "").strip().lower() == "calendar":
+            try:
+                temporal_timeline = self._build_temporal_timeline(
+                    simulation_requirement, actors, context, max_rounds
+                )
+                logger.info(
+                    f"日历时间线: {temporal_timeline.unit}×{temporal_timeline.n_rounds} 轮 "
+                    f"({temporal_timeline.as_of_date} → {temporal_timeline.horizon_date}, "
+                    f"horizon_source={temporal_timeline.horizon_source})"
+                )
+                reasoning_parts.append(
+                    f"日历时间线: {temporal_timeline.unit}×{temporal_timeline.n_rounds} 轮, "
+                    f"判定日 {temporal_timeline.horizon_date}（{temporal_timeline.horizon_source}）"
+                )
+            except Exception as e:
+                logger.warning(f"日历时间线构建失败（降级回小时制路径）: {e}")
+                temporal_timeline = None
+        self._temporal_timeline = temporal_timeline
+
         # ========== 步骤1: 生成时间配置 ==========
         report_progress(1, "生成时间配置...")
         num_entities = len(entities)
-        time_config_result = self._generate_time_config(context, num_entities)
-        time_config = self._parse_time_config(time_config_result, num_entities)
-        reasoning_parts.append(f"时间配置: {time_config_result.get('reasoning', '成功')}")
+        if temporal_timeline is not None:
+            # TEMPORAL: 日历模式跳过 _generate_time_config 的 LLM 调用（昼夜作息输出对
+            # 「一轮=一个日历时段」无意义，还省一次调用），改用确定性默认配置并覆盖
+            # 兼容垫片字段 total_simulation_hours=n_rounds、minutes_per_round=60——所有
+            # 旧的 rounds = hours*60/minutes_per_round 重算点无需修改即得到正确轮数。
+            time_config_result = self._get_default_time_config(num_entities)
+            time_config = self._parse_time_config(time_config_result, num_entities)
+            time_config.total_simulation_hours = temporal_timeline.n_rounds
+            time_config.minutes_per_round = 60
+            reasoning_parts.append(
+                f"时间配置: 日历模式垫片（{temporal_timeline.n_rounds} 轮，跳过LLM作息生成）"
+            )
+        else:
+            time_config_result = self._generate_time_config(context, num_entities)
+            time_config = self._parse_time_config(time_config_result, num_entities)
+            reasoning_parts.append(f"时间配置: {time_config_result.get('reasoning', '成功')}")
 
         # ========== 步骤2: 生成事件配置 ==========
         report_progress(2, "生成事件配置和热点话题...")
@@ -569,6 +628,17 @@ class SimulationConfigGenerator:
         except Exception as e:
             logger.warning(f"受众群体生成失败（降级跳过，不影响模拟）: {e}")
 
+        # ========== 主角节奏分层（TEMPORAL cadence tiering）==========
+        # 非受众且 influence_weight ≥ 0.6 的阵容按影响力降序（并列按 agent_id 升序）取前
+        # 20 名标记 cadence="principal"；受众与其余保持默认 "sampled"。日历模式运行脚本
+        # 每轮无条件激活 principal；小时制运行路径不读该字段（additive，不改变旧行为）。
+        try:
+            n_principal = self._assign_cadence_tiers(all_agent_configs)
+            if n_principal:
+                reasoning_parts.append(f"主角节奏: {n_principal} 个 principal")
+        except Exception as e:
+            logger.warning(f"主角节奏分层失败（全部保持 sampled）: {e}")
+
         # ========== 构建初始关注图（T3.2）==========
         # 研究 relationships[] → 有向关注边（方向遵循 actors.build_initial_follow_graph 的语义），
         # 再用图谱邻边补充（relationships[] 稀疏时也能成形）。模拟开始前注入，杜绝空社交图。
@@ -585,7 +655,8 @@ class SimulationConfigGenerator:
         # 运行脚本在对应轮次以 CREATE_POST 触发。无 key_events / 无法解析 → 空，不影响模拟。
         try:
             event_config.scheduled_events = self._build_scheduled_events(
-                actors, time_config, all_agent_configs, max_rounds=max_rounds
+                actors, time_config, all_agent_configs, max_rounds=max_rounds,
+                timeline=temporal_timeline,
             )
             if event_config.scheduled_events:
                 reasoning_parts.append(f"定时事件: {len(event_config.scheduled_events)} 个")
@@ -647,6 +718,9 @@ class SimulationConfigGenerator:
             reddit_config=reddit_config,
             as_of_date=(str((actors or {}).get("as_of_date")) if isinstance(actors, dict) and actors.get("as_of_date") else None),
             world_brief=world_brief,
+            # TEMPORAL spec §3: beyond_horizon_events/warnings 已在 _build_scheduled_events
+            # 中回填到 timeline，此处一次性序列化（None → to_dict 省略字段）。
+            temporal_config=(asdict(temporal_timeline) if temporal_timeline is not None else None),
             llm_provider=self.provider,
             llm_model=self.model_name,
             llm_base_url=self.base_url,
@@ -728,12 +802,124 @@ class SimulationConfigGenerator:
         valid = {c.agent_id for c in agent_configs}
         return [[a, b] for (a, b) in sorted(pairs) if a in valid and b in valid]
 
+    # TEMPORAL: principal 节奏名额上限与影响力门槛（全体主角每轮必激活，规模失控会挤掉采样阵容）
+    PRINCIPAL_CADENCE_MAX = 20
+    PRINCIPAL_CADENCE_MIN_INFLUENCE = 0.6
+
+    def _assign_cadence_tiers(self, agent_configs: List[AgentActivityConfig]) -> int:
+        """TEMPORAL: 非受众且 influence_weight ≥ 0.6 的阵容按影响力降序（并列按 agent_id
+        升序）取前 20 名标记 cadence="principal"；其余（含全部受众）保持 "sampled"。
+        返回标记数。确定性实现，不依赖随机数。"""
+        eligible = [
+            c for c in agent_configs
+            if c.entity_type != self.AUDIENCE_ENTITY_TYPE
+            and c.influence_weight >= self.PRINCIPAL_CADENCE_MIN_INFLUENCE
+        ]
+        eligible.sort(key=lambda c: (-c.influence_weight, c.agent_id))
+        chosen = eligible[:self.PRINCIPAL_CADENCE_MAX]
+        for c in chosen:
+            c.cadence = "principal"
+        return len(chosen)
+
+    def _build_temporal_timeline(
+        self,
+        simulation_requirement: str,
+        actors: Optional[Dict[str, Any]],
+        context: str,
+        max_rounds: Optional[int] = None,
+    ) -> sim_timeline.SimulationTimeline:
+        """TEMPORAL spec §4: 解析 as_of 与判定日（horizon），构建日历回合时间线。
+
+        * as_of：actors["as_of_date"] 经 parse_as_of 解析；不可解析/缺失 → 运行日 +
+          warning ``as_of_defaulted``。
+        * 判定日阶梯：sim_timeline.extract_horizon（确定性四层，输入 =
+          模拟需求 + "\\n" + central_question）→ _llm_extract_horizon（单次 JSON 兜底）
+          → default_horizon(as_of, SIM_HORIZON_DEFAULT_MONTHS)。
+        * target_max = min(SIM_CALENDAR_TARGET_MAX_ROUNDS, max_rounds, OASIS_DEFAULT_MAX_ROUNDS)
+          （后两者未设/非正视为 ∞）——显式回合上限只粗化时间粒度、绝不截断预测期
+          （build_timeline 记 round_cap_coarsened）。
+        """
+        as_of_raw = actors.get("as_of_date") if isinstance(actors, dict) else None
+        parsed = parse_as_of(as_of_raw)
+        as_of_defaulted = parsed is None
+        as_of = parsed.date() if parsed is not None else datetime.now().date()
+        if as_of_defaulted:
+            logger.warning(f"as_of_date 不可解析（{as_of_raw!r}），默认取运行日 {as_of.isoformat()}")
+
+        # 判定日阶梯：确定性抽取 → LLM 兜底 → 默认 12 个月
+        cq = str(actors.get("central_question", "") or "") if isinstance(actors, dict) else ""
+        horizon = sim_timeline.extract_horizon(f"{simulation_requirement}\n{cq}", as_of)
+        if horizon is None:
+            horizon = self._llm_extract_horizon(context, as_of)
+        if horizon is None:
+            horizon = sim_timeline.default_horizon(
+                as_of, int(getattr(Config, "SIM_HORIZON_DEFAULT_MONTHS", 12) or 12)
+            )
+
+        target_max = int(getattr(Config, "SIM_CALENDAR_TARGET_MAX_ROUNDS", 36) or 36)
+        try:
+            if max_rounds is not None and int(max_rounds) > 0:
+                target_max = min(target_max, int(max_rounds))
+        except (TypeError, ValueError):
+            pass
+        oasis_cap = int(getattr(Config, "OASIS_DEFAULT_MAX_ROUNDS", 0) or 0)
+        if oasis_cap > 0:
+            target_max = min(target_max, oasis_cap)
+
+        timeline = sim_timeline.build_timeline(
+            as_of,
+            horizon,
+            target_max=target_max,
+            reference_max=int(getattr(Config, "SIM_CALENDAR_TARGET_MAX_ROUNDS", 36) or 36),
+            hard_max=int(getattr(Config, "SIM_CALENDAR_HARD_MAX_ROUNDS", 48) or 48),
+        )
+        if as_of_defaulted:
+            timeline.warnings.append("as_of_defaulted")
+        return timeline
+
+    def _llm_extract_horizon(self, context: str, as_of) -> Optional[sim_timeline.HorizonResult]:
+        """TEMPORAL: 确定性四层抽取落空时的 LLM 兜底——单次 JSON 调用抽取判定日。
+
+        约定返回 ``{"horizon_date": "YYYY-MM-DD" | null}``；结果经 parse_as_of 复验，
+        且必须落在 (as_of, as_of+30年] 内，否则丢弃返回 None（继续降级到默认时域）。
+        任何调用/解析异常 → None，绝不阻断配置生成。
+        """
+        context_truncated = context[:self.TIME_CONFIG_CONTEXT_LENGTH]
+        prompt = f"""从以下预测问题与背景材料中找出「预测判定日」（问题所问的结果应在哪一天之前见分晓）。
+
+{context_truncated}
+
+## 任务
+只返回JSON（不要markdown）：
+{{"horizon_date": "YYYY-MM-DD"}}
+
+规则：
+- 优先取问题文本中明示的期限/日期；只给年份时取该年12月31日
+- 材料中找不到任何期限线索时返回 {{"horizon_date": null}}
+- 不要编造：宁可返回 null 也不要猜一个没有依据的日期"""
+        system_prompt = "你是预测问题分析专家。返回纯JSON格式。"
+        try:
+            result = self._call_llm_with_retry(prompt, system_prompt)
+        except Exception as e:
+            logger.warning(f"判定日LLM兜底失败: {e}")
+            return None
+        parsed = parse_as_of((result or {}).get("horizon_date"))
+        if parsed is None:
+            return None
+        d = parsed.date()
+        limit = sim_timeline._add_months(as_of, 360)  # as_of + 30 年（真日历加法）
+        if not (as_of < d <= limit):
+            logger.warning(f"判定日LLM兜底越界丢弃: {d.isoformat()} (as_of={as_of.isoformat()})")
+            return None
+        return sim_timeline.HorizonResult(d.isoformat(), "llm", "", False, 0.7)
+
     def _build_scheduled_events(
         self,
         actors: Optional[Dict[str, Any]],
         time_config: "TimeSimulationConfig",
         agent_configs: List[AgentActivityConfig],
         max_rounds: Optional[int] = None,
+        timeline: Optional[sim_timeline.SimulationTimeline] = None,
     ) -> List[Dict[str, Any]]:
         """T3.8: 研究 key_events → 映射到 [0,total_rounds) 的定时事件，附最相关高影响力发布者。
 
@@ -745,26 +931,52 @@ class SimulationConfigGenerator:
         而事件此前按配置全轮数（如 72）排期——关键 flashpoint 落在截断窗口外被静默丢弃。
         排期域改为 min(配置轮数, 执行轮数预算)：显式 max_rounds 优先；未接线时按
         SIM_SCHEDULE_CLAMP_ROUNDS 回退到 OASIS_DEFAULT_MAX_ROUNDS。预算<=0 → 不变。
+
+        TEMPORAL spec §4: 传入 ``timeline``（日历模式）→ 改走 events_to_calendar_rounds
+        的区间包含落轮：不做比例压缩、不做 PREP-5 反应缓冲（fire_scheduled_events 在每轮
+        agent 激活前触发，同期反应有保障），事件内容加 ``[日期] `` 前缀；晚于判定日的
+        事件完整留档到 timeline.beyond_horizon_events，日期不可解析的条目排除并记
+        ``event_date_unparsed:<n>`` warning。timeline=None（小时制）→ 旧路径字节不变。
         """
         if not isinstance(actors, dict) or not agent_configs:
             return []
-        config_rounds = max(
-            1,
-            int(time_config.total_simulation_hours * 60 / max(1, time_config.minutes_per_round)),
-        )
-        budget = 0
-        try:
-            if max_rounds is not None and int(max_rounds) > 0:
-                budget = int(max_rounds)
-            elif getattr(Config, "SIM_SCHEDULE_CLAMP_ROUNDS", True):
-                budget = int(getattr(Config, "OASIS_DEFAULT_MAX_ROUNDS", 0) or 0)
-        except (TypeError, ValueError):
+        calendar = timeline is not None
+        if calendar:
+            schedule, beyond = events_to_calendar_rounds(
+                actors, timeline.round_dates, timeline.as_of_date, timeline.horizon_date
+            )
+            timeline.beyond_horizon_events = beyond
+            evs = actors.get("key_events")
+            unparsed = sum(
+                1 for e in (evs if isinstance(evs, list) else [])
+                if isinstance(e, dict) and parse_as_of(e.get("date")) is None
+            )
+            if unparsed:
+                timeline.warnings.append(f"event_date_unparsed:{unparsed}")
+                logger.warning(f"定时事件: {unparsed} 个事件日期不可解析，已排除")
+            if beyond:
+                logger.info(
+                    f"定时事件: {len(beyond)} 个事件晚于判定日 {timeline.horizon_date}，"
+                    f"留档 beyond_horizon_events 不落轮"
+                )
+        else:
+            config_rounds = max(
+                1,
+                int(time_config.total_simulation_hours * 60 / max(1, time_config.minutes_per_round)),
+            )
             budget = 0
-        total_rounds = min(config_rounds, budget) if budget > 0 else config_rounds
-        if total_rounds < config_rounds:
-            logger.info(f"定时事件: 排期轮数按执行预算钳制 {config_rounds} -> {total_rounds}")
-        as_of = actors.get("as_of_date")
-        schedule = events_to_schedule(actors, total_rounds, as_of)
+            try:
+                if max_rounds is not None and int(max_rounds) > 0:
+                    budget = int(max_rounds)
+                elif getattr(Config, "SIM_SCHEDULE_CLAMP_ROUNDS", True):
+                    budget = int(getattr(Config, "OASIS_DEFAULT_MAX_ROUNDS", 0) or 0)
+            except (TypeError, ValueError):
+                budget = 0
+            total_rounds = min(config_rounds, budget) if budget > 0 else config_rounds
+            if total_rounds < config_rounds:
+                logger.info(f"定时事件: 排期轮数按执行预算钳制 {config_rounds} -> {total_rounds}")
+            as_of = actors.get("as_of_date")
+            schedule = events_to_schedule(actors, total_rounds, as_of)
         if not schedule:
             return []
         # 名字 → agent 索引（用于把事件定向到被提及的真实角色）
@@ -785,7 +997,9 @@ class SimulationConfigGenerator:
             poster = poster or fallback
             out.append({
                 "round": int(ev.get("round", 0)),
-                "content": text,
+                # TEMPORAL: 日历模式给事件内容加 "[日期] " 前缀，让 agent 看到确切日期；
+                # 小时制内容不变（字节不变）。
+                "content": (f"[{ev.get('date')}] {text}" if calendar else text),
                 "date": ev.get("date"),
                 "poster_agent_id": poster.agent_id,
                 "poster_name": poster.entity_name,
@@ -1766,6 +1980,13 @@ class SimulationConfigGenerator:
         profile = self._activity_profile()
         agent_prompt_rhythm = profile["agent_prompt_rhythm"]
         agent_active_hours_hint = profile["agent_active_hours_hint"]
+        # TEMPORAL spec §4: 日历模式（generate_config 已建时间线）删去昼夜作息提示行——
+        # 「一轮=一个日历时段」下按小时的作息节律无意义；active_hours/响应延迟字段照常
+        # 要求（运行时不消费，不破坏 schema）。小时制 rhythm_line 与历史逐字节一致。
+        if getattr(self, "_temporal_timeline", None) is not None:
+            rhythm_line = ""
+        else:
+            rhythm_line = f"{agent_prompt_rhythm}\n"
 
         prompt = f"""基于以下信息，为每个实体生成社交媒体活动配置。
 
@@ -1778,8 +1999,7 @@ class SimulationConfigGenerator:
 
 ## 任务
 为每个实体生成活动配置，注意：
-{agent_prompt_rhythm}
-- **官方机构**（University/GovernmentAgency）：活跃度低(0.1-0.3)，工作时间(9-17)活动，响应慢(60-240分钟)，影响力高(2.5-3.0)
+{rhythm_line}- **官方机构**（University/GovernmentAgency）：活跃度低(0.1-0.3)，工作时间(9-17)活动，响应慢(60-240分钟)，影响力高(2.5-3.0)
 - **媒体**（MediaOutlet）：活跃度中(0.4-0.6)，全天活动(8-23)，响应快(5-30分钟)，影响力高(2.0-2.5)
 - **个人**（Student/Person/Alumni）：活跃度高(0.6-0.9)，主要晚间活动(18-23)，响应快(1-15分钟)，影响力低(0.8-1.2)
 - **公众人物/专家**：活跃度中(0.4-0.6)，影响力中高(1.5-2.0){research_rule}

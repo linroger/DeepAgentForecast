@@ -22,6 +22,7 @@ from flask import jsonify, request
 from . import research_bp
 from ..config import Config
 from ..services.pipeline_orchestrator import PipelineManager, PipelineOrchestrator, preflight_pipeline
+from ..services.research_progress import merged_research_progress_tail
 from ..utils.logger import get_logger
 
 logger = get_logger('mirofish.api.research')
@@ -297,7 +298,10 @@ def pipeline_status(pipeline_id: str):
     data = PipelineManager.load(pipeline_id)
     if data is None:
         return jsonify({"success": False, "error": "管线不存在"}), 404
-    return jsonify({"success": True, "data": data})
+    response = jsonify({"success": True, "data": data})
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @research_bp.route('/list', methods=['GET'])
@@ -361,13 +365,32 @@ def get_dossier(pipeline_id: str):
     actors_raw = _read('actors.json')
     sources_raw = _read('sources.json')
     timeline_raw = _read('timeline.json')  # T5.2: 一等公民时间线
+    quantitative_raw = _read('quantitative.json')
+    contested_raw = _read('contested.json')
+    markets_raw = _read('prediction_markets.json')
+    charts_raw = _read('charts.json')
+
+    def _decode(raw):
+        try:
+            return _json.loads(raw) if raw else None
+        except (TypeError, ValueError):
+            return None
+
     return jsonify({
         "success": True,
         "data": {
             "report": report,
-            "actors": _json.loads(actors_raw) if actors_raw else None,
-            "sources": _json.loads(sources_raw) if sources_raw else None,
-            "timeline": _json.loads(timeline_raw) if timeline_raw else None,
+            "actors": _decode(actors_raw),
+            "sources": _decode(sources_raw),
+            "timeline": _decode(timeline_raw),
+            "quantitative": _decode(quantitative_raw),
+            "contested": _decode(contested_raw),
+            # Market signals are useful even when none are semantically exact
+            # enough to become a model-vs-market forecast anchor.  Surface the
+            # canonical status rather than hiding the entire lane behind the
+            # final report's comparison matcher.
+            "prediction_markets": _decode(markets_raw),
+            "charts": _decode(charts_raw),
             "has_report": report is not None,
         },
     })
@@ -464,6 +487,24 @@ def get_artifact(pipeline_id: str, name: str):
             '.html': 'text/html; charset=utf-8',
         }.get(_ext)
         if _asset_mime:
+            if name.startswith("chart_"):
+                # Revalidate the persisted pointer at serve time. A renderer can
+                # replace a once-regular chart with a symlink after a live scan;
+                # formal/partial registration is therefore not a trust boundary.
+                handoff = os.path.realpath(PipelineManager.handoff_dir(pipeline_id))
+                charts_root = os.path.realpath(os.path.join(handoff, "charts"))
+                resolved = os.path.realpath(path)
+                expected_file = name[len("chart_"):]
+                if (os.path.basename(path) != expected_file
+                        or os.path.basename(resolved) != expected_file
+                        or os.path.islink(path)
+                        or not os.path.isfile(resolved)
+                        or os.path.commonpath([resolved, charts_root]) != charts_root):
+                    return jsonify({
+                        "success": False,
+                        "error": f"产物 '{name}' 不存在",
+                    }), 404
+                path = resolved
             from flask import send_file
             response = send_file(path, mimetype=_asset_mime)
             if _ext == '.html':
@@ -471,6 +512,13 @@ def get_artifact(pipeline_id: str, name: str):
                     "sandbox allow-scripts; default-src 'none'; "
                     "script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
                     "img-src data: blob:; font-src data:; connect-src 'none'"
+                )
+                response.headers["X-Content-Type-Options"] = "nosniff"
+                response.headers["Referrer-Policy"] = "no-referrer"
+            elif _ext == '.svg':
+                response.headers["Content-Security-Policy"] = (
+                    "sandbox; default-src 'none'; script-src 'none'; "
+                    "style-src 'unsafe-inline'; img-src data:; font-src data:"
                 )
                 response.headers["X-Content-Type-Options"] = "nosniff"
                 response.headers["Referrer-Policy"] = "no-referrer"
@@ -487,18 +535,31 @@ def get_artifact(pipeline_id: str, name: str):
 
 @research_bp.route('/<pipeline_id>/progress', methods=['GET'])
 def get_progress_log(pipeline_id: str):
-    """返回研究子进程进度日志的尾部（默认最后 200 行），用于前端控制台。"""
+    """返回研究子进程进度日志的实时合并尾部，用于前端控制台。
+
+    并行研究时 producer 写在 ``handoff/track_N/research_progress.log``；根目录日志直到
+    单轨/收尾路径才可能存在。每个文件只读有界尾部，再按 ISO 时间戳合并、去重并截断，
+    因此轮询不会随数小时运行产生的多 MB 日志线性变慢。
+    """
     handoff = PipelineManager.handoff_dir(pipeline_id)
-    log_path = os.path.join(handoff, 'research_progress.log')
-    if not os.path.exists(log_path):
-        return jsonify({"success": True, "data": {"lines": []}})
     try:
         limit = int(request.args.get('lines', '200'))
     except ValueError:
         limit = 200
     try:
-        with open(log_path, 'r', encoding='utf-8') as f:
-            lines = f.read().splitlines()
-        return jsonify({"success": True, "data": {"lines": lines[-limit:], "total": len(lines)}})
+        tail = merged_research_progress_tail(handoff, limit)
+        response = jsonify({"success": True, "data": {
+            "lines": tail.lines,
+            "returned": len(tail.lines),
+            # Exact historical line counts require an O(file) scan and are
+            # deliberately unavailable on this live bounded endpoint.
+            "total": None,
+            "total_exact": False,
+            "source_count": tail.source_count,
+            "truncated": tail.truncated,
+        }})
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        return response
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

@@ -893,7 +893,7 @@ class TwitterSimulationRunner:
                 agent_names[agent_id] = getattr(agent, 'name', f'Agent_{agent_id}')
         last_rowid = 0  # 已处理 trace 记录的最大 rowid
         total_actions = 0
-        action_logger.log_simulation_start(self.config)
+        action_logger.log_simulation_start(self.config, total_rounds)
 
         # 执行初始事件
         event_config = self.config.get("event_config", {})

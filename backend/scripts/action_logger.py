@@ -65,22 +65,29 @@ class PlatformActionLogger:
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
-    def log_round_start(self, round_num: int, simulated_hour: int):
-        """记录轮次开始"""
+    def log_round_start(self, round_num: int, simulated_hour: int,
+                        period_label: Optional[str] = None):
+        """记录轮次开始。period_label=日历模式的时段标签（如 "2027-Q3"），
+        hours 模式不传 → 输出逐字节不变。"""
         entry = {
             "round": round_num,
             "timestamp": datetime.now().isoformat(),
             "event_type": "round_start",
             "simulated_hour": simulated_hour,
         }
-        
+        if period_label is not None:
+            entry["period_label"] = period_label
+
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
-    
+
     def log_round_end(self, round_num: int, actions_count: int,
-                      simulated_hours: Optional[float] = None):
+                      simulated_hours: Optional[float] = None,
+                      period_end: Optional[str] = None):
         """记录轮次结束。simulated_hours=累计已模拟小时数——runner 的 round_end 对账
-        （simulation_runner state.simulated_hours）以此为唯一数据源，缺省则对账值恒为 0。"""
+        （simulation_runner state.simulated_hours）以此为唯一数据源，缺省则对账值恒为 0。
+        period_end=日历模式本轮覆盖时段的结束日（ISO），runner 据此推进 current_period_end；
+        hours 模式不传 → 输出逐字节不变。"""
         entry = {
             "round": round_num,
             "timestamp": datetime.now().isoformat(),
@@ -89,17 +96,21 @@ class PlatformActionLogger:
         }
         if simulated_hours is not None:
             entry["simulated_hours"] = simulated_hours
+        if period_end is not None:
+            entry["period_end"] = period_end
 
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
-    
-    def log_simulation_start(self, config: Dict[str, Any]):
-        """记录模拟开始"""
+
+    def log_simulation_start(self, config: Dict[str, Any], total_rounds: int):
+        """记录模拟开始。total_rounds 由调用方显式给出——旧实现按
+        total_simulation_hours*2 硬编码推算，早已与真实轮数公式
+        （total_hours*60/minutes_per_round + 截断/日历 n_rounds）脱节（陈旧 bug）。"""
         entry = {
             "timestamp": datetime.now().isoformat(),
             "event_type": "simulation_start",
             "platform": self.platform,
-            "total_rounds": config.get("time_config", {}).get("total_simulation_hours", 72) * 2,
+            "total_rounds": total_rounds,
             "agents_count": len(config.get("agent_configs", [])),
         }
         

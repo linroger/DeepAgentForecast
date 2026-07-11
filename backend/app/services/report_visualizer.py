@@ -102,6 +102,16 @@ except Exception:  # noqa: BLE001
 _KALEIDO_RUNTIME_OK = True  # 运行期熔断标志（首个渲染异常后本进程不再尝试 PNG 导出）
 
 
+def _close_matplotlib_figure(fig: Any) -> None:
+    """Close one builder-owned figure without touching figures from concurrent callers."""
+    if fig is None or plt is None:
+        return
+    try:
+        plt.close(fig)
+    except Exception:  # noqa: BLE001 - cleanup must never mask the render result
+        pass
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 内部小工具（纯函数）
 # ─────────────────────────────────────────────────────────────────────────────
@@ -220,44 +230,243 @@ def _san_label(text: Any, max_len: int = 80) -> str:
     return s
 
 
-# 已知的中文对比维度名 → 英文（comparison.json 的 dimensions 来自 report_agent 的
-# _scenario_diff_structured，维度名为中文；matplotlib 默认字体无 CJK 字形，故映射为英文，
-# 保证 PDF 宽度下可读、无缺字方块）。
-_COMPARISON_DIM_EN = {
-    "总动作量": "Total actions",
-    "峰值轮次": "Peak round",
-    "执行轮数": "Rounds executed",
-    "参与 Agent 数": "Active agents",
-    "活跃度变化最大 Agent": "Top mover",
-}
-
-
 def _mpl_text(text: Any, fallback: str = "", max_len: int = 60) -> str:
-    """matplotlib 文本标签的字形安全化：先套用已知中文维度→英文映射，再剔除默认字体
-    （DejaVu Sans）无法渲染的字形（CJK/假名/谚文等，ord ≥ 0x2E80），折叠空白并截断。
-    结果为空 → fallback。避免 PNG 里出现缺字方块 + UserWarning，保证「clean English labels」。"""
+    """Normalize a static-chart label without changing its language or identity.
+
+    CJK text used to be stripped and replaced by labels such as ``Actor 4`` or ``Event``.  That is
+    semantically false.  Font support is now checked separately by :func:`_mpl_font_for_text`;
+    renderers either use a real installed font that covers every CJK codepoint or skip the chart.
+    ``fallback`` therefore applies only to genuinely empty input.
+    """
     s = str(text if text is not None else "").strip()
-    s = _COMPARISON_DIM_EN.get(s, s)
-    # 保留 Latin/Greek/Cyrillic/常见标点（< 0x2E80）；丢弃 CJK 及以上的非拉丁字形。
-    kept = "".join(ch for ch in s if ord(ch) < 0x2E80)
-    kept = re.sub(r"\s+", " ", kept).strip()
-    if not kept:
+    s = re.sub(r"\s+", " ", s).strip()
+    if not s:
         return fallback
-    if len(kept) > max_len:
-        kept = kept[: max_len - 1].rstrip() + "…"
+    if len(s) > max_len:
+        s = s[: max_len - 1].rstrip() + "…"
     # WAVE9：成对 '$' 会触发 matplotlib mathtext（'$100B vs $65B' 变斜体数学式），反斜杠转义。
-    if kept.count("$") >= 2:
-        kept = kept.replace("$", r"\$")
-    return kept
+    if s.count("$") >= 2:
+        s = s.replace("$", r"\$")
+    return s
+
+
+_CJK_FONT_FAMILIES = (
+    "Noto Sans CJK SC", "Noto Sans CJK TC", "Noto Sans CJK JP",
+    "Source Han Sans SC", "Source Han Sans CN", "Microsoft YaHei", "SimHei",
+    "PingFang SC", "PingFang HK", "Hiragino Sans GB", "Hiragino Sans",
+    "Arial Unicode MS", "WenQuanYi Zen Hei", "Malgun Gothic",
+)
+_MPL_CJK_FONT_CACHE: Optional[List[Tuple[Any, frozenset]]] = None
+
+
+def _cjk_codepoints(text: Any) -> frozenset:
+    """Return CJK/Japanese/Korean codepoints whose glyph coverage must be explicit."""
+    points = set()
+    for char in str(text or ""):
+        value = ord(char)
+        if (0x2E80 <= value <= 0x303F or 0x3040 <= value <= 0x30FF
+                or 0x3100 <= value <= 0x312F or 0x31A0 <= value <= 0x31EF
+                or 0x3200 <= value <= 0x33FF or 0x3400 <= value <= 0x4DBF
+                or 0x4E00 <= value <= 0x9FFF or 0xAC00 <= value <= 0xD7AF
+                or 0xF900 <= value <= 0xFAFF or 0xFF00 <= value <= 0xFFEF
+                or 0x20000 <= value <= 0x2EBEF or 0x30000 <= value <= 0x323AF):
+            points.add(value)
+    return frozenset(points)
+
+
+def _installed_cjk_fonts() -> List[Tuple[Any, frozenset]]:
+    """Discover deterministic, installed Matplotlib fonts and cache their real charmaps."""
+    global _MPL_CJK_FONT_CACHE
+    if _MPL_CJK_FONT_CACHE is not None:
+        return _MPL_CJK_FONT_CACHE
+    found: List[Tuple[Any, frozenset]] = []
+    if not MATPLOTLIB_AVAILABLE:
+        _MPL_CJK_FONT_CACHE = found
+        return found
+    try:
+        from matplotlib import font_manager, ft2font
+
+        seen_paths = set()
+        font_logger = logging.getLogger("matplotlib.font_manager")
+        previous_level = font_logger.level
+        for family in _CJK_FONT_FAMILIES:
+            try:
+                font_logger.setLevel(logging.ERROR)
+                prop = font_manager.FontProperties(family=family)
+                path = font_manager.findfont(prop, fallback_to_default=False)
+                real_path = os.path.realpath(path)
+                if not real_path or real_path in seen_paths or not os.path.isfile(real_path):
+                    continue
+                charmap = frozenset(ft2font.FT2Font(real_path).get_charmap())
+                if charmap:
+                    found.append((font_manager.FontProperties(fname=real_path), charmap))
+                    seen_paths.add(real_path)
+            except Exception:  # noqa: BLE001 - one unavailable family is expected
+                continue
+            finally:
+                font_logger.setLevel(previous_level)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("CJK font discovery failed; static CJK charts will be skipped: %s", exc)
+    _MPL_CJK_FONT_CACHE = found
+    return found
+
+
+def _mpl_font_for_text(text: Any):
+    """Return a real font covering all CJK glyphs in *text*, or ``None`` if unavailable.
+
+    ``None`` also represents ordinary non-CJK text, which is safely handled by Matplotlib's
+    default font.  Callers distinguish the two cases with :func:`_cjk_codepoints`.
+    """
+    required = _cjk_codepoints(text)
+    if not required:
+        return None
+    for prop, charmap in _installed_cjk_fonts():
+        if required <= charmap:
+            return prop
+    return None
+
+
+def _mpl_labels_supported(text: Any) -> bool:
+    """True when text needs no CJK font or an installed font covers every CJK glyph."""
+    return not _cjk_codepoints(text) or _mpl_font_for_text(text) is not None
+
+
+def _font_at_size(prop: Any, size: float):
+    """Copy a FontProperties instance before applying an artist-specific point size."""
+    if prop is None:
+        return None
+    try:
+        copied = prop.copy()
+        copied.set_size(size)
+        return copied
+    except Exception:  # noqa: BLE001
+        return prop
+
+
+def _boxes_overlap(left: Tuple[float, float, float, float],
+                   right: Tuple[float, float, float, float], pad: float = 0.0) -> bool:
+    """Axis-aligned collision predicate shared by deterministic label planners."""
+    return not (left[2] + pad <= right[0] or right[2] + pad <= left[0]
+                or left[3] + pad <= right[1] or right[3] + pad <= left[1])
+
+
+def _timeline_label_plan(events: List[Dict[str, Any]], used_index: Dict[str, int],
+                         max_labels: int = 12) -> Dict[Tuple[Any, str], Dict[str, Any]]:
+    """Choose salient timeline labels and non-overlapping deterministic annotation slots.
+
+    Bounding boxes are conservative estimates in ``(date ordinal, lane units)``.  Labels near the
+    right boundary extend left; all others extend right.  A label is omitted when none of six
+    vertical slots is collision-free, which is preferable to publishing unreadable overprint.
+    """
+    if not events or not used_index or max_labels <= 0:
+        return {}
+    ranked = sorted(events, key=lambda event: (
+        -float(event.get("score", 0.0)), event["dt"], event["text"],
+    ))[:max_labels]
+    ordinals = [float(event["dt"].toordinal()) for event in events]
+    x_min, x_max = min(ordinals), max(ordinals)
+    span = max(30.0, x_max - x_min)
+    lane_count = max(1, len(used_index))
+    figure_height = max(3.8, 1.05 * lane_count + 2.4)
+    lane_points = max(42.0, figure_height * 72.0 * 0.68 / lane_count)
+    slots = (16, -20, 34, -38, 52, -56)
+    occupied: List[Tuple[float, float, float, float]] = []
+    plan: Dict[Tuple[Any, str], Dict[str, Any]] = {}
+
+    for event in ranked:
+        label = _mpl_text(event.get("text"), max_len=48)
+        if not label:
+            continue
+        x = float(event["dt"].toordinal())
+        lane = float(used_index[event["cat"]])
+        # Eight-point labels occupy roughly 0.55% of an 11-inch axis per Latin character;
+        # the estimate is deliberately conservative for full-width CJK glyphs.
+        width = max(span * 0.05, span * min(0.25, 0.0055 * len(label)))
+        extend_left = (x - x_min) / span > 0.72
+        x0, x1 = ((x - width, x) if extend_left else (x, x + width))
+        for slot in slots:
+            center_y = lane + slot / lane_points
+            half_height = 5.5 / lane_points
+            box = (x0, center_y - half_height, x1, center_y + half_height)
+            if any(_boxes_overlap(box, prior, pad=0.01) for prior in occupied):
+                continue
+            plan[(event["dt"], event["text"])] = {
+                "label": label,
+                "offset": (-4 if extend_left else 4, slot),
+                "ha": "right" if extend_left else "left",
+                "va": "bottom" if slot > 0 else "top",
+                "bbox": box,
+            }
+            occupied.append(box)
+            break
+    for index, key in enumerate(sorted(plan, key=lambda item: (item[0], item[1])), 1):
+        plan[key]["index"] = index
+    return plan
+
+
+def _actor_label_plan(nodes: List[str], positions: Dict[str, Tuple[float, float]],
+                      weights: Dict[str, float], max_labels: int = 22
+                      ) -> Dict[str, Dict[str, Any]]:
+    """Place high-value actor labels around nodes without deterministic box collisions."""
+    valid_nodes = [node for node in nodes if node in positions]
+    if not valid_nodes or max_labels <= 0:
+        return {}
+    xs = [positions[node][0] for node in valid_nodes]
+    ys = [positions[node][1] for node in valid_nodes]
+    x_span = max(max(xs) - min(xs), 1.0)
+    y_span = max(max(ys) - min(ys), 1.0)
+    scale = max(x_span, y_span)
+    center_x = sum(xs) / len(xs)
+    center_y = sum(ys) / len(ys)
+    occupied: List[Tuple[float, float, float, float]] = []
+    plan: Dict[str, Dict[str, Any]] = {}
+    ranked = sorted(valid_nodes, key=lambda node: (-weights.get(node, 0.0), node))[:max_labels]
+
+    for node in ranked:
+        label = _mpl_text(node, max_len=24)
+        if not label:
+            continue
+        x, y = positions[node]
+        radial = math.atan2(y - center_y, x - center_x)
+        if abs(x - center_x) + abs(y - center_y) < 1e-9:
+            radial = (sum((index + 1) * ord(char) for index, char in enumerate(node)) % 360
+                      ) * math.pi / 180.0
+        angles = (radial, radial + math.pi / 3, radial - math.pi / 3,
+                  radial + math.pi, radial + math.pi / 2, radial - math.pi / 2,
+                  0.0, math.pi)
+        half_width = max(x_span * 0.04, x_span * min(0.18, 0.0065 * len(label)))
+        half_height = y_span * 0.025
+        placed = False
+        for radius_factor in (0.07, 0.12, 0.18, 0.25, 0.34):
+            radius = scale * radius_factor
+            for angle in angles:
+                label_x = x + radius * math.cos(angle)
+                label_y = y + radius * math.sin(angle)
+                box = (label_x - half_width, label_y - half_height,
+                       label_x + half_width, label_y + half_height)
+                if any(_boxes_overlap(box, prior, pad=scale * 0.008)
+                       for prior in occupied):
+                    continue
+                # Keep labels clear of every node marker, not merely of other labels.
+                if any(box[0] - scale * 0.018 <= node_x <= box[2] + scale * 0.018
+                       and box[1] - scale * 0.018 <= node_y <= box[3] + scale * 0.018
+                       for node_x, node_y in positions.values()):
+                    continue
+                plan[node] = {"label": label, "xytext": (label_x, label_y), "bbox": box}
+                occupied.append(box)
+                placed = True
+                break
+            if placed:
+                break
+    return plan
 
 
 def _html_text(text: Any, fallback: str = "", max_len: int = 60) -> str:
-    """plotly HTML 标签的文本规整（ITEM-16）：先套用已知中文维度→英文映射（与图注一致），但
-    保留 CJK/非拉丁字形（浏览器字体可渲染，无缺字方块问题），仅折叠空白并截断。空 → fallback。
+    """plotly HTML 标签的文本规整（ITEM-16）：保留 CJK/非拉丁字形
+    （浏览器字体可渲染，无缺字方块问题），仅折叠空白并截断。空 → fallback。
     WAVE9：成对 '$' 会被 plotly/MathJax 当 LaTeX 数学式渲染（'$100B vs $65B' 变斜体乱排），
     改写为 HTML 实体 &#36;（显示不变、MathJax 不再匹配）。"""
     s = str(text if text is not None else "").strip()
-    s = _COMPARISON_DIM_EN.get(s, s)
     s = re.sub(r"\s+", " ", s).strip()
     if not s:
         return fallback
@@ -564,6 +773,7 @@ class ReportVisualizer:
         总为 None → 光杆柱状），无 ensemble 时回退 forecast scenarios 的区间键。无情景 → None。"""
         if not self._chart_ok():
             return None
+        fig = None
         try:
             rows = _extract_scenario_rows(forecast, ensemble)
             if not rows:
@@ -577,7 +787,8 @@ class ReportVisualizer:
                 nm = _mpl_text(r["name"], fallback=f"Scenario {i}", max_len=48)
                 names.append(nm)
                 probs.append(r["p"])
-                if r["lo"] is not None and r["hi"] is not None:
+                if (r["lo"] is not None and r["hi"] is not None
+                        and r["hi"] > r["lo"]):
                     lo_err.append(max(0.0, r["p"] - r["lo"]))
                     hi_err.append(max(0.0, r["hi"] - r["p"]))
                     has_err = True
@@ -586,6 +797,11 @@ class ReportVisualizer:
                     hi_err.append(0.0)
             if not probs:
                 return None
+            label_text = " ".join(names)
+            if not _mpl_labels_supported(label_text):
+                logger.info("scenario static chart skipped: no installed font covers CJK labels")
+                return None
+            label_font = _mpl_font_for_text(label_text)
             y = list(range(len(names)))[::-1]  # 顶部为第一个情景
             fig, ax = plt.subplots(figsize=(9, max(2.2, 0.7 * len(names) + 1.2)))
             xerr = [lo_err, hi_err] if has_err else None
@@ -593,7 +809,7 @@ class ReportVisualizer:
                     xerr=xerr, capsize=4 if has_err else 0,
                     error_kw={"ecolor": "#2b2b2b", "elinewidth": 1.1})
             ax.set_yticks(y)
-            ax.set_yticklabels(names, fontsize=9)
+            ax.set_yticklabels(names, fontsize=9, fontproperties=label_font)
             ax.set_xlabel("Probability", fontsize=10)
             ax.set_xlim(0, max(1.0, max(probs) * 1.15))
             ax.set_title("Scenario Probabilities" + (" (ensemble spread)" if has_err else ""),
@@ -606,6 +822,8 @@ class ReportVisualizer:
         except Exception as exc:  # noqa: BLE001
             logger.debug("build_scenario_bars 失败（跳过该图）：%s", exc)
             return None
+        finally:
+            _close_matplotlib_figure(fig)
 
     def build_model_vs_market(self, forecast: Any, charts_dir: str) -> Optional[str]:
         """(2) 模型 vs 市场哑铃图（来自 binary_forecasts[].market_anchor 的分歧）。
@@ -614,6 +832,7 @@ class ReportVisualizer:
         的条目。无可比条目 → None。"""
         if not self._chart_ok():
             return None
+        fig = None
         try:
             bfs = forecast.get("binary_forecasts") if isinstance(forecast, dict) else forecast
             if not isinstance(bfs, list) or not bfs:
@@ -640,6 +859,11 @@ class ReportVisualizer:
                 market_p.append(kp)
             if not labels:
                 return None
+            label_text = " ".join(labels)
+            if not _mpl_labels_supported(label_text):
+                logger.info("model-vs-market static chart skipped: no installed font covers CJK labels")
+                return None
+            label_font = _mpl_font_for_text(label_text)
             y = list(range(len(labels)))[::-1]
             fig, ax = plt.subplots(figsize=(9, max(2.2, 0.6 * len(labels) + 1.4)))
             for yi, mp, kp in zip(y, model_p, market_p):
@@ -647,7 +871,7 @@ class ReportVisualizer:
             ax.scatter(market_p, y, color="#c0603a", s=60, zorder=2, label="Market implied")
             ax.scatter(model_p, y, color="#3b6fb0", s=60, zorder=3, label="Model")
             ax.set_yticks(y)
-            ax.set_yticklabels(labels, fontsize=9)
+            ax.set_yticklabels(labels, fontsize=9, fontproperties=label_font)
             ax.set_xlabel("P(yes)", fontsize=10)
             ax.set_xlim(0, 1)
             ax.set_title("Model vs Market (binary forecasts)", fontsize=12, fontweight="bold")
@@ -657,14 +881,19 @@ class ReportVisualizer:
             return self._save(fig, charts_dir, "model_vs_market.png")
         except Exception:  # noqa: BLE001
             return None
+        finally:
+            _close_matplotlib_figure(fig)
 
     def build_worldstate_area(self, trajectory: Any, charts_dir: str) -> Optional[str]:
         """(3) 结果世界态堆叠面积（world_state_trajectory.json 的 trajectory[].shares 随轮次）。
 
         兼容 {trajectory:[{round,shares:{name:share}}]} 或直接列表；shares 为情景→份额。
-        少于 2 个时间点 → None（面积图无意义）。"""
+        少于 2 个时间点 → None（面积图无意义）。CAL-TEMPORAL：若所有行都带可解析的
+        period_end/as_of（轨迹 schema v3，日历模式）→ 横轴改用日历日期并标注 "Date"；
+        否则保持旧的 "Forecast update step" 轮次横轴（hours 模式行为字节不变）。"""
         if not self._chart_ok():
             return None
+        fig = None
         try:
             rows = trajectory.get("trajectory") if isinstance(trajectory, dict) else trajectory
             if not isinstance(rows, list) or len(rows) < 2:
@@ -672,6 +901,7 @@ class ReportVisualizer:
             # 收集所有出现过的情景名（稳定：首次出现顺序）。
             names: List[str] = []
             snaps: List[Tuple[float, Dict[str, float]]] = []
+            dates: List[Any] = []  # CAL-TEMPORAL：与 snaps 一一对应的日历日期（可含 None）
             for i, r in enumerate(rows):
                 if not isinstance(r, dict):
                     continue
@@ -691,25 +921,377 @@ class ReportVisualizer:
                         names.append(str(k))
                 if clean:
                     snaps.append((x, clean))
+                    dates.append(_trajectory_row_date(r))
             if len(snaps) < 2 or not names:
                 return None
-            xs = [x for x, _ in snaps]
+            # CAL-TEMPORAL：任一快照缺日期 → 整体回退轮次横轴（degrade-safe）。
+            use_dates = bool(dates) and all(d is not None for d in dates)
+            xs: List[Any] = dates if use_dates else [x for x, _ in snaps]
             series = [[snap.get(nm, 0.0) for _, snap in snaps] for nm in names]
             fig, ax = plt.subplots(figsize=(9, 5))
             leg_labels = [_mpl_text(n, fallback=f"Series {i + 1}", max_len=40)
                           for i, n in enumerate(names)]
+            label_text = " ".join(leg_labels)
+            if not _mpl_labels_supported(label_text):
+                logger.info("world-state static chart skipped: no installed font covers CJK labels")
+                return None
+            label_font = _mpl_font_for_text(label_text)
             ax.stackplot(xs, *series, labels=leg_labels, alpha=0.85)
-            ax.set_xlabel("Simulation round", fontsize=10)
+            if use_dates:
+                # 复用时间线泳道的日期横轴规范（AutoDateLocator + ConciseDateFormatter）。
+                import matplotlib.dates as _mdates
+                locator = _mdates.AutoDateLocator(minticks=3, maxticks=8)
+                ax.xaxis.set_major_locator(locator)
+                ax.xaxis.set_major_formatter(_mdates.ConciseDateFormatter(locator))
+                ax.set_xlabel("Date", fontsize=10)
+            else:
+                ax.set_xlabel("Forecast update step", fontsize=10)
             ax.set_ylabel("Outcome share", fontsize=10)
-            ax.set_title("Modeled Outcome-Share Trajectory", fontsize=12, fontweight="bold")
+            ax.set_title("Forecast Outcome-Share Trajectory", fontsize=12, fontweight="bold")
             ax.set_xlim(min(xs), max(xs))
             ax.set_ylim(0, max(1.0, max(sum(col) for col in zip(*series)) if series else 1.0))
-            ax.legend(loc="upper left", fontsize=8, ncol=1, framealpha=0.85)
+            ax.legend(loc="upper left", fontsize=8, ncol=1, framealpha=0.85,
+                      prop=_font_at_size(label_font, 8) if label_font else None)
             ax.grid(linestyle=":", alpha=0.35)
             fig.tight_layout()
             return self._save(fig, charts_dir, "worldstate_trajectory.png")
         except Exception:  # noqa: BLE001
             return None
+        finally:
+            _close_matplotlib_figure(fig)
+
+    def build_timeline_lanes(self, timeline: Any, charts_dir: str) -> Optional[str]:
+        """Static PNG counterpart to :meth:`build_timeline_lanes_html`.
+
+        The builder intentionally consumes ``_prepare_timeline_events`` so the interactive and
+        static paths share date parsing, de-duplication, salience ranking, lane classification,
+        and ``REPORT_VIZ_TIMELINE_MAX_EVENTS`` enforcement.  It is used when Plotly is disabled
+        or when an interactive figure has no exported PNG.
+        """
+        if not self._chart_ok():
+            return None
+        fig = None
+        try:
+            rows = timeline.get("timeline") if isinstance(timeline, dict) else timeline
+            if not isinstance(rows, list) or not rows:
+                return None
+            events = _prepare_timeline_events(rows)
+            if not events:
+                return None
+
+            lanes = [category for category, _ in _TL_CATEGORIES] + ["Other"]
+            lane_order = {category: index for index, category in enumerate(lanes)}
+            used = sorted({event["cat"] for event in events}, key=lane_order.get)
+            used_index = {category: index for index, category in enumerate(used)}
+            label_plan = _timeline_label_plan(events, used_index)
+            label_text = " ".join(entry["label"] for entry in label_plan.values())
+            if not _mpl_labels_supported(label_text):
+                logger.info("timeline static chart skipped: no installed font covers CJK labels")
+                return None
+            label_font = _mpl_font_for_text(label_text)
+
+            import datetime as _dt
+            import matplotlib.dates as _mdates
+
+            key_columns = 2 if len(label_plan) > 6 else 1
+            key_rows = max(1, math.ceil(len(label_plan) / key_columns))
+            timeline_height = max(3.2, 0.9 * len(used) + 2.0)
+            key_height = max(1.15, 0.36 * key_rows + 0.35)
+            fig, (ax, key_ax) = plt.subplots(
+                2, 1,
+                figsize=(11, timeline_height + key_height),
+                gridspec_kw={"height_ratios": [timeline_height, key_height]},
+            )
+            fig.patch.set_facecolor(_SURFACE)
+            ax.set_facecolor(_SURFACE)
+            key_ax.set_facecolor(_SURFACE)
+
+            for category in used:
+                y_base = used_index[category]
+                category_events = [event for event in events if event["cat"] == category]
+                xs = [event["dt"] for event in category_events]
+                ys = [y_base + ((index % 3) - 1) * 0.12
+                      for index in range(len(category_events))]
+                color = _PALETTE[lane_order[category] % len(_PALETTE)]
+                ax.axhline(y_base, color=_GRID, linewidth=1.0, zorder=0)
+                ax.scatter(
+                    xs,
+                    ys,
+                    s=62,
+                    color=color,
+                    edgecolor=_SURFACE,
+                    linewidth=1.4,
+                    zorder=3,
+                )
+                for event, x, y in zip(category_events, xs, ys, strict=True):
+                    placement = label_plan.get((event["dt"], event["text"]))
+                    if placement is None:
+                        continue
+                    ax.annotate(
+                        str(placement["index"]),
+                        xy=(x, y),
+                        xytext=placement["offset"],
+                        textcoords="offset points",
+                        ha=placement["ha"],
+                        va=placement["va"],
+                        fontsize=7.5,
+                        color=_INK,
+                        fontweight="bold",
+                        arrowprops={"arrowstyle": "-", "color": _AXIS, "linewidth": 0.7},
+                        bbox={"boxstyle": "circle,pad=0.16", "fc": _SURFACE,
+                              "ec": color, "linewidth": 1.0, "alpha": 0.96},
+                        zorder=4,
+                    )
+
+            dates = [event["dt"] for event in events]
+            if min(dates) == max(dates):
+                ax.set_xlim(min(dates) - _dt.timedelta(days=15),
+                            max(dates) + _dt.timedelta(days=15))
+            else:
+                span = max(dates) - min(dates)
+                margin = max(_dt.timedelta(days=7), span * 0.04)
+                ax.set_xlim(min(dates) - margin, max(dates) + margin)
+            locator = _mdates.AutoDateLocator(minticks=3, maxticks=8)
+            ax.xaxis.set_major_locator(locator)
+            ax.xaxis.set_major_formatter(_mdates.ConciseDateFormatter(locator))
+            ax.set_yticks(range(len(used)))
+            ax.set_yticklabels(used, fontsize=9)
+            ax.set_ylim(len(used) - 0.55, -0.55)
+            ax.set_title("Event Timeline", fontsize=13, fontweight="bold",
+                         loc="left", color=_INK)
+            ax.grid(axis="x", color=_GRID, linestyle=":", linewidth=0.8)
+            ax.tick_params(colors=_INK_2)
+            for spine in ("top", "right", "left"):
+                ax.spines[spine].set_visible(False)
+            ax.spines["bottom"].set_color(_AXIS)
+
+            key_ax.axis("off")
+            key_ax.text(0.0, 1.02, "Key events", transform=key_ax.transAxes,
+                        ha="left", va="bottom", fontsize=9, fontweight="bold", color=_INK)
+            ordered_plan = sorted(
+                label_plan.items(), key=lambda item: (item[0][0], item[0][1]),
+            )
+            for position, ((event_date, _event_text), placement) in enumerate(ordered_plan):
+                column = position // key_rows
+                row = position % key_rows
+                x = 0.01 + column * (1.0 / key_columns)
+                y = 0.92 - row * (0.80 / max(1, key_rows - 1))
+                key_ax.text(
+                    x, y,
+                    f"{placement['index']:02d}  {event_date:%Y-%m-%d}  {placement['label']}",
+                    transform=key_ax.transAxes,
+                    ha="left", va="top", fontsize=8,
+                    fontproperties=label_font,
+                    color=_INK_2,
+                )
+            fig.tight_layout(h_pad=0.8)
+            return self._save(fig, charts_dir, "timeline_lanes.png")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("build_timeline_lanes 失败（跳过该图）：%s", exc)
+            return None
+        finally:
+            _close_matplotlib_figure(fig)
+
+    def build_actor_network(self, actors: Any, charts_dir: str,
+                            graph_priors: Any = None) -> Optional[str]:
+        """Static PNG counterpart to :meth:`build_actor_network_html`.
+
+        Actor aliases, relationship de-duplication, node ranking/capping, signed edge colors, and
+        deterministic network layout mirror the Plotly builder.  The result is a compact directed
+        network suitable for Markdown/PDF reports when no interactive renderer is available.
+        """
+        if not self._chart_ok():
+            return None
+        fig = None
+        try:
+            rels = (actors.get("relationships") or actors.get("relations")
+                    or actors.get("edges")) if isinstance(actors, dict) else actors
+            if not isinstance(rels, list) or not rels:
+                return None
+            actor_list = actors.get("actors") if isinstance(actors, dict) else None
+            canon = _canonical_actor_map(actor_list)
+            priors: Dict[str, float] = {}
+            if isinstance(graph_priors, dict):
+                for key, value in graph_priors.items():
+                    numeric = _to_float(value)
+                    if numeric is not None and str(key).strip():
+                        priors[_norm_key(key)] = numeric
+
+            seen_edges: set = set()
+            edges: List[Tuple[str, str, str, str]] = []
+            node_order: List[str] = []
+            degree: Dict[str, int] = {}
+            for relation in rels:
+                if not isinstance(relation, dict):
+                    continue
+                source = _canonicalize(
+                    str(relation.get("source") or relation.get("from") or "").strip(), canon)
+                target = _canonicalize(
+                    str(relation.get("target") or relation.get("to") or "").strip(), canon)
+                if not source or not target or source == target:
+                    continue
+                relation_type = str(
+                    relation.get("type") or relation.get("relation")
+                    or relation.get("rel") or "REL"
+                ).strip().upper()
+                edge_key = (source, target, relation_type)
+                if edge_key in seen_edges:
+                    continue
+                seen_edges.add(edge_key)
+                edges.append((source, target, relation_type, _sign_of(relation) or "±"))
+                for node in (source, target):
+                    if node not in degree:
+                        degree[node] = 0
+                        node_order.append(node)
+                    degree[node] += 1
+            if not edges:
+                return None
+
+            max_nodes = int(_cfg("REPORT_VIZ_NETWORK_MAX_NODES", 60) or 60)
+            first_seen = {node: index for index, node in enumerate(node_order)}
+            ranked = sorted(
+                node_order,
+                key=lambda node: (
+                    -priors.get(_norm_key(node), 0.0),
+                    -degree.get(node, 0),
+                    first_seen[node],
+                ),
+            )
+            kept = set(ranked[:max(2, max_nodes)])
+            edges = [edge for edge in edges if edge[0] in kept and edge[1] in kept]
+            nodes = [node for node in node_order if node in kept]
+            if not edges or len(nodes) < 2:
+                return None
+
+            positions = _network_layout(nodes, edges)
+            metadata: Dict[str, Dict[str, Any]] = {}
+            if isinstance(actor_list, list):
+                for actor in actor_list:
+                    if isinstance(actor, dict) and str(actor.get("name") or "").strip():
+                        metadata[_norm_key(actor["name"])] = actor
+
+            has_prior = any(_norm_key(node) in priors for node in nodes)
+            weights = {
+                node: (priors.get(_norm_key(node), 0.0)
+                       if has_prior else float(degree.get(node, 1)))
+                for node in nodes
+            }
+            weight_max = max(weights.values()) or 1.0
+            role_classes = sorted({
+                str((metadata.get(_norm_key(node)) or {}).get("role_class") or "other")
+                for node in nodes
+            })
+            class_color = {
+                role_class: _PALETTE[index % len(_PALETTE)]
+                for index, role_class in enumerate(role_classes)
+            }
+            label_plan = _actor_label_plan(nodes, positions, weights)
+            label_text = " ".join(
+                [entry["label"] for entry in label_plan.values()] + role_classes
+            )
+            if not _mpl_labels_supported(label_text):
+                logger.info("actor-network static chart skipped: no installed font covers CJK labels")
+                return None
+            label_font = _mpl_font_for_text(label_text)
+
+            from matplotlib.lines import Line2D
+            from matplotlib.patches import FancyArrowPatch
+
+            fig, ax = plt.subplots(figsize=(10.5, 7.5))
+            fig.patch.set_facecolor(_SURFACE)
+            ax.set_facecolor(_SURFACE)
+            edge_colors = {"+": _COLOR_POS, "−": _COLOR_NEG, "±": _COLOR_NEU}
+            for index, (source, target, _relation_type, sign) in enumerate(edges):
+                arrow = FancyArrowPatch(
+                    positions[source],
+                    positions[target],
+                    arrowstyle="-|>",
+                    mutation_scale=9,
+                    linewidth=1.15,
+                    color=edge_colors.get(sign, _COLOR_NEU),
+                    alpha=0.48,
+                    shrinkA=14,
+                    shrinkB=14,
+                    connectionstyle=f"arc3,rad={((index % 3) - 1) * 0.035:.3f}",
+                    zorder=1,
+                )
+                ax.add_patch(arrow)
+
+            for role_class in role_classes:
+                class_nodes = [
+                    node for node in nodes
+                    if str((metadata.get(_norm_key(node)) or {}).get("role_class") or "other")
+                    == role_class
+                ]
+                ax.scatter(
+                    [positions[node][0] for node in class_nodes],
+                    [positions[node][1] for node in class_nodes],
+                    s=[260 + 900 * (weights[node] / weight_max) for node in class_nodes],
+                    color=class_color[role_class],
+                    edgecolor=_SURFACE,
+                    linewidth=2.0,
+                    alpha=0.92,
+                    zorder=3,
+                )
+
+            for node in nodes:
+                placement = label_plan.get(node)
+                if placement is None:
+                    continue
+                ax.annotate(
+                    placement["label"],
+                    xy=positions[node],
+                    xytext=placement["xytext"],
+                    textcoords="data",
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    fontproperties=label_font,
+                    color=_INK,
+                    fontweight="bold",
+                    arrowprops={"arrowstyle": "-", "color": _AXIS, "linewidth": 0.65,
+                                "shrinkA": 2, "shrinkB": 8},
+                    bbox={"boxstyle": "round,pad=0.18", "fc": _SURFACE,
+                          "ec": "none", "alpha": 0.88},
+                    zorder=4,
+                )
+
+            node_handles = [
+                Line2D([0], [0], marker="o", linestyle="", label=role_class,
+                       markerfacecolor=class_color[role_class], markeredgecolor=_SURFACE,
+                       markersize=8)
+                for role_class in role_classes
+            ]
+            edge_handles = [
+                Line2D([0], [0], color=_COLOR_POS, linewidth=2, label="supportive (+)"),
+                Line2D([0], [0], color=_COLOR_NEG, linewidth=2, label="adversarial (−)"),
+                Line2D([0], [0], color=_COLOR_NEU, linewidth=2, label="neutral (±)"),
+            ]
+            ax.legend(handles=node_handles + edge_handles, loc="upper center",
+                      bbox_to_anchor=(0.5, -0.02), ncol=min(4, len(node_handles + edge_handles)),
+                      frameon=False, fontsize=8,
+                      prop=_font_at_size(label_font, 8) if label_font else None)
+            ax.set_title("Actor Relationship Network", fontsize=13, fontweight="bold",
+                         loc="left", color=_INK)
+            bounds = [entry["bbox"] for entry in label_plan.values()]
+            xs = [positions[node][0] for node in nodes]
+            ys = [positions[node][1] for node in nodes]
+            if bounds:
+                xs.extend(value for box in bounds for value in (box[0], box[2]))
+                ys.extend(value for box in bounds for value in (box[1], box[3]))
+            x_span = max(max(xs) - min(xs), 1.0)
+            y_span = max(max(ys) - min(ys), 1.0)
+            ax.set_xlim(min(xs) - x_span * 0.08, max(xs) + x_span * 0.08)
+            ax.set_ylim(min(ys) - y_span * 0.10, max(ys) + y_span * 0.08)
+            ax.set_aspect("equal", adjustable="box")
+            ax.axis("off")
+            fig.tight_layout()
+            return self._save(fig, charts_dir, "actor_network.png")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("build_actor_network 失败（跳过该图）：%s", exc)
+            return None
+        finally:
+            _close_matplotlib_figure(fig)
 
     def build_comparison_bars(self, comparison: Any, charts_dir: str) -> Optional[str]:
         """(4) 基线-情景分组柱（comparison.json 的 dimensions[]，仅取数值可解析的维度）。
@@ -717,6 +1299,7 @@ class ReportVisualizer:
         每个维度取 baseline/scenario 两根柱；无法解析为数字的维度跳过。无数值维度 → None。"""
         if not self._chart_ok():
             return None
+        fig = None
         try:
             dims = comparison.get("dimensions") if isinstance(comparison, dict) else comparison
             if not isinstance(dims, list) or not dims:
@@ -737,6 +1320,11 @@ class ReportVisualizer:
                 scen_vals.append(s)
             if not labels:
                 return None
+            label_text = " ".join(labels)
+            if not _mpl_labels_supported(label_text):
+                logger.info("comparison static chart skipped: no installed font covers CJK labels")
+                return None
+            label_font = _mpl_font_for_text(label_text)
             import numpy as _np  # matplotlib 依赖 numpy，一定可用
             x = _np.arange(len(labels))
             w = 0.38
@@ -744,7 +1332,8 @@ class ReportVisualizer:
             ax.bar(x - w / 2, base_vals, w, label="Baseline", color="#9aa5b1")
             ax.bar(x + w / 2, scen_vals, w, label="Scenario", color="#3b6fb0")
             ax.set_xticks(x)
-            ax.set_xticklabels(labels, fontsize=9, rotation=20, ha="right")
+            ax.set_xticklabels(labels, fontsize=9, rotation=20, ha="right",
+                               fontproperties=label_font)
             ax.set_ylabel("Value", fontsize=10)
             ax.set_title("Baseline vs Scenario (comparison)", fontsize=12, fontweight="bold")
             ax.legend(fontsize=9)
@@ -753,6 +1342,8 @@ class ReportVisualizer:
             return self._save(fig, charts_dir, "comparison_bars.png")
         except Exception:  # noqa: BLE001
             return None
+        finally:
+            _close_matplotlib_figure(fig)
 
     def build_calibration_curve(self, calibration: Any, charts_dir: str) -> Optional[str]:
         """(5) 校准曲线（来自 forecast-ledger 的 calibration_report 统计，若存在）。
@@ -761,6 +1352,7 @@ class ReportVisualizer:
         画 mean_predicted vs observed 折线 + 对角线（完美校准）。有效点 <1 → None。"""
         if not self._chart_ok():
             return None
+        fig = None
         try:
             bins = calibration.get("bins") if isinstance(calibration, dict) else calibration
             if not isinstance(bins, list) or not bins:
@@ -796,6 +1388,8 @@ class ReportVisualizer:
             return self._save(fig, charts_dir, "calibration_curve.png")
         except Exception:  # noqa: BLE001
             return None
+        finally:
+            _close_matplotlib_figure(fig)
 
     def render_market_price_history(self, price_history: Any, anchors: Any,
                                     out_dir: str) -> List[str]:
@@ -816,6 +1410,7 @@ class ReportVisualizer:
         matplotlib 缺失/关闭、无 price_history、无可用锚点 → []（never raises）。"""
         if not self._chart_ok():
             return []
+        fig = None
         try:
             if not isinstance(price_history, dict) or not price_history:
                 return []
@@ -825,6 +1420,11 @@ class ReportVisualizer:
             cap = int(_cfg("REPORT_VIZ_MAX_NODES", 40) or 40)
             if cap > 0 and len(norm) > cap:
                 norm = norm[:cap]  # 病态超长输入的确定性上限（保留首现锚点）
+            label_text = " ".join(str(anchor.get("label") or "") for anchor in norm)
+            if not _mpl_labels_supported(label_text):
+                logger.info("price-history static chart skipped: no installed font covers CJK labels")
+                return []
+            label_font = _mpl_font_for_text(label_text)
             import matplotlib.dates as _mdates  # 惰性导入（matplotlib 已确认可用）
             per_fig = 2 if len(norm) > 6 else 1  # >6 锚点 → 每图 2 子图，降低图数量
             groups = [norm[i:i + per_fig] for i in range(0, len(norm), per_fig)]
@@ -852,7 +1452,8 @@ class ReportVisualizer:
                                           "ec": "#9aa5b1", "alpha": 0.85})
                     ax.set_ylim(0, 1)
                     ax.set_ylabel("P(yes)", fontsize=9)
-                    ax.set_title(a["label"], fontsize=11, fontweight="bold")
+                    ax.set_title(a["label"], fontsize=11, fontweight="bold",
+                                 fontproperties=label_font)
                     ax.xaxis.set_major_formatter(_mdates.DateFormatter("%Y-%m-%d"))
                     ax.legend(loc="best", fontsize=8, framealpha=0.85)
                     ax.grid(linestyle=":", alpha=0.4)
@@ -865,6 +1466,8 @@ class ReportVisualizer:
             return paths
         except Exception:  # noqa: BLE001
             return []
+        finally:
+            _close_matplotlib_figure(fig)
 
     # ============================ (C) plotly 交互式 HTML 族 ============================
     # ITEM-16：全部为实例方法，入参普通 dict/list + 输出目录，成功落盘自包含 HTML 返回相对路径，
@@ -986,7 +1589,10 @@ class ReportVisualizer:
                 return None
             names = [r["name"] for r in rows]
             probs = [r["p"] for r in rows]
-            has_err = any(r["lo"] is not None and r["hi"] is not None for r in rows)
+            has_err = any(
+                r["lo"] is not None and r["hi"] is not None and r["hi"] > r["lo"]
+                for r in rows
+            )
             err_x = None
             if has_err:
                 err_x = dict(
@@ -1000,7 +1606,8 @@ class ReportVisualizer:
             hover = []
             for r in rows:
                 parts = [f"<b>{_wrap_hover(r['name'], 48)}</b>", f"P = {r['p']:.1%}"]
-                if r["lo"] is not None and r["hi"] is not None:
+                if (r["lo"] is not None and r["hi"] is not None
+                        and r["hi"] > r["lo"]):
                     parts.append(f"range {r['lo']:.1%} – {r['hi']:.1%}")
                 if r.get("stdev") is not None:
                     parts.append(f"ensemble stdev {r['stdev']:.3f}")
@@ -1093,7 +1700,9 @@ class ReportVisualizer:
     def build_worldstate_area_html(self, trajectory: Any, charts_dir: str) -> Optional[str]:
         """(C3) 结果世界态堆叠面积的交互式 HTML（对应 build_worldstate_area）。
 
-        兼容 {trajectory:[{round,shares:{name:share}}]} 或直接列表；<2 时间点 → None。"""
+        兼容 {trajectory:[{round,shares:{name:share}}]} 或直接列表；<2 时间点 → None。
+        CAL-TEMPORAL：所有行都带可解析的 period_end/as_of（schema v3）→ 横轴用日历日期
+        （"Date"）；否则维持旧的 "Forecast update step" 轮次横轴（hours 模式字节不变）。"""
         if not self._interactive_ok():
             return None
         try:
@@ -1102,6 +1711,7 @@ class ReportVisualizer:
                 return None
             names: List[str] = []
             snaps: List[Tuple[float, Dict[str, float]]] = []
+            dates: List[Any] = []  # CAL-TEMPORAL：与 snaps 一一对应的日历日期（可含 None）
             for i, r in enumerate(rows):
                 if not isinstance(r, dict):
                     continue
@@ -1121,9 +1731,18 @@ class ReportVisualizer:
                         names.append(str(k))
                 if clean:
                     snaps.append((x, clean))
+                    dates.append(_trajectory_row_date(r))
             if len(snaps) < 2 or not names:
                 return None
-            xs = [x for x, _ in snaps]
+            use_dates = bool(dates) and all(d is not None for d in dates)
+            if use_dates:
+                xs: List[Any] = [d.isoformat() for d in dates]  # plotly 自动识别 ISO 日期轴
+                x_title = "Date"
+                hover_x = "%{x|%Y-%m-%d}"
+            else:
+                xs = [x for x, _ in snaps]
+                x_title = "Forecast update step"
+                hover_x = "Forecast update step %{x}"
             fig = go.Figure()
             for i, nm in enumerate(names):
                 ser = [snap.get(nm, 0.0) for _, snap in snaps]
@@ -1131,10 +1750,11 @@ class ReportVisualizer:
                     x=xs, y=ser, mode="lines", name=_html_text(nm, fallback=f"Series {i + 1}", max_len=40),
                     stackgroup="one",  # 堆叠面积
                     line=dict(width=1),
-                    hovertemplate="round %{x}: %{y:.2f}<extra>" + _html_text(nm, max_len=40) + "</extra>",
+                    hovertemplate=hover_x + ": %{y:.2f}<extra>"
+                                  + _html_text(nm, max_len=40) + "</extra>",
                 ))
-            _apply_layout(fig, "Modeled Outcome-Share Trajectory", height=460)
-            fig.update_layout(xaxis_title="Simulation round", yaxis_title="Outcome share")
+            _apply_layout(fig, "Forecast Outcome-Share Trajectory", height=460)
+            fig.update_layout(xaxis_title=x_title, yaxis_title="Outcome share")
             return self._save_pair(fig, charts_dir, "worldstate_trajectory",
                                    "worldstate_trajectory")
         except Exception as exc:  # noqa: BLE001
@@ -1287,7 +1907,8 @@ class ReportVisualizer:
     def build_timeline_lanes_html(self, timeline: Any, charts_dir: str) -> Optional[str]:
         """(D2) 时间线泳道图（取代旧 mermaid timeline）：x=日期、y=主题泳道（关键词归类），
         hover=完整事件文本（不截断、不毁字符），同日高词元重合事件去重，超上限
-        （REPORT_VIZ_TIMELINE_MAX_EVENTS）按显著度截断后仍按时间升序。"""
+        （REPORT_VIZ_TIMELINE_MAX_EVENTS）按显著度截断后仍按时间升序。图内只显示编号，
+        完整的显著事件短标签放在图下方的键中，避免密集日期簇的文本互相覆盖。"""
         if not self._interactive_ok():
             return None
         try:
@@ -1298,39 +1919,43 @@ class ReportVisualizer:
             if not events:
                 return None
             lanes = [c for c, _ in _TL_CATEGORIES] + ["Other"]
-            lane_idx = {c: i for i, c in enumerate(lanes)}
-            used = sorted({e["cat"] for e in events}, key=lambda c: lane_idx[c])
+            lane_order = {c: i for i, c in enumerate(lanes)}
+            used = sorted({e["cat"] for e in events}, key=lambda c: lane_order[c])
+            lane_idx = {c: i for i, c in enumerate(used)}
+            label_plan = _timeline_label_plan(events, lane_idx, max_labels=10)
             fig = go.Figure()
-            # 标注少量显著事件的短标签（其余仅 hover）——密集簇里标签必然相撞，宁少勿叠；
-            # 同泳道内按序轮换四个文本方位进一步降碰撞。
-            top_ids = {id(e) for e in sorted(events, key=lambda e: -e["score"])[:10]}
-            _POSITIONS = ("top center", "bottom center", "middle right", "middle left")
+            # 图内只放紧凑编号；完整短标签位于下方 key，完整原文始终保留在 hover。
             for cat in used:
                 evs = [e for e in events if e["cat"] == cat]
                 xs = [e["dt"] for e in evs]
-                ys = [lane_idx[cat] + ((k % 3) - 1) * 0.18 for k in range(len(evs))]
+                # Five vertical slots keep same-lane date clusters readable in PNG exports;
+                # three slots still allowed every fourth point to land on top of an earlier one.
+                jitter = (-0.40, -0.20, 0.0, 0.20, 0.40)
+                ys = [lane_idx[cat] + jitter[k % len(jitter)] for k in range(len(evs))]
                 texts = []
-                positions = []
-                labeled = 0
+                marker_sizes = []
                 for e in evs:
-                    if id(e) in top_ids:
-                        texts.append(_html_text(e["text"], max_len=28))
-                        positions.append(_POSITIONS[labeled % len(_POSITIONS)])
-                        labeled += 1
-                    else:
-                        texts.append("")
-                        positions.append("top center")
+                    placement = label_plan.get((e["dt"], e["text"]))
+                    texts.append(f"{placement['index']:02d}" if placement else "")
+                    marker_sizes.append(19 if placement else 9)
                 fig.add_trace(go.Scatter(
                     x=xs, y=ys, mode="markers+text", name=cat,
-                    text=texts, textposition=positions,
-                    textfont=dict(size=9, color=_INK_2),
-                    marker=dict(size=9, color=_PALETTE[lane_idx[cat] % len(_PALETTE)],
+                    text=texts, textposition="middle center",
+                    textfont=dict(size=7, color=_SURFACE, family=_VIZ_FONT),
+                    marker=dict(size=marker_sizes,
+                                color=_PALETTE[lane_idx[cat] % len(_PALETTE)],
                                 line=dict(color=_SURFACE, width=1.5)),
                     hovertext=[f"<b>{e['date']}</b><br>{_wrap_hover(e['text'], 64)}"
                                for e in evs],
                     hoverinfo="text",
                 ))
-            _apply_layout(fig, "Event Timeline", height=max(420, 90 * len(used) + 180))
+            ordered_key = sorted(label_plan.items(), key=lambda item: item[1]["index"])
+            key_columns = 2 if len(ordered_key) > 5 else 1
+            key_rows = max(1, math.ceil(len(ordered_key) / key_columns))
+            plot_height = max(390, 82 * len(used) + 155)
+            key_height = 70 + 27 * key_rows
+            paper_height = max(260, plot_height - 58)
+            _apply_layout(fig, "Event Timeline", height=plot_height + key_height)
             fig.update_layout(
                 xaxis_title="Date",
                 yaxis=dict(
@@ -1339,8 +1964,28 @@ class ReportVisualizer:
                     range=[max(lane_idx[c] for c in used) + 0.7, -0.7],
                     showgrid=True, zeroline=False,  # 泳道 0 不该有零线横贯
                 ),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                showlegend=False,
+                margin=dict(l=12, r=24, t=58, b=key_height),
             )
+            if ordered_key:
+                fig.add_annotation(
+                    xref="paper", yref="paper", x=0.0, y=-18 / paper_height,
+                    text="<b>Key events</b>", showarrow=False,
+                    xanchor="left", yanchor="top", align="left",
+                    font=dict(size=10, color=_INK, family=_VIZ_FONT),
+                )
+            for position, ((event_date, _event_text), placement) in enumerate(ordered_key):
+                column = position // key_rows
+                row = position % key_rows
+                fig.add_annotation(
+                    xref="paper", yref="paper",
+                    x=column / key_columns + 0.01,
+                    y=-(48 + row * 25) / paper_height,
+                    text=(f"<b>{placement['index']:02d}</b>  {event_date:%Y-%m-%d}  "
+                          f"{_html_text(placement['label'], max_len=52)}"),
+                    showarrow=False, xanchor="left", yanchor="top", align="left",
+                    font=dict(size=9, color=_INK_2, family=_VIZ_FONT),
+                )
             return self._save_pair(fig, charts_dir, "timeline_lanes", "timeline_lanes")
         except Exception as exc:  # noqa: BLE001
             logger.debug("build_timeline_lanes_html 失败（跳过该图）：%s", exc)
@@ -1441,7 +2086,7 @@ class ReportVisualizer:
             classes = sorted({str((meta.get(_norm_key(n)) or {}).get("role_class")
                                   or "other") for n in nodes})
             class_color = {c: _PALETTE[i % len(_PALETTE)] for i, c in enumerate(classes)}
-            label_top = set(sorted(nodes, key=lambda n: -weights[n])[:25])
+            label_plan = _actor_label_plan(nodes, pos, weights, max_labels=16)
             for cls in classes:
                 cnodes = [n for n in nodes
                           if str((meta.get(_norm_key(n)) or {}).get("role_class")
@@ -1462,19 +2107,41 @@ class ReportVisualizer:
                     ) if x))
                 fig.add_trace(go.Scatter(
                     x=[pos[n][0] for n in cnodes], y=[pos[n][1] for n in cnodes],
-                    mode="markers+text", name=cls,
-                    text=[_html_text(n, max_len=22) if n in label_top else ""
-                          for n in cnodes],
-                    textposition="top center", textfont=dict(size=10, color=_INK),
+                    mode="markers", name=cls,
                     marker=dict(
                         size=[10 + 26 * (weights[n] / wmax) for n in cnodes],
                         color=class_color[cls], line=dict(color=_SURFACE, width=2),
                     ),
                     hovertext=hovers, hoverinfo="text",
                 ))
-            _apply_layout(fig, "Actor Relationship Network", height=720)
+            for node, placement in label_plan.items():
+                fig.add_annotation(
+                    x=pos[node][0], y=pos[node][1], xref="x", yref="y",
+                    ax=placement["xytext"][0], ay=placement["xytext"][1],
+                    axref="x", ayref="y", showarrow=True, arrowhead=0,
+                    arrowwidth=0.7, arrowcolor=_AXIS,
+                    text=f"<b>{_html_text(node, max_len=24)}</b>",
+                    font=dict(size=9, color=_INK, family=_VIZ_FONT),
+                    bgcolor="rgba(255,255,255,0.88)", borderpad=2,
+                    xanchor="center", yanchor="middle",
+                )
+            bounds = [entry["bbox"] for entry in label_plan.values()]
+            x_values = [pos[node][0] for node in nodes]
+            y_values = [pos[node][1] for node in nodes]
+            if bounds:
+                x_values.extend(value for box in bounds for value in (box[0], box[2]))
+                y_values.extend(value for box in bounds for value in (box[1], box[3]))
+            x_span = max(max(x_values) - min(x_values), 1.0)
+            y_span = max(max(y_values) - min(y_values), 1.0)
+            _apply_layout(fig, "Actor Relationship Network", height=780)
             fig.update_layout(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
+                xaxis=dict(visible=False,
+                           range=[min(x_values) - x_span * 0.06,
+                                  max(x_values) + x_span * 0.06]),
+                yaxis=dict(visible=False,
+                           range=[min(y_values) - y_span * 0.08,
+                                  max(y_values) + y_span * 0.08],
+                           scaleanchor="x", scaleratio=1),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             )
             return self._save_pair(fig, charts_dir, "actor_network", "actor_network")
@@ -2016,7 +2683,7 @@ class ReportVisualizer:
                      lambda: self.build_contested_dumbbell_html(cont, charts_dir))
             wst = artifacts.get("world_state_trajectory")
             _attempt("worldstate_trajectory", "world_state_trajectory",
-                     "Modeled Outcome-Share Trajectory", "simulation",
+                     "Forecast Outcome-Share Trajectory", "scenarios",
                      bool(wst),
                      lambda: self.build_worldstate_area_html(wst, charts_dir))
 
@@ -2117,8 +2784,16 @@ class ReportVisualizer:
         _fallback("model_vs_market", "forecast", "Model vs Market",
                   "binary_forecasts",
                   lambda: self.build_model_vs_market(forecast, charts_dir))
+        _fallback("timeline_lanes", "timeline", "Event Timeline", "timeline",
+                  lambda: self.build_timeline_lanes(
+                      artifacts.get("timeline"), charts_dir))
+        _fallback("actor_network", "actors", "Actor Relationship Network", "actors",
+                  lambda: self.build_actor_network(
+                      artifacts.get("actors"), charts_dir,
+                      graph_priors=(artifacts.get("graph_priors")
+                                    or artifacts.get("graph_priors_structural"))))
         _fallback("worldstate_trajectory", "world_state_trajectory",
-                  "Modeled Outcome-Share Trajectory", "simulation",
+                  "Forecast Outcome-Share Trajectory", "scenarios",
                   lambda: self.build_worldstate_area(
                       artifacts.get("world_state_trajectory"), charts_dir))
 
@@ -2412,49 +3087,108 @@ def _normalize_price_anchors(anchors: Any,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _extract_scenario_rows(forecast: Any, ensemble: Any = None) -> List[Dict[str, Any]]:
-    """统一情景行抽取（matplotlib 与 plotly 情景柱共用，保证同一数据）：
-    优先 ensemble_forecast.json 的 scenarios（mean_probability + min/max/stdev/support_ratio
-    误差带），缺失/无效时回退 forecast.json scenarios（probability + p_low/p_high 等区间键）。
-    返回 [{name,p,lo,hi,stdev,support}]（按 p 降序，上限 14 行）；无有效情景 → []。"""
+    """Return one coherent scenario distribution for both static and Plotly charts.
+
+    ``forecast.json`` is the canonical published distribution.  Ensemble runs may use different
+    free-form names or even surface a different scenario taxonomy, so their rows MUST NOT be
+    appended to the canonical rows: doing so produced charts whose bars summed to far more than
+    100 percent.  An ensemble row now contributes uncertainty metadata only when its stable ID or
+    normalized name/alias exactly matches a canonical scenario.
+
+    If no canonical forecast scenarios exist, a coherent ensemble-only distribution may be used;
+    in that fallback the normalized ``probability`` field is preferred over the diagnostic
+    ``mean_probability``.  Returns ``[{name,p,lo,hi,stdev,support}]`` sorted by probability and
+    capped at 14 rows.  Invalid probabilities are ignored and malformed input degrades to ``[]``.
+    """
+
+    def _probability(value: Any) -> Optional[float]:
+        number = _to_float(value)
+        if number is None or not 0.0 <= number <= 1.0:
+            return None
+        return number
+
+    def _identity_parts(item: Dict[str, Any]) -> Tuple[set, set]:
+        aliases = item.get("aliases") if isinstance(item.get("aliases"), list) else []
+        ids = {
+            _norm_key(item.get(key))
+            for key in ("id", "scenario_id", "scenarioId", "slug")
+            if _norm_key(item.get(key))
+        }
+        names = {
+            re.sub(r"[^\w\u3400-\u9fff]+", " ", str(value or "").casefold()).strip()
+            for value in (item.get("name"), item.get("label"), *aliases)
+            if str(value or "").strip()
+        }
+        return ids, {name for name in names if name}
+
+    def _uncertainty(item: Dict[str, Any], p: float) -> Tuple[Any, Any, Any, Any]:
+        lo = _probability(_first_float(item, ("min", "p_low", "prob_low", "ci_low", "low")))
+        hi = _probability(_first_float(item, ("max", "p_high", "prob_high", "ci_high", "high")))
+        if lo is None or hi is None or not lo <= p <= hi:
+            lo, hi = None, None
+        stdev = _to_float(item.get("stdev") if item.get("stdev") is not None
+                          else item.get("std"))
+        support = _probability(item.get("support_ratio"))
+        return lo, hi, stdev, support
+
     rows: List[Dict[str, Any]] = []
     try:
         ens_list = ensemble.get("scenarios") if isinstance(ensemble, dict) else None
-        if isinstance(ens_list, list):
-            for i, s in enumerate(ens_list, 1):
-                if not isinstance(s, dict):
-                    continue
-                p = _first_float(s, ("mean_probability", "probability", "prob", "p"))
+        ensemble_rows = [item for item in (ens_list or []) if isinstance(item, dict)]
+        scenarios = forecast.get("scenarios") if isinstance(forecast, dict) else forecast
+        canonical = [item for item in (scenarios or []) if isinstance(item, dict)] \
+            if isinstance(scenarios, list) else []
+
+        if canonical:
+            ensemble_identity = [(_identity_parts(item), item) for item in ensemble_rows]
+            used_ensemble: set = set()
+            for i, scenario in enumerate(canonical, 1):
+                p = _probability(_first_float(scenario, ("probability", "prob", "p")))
                 if p is None:
                     continue
-                lo = _first_float(s, ("min", "p_low", "prob_low", "ci_low", "low"))
-                hi = _first_float(s, ("max", "p_high", "prob_high", "ci_high", "high"))
-                if lo is None or hi is None or not (lo <= p <= hi):
-                    lo, hi = None, None
+                ids, names = _identity_parts(scenario)
+                match = None
+                for index, ((candidate_ids, candidate_names), candidate) in enumerate(
+                        ensemble_identity):
+                    if index in used_ensemble:
+                        continue
+                    if (ids and candidate_ids and ids & candidate_ids) or (names & candidate_names):
+                        match = (index, candidate)
+                        break
+                source = scenario
+                if match is not None:
+                    used_ensemble.add(match[0])
+                    source = match[1]
+                lo, hi, stdev, support = _uncertainty(source, p)
                 rows.append({
-                    "name": _html_text(s.get("name") or s.get("label"),
+                    "name": _html_text(scenario.get("name") or scenario.get("label"),
                                        fallback=f"Scenario {i}", max_len=56),
                     "p": p, "lo": lo, "hi": hi,
-                    "stdev": _first_float(s, ("stdev", "std")),
-                    "support": _first_float(s, ("support_ratio",)),
+                    "stdev": stdev if match is not None else None,
+                    "support": support if match is not None else None,
                 })
-        if not rows:
-            scenarios = forecast.get("scenarios") if isinstance(forecast, dict) else forecast
-            if isinstance(scenarios, list):
-                for i, s in enumerate(scenarios, 1):
-                    if not isinstance(s, dict):
-                        continue
-                    p = _first_float(s, ("probability", "prob", "p"))
-                    if p is None:
-                        continue
-                    lo = _first_float(s, ("p_low", "prob_low", "ci_low", "low"))
-                    hi = _first_float(s, ("p_high", "prob_high", "ci_high", "high"))
-                    if lo is None or hi is None or not (lo <= p <= hi):
-                        lo, hi = None, None
-                    rows.append({
-                        "name": _html_text(s.get("name") or s.get("label"),
-                                           fallback=f"Scenario {i}", max_len=56),
-                        "p": p, "lo": lo, "hi": hi, "stdev": None, "support": None,
-                    })
+        elif ensemble_rows:
+            for i, scenario in enumerate(ensemble_rows, 1):
+                # ``probability`` is the normalized published ensemble distribution;
+                # ``mean_probability`` is a per-bucket diagnostic and need not sum to one.
+                p = _probability(_first_float(
+                    scenario, ("probability", "prob", "p", "mean_probability"),
+                ))
+                if p is None:
+                    continue
+                lo, hi, stdev, support = _uncertainty(scenario, p)
+                rows.append({
+                    "name": _html_text(scenario.get("name") or scenario.get("label"),
+                                       fallback=f"Scenario {i}", max_len=56),
+                    "p": p, "lo": lo, "hi": hi,
+                    "stdev": stdev, "support": support,
+                })
+            # Old/malformed ensemble schemas may expose only diagnostic bucket means.  When
+            # semantic alignment failed those means can total 2x or 3x; omitting the chart is
+            # safer than presenting a distribution that is mathematically impossible.
+            total = sum(row["p"] for row in rows)
+            if rows and not 0.95 <= total <= 1.05:
+                return []
         rows.sort(key=lambda r: (-r["p"], r["name"]))
         return rows[:14]
     except Exception:  # noqa: BLE001
@@ -2490,6 +3224,24 @@ def _parse_flex_date(s: Any):
             return None
         day = min(max(day, 1), 28)  # 钳到 28 避免月长判断
         return _dt.datetime(year, month, day)
+    except (TypeError, ValueError):
+        return None
+
+
+def _trajectory_row_date(row: Any):
+    """CAL-TEMPORAL：日历模式轨迹行（world_state_trajectory schema v3）的横轴日期。
+
+    优先 as_of（第 0 行为 as_of_date，其余行等于 period_end），回退 period_end；
+    严格 ISO YYYY-MM-DD 解析（不用 _parse_flex_date——其钳日到 28 会挪动季度末/月末边界）。
+    解析失败 → None，调用方对任一行失败即整体回退旧的轮次横轴（degrade-safe）。"""
+    import datetime as _dt
+    if not isinstance(row, dict):
+        return None
+    raw = row.get("as_of") or row.get("period_end")
+    if not raw:
+        return None
+    try:
+        return _dt.date.fromisoformat(str(raw).strip()[:10])
     except (TypeError, ValueError):
         return None
 

@@ -64,6 +64,7 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { L } from '../../i18n'
+import { liveLogRevision } from '../../utils/liveProgress'
 
 const props = defineProps({
   logLines: {
@@ -157,7 +158,7 @@ const showJumpButton = computed(() => !atBottom.value && visibleLines.value.leng
 
 // 监听日志变化与过滤切换：若已在底部则自动跟随到底
 watch(
-  () => [safeLines.value.length, activeFilter.value],
+  () => [liveLogRevision(safeLines.value), activeFilter.value],
   () => {
     if (!atBottom.value) return
     nextTick(() => scrollToBottom())

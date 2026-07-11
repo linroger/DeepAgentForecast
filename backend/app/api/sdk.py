@@ -255,6 +255,13 @@ def v1_forecast(report_id: str):
         report = ReportManager.get_report(report_id)
         if report is None:
             return _err(f"报告不存在: {report_id}", 404)
+        publication = ReportManager.publication_status(report_id)
+        if not publication.get("publishable"):
+            return _err(
+                "该报告未通过当前发布完整性门，结构化预测不可对外读取："
+                + "；".join(publication.get("reasons") or []),
+                409,
+            )
         forecast = _load_forecast(report_id)
         if forecast is None:
             return _err(
@@ -299,6 +306,14 @@ def v1_resolve(report_id: str):
         report = ReportManager.get_report(report_id)
         if report is None:
             return _err(f"报告不存在: {report_id}", 404)
+
+        publication = ReportManager.publication_status(report_id)
+        if not publication.get("publishable"):
+            return _err(
+                "该报告未通过当前发布完整性门，禁止写入判定/校准账本："
+                + "；".join(publication.get("reasons") or []),
+                409,
+            )
 
         forecast = _load_forecast(report_id)
         if forecast is None:

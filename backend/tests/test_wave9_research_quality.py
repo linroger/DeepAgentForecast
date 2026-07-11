@@ -262,11 +262,15 @@ class TestPromptContracts:
         assert "SOURCE INDEX" in p
         assert "INTERNAL" in p  # working-notes digest 标头声明内部性
 
-    def test_write_step_prompt_requires_charts_by_default(self, mod, monkeypatch):
+    def test_write_step_prompt_requires_chart_ready_data_not_impossible_rendering(
+        self, mod, monkeypatch
+    ):
         monkeypatch.delenv("RESEARCH_CHARTS_MIN", raising=False)
-        monkeypatch.setenv("DEERFLOW_ALLOW_HOST_BASH", "true")
         p = mod.build_synthesis_prompt("Q?", None, depth="deep")
-        assert "REQUIRED CHARTS" in p and "charts/actor_network.png" in p
+        assert "CHART-READY EVIDENCE" in p
+        assert "deterministic post-processing" in p
+        assert "load the forecast-visuals skill" not in p
+        assert "scripts/render.py" not in p
         monkeypatch.setenv("RESEARCH_CHARTS_MIN", "0")
         p0 = mod.build_synthesis_prompt("Q?", None, depth="deep")
-        assert "OPTIONAL CHARTS" in p0
+        assert "Preserve chart-ready quantitative series" in p0

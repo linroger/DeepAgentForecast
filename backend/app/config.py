@@ -162,11 +162,27 @@ class Config:
     # 结构化预测后追加红队自校准（纠正过度自信/基率忽视，EXECPLAN2 I-3-5；NEXTSTEPS P2-1）。
     # 默认开：与基率锚定+inter-seed 一致度配合做 anchor-and-adjust，纠正内视过度自信（多一次 LLM 调用）。
     REPORT_FORECAST_SELF_CRITIQUE = os.environ.get('REPORT_FORECAST_SELF_CRITIQUE', 'True').strip().lower() == 'true'
-    # NEXTSTEPS P2-3：发布门。结构化预测推导后，对「喂给情景的定量声明」要求引用覆盖率≥阈值，
-    # 否则把整体 confidence 降级为 low；并强制存在一个「维持现状/兜底」情景、拒绝无依据的退化熵。
-    # 把品控写进 forecast.json.quality。默认开；关闭=不设门（degrade-safe）。
+    # NEXTSTEPS P2-3 / LOOP-010：发布门。严格解析后的定量引用覆盖不足等认识论缺口
+    # 至多降一级 confidence；概率不闭合、缺兜底情景和最终工件完整性缺陷写入 hard_issues，
+    # 由最终只读审计阻止 completed 发布。默认开；关闭仅跳过结构化预测门。
     REPORT_PUBLISH_GATE = os.environ.get('REPORT_PUBLISH_GATE', 'True').strip().lower() == 'true'
-    REPORT_PUBLISH_GATE_MIN_COVERAGE = float(os.environ.get('REPORT_PUBLISH_GATE_MIN_COVERAGE', '0.5') or '0.5')
+    REPORT_PUBLISH_GATE_MIN_COVERAGE = float(os.environ.get('REPORT_PUBLISH_GATE_MIN_COVERAGE', '0.75') or '0.75')
+    # A single generic source repeated throughout a long report is usually a
+    # provenance-collapse signal, not stronger evidence.  The final audit blocks
+    # publication above this count so synthesis must either cite the actual
+    # evidence span or leave a visible coverage gap.
+    REPORT_MAX_CITATIONS_PER_SOURCE = int(
+        os.environ.get('REPORT_MAX_CITATIONS_PER_SOURCE', '20') or '20'
+    )
+    # LOOP-010：所有正文改写与引用最终化之后，对将发布的精确 Markdown 做一次只读审计。
+    # 记录 SHA-256、磁盘一致性、严格引用解析、语言/流程泄漏与 lint would-change，并把结果
+    # 合并进 forecast.json.quality；绝不在审计阶段再次改写报告。默认开。
+    REPORT_FINAL_READ_ONLY_AUDIT = os.environ.get(
+        'REPORT_FINAL_READ_ONLY_AUDIT', 'True'
+    ).strip().lower() == 'true'
+    # Increment whenever a hard publication rule changes. Byte-matched audits
+    # from an older policy are drafts until replayed under the current rules.
+    REPORT_FINAL_AUDIT_POLICY_VERSION = 3
     # NEXTSTEPS P2-2：在报告末尾追加一个**确定性**的「如何验证本预测」章节——逐情景列可证伪判定
     # 标准 + 来自 forecast_inputs 的带日期/触发观察指标，并把指标-情景映射写进 forecast.json 供
     # 解析调度器使用。默认开；无结构化预测/无情景时自动跳过（degrade-safe）。
@@ -484,6 +500,30 @@ class Config:
     # 降级为 '## Part N — <english title>' H2、输出「跨轨分歧」小节点名冲突的头条数字。仅喂各轨
     # 执行摘要（cap ~30K 字符）；任何失败降级为纯拼接（与今日逐字节一致）。
     RESEARCH_TRACK_RECONCILE = os.environ.get('RESEARCH_TRACK_RECONCILE', 'true').strip().lower() == 'true'
+    # LOOP-007: one cross-process budget ledger bounds multiplicative outer tracks,
+    # dual workflows, phases, and subagents at the actual search/fetch boundary.
+    RESEARCH_BUDGET_ENABLED = os.environ.get(
+        'RESEARCH_BUDGET_ENABLED', 'true').strip().lower() == 'true'
+    RESEARCH_BUDGET_ATTEMPTS_GLOBAL = int(os.environ.get(
+        'RESEARCH_BUDGET_ATTEMPTS_GLOBAL', '1800') or '1800')
+    RESEARCH_BUDGET_SEARCH_GLOBAL = int(os.environ.get(
+        'RESEARCH_BUDGET_SEARCH_GLOBAL', '900') or '900')
+    RESEARCH_BUDGET_SEARCH_LANE = int(os.environ.get(
+        'RESEARCH_BUDGET_SEARCH_LANE', '360') or '360')
+    RESEARCH_BUDGET_FETCH_GLOBAL = int(os.environ.get(
+        'RESEARCH_BUDGET_FETCH_GLOBAL', '450') or '450')
+    RESEARCH_BUDGET_FETCH_LANE = int(os.environ.get(
+        'RESEARCH_BUDGET_FETCH_LANE', '180') or '180')
+    RESEARCH_NEGATIVE_CACHE_TTL_SECONDS = int(os.environ.get(
+        'RESEARCH_NEGATIVE_CACHE_TTL_SECONDS', '600') or '600')
+    RESEARCH_NEGATIVE_CACHE_RETRIES = int(os.environ.get(
+        'RESEARCH_NEGATIVE_CACHE_RETRIES', '1') or '1')
+    # LOOP-007B: raw per-track actor prose remains auditable under track_N/;
+    # graph extraction consumes one bounded canonical cast + one-hop dossier.
+    RESEARCH_COMPACT_MERGED_DOSSIER = os.environ.get(
+        'RESEARCH_COMPACT_MERGED_DOSSIER', 'true').strip().lower() == 'true'
+    ACTOR_DOSSIER_MAX_CHARS = int(os.environ.get(
+        'ACTOR_DOSSIER_MAX_CHARS', '80000') or '80000')
     # W9-11：研究卷宗定稿后跑确定性编辑 lint（report_lint.lint_report(md, lang, mode='research')，
     # 清理 [citation:...] 残渣、pass/working-notes 叙述泄漏等机器语法）。模块未部署（ImportError）
     # 或本旋钮为 false 时静默跳过（degrade-safe）。
@@ -936,6 +976,22 @@ class Config:
     # 设为正整数则作为全局轮数上限（每次运行可被 options.max_rounds 覆盖；冒烟测试用小值）。
     # SIM-2：0→36。封顶一个 config-gen 产出的病态 336 轮（~9x）；options.max_rounds 仍可为长时域覆盖。
     OASIS_DEFAULT_MAX_ROUNDS = int(os.environ.get('OASIS_DEFAULT_MAX_ROUNDS', '36'))
+    # —— 日历时间轴模式（TEMPORAL-*；仅影响 config 生成，运行侧按 temporal_config 是否存在分派）——
+    # calendar（默认）= 生成 temporal_config：每轮对应一个自然日历时段（日/周/半月/月/季/半年），
+    # 事件按真实日期落轮、预测期限完整覆盖。hours = 不生成 temporal_config，走旧的小时制路径（字节不变）。
+    SIM_TEMPORAL_MODE = os.environ.get('SIM_TEMPORAL_MODE', 'calendar').strip().lower()
+    # 日历单位选择的软轮数预算（时间粒度在此预算内取最接近理想轮数的单位；不截断预测期）。
+    SIM_CALENDAR_TARGET_MAX_ROUNDS = int(os.environ.get('SIM_CALENDAR_TARGET_MAX_ROUNDS', '36') or '36')
+    # 绝对轮数上界（短时域反锯齿细化的天花板，防止 unit 细化后轮数失控）。
+    SIM_CALENDAR_HARD_MAX_ROUNDS = int(os.environ.get('SIM_CALENDAR_HARD_MAX_ROUNDS', '48') or '48')
+    # 问题中解析不出预测期限（确定性各档 + LLM 兜底均失败）时的降级默认时域（月）。
+    SIM_HORIZON_DEFAULT_MONTHS = int(os.environ.get('SIM_HORIZON_DEFAULT_MONTHS', '12') or '12')
+    # 世界时钟头部附带上一时段变化摘要（world_delta 纯确定性拼装，仅日历模式生效）。
+    SIM_WORLD_DELTA = os.environ.get('SIM_WORLD_DELTA', 'true').strip().lower() == 'true'
+    # 决策通道改为逐轮在环内引出承诺并推进 WorldState（仅日历模式；关闭则回退事后一次性通道）。
+    SIM_DECISION_CHANNEL_INBAND = os.environ.get('SIM_DECISION_CHANNEL_INBAND', 'true').strip().lower() == 'true'
+    # WorldState.step 熵地板：按时段天数向种子基率先验混合，防止长时域份额锁死（仅日历模式生效）。
+    WORLDSTATE_ENTROPY_MIX = os.environ.get('WORLDSTATE_ENTROPY_MIX', 'true').strip().lower() == 'true'
     OASIS_SIMULATION_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/simulations')
 
     # —— OASIS 并发上限（每轮在飞 LLM 请求数）单一真源（EXECPLAN2 I-8-4）——
@@ -1040,6 +1096,29 @@ class Config:
     # 并打降级标；全失败 → 阶段失败（与今日一致）。设 1 = 今日单轨路径逐字节一致（degrade-safe）。
     # 上限受已定义角度数约束（当前 3）；>3 的值被夹到 3。
     RESEARCH_PARALLEL_TRACKS = max(1, int(os.environ.get('RESEARCH_PARALLEL_TRACKS', '3') or '3'))
+    # LOOP-010: parallel tracks own evidence discovery, not three independent
+    # publishable dossiers.  With >1 track, export lossless evidence packs and
+    # run one global routed synthesis/judge/extraction namespace afterward.
+    RESEARCH_GLOBAL_SYNTHESIS = os.environ.get(
+        'RESEARCH_GLOBAL_SYNTHESIS', 'true').strip().lower() == 'true'
+    # LOOP-009：外层轨与 harness 子代理共享一个并行度信封。旧行为是 3 外轨 × 每轨 5
+    # 子代理 = 最多 15 条并发模型流；最近实跑显示这会重复上下文与检索、而非线性增质。
+    # 默认全局信封 9、每轨最多 5：3 轨时自动分成 3/轨，单轨仍可用满 5。
+    RESEARCH_GLOBAL_SUBAGENT_CAP = max(
+        1, int(os.environ.get('RESEARCH_GLOBAL_SUBAGENT_CAP', '9') or '9'))
+    RESEARCH_SUBAGENTS_PER_TRACK_MAX = max(
+        1, min(8, int(os.environ.get('RESEARCH_SUBAGENTS_PER_TRACK_MAX', '5') or '5')))
+    # Total provider-facing model streams, including outer lead calls and nested
+    # harness workers. ``0`` derives the safe envelope as global subagents plus
+    # concurrently active outer tracks; a positive value is an explicit override.
+    RESEARCH_GLOBAL_MODEL_CONCURRENCY = max(
+        0, int(os.environ.get('RESEARCH_GLOBAL_MODEL_CONCURRENCY', '0') or '0'))
+    # Stable application-level lease DB shared by every concurrently running
+    # pipeline. Tool budgets remain per-run; provider admission must not.
+    RESEARCH_MODEL_LEASE_DB = (
+        os.environ.get('RESEARCH_MODEL_LEASE_DB', '').strip()
+        or os.path.join(UPLOAD_FOLDER, 'research_model_leases.sqlite3')
+    )
     # 双轨研究：在研究阶段「同时」跑两套调研工作流——Track A = 既有 deep-research 工作流
     # （deep-research skill）产出 research_report.md（广覆盖证据报告，角色不变）；Track B =
     # 新增 actor-ontology 研究工作流（actor-ontology-research skill）产出 actor_dossier.md

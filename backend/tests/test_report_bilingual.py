@@ -7,8 +7,8 @@ ReportManager.REPORTS_DIR is redirected into tmp so no artifacts leak.
 Covers the design's required test bullets:
   * structure preservation — code/mermaid fences copied UNCHANGED, table column
     count kept, an H2-looking line INSIDE a fence is not treated as a boundary;
-  * number-integrity flag — a translation that drops a '42%' token records
-    translation_quality='warning' + missing_numbers, but still ships the file;
+  * fail-closed integrity — a translation that drops a '42%' token is audited
+    but neither the Markdown nor its PDF is published;
   * skip on non-CJK/non-Latin (other) language — detection returns None → no file;
   * same-language / identity no-op — translation == source → nothing written;
   * degrade on LLM error — every section call raises → falls back to source →
@@ -18,6 +18,8 @@ Covers the design's required test bullets:
   * API: GET /<id>/full_report.<lang>.md serving + /pdf?lang= wiring.
 """
 
+import hashlib
+import json
 import os
 import sys
 
@@ -71,6 +73,42 @@ def reports_tmp(tmp_path, monkeypatch):
     return str(d)
 
 
+def _publish_primary(rid: str, markdown: str = "# Primary\n\nAudited body.\n") -> None:
+    report = Report(
+        report_id=rid,
+        simulation_id=f"sim_{rid}",
+        graph_id="graph_test",
+        simulation_requirement="Forecast the outcome.",
+        status=ReportStatus.COMPLETED,
+        markdown_content=markdown,
+    )
+    ReportManager.save_report(report)
+    with open(ReportManager._get_report_final_audit_path(rid), "w", encoding="utf-8") as f:
+        json.dump({
+            "policy_version": 3,
+            "hard_passed": True,
+            "hard_issues": [],
+            "markdown_sha256": hashlib.sha256(markdown.encode("utf-8")).hexdigest(),
+            "publish_gate": {"enabled": True, "passed": True},
+            "structured_forecast": {"required": False, "valid": True},
+            "citation_artifacts": {"required": False, "passed": True},
+        }, f)
+
+
+def _publish_variant(rid: str, lang: str, markdown: str) -> None:
+    sha = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
+    with open(ReportManager._get_report_citations_path(rid, lang), "w", encoding="utf-8") as f:
+        json.dump({"language": lang, "markdown_sha256": sha, "markers": []}, f)
+    with open(ReportManager._get_report_final_audit_path(rid, lang), "w", encoding="utf-8") as f:
+        json.dump({
+            "policy_version": 3,
+            "language": lang,
+            "hard_passed": True,
+            "hard_issues": [],
+            "markdown_sha256": sha,
+        }, f)
+
+
 # An English source report with: H1 + summary, two H2 sections, an H3, a markdown
 # table (3 columns), a fenced code block that CONTAINS a line starting with '## '
 # (must NOT be split as a section), and percentage tokens.
@@ -102,9 +140,31 @@ x = 42
 
 
 def _translate_outlook(user: str) -> str:
-    """Faithful fake translation: only touches prose word 'Outlook' → '展望';
-    leaves fences, tables, numbers, citation markup byte-identical."""
-    return user.replace("Outlook", "展望")
+    """Faithful deterministic translation; fenced code remains byte-identical."""
+    replacements = {
+        "# Trade Outlook Report": "# 贸易展望报告",
+        "> A concise Outlook of the 2027 trade posture.": "> 2027 年贸易形势简报。",
+        "## Executive Summary": "## 执行摘要",
+        "The Outlook base case holds at 42% while the escalation path sits at 21%.":
+            "基准情景为 42%，升级路径为 21%。",
+        "### Sub-point": "### 次级要点",
+        "Secondary Outlook detail with 15% weighting.": "次级细节权重为 15%。",
+        "## Scenarios & Data": "## 情景与数据",
+        "| Scenario | Probability | Note |": "| 情景 | 概率 | 备注 |",
+        "| Base | 42% | steady |": "| 基准 | 42% | 稳定 |",
+        "| Escalation | 21% | tail |": "| 升级 | 21% | 尾部 |",
+    }
+    in_fence = False
+    output = []
+    for line in user.splitlines():
+        if line.lstrip().startswith(("```", "~~~")):
+            in_fence = not in_fence
+            output.append(line)
+        elif in_fence:
+            output.append(line)
+        else:
+            output.append(replacements.get(line, line))
+    return "\n".join(output)
 
 
 # ─────────────────────────── section splitting ──────────────────────────
@@ -141,7 +201,7 @@ def test_bilingual_preserves_structure_and_writes_zh(reports_tmp):
     assert "x = 42" in out
     # table shape kept: separator row + 3-column data rows intact
     assert "|---|---|---|" in out
-    assert out.count("| Base | 42% | steady |") == 1
+    assert out.count("| 基准 | 42% | 稳定 |") == 1
     # prose actually translated (Outlook → 展望) — proves it wasn't a no-op skip
     assert "展望" in out and "Outlook" not in out
     # meta entry recorded on the report, number integrity OK
@@ -152,6 +212,12 @@ def test_bilingual_preserves_structure_and_writes_zh(reports_tmp):
     assert entry["translation_quality"] == "ok"
     assert entry["missing_numbers"] == []
     assert entry["model"] == "fake-translator"
+    assert entry["available"] is True
+    assert entry["chars"] == len(out)
+    assert entry["bytes"] == len(out.encode("utf-8"))
+    assert entry["markdown_sha256"] == hashlib.sha256(out.encode("utf-8")).hexdigest()
+    assert os.path.exists(ReportManager._get_report_citations_path(rid, "zh"))
+    assert os.path.exists(ReportManager._get_report_final_audit_path(rid, "zh"))
     # primary deliverable never mutated
     assert report.markdown_content == _EN_MD
     # meta.json round-trips the translations block
@@ -161,25 +227,47 @@ def test_bilingual_preserves_structure_and_writes_zh(reports_tmp):
 
 
 # ─────────────────────────── number-integrity flag ──────────────────────
-def test_bilingual_number_integrity_warns_on_dropped_percent(reports_tmp):
+def test_bilingual_number_integrity_failure_blocks_variant(reports_tmp):
     rid = "report_numint"
     ReportManager._ensure_report_folder(rid)
     report = Report(report_id=rid, simulation_id="s", graph_id="g",
                     simulation_requirement="req", status=ReportStatus.COMPLETED,
                     markdown_content=_EN_MD)
     # Corrupt the numbers: drop the '%' on 42% (→ '42 percent') in prose + table.
-    llm = _TransLLM(translate=lambda u: u.replace("42%", "42 percent"))
+    llm = _TransLLM(translate=lambda u: _translate_outlook(u).replace("42%", "42 percent"))
     agent = _bili_agent(llm)
 
     agent._generate_bilingual_report(rid, report)
 
-    # File still shipped (degrade: still shows the translation)
-    assert os.path.exists(os.path.join(reports_tmp, rid, "full_report.zh.md"))
-    entry = report.translations[0]
-    assert entry["translation_quality"] == "warning"
-    assert "42%" in entry["missing_numbers"]
-    # 21% / 15% were preserved, so they must NOT appear as missing
-    assert "21%" not in entry["missing_numbers"]
+    assert not os.path.exists(os.path.join(reports_tmp, rid, "full_report.zh.md"))
+    assert report.translations is None
+    audit_path = ReportManager._get_report_final_audit_path(rid, "zh")
+    with open(audit_path, encoding="utf-8") as handle:
+        audit = json.load(handle)
+    assert audit["hard_passed"] is False
+    assert audit["number_parity"]["passed"] is False
+    assert any("numeric-token" in issue for issue in audit["issues"])
+
+
+def test_translation_variant_audit_rejects_heading_table_and_language_drift():
+    source = (
+        "# Forecast\n\n## Outcome\n\nThe outcome is 42%.\n\n"
+        "| Metric | Value |\n|---|---|\n| Share | 42% |\n"
+    )
+    variant = (
+        "# 预测\n\nThe untranslated outcome prose remains here at 42%.\n\n"
+        "| 指标 |\n|---|\n| 42% |\n"
+    )
+    agent = _bili_agent(_TransLLM(translate=_translate_outlook))
+    agent._forecast_spine = None
+
+    audit, _citations = agent._audit_translation_variant(
+        "report_variant_audit", source, variant, "en", "zh", {})
+
+    assert audit["hard_passed"] is False
+    assert audit["section_parity"]["passed"] is False
+    assert audit["table_parity"]["passed"] is False
+    assert audit["language_lint"]["language_contamination"]["lines"] >= 1
 
 
 # ─────────────────────────── skip: other language ───────────────────────
@@ -262,8 +350,15 @@ def test_bilingual_chinese_source_produces_english(reports_tmp):
     report = Report(report_id=rid, simulation_id="s", graph_id="g",
                     simulation_requirement="req", status=ReportStatus.COMPLETED,
                     markdown_content=zh_md)
-    # Fake en translation that keeps the % tokens.
-    agent = _bili_agent(_TransLLM(translate=lambda u: u.replace("执行摘要", "Executive Summary")),
+    # Faithful fake English translation that keeps the numeric tokens.
+    def _to_en(user: str) -> str:
+        return (user.replace("# 贸易展望报告", "# Trade Outlook Report")
+                .replace("> 简要摘要", "> Concise summary.")
+                .replace("## 执行摘要", "## Executive Summary")
+                .replace("基准情景维持在 42%，升级路径为 21%。",
+                         "The base case is 42%, while escalation is 21%."))
+
+    agent = _bili_agent(_TransLLM(translate=_to_en),
                         output_language="Chinese")
 
     agent._generate_bilingual_report(rid, report)
@@ -286,11 +381,33 @@ def test_pdf_and_translation_path_helpers(reports_tmp):
 
 def test_export_pdf_uses_translation_source(reports_tmp, monkeypatch):
     rid = "report_pdf_lang"
-    ReportManager._ensure_report_folder(rid)
+    _publish_primary(rid)
     # Write a zh translation md; stub the actual PDF backends so no pandoc/PyMuPDF needed.
     zh_path = ReportManager._get_report_translation_path(rid, "zh")
+    zh_md = (
+        "# 标题\n\n正文 42% [S1]。\n\n## 参考来源\n\n"
+        "1. [S1] 中文来源 — [https://example.cn/zh](https://example.cn/zh)\n"
+    )
     with open(zh_path, "w", encoding="utf-8") as f:
-        f.write("# 标题\n\n正文 42%。\n")
+        f.write(zh_md)
+    sha = hashlib.sha256(zh_md.encode("utf-8")).hexdigest()
+    with open(ReportManager._get_report_citations_path(rid), "w", encoding="utf-8") as f:
+        json.dump({"markers": [{"tag": "S1", "title": "WRONG PRIMARY",
+                                "domain": "wrong.example", "url": "https://wrong.example",
+                                "url_valid": True}]}, f)
+    with open(ReportManager._get_report_citations_path(rid, "zh"), "w", encoding="utf-8") as f:
+        json.dump({"language": "zh", "markdown_sha256": sha, "markers": [{
+            "tag": "S1", "title": "中文来源", "domain": "example.cn",
+            "url": "https://example.cn/zh", "url_valid": True,
+        }]}, f)
+    with open(ReportManager._get_report_final_audit_path(rid, "zh"), "w", encoding="utf-8") as f:
+        json.dump({
+            "policy_version": 3,
+            "language": "zh",
+            "hard_passed": True,
+            "hard_issues": [],
+            "markdown_sha256": sha,
+        }, f)
 
     seen = {}
 
@@ -308,8 +425,24 @@ def test_export_pdf_uses_translation_source(reports_tmp, monkeypatch):
     assert out and out.endswith("full_report.zh.pdf")
     assert seen["pdf_path"].endswith("full_report.zh.pdf")
     assert "标题" in seen["md"]
+    assert "中文来源" in seen["md"] and "WRONG PRIMARY" not in seen["md"]
     # Missing translation for 'en' → None (degrade-safe), no crash.
     assert ReportManager.export_pdf(rid, lang="en") is None
+
+
+def test_translation_pdf_cache_cannot_bypass_missing_variant_audit(reports_tmp, monkeypatch):
+    rid = "report_pdf_unaudited"
+    ReportManager._ensure_report_folder(rid)
+    md_path = ReportManager._get_report_translation_path(rid, "zh")
+    pdf_path = ReportManager._get_report_pdf_path(rid, "zh")
+    with open(md_path, "w", encoding="utf-8") as handle:
+        handle.write("# 标题\n\n未审计译文。\n")
+    with open(pdf_path, "wb") as handle:
+        handle.write(b"%PDF-1.4 stale")
+    os.utime(pdf_path, (os.path.getmtime(md_path) + 10,) * 2)
+    monkeypatch.setattr(Config, "REPORT_PDF_EXPORT", True)
+
+    assert ReportManager.export_pdf(rid, lang="zh") is None
 
 
 # ─────────────────────── API: md serving + pdf?lang= ─────────────────────
@@ -323,9 +456,11 @@ def client(reports_tmp, monkeypatch):
 
 def test_api_serves_translation_md(client, reports_tmp):
     rid = "report_api_md"
-    ReportManager._ensure_report_folder(rid)
+    _publish_primary(rid)
+    zh_md = "# 中文标题\n\n译文正文。\n"
     with open(ReportManager._get_report_translation_path(rid, "zh"), "w", encoding="utf-8") as f:
-        f.write("# 中文标题\n\n译文正文。\n")
+        f.write(zh_md)
+    _publish_variant(rid, "zh", zh_md)
 
     resp = client.get(f"/api/report/{rid}/full_report.zh.md")
     assert resp.status_code == 200
@@ -345,8 +480,21 @@ def test_api_pdf_lang_param(client, reports_tmp, monkeypatch):
                     simulation_requirement="req", status=ReportStatus.COMPLETED,
                     markdown_content="# T\n\nbody 42%.\n")
     ReportManager.save_report(report)
+    primary_md = report.markdown_content
+    with open(ReportManager._get_report_final_audit_path(rid), "w", encoding="utf-8") as f:
+        json.dump({
+            "policy_version": 3,
+            "hard_passed": True,
+            "hard_issues": [],
+            "markdown_sha256": hashlib.sha256(primary_md.encode("utf-8")).hexdigest(),
+            "publish_gate": {"enabled": True, "passed": True},
+            "structured_forecast": {"required": False, "valid": True},
+            "citation_artifacts": {"required": False, "passed": True},
+        }, f)
+    zh_md = "# 标题\n\n正文 42%。\n"
     with open(ReportManager._get_report_translation_path(rid, "zh"), "w", encoding="utf-8") as f:
-        f.write("# 标题\n\n正文 42%。\n")
+        f.write(zh_md)
+    _publish_variant(rid, "zh", zh_md)
 
     captured = {}
 

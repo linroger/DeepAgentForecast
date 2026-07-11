@@ -519,6 +519,9 @@ def test_outage_aborts_after_first_two_sections(monkeypatch, tmp_path):
 def test_outage_flag_off_keeps_legacy_completed(monkeypatch, tmp_path):
     _wire_report_dirs(monkeypatch, tmp_path)
     monkeypatch.setattr(Config, "REPORT_ABORT_ON_LLM_OUTAGE", False, raising=False)
+    # Isolate the legacy outage flag. The default-on final publish audit now
+    # correctly rejects the placeholder-only/mixed-language artifact regardless.
+    monkeypatch.setattr(Config, "REPORT_FINAL_READ_ONLY_AUDIT", False, raising=False)
     a = _outage_agent(fail_all=True)
     report = a.generate_report(report_id="report_outage_legacy")
     assert report.status == ReportStatus.COMPLETED  # today's (broken) behavior preserved

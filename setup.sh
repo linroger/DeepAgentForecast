@@ -582,12 +582,14 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
 
   # (a2) Config-reflected tool modules registered in config.yaml as BARE module
   #     names (`use: market_tools:...`, `use: search_tools:...`, `use: cached_fetch:...`).
+  #   - research_budget.py is imported by search_tools/cached_fetch and must be
+  #     colocated with them for the shared LOOP-007 SQLite control plane.
   #     deerflow_research.py runs as `python <deer-flow>/deerflow_research.py`, so
   #     sys.path[0] is the deer-flow dir and the harness reflection resolver
   #     (resolve_variable -> import_module) imports these by bare name — they MUST
   #     sit next to config.yaml in deer-flow/ or web_search/web_fetch/prediction_market
-  #     tools fail to load. Deploy all three so the wiring is reproducible.
-  for _tool_mod in market_tools.py search_tools.py cached_fetch.py; do
+  #     tools fail to load. Deploy all four so the wiring is reproducible.
+  for _tool_mod in market_tools.py search_tools.py cached_fetch.py research_budget.py; do
     if [ -f "$BRIDGE_DIR/$_tool_mod" ]; then
       cp "$BRIDGE_DIR/$_tool_mod" "$DEERFLOW_DIR/$_tool_mod"
       ok "Installed $_tool_mod (config-reflected bridge tool)"
@@ -610,8 +612,8 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
   #     triangulation, circular-sourcing detection, and tool-budget discipline.
   DF_SKILL="$DEERFLOW_DIR/skills/public/deep-research"
   if [ -f "$BRIDGE_DIR/skills/deep-research/SKILL.md" ] && [ -d "$DF_SKILL" ]; then
-    cp "$BRIDGE_DIR/skills/deep-research/SKILL.md" "$DF_SKILL/SKILL.md"
-    ok "Applied deep-research skill overhaul (source tiering + budget discipline)"
+    cp -R "$BRIDGE_DIR/skills/deep-research/." "$DF_SKILL/"
+    ok "Applied compact deep-research skill + lazy tradecraft/dossier references"
   fi
 
   # (b2b) Actor/ontology research skill: an actor-centric, ontology-ready
@@ -627,14 +629,41 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
     ok "Installed actor-ontology-research skill (actor-centric, ontology-ready research)"
   fi
 
-  # (b3) Patched middlewares: loop-detection counters reset per agent run.
+  # (b3) Patched middlewares: loop-detection counters reset per agent run;
+  #     provider model calls share an application-level cross-process lease,
+  #     including lead/subagent and middleware-internal title/summarization calls.
   #     Upstream accumulates per-tool call counts across ALL turns of a thread,
   #     so multi-pass deep research permanently force-stops web_search from
   #     pass 2 onward once the cumulative count crosses the safety limit.
   DF_MIDDLEWARES="$DEERFLOW_DIR/backend/packages/harness/deerflow/agents/middlewares"
   if [ -d "$BRIDGE_DIR/patches/middlewares" ] && [ -d "$DF_MIDDLEWARES" ]; then
     cp "$BRIDGE_DIR/patches/middlewares/"*.py "$DF_MIDDLEWARES/"
-    ok "Applied middleware patches (loop_detection per-run reset)"
+    ok "Applied middleware patches (loop reset + exact-call model concurrency)"
+  fi
+
+  # (b4) SubagentExecutor lifecycle overlay. Apply one narrow idempotent source
+  #     transformation so the active vendor version keeps all of its tracing,
+  #     session, callback, and token-record behavior.
+  SUBAGENT_OVERLAY="$BRIDGE_DIR/patches/apply_subagent_overlays.py"
+  if [ -f "$SUBAGENT_OVERLAY" ]; then
+    if python3 "$SUBAGENT_OVERLAY" "$DEERFLOW_DIR" >/dev/null; then
+      ok "Applied subagent lifecycle concurrency boundary"
+    else
+      warn "Could not apply subagent overlay; inspect upstream executor drift"
+    fi
+  fi
+
+  # (b5) Lead-agent factory overlay: YAML ``trim_tokens_to_summarize: null`` is
+  #     deliberate (summarize the complete discarded segment). Upstream omits
+  #     the kwarg when null, silently reactivating LangChain's 4K default.
+  #     This tracked idempotent overlay makes the contract survive a clean clone.
+  LEAD_AGENT_OVERLAY="$BRIDGE_DIR/patches/apply_lead_agent_overlays.py"
+  if [ -f "$LEAD_AGENT_OVERLAY" ]; then
+    if python3 "$LEAD_AGENT_OVERLAY" "$DEERFLOW_DIR" >/dev/null; then
+      ok "Applied lead-agent summarization overlay (explicit null trim)"
+    else
+      warn "Could not apply lead-agent summarization overlay; inspect upstream factory drift"
+    fi
   fi
 
   # (c) Ready-to-use config.yaml (claude/minimax/deepseek/qwen/glm/codex stanzas,

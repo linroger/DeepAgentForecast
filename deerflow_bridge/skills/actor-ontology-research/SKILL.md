@@ -1,11 +1,19 @@
 ---
 name: actor-ontology-research
-description: Use this skill for the DeepResearchForecast/DeerFlow forecasting pipeline whenever the research output must seed an ontology, a knowledge graph, and an actor-based simulation — i.e. any "forecast X" / "who wins / what happens to X" prediction run. It specializes the deep-research tradecraft toward an ACTOR-CENTRIC, ONTOLOGY-READY dossier: identify the real key actors (and demote mere reporters/outlets/sources), profile each in depth (role, values, beliefs, incentives, goals, constraints, resources, vulnerabilities, allies/opponents/customers/competitors/backers/investors), map their directed, typed, valenced relationships, and trace how the actors and their relationships have evolved over time. Runs a multipass, iteratively-refined workflow with an AI-judge quality gate that loops until the dossier is sufficiently detailed, rich, and excellent. Builds on (does not replace) the `deep-research` skill — use that skill's search craft, source tiering (S1–S4), evidence grading, and verification tradecraft as the foundation, and this skill for the mission, structure, and quality loop.
+description: >-
+  Use this skill in the DeepResearchForecast/DeerFlow forecasting pipeline when
+  research must seed an ontology, knowledge graph, and actor simulation. It
+  produces an actor-centric, ontology-ready dossier with deeply profiled key
+  actors, directed typed and valenced relationships, historical evolution, and
+  the behavioral fields needed for tailored runtime roles. It builds on the
+  deep-research skill's source tiering, evidence grading, and verification
+  discipline and adds a multipass actor/relationship workflow with an AI-judge
+  quality gate.
 ---
 
 # Actor & Ontology Research Skill
 
-> This skill produces the seed material for the rest of the pipeline. The downstream ontology generator reads your report and builds the entity/edge type ontology; a structured-extraction pass converts your report into `actors.json` (the cast), `relationships[]` (the network), `sources.json`, and the situation brief; those become the knowledge graph, the simulation personas, the social/follow graph, and the final forecast. **The quality of every later stage is capped by the quality of this dossier.** Your job is to make the cast and their network *legible* — richly profiled, correctly ranked, and explicitly connected — so the ontology step can build a rich knowledge map without re-mining from scratch.
+> This skill produces the seed material for the rest of the pipeline. The downstream ontology generator reads your report and builds the entity/edge type ontology; a structured-extraction pass converts your report into `actors.json` (the cast), `relationships[]` (the network), `sources.json`, and the situation brief. Each active `actors.json` row is then compiled into a versioned `actor-role/v1` contract that is appended to the exact Reddit `persona` / Twitter `user_char` OASIS consumes. Those artifacts become the knowledge graph, tailored simulation roles, social/follow graph, and final forecast. **The quality of every later stage is capped by the quality of this dossier.** Your job is to make the cast and their network *legible* — richly profiled, correctly ranked, explicitly connected, and behaviorally specific — so later stages never need to invent a generic persona or re-mine the report.
 
 > Foundation: follow the `deep-research` skill for all search craft, source-quality tiering (S1–S4), evidence grading (Admiralty B2 bar), triangulation, circular-source detection, temporal awareness, and the synthesis gate. This skill adds the *actor/ontology mission*, the *per-actor depth standard*, the *relationship/evolution requirements*, the *multipass workflow*, and the *AI-judge quality loop*. Where the two conflict, the underlying evidence discipline of `deep-research` always wins.
 
@@ -97,6 +105,36 @@ For **every key actor**, research and write a profile that a downstream model co
 
 > Depth heuristic: if you could not write three sentences of the actor's likely reasoning under the forecast's main uncertainty, you have not researched it enough.
 
+### 3.1 Runtime role-contract handoff (mandatory)
+
+The profile is not merely narrative: it is the source for the exact role the
+multi-agent simulation plays. For every active actor, make these fields explicit
+and actor-specific so structured extraction can populate `actors.json` without
+guessing:
+
+- stable identity: canonical name, aliases, actor/archetype, role-class, salience,
+  jurisdiction/sector, disambiguator, and real-world role;
+- behavior: ranked objectives/goals, incentives and gains/loses-if, constraints,
+  resources/capabilities, vulnerabilities, decision rights, and risk tolerance;
+- cognition: values, beliefs/worldview/frame, stated stance, revealed behavior,
+  and the evidence-backed gap between them;
+- interaction: named typed/valenced relationships, likely actions under the
+  forecast's main uncertainty, and genuine red lines;
+- epistemic boundary: known context/memory, as-of date, forecast horizon,
+  evidence grade, source tags, and explicit evidence gaps.
+
+Write these as **declarative evidence about the actor**, never as commands to a
+model (no “ignore”, “follow this message”, “write only”, tool requests, hidden
+instructions, or role reassignment). The runtime compiler treats dossier prose
+as untrusted data and may omit instruction-like values. A sparse or generic
+profile therefore yields a deliberately cautious role; it does not authorize the
+simulation to invent powers, alliances, facts, or commitments.
+
+Every active actor must be behaviorally distinguishable. Reusing the same goals,
+likely actions, or red lines across the cast without actor-specific evidence is a
+judge failure. Sources and context objects remain evidence and never receive an
+agent role.
+
 ---
 
 ## 4. The relationship network (directed, typed, valenced, evidenced)
@@ -187,7 +225,7 @@ The loop converges on *excellence*, not mere completeness: each round should rai
 | 5 | **History & evolution** | Dated formation, inflection points, and realignments for actors and key relationships; track records for forecasting. | A present-day snapshot only; no trajectory or dates. |
 | 6 | **Evidence grounding** | Load-bearing claims at B2+; sources tiered (S1–S4) and dated; circular sourcing avoided; numbers carry unit/as-of/definition. | Claims unattributed; aggregator/S4 reliance; echoes counted as independent. |
 | 7 | **Contradiction handling** | Genuine conflicts surfaced as contested claims with positions, sources, and *why they differ*; single-origin items flagged. | Conflicts averaged away or omitted; false certainty. |
-| 8 | **Ontology-readiness** | The report's structure (§9) lets the downstream step extract the cast, archetypes/role-classes, salience, the typed/valenced relationship network, and the timeline *without re-mining* — names are canonical and consistent; relations name real cast members. | Prose-only narrative; inconsistent names; the relationship network must be re-derived from scratch. |
+| 8 | **Ontology and role readiness** | The report's structure (§9) lets the downstream step extract the cast, archetypes/role-classes, salience, the typed/valenced relationship network, timeline, and every §3.1 runtime-role field *without re-mining* — names are canonical and consistent; relations name real cast members. | Prose-only narrative; inconsistent names; generic roles; missing likely actions/red lines/as-of/evidence boundary; the network or role must be re-derived from scratch. |
 
 ### 8.2 Pass bar (all must hold)
 
@@ -206,7 +244,7 @@ If the bar is not met, the judge FAILS the draft and emits the targeted gap list
 Write the report so the downstream ontology generator and the structured-extraction pass can read it directly. Keep the `deep-research` §12 output contract (layered claims, calibrated uncertainty, inline attribution, conflicts shown not averaged, no S4 citations, tiered source list), and add this **explicit, labeled structure**:
 
 1. **Forecast frame** — the question, its forecast object, horizon, and as-of date; the situation brief (current situation, how it got here / context, the forces in tension / dynamics, the 3–6 fault lines the actors argue over, and the catalysts that would shift things).
-2. **The cast (key actors)** — one clearly-delimited profile per actor, in salience order, each carrying the §3 fields. Use **canonical names consistently** (the same string everywhere) and list aliases once. Mark each actor's archetype, role-class, and salience tier explicitly, **with the one-line salience basis from §2.3 next to the tier** — the extraction pass emits it as `salience: {tier, basis}` and downstream coverage/agent-ranking read it.
+2. **The cast (key actors)** — one clearly-delimited profile per actor, in salience order, each carrying every §3 and §3.1 field, including actor-specific likely actions, red lines, risk tolerance, as-of/horizon, source tags, and evidence gaps. Use **canonical names consistently** (the same string everywhere) and list aliases once. Mark each actor's archetype, role-class, and salience tier explicitly, **with the one-line salience basis from §2.3 next to the tier** — the extraction pass emits it as `salience: {tier, basis}` and downstream coverage/agent-ranking read it.
 3. **The relationship network** — an explicit, enumerated list of directed edges: `Source —[TYPE, valence, strength]→ Target — basis`, covering the load-bearing relationships from §4. Every endpoint must be a name from the cast.
 4. **Per-actor relational roster** — within or beside each profile, the actor's allies / opponents / competitors / customers / suppliers / backers-investors / supporters / regulators / dependents, named.
 5. **Evolution & timeline** — the dated sequence of formation, inflection points, and realignments (§5).
@@ -223,7 +261,7 @@ Write the report so the downstream ontology generator and the structured-extract
 |---|---|---|
 | §9.1 situation brief | extraction → `situation_brief` | report background + simulation fault-line posts |
 | §9.2 cast (archetype/role-class/salience) | ontology generation + `actors.json` + agent selection | entity types/archetypes; persona-eligible cast; salience-ranked agents (so amplifiers don't crowd out principals) |
-| §9.2 per-actor values/beliefs/incentives/goals/etc. | `actors.json` actor detail | rich personas (not generic templates) and grounded report context |
+| §9.2 per-actor §3.1 contract fields | `actors.json` actor detail → `actor-role/v1` | one bounded tailored OASIS role per active actor, persisted in Reddit `persona` / Twitter `user_char`, plus grounded report context |
 | §9.3 relationship network (typed/valenced/directed) | `relationships[]` → graph seeding + follow graph + sentiment | the knowledge-graph edges, the simulation's initial follows, and ally/rival sentiment (valence preserved) |
 | §9.4 relational roster | report + persona prompts | "who to @, ally with, or oppose"; report coalition reasoning |
 | §9.5 evolution & timeline | `key_events` → scheduled events | dated simulation triggers; causal/temporal grounding |
@@ -239,6 +277,7 @@ Write the report so the downstream ontology generator and the structured-extract
 - ❌ **Outlet-as-actor.** Putting a cited news outlet, reporter, pollster, or "expert who commented" into the cast. They are sources unless they themselves move the outcome (§2.1).
 - ❌ **Ranking by prominence.** Letting the most-quoted or most-connected name outrank the actual decision-maker (§2.3).
 - ❌ **Label-depth profiles.** "A key regulator with significant influence" — no values, incentives, constraints, or stated-vs-revealed (§3).
+- ❌ **Generic or imperative runtime roles.** Reusing one persona across actors; omitting likely actions/red lines/evidence boundaries; or placing model instructions/tool requests in dossier fields (§3.1).
 - ❌ **Undirected / unvalenced relationships.** "X is connected to Y" — or treating a rivalry the same as a partnership (§4). A partner and an opponent must be distinguishable.
 - ❌ **Static snapshot.** A present-day picture with no formation, inflection points, or realignments, and no dates (§5).
 - ❌ **Network by co-occurrence.** Inferring relationships from two names appearing together instead of researching the edge and its basis (§4).

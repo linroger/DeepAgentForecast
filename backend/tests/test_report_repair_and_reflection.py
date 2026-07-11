@@ -12,7 +12,7 @@ Covers:
     resolved to [S1] (single source).
   * RQ-2 _run_repair_passes end-to-end: before/after recorded, existing quality keys merged.
   * RQ-2 language purity: CJK run in an English-target report translated inline;
-    blockquote source string keeps original as a parenthetical; disabled/empty → no-op.
+    blockquotes do not re-inject the source-language impurity; disabled/empty → no-op.
   * RQ-5 reflection gating: PASS → draft unchanged (1 critique call); revision
     instruction → revised draft adopted; invalid revision → original kept; disabled /
     MAX_REFLECTION_ROUNDS<=0 / contaminated draft → skipped (no LLM calls); wired into
@@ -78,8 +78,9 @@ _LONG = "This is a sufficiently long English body paragraph with real analysis. 
 # ─────────────────────────── RQ-2 citation backfill ─────────────────────────
 def test_repair_citation_backfill_appends_matching_source_tag():
     a = _repair_agent(sources=[{"title": "Trade dossier",
+                                "url": "https://example.com/trade-dossier",
                                 "content": "export volume rose 37% through 2027"}])
-    md = "# Title\n\nThe share reached 37% by mid-year and held.\n"
+    md = "# Title\n\nExport volume rose 37% by mid-year and held.\n"
     new_md, n = a._repair_citation_backfill(md)
     assert n == 1
     assert "[S1]" in new_md
@@ -92,6 +93,23 @@ def test_repair_citation_backfill_appends_matching_source_tag():
 def test_repair_citation_backfill_no_match_no_insert():
     a = _repair_agent(sources=[{"title": "Unrelated", "content": "nothing numeric here"}])
     md = "Revenue hit 99% penetration last quarter.\n"
+    new_md, n = a._repair_citation_backfill(md)
+    assert n == 0 and new_md == md
+
+
+def test_repair_citation_backfill_calendar_year_alone_never_matches():
+    a = _repair_agent(sources=[{"title": "Unrelated", "content": "published in 2027"}])
+    md = "Revenue accelerated in 2027 across several markets.\n"
+    new_md, n = a._repair_citation_backfill(md)
+    assert n == 0 and new_md == md
+
+
+def test_repair_citation_backfill_ambiguous_evidence_tie_stays_uncited():
+    a = _repair_agent(sources=[
+        {"title": "Survey A", "content": "regional adoption penetration reached 42%"},
+        {"title": "Survey B", "content": "regional adoption penetration reached 42%"},
+    ])
+    md = "Regional adoption penetration reached 42% this cycle.\n"
     new_md, n = a._repair_citation_backfill(md)
     assert n == 0 and new_md == md
 
@@ -112,11 +130,12 @@ def test_repair_quote_grounding_removes_only_ungrounded():
     assert "Aliens seized the harbor" not in new_md
 
 
-def test_repair_quote_grounding_keeps_cited_quote():
+def test_repair_quote_grounding_dequotes_cited_paraphrase():
     a = _repair_agent(research_report="irrelevant grounding corpus")
     md = "> An unmatched but properly sourced statement here [S3].\n"
     new_md, removed = a._repair_quote_grounding(md)
-    assert removed == 0 and new_md == md  # has [S#] → not fabricated, kept
+    assert removed == 0
+    assert new_md == "An unmatched but properly sourced statement here [S3]."
 
 
 # ───────────────────────── RQ-2 placeholder resolution ──────────────────────
@@ -138,8 +157,12 @@ def test_repair_placeholder_tokens_resolved_single_source():
 # ───────────────────────── RQ-2 _run_repair_passes E2E ──────────────────────
 def test_run_repair_passes_records_before_after_and_merges(monkeypatch):
     monkeypatch.setattr(Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.5, raising=False)
-    a = _repair_agent(sources=[{"title": "src", "content": "penetration reached 42% in 2027"}])
-    md = "# T\n\nAdoption hit 42% across the region this cycle.\n"
+    a = _repair_agent(sources=[{
+        "title": "src",
+        "url": "https://example.com/regional-adoption",
+        "content": "regional adoption penetration reached 42% in 2027",
+    }])
+    md = "# T\n\nRegional adoption penetration reached 42% this cycle.\n"
     forecast = {
         "citation_audit": {"coverage": 0.0, "quantitative_claims": 1},
         # pre-existing audit finding must survive the merge (never overwrite)
@@ -188,9 +211,176 @@ def test_language_purity_translates_cjk_in_english_report(monkeypatch, tmp_path)
     md = rep.markdown_content
     assert "市场情绪" not in md              # prose CJK translated inline (replaced)
     assert "market sentiment" in md
-    # blockquote (source string) keeps the original as a parenthetical (English-target form)
-    assert "supply chain shifted (供应链转移)" in md
+    # A language-purity pass must not deliberately re-inject the original CJK in
+    # parentheses, even inside a blockquote.
+    assert "supply chain shifted" in md and "供应链转移" not in md
     assert llm.calls and llm.calls[0]["tier"] == "fast"
+
+
+def test_language_purity_batches_large_residual_set(monkeypatch, tmp_path):
+    monkeypatch.setattr(Config, "REPORT_LANGUAGE_PURITY", True, raising=False)
+    monkeypatch.setattr(
+        Config, "REPORT_PURITY_RETRANSLATE_SEGMENTS", 100, raising=False
+    )
+    monkeypatch.setattr(
+        Config, "REPORT_PURITY_TRANSLATION_BATCH_SIZE", 20, raising=False
+    )
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"), raising=False)
+
+    class _BatchLLM:
+        def __init__(self):
+            self.calls = []
+
+        def chat_json(self, messages=None, **kwargs):
+            self.calls.append(messages)
+            lines = messages[-1]["content"].splitlines()
+            return {
+                str(index): f"translated term {len(self.calls)}-{index}"
+                for index, _line in enumerate(lines, 1)
+            }
+
+    llm = _BatchLLM()
+    a = _repair_agent(output_language="English", llm=llm)
+    body = "\n".join(f"Residual 残留术语{i} appears here." for i in range(25))
+    rep = type("_Rep", (), {"markdown_content": f"# Title\n\n{body}\n"})()
+
+    a._apply_language_purity("rid_batches", rep)
+
+    assert len(llm.calls) == 2
+    assert not a._collect_impurity_segments(rep.markdown_content, False, cap=100)
+
+
+def test_language_purity_rescans_whole_section_translation(monkeypatch, tmp_path):
+    monkeypatch.setattr(Config, "REPORT_LANGUAGE_PURITY", True, raising=False)
+    monkeypatch.setattr(
+        Config, "REPORT_PURITY_RETRANSLATE_SEGMENTS", 1, raising=False
+    )
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"), raising=False)
+
+    class _HybridLLM:
+        def __init__(self):
+            self.chat_calls = 0
+            self.json_calls = 0
+
+        def chat(self, **kwargs):
+            self.chat_calls += 1
+            return "## Outlook\n\nMost of the section is translated. 残留词语 remains."
+
+        def chat_json(self, **kwargs):
+            self.json_calls += 1
+            return {"1": "residual term"}
+
+    llm = _HybridLLM()
+    a = _repair_agent(output_language="English", llm=llm)
+    rep = type(
+        "_Rep",
+        (),
+        {"markdown_content": "## Outlook\n\n市场情绪 weakens.\n\n供应链 shifted.\n"},
+    )()
+
+    a._apply_language_purity("rid_rescan", rep)
+
+    assert llm.chat_calls == 1
+    assert llm.json_calls == 1
+    assert "残留词语" not in rep.markdown_content
+    assert "residual term" in rep.markdown_content
+
+
+def test_language_purity_runs_one_bounded_post_batch_rescan(monkeypatch, tmp_path):
+    monkeypatch.setattr(Config, "REPORT_LANGUAGE_PURITY", True, raising=False)
+    monkeypatch.setattr(
+        Config, "REPORT_PURITY_RETRANSLATE_SEGMENTS", 100, raising=False
+    )
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"), raising=False)
+
+    class _ResidualLLM:
+        def __init__(self):
+            self.calls = 0
+
+        def chat_json(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return {"1": "still 残留"}
+            return {"1": "fully translated"}
+
+    llm = _ResidualLLM()
+    a = _repair_agent(output_language="English", llm=llm)
+    rep = type(
+        "_Rep",
+        (),
+        {"markdown_content": "# Outlook\n\nThe market has 原始污染 in this line.\n"},
+    )()
+
+    a._apply_language_purity("rid_second_scan", rep)
+
+    assert llm.calls == 2
+    assert "fully translated" in rep.markdown_content
+    assert not a._collect_impurity_segments(rep.markdown_content, False, cap=100)
+
+
+def test_language_purity_scans_structured_markdown_and_preserves_url(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(Config, "REPORT_LANGUAGE_PURITY", True, raising=False)
+    monkeypatch.setattr(
+        Config, "REPORT_PURITY_RETRANSLATE_SEGMENTS", 100, raising=False
+    )
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"), raising=False)
+    url = "https://example.com/English-slug-must-remain"
+    md = (
+        "## This English heading contains enough prose words to require translation\n\n"
+        "| Metric | This English table cell contains enough prose words to require translation |\n"
+        "|---|---|\n"
+        "> This English blockquote contains enough prose words to require translation.\n\n"
+        "Read [this English linked passage contains enough prose words for translation]"
+        f"({url}) for evidence.\n"
+    )
+    llm = _JsonChatLLM({
+        "1": "需要翻译的中文标题",
+        "2": "需要翻译的中文表格内容",
+        "3": "需要翻译的中文引文内容",
+        "4": "需要翻译的中文链接文字",
+    })
+    a = _repair_agent(output_language="Chinese", llm=llm)
+    rep = type("_Rep", (), {"markdown_content": md})()
+
+    a._apply_language_purity("rid_structured", rep)
+
+    assert url in rep.markdown_content
+    assert rep.markdown_content.startswith("## 需要翻译的中文标题")
+    assert "| Metric | 需要翻译的中文表格内容 |" in rep.markdown_content
+    assert "> 需要翻译的中文引文内容" in rep.markdown_content
+    assert f"[需要翻译的中文链接文字]({url})" in rep.markdown_content
+    assert not a._collect_impurity_segments(rep.markdown_content, True, cap=100)
+
+
+def test_final_contamination_detector_includes_structured_markdown_text():
+    from app.services.report_lint import detect_language_contamination
+
+    md = (
+        "## This English heading contains enough prose words to trigger detection\n"
+        "| This English table cell contains enough prose words to trigger detection |\n"
+        "> This English blockquote contains enough prose words to trigger detection.\n"
+        "Read [this English linked passage contains enough prose words for detection]"
+        "(https://example.com/keep-this-url) now.\n"
+        "```text\nThis fenced English prose must remain excluded from detection.\n```\n"
+    )
+
+    audit = detect_language_contamination(md, "Chinese")
+
+    assert audit["lines"] == 4
+
+
+def test_language_detector_allows_original_titles_in_references_appendix():
+    from app.services.report_lint import detect_language_contamination
+
+    md = (
+        "# 中文预测报告\n\n正文保持中文。\n\n## 参考来源\n\n"
+        "1. A Very Long Original English Publication Title That Must Stay Verbatim — "
+        "2026-01-01 — https://example.com/source\n"
+    )
+
+    assert detect_language_contamination(md, "Chinese")["lines"] == 0
 
 
 def test_language_purity_noop_when_pure(monkeypatch):

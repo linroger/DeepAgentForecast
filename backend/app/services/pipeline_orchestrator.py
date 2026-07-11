@@ -47,6 +47,10 @@ from ..models.task import TaskManager
 from ..services.graph_builder import GraphBuilderService
 from ..services.ontology_generator import OntologyGenerator
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.research_progress import (
+    ResearchProgressEstimator,
+    aggregate_parallel_progress,
+)
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
 from ..services.text_processor import TextProcessor
@@ -732,10 +736,27 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
         # deployed script or web_search/web_fetch/prediction_market tools fail to load.
         # setup.sh copies them, but a bridge-only edit (no ./setup.sh rerun) would
         # otherwise drift exactly like deerflow_research.py did; mirror that guard here.
-        for _tool_mod in ("market_tools.py", "search_tools.py", "cached_fetch.py"):
+        for _tool_mod in (
+            "market_tools.py", "search_tools.py", "cached_fetch.py", "research_budget.py"
+        ):
             _tool_src = os.path.join(bridge_dir, _tool_mod)
             if os.path.isfile(_tool_src):
                 pairs.append((_tool_src, os.path.join(deerflow_dir, _tool_mod)))
+        # LOOP-009 provider-call admission and middleware-internal model calls
+        # must be reproducible from the tracked bridge overlay. ``deer-flow/``
+        # is gitignored, so syncing only the root bridge script would leave a
+        # clean clone without the exact-call concurrency boundary.
+        _mw_src_dir = os.path.join(bridge_dir, "patches", "middlewares")
+        _mw_dst_dir = os.path.join(
+            deerflow_dir, "backend", "packages", "harness", "deerflow",
+            "agents", "middlewares")
+        if os.path.isdir(_mw_src_dir) and os.path.isdir(_mw_dst_dir):
+            for _mw_name in sorted(os.listdir(_mw_src_dir)):
+                if _mw_name.endswith(".py"):
+                    pairs.append((
+                        os.path.join(_mw_src_dir, _mw_name),
+                        os.path.join(_mw_dst_dir, _mw_name),
+                    ))
         # W9-9：MCP 扩展注册文件也同步到部署目录。该文件是 OPT-IN 的（harness 仅在
         # DEER_FLOW_EXTENSIONS_CONFIG_PATH 指向它时才加载），部署副本本身惰性无副作用；
         # DeerFlowResearchRunner 在「图谱已存在」的路径把该 env 指向此部署副本。
@@ -758,6 +779,20 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
                 skill_dir = os.path.dirname(os.path.dirname(src))
                 skill = os.path.basename(skill_dir)
                 pairs.append((src, os.path.join(public_skills_dir, skill, "scripts", os.path.basename(src))))
+            # LOOP-010 progressive disclosure: the always-injected SKILL.md is
+            # compact; detailed tradecraft/final-dossier rules live in lazy
+            # references and must be deployed with it.
+            for src in sorted(_glob.glob(os.path.join(
+                bridge_dir, "skills", "*", "references", "*.md"
+            ))):
+                skill_dir = os.path.dirname(os.path.dirname(src))
+                skill = os.path.basename(skill_dir)
+                pairs.append((
+                    src,
+                    os.path.join(
+                        public_skills_dir, skill, "references", os.path.basename(src)
+                    ),
+                ))
 
         synced = []
         for src, dst in pairs:
@@ -766,6 +801,52 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copyfile(src, dst)
             synced.append(os.path.relpath(dst, deerflow_dir))
+
+        # LOOP-010: unlike copied modules, the lead-agent change is a narrow
+        # overlay on an upstream file. Apply the same tracked, idempotent
+        # transformation used by setup.sh so an existing deployment cannot keep
+        # interpreting YAML null as LangChain's implicit 4K trim default.
+        _lead_overlay = os.path.join(
+            bridge_dir, "patches", "apply_lead_agent_overlays.py"
+        )
+        if os.path.isfile(_lead_overlay):
+            import importlib.util as _importlib_util
+
+            _spec = _importlib_util.spec_from_file_location(
+                "deerflow_lead_agent_overlay", _lead_overlay
+            )
+            if _spec is None or _spec.loader is None:
+                raise RuntimeError("could not load tracked DeerFlow lead-agent overlay")
+            _overlay_module = _importlib_util.module_from_spec(_spec)
+            _spec.loader.exec_module(_overlay_module)
+            _overlay_status = _overlay_module.apply(deerflow_dir)
+            if _overlay_status == "applied":
+                synced.append(
+                    "backend/packages/harness/deerflow/agents/lead_agent/agent.py"
+                )
+
+        # Subagent lifecycle admission is likewise a narrow transformation.
+        # Never copy an entire executor from a possibly older active runtime:
+        # the vendor seed carries tracing/session callbacks that must survive.
+        _subagent_overlay = os.path.join(
+            bridge_dir, "patches", "apply_subagent_overlays.py"
+        )
+        if os.path.isfile(_subagent_overlay):
+            import importlib.util as _importlib_util
+
+            _spec = _importlib_util.spec_from_file_location(
+                "deerflow_subagent_overlay", _subagent_overlay
+            )
+            if _spec is None or _spec.loader is None:
+                raise RuntimeError(
+                    "could not load tracked DeerFlow subagent overlay")
+            _overlay_module = _importlib_util.module_from_spec(_spec)
+            _spec.loader.exec_module(_overlay_module)
+            _overlay_status = _overlay_module.apply(deerflow_dir)
+            if _overlay_status == "applied":
+                synced.append(
+                    "backend/packages/harness/deerflow/subagents/executor.py"
+                )
 
         # ORCH-1(1) config.yaml：setup.sh 明确「绝不覆盖已存在的 deer-flow/config.yaml」
         # （部署侧可能有本地 provider stanza 改动），故此处只做漂移检测 + 提示手工 diff，
@@ -786,6 +867,65 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
             )
     except Exception as sync_err:  # noqa: BLE001 — 漂移防护本身绝不能阻断研究阶段
         logger.warning("DeerFlow 部署副本漂移检测失败（忽略，不影响本次运行）: %s", sync_err)
+
+
+_RESEARCH_BUDGET_ENV_KEYS = (
+    "RESEARCH_BUDGET_DB",
+    "RESEARCH_BUDGET_TELEMETRY_PATH",
+    "RESEARCH_BUDGET_LANE_ID",
+    "RESEARCH_BUDGET_RUN_ID",
+    "RESEARCH_BUDGET_ATTEMPTS_GLOBAL",
+    "RESEARCH_BUDGET_SEARCH_GLOBAL",
+    "RESEARCH_BUDGET_SEARCH_LANE",
+    "RESEARCH_BUDGET_FETCH_GLOBAL",
+    "RESEARCH_BUDGET_FETCH_LANE",
+    "RESEARCH_NEGATIVE_CACHE_TTL_SECONDS",
+    "RESEARCH_NEGATIVE_CACHE_RETRIES",
+)
+
+
+def _configure_research_budget_env(
+    env: dict[str, str],
+    handoff_dir: str,
+    *,
+    budget_db_path: Optional[str] = None,
+    budget_lane_id: Optional[str] = None,
+    budget_telemetry_path: Optional[str] = None,
+    budget_run_id: Optional[str] = None,
+) -> None:
+    """Inject the shared LOOP-007 ledger contract into one research process.
+
+    All descendants inherit these values.  Disabling the feature removes any
+    stale variables copied from the backend process so an operator can reliably
+    turn the control plane off for a diagnostic run.
+    """
+    if not bool(getattr(Config, "RESEARCH_BUDGET_ENABLED", True)):
+        for key in _RESEARCH_BUDGET_ENV_KEYS:
+            env.pop(key, None)
+        return
+    env["RESEARCH_BUDGET_DB"] = str(
+        budget_db_path or os.path.join(handoff_dir, "research_budget.sqlite3"))
+    env["RESEARCH_BUDGET_TELEMETRY_PATH"] = str(
+        budget_telemetry_path or os.path.join(handoff_dir, "research_budget.json"))
+    env["RESEARCH_BUDGET_LANE_ID"] = str(budget_lane_id or "outer-track-1")
+    if budget_run_id:
+        env["RESEARCH_BUDGET_RUN_ID"] = str(budget_run_id)
+    else:
+        env.pop("RESEARCH_BUDGET_RUN_ID", None)
+    env["RESEARCH_BUDGET_ATTEMPTS_GLOBAL"] = str(getattr(
+        Config, "RESEARCH_BUDGET_ATTEMPTS_GLOBAL", 1800))
+    env["RESEARCH_BUDGET_SEARCH_GLOBAL"] = str(getattr(
+        Config, "RESEARCH_BUDGET_SEARCH_GLOBAL", 900))
+    env["RESEARCH_BUDGET_SEARCH_LANE"] = str(getattr(
+        Config, "RESEARCH_BUDGET_SEARCH_LANE", 360))
+    env["RESEARCH_BUDGET_FETCH_GLOBAL"] = str(getattr(
+        Config, "RESEARCH_BUDGET_FETCH_GLOBAL", 450))
+    env["RESEARCH_BUDGET_FETCH_LANE"] = str(getattr(
+        Config, "RESEARCH_BUDGET_FETCH_LANE", 180))
+    env["RESEARCH_NEGATIVE_CACHE_TTL_SECONDS"] = str(getattr(
+        Config, "RESEARCH_NEGATIVE_CACHE_TTL_SECONDS", 600))
+    env["RESEARCH_NEGATIVE_CACHE_RETRIES"] = str(getattr(
+        Config, "RESEARCH_NEGATIVE_CACHE_RETRIES", 1))
 
 
 class DeerFlowResearchRunner:
@@ -817,6 +957,16 @@ class DeerFlowResearchRunner:
         on_spawn: Optional[Callable[[int], None]] = None,
         resume: bool = False,
         kg_graph_id: Optional[str] = None,
+        budget_db_path: Optional[str] = None,
+        budget_lane_id: Optional[str] = None,
+        budget_telemetry_path: Optional[str] = None,
+        budget_run_id: Optional[str] = None,
+        max_concurrent_subagents: Optional[int] = None,
+        model_concurrency_global: Optional[int] = None,
+        dual_track: Optional[bool] = None,
+        shared_actor_track: Optional[bool] = None,
+        evidence_only: bool = False,
+        synthesis_manifest_path: Optional[str] = None,
     ) -> dict[str, Any]:
         """运行研究子进程，阻塞直到结束。返回 handoff 摘要。
 
@@ -843,6 +993,28 @@ class DeerFlowResearchRunner:
         _sync_deerflow_bridge_if_stale(deerflow_dir)
 
         os.makedirs(handoff_dir, exist_ok=True)
+        expected_artifact_path = os.path.join(
+            handoff_dir,
+            "evidence_pack.md" if evidence_only else "research_report.md",
+        )
+
+        def _artifact_fingerprint(path: str) -> Optional[tuple[int, str]]:
+            try:
+                size = os.path.getsize(path)
+                digest = _sha256_file(path)
+                return (size, digest or "") if digest is not None else None
+            except OSError:
+                return None
+
+        artifact_before = _artifact_fingerprint(expected_artifact_path)
+
+        def _fresh_expected_artifact() -> bool:
+            current = _artifact_fingerprint(expected_artifact_path)
+            return (
+                current is not None
+                and current != artifact_before
+                and len(_read_text(expected_artifact_path).strip()) >= 400
+            )
         # 把（可能敏感的）研究问题写入文件，经 --prompt-file 传给子进程，避免出现在
         # ps / /proc/<pid>/cmdline 里（EXECPLAN2 F-0-7/F-13-3，与 llm_client 既有约定一致）。
         # run() 会阻塞到子进程退出，子进程启动时即读取该文件，故可在 finally 安全删除。
@@ -868,6 +1040,10 @@ class DeerFlowResearchRunner:
         # ITEM-3：崩溃/超时重试时若 handoff_dir 已有 checkpoint，续跑而非全量重启。
         if resume:
             cmd += ["--resume"]
+        if evidence_only:
+            cmd += ["--evidence-only"]
+        if synthesis_manifest_path:
+            cmd += ["--synthesis-manifest", str(synthesis_manifest_path)]
 
         env = dict(os.environ)
         env.setdefault("PYTHONUNBUFFERED", "1")
@@ -877,7 +1053,20 @@ class DeerFlowResearchRunner:
         # 双轨研究开关：Config 即单一真源（默认 True）下发给子进程，决定 deerflow 是否在跑
         # Track A（深度研究→research_report.md）的同时并行跑 Track B（角色本体研究→actor_dossier.md）。
         # 关闭时子进程行为与今日逐字节一致（只跑 Track A，不产出 actor_dossier.md）。
-        env["DEERFLOW_DUAL_TRACK"] = "true" if getattr(Config, "DEERFLOW_DUAL_TRACK", True) else "false"
+        _dual_track_enabled = (
+            bool(dual_track)
+            if dual_track is not None
+            else bool(getattr(Config, "DEERFLOW_DUAL_TRACK", True))
+        )
+        env["DEERFLOW_DUAL_TRACK"] = (
+            "true" if _dual_track_enabled else "false")
+        _shared_actor_track = (
+            bool(shared_actor_track)
+            if shared_actor_track is not None
+            else False
+        )
+        env["RESEARCH_SHARED_ACTOR_TRACK"] = (
+            "true" if _shared_actor_track else "false")
         # CONF-1：深度扇出开关/宽度同样从 Config 单一真源下发给 bridge（bridge 侧经
         # _env_flag/os.environ 读取，自带默认值）。不下发时 Config 里的默认（true/8）对
         # 研究子进程静默失效（与 ACTOR_CAST_MAX 曾经的漂移同因）。
@@ -896,6 +1085,37 @@ class DeerFlowResearchRunner:
         env["PREDICTION_MARKETS_MAX"] = str(getattr(Config, "PREDICTION_MARKETS_MAX", 20))
         env["PREDICTION_MARKETS_MIN_VOLUME"] = str(getattr(Config, "PREDICTION_MARKETS_MIN_VOLUME", 200.0))
         env["PREDICTION_MARKETS_MAX_PER_EVENT"] = str(getattr(Config, "PREDICTION_MARKETS_MAX_PER_EVENT", 3))
+        env["PREDICTION_MARKETS_PER_QUERY"] = str(getattr(Config, "PREDICTION_MARKETS_PER_QUERY", 15))
+        env["PREDICTION_MARKETS_MIN_RELEVANCE"] = str(
+            getattr(Config, "PREDICTION_MARKETS_MIN_RELEVANCE", 5.0))
+        if max_concurrent_subagents is not None:
+            env["DEER_FLOW_MAX_CONCURRENT_SUBAGENTS"] = str(
+                max(1, min(8, int(max_concurrent_subagents))))
+        if model_concurrency_global is not None:
+            env["RESEARCH_MODEL_CONCURRENCY_GLOBAL"] = str(
+                max(1, int(model_concurrency_global)))
+        env["RESEARCH_GLOBAL_SUBAGENT_CAP"] = str(
+            max(1, int(getattr(Config, "RESEARCH_GLOBAL_SUBAGENT_CAP", 9))))
+        # LOOP-009: prediction_market_search runs inside the DeerFlow agent and
+        # previously returned useful markets only into chat history.  Give the
+        # reflected tool a trusted, per-track artifact root so it can append a
+        # provenance ledger that the deterministic post-pass later reconciles.
+        env["DEERFLOW_RUN_ARTIFACT_DIR"] = os.path.realpath(handoff_dir)
+        _configure_research_budget_env(
+            env,
+            handoff_dir,
+            budget_db_path=budget_db_path,
+            budget_lane_id=budget_lane_id,
+            budget_telemetry_path=budget_telemetry_path,
+            budget_run_id=budget_run_id,
+        )
+        # Model-call leases are a correctness boundary, not merely a tool-cost
+        # budget. Keep their shared SQLite path even when tool-budget admission
+        # is explicitly disabled, so outer processes cannot multiply provider
+        # streams behind the user's concurrency cap.
+        env["RESEARCH_MODEL_LEASE_DB"] = os.path.realpath(
+            getattr(Config, "RESEARCH_MODEL_LEASE_DB", "")
+            or os.path.join(Config.UPLOAD_FOLDER, "research_model_leases.sqlite3"))
         # W9-9：图谱已存在（fork/continue/resume-with-graph）时把 KG MCP server 暴露给研究子进程。
         # extensions_config.json 由 _sync_deerflow_bridge_if_stale 同步到部署目录；两台 server 均
         # 设计为图谱缺失时返回结构化错误、绝不 hang（见该文件 _comment），接线本身 degrade-safe。
@@ -945,6 +1165,7 @@ class DeerFlowResearchRunner:
         deadline = time.time() + budget
         # 看门狗：即使子进程长时间无输出（模型思考），也能在超时后被杀掉。
         timed_out = {"hit": False}
+        timeout_salvaged = {"hit": False}
 
         def _watchdog():
             if proc.poll() is None:
@@ -969,8 +1190,11 @@ class DeerFlowResearchRunner:
             t_cancel = threading.Thread(target=_cancel_watcher, daemon=True)
             t_cancel.start()
 
-        # 启发式进度：研究阶段难以精确，按事件类型缓慢推进 2→95。
-        local = 2
+        # LOOP-008: 进度由显式研究里程碑限定在各自区间；tool/result 只负责区间内的
+        # 平滑移动。旧公式 ``10 + tool_calls * 4`` 在开场 20 次调用后就跳到 90%，
+        # 随后的数小时合成/抽取完全没有可见进展。
+        estimator = ResearchProgressEstimator()
+        local = estimator.progress
         tool_events = 0
         last_line = ""
         # I-5-7: 结构化研究阶段遥测（token/工具量/壁钟）。bridge 已在 stdout 发出 [usage] 行，
@@ -985,16 +1209,19 @@ class DeerFlowResearchRunner:
                 if not line:
                     continue
                 last_line = line
+                local = estimator.observe(line)
                 # 解析进度日志的事件类型 [tool]/[result]/[stage]/[ok]/[done]/[error]/[usage]
                 if "[tool]" in line:
                     tool_events += 1
-                    local = min(90, 10 + tool_events * 4)
                     on_progress(local, _tail(line))
                 elif "[result]" in line:
                     _result_events += 1
                     on_progress(local, _tail(line))
                 elif "[stage]" in line:
-                    on_progress(min(local, 92), _tail(line))
+                    # ResearchProgressEstimator already reserves honest bands for
+                    # synthesis/extraction/finalization.  The legacy 92 cap would
+                    # now regress a 95% track when triangulation emits [stage].
+                    on_progress(local, _tail(line))
                 elif "[usage]" in line:
                     # I-5-7: 仅累加 token，不动进度（usage 行非进度信号）。
                     parsed = _parse_usage_line(line)
@@ -1004,7 +1231,6 @@ class DeerFlowResearchRunner:
                         _tok_out += _o
                         _tok_total += (_t if _t else _i + _o)
                 elif "[ok]" in line or "[done]" in line:
-                    local = max(local, 95)
                     on_progress(local, _tail(line))
                 elif "[error]" in line:
                     on_progress(local, _tail(line))
@@ -1025,12 +1251,19 @@ class DeerFlowResearchRunner:
                     returncode = proc.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     returncode = -9  # 进程组已被 SIGKILL，wait 仍超时视作强杀
-                if _track_artifacts_survived(handoff_dir):
+                _fresh = _fresh_expected_artifact()
+                _evidence_survived = evidence_only and _fresh
+                _report_survived = (
+                    (not evidence_only) and _fresh
+                    and _track_artifacts_survived(handoff_dir)
+                )
+                if _evidence_survived or _report_survived:
                     logger.warning(
                         "研究子进程收尾超时（stdout 已关闭但进程组未在 30s 内退出，exit=%s）"
                         "——盘上产物完整，按存活轨继续", returncode,
                     )
                     on_progress(95, "子进程收尾超时，但研究产物完整——按存活轨继续")
+                    timeout_salvaged["hit"] = True
                     returncode = 0
                 else:
                     raise RuntimeError(
@@ -1051,22 +1284,32 @@ class DeerFlowResearchRunner:
         if cancelled["hit"]:
             raise PipelineCancelled("深度研究已取消")
 
-        report_path = os.path.join(handoff_dir, "research_report.md")
+        report_path = expected_artifact_path
+        artifact_label = (
+            "evidence_pack.md" if evidence_only else "research_report.md")
         if timed_out["hit"]:
             # 超时打捞：研究主报告先于 actors/sources 提取阶段落盘——若被看门狗
             # 杀掉时报告已经写出，没必要丢弃整轮研究，降级继续（仅缺结构化档案）。
-            if os.path.exists(report_path) and len(_read_text(report_path).strip()) >= 400:
+            if _fresh_expected_artifact():
                 logger.warning(
-                    f"DeerFlow 研究超时（>{budget}s），但 research_report.md 已写出——打捞继续"
+                    f"DeerFlow 研究超时（>{budget}s），但 {artifact_label} 已写出——打捞继续"
                 )
-                on_progress(95, "研究超时，但报告已生成——打捞继续（无结构化档案）")
+                on_progress(
+                    95,
+                    "研究超时，但证据产物已生成——打捞继续"
+                    if evidence_only else
+                    "研究超时，但报告已生成——打捞继续（无结构化档案）",
+                )
+                timeout_salvaged["hit"] = True
+                returncode = 0
                 # ITEM-14：报告已落盘但结构化抽取还没跑（'无结构化档案'）。花一个有界的
                 # --extract-only 子进程把 actors/sources/timeline/quantitative 抢救出来，
                 # 让下游本体/图谱/模拟仍有真实结构可用，而非带着空档案降级。best-effort。
                 actors_path = os.path.join(handoff_dir, "actors.json")
                 _salvage_on = os.environ.get(
                     "RESEARCH_EXTRACT_ONLY_SALVAGE", "true").strip().lower() not in ("0", "false", "no")
-                if _salvage_on and not os.path.exists(actors_path):
+                if (not evidence_only and _salvage_on
+                        and not os.path.exists(actors_path)):
                     try:
                         _run_extract_only_salvage(
                             deerflow_dir, handoff_dir, prompt, model or Config.DEERFLOW_MODEL,
@@ -1079,14 +1322,14 @@ class DeerFlowResearchRunner:
                     f"DeerFlow 研究超时（>{budget}s，depth={effective_depth}）。"
                     "可降低研究深度，或在 .env 设更大的 DEERFLOW_RESEARCH_TIMEOUT"
                 )
-        if returncode != 0 and not os.path.exists(report_path):
+        if returncode != 0 and not timeout_salvaged["hit"]:
             raise RuntimeError(f"DeerFlow 研究子进程失败 (exit={returncode})：{last_line}")
         if not os.path.exists(report_path):
-            raise RuntimeError("DeerFlow 研究未产出 research_report.md")
+            raise RuntimeError(f"DeerFlow 研究未产出 {artifact_label}")
 
         report = _read_text(report_path)
         if not report.strip():
-            raise RuntimeError("research_report.md 为空")
+            raise RuntimeError(f"{artifact_label} 为空")
         # 纵深防御：即便上游漏写了降级/错误消息当报告，也别让管线拿一段错误串去
         # 建图/模拟/写报告（那会把垃圾当成功）。覆盖 DeerFlow 降级文案、原始 provider
         # 报错、以及 MiniMax 域内容审核(422 new_sensitive)等多种短错误串。
@@ -1123,10 +1366,14 @@ class DeerFlowResearchRunner:
             "results": _result_events,
             "wall_s": round(time.time() - _t_start, 1),
         }
-        on_progress(100, f"研究完成（报告 {len(report)} 字）")
+        on_progress(
+            100,
+            f"研究完成（{'证据包' if evidence_only else '报告'} {len(report)} 字）",
+        )
         return {
             "report": report,
             "report_path": report_path,
+            "evidence_pack": report if evidence_only else None,
             "actor_dossier": actor_dossier,  # 双轨 Track B：角色本体档案（缺失为 ""）
             "actors": actors,
             "sources": sources,
@@ -1231,6 +1478,318 @@ def _track_artifacts_survived(handoff_dir: str) -> bool:
         return True
     ckpt = _read_json(os.path.join(handoff_dir, "research_checkpoint.json"))
     return bool(isinstance(ckpt, dict) and ckpt.get("completed_passes"))
+
+
+_RESEARCH_CONTRACT_FILENAME = "research_contract_manifest.json"
+_RESEARCH_CONTRACT_FILES = (
+    "research_report.md", "actor_dossier.md", "actors.json", "sources.json",
+    "timeline.json", "quantitative.json", "contested.json",
+    "prediction_markets.json", "market_price_history.json",
+    "research_report_judge.json", "research_progress.log", "meta.json",
+    "charts.json",
+)
+
+
+def _research_contract_path(handoff_dir: str) -> str:
+    return os.path.join(handoff_dir, _RESEARCH_CONTRACT_FILENAME)
+
+
+def _research_contract_entries(root: str) -> dict[str, dict[str, Any]]:
+    """Fingerprint the exact staged/root research contract, including charts."""
+    entries: dict[str, dict[str, Any]] = {}
+    candidates: list[tuple[str, str]] = []
+    for name in _RESEARCH_CONTRACT_FILES:
+        path = os.path.join(root, name)
+        if os.path.isfile(path):
+            candidates.append((name, path))
+    charts = os.path.join(root, "charts")
+    if os.path.isdir(charts):
+        for dirpath, dirnames, filenames in os.walk(charts):
+            dirnames[:] = sorted(d for d in dirnames if not os.path.islink(
+                os.path.join(dirpath, d)))
+            for filename in sorted(filenames):
+                path = os.path.join(dirpath, filename)
+                if os.path.isfile(path) and not os.path.islink(path):
+                    candidates.append((os.path.relpath(path, root), path))
+    for relative, path in candidates:
+        digest = _sha256_file(path)
+        if digest is None:
+            raise RuntimeError(f"cannot fingerprint research artifact: {relative}")
+        entries[relative] = {
+            "bytes": os.path.getsize(path),
+            "sha256": digest,
+        }
+    return entries
+
+
+def _validate_research_contract(handoff_dir: str) -> bool:
+    """Validate the manifest-last root contract before any research reuse."""
+    manifest = _read_json(_research_contract_path(handoff_dir))
+    if not isinstance(manifest, dict) or manifest.get("version") != 1:
+        return False
+    entries = manifest.get("files")
+    if not isinstance(entries, dict) or "research_report.md" not in entries:
+        return False
+    root = os.path.realpath(handoff_dir)
+    try:
+        for relative, expected in entries.items():
+            if (not isinstance(relative, str) or not isinstance(expected, dict)
+                    or os.path.isabs(relative)):
+                return False
+            path = os.path.realpath(os.path.join(root, relative))
+            if os.path.commonpath([root, path]) != root or not os.path.isfile(path):
+                return False
+            if os.path.getsize(path) != expected.get("bytes"):
+                return False
+            if _sha256_file(path) != expected.get("sha256"):
+                return False
+        report = _read_text(os.path.join(root, "research_report.md")).strip()
+        if len(report) < 400:
+            return False
+        # Optional contract-owned artifacts absent from the generation manifest
+        # would prove that a stale file survived promotion.
+        for name in _RESEARCH_CONTRACT_FILES:
+            if os.path.exists(os.path.join(root, name)) and name not in entries:
+                return False
+        if os.path.isdir(os.path.join(root, "charts")):
+            actual_chart_files = {
+                rel for rel in _research_contract_entries(root)
+                if rel.startswith("charts" + os.sep)
+            }
+            expected_chart_files = {
+                rel for rel in entries if rel.startswith("charts" + os.sep)
+            }
+            if actual_chart_files != expected_chart_files:
+                return False
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def _promote_research_contract(
+    source_dir: str,
+    handoff_dir: str,
+    *,
+    meta_patch: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Promote one validated research generation with rollback + manifest-last.
+
+    Files are copied completely into a private stage, then root artifacts are
+    atomically replaced one by one while their predecessors live in a rollback
+    directory.  Any exception restores the previous generation.  The checksum
+    manifest is written last; resume never trusts an unmanifested mixed root.
+    """
+    source_root = os.path.realpath(source_dir)
+    root = os.path.realpath(handoff_dir)
+    os.makedirs(root, exist_ok=True)
+    generation = uuid.uuid4().hex
+    stage = tempfile.mkdtemp(prefix=f".research-stage-{generation}-", dir=root)
+    rollback = tempfile.mkdtemp(prefix=f".research-rollback-{generation}-", dir=root)
+    contract_path = _research_contract_path(root)
+    moved_old: list[str] = []
+    installed_new: list[str] = []
+    charts_installed = False
+    old_charts_moved = False
+    old_contract_moved = False
+    try:
+        for name in _RESEARCH_CONTRACT_FILES:
+            source = os.path.join(source_root, name)
+            if os.path.isfile(source):
+                shutil.copy2(source, os.path.join(stage, name))
+        source_charts = os.path.join(source_root, "charts")
+        if os.path.isdir(source_charts):
+            shutil.copytree(source_charts, os.path.join(stage, "charts"))
+
+        if meta_patch:
+            staged_meta_path = os.path.join(stage, "meta.json")
+            staged_meta = _read_json(staged_meta_path)
+            if not isinstance(staged_meta, dict):
+                staged_meta = {}
+            staged_meta.update(meta_patch)
+            from ..utils.atomic import write_json_atomic
+            write_json_atomic(staged_meta_path, staged_meta)
+
+        report = _read_text(os.path.join(stage, "research_report.md")).strip()
+        if len(report) < 400:
+            raise RuntimeError("staged research contract has no complete report")
+        entries = _research_contract_entries(stage)
+        manifest = {
+            "version": 1,
+            "generation": generation,
+            "created_at": _utcnow(),
+            "files": entries,
+        }
+
+        if os.path.exists(contract_path):
+            os.replace(contract_path, os.path.join(rollback, _RESEARCH_CONTRACT_FILENAME))
+            old_contract_moved = True
+        for name in _RESEARCH_CONTRACT_FILES:
+            destination = os.path.join(root, name)
+            if os.path.exists(destination):
+                os.replace(destination, os.path.join(rollback, name))
+                moved_old.append(name)
+        root_charts = os.path.join(root, "charts")
+        if os.path.lexists(root_charts):
+            os.replace(root_charts, os.path.join(rollback, "charts"))
+            old_charts_moved = True
+
+        for name in _RESEARCH_CONTRACT_FILES:
+            staged = os.path.join(stage, name)
+            if os.path.isfile(staged):
+                os.replace(staged, os.path.join(root, name))
+                installed_new.append(name)
+        staged_charts = os.path.join(stage, "charts")
+        if os.path.isdir(staged_charts):
+            os.replace(staged_charts, root_charts)
+            charts_installed = True
+
+        from ..utils.atomic import write_json_atomic
+        write_json_atomic(contract_path, manifest)
+        if not _validate_research_contract(root):
+            raise RuntimeError("promoted research contract failed checksum validation")
+        return manifest
+    except Exception:
+        try:
+            if os.path.exists(contract_path):
+                os.unlink(contract_path)
+            for name in installed_new:
+                path = os.path.join(root, name)
+                if os.path.exists(path):
+                    os.unlink(path)
+            if charts_installed and os.path.lexists(os.path.join(root, "charts")):
+                shutil.rmtree(os.path.join(root, "charts"), ignore_errors=True)
+            for name in moved_old:
+                prior = os.path.join(rollback, name)
+                if os.path.exists(prior):
+                    os.replace(prior, os.path.join(root, name))
+            if old_charts_moved and os.path.lexists(os.path.join(rollback, "charts")):
+                os.replace(os.path.join(rollback, "charts"), os.path.join(root, "charts"))
+            if old_contract_moved:
+                prior_contract = os.path.join(rollback, _RESEARCH_CONTRACT_FILENAME)
+                if os.path.exists(prior_contract):
+                    os.replace(prior_contract, contract_path)
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)
+            shutil.rmtree(rollback, ignore_errors=True)
+        raise
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+        shutil.rmtree(rollback, ignore_errors=True)
+
+
+def _finalize_research_contract(
+    handoff_dir: str,
+    research: dict[str, Any],
+) -> Optional[dict[str, Any]]:
+    """Atomically seal sanctioned post-processing into a research contract.
+
+    Global synthesis first promotes a clean producer generation so downstream
+    code never observes a half-written handoff.  Research lint and cast
+    reconciliation run afterwards, however, and historically wrote directly
+    over ``research_report.md`` / ``actors.json``.  That made the already
+    published checksum manifest invalid and forced every resume to reject the
+    otherwise healthy generation.
+
+    Keep the producer generation untouched and valid while building a private
+    finalized copy.  The copy receives the exact in-memory report, reconciled
+    actors, and effective source ledger, then goes through the same
+    rollback-capable, manifest-last promotion as the producer generation.  A
+    failure therefore leaves the prior valid contract reusable; it can never
+    bless a mixed root.  Legacy research paths without a contract keep their
+    existing behavior and return ``None``.
+    """
+    root = os.path.realpath(handoff_dir)
+    contract_path = _research_contract_path(root)
+    if not os.path.exists(contract_path):
+        return None
+    existing_manifest = _read_json(contract_path)
+    if not _validate_research_contract(root):
+        raise RuntimeError(
+            "research contract changed before sanctioned finalization"
+        )
+
+    report = research.get("report")
+    if not isinstance(report, str) or len(report.strip()) < 400:
+        raise RuntimeError(
+            "finalized research contract has no complete report"
+        )
+    actors = research.get("actors")
+    if actors is not None and not isinstance(actors, dict):
+        raise RuntimeError(
+            "finalized research actors must be a JSON object"
+        )
+    # Persist the exact source union returned to downstream consumers,
+    # including an empty list.  Previously ``or merged_sources`` could make
+    # the in-memory ledger richer than the generation actually sealed.
+    sources = research.get("sources")
+    if sources is not None and not isinstance(sources, list):
+        raise RuntimeError(
+            "finalized research sources must be a JSON list"
+        )
+    meta = research.get("meta")
+    if meta is not None and not isinstance(meta, dict):
+        raise RuntimeError(
+            "finalized research metadata must be a JSON object"
+        )
+
+    # A clean resume should validate, not rewrite or recopy a potentially large
+    # charts tree.  Only build a private generation when a sanctioned payload
+    # actually differs from the sealed root.
+    if (
+        _read_text(os.path.join(root, "research_report.md")) == report
+        and (actors is None or _read_json(os.path.join(root, "actors.json")) == actors)
+        and (sources is None or _read_json(os.path.join(root, "sources.json")) == sources)
+        and (meta is None or _read_json(os.path.join(root, "meta.json")) == meta)
+    ):
+        return existing_manifest if isinstance(existing_manifest, dict) else None
+
+    final_source = tempfile.mkdtemp(prefix=".research-final-", dir=root)
+    try:
+        for name in _RESEARCH_CONTRACT_FILES:
+            source = os.path.join(root, name)
+            if os.path.isfile(source):
+                shutil.copy2(source, os.path.join(final_source, name))
+        source_charts = os.path.join(root, "charts")
+        if os.path.isdir(source_charts):
+            shutil.copytree(source_charts, os.path.join(final_source, "charts"))
+
+        from ..utils.atomic import write_json_atomic, write_text_atomic
+        staged_report_path = os.path.join(final_source, "research_report.md")
+        if _read_text(staged_report_path) != report:
+            write_text_atomic(staged_report_path, report)
+
+        if actors is not None:
+            staged_actors_path = os.path.join(final_source, "actors.json")
+            if _read_json(staged_actors_path) != actors:
+                write_json_atomic(staged_actors_path, actors)
+
+        if sources is not None:
+            staged_sources_path = os.path.join(final_source, "sources.json")
+            if _read_json(staged_sources_path) != sources:
+                write_json_atomic(staged_sources_path, sources)
+
+        if meta is not None:
+            staged_meta_path = os.path.join(final_source, "meta.json")
+            if _read_json(staged_meta_path) != meta:
+                write_json_atomic(staged_meta_path, meta)
+
+        if (
+            isinstance(existing_manifest, dict)
+            and existing_manifest.get("files")
+            == _research_contract_entries(final_source)
+        ):
+            return existing_manifest
+
+        # Detect any concurrent or out-of-band mutation before replacing the
+        # root.  Promotion itself retains its rollback directory until the new
+        # manifest validates, so a later install error restores this generation.
+        if not _validate_research_contract(root):
+            raise RuntimeError(
+                "research contract changed during sanctioned finalization"
+            )
+        return _promote_research_contract(final_source, root)
+    finally:
+        shutil.rmtree(final_source, ignore_errors=True)
 
 
 def _run_extract_only_salvage(
@@ -1412,6 +1971,70 @@ _RESEARCH_TRACK_ANGLES: list[tuple[str, str, str]] = [
 ]
 
 
+def research_subagent_cap_per_track(n_tracks: int, global_cap: int,
+                                    per_track_max: int = 5) -> int:
+    """Allocate one fixed harness-concurrency envelope across outer tracks."""
+    try:
+        tracks = max(1, int(n_tracks))
+        total = max(1, int(global_cap))
+        lane_max = max(1, min(8, int(per_track_max)))
+    except (TypeError, ValueError):
+        return 1
+    return max(1, min(lane_max, total // tracks))
+
+
+def research_outer_track_workers(
+        n_tracks: int, global_cap: int, model_cap: int = 0) -> int:
+    """Bound simultaneously active outer tracks by the shared subagent cap."""
+    try:
+        tracks = max(1, int(n_tracks))
+        total = max(1, int(global_cap))
+        models = max(0, int(model_cap))
+    except (TypeError, ValueError):
+        return 1
+    return max(1, min(tracks, total, models if models > 0 else tracks))
+
+
+def research_model_concurrency_cap(
+        outer_workers: int, global_subagent_cap: int, configured: int = 0) -> int:
+    """Return one provider-facing envelope for leads plus harness workers."""
+    try:
+        explicit = int(configured)
+        workers = max(1, int(outer_workers))
+        subagents = max(1, int(global_subagent_cap))
+    except (TypeError, ValueError):
+        return 2
+    return explicit if explicit > 0 else workers + subagents
+
+
+def research_lane_subagent_cap(
+        outer_workers: int, global_subagent_cap: int, per_track_max: int,
+        model_concurrency: int) -> int:
+    """Return 0 when the all-model envelope cannot fit lead + subagent."""
+    try:
+        workers = max(1, int(outer_workers))
+        models = max(1, int(model_concurrency))
+    except (TypeError, ValueError):
+        return 0
+    model_room = max(0, models // workers - 1)
+    if model_room <= 0:
+        return 0
+    return min(
+        model_room,
+        research_subagent_cap_per_track(
+            workers, global_subagent_cap, per_track_max),
+    )
+
+
+def research_dual_track_for_outer_lane(
+        lane_index: int, enabled: bool) -> bool:
+    """Assign the shared actor/ontology dossier to the broad baseline lane."""
+    try:
+        return bool(enabled) and int(lane_index) == 0
+    except (TypeError, ValueError):
+        return False
+
+
 def _track_tier_rank(tier: Any) -> int:
     """来源层级 → 排序秩：S1 最高（rank 1）… S4（rank 4），缺失/非法 → 9（最低）。
     合并去重时「保最高层级」= 取 rank 最小者。"""
@@ -1447,9 +2070,150 @@ def merge_track_reports(labeled_reports: list[tuple[str, str]]) -> str:
 
 # W9-7: 多轨卷宗的一次有界 LLM 整理 —— merge_track_reports 的纯拼接会把 3 份执行摘要、
 # 互相矛盾的头条数字原封不动地交付（诊断实测：同一轨内 2030 基线 $1.45-1.55T vs $1.7-1.9T）。
-# 这里补一个「合并开篇 + 跨轨分歧表 + H1 降级」的编辑整理；degrade-safe：任何失败回退纯拼接。
+# 这里补一个「合并开篇 + 跨轨分歧表 + H1 降级」的编辑整理；degrade-safe：
+# 任何 LLM 失败均回退确定性去重/降级后的卷宗，而不是泄漏 K 份开篇。
 
 _TRACK_H1_RE = re.compile(r"(?m)^# Track (\d+): (.+?)\s*$")
+_REPORT_HEADING_RE = re.compile(r"(?m)^(#{1,3})[ \t]+(.+?)[ \t]*$")
+_OPENING_CITATION_RE = re.compile(r"\[\s*S(\d+)\s*\]", re.I)
+
+
+def _normalise_report_heading(title: str) -> str:
+    """Return a comparison key for multilingual report-opening headings."""
+    value = re.sub(r"[`*_~]", "", str(title or "")).strip().casefold()
+    value = re.sub(r"^\s*(?:\d+(?:\.\d+)*|[ivxlcdm]+)[.)、:]?\s+", "", value)
+    value = re.sub(r"[\s\-–—_:：/|'’（）()]+", " ", value)
+    return value.strip(" .!?！？。")
+
+
+def _report_opening_kind(title: str) -> Optional[str]:
+    """Classify Executive Summary / reader-guide aliases without fuzzy matching.
+
+    These are presentation sections generated independently by every research
+    track.  Exact, bounded aliases avoid deleting substantive sections merely
+    because their prose happens to contain words such as ``summary`` or
+    ``guide``.
+    """
+    key = _normalise_report_heading(title)
+    compact = re.sub(r"\s+", "", key)
+    executive_aliases = {
+        "executive summary", "executive overview", "management summary",
+        "summary", "summary of findings", "research summary",
+        "key findings summary", "key takeaways",
+        "摘要", "执行摘要", "执行概要", "研究摘要", "核心摘要", "摘要与核心结论",
+    }
+    orientation_aliases = {
+        "how to read this dossier", "how to read this report",
+        "how to use this dossier", "how to use this report",
+        "reader guide", "reader s guide", "reading guide", "dossier guide",
+        "report guide", "orientation", "document orientation",
+        "如何阅读本卷宗", "如何阅读本报告", "如何阅读这份报告", "阅读指南",
+        "读者指南", "卷宗导读", "报告导读", "报告使用说明", "卷宗使用说明",
+    }
+    if (key in executive_aliases
+            or "executive summary" in key
+            or compact in {
+            "摘要", "执行摘要", "执行概要", "研究摘要", "核心摘要", "摘要与核心结论"}):
+        return "executive"
+    if (key in orientation_aliases
+            or "how to read this dossier" in key
+            or "how to read this report" in key
+            or compact in {
+            "如何阅读本卷宗", "如何阅读本报告", "如何阅读这份报告", "阅读指南",
+            "读者指南", "卷宗导读", "报告导读", "报告使用说明", "卷宗使用说明"}):
+        return "orientation"
+    return None
+
+
+def _opening_sections(report_md: str, kind: Optional[str] = None) -> list[dict[str, Any]]:
+    """Locate bounded opening sections, stopping at a peer/ancestor heading."""
+    text = str(report_md or "")
+    headings = list(_REPORT_HEADING_RE.finditer(text))
+    found: list[dict[str, Any]] = []
+    for index, heading in enumerate(headings):
+        section_kind = _report_opening_kind(heading.group(2))
+        if section_kind is None or (kind is not None and section_kind != kind):
+            continue
+        level = len(heading.group(1))
+        end = len(text)
+        for following in headings[index + 1:]:
+            if len(following.group(1)) <= level:
+                end = following.start()
+                break
+        found.append({
+            "kind": section_kind,
+            "start": heading.start(),
+            "end": end,
+            "body": text[heading.end():end].strip(),
+        })
+    return found
+
+
+def _strip_opening_sections(report_md: str, kinds: set[str]) -> str:
+    """Remove every recognized per-track presentation section in ``kinds``."""
+    text = str(report_md or "")
+    spans = [row for row in _opening_sections(text) if row["kind"] in kinds]
+    for row in reversed(spans):
+        text = text[:row["start"]] + text[row["end"]:]
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _first_opening_body(tracks: list[tuple[str, str]], kind: str) -> str:
+    """Select the first substantive opening, with a non-empty last resort."""
+    fallback = ""
+    minimum = 80 if kind == "executive" else 20
+    for _title, report in tracks:
+        for section in _opening_sections(report, kind):
+            body = str(section.get("body") or "").strip()
+            if body and not fallback:
+                fallback = body
+            if len(re.sub(r"\s+", "", body)) >= minimum:
+                return body
+    return fallback
+
+
+def _deterministic_track_report(tracks: list[tuple[str, str]]) -> tuple[str, str]:
+    """Build one canonical opening plus clean, demoted per-track evidence parts.
+
+    The first substantive summary/guide is retained because track order is the
+    pipeline's declared priority order (the broad baseline track is first).
+    Every duplicate alias is removed from the evidence parts.
+    """
+    summary = _first_opening_body(tracks, "executive")
+    orientation = _first_opening_body(tracks, "orientation")
+    opening: list[str] = []
+    if summary:
+        opening.append(f"## Executive Summary\n\n{summary}")
+    if orientation:
+        opening.append(f"## How to Read This Dossier\n\n{orientation}")
+    compact_body = merge_track_reports([
+        (title, _strip_opening_sections(report, {"executive", "orientation"}))
+        for title, report in tracks
+    ])
+    body = demote_track_headings(compact_body)
+    pieces = [piece.strip() for piece in (*opening, body) if piece.strip()]
+    return "\n\n".join(pieces), "\n\n".join(opening)
+
+
+def _opening_citation_audit(candidate: str, fallback: str,
+                            merged_report: str) -> dict[str, Any]:
+    """Reject synthesized openings that lose or invent source markers."""
+    candidate_markers = _OPENING_CITATION_RE.findall(candidate or "")
+    fallback_markers = _OPENING_CITATION_RE.findall(fallback or "")
+    allowed = set(_OPENING_CITATION_RE.findall(merged_report or ""))
+    dangling = sorted(set(candidate_markers) - allowed, key=lambda n: int(n))
+    return {
+        "candidate_markers": len(candidate_markers),
+        "candidate_distinct": len(set(candidate_markers)),
+        "fallback_markers": len(fallback_markers),
+        "fallback_distinct": len(set(fallback_markers)),
+        "dangling": dangling,
+        "passed": (
+            not dangling
+            and set(fallback_markers).issubset(set(candidate_markers))
+            and len(set(candidate_markers)) >= len(set(fallback_markers))
+        ),
+    }
 
 
 def _track_title_en(title: str) -> str:
@@ -1470,16 +2234,13 @@ def demote_track_headings(md: str) -> str:
 
 
 def extract_exec_summary(report_md: str, max_chars: int = 4000) -> str:
-    """W9-7（纯）：提取单轨报告的 Executive Summary 小节正文（到下一个 H1/H2 为止）。
+    """W9-7（纯）：提取单轨报告的执行摘要（含受控别名/译名）。
 
     找不到该标题时回退取开头 ``max_chars``（多数轨的头部即摘要性内容）。"""
     text = report_md or ""
-    m = re.search(r"(?mi)^#{1,3}\s+.*executive summary.*$", text)
-    if m:
-        start = m.end()
-        nxt = re.search(r"(?m)^#{1,2}\s+", text[start:])
-        seg = text[start:start + nxt.start()] if nxt else text[start:]
-        seg = seg.strip()
+    sections = _opening_sections(text, "executive")
+    if sections:
+        seg = str(sections[0].get("body") or "").strip()
         if seg:
             return seg[:max_chars]
     return text.strip()[:max_chars]
@@ -1493,13 +2254,20 @@ def reconcile_track_reports(merged_report: str,
 
     输入只喂各轨标题 + 执行摘要（总量 cap ``max_prompt_chars``≈30K 字符，绝不喂全文），
     产出一个「合并执行摘要 + 跨轨分歧（Cross-track disagreements）」开篇；随后确定性地把
-    '# Track N' H1 降级为 '## Part N — <english title>' H2 并把开篇前置。degrade-safe：
-    LLM 失败/输出可疑（过短/错误串）→ 返回 (merged_report 原文, audit{applied:False})，
-    与今日纯拼接逐字节一致。
+    '# Track N' H1 降级为 '## Part N — <english title>' H2 并把开篇前置。无论 LLM
+    成败，确定性基线都会去掉重复的执行摘要/阅读指南、保留第一份有效开篇并降级轨级 H1。
+    LLM 失败、输出可疑或 [S#] 覆盖/悬空审计退化时，回退该确定性基线。
     """
     audit: dict[str, Any] = {"applied": False, "reason": ""}
+    tracks = [(t, r) for t, r in (labeled_reports or []) if (r or "").strip()]
+    deterministic, deterministic_opening = _deterministic_track_report(tracks)
+    fallback = deterministic or demote_track_headings(merged_report)
+
+    def _reject(reason: str, **details: Any) -> tuple[str, dict]:
+        audit.update({"reason": reason, "fallback": "deterministic", **details})
+        return fallback, audit
+
     try:
-        tracks = [(t, r) for t, r in (labeled_reports or []) if (r or "").strip()]
         if len(tracks) < 2:
             audit["reason"] = "tracks<2"
             return merged_report, audit
@@ -1517,7 +2285,9 @@ def reconcile_track_reports(merged_report: str,
             "2. 紧随其后输出 '### Cross-track disagreements' 小节：用列表逐条点名各轨"
             "互相冲突的头条数字/结论（指标、各轨口径、差异），没有实质冲突就写"
             "「未发现实质性跨轨分歧」。\n"
-            "3. 只输出上述 markdown，不要前言/解释；绝不提及研究 pass、working notes、"
+            "3. 原样保留支撑被采用声明的 [S#] 标记；不得改号、删除基线摘要已有标记或"
+            "发明输入中不存在的标记。\n"
+            "4. 只输出上述 markdown，不要前言/解释；绝不提及研究 pass、working notes、"
             "轨道机制等管线内部词汇；语言与输入摘要的主要语言一致。\n\n"
             f"{payload}"
         )
@@ -1528,14 +2298,38 @@ def reconcile_track_reports(merged_report: str,
                        temperature=0.2, max_tokens=4000)
         out = (out or "").strip()
         if len(out) < 200 or any(mk in out for mk in _LLM_ERROR_MARKERS):
-            audit["reason"] = f"llm output rejected (len={len(out)})"
-            return merged_report, audit
-        body = demote_track_headings(merged_report)
-        audit.update({"applied": True, "opening_chars": len(out), "tracks": len(tracks)})
-        return out.rstrip() + "\n\n" + body.lstrip(), audit
-    except Exception as e:  # noqa: BLE001 — 整理是增强，失败必回退纯拼接
-        audit["reason"] = f"{type(e).__name__}: {e}"
-        return merged_report, audit
+            return _reject(f"llm output rejected (len={len(out)})")
+        output_sections = _opening_sections(out)
+        exec_count = sum(row["kind"] == "executive" for row in output_sections)
+        orientation_count = sum(row["kind"] == "orientation" for row in output_sections)
+        if exec_count != 1 or orientation_count > 1:
+            return _reject(
+                "llm opening structure rejected",
+                opening_sections={
+                    "executive": exec_count,
+                    "orientation": orientation_count,
+                },
+            )
+        citation_audit = _opening_citation_audit(
+            out, deterministic_opening, merged_report)
+        if not citation_audit["passed"]:
+            return _reject("llm citation audit regressed", citation_audit=citation_audit)
+
+        # Deterministic already contains the canonical opening followed by the
+        # clean evidence body. Replace only that opening, never the source body.
+        body = deterministic[len(deterministic_opening):].lstrip() \
+            if deterministic_opening and deterministic.startswith(deterministic_opening) \
+            else deterministic
+        candidate = out.rstrip() + ("\n\n" + body if body else "")
+        audit.update({
+            "applied": True,
+            "opening_chars": len(out),
+            "tracks": len(tracks),
+            "citation_audit": citation_audit,
+        })
+        return candidate, audit
+    except Exception as e:  # noqa: BLE001 — 整理增强失败时仍执行确定性清理
+        return _reject(f"{type(e).__name__}: {e}")
 
 
 def merge_sources_union(track_sources: list[Any]) -> list[dict]:
@@ -1567,6 +2361,107 @@ def merge_sources_union(track_sources: list[Any]) -> list[dict]:
                     if v and not existing.get(k):
                         existing[k] = v
     return out
+
+
+_TRACK_CITATION_RE = re.compile(r"\[\s*S(\d+)\s*\]", re.I)
+_TRACK_REFERENCES_HEADING_RE = re.compile(
+    r"^#{1,3}\s*(?:References|参考来源|参考文献)\s*$", re.I)
+_TRACK_URL_RE = re.compile(r"https?://[^\s<>\])}\"']+", re.I)
+
+
+def normalize_track_report_citations(
+        report: str, track_sources: Any,
+        merged_sources: list[dict]) -> tuple[str, dict[str, int]]:
+    """Remap one track's local ``[S#]`` namespace into the merged source registry.
+
+    Each DeerFlow track legitimately starts at S1. Concatenating those reports
+    without remapping makes one marker refer to several sources. We recover each
+    local marker from its References entry (falling back to the same-position
+    track source), map by normalized URL into ``merged_sources``, remove the local
+    References section, and strip only markers that cannot be resolved.
+    """
+    rows = track_sources if isinstance(track_sources, list) else []
+    global_by_url = {
+        _track_norm_url(row.get("url")): index
+        for index, row in enumerate(merged_sources or [], 1)
+        if isinstance(row, dict) and _track_norm_url(row.get("url"))
+    }
+    local_by_tag: dict[int, str] = {
+        index: _track_norm_url(row.get("url"))
+        for index, row in enumerate(rows, 1)
+        if isinstance(row, dict) and _track_norm_url(row.get("url"))
+    }
+
+    lines = str(report or "").split("\n")
+    body: list[str] = []
+    in_refs = False
+    for line in lines:
+        stripped = line.strip()
+        if _TRACK_REFERENCES_HEADING_RE.match(stripped):
+            in_refs = True
+            continue
+        if in_refs and re.match(r"^#{1,3}\s+\S", stripped):
+            in_refs = False
+        if in_refs:
+            marker = _TRACK_CITATION_RE.search(line)
+            url = _TRACK_URL_RE.search(line)
+            if marker and url:
+                local_by_tag[int(marker.group(1))] = _track_norm_url(url.group(0))
+            continue
+        body.append(line)
+
+    stats = {"markers": 0, "remapped": 0, "stripped": 0}
+    out: list[str] = []
+    in_fence = False
+    for line in body:
+        stripped = line.lstrip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+
+        def _replace(match: "re.Match[str]") -> str:
+            stats["markers"] += 1
+            local_n = int(match.group(1))
+            global_n = global_by_url.get(local_by_tag.get(local_n, ""))
+            if not global_n:
+                stats["stripped"] += 1
+                return ""
+            stats["remapped"] += 1
+            return f"[S{global_n}]"
+
+        rewritten = _TRACK_CITATION_RE.sub(_replace, line)
+        rewritten = re.sub(r"[ \t]{2,}", " ", re.sub(r"\s+([.,;:!?，。；：！？])", r"\1", rewritten))
+        out.append(rewritten.rstrip())
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip(), stats
+
+
+def append_merged_references(report: str, merged_sources: list[dict]) -> str:
+    """Append one machine-readable References section for globally remapped markers."""
+    cited = sorted({int(value) for value in _TRACK_CITATION_RE.findall(report or "")})
+    if not cited:
+        return report
+    rows: list[str] = []
+    for number in cited:
+        if not (1 <= number <= len(merged_sources)):
+            continue
+        source = merged_sources[number - 1]
+        if not isinstance(source, dict):
+            continue
+        title = str(source.get("title") or "source").strip()
+        url = str(source.get("url") or "").strip()
+        rows.append(f"- [S{number}] {title}" + (f" — {url}" if url else ""))
+    if not rows:
+        return report
+    return report.rstrip() + "\n\n## References\n\n" + "\n".join(rows) + "\n"
+
+
+def strip_exec_summary_section(report_md: str) -> str:
+    """Remove all track-local Executive Summary aliases/translations."""
+    return _strip_opening_sections(report_md, {"executive"})
 
 
 def merge_list_dedup(track_lists: list[Any]) -> list:
@@ -1680,6 +2575,201 @@ def pick_freshest_markets(track_markets: list[Any]) -> Optional[dict]:
             if isinstance(pm, dict):
                 return pm
     return best
+
+
+def merge_market_snapshots(track_markets: list[Any], *, max_total: int = 20,
+                           max_per_event: int = 3) -> Optional[dict]:
+    """Relevance-gated union of per-track market registries.
+
+    Older code selected one freshest snapshot, so an empty/failing track could
+    erase disjoint useful markets discovered elsewhere.  Union by ``market_id``;
+    the freshest snapshot wins mutable quote fields while older rows backfill
+    provenance.  The bridge has already applied the semantic relevance gate.
+    """
+    snapshots = [pm for pm in track_markets if isinstance(pm, dict)]
+    if not snapshots:
+        return None
+    queries: list[str] = []
+    seen_queries: set[str] = set()
+    by_id: dict[str, dict[str, Any]] = {}
+    row_as_of: dict[str, str] = {}
+    # ``markets`` contains only rows that survived each track's relevance gate.
+    # Preserve the upstream raw candidate count separately: when zero selected
+    # rows remain, it distinguishes "candidates existed but were irrelevant"
+    # from a verified empty provider response or a total transport outage.
+    candidate_count = 0
+    raw_candidate_count = 0
+    selected_input_count = 0
+    sources: set[str] = set()
+    status_totals = {
+        "query_count": 0,
+        "successful_query_count": 0,
+        "transport_failure_count": 0,
+        "inflight_timeout_count": 0,
+        "tool_observation_count": 0,
+    }
+    empty_reason_counts: dict[str, int] = {}
+    for track_index, pm in enumerate(snapshots, start=1):
+        snap_as_of = str(pm.get("as_of") or "")
+        source_value = pm.get("registry_sources") or pm.get("source")
+        if isinstance(source_value, list):
+            sources.update(str(value) for value in source_value if value)
+        elif source_value:
+            sources.add(str(source_value))
+        track_status = pm.get("status") if isinstance(pm.get("status"), dict) else {}
+        # New tool payloads call this attempted_query_count; older canonical
+        # snapshots call it query_count.  Count one or the other, never both.
+        attempted_value = track_status.get(
+            "attempted_query_count", track_status.get("query_count", 0)
+        )
+        try:
+            status_totals["query_count"] += max(0, int(attempted_value or 0))
+        except (TypeError, ValueError):
+            pass
+        for key in status_totals:
+            if key == "query_count":
+                continue
+            try:
+                status_totals[key] += max(0, int(track_status.get(key) or 0))
+            except (TypeError, ValueError):
+                continue
+        empty_reason = str(track_status.get("empty_reason") or "").strip()
+        if empty_reason:
+            empty_reason_counts[empty_reason] = empty_reason_counts.get(empty_reason, 0) + 1
+        for query in pm.get("queries") or []:
+            text = str(query or "").strip()
+            key = text.casefold()
+            if text and key not in seen_queries:
+                seen_queries.add(key)
+                queries.append(text)
+        rows = [row for row in (pm.get("markets") or []) if isinstance(row, dict)]
+        selected_input_count += len(rows)
+        raw_count = track_status.get("candidate_count")
+        try:
+            normalized_count = max(0, int(raw_count)) if raw_count is not None else len(rows)
+        except (TypeError, ValueError):
+            normalized_count = len(rows)
+        candidate_count += normalized_count
+        provider_raw_count = track_status.get("raw_candidate_count", normalized_count)
+        try:
+            raw_candidate_count += max(0, int(provider_raw_count))
+        except (TypeError, ValueError):
+            raw_candidate_count += normalized_count
+        for row in rows:
+            market_id = str(row.get("market_id") or "").strip()
+            if not market_id:
+                continue
+            existing = by_id.get(market_id)
+            provenance = list((existing or {}).get("track_provenance") or [])
+            provenance.append({"track": track_index, "as_of": snap_as_of})
+            if existing is None or snap_as_of >= row_as_of.get(market_id, ""):
+                merged = dict(existing or {})
+                merged.update(row)
+                by_id[market_id] = merged
+                row_as_of[market_id] = snap_as_of
+            by_id[market_id]["track_provenance"] = provenance
+
+    def _numeric(value: Any) -> float:
+        try:
+            number = float(value)
+            return number if number == number else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    ranked = sorted(
+        by_id.values(),
+        key=lambda row: (
+            -_numeric(row.get("relevance_score")),
+            -_numeric(row.get("volume")),
+            str(row.get("market_id") or ""),
+        ),
+    )
+    selected: list[dict] = []
+    per_event: dict[str, int] = {}
+    selection_limit = max(0, int(max_total))
+    for row in ranked:
+        if len(selected) >= selection_limit:
+            break
+        event = str(row.get("event_title") or row.get("market_id") or "").strip()
+        if max_per_event > 0 and per_event.get(event, 0) >= max_per_event:
+            continue
+        per_event[event] = per_event.get(event, 0) + 1
+        selected.append(row)
+    latest_as_of = max((str(pm.get("as_of") or "") for pm in snapshots), default="")
+    all_network_attempts_failed = bool(
+        status_totals["query_count"] > 0
+        and status_totals["successful_query_count"] == 0
+        and status_totals["transport_failure_count"] >= status_totals["query_count"]
+    )
+    if selected:
+        evidence_state = "markets_selected"
+    elif candidate_count:
+        evidence_state = "all_candidates_irrelevant"
+    elif all_network_attempts_failed:
+        evidence_state = "transport_failure"
+    elif (status_totals["inflight_timeout_count"] > 0
+          and status_totals["successful_query_count"] == 0):
+        evidence_state = "inflight_timeout"
+    elif status_totals["transport_failure_count"] > 0:
+        evidence_state = "partial_transport_failure"
+    else:
+        evidence_state = "verified_empty"
+    status = {
+        "attempted": True,
+        "state": evidence_state,
+        "snapshot_count": len(snapshots),
+        "raw_candidate_count": raw_candidate_count,
+        "candidate_count": candidate_count,
+        "selected_input_count": selected_input_count,
+        "unique_candidate_count": len(by_id),
+        "selected_count": len(selected),
+        "empty_reason_counts": empty_reason_counts,
+        **status_totals,
+        "attempted_query_count": status_totals["query_count"],
+        "empty_reason": None if selected else (
+            "all_candidates_irrelevant" if candidate_count else (
+                "transport_failure" if all_network_attempts_failed else "no_equivalent_market"
+            )
+        ),
+    }
+    return {
+        "as_of": latest_as_of,
+        "source": "polymarket",
+        "registry_sources": sorted(sources) or ["polymarket"],
+        "queries": queries,
+        "markets": selected,
+        "no_relevant_markets": not bool(selected),
+        "status": status,
+    }
+
+
+def merge_market_price_histories(track_histories: list[Any],
+                                 selected_market_ids: set[str]) -> dict[str, list[dict]]:
+    """Union price series for selected markets only, latest point per timestamp wins."""
+    merged: dict[str, dict[int, dict]] = {}
+    for history in track_histories:
+        if not isinstance(history, dict):
+            continue
+        for market_id, points in history.items():
+            mid = str(market_id or "").strip()
+            if mid not in selected_market_ids or not isinstance(points, list):
+                continue
+            bucket = merged.setdefault(mid, {})
+            for point in points:
+                if not isinstance(point, dict):
+                    continue
+                try:
+                    timestamp = int(float(point.get("t")))
+                    probability = float(point.get("p"))
+                except (TypeError, ValueError):
+                    continue
+                if timestamp <= 0 or not (0.0 <= probability <= 1.0):
+                    continue
+                bucket[timestamp] = {"t": timestamp, "p": probability}
+    return {
+        market_id: [points[t] for t in sorted(points)]
+        for market_id, points in merged.items() if points
+    }
 
 
 def load_research_dossier_for_simulation(simulation_id: Optional[str]) -> dict[str, Any]:
@@ -1896,6 +2986,16 @@ def _capture_key_packages() -> Optional[dict[str, Any]]:
     return out or None
 
 
+def _calendar_mode() -> bool:
+    """CAL：配置生成语义的日历模式判定（Config.SIM_TEMPORAL_MODE=="calendar"）。
+
+    仅用于「运行期是否注入 OASIS_DEFAULT_MAX_ROUNDS」等生成语义决策；运行器/子进程
+    一律按 simulation_config.json 里 temporal_config 的有无分派，绝不读该环境开关。
+    老 Config（无该属性）→ False，走 hours 旧路径，逐字节不变。
+    """
+    return str(getattr(Config, "SIM_TEMPORAL_MODE", "") or "").strip().lower() == "calendar"
+
+
 def _build_run_manifest(state: "PipelineState") -> dict[str, Any]:
     """构造 run.json 的内容快照（secrets 已脱敏）。
 
@@ -1914,7 +3014,12 @@ def _build_run_manifest(state: "PipelineState") -> dict[str, Any]:
         research_timeout = depth_budgets.get(
             str(depth).lower(), getattr(Config, "DEERFLOW_RESEARCH_TIMEOUT", 0)
         )
-    max_rounds = opts.get("max_rounds") or (getattr(Config, "OASIS_DEFAULT_MAX_ROUNDS", 0) or None)
+    # CAL：日历模式下默认轮数上限只在配置生成期喂 target_max（粗化粒度），
+    # 运行期不再注入——清单只记用户显式指定的 max_rounds。
+    if _calendar_mode():
+        max_rounds = opts.get("max_rounds") or None
+    else:
+        max_rounds = opts.get("max_rounds") or (getattr(Config, "OASIS_DEFAULT_MAX_ROUNDS", 0) or None)
 
     manifest: dict[str, Any] = {
         "schema_version": PIPELINE_SCHEMA_VERSION,
@@ -2896,6 +4001,13 @@ class PipelineOrchestrator:
         if injected:
             ec = config.setdefault("event_config", {})
             sched = ec.setdefault("scheduled_events", [])
+            # CAL：配置带 temporal_config（日历模式）时按日期精确装桶（round_for_date），
+            # 与 key_events 同一套定位；无 temporal_config → 旧行为逐字节不变。
+            _tc = config.get("temporal_config")
+            _cal_rounds = (_tc.get("round_dates") or []) if (
+                isinstance(_tc, dict) and _tc.get("mode") == "calendar") else None
+            if _cal_rounds:
+                from ..utils import sim_timeline
             # 影响力最高 agent 作兜底发布者
             fallback = max(agents, key=lambda x: x.get("influence_weight", 1.0), default=None)
             fb_id = fallback.get("agent_id") if fallback else 0
@@ -2903,8 +4015,26 @@ class PipelineOrchestrator:
             for ev in injected:
                 poster_name = str(ev.get("poster_name", "") or "").strip()
                 a = by_name.get(normalize_name(poster_name)) if poster_name else None
+                _round = int(ev.get("round", 0) or 0)
+                if _cal_rounds:
+                    _d = parse_as_of(ev.get("date"))
+                    if _d is None:
+                        _round = 0  # 无日期 → 第 0 轮起手注入
+                        logger.warning("注入事件无可解析日期，落到第 0 轮: %r",
+                                       str(ev.get("content") or "")[:60])
+                    else:
+                        _r = sim_timeline.round_for_date(_d.date(), _cal_rounds)
+                        _last_end = parse_as_of(_cal_rounds[-1].get("period_end"))
+                        if _r is not None:
+                            _round = _r
+                        elif _last_end is not None and _d.date() > _last_end.date():
+                            _round = len(_cal_rounds) - 1  # 超出判定日 → 钳到最后一轮
+                            logger.warning("注入事件日期 %s 超出判定日，钳到最后一轮", ev.get("date"))
+                        else:
+                            _round = 0  # 早于 as_of → 起手轮
+                            logger.warning("注入事件日期 %s 早于 as_of，落到第 0 轮", ev.get("date"))
                 sched.append({
-                    "round": int(ev.get("round", 0) or 0),
+                    "round": _round,
                     "content": str(ev.get("content", "") or ""),
                     "date": ev.get("date"),
                     "poster_agent_id": a.get("agent_id") if a else fb_id,
@@ -2916,18 +4046,30 @@ class PipelineOrchestrator:
     # -- NEXTSTEPS P0-3: 同问多种子集成 -----------------------------------
     @staticmethod
     def _infer_horizon_date(prompt: Any, actors: Any) -> Optional[str]:
-        """NEXTSTEPS P1-2：从问题/central_question 解析一个预测时间范围年份 → 'YYYY-12-31'。
+        """NEXTSTEPS P1-2 / CAL：从问题/central_question 解析判定日 → 'YYYY-MM-DD'。
 
-        供子进程把每轮映射到日历日期（as_of→horizon 线性）。无可解析年份 → None（不做日期映射）。
+        委托 sim_timeline.extract_horizon 的四层确定性抽取（explicit_date/anchored_period/
+        relative/bare_year——bare_year 层即旧实现，行为超集）。as_of 取 actors.as_of_date
+        （不可解析→今天）。无合法候选 → None（不做日期映射）；任何异常回退旧的裸年份正则。
         """
         text = str(prompt or "")
         if isinstance(actors, dict):
-            text += " " + str(actors.get("central_question") or "")
-        # 数字边界（非 \b：\b 在中日韩字符旁不触发，"2027年" 取不到年份）。
-        years = [int(y) for y in re.findall(r"(?<!\d)(20\d{2})(?!\d)", text)]
-        if not years:
-            return None
-        return f"{max(years)}-12-31"
+            text += "\n" + str(actors.get("central_question") or "")
+        try:
+            from datetime import date as _date
+            from ..utils import sim_timeline
+            as_of = None
+            if isinstance(actors, dict):
+                parsed = parse_as_of(actors.get("as_of_date"))
+                as_of = parsed.date() if parsed else None
+            hr = sim_timeline.extract_horizon(text, as_of or _date.today())
+            return hr.horizon_date if hr else None
+        except Exception:  # noqa: BLE001 — degrade-safe：模块缺失/异常时保持旧行为
+            # 数字边界（非 \b：\b 在中日韩字符旁不触发，"2027年" 取不到年份）。
+            years = [int(y) for y in re.findall(r"(?<!\d)(20\d{2})(?!\d)", text)]
+            if not years:
+                return None
+            return f"{max(years)}-12-31"
 
     @staticmethod
     def _agreement_to_confidence(agreement: Any) -> str:
@@ -2985,7 +4127,10 @@ class PipelineOrchestrator:
         forecasts: list = [primary_fc]
         extra_runs: list = []
         base_seed = int(getattr(Config, "SIM_SEED", 0) or 0)
-        _mr = state.options.get("max_rounds") or (Config.OASIS_DEFAULT_MAX_ROUNDS or None)
+        # CAL：日历模式运行期不注入默认轮数上限（已在配置生成期喂 target_max），
+        # 只透传用户显式指定的 max_rounds（在 prepare 粗化粒度、绝不截断覆盖）。
+        _mr = state.options.get("max_rounds") or (
+            None if _calendar_mode() else (Config.OASIS_DEFAULT_MAX_ROUNDS or None))
         max_rounds = int(_mr) if _mr else None
         handoff_dir = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
         # 派生互异种子（base=0 时也确定性互异）；每个种子跑一次独立 (prepare→run→report)。
@@ -3145,7 +4290,11 @@ class PipelineOrchestrator:
             agg["extra_runs"] = extra_runs
             agreement = agg.get("agreement")
             agg["confidence"] = self._agreement_to_confidence(agreement)
-            # 落 ensemble_forecast.json（handoff + 主报告目录），并把一致度/信心回写主 forecast.json
+            # 落 ensemble_forecast.json（handoff + 主报告目录）。主报告的
+            # forecast.json/full_report.md 已作为一个精确审计束封存；在报告之后只改
+            # confidence/ensemble 会让结构化预测、 prose、图表和 final_audit 分叉。
+            # 因此集成保持为独立、可追溯的敏感性 sidecar，直到它能在下一版流程中
+            # 前移到最终报告渲染/审计之前。
             try:
                 write_json_atomic(os.path.join(handoff_dir, "ensemble_forecast.json"), agg)
                 state.artifacts["ensemble_forecast"] = os.path.join(handoff_dir, "ensemble_forecast.json")
@@ -3155,12 +4304,6 @@ class PipelineOrchestrator:
                 from .report_agent import ReportManager
                 rfolder = ReportManager._get_report_folder(state.report_id)
                 write_json_atomic(os.path.join(rfolder, "ensemble_forecast.json"), agg)
-                primary_fc["confidence"] = agg["confidence"]
-                primary_fc["ensemble"] = {
-                    "n_runs": agg.get("n_runs"), "agreement": agreement,
-                    "scenarios": agg.get("scenarios"),
-                }
-                write_json_atomic(os.path.join(rfolder, "forecast.json"), primary_fc)
             except Exception as _we:  # noqa: BLE001
                 logger.warning("[%s] 写集成结果失败: %s", state.pipeline_id, _we)
             state.options["ensemble_done"] = True
@@ -3326,6 +4469,7 @@ class PipelineOrchestrator:
         chunk_count: Optional[int] = None,
         total_rounds: Optional[int] = None,
         section_count: Optional[int] = None,
+        temporal: Optional[dict] = None,
     ) -> None:
         """T6.7: 用已知成本信号（chunk 数 / 轮数 / 章节数）按比例重排 graph/run/report 的全局区间。
 
@@ -3340,7 +4484,13 @@ class PipelineOrchestrator:
         cc = chunk_count if chunk_count is not None else prev.get("chunk_count")
         tr = total_rounds if total_rounds is not None else prev.get("total_rounds")
         sc = section_count if section_count is not None else prev.get("section_count")
-        state.options["cost_signals"] = {"chunk_count": cc, "total_rounds": tr, "section_count": sc}
+        _sig: dict[str, Any] = {"chunk_count": cc, "total_rounds": tr, "section_count": sc}
+        # CAL：日历模式把 temporal_config 的日历指纹一并记入成本信号（跨调用保留）。
+        for _k in ("calendar_unit", "n_rounds", "horizon_date"):
+            _v = (temporal or {}).get(_k, prev.get(_k))
+            if _v is not None:
+                _sig[_k] = _v
+        state.options["cost_signals"] = _sig
         w_graph = float(cc or 20)        # 每 chunk ~1 次 LLM 抽取
         w_prepare = 8.0                  # prepare 较轻且较稳定
         w_run = float((tr or 24) * 1.5)  # 每轮多次 agent LLM 调用
@@ -3491,8 +4641,11 @@ class PipelineOrchestrator:
         return ctl
 
     def _assess_report_health(self, report_id: Optional[str]) -> "tuple[str, list[str], dict]":
-        """Hard-fail if the report is fundamentally empty (all placeholders / no forecast /
-        trivially short); degraded if some sections are placeholders."""
+        """Assess the exact deliverable, including its authoritative final audit.
+
+        Empty/placeholder output, missing forecast/audit, or hard publish-integrity
+        defects fail. Partial sections and epistemic/calibration findings degrade.
+        """
         import glob
         issues: list[str] = []
         if not report_id:
@@ -3523,18 +4676,32 @@ class PipelineOrchestrator:
         fc_ok = False
         fcp = os.path.join(folder, "forecast.json")
         q_issues: list[str] = []
+        hard_q_issues: list[str] = []
+
+        def _add_unique(target: list[str], value: Any) -> None:
+            text = str(value or "").strip()
+            if text and text not in target:
+                target.append(text)
+
         if os.path.exists(fcp):
             try:
                 fc = json.load(open(fcp, encoding="utf-8"))
                 fc_ok = bool(fc.get("scenarios") or fc.get("binary_forecasts"))
                 # surface the report-side audit findings (S2/S11/S12) as degraded signals
-                q = fc.get("quality") or {}
+                _q0 = fc.get("quality")
+                q = _q0 if isinstance(_q0, dict) else {}
                 if (q.get("quote_provenance") or {}).get("ungrounded"):
                     q_issues.append(f"{q['quote_provenance']['ungrounded']} ungrounded/laundered quote(s) (S2)")
                 if (q.get("numeric_consistency") or {}).get("mismatch_count"):
                     q_issues.append(f"{q['numeric_consistency']['mismatch_count']} prose-vs-forecast probability mismatch(es) (S11)")
                 if (q.get("implausible_stats") or {}).get("count"):
                     q_issues.append(f"{q['implausible_stats']['count']} implausible headline stat(s) (S12)")
+                lint_q = q.get("lint") or {}
+                if lint_q.get("leakage_flags"):
+                    q_issues.append(
+                        f"{lint_q['leakage_flags']} residual simulation-mechanics phrase(s) "
+                        "remain in the published report"
+                    )
                 bq = fc.get("binary_quality") or {}
                 if bq and not bq.get("passed", True):
                     q_issues.append("binary-forecast conviction/objectivity gate failed (A3/A4): " + "；".join(bq.get("issues", [])[:2]))
@@ -3549,16 +4716,97 @@ class PipelineOrchestrator:
                     q_issues.append(
                         f"scenario count drifted {_scd.get('pinned')}→{_scd.get('final')} "
                         "between pinned spine and final forecast")
-                # XRUN-16(2): 发布门的引用覆盖率失败已在报告侧写进 quality.issues，折入健康块。
+                # LOOP-010: surface the complete final publish-gate result, not
+                # only its citation-coverage prefix. Hard issues block completion;
+                # epistemic issues keep the report visible as degraded.
                 for _qi in (q.get("issues") or []):
-                    if isinstance(_qi, str) and _qi.startswith("定量声明引用覆盖率"):
-                        q_issues.append(_qi)
-            except (OSError, ValueError):
+                    if isinstance(_qi, str):
+                        _add_unique(q_issues, _qi)
+                for _qi in (q.get("hard_issues") or []):
+                    if isinstance(_qi, str):
+                        _add_unique(hard_q_issues, _qi)
+            except (OSError, ValueError, TypeError, AttributeError):
                 fc_ok = False
+        final_audit_meta: dict[str, Any] = {}
         fr = os.path.join(folder, "full_report.md")
+        if getattr(Config, "REPORT_FINAL_READ_ONLY_AUDIT", True):
+            final_audit_path = os.path.join(folder, "final_audit.json")
+            if not os.path.exists(final_audit_path):
+                _add_unique(hard_q_issues, "final_audit.json missing (report was not audited)")
+            else:
+                try:
+                    with open(final_audit_path, encoding="utf-8") as _faf:
+                        final_audit = json.load(_faf)
+                    if not isinstance(final_audit, dict) or not final_audit:
+                        raise ValueError("empty final audit")
+                    final_hard = list(final_audit.get("hard_issues") or [])
+                    _gate0 = final_audit.get("publish_gate")
+                    gate = _gate0 if isinstance(_gate0, dict) else {}
+                    required_policy = int(getattr(
+                        Config, "REPORT_FINAL_AUDIT_POLICY_VERSION", 3
+                    ))
+                    if final_audit.get("policy_version") != required_policy:
+                        final_hard.append(
+                            "final audit policy is stale; deterministic replay required"
+                        )
+                    if final_audit.get("hard_passed") is not True:
+                        final_hard.append("final audit did not hard-pass")
+                    if final_audit.get("disk_matches_memory") is not True:
+                        final_hard.append(
+                            "final audit did not confirm disk/memory byte identity"
+                        )
+                    if gate.get("enabled") and gate.get("passed") is not True:
+                        final_hard.append("professional publication gate did not pass")
+                    structured = final_audit.get("structured_forecast") or {}
+                    scenario_contract = final_audit.get("scenario_contract") or {}
+                    if structured.get("required") and structured.get("valid") is not True:
+                        final_hard.append("structured forecast contract is invalid")
+                    if (structured.get("required")
+                            and scenario_contract.get("valid") is not True):
+                        final_hard.append("scenario contract is missing or invalid")
+                    if os.path.exists(fr):
+                        with open(fr, "rb") as _report_handle:
+                            current_sha = hashlib.sha256(
+                                _report_handle.read()
+                            ).hexdigest()
+                        if final_audit.get("markdown_sha256") != current_sha:
+                            final_hard.append(
+                                "final audit fingerprint does not match full_report.md"
+                            )
+                    if os.path.exists(fcp):
+                        with open(fcp, "rb") as _forecast_handle:
+                            current_forecast_sha = hashlib.sha256(
+                                _forecast_handle.read()
+                            ).hexdigest()
+                        if final_audit.get("forecast_sha256") != current_forecast_sha:
+                            final_hard.append(
+                                "final audit fingerprint does not match forecast.json"
+                            )
+                    final_hard.extend(
+                        issue for issue in (gate.get("hard_issues") or [])
+                        if issue not in final_hard
+                    )
+                    for _qi in final_hard:
+                        _add_unique(hard_q_issues, _qi)
+                        _add_unique(q_issues, _qi)
+                    for _qi in (gate.get("epistemic_issues") or []):
+                        _add_unique(q_issues, _qi)
+                    final_audit_meta = {
+                        "read_only": final_audit.get("read_only"),
+                        "markdown_sha256": final_audit.get("markdown_sha256"),
+                        "forecast_sha256": final_audit.get("forecast_sha256"),
+                        "disk_matches_memory": final_audit.get("disk_matches_memory"),
+                        "hard_passed": not final_hard,
+                    }
+                except (OSError, ValueError, TypeError, AttributeError) as _fae:
+                    _add_unique(
+                        hard_q_issues,
+                        f"final_audit.json unreadable/invalid ({type(_fae).__name__})",
+                    )
         fr_len = os.path.getsize(fr) if os.path.exists(fr) else 0
         meta = {"sections": total, "placeholder_sections": placeholder,
-                "forecast_ok": fc_ok, "full_report_bytes": fr_len}
+                "forecast_ok": fc_ok, "full_report_bytes": fr_len,
+                "final_audit": final_audit_meta}
         hard = False
         if total and placeholder >= total:
             hard = True
@@ -3571,8 +4819,14 @@ class PipelineOrchestrator:
         if fr_len and fr_len < 2000:
             hard = True
             issues.append(f"full_report.md is only {fr_len} bytes (effectively empty)")
-        issues.extend(q_issues)  # S2/S11/S12/binary-gate audit findings → degraded signals
+        if hard_q_issues:
+            hard = True
+            for _qi in hard_q_issues:
+                _add_unique(issues, _qi)
+        for _qi in q_issues:  # all final publish issues are visible in health
+            _add_unique(issues, _qi)
         meta["quality_issues"] = q_issues
+        meta["hard_quality_issues"] = hard_q_issues
         health = "failed" if hard else ("degraded" if issues else "ok")
         return health, issues, meta
 
@@ -3736,9 +4990,17 @@ class PipelineOrchestrator:
         specs: list[tuple[str, str]] = []
         if stage == STAGE_RESEARCH:
             specs.append(("report", os.path.join(hd, "research_report.md")))
+            specs.append(("actor_dossier", os.path.join(hd, "actor_dossier.md")))
             specs.append(("dossier", os.path.join(hd, "actors.json")))
             specs.append(("timeline", os.path.join(hd, "timeline.json")))
             specs.append(("sources", os.path.join(hd, "sources.json")))
+            specs.append(("quantitative", os.path.join(hd, "quantitative.json")))
+            specs.append(("contested", os.path.join(hd, "contested.json")))
+            specs.append(("prediction_markets", os.path.join(hd, "prediction_markets.json")))
+            specs.append(("market_price_history", os.path.join(hd, "market_price_history.json")))
+            specs.append(("prediction_market_candidates",
+                          os.path.join(hd, "prediction_market_candidates.jsonl")))
+            specs.append(("research_budget", os.path.join(hd, "research_budget.json")))
             specs.extend(PipelineOrchestrator._viz_artifact_specs(hd))
         elif stage == STAGE_ONTOLOGY:
             specs.append(("ontology", os.path.join(hd, "ontology.json")))
@@ -3751,6 +5013,15 @@ class PipelineOrchestrator:
                 specs.append(("initial_posts", os.path.join(sim_dir, "simulation_config.json")))
                 for fname in ("twitter_profiles.csv", "reddit_profiles.json"):
                     specs.append(("personas", os.path.join(sim_dir, fname)))
+                specs.append(("actor_cast", os.path.join(
+                    sim_dir, "actor_cast_manifest.json"
+                )))
+                specs.append(("twitter_actor_roles", os.path.join(
+                    sim_dir, "twitter_profiles_roles.json"
+                )))
+                specs.append(("reddit_actor_roles", os.path.join(
+                    sim_dir, "reddit_profiles_roles.json"
+                )))
         elif stage == STAGE_RUN:
             sim_id = state.simulation_id
             if sim_id:
@@ -3830,6 +5101,79 @@ class PipelineOrchestrator:
             for name, path in PipelineOrchestrator._viz_dynamic_artifact_specs(report_dir)
         ]
 
+    @staticmethod
+    def _validate_report_viz_references(report_dir: str) -> bool:
+        """Validate every file referenced by an existing report viz manifest.
+
+        The integrity manifest hashes ``viz_manifest.json`` itself, but a report
+        cannot be safely reused when one of its declared chart assets was deleted,
+        truncated, or replaced by a symlink. Visuals remain optional: an absent
+        manifest is valid; an existing malformed/dangling manifest is not.
+        """
+        manifest_path = os.path.join(report_dir, "viz_manifest.json")
+        if not os.path.exists(manifest_path):
+            return True
+        if os.path.islink(manifest_path):
+            return False
+        try:
+            payload = _read_json(manifest_path)
+            if isinstance(payload, list):
+                items = payload
+            elif isinstance(payload, dict) and isinstance(payload.get("items"), list):
+                items = payload["items"]
+            else:
+                return False
+            charts_root = os.path.realpath(os.path.join(report_dir, "charts"))
+            allowed = {".png", ".svg", ".jpg", ".jpeg", ".gif", ".webp", ".html", ".mmd"}
+            for item in items:
+                if not isinstance(item, dict):
+                    return False
+                for field in ("path", "png_path"):
+                    value = item.get(field)
+                    if value in (None, ""):
+                        continue
+                    if (not isinstance(value, str) or "\\" in value or "%" in value
+                            or any(ord(char) < 32 or ord(char) == 127 for char in value)):
+                        return False
+                    raw = value.strip().removeprefix("./")
+                    parts = raw.split("/")
+                    if (len(parts) < 2 or parts[0] != "charts"
+                            or any(part in ("", ".", "..") for part in parts)
+                            or os.path.splitext(parts[-1])[1].lower() not in allowed):
+                        return False
+                    candidate = os.path.join(report_dir, *parts)
+                    resolved = os.path.realpath(candidate)
+                    if (os.path.commonpath([resolved, charts_root]) != charts_root
+                            or not os.path.isfile(resolved) or os.path.getsize(resolved) <= 0
+                            or any(os.path.islink(os.path.join(charts_root, *parts[1:i]))
+                                   for i in range(2, len(parts) + 1))):
+                        return False
+            return True
+        except (OSError, ValueError, TypeError):
+            return False
+
+    @staticmethod
+    def _clear_report_attempt_artifacts(state: PipelineState) -> None:
+        """Remove old REPORT-owned pointers and integrity rows at a new attempt boundary."""
+        stale_names = {
+            name for name in list(state.artifacts)
+            if name.endswith("_partial") or name == "report_viz_manifest"
+            or name.startswith("report_chart_")
+        }
+        for name in stale_names:
+            state.artifacts.pop(name, None)
+        try:
+            manifest = PipelineManager.load_artifact_manifest(state.pipeline_id)
+            changed = False
+            for name in list(manifest):
+                if name == "report_viz_manifest" or name.startswith("report_chart_"):
+                    manifest.pop(name, None)
+                    changed = True
+            if changed:
+                PipelineManager.write_artifact_manifest(state.pipeline_id, manifest)
+        except Exception:  # noqa: BLE001 — cleanup is best-effort; new keys overwrite safely
+            pass
+
     def _record_stage_artifacts(self, state: PipelineState, stage: str) -> None:
         """T6.3: 阶段完成时登记其产物的可深链路径（存在且非空才登记）。
 
@@ -3842,6 +5186,7 @@ class PipelineOrchestrator:
         def add_if(name: str, path: Optional[str]) -> bool:
             if path and os.path.exists(path) and os.path.getsize(path) > 0:
                 state.artifacts[name] = path
+                state.artifacts.pop(f"{name}_partial", None)
                 recorded.append((name, path))
                 return True
             return False
@@ -3909,6 +5254,9 @@ class PipelineOrchestrator:
         """
         manifest = PipelineManager.load_artifact_manifest(state.pipeline_id)
         if not manifest:
+            if stage == STAGE_REPORT and state.report_id:
+                return self._validate_report_viz_references(
+                    ReportManager._get_report_folder(state.report_id))
             return True  # 无清单 → 退化到旧的存在性复用，保持向后兼容
         ok = True
         for name, path in self._stage_artifact_specs(state, stage):
@@ -3943,6 +5291,11 @@ class PipelineOrchestrator:
                 logger.warning("[%s] 复用校验：产物 %s 结构探针未通过", state.pipeline_id, name)
                 ok = False
                 break
+        if ok and stage == STAGE_REPORT and state.report_id:
+            ok = self._validate_report_viz_references(
+                ReportManager._get_report_folder(state.report_id))
+            if not ok:
+                logger.warning("[%s] 复用校验：报告可视化清单含缺失/越界产物", state.pipeline_id)
         return ok
 
     def _reuse_ok(self, state: PipelineState, stage: str) -> bool:
@@ -4216,11 +5569,13 @@ class PipelineOrchestrator:
             logger.debug("[%s] run.json 写出跳过: %s", state.pipeline_id, e)
 
     def _update_manifest(self, state: PipelineState, stage: str,
-                         total_rounds: Optional[int] = None) -> None:
+                         total_rounds: Optional[int] = None,
+                         temporal: Optional[dict] = None) -> None:
         """I-8-1: 阶段进入时把当前解析出的 provider/model（可热切换）钉入 run.json。
 
         读出现有清单，更新对应 stage 的 resolved.provider/model_name（ontology/graph/report）
         与 simulation.total_rounds，原子写回。任何异常静默吞掉。
+        CAL：temporal 给出时把 calendar_unit/n_rounds/horizon_date 一并钉入 resolved.simulation。
         """
         if not bool(getattr(Config, "RECORD_RUN_MANIFEST", True)):
             return
@@ -4238,6 +5593,11 @@ class PipelineOrchestrator:
             if total_rounds is not None:
                 sim = resolved.setdefault("simulation", {})
                 sim["total_rounds"] = int(total_rounds)
+            if temporal:
+                sim = resolved.setdefault("simulation", {})
+                for _k in ("calendar_unit", "n_rounds", "horizon_date"):
+                    if temporal.get(_k) is not None:
+                        sim[_k] = temporal[_k]
             manifest["updated_at"] = _utcnow()
             write_json_atomic(path, redact_secrets(manifest))
         except Exception as e:  # noqa: BLE001
@@ -4288,7 +5648,9 @@ class PipelineOrchestrator:
 
     # -- 内部：研究覆盖度/质量记分牌 (I-0-3) -------------------------------
 
-    def _surface_research_quality(self, state: PipelineState, handoff_dir: str) -> None:
+    def _surface_research_quality(
+        self, state: PipelineState, handoff_dir: str
+    ) -> Optional[dict[str, Any]]:
         """I-0-3: 把研究阶段写出的 research_quality 记分牌（来自 handoff/meta.json）
         透传到 state.options，供 StageTimeline / API 展示。
 
@@ -4303,11 +5665,49 @@ class PipelineOrchestrator:
             meta = _read_json(os.path.join(handoff_dir, "meta.json"))
         except Exception:  # noqa: BLE001
             meta = None
-        if not isinstance(meta, dict):
-            return
-        rq = meta.get("research_quality")
-        if not isinstance(rq, dict):
-            return
+        meta = meta if isinstance(meta, dict) else {}
+        rq = dict(meta.get("research_quality") or {})
+        budget = _read_json(os.path.join(handoff_dir, "research_budget.json"))
+        if isinstance(budget, dict):
+            global_counts = budget.get("global") if isinstance(budget.get("global"), dict) else {}
+            denials = sum(
+                int(value or 0) for key, value in global_counts.items()
+                if str(key).startswith("denied_") and isinstance(value, (int, float))
+            )
+            budget_summary = {
+                "degraded": bool(budget.get("degraded")),
+                "denials": denials,
+                "attempts": int(global_counts.get("attempts") or 0),
+                "search_network": int(global_counts.get("search_network") or 0),
+                "fetch_network": int(global_counts.get("fetch_network") or 0),
+                "limits": budget.get("limits") if isinstance(budget.get("limits"), dict) else {},
+            }
+            state.options["research_budget"] = budget_summary
+            meta["research_budget"] = budget_summary
+            if budget_summary["degraded"] or denials:
+                rq["degraded"] = True
+                degradation = list(rq.get("degradation") or [])
+                reason = (
+                    "research budget ledger degraded"
+                    if budget_summary["degraded"]
+                    else f"research tool budget denied {denials} call(s); synthesis used collected evidence"
+                )
+                if reason not in degradation:
+                    degradation.append(reason)
+                rq["degradation"] = degradation
+                meta["research_quality"] = rq
+                # Manifest-owned metadata is written into the private finalized
+                # generation with report/cast/sources.  Mutating it here would
+                # invalidate the producer contract before that generation is
+                # ready to promote.
+                if not os.path.exists(_research_contract_path(handoff_dir)):
+                    try:
+                        from ..utils.atomic import write_json_atomic
+                        write_json_atomic(os.path.join(handoff_dir, "meta.json"), meta)
+                    except Exception:  # noqa: BLE001 — state still carries the signal
+                        pass
+        if not rq and not isinstance(budget, dict):
+            return meta or None
         try:
             state.options["research_quality"] = rq
             # 软告警：记分牌偏低时留痕（不阻断管线——GIGO 是软信号，宁可继续也不误杀小盘口事件）。
@@ -4325,6 +5725,7 @@ class PipelineOrchestrator:
             PipelineManager.save(state)
         except Exception as e:  # noqa: BLE001
             logger.debug("[%s] research_quality 透传跳过: %s", state.pipeline_id, e)
+        return meta or None
 
     # -- 内部：预测信心罚分 (R2-RES-3) -------------------------------------
 
@@ -4335,9 +5736,10 @@ class PipelineOrchestrator:
         """R2-RES-3 (pure): derive an advisory forecast-confidence penalty in [0, 0.3]
         from research evidence quality.
 
-        Three additive sources, each capped so the total is a soft demotion signal and
+        Four additive sources, each capped so the total is a soft demotion signal and
         never large enough to be load-bearing on its own:
           * research_quality.score below RESEARCH_QUALITY_FLOOR (proportional, ≤0.15);
+          * exhausted/degraded shared research budget (0.05);
           * source-tier mix skewed to low-tier sources (≤~0.08);
           * weak dossier-coverage signals (0.05 each, ≤0.10).
         Returns ``(penalty, components)``; never raises (caller wraps too)."""
@@ -4357,6 +5759,12 @@ class PipelineOrchestrator:
                 if c > 0:
                     components["research_quality"] = c
                     penalty += c
+
+        research_budget = meta.get("research_budget")
+        if isinstance(research_budget, dict) and (
+                research_budget.get("degraded") or research_budget.get("denials")):
+            components["research_budget"] = 0.05
+            penalty += 0.05
 
         tiers = meta.get("source_tiers")
         if isinstance(tiers, dict) and tiers:
@@ -4483,7 +5891,28 @@ class PipelineOrchestrator:
         cls = type(self)
         angles = _RESEARCH_TRACK_ANGLES[:max(1, n_tracks)]
         n = len(angles)
+        global_synthesis = bool(
+            n > 1 and getattr(Config, "RESEARCH_GLOBAL_SYNTHESIS", True))
+        global_subagent_cap = getattr(Config, "RESEARCH_GLOBAL_SUBAGENT_CAP", 9)
+        configured_model_cap = getattr(Config, "RESEARCH_GLOBAL_MODEL_CONCURRENCY", 0)
+        outer_workers = research_outer_track_workers(
+            n, global_subagent_cap, configured_model_cap)
+        model_concurrency = research_model_concurrency_cap(
+            outer_workers,
+            global_subagent_cap,
+            configured_model_cap,
+        )
+        subagent_cap = research_lane_subagent_cap(
+            outer_workers,
+            global_subagent_cap,
+            getattr(Config, "RESEARCH_SUBAGENTS_PER_TRACK_MAX", 5),
+            model_concurrency,
+        )
+        harness_subagents = bool(
+            getattr(Config, "DEERFLOW_SUBAGENTS", True) and subagent_cap > 0)
         os.makedirs(handoff_dir, exist_ok=True)
+        budget_db_path = os.path.join(handoff_dir, "research_budget.sqlite3")
+        budget_telemetry_path = os.path.join(handoff_dir, "research_budget.json")
         # PAR-2：先在启动任何轨之前把 bridge→deployed 同步做一次。每个 .run 内部也会调
         # _sync_deerflow_bridge_if_stale，但 K 条轨并发时它们会同时 shutil.copyfile 同一组
         # 文件（非原子）→ 竞态可能让某轨读到半写的脚本。预同步后各轨内的同步退化为只读哈希
@@ -4492,23 +5921,49 @@ class PipelineOrchestrator:
             _sync_deerflow_bridge_if_stale(Config.DEERFLOW_DIR)
         except Exception:  # noqa: BLE001
             pass
-        upd(2, f"并行研究：启动 {n} 条多角度研究轨…")
+        upd(
+            2,
+            f"并行研究：排队 {n} 条多角度研究轨（同时 {outer_workers} 条；"
+            f"每轨最多 {subagent_cap if harness_subagents else 0} 个 harness 子代理；"
+            f"全局模型流 {model_concurrency}）…",
+        )
 
-        # 进度聚合：取各轨 local 的最小值作为阶段进度，让进度条随「最慢轨」诚实推进
-        # （wall-clock ≈ 1 轨）。upd 自身也会在取消时抛 PipelineCancelled。
+        # LOOP-008：等权聚合每条真实研究轨，并为最终跨轨合并保留 95→100。
+        # 旧实现取 min 且允许子轨先报 100，随后 ``upd(96, 合并…)`` 会倒退；并发回调还
+        # 可能以旧值晚写覆盖新值。这里把每轨限定在 95、聚合单调化，并串行发布状态。
+        # 高频 tool/result 仍由 progress endpoint 直接读各轨日志；状态文件只在百分比变化
+        # 或 15 秒存活刷新时写，避免日志洪峰阻塞 stdout reader。
         prog_lock = threading.Lock()
-        track_local = [0] * n
+        publish_lock = threading.Lock()
+        track_local = [2] * n
+        failed_tracks: set[int] = set()
+        last_published = 2
+        last_publish_at = 0.0
         pids_lock = threading.Lock()
 
         def _make_cb(idx: int) -> "Callable[[int, str], None]":
             def _cb(local: int, msg: str) -> None:
+                nonlocal last_published, last_publish_at
                 ev = cls._cancel_events.get(state.pipeline_id)
                 if ev is not None and ev.is_set():
                     raise PipelineCancelled("并行研究期间被取消")
                 with prog_lock:
-                    track_local[idx] = int(local)
-                    agg = min(track_local)
-                upd(max(2, agg), f"[轨{idx + 1}] {_tail(msg)}")
+                    track_local[idx] = max(track_local[idx], min(95, int(local)))
+                with publish_lock:
+                    with prog_lock:
+                        agg = aggregate_parallel_progress(
+                            track_local,
+                            previous=last_published,
+                            ceiling=95,
+                            excluded_indices=failed_tracks,
+                        )
+                    now = time.monotonic()
+                    detail = str(msg or "")
+                    if agg <= last_published and now - last_publish_at < 15.0:
+                        return
+                    last_published = agg
+                    last_publish_at = now
+                    upd(agg, f"[轨{idx + 1}] {_tail(detail)}")
             return _cb
 
         def _make_spawn(idx: int) -> "Callable[[int], None]":
@@ -4542,12 +5997,39 @@ class PipelineOrchestrator:
                 on_spawn=_make_spawn(idx),
                 resume=_resume_track,
                 kg_graph_id=state.graph_id,  # W9-9：图谱已存在时接入 KG MCP（首跑为 None → no-op）
+                budget_db_path=budget_db_path,
+                budget_lane_id=f"outer-track-{idx + 1}",
+                budget_telemetry_path=budget_telemetry_path,
+                budget_run_id=state.pipeline_id,
+                subagents=harness_subagents,
+                max_concurrent_subagents=max(1, subagent_cap),
+                model_concurrency_global=model_concurrency,
+                # Actor/ontology research is a shared cast-building plane, not
+                # an angle-specific evidence lane. Running it inside every
+                # outer track tripled its synthesis/judge cost and expanded the
+                # graph with duplicate peripheral actors. The broad baseline
+                # lane owns the single global dossier; the other lanes remain
+                # focused on orthogonal Track-A evidence.
+                dual_track=research_dual_track_for_outer_lane(
+                    idx, bool(getattr(Config, "DEERFLOW_DUAL_TRACK", True))),
+                # Track B is a separate downstream artifact and is not injected
+                # into Track-A threads. Keep Track A's actor/incentive phase so
+                # the visible research report remains complete even if the one
+                # baseline Track-B lane fails.
+                shared_actor_track=False,
+                evidence_only=global_synthesis,
             )
+            if int(res.get("exit_code") or 0) != 0:
+                raise RuntimeError(
+                    f"research lane {idx + 1} returned non-zero exit "
+                    f"{res.get('exit_code')}"
+                )
             return idx, angle_title, track_dir, res
 
         results: dict[int, tuple] = {}
         cancelled: Optional[PipelineCancelled] = None
-        with ThreadPoolExecutor(max_workers=n, thread_name_prefix="research-track") as ex:
+        with ThreadPoolExecutor(
+                max_workers=outer_workers, thread_name_prefix="research-track") as ex:
             futs = {ex.submit(_run_track, i, angles[i][1], angles[i][2]): i for i in range(n)}
             for fut in as_completed(futs):
                 i = futs[fut]
@@ -4559,6 +6041,12 @@ class PipelineOrchestrator:
                 except Exception as te:  # noqa: BLE001 — 单轨失败用存活轨继续
                     logger.warning("[%s] 研究轨 %d 失败（跳过，用存活轨继续）: %s",
                                    state.pipeline_id, i + 1, te)
+                    with prog_lock:
+                        failed_tracks.add(i)
+                    try:
+                        _make_cb(i)(95, f"研究轨失败，已从活动进度聚合移除：{te}")
+                    except Exception:  # noqa: BLE001 — 可观测性更新不得掩盖原始轨失败
+                        pass
         if cancelled is not None:
             raise cancelled
         if not results:
@@ -4570,21 +6058,286 @@ class PipelineOrchestrator:
 
         # 按轨序确定性合并
         ordered = [results[i] for i in sorted(results)]
-        labeled_reports = [(title, res["report"]) for (title, _td, res) in ordered]
+        track_sources = [res.get("sources") for (_title, _td, res) in ordered]
+        merged_sources = merge_sources_union(track_sources)
+
+        if global_synthesis:
+            manifest_path = os.path.join(
+                handoff_dir, "evidence_synthesis_manifest.json")
+            lane_manifest_rows: list[dict[str, Any]] = []
+            for title, track_dir, _res in ordered:
+                evidence_path = os.path.join(track_dir, "evidence_pack.md")
+                sources_path = os.path.join(track_dir, "sources.json")
+                for artifact_name, artifact_path in (
+                    ("evidence pack", evidence_path),
+                    ("source ledger", sources_path),
+                ):
+                    if not os.path.isfile(artifact_path) or os.path.getsize(artifact_path) <= 0:
+                        raise RuntimeError(
+                            f"surviving research lane has empty/missing {artifact_name}: "
+                            f"{os.path.relpath(artifact_path, handoff_dir)}"
+                        )
+                with open(evidence_path, "rb") as evidence_handle:
+                    evidence_bytes = evidence_handle.read()
+                with open(sources_path, "rb") as source_handle:
+                    source_bytes = source_handle.read()
+                lane_manifest_rows.append({
+                    "title": title,
+                    "path": os.path.relpath(evidence_path, handoff_dir),
+                    "bytes": len(evidence_bytes),
+                    "sha256": hashlib.sha256(evidence_bytes).hexdigest(),
+                    "sources_path": os.path.relpath(sources_path, handoff_dir),
+                    "sources_bytes": len(source_bytes),
+                    "sources_sha256": hashlib.sha256(source_bytes).hexdigest(),
+                })
+            canonical_sources = json.dumps(
+                merged_sources,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            manifest = {
+                "version": 2,
+                "pipeline_id": state.pipeline_id,
+                "lanes": lane_manifest_rows,
+                "sources": merged_sources,
+                "sources_count": len(merged_sources),
+                "sources_sha256": hashlib.sha256(canonical_sources).hexdigest(),
+            }
+            write_json_atomic(manifest_path, manifest)
+
+            dossier_candidates = [
+                str(res.get("actor_dossier") or "").strip()
+                for _title, _track_dir, res in ordered
+                if str(res.get("actor_dossier") or "").strip()
+            ]
+            shared_dossier = max(
+                dossier_candidates, key=len, default="")
+            def _global_progress(percent: int, message: str) -> None:
+                mapped = min(99, 96 + max(0, int(percent)) * 3 // 100)
+                upd(mapped, f"[全局综合] {message}")
+
+            final_res: Optional[dict[str, Any]] = None
+            synthesis_source_dir = ""
+            synthesis_attempts = 0
+            synthesis_errors: list[str] = []
+            # A synthesis outage must never trigger another full evidence run.
+            # Retry the immutable manifest once in a clean directory; if both
+            # attempts fail, preserve every lane pack and fail closed.
+            for attempt in range(1, 3):
+                synthesis_attempts = attempt
+                synthesis_dir = tempfile.mkdtemp(
+                    prefix=f".global-synthesis-{attempt}-", dir=handoff_dir)
+                if shared_dossier:
+                    write_text_atomic(
+                        os.path.join(
+                            synthesis_dir, "actor_dossier.md"),
+                        shared_dossier,
+                    )
+                upd(
+                    96,
+                    f"全局综合 {survived} 条证据轨（单一 outline / citation / judge，"
+                    f"尝试 {attempt}/2）…",
+                )
+                try:
+                    candidate = DeerFlowResearchRunner.run(
+                        state.prompt,
+                        synthesis_dir,
+                        on_progress=_global_progress,
+                        depth=state.options.get("depth"),
+                        language=state.options.get("research_language"),
+                        model=state.options.get("research_model"),
+                        cancel_event=cls._cancel_events.get(state.pipeline_id),
+                        on_spawn=_make_spawn(0),
+                        kg_graph_id=state.graph_id,
+                        budget_db_path=budget_db_path,
+                        budget_lane_id="global-synthesis",
+                        budget_telemetry_path=budget_telemetry_path,
+                        budget_run_id=state.pipeline_id,
+                        subagents=False,
+                        max_concurrent_subagents=1,
+                        model_concurrency_global=model_concurrency,
+                        dual_track=False,
+                        shared_actor_track=False,
+                        synthesis_manifest_path=manifest_path,
+                    )
+                    if int(candidate.get("exit_code") or 0) != 0:
+                        raise RuntimeError(
+                            "global synthesis returned non-zero exit "
+                            f"{candidate.get('exit_code')}"
+                        )
+                    final_res = candidate
+                    synthesis_source_dir = synthesis_dir
+                    break
+                except PipelineCancelled:
+                    shutil.rmtree(synthesis_dir, ignore_errors=True)
+                    raise
+                except Exception as synthesis_error:  # noqa: BLE001 — bounded retry
+                    synthesis_errors.append(
+                        f"{type(synthesis_error).__name__}: {synthesis_error}"
+                    )
+                    shutil.rmtree(synthesis_dir, ignore_errors=True)
+                    logger.warning(
+                        "[%s] 全局证据综合尝试 %d/2 失败（%s）",
+                        state.pipeline_id, attempt, synthesis_error,
+                    )
+
+            if final_res is None or not synthesis_source_dir:
+                failure_meta = {
+                    "requested": n,
+                    "survived": survived,
+                    "architecture": "parallel_evidence_single_global_synthesis",
+                    "evidence_manifest": manifest_path,
+                    "evidence_lanes_consumed": survived,
+                    "global_synthesis_failed": True,
+                    "global_synthesis_attempts": synthesis_attempts,
+                    "errors": synthesis_errors,
+                    "degraded": True,
+                }
+                state.options["parallel_research"] = failure_meta
+                state.options["global_synthesis_failure"] = failure_meta
+                PipelineManager.save(state)
+                raise RuntimeError(
+                    "全局证据综合连续两次失败；已保留全部 evidence packs，"
+                    "拒绝回退到全量研究重跑或发布未综合证据"
+                )
+
+            parallel_meta = {
+                "requested": n,
+                "survived": survived,
+                "angles": [angles[i][0] for i in sorted(results)],
+                "architecture": "parallel_evidence_single_global_synthesis",
+                "evidence_manifest": manifest_path,
+                "evidence_lanes_consumed": survived,
+                "global_synthesis_failed": False,
+                "global_synthesis_attempts": synthesis_attempts,
+                "degraded": degraded,
+            }
+            _promote_research_contract(
+                synthesis_source_dir,
+                handoff_dir,
+                meta_patch={"parallel_research": parallel_meta},
+            )
+            shutil.rmtree(synthesis_source_dir, ignore_errors=True)
+            state.options["parallel_research"] = parallel_meta
+            state.options.pop("global_synthesis_failure", None)
+            state.options.pop("global_synthesis_fallback", None)
+            PipelineManager.save(state)
+
+            lane_tels = [
+                res.get("research_telemetry") or {}
+                for _title, _track_dir, res in ordered
+            ]
+            final_tel = final_res.get("research_telemetry") or {}
+            all_tels = lane_tels + [final_tel]
+
+            def _sum_tel(key: str) -> int:
+                return sum(int(tel.get(key) or 0) for tel in all_tels)
+
+            merged_tel = {
+                "model": final_tel.get("model") or Config.DEERFLOW_MODEL,
+                "depth": final_tel.get("depth"),
+                "tokens_in": _sum_tel("tokens_in"),
+                "tokens_out": _sum_tel("tokens_out"),
+                "tokens_total": _sum_tel("tokens_total") or (
+                    _sum_tel("tokens_in") + _sum_tel("tokens_out")),
+                "tool_calls": _sum_tel("tool_calls"),
+                "results": _sum_tel("results"),
+                # Research lanes overlap; the one global synthesis follows them.
+                "wall_s": round(
+                    max((float(t.get("wall_s") or 0.0) for t in lane_tels),
+                        default=0.0)
+                    + float(final_tel.get("wall_s") or 0.0),
+                    1,
+                ),
+                "parallel_tracks": survived,
+                "global_synthesis_runs": synthesis_attempts,
+            }
+            report_path = os.path.join(handoff_dir, "research_report.md")
+            return {
+                "report": _read_text(report_path),
+                "report_path": report_path,
+                "actor_dossier": _read_text(os.path.join(
+                    handoff_dir, "actor_dossier.md")),
+                "actors": _read_json(os.path.join(handoff_dir, "actors.json")),
+                "sources": _read_json(os.path.join(handoff_dir, "sources.json"))
+                or merged_sources,
+                "timeline": _read_json(os.path.join(handoff_dir, "timeline.json")),
+                "exit_code": 0,
+                "research_telemetry": merged_tel,
+            }
+
+        labeled_reports: list[tuple[str, str]] = []
+        citation_audits: list[dict[str, int]] = []
+        for (title, _td, res), sources in zip(ordered, track_sources):
+            normalized_report, citation_audit = normalize_track_report_citations(
+                res["report"], sources, merged_sources)
+            labeled_reports.append((title, normalized_report))
+            citation_audits.append(citation_audit)
         labeled_dossiers = [(title, res.get("actor_dossier") or "") for (title, _td, res) in ordered]
         track_dirs = [td for (_t, td, _r) in ordered]
 
         merged_report = merge_track_reports(labeled_reports)
-        merged_dossier = merge_track_reports(labeled_dossiers)
-        merged_sources = merge_sources_union([res.get("sources") for (_t, _td, res) in ordered])
+        raw_merged_dossier = merge_track_reports(labeled_dossiers)
+        merged_dossier = raw_merged_dossier
         merged_actors, _cast_audit = merge_actors_objs([res.get("actors") for (_t, _td, res) in ordered])
+        dossier_audit: dict[str, Any] = {
+            "enabled": bool(getattr(Config, "RESEARCH_COMPACT_MERGED_DOSSIER", True)),
+            "raw_chars": len(raw_merged_dossier),
+        }
+        if dossier_audit["enabled"]:
+            try:
+                _dossier_cap = max(1000, int(getattr(
+                    Config, "ACTOR_DOSSIER_MAX_CHARS", 80000) or 80000))
+            except (TypeError, ValueError):
+                _dossier_cap = 80000
+            compact = ""
+            compact_meta: dict[str, Any] = {}
+            if isinstance(merged_actors, dict):
+                try:
+                    from .actor_dossier_compactor import render_compact_actor_dossier
+                    compact, compact_meta = render_compact_actor_dossier(
+                        merged_actors,
+                        max_chars=_dossier_cap,
+                        max_actors=int(getattr(Config, "ACTOR_CAST_MAX", 20) or 20),
+                    )
+                except Exception as _compact_err:  # noqa: BLE001
+                    compact_meta = {"fallback_reason": f"{type(_compact_err).__name__}"}
+            if len(compact.strip()) >= 800:
+                merged_dossier = compact
+            else:
+                # Honest fallback: one best surviving dossier, never K-way
+                # concatenation, and still bounded before graph chunking.
+                candidates = [str(body or "").strip() for _title, body in labeled_dossiers
+                              if str(body or "").strip()]
+                best = max(candidates, key=len, default="")
+                merged_dossier = best[:_dossier_cap].rsplit("\n", 1)[0].rstrip() + "\n" \
+                    if len(best) > _dossier_cap else best
+                compact_meta["fallback_reason"] = (
+                    compact_meta.get("fallback_reason") or "compact_output_too_short")
+            dossier_audit.update(compact_meta)
+            dossier_audit["compact_chars"] = len(merged_dossier)
+            dossier_audit["reduction_ratio"] = round(
+                1.0 - (len(merged_dossier) / max(1, len(raw_merged_dossier))), 4)
         merged_timeline = merge_list_dedup([res.get("timeline") for (_t, _td, res) in ordered])
         merged_quant = merge_list_dedup([_read_json(os.path.join(td, "quantitative.json")) for td in track_dirs])
         merged_contested = merge_list_dedup([_read_json(os.path.join(td, "contested.json")) for td in track_dirs])
         track_metas = [(_read_json(os.path.join(td, "meta.json")) or {}) for td in track_dirs]
         merged_rq = merge_research_quality(track_metas)
-        merged_pm = pick_freshest_markets(
-            [_read_json(os.path.join(td, "prediction_markets.json")) for td in track_dirs])
+        merged_pm = merge_market_snapshots(
+            [_read_json(os.path.join(td, "prediction_markets.json")) for td in track_dirs],
+            max_total=int(getattr(Config, "PREDICTION_MARKETS_MAX", 20) or 20),
+            max_per_event=int(getattr(Config, "PREDICTION_MARKETS_MAX_PER_EVENT", 3) or 3),
+        )
+        selected_market_ids = {
+            str(row.get("market_id") or "").strip()
+            for row in ((merged_pm or {}).get("markets") or [])
+            if isinstance(row, dict) and str(row.get("market_id") or "").strip()
+        }
+        merged_market_history = merge_market_price_histories(
+            [_read_json(os.path.join(td, "market_price_history.json")) for td in track_dirs],
+            selected_market_ids,
+        )
 
         if degraded:
             merged_rq["degraded"] = True
@@ -4604,18 +6357,48 @@ class PipelineOrchestrator:
         merged_meta["parallel_research"] = {
             "requested": n, "survived": survived,
             "angles": [angles[i][0] for i in sorted(results)],
+            "citation_remap": {
+                "markers": sum(item.get("markers", 0) for item in citation_audits),
+                "remapped": sum(item.get("remapped", 0) for item in citation_audits),
+                "stripped": sum(item.get("stripped", 0) for item in citation_audits),
+            },
         }
+        merged_meta["actor_dossier_compaction"] = dossier_audit
+        if isinstance(merged_pm, dict):
+            merged_meta["prediction_markets_count"] = len(merged_pm.get("markets") or [])
+            merged_meta["prediction_markets_as_of"] = merged_pm.get("as_of")
+            merged_meta["prediction_market_status"] = merged_pm.get("status")
+        if merged_market_history:
+            merged_meta["prediction_market_price_history_count"] = len(merged_market_history)
 
         # W9-7：合并卷宗的一次有界 LLM 整理——合并 K 份执行摘要为统一开篇、点名跨轨冲突的
         # 头条数字、'# Track N' H1 降级为 Part H2。只喂各轨执行摘要（cap ~30K 字符）；
         # 失败回退纯拼接（与今日逐字节一致）。存活 <2 轨时无需整理。
-        if survived >= 2 and bool(getattr(Config, "RESEARCH_TRACK_RECONCILE", True)):
-            upd(97, "整理多轨卷宗（合并执行摘要 + 跨轨分歧）…")
-            merged_report, _rec_audit = reconcile_track_reports(merged_report, labeled_reports)
+        if survived >= 2:
+            if bool(getattr(Config, "RESEARCH_TRACK_RECONCILE", True)):
+                upd(97, "整理多轨卷宗（合并执行摘要 + 跨轨分歧）…")
+                merged_report, _rec_audit = reconcile_track_reports(
+                    merged_report, labeled_reports)
+            else:
+                # Disabling the optional LLM editor must not re-enable the
+                # known duplicate-summary/H1-scaffolding defect.
+                merged_report, _unused_opening = _deterministic_track_report(
+                    labeled_reports)
+                _rec_audit = {
+                    "applied": False,
+                    "reason": "llm reconciliation disabled",
+                    "fallback": "deterministic",
+                }
             state.options["research_track_reconcile"] = _rec_audit
             if not _rec_audit.get("applied"):
-                logger.info("[%s] 卷宗整理未应用（%s），保留纯拼接",
-                            state.pipeline_id, _rec_audit.get("reason"))
+                logger.info(
+                    "[%s] LLM 卷宗整理未应用（%s），已使用确定性去重卷宗",
+                    state.pipeline_id, _rec_audit.get("reason"))
+
+        # Each track starts its citation namespace at S1. At this point every
+        # marker has been remapped to merged_sources, so publish exactly one
+        # global References section rather than K colliding local ledgers.
+        merged_report = append_merged_references(merged_report, merged_sources)
 
         # 落盘合并产物到 handoff_dir（下游/resume 读的正是这些文件）
         report_path = os.path.join(handoff_dir, "research_report.md")
@@ -4634,6 +6417,11 @@ class PipelineOrchestrator:
             write_json_atomic(os.path.join(handoff_dir, "contested.json"), merged_contested)
         if isinstance(merged_pm, dict):
             write_json_atomic(os.path.join(handoff_dir, "prediction_markets.json"), merged_pm)
+        if merged_market_history:
+            write_json_atomic(
+                os.path.join(handoff_dir, "market_price_history.json"),
+                merged_market_history,
+            )
         write_json_atomic(os.path.join(handoff_dir, "meta.json"), merged_meta)
 
         # 合并遥测：token/工具量求和；wall_s 取最大（并行）；model/depth 取首轨。
@@ -4655,6 +6443,7 @@ class PipelineOrchestrator:
         }
 
         state.options["parallel_research"] = merged_meta["parallel_research"]
+        state.options["actor_dossier_compaction"] = dossier_audit
         if degraded:
             logger.warning("[%s] 并行研究降级：%d/%d 轨存活", state.pipeline_id, survived, n)
         PipelineManager.save(state)
@@ -4742,11 +6531,36 @@ class PipelineOrchestrator:
             upd = self._make_stage_updater(state, STAGE_RESEARCH)
             handoff_dir = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
             report_path = os.path.join(handoff_dir, "research_report.md")
-            if os.path.exists(report_path) and len(_read_text(report_path).strip()) >= 400:
+            _report_candidate = (
+                os.path.exists(report_path)
+                and len(_read_text(report_path).strip()) >= 400
+            )
+            _contract_present = os.path.exists(
+                _research_contract_path(handoff_dir))
+            _research_stage = state.stages.get(STAGE_RESEARCH)
+            _stage_was_complete = bool(
+                _research_stage and _research_stage.status == "completed")
+            _reuse_research = False
+            if _report_candidate:
+                if _contract_present:
+                    _reuse_research = _validate_research_contract(handoff_dir)
+                    if not _reuse_research:
+                        logger.warning(
+                            "[%s] 研究 contract manifest 校验失败，拒绝复用混合/篡改产物",
+                            state.pipeline_id,
+                        )
+                elif _stage_was_complete:
+                    _reuse_research = self._validate_reuse(
+                        state, STAGE_RESEARCH)
+                else:
+                    logger.warning(
+                        "[%s] 发现未带完成阶段/contract manifest 的研究报告，拒绝长度式复用",
+                        state.pipeline_id,
+                    )
+            if _reuse_research:
                 upd(95, "复用已有研究报告，跳过 DeerFlow 研究阶段…")
                 research = _load_research_handoff(handoff_dir)
                 state.research_pid = None
-                self._complete_stage(state, STAGE_RESEARCH, "研究报告已恢复")
             else:
                 upd(1, "准备深度研究…")
                 def _persist_research_pid(pid: int) -> None:
@@ -4768,6 +6582,19 @@ class PipelineOrchestrator:
                     _resume_research = _has_research_checkpoint(handoff_dir)
                     if _resume_research:
                         upd(1, "检测到研究断点，续跑（复用已完成 pass）…")
+                    _single_global_subagents = getattr(
+                        Config, "RESEARCH_GLOBAL_SUBAGENT_CAP", 9)
+                    _single_model_concurrency = research_model_concurrency_cap(
+                        1,
+                        _single_global_subagents,
+                        getattr(Config, "RESEARCH_GLOBAL_MODEL_CONCURRENCY", 0),
+                    )
+                    _single_subagent_cap = research_lane_subagent_cap(
+                        1,
+                        _single_global_subagents,
+                        getattr(Config, "RESEARCH_SUBAGENTS_PER_TRACK_MAX", 5),
+                        _single_model_concurrency,
+                    )
                     research = DeerFlowResearchRunner.run(
                         state.prompt,
                         handoff_dir,
@@ -4781,11 +6608,20 @@ class PipelineOrchestrator:
                         # W9-9：图谱已存在（resume-with-graph/fork/continue 血统）时接入 KG MCP；
                         # 首跑 graph_id 为 None → env 与今日逐字节一致。
                         kg_graph_id=state.graph_id,
+                        budget_db_path=os.path.join(handoff_dir, "research_budget.sqlite3"),
+                        budget_lane_id="outer-track-1",
+                        budget_telemetry_path=os.path.join(
+                            handoff_dir, "research_budget.json"),
+                        budget_run_id=state.pipeline_id,
+                        subagents=bool(
+                            getattr(Config, "DEERFLOW_SUBAGENTS", True)
+                            and _single_subagent_cap > 0),
+                        max_concurrent_subagents=max(1, _single_subagent_cap),
+                        model_concurrency_global=_single_model_concurrency,
                     )
                 state.research_pid = None  # 子进程已结束，清掉以免 reconcile 误杀复用 PID
                 # PAR-2：并行轨 PID 清单也一并清空（研究阶段已结束，避免 reconcile 误杀复用 PID）。
                 state.options.pop("research_track_pids", None)
-                self._complete_stage(state, STAGE_RESEARCH, "研究完成")
             report_md: str = research["report"]
             # W9-11: 研究卷宗定稿后跑确定性编辑 lint（report_lint 由报告链工作流并行落地；
             # 模块缺失 → ImportError → 静默跳过）。清理 [citation:...] 残渣、pass/working-notes
@@ -4805,13 +6641,22 @@ class PipelineOrchestrator:
                     if isinstance(_cleaned, str) and _cleaned.strip() and _cleaned != report_md:
                         report_md = _cleaned
                         research["report"] = _cleaned
-                        try:
-                            from ..utils.atomic import write_text_atomic
-                            write_text_atomic(
-                                os.path.join(handoff_dir, "research_report.md"), _cleaned)
-                        except Exception as _lw:  # noqa: BLE001 — 写回失败不阻断（内存版已清洗）
-                            logger.warning("[%s] lint 后写回 research_report.md 失败: %s",
-                                           state.pipeline_id, _lw)
+                        # A manifest-owned report is finalized in a private
+                        # generation below. Writing it here would invalidate
+                        # the still-published producer contract before an
+                        # atomic replacement is ready.
+                        if not os.path.exists(_research_contract_path(handoff_dir)):
+                            try:
+                                from ..utils.atomic import write_text_atomic
+                                write_text_atomic(
+                                    os.path.join(handoff_dir, "research_report.md"),
+                                    _cleaned,
+                                )
+                            except Exception as _lw:  # noqa: BLE001 — legacy best-effort path
+                                logger.warning(
+                                    "[%s] lint 后写回 research_report.md 失败: %s",
+                                    state.pipeline_id, _lw,
+                                )
                     if isinstance(_lint_rep, dict):
                         state.options["research_lint"] = {
                             k: v for k, v in _lint_rep.items()
@@ -4838,7 +6683,12 @@ class PipelineOrchestrator:
                         _hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
                         try:
                             from ..utils.atomic import write_json_atomic
-                            write_json_atomic(os.path.join(_hd, "actors.json"), _recon)
+                            # Keep a sealed producer generation byte-stable
+                            # until report, cast, and source changes can be
+                            # promoted together as one final contract.
+                            if not os.path.exists(_research_contract_path(_hd)):
+                                write_json_atomic(
+                                    os.path.join(_hd, "actors.json"), _recon)
                             write_json_atomic(os.path.join(_hd, "cast_reconciliation.json"), _audit)
                             state.artifacts["cast_reconciliation"] = os.path.join(_hd, "cast_reconciliation.json")
                         except Exception:  # noqa: BLE001
@@ -4858,7 +6708,10 @@ class PipelineOrchestrator:
             # （默认关，EMBED_WARM_AT_RESEARCH；纯增益、daemon 线程、失败无声）。
             self._maybe_warm_embedder(state, actors)
             # I-0-3: 透传研究覆盖度/质量记分牌（meta.json → options，纯观测，永不硬失败）。
-            self._surface_research_quality(state, handoff_dir)
+            _final_research_meta = self._surface_research_quality(
+                state, handoff_dir)
+            if isinstance(_final_research_meta, dict):
+                research["meta"] = _final_research_meta
 
             # NEXTSTEPS P3-4: 计算并透传 dossier 载荷字段覆盖率（纯观测；让"空壳种子"可见）。
             try:
@@ -4880,10 +6733,22 @@ class PipelineOrchestrator:
             except Exception as _cov_err:  # noqa: BLE001 — 覆盖度纯观测，失败不影响主流程
                 logger.debug("[%s] dossier_coverage 计算跳过: %s", state.pipeline_id, _cov_err)
 
+            # A research stage is complete only after every sanctioned
+            # postprocessor and the effective source ledger are sealed into a
+            # single manifest-last generation.  The producer generation stays
+            # valid throughout this operation and is restored on install error.
+            _finalize_research_contract(handoff_dir, research)
             # R2-RES-3: 由 dossier 覆盖度 + 来源层级 + 研究质量记分牌派生一个咨询性
             # forecast_confidence_penalty 写入 options，供发布门后续消费（gate refine 推迟；
             # 此处纯写值，不读不阻断，永不 wedge）。
+            # Read the now-finalized metadata so a budget degradation staged
+            # above is reflected in the advisory confidence penalty.
             self._surface_forecast_confidence_penalty(state, handoff_dir)
+            self._complete_stage(
+                state,
+                STAGE_RESEARCH,
+                "研究报告已恢复" if _reuse_research else "研究完成",
+            )
 
             if state.mode == "research_only":
                 state.status = "completed"
@@ -5320,7 +7185,10 @@ class PipelineOrchestrator:
                 _pp = int(getattr(Config, "PARALLEL_PROFILE_COUNT", 16) or 16)
                 # PREP-1: 把本次运行的真实轮数预算透传到事件排期（否则生成器只能按
                 # OASIS_DEFAULT_MAX_ROUNDS 钳制，options.max_rounds < 默认时欠覆盖）。
-                _prep_mr = state.options.get("max_rounds") or (Config.OASIS_DEFAULT_MAX_ROUNDS or None)
+                # CAL：日历模式只透传用户显式 max_rounds（生成器把它当 target_max 粗化
+                # 粒度、绝不截断）；默认上限已由生成器自身读取，不在此注入。
+                _prep_mr = state.options.get("max_rounds") or (
+                    None if _calendar_mode() else (Config.OASIS_DEFAULT_MAX_ROUNDS or None))
                 sim_manager.prepare_simulation(
                     simulation_id=sim_state.simulation_id,
                     simulation_requirement=state.prompt,
@@ -5357,11 +7225,14 @@ class PipelineOrchestrator:
             # NEXTSTEPS P1-1/P1-2: 决策通道开启时，把 WorldState 种子（情景+基率）+ 时点跨度
             # （as_of→horizon，供子进程逐轮日期映射）注入 simulation_config.json，供 post-sim
             # 演化"结果世界态"。默认关 → 不注入，行为与今日逐字节一致。
-            if getattr(Config, "SIM_DECISION_CHANNEL", False) and not _run_already_done:
+            # CAL：日历模式无条件注入（去掉 SIM_DECISION_CHANNEL 门控；空情景 → 演化静默关），
+            # 并从已生成的 temporal_config 补 horizon_date/horizon_source/horizon_defaulted。
+            _cal_gen = _calendar_mode()
+            if (_cal_gen or getattr(Config, "SIM_DECISION_CHANNEL", False)) and not _run_already_done:
                 try:
                     from ..utils.actors import world_state_seed_from_actors as _ws_seed
                     _seed = _ws_seed(actors)
-                    if _seed.get("scenarios"):
+                    if _cal_gen or _seed.get("scenarios"):
                         _seed["as_of_date"] = (actors.get("as_of_date") if isinstance(actors, dict) else None)
                         _seed["horizon_date"] = self._infer_horizon_date(state.prompt, actors)
                         _wcfg_path = os.path.join(
@@ -5370,10 +7241,17 @@ class PipelineOrchestrator:
                             from ..utils.atomic import write_json_atomic
                             with open(_wcfg_path, "r", encoding="utf-8") as _wf:
                                 _wcfg = json.load(_wf)
+                            _tc = _wcfg.get("temporal_config")
+                            if isinstance(_tc, dict) and _tc.get("mode") == "calendar":
+                                # 判定日以 temporal_config 为准（含 LLM/default 兜底结果）
+                                _seed["horizon_date"] = _tc.get("horizon_date") or _seed.get("horizon_date")
+                                _seed["horizon_source"] = _tc.get("horizon_source")
+                                _seed["horizon_defaulted"] = bool(_tc.get("horizon_defaulted"))
                             _wcfg["world_state_seed"] = _seed
                             write_json_atomic(_wcfg_path, _wcfg)
                             logger.info("[%s] WorldState 种子已注入 simulation_config（%d 情景, horizon=%s）",
-                                        state.pipeline_id, len(_seed["scenarios"]), _seed.get("horizon_date"))
+                                        state.pipeline_id, len(_seed.get("scenarios") or []),
+                                        _seed.get("horizon_date"))
                 except Exception as _ws_err:  # noqa: BLE001
                     logger.warning("[%s] WorldState 种子注入跳过: %s", state.pipeline_id, _ws_err)
 
@@ -5392,7 +7270,10 @@ class PipelineOrchestrator:
                 upd(2, "启动 OASIS 模拟…")
                 run_kwargs: dict[str, Any] = {"platform": "parallel"}
                 # T3.7: 每次运行的 max_rounds 优先，否则用 Config.OASIS_DEFAULT_MAX_ROUNDS（0→None=跑满）。
-                _mr = state.options.get("max_rounds") or (Config.OASIS_DEFAULT_MAX_ROUNDS or None)
+                # CAL：日历模式运行期不注入默认上限——轮数由 temporal_config.n_rounds 定，
+                # 用户显式 max_rounds 也已在配置生成期粗化粒度（运行器会忽略并告警）。
+                _mr = state.options.get("max_rounds") or (
+                    None if _calendar_mode() else (Config.OASIS_DEFAULT_MAX_ROUNDS or None))
                 if _mr:
                     run_kwargs["max_rounds"] = int(_mr)
                 # T3.10: 打开「模拟 → 图谱」反馈回路（本地默认开），让报告阶段挖到的是模拟后的图谱。
@@ -5433,8 +7314,26 @@ class PipelineOrchestrator:
                         # （取消请求由循环顶部的检查兜底，最多延迟一个 5s 周期）
                         if (cur, total) != _last_round_seen:
                             if total > 0 and (_last_round_seen[1] or 0) <= 0:
-                                self._recompute_dynamic_bands(state, total_rounds=total)  # T6.7
-                                self._update_manifest(state, STAGE_RUN, total_rounds=total)  # I-8-1
+                                # CAL：读一次 temporal_config，把日历指纹随成本信号/清单落盘。
+                                _tc_sig = None
+                                try:
+                                    _tc_path = os.path.join(
+                                        Config.OASIS_SIMULATION_DATA_DIR,
+                                        sim_state.simulation_id, "simulation_config.json")
+                                    with open(_tc_path, "r", encoding="utf-8") as _tf:
+                                        _tc_cfg = (json.load(_tf) or {}).get("temporal_config")
+                                    if isinstance(_tc_cfg, dict) and _tc_cfg.get("mode") == "calendar":
+                                        _tc_sig = {
+                                            "calendar_unit": _tc_cfg.get("unit"),
+                                            "n_rounds": _tc_cfg.get("n_rounds"),
+                                            "horizon_date": _tc_cfg.get("horizon_date"),
+                                        }
+                                except Exception:  # noqa: BLE001 — 观测指纹缺失不阻塞运行
+                                    _tc_sig = None
+                                self._recompute_dynamic_bands(
+                                    state, total_rounds=total, temporal=_tc_sig)  # T6.7
+                                self._update_manifest(
+                                    state, STAGE_RUN, total_rounds=total, temporal=_tc_sig)  # I-8-1
                             _last_round_seen = (cur, total)
                             _last_progress_at = time.monotonic()  # B12: 有进展即续命看门狗
                             if total > 0:
@@ -5561,6 +7460,20 @@ class PipelineOrchestrator:
             if existing_report is not None and state.options.pop("force_report_regen", None):
                 logger.info("[%s] force resume：跳过报告复用，重生成", state.pipeline_id)
                 existing_report = None
+            if existing_report is not None:
+                _candidate_report_id = (
+                    getattr(existing_report, "report_id", None) or state.report_id
+                )
+                _previous_report_id = state.report_id
+                state.report_id = _candidate_report_id
+                if not self._reuse_ok(state, STAGE_REPORT):
+                    logger.warning(
+                        "[%s] 现有报告 %s 完整性校验失败，跳过复用并重生成",
+                        state.pipeline_id, _candidate_report_id,
+                    )
+                    state.options["report_rebuilt_artifact_validation"] = _candidate_report_id
+                    existing_report = None
+                    state.report_id = _previous_report_id
             if existing_report is not None and getattr(existing_report, "status", None) != ReportStatus.FAILED:
                 upd(100, "复用已有报告")
                 state.report_id = getattr(existing_report, "report_id", state.report_id)
@@ -5582,13 +7495,14 @@ class PipelineOrchestrator:
                             "报告前置探测失败：主/回退 LLM 提供方均不可用 —— 中止报告阶段以免"
                             f"烧掉全部章节成本（稍后 resume 可从 REPORT 续跑）: {str(_pf_err)[:200]}"
                         )
-                # XRUN-15: 铸新报告 = 新 attempt，清掉上一 attempt 的 *_partial 临时产物指针
-                # （它们指向被取代的旧 report/sim 目录，读者会拼出 Franken-run）。扫描器会为新
-                # attempt 重新登记。
-                for _pk in [k for k in list(state.artifacts) if k.endswith("_partial")]:
-                    state.artifacts.pop(_pk, None)
-                upd(5, "生成预测报告…")
+                # XRUN-15/LOOP-005: 铸新报告 = 新 attempt。清掉上一 attempt 的临时及正式
+                # REPORT-owned 指针/完整性行，随后在生成开始前持久化新 report_id。这样每次
+                # progress callback 都扫描当前 attempt 的 sections/charts，而非旧目录或空目录。
+                self._clear_report_attempt_artifacts(state)
                 report_id = f"report_{uuid.uuid4().hex[:12]}"
+                state.report_id = report_id
+                PipelineManager.save(state)
+                upd(5, "生成预测报告…")
                 # T4.6/T4.7: 情景报告 → 传情景标签 + base 模拟 id（反事实对比 scenario_diff）
                 _scenario_label = state.options.get("scenario_label")
                 _base_sim_id = None

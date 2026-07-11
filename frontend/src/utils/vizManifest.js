@@ -75,12 +75,21 @@ export function normalizeVizGallery(manifest) {
 }
 
 export function filterVizGalleryByMarkdown(gallery, markdown) {
-  const embedded = new Set()
-  const markerRe = /<!--\s*viz:([^\s>]+)\s*-->/g
   const source = String(markdown || '')
+  const embeddedImages = new Set()
+  const embeddedLinks = new Set()
   let match
-  while ((match = markerRe.exec(source)) !== null) embedded.add(match[1])
+  const imageRe = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
+  const linkRe = /(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
+  while ((match = imageRe.exec(source)) !== null) {
+    const path = safeChartPath(match[1])
+    if (path) embeddedImages.add(path)
+  }
+  while ((match = linkRe.exec(source)) !== null) {
+    const path = safeChartPath(match[1])
+    if (path) embeddedLinks.add(path)
+  }
   return (Array.isArray(gallery) ? gallery : []).filter(item => (
-    !embedded.has(item?.imagePath) && !embedded.has(item?.interactivePath)
+    !embeddedImages.has(item?.imagePath) && !embeddedLinks.has(item?.interactivePath)
   ))
 }

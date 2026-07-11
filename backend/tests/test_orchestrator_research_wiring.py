@@ -5,6 +5,7 @@ R2-RES-3 (advisory forecast-confidence penalty). No network / LLM / disk.
 """
 
 from datetime import datetime, timedelta, timezone
+import hashlib
 
 from app.services.pipeline_orchestrator import PipelineOrchestrator
 
@@ -111,14 +112,52 @@ def test_penalty_capped_at_0_3():
     assert pen <= 0.3
 
 
+def test_penalty_includes_research_budget_exhaustion():
+    pen, components = PipelineOrchestrator._compute_forecast_confidence_penalty(
+        {"research_budget": {"denials": 3, "degraded": False}}, None)
+    assert pen == 0.05
+    assert components == {"research_budget": 0.05}
+
+
 # ── ORCH-1(2): report-health placeholder detection (figure exemption) ───────
 
 def _write_health_fixture(tmp_path, sections):
     """Write forecast.json + numbered section files; return the folder path."""
     import json as _json
-    (tmp_path / "forecast.json").write_text(
-        _json.dumps({"scenarios": [{"name": "A", "probability": 1.0}]}),
-        encoding="utf-8")
+    forecast_text = _json.dumps({"scenarios": [
+        {
+            "name": "A",
+            "probability": 0.7,
+            "resolution_criteria": "Outcome A is observed.",
+        },
+        {
+            "name": "Other",
+            "probability": 0.3,
+            "resolution_criteria": "Any other outcome is observed.",
+        },
+    ]})
+    (tmp_path / "forecast.json").write_text(forecast_text, encoding="utf-8")
+    (tmp_path / "final_audit.json").write_text(
+        _json.dumps({
+            "policy_version": 3,
+            "read_only": True,
+            "markdown_sha256": "fixture",
+            "forecast_sha256": hashlib.sha256(forecast_text.encode("utf-8")).hexdigest(),
+            "disk_matches_memory": True,
+            "hard_issues": [],
+            "hard_passed": True,
+            "structured_forecast": {"required": True, "present": True, "valid": True},
+            "scenario_contract": {"valid": True, "issue_count": 0},
+            "publish_gate": {
+                "enabled": True,
+                "passed": True,
+                "hard_issues": [],
+                "epistemic_issues": [],
+                "hard_passed": True,
+            },
+        }),
+        encoding="utf-8",
+    )
     for i, body in enumerate(sections, start=1):
         (tmp_path / f"section_{i:02d}.md").write_text(body, encoding="utf-8")
     return str(tmp_path)
@@ -145,11 +184,96 @@ def test_report_health_short_figure_section_is_not_placeholder(monkeypatch, tmp_
     assert any("2/5" in i for i in issues)
 
 
+def test_report_health_surfaces_residual_simulation_mechanics(monkeypatch, tmp_path):
+    from app.services import pipeline_orchestrator as po
+    folder = _write_health_fixture(tmp_path, ["Analysis body. " * 40])
+    forecast = json.loads((tmp_path / "forecast.json").read_text(encoding="utf-8"))
+    forecast["quality"] = {
+        "lint": {"leakage_flags": 2, "outcome_focus_ok": False}
+    }
+    forecast_text = json.dumps(forecast)
+    (tmp_path / "forecast.json").write_text(forecast_text, encoding="utf-8")
+    audit_path = tmp_path / "final_audit.json"
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    audit["forecast_sha256"] = hashlib.sha256(
+        forecast_text.encode("utf-8")
+    ).hexdigest()
+    audit_path.write_text(json.dumps(audit), encoding="utf-8")
+    monkeypatch.setattr(po.ReportManager, "_get_report_folder", lambda rid: folder)
+
+    health, issues, meta = po.PipelineOrchestrator._assess_report_health(None, "rid-1")
+
+    assert health == "degraded"
+    assert any("simulation-mechanics" in issue for issue in issues)
+    assert any("simulation-mechanics" in issue for issue in meta["quality_issues"])
+
+
+def test_report_health_hard_fails_final_publish_integrity_issue(monkeypatch, tmp_path):
+    from app.services import pipeline_orchestrator as po
+
+    folder = _write_health_fixture(tmp_path, ["Analysis body. " * 40])
+    (tmp_path / "final_audit.json").write_text(json.dumps({
+        "policy_version": 3,
+        "read_only": True,
+        "markdown_sha256": "dirty",
+        "disk_matches_memory": True,
+        "hard_issues": ["最终 Markdown 含 1 个悬空引用记号"],
+        "hard_passed": False,
+        "publish_gate": {
+            "enabled": True,
+            "passed": False,
+            "hard_issues": ["最终 Markdown 含 1 个悬空引用记号"],
+            "epistemic_issues": ["定量声明引用覆盖率 0.20 < 阈值 0.50"],
+            "hard_passed": False,
+        },
+    }), encoding="utf-8")
+    monkeypatch.setattr(po.ReportManager, "_get_report_folder", lambda rid: folder)
+
+    health, issues, meta = po.PipelineOrchestrator._assess_report_health(None, "rid-1")
+
+    assert health == "failed"
+    assert any("悬空引用" in issue for issue in issues)
+    assert any("覆盖率" in issue for issue in issues)
+    assert any("悬空引用" in issue for issue in meta["hard_quality_issues"])
+
+
+def test_report_health_rejects_stale_final_audit_fingerprint(monkeypatch, tmp_path):
+    from app.services import pipeline_orchestrator as po
+
+    folder = _write_health_fixture(tmp_path, ["Analysis body. " * 40])
+    report_md = "# Forecast\n\n" + ("Substantive outcome analysis. " * 100)
+    (tmp_path / "full_report.md").write_text(report_md, encoding="utf-8")
+    audit_path = tmp_path / "final_audit.json"
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    audit["markdown_sha256"] = "0" * 64
+    audit_path.write_text(json.dumps(audit), encoding="utf-8")
+    monkeypatch.setattr(po.ReportManager, "_get_report_folder", lambda rid: folder)
+
+    health, issues, _meta = po.PipelineOrchestrator._assess_report_health(None, "rid-1")
+
+    assert health == "failed"
+    assert any("fingerprint" in issue for issue in issues)
+
+
+def test_report_health_hard_fails_when_final_audit_missing(monkeypatch, tmp_path):
+    from app.services import pipeline_orchestrator as po
+
+    folder = _write_health_fixture(tmp_path, ["Analysis body. " * 40])
+    (tmp_path / "final_audit.json").unlink()
+    monkeypatch.setattr(po.ReportManager, "_get_report_folder", lambda rid: folder)
+
+    health, issues, _meta = po.PipelineOrchestrator._assess_report_health(None, "rid-1")
+
+    assert health == "failed"
+    assert any("not audited" in issue for issue in issues)
+
+
 # ── VIZ-2: charts/datasets 可视化产物通道 specs & 临时产物发现 ──────────────────
 # 覆盖 _viz_artifact_specs / _stage_artifact_specs / _discover_partial_artifacts 的
 # 纯离线行为：索引锚点登记、开关门控、缺文件降级、原始 png|svg|csv 逐个透出。No disk-writes
 # 到 uploads（仅 tmp_path handoff 目录）。
 
+import json  # noqa: E402
 import os  # noqa: E402
 
 from app.services import pipeline_orchestrator as _po  # noqa: E402
@@ -262,6 +386,8 @@ def test_research_completion_registers_chart_assets_without_partial_suffix(
     (charts / "actor.png").write_bytes(b"png")
     (charts / "actor.html").write_text("<html></html>", encoding="utf-8")
     st = _viz_state(tmp_path)
+    st.artifacts["chart_actor.png_partial"] = str(charts / "actor.png")
+    st.artifacts["chart_actor.html_partial"] = str(charts / "actor.html")
     orch = _po.PipelineOrchestrator.__new__(_po.PipelineOrchestrator)
 
     orch._record_stage_artifacts(st, _po.STAGE_RESEARCH)
@@ -269,11 +395,86 @@ def test_research_completion_registers_chart_assets_without_partial_suffix(
     assert st.artifacts["chart_actor.png"] == str(charts / "actor.png")
     assert st.artifacts["chart_actor.html"] == str(charts / "actor.html")
     assert "chart_actor.png_partial" not in st.artifacts
+    assert "chart_actor.html_partial" not in st.artifacts
+
+
+def test_report_viz_reuse_validation_checks_every_declared_asset(tmp_path):
+    report_dir = tmp_path / "report"
+    charts = report_dir / "charts"
+    charts.mkdir(parents=True)
+    (charts / "timeline.html").write_text("<html></html>", encoding="utf-8")
+    (charts / "timeline.png").write_bytes(b"png")
+    (report_dir / "viz_manifest.json").write_text(json.dumps({
+        "schema_version": 2,
+        "items": [{
+            "id": "timeline",
+            "type": "html",
+            "path": "charts/timeline.html",
+            "png_path": "charts/timeline.png",
+        }],
+        "skipped": [],
+    }), encoding="utf-8")
+
+    assert _po.PipelineOrchestrator._validate_report_viz_references(str(report_dir)) is True
+    (charts / "timeline.png").unlink()
+    assert _po.PipelineOrchestrator._validate_report_viz_references(str(report_dir)) is False
+
+
+def test_report_viz_reuse_validation_rejects_symlink(tmp_path):
+    report_dir = tmp_path / "report"
+    charts = report_dir / "charts"
+    charts.mkdir(parents=True)
+    outside = tmp_path / "outside.html"
+    outside.write_text("<html></html>", encoding="utf-8")
+    os.symlink(outside, charts / "timeline.html")
+    (report_dir / "viz_manifest.json").write_text(json.dumps({
+        "schema_version": 2,
+        "items": [{"type": "html", "path": "charts/timeline.html"}],
+    }), encoding="utf-8")
+
+    assert _po.PipelineOrchestrator._validate_report_viz_references(str(report_dir)) is False
+
+
+def test_new_report_attempt_clears_formal_partial_and_integrity_rows(monkeypatch, tmp_path):
+    st = _viz_state(tmp_path)
+    st.artifacts = {
+        "report_viz_manifest": "/old/viz_manifest.json",
+        "report_chart_timeline.html": "/old/charts/timeline.html",
+        "section_01_partial": "/old/section_01.md",
+        "report": "/handoff/research_report.md",
+    }
+    written = {}
+    monkeypatch.setattr(
+        _po.PipelineManager,
+        "load_artifact_manifest",
+        classmethod(lambda cls, pid: {
+            "report_viz_manifest": {"path": "/old/viz_manifest.json"},
+            "report_chart_timeline.html": {"path": "/old/charts/timeline.html"},
+            "report": {"path": "/handoff/research_report.md"},
+        }),
+    )
+    monkeypatch.setattr(
+        _po.PipelineManager,
+        "write_artifact_manifest",
+        classmethod(lambda cls, pid, value: written.update(value)),
+    )
+
+    _po.PipelineOrchestrator._clear_report_attempt_artifacts(st)
+
+    assert st.artifacts == {"report": "/handoff/research_report.md"}
+    assert written == {"report": {"path": "/handoff/research_report.md"}}
 
 
 def test_research_html_artifact_is_raw_served_in_opaque_sandbox(monkeypatch, tmp_path):
-    chart = tmp_path / "actor.html"
+    charts = tmp_path / "charts"
+    charts.mkdir()
+    chart = charts / "actor.html"
     chart.write_text("<html><script>window.ok=1</script></html>", encoding="utf-8")
+    monkeypatch.setattr(
+        _po.PipelineManager,
+        "handoff_dir",
+        classmethod(lambda cls, pid: str(tmp_path)),
+    )
     monkeypatch.setattr(
         _po.PipelineManager,
         "load",
@@ -291,6 +492,44 @@ def test_research_html_artifact_is_raw_served_in_opaque_sandbox(monkeypatch, tmp
     assert resp.data.startswith(b"<html>")
     assert "sandbox allow-scripts" in resp.headers["Content-Security-Policy"]
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_research_svg_artifact_disables_scripts(monkeypatch, tmp_path):
+    charts = tmp_path / "charts"
+    charts.mkdir()
+    chart = charts / "active.svg"
+    chart.write_text("<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+                     encoding="utf-8")
+    monkeypatch.setattr(_po.PipelineManager, "handoff_dir",
+                        classmethod(lambda cls, pid: str(tmp_path)))
+    monkeypatch.setattr(_po.PipelineManager, "load", classmethod(lambda cls, pid: {
+        "artifacts": {"chart_active.svg": str(chart)},
+    }))
+    from app import create_app
+    resp = create_app().test_client().get("/api/research/pipe/artifact/chart_active.svg")
+
+    assert resp.status_code == 200
+    assert "sandbox;" in resp.headers["Content-Security-Policy"]
+    assert "script-src 'none'" in resp.headers["Content-Security-Policy"]
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_research_chart_rejects_post_registration_symlink_swap(monkeypatch, tmp_path):
+    charts = tmp_path / "charts"
+    charts.mkdir()
+    outside = tmp_path / "outside.html"
+    outside.write_text("<script>window.stolen=1</script>", encoding="utf-8")
+    swapped = charts / "actor.html"
+    os.symlink(outside, swapped)
+    monkeypatch.setattr(_po.PipelineManager, "handoff_dir",
+                        classmethod(lambda cls, pid: str(tmp_path)))
+    monkeypatch.setattr(_po.PipelineManager, "load", classmethod(lambda cls, pid: {
+        "artifacts": {"chart_actor.html_partial": str(swapped)},
+    }))
+    from app import create_app
+    resp = create_app().test_client().get("/api/research/pipe/artifact/chart_actor.html")
+
+    assert resp.status_code == 404
 
 
 # ── ITEM-18: 阶段级墙钟提取 ──────────────────────────────────────────────────

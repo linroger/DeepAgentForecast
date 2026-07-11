@@ -96,6 +96,10 @@ class WorldState:
         if self.uniform_prior:  # no usable base rates → uniform prior
             seed = dict.fromkeys(self.scenarios, 1.0)
         self.shares = _norm_shares(seed)
+        # 日历熵地板（WORLDSTATE_ENTROPY_MIX）：记住种子先验（外部视角基率），
+        # step(entropy_mix_days=...) 时向它回混——回混目标是先验而非均匀分布，
+        # 偏斜先验（如 90/10）不会被拉向 50/50。
+        self._seed_shares = dict(self.shares)
         self.history: List[Dict[str, float]] = [dict(self.shares)]
         self._last_delta = 1.0
         self._ewma_delta = 1.0
@@ -103,13 +107,19 @@ class WorldState:
         self.converged_at: Optional[int] = None
 
     def step(self, commitments: List[Dict[str, Any]],
-             inertia: Optional[float] = None) -> Dict[str, float]:
+             inertia: Optional[float] = None,
+             entropy_mix_days: Optional[int] = None) -> Dict[str, float]:
         """Evolve one round: aggregate resource-weighted commitments into a target
         distribution, blend with the prior by ``inertia``. No commitments → unchanged.
 
         R2-SIM-12: ``inertia`` may be overridden per round (e.g. scaled by the calendar
         gap between rounds) — ``None`` keeps the instance default so existing callers
         and the no-date path are byte-identical.
+
+        日历熵地板（WORLDSTATE_ENTROPY_MIX，calendar-only）：``entropy_mix_days`` 为本轮
+        覆盖的日历天数时，在常规 blend/renormalize 之后再向**种子先验**回混
+        ``lam = min(0.05, 0.0005×天数)``（day→0.0005，month→≈0.0152，half_year→0.05 封顶），
+        防止长推演把分布锁死在极端值。``None``（所有旧调用方）→ 逐字节不变。
         """
         if not self.scenarios:
             return {}
@@ -133,6 +143,11 @@ class WorldState:
             new = _norm_shares(blended)
         else:
             new = dict(self.shares)
+        if entropy_mix_days is not None:
+            # 熵地板：向种子先验（非均匀）回混后再归一化；lam 钳在 [0, 0.05]。
+            lam = max(0.0, min(0.05, 0.0005 * float(entropy_mix_days)))
+            new = _norm_shares({k: (1.0 - lam) * v + lam * self._seed_shares.get(k, 0.0)
+                                for k, v in new.items()})
         delta = sum(abs(new[s] - self.shares[s]) for s in self.scenarios)
         self._last_delta = round(delta, 6)
         self._ewma_delta = round(0.5 * self._ewma_delta + 0.5 * delta, 6)

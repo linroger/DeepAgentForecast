@@ -150,6 +150,36 @@
       </div>
     </section>
 
+    <!-- Prediction-market signals remain useful even without an exact forecast anchor. -->
+    <section v-show="activeTab === 'markets'" class="panel" role="tabpanel">
+      <div class="panel-head"><span class="diamond">◇</span>{{ L('预测市场信号', 'Prediction-market Signals') }}</div>
+      <div class="panel-body">
+        <template v-if="marketList.length">
+          <div class="market-meta">
+            <span>{{ L('快照时间', 'Snapshot') }}: {{ marketAsOf || '—' }}</span>
+            <span>{{ L('仅作校准锚点，并非真值', 'Calibration anchors, not ground truth') }}</span>
+          </div>
+          <div class="market-grid">
+            <article v-for="market in marketList" :key="market.market_id" class="market-card">
+              <a :href="marketUrl(market)" target="_blank" rel="noopener" class="market-question">
+                {{ market.question || market.event_title || market.market_id }}
+              </a>
+              <div class="market-prob">{{ formatProbability(market.implied_yes_prob) }}</div>
+              <div class="market-detail">
+                <span>{{ L('成交量', 'Volume') }} {{ formatUsd(market.volume) }}</span>
+                <span v-if="market.end_date">{{ L('截止', 'Ends') }} {{ String(market.end_date).slice(0, 10) }}</span>
+              </div>
+            </article>
+          </div>
+        </template>
+        <div v-else class="empty">
+          <div class="empty-icon">◇</div>
+          <div class="empty-title">{{ marketEmptyTitle }}</div>
+          <div class="empty-sub">{{ marketEmptyDetail }}</div>
+        </div>
+      </div>
+    </section>
+
     <!-- 信息来源 -->
     <section v-show="activeTab === 'sources'" class="panel" role="tabpanel">
       <div class="panel-head"><span class="diamond">◇</span>{{ L('信息来源', 'Sources') }}</div>
@@ -308,6 +338,42 @@ const sourceList = computed(() => {
   return []
 })
 
+const marketContainer = computed(() => {
+  const value = props.dossier && props.dossier.prediction_markets
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null
+})
+
+const marketList = computed(() => {
+  const value = marketContainer.value
+  return value && Array.isArray(value.markets)
+    ? value.markets.filter(row => row && row.market_id && row.implied_yes_prob != null)
+    : []
+})
+
+const marketAsOf = computed(() => String((marketContainer.value && marketContainer.value.as_of) || ''))
+
+const marketEmptyTitle = computed(() => {
+  const status = marketContainer.value && marketContainer.value.status
+  if (status && status.empty_reason === 'transport_failure') {
+    return L('市场数据暂不可用', 'Market data unavailable')
+  }
+  return L('未找到足够相关且流动的市场', 'No sufficiently relevant liquid market found')
+})
+
+const marketEmptyDetail = computed(() => {
+  if (!marketContainer.value) return L('该研究运行没有市场快照。', 'This research run has no market snapshot.')
+  return L('这表示没有可用的外部市场锚点，并非研究阶段失败。', 'This means no usable external market anchor was found; it is not a research failure.')
+})
+
+const citationTitles = computed(() => {
+  const out = {}
+  sourceList.value.forEach((source, index) => {
+    if (!source || typeof source !== 'object') return
+    out[`S${index + 1}`] = String(source.title || source.name || source.url || `Source ${index + 1}`)
+  })
+  return out
+})
+
 const hasReport = computed(() => {
   const d = props.dossier
   return !!(d && d.has_report && d.report && String(d.report).trim() !== '')
@@ -319,7 +385,8 @@ const renderedReport = computed(() => {
     // GATE-W9：研究卷宗的 Visual Annex 内嵌相对 charts/*.png（W9 确定性渲染步产出），
     // 经产物深链端点（chart_<文件名>，原始字节直出）解析；无 pipelineId 时优雅降级。
     return renderMarkdown(props.dossier.report, {
-      resolveUrl: (rel) => researchChartUrl(props.pipelineId, rel)
+      resolveUrl: (rel) => researchChartUrl(props.pipelineId, rel),
+      citations: citationTitles.value
     })
   } catch (e) {
     return ''
@@ -339,6 +406,9 @@ const tabs = computed(() => {
   }
   if (relationships.value.length) {
     t.push({ key: 'relationships', label: L('关系网', 'Relationships'), count: relationships.value.length })
+  }
+  if (marketContainer.value) {
+    t.push({ key: 'markets', label: L('预测市场', 'Markets'), count: marketList.value.length })
   }
   t.push({ key: 'sources', label: L('信息来源', 'Sources'), count: sourceList.value.length })
   return t
@@ -406,6 +476,23 @@ function sourceHref(src) {
   if (typeof src === 'string') return src
   const url = src.url || src.title
   return url ? String(url) : '#'
+}
+
+function marketUrl(market) {
+  return String((market && (market.url || market.event_url)) || '#')
+}
+
+function formatProbability(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? `${(number * 100).toFixed(1)}%` : '—'
+}
+
+function formatUsd(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '—'
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1
+  }).format(number)
 }
 </script>
 
@@ -924,6 +1011,62 @@ function sourceHref(src) {
   color: #999;
   line-height: 1.5;
   padding-left: 2px;
+}
+
+/* ---- Prediction-market signals ---- */
+.market-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  color: #777;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.market-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px 14px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.market-question {
+  color: #000;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.market-question:hover { color: var(--orange); }
+
+.market-prob {
+  color: var(--orange);
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.market-detail {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #777;
+  font-family: var(--mono);
+  font-size: 10px;
 }
 
 /* ---- Sources ---- */

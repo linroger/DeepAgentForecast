@@ -66,6 +66,27 @@ WORLD_STATE = {
     "converged_at": 2,
 }
 
+# CAL-TEMPORAL：日历模式轨迹（schema v3）——行带 period_start/period_end/label/as_of
+# （as_of = period_end；第 0 行 as_of = as_of_date）。横轴应切换为日历日期（"Date"）。
+WORLD_STATE_V3 = {
+    "schema_version": 3,
+    "mode": "calendar",
+    "calendar_unit": "quarter",
+    "horizon_date": "2027-03-31",
+    "trajectory": [
+        {"round": 0, "shares": {"Modest wave": 0.5, "Clean wave": 0.25, "Hold": 0.25},
+         "period_start": "2026-07-12", "period_end": "2026-09-30",
+         "label": "2026-Q3", "as_of": "2026-07-11"},
+        {"round": 1, "shares": {"Modest wave": 0.55, "Clean wave": 0.28, "Hold": 0.17},
+         "period_start": "2026-10-01", "period_end": "2026-12-31",
+         "label": "2026-Q4", "as_of": "2026-12-31"},
+        {"round": 2, "shares": {"Modest wave": 0.6, "Clean wave": 0.3, "Hold": 0.1},
+         "period_start": "2027-01-01", "period_end": "2027-03-31",
+         "label": "2027-Q1", "as_of": "2027-03-31"},
+    ],
+    "converged_at": 2,
+}
+
 COMPARISON = {
     "dimensions": [
         {"name": "总动作量", "baseline": 100, "scenario": 120, "delta": "+20", "verdict": "更高"},
@@ -221,6 +242,54 @@ def test_png_builders_none_on_empty(tmp_path):
         {"trajectory": [{"round": 0, "shares": {"A": 1.0}}]}, charts) is None
     assert viz.build_comparison_bars({"dimensions": []}, charts) is None
     assert viz.build_calibration_curve({"bins": []}, charts) is None
+
+
+# ============== CAL-TEMPORAL：worldstate 横轴 = 日历日期 iff 行带 period_end/as_of ==============
+
+@pytest.mark.skipif(not rv.MATPLOTLIB_AVAILABLE, reason="matplotlib not installed")
+def test_worldstate_area_calendar_date_axis(tmp_path, monkeypatch):
+    """v3 轨迹（行带 period_end/as_of）→ 横轴 "Date"；v2 轨迹 → 旧 "Forecast update step"。"""
+    captured = {}
+    orig_save = ReportVisualizer._save
+
+    def _spy(self, fig, charts_dir, filename):
+        captured["xlabel"] = fig.axes[0].get_xlabel()
+        return orig_save(self, fig, charts_dir, filename)
+
+    monkeypatch.setattr(ReportVisualizer, "_save", _spy)
+    charts = str(tmp_path / "charts")
+    viz = ReportVisualizer()
+    rel = viz.build_worldstate_area(WORLD_STATE_V3, charts)
+    assert rel is not None and rel.endswith(".png")
+    assert captured["xlabel"] == "Date"
+    # 旧 v2 轨迹（无 period_end/as_of）→ 轮次横轴保持不变（hours 模式回归钉）
+    assert viz.build_worldstate_area(WORLD_STATE, charts) is not None
+    assert captured["xlabel"] == "Forecast update step"
+
+
+@pytest.mark.skipif(not rv.MATPLOTLIB_AVAILABLE, reason="matplotlib not installed")
+def test_worldstate_area_partial_dates_fall_back_to_step_axis(tmp_path, monkeypatch):
+    """任一行缺日期或日期不可解析 → 整体回退轮次横轴（degrade-safe，不混轴）。"""
+    captured = {}
+
+    def _spy(self, fig, charts_dir, filename):
+        captured["xlabel"] = fig.axes[0].get_xlabel()
+        return os.path.join("charts", filename)
+
+    monkeypatch.setattr(ReportVisualizer, "_save", _spy)
+    viz = ReportVisualizer()
+    charts = str(tmp_path / "charts")
+    # 第二行无 period_end/as_of
+    mixed = {"trajectory": [dict(WORLD_STATE_V3["trajectory"][0]),
+                            {"round": 1, "shares": {"Hold": 1.0}}]}
+    assert viz.build_worldstate_area(mixed, charts) is not None
+    assert captured["xlabel"] == "Forecast update step"
+    # 第二行日期不可解析
+    garbled = {"trajectory": [dict(WORLD_STATE_V3["trajectory"][0]),
+                              {"round": 1, "shares": {"Hold": 1.0},
+                               "as_of": "not-a-date", "period_end": "soon"}]}
+    assert viz.build_worldstate_area(garbled, charts) is not None
+    assert captured["xlabel"] == "Forecast update step"
 
 
 # ============================ build_all + manifest ============================
@@ -566,6 +635,31 @@ def test_html_builders_none_on_empty(tmp_path):
 
 
 @pytest.mark.skipif(not rv.PLOTLY_AVAILABLE, reason="plotly not installed")
+def test_html_worldstate_calendar_date_axis(tmp_path):
+    """CAL-TEMPORAL：v3 轨迹 → 横轴日历日期（"Date" + ISO 日期数据点 + 日期 hover）；
+    v2 轨迹 → 旧 "Forecast update step" 轮次横轴（字节级回归钉由字符串断言承担）。"""
+    import re
+    charts = str(tmp_path / "charts")
+    viz = ReportVisualizer()
+    rel = viz.build_worldstate_area_html(WORLD_STATE_V3, charts)
+    assert rel is not None
+    with open(str(tmp_path / rel), "r", encoding="utf-8") as f:
+        html = f.read()
+    # 数据点是 ISO 日期（as_of：首行 as_of_date，其余 period_end）而非轮次序号
+    assert "2026-07-11" in html and "2026-12-31" in html and "2027-03-31" in html
+    assert re.search(r'"text":\s*"Date"', html)
+    assert "%{x|%Y-%m-%d}" in html          # 日期 hover 模板
+    assert "Forecast update step" not in html
+    # 旧 v2 轨迹 → 轮次横轴不变
+    rel2 = viz.build_worldstate_area_html(WORLD_STATE, charts)
+    assert rel2 is not None
+    with open(str(tmp_path / rel2), "r", encoding="utf-8") as f:
+        html2 = f.read()
+    assert "Forecast update step" in html2
+    assert "%{x|%Y-%m-%d}" not in html2
+
+
+@pytest.mark.skipif(not rv.PLOTLY_AVAILABLE, reason="plotly not installed")
 def test_html_price_history_writes_files(tmp_path):
     viz = ReportVisualizer()
     charts = str(tmp_path / "charts")
@@ -614,7 +708,8 @@ def test_build_all_includes_html_when_plotly(tmp_path):
     # actor bubble + worldstate + 1 市场价格历史
     assert len(htmls) >= 6
     hints = {e["placement_hint"] for e in htmls}
-    assert {"scenarios", "binary_forecasts", "simulation", "timeline", "actors"} <= hints
+    assert {"scenarios", "binary_forecasts", "timeline", "actors"} <= hints
+    assert "simulation" not in hints
     for e in htmls:
         assert e["path"].startswith("charts/") and e["path"].endswith(".html")
         _assert_offline_html(str(tmp_path / e["path"]))

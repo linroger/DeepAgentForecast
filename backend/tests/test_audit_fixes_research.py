@@ -317,10 +317,12 @@ class TestCoverageProbe:
         assert "Modern Mercantilism" not in gaps["missing_named_entities"]
         assert "Ray Dalio" in gaps["missing_named_entities"]
 
-    def test_standard_depth_gate_defaults_on(self, mod, tmp_path, monkeypatch):
-        # SCALE-2: flag now defaults ON — with 0 fetched sources the standard turn is
-        # followed by bounded top-up passes (RESEARCH_COVERAGE_GATE_MAX_ROUNDS, default 2
-        # for standard); the run still returns the original report when re-synthesis fails.
+    def test_standard_depth_low_source_count_is_diagnostic_not_a_quota(
+        self, mod, tmp_path, monkeypatch
+    ):
+        # LOOP-010: an empty source counter alone no longer forces two blind
+        # broadening turns.  With no explicit KIQ gap, standard depth stops after
+        # its opening report even though the breadth diagnostic is below reference.
         monkeypatch.delenv("RESEARCH_COVERAGE_GATE_STANDARD", raising=False)
         monkeypatch.delenv("RESEARCH_COVERAGE_GATE_MAX_ROUNDS", raising=False)
         monkeypatch.delenv("RESEARCH_MIN_SOURCES", raising=False)
@@ -337,7 +339,39 @@ class TestCoverageProbe:
         finally:
             plog.close()
         assert out == "report body"
-        assert len(calls) == 3  # opening turn + 2 top-up rounds
+        assert len(calls) == 1
+        assert "diagnostic only" in (tmp_path / "progress.log").read_text()
+
+    def test_standard_depth_explicit_kiq_gap_gets_targeted_topup(
+        self, mod, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv("RESEARCH_COVERAGE_GATE_STANDARD", raising=False)
+        monkeypatch.setenv("RESEARCH_COVERAGE_GATE_MAX_ROUNDS", "2")
+        calls = []
+        responses = iter([
+            "# Report\n\n## Gaps to carry into the next pass\n- Verify the base rate",
+            "## Evidence gathered\n- Base rate verified [S1]\n\n"
+            "## Gaps to carry into the next pass\n",
+        ])
+
+        def _stream(message, thread_id=None, recursion_limit=None):
+            calls.append(message)
+            return iter([SimpleNamespace(
+                type="messages-tuple",
+                data={"type": "ai", "id": f"m{len(calls)}", "content": next(responses)},
+            )])
+
+        client = SimpleNamespace(stream=_stream)
+        plog = _plog(mod, tmp_path)
+        try:
+            out = mod.run_research_stage(
+                client, "q", "standard", None, "claude", "tid", plog
+            )
+        finally:
+            plog.close()
+        assert out.startswith("# Report")
+        assert len(calls) == 2
+        assert calls[1].startswith("/deep-research\nTARGETED GAP-CLOSING PASS")
 
     def test_standard_depth_gate_opt_out_restores_single_turn(self, mod, tmp_path, monkeypatch):
         # flag explicitly off: one turn, no top-up even with 0 fetched sources (old default)

@@ -80,16 +80,16 @@ class TestOutlineParse:
 
     def test_untitled_rows_dropped_and_target_words_clamped(self, mod):
         rows = _outline(3) + [{"scope": "no title -> dropped"}]
-        rows[0]["target_words"] = 99999   # clamp down to 2500
+        rows[0]["target_words"] = 99999   # clamp down to 3500
         rows[1]["target_words"] = 10      # clamp up to 1500
-        rows[2]["target_words"] = "junk"  # non-int -> default 2000
+        rows[2]["target_words"] = "junk"  # non-int -> default 2200
         out = mod.parse_synthesis_outline(json.dumps({"sections": rows}))
-        assert [s["target_words"] for s in out] == [2500, 1500, 2000]
+        assert [s["target_words"] for s in out] == [3500, 1500, 2200]
         assert len(out) == 3
 
-    def test_outline_capped_at_sixteen_sections(self, mod):
+    def test_outline_capped_at_twenty_four_sections(self, mod):
         out = mod.parse_synthesis_outline(json.dumps({"sections": _outline(30)}))
-        assert len(out) == 16
+        assert len(out) == 24
 
 
 # ---------------------------------------------------------------------------
@@ -113,10 +113,10 @@ class TestKeywordSharding:
         assert "Semiconductor" not in packed
         assert "polling" not in packed
 
-    def test_selected_blocks_emitted_in_original_order(self, mod):
+    def test_selected_positive_blocks_emitted_in_original_order(self, mod):
         packed = mod.pack_context_for_section(self.BLOCKS, "OPEC Saudi crude", cap=10_000)
-        # 全部装得下 → 全选，但顺序必须是原始顺序（不是得分序）
-        assert packed == "\n\n".join(self.BLOCKS)
+        # Zero-relevance blocks are not used merely to fill spare context.
+        assert packed == "\n\n".join([self.BLOCKS[0], self.BLOCKS[2]])
 
     def test_cap_is_respected(self, mod):
         cap = len(self.BLOCKS[0]) + 5
@@ -148,6 +148,91 @@ class TestKeywordSharding:
         broad = "opec saudi crude quotas"          # 3 个词项各 1 次
         assert mod.score_block_for_scope(broad, terms) > mod.score_block_for_scope(spam, terms)
         assert mod.score_block_for_scope("irrelevant text", terms) == 0
+
+    def test_disjoint_scopes_do_not_replay_each_others_blocks(self, mod):
+        oil = mod.pack_context_for_section(
+            self.BLOCKS, "OPEC Saudi crude quotas", cap=10_000)
+        chips = mod.pack_context_for_section(
+            self.BLOCKS, "Taiwan TSMC semiconductor wafer", cap=10_000)
+        assert "Semiconductor" not in oil
+        assert "OPEC" not in chips
+        assert "OPEC" in oil and "Semiconductor" in chips
+
+    def test_max_blocks_prevents_many_small_matches_from_filling_context(self, mod):
+        blocks = [f"OPEC evidence block {i}" for i in range(30)]
+        packed = mod.pack_context_for_section(
+            blocks, "OPEC evidence", cap=100_000, max_blocks=3)
+        assert len(packed.split("\n\n")) == 3
+
+    def test_citation_index_is_routed_without_renumbering(self, mod):
+        entries = [
+            {"n": 1, "title": "OPEC quota decision", "url": "https://oil.test/1"},
+            {"n": 2, "title": "TSMC wafer capacity", "url": "https://chips.test/2"},
+            {"n": 3, "title": "Saudi crude output", "url": "https://oil.test/3"},
+        ]
+        routed = mod.route_citation_index_for_scope(
+            entries, "OPEC Saudi crude", max_entries=4)
+        assert [entry["n"] for entry in routed] == [1, 3]
+
+    def test_generic_urls_route_by_relevant_excerpt_beyond_fallback_eight(
+            self, mod):
+        fetched = []
+        for i in range(1, 13):
+            fetched.append({
+                "url": f"https://evidence.test/document/{i}",
+                "title": "Evidence document",
+                "excerpt": (
+                    "Lithium refinery bottleneck constrains 2028 supply."
+                    if i == 11 else "General background evidence."
+                ),
+                "ok": True,
+            })
+        entries = mod.build_citation_index(fetched, cap=20)
+        routed = mod.route_citation_index_for_scope(
+            entries,
+            "lithium refinery bottleneck",
+            max_entries=4,
+        )
+
+        # The relevant source is outside the old generic first-eight fallback,
+        # and keeps its one global source number rather than being renumbered.
+        assert [entry["n"] for entry in routed] == [11]
+        block = mod.render_citation_index_block(routed)
+        assert "[S11]" in block
+        assert "[S1]" not in block
+
+
+class TestSynthesisInputBudgets:
+    def test_profile_budget_reserves_output_and_prompt_tokens(
+            self, mod, monkeypatch):
+        monkeypatch.delenv("SYNTHESIS_MAX_CONTEXT_CHARS", raising=False)
+        monkeypatch.setenv("SYNTHESIS_CONTEXT_WINDOW_TOKENS", "200000")
+        monkeypatch.setenv("SYNTHESIS_OUTPUT_RESERVE_TOKENS", "64000")
+        monkeypatch.setenv("SYNTHESIS_PROMPT_OVERHEAD_TOKENS", "8000")
+        monkeypatch.setenv("SYNTHESIS_CHARS_PER_TOKEN", "3.2")
+        monkeypatch.setenv("SYNTHESIS_INPUT_SAFETY_CAP_CHARS", "1500000")
+        assert mod._synthesis_context_cap("any-profile") == 409600
+
+    def test_aggregate_section_budget_is_bounded(self, mod, monkeypatch):
+        monkeypatch.setenv("SYNTHESIS_SECTION_CONTEXT_CHARS", "60000")
+        monkeypatch.setenv("SYNTHESIS_TOTAL_ROUTED_CONTEXT_CHARS", "600000")
+        per_section = mod._synthesis_section_context_cap(20, 400000)
+        assert per_section == 30000
+        assert per_section * 20 <= 600000
+
+    def test_cjk_context_uses_conservative_character_conversion(
+            self, mod, monkeypatch):
+        monkeypatch.delenv("SYNTHESIS_MAX_CONTEXT_CHARS", raising=False)
+        monkeypatch.delenv("SYNTHESIS_CHARS_PER_TOKEN", raising=False)
+        monkeypatch.setenv("SYNTHESIS_CONTEXT_WINDOW_TOKENS", "200000")
+        monkeypatch.setenv("SYNTHESIS_OUTPUT_RESERVE_TOKENS", "64000")
+        monkeypatch.setenv("SYNTHESIS_PROMPT_OVERHEAD_TOKENS", "8000")
+        monkeypatch.setenv("SYNTHESIS_INPUT_SAFETY_CAP_CHARS", "1500000")
+        chinese_cap = mod._synthesis_context_cap("claude", "研究证据与预测" * 100)
+        english_cap = mod._synthesis_context_cap(
+            "claude", "research evidence and forecast " * 100)
+        assert chinese_cap == 204800
+        assert english_cap == 409600
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +271,7 @@ class TestProseWordGate:
 
     def test_min_words_defaults_and_override(self, mod, monkeypatch):
         monkeypatch.delenv("RESEARCH_SYNTHESIS_MIN_WORDS", raising=False)
-        assert mod._synthesis_min_words("deep") == 9000
+        assert mod._synthesis_min_words("deep") == 10000
         assert mod._synthesis_min_words("standard") == 4500
         monkeypatch.setenv("RESEARCH_SYNTHESIS_MIN_WORDS", "12000")
         assert mod._synthesis_min_words("deep") == 12000
@@ -194,7 +279,7 @@ class TestProseWordGate:
         monkeypatch.setenv("RESEARCH_SYNTHESIS_MIN_WORDS", "0")  # 0 = gate off
         assert mod._synthesis_min_words("deep") == 0
         monkeypatch.setenv("RESEARCH_SYNTHESIS_MIN_WORDS", "junk")  # 非法回退默认
-        assert mod._synthesis_min_words("deep") == 9000
+        assert mod._synthesis_min_words("deep") == 10000
 
     def test_select_thinnest_sections_orders_by_prose_words(self, mod):
         outline = _outline(4)
@@ -260,6 +345,7 @@ class TestKnobs:
         assert mod._multipart_synthesis_enabled("deep") is False
 
     def test_workers_default_and_bad_value(self, mod, monkeypatch):
+        monkeypatch.delenv("RESEARCH_MODEL_CONCURRENCY_GLOBAL", raising=False)
         monkeypatch.delenv("RESEARCH_SYNTHESIS_WORKERS", raising=False)
         assert mod._synthesis_workers() == 4
         monkeypatch.setenv("RESEARCH_SYNTHESIS_WORKERS", "9")
@@ -268,6 +354,11 @@ class TestKnobs:
         assert mod._synthesis_workers() == 1  # floor
         monkeypatch.setenv("RESEARCH_SYNTHESIS_WORKERS", "junk")
         assert mod._synthesis_workers() == 4
+
+    def test_workers_obey_global_model_envelope(self, mod, monkeypatch):
+        monkeypatch.setenv("RESEARCH_SYNTHESIS_WORKERS", "9")
+        monkeypatch.setenv("RESEARCH_MODEL_CONCURRENCY_GLOBAL", "3")
+        assert mod._synthesis_workers() == 3
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +451,53 @@ class TestGapMergeFromParallelWorkers:
         acc = ["seed gap"]
         acc = mod._merge_gaps(acc, mod.parse_gaps_from_notes("no gap heading here"))
         assert acc == ["seed gap"]
+
+    def test_complete_sequential_ledger_removes_resolved_gaps(self, mod):
+        previous = ["closed by this pass", "still open"]
+        notes = _worker_notes("phase", "still open")
+        advanced, plateau = mod.advance_gap_set_from_notes(previous, notes)
+        assert advanced == ["still open"]
+        assert plateau is False
+
+    def test_empty_explicit_ledger_converges_but_missing_ledger_does_not(
+            self, mod):
+        previous = ["open KIQ"]
+        closed, _ = mod.advance_gap_set_from_notes(
+            previous, "## Evidence gathered\nDone.\n\n## Gaps to carry into the next pass\n")
+        missing, _ = mod.advance_gap_set_from_notes(
+            previous, "## Evidence gathered\nDone without required heading.")
+        assert closed == []
+        assert missing == previous
+
+    def test_parallel_ledgers_close_old_if_any_worker_resolves_and_union_new(
+            self, mod):
+        previous = ["old A", "old B"]
+        note_a = _worker_notes("a", "old A", "new C")
+        note_b = _worker_notes("b", "old B", "new D")
+        merged, plateau = mod.reconcile_parallel_gap_sets(
+            previous, [note_a, note_b])
+        assert merged == ["new C", "new D"]
+        assert plateau is False
+
+
+class TestConvergencePhaseScheduler:
+    def test_complete_opening_ledger_replaces_scope_and_shared_actor_phase(
+            self, mod):
+        opening = _worker_notes("opening", "one unresolved KIQ")
+        assert mod.planned_deep_phase_indices(
+            opening, shared_actor_track=True) == [2, 4, 5]
+
+    def test_missing_opening_ledger_keeps_scope(self, mod):
+        assert mod.planned_deep_phase_indices(
+            "working notes without ledger", shared_actor_track=True) == [1, 2, 4, 5]
+
+    def test_scheduler_can_be_disabled_for_compatibility(self, mod):
+        opening = _worker_notes("opening", "one unresolved KIQ")
+        assert mod.planned_deep_phase_indices(
+            opening,
+            shared_actor_track=True,
+            convergence_scheduler=False,
+        ) == [1, 2, 3, 4, 5]
 
 
 class TestWorkerNotesFoldIn:

@@ -30,6 +30,9 @@ community 工具函数——因此行为与直接在 config 里选那个 provide
   （默认 6h，0=关闭）/ RESEARCH_SEARCH_CACHE_DIR / RESEARCH_SEARCH_CACHE_MAX_MB（默认 200）。
   键 = sha256(实际后端 + 归一化 query + max_results)；只缓存成功非空结果；缓存层任何异常
   → 透明直连，绝不改变搜索结果本身。
+* **LOOP-007 —— 跨进程预算**：编排器提供 RESEARCH_BUDGET_DB 后，每次工具调用先计 attempt；
+  正缓存 miss 后才原子占用 global/lane 网络额度。exact 空结果只放行一次重试，随后在 10 分钟
+  TTL 内稳定抑制。账本故障 fail-open，并写 research_budget.json degraded 遥测。
 """
 
 from __future__ import annotations
@@ -43,6 +46,16 @@ import time
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+try:  # copied beside this module by the bridge sync guard; absence is fail-open
+    import research_budget as _research_budget
+except ImportError:  # pragma: no cover - exercised only by incomplete deployments
+    _research_budget = None  # type: ignore[assignment]
+
+try:  # keep search discovery aligned with fetch/final source admission
+    from cached_fetch import _source_policy_rejection
+except ImportError:  # pragma: no cover - incomplete deployment remains usable
+    _source_policy_rejection = None  # type: ignore[assignment]
 
 # provider → harness community 模块路径（延迟导入，见 _load_search_module）
 _PROVIDER_MODULES = {
@@ -147,6 +160,77 @@ def _is_search_cacheable(result: Any) -> bool:
     if isinstance(obj, list):
         return bool(obj)
     return True
+
+
+def _is_search_no_result(result: Any) -> bool:
+    """Identify an actual empty result without negative-caching transient errors."""
+    if not isinstance(result, str):
+        return False
+    stripped = result.strip()
+    if not stripped:
+        return True
+    try:
+        obj = json.loads(stripped)
+    except ValueError:
+        return len(stripped) < 200 and bool(re.search(
+            r"\b(?:no|zero)\s+(?:search\s+)?results?\b|\bnothing\s+found\b",
+            stripped,
+            re.I,
+        ))
+    if isinstance(obj, dict):
+        if obj.get("error"):
+            return False
+        results = obj.get("results")
+        return isinstance(results, list) and not results
+    return isinstance(obj, list) and not obj
+
+
+def _filter_denied_search_results(result: Any) -> str:
+    """Remove structured result rows whose URL violates source policy.
+
+    This runs on both old cache entries and fresh provider output, preventing a
+    denied AI/SEO aggregator from entering model context simply because it was
+    discovered by search rather than fetched. Non-JSON provider text remains
+    byte-for-byte unchanged because it has no reliable row boundary.
+    """
+    text = result if isinstance(result, str) else str(result)
+    if _source_policy_rejection is None:
+        return text
+    try:
+        obj = json.loads(text)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return text
+
+    def allowed(row: Any) -> bool:
+        if not isinstance(row, dict):
+            return True
+        url = row.get("url") or row.get("link") or row.get("href")
+        return not (url and _source_policy_rejection(str(url)))
+
+    changed = False
+    if isinstance(obj, dict) and isinstance(obj.get("results"), list):
+        original = obj["results"]
+        filtered = [row for row in original if allowed(row)]
+        changed = len(filtered) != len(original)
+        if changed:
+            obj = dict(obj)
+            obj["results"] = filtered
+    elif isinstance(obj, list):
+        filtered = [row for row in obj if allowed(row)]
+        changed = len(filtered) != len(obj)
+        if changed:
+            obj = filtered
+    return (json.dumps(obj, ensure_ascii=False, sort_keys=True)
+            if changed else text)
+
+
+def _budget_denial(tool: str, reason: str, request: str) -> str:
+    if _research_budget is not None:
+        return _research_budget.denial_result(tool, reason, request)
+    return json.dumps({
+        "error": "research_budget_exhausted", "tool": tool,
+        "budget": reason, "request": request, "results": [],
+    }, ensure_ascii=False, sort_keys=True)
 
 
 def _read_search_cache(path: str, ttl_seconds: float) -> Optional[str]:
@@ -275,15 +359,23 @@ def _call_delegate(tool_obj: Any, query: str, max_results: int) -> str:
     return fn(**kwargs)
 
 
-def web_search_impl(query: str, max_results: int = DEFAULT_MAX_RESULTS) -> str:
+def web_search_impl(
+    query: str,
+    max_results: int = DEFAULT_MAX_RESULTS,
+    revisit_reason: str = "",
+) -> str:
     """纯逻辑入口：选后端 → 查缓存 → 委派 → 落缓存 → 返回结果字符串。任何内部错误 → 带说明的空结果，绝不抛。
 
     调度纪律：选中的 provider 若导入不可用（无 deerflow / provider 依赖缺失），回退 DDG；
     连 DDG 也不可用则返回空结果 JSON（与 community 工具的「无结果」形状一致）。
     WAVE9：委派前后各加一层短 TTL 磁盘缓存（键含**实际使用**的 provider，回退 DDG 时按 ddg 记）；
-    缓存关闭（TTL<=0）或 query 归一化后为空时与旧行为逐字节一致。
+    缓存关闭（TTL<=0）或 query 归一化后为空时绕过正缓存；LOOP-007 预算仍独立生效。
     """
     provider = _select_search_provider()
+    if _research_budget is not None:
+        attempt = _research_budget.admit_attempt("search")
+        if not attempt.allowed:
+            return _budget_denial("web_search", attempt.reason, query)
     mod = _load_search_module(provider)
     if (mod is None or getattr(mod, "web_search_tool", None) is None) and provider != "ddg":
         # 被选后端不可用 → 回退社区 DDG（零 key 兜底路径，无需任何依赖之外的东西）
@@ -294,7 +386,9 @@ def web_search_impl(query: str, max_results: int = DEFAULT_MAX_RESULTS) -> str:
     if tool_obj is None:
         return json.dumps({"error": "no web_search backend available", "query": query},
                           ensure_ascii=False)
-
+    # Provider fallback changes the actual request identity; negative-cache the
+    # delegate that was really used, just like the positive disk-cache key.
+    exact_key = f"{provider}\n{_normalize_query(query)}\n{int(max_results)}"
     # WAVE9：缓存读——TTL<=0（关闭）或空 query 时完全绕过；缓存层异常绝不阻断搜索。
     _ttl = _search_ttl_seconds()
     _cache_path_str = ""
@@ -304,27 +398,115 @@ def web_search_impl(query: str, max_results: int = DEFAULT_MAX_RESULTS) -> str:
             _cache_path_str = _search_cache_path(_root, _search_cache_key(provider, query, max_results))
             hit = _read_search_cache(_cache_path_str, _ttl)
             if hit is not None:
+                hit = _filter_denied_search_results(hit)
+                # A cache written under an older policy may contain only newly
+                # denied domains. Treat that as a miss so replacements can be
+                # discovered instead of returning an empty stale artifact.
+                if not _is_search_cacheable(hit):
+                    hit = None
+            if hit is not None:
+                if _research_budget is not None:
+                    if not str(revisit_reason or "").strip():
+                        artifact_id = _research_budget.positive_repeat(
+                            "search", exact_key)
+                        if artifact_id:
+                            return _research_budget.compact_positive_result(
+                                "web_search", artifact_id)
+                    _research_budget.record_positive("search", exact_key)
                 return hit
         except Exception as e:  # noqa: BLE001 — 缓存故障 → 当作未命中直连
             logger.warning("search_tools: 搜索缓存读取异常（跳过缓存）: %s", e)
             _cache_path_str = ""
 
+    # An exact empty query receives one bounded retry inside the negative TTL.
+    # This check happens after the positive cache, and before network admission.
+    if (_research_budget is not None
+            and _research_budget.negative_suppressed("search", exact_key)):
+        return _research_budget.negative_result("web_search", query)
+
+    claim_token = ""
+    waited_for_claim = False
+    if _research_budget is not None and _cache_path_str:
+        claim_token = _research_budget.claim_request("search", exact_key)
+        if not claim_token:
+            waited_for_claim = True
+            try:
+                wait_seconds = max(1, int(os.environ.get(
+                    "RESEARCH_INFLIGHT_WAIT_SECONDS", "45") or "45"))
+            except ValueError:
+                wait_seconds = 45
+            deadline = time.monotonic() + wait_seconds
+            delay = 0.1
+            while time.monotonic() < deadline:
+                time.sleep(delay)
+                delay = min(1.0, delay * 1.7)
+                hit = _read_search_cache(_cache_path_str, _ttl)
+                if hit is not None:
+                    hit = _filter_denied_search_results(hit)
+                    if not _is_search_cacheable(hit):
+                        hit = None
+                if hit is not None:
+                    # Identical in-flight callers may be isolated subagents;
+                    # each needs the fresh body even though only one network
+                    # request is allowed.
+                    _research_budget.record_positive("search", exact_key)
+                    return hit
+                claim_token = _research_budget.claim_request(
+                    "search", exact_key)
+                if claim_token:
+                    break
+            if not claim_token:
+                return json.dumps({
+                    "error": "research_inflight_timeout",
+                    "tool": "web_search",
+                    "message": "Timed out waiting for the identical in-flight search.",
+                }, ensure_ascii=False, sort_keys=True)
+    if (waited_for_claim and _research_budget is not None
+            and _research_budget.negative_suppressed("search", exact_key)):
+        _research_budget.release_request(claim_token)
+        return _research_budget.negative_result("web_search", query)
+
+    # Positive cache hits and singleflight followers never reach this
+    # reservation and therefore do not consume network allowance.
+    if _research_budget is not None:
+        network = _research_budget.admit_network("search")
+        if not network.allowed:
+            _research_budget.release_request(claim_token)
+            return _budget_denial("web_search", network.reason, query)
+
     try:
         result = _call_delegate(tool_obj, query, max_results)
         result = result if isinstance(result, str) else str(result)
+        result = _filter_denied_search_results(result)
     except Exception as e:  # noqa: BLE001 — 工具层最后兜底：绝不向 agent 循环抛异常
         logger.warning("search_tools: 委派 %s 失败（降级为空结果）: %s", provider, e)
+        if _research_budget is not None:
+            _research_budget.export_telemetry(force=True)
+            _research_budget.release_request(claim_token)
         return json.dumps({"error": str(e), "query": query}, ensure_ascii=False)
 
+    if _research_budget is not None:
+        if _is_search_no_result(result):
+            _research_budget.record_negative("search", exact_key)
+        elif _is_search_cacheable(result):
+            _research_budget.clear_negative("search", exact_key)
+            _research_budget.record_positive("search", exact_key)
+        else:
+            _research_budget.export_telemetry(force=True)
+
     # WAVE9：缓存写——仅成功且非空的结果落盘；失败/空壳原样返回但不固化。
-    if _cache_path_str:
-        try:
+    try:
+        if _cache_path_str:
             if _is_search_cacheable(result):
                 _write_search_cache(_cache_path_str, provider, query, result)
                 _enforce_search_cache_cap(_search_cache_root(), _search_max_bytes())
-        except Exception as e:  # noqa: BLE001 — 落盘/淘汰失败绝不影响已取得的结果
-            logger.warning("search_tools: 搜索缓存写入路径异常（跳过）: %s", e)
-    return result
+        return result
+    except Exception as e:  # noqa: BLE001 — 落盘/淘汰失败绝不影响已取得的结果
+        logger.warning("search_tools: 搜索缓存写入路径异常（跳过）: %s", e)
+        return result
+    finally:
+        if _research_budget is not None:
+            _research_budget.release_request(claim_token)
 
 
 # ---------------------------------------------------------------------------
@@ -336,14 +518,19 @@ try:
     from langchain_core.tools import tool as _lc_tool
 
     @_lc_tool("web_search", parse_docstring=True)
-    def web_search_tool(query: str, max_results: int = DEFAULT_MAX_RESULTS) -> str:
+    def web_search_tool(
+        query: str,
+        max_results: int = DEFAULT_MAX_RESULTS,
+        revisit_reason: str = "",
+    ) -> str:
         """Search the web for information. Use this tool to find current information, news, articles, and facts from the internet.
 
         Args:
             query: Search keywords describing what you want to find. Be specific for better results.
             max_results: Maximum number of results to return. Default is 10.
+            revisit_reason: Optional specific reason an identical successful result set must be returned again. Leave empty for normal use.
         """
-        return web_search_impl(query, max_results)
+        return web_search_impl(query, max_results, revisit_reason)
 
 except ImportError:  # noqa: BLE001 — 离线环境无 langchain：纯逻辑仍可测
     web_search_tool = None  # type: ignore[assignment]
