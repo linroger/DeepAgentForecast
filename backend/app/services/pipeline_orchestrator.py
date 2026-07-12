@@ -700,6 +700,10 @@ def _strip_data_uri_images(text: str) -> str:
         return text
 
 
+class _DeerFlowSafetyOverlayError(RuntimeError):
+    """A required tracked DeerFlow safety overlay could not be enforced."""
+
+
 def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
     """启动研究子进程前的漂移防护（2026-07-03 live-surfaced）。
 
@@ -711,8 +715,10 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
     vs 源 3792 行），导致 28-actor 的档案未按 ACTOR_CAST_MAX=20 截断。
     此函数在每次启动子进程前做一次内容哈希比对，检测到漂移就按 setup.sh 同款的
     ``cp`` 逻辑自动重新同步（deerflow_research.py + 两个种子 skill），并记录一条
-    WARNING——不再依赖人工记得重跑 setup.sh。退化安全：找不到 bridge 目录（例如
-    生产环境只部署了 deer-flow/、没有 bridge 源）或任何异常都仅记录警告，不阻断管线。
+    WARNING——不再依赖人工记得重跑 setup.sh。找不到 bridge 目录（例如生产环境只部署了
+    deer-flow/、没有 bridge 源）时保持 no-op；普通漂移检查异常仍退化为警告。若 tracked
+    lead-agent safety overlay 存在却无法应用，则必须阻断研究启动，避免已知跨 provider
+    summarization stall 在未打补丁的 runtime 中重现。
     """
     try:
         # backend/app/services/pipeline_orchestrator.py -> repo root 是三层上级，
@@ -805,21 +811,42 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
         # LOOP-010: unlike copied modules, the lead-agent change is a narrow
         # overlay on an upstream file. Apply the same tracked, idempotent
         # transformation used by setup.sh so an existing deployment cannot keep
-        # interpreting YAML null as LangChain's implicit 4K trim default.
+        # interpreting YAML null as LangChain's implicit 4K trim default or route
+        # summarization through the first configured provider instead of the
+        # active per-run model.
         _lead_overlay = os.path.join(
             bridge_dir, "patches", "apply_lead_agent_overlays.py"
         )
-        if os.path.isfile(_lead_overlay):
+        _lead_target = os.path.join(
+            deerflow_dir, "backend", "packages", "harness", "deerflow",
+            "agents", "lead_agent", "agent.py",
+        )
+        if os.path.isfile(_lead_target):
+            if not os.path.isfile(_lead_overlay):
+                raise _DeerFlowSafetyOverlayError(
+                    "required tracked DeerFlow lead-agent safety overlay is missing"
+                )
             import importlib.util as _importlib_util
 
-            _spec = _importlib_util.spec_from_file_location(
-                "deerflow_lead_agent_overlay", _lead_overlay
-            )
-            if _spec is None or _spec.loader is None:
-                raise RuntimeError("could not load tracked DeerFlow lead-agent overlay")
-            _overlay_module = _importlib_util.module_from_spec(_spec)
-            _spec.loader.exec_module(_overlay_module)
-            _overlay_status = _overlay_module.apply(deerflow_dir)
+            try:
+                _spec = _importlib_util.spec_from_file_location(
+                    "deerflow_lead_agent_overlay", _lead_overlay
+                )
+                if _spec is None or _spec.loader is None:
+                    raise RuntimeError(
+                        "could not load tracked DeerFlow lead-agent overlay")
+                _overlay_module = _importlib_util.module_from_spec(_spec)
+                _spec.loader.exec_module(_overlay_module)
+                _overlay_status = _overlay_module.apply(deerflow_dir)
+            except Exception as overlay_err:  # noqa: BLE001 — retyped below
+                raise _DeerFlowSafetyOverlayError(
+                    "required DeerFlow lead-agent safety overlay failed"
+                ) from overlay_err
+            if _overlay_status not in {"applied", "already_applied"}:
+                raise _DeerFlowSafetyOverlayError(
+                    "required DeerFlow lead-agent safety overlay is missing "
+                    f"its target (status={_overlay_status!r})"
+                )
             if _overlay_status == "applied":
                 synced.append(
                     "backend/packages/harness/deerflow/agents/lead_agent/agent.py"
@@ -889,7 +916,10 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
                 "研究子进程刚才会用旧代码运行。建议提交后运行一次 ./setup.sh 使其保持最新。",
                 ", ".join(synced),
             )
-    except Exception as sync_err:  # noqa: BLE001 — 漂移防护本身绝不能阻断研究阶段
+    except _DeerFlowSafetyOverlayError as sync_err:
+        logger.error("DeerFlow 必需安全 overlay 无法应用，拒绝启动研究子进程: %s", sync_err)
+        raise
+    except Exception as sync_err:  # noqa: BLE001 — 非安全 overlay 漂移继续退化为警告
         logger.warning("DeerFlow 部署副本漂移检测失败（忽略，不影响本次运行）: %s", sync_err)
 
 

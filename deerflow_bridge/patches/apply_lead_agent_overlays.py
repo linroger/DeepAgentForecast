@@ -4,6 +4,13 @@ The upstream harness is installed under the gitignored ``deer-flow/`` tree, so a
 direct edit there disappears on a clean clone.  Keep narrowly scoped, idempotent
 source transformations here and invoke them from both ``setup.sh`` and the runtime
 bridge drift guard.
+
+The overlays currently preserve two research-critical contracts:
+
+* ``trim_tokens_to_summarize: null`` means summarize the complete discarded
+  segment instead of silently falling back to LangChain's 4K tail.
+* ``summarization.model_name: null`` inherits the active run model instead of
+  falling back to the first configured provider.
 """
 
 from __future__ import annotations
@@ -38,6 +45,49 @@ _NEW_TRIM_BLOCK = '''    kwargs = {
     }
 '''
 
+_OLD_SUMMARY_SIGNATURE = '''def _create_summarization_middleware(*, app_config: AppConfig | None = None) -> DeerFlowSummarizationMiddleware | None:
+'''
+
+_NEW_SUMMARY_SIGNATURE = '''def _create_summarization_middleware(
+    *,
+    app_config: AppConfig | None = None,
+    model_name: str | None = None,
+) -> DeerFlowSummarizationMiddleware | None:
+'''
+
+_OLD_SUMMARY_MODEL_BLOCK = '''    if config.model_name:
+        model = create_chat_model(name=config.model_name, thinking_enabled=False, app_config=resolved_app_config, attach_tracing=False)
+    else:
+        model = create_chat_model(thinking_enabled=False, app_config=resolved_app_config, attach_tracing=False)
+'''
+
+_NEW_SUMMARY_MODEL_BLOCK = '''    # An explicit summarization model remains authoritative.  Otherwise inherit
+    # the resolved model for this run.  Falling back to the first configured
+    # model silently crosses providers in per-run model deployments and can
+    # turn context compression into a quota failure or a full request timeout.
+    summary_model_name = config.model_name or model_name
+    if summary_model_name:
+        model = create_chat_model(name=summary_model_name, thinking_enabled=False, app_config=resolved_app_config, attach_tracing=False)
+    else:
+        model = create_chat_model(thinking_enabled=False, app_config=resolved_app_config, attach_tracing=False)
+'''
+
+_OLD_SUMMARY_FACTORY_CALL = '''    summarization_middleware = _create_summarization_middleware(app_config=resolved_app_config)
+'''
+
+_NEW_SUMMARY_FACTORY_CALL = '''    summarization_middleware = _create_summarization_middleware(
+        app_config=resolved_app_config,
+        model_name=model_name,
+    )
+'''
+
+_TRANSFORMS = (
+    (_OLD_TRIM_BLOCK, _NEW_TRIM_BLOCK, "explicit null trim forwarding"),
+    (_OLD_SUMMARY_SIGNATURE, _NEW_SUMMARY_SIGNATURE, "runtime model factory parameter"),
+    (_OLD_SUMMARY_MODEL_BLOCK, _NEW_SUMMARY_MODEL_BLOCK, "runtime model inheritance"),
+    (_OLD_SUMMARY_FACTORY_CALL, _NEW_SUMMARY_FACTORY_CALL, "runtime model call-site forwarding"),
+)
+
 
 def apply(deerflow_root: str | os.PathLike[str]) -> str:
     """Apply the overlay and return ``applied``, ``already_applied``, or ``missing``.
@@ -51,13 +101,22 @@ def apply(deerflow_root: str | os.PathLike[str]) -> str:
     if not target.is_file():
         return "missing"
     source = target.read_text(encoding="utf-8")
-    if _NEW_TRIM_BLOCK in source:
+    updated = source
+    changed = False
+    for old, new, label in _TRANSFORMS:
+        if new in updated:
+            continue
+        if old not in updated:
+            raise RuntimeError(
+                "lead-agent overlay context drifted while applying "
+                f"{label}; refusing an unsafe edit: {target}"
+            )
+        updated = updated.replace(old, new, 1)
+        changed = True
+
+    if not changed:
         return "already_applied"
-    if _OLD_TRIM_BLOCK not in source:
-        raise RuntimeError(
-            f"lead-agent overlay context drifted; refusing an unsafe edit: {target}"
-        )
-    updated = source.replace(_OLD_TRIM_BLOCK, _NEW_TRIM_BLOCK, 1)
+
     tmp = target.with_suffix(target.suffix + ".tmp")
     try:
         tmp.write_text(updated, encoding="utf-8")

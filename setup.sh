@@ -654,16 +654,21 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
   fi
 
   # (b5) Lead-agent factory overlay: YAML ``trim_tokens_to_summarize: null`` is
-  #     deliberate (summarize the complete discarded segment). Upstream omits
-  #     the kwarg when null, silently reactivating LangChain's 4K default.
-  #     This tracked idempotent overlay makes the contract survive a clean clone.
+  #     deliberate (summarize the complete discarded segment), and a null
+  #     summarization model must inherit the active run model rather than the
+  #     first configured provider. This tracked idempotent overlay preserves
+  #     both contracts across a clean clone. Unlike optional enhancements, a
+  #     failed safety overlay aborts setup so a broken runtime cannot launch.
   LEAD_AGENT_OVERLAY="$BRIDGE_DIR/patches/apply_lead_agent_overlays.py"
-  if [ -f "$LEAD_AGENT_OVERLAY" ]; then
-    if python3 "$LEAD_AGENT_OVERLAY" "$DEERFLOW_DIR" >/dev/null; then
-      ok "Applied lead-agent summarization overlay (explicit null trim)"
-    else
-      warn "Could not apply lead-agent summarization overlay; inspect upstream factory drift"
-    fi
+  if [ ! -f "$LEAD_AGENT_OVERLAY" ]; then
+    warn "Required lead-agent summarization overlay is missing: $LEAD_AGENT_OVERLAY"
+    exit 1
+  fi
+  if python3 "$LEAD_AGENT_OVERLAY" "$DEERFLOW_DIR" >/dev/null; then
+    ok "Applied lead-agent summarization overlay (null trim + model inheritance)"
+  else
+    warn "Could not apply required lead-agent summarization overlay; inspect upstream factory drift"
+    exit 1
   fi
 
   # (b6) Model-factory metadata overlay: ``context_window_tokens`` controls

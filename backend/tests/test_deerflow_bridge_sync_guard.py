@@ -14,7 +14,12 @@ import os
 from pathlib import Path
 import runpy
 
-from app.services.pipeline_orchestrator import _sync_deerflow_bridge_if_stale
+import pytest
+
+from app.services.pipeline_orchestrator import (
+    _DeerFlowSafetyOverlayError,
+    _sync_deerflow_bridge_if_stale,
+)
 
 
 def _write(path, content):
@@ -155,7 +160,7 @@ def test_syncs_tracked_middleware_overlay(tmp_path, monkeypatch):
         "# tracked exact-call lease\n")
 
 
-def test_sync_applies_tracked_lead_agent_null_trim_overlay(tmp_path, monkeypatch):
+def test_sync_applies_tracked_lead_agent_summarization_overlay(tmp_path, monkeypatch):
     repo_root = tmp_path
     bridge_dir = repo_root / "deerflow_bridge"
     deployed_dir = repo_root / "deer-flow"
@@ -176,7 +181,13 @@ def test_sync_applies_tracked_lead_agent_null_trim_overlay(tmp_path, monkeypatch
     )
     _write(
         lead_agent,
-        '''def factory(config, model, trigger, keep):
+        '''def _create_summarization_middleware(*, app_config: AppConfig | None = None) -> DeerFlowSummarizationMiddleware | None:
+    resolved_app_config = app_config or get_app_config()
+    config = resolved_app_config.summarization
+    if config.model_name:
+        model = create_chat_model(name=config.model_name, thinking_enabled=False, app_config=resolved_app_config, attach_tracing=False)
+    else:
+        model = create_chat_model(thinking_enabled=False, app_config=resolved_app_config, attach_tracing=False)
     kwargs = {
         "model": model,
         "trigger": trigger,
@@ -186,6 +197,10 @@ def test_sync_applies_tracked_lead_agent_null_trim_overlay(tmp_path, monkeypatch
     if config.trim_tokens_to_summarize is not None:
         kwargs["trim_tokens_to_summarize"] = config.trim_tokens_to_summarize
     return kwargs
+
+def build_middlewares(config, model_name, resolved_app_config):
+    summarization_middleware = _create_summarization_middleware(app_config=resolved_app_config)
+    return summarization_middleware
 ''',
     )
 
@@ -199,6 +214,65 @@ def test_sync_applies_tracked_lead_agent_null_trim_overlay(tmp_path, monkeypatch
     deployed = lead_agent.read_text(encoding="utf-8")
     assert '"trim_tokens_to_summarize": config.trim_tokens_to_summarize' in deployed
     assert "if config.trim_tokens_to_summarize is not None" not in deployed
+    assert "summary_model_name = config.model_name or model_name" in deployed
+    assert "model_name=model_name" in deployed
+
+
+def test_sync_fails_closed_when_required_lead_overlay_drifts(tmp_path, monkeypatch):
+    repo_root = tmp_path
+    bridge_dir = repo_root / "deerflow_bridge"
+    deployed_dir = repo_root / "deer-flow"
+    _write(bridge_dir / "deerflow_research.py", "same\n")
+    _write(deployed_dir / "deerflow_research.py", "same\n")
+
+    real_overlay = (
+        Path(__file__).resolve().parents[2]
+        / "deerflow_bridge" / "patches" / "apply_lead_agent_overlays.py"
+    )
+    _write(
+        bridge_dir / "patches" / "apply_lead_agent_overlays.py",
+        real_overlay.read_text(encoding="utf-8"),
+    )
+    lead_agent = (
+        deployed_dir / "backend" / "packages" / "harness" / "deerflow"
+        / "agents" / "lead_agent" / "agent.py"
+    )
+    _write(lead_agent, "# unexpected upstream factory shape\n")
+
+    monkeypatch.setattr(
+        "app.services.pipeline_orchestrator.__file__",
+        str(repo_root / "backend" / "app" / "services" / "pipeline_orchestrator.py"),
+    )
+
+    with pytest.raises(
+        _DeerFlowSafetyOverlayError,
+        match="required DeerFlow lead-agent safety overlay failed",
+    ):
+        _sync_deerflow_bridge_if_stale(str(deployed_dir))
+
+
+def test_sync_fails_closed_when_required_lead_overlay_is_missing(tmp_path, monkeypatch):
+    repo_root = tmp_path
+    bridge_dir = repo_root / "deerflow_bridge"
+    deployed_dir = repo_root / "deer-flow"
+    _write(bridge_dir / "deerflow_research.py", "same\n")
+    _write(deployed_dir / "deerflow_research.py", "same\n")
+    _write(
+        deployed_dir / "backend" / "packages" / "harness" / "deerflow"
+        / "agents" / "lead_agent" / "agent.py",
+        "# unpatched lead-agent runtime\n",
+    )
+
+    monkeypatch.setattr(
+        "app.services.pipeline_orchestrator.__file__",
+        str(repo_root / "backend" / "app" / "services" / "pipeline_orchestrator.py"),
+    )
+
+    with pytest.raises(
+        _DeerFlowSafetyOverlayError,
+        match="required tracked DeerFlow lead-agent safety overlay is missing",
+    ):
+        _sync_deerflow_bridge_if_stale(str(deployed_dir))
 
 
 def test_sync_applies_model_factory_metadata_overlay(tmp_path, monkeypatch):
