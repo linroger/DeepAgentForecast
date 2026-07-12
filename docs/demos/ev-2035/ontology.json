@@ -1,212 +1,318 @@
 {
  "entity_types": [
   {
-   "name": "EVManufacturer",
-   "description": "Electric vehicle manufacturers, including Chinese, Korean, European, and American automakers comp...",
+   "name": "OEM",
+   "description": "Vehicle manufacturer competing in global passenger or commercial EV markets",
    "attributes": [
     {
      "name": "full_name",
      "type": "text",
-     "description": "Full official name of the company"
+     "description": "Official corporate name"
     },
     {
-     "name": "headquarters",
+     "name": "origin_jurisdiction",
      "type": "text",
-     "description": "Country or region where the company is headquartered"
+     "description": "Headquarter country/region"
     },
     {
-     "name": "market_position",
+     "name": "ev_strategy_stance",
      "type": "text",
-     "description": "Competitive position in the global EV market (e.g., leader, challenger)"
+     "description": "BEV-only / Hybrid-EREV emphasis / Delayed-pivot"
+    },
+    {
+     "name": "market_share_tier",
+     "type": "text",
+     "description": "Volume tier: top-tier / challenger / sub-scale"
     }
    ],
    "examples": [
-    "BYD",
-    "Tesla",
-    "Hyundai Motor Group",
-    "VinFast",
-    "Volkswagen"
-   ]
-  },
-  {
-   "name": "AutoBrand",
-   "description": "Sub-brands or vehicle brands under a major automotive group, including luxury and mass-market labels",
-   "attributes": [
-    {
-     "name": "brand_name",
-     "type": "text",
-     "description": "Name of the automotive brand"
-    },
-    {
-     "name": "brand_tier",
-     "type": "text",
-     "description": "Market positioning such as luxury, mainstream, or entry-level"
-    },
-    {
-     "name": "parent_group",
-     "type": "text",
-     "description": "Parent automotive group that owns this brand"
-    }
+    "BYD Company",
+    "Tesla Inc.",
+    "Volkswagen Group",
+    "Stellantis N.V.",
+    "Ford Motor Company",
+    "General Motors",
+    "Hyundai-Kia",
+    "Toyota Motor Corporation",
+    "Li Auto",
+    "Geely",
+    "NIO",
+    "XPeng"
    ],
-   "examples": [
-    "Kia",
-    "Genesis",
-    "IONIQ"
-   ]
+   "archetype": "actor"
   },
   {
-   "name": "TechSupplier",
-   "description": "Technology suppliers providing components or systems such as autonomous driving, batteries, and s...",
+   "name": "BatterySupplier",
+   "description": "Cell/pack manufacturer supplying EV traction batteries",
    "attributes": [
     {
      "name": "full_name",
      "type": "text",
-     "description": "Official company name"
+     "description": "Official corporate name"
     },
     {
-     "name": "tech_focus",
+     "name": "chemistry_focus",
      "type": "text",
-     "description": "Primary technology domain, e.g., autonomous driving, battery management, SDV"
+     "description": "LFP / NCM / Sodium-ion / SSB R&D"
+    },
+    {
+     "name": "global_share_tier",
+     "type": "text",
+     "description": "Dominant / Challenger / Niche"
     }
    ],
    "examples": [
-    "Mobileye",
-    "Siemens"
-   ]
+    "CATL",
+    "LG Energy Solution",
+    "Panasonic",
+    "Samsung SDI",
+    "CALB",
+    "Gotion High-Tech",
+    "EVE Energy"
+   ],
+   "archetype": "actor"
   },
   {
-   "name": "GovernmentAgency",
-   "description": "Government bodies or regulatory agencies setting EV-related policies such as ICE bans, tariffs, a...",
+   "name": "RawMaterialProducer",
+   "description": "Upstream miner/refiner of lithium, nickel, cobalt, graphite, rare earths",
    "attributes": [
     {
-     "name": "agency_name",
+     "name": "full_name",
      "type": "text",
-     "description": "Name of the government agency or body"
+     "description": "Official corporate name"
+    },
+    {
+     "name": "mineral_focus",
+     "type": "text",
+     "description": "Primary mineral(s) produced or processed"
     },
     {
      "name": "jurisdiction",
      "type": "text",
-     "description": "Country or region governed by this agency"
+     "description": "Operating country/region"
+    },
+    {
+     "name": "processing_share_tier",
+     "type": "text",
+     "description": "Dominant / Significant / Minor"
+    }
+   ],
+   "examples": [
+    "Albemarle",
+    "SQM",
+    "Tsingshan",
+    "Huayou Cobalt",
+    "GEM Co.",
+    "Lynas Rare Earths",
+    "MP Materials (Mountain Pass)"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "Government",
+   "description": "Sovereign regulator or executive branch body setting EV-related policy, trade, or industrial rules",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Official name of the body"
+    },
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "Country/region of authority"
     },
     {
      "name": "policy_stance",
      "type": "text",
-     "description": "Current policy direction on EV transition and trade"
+     "description": "Pro-EV mandate / Pro-hybrid-flexibility / Deregulatory / Industrial-support"
+    },
+    {
+     "name": "tool_type",
+     "type": "text",
+     "description": "Regulation / Subsidy / Trade defense / Export licensing / Court ruling"
     }
    ],
    "examples": [
+    "European Commission",
+    "Chinese Government (MIIT/MOFCOM)",
+    "German Government",
+    "French Government",
     "UK Government",
-    "European Union",
-    "Brazilian Government",
-    "Thai Government",
-    "Turkish Government"
-   ]
-  },
-  {
-   "name": "PoliticalParty",
-   "description": "Political parties that shape EV and energy policy through legislative or executive power",
-   "attributes": [
-    {
-     "name": "party_name",
-     "type": "text",
-     "description": "Official name of the political party"
-    },
-    {
-     "name": "country",
-     "type": "text",
-     "description": "Country where the party operates"
-    },
-    {
-     "name": "ruling_status",
-     "type": "text",
-     "description": "Whether the party is currently in power or in opposition"
-    }
+    "US EPA",
+    "California Air Resources Board (CARB)",
+    "Japanese Government (METI)",
+    "Korean Government (MOTIE)",
+    "Canadian Government"
    ],
-   "examples": [
-    "UK Labour Party"
-   ]
+   "archetype": "actor"
   },
   {
-   "name": "ResearchInstitute",
-   "description": "Market research firms, think tanks, and academic institutions publishing data and analysis on the...",
+   "name": "EVProduct",
+   "description": "Specific EV model or product line that materially shapes market share, technology adoption, or co...",
    "attributes": [
     {
      "name": "full_name",
      "type": "text",
-     "description": "Official name of the research organization"
+     "description": "Model or product line name"
     },
     {
-     "name": "research_focus",
+     "name": "manufacturer",
      "type": "text",
-     "description": "Primary research area, e.g., EV sales data, autonomous driving, battery tech"
+     "description": "Parent OEM"
+    },
+    {
+     "name": "powertrain",
+     "type": "text",
+     "description": "BEV / PHEV / EREV / FCEV"
+    },
+    {
+     "name": "segment",
+     "type": "text",
+     "description": "Entry-level / Mid-market / Premium / Commercial"
     }
    ],
    "examples": [
-    "TrendForce"
-   ]
-  },
-  {
-   "name": "MediaOutlet",
-   "description": "News organizations, industry publications, and media platforms reporting on the EV industry and p...",
-   "attributes": [
-    {
-     "name": "outlet_name",
-     "type": "text",
-     "description": "Name of the media outlet"
-    },
-    {
-     "name": "media_type",
-     "type": "text",
-     "description": "Type of media, e.g., newspaper, trade publication, online news site"
-    }
+    "BYD Seagull",
+    "BYD Han",
+    "Tesla Model 3/Y",
+    "Tesla Cybercab",
+    "Wuling Mini EV",
+    "Li Auto L9",
+    "Volkswagen ID.4",
+    "Hyundai Ioniq 5/6"
    ],
-   "examples": [
-    "BBC",
-    "Electrek"
-   ]
+   "archetype": "asset_object"
   },
   {
-   "name": "IndustryAnalyst",
-   "description": "Professional analysts, experts, and commentators who publicly share views on EV market trends, te...",
-   "attributes": [
-    {
-     "name": "full_name",
-     "type": "text",
-     "description": "Full name of the analyst"
-    },
-    {
-     "name": "expertise_area",
-     "type": "text",
-     "description": "Field of expertise such as EV pricing, battery, or autonomous driving"
-    }
-   ],
-   "examples": [
-    "EV industry analysts cited in TrendForce reports"
-   ]
-  },
-  {
-   "name": "Person",
-   "description": "Fallback type for any natural person, such as consumers, employees, executives, or netizens, who ...",
+   "name": "BatteryTechnology",
+   "description": "Specific cell chemistry or structural innovation tracked for cost/performance trajectory",
    "attributes": [
     {
      "name": "full_name",
      "type": "text",
-     "description": "Full name of the individual"
+     "description": "Technology designation"
     },
     {
-     "name": "role",
+     "name": "chemistry_family",
      "type": "text",
-     "description": "Role or social identity, e.g., consumer, employee, netizen"
+     "description": "LFP / NCM / Sodium-ion / Solid-state / Cell-to-pack"
+    },
+    {
+     "name": "trl_assessment",
+     "type": "text",
+     "description": "TRL 1-9 readiness estimate"
+    },
+    {
+     "name": "cost_target_usd_per_kwh",
+     "type": "text",
+     "description": "Projected pack price target"
     }
    ],
    "examples": [
-    "General consumers discussing EV purchases",
-    "Netizens commenting on BYD price war"
-   ]
+    "LFP chemistry",
+    "Sodium-ion (CATL Naxtra)",
+    "Solid-state sulfide (Toyota/Idemitsu)",
+    "Cell-to-pack (Qilin/Blade)",
+    "800V SiC architecture"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "ChargingInfrastructureOperator",
+   "description": "Operator of public/private EV charging networks critical to adoption constraints",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Operator name"
+    },
+    {
+     "name": "primary_market",
+     "type": "text",
+     "description": "US / EU / China / Global"
+    },
+    {
+     "name": "network_tier",
+     "type": "text",
+     "description": "Dominant / Challenger / Regional"
+    }
+   ],
+   "examples": [
+    "Tesla Supercharger (NACS)",
+    "ChargePoint",
+    "Ionity",
+    "Star Charge/TELD",
+    "National Grid (utility)"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "RegulatoryFramework",
+   "description": "Named binding regulation or pending legislative instrument governing EV adoption, emissions, or t...",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Regulation or proposal name"
+    },
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "Applicable territory"
+    },
+    {
+     "name": "status",
+     "type": "text",
+     "description": "In force / Proposed / Under litigation / Sunset"
+    },
+    {
+     "name": "target_year",
+     "type": "text",
+     "description": "Compliance horizon (e.g., 2035)"
+    }
+   ],
+   "examples": [
+    "EU Regulation 2019/631 (2035 CO₂)",
+    "EU December 2025 90% proposal",
+    "US OBBBA (IRA credit termination)",
+    "California ACC II waiver",
+    "China dual-credit policy",
+    "UK ZEV mandate",
+    "US Section 301 China EV tariff"
+   ],
+   "archetype": "institution_rule"
+  },
+  {
+   "name": "CriticalMineralExportRegime",
+   "description": "State-controlled licensing or quota regime constraining critical-mineral flows as a strategic cho...",
+   "attributes": [
+    {
+     "name": "full_name",
+     "type": "text",
+     "description": "Regime name"
+    },
+    {
+     "name": "controlling_state",
+     "type": "text",
+     "description": "Jurisdiction imposing controls"
+    },
+    {
+     "name": "materials_covered",
+     "type": "text",
+     "description": "Graphite / Rare earths / Cobalt / Lithium"
+    }
+   ],
+   "examples": [
+    "MOFCOM graphite export licensing",
+    "China rare earth export controls (Oct 2025)",
+    "DRC cobalt export quota (Oct 2025)"
+   ],
+   "archetype": "actor"
   },
   {
    "name": "Organization",
-   "description": "Fallback type for any organization, association, or group that does not fit a more specific organ...",
+   "description": "Any organization not fitting other specific organization types.",
    "attributes": [
     {
      "name": "org_name",
@@ -216,189 +322,400 @@
     {
      "name": "org_type",
      "type": "text",
-     "description": "General type or nature of the organization"
+     "description": "Type of organization"
     }
    ],
    "examples": [
-    "Local industry associations",
-    "EV owner clubs",
-    "Trade unions in the auto sector"
+    "small business",
+    "community group"
    ]
   }
  ],
  "edge_types": [
   {
-   "name": "OWNS_BRAND",
-   "description": "Parent automotive group owns or controls a sub-brand",
-   "source_targets": [
-    {
-     "source": "EVManufacturer",
-     "target": "AutoBrand"
-    }
-   ],
-   "attributes": []
-  },
-  {
-   "name": "SUPPLIES_TECHNOLOGY_TO",
-   "description": "Technology supplier provides components or systems to an automaker",
-   "source_targets": [
-    {
-     "source": "TechSupplier",
-     "target": "EVManufacturer"
-    }
-   ],
-   "attributes": []
-  },
-  {
-   "name": "SETS_POLICY_FOR",
-   "description": "Government or political party enacts regulations affecting the EV market",
-   "source_targets": [
-    {
-     "source": "GovernmentAgency",
-     "target": "EVManufacturer"
-    },
-    {
-     "source": "PoliticalParty",
-     "target": "GovernmentAgency"
-    },
-    {
-     "source": "PoliticalParty",
-     "target": "EVManufacturer"
-    }
-   ],
-   "attributes": []
-  },
-  {
    "name": "COMPETES_WITH",
-   "description": "Direct market competition between EV manufacturers or brands",
+   "description": "Two OEMs or ecosystem players contest the same vehicle or battery market segment",
    "source_targets": [
     {
-     "source": "EVManufacturer",
-     "target": "EVManufacturer"
+     "source": "OEM",
+     "target": "OEM"
     },
     {
-     "source": "AutoBrand",
-     "target": "AutoBrand"
+     "source": "OEM",
+     "target": "BatterySupplier"
     },
     {
-     "source": "EVManufacturer",
-     "target": "AutoBrand"
+     "source": "BatterySupplier",
+     "target": "BatterySupplier"
     }
    ],
-   "attributes": []
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/negative/neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low"
+    },
+    {
+     "name": "market_segment",
+     "type": "text",
+     "description": "BEV volume / Premium / Entry-level / Battery cell"
+    }
+   ],
+   "family": "antagonism",
+   "valence": "adversarial",
+   "direction_semantics": "source competes with target in the same product/market"
   },
   {
-   "name": "REPORTS_ON",
-   "description": "Media outlet, research institute, or analyst publishes information about a company or topic",
+   "name": "REGULATES",
+   "description": "Government or regulatory body imposes binding rule on an OEM, technology, or framework",
    "source_targets": [
     {
-     "source": "MediaOutlet",
-     "target": "EVManufacturer"
+     "source": "Government",
+     "target": "OEM"
     },
     {
-     "source": "ResearchInstitute",
-     "target": "EVManufacturer"
+     "source": "Government",
+     "target": "RegulatoryFramework"
     },
     {
-     "source": "IndustryAnalyst",
-     "target": "EVManufacturer"
-    },
-    {
-     "source": "MediaOutlet",
-     "target": "GovernmentAgency"
-    },
-    {
-     "source": "ResearchInstitute",
-     "target": "TechSupplier"
+     "source": "Government",
+     "target": "BatteryTechnology"
     }
    ],
-   "attributes": []
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "supportive/restrictive/mixed"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Effective date or proposal date"
+    }
+   ],
+   "family": "governance",
+   "valence": "directional",
+   "direction_semantics": "source government/regulator imposes rule on target"
   },
   {
-   "name": "COMMENTS_ON",
-   "description": "Entity publicly comments, reacts, or voices an opinion about another entity or its actions",
+   "name": "TRADE_DEFENSE_INVESTIGATION",
+   "description": "Government launches anti-subsidy, tariff, or dumping proceeding against an OEM or exporter",
    "source_targets": [
     {
-     "source": "Person",
-     "target": "EVManufacturer"
+     "source": "Government",
+     "target": "OEM"
     },
     {
-     "source": "Person",
-     "target": "GovernmentAgency"
-    },
-    {
-     "source": "IndustryAnalyst",
-     "target": "EVManufacturer"
-    },
-    {
-     "source": "IndustryAnalyst",
-     "target": "GovernmentAgency"
-    },
-    {
-     "source": "MediaOutlet",
-     "target": "EVManufacturer"
-    },
-    {
-     "source": "EVManufacturer",
-     "target": "EVManufacturer"
-    },
-    {
-     "source": "GovernmentAgency",
-     "target": "EVManufacturer"
+     "source": "RegulatoryFramework",
+     "target": "OEM"
     }
    ],
-   "attributes": []
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "adverse/neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "tariff rate or severity tier"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Initiation date"
+    }
+   ],
+   "family": "antagonism",
+   "valence": "adversarial",
+   "direction_semantics": "source investigates or imposes trade defense on target"
+  },
+  {
+   "name": "SUPPORTS",
+   "description": "Government policy, subsidy, or industrial program materially benefits an OEM or supplier",
+   "source_targets": [
+    {
+     "source": "Government",
+     "target": "OEM"
+    },
+    {
+     "source": "Government",
+     "target": "BatterySupplier"
+    },
+    {
+     "source": "Government",
+     "target": "BatteryTechnology"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Program start date"
+    }
+   ],
+   "family": "alignment",
+   "valence": "allied",
+   "direction_semantics": "source government supports target via subsidy, mandate, or industrial policy"
+  },
+  {
+   "name": "DEPENDS_ON",
+   "description": "OEM or battery maker relies on upstream mineral/refining supply that is concentrated or constrained",
+   "source_targets": [
+    {
+     "source": "OEM",
+     "target": "RawMaterialProducer"
+    },
+    {
+     "source": "BatterySupplier",
+     "target": "RawMaterialProducer"
+    },
+    {
+     "source": "BatteryTechnology",
+     "target": "RawMaterialProducer"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "neutral/constrained"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low"
+    },
+    {
+     "name": "material",
+     "type": "text",
+     "description": "Lithium / Nickel / Cobalt / Graphite / Rare earth"
+    }
+   ],
+   "family": "dependency",
+   "valence": "directional",
+   "direction_semantics": "source depends on target's supply"
+  },
+  {
+   "name": "SUPPLIES",
+   "description": "Battery supplier or material producer sells cells/packs/materials to an OEM",
+   "source_targets": [
+    {
+     "source": "BatterySupplier",
+     "target": "OEM"
+    },
+    {
+     "source": "RawMaterialProducer",
+     "target": "BatterySupplier"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "transactional posture"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low"
+    },
+    {
+     "name": "chemistry",
+     "type": "text",
+     "description": "Cell chemistry supplied"
+    }
+   ],
+   "family": "economic",
+   "valence": "transactional",
+   "direction_semantics": "source supplies target"
   },
   {
    "name": "PARTNERS_WITH",
-   "description": "Formal collaboration between two entities on EV production, technology, or market entry",
+   "description": "Two actors cooperate on technology, manufacturing, or platform development (e.g., SSB JV, OEM-pla...",
    "source_targets": [
     {
-     "source": "EVManufacturer",
-     "target": "EVManufacturer"
+     "source": "OEM",
+     "target": "OEM"
     },
     {
-     "source": "EVManufacturer",
-     "target": "TechSupplier"
+     "source": "OEM",
+     "target": "BatterySupplier"
     },
     {
-     "source": "EVManufacturer",
-     "target": "GovernmentAgency"
+     "source": "OEM",
+     "target": "BatteryTechnology"
+    },
+    {
+     "source": "BatterySupplier",
+     "target": "BatteryTechnology"
     }
    ],
-   "attributes": []
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "positive/neutral"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "Partnership start date"
+    }
+   ],
+   "family": "alignment",
+   "valence": "allied",
+   "direction_semantics": "source cooperates with target on technology/manufacturing"
   },
   {
-   "name": "AFFILIATED_WITH",
-   "description": "An individual or organization has a formal affiliation, membership, or working relationship with ...",
+   "name": "CONSTRAINS",
+   "description": "Export licensing, quota, or critical-mineral regime restricts supply available to downstream OEM ...",
    "source_targets": [
     {
-     "source": "Person",
-     "target": "EVManufacturer"
+     "source": "CriticalMineralExportRegime",
+     "target": "OEM"
     },
     {
-     "source": "Person",
-     "target": "GovernmentAgency"
+     "source": "CriticalMineralExportRegime",
+     "target": "BatterySupplier"
     },
     {
-     "source": "Person",
-     "target": "ResearchInstitute"
+     "source": "Government",
+     "target": "OEM"
     },
     {
-     "source": "Person",
-     "target": "Organization"
-    },
-    {
-     "source": "Organization",
-     "target": "GovernmentAgency"
-    },
-    {
-     "source": "Organization",
-     "target": "EVManufacturer"
+     "source": "RegulatoryFramework",
+     "target": "OEM"
     }
    ],
-   "attributes": []
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "restrictive"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low"
+    },
+    {
+     "name": "material",
+     "type": "text",
+     "description": "Mineral or technology constrained"
+    }
+   ],
+   "family": "causal",
+   "valence": "directional",
+   "direction_semantics": "source regime/government restricts target's access"
+  },
+  {
+   "name": "ENABLES",
+   "description": "Battery technology, infrastructure operator, or policy framework enables OEM product or market ex...",
+   "source_targets": [
+    {
+     "source": "BatteryTechnology",
+     "target": "OEM"
+    },
+    {
+     "source": "ChargingInfrastructureOperator",
+     "target": "OEM"
+    },
+    {
+     "source": "RegulatoryFramework",
+     "target": "OEM"
+    },
+    {
+     "source": "BatteryTechnology",
+     "target": "EVProduct"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "enabling"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low"
+    },
+    {
+     "name": "mechanism",
+     "type": "text",
+     "description": "Cost reduction / Range / Charging speed / Compliance"
+    }
+   ],
+   "family": "causal",
+   "valence": "directional",
+   "direction_semantics": "source technology/infrastructure enables target product or expansion"
+  },
+  {
+   "name": "INFLUENCES",
+   "description": "Geopolitical or macro shock (e.g., oil price spike from Iran war) shifts consumer or OEM behavior...",
+   "source_targets": [
+    {
+     "source": "Government",
+     "target": "OEM"
+    },
+    {
+     "source": "Government",
+     "target": "RegulatoryFramework"
+    },
+    {
+     "source": "RegulatoryFramework",
+     "target": "OEM"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "supportive/adverse"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "high/medium/low"
+    },
+    {
+     "name": "mechanism",
+     "type": "text",
+     "description": "Fuel price / Trade barrier / Subsidy change"
+    }
+   ],
+   "family": "influence",
+   "valence": "directional",
+   "direction_semantics": "source macro/policy event influences target's adoption or strategy"
   }
  ],
- "analysis_summary": "本报告聚焦2035年前全球电动汽车产业趋势，核心叙事围绕中国EV品牌（以BYD为代表）通过激进价格战和全球建厂（泰国、巴西、土耳其）超越特斯拉、挤压本土品牌（VinFast推迟东南亚扩张）的竞争格局，同时叠加英国2030、欧盟2035等ICE禁售政策、关税博弈（欧盟对中国EV加征关税）、以及端到端自动驾驶与SDV的技术竞赛。文本涉及的角色高度多元化：EV制造商（BYD、Tesla、Hyundai、VinFast、Volkswagen）、子品牌（Kia、Genesis）、技术供应商（Mobileye、Siemens）、多国政府与政党（英国政府、欧盟、巴西、泰国、土耳其政府、工党）、研究机构（TrendForce）、媒体（BBC、Electrek），以及评论员和公众消费者。因此设计了8个具体类型（EV制造商、子品牌、技术供应商、政府机构、政党、研究机构、媒体、行业分析师）和2个兜底类型（Person、Organization），关系类型覆盖品牌归属、技术供应、政策制定、市场竞争、媒体报道、公开评论、战略合作和人员隶属，能够支撑围绕价格战、海外建厂、政策争议、技术路线等热点的多主体社媒舆论模拟。"
+ "analysis_summary": "本预测问题是全球电动车产业2026–2035的演化轨迹，覆盖技术路线、产业链、政策与消费市场四大维度。actor 阵容高度集中在产业实体（OEM×10、Government×2），并隐含电池/矿产/基础设施/法规等支撑性主体。因此本体采用9个领域专属类型：OEM、BatterySupplier、RawMaterialProducer（替换原Organization以体现产业链分工）、Government（保留）、EVProduct、BatteryTechnology、ChargingInfrastructureOperator、RegulatoryFramework、CriticalMineralExportRegime。其中 Government 与 Organization 类型被替换为更具区分度的产业链专属类型，避免通用兜底稀释领域信号。关系设计覆盖：竞争（COMPETES_WITH）、监管（REGULATES、TRADE_DEFENSE_INVESTIGATION、SUPPORTS、CONSTRAINS）、交易（SUPPLIES、DEPENDS_ON、PARTNERS_WITH）、传导机制（ENABLES、INFLUENCES），并为关键边附带 sentiment/strength/since_date 等可检索属性，使图谱既可索引实体关系，也可刻画油价冲击、政策反转、技术替代等因果链。已注入的角色关系（EU ↔ BYD、EU ↔ VW、BYD ↔ Tesla/VW、BYD ↔ 锂矿、Toyota ↔ 锂矿、中政府 → BYD、Hyundai-Kia ↔ Tesla、Stellantis ↔ Ford、GM ↔ Ford）均可在上述类型与关系中实例化。"
 }

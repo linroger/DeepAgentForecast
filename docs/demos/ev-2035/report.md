@@ -1,355 +1,696 @@
-# 未来预测报告
+# Global Electric Vehicle Industry Trajectory 2026–2035: Bifurcation, Technological Pivots, and the Reshaping of an Industry at an Inflection Point
 
-> 基于模拟预测的未来趋势与风险分析
+<!-- binary-forecast-block:start -->
+## Part 1 — Binary Forecasts
+
+<!-- viz:charts/binary_forecast_dotplot.html -->
+![Binary Forecasts — P(yes) with confidence](demos/ev-2035/charts/binary_forecast_dotplot.png)
+
+*Binary Forecasts — P(yes) with confidence*
+
+Independent binary (yes/no) forecasts, each with a probability and an objective resolution test (metric · threshold · date · source). Probabilities express genuine conviction, not hedging.
+
+| # | Forecast (one sentence) | Prob. | Resolution criteria | Theme |
+|---|---|---|---|---|
+| F1 | Global EV (BEV+PHEV) market share averages below 42% over 2029-2031, per IEA Global EV Outlook data. | 42% | Compute average global BEV+PHEV market share across 2029, 2030, and 2031 calendar years as published in IEA Global EV Outlook 2032; metric = global EV market share; threshold = <42%; resolution source = IEA Global EV Outlook. | global-adoption-trajectory |
+| F2 | US EV market share reaches above 7% in at least one quarter of 2027 according to Cox Automotive Kelley Blue Book quarterly data. | 45% | Cox Automotive Inc. quarterly EV market share reports for any of Q1, Q2, Q3, or Q4 2027; metric = EV share of new US vehicle sales; threshold = >7.0%; resolution source = Cox Automotive Inc. quarterly EV sales report. | us-policy-reversal |
+| F3 | The final EU 2035 CO2 framework retains a target stricter than 90% emissions reduction (i.e., ≥95%) by end of trilogue in 2027. | 18% | EU Council and Parliament-adopted CO2 emissions performance standard for new passenger cars effective 2035; metric = percentage CO2 reduction vs 2021 baseline; threshold = ≥95%; resolution source = Official Journal of the European Union final regulation text. | eu-policy-reversal |
+| F4 | LFP captures more than 65% of global EV battery deployments in 2030, per BloombergNEF or SNE Research annual installation data. | 72% | Annual global EV battery installations by chemistry for calendar year 2030; metric = LFP share of EV battery deployments; threshold = >65%; resolution source = BloombergNEF or SNE Research annual battery market share report. | battery-chemistry |
+| F5 | Toyota launches a solid-state battery-equipped vehicle in limited production (under 10,000 units annually) by December 31, 2028. | 55% | Toyota Motor Corporation official press releases confirming sale/delivery of solid-state battery-equipped vehicle; metric = unit volume in first 12 months; threshold = ≥1 unit and ≤10,000 units; resolution source = Toyota IR releases or Idemitsu Kosan disclosure. | solid-state-timeline |
+| F6 | China accounts for at least 60% of global EV production volume in 2030, per BloombergNEF or Rystad country-level data. | 62% | Annual global passenger EV (BEV+PHEV) production volume by country for 2030; metric = China share of global EV production; threshold = ≥60%; resolution source = BloombergNEF EV Outlook or Rystad Energy country dataset. | geopolitical-fragmentation |
+| F7 | California's Advanced Clean Cars II (ACC II) waiver survives legal challenge with the District of Columbia District Court declining to vacate it by December 31, 2026. | 32% | District Court for the District of Columbia final judgment on ACC II waiver challenge; metric = court ruling on the merits; threshold = denial of vacatur / waiver remains in legal force; resolution source = PACER docket or court opinion publication. | us-state-level-policy |
+| F8 | No comprehensive US federal EV purchase incentive (≥$5,000 per vehicle) is enacted into law between 2027 and 2030, inclusive. | 78% | Enacted US federal statute or binding Treasury regulation establishing a per-vehicle EV purchase credit of ≥$5,000; metric = law/regulation effective date; resolution source = US Congress.gov legislation tracker and IRS regulations publication. | us-policy-reversal |
+| F9 | Lithium-ion battery pack price (volume-weighted average) falls below $100/kWh on a real basis by end of 2027, per BloombergNEF annual battery price survey. | 62% | BloombergNEF annual Lithium-Ion Battery Price Survey for calendar year 2027; metric = volume-weighted average pack price (real USD); threshold = <$100/kWh; resolution source = BloombergNEF Battery Price Survey 2027. | battery-cost |
+| F10 | EU BEV market share exceeds 35% in any quarter between Q1 2028 and Q4 2028, per ACEA/EEA monthly registrations data. | 38% | ACEA/European Environment Agency monthly new passenger car registrations data; metric = BEV (battery-electric only, excluding PHEV) share of new registrations; threshold = >35% in any single month of 2028; resolution source = ACEA monthly press releases. | eu-policy-reversal |
+| F11 | BYD produces more than 2 million vehicles at overseas (non-China) facilities during calendar year 2030, summed across Thai, Brazilian, Hungarian, and Turkish plants per BYD IR disclosures. | 32% | BYD Company Limited annual report or operating data disclosure for fiscal year 2030; metric = aggregate passenger vehicle production at non-China facilities; threshold = >2,000,000 units; resolution source = BYD annual report or HKEX filings. | chinese-export-expansion |
+| F12 | Global passenger EV (BEV+PHEV) market share surpasses 50% on a full-year basis in 2035, per IEA Global EV Outlook 2036. | 40% | IEA Global EV Outlook 2036 publication; metric = global EV share of new passenger vehicle sales for calendar year 2035; threshold = >50%; resolution source = IEA Global EV Outlook 2036. | long-horizon-adoption |
+
+_12 forecasts; 3 high-conviction (≥70% or ≤30%); 12 with objective criteria._
+<!-- binary-forecast-block:end -->
 
 ---
 
-## 预测场景与核心发现
+## Part 2 — Framework & Synthesis
 
-本报告基于对全球电动汽车产业2035年前演进路径的模拟预测，从技术路线、竞争格局、政策走向和消费市场四个维度，提炼出以下核心发现。模拟世界呈现的不是线性外推的产业现状，而是一幅由多股力量——中国车企的全球化扩张、欧洲的规则化防御、技术供应商的路线分化、各国政策的加速收紧——共同塑造的复杂图景。以下逐层展开。
+### Analytical Framework: Why a Four-Scenario Structure Anchored on Bifurcation
 
-**核心发现一：全球电动汽车产业格局已发生"权力交接"，2025年成为关键分水岭**
+The framework pairs the following four scenario "buckets" against the Part-1 spine:
 
-模拟结果显示，到2025年全球新能源汽车销量已攀升至2053万辆的历史峰值，其中最具标志性意义的事件是比亚迪（BYD）在全球电动汽车市场完成了对特斯拉的反超。
+### The 2026 Baseline: Where the Industry Stands
 
-> "BYD surpassed Tesla in the global EV market in 2025, with sales reaching 20.53 million vehicles."
-> "BYD became the global leader in the EV market in 2025."
-> "The BBC reports that BYD has surpassed Tesla to become mainstream in EVs."
+Within that headline, **China accounts for ~63% of global EV volume**, with domestic NEV penetration reaching **53% of new-car sales** [S10].
 
-这一变化的深层含义远超企业排名的更替：它意味着全球电动汽车产业的主导权已从"硅谷式创新叙事"转向"中国式垂直整合+成本控制+迭代速度"的范式。比亚迪海鸥车型以约6.98万元的入门价将A级电动车的价格门槛大幅压低，直接挤压了二线品牌的生存空间。模拟世界中，市场研究机构TrendForce明确捕捉到了这一拐点的产业含义——全球新能源车销量从原有的增长曲线跃升至2053万辆的纪录高位。
+This trifurcation — China saturated, Europe policy-driven, US consumer-laggard — is the empirical foundation for the bifurcated-acceleration and Western-plateau scenarios. Global volume leadership is now a Chinese phenomenon, with two firms — **BYD and CATL — jointly commanding ~55.6% of global EV battery installations** [S8] — anchoring the supply side in the same geography that already dominates the demand side.
 
-**核心发现二：电池技术路线呈现"渐进式创新主导、固态电池过渡突破"的多元化图景**
+This makes the US quarter-by-quarter trajectory the most informative early indicator for distinguishing the Western Plateau scenario from a deeper consumer-rejection outcome.
 
-模拟世界中，被采访的技术专家和研究机构对2035年前最可能实现规模化突破的电池路线存在显著分歧，这一分歧本身就是预测的核心信息：
+### Causal Logic: How the Key Drivers Map to the Spine Probabilities
 
-TrendForce在其Twitter平台回答中明确表态："固态电池是最有可能在2030-2035年间实现规模化突破的技术路线。"理由是头部企业研发投入已形成规模，固态电池在能量密度（可达500Wh/kg以上）、安全性、循环寿命上具备代际优势。欧盟受访者也倾向于固态电池路线，并指出"丰田、宁德时代、QuantumScape、辉能科技等头部企业均已锁定2027-2030年量产窗口"。
+**1.
 
-然而，全球电动汽车产业垂直媒体提出了截然不同的判断："最有可能实现规模化突破的将是磷酸铁锂（LFP）化学体系的能量密度持续优化路径，以及与之配套的800V高压平台与碳化硅（SiC）功率半导体应用"。Mobileye技术供应商同样认为："半固态电池已在2024-2025年实现小规模量产，但全固态电池的规模化突破更可能在2030年代中后期。"
+The single largest empirical input to the distribution is the observation that **no Western OEM has yet demonstrated the ability to compete with Chinese LFP-based vehicles on cost-per-kWh delivered to the consumer**. This is the reason the Western Plateau is the modal scenario: even with strong policy ambition in Europe and the IRA in the US, the consumer-facing cost gap implies that Western markets plateau below the policy-target range.
 
-综合模拟世界各方的判断，可以预见：未来十年技术路线将呈现"三轨并行"的格局——LFP+800V+SiC占据中低端与快充主流市场、固态/半固态电池在高端长续航车型率先突破、钠离子电池覆盖入门级与储能场景；氢燃料电池则因制氢成本和加氢站基础设施的瓶颈，被挤压至商用车（长途重卡、港口、矿山）与工业脱碳场景。
+**2.
 
-**核心发现三：自动驾驶技术正经历从"模块化架构"向"端到端神经网络"的范式转移，但商业化面临系统性瓶颈**
+This is why even the most aggressive Western onshoring scenarios (e.g., the IRA's FEOC rules) cannot fully eliminate Chinese content from Western EV value chains.
 
-模拟世界清晰呈现了自动驾驶技术路线的分化与演进。一方面，端到端自动驾驶作为2025年的技术竞争焦点，正在从传统的模块化架构向单一神经网络的端到端模型转移。
+**3.
 
-> "End-to-End Autonomous Driving is shifting from a traditional modular architecture to a single neural network end-to-end model."
-> "Volkswagen is focusing on End-to-End Autonomous Driving as a technological race focus for 2025."
-> "Volkswagen is developing L4-level autonomous driving on the ID. Buzz."
-> "Volkswagen is partnered with Mobileye for autonomous driving technology."
-> "Chinese brands are betting on end-to-end intelligent driving."
+The Iran war that began on **February 28, 2026 with US and Israeli strikes** [S27] introduces a counter-intuitive dynamic: **geopolitical oil shocks historically accelerate EV adoption rather than retard it**, because consumer and corporate buyers hedge against fuel-price volatility by locking in electricity-fueled transport. This dynamic strengthens both Bifurcated Acceleration (by helping Europe hit its targets) and Western Plateau (by preventing demand collapse in the US) while leaving the Technology Disappointment scenario relatively unchanged.
 
-模拟中呈现出两条并行的技术路线——单车智能（SAD）与车路云一体化（i-VICS）——同时展开竞赛。中国品牌押注端到端智能驾驶，欧洲传统车企（以大众为代表）则选择与Mobileye合作开发L4级自动驾驶。在比亚迪、大众、现代等行业参与者的战略选择背后，模拟揭示了长期成功的两大核心要素：
+**4.
 
-> "Long-term success depends on software capabilities and depth of vertical integration."
+However, **Tesla's NACS adoption by Ford, GM, and Rivian**, plus state-level California and New York mandates, create a floor under port-to-EV ratios in the largest US markets that makes a complete consumer-rejection scenario unlikely.
 
-然而，被采访的各方对2035年高阶自动驾驶渗透率的预测都较为审慎：TrendForce预计15-25%，欧盟受访者预测L3级15-25%、L4级（高速ODD）5-10%，Mobileye判断25-35%且区域分化明显，中国汽车产业媒体判断中国可能达到45-55%。综合各方观点，L4级在私域乘用车的渗透率预计不超过15%，主要集中于Robotaxi、高速干线、限定ODD场景。核心瓶颈按重要性排序依次为：安全验证体系的统计学充分性、跨区域监管碎片化、长尾场景处理、激光雷达与高算力芯片成本、以及商业模式与责任边界问题。
+### Technology: LFP and Sodium-Ion Win by Default, Not by Breakthrough
 
-**核心发现四：政策走向呈现"欧洲规则化收紧、中国加速出海、各国竞合博弈"的复杂态势**
+The implication for the spine: the **Western Plateau scenario is the modal outcome precisely because Western OEMs have over-invested in NMC-heavy packs chasing energy-density parity with internal combustion**, while Chinese OEMs have optimized for cost-per-kWh-delivered. By the time solid-state achieves commercial scale (if ever in this window), LFP will have cemented a decade of cost-learning and manufacturing scale that no new chemistry can displace within a five-year horizon.
 
-模拟世界在政策维度上展现出三类截然不同的演进路径，且彼此深度联动。
+### Regional Bifurcation: The Structural Shape of 2026–2035
 
-第一类，欧洲正以前所未有的力度推进2035年新车零排放目标，并通过规则工具构建"防御+开放"的双层体系：
+The four-region disaggregation is the framework's empirical backbone:
 
-> "2023年生效的Regulation (EU) 2023/851确立了2035年新车CO2零排放目标，所有成员国必须遵守。"
-> "2024年10月终裁的中国BEV反补贴税（最高35.3%）由欧盟委员会统一征收。"
-> "CBAM（碳边境调节机制）2026年1月1日进入全面实施阶段。"
-> "ICE燃油车 has a ban in Norway starting in 2025."
-> "The UK government reaffirmed the 2030 ICE ban target."
-> "The Labour government reinstated the 2030 ban for ICE燃油车 in the UK."
+- **China**: From volume saturation to a hardened winner-take-most structure.
+- **Europe**: Policy-driven adoption with significant infrastructure risk.
+- **United States**: Consumer-laggard with structural constraints. Recovery depends on state-level mandates (California ACC II, NY, etc.) and on whether the Trump administration's tariff regime produces domestic manufacturing capacity or simply raises prices.
+- **Emerging markets (India, Southeast Asia, Latin America, Africa)**: A fourth path that the spine does not separately model, but which is captured implicitly in the Bifurcated Acceleration scenario via Chinese export penetration.
 
-值得注意的是，工党政府将此前推迟的2035年禁燃时间表重新恢复至2030年，并通过书面议会声明予以确认；挪威则已在2025年实质完成禁燃。这构成了模拟世界中欧洲政策最激进的两极。
+### Policy Inflection Points: Five Decisions That Compound
 
-第二类，中国车企正以"本地化建厂+技术合作+软性出海"的组合策略应对欧洲的关税壁垒。比亚迪的全球化布局是这一策略的典型缩影——其首个全资海外工厂落地泰国（年产15万辆，已于2024年中期投产），同时将乌兹别克斯坦、巴西、土耳其纳入产能版图，并通过10亿美元投资在土耳其建立年产15万辆的工厂以规避欧盟关税。模拟记录显示，比亚迪甚至推迟了原计划2025年底投产的匈牙利工厂，将欧洲生产重心转向土耳其。
+The five policy events that most directly shape the spine are:
 
-> "BYD is investing $1 billion in a production facility in Turkey with an annual capacity of 150,000 vehicles to avoid European Union tariffs."
-> "BYD has a target of selling 1 million overseas cars by 2025."
-> "BYD's facility in Thailand has a capacity exceeding 300,000 vehicles per year when combined with Uzbekistan and Brazil."
+5. **Critical mineral trade policy (IRA FEOC, EU CRMA, Indo-Pacific framework)**.
 
-第三类，新兴市场国家（东南亚、印度、巴西）成为产业链重构的重要节点，但部分本土玩家在与中国品牌的价格战中节节败退。模拟世界中，越南的VinFast是这一趋势的典型案例：
+These five events **compound rather than compete**. Conversely, an EU framework strengthening combined with sustained IRA-equivalent US state-level policy creates the conditions for Bifurcated Acceleration in the West while China continues to dominate volume.
 
-> "VinFast has indefinitely postponed its expansion to Southeast Asia due to inability to compete with Chinese brands on price."
-> "VinFast is unable to compete with Chinese brands on price."
+### Prediction-Market and Forecast-Platform Anchors
 
-这一现象预示着，在2035年前的全球电动汽车消费市场中，二线品牌的淘汰潮将集中发生在无法与中国品牌进行价格竞争、且缺乏独特技术壁垒的区域市场。
+Where prediction-market data is available (Polymarket, Kalshi, Metaculus), the framework has cross-checked the spine against external probability aggregations.
 
-**核心发现五：消费市场结构正经历剧烈的区域分化与价格重构**
+The framework weights prediction-market signals as **informative but not authoritative**, because (a) market liquidity in long-horizon EV contracts remains thin, (b) markets are subject to sentiment-driven overshoot in either direction, and (c) the spine's regional disaggregation is more granular than any single market contract. The market signals are used primarily as a **sanity check** against the spine's modal probabilities, not as direct probability inputs.
 
-模拟世界呈现出极为清晰的区域市场分化图景，且这种分化并非线性增长，而是反映了不同区域的能源结构、政策力度与产业基础的差异：
+### Critical Mineral Chokepoints: The Hidden Floor Under Every Scenario
 
-> "Global EV sales saw a 40% year-over-year increase by mid-2025, with Europe experiencing 22% growth."
-> "Germany's BEV sales grew by 37% in March 2025."
-> "Italy's BEV sales surged by 64% in March 2025."
-> "The United Kingdom's BEV sales surpassed 100,000 units in a single month."
+Across all four scenarios, **lithium, cobalt, nickel, graphite, and manganese supply chains** function as the binding constraint. The IRA's FEOC rules and the EU's CRMA are best understood as **margin-shifting policies** rather than **decoupling policies**: they raise the cost of Chinese content in Western EVs but do not eliminate it.
 
-意大利64%、德国37%、英国单月突破10万辆的爆发式增长，与中国市场14%的BEV均价同比降幅（2024年）形成鲜明对比——欧洲在加速渗透，而中国已进入存量博弈与价格血战。
+### Defending the Spine
 
-> "The average price of BEVs in China decreased by 14% in 2024."
-> "BYD is leading price reductions in China's EV industry."
-> "BYD is in a price war that forces smaller competitors like Hyundai Motor Group to sell below cost."
+Removing any one of these indicators (e.g., a stronger-than-expected EU framework outcome) shifts probability mass toward Bifurcated Acceleration but does not displace Western Plateau as the modal outcome unless **multiple** indicators move simultaneously.
 
-模拟世界中，价格战的传导效应已超出中国本土边界——现代汽车集团被描述为被迫以低于成本的价格销售，这预示着二线国际品牌将首先在中国市场的价格压力下失去盈利能力，进而被迫收缩战线。现代的对策是到2030年实现全球销售555万辆，并在2025-2030年间投入553亿美元（77.3万亿韩元），同步扩张美国HMGMA工厂（二期增加20万辆产能）、推出IONIQ 3进军欧洲大众市场，并以SDV（软件定义汽车）和下一代电池作为技术赌注。
+This is a low-probability but non-zero outcome, reflecting the inherent incompleteness of any four-scenario taxonomy.
 
-**核心发现六：中国车企的全球化呈现"中端突破、高端受阻"的清晰路径**
+### Conclusion: Why Bifurcation Is the Spine's Central Claim
 
-模拟世界中被采访的多方观点高度一致：中国车企在2035年前将在全球中端及中高端市场建立显著竞争优势，但在高端豪华细分市场（BBA、保时捷所占据的区间）建立稳固地位仍面临结构性挑战。
+Chinese volume dominance is locked in by cost-curve and supply-chain dynamics that no Western policy can reverse within the window. European policy ambition is real but execution-risky, making Bifurcated Acceleration a credible but not certain outcome. US adoption remains consumer-constrained and policy-volatile, anchoring Western Plateau as the modal scenario.
 
-> "中国车企的优势主要体现在三方面：一是垂直整合的供应链与成本控制，二是软件定义汽车（SDV）迭代速度（典型开发周期约18-24个月，显著短于欧洲车企的36-48个月），三是智能化用户体验。"
+## Part 3 — Appendix: Detailed Analysis
 
-TrendForce明确判断："我们预计2030年前后，中国头部车企（BYD、吉利系、奇瑞系）将在欧洲与东南亚中端市场形成10-15%份额的稳固立足点，但高端市场（30万元以上区间）的全球突破仍需观察2028-2032年的本地化与品牌战略执行成效。"
+_The detailed, section-by-section analysis supporting Parts 1–2 follows._
 
-这一预测的支撑数据极为扎实：2025年比亚迪以约460万辆NEV销量登顶全球，是中国车企出海的明确产业信号。但欧盟反补贴税（最高35.3%）、CBAM碳边境调节机制、GDPR数据本地化、美国IRA法案供应链溯源要求等多重合规壁垒，构成了中国高端品牌进入欧美市场的"规则性天花板"。
+## The 2026 Baseline: An Industry Caught Between Acceleration and Collapse
 
-**核心发现七：产业链将围绕"软件能力+垂直整合深度"重新洗牌**
+### The Volume-Leadership Center of Gravity: How China Captured 63% of Global EV Sales and What 53% Domestic Penetration Reveals About the Next Phase
 
-模拟世界揭示了一个贯穿所有核心发现的底层规律——长期竞争的决定因素已从硬件层面的电池能量密度、续航里程，转移至软件能力与垂直整合深度。
+The headline figure of 2025 — roughly 20 million EVs sold globally representing 25% of all new car sales — obscures the most important structural fact about the industry entering 2026: the global EV market is no longer global in any meaningful competitive sense. [S7] It is a Chinese-centered market with peripheral regions attached. China alone absorbed 63% of worldwide EV volume in 2025 [S10], while reaching 53% domestic EV penetration in its own new-car market [S10].
 
-> "Long-term success depends on software capabilities and depth of vertical integration."
+BYD's H1 2026 cumulative sales of 1,808,511 units declined 15.72% year-over-year, the first sustained contraction since the company's scale-up, signaling that the Chinese EV domestic market has reached saturation. [S17] The simultaneous overseas surge — June 2026 alone saw 175,349 units shipped abroad, up 94.73% year-over-year — is not opportunistic but a forced pivot. [S17] The Thai Rayong factory inaugurated in July 2026, with Brazilian, Hungarian, and Turkish facilities under development, is the physical manifestation of this pivot. [S17]
 
-这一判断意味着：拥有全栈自研能力（从电芯到SiC功率器件、从座舱OS到智驾算法）的玩家将获得结构性优势；缺乏软件能力和深度垂直整合的二线品牌，将在价格战与合规成本的双重挤压下被加速淘汰。比亚迪的刀片电池、宁德时代的麒麟电池、华为加持的智能座舱与智驾方案——这些是模拟世界中可观察到的"垂直整合+软件能力"双轮驱动的成功范本。
+A second-order consequence: the Chinese OEM landscape is bifurcating into two groups that the Western press routinely conflates. The risk for Western trade-defense planners is that the export wave is led by three or four scaled players with cost structures Western OEMs cannot match, not by a diffuse Chinese challenge.
 
-**核心发现八：标准与碳关税将走向"区域趋同、全球碎片化"的双轨格局**
+### The American Demand Cliff: Quantifying the 2025–2026 Collapse and the State-Mandate Floor Beneath It
 
-模拟世界中，被采访各方对未来十年是否会出现"统一的电动汽车碳关税或技术标准"问题给出了高度一致的判断：碳关税将走向区域协调，技术标准将形成"区域标准+事实标准"的双轨格局，而非全球完全统一。
+The market reaction was immediate and severe. The downward momentum continued into 2026: Q2 2026 EV sales reached 247,226 units [S5], down 20.5% year-over-year, with EV share of new vehicle sales collapsing to 5.8% [S5] — a dramatic reversal from the Q3 2025 peak of 10.6% [S5].
 
-> "2026年全面实施后，CBAM大概率将向电池全生命周期碳足迹、氢能、绿钢、合成燃料等扩展，2030年前形成'CBAM+'矩阵。"
-> "分裂为两个体系的风险——一个以中国为中心的标准生态和一个以欧美为中心的标准生态——是真实存在的，欧盟将在中间寻求战略自主。"
-> "2027-2030年间是否出现跨大西洋或跨太平洋的'标准互认'机制，将是观察全球EV产业治理体系走向的核心指标。"
+Its removal pushed many mass-market EVs above the psychological price thresholds that have historically constrained US adoption.
 
-欧盟电池法规（EU 2023/1542）已建立全球首个强制性的电池碳足迹、回收材料含量、供应链尽职调查统一规则，联合国UNECE的WP.29框架正在推动L3以上自动驾驶认证标准协调，UN-R157 ALKS的后续演进可能成为自动驾驶领域的全球事实标准——但完全统一的电池规格、充电接口、数据格式在十年内仍面临较大挑战。
+A critical and underappreciated floor exists beneath the collapse. EPA* established that plaintiffs have standing to challenge the waiver.
 
-**总结与前瞻判断**
+The tariff forecloses Chinese price competition in the US, but in doing so it also removes the price-discovery mechanism that historically forced US OEMs to compete on cost. The result is a closed market that protects uncompetitive domestic production while eliminating the main lever (Chinese price pressure) that would force legacy OEMs to rationalize EV programs more aggressively.
 
-综合模拟世界的全貌，2035年前的全球电动汽车产业将呈现以下结构性特征：第一，市场规模将持续放大，但增长动力将从"政策驱动"转向"产品力+成本力驱动"；第二，技术路线将多元化并存，渐进式创新与颠覆性创新并行推进，固态电池、高压平台、LFP化学体系各自占据不同的细分市场；第三，竞争格局将经历剧烈洗牌，二线品牌在价格战中大规模淘汰，中国品牌完成从中端到中高端的全球化突围，但在高端豪华市场仍受到品牌护城河与规则壁垒的双重制约；第四，政策走向将围绕碳排放法规、关税工具与技术标准形成区域化的"规则竞争"，而非全球统一治理；第五，消费市场将出现显著的"区域分化加速"——欧洲在政策推动下加速渗透，中国在价格血战中进入品牌化重组期，新兴市场成为中国产能出海的主战场。
+### The European Policy Reversal and Its Industrial-Strategic Meaning
 
-模拟世界中最为关键的一个二阶效应是：被访技术供应商Mobileye警告"获胜"的定义必须以安全指标为标准，而非演示视频的流畅度。这一观点预示着，随着L3/L4级自动驾驶渗透率提升，2030-2035年间可能出现的重大安全事故将成为重塑产业格局的"黑天鹅"——它可能延缓监管进程、改变消费者信任结构，并重新定义不同技术路线的相对竞争优势。
+The second-order effect on Chinese exports is paradoxical. The December 2025 EU proposal was partly driven by concerns about Chinese competitive pressure from OEMs such as BYD, reducing regulatory pressure on BYD's expansion into European markets. [S1]
 
-整体而言，2035年前的全球电动汽车产业不是一条通往"全面电动化"的坦途，而是一场涉及技术路线、政策工具、产业链布局与品牌价值的全方位竞合博弈。掌握"软件能力+垂直整合深度"双轮驱动力的玩家，将在这场博弈中占据结构性优势。
+### The Iran War Paradox: How a Geopolitical Shock Reshaped Both Demand and Cost Simultaneously
 
-## 人群行为预测分析
+The 2026 Iran war — beginning February 28, 2026 with US and Israeli strikes [S27] — has produced a counterintuitive set of effects on the EV industry that the standard narrative misses. The July 8–11, 2026 ceasefire collapse and renewed tensions [S29] indicate that oil-price volatility will persist through at least 2027, sustaining consumer interest in EVs even in markets where direct policy support has receded.
 
-模拟世界中，多元角色的Agent——消费者、车企从业者、监管者、研究机构、媒体与投资者——围绕2035年前的全球电动汽车产业展开了密集的行为互动与认知博弈。这些言行不是当下现实的延伸，而是对未来人群行为的预演。本章从消费者购车决策的范式迁移、不同区域人群的行为分化、从业者与企业的战略应对、投资者与媒体的认知错位、以及政策制定者与社会公众的互动五个维度，揭示模拟世界中各色人群是如何"行动"起来的。
+The demand-side effect is real and asymmetric. In the US, used EV sales rose 30% year-over-year in February 2026 [S22] as fuel-price concerns expanded the EV-curious segment among consumers who had previously dismissed the technology. The same dynamic is visible in India, Thailand, and Southeast Asia — oil-importing economies where the second-hand EV market provides a price-discovery mechanism that enables sub-premium-tier adoption without subsidy support. IEA notes growing sales amid the energy crisis linked to Iran war disruptions [S26], suggesting that the IEA's 2026 projection of 23 million EV sales and 30% share is partially supported by war-driven consumer behavior, not just baseline policy assumptions.
 
-**消费者：从"硬件参数比价"到"全生命周期价值评估"的行为范式迁移**
+The cost-side effect cuts in the opposite direction and is structurally more dangerous. This rebound occurred despite battery pack prices continuing to fall — volume-weighted packs at $108/kWh and BEV-specific packs at $99/kWh in 2025 [S6] — because cell manufacturing learning rates and pack design innovations are offsetting raw material cost pressures more than consensus expected. But the offset is not infinite.
 
-模拟世界中被采访的多方Agent高度一致地指出，到2035年消费者购车决策的核心考量将发生一次结构性翻转——从过去十年的"续航、品牌、价格"三要素，迁移至"软件迭代能力、全生命周期成本、补能便利性、残值率与碳足迹"的复合维度。比亚迪官方账号在Reddit平台上给出了三层级时间表：
+The net effect is positive for volume (consumers buy more EVs when oil is expensive) but negative for OEM margins (battery costs rise even as pack-level learning rates continue). Non-integrated OEMs — the majority of Western manufacturers — absorb the margin compression, while vertically integrated players like BYD and CATL, who control roughly 55.6% of global battery installations between them [S8], internalize the shock. This structural asymmetry is why the Iran war, despite creating a one-time demand boost, also accelerates the concentration of value-chain power in the hands of the two players least vulnerable to raw material volatility.
 
-> "在2025-2028年，购车决策仍将以价格、续航、品牌三大传统维度为主；但到2028-2031年，随着智能驾驶辅助系统的普及和充电基础设施的完善，决策权重将明显向软件迭代能力、OTA升级支持周期、智能化体验流畅度转移，硬件配置的重要性相对下降。到2031-2035年，购车决策将进入全生命周期价值评估阶段，消费者更关注车辆残值率、电池衰减保障、软件订阅服务的可持续性以及数据隐私合规性。"
+China holds volume leadership and continues to expand globally, with the export pivot now structurally embedded in BYD's strategy. The US has suffered a policy-driven demand collapse partially offset by state-level mandate floors whose durability is being adjudicated in the courts. Europe has executed a policy reversal that preserves industrial flexibility but undermines the regulatory certainty that BNEF and IEA consensus forecasts depend on. And the Iran war, by simultaneously boosting EV demand and battery raw material costs, has revealed the structural fragility of OEM business models that lack vertical integration into raw materials and cell production.
 
-这一判断的深层含义是：消费者正在从"一次性购买者"演变为"持续运营参与者"，汽车的角色从交通工具向"智能移动空间"转变。TrendForce在Twitter上进一步指出，购车决策的首要考量将变为"软件定义汽车所衍生的生态服务价值"，包括OTA升级带来的功能持续进化、车内AI助理的个人化服务订阅、以及车辆作为移动运算节点参与能源互联网的V2G应用收益：
+---
 
-> "2024年的购车决策仍以续航里程、充电便利性、品牌力为主要权重，但到2035年，我认为软件定义汽车(SDV)所衍生的生态服务价值将成为首要考量。"
+Notes on citations: All quantitative claims in this chapter are anchored to the source indices in the research materials (–). Where a fact could not be precisely verified, the chapter either paraphrases the consensus or marks the claim as a forecast judgment derived from the empirical record rather than a confirmed future event. The chapter deliberately does not quote directly from non-verifiable sources, and treats BNEF and IEA projections as the two primary forecast references for 2026–2035 trajectory questions, with AlixPartners' Chinese brand profitability projection and the European Commission's December 16, 2025 proposal as the two most consequential policy and structural judgments for the 2026 baseline. [S1]
 
-消费者焦虑的"形态"也在模拟世界中发生迁移。ElectricCarWorld垂直媒体明确判断："续航里程会从焦虑点变成非决策因素——就像今天没人问汽油车油箱多大一样。取而代之的核心考量会变成三点：智能驾驶能力（具体来说是高速NOA、城市NOA、L3级别的可用性）、软件生态（OTA升级频率、订阅服务丰富度）、以及整体拥有成本。充电焦虑会演变成智能化焦虑——你的车能持续变好吗？"这一表述精准捕捉了消费者行为模式从"硬件性能敏感"向"软件持续性敏感"的转变。
+## Four Scenarios to 2035: Probabilistic Pathways and Their Probability Distribution
 
-**区域分化：欧洲的"政策驱动型购买"、中国的"存量博弈型购买"与新兴市场的"被动接受型购买"**
+<!-- viz:charts/scenario_probabilities.html -->
+![Scenario Probabilities (ensemble spread)](demos/ev-2035/charts/scenario_probabilities.png)
 
-模拟世界清晰呈现了不同区域消费者行为的根本性分化。欧洲消费者表现出强烈的政策驱动型购买特征，意大利、德国、英国在2025年3月的数据极具说明力——意大利BEV销量同比增长64%，德国增长37%，英国单月突破10万辆。
+*Scenario Probabilities (ensemble spread)*
 
-> "Italy's BEV sales surged by 64% in March 2025."
-> "Germany's BEV sales grew by 37% in March 2025."
-> "The United Kingdom's BEV sales surpassed 100,000 units in a single month."
+### The four-scenario framework: anchoring the distribution
 
-但这一爆发式增长背后隐藏着结构性挑战。欧盟受访者明确指出，欧洲市场存在"政策驱动的电动化"与"使用场景匹配度"之间的落差：
+each requires at least one structural surprise (a trilogue outcome, a court ruling, a battery breakthrough, a tariff escalation) to activate. The aggregate BNEF base-case forecast of 52% global EV share by 2035 sits between Scenario A and Scenario B but leans closer to A [S10]; the IEA's parallel forecast of 23M sales and 30% share in 2026, growing into the next decade despite "regional policy headwinds," reinforces that the central tendency is upward even as the variance widens [S26]. Whether the variance resolves above or below that central tendency depends on a handful of decisions already on the calendar.
 
-> "消费者层面的错位主要表现为政策驱动下的电动化与使用场景的匹配度之间的落差，欧盟2025年3月市场增速22%与全球40%基准之间的18个百分点差距，已经在很大程度上说明了这一点，补贴退坡后总持有成本和充电便利性成为新的决策门槛。"
+### Scenario A — "Bifurcated Acceleration" (modal scenario)
 
-英国工党政府则从政策侧印证了这一观察："消费者对2030年禁售令的反应混合了价格敏感、充电焦虑和对二手车残值的担忧，对政策落地时间表的实际约束力持怀疑态度。"这表明即便在政策最激进的英国市场，消费者的实际购买行为仍受到多维度焦虑的制约。
+Bifurcated Acceleration is the modal scenario: the global industry fragments along regional lines rather than around a single growth rate. The mechanism is straightforward: the trilogue concludes at the 90% framework as the European Commission proposed on December 16, 2025 — the most likely outcome based on the German-Italian-Hungarian coalition's preference for ICE flexibility, the absence of a qualified majority for tighter targets, and the Parliament's resistance likely being insufficient to override the Council [S1]. BYD's overseas pivot scales as projected: June 2026 overseas sales already up 94.73% year-over-year at 175,349 units [S17], with the AlixPartners-base-case projection of tripling overseas production by 2030 toward one-third of the global auto market materializing with no more than friction at EU borders and not at outright tariff blockage.
 
-中国消费者则呈现"存量博弈型购买"特征——价格战与品牌淘汰成为主旋律。模拟世界中：
+The decisive feature of Scenario A is *non-convergence*: the four regional blocs move on different trajectories simultaneously. Emerging markets, especially those exposed to Iran-war-driven oil-price volatility, accelerate through Chinese LFP supply at $99/kWh BEV-specific pack prices [S6], with the Iran war's asymmetric effect on oil-importing economies providing a tailwind that no Western OEM can match at equivalent cost.
 
-> "BYD is leading price reductions in China's EV industry."
-> "The average price of BEVs in China decreased by 14% in 2024."
-> "BYD is in a price war that forces smaller competitors like Hyundai Motor Group to sell below cost."
+### Scenario B — "Western Plateau" (credible alternative)
 
-比亚迪主导的价格战已传导至整个行业生态，14%的BEV均价跌幅叠加比亚迪海鸥6.98万元的入门价，正在系统性地挤压二线品牌的生存空间。中国消费者因此成为全球最"挑剔"的买家——他们已经历过第一轮产品迭代，对智能化、性价比、迭代速度都有更高预期。比亚迪自己承认："消费者层面，目前对电动汽车的接受度仍受限于里程焦虑、电池衰减、充电便利性等已被技术进步部分解决的问题，认知更新滞后于实际产品力进步；同时年轻消费群体对智能化、个性订阅的接受度又显著高于车企的产品供给侧预期。"
+The triggers are concrete. Scenario B does not require absolute decline, only plateau at Western rates that drag the global aggregate down.
 
-新兴市场（特别是东南亚）的消费者行为则更接近"被动接受型"——他们面对的是中国品牌的强势渗透和本土品牌的节节败退。越南VinFast是这一图景的典型案例：
+The aluminum-foil argument for Scenario B: Ford and GM have already taken tens of billions in charges;
 
-> "VinFast has indefinitely postponed its expansion to Southeast Asia due to inability to compete with Chinese brands on price."
-> "VinFast is unable to compete with Chinese brands on price."
+### Scenario C — "Disruptive Acceleration" (upside tail)
 
-这意味着在新兴市场，消费者实际上"用脚投票"了——他们选择了性价比更高的中国品牌，而本土品牌的退场本质上是消费者集体决策的结果。
+Disruptive Acceleration is the upside scenario where a chemistry breakthrough breaks the cost-down pathway's anticipated gradualism.
 
-**从业者：从"硬件制造者"到"软件+生态运营者"的角色焦虑**
+For sodium-ion, the path is also clear but slower: Naxtra's December 2025 launch positioned for cold-climate markets, urban delivery fleets, and stationary storage rather than mass-market automotive [S20] suggests the transition into volume automotive requires multi-year yield improvements and cell-format scaling.
 
-模拟世界中，企业从业者（包括车企、供应商、经销商）的行为反应呈现出明显的两极分化与认知滞后。比亚迪作为头部企业的从业者已经形成"全栈智能出行服务商"的清晰认知，但中尾部企业仍停留在"卷参数、卷价格"的传统思维中。ElectricCarWorld的观察一针见血：
+But the asymmetric upside is real. Note the structural tension: solid-state at commercial viability is a disruptive accelerator but it also benefits Western OEMs that can co-invest or license the technology, partially offsetting Scenario B's Western retreat thesis. This is why Scenario C's weighting is not zero even under adverse policy scenarios.
 
-> "企业层面，认知分化最大：头部企业（比亚迪、特斯拉、华为系）看得很清楚自己要做全栈智能出行服务商，但中尾部企业还在用传统汽车思维做电动车，还在卷参数、卷价格。三方之间最大的错位在于：消费者开始把车当成电子产品来看待，期待持续升级；但很多车企还在用卖硬件的思维造车，研发投入和组织架构都没真正转型。这才是行业最大的隐忧。"
+### Scenario D — "Geopolitical Fragmentation" (downside tail)
 
-传统跨国车企的从业者则普遍表现出"两难焦虑"——既要保燃油车利润、又要投电动化。比亚迪官方账号评论道："传统跨国车企在既要保燃油车利润、又要投电动化的两难中往往两头承压。"这一行为反应在欧洲车企（如大众）的转型路径中表现得尤为突出——大众与Mobileye合作开发L4级自动驾驶，本身就反映了欧洲传统车企对自身软件能力不足的焦虑。
+The mechanism is not a demand collapse but a *supply-side fragmentation*: Chinese OEMs cannot reach Western markets, Western OEMs cannot source from Chinese battery suppliers, and the duplication of supply chains across blocs imposes cost penalties that slow adoption everywhere.
 
-> "Volkswagen is focusing on End-to-End Autonomous Driving as a technological race focus for 2025."
-> "Volkswagen is partnered with Mobileye for autonomous driving technology."
+The autocatalytic binding of fragmentation into Scenario D requires a step change beyond what is already priced into the market: an explicit EU carbon-border tariff adjustment on Chinese-content vehicles, a US secondary-sanctions regime on Chinese battery exports, or a militarized incident in the South China Sea or Taiwan Strait that triggers comprehensive supply-chain decoupling.
 
-供应商群体的行为反应同样发生重要转向。Mobileye等Tier-1供应商在自动驾驶竞赛中的话语权显著提升，而传统的机械部件供应商面临被边缘化的风险。TrendForce在Reddit上的分析揭示了这一趋势："车用存储与HPC芯片的算力竞赛……单车数据吞吐量正在从TB级向PB级跃迁，车规级DRAM、NAND以及高算力SoC的需求增速会显著超越整车销量增速。这意味着价值链利润将从传统机械件向半导体和软件迁移。"
+The scenario's falsification test: a China-US trade détente, an Iran ceasefire that holds, a Canadian-style tariff reversal in a major EU member state, or successful Chinese OEM overseas-factory buildouts (Thai Rayong inaugurated July 2026, Brazilian/Hungarian/Turkish facilities in development ) all reduce the downside weighting. [S29]
 
-**投资者：从"销量乐观主义"到"产业链价值再发现"的行为路径**
+### Cross-scenario falsification milestones
 
-模拟世界中投资者群体的行为反应呈现出"短期高估、长期低估"的时间维度错位。TrendForce精准捕捉到了这一行为模式：
+First, the EU trilogue conclusion on the 2035 framework, expected late 2026 or H1 2027, will most likely land at 90% CO₂ reduction (the Commission's December 2025 proposal) with Parliament resistance insufficient to override Council preference [S1];
 
-> "投资者层面，分歧最为明显——一派认为电动车已是成熟产业、估值过高，类比2010年代的太阳能产业；另一派则看好AI、机器人、能源互联网与电动车的深度融合，认为头部企业的长期价值远未充分体现。"
+an escalation toward Strait of Hormuz closure creates stagflation-type shocks where EV demand rises (oil-price effect) but battery supply contracts (mineral disruption) [S29]. a delayed commissioning schedule forces Scenario A's export-pivot mechanism to weaken.
 
-更具体地看，模拟世界中的投资者行为呈现三个层级：第一层，对2025-2026年盈利兑现的预期过于乐观，忽视了价格战对毛利率的压制；第二层，对2027-2030年间的产业链合规成本（CBAM、IRA、反规避调查）准备不足；第三层，对2030年后的L4商业化、储能V2G、Robotaxi等长期价值释放估计不足。
+### The combined scenario weight and the central forecast
 
-> "资本市场对2025-2026年盈利兑现的预期过于乐观（忽视了价格战对毛利率的压制），同时对2030年后的L4商业化、储能V2G、Robotaxi等长期价值释放估计不足，估值波动率在2025年明显放大。"
+Three structural insights emerge from this scenario framework that the next six chapters should reflect. Second, the bifurcation between China (accelerating regardless) and the West (contingent on policy) means that *two scenarios* — Bifurcated Acceleration and Western Plateau — together carry the dominant share of likelihood mass, with Disruptive Acceleration and Geopolitical Fragmentation as tails in opposite directions whose combined residual weighting materially widens the forecast distribution. Third, the entire scenario space assumes the chemistry stack resolves around LFP and sodium-ion rather than solid-state as the volume-tier foundation; the technology chapter that follows should treat this assumption as a high-confidence central case rather than a foregone conclusion, with Scenario C as the specific pathway by which the assumption could be falsified.
 
-投资者行为的另一个重要转向是"从整车厂向产业链关键节点迁移"。TrendForce识别出三大最具潜力的赛道：电池回收与材料再生、车用SiC/GaN半导体、V2G能源聚合服务、AI驱动的电池管理与车队能源优化软件。
+## Technology Evolution: Why LFP and Sodium-Ion — Not Solid-State — Define the 2026–2035 Battery Stack
 
-> "潜力赛道方面，我认为最具吸引力的领域包括：电池回收与材料再生(redwood materials等已具规模)、车用半导体与第三代半导体(SiC、GaN在800V平台的渗透)、V2G能源聚合服务、以及AI驱动的电池管理系统(BMS)与车队能源优化软体。这些领域的共同特征是轻资产、高毛利、且具有跨场景扩展性。"
+### LFP's Quiet Coronation: How a "Fallback" Chemistry Became the Default by 2030
 
-这一行为转向预示着未来十年的资本配置将出现显著的结构性变化——整车厂估值可能持续承压，而上游关键材料、功率半导体、回收与能源服务等"隐形价值节点"将获得超额溢价。
+It will be the consolidation of an already-existing one. LFP's coronation is, in industry terms, fait accompli.
 
-**政策制定者与社会公众：双向互动的"预期管理"行为**
+Three forces combined to produce this outcome, and each one is structural rather than cyclical. The first is cost. BloombergNEF reported volume-weighted battery pack prices at $108/kWh in 2025, with BEV-specific pack prices reaching $99/kWh — a figure that BNEF explicitly attributes to LFP's continued cost-down trajectory [S6]. The second is supply-chain de-risking. LFP's cobalt-free architecture side-steps that exposure entirely, which is precisely the kind of decision-relevant durability that procurement officers at Ford, Volkswagen, and Stellantis weight heavily. The third is thermal and cycle-life performance, where LFP's superior stability translates into warranty and residual-value economics that NCM cannot match at the volume tier.
 
-模拟世界中，政策制定者（欧盟、英国工党政府）的行为反应展现出"明确化时间表+差异化工具组合"的特征。工党政府在2024年7月重启2030年禁售令后，于2025年1月1日发布书面议会声明予以确认：
+This is not a chemistry that will be displaced by a flashy newcomer. It is the platform on which the rest of the industry builds. CATL's Qilin and BYD's Blade Battery — first-generation cell-to-pack structural implementations — are LFP architectures, and they are the production formats already being scaled at multi-hundred-gigawatt-hour capacity. The question for the next decade is not whether LFP consolidates further;
 
-> "The Labour government reinstated the 2030 ban for ICE燃油车 in the UK."
-> "The UK Government published the 2030 Statement regarding phasing out the sale of new petrol and diesel cars."
+### The Sodium-Ion Pivot: Why CATL Is Betting on a Chemistry That Already Lost the Energy-Density Race
 
-挪威更是以2025年为节点在事实上完成了禁燃：
+If LFP is the past's quiet winner, sodium-ion is the present's deliberate gamble. The Naxtra launch is, instead, a strategic response to a single number: 75%. [S20] That is China's lithium import dependence, and it is the figure that has prompted a top Chinese battery executive to publicly urge a sodium-ion hardware pivot to break the country's reliance on foreign lithium supply [S20].
 
-> "ICE燃油车 has a ban in Norway starting in 2025."
+The economics support the strategic logic.
 
-但政策制定者也清醒地意识到，单一政策驱动无法完成系统性转型。工党政府在Reddit上坦承："政策制定者必须同步推进车辆电动化与电网基础设施现代化，两者是互补而非序贯的挑战。"这一表态揭示了未来政策行为的"耦合化"趋势——购车补贴、充电基建、电池回收法规、V2G激励、碳关税必须协同推进。
+" The answer is not Western. It is the chemistry stack that BYD and CATL are already shipping.
 
-社会公众对政策的反应则呈现"短期怀疑、长期接受"的行为路径。工党政府观察到："消费者对2030年禁售令的反应混合了价格敏感、充电焦虑和对二手车残值的担忧，对政策落地时间表的实际约束力持怀疑态度。"但随着时间推移、基础设施完善和产品力提升，社会行为正在向"主动选择电动车"迁移——这一点从英国单月BEV销量突破10万辆、意大利64%的同比增长中可清晰观察到。
+### The Solid-State Dispute: A Binary Catalyst That Will Not Define the Decade
 
-媒体作为政策与企业行为的"放大器"和"翻译器"，在模拟世界中扮演了关键角色。BBC、Electrek、automotiveworld.com等媒体对比亚迪反超特斯拉的密集报道，构成了市场认知转变的关键节点：
+The most contested forecast in the industry concerns Toyota. Without it, Toyota remains a hybrid/EREV-emphasis player rather than a full-BEV competitor.
 
-> "The BBC reports that BYD has surpassed Tesla to become mainstream in EVs."
-> "Electrek reports on BYD's sales performance and market position."
+The case for skepticism is, however, overwhelming. The pattern is not anecdotal — it is structural. New cell architectures face manufacturing scalability, cost, and safety challenges that pilot-line data systematically underestimates.
 
-媒体的报道框架选择本身也在塑造公众认知——从"特斯拉的创新神话"转向"比亚迪的产业现实主义"，这种叙事转换加速了消费者从"尝鲜者"向"主流用户"的行为扩散。
+The steelman case for Toyota is real, however, and must be engaged rather than dismissed. A genuine launch in that window with disclosed cost and energy-density data would force a re-rating of the chemistry stack.
 
-**关键二阶效应：信息不对称催生"赢家通吃"的认知博弈**
+Solid-state captures the premium flagship tier and, possibly, a segment of the long-range SUV market in Japan and Europe. It is determined by policy, cost, and consumer behavior, not by Toyota's cell-format choice.
 
-模拟世界揭示了一个贯穿所有人群行为的二阶效应——信息不对称+时间维度错配正在催生系统性的认知博弈。TrendForce对此有清晰诊断：
+### The Hidden Chokepoints: Why Cell Chemistry Decisions Cannot Escape the Upstream
 
-> "这种三方认知错位的核心根源是信息不对称+时间维度错配——消费者基于营销信息、企业基于战略叙事、投资者基于财务模型，三方对同一产业的理解存在结构性偏差。"
+A chapter on battery chemistry would be incomplete without acknowledging that the chemistry stack is itself a chokepoint, not a free choice. CATL and BYD themselves are not exempt from this leverage — they source upstream lithium and, in the case of certain precursor materials, are themselves subject to MOFCOM licensing.
 
-这一博弈的直接后果是"赢家通吃"行为模式的强化。比亚迪、宁德时代、特斯拉等头部企业凭借更完整的信息链与更长的战略视野，在与消费者、投资者、监管者的多方博弈中占据结构性优势。比亚迪自己总结道："三方错位的核心，在于低估了电动化+智能化双轮驱动的长周期属性——这既不是单纯的消费电子替代燃油车故事，也不是简单的传统制造业升级，而是一场持续20年以上的系统性产业革命。"
+This structure is the most important non-obvious finding for the forecast. It is a function of the structural cost disadvantage that Chinese vertical integration (BYD's Blade Battery + LFP + cell-to-pack + raw material access) confers on every non-integrated Western player.
 
-综合模拟世界中各色人群的行为预演，2035年前的全球电动汽车产业将呈现"消费者分层、从业者分化、投资者结构性转向、政策制定者耦合化、媒体叙事重构"的多维行为图景。决定各方能否在这场博弈中胜出的核心因素，是其"信息整合能力+时间维度视野+跨界协同能力"的综合表现——单一维度的领先者将快速被多维协同者反超。这正是比亚迪在2025年实现对特斯拉反超的深层行为学逻辑，也是未来十年所有参与者必须直面的核心挑战。
+The Megawatt Charging System (MCS) deployment in the Netherlands, California, and Japan represents the parallel infrastructure enabler for commercial-vehicle electrification. The CATL-BYD dominance in cell manufacturing — combined Chinese share at 55.6% of global installations [S8] — means that the MCS-enabled commercial-vehicle transition will also run on Chinese cell technology. The chemistry stack is, in this sense, an industrial-policy stack as much as a technology choice.
 
-## 趋势展望与风险提示
+### The Synthesis: LFP and Sodium-Ion Define the Volume, Everything Else Is Premium
 
-基于模拟世界的多维证据，2035年前的全球电动汽车产业正处在一个"高确定性大趋势+高不确定性细节"的复杂演化阶段。以下从基准情景主线、乐观情景催化剂、悲观情景风险源、二阶效应放大机制与情景敏感性分析四个维度展开系统性的趋势展望与风险提示。
+Residual NCM and high-nickel chemistries retreat to performance-segment niches where energy density remains the binding constraint.
 
-**基准情景下的主线趋势：技术渐进、格局重塑、政策耦合**
+It is a Chinese-dominated, LFP-anchored, sodium-ion-extended structure in which solid-state is a real but bounded premium catalyst. The chemistry choice, in other words, has already been made. What remains is the speed of the cost curve, and on that, the sodium-ion/LFP stack holds the decisive lead.
 
-模拟世界中各方受访者对2030-2035年基准情景的判断高度趋同。TrendForce数据显示2025年全球新能源车销量已达2053万辆的历史峰值，比亚迪以460万辆规模完成对特斯拉的反超，这一拐点本身就构成基准情景的起点。基准情景下，技术路线将沿"液态锂电→半固态→固态"渐进式演进，价格战将在中国与新兴市场持续压制二线品牌生存空间，欧洲在政策驱动下保持22%-40%的同比增长，消费决策将从硬件参数比价迁移至全生命周期价值评估。欧盟、英国工党政府的监管框架将以"技术中立+安全底线+碳排约束"为特征稳步推进——
+## Industry Chain Power Map: The Three-Tier Restructuring of Global EV Competitiveness
 
-> "The UK Government published the 2030 Statement regarding phasing out the sale of new petrol and diesel cars."
-> "ICE燃油车 has a ban in Norway starting in 2025."
+### Tier 1 — Chinese Vertical Integration: BYD and CATL as the Industry's Structural Anchor
 
-基准情景的关键支撑变量包括：BYD等头部企业的"软件能力+垂直整合深度"双轮驱动形成结构性优势、现代汽车集团等二线国际品牌以SDV和下一代电池为赌注进行转型（计划2025-2030年投入553亿美元）、Mobileye等Tier-1供应商绑定头部OEM锁定中长期份额。
+The single most consequential fact about the 2026–2035 EV industry chain is that two Chinese firms — BYD and CATL — together command approximately 55.6% of global EV battery installations [S8]. The economic implication is that battery pack prices fell to $108/kWh in 2025, with BEV-specific packs at $99/kWh [S6], validating LFP's continued cost-down trajectory and concentrating the cell-manufacturing learning curve inside Chinese factories.
 
-**乐观情景催化剂：技术突破与新市场打开**
+BYD's commercial results illustrate the volume position this cost profile supports. BYD reached its 17-millionth cumulative NEV production milestone by July 2026 and inaugurated its Thai Rayong factory in July 2026 [S17]. The H1 2026 cumulative NEV sales figure of 1,808,511 units, down 15.72% year-over-year, signals Chinese domestic market saturation [S17]. The compensating vector is export: BYD's June 2026 overseas sales of 175,349 units grew 94.73% year-over-year [S17], and Brazilian, Hungarian, and Turkish facilities are under development alongside the operating Rayong plant [S17].
 
-模拟世界中识别出三类可能在2027-2030年成为乐观情景催化剂的关键变量。
+CATL's role in this tier is complementary rather than derivative. While BYD is vertically integrated through internal cell production for its own vehicles, CATL is the dominant external supplier with approximately 37%+ global installation share [S8]. CATL launched the Naxtra sodium-ion battery in December 2025 at 175 Wh/kg energy density, targeting low-range applications, cold-climate markets, and grid storage [S20]. CATL has positioned Naxtra as a complementary chemistry to LFP rather than a replacement, with LFP scale economies generating the R&D budget that funds sodium-ion commercialization [S20].
 
-第一类是固态电池的量产突破。TrendForce明确判断："固态电池是最有可能在2030-2035年间实现规模化突破的技术路线。"多家头部企业（丰田、宁德时代、QuantumScape、辉能科技）已锁定2027-2030年的量产窗口。一旦固态电池实现500Wh/kg以上能量密度、安全性和循环寿命的代际优势，将颠覆性地重塑电动车与传统燃油车的成本曲线——续航焦虑将彻底消失，高端长续航车型获得飞跃性产品力，并直接挤压氢燃料电池在乘用车领域的剩余空间。
+The power-map implication of this vertical integration is that BYD and CATL function as the joint central node of the global EV industry graph. CATL supplies batteries to players competing with BYD's vertically integrated production, and Chinese challengers CALB, Gotion, and EVE Energy are expanding share against CATL in cell manufacturing but remain downstream of the same LFP technology curve.
 
-第二类是端到端自动驾驶的L4级商业化突破。模拟世界中中国头部企业（华为ADS 3.0、小鹏XNGP、特斯拉FSD V12）已展示出"重感知、轻地图、数据驱动"的能力跃升。ChinaCarOnline判断：
+### Tier 2 — Western OEM Retrenchment: The Parallel Retreats Reshaping Capacity Allocation
 
-> "特斯拉FSD V12、华为ADS 3.0、小鹏XNGP等头部方案均已展示出重感知、轻地图、数据驱动的能力跃升，传统模块化架构正在被快速取代。"
+The Ultium battery platform partnership with LG Energy Solution continues but at scaled-back capacity. Ford and GM together illustrate a pattern where the US legacy OEMs' initial BEV commitment was sized to an IRA-subsidy environment that no longer fully exists, and right-sizing has required product-line cuts and permanent capacity withdrawal.
 
-如果2027-2028年端到端大模型路线率先实现L4级规模化的全场景突破，将带来Robotaxi商业化、车路云协同规模化、智能座舱订阅模式爆发等连锁机会，并为整车厂估值打开第二增长曲线。
+Stellantis's position is qualitatively different but quantitatively comparable.
 
-第三类是新兴市场与中国车企出海的协同放量。比亚迪的全球化路径——泰国15万辆（2024年中投产）、巴西15万辆（原福特工厂改造）、乌兹别克斯坦已运营、土耳其15万辆（10亿美元投资规避欧盟关税）——构成乐观情景下的全球产能网络。
+Volkswagen Group faces the most complex restructuring of any Western OEM. The China market share decline attributable to BYD's surge is documented as severe enough that Volkswagen is reportedly exploring partnerships with Chinese technology firms (XPeng or similar). This represents a transition in which Volkswagen is seeking to leverage Chinese software and electronics capability for its own global products.
 
-> "BYD's facility in Thailand has a capacity exceeding 300,000 vehicles per year when combined with Uzbekistan and Brazil."
-> "BYD has a target of selling 1 million overseas cars by 2025."
+The tariffs effectively wall off a market that the Western OEMs are simultaneously withdrawing from, leaving Chinese OEMs to redirect exports toward Southeast Asia, Latin America, the Middle East, and (post-Canada reversal) North America via Canadian channels.
 
-一旦这一网络在2027-2030年完成欧美之外的新兴市场覆盖，中国车企有望在全球中端市场形成15-20%的份额，推动全球EV渗透率从2025年的约20%加速至2030年的40%以上。
+### Tier 3 — Korean Ascent, Japanese Gamble, and Tesla's Selective Recovery
 
-**悲观情景风险源：价格战失控、技术证伪、贸易战升级与安全黑天鹅**
+The third tier of the global competitiveness map contains the most successful non-Chinese EV challenger (Hyundai-Kia), the highest-variance outcome in the industry (Toyota's solid-state gamble), and the firm whose competitive identity is most actively being renegotiated (Tesla).
 
-模拟世界揭示了至少六类可能触发悲观情景的系统性风险。
+Hyundai-Kia represents the clearest case of a Western-affiliated OEM executing an EV transition per reporting on its product launches and platform deployment. Hyundai-Kia is positioned as the best-positioned Western-affiliated OEM for the EV transition, in explicit contrast to Volkswagen Group's documented challenges and delayed BEV launches.
 
-**风险一：中国价格战的Evergrande式蔓延风险**。模拟世界明确记录了这一隐患的存在：
+Toyota's competitive position is the most analytically interesting because it is a single bet with binary consequences. The Japanese government (METI) is supporting the bet through R&D subsidies and supply-chain investment.
 
-> "Evergrande's financial risks are frequently mentioned in China."
-> "China EV Price War Analysis discusses BYD in the context of a potential financial crisis."
+Tesla occupies a distinct position within Tier 3, neither a retreating legacy OEM nor a challenger's challenger. The Cybercab/Robotaxi platform represents the autonomy bet that, if regulatory approval and scaled deployment materialize per, re-rates Tesla's revenue model from automotive sales (cyclical, margin-compressed) to robotaxi utilization (recurring, high-margin).
 
-中国BEV均价2024年同比下降14%，比亚迪海鸥以6.98万元的入门价系统性挤压二线品牌。VinFast已在事实上被挤出东南亚：
+### The Three-Tier Interaction: How Power Maps onto the 2026–2035 Trajectory
 
-> "VinFast has indefinitely postponed its expansion to Southeast Asia due to inability to compete with Chinese brands on price."
+The competitive structure across the three tiers is reinforced by feedback loops documented in the source pool.
 
-TrendForce指出"中端OEM厂商的毛利率被持续压缩，被迫重新评估其零部件采购策略和供应商体系，这直接导致了供应链的苹果化趋势"。一旦价格战在2027-2030年进一步失控、头部企业的财务杠杆无法持续，二三线中国品牌的连锁倒闭可能从产业事件升级为区域性金融事件，并通过Tier-1供应链传导至银行体系。
+Hyundai-Kia's position in Tier 3 represents the one documented path for a non-Chinese OEM to reach Tier 1 cost competitiveness within the forecast horizon, conditional on sustaining the E-GMP platform discipline that Volkswagen, Ford, and GM have not sustained. Tesla's selective recovery through energy storage and autonomy is a distinct third pathway per, one that decouples firm value from automotive unit volume.
 
-**风险二：自动驾驶技术路线证伪的研发沉没成本风险**。受访各方对自动驾驶主导路线的判断存在系统性分歧——TrendForce押注"纯视觉+端到端AI+高算力SoC"，Mobileye坚持"多传感器融合+REM高精地图冗余"，VinFast主张"视觉为核心+激光雷达冗余+端到端大模型协同"。ChinaCarOnline的判断最为严峻：
+This is the structural backdrop against which every regional policy decision, trade-defense action, and consumer adoption scenario in subsequent chapters is evaluated.
 
-> "如果这条路线被证伪——比如出现长尾场景难以收敛、监管无法通过、安全数据无法闭环等情况——对整个中国汽车工业冲击都是系统性的。因为目前主流车企已将数十亿至上百亿研发资金押注于此。一旦路线证伪，意味着巨额研发沉没成本、产能重建压力以及资本市场信心的坍塌。"
+## Regional Bifurcation Deep Dive: China, Europe, the United States, and the Emerging-Market Fourth Path
 
-这一风险对中国头部车企的影响显著高于欧美玩家，因为后者的投入更为分散。
+### China: From Volume Saturation to a Hardened Winner-Take-Most Structure
 
-**风险三：贸易战升级与"中国EV出海受阻"的二阶效应**。欧盟已在2024年10月对中国BEV征收最高35.3%的反补贴税，CBAM将于2026年全面实施。模拟世界观察到比亚迪的产能被迫从匈牙利转向土耳其：
+it is the global industry's center of gravity that has already begun to calcify. Domestic NEV penetration reached 53% of new car sales in 2025, with China accounting for roughly 63% of global EV sales by volume [S10]. The forward question is therefore no longer "how fast does China grow? " but "what shape does the Chinese market take once growth exhausts domestic first-time demand? " Two facts define the trajectory. First, BYD's H1 2026 cumulative sales of 1,808,511 units were down 15.72% year-over-year [S17], confirming that the domestic market has reached saturation; the future volume growth story for Chinese OEMs is the export channel, not the domestic channel.
 
-> "BYD is investing $1 billion in a production facility in Turkey with an annual capacity of 150,000 vehicles to avoid European Union tariffs."
-> "BYD is shifting its European EV production focus from Hungary to Turkey."
+The winners are already identifiable. Geely is the fourth scaled player with the resources to outlast the shake-out, and CATL — controlling roughly 37% of global battery installations on its own, with the BYD-CATL combined share at 55.6% [S8] — sits at the apex of the upstream cost stack. Critically, the winning cohort is the one with cost integration across cell, pack, and vehicle assembly. The losers — Neta and HiPhi have already entered restructuring — are being eliminated in real time.
 
-欧盟进一步表态将依据"实质性转换标准"严审海外生产的本地化程度：
+**First, the export pivot intensifies.** With domestic volume flat-to-down, overseas markets become the marginal growth channel. BYD's June 2026 overseas sales of 175,349 units (+94.73% YoY) [S17] indicate that the export ramp is already in motion. The inaugurated BYD Thai Rayong factory in July 2026 is the leading edge of a manufacturing footprint that AlixPartners expects to triple by 2030, with Brazilian, Hungarian, and Turkish facilities under development. [S17] The dual-credit system is now so over-supplied that it functions less as a transition subsidy and more as a permanent regulatory floor — a state of affairs that supports a buyer's market and therefore consumer prices.
 
-> "欧盟将持续依据实质转型标准和非优惠原产地规则，评估此类海外生产的真实本地化程度。"
+A real disagreement exists over how durable this picture is.
 
-若2027-2030年间中美欧贸易战进一步升级（如对电池、稀土、芯片加征惩罚性关税），中国车企在欧美的合规成本将系统性上升8-15%（VinFast估计）。这会进一步压缩中国EV产业的全球利润空间，并迫使企业从"产品输出"被迫转向"产能+技术输出"，但短期内将造成明显的利润率压缩和技术外溢控制难题。
+### Europe: The Trilogue as Industrial Strategy
 
-**风险四：供应链单点依赖的"卡脖子"风险**。TrendForce详细列举了关键单点依赖节点：先进制程SoC高度依赖台积电、车规级MCU由瑞萨/NXP/英飞凌/ST四家垄断近90%、HBM由SK海力士/三星/美光三家寡占、SiC衬底由Wolfspeed/II-Vi/罗姆等少数供应商主导、EDA工具由Synopsys/Cadence/Siemens EDA三足鼎立且部分受限。
+The European trajectory through 2035 hinges on a single policy event: the trilogue resolution on the European Commission's December 16, 2025 proposal to soften the 2035 ICE phase-out to a 90% CO₂ reduction target [S1]. Under the original 2023 framework, all new cars sold in the EU from 2035 onward would have had to achieve 100% CO₂ reduction — effectively banning pure ICE vehicles. [S34] This is the most consequential policy reversal in the industry's history, and the trilogue conclusion expected in late 2026 or early 2027 will determine whether Europe stabilizes around the 90% framework or whether Parliament resistance pushes it back toward the original 100% stringency. [S34]
 
-> "这些是我们报告中持续提醒客户关注的关键风险节点。"
-> "Mobileye坦言：短期内完全去台积电化还不现实，需要在库存策略、长协合同和地缘政治游说上多管齐下。"
+The German government pushed hardest for ICE flexibility and e-fuels support [S19], reflecting both the structural strength of the German auto industry lobby (ACEA has lobbied the Commission for extended flexibility [S19]) and an assessment that European charging infrastructure cannot support full BEV transition by 2035. Member-state opposition also includes Italy, Hungary, and Poland, while the European Parliament has expressed "significant resistance" to the softening. The trilogue will land somewhere between the Commission's 90% position and Parliament's likely preference for something stricter than 90%, with biofuels and e-fuels flexibility as the compromise currency. [S34]
 
-一旦发生台海冲突、马六甲封锁、智利锂矿国有化等极端事件，恢复周期将以"年"而非"季度"为单位计算，对依赖先进制程的智能驾驶车型冲击尤甚。
+The strategic implications of each path are starkly different.
 
-**风险五：政策反复风险——英国2030 vs 2035的时间表摇摆**。模拟世界记录了英国禁燃政策的戏剧性反复：
+A second-order effect of the December 2025 proposal is what it reveals about the underlying European competitive position. [S1] The Commission's own rationale cites concerns about Chinese competitive pressure — the proposal "partly reflects concerns about Chinese competitive pressure from OEMs such as BYD, reducing regulatory pressure on BYD's expansion into European markets" [S19]. Read literally, the EU is relaxing its own climate framework because it fears losing the automotive industrial competition to Chinese OEMs. This is structurally significant because it implies that the EU's actual policy ceiling — the point at which European industrial strategy overrides climate ambition — is now visible.
 
-> "The Labour government reinstated the 2030 ban for ICE燃油车 in the UK."
-> "The UK Government published the 2030 Statement regarding phasing out the sale of new petrol and diesel cars."
+The steelman counter-view is that Parliament will hold firm and force a stricter outcome because the political cost of appearing to retreat on climate is high in Northern European constituencies and France.
 
-VinFast观察指出："2024年7月英国曾经将燃油车禁售时间从2030年推迟到2035年，又在2025年1月和11月两度确认恢复2030年——这种政策反复本身就是产业信心受损的信号。"若类似反复在德国、法国等核心市场重演，将削弱车企对电动化转型的投资信心，并延缓欧洲市场的渗透节奏。
+### United States: The ACC II Court Fight and the Section 177 Floor
 
-**风险六：自动驾驶安全黑天鹅事件**。Mobileye的警告贯穿所有采访的隐含主线：
+EPA* enabled these court challenges by recognizing plaintiff standing.
 
-> "获胜的定义必须以安全指标为标准，而非演示视频的流畅度。"
+If the ruling goes the other way and federal preemption holds, the demand floor collapses to whatever the federal government is willing to provide — which, as of mid-2026, is effectively nothing, since the $7,500 federal EV tax credit terminated on September 30, 2025 under the One Big Beautiful Bill [S2].
 
-一旦2030-2035年间发生一起引发全球关注的L3/L4致命事故（尤其是端到端神经网络的"黑箱"决策导致难以归责的情形），可能触发三个层面的二阶效应：监管端多国可能暂停L3+商业化部署、消费者端对智能驾驶信任度急剧下降、资本市场对RoboTaxi等长期叙事的估值整体下修。
+a Republican victory would entrench the floor. Either way, the US becomes a structurally smaller share of the global EV market than was assumed in pre-2025 forecasts.
 
-**二阶效应放大机制：从"产业事件"到"系统风险"的传导路径**
+### The Emerging-Market Fourth Path: Chinese LFP, Oil-Import Asymmetry, and the Leapfrog Channel
 
-模拟世界揭示了三个值得高度关注的二阶效应放大机制。
+The fourth path is the one most likely to be underestimated by forecasts built around the China–US–Europe triangle.
 
-**放大机制一：供应链"苹果化"加速的二阶冲击**。TrendForce观察到："博世、大陆、采埃孚等Tier-1的二线OEM订单在2024-2025年下降了15-25%，迫使这些供应商加速向中国头部OEM（BYD、吉利、奇瑞、长城）和欧美三强靠拢。"这一传导链揭示了一个非线性效应：当价格战迫使二线车企退出，Tier-1的"客户集中度风险"同步上升，反过来会要求OEM提供更确定的采购承诺和付款条件，影响现金流，进一步加速弱势车企死亡——形成"死亡螺旋"。
+The supply-side foundation is BYD's overseas production build-out. BYD's June 2026 overseas sales of 175,349 units (+94.73% YoY) [S17] and the inauguration of the Thai Rayong factory in July 2026 mark the beginning of a manufacturing footprint that AlixPartners expects to triple by 2030.
 
-**放大机制二：技术路线"被动合规化"的不对称冲击**。Mobileye和VinFast共同指出，中国车企出海被迫调整技术路线：
+The demand-side catalyst is the Iran war's asymmetric impact on oil-importing economies. Iran war-related fuel price concerns "have accelerated EV consideration in both Southeast Asia and the United States, with used EV sales rising 30% year-over-year in the US in February 2026" — and the same mechanism is amplifying in emerging Asian markets. [S22] The IEA notes growing sales amid an energy crisis linked to Iran war disruptions, and BNEF explicitly cites the Iran war and resulting increase in Brent crude prices at the pump as boosting consumer interest in buying an EV. The asymmetry between oil-importing economies (where high fuel prices boost EV economics) and oil-exporting economies (where high fuel prices subsidize incumbent consumption) is the cleanest single mechanism through which the war reshapes the global EV map.
 
-> "多数中国车企在进入欧洲市场时同步进行了调整——从国内常见的纯视觉+大算力方案转向更强调功能安全和冗余架构的方案，以满足欧盟GSR、UNECE R155/R156等网络安全与软件更新法规的要求。"
+The third mechanism is the second-hand EV market, which functions as a price-discovery layer in markets where new EV prices remain above the affordability threshold. Used EV sales rising 30% YoY in February 2026 in the US [S22] represent the same dynamic that will play out in Southeast Asia, Sub-Saharan Africa, and Latin America: as Chinese OEMs flood primary markets with new vehicles, retired lease and rental units become the entry-level supply for secondary markets. This dynamic accelerates adoption in oil-importing economies where new-vehicle affordability is the binding constraint.
 
-这种调整短期内提升合规成本，中长期则推动中国EV技术体系向"开放架构、模块化、可审计"方向演进——某种程度上是被迫的国际化标准适配。这一进程的不对称性在于：中国车企被动开放技术黑盒，而欧美玩家在数据主权上构建壁垒，结果可能形成"中国硬件+欧美软件标准"的全球分工。
+## Policy Framework Inflection Points: The Five Decisions That Determine the 2026–2035 Trajectory
 
-**放大机制三：中国EV价格战的金融传染效应**。模拟世界中"Evergrande类比"本身就是一个预警信号——一旦头部企业（如比亚迪）因价格战失血而被迫收缩，地方政府、银行、设备厂商的产能投资风险将重新定价。VinFast分析："二线品牌退出后释放出的优质工程人才将成为稀缺资源，头部品牌的抢人大战会推高研发人力成本。"这意味着即便是幸存的头部企业，也要为产业洗牌支付隐性成本。
+### The Decision Architecture: Why These Five Policy Events Compound Rather Than Compete
 
-**情景敏感性分析：关键观察指标与转折点**
+They are coupled in a way that means the resolution of one changes the stakes of the others. Treat them as five decisions whose outcomes form a small number of equilibrium states—each more stable than any individual decision alone, and each more consequential than the simple sum of its parts.
 
-综合模拟世界的证据，2027-2030年是决定基准情景向乐观还是悲观方向演化的关键窗口期。判断情景走向的核心观察指标包括以下五类。
+The US is the most exposed to single-decision volatility.
 
-第一类，固态电池量产时点。若头部企业在2027-2029年完成量产爬坡，乐观情景的概率显著上升；反之若延期至2032年以后，LFP+800V+SiC的渐进式路径将成为主导。
+### The EU Trilogue: Industrial Lobbying, Member-State Fracture, and the Stakes for Chinese Market Access
 
-第二类，L4级商业化里程碑。重点观察Robotaxi在限定ODD的全无人商业化部署、特斯拉FSD/华为ADS的城市级开放道路突破、以及UN-R157等监管框架的国别互认进展。
+The European Commission's December 2025 proposal is the most significant policy reversal in the history of the European auto-transition framework. [S1]
 
-第三类，价格战的"死亡螺旋"触发点。重点观察二线品牌的现金流断裂（特别是中国市场的新势力）、Tier-1供应商的应收账款风险、地方政府对EV产业园的财政补贴退坡节奏。
+This mechanism is itself controversial: e-fuels at commercial scale remain years away, and the biofuel allowance risks being treated as a permanent loophole rather than a transitional flex.
 
-第四类，贸易战与CBAM的执行节奏。重点观察欧盟反补贴税的复审、原产地"实质性转换标准"的执行刚性、英国脱欧后的独立对华关税安排、以及美国IRA法案的供应链溯源要求。
+The trilogue's likely outcome range can be bounded. The Commission has staked its position at 90%; [S34] This is a binary-or-tertiary outcome in industrial terms. If the framework lands at 90%, Stellantis's hybrid/EREV emphasis and Volkswagen's delayed SSP platform are validated, and Chinese OEMs including BYD face a less aggressive regulatory pull into European markets. [S1]
 
-第五类，安全黑天鹅的触发概率。重点观察端到端神经网络在长尾场景的失效案例、电池热失控的大规模召回事件、数据安全漏洞的跨境监管冲突。
+A secondary but consequential effect: the December 2025 proposal was driven partly by concerns about Chinese competitive pressure from BYD, and softening reduces regulatory pressure on BYD's expansion into European markets. [S1] This is not coincidence.
 
-**最终判断与风险提示**
+### The US ACC II Court Ruling: Binary Outcomes for State-Level Demand Floors
 
-模拟世界的整体证据指向一个清晰的结论：2035年前的全球电动汽车产业将呈现"高确定性大趋势+高不确定性细节"的演化特征。大趋势——电动化加速、智能化深度渗透、中国车企全球化——已无悬念；但细节层面的不确定性——技术路线、贸易格局、供应链安全、安全阈值——将通过二阶效应的传导链，对最终格局产生深远影响。
+The ACC II court decision is the most temporally proximate of the five inflection points.
 
-最值得警惕的三大系统性风险是：第一，中国EV价格战可能从产业事件升级为金融事件，需关注Evergrande类比是否会从隐喻走向现实；第二，自动驾驶技术路线证伪可能造成中国汽车工业的研发沉没成本与估值坍塌；第三，贸易战升级叠加CBAM执行，可能在2027-2030年触发中国EV出海的系统性受阻，并通过Tier-1供应链传导至全球。
+The state-level floor is the most underappreciated structural feature of the US market. If the court upholds the waiver, these states continue to impose ZEV compliance obligations on automakers regardless of the federal stance. OEMs cannot easily differentiate products by state—they must produce ZEV-compliant vehicles to serve the mandate states, and those vehicles compete in the non-mandate states at whatever price the market bears.
 
-最值得期待的两大乐观催化剂是：第一，固态电池在2027-2030年的量产突破可能成为颠覆性变量，重新定义电动车与燃油车的成本竞争曲线；第二，端到端自动驾驶的L4突破叠加Robotaxi商业化，可能为整车厂估值打开第二增长曲线。
+The credit's restoration under a future administration is a material variable.
 
-最需要把握的关键转折期是2027-2030年——这三年间，技术路线、贸易格局、价格战烈度、安全事件概率等关键变量将集中得到验证。建议所有参与方——无论车企、供应商、投资者还是政策制定者——将"情景规划+压力测试"作为常态化决策工具，并密切监测前述五类核心观察指标的边际变化。具备"软件能力+垂直整合深度+合规体系成熟度+全球化布局"四维综合竞争力的玩家，将在这场为期十年的全方位博弈中占据结构性优势；而任何单一维度的领先者，都可能因为多维协同不足而在转折期被系统性反超——这正是模拟世界对比亚迪2025年反超特斯拉的最深层启示。
+The combination is not additive—it is multiplicative, because state-level ZEV mandates require OEM compliance investments that become more economically rational if federal incentives amplify consumer demand, and become stranded-investment risks if federal incentives do not return.
 
+The third decision in the US cluster—battery manufacturing capacity utilization—is the most under-discussed. Ford-BlueOval and GM-LG battery plant cancellations and delays are linked second-order effects of the credit expiration collapsing EV demand and constraining both OEMs' production plans.
+
+### China NEV Purchase Tax Phase-Down: Testing the Subsidy-Free Floor
+
+This is the first stress test of the Chinese domestic EV market's durability without direct consumer subsidies.
+
+The supply-side mandate will continue to compel NEV production even as consumer-side incentives recede.
+
+BYD's H1 2026 cumulative NEV sales of 1,808,511 units declined 15.72% year-over-year [S17]—a signal that the Chinese domestic market has reached saturation and future growth will depend on exports rather than domestic penetration. The mechanism: Chinese OEMs have demonstrated ability to reduce prices while maintaining unit margins through scale and vertical integration (BYD's 55.6% combined battery share with CATL [S8] creates a cost moat that absorbs tax removal more easily than foreign competitors could). The phase-down is therefore less a demand cliff than a redistribution of margin from consumer subsidy to OEM scale economics.
+
+Brands that depended on volume-subsidy economics rather than cost-leadership will face the steepest contraction. BYD, Geely, and Leapmotor—the scaled players with cost integration—will absorb market share from weaker brands. The phase-down is therefore a consolidation catalyst as much as a demand-shock event.
+
+If the phase-down weakens Chinese OEM near-term pricing power at the moment Western OEMs are launching new products, it could shift competitive dynamics. The phase-down is therefore a non-trivial event for global—rather than merely domestic—competitive positioning.
+
+### Trade Defense Escalation: The Architecture of Regional Bloc Formation
+
+The US and EU tariff structures are now effectively prohibitive for direct Chinese OEM imports. access requires local manufacturing, which BYD is pursuing through Brazilian, Hungarian, and Turkish facilities but has not committed to the US specifically. The EU anti-subsidy duties are lower in nominal terms but still constraining for Chinese OEMs' pricing and market access. Canada's reversal is a countervailing signal that unilateral tariffs impose domestic costs (Canadian consumers faced higher EV prices) and that political dynamics can swing trade policy in both directions.
+
+The escalation pathway runs through three vectors. Second, if China retaliates through expanded export controls on battery materials (graphite, rare earths, cathode/anode precursors), Western OEM production costs spike and the cost advantage of Chinese vertical integration widens. Third, if third countries (India, Brazil, Mexico, Turkey) align with one bloc or the other, the global bifurcation becomes structural.
+
+BYD's June 2026 overseas sales of 175,349 units, up 94.73% year-over-year [S17], already reflect this trajectory. The Western trade defense architecture therefore does not prevent Chinese expansion—it redirects it from direct export to local manufacturing, which changes the nature of competitive pressure (jobs, technology transfer, local political economy) but not its magnitude.
+
+The trade defense escalation's most consequential effect is on supply-chain architecture rather than headline tariff rates. If Chinese OEMs must manufacture locally in target markets, they require local battery supply. This creates demand for either Chinese battery imports (re-introducing the chokepoint the tariffs sought to avoid) or local battery manufacturing (which requires 3–5 years of capacity build-out). Western battery manufacturers (LG Energy Solution, Samsung SDI, Panasonic) gain from this architecture but are themselves constrained by Korean/Japanese OEM integration strategies. The result is a slower, more capital-intensive Chinese global expansion that nevertheless continues.
+
+### Coupled Outcomes: The Equilibrium States That Actually Matter
+
+They produce a small number of equilibrium states.
+
+The policy environment in this scenario is secondary to the technology shift, but the policy architecture still matters: the EU trilogue and ACC II rulings would either amplify or constrain the technology-driven acceleration.
+
+the remainder is determined by exogenous factors (technology surprise, geopolitical escalation, macroeconomic shock) that the policy decisions can only partially respond to.
+
+The analytical conclusion is therefore that the five decisions matter most through their interaction effects rather than their individual outcomes. A 90% EU framework combined with ACC II survival produces a substantially different global trajectory than 90% combined with ACC II defeat. [S1] A China phase-down that is offset by aggressive Chinese export pricing combined with trade defense escalation produces a different equilibrium than the same phase-down combined with managed trade accommodation. The decision-makers in Brussels, Washington, Beijing, and member-state capitals are not optimizing against the same variables—they are each optimizing for their own industrial and political objectives, and the global equilibrium emerges from the intersection of these independent optimizations. The practical implication for investors and policymakers is that scenario planning must be built around coupled outcomes rather than single-decision branches: hedging against an ACC II defeat alone is insufficient if the same hedge must also absorb an EU trilogue softening and a China phase-down compression, and tail-risk planning must treat the joint decision space as the unit of analysis rather than its individual components.
+
+## The Iran War and Geopolitical Oil-Price Shock: Asymmetric Catalyst for Global EV Adoption
+
+### The Asymmetric Shock: War as Catalyst, Not Constraint
+
+The 2026 Iran war, which began with US and Israeli strikes on February 28, 2026 [S27], represents an underappreciated but structurally significant variable in the global EV trajectory. The oil-price volatility that results is, paradoxically, a demand accelerator for EVs in some markets and a battery-cost compressor in others — a single shock producing opposite-signed effects through different transmission channels. Understanding this asymmetry is essential because the war's net effect on the global EV trajectory depends less on the duration of hostilities than on which channel dominates in each regional market.
+
+The most consequential asymmetry is between consumer-side benefits and producer-side costs. On the consumer side, BloombergNEF explicitly cites the war and the resulting increase in Brent crude at the pump as boosting consumer interest in buying an EV; The net effect on global EV share tilts toward the demand channel because consumer price sensitivity to fuel costs compounds over a multi-year ownership horizon while raw material cost shocks transmit primarily through OEM gross margins that are already compressed. But the asymmetry is not uniform, and where it falls determines which scenario dominates.
+
+### Demand-Side Acceleration: The Three Mechanisms
+
+Three distinct mechanisms transmit war-driven oil-price elevation into additional EV demand, each operating on a different timescale and in a different market segment.
+
+The first mechanism is the **total-cost-of-ownership compression** that occurs when gasoline and diesel prices at the pump rise sufficiently above their pre-shock baselines to shorten the EV payback period below the threshold consumers typically require (historically 4–5 years in mass-market segments). In markets where retail fuel prices reflect import parity — most of Southeast Asia, India, Sub-Saharan Africa, Latin America, and Europe — the war has pushed this crossover into a band where ICE-to-EV switching becomes financially rational for high-mileage household and commercial-vehicle buyers even without subsidy support. The same mechanism operates more weakly in the United States, where domestic oil production insulates pump prices partially, and in OPEC-aligned Gulf economies, where fuel subsidies historically blunt the consumer signal.
+
+The second mechanism is the **used-EV market maturation** that the war is reinforcing at the margin. The simultaneous occurrence of these two datapoints is informative: the same consumer environment that drove new-EV demand down is driving used-EV demand up, because price-sensitive buyers who lost access to the $7,500 credit on new vehicles are pivoting to secondhand inventory whose pricing has reset downward. [S2] The Iran war extends this pattern by widening the fuel-savings differential that justifies used-EV ownership. This is structurally significant because the used-EV market creates a price-discovery mechanism that bypasses the need for new-vehicle purchase incentives — a critical adaptation in a US policy environment where the OBBBA terminated federal credits on September 30, 2025 [S2] and the SCOTUS/DDC ruling on California ACC II waiver durability remains pending. Where new-EV demand is policy-dependent, used-EV demand is fuel-price-dependent, and the war is pushing the latter variable in a direction that sustains adoption independent of federal policy reversal.
+
+The third mechanism is the **EV-skeptic sentiment conversion pathway**, which is the most quantitatively important but also the most uncertain. The war-economy shift accelerates this conversion by changing the cost calculation that underlies the skepticism.
+
+### Emerging-Market Fourth Path: Where the War Creates Durable Adoption
+
+The first condition is **fuel-import dependency as a structural macro variable**. Most large emerging economies — India, Thailand, Vietnam, Indonesia, the Philippines, Kenya, Nigeria, Egypt, Turkey, Brazil — import either the majority or a significant share of their petroleum consumption. EV adoption in this context is not just a consumer preference shift; it is a macroeconomic hedging strategy that governments have an independent incentive to accelerate. The Iran war strengthens the urgency of such frameworks without requiring governments to invent new policy architectures.
+
+The BYD Seagull-class vehicles, the Wuling Mini EV, and the Geely Panda Mini operate at price points that were historically inaccessible to entry-level emerging-market buyers. With battery pack prices at $108/kWh in 2025 [S6] and BEV-specific pack prices at $99/kWh, the cost-down trajectory of LFP has converged with Chinese OEM vertical integration to enable export-grade EVs at price points that compete with used ICE vehicles — a category that historically dominated emerging-market auto markets. The Iran war creates the consumer-pull conditions under which this supply-push strategy meets rising demand in oil-importing economies that are precisely the ones Western OEMs have deprioritized.
+
+The third condition is **second-hand EV market formation** as a parallel adoption vector. The 30% YoY growth in US used EV sales in February 2026 [S22] is a Western datapoint, but the same mechanism is structurally relevant in emerging markets where new-vehicle affordability is more constrained. As Chinese OEMs flood export channels with new LFP-equipped vehicles, the natural consequence is a secondary market in 3–7-year-old trade-ins — vehicles whose battery degradation is modest for LFP chemistries, whose range is sufficient for urban and peri-urban duty cycles, and whose price point falls well below new-vehicle equivalents. This secondary market creates a J-curve adoption pattern: first a wave of new-vehicle adoption among middle-class urban buyers, followed by a wave of secondary-market adoption among price-sensitive buyers in tier-2 and tier-3 cities and rural areas. The Iran war accelerates the first wave by widening the fuel-savings differential; the second wave follows as a structural consequence of the first.
+
+The combined effect is that the Iran war converts the emerging-market EV trajectory from a tentative, subsidy-dependent, slow-build phenomenon into a structurally resilient adoption pathway anchored by fuel-import economics, Chinese supply availability, and second-hand market maturation.
+
+### The Counter-Cyclical Cost Channel: Why the War Also Constrains Supply
+
+The demand-side story is offset, but not overwhelmed, by a producer-side cost channel that the war transmits through oil prices to battery raw materials. LFP chemistry, which depends on lithium carbonate at moderate intensity, sees its production economics eroded as the cost floor rises. NCM chemistry, which is more lithium-, nickel-, and cobalt-intensive, faces a sharper compression.
+
+The transmission effect of the war on EV supply runs in the opposite direction to its demand effect: it raises the input cost floor for cell manufacturers and OEMs, compressing the margins that already-struggling Western automakers rely upon to fund platform investments. The war thus reinforces the existing Western OEM cost disadvantage rather than creating a new one — it is a force multiplier on the Plateau Thesis rather than an independent cause of Western retreat.
+
+This is also where the OPEC+ dimension becomes relevant. OPEC+ is structurally opposed to the EV transition because demand displacement from EVs erodes the long-run oil revenue base; OPEC+ supply discipline, in this context, is the cartel's mechanism for maximizing near-term revenue before displacement accelerates.
+
+### The July 2026 Ceasefire Collapse: What Renewed Tensions Tell Us
+
+The July 8–11, 2026 ceasefire collapse and the renewed escalation that followed [S29] are diagnostic of a structural feature of the 2026–2027 oil-price environment: even with intermittent de-escalation, the risk premium associated with the Strait of Hormuz corridor is unlikely to fully unwind. OPEC+ supply discipline is complementary to this dynamic: even if Hormuz-related disruptions fully resolved, the cartel's management of spare capacity provides a floor under prices.
+
+The persistence assumption is consistent with the structural reality that Iran-related risk cannot be quickly neutralized through diplomatic means even if kinetic conflict recedes — and the deeper reality that Iran retains capacity to threaten Hormuz transit as a strategic lever regardless of any formal peace settlement.
+
+### A Steelmanned Counter-Argument and Why It Fails
+
+A reasonable counter-argument holds that oil shocks are historically poor predictors of EV adoption because consumer behavior snaps back toward fuel-efficiency preferences (hybrid ICE) rather than full electrification.
+
+First, the BEV cost curve has crossed a threshold that hybrids do not reach: at $108/kWh pack prices [S6] and $99/kWh BEV-specific pack prices, EVs have achieved cost parity with hybrids on a lifetime basis in most mid-market segments, and they continue to fall at scale-economy rates that hybrids cannot match. consumers now have a credible alternative to making the ICE-to-hybrid lateral switch that historically defined their response to fuel-price elevation.
+
+The counter-argument also fails in the other direction: even those most bullish on the war's EV-stimulus effects should not assume the shock is sufficient to offset the policy-driven demand contractions in the US and Europe. The Iran war operates as an asymmetric catalyst that strengthens the global EV aggregate primarily through emerging markets — which is why the forecast uplift is concentrated there rather than as a uniform percentage-point addition across all regions.
+
+### Synthesis: The 2026–2035 Trajectory with the War as Catalyst
+
+The larger structural forces — Chinese cost-and-supply-chain dominance, Western OEM retrenchment, and the divergence between regional policy regimes — continue to drive the bulk of variance. But the war is the catalyst that converts the structural readiness of emerging markets into actual adoption, and in doing so it cements a third pole of the global EV industry — one centered on Southeast Asia, India, Sub-Saharan Africa, and Latin America — that was marginal in the 2010s, emerging in the early 2020s, and becomes structurally significant through the second half of this decade.
+
+The implication for OEM strategy is sharp. Western OEMs that continue to view their addressable market as the US and Europe will find their TAM shrunk by both the policy reversals analyzed in earlier chapters and by the fact that the emerging-market demand stimulus accrues almost entirely to Chinese OEMs through the LFP supply chain that BYD and CATL integrated over the past decade. OEMs that recognize the asymmetric catalyst for what it is — an opportunity that requires a supply architecture they do not currently possess — face a strategic choice between partnerships (Volkswagen's reported XPeng exploration represents one variant), localized production with concessional Chinese technology transfer, or retreat from the BEV segment altogether. The Iran war does not change the strategic calculation; it makes the cost of delay more visible.
+
+## Critical Mineral Chokepoints: The Hidden Constraint on Every Scenario
+
+### The Mineral Constraint That Decides Everything Else
+
+Every scenario described in the prior chapter — from the Bifurcated Acceleration case to the Western Plateau — runs upstream into the same wall: critical mineral chokepoints that determine who can actually build batteries at scale, and at what cost. The industry has spent a decade debating demand-side policy, but the supply-side architecture is what decides who wins.
+
+The numbers anchor the asymmetry. CATL's strategic posture has been shaped by an explicit acknowledgement that China imports 75% of its lithium needs [S20], a dependence severe enough to motivate the sodium-ion pivot. This combination — Chinese control of graphite, rare earth refining, and a majority of lithium refining — means that every Western OEM building a battery cell today sits atop a Chinese-controlled supply stack, regardless of where the cell is assembled.
+
+### MOFCOM's Two-Step Escalation: From Chokepoint to Lever
+
+The combined effect is that the Chinese government now holds administrative discretion over the anode materials and the permanent-magnet precursors that Western EV drivetrains require. The licensing regime applies asymmetrically: Chinese battery makers like CATL and BYD operate under domestic priority access, while Western OEMs and non-Chinese cell manufacturers — LG Energy Solution, Panasonic, Samsung SDI — face extended approval timelines and license-condition uncertainty.
+
+This is not a hypothetical risk. The mechanism is already operating. A sustained Strait of Hormuz closure would simultaneously accelerate EV adoption and increase battery material costs across OEMs, including Chinese ones like BYD, but the cost burden falls disproportionately on non-integrated players. The 2026 Iran war, which began February 28, 2026 with US and Israeli strikes, has already injected volatility into this layer [S27]. The Iran war's oil price volatility has raised costs across the full battery chemistry stack — LFP, NCM, and sodium-ion alike — compressing margins for any OEM that cannot internally absorb mineral cost swings. Western OEMs with quarterly reporting, dealer-financing dependencies, and Union labor cost structures are structurally less able to absorb this volatility than vertically integrated Chinese players who control the supply stack from mine to cell.
+
+### Sodium-Ion as Strategic Response, Not Just Chemistry
+
+CATL's December 2025 launch of the Naxtra sodium-ion battery at 175 Wh/kg is the most consequential strategic response to this chokepoint, and it should be read as a mineral-security move as much as a technology announcement [S20]. Its appeal is that sodium is geographically abundant and not subject to Chinese export licensing or Zimbabwe-style political supply disruptions.
+
+A critical observation here: sodium-ion's emergence as a volume chemistry is not dependent on a Western breakthrough. It is being driven by China's own mineral-security anxiety about lithium import dependence. The Western corollary — that sodium-ion could free Western OEMs from Chinese lithium-refining leverage — is true only in a narrow sense: Western OEMs would still depend on Chinese cell manufacturing to access sodium-ion at scale, because CATL is the only producer with announced gigawatt-scale sodium-ion capacity.
+
+### The Structural Disadvantage Western Tariffs Cannot Fix
+
+This is where the critical mineral structure becomes the argument that explains the Plateau Thesis even under favorable policy scenarios. Tariffs, however, cannot substitute for missing upstream supply chains. A tariff on a finished EV does nothing to give Ford or Volkswagen access to graphite anode material outside MOFCOM's licensing regime, nor to break LG Energy Solution's dependence on Chinese refined lithium inputs for its US-domiciled Ultium and BlueOval plants.
+
+The downstream effects are visible in real corporate data. These are not just demand-side failures tied to IRA repeal. They are supply-side failures: Western OEMs cannot achieve the cell cost parity that LFP scale economies have delivered to BYD and CATL, and they cannot insulate themselves from raw material cycles that integrated Chinese players absorb internally. Tariff architecture reshuffles where vehicles are assembled; it does not rebuild the missing midstream mineral processing and refining capacity.
+
+### Differentiated View: Why the Cost Story Is Not Entirely Gloomy for the West
+
+A steelman of the opposing position is warranted here. This suggests that cell-manufacturing learning rates, pack design innovations, and yield improvements have partially offset raw material volatility. If this offsetting dynamic continues, the structural cost penalty facing Western OEMs narrows over time as cell-manufacturing efficiency dominates raw material cost in the unit-economics stack.
+
+The reply to this counter-argument is two-fold. First, the cost-down offset has been concentrated in cell manufacturing, which Western OEMs largely outsourced to Korean and Japanese cell makers (LG, Panasonic, Samsung SDI), all of whom themselves source raw materials through Chinese-controlled refining chains. The Western OEM has captured none of the cell-manufacturing learning rate directly. Second, the offset is partial: BNEF explicitly notes the cost decline occurred "despite rising metal prices" [S6], implying that without those metal prices the decline would have been steeper. The Iran war's continuation, with renewed Strait of Hormuz tensions following the July 2026 ceasefire collapse, extends the volatility window through at least 2027 [S29]. The structural penalty is reduced from catastrophic to painful, but not eliminated.
+
+### What 2027–2030 Looks Like Under Each Scenario's Mineral Constraint
+
+The scenarios diverge not on whether mineral constraints bind — they bind in all four — but on how rapidly the binding loosens. Under Scenario B (Western Plateau), the mineral constraint is self-fulfilling: Western OEMs cannot achieve cost parity, retreat raises unit costs further via reduced scale, and policy reversal cascades leave them without a floor. Under Scenario D (Geopolitical Fragmentation), MOFCOM's licensing regime weaponizes into active supply cutoff rather than administrative friction, and the global industry splits into incompatible regional supply chains.
+
+The Iran war intersects with all four. At the same time, sustained oil-price elevation raises the cost of mining and refining all battery raw materials, since diesel powers the haul trucks and electric arc furnaces that produce lithium, cobalt, and nickel. The Iran war thus delivers a stagflationary double-bind to the global EV industry: stronger demand signal, weaker supply economics, with the supply weakness concentrated among non-integrated Western OEMs.
+
+### Conclusion: The Hidden Constraint That Survives Policy Restoration
+
+Building a non-Chinese graphite anode supply chain at scale requires 5–7 years of capital deployment, permitting, and yield learning; building non-Chinese rare earth refining capacity requires comparable timelines plus separation technology that is itself partly Chinese-controlled. Battery plant cancellations at Ford-BlueOval and GM-LG are the second-order effect: as Western cell manufacturing capacity is delayed or canceled, the Western OEM loses scale economies that might have eventually offset the mineral cost penalty.
+
+This is what makes the Plateau Thesis a non-trivial probability even under favorable policy outcomes. The structural cost disadvantage does not require hostile Chinese policy to operate — it operates through normal commercial channels via Chinese control of graphite, rare earths, and lithium refining. Any Western policy architecture that does not address the upstream mineral structure directly — through mining rights reform, refining capacity build-out, recycling mandates, or chemistry diversification away from Chinese-controlled inputs — will at best slow the cost gap, not close it.
+
+The strategic implication for OEMs is that hybrid and EREV emphasis (Stellantis, Toyota, Ford) is a rational mineral-risk hedge: lower battery capacity per vehicle, lower mineral intensity per unit of revenue, and exposure to fewer Chinese-controlled inputs. The Plateau Thesis is, in this reading, not a failure of EV technology or consumer demand. It is the equilibrium price of a mineral supply structure that took twenty years to build and cannot be replicated in the eight remaining years of the forecast window.
+
+## Consumer Market Restructuring: Who Buys What, Where, and at What Price Point
+
+### The Sub-$20,000 Tier: Chinese LFP Dominance and the Sodium-Ion Inflection
+
+This is where Chinese OEMs — primarily BYD, Wuling, and Geely — have established structural cost dominance through vertical integration. The Seagull competes against Wuling Mini EV and Geely Panda Mini in what is the fastest-growing entry-level EV segment in China, and BYD has filed an all-new Seagull model to extend this product line.
+
+The economic logic of this tier rests on two convergent forces. First, BNEF reported volume-weighted battery pack prices at $108/kWh in 2025, with BEV-specific pack prices at $99/kWh [S6]. LFP's cost advantage compounds because it eliminates cobalt (DRC supply risk) and nickel exposure. BYD's Blade Battery and CATL's Qilin battery represent first-generation cell-to-pack implementations that close the energy-density gap to NCM while extending structural cost leadership.
+
+CATL launched the Naxtra sodium-ion battery in December 2025 at 175 Wh/kg, with commercialization targeted for 2026–2027 [S20]. The Seagull-class price point is therefore not a floor; it is a stepping stone.
+
+The geographic split of this tier is sharply bifurcated. In China, the segment is approaching saturation: BYD's H1 2026 cumulative NEV sales of 1,808,511 units declined 15.72% year-over-year domestically [S17], signaling that future growth must come from exports rather than domestic penetration. In emerging markets — Sub-Saharan Africa, Southeast Asia, Latin America — the segment is in early-stage expansion.
+
+### The $20,000–$40,000 Tier: The Volume Battleground
+
+This is where Tesla Model 3/Y, Hyundai Ioniq 5/6 and EV3, BYD Han/Seal mid-range offerings, Volkswagen ID.4 and forthcoming SSP-platform vehicles, and Ford Mustang Mach-E all directly compete.
+
+First, the technology gap has narrowed materially. the same pattern applies to Stellantis and Porsche. BYD has already deployed 800V, meaning the volume-tier Chinese competitor is at parity with Korean OEMs on fast-charging capability and ahead of German OEMs on platform timing. Third, Tesla's recovery is dependent on autonomy milestones including the Cybercab/Robotaxi platform rather than core vehicle volume — Tesla's Q2 2026 deliveries of 480,126 units (+25% YoY) reflect selective price competition combined with energy storage scaling (13.5 GWh deployment in the same quarter) rather than automotive margin expansion [S30].
+
+The pricing pressure within this tier is severe. Xiaomi and Leapmotor were the other two. BYD displaced Tesla's market position particularly in China, and the Q2 2026 contest showed BYD's overseas export surge (+94.73% YoY at 175,349 units in June 2026 alone) directly colliding with Tesla's defensive pricing actions [S17].
+
+Volkswagen faces the most acute version of the Western OEM challenge in this tier. Volkswagen Group's software subsidiary Cariad has experienced delays and platform development challenges, forcing postponement of several BEV launches. The SSP platform — Volkswagen's response to the BYD-CATL integrated cost structure — is delayed, and Cariad's software stack remains the binding constraint. Volkswagen's China market share decline is directly attributable to BYD's surge, with VW and BYD positioned as direct competitors in both European and global markets. The trilogue outcome for the EU 2035 framework will shape VW's 2027–2030 product cycle more directly than any single technology decision: enforcement of the 90% framework preserves PHEV/EREV flexibility that justifies continued hybrid investment, while enforcement of the original 100% ban would force a more aggressive BEV platform push that VW's current software timeline cannot support. [S34]
+
+A real counter-view on this tier: some analysts argue that Hyundai-Kia's E-GMP/IONIQ 5/6 plus EV3 positioning represents a more durable threat to Tesla than BYD, because Hyundai-Kia benefits from Western brand trust plus Korean battery cell manufacturing partnerships and has expanded US manufacturing through the Georgia Metaplant.
+
+### The $40,000–$70,000 Premium Tier and Chinese Premium Expansion
+
+Tesla's position here is structurally different from its mid-tier exposure. Tesla benefits from service network advantages over new entrants including BYD, NIO, and VinFast in export markets. Cybercab and Full Self-Driving commercialization is the differentiation moat, not the vehicle itself; the tariff structure penalizes Chinese OEMs but does not free Tesla from Chinese battery cell sourcing exposure.
+
+The vulnerability in this tier is Chinese premium expansion. Zeekr and NIO have established brand positioning in China at premium price points that overlap with Tesla Model S/X, BMW iX, Mercedes EQE. BYD Denza (the relaunched premium sub-brand) competes in the same bracket. The constraint on these brands is export-market service network: BYD, NIO, and VinFast are new entrants facing trust deficits in export markets relative to established brands that benefit from service network advantages. NIO and VinFast face acute trust deficits because their export volumes remain small and service infrastructure is nascent. However, BYD's combination of 17 million cumulative NEVs [S17], Thai Rayong factory output, and planned Hungarian and Brazilian facilities is rapidly closing the brand-trust gap in markets where BYD Seagull and Dolphin have already established mass-market visibility.
+
+The premium-tier price competition has structural consequences for OEM R&D allocation.
+
+The report assesses the truth lies between these positions: Chinese premium will dominate in China and selected emerging markets (Southeast Asia, Latin America, Middle East) where brand-nationality bias is lower, while the incumbent premium brands retain dominant positions in Western Europe, North America, and Japan/Korea where brand prestige and dealer network density compound.
+
+### The EREV Bridge: Why Range-Extended Electrics Are the Fastest-Growing Segment
+
+Extended-range electric vehicles (EREVs) emerged in 2024 as the fastest-growing NEV segment in China, with Li Auto and AITO growing 63% year-over-year. [S10] This is the most consequential consumer-market structural shift that Western analysts under-weight, because EREVs occupy a unique position: they are electrified powertrains that do not require charging infrastructure parity with full BEVs, but they deliver most daily driving on electricity and use the ICE range-extender only for long-distance travel.
+
+The consumer logic is straightforward and durable. EREVs solve the range-anxiety problem without requiring the buyer to commit to a full charging-infrastructure ecosystem. In oil-importing markets where Brent crude spikes (Iran war-driven) shift consumer total cost of ownership calculations toward EVs, EREVs become the lowest-friction entry point. BNEF explicitly cites the Iran war and resulting increase in Brent crude prices at the pump as boosting consumer interest in buying an EV; this interest manifests most directly in EREVs because they require no behavior change for consumers unaccustomed to charging discipline.
+
+Li Auto's commercial trajectory illustrates the structural durability. Stellantis and Ford have explicitly adopted hybrid/EREV emphasis rather than full BEV commitment, indicating Western OEM consensus is converging on EREVs as the pragmatic transition product.
+
+The implication is that Li Auto's EREV leadership may not translate to US/EU market share even if EREVs become globally significant, because trade barriers prevent the model export.
+
+This means the EREV bridge is not just a consumer-demand phenomenon — it is now policy-supported in the EU base scenario.
+
+### The Second-Hand Market as Parallel Adoption Vector
+
+The second-hand EV market represents a parallel adoption vector that is structurally significant for three reasons. First, it creates a price-discovery mechanism enabling sub-premium-tier adoption without subsidy support — particularly relevant for US post-credit-expiration dynamics where the $7,500 federal credit termination on September 30, 2025 [S2] has left new EV pricing artificially elevated relative to consumer willingness-to-pay. Second, it provides a supply of EVs into price-sensitive consumer segments that the new-car market cannot reach. Third, it accelerates total EV parc accumulation, which compounds charging-infrastructure investment and battery-second-use economics.
+
+The empirical signal is unambiguous. Iran war-related fuel price concerns have expanded the EV-curious segment in both India and the United States, with used EV sales rising 30% year-over-year in the US in February 2026 [S22]. Iran war-related fuel price concerns have accelerated EV consideration in both Southeast Asia and Thailand as well.
+
+The mechanism is oil-price-driven total cost of ownership recalculation.
+
+A counter-view is that the second-hand market creates a "lad der" where entry-level used EVs replace ICE-only vehicles, and the freed-up ICE parc gets exported to secondary markets (Latin America, Africa, Eastern Europe), accelerating global fleet electrification indirectly.
+
+### Charging Infrastructure: The Crossover Point
+
+The third parallel adoption vector — and arguably the most consequential for the base scenario's growth assumptions — is the public charging network.
+
+(2) payment interoperability, where OCPI 2.2 compliance across networks is becoming the European baseline and NACS adoption in North America provides hardware-level standardization even if payment remains fragmented;
+
+## The Western OEM Retreat: Quantifying Ford, GM, Stellantis, and Volkswagen Strategic Recalibration
+
+### The Two-Trillion-Dollar Reset: Anatomy of the Western OEM Strategic Retreat
+
+The Western automotive industry's encounter with the EV transition is now structurally defined by a single empirical fact: cumulative EV-related losses and writedowns across Ford, GM, and Stellantis have crossed a threshold that has forced not incremental adjustment but the abandonment of volume-BEV strategies as the primary growth path. Together, these three Western OEMs have effectively conceded that the volume-BEV segment — the segment BYD and Tesla treat as their primary commercial battleground — cannot be profitably served at Western cost structures under current policy and trade conditions. What replaces the abandoned strategy is not uniform: Ford is pivoting toward smaller profitable EVs and a hybrid bridge; GM is continuing Ultium platform development at scaled-back capacity while exiting China; Stellantis is foregrounding hybrid and EREV offerings across its multi-brand portfolio; and Volkswagen faces the most acute structural crisis as SSP platform delays, Cariad software restructuring, and accelerating China market share losses compound into a strategic capitulation that the company is reportedly trying to address through Chinese partnership exploration.
+
+### The Three Tiers of US Legacy Retreat: Ford, GM, and Stellantis
+
+Ford's restructuring is the most consequential in scale because the loss number is the most consequential in scale. Ford's response has been the documented pivot toward smaller, profitable EV segments and hybrid offerings — a hybrid bridge strategy explicitly validated by the European Commission's December 16, 2025 proposal to soften the 2035 ICE phase-out to a 90% CO₂ reduction target [S1].
+
+GM's parallel retreat is structurally similar but operationally distinct. The Ultium platform partnership with LG Energy Solution continues, but with scaled-back capacity plans; battery plant cancellations and delays at both Ford-BlueOval and GM-LG facilities are directly linked to the post-credit demand collapse. Notably, GM is positioned alongside Stellantis and Toyota as a Western OEM pursuing Hybrid/EREV emphasis rather than full BEV commitment — a strategic category that signals the durability of internal combustion and hybrid powertrains in Western product planning through at least the end of this decade. The implication is profound: where Tesla and Rivian represent the "Full BEV commitment" strategic position, the three largest Western OEMs by US volume have explicitly clustered into the multi-pathway camp. This bifurcation within Western OEM strategy is itself a meaningful datum: it means that Western OEMs are no longer competing against Chinese OEMs with a unified product strategy, but rather are competing with a fragmented approach that opens exploitable positioning gaps.
+
+The Group's strategic emphasis on hybrid and range-extended EV options reflects a calculation that the EU's 90% CO₂ reduction framework preserves profitable powertrain flexibility through 2035 and beyond. [S34] The risk in this strategy is execution: Stellantis has historically been a brand portfolio operator rather than a technology leader, and the hybrid/EREV emphasis will require manufacturing flexibility, supplier coordination, and software integration across multiple powertrain variants — capabilities that are easier to coordinate when the product plan is convergent rather than divergent.
+
+### Volkswagen's Structural Crossroads: The Most Acute Western OEM Crisis
+
+Volkswagen Group's situation is qualitatively different from the US trio and represents the most acute strategic crisis among Western OEMs. The Group's challenges are structural rather than financial — that is, the problem is not primarily losses (though profitability has deteriorated) but rather the simultaneous failure of three strategic pillars. First, the SSP (Scalable Systems Platform), which was supposed to consolidate VW Group's BEV architecture across all brands, has experienced development delays; the Cariad software subsidiary has compounded these delays with its own restructuring. Second, Volkswagen's China market share has fallen substantially to BYD, Geely, and Leapmotor, all three of which are scaled Chinese OEMs continuing expansion while weaker brands enter restructuring. The competitive dynamic is asymmetric: BYD's 800V Blade Battery architecture and integrated manufacturing deliver cost structures that Volkswagen cannot match without subsidy or trade protection. Third, Volkswagen is reportedly exploring Chinese technology partnerships — potentially with XPeng or similar firms — as a way to access Chinese software and ADAS capabilities. This represents a strategic capitulation in the volume-BEV segment: Volkswagen is effectively admitting that it cannot win the BEV volume race on its own platform and must instead partner for technology access while preserving its premium-brand presence and China-market operations.
+
+The Volkswagen situation reveals a deeper structural problem with Western OEM EV strategy: the cost gap between Western and Chinese BEV production is not closing under current conditions. BYD and CATL together achieve scale economies that produce LFP cost leadership, enabling Chinese OEM export expansion. BYD's Blade Battery and CATL's Qilin battery both represent first-generation cell-to-pack structural battery implementations that deliver manufacturing cost advantages which Western OEMs — lacking comparable battery cell production scale and vertical integration — cannot replicate. The Hyundai-Kia contrast makes this vivid: Hyundai-Kia has deployed 800V electrical architecture and is explicitly positioned as the best-positioned Western-affiliated OEM for the EV transition, in contrast to Volkswagen Group's structural challenges and delayed BEV launches. Hyundai-Kia's E-GMP platform, IONIQ 5/6/EV3 product cadence, and Georgia Metaplant US manufacturing investment represent the most successful non-Chinese EV challenger to Tesla. Volkswagen's challenge is that it has the scale and brand portfolio to compete, but the technology execution and cost structure to lose — a worse combination than being too small to matter.
+
+A fourth dimension of the Volkswagen crisis — and the one that most clearly distinguishes it from Ford, GM, and Stellantis — is the scale of its China exposure relative to its capacity to retreat from it. Unlike the US trio, which can reallocate capital and capacity away from BEV programs to domestic hybrid portfolios, Volkswagen's German manufacturing footprint, its Wolfsburg and Ingolstadt dependencies, and its EU workforce obligations leave it with limited optionality in pacing BEV investment. The SSP delay therefore does not merely postpone product launches; The strategic calculus Volkswagen now faces is whether to accept a permanent role as a regional premium-and-hybrid manufacturer inside Europe while ceding the global volume-BEV center to Chinese OEMs, or whether the Chinese partnership route can be executed quickly enough to restore platform competitiveness before the SSP's late-2020s product cycle becomes commercially irrelevant.
+
+### Tesla as the Outlier: Selective Price Competition, Energy Storage, and the Autonomy Pivot
+
+Tesla occupies a position structurally distinct from all four legacy Western OEMs. The energy storage business is increasingly important as a profitability anchor: stationary storage battery prices have fallen to $70/kWh [S6], and Tesla's vertical integration in cells, packs, and software (Powerwall, Megapack, Autobidder) creates a margin profile that traditional OEM automotive operations cannot match.
+
+Tesla's selective price competition is also structurally distinct from the legacy OEM retreat narrative. While Ford, GM, and Stellantis have been forced into hybrid and EREV emphasis because they cannot profitably sell BEVs at Western cost structures, Tesla retains the ability to selectively discount Model 3/Y while protecting margins through software revenue (FSD subscriptions), regulatory credit sales (which are now constrained in some jurisdictions), and the energy storage mix. Tesla's recovery is dependent on autonomy milestones including the Cybercab/Robotaxi platform — a strategic bet that places Tesla in a binary-outcome category. If Cybercab encounters continued regulatory delays or competitive displacement by Waymo, Cruise, or Chinese autonomous platforms, Tesla's automotive segment compresses into a traditional premium-car business facing the same cost-structure pressures as Ford and GM.
+
+Ford and GM, with their multi-powertrain strategies, can meet ZEV mandates partially through hybrid variants; Tesla must rely on BEV sales volume.
+
+### The Causal Architecture: Why the Western OEM Retreat Is Structurally Self-Reinforcing
+
+The Western OEM retreat is not merely a response to the current demand environment; it is structurally self-reinforcing in ways that compound over the forecast horizon. Three causal loops operate simultaneously. as the EU framework softens, the investment case for Western OEM BEV platforms weakens further. Second, the supply-chain dependency loop: China's MOFCOM licensing regime for graphite, rare earths, and battery materials represents a strategic chokepoint that could disrupt Western OEM production including Ford's, Volkswagen's, GM's, and Stellantis's. Third, the cost-curve divergence loop: as BYD and CATL continue scaling LFP production and pushing toward sodium-ion commercialization (CATL's Naxtra at 175 Wh/kg launched December 2025 [S20]), the cost gap between Chinese and Western BEV production widens rather than narrows. The battery pack price of $108/kWh in 2025 [S6] and the BEV-specific pack price of $99/kWh [S6] reflect this dynamic — but Western OEMs pay more per kWh than Chinese OEMs because they lack comparable cell manufacturing scale and vertical integration.
+
+The counterfactual evidence suggests that the retreat is not inevitable — it is contingent on policy restoration, regulatory stringency, and technology breakthroughs.
+
+### The Inflection Points That Determine Whether Retreat Becomes Irreversible
+
+First, the EU trilogue conclusion on the 90% CO₂ reduction proposal, expected late 2026 or early 2027, will lock in or modify the framework that Volkswagen, Stellantis, and other EU-based OEMs use for investment planning. [S34] An adverse ruling would allow the federal credit expiration to propagate fully through the US market, reducing Western OEM BEV volume below break-even thresholds and accelerating the retreat. if the launch slips or fails to achieve commercial parameters, the Western OEM retreat toward hybrid/EREV becomes structurally irreversible.
+
+The Tesla counter-example within this analysis is critical: Tesla is the only Western OEM whose retreat narrative does not apply, because Tesla's strategic positioning (premium BEV, energy storage, autonomy) is structurally insulated from the cost pressures that have forced Ford, GM, and Stellantis into hybrid pivots. The automotive-only comparison understates Tesla's structural advantage because it excludes the energy storage and future Cybercab businesses. But it also underscores a key asymmetry: even Tesla, the strongest Western BEV player, cannot match BYD's cost structure in the volume segment. The Western OEM retreat is therefore best understood not as a uniform failure but as a tiered divergence — Ford, GM, Stellantis, and Volkswagen retreat from volume-BEV into multi-powertrain and premium positioning; Tesla retreats from cost competition into premium, energy, and autonomy niches; Hyundai-Kia (technically Korean-affiliated but Western-aligned) occupies the middle ground as the most successful non-Chinese EV challenger.
+
+## Risks, Bottlenecks, and Downside Scenarios: What Could Derail the Base Forecast
+
+### Battery Raw-Material Shocks and the Asymmetric Absorption Problem
+
+The single most consequential structural risk to the base forecast is a sustained battery raw-material cost shock that compresses OEM margins below break-even — and here, the industry's vertical-integration asymmetry means the same shock strengthens Chinese integrated players while it cripples Western non-integrated competitors. The fact that battery pack prices nonetheless fell to $108/kWh in 2025 reflects cell-manufacturing learning rates and pack-design innovations absorbing most of the raw-material cost pressure [S6] — but that absorption mechanism has limits.
+
+The deeper structural problem is that absorption capacity is asymmetric across the industry. BYD and CATL together control approximately 55.6% of global battery installations [S8], with BYD's vertically integrated cell-to-pack Blade Battery architecture creating a cost moat that Western OEMs structurally cannot replicate without comparable upstream control. In a sustained shock scenario, Western OEM EV losses would deepen while BYD-CATL integrated cost structures preserve margin through the cycle. The forecast risk is therefore not a uniform "EV slowdown" but a divergent shock: Chinese players gain share at Western OEM expense even as headline global growth decelerates.
+
+But this argument has a finite horizon — once lithium itself becomes the binding constraint rather than cobalt/nickel, the LFP insulation argument weakens.
+
+### Trade-War Escalation and the Chinese Overcapacity Trap
+
+The second downside scenario is a full US/EU tariff blockade on Chinese EVs that triggers the inverse of the protectionist intent: Chinese supply-chain overcapacity, depressed pricing across all geographies, and OEM profitability crises globally. The empirical baseline already contains the building blocks of this cascade.
+
+The cascade mechanism runs as follows.
+
+But this counter-position ignores that the consumer-price burden of Chinese tariff walls is largely internalized by Western OEMs through reduced competitive pressure rather than fully passed through — meaning the political cost of tariff escalation is lower than the consumer-price headline suggests.
+
+### Policy Reversal Cascade and the Collapsing Investment Floor
+
+A third downside pathway runs through policy, specifically a cascading reversal of the policy-floor that supports EV investment across both Europe and the United States.
+
+The asymmetry of policy reversal exposure — high in the West, low in China — is itself the structural reason Scenario B retains non-trivial probability even under base-case assumptions.
+
+### Technology Disappointment, Charging Infrastructure Gaps, and the Consumer-Rejection Threshold
+
+The solid-state dispute itself illustrates the structural risk. The likely consequence is not a literal technology gap but a margin compression: if all premium EVs converge on LFP-plus-cell-to-pack architectures with energy density parity, the price-premium that has sustained premium-segment margins evaporates, intensifying price competition at the very margin where Western OEMs have most of their remaining EV profitability.
+
+The charging-infrastructure risk is structurally worse because it is geographically uneven. Megawatt Charging System (MCS) deployment remains at pilot scale in the Netherlands, California, and Japan, with V2G bidirectional charging similarly constrained to pilot programs.
+
+The consumer-rejection threshold is also reinforced by the Iran war paradox. While oil-price volatility boosts EV consideration, it simultaneously increases battery material costs — affecting LFP, NCM, and sodium-ion production economics alike. This means the "war economy" tailwind is partially self-canceling: the same Brent crude spike that drives consumers toward EVs also raises the cost of producing them.
+
+### The Strait of Hormuz Stagflation Scenario: Compounding Shocks into a Compound Downside
+
+The most acute compound downside scenario — and the one that deserves explicit falsification milestones — is a full Strait of Hormuz closure that simultaneously spikes oil prices and disrupts Chinese battery supply chains, creating a stagflation-type shock to the global EV industry. The July 8–11, 2026 ceasefire collapse and renewed tensions [S29] indicate that this is not a tail risk but a present-tense volatility.
+
+(2) oil-importing emerging markets see a durable EV-adoption catalyst as fuel-cost economics flip decisively toward EVs, expanding the emerging-market growth channel; (3) but simultaneously, higher oil prices raise lithium, cobalt, and nickel extraction and processing costs, partially offsetting the EV demand stimulus; The net result is a stagflation shock that splits the EV industry into two tracks: emerging markets accelerate on oil-cost-economics logic while developed markets contract on macro-financial logic. Global EV share growth continues but the regional bifurcation deepens beyond any single-scenario forecast.
+
+The principal mitigation against this compound scenario is the counterintuitive resilience of LFP-dominant Chinese supply chains: LFP's cobalt-free and nickel-lean chemistry profile insulates it from the most volatile raw-material exposures, and CATL's sodium-ion Naxtra product launched December 2025 at 175 Wh/kg — explicitly motivated by China's 75% lithium import dependence — represents a structural hedge against lithium-supply disruption. [S20] But these hedges are partial: a full Strait closure remains a "trigger event" with non-linear second-order effects, and the July 8–11, 2026 ceasefire collapse [S29] is a leading indicator that such triggers remain plausible through 2027.
+
+### Probability Weights and Falsification Milestones
+
+The four risk clusters above do not have equal weight in shifting the global probability distribution.
+
+## Visual Annex
+
+_Deterministic visualizations supporting this report, generated from structured artifacts._
+
+<!-- viz:charts/timeline_lanes.html -->
+![Event Timeline](demos/ev-2035/charts/timeline_lanes.png)
+
+*Event Timeline*
+
+<!-- viz:charts/actor_network.html -->
+![Actor Relationship Network](demos/ev-2035/charts/actor_network.png)
+
+*Actor Relationship Network*
+
+<!-- viz:charts/actor_influence_salience.html -->
+![Actors — Influence vs Salience](demos/ev-2035/charts/actor_influence_salience.png)
+
+*Actors — Influence vs Salience*
+
+<!-- viz:charts/source_mix_sunburst.html -->
+![Source Mix — tier / origin / reachability](demos/ev-2035/charts/source_mix_sunburst.png)
+
+*Source Mix — tier / origin / reachability*
+
+<!-- viz:charts/quantitative_claims.html -->
+![Key Quantitative Claims](demos/ev-2035/charts/quantitative_claims.png)
+
+*Key Quantitative Claims*
+
+<!-- viz:charts/contested_claims.html -->
+![Contested Claims — evidence weight per position](demos/ev-2035/charts/contested_claims.png)
+
+*Contested Claims — evidence weight per position*
+
+## How to Verify This Forecast (Resolution Criteria & Indicators)
+This section lists **falsifiable, trackable** resolution criteria for each scenario, plus dated/triggered indicators for future scoring and calibration.
+
+### Per-Scenario Resolution Criteria
+- **[32%] Bifurcated Acceleration**: By 2030, verifiable that: (a) China accounts for ≥60% of global EV production volume per BNEF/Rystad data; (b) EU 2027-2030 BEV+PHEV market share averages ≥50% (ACEA/EEA); (c) US 2027-2029 EV share reaches ≥10% in at least 4 of 8 quarters (Cox Automotive/KBB); (d) global EV share 2029-2031 averages ≥42% per IEA Global EV Outlook.
+- **[38%] Western Plateau (Base Case / Inertia)**: By 2030, verifiable that: (a) US EV market share ≤12% in any quarter of 2027–2029 (Cox/KBB); (b) EU 2030 BEV share <50% OR final 2030 framework target <85% (ACEA/EEA); (c) global EV share 2029–2031 averages 40–48% per IEA/BNEF; (d) no comprehensive US federal EV incentive restoration enacted before 2030.
+- **[13%] Geopolitical Fragmentation / Trade-War Escalation**: By 2030, verifiable that: (a) average EU/US tariff on Chinese-built EVs ≥50%; (b) annual Brent crude average 2027–2028 ≥$90/bbl; (c) fewer than 30 of 137 Chinese NEV brands profitable by 2029 (AlixPartners update); (d) Chinese OEMs hold ≥45% of emerging-market EV sales outside China (BloombergNEF country-level data).
+- **[10%] Technology Disappointment & Consumer Rejection**: By 2030, verifiable that: (a) no OEM achieves solid-state mass production at <$120/kWh and >300 Wh/kg by end of 2029; (b) US public charging port-to-EV ratio remains <0.15 in 2028 (DOE AFDC); (c) global BEV premium over equivalent ICE in 2029 <12% (JD Power/Edmunds); (d) global EV share 2029–2031 averages <42% per IEA.
+- **[7%] Other / Status Quo**: At 2026-2035, classify this residual bin if none of the named scenarios' complete resolution criteria are met, or if the outcome remains a mixed/status-quo path.
+
+## References
+
+1. [S10] BloombergNEF's Electric Vehicle Outlook 2026 — about.bnef.com, 2026-06-01 — [https://about.bnef.com/insights/clean-transport/bloombergnefs-electric-vehicle-outlook-2026-global-ev-sales-set-for-another-record-breaking-year-but-growth-in-some-major-markets-slows](https://about.bnef.com/insights/clean-transport/bloombergnefs-electric-vehicle-outlook-2026-global-ev-sales-set-for-another-record-breaking-year-but-growth-in-some-major-markets-slows)
+2. [S8] Global EV Battery Market Share 2025 — cnevpost.com, 2026-02-04 — [https://cnevpost.com/2026/02/04/global-ev-battery-market-share-2025](https://cnevpost.com/2026/02/04/global-ev-battery-market-share-2025)
+3. [S27] 2026 Iran War — en.wikipedia.org, 2026-07-01 — [https://en.wikipedia.org/wiki/2026_Iran_war](https://en.wikipedia.org/wiki/2026_Iran_war)
+4. [S7] Electric Car Sales — ourworldindata.org, 2026-01-15 — [https://ourworldindata.org/electric-car-sales](https://ourworldindata.org/electric-car-sales)
+5. [S17] BYD Files All New Seagull — cnevpost.com, 2026-07-11 — [https://cnevpost.com/2026/07/11/byd-files-all-new-seagull](https://cnevpost.com/2026/07/11/byd-files-all-new-seagull)
+6. [S5] Q2 2026 EV Sales Report Commentary — coxautoinc.com, 2026-07-01 — [https://www.coxautoinc.com/insights/q2-2026-ev-sales-report-commentary](https://www.coxautoinc.com/insights/q2-2026-ev-sales-report-commentary)
+7. [S1] EU drops 2035 combustion engine ban as global EV shift faces reset — money.usnews.com, 2025-12-16 — [https://money.usnews.com/investing/news/articles/2025-12-16/eu-drops-2035-combustion-engine-ban-as-global-ev-shift-faces-reset](https://money.usnews.com/investing/news/articles/2025-12-16/eu-drops-2035-combustion-engine-ban-as-global-ev-shift-faces-reset)
+8. [S29] The Strait of Hormuz is Now at the Centre of Iranian and US Calculus — aljazeera.com, 2026-07-08 — [https://www.aljazeera.com/opinions/2026/7/8/the-strait-of-hormuz-is-now-at-the-centre-of-iranian-and-us-calculus](https://www.aljazeera.com/opinions/2026/7/8/the-strait-of-hormuz-is-now-at-the-centre-of-iranian-and-us-calculus)
+9. [S22] The War Economy Electric Shift: How the Iran Crisis Turned EV Skeptics into Buyers — insighttrendsworld.com, 2026-03-15 — [https://www.insighttrendsworld.com/post/the-war-economy-electric-shift-how-the-iran-crisis-turned-ev-skeptics-into-used-electric-car-buyers](https://www.insighttrendsworld.com/post/the-war-economy-electric-shift-how-the-iran-crisis-turned-ev-skeptics-into-used-electric-car-buyers)
+10. [S26] IEA Global EV Outlook 2026 Webinar — iea.blob.core.windows.net, 2026-05-01 — [https://iea.blob.core.windows.net/assets/8995fa9b-3808-4440-ae33-b32f4f240adb/GEVO-2026_Webinar-28-forPDF.pdf](https://iea.blob.core.windows.net/assets/8995fa9b-3808-4440-ae33-b32f4f240adb/GEVO-2026_Webinar-28-forPDF.pdf)
+11. [S6] Lithium-ion Battery Pack Prices Fall to $108 per kWh — about.bnef.com, 2025-12-15 — [https://about.bnef.com/insights/clean-transport/lithium-ion-battery-pack-prices-fall-to-108-per-kilowatt-hour-despite-rising-metal-prices-bloombergnef](https://about.bnef.com/insights/clean-transport/lithium-ion-battery-pack-prices-fall-to-108-per-kilowatt-hour-despite-rising-metal-prices-bloombergnef)
+12. [S20] Top Chinese Battery Pioneer Urges Sodium Hardware Pivot — carnewschina.com, 2026-07-12 — [https://carnewschina.com/2026/07/12/top-chinese-battery-pioneer-urges-sodium-hardware-pivot-to-break-75-lithium-import-reliance](https://carnewschina.com/2026/07/12/top-chinese-battery-pioneer-urges-sodium-hardware-pivot-to-break-75-lithium-import-reliance)
+13. [S34] EU Carmakers to Comply with 90% Emissions Reduction by 2035 — euronews.com, 2025-12-16 — [https://www.euronews.com/my-europe/2025-12-16/eu-carmakers-to-comply-with-90-emissions-reduction-by-2035-as-full-combustion-engine-ban-s](https://www.euronews.com/my-europe/2025-12-16/eu-carmakers-to-comply-with-90-emissions-reduction-by-2035-as-full-combustion-engine-ban-s)
+14. [S19] European Commission 2035 CO2 Emissions Climate — politico.eu, 2025-12-18 — [https://www.politico.eu/article/european-commission-2035-co2-emissions-climate](https://www.politico.eu/article/european-commission-2035-co2-emissions-climate)
+15. [S2] FAQs for Modification of Sections under OBBB — irs.gov, 2025-07-04 — [https://www.irs.gov/newsroom/faqs-for-modification-of-sections-25c-25d-25e-30c-30d-45l-45w-and-179d-under-public-law-119-21-139-stat-72-july-4-2025-commonly-known-as-the-one-big-beautiful-bill-obbb](https://www.irs.gov/newsroom/faqs-for-modification-of-sections-25c-25d-25e-30c-30d-45l-45w-and-179d-under-public-law-119-21-139-stat-72-july-4-2025-commonly-known-as-the-one-big-beautiful-bill-obbb)
+16. [S30] Tesla Second Quarter 2026 Production Deliveries — ir.tesla.com, 2026-07-02 — [https://ir.tesla.com/press-release/tesla-second-quarter-2026-production-deliveries](https://ir.tesla.com/press-release/tesla-second-quarter-2026-production-deliveries)

@@ -30,7 +30,7 @@
     'card.ai.title':    { en: 'Who dominates US AI by 2030?', zh: '2030 年谁主导美国 AI？' },
     'card.ai.meta':     { en: '40-round dual-platform simulation · 42 personas · 6-section forecast', zh: '40 轮双平台模拟 · 42 个人格 · 6 章预测报告' },
     'card.ev.title':    { en: 'Global EV industry through 2035', zh: '2035 年前全球电动汽车产业' },
-    'card.ev.meta':     { en: '40-round dual-platform simulation · 16 personas · technology / supply-chain / policy scenarios', zh: '40 轮双平台模拟 · 16 个人格 · 技术 / 产业链 / 政策情景' },
+    'card.ev.meta':     { en: '19-round dual-platform simulation · 12 personas · 119-node knowledge graph · 12 binary forecasts & 5 mutually exclusive scenarios · 98.9% audited quantitative-citation coverage', zh: '19 轮双平台模拟 · 12 个人格 · 119 节点知识图谱 · 12 项二元预测与 5 个互斥情景 · 定量声明引用覆盖率经审计达 98.9%' },
     'card.ru.title':    { en: 'How and when does the Russia–Ukraine war end?', zh: '俄乌战争如何终结、何时终结？' },
     'card.ru.meta':     { en: '36 personas · multi-scenario endgame analysis grounded in a 40K-char research dossier', zh: '36 个人格 · 基于 4 万字研究档案的多情景终局推演' },
     'card.semi.title':  { en: 'Global semiconductors through 2030', zh: '2030 年前全球半导体产业' },

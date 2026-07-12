@@ -1,142 +1,508 @@
 [
   {
-    "title": "UK Government: Phasing out the sale of new petrol and diesel cars from 2030",
-    "url": "https://www.gov.uk/government/speeches/phasing-out-the-sale-of-new-petrol-and-diesel-cars-from-2030-and-support-for-zero-emission-vehicle-zev-transition"
+    "url": "https://money.usnews.com/investing/news/articles/2025-12-16/eu-drops-2035-combustion-engine-ban-as-global-ev-shift-faces-reset",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "EU drops 2035 combustion engine ban as global EV shift faces reset",
+    "tier": "S1",
+    "date": "2025-12-16",
+    "independent": true,
+    "supports": [
+      "European Commission's December 16, 2025 proposal to soften 2035 ICE ban to 90%",
+      "EU 2035 framework finalization timeline",
+      "Carbon neutrality by 2050 framework"
+    ],
+    "jurisdiction": "EU",
+    "lang": "en",
+    "staleness_days": 218,
+    "is_stale": false
   },
   {
-    "title": "Labour Confirms 2030 Petrol and Diesel Car Ban and ZEV",
-    "url": "https://www.electriccarscheme.com/blog/labour-to-reinstate-2030-ice-car-ban"
+    "url": "https://www.irs.gov/newsroom/faqs-for-modification-of-sections-25c-25d-25e-30c-30d-45l-45w-and-179d-under-public-law-119-21-139-stat-72-july-4-2025-commonly-known-as-the-one-big-beautiful-bill-obbb",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "FAQs for Modification of Sections under OBBB",
+    "tier": "S1",
+    "date": "2025-07-04",
+    "independent": true,
+    "supports": [
+      "US $7,500 federal EV tax credit terminated effective September 30, 2025",
+      "Sections 30D, 25E, 45W clean vehicle credit modifications",
+      "OBBB implementation timeline"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 383,
+    "is_stale": true
   },
   {
-    "title": "ICE car bans: What? Where? When? - ADI Analytics",
-    "url": "https://adi-analytics.com/2023/03/30/ice-car-bans-what-where-when/"
+    "url": "https://oilprice.com/Latest-Energy-News/World-News/US-EV-Adoption-Slows-While-Global-Demand-Accelerates.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "US EV Adoption Slows While Global Demand Accelerates",
+    "tier": "S2",
+    "date": "2025-12-20",
+    "independent": true,
+    "supports": [
+      "US EV adoption slowdown following IRA repeal",
+      "Global EV demand acceleration",
+      "Cross-regional bifurcation in EV markets"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 214,
+    "is_stale": false
   },
   {
-    "title": "Government reaffirms 2030 ICE vehicle ban",
-    "url": "https://www.driving.org/government-reaffirms-2030-ice-vehicle-ban-amid-industry-concerns-over-ev-transition/"
+    "url": "https://www.spglobal.com/automotive-insights/en/blogs/2025/12/europe-shifts-into-reverse-on-eu-2035-ice-ban",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Europe Shifts into Reverse on EU 2035 ICE Ban",
+    "tier": "S2",
+    "date": "2025-12-17",
+    "independent": true,
+    "supports": [
+      "EU automotive lobby pressure on 2035 framework",
+      "Industry position on charging infrastructure gaps",
+      "Softening rationale on competitiveness concerns"
+    ],
+    "jurisdiction": "EU",
+    "lang": "en",
+    "staleness_days": 217,
+    "is_stale": false
   },
   {
-    "title": "The UK brings the ICE phase-out back on track - electrive.com",
-    "url": "https://www.electrive.com/2024/07/24/the-uk-brings-the-ice-phase-out-back-on-track/"
+    "url": "https://www.coxautoinc.com/insights/q2-2026-ev-sales-report-commentary",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Q2 2026 EV Sales Report Commentary",
+    "tier": "S1",
+    "date": "2026-07-01",
+    "independent": true,
+    "supports": [
+      "US Q2 2026 EV sales of 247,226 units (-20.5% YoY, +14.7% sequentially)",
+      "US EV share 5.8% Q2 2026",
+      "US Q4 2025 sales -36% YoY",
+      "US Q3 2025 peak of 10.6% share"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 21,
+    "is_stale": false
   },
   {
-    "title": "BYD: steady progress on global production network",
-    "url": "https://www.automotiveworld.com/articles/byd-steady-progress-on-global-production-network/"
+    "url": "https://about.bnef.com/insights/clean-transport/lithium-ion-battery-pack-prices-fall-to-108-per-kilowatt-hour-despite-rising-metal-prices-bloombergnef",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Lithium-ion Battery Pack Prices Fall to $108 per kWh",
+    "tier": "S1",
+    "date": "2025-12-15",
+    "independent": true,
+    "supports": [
+      "Volume-weighted battery pack price $108/kWh in 2025",
+      "BEV-specific pack price $99/kWh",
+      "Stationary storage price $70/kWh",
+      "Battery price decline despite lithium recovery"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en",
+    "staleness_days": 219,
+    "is_stale": false
   },
   {
-    "title": "BYD Global Expansion: Explosive Overseas Growth",
-    "url": "https://chinacaronline.com/byd-global-expansion-overseas-growth-2025/"
+    "url": "https://ourworldindata.org/electric-car-sales",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Electric Car Sales",
+    "tier": "S2",
+    "date": "2026-01-15",
+    "independent": true,
+    "supports": [
+      "Global EV sales reaching 20M in 2025",
+      "25% global EV market share in 2025",
+      "Norway BEV adoption reference at ~90%",
+      "Japan HEV adoption reference"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en",
+    "staleness_days": 188,
+    "is_stale": false
   },
   {
-    "title": "BYD shifts focus from Hungary to Türkiye for European EV production",
-    "url": "https://www.electrive.com/2025/07/22/byd-shifts-focus-from-hungary-to-turkey-for-european-ev-production/"
+    "url": "https://cnevpost.com/2026/02/04/global-ev-battery-market-share-2025",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Global EV Battery Market Share 2025",
+    "tier": "S2",
+    "date": "2026-02-04",
+    "independent": true,
+    "supports": [
+      "CATL global battery share at 37%+",
+      "CATL+BYD combined share at 55.6%",
+      "Battery manufacturer market positioning"
+    ],
+    "jurisdiction": "China",
+    "lang": "en",
+    "staleness_days": 168,
+    "is_stale": false
   },
   {
-    "title": "BYD Targets 1 Million Overseas Car Sales by 2025",
-    "url": "https://electricarworld.com/byd-targets-1-million-overseas-car-sales-by-2025/"
+    "url": "https://www.euronews.com/my-europe/2025/12/16/eu-carmakers-to-comply-with-90-emissions-reduction-by-2035-as-full-combustion-engine-ban-s",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "eu carmakers to comply with 90 emissions reduction by 2035 as full combustion engine ban s",
+    "tier": "S3"
   },
   {
-    "title": "China's BYD Races Ahead With New Plants In Emerging Markets",
-    "url": "https://gfmag.com/economics-policy-regulation/china-byd-global-expansion-new-plants-emerging-markets/"
+    "url": "https://about.bnef.com/insights/clean-transport/bloombergnefs-electric-vehicle-outlook-2026-global-ev-sales-set-for-another-record-breaking-year-but-growth-in-some-major-markets-slows",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "BloombergNEF's Electric Vehicle Outlook 2026",
+    "tier": "S1",
+    "date": "2026-06-01",
+    "independent": true,
+    "supports": [
+      "BNEF 2026 projection of 23M+ EV sales",
+      "BNEF 2035 projection of 52% global EV share",
+      "China 53% domestic and 63% global EV share",
+      "US 2030 forecast downgrade to 17%"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en",
+    "staleness_days": 51,
+    "is_stale": false
   },
   {
-    "title": "The Looming Financial Crisis Behind China's EV Boom",
-    "url": "https://medium.com/@unpopdisc/the-looming-financial-crisis-behind-chinas-electric-vehicle-boom-is-byd-the-next-evergrande-a5ae035533bc"
+    "url": "https://www.pbs.org/newshour/world/eu-plans-to-ease-2035-ban-on-internal-combustion-cars-as-auto-industry-seeks-flexibility",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "EU Plans to Ease 2035 Ban on Internal Combustion Cars",
+    "tier": "S2",
+    "date": "2025-12-16",
+    "independent": true,
+    "supports": [
+      "EU auto industry lobbying affecting 2035 framework",
+      "Member state divisions on policy reversal",
+      "Compensation mechanism details for biofuels/e-fuels"
+    ],
+    "jurisdiction": "EU",
+    "lang": "en",
+    "staleness_days": 218,
+    "is_stale": false
   },
   {
-    "title": "How China made electric vehicles mainstream - BBC",
-    "url": "https://www.bbc.com/news/articles/c2d5ld8y8pwo"
+    "url": "https://www.autonews.ru/news/6a509f4c9a7947686ab7cee7",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "6a509f4c9a7947686ab7cee7",
+    "tier": "S3"
   },
   {
-    "title": "Tesla is facing major competition in China",
-    "url": "https://qz.com/tesla-elon-musk-ev-competition-china-byd-geely-nio-1851452115"
+    "url": "https://apnews.com/article/china-autos-exports-evs-cars-4bce218f337534299f230c510917b84c",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "China Autos Exports EVs Cars",
+    "tier": "S1",
+    "date": "2026-01-22",
+    "independent": true,
+    "supports": [
+      "Chinese EV export volumes and trajectories",
+      "AlixPartners profitability projections",
+      "Trade defense dynamics globally"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 181,
+    "is_stale": false
   },
   {
-    "title": "BYD обогнала Tesla: в 2025 году продали рекордные 20.5 млн электромобилей",
-    "url": "https://itc.ua/news/byd-obognala-tesla-v-2025-godu-v-myre-prodaly-rekordnye-20-5-mln-elektromobylej/"
+    "url": "https://www.businesstimes.com.sg/companies-markets/telcos-media-tech/lg-energy-profit-misses-estimates-slow-ev-demand-hits",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lg energy profit misses estimates slow ev demand hits",
+    "tier": "S3"
   },
   {
-    "title": "Global EV sales jump 40% in March despite tariff turmoil - Electrek",
-    "url": "https://electrek.co/2025/04/14/global-ev-sales-march-2025/"
+    "url": "https://www.newsday.co.zw/opinion-analysis/article/200058088/ev-era-has-arrived-a-historic-opportunity-for-the-global-south",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "ev era has arrived a historic opportunity for the global south",
+    "tier": "S3"
   },
   {
-    "title": "Hyundai Motor Unveils Bold 2030 Vision at 2025 CEO Investor Day",
-    "url": "https://www.hyundai.com/worldwide/en/newsroom/detail/hyundai-motor-company-unveils-bold-2030-vision-and-product-roadmap-at-2025-ceo-investor-day-0000001018"
+    "url": "https://www.utilitydive.com/news/us-electric-vehicle-sales-are-slowing-amid-policy-shifts-bnef/751079",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "US Electric Vehicle Sales Are Slowing",
+    "tier": "S2",
+    "date": "2026-04-15",
+    "independent": true,
+    "supports": [
+      "BNEF US EV forecast downgrade trajectory",
+      "Policy shift impact on sales",
+      "ACC II state adoption details"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 98,
+    "is_stale": false
   },
   {
-    "title": "Hyundai's 2025 Battery Strategy: An Energy Powerhouse",
-    "url": "https://enkiai.com/hyundai/hyundais-2025-battery-strategy-an-energy-powerhouse/"
+    "url": "https://cnevpost.com/2026/07/11/byd-files-all-new-seagull",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "BYD Files All New Seagull",
+    "tier": "S2",
+    "date": "2026-07-11",
+    "independent": true,
+    "supports": [
+      "BYD H1 2026 sales of 1,808,511 units (-15.72% YoY)",
+      "BYD June 2026 overseas sales of 175,349 (+94.73% YoY)",
+      "BYD 17 million NEV milestone",
+      "BYD Thai factory inauguration July 2026"
+    ],
+    "jurisdiction": "China",
+    "lang": "en",
+    "staleness_days": 11,
+    "is_stale": false
   },
   {
-    "title": "Hyundai's Aggressive EV Strategy - AInvest",
-    "url": "https://www.ainvest.com/news/hyundai-aggressive-ev-strategy-navigating-price-competition-unlock-long-term-2510/"
+    "url": "https://earth.org/eu-review-of-2035-ban-on-co2-emitting-vehicles-deals-another-blow-to-blocs-decarbonization-efforts",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "EU Review of 2035 Ban Deals Another Blow to Decarbonization",
+    "tier": "S2",
+    "date": "2026-01-10",
+    "independent": true,
+    "supports": [
+      "EU 2035 review process and stakeholders",
+      "Environmental advocacy response",
+      "Parliament resistance to softening"
+    ],
+    "jurisdiction": "EU",
+    "lang": "en",
+    "staleness_days": 193,
+    "is_stale": false
   },
   {
-    "title": "Hyundai Motor Group 2030 Vision Official Press Release",
-    "url": "https://www.hyundaimotorgroup.com/en/news/CONT0000000000187288"
+    "url": "https://www.politico.eu/article/european-commission-2035-co2-emissions-climate",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "European Commission 2035 CO2 Emissions Climate",
+    "tier": "S1",
+    "date": "2025-12-18",
+    "independent": true,
+    "supports": [
+      "Commission proposal structure and rationale",
+      "2035 framework amendments detail",
+      "Member state and Parliament negotiating positions"
+    ],
+    "jurisdiction": "EU",
+    "lang": "en",
+    "staleness_days": 216,
+    "is_stale": false
   },
   {
-    "title": "Hyundai Motor Group Investment Plans",
-    "url": "https://worldwide.kia.com/en/newsroom/view/?id=161366"
+    "url": "https://carnewschina.com/2026/07/12/top-chinese-battery-pioneer-urges-sodium-hardware-pivot-to-break-75-lithium-import-reliance",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Top Chinese Battery Pioneer Urges Sodium Hardware Pivot",
+    "tier": "S2",
+    "date": "2026-07-12",
+    "independent": true,
+    "supports": [
+      "CATL Naxtra sodium-ion launch December 2025",
+      "175 Wh/kg energy density specification",
+      "75% lithium import dependence motivation",
+      "Sodium-ion projected $40-60/kWh cost by 2028"
+    ],
+    "jurisdiction": "China",
+    "lang": "en",
+    "staleness_days": 10,
+    "is_stale": false
   },
   {
-    "title": "VinFast Wikipedia",
-    "url": "https://en.wikipedia.org/wiki/VinFast"
+    "url": "https://www.evengineeringonline.com/ev-skeptics-likely-to-change-their-mind-within-five-years-according-to-new-study",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "EV Skeptics Likely to Change Their Mind Within Five Years",
+    "tier": "S2",
+    "date": "2026-03-01",
+    "independent": true,
+    "supports": [
+      "Consumer sentiment research on EV skeptics",
+      "Five-year transition probability for skeptics"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en",
+    "staleness_days": 143,
+    "is_stale": false
   },
   {
-    "title": "VinFast Europe Official",
-    "url": "https://vinfastauto.eu/"
+    "url": "https://www.insighttrendsworld.com/post/the-war-economy-electric-shift-how-the-iran-crisis-turned-ev-skeptics-into-used-electric-car-buyers",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "The War Economy Electric Shift: How the Iran Crisis Turned EV Skeptics into Buyers",
+    "tier": "S2",
+    "date": "2026-03-15",
+    "independent": true,
+    "supports": [
+      "Iran war impact on EV consideration",
+      "Used EV sales rising 30% YoY in US February 2026",
+      "Oil price impact on consumer behavior"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 129,
+    "is_stale": false
   },
   {
-    "title": "VinFast Vietnam Official",
-    "url": "https://vinfastauto.com/vn_en"
+    "url": "https://www.reuters",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.reuters",
+    "tier": "S3"
   },
   {
-    "title": "VinFast Vietnam Homepage",
-    "url": "https://vinfast.com/"
+    "url": "https://www.bbc.com/news/articles/c",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.bbc.com",
+    "tier": "S3"
   },
   {
-    "title": "Survey of end-to-end autonomous driving systems",
-    "url": "https://www.cjig.cn/zh/article/doi/10.11834/jig.230787/"
+    "url": "https://www.bbc.com/news/articles/ck",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.bbc.com",
+    "tier": "S3"
   },
   {
-    "title": "基于多模态融合的自动驾驶感知及计算",
-    "url": "https://crad.ict.ac.cn/fileJSJYJYFZ/journal/article/jsjyjyfz/HTML/2020-9-1781.shtml"
+    "url": "https://iea.blob.core.windows.net/assets/8995fa9b-3808-4440-ae33-b32f4f240adb/GEVO-2026_Webinar-28-forPDF.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "IEA Global EV Outlook 2026 Webinar",
+    "tier": "S1",
+    "date": "2026-05-01",
+    "independent": true,
+    "supports": [
+      "IEA 2026 projection of 23M EV sales and 30% share",
+      "Battery technology and chemistry projections",
+      "Solid-state battery assessments"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en",
+    "staleness_days": 82,
+    "is_stale": false
   },
   {
-    "title": "自动驾驶技术的未来:单车智能和智能车路协同",
-    "url": "https://www.researchgate.net/publication/388407276_zidongjiashijishudeweilaidanchezhinenghezhinengcheluxietong"
+    "url": "https://en.wikipedia.org/wiki/2026_Iran_war",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "2026 Iran War",
+    "tier": "S2",
+    "date": "2026-07-01",
+    "independent": true,
+    "supports": [
+      "Iran war beginning February 28, 2026",
+      "US/Israel strikes killing Khamenei",
+      "Conflict escalation timeline through July 2026"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en",
+    "staleness_days": 21,
+    "is_stale": false
   },
   {
-    "title": "大众ADMT宣布与Mobileye达成自动驾驶协议",
-    "url": "https://www.mobileyechina.com/news/volkswagen-admt-announces-agreement-with-mobileye-for-autonomous-driving/"
+    "url": "https://about.bnef.com/insights/clean-transport/electric-vehicle-outlook",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "electric vehicle outlook",
+    "tier": "S3"
   },
   {
-    "title": "端到端自动驾驶:挑战与前沿",
-    "url": "https://blog.csdn.net/jch924583667/article/details/140798921"
+    "url": "https://www.aljazeera.com/opinions/2026/7/8/the-strait-of-hormuz-is-now-at-the-centre-of-iranian-and-us-calculus",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "The Strait of Hormuz is Now at the Centre of Iranian and US Calculus",
+    "tier": "S2",
+    "date": "2026-07-08",
+    "independent": true,
+    "supports": [
+      "Iran ceasefire collapse July 8-11, 2026",
+      "Strait of Hormuz disruption persistence",
+      "Renewed tensions affecting oil markets"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en",
+    "staleness_days": 14,
+    "is_stale": false
   },
   {
-    "title": "The Rise of Emerging Markets: Southeast Asia Investment",
-    "url": "https://finance.esoftgames.com/the-rise-of-emerging-markets-why-investors-are-watching-india-brazil-and-southeast-asia/"
+    "url": "https://ir.tesla.com/press-release/tesla-second-quarter-2026-production-deliveries",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Tesla Second Quarter 2026 Production Deliveries",
+    "tier": "S1",
+    "date": "2026-07-02",
+    "independent": true,
+    "supports": [
+      "Tesla Q2 2026 deliveries of 480,126 units",
+      "Q2 YoY growth of 25%",
+      "Energy storage deployment of 13.5 GWh"
+    ],
+    "jurisdiction": "US",
+    "lang": "en",
+    "staleness_days": 20,
+    "is_stale": false
   },
   {
-    "title": "BYD Auto Wikipedia",
-    "url": "https://en.wikipedia.org/wiki/BYD_Auto"
+    "url": "https://www.cnbc.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.cnbc.com",
+    "tier": "S3"
   },
   {
-    "title": "BYD ships 7,000 vehicles to Türkiye",
-    "url": "https://www.turkiyetoday.com/business/chinese-byd-ships-7000-vehicles-to-turkiye-creates-buzz-on-turkish-social-media-141137"
+    "url": "https://ir.tesla.com/press-release/tesla-second-quarter-2026-production-deliveries-and-deployments",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "tesla second quarter 2026 production deliveries and deployments",
+    "tier": "S3"
   },
   {
-    "title": "BYD Atto 3 Review",
-    "url": "https://www.ev24.africa/byd-atto-3-review-compact-suv-winning-everywhere/"
+    "url": "https://cnevpost.com/2026/05/28/li-auto-q1-2026-earnings",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Li Auto Q1 2026 Earnings",
+    "tier": "S2",
+    "date": "2026-05-28",
+    "independent": true,
+    "supports": [
+      "Li Auto Q1 2026 net loss of 2.3 billion yuan ($330M)",
+      "Gross margin decline from 20.5% to 7.9%",
+      "Q2 delivery guidance of 95-100k units"
+    ],
+    "jurisdiction": "China",
+    "lang": "en",
+    "staleness_days": 55,
+    "is_stale": false
   },
   {
-    "title": "Tesla margins in focus as EV price war kicks",
-    "url": "https://ca.news.yahoo.com/tesla-margins-focus-ev-price-103046432.html"
-  },
-  {
-    "title": "VinFast Russian Wikipedia (历史背景)",
-    "url": "https://ru.wikipedia.org/wiki/VinFast"
+    "title": "EU Carmakers to Comply with 90% Emissions Reduction by 2035",
+    "url": "https://www.euronews.com/my-europe/2025-12-16/eu-carmakers-to-comply-with-90-emissions-reduction-by-2035-as-full-combustion-engine-ban-s",
+    "tier": "S1",
+    "date": "2025-12-16",
+    "supports": [
+      "EU Commission 90% CO₂ reduction proposal",
+      "2035 framework softening from original 100%",
+      "Member state positions during proposal"
+    ],
+    "independent": true,
+    "jurisdiction": "EU",
+    "lang": "en",
+    "source_origin": "cited",
+    "staleness_days": 218,
+    "is_stale": false
   }
 ]

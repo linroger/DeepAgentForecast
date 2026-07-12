@@ -1,210 +1,1921 @@
 {
-  "central_question": "在2025-2030年全球电动汽车市场转型关键期,谁将主导竞争格局——中国价格战与海外扩张战略能否重塑全球产业秩序,传统车企的电动化转型能否成功突围?",
-  "as_of_date": "2026-06-09",
+  "central_question": "What will the global EV industry trajectory look like from 2026 to 2035, including adoption rates, regional bifurcation, technology evolution, and policy frameworks?",
+  "as_of_date": "2026-07-22",
+  "situation_brief": {
+    "current_situation": "The global EV industry stands at an inflection point in mid-2026: approximately 20 million EVs were sold globally in 2025 (25% market share), but the market has bifurcated sharply by region. China captured 63% of 2025 global EV sales and reached 53% domestic penetration, while the US market collapsed from a 10.6% Q3 2025 peak to 5.8% by Q2 2026 following expiration of the $7,500 federal tax credit on September 30, 2025. The European Commission's December 16, 2025 proposal softened the 2035 ICE ban to a 90% CO₂ reduction, representing the most significant policy reversal in the industry's history. The Iran war (started February 28, 2026) and Strait of Hormuz disruptions created oil-price volatility that paradoxically boosted EV consumer interest while increasing battery raw material costs.",
+    "context": "The EV transition reached 25% global market share in 2025 through a combination of Chinese industrial policy (dual-credit system, NEV mandate from 2018), European regulatory push (2023 100% CO₂ reduction by 2035), and US Inflation Reduction Act incentives ($7,500 federal credit). The June 2025 lithium price trough (~$9,000/tonne) and continued LFP cost-down brought battery pack prices to $108/kWh. However, the Trump administration's 'One Big Beautiful Bill' (signed July 4, 2025) terminated EV credits effective September 30, 2025, triggering a US demand cliff (−36% YoY Q4 2025). Simultaneously, German automotive industry lobbying and Chinese competitive pressure drove the EU's December 2025 retreat from the original 2035 ICE ban.",
+    "dynamics": "Three forces are in tension: (1) Policy stability versus reversal, with the EU 90% proposal facing Parliament resistance and trilogue negotiations through 2026-2027, while 17 US states plus DC (~40% of US market) maintain ACC II ZEV mandates despite federal preemption attempts. (2) Cost reduction versus raw material volatility, with battery pack prices falling despite lithium carbonate rebounding 170% from June 2025 lows to exceed $25,000/tonne by June 2026. (3) Chinese export expansion versus Western protectionism, with BYD's June 2026 overseas sales up 94.73% year-over-year confronting 100% US Section 301 tariffs and EU anti-subsidy duties. Western OEMs recorded massive EV-related charges: Ford $19.5 billion cumulative losses, GM $7.2 billion Q4 2025 special charges, Stellantis €22 billion. Tesla's Q2 2026 deliveries of 480,126 units (+25% YoY, +18% consensus beat) signal selective recovery.",
+    "fault_lines": [
+      "EU 2035 ICE ban final framework (90% versus original 100%) — trilogue resolution in late 2026 or early 2027",
+      "US ACC II waiver durability — pending SCOTUS/DDC court ruling in Q3-Q4 2026 determines state-level ZEV mandate survival",
+      "China EV brand consolidation — AlixPartners projects only 19 of 137 brands profitable by 2030 versus 3 of 137 in 2025",
+      "Solid-state battery commercial timeline — Toyota/Idemitsu target 2027-2028 limited launch versus CATL's 'level 4 of 9' maturity assessment, with mass-market volume not expected before 2030",
+      "Chinese OEM export expansion versus Western trade defense — BYD planning to triple overseas production by 2030, targeting 33% of global automotive market",
+      "Iran war impact on oil markets and emerging market EV adoption — Strait of Hormuz disruption affects ~20% of global oil supply"
+    ],
+    "catalysts": [
+      "EU Council vote on 90% CO₂ reduction proposal (H1 2027)",
+      "SCOTUS/DDC ruling on California ACC II waiver (Q3-Q4 2026)",
+      "2028 US presidential election outcome",
+      "Toyota solid-state battery limited launch (2027)",
+      "China NEV purchase tax phase-down beginning (2027)",
+      "Iran war escalation or resolution affecting oil prices",
+      "Lithium price stabilization or further volatility",
+      "Sodium-ion battery commercial scale-up by CATL (2026-2027)"
+    ]
+  },
   "actors": [
     {
-      "name": "比亚迪(BYD)",
-      "type": "Organization",
-      "role": "全球电动汽车市场领导者,2025年超越特斯拉,主导中国价格战并加速全球生产布局",
-      "stance": "通过激进的定价策略(海鸥69,800元起售)和大规模海外建厂(泰国、巴西、土耳其等)实现全球扩张",
-      "influence": "high",
-      "memory": "已建立覆盖泰国、巴西、乌兹别克斯坦、土耳其的全球生产网络,合计海外产能超30万辆/年,2025年海外销售目标100万辆"
-    },
-    {
-      "name": "特斯拉(Tesla)",
-      "type": "Organization",
-      "role": "曾经的全球EV市场领导者,2025年被比亚迪超越",
-      "stance": "面临中国价格战压力,利润率下滑,在中国市场与BYD、吉利、蔚来等竞争加剧",
-      "influence": "high",
-      "memory": "第一季度利润率跌至三年新低,不得不持续降价以维持销量"
-    },
-    {
-      "name": "现代汽车集团(Hyundai Motor Group)",
-      "type": "Organization",
-      "role": "韩国传统车企代表,押注技术差异化战略",
-      "stance": "通过2030愿景投资553亿美元,聚焦SDV平台、下一代电池技术和区域定制化产品",
-      "influence": "high",
-      "memory": "2030年全球销量目标555万辆,投资77.3万亿韩元,2025-2030年实施,IONIQ 3主攻欧洲市场"
-    },
-    {
-      "name": "起亚(Kia)",
-      "type": "Organization",
-      "role": "现代汽车集团子品牌,EV9旗舰电动SUV推动者",
-      "stance": "作为集团31款EV车型阵容的重要组成部分,推进电动化转型",
-      "influence": "medium",
-      "memory": "EV9作为首款三排座电动旗舰SUV已上市"
-    },
-    {
-      "name": "捷尼赛思(Genesis)",
-      "type": "Organization",
-      "role": "现代汽车集团豪华品牌,参与集团EV战略",
-      "stance": "作为集团31款EV车型阵容的豪华组成部分",
-      "influence": "medium",
-      "memory": "与现代、起亚共同组成集团电动化矩阵"
-    },
-    {
-      "name": "VinFast",
-      "type": "Organization",
-      "role": "越南本土EV品牌,东南亚市场挑战者",
-      "stance": "在与中国品牌的价格战中无法竞争,无限期推迟东南亚扩张,转向欧洲市场",
-      "influence": "medium",
-      "memory": "电动巴士在德国首发,与西门子合作电巴士技术,2018年起合作"
-    },
-    {
-      "name": "英国政府(UK Government)",
+      "name": "European Commission",
       "type": "Government",
-      "role": "2030年ICE禁售政策的制定者",
-      "stance": "工党政府2024年7月恢复2030年ICE禁售期限(原推迟至2035),2025年1月议会书面声明确认",
+      "role": "Proposes and negotiates 2035 CO₂ framework; conducts trade defense investigations on Chinese EVs",
+      "stance": "Proposing 90% CO₂ reduction by 2035 (softening original 100% ban); carbon neutrality by 2050",
       "influence": "high",
-      "memory": "2030年禁售新汽油和柴油汽车,2024年11月再次重申,并承诺发布全面计划"
+      "grade": "A1",
+      "archetype": "arbiter",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "basis": "Sets binding regulatory framework for 450 million EU consumers; final framework determines European OEMs' investment trajectory and Chinese import access"
+      },
+      "description": "The EU's executive branch, led by the Commission President, responsible for proposing legislation including the December 16, 2025 amendment to Regulation (EU) 2019/631 softening the 2035 ICE phase-out to 90% CO₂ reduction.",
+      "goals": [
+        "Achieve 2050 climate neutrality",
+        "Protect European automotive industry competitiveness",
+        "Counter Chinese EV import surge through anti-subsidy duties"
+      ],
+      "constraints": [
+        "Requires Council and Parliament approval for 2035 amendment",
+        "Member state divisions (Germany/Italy/Hungary versus France/Nordics)",
+        "Limited charging infrastructure deployment rates"
+      ],
+      "assets": [
+        "Regulatory authority over CO₂ standards",
+        "Trade defense investigation powers",
+        "EU single market access leverage"
+      ],
+      "vulnerabilities": [
+        "German automotive lobbying power",
+        "Chinese retaliatory export controls on critical minerals",
+        "Parliament environmental committee resistance"
+      ],
+      "stated_vs_revealed": "Stated commitment to 2050 carbon neutrality has been revealed to be negotiable on intermediate 2035 targets when domestic industry competitiveness is threatened",
+      "worldview": {
+        "values": [
+          "Climate leadership",
+          "European strategic autonomy",
+          "Industrial competitiveness"
+        ],
+        "beliefs": [
+          "100% 2035 ban is unrealistic given infrastructure constraints",
+          "Chinese subsidies distort fair competition",
+          "E-fuels and biofuels offer viable partial pathway"
+        ],
+        "identity": "Climate-regulatory leader balancing green transition with industrial policy",
+        "frame": "EU Green Deal meets industrial sovereignty"
+      },
+      "incentives": [
+        {
+          "driver": "European industrial competitiveness",
+          "gains_if": "90% framework adopted allowing continued ICE/PHEV/EREV flexibility",
+          "loses_if": "Original 100% ban retained or stricter measures imposed",
+          "intensity": "high"
+        },
+        {
+          "driver": "Climate credibility",
+          "gains_if": "Effective carbon reduction achieved",
+          "loses_if": "Perceived as weakening climate commitments",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Regulatory framework authority",
+        "Trade defense investigation apparatus",
+        "Member state coalition-building capacity"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Knows the 2023 100% ICE ban legislation was passed but faces reality of insufficient charging infrastructure and Chinese competitive pressure"
     },
     {
-      "name": "欧盟(European Union)",
-      "type": "Government",
-      "role": "通过2035年ICE禁售和对中国EV加征关税影响市场",
-      "stance": "即将对中国汽车制造商加征惩罚性关税,促使BYD将欧洲生产重心转向土耳其",
+      "name": "BYD Company",
+      "type": "Organization",
+      "role": "Global BEV volume leader and Chinese EV export champion",
+      "stance": "Scale-driven cost leadership; aggressive export and local manufacturing expansion",
       "influence": "high",
-      "memory": "2035年新车销售100%零排放目标,关税政策推动BYD等中国车企在土耳其建厂"
+      "grade": "A2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "Largest EV maker globally with 2.26M units in 2025, planned tripling of overseas production by 2030; sets global EV price benchmark"
+      },
+      "description": "Chinese automobile and battery manufacturer, the world's largest BEV producer by volume (2.26M units in 2025 vs. Tesla's 1.64M), pursuing aggressive international expansion with Thai, Brazilian, Hungarian, and Turkish factories.",
+      "goals": [
+        "Sustain global volume leadership",
+        "Achieve profit margin recovery from price competition",
+        "Expand overseas production to offset domestic saturation"
+      ],
+      "constraints": [
+        "Domestic H1 2026 sales decline of 15.72% YoY signals saturation",
+        "Tariff barriers in US (100%), EU anti-subsidy duties",
+        "Only 3 of 137 Chinese NEV brands profitable in 2025"
+      ],
+      "assets": [
+        "Vertical integration (cells to vehicles)",
+        "LFP/blade battery technology",
+        "Thai/Brazilian/Hungarian/Turkish factories by 2030",
+        "64% of Chinese car sales are EVs"
+      ],
+      "vulnerabilities": [
+        "Domestic profit margin pressure from price war",
+        "Western trade defense escalating",
+        "Concentration risk if Chinese EV market consolidates"
+      ],
+      "stated_vs_revealed": "Stated ambition is global automotive leadership; revealed behavior shows pragmatic focus on cost-driven emerging market expansion over premium Western markets",
+      "worldview": {
+        "values": [
+          "Scale and cost leadership",
+          "Vertical integration",
+          "Technology accessibility"
+        ],
+        "beliefs": [
+          "LFP is the right chemistry for mass-market EVs",
+          "Emerging markets represent the largest growth opportunity",
+          "Vertical integration is essential for cost control"
+        ],
+        "identity": "China's national champion in EV manufacturing",
+        "frame": "Scale-economics disruptor"
+      },
+      "incentives": [
+        {
+          "driver": "Global market share growth",
+          "gains_if": "Tripling overseas production by 2030 and capturing one-third of global auto market",
+          "loses_if": "Western tariff escalation closes export markets",
+          "intensity": "high"
+        },
+        {
+          "driver": "Profitability",
+          "gains_if": "Margin stabilization despite price competition",
+          "loses_if": "Continued price war compresses margins below break-even",
+          "intensity": "high"
+        },
+        {
+          "driver": "Technology leadership",
+          "gains_if": "Second-generation cell-to-body and 800V architecture deployment",
+          "loses_if": "Competitors achieve technical parity",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Vertically integrated battery production",
+        "Global manufacturing footprint",
+        "Cost-competitive LFP supply chain",
+        "Brand recognition in 80+ markets"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Knows its H1 2026 domestic decline of 15.72% YoY signals saturation and that Western markets remain difficult despite overseas growth of 94.73% in June 2026"
     },
     {
-      "name": "巴西政府(Brazilian Government)",
-      "type": "Government",
-      "role": "接受BYD投资,提供原福特工厂改造场地",
-      "stance": "支持BYD在巴西建设15万辆年产能工厂,作为BYD在拉丁美洲的桥头堡",
-      "influence": "medium",
-      "memory": "提供原福特工厂供BYD改造,实现本地化生产"
-    },
-    {
-      "name": "泰国政府(Thai Government)",
-      "type": "Government",
-      "role": "BYD东南亚生产基地的东道国",
-      "stance": "支持BYD在泰国建设首座全资海外工厂,2024年年中投产,年产能15万辆",
-      "influence": "medium",
-      "memory": "为BYD提供15万辆年产能的工厂用地,服务东南亚市场"
-    },
-    {
-      "name": "土耳其政府(Turkish Government)",
+      "name": "CATL (Contemporary Amperex Technology)",
       "type": "Organization",
-      "role": "吸引BYD投资10亿美元建厂,规避欧盟关税",
-      "stance": "通过支持BYD建厂吸引中国EV产业投资",
-      "influence": "medium",
-      "memory": "BYD在土耳其建设15万辆年产能工厂,2025年7月加速推进,原计划在匈牙利"
-    },
-    {
-      "name": "Mobileye",
-      "type": "Organization",
-      "role": "自动驾驶技术供应商,与大众汽车合作",
-      "stance": "为大众ID. Buzz提供L4级自动驾驶技术支持",
-      "influence": "medium",
-      "memory": "自2021年起开发ID. Buzz的自动驾驶技术,符合SAE L4级别定义"
-    },
-    {
-      "name": "大众汽车(Volkswagen)",
-      "type": "Organization",
-      "role": "通过ADMT与Mobileye合作推进自动驾驶",
-      "stance": "在ID. Buzz平台上开发L4级自动驾驶",
-      "influence": "medium",
-      "memory": "与Mobileye达成自动驾驶协议,目标在限定区域实现完全自动驾驶"
-    },
-    {
-      "name": "西门子(Siemens)",
-      "type": "Organization",
-      "role": "VinFast的电动巴士技术合作伙伴",
-      "stance": "为VinFast提供电动巴士技术和组件,服务东南亚市场",
-      "influence": "low",
-      "memory": "2018年8月与VinFast签订两份合同,供应电巴士生产技术"
-    },
-    {
-      "name": "TrendForce",
-      "type": "Media",
-      "role": "全球市场研究机构,提供EV销量数据",
-      "stance": "发布2025年全球EV销量达2053万辆的历史纪录数据",
-      "influence": "medium",
-      "memory": "统计数据显示2025年全球新能源汽车销量20.53百万辆"
-    },
-    {
-      "name": "英国工党(UK Labour Party)",
-      "type": "Government",
-      "role": "2024年执政后恢复2030年ICE禁售政策的执政党",
-      "stance": "2024年7月将2035年期限恢复为2030年,2025年4月再次确认",
+      "role": "Dominant global battery manufacturer with ~37%+ market share",
+      "stance": "Technology diversification (LFP, sodium-ion, solid-state R&D); geographic expansion with capacity investments abroad",
       "influence": "high",
-      "memory": "认为2030年期限为行业提供了明确的转型时间表,有助于实现Net Zero目标"
+      "grade": "A2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "Supplies ~55.6% of global EV battery installations combined with BYD; sets global battery chemistry and pricing trajectory"
+      },
+      "description": "The world's largest EV battery manufacturer, accounting for over 37% of global installations in 2025, and a leader in LFP chemistry and the December 2025 sodium-ion (Naxtra) launch at 175 Wh/kg.",
+      "goals": [
+        "Maintain chemistry and volume leadership",
+        "Commercialize sodium-ion for cost-disruptive applications",
+        "Diversify geographically amid Western decoupling pressure"
+      ],
+      "constraints": [
+        "FY24 revenue declined 9.7% despite volume growth",
+        "Western decoupling pressure limits market access",
+        "Lithium import dependence of 75% (motivating sodium-ion pivot)"
+      ],
+      "assets": [
+        "55.6% combined global share with BYD",
+        "Naxtra sodium-ion product launched December 2025",
+        "Hungarian and Indonesian factory investments",
+        "LFP and condensed battery IP portfolio"
+      ],
+      "vulnerabilities": [
+        "Lithium price recovery (170% from June 2025 low)",
+        "Margin compression from cell price collapse",
+        "US/EU trade restrictions on Chinese batteries"
+      ],
+      "stated_vs_revealed": "Stated position is technology breadth leadership; revealed behavior shows margin erosion forcing pivot to higher-volume sodium-ion over premium chemistries",
+      "worldview": {
+        "values": [
+          "Technology leadership through scale",
+          "Chemistry diversification",
+          "Energy access democratization"
+        ],
+        "beliefs": [
+          "LFP will dominate volume segments",
+          "Sodium-ion will capture entry-level and storage",
+          "Solid-state mass production is unrealistic before 2030"
+        ],
+        "identity": "China's national champion in battery technology",
+        "frame": "Diversified chemistry portfolio optimizer"
+      },
+      "incentives": [
+        {
+          "driver": "Volume leadership",
+          "gains_if": "Sustaining 55%+ share with BYD combined",
+          "loses_if": "Korean/Japanese rivals recapture OEM share",
+          "intensity": "high"
+        },
+        {
+          "driver": "Margin recovery",
+          "gains_if": "Sodium-ion premium pricing in cold climate and storage segments",
+          "loses_if": "Cell ASPs continue decline with raw material volatility",
+          "intensity": "high"
+        },
+        {
+          "driver": "Geographic diversification",
+          "gains_if": "Hungarian, Indonesian, North American JVs deliver capacity",
+          "loses_if": "Western decoupling accelerates",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Cell manufacturing scale",
+        "Sodium-ion production capability",
+        "Hungarian and Indonesian factory investments",
+        "Lithium processing partnerships"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Knows Zeng Yuqun publicly assessed solid-state at 'level 4 of 9' maturity and that FY24 revenue fell despite volume growth"
     },
     {
-      "name": "美国加州(California)",
+      "name": "Tesla Inc.",
+      "type": "Organization",
+      "role": "Premium EV and energy storage leader; autonomy commercialization pioneer",
+      "stance": "FSD/Cybercab platform commercialization; energy storage scaling (13.5 GWh Q2 2026); selective EV price competition",
+      "influence": "high",
+      "grade": "A2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "Q2 2026 deliveries of 480,126 units (+25% YoY, +18% consensus beat) and FSD/Cybercab commercialization may define autonomy timeline globally"
+      },
+      "description": "American EV and clean energy company led by Elon Musk; delivered 480,126 vehicles in Q2 2026 and 13.5 GWh of energy storage; faces halved China market share at 6.5% but maintains premium positioning and NACS standard-setting.",
+      "goals": [
+        "Commercialize FSD/Cybercab autonomy platform",
+        "Grow energy storage as second pillar",
+        "Recover US market share as sole surviving scale US BEV maker"
+      ],
+      "constraints": [
+        "US federal EV credit expiration cost competitive parity",
+        "China market share halved to 6.5%",
+        "2025 global deliveries declined 8.6% YoY"
+      ],
+      "assets": [
+        "NACS charging standard adoption",
+        "Energy storage scale (13.5 GWh Q2 2026)",
+        "FSD software stack",
+        "US manufacturing footprint"
+      ],
+      "vulnerabilities": [
+        "Dependency on autonomy commercialization timing",
+        "Premium segment price elasticity",
+        "Regulatory approval risk for FSD"
+      ],
+      "stated_vs_revealed": "Stated vision is autonomy and energy; revealed behavior shows EV business performance is increasingly dependent on price cuts and Cybercab timeline",
+      "worldview": {
+        "values": [
+          "Autonomy-first mobility",
+          "Energy transition acceleration",
+          "Vertical manufacturing integration"
+        ],
+        "beliefs": [
+          "Autonomy is the primary long-term value driver",
+          "US charging standard leadership creates moat",
+          "Energy storage is the overlooked second pillar"
+        ],
+        "identity": "AI/autonomy company that happens to make EVs",
+        "frame": "Autonomy and energy platform builder"
+      },
+      "incentives": [
+        {
+          "driver": "Cybercab/FSD commercialization",
+          "gains_if": "Regulatory approval and scaled robotaxi deployment by 2027",
+          "loses_if": "Continued regulatory delays or Waymo/Cruise competition",
+          "intensity": "high"
+        },
+        {
+          "driver": "Energy storage growth",
+          "gains_if": "Sustaining 13.5+ GWh quarterly deployment",
+          "loses_if": "Lithium/cell cost spikes compress margins",
+          "intensity": "medium"
+        },
+        {
+          "driver": "US market share recovery",
+          "gains_if": "Premium differentiation versus joint-venture and legacy competition",
+          "loses_if": "Affordability gap widens post-credit",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Manufacturing capacity",
+        "FSD data advantage",
+        "Energy storage Megapack/ Powerwall product lines",
+        "NACS standard network effects"
+      ],
+      "risk_tolerance": "high",
+      "memory": "Knows 2025 global deliveries declined 8.6% YoY and Q2 2026 represented 25% YoY recovery dependent on continued price competition"
+    },
+    {
+      "name": "Volkswagen Group",
+      "type": "Organization",
+      "role": "Largest European OEM struggling with BEV platform delays and China market share loss",
+      "stance": "Delayed BEV platform launches; software (Cariad) restructuring; Chinese partnership exploration",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "Europe's largest carmaker facing platform/SSE delays and declining China share; decisions on SSP launch timing affect entire EU OEM trajectory"
+      },
+      "description": "German automotive group (Volkswagen, Audi, Porsche brands) experiencing structural challenges including Cariad software subsidiary delays, BEV platform postponements, and continued China market share decline.",
+      "goals": [
+        "Launch SSP platform successfully",
+        "Resolve Cariad software development challenges",
+        "Restore China market share through partnerships"
+      ],
+      "constraints": [
+        "Cariad software delays",
+        "Continued China market share decline",
+        "EU 2035 framework uncertainty affecting investment decisions"
+      ],
+      "assets": [
+        "Premium brand portfolio (Audi, Porsche)",
+        "European manufacturing scale",
+        "800V architecture launch with Porsche"
+      ],
+      "vulnerabilities": [
+        "Software delay risk to 2027-2028 product cycle",
+        "China market share decline",
+        "Premium segment price competition"
+      ],
+      "stated_vs_revealed": "Stated commitment is full BEV transition by 2035; revealed behavior shows software delays and BEV postponements contradicting stated timeline",
+      "worldview": {
+        "values": [
+          "European industrial leadership",
+          "Premium brand positioning",
+          "Software-defined vehicle transition"
+        ],
+        "beliefs": [
+          "Software is the critical differentiator",
+          "Premium positioning protects margins",
+          "Chinese partnerships may be necessary"
+        ],
+        "identity": "European industrial champion in transformation",
+        "frame": "Software-defined premium OEM in transition"
+      },
+      "incentives": [
+        {
+          "driver": "Platform launch success",
+          "gains_if": "SSP delivers on time with working software",
+          "loses_if": "Further delays force lost model cycles",
+          "intensity": "high"
+        },
+        {
+          "driver": "China share restoration",
+          "gains_if": "Successful partnership with XPeng or similar Chinese tech firm",
+          "loses_if": "Continued share losses to BYD/Geely/Leapmotor",
+          "intensity": "high"
+        },
+        {
+          "driver": "Profit protection",
+          "gains_if": "Premium pricing holds against Chinese import surge",
+          "loses_if": "Anti-subsidy duties insufficient or EU 2035 softened too much",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Brand portfolio (VW, Audi, Porsche, Bentley, Lamborghini)",
+        "European manufacturing footprint",
+        "R&D scale",
+        "Battery procurement through PowerCo"
+      ],
+      "risk_tolerance": "low",
+      "memory": "Knows Cariad delays have already forced BEV launch postponements and that Chinese share continues declining"
+    },
+    {
+      "name": "Stellantis N.V.",
+      "type": "Organization",
+      "role": "Multi-brand European-American OEM pivoting to hybrid/EREV emphasis",
+      "stance": "Delayed BEV platforms; emphasized hybrid and range-extended EV options; brand portfolio rationalization",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "€22 billion in charges indicates major strategic rationalization; hybrid/EREV emphasis versus full BEV signals OEM direction"
+      },
+      "description": "Multinational automotive group (formed from FCA-PSA merger) with brands including Peugeot, Fiat, Opel, Jeep, Ram, Chrysler; recorded €22 billion in charges reflecting EV-related losses and brand rationalization.",
+      "goals": [
+        "Rationalize brand portfolio costs",
+        "Pursue profitable BEV transition rather than volume",
+        "Expand hybrid/EREV offering"
+      ],
+      "constraints": [
+        "€22 billion charges constrain investment capacity",
+        "Delayed BEV platforms risk EU 2035 compliance",
+        "American brands face IRA repeal impact"
+      ],
+      "assets": [
+        "Multi-brand portfolio diversification",
+        "Hybrid powertrain technology",
+        "Jeep/Ram US presence for ZEV-compliance markets"
+      ],
+      "vulnerabilities": [
+        "Compliance risk if EU retains stricter 2035",
+        "US IRA repeal impact on planned EVs",
+        "Brand rationalization resistance"
+      ],
+      "stated_vs_revealed": "Stated commitment to BEV transition; revealed behavior shows EREV/hybrid emphasis and platform delays indicate more pragmatic transition",
+      "worldview": {
+        "values": [
+          "Brand portfolio diversification",
+          "Profitable transition over volume",
+          "Multi-energy pathway flexibility"
+        ],
+        "beliefs": [
+          "Full BEV is not optimal for all segments by 2030",
+          "Hybrid/EREV bridges infrastructure gap",
+          "Brand portfolio rationalization is necessary"
+        ],
+        "identity": "Multi-brand pragmatic transitioner",
+        "frame": "Energy-diversity strategist"
+      },
+      "incentives": [
+        {
+          "driver": "Profitability restoration",
+          "gains_if": "Hybrid/EREV emphasis delivers margin recovery",
+          "loses_if": "Continued charge volume from BEV losses",
+          "intensity": "high"
+        },
+        {
+          "driver": "EU 2035 compliance",
+          "gains_if": "90% framework adopted allowing flexibilities",
+          "loses_if": "Original 100% ban retained",
+          "intensity": "high"
+        },
+        {
+          "driver": "US market presence",
+          "gains_if": "State ACC II mandates survive court challenge",
+          "loses_if": "Continued federal preemption",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Multi-brand portfolio",
+        "Hybrid powertrain technology",
+        "North American manufacturing footprint",
+        "Battery JV commitments"
+      ],
+      "risk_tolerance": "low",
+      "memory": "Knows €22 billion in charges signals major strategic retreat and that delayed BEV platforms gamble on policy flexibility"
+    },
+    {
+      "name": "Ford Motor Company",
+      "type": "Organization",
+      "role": "US legacy OEM with major EV strategy restructuring",
+      "stance": "Scaled-back EV ambitions; Model e division had $19.5 billion cumulative losses with $8.5 billion in writedowns; pivot toward smaller profitable EVs and hybrids",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "$19.5 billion cumulative EV losses and strategic pivot signals major US OEM restructuring trajectory"
+      },
+      "description": "American automaker whose Model e EV division has accumulated $19.5 billion in losses with $8.5 billion in writedowns; pivoting toward smaller profitable EV segments and hybrid offerings.",
+      "goals": [
+        "Restore Model e profitability",
+        "Right-size EV production capacity",
+        "Expand hybrid offering as bridge technology"
+      ],
+      "constraints": [
+        "$19.5 billion cumulative Model e losses",
+        "$8.5 billion in writedowns constraining investment",
+        "Post-IRA US market contraction"
+      ],
+      "assets": [
+        "Mustang Mach-E and F-150 Lightning brand recognition",
+        "US manufacturing footprint",
+        "Hybrid technology expertise"
+      ],
+      "vulnerabilities": [
+        "Sustained cash burn if EV demand does not recover",
+        "Battery plant investment writeoff risk",
+        "Continued supply chain inflation"
+      ],
+      "stated_vs_revealed": "Stated commitment is full BEV transition with vertical integration; revealed behavior shows dramatic scope reduction and hybrid/EREV emphasis",
+      "worldview": {
+        "values": [
+          "Profitable transition over volume leadership",
+          "American manufacturing resilience",
+          "Brand electrification"
+        ],
+        "beliefs": [
+          "Model e losses reflect scale-timing mismatch",
+          "Smaller, profitable EVs are sustainable",
+          "Hybrids bridge the transition gap"
+        ],
+        "identity": "American industrial pragmatist",
+        "frame": "Profitable transitioner"
+      },
+      "incentives": [
+        {
+          "driver": "Model e profitability",
+          "gains_if": "Right-sized portfolio delivers margin recovery",
+          "loses_if": "Continued losses from underutilized capacity",
+          "intensity": "high"
+        },
+        {
+          "driver": "US market positioning",
+          "gains_if": "Hybrid bridge strategy captures state ACC II markets",
+          "loses_if": "Federal preemption plus consumer rejection",
+          "intensity": "medium"
+        },
+        {
+          "driver": "IRA repeal response",
+          "gains_if": "Successfully converts plants to hybrid output",
+          "loses_if": "Stranded EV-specific assets",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Brand portfolio (Ford, Lincoln)",
+        "US manufacturing footprint",
+        "Battery plant investments (BlueOval)",
+        "F-150 Lightning and Mustang Mach-E platforms"
+      ],
+      "risk_tolerance": "low",
+      "memory": "Knows Model e has lost $19.5 billion and that scaling back is essential to investor credibility"
+    },
+    {
+      "name": "General Motors",
+      "type": "Organization",
+      "role": "US legacy OEM with Ultium battery platform and EV strategy recalibration",
+      "stance": "Q4 2025 $7.2 billion special charges (EV-related plus China JV writedowns); continued Ultium platform development at scaled-back capacity",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "$7.2 billion Q4 2025 charges including China JV writedowns signal major strategy reset; Ultium platform decisions affect North American battery supply"
+      },
+      "description": "American automaker with Ultium battery platform partnership with LG Energy Solution; recorded $7.2 billion in Q4 2025 special charges including China joint venture writedowns and EV-related writedowns.",
+      "goals": [
+        "Stabilize Ultium platform cost economics",
+        "Rationalize China JV exposure",
+        "Calibrate EV production to demand reality"
+      ],
+      "constraints": [
+        "$7.2 billion Q4 2025 special charges",
+        "Scaled-back Ultium capacity plans",
+        "China JV writedowns signal retreat"
+      ],
+      "assets": [
+        "Ultium battery platform with LG JV",
+        "Cruise autonomous vehicle subsidiary",
+        "US manufacturing footprint"
+      ],
+      "vulnerabilities": [
+        "Continued EV demand contraction",
+        "Ultium cost competitiveness versus LFP",
+        "Stranded investment in scaled-back capacity"
+      ],
+      "stated_vs_revealed": "Stated ambition is all-EV future; revealed behavior shows major China JV retreat and Ultium capacity scaling back",
+      "worldview": {
+        "values": [
+          "American manufacturing transformation",
+          "EV leadership through battery scale",
+          "Software-defined vehicle future"
+        ],
+        "beliefs": [
+          "Ultium scale is essential for cost parity",
+          "China exposure must be rationalized",
+          "Software/Autonomy through Cruise is a key differentiator"
+        ],
+        "identity": "American industrial transformation leader",
+        "frame": "Battery-platform-driven transformation"
+      },
+      "incentives": [
+        {
+          "driver": "Ultium platform viability",
+          "gains_if": "Cell cost reaches competitive parity",
+          "loses_if": "LFP cost advantage compounds",
+          "intensity": "high"
+        },
+        {
+          "driver": "China JV rationalization",
+          "gains_if": "Successful exit with limited writedowns",
+          "loses_if": "Continued China exposure losses",
+          "intensity": "medium"
+        },
+        {
+          "driver": "Cruise autonomy",
+          "gains_if": "Successful technology demonstration and scaled deployment",
+          "loses_if": "Continued operational and regulatory setbacks",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Ultium battery platform",
+        "Cruise autonomy subsidiary",
+        "US manufacturing footprint",
+        "Brand portfolio (Chevrolet, GMC, Cadillac)"
+      ],
+      "risk_tolerance": "low",
+      "memory": "Knows $7.2 billion Q4 2025 charges include China JV writedowns and that Ultium economics must improve for continuation"
+    },
+    {
+      "name": "Hyundai-Kia",
+      "type": "Organization",
+      "role": "Korean OEM with growing global EV market share via E-GMP platform",
+      "stance": "Aggressive E-GMP platform expansion; US manufacturing investment; among few Western-affiliated OEMs with growing EV share",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "Best-positioned Western-affiliated OEM for EV transition; Korean government K-EV roadmap supports national champion status"
+      },
+      "description": "Korean automotive group with Hyundai, Kia, and Genesis brands; operating E-GMP dedicated EV platform and expanding US manufacturing (Georgia Metaplant); among few Western-affiliated OEMs with growing EV market share.",
+      "goals": [
+        "Expand E-GMP platform to mass-market segments",
+        "Scale US manufacturing for IRA-eligible production",
+        "Grow European EV share"
+      ],
+      "constraints": [
+        "Korean won currency exposure",
+        "IRA repeal impacts US manufacturing economics",
+        "Limited presence in Chinese market"
+      ],
+      "assets": [
+        "E-GMP 800V architecture platform",
+        "US Metaplant (Georgia)",
+        "Korean government K-EV roadmap support"
+      ],
+      "vulnerabilities": [
+        "Iran war impact on Korea's Middle East oil supply",
+        "Chinese retaliation risk for Korean battery makers",
+        "IRA repeal impact on US investment payback"
+      ],
+      "stated_vs_revealed": "Stated commitment is full BEV portfolio expansion; revealed behavior shows balanced EV/hybrid strategy with E-GMP as foundation",
+      "worldview": {
+        "values": [
+          "Technology leadership through E-GMP",
+          "Manufacturing resilience",
+          "Balanced multi-pathway transition"
+        ],
+        "beliefs": [
+          "800V architecture is mass-market-ready",
+          "US manufacturing insulates from trade risk",
+          "Korean government coordination accelerates transition"
+        ],
+        "identity": "Korean industrial champion in transition",
+        "frame": "Multi-pathway global OEM"
+      },
+      "incentives": [
+        {
+          "driver": "E-GMP volume",
+          "gains_if": "Ioniq 5/6/9 family plus EV9/ EV3 launch delivers volume",
+          "loses_if": "Tesla/BYD competition compresses premium positioning",
+          "intensity": "high"
+        },
+        {
+          "driver": "US manufacturing scale",
+          "gains_if": "Metaplant delivers IRA-compliant production",
+          "loses_if": "Federal preemption plus continued IRA repeal",
+          "intensity": "medium"
+        },
+        {
+          "driver": "EU market share",
+          "gains_if": "European BEV availability increases under 90% framework",
+          "loses_if": "Chinese import surge captures share",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "E-GMP platform",
+        "US Metaplant (Georgia)",
+        "Korean battery supplier LG ES",
+        "Brand portfolio (Hyundai/Kia/Genesis)"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Knows E-GMP cost economics are approaching BEV-only brands and that Korean government K-EV support is policy-dependent"
+    },
+    {
+      "name": "Chinese Government (MIIT/MOFCOM)",
       "type": "Government",
-      "role": "美国2035年ICE禁售政策的标杆州",
-      "stance": "渐进式推进2035年新车销售100%零排放目标",
+      "role": "Industrial policy and export licensing for Chinese EV ecosystem",
+      "stance": "NEV purchase tax exemption extended to 2027; dual-credit policy; MOFCOM export licensing on critical minerals",
+      "influence": "high",
+      "grade": "A2",
+      "archetype": "institution_rule",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "basis": "Sets NEV policy framework controlling world's largest EV market; export licensing controls critical minerals supply globally"
+      },
+      "description": "Chinese government ministries including MIIT (industrial policy, dual-credit system) and MOFCOM (export licensing, rare earth controls); responsible for NEV purchase tax exemption extension through 2027 and critical mineral export controls.",
+      "goals": [
+        "Maintain Chinese EV global market dominance",
+        "Ensure critical mineral supply chain chokepoint leverage",
+        "Manage orderly Chinese OEM consolidation"
+      ],
+      "constraints": [
+        "21.9 million NEV credit surplus in 2025 creates over-compliance",
+        "Provincial government bailout expectations complicate OEM consolidation",
+        "Trade retaliation risk from Western tariff escalation"
+      ],
+      "assets": [
+        "MOFCOM export licensing (graphite, rare earths)",
+        "NEV purchase tax authority",
+        "Dual-credit policy system",
+        "Industrial policy coordination"
+      ],
+      "vulnerabilities": [
+        "Overcapacity and price war (3 of 137 profitable)",
+        "Trade war escalation risk",
+        "Provincial government fiscal exposure to NEV brand failures"
+      ],
+      "stated_vs_revealed": "Stated position is NEV policy continuation; revealed behavior shows export licensing as strategic leverage and dual-credit policy as de facto industrial strategy",
+      "worldview": {
+        "values": [
+          "Industrial competitiveness and self-sufficiency",
+          "Strategic leverage through supply chain control",
+          "Managed transition rather than abrupt stop"
+        ],
+        "beliefs": [
+          "China's EV lead is sustainable through scale",
+          "Critical mineral leverage creates Western dependency",
+          "Domestic consolidation is preferable to foreign competition"
+        ],
+        "identity": "Industrial state coordinating technology transition",
+        "frame": "Strategic decoupling manager"
+      },
+      "incentives": [
+        {
+          "driver": "NEV market leadership",
+          "gains_if": "China maintains 55-65% global EV share",
+          "loses_if": "Western reshoring accelerates and Chinese OEMs lose competitiveness",
+          "intensity": "high"
+        },
+        {
+          "driver": "Critical mineral leverage",
+          "gains_if": "MOFCOM licensing creates Western dependency",
+          "loses_if": "Alternative supply chains (Mountain Pass, Lynas) scale",
+          "intensity": "high"
+        },
+        {
+          "driver": "Domestic consolidation",
+          "gains_if": "Only 19 profitable brands by 2030 (AlixPartners projection)",
+          "loses_if": "Provincial bailouts delay consolidation",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "NEV purchase tax authority",
+        "MOFCOM export licensing",
+        "Dual-credit system",
+        "Battery material export controls"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Knows only 3 of 137 Chinese NEV brands were profitable in 2025 and that domestic H1 2026 sales declined 15.72% YoY"
+    },
+    {
+      "name": "Lithium and Critical Mineral Producers",
+      "type": "Organization",
+      "role": "Upstream raw material supply for battery manufacturing",
+      "stance": "Capacity expansion to meet projected demand; price volatility absorbed through long-term contracts",
       "influence": "medium",
-      "memory": "作为美国先进减排标准的领导者影响其他州政策"
+      "grade": "B2",
+      "archetype": "collective",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "salience": {
+        "tier": "medium",
+        "basis": "Supply constraints and pricing determine battery cost trajectory and OEM profit margins globally"
+      },
+      "description": "Global producers of lithium (Albemarle, SQM, Ganfeng, Tianqi), nickel (Tsingshan, Huayou, GEM with Danantara), cobalt (DRC quota system), and graphite (China 95%+ control) feeding battery supply chains.",
+      "goals": [
+        "Stable long-term pricing",
+        "Expand capacity to meet demand growth",
+        "Secure offtake agreements with battery makers"
+      ],
+      "constraints": [
+        "DRC cobalt quota of 96,600 t/yr",
+        "Indonesian HPAL project concentration",
+        "China's 95%+ graphite control"
+      ],
+      "assets": [
+        "Albemarle/SQM lithium operations",
+        "Tsingshan/Huayou nickel operations",
+        "China graphite dominance"
+      ],
+      "vulnerabilities": [
+        "Lithium price volatility (170% recovery from June 2025 low)",
+        "Sodium-ion substitution risk",
+        "DRC political instability"
+      ],
+      "stated_vs_revealed": "Stated commitment to supply security; revealed behavior shows capacity discipline responding to price recovery",
+      "worldview": {
+        "values": [
+          "Long-cycle commodity economics",
+          "Resource nationalism",
+          "Vertical integration with battery makers"
+        ],
+        "beliefs": [
+          "Lithium demand will grow through 2030",
+          "Recycling will not displace primary supply by 2030",
+          "Resource nationalism increases"
+        ],
+        "identity": "Upstream resource stewards",
+        "frame": "Long-cycle commodity supplier"
+      },
+      "incentives": [
+        {
+          "driver": "Long-term pricing",
+          "gains_if": "Battery demand sustains 23M+ EV sales trajectory",
+          "loses_if": "Sodium-ion substitution accelerates",
+          "intensity": "high"
+        },
+        {
+          "driver": "Capacity utilization",
+          "gains_if": "EV demand growth absorbs expanded capacity",
+          "loses_if": "Demand plateau hits before capacity fully ramped",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Resource reserves",
+        "Processing capacity",
+        "Long-term offtake contracts"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Knows prices recovered 170% from June 2025 lows and that Chinese battery makers are explicitly pursuing sodium-ion to reduce dependence"
+    },
+    {
+      "name": "Toyota Motor Corporation",
+      "type": "Organization",
+      "role": "Japanese OEM with solid-state battery development partnership with Idemitsu Kosan",
+      "stance": "Targeting 2027-2028 limited solid-state launch for flagship vehicles; skeptical of pure BEV-only transition",
+      "influence": "medium",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "salience": {
+        "tier": "medium",
+        "basis": "Toyota/Idemitsu's 2027-2028 sulfide electrolyte SSB limited launch could validate or disappoint expectations; the announcement is contested by CATL's 'level 4 of 9' assessment"
+      },
+      "description": "Japanese automotive manufacturer and Idemitsu Kosan partnering on sulfide electrolyte solid-state battery technology; targeting limited 2027-2028 launch for flagship vehicles rather than mass-market volume.",
+      "goals": [
+        "Validate solid-state battery via limited premium launch",
+        "Maintain multi-pathway strategy (BEV/hybrid/FCEV)",
+        "Recover lost EV market share gradually"
+      ],
+      "constraints": [
+        "Solid-state technology not yet cost-competitive",
+        "Limited initial production volume",
+        "Slow BEV rollout vs Tesla/BYD/Hyundai-Kia"
+      ],
+      "assets": [
+        "Idemitsu sulfide electrolyte partnership",
+        "Hybrid powertrain technology",
+        "Global manufacturing footprint"
+      ],
+      "vulnerabilities": [
+        "Solid-state timeline slippage (CATL disputes 2027-2028 readiness)",
+        "BEV competitive position continues to weaken",
+        "China market presence limited"
+      ],
+      "stated_vs_revealed": "Stated ambition is SSB leadership by 2027-2028; revealed skepticism about pure BEV approach",
+      "worldview": {
+        "values": [
+          "Multi-pathway transition",
+          "Technology patience",
+          "Quality and reliability"
+        ],
+        "beliefs": [
+          "Solid-state requires patient development",
+          "Multi-energy approach hedges risk",
+          "Hybrid bridge remains important"
+        ],
+        "identity": "Multi-pathway transition leader",
+        "frame": "Technology patience pragmatist"
+      },
+      "incentives": [
+        {
+          "driver": "SSB validation",
+          "gains_if": "2027-2028 limited launch succeeds as proof point",
+          "loses_if": "Continued timeline slippage erodes credibility",
+          "intensity": "high"
+        },
+        {
+          "driver": "Multi-pathway defense",
+          "gains_if": "Consumers favor hybrid/FCEV options",
+          "loses_if": "Pure BEV accelerates despite Toyota caution",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Idemitsu Kosan partnership",
+        "Global hybrid platform technology",
+        "Manufacturing scale",
+        "Japanese government METI support"
+      ],
+      "risk_tolerance": "low",
+      "memory": "Knows CATL's Zeng Yuqun publicly assessed solid-state at 'level 4 of 9' maturity and questioned 2030 mass production viability"
+    }
+  ],
+  "relationships": [
+    {
+      "source": "European Commission",
+      "target": "BYD Company",
+      "type": "OTHER",
+      "relation_label": "TRADE_DEFENSE_INVESTIGATION",
+      "sign": "rival",
+      "strength": "high",
+      "grade": "A1",
+      "valence": "adversarial",
+      "polarity": -0.7,
+      "basis": "EU anti-subsidy investigation on Chinese BEVs and proposed 100% tariff option; BYD's aggressive overseas expansion is direct subject"
+    },
+    {
+      "source": "European Commission",
+      "target": "German Automotive Industry",
+      "type": "OTHER",
+      "relation_label": "NEGOTIATING",
+      "sign": "neutral",
+      "strength": "high",
+      "grade": "A1",
+      "valence": "transactional",
+      "polarity": 0.1,
+      "basis": "December 16, 2025 proposal to soften 2035 ICE ban to 90% CO₂ reduction reflects German industry lobbying pressure versus climate advocacy resistance"
+    },
+    {
+      "source": "European Commission",
+      "target": "Volkswagen Group",
+      "type": "REGULATES",
+      "sign": "neutral",
+      "strength": "medium",
+      "grade": "A1",
+      "valence": "directional",
+      "polarity": 0.2,
+      "basis": "CO₂ regulations determine VW's investment path; trilogue outcome will shape VW's 2027-2030 product cycle"
+    },
+    {
+      "source": "BYD Company",
+      "target": "Tesla Inc.",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "grade": "A1",
+      "valence": "adversarial",
+      "polarity": -0.8,
+      "since": "2022",
+      "basis": "Global BEV leadership contest: BYD delivered 2.26M units in 2025 vs Tesla's 1.64M; contested in Q2 2026 with Tesla's 480k deliveries and BYD's overseas export surge"
+    },
+    {
+      "source": "CATL",
+      "target": "BYD Company",
+      "type": "SUPPLIES",
+      "sign": "ally",
+      "strength": "medium",
+      "grade": "B2",
+      "valence": "transactional",
+      "polarity": 0.4,
+      "basis": "CATL supplies batteries to OEMs including potential BYD partnership; also competes in battery market with BYD cells. Combined 55.6% global share"
+    },
+    {
+      "source": "CATL",
+      "target": "Tesla Inc.",
+      "type": "SUPPLIES",
+      "sign": "ally",
+      "strength": "medium",
+      "grade": "B2",
+      "valence": "transactional",
+      "polarity": 0.5,
+      "basis": "Tesla is among CATL's largest customers for LFP battery supply supporting Model 3/Y Standard Range production"
+    },
+    {
+      "source": "BYD Company",
+      "target": "Volkswagen Group",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "grade": "B2",
+      "valence": "adversarial",
+      "polarity": -0.7,
+      "basis": "BYD is direct competitor in both European and global markets; VW's China market share decline attributable to BYD's surge"
+    },
+    {
+      "source": "Stellantis N.V.",
+      "target": "Ford Motor Company",
+      "type": "OTHER",
+      "relation_label": "RIVAL_IN_MULTI_PATHWAY",
+      "sign": "rival",
+      "strength": "low",
+      "grade": "B2",
+      "valence": "adversarial",
+      "polarity": -0.3,
+      "basis": "Both pursuing multi-pathway strategy with delayed BEV platforms; competing for EU 2035 flexibility and US hybrid pivot"
+    },
+    {
+      "source": "General Motors",
+      "target": "Ford Motor Company",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "grade": "B2",
+      "valence": "adversarial",
+      "polarity": -0.4,
+      "basis": "Both US legacy OEMs restructuring EV strategy; GM's $7.2B Q4 2025 charges and Ford's $19.5B Model e losses are parallel retreats"
+    },
+    {
+      "source": "Hyundai-Kia",
+      "target": "Tesla Inc.",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "grade": "B2",
+      "valence": "adversarial",
+      "polarity": -0.5,
+      "basis": "Hyundai-Kia's growing EV market share is direct competitive threat to Tesla; E-GMP/IONIQ 5/6 plus EV3 challenge Tesla Model 3/Y"
+    },
+    {
+      "source": "Chinese Government (MIIT/MOFCOM)",
+      "target": "Western OEMs",
+      "type": "CONSTRAINS",
+      "sign": "rival",
+      "strength": "medium",
+      "grade": "A2",
+      "valence": "adversarial",
+      "polarity": -0.6,
+      "basis": "MOFCOM export licensing on graphite (>95% China production) and rare earths (>85% refining) creates strategic chokepoint over Western OEM EV production"
+    },
+    {
+      "source": "Chinese Government (MIIT/MOFCOM)",
+      "target": "BYD Company",
+      "type": "SUPPORTS",
+      "sign": "ally",
+      "strength": "high",
+      "grade": "A1",
+      "valence": "allied",
+      "polarity": 0.9,
+      "basis": "MIIT dual-credit policy, NEV purchase tax exemption, and provincial government support directly underpin BYD's domestic and export expansion"
+    },
+    {
+      "source": "Chinese Government (MIIT/MOFCOM)",
+      "target": "CATL",
+      "type": "SUPPORTS",
+      "sign": "ally",
+      "strength": "high",
+      "grade": "A1",
+      "valence": "allied",
+      "polarity": 0.9,
+      "basis": "Chinese government's industrial policy explicitly backs CATL's battery leadership and sodium-ion pivot to reduce lithium import dependence"
+    },
+    {
+      "source": "European Commission",
+      "target": "CATL",
+      "type": "REGULATES",
+      "sign": "rival",
+      "strength": "medium",
+      "grade": "B2",
+      "valence": "adversarial",
+      "polarity": -0.5,
+      "basis": "EU battery regulation and Critical Raw Materials Act affect CATL's European expansion plans; Hungarian factory under regulatory scrutiny"
+    },
+    {
+      "source": "Ford Motor Company",
+      "target": "General Motors",
+      "type": "OTHER",
+      "relation_label": "JOINT_REGULATORY_RESPONSE",
+      "sign": "neutral",
+      "strength": "medium",
+      "grade": "B2",
+      "valence": "transactional",
+      "polarity": 0.1,
+      "basis": "Both US OEMs engage EPA and court proceedings on ACC II waiver; share common interest in federal policy restoration or state mandate survival"
+    },
+    {
+      "source": "BYD Company",
+      "target": "Lithium and Critical Mineral Producers",
+      "type": "DEPENDS_ON",
+      "sign": "neutral",
+      "strength": "high",
+      "grade": "B2",
+      "valence": "directional",
+      "polarity": 0.3,
+      "basis": "BYD's LFP/blade battery production requires upstream lithium supply; sodium-ion pivot motivated by dependence reduction"
+    },
+    {
+      "source": "Toyota Motor Corporation",
+      "target": "Lithium and Critical Mineral Producers",
+      "type": "DEPENDS_ON",
+      "sign": "neutral",
+      "strength": "medium",
+      "grade": "B2",
+      "valence": "directional",
+      "polarity": 0.3,
+      "basis": "Toyota's SSB development still requires lithium for current HEV/PHEV/BEV production; Idemitsu partnership is electrolyte-focused not raw material substitute"
+    },
+    {
+      "source": "Volkswagen Group",
+      "target": "CATL",
+      "type": "DEPENDS_ON",
+      "sign": "neutral",
+      "strength": "medium",
+      "grade": "B2",
+      "valence": "transactional",
+      "polarity": 0.4,
+      "basis": "VW sources batteries from CATL including for some European production; reducing dependence is key strategic priority given MOFCOM leverage"
+    },
+    {
+      "source": "Stellantis N.V.",
+      "target": "CATL",
+      "type": "DEPENDS_ON",
+      "sign": "neutral",
+      "strength": "medium",
+      "grade": "B2",
+      "valence": "transactional",
+      "polarity": 0.3,
+      "basis": "Stellantis battery supply includes CATL for European production; multi-supplier strategy including LG ES and Samsung SDI"
     }
   ],
   "key_events": [
     {
-      "date": "2018-08",
-      "event": "VinFast与西门子签订两份合同,合作电动巴士技术"
+      "date": "2018-01-01",
+      "event": "China NEV mandate implementation with dual-credit system establishes supply-side requirement"
     },
     {
-      "date": "2021",
-      "event": "大众与Mobileye开始ID. Buzz的自动驾驶技术开发"
+      "date": "2022-12-31",
+      "event": "China NEV subsidy phase-out; tests market sustainability without direct subsidies"
     },
     {
-      "date": "2024-中",
-      "event": "BYD泰国首座全资海外工厂投产,年产能15万辆"
+      "date": "2023-01-01",
+      "event": "EU 2035 ICE ban formally adopted establishing binding European zero-emission timeline"
     },
     {
-      "date": "2024-07",
-      "event": "英国工党政府将2035年ICE禁售期限恢复为2030年"
+      "date": "2023-08-16",
+      "event": "US Inflation Reduction Act enacted creating $7,500 federal tax credit with domestic content requirements"
     },
     {
-      "date": "2024",
-      "event": "中国BEV平均售价下降14%,中端OEM毛利率腰斩"
+      "date": "2024-05-14",
+      "event": "US Biden administration announces 100% Section 301 tariff on Chinese EVs"
     },
     {
-      "date": "2024-11-24",
-      "event": "英国政府重申2030年ICE车辆禁售目标,承诺发布全面计划"
+      "date": "2024-11-18",
+      "event": "BYD reaches 10 million NEV cumulative milestone validating scale"
     },
     {
-      "date": "2025-01-06",
-      "event": "英国议会书面声明确认2030年禁售新汽油柴油汽车政策"
+      "date": "2025-02-22",
+      "event": "DRC cobalt export ban disrupts supply chains; subsequently replaced by 96,600 t/yr quota announced October 16, 2025"
     },
     {
-      "date": "2025-03",
-      "event": "全球EV销量同比增长40%,欧洲增长22%,英国单月突破10万辆"
+      "date": "2025-06-12",
+      "event": "Congressional Review Act resolutions signed revoking California ACC II waiver"
     },
     {
-      "date": "2025-04-15",
-      "event": "英国工党确认2030年ICE汽车禁售和ZEV转型政策"
+      "date": "2025-07-04",
+      "event": "One Big Beautiful Bill signed terminating US IRA EV tax credits effective September 30, 2025"
     },
     {
-      "date": "2025-07-22",
-      "event": "BYD将欧洲生产重心从匈牙利转向土耳其,土耳其工厂加速推进"
+      "date": "2025-09-30",
+      "event": "US $7,500 federal EV tax credit expires; US EV demand collapses immediately"
     },
     {
-      "date": "2025-09-18",
-      "event": "现代汽车发布2030愿景,投资553亿美元,目标2030年555万辆销量"
+      "date": "2025-10-16",
+      "event": "DRC cobalt quota of 96,600 t/yr announced; supply normalization attempt"
     },
     {
-      "date": "2025-12-11",
-      "event": "BYD海外扩张报告:泰国、乌兹别克斯坦、巴西合计产能超30万辆/年"
+      "date": "2025-10-31",
+      "event": "China rare earth export control expansion; strategic leverage signal"
     },
     {
-      "date": "2025",
-      "event": "BYD超越特斯拉成为全球EV市场领导者,全球EV销量达20.53百万辆"
+      "date": "2025-12-12",
+      "event": "CATL Naxtra sodium-ion battery launched at 175 Wh/kg"
+    },
+    {
+      "date": "2025-12-16",
+      "event": "European Commission proposes amending 2035 framework from 100% to 90% CO₂ reduction"
+    },
+    {
+      "date": "2026-01-15",
+      "event": "Canada reverses 100% China EV tariff, returning to standard 6.1% MFN rate"
+    },
+    {
+      "date": "2026-02-28",
+      "event": "Iran war begins with US/Israel strikes killing Supreme Leader Ali Khamenei; Strait of Hormuz disruption begins"
+    },
+    {
+      "date": "2026-03-31",
+      "event": "US Q1 2026 EV sales down 27.3% YoY; post-credit collapse continuing"
+    },
+    {
+      "date": "2026-04-15",
+      "event": "Strait of Hormuz crisis peaks; ~20% of global oil supply threatened"
+    },
+    {
+      "date": "2026-04-30",
+      "event": "US-Iran ceasefire framework established; temporary de-escalation"
+    },
+    {
+      "date": "2026-06-30",
+      "event": "Lithium carbonate price exceeds $25,000/tonne, up 170% from June 2025 low"
+    },
+    {
+      "date": "2026-07-02",
+      "event": "Tesla Q2 2026 deliveries: 480,126 units (+25% YoY, +18% consensus beat)"
+    },
+    {
+      "date": "2026-07-08",
+      "event": "BYD 17 millionth NEV produced; cumulative production milestone"
+    },
+    {
+      "date": "2026-07-08",
+      "event": "BYD Thai factory inaugurated; local production milestone"
+    },
+    {
+      "date": "2026-07-11",
+      "event": "Iran ceasefire collapses; renewed Hormuz tensions"
+    },
+    {
+      "date": "2026-Q3-Q4",
+      "event": "SCOTUS/DDC ACC II ruling expected; determines ZEV mandate durability"
     }
   ],
   "hot_topics": [
-    "中国EV价格战与中端OEM财务风险(Evergrande式危机)",
-    "BYD主导的全球生产网络扩张与关税规避策略",
-    "海外建厂的本地化生产趋势(泰国、巴西、土耳其、匈牙利)",
-    "端到端自动驾驶(End-to-End)技术竞赛成为行业焦点",
-    "单车智能(SAD)与车路协同(i-VICS)技术路线分化",
-    "软件定义汽车(SDV)平台的开发与应用",
-    "全球ICE禁售时间表:英国2030、欧盟2035、加州2035",
-    "东南亚新兴市场:中国品牌主导与本土品牌(VinFast)承压",
-    "韩国现代汽车集团的区域定制化产品战略(IONIQ 3主攻欧洲)",
-    "下一代电池技术与云端电池管理系统(2026年起)",
-    "VinFast的战略性撤退:从东南亚转向欧洲电动巴士市场",
-    "BYD海鸥69,800元低价对市场定价结构的颠覆性影响"
+    "EU 2035 ICE ban reversal to 90% CO₂ reduction versus original 100%",
+    "US federal EV credit expiration triggering demand cliff",
+    "China NEV brand profitability crisis (3 of 137 profitable in 2025)",
+    "Iran war impact on global oil supply and EV adoption",
+    "China lithium import dependence and sodium-ion adoption pivot",
+    "BYD overseas production expansion (tripling by 2030)",
+    "Western OEM EV losses (Ford $19.5B, GM $7.2B, Stellantis €22B, Tesla −8.6% 2025)",
+    "Solid-state battery timeline discrepancy (Toyota/Idemitsu 2027-2028 versus CATL 'level 4 of 9')",
+    "US ACC II waiver court challenge and Section 177 state adoption",
+    "MOFCOM export licensing on graphite and rare earths as strategic chokepoint",
+    "Tesla Cybercab and FSD autonomy commercialization timing",
+    "LFP consolidation at 50%+ market share through 2030",
+    "Cell-to-pack and cell-to-body structural battery innovation",
+    "Sodium-ion projected cost trajectory of $40-60/kWh enabling sub-$15,000 EVs in emerging markets"
+  ],
+  "quantitative_facts": [
+    {
+      "metric": "Global EV market share",
+      "value": "25",
+      "unit": "% new car sales",
+      "as_of_date": "2025-12-31",
+      "definition": "BEV+PHEV share of global passenger vehicle sales",
+      "source": "IEA Global EV Outlook 2026 [S26]"
+    },
+    {
+      "metric": "Global EV sales volume",
+      "value": "~20",
+      "unit": "million units",
+      "as_of_date": "2025-12-31",
+      "definition": "BEV+PHEV passenger vehicle sales worldwide",
+      "source": "BNEF EVO 2026 / IEA GEVO 2026 [S10][S26]"
+    },
+    {
+      "metric": "China domestic EV penetration",
+      "value": "53",
+      "unit": "% new car sales",
+      "as_of_date": "2025-12-31",
+      "definition": "BEV+PHEV share of China domestic passenger vehicle sales",
+      "source": "BNEF EVO 2026 [S10]"
+    },
+    {
+      "metric": "China global EV share",
+      "value": "63",
+      "unit": "% world EV sales",
+      "as_of_date": "2025-12-31",
+      "definition": "China's share of global EV sales",
+      "source": "BNEF EVO 2026 [S10]"
+    },
+    {
+      "metric": "Europe EV market share",
+      "value": "28",
+      "unit": "% new car sales",
+      "as_of_date": "2025-12-31",
+      "definition": "BEV+PHEV share of European passenger vehicle sales",
+      "source": "IEA Global EV Outlook 2026 [S7]"
+    },
+    {
+      "metric": "US EV share peak (pre-credit expiration)",
+      "value": "10.6",
+      "unit": "% new vehicle sales",
+      "as_of_date": "2025-09-30",
+      "definition": "Q3 2025 peak before IRA credit expiration",
+      "source": "Cox Automotive Q2 2026 report [S5]"
+    },
+    {
+      "metric": "US EV share (post-credit collapse)",
+      "value": "5.8",
+      "unit": "% new vehicle sales",
+      "as_of_date": "2026-06-30",
+      "definition": "Q2 2026 share",
+      "source": "Cox Automotive Q2 2026 report [S5]"
+    },
+    {
+      "metric": "US Q4 2025 EV sales YoY change",
+      "value": "-36",
+      "unit": "% year-over-year",
+      "as_of_date": "2025-12-31",
+      "definition": "Q4 2025 sales change following credit expiration",
+      "source": "Cox Automotive [S5]"
+    },
+    {
+      "metric": "US Q2 2026 EV sales volume",
+      "value": "247,226",
+      "unit": "units",
+      "as_of_date": "2026-06-30",
+      "definition": "Q2 2026 EV unit sales",
+      "source": "Cox Automotive Q2 2026 report [S5]"
+    },
+    {
+      "metric": "US Q2 2026 EV sales YoY change",
+      "value": "-20.5",
+      "unit": "% year-over-year",
+      "as_of_date": "2026-06-30",
+      "definition": "Q2 2026 YoY change",
+      "source": "Cox Automotive [S5]"
+    },
+    {
+      "metric": "Battery pack price (volume-weighted)",
+      "value": "108",
+      "unit": "USD per kWh",
+      "as_of_date": "2025-12-31",
+      "definition": "Volume-weighted average BEV+PHEV+ESS battery pack price",
+      "source": "BloombergNEF [S6]"
+    },
+    {
+      "metric": "BEV-specific pack price",
+      "value": "99",
+      "unit": "USD per kWh",
+      "as_of_date": "2025-12-31",
+      "definition": "BEV-only battery pack price",
+      "source": "BloombergNEF [S6]"
+    },
+    {
+      "metric": "Stationary storage battery price",
+      "value": "70",
+      "unit": "USD per kWh",
+      "as_of_date": "2025-12-31",
+      "definition": "BESS battery pack price",
+      "source": "BloombergNEF [S6]"
+    },
+    {
+      "metric": "Lithium carbonate price",
+      "value": ">25,000",
+      "unit": "USD per tonne",
+      "as_of_date": "2026-06-30",
+      "definition": "Battery-grade lithium carbonate spot price",
+      "source": "Market data per research"
+    },
+    {
+      "metric": "Lithium price change from 2025 low",
+      "value": "+170",
+      "unit": "% increase",
+      "as_of_date": "2026-06-30",
+      "definition": "From June 2025 trough of ~$9,000/tonne",
+      "source": "Market data per research"
+    },
+    {
+      "metric": "CATL global battery share",
+      "value": "37+",
+      "unit": "% installations",
+      "as_of_date": "2025-12-31",
+      "definition": "CATL share of global EV battery installations",
+      "source": "SNE Research [S8]"
+    },
+    {
+      "metric": "CATL+BYD combined battery share",
+      "value": "55.6",
+      "unit": "% installations",
+      "as_of_date": "2025-12-31",
+      "definition": "CATL+BYD combined share of global EV battery installations",
+      "source": "SNE Research [S8]"
+    },
+    {
+      "metric": "China graphite production control",
+      "value": ">95",
+      "unit": "% production",
+      "as_of_date": "2025-12-31",
+      "definition": "China share of battery-grade graphite production",
+      "source": "USGS estimates"
+    },
+    {
+      "metric": "China rare earth refining share",
+      "value": "~85",
+      "unit": "% global capacity",
+      "as_of_date": "2025-12-31",
+      "definition": "China share of rare earth processing capacity",
+      "source": "USGS estimates"
+    },
+    {
+      "metric": "DRC cobalt quota",
+      "value": "96,600",
+      "unit": "tonnes per year",
+      "as_of_date": "2025-10-16",
+      "definition": "DRC cobalt export quota announced October 2025",
+      "source": "DRC government"
+    },
+    {
+      "metric": "Sodium-ion energy density (CATL Naxtra)",
+      "value": "175",
+      "unit": "Wh/kg",
+      "as_of_date": "2025-12-12",
+      "definition": "CATL Naxtra sodium-ion cell energy density at December 2025 launch",
+      "source": "CATL [S20]"
+    },
+    {
+      "metric": "BYD 2025 global BEV volume",
+      "value": "~2.26",
+      "unit": "million units",
+      "as_of_date": "2025-12-31",
+      "definition": "BYD global BEV units delivered",
+      "source": "Industry reports"
+    },
+    {
+      "metric": "Tesla 2025 global deliveries",
+      "value": "~1.64",
+      "unit": "million units",
+      "as_of_date": "2025-12-31",
+      "definition": "Tesla total 2025 deliveries",
+      "source": "Tesla investor relations [S30]"
+    },
+    {
+      "metric": "Tesla Q2 2026 deliveries",
+      "value": "480,126",
+      "unit": "units",
+      "as_of_date": "2026-06-30",
+      "definition": "Q2 2026 Tesla unit deliveries",
+      "source": "Tesla investor relations [S30][S31]"
+    },
+    {
+      "metric": "Tesla Q2 2026 YoY growth",
+      "value": "+25",
+      "unit": "% year-over-year",
+      "as_of_date": "2026-06-30",
+      "definition": "Q2 2026 deliveries versus Q2 2025",
+      "source": "Tesla investor relations"
+    },
+    {
+      "metric": "Tesla Q2 2026 energy storage deployment",
+      "value": "13.5",
+      "unit": "GWh",
+      "as_of_date": "2026-06-30",
+      "definition": "Q2 2026 Megapack and Powerwall deployment",
+      "source": "Tesla investor relations [S30]"
+    },
+    {
+      "metric": "BYD H1 2026 cumulative sales",
+      "value": "1,808,511",
+      "unit": "units",
+      "as_of_date": "2026-06-30",
+      "definition": "BYD H1 2026 NEV cumulative sales",
+      "source": "BYD [S17]"
+    },
+    {
+      "metric": "BYD H1 2026 YoY change",
+      "value": "-15.72",
+      "unit": "% year-over-year",
+      "as_of_date": "2026-06-30",
+      "definition": "H1 2026 NEV sales versus H1 2025",
+      "source": "BYD [S17]"
+    },
+    {
+      "metric": "BYD June 2026 overseas sales",
+      "value": "175,349",
+      "unit": "units",
+      "as_of_date": "2026-06-30",
+      "definition": "BYD overseas sales June 2026",
+      "source": "BYD [S17]"
+    },
+    {
+      "metric": "BYD June 2026 overseas YoY growth",
+      "value": "+94.73",
+      "unit": "% year-over-year",
+      "as_of_date": "2026-06-30",
+      "definition": "June 2026 overseas sales change",
+      "source": "BYD [S17]"
+    },
+    {
+      "metric": "BYD cumulative NEV production",
+      "value": "17+",
+      "unit": "million units",
+      "as_of_date": "2026-07-08",
+      "definition": "BYD lifetime NEV production milestone",
+      "source": "BYD [S17]"
+    },
+    {
+      "metric": "BNEF 2026 global EV projection",
+      "value": "23+",
+      "unit": "million units",
+      "as_of_date": "2026-12-31",
+      "definition": "BNEF projected 2026 global EV sales",
+      "source": "BNEF EVO 2026 [S10]"
+    },
+    {
+      "metric": "BNEF 2035 global EV share projection",
+      "value": "52",
+      "unit": "% new car sales",
+      "as_of_date": "2035-12-31",
+      "definition": "BNEF projected 2035 global EV share",
+      "source": "BNEF EVO 2026 [S10]"
+    },
+    {
+      "metric": "IEA 2026 global EV projection",
+      "value": "23",
+      "unit": "million units",
+      "as_of_date": "2026-12-31",
+      "definition": "IEA projected 2026 global EV sales",
+      "source": "IEA GEVO 2026 [S26]"
+    },
+    {
+      "metric": "IEA 2030 STEPS projection",
+      "value": "~40",
+      "unit": "% new car sales",
+      "as_of_date": "2030-12-31",
+      "definition": "IEA Stated Policies Scenario 2030 EV share",
+      "source": "IEA GEVO 2026 [S26]"
+    },
+    {
+      "metric": "Chinese NEV brands profitable in 2025",
+      "value": "3",
+      "unit": "brands of 137",
+      "as_of_date": "2025-12-31",
+      "definition": "Chinese NEV-focused brands profitable in 2025",
+      "source": "AlixPartners"
+    },
+    {
+      "metric": "AlixPartners projection: Chinese NEV brands profitable by 2030",
+      "value": "19",
+      "unit": "brands of 137",
+      "as_of_date": "2030-12-31",
+      "definition": "Projected profitable Chinese NEV brands by 2030",
+      "source": "AlixPartners [S13]"
+    },
+    {
+      "metric": "Ford Model e cumulative losses",
+      "value": "19.5",
+      "unit": "USD billion",
+      "as_of_date": "2025-12-31",
+      "definition": "Cumulative Model e EV-related losses with $8.5 billion in writedowns",
+      "source": "Ford Motor Company"
+    },
+    {
+      "metric": "General Motors Q4 2025 special charges",
+      "value": "7.2",
+      "unit": "USD billion",
+      "as_of_date": "2025-12-31",
+      "definition": "GM Q4 2025 special charges including EV-related plus China JV writedowns",
+      "source": "General Motors"
+    },
+    {
+      "metric": "Stellantis cumulative charges",
+      "value": "22",
+      "unit": "EUR billion",
+      "as_of_date": "2025-12-31",
+      "definition": "Stellantis EV-related and brand rationalization charges",
+      "source": "Stellantis"
+    },
+    {
+      "metric": "EU 2035 original CO₂ reduction target",
+      "value": "100",
+      "unit": "% reduction",
+      "as_of_date": "2023-01-01",
+      "definition": "Original 100% zero-emission target from Regulation (EU) 2019/631",
+      "source": "EU Regulation"
+    },
+    {
+      "metric": "EU 2035 proposed CO₂ reduction target",
+      "value": "90",
+      "unit": "% reduction",
+      "as_of_date": "2025-12-16",
+      "definition": "Commission proposal to soften target with flexibilities",
+      "source": "European Commission [S9]"
+    },
+    {
+      "metric": "US Section 301 China EV tariff rate",
+      "value": "100",
+      "unit": "% tariff",
+      "as_of_date": "2024-05-14",
+      "definition": "USTR Section 301 tariff rate on Chinese EVs",
+      "source": "USTR"
+    },
+    {
+      "metric": "China NEV credit surplus",
+      "value": "21.9",
+      "unit": "million credits",
+      "as_of_date": "2025-12-31",
+      "definition": "MIIT dual-credit NEV credit balance",
+      "source": "MIIT"
+    },
+    {
+      "metric": "China fuel consumption credit deficit",
+      "value": "1.5",
+      "unit": "million negative credits",
+      "as_of_date": "2025-12-31",
+      "definition": "MIIT fuel consumption credit balance",
+      "source": "MIIT"
+    },
+    {
+      "metric": "ACC II Section 177 adopting states share",
+      "value": "~40",
+      "unit": "% US new car sales",
+      "as_of_date": "2025-12-31",
+      "definition": "Combined market share of 17 states plus DC adopting ACC II",
+      "source": "CARB"
+    },
+    {
+      "metric": "Canada China EV tariff",
+      "value": "6.1",
+      "unit": "% import duty",
+      "as_of_date": "2026-01-15",
+      "definition": "Reversed from 100% to standard MFN rate",
+      "source": "Canada government"
+    },
+    {
+      "metric": "Strait of Hormuz oil flow",
+      "value": "~20",
+      "unit": "million barrels per day",
+      "as_of_date": "2025-12-31",
+      "definition": "Pre-conflict Hormuz transit volume",
+      "source": "EIA via BBC [S24]"
+    },
+    {
+      "metric": "Strait of Hormuz global oil share",
+      "value": "~20",
+      "unit": "% global oil",
+      "as_of_date": "2025-12-31",
+      "definition": "Share of global oil supply transiting Strait of Hormuz",
+      "source": "EIA [S24]"
+    },
+    {
+      "metric": "Tesla China market share",
+      "value": "6.5",
+      "unit": "%",
+      "as_of_date": "2025-12-31",
+      "definition": "Tesla share of China EV market; halved from previous peak",
+      "source": "Industry reports"
+    },
+    {
+      "metric": "Thailand EV market share for Chinese brands",
+      "value": "88",
+      "unit": "% of Thailand EV sales",
+      "as_of_date": "2025-12-31",
+      "definition": "Chinese-brand share of Thailand's EV market",
+      "source": "Industry reports"
+    },
+    {
+      "metric": "Singapore EV share",
+      "value": "47",
+      "unit": "% new car sales",
+      "as_of_date": "2025-12-31",
+      "definition": "Singapore 2025 EV market share",
+      "source": "Government reports"
+    },
+    {
+      "metric": "Turkey EV share",
+      "value": "22",
+      "unit": "% new car sales",
+      "as_of_date": "2025-12-31",
+      "definition": "Turkey 2025 EV market share",
+      "source": "Industry reports"
+    },
+    {
+      "metric": "LFP battery market share",
+      "value": "~50",
+      "unit": "% deployments",
+      "as_of_date": "2025-12-31",
+      "definition": "LFP share of global EV battery deployments 2025",
+      "source": "Industry estimates"
+    },
+    {
+      "metric": "China lithium import dependence",
+      "value": "75",
+      "unit": "% import reliance",
+      "as_of_date": "2025-12-31",
+      "definition": "China's import reliance for lithium motivating sodium-ion pivot",
+      "source": "Industry reports [S20]"
+    },
+    {
+      "metric": "BNEF US 2030 EV share projection (2024)",
+      "value": "48",
+      "unit": "% of US new car sales",
+      "as_of_date": "2024-12-31",
+      "definition": "BNEF 2024 forecast for US 2030 EV share",
+      "source": "BNEF EVO 2024"
+    },
+    {
+      "metric": "BNEF US 2030 EV share projection (2025)",
+      "value": "27",
+      "unit": "% of US new car sales",
+      "as_of_date": "2025-12-31",
+      "definition": "BNEF 2025 revision for US 2030 EV share",
+      "source": "BNEF EVO 2026 [S10]"
+    },
+    {
+      "metric": "BNEF US 2030 EV share projection (2026)",
+      "value": "17",
+      "unit": "% of US new car sales",
+      "as_of_date": "2026-06-30",
+      "definition": "BNEF 2026 revision for US 2030 EV share post-IRA repeal",
+      "source": "BNEF EVO 2026 [S10]"
+    },
+    {
+      "metric": "China EREV segment growth",
+      "value": "+63",
+      "unit": "% year-over-year",
+      "as_of_date": "2024-12-31",
+      "definition": "EREV segment growth in 2024 Chinese market",
+      "source": "Industry reports"
+    },
+    {
+      "metric": "Li Auto Q1 2026 net loss",
+      "value": "2.3",
+      "unit": "billion yuan (~$330M USD)",
+      "as_of_date": "2026-03-31",
+      "definition": "Li Auto Q1 2026 net loss",
+      "source": "Li Auto [S33]"
+    },
+    {
+      "metric": "Li Auto Q1 2026 gross margin",
+      "value": "7.9",
+      "unit": "%",
+      "as_of_date": "2026-03-31",
+      "definition": "Q1 2026 gross margin down from 20.5% prior",
+      "source": "Li Auto [S33]"
+    }
+  ],
+  "contested_claims": [
+    {
+      "claim": "Global EV sales growth trajectory for 2026",
+      "positions": [
+        {
+          "stance": "BNEF projects 11% growth in 2026 to 23M+ units with long-term outlook slightly lower than previous due to US rollback and China maturation",
+          "sources": [
+            "S10"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "IEA projects 30% share and 23M sales in 2026 with growing sales amid energy crisis",
+          "sources": [
+            "S26"
+          ],
+          "tier": "S1"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Different BEV vs BEV+PHEV definitions; different regional weighting. BNEF ~23M/27% versus IEA 23M/30% with definitional differences accounting for ~3pp"
+    },
+    {
+      "claim": "Solid-state battery commercial timeline",
+      "positions": [
+        {
+          "stance": "Toyota/Idemitsu target 2027-2028 limited launch with sulfide electrolyte for flagship vehicles",
+          "sources": [
+            "S26",
+            "S28"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "CATL founder Zeng Yuqun assesses maturity at 'level 4 of 9' with mass production highly unlikely before 2030",
+          "sources": [
+            "S26",
+            "S28"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Definitional ambiguity (pilot vs limited launch vs mass production); competitive positioning incentives; yield and cost concerns differ by source"
+    },
+    {
+      "claim": "Chinese OEM consolidation and profitability by 2030",
+      "positions": [
+        {
+          "stance": "AlixPartners projects only 19 of 137 brands profitable by 2030; sub-scale brand attrition is likely",
+          "sources": [
+            "S13"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "Provincial government bailouts impede bankruptcy predictions; large established players (BYD, Geely, Leapmotor) will survive regardless",
+          "sources": [
+            "Research analysis"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Different definitions of profitability; bailout expectations vary across provinces"
+    },
+    {
+      "claim": "US EV trajectory through 2030",
+      "positions": [
+        {
+          "stance": "BNEF cut US 2030 forecast progressively: 48% (2024) → 27% (2025) → 17% (2026) following IRA repeal",
+          "sources": [
+            "S10"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "State-level ACC II adoption (17 states + DC, ~40% market) provides partial demand floor; potential recovery to 8-10% by 2027-2028",
+          "sources": [
+            "S5"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Different policy assumption scenarios; BNEF assumes federal restriction persists while Cox sees state mandate floor; election cycle scenarios divergent"
+    },
+    {
+      "claim": "EU 2035 ICE ban framework outcome",
+      "positions": [
+        {
+          "stance": "Commission December 2025 proposal softens to 90% CO₂ reduction",
+          "sources": [
+            "S1",
+            "S4",
+            "S9",
+            "S11",
+            "S18",
+            "S19"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "Environmental advocates and Parliament resistance may maintain stricter framework above 90%",
+          "sources": [
+            "S18",
+            "S19"
+          ],
+          "tier": "S1"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Trilogue negotiation outcome uncertain; member state positions vary (Germany/Italy/Hungary versus France/Nordics/Netherlands); 70% probability for 90% adoption"
+    },
+    {
+      "claim": "Lithium price trajectory stability",
+      "positions": [
+        {
+          "stance": "Lithium carbonate rebounded 170% from June 2025 lows to exceed $25,000/tonne by June 2026",
+          "sources": [
+            "Research compilation"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "Battery pack prices continued declining to $108/kWh despite lithium recovery; cell manufacturing learning rates offset raw material costs",
+          "sources": [
+            "S6"
+          ],
+          "tier": "S1"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Cell manufacturing learning rates and pack design innovations offsetting raw material cost pressures more than expected; sustainability beyond 2026 uncertain"
+    }
   ]
 }

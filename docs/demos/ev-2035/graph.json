@@ -1,1065 +1,2379 @@
 {
  "nodes": [
   {
-   "id": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "name": "Hyundai",
-   "labels": [],
-   "summary": "Hyundai is part of Hyundai Motor Group's 31-model EV lineup."
-  },
-  {
-   "id": "fb6d23d1-8bbe-4200-a89e-5468f0ad7c0a",
-   "name": "2030",
-   "labels": [],
-   "summary": "This year is the reinstated deadline for the ban on the sale of new ICE vehicles in the United Kingdom, confirmed by the Labour government in July 2024 and a parliamentary statement in January 2025. The deadline was previously moved to 2035."
-  },
-  {
-   "id": "f7e8a535-4659-43ad-923a-b6b1aca5679e",
-   "name": "BBC",
+   "id": "ffd7fe82-246d-482d-9089-2a89fc6bee05",
+   "name": "solid-state batteries",
    "labels": [
-    "MediaOutlet"
+    "BatteryTechnology"
    ],
-   "summary": "BBC reported that BYD surpassed Tesla to become the global EV market leader in 2025, with China making EVs mainstream."
+   "summary": "Lithium iron phosphate (LFP) batteries will favor over premium solid-state battery alternatives through 2030 based on battery technology evolution.\nSodium-ion batteries will favor over premium solid-state alternatives through 2030, with projected emergence as cost-competitive.\nEU December 2025 policy retreat delays BEV platform investments, indirectly constraining solid-state battery mass-market rollout timelines.\nTesla 4680 cell production and Toyota solid-state battery timelines have consistently slipped versus original targets, with production reality lagging announcements by 2-5 years hist"
   },
   {
-   "id": "f78628ca-8534-4e1e-923f-0150aeda72e8",
-   "name": "Malaysia",
+   "id": "ff6acb48-6425-4e5d-b716-c2ef3f0eda36",
+   "name": "China NEV Mandate",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "The China NEV Mandate (2018-2024) enabled China's six-year transition from single-digit to 40%+ EV market share via dual-credit policy and industrial policy integration.\nChina's dual-credit system (NEV credits and fuel consumption credits) continues to drive OEM compliance, administered under the broader government industrial policy framework, with 21.9 million NEV credit surplus against 1.5 million negative credits in 2025.\nThe 2018 China NEV mandate implementation established the dual-credit system as a supply-side requirement.\nBYD's scale milestone of 10 million cumulative NEVs in November "
+  },
+  {
+   "id": "fbb4433c-8089-49aa-b7b3-65162d44e376",
+   "name": "EVE Energy",
+   "labels": [
+    "BatterySupplier"
+   ],
+   "summary": "Chinese challengers CALB, Gotion, and EVE Energy are expanding share against CATL in cell manufacturing."
+  },
+  {
+   "id": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "LFP",
+   "labels": [
+    "BatteryTechnology"
+   ],
+   "summary": "Lithium Iron Phosphate (LFP) battery chemistry captured approximately 50% of global EV battery deployments in 2025, up from approximately 19% in 2020, and is projected to reach 65-70% market share by 2030. LFP's advantages include lower cost, superior thermal stability, longer cycle life, and avoidance of cobalt/nickel supply chain risks, making it the default choice for entry-level and mid-market vehicles in China. Cobalt-free advantage accelerates shift away from NCM chemistries amid DRC supply restrictions (February 22, 2025 export ban; October 16, 2025 quota of 96,600 tonnes/year). Battery"
+  },
+  {
+   "id": "f817c2f7-7ed0-4bc3-8307-eb1fbff77e84",
+   "name": "Zeng Yuqun",
    "labels": [],
-   "summary": "Malaysia is a planned future production location for BYD."
+   "summary": "Zeng Yuqun is the founder of CATL."
   },
   {
-   "id": "efd69e08-d575-486f-9280-bff657d9e8be",
-   "name": "Hyundai Battery Strategy 2025",
+   "id": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "name": "China",
+   "labels": [
+    "Government"
+   ],
+   "summary": "China and emerging markets will approach EV saturation while the United States mature market will experience demand volatility tied to policy reversals and infrastructure constraints.\nChina maintains 52% of global EV sales in the base scenario, in contrast to Western Europe where demand volatility is tied to policy reversals and infrastructure constraints.\nThe US stalls between 5-8% EV market share absent federal policy restoration, contrasting with China's dominant 52% of global sales.\nIn the Policy Push Scenario, US restoration of purchase incentives supports accelerated EV adoption in the U"
+  },
+  {
+   "id": "f6e09392-3e8a-48c2-ae70-9d13d85ac41f",
+   "name": "Hyundai-Kia",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Korean automotive group with Hyundai, Kia, and Genesis brands; operating E-GMP dedicated EV platform and expanding US manufacturing (Georgia Metaplant); among few Western-affiliated OEMs with growing \nHyundai-Kia has deployed 800V electrical architectures while Volkswagen's 800V implementation arrives in 2026-2027.\nHyundai-Kia has deployed 800V electrical architectures while Stellantis's 800V implementation arrives in 2026-2027.\nHyundai-Kia is positioned as the best-positioned Western OEM for the EV transition, in contrast to Volkswagen Group's structural challenges and delayed BEV launches."
+  },
+  {
+   "id": "f53ad827-435c-4594-9d2c-a12ef0c10485",
+   "name": "SCOTUS",
+   "labels": [
+    "Government"
+   ],
+   "summary": "On June 20, 2025, the SCOTUS standing ruling in Diamond Alternative Energy v. EPA enabled court challenges to the California ACC II waiver.\nA SCOTUS or DDC ruling upholding the ACC II waiver by Q4 2026 would materially strengthen the base case for US EV adoption by validating state-level ZEV mandates."
+  },
+  {
+   "id": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "BYD Company",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "BYD is one of only three profitable Chinese NEV brands in 2025 (alongside Xiaomi and Leapmotor); AlixPartners projects BYD among only 19 of 137 Chinese NEV brands to achieve profitability by 2030. BYD's Blade Battery is a first-generation cell-to-pack structural battery implementation. BYD has deployed 800V electrical architecture systems. BYD's June 2026 overseas sales reached 175,349 units (+94.73% YoY), a record, while H1 2026 cumulative NEV sales of 1,808,511 units declined 15.72% YoY, signaling domestic market saturation. BYD inaugurated its Thai Rayong factory in July 2026, producing the"
+  },
+  {
+   "id": "efc7107d-93b3-4fea-975e-6e2880e45e1c",
+   "name": "Brent crude",
+   "labels": [
+    "RawMaterialProducer"
+   ],
+   "summary": "The Iran war and Strait of Hormuz oil shipment disruption (approximately 20% of global oil trade) caused Brent crude price volatility, with a -15% post-ceasefire change observed in April 2026.\nClosure of the Strait of Hormuz causes spikes in Brent crude prices, affecting fuel prices at the pump.\nBNEF explicitly cites the Iran war and resulting increase in Brent crude prices at the pump as boosting consumer interest in buying an EV.\nHigher oil prices driven by Brent crude spikes increase lithium extraction and processing costs, partially offsetting EV demand stimulus.\nHigher oil prices driven b"
+  },
+  {
+   "id": "eceb7aa5-d5dd-475c-81c4-ee631848665f",
+   "name": "Section 177 state adoption",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "Section 177 state adoption by seventeen states plus DC (~40% of US new car sales) provides a partial demand floor that enables Tesla and other OEMs to mitigate the demand collapse from federal credit expiration, under which Tesla US sales declined >10% in H1 2026.\nIf the pending court ruling upholds state-level ZEV mandates under Section 177, 40% of US new car sales would remain under ACC II requirements, pressuring OEMs to comply regardless of federal stance.\nAlixPartners' projection of only 19 of 137 Chinese NEV brands being profitable by 2030 is identified as a counter-evidence threshold; i"
+  },
+  {
+   "id": "eb0db79c-2b67-4a95-92fe-1b8bafbdc6a4",
+   "name": "German Government",
+   "labels": [
+    "Government"
+   ],
+   "summary": "The German Government pushed for ICE flexibility and e-fuels support, influencing the European Commission's 90% 2035 CO₂ reduction proposal."
+  },
+  {
+   "id": "ea579ba4-be4c-42a7-a518-79382d5f7f49",
+   "name": "Porsche",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "Porsche has deployed 800V electrical architectures while Volkswagen's 800V implementation arrives in 2026-2027.\nPorsche has deployed 800V electrical architectures while Stellantis's 800V implementation arrives in 2026-2027."
+  },
+  {
+   "id": "e8460784-2046-40d0-9568-e8fba733bff6",
+   "name": "VinFast",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "New entrants NIO and VinFast face trust deficits in export markets relative to established brands that benefit from service network advantages.\nBYD, NIO, and VinFast are new entrants facing trust deficits in export markets while established brands benefit from service network advantages."
+  },
+  {
+   "id": "e67c8519-2350-469a-b5a2-10489feb55ae",
+   "name": "Huayou",
+   "labels": [
+    "RawMaterialProducer"
+   ],
+   "summary": "Huayou is one of the controllers of Indonesian high-pressure acid leaching (HPAL) production for battery-grade nickel.\nHuayou controls Indonesian HPAL production for battery-grade nickel supply growth, with capacity additions projected to meet demand through 2028."
+  },
+  {
+   "id": "dfb9d5d7-b564-47e3-8170-9e810f6b547d",
+   "name": "Panasonic",
+   "labels": [
+    "BatterySupplier"
+   ],
+   "summary": "LG Energy Solution, Panasonic, and Samsung SDI form the second tier of cell manufacturing leadership behind CATL and BYD."
+  },
+  {
+   "id": "deea8984-aef3-46be-a5c9-54dab6630dbb",
+   "name": "Zimbabwe lithium carbonate supply disruptions",
+   "labels": [
+    "CriticalMineralExportRegime"
+   ],
+   "summary": "Chinese automakers face export constraints from the 100% United States Section 301 tariffs on Chinese EVs, while Zimbabwe lithium carbonate supply disruptions simultaneously affect battery raw material costs.\nCATL mine suspensions, alongside Zimbabwe lithium carbonate supply disruptions, jointly drove lithium carbonate prices up 170% to exceed $25,000 per tonne by June 2026."
+  },
+  {
+   "id": "ded925b7-efdf-4748-8cb1-f68b68ba15ff",
+   "name": "Rivian",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "Tesla and Rivian represent the Full BEV commitment strategic position among Western OEMs."
+  },
+  {
+   "id": "dac37e0d-20ec-48d0-8a68-8909b08c2e34",
+   "name": "Renault",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "The French Government supports Renault as a national champion via Council voting and ECJ advocacy."
+  },
+  {
+   "id": "d99922f4-0a5f-4934-bc88-9d3a807b1cd6",
+   "name": "BYD Seagull",
+   "labels": [
+    "EVProduct"
+   ],
+   "summary": "BYD Seagull is part of BYD's fast-growing entry-level EV segment (<$30,000) in China, with BYD targeting this segment for export expansion.\nBYD Seagull and Wuling Mini EV compete in the fastest-growing entry-level EV segment (<$30,000) in China.\nBYD Seagull and Geely Panda Mini compete in the fastest-growing entry-level EV segment (<$30,000) in China.\nBYD filed an all-new Seagull model, expanding its EV product lineup."
+  },
+  {
+   "id": "d1b8de75-e165-4474-a77c-39ddcb0055b7",
+   "name": "Strait of Hormuz",
    "labels": [],
-   "summary": "Hyundai's 2025 Battery Strategy outlines its plan to become an energy powerhouse, focusing on battery technology."
+   "summary": "The Iran War that began February 28, 2026, with US and Israeli strikes killing Supreme Leader Ali Khamenei created sustained disruption to Strait of Hormuz oil shipments, which account for approximately 20% of global oil trade.\nOPEC+ is listed as a strategic actor opposing the EV transition due to demand displacement concerns tied to Strait of Hormuz oil disruption.\nA sustained Strait of Hormuz closure would accelerate EV adoption and increase battery material costs across OEMs including BYD.\nThe Iran war and Strait of Hormuz oil shipment disruption (approximately 20% of global oil trade) caus"
   },
   {
-   "id": "ee7105e8-ce61-4d74-a7e6-e74b93d303e5",
-   "name": "英国",
+   "id": "cd8025fc-6f22-4b8a-81be-afd252e46a0a",
+   "name": "2026 Iran war",
    "labels": [],
-   "summary": ""
+   "summary": "The 2026 Iran war disrupted fossil fuel supply chains, influencing the global electric vehicle industry trajectory from 2026 to 2035.\nThe Iran War that began February 28, 2026, with US and Israeli strikes killing Supreme Leader Ali Khamenei created sustained disruption to Strait of Hormuz oil shipments, which account for approximately 20% of global oil trade.\nThe Iran War's oil price volatility has increased battery material costs, affecting lithium iron phosphate (LFP) chemistry production economics.\nThe Iran War's oil price volatility has increased battery material costs, affecting nickel-co"
   },
   {
-   "id": "ec32c175-b661-448f-b246-e2a3e5d8d7de",
-   "name": "Volkswagen",
-   "labels": [],
-   "summary": "Volkswagen is mentioned in the context of autonomous driving technology development."
+   "id": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "name": "Tesla Inc.",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "American EV and clean energy company led by Elon Musk; delivered 480,126 vehicles in Q2 2026 and 13.5 GWh of energy storage; faces halved China market share at 6.5% but maintains premium positioning a\nThe 100% United States Section 301 tariffs on Chinese EVs constrain Tesla's competitive position against Chinese imports in the US market.\nThe Iran War created oil price volatility that paradoxically boosted EV consideration among consumers, influencing Tesla's market conditions.\nBYD competes with Tesla in the Chinese NEV market; Tesla's China market share was halved to 6.5% in 2025 while BYD rem"
   },
   {
-   "id": "ec1c6adb-a5f1-4ee0-85d0-ce3e3252ff40",
-   "name": "local brands",
-   "labels": [],
-   "summary": ""
+   "id": "c9b130f9-794a-4349-97f0-2901541dbd0a",
+   "name": "BloombergNEF (BNEF)",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "BloombergNEF (BNEF) is a primary research source providing empirical data on the global electric vehicle industry forecast, including the baseline figure of approximately 20 million EVs sold globally in 2025 representing 25% market share.\nBNEF explicitly cites the Iran war and resulting increase in Brent crude prices at the pump as boosting consumer interest in buying an EV.\nBNEF reported battery pack prices at $108/kWh in 2025, validating LFP chemistry's continued cost-down trajectory and supporting projected 65-70% LFP market share by 2030.\nIn the Base Scenario, adoption of the EU 90% 2035 f"
   },
   {
-   "id": "ec09380b-ada5-48a0-ae5a-278e27c44bc5",
-   "name": "vertical integration depth",
-   "labels": [],
-   "summary": "Long-term success depends on vertical integration depth."
+   "id": "c7fba6cf-d34b-482a-ab52-ef47c44b1566",
+   "name": "lithium iron phosphate (LFP)",
+   "labels": [
+    "BatteryTechnology"
+   ],
+   "summary": "Lithium iron phosphate (LFP) batteries will favor over premium solid-state battery alternatives through 2030 based on battery technology evolution.\nLithium iron phosphate (LFP) and sodium-ion batteries are both favored over premium solid-state alternatives through 2030 in battery technology evolution.\nThe Iran War's oil price volatility has increased battery material costs, affecting lithium iron phosphate (LFP) chemistry production economics.\nLithium iron phosphate (LFP) chemistry captured approximately 50% of global EV battery deployments in 2025, up from approximately 19% in 2020, displacin"
   },
   {
-   "id": "ea994af8-6fe3-4ee5-9178-c1b12d51a127",
-   "name": "Intelligent driving technology",
-   "labels": [],
-   "summary": "Resources are available on End-to-End Autonomous Driving, Multimodal Fusion Autonomous Driving, and the Future of Autonomous Driving, which compares single-vehicle intelligence with vehicle-road coordination. Volkswagen is associated with Mobileye in this field."
+   "id": "c6d5cd99-c4b1-4164-a866-95ce6074bda4",
+   "name": "Western OEM retreat",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "The Plateau Thesis argues Western OEM retreat and observed policy reversals such as softening of the EU 2035 ICE ban increase the probability that global EV adoption plateaus at 25-30% market share through 2035.\nRestoration of US federal EV incentives would counter the Western OEM retreat narrative and push US EV share above 12% by end-2027, disconfirming the plateau thesis.\nEnforcement of the EU 2035 ban at original 100% stringency would counter Western OEM retreat by enabling EU EV share to exceed 35% by 2030.\nCommercial viability of sodium-ion batteries at $50-70/kWh with 300+ Wh/kg by 2028"
   },
   {
-   "id": "e836db88-b92f-4f57-8045-2f479c5e82e6",
+   "id": "c52b9c08-fbe3-4613-b5b1-db4a94477143",
+   "name": "Blade Battery",
+   "labels": [
+    "EVProduct"
+   ],
+   "summary": "BYD's Blade Battery represents a first-generation cell-to-pack implementation."
+  },
+  {
+   "id": "c1f8c2fb-22a2-4d1f-8515-6e528ed93734",
+   "name": "EU",
+   "labels": [
+    "Government"
+   ],
+   "summary": "The EU 2035 ICE ban was formally adopted in 2023, establishing a binding European zero-emission timeline.\nIn 2024, the EU launched provisional anti-subsidy duties on Chinese BEVs, initiating trade defense.\nReciprocal tariff escalation between China and the EU could create fragmented global supply chains and pricing disparities."
+  },
+  {
+   "id": "c1c9fba4-054a-4128-9454-c443a257df1f",
+   "name": "Japan",
+   "labels": [
+    "Government"
+   ],
+   "summary": "Japan hosts pilot programs for bidirectional V2G charging deployment alongside California and the Netherlands."
+  },
+  {
+   "id": "c188f12f-272f-4756-97e7-ba15c2047efb",
+   "name": "United States Section 301 tariffs on Chinese EVs",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "The 100% United States Section 301 tariffs on Chinese EVs constrain General Motors' competitive position against Chinese imports in the US market.\nThe 100% United States Section 301 tariffs on Chinese EVs constrain Ford's competitive position against Chinese imports in the US market.\nThe 100% United States Section 301 tariffs on Chinese EVs constrain Stellantis' competitive position against Chinese imports in the US market.\nThe 100% United States Section 301 tariffs on Chinese EVs constrain Tesla's competitive position against Chinese imports in the US market.\nIn 2024, the US imposed a 100% ta"
+  },
+  {
+   "id": "c067fd10-bae0-403f-a2fd-ab926af59167",
+   "name": "Extended-range electric vehicles (EREVs)",
+   "labels": [
+    "EVProduct"
+   ],
+   "summary": "Extended-range electric vehicles like those from Li Auto grew 63% in 2024, making EREVs the fastest-growing NEV segment in China.\nExtended-range electric vehicles like AITO grew 63% in 2024, making EREVs the fastest-growing NEV segment in China.\nEREVs (Li Auto, AITO) are the fastest-growing NEV segment in China (+63% in 2024), demonstrating durable hybrid architecture demand in an advanced market."
+  },
+  {
+   "id": "be53cbf0-d1b6-470f-b249-63134a66b80f",
    "name": "European Union",
    "labels": [
-    "GovernmentAgency"
+    "Government"
    ],
-   "summary": "BYD is investing in a plant in Turkey with an annual capacity of 150,000 vehicles specifically to avoid European Union tariffs."
+   "summary": "The European Commission's December 16, 2025 proposal amends EU Regulation 2019/631 to allow 90% CO₂ reduction from 2035, permitting continued ICE/PHEV sales post-2035.\nBloombergNEF forecasts project continued EV growth through 2030 in the European Union's BEV market despite policy reversal headwinds.\nThe European Union's policy reversal and BEV market dynamics influence consolidation toward LFP battery chemistry in volume segments.\nThe California ACC II waiver durability is identified as a key inflection point alongside the European Union's trilogue conclusion as competing regulatory signals s"
   },
   {
-   "id": "e50da547-e44e-40f4-8b26-b35a408bc6bf",
-   "name": "IONIQ 3",
-   "labels": [],
-   "summary": "The IONIQ 3 is a regionally customized product from Hyundai Motor Group, targeting the European mass market."
-  },
-  {
-   "id": "d9640271-f4f6-4005-85f7-063891dc5f5b",
-   "name": "i-VICS",
-   "labels": [],
-   "summary": "i-VICS, or Vehicle-Road Collaborative Systems, is one of the two technical routes developing in parallel for autonomous driving, alongside SAD (Single-car Intelligence)."
-  },
-  {
-   "id": "d7cb90da-5c22-4d3c-961e-3dae22c28bcb",
-   "name": "China car online",
-   "labels": [],
-   "summary": ""
-  },
-  {
-   "id": "d5792b9e-ab66-43c6-999d-bee70886c492",
-   "name": "Tesla",
-   "labels": [],
-   "summary": ""
-  },
-  {
-   "id": "d2130e67-3233-4d62-9210-ce0661613304",
-   "name": "BYD Production Network",
-   "labels": [],
-   "summary": "The BYD Production Network article from automotive world discusses BYD's global production network."
-  },
-  {
-   "id": "d0ce283e-c2d6-443d-ae63-1b59d25f26f0",
-   "name": "Southeast Asia",
-   "labels": [],
-   "summary": "VinFast announced an indefinite postponement of its expansion into Southeast Asia due to an inability to compete with Chinese brands in price wars."
-  },
-  {
-   "id": "cebc1586-4e64-4093-9552-986c43b69f56",
-   "name": "United Kingdom",
-   "labels": [],
-   "summary": "The Labour government reinstated the 2030 deadline for banning the sale of new ICE vehicles in July 2024, confirming it in a written parliamentary statement on January 1, 2025. This date was previously delayed to 2035."
-  },
-  {
-   "id": "ce60fcb0-deb2-4892-8e30-086978b8e050",
-   "name": "Cambodia",
-   "labels": [],
-   "summary": "Cambodia is a planned future production location for BYD."
-  },
-  {
-   "id": "cad926e6-3eb5-4a5b-aa27-6d32e3c7d274",
-   "name": "Thailand",
-   "labels": [],
-   "summary": "Thailand is the location of BYD's first wholly-owned overseas factory, which is scheduled to begin production in mid-2024 with an annual capacity of 150,000 vehicles. Combined with Uzbekistan and Brazil, it contributes to a total annual capacity exceeding 300,000 vehicles for BYD."
-  },
-  {
-   "id": "c9a56528-decd-4f72-9f58-81244837cda0",
-   "name": "BYD Targets 1M Overseas Sales",
-   "labels": [],
-   "summary": "The article BYD Targets 1M Overseas Sales from electricarworld.com reports on BYD's goal of achieving 1 million overseas car sales."
-  },
-  {
-   "id": "c7b49976-8454-41b5-817a-7ebd38135609",
-   "name": "Genesis",
-   "labels": [],
-   "summary": "Genesis is part of Hyundai Motor Group's 31-model EV lineup."
-  },
-  {
-   "id": "c1449124-ec0b-4192-a9ee-e0a2dcc82535",
-   "name": "2025",
-   "labels": [],
-   "summary": "This year is the target for Norway to effectively complete its ban on the sale of new ICE vehicles. It is also the year a UK parliamentary statement confirmed the reinstated 2030 ICE vehicle ban."
-  },
-  {
-   "id": "c0b2af84-f75a-4fcd-8023-2b24c5820079",
-   "name": "ICE Bans Global",
-   "labels": [],
-   "summary": "ICE Bans Global is a map detailing worldwide ICE car bans, including their locations and effective dates. It references policy updates from the UK, such as their reaffirmation of the 2030 ICE vehicle ban despite industry concerns. The resource also notes the return of the UK's 'bring the ice phase out' track."
-  },
-  {
-   "id": "be67d289-a6da-41ba-98c5-3fd05ee5a727",
-   "name": "ID. Buzz",
-   "labels": [],
-   "summary": "Volkswagen and Mobileye continue their collaboration on L4-level autonomous driving for the ID. Buzz."
-  },
-  {
-   "id": "be11cb8b-78b5-4a51-af04-c0998c574bf1",
-   "name": "Italy",
-   "labels": [],
-   "summary": "BEV sales in Italy surged by 64% in March 2025."
-  },
-  {
-   "id": "bdc2f31f-9568-4d32-a64e-b3b1f84df430",
-   "name": "HMGMA factory",
-   "labels": [],
-   "summary": ""
-  },
-  {
-   "id": "b2b5d9e7-ac0c-4662-91d2-366ebb6a7718",
-   "name": "Uzbekistan",
-   "labels": [],
-   "summary": "Uzbekistan is a location where BYD is already producing vehicles. Combined with Thailand and Brazil, it contributes to a total annual capacity exceeding 300,000 vehicles for BYD."
-  },
-  {
-   "id": "b147a21c-0015-439e-99c7-959d32ae59e1",
-   "name": "Hyundai Motor Group",
-   "labels": [],
-   "summary": "Hyundai Motor Group plans to increase production capacity by 200,000 units at its HMGMA factory's second phase, investing $2.7 billion and creating 3,000 jobs. Their EV lineup will include 31 models across Hyundai, Kia, and Genesis brands. Regionally customized products, such as the IONIQ 3 for the European mass market, are part of their strategy. They are also focusing on next-generation battery technology with cloud-based battery management systems starting in 2026, and a software-defined vehicle (SDV) platform, alongside localized production."
-  },
-  {
-   "id": "aea488d5-4e3e-4eac-9b19-46a608b225e8",
-   "name": "2030 policy",
-   "labels": [],
-   "summary": "The UK Government has a 2030 Statement regarding the transition to zero-emission vehicles. UK Labour has confirmed a 2030 ban on internal combustion engine (ICE) cars, bringing the phase-out back on track."
-  },
-  {
-   "id": "a9877f18-b209-4c5d-96b4-a920c98bdf67",
-   "name": "China",
-   "labels": [],
-   "summary": "In China, the average selling price for BEVs decreased by 14% in 2024, leading to a halving of gross profit margins for mid-range OEM manufacturers amid an intensifying price war."
-  },
-  {
-   "id": "a3093112-b292-4879-ab25-cdd9b22b8501",
-   "name": "mid-range OEM manufacturers",
-   "labels": [],
-   "summary": "Mid-range OEM manufacturers in China experienced their gross profit margins halved in 2024 due to a 14% decrease in the average selling price of BEVs and an intensifying price war."
-  },
-  {
-   "id": "a2da7af2-7ef0-4823-95f7-461bc10ba8cd",
-   "name": "Electrek",
+   "id": "bc9b0e72-1023-43ff-a9cd-4ba90a35ae91",
+   "name": "LG Energy Solution",
    "labels": [
-    "MediaOutlet"
+    "BatterySupplier"
    ],
-   "summary": "Electrek published a March sales report."
+   "summary": "LG Energy Solution, Panasonic, and Samsung SDI form the second tier of cell manufacturing leadership behind CATL and BYD."
   },
   {
-   "id": "9a78db69-48d3-430a-af72-36812b267d04",
-   "name": "下一代电池",
-   "labels": [],
-   "summary": "现代押注下一代电池技术。"
-  },
-  {
-   "id": "96ce25da-0bef-4f10-a15a-8abf6639706a",
-   "name": "UK Labour",
+   "id": "b7f0abae-6cc1-40db-a3bd-3f573f03cfff",
+   "name": "Qilin battery",
    "labels": [
-    "PoliticalParty"
+    "EVProduct"
    ],
-   "summary": "UK Labour has confirmed a 2030 ban on internal combustion engine (ICE) cars, bringing the phase-out back on track."
+   "summary": "CATL's Qilin battery represents a first-generation cell-to-pack implementation.\nBYD's Blade Battery competes with CATL's Qilin battery as first-generation cell-to-pack implementations."
   },
   {
-   "id": "935d7f28-36b8-4e49-9856-bc0ea482808c",
-   "name": "Multimodal Fusion Autonomous Driving",
-   "labels": [],
-   "summary": "A resource is available on Multimodal Fusion Autonomous Driving."
-  },
-  {
-   "id": "91847d4c-cc6d-4a58-84c4-c1e95ccdbc75",
-   "name": "Evergrande",
-   "labels": [],
-   "summary": "Evergrande's financial risks are frequently mentioned in the context of the Chinese EV industry's \"involution\" and price wars, which have led to mid-tier manufacturers' gross profit margins being halved."
-  },
-  {
-   "id": "912c10c5-8737-492c-bd04-fe981a2289bc",
-   "name": "single neural network",
-   "labels": [],
-   "summary": "A single neural network is used in end-to-end autonomous driving models, contrasting with traditional modular architectures."
-  },
-  {
-   "id": "90f6ca7a-0e66-4b52-8bec-d1b1a06f8aaf",
-   "name": "Chinese brands",
-   "labels": [],
-   "summary": ""
-  },
-  {
-   "id": "8b1c4fbe-0f41-4b3b-bc6d-c51e42c63c59",
-   "name": "Kia",
-   "labels": [],
-   "summary": "Kia is part of Hyundai Motor Group's 31-model EV lineup."
-  },
-  {
-   "id": "8aedb46d-fe92-4854-876c-baf26c3de81a",
-   "name": "End-to-End Autonomous Driving",
-   "labels": [],
-   "summary": "End-to-End Autonomous Driving became the focus of the 2025 technology competition, shifting from traditional modular architectures to single neural network end-to-end models. Two technical routes, Single-car Intelligence (SAD) and Vehicle-Road Collaborative Systems (i-VICS), are developing in parallel. China continues to make breakthroughs in multimodal fusion perception."
-  },
-  {
-   "id": "85c70a60-aeb7-4f88-a306-9e076bedb1e3",
-   "name": "Europe",
-   "labels": [],
-   "summary": "In March 2025, Europe experienced a 22% year-over-year increase in EV sales. Specifically, Germany saw a 37% increase in BEV sales, Italy surged by 64%, and the UK recorded over 100,000 EV sales in a single month."
-  },
-  {
-   "id": "83fd62f2-6c1d-40d0-bb3f-29edd4993163",
-   "name": "Hungary",
-   "labels": [],
-   "summary": "Hungary was originally planned for BYD production by the end of 2025, but this has been postponed. BYD is now shifting its focus to Turkey for accelerated expansion."
-  },
-  {
-   "id": "8354ca3a-d458-4ba7-8fb7-cfb95a75d4b4",
-   "name": "BYD Seagull",
-   "labels": [],
-   "summary": "The BYD Seagull has a starting price of 69,800 RMB (approximately 7,600 GBP), which forces smaller competitors to sell below cost."
-  },
-  {
-   "id": "82e45e80-1e52-43bd-ba84-f4933de268f3",
-   "name": "Future of Autonomous Driving",
-   "labels": [],
-   "summary": "A resource titled \"Future of Autonomous Driving\" discusses single-vehicle intelligence versus vehicle-road coordination."
-  },
-  {
-   "id": "7fe94962-cd9c-4663-904f-584368eff1f4",
-   "name": "software capabilities",
-   "labels": [],
-   "summary": "Long-term success depends on software capabilities."
-  },
-  {
-   "id": "7b45c9f2-6fa3-4dfa-bd90-30deeca26324",
-   "name": "TrendForce",
+   "id": "aaa0be8b-0c08-4f80-9012-e14d86fe7e19",
+   "name": "Geely",
    "labels": [
-    "ResearchInstitute"
+    "OEM"
    ],
-   "summary": "TrendForce analysts reported that global new energy vehicle sales reached 20.53 million units in 2025, setting a new historical record."
+   "summary": "Geely Panda Mini is part of the fastest-growing entry-level EV segment (<$30,000) in China."
   },
   {
-   "id": "7825f6ad-413b-49b5-b5f2-ddfb5a3c10d8",
-   "name": "Emerging Markets",
-   "labels": [],
-   "summary": "BYD is expanding its global presence with new plants in emerging markets. The company aims to achieve 1 million overseas car sales by 2025 and is shifting its European production focus from Hungary to Turkey."
-  },
-  {
-   "id": "70bdf404-6820-4875-8eeb-3339d572bfe9",
-   "name": "ICE vehicle ban",
-   "labels": [],
-   "summary": "The United Kingdom's ban on new ICE vehicle sales is set for 2030, a deadline reinstated by the Labour government in July 2024 and confirmed by a parliamentary statement on January 1, 2025, after a previous postponement to 2035. Norway aims to have this ban substantially completed by 2025."
-  },
-  {
-   "id": "6e7b7605-8bfc-4b14-9eb7-4916820cdf97",
-   "name": "automotive world",
-   "labels": [],
-   "summary": ""
-  },
-  {
-   "id": "5ffa3855-d184-4c11-9aa6-09de12fc3846",
-   "name": "Mobileye",
-   "labels": [],
-   "summary": "Volkswagen and Mobileye have an agreement for autonomous driving technology."
-  },
-  {
-   "id": "5bc1d97b-1b34-4e15-81c8-e1cb5ee019a2",
-   "name": "end-to-end intelligent driving",
-   "labels": [],
-   "summary": ""
-  },
-  {
-   "id": "5734a711-9e29-48f7-aae1-90ee0cad5cde",
-   "name": "SDV",
-   "labels": [],
-   "summary": ""
-  },
-  {
-   "id": "54994604-07c8-4f34-b47c-0f0d6e824d72",
-   "name": "Norway",
-   "labels": [],
-   "summary": "Norway has effectively completed its ban on the sale of new ICE vehicles, with a target year of 2025."
-  },
-  {
-   "id": "5412cd26-e61d-4e57-ae81-cad2a948ee0e",
-   "name": "Brazil",
-   "labels": [],
-   "summary": "Brazil is a location for BYD's global production, with a former Ford factory being converted to have an annual capacity of 150,000 vehicles. Combined with Thailand and Uzbekistan, it contributes to a total annual capacity exceeding 300,000 vehicles for BYD."
-  },
-  {
-   "id": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
-   "name": "VinFast",
-   "labels": [],
-   "summary": "VinFast electric buses debuted in Germany. The company has cooperated with Siemens on electric bus technology since 2018."
-  },
-  {
-   "id": "41d55056-bbbb-4210-b19d-0ba096fe5fad",
-   "name": "Germany",
-   "labels": [],
-   "summary": "BEV sales in Germany increased by 37% in March 2025."
-  },
-  {
-   "id": "4014098d-36b4-4eab-b88a-3c5767742a60",
-   "name": "中国品牌",
-   "labels": [],
-   "summary": "中国品牌押注端到端智驾和价格。在东南亚等新兴市场，中国品牌占据主导地位，但本土品牌面临压力。VinFast 的撤退反映了新兴市场本土品牌面临的困境。"
-  },
-  {
-   "id": "3fd88a85-6761-46d2-a373-d608d7d74175",
-   "name": "price",
-   "labels": [],
-   "summary": ""
-  },
-  {
-   "id": "3eb78813-0396-466e-85e9-0abef866d729",
-   "name": "BYD Global Expansion 2025",
-   "labels": [],
-   "summary": "China car online's article, BYD Global Expansion 2025, details BYD's overseas expansion plans."
-  },
-  {
-   "id": "3cd88686-62d0-47d7-b515-62f187686869",
-   "name": "next-generation batteries",
-   "labels": [],
-   "summary": ""
-  },
-  {
-   "id": "3c1a724a-0a70-4386-a94f-a45768de5b00",
-   "name": "Siemens",
-   "labels": [],
-   "summary": "Siemens has cooperated with VinFast on electric bus technology since 2018."
-  },
-  {
-   "id": "36bff843-9f5b-46bf-8820-b1bb09feb0eb",
-   "name": "BEV",
-   "labels": [],
-   "summary": "The average selling price of BEVs in China fell by 14% in 2024. Globally, EV sales increased by 40% year-over-year in March 2025. In March 2025, Europe saw a 22% year-over-year increase in EV sales, with Germany experiencing a 37% rise, Italy a 64% surge, and the UK surpassing 100,000 vehicle sales in a single month."
-  },
-  {
-   "id": "3672c9ad-9c78-4016-aadc-5a3bd2ee461f",
-   "name": "英国政府",
+   "id": "a70b362c-bf92-4952-95a7-0e4b05919a4d",
+   "name": "Volkswagen Group",
    "labels": [
-    "GovernmentAgency"
+    "Organization"
    ],
-   "summary": "英国政府 on November 1, 2024 reaffirmed the 2030 ICE sales ban target."
+   "summary": "German automotive group (Volkswagen, Audi, Porsche brands) experiencing structural challenges including Cariad software subsidiary delays, BEV platform postponements, and continued China market share \nBYD has deployed 800V electrical architectures while Volkswagen's 800V implementation arrives in 2026-2027.\nHyundai-Kia has deployed 800V electrical architectures while Volkswagen's 800V implementation arrives in 2026-2027.\nPorsche has deployed 800V electrical architectures while Volkswagen's 800V implementation arrives in 2026-2027.\nVolkswagen Group's software subsidiary Cariad has experienced d"
   },
   {
-   "id": "297a9362-b644-4400-9e7d-6a41f6321715",
-   "name": "Electricarworld.com",
+   "id": "a459d7d1-4641-4cff-94b1-7304e201e880",
+   "name": "Korean Government (MOTIE)",
    "labels": [
-    "MediaOutlet"
+    "Government"
    ],
-   "summary": "Electricarworld.com cited BYD's overseas sales target of 1 million vehicles by 2025."
+   "summary": "The Korean Government (MOTIE) implements the K-EV roadmap with tax incentives and trade policy support for national champions LG and Samsung SDI.\nThe Korean Government (MOTIE) supports LG as a national champion via the K-EV roadmap, tax incentives, and trade policy.\nThe Korean Government (MOTIE) supports Samsung SDI as a national champion via the K-EV roadmap, tax incentives, and trade policy."
   },
   {
-   "id": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "BYD",
-   "labels": [],
-   "summary": "BYD aims for 1 million overseas car sales by 2025. Their global production includes a wholly-owned factory in Thailand set to begin production in mid-2024 with an annual capacity of 150,000 vehicles, a converted former Ford plant in Brazil with an annual capacity of 150,000 vehicles, and production in Uzbekistan. A planned factory in Hungary for late 2025 has been postponed, with BYD shifting focus to Turkey where they are investing $1 billion for a 150,000 annual capacity plant to avoid European Union tariffs. Malaysia and Cambodia are also planned production locations. Thailand, Uzbekistan, "
+   "id": "a13a0686-4fe7-487f-b6c0-ce0a4c2b0169",
+   "name": "NIO",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "New entrants NIO and VinFast face trust deficits in export markets relative to established brands that benefit from service network advantages.\nBYD is among the new entrants facing a brand trust deficit in export markets compared to established brands with service network advantages, competing with NIO and VinFast."
   },
   {
-   "id": "283234e4-1523-4c7f-9fb9-3444db2c35ad",
-   "name": "Hyundai Kia Group",
-   "labels": [],
-   "summary": "Hyundai Kia Group has a 2030 strategic goal of 5.55 million global sales. Between 2025 and 2030, they plan to invest $55.3 billion (77.3 trillion KRW). The second phase expansion of the HMGMA factory in the US will add 200,000 vehicle production capacity."
+   "id": "9fe2c807-0a85-4fc2-91b4-269148487271",
+   "name": "ACEA",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "ACEA has lobbied the European Commission for extended flexibility in the 2035 CO₂ framework."
   },
   {
-   "id": "23eaeb7c-747e-42be-8897-049e24dc565e",
-   "name": "SAD",
-   "labels": [],
-   "summary": "SAD, or Single-car Intelligence, is one of the two technical routes developing in parallel for autonomous driving, alongside i-VICS (Vehicle-Road Collaborative Systems)."
+   "id": "9fb5d5e6-f5ff-4169-ab2a-0c73f2b16a9c",
+   "name": "Australia",
+   "labels": [
+    "Government"
+   ],
+   "summary": "China, Australia, Chile, and Argentina are the primary geographic concentrations of global lithium production, with China also controlling over 65% of global refining capacity.\nAustralia and Chile are among the geographically concentrated producers of global lithium.\nAustralia and Argentina are among the geographically concentrated producers of global lithium."
   },
   {
-   "id": "23cd5c2f-76f1-4791-ab17-e7ae20358e57",
-   "name": "Turkey",
-   "labels": [],
-   "summary": "Turkey is a focus for BYD's accelerated expansion, with an investment of $1 billion for a plant that will have an annual capacity of 150,000 vehicles. This move aims to avoid European Union tariffs."
+   "id": "984de0a4-8587-4c48-afb1-93217d2b6ab7",
+   "name": "ZEV mandate",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "The UK Government realigned the ZEV mandate in December 2025, permitting hybrids through 2035 as a pragmatic transition.\nReversal of ZEV mandates in the EU and UK influences the demand environment for LFP batteries.\nReversal of ZEV mandates may recur and influences Western OEM commitment to premium solid-state battery timelines."
   },
   {
-   "id": "165e6914-32f4-407c-b819-ac19994ca340",
-   "name": "Global EV market",
-   "labels": [],
-   "summary": "BYD became the global EV market leader in 2025, surpassing Tesla. BYD has set an overseas sales target of 1 million vehicles for 2025."
+   "id": "983b0278-7105-4913-94b0-3ee6e0f785ec",
+   "name": "Japan Hybrid Electric Vehicle Trajectory",
+   "labels": [
+    "EVProduct"
+   ],
+   "summary": "Japan Hybrid Electric Vehicle Trajectory (1997-2017) plateaued as a segment rather than displacing ICE over two decades, suggesting that powertrain transitions face structural friction that constrains outcomes under frameworks like the EU 2035 ICE ban."
   },
   {
-   "id": "0e51b812-d3d2-41fb-b113-da5a2a681df8",
-   "name": "VinFast Europe",
-   "labels": [],
-   "summary": "VinFast Europe is progressing in the European market."
+   "id": "9807a541-a627-4b96-8062-2bb67c80d098",
+   "name": "Geely Panda Mini",
+   "labels": [
+    "EVProduct"
+   ],
+   "summary": "Geely Panda Mini is part of the fastest-growing entry-level EV segment (<$30,000) in China.\nBYD Seagull and Geely Panda Mini compete in the fastest-growing entry-level EV segment (<$30,000) in China.\nWuling Mini EV and Geely Panda Mini compete in the fastest-growing entry-level EV segment (<$30,000) in China."
   },
   {
-   "id": "0c170e9e-dcac-406f-9d6f-4f0f64c04ccd",
-   "name": "HMGMA",
+   "id": "95115872-38b6-4bd1-9251-592434fbbf0d",
+   "name": "OPEC+",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "OPEC+ is listed as a strategic actor opposing the EV transition due to demand displacement concerns tied to Strait of Hormuz oil disruption.\nOPEC+ supply discipline could contribute to Brent crude remaining above $100/barrel for extended periods, boosting EV consideration in oil-dependent markets."
+  },
+  {
+   "id": "950d71b7-23a5-4873-81d5-2b6cc4309d6d",
+   "name": "Chinese EV Exporters",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The EU Commission conducts trade defense against Chinese EV Exporters through anti-subsidy duties to counter competitive pressure."
+  },
+  {
+   "id": "94ced99b-880d-444b-86d7-6c01121dd71a",
+   "name": "China rare earth export control expansion",
+   "labels": [
+    "CriticalMineralExportRegime"
+   ],
+   "summary": "In October 2025, China expanded rare earth export controls as a strategic leverage signal."
+  },
+  {
+   "id": "92344c74-ae71-47b3-bef0-61a4b9a96695",
+   "name": "Idemitsu Kosan",
+   "labels": [
+    "RawMaterialProducer"
+   ],
+   "summary": "Toyota announced a 2027-2028 solid-state battery launch with Idemitsu Kosan supplying sulfide electrolyte for limited-batch flagship vehicle deployment.\nToyota partners with Idemitsu Kosan on solid-state battery (SSB) development, with sulfide electrolyte production targeting 2027-2028 launch."
+  },
+  {
+   "id": "908443f9-c91e-441b-9bf9-97303c071aa2",
+   "name": "XPeng",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "XPeng competes with Onvo in the mass-market Chinese EV segment through ADAS technology differentiation and mass market expansion.\nXPeng competes with Firefly in the mass-market Chinese EV segment through ADAS technology differentiation and mass market expansion."
+  },
+  {
+   "id": "902a9cc4-fb02-4f85-907f-454863942534",
+   "name": "High-Pressure Acid Leaching (HPAL)",
+   "labels": [
+    "BatteryTechnology"
+   ],
+   "summary": "Tsingshan controls Indonesian HPAL production for battery-grade nickel supply growth, with capacity additions projected to meet demand through 2028.\nHuayou controls Indonesian HPAL production for battery-grade nickel supply growth, with capacity additions projected to meet demand through 2028.\nGEM controls Indonesian HPAL production for battery-grade nickel supply growth through a partnership with Danantara sovereign fund, with capacity additions projected to meet demand through 2028."
+  },
+  {
+   "id": "900b40af-3c3c-4f3e-8279-fd4100ce3540",
+   "name": "Neta",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "Neta has entered restructuring while BYD continues expansion, illustrating the divergent outcomes among Chinese EV brands."
+  },
+  {
+   "id": "8b66f322-b4bb-4868-9922-38b916754fc6",
+   "name": "2035 internal combustion engine (ICE) ban",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "The European Union reversed its 2035 internal combustion engine (ICE) ban policy in December 2025, retreating from the planned ban.\nThe European Union's December 16, 2025 proposal to soften the 2035 ICE phase-out to a 90% CO2 reduction target (allowing 10% biofuels or e-fuels) was driven by concerns about Chinese competitive pressure, similar to the rationale underlying the 100% United States Section 301 tariffs on Chinese EVs.\nChina's continued NEV purchase-tax exemption, extended through 2027, contrasts with the European Union's December 16, 2025 proposal to soften the 2035 ICE phase-out to "
+  },
+  {
+   "id": "8a6217de-d2cc-4c7a-8337-354a8d4713ef",
+   "name": "District Court for the District of Columbia",
+   "labels": [
+    "Government"
+   ],
+   "summary": "A District Court for the District of Columbia decision on the California Advanced Clean Cars II EPA waiver challenge is expected in 2026.\nA DDC ruling upholding the ACC II waiver by Q4 2026 would materially strengthen the US EV base case by validating state-level ZEV mandates."
+  },
+  {
+   "id": "8a08501e-cf57-470c-b350-97f17604ead9",
+   "name": "MOFCOM export licensing for battery materials",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "MOFCOM export licensing for battery materials and Canada's reversal of its 100% tariff on Chinese EVs both reflect shifting global trade dynamics affecting Chinese EV and battery supply chains\nChina's MOFCOM licensing regime for graphite, rare earths, and battery materials represents a strategic chokepoint that could disrupt Western OEM production such as Ford's.\nChina's MOFCOM licensing regime for graphite, rare earths, and battery materials represents a strategic chokepoint that could disrupt Western OEM production such as Volkswagen's.\nChina's MOFCOM licensing regime for graphite, rare eart"
+  },
+  {
+   "id": "87802b0e-1866-4c64-9a1c-1590c5153f3e",
+   "name": "ACC II waiver revocation",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "The US Federal Government revoked the EPA waiver for California's ACC II program via Congressional Review Act resolutions signed June 12, 2025.\nThe California ACC II waiver durability is identified as a key inflection point alongside the European Union's trilogue conclusion as competing regulatory signals shape global EV adoption."
+  },
+  {
+   "id": "86def693-f889-4bc9-8694-b6747c22c542",
+   "name": "Condensed battery technology",
+   "labels": [
+    "BatteryTechnology"
+   ],
+   "summary": "CATL pursues technology leadership in condensed battery technology alongside LFP and sodium-ion development."
+  },
+  {
+   "id": "85cc97cc-33b4-4009-b6c9-3c1b27fe83cc",
+   "name": "Japanese Government (METI)",
+   "labels": [
+    "Government"
+   ],
+   "summary": "The Japanese Government (METI) supports Toyota's solid-state battery partnership through R&D subsidies and supply chain investment."
+  },
+  {
+   "id": "85302274-5e80-4604-bfa5-014945d58d42",
+   "name": "United States Section 301 tariffs on Chinese EVs",
+   "labels": [
+    "CriticalMineralExportRegime"
+   ],
+   "summary": "Both the United States $7,500 federal tax credit and the United States Section 301 tariffs on Chinese EVs were part of the policy environment that preceded 2026, with the federal tax credit expiring on September 30, 2025, and Section 301 tariffs imposing 100% duties on Chinese EVs.\nThe European Union's December 16, 2025 proposal to soften the 2035 ICE phase-out to a 90% CO2 reduction target (allowing 10% biofuels or e-fuels) was driven by concerns about Chinese competitive pressure, similar to the rationale underlying the 100% United States Section 301 tariffs on Chinese EVs.\nChinese automaker"
+  },
+  {
+   "id": "81797d38-7417-4ec1-b428-242087d1fdeb",
+   "name": "Cybercab",
+   "labels": [
+    "EVProduct"
+   ],
+   "summary": "Tesla's recovery is dependent on autonomy milestones including the Cybercab/Robotaxi platform."
+  },
+  {
+   "id": "7e7b82fb-2db6-4e7e-985a-005a32726ba0",
+   "name": "Cariad",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Volkswagen Group's software subsidiary Cariad has experienced delays and platform development challenges, forcing postponement of several BEV launches."
+  },
+  {
+   "id": "7a2f6c06-c656-4186-87d1-ccf393730a20",
+   "name": "Indonesia",
+   "labels": [
+    "Government"
+   ],
+   "summary": "Tsingshan is one of the controllers of Indonesian high-pressure acid leaching (HPAL) production for battery-grade nickel.\nHuayou is one of the controllers of Indonesian high-pressure acid leaching (HPAL) production for battery-grade nickel."
+  },
+  {
+   "id": "79e74f04-417e-4447-af68-32c0bd033b2e",
+   "name": "Lithium carbonate",
+   "labels": [
+    "RawMaterialProducer"
+   ],
+   "summary": "Lithium carbonate prices reached a trough of approximately $9,000/tonne in June 2025, marking the cycle bottom. Prices subsequently rebounded, climbing 170% to exceed $25,000 per tonne by June 2026, driven by supply disruptions from Zimbabwe and CATL mine suspensions. China's 75% lithium import dependence has prompted a senior Chinese battery executive to advocate for accelerated sodium-ion hardware adoption as a strategic alternative. Global lithium production is concentrated in Australia, Chile, China, and Argentina, with China controlling over 65% of global lithium refining capacity.\nLFP ba"
+  },
+  {
+   "id": "76f8de64-dfbb-4145-9526-1c1b1a544754",
+   "name": "Congressional Review Act",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "The Section 30D New Clean Vehicle Credit ($7,500 credit) was terminated for vehicles acquired after September 30, 2025, following the One Big Beautiful Bill signed July 4, 2025.\nThe Section 25E Used Clean Vehicle Credit (up to $4,000) was terminated by the One Big Beautiful Bill signed July 4, 2025.\nThe Section 45W Commercial Clean Vehicle Credit (up to $7,500) was terminated by the One Big Beautiful Bill signed July 4, 2025.\nOn June 12, 2025, CRA resolutions revoked the California ACC II waiver as a state preemption attempt."
+  },
+  {
+   "id": "74a0a405-4333-4f52-bf39-ec47f44e4bfa",
+   "name": "Li Auto",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "Chinese OEM with EREV market leadership. Q1 2026 net loss of 2.3 billion yuan ($330M); gross margin fell to 7.9% from 20.5%. Margin recovery dependent on L9 refresh and Q2-Q4 2026 delivery ramp.\nExtended-range electric vehicles like those from Li Auto grew 63% in 2024, making EREVs the fastest-growing NEV segment in China.\nLi Auto and NIO are both profiled as Chinese OEMs competing in the EV market, with Li Auto Q1 2026 earnings confirmed and NIO Q2 guidance partially available.\nLi Auto and XPeng are both profiled as Chinese OEMs competing in the EV market, with Li Auto Q1 2026 earnings confir"
+  },
+  {
+   "id": "7087ceee-2c8e-4a83-a26c-6f74a95f6709",
+   "name": "NCM",
+   "labels": [
+    "BatteryTechnology"
+   ],
+   "summary": "DRC's February 22, 2025 cobalt export ban, replaced by a 96,600 tonne/year quota announced October 16, 2025, accelerates the shift away from NCM chemistries.\nLFP's cobalt-free advantage over NCM chemistry accelerates the shift away from NCM chemistries amid DRC supply restrictions."
+  },
+  {
+   "id": "6fb04fa5-2aee-4377-a37f-8cc8a0a39e80",
+   "name": "Western OEMs",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "Toyota competes with Western OEMs through its delayed but differentiated solid-state battery strategy.\nMOFCOM export controls on critical battery materials (graphite, rare earths, cathode/anode precursors) impose strategic leverage and constraints on Western OEMs."
+  },
+  {
+   "id": "6e31cb60-3c1a-40b0-9dda-050cddd8543f",
+   "name": "Chinese Government (MIIT/MOFCOM)",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Chinese government ministries including MIIT (industrial policy, dual-credit system) and MOFCOM (export licensing, rare earth controls); responsible for NEV purchase tax exemption extension through 20\nMOFCOM implemented an export license regime for battery-grade graphite in 2025, providing China with a strategic chokepoint over anode material supply that affects battery production for OEMs like BYD.\nThe Chinese Government (MIIT) extends the NEV purchase tax exemption through 2027 and operates the dual-credit policy in response to global regulatory competition, including the US OBBBA framework."
+  },
+  {
+   "id": "6ac814b9-8b96-4690-b9b6-b7811ae22d49",
+   "name": "Infineon",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Infineon is a dominant supplier of silicon carbide (SiC) power electronics for EV powertrains. SiC power electronics adoption is accelerating, reducing inverter losses by approximately 5% and improving overall powertrain efficiency, though supply remains constrained."
+  },
+  {
+   "id": "69f9c39d-ae89-4009-aea2-fc8c381aca0a",
+   "name": "ON Semiconductor",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "ON Semiconductor is a dominant supplier of silicon carbide (SiC) power electronics for EV powertrains. SiC power electronics adoption is accelerating, reducing inverter losses by approximately 5% and improving overall powertrain efficiency, though supply remains constrained."
+  },
+  {
+   "id": "684c9f37-ac24-4d00-80dc-5c8867610c9e",
+   "name": "Megawatt Charging System (MCS)",
+   "labels": [
+    "ChargingInfrastructureOperator"
+   ],
+   "summary": "Megawatt Charging System (MCS) enables 1+ MW charging rates for long-haul electric trucks.\nJapan hosts pilot programs for bidirectional V2G charging deployment alongside California and the Netherlands.\nCalifornia hosts pilot programs for bidirectional V2G charging deployment alongside Japan and the Netherlands.\nThe Netherlands hosts pilot programs for bidirectional V2G charging deployment alongside Japan and California."
+  },
+  {
+   "id": "67f314e9-8f26-4c66-8051-375e325185ce",
+   "name": "Canada 100% tariff on Chinese EVs",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "Canada reversed its 100% tariff on Chinese EVs in January 2026, returning to the standard 6.1% Most Favored Nation rate\nMOFCOM export licensing for battery materials and Canada's reversal of its 100% tariff on Chinese EVs both reflect shifting global trade dynamics affecting Chinese EV and battery supply chains\nCanada reversed its 100% tariff on Chinese EVs in January 2026, returning to the standard 6.1% Most Favored Nation rate, reflecting recognition that the original policy disadvantaged Canadian consumers."
+  },
+  {
+   "id": "668489ca-d45b-43fb-adaf-b4ac32dccbb4",
+   "name": "HiPhi",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "HiPhi has entered restructuring while BYD continues expansion, illustrating the divergent outcomes among Chinese EV brands."
+  },
+  {
+   "id": "64e0d7e5-7073-47a8-a715-c404140658e1",
+   "name": "Xiaomi",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "Xiaomi competes with Tesla in the Chinese NEV market; Tesla's China market share was halved to 6.5% in 2025 while Xiaomi was one of only three profitable Chinese NEV brands.\nAlixPartners projects that Xiaomi is one of only 19 of 137 Chinese NEV brands that will achieve profitability by 2030."
+  },
+  {
+   "id": "62fb0f66-710f-4b72-b602-e97f4cf2bc02",
+   "name": "China NEV purchase-tax exemption",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "China's continued NEV purchase-tax exemption, extended through 2027, contrasts with the European Union's December 16, 2025 proposal to soften the 2035 ICE phase-out to a 90% CO2 reduction target.\nChina's NEV purchase tax exemption was extended through 2027, with planned phase-down thereafter, under continued government industrial policy support.\nMOFCOM provides sustained industrial policy support for China's NEV purchase tax exemption framework."
+  },
+  {
+   "id": "613bdd51-6fce-4a1e-845f-f69db643a6ca",
+   "name": "General Motors",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "American automaker with Ultium battery platform partnership with LG Energy Solution; recorded $7.2 billion in Q4 2025 special charges including China joint venture writedowns and EV-related writedowns\nThe 100% United States Section 301 tariffs on Chinese EVs constrain General Motors' competitive position against Chinese imports in the US market.\nThe Iran War created oil price volatility that paradoxically boosted EV consideration among consumers, influencing General Motors' market conditions.\nGeneral Motors' Ultium battery platform development continues but with scaled-back capacity plans foll"
+  },
+  {
+   "id": "5423e18f-52a2-4cd1-a8dd-dd1e0b2e325c",
+   "name": "sodium-ion",
+   "labels": [
+    "BatteryTechnology"
+   ],
+   "summary": "China's dominance in over 65% of global lithium refining capacity creates strategic vulnerability that sodium-ion adoption explicitly aims to address.\nSodium-ion's cost trajectory ($40-60/kWh target) could disrupt LFP dominance in entry-level segments, though energy density limitations (175 Wh/kg vs. LFP's 180-200 Wh/kg) constrain application range.\nSodium-ion at energy density of 175 Wh/kg, compared to LFP's 180-200 Wh/kg, is constrained from displacing LFP in applications requiring higher energy density.\nCommercial viability of sodium-ion batteries at $50-70/kWh with 300+ Wh/kg by 2028-2029 "
+  },
+  {
+   "id": "52cb166d-0f34-41aa-bb76-75b196665baa",
+   "name": "French Government",
+   "labels": [
+    "Government"
+   ],
+   "summary": "The French Government supports stringent 2035 CO₂ targets and EU strategic autonomy, influencing the European Commission's regulatory stance.\nThe French Government supports Renault as a national champion via Council voting and ECJ advocacy."
+  },
+  {
+   "id": "4f9b92c1-aebf-4c7f-bbea-dcc7de571284",
+   "name": "global electric vehicle (EV) industry",
    "labels": [],
+   "summary": "The 2026 Iran war disrupted fossil fuel supply chains, influencing the global electric vehicle industry trajectory from 2026 to 2035."
+  },
+  {
+   "id": "4d2d1ba7-9ae4-4558-ba57-ce3086e113fb",
+   "name": "CATL solid-state battery",
+   "labels": [
+    "BatteryTechnology"
+   ],
+   "summary": "BYD reached its 10 millionth NEV cumulative milestone in November 2024, while CATL's solid-state TRL was assessed at Level 4 in December 2024, indicating both leaders compete across the battery and vehicle value chain."
+  },
+  {
+   "id": "4cb13ac7-c19f-4fc7-a0cd-0721f195568c",
+   "name": "German Automotive Industry",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The EU Commission is negotiating with the German Automotive Industry over the softening of the 2035 ICE ban to a 90% CO2 reduction target."
+  },
+  {
+   "id": "4c18bfb8-415e-46b2-9494-4933c8aef37f",
+   "name": "nickel-cobalt-manganese (NCM) chemistry",
+   "labels": [
+    "BatteryTechnology"
+   ],
+   "summary": "The Iran War's oil price volatility has increased battery material costs, affecting nickel-cobalt-manganese (NCM) chemistry production economics.\nLithium iron phosphate (LFP) chemistry captured approximately 50% of global EV battery deployments in 2025, up from approximately 19% in 2020, displacing nickel-cobalt-manganese (NCM) chemistry in volume segments, with projected 65-70% market share by 2030."
+  },
+  {
+   "id": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "name": "Ford Motor Company",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "American automaker whose Model e EV division has accumulated $19.5 billion in losses with $8.5 billion in writedowns; pivoting toward smaller profitable EV segments and hybrid offerings.\nThe 100% United States Section 301 tariffs on Chinese EVs constrain Ford's competitive position against Chinese imports in the US market.\nThe Iran War created oil price volatility that paradoxically boosted EV consideration among consumers, influencing Ford's market conditions.\nFord's Model e division has accumulated $19.5 billion in losses with $8.5 billion in writedowns, prompting a strategic pivot toward sm"
+  },
+  {
+   "id": "4ab7ebb2-81a4-4633-ab53-0cc1b3b53a07",
+   "name": "CALB",
+   "labels": [
+    "BatterySupplier"
+   ],
+   "summary": "Chinese challengers CALB, Gotion, and EVE Energy are expanding share against CATL in cell manufacturing."
+  },
+  {
+   "id": "49ffc98d-ff88-4cee-bcc9-b575bf29a60c",
+   "name": "United States $7,500 federal tax credit",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "Both the United States $7,500 federal tax credit and the United States Section 301 tariffs on Chinese EVs were part of the policy environment that preceded 2026, with the federal tax credit expiring on September 30, 2025, and Section 301 tariffs imposing 100% duties on Chinese EVs.\nThe expiration of the United States $7,500 federal tax credit on September 30, 2025, triggered an immediate US market contraction, paralleling in scale the European Union's December 16, 2025 proposal to soften the 2035 ICE phase-out to a 90% CO2 reduction target.\nThe OBBB signed July 4, 2025, terminated the US $7,50"
+  },
+  {
+   "id": "4952d6d3-73cb-43ef-aafe-f94695a307b5",
+   "name": "Stellantis N.V.",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Multinational automotive group (formed from FCA-PSA merger) with brands including Peugeot, Fiat, Opel, Jeep, Ram, Chrysler; recorded €22 billion in charges reflecting EV-related losses and brand ratio\nBYD has deployed 800V electrical architectures while Stellantis's 800V implementation arrives in 2026-2027.\nHyundai-Kia has deployed 800V electrical architectures while Stellantis's 800V implementation arrives in 2026-2027.\nPorsche has deployed 800V electrical architectures while Stellantis's 800V implementation arrives in 2026-2027.\nToyota and Stellantis are Western OEMs pursuing Hybrid/EREV emp"
+  },
+  {
+   "id": "43a6d9ab-ac99-476d-a345-92b19644fbc5",
+   "name": "Leapmotor",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "Leapmotor competes with Tesla in the Chinese NEV market; Tesla's China market share was halved to 6.5% in 2025 while Leapmotor was one of only three profitable Chinese NEV brands.\nAlixPartners projects that Leapmotor is one of only 19 of 137 Chinese NEV brands that will achieve profitability by 2030.\nBYD, Geely, and Leapmotor are scaled Chinese OEMs that continue expansion amid widespread Chinese EV brand unprofitability.\nGeely and Leapmotor, along with BYD, are scaled Chinese OEMs continuing expansion while weaker brands enter restructuring."
+  },
+  {
+   "id": "3e300642-e85e-4b71-a2a4-7dbc36aae050",
+   "name": "Chile",
+   "labels": [
+    "Government"
+   ],
+   "summary": "China, Australia, Chile, and Argentina are the primary geographic concentrations of global lithium production, with China also controlling over 65% of global refining capacity.\nAustralia and Chile are among the geographically concentrated producers of global lithium.\nChile and Argentina are among the geographically concentrated producers of global lithium."
+  },
+  {
+   "id": "3bbd3c61-99a5-48b9-8fc7-094da8a857ea",
+   "name": "CARB",
+   "labels": [
+    "Government"
+   ],
+   "summary": "CARB is defending the ACC II program in litigation and issued EO N-27-25 to maintain the ZEV transition framework.\nCARB issued Executive Order N-27-25 to maintain the ZEV transition framework.\nAdvanced Clean Cars II is a regulatory framework administered by the California Air Resources Board, adopted by 17 states plus the District of Columbia representing approximately 40% of US new car sales.\nThe California Air Resources Board originated the Advanced Clean Cars II regulations that were subsequently adopted by 17 states plus DC, covering approximately 40% of US new car sales.\nThe US Federal Go"
+  },
+  {
+   "id": "3a95d860-a817-43ec-99c3-5975fff387c2",
+   "name": "OBBBA",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "The Chinese Government (MIIT) extends the NEV purchase tax exemption through 2027 and operates the dual-credit policy in response to global regulatory competition, including the US OBBBA framework.\nThe OBBB signed July 4, 2025, terminated the US $7,500 federal EV tax credit effective September 30, 2025."
+  },
+  {
+   "id": "37e3772e-4467-47b9-8adc-a115361a694e",
+   "name": "GEVO 2026 Webinar 28",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The International Energy Agency hosted the GEVO 2026 Webinar 28, presenting insights on global EV outlook."
+  },
+  {
+   "id": "365327b6-f9a4-432c-a47b-a96c615f4ea6",
+   "name": "Netherlands",
+   "labels": [
+    "Government"
+   ],
+   "summary": "The Netherlands hosts pilot programs for bidirectional V2G charging deployment alongside Japan and California."
+  },
+  {
+   "id": "30eff5ac-0625-49b0-ae7e-bc06f65f6743",
+   "name": "PM E-DRIVE scheme",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "India's PM E-DRIVE scheme provides subsidies for electric two-wheelers, three-wheelers, and certain commercial vehicles, while four-wheeler EV penetration remains below 2% constrained by high import duties\nThe India PM E-DRIVE Scheme subsidy structure is confirmed but outcome data is limited, affecting the emerging market forecast relevant to Chinese OEMs such as Li Auto.\nThe India PM E-DRIVE Scheme subsidy structure is confirmed but outcome data is limited, affecting the emerging market forecast relevant to Chinese OEMs such as NIO.\nThe India PM E-DRIVE Scheme subsidy structure is confirmed b"
+  },
+  {
+   "id": "2fab8747-14da-473f-8eda-949eaff905dd",
+   "name": "European Parliament",
+   "labels": [
+    "Government"
+   ],
+   "summary": "The European Commission's December 16, 2025 proposal to soften the 2035 ICE ban requires Council and European Parliament approval, with the Parliament expressing significant resistance during the trilogue process expected to conclude in late 2026 or early 2027."
+  },
+  {
+   "id": "2de68002-6c67-4b0e-b670-b9cdd753ef9c",
+   "name": "Toyota",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "The Japanese Government (METI) supports Toyota's solid-state battery partnership through R&D subsidies and supply chain investment.\nToyota and Stellantis are Western OEMs pursuing Hybrid/EREV emphasis rather than full BEV commitment.\nToyota partners with Idemitsu Kosan on solid-state battery (SSB) development, with sulfide electrolyte production targeting 2027-2028 launch.\nToyota competes with Western OEMs through its delayed but differentiated solid-state battery strategy."
+  },
+  {
+   "id": "2b995f93-9bbf-4950-885b-8f6474dfef41",
+   "name": "Gotion",
+   "labels": [
+    "BatterySupplier"
+   ],
+   "summary": "Chinese challengers CALB, Gotion, and EVE Energy are expanding share against CATL in cell manufacturing."
+  },
+  {
+   "id": "2a88406e-d9cf-4e42-9ac2-68a38ad4a779",
+   "name": "International Energy Agency (IEA)",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "International Energy Agency (IEA) is a primary research source providing empirical data on the global electric vehicle industry forecast alongside BloombergNEF (BNEF).\nIEA notes growing sales amid an energy crisis linked to Iran war disruptions.\nBNEF and IEA are cited together as primary sources synthesizing forecast data on the global EV industry outlook to 2035.\nInternational Energy Agency forecasts support continued EV growth in the European Union despite the December 2025 policy reversal headwinds.\nIEA forecasts continued EV growth despite regional policy headwinds, supporting LFP and sodi"
+  },
+  {
+   "id": "28590d20-d244-4fb4-ab3e-477c645a5f61",
+   "name": "ACC II",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "The European Commission is proposing a 90% 2035 CO₂ reduction framework as part of its regulatory approach to carbon neutrality by 2050.\nThe US EPA rescinded the endangerment finding in February 2026 and implements OBBBA, revoking California's ACC II waiver and preempting state standards.\nCARB is defending the ACC II program in litigation and issued EO N-27-25 to maintain the ZEV transition framework.\nOn June 12, 2025, CRA resolutions revoked the California ACC II waiver as a state preemption attempt.\nAdvanced Clean Cars II is a regulatory framework administered by the California Air Resources"
+  },
+  {
+   "id": "266c941b-ac5b-4383-9379-abdf813dce10",
+   "name": "Wuling Mini EV",
+   "labels": [
+    "EVProduct"
+   ],
+   "summary": "Wuling Mini EV is part of the fastest-growing entry-level EV segment (<$30,000) in China.\nBYD Seagull and Wuling Mini EV compete in the fastest-growing entry-level EV segment (<$30,000) in China.\nWuling Mini EV and Geely Panda Mini compete in the fastest-growing entry-level EV segment (<$30,000) in China."
+  },
+  {
+   "id": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "name": "European Commission",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "The EU's executive branch, responsible for proposing legislation. On December 16, 2025, proposed amending Regulation (EU) 2019/631 to change the 2035 target from 100% CO₂ reduction to 90%, with the remaining 10% permitted through biofuels and e-fuels compensation mechanisms. The proposal allows continued sale of PHEVs, range-extended EVs, and ICE vehicles using synthetic fuels post-2035. The amendment requires Council and European Parliament approval; trilogue expected to conclude late 2026 or early 2027. Parliament has expressed significant resistance. The reversal was driven by German automo"
+  },
+  {
+   "id": "249b3f0b-1304-4ba6-806f-c1fcb650742e",
+   "name": "EPA",
+   "labels": [
+    "Government"
+   ],
+   "summary": "The EPA waiver for California's Advanced Clean Cars II program was revoked via Congressional Review Act resolutions signed June 12, 2025.\nThe Diamond Alternative Energy v. EPA Supreme Court case addressed the EPA's waiver authority, with a ruling on June 20, 2025.\nThe US EPA rescinded the endangerment finding in February 2026 and implements OBBBA, revoking California's ACC II waiver and preempting state standards."
+  },
+  {
+   "id": "229e545c-dafa-4b4e-8c2d-1e329118a5da",
+   "name": "Argentina",
+   "labels": [
+    "Government"
+   ],
+   "summary": "China, Australia, Chile, and Argentina are the primary geographic concentrations of global lithium production, with China also controlling over 65% of global refining capacity.\nAustralia and Argentina are among the geographically concentrated producers of global lithium.\nChile and Argentina are among the geographically concentrated producers of global lithium."
+  },
+  {
+   "id": "2074bb18-0cfb-4f9b-bd6b-bb874d9e927b",
+   "name": "WM Motor",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "WM Motor has entered restructuring while BYD continues expansion, illustrating the divergent outcomes among Chinese EV brands."
+  },
+  {
+   "id": "1f4a7754-0a5c-45d8-867c-b0a947f64ca3",
+   "name": "EU provisional anti-subsidy duties on Chinese BEVs",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "In 2024, the EU launched provisional anti-subsidy duties on Chinese BEVs, initiating trade defense.\nBYD's Chinese OEM export expansion confronts the EU anti-subsidy duties in force, constraining its pricing and market access in Europe.\nEU anti-subsidy duties are in force as a trade defense response against Chinese OEM export expansion led by BYD."
+  },
+  {
+   "id": "1d959f65-af88-4c17-920d-f8c93392a80c",
+   "name": "Dual-credit system",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "The 2018 China NEV mandate implementation established the dual-credit system as a supply-side requirement."
+  },
+  {
+   "id": "1d83295a-ef7b-4b59-b8a6-4909125fc7cc",
+   "name": "Lithium and Critical Mineral Producers",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Global producers of lithium (Albemarle, SQM, Ganfeng, Tianqi), nickel (Tsingshan, Huayou, GEM with Danantara), cobalt (DRC quota system), and graphite (China 95%+ control) feeding battery supply chain\nTsingshan is one of the controllers of Indonesian high-pressure acid leaching (HPAL) production for battery-grade nickel.\nTsingshan controls Indonesian HPAL production for battery-grade nickel supply growth, with capacity additions projected to meet demand through 2028."
+  },
+  {
+   "id": "1992d238-f368-4105-ba8b-58bfcb21c42d",
+   "name": "California",
+   "labels": [
+    "Government"
+   ],
+   "summary": "California hosts pilot programs for bidirectional V2G charging deployment alongside Japan and the Netherlands.\nThe EPA waiver for California's Advanced Clean Cars II program was revoked via Congressional Review Act resolutions signed June 12, 2025.\nThe Supreme Court ruled June 20, 2025 (Diamond Alternative Energy v. EPA) that plaintiffs have standing to challenge the EPA waiver for California's Advanced Clean Cars II program.\nA District Court for the District of Columbia decision on the California Advanced Clean Cars II EPA waiver challenge is expected in 2026.\nThe Diamond Alternative Energy v"
+  },
+  {
+   "id": "18bef761-0325-41a6-bcce-77636ce0fb96",
+   "name": "Tesla 4680 cell",
+   "labels": [
+    "BatteryTechnology"
+   ],
+   "summary": "Tesla's 4680 cell production announcements have consistently slipped versus original targets by 2-5 years, while LFP chemistry has consolidated approximately 50% of global EV battery deployments in 2025 as the default low-cost chemistry."
+  },
+  {
+   "id": "1673a4f9-fde8-4e4f-8d94-d9b7b7a12bb5",
+   "name": "STMicroelectronics",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "STMicroelectronics is a dominant supplier of silicon carbide (SiC) power electronics for EV powertrains. SiC power electronics adoption is accelerating in the EV industry, reducing inverter losses by approximately 5% and improving overall powertrain efficiency, though supply remains constrained."
+  },
+  {
+   "id": "16698ab2-1156-4d6c-986a-2ccb293ddaa3",
+   "name": "AlixPartners",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "AlixPartners projects that BYD is one of only 19 of 137 Chinese NEV brands that will achieve profitability by 2030.\nAlixPartners projects that Xiaomi is one of only 19 of 137 Chinese NEV brands that will achieve profitability by 2030.\nAlixPartners projects that Leapmotor is one of only 19 of 137 Chinese NEV brands that will achieve profitability by 2030.\nAlixPartners projects Chinese automakers, including BYD, will triple overseas production by 2030.\nAlixPartners' projection of only 19 of 137 Chinese NEV brands being profitable by 2030 is identified as a counter-evidence threshold; if signific"
+  },
+  {
+   "id": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "name": "EU 2035 ICE ban",
+   "labels": [
+    "RegulatoryFramework"
+   ],
+   "summary": "EU enforcement of the original 2035 ICE ban (100% zero-emission) accelerates EV adoption in Western Europe in the Policy Push Scenario.\nEnforcement of the EU 2035 ICE ban (100% zero-emission) enables accelerated EV adoption in Western Europe under the Policy Push Scenario.\nJapan Hybrid Electric Vehicle Trajectory (1997-2017) plateaued as a segment rather than displacing ICE over two decades, suggesting that powertrain transitions face structural friction that constrains outcomes under frameworks like the EU 2035 ICE ban.\nThe EU 2035 ICE ban was formally adopted in 2023, establishing a binding "
+  },
+  {
+   "id": "14a282cd-0cb4-4ba6-8155-2176e38d6b00",
+   "name": "Organization",
+   "labels": [
+    "Organization"
+   ],
    "summary": ""
   },
   {
-   "id": "09d4016c-48c7-4400-9550-8ca4898262a2",
-   "name": "ICE vehicles",
-   "labels": [],
-   "summary": "There is a sales ban schedule for ICE vehicles."
+   "id": "148c31bd-df23-4c63-8a31-0d03e99264bb",
+   "name": "Samsung SDI",
+   "labels": [
+    "BatterySupplier"
+   ],
+   "summary": "LG Energy Solution, Panasonic, and Samsung SDI form the second tier of cell manufacturing leadership behind CATL and BYD.\nThe Korean Government (MOTIE) supports Samsung SDI as a national champion via the K-EV roadmap, tax incentives, and trade policy."
   },
   {
-   "id": "08fee1c3-3a5e-489e-ae30-b4e82ab8ddb4",
-   "name": "BYD Auto Wikipedia",
-   "labels": [],
-   "summary": "BYD Auto Wikipedia provides basic company information for BYD Auto."
+   "id": "146995ec-dec7-4b00-9986-97ce7c5d62d1",
+   "name": "United States",
+   "labels": [
+    "Government"
+   ],
+   "summary": "China and emerging markets will approach EV saturation while the United States mature market will experience demand volatility tied to policy reversals and infrastructure constraints.\nThe US stalls between 5-8% EV market share absent federal policy restoration, contrasting with China's dominant 52% of global sales.\nIn the Policy Push Scenario, US restoration of purchase incentives supports accelerated EV adoption in the United States.\nIran war-related fuel price concerns have expanded the EV curious segment in both India and the United States, with used EV sales rising 30% year-over-year in th"
+  },
+  {
+   "id": "10ea79b1-bb72-4c00-b2b3-26dfe5df7a1a",
+   "name": "Toyota Motor Corporation",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "Japanese automotive manufacturer and Idemitsu Kosan partnering on sulfide electrolyte solid-state battery technology; targeting limited 2027-2028 launch for flagship vehicles rather than mass-market v\nToyota announced a 2027-2028 solid-state battery launch with Idemitsu Kosan supplying sulfide electrolyte for limited-batch flagship vehicle deployment."
+  },
+  {
+   "id": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "CATL (Contemporary Amperex Technology)",
+   "labels": [
+    "Organization"
+   ],
+   "summary": "World's largest EV battery manufacturer holding approximately 55.6% of global installations alongside BYD. FY2024 revenue declined 9.7% despite volume growth due to battery price collapse, signaling industry commoditization. Technology leader across LFP, sodium-ion, and condensed battery formats. CATL mine suspensions, alongside Zimbabwe lithium carbonate supply disruptions, drove lithium carbonate prices up 170% to exceed $25,000 per tonne by June 2026. Founder Zeng Yuqun rates solid-state battery maturity at level 4 of 9, with mass production unlikely before 2030. Sodium-ion commercializatio"
+  },
+  {
+   "id": "0bae74ae-6231-49ec-88ff-0ef66341a6ee",
+   "name": "GEM",
+   "labels": [
+    "RawMaterialProducer"
+   ],
+   "summary": "GEM partners with the Danantara sovereign fund to control Indonesian HPAL production for battery-grade nickel supply growth.\nGEM controls Indonesian HPAL production for battery-grade nickel supply growth through a partnership with Danantara sovereign fund, with capacity additions projected to meet demand through 2028."
+  },
+  {
+   "id": "09d7e96b-877f-4dc8-9e52-348bf8cdd6ea",
+   "name": "Naxtra sodium-ion battery",
+   "labels": [
+    "EVProduct"
+   ],
+   "summary": "CATL launched the Naxtra sodium-ion battery in December 2025 at 175 Wh/kg energy density, targeting low-range applications, cold-climate markets, and grid storage.\nLFP scale economies driving battery pack prices down enable R&D investment in next-generation chemistries such as CATL's Naxtra sodium-ion battery, targeting $40-60/kWh and sub-$15,000 EVs for emerging markets.\nCATL Naxtra sodium-ion battery, launched December 2025 at 175 Wh/kg, competes with LFP chemistry for entry-level EV and grid storage applications but is constrained by an energy density gap that limits it to cold-climate, urb"
+  },
+  {
+   "id": "083dc888-3a80-4fda-857d-f70d2973ffd4",
+   "name": "BYD Rayong Factory",
+   "labels": [
+    "OEM"
+   ],
+   "summary": "BYD inaugurated its Thai Rayong factory in July 2026, with the 8 millionth NEV rolling off the production line."
+  },
+  {
+   "id": "07285a39-ba68-461b-bd6f-82ae2e11659d",
+   "name": "sodium-ion batteries",
+   "labels": [
+    "BatteryTechnology"
+   ],
+   "summary": "Sodium-ion batteries will favor over premium solid-state alternatives through 2030, with projected emergence as cost-competitive.\nLithium iron phosphate (LFP) and sodium-ion batteries are both favored over premium solid-state alternatives through 2030 in battery technology evolution.\nThe Iran War's oil price volatility has increased battery material costs, affecting sodium-ion battery technology production economics.\nSodium-ion battery technology is emerging as a complementary low-cost technology competing alongside lithium iron phosphate (LFP) chemistry in cost-sensitive EV battery segments.\n"
+  },
+  {
+   "id": "04bf3777-3aa4-4d99-8204-a57854130ad0",
+   "name": "Western Europe",
+   "labels": [
+    "Government"
+   ],
+   "summary": "China maintains 52% of global EV sales in the base scenario, in contrast to Western Europe where demand volatility is tied to policy reversals and infrastructure constraints.\nEU enforcement of the original 2035 ICE ban (100% zero-emission) accelerates EV adoption in Western Europe in the Policy Push Scenario.\nEnforcement of the EU 2035 ICE ban (100% zero-emission) enables accelerated EV adoption in Western Europe under the Policy Push Scenario.\nNorway BEV Adoption (2009-2024) achieved ~90% BEV market share over 15 years through massive fiscal incentives, representing an upper-bound ceiling for"
   }
  ],
  "links": [
   {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "83fd62f2-6c1d-40d0-bb3f-29edd4993163",
-   "name": "AFFILIATED_WITH",
-   "fact": "BYD is shifting its focus away from Hungary for European EV production."
+   "source": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "target": "3e300642-e85e-4b71-a2a4-7dbc36aae050",
+   "name": "COMPETES_WITH",
+   "fact": "China, Australia, Chile, and Argentina are the primary geographic concentrations of global lithium production, with China also controlling over 65% of global refining capacity."
   },
   {
-   "source": "8aedb46d-fe92-4854-876c-baf26c3de81a",
-   "target": "912c10c5-8737-492c-bd04-fe981a2289bc",
+   "source": "1992d238-f368-4105-ba8b-58bfcb21c42d",
+   "target": "8a6217de-d2cc-4c7a-8337-354a8d4713ef",
+   "name": "PENDING_RULING_IN",
+   "fact": "A District Court for the District of Columbia decision on the California Advanced Clean Cars II EPA waiver challenge is expected in 2026."
+  },
+  {
+   "source": "30eff5ac-0625-49b0-ae7e-bc06f65f6743",
+   "target": "74a0a405-4333-4f52-bf39-ec47f44e4bfa",
+   "name": "INFLUENCES",
+   "fact": "The India PM E-DRIVE Scheme subsidy structure is confirmed but outcome data is limited, affecting the emerging market forecast relevant to Chinese OEMs such as Li Auto."
+  },
+  {
+   "source": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "target": "7087ceee-2c8e-4a83-a26c-6f74a95f6709",
+   "name": "COMPETES_WITH",
+   "fact": "LFP's cobalt-free advantage over NCM chemistry accelerates the shift away from NCM chemistries amid DRC supply restrictions."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "name": "COMPETES_WITH",
+   "fact": "BYD (Han/Seal) and Tesla (Model 3/Y) both compete in the mid-market EV segment ($30,000-$60,000), the largest segment by volume."
+  },
+  {
+   "source": "cd8025fc-6f22-4b8a-81be-afd252e46a0a",
+   "target": "c7fba6cf-d34b-482a-ab52-ef47c44b1566",
+   "name": "INFLUENCES",
+   "fact": "The Iran War's oil price volatility has increased battery material costs, affecting lithium iron phosphate (LFP) chemistry production economics."
+  },
+  {
+   "source": "a70b362c-bf92-4952-95a7-0e4b05919a4d",
+   "target": "7e7b82fb-2db6-4e7e-985a-005a32726ba0",
+   "name": "PARTNERS_WITH",
+   "fact": "Volkswagen Group's software subsidiary Cariad has experienced delays and platform development challenges, forcing postponement of several BEV launches."
+  },
+  {
+   "source": "cd8025fc-6f22-4b8a-81be-afd252e46a0a",
+   "target": "d1b8de75-e165-4474-a77c-39ddcb0055b7",
+   "name": "INFLUENCES",
+   "fact": "The Iran War that began February 28, 2026, with US and Israeli strikes killing Supreme Leader Ali Khamenei created sustained disruption to Strait of Hormuz oil shipments, which account for approximately 20% of global oil trade."
+  },
+  {
+   "source": "148c31bd-df23-4c63-8a31-0d03e99264bb",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "COMPETES_WITH",
+   "fact": "LG Energy Solution, Panasonic, and Samsung SDI form the second tier of cell manufacturing leadership behind CATL and BYD."
+  },
+  {
+   "source": "146995ec-dec7-4b00-9986-97ce7c5d62d1",
+   "target": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "name": "REGULATES",
+   "fact": "The US stalls between 5-8% EV market share absent federal policy restoration, contrasting with China's dominant 52% of global sales."
+  },
+  {
+   "source": "2a88406e-d9cf-4e42-9ac2-68a38ad4a779",
+   "target": "be53cbf0-d1b6-470f-b249-63134a66b80f",
+   "name": "INFLUENCES",
+   "fact": "International Energy Agency forecasts support continued EV growth in the European Union despite the December 2025 policy reversal headwinds."
+  },
+  {
+   "source": "c067fd10-bae0-403f-a2fd-ab926af59167",
+   "target": "74a0a405-4333-4f52-bf39-ec47f44e4bfa",
+   "name": "PRODUCED_BY",
+   "fact": "Extended-range electric vehicles like those from Li Auto grew 63% in 2024, making EREVs the fastest-growing NEV segment in China."
+  },
+  {
+   "source": "4952d6d3-73cb-43ef-aafe-f94695a307b5",
+   "target": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "name": "RIVAL_IN_MULTI_PATHWAY",
+   "fact": "Both pursuing multi-pathway strategy with delayed BEV platforms; competing for EU 2035 flexibility and US hybrid pivot（sign=rival，strength=low，grade=B2，valence=adversarial，polarity=-0.30）"
+  },
+  {
+   "source": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "COMPETES_WITH",
+   "fact": "CATL and BYD collectively represent approximately 55.6% of global battery installations, competing for cell manufacturing leadership."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "name": "COMPETES_WITH",
+   "fact": "BYD competes with Tesla in the Chinese NEV market; Tesla's China market share was halved to 6.5% in 2025 while BYD remained one of only three profitable Chinese NEV brands."
+  },
+  {
+   "source": "6e31cb60-3c1a-40b0-9dda-050cddd8543f",
+   "target": "3a95d860-a817-43ec-99c3-5975fff387c2",
+   "name": "INFLUENCES",
+   "fact": "The Chinese Government (MIIT) extends the NEV purchase tax exemption through 2027 and operates the dual-credit policy in response to global regulatory competition, including the US OBBBA framework."
+  },
+  {
+   "source": "69f9c39d-ae89-4009-aea2-fc8c381aca0a",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "SUPPLIES",
+   "fact": "ON Semiconductor is one of the dominant suppliers of power electronics, with supply remaining constrained amid accelerating EV adoption."
+  },
+  {
+   "source": "ff6acb48-6425-4e5d-b716-c2ef3f0eda36",
+   "target": "1d959f65-af88-4c17-920d-f8c93392a80c",
+   "name": "ENABLES",
+   "fact": "The 2018 China NEV mandate implementation established the dual-credit system as a supply-side requirement."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "a70b362c-bf92-4952-95a7-0e4b05919a4d",
+   "name": "COMPETES_WITH",
+   "fact": "BYD is direct competitor in both European and global markets; VW's China market share decline attributable to BYD's surge（sign=rival，strength=high，grade=B2，valence=adversarial，polarity=-0.70）"
+  },
+  {
+   "source": "365327b6-f9a4-432c-a47b-a96c615f4ea6",
+   "target": "684c9f37-ac24-4d00-80dc-5c8867610c9e",
+   "name": "ENABLES",
+   "fact": "The Netherlands hosts pilot programs for bidirectional V2G charging deployment alongside Japan and California."
+  },
+  {
+   "source": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "target": "deea8984-aef3-46be-a5c9-54dab6630dbb",
+   "name": "INFLUENCES",
+   "fact": "CATL mine suspensions, alongside Zimbabwe lithium carbonate supply disruptions, jointly drove lithium carbonate prices up 170% to exceed $25,000 per tonne by June 2026."
+  },
+  {
+   "source": "d1b8de75-e165-4474-a77c-39ddcb0055b7",
+   "target": "efc7107d-93b3-4fea-975e-6e2880e45e1c",
+   "name": "INFLUENCES",
+   "fact": "The Iran war and Strait of Hormuz oil shipment disruption (approximately 20% of global oil trade) caused Brent crude price volatility, with a -15% post-ceasefire change observed in April 2026."
+  },
+  {
+   "source": "07285a39-ba68-461b-bd6f-82ae2e11659d",
+   "target": "c7fba6cf-d34b-482a-ab52-ef47c44b1566",
+   "name": "COMPETES_WITH",
+   "fact": "Sodium-ion battery technology is emerging as a complementary low-cost technology competing alongside lithium iron phosphate (LFP) chemistry in cost-sensitive EV battery segments."
+  },
+  {
+   "source": "dfb9d5d7-b564-47e3-8170-9e810f6b547d",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "COMPETES_WITH",
+   "fact": "LG Energy Solution, Panasonic, and Samsung SDI form the second tier of cell manufacturing leadership behind CATL and BYD."
+  },
+  {
+   "source": "efc7107d-93b3-4fea-975e-6e2880e45e1c",
+   "target": "c9b130f9-794a-4349-97f0-2901541dbd0a",
+   "name": "INFLUENCES",
+   "fact": "BNEF explicitly cites the Iran war and resulting increase in Brent crude prices at the pump as boosting consumer interest in buying an EV."
+  },
+  {
+   "source": "ea579ba4-be4c-42a7-a518-79382d5f7f49",
+   "target": "a70b362c-bf92-4952-95a7-0e4b05919a4d",
+   "name": "COMPETES_WITH",
+   "fact": "Porsche has deployed 800V electrical architectures while Volkswagen's 800V implementation arrives in 2026-2027."
+  },
+  {
+   "source": "2a88406e-d9cf-4e42-9ac2-68a38ad4a779",
+   "target": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "name": "INFLUENCES",
+   "fact": "IEA notes growing sales amid an energy crisis linked to Iran war disruptions."
+  },
+  {
+   "source": "c188f12f-272f-4756-97e7-ba15c2047efb",
+   "target": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "name": "CONSTRAINS",
+   "fact": "The 100% United States Section 301 tariffs on Chinese EVs constrain Tesla's competitive position against Chinese imports in the US market."
+  },
+  {
+   "source": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "target": "146995ec-dec7-4b00-9986-97ce7c5d62d1",
+   "name": "INFLUENCES",
+   "fact": "China and emerging markets will approach EV saturation while the United States mature market will experience demand volatility tied to policy reversals and infrastructure constraints."
+  },
+  {
+   "source": "a70b362c-bf92-4952-95a7-0e4b05919a4d",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "COMPETES_WITH",
+   "fact": "Volkswagen, as an established brand, benefits from service network advantages over new entrants including BYD in export markets."
+  },
+  {
+   "source": "4952d6d3-73cb-43ef-aafe-f94695a307b5",
+   "target": "613bdd51-6fce-4a1e-845f-f69db643a6ca",
+   "name": "COMPETES_WITH",
+   "fact": "Stellantis and GM are Western OEMs pursuing Hybrid/EREV emphasis rather than full BEV commitment."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "a70b362c-bf92-4952-95a7-0e4b05919a4d",
+   "name": "COMPETES_WITH",
+   "fact": "BYD has deployed 800V electrical architectures while Volkswagen's 800V implementation arrives in 2026-2027."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "d99922f4-0a5f-4934-bc88-9d3a807b1cd6",
+   "name": "PARTNERS_WITH",
+   "fact": "BYD filed an all-new Seagull model, expanding its EV product lineup."
+  },
+  {
+   "source": "bc9b0e72-1023-43ff-a9cd-4ba90a35ae91",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "COMPETES_WITH",
+   "fact": "LG Energy Solution, Panasonic, and Samsung SDI form the second tier of cell manufacturing leadership behind CATL and BYD."
+  },
+  {
+   "source": "c188f12f-272f-4756-97e7-ba15c2047efb",
+   "target": "613bdd51-6fce-4a1e-845f-f69db643a6ca",
+   "name": "CONSTRAINS",
+   "fact": "The 100% United States Section 301 tariffs on Chinese EVs constrain General Motors' competitive position against Chinese imports in the US market."
+  },
+  {
+   "source": "16698ab2-1156-4d6c-986a-2ccb293ddaa3",
+   "target": "64e0d7e5-7073-47a8-a715-c404140658e1",
+   "name": "INFLUENCES",
+   "fact": "AlixPartners projects that Xiaomi is one of only 19 of 137 Chinese NEV brands that will achieve profitability by 2030."
+  },
+  {
+   "source": "49ffc98d-ff88-4cee-bcc9-b575bf29a60c",
+   "target": "85302274-5e80-4604-bfa5-014945d58d42",
+   "name": "REGULATES",
+   "fact": "Both the United States $7,500 federal tax credit and the United States Section 301 tariffs on Chinese EVs were part of the policy environment that preceded 2026, with the federal tax credit expiring on September 30, 2025, and Section 301 tariffs imposing 100% duties on Chinese EVs."
+  },
+  {
+   "source": "ff6acb48-6425-4e5d-b716-c2ef3f0eda36",
+   "target": "6e31cb60-3c1a-40b0-9dda-050cddd8543f",
+   "name": "ADMINISTERED_BY",
+   "fact": "China's dual-credit system (NEV credits and fuel consumption credits) continues to drive OEM compliance, administered under the broader government industrial policy framework, with 21.9 million NEV credit surplus against 1.5 million negative credits in 2025."
+  },
+  {
+   "source": "8a08501e-cf57-470c-b350-97f17604ead9",
+   "target": "613bdd51-6fce-4a1e-845f-f69db643a6ca",
+   "name": "CONSTRAINS",
+   "fact": "China's MOFCOM licensing regime for graphite, rare earths, and battery materials represents a strategic chokepoint that could disrupt Western OEM production such as GM's."
+  },
+  {
+   "source": "be53cbf0-d1b6-470f-b249-63134a66b80f",
+   "target": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "REGULATES",
+   "fact": "The European Union's policy reversal and BEV market dynamics influence consolidation toward LFP battery chemistry in volume segments."
+  },
+  {
+   "source": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "target": "613bdd51-6fce-4a1e-845f-f69db643a6ca",
+   "name": "CONSTRAINS",
+   "fact": "Battery plant cancellations and delays at Ford-BlueOval and GM-LG are linked second-order effects of the US credit expiration that is collapsing EV demand and constraining both OEMs' production plans."
+  },
+  {
+   "source": "1d83295a-ef7b-4b59-b8a6-4909125fc7cc",
+   "target": "902a9cc4-fb02-4f85-907f-454863942534",
+   "name": "PARTNERS_WITH",
+   "fact": "Tsingshan controls Indonesian HPAL production for battery-grade nickel supply growth, with capacity additions projected to meet demand through 2028."
+  },
+  {
+   "source": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "target": "2fab8747-14da-473f-8eda-949eaff905dd",
+   "name": "INFLUENCES",
+   "fact": "The European Commission's December 16, 2025 proposal to soften the 2035 ICE ban requires Council and European Parliament approval, with the Parliament expressing significant resistance during the trilogue process expected to conclude in late 2026 or early 2027."
+  },
+  {
+   "source": "2a88406e-d9cf-4e42-9ac2-68a38ad4a779",
+   "target": "37e3772e-4467-47b9-8adc-a115361a694e",
+   "name": "PARTNERS_WITH",
+   "fact": "The International Energy Agency hosted the GEVO 2026 Webinar 28, presenting insights on global EV outlook."
+  },
+  {
+   "source": "cd8025fc-6f22-4b8a-81be-afd252e46a0a",
+   "target": "07285a39-ba68-461b-bd6f-82ae2e11659d",
+   "name": "INFLUENCES",
+   "fact": "The Iran War's oil price volatility has increased battery material costs, affecting sodium-ion battery technology production economics."
+  },
+  {
+   "source": "613bdd51-6fce-4a1e-845f-f69db643a6ca",
+   "target": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "name": "COMPETES_WITH",
+   "fact": "Both US legacy OEMs restructuring EV strategy; GM's $7.2B Q4 2025 charges and Ford's $19.5B Model e losses are parallel retreats（sign=rival，strength=medium，grade=B2，valence=adversarial，polarity=-0.40）"
+  },
+  {
+   "source": "908443f9-c91e-441b-9bf9-97303c071aa2",
+   "target": "30eff5ac-0625-49b0-ae7e-bc06f65f6743",
+   "name": "INFLUENCES",
+   "fact": "The India PM E-DRIVE Scheme subsidy structure is confirmed but outcome data is limited, affecting the emerging market forecast relevant to Chinese OEMs such as XPeng."
+  },
+  {
+   "source": "983b0278-7105-4913-94b0-3ee6e0f785ec",
+   "target": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "name": "CONSTRAINS",
+   "fact": "Japan Hybrid Electric Vehicle Trajectory (1997-2017) plateaued as a segment rather than displacing ICE over two decades, suggesting that powertrain transitions face structural friction that constrains outcomes under frameworks like the EU 2035 ICE ban."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "a13a0686-4fe7-487f-b6c0-ce0a4c2b0169",
+   "name": "COMPETES_WITH",
+   "fact": "BYD is among the new entrants facing a brand trust deficit in export markets compared to established brands with service network advantages, competing with NIO and VinFast."
+  },
+  {
+   "source": "c9b130f9-794a-4349-97f0-2901541dbd0a",
+   "target": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "INFLUENCES",
+   "fact": "BNEF reported battery pack prices at $108/kWh in 2025, validating LFP chemistry's continued cost-down trajectory and supporting projected 65-70% LFP market share by 2030."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "ff6acb48-6425-4e5d-b716-c2ef3f0eda36",
+   "name": "SUPPORTS",
+   "fact": "BYD's scale milestone of 10 million cumulative NEVs in November 2024 validated the success of the China NEV mandate and dual-credit policy framework."
+  },
+  {
+   "source": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "target": "28590d20-d244-4fb4-ab3e-477c645a5f61",
+   "name": "REGULATES",
+   "fact": "The European Commission is proposing a 90% 2035 CO₂ reduction framework as part of its regulatory approach to carbon neutrality by 2050."
+  },
+  {
+   "source": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "target": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "name": "REGULATES",
+   "fact": "The proposed amendment to the EU 2035 ICE ban, allowing 10% of vehicles to use biofuels or e-fuels, undermines the policy stability assumed in consensus forecasts and reduces incentives for Chinese EV exports targeting Europe."
+  },
+  {
+   "source": "d99922f4-0a5f-4934-bc88-9d3a807b1cd6",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "ENABLES",
+   "fact": "BYD Seagull is part of BYD's fast-growing entry-level EV segment (<$30,000) in China, with BYD targeting this segment for export expansion."
+  },
+  {
+   "source": "cd8025fc-6f22-4b8a-81be-afd252e46a0a",
+   "target": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "name": "INFLUENCES",
+   "fact": "The Iran War created oil price volatility that paradoxically boosted EV consideration among consumers, influencing Ford's market conditions."
+  },
+  {
+   "source": "8a6217de-d2cc-4c7a-8337-354a8d4713ef",
+   "target": "28590d20-d244-4fb4-ab3e-477c645a5f61",
+   "name": "REGULATES",
+   "fact": "A DDC ruling upholding the ACC II waiver by Q4 2026 would materially strengthen the US EV base case by validating state-level ZEV mandates."
+  },
+  {
+   "source": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "target": "950d71b7-23a5-4873-81d5-2b6cc4309d6d",
+   "name": "TRADE_DEFENSE_INVESTIGATION",
+   "fact": "The EU Commission conducts trade defense against Chinese EV Exporters through anti-subsidy duties to counter competitive pressure."
+  },
+  {
+   "source": "c7fba6cf-d34b-482a-ab52-ef47c44b1566",
+   "target": "4c18bfb8-415e-46b2-9494-4933c8aef37f",
+   "name": "COMPETES_WITH",
+   "fact": "Lithium iron phosphate (LFP) chemistry captured approximately 50% of global EV battery deployments in 2025, up from approximately 19% in 2020, displacing nickel-cobalt-manganese (NCM) chemistry in volume segments, with projected 65-70% market share by 2030."
+  },
+  {
+   "source": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "target": "c9b130f9-794a-4349-97f0-2901541dbd0a",
+   "name": "INFLUENCES",
+   "fact": "In the Base Scenario, adoption of the EU 90% 2035 framework (with 2027 trilogue conclusion) shapes the BNEF base case forecast trajectory of 52% global EV share by 2035."
+  },
+  {
+   "source": "3bbd3c61-99a5-48b9-8fc7-094da8a857ea",
+   "target": "28590d20-d244-4fb4-ab3e-477c645a5f61",
+   "name": "INFLUENCES",
+   "fact": "The California Air Resources Board originated the Advanced Clean Cars II regulations that were subsequently adopted by 17 states plus DC, covering approximately 40% of US new car sales."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "name": "COMPETES_WITH",
+   "fact": "BYD competes with Tesla for global BEV leadership, having displaced Tesla's market position particularly in China."
+  },
+  {
+   "source": "76f8de64-dfbb-4145-9526-1c1b1a544754",
+   "target": "28590d20-d244-4fb4-ab3e-477c645a5f61",
+   "name": "REGULATES",
+   "fact": "On June 12, 2025, CRA resolutions revoked the California ACC II waiver as a state preemption attempt."
+  },
+  {
+   "source": "f6e09392-3e8a-48c2-ae70-9d13d85ac41f",
+   "target": "4952d6d3-73cb-43ef-aafe-f94695a307b5",
+   "name": "COMPETES_WITH",
+   "fact": "Hyundai-Kia has deployed 800V electrical architectures while Stellantis's 800V implementation arrives in 2026-2027."
+  },
+  {
+   "source": "146995ec-dec7-4b00-9986-97ce7c5d62d1",
+   "target": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "name": "SUPPORTS",
+   "fact": "In the Policy Push Scenario, US restoration of purchase incentives supports accelerated EV adoption in the United States."
+  },
+  {
+   "source": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "target": "09d7e96b-877f-4dc8-9e52-348bf8cdd6ea",
+   "name": "ENABLES",
+   "fact": "LFP scale economies driving battery pack prices down enable R&D investment in next-generation chemistries such as CATL's Naxtra sodium-ion battery, targeting $40-60/kWh and sub-$15,000 EVs for emerging markets."
+  },
+  {
+   "source": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "target": "229e545c-dafa-4b4e-8c2d-1e329118a5da",
+   "name": "COMPETES_WITH",
+   "fact": "China, Australia, Chile, and Argentina are the primary geographic concentrations of global lithium production, with China also controlling over 65% of global refining capacity."
+  },
+  {
+   "source": "2de68002-6c67-4b0e-b670-b9cdd753ef9c",
+   "target": "6fb04fa5-2aee-4377-a37f-8cc8a0a39e80",
+   "name": "COMPETES_WITH",
+   "fact": "Toyota competes with Western OEMs through its delayed but differentiated solid-state battery strategy."
+  },
+  {
+   "source": "c9b130f9-794a-4349-97f0-2901541dbd0a",
+   "target": "be53cbf0-d1b6-470f-b249-63134a66b80f",
+   "name": "INFLUENCES",
+   "fact": "BloombergNEF forecasts project continued EV growth through 2030 in the European Union's BEV market despite policy reversal headwinds."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "083dc888-3a80-4fda-857d-f70d2973ffd4",
+   "name": "PARTNERS_WITH",
+   "fact": "BYD inaugurated its Thai Rayong factory in July 2026, with the 8 millionth NEV rolling off the production line."
+  },
+  {
+   "source": "52cb166d-0f34-41aa-bb76-75b196665baa",
+   "target": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "name": "INFLUENCES",
+   "fact": "The French Government supports stringent 2035 CO₂ targets and EU strategic autonomy, influencing the European Commission's regulatory stance."
+  },
+  {
+   "source": "a70b362c-bf92-4952-95a7-0e4b05919a4d",
+   "target": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "name": "COMPETES_WITH",
+   "fact": "Volkswagen (ID.4) and Ford (Mustang Mach-E) both compete in the mid-market EV segment ($30,000-$60,000)."
+  },
+  {
+   "source": "18bef761-0325-41a6-bcce-77636ce0fb96",
+   "target": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "COMPETES_WITH",
+   "fact": "Tesla's 4680 cell production announcements have consistently slipped versus original targets by 2-5 years, while LFP chemistry has consolidated approximately 50% of global EV battery deployments in 2025 as the default low-cost chemistry."
+  },
+  {
+   "source": "c188f12f-272f-4756-97e7-ba15c2047efb",
+   "target": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "name": "CONSTRAINS",
+   "fact": "The 100% United States Section 301 tariffs on Chinese EVs constrain Ford's competitive position against Chinese imports in the US market."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "1d83295a-ef7b-4b59-b8a6-4909125fc7cc",
+   "name": "DEPENDS_ON",
+   "fact": "BYD's LFP/blade battery production requires upstream lithium supply; sodium-ion pivot motivated by dependence reduction（sign=neutral，strength=high，grade=B2，valence=directional，polarity=0.30）"
+  },
+  {
+   "source": "3bbd3c61-99a5-48b9-8fc7-094da8a857ea",
+   "target": "28590d20-d244-4fb4-ab3e-477c645a5f61",
+   "name": "REGULATES",
+   "fact": "CARB is defending the ACC II program in litigation and issued EO N-27-25 to maintain the ZEV transition framework."
+  },
+  {
+   "source": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "target": "c067fd10-bae0-403f-a2fd-ab926af59167",
+   "name": "MARKET_FOR",
+   "fact": "EREVs (Li Auto, AITO) are the fastest-growing NEV segment in China (+63% in 2024), demonstrating durable hybrid architecture demand in an advanced market."
+  },
+  {
+   "source": "c188f12f-272f-4756-97e7-ba15c2047efb",
+   "target": "4952d6d3-73cb-43ef-aafe-f94695a307b5",
+   "name": "CONSTRAINS",
+   "fact": "The 100% United States Section 301 tariffs on Chinese EVs constrain Stellantis' competitive position against Chinese imports in the US market."
+  },
+  {
+   "source": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "target": "09d7e96b-877f-4dc8-9e52-348bf8cdd6ea",
+   "name": "LAUNCHED",
+   "fact": "CATL launched the Naxtra sodium-ion battery in December 2025 at 175 Wh/kg energy density, targeting low-range applications, cold-climate markets, and grid storage."
+  },
+  {
+   "source": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "target": "613bdd51-6fce-4a1e-845f-f69db643a6ca",
+   "name": "JOINT_REGULATORY_RESPONSE",
+   "fact": "Both US OEMs engage EPA and court proceedings on ACC II waiver; share common interest in federal policy restoration or state mandate survival（sign=neutral，strength=medium，grade=B2，valence=transactional，polarity=0.10）"
+  },
+  {
+   "source": "16698ab2-1156-4d6c-986a-2ccb293ddaa3",
+   "target": "eceb7aa5-d5dd-475c-81c4-ee631848665f",
+   "name": "INFLUENCES",
+   "fact": "AlixPartners' projection of only 19 of 137 Chinese NEV brands being profitable by 2030 is identified as a counter-evidence threshold; if significantly exceeded (e.g., 40+ brands), the Chinese export expansion narrative strengthens and could overwhelm trade defenses and Western policy barriers like the US Section 177 ZEV Mandate through price competition."
+  },
+  {
+   "source": "2a88406e-d9cf-4e42-9ac2-68a38ad4a779",
+   "target": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "INFLUENCES",
+   "fact": "IEA forecasts continued EV growth despite regional policy headwinds, supporting LFP and sodium-ion adoption."
+  },
+  {
+   "source": "87802b0e-1866-4c64-9a1c-1590c5153f3e",
+   "target": "be53cbf0-d1b6-470f-b249-63134a66b80f",
+   "name": "INFLUENCES",
+   "fact": "The California ACC II waiver durability is identified as a key inflection point alongside the European Union's trilogue conclusion as competing regulatory signals shape global EV adoption."
+  },
+  {
+   "source": "62fb0f66-710f-4b72-b602-e97f4cf2bc02",
+   "target": "6e31cb60-3c1a-40b0-9dda-050cddd8543f",
+   "name": "EXTENDED_BY",
+   "fact": "China's NEV purchase tax exemption was extended through 2027, with planned phase-down thereafter, under continued government industrial policy support."
+  },
+  {
+   "source": "1992d238-f368-4105-ba8b-58bfcb21c42d",
+   "target": "684c9f37-ac24-4d00-80dc-5c8867610c9e",
+   "name": "ENABLES",
+   "fact": "California hosts pilot programs for bidirectional V2G charging deployment alongside Japan and the Netherlands."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "name": "COMPETES_WITH",
+   "fact": "BYD's H1 2026 sales declined 15.72% year-over-year, signaling that the Chinese EV domestic market has reached saturation and future growth will depend on exports rather than domestic penetration."
+  },
+  {
+   "source": "ea579ba4-be4c-42a7-a518-79382d5f7f49",
+   "target": "4952d6d3-73cb-43ef-aafe-f94695a307b5",
+   "name": "COMPETES_WITH",
+   "fact": "Porsche has deployed 800V electrical architectures while Stellantis's 800V implementation arrives in 2026-2027."
+  },
+  {
+   "source": "f6e09392-3e8a-48c2-ae70-9d13d85ac41f",
+   "target": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "name": "COMPETES_WITH",
+   "fact": "Hyundai-Kia's growing EV market share is direct competitive threat to Tesla; E-GMP/IONIQ 5/6 plus EV3 challenge Tesla Model 3/Y（sign=rival，strength=medium，grade=B2，valence=adversarial，polarity=-0.50）"
+  },
+  {
+   "source": "c188f12f-272f-4756-97e7-ba15c2047efb",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "TRADE_DEFENSE_INVESTIGATION",
+   "fact": "US Section 301 imposes 100% tariffs on Chinese EVs, a trade defense response targeting Chinese OEMs including BYD."
+  },
+  {
+   "source": "d99922f4-0a5f-4934-bc88-9d3a807b1cd6",
+   "target": "266c941b-ac5b-4383-9379-abdf813dce10",
+   "name": "COMPETES_WITH",
+   "fact": "BYD Seagull and Wuling Mini EV compete in the fastest-growing entry-level EV segment (<$30,000) in China."
+  },
+  {
+   "source": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "target": "146995ec-dec7-4b00-9986-97ce7c5d62d1",
+   "name": "INFLUENCES",
+   "fact": "Reciprocal tariff escalation between China and the US could create fragmented global supply chains and pricing disparities."
+  },
+  {
+   "source": "8a08501e-cf57-470c-b350-97f17604ead9",
+   "target": "a70b362c-bf92-4952-95a7-0e4b05919a4d",
+   "name": "CONSTRAINS",
+   "fact": "China's MOFCOM licensing regime for graphite, rare earths, and battery materials represents a strategic chokepoint that could disrupt Western OEM production such as Volkswagen's."
+  },
+  {
+   "source": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "target": "14a282cd-0cb4-4ba6-8155-2176e38d6b00",
    "name": "IS_A",
-   "fact": "End-to-End Autonomous Driving uses a single neural network end-to-end model."
+   "fact": "Dominant global battery manufacturer with ~37%+ market share；- 角色定位: Dominant global battery manufacturer with ~37%+ market share；- 立场: Technology diversification (LFP, sodium-ion, solid-state R&D); geographic expansion with capacity investments abroad；- 影响力: high；- 目标/动机: Maintain chemistry and volume leadership；Commercialize sodium-ion for cost-disruptive applications；Diversify geographically am"
   },
   {
-   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "target": "efd69e08-d575-486f-9280-bff657d9e8be",
-   "name": "HAS_STRATEGY",
-   "fact": "Hyundai has a strategy called Hyundai Battery Strategy 2025."
+   "source": "146995ec-dec7-4b00-9986-97ce7c5d62d1",
+   "target": "3bbd3c61-99a5-48b9-8fc7-094da8a857ea",
+   "name": "REGULATES",
+   "fact": "The US Federal Government is engaged in legal conflict with California (CARB) over the ACC II waiver revocation."
   },
   {
-   "source": "54994604-07c8-4f34-b47c-0f0d6e824d72",
-   "target": "70bdf404-6820-4875-8eeb-3339d572bfe9",
-   "name": "HAS_POLICY",
-   "fact": "Norway has an ICE vehicle ban."
-  },
-  {
-   "source": "23cd5c2f-76f1-4791-ab17-e7ae20358e57",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "IS_PRODUCTION_SITE_FOR",
-   "fact": "Turkey is a production site for BYD, with an investment of 1 billion USD and an annual capacity of 150,000 vehicles."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "23cd5c2f-76f1-4791-ab17-e7ae20358e57",
-   "name": "BUILDS_FACTORY_IN",
-   "fact": "BYD is building a factory in Turkey to circumvent EU tariffs."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "d5792b9e-ab66-43c6-999d-bee70886c492",
+   "source": "d99922f4-0a5f-4934-bc88-9d3a807b1cd6",
+   "target": "9807a541-a627-4b96-8062-2bb67c80d098",
    "name": "COMPETES_WITH",
-   "fact": "BYD has overtaken Tesla."
+   "fact": "BYD Seagull and Geely Panda Mini compete in the fastest-growing entry-level EV segment (<$30,000) in China."
   },
   {
-   "source": "f7e8a535-4659-43ad-923a-b6b1aca5679e",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "REPORTS_ON",
-   "fact": "BBC reported that China's EVs, including BYD, are becoming mainstream."
-  },
-  {
-   "source": "3672c9ad-9c78-4016-aadc-5a3bd2ee461f",
-   "target": "70bdf404-6820-4875-8eeb-3339d572bfe9",
-   "name": "SETS_POLICY_FOR",
-   "fact": "The UK Government brings the ICE phase-out back on track."
-  },
-  {
-   "source": "90f6ca7a-0e66-4b52-8bec-d1b1a06f8aaf",
-   "target": "3fd88a85-6761-46d2-a373-d608d7d74175",
-   "name": "BETTING_ON",
-   "fact": "Chinese brands are betting on price for long-term success."
-  },
-  {
-   "source": "cebc1586-4e64-4093-9552-986c43b69f56",
-   "target": "36bff843-9f5b-46bf-8820-b1bb09feb0eb",
-   "name": "BREAKS_SALES_RECORD_IN",
-   "fact": "The United Kingdom surpassed 100,000 BEV sales in a single month in March 2025."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "OWNS_BRAND",
-   "fact": "BYD owns the brand BYD Auto."
-  },
-  {
-   "source": "85c70a60-aeb7-4f88-a306-9e076bedb1e3",
-   "target": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "name": "POLICY_DRIVEN_IN",
-   "fact": "Mature markets like Europe and the US are policy-driven."
-  },
-  {
-   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "target": "0c170e9e-dcac-406f-9d6f-4f0f64c04ccd",
-   "name": "EXPANDS_PRODUCTION_AT",
-   "fact": "Hyundai is expanding production at HMGMA for localization in the US."
-  },
-  {
-   "source": "3672c9ad-9c78-4016-aadc-5a3bd2ee461f",
-   "target": "aea488d5-4e3e-4eac-9b19-46a608b225e8",
-   "name": "SETS_POLICY_FOR",
-   "fact": "The UK Government has a 2030 policy statement regarding vehicle transitions."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "a3093112-b292-4879-ab25-cdd9b22b8501",
+   "source": "2de68002-6c67-4b0e-b670-b9cdd753ef9c",
+   "target": "4952d6d3-73cb-43ef-aafe-f94695a307b5",
    "name": "COMPETES_WITH",
-   "fact": "BYD is leading price reductions in the Chinese EV industry, impacting the gross profit margins of mid-range manufacturers."
+   "fact": "Toyota and Stellantis are Western OEMs pursuing Hybrid/EREV emphasis rather than full BEV commitment."
   },
   {
-   "source": "d7cb90da-5c22-4d3c-961e-3dae22c28bcb",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "REPORTS_ON",
-   "fact": "China Car Online reports on BYD's global expansion and overseas growth in 2025."
-  },
-  {
-   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "target": "9a78db69-48d3-430a-af72-36812b267d04",
-   "name": "BETTING_ON",
-   "fact": "Hyundai is betting on SDV and next-generation batteries."
-  },
-  {
-   "source": "85c70a60-aeb7-4f88-a306-9e076bedb1e3",
-   "target": "36bff843-9f5b-46bf-8820-b1bb09feb0eb",
-   "name": "SEES_GROWTH_IN",
-   "fact": "Europe saw a 22% year-on-year growth in BEV sales in March 2025."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "f78628ca-8534-4e1e-923f-0150aeda72e8",
-   "name": "HAS_PRODUCTION_FACILITY_IN",
-   "fact": "BYD has a production facility planned in Malaysia."
-  },
-  {
-   "source": "f7e8a535-4659-43ad-923a-b6b1aca5679e",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "REPORTS_ON",
-   "fact": "BBC reported that China made EVs mainstream, with BYD overtaking Tesla."
-  },
-  {
-   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
-   "target": "3c1a724a-0a70-4386-a94f-a45768de5b00",
+   "source": "85cc97cc-33b4-4009-b6c9-3c1b27fe83cc",
+   "target": "2de68002-6c67-4b0e-b670-b9cdd753ef9c",
    "name": "PARTNERS_WITH",
-   "fact": "VinFast partnered with Siemens for electric bus technology starting in 2018."
+   "fact": "The Japanese Government (METI) supports Toyota's solid-state battery partnership through R&D subsidies and supply chain investment."
   },
   {
-   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "target": "c1449124-ec0b-4192-a9ee-e0a2dcc82535",
-   "name": "HAS_STRATEGY",
-   "fact": "Hyundai has a strategy named Hyundai Strategy 2025."
-  },
-  {
-   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
-   "target": "a9877f18-b209-4c5d-96b4-a920c98bdf67",
-   "name": "COMPETES_WITH",
-   "fact": "VinFast is unable to compete with established brands from China."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "d5792b9e-ab66-43c6-999d-bee70886c492",
-   "name": "COMPETES_WITH",
-   "fact": "BYD is competing with Tesla."
-  },
-  {
-   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
-   "target": "41d55056-bbbb-4210-b19d-0ba096fe5fad",
-   "name": "ELECTRIC_BUS_FIRST_APPEARED_IN",
-   "fact": "VinFast electric buses made their debut in Germany."
-  },
-  {
-   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "target": "83fd62f2-6c1d-40d0-bb3f-29edd4993163",
-   "name": "LOCALIZES_PRODUCTION_IN",
-   "fact": "Hyundai is expanding production at HMGMA for localization in the US."
-  },
-  {
-   "source": "90f6ca7a-0e66-4b52-8bec-d1b1a06f8aaf",
-   "target": "ec09380b-ada5-48a0-ae5a-278e27c44bc5",
-   "name": "COMPETES_ON",
-   "fact": "The long-term competition depends on software capabilities and vertical integration depth."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "d5792b9e-ab66-43c6-999d-bee70886c492",
-   "name": "COMPETES_WITH",
-   "fact": "BYD is predicted to surpass Tesla in global EV sales by 2025."
-  },
-  {
-   "source": "cad926e6-3eb5-4a5b-aa27-6d32e3c7d274",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "IS_PRODUCTION_SITE_FOR",
-   "fact": "Thailand is a production site for BYD with a planned annual capacity of 150,000 vehicles."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "ce60fcb0-deb2-4892-8e30-086978b8e050",
-   "name": "HAS_PRODUCTION_FACILITY_IN",
-   "fact": "BYD has a production facility planned in Cambodia."
-  },
-  {
-   "source": "ea994af8-6fe3-4ee5-9178-c1b12d51a127",
-   "target": "8aedb46d-fe92-4854-876c-baf26c3de81a",
-   "name": "HAS_SUBTOPIC",
-   "fact": "Intelligent driving technology includes an End-to-End Autonomous Driving Survey."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "cad926e6-3eb5-4a5b-aa27-6d32e3c7d274",
-   "name": "HAS_PRODUCTION_CAPACITY",
-   "fact": "BYD's total production capacity in Thailand, Uzbekistan, and Brazil exceeds 300,000 vehicles per year."
-  },
-  {
-   "source": "41d55056-bbbb-4210-b19d-0ba096fe5fad",
-   "target": "36bff843-9f5b-46bf-8820-b1bb09feb0eb",
-   "name": "SEES_GROWTH_IN",
-   "fact": "Germany experienced 37% growth in BEV sales in March 2025."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "a3093112-b292-4879-ab25-cdd9b22b8501",
-   "name": "COMPETES_WITH",
-   "fact": "BYD is leading price reductions and achieving record sales, but has halved the gross profit margin for mid-range manufacturers."
-  },
-  {
-   "source": "ec32c175-b661-448f-b246-e2a3e5d8d7de",
-   "target": "8aedb46d-fe92-4854-876c-baf26c3de81a",
+   "source": "0bae74ae-6231-49ec-88ff-0ef66341a6ee",
+   "target": "902a9cc4-fb02-4f85-907f-454863942534",
    "name": "PARTNERS_WITH",
-   "fact": "Volkswagen and Mobileye are advancing their L4-level autonomous driving cooperation on the ID. Buzz."
+   "fact": "GEM controls Indonesian HPAL production for battery-grade nickel supply growth through a partnership with Danantara sovereign fund, with capacity additions projected to meet demand through 2028."
   },
   {
-   "source": "a2da7af2-7ef0-4823-95f7-461bc10ba8cd",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "REPORTS_ON",
-   "fact": "Electrek released a sales report for March 2025."
+   "source": "49ffc98d-ff88-4cee-bcc9-b575bf29a60c",
+   "target": "8b66f322-b4bb-4868-9922-38b916754fc6",
+   "name": "INFLUENCES",
+   "fact": "The expiration of the United States $7,500 federal tax credit on September 30, 2025, triggered an immediate US market contraction, paralleling in scale the European Union's December 16, 2025 proposal to soften the 2035 ICE phase-out to a 90% CO2 reduction target."
   },
   {
-   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
-   "target": "d0ce283e-c2d6-443d-ae63-1b59d25f26f0",
-   "name": "POSTPONED_EXPANSION_INTO",
-   "fact": "VinFast has indefinitely postponed its expansion into Southeast Asia."
+   "source": "f53ad827-435c-4594-9d2c-a12ef0c10485",
+   "target": "28590d20-d244-4fb4-ab3e-477c645a5f61",
+   "name": "REGULATES",
+   "fact": "A SCOTUS or DDC ruling upholding the ACC II waiver by Q4 2026 would materially strengthen the base case for US EV adoption by validating state-level ZEV mandates."
   },
   {
-   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
-   "target": "ec1c6adb-a5f1-4ee0-85d0-ce3e3252ff40",
-   "name": "REPRESENTS_DIFFICULTY_FOR",
-   "fact": "VinFast's retreat is a representation of the difficulties faced by local brands in emerging markets."
+   "source": "cd8025fc-6f22-4b8a-81be-afd252e46a0a",
+   "target": "d1b8de75-e165-4474-a77c-39ddcb0055b7",
+   "name": "INFLUENCES",
+   "fact": "The 2026 Iran war has placed the Strait of Hormuz at the centre of Iranian and US strategic calculus, disrupting global oil trade."
   },
   {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "8354ca3a-d458-4ba7-8fb7-cfb95a75d4b4",
-   "name": "HAS_PRODUCT",
-   "fact": "BYD's Seagull has a starting price of 69,800 Chinese Yuan."
+   "source": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "INFLUENCES",
+   "fact": "The December 16, 2025 EU proposal to soften the 2035 ICE phase-out to 90% CO2 reduction partly reflects concerns about Chinese competitive pressure from OEMs such as BYD, reducing regulatory pressure on BYD's expansion into European markets."
   },
   {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "165e6914-32f4-407c-b819-ac19994ca340",
-   "name": "LEADS",
-   "fact": "BYD became the leader in the global EV market in 2025."
-  },
-  {
-   "source": "6e7b7605-8bfc-4b14-9eb7-4916820cdf97",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "REPORTS_ON",
-   "fact": "Automotive World reports on BYD's steady progress on its global production network."
-  },
-  {
-   "source": "90f6ca7a-0e66-4b52-8bec-d1b1a06f8aaf",
-   "target": "7fe94962-cd9c-4663-904f-584368eff1f4",
-   "name": "FOCUSES_ON",
-   "fact": "Chinese brands are focusing on end-to-end intelligent driving and price."
-  },
-  {
-   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
+   "source": "2074bb18-0cfb-4f9b-bd6b-bb874d9e927b",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
    "name": "COMPETES_WITH",
-   "fact": "VinFast is competing with BYD."
+   "fact": "WM Motor has entered restructuring while BYD continues expansion, illustrating the divergent outcomes among Chinese EV brands."
   },
   {
-   "source": "4014098d-36b4-4eab-b88a-3c5767742a60",
-   "target": "8aedb46d-fe92-4854-876c-baf26c3de81a",
-   "name": "BETTING_ON",
-   "fact": "Chinese brands are betting on end-to-end intelligent driving and price."
+   "source": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "target": "b7f0abae-6cc1-40db-a3bd-3f573f03cfff",
+   "name": "PRODUCES",
+   "fact": "CATL's Qilin battery represents a first-generation cell-to-pack implementation."
   },
   {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "23cd5c2f-76f1-4791-ab17-e7ae20358e57",
-   "name": "HAS_PRODUCTION_FACILITY_IN",
-   "fact": "BYD has a production facility in Turkey."
+   "source": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "target": "a70b362c-bf92-4952-95a7-0e4b05919a4d",
+   "name": "REGULATES",
+   "fact": "CO₂ regulations determine VW's investment path; trilogue outcome will shape VW's 2027-2030 product cycle（sign=neutral，strength=medium，grade=A1，valence=directional，polarity=0.20）"
   },
   {
-   "source": "3eb78813-0396-466e-85e9-0abef866d729",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "PROVIDES_INFORMATION_ON",
-   "fact": "BYD Global Expansion 2025 provides details on BYD's overseas expansion."
-  },
-  {
-   "source": "54994604-07c8-4f34-b47c-0f0d6e824d72",
-   "target": "c1449124-ec0b-4192-a9ee-e0a2dcc82535",
-   "name": "HAS_BAN_YEAR",
-   "fact": "Norway has an ICE vehicle ban set for 2025."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "cad926e6-3eb5-4a5b-aa27-6d32e3c7d274",
-   "name": "BUILDS_FACTORY_IN",
-   "fact": "BYD is building factories in Thailand and Brazil for regional outreach."
-  },
-  {
-   "source": "ec32c175-b661-448f-b246-e2a3e5d8d7de",
-   "target": "8aedb46d-fe92-4854-876c-baf26c3de81a",
-   "name": "RESEARCHING",
-   "fact": "Volkswagen is researching End-to-End Autonomous Driving."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "d5792b9e-ab66-43c6-999d-bee70886c492",
+   "source": "f6e09392-3e8a-48c2-ae70-9d13d85ac41f",
+   "target": "cacdf059-2b14-48d6-be99-04cde3e433de",
    "name": "COMPETES_WITH",
-   "fact": "BYD overtook Tesla in 2025 to become the global EV market leader."
+   "fact": "Hyundai (Ioniq 5/6) and Tesla (Model 3/Y) both compete in the mid-market EV segment ($30,000-$60,000)."
   },
   {
-   "source": "a3093112-b292-4879-ab25-cdd9b22b8501",
-   "target": "a9877f18-b209-4c5d-96b4-a920c98bdf67",
-   "name": "EXPERIENCES_PRICE_WAR_IN",
-   "fact": "Mid-range OEM manufacturers in China are experiencing a white-hot price war with halved gross profit margins."
-  },
-  {
-   "source": "d2130e67-3233-4d62-9210-ce0661613304",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "PROVIDES_INFORMATION_ON",
-   "fact": "BYD Production Network provides details on BYD's global production network."
-  },
-  {
-   "source": "3672c9ad-9c78-4016-aadc-5a3bd2ee461f",
-   "target": "ee7105e8-ce61-4d74-a7e6-e74b93d303e5",
-   "name": "GOVERNS",
-   "fact": "英国政府 governs 英国."
-  },
-  {
-   "source": "cebc1586-4e64-4093-9552-986c43b69f56",
-   "target": "70bdf404-6820-4875-8eeb-3339d572bfe9",
-   "name": "HAS_POLICY",
-   "fact": "The United Kingdom has an ICE vehicle ban."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "7825f6ad-413b-49b5-b5f2-ddfb5a3c10d8",
-   "name": "AFFILIATED_WITH",
-   "fact": "BYD is expanding its global presence with new plants in emerging markets."
-  },
-  {
-   "source": "be11cb8b-78b5-4a51-af04-c0998c574bf1",
-   "target": "36bff843-9f5b-46bf-8820-b1bb09feb0eb",
-   "name": "SEES_GROWTH_IN",
-   "fact": "Italy saw a surge of 64% in BEV sales in March 2025."
-  },
-  {
-   "source": "09d4016c-48c7-4400-9550-8ca4898262a2",
-   "target": "41d55056-bbbb-4210-b19d-0ba096fe5fad",
-   "name": "BAN_EXPECTED_IN",
-   "fact": "Germany has a timeline for banning ICE vehicles."
-  },
-  {
-   "source": "ec32c175-b661-448f-b246-e2a3e5d8d7de",
-   "target": "be67d289-a6da-41ba-98c5-3fd05ee5a727",
-   "name": "WORKS_WITH",
-   "fact": "Volkswagen is working with Mobileye on the L4-level autonomous driving features for the ID. Buzz."
-  },
-  {
-   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "target": "8b1c4fbe-0f41-4b3b-bc6d-c51e42c63c59",
-   "name": "COMPETES_WITH",
-   "fact": "Hyundai competes with Kia."
-  },
-  {
-   "source": "e50da547-e44e-40f4-8b26-b35a408bc6bf",
-   "target": "85c70a60-aeb7-4f88-a306-9e076bedb1e3",
-   "name": "TARGETS_MARKET",
-   "fact": "IONIQ 3 targets the European mass market."
-  },
-  {
-   "source": "ea994af8-6fe3-4ee5-9178-c1b12d51a127",
-   "target": "82e45e80-1e52-43bd-ba84-f4933de268f3",
-   "name": "HAS_SUBTOPIC",
-   "fact": "Intelligent driving technology includes the Future of Autonomous Driving, discussing single-vehicle intelligence vs. vehicle-road coordination."
-  },
-  {
-   "source": "ea994af8-6fe3-4ee5-9178-c1b12d51a127",
-   "target": "935d7f28-36b8-4e49-9856-bc0ea482808c",
-   "name": "HAS_SUBTOPIC",
-   "fact": "Intelligent driving technology includes Multimodal Fusion Autonomous Driving."
-  },
-  {
-   "source": "91847d4c-cc6d-4a58-84c4-c1e95ccdbc75",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "HAS_FINANCIAL_RISK_MENTIONED_ALONGSIDE",
-   "fact": "Evergrande's financial risks are frequently mentioned alongside BYD's market dominance."
-  },
-  {
-   "source": "83fd62f2-6c1d-40d0-bb3f-29edd4993163",
-   "target": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "name": "POLICY_DRIVEN_IN",
-   "fact": "Mature markets like Europe and the US are policy-driven."
-  },
-  {
-   "source": "283234e4-1523-4c7f-9fb9-3444db2c35ad",
-   "target": "bdc2f31f-9568-4d32-a64e-b3b1f84df430",
-   "name": "HAS_FACILITY",
-   "fact": "The Hyundai Kia Group is expanding the HMGMA factory by 200,000 units for its second phase."
-  },
-  {
-   "source": "45b686df-0433-4ad7-84f6-3a43f65d3ab4",
-   "target": "0e51b812-d3d2-41fb-b113-da5a2a681df8",
-   "name": "HAS_ORGANIZATION",
-   "fact": "VinFast has an organization called VinFast Europe focused on the European market."
-  },
-  {
-   "source": "7b45c9f2-6fa3-4dfa-bd90-30deeca26324",
-   "target": "165e6914-32f4-407c-b819-ac19994ca340",
-   "name": "REPORTS_ON",
-   "fact": "TrendForce analysts reported that global new energy vehicle sales reached a record high of 20.53 million units in 2025."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "5412cd26-e61d-4e57-ae81-cad2a948ee0e",
-   "name": "BUILDS_FACTORY_IN",
-   "fact": "BYD is building factories in Thailand and Brazil for regional outreach."
-  },
-  {
-   "source": "a3093112-b292-4879-ab25-cdd9b22b8501",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "IMPACTED_BY",
-   "fact": "Mid-range manufacturers' gross profit margins have been halved due to BYD's price war."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "83fd62f2-6c1d-40d0-bb3f-29edd4993163",
-   "name": "HAS_PRODUCTION_FACILITY_IN",
-   "fact": "BYD has a production facility in Hungary."
-  },
-  {
-   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "target": "3cd88686-62d0-47d7-b515-62f187686869",
-   "name": "BETTING_ON",
-   "fact": "Hyundai is betting on next-generation batteries for long-term success."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "d5792b9e-ab66-43c6-999d-bee70886c492",
-   "name": "COMPETES_WITH",
-   "fact": "BYD Auto is noted as surpassing Tesla."
-  },
-  {
-   "source": "a9877f18-b209-4c5d-96b4-a920c98bdf67",
-   "target": "36bff843-9f5b-46bf-8820-b1bb09feb0eb",
-   "name": "SEES_PRICE_DROP_IN",
-   "fact": "China saw a 14% average price decrease for BEVs in 2024."
-  },
-  {
-   "source": "cebc1586-4e64-4093-9552-986c43b69f56",
-   "target": "fb6d23d1-8bbe-4200-a89e-5468f0ad7c0a",
-   "name": "HAS_BAN_YEAR",
-   "fact": "The United Kingdom has an ICE vehicle ban set for 2030."
-  },
-  {
-   "source": "91847d4c-cc6d-4a58-84c4-c1e95ccdbc75",
-   "target": "a3093112-b292-4879-ab25-cdd9b22b8501",
-   "name": "FINANCIAL_RISK_MENTIONED_WITH",
-   "fact": "Financial risks associated with Evergrande are frequently mentioned in the context of mid-range manufacturers."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "cad926e6-3eb5-4a5b-aa27-6d32e3c7d274",
-   "name": "HAS_PRODUCTION_FACILITY_IN",
-   "fact": "BYD has a production facility in Thailand."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "91847d4c-cc6d-4a58-84c4-c1e95ccdbc75",
-   "name": "COMPARED_TO",
-   "fact": "BYD is frequently mentioned in the context of Evergrande-style financial risks."
-  },
-  {
-   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "target": "5734a711-9e29-48f7-aae1-90ee0cad5cde",
-   "name": "BETTING_ON",
-   "fact": "Hyundai is betting on SDV for long-term success."
-  },
-  {
-   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "target": "c7b49976-8454-41b5-817a-7ebd38135609",
-   "name": "COMPETES_WITH",
-   "fact": "Hyundai competes with Genesis."
-  },
-  {
-   "source": "90f6ca7a-0e66-4b52-8bec-d1b1a06f8aaf",
-   "target": "5bc1d97b-1b34-4e15-81c8-e1cb5ee019a2",
-   "name": "BETTING_ON",
-   "fact": "Chinese brands are betting on end-to-end intelligent driving for long-term success."
-  },
-  {
-   "source": "297a9362-b644-4400-9e7d-6a41f6321715",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "REPORTS_ON",
-   "fact": "Electricarworld.com reported that BYD is targeting 1 million overseas car sales by 2025."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "e836db88-b92f-4f57-8045-2f479c5e82e6",
-   "name": "SEEKS_TO_CIRCUMVENT_TARIFF_FOR",
-   "fact": "BYD is building a plant in Turkey to circumvent European Union tariffs."
-  },
-  {
-   "source": "5412cd26-e61d-4e57-ae81-cad2a948ee0e",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "IS_PRODUCTION_SITE_FOR",
-   "fact": "Brazil is a production site for BYD, with the former Ford plant having an annual capacity of 150,000 vehicles."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "b2b5d9e7-ac0c-4662-91d2-366ebb6a7718",
-   "name": "HAS_PRODUCTION_FACILITY_IN",
-   "fact": "BYD has a production facility in Uzbekistan."
-  },
-  {
-   "source": "ec32c175-b661-448f-b246-e2a3e5d8d7de",
-   "target": "5ffa3855-d184-4c11-9aa6-09de12fc3846",
+   "source": "2de68002-6c67-4b0e-b670-b9cdd753ef9c",
+   "target": "92344c74-ae71-47b3-bef0-61a4b9a96695",
    "name": "PARTNERS_WITH",
-   "fact": "Volkswagen and Mobileye have an agreement for autonomous driving."
+   "fact": "Toyota partners with Idemitsu Kosan on solid-state battery (SSB) development, with sulfide electrolyte production targeting 2027-2028 launch."
   },
   {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "23cd5c2f-76f1-4791-ab17-e7ae20358e57",
-   "name": "PARTNERS_WITH",
-   "fact": "BYD is shifting its European EV production focus to Turkey."
+   "source": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "target": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "INFLUENCES",
+   "fact": "The EU December 2025 proposal's permission for continued ICE/PHEV sales post-2035 creates a counter-vailing pressure against LFP cost-led transition acceleration by easing EU OEM urgency to shift to LFP-dominant BEV lineups."
   },
   {
-   "source": "283234e4-1523-4c7f-9fb9-3444db2c35ad",
-   "target": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "name": "HAS_SUB_ORGANIZATION",
-   "fact": "Hyundai is part of the organization 现代起亚."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "cad926e6-3eb5-4a5b-aa27-6d32e3c7d274",
-   "name": "ESTABLISHES_PLANT_IN",
-   "fact": "BYD is establishing a plant in Thailand for regional reach."
-  },
-  {
-   "source": "c0b2af84-f75a-4fcd-8023-2b24c5820079",
-   "target": "ee7105e8-ce61-4d74-a7e6-e74b93d303e5",
-   "name": "INCLUDES_POLICY_FOR",
-   "fact": "ICE Bans Global provides a map of ICE car bans worldwide, including for the UK."
-  },
-  {
-   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "target": "5734a711-9e29-48f7-aae1-90ee0cad5cde",
-   "name": "BETTING_ON",
-   "fact": "Hyundai is betting on SDV and next-generation batteries."
-  },
-  {
-   "source": "08fee1c3-3a5e-489e-ae30-b4e82ab8ddb4",
-   "target": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "name": "PROVIDES_INFORMATION_ON",
-   "fact": "BYD Auto Wikipedia provides basic company information on BYD."
-  },
-  {
-   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "target": "b147a21c-0015-439e-99c7-959d32ae59e1",
-   "name": "PART_OF",
-   "fact": "Hyundai is part of Hyundai Motor Group."
-  },
-  {
-   "source": "23eaeb7c-747e-42be-8897-049e24dc565e",
-   "target": "d9640271-f4f6-4005-85f7-063891dc5f5b",
-   "name": "PARALLEL_TO",
-   "fact": "SAD and i-VICS are two parallel technical routes."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "5412cd26-e61d-4e57-ae81-cad2a948ee0e",
-   "name": "HAS_PRODUCTION_FACILITY_IN",
-   "fact": "BYD has a production facility in Brazil."
-  },
-  {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "283234e4-1523-4c7f-9fb9-3444db2c35ad",
+   "source": "9fb5d5e6-f5ff-4169-ab2a-0c73f2b16a9c",
+   "target": "229e545c-dafa-4b4e-8c2d-1e329118a5da",
    "name": "COMPETES_WITH",
-   "fact": "BYD is a major competitor to Hyundai Kia Group in the EV market."
+   "fact": "Australia and Argentina are among the geographically concentrated producers of global lithium."
   },
   {
-   "source": "294fe11d-cf94-4114-8426-1b51b5a22b65",
-   "target": "165e6914-32f4-407c-b819-ac19994ca340",
-   "name": "HAS_SALES_TARGET",
-   "fact": "BYD has an overseas sales target of 1 million vehicles by 2025."
+   "source": "1673a4f9-fde8-4e4f-8d94-d9b7b7a12bb5",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "SUPPLIES",
+   "fact": "STMicroelectronics is one of the dominant suppliers of power electronics, with supply remaining constrained amid accelerating EV adoption."
   },
   {
-   "source": "fd2a8eaf-d9e4-422a-ba28-179d7ae03865",
-   "target": "0c170e9e-dcac-406f-9d6f-4f0f64c04ccd",
-   "name": "EXPANDS_PRODUCTION_AT",
-   "fact": "Hyundai is expanding production at HMGMA to achieve US localization."
+   "source": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "target": "5423e18f-52a2-4cd1-a8dd-dd1e0b2e325c",
+   "name": "SUPPORTS",
+   "fact": "China's dominance in over 65% of global lithium refining capacity creates strategic vulnerability that sodium-ion adoption explicitly aims to address."
   },
   {
-   "source": "4014098d-36b4-4eab-b88a-3c5767742a60",
-   "target": "d0ce283e-c2d6-443d-ae63-1b59d25f26f0",
-   "name": "DOMINATES_IN",
-   "fact": "Chinese brands dominate emerging markets like Southeast Asia, which are price-sensitive."
+   "source": "1f4a7754-0a5c-45d8-867c-b0a947f64ca3",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "TRADE_DEFENSE_INVESTIGATION",
+   "fact": "EU anti-subsidy duties are in force as a trade defense response against Chinese OEM export expansion led by BYD."
   },
   {
-   "source": "b147a21c-0015-439e-99c7-959d32ae59e1",
-   "target": "e50da547-e44e-40f4-8b26-b35a408bc6bf",
-   "name": "HAS_MODEL",
-   "fact": "Hyundai Motor Group has a model called IONIQ 3."
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "PARTNERS_WITH",
+   "fact": "BYD and CATL together achieve scale economies that produce LFP cost leadership, enabling Chinese OEM export expansion including BYD's June 2026 overseas sales of 175,349 units."
+  },
+  {
+   "source": "6e31cb60-3c1a-40b0-9dda-050cddd8543f",
+   "target": "6fb04fa5-2aee-4377-a37f-8cc8a0a39e80",
+   "name": "CONSTRAINS",
+   "fact": "MOFCOM export controls on critical battery materials (graphite, rare earths, cathode/anode precursors) impose strategic leverage and constraints on Western OEMs."
+  },
+  {
+   "source": "a13a0686-4fe7-487f-b6c0-ce0a4c2b0169",
+   "target": "e8460784-2046-40d0-9568-e8fba733bff6",
+   "name": "COMPETES_WITH",
+   "fact": "New entrants NIO and VinFast face trust deficits in export markets relative to established brands that benefit from service network advantages."
+  },
+  {
+   "source": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "target": "79e74f04-417e-4447-af68-32c0bd033b2e",
+   "name": "DEPENDS_ON",
+   "fact": "LFP battery chemistry remains dependent on lithium carbonate, with price rebounding above $25,000/t creating cost pressure for LFP production."
+  },
+  {
+   "source": "908443f9-c91e-441b-9bf9-97303c071aa2",
+   "target": "74a0a405-4333-4f52-bf39-ec47f44e4bfa",
+   "name": "COMPETES_WITH",
+   "fact": "Li Auto and XPeng are both profiled as Chinese OEMs competing in the EV market, with Li Auto Q1 2026 earnings confirmed and XPeng Q2 guidance partially available."
+  },
+  {
+   "source": "10ea79b1-bb72-4c00-b2b3-26dfe5df7a1a",
+   "target": "92344c74-ae71-47b3-bef0-61a4b9a96695",
+   "name": "PARTNERS_WITH",
+   "fact": "Toyota announced a 2027-2028 solid-state battery launch with Idemitsu Kosan supplying sulfide electrolyte for limited-batch flagship vehicle deployment."
+  },
+  {
+   "source": "e67c8519-2350-469a-b5a2-10489feb55ae",
+   "target": "7a2f6c06-c656-4186-87d1-ccf393730a20",
+   "name": "PARTNERS_WITH",
+   "fact": "Huayou is one of the controllers of Indonesian high-pressure acid leaching (HPAL) production for battery-grade nickel."
+  },
+  {
+   "source": "8a08501e-cf57-470c-b350-97f17604ead9",
+   "target": "4952d6d3-73cb-43ef-aafe-f94695a307b5",
+   "name": "CONSTRAINS",
+   "fact": "China's MOFCOM licensing regime for graphite, rare earths, and battery materials represents a strategic chokepoint that could disrupt Western OEM production such as Stellantis's."
+  },
+  {
+   "source": "4d2d1ba7-9ae4-4558-ba57-ce3086e113fb",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "COMPETES_WITH",
+   "fact": "BYD reached its 10 millionth NEV cumulative milestone in November 2024, while CATL's solid-state TRL was assessed at Level 4 in December 2024, indicating both leaders compete across the battery and vehicle value chain."
+  },
+  {
+   "source": "52cb166d-0f34-41aa-bb76-75b196665baa",
+   "target": "dac37e0d-20ec-48d0-8a68-8909b08c2e34",
+   "name": "SUPPORTS",
+   "fact": "The French Government supports Renault as a national champion via Council voting and ECJ advocacy."
+  },
+  {
+   "source": "85302274-5e80-4604-bfa5-014945d58d42",
+   "target": "deea8984-aef3-46be-a5c9-54dab6630dbb",
+   "name": "INFLUENCES",
+   "fact": "Chinese automakers face export constraints from the 100% United States Section 301 tariffs on Chinese EVs, while Zimbabwe lithium carbonate supply disruptions simultaneously affect battery raw material costs."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "c188f12f-272f-4756-97e7-ba15c2047efb",
+   "name": "CONSTRAINS",
+   "fact": "BYD's Chinese OEM export expansion confronts the US Section 301 100% tariffs on Chinese EVs, constraining its access to the US market."
+  },
+  {
+   "source": "9fb5d5e6-f5ff-4169-ab2a-0c73f2b16a9c",
+   "target": "3e300642-e85e-4b71-a2a4-7dbc36aae050",
+   "name": "COMPETES_WITH",
+   "fact": "Australia and Chile are among the geographically concentrated producers of global lithium."
+  },
+  {
+   "source": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "target": "c1f8c2fb-22a2-4d1f-8515-6e528ed93734",
+   "name": "REGULATES",
+   "fact": "The EU 2035 ICE ban was formally adopted in 2023, establishing a binding European zero-emission timeline."
+  },
+  {
+   "source": "c6d5cd99-c4b1-4164-a866-95ce6074bda4",
+   "target": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "name": "CONSTRAINS",
+   "fact": "The Plateau Thesis argues Western OEM retreat and observed policy reversals such as softening of the EU 2035 ICE ban increase the probability that global EV adoption plateaus at 25-30% market share through 2035."
+  },
+  {
+   "source": "146995ec-dec7-4b00-9986-97ce7c5d62d1",
+   "target": "87802b0e-1866-4c64-9a1c-1590c5153f3e",
+   "name": "ENFORCES",
+   "fact": "The US Federal Government revoked the EPA waiver for California's ACC II program via Congressional Review Act resolutions signed June 12, 2025."
+  },
+  {
+   "source": "a13a0686-4fe7-487f-b6c0-ce0a4c2b0169",
+   "target": "30eff5ac-0625-49b0-ae7e-bc06f65f6743",
+   "name": "INFLUENCES",
+   "fact": "The India PM E-DRIVE Scheme subsidy structure is confirmed but outcome data is limited, affecting the emerging market forecast relevant to Chinese OEMs such as NIO."
+  },
+  {
+   "source": "3a95d860-a817-43ec-99c3-5975fff387c2",
+   "target": "49ffc98d-ff88-4cee-bcc9-b575bf29a60c",
+   "name": "REGULATES",
+   "fact": "The OBBB signed July 4, 2025, terminated the US $7,500 federal EV tax credit effective September 30, 2025."
+  },
+  {
+   "source": "c188f12f-272f-4756-97e7-ba15c2047efb",
+   "target": "74a0a405-4333-4f52-bf39-ec47f44e4bfa",
+   "name": "TRADE_DEFENSE_INVESTIGATION",
+   "fact": "US Section 301 tariffs (100% on Chinese EVs) affect Chinese OEMs including Li Auto, with implementation nuances only partially confirmed."
+  },
+  {
+   "source": "eceb7aa5-d5dd-475c-81c4-ee631848665f",
+   "target": "28590d20-d244-4fb4-ab3e-477c645a5f61",
+   "name": "REGULATES",
+   "fact": "If the pending court ruling upholds state-level ZEV mandates under Section 177, 40% of US new car sales would remain under ACC II requirements, pressuring OEMs to comply regardless of federal stance."
+  },
+  {
+   "source": "3e300642-e85e-4b71-a2a4-7dbc36aae050",
+   "target": "229e545c-dafa-4b4e-8c2d-1e329118a5da",
+   "name": "COMPETES_WITH",
+   "fact": "Chile and Argentina are among the geographically concentrated producers of global lithium."
+  },
+  {
+   "source": "6e31cb60-3c1a-40b0-9dda-050cddd8543f",
+   "target": "62fb0f66-710f-4b72-b602-e97f4cf2bc02",
+   "name": "SUPPORTS",
+   "fact": "MOFCOM provides sustained industrial policy support for China's NEV purchase tax exemption framework."
+  },
+  {
+   "source": "a459d7d1-4641-4cff-94b1-7304e201e880",
+   "target": "148c31bd-df23-4c63-8a31-0d03e99264bb",
+   "name": "SUPPORTS",
+   "fact": "The Korean Government (MOTIE) supports Samsung SDI as a national champion via the K-EV roadmap, tax incentives, and trade policy."
+  },
+  {
+   "source": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "target": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "name": "DEPENDS_ON",
+   "fact": "Ford's Model e division has accumulated $19.5 billion in losses with $8.5 billion in writedowns, prompting a strategic pivot toward smaller, profitable EV segments and hybrid offerings."
+  },
+  {
+   "source": "eb0db79c-2b67-4a95-92fe-1b8bafbdc6a4",
+   "target": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "name": "INFLUENCES",
+   "fact": "The German Government pushed for ICE flexibility and e-fuels support, influencing the European Commission's 90% 2035 CO₂ reduction proposal."
+  },
+  {
+   "source": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "target": "81797d38-7417-4ec1-b428-242087d1fdeb",
+   "name": "INFLUENCES",
+   "fact": "Tesla's recovery is dependent on autonomy milestones including the Cybercab/Robotaxi platform."
+  },
+  {
+   "source": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "target": "04bf3777-3aa4-4d99-8204-a57854130ad0",
+   "name": "ENABLES",
+   "fact": "Enforcement of the EU 2035 ICE ban (100% zero-emission) enables accelerated EV adoption in Western Europe under the Policy Push Scenario."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "43a6d9ab-ac99-476d-a345-92b19644fbc5",
+   "name": "COMPETES_WITH",
+   "fact": "BYD, Geely, and Leapmotor are scaled Chinese OEMs that continue expansion amid widespread Chinese EV brand unprofitability."
+  },
+  {
+   "source": "f817c2f7-7ed0-4bc3-8307-eb1fbff77e84",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "FOUNDED",
+   "fact": "Zeng Yuqun is the founder of CATL."
+  },
+  {
+   "source": "43a6d9ab-ac99-476d-a345-92b19644fbc5",
+   "target": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "name": "COMPETES_WITH",
+   "fact": "Leapmotor competes with Tesla in the Chinese NEV market; Tesla's China market share was halved to 6.5% in 2025 while Leapmotor was one of only three profitable Chinese NEV brands."
+  },
+  {
+   "source": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "target": "4cb13ac7-c19f-4fc7-a0cd-0721f195568c",
+   "name": "NEGOTIATES_WITH",
+   "fact": "The EU Commission is negotiating with the German Automotive Industry over the softening of the 2035 ICE ban to a 90% CO2 reduction target."
+  },
+  {
+   "source": "62fb0f66-710f-4b72-b602-e97f4cf2bc02",
+   "target": "8b66f322-b4bb-4868-9922-38b916754fc6",
+   "name": "INFLUENCES",
+   "fact": "China's continued NEV purchase-tax exemption, extended through 2027, contrasts with the European Union's December 16, 2025 proposal to soften the 2035 ICE phase-out to a 90% CO2 reduction target."
+  },
+  {
+   "source": "28590d20-d244-4fb4-ab3e-477c645a5f61",
+   "target": "3bbd3c61-99a5-48b9-8fc7-094da8a857ea",
+   "name": "REGULATES",
+   "fact": "Advanced Clean Cars II is a regulatory framework administered by the California Air Resources Board, adopted by 17 states plus the District of Columbia representing approximately 40% of US new car sales."
+  },
+  {
+   "source": "c1c9fba4-054a-4128-9454-c443a257df1f",
+   "target": "684c9f37-ac24-4d00-80dc-5c8867610c9e",
+   "name": "ENABLES",
+   "fact": "Japan hosts pilot programs for bidirectional V2G charging deployment alongside California and the Netherlands."
+  },
+  {
+   "source": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "target": "86def693-f889-4bc9-8694-b6747c22c542",
+   "name": "PARTNERS_WITH",
+   "fact": "CATL pursues technology leadership in condensed battery technology alongside LFP and sodium-ion development."
+  },
+  {
+   "source": "cd8025fc-6f22-4b8a-81be-afd252e46a0a",
+   "target": "613bdd51-6fce-4a1e-845f-f69db643a6ca",
+   "name": "INFLUENCES",
+   "fact": "The Iran War created oil price volatility that paradoxically boosted EV consideration among consumers, influencing General Motors' market conditions."
+  },
+  {
+   "source": "c9b130f9-794a-4349-97f0-2901541dbd0a",
+   "target": "2a88406e-d9cf-4e42-9ac2-68a38ad4a779",
+   "name": "PARTNERS_WITH",
+   "fact": "BNEF and IEA are cited together as primary sources synthesizing forecast data on the global EV industry outlook to 2035."
+  },
+  {
+   "source": "c7fba6cf-d34b-482a-ab52-ef47c44b1566",
+   "target": "07285a39-ba68-461b-bd6f-82ae2e11659d",
+   "name": "COMPETES_WITH",
+   "fact": "Lithium iron phosphate (LFP) and sodium-ion batteries are both favored over premium solid-state alternatives through 2030 in battery technology evolution."
+  },
+  {
+   "source": "09d7e96b-877f-4dc8-9e52-348bf8cdd6ea",
+   "target": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "COMPETES_WITH",
+   "fact": "CATL Naxtra sodium-ion battery, launched December 2025 at 175 Wh/kg, competes with LFP chemistry for entry-level EV and grid storage applications but is constrained by an energy density gap that limits it to cold-climate, urban, and storage use cases."
+  },
+  {
+   "source": "d1b8de75-e165-4474-a77c-39ddcb0055b7",
+   "target": "efc7107d-93b3-4fea-975e-6e2880e45e1c",
+   "name": "INFLUENCES",
+   "fact": "Closure of the Strait of Hormuz causes spikes in Brent crude prices, affecting fuel prices at the pump."
+  },
+  {
+   "source": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "target": "a70b362c-bf92-4952-95a7-0e4b05919a4d",
+   "name": "COMPETES_WITH",
+   "fact": "Ford and Volkswagen are Western OEMs pursuing delayed EV transition strategies."
+  },
+  {
+   "source": "a13a0686-4fe7-487f-b6c0-ce0a4c2b0169",
+   "target": "c188f12f-272f-4756-97e7-ba15c2047efb",
+   "name": "TRADE_DEFENSE_INVESTIGATION",
+   "fact": "US Section 301 tariffs (100% on Chinese EVs) affect Chinese OEMs including NIO, with implementation nuances only partially confirmed."
+  },
+  {
+   "source": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "target": "5423e18f-52a2-4cd1-a8dd-dd1e0b2e325c",
+   "name": "COMPETES_WITH",
+   "fact": "Sodium-ion battery technology competes with LFP battery chemistry for low-range and cost-sensitive applications, while LFP consolidates as the dominant volume chemistry through 2030."
+  },
+  {
+   "source": "8b66f322-b4bb-4868-9922-38b916754fc6",
+   "target": "85302274-5e80-4604-bfa5-014945d58d42",
+   "name": "INFLUENCES",
+   "fact": "The European Union's December 16, 2025 proposal to soften the 2035 ICE phase-out to a 90% CO2 reduction target (allowing 10% biofuels or e-fuels) was driven by concerns about Chinese competitive pressure, similar to the rationale underlying the 100% United States Section 301 tariffs on Chinese EVs."
+  },
+  {
+   "source": "8a08501e-cf57-470c-b350-97f17604ead9",
+   "target": "67f314e9-8f26-4c66-8051-375e325185ce",
+   "name": "INFLUENCES",
+   "fact": "MOFCOM export licensing for battery materials and Canada's reversal of its 100% tariff on Chinese EVs both reflect shifting global trade dynamics affecting Chinese EV and battery supply chains"
+  },
+  {
+   "source": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "target": "8b66f322-b4bb-4868-9922-38b916754fc6",
+   "name": "REGULATES",
+   "fact": "On December 16, 2025, the European Commission proposed amending Regulation (EU) 2019/631 to change the 2035 target from 100% CO₂ reduction to 90% CO₂ reduction, with the remaining 10% permitted through biofuels and e-fuels compensation mechanisms."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "b7f0abae-6cc1-40db-a3bd-3f573f03cfff",
+   "name": "COMPETES_WITH",
+   "fact": "BYD's Blade Battery competes with CATL's Qilin battery as first-generation cell-to-pack implementations."
+  },
+  {
+   "source": "ff6acb48-6425-4e5d-b716-c2ef3f0eda36",
+   "target": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "name": "ENABLES",
+   "fact": "The China NEV Mandate (2018-2024) enabled China's six-year transition from single-digit to 40%+ EV market share via dual-credit policy and industrial policy integration."
+  },
+  {
+   "source": "668489ca-d45b-43fb-adaf-b4ac32dccbb4",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "COMPETES_WITH",
+   "fact": "HiPhi has entered restructuring while BYD continues expansion, illustrating the divergent outcomes among Chinese EV brands."
+  },
+  {
+   "source": "cd8025fc-6f22-4b8a-81be-afd252e46a0a",
+   "target": "4c18bfb8-415e-46b2-9494-4933c8aef37f",
+   "name": "INFLUENCES",
+   "fact": "The Iran War's oil price volatility has increased battery material costs, affecting nickel-cobalt-manganese (NCM) chemistry production economics."
+  },
+  {
+   "source": "d1b8de75-e165-4474-a77c-39ddcb0055b7",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "INFLUENCES",
+   "fact": "A sustained Strait of Hormuz closure would accelerate EV adoption and increase battery material costs across OEMs including BYD."
+  },
+  {
+   "source": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "target": "8b66f322-b4bb-4868-9922-38b916754fc6",
+   "name": "REGULATES",
+   "fact": "The European Union reversed its 2035 internal combustion engine (ICE) ban policy in December 2025, retreating from the planned ban."
+  },
+  {
+   "source": "900b40af-3c3c-4f3e-8279-fd4100ce3540",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "COMPETES_WITH",
+   "fact": "Neta has entered restructuring while BYD continues expansion, illustrating the divergent outcomes among Chinese EV brands."
+  },
+  {
+   "source": "18bef761-0325-41a6-bcce-77636ce0fb96",
+   "target": "ffd7fe82-246d-482d-9089-2a89fc6bee05",
+   "name": "DELAYED_VS_ANNOUNCEMENT",
+   "fact": "Tesla 4680 cell production and Toyota solid-state battery timelines have consistently slipped versus original targets, with production reality lagging announcements by 2-5 years historically."
+  },
+  {
+   "source": "ffd7fe82-246d-482d-9089-2a89fc6bee05",
+   "target": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "COMPETES_WITH",
+   "fact": "Solid-state battery technology competes with LFP battery chemistry but its mass-market displacement remains beyond the 2026-2035 forecast horizon."
+  },
+  {
+   "source": "10ea79b1-bb72-4c00-b2b3-26dfe5df7a1a",
+   "target": "1d83295a-ef7b-4b59-b8a6-4909125fc7cc",
+   "name": "DEPENDS_ON",
+   "fact": "Toyota's SSB development still requires lithium for current HEV/PHEV/BEV production; Idemitsu partnership is electrolyte-focused not raw material substitute（sign=neutral，strength=medium，grade=B2，valence=directional，polarity=0.30）"
+  },
+  {
+   "source": "6e31cb60-3c1a-40b0-9dda-050cddd8543f",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "SUPPORTS",
+   "fact": "MIIT dual-credit policy, NEV purchase tax exemption, and provincial government support directly underpin BYD's domestic and export expansion（sign=ally，strength=high，grade=A1，valence=allied，polarity=0.90）"
+  },
+  {
+   "source": "f6e09392-3e8a-48c2-ae70-9d13d85ac41f",
+   "target": "a70b362c-bf92-4952-95a7-0e4b05919a4d",
+   "name": "COMPETES_WITH",
+   "fact": "Hyundai-Kia has deployed 800V electrical architectures while Volkswagen's 800V implementation arrives in 2026-2027."
+  },
+  {
+   "source": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "target": "07285a39-ba68-461b-bd6f-82ae2e11659d",
+   "name": "PARTNERS_WITH",
+   "fact": "CATL pursues sodium-ion battery commercialization targeted for 2026-2027 alongside its LFP and condensed battery portfolios."
+  },
+  {
+   "source": "c1f8c2fb-22a2-4d1f-8515-6e528ed93734",
+   "target": "1f4a7754-0a5c-45d8-867c-b0a947f64ca3",
+   "name": "REGULATES",
+   "fact": "In 2024, the EU launched provisional anti-subsidy duties on Chinese BEVs, initiating trade defense."
+  },
+  {
+   "source": "c7fba6cf-d34b-482a-ab52-ef47c44b1566",
+   "target": "ffd7fe82-246d-482d-9089-2a89fc6bee05",
+   "name": "COMPETES_WITH",
+   "fact": "Lithium iron phosphate (LFP) batteries will favor over premium solid-state battery alternatives through 2030 based on battery technology evolution."
+  },
+  {
+   "source": "aaa0be8b-0c08-4f80-9012-e14d86fe7e19",
+   "target": "43a6d9ab-ac99-476d-a345-92b19644fbc5",
+   "name": "COMPETES_WITH",
+   "fact": "Geely and Leapmotor, along with BYD, are scaled Chinese OEMs continuing expansion while weaker brands enter restructuring."
+  },
+  {
+   "source": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "target": "94ced99b-880d-444b-86d7-6c01121dd71a",
+   "name": "REGULATES",
+   "fact": "In October 2025, China expanded rare earth export controls as a strategic leverage signal."
+  },
+  {
+   "source": "9fe2c807-0a85-4fc2-91b4-269148487271",
+   "target": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "name": "INFLUENCES",
+   "fact": "ACEA has lobbied the European Commission for extended flexibility in the 2035 CO₂ framework."
+  },
+  {
+   "source": "6e31cb60-3c1a-40b0-9dda-050cddd8543f",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "CONSTRAINS",
+   "fact": "MOFCOM export licensing for graphite, rare earths, and cathode/anode precursors exerts strategic leverage over battery suppliers including CATL and downstream producers."
+  },
+  {
+   "source": "eceb7aa5-d5dd-475c-81c4-ee631848665f",
+   "target": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "name": "ENABLES",
+   "fact": "Section 177 state adoption by seventeen states plus DC (~40% of US new car sales) provides a partial demand floor that enables Tesla and other OEMs to mitigate the demand collapse from federal credit expiration, under which Tesla US sales declined >10% in H1 2026."
+  },
+  {
+   "source": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "target": "ffd7fe82-246d-482d-9089-2a89fc6bee05",
+   "name": "CONSTRAINS",
+   "fact": "EU December 2025 policy retreat delays BEV platform investments, indirectly constraining solid-state battery mass-market rollout timelines."
+  },
+  {
+   "source": "908443f9-c91e-441b-9bf9-97303c071aa2",
+   "target": "a13a0686-4fe7-487f-b6c0-ce0a4c2b0169",
+   "name": "COMPETES_WITH",
+   "fact": "NIO and XPeng are both profiled as Chinese OEMs competing in the EV market, with both having only partial Q2 2026 earnings guidance available."
+  },
+  {
+   "source": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "target": "9fb5d5e6-f5ff-4169-ab2a-0c73f2b16a9c",
+   "name": "COMPETES_WITH",
+   "fact": "China, Australia, Chile, and Argentina are the primary geographic concentrations of global lithium production, with China also controlling over 65% of global refining capacity."
+  },
+  {
+   "source": "f6e09392-3e8a-48c2-ae70-9d13d85ac41f",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "COMPETES_WITH",
+   "fact": "Hyundai, as an established brand, benefits from service network advantages over new entrants including BYD in export markets."
+  },
+  {
+   "source": "984de0a4-8587-4c48-afb1-93217d2b6ab7",
+   "target": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "INFLUENCES",
+   "fact": "Reversal of ZEV mandates in the EU and UK influences the demand environment for LFP batteries."
+  },
+  {
+   "source": "16698ab2-1156-4d6c-986a-2ccb293ddaa3",
+   "target": "c6d5cd99-c4b1-4164-a866-95ce6074bda4",
+   "name": "INFLUENCES",
+   "fact": "AlixPartners' projection that only 19 of 137 Chinese NEV brands will be profitable by 2030 would, if significantly exceeded (e.g., 40+ brands), strengthen Chinese OEM expansion and overwhelm Western OEM retreat through price competition."
+  },
+  {
+   "source": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "target": "ded925b7-efdf-4748-8cb1-f68b68ba15ff",
+   "name": "COMPETES_WITH",
+   "fact": "Tesla and Rivian represent the Full BEV commitment strategic position among Western OEMs."
+  },
+  {
+   "source": "2a88406e-d9cf-4e42-9ac2-68a38ad4a779",
+   "target": "5423e18f-52a2-4cd1-a8dd-dd1e0b2e325c",
+   "name": "INFLUENCES",
+   "fact": "IEA forecasts continued EV growth despite regional policy headwinds, supporting LFP and sodium-ion adoption."
+  },
+  {
+   "source": "4ab7ebb2-81a4-4633-ab53-0cc1b3b53a07",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "COMPETES_WITH",
+   "fact": "Chinese challengers CALB, Gotion, and EVE Energy are expanding share against CATL in cell manufacturing."
+  },
+  {
+   "source": "6ac814b9-8b96-4690-b9b6-b7811ae22d49",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "SUPPLIES",
+   "fact": "Infineon is one of the dominant suppliers of power electronics, with supply remaining constrained amid accelerating EV adoption."
+  },
+  {
+   "source": "c9b130f9-794a-4349-97f0-2901541dbd0a",
+   "target": "5423e18f-52a2-4cd1-a8dd-dd1e0b2e325c",
+   "name": "INFLUENCES",
+   "fact": "BNEF forecasts continued EV growth, supporting consideration of sodium-ion as a complementary low-cost technology."
+  },
+  {
+   "source": "8a08501e-cf57-470c-b350-97f17604ead9",
+   "target": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "name": "CONSTRAINS",
+   "fact": "China's MOFCOM licensing regime for graphite, rare earths, and battery materials represents a strategic chokepoint that could disrupt Western OEM production such as Ford's."
+  },
+  {
+   "source": "613bdd51-6fce-4a1e-845f-f69db643a6ca",
+   "target": "613bdd51-6fce-4a1e-845f-f69db643a6ca",
+   "name": "PARTNERS_WITH",
+   "fact": "General Motors' Ultium battery platform development continues but with scaled-back capacity plans following Q4 2025 special charges of $7.2 billion including China joint venture writedowns."
+  },
+  {
+   "source": "cd8025fc-6f22-4b8a-81be-afd252e46a0a",
+   "target": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "name": "INFLUENCES",
+   "fact": "The Iran War created oil price volatility that paradoxically boosted EV consideration among consumers, influencing Tesla's market conditions."
+  },
+  {
+   "source": "4bc3d6eb-cb19-4143-84b9-cfa44d5ed453",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "COMPETES_WITH",
+   "fact": "Ford, as an established brand, benefits from service network advantages over new entrants including BYD in export markets."
+  },
+  {
+   "source": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "target": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "PARTNERS_WITH",
+   "fact": "CATL pursues technology leadership in LFP battery chemistry alongside sodium-ion and condensed battery development."
+  },
+  {
+   "source": "5423e18f-52a2-4cd1-a8dd-dd1e0b2e325c",
+   "target": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "ENABLES",
+   "fact": "Sodium-ion at energy density of 175 Wh/kg, compared to LFP's 180-200 Wh/kg, is constrained from displacing LFP in applications requiring higher energy density."
+  },
+  {
+   "source": "5423e18f-52a2-4cd1-a8dd-dd1e0b2e325c",
+   "target": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "COMPETES_WITH",
+   "fact": "Sodium-ion's cost trajectory ($40-60/kWh target) could disrupt LFP dominance in entry-level segments, though energy density limitations (175 Wh/kg vs. LFP's 180-200 Wh/kg) constrain application range."
+  },
+  {
+   "source": "cd8025fc-6f22-4b8a-81be-afd252e46a0a",
+   "target": "4f9b92c1-aebf-4c7f-bbea-dcc7de571284",
+   "name": "INFLUENCES",
+   "fact": "The 2026 Iran war disrupted fossil fuel supply chains, influencing the global electric vehicle industry trajectory from 2026 to 2035."
+  },
+  {
+   "source": "5423e18f-52a2-4cd1-a8dd-dd1e0b2e325c",
+   "target": "c6d5cd99-c4b1-4164-a866-95ce6074bda4",
+   "name": "ENABLES",
+   "fact": "Commercial viability of sodium-ion batteries at $50-70/kWh with 300+ Wh/kg by 2028-2029 would enable sub-$20,000 EVs in mature markets, countering the Western OEM retreat and plateau thesis."
+  },
+  {
+   "source": "a13a0686-4fe7-487f-b6c0-ce0a4c2b0169",
+   "target": "74a0a405-4333-4f52-bf39-ec47f44e4bfa",
+   "name": "COMPETES_WITH",
+   "fact": "Li Auto and NIO are both profiled as Chinese OEMs competing in the EV market, with Li Auto Q1 2026 earnings confirmed and NIO Q2 guidance partially available."
+  },
+  {
+   "source": "16698ab2-1156-4d6c-986a-2ccb293ddaa3",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "INFLUENCES",
+   "fact": "AlixPartners projects that BYD is one of only 19 of 137 Chinese NEV brands that will achieve profitability by 2030."
+  },
+  {
+   "source": "64e0d7e5-7073-47a8-a715-c404140658e1",
+   "target": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "name": "COMPETES_WITH",
+   "fact": "Xiaomi competes with Tesla in the Chinese NEV market; Tesla's China market share was halved to 6.5% in 2025 while Xiaomi was one of only three profitable Chinese NEV brands."
+  },
+  {
+   "source": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "target": "04bf3777-3aa4-4d99-8204-a57854130ad0",
+   "name": "INFLUENCES",
+   "fact": "China maintains 52% of global EV sales in the base scenario, in contrast to Western Europe where demand volatility is tied to policy reversals and infrastructure constraints."
+  },
+  {
+   "source": "fbb4433c-8089-49aa-b7b3-65162d44e376",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "COMPETES_WITH",
+   "fact": "Chinese challengers CALB, Gotion, and EVE Energy are expanding share against CATL in cell manufacturing."
+  },
+  {
+   "source": "266c941b-ac5b-4383-9379-abdf813dce10",
+   "target": "9807a541-a627-4b96-8062-2bb67c80d098",
+   "name": "COMPETES_WITH",
+   "fact": "Wuling Mini EV and Geely Panda Mini compete in the fastest-growing entry-level EV segment (<$30,000) in China."
+  },
+  {
+   "source": "f6e09392-3e8a-48c2-ae70-9d13d85ac41f",
+   "target": "a70b362c-bf92-4952-95a7-0e4b05919a4d",
+   "name": "COMPETES_WITH",
+   "fact": "Hyundai-Kia is positioned as the best-positioned Western OEM for the EV transition, in contrast to Volkswagen Group's structural challenges and delayed BEV launches."
+  },
+  {
+   "source": "c9b130f9-794a-4349-97f0-2901541dbd0a",
+   "target": "fa84cfcf-6068-40c9-af1b-20d3936bdac6",
+   "name": "INFLUENCES",
+   "fact": "BNEF forecasts continued EV growth despite elevated battery raw material costs, supporting LFP expansion trajectory."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "4952d6d3-73cb-43ef-aafe-f94695a307b5",
+   "name": "COMPETES_WITH",
+   "fact": "BYD has deployed 800V electrical architectures while Stellantis's 800V implementation arrives in 2026-2027."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "1f4a7754-0a5c-45d8-867c-b0a947f64ca3",
+   "name": "CONSTRAINS",
+   "fact": "BYD's Chinese OEM export expansion confronts the EU anti-subsidy duties in force, constraining its pricing and market access in Europe."
+  },
+  {
+   "source": "95115872-38b6-4bd1-9251-592434fbbf0d",
+   "target": "d1b8de75-e165-4474-a77c-39ddcb0055b7",
+   "name": "INFLUENCES",
+   "fact": "OPEC+ is listed as a strategic actor opposing the EV transition due to demand displacement concerns tied to Strait of Hormuz oil disruption."
+  },
+  {
+   "source": "146995ec-dec7-4b00-9986-97ce7c5d62d1",
+   "target": "c188f12f-272f-4756-97e7-ba15c2047efb",
+   "name": "REGULATES",
+   "fact": "In 2024, the US imposed a 100% tariff on Chinese EVs, escalating trade protectionism."
+  },
+  {
+   "source": "cd8025fc-6f22-4b8a-81be-afd252e46a0a",
+   "target": "4952d6d3-73cb-43ef-aafe-f94695a307b5",
+   "name": "INFLUENCES",
+   "fact": "The Iran War created oil price volatility that paradoxically boosted EV consideration among consumers, influencing Stellantis' market conditions."
+  },
+  {
+   "source": "2b995f93-9bbf-4950-885b-8f6474dfef41",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "COMPETES_WITH",
+   "fact": "Chinese challengers CALB, Gotion, and EVE Energy are expanding share against CATL in cell manufacturing."
+  },
+  {
+   "source": "16698ab2-1156-4d6c-986a-2ccb293ddaa3",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "INFLUENCES",
+   "fact": "AlixPartners projects Chinese automakers, including BYD, will triple overseas production by 2030."
+  },
+  {
+   "source": "e67c8519-2350-469a-b5a2-10489feb55ae",
+   "target": "902a9cc4-fb02-4f85-907f-454863942534",
+   "name": "PARTNERS_WITH",
+   "fact": "Huayou controls Indonesian HPAL production for battery-grade nickel supply growth, with capacity additions projected to meet demand through 2028."
+  },
+  {
+   "source": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "SUPPLIES",
+   "fact": "CATL supplies batteries in competition with BYD's vertically integrated battery production for the global EV market."
+  },
+  {
+   "source": "9807a541-a627-4b96-8062-2bb67c80d098",
+   "target": "aaa0be8b-0c08-4f80-9012-e14d86fe7e19",
+   "name": "ENABLES",
+   "fact": "Geely Panda Mini is part of the fastest-growing entry-level EV segment (<$30,000) in China."
+  },
+  {
+   "source": "95115872-38b6-4bd1-9251-592434fbbf0d",
+   "target": "efc7107d-93b3-4fea-975e-6e2880e45e1c",
+   "name": "INFLUENCES",
+   "fact": "OPEC+ supply discipline could contribute to Brent crude remaining above $100/barrel for extended periods, boosting EV consideration in oil-dependent markets."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "name": "COMPETES_WITH",
+   "fact": "Global BEV leadership contest: BYD delivered 2.26M units in 2025 vs Tesla's 1.64M; contested in Q2 2026 with Tesla's 480k deliveries and BYD's overseas export surge（sign=rival，strength=high，grade=A1，valence=adversarial，polarity=-0.80）"
+  },
+  {
+   "source": "16698ab2-1156-4d6c-986a-2ccb293ddaa3",
+   "target": "43a6d9ab-ac99-476d-a345-92b19644fbc5",
+   "name": "INFLUENCES",
+   "fact": "AlixPartners projects that Leapmotor is one of only 19 of 137 Chinese NEV brands that will achieve profitability by 2030."
+  },
+  {
+   "source": "ffd7fe82-246d-482d-9089-2a89fc6bee05",
+   "target": "c6d5cd99-c4b1-4164-a866-95ce6074bda4",
+   "name": "ENABLES",
+   "fact": "Commercial viability of solid-state batteries at $50-70/kWh with 300+ Wh/kg by 2028-2029 would enable sub-$20,000 EVs in mature markets, countering Western OEM retreat and the plateau thesis."
+  },
+  {
+   "source": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "target": "c6d5cd99-c4b1-4164-a866-95ce6074bda4",
+   "name": "ENABLES",
+   "fact": "Enforcement of the EU 2035 ban at original 100% stringency would counter Western OEM retreat by enabling EU EV share to exceed 35% by 2030."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "e8460784-2046-40d0-9568-e8fba733bff6",
+   "name": "COMPETES_WITH",
+   "fact": "BYD, NIO, and VinFast are new entrants facing trust deficits in export markets while established brands benefit from service network advantages."
+  },
+  {
+   "source": "6e31cb60-3c1a-40b0-9dda-050cddd8543f",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "CONSTRAINS",
+   "fact": "MOFCOM implemented an export license regime for battery-grade graphite in 2025, providing China with a strategic chokepoint over anode material supply that affects battery production for OEMs like BYD."
+  },
+  {
+   "source": "07285a39-ba68-461b-bd6f-82ae2e11659d",
+   "target": "ffd7fe82-246d-482d-9089-2a89fc6bee05",
+   "name": "COMPETES_WITH",
+   "fact": "Sodium-ion batteries will favor over premium solid-state alternatives through 2030, with projected emergence as cost-competitive."
+  },
+  {
+   "source": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "target": "be53cbf0-d1b6-470f-b249-63134a66b80f",
+   "name": "REGULATES",
+   "fact": "The European Commission's December 16, 2025 proposal amends EU Regulation 2019/631 to allow 90% CO₂ reduction from 2035, permitting continued ICE/PHEV sales post-2035."
+  },
+  {
+   "source": "9fe2c807-0a85-4fc2-91b4-269148487271",
+   "target": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "name": "INFLUENCES",
+   "fact": "ACEA has lobbied for extended flexibility, influencing the EU December 2025 proposal that allows continued ICE/PHEV sales post-2035."
+  },
+  {
+   "source": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "target": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "name": "REGULATES",
+   "fact": "On December 16, 2025, the EU Commission proposed a 90% CO₂ reduction target, softening the original 2035 ICE ban."
+  },
+  {
+   "source": "aaa0be8b-0c08-4f80-9012-e14d86fe7e19",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "COMPETES_WITH",
+   "fact": "BYD, Geely, and Leapmotor are scaled Chinese OEMs that continue expansion while HiPhi, Neta, and WM Motor have entered restructuring."
+  },
+  {
+   "source": "684c9f37-ac24-4d00-80dc-5c8867610c9e",
+   "target": "0c575edf-e2cb-4b0b-87ff-ae867532595e",
+   "name": "ENABLES",
+   "fact": "Megawatt Charging System (MCS) enables 1+ MW charging rates for long-haul electric trucks."
+  },
+  {
+   "source": "249b3f0b-1304-4ba6-806f-c1fcb650742e",
+   "target": "28590d20-d244-4fb4-ab3e-477c645a5f61",
+   "name": "REGULATES",
+   "fact": "The US EPA rescinded the endangerment finding in February 2026 and implements OBBBA, revoking California's ACC II waiver and preempting state standards."
+  },
+  {
+   "source": "908443f9-c91e-441b-9bf9-97303c071aa2",
+   "target": "c188f12f-272f-4756-97e7-ba15c2047efb",
+   "name": "TRADE_DEFENSE_INVESTIGATION",
+   "fact": "US Section 301 tariffs (100% on Chinese EVs) affect Chinese OEMs including XPeng, with implementation nuances only partially confirmed."
+  },
+  {
+   "source": "f717f6e5-cbbe-41d2-b643-c35a6eac464c",
+   "target": "c1f8c2fb-22a2-4d1f-8515-6e528ed93734",
+   "name": "INFLUENCES",
+   "fact": "Reciprocal tariff escalation between China and the EU could create fragmented global supply chains and pricing disparities."
+  },
+  {
+   "source": "cacdf059-2b14-48d6-be99-04cde3e433de",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "COMPETES_WITH",
+   "fact": "Tesla, as an established brand, benefits from service network advantages over new entrants including BYD, NIO, and VinFast in export markets."
+  },
+  {
+   "source": "1992d238-f368-4105-ba8b-58bfcb21c42d",
+   "target": "249b3f0b-1304-4ba6-806f-c1fcb650742e",
+   "name": "WAIVER_REVOKED_FOR",
+   "fact": "The EPA waiver for California's Advanced Clean Cars II program was revoked via Congressional Review Act resolutions signed June 12, 2025."
+  },
+  {
+   "source": "984de0a4-8587-4c48-afb1-93217d2b6ab7",
+   "target": "ffd7fe82-246d-482d-9089-2a89fc6bee05",
+   "name": "INFLUENCES",
+   "fact": "Reversal of ZEV mandates may recur and influences Western OEM commitment to premium solid-state battery timelines."
+  },
+  {
+   "source": "1d83295a-ef7b-4b59-b8a6-4909125fc7cc",
+   "target": "7a2f6c06-c656-4186-87d1-ccf393730a20",
+   "name": "PARTNERS_WITH",
+   "fact": "Tsingshan is one of the controllers of Indonesian high-pressure acid leaching (HPAL) production for battery-grade nickel."
+  },
+  {
+   "source": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "target": "c52b9c08-fbe3-4613-b5b1-db4a94477143",
+   "name": "PRODUCES",
+   "fact": "BYD's Blade Battery represents a first-generation cell-to-pack implementation."
+  },
+  {
+   "source": "04bf3777-3aa4-4d99-8204-a57854130ad0",
+   "target": "163d81ef-b772-4518-b238-c3f325e5c369",
+   "name": "INFLUENCES",
+   "fact": "EU enforcement of the original 2035 ICE ban (100% zero-emission) accelerates EV adoption in Western Europe in the Policy Push Scenario."
+  },
+  {
+   "source": "24fd1297-c2ba-4969-9116-856e49eedb12",
+   "target": "f1e58104-0e3e-4f2d-bf65-9aa92f7272b9",
+   "name": "TRADE_DEFENSE_INVESTIGATION",
+   "fact": "EU anti-subsidy investigation on Chinese BEVs and proposed 100% tariff option; BYD's aggressive overseas expansion is direct subject（sign=rival，strength=high，grade=A1，valence=adversarial，polarity=-0.70）"
   }
  ],
- "graph_id": "mirofish_76972211fdd840ac"
+ "graph_id": "mirofish_204aa50069334f1b"
 }
