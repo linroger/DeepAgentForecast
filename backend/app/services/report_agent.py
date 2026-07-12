@@ -2941,6 +2941,7 @@ class ReportAgent:
             try:
                 from .forecast_extractor import (
                     _binary_quality as _binary_quality_score,
+                    apply_horizon_consistency as _apply_horizon_consistency,
                     extract_binary_forecasts as _ebf,
                     reconcile_forecast_contract as _reconcile_forecast_contract,
                 )
@@ -2982,6 +2983,11 @@ class ReportAgent:
                         _mkt = self._build_market_pack()
                     except Exception:  # noqa: BLE001
                         _mkt = ""
+                # CAL-TEMPORAL：把日历模式抽取出的真实判定日 horizon_date 接入二元预测抽取，
+                # 让结算年份提示对齐预测期（否则提示词硬编码 2027，多年期日历运行下 Part-1
+                # 二元预测会静默结算到 2027，与情景骨架/图表的日历判定日不一致）。hours 模式
+                # _temporal_horizon_date() 返回 ""，传 None ⇒ 旧行为逐字节不变（degrade-safe）。
+                _hz_date = self._temporal_horizon_date() or None
                 # B2: 需求书解析出的 binary_min_count 参与生效——取 spec 与 Config 的较大者
                 # （需求书写明「15+ binary forecasts」时不被 Config 默认静默压低）。
                 _bres = _ebf(
@@ -2994,6 +3000,7 @@ class ReportAgent:
                     market_pack=_mkt or None,
                     markets=getattr(self, "_prediction_markets", None) or None,
                     scenarios=forecast.get("scenarios") or None,
+                    horizon_date=_hz_date,
                 )
                 if _bres.get("binary_forecasts"):
                     forecast["binary_forecasts"] = _bres["binary_forecasts"]
@@ -3006,6 +3013,17 @@ class ReportAgent:
                     )
                     _quality["proposition_consistency"] = _contract
                     forecast["binary_quality"] = _quality
+                    # RQ-6：校验二元预测结算年份与真实判定期一致——目标年份集合（需求书 +
+                    # 日历 horizon_date.year）与二元结算年份集合非空且无交集时，把
+                    # quality["horizon_mismatch"] 合并进 forecast（供发布门降信心）。日历
+                    # horizon 缺失（hours 模式）时 horizon_date=None，退回仅按需求书校验，
+                    # 行为不变（degrade-safe，绝不覆盖既有 quality 键）。
+                    try:
+                        _apply_horizon_consistency(
+                            forecast, getattr(self, "simulation_requirement", None),
+                            horizon_date=_hz_date)
+                    except Exception:  # noqa: BLE001 — 观测性校验，绝不影响产物
+                        pass
                     # PM-2：确定性市场对照负载（预测 vs 市场隐含概率、|Δ|、>10pp 判定）——嵌入
                     # forecast.json 并独立落 market_comparison.json，供 Part-1 后的「Market Cross-Check」
                     # 渲染块与下游消费。无锚定预测时不写（degrade-safe）。

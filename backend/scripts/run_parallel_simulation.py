@@ -1710,14 +1710,17 @@ def _observe_agent_dynamics(tracker, actual_actions, name_to_id):
 
 def _inject_period_context(env, active_ids, round_num, period, timeline,
                            fired_events, world_delta) -> None:
-    """CAL-TEMPORAL: env.step 前给每个活跃 agent 追加一条本轮「世界时钟」SYSTEM 记忆。
+    """CAL-TEMPORAL: env.step 前给每个活跃 agent 追加一条本轮「世界时钟」记忆。
 
-    机制与 _inject_agent_dynamics 一致（update_memory 追加最新 system 记录，不清空
-    跨轮会话记忆，astep 读 memory.get_context() 时它成为动作提示前最新的系统消息）。
-    头部含日历时段/轮次进度/预测判定日（spec §5 verbatim）；CONFIRMED EVENTS 列出
-    本轮已到期的日程事件；WHAT CHANGED LAST PERIOD 段由 SIM_WORLD_DELTA 开关控制
-    （默认开），摘要为空（首轮 / in-band 演化未产出）时显示 "(first period)"。
-    仅日历模式调用；全程 best-effort——无法构造/单个 agent 失败均静默跳过，绝不中断轮循环。
+    以 USER 角色写入（关键）：camel-ai 0.2.78 的 ScoreBasedContextCreator 只保留
+    records[0] 作系统消息、丢弃其后所有 SYSTEM 记录，故用 OpenAIBackendRole.SYSTEM
+    写入的动态世界时钟根本到不了模型（实测 get_context() 丢弃）；改用 USER 角色则随
+    环境消息一同送达（与 OASIS 把「你的环境：[帖子…]」作 USER 消息投喂同源），且
+    update_memory 不清空跨轮记忆。头部含日历时段/轮次进度/预测判定日（spec §5 verbatim）；
+    CONFIRMED EVENTS 列出本轮已到期的日程事件；WHAT CHANGED LAST PERIOD 段由
+    SIM_WORLD_DELTA 开关控制（默认开），摘要为空（首轮 / in-band 演化未产出）时显示
+    "(first period)"。仅日历模式调用；全程 best-effort——无法构造/单个 agent 失败均静默
+    跳过，绝不中断轮循环。
     """
     if not isinstance(period, dict) or not period:
         return
@@ -1772,7 +1775,9 @@ def _inject_period_context(env, active_ids, round_num, period, timeline,
         try:
             agent = env.agent_graph.get_agent(aid)
             note = BaseMessage.make_user_message(role_name="WorldClock", content=text)
-            agent.update_memory(note, OpenAIBackendRole.SYSTEM)
+            # USER 角色（非 SYSTEM）：见 docstring——SYSTEM 记录会被 camel 的上下文构造器
+            # 丢弃，只有 USER 记录能随环境送达模型。这是本特性真正落地的关键行。
+            agent.update_memory(note, OpenAIBackendRole.USER)
         except Exception:
             continue
 
@@ -3166,6 +3171,11 @@ def _get_inband_evolution(config: Dict[str, Any], simulation_dir: str,
             return None
         seed = config.get("world_state_seed") if isinstance(config, dict) else None
         if not (isinstance(seed, dict) and seed.get("scenarios")):
+            # CAL-TEMPORAL 可观测性：种子无情景 ⇒ 世界演化关闭、轨迹退化为先验（无 delta、
+            # 无 world_state_trajectory.json）。此前静默返回 None——现明确告警，便于运维区分
+            # 「按配置关闭」与「研究阶段未产出 forecast 情景」这一真实降级。
+            log_info("in-band 世界演化关闭：world_state_seed 无 scenarios"
+                     "（研究阶段未产出 forecast 情景 → 轨迹将退化为先验，无逐轮演化）")
             return None
         key = os.path.abspath(simulation_dir)
         evo = _INBAND_EVOLUTIONS.get(key)

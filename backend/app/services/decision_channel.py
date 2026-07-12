@@ -36,11 +36,15 @@ decisions/轨迹行带 period_end，输出 schema v3。``round_dates=None`` → 
 
 from __future__ import annotations
 
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from .worldstate import WorldState, commitments_from_decisions
+
+# 仅用 stdlib logging，保持本模块导入纯净（子进程 in-band 演化直接 import 本模块）。
+logger = logging.getLogger(__name__)
 
 # Synthetic roster id for the collapsed audience tail (R2-EXEC-10). A string id never
 # collides with the integer agent ids OASIS emits.
@@ -227,7 +231,11 @@ def _elicit_round_decisions(llm, scenarios: List[str], active: List[Dict[str, An
             temperature=0.2,
             max_tokens=2048,
         )
-    except Exception:  # noqa: BLE001 — 一轮 elicit 失败不拖垮整条决策通道
+    except Exception as _elicit_err:  # noqa: BLE001 — 一轮 elicit 失败不拖垮整条决策通道
+        # 观测性：此前静默返回 []（该轮无承诺 → WorldState 仅按熵地板演化，轨迹看似真实
+        # 却实为近静态先验）。降级为 debug 级告警，便于事后区分「真实收敛」与「LLM 连续失败」。
+        logger.debug("决策通道单轮 elicit 失败（该轮承诺置空，演化退化为先验+熵地板）: %s",
+                     _elicit_err)
         return []
     decs = raw.get("decisions") if isinstance(raw, dict) else None
     out: List[Dict[str, Any]] = []

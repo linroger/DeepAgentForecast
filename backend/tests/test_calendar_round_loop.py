@@ -266,6 +266,16 @@ def _world_clock_notes(env):
     return notes
 
 
+def _world_clock_roles(env):
+    """本轮世界时钟注入所用的 backend role 列表（回归护栏见 test_world_clock_delivered_as_user）。"""
+    roles = []
+    for _aid, agent in env.agent_graph.get_agents():
+        for content, role in agent.memory_notes:
+            if content.startswith("# WORLD CLOCK"):
+                roles.append(role)
+    return roles
+
+
 # ===========================================================================
 # 1+2+3+4+5+6) 日历全链路：轮数/时段字段/激活/注入/in-band 演化产物
 # ===========================================================================
@@ -364,6 +374,28 @@ def test_calendar_loop_full_run(tmp_path, monkeypatch):
     assert traj["decisions"] and all(d.get("period_end") for d in traj["decisions"])
     assert all("weight" not in d for d in traj["decisions"])
     assert os.path.exists(os.path.join(sim_dir, "decisions.jsonl"))
+
+
+# ===========================================================================
+# 3b) 回归护栏：世界时钟必须以 USER 角色投喂，否则模型收不到（camel 0.2.78
+#     ScoreBasedContextCreator 只留 records[0] 作系统消息、丢弃其后所有 SYSTEM 记录）。
+#     此前用 SYSTEM 角色注入，动态世界时钟被 get_context() 静默丢弃——特性形同虚设。
+# ===========================================================================
+def test_world_clock_delivered_as_user_role(tmp_path, monkeypatch):
+    from camel.types import OpenAIBackendRole
+    sim_dir = str(tmp_path)
+    envs, calls = [], []
+    _patch_runtime(monkeypatch, sim_dir, envs)
+    monkeypatch.setattr(dc, "elicit_round", _fake_elicit(calls))
+    _run(_calendar_config(), sim_dir, max_rounds=1)
+    env = envs[0]
+
+    roles = _world_clock_roles(env)
+    assert roles, "世界时钟从未注入——特性未生效"
+    # 关键断言：每一条世界时钟记忆都以 USER 角色写入（绝非 SYSTEM）。
+    # 退回 SYSTEM 会让 camel 的上下文构造器丢弃它，模型永远收不到本轮时段/进度/演化摘要。
+    assert all(r == OpenAIBackendRole.USER for r in roles), (
+        f"世界时钟必须以 USER 角色投喂；发现非 USER 角色：{set(roles)}")
 
 
 # ===========================================================================
