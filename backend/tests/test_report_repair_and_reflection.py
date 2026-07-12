@@ -104,6 +104,323 @@ def test_repair_citation_backfill_calendar_year_alone_never_matches():
     assert n == 0 and new_md == md
 
 
+def test_final_quantitative_grounding_preserves_forecasts_and_removes_false_precision(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.75, raising=False
+    )
+    source = {
+        "title": "Official battery adoption report",
+        "url": "https://example.gov/battery-adoption",
+        "supports": ["Official battery adoption reached 55.6% in 2025."],
+    }
+    a = _repair_agent(sources=[source], _citation_index={"S1": source})
+    md = (
+        "# Forecast\n\n"
+        "## Part 1 — Binary Forecasts\n\n"
+        "| F1 | Authored outcome | 72% | Resolve above 40% by 2030 |\n\n"
+        "## Part 2 — Framework & Synthesis\n\n"
+        "Official battery adoption reached 55.6% in 2025.\n\n"
+        "Unsupported lunar adoption reached 99% in 2027. "
+        "The competitive mechanism remains material.\n\n"
+        "## How to Verify This Forecast (Resolution Criteria & Indicators)\n\n"
+        "Resolve the authored scenario at a 90% threshold by 2035.\n"
+    )
+
+    repaired, info = a._repair_final_quantitative_grounding(md)
+
+    assert info["applied"] is True
+    assert info["passed"] is True
+    assert info["citations_added"] == 1
+    assert info["sentences_removed"] == 1
+    assert info["after"]["resolved_coverage"] == 1.0
+    assert info["after"]["excluded_authored_forecast_claims"] == 3
+    assert "Official battery adoption reached 55.6% in 2025. [S1]" in repaired
+    assert "Unsupported lunar adoption" not in repaired
+    assert "The competitive mechanism remains material." in repaired
+    assert "| F1 | Authored outcome | 72% | Resolve above 40% by 2030 |" in repaired
+    assert "90% threshold by 2035" in repaired
+
+
+def test_final_quantitative_grounding_repairs_mixed_claims_and_preserves_table_shape(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.75, raising=False
+    )
+    source = {
+        "title": "Official battery adoption report",
+        "url": "https://example.gov/battery-adoption",
+        "supports": ["Official battery adoption reached 55.6% in 2025."],
+    }
+    a = _repair_agent(sources=[source], _citation_index={"S1": source})
+    md = (
+        "# Evidence\n\n"
+        "Official battery adoption reached 55.6% in 2025 [S1]. "
+        "Unsupported lunar adoption reached 99% in 2027.\n\n"
+        "| Metric | 2025 actual | 2026 forecast |\n"
+        "|---|---:|---:|\n"
+        "| Battery adoption | 55.6% | 99% |\n"
+    )
+
+    repaired, info = a._repair_final_quantitative_grounding(md)
+
+    assert info["passed"] is True
+    assert info["after"]["resolved_coverage"] == 1.0
+    assert "Unsupported lunar adoption" not in repaired
+    assert "| Metric | 2025 actual | 2026 forecast |" in repaired
+    assert "|---|---:|---:|" in repaired
+    assert "55.6% [S1]" in repaired
+    assert "| Battery adoption | 55.6% [S1] | — |" in repaired
+    semantically_repaired, semantic_info = a._repair_semantic_citations(repaired)
+    assert "55.6% [S1]" in semantically_repaired
+    assert semantic_info["stripped"] == 0
+    assert a._audit_semantic_citations(
+        semantically_repaired, a._citation_index_or_fallback()
+    )["unsupported"] == 0
+
+
+def test_final_quantitative_grounding_requires_matching_fence_delimiters(monkeypatch):
+    monkeypatch.setattr(
+        Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.75, raising=False
+    )
+    a = _repair_agent()
+    md = (
+        "```text\n"
+        "Inside code reached 99%.\n"
+        "~~~\n"
+        "Still inside code reached 88%.\n"
+        "```\n"
+        "Outside unsupported evidence reached 77%.\n"
+    )
+
+    repaired, info = a._repair_final_quantitative_grounding(md)
+
+    assert "Inside code reached 99%." in repaired
+    assert "Still inside code reached 88%." in repaired
+    assert "Outside unsupported evidence" not in repaired
+    assert info["passed"] is True
+
+
+def test_final_quantitative_grounding_supports_exact_chinese_evidence(monkeypatch):
+    monkeypatch.setattr(
+        Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.75, raising=False
+    )
+    source = {
+        "title": "官方新能源汽车报告",
+        "url": "https://example.gov.cn/ev-report",
+        "supports": ["中国电动车销量在2025年达到55.6%。"],
+    }
+    a = _repair_agent(
+        output_language="Chinese",
+        sources=[source],
+        _citation_index={"S1": source},
+    )
+
+    repaired, info = a._repair_final_quantitative_grounding(
+        "中国电动车销量在2025年达到55.6%。\n"
+    )
+
+    assert "中国电动车销量在2025年达到55.6%。 [S1]" in repaired
+    assert info["citations_added"] == 1
+    assert info["passed"] is True
+
+
+def test_chinese_han_adjacent_numeric_mismatch_never_gets_citation(monkeypatch):
+    monkeypatch.setattr(
+        Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.75, raising=False
+    )
+    source = {
+        "title": "官方新能源汽车报告",
+        "url": "https://example.gov.cn/ev-report-mismatch",
+        "supports": ["中国电动车销量在2025年达到12.3%。"],
+    }
+    a = _repair_agent(
+        output_language="Chinese",
+        sources=[source],
+        _citation_index={"S1": source},
+    )
+    claim = "中国电动车销量在2025年达到55.6%。"
+
+    assert a._semantic_citation_support(claim, source) is False
+    repaired, info = a._repair_final_quantitative_grounding(claim + "\n")
+
+    assert "[S1]" not in repaired
+    assert claim not in repaired
+    assert info["citations_added"] == 0
+    assert info["passed"] is True
+
+
+def test_final_quantitative_grounding_preserves_cross_language_unverifiable_claim(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.75, raising=False
+    )
+    source = {
+        "title": "Official EV report",
+        "url": "https://example.gov/ev-report",
+        "supports": ["Electric vehicle registrations reached 55.6% in 2025."],
+    }
+    a = _repair_agent(
+        output_language="Chinese",
+        sources=[source],
+        _citation_index={"S1": source},
+    )
+    claim = "中国电动车销量在2025年达到55.6%。"
+
+    repaired, info = a._repair_final_quantitative_grounding(claim + "\n")
+
+    # Cross-language lexical verification is inconclusive. Preserve the claim
+    # uncited so the unchanged publication gate fails honestly; do not censor it.
+    assert claim in repaired
+    assert "[S1]" not in repaired
+    assert info["passed"] is False
+    assert info["unverifiable_claims_preserved"] == 1
+
+
+def test_chinese_near_match_does_not_confuse_sales_with_production(monkeypatch):
+    monkeypatch.setattr(
+        Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.75, raising=False
+    )
+    source = {
+        "title": "官方新能源汽车报告",
+        "url": "https://example.gov.cn/ev-production",
+        "supports": ["中国电动车产量在2025年达到55.6%。"],
+    }
+    a = _repair_agent(
+        output_language="Chinese",
+        sources=[source],
+        _citation_index={"S1": source},
+    )
+    claim = "中国电动车销量在2025年达到55.6%。"
+
+    repaired, info = a._repair_final_quantitative_grounding(claim + "\n")
+
+    assert claim in repaired
+    assert "[S1]" not in repaired
+    assert info["passed"] is False
+    assert info["unverifiable_claims_preserved"] == 1
+
+
+def test_semantic_citation_support_removes_the_complete_multi_digit_tag():
+    source = {
+        "title": "IEA Global EV Outlook 2026 Webinar",
+        "url": "https://example.org/iea-global-ev-outlook-2026",
+        "supports": ["Global EV adoption outlook scenarios for 2026–2035."],
+    }
+    a = _repair_agent(sources=[source], _citation_index={"S26": source})
+    md = "Global EV adoption outlook scenarios for 2026–2035 [S26].\n"
+
+    repaired, info = a._repair_semantic_citations(md)
+
+    assert repaired == md
+    assert info["kept"] == 1
+    assert info["stripped"] == 0
+
+
+def test_table_context_does_not_confuse_sales_with_production(monkeypatch):
+    monkeypatch.setattr(
+        Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.75, raising=False
+    )
+    source = {
+        "title": "Official battery production report",
+        "url": "https://example.gov/battery-production",
+        "supports": ["Battery production reached 55.6% in 2025."],
+    }
+    a = _repair_agent(sources=[source], _citation_index={"S1": source})
+    md = (
+        "| Metric | 2025 actual |\n"
+        "|---|---:|\n"
+        "| Battery sales | 55.6% |\n"
+    )
+
+    repaired, info = a._repair_final_quantitative_grounding(md)
+
+    assert "[S1]" not in repaired
+    assert "| Battery sales | — |" in repaired
+    assert info["table_cells_cleared"] == 1
+    assert info["passed"] is True
+
+
+def test_table_header_words_cannot_override_contradictory_row_label(monkeypatch):
+    monkeypatch.setattr(
+        Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.75, raising=False
+    )
+    source = {
+        "title": "Earth battery adoption report",
+        "url": "https://example.gov/earth-battery-adoption",
+        "supports": ["Earth battery adoption reached 55.6% in 2025."],
+    }
+    a = _repair_agent(sources=[source], _citation_index={"S1": source})
+    md = (
+        "| Region | 2025 battery adoption |\n"
+        "|---|---:|\n"
+        "| Moon | 55.6% |\n"
+    )
+
+    repaired, info = a._repair_final_quantitative_grounding(md)
+
+    assert "[S1]" not in repaired
+    assert "| Moon | 55.6% |" in repaired
+    assert info["unverifiable_claims_preserved"] == 1
+    assert info["passed"] is False
+
+
+def test_table_without_outer_pipes_preserves_shape_and_repairs_cells(monkeypatch):
+    monkeypatch.setattr(
+        Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.75, raising=False
+    )
+    source = {
+        "title": "Official battery adoption report",
+        "url": "https://example.gov/battery-adoption",
+        "supports": ["Battery adoption reached 55.6% in 2025."],
+    }
+    a = _repair_agent(sources=[source], _citation_index={"S1": source})
+    md = (
+        "Metric | 2025 actual | 2026 forecast\n"
+        "--- | ---: | ---:\n"
+        "Battery adoption | 55.6% | 99%\n"
+    )
+
+    repaired, info = a._repair_final_quantitative_grounding(md)
+
+    assert "Metric | 2025 actual | 2026 forecast" in repaired
+    assert "--- | ---: | ---:" in repaired
+    assert "Battery adoption | 55.6% [S1] | —" in repaired
+    assert info["passed"] is True
+
+
+@pytest.mark.parametrize(
+    "md",
+    [
+        "Earth adoption reached 55.6% [S1];Moon adoption reached 99% [S1].\n",
+        "地球采用率在2025年达到55.6%[S1]；月球采用率在2025年达到99%[S1]。\n",
+    ],
+)
+def test_unspaced_semicolon_keeps_semantic_citation_ownership_separate(md):
+    source = {
+        "title": "Earth adoption report",
+        "url": "https://example.gov/earth-adoption",
+        "supports": [
+            "Earth adoption reached 55.6% in 2025.",
+            "地球采用率在2025年达到55.6%。",
+        ],
+    }
+    a = _repair_agent(sources=[source], _citation_index={"S1": source})
+
+    audit = a._audit_semantic_citations(md, {"S1": source})
+    repaired, info = a._repair_semantic_citations(md)
+
+    assert audit["unsupported"] == 1
+    assert audit["passed"] is False
+    assert info["kept"] == 1
+    assert info["stripped"] == 1
+    assert repaired.count("[S1]") == 1
+    assert "99% ." not in repaired
+
+
 def test_repair_citation_backfill_ambiguous_evidence_tie_stays_uncited():
     a = _repair_agent(sources=[
         {"title": "Survey A", "content": "regional adoption penetration reached 42%"},

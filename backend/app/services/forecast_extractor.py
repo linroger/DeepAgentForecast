@@ -17,7 +17,7 @@ import hashlib
 import logging
 import math
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ def _normalize_scenarios(scenarios: Any) -> List[Dict[str, Any]]:
 _SCENARIO_SUM_TOLERANCE = 0.015
 _SCENARIO_VALUE_TOLERANCE = 0.015
 _SCENARIO_RESIDUAL_TERMS = (
-    "status quo", "status-quo", "baseline", "base case", "residual",
+    "status quo", "status-quo", "baseline", "residual",
     "other", "catch-all", "remainder", "everything else", "all else",
     "none of the above", "otherwise",
     "维持现状", "基准", "基线", "其它", "其他", "兜底", "剩余",
@@ -276,6 +276,113 @@ def _is_residual_scenario_name(value: Any) -> bool:
     return False
 
 
+def _ensure_residual_critique_scenario(
+    scenarios: Any,
+    forecast: Dict[str, Any],
+) -> tuple[Optional[List[Dict[str, Any]]], bool]:
+    """Materialize the critic's unallocated mass as an explicit residual bin.
+
+    The publication contract requires a status-quo/other scenario, but an LLM
+    critic can lower every named probability without emitting the implied
+    remainder.  Normalizing that partial allocation immediately erases the
+    critic's uncertainty and makes its probability-bearing notes stale.  This
+    helper runs *before* normalization:
+
+    * preserve ``1 - sum(named probabilities)`` when the critic left real mass;
+    * otherwise reserve a small bounded residual and scale named rows together;
+    * never repair malformed/non-finite probabilities (the contract audit must
+      still expose those failures).
+
+    Returns a copied list plus whether a deterministic residual was inserted.
+    """
+    if not isinstance(scenarios, list) or not scenarios:
+        return None, False
+    if any(not isinstance(row, dict) for row in scenarios):
+        return None, False
+    rows = [dict(row) for row in scenarios]
+
+    probabilities: List[float] = []
+    for row in rows:
+        raw_probability = row.get("probability")
+        if type(raw_probability) not in (int, float):
+            return None, False
+        probability = float(raw_probability)
+        if not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
+            return None, False
+        probabilities.append(probability)
+    total = sum(probabilities)
+    if total <= 0.0:
+        return None, False
+    if total > 1.0 + _SCENARIO_SUM_TOLERANCE:
+        return None, False
+    if any(_is_residual_scenario_name(row.get("name")) for row in rows):
+        return rows, False
+
+    configured_floor = _coerce_float(_cfg("FORECAST_PROB_FLOOR", 0.03)) or 0.03
+    residual_floor = min(0.20, max(0.03, configured_floor))
+    unallocated = max(0.0, 1.0 - total)
+    residual_probability = (
+        unallocated
+        if unallocated >= max(_SCENARIO_SUM_TOLERANCE, residual_floor)
+        else residual_floor
+    )
+    residual_probability = min(0.95, residual_probability)
+    named_target = 1.0 - residual_probability
+    scale = named_target / total
+    for row, probability in zip(rows, probabilities, strict=True):
+        row["probability"] = probability * scale
+
+    text_probe = " ".join(
+        [str(forecast.get("headline") or "")]
+        + [str(row.get("name") or "") for row in rows]
+    )
+    is_cjk = bool(re.search(r"[\u4e00-\u9fff]", text_probe))
+    horizon = str(forecast.get("horizon") or "").strip()
+    if is_cjk:
+        residual = {
+            "name": "其它 / 维持现状",
+            "probability": residual_probability,
+            "summary": "已命名情景均未完整发生，结果呈现混合、延迟或接近既有轨迹的剩余路径。",
+            "key_drivers": ["政策与技术结果混合或延迟", "未满足任何已命名情景的完整判定标准"],
+            "resolution_criteria": (
+                f"截至{horizon or '预测期末'}，若所有已命名情景的完整判定标准均未满足，"
+                "或结果仍为混合/维持现状路径，则归入本剩余情景。"
+            ),
+            "base_rate_anchor": "红队重新分配后剩余的未分配概率质量。",
+            "adjustment_rationale": "以 1 减去已命名情景概率之和，确定性保留剩余情景。",
+            "critique_note": "为保证情景集合互斥且穷尽，显式补入剩余/维持现状情景。",
+        }
+    else:
+        residual = {
+            "name": "Other / Status Quo",
+            "probability": residual_probability,
+            "summary": (
+                "None of the named scenarios resolves in full; outcomes remain mixed, "
+                "delayed, or close to the prior trajectory."
+            ),
+            "key_drivers": [
+                "Mixed or delayed policy and technology outcomes",
+                "Failure to satisfy any named scenario's complete resolution contract",
+            ],
+            "resolution_criteria": (
+                f"At {horizon or 'the forecast horizon'}, classify this residual bin if none "
+                "of the named scenarios' complete resolution criteria are met, or if the "
+                "outcome remains a mixed/status-quo path."
+            ),
+            "base_rate_anchor": "Unallocated probability mass after red-team reassignment.",
+            "adjustment_rationale": (
+                "Deterministically preserves one minus the sum of the named scenario "
+                "probabilities as the residual path."
+            ),
+            "critique_note": (
+                "Added explicitly so the scenario partition remains mutually exclusive and "
+                "collectively exhaustive."
+            ),
+        }
+    rows.append(residual)
+    return rows, True
+
+
 _LEADING_RANGE_TIME_RE = re.compile(
     r"^\s*(?:(?:by|in|at|through|as\s+of|before|until)\s+"
     r"(?:FY\s*|CY\s*)?20\d{2}(?:\s*Q[1-4])?"
@@ -420,6 +527,49 @@ def _critique_probability_targets(note: Any) -> List[float]:
             if 0.0 <= target <= 1.0:
                 targets.append(target)
     return targets
+
+
+def _synchronize_scenario_probability_narratives(
+    scenarios: List[Dict[str, Any]],
+) -> None:
+    """Keep probability-bearing critique prose aligned after deterministic moves.
+
+    Residual insertion, humility clamping, or the pre-mortem can legitimately
+    rebalance probabilities after the critic writes its notes.  Preserve the
+    original qualitative explanation in a detail field, but replace a stale
+    numeric claim with an explicit final-calibration note.  This mutates only
+    rows whose prose contains a parsed target that contradicts the final value.
+    """
+    for scenario in scenarios:
+        if not isinstance(scenario, dict):
+            continue
+        probability = _coerce_float(scenario.get("probability"))
+        if probability is None:
+            continue
+        for field in ("critique_note", "adjustment_rationale"):
+            narrative = str(scenario.get(field) or "").strip()
+            if not narrative:
+                continue
+            targets = _critique_probability_targets(narrative)
+            if not any(
+                abs(target - probability) > _SCENARIO_VALUE_TOLERANCE
+                for target in targets
+            ):
+                continue
+            detail_field = f"{field}_detail"
+            scenario.setdefault(detail_field, narrative)
+            if field == "critique_note":
+                scenario[field] = (
+                    f"Final calibrated probability is {probability:.1%} after explicit "
+                    "residual-bin normalization and bounded uncertainty rebalancing; the "
+                    f"original qualitative review is preserved in {detail_field}."
+                )
+            else:
+                scenario[field] = (
+                    f"Final calibrated probability is {probability:.1%} after preserving an "
+                    "explicit residual/status-quo bin; the original anchor-and-adjust "
+                    f"reasoning is preserved in {detail_field}."
+                )
 
 
 def _bad_percentage_allocations(text: Any) -> List[Dict[str, Any]]:
@@ -1169,6 +1319,21 @@ def _normalize_binaries(items: Any, *, start_index: int = 1,
                 )
             if len(set(yes_scenarios)) != len(yes_scenarios):
                 membership_errors.append("yes_scenarios contains duplicates")
+            discarded_yes_scenarios: List[str] = []
+            if (
+                raw_derivable is False
+                and not membership_errors
+                and yes_scenarios
+            ):
+                # ``derivable=false`` is the conservative, non-binding choice:
+                # no scenario bin is permitted to overwrite this independent
+                # binary probability.  Some model responses still emit related
+                # (but not fully determining) scenario names.  Preserve those
+                # suggestions for diagnostics while canonicalizing the active
+                # contract to the prompt-mandated empty list.  Structurally
+                # malformed declarations continue to fail closed below.
+                discarded_yes_scenarios = list(yes_scenarios)
+                yes_scenarios = []
             row["scenario_membership"] = {
                 # Do not coerce strings such as ``"false"`` with ``bool()``:
                 # that silently turns an invalid model payload into permission
@@ -1178,6 +1343,10 @@ def _normalize_binaries(items: Any, *, start_index: int = 1,
                 ),
                 "yes_scenarios": yes_scenarios,
             }
+            if discarded_yes_scenarios:
+                row["scenario_membership"]["discarded_yes_scenarios"] = (
+                    discarded_yes_scenarios
+                )
             if membership_errors:
                 row["scenario_membership"]["validation_errors"] = membership_errors
         elif membership is not None:
@@ -2959,12 +3128,22 @@ def self_critique_forecast(forecast: Dict[str, Any], llm) -> Dict[str, Any]:
             temperature=0.2,
             max_tokens=2048,
         )
-        if not isinstance(raw, dict) or not raw.get("scenarios"):
+        if not isinstance(raw, dict):
+            return forecast
+        critique_scenarios = raw.get("scenarios")
+        if not isinstance(critique_scenarios, list) or not critique_scenarios:
             return forecast
         out = dict(forecast)
-        out["scenarios"] = _normalize_scenarios(raw.get("scenarios"))
+        raw_scenarios, residual_added = _ensure_residual_critique_scenario(
+            critique_scenarios, forecast,
+        )
+        if raw_scenarios is None:
+            return forecast
+        out["scenarios"] = _normalize_scenarios(raw_scenarios)
+        if not out["scenarios"]:
+            return forecast
         # preserve critique_note per scenario if the model supplied it
-        for new_s, raw_s in zip(out["scenarios"], raw.get("scenarios") or []):
+        for new_s, raw_s in zip(out["scenarios"], raw_scenarios or [], strict=True):
             if isinstance(raw_s, dict) and raw_s.get("critique_note"):
                 new_s["critique_note"] = str(raw_s["critique_note"])
         if raw.get("confidence"):
@@ -2976,10 +3155,53 @@ def self_critique_forecast(forecast: Dict[str, Any], llm) -> Dict[str, Any]:
         # R2-CAL-8：让红队评审「谦逊单调」——修正只能降低、不得抬高峰值自信。若评审反而把
         # 最高概率推得比原来更高，则把峰值夹回原始上限并重新归一（cap residual growth）。
         out["scenarios"] = _enforce_humility_monotone(forecast, out["scenarios"])
+        _synchronize_scenario_probability_narratives(out["scenarios"])
+        if residual_added:
+            out["residual_scenario_added"] = True
+            original_rationale = str(out.get("confidence_rationale") or "").strip()
+            if original_rationale:
+                out["confidence_rationale_detail"] = original_rationale
+            confidence = str(out.get("confidence") or "medium").strip().capitalize()
+            out["confidence_rationale"] = (
+                f"{confidence} confidence after red-team calibration. The named scenarios "
+                "plus an explicit residual/status-quo bin form a complete 100% partition; "
+                "remaining uncertainty reflects evidence quality, forecast-horizon length, "
+                "and unresolved policy and technology branches."
+            )
+        if audit_scenario_contract(out).get("valid") is not True:
+            return forecast
         out["critiqued"] = True
         return out
     except Exception:
         return forecast
+
+
+def _close_probability_rounding(
+    scenarios: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Close four-decimal probability rounding on one deterministic row."""
+    if not scenarios:
+        return scenarios
+    probabilities = [_coerce_float(row.get("probability")) for row in scenarios]
+    if any(probability is None for probability in probabilities):
+        return scenarios
+    rounded = [round(float(probability), 4) for probability in probabilities]
+    correction = round(1.0 - sum(rounded), 4)
+    target_index = next(
+        (
+            index
+            for index, row in enumerate(scenarios)
+            if _is_residual_scenario_name(row.get("name"))
+        ),
+        len(scenarios) - 1,
+    )
+    adjusted = rounded[target_index] + correction
+    if not 0.0 <= adjusted <= 1.0:
+        return scenarios
+    for row, probability in zip(scenarios, rounded, strict=True):
+        row["probability"] = probability
+    scenarios[target_index]["probability"] = round(adjusted, 4)
+    return scenarios
 
 
 def _enforce_humility_monotone(orig: Dict[str, Any],
@@ -2991,12 +3213,12 @@ def _enforce_humility_monotone(orig: Dict[str, Any],
     orig_probs = [_coerce_float(s.get("probability")) or 0.0
                   for s in (orig.get("scenarios") or []) if isinstance(s, dict)]
     if not orig_probs or len(new_scenarios) < 2:
-        return new_scenarios
+        return _close_probability_rounding(new_scenarios)
     orig_max = max(orig_probs)
     peak = max(new_scenarios, key=lambda s: _coerce_float(s.get("probability")) or 0.0)
     cur_max = _coerce_float(peak.get("probability")) or 0.0
     if cur_max <= orig_max + 1e-9:
-        return new_scenarios
+        return _close_probability_rounding(new_scenarios)
     # Cap the peak at the original peak and redistribute the FREED mass across the
     # other scenarios proportionally (a plain renormalize would re-inflate the peak).
     excess = cur_max - orig_max
@@ -3007,7 +3229,7 @@ def _enforce_humility_monotone(orig: Dict[str, Any],
         for s in others:
             p = _coerce_float(s.get("probability")) or 0.0
             s["probability"] = round(p + excess * (p / other_total), 4)
-    return new_scenarios
+    return _close_probability_rounding(new_scenarios)
 
 
 _PREMORTEM_INSTRUCTIONS = """你是预测红队的「事前验尸（pre-mortem）」分析师。假设到期时这份预测被证明**严重错误**。
@@ -3061,6 +3283,7 @@ def premortem_forecast(forecast: Dict[str, Any], llm) -> Dict[str, Any]:
                 shift = min(0.05, p_src * 0.25)
                 src["probability"] = round(p_src - shift, 4)
                 dst["probability"] = round((_coerce_float(dst.get("probability")) or 0.0) + shift, 4)
+        _synchronize_scenario_probability_narratives(out["scenarios"])
         out["premortem"] = {"underweighted_scenario": str(raw.get("underweighted_scenario") or ""),
                             "missed_signals": missed[:8]}
         return out
@@ -3069,8 +3292,9 @@ def premortem_forecast(forecast: Dict[str, Any], llm) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------- citation audit
-# A "quantitative claim" = a sentence/line carrying a number or percentage. We
-# check whether each such line is near a citation marker ([S1], 【S3】, etc.).
+# Citation coverage is measured at the smallest deterministic Markdown claim
+# surface we can preserve: prose sentences and individual table body cells.
+# A marker in one sentence/cell must never launder a neighboring numeric claim.
 _CITATION_RE = re.compile(r"[\[【]\s*S\d+\s*[\]】]", re.I)
 _NUMBER_RE = re.compile(r"\d+(?:\.\d+)?\s*%|\b\d{2,}(?:\.\d+)?\b|\b\d{4}年")
 # REPORT-6：模拟/图谱接地标记也算作有效接地——agent 言行引用（> "…"）、因果边渲染
@@ -3082,11 +3306,258 @@ _SIM_GROUNDING_RE = re.compile(
     re.I)
 
 
-def audit_citation_grounding(report_markdown: str,
-                             index_map: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Heuristic, offline audit (I-3-1 + REPORT-6): of the lines making a quantitative
-    claim, how many are *grounded* — i.e. carry a source citation ([S1]) OR a
-    simulation/edge-grounding marker (agent quote, causal-edge render, sim/edge ref)?
+BINARY_FORECAST_START_MARKER = "<!-- binary-forecast-block:start -->"
+BINARY_FORECAST_END_MARKER = "<!-- binary-forecast-block:end -->"
+
+_AUTHORED_FORECAST_H2_RE = re.compile(
+    r"^(?:"
+    r"##\s+Part\s*1\s*[—-]\s*Binary\s+Forecasts|"
+    r"##\s+第一部分\s*[·・]\s*二元预测"
+    r"(?:[（(]Part\s*1\s*[—-]\s*Binary\s+Forecasts[）)])?|"
+    r"##\s+How\s+to\s+Verify\s+This\s+Forecast\s*"
+    r"\(Resolution\s+Criteria\s*&\s*Indicators\)|"
+    r"##\s+如何验证本预测（判定标准与观察指标）"
+    r")\s*$",
+    re.I,
+)
+
+_MARKDOWN_FENCE_RE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})(.*)$")
+_MARKDOWN_TABLE_DELIMITER_CELL_RE = re.compile(r"^:?-{3,}:?$")
+_QUANT_CLAIM_BOUNDARY_RE = re.compile(
+    r"(?:"
+    r"[!?;。！？；](?:\s*[\[【]\s*S\d+(?:-[A-Za-z])?\s*[\]】])*"
+    r"[.!?;。！？；]?\s*(?=[A-Za-z0-9*_(`>\[\"'“‘（【\u3400-\u9fff])"
+    r"|"
+    r"\.(?!\d)(?:\s*[\[【]\s*S\d+(?:-[A-Za-z])?\s*[\]】])*"
+    r"[.!?;]?\s+(?=[A-Za-z0-9*_(`>\[\"'“‘（【\u3400-\u9fff])"
+    r")",
+    re.I,
+)
+_LEADING_CITATION_FRAGMENT_RE = re.compile(
+    r"^((?:[\[【]\s*S\d+(?:-[A-Za-z])?\s*[\]】]\s*)+)"
+    r"([.,;:。！？]?\s*)(.*)$",
+    re.I,
+)
+_DOTTED_INITIALISM_RE = re.compile(r"^(?:[A-Za-z]\.){2,}$")
+_MARKDOWN_LIST_PREFIX_RE = re.compile(r"^\s*(?:[-*+] |\d+[.)] )")
+
+# (opening character, minimum closing length); None means outside a fence.
+MarkdownFenceState = Optional[Tuple[str, int]]
+
+
+def markdown_fence_transition(
+    line: Any,
+    state: MarkdownFenceState,
+) -> Tuple[MarkdownFenceState, bool]:
+    """Advance a CommonMark-style fenced-block state machine.
+
+    A fence closes only with the same character and at least the opening length.
+    This prevents a literal ``~~~`` inside a backtick block (or vice versa) from
+    flipping scanners back into report prose. ``bool`` identifies fence lines so
+    callers can preserve/ignore them without treating their contents as claims.
+    """
+    match = _MARKDOWN_FENCE_RE.match(str(line or ""))
+    if not match:
+        return state, False
+    token, remainder = match.group(1), match.group(2)
+    marker = (token[0], len(token))
+    if state is None:
+        return marker, True
+    if marker[0] == state[0] and marker[1] >= state[1] and not remainder.strip():
+        return None, True
+    return state, True
+
+
+def markdown_table_cells(line: Any) -> List[str]:
+    """Return cells for a Markdown row, with leading/trailing pipes optional."""
+    stripped = str(line or "").strip()
+    separators = list(re.finditer(r"(?<!\\)\|", stripped))
+    if not separators:
+        return []
+    body = stripped[1:] if stripped.startswith("|") else stripped
+    if body.endswith("|") and not body.endswith(r"\|"):
+        body = body[:-1]
+    cells = re.split(r"(?<!\\)\|", body)
+    normalized = [cell.strip().replace(r"\|", "|") for cell in cells]
+    return normalized if len(normalized) >= 2 else []
+
+
+def is_markdown_table_delimiter(line: Any) -> bool:
+    cells = markdown_table_cells(line)
+    return bool(cells) and all(
+        bool(_MARKDOWN_TABLE_DELIMITER_CELL_RE.fullmatch(cell.replace(" ", "")))
+        for cell in cells
+    )
+
+
+def is_markdown_table_header(lines: List[str], index: int) -> bool:
+    """Return whether ``lines[index]`` is immediately followed by a delimiter."""
+    return bool(
+        0 <= index < len(lines) - 1
+        and markdown_table_cells(lines[index])
+        and is_markdown_table_delimiter(lines[index + 1])
+    )
+
+
+def split_markdown_claim_units(
+    text: Any,
+    *,
+    table_header: bool = False,
+    table_delimiter: bool = False,
+) -> List[str]:
+    """Split prose or a table row into independently auditable claim units.
+
+    Numeric table headers (for example ``2025 actual``) are labels and excluded,
+    as are delimiter rows. Table body cells are independent; prose/list content is
+    split on deterministic sentence boundaries while retaining citation markers
+    with the sentence they annotate.
+    """
+    raw = str(text or "")
+    if table_header or table_delimiter:
+        return []
+    cells = markdown_table_cells(raw)
+    surfaces = cells if cells else [_MARKDOWN_LIST_PREFIX_RE.sub("", raw, count=1)]
+    units: List[str] = []
+    for surface in surfaces:
+        fragments: List[str] = []
+        cursor = 0
+        for boundary in _QUANT_CLAIM_BOUNDARY_RE.finditer(surface):
+            fragment = surface[cursor:boundary.end()].strip()
+            if fragment:
+                fragments.append(fragment)
+            cursor = boundary.end()
+        remainder = surface[cursor:].strip()
+        if remainder:
+            fragments.append(remainder)
+        merged_fragments: List[str] = []
+        for fragment in fragments:
+            if (
+                merged_fragments
+                and _DOTTED_INITIALISM_RE.fullmatch(merged_fragments[-1])
+            ):
+                merged_fragments[-1] = f"{merged_fragments[-1]} {fragment}"
+            else:
+                merged_fragments.append(fragment)
+        fragments = merged_fragments
+        surface_units: List[str] = []
+        for fragment in fragments:
+            leading = _LEADING_CITATION_FRAGMENT_RE.match(fragment)
+            if leading and surface_units:
+                marker = (leading.group(1) + leading.group(2)).strip()
+                surface_units[-1] = f"{surface_units[-1]} {marker}".strip()
+                remainder = leading.group(3).strip()
+                if remainder:
+                    surface_units.append(remainder)
+                continue
+            surface_units.append(fragment)
+        units.extend(surface_units)
+    return units
+
+
+def format_markdown_table_row(original: str, cells: List[str]) -> str:
+    """Rebuild one table body row without changing its column count."""
+    indent = original[:len(original) - len(original.lstrip())]
+    stripped = original.strip()
+    leading_pipe = stripped.startswith("|")
+    trailing_pipe = stripped.endswith("|") and not stripped.endswith(r"\|")
+    escaped = [str(cell).replace("|", r"\|").strip() for cell in cells]
+    body = " | ".join(escaped)
+    if leading_pipe:
+        body = "| " + body
+    if trailing_pipe:
+        body += " |"
+    return indent + body
+
+
+def markdown_table_cell_index(line: Any, position: int) -> Optional[int]:
+    """Map a character offset to its pipe-table cell, clamped at row edges."""
+    raw = str(line or "")
+    cells = markdown_table_cells(raw)
+    if not cells:
+        return None
+    separators_before = sum(
+        1 for match in re.finditer(r"(?<!\\)\|", raw)
+        if match.start() < max(0, int(position))
+    )
+    index = separators_before - 1 if raw.lstrip().startswith("|") else separators_before
+    index = max(0, index)
+    return min(index, len(cells) - 1)
+
+
+def markdown_table_claim_context(
+    headers: List[str],
+    cells: List[str],
+    cell_index: int,
+    claim: str,
+) -> str:
+    """Build the semantic label for one table claim without sharing citations.
+
+    A numeric value cell often needs its row label and column header to mean
+    anything (``Battery adoption`` + ``2025 actual`` + ``55.6%``). Those labels
+    may help semantic source matching, but the citation marker must still live in
+    the numeric cell itself for claim-unit coverage.
+    """
+    row_label = next(
+        (
+            cell for cell in cells
+            if cell and not _NUMBER_RE.search(cell) and not _CITATION_RE.fullmatch(cell)
+        ),
+        "",
+    )
+    header = headers[cell_index] if 0 <= cell_index < len(headers) else ""
+    # Header prose describes the column role but must not supply lexical anchors
+    # that can override a contradictory row label (Earth evidence → Moon row).
+    # Retain only numeric/time qualifiers such as the year in ``2025 actual``.
+    header_numbers = " ".join(match.group(0) for match in _NUMBER_RE.finditer(header))
+    parts: List[str] = []
+    for part in (row_label, header_numbers, str(claim or "").strip()):
+        if part and part not in parts:
+            parts.append(part)
+    return " ".join(parts)
+
+
+def authored_forecast_markers_balanced(lines: List[str]) -> bool:
+    """Return whether generated binary ownership markers are ordered and paired."""
+    active = False
+    fence_state: MarkdownFenceState = None
+    for line in lines:
+        was_in_fence = fence_state is not None
+        fence_state, is_fence_line = markdown_fence_transition(line, fence_state)
+        if is_fence_line or was_in_fence:
+            continue
+        stripped = str(line or "").strip()
+        if stripped == BINARY_FORECAST_START_MARKER:
+            if active:
+                return False
+            active = True
+        elif stripped == BINARY_FORECAST_END_MARKER:
+            if not active:
+                return False
+            active = False
+    return not active
+
+
+def is_authored_forecast_heading(line: Any) -> bool:
+    """Return whether one H2 starts an authored forecast-contract section.
+
+    Binary probabilities and resolution thresholds are the report's own
+    predictions/definitions, not external factual claims.  Callers may exclude
+    those explicitly labelled sections from *source* citation coverage while
+    continuing to audit their structure through forecast.json.
+    """
+    return bool(_AUTHORED_FORECAST_H2_RE.fullmatch(str(line or "").strip()))
+
+
+def audit_citation_grounding(
+    report_markdown: str,
+    index_map: Optional[Dict[str, Any]] = None,
+    *,
+    exclude_authored_forecasts: bool = False,
+) -> Dict[str, Any]:
+    """Heuristic, offline audit (I-3-1 + REPORT-6): of the prose-sentence and
+    table-cell units making a quantitative claim, how many are *grounded* — i.e.
+    carry a source citation ([S1]) OR a simulation/edge-grounding marker (agent
+    quote, causal-edge render, sim/edge ref)?
 
     ``coverage`` now counts sim/edge grounding as valid; ``source_coverage`` keeps the
     strict source-only ratio as a separate metric so a regression in real-citation
@@ -3097,40 +3568,94 @@ def audit_citation_grounding(report_markdown: str,
     ``resolved_cited`` / ``resolved_coverage``。最终发布门在该字段存在时优先使用它，避免
     悬空记号或内部模拟标记抬高引用覆盖；缺省 None 的遗留调用仍只输出历史 ``coverage``。
     """
-    lines = [ln.strip() for ln in (report_markdown or "").splitlines() if ln.strip()]
-    quant_lines = [ln for ln in lines if _NUMBER_RE.search(ln) and not ln.startswith("#")]
-    if not quant_lines:
+    claim_units: List[str] = []
+    excluded_authored = 0
+    ignored_fenced = 0
+    in_authored_block = False
+    in_authored_section = False
+    fence_state: MarkdownFenceState = None
+    raw_lines = (report_markdown or "").splitlines()
+    authored_markers_valid = authored_forecast_markers_balanced(raw_lines)
+    for line_index, raw_line in enumerate(raw_lines):
+        stripped = raw_line.strip()
+        was_in_fence = fence_state is not None
+        fence_state, is_fence_line = markdown_fence_transition(raw_line, fence_state)
+        if is_fence_line:
+            continue
+        if was_in_fence:
+            if _NUMBER_RE.search(stripped):
+                ignored_fenced += 1
+            continue
+        if stripped == BINARY_FORECAST_START_MARKER:
+            in_authored_block = bool(
+                exclude_authored_forecasts and authored_markers_valid
+            )
+            in_authored_section = False
+            continue
+        if stripped == BINARY_FORECAST_END_MARKER:
+            in_authored_block = False
+            in_authored_section = False
+            continue
+        if stripped.startswith("## ") and not in_authored_block:
+            in_authored_section = bool(
+                exclude_authored_forecasts and is_authored_forecast_heading(stripped)
+            )
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            continue
+        units = split_markdown_claim_units(
+            raw_line,
+            table_header=is_markdown_table_header(raw_lines, line_index),
+            table_delimiter=is_markdown_table_delimiter(raw_line),
+        )
+        quantitative = [unit for unit in units if _NUMBER_RE.search(unit)]
+        if in_authored_block or in_authored_section:
+            excluded_authored += len(quantitative)
+            continue
+        claim_units.extend(quantitative)
+    if not claim_units:
         out = {"quantitative_claims": 0, "cited": 0, "coverage": 1.0,
                "source_cited": 0, "source_coverage": 1.0, "unsupported_samples": []}
         if index_map is not None:
             out["resolved_cited"] = 0
             out["resolved_coverage"] = 1.0
+        if exclude_authored_forecasts:
+            out["excluded_authored_forecast_claims"] = excluded_authored
+            out["authored_forecast_markers_valid"] = authored_markers_valid
+        if ignored_fenced:
+            out["ignored_fenced_quantitative_lines"] = ignored_fenced
         return out
 
-    def _grounded(ln: str) -> bool:
-        return bool(_CITATION_RE.search(ln) or _SIM_GROUNDING_RE.search(ln))
+    def _grounded(unit: str) -> bool:
+        return bool(_CITATION_RE.search(unit) or _SIM_GROUNDING_RE.search(unit))
 
-    grounded = [ln for ln in quant_lines if _grounded(ln)]
-    source_cited = [ln for ln in quant_lines if _CITATION_RE.search(ln)]
-    unsupported = [ln for ln in quant_lines if not _grounded(ln)]
+    grounded = [unit for unit in claim_units if _grounded(unit)]
+    source_cited = [unit for unit in claim_units if _CITATION_RE.search(unit)]
+    unsupported = [unit for unit in claim_units if not _grounded(unit)]
     out = {
-        "quantitative_claims": len(quant_lines),
+        "quantitative_claims": len(claim_units),
         "cited": len(grounded),                                   # grounded (source or sim/edge)
-        "coverage": round(len(grounded) / len(quant_lines), 3),
+        "coverage": round(len(grounded) / len(claim_units), 3),
         "source_cited": len(source_cited),                        # source-only (separate metric)
-        "source_coverage": round(len(source_cited) / len(quant_lines), 3),
-        "unsupported_samples": [ln[:200] for ln in unsupported[:8]],
+        "source_coverage": round(len(source_cited) / len(claim_units), 3),
+        "unsupported_samples": [unit[:200] for unit in unsupported[:8]],
     }
     if index_map is not None:
         resolvable = {_norm_citation_tag(k) for k in index_map}
 
-        def _resolves(ln: str) -> bool:
+        def _resolves(unit: str) -> bool:
             return any(_norm_citation_tag(m.group(1)) in resolvable
-                       for m in _CITATION_TAG_RE.finditer(ln))
+                       for m in _CITATION_TAG_RE.finditer(unit))
 
-        resolved = [ln for ln in quant_lines if _resolves(ln)]
+        resolved = [unit for unit in claim_units if _resolves(unit)]
         out["resolved_cited"] = len(resolved)
-        out["resolved_coverage"] = round(len(resolved) / len(quant_lines), 3)
+        out["resolved_coverage"] = round(len(resolved) / len(claim_units), 3)
+    if exclude_authored_forecasts:
+        out["excluded_authored_forecast_claims"] = excluded_authored
+        out["authored_forecast_markers_valid"] = authored_markers_valid
+    if ignored_fenced:
+        out["ignored_fenced_quantitative_lines"] = ignored_fenced
     return out
 
 
@@ -3162,13 +3687,13 @@ def validate_citation_markers(report_markdown: str,
     """
     order: List[str] = []
     counts: Dict[str, int] = {}
-    in_fence = False
+    fence_state: MarkdownFenceState = None
     for ln in (report_markdown or "").split("\n"):
-        s = ln.lstrip()
-        if s.startswith("```") or s.startswith("~~~"):
-            in_fence = not in_fence
+        was_in_fence = fence_state is not None
+        fence_state, is_fence_line = markdown_fence_transition(ln, fence_state)
+        if is_fence_line:
             continue
-        if in_fence:
+        if was_in_fence:
             continue
         for m in _CITATION_TAG_RE.finditer(ln):
             tag = _norm_citation_tag(m.group(1))

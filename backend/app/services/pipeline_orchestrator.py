@@ -5313,36 +5313,66 @@ class PipelineOrchestrator:
                     ReportManager._get_report_folder(state.report_id))
             return True  # 无清单 → 退化到旧的存在性复用，保持向后兼容
         ok = True
+        # ``personas`` deliberately has two alternative candidate paths. Group by
+        # logical artifact name so a recorded reddit profile does not also require
+        # twitter_profiles.csv. More importantly, the manifest path must belong to
+        # the *current* stage identity. Previously an old sim's perfectly valid
+        # run_summary could satisfy a new PREPARE attempt because only the stored
+        # path's bytes/hash were checked.
+        candidates_by_name: dict[str, list[str]] = {}
         for name, path in self._stage_artifact_specs(state, stage):
+            candidates_by_name.setdefault(name, []).append(path)
+
+        for name, candidates in candidates_by_name.items():
             entry = manifest.get(name)
             if not isinstance(entry, dict):
                 continue  # 该产物未登记（可选 / 老清单）→ 不校验
-            man_path = entry.get("path") or path
-            if not os.path.exists(man_path):
-                logger.warning("[%s] 复用校验：产物 %s 缺失（%s）", state.pipeline_id, name, man_path)
-                ok = False
-                break
-            try:
-                size = os.path.getsize(man_path)
-            except OSError:
-                ok = False
-                break
-            exp_bytes = entry.get("bytes")
-            if isinstance(exp_bytes, int) and exp_bytes != size:
-                logger.warning("[%s] 复用校验：产物 %s 字节数变更 %s→%s",
-                               state.pipeline_id, name, exp_bytes, size)
-                ok = False
-                break
-            exp_sha = entry.get("sha256")
-            if isinstance(exp_sha, str) and exp_sha:
-                cur_sha = _sha256_file(man_path)
-                if cur_sha is not None and cur_sha != exp_sha:
-                    logger.warning("[%s] 复用校验：产物 %s 哈希不符（内容变更/损坏）",
-                                   state.pipeline_id, name)
+
+            declared_path = entry.get("path")
+            if isinstance(declared_path, str) and declared_path:
+                expected_paths = {
+                    os.path.realpath(os.path.abspath(candidate))
+                    for candidate in candidates
+                }
+                declared_real = os.path.realpath(os.path.abspath(declared_path))
+                if declared_real not in expected_paths:
+                    logger.warning(
+                        "[%s] 复用校验：产物 %s 属于另一 attempt（manifest=%s, current=%s）",
+                        state.pipeline_id, name, declared_path, candidates,
+                    )
                     ok = False
                     break
-            if not _probe_artifact_schema(name, man_path):
-                logger.warning("[%s] 复用校验：产物 %s 结构探针未通过", state.pipeline_id, name)
+                paths_to_check = [declared_path]
+            else:
+                # Very old manifests may not carry a path. Try each logical
+                # alternative and accept the one whose bytes/hash/schema match.
+                paths_to_check = candidates
+
+            matched = False
+            for man_path in paths_to_check:
+                if not os.path.exists(man_path):
+                    continue
+                try:
+                    size = os.path.getsize(man_path)
+                except OSError:
+                    continue
+                exp_bytes = entry.get("bytes")
+                if isinstance(exp_bytes, int) and exp_bytes != size:
+                    continue
+                exp_sha = entry.get("sha256")
+                if isinstance(exp_sha, str) and exp_sha:
+                    cur_sha = _sha256_file(man_path)
+                    if cur_sha is not None and cur_sha != exp_sha:
+                        continue
+                if not _probe_artifact_schema(name, man_path):
+                    continue
+                matched = True
+                break
+            if not matched:
+                logger.warning(
+                    "[%s] 复用校验：产物 %s 缺失、内容变更或结构探针未通过（%s）",
+                    state.pipeline_id, name, paths_to_check,
+                )
                 ok = False
                 break
         if ok and stage == STAGE_REPORT and state.report_id:
@@ -5357,14 +5387,92 @@ class PipelineOrchestrator:
 
         各阶段（GRAPH/PREPARE/RUN）的复用分支统一经此判定，校验失败时由调用方
         把对应阶段降级重建，并写 resumed_stage_validation 面包屑（与既有图谱重建路径同构）。
+        校验器本身异常时必须 fail closed：缺失清单的兼容路径已经由
+        ``_validate_reuse`` 显式放行，异常意味着身份/完整性未被证明。
         """
         if not bool(getattr(Config, "PIPELINE_VALIDATE_ARTIFACTS", True)):
             return True
         try:
             return self._validate_reuse(state, stage)
-        except Exception as e:  # noqa: BLE001 — 校验自身异常绝不阻断一次合法复用
-            logger.debug("[%s] 复用校验异常（放行）: %s", state.pipeline_id, e)
-            return True
+        except Exception as e:  # noqa: BLE001 — 未证明完整性时拒绝复用
+            state.options["artifact_validation_error"] = {
+                "stage": stage,
+                "error": str(e)[:300],
+                "at": _utcnow(),
+            }
+            logger.warning("[%s] %s 复用校验异常（拒绝复用）: %s",
+                           state.pipeline_id, stage, e)
+            return False
+
+    @staticmethod
+    def _run_reuse_ready(state: PipelineState, sim_state: Any) -> bool:
+        """Return whether a completed RUN can belong to the current simulation.
+
+        The stage bit alone is not provenance. A rebuilt PREPARE attempt creates a
+        fresh READY simulation while the persisted RUN bit can still say completed.
+        Reuse is therefore allowed only for the same simulation identity in a
+        terminal COMPLETED state. A missing summary remains recoverable for legacy
+        runs and is generated once by ``_publish_run_summary``.
+        """
+        sim_id = state.simulation_id
+        if not sim_id or sim_state is None:
+            return False
+        if str(getattr(sim_state, "simulation_id", "")) != str(sim_id):
+            return False
+        status = getattr(sim_state, "status", None)
+        status_value = getattr(status, "value", status)
+        if status_value != SimulationStatus.COMPLETED.value:
+            return False
+
+        summary_path = os.path.join(
+            SimulationRunner.RUN_STATE_DIR, sim_id, "run_summary.json")
+        if not os.path.exists(summary_path):
+            return True  # Legacy completed run; regenerate from preserved raw data.
+        summary = _read_json(summary_path)
+        if not isinstance(summary, dict):
+            return False
+        summary_sim_id = summary.get("simulation_id")
+        if summary_sim_id not in (None, "", sim_id):
+            return False
+        return _probe_artifact_schema("run_summary", summary_path)
+
+    def _publish_run_summary(
+        self,
+        state: PipelineState,
+        simulation_id: str,
+        *,
+        communities: Any = None,
+        regenerate: bool,
+    ) -> bool:
+        """Generate a new summary when needed, otherwise preserve the reused bytes.
+
+        Re-running the aggregator unconditionally used to overwrite a valid reused
+        summary. If PREPARE had changed identity, that produced a plausible-looking
+        but hollow ``0 agents / 0 rounds`` file under the new simulation id. This
+        method makes reuse read-only and only backfills a missing legacy summary.
+        """
+        summary_path = os.path.join(
+            SimulationRunner.RUN_STATE_DIR, simulation_id, "run_summary.json")
+        summary_exists = (
+            os.path.exists(summary_path) and os.path.getsize(summary_path) > 0
+            and _probe_artifact_schema("run_summary", summary_path)
+        )
+        if regenerate or not summary_exists:
+            SimulationRunner.write_run_summary(simulation_id, communities=communities)
+
+        if not (os.path.exists(summary_path) and os.path.getsize(summary_path) > 0
+                and _probe_artifact_schema("run_summary", summary_path)):
+            return False
+
+        state.artifacts["run_summary"] = summary_path
+        PipelineManager.save(state)
+        if bool(getattr(Config, "PIPELINE_VALIDATE_ARTIFACTS", True)):
+            manifest = PipelineManager.load_artifact_manifest(state.pipeline_id)
+            entry = _manifest_entry_for("run_summary", summary_path, STAGE_RUN)
+            if entry is not None:
+                manifest["run_summary"] = entry
+                PipelineManager.write_artifact_manifest(state.pipeline_id, manifest)
+        return True
 
     # -- 内部：运行中临时产物深链 (I-4-6) ----------------------------------
 
@@ -7199,7 +7307,7 @@ class PipelineOrchestrator:
                 logger.info("[%s] 模拟环境产物清单校验未通过，回落到重建", state.pipeline_id)
             if _prepare_reuse:
                 upd(100, "复用已有模拟环境…")
-                self._complete_stage(state, STAGE_PREPARE, "环境已恢复")
+                _prepare_completion_message = "环境已恢复"
             else:
                 if prepare_stage_done and sim_state is None:
                     # 阶段标完成但模拟状态丢了（手动清理/磁盘损坏）：自愈重建，但要留痕。
@@ -7254,11 +7362,16 @@ class PipelineOrchestrator:
                     max_rounds=int(_prep_mr) if _prep_mr else None,
                     research_language=state.options.get("research_language"),  # PREP-4
                 )
-                self._complete_stage(state, STAGE_PREPARE, "环境就绪")
+                _prepare_completion_message = "环境就绪"
 
             # T4.6: 情景 overlay — 把影响力/立场覆盖 + 注入事件确定性落到 simulation_config.json
             _overlay = state.options.get("scenario_overlay")
-            _run_already_done = bool(state.stages.get(STAGE_RUN) and state.stages[STAGE_RUN].status == "completed")
+            _run_already_done = bool(
+                _prepare_reuse and state.stages.get(STAGE_RUN)
+                and state.stages[STAGE_RUN].status == "completed"
+                and self._run_reuse_ready(state, sim_state)
+                and self._reuse_ok(state, STAGE_RUN)
+            )
             if _overlay and not _run_already_done:
                 try:
                     _cfg_path = os.path.join(
@@ -7309,9 +7422,28 @@ class PipelineOrchestrator:
                 except Exception as _ws_err:  # noqa: BLE001
                     logger.warning("[%s] WorldState 种子注入跳过: %s", state.pipeline_id, _ws_err)
 
+            # PREPARE's integrity fingerprint must cover the final config consumed
+            # by RUN. Scenario/world-state injection above mutates
+            # simulation_config.json; completing earlier recorded a permanently
+            # stale hash and forced every resume to create a new simulation.
+            self._complete_stage(state, STAGE_PREPARE, _prepare_completion_message)
+
             # ---- Stage 4: RUN ----
             upd = self._make_stage_updater(state, STAGE_RUN)
-            run_stage_done = state.stages.get(STAGE_RUN) and state.stages[STAGE_RUN].status == "completed"
+            previous_run_done = bool(
+                state.stages.get(STAGE_RUN)
+                and state.stages[STAGE_RUN].status == "completed"
+            )
+            # A rebuilt PREPARE attempt invalidates every downstream RUN result,
+            # even if the persisted stage bit still says completed.
+            run_stage_done = bool(_prepare_reuse and previous_run_done)
+            if previous_run_done and not _prepare_reuse:
+                state.options["resumed_stage_validation"] = "run_rebuilt_prepare_identity_changed"
+                logger.info("[%s] PREPARE attempt 已变化，旧 RUN 结果不可复用", state.pipeline_id)
+            if run_stage_done and not self._run_reuse_ready(state, sim_state):
+                run_stage_done = False
+                state.options["resumed_stage_validation"] = "run_rebuilt_simulation_state_mismatch"
+                logger.info("[%s] RUN 状态与当前 simulation identity 不一致，回落到重跑", state.pipeline_id)
             # I-4-3: 复用前校验 RUN 产物（run_summary.json）未被半写/篡改；不符则重跑模拟并留痕。
             if run_stage_done and not self._reuse_ok(state, STAGE_RUN):
                 run_stage_done = False
@@ -7319,7 +7451,7 @@ class PipelineOrchestrator:
                 logger.info("[%s] 模拟结果产物清单校验未通过，回落到重跑", state.pipeline_id)
             if run_stage_done:
                 upd(100, "复用已有模拟结果…")
-                self._complete_stage(state, STAGE_RUN, "模拟已恢复")
+                _run_completion_message = "模拟已恢复"
             else:
                 upd(2, "启动 OASIS 模拟…")
                 run_kwargs: dict[str, Any] = {"platform": "parallel"}
@@ -7443,7 +7575,7 @@ class PipelineOrchestrator:
                             state.pipeline_id, _flush_err,
                         )
 
-                self._complete_stage(state, STAGE_RUN, "模拟完成")
+                _run_completion_message = "模拟完成"
 
             # T3.14: 模拟结束后聚合 run_summary.json（per-agent engagement + 每轮动作量 + top_posts +
             # 可选派系）。报告阶段的 simulation_outcomes 工具与前端均可直接读，免再 fuzzy 检索。
@@ -7453,24 +7585,19 @@ class PipelineOrchestrator:
                 if os.path.exists(_comm_path):
                     with open(_comm_path, "r", encoding="utf-8") as cf:
                         _comm = json.load(cf)
-                SimulationRunner.write_run_summary(sim_state.simulation_id, communities=_comm)
-                _rs = os.path.join(SimulationRunner.RUN_STATE_DIR, sim_state.simulation_id, "run_summary.json")
-                if os.path.exists(_rs) and os.path.getsize(_rs) > 0:
-                    state.artifacts["run_summary"] = _rs  # T6.3
-                    PipelineManager.save(state)
-                    # I-4-3: run_summary 在 _complete_stage(RUN) 之后才落盘，故补登清单条目，
-                    # 让后续 resume 能对它做完整性校验（否则清单缺该条 → 校验放行无保障）。
-                    if bool(getattr(Config, "PIPELINE_VALIDATE_ARTIFACTS", True)):
-                        try:
-                            _man = PipelineManager.load_artifact_manifest(state.pipeline_id)
-                            _entry = _manifest_entry_for("run_summary", _rs, STAGE_RUN)
-                            if _entry is not None:
-                                _man["run_summary"] = _entry
-                                PipelineManager.write_artifact_manifest(state.pipeline_id, _man)
-                        except Exception:  # noqa: BLE001
-                            pass
+                if not self._publish_run_summary(
+                    state,
+                    sim_state.simulation_id,
+                    communities=_comm,
+                    regenerate=not run_stage_done,
+                ):
+                    logger.warning("[%s] run_summary 未生成或结构无效", state.pipeline_id)
             except Exception as e:  # noqa: BLE001
                 logger.warning("[%s] run_summary 写出跳过: %s", state.pipeline_id, e)
+
+            # Completion now follows the final summary publication, so the stage
+            # manifest and status describe the same durable boundary.
+            self._complete_stage(state, STAGE_RUN, _run_completion_message)
 
             # ---- Stage 5: REPORT ----
             upd = self._make_stage_updater(state, STAGE_REPORT)

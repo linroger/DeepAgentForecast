@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from app.services.forecast_extractor import (
     _binary_quality,
     _normalize_binaries,
@@ -21,7 +23,9 @@ from app.services.forecast_extractor import (
     render_binary_forecasts_block,
     render_forecast_spine_block,
     render_resolution_block,
+    self_critique_forecast,
     slice_head_tail,
+    validate_citation_markers,
 )
 from app.services.ensemble import pool_binary_forecasts
 from tests.conftest import FakeLLMClient
@@ -48,6 +52,182 @@ def test_audit_citation_grounding_counts_and_coverage():
 
 def test_audit_empty_is_full_coverage():
     assert audit_citation_grounding("no numbers here")["coverage"] == 1.0
+
+
+def test_citation_audit_separates_authored_forecast_contract_from_source_claims():
+    md = (
+        "# Forecast\n\n"
+        "## Part 1 — Binary Forecasts\n\n"
+        "| F1 | Authored outcome | 72% | Resolve above 40% by 2030 |\n\n"
+        "## Analysis\n\n"
+        "Official adoption reached 55.6% in 2025 [S1].\n\n"
+        "Unsupported market share reached 99% in 2027.\n\n"
+        "## How to Verify This Forecast (Resolution Criteria & Indicators)\n\n"
+        "Resolve the authored scenario at a 90% threshold by 2035.\n"
+    )
+    audit = audit_citation_grounding(
+        md,
+        index_map={"S1": {"title": "Official adoption"}},
+        exclude_authored_forecasts=True,
+    )
+
+    assert audit["quantitative_claims"] == 2
+    assert audit["resolved_cited"] == 1
+    assert audit["resolved_coverage"] == 0.5
+    assert audit["excluded_authored_forecast_claims"] == 3
+
+
+def test_citation_audit_counts_each_sentence_and_table_cell_independently():
+    md = (
+        "# Evidence\n\n"
+        "Official adoption reached 55.6% in 2025. [S1] "
+        "Unsupported lunar adoption reached 99% in 2027.\n\n"
+        "| Metric | 2025 actual | 2026 forecast |\n"
+        "|---|---:|---:|\n"
+        "| Official adoption | 55.6%. [S1] | 99% |\n"
+    )
+
+    audit = audit_citation_grounding(md, index_map={"S1": {"title": "Official"}})
+
+    # Numeric table headers are labels, not factual claim units. The two prose
+    # sentences and two data cells are each audited independently.
+    assert audit["quantitative_claims"] == 4
+    assert audit["resolved_cited"] == 2
+    assert audit["resolved_coverage"] == 0.5
+    assert sum("99%" in sample for sample in audit["unsupported_samples"]) == 2
+
+
+def test_citation_audit_uses_exact_authored_boundaries_not_arbitrary_part_one():
+    md = (
+        "# Forecast\n\n"
+        "## Part 1 — Market Evidence\n\n"
+        "Unsupported market evidence reached 99% in 2027.\n\n"
+        "<!-- binary-forecast-block:start -->\n"
+        "## Part 1 — Binary Forecasts\n\n"
+        "| F1 | Authored outcome | 72% | Resolve above 40% by 2030 |\n"
+        "<!-- binary-forecast-block:end -->\n\n"
+        "## Analysis\n\n"
+        "Official adoption reached 55.6% in 2025 [S1].\n"
+    )
+
+    audit = audit_citation_grounding(
+        md,
+        index_map={"S1": {"title": "Official"}},
+        exclude_authored_forecasts=True,
+    )
+
+    assert audit["quantitative_claims"] == 2
+    assert audit["resolved_cited"] == 1
+    assert audit["resolved_coverage"] == 0.5
+    assert audit["excluded_authored_forecast_claims"] == 2
+
+
+def test_citation_scanners_require_matching_fence_delimiters():
+    md = (
+        "```text\n"
+        "Inside code reached 99% [S9].\n"
+        "~~~\n"
+        "Still inside code reached 88% [S8].\n"
+        "```\n"
+        "Outside evidence reached 77% [S1].\n"
+    )
+
+    audit = audit_citation_grounding(md, index_map={"S1": {"title": "Official"}})
+    markers = validate_citation_markers(md, {"S1": {"title": "Official"}})
+
+    assert audit["quantitative_claims"] == 1
+    assert audit["resolved_cited"] == 1
+    assert audit["ignored_fenced_quantitative_lines"] == 2
+    assert markers["order"] == ["S1"]
+    assert markers["dangling"] == []
+
+
+def test_claim_splitter_keeps_dotted_initialism_with_its_sentence():
+    md = (
+        "U.S. EV adoption reached 55.6%. [S1] "
+        "Unsupported lunar adoption reached 99%."
+    )
+
+    audit = audit_citation_grounding(md, index_map={"S1": {"title": "Official"}})
+
+    assert audit["quantitative_claims"] == 2
+    assert audit["resolved_cited"] == 1
+    assert audit["resolved_coverage"] == 0.5
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        "Unsupported lunar adoption reached 99%.",
+        "“Unsupported lunar adoption reached 99%.“",
+        "(Unsupported lunar adoption reached 99%.)",
+        "2027 lunar adoption reached 99%.",
+        "[Unsupported lunar adoption](https://example.org) reached 99%.",
+        "unsupported lunar adoption reached 99%.",
+    ],
+)
+def test_post_punctuation_citation_never_covers_wrapped_next_claim(tail):
+    md = f"Official adoption reached 55.6%. [S12] {tail}"
+
+    audit = audit_citation_grounding(md, index_map={"S12": {"title": "Official"}})
+
+    assert audit["quantitative_claims"] == 2
+    assert audit["resolved_cited"] == 1
+    assert audit["resolved_coverage"] == 0.5
+
+
+def test_semicolon_separates_citation_ownership():
+    md = "Official adoption reached 55.6% [S1]; Unsupported adoption reached 99%."
+
+    audit = audit_citation_grounding(md, index_map={"S1": {"title": "Official"}})
+
+    assert audit["quantitative_claims"] == 2
+    assert audit["resolved_cited"] == 1
+    assert audit["resolved_coverage"] == 0.5
+
+
+def test_unclosed_authored_marker_disables_marker_based_exclusion():
+    md = (
+        "<!-- binary-forecast-block:start -->\n"
+        "## Part 1 — Binary Forecasts\n\n"
+        "| F1 | Authored outcome | 72% | Resolve above 40% by 2030 |\n\n"
+        "## Analysis\n\n"
+        "Unsupported market evidence reached 99% in 2027.\n"
+    )
+
+    audit = audit_citation_grounding(
+        md,
+        index_map={},
+        exclude_authored_forecasts=True,
+    )
+
+    assert audit["authored_forecast_markers_valid"] is False
+    assert audit["quantitative_claims"] == 1
+    assert audit["resolved_cited"] == 0
+    assert audit["resolved_coverage"] == 0.0
+
+
+def test_fenced_literal_end_marker_cannot_balance_unclosed_authored_block():
+    md = (
+        "<!-- binary-forecast-block:start -->\n"
+        "## Part 1 — Binary Forecasts\n\n"
+        "| F1 | Authored outcome | 72% | Resolve above 40% by 2030 |\n\n"
+        "```text\n"
+        "<!-- binary-forecast-block:end -->\n"
+        "```\n"
+        "## Analysis\n\n"
+        "Unsupported market evidence reached 99% in 2027.\n"
+    )
+
+    audit = audit_citation_grounding(
+        md,
+        index_map={},
+        exclude_authored_forecasts=True,
+    )
+
+    assert audit["authored_forecast_markers_valid"] is False
+    assert audit["quantitative_claims"] == 1
+    assert audit["resolved_coverage"] == 0.0
 
 
 def test_scenario_contract_accepts_absent_or_valid_conservative_partition():
@@ -150,6 +330,218 @@ def test_scenario_contract_rejects_bad_sum_and_missing_residual_bin():
         "probability_sum",
         "residual_scenario_missing",
     }
+
+
+def test_named_base_case_is_not_a_residual_bin():
+    audit = audit_scenario_contract({
+        "scenarios": [
+            {
+                "name": "Three-bloc Fragmentation (Base Case)",
+                "probability": 0.60,
+                "resolution_criteria": "Fragmentation criteria are met by 2035",
+            },
+            {
+                "name": "Accelerated convergence",
+                "probability": 0.40,
+                "resolution_criteria": "Convergence criteria are met by 2035",
+            },
+        ],
+    })
+
+    assert "residual_scenario_missing" in _scenario_issue_codes(audit)
+
+
+def test_self_critique_preserves_unallocated_mass_as_residual_scenario():
+    forecast = {
+        "headline": "Global EV pathways",
+        "horizon": "2035-12-31",
+        "confidence": "medium",
+        "confidence_rationale": "Initial rationale.",
+        "scenarios": [
+            {"name": "Fragmentation", "probability": 0.50,
+             "resolution_criteria": "Fragmentation criteria are met by 2035"},
+            {"name": "Convergence", "probability": 0.30,
+             "resolution_criteria": "Convergence criteria are met by 2035"},
+            {"name": "Industrial retreat", "probability": 0.20,
+             "resolution_criteria": "Retreat criteria are met by 2035"},
+        ],
+    }
+    critique = {
+        "confidence": "medium",
+        "confidence_rationale": "Four substantive scenarios sum to 95%.",
+        "scenarios": [
+            {"name": "Fragmentation", "probability": 0.42,
+             "resolution_criteria": "Fragmentation criteria are met by 2035",
+             "critique_note": "Probability reduced from 0.50 to 0.42."},
+            {"name": "Convergence", "probability": 0.12,
+             "resolution_criteria": "Convergence criteria are met by 2035",
+             "critique_note": "Probability reduced from 0.30 to 0.12."},
+            {"name": "Industrial retreat", "probability": 0.15,
+             "resolution_criteria": "Retreat criteria are met by 2035",
+             "critique_note": "Probability reduced from 0.20 to 0.15."},
+        ],
+    }
+
+    out = self_critique_forecast(
+        forecast, FakeLLMClient(json_responses=[critique]),
+    )
+    probabilities = {row["name"]: row["probability"] for row in out["scenarios"]}
+
+    assert probabilities == {
+        "Fragmentation": 0.42,
+        "Convergence": 0.12,
+        "Industrial retreat": 0.15,
+        "Other / Status Quo": 0.31,
+    }
+    assert out["residual_scenario_added"] is True
+    assert "complete 100% partition" in out["confidence_rationale"]
+    assert out["confidence_rationale_detail"] == "Four substantive scenarios sum to 95%."
+    assert audit_scenario_contract(out)["valid"] is True
+
+
+def test_self_critique_reserves_residual_and_synchronizes_scaled_notes():
+    forecast = {
+        "headline": "Two named paths",
+        "horizon": "2030",
+        "confidence": "medium",
+        "scenarios": [
+            {"name": "Path A", "probability": 0.80,
+             "resolution_criteria": "Path A resolves by 2030"},
+            {"name": "Path B", "probability": 0.20,
+             "resolution_criteria": "Path B resolves by 2030"},
+        ],
+    }
+    critique = {
+        "scenarios": [
+            {"name": "Path A", "probability": 0.55,
+             "resolution_criteria": "Path A resolves by 2030",
+             "critique_note": "Probability reduced to 0.55."},
+            {"name": "Path B", "probability": 0.45,
+             "resolution_criteria": "Path B resolves by 2030",
+             "critique_note": "Probability increased to 0.45."},
+        ],
+    }
+
+    out = self_critique_forecast(
+        forecast, FakeLLMClient(json_responses=[critique]),
+    )
+    residual = next(row for row in out["scenarios"] if row["name"] == "Other / Status Quo")
+
+    assert residual["probability"] == 0.03
+    assert abs(sum(row["probability"] for row in out["scenarios"]) - 1.0) < 1e-6
+    path_a = next(row for row in out["scenarios"] if row["name"] == "Path A")
+    path_b = next(row for row in out["scenarios"] if row["name"] == "Path B")
+    assert "critique_note_detail" in path_a  # 1.65pp move exceeds contract tolerance
+    assert "critique_note_detail" not in path_b  # 1.35pp move is within tolerance
+    assert audit_scenario_contract(out)["valid"] is True
+
+
+@pytest.mark.parametrize("malformed_scenarios", [
+    "not-a-list",
+    [
+        {"name": "Path A", "probability": 0.50,
+         "resolution_criteria": "Path A resolves by 2030"},
+        "not-an-object",
+    ],
+    [
+        {"name": "Path A", "probability": "0.50",
+         "resolution_criteria": "Path A resolves by 2030"},
+        {"name": "Path B", "probability": 0.50,
+         "resolution_criteria": "Path B resolves by 2030"},
+    ],
+    [
+        {"name": "Path A", "probability": float("nan"),
+         "resolution_criteria": "Path A resolves by 2030"},
+        {"name": "Path B", "probability": 0.50,
+         "resolution_criteria": "Path B resolves by 2030"},
+    ],
+    [
+        {"name": "Path A", "probability": float("inf"),
+         "resolution_criteria": "Path A resolves by 2030"},
+        {"name": "Path B", "probability": 0.50,
+         "resolution_criteria": "Path B resolves by 2030"},
+    ],
+    [
+        {"name": "Path A", "probability": 0.80,
+         "resolution_criteria": "Path A resolves by 2030"},
+        {"name": "Path B", "probability": 0.70,
+         "resolution_criteria": "Path B resolves by 2030"},
+    ],
+    [
+        {"name": "Path A", "probability": True,
+         "resolution_criteria": "Path A resolves by 2030"},
+        {"name": "Other / Status Quo", "probability": 0.50,
+         "resolution_criteria": "All other outcomes by 2030"},
+    ],
+    [
+        {"name": "Path A", "probability": 0.50,
+         "resolution_criteria": ""},
+        {"name": "Path B", "probability": 0.50,
+         "resolution_criteria": "Path B resolves by 2030"},
+    ],
+])
+def test_self_critique_rejects_malformed_scenario_payloads(malformed_scenarios):
+    forecast = {
+        "headline": "Original forecast",
+        "horizon": "2030",
+        "confidence": "medium",
+        "scenarios": [
+            {"name": "Original A", "probability": 0.60,
+             "resolution_criteria": "Original A resolves by 2030"},
+            {"name": "Original B", "probability": 0.40,
+             "resolution_criteria": "Original B resolves by 2030"},
+        ],
+    }
+
+    out = self_critique_forecast(
+        forecast,
+        FakeLLMClient(json_responses=[{"scenarios": malformed_scenarios}]),
+    )
+
+    assert out is forecast
+    assert "critiqued" not in out
+
+
+def test_humility_rebalance_closes_probability_rounding_on_residual():
+    forecast = {
+        "headline": "Five paths",
+        "horizon": "2030",
+        "confidence": "medium",
+        "scenarios": [
+            {"name": "A", "probability": 0.63,
+             "resolution_criteria": "A resolves by 2030"},
+            {"name": "B", "probability": 0.12,
+             "resolution_criteria": "B resolves by 2030"},
+            {"name": "C", "probability": 0.10,
+             "resolution_criteria": "C resolves by 2030"},
+            {"name": "D", "probability": 0.08,
+             "resolution_criteria": "D resolves by 2030"},
+            {"name": "Other / Status Quo", "probability": 0.07,
+             "resolution_criteria": "All other outcomes by 2030"},
+        ],
+    }
+    critique = {
+        "scenarios": [
+            {"name": "A", "probability": 0.91,
+             "resolution_criteria": "A resolves by 2030"},
+            {"name": "B", "probability": 0.031,
+             "resolution_criteria": "B resolves by 2030"},
+            {"name": "C", "probability": 0.024,
+             "resolution_criteria": "C resolves by 2030"},
+            {"name": "D", "probability": 0.019,
+             "resolution_criteria": "D resolves by 2030"},
+            {"name": "Other / Status Quo", "probability": 0.016,
+             "resolution_criteria": "All other outcomes by 2030"},
+        ],
+    }
+
+    out = self_critique_forecast(
+        forecast, FakeLLMClient(json_responses=[critique]),
+    )
+
+    assert max(row["probability"] for row in out["scenarios"]) == 0.63
+    assert round(sum(row["probability"] for row in out["scenarios"]), 4) == 1.0
+    assert audit_scenario_contract(out)["valid"] is True
 
 
 def test_scenario_contract_rejects_stale_critique_and_bad_percentage_total():
@@ -810,6 +1202,70 @@ def test_membership_rejects_non_boolean_derivable_without_reconciling():
     assert result["corrected_count"] == 0
     assert audit["passed"] is False
     assert "JSON boolean" in audit["mismatches"][0]["reason"]
+
+
+def test_membership_canonicalizes_non_derivable_scenario_suggestions():
+    raw = [
+        {
+            "id": forecast_id,
+            "statement": statement,
+            "probability": probability,
+            "resolution_criteria": criteria,
+            "scenario_membership": {
+                "derivable": False,
+                "yes_scenarios": ["China Triumphant — Global Bifurcation Hardens"],
+            },
+        }
+        for forecast_id, statement, probability, criteria in (
+            (
+                "F4",
+                "China domestic EV penetration exceeds 65% by 2030.",
+                0.68,
+                "CAAM reports penetration above 65% by December 2030.",
+            ),
+            (
+                "F7",
+                "CATL and BYD control more than 50% of battery capacity by 2030.",
+                0.73,
+                "SNE reports combined capacity above 50% by December 2030.",
+            ),
+            (
+                "F11",
+                "Chinese vehicles exceed 15% of European EV registrations by 2028.",
+                0.72,
+                "ACEA reports a share above 15% by December 2028.",
+            ),
+        )
+    ]
+    binaries = _normalize_binaries(raw)
+    forecast = {
+        "scenarios": [
+            {
+                "name": "China Triumphant — Global Bifurcation Hardens",
+                "probability": 0.488,
+            },
+            {"name": "Solid-State Disruption", "probability": 0.122},
+            {"name": "Other / Status Quo", "probability": 0.39},
+        ],
+        "binary_forecasts": binaries,
+    }
+
+    result = reconcile_forecast_contract(forecast)
+    audit = audit_proposition_consistency(forecast)
+
+    assert [row["probability"] for row in binaries] == [0.68, 0.73, 0.72]
+    assert all(
+        row["scenario_membership"]["derivable"] is False
+        and row["scenario_membership"]["yes_scenarios"] == []
+        and row["scenario_membership"]["discarded_yes_scenarios"]
+        == ["China Triumphant — Global Bifurcation Hardens"]
+        for row in binaries
+    )
+    assert result["corrected_count"] == 0
+    assert result["passed"] is True
+    assert audit["checked"] == 0
+    assert audit["mismatch_count"] == 0
+    assert audit["passed"] is True
 
 
 def test_membership_rejects_duplicate_yes_scenarios_without_double_counting():

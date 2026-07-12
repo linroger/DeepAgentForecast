@@ -652,9 +652,12 @@ def test_scenario_count_drift_surfaced(monkeypatch, tmp_path):
     def router(content):
         if "红队评审" in content:  # critique adds a residual scenario → 2 → 3 drift
             return {"scenarios": [
-                {"name": "情景甲乙丙", "probability": 0.5},
-                {"name": "情景丁戊己", "probability": 0.3},
-                {"name": "其它维持现状", "probability": 0.2}]}
+                {"name": "情景甲乙丙", "probability": 0.5,
+                 "resolution_criteria": "截至2030年指标高于10%"},
+                {"name": "情景丁戊己", "probability": 0.3,
+                 "resolution_criteria": "截至2030年指标低于5%"},
+                {"name": "其它维持现状", "probability": 0.2,
+                 "resolution_criteria": "截至2030年不满足其它已命名情景"}]}
         return {}
 
     a = _bare_agent(llm=_JsonLLM(router), _forecast_spine=dict(spine))

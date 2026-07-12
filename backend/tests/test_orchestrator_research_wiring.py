@@ -6,6 +6,7 @@ R2-RES-3 (advisory forecast-confidence penalty). No network / LLM / disk.
 
 from datetime import datetime, timedelta, timezone
 import hashlib
+from types import SimpleNamespace
 
 from app.services.pipeline_orchestrator import PipelineOrchestrator
 
@@ -463,6 +464,489 @@ def test_new_report_attempt_clears_formal_partial_and_integrity_rows(monkeypatch
 
     assert st.artifacts == {"report": "/handoff/research_report.md"}
     assert written == {"report": {"path": "/handoff/research_report.md"}}
+
+
+def test_run_reuse_rejects_manifest_artifact_from_previous_simulation(
+        monkeypatch, tmp_path):
+    """A valid old run must not satisfy the manifest contract for a new PREPARE attempt."""
+    run_root = tmp_path / "run-state"
+    old_summary = run_root / "sim_old" / "run_summary.json"
+    old_summary.parent.mkdir(parents=True)
+    old_summary.write_text(json.dumps({
+        "simulation_id": "sim_old",
+        "rounds_executed": 19,
+        "simulation_health": "ok",
+    }), encoding="utf-8")
+    entry = _po._manifest_entry_for("run_summary", str(old_summary), _po.STAGE_RUN)
+    monkeypatch.setattr(_po.SimulationRunner, "RUN_STATE_DIR", str(run_root), raising=False)
+    monkeypatch.setattr(
+        _po.PipelineManager,
+        "load_artifact_manifest",
+        classmethod(lambda cls, pid: {"run_summary": entry}),
+    )
+    st = _po.PipelineState(
+        pipeline_id="pipe_identity", prompt="q", mode="full", status="running")
+    st.simulation_id = "sim_new"
+
+    assert _po.PipelineOrchestrator()._validate_reuse(st, _po.STAGE_RUN) is False
+
+
+def test_reuse_validation_exception_fails_closed(monkeypatch):
+    orch = _po.PipelineOrchestrator()
+    monkeypatch.setattr(
+        orch,
+        "_validate_reuse",
+        lambda state, stage: (_ for _ in ()).throw(OSError("manifest read race")),
+    )
+    st = _po.PipelineState(
+        pipeline_id="pipe_fail_closed", prompt="q", mode="full", status="running")
+
+    assert orch._reuse_ok(st, _po.STAGE_RUN) is False
+
+
+def test_prepare_reuse_accepts_the_recorded_persona_alternative(monkeypatch, tmp_path):
+    """Duplicate persona candidates are one logical artifact, not two required files."""
+    sim_root = tmp_path / "simulations"
+    reddit_profiles = sim_root / "sim_one" / "reddit_profiles.json"
+    reddit_profiles.parent.mkdir(parents=True)
+    reddit_profiles.write_text('[{"name": "agent"}]', encoding="utf-8")
+    entry = _po._manifest_entry_for("personas", str(reddit_profiles), _po.STAGE_PREPARE)
+    monkeypatch.setattr(
+        _po.Config, "OASIS_SIMULATION_DATA_DIR", str(sim_root), raising=False)
+    monkeypatch.setattr(
+        _po.PipelineManager,
+        "load_artifact_manifest",
+        classmethod(lambda cls, pid: {"personas": entry}),
+    )
+    st = _po.PipelineState(
+        pipeline_id="pipe_persona", prompt="q", mode="full", status="running")
+    st.simulation_id = "sim_one"
+
+    assert _po.PipelineOrchestrator()._validate_reuse(st, _po.STAGE_PREPARE) is True
+
+
+def test_run_reuse_requires_the_current_simulation_to_be_completed(monkeypatch, tmp_path):
+    run_root = tmp_path / "run-state"
+    summary = run_root / "sim_current" / "run_summary.json"
+    summary.parent.mkdir(parents=True)
+    summary.write_text(json.dumps({
+        "simulation_id": "sim_current",
+        "rounds_executed": 19,
+        "simulation_health": "ok",
+    }), encoding="utf-8")
+    monkeypatch.setattr(_po.SimulationRunner, "RUN_STATE_DIR", str(run_root), raising=False)
+    st = _po.PipelineState(
+        pipeline_id="pipe_status", prompt="q", mode="full", status="running")
+    st.simulation_id = "sim_current"
+
+    ready = SimpleNamespace(simulation_id="sim_current", status=_po.SimulationStatus.READY)
+    completed = SimpleNamespace(
+        simulation_id="sim_current", status=_po.SimulationStatus.COMPLETED)
+    wrong = SimpleNamespace(simulation_id="sim_previous", status=_po.SimulationStatus.COMPLETED)
+
+    assert _po.PipelineOrchestrator._run_reuse_ready(st, ready) is False
+    assert _po.PipelineOrchestrator._run_reuse_ready(st, wrong) is False
+    assert _po.PipelineOrchestrator._run_reuse_ready(st, completed) is True
+
+
+def test_reused_run_summary_is_registered_without_rewriting(monkeypatch, tmp_path):
+    run_root = tmp_path / "run-state"
+    summary = run_root / "sim_current" / "run_summary.json"
+    summary.parent.mkdir(parents=True)
+    original = b'{"simulation_id":"sim_current","rounds_executed":19}\n'
+    summary.write_bytes(original)
+    monkeypatch.setattr(_po.SimulationRunner, "RUN_STATE_DIR", str(run_root), raising=False)
+    writes = []
+    monkeypatch.setattr(
+        _po.SimulationRunner,
+        "write_run_summary",
+        classmethod(lambda cls, *args, **kwargs: writes.append((args, kwargs))),
+    )
+    monkeypatch.setattr(
+        _po.PipelineManager, "save", classmethod(lambda cls, state: None))
+    monkeypatch.setattr(
+        _po.PipelineManager, "load_artifact_manifest", classmethod(lambda cls, pid: {}))
+    recorded = {}
+    monkeypatch.setattr(
+        _po.PipelineManager,
+        "write_artifact_manifest",
+        classmethod(lambda cls, pid, value: recorded.update(value)),
+    )
+    st = _po.PipelineState(
+        pipeline_id="pipe_preserve", prompt="q", mode="full", status="running")
+    st.simulation_id = "sim_current"
+
+    _po.PipelineOrchestrator()._publish_run_summary(
+        st, "sim_current", communities=None, regenerate=False)
+
+    assert writes == []
+    assert summary.read_bytes() == original
+    assert st.artifacts["run_summary"] == str(summary)
+    assert recorded["run_summary"]["path"] == str(summary)
+
+
+def test_missing_legacy_run_summary_is_backfilled_once(monkeypatch, tmp_path):
+    run_root = tmp_path / "run-state"
+    summary = run_root / "sim_legacy" / "run_summary.json"
+    monkeypatch.setattr(_po.SimulationRunner, "RUN_STATE_DIR", str(run_root), raising=False)
+    writes = []
+
+    def write_summary(cls, simulation_id, communities=None):
+        writes.append(simulation_id)
+        summary.parent.mkdir(parents=True, exist_ok=True)
+        summary.write_text(json.dumps({
+            "simulation_id": simulation_id,
+            "rounds_executed": 7,
+            "simulation_health": "ok",
+        }), encoding="utf-8")
+
+    monkeypatch.setattr(
+        _po.SimulationRunner, "write_run_summary", classmethod(write_summary))
+    monkeypatch.setattr(
+        _po.PipelineManager, "save", classmethod(lambda cls, state: None))
+    manifest = {}
+    monkeypatch.setattr(
+        _po.PipelineManager,
+        "load_artifact_manifest",
+        classmethod(lambda cls, pid: dict(manifest)),
+    )
+    monkeypatch.setattr(
+        _po.PipelineManager,
+        "write_artifact_manifest",
+        classmethod(lambda cls, pid, value: manifest.update(value)),
+    )
+    st = _po.PipelineState(
+        pipeline_id="pipe_legacy", prompt="q", mode="full", status="running")
+    st.simulation_id = "sim_legacy"
+    completed = SimpleNamespace(
+        simulation_id="sim_legacy", status=_po.SimulationStatus.COMPLETED)
+
+    assert _po.PipelineOrchestrator._run_reuse_ready(st, completed) is True
+    orch = _po.PipelineOrchestrator()
+    assert orch._publish_run_summary(
+        st, "sim_legacy", communities=None, regenerate=False) is True
+    assert orch._publish_run_summary(
+        st, "sim_legacy", communities=None, regenerate=False) is True
+
+    assert writes == ["sim_legacy"]
+    assert st.artifacts["run_summary"] == str(summary)
+    assert manifest["run_summary"]["path"] == str(summary)
+
+
+def _exercise_prepare_run_resume(
+        monkeypatch, tmp_path, *, rebuild_prepare, corrupt_run=False):
+    """Run the real orchestrator state machine with every external service faked."""
+    pipeline_root = tmp_path / "pipelines"
+    simulation_root = tmp_path / "simulations"
+    report_root = tmp_path / "reports" / "report_existing"
+    report_root.mkdir(parents=True)
+    monkeypatch.setattr(_po.Config, "PIPELINE_DATA_DIR", str(pipeline_root), raising=False)
+    monkeypatch.setattr(
+        _po.Config, "OASIS_SIMULATION_DATA_DIR", str(simulation_root), raising=False)
+    monkeypatch.setattr(_po.SimulationRunner, "RUN_STATE_DIR", str(simulation_root), raising=False)
+    for name, value in {
+        "REPORT_LINT": False,
+        "CAST_RECONCILE": False,
+        "EMBED_WARM_AT_RESEARCH": False,
+        "PIPELINE_VIZ_ARTIFACTS": False,
+        "GRAPH_BUILD_COMMUNITIES": False,
+        "GRAPH_RESOLVE_ENTITIES": False,
+        "GRAPH_PRUNE_ENABLED": False,
+        "SIM_GRAPH_FEEDBACK": False,
+        "PIPELINE_RUN_STALL_S": 0,
+        "REPORT_LLM_PREFLIGHT": False,
+        "REPORT_TELEMETRY_APPENDIX": False,
+        "SIM_TEMPORAL_MODE": "calendar",
+        "SIM_DECISION_CHANNEL": True,
+        "N_FORECAST_SEEDS": 1,
+    }.items():
+        monkeypatch.setattr(_po.Config, name, value, raising=False)
+
+    pid = "pipe_state_machine"
+    _po.PipelineManager.ensure_dirs(pid)
+    handoff = _po.PipelineManager.handoff_dir(pid)
+    os.makedirs(handoff, exist_ok=True)
+    with open(os.path.join(handoff, "research_report.md"), "w", encoding="utf-8") as f:
+        f.write("Evidence-backed EV research. " * 30)
+    with open(os.path.join(handoff, "actors.json"), "w", encoding="utf-8") as f:
+        json.dump({
+            "as_of_date": "2026-07-12",
+            "actors": [{"name": "EV OEM", "type": "Company"}],
+            "relationships": [],
+        }, f)
+    with open(os.path.join(handoff, "sources.json"), "w", encoding="utf-8") as f:
+        json.dump([], f)
+
+    old_id = "sim_old"
+    new_id = "sim_new"
+    old_dir = simulation_root / old_id
+    old_dir.mkdir(parents=True)
+    old_config = old_dir / "simulation_config.json"
+    old_config.write_text(json.dumps({
+        "temporal_config": {
+            "mode": "calendar",
+            "unit": "year",
+            "n_rounds": 9,
+            "horizon_date": "2035-12-31",
+            "horizon_source": "bare_year",
+            "horizon_defaulted": False,
+        },
+        "world_state_seed": {
+            "as_of_date": "2026-07-12",
+            "horizon_date": "2035-12-31",
+        },
+    }, indent=2), encoding="utf-8")
+    (old_dir / "twitter_profiles.csv").write_text("name\nEV OEM\n", encoding="utf-8")
+    old_summary = old_dir / "run_summary.json"
+    original_summary = json.dumps({
+        "simulation_id": old_id,
+        "rounds_executed": 9,
+        "simulation_health": "ok",
+    }, indent=2).encode()
+    old_summary.write_bytes(original_summary)
+    manifest = {
+        "initial_posts": _po._manifest_entry_for(
+            "initial_posts", str(old_config), _po.STAGE_PREPARE),
+        "personas": _po._manifest_entry_for(
+            "personas", str(old_dir / "twitter_profiles.csv"), _po.STAGE_PREPARE),
+        "run_summary": _po._manifest_entry_for(
+            "run_summary", str(old_summary), _po.STAGE_RUN),
+    }
+    _po.PipelineManager.write_artifact_manifest(pid, manifest)
+    if rebuild_prepare:
+        # Same path, different bytes: force the production manifest guard to
+        # create a new PREPARE attempt while the old RUN bit remains completed.
+        old_config.write_text(old_config.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    if corrupt_run:
+        old_summary.write_bytes(original_summary + b"\n")
+
+    states = {
+        old_id: SimpleNamespace(
+            simulation_id=old_id,
+            project_id="proj",
+            graph_id="graph",
+            status=_po.SimulationStatus.COMPLETED,
+        ),
+    }
+    manager_calls = {"create": 0, "prepare": 0}
+
+    class FakeSimulationManager:
+        def get_simulation(self, simulation_id):
+            return states.get(simulation_id)
+
+        def create_simulation(self, project_id, graph_id, **kwargs):
+            manager_calls["create"] += 1
+            states[new_id] = SimpleNamespace(
+                simulation_id=new_id,
+                project_id=project_id,
+                graph_id=graph_id,
+                status=_po.SimulationStatus.CREATED,
+            )
+            return states[new_id]
+
+        def prepare_simulation(self, simulation_id, **kwargs):
+            manager_calls["prepare"] += 1
+            sim_dir = simulation_root / simulation_id
+            sim_dir.mkdir(parents=True, exist_ok=True)
+            (sim_dir / "simulation_config.json").write_text(json.dumps({
+                "temporal_config": {
+                    "mode": "calendar",
+                    "unit": "year",
+                    "n_rounds": 9,
+                    "horizon_date": "2035-12-31",
+                    "horizon_source": "bare_year",
+                    "horizon_defaulted": False,
+                },
+            }, indent=2), encoding="utf-8")
+            (sim_dir / "twitter_profiles.csv").write_text(
+                "name\nEV OEM\n", encoding="utf-8")
+            states[simulation_id].status = _po.SimulationStatus.READY
+            return states[simulation_id]
+
+        def _save_simulation_state(self, state):
+            states[state.simulation_id] = state
+
+    fake_manager = FakeSimulationManager()
+    monkeypatch.setattr(_po, "SimulationManager", lambda: fake_manager)
+    project = SimpleNamespace(
+        project_id="proj",
+        name="EV project",
+        ontology={"entity_types": [{"name": "Company"}]},
+        graph_id="graph",
+    )
+    monkeypatch.setattr(
+        _po.ProjectManager, "get_project", classmethod(lambda cls, project_id: project))
+
+    import app.services.zep_entity_reader as zep_reader
+
+    class FakeEntityReader:
+        def filter_defined_entities(self, graph_id, enrich_with_edges=False):
+            return SimpleNamespace(entities=[{"uuid": "one"}])
+
+    monkeypatch.setattr(zep_reader, "ZepEntityReader", FakeEntityReader)
+    monkeypatch.setattr(
+        _po,
+        "GraphBuilderService",
+        lambda **kwargs: SimpleNamespace(set_ontology=lambda graph_id, ontology: None),
+    )
+
+    start_calls = []
+    summary_writes = []
+
+    def start_simulation(cls, simulation_id, **kwargs):
+        start_calls.append(simulation_id)
+        states[simulation_id].status = _po.SimulationStatus.RUNNING
+
+    def get_run_state(cls, simulation_id):
+        return SimpleNamespace(
+            total_rounds=9,
+            current_round=9,
+            runner_status=_po.RunnerStatus.COMPLETED,
+        )
+
+    def write_summary(cls, simulation_id, communities=None):
+        summary_writes.append(simulation_id)
+        path = simulation_root / simulation_id / "run_summary.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({
+            "simulation_id": simulation_id,
+            "rounds_executed": 9,
+            "simulation_health": "ok",
+        }), encoding="utf-8")
+
+    monkeypatch.setattr(
+        _po.SimulationRunner, "start_simulation", classmethod(start_simulation))
+    monkeypatch.setattr(
+        _po.SimulationRunner, "get_run_state", classmethod(get_run_state))
+    monkeypatch.setattr(
+        _po.SimulationRunner, "write_run_summary", classmethod(write_summary))
+
+    existing_report = SimpleNamespace(
+        report_id="report_existing", status=_po.ReportStatus.COMPLETED)
+    monkeypatch.setattr(
+        _po.ReportManager,
+        "get_report",
+        classmethod(lambda cls, report_id: existing_report),
+    )
+    monkeypatch.setattr(
+        _po.ReportManager,
+        "get_report_by_simulation",
+        classmethod(lambda cls, simulation_id: None),
+    )
+    monkeypatch.setattr(
+        _po.ReportManager,
+        "_get_report_folder",
+        classmethod(lambda cls, report_id: str(report_root)),
+    )
+
+    # Keep this transition test focused on durable stage contracts, not provider,
+    # telemetry, or final-report quality systems.
+    monkeypatch.setattr(_po, "_finalize_research_contract", lambda *args, **kwargs: None)
+    for name, replacement in {
+        "_start_heartbeat": lambda self, state: None,
+        "_init_telemetry_flush": lambda self, state: None,
+        "_write_run_manifest": lambda self, state: None,
+        "_update_manifest": lambda self, state, stage, **kwargs: None,
+        "_record_research_telemetry": lambda self, state, value: None,
+        "_maybe_warm_embedder": lambda self, state, actors: None,
+        "_surface_research_quality": lambda self, state, handoff_dir: {},
+        "_surface_forecast_confidence_penalty": lambda self, state, handoff_dir: None,
+        "_flush_run_telemetry": lambda self, state, **kwargs: None,
+        "_maybe_run_seed_ensemble": lambda self, *args, **kwargs: None,
+        "_enforce_pipeline_health": lambda self, state: None,
+        "_assess_report_health": lambda self, report_id: ("ok", [], {}),
+    }.items():
+        monkeypatch.setattr(_po.PipelineOrchestrator, name, replacement)
+
+    state = _po.PipelineState(
+        pipeline_id=pid,
+        prompt="Forecast EV development through 2035",
+        mode="full",
+        status="running",
+    )
+    state.handoff_dir = handoff
+    state.project_id = "proj"
+    state.graph_id = "graph"
+    state.simulation_id = old_id
+    state.report_id = "report_existing"
+    state.options["research_language"] = "English"
+    if corrupt_run:
+        state.options["scenario_overlay"] = {
+            "injected_events": [{"content": "Policy shock", "round": 0}],
+        }
+    state.stages = {
+        name: _po.StageState(name=name, status="completed", progress=100)
+        for name in (
+            _po.STAGE_RESEARCH,
+            _po.STAGE_ONTOLOGY,
+            _po.STAGE_GRAPH,
+            _po.STAGE_PREPARE,
+            _po.STAGE_RUN,
+            _po.STAGE_REPORT,
+        )
+    }
+
+    _po.PipelineOrchestrator._run(state)
+    return SimpleNamespace(
+        state=state,
+        old_id=old_id,
+        new_id=new_id,
+        simulation_root=simulation_root,
+        original_summary=original_summary,
+        start_calls=start_calls,
+        summary_writes=summary_writes,
+        manager_calls=manager_calls,
+        manifest=_po.PipelineManager.load_artifact_manifest(pid),
+    )
+
+
+def test_prepare_rebuild_invalidates_and_executes_run_end_to_end(monkeypatch, tmp_path):
+    result = _exercise_prepare_run_resume(
+        monkeypatch, tmp_path, rebuild_prepare=True)
+
+    assert result.state.status == "completed"
+    assert result.state.simulation_id == result.new_id
+    assert result.manager_calls == {"create": 1, "prepare": 1}
+    assert result.start_calls == [result.new_id]
+    assert result.summary_writes == [result.new_id]
+    config_path = result.simulation_root / result.new_id / "simulation_config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["world_state_seed"]["horizon_date"] == "2035-12-31"
+    entry = result.manifest["initial_posts"]
+    assert os.path.realpath(entry["path"]) == os.path.realpath(config_path)
+    assert entry["sha256"] == _po._sha256_file(str(config_path))
+    assert result.manifest["run_summary"]["path"].endswith(
+        f"{result.new_id}/run_summary.json")
+    assert result.state.stages[_po.STAGE_RUN].message == "模拟完成"
+
+
+def test_prepare_and_run_reuse_is_read_only_end_to_end(monkeypatch, tmp_path):
+    result = _exercise_prepare_run_resume(
+        monkeypatch, tmp_path, rebuild_prepare=False)
+
+    assert result.state.status == "completed"
+    assert result.state.simulation_id == result.old_id
+    assert result.manager_calls == {"create": 0, "prepare": 0}
+    assert result.start_calls == []
+    assert result.summary_writes == []
+    summary = result.simulation_root / result.old_id / "run_summary.json"
+    assert summary.read_bytes() == result.original_summary
+    assert result.state.stages[_po.STAGE_RUN].message == "模拟已恢复"
+
+
+def test_invalid_run_manifest_applies_overlay_before_rerun(monkeypatch, tmp_path):
+    result = _exercise_prepare_run_resume(
+        monkeypatch, tmp_path, rebuild_prepare=False, corrupt_run=True)
+
+    assert result.state.status == "completed"
+    assert result.state.simulation_id == result.old_id
+    assert result.manager_calls == {"create": 0, "prepare": 0}
+    assert result.start_calls == [result.old_id]
+    assert result.summary_writes == [result.old_id]
+    config_path = result.simulation_root / result.old_id / "simulation_config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["event_config"]["scheduled_events"][0]["content"] == "Policy shock"
+    assert result.state.stages[_po.STAGE_RUN].message == "模拟完成"
 
 
 def test_research_html_artifact_is_raw_served_in_opaque_sandbox(monkeypatch, tmp_path):

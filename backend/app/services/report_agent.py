@@ -3310,9 +3310,12 @@ class ReportAgent:
         multiple sources tie for best evidence, return empty rather than attach
         an arbitrary citation.
         """
-        bare = cls._ANY_S_TAG_RE.sub(" ", str(line or ""))
+        bare = cls._FULL_S_TAG_RE.sub(" ", str(line or ""))
         numeric: List[Tuple[str, bool]] = []
-        for match in re.finditer(r"(?<![\w.])(\d+(?:\.\d+)?)(\s*%)?", bare):
+        for match in re.finditer(
+            r"(?<![A-Za-z0-9_.])(\d+(?:\.\d+)?)(\s*%)?",
+            bare,
+        ):
             number = match.group(1)
             is_percent = bool(match.group(2))
             try:
@@ -3386,6 +3389,242 @@ class ReportAgent:
         if not inserted:
             return md, 0
         return "\n".join(out_lines), inserted
+
+    def _repair_final_quantitative_grounding(
+        self, md: str
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Remove unsupported numeric claims after all report-shape rewrites.
+
+        The publication gate measures the exact final bytes.  Part-2 synthesis,
+        visualization placement, and resolution-section insertion happen after
+        the earlier draft repair, so a draft can appear well cited and then ship
+        mostly uncited numbers.  This bounded deterministic pass runs only at the
+        final mutable stage:
+
+        * authored Part-1 forecasts and resolution criteria are preserved and
+          reported separately from *external-source* citation coverage;
+        * an uncited numeric sentence gets a marker only when the persisted source
+          spans pass the same semantic-support predicate as the final audit;
+        * otherwise a deterministically unsupported numeric sentence/table-cell
+          fragment is removed rather than receiving a guessed citation or
+          surviving as false precision; unverifiable fragments remain visible
+          and keep the unchanged gate failed.
+
+        Non-numeric analysis is retained.  The following citation finalizer and
+        read-only audit remain authoritative.
+        """
+        from .forecast_extractor import (
+            BINARY_FORECAST_END_MARKER,
+            BINARY_FORECAST_START_MARKER,
+            _CITATION_RE as _source_citation_re,
+            _NUMBER_RE as _number_re,
+            audit_citation_grounding as _audit_grounding,
+            authored_forecast_markers_balanced as _authored_markers_balanced,
+            format_markdown_table_row as _format_table_row,
+            is_authored_forecast_heading as _is_authored_heading,
+            is_markdown_table_delimiter as _is_table_delimiter,
+            is_markdown_table_header as _is_table_header,
+            markdown_fence_transition as _fence_transition,
+            markdown_table_claim_context as _table_claim_context,
+            markdown_table_cells as _table_cells,
+            split_markdown_claim_units as _claim_units,
+        )
+
+        text = str(md or "")
+        index_map = self._citation_index_or_fallback()
+
+        def _audit_external_claims(value: str) -> Dict[str, Any]:
+            body = "\n".join(
+                chunk for chunk in self._split_markdown_h2_sections(value)
+                if chunk.split("\n", 1)[0].strip() not in _REFS_HEADINGS
+            )
+            return _audit_grounding(
+                body,
+                index_map=self._citation_index_or_fallback(),
+                exclude_authored_forecasts=True,
+            )
+
+        before = _audit_external_claims(text)
+        try:
+            threshold = float(
+                getattr(Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.5) or 0.0
+            )
+        except (TypeError, ValueError):
+            threshold = 0.5
+        coverage = float(before.get("resolved_coverage", 1.0) or 0.0)
+        if coverage >= threshold:
+            return text, {
+                "applied": False,
+                "before": before,
+                "after": before,
+                "citations_added": 0,
+                "sentences_removed": 0,
+                "table_rows_removed": 0,
+                "table_cells_cleared": 0,
+                "unverifiable_claims_preserved": 0,
+                "passed": True,
+            }
+
+        out_lines: List[str] = []
+        in_authored_block = False
+        in_authored_section = False
+        in_references = False
+        fence_state = None
+        active_table_headers: List[str] = []
+        citations_added = 0
+        sentences_removed = 0
+        table_rows_removed = 0
+        table_cells_cleared = 0
+        unverifiable_claims_preserved = 0
+
+        lines = text.split("\n")
+        authored_markers_valid = _authored_markers_balanced(lines)
+
+        def _repair_fragments(
+            surface: str,
+            *,
+            semantic_context: str = "",
+        ) -> Tuple[str, bool]:
+            nonlocal citations_added
+            nonlocal sentences_removed
+            nonlocal unverifiable_claims_preserved
+            fragments = _claim_units(surface)
+            if not fragments:
+                return surface, False
+            kept: List[str] = []
+            removed_numeric = False
+            for fragment in fragments:
+                if not _number_re.search(fragment):
+                    kept.append(fragment)
+                    continue
+                if _source_citation_re.search(fragment):
+                    kept.append(fragment)
+                    continue
+                claim_for_support = " ".join(
+                    part for part in (semantic_context.strip(), fragment) if part
+                )
+                tag, status = self._quantitative_semantic_decision(
+                    claim_for_support
+                )
+                if tag:
+                    kept.append(fragment.rstrip() + f" [{tag}]")
+                    citations_added += 1
+                elif status == "unverifiable":
+                    kept.append(fragment)
+                    unverifiable_claims_preserved += 1
+                else:
+                    sentences_removed += 1
+                    removed_numeric = True
+            return " ".join(kept), removed_numeric
+
+        for line_index, line in enumerate(lines):
+            stripped = line.strip()
+            was_in_fence = fence_state is not None
+            fence_state, is_fence_line = _fence_transition(line, fence_state)
+            if is_fence_line:
+                out_lines.append(line)
+                continue
+            if was_in_fence:
+                out_lines.append(line)
+                continue
+            if stripped == BINARY_FORECAST_START_MARKER:
+                in_authored_block = authored_markers_valid
+                in_authored_section = False
+                out_lines.append(line)
+                continue
+            if stripped == BINARY_FORECAST_END_MARKER:
+                in_authored_block = False
+                in_authored_section = False
+                out_lines.append(line)
+                continue
+            if stripped.startswith("## "):
+                if not in_authored_block:
+                    in_authored_section = _is_authored_heading(stripped)
+                in_references = stripped in _REFS_HEADINGS
+                active_table_headers = []
+                out_lines.append(line)
+                continue
+
+            table_cells = _table_cells(line)
+            table_header = _is_table_header(lines, line_index)
+            table_delimiter = _is_table_delimiter(line)
+            if table_header:
+                active_table_headers = table_cells
+                out_lines.append(line)
+                continue
+            if table_delimiter:
+                out_lines.append(line)
+                continue
+            if (
+                in_authored_block
+                or in_authored_section
+                or in_references
+                or not stripped
+                or stripped.startswith("#")
+                or not _number_re.search(stripped)
+            ):
+                if not stripped or (stripped and not table_cells):
+                    active_table_headers = []
+                out_lines.append(line)
+                continue
+
+            if table_cells:
+                repaired_cells: List[str] = []
+                for cell_index, cell in enumerate(table_cells):
+                    context = _table_claim_context(
+                        active_table_headers,
+                        table_cells,
+                        cell_index,
+                        "",
+                    )
+                    repaired_cell, removed_numeric = _repair_fragments(
+                        cell,
+                        semantic_context=context,
+                    )
+                    if removed_numeric and not repaired_cell.strip():
+                        repaired_cell = "—"
+                        table_cells_cleared += 1
+                    repaired_cells.append(repaired_cell)
+                out_lines.append(_format_table_row(line, repaired_cells))
+                continue
+
+            active_table_headers = []
+            prefix = ""
+            body = line
+            list_match = re.match(r"^(\s*(?:[-*+] |\d+[.)] ))(.*)$", line)
+            if list_match:
+                prefix, body = list_match.group(1), list_match.group(2)
+            repaired_body, _ = _repair_fragments(body)
+            if repaired_body:
+                out_lines.append(prefix + repaired_body)
+
+        repaired = "\n".join(out_lines)
+        after = _audit_external_claims(repaired)
+        after_coverage = float(after.get("resolved_coverage", 1.0) or 0.0)
+        diagnostics = {
+            "applied": repaired != text,
+            "before": before,
+            "after": after,
+            "citations_added": citations_added,
+            "sentences_removed": sentences_removed,
+            "table_rows_removed": table_rows_removed,
+            "table_cells_cleared": table_cells_cleared,
+            "unverifiable_claims_preserved": unverifiable_claims_preserved,
+            "passed": after_coverage >= threshold,
+        }
+        if repaired != text:
+            logger.info(
+                "最终定量接地修复: coverage %.3f→%.3f, citations_added=%s, "
+                "sentences_removed=%s, table_cells_cleared=%s, "
+                "unverifiable_preserved=%s",
+                coverage,
+                after_coverage,
+                citations_added,
+                sentences_removed,
+                table_cells_cleared,
+                unverifiable_claims_preserved,
+            )
+        return repaired, diagnostics
 
     def _repair_quote_grounding(self, md: str) -> Tuple[str, int]:
         """RQ-2 引文接地修复：删除既非模拟/推演标注、又未在研究材料中逐字命中、且不带 [S#] 来源的
@@ -3545,6 +3784,56 @@ class ReportAgent:
                 out[f"S{i}"] = s
         return out
 
+    _CITATION_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+    _SEMANTIC_NUMBER_RE = re.compile(
+        r"(?<![A-Za-z0-9_.])\d+(?:\.\d+)?\s*%?"
+    )
+
+    @classmethod
+    def _semantic_numbers(cls, text: str) -> set[str]:
+        return {
+            re.sub(r"\s+", "", match.group(0))
+            for match in cls._SEMANTIC_NUMBER_RE.finditer(str(text or ""))
+        }
+
+    @staticmethod
+    def _citation_evidence_spans(source: Dict[str, Any]) -> List[str]:
+        """Return only persisted evidence-bearing source fields."""
+        spans: List[str] = []
+        title = str(source.get("title") or "").strip()
+        if title:
+            spans.append(title)
+        supports = source.get("supports")
+        if isinstance(supports, list):
+            spans.extend(
+                str(value).strip() for value in supports if str(value).strip()
+            )
+        elif isinstance(supports, str) and supports.strip():
+            spans.append(supports.strip())
+        for key in (
+            "excerpt", "snippet", "quote", "summary", "description", "content", "text"
+        ):
+            value = source.get(key)
+            if not isinstance(value, str) or not value.strip():
+                continue
+            pieces = re.split(r"(?<=[.!?。！？])\s+|[\r\n]+", value.strip())
+            spans.extend(
+                piece.strip()[:1200] for piece in pieces[:200] if piece.strip()
+            )
+        return spans
+
+    @classmethod
+    def _citation_cjk_signature(cls, text: str) -> str:
+        return "".join(cls._CITATION_CJK_RE.findall(str(text or "")))
+
+    @classmethod
+    def _citation_cjk_bigrams(cls, text: str) -> set[str]:
+        signature = cls._citation_cjk_signature(text)
+        return {
+            signature[index:index + 2]
+            for index in range(max(0, len(signature) - 1))
+        }
+
     @classmethod
     def _semantic_citation_support(
         cls, line: str, source: Dict[str, Any]
@@ -3556,7 +3845,7 @@ class ReportAgent:
         the pair is not deterministically auditable (for example cross-language
         prose); callers preserve but report it rather than guessing.
         """
-        bare = cls._ANY_S_TAG_RE.sub(" ", str(line or ""))
+        bare = cls._FULL_S_TAG_RE.sub(" ", str(line or ""))
 
         def _tokens(text: str) -> set[str]:
             out: set[str] = set()
@@ -3568,44 +3857,62 @@ class ReportAgent:
                 out.add(token)
             return out
 
-        line_tokens = _tokens(bare)
-        if len(line_tokens) < 2:
-            return None
-
-        spans: List[str] = []
-        title = str(source.get("title") or "").strip()
-        if title:
-            spans.append(title)
-        supports = source.get("supports")
-        if isinstance(supports, list):
-            spans.extend(str(value).strip() for value in supports if str(value).strip())
-        elif isinstance(supports, str) and supports.strip():
-            spans.append(supports.strip())
-        for key in ("excerpt", "snippet", "quote", "summary", "description", "content", "text"):
-            value = source.get(key)
-            if not isinstance(value, str) or not value.strip():
-                continue
-            # Treat individual persisted sentences/lines as evidence.  This
-            # avoids allowing an unrelated fact elsewhere in a large scraped
-            # document to combine with generic words from the cited claim.
-            pieces = re.split(r"(?<=[.!?。！？])\s+|[\r\n]+", value.strip())
-            spans.extend(piece.strip()[:1200] for piece in pieces[:200] if piece.strip())
+        spans = cls._citation_evidence_spans(source)
         if not spans:
             return None
 
-        line_numbers = set(re.findall(r"(?<![\w.])\d+(?:\.\d+)?%?", bare))
+        title = str(source.get("title") or "").strip()
+        line_tokens = _tokens(bare)
+        line_numbers = cls._semantic_numbers(bare)
         discriminative_numbers = {
             number for number in line_numbers
             if not (number.isdigit() and 1900 <= int(number) <= 2100)
         }
         normalized_line = re.sub(r"\s+", " ", bare).strip().lower()
+        line_cjk = cls._citation_cjk_signature(bare)
+        cjk_spans = [span for span in spans if cls._citation_cjk_signature(span)]
+        if line_cjk:
+            if not cjk_spans:
+                # Cross-language evidence cannot be rejected or accepted by a
+                # monolingual lexical check. Preserve the claim and let coverage
+                # remain visibly below the publication threshold.
+                return None
+            line_bigrams = cls._citation_cjk_bigrams(bare)
+            number_compatible_span = False
+            for span in cjk_spans:
+                span_cjk = cls._citation_cjk_signature(span)
+                span_numbers = cls._semantic_numbers(span)
+                if line_numbers and not line_numbers.issubset(span_numbers):
+                    continue
+                number_compatible_span = True
+                exact_phrase = (
+                    min(len(line_cjk), len(span_cjk)) >= 6
+                    and (line_cjk in span_cjk or span_cjk in line_cjk)
+                )
+                if exact_phrase:
+                    return True
+                overlap = line_bigrams & cls._citation_cjk_bigrams(span)
+                if (
+                    len(overlap) >= 5
+                    and len(overlap) / max(1, len(line_bigrams)) >= 0.9
+                ):
+                    return True
+            # A material number absent from every CJK span is a deterministic
+            # contradiction. Similar wording with compatible numbers is merely
+            # inconclusive: one changed Han character can invert sales vs.
+            # production, imports vs. exports, etc., so preserve it uncited.
+            return None if number_compatible_span else False
+
+        if len(line_tokens) < 2:
+            return None
+        if not any(_tokens(span) for span in spans) and cjk_spans:
+            return None
+
         all_span_tokens: set[str] = set()
         all_span_numbers: set[str] = set()
         for span in spans:
             all_span_tokens.update(_tokens(span))
-            all_span_numbers.update(re.findall(
-                r"(?<![\w.])\d+(?:\.\d+)?%?", span
-            ))
+            all_span_numbers.update(cls._semantic_numbers(span))
         # One source may persist a multi-part fact as several concise `supports`
         # spans (for example tariff rate and burden incidence). Aggregate only
         # those trusted spans—not URL/metadata—and require every material number
@@ -3626,9 +3933,7 @@ class ReportAgent:
             )
             if exact_phrase:
                 return True
-            span_numbers = set(re.findall(
-                r"(?<![\w.])\d+(?:\.\d+)?%?", span
-            ))
+            span_numbers = cls._semantic_numbers(span)
             if discriminative_numbers:
                 if not discriminative_numbers.issubset(span_numbers):
                     continue
@@ -3655,7 +3960,10 @@ class ReportAgent:
         """
         text = str(line or "")
         boundaries: List[Tuple[int, int]] = []
-        for match in re.finditer(r"(?:[.!?。！？；](?=\s|$)|\|)", text):
+        for match in re.finditer(
+            r"(?:\.(?=\s|$|[\[【])|[!?;。！？；]|\|)",
+            text,
+        ):
             boundaries.append((match.start(), match.end()))
         left = 0
         right = len(text)
@@ -3676,27 +3984,55 @@ class ReportAgent:
                 break
         return text[left:right].strip()
 
+    @staticmethod
+    def _citation_semantic_claim(
+        line: str,
+        marker_start: int,
+        claim_clause: str,
+        table_headers: List[str],
+    ) -> str:
+        """Add table row/header labels to a marker's own cell claim."""
+        from .forecast_extractor import (
+            markdown_table_cell_index,
+            markdown_table_cells,
+            markdown_table_claim_context,
+        )
+
+        cells = markdown_table_cells(line)
+        if not cells:
+            return claim_clause
+        cell_index = markdown_table_cell_index(line, marker_start)
+        if cell_index is None:
+            return claim_clause
+        return markdown_table_claim_context(
+            table_headers,
+            cells,
+            cell_index,
+            claim_clause,
+        )
+
     def _best_semantic_source_tag_for_line(
         self, line: str
     ) -> str:
-        candidates: List[Tuple[int, int, str, Dict[str, Any]]] = []
-        bare = self._ANY_S_TAG_RE.sub(" ", str(line or ""))
+        candidates: List[Tuple[int, int, int, str, Dict[str, Any]]] = []
+        bare = self._FULL_S_TAG_RE.sub(" ", str(line or ""))
         line_words = set(re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", bare.lower()))
-        line_numbers = set(re.findall(r"(?<![\w.])\d+(?:\.\d+)?%?", bare))
+        line_numbers = self._semantic_numbers(bare)
+        line_cjk = self._citation_cjk_bigrams(bare)
         for index, source in enumerate(getattr(self, "sources", None) or [], 1):
             if not _citation_source_admissible(source):
                 continue
             supported = self._semantic_citation_support(line, source)
             if supported is not True:
                 continue
-            source_text = json.dumps(source, ensure_ascii=False)
+            source_text = "\n".join(self._citation_evidence_spans(source))
             source_words = set(re.findall(
                 r"[A-Za-z][A-Za-z0-9_-]{3,}", source_text.lower()))
-            source_numbers = set(re.findall(
-                r"(?<![\w.])\d+(?:\.\d+)?%?", source_text))
+            source_numbers = self._semantic_numbers(source_text)
             candidates.append((
                 len(line_numbers & source_numbers),
                 len(line_words & source_words),
+                len(line_cjk & self._citation_cjk_bigrams(source_text)),
                 f"S{index}",
                 source,
             ))
@@ -3704,14 +4040,48 @@ class ReportAgent:
             return ""
         candidates.sort(key=lambda row: (row[0], row[1], row[2]), reverse=True)
         best = candidates[0]
-        if len(candidates) > 1 and best[:2] == candidates[1][:2]:
+        if len(candidates) > 1 and best[:3] == candidates[1][:3]:
             return ""  # tied provenance is not a safe automatic remap
         imap = getattr(self, "_citation_index", None)
         if not isinstance(imap, dict):
             imap = {}
             self._citation_index = imap
-        imap.setdefault(best[2], best[3])
-        return best[2]
+        imap.setdefault(best[3], best[4])
+        return best[3]
+
+    def _quantitative_semantic_decision(self, claim: str) -> Tuple[str, str]:
+        """Return ``(supported tag, status)`` for one numeric claim unit.
+
+        ``unverifiable`` is deliberately distinct from ``unsupported``. The
+        former survives uncited so the unchanged quality gate fails honestly;
+        only deterministically unsupported precision may be removed.
+        """
+        tag = self._best_semantic_source_tag_for_line(claim)
+        if tag:
+            return tag, "supported"
+        outcomes: List[bool] = []
+        saw_unverifiable = False
+        for source in getattr(self, "sources", None) or []:
+            if not _citation_source_admissible(source):
+                continue
+            supported = self._semantic_citation_support(claim, source)
+            if supported is None:
+                saw_unverifiable = True
+            else:
+                outcomes.append(supported)
+        if any(outcomes):
+            # More than one equally plausible source is not safe provenance.
+            return "", "unverifiable"
+        if saw_unverifiable:
+            return "", "unverifiable"
+        if outcomes:
+            return "", "unsupported"
+        if any(
+            _citation_source_admissible(source)
+            for source in (getattr(self, "sources", None) or [])
+        ):
+            return "", "unverifiable"
+        return "", "unsupported"
 
     def _repair_semantic_citations(
         self, md: str
@@ -3722,6 +4092,13 @@ class ReportAgent:
         therefore forbidden here; a missing citation remains a visible coverage
         gap for the publication gate instead of becoming a false footnote.
         """
+        from .forecast_extractor import (
+            is_markdown_table_delimiter,
+            is_markdown_table_header,
+            markdown_fence_transition,
+            markdown_table_cells,
+        )
+
         imap = self._citation_index_or_fallback()
         current = getattr(self, "_citation_index", None)
         if not isinstance(current, dict) or not current:
@@ -3730,27 +4107,52 @@ class ReportAgent:
         info = {"checked": 0, "kept": 0, "unverifiable": 0,
                 "remapped": 0, "stripped": 0}
         out: List[str] = []
-        in_fence = False
-        for line in str(md or "").split("\n"):
-            stripped = line.lstrip()
-            if stripped.startswith(("```", "~~~")):
-                in_fence = not in_fence
+        fence_state = None
+        table_headers: List[str] = []
+        lines = str(md or "").split("\n")
+        for line_index, line in enumerate(lines):
+            was_in_fence = fence_state is not None
+            fence_state, is_fence_line = markdown_fence_transition(
+                line, fence_state
+            )
+            if is_fence_line:
                 out.append(line)
                 continue
-            if in_fence:
+            if was_in_fence:
                 out.append(line)
                 continue
+            cells = markdown_table_cells(line)
+            if is_markdown_table_header(lines, line_index):
+                table_headers = cells
+                out.append(line)
+                continue
+            if is_markdown_table_delimiter(line):
+                out.append(line)
+                continue
+            if not cells:
+                table_headers = []
 
-            def _replace(match: "re.Match") -> str:
+            def _replace(
+                match: "re.Match",
+                *,
+                _line: str = line,
+                _headers: Tuple[str, ...] = tuple(table_headers),
+            ) -> str:
                 tag = match.group(1).upper()
                 source = imap.get(tag)
                 if not isinstance(source, dict):
                     return match.group(0)
                 info["checked"] += 1
                 claim_clause = self._citation_claim_clause(
-                    line, match.start(), match.end()
+                    _line, match.start(), match.end()
                 )
-                supported = self._semantic_citation_support(claim_clause, source)
+                semantic_claim = self._citation_semantic_claim(
+                    _line,
+                    match.start(),
+                    claim_clause,
+                    list(_headers),
+                )
+                supported = self._semantic_citation_support(semantic_claim, source)
                 if supported is True:
                     info["kept"] += 1
                     return f"[{tag}]"
@@ -3762,6 +4164,7 @@ class ReportAgent:
 
             updated = marker_re.sub(_replace, line)
             updated = re.sub(r"(?:\[(S\d+)\])(?:\s+\[\1\])+", r"[\1]", updated)
+            updated = re.sub(r"\s+([，。,.;；、])", r"\1", updated)
             updated = re.sub(r"[ \t]{2,}", " ", updated).rstrip()
             out.append(updated)
         return "\n".join(out), info
@@ -3769,19 +4172,40 @@ class ReportAgent:
     def _audit_semantic_citations(
         self, md: str, index_map: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
+        from .forecast_extractor import (
+            is_markdown_table_delimiter,
+            is_markdown_table_header,
+            markdown_fence_transition,
+            markdown_table_cells,
+        )
+
         imap = index_map or self._citation_index_or_fallback()
         marker_re = re.compile(r"[\[【]\s*(S\d+)\s*[\]】]", re.I)
         unsupported: List[Dict[str, str]] = []
         unverifiable = 0
         checked = 0
         tag_counts: Dict[str, int] = {}
-        in_fence = False
-        for line_no, line in enumerate(str(md or "").split("\n"), 1):
-            if line.lstrip().startswith(("```", "~~~")):
-                in_fence = not in_fence
+        fence_state = None
+        table_headers: List[str] = []
+        lines = str(md or "").split("\n")
+        for line_index, line in enumerate(lines):
+            line_no = line_index + 1
+            was_in_fence = fence_state is not None
+            fence_state, is_fence_line = markdown_fence_transition(
+                line, fence_state
+            )
+            if is_fence_line:
                 continue
-            if in_fence:
+            if was_in_fence:
                 continue
+            cells = markdown_table_cells(line)
+            if is_markdown_table_header(lines, line_index):
+                table_headers = cells
+                continue
+            if is_markdown_table_delimiter(line):
+                continue
+            if not cells:
+                table_headers = []
             for match in marker_re.finditer(line):
                 source = imap.get(match.group(1).upper())
                 if not isinstance(source, dict):
@@ -3792,7 +4216,13 @@ class ReportAgent:
                 claim_clause = self._citation_claim_clause(
                     line, match.start(), match.end()
                 )
-                supported = self._semantic_citation_support(claim_clause, source)
+                semantic_claim = self._citation_semantic_claim(
+                    line,
+                    match.start(),
+                    claim_clause,
+                    table_headers,
+                )
+                supported = self._semantic_citation_support(semantic_claim, source)
                 if supported is None:
                     unverifiable += 1
                 elif not supported:
@@ -3836,6 +4266,8 @@ class ReportAgent:
 
         围栏（```/~~~）内的记号是字面内容，不动。返回
         (新 markdown, {"kept_verified", "remapped", "stripped"})（按记号计数）。"""
+        from .forecast_extractor import markdown_fence_transition
+
         info = {"kept_verified": 0, "remapped": 0, "stripped": 0}
         if not dangling:
             return md, info
@@ -3849,26 +4281,28 @@ class ReportAgent:
         marker_re = re.compile(r"[\[【]\s*(S\d+(?:-[A-Za-z])?)\s*[\]】]", re.I)
 
         out_lines: List[str] = []
-        in_fence = False
+        fence_state = None
         for line in md.split("\n"):
-            stripped = line.lstrip()
-            if stripped.startswith("```") or stripped.startswith("~~~"):
-                in_fence = not in_fence
+            was_in_fence = fence_state is not None
+            fence_state, is_fence_line = markdown_fence_transition(
+                line, fence_state
+            )
+            if is_fence_line:
                 out_lines.append(line)
                 continue
-            if in_fence:
+            if was_in_fence:
                 out_lines.append(line)
                 continue
             changed = False
 
-            def _replace(match: "re.Match") -> str:
+            def _replace(match: "re.Match", *, _line: str = line) -> str:
                 nonlocal changed
                 original = match.group(1)
                 tag = original.upper()
                 if tag not in dangling_set:
                     return match.group(0)
                 claim_clause = self._citation_claim_clause(
-                    line, match.start(), match.end()
+                    _line, match.start(), match.end()
                 )
                 best = self._best_source_tag_for_line(
                     claim_clause, haystacks
@@ -3905,6 +4339,10 @@ class ReportAgent:
 
     # 任意 [S…] 记号（位置式 [S1]、分层 [S1-a]、或占位符 [S?]/[S#]）——引用回填判定「本行是否已带记号」。
     _ANY_S_TAG_RE = re.compile(r"[\[【]\s*S[\d?#]", re.I)
+    _FULL_S_TAG_RE = re.compile(
+        r"[\[【]\s*S\d+(?:-[A-Za-z])?\s*[\]】]",
+        re.I,
+    )
 
     # WAVE9：泄漏章节标题（方法学词汇进标题）——修复与大纲 lint 共用。\bagents?\b 带词界，
     # 避免误伤 agenda/agency 等词。
@@ -4082,7 +4520,7 @@ class ReportAgent:
                     if len(other_probs) != len(probs):
                         continue
                     if all(abs(float(a) - float(b)) <= 0.01
-                           for a, b in zip(probs, other_probs)):
+                           for a, b in zip(probs, other_probs, strict=True)):
                         return {
                             "issue": "binary probabilities identical to a different-simulation "
                                      "report — forecasts insensitive to simulation",
@@ -4539,9 +4977,11 @@ class ReportAgent:
                         continue
                     protected: List[str] = []
 
-                    def _mask_inline(match: "re.Match[str]") -> str:
-                        protected.append(match.group(0))
-                        return f"\x00LANGPROTECTED{len(protected) - 1}\x00"
+                    def _mask_inline(
+                        match: "re.Match[str]", *, _protected: List[str] = protected
+                    ) -> str:
+                        _protected.append(match.group(0))
+                        return f"\x00LANGPROTECTED{len(_protected) - 1}\x00"
 
                     new_line = self._LANG_INLINE_PROTECTED_RE.sub(_mask_inline, line)
                     for original, translated in replacements:
@@ -4674,18 +5114,22 @@ class ReportAgent:
         """按 H2（行首 '## '，不含 '### '）边界把成稿切成若干块；首个 H2 之前的前言
         （H1 标题 + 摘要 blockquote）为块 0。跳过围栏代码块内的 '## '（避免把代码/示例里的
         井号当章节边界）。各块以 '\\n' 拼接后 == 原文（无增删换行），保证结构无损。"""
+        from .forecast_extractor import markdown_fence_transition
+
         lines = (md or "").split("\n")
         chunks: List[List[str]] = []
         cur: List[str] = []
-        in_fence = False
+        fence_state = None
         for ln in lines:
-            s = ln.lstrip()
-            if s.startswith("```") or s.startswith("~~~"):
-                in_fence = not in_fence
+            was_in_fence = fence_state is not None
+            fence_state, is_fence_line = markdown_fence_transition(
+                ln, fence_state
+            )
+            if is_fence_line:
                 cur.append(ln)
                 continue
             # H2 边界：'## ' 开头但非 '### '（后者 startswith('## ') 为 False，无需额外判断）
-            if (not in_fence) and ln.startswith("## "):
+            if (not was_in_fence) and ln.startswith("## "):
                 if cur:
                     chunks.append(cur)
                 cur = [ln]
@@ -5397,6 +5841,8 @@ class ReportAgent:
             "passes": 0,
             "quotes_removed": 0,
             "lint_rewrites": 0,
+            "quantitative_rewrites": 0,
+            "quantitative_grounding": {},
             "semantic_unsupported": None,
             "stable": False,
             "lint": {},
@@ -5405,6 +5851,16 @@ class ReportAgent:
         for pass_no in range(1, limit + 1):
             totals["passes"] = pass_no
             self._finalize_citations_for_publish(report_id, report)
+
+            quantitatively_grounded, quantitative_info = (
+                self._repair_final_quantitative_grounding(
+                    report.markdown_content or ""
+                )
+            )
+            totals["quantitative_grounding"] = quantitative_info
+            if quantitatively_grounded != (report.markdown_content or ""):
+                totals["quantitative_rewrites"] += 1
+                report.markdown_content = quantitatively_grounded
 
             repaired, removed = self._repair_quote_grounding(
                 report.markdown_content or ""
@@ -5437,6 +5893,10 @@ class ReportAgent:
             semantic = self._audit_semantic_citations(
                 body, self._citation_index_or_fallback()
             )
+            quantitative_probe, quantitative_probe_info = (
+                self._repair_final_quantitative_grounding(current)
+            )
+            totals["quantitative_grounding"] = quantitative_probe_info
             quote_probe, _ = self._repair_quote_grounding(current)
             lint_probe, final_lint = _rl.lint_report(
                 current,
@@ -5449,6 +5909,8 @@ class ReportAgent:
             totals["lint"] = final_lint
             if (
                 quote_probe == current
+                and quantitative_probe == current
+                and quantitative_probe_info.get("passed") is True
                 and lint_probe == current
                 and not final_lint.get("changed")
                 and unsupported == 0
@@ -5456,11 +5918,12 @@ class ReportAgent:
                 totals["stable"] = True
                 logger.info(
                     "发布 Markdown 已收敛: %s passes=%s quote_removed=%s "
-                    "lint_rewrites=%s",
+                    "lint_rewrites=%s quantitative_rewrites=%s",
                     report_id,
                     pass_no,
                     totals["quotes_removed"],
                     totals["lint_rewrites"],
+                    totals["quantitative_rewrites"],
                 )
                 return totals
 
@@ -5768,7 +6231,11 @@ class ReportAgent:
         ).rstrip() + "\n"
         reference_text = "\n".join(reference_chunks)
         index_map = self._citation_index_or_fallback()
-        citation_audit = _acg(body, index_map=index_map)
+        citation_audit = _acg(
+            body,
+            index_map=index_map,
+            exclude_authored_forecasts=True,
+        )
         body_marker_audit = _vcm(body, index_map)
         marker_audit = _vcm(md, index_map)
         semantic_citation_audit = self._audit_semantic_citations(body, index_map)
@@ -8275,7 +8742,7 @@ class ReportAgent:
         # 检查强制收尾时 LLM 返回是否为 None
         if response is None:
             logger.error(f"章节 {section.title} 强制收尾时 LLM 返回 None，使用默认错误提示")
-            final_answer = f"（本章节生成失败：LLM 返回空响应，请稍后重试）"
+            final_answer = "（本章节生成失败：LLM 返回空响应，请稍后重试）"
         elif "Final Answer:" in response:
             final_answer = response.split("Final Answer:")[-1].strip()
         else:
@@ -8534,10 +9001,10 @@ class ReportAgent:
                             section=section,
                             outline=outline,
                             previous_sections=_prev_ctx,
-                            progress_callback=lambda stage, prog, msg:
+                            progress_callback=lambda stage, prog, msg, _base=base_progress:
                                 progress_callback(
                                     stage,
-                                    base_progress + int(prog * 0.7 / total_sections),
+                                    _base + int(prog * 0.7 / total_sections),
                                     msg
                                 ) if progress_callback else None,
                             section_index=section_num
@@ -8948,7 +9415,7 @@ class ReportAgent:
         tool_calls_made = []
         max_iterations = 2  # 减少迭代轮数
         
-        for iteration in range(max_iterations):
+        for _iteration in range(max_iterations):
             response = self.llm.chat(
                 messages=messages,
                 temperature=0.5
@@ -10161,7 +10628,7 @@ class ReportManager:
         # 构建报告头部
         md_content = f"# {outline.title}\n\n"
         md_content += f"> {outline.summary}\n\n"
-        md_content += f"---\n\n"
+        md_content += "---\n\n"
         
         # 按顺序读取所有章节文件
         sections = cls.get_generated_sections(report_id)

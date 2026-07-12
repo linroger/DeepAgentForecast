@@ -141,6 +141,42 @@ def test_final_audit_fingerprints_exact_post_citation_markdown_without_mutation(
     assert any("structured forecast" in reason for reason in status["reasons"])
 
 
+def test_final_audit_does_not_launder_adjacent_sentences_or_table_cells(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(Config, "REPORT_PUBLISH_GATE", True, raising=False)
+    monkeypatch.setattr(
+        Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.75, raising=False
+    )
+    source = {
+        "title": "Official outlook",
+        "url": "https://example.gov/outlook",
+        "supports": ["Official adoption reached 55.6% in 2025."],
+    }
+    report_id = "report_final_audit_claim_units"
+    initial = (
+        "# Evidence\n\n"
+        "Official adoption reached 55.6% in 2025. [S1] "
+        "Unsupported lunar adoption reached 99% in 2027.\n\n"
+        "| Metric | 2025 actual | 2026 forecast |\n"
+        "|---|---:|---:|\n"
+        "| Official adoption | 55.6%. [S1] | 99% |\n"
+    )
+    _prepare(monkeypatch, tmp_path, report_id, initial)
+    report = SimpleNamespace(markdown_content=initial)
+    agent = _agent(source)
+
+    agent._finalize_citations(report_id, report)
+    audit = agent._audit_final_published_markdown(report_id, report)
+
+    grounding = audit["citation_grounding"]
+    assert grounding["quantitative_claims"] == 4
+    assert grounding["resolved_cited"] == 2
+    assert grounding["resolved_coverage"] == 0.5
+    assert audit["publish_gate"]["passed"] is False
+    assert any("引用覆盖率" in issue for issue in audit["publish_gate"]["issues"])
+
+
 def test_final_audit_fails_gate_but_never_repairs_published_markdown(
     monkeypatch, tmp_path
 ):
@@ -298,6 +334,48 @@ def test_publish_stabilizer_removes_quote_exposed_by_semantic_citation_repair(
     )
     assert citations["markers"] == []
     assert os.path.isdir(folder)
+
+
+def test_publish_stabilizer_repairs_exact_final_quantitative_surface(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        Config, "REPORT_PUBLISH_GATE_MIN_COVERAGE", 0.75, raising=False
+    )
+    source = {
+        "title": "Official battery adoption report",
+        "url": "https://example.gov/battery-adoption",
+        "date": "2026-01-02",
+        "supports": ["Official battery adoption reached 55.6% in 2025."],
+    }
+    report_id = "report_publish_quantitative_convergence"
+    initial = (
+        "# Forecast\n\n"
+        "## Part 1 — Binary Forecasts\n\n"
+        "| F1 | Authored outcome | 72% | Resolve above 40% by 2030 |\n\n"
+        "## Part 2 — Framework & Synthesis\n\n"
+        "Official battery adoption reached 55.6% in 2025.\n\n"
+        "Unsupported lunar adoption reached 99% in 2027. "
+        "The competitive mechanism remains material.\n\n"
+        "## How to Verify This Forecast (Resolution Criteria & Indicators)\n\n"
+        "Resolve the authored scenario at a 90% threshold by 2035.\n"
+    )
+    _prepare(monkeypatch, tmp_path, report_id, initial)
+    report = SimpleNamespace(markdown_content=initial)
+    agent = _agent(source)
+
+    result = agent._stabilize_publish_markdown(report_id, report)
+
+    assert result["stable"] is True
+    assert result["quantitative_rewrites"] == 1
+    assert result["quantitative_grounding"]["passed"] is True
+    assert result["quantitative_grounding"]["after"]["resolved_coverage"] == 1.0
+    assert "Official battery adoption reached 55.6% in 2025. [S1]" in report.markdown_content
+    assert "Unsupported lunar adoption" not in report.markdown_content
+    assert "The competitive mechanism remains material." in report.markdown_content
+    assert "| F1 | Authored outcome | 72% | Resolve above 40% by 2030 |" in report.markdown_content
+    assert "90% threshold by 2035" in report.markdown_content
+    assert "## References" in report.markdown_content
 
 
 def test_final_audit_requires_visible_reference_and_citation_artifacts(
