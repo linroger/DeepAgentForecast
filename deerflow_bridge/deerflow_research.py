@@ -3252,7 +3252,11 @@ def load_evidence_manifest(
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
-        if int(obj.get("sources_count") or -1) != len(sources):
+        try:
+            declared_source_count = int(obj["sources_count"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("global evidence source count mismatch") from exc
+        if declared_source_count != len(sources):
             raise ValueError("global evidence source count mismatch")
         if hashlib.sha256(canonical_sources).hexdigest() != str(
                 obj.get("sources_sha256") or ""):
@@ -4510,6 +4514,21 @@ def looks_like_llm_error(text: str) -> bool:
     if not t:
         return True
     return len(t) < 400 and any(s in t for s in _LLM_ERROR_SENTINELS)
+
+
+def evidence_pack_is_provider_error_only(text: str) -> bool:
+    """Return true when every routable lane block contains an LLM error.
+
+    Evidence-only mode deliberately allows qualitative, zero-source lanes, so
+    an empty source ledger alone is not a failure.  Pair this predicate with an
+    empty ledger to distinguish valid qualitative evidence from DeerFlow's
+    middleware turning every failed model call into apparently successful text.
+    """
+    parts = parse_evidence_pack(text)
+    return not parts or all(
+        any(sentinel in part for sentinel in _LLM_ERROR_SENTINELS)
+        for part in parts
+    )
 
 
 def _is_degraded_artifact(text: str, min_chars: int) -> bool:
@@ -8489,6 +8508,21 @@ def main() -> int:
             # citation ledger. Valid resume sources were explicitly restored
             # only after question/depth checkpoint validation above.
             persist_evidence_sources(out_dir, source_rows)
+            if (not source_rows
+                    and evidence_pack_is_provider_error_only(evidence_pack)):
+                error = (
+                    "evidence lane contains only LLM provider error fallbacks"
+                )
+                meta.update(
+                    status="failed", error=error, finished_at=_utcnow())
+                write_meta()
+                plog.write(
+                    "error",
+                    "evidence lane failed: every routable block is an LLM "
+                    "provider error and no sources were fetched",
+                )
+                plog.close()
+                return 2
             if dossier.strip() and not _is_degraded_artifact(dossier, 400):
                 dossier = unwrap_markdown_fence(dossier)
                 _atomic_write_text(

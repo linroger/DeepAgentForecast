@@ -24,6 +24,7 @@ by hand.
 | `patches/models/claude_provider.py` | `ClaudeChatModel` with **OAuth‑preference** (prefers a Claude Code OAuth credential over an ambient non‑OAuth `ANTHROPIC_API_KEY`, fixing stray‑key 401s) and a 0.5 thinking‑budget ratio. | → `deer-flow/backend/packages/harness/deerflow/models/` |
 | `patches/models/credential_loader.py` | Adds a **macOS Keychain** credential source (`security find-generic-password -s "Claude Code-credentials"`) so the local `claude` OAuth token is found even when it isn't in `~/.claude/.credentials.json`. | → same `models/` dir |
 | `patches/models/patched_minimax.py` | DeerFlow 2.0's **own upstreamed** `PatchedChatMiniMax` — strips the per‑message `name` field from user-role messages, fixing MiniMax `400 user name must be consistent`; keeps tools + reasoning **on**. Carried here **verbatim** so it is a no‑op on the vendored 2.0 engine and back‑ports the fix on an older clone‑fallback base (it never downgrades the upstream role‑scoped implementation). | → same `models/` dir |
+| `patches/apply_model_factory_overlays.py` | Idempotently keeps local `context_window_tokens` budgeting metadata out of provider constructor/request kwargs. | → transforms `deer-flow/backend/packages/harness/deerflow/models/factory.py` |
 | `skills/deep-research/` | Compact always-injected research core (about 6.8K chars instead of ~29K) plus lazy `references/` for source tradecraft and the final-dossier contract. Working passes are explicitly exempt from the final dossier's 10K-word floor; KIQ/evidence-yield convergence replaces call/source quotas. | → `deer-flow/skills/public/deep-research/` |
 | `patches/middlewares/loop_detection_middleware.py` | Loop detection with **per‑run counter resets**. Upstream accumulates per‑tool call counts across *all* turns of a thread, so multi‑pass deep research permanently force‑stops `web_search` from pass 2 onward (`[FORCED STOP] Tool web_search called N times…`) once the cumulative count crosses the limit. The patch resets the budget at the start of each agent run — full in‑run loop protection stays intact. | → `deer-flow/backend/packages/harness/deerflow/agents/middlewares/` |
 | `patches/middlewares/model_concurrency_middleware.py` plus the patched runtime/title/summarization middleware modules | Acquires one shared SQLite permit at the **exact provider-call boundary** for lead agents, scoped subagents, title calls, and summarization calls. Tool execution does not hold a model permit, and concurrently running forecast pipelines share the same application-level envelope. | → same `middlewares/` dir |
@@ -73,6 +74,7 @@ cp deerflow_bridge/patches/middlewares/*.py \
 cp -R deerflow_bridge/skills/deep-research/. \
    deer-flow/skills/public/deep-research/
 python3 deerflow_bridge/patches/apply_lead_agent_overlays.py deer-flow
+python3 deerflow_bridge/patches/apply_model_factory_overlays.py deer-flow
 
 # 4. Install the ready-to-use config (keys come from .env via $VAR)
 cp deerflow_bridge/config.yaml deer-flow/config.yaml

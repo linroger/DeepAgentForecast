@@ -666,6 +666,18 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
     fi
   fi
 
+  # (b6) Model-factory metadata overlay: ``context_window_tokens`` controls
+  #     local research/synthesis budgeting. It must not be forwarded as an
+  #     OpenAI-compatible request parameter.
+  MODEL_FACTORY_OVERLAY="$BRIDGE_DIR/patches/apply_model_factory_overlays.py"
+  if [ -f "$MODEL_FACTORY_OVERLAY" ]; then
+    if python3 "$MODEL_FACTORY_OVERLAY" "$DEERFLOW_DIR" >/dev/null; then
+      ok "Applied model-factory metadata boundary"
+    else
+      warn "Could not apply model-factory overlay; inspect upstream factory drift"
+    fi
+  fi
+
   # (c) Ready-to-use config.yaml (claude/minimax/deepseek/qwen/glm/codex stanzas,
   #     all keys as $VAR — no secrets). NEVER clobber an existing config.yaml:
   #     it is gitignored upstream and may carry the user's own tuning.

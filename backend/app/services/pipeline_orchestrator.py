@@ -825,6 +825,30 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
                     "backend/packages/harness/deerflow/agents/lead_agent/agent.py"
                 )
 
+        # Model config intentionally carries local context-window metadata for
+        # research/synthesis budgeting. Upstream ModelConfig allows unknown
+        # fields and the factory otherwise forwards that metadata into
+        # OpenAI-compatible request kwargs, where providers reject it.
+        _model_factory_overlay = os.path.join(
+            bridge_dir, "patches", "apply_model_factory_overlays.py"
+        )
+        if os.path.isfile(_model_factory_overlay):
+            import importlib.util as _importlib_util
+
+            _spec = _importlib_util.spec_from_file_location(
+                "deerflow_model_factory_overlay", _model_factory_overlay
+            )
+            if _spec is None or _spec.loader is None:
+                raise RuntimeError(
+                    "could not load tracked DeerFlow model-factory overlay")
+            _overlay_module = _importlib_util.module_from_spec(_spec)
+            _spec.loader.exec_module(_overlay_module)
+            _overlay_status = _overlay_module.apply(deerflow_dir)
+            if _overlay_status == "applied":
+                synced.append(
+                    "backend/packages/harness/deerflow/models/factory.py"
+                )
+
         # Subagent lifecycle admission is likewise a narrow transformation.
         # Never copy an entire executor from a possibly older active runtime:
         # the vendor seed carries tracing/session callbacks that must survive.

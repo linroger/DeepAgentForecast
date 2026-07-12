@@ -102,6 +102,41 @@ def test_version2_manifest_verifies_every_lane_and_source_ledger(tmp_path):
         dr.load_evidence_manifest(manifest)
 
 
+def test_version2_manifest_accepts_zero_global_sources(tmp_path):
+    """A valid empty source ledger must not be mistaken for a missing count."""
+    lane_dir = tmp_path / "track_1"
+    lane_dir.mkdir()
+    evidence_path = lane_dir / "evidence_pack.md"
+    sources_path = lane_dir / "sources.json"
+    evidence_path.write_text(
+        dr.render_evidence_pack(["qualitative lane evidence"]), encoding="utf-8")
+    sources_path.write_text("[]", encoding="utf-8")
+    evidence_bytes = evidence_path.read_bytes()
+    source_bytes = sources_path.read_bytes()
+    canonical_sources = b"[]"
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({
+        "version": 2,
+        "lanes": [{
+            "title": "Zero-source lane",
+            "path": "track_1/evidence_pack.md",
+            "bytes": len(evidence_bytes),
+            "sha256": hashlib.sha256(evidence_bytes).hexdigest(),
+            "sources_path": "track_1/sources.json",
+            "sources_bytes": len(source_bytes),
+            "sources_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        }],
+        "sources": [],
+        "sources_count": 0,
+        "sources_sha256": hashlib.sha256(canonical_sources).hexdigest(),
+    }), encoding="utf-8")
+
+    parts, loaded_sources = dr.load_evidence_manifest(manifest)
+
+    assert "qualitative lane evidence" in parts[0]
+    assert loaded_sources == []
+
+
 def test_manifest_routes_blocks_round_robin_and_remaps_lane_citations(
         tmp_path, monkeypatch):
     monkeypatch.setenv("SYNTHESIS_EVIDENCE_BLOCK_CHARS", "4000")
@@ -187,6 +222,18 @@ def test_evidence_source_persistence_replaces_stale_rows_with_empty(tmp_path):
     dr.persist_evidence_sources(tmp_path, [])
 
     assert json.loads(source_path.read_text(encoding="utf-8")) == []
+
+
+def test_evidence_pack_rejects_all_provider_errors_but_keeps_partial_evidence():
+    provider_error = (
+        "LLM request failed: Completions.create() got an unexpected keyword "
+        "argument 'context_window_tokens'"
+    )
+
+    assert dr.evidence_pack_is_provider_error_only(
+        dr.render_evidence_pack([provider_error, provider_error]))
+    assert not dr.evidence_pack_is_provider_error_only(
+        dr.render_evidence_pack([provider_error, "usable qualitative evidence"]))
 
 
 def test_manifest_sources_keep_global_ids_excerpts_and_filter_denied(monkeypatch):

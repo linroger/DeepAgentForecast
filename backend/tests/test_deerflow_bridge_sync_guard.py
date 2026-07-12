@@ -201,6 +201,52 @@ def test_sync_applies_tracked_lead_agent_null_trim_overlay(tmp_path, monkeypatch
     assert "if config.trim_tokens_to_summarize is not None" not in deployed
 
 
+def test_sync_applies_model_factory_metadata_overlay(tmp_path, monkeypatch):
+    repo_root = tmp_path
+    bridge_dir = repo_root / "deerflow_bridge"
+    deployed_dir = repo_root / "deer-flow"
+    _write(bridge_dir / "deerflow_research.py", "same\n")
+    _write(deployed_dir / "deerflow_research.py", "same\n")
+    real_overlay = (
+        Path(__file__).resolve().parents[2]
+        / "deerflow_bridge" / "patches" / "apply_model_factory_overlays.py"
+    )
+    _write(
+        bridge_dir / "patches" / "apply_model_factory_overlays.py",
+        real_overlay.read_text(encoding="utf-8"),
+    )
+    factory = (
+        deployed_dir / "backend" / "packages" / "harness" / "deerflow"
+        / "models" / "factory.py"
+    )
+    _write(
+        factory,
+        '''def create(model_config):
+    return model_config.model_dump(
+        exclude={
+            "supports_vision",
+        },
+    )
+''',
+    )
+
+    monkeypatch.setattr(
+        "app.services.pipeline_orchestrator.__file__",
+        str(
+            repo_root / "backend" / "app" / "services"
+            / "pipeline_orchestrator.py"
+        ),
+    )
+
+    _sync_deerflow_bridge_if_stale(str(deployed_dir))
+
+    deployed = factory.read_text(encoding="utf-8")
+    assert '"context_window_tokens"' in deployed
+    once = deployed
+    _sync_deerflow_bridge_if_stale(str(deployed_dir))
+    assert factory.read_text(encoding="utf-8") == once
+
+
 def test_syncs_tracked_subagent_executor_overlay(tmp_path, monkeypatch):
     repo_root = tmp_path
     bridge_dir = repo_root / "deerflow_bridge"
