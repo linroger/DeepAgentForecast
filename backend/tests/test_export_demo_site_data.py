@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+import scripts.export_demo_site_data as exporter
+from app.services.graphiti_client import ApiError
 from scripts.export_demo_site_data import (
     MARKDOWN_LINK_RE,
     RUNS,
@@ -23,10 +25,28 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _write_project_artifact(
+    uploads: Path,
+    *,
+    project_id: str = "proj_ok",
+    graph_id: str = "graph_ok",
+) -> None:
+    _write_json(
+        uploads / "projects" / project_id / "project.json",
+        {
+            "project_id": project_id,
+            "graph_id": graph_id,
+            "ontology": {"entity_types": [], "edge_types": []},
+            "analysis_summary": "Audited project",
+        },
+    )
+
+
 def _completed_state(report_id: str = "report_ok") -> dict:
     return {
         "pipeline_id": "pipe_ok",
         "status": "completed",
+        "project_id": "proj_ok",
         "report_id": report_id,
         "simulation_id": "sim_ok",
         "graph_id": "graph_ok",
@@ -37,56 +57,303 @@ def _completed_state(report_id: str = "report_ok") -> dict:
     }
 
 
-def test_ev_demo_points_to_latest_verified_pipeline() -> None:
-    assert RUNS["ev-2035"] == "pipe_91aaf91f6392"
-
-
-def test_validate_publishable_run_checks_terminal_audit_and_hashes(tmp_path: Path) -> None:
-    report_dir = tmp_path / "reports" / "report_ok"
+def _write_report_artifacts(
+    uploads: Path,
+    *,
+    report_id: str = "report_ok",
+    simulation_id: str = "sim_ok",
+    graph_id: str = "graph_ok",
+    publish_gate_passed: bool = True,
+) -> dict:
+    report_dir = uploads / "reports" / report_id
     report_dir.mkdir(parents=True)
     report_bytes = b"# Audited report\n"
     forecast_bytes = b'{"scenarios": []}\n'
     (report_dir / "full_report.md").write_bytes(report_bytes)
     (report_dir / "forecast.json").write_bytes(forecast_bytes)
     _write_json(
-        report_dir / "final_audit.json",
+        report_dir / "meta.json",
         {
-            "report_id": "report_ok",
-            "read_only": True,
-            "disk_matches_memory": True,
-            "hard_passed": True,
-            "publish_gate": {"passed": True},
-            "scenario_contract": {"valid": True},
-            "markdown_sha256": hashlib.sha256(report_bytes).hexdigest(),
-            "forecast_sha256": hashlib.sha256(forecast_bytes).hexdigest(),
+            "report_id": report_id,
+            "simulation_id": simulation_id,
+            "graph_id": graph_id,
+            "status": "completed",
         },
     )
+    audit = {
+        "report_id": report_id,
+        "read_only": True,
+        "disk_matches_memory": True,
+        "hard_passed": True,
+        "publish_gate": {"passed": publish_gate_passed},
+        "scenario_contract": {"valid": True},
+        "markdown_sha256": hashlib.sha256(report_bytes).hexdigest(),
+        "forecast_sha256": hashlib.sha256(forecast_bytes).hexdigest(),
+    }
+    _write_json(report_dir / "final_audit.json", audit)
+    return audit
 
-    audit = validate_publishable_run("pipe_ok", _completed_state(), uploads=str(tmp_path))
 
-    assert audit["hard_passed"] is True
+def _write_simulation_artifacts(
+    uploads: Path,
+    *,
+    simulation_id: str = "sim_ok",
+    project_id: str = "proj_ok",
+    graph_id: str = "graph_ok",
+    run_summary: dict | None = None,
+) -> None:
+    simulation_dir = uploads / "simulations" / simulation_id
+    _write_json(
+        simulation_dir / "state.json",
+        {
+            "simulation_id": simulation_id,
+            "project_id": project_id,
+            "graph_id": graph_id,
+            "status": "completed",
+            "error": None,
+        },
+    )
+    _write_json(
+        simulation_dir / "simulation_config.json",
+        {
+            "simulation_id": simulation_id,
+            "project_id": project_id,
+            "graph_id": graph_id,
+        },
+    )
+    _write_json(
+        simulation_dir / "run_state.json",
+        {"simulation_id": simulation_id},
+    )
+    healthy_summary = {
+        "simulation_id": simulation_id,
+        "agent_count": 3,
+        "total_actions": 12,
+        "organic_action_count": 8,
+        "rounds_executed": 4,
+        "simulation_health": "ok",
+    }
+    if run_summary is not None:
+        healthy_summary.update(run_summary)
+    _write_json(simulation_dir / "run_summary.json", healthy_summary)
+
+
+@pytest.fixture
+def healthy_publishable_run(tmp_path: Path) -> tuple[Path, dict, dict]:
+    state = _completed_state()
+    _write_project_artifact(tmp_path)
+    _write_simulation_artifacts(tmp_path)
+    audit = _write_report_artifacts(tmp_path)
+    return tmp_path, state, audit
+
+
+def test_ev_demo_points_to_latest_verified_pipeline() -> None:
+    assert RUNS["ev-2035"] == "pipe_91aaf91f6392"
+
+
+def test_validate_publishable_run_accepts_healthy_fixture(
+    healthy_publishable_run: tuple[Path, dict, dict],
+) -> None:
+    uploads, state, expected_audit = healthy_publishable_run
+
+    audit = validate_publishable_run("pipe_ok", state, uploads=str(uploads))
+
+    assert audit == expected_audit
+
+
+def test_validate_publishable_run_requires_project_artifact(
+    healthy_publishable_run: tuple[Path, dict, dict],
+) -> None:
+    uploads, state, _audit = healthy_publishable_run
+    (uploads / "projects" / "proj_ok" / "project.json").unlink()
+
+    with pytest.raises(RuntimeError, match="project artifact is missing or invalid"):
+        validate_publishable_run("pipe_ok", state, uploads=str(uploads))
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_error"),
+    [
+        (
+            "project_id",
+            "proj_other",
+            "project artifact project id does not match pipeline project id",
+        ),
+        (
+            "graph_id",
+            "graph_other",
+            "project artifact graph id does not match pipeline graph id",
+        ),
+    ],
+)
+def test_validate_publishable_run_rejects_project_identity_disagreement(
+    healthy_publishable_run: tuple[Path, dict, dict],
+    field: str,
+    value: str,
+    expected_error: str,
+) -> None:
+    uploads, state, _audit = healthy_publishable_run
+    project_path = uploads / "projects" / "proj_ok" / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project[field] = value
+    _write_json(project_path, project)
+
+    with pytest.raises(RuntimeError, match=expected_error):
+        validate_publishable_run("pipe_ok", state, uploads=str(uploads))
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "updates", "expected_error"),
+    [
+        (
+            "reports/report_ok/meta.json",
+            {"simulation_id": "sim_other"},
+            "report simulation id does not match pipeline simulation id",
+        ),
+        (
+            "reports/report_ok/meta.json",
+            {"graph_id": "graph_other"},
+            "report graph id does not match pipeline graph id",
+        ),
+        (
+            "reports/report_ok/meta.json",
+            {"report_id": "report_other"},
+            "report metadata report id does not match",
+        ),
+        (
+            "simulations/sim_ok/state.json",
+            {"simulation_id": "sim_other"},
+            "simulation durable state id does not match pipeline/report simulation id",
+        ),
+        (
+            "simulations/sim_ok/state.json",
+            {"project_id": "proj_other"},
+            "simulation durable state project id does not match pipeline project id",
+        ),
+        (
+            "simulations/sim_ok/state.json",
+            {"graph_id": "graph_other"},
+            "simulation durable state graph id does not match pipeline/report graph id",
+        ),
+        (
+            "simulations/sim_ok/simulation_config.json",
+            {"simulation_id": "sim_other"},
+            "simulation config id does not match pipeline/report simulation id",
+        ),
+        (
+            "simulations/sim_ok/simulation_config.json",
+            {"project_id": "proj_other"},
+            "simulation config project id does not match pipeline project id",
+        ),
+        (
+            "simulations/sim_ok/simulation_config.json",
+            {"graph_id": "graph_other"},
+            "simulation config graph id does not match pipeline/report graph id",
+        ),
+        (
+            "simulations/sim_ok/run_state.json",
+            {"simulation_id": "sim_other"},
+            "run state simulation id does not match pipeline/report simulation id",
+        ),
+        (
+            "simulations/sim_ok/run_summary.json",
+            {"simulation_id": "sim_other"},
+            "run summary simulation id does not match pipeline/report simulation id",
+        ),
+        (
+            "reports/report_ok/final_audit.json",
+            {"report_id": "report_other"},
+            "final audit report id does not match",
+        ),
+        (
+            "reports/report_ok/meta.json",
+            {"status": "running"},
+            "report status is 'running', not 'completed'",
+        ),
+        (
+            "simulations/sim_ok/state.json",
+            {"status": "ready"},
+            "simulation durable state status is 'ready', not 'completed'",
+        ),
+    ],
+)
+def test_validate_publishable_run_rejects_identity_or_status_disagreement(
+    healthy_publishable_run: tuple[Path, dict, dict],
+    relative_path: str,
+    updates: dict,
+    expected_error: str,
+) -> None:
+    uploads, state, _audit = healthy_publishable_run
+    artifact_path = uploads / relative_path
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload.update(updates)
+    _write_json(artifact_path, payload)
+
+    with pytest.raises(RuntimeError, match=expected_error):
+        validate_publishable_run("pipe_ok", state, uploads=str(uploads))
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_error"),
+    [
+        ("pipeline_id", None, "pipeline id does not match its state"),
+        ("project_id", None, "project id is missing"),
+    ],
+)
+def test_validate_publishable_run_rejects_missing_pipeline_identity(
+    healthy_publishable_run: tuple[Path, dict, dict],
+    field: str,
+    value: str | None,
+    expected_error: str,
+) -> None:
+    uploads, state, _audit = healthy_publishable_run
+    state[field] = value
+
+    with pytest.raises(RuntimeError, match=expected_error):
+        validate_publishable_run("pipe_ok", state, uploads=str(uploads))
+
+
+def test_validate_publishable_run_rejects_nonexistent_pipeline_simulation(
+    tmp_path: Path,
+) -> None:
+    _write_report_artifacts(tmp_path)
+
+    with pytest.raises(RuntimeError, match="pipeline simulation does not exist"):
+        validate_publishable_run("pipe_ok", _completed_state(), uploads=str(tmp_path))
+
+
+def test_validate_publishable_run_rejects_hollow_simulation_report_pair(
+    tmp_path: Path,
+) -> None:
+    _write_simulation_artifacts(
+        tmp_path,
+        run_summary={
+            "agent_count": 0,
+            "total_actions": 0,
+            "organic_action_count": 0,
+            "rounds_executed": 0,
+            "simulation_health": "hollow",
+        },
+    )
+    _write_report_artifacts(tmp_path)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        validate_publishable_run("pipe_ok", _completed_state(), uploads=str(tmp_path))
+
+    message = str(exc_info.value)
+    assert "run summary reports a hollow simulation" in message
+    for field in (
+        "agent_count",
+        "rounds_executed",
+        "total_actions",
+        "organic_action_count",
+    ):
+        assert f"run summary {field}" in message
 
 
 def test_validate_publishable_run_fails_closed_on_publish_gate(tmp_path: Path) -> None:
-    report_dir = tmp_path / "reports" / "report_ok"
-    report_dir.mkdir(parents=True)
-    report_bytes = b"# Report\n"
-    forecast_bytes = b"{}\n"
-    (report_dir / "full_report.md").write_bytes(report_bytes)
-    (report_dir / "forecast.json").write_bytes(forecast_bytes)
-    _write_json(
-        report_dir / "final_audit.json",
-        {
-            "report_id": "report_ok",
-            "read_only": True,
-            "disk_matches_memory": True,
-            "hard_passed": True,
-            "publish_gate": {"passed": False},
-            "scenario_contract": {"valid": True},
-            "markdown_sha256": hashlib.sha256(report_bytes).hexdigest(),
-            "forecast_sha256": hashlib.sha256(forecast_bytes).hexdigest(),
-        },
-    )
+    _write_simulation_artifacts(tmp_path)
+    _write_report_artifacts(tmp_path, publish_gate_passed=False)
 
     with pytest.raises(RuntimeError, match="publish gate did not pass"):
         validate_publishable_run("pipe_ok", _completed_state(), uploads=str(tmp_path))
@@ -221,6 +488,69 @@ def test_strict_skip_graph_accepts_only_the_current_graph(tmp_path: Path) -> Non
 
     with pytest.raises(RuntimeError, match="stale graph.json"):
         validate_retained_graph(str(tmp_path), "graph_stale")
+
+
+def test_publishable_graph_404_fails_closed_without_rebuild(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    uploads = tmp_path / "uploads"
+    output_root = tmp_path / "site"
+    state = _completed_state()
+    _write_json(
+        uploads / "pipelines" / "pipe_ok" / "pipeline_state.json",
+        state,
+    )
+    handoff = uploads / "pipelines" / "pipe_ok" / "handoff"
+    handoff.mkdir(parents=True)
+    (handoff / "research_report.md").write_text(
+        "# Audited dossier\n",
+        encoding="utf-8",
+    )
+    _write_project_artifact(uploads)
+    _write_simulation_artifacts(uploads)
+    _write_report_artifacts(uploads)
+
+    original_validator = exporter.validate_publishable_run
+    monkeypatch.setattr(exporter, "UPLOADS", str(uploads))
+    monkeypatch.setattr(exporter, "OUT_ROOT", str(output_root))
+    monkeypatch.setattr(
+        exporter,
+        "validate_publishable_run",
+        lambda pipeline_id, pipeline_state: original_validator(
+            pipeline_id,
+            pipeline_state,
+            uploads=str(uploads),
+        ),
+    )
+
+    rebuild_calls = []
+
+    def _missing_graph(graph_id: str) -> dict:
+        assert graph_id == "graph_ok"
+        raise ApiError("missing", status_code=404)
+
+    def _forbidden_rebuild(key: str, out_dir: str) -> str:
+        rebuild_calls.append((key, out_dir))
+        return "graph_substitute"
+
+    monkeypatch.setattr(exporter, "export_graph", _missing_graph)
+    monkeypatch.setattr(exporter, "rebuild_graph", _forbidden_rebuild)
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"publication-bound graph 'graph_ok' is unavailable \(404\)",
+    ):
+        exporter.export_run(
+            "test-run",
+            "pipe_ok",
+            skip_graph=False,
+            require_publishable=True,
+        )
+
+    assert rebuild_calls == []
+    assert not (output_root / "test-run" / "graph.json").exists()
+    assert not (output_root / "test-run" / "meta.json").exists()
 
 
 def test_published_ev_markdown_assets_resolve_and_match_manifest_hashes() -> None:

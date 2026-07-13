@@ -33,6 +33,9 @@ logger = logging.getLogger("mirofish.graphiti_runtime")
 
 _VALID_BACKENDS = ("auto", "falkordblite", "falkordb", "kuzu")
 
+_GRAPH_INGEST_RATE_LIMIT_COOLDOWN_DEFAULT_S = 15.0
+_GRAPH_INGEST_RATE_LIMIT_COOLDOWN_MAX_S = 60.0
+
 # R2-KG-1 / R2-KG-3: causal attributes (sign / strength / lag / polarity / valence)
 # are folded into an edge's ``fact`` text by graph_builder.seed_actors (e.g.
 # "…（sign=-，strength=high，lag=2w，polarity=-0.80）"). The traversal primitives
@@ -135,6 +138,27 @@ def _default_op_timeout() -> float | None:
         return v if v > 0 else None
     except Exception:  # noqa: BLE001 — 读不到配置就用保守的 30 分钟兜底
         return 1800.0
+
+
+def _graph_ingest_rate_limit_cooldown_s() -> float:
+    """Return the single post-fan-out 429 cooldown, clamped to a safe bound.
+
+    This knob intentionally lives in the graph runtime so the recovery remains a
+    self-contained ingestion repair: ``GRAPH_INGEST_RATE_LIMIT_COOLDOWN_S`` may
+    tune the wait from 0 to 60 seconds, while invalid values retain the bounded
+    15-second default.
+    """
+    raw = os.environ.get(
+        "GRAPH_INGEST_RATE_LIMIT_COOLDOWN_S",
+        str(_GRAPH_INGEST_RATE_LIMIT_COOLDOWN_DEFAULT_S),
+    )
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = _GRAPH_INGEST_RATE_LIMIT_COOLDOWN_DEFAULT_S
+    if value != value:  # NaN
+        value = _GRAPH_INGEST_RATE_LIMIT_COOLDOWN_DEFAULT_S
+    return min(_GRAPH_INGEST_RATE_LIMIT_COOLDOWN_MAX_S, max(0.0, value))
 
 
 class GraphitiRuntime:
@@ -468,17 +492,74 @@ class GraphitiRuntime:
     @staticmethod
     def _classify_ingest_error(exc: BaseException) -> str:
         """把 episode 抽取异常归类为可审计的 skip 原因（用于计数与重试路由）。"""
-        msg = str(exc).lower()
+        attached_reason = getattr(exc, "_graphiti_ingest_reason", None)
+        if isinstance(attached_reason, str) and attached_reason:
+            return attached_reason
+
+        # Graphiti/tenacity may wrap the useful provider exception. Inspect a
+        # bounded cause/context/last_attempt chain so EmptyResponseError and 429
+        # classifications survive those wrappers without making arbitrary errors
+        # retryable.
+        errors: list[BaseException] = []
+        pending: list[BaseException] = [exc]
+        seen: set[int] = set()
+        while pending and len(errors) < 8:
+            current = pending.pop(0)
+            if id(current) in seen:
+                continue
+            seen.add(id(current))
+            errors.append(current)
+            nested = current.__cause__ or current.__context__
+            if isinstance(nested, BaseException):
+                pending.append(nested)
+            last_attempt = getattr(current, "last_attempt", None)
+            if last_attempt is not None:
+                with contextlib.suppress(Exception):
+                    nested = last_attempt.exception()
+                    if isinstance(nested, BaseException):
+                        pending.append(nested)
+
+        msg = " | ".join(str(error).lower() for error in errors)
+        error_names = {type(error).__name__.lower() for error in errors}
         if "schema instead of an instance" in msg or "schema echo" in msg:
             return "schema_echo"
         if "validation" in msg and ("failed" in msg or "error" in msg):
             return "schema_validation"
-        if "rate limit" in msg or "429" in msg:
+        if (
+            "rate limit" in msg
+            or "rate_limit" in msg
+            or "429" in msg
+            or any("ratelimit" in name for name in error_names)
+        ):
             return "rate_limit"
-        if isinstance(exc, (asyncio.TimeoutError, TimeoutError)) or "timeout" in msg:
+        if (
+            any(isinstance(error, (asyncio.TimeoutError, TimeoutError)) for error in errors)
+            or "timeout" in msg
+        ):
             return "timeout"
         if "content" in msg and ("filter" in msg or "sensitive" in msg):
             return "content_filter"
+        parse_markers = (
+            "invalid json",
+            "unparseable json",
+            "failed to parse json",
+            "json parse failed",
+            "json decode",
+            "jsondecodeerror",
+            "expected json object",
+            "empty response",
+            "response was empty",
+            "llm返回的json格式无效",
+            "json格式无效",
+            "无法解析json",
+            "json解析失败",
+        )
+        if (
+            "emptyresponseerror" in error_names
+            or "jsondecodeerror" in error_names
+            or any(marker in msg for marker in parse_markers)
+        ):
+            return "schema_parse"
         return "other"
 
     def _record_skip_reason(self, graph_id: str, reason: str) -> None:
@@ -556,9 +637,15 @@ class GraphitiRuntime:
                         g.clients.llm_client = primary
 
     async def _add_episode_locked(
-        self, graph_id, *, name, body, source_type, source_description, reference_time
+        self, graph_id, *, name, body, source_type, source_description, reference_time,
+        record_skip_reason: bool = True,
     ) -> str:
-        """Write one episode. Caller MUST hold ``self._graph_lock(graph_id)``."""
+        """Write one episode. Caller MUST hold ``self._graph_lock(graph_id)``.
+
+        Concurrent batches defer skip accounting until their one post-fan-out
+        replay has completed; direct/serial callers retain the existing immediate
+        accounting behavior.
+        """
         g = await self._ensure_graph(graph_id)
         try:
             from ...config import Config
@@ -584,11 +671,11 @@ class GraphitiRuntime:
                 last_exc = exc
                 reason = self._classify_ingest_error(exc)
                 # 只有 schema 类失败值得整 episode 重滚；限流/超时等已有各自的内层处理。
-                if reason not in ("schema_echo", "schema_validation"):
+                if reason not in ("schema_echo", "schema_validation", "schema_parse"):
                     break
 
         # 重试耗尽：schema 类失败换入兜底提供方再抽一次（若配置且可用）。
-        if reason in ("schema_echo", "schema_validation"):
+        if reason in ("schema_echo", "schema_validation", "schema_parse"):
             async with self._fallback_llm_swapped(graph_id, g) as swapped:
                 if swapped:
                     try:
@@ -606,8 +693,13 @@ class GraphitiRuntime:
                         last_exc = exc
                         reason = f"fallback_{self._classify_ingest_error(exc)}"
 
-        self._record_skip_reason(graph_id, reason)
         assert last_exc is not None
+        # Preserve the final reason (including fallback_* provenance) across the
+        # raised exception so a concurrent batch can account only after replay.
+        with contextlib.suppress(Exception):
+            last_exc._graphiti_ingest_reason = reason
+        if record_skip_reason:
+            self._record_skip_reason(graph_id, reason)
         raise last_exc
 
     async def _add_episode_once(
@@ -741,20 +833,24 @@ class GraphitiRuntime:
         await self._ensure_graph(graph_id)  # warm once before fan-out (avoid lock stampede)
         sem = asyncio.Semaphore(max(1, int(concurrency)))
 
+        async def ingest(i, ep):
+            # Caller holds the per-graph write lock, so call the lock-free core
+            # and defer accounting until the bounded replay decision is final.
+            return await self._add_episode_locked(
+                graph_id,
+                name=ep.get("name") or f"chunk-{i}",
+                body=ep.get("data", "") or "",
+                source_type=ep.get("type", "text") or "text",
+                source_description=ep.get("source_description", "") or "mirofish",
+                reference_time=ep.get("reference_time"),
+                record_skip_reason=False,
+            )
+
         async def one(i, ep):
             async with sem:
-                # Caller (below) already holds the per-graph write lock for the whole
-                # batch, so call the lock-free core to avoid deadlocking on the
-                # non-reentrant asyncio.Lock. The intra-batch dedup race documented
-                # above is the accepted tradeoff of this opt-in fast path.
-                return await self._add_episode_locked(
-                    graph_id,
-                    name=ep.get("name") or f"chunk-{i}",
-                    body=ep.get("data", "") or "",
-                    source_type=ep.get("type", "text") or "text",
-                    source_description=ep.get("source_description", "") or "mirofish",
-                    reference_time=ep.get("reference_time"),
-                )
+                # The intra-batch dedup race documented above is the accepted
+                # tradeoff of this opt-in fast path.
+                return await ingest(i, ep)
 
         # EXECPLAN2 F-12-8: hold the per-graph write lock across the entire fan-out so
         # the batch never overlaps an external writer/reader on the same graph_id.
@@ -767,24 +863,72 @@ class GraphitiRuntime:
             results = await asyncio.gather(
                 *[one(i, ep) for i, ep in enumerate(episodes)], return_exceptions=True
             )
+
+        # Retain the exact failed index/input/reason after fan-out. Only transient
+        # rate-limit failures get one batch-level replay; schema/content/other hard
+        # failures remain skipped, preserving the existing failure boundary.
+        failed = [
+            (idx, episodes[idx], self._classify_ingest_error(result), result)
+            for idx, result in enumerate(results)
+            if isinstance(result, BaseException)
+        ]
+        rate_limited = [
+            item
+            for item in failed
+            if item[2] in ("rate_limit", "fallback_rate_limit")
+        ]
+        recovered = 0
+        if rate_limited:
+            cooldown = _graph_ingest_rate_limit_cooldown_s()
+            logger.warning(
+                "[%s] add_episodes_concurrent: replaying %d rate-limited episode(s) "
+                "once, serially, after %.1fs cooldown",
+                graph_id, len(rate_limited), cooldown,
+            )
+            if cooldown > 0:
+                await asyncio.sleep(cooldown)
+            # A single lock acquisition plus an awaited loop makes replay
+            # concurrency exactly 1 and prevents a second fan-out/retry storm.
+            async with self._graph_lock(graph_id):
+                for idx, ep, _reason, _exc in rate_limited:
+                    try:
+                        results[idx] = await ingest(idx, ep)
+                        recovered += 1
+                    except Exception as replay_exc:  # noqa: BLE001 — final skip below
+                        results[idx] = replay_exc
+
         out = []
         n_failed = 0
-        reasons: dict = {}  # Wave9-KG：本批 skip 原因分布（累计计数在 _add_episode_locked）
+        reasons: dict = {}  # Wave9-KG：只计最终 skip 原因（已恢复的 429 不入账）
         for idx, r in enumerate(results):
             if isinstance(r, BaseException):
                 n_failed += 1
                 reason = self._classify_ingest_error(r)
                 reasons[reason] = reasons.get(reason, 0) + 1
-                logger.warning("[%s] episode %d ingest failed (skipped, reason=%s): %s",
-                               graph_id, idx, reason, str(r)[:160])
+                self._record_skip_reason(graph_id, reason)
+                ep = episodes[idx]
+                ep_name = ep.get("name") if isinstance(ep, dict) else None
+                ep_name = ep_name or f"chunk-{idx}"
+                logger.warning(
+                    "[%s] episode %d (%s) ingest failed (final skip, reason=%s): %s",
+                    graph_id, idx, ep_name, reason, str(r)[:160],
+                )
                 continue
             if r:
                 out.append(r)
+        if recovered:
+            logger.info(
+                "[%s] add_episodes_concurrent: serial replay recovered %d/%d "
+                "rate-limited episode(s)",
+                graph_id, recovered, len(rate_limited),
+            )
         if n_failed:
-            logger.warning("[%s] add_episodes_concurrent: %d/%d episodes skipped due to "
-                           "errors (reasons: %s)",
-                           graph_id, n_failed, len(episodes),
-                           ", ".join(f"{k}={v}" for k, v in sorted(reasons.items())))
+            logger.warning(
+                "[%s] add_episodes_concurrent: final skips %d/%d after bounded replay "
+                "(reasons: %s)",
+                graph_id, n_failed, len(episodes),
+                ", ".join(f"{k}={v}" for k, v in sorted(reasons.items())),
+            )
         return out
 
     def build_communities(self, graph_id: str) -> list:

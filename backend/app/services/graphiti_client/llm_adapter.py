@@ -18,6 +18,7 @@ so here we only translate messages and invoke the app client's ``chat_json``.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import threading
 import typing
@@ -161,8 +162,13 @@ class AppGraphitiLLMClient(GraphitiLLMClient):
         temps = (0.0, 0.4)
         for attempt, temp in enumerate(temps):
             try:
+                # ``ThreadPoolExecutor`` does not inherit ContextVars. Without
+                # an explicit copy, graph calls lose pipeline/stage attribution
+                # and accumulate in telemetry's cross-run ``_global`` bucket.
+                call_context = contextvars.copy_context()
                 result = await loop.run_in_executor(
                     io_pool,
+                    call_context.run,
                     lambda t=temp: self._app_llm.chat_json(
                         msg_dicts, temperature=t, max_tokens=tokens, tier=tier
                     ),

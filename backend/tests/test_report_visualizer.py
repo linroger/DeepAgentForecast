@@ -22,6 +22,190 @@ def _no_png_export(monkeypatch):
     monkeypatch.setattr(ReportVisualizer, "_png_export_ok", lambda self: False)
 
 
+@pytest.mark.parametrize(("raw", "expected"), [
+    ("247,226", 247226.0),
+    ("1,808,511", 1808511.0),
+    (">25,000", 25000.0),
+    ("~2.26", 2.26),
+    ("+170", 170.0),
+])
+def test_to_float_preserves_grouped_thousands(raw, expected):
+    """Reader-facing charts MUST not truncate comma-grouped values at the first comma."""
+    assert rv._to_float(raw) == expected
+
+
+def test_prepare_quantitative_panels_keeps_only_comparable_groups():
+    rows = [
+        {"metric": "Revenue", "value": "100", "unit": "USD billion"},
+        {"metric": "Market size", "value": "155", "unit": "USD billion"},
+        {"metric": "Gross margin", "value": "20", "unit": "%"},
+        {"metric": "Market share", "value": "52", "unit": "%"},
+        {"metric": "China EV penetration", "value": "53", "unit": "% new car sales",
+         "as_of_date": "2025-12-31", "source": "BNEF",
+         "definition": "BEV+PHEV share of China passenger vehicle sales"},
+        {"metric": "Europe EV share", "value": "28", "unit": "% new vehicle sales",
+         "as_of_date": "2025-12-31", "source": "IEA",
+         "definition": "BEV+PHEV share of European passenger vehicle sales"},
+        {"metric": "BEV pack price", "value": "99", "unit": "USD per kWh",
+         "as_of_date": "2025-12-31", "source": "BNEF",
+         "definition": "BEV-only battery pack price"},
+        {"metric": "Storage pack price", "value": "70", "unit": "USD/kWh",
+         "as_of_date": "2025-12-31", "source": "BNEF",
+         "definition": "BESS battery pack price"},
+    ]
+
+    panels = rv._prepare_quantitative_panels(rows)
+
+    assert {panel["unit"] for panel in panels} == {"% new car sales", "USD per kWh"}
+    assert all(len(panel["rows"]) == 2 for panel in panels)
+    assert all(panel["unit"] not in {"%", "USD billion"} for panel in panels)
+
+
+def test_prepare_quantitative_panels_requires_semantic_compatibility_and_provenance():
+    rows = [
+        {"metric": "Region A EV share", "value": 41, "unit": "% new car sales",
+         "as_of_date": "2025-12-31", "source": "Agency A",
+         "definition": "Annual BEV+PHEV share of new vehicle sales"},
+        {"metric": "Region B EV share", "value": 29, "unit": "% new vehicle sales",
+         "as_of_date": "2025-12-31", "source": "Agency B",
+         "definition": "Annual BEV+PHEV share of new vehicle sales"},
+    ]
+
+    assert len(rv._prepare_quantitative_panels(rows)) == 1
+
+    mixed_denominator = [dict(row) for row in rows]
+    mixed_denominator[1]["definition"] = "Annual BEV+PHEV share of total vehicle fleet"
+    assert rv._prepare_quantitative_panels(mixed_denominator) == []
+
+    mixed_period = [dict(row) for row in rows]
+    mixed_period[1]["definition"] = "Monthly BEV+PHEV share of new vehicle sales"
+    assert rv._prepare_quantitative_panels(mixed_period) == []
+
+    mixed_as_of = [dict(row) for row in rows]
+    mixed_as_of[1]["as_of_date"] = "2024-12-31"
+    assert rv._prepare_quantitative_panels(mixed_as_of) == []
+
+    for missing_field in ("source", "as_of_date"):
+        missing_provenance = [dict(row) for row in rows]
+        missing_provenance[1].pop(missing_field)
+        assert rv._prepare_quantitative_panels(missing_provenance) == []
+
+
+def test_negative_staleness_does_not_turn_future_dated_actual_into_projection():
+    row = {
+        "metric": "Reported Q4 vehicle registrations",
+        "definition": "Observed registrations during the quarter",
+        "as_of_date": "2027-12-31",
+        "staleness_days": -430,
+    }
+
+    assert rv._quant_is_projection(row) is False
+    assert rv._quant_is_projection({**row, "definition": "Forecast registrations"}) is True
+
+
+def test_prepare_quantitative_panels_drops_future_dated_actuals_but_keeps_forecasts():
+    future_actuals = [
+        {"metric": "Region A reported EV share", "value": 41, "unit": "% new car sales",
+         "as_of_date": "2027-12-31", "source": "Agency A",
+         "definition": "Observed BEV+PHEV share of new vehicle sales",
+         "staleness_days": -430},
+        {"metric": "Region B reported EV share", "value": 29, "unit": "% new vehicle sales",
+         "as_of_date": "2027-12-31", "source": "Agency B",
+         "definition": "Observed BEV+PHEV share of new vehicle sales",
+         "staleness_days": -430},
+    ]
+    assert rv._prepare_quantitative_panels(future_actuals) == []
+
+    forecasts = [
+        {**row,
+         "metric": row["metric"].replace("reported", "2030 forecast"),
+         "definition": row["definition"].replace("Observed", "Forecast"),
+         "as_of_date": "2030-12-31"}
+        for row in future_actuals
+    ]
+    panels = rv._prepare_quantitative_panels(forecasts)
+    assert len(panels) == 1
+    assert all(point["projection"] is True for point in panels[0]["rows"])
+
+
+def _bnef_revision_rows():
+    return [
+        {"metric": "BNEF US 2030 EV share projection (2024)", "value": "48",
+         "unit": "% of US new car sales", "as_of_date": "2024-12-31",
+         "definition": "BNEF 2024 forecast for US 2030 EV share",
+         "source": "BNEF EVO 2024"},
+        {"metric": "BNEF US 2030 EV share projection (2025)", "value": "27",
+         "unit": "% of US new car sales", "as_of_date": "2025-12-31",
+         "definition": "BNEF 2025 revision for US 2030 EV share",
+         "source": "BNEF EVO 2026 [S10]"},
+        {"metric": "BNEF US 2030 EV share projection (2026)", "value": "17",
+         "unit": "% of US new car sales", "as_of_date": "2026-06-30",
+         "definition": "BNEF 2026 revision for US 2030 EV share post-IRA repeal",
+         "source": "BNEF EVO 2026 [S10]"},
+    ]
+
+
+def test_source_outlook_family_normalizes_bnef_aliases_citations_and_recap_years():
+    assert rv._source_outlook_family(
+        "BloombergNEF's Electric Vehicle Outlook 2024 [S4]"
+    ) == "bnef evo"
+    assert rv._source_outlook_family("BNEF EVO 2026 [S10] recap") == "bnef evo"
+    assert rv._source_outlook_family("IEA Global EV Outlook 2026") != "bnef evo"
+
+
+def test_prepare_forecast_revision_series_uses_actual_vintages_and_values():
+    rows = _bnef_revision_rows() + [
+        {"metric": "Unrelated actual (2026)", "value": "99", "unit": "%"},
+    ]
+
+    series = rv._prepare_forecast_revision_series(rows)
+
+    assert len(series) == 1
+    assert series[0]["name"] == "BNEF US 2030 EV share projection"
+    assert series[0]["unit"] == "% of US new car sales"
+    assert series[0]["publisher_family"] == "bnef evo"
+    assert series[0]["target_year"] == 2030
+    assert [(point["vintage"], point["value"]) for point in series[0]["points"]] == [
+        (2024, 48.0), (2025, 27.0), (2026, 17.0),
+    ]
+
+
+def test_prepare_forecast_revision_series_rejects_cross_publisher_and_definition_drift():
+    cross_publisher = _bnef_revision_rows()
+    cross_publisher[1] = {
+        **cross_publisher[1],
+        "source": "IEA Global EV Outlook 2025",
+    }
+    assert rv._prepare_forecast_revision_series(cross_publisher) == []
+
+    definition_drift = _bnef_revision_rows()
+    definition_drift[2] = {
+        **definition_drift[2],
+        "definition": "BNEF 2026 forecast for US 2030 BEV-only share",
+    }
+    assert rv._prepare_forecast_revision_series(definition_drift) == []
+
+    unit_drift = _bnef_revision_rows()
+    unit_drift[2] = {**unit_drift[2], "unit": "% of total US vehicle fleet"}
+    assert rv._prepare_forecast_revision_series(unit_drift) == []
+
+
+def test_prepare_forecast_revision_series_does_not_treat_target_year_as_vintage():
+    rows = [
+        {"metric": "US EV share projection (2028)", "value": 24,
+         "unit": "% new car sales", "as_of_date": "2024-12-31",
+         "definition": "BNEF forecast for US 2028 EV share", "source": "BNEF EVO 2024"},
+        {"metric": "US EV share projection (2029)", "value": 31,
+         "unit": "% new car sales", "as_of_date": "2025-12-31",
+         "definition": "BNEF forecast for US 2029 EV share", "source": "BNEF EVO 2025"},
+        {"metric": "US EV share projection (2030)", "value": 37,
+         "unit": "% new car sales", "as_of_date": "2026-06-30",
+         "definition": "BNEF forecast for US 2030 EV share", "source": "BNEF EVO 2026"},
+    ]
+
+    assert rv._prepare_forecast_revision_series(rows) == []
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 最小真实工件样本（键名与真实落盘一致）
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1218,7 +1218,9 @@ The forecast through 2035 does not represent a single trajectory but multiple re
 
 [Interactive version](demos/ev-2035/research-charts/actor_network.html)
 
-_Node size = influence, color = role class; red edges adversarial, green cooperative._
+_Colors encode actor roles and edge valence. Node size uses an explicitly
+declared tier or score when available and otherwise remains equal; it must not
+be read as market share, revenue, or measured bargaining power._
 
 ### Event Timeline
 
@@ -1226,15 +1228,27 @@ _Node size = influence, color = role class; red edges adversarial, green coopera
 
 [Interactive version](demos/ev-2035/research-charts/timeline.html)
 
-_Dated key events driving the forecast, most recent window._
+_All 25 dated events are retained at their source dates; the numbered key keeps
+dense milestones readable without shifting them along the time axis._
 
-### Top Quantitative Metrics
+### Comparable Forecast Benchmarks
 
-![Top Quantitative Metrics](demos/ev-2035/research-charts/quant_metrics.png)
+![Comparable Forecast Benchmarks](demos/ev-2035/research-charts/quant_metrics.png)
 
 [Interactive version](demos/ev-2035/research-charts/quant_metrics.html)
 
-_Largest same-unit metric group; units never mixed on one axis._
+_Every panel shares the same denominator, definition family, period, exact
+as-of date, and actual-versus-forecast status. Incompatible rows remain in the
+evidence table instead of being forced onto an axis._
+
+### Published Forecast Revisions
+
+![BNEF US 2030 EV-share forecast revisions](demos/ev-2035/research-charts/forecast_revisions.png)
+
+[Interactive version](demos/ev-2035/research-charts/forecast_revisions.html)
+
+_The same BNEF outlook, fixed 2030 target, US new-car-sales denominator, and
+definition across three publication vintages: 48% → 27% → 17%._
 
 ### Source Quality and Freshness
 
@@ -1242,4 +1256,5 @@ _Largest same-unit metric group; units never mixed on one axis._
 
 [Interactive version](demos/ev-2035/research-charts/source_quality.html)
 
-_Deduplicated source counts by evidence tier and deterministic freshness bucket._
+_Deduplicated source counts by evidence tier and deterministic freshness
+bucket, all measured against the run's single 2026-07-12 UTC completion anchor._

@@ -4,9 +4,11 @@
 ## Part 1 — Binary Forecasts
 
 <!-- viz:charts/binary_forecast_dotplot.html -->
-![Binary Forecasts — P(yes) with confidence](demos/ev-2035/charts/binary_forecast_dotplot.png)
+![Binary Forecasts — P(yes)](demos/ev-2035/charts/binary_forecast_dotplot.png)
 
-*Binary Forecasts — P(yes) with confidence*
+*Twelve falsifiable calls on a common 0–100% probability axis; no confidence
+interval is shown because the structured forecast contains point probabilities,
+not measured intervals.*
 
 Independent binary (yes/no) forecasts, each with a probability and an objective resolution test (metric · threshold · date · source). Probabilities express genuine conviction, not hedging.
 
@@ -150,9 +152,10 @@ Notes on citations: All quantitative claims in this chapter are anchored to the 
 ## Four Scenarios to 2035: Probabilistic Pathways and Their Probability Distribution
 
 <!-- viz:charts/scenario_probabilities.html -->
-![Scenario Probabilities (ensemble spread)](demos/ev-2035/charts/scenario_probabilities.png)
+![Scenario Probabilities](demos/ev-2035/charts/scenario_probabilities.png)
 
-*Scenario Probabilities (ensemble spread)*
+*Five mutually exclusive outcomes whose declared probabilities sum to 100%; no
+ensemble spread is implied because the artifact contains no ensemble interval.*
 
 ### The four-scenario framework: anchoring the distribution
 
@@ -634,37 +637,48 @@ The four risk clusters above do not have equal weight in shifting the global pro
 
 ## Visual Annex
 
-_Deterministic visualizations supporting this report, generated from structured artifacts._
+_Deterministic, data-first visualizations generated from the run's sourced
+structured artifacts. Internal influence/salience and evidence-weight proxies
+are deliberately omitted._
 
-<!-- viz:charts/timeline_lanes.html -->
+### Published Forecast Revisions
+
+![BNEF US 2030 EV-share forecast revisions](demos/ev-2035/charts/forecast_revisions.png)
+
+*BNEF's forecast for the same 2030 US new-car-sales denominator fell from 48%
+in its 2024 vintage to 27% in 2025 and 17% in 2026—a 31-point recalibration that
+shows how sharply the US policy and demand outlook changed.*
+
+### Comparable Forecast Benchmarks
+
+![Comparable Forecast Benchmarks](demos/ev-2035/charts/quantitative_claims.png)
+
+*Each panel uses one explicit denominator and one as-of basis: regional share of
+new-car sales, battery-pack price per kWh, or battery-installation share. Unlike
+the old “top metrics” view, unrelated percentages and currencies never share an
+axis.*
+
+### Dated Inflection Path
+
 ![Event Timeline](demos/ev-2035/charts/timeline_lanes.png)
 
-*Event Timeline*
+*Exact event dates are separated by policy, geopolitics, supply chain, and
+technology so readers can see which milestones changed the forecast path.*
 
-<!-- viz:charts/actor_network.html -->
+### Industrial-Chain Context
+
 ![Actor Relationship Network](demos/ev-2035/charts/actor_network.png)
 
-*Actor Relationship Network*
+*This optional map shows sourced supportive, adversarial, and neutral
+relationships. It is context for transmission paths, not evidence of company
+market share or causal impact.*
 
-<!-- viz:charts/actor_influence_salience.html -->
-![Actors — Influence vs Salience](demos/ev-2035/charts/actor_influence_salience.png)
+### Evidence Provenance
 
-*Actors — Influence vs Salience*
-
-<!-- viz:charts/source_mix_sunburst.html -->
 ![Source Mix — tier / origin / reachability](demos/ev-2035/charts/source_mix_sunburst.png)
 
-*Source Mix — tier / origin / reachability*
-
-<!-- viz:charts/quantitative_claims.html -->
-![Key Quantitative Claims](demos/ev-2035/charts/quantitative_claims.png)
-
-*Key Quantitative Claims*
-
-<!-- viz:charts/contested_claims.html -->
-![Contested Claims — evidence weight per position](demos/ev-2035/charts/contested_claims.png)
-
-*Contested Claims — evidence weight per position*
+*The 34-source mix is a methodology diagnostic and is kept after the
+forecast-domain figures rather than presented as an industry outcome.*
 
 ## How to Verify This Forecast (Resolution Criteria & Indicators)
 This section lists **falsifiable, trackable** resolution criteria for each scenario, plus dated/triggered indicators for future scoring and calibration.

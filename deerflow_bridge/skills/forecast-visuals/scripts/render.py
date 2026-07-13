@@ -3,7 +3,7 @@
 
 从一个运行目录（--dir，默认 CWD）读取结构化工件并渲染研究图表：
 
-    actors.json        {actors:[{name,influence,salience,role_class,...}],
+    actors.json        {actors:[{name,role_class,...}],
                         relationships:[{source,target,type,sign/valence/polarity,...}]}
     timeline.json      [{date, event}]
     quantitative.json  [{metric, value, unit, as_of_date, tier, ...}]
@@ -15,9 +15,11 @@
                         供抽取尚未落盘时由 agent 自写数据的 write-step 流程）
 
 输出（全部落在 <dir>/charts/ 下 + <dir>/charts.json 清单）：
-    charts/actor_network.{html,png}   actor 关系网络（角色类着色、影响力定径、valence 定边色）
+    charts/actor_network.{html,png}   actor 关系网络（角色类着色、显式层级/关系度定径、语义边色）
     charts/timeline.{html,png}        分道事件时间线（按日期，≤40 事件，悬停出全文）
-    charts/quant_metrics.{html,png}   定量 Top 指标（同单位分组取最大组，横向条形）
+    charts/quant_metrics.{html,png}   同分母定量基准面板（实际值/预测值分符号）
+    charts/forecast_revisions.{html,png}
+                                      同一预测指标跨三个以上发布版本的修订轨迹
     charts/market_probabilities.{html,png}
                                       最高流动性预测市场的隐含 P(yes)
     charts/source_quality.{html,png}  来源层级构成 + 时效性分布
@@ -84,13 +86,18 @@ _EDGE_COLORS = {
     "governance": "#8250df",
 }
 _EDGE_FALLBACK = "#9aa0a6"
+_LEVEL_WEIGHT = {
+    "very high": 4.0, "high": 3.0, "medium": 2.0, "moderate": 2.0,
+    "med": 2.0, "low": 1.0, "very low": 0.5,
+}
 
-# 本渲染器独占的五个生产者。charts.json 还可以包含 agent/用户自定义图表，
+# 本渲染器独占的六个生产者。charts.json 还可以包含 agent/用户自定义图表，
 # 所以清理时只能替换这些稳定身份，不能整个覆盖 manifest。
 _OWNED_CHART_IDS = (
     "actor_network",
     "timeline",
     "quant_metrics",
+    "forecast_revisions",
     "market_probabilities",
     "source_quality",
 )
@@ -134,6 +141,120 @@ def _num(v) -> float | None:
         return None
 
 
+_UNIT_ALIASES = {
+    "% new vehicle sales": "% new car sales",
+    "% of new vehicle sales": "% new car sales",
+    "% of new car sales": "% new car sales",
+    "usd/kwh": "USD per kWh",
+    "usd per kwh": "USD per kWh",
+    "us$ per kwh": "USD per kWh",
+    "$/kwh": "USD per kWh",
+}
+_AMBIGUOUS_UNITS = {
+    "%", "percent", "percentage", "unit", "units", "million units",
+    "billion units", "count", "number", "usd million", "usd billion",
+    "eur million", "eur billion", "cny million", "cny billion",
+}
+_FORECAST_SIGNAL_RE = re.compile(
+    r"\b(?:forecast(?:ed|s|ing)?|project(?:ed|ion|ions)?|outlook|"
+    r"estimate(?:d|s)?|expected|expectation|guidance|scenario|target|"
+    r"revision|revised)\b",
+    re.IGNORECASE,
+)
+_DENOMINATOR_PATTERNS = (
+    ("fleet", r"\b(?:fleet|vehicle stock|installed base|vehicles? on (?:the )?road)\b"),
+    ("registrations", r"\bregistrations?\b"),
+    ("deliveries", r"\bdeliver(?:y|ies|ed)\b"),
+    ("shipments", r"\bshipments?\b"),
+    ("production", r"\bproduction\b"),
+    ("capacity", r"\bcapacity\b"),
+    ("revenue", r"\b(?:revenue|turnover)\b"),
+    ("population", r"\bpopulation\b"),
+    ("households", r"\bhouseholds?\b"),
+    ("respondents", r"\brespondents?\b"),
+    ("gdp", r"\bgdp\b"),
+    ("sales", r"\bsales?\b"),
+)
+_TIME_BASIS_PATTERNS = (
+    ("ytd", r"\b(?:ytd|year[- ]to[- ]date)\b"),
+    ("trailing", r"\b(?:ttm|trailing\s+(?:twelve|12)\s+months?)\b"),
+    ("monthly", r"\b(?:monthly|month)\b"),
+    ("quarterly", r"\b(?:quarterly|quarter|q[1-4])\b"),
+    ("annual", r"\b(?:annual|annually|yearly|calendar year|full[- ]year|fy\s*20\d{2})\b"),
+)
+_MEASURE_FAMILY_PATTERNS = (
+    ("growth", r"\b(?:growth|cagr|change)\b"),
+    ("share", r"\b(?:share|penetration|adoption|mix)\b"),
+    ("price", r"\b(?:price|cost)\b"),
+    ("margin", r"\bmargin\b"),
+    ("rate", r"\b(?:rate|yield)\b"),
+    ("capacity", r"\bcapacity\b"),
+    ("production", r"\b(?:production|output)\b"),
+    ("volume", r"\b(?:sales|deliveries|shipments|registrations)\b"),
+    ("density", r"\bdensity\b"),
+    ("range", r"\brange\b"),
+    ("emissions", r"\b(?:emissions?|intensity)\b"),
+    ("revenue", r"\brevenue\b"),
+)
+_SUBJECT_STOPWORDS = {
+    "actual", "adoption", "annual", "annually", "average", "calendar", "capacity",
+    "car", "cars", "cost", "daily", "deliveries", "delivery", "domestic", "fleet",
+    "forecast", "forecasted", "global", "growth", "market", "margin", "monthly",
+    "new", "observed", "only", "passenger", "penetration", "percent", "percentage",
+    "price", "production", "projected", "projection", "quarter", "quarterly", "rate",
+    "region", "regional", "registrations", "reported", "revenue", "sale", "sales",
+    "share", "shipments", "specific", "target", "total", "unit", "units", "vehicle",
+    "vehicles", "volume", "weighted", "year", "yearly", "ytd", "the", "and", "for",
+    "from", "into", "during", "with", "without", "per", "of", "to", "in", "on", "as",
+}
+_REVISION_NOISE_WORDS = {
+    "a", "an", "at", "by", "edition", "estimate", "estimated", "for", "forecast",
+    "forecasted", "forecasting", "forecasts", "in", "of", "on", "outlook", "projection",
+    "projections", "projected", "publication", "published", "revision", "revisions",
+    "revised", "scenario", "the", "to", "target", "update", "updated", "version", "vintage",
+}
+_GENERIC_SOURCE_FAMILY_WORDS = {
+    "analysis", "forecast", "outlook", "projection", "recap", "report", "research", "source", "study",
+}
+_TIER_RANK = {"S1": 0, "S2": 1, "S3": 2, "S4": 3}
+
+
+def _canonical_unit(unit) -> str:
+    raw = re.sub(r"\s+", " ", str(unit or "")).strip()
+    return _UNIT_ALIASES.get(raw.lower(), raw) if raw else ""
+
+
+def _comparable_unit(unit) -> bool:
+    canonical = _canonical_unit(unit)
+    low = canonical.lower()
+    if not low or low == "date" or low in _AMBIGUOUS_UNITS:
+        return False
+    if "%" in canonical:
+        return len(low.replace("%", "").strip()) >= 3
+    if " per " in low or "/" in low or " of " in low:
+        return True
+    return bool(re.fullmatch(
+        r"(?:[kmgt]?wh|wh/kg|kg|tonnes?|barrels?|credits?|bps|basis points)", low
+    ))
+
+
+def _is_projection(row: dict) -> bool:
+    explicit = row.get("is_projection")
+    if isinstance(explicit, bool):
+        return explicit
+    is_actual = row.get("is_actual")
+    if isinstance(is_actual, bool):
+        return not is_actual
+    for key in ("value_type", "observation_type", "fact_type", "status"):
+        label = re.sub(r"[^a-z]+", "_", str(row.get(key) or "").casefold()).strip("_")
+        if label in {"actual", "historical", "observed", "reported"}:
+            return False
+        if label in {"forecast", "forecasted", "projection", "projected", "target", "expected"}:
+            return True
+    text = " ".join(str(row.get(key) or "") for key in ("metric", "definition")).lower()
+    return bool(_FORECAST_SIGNAL_RE.search(text))
+
+
 def _truncate(s: str, n: int) -> str:
     s = str(s or "").strip()
     return s if len(s) <= n else s[: n - 1] + "…"
@@ -149,6 +270,148 @@ def _parse_date(v) -> dt.date | None:
         return dt.date.fromisoformat(match.group(0))
     except ValueError:
         return None
+
+
+def _unit_denominator_key(unit: str) -> str:
+    low = unit.casefold()
+    if "margin" in low:
+        return "revenue"
+    for label, pattern in _DENOMINATOR_PATTERNS:
+        if re.search(pattern, low):
+            return label
+    if " per " in low:
+        return re.sub(r"[^a-z0-9]+", " ", low.rsplit(" per ", 1)[1]).strip()
+    if "/" in low:
+        return re.sub(r"[^a-z0-9]+", " ", low.rsplit("/", 1)[1]).strip()
+    return low
+
+
+def _quant_denominator_key(unit: str, definition: str) -> str | None:
+    unit_key = _unit_denominator_key(unit)
+    if "%" not in unit:
+        return unit_key
+    markers = {
+        label for label, pattern in _DENOMINATOR_PATTERNS
+        if re.search(pattern, definition, re.IGNORECASE)
+    }
+    if not markers:
+        return unit_key
+    if markers == {unit_key}:
+        return unit_key
+    return None
+
+
+def _quant_time_basis(row: dict, metric: str, definition: str) -> str:
+    explicit = []
+    period = row.get("period")
+    if isinstance(period, dict):
+        for key in ("period_start", "period_end", "start", "end", "frequency", "label"):
+            if period.get(key):
+                explicit.append(f"{key}:{period[key]}")
+    elif period:
+        explicit.append(str(period))
+    for key in ("period_start", "period_end", "frequency", "time_basis"):
+        if row.get(key):
+            explicit.append(f"{key}:{row[key]}")
+    if explicit:
+        return re.sub(r"\s+", " ", "|".join(explicit)).casefold().strip()
+    text = f"{metric} {definition}"
+    labels = [label for label, pattern in _TIME_BASIS_PATTERNS if re.search(pattern, text, re.IGNORECASE)]
+    return "+".join(labels) if labels else "as-of"
+
+
+def _quant_measure_family(metric: str, definition: str) -> str:
+    text = f"{metric} {definition}"
+    for label, pattern in _MEASURE_FAMILY_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            return label
+    return re.sub(r"[^a-z0-9]+", " ", definition.casefold()).strip()
+
+
+def _quant_subject_tokens(metric: str, definition: str) -> frozenset[str]:
+    text = f"{metric} {definition}".casefold()
+    text = re.sub(r"\b(?:battery electric vehicles?|plug[- ]in hybrid electric vehicles?)\b", " ev ", text)
+    text = re.sub(r"\b(?:electric vehicles?|electric cars?|bev|phev|nev|zev)\b", " ev ", text)
+    tokens = {
+        token for token in re.findall(r"[a-z][a-z0-9]+", text)
+        if token not in _SUBJECT_STOPWORDS and not re.fullmatch(r"20\d{2}", token)
+    }
+    if tokens:
+        return frozenset(tokens)
+    fallback = re.sub(r"\b20\d{2}\b", " ", definition.casefold())
+    fallback = re.sub(r"[^a-z0-9]+", " ", fallback).strip()
+    return frozenset({f"definition:{fallback}"}) if fallback else frozenset()
+
+
+def _split_quant_families(rows: list[dict]) -> list[list[dict]]:
+    families = []
+    for row in rows:
+        subjects = row["_subjects"]
+        for family in families:
+            common = family["common"] & subjects
+            if common:
+                family["rows"].append(row)
+                family["common"] = common
+                break
+        else:
+            families.append({"rows": [row], "common": subjects})
+    return [family["rows"] for family in families if len(family["rows"]) >= 2]
+
+
+def _source_outlook_family(source: str) -> str:
+    text = source.casefold()
+    text = re.sub(r"[’']s\b", "", text)
+    text = re.sub(r"\[[^\]]*\]|【[^】]*】", " ", text)
+    text = re.sub(
+        r"\b(?:bloomberg\s*nef|bloombergnef|bloomberg new energy finance)\b",
+        "bnef",
+        text,
+    )
+    text = re.sub(r"\belectric vehicle outlook\b", "evo", text)
+    text = re.sub(r"\bgevo\b", "global ev outlook", text)
+    text = re.sub(r"\b20\d{2}\b", " ", text)
+    noise = {
+        "cited", "edition", "published", "publication", "recap", "recapping", "revision",
+        "revised", "update", "updated", "version", "vintage",
+    }
+    tokens = [token for token in re.findall(r"[a-z][a-z0-9]+", text) if token not in noise]
+    if not tokens or all(token in _GENERIC_SOURCE_FAMILY_WORDS for token in tokens):
+        return ""
+    return " ".join(tokens)
+
+
+def _revision_target_year(name: str, definition: str, vintage: int) -> int | None:
+    years = {int(year) for year in re.findall(r"\b(20\d{2})\b", f"{name} {definition}")}
+    years.discard(vintage)
+    return next(iter(years)) if len(years) == 1 else None
+
+
+def _revision_identity_text(
+    text: str,
+    *,
+    publisher_family: str,
+    vintage: int,
+    target_year: int,
+) -> str:
+    normalized = text.casefold()
+    normalized = re.sub(
+        r"\b(?:bloomberg\s*nef|bloombergnef|bloomberg new energy finance)\b",
+        "bnef",
+        normalized,
+    )
+    normalized = re.sub(r"\belectric vehicles?\b", "ev", normalized)
+    normalized = re.split(
+        r"\b(?:post|after|following|due to|because of|in response to)\b",
+        normalized,
+        maxsplit=1,
+    )[0]
+    normalized = re.sub(rf"\b(?:{vintage}|{target_year})\b", " ", normalized)
+    publisher_tokens = set(publisher_family.split())
+    tokens = [
+        token for token in re.findall(r"[a-z][a-z0-9]+", normalized)
+        if token not in _REVISION_NOISE_WORDS and token not in publisher_tokens
+    ]
+    return " ".join(tokens)
 
 
 def _source_identity(row: dict) -> str:
@@ -174,7 +437,12 @@ def _source_identity(row: dict) -> str:
 
 
 def prep_network(actors_obj, max_nodes: int = 30):
-    """actors.json → 节点（按 role_class 分组圆布局、影响力定径）+ 边（valence 定色）。"""
+    """actors.json → optional relationship map with explicit, bounded proxy sizing.
+
+    Only declared numeric scores or ordinal tiers may size nodes.  Numbers
+    embedded in salience prose are never parsed.  Relationship endpoints are
+    canonicalized through names, aliases, and a unique parenthetical prefix.
+    """
     if not isinstance(actors_obj, dict):
         return None
     actors = [a for a in (actors_obj.get("actors") or []) if isinstance(a, dict) and str(a.get("name") or "").strip()]
@@ -182,15 +450,48 @@ def prep_network(actors_obj, max_nodes: int = 30):
         return None
 
     def _influence(a) -> float:
-        for k in ("influence", "salience", "salience_score"):
-            v = _num(a.get(k))
+        salience = a.get("salience")
+        explicit = (
+            a.get("influence_score"),
+            a.get("salience_score"),
+            salience.get("score") if isinstance(salience, dict) else None,
+            a.get("influence") if isinstance(a.get("influence"), (int, float)) else None,
+        )
+        for raw in explicit:
+            v = _num(raw)
             if v is not None:
                 return v
-        return 0.0
+        for raw in (
+            a.get("influence"),
+            salience.get("tier") if isinstance(salience, dict) else salience,
+        ):
+            level = _LEVEL_WEIGHT.get(str(raw or "").strip().lower())
+            if level is not None:
+                return level
+        return 1.0
 
     actors = sorted(actors, key=lambda a: -_influence(a))[: max(2, max_nodes)]
     names = [str(a["name"]).strip() for a in actors]
-    name_set = {n.lower() for n in names}
+
+    def _actor_key(value) -> str:
+        return re.sub(r"\s+", " ", str(value or "")).strip(" .,;:'\"()").casefold()
+
+    alias_candidates: dict[str, set[str]] = {}
+    for actor, canonical in zip(actors, names, strict=False):
+        candidates = [canonical]
+        aliases = actor.get("aliases")
+        if isinstance(aliases, list):
+            candidates.extend(str(alias) for alias in aliases)
+        prefix = re.sub(r"\s*\([^)]*\)\s*$", "", canonical).strip()
+        if prefix and prefix != canonical:
+            candidates.append(prefix)
+        for candidate in candidates:
+            key = _actor_key(candidate)
+            if key:
+                alias_candidates.setdefault(key, set()).add(canonical)
+    alias_map = {
+        key: next(iter(values)) for key, values in alias_candidates.items() if len(values) == 1
+    }
     # 角色类分组圆布局：同 role_class 的节点相邻（角度连续段），确定性（无随机布局）。
     groups: dict[str, list[int]] = {}
     for i, a in enumerate(actors):
@@ -212,26 +513,43 @@ def prep_network(actors_obj, max_nodes: int = 30):
             "color": _ROLE_COLORS.get(rc, _ROLE_FALLBACK),
             "role_class": rc,
         })
-    idx = {n.lower(): i for i, n in enumerate(names)}
+    idx = {_actor_key(n): i for i, n in enumerate(names)}
     edges = []
     seen_edges: set = set()
     for r in actors_obj.get("relationships") or []:
         if not isinstance(r, dict):
             continue
-        s = str(r.get("source") or "").strip()
-        t = str(r.get("target") or "").strip()
-        if s.lower() not in name_set or t.lower() not in name_set or s.lower() == t.lower():
+        source_raw = str(r.get("source") or "").strip()
+        target_raw = str(r.get("target") or "").strip()
+        s = alias_map.get(_actor_key(source_raw))
+        t = alias_map.get(_actor_key(target_raw))
+        if not s or not t or _actor_key(s) == _actor_key(t):
             continue
         rtype = str(r.get("type") or "").strip().upper()
-        key = (s.lower(), t.lower(), rtype)
+        key = (_actor_key(s), _actor_key(t), rtype)
         if key in seen_edges:  # 重复边去重（诊断里的 COMPETES_WITH ×4）
             continue
         seen_edges.add(key)
-        valence = str(r.get("valence") or r.get("sign") or r.get("polarity") or "").strip().lower()
-        i, j = idx[s.lower()], idx[t.lower()]
+        valence = str(r.get("valence") or r.get("sign") or "").strip().lower()
+        polarity = _num(r.get("polarity"))
+        if valence in {"allied", "ally", "supportive", "positive", "cooperative", "+"}:
+            semantic = "cooperative"
+        elif valence in {"rival", "adversarial", "negative", "opposed", "-"}:
+            semantic = "adversarial"
+        elif valence in {"governance", "directional", "regulatory"} or rtype in {
+            "REGULATES", "GOVERNS", "ENFORCES",
+        }:
+            semantic = "governance"
+        elif polarity is not None and polarity > 0.15:
+            semantic = "cooperative"
+        elif polarity is not None and polarity < -0.15:
+            semantic = "adversarial"
+        else:
+            semantic = "neutral"
+        i, j = idx[_actor_key(s)], idx[_actor_key(t)]
         edges.append({
             "x0": pos[i][0], "y0": pos[i][1], "x1": pos[j][0], "y1": pos[j][1],
-            "color": _EDGE_COLORS.get(valence, _EDGE_FALLBACK),
+            "color": _EDGE_COLORS.get(semantic, _EDGE_FALLBACK),
             "label": f"{s} —{rtype or 'REL'}→ {t}" + (f" ({valence})" if valence else ""),
         })
     if not edges and len(nodes) < 3:
@@ -240,7 +558,11 @@ def prep_network(actors_obj, max_nodes: int = 30):
 
 
 def prep_timeline(rows, max_events: int = 40):
-    """timeline.json → 按日期排序、近端优先截断、轮转分道（防标签互压）。"""
+    """timeline.json → dated points with stable numeric keys.
+
+    Full event prose belongs in hover/the key, not on top of data points.  The
+    stable index lets dense date clusters remain readable in both HTML and PNG.
+    """
     events = []
     for r in rows or []:
         if not isinstance(r, dict):
@@ -255,37 +577,204 @@ def prep_timeline(rows, max_events: int = 40):
     events = sorted(set(events), key=lambda e: e[0])
     if len(events) > max_events:
         events = events[-max_events:]
-    points = [{"date": d, "lane": (i % 4) + 1, "label": _truncate(ev, 90), "full": ev}
-              for i, (d, ev) in enumerate(events)]
+    lane_last_date: dict[int, dt.date] = {}
+    points = []
+    for i, (date, event) in enumerate(events):
+        # Keep the exact evidence date on x while allocating a visual lane that
+        # avoids marker collisions in dense clusters.  This changes layout
+        # only: the date in the data, key and hover remains untouched.
+        parsed_date = _parse_date(date)
+        preferred_lanes = [((i + offset) % 6) + 1 for offset in range(6)]
+        lane = preferred_lanes[0]
+        if parsed_date is not None:
+            lane = next(
+                (
+                    candidate
+                    for candidate in preferred_lanes
+                    if candidate not in lane_last_date
+                    or (parsed_date - lane_last_date[candidate]).days >= 30
+                ),
+                min(
+                    preferred_lanes,
+                    key=lambda candidate: lane_last_date.get(candidate, dt.date.min),
+                ),
+            )
+            lane_last_date[lane] = parsed_date
+        points.append({
+            "index": i + 1,
+            "date": date,
+            "lane": lane,
+            "label": _truncate(event, 90),
+            "full": event,
+        })
     return {"points": points}
 
 
-def prep_quant(rows, max_bars: int = 12):
-    """quantitative.json → 最大同单位组的 Top 指标横向条形（绝不混单位同轴）。"""
-    by_unit: dict[str, list[dict]] = {}
-    for r in rows or []:
+def prep_quant(rows, max_bars: int = 10, max_panels: int = 3):
+    """quantitative.json → strict same-denominator benchmark panels.
+
+    Plain percentages, generic counts and broad currency units are rejected:
+    they commonly mix margins, shares, periods or definitions despite looking
+    numerically compatible.  Source/as-of/projection metadata survives for
+    labels and hover text.
+    """
+    groups: dict[tuple[str, str, str, str, str], list[dict]] = {}
+    for idx, r in enumerate(rows or []):
         if not isinstance(r, dict):
             continue
         v = _num(r.get("value"))
         metric = str(r.get("metric") or "").strip()
-        unit = str(r.get("unit") or "").strip()
-        if v is None or not metric or not unit:
+        unit = _canonical_unit(r.get("unit"))
+        if v is None or not metric or not _comparable_unit(unit):
             continue
-        by_unit.setdefault(unit, []).append({
+        source = str(r.get("source") or "").strip()
+        definition = str(r.get("definition") or "").strip()
+        as_of = _parse_date(r.get("as_of_date"))
+        if not source or not definition or as_of is None:
+            continue
+        projection = _is_projection(r)
+        staleness = _num(r.get("staleness_days"))
+        if staleness is not None and staleness < 0 and not projection:
+            continue
+        denominator = _quant_denominator_key(unit, definition)
+        if not denominator:
+            continue
+        time_basis = _quant_time_basis(r, metric, definition)
+        measure_family = _quant_measure_family(metric, definition)
+        subjects = _quant_subject_tokens(metric, definition)
+        if not measure_family or not subjects:
+            continue
+        key = (unit.casefold(), as_of.isoformat(), time_basis, denominator, measure_family)
+        groups.setdefault(key, []).append({
             "metric": metric, "value": v,
-            "as_of": str(r.get("as_of_date") or "").strip(),
+            "unit": unit,
+            "as_of": as_of.isoformat(),
             "tier": str(r.get("tier") or "").strip(),
+            "source": source,
+            "definition": definition,
+            "projection": projection,
+            "stale": bool(r.get("is_stale")),
+            "_subjects": subjects,
+            "idx": idx,
         })
-    if not by_unit:
+    eligible = []
+    for key, values in groups.items():
+        eligible.extend((key, family) for family in _split_quant_families(values))
+    if not eligible:
         return None
-    unit = max(by_unit, key=lambda u: len(by_unit[u]))
-    rows_u = sorted(by_unit[unit], key=lambda r: -abs(r["value"]))[:max_bars]
-    if not rows_u:
-        return None
-    rows_u.reverse()  # 横向条形自下而上升序展示
-    bars = [{"label": _truncate(f"{r['metric']}" + (f" (as of {r['as_of']})" if r["as_of"] else ""), 70),
-             "value": r["value"]} for r in rows_u]
-    return {"unit": unit, "bars": bars, "n_units": len(by_unit)}
+    eligible.sort(key=lambda item: (-len(item[1]), item[0]))
+    panels = []
+    for key, values in eligible[:max_panels]:
+        values.sort(key=lambda row: (
+            _TIER_RANK.get(row["tier"].upper(), 9),
+            row["stale"],
+            row["projection"],
+            row["idx"],
+        ))
+        bars = []
+        for row in values[:max_bars]:
+            clean = {field: value for field, value in row.items() if not field.startswith("_")}
+            bars.append({
+                **clean,
+                "label": _truncate(
+                    row["metric"] + (f" (as of {row['as_of']})" if row["as_of"] else ""),
+                    72,
+                ),
+            })
+        panels.append({
+            "unit": values[0]["unit"],
+            "as_of": key[1],
+            "time_basis": key[2],
+            "bars": bars,
+        })
+    return {"panels": panels}
+
+
+def prep_revisions(rows, max_series: int = 3):
+    """Extract ≥3 semantically identical published forecast vintages."""
+    grouped: dict[tuple[str, int, str, str, str], dict] = {}
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        metric = re.sub(r"\s+", " ", str(row.get("metric") or "")).strip()
+        match = re.search(r"\((20\d{2})\)\s*$", metric)
+        if not match:
+            continue
+        text = " ".join((metric, str(row.get("definition") or "")))
+        if not _FORECAST_SIGNAL_RE.search(text):
+            continue
+        value = _num(row.get("value"))
+        unit = _canonical_unit(row.get("unit"))
+        source = str(row.get("source") or "").strip()
+        definition = str(row.get("definition") or "").strip()
+        as_of = _parse_date(row.get("as_of_date"))
+        if value is None or not unit or not source or not definition or as_of is None:
+            continue
+        name = metric[:match.start()].rstrip(" -–—:")
+        vintage = int(match.group(1))
+        if vintage != as_of.year:
+            continue
+        publisher_family = _source_outlook_family(source)
+        target_year = _revision_target_year(name, definition, vintage)
+        if not publisher_family or target_year is None:
+            continue
+        metric_family = _revision_identity_text(
+            name,
+            publisher_family=publisher_family,
+            vintage=vintage,
+            target_year=target_year,
+        )
+        definition_family = _revision_identity_text(
+            definition,
+            publisher_family=publisher_family,
+            vintage=vintage,
+            target_year=target_year,
+        )
+        if not metric_family or not definition_family:
+            continue
+        key = (
+            publisher_family,
+            target_year,
+            unit.casefold(),
+            metric_family,
+            definition_family,
+        )
+        series = grouped.setdefault(
+            key,
+            {
+                "name": name,
+                "unit": unit,
+                "publisher_family": publisher_family,
+                "target_year": target_year,
+                "points": {},
+            },
+        )
+        candidate = {
+            "vintage": vintage,
+            "value": value,
+            "as_of": as_of.isoformat(),
+            "source": source,
+            "tier": str(row.get("tier") or "S3").strip().upper() or "S3",
+            "stale": bool(row.get("is_stale")),
+        }
+        previous = series["points"].get(vintage)
+        if previous is None or _TIER_RANK.get(candidate["tier"], 9) < _TIER_RANK.get(
+            previous["tier"], 9
+        ):
+            series["points"][vintage] = candidate
+    eligible = []
+    for series in grouped.values():
+        points = [series["points"][year] for year in sorted(series["points"])]
+        if len(points) >= 3:
+            eligible.append({
+                "name": series["name"],
+                "unit": series["unit"],
+                "publisher_family": series["publisher_family"],
+                "target_year": series["target_year"],
+                "points": points,
+            })
+    eligible.sort(key=lambda series: (-len(series["points"]), series["name"].lower()))
+    return {"series": eligible[:max_series]} if eligible else None
 
 
 def prep_markets(payload, max_bars: int = 12):
@@ -338,7 +827,7 @@ def prep_markets(payload, max_bars: int = 12):
     return {"markets": markets, "as_of": as_of}
 
 
-def prep_sources(payload):
+def prep_sources(payload, run_anchor=None):
     """sources.json → deduplicated source-tier and freshness distributions.
 
     Explicit ``staleness_days`` wins. Otherwise freshness is measured against
@@ -370,7 +859,26 @@ def prep_sources(payload):
         return None
 
     dated = [item["date"] for item in unique if item["date"] is not None]
-    reference_date = max(dated) if dated else None
+    authoritative_anchor = _parse_date(run_anchor)
+    explicit_anchors: list[dt.date] = []
+    for item in unique:
+        explicit_age = _num(item["row"].get("staleness_days"))
+        if item["date"] is not None and explicit_age is not None and explicit_age >= 0:
+            explicit_anchors.append(
+                item["date"] + dt.timedelta(days=int(round(explicit_age)))
+            )
+    if authoritative_anchor is not None:
+        reference_date = authoritative_anchor
+        reference_source = "run_metadata"
+    elif explicit_anchors:
+        anchor_counts: dict[dt.date, int] = {}
+        for anchor in explicit_anchors:
+            anchor_counts[anchor] = anchor_counts.get(anchor, 0) + 1
+        reference_date = max(anchor_counts, key=lambda anchor: (anchor_counts[anchor], anchor))
+        reference_source = "explicit_staleness_anchor"
+    else:
+        reference_date = max(dated) if dated else None
+        reference_source = "latest_dated_source" if reference_date else "none"
     tier_order = ("S1", "S2", "S3", "S4", "Untiered")
     freshness_order = ("≤30 days", "31–90 days", "91–365 days", ">365 days", "Undated")
     tier_counts = dict.fromkeys(tier_order, 0)
@@ -382,12 +890,15 @@ def prep_sources(payload):
         tier_match = re.search(r"\bS([1-4])\b", str(row.get("tier") or "").upper())
         tier_counts[f"S{tier_match.group(1)}" if tier_match else "Untiered"] += 1
 
-        age = _num(row.get("staleness_days"))
-        if age is not None:
+        explicit_age = _num(row.get("staleness_days"))
+        if explicit_age is not None:
             explicit_staleness_count += 1
-            age = max(0.0, age)
-        if age is None and item["date"] is not None and reference_date is not None:
+        if item["date"] is not None and reference_date is not None:
             age = float(max(0, (reference_date - item["date"]).days))
+        elif explicit_age is not None:
+            age = max(0.0, explicit_age)
+        else:
+            age = None
         if age is None:
             freshness_counts["Undated"] += 1
         elif age <= 30:
@@ -406,6 +917,7 @@ def prep_sources(payload):
         ],
         "total": len(unique),
         "reference_date": reference_date.isoformat() if reference_date else "",
+        "reference_source": reference_source,
         "explicit_staleness_count": explicit_staleness_count,
     }
 
@@ -428,6 +940,18 @@ def _write_outputs(fig, mpl_draw, charts_dir: Path, stem: str) -> tuple[str | No
                 full_html=True,
                 div_id=f"forecast-visual-{stem}",
             )
+            # Plotly's bundled JavaScript contains many line-ending spaces.
+            # They are semantically inert but make generated assets fail
+            # repository hygiene checks.  Normalize only trailing horizontal
+            # whitespace while preserving line boundaries and final-newline
+            # state so the self-contained document remains deterministic.
+            raw_html = html_path.read_text(encoding="utf-8")
+            had_final_newline = raw_html.endswith(("\n", "\r"))
+            clean_html = "\n".join(line.rstrip(" \t") for line in raw_html.splitlines())
+            if had_final_newline:
+                clean_html += "\n"
+            if clean_html != raw_html:
+                html_path.write_text(clean_html, encoding="utf-8")
             html_rel = f"charts/{stem}.html"
         except Exception as e:  # noqa: BLE001
             _log(f"{stem}: write_html failed ({type(e).__name__}: {e})")
@@ -487,27 +1011,46 @@ def render_network(prep, charts_dir: Path):
 
 def render_timeline(prep, charts_dir: Path):
     pts = prep["points"]
+    lane_ceiling = max((point["lane"] for point in pts), default=1) + 1.5
     fig = None
     if _HAS_PLOTLY:
         fig = go.Figure(go.Scatter(
             x=[p["date"] for p in pts], y=[p["lane"] for p in pts],
-            mode="markers+text", text=[_truncate(p["label"], 40) for p in pts],
-            textposition="top center", textfont={"size": 8},
-            hovertext=[f"{p['date']}: {p['full']}" for p in pts], hoverinfo="text",
-            marker={"size": 9, "color": "#3b6fb0"}))
+            mode="markers+text", text=[f"{p['index']:02d}" for p in pts],
+            textposition="middle center", textfont={"size": 8, "color": "white"},
+            hovertext=[f"<b>{p['date']}</b><br>{p['full']}" for p in pts],
+            hoverinfo="text",
+            marker={"size": 20, "color": "#3b6fb0",
+                    "line": {"color": "white", "width": 1.5}}))
+        key_columns = 2 if len(pts) > 14 else 1
+        key_rows = max(1, math.ceil(len(pts) / key_columns))
+        for position, point in enumerate(pts):
+            column = position // key_rows
+            row = position % key_rows
+            fig.add_annotation(
+                xref="paper", yref="paper", x=column / key_columns,
+                y=-(0.14 + row * 0.055), showarrow=False,
+                text=(f"<b>{point['index']:02d}</b>  {point['date']}  "
+                      f"{_truncate(point['label'], 68 if key_columns == 2 else 86)}"),
+                xanchor="left", yanchor="top", align="left",
+                font={"size": 9, "color": "#24292f"},
+            )
         fig.update_layout(title=f"Event Timeline ({len(pts)} key events)", template="plotly_white",
-                          yaxis={"visible": False, "range": [0, 5.5]}, xaxis_title="date",
-                          margin={"l": 30, "r": 30, "t": 60, "b": 40})
+                          yaxis={"visible": False, "range": [0, lane_ceiling]}, xaxis_title="date",
+                          height=max(620, 430 + 28 * key_rows),
+                          margin={"l": 30, "r": 30, "t": 60,
+                                  "b": 90 + 23 * key_rows})
 
     def mpl_draw(path: str) -> None:
         f, ax = plt.subplots(figsize=(12, 7.5), dpi=160)
         xs = list(range(len(pts)))
         ax.scatter(xs, [p["lane"] for p in pts], s=28, c="#3b6fb0", zorder=2)
         for x, p in zip(xs, pts, strict=False):
-            ax.annotate(f"{p['date']}\n{_truncate(p['label'], 34)}", (x, p["lane"]),
+            ax.annotate(f"{p['index']:02d}  {p['date']}\n{_truncate(p['label'], 54)}",
+                        (x, p["lane"]),
                         textcoords="offset points", xytext=(0, 8), ha="center", fontsize=6)
         ax.set_title(f"Event Timeline ({len(pts)} key events)")
-        ax.set_ylim(0, 5.5)
+        ax.set_ylim(0, lane_ceiling)
         ax.set_yticks([])
         ax.set_xticks([])
         f.tight_layout()
@@ -518,27 +1061,148 @@ def render_timeline(prep, charts_dir: Path):
 
 
 def render_quant(prep, charts_dir: Path):
-    bars = prep["bars"]
-    title = f"Top Quantitative Metrics ({prep['unit']})"
+    panels = prep["panels"]
+    title = "Comparable Forecast Benchmarks"
     fig = None
     if _HAS_PLOTLY:
-        fig = go.Figure(go.Bar(
-            x=[b["value"] for b in bars], y=[b["label"] for b in bars], orientation="h",
-            marker={"color": "#2f8f5b"}))
-        fig.update_layout(title=title, template="plotly_white", xaxis_title=prep["unit"],
-                          margin={"l": 280, "r": 40, "t": 60, "b": 40})
+        fig = make_subplots(
+            rows=len(panels), cols=1,
+            subplot_titles=[f"{panel['unit']} (n={len(panel['bars'])})" for panel in panels],
+            # Static exports need explicit breathing room between a panel's
+            # x-axis title and the next panel heading.
+            vertical_spacing=0.16,
+        )
+        shown = set()
+        for row_no, panel in enumerate(panels, 1):
+            for projection in (False, True):
+                bars = [bar for bar in panel["bars"] if bar["projection"] is projection]
+                if not bars:
+                    continue
+                status = "Published forecast / target" if projection else "Observed / reported"
+                fig.add_trace(go.Scatter(
+                    x=[bar["value"] for bar in bars],
+                    y=[bar["label"] for bar in bars],
+                    mode="markers",
+                    name=status,
+                    legendgroup=status,
+                    showlegend=status not in shown,
+                    marker={
+                        "size": 11,
+                        "symbol": "diamond" if projection else "circle",
+                        "color": "#b36b00" if projection else "#3b6fb0",
+                        "line": {
+                            "color": ["#c04a3a" if bar["stale"] else "#ffffff" for bar in bars],
+                            "width": 2,
+                        },
+                    },
+                    hovertext=["<br>".join(
+                        part for part in (
+                            f"<b>{bar['metric']}</b>",
+                            f"{bar['value']:g} {panel['unit']}",
+                            f"as of {bar['as_of']}" if bar["as_of"] else "",
+                            bar["definition"],
+                            bar["source"],
+                        ) if part
+                    ) for bar in bars],
+                    hoverinfo="text",
+                ), row=row_no, col=1)
+                shown.add(status)
+            fig.update_xaxes(title_text=panel["unit"], row=row_no, col=1)
+            fig.update_yaxes(autorange="reversed", row=row_no, col=1)
+        fig.update_layout(
+            title=f"{title}<br><sup>Each panel shares one explicit denominator; hover for source and as-of.</sup>",
+            template="plotly_white",
+            height=max(720, 380 * len(panels)),
+            margin={"l": 330, "r": 40, "t": 90, "b": 85},
+            legend={"orientation": "h", "y": -0.09, "x": 0.5,
+                    "xanchor": "center", "yanchor": "top"},
+        )
 
     def mpl_draw(path: str) -> None:
-        f, ax = plt.subplots(figsize=(12, 7.5), dpi=160)
-        ax.barh([b["label"] for b in bars], [b["value"] for b in bars], color="#2f8f5b")
-        ax.set_title(title)
-        ax.set_xlabel(prep["unit"])
-        ax.tick_params(axis="y", labelsize=7)
+        f, axes = plt.subplots(
+            len(panels), 1, figsize=(12, max(7.5, 4.2 * len(panels))), dpi=160,
+            squeeze=False,
+        )
+        for ax, panel in zip(axes[:, 0], panels, strict=False):
+            bars = panel["bars"]
+            ys = list(range(len(bars)))
+            colors = ["#b36b00" if bar["projection"] else "#3b6fb0" for bar in bars]
+            markers = ["D" if bar["projection"] else "o" for bar in bars]
+            for y, bar, color, marker in zip(ys, bars, colors, markers, strict=False):
+                ax.scatter([bar["value"]], [y], c=color, marker=marker, s=55)
+            ax.set_yticks(ys, [bar["label"] for bar in bars], fontsize=7)
+            ax.invert_yaxis()
+            ax.set_title(panel["unit"])
+            ax.set_xlabel(panel["unit"])
+            ax.grid(axis="x", alpha=0.25)
+        f.suptitle(title)
         f.tight_layout()
         f.savefig(path)
         plt.close(f)
 
     return _write_outputs(fig, mpl_draw, charts_dir, "quant_metrics")
+
+
+def render_revisions(prep, charts_dir: Path):
+    series = prep["series"]
+    title = "Forecast Revisions Across Published Vintages"
+    fig = None
+    if _HAS_PLOTLY:
+        fig = make_subplots(
+            rows=len(series), cols=1,
+            subplot_titles=[f"{row['name']} · {row['unit']}" for row in series],
+            vertical_spacing=0.14,
+        )
+        for row_no, row in enumerate(series, 1):
+            points = row["points"]
+            fig.add_trace(go.Scatter(
+                x=[point["vintage"] for point in points],
+                y=[point["value"] for point in points],
+                mode="lines+markers+text",
+                text=[f"{point['value']:g}" for point in points],
+                textposition="top center",
+                line={"color": "#3b6fb0", "width": 3},
+                marker={"size": 10, "color": "#3b6fb0"},
+                hovertext=["<br>".join(part for part in (
+                    f"<b>{row['name']}</b>",
+                    f"vintage {point['vintage']}: {point['value']:g} {row['unit']}",
+                    f"as of {point['as_of']}" if point["as_of"] else "",
+                    point["source"],
+                ) if part) for point in points],
+                hoverinfo="text",
+                showlegend=False,
+            ), row=row_no, col=1)
+            fig.update_xaxes(title_text="forecast vintage", dtick=1, row=row_no, col=1)
+            fig.update_yaxes(title_text=row["unit"], row=row_no, col=1)
+        fig.update_layout(
+            title=title, template="plotly_white", height=max(520, 320 * len(series)),
+            margin={"l": 100, "r": 40, "t": 75, "b": 45},
+        )
+
+    def mpl_draw(path: str) -> None:
+        f, axes = plt.subplots(
+            len(series), 1, figsize=(12, max(7.5, 4.2 * len(series))), dpi=160,
+            squeeze=False,
+        )
+        for ax, row in zip(axes[:, 0], series, strict=False):
+            points = row["points"]
+            xs = [point["vintage"] for point in points]
+            ys = [point["value"] for point in points]
+            ax.plot(xs, ys, color="#3b6fb0", marker="o", lw=2.5)
+            for x, y in zip(xs, ys, strict=False):
+                ax.annotate(f"{y:g}", (x, y), xytext=(0, 7), textcoords="offset points",
+                            ha="center", fontsize=8)
+            ax.set_title(f"{row['name']} · {row['unit']}")
+            ax.set_xlabel("forecast vintage")
+            ax.set_ylabel(row["unit"])
+            ax.set_xticks(xs)
+            ax.grid(alpha=0.25)
+        f.suptitle(title)
+        f.tight_layout()
+        f.savefig(path)
+        plt.close(f)
+
+    return _write_outputs(fig, mpl_draw, charts_dir, "forecast_revisions")
 
 
 def render_markets(prep, charts_dir: Path):
@@ -638,10 +1302,14 @@ def render_sources(prep, charts_dir: Path):
             row=1,
             col=2,
         )
-        if reference and prep.get("explicit_staleness_count"):
+        if reference and prep.get("reference_source") == "run_metadata":
             freshness_note = (
-                "Explicit staleness_days are preserved; other dated rows are relative to "
-                f"{reference}."
+                f"All dated rows use the research-run anchor ({reference}) from meta.finished_at."
+            )
+        elif reference and prep.get("reference_source") == "explicit_staleness_anchor":
+            freshness_note = (
+                f"All dated rows use one run-level anchor ({reference}), inferred from "
+                "explicit staleness metadata."
             )
         elif reference:
             freshness_note = f"Dated buckets are relative to {reference}; undated rows are explicit."
@@ -704,7 +1372,7 @@ def _owned_chart_id(row: dict) -> str | None:
 def _merge_manifest(manifest_path: Path, new_entries: list) -> list:
     """替换本渲染器的条目，保留其它生产者的条目。
 
-    一次调用总是检查 actor/timeline/quant/market/source 五个当前输入，因此旧的五类
+    一次调用总是检查 actor/timeline/quant/revision/market/source 六个当前输入，因此旧的六类
     条目必须先作为一个集合删除，再按固定顺序加入本次成功产物。
     这同时解决 HTML-only → PNG+HTML 重跑时 ``path`` 改变导致的双条目，
     以及当前输入已缺失时清单仍指向旧图的问题。
@@ -768,21 +1436,27 @@ def main() -> int:
     sources_payload = _read_json(base / "sources.json")
     if not isinstance(sources_payload, (dict, list)):
         sources_payload = fallback.get("sources") if isinstance(fallback, dict) else None
+    run_meta = _read_json(base / "meta.json")
+    run_anchor = run_meta.get("finished_at") if isinstance(run_meta, dict) else None
 
     jobs = [
         ("actor_network", prep_network(actors_obj), render_network,
          "actors.json", "Actor Relationship Network",
-         "Node size = influence, color = role class; red edges adversarial, green cooperative."),
+         "Node size uses declared tiers/scores when present, otherwise equal size; "
+         "colors encode role and relationship semantics."),
         ("timeline", prep_timeline(timeline_rows), render_timeline,
          "timeline.json", "Event Timeline",
          "Dated key events driving the forecast, most recent window."),
         ("quant_metrics", prep_quant(quant_rows), render_quant,
-         "quantitative.json", "Top Quantitative Metrics",
-         "Largest same-unit metric group; units never mixed on one axis."),
+         "quantitative.json", "Comparable Forecast Benchmarks",
+         "Strict same-denominator panels; hover retains source, as-of, and forecast status."),
+        ("forecast_revisions", prep_revisions(quant_rows), render_revisions,
+         "quantitative.json", "Forecast Revisions Across Published Vintages",
+         "The same sourced forecast metric across three or more published vintages."),
         ("market_probabilities", prep_markets(markets_payload), render_markets,
          "prediction_markets.json", "Prediction-Market Implied Probabilities",
          "Most-liquid matched markets; implied probabilities are calibration anchors, not truth."),
-        ("source_quality", prep_sources(sources_payload), render_sources,
+        ("source_quality", prep_sources(sources_payload, run_anchor), render_sources,
          "sources.json", "Source Quality and Freshness",
          "Deduplicated source counts by evidence tier and deterministic freshness bucket."),
     ]

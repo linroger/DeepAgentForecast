@@ -3,6 +3,7 @@
 全部离线（offline-first）：fake client / 纯函数 / monkeypatch，绝不触真实图库或 LLM。
 """
 
+import asyncio
 import types
 
 import pytest
@@ -732,6 +733,7 @@ class TestLayout:
 class TestIngestErrorClassification:
     def test_reason_buckets(self):
         from app.services.graphiti_client.runtime import GraphitiRuntime
+        from graphiti_core.llm_client.errors import EmptyResponseError
 
         cls = GraphitiRuntime._classify_ingest_error
         assert cls(ValueError(
@@ -743,3 +745,163 @@ class TestIngestErrorClassification:
         assert cls(RuntimeError("Rate limit exceeded, 429")) == "rate_limit"
         assert cls(TimeoutError("op timeout")) == "timeout"
         assert cls(RuntimeError("boom")) == "other"
+        assert cls(ValueError("LLM返回的JSON格式无效: ```json")) == "schema_parse"
+        assert cls(EmptyResponseError("response was empty")) == "schema_parse"
+
+    def test_local_json_parse_failure_uses_existing_fallback(self, monkeypatch):
+        from app.services.graphiti_client.runtime import GraphitiRuntime
+
+        runtime = GraphitiRuntime.__new__(GraphitiRuntime)
+        runtime._ingest_skip_reasons = {}
+        graph = object()
+
+        async def ensure_graph(graph_id):
+            assert graph_id == "g-parse"
+            return graph
+
+        in_fallback = False
+        attempts = []
+
+        async def add_episode_once(g, graph_id, **_kwargs):
+            assert g is graph
+            assert graph_id == "g-parse"
+            attempts.append(in_fallback)
+            if not in_fallback:
+                raise ValueError("LLM返回的JSON格式无效: {bad")
+            return "uuid-recovered"
+
+        @_rt_mod.contextlib.asynccontextmanager
+        async def fallback_swapped(graph_id, g):
+            nonlocal in_fallback
+            assert graph_id == "g-parse"
+            assert g is graph
+            in_fallback = True
+            try:
+                yield True
+            finally:
+                in_fallback = False
+
+        monkeypatch.setattr(Config, "GRAPH_EPISODE_SCHEMA_RETRIES", 0, raising=False)
+        monkeypatch.setattr(runtime, "_ensure_graph", ensure_graph)
+        monkeypatch.setattr(runtime, "_add_episode_once", add_episode_once)
+        monkeypatch.setattr(runtime, "_fallback_llm_swapped", fallback_swapped)
+
+        result = asyncio.run(
+            runtime._add_episode_locked(
+                "g-parse",
+                name="parse-failure",
+                body="body",
+                source_type="text",
+                source_description="test",
+                reference_time=None,
+            )
+        )
+
+        assert result == "uuid-recovered"
+        assert attempts == [False, True]
+        assert runtime.pop_ingest_skip_reasons("g-parse") == {}
+
+
+class TestConcurrentIngestRecovery:
+    def test_rate_limit_cooldown_is_configurable_and_bounded(self, monkeypatch):
+        monkeypatch.setenv("GRAPH_INGEST_RATE_LIMIT_COOLDOWN_S", "999")
+        assert _rt_mod._graph_ingest_rate_limit_cooldown_s() == 60.0
+        monkeypatch.setenv("GRAPH_INGEST_RATE_LIMIT_COOLDOWN_S", "invalid")
+        assert _rt_mod._graph_ingest_rate_limit_cooldown_s() == 15.0
+
+    def test_replays_only_rate_limit_once_and_reports_final_skips(
+        self, monkeypatch
+    ):
+        from app.services.graphiti_client.runtime import GraphitiRuntime
+
+        runtime = GraphitiRuntime.__new__(GraphitiRuntime)
+        runtime._graphs = {}
+        runtime._graph_locks = {}
+        runtime._ingest_skip_reasons = {}
+
+        async def ensure_graph(graph_id):
+            assert graph_id == "g-replay"
+
+        attempts = {
+            "rate-limited": 0,
+            "content-filtered": 0,
+            "ok": 0,
+            "persistent-rate-limit": 0,
+        }
+        calls = []
+        replay_active = 0
+        max_replay_active = 0
+
+        async def add_episode_locked(
+            graph_id, *, name, body, source_type, source_description,
+            reference_time, record_skip_reason=True,
+        ):
+            nonlocal replay_active, max_replay_active
+            assert graph_id == "g-replay"
+            calls.append((name, body, record_skip_reason))
+            is_replay = attempts[name] > 0
+            attempts[name] += 1
+            if is_replay:
+                replay_active += 1
+                max_replay_active = max(max_replay_active, replay_active)
+                yielded = asyncio.get_running_loop().create_future()
+                asyncio.get_running_loop().call_soon(yielded.set_result, None)
+                await yielded
+            try:
+                if name == "rate-limited" and attempts[name] == 1:
+                    raise RuntimeError("HTTP 429 rate limit")
+                if name == "persistent-rate-limit":
+                    raise RuntimeError("HTTP 429 rate limit")
+                if name == "content-filtered":
+                    raise RuntimeError("content filtered as sensitive")
+                return f"uuid-{name}"
+            finally:
+                if is_replay:
+                    replay_active -= 1
+
+        cooldowns = []
+
+        async def no_sleep(delay):
+            cooldowns.append(delay)
+
+        warnings = []
+
+        def capture_warning(message, *args):
+            warnings.append(message % args)
+
+        monkeypatch.setenv("GRAPH_INGEST_RATE_LIMIT_COOLDOWN_S", "7.5")
+        monkeypatch.setattr(runtime, "_ensure_graph", ensure_graph)
+        monkeypatch.setattr(runtime, "_add_episode_locked", add_episode_locked)
+        monkeypatch.setattr(_rt_mod.asyncio, "sleep", no_sleep)
+        monkeypatch.setattr(_rt_mod.logger, "warning", capture_warning)
+
+        episodes = [
+            {"name": "rate-limited", "data": "first"},
+            {"name": "content-filtered", "data": "second"},
+            {"name": "ok", "data": "third"},
+            {"name": "persistent-rate-limit", "data": "fourth"},
+        ]
+        result = asyncio.run(
+            runtime._add_episodes_concurrent("g-replay", episodes, concurrency=3)
+        )
+
+        assert result == ["uuid-rate-limited", "uuid-ok"]
+        assert attempts == {
+            "rate-limited": 2,
+            "content-filtered": 1,
+            "ok": 1,
+            "persistent-rate-limit": 2,
+        }
+        assert cooldowns == [7.5]
+        assert max_replay_active == 1
+        assert calls[-2:] == [
+            ("rate-limited", "first", False),
+            ("persistent-rate-limit", "fourth", False),
+        ]
+        assert all(record_skip_reason is False for _, _, record_skip_reason in calls)
+        assert runtime.pop_ingest_skip_reasons("g-replay") == {
+            "content_filter": 1,
+            "rate_limit": 1,
+        }
+        assert any("content_filter=1" in warning for warning in warnings)
+        assert any("rate_limit=1" in warning for warning in warnings)

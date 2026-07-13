@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -30,6 +31,126 @@ def _write_generation(
         (folder / "sources.json").write_text(
             json.dumps(sources), encoding="utf-8"
         )
+
+
+def _write_judged_generation(
+    folder: Path,
+    *,
+    verdict: str = "PASS",
+    summary_passed: bool | None = None,
+    corrupt_prose_hash: bool = False,
+) -> str:
+    prose = "# Judged dossier\n\n" + "sourced forecast evidence " * 60
+    report = prose + "\n## Visual Annex\n\n![Chart](charts/chart.png)\n"
+    prose_hash = hashlib.sha256(prose.encode("utf-8")).hexdigest()
+    if summary_passed is None:
+        summary_passed = verdict == "PASS"
+    scores = dict.fromkeys(po._RESEARCH_JUDGE_DIMS, 5)
+    judge = {
+        "verdict": verdict,
+        "scores": scores,
+        "gaps": [] if verdict == "PASS" else ["remaining gap"],
+        "_judge_input": {
+            "report_chars": len(prose),
+            "input_chars": len(prose),
+            "input_sha256": prose_hash,
+            "truncated": False,
+        },
+        "_judged_prose": {
+            "sha256": "0" * 64 if corrupt_prose_hash else prose_hash,
+            "chars": len(prose),
+            "stage": "global-synthesis-final",
+            "scope": "llm-prose",
+        },
+    }
+    summary = {
+        "verdict": verdict,
+        "scores": scores,
+        "passed": summary_passed,
+        "judged_prose_sha256": prose_hash,
+        "judged_prose_chars": len(prose),
+        "judge_scope": "llm-prose",
+        "stage": "global-synthesis-final",
+    }
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "research_report.md").write_text(report, encoding="utf-8")
+    (folder / "research_report_judge.json").write_text(
+        json.dumps(judge), encoding="utf-8"
+    )
+    (folder / "meta.json").write_text(
+        json.dumps({
+            "depth": "deep",
+            "status": "completed",
+            "research_report_judge": summary,
+            "global_synthesis_judge": summary,
+        }),
+        encoding="utf-8",
+    )
+    return report
+
+
+def test_deep_research_contract_requires_complete_exact_judge(tmp_path):
+    handoff = tmp_path / "handoff"
+    source = tmp_path / "source"
+    _write_generation(
+        source,
+        report="# Deep dossier\n\n" + "evidence " * 100,
+    )
+    (source / "meta.json").write_text(
+        json.dumps({"depth": "deep", "status": "completed"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="checksum validation"):
+        po._promote_research_contract(str(source), str(handoff))
+    assert not (handoff / po._RESEARCH_CONTRACT_FILENAME).exists()
+
+
+def test_research_contract_accepts_exact_judged_prefix_and_deterministic_annex(
+    tmp_path,
+):
+    handoff = tmp_path / "handoff"
+    source = tmp_path / "source"
+    report = _write_judged_generation(source)
+
+    po._promote_research_contract(str(source), str(handoff))
+
+    assert po._validate_research_contract(str(handoff)) is True
+    assert (handoff / "research_report.md").read_text(encoding="utf-8") == report
+
+
+def test_research_contract_accepts_honest_exact_fail_scorecard(tmp_path):
+    handoff = tmp_path / "handoff"
+    source = tmp_path / "source"
+    _write_judged_generation(source, verdict="FAIL", summary_passed=False)
+
+    po._promote_research_contract(str(source), str(handoff))
+
+    assert po._validate_research_contract(str(handoff)) is True
+
+
+@pytest.mark.parametrize(
+    ("verdict", "summary_passed", "corrupt_prose_hash"),
+    [
+        ("FAIL", True, False),
+        ("PASS", True, True),
+    ],
+)
+def test_research_contract_rejects_inconsistent_or_unbound_judge(
+    tmp_path, verdict, summary_passed, corrupt_prose_hash
+):
+    handoff = tmp_path / "handoff"
+    source = tmp_path / "source"
+    _write_judged_generation(
+        source,
+        verdict=verdict,
+        summary_passed=summary_passed,
+        corrupt_prose_hash=corrupt_prose_hash,
+    )
+
+    with pytest.raises(RuntimeError, match="checksum validation"):
+        po._promote_research_contract(str(source), str(handoff))
+    assert not (handoff / po._RESEARCH_CONTRACT_FILENAME).exists()
 
 
 def test_finalization_seals_lint_cast_and_effective_sources_together(tmp_path):

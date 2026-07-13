@@ -42,6 +42,7 @@ import functools
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import sys
@@ -5254,6 +5255,7 @@ _REPORT_JUDGE_DIMS = (
 )
 # 不可妥协的四维：论点具体性 / 机制链 / 反共识覆盖 / 引用覆盖 —— 最能区分「锐利 POV」与「泛化 slop」。
 _REPORT_JUDGE_CRITICAL = ("thesis_specificity", "mechanism_chains", "contrarian_coverage", "citation_coverage")
+_REPORT_JUDGE_FILENAME = "research_report_judge.json"
 
 
 def build_report_judge_prompt(question: str, target_language: str | None,
@@ -5288,32 +5290,58 @@ def build_report_judge_prompt(question: str, target_language: str | None,
     )
 
 
-def report_passes(scorecard: Any) -> bool:
-    """按 INSIGHT-CONTRACT 判定研究报告是否通过（镜像 dossier_passes 的稳健判定）。
-    无有效记分牌时**不阻断**（degrade：回退为"发首稿"行为）。
-    RESEARCH_REPORT_JUDGE_STRICT=true 可升级为全维度 ≥4。"""
+def _validated_report_scores(scorecard: Any) -> "tuple[float, ...] | None":
+    """Return the seven ordered 0-5 scores, or ``None`` for any schema defect.
+
+    Judge execution/JSON parse failures remain degrade-safe in the orchestration
+    callers, but a malformed object must never be interpreted as a passing
+    scorecard.  JSON score values are numbers, not numeric strings or booleans.
+    """
     if not isinstance(scorecard, dict):
-        return True
+        return None
+    if str(scorecard.get("verdict", "")).strip().upper() not in {"PASS", "FAIL"}:
+        return None
+    judge_input = scorecard.get("_judge_input")
+    if isinstance(judge_input, dict) and judge_input.get("truncated") is True:
+        return None
     scores = scorecard.get("scores")
-    if not isinstance(scores, dict) or not scores:
-        return str(scorecard.get("verdict", "")).upper() != "FAIL"
-    vals = []
-    for v in scores.values():
+    if not isinstance(scores, dict) or set(scores) != set(_REPORT_JUDGE_DIMS):
+        return None
+    vals: list[float] = []
+    for dim in _REPORT_JUDGE_DIMS:
+        raw = scores[dim]
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return None
         try:
-            vals.append(float(v))
-        except (TypeError, ValueError):
-            pass
-    if not vals:
-        return str(scorecard.get("verdict", "")).upper() != "FAIL"
+            value = float(raw)
+        except (OverflowError, ValueError):
+            return None
+        if not math.isfinite(value) or not 0.0 <= value <= 5.0:
+            return None
+        vals.append(value)
+    return tuple(vals)
+
+
+def report_passes(scorecard: Any) -> bool:
+    """Return whether a complete seven-dimension scorecard passes the contract.
+
+    Only an explicit PASS with exactly the expected finite numeric dimensions
+    can pass.  An explicit FAIL is authoritative even if its numeric scores
+    would otherwise clear the thresholds.  Operational judge failures are
+    handled by callers before invoking this predicate.
+    """
+    vals = _validated_report_scores(scorecard)
+    if vals is None:
+        return False
+    if str(scorecard.get("verdict", "")).strip().upper() == "FAIL":
+        return False
+    scores = scorecard["scores"]
     if _env_flag("RESEARCH_REPORT_JUDGE_STRICT", False) and min(vals) < 4:
         return False
     if min(vals) < 3:
         return False
     for k in _REPORT_JUDGE_CRITICAL:
-        try:
-            if float(scores.get(k, 0)) < 4:
-                return False
-        except (TypeError, ValueError):
+        if float(scores[k]) < 4:
             return False
     return (sum(vals) / len(vals)) >= 4.0
 
@@ -5335,6 +5363,49 @@ def build_report_refine_prompt(question: str, gaps: list, depth: str,
     )
 
 
+def _report_judge_input(report: Any) -> "tuple[str, dict]":
+    """Return the bounded judge input and an honest identity for those bytes."""
+    full = str(report or "")
+    bounded = full[:_JUDGE_INPUT_CAP]
+    return bounded, {
+        "report_chars": len(full),
+        "input_chars": len(bounded),
+        "input_sha256": hashlib.sha256(bounded.encode("utf-8")).hexdigest(),
+        "truncated": len(bounded) != len(full),
+    }
+
+
+def _judge_input_matches_report(scorecard: Any, report: str) -> bool:
+    """Prove that a complete scorecard was produced from these exact bytes."""
+    if _validated_report_scores(scorecard) is None:
+        return False
+    judge_input = scorecard.get("_judge_input")
+    if not isinstance(judge_input, dict):
+        return False
+    _bounded, expected = _report_judge_input(report)
+    return judge_input == expected and expected["truncated"] is False
+
+
+def _report_scorecard_adoptable(candidate: Any, previous: Any = None) -> bool:
+    """Allow a late mutation only when it passes and cannot regress a prior PASS.
+
+    A candidate that clears the contract is an improvement over a prior FAIL or
+    malformed scorecard.  When the current report already passes, every one of
+    its seven dimensions is a floor: a late top-up must not trade away a judged
+    strength merely because its aggregate still happens to pass.
+    """
+    candidate_scores = _validated_report_scores(candidate)
+    if candidate_scores is None or not report_passes(candidate):
+        return False
+    previous_scores = _validated_report_scores(previous)
+    if previous_scores is None or not report_passes(previous):
+        return True
+    return all(
+        new >= old
+        for new, old in zip(candidate_scores, previous_scores, strict=True)
+    )
+
+
 def judge_research_report(report: str, question: str, target_language: str | None,
                           depth: str, model_name: str, plog: "ProgressLog") -> "dict | None":
     """对研究报告做一次无工具的 AI-judge 评审，返回记分牌 dict（解析失败/异常→None，pass-through）。"""
@@ -5350,21 +5421,186 @@ def judge_research_report(report: str, question: str, target_language: str | Non
             if depth == "deep"
             else "at least 3,500 evidence-dense words, expanding as needed"
         )
+        bounded_report, judge_input = _report_judge_input(report)
         prompt = (
             build_report_judge_prompt(question, target_language, target_words,
                                       _dossier_source_signal(report or ""))
-            + "\n=== 研究报告 ===\n" + (report or "")[:_JUDGE_INPUT_CAP]
+            + "\n=== 研究报告 ===\n" + bounded_report
         )
         resp = _invoke_model(model, [HumanMessage(content=prompt)])
         text = _message_text(getattr(resp, "content", resp))
         sc = extract_json_object(text)
         if isinstance(sc, dict):
+            sc = dict(sc)
+            # Never let model output define this provenance block.  A report
+            # longer than the context-safe cap is not a fully judged report and
+            # therefore cannot pass or replace an existing fully judged draft.
+            sc["_judge_input"] = judge_input
+            if judge_input["truncated"]:
+                plog.write(
+                    "warn",
+                    "research-report judge input was truncated; refusing PASS "
+                    f"({judge_input['input_chars']}/{judge_input['report_chars']} chars)",
+                )
             return sc
         plog.write("warn", "research-report judge: could not parse scorecard JSON")
         return None
     except Exception as e:  # noqa: BLE001 — judge 失败不阻断，回退发当前稿
         plog.write("warn", f"research-report judge failed ({type(e).__name__}: {e})")
         return None
+
+
+def _finalize_and_judge_report(report: str, question: str,
+                               target_language: str | None, depth: str,
+                               model_name: str, plog: "ProgressLog", *,
+                               context: str) -> "tuple[str, dict | None]":
+    """Normalize/finalize the exact report bytes before presenting them to the judge."""
+    report = unwrap_markdown_fence(report)
+    try:
+        report = finalize_report_citations(report, plog)
+    except Exception as exc:  # noqa: BLE001 — caller retains the prior judged report
+        plog.write(
+            "warn",
+            f"{context} citation finalize failed; refusing to judge unfinalized bytes: {exc}",
+        )
+        return report, None
+    scorecard = judge_research_report(
+        report, question, target_language, depth, model_name, plog)
+    return report, scorecard
+
+
+def _persist_report_judge(out_dir: Path, report: str, scorecard: Any,
+                          meta: dict, *, stage: str,
+                          targeted_refinement_applied: "bool | None" = None) -> bool:
+    """Persist a complete scorecard with a digest of the exact judged bytes."""
+    if not _judge_input_matches_report(scorecard, report):
+        return False
+    report_sha256 = hashlib.sha256(report.encode("utf-8")).hexdigest()
+    judged_prose = {
+        "sha256": report_sha256,
+        "chars": len(report),
+        "stage": stage,
+        "scope": "llm-prose",
+    }
+    payload = dict(scorecard)
+    payload["_judged_prose"] = judged_prose
+    _atomic_write_text(
+        Path(out_dir) / _REPORT_JUDGE_FILENAME,
+        json.dumps(payload, ensure_ascii=False, indent=2),
+    )
+    summary = {
+        "verdict": str(scorecard.get("verdict", "")).strip().upper(),
+        "scores": dict(scorecard["scores"]),
+        "passed": report_passes(scorecard),
+        "judged_prose_sha256": report_sha256,
+        "judged_prose_chars": len(report),
+        "judge_scope": "llm-prose",
+        "stage": stage,
+    }
+    if targeted_refinement_applied is not None:
+        summary["targeted_refinement_applied"] = bool(targeted_refinement_applied)
+    meta["research_report_judge"] = summary
+    # Preserve the established global-synthesis metadata key, but never leave
+    # it pointing at bytes older than the canonical persisted judge artifact.
+    if stage.startswith("global") or "global_synthesis_judge" in meta:
+        meta["global_synthesis_judge"] = dict(summary)
+    return True
+
+
+def _record_persisted_report_identity(out_dir: Path, meta: dict) -> bool:
+    """Refresh the identity of the on-disk report after deterministic rewrites."""
+    report_path = Path(out_dir) / REPORT_FILENAME
+    try:
+        persisted_bytes = report_path.read_bytes()
+        persisted = persisted_bytes.decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        meta.pop("persisted_report_sha256", None)
+        return False
+    meta["report_chars"] = len(persisted)
+    meta["persisted_report_sha256"] = hashlib.sha256(persisted_bytes).hexdigest()
+    return True
+
+
+def _adopt_judged_report_candidate(
+        out_dir: Path, current_report: str, candidate_report: str,
+        question: str, target_language: str | None, depth: str,
+        model_name: str, meta: dict, plog: "ProgressLog", *,
+        stage: str) -> "tuple[str, bool]":
+    """Adopt a late LLM mutation only with a complete judge bound to its bytes.
+
+    The existing report, scorecard artifact, and metadata remain unchanged when
+    final judging is unavailable or malformed.  I/O failures restore the prior
+    report/judge pair before propagating to the caller's degrade-safe boundary.
+    """
+    finalized, scorecard = _finalize_and_judge_report(
+        candidate_report,
+        question,
+        target_language,
+        depth,
+        model_name,
+        plog,
+        context=f"{stage} final",
+    )
+    if (not finalized.strip() or finalized == current_report
+            or len(finalized.strip()) < len(current_report.strip())):
+        plog.write("warn", f"{stage}: finalized candidate regressed; keeping prior judged report")
+        return current_report, False
+    judge_path = Path(out_dir) / _REPORT_JUDGE_FILENAME
+    previous_scorecard = None
+    if judge_path.exists():
+        try:
+            previous_scorecard = json.loads(judge_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            previous_scorecard = None
+    if not _report_scorecard_adoptable(scorecard, previous_scorecard):
+        plog.write(
+            "warn",
+            f"{stage}: final scorecard did not pass without regression; "
+            "keeping prior judged report",
+        )
+        return current_report, False
+
+    report_path = Path(out_dir) / REPORT_FILENAME
+    previous_judge = (
+        judge_path.read_text(encoding="utf-8") if judge_path.exists() else None
+    )
+    missing = object()
+    previous_meta = {
+        key: meta.get(key, missing)
+        for key in ("research_report_judge", "global_synthesis_judge")
+    }
+    try:
+        _atomic_write_text(report_path, finalized)
+        if not _persist_report_judge(
+                out_dir,
+                finalized,
+                scorecard,
+                meta,
+                stage=stage,
+                targeted_refinement_applied=True):
+            raise ValueError("final report scorecard became invalid before persistence")
+    except Exception:
+        _atomic_write_text(report_path, current_report)
+        if previous_judge is None:
+            try:
+                judge_path.unlink()
+            except FileNotFoundError:
+                pass
+        else:
+            _atomic_write_text(judge_path, previous_judge)
+        for key, value in previous_meta.items():
+            if value is missing:
+                meta.pop(key, None)
+            else:
+                meta[key] = value
+        raise
+
+    plog.write(
+        "stage",
+        f"{stage}: final judge verdict={scorecard.get('verdict')} "
+        f"passed={report_passes(scorecard)}",
+    )
+    return finalized, True
 
 
 def run_report_judge_refine(client, thread_id: str, question: str, depth: str,
@@ -5381,20 +5617,37 @@ def run_report_judge_refine(client, thread_id: str, question: str, depth: str,
         max_rounds = max(0, int(os.environ.get("RESEARCH_REPORT_JUDGE_MAX_ROUNDS", "1") or "1"))
     except ValueError:
         max_rounds = 1
-    for r in range(max_rounds):
-        scorecard = judge_research_report(report, question, target_language, depth, model_name, plog)
-        if scorecard is None:
-            break
+    # ``max_rounds`` bounds mutations, not observations: the initial draft and
+    # every adopted mutation (including the last allowed one) receive a judge.
+    report, scorecard = _finalize_and_judge_report(
+        report,
+        question,
+        target_language,
+        depth,
+        model_name,
+        plog,
+        context="pre-judge",
+    )
+    if scorecard is None:
+        return report
+    for judge_round in range(1, max_rounds + 2):
         plog.write("stage",
-                   f"research-report judge round {r + 1}: verdict={scorecard.get('verdict')} "
+                   f"research-report judge round {judge_round}: verdict={scorecard.get('verdict')} "
                    f"scores={scorecard.get('scores')}")
+        if _validated_report_scores(scorecard) is None:
+            plog.write("warn", "research-report judge: incomplete scorecard; refusing PASS")
+            break
         if report_passes(scorecard):
-            plog.write("ok", f"research-report judge: PASS at round {r + 1}")
+            plog.write("ok", f"research-report judge: PASS at round {judge_round}")
+            break
+        if judge_round > max_rounds:
+            plog.write("warn", "research-report judge: refinement budget exhausted after final rejudge")
             break
         gaps = scorecard.get("gaps") or []
         if not gaps:
             break
-        plog.write("stage", f"research-report refine round {r + 1}: addressing {len(gaps)} INSIGHT-CONTRACT gap(s)")
+        refine_round = judge_round
+        plog.write("stage", f"research-report refine round {refine_round}: addressing {len(gaps)} INSIGHT-CONTRACT gap(s)")
         try:
             refine_notes = run_streamed_turn(
                 client,
@@ -5402,7 +5655,7 @@ def run_report_judge_refine(client, thread_id: str, question: str, depth: str,
                 thread_id,
                 int(os.environ.get("DEERFLOW_REPORT_REFINE_RECURSION_LIMIT", "360") or "360"),
                 plog,
-                f"research:report-refine-{r + 1}",
+                f"research:report-refine-{refine_round}",
             )
             # WAVE9：top-up 笔记优先走一次有界小节级补丁（只强化 judge 点名的小节）；
             # 补丁不可用（None）→ 回退整份重合成（今日行为）。
@@ -5412,10 +5665,29 @@ def run_report_judge_refine(client, thread_id: str, question: str, depth: str,
             # 只在新稿真正更充实时替换：非空 + 非 LLM 错误 + 长度不短于当前稿（与覆盖门同一"绝不回退"约定）。
             if (new_report.strip() and not looks_like_llm_error(new_report)
                     and len(new_report.strip()) >= len(report.strip())):
-                report = new_report
-                plog.write("ok", f"research-report refine round {r + 1}: adopted re-synthesized report ({len(report)} chars)")
+                finalized_report, finalized_scorecard = _finalize_and_judge_report(
+                    new_report,
+                    question,
+                    target_language,
+                    depth,
+                    model_name,
+                    plog,
+                    context=f"post-refine round {refine_round}",
+                )
+                if not _report_scorecard_adoptable(finalized_scorecard, scorecard):
+                    plog.write(
+                        "warn",
+                        f"research-report refine round {refine_round}: final "
+                        "scorecard did not pass without regression; keeping "
+                        "prior judged report",
+                    )
+                    break
+                report = finalized_report
+                scorecard = finalized_scorecard
+                plog.write("ok", f"research-report refine round {refine_round}: adopted re-synthesized report ({len(report)} chars)")
             else:
-                plog.write("warn", f"research-report refine round {r + 1}: re-synthesis not longer/valid; keeping current report")
+                plog.write("warn", f"research-report refine round {refine_round}: re-synthesis not longer/valid; keeping current report")
+                break
         except Exception as e:  # noqa: BLE001 — refine 失败发当前稿
             plog.write("warn", f"research-report refine failed ({type(e).__name__}: {e}); shipping current report")
             break
@@ -8334,6 +8606,10 @@ def main() -> int:
         # （沿用 run_deep_fanout 已验证安全的并发回合模式）。Track A 结果仍是 report，
         # 下游逻辑逐字节不变；Track B 结果记为 dossier。Track B 任何异常/空 → dossier=""
         # 并告警，整轮退回单轨继续。关闭双轨时走原始单轨调用，行为逐字节一致。
+        final_report_scorecard = None
+        final_judged_report = None
+        final_judge_stage = "synthesis-final"
+        final_targeted_refinement = None
         existing_dossier_path = out_dir / ACTOR_DOSSIER_FILENAME
         dossier = (
             existing_dossier_path.read_text(encoding="utf-8")
@@ -8364,19 +8640,18 @@ def main() -> int:
                 dossier_path.read_text(encoding="utf-8")
                 if dossier_path.exists() else ""
             )
-            scorecard = (
-                judge_research_report(
-                    report,
-                    question,
-                    args.target_language,
-                    args.depth,
-                    args.model,
-                    plog,
-                )
-                if report.strip() else None
+            report, scorecard = _finalize_and_judge_report(
+                report,
+                question,
+                args.target_language,
+                args.depth,
+                args.model,
+                plog,
+                context="global pre-judge",
             )
             refined = False
-            if (isinstance(scorecard, dict) and not report_passes(scorecard)
+            if (_validated_report_scores(scorecard) is not None
+                    and not report_passes(scorecard)
                     and scorecard.get("gaps")):
                 gap_text = "\n".join(
                     f"- {gap}" for gap in scorecard.get("gaps") or [])
@@ -8400,27 +8675,30 @@ def main() -> int:
                     "global-judge-refine",
                 )
                 if patched and patched != report:
-                    report = patched
-                    refined = True
-                    scorecard = judge_research_report(
-                        report,
+                    patched, patched_scorecard = _finalize_and_judge_report(
+                        patched,
                         question,
                         args.target_language,
                         args.depth,
                         args.model,
                         plog,
-                    ) or scorecard
-            if isinstance(scorecard, dict):
-                _atomic_write_text(
-                    out_dir / "research_report_judge.json",
-                    json.dumps(scorecard, ensure_ascii=False, indent=2),
-                )
-                meta["global_synthesis_judge"] = {
-                    "verdict": scorecard.get("verdict"),
-                    "scores": scorecard.get("scores"),
-                    "passed": report_passes(scorecard),
-                    "targeted_refinement_applied": refined,
-                }
+                        context="global post-refine",
+                    )
+                    if _report_scorecard_adoptable(patched_scorecard, scorecard):
+                        report = patched
+                        scorecard = patched_scorecard
+                        refined = True
+                    else:
+                        plog.write(
+                            "warn",
+                            "global post-refine scorecard did not pass without "
+                            "regression; "
+                            "keeping the prior judged report",
+                        )
+            final_report_scorecard = scorecard
+            final_judged_report = report
+            final_judge_stage = "global-synthesis-final"
+            final_targeted_refinement = refined
         elif _env_flag("DEERFLOW_DUAL_TRACK", True):
             import concurrent.futures as _cf
 
@@ -8609,8 +8887,46 @@ def main() -> int:
             report = finalize_report_citations(report, plog)
         except Exception as _cit_err:  # noqa: BLE001 — 引注校验为可选增强
             plog.write("warn", f"citation finalize skipped (non-fatal): {_cit_err}")
+        judge_required = bool(
+            args.synthesis_manifest
+            or (args.depth == "deep" and _env_flag("RESEARCH_REPORT_JUDGE", True))
+        )
+        if judge_required:
+            if not (report == final_judged_report
+                    and _validated_report_scores(final_report_scorecard) is not None):
+                report, final_report_scorecard = _finalize_and_judge_report(
+                    report,
+                    question,
+                    args.target_language,
+                    args.depth,
+                    args.model,
+                    plog,
+                    context="final persistence",
+                )
+                final_judged_report = report
+                final_judge_stage = (
+                    "global-synthesis-final"
+                    if args.synthesis_manifest else "synthesis-final"
+                )
+            if not _judge_input_matches_report(final_report_scorecard, report):
+                raise RuntimeError(
+                    "final research-report judge is incomplete or not bound "
+                    "to the exact final prose bytes"
+                )
         _atomic_write_text(out_dir / REPORT_FILENAME, report)
-        meta["report_chars"] = len(report)
+        _record_persisted_report_identity(out_dir, meta)
+        if judge_required:
+            if not _persist_report_judge(
+                    out_dir,
+                    report,
+                    final_report_scorecard,
+                    meta,
+                    stage=final_judge_stage,
+                    targeted_refinement_applied=final_targeted_refinement):
+                raise RuntimeError(
+                    "final research-report judge could not be persisted with "
+                    "exact-byte provenance"
+                )
         plog.write("ok", f"wrote {REPORT_FILENAME} ({len(report)} chars)")
         write_meta()
 
@@ -8875,15 +9191,24 @@ def main() -> int:
                     report, _flagged, plog)
                 if (_new_report.strip() and _new_report != report
                         and len(_new_report.strip()) >= len(report.strip())):
-                    report = unwrap_markdown_fence(_new_report)
-                    # WAVE9-RQ2: top-up 补写可能引入新的悬空 [S<n>] 记号 → 重校验（幂等：
-                    # 已有 References 节则按该节校验，不重复追加）。
-                    report = finalize_report_citations(report, plog)
-                    _atomic_write_text(out_dir / REPORT_FILENAME, report)
-                    meta["report_chars"] = len(report)
-                    meta["triangulation_topup_applied"] = True
-                    write_meta()
-                    plog.write("ok", f"triangulation top-up: rewrote {REPORT_FILENAME} ({len(report)} chars)")
+                    adopted_report, adopted = _adopt_judged_report_candidate(
+                        out_dir,
+                        report,
+                        _new_report,
+                        question,
+                        args.target_language,
+                        args.depth,
+                        args.model,
+                        meta,
+                        plog,
+                        stage="triangulation-topup",
+                    )
+                    if adopted:
+                        report = adopted_report
+                        _record_persisted_report_identity(out_dir, meta)
+                        meta["triangulation_topup_applied"] = True
+                        write_meta()
+                        plog.write("ok", f"triangulation top-up: rewrote {REPORT_FILENAME} ({len(report)} chars)")
         except Exception as _tt_err:  # noqa: BLE001 — 三角 top-up 为可选增强
             plog.write("warn", f"triangulation top-up skipped (non-fatal): {_tt_err}")
 
@@ -8903,9 +9228,12 @@ def main() -> int:
         # 渲染失败 → 一行日志跳过，绝不影响已产出的研究契约。
         try:
             _render_research_charts(out_dir, meta, plog)
-            write_meta()
         except Exception as _ch_err:  # noqa: BLE001 — 图表为可选增强
             plog.write("warn", f"research charts skipped (non-fatal): {_ch_err}")
+        finally:
+            if not _record_persisted_report_identity(out_dir, meta):
+                plog.write("warn", "research report identity unavailable after chart stage")
+            write_meta()
 
         meta.update(status="completed", finished_at=_utcnow())
         write_meta()

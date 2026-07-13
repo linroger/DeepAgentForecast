@@ -59,6 +59,9 @@ RUNS = {
 
 PLACEHOLDER_MARKER = "本章节生成失败"
 REQUIRED_STAGES = ("research", "ontology", "graph", "prepare", "run", "report")
+RUN_SUMMARY_HEALTH_VALUES = frozenset(
+    {"ok", "llm_degraded", "truncated", "errored", "hollow"}
+)
 MARKDOWN_LINK_RE = re.compile(
     r"(?P<prefix>!?\[[^\]\r\n]*\]\()(?P<target>[^)\r\n]*)(?P<suffix>\))"
 )
@@ -87,10 +90,36 @@ def _sha256_file(path: str) -> str:
     return digest.hexdigest()
 
 
+def _load_bound_project(uploads: str, project_id: str, graph_id: str) -> dict:
+    """Load the project artifact only when it matches the publication identity."""
+    project_path = os.path.join(uploads, "projects", project_id, "project.json")
+    try:
+        project = _read_json(project_path)
+    except (OSError, ValueError, TypeError):
+        project = None
+
+    issues = []
+    if not isinstance(project, dict):
+        issues.append("project artifact is missing or invalid")
+    else:
+        if project.get("project_id") != project_id:
+            issues.append(
+                "project artifact project id does not match pipeline project id"
+            )
+        if project.get("graph_id") != graph_id:
+            issues.append(
+                "project artifact graph id does not match pipeline graph id"
+            )
+
+    if issues:
+        raise RuntimeError("; ".join(issues))
+    return project
+
+
 def validate_publishable_run(pipeline_id: str, state: dict, uploads: str = UPLOADS) -> dict:
     """Fail closed unless a pipeline's immutable final artifacts are publishable."""
     issues = []
-    if state.get("pipeline_id") not in (None, pipeline_id):
+    if state.get("pipeline_id") != pipeline_id:
         issues.append("pipeline id does not match its state")
     if state.get("status") != "completed":
         issues.append(f"pipeline status is {state.get('status')!r}, not 'completed'")
@@ -104,6 +133,9 @@ def validate_publishable_run(pipeline_id: str, state: dict, uploads: str = UPLOA
     report_id = state.get("report_id")
     simulation_id = state.get("simulation_id")
     graph_id = state.get("graph_id")
+    project_id = state.get("project_id")
+    if not project_id:
+        issues.append("project id is missing")
     if not report_id:
         issues.append("report id is missing")
     if not simulation_id:
@@ -111,16 +143,138 @@ def validate_publishable_run(pipeline_id: str, state: dict, uploads: str = UPLOA
     if not graph_id:
         issues.append("graph id is missing")
 
+    if project_id and graph_id:
+        try:
+            _load_bound_project(uploads, project_id, graph_id)
+        except RuntimeError as exc:
+            issues.append(str(exc))
+
     report_dir = os.path.join(uploads, "reports", str(report_id or ""))
     report_path = os.path.join(report_dir, "full_report.md")
     forecast_path = os.path.join(report_dir, "forecast.json")
     audit_path = os.path.join(report_dir, "final_audit.json")
+
+    try:
+        report_meta = _read_json(os.path.join(report_dir, "meta.json"))
+    except (OSError, ValueError, TypeError):
+        report_meta = None
+    if not isinstance(report_meta, dict):
+        issues.append("report metadata is missing or invalid")
+    else:
+        if report_meta.get("report_id") != report_id:
+            issues.append("report metadata report id does not match")
+        if report_meta.get("simulation_id") != simulation_id:
+            issues.append("report simulation id does not match pipeline simulation id")
+        if report_meta.get("graph_id") != graph_id:
+            issues.append("report graph id does not match pipeline graph id")
+        if report_meta.get("status") != "completed":
+            issues.append(
+                f"report status is {report_meta.get('status')!r}, not 'completed'"
+            )
+
+    simulation_dir = os.path.join(uploads, "simulations", str(simulation_id or ""))
+    if simulation_id and not os.path.isdir(simulation_dir):
+        issues.append("pipeline simulation does not exist")
+    elif simulation_id:
+        try:
+            simulation_state = _read_json(os.path.join(simulation_dir, "state.json"))
+        except (OSError, ValueError, TypeError):
+            simulation_state = None
+        if not isinstance(simulation_state, dict):
+            issues.append("simulation durable state is missing or invalid")
+        else:
+            if simulation_state.get("simulation_id") != simulation_id:
+                issues.append(
+                    "simulation durable state id does not match "
+                    "pipeline/report simulation id"
+                )
+            if simulation_state.get("project_id") != project_id:
+                issues.append(
+                    "simulation durable state project id does not match "
+                    "pipeline project id"
+                )
+            if simulation_state.get("graph_id") != graph_id:
+                issues.append(
+                    "simulation durable state graph id does not match "
+                    "pipeline/report graph id"
+                )
+            if simulation_state.get("status") != "completed":
+                issues.append(
+                    "simulation durable state status is "
+                    f"{simulation_state.get('status')!r}, not 'completed'"
+                )
+
+        try:
+            simulation_config = _read_json(
+                os.path.join(simulation_dir, "simulation_config.json")
+            )
+        except (OSError, ValueError, TypeError):
+            simulation_config = None
+        if not isinstance(simulation_config, dict):
+            issues.append("simulation config is missing or invalid")
+        else:
+            if simulation_config.get("simulation_id") != simulation_id:
+                issues.append(
+                    "simulation config id does not match pipeline/report simulation id"
+                )
+            if simulation_config.get("project_id") != project_id:
+                issues.append(
+                    "simulation config project id does not match pipeline project id"
+                )
+            if simulation_config.get("graph_id") != graph_id:
+                issues.append(
+                    "simulation config graph id does not match pipeline/report graph id"
+                )
+
+        try:
+            run_state = _read_json(os.path.join(simulation_dir, "run_state.json"))
+        except (OSError, ValueError, TypeError):
+            run_state = None
+        if not isinstance(run_state, dict):
+            issues.append("run state is missing or invalid")
+        elif run_state.get("simulation_id") != simulation_id:
+            issues.append(
+                "run state simulation id does not match pipeline/report simulation id"
+            )
+
+        try:
+            run_summary = _read_json(os.path.join(simulation_dir, "run_summary.json"))
+        except (OSError, ValueError, TypeError):
+            run_summary = None
+        if not isinstance(run_summary, dict):
+            issues.append("run summary is missing or invalid")
+        else:
+            if run_summary.get("simulation_id") != simulation_id:
+                issues.append(
+                    "run summary simulation id does not match "
+                    "pipeline/report simulation id"
+                )
+            simulation_health = run_summary.get("simulation_health")
+            if simulation_health == "hollow":
+                issues.append("run summary reports a hollow simulation")
+            elif (
+                not isinstance(simulation_health, str)
+                or simulation_health not in RUN_SUMMARY_HEALTH_VALUES
+            ):
+                issues.append("run summary simulation_health is missing or invalid")
+            for field in (
+                "agent_count",
+                "rounds_executed",
+                "total_actions",
+                "organic_action_count",
+            ):
+                value = run_summary.get(field)
+                if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                    issues.append(
+                        f"run summary {field} is {value!r}, not a positive integer"
+                    )
+
     audit = _read_json(audit_path)
     if not isinstance(audit, dict):
         issues.append("final read-only audit is missing or invalid")
         audit = {}
     else:
-        if audit.get("report_id") not in (None, report_id):
+        if audit.get("report_id") != report_id:
             issues.append("final audit report id does not match")
         if audit.get("read_only") is not True:
             issues.append("final audit is not read-only")
@@ -428,7 +582,11 @@ def export_run(
             shutil.copyfile(src, os.path.join(out, name))
 
     # stage 2 — ontology
-    project = _read_json(os.path.join(UPLOADS, "projects", state["project_id"], "project.json")) or {}
+    project = _load_bound_project(
+        UPLOADS,
+        state["project_id"],
+        state["graph_id"],
+    )
     ontology = project.get("ontology") or {}
     _write_json(os.path.join(out, "ontology.json"), {
         "entity_types": ontology.get("entity_types", []),
@@ -436,9 +594,9 @@ def export_run(
         "analysis_summary": project.get("analysis_summary", ""),
     })
 
-    # stage 3 — knowledge graph (network call; resilient to Zep 429s). If the
-    # original graph no longer exists on the account, rebuild it from the
-    # saved dossier + ontology (identical stage-3 inputs) and export that.
+    # stage 3 — knowledge graph (network call; resilient to Zep 429s). Strict
+    # publication exports preserve the graph identity validated above: a 404
+    # aborts instead of substituting a nondeterministic reconstruction.
     exported_graph_id = state["graph_id"]
     if not skip_graph:
         from app.services.graphiti_client import ApiError
@@ -449,6 +607,11 @@ def export_run(
         except ApiError as e:
             if getattr(e, "status_code", None) != 404:
                 raise
+            if require_publishable:
+                raise RuntimeError(
+                    f"publication-bound graph {graph_id!r} is unavailable (404); "
+                    "refusing to rebuild or substitute a different graph"
+                ) from e
             print(f"   original graph {graph_id} is gone (404) — rebuilding from dossier")
             graph_id = rebuild_graph(key, out)
             graph = export_graph(graph_id)

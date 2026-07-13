@@ -228,6 +228,245 @@ def test_prep_sources_reports_deduplicated_tier_and_freshness_mix():
     }
 
 
+def test_prep_sources_uses_one_freshness_anchor_for_every_dated_row():
+    renderer = _load_renderer()
+    prepared = renderer.prep_sources([
+        {"url": "https://example.com/old", "tier": "S1", "date": "2025-12-31",
+         "staleness_days": 203},
+        {"url": "https://example.com/new", "tier": "S2", "date": "2026-07-12"},
+    ])
+
+    assert prepared["reference_date"] == "2026-07-22"
+    assert prepared["reference_source"] == "explicit_staleness_anchor"
+    assert {row["label"]: row["count"] for row in prepared["freshness"]}["≤30 days"] == 1
+
+
+def test_prep_sources_prefers_authoritative_run_anchor_over_staleness_inference():
+    renderer = _load_renderer()
+    prepared = renderer.prep_sources(
+        [
+            {"url": "https://example.com/a", "tier": "S1", "date": "2026-07-01",
+             "staleness_days": 21},
+            {"url": "https://example.com/b", "tier": "S2", "date": "2026-06-01",
+             "staleness_days": 51},
+        ],
+        "2026-07-12T15:51:13+00:00",
+    )
+
+    assert prepared["reference_date"] == "2026-07-12"
+    assert prepared["reference_source"] == "run_metadata"
+    assert {row["label"]: row["count"] for row in prepared["freshness"]} == {
+        "≤30 days": 1,
+        "31–90 days": 1,
+        "91–365 days": 0,
+        ">365 days": 0,
+        "Undated": 0,
+    }
+
+
+def test_prep_quant_builds_comparable_panels_not_largest_ambiguous_unit_group():
+    renderer = _load_renderer()
+    prepared = renderer.prep_quant(
+        [
+            {"metric": "Revenue", "value": 100, "unit": "USD billion"},
+            {"metric": "Market size", "value": 155, "unit": "USD billion"},
+            {"metric": "Margin", "value": 20, "unit": "%"},
+            {"metric": "Share", "value": 52, "unit": "%"},
+            {"metric": "China adoption", "value": 53, "unit": "% new car sales",
+             "as_of_date": "2025-12-31", "source": "BNEF",
+             "definition": "BEV+PHEV share of China passenger vehicle sales"},
+            {"metric": "Europe adoption", "value": 28, "unit": "% new vehicle sales",
+             "as_of_date": "2025-12-31", "source": "IEA",
+             "definition": "BEV+PHEV share of European passenger vehicle sales"},
+            {"metric": "BEV pack", "value": 99, "unit": "USD per kWh",
+             "as_of_date": "2025-12-31", "source": "BNEF",
+             "definition": "BEV-only battery pack price"},
+            {"metric": "Storage pack", "value": 70, "unit": "USD/kWh",
+             "as_of_date": "2025-12-31", "source": "BNEF",
+             "definition": "BESS battery pack price"},
+        ]
+    )
+
+    assert prepared is not None
+    assert {panel["unit"] for panel in prepared["panels"]} == {
+        "% new car sales", "USD per kWh",
+    }
+    assert all(panel["unit"] not in {"%", "USD billion"} for panel in prepared["panels"])
+
+
+def test_prep_quant_requires_semantic_compatibility_and_provenance():
+    renderer = _load_renderer()
+    rows = [
+        {"metric": "Region A EV share", "value": 41, "unit": "% new car sales",
+         "as_of_date": "2025-12-31", "source": "Agency A",
+         "definition": "Annual BEV+PHEV share of new vehicle sales"},
+        {"metric": "Region B EV share", "value": 29, "unit": "% new vehicle sales",
+         "as_of_date": "2025-12-31", "source": "Agency B",
+         "definition": "Annual BEV+PHEV share of new vehicle sales"},
+    ]
+
+    assert renderer.prep_quant(rows) is not None
+
+    mixed_denominator = [dict(row) for row in rows]
+    mixed_denominator[1]["definition"] = "Annual BEV+PHEV share of total vehicle fleet"
+    assert renderer.prep_quant(mixed_denominator) is None
+
+    mixed_period = [dict(row) for row in rows]
+    mixed_period[1]["definition"] = "Monthly BEV+PHEV share of new vehicle sales"
+    assert renderer.prep_quant(mixed_period) is None
+
+    mixed_as_of = [dict(row) for row in rows]
+    mixed_as_of[1]["as_of_date"] = "2024-12-31"
+    assert renderer.prep_quant(mixed_as_of) is None
+
+    for missing_field in ("source", "as_of_date"):
+        missing_provenance = [dict(row) for row in rows]
+        missing_provenance[1].pop(missing_field)
+        assert renderer.prep_quant(missing_provenance) is None
+
+
+def test_negative_staleness_does_not_turn_future_dated_actual_into_projection():
+    renderer = _load_renderer()
+    row = {
+        "metric": "Reported Q4 vehicle registrations",
+        "definition": "Observed registrations during the quarter",
+        "as_of_date": "2027-12-31",
+        "staleness_days": -430,
+    }
+
+    assert renderer._is_projection(row) is False
+    assert renderer._is_projection({**row, "definition": "Forecast registrations"}) is True
+
+
+def test_prep_quant_drops_future_dated_actuals_but_keeps_forecasts():
+    renderer = _load_renderer()
+    future_actuals = [
+        {"metric": "Region A reported EV share", "value": 41, "unit": "% new car sales",
+         "as_of_date": "2027-12-31", "source": "Agency A",
+         "definition": "Observed BEV+PHEV share of new vehicle sales",
+         "staleness_days": -430},
+        {"metric": "Region B reported EV share", "value": 29, "unit": "% new vehicle sales",
+         "as_of_date": "2027-12-31", "source": "Agency B",
+         "definition": "Observed BEV+PHEV share of new vehicle sales",
+         "staleness_days": -430},
+    ]
+    assert renderer.prep_quant(future_actuals) is None
+
+    forecasts = [
+        {**row,
+         "metric": row["metric"].replace("reported", "2030 forecast"),
+         "definition": row["definition"].replace("Observed", "Forecast"),
+         "as_of_date": "2030-12-31"}
+        for row in future_actuals
+    ]
+    prepared = renderer.prep_quant(forecasts)
+    assert prepared is not None
+    assert all(point["projection"] is True for point in prepared["panels"][0]["bars"])
+
+
+def _bnef_revision_rows():
+    return [
+        {"metric": "BNEF US 2030 EV share projection (2024)", "value": 48,
+         "unit": "% of US new car sales", "as_of_date": "2024-12-31",
+         "definition": "BNEF 2024 forecast for US 2030 EV share",
+         "source": "BNEF EVO 2024"},
+        {"metric": "BNEF US 2030 EV share projection (2025)", "value": 27,
+         "unit": "% of US new car sales", "as_of_date": "2025-12-31",
+         "definition": "BNEF 2025 revision for US 2030 EV share",
+         "source": "BNEF EVO 2026 [S10]"},
+        {"metric": "BNEF US 2030 EV share projection (2026)", "value": 17,
+         "unit": "% of US new car sales", "as_of_date": "2026-06-30",
+         "definition": "BNEF 2026 revision for US 2030 EV share post-IRA repeal",
+         "source": "BNEF EVO 2026 [S10]"},
+    ]
+
+
+def test_source_outlook_family_normalizes_bnef_aliases_citations_and_recap_years():
+    renderer = _load_renderer()
+    assert renderer._source_outlook_family(
+        "BloombergNEF's Electric Vehicle Outlook 2024 [S4]"
+    ) == "bnef evo"
+    assert renderer._source_outlook_family("BNEF EVO 2026 [S10] recap") == "bnef evo"
+    assert renderer._source_outlook_family("IEA Global EV Outlook 2026") != "bnef evo"
+
+
+def test_prep_revisions_requires_three_matching_forecast_vintages():
+    renderer = _load_renderer()
+    prepared = renderer.prep_revisions(_bnef_revision_rows() + [
+        {"metric": "Unrelated actual (2026)", "value": 99, "unit": "%"},
+    ])
+
+    assert prepared is not None
+    assert prepared["series"][0]["name"] == "BNEF US 2030 EV share projection"
+    assert prepared["series"][0]["publisher_family"] == "bnef evo"
+    assert prepared["series"][0]["target_year"] == 2030
+    assert [point["value"] for point in prepared["series"][0]["points"]] == [48, 27, 17]
+
+
+def test_prep_revisions_rejects_cross_publisher_and_definition_drift():
+    renderer = _load_renderer()
+    cross_publisher = _bnef_revision_rows()
+    cross_publisher[1] = {
+        **cross_publisher[1],
+        "source": "IEA Global EV Outlook 2025",
+    }
+    assert renderer.prep_revisions(cross_publisher) is None
+
+    definition_drift = _bnef_revision_rows()
+    definition_drift[2] = {
+        **definition_drift[2],
+        "definition": "BNEF 2026 forecast for US 2030 BEV-only share",
+    }
+    assert renderer.prep_revisions(definition_drift) is None
+
+    unit_drift = _bnef_revision_rows()
+    unit_drift[2] = {**unit_drift[2], "unit": "% of total US vehicle fleet"}
+    assert renderer.prep_revisions(unit_drift) is None
+
+
+def test_prep_revisions_does_not_treat_target_year_as_vintage():
+    renderer = _load_renderer()
+    rows = [
+        {"metric": "US EV share projection (2028)", "value": 24,
+         "unit": "% new car sales", "as_of_date": "2024-12-31",
+         "definition": "BNEF forecast for US 2028 EV share", "source": "BNEF EVO 2024"},
+        {"metric": "US EV share projection (2029)", "value": 31,
+         "unit": "% new car sales", "as_of_date": "2025-12-31",
+         "definition": "BNEF forecast for US 2029 EV share", "source": "BNEF EVO 2025"},
+        {"metric": "US EV share projection (2030)", "value": 37,
+         "unit": "% new car sales", "as_of_date": "2026-06-30",
+         "definition": "BNEF forecast for US 2030 EV share", "source": "BNEF EVO 2026"},
+    ]
+
+    assert renderer.prep_revisions(rows) is None
+
+
+def test_prep_network_uses_declared_tiers_and_canonicalizes_relationship_endpoints():
+    renderer = _load_renderer()
+    prepared = renderer.prep_network({
+        "actors": [
+            {"name": "Toyota", "influence": "high",
+             "salience": {"tier": "high", "basis": "Launch expected 2027-2028"}},
+            {"name": "CATL (Contemporary Amperex Technology)", "influence": "high",
+             "salience": {"tier": "high", "basis": "55.6% combined share"}},
+            {"name": "Regulator", "influence": "medium", "salience": "medium"},
+        ],
+        "relationships": [
+            {"source": "CATL", "target": "Toyota", "type": "SUPPLIES",
+             "valence": "allied", "polarity": 0.8},
+            {"source": "Regulator", "target": "CATL", "type": "REGULATES",
+             "valence": "directional", "polarity": 0.1},
+        ],
+    })
+
+    assert prepared is not None
+    nodes = {node["name"]: node for node in prepared["nodes"]}
+    assert nodes["Toyota"]["size"] == nodes["CATL (Contemporary Amperex Technology)"]["size"]
+    assert nodes["Toyota"]["size"] > nodes["Regulator"]["size"]
+    assert len(prepared["edges"]) == 2
+    assert prepared["edges"][0]["color"] == renderer._EDGE_COLORS["cooperative"]
+
+
 def test_source_identity_normalizes_host_but_preserves_case_sensitive_path():
     renderer = _load_renderer()
 
@@ -331,12 +570,69 @@ def test_timeline_matplotlib_fallback_annotates_each_event_once(tmp_path, monkey
             {"date": "2026-07-03", "event": "Third"},
         ]
     )
+    assert [point["index"] for point in prepared["points"]] == [1, 2, 3]
 
     png_path, html_path = renderer.render_timeline(prepared, charts_dir)
 
     assert png_path == "charts/timeline.png"
     assert html_path is None
     assert len(fake_plt.axes.annotations) == 3
+
+
+def test_timeline_plotly_key_keeps_every_event(tmp_path, monkeypatch):
+    renderer = _load_renderer()
+    if not renderer._HAS_PLOTLY:
+        pytest.skip("plotly not installed")
+    captured = {}
+    monkeypatch.setattr(
+        renderer,
+        "_write_outputs",
+        lambda fig, _mpl, _charts, _stem: captured.setdefault("fig", fig) or (None, None),
+    )
+    prepared = renderer.prep_timeline([
+        {"date": f"2026-{month:02d}-{day:02d}",
+         "event": f"Milestone {month:02d}-{day:02d}"}
+        for month in range(1, 3)
+        for day in range(1, 14)
+    ])
+
+    renderer.render_timeline(prepared, tmp_path)
+
+    annotations = list(captured["fig"].layout.annotations)
+    assert len(annotations) == len(prepared["points"]) == 26
+    assert annotations[-1].text.startswith("<b>26</b>")
+
+
+def test_timeline_duplicate_dates_do_not_overlap_on_same_lane():
+    renderer = _load_renderer()
+    prepared = renderer.prep_timeline(
+        [
+            {"date": "2026-06-30", "event": "Supply shock"},
+            {"date": "2026-06-30", "event": "Policy response"},
+        ]
+    )
+
+    points = prepared["points"]
+    assert {point["date"] for point in points} == {"2026-06-30"}
+    assert len({point["lane"] for point in points}) == 2
+
+
+def test_timeline_nearby_dates_four_positions_apart_use_different_lanes():
+    renderer = _load_renderer()
+    prepared = renderer.prep_timeline(
+        [
+            {"date": "2026-06-30", "event": "Event 1"},
+            {"date": "2026-07-02", "event": "Event 2"},
+            {"date": "2026-07-05", "event": "Event 3"},
+            {"date": "2026-07-08", "event": "Event 4"},
+            {"date": "2026-07-11", "event": "Event 5"},
+        ]
+    )
+
+    points = prepared["points"]
+    assert points[0]["date"] == "2026-06-30"
+    assert points[4]["date"] == "2026-07-11"
+    assert points[0]["lane"] != points[4]["lane"]
 
 
 def test_main_registers_market_and_source_figures(tmp_path, monkeypatch):
@@ -412,3 +708,4 @@ def test_plotly_html_has_stable_div_id_and_is_byte_deterministic(tmp_path, monke
 
     assert first == second
     assert b'id="forecast-visual-market_probabilities"' in first
+    assert all(line == line.rstrip(b" \t") for line in first.splitlines())

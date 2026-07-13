@@ -1,5 +1,102 @@
 # PLANS.md — Agentic Workflow Refinement Program
 
+## 2026-07-13 LOOP-012 — stage forensics and decision-relevant visual evidence
+
+### Intent
+
+Audit the three newest EV pipelines stage by stage, separate historical defects
+that are already fixed from active workflow weaknesses, and implement one
+cohesive improvement slice: make run observability truthful and make report
+visuals answer forecast questions with sourced data. Internal actor-ranking
+proxies such as “influence versus salience” MUST NOT occupy a default
+customer-facing chart slot when actual market, technology, policy, regional,
+simulation, or forecast data are available.
+
+### Comparison set
+
+- `pipe_91aaf91f6392`: latest completed and published EV run.
+- `pipe_a362c6f3c49d`: immediately preceding cancelled pre-fix run.
+- `pipe_1cf8b18d71a0`: immediately preceding failed global-synthesis run.
+
+### Acceptance criteria
+
+| ID | Criterion | Evidence |
+|---|---|---|
+| F1 | Every stage is reviewed against the same contract | Research, ontology, graph, prepare, run, and report evidence table with timing, errors, retries, inputs, outputs, health, and remaining risks |
+| F2 | Active and historical failures are distinguished | Each finding names whether the current `main` code still reproduces it and points to the responsible code/test seam |
+| V1 | Default visuals are reader-relevant | The influence-versus-salience bubble is removed from default report generation and replaced by sourced forecast-domain data when eligible |
+| V2 | Charts preserve data meaning | Compatible units are normalized deliberately; incompatible units never share an axis; source and as-of metadata survive into hover/caption/manifest |
+| V3 | Chart selection fails closed | No fabricated values, proxy-score substitution, silent empty chart, or “chart for chart’s sake”; skipped reasons remain explicit |
+| S1 | The visualization skill teaches reusable judgment | `forecast-visuals` has a concise reader-question workflow plus a routed reference containing concrete time-series, regional, technology, cost, concentration, policy, uncertainty, and scenario examples |
+| W1 | Confirmed workflow regressions are hardened | At least one high-confidence cross-run reliability/efficiency defect receives a bounded regression check and fix |
+| A1 | The EV artifact replay proves the outcome | A temporary replay of `report_9147b3f6a0a9` produces the new chart set from the original structured artifacts without mutating the published source bundle |
+| A2 | The reader-visible EV demo reflects the fix | Refresh the tracked `ev-2035` presentation from the verified replay, remove proxy-chart references/assets, update artifact hashes, and browser-check every new figure without changing the audited source report |
+| Q1 | Release evidence is fresh | Focused tests, changed-file lint/compile, skill validation, frontend/build where affected, full backend suite, artifact smoke, and independent review pass before commit/push |
+
+### Execution order
+
+1. Parse the three pipeline states, progress logs, manifests, telemetry, and
+   terminal artifacts into one stage-by-stage evidence matrix.
+2. Trace every active anomaly to its producer/consumer code and rank it by
+   correctness, frequency, user harm, cost, fix size, and verification cost.
+3. Implement the smallest coherent workflow hardening and the data-first
+   visualization contract. Preserve old helper APIs only where callers/tests
+   require compatibility; stop emitting low-value charts by default.
+4. Expand `forecast-visuals` using progressive disclosure: keep the mandatory
+   decision process in `SKILL.md`, put domain/chart examples in one directly
+   linked reference, and validate both the bridge and deployed copies.
+5. Replay the completed EV artifacts into an isolated output directory,
+   inspect the manifest/data bindings and rendered images, then run code review
+   and the proportional repository gates.
+6. Update the loop evidence and handoff, commit one cohesive change, and push
+   only after all publication-independent gates pass.
+
+### Authorization and risk boundary
+
+The user explicitly authorized stage review and bounded workflow/visualization
+changes. Deterministic offline replays are authorized. A new paid deep-research,
+graph, simulation, or report run is not necessary for the first proof and will
+not be launched unless deterministic evidence cannot validate the change.
+
+### Independent-review amendment (2026-07-13T10:07:09Z)
+
+The first frozen-diff review found no Critical issue and eight release-blocking
+edge cases. Before LOOP-012 can close, publication MUST bind project, graph,
+simulation, report, and available run identities; the exact final LLM-mutated
+research report MUST receive an authoritative complete-scorecard judge; chart
+families MUST prove provenance plus unit/denominator/definition/time
+compatibility; revision lines MUST bind publisher, outlook family, target
+horizon, and publication vintage; and recovery/temporal fallbacks MUST not
+invent elapsed time, per-platform completion, or forecast semantics. Each seam
+requires a targeted failing-before/passing-after regression, then the complete
+gate and independent re-review are repeated.
+
+### Review-correction disposition (2026-07-13T10:46:23Z)
+
+All eight first-review findings are implemented and covered by focused tests.
+The final immutable replay emits seven report figures and five dossier figure
+pairs, with the reader-facing sequence led by published forecast revisions,
+same-denominator benchmarks, declared probabilities, and exact-date milestones.
+The tracked `ev-2035` demo contains no influence/salience or proxy
+evidence-weight asset/reference; its 25-artifact hash manifest and 17 local
+Markdown links validate. Full gates, independent re-review, browser acceptance,
+commit, and remote verification remain before closure.
+
+### Final adversarial-review disposition (2026-07-13T11:30:01Z)
+
+The final reviewer found six additional Important edge cases and no Critical
+issue. All six are fixed and independently re-reviewed with no Critical or
+Important defect remaining: strict publication no longer rebuilds a missing
+bound graph; the project artifact and ontology are identity-checked; deep
+research reuse requires a complete seven-dimension judge bound to the exact
+untruncated prose prefix; incomplete final judging fails closed and late
+mutations must pass without regressing a previously passing dimension; absent
+legacy platform-enable fields remain unknown; and declared scenario intervals
+are visually distinct from true ensemble spread. The exact release bytes pass
+the complete backend suite, frontend 14/14 tests/build, dependency/environment,
+compile, deployment-parity, skill, diff, static-demo, and immutable-replay
+gates. Only staging, commit, push, and public deployment verification remain.
+
 ## 2026-07-11 LOOP-010/011 — publication integrity and ontology-connected roles
 
 ### New intent

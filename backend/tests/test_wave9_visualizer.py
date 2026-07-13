@@ -85,13 +85,26 @@ TIMELINE = [
 QUANTITATIVE = [
     {"metric": "Q1 2026 DRAM revenue", "value": "~100", "unit": "USD billion",
      "as_of_date": "2026-05-27", "tier": "S2", "is_stale": False, "source": "Counterpoint"},
-    {"metric": "TSMC Q1 2026 gross margin", "value": "58", "unit": "%",
-     "tier": "S1", "is_stale": False},
+    {"metric": "TSMC Q1 2026 gross margin", "value": "58", "unit": "% gross margin",
+     "as_of_date": "2026-03-31", "source": "TSMC Q1 results", "tier": "S1",
+     "definition": "Quarterly gross margin as percentage of revenue", "is_stale": False},
+    {"metric": "Samsung Q1 2026 gross margin", "value": "41", "unit": "% gross margin",
+     "as_of_date": "2026-03-31", "source": "Samsung Q1 results", "tier": "S2",
+     "definition": "Quarterly gross margin as percentage of revenue", "is_stale": False},
     {"metric": "Foundry 2024 market", "value": "155", "unit": "USD billion",
      "tier": "S1", "is_stale": True},
     {"metric": "HBM share SK hynix", "value": "52", "unit": "%",
      "tier": "S2", "is_stale": False},
     {"metric": "resolution date", "value": "2030-12-31", "unit": "date", "tier": "S1"},  # 排除
+    {"metric": "HBM 2028 market projection (2024)", "value": "45", "unit": "USD billion",
+     "as_of_date": "2024-12-31", "source": "Analyst HBM Outlook 2024",
+     "definition": "Analyst 2024 forecast for 2028 HBM market revenue"},
+    {"metric": "HBM 2028 market projection (2025)", "value": "62", "unit": "USD billion",
+     "as_of_date": "2025-12-31", "source": "Analyst HBM Outlook 2025",
+     "definition": "Analyst 2025 revision for 2028 HBM market revenue"},
+    {"metric": "HBM 2028 market projection (2026)", "value": "79", "unit": "USD billion",
+     "as_of_date": "2026-06-30", "source": "Analyst HBM Outlook 2026",
+     "definition": "Analyst 2026 revision for 2028 HBM market revenue"},
 ]
 
 SOURCES = [
@@ -163,10 +176,12 @@ def test_build_all_full_artifacts_produces_8_plus_charts(tmp_path):
     items = viz.build_all("w9_full", str(tmp_path), _full_artifacts())
     ids = {e["id"] for e in items}
     expected = {"scenario_probabilities", "binary_forecast_dotplot", "model_vs_market",
-                "timeline_lanes", "actor_network", "actor_influence_salience",
-                "source_mix_sunburst", "quantitative_claims", "driver_tornado",
-                "contested_claims", "worldstate_trajectory", "market_price_history_1"}
+                "timeline_lanes", "actor_network", "source_mix_sunburst",
+                "quantitative_claims", "forecast_revisions",
+                "worldstate_trajectory", "market_price_history_1"}
     assert expected <= ids
+    assert {"actor_influence_salience", "driver_tornado",
+            "contested_claims"}.isdisjoint(ids)
     assert len(items) >= 8
     for e in items:
         assert {"id", "path", "type", "title", "caption", "source",
@@ -187,10 +202,13 @@ def test_build_all_skipped_reasons_no_silent_skips(tmp_path):
                           {"forecast": json.loads(json.dumps(FORECAST))})
     m = json.loads((tmp_path / "viz_manifest.json").read_text(encoding="utf-8"))
     reasons = {s["builder"]: s["reason"] for s in m["skipped"]}
-    for builder in ("timeline_lanes", "actor_network", "actor_influence_salience",
-                    "source_mix_sunburst", "quantitative_claims", "driver_tornado",
-                    "contested_claims", "worldstate_trajectory", "market_price_history"):
+    for builder in ("timeline_lanes", "actor_network", "source_mix_sunburst",
+                    "quantitative_claims", "forecast_revisions",
+                    "worldstate_trajectory", "market_price_history"):
         assert reasons.get(builder) == "no_input", f"{builder} 应记 no_input"
+    assert reasons["actor_influence_salience"] == "internal_proxy_not_reader_facing"
+    assert reasons["driver_tornado"] == "proxy_not_sensitivity_analysis"
+    assert reasons["contested_claims"] == "proxy_evidence_weight_not_reader_facing"
     assert any(e["id"] == "binary_forecast_dotplot" for e in items)
 
 
@@ -239,6 +257,11 @@ def test_build_all_kaleido_off_attaches_matplotlib_png(tmp_path):
 def test_scenario_bars_uses_ensemble_error_bands(tmp_path):
     viz = ReportVisualizer()
     charts = str(tmp_path / "charts")
+    rows = rv._extract_scenario_rows(FORECAST, ENSEMBLE)
+    assert {row["interval_source"] for row in rows if row["lo"] is not None} == {"ensemble"}
+    assert {
+        row["interval_label"] for row in rows if row["lo"] is not None
+    } == {"Ensemble spread"}
     rel = viz.build_scenario_bars_html(FORECAST, charts, ensemble=ENSEMBLE)
     assert rel is not None
     html = (tmp_path / rel).read_text(encoding="utf-8")
@@ -253,6 +276,71 @@ def test_scenario_bars_uses_ensemble_error_bands(tmp_path):
     assert rel2 == os.path.join("charts", "scenario_probabilities.html")
     html2 = (tmp_path / "c2" / "scenario_probabilities.html").read_text(encoding="utf-8")
     assert '"arrayminus":[' not in html2
+
+
+@needs_plotly
+def test_scenario_bars_labels_canonical_interval_as_declared_not_ensemble(tmp_path):
+    forecast = {
+        "scenarios": [
+            {"id": "base", "name": "Base case", "probability": 0.60,
+             "p_low": 0.52, "p_high": 0.68},
+            {"id": "bear", "name": "Bear case", "probability": 0.40,
+             "p_low": 0.32, "p_high": 0.48},
+        ],
+    }
+
+    rows = rv._extract_scenario_rows(forecast)
+    assert {row["interval_source"] for row in rows} == {"declared"}
+    assert {row["interval_label"] for row in rows} == {
+        "Declared uncertainty interval",
+    }
+
+    viz = ReportVisualizer()
+    rel = viz.build_scenario_bars_html(forecast, str(tmp_path / "declared"))
+    assert rel is not None
+    html = (tmp_path / "declared" / "scenario_probabilities.html").read_text(
+        encoding="utf-8",
+    )
+    assert '"arrayminus":[' in html
+    assert "Declared uncertainty interval" in html
+    assert "declared uncertainty intervals" in html
+    assert "ensemble spread" not in html
+
+
+@pytest.mark.skipif(not rv.MATPLOTLIB_AVAILABLE, reason="matplotlib not installed")
+def test_static_scenario_intervals_use_source_specific_labels(tmp_path, monkeypatch):
+    declared = {
+        "scenarios": [
+            {"name": "Base case", "probability": 0.60,
+             "p_low": 0.52, "p_high": 0.68},
+            {"name": "Bear case", "probability": 0.40,
+             "p_low": 0.32, "p_high": 0.48},
+        ],
+    }
+    captured = []
+    original_save = ReportVisualizer._save
+
+    def _spy(self, fig, charts_dir, filename):
+        axis = fig.axes[0]
+        legend = axis.get_legend()
+        captured.append({
+            "title": axis.get_title(),
+            "legend": [text.get_text() for text in legend.get_texts()] if legend else [],
+            "line_colors": [line.get_color() for line in axis.lines],
+        })
+        return original_save(self, fig, charts_dir, filename)
+
+    monkeypatch.setattr(ReportVisualizer, "_save", _spy)
+    viz = ReportVisualizer()
+    assert viz.build_scenario_bars(declared, str(tmp_path / "declared")) is not None
+    assert viz.build_scenario_bars(FORECAST, str(tmp_path / "ensemble"), ENSEMBLE) is not None
+
+    assert captured[0]["title"].endswith("(declared uncertainty intervals)")
+    assert captured[0]["legend"] == ["Declared uncertainty interval"]
+    assert "#b26a00" in captured[0]["line_colors"]
+    assert captured[1]["title"].endswith("(ensemble spread)")
+    assert captured[1]["legend"] == ["Ensemble spread"]
+    assert "#2b2b2b" in captured[1]["line_colors"]
 
 
 def test_scenario_rows_keep_canonical_taxonomy_and_only_match_uncertainty():
@@ -315,12 +403,24 @@ def test_binary_dotplot_market_markers_and_sorting(tmp_path):
     assert rel is not None
     html = (tmp_path / rel).read_text(encoding="utf-8")
     assert "Market implied" in html and "diamond" in html  # 锚点菱形
-    assert "Confidence" in html                            # 置信度色标
+    # Mixed/missing declaration must not be replaced with distance from 50%.
+    assert "Declared confidence" not in html
     # 空/无概率 → None
     assert viz.build_binary_dotplot_html({"binary_forecasts": []}, str(tmp_path / "c2")) is None
     assert viz.build_binary_dotplot_html(
         {"binary_forecasts": [{"id": "X", "statement": "no prob"}]},
         str(tmp_path / "c3")) is None
+
+
+@needs_plotly
+def test_binary_dotplot_encodes_only_fully_declared_confidence(tmp_path):
+    forecast = {"binary_forecasts": [
+        {"id": "F1", "statement": "A", "probability": 0.7, "confidence": 0.8},
+        {"id": "F2", "statement": "B", "probability": 0.4, "confidence": 0.6},
+    ]}
+    rel = ReportVisualizer().build_binary_dotplot_html(forecast, str(tmp_path / "charts"))
+    html = (tmp_path / rel).read_text(encoding="utf-8")
+    assert "Declared confidence" in html
 
 
 @needs_plotly
@@ -374,6 +474,53 @@ def test_prepare_timeline_events_cap_and_order(monkeypatch):
     assert len(events) == 3
     # 截断后仍按时间升序
     assert [e["dt"] for e in events] == sorted(e["dt"] for e in events)
+
+
+def test_timeline_date_parser_preserves_month_end_and_quarter_precision():
+    rows = [
+        {"date": "2025-09-30", "event": "Credit expires"},
+        {"date": "2025-10-31", "event": "Control expands"},
+        {"date": "2026-Q3-Q4", "event": "Court decision window"},
+    ]
+
+    events = rv._prepare_timeline_events(rows)
+
+    assert events[0]["dt"].date().isoformat() == "2025-09-30"
+    assert events[1]["dt"].date().isoformat() == "2025-10-31"
+    assert events[2]["date"] == "2026-Q3-Q4"
+    assert events[2]["precision"] == "quarter_range"
+
+
+def test_timeline_categories_answer_cross_domain_forecast_questions():
+    assert rv._tl_category("EU zero-emission vehicle mandate takes effect") == \
+        "Policy & Regulation"
+    assert rv._tl_category("EV sales penetration reaches 40% of registrations") == \
+        "Consumer & Adoption"
+    assert rv._tl_category("Lithium refining surplus pushes pack costs lower") == \
+        "Supply Chain & Economics"
+    assert rv._tl_category("Automaker launches a solid-state battery platform") == \
+        "Companies & Technology"
+
+
+@needs_plotly
+def test_timeline_key_displays_original_date_precision(tmp_path, monkeypatch):
+    captured = {}
+    viz = ReportVisualizer()
+    monkeypatch.setattr(
+        viz,
+        "_save_pair",
+        lambda fig, *_args, **_kwargs: captured.setdefault("fig", fig) or "charts/timeline.html",
+    )
+
+    assert viz.build_timeline_lanes_html(
+        [{"date": "2025-09-30", "event": "Credit expires"},
+         {"date": "2026-Q3-Q4", "event": "Court decision window"}],
+        str(tmp_path / "charts"),
+    )
+
+    annotations = " ".join(str(item.text) for item in captured["fig"].layout.annotations)
+    assert "2025-09-30" in annotations
+    assert "2026-Q3-Q4" in annotations
 
 
 @needs_plotly
@@ -533,9 +680,16 @@ def test_build_all_real_handoff_integration(tmp_path):
     viz = ReportVisualizer()
     items = viz.build_all("w9_real", str(tmp_path), arts)
     ids = {e["id"] for e in items}
-    # 真实工件（无 forecast/worldstate/价格历史）也应产出 7 类图
-    assert {"scenario_probabilities", "timeline_lanes", "actor_network",
-            "actor_influence_salience", "source_mix_sunburst",
-            "quantitative_claims", "driver_tornado", "contested_claims"} <= ids
+    # 这份较旧的真实工件没有足够的来源/时点/口径语义，因此不再伪造
+    # quantitative_claims；只要求它仍能诚实生成有资格的图。
+    assert ids == {
+        "scenario_probabilities",
+        "timeline_lanes",
+        "actor_network",
+        "source_mix_sunburst",
+    }
+    manifest = json.loads((tmp_path / "viz_manifest.json").read_text(encoding="utf-8"))
+    reasons = {entry["builder"]: entry["reason"] for entry in manifest["skipped"]}
+    assert reasons["quantitative_claims"] == "empty_after_parse"
     for e in items:
         assert os.path.exists(str(tmp_path / e["path"]))

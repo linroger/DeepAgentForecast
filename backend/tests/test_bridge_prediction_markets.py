@@ -5,9 +5,10 @@
 目录挂到 sys.path（backend conftest 只挂了 backend/，不含桥目录）。全部纯函数、零网络、零 LLM。
 """
 
+import hashlib
+import json
 import os
 import sys
-import json
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BRIDGE_DIR = os.path.join(_REPO_ROOT, "deerflow_bridge")
@@ -380,47 +381,501 @@ def test_adaptive_passes_remaining_arithmetic():
     assert d.adaptive_passes_remaining(0, None) == 0
 
 
-# ---------------------------------------------------------------- RQ-3 report-judge parse fallback
-
-def test_report_passes_none_and_nondict_are_passthrough():
-    """无有效记分牌（None/非 dict）→ 不阻断（pass-through，回退发首稿）。"""
-    assert d.report_passes(None) is True
-    assert d.report_passes("not a dict") is True
+# ---------------------------------------------------------------- RQ-3 report-judge scorecard gate
 
 
-def test_report_passes_empty_scores_uses_verdict():
-    assert d.report_passes({"verdict": "PASS"}) is True
+def _passing_report_scorecard():
+    return {
+        "verdict": "PASS",
+        "scores": dict.fromkeys(d._REPORT_JUDGE_DIMS, 5),
+    }
+
+
+def test_report_passes_rejects_malformed_or_incomplete_scorecards():
+    valid_scores = dict.fromkeys(d._REPORT_JUDGE_DIMS, 5)
+    malformed = (
+        None,
+        "not a dict",
+        {},
+        {"verdict": "PASS"},
+        {"verdict": "PASS", "scores": []},
+        {"verdict": "UNKNOWN", "scores": valid_scores},
+    )
+    for scorecard in malformed:
+        assert d.report_passes(scorecard) is False
+
+
+def test_report_passes_explicit_fail_is_authoritative():
     assert d.report_passes({"verdict": "FAIL"}) is False
-    assert d.report_passes({}) is True               # 无 verdict/无 scores → 非 FAIL → 放行
+    assert d.report_passes({
+        "verdict": "FAIL",
+        "scores": dict.fromkeys(d._REPORT_JUDGE_DIMS, 5),
+        "gaps": ["citation evidence was stripped during finalization"],
+    }) is False
+
+
+def test_report_passes_requires_exact_finite_in_range_numeric_dimensions():
+    valid = dict.fromkeys(d._REPORT_JUDGE_DIMS, 5)
+    missing = dict(valid)
+    missing.pop("base_rate_usage")
+    invalid_scores = {
+        "missing dimension": missing,
+        "extra dimension": {**valid, "style": 5},
+        "numeric string": {**valid, "base_rate_usage": "5"},
+        "boolean": {**valid, "base_rate_usage": True},
+        "nan": {**valid, "base_rate_usage": float("nan")},
+        "positive infinity": {**valid, "base_rate_usage": float("inf")},
+        "negative infinity": {**valid, "base_rate_usage": float("-inf")},
+        "integer overflow": {**valid, "base_rate_usage": 10**400},
+        "below range": {**valid, "base_rate_usage": -0.1},
+        "above range": {**valid, "base_rate_usage": 5.1},
+    }
+    for case, scores in invalid_scores.items():
+        assert d.report_passes({"verdict": "PASS", "scores": scores}) is False, case
+
+    assert d.report_passes(_passing_report_scorecard()) is True
+
+
+def test_report_judge_input_cap_is_explicit_and_cannot_pass(monkeypatch):
+    monkeypatch.setattr(d, "_JUDGE_INPUT_CAP", 5)
+    bounded, identity = d._report_judge_input("abcdefgh")
+    scorecard = _passing_report_scorecard()
+    scorecard["_judge_input"] = identity
+
+    assert bounded == "abcde"
+    assert identity == {
+        "report_chars": 8,
+        "input_chars": 5,
+        "input_sha256": hashlib.sha256(b"abcde").hexdigest(),
+        "truncated": True,
+    }
+    assert d.report_passes(scorecard) is False
 
 
 def test_report_passes_full_scorecard_gate():
     dims = d._REPORT_JUDGE_DIMS
     # 全 5 分 → PASS
-    assert d.report_passes({"scores": {k: 5 for k in dims}}) is True
+    assert d.report_passes({"verdict": "PASS", "scores": dict.fromkeys(dims, 5)}) is True
     # 非关键维 = 3（无维 <3、四关键维 ≥4、均分 ≥4）→ 仍 PASS
-    sc = {k: 5 for k in dims}
+    sc = dict.fromkeys(dims, 5)
     sc["quantitative_density"] = 3
-    assert d.report_passes({"scores": sc}) is True
+    assert d.report_passes({"verdict": "PASS", "scores": sc}) is True
     # 关键维 <4 → FAIL
-    sc2 = {k: 5 for k in dims}
+    sc2 = dict.fromkeys(dims, 5)
     sc2["thesis_specificity"] = 3
-    assert d.report_passes({"scores": sc2}) is False
+    assert d.report_passes({"verdict": "PASS", "scores": sc2}) is False
     # 任一维 <3 → FAIL
-    sc3 = {k: 5 for k in dims}
+    sc3 = dict.fromkeys(dims, 5)
     sc3["quantitative_density"] = 2
-    assert d.report_passes({"scores": sc3}) is False
+    assert d.report_passes({"verdict": "PASS", "scores": sc3}) is False
 
 
 def test_report_passes_strict_env(monkeypatch):
     """RESEARCH_REPORT_JUDGE_STRICT=true → 任一维 <4 即 FAIL。"""
     dims = d._REPORT_JUDGE_DIMS
-    sc = {k: 5 for k in dims}
+    sc = dict.fromkeys(dims, 5)
     sc["length_vs_target"] = 3       # 非关键维 3，宽松模式本应 PASS
     monkeypatch.setenv("RESEARCH_REPORT_JUDGE_STRICT", "true")
-    assert d.report_passes({"scores": sc}) is False
+    assert d.report_passes({"verdict": "PASS", "scores": sc}) is False
     monkeypatch.setenv("RESEARCH_REPORT_JUDGE_STRICT", "false")
-    assert d.report_passes({"scores": sc}) is True
+    assert d.report_passes({"verdict": "PASS", "scores": sc}) is True
+
+
+def test_report_judge_sees_citation_finalized_bytes(monkeypatch):
+    """Citation coverage must be judged on the bytes that can actually ship."""
+    seen = {}
+
+    monkeypatch.setattr(
+        d,
+        "finalize_report_citations",
+        lambda report, _plog: report + "\n\nFINALIZED REFERENCES",
+    )
+
+    def _judge(report, *_args, **_kwargs):
+        seen["report"] = report
+        return {"verdict": "PASS", "scores": dict.fromkeys(d._REPORT_JUDGE_DIMS, 5)}
+
+    monkeypatch.setattr(d, "judge_research_report", _judge)
+
+    class _Log:
+        def write(self, *_args, **_kwargs):
+            return None
+
+    out = d.run_report_judge_refine(
+        object(), "thread", "question", "deep", None, "model", "DRAFT", _Log()
+    )
+
+    assert seen["report"].endswith("FINALIZED REFERENCES")
+    assert out == seen["report"]
+
+
+def test_report_judge_rejudges_last_allowed_refine_on_exact_final_bytes(monkeypatch):
+    """A FAIL-triggered final mutation must be finalized and judged before return."""
+    monkeypatch.setenv("RESEARCH_REPORT_JUDGE_MAX_ROUNDS", "1")
+    judge_inputs = []
+    scorecards = [
+        {
+            "verdict": "FAIL",
+            "scores": dict.fromkeys(d._REPORT_JUDGE_DIMS, 5),
+            "gaps": ["add independent corroboration"],
+        },
+        _passing_report_scorecard(),
+    ]
+
+    def _finalize(report, _plog):
+        return report.replace(" [DANGLING]", "").rstrip() + "\nCITATION-FINALIZED"
+
+    def _judge(report, *_args, **_kwargs):
+        judge_inputs.append(report)
+        return scorecards.pop(0)
+
+    monkeypatch.setattr(d, "finalize_report_citations", _finalize)
+    monkeypatch.setattr(d, "judge_research_report", _judge)
+    monkeypatch.setattr(d, "run_streamed_turn", lambda *_args, **_kwargs: "TOP-UP NOTES")
+    monkeypatch.setattr(
+        d,
+        "run_incremental_report_patch",
+        lambda _question, report, *_args, **_kwargs: report + "\nREFINED [DANGLING]",
+    )
+
+    class _Log:
+        def write(self, *_args, **_kwargs):
+            return None
+
+    out = d.run_report_judge_refine(
+        object(), "thread", "question", "deep", None, "model", "DRAFT", _Log()
+    )
+
+    assert len(judge_inputs) == 2
+    assert judge_inputs[0] == "DRAFT\nCITATION-FINALIZED"
+    assert out == judge_inputs[-1]
+    assert out.endswith("REFINED\nCITATION-FINALIZED")
+    assert "DANGLING" not in out
+
+
+def test_report_refine_rolls_back_when_final_rejudge_is_incomplete(monkeypatch):
+    monkeypatch.setenv("RESEARCH_REPORT_JUDGE_MAX_ROUNDS", "1")
+    initial_fail = {
+        "verdict": "FAIL",
+        "scores": dict.fromkeys(d._REPORT_JUDGE_DIMS, 5),
+        "gaps": ["add corroboration"],
+    }
+    incomplete_scores = dict.fromkeys(d._REPORT_JUDGE_DIMS, 5)
+    incomplete_scores.pop("citation_coverage")
+    scorecards = [
+        initial_fail,
+        {"verdict": "PASS", "scores": incomplete_scores},
+    ]
+
+    monkeypatch.setattr(
+        d,
+        "finalize_report_citations",
+        lambda report, _plog: report.rstrip() + "\nCITATION-FINALIZED",
+    )
+    monkeypatch.setattr(
+        d,
+        "judge_research_report",
+        lambda *_args, **_kwargs: scorecards.pop(0),
+    )
+    monkeypatch.setattr(d, "run_streamed_turn", lambda *_args, **_kwargs: "TOP-UP NOTES")
+    monkeypatch.setattr(
+        d,
+        "run_incremental_report_patch",
+        lambda _question, report, *_args, **_kwargs: report + "\nREFINED",
+    )
+
+    class _Log:
+        def write(self, *_args, **_kwargs):
+            return None
+
+    out = d.run_report_judge_refine(
+        object(), "thread", "question", "deep", None, "model", "DRAFT", _Log()
+    )
+
+    assert out == "DRAFT\nCITATION-FINALIZED"
+
+
+def test_adopted_topup_persists_judge_for_exact_final_bytes(tmp_path, monkeypatch):
+    current = "BASE REPORT\n"
+    (tmp_path / d.REPORT_FILENAME).write_text(current, encoding="utf-8")
+    seen = []
+
+    monkeypatch.setattr(
+        d,
+        "finalize_report_citations",
+        lambda report, _plog: report.replace(" [DANGLING]", "").rstrip()
+        + "\nCITATION-FINALIZED\n",
+    )
+
+    def _judge(report, *_args, **_kwargs):
+        seen.append(report)
+        scorecard = _passing_report_scorecard()
+        scorecard["_judge_input"] = d._report_judge_input(report)[1]
+        return scorecard
+
+    monkeypatch.setattr(d, "judge_research_report", _judge)
+
+    class _Log:
+        def write(self, *_args, **_kwargs):
+            return None
+
+    meta = {"global_synthesis_judge": {"judged_prose_sha256": "stale"}}
+    out, adopted = d._adopt_judged_report_candidate(
+        tmp_path,
+        current,
+        "TOP-UP REPORT [DANGLING]",
+        "question",
+        None,
+        "deep",
+        "model",
+        meta,
+        _Log(),
+        stage="triangulation-topup",
+    )
+
+    expected = "TOP-UP REPORT\nCITATION-FINALIZED\n"
+    expected_hash = hashlib.sha256(expected.encode("utf-8")).hexdigest()
+    persisted = json.loads(
+        (tmp_path / "research_report_judge.json").read_text(encoding="utf-8")
+    )
+
+    assert adopted is True
+    assert out == expected == seen[-1]
+    assert (tmp_path / d.REPORT_FILENAME).read_text(encoding="utf-8") == expected
+    assert persisted["_judged_prose"] == {
+        "sha256": expected_hash,
+        "chars": len(expected),
+        "stage": "triangulation-topup",
+        "scope": "llm-prose",
+    }
+    assert meta["research_report_judge"]["judged_prose_sha256"] == expected_hash
+    assert meta["research_report_judge"]["judge_scope"] == "llm-prose"
+    assert meta["research_report_judge"]["passed"] is True
+    assert meta["global_synthesis_judge"]["judged_prose_sha256"] == expected_hash
+    assert "report_sha256" not in meta["research_report_judge"]
+
+
+def test_topup_explicit_fail_cannot_replace_current_report(tmp_path, monkeypatch):
+    current = "BASE\n"
+    (tmp_path / d.REPORT_FILENAME).write_text(current, encoding="utf-8")
+    explicit_fail = {
+        "verdict": "FAIL",
+        "scores": dict.fromkeys(d._REPORT_JUDGE_DIMS, 5),
+        "gaps": ["still lacks independent evidence"],
+    }
+    monkeypatch.setattr(d, "finalize_report_citations", lambda report, _plog: report)
+    monkeypatch.setattr(
+        d,
+        "judge_research_report",
+        lambda *_args, **_kwargs: explicit_fail,
+    )
+
+    class _Log:
+        def write(self, *_args, **_kwargs):
+            return None
+
+    meta = {}
+    out, adopted = d._adopt_judged_report_candidate(
+        tmp_path,
+        current,
+        "LONGER TOP-UP REPORT",
+        "question",
+        None,
+        "deep",
+        "model",
+        meta,
+        _Log(),
+        stage="triangulation-topup",
+    )
+
+    assert adopted is False
+    assert out == current
+    assert (tmp_path / d.REPORT_FILENAME).read_text(encoding="utf-8") == current
+    assert not (tmp_path / "research_report_judge.json").exists()
+    assert meta == {}
+
+
+def test_late_candidate_cannot_regress_a_passing_dimension(tmp_path, monkeypatch):
+    current = "BASE PASSING REPORT\n"
+    current_scorecard = _passing_report_scorecard()
+    current_scorecard["_judged_prose"] = {
+        "sha256": hashlib.sha256(current.encode("utf-8")).hexdigest(),
+        "chars": len(current),
+        "stage": "initial",
+        "scope": "llm-prose",
+    }
+    (tmp_path / d.REPORT_FILENAME).write_text(current, encoding="utf-8")
+    (tmp_path / "research_report_judge.json").write_text(
+        json.dumps(current_scorecard), encoding="utf-8"
+    )
+    regressed = _passing_report_scorecard()
+    regressed["scores"]["base_rate_usage"] = 4
+    candidate = "LONGER BUT WEAKER TOP-UP REPORT\n"
+    regressed["_judge_input"] = d._report_judge_input(candidate)[1]
+    monkeypatch.setattr(d, "finalize_report_citations", lambda report, _plog: report)
+    monkeypatch.setattr(
+        d, "judge_research_report", lambda *_args, **_kwargs: regressed
+    )
+
+    class _Log:
+        def write(self, *_args, **_kwargs):
+            return None
+
+    out, adopted = d._adopt_judged_report_candidate(
+        tmp_path,
+        current,
+        candidate,
+        "question",
+        None,
+        "deep",
+        "model",
+        {},
+        _Log(),
+        stage="triangulation-topup",
+    )
+
+    assert adopted is False
+    assert out == current
+    assert (tmp_path / d.REPORT_FILENAME).read_text(encoding="utf-8") == current
+
+
+def test_persist_report_judge_requires_exact_untruncated_input_identity(tmp_path):
+    report = "EXACT JUDGED REPORT\n"
+    meta = {}
+    missing = _passing_report_scorecard()
+    assert d._persist_report_judge(
+        tmp_path, report, missing, meta, stage="test"
+    ) is False
+
+    mismatched = _passing_report_scorecard()
+    mismatched["_judge_input"] = d._report_judge_input("OTHER REPORT\n")[1]
+    assert d._persist_report_judge(
+        tmp_path, report, mismatched, meta, stage="test"
+    ) is False
+
+    exact = _passing_report_scorecard()
+    exact["_judge_input"] = d._report_judge_input(report)[1]
+    assert d._persist_report_judge(
+        tmp_path, report, exact, meta, stage="test"
+    ) is True
+
+
+def test_topup_rolls_back_when_final_scorecard_is_incomplete(tmp_path, monkeypatch):
+    current = "BASE REPORT\n"
+    judge_path = tmp_path / "research_report_judge.json"
+    (tmp_path / d.REPORT_FILENAME).write_text(current, encoding="utf-8")
+    judge_path.write_text('{"existing": true}\n', encoding="utf-8")
+    previous_meta = {
+        "research_report_judge": {"judged_prose_sha256": "existing"},
+        "global_synthesis_judge": {"judged_prose_sha256": "existing"},
+    }
+    meta = {key: dict(value) for key, value in previous_meta.items()}
+    incomplete_scores = dict.fromkeys(d._REPORT_JUDGE_DIMS, 5)
+    incomplete_scores.pop("citation_coverage")
+
+    monkeypatch.setattr(d, "finalize_report_citations", lambda report, _plog: report)
+    monkeypatch.setattr(
+        d,
+        "judge_research_report",
+        lambda *_args, **_kwargs: {"verdict": "PASS", "scores": incomplete_scores},
+    )
+
+    class _Log:
+        def write(self, *_args, **_kwargs):
+            return None
+
+    out, adopted = d._adopt_judged_report_candidate(
+        tmp_path,
+        current,
+        "UNJUDGED TOP-UP",
+        "question",
+        None,
+        "deep",
+        "model",
+        meta,
+        _Log(),
+        stage="triangulation-topup",
+    )
+
+    assert adopted is False
+    assert out == current
+    assert (tmp_path / d.REPORT_FILENAME).read_text(encoding="utf-8") == current
+    assert judge_path.read_text(encoding="utf-8") == '{"existing": true}\n'
+    assert meta == previous_meta
+
+
+def test_topup_rolls_back_when_citation_finalization_fails(tmp_path, monkeypatch):
+    current = "BASE REPORT\n"
+    report_path = tmp_path / d.REPORT_FILENAME
+    judge_path = tmp_path / "research_report_judge.json"
+    report_path.write_text(current, encoding="utf-8")
+    judge_path.write_text('{"existing": true}\n', encoding="utf-8")
+    previous_meta = {
+        "research_report_judge": {"judged_prose_sha256": "existing"},
+    }
+    meta = {key: dict(value) for key, value in previous_meta.items()}
+    judge_called = False
+
+    def _fail_finalize(*_args, **_kwargs):
+        raise RuntimeError("citation finalizer unavailable")
+
+    def _judge(*_args, **_kwargs):
+        nonlocal judge_called
+        judge_called = True
+        return _passing_report_scorecard()
+
+    monkeypatch.setattr(d, "finalize_report_citations", _fail_finalize)
+    monkeypatch.setattr(d, "judge_research_report", _judge)
+
+    class _Log:
+        def write(self, *_args, **_kwargs):
+            return None
+
+    out, adopted = d._adopt_judged_report_candidate(
+        tmp_path,
+        current,
+        "UNFINALIZED TOP-UP [S999]",
+        "question",
+        None,
+        "deep",
+        "model",
+        meta,
+        _Log(),
+        stage="triangulation-topup",
+    )
+
+    assert adopted is False
+    assert out == current
+    assert judge_called is False
+    assert report_path.read_text(encoding="utf-8") == current
+    assert judge_path.read_text(encoding="utf-8") == '{"existing": true}\n'
+    assert meta == previous_meta
+
+
+def test_persisted_report_identity_tracks_later_deterministic_rewrite(tmp_path):
+    prose = "FINAL JUDGED PROSE\n"
+    prose_hash = hashlib.sha256(prose.encode("utf-8")).hexdigest()
+    report_path = tmp_path / d.REPORT_FILENAME
+    report_path.write_text(prose, encoding="utf-8")
+    meta = {
+        "research_report_judge": {
+            "judged_prose_sha256": prose_hash,
+            "judge_scope": "llm-prose",
+        }
+    }
+
+    assert d._record_persisted_report_identity(tmp_path, meta) is True
+    assert meta["persisted_report_sha256"] == prose_hash
+
+    with_annex = prose + "\n## Visual Annex\n\n![Chart](charts/chart.png)\n"
+    report_path.write_text(with_annex, encoding="utf-8")
+    assert d._record_persisted_report_identity(tmp_path, meta) is True
+
+    assert meta["persisted_report_sha256"] == hashlib.sha256(
+        with_annex.encode("utf-8")
+    ).hexdigest()
+    assert meta["research_report_judge"]["judged_prose_sha256"] == prose_hash
+    assert meta["report_chars"] == len(with_annex)
 
 
 def test_build_report_judge_prompt_is_json_only():

@@ -227,6 +227,28 @@ def test_llm_adapter_tier_mapping(monkeypatch):
     assert captured["tier"] == "fast"
 
 
+def test_llm_adapter_propagates_pipeline_context_into_io_worker():
+    pytest.importorskip("graphiti_core")
+    import asyncio
+    from app.utils.telemetry import get_run_context, set_run_context
+
+    captured = {}
+
+    class FakeApp:
+        def chat_json(self, messages, temperature=0.3, max_tokens=4096, tier="strong"):
+            captured["context"] = get_run_context()
+            return {"ok": True}
+
+    adapter = _make_adapter(FakeApp())
+    set_run_context("pipe-context", "graph")
+    try:
+        asyncio.run(adapter._generate_response([_Msg("user", "extract")]))
+    finally:
+        set_run_context(None, None)
+
+    assert captured["context"] == ("pipe-context", "graph")
+
+
 def test_llm_adapter_bounded_inner_retries():
     pytest.importorskip("graphiti_core")
     import asyncio

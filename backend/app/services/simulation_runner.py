@@ -372,8 +372,18 @@ class SimulationRunner:
                 error=data.get("error"),
                 process_pid=data.get("process_pid"),
                 process_pgid=data.get("process_pgid"),
-                twitter_enabled=data.get("twitter_enabled", False),
-                reddit_enabled=data.get("reddit_enabled", False),
+                # Legacy run_state.json files predate the enabled flags.  Keep
+                # absence as ``None`` so terminal reconciliation can fall back
+                # to the API-facing SimulationState instead of turning an
+                # unknown legacy value into an authoritative ``False``.
+                twitter_enabled=(
+                    data.get("twitter_enabled")
+                    if "twitter_enabled" in data else None
+                ),
+                reddit_enabled=(
+                    data.get("reddit_enabled")
+                    if "reddit_enabled" in data else None
+                ),
                 graph_memory_requested=data.get("graph_memory_requested", False),
                 graph_memory_active=data.get("graph_memory_active", False),
                 graph_memory_error=data.get("graph_memory_error"),
@@ -2064,8 +2074,18 @@ class SimulationRunner:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(summary, f, ensure_ascii=False, indent=2)
             os.replace(tmp, out)
-            logger.info(f"[{simulation_id}] run_summary.json 已写出（{len(agent_stats)} agents, "
-                        f"{len(action_volume_by_round)} rounds）")
+            seed_buckets = sum(
+                1 for bucket in action_volume_by_round
+                if int(bucket.get("round_num") or 0) <= 0
+            )
+            logger.info(
+                "[%s] run_summary.json 已写出（%d agents, %d executed rounds, "
+                "%d round-0 seed buckets）",
+                simulation_id,
+                len(agent_stats),
+                rounds_executed,
+                seed_buckets,
+            )
         except Exception as e:  # noqa: BLE001
             logger.warning(f"[{simulation_id}] run_summary.json 写出失败（不影响主流程）: {e}")
         return summary

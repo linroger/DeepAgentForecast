@@ -28,6 +28,7 @@ from __future__ import annotations
 import atexit
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -1543,6 +1544,121 @@ _RESEARCH_CONTRACT_FILES = (
     "charts.json",
 )
 
+_RESEARCH_JUDGE_DIMS = (
+    "thesis_specificity", "base_rate_usage", "mechanism_chains",
+    "quantitative_density", "contrarian_coverage", "length_vs_target",
+    "citation_coverage",
+)
+_RESEARCH_JUDGE_CRITICAL = (
+    "thesis_specificity", "mechanism_chains", "contrarian_coverage",
+    "citation_coverage",
+)
+
+
+def _research_judge_scores(scorecard: Any) -> Optional[tuple[float, ...]]:
+    """Validate the persisted seven-dimension judge schema without importing DeerFlow."""
+    if not isinstance(scorecard, dict):
+        return None
+    if str(scorecard.get("verdict", "")).strip().upper() not in {"PASS", "FAIL"}:
+        return None
+    scores = scorecard.get("scores")
+    if not isinstance(scores, dict) or set(scores) != set(_RESEARCH_JUDGE_DIMS):
+        return None
+    values: list[float] = []
+    for dimension in _RESEARCH_JUDGE_DIMS:
+        raw = scores[dimension]
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return None
+        value = float(raw)
+        if not math.isfinite(value) or not 0.0 <= value <= 5.0:
+            return None
+        values.append(value)
+    return tuple(values)
+
+
+def _research_judge_passes(scorecard: Any) -> bool:
+    values = _research_judge_scores(scorecard)
+    if values is None or str(scorecard.get("verdict", "")).strip().upper() != "PASS":
+        return False
+    scores = scorecard["scores"]
+    strict = str(os.environ.get("RESEARCH_REPORT_JUDGE_STRICT", "")).strip().lower()
+    if strict in {"1", "true", "yes", "on"} and min(values) < 4:
+        return False
+    if min(values) < 3:
+        return False
+    if any(float(scores[name]) < 4 for name in _RESEARCH_JUDGE_CRITICAL):
+        return False
+    return sum(values) / len(values) >= 4.0
+
+
+def _validate_research_judge_contract(
+    root: str,
+    entries: dict[str, Any],
+    report: str,
+) -> bool:
+    """Bind required deep-research judge evidence to the exact prose prefix.
+
+    Deterministic market/chart annexes may follow the judged LLM prose.  The
+    persisted ``chars`` boundary therefore identifies the exact report prefix
+    the judge saw, while the outer research manifest seals the complete report.
+    """
+    meta = _read_json(os.path.join(root, "meta.json"))
+    if not isinstance(meta, dict):
+        meta = {}
+    judge_required = (
+        str(meta.get("depth", "")).strip().lower() == "deep"
+        or "research_report_judge.json" in entries
+        or isinstance(meta.get("research_report_judge"), dict)
+        or isinstance(meta.get("global_synthesis_judge"), dict)
+    )
+    if not judge_required:
+        return True
+    if "research_report_judge.json" not in entries or "meta.json" not in entries:
+        return False
+    scorecard = _read_json(os.path.join(root, "research_report_judge.json"))
+    if _research_judge_scores(scorecard) is None:
+        return False
+    judged = scorecard.get("_judged_prose")
+    judge_input = scorecard.get("_judge_input")
+    if not isinstance(judged, dict) or not isinstance(judge_input, dict):
+        return False
+    try:
+        chars = int(judged.get("chars"))
+    except (TypeError, ValueError):
+        return False
+    if chars <= 0 or chars > len(report) or judged.get("scope") != "llm-prose":
+        return False
+    prose = report[:chars]
+    prose_sha = hashlib.sha256(prose.encode("utf-8")).hexdigest()
+    if judged.get("sha256") != prose_sha:
+        return False
+    if judge_input != {
+        "report_chars": chars,
+        "input_chars": chars,
+        "input_sha256": prose_sha,
+        "truncated": False,
+    }:
+        return False
+
+    summary = meta.get("research_report_judge")
+    if not isinstance(summary, dict):
+        return False
+    expected_pass = _research_judge_passes(scorecard)
+    if (
+        str(summary.get("verdict", "")).strip().upper()
+        != str(scorecard.get("verdict", "")).strip().upper()
+        or summary.get("scores") != scorecard.get("scores")
+        or summary.get("passed") is not expected_pass
+        or summary.get("judged_prose_sha256") != prose_sha
+        or summary.get("judged_prose_chars") != chars
+        or summary.get("judge_scope") != "llm-prose"
+    ):
+        return False
+    global_summary = meta.get("global_synthesis_judge")
+    if global_summary is not None and global_summary != summary:
+        return False
+    return True
+
 
 def _research_contract_path(handoff_dir: str) -> str:
     return os.path.join(handoff_dir, _RESEARCH_CONTRACT_FILENAME)
@@ -1597,8 +1713,10 @@ def _validate_research_contract(handoff_dir: str) -> bool:
                 return False
             if _sha256_file(path) != expected.get("sha256"):
                 return False
-        report = _read_text(os.path.join(root, "research_report.md")).strip()
-        if len(report) < 400:
+        report = _read_text(os.path.join(root, "research_report.md"))
+        if len(report.strip()) < 400:
+            return False
+        if not _validate_research_judge_contract(root, entries, report):
             return False
         # Optional contract-owned artifacts absent from the generation manifest
         # would prove that a stale file survived promotion.
@@ -1954,6 +2072,24 @@ def _stage_walls(state: "PipelineState") -> dict[str, float]:
     except Exception:  # noqa: BLE001 — 纯观测，绝不抛
         pass
     return walls
+
+
+def _reset_stage_attempt(stage: "StageState") -> None:
+    """Reset one stage before real re-execution, including its timing window.
+
+    A resumed failed stage is a new attempt. Keeping the first attempt's
+    ``started_at`` while clearing only ``finished_at`` charged retry downtime and
+    all prior attempts to the final attempt (the EV report appeared to take
+    11,606 seconds although the successful report telemetry was 605 seconds).
+    Reused completed stages do not call this helper and retain their original
+    wall-clock interval.
+    """
+    stage.status = "pending"
+    stage.progress = 0
+    stage.message = ""
+    stage.error = None
+    stage.started_at = None
+    stage.finished_at = None
 
 
 def _load_research_handoff(handoff_dir: str) -> dict[str, Any]:
@@ -3850,10 +3986,7 @@ class PipelineOrchestrator:
                 # 仅重置 REPORT：研究/图谱/模拟产物保持复用。ORCH-1 的复用守卫会因交付物损坏
                 # 拒绝复用旧报告并铸新 report_id。
                 _rst = state.stages.setdefault(STAGE_REPORT, StageState(name=STAGE_REPORT))
-                _rst.status = "pending"
-                _rst.progress = 0
-                _rst.error = None
-                _rst.finished_at = None
+                _reset_stage_attempt(_rst)
                 state.current_stage = STAGE_REPORT
                 state.options["force_report_regen"] = _utcnow()
 
@@ -3861,9 +3994,7 @@ class PipelineOrchestrator:
             if failed_stage and failed_stage in state.stages:
                 st = state.stages[failed_stage]
                 if st.status in ("failed", "cancelled"):
-                    st.status = "pending"
-                    st.error = None
-                    st.finished_at = None
+                    _reset_stage_attempt(st)
 
             task_manager = TaskManager()
             task_id = task_manager.create_task(
@@ -3929,10 +4060,7 @@ class PipelineOrchestrator:
                     if st.progress != 100:
                         st.progress = 100
                 else:
-                    st.status = "pending"
-                    st.error = None
-                    st.finished_at = None
-                    st.progress = 0
+                    _reset_stage_attempt(st)
 
             task_manager = TaskManager()
             task_id = task_manager.create_task(
@@ -4617,12 +4745,37 @@ class PipelineOrchestrator:
 
         return update
 
-    def _complete_stage(self, state: PipelineState, stage: str, message: str = "完成"):
+    def _complete_stage(
+        self,
+        state: PipelineState,
+        stage: str,
+        message: str = "完成",
+        *,
+        reused: bool = False,
+    ):
+        """Seal a stage without charging resume downtime to its wall clock.
+
+        Reuse paths briefly mark an already-completed stage as ``running`` so
+        progress and artifact checks remain visible.  Those bookkeeping calls
+        must preserve the original attempt timestamps; otherwise a resume made
+        hours later reports the idle gap as model/runtime cost.  Legacy reused
+        states missing one endpoint degrade to a zero-duration bookkeeping
+        interval rather than an invented multi-hour duration.
+        """
         st = state.stages.setdefault(stage, StageState(name=stage))
         st.status = "completed"
         st.progress = 100
         st.message = message
-        st.finished_at = _utcnow()
+        now = _utcnow()
+        if reused:
+            if st.started_at is None and st.finished_at is None:
+                st.started_at = st.finished_at = now
+            elif st.started_at is None:
+                st.started_at = st.finished_at
+            elif st.finished_at is None:
+                st.finished_at = st.started_at
+        else:
+            st.finished_at = now
         state.global_progress = self._global_from_stage(
             state.mode, stage, 100, state.options.get("dynamic_bands")
         )
@@ -4633,6 +4786,56 @@ class PipelineOrchestrator:
         PipelineManager.save(state)
         # W9-3：阶段转换必落一版遥测账（重启只丢「上一次阶段边界之后」的增量）。
         self._flush_run_telemetry(state)
+
+    @staticmethod
+    def _reconcile_completed_simulation_state(
+        sim_state: Any,
+        run_state: Any = None,
+        run_summary: Any = None,
+    ) -> None:
+        """Copy authoritative terminal RUN fields into the durable simulation state.
+
+        ``SimulationState`` is the API-facing record while ``SimulationRunState``
+        is the runtime authority.  Updating only the former's top-level status
+        produced impossible records (completed with round 0 and both platforms
+        not_started).  This helper makes the terminal projection explicit and
+        testable without coupling it to pipeline I/O.
+        """
+        sim_state.status = SimulationStatus.COMPLETED
+        round_candidates = [getattr(run_state, "current_round", None)]
+        if isinstance(run_summary, dict):
+            round_candidates.append(run_summary.get("rounds_executed"))
+        parsed_rounds = []
+        for candidate in round_candidates:
+            try:
+                parsed_rounds.append(max(0, int(candidate or 0)))
+            except (TypeError, ValueError):
+                continue
+        sim_state.current_round = max(parsed_rounds, default=0)
+        for platform in ("twitter", "reddit"):
+            enabled_raw = getattr(run_state, f"{platform}_enabled", None)
+            enabled = bool(
+                getattr(sim_state, f"enable_{platform}", False)
+                if enabled_raw is None else enabled_raw
+            )
+            completed_raw = getattr(run_state, f"{platform}_completed", None)
+            if not enabled:
+                platform_status = "disabled"
+            elif completed_raw is not None:
+                platform_status = "completed" if bool(completed_raw) else "incomplete"
+            else:
+                # Aggregate rounds prove that *some* simulation work completed,
+                # not that every enabled lane reached its terminal checkpoint.
+                # Preserve an existing explicit terminal projection when one is
+                # available; otherwise expose the missing evidence honestly.
+                existing = str(
+                    getattr(sim_state, f"{platform}_status", "") or ""
+                ).strip()
+                platform_status = (
+                    existing if existing not in {"", "not_started"} else "unknown"
+                )
+            setattr(sim_state, f"{platform}_status", platform_status)
+        sim_state.error = getattr(run_state, "error", None) or None
 
     # ---------------------------------------------------------------- S1 health gate
     # The corpus review found 8/13 runs reported status=completed/100%/error=null while
@@ -6910,6 +7113,7 @@ class PipelineOrchestrator:
                 state,
                 STAGE_RESEARCH,
                 "研究报告已恢复" if _reuse_research else "研究完成",
+                reused=_reuse_research,
             )
 
             if state.mode == "research_only":
@@ -6932,7 +7136,7 @@ class PipelineOrchestrator:
             project = ProjectManager.get_project(state.project_id) if state.project_id else None
             if project is not None and project.ontology:
                 upd(100, "复用已有本体…")
-                self._complete_stage(state, STAGE_ONTOLOGY, "本体已恢复")
+                self._complete_stage(state, STAGE_ONTOLOGY, "本体已恢复", reused=True)
             else:
                 if project is None:
                     upd(10, "用研究报告创建项目…")
@@ -7045,7 +7249,7 @@ class PipelineOrchestrator:
                         GraphBuilderService(api_key=Config.ZEP_API_KEY).set_ontology(graph_id, project.ontology)
                 except Exception as _ro_err:  # noqa: BLE001
                     logger.warning("reuse-path set_ontology skipped: %s", _ro_err)
-                self._complete_stage(state, STAGE_GRAPH, "图谱已恢复")
+                self._complete_stage(state, STAGE_GRAPH, "图谱已恢复", reused=True)
             else:
                 upd(5, "构建知识图谱…")
                 builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
@@ -7426,7 +7630,12 @@ class PipelineOrchestrator:
             # by RUN. Scenario/world-state injection above mutates
             # simulation_config.json; completing earlier recorded a permanently
             # stale hash and forced every resume to create a new simulation.
-            self._complete_stage(state, STAGE_PREPARE, _prepare_completion_message)
+            self._complete_stage(
+                state,
+                STAGE_PREPARE,
+                _prepare_completion_message,
+                reused=_prepare_reuse,
+            )
 
             # ---- Stage 4: RUN ----
             upd = self._make_stage_updater(state, STAGE_RUN)
@@ -7541,15 +7750,6 @@ class PipelineOrchestrator:
                         time.sleep(5)
                 finally:
                     _wd_ctl["stop"] = True  # C1/C2/ORCH-6: 任何退出路径都退休独立看门狗
-                # 同步 SimulationManager 状态
-                try:
-                    ss = sim_manager.get_simulation(sim_state.simulation_id)
-                    if ss is not None:
-                        ss.status = SimulationStatus.COMPLETED
-                        sim_manager._save_simulation_state(ss)
-                except Exception:
-                    pass
-
                 # EXECPLAN2 F-12-1: 模拟结束后、读 actions.jsonl 写 run_summary 与跑报告之前，
                 # 加一道"汇流栅栏"。runner_status 会在 simulation_end 事件被解析的瞬间就置为
                 # COMPLETED（此时 OASIS 进程仍存活、监控线程仍在收尾，「模拟 → 图谱」反馈写入器
@@ -7579,25 +7779,62 @@ class PipelineOrchestrator:
 
             # T3.14: 模拟结束后聚合 run_summary.json（per-agent engagement + 每轮动作量 + top_posts +
             # 可选派系）。报告阶段的 simulation_outcomes 工具与前端均可直接读，免再 fuzzy 检索。
+            _run_summary_published = False
             try:
                 _comm = None
                 _comm_path = os.path.join(handoff_dir, "communities.json")
                 if os.path.exists(_comm_path):
                     with open(_comm_path, "r", encoding="utf-8") as cf:
                         _comm = json.load(cf)
-                if not self._publish_run_summary(
+                _run_summary_published = self._publish_run_summary(
                     state,
                     sim_state.simulation_id,
                     communities=_comm,
                     regenerate=not run_stage_done,
-                ):
+                )
+                if not _run_summary_published:
                     logger.warning("[%s] run_summary 未生成或结构无效", state.pipeline_id)
             except Exception as e:  # noqa: BLE001
                 logger.warning("[%s] run_summary 写出跳过: %s", state.pipeline_id, e)
 
+            # Reconcile both freshly executed and reused RUNs. The successful EV
+            # resume proved that a valid reused summary can coexist with a stale
+            # API-facing state.json at round 0; reuse must repair that projection
+            # just as a fresh run does.
+            try:
+                _terminal_rs = (
+                    SimulationRunner.get_run_state(sim_state.simulation_id)
+                    if run_stage_done else rs
+                )
+                _summary_path = os.path.join(
+                    SimulationRunner.RUN_STATE_DIR,
+                    sim_state.simulation_id,
+                    "run_summary.json",
+                )
+                _terminal_summary = (
+                    _read_json(_summary_path) if _run_summary_published else None
+                )
+                ss = sim_manager.get_simulation(sim_state.simulation_id)
+                if ss is not None:
+                    self._reconcile_completed_simulation_state(
+                        ss, _terminal_rs, _terminal_summary,
+                    )
+                    sim_manager._save_simulation_state(ss)
+            except Exception as _state_sync_err:  # noqa: BLE001
+                logger.warning(
+                    "[%s] 同步终态 simulation state 失败: %s",
+                    state.pipeline_id,
+                    _state_sync_err,
+                )
+
             # Completion now follows the final summary publication, so the stage
             # manifest and status describe the same durable boundary.
-            self._complete_stage(state, STAGE_RUN, _run_completion_message)
+            self._complete_stage(
+                state,
+                STAGE_RUN,
+                _run_completion_message,
+                reused=run_stage_done,
+            )
 
             # ---- Stage 5: REPORT ----
             upd = self._make_stage_updater(state, STAGE_REPORT)
@@ -7658,7 +7895,7 @@ class PipelineOrchestrator:
             if existing_report is not None and getattr(existing_report, "status", None) != ReportStatus.FAILED:
                 upd(100, "复用已有报告")
                 state.report_id = getattr(existing_report, "report_id", state.report_id)
-                self._complete_stage(state, STAGE_REPORT, "报告完成（复用）")
+                self._complete_stage(state, STAGE_REPORT, "报告完成（复用）", reused=True)
             else:
                 # ORCH-8: 报告是最贵的 LLM 阶段，而健康门在全部章节成本烧完后才触发。双 provider
                 # 同时不可用（MiniMax 审查/配额 + claude-cli 耗尽）时，先花 ~10 token 探测一次

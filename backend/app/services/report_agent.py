@@ -6451,6 +6451,12 @@ class ReportAgent:
         "comparison": ("comparison", "baseline", "counterfactual", "contrast",
                        "对比", "基线", "反事实", "对照", "情景差"),
         "calibration": ("calibration", "reliability", "校准", "可靠", "信度"),
+        "quantitative": ("market", "adoption", "demand", "consumer", "regional",
+                         "technology", "battery", "cost", "supply", "industry",
+                         "市场", "渗透", "需求", "消费", "区域", "技术", "电池",
+                         "成本", "供应", "产业"),
+        "forecast_revisions": ("forecast", "outlook", "projection", "market", "policy",
+                               "预测", "展望", "市场", "政策", "情景"),
     }
 
     def _binary_min_count(self) -> int:

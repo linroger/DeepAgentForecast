@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 from types import SimpleNamespace
 
+import pytest
+
 from app.services.pipeline_orchestrator import PipelineOrchestrator
 
 
@@ -1039,6 +1041,176 @@ def test_stage_walls_computes_seconds_and_skips_incomplete():
 def test_stage_walls_empty_state_is_empty():
     st = _po.PipelineState(pipeline_id="pipe-walls-2", prompt="x")
     assert _po._stage_walls(st) == {}
+
+
+def test_reused_stage_completion_preserves_original_wall_clock(monkeypatch):
+    """A resume bookkeeping pass MUST not turn idle downtime into stage runtime."""
+    state = _po.PipelineState(pipeline_id="pipe-walls-reuse", prompt="x")
+    state.stages["research"] = _po.StageState(
+        name="research",
+        status="running",
+        started_at="2026-05-01T00:00:00+00:00",
+        finished_at="2026-05-01T00:00:42+00:00",
+    )
+    orchestrator = PipelineOrchestrator()
+    monkeypatch.setattr(orchestrator, "_record_stage_artifacts", lambda *_args: None)
+    monkeypatch.setattr(orchestrator, "_flush_run_telemetry", lambda *_args: None)
+    monkeypatch.setattr(_po.PipelineManager, "save", classmethod(lambda cls, _state: None))
+    monkeypatch.setattr(_po, "_utcnow", lambda: "2026-05-01T08:00:00+00:00")
+
+    orchestrator._complete_stage(
+        state, "research", "研究报告已恢复", reused=True,
+    )
+
+    assert state.stages["research"].finished_at == "2026-05-01T00:00:42+00:00"
+    assert _po._stage_walls(state)["research"] == 42.0
+
+
+@pytest.mark.parametrize(
+    ("started_at", "finished_at", "expected"),
+    [
+        ("2026-05-01T00:00:00+00:00", None, "2026-05-01T00:00:00+00:00"),
+        (None, "2026-05-01T00:00:42+00:00", "2026-05-01T00:00:42+00:00"),
+    ],
+)
+def test_reused_stage_completion_collapses_one_sided_legacy_timing(
+    monkeypatch, started_at, finished_at, expected,
+):
+    """A missing legacy endpoint MUST not turn resume idle time into runtime."""
+    state = _po.PipelineState(pipeline_id="pipe-walls-one-sided", prompt="x")
+    state.stages["research"] = _po.StageState(
+        name="research",
+        status="running",
+        started_at=started_at,
+        finished_at=finished_at,
+    )
+    orchestrator = PipelineOrchestrator()
+    monkeypatch.setattr(orchestrator, "_record_stage_artifacts", lambda *_args: None)
+    monkeypatch.setattr(orchestrator, "_flush_run_telemetry", lambda *_args: None)
+    monkeypatch.setattr(_po.PipelineManager, "save", classmethod(lambda cls, _state: None))
+    monkeypatch.setattr(_po, "_utcnow", lambda: "2026-05-01T08:00:00+00:00")
+
+    orchestrator._complete_stage(state, "research", "研究报告已恢复", reused=True)
+
+    stage = state.stages["research"]
+    assert stage.started_at == expected
+    assert stage.finished_at == expected
+    assert _po._stage_walls(state)["research"] == 0.0
+
+
+def test_retry_stage_reset_starts_a_fresh_timing_window():
+    stage = _po.StageState(
+        name="report",
+        status="failed",
+        progress=96,
+        message="old failed attempt",
+        error="quality gate failed",
+        started_at="2026-05-01T00:00:00+00:00",
+        finished_at="2026-05-01T00:30:00+00:00",
+    )
+
+    _po._reset_stage_attempt(stage)
+
+    assert stage.status == "pending"
+    assert stage.progress == 0
+    assert stage.message == ""
+    assert stage.error is None
+    assert stage.started_at is None
+    assert stage.finished_at is None
+
+
+def test_reconcile_completed_simulation_state_copies_authoritative_run_progress():
+    simulation = SimpleNamespace(
+        status=_po.SimulationStatus.RUNNING,
+        enable_twitter=True,
+        enable_reddit=True,
+        current_round=0,
+        twitter_status="not_started",
+        reddit_status="not_started",
+        error="stale",
+    )
+    run_state = SimpleNamespace(
+        current_round=19,
+        twitter_enabled=True,
+        reddit_enabled=True,
+        twitter_completed=True,
+        reddit_completed=True,
+        error=None,
+    )
+
+    PipelineOrchestrator._reconcile_completed_simulation_state(simulation, run_state)
+
+    assert simulation.status == _po.SimulationStatus.COMPLETED
+    assert simulation.current_round == 19
+    assert simulation.twitter_status == "completed"
+    assert simulation.reddit_status == "completed"
+    assert simulation.error is None
+
+
+def test_reconcile_completed_simulation_state_keeps_legacy_platforms_unknown():
+    simulation = SimpleNamespace(
+        status=_po.SimulationStatus.COMPLETED,
+        enable_twitter=True,
+        enable_reddit=True,
+        current_round=0,
+        twitter_status="not_started",
+        reddit_status="not_started",
+        error=None,
+    )
+
+    PipelineOrchestrator._reconcile_completed_simulation_state(
+        simulation,
+        run_state=None,
+        run_summary={"rounds_executed": 19},
+    )
+
+    assert simulation.current_round == 19
+    assert simulation.twitter_status == "unknown"
+    assert simulation.reddit_status == "unknown"
+
+
+def test_reconcile_loaded_legacy_run_state_uses_simulation_enable_flags(
+    tmp_path, monkeypatch
+):
+    from app.services.simulation_runner import SimulationRunner
+
+    simulation_id = "sim_legacy_enabled_flags"
+    run_dir = tmp_path / simulation_id
+    run_dir.mkdir()
+    (run_dir / "run_state.json").write_text(
+        json.dumps({
+            "simulation_id": simulation_id,
+            "runner_status": "completed",
+            "current_round": 19,
+            "twitter_completed": True,
+            "reddit_completed": False,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(SimulationRunner, "RUN_STATE_DIR", str(tmp_path))
+
+    loaded = SimulationRunner._load_run_state(simulation_id)
+    assert loaded is not None
+    assert loaded.twitter_enabled is None
+    assert loaded.reddit_enabled is None
+
+    simulation = SimpleNamespace(
+        status=_po.SimulationStatus.RUNNING,
+        enable_twitter=True,
+        enable_reddit=False,
+        current_round=0,
+        twitter_status="not_started",
+        reddit_status="not_started",
+        error=None,
+    )
+    PipelineOrchestrator._reconcile_completed_simulation_state(
+        simulation,
+        run_state=loaded,
+        run_summary={"rounds_executed": 19},
+    )
+
+    assert simulation.twitter_status == "completed"
+    assert simulation.reddit_status == "disabled"
 
 
 def test_report_agent_accepts_charts_manifest_kwarg():

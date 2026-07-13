@@ -36,6 +36,12 @@ dependencies = [
     # 编码检测（支持非UTF-8编码的文本文件）
     "charset-normalizer>=3.0.0",
     "chardet>=5.0.0",
+
+    # 确定性预测可视化：Plotly 交互图 + Kaleido 静态导出，matplotlib 为无 Chrome/导出失败回退。
+    # 这些是默认开启的生产能力，不得只靠开发机里偶然残留的包；否则 `uv sync` 会卸载整套图表栈。
+    "plotly>=5.18.0",
+    "kaleido>=1.3.0",
+    "matplotlib>=3.7.0",
     
     # 工具库
     "python-dotenv>=1.0.0",
