@@ -59,7 +59,9 @@ limits rather than silently presenting a partial history as complete.
   re-verified are explicitly labeled incomplete rather than presented as full.
 - Backend 2,171/2,171, frontend 18/18, production build, smoke, environment,
   dependency, diff, deployed-bridge parity, API, and browser gates are green.
-  No paid pipeline was launched; commit/push/public Pages acceptance remain.
+  Implementation commit `3ca713a` is pushed to both canonical `main` branches;
+  GitHub Pages serves the expected log checksum and passes fresh public browser
+  acceptance with zero console messages. No paid pipeline was launched.
 
 ## 2026-07-13 LOOP-012 — stage forensics and decision-relevant visual evidence
 
