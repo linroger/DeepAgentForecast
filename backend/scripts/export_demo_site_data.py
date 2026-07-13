@@ -18,6 +18,7 @@ else without network calls.
 
 Usage:
     cd backend && uv run python scripts/export_demo_site_data.py [--skip-graph] [--only RUN_KEY]
+    cd backend && uv run python scripts/export_demo_site_data.py --only RUN_KEY --research-log-only
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from urllib.parse import unquote, urlsplit
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.config import Config  # noqa: E402
+from app.services.research_progress import merged_research_progress_full  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 UPLOADS = os.path.join(ROOT, "backend", "uploads")
@@ -88,6 +90,87 @@ def _sha256_file(path: str) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def export_research_log(
+    handoff_dir: str, output_dir: str, *, retain_existing_if_missing: bool = False,
+) -> dict:
+    """Publish the complete canonical recorded root/track/attempt history.
+
+    A provenance-only refresh is strict. The broad legacy demo exporter may,
+    however, encounter an old pipeline whose source progress logs have already
+    been garbage-collected. In that case it can retain a pre-existing published
+    log, but must explicitly downgrade ``complete`` instead of claiming that the
+    retained bytes were re-verified against canonical sources.
+    """
+    snapshot = merged_research_progress_full(handoff_dir)
+    if snapshot.source_count == 0:
+        retained_path = os.path.join(output_dir, "research_log.txt")
+        if retain_existing_if_missing and os.path.isfile(retained_path):
+            with open(retained_path, encoding="utf-8") as handle:
+                retained_lines = handle.read().splitlines()
+            return {
+                "line_count": len(retained_lines),
+                "source_count": 0,
+                "complete": False,
+                "event_fidelity": "summarized_progress_events",
+                "retained_legacy_artifact": True,
+            }
+        raise RuntimeError("no research progress logs found for static export")
+    os.makedirs(output_dir, exist_ok=True)
+    rendered = "\n".join(snapshot.lines)
+    if rendered:
+        rendered += "\n"
+    with open(os.path.join(output_dir, "research_log.txt"), "w", encoding="utf-8") as f:
+        f.write(rendered)
+    return {
+        "line_count": len(snapshot.lines),
+        "source_count": snapshot.source_count,
+        "complete": True,
+        "event_fidelity": "summarized_progress_events",
+    }
+
+
+def refresh_demo_research_log(
+    key: str, pipeline_id: str, *, require_publishable: bool = False,
+) -> dict:
+    """Refresh prompt/log provenance without regenerating unrelated demo assets."""
+    state = _read_json(os.path.join(UPLOADS, "pipelines", pipeline_id, "pipeline_state.json"))
+    if not isinstance(state, dict):
+        raise RuntimeError(f"pipeline state missing for {pipeline_id}")
+    if require_publishable:
+        validate_publishable_run(pipeline_id, state)
+
+    output_dir = os.path.join(OUT_ROOT, key)
+    metadata_path = os.path.join(output_dir, "meta.json")
+    metadata = _read_json(metadata_path)
+    if not isinstance(metadata, dict):
+        raise RuntimeError(f"demo metadata missing for {key}")
+    if metadata.get("pipeline_id") != pipeline_id:
+        raise RuntimeError(
+            f"demo metadata pipeline id {metadata.get('pipeline_id')!r} does not match {pipeline_id!r}"
+        )
+
+    log_metadata = export_research_log(
+        os.path.join(UPLOADS, "pipelines", pipeline_id, "handoff"),
+        output_dir,
+    )
+    metadata["prompt"] = state.get("prompt", "")
+    metadata["research_log"] = log_metadata
+    artifact_sha256 = metadata.get("artifact_sha256")
+    if not isinstance(artifact_sha256, dict):
+        artifact_sha256 = {}
+        metadata["artifact_sha256"] = artifact_sha256
+    artifact_sha256["research_log.txt"] = _sha256_file(
+        os.path.join(output_dir, "research_log.txt")
+    )
+    # The tracked demo metadata is human-reviewed and conventionally uses a
+    # two-space indent. Preserve that presentation so a provenance-only refresh
+    # does not create a whole-file formatting diff.
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    return log_metadata
 
 
 def _load_bound_project(uploads: str, project_id: str, graph_id: str) -> dict:
@@ -557,9 +640,11 @@ def export_run(
     handoff = os.path.join(UPLOADS, "pipelines", pipeline_id, "handoff")
 
     # stage 1 — research log + dossier (+ structured extraction when present)
-    log_src = os.path.join(handoff, "research_progress.log")
-    if os.path.exists(log_src):
-        shutil.copyfile(log_src, os.path.join(out, "research_log.txt"))
+    research_log = export_research_log(
+        handoff,
+        out,
+        retain_existing_if_missing=True,
+    )
     dossier_src = os.path.join(handoff, "research_report.md")
     with open(dossier_src, encoding="utf-8") as f:
         dossier_md = f.read()
@@ -668,6 +753,7 @@ def export_run(
         "rounds": run_state.get("total_rounds"),
         "personas": len(agents) if isinstance(agents, list) else None,
         "has_actors": os.path.exists(os.path.join(handoff, "actors.json")),
+        "research_log": research_log,
         "dossier_assets": dossier_assets,
         "report_assets": report_assets,
         "artifact_sha256": artifact_sha256,
@@ -693,16 +779,29 @@ def main() -> int:
         action="store_true",
         help="fail unless the pipeline and final read-only publication audit pass",
     )
+    ap.add_argument(
+        "--research-log-only",
+        action="store_true",
+        help="refresh only prompt + exact merged research log metadata/assets",
+    )
     args = ap.parse_args()
 
     runs = {args.only: RUNS[args.only]} if args.only else RUNS
     for key, pid in runs.items():
-        export_run(
-            key,
-            pid,
-            skip_graph=args.skip_graph,
-            require_publishable=args.require_publishable,
-        )
+        if args.research_log_only:
+            metadata = refresh_demo_research_log(
+                key,
+                pid,
+                require_publishable=args.require_publishable,
+            )
+            print(f"ok {key}: refreshed research provenance ({metadata['line_count']} lines)")
+        else:
+            export_run(
+                key,
+                pid,
+                skip_graph=args.skip_graph,
+                require_publishable=args.require_publishable,
+            )
     return 0
 
 

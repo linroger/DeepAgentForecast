@@ -40,6 +40,22 @@ def _plog(mod, tmp_path):
 LIVE_CONTENT = "Real page content. " * 20  # >=200 chars, no dead-fetch sentinel
 
 
+def test_progress_log_reopen_appends_instead_of_overwriting_prior_attempt(mod, tmp_path):
+    path = tmp_path / "progress.log"
+    first = mod.ProgressLog(path)
+    first.write("stage", "first attempt")
+    first.close()
+
+    second = mod.ProgressLog(path)
+    second.write("stage", "recovered attempt")
+    second.close()
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2
+    assert lines[0].endswith("[stage] first attempt")
+    assert lines[1].endswith("[stage] recovered attempt")
+
+
 # ---------------------------------------------------------------------------
 # RES-2: per-turn fetch accounting (id pairing, FIFO fallback, locked merge)
 # ---------------------------------------------------------------------------

@@ -10,6 +10,12 @@
   "rounds": 19,
   "personas": 12,
   "has_actors": true,
+  "research_log": {
+    "line_count": 1523,
+    "source_count": 4,
+    "complete": true,
+    "event_fidelity": "summarized_progress_events"
+  },
   "dossier_assets": [
     "research-charts/actor_network.png",
     "research-charts/actor_network.html",
@@ -32,7 +38,7 @@
     "charts/forecast_revisions.png"
   ],
   "artifact_sha256": {
-    "research_log.txt": "63bfd56c15e2540e2523acf6be1c8ca630a75537dfab8850d0f3d2fcecf277f7",
+    "research_log.txt": "9d2145151a77df4a2f098e60bbe486527f9c962abea569eea3ec539b601a2e08",
     "dossier.md": "5284c53666776b55c6c545b707d5446db07af0dfed34fe5c6ebc8c7733ab2e0b",
     "actors.json": "6ae1ab071dc797f2b6c95d66be440733eb6ae21885db003ddac3be06812bc2fb",
     "sources.json": "c2094ce77a871b3e7be71f9fa5d7c2b67378d4493b8de9afc605e1787351a1db",

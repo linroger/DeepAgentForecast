@@ -181,11 +181,12 @@ export function editDossier(pipelineId, payload) {
  * 研究子进程进度日志（tail）
  * @param {String} pipelineId
  * @param {Number} lines
+ * @param {'tail'|'full'} scope recurring bounded tail or explicit exact snapshot
  */
-export function getProgressLog(pipelineId, lines = 200) {
+export function getProgressLog(pipelineId, lines = 200, scope = 'tail') {
   return service({
     url: `/api/research/${pipelineId}/progress`,
     method: 'get',
-    params: { lines }
+    params: { lines, scope }
   })
 }

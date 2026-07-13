@@ -1,5 +1,66 @@
 # PLANS.md — Agentic Workflow Refinement Program
 
+## 2026-07-13 LOOP-013 — complete research provenance in localhost and demos
+
+### Intent
+
+Before the next paid forecast run, make the initiating question and the complete
+deep-research event history visible and auditable in both the live Vue workflow
+and the static demo. Preserve the existing bounded tail endpoint for efficient
+polling, add an explicit full-history snapshot contract, and make static export
+use the same multi-track merge semantics instead of copying only the 33-line root
+handoff summary.
+
+### Acceptance criteria
+
+| ID | Criterion | Evidence |
+|---|---|---|
+| O1 | The submitted prompt remains visible after launch and when reopening history | Localhost run view renders the prompt returned by `pipeline_state.json`; browser smoke verifies the exact text |
+| O2 | Live logs never discard already-observed history | Initial full snapshot plus incremental tail merge preserves early and late events; frontend regression covers overlap and deduplication |
+| O3 | Completed logs are exact and complete | The full-history API reports an exact total and includes root plus every valid `track_N` log without a silent cap |
+| O4 | Static demos publish the complete research history | Exported `research_log.txt` is the canonical chronological multi-track merge, and metadata records exact line/source counts |
+| O5 | The demo makes provenance obvious | The prompt is persistently visible and the deep-research panel reports full line/source coverage |
+| Q1 | The slice is safe for a new run | Focused backend/frontend tests, complete frontend tests/build, backend quality gates, exporter replay, API smoke, and browser acceptance pass |
+
+### Execution order
+
+1. Characterize the current root-versus-track artifacts and API/UI truncation.
+2. Introduce one reusable full-history merge alongside the existing bounded tail.
+3. Wire initial/final snapshots plus incremental tail accumulation into localhost.
+4. Export and render the exact merged history and prompt metadata in the demo.
+5. Re-export the EV demo, run deterministic gates, then verify localhost and the
+   static page in a real browser before release.
+
+### Risk boundary
+
+No paid research, graph, simulation, or report generation is required. Existing
+run artifacts remain immutable; only deterministic reads and tracked demo output
+are permitted. Full-history reads MUST fail explicitly on unsafe files or resource
+limits rather than silently presenting a partial history as complete.
+
+### Verified implementation outcome (2026-07-13T13:33:00Z)
+
+- The live and static surfaces now show the canonical initiating prompt and all
+  persisted research progress events from root, track, and preserved-attempt
+  sources. User-facing labels explicitly distinguish this summarized event
+  stream from a raw model transcript.
+- Localhost performs one full hydration, cheap overlap-aware bounded tails, and
+  one distinct terminal snapshot; failed/cancelled states are covered, and logs
+  over 2,000 rows use deterministic paging without dropping data.
+- Research lane reopen appends instead of overwriting prior events. Failed or
+  cancelled global-synthesis logs are retained before staging cleanup.
+- Independent review found and closed two final edge cases: concurrent-track
+  late arrivals now merge chronologically without duplicating a bounded tail,
+  and structured forecasts are exposed only when their exact bytes are bound
+  by the current hard-passed final audit.
+- The EV demo publishes 1,523 rows from four sources (33 root + 1,490 track),
+  with exact boundary events and SHA-256 provenance. Selective export prevents
+  unrelated report/chart regeneration; retained legacy logs that cannot be
+  re-verified are explicitly labeled incomplete rather than presented as full.
+- Backend 2,171/2,171, frontend 18/18, production build, smoke, environment,
+  dependency, diff, deployed-bridge parity, API, and browser gates are green.
+  No paid pipeline was launched; commit/push/public Pages acceptance remain.
+
 ## 2026-07-13 LOOP-012 — stage forensics and decision-relevant visual evidence
 
 ### Intent

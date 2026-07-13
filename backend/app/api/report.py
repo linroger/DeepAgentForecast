@@ -362,6 +362,38 @@ def get_report(report_id: str):
         }), 500
 
 
+@report_bp.route('/<report_id>/forecast', methods=['GET'])
+def get_report_forecast(report_id: str):
+    """Return the optional structured forecast used by the local report UI.
+
+    The stable ``/api/v1`` SDK is intentionally feature-gated and may be
+    disabled on a local installation.  The first-party SPA, however, is always
+    allowed to read a *publishable* report's forecast dashboard.  Returning a
+    successful ``forecast: null`` payload for audited legacy reports keeps that
+    optional dashboard degrade-safe without creating expected 404/409 console
+    noise before a new run.
+    """
+    report = ReportManager.get_report(report_id)
+    if report is None:
+        return jsonify({
+            "success": False,
+            "error": f"报告不存在: {report_id}",
+        }), 404
+    if not ReportManager.is_publishable(report_id):
+        return _publication_rejection(report_id)
+
+    forecast = ReportManager.load_structured_forecast(report_id)
+    return jsonify({
+        "success": True,
+        "data": {
+            "report_id": report_id,
+            "simulation_id": report.simulation_id,
+            "forecast": forecast,
+            "available": forecast is not None,
+        },
+    })
+
+
 @report_bp.route('/by-simulation/<simulation_id>', methods=['GET'])
 def get_report_by_simulation(simulation_id: str):
     """

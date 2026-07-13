@@ -235,8 +235,8 @@ const scrollEl = ref(null)
 
 // VIZ-1：可视化清单（PNG 图表 + 图注）。空数组 → 不渲染图区（degrade-safe）。
 const vizManifest = ref([])
-// FORECAST-DASH：结构化预测对象（GET /api/v1/forecast/<id> 的 data.forecast）。
-// 404/409/网络错误（旧报告 / 未启用 REPORT_STRUCTURED_FORECAST / API_V1 关闭）→ null → 仪表盘隐藏。
+// FORECAST-DASH：结构化预测对象（GET /api/report/<id>/forecast 的 data.forecast）。
+// 404/409/网络错误（报告缺失或未通过发布门）→ null → 仪表盘隐藏。
 const forecastPayload = ref(null)
 // BILINGUAL：当前展示语种。null=原文（markdown_content）；否则为某翻译语种码（'en'|'zh'）。
 const activeLang = ref(null)
@@ -310,7 +310,7 @@ async function loadVizManifest() {
   }
 }
 
-// FORECAST-DASH：拉取结构化预测。任何失败（404 报告不存在/API_V1 关闭、409 未启用、网络错误）
+// FORECAST-DASH：拉取结构化预测。旧报告会返回 forecast:null；其余失败（404/409/网络错误）
 // → null → 仪表盘整体隐藏，报告正文不受影响（degrade-safe）。
 async function loadForecast() {
   try {

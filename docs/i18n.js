@@ -79,6 +79,12 @@
     'viewer.backlist':  { en: 'Back to the demo list →', zh: '返回演示列表 →' },
 
     'log.intro':        { en: 'Live console of the DeerFlow deep-research subprocess — every search, fetch and synthesis step of stage 1.', zh: 'DeerFlow 深度研究子进程的实时控制台 —— 阶段 1 的每一次搜索、抓取与综合。' },
+    'log.prompt':       { en: 'Initial research / forecast prompt', zh: '初始研究 / 预测提示词' },
+    'log.history':      { en: 'Complete recorded research-event history', zh: '完整的已记录研究事件历史' },
+    'log.historyPartial': { en: 'Recorded history · completeness not re-verified', zh: '已记录历史 · 完整性未经重新验证' },
+    'log.lines':        { en: 'lines', zh: '行' },
+    'log.sources':      { en: 'log sources', zh: '个日志源' },
+    'log.complete':     { en: 'all recorded events', zh: '全部已记录事件' },
 
     'dossier.actors':   { en: 'Researched actors', zh: '调研得到的行动者' },
     'dossier.actorsub': { en: 'Extracted by the research agent; these seed the ontology, the personas and the simulation’s initial posts.', zh: '由研究 Agent 提取；它们为本体、人格与模拟初始帖子提供种子。' },

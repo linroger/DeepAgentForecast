@@ -142,6 +142,11 @@
           </div>
         </div>
 
+        <div class="run-prompt-card">
+          <span class="run-prompt-label">{{ L('初始研究 / 预测问题', 'Initial research / forecast prompt') }}</span>
+          <p>{{ runPrompt || L('正在载入原始问题…', 'Loading the original prompt…') }}</p>
+        </div>
+
         <div class="run-layout">
           <aside class="rail">
             <StageTimeline :stages="stages" :current-stage="currentStage" :mode="mode" :global-progress="globalProgress" />
@@ -157,7 +162,8 @@
             </div>
 
             <div class="tab-body">
-              <ResearchConsole v-show="activeTab==='log'" :log-lines="logLines" />
+              <ResearchConsole v-show="activeTab==='log'" :log-lines="logLines"
+                :history-meta="logHistoryMeta" @refresh="refreshFullResearchLog" />
               <DossierViewer v-show="activeTab==='dossier'" :dossier="dossier"
                 :pipeline-id="pipelineId" :editable="canContinue" @saved-continue="continueToFull" />
               <div v-show="activeTab==='graph'" class="graph-wrap" :class="{ max: graphMax }">
@@ -190,7 +196,11 @@ import { useRouter } from 'vue-router'
 import { runPipeline, cancelPipeline, resumePipeline, getPipelineStatus, getProgressLog, getDossier, continuePipeline, getPreflight } from '../api/research'
 import { getGraphData } from '../api/graph'
 import { locale, setLocale, L } from '../i18n'
-import { liveLogRevision } from '../utils/liveProgress'
+import {
+  liveLogRevision,
+  mergeProgressLines,
+  needsFinalProgressSnapshot
+} from '../utils/liveProgress'
 import StageTimeline from '../components/research/StageTimeline.vue'
 import ResearchConsole from '../components/research/ResearchConsole.vue'
 import DossierViewer from '../components/research/DossierViewer.vue'
@@ -287,7 +297,15 @@ const stages = ref({})
 const graphId = ref('')
 const simulationId = ref('')
 const reportId = ref('')
+const runPrompt = ref('')
 const logLines = ref([])
+const logSourceCount = ref(0)
+const logHistoryHydrated = ref(false)
+const logHistoryFinalized = ref(false)
+const logInitialSnapshotAttempted = ref(false)
+const logFinalSnapshotAttempts = ref(0)
+const logHistoryLoading = ref(false)
+const logHistoryError = ref('')
 const dossier = ref(null)
 const showHistory = ref(false)
 
@@ -305,11 +323,20 @@ const seedActorNames = computed(() => {
   return list.map(x => x && x.name).filter(Boolean)
 })
 
+const logHistoryMeta = computed(() => ({
+  sourceCount: logSourceCount.value,
+  totalExact: logHistoryHydrated.value,
+  finalized: logHistoryFinalized.value,
+  loading: logHistoryLoading.value,
+  error: logHistoryError.value
+}))
+
 let pollTimer = null
 let dossierFetched = false
 let pollFailures = 0
 let connErrorShown = false
 const POLL_FAILURE_THRESHOLD = 4 // 连续 4 次（约 10s）轮询失败才提示，容忍偶发抖动
+const MAX_FINAL_SNAPSHOT_ATTEMPTS = 2
 
 // FE-1: 自适应轮询 —— 状态未变化时把间隔从 2.5s 逐步拉到 12s，标签页隐藏时暂停，
 // 重新可见时立即拉一次。降低长管线（数小时）空转时的后端/网络负载。
@@ -391,7 +418,7 @@ async function start() {
       language: researchLanguage.value || undefined,  // T5.5
       model: researchModel.value || undefined          // T5.5
     })
-    beginPipeline(res.data.pipeline_id)
+    beginPipeline(res.data.pipeline_id, prompt.value.trim())
   } catch (e) {
     error.value = e?.message || L('启动失败', 'Failed to start')
   } finally {
@@ -399,10 +426,79 @@ async function start() {
   }
 }
 
-function beginPipeline(id) {
+function beginPipeline(id, initialPrompt = '') {
   pipelineId.value = id
+  runPrompt.value = String(initialPrompt || '').trim()
+  logLines.value = []
+  logSourceCount.value = 0
+  logHistoryHydrated.value = false
+  logHistoryFinalized.value = false
+  logInitialSnapshotAttempted.value = false
+  logFinalSnapshotAttempts.value = 0
+  logHistoryLoading.value = false
+  logHistoryError.value = ''
   try { localStorage.setItem(ACTIVE_PIPELINE_KEY, id) } catch (e) { /* noop */ }
   startPolling()
+}
+
+function applyProgressLogResponse(response, { finalized = false } = {}) {
+  const data = response && response.data
+  if (!data || !Array.isArray(data.lines)) return false
+  const exact = data.scope === 'full' && data.total_exact === true && data.truncated === false
+  if (exact) {
+    logLines.value = data.lines.map(line => String(line ?? ''))
+    logHistoryHydrated.value = true
+    logHistoryFinalized.value = !!finalized
+    logHistoryError.value = ''
+  } else {
+    logLines.value = mergeProgressLines(logLines.value, data.lines)
+  }
+  logSourceCount.value = Math.max(logSourceCount.value, Number(data.source_count) || 0)
+  return exact
+}
+
+async function requestProgressLog(id, scope) {
+  if (!id) return null
+  if (scope === 'full') logHistoryLoading.value = true
+  try {
+    return await getProgressLog(id, 500, scope)
+  } catch (e) {
+    if (scope === 'full') {
+      logHistoryError.value = e?.message || L('全部记录事件载入失败', 'Failed to load recorded history')
+    }
+    return null
+  } finally {
+    if (scope === 'full') logHistoryLoading.value = false
+  }
+}
+
+async function refreshFullResearchLog() {
+  const id = pipelineId.value
+  if (!id || logHistoryLoading.value) return
+  // A snapshot may be labeled final only when the terminal boundary was
+  // already observed before this request began. If status crosses while the
+  // request is in flight, the polling path still owes a distinct final read.
+  const researchStatusBefore = stages.value.research && stages.value.research.status
+  const terminalBeforeRequest = needsFinalProgressSnapshot(
+    status.value, researchStatusBefore, false
+  )
+  const response = await requestProgressLog(id, 'full')
+  if (id !== pipelineId.value) return
+  logInitialSnapshotAttempted.value = true
+  if (terminalBeforeRequest) {
+    logFinalSnapshotAttempts.value = Math.max(1, logFinalSnapshotAttempts.value)
+  }
+  applyProgressLogResponse(response, { finalized: terminalBeforeRequest })
+}
+
+async function finalizeResearchLog(id, generation) {
+  while (logFinalSnapshotAttempts.value < MAX_FINAL_SNAPSHOT_ATTEMPTS) {
+    logFinalSnapshotAttempts.value += 1
+    const response = await requestProgressLog(id, 'full')
+    if (!pollActive || generation !== pollGeneration || id !== pipelineId.value) return false
+    if (applyProgressLogResponse(response, { finalized: true })) return true
+  }
+  return false
 }
 
 const cancelling = ref(false)
@@ -431,6 +527,10 @@ async function resume() {
     const id = (res && res.data && res.data.pipeline_id) || pipelineId.value
     pipelineId.value = id
     status.value = 'running'
+    // A failed/cancelled terminal snapshot is exact only for the pre-resume
+    // stream. The resumed producer may append new research events.
+    logHistoryFinalized.value = false
+    logFinalSnapshotAttempts.value = 0
     try { localStorage.setItem(ACTIVE_PIPELINE_KEY, id) } catch (e) { /* noop */ }
     startPolling()
   } catch (e) {
@@ -506,13 +606,17 @@ async function poll(generation) {
   const requestedPipelineId = pipelineId.value
   if (!requestedPipelineId) return
   try {
-    // 研究日志只在研究阶段增长：研究完成后（已拿到过一次完整 tail）就不再
-    // 每 2.5s 重新拉 400 行，省掉整个管线生命周期里的无效轮询。
+    // 首次打开做一次精确全量 hydration；随后只拉有界 tail 并累积，避免每 2.5s
+    // 对数小时日志做 O(file) 扫描。研究完成边界再做一次精确快照，弥合任何突发窗口。
     const researchRunning = !(stages.value.research && stages.value.research.status === 'completed') || logLines.value.length === 0
+    const progressScope = !logHistoryHydrated.value && !logInitialSnapshotAttempted.value
+      ? 'full'
+      : (researchRunning ? 'tail' : null)
+    if (progressScope === 'full') logInitialSnapshotAttempted.value = true
     const [st, lg] = await Promise.all([
       getPipelineStatus(requestedPipelineId),
-      researchRunning
-        ? getProgressLog(requestedPipelineId, 400).catch(() => null)
+      progressScope
+        ? requestProgressLog(requestedPipelineId, progressScope)
         : Promise.resolve(null)
     ])
     if (!pollActive || generation !== pollGeneration || requestedPipelineId !== pipelineId.value) return
@@ -524,10 +628,19 @@ async function poll(generation) {
     currentStage.value = d.current_stage || ''
     stages.value = d.stages || {}
     if (d.mode) mode.value = d.mode
+    if (typeof d.prompt === 'string') runPrompt.value = d.prompt
     if (d.graph_id) graphId.value = d.graph_id
     if (d.simulation_id) simulationId.value = d.simulation_id
     if (d.report_id) reportId.value = d.report_id
-    if (lg) logLines.value = (lg.data && lg.data.lines) || []
+    const researchStatus = stages.value.research && stages.value.research.status
+    const researchDone = researchStatus === 'completed'
+    // An initial full hydration is exact only at the instant it was read. Never
+    // promote it to "final" merely because the concurrently fetched status has
+    // crossed a boundary; always take one distinct post-observation snapshot.
+    applyProgressLogResponse(lg, { finalized: false })
+    if (needsFinalProgressSnapshot(status.value, researchStatus, logHistoryFinalized.value)) {
+      await finalizeResearchLog(requestedPipelineId, generation)
+    }
 
     // FE-1: 有进展则复位为快节奏，连续无变化则把间隔向 POLL_MAX_MS 拉升（~1.5x 阶梯）。
     const fp = pollFingerprint()
@@ -538,7 +651,6 @@ async function poll(generation) {
     }
     lastFingerprint = fp
 
-    const researchDone = stages.value.research && stages.value.research.status === 'completed'
     if (researchDone && !dossierFetched) {
       dossierFetched = true
       try {
@@ -609,7 +721,11 @@ function resetState() {
   stopPolling()
   status.value = 'running'; globalProgress.value = 0; currentStage.value = ''
   stages.value = {}; graphId.value = ''; simulationId.value = ''; reportId.value = ''
-  logLines.value = []; dossier.value = null; dossierFetched = false
+  runPrompt.value = ''; logLines.value = []; logSourceCount.value = 0
+  logHistoryHydrated.value = false; logHistoryFinalized.value = false
+  logInitialSnapshotAttempted.value = false; logFinalSnapshotAttempts.value = 0
+  logHistoryLoading.value = false; logHistoryError.value = ''
+  dossier.value = null; dossierFetched = false
   graphData.value = null; graphLoading.value = false; graphMax.value = false
   activeTab.value = 'log'; userPickedTab.value = false; error.value = ''
 }
@@ -717,6 +833,9 @@ onUnmounted(stopPolling)
 .resume-btn { color:#166534; border-color:#B7E4C7; }
 .resume-btn:hover { border-color:#16a34a; }
 .resume-btn:disabled { color:#bbb; border-color:#E5E5E5; cursor:not-allowed; }
+.run-prompt-card { border:1px solid var(--border); border-left:3px solid var(--orange); background:#FAFAFA; padding:14px 18px; margin:0 0 22px; }
+.run-prompt-label { display:block; margin-bottom:6px; color:var(--orange); font-family:var(--mono); font-size:.66rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+.run-prompt-card p { margin:0; color:#222; font-size:.94rem; line-height:1.65; white-space:pre-wrap; overflow-wrap:anywhere; }
 
 .run-layout { display:grid; grid-template-columns:330px 1fr; gap:24px; align-items:start; }
 .rail { position:sticky; top:84px; }
@@ -752,5 +871,7 @@ onUnmounted(stopPolling)
   .param, .num-input { width:100%; }
   .seg { width:100%; }
   .seg button { flex:1; min-width:0; padding:9px 10px; }
+  .run-header { align-items:flex-start; flex-direction:column; gap:14px; }
+  .run-actions { flex-wrap:wrap; }
 }
 </style>

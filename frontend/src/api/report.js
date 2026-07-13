@@ -99,17 +99,17 @@ export const reportPdfUrl = (reportId, lang) => {
 }
 
 /**
- * FORECAST-DASH：获取报告的机器可读结构化预测对象（/api/v1 稳定表面，后端 sdk.py）。
- * 返回 { success, data: { report_id, simulation_id, forecast, resolved } }；
+ * FORECAST-DASH：获取报告的机器可读结构化预测对象（第一方报告 API）。
+ * 返回 { success, data: { report_id, simulation_id, forecast, available } }；
  * forecast 内含 scenarios / confidence / ensemble / market_comparison 等字段。
  * 降级路径（调用方一律按「无仪表盘」处理，不报错）：
  *   · 报告不存在 → 404；
- *   · 报告存在但未启用 REPORT_STRUCTURED_FORECAST（旧报告）→ 409；
- *   · API_V1_ENABLED 关闭（蓝图未注册）→ 404。
+ *   · 已审计旧报告没有 forecast.json → 200 + forecast: null；
+ *   · 报告未通过发布门 → 409。
  * @param {string} reportId
  */
 export const getForecast = (reportId) => {
-  return service.get(`/api/v1/forecast/${reportId}`)
+  return service.get(`/api/report/${reportId}/forecast`)
 }
 
 /**

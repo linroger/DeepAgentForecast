@@ -232,15 +232,7 @@ def _resolved_path(report_id: str) -> str:
 
 def _load_forecast(report_id: str):
     """读取并解析某报告的结构化预测对象；不存在/损坏返回 None。"""
-    path = _forecast_path(report_id)
-    if not os.path.exists(path):
-        return None
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            obj = json.load(f)
-        return obj if isinstance(obj, dict) else None
-    except (OSError, json.JSONDecodeError):
-        return None
+    return ReportManager.load_structured_forecast(report_id)
 
 
 @sdk_bp.route('/forecast/<report_id>', methods=['GET'])

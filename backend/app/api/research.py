@@ -11,7 +11,7 @@
     GET    /status/<pipeline_id>     聚合的五阶段进度
     GET    /list                     最近管线列表
     GET    /<pipeline_id>/dossier    研究报告 markdown + actors/sources
-    GET    /<pipeline_id>/progress   研究子进程进度日志（tail）
+    GET    /<pipeline_id>/progress   研究子进程进度日志（bounded tail / exact full snapshot）
 """
 
 import os
@@ -22,7 +22,11 @@ from flask import jsonify, request
 from . import research_bp
 from ..config import Config
 from ..services.pipeline_orchestrator import PipelineManager, PipelineOrchestrator, preflight_pipeline
-from ..services.research_progress import merged_research_progress_tail
+from ..services.research_progress import (
+    ResearchProgressLimitError,
+    merged_research_progress_full,
+    merged_research_progress_tail,
+)
 from ..utils.logger import get_logger
 
 logger = get_logger('mirofish.api.research')
@@ -535,31 +539,52 @@ def get_artifact(pipeline_id: str, name: str):
 
 @research_bp.route('/<pipeline_id>/progress', methods=['GET'])
 def get_progress_log(pipeline_id: str):
-    """返回研究子进程进度日志的实时合并尾部，用于前端控制台。
+    """返回研究子进程日志的有界尾部或全部已记录事件快照。
 
     并行研究时 producer 写在 ``handoff/track_N/research_progress.log``；根目录日志直到
-    单轨/收尾路径才可能存在。每个文件只读有界尾部，再按 ISO 时间戳合并、去重并截断，
-    因此轮询不会随数小时运行产生的多 MB 日志线性变慢。
+    单轨/收尾路径才可能存在。默认 ``scope=tail`` 每个文件只读有界尾部，因此周期轮询
+    不会随数小时运行产生的多 MB 日志线性变慢。``scope=full`` 是一次性 hydration / 审计
+    契约：读取并合并全部可信的已记录进度事件，保留重复行和完整持久化行；事件本身是适合
+    人类阅读的工具载荷摘要，并非原始模型 transcript。超过安全上限则明确 413，绝不把截断
+    结果冒充完整记录。
     """
-    handoff = PipelineManager.handoff_dir(pipeline_id)
+    if PipelineManager.load(pipeline_id) is None:
+        return jsonify({"success": False, "error": "管线不存在"}), 404
+    try:
+        handoff = PipelineManager.handoff_dir(pipeline_id)
+    except ValueError:
+        return jsonify({"success": False, "error": "管线不存在"}), 404
+    scope = str(request.args.get('scope', 'tail') or 'tail').strip().lower()
+    if scope not in {'tail', 'full'}:
+        return jsonify({"success": False, "error": "scope 必须是 tail 或 full"}), 400
     try:
         limit = int(request.args.get('lines', '200'))
     except ValueError:
         limit = 200
     try:
-        tail = merged_research_progress_tail(handoff, limit)
+        snapshot = (
+            merged_research_progress_full(handoff)
+            if scope == 'full'
+            else merged_research_progress_tail(handoff, limit)
+        )
+        total_exact = scope == 'full'
         response = jsonify({"success": True, "data": {
-            "lines": tail.lines,
-            "returned": len(tail.lines),
+            "scope": scope,
+            "lines": snapshot.lines,
+            "returned": len(snapshot.lines),
             # Exact historical line counts require an O(file) scan and are
-            # deliberately unavailable on this live bounded endpoint.
-            "total": None,
-            "total_exact": False,
-            "source_count": tail.source_count,
-            "truncated": tail.truncated,
+            # deliberately unavailable on the recurring bounded endpoint.
+            "total": len(snapshot.lines) if total_exact else None,
+            "total_exact": total_exact,
+            "snapshot_exact": total_exact,
+            "event_fidelity": "summarized_progress_events",
+            "source_count": snapshot.source_count,
+            "truncated": snapshot.truncated,
         }})
         response.headers["Cache-Control"] = "no-store, max-age=0"
         response.headers["Pragma"] = "no-cache"
         return response
+    except ResearchProgressLimitError as e:
+        return jsonify({"success": False, "error": str(e)}), 413
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

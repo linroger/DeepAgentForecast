@@ -1535,6 +1535,51 @@ def _track_artifacts_survived(handoff_dir: str) -> bool:
     return bool(isinstance(ckpt, dict) and ckpt.get("completed_passes"))
 
 
+def _preserve_research_attempt_progress(
+    source_dir: str,
+    handoff_dir: str,
+    *,
+    attempt: int,
+    outcome: str,
+    detail: str = "",
+) -> Optional[str]:
+    """Retain a failed/cancelled global-synthesis event log before cleanup.
+
+    Synthesis runs in disposable staging directories so partial reports cannot
+    leak into the research contract.  The human-readable event stream is safe
+    and valuable forensic evidence, however, so copy that one file into a
+    durable sidecar directory.  A unique name prevents later resumes from
+    overwriting an earlier attempt.
+    """
+    source = os.path.join(source_dir, "research_progress.log")
+    if not os.path.isfile(source) or os.path.islink(source):
+        return None
+    normalized_outcome = re.sub(r"[^A-Za-z0-9_-]+", "_", outcome or "unknown")
+    destination_dir = os.path.join(handoff_dir, "research_attempts")
+    destination = os.path.join(
+        destination_dir,
+        f"global_synthesis_{max(1, int(attempt))}_{normalized_outcome}_"
+        f"{uuid.uuid4().hex[:12]}.log",
+    )
+    try:
+        os.makedirs(destination_dir, exist_ok=True)
+        shutil.copy2(source, destination)
+        summary = " ".join(str(detail or "").split())[:1000]
+        kind = "error" if normalized_outcome == "failed" else "warn"
+        suffix = f": {summary}" if summary else ""
+        with open(destination, "a", encoding="utf-8") as handle:
+            handle.write(
+                f"{_utcnow()} [{kind}] global synthesis attempt {attempt} "
+                f"{normalized_outcome}{suffix}\n"
+            )
+        return destination
+    except OSError as exc:
+        logger.warning(
+            "无法保留全局综合尝试 %s 的研究进度日志: %s", attempt, exc,
+        )
+        return None
+
+
 _RESEARCH_CONTRACT_FILENAME = "research_contract_manifest.json"
 _RESEARCH_CONTRACT_FILES = (
     "research_report.md", "actor_dossier.md", "actors.json", "sources.json",
@@ -6534,10 +6579,24 @@ class PipelineOrchestrator:
                     final_res = candidate
                     synthesis_source_dir = synthesis_dir
                     break
-                except PipelineCancelled:
+                except PipelineCancelled as cancelled:
+                    _preserve_research_attempt_progress(
+                        synthesis_dir,
+                        handoff_dir,
+                        attempt=attempt,
+                        outcome="cancelled",
+                        detail=str(cancelled),
+                    )
                     shutil.rmtree(synthesis_dir, ignore_errors=True)
                     raise
                 except Exception as synthesis_error:  # noqa: BLE001 — bounded retry
+                    _preserve_research_attempt_progress(
+                        synthesis_dir,
+                        handoff_dir,
+                        attempt=attempt,
+                        outcome="failed",
+                        detail=f"{type(synthesis_error).__name__}: {synthesis_error}",
+                    )
                     synthesis_errors.append(
                         f"{type(synthesis_error).__name__}: {synthesis_error}"
                     )

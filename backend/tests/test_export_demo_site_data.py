@@ -13,6 +13,7 @@ from scripts.export_demo_site_data import (
     RUNS,
     copy_markdown_assets,
     copy_report_assets,
+    export_research_log,
     rebase_markdown_assets,
     rebase_report_assets,
     validate_retained_graph,
@@ -149,6 +150,104 @@ def healthy_publishable_run(tmp_path: Path) -> tuple[Path, dict, dict]:
 
 def test_ev_demo_points_to_latest_verified_pipeline() -> None:
     assert RUNS["ev-2035"] == "pipe_91aaf91f6392"
+
+
+def test_export_research_log_merges_root_and_tracks_with_exact_metadata(tmp_path: Path) -> None:
+    handoff = tmp_path / "handoff"
+    output = tmp_path / "site"
+    track = handoff / "track_1"
+    track.mkdir(parents=True)
+    (handoff / "research_progress.log").write_text(
+        "2026-01-01T00:00:02+00:00 [done] root\n",
+        encoding="utf-8",
+    )
+    (track / "research_progress.log").write_text(
+        "2026-01-01T00:00:00+00:00 [init] opening\n"
+        "2026-01-01T00:00:01+00:00 [tool] search\n",
+        encoding="utf-8",
+    )
+
+    metadata = export_research_log(str(handoff), str(output))
+
+    published = (output / "research_log.txt").read_text(encoding="utf-8").splitlines()
+    assert len(published) == 3
+    assert published[0].endswith("[track:1] [init] opening")
+    assert published[-1].endswith("[done] root")
+    assert metadata == {
+        "line_count": 3,
+        "source_count": 2,
+        "complete": True,
+        "event_fidelity": "summarized_progress_events",
+    }
+
+
+def test_export_research_log_retains_but_downgrades_legacy_artifact_without_sources(
+    tmp_path: Path,
+) -> None:
+    handoff = tmp_path / "handoff"
+    output = tmp_path / "site"
+    handoff.mkdir()
+    output.mkdir()
+    retained = output / "research_log.txt"
+    retained.write_text("old first\nold second\n", encoding="utf-8")
+
+    metadata = export_research_log(
+        str(handoff),
+        str(output),
+        retain_existing_if_missing=True,
+    )
+
+    assert retained.read_text(encoding="utf-8") == "old first\nold second\n"
+    assert metadata == {
+        "line_count": 2,
+        "source_count": 0,
+        "complete": False,
+        "event_fidelity": "summarized_progress_events",
+        "retained_legacy_artifact": True,
+    }
+
+
+def test_research_log_only_refresh_preserves_unrelated_demo_assets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    uploads = tmp_path / "uploads"
+    output_root = tmp_path / "site"
+    pipeline_id = "pipe_observable"
+    handoff = uploads / "pipelines" / pipeline_id / "handoff"
+    handoff.mkdir(parents=True)
+    _write_json(
+        uploads / "pipelines" / pipeline_id / "pipeline_state.json",
+        {"pipeline_id": pipeline_id, "prompt": "Exact initial prompt"},
+    )
+    (handoff / "research_progress.log").write_text(
+        "2026-01-01T00:00:00+00:00 [done] complete\n",
+        encoding="utf-8",
+    )
+    demo = output_root / "demo"
+    demo.mkdir(parents=True)
+    sentinel = demo / "verified-chart.png"
+    sentinel.write_bytes(b"verified-chart-bytes")
+    _write_json(
+        demo / "meta.json",
+        {
+            "pipeline_id": pipeline_id,
+            "prompt": "stale",
+            "artifact_sha256": {"verified-chart.png": "sealed"},
+        },
+    )
+    monkeypatch.setattr(exporter, "UPLOADS", str(uploads))
+    monkeypatch.setattr(exporter, "OUT_ROOT", str(output_root))
+
+    metadata = exporter.refresh_demo_research_log("demo", pipeline_id)
+
+    refreshed = json.loads((demo / "meta.json").read_text(encoding="utf-8"))
+    assert sentinel.read_bytes() == b"verified-chart-bytes"
+    assert refreshed["artifact_sha256"]["verified-chart.png"] == "sealed"
+    assert refreshed["prompt"] == "Exact initial prompt"
+    assert refreshed["research_log"] == metadata
+    assert refreshed["artifact_sha256"]["research_log.txt"] == hashlib.sha256(
+        (demo / "research_log.txt").read_bytes()
+    ).hexdigest()
 
 
 def test_validate_publishable_run_accepts_healthy_fixture(
@@ -505,6 +604,10 @@ def test_publishable_graph_404_fails_closed_without_rebuild(
     handoff.mkdir(parents=True)
     (handoff / "research_report.md").write_text(
         "# Audited dossier\n",
+        encoding="utf-8",
+    )
+    (handoff / "research_progress.log").write_text(
+        "2026-01-01T00:00:00+00:00 [done] research complete\n",
         encoding="utf-8",
     )
     _write_project_artifact(uploads)

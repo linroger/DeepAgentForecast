@@ -11,6 +11,9 @@ DeerFlow runs in **its own Python environment** (Python 3.12, with its `langchai
 dependency tree isolated from this backend) and is invoked as a **subprocess** that writes a
 file‑based "handoff contract" the backend consumes (`research_report.md`, `actors.json`,
 `sources.json`, `prediction_requirement.txt`, `meta.json`, `research_progress.log`).
+`research_progress.log` is an append-only, human-readable event stream: it preserves
+events across bounded retries/recovery while summarizing large tool payloads, so it is
+operational provenance rather than a raw model transcript.
 
 This folder is the **single source of truth** for that integration, so the whole bridge is
 reproducible from this repo. `./setup.sh` (at the project root) assembles the engine — preferring

@@ -9532,6 +9532,53 @@ class ReportManager:
         """获取完整报告Markdown文件路径"""
         return os.path.join(cls._get_report_folder(report_id), "full_report.md")
 
+    @classmethod
+    def load_structured_forecast(cls, report_id: str) -> Optional[Dict[str, Any]]:
+        """Load an optional forecast only when the final audit seals its bytes.
+
+        Legacy reports may be publishable without ``forecast.json``.  Merely
+        finding a parseable sidecar beside one of those reports is not proof
+        that it belongs to the audited publication bundle, so callers receive
+        ``None`` unless the current hard-passed audit explicitly records the
+        artifact as present and valid and its SHA-256 matches the exact bytes.
+        Customer-facing callers must additionally apply ``publication_status``
+        to the report itself before exposing the returned object.
+        """
+        audit_path = cls._get_report_final_audit_path(report_id)
+        try:
+            with open(audit_path, encoding="utf-8") as handle:
+                audit = json.load(handle)
+        except (OSError, ValueError, TypeError):
+            return None
+        if not isinstance(audit, dict):
+            return None
+        if audit.get("hard_passed") is not True or list(audit.get("hard_issues") or []):
+            return None
+        required_policy = int(getattr(
+            Config, "REPORT_FINAL_AUDIT_POLICY_VERSION", 3
+        ))
+        if audit.get("policy_version") != required_policy:
+            return None
+        structured = audit.get("structured_forecast")
+        if not isinstance(structured, dict):
+            return None
+        if structured.get("present") is not True or structured.get("valid") is not True:
+            return None
+        expected_sha = audit.get("forecast_sha256")
+        if not isinstance(expected_sha, str) or not expected_sha:
+            return None
+
+        path = os.path.join(cls._get_report_folder(report_id), "forecast.json")
+        try:
+            with open(path, "rb") as handle:
+                raw = handle.read()
+            if hashlib.sha256(raw).hexdigest() != expected_sha:
+                return None
+            forecast = json.loads(raw)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError):
+            return None
+        return forecast if isinstance(forecast, dict) else None
+
     # BILINGUAL：合法目标语种代码（同时用于路径构造与 API 校验，单一真源）。
     _TRANSLATION_LANGS = ("en", "zh")
 

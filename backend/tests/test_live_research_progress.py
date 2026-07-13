@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from flask import Flask
 
 from app.api import research_bp
@@ -11,6 +12,7 @@ from app.services.pipeline_orchestrator import PipelineManager
 from app.services.research_progress import (
     ResearchProgressEstimator,
     aggregate_parallel_progress,
+    merged_research_progress_full,
     merged_research_progress_tail,
 )
 
@@ -164,6 +166,61 @@ def test_multiline_continuation_keeps_source_order_instead_of_masking_live_tail(
     ]
 
 
+def test_full_progress_snapshot_preserves_early_rows_duplicates_and_exact_total(tmp_path):
+    root = tmp_path / "research_progress.log"
+    track = tmp_path / "track_1"
+    track.mkdir()
+    root.write_text(
+        "2026-01-01T00:00:03+00:00 [done] root summary\n",
+        encoding="utf-8",
+    )
+    repeated = "2026-01-01T00:00:01+00:00 [tool] repeated"
+    (track / "research_progress.log").write_text(
+        repeated + "\n" + repeated + "\n"
+        "2026-01-01T00:00:02+00:00 [result] later\n",
+        encoding="utf-8",
+    )
+
+    snapshot = merged_research_progress_full(str(tmp_path))
+
+    assert snapshot.source_count == 2
+    assert snapshot.truncated is False
+    assert len(snapshot.lines) == 4
+    assert snapshot.lines[:2] == [
+        "2026-01-01T00:00:01+00:00 [track:1] [tool] repeated",
+        "2026-01-01T00:00:01+00:00 [track:1] [tool] repeated",
+    ]
+    assert snapshot.lines[-1].endswith("[done] root summary")
+
+
+def test_full_progress_snapshot_includes_preserved_failed_attempt_logs(tmp_path):
+    attempts = tmp_path / "research_attempts"
+    attempts.mkdir()
+    (attempts / "global_synthesis_1_failed_abc123.log").write_text(
+        "2026-01-01T00:00:00+00:00 [error] first synthesis failed\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "research_progress.log").write_text(
+        "2026-01-01T00:00:01+00:00 [done] retry succeeded\n",
+        encoding="utf-8",
+    )
+
+    snapshot = merged_research_progress_full(str(tmp_path))
+
+    assert snapshot.source_count == 2
+    assert snapshot.lines[0].endswith(
+        "[attempt:global_synthesis_1_failed_abc123] [error] first synthesis failed"
+    )
+    assert snapshot.lines[-1].endswith("[done] retry succeeded")
+
+
+def test_full_progress_snapshot_fails_explicitly_instead_of_silently_truncating(tmp_path):
+    (tmp_path / "research_progress.log").write_text("0123456789\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="exceeds the full-history safety limit"):
+        merged_research_progress_full(str(tmp_path), max_total_bytes=4)
+
+
 def test_progress_endpoint_serves_track_logs_before_root_merge(tmp_path, monkeypatch):
     track = tmp_path / "track_3"
     track.mkdir()
@@ -173,6 +230,7 @@ def test_progress_endpoint_serves_track_logs_before_root_merge(tmp_path, monkeyp
         encoding="utf-8",
     )
     monkeypatch.setattr(PipelineManager, "handoff_dir", lambda _pipeline_id: str(tmp_path))
+    monkeypatch.setattr(PipelineManager, "load", lambda _pipeline_id: {"status": "running"})
 
     app = Flask(__name__)
     app.register_blueprint(research_bp, url_prefix="/api/research")
@@ -187,6 +245,49 @@ def test_progress_endpoint_serves_track_logs_before_root_merge(tmp_path, monkeyp
     assert payload["lines"][-1].endswith("[track:3] [tool] web_search(query=x)")
     assert response.headers["Cache-Control"] == "no-store, max-age=0"
     assert response.headers["Pragma"] == "no-cache"
+
+
+def test_progress_endpoint_serves_exact_full_history_on_explicit_scope(tmp_path, monkeypatch):
+    track = tmp_path / "track_2"
+    track.mkdir()
+    (tmp_path / "research_progress.log").write_text(
+        "2026-01-01T00:00:02+00:00 [done] root\n",
+        encoding="utf-8",
+    )
+    (track / "research_progress.log").write_text(
+        "2026-01-01T00:00:00+00:00 [init] first\n"
+        "2026-01-01T00:00:01+00:00 [tool] second\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(PipelineManager, "handoff_dir", lambda _pipeline_id: str(tmp_path))
+    monkeypatch.setattr(PipelineManager, "load", lambda _pipeline_id: {"status": "completed"})
+
+    app = Flask(__name__)
+    app.register_blueprint(research_bp, url_prefix="/api/research")
+    response = app.test_client().get("/api/research/pipe_live/progress?scope=full")
+
+    assert response.status_code == 200
+    payload = response.get_json()["data"]
+    assert payload["scope"] == "full"
+    assert payload["returned"] == payload["total"] == 3
+    assert payload["total_exact"] is True
+    assert payload["snapshot_exact"] is True
+    assert payload["event_fidelity"] == "summarized_progress_events"
+    assert payload["truncated"] is False
+    assert payload["lines"][0].endswith("[track:2] [init] first")
+    assert payload["lines"][-1].endswith("[done] root")
+
+
+def test_progress_endpoint_returns_not_found_for_unknown_pipeline():
+    app = Flask(__name__)
+    app.register_blueprint(research_bp, url_prefix="/api/research")
+
+    response = app.test_client().get(
+        "/api/research/pipe_definitely_missing_loop013/progress?scope=full"
+    )
+
+    assert response.status_code == 404
+    assert response.get_json()["success"] is False
 
 
 def test_status_endpoint_is_never_cached(monkeypatch):

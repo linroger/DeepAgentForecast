@@ -9,6 +9,28 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 
 
+class ClosedStreamSafeHandler(logging.StreamHandler):
+    """Console handler that stays silent after its captured stream is closed.
+
+    Test runners and process supervisors can replace and then close ``stdout``
+    before application ``atexit`` handlers finish.  Standard ``StreamHandler``
+    reports that expected lifecycle race as a noisy secondary logging error.
+    Normal logging behavior is unchanged while the stream remains available.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if self.stream is None or getattr(self.stream, "closed", False):
+            return
+        super().emit(record)
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        # Cover the narrow race where the stream closes after ``emit`` checks
+        # it but before ``StreamHandler`` writes the formatted record.
+        if self.stream is None or getattr(self.stream, "closed", False):
+            return
+        super().handleError(record)
+
+
 def _ensure_utf8_stdout():
     """
     确保 stdout/stderr 使用 UTF-8 编码
@@ -83,7 +105,7 @@ def setup_logger(name: str = 'mirofish', level: int = logging.DEBUG) -> logging.
     # 2. 控制台处理器 - 简洁日志（INFO及以上）
     # 确保 Windows 下使用 UTF-8 编码，避免中文乱码
     _ensure_utf8_stdout()
-    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler = ClosedStreamSafeHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(simple_formatter)
     
@@ -129,4 +151,3 @@ def error(msg, *args, **kwargs):
 
 def critical(msg, *args, **kwargs):
     logger.critical(msg, *args, **kwargs)
-

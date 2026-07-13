@@ -6,11 +6,42 @@ R2-RES-3 (advisory forecast-confidence penalty). No network / LLM / disk.
 
 from datetime import datetime, timedelta, timezone
 import hashlib
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from app.services.pipeline_orchestrator import PipelineOrchestrator
+from app.services.pipeline_orchestrator import (
+    PipelineOrchestrator,
+    _preserve_research_attempt_progress,
+)
+
+
+def test_failed_global_synthesis_progress_is_preserved_outside_disposable_stage(tmp_path):
+    stage = tmp_path / ".global-synthesis-1-temp"
+    handoff = tmp_path / "handoff"
+    stage.mkdir()
+    handoff.mkdir()
+    (stage / "research_progress.log").write_text(
+        "2026-01-01T00:00:00+00:00 [stage] synthesis started\n",
+        encoding="utf-8",
+    )
+
+    preserved = _preserve_research_attempt_progress(
+        str(stage),
+        str(handoff),
+        attempt=1,
+        outcome="failed",
+        detail="RuntimeError: provider timeout",
+    )
+
+    assert preserved is not None
+    preserved_path = handoff / "research_attempts" / Path(preserved).name
+    lines = preserved_path.read_text(encoding="utf-8").splitlines()
+    assert lines[0].endswith("[stage] synthesis started")
+    assert lines[-1].endswith(
+        "[error] global synthesis attempt 1 failed: RuntimeError: provider timeout"
+    )
 
 
 # ── R2-RES-7: as_of anchor validation ───────────────────────────────────────

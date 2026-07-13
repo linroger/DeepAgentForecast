@@ -1507,11 +1507,16 @@ def _utcnow() -> str:
 
 
 class ProgressLog:
-    """Append-only progress log. MiroFish tails this file for live updates."""
+    """Append-only progress log. MiroFish tails this file for live updates.
+
+    Reopening a lane can happen after a bounded retry, backend recovery, or
+    extract-only salvage.  Append mode preserves the already-recorded events
+    from those earlier attempts instead of silently replacing them.
+    """
 
     def __init__(self, path: Path):
         self._path = path
-        self._fh = path.open("w", encoding="utf-8")
+        self._fh = path.open("a", encoding="utf-8")
         # EXECPLAN2 I-0-4: the deep fan-out runs scoped workers in a ThreadPoolExecutor
         # that all call write() concurrently. Serialize the write→flush→print sequence
         # so log lines never interleave/corrupt. Single-threaded callers are unaffected.

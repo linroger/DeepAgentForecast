@@ -8,7 +8,23 @@
       </div>
 
       <div class="rc-header-right">
+        <span class="rc-history-state" :class="{ complete: historyMeta.finalized, warning: !!historyMeta.error }">
+          {{ historyStateLabel }}
+        </span>
+        <span class="rc-line-counter">{{ safeLines.length }} {{ L('行', 'lines') }}<template v-if="historyMeta.sourceCount"> · {{ historyMeta.sourceCount }} {{ L('个日志源', 'sources') }}</template></span>
         <span class="rc-tool-counter">{{ L('工具调用', 'Tool calls') }} {{ toolCallCount }}</span>
+
+        <div v-if="pageCount > 1" class="rc-pages" :aria-label="L('日志分页', 'Log pages')">
+          <span>{{ visibleRange }}</span>
+          <button type="button" :disabled="pageIndex === 0" @click="goFirst">{{ L('最早', 'First') }}</button>
+          <button type="button" :disabled="pageIndex === 0" @click="goPrevious">←</button>
+          <button type="button" :disabled="pageIndex >= pageCount - 1" @click="goNext">→</button>
+          <button type="button" :disabled="pageIndex >= pageCount - 1" @click="goLatest">{{ L('最新', 'Latest') }}</button>
+        </div>
+
+        <button type="button" class="rc-refresh-btn" :disabled="historyMeta.loading" @click="emit('refresh')">
+          {{ historyMeta.loading ? L('载入中…', 'Loading…') : L('重新载入全部记录', 'Reload all recorded events') }}
+        </button>
 
         <div class="rc-filter" role="tablist" :aria-label="L('日志过滤', 'Log filter')">
           <button
@@ -70,8 +86,13 @@ const props = defineProps({
   logLines: {
     type: Array,
     default: () => []
+  },
+  historyMeta: {
+    type: Object,
+    default: () => ({})
   }
 })
+const emit = defineEmits(['refresh'])
 
 // 始终是一个安全的字符串数组，永不抛错
 const safeLines = computed(() => {
@@ -93,7 +114,7 @@ const filterOptions = computed(() => [
 ])
 const activeFilter = ref('all')
 
-const visibleLines = computed(() => {
+const filteredLines = computed(() => {
   const lines = safeLines.value
   switch (activeFilter.value) {
     case 'tool':
@@ -107,11 +128,70 @@ const visibleLines = computed(() => {
   }
 })
 
+// Keep DOM work bounded for exceptionally large runs without dropping data.
+// Every row remains reachable through deterministic pages; ordinary runs such
+// as the 1,523-line EV example remain a single page with every row rendered.
+const RENDER_PAGE_SIZE = 2000
+const pageIndex = ref(0)
+const followLatestPage = ref(true)
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredLines.value.length / RENDER_PAGE_SIZE)))
+const visibleLines = computed(() => {
+  const start = pageIndex.value * RENDER_PAGE_SIZE
+  return filteredLines.value.slice(start, start + RENDER_PAGE_SIZE)
+})
+const visibleRange = computed(() => {
+  const total = filteredLines.value.length
+  if (!total) return '0 / 0'
+  const start = pageIndex.value * RENDER_PAGE_SIZE + 1
+  const end = Math.min(total, start + RENDER_PAGE_SIZE - 1)
+  return `${start}–${end} / ${total}`
+})
+
+function goFirst() {
+  followLatestPage.value = false
+  pageIndex.value = 0
+  nextTick(() => {
+    if (terminalRef.value) terminalRef.value.scrollTop = 0
+    onScroll()
+  })
+}
+function goPrevious() {
+  followLatestPage.value = false
+  pageIndex.value = Math.max(0, pageIndex.value - 1)
+  nextTick(() => {
+    if (terminalRef.value) terminalRef.value.scrollTop = 0
+    onScroll()
+  })
+}
+function goNext() {
+  pageIndex.value = Math.min(pageCount.value - 1, pageIndex.value + 1)
+  followLatestPage.value = pageIndex.value === pageCount.value - 1
+  nextTick(() => {
+    if (terminalRef.value) terminalRef.value.scrollTop = 0
+    onScroll()
+  })
+}
+function goLatest() {
+  followLatestPage.value = true
+  pageIndex.value = pageCount.value - 1
+  nextTick(() => {
+    scrollToBottom()
+    onScroll()
+  })
+}
+
 const emptyMessage = computed(() =>
   activeFilter.value === 'all'
     ? L('等待研究子进程输出…', 'Waiting for research subprocess output…')
     : L('当前过滤条件下暂无日志。', 'No logs under the current filter.')
 )
+
+const historyStateLabel = computed(() => {
+  if (props.historyMeta.finalized) return L('全部记录事件 · 已封存', 'All recorded events · final')
+  if (props.historyMeta.error) return L('全部记录载入失败', 'Recorded history unavailable')
+  if (props.historyMeta.totalExact) return L('全部记录快照 + 实时增量', 'Recorded snapshot + live tail')
+  return L('载入全部记录…', 'Loading recorded history…')
+})
 
 // 按子串着色
 function colorFor(line) {
@@ -160,6 +240,8 @@ const showJumpButton = computed(() => !atBottom.value && visibleLines.value.leng
 watch(
   () => [liveLogRevision(safeLines.value), activeFilter.value],
   () => {
+    if (followLatestPage.value) pageIndex.value = pageCount.value - 1
+    else pageIndex.value = Math.min(pageIndex.value, pageCount.value - 1)
     if (!atBottom.value) return
     nextTick(() => scrollToBottom())
   }
@@ -237,6 +319,18 @@ onMounted(() => {
   color: var(--muted);
   white-space: nowrap;
 }
+.rc-line-counter { font-family:var(--mono); font-size:.68rem; color:var(--muted); white-space:nowrap; }
+.rc-history-state { border:1px solid #c7d2fe; background:#eef2ff; color:#3730a3; padding:3px 7px; font-family:var(--mono); font-size:.62rem; font-weight:700; letter-spacing:.3px; white-space:nowrap; }
+.rc-history-state.complete { border-color:#bbf7d0; background:#f0fdf4; color:#166534; }
+.rc-history-state.warning { border-color:#fecaca; background:#fff1f2; color:#b91c1c; }
+.rc-refresh-btn { border:1px solid var(--border); background:#fff; color:#444; padding:5px 9px; font-family:var(--mono); font-size:.64rem; cursor:pointer; }
+.rc-refresh-btn:hover:not(:disabled) { border-color:var(--orange); color:var(--orange); }
+.rc-refresh-btn:disabled { color:#aaa; cursor:wait; }
+.rc-pages { display:inline-flex; align-items:center; gap:4px; font-family:var(--mono); font-size:.62rem; color:var(--muted); }
+.rc-pages span { min-width:92px; text-align:right; }
+.rc-pages button { border:1px solid var(--border); background:#fff; color:#444; padding:3px 6px; font:inherit; cursor:pointer; }
+.rc-pages button:hover:not(:disabled) { border-color:var(--orange); color:var(--orange); }
+.rc-pages button:disabled { color:#bbb; cursor:default; }
 
 /* ── 分段过滤器 ─────────────────────────────────────────── */
 .rc-filter {

@@ -190,3 +190,119 @@ def test_exactly_audited_report_is_exposed_and_downloadable(client):
     assert download.status_code == 200
     assert download.mimetype == "text/markdown"
     assert download.get_data(as_text=True) == markdown
+
+
+def test_first_party_forecast_endpoint_is_available_without_sdk_blueprint(client):
+    report_id = "report_first_party_forecast"
+    simulation_id = "sim_first_party_forecast"
+    markdown = _save_completed_report(report_id, simulation_id)
+    forecast = {
+        "scenarios": [{"name": "Base case", "probability": 1.0}],
+    }
+    forecast_text = json.dumps(forecast, ensure_ascii=False, indent=2)
+    with open(
+        ReportManager._get_report_folder(report_id) + "/forecast.json",
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        handle.write(forecast_text)
+
+    _write_passing_audit(report_id, markdown)
+    audit_path = ReportManager._get_report_final_audit_path(report_id)
+    with open(audit_path, encoding="utf-8") as handle:
+        audit = json.load(handle)
+    audit.update({
+        "forecast_sha256": hashlib.sha256(forecast_text.encode("utf-8")).hexdigest(),
+        "structured_forecast": {
+            "required": True,
+            "present": True,
+            "valid": True,
+        },
+        "scenario_contract": {"valid": True, "issue_count": 0},
+    })
+    with open(audit_path, "w", encoding="utf-8") as handle:
+        json.dump(audit, handle)
+
+    response = client.get(f"/api/report/{report_id}/forecast")
+
+    assert response.status_code == 200
+    payload = response.get_json()["data"]
+    assert payload["available"] is True
+    assert payload["forecast"] == forecast
+    assert payload["simulation_id"] == simulation_id
+
+
+def test_first_party_forecast_endpoint_returns_null_for_audited_legacy_report(client):
+    report_id = "report_first_party_legacy"
+    markdown = _save_completed_report(report_id, "sim_first_party_legacy")
+    _write_passing_audit(report_id, markdown)
+
+    response = client.get(f"/api/report/{report_id}/forecast")
+
+    assert response.status_code == 200
+    assert response.get_json()["data"]["available"] is False
+    assert response.get_json()["data"]["forecast"] is None
+
+
+def test_first_party_forecast_endpoint_ignores_unbound_legacy_sidecar(client):
+    report_id = "report_first_party_unbound_sidecar"
+    markdown = _save_completed_report(report_id, "sim_first_party_unbound_sidecar")
+    _write_passing_audit(report_id, markdown)
+    with open(
+        ReportManager._get_report_folder(report_id) + "/forecast.json",
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        json.dump({"scenarios": [{"name": "Injected", "probability": 1.0}]}, handle)
+
+    response = client.get(f"/api/report/{report_id}/forecast")
+
+    assert response.status_code == 200
+    assert response.get_json()["data"]["available"] is False
+    assert response.get_json()["data"]["forecast"] is None
+
+
+def test_first_party_forecast_endpoint_rejects_mutated_audited_sidecar(client):
+    report_id = "report_first_party_mutated_sidecar"
+    markdown = _save_completed_report(report_id, "sim_first_party_mutated_sidecar")
+    _write_passing_audit(report_id, markdown)
+    forecast_path = ReportManager._get_report_folder(report_id) + "/forecast.json"
+    original = json.dumps({"scenarios": [{"name": "Base", "probability": 1.0}]})
+    with open(forecast_path, "w", encoding="utf-8") as handle:
+        handle.write(original)
+
+    audit_path = ReportManager._get_report_final_audit_path(report_id)
+    with open(audit_path, encoding="utf-8") as handle:
+        audit = json.load(handle)
+    audit.update({
+        "forecast_sha256": hashlib.sha256(original.encode("utf-8")).hexdigest(),
+        "structured_forecast": {
+            "required": True,
+            "present": True,
+            "valid": True,
+        },
+        "scenario_contract": {"valid": True, "issue_count": 0},
+    })
+    with open(audit_path, "w", encoding="utf-8") as handle:
+        json.dump(audit, handle)
+    with open(forecast_path, "w", encoding="utf-8") as handle:
+        handle.write('{"scenarios": [{"name": "Mutated", "probability": 1.0}]}')
+
+    response = client.get(f"/api/report/{report_id}/forecast")
+
+    assert response.status_code == 409
+    assert response.get_json()["publishable"] is False
+    assert any(
+        "structured forecast" in reason
+        for reason in response.get_json()["publication_issues"]
+    )
+
+
+def test_first_party_forecast_endpoint_obeys_publication_barrier(client):
+    report_id = "report_first_party_blocked"
+    _save_completed_report(report_id, "sim_first_party_blocked")
+
+    response = client.get(f"/api/report/{report_id}/forecast")
+
+    assert response.status_code == 409
+    assert response.get_json()["publishable"] is False
