@@ -43,6 +43,7 @@ env 旋钮（Config，全部 degrade-safe 默认）：
 from __future__ import annotations
 
 import datetime as dt
+import html as html_lib
 import json
 import logging
 import math
@@ -51,6 +52,35 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+_EMBEDDED_FAVICON = (
+    "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 "
+    "viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 "
+    "rx=%2214%22 fill=%22%2308172b%22/%3E%3Cpath d=%22M18 33h28M32 19v28%22 "
+    "stroke=%22%2354d4ff%22 stroke-width=%226%22/%3E%3C/svg%3E"
+)
+
+
+def _plotly_document_title(fig: Any, filename: str) -> str:
+    """Return a readable title for a standalone interactive chart document."""
+    try:
+        raw = str(fig.layout.title.text or "")
+    except Exception:  # noqa: BLE001 - tolerate partially mocked optional dependency
+        raw = ""
+    plain = re.sub(r"<[^>]+>", " ", raw)
+    plain = re.sub(r"\s+", " ", plain).strip()
+    return plain or os.path.splitext(filename)[0].replace("_", " ").title()
+
+
+def _finalize_plotly_html(raw_html: str, title: str) -> str:
+    """Inject deterministic title/favicon metadata into a self-contained Plotly file."""
+    if "</head>" not in raw_html.lower():
+        return raw_html
+    metadata = (
+        f"<title>{html_lib.escape(title)}</title>"
+        f'<link rel="icon" href="{_EMBEDDED_FAVICON}">'
+    )
+    return re.sub(r"</head>", metadata + "</head>", raw_html, count=1, flags=re.IGNORECASE)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # matplotlib 可选依赖：导入失败 → 仅 Mermaid 模式（模块级单一真源标志）。
@@ -1986,6 +2016,7 @@ class ReportVisualizer:
             # include_plotlyjs='inline'：把整份 plotly.js 内联进 HTML → 无外链、完全离线自包含。
             html = fig.to_html(include_plotlyjs="inline", full_html=True,
                                config={"displayModeBar": True, "responsive": True})
+            html = _finalize_plotly_html(html, _plotly_document_title(fig, filename))
             tmp = out_path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 f.write(html)

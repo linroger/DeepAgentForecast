@@ -708,4 +708,6 @@ def test_plotly_html_has_stable_div_id_and_is_byte_deterministic(tmp_path, monke
 
     assert first == second
     assert b'id="forecast-visual-market_probabilities"' in first
+    assert b"<title>" in first
+    assert b'data:image/svg+xml' in first
     assert all(line == line.rstrip(b" \t") for line in first.splitlines())

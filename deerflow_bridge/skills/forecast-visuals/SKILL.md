@@ -64,9 +64,10 @@ PYBIN="${RESEARCH_CHARTS_PYTHON:-python3}"
 ```
 
 The renderer is local, deterministic, idempotent, and network-free. It writes
-self-contained Plotly HTML, PNG when Kaleido or matplotlib is available, and a
-stable `charts.json` manifest. Missing or ineligible data is skipped, never
-fabricated.
+self-contained Plotly HTML with a meaningful document title and embedded data
+favicon, PNG when Kaleido or matplotlib is available, and a stable `charts.json`
+manifest. Standalone chart pages must not make incidental network requests.
+Missing or ineligible data is skipped, never fabricated.
 
 ## 3. Reader-facing outputs
 
@@ -144,6 +145,8 @@ For every manifest row verify:
 - `source_data` names the real producer artifact;
 - the chart has at least two comparable rows (three vintages for revisions);
 - labels, source/as-of hover, and observed-versus-forecast encoding are legible;
+- standalone HTML has a meaningful browser title, embedded favicon, and no
+  runtime dependency on the parent site;
 - rerunning replaces the owned row rather than duplicating it.
 
 Exit codes: `0` = at least one chart written, `2` = no eligible artifact, `3` =

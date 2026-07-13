@@ -787,6 +787,8 @@ def _assert_offline_html(path):
         html = f.read()
     assert "<html" in html.lower()
     assert "Plotly" in html            # plotly 运行时存在
+    assert "<title>" in html
+    assert 'rel="icon" href="data:image/svg+xml' in html
     # >1MB ⟺ 整份 plotly.js 已内联（CDN 模式的 HTML 仅数 KB）→ 真正离线自包含
     assert len(html) > 1_000_000
 

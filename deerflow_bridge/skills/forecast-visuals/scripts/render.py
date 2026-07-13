@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import html as html_lib
 import json
 import math
 import os
@@ -927,6 +928,36 @@ def prep_sources(payload, run_anchor=None):
 # ---------------------------------------------------------------------------
 
 
+_EMBEDDED_FAVICON = (
+    "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 "
+    "viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 "
+    "rx=%2214%22 fill=%22%2308172b%22/%3E%3Cpath d=%22M18 33h28M32 19v28%22 "
+    "stroke=%22%2354d4ff%22 stroke-width=%226%22/%3E%3C/svg%3E"
+)
+
+
+def _document_title(fig, stem: str) -> str:
+    """Return a plain, deterministic browser title for a standalone chart."""
+    try:
+        raw = str(fig.layout.title.text or "")
+    except Exception:  # noqa: BLE001 - optional plotly object can be partially mocked
+        raw = ""
+    plain = re.sub(r"<[^>]+>", " ", raw)
+    plain = re.sub(r"\s+", " ", plain).strip()
+    return plain or stem.replace("_", " ").title()
+
+
+def _finalize_html_document(raw_html: str, title: str) -> str:
+    """Add self-contained browser metadata without introducing network requests."""
+    if "</head>" not in raw_html.lower():
+        return raw_html
+    metadata = (
+        f"<title>{html_lib.escape(title)}</title>"
+        f'<link rel="icon" href="{_EMBEDDED_FAVICON}">'
+    )
+    return re.sub(r"</head>", metadata + "</head>", raw_html, count=1, flags=re.IGNORECASE)
+
+
 def _write_outputs(fig, mpl_draw, charts_dir: Path, stem: str) -> tuple[str | None, str | None]:
     """写 <stem>.html（plotly 可用时）+ <stem>.png（kaleido → matplotlib 降级）。
     返回 (png 相对路径 | None, html 相对路径 | None)；两者皆 None = 该图失败。"""
@@ -946,6 +977,7 @@ def _write_outputs(fig, mpl_draw, charts_dir: Path, stem: str) -> tuple[str | No
             # whitespace while preserving line boundaries and final-newline
             # state so the self-contained document remains deterministic.
             raw_html = html_path.read_text(encoding="utf-8")
+            raw_html = _finalize_html_document(raw_html, _document_title(fig, stem))
             had_final_newline = raw_html.endswith(("\n", "\r"))
             clean_html = "\n".join(line.rstrip(" \t") for line in raw_html.splitlines())
             if had_final_newline:
