@@ -1,0 +1,2393 @@
+[
+  {
+    "url": "https://www.eia.gov/electricity/data/eia860",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Annual Electric Power Industry Report, Form EIA-860 detailed data",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "US operating battery capacity",
+      "Authoritative generator-level resolution feed"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://about.bnef.com/insights/clean-energy/energy-storage-enters-the-100-gigawatt-era-three-things-to-know",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Energy Storage Enters the 100-Gigawatt Era: Three Things to Know",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "112 GW/307 GWh 2025 additions",
+      "158 GW 2026 outlook",
+      "308 GW 2036 outlook",
+      "3.8 TW 2035 trajectory",
+      "Global four-hour cost benchmark"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en"
+  },
+  {
+    "url": "https://about.bnef.com/insights/commodities/global-energy-storage-market-to-grow-15-fold-by-2030",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Global Energy Storage Market to Grow 15-Fold by 2030",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "Global storage growth reference class",
+      "Long-run deployment trajectory"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en"
+  },
+  {
+    "url": "https://en.cnesa.org/latest-news/2025/8/3/china-releases-official-energy-storage-report-highlighting-130-growth-in-installed-capacity",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "China Releases Official Energy Storage Report Highlighting 130% Growth in Installed Capacity",
+    "tier": "S2",
+    "date": "2025-08-03",
+    "independent": true,
+    "supports": [
+      "CNESA capacity definitions",
+      "China storage growth"
+    ],
+    "jurisdiction": "China",
+    "lang": "en",
+    "staleness_days": 346,
+    "is_stale": false
+  },
+  {
+    "url": "https://apcoworldwide.com/blog/chinas-booming-energy-storage-a-policy-driven-and-highly-concentrated-market",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "chinas booming energy storage a policy driven and highly concentrated market",
+    "tier": "S3"
+  },
+  {
+    "url": "https://about.bnef.com/insights/finance/energy-storage-620-billion-investment-opportunity-2040",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Energy Storage is a $620 Billion Investment Opportunity to 2040",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "Long-run storage investment scale"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.fxbaogao.com/detail/5410763",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "5410763",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.law.berkeley.edu/wp-content/uploads/archive/2025/09/Energy-Storage-Report-Final-EN-2.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Energy Storage Report Final EN 2.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "http://en.cnesa.org/latest-news/2025/12/14/year-end-review-2025-chen-haisheng-chinas-new-type-energy-storage-installed-capacity-surpasses-100-gw-how-to-move-from-scale-expansion-to-high-quality-development",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Year-End Review 2025: China's New-Type Energy Storage Installed Capacity Surpasses 100 GW",
+    "tier": "S2",
+    "date": "2025-12-14",
+    "independent": true,
+    "supports": [
+      "CNESA 144.7 GW alternative series",
+      "Shift from scale expansion to operating quality"
+    ],
+    "jurisdiction": "China",
+    "lang": "en",
+    "staleness_days": 213,
+    "is_stale": false
+  },
+  {
+    "url": "https://www.iea.org/reports/batteries-and-secure-energy-transitions",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Batteries and Secure Energy Transitions",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "IEA 2030 storage requirement",
+      "Battery investment requirement",
+      "LFP cost and chemistry trends",
+      "Chinese supply-chain concentration"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.iea.org/reports/batteries-and-secure-energy-transitions/executive-summary",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Executive summary – Batteries and Secure Energy Transitions",
+    "tier": "S1",
+    "independent": false,
+    "supports": [
+      "Approximately 1,500 GW of storage by 2030 in the Net Zero pathway",
+      "Approximately 1,200 GW battery component",
+      "Approximately US$800 billion battery investment requirement"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.eia.gov/electricity/data/eia860m/archive/xls/operating_generator_capacity.xlsx",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "operating generator capacity.xlsx",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.esresearch.com.cn/report/?category_id=26",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "report",
+    "tier": "S3"
+  },
+  {
+    "url": "https://ldescouncil.com/ldes-epri-cost-benchmarking-study",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Study: Long Duration Energy Storage Costs Expected to Decline by 2030",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "LDES cost benchmarking",
+      "Commercialization gap",
+      "2030 cost expectations"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.eia.gov/electricity/data/eia860m",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Preliminary Monthly Electric Generator Inventory, Form EIA-860M",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "Monthly US operating and planned utility-scale storage capacity"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://cuswebsite.blob.core.windows.net/2222tracker/Tracker-Report-May-2025.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Tracker Report May 2025.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.sidley.com/en/insights/newsupdates/2025/07/the-one-big-beautiful-bill-act-navigating-the-new-energy-landscape",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "The One Big Beautiful Bill Act – Navigating the New Energy Landscape",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "OBBBA energy-credit changes",
+      "FEOC and foreign-content implications"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.eia.gov/todayinenergy/detail.php?id=67205",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "New U.S. electric generating capacity expected to reach a record high in 2026",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "US 2026 planned storage additions"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://ldescouncil.com/wp-content/uploads/2026/01/Benchmarking-Report-21-Jan-EXTERNAL.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Cost Benchmarking for Long Duration Energy Storage Solutions",
+    "tier": "S2",
+    "date": "2026-01-21",
+    "independent": true,
+    "supports": [
+      "Intra-day LDES cost and efficiency benchmarks",
+      "Multi-day LDES cost and efficiency benchmarks"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en",
+    "staleness_days": 175,
+    "is_stale": false
+  },
+  {
+    "url": "https://www.fxbaogao.com/detail/4788915",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "4788915",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.fxbaogao.com/detail/5341852",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "5341852",
+    "tier": "S3"
+  },
+  {
+    "url": "https://cleanpower.org/resources/u-s-energy-storage-monitor",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "U.S. Energy Storage Monitor",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "US storage deployment",
+      "US market revenue and project pipeline context"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.woodmac.com/press-releases/us-energy-storage-installations-through-q3-2025-surpass-2024-totals",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "US Energy Storage Installations Through Q3 2025 Surpass 2024 Totals",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "US storage deployment momentum"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.raponline.org/wp-content/uploads/2026/04/RAP-Gao-Incentivize-Flexible-Resource-Energy-Storage.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "RAP Gao Incentivize Flexible Resource Energy Storage.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.arnoldporter.com/en/perspectives/advisories/2025/07/from-ira-to-obbba-a-new-era-for-clean-energy-tax-credits",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "From IRA to OBBBA: A New Era for Clean Energy Tax Credits",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "US storage tax-credit changes",
+      "Domestic-content and FEOC restrictions"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.ferc.gov/ferc-order-no-2222-explainer-facilitating-participation-electricity-markets-distributed-energy",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "FERC Order No. 2222 Explainer: Facilitating Participation in Electricity Markets by Distributed Energy Resources",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "Distributed-resource market participation",
+      "US storage market-access architecture"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://rsmus.com/insights/services/business-tax/obbba-tax-clean-energy.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "obbba tax clean energy",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.ndrc.gov.cn/xxgk/zcfb/tz/202511/t20251110_1401469.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "关于促进新能源消纳和调控的指导意见（发改能源〔2025〕1360号）",
+    "tier": "S1",
+    "date": "2025-11-10",
+    "independent": true,
+    "supports": [
+      "Storage as a dispatchable system resource",
+      "Telemetry and control requirements",
+      "Renewable integration policy"
+    ],
+    "jurisdiction": "China",
+    "lang": "zh",
+    "staleness_days": 247,
+    "is_stale": false
+  },
+  {
+    "url": "https://www.utilitydive.com/news/ercots-large-load-queue-jumped-almost-300-last-year-official/808820",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "808820",
+    "tier": "S3"
+  },
+  {
+    "url": "https://atb.nrel.gov/electricity/2024b/utility-scale_battery_storage",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Utility-Scale Battery Storage | Electricity | 2024b Annual Technology Baseline",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "Utility-scale lithium-ion cost trajectory",
+      "Duration and cost assumptions"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "http://en.cnesa.org/latest-news/2025/8/19/cnesa-major-release-2303gw5612gwh-of-new-energy-storage-added-in-h1-2025-cumulative-installed-capacity-surpasses-100gw-for-the-first-time",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "CNESA Major Release: 23.03 GW/56.12 GWh of New Energy Storage Added in H1 2025",
+    "tier": "S2",
+    "date": "2025-08-19",
+    "independent": true,
+    "supports": [
+      "China H1 2025 additions",
+      "China cumulative capacity passing 100 GW"
+    ],
+    "jurisdiction": "China",
+    "lang": "en",
+    "staleness_days": 330,
+    "is_stale": false
+  },
+  {
+    "url": "https://www.energy-storage.news/at-nearly-200gwh-chinas-new-energy-storage-deployment-rate-hit-record-high-in-2025",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "At nearly 200 GWh, China's new energy storage deployment rate hit record high in 2025",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "China 2025 deployment",
+      "Lithium-ion dominance"
+    ],
+    "jurisdiction": "China",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.energy-storage.news/2025-bess-cell-and-system-shipments-byd-takes-bess-crown-no-korean-firms-in-top-10-cell-suppliers",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "2025 BESS cell and system shipments: BYD takes BESS crown, no Korean firms in top 10 cell suppliers",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "Approximately 600 GWh cell shipments",
+      "Approximately 460 GWh system shipments",
+      "Chinese integrator concentration",
+      "Shipment-to-installation gap"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.ndrc.gov.cn/xxgk/zcfb/tz/202509/P020250912338143145278.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "新型储能规模化建设专项行动方案",
+    "tier": "S1",
+    "date": "2025-09-12",
+    "independent": true,
+    "supports": [
+      "China 180 GW by 2027 target",
+      "RMB 250 billion investment",
+      "Technology commercialization priorities",
+      "Lifecycle safety and scale-up policy"
+    ],
+    "jurisdiction": "China",
+    "lang": "zh",
+    "staleness_days": 306,
+    "is_stale": false
+  },
+  {
+    "url": "https://www.lazard.com/media/xemfey0k/lazards-lcoeplus-june-2024-_vf.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Lazard's LCOE+ June 2024",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "US storage-cost methodology",
+      "LCOS comparison framework"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.lazard.com/media/eijnqja3/lazards-lcoeplus-june-2025.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Lazard's LCOE+ June 2025",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "US four-hour unsubsidized LCOS",
+      "ITC-adjusted LCOS",
+      "Financing and tariff sensitivity"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://docs.nrel.gov/docs/fy25osti/93281.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "93281.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.epa.gov/ca/moss-landing-vistra-battery-fire",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Moss Landing Vistra Battery Fire Response",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "Moss Landing incident response",
+      "Post-fire handling and regulatory context"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.dankolaw.com/blog/the-2025-vistra-battery-fire-in-moss-landing-one-year-later",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "the 2025 vistra battery fire in moss landing one year later",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.electrichybridvehicletechnology.com/news/catl-to-add-40-gwh-of-sodium-ion-battery-capacity-in-735m-fujian-expansion.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "CATL to add 40 GWh of sodium-ion battery capacity in $735m Fujian expansion",
+    "tier": "S3",
+    "independent": true,
+    "supports": [
+      "CATL 40 GWh sodium-ion plan",
+      "US$735 million disclosed investment"
+    ],
+    "jurisdiction": "China",
+    "lang": "en"
+  },
+  {
+    "url": "https://cleanpower.org/resources/clean-power-quarterly-market-report-q4-25",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "clean power quarterly market report q4 25",
+    "tier": "S3"
+  },
+  {
+    "url": "https://cleanpower.org/news/report-q4-2025-clean-power-adds-record-50gw-surging-electricity-demand-accelerates",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "report q4 2025 clean power adds record 50gw surging electricity demand accelerates",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.solarbe.com/data/zhengce/show.php?itemid=342099",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "show",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.hinabattery.com/en/index.php?id=77",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Sodium-Ion Batteries Enter the Commercial Era",
+    "tier": "S3",
+    "independent": false,
+    "supports": [
+      "HiNa commercialization claims",
+      "Early sodium-ion shipment evidence"
+    ],
+    "jurisdiction": "China",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.ess-news.com/2025/06/26/china-energy-engineering-launches-record-25-gwh-storage-tender-as-prices-hit-historic-low",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "china energy engineering launches record 25 gwh storage tender as prices hit historic low",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/price-jump-chinese-firms-battery-cell-quotes-approach-0-4-rmb-wh-system-prices-follow-suit",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "price jump chinese firms battery cell quotes approach 0 4 rmb wh system prices follow suit",
+    "tier": "S3"
+  },
+  {
+    "url": "https://insidelines.pjm.com/pjm-auction-procures-134311-mw-of-generation-resources-supply-responds-to-price-signal",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "PJM Auction Procures 134,311 MW of Generation Resources; Supply Responds to Price Signal",
+    "tier": "S1",
+    "independent": false,
+    "supports": [
+      "PJM auction supply response",
+      "Capacity-market scarcity signal"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://about.bnef.com/insights/clean-energy/lithium-ion-batteries-are-set-to-face-competition-from-novel-tech-for-long-duration-storage-bloombergnef-research",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Lithium-Ion Batteries are set to Face Competition from Novel Tech for Long-Duration Storage",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "Emerging LDES competition",
+      "Expectation that novel routes will not match lithium-ion's near-term cost decline"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en"
+  },
+  {
+    "url": "https://ssti.org/blog/doe-funds-15-projects-development-long-duration-energy-storage-ldes-technologies",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "doe funds 15 projects development long duration energy storage ldes technologies",
+    "tier": "S3"
+  },
+  {
+    "url": "https://cleanpower.org/news/u-s-energy-storage-monitor-q4-2024",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "u s energy storage monitor q4 2024",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.yesenergy.com/blog/the-caiso-energy-storage-revolution?hs_amp=true",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "the caiso energy storage revolution",
+    "tier": "S3"
+  },
+  {
+    "url": "https://battery-tech.net/how-sodium-ion-technology-is-disrupting-the-global-battery-market-in-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "how sodium ion technology is disrupting the global battery market in 2026",
+    "tier": "S3"
+  },
+  {
+    "url": "https://iea.blob.core.windows.net/assets/17033b62-07a5-4144-8dd0-651cdb6caa24/Renewables2024.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Renewables2024.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy.gov/cmei/oced/long-duration-energy-storage-pilot-program-notifications",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "long duration energy storage pilot program notifications",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.cesa.org/resource-library/resource/obbba-summary-diagram",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "obbba summary diagram",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energytrend.com/news/20250801-49967.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "20250801 49967",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.eidebailly.com/insights/alerts/2025/obbb-energy-credits",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "obbb energy credits",
+    "tier": "S3"
+  },
+  {
+    "url": "https://storagealliance.org/hubfs/CESA%20ACP-CA%20Joint%20BESS%20Safety%20Recommendations%20July%202025.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "California Battery Energy Storage Safety Recommendations July 2025",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "BESS spacing",
+      "Deflagration venting",
+      "Water supply",
+      "Emergency-response recommendations"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.iea.org/reports/renewables-2024/electricity",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "electricity",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.cnesa.org/policy/detail/?column_id=6&id=7427",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "detail",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.lazard.com/news-announcements/lazard-releases-2025-levelized-cost-of-energyplus-report-pr",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Lazard Releases 2025 Levelized Cost of Energy+ Report",
+    "tier": "S2",
+    "independent": false,
+    "supports": [
+      "Lazard 2025 storage-cost conclusions"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.eia.gov/todayinenergy/detail.php?id=64705",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "U.S. battery capacity increased 66% in 2024",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "US 2024 battery additions",
+      "US cumulative utility-scale capacity"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.eia.gov/todayinenergy/detail.php?id=64586",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "detail",
+    "tier": "S1"
+  },
+  {
+    "url": "https://atb.nlr.gov/electricity/2024b/utility-scale_battery_storage",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "utility scale battery storage",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.nea.gov.cn/20250218/8b14082a18c2423ba9779882d3791d30/c.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.nea.gov.cn",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.energy-storage.news/nfpa-855-2026-edition-updates-and-what-they-mean-for-energy-storage-projects",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "NFPA 855: 2026 edition updates and what they mean for energy storage projects",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "NFPA 855 changes",
+      "Large outdoor enclosure requirements",
+      "Emergency-response implications"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.utilitydive.com/news/higher-renewable-energy-costs-lazard-lcoe-storage-hydrogen/720177",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "720177",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.nea.gov.cn/20260130/50f657ce87f848e1a9a1861d1fd9aa23/c.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "国家能源局举行新闻发布会介绍2025年新型储能发展情况",
+    "tier": "S1",
+    "date": "2026-01-30",
+    "independent": true,
+    "supports": [
+      "China 136 GW/351 GWh stock",
+      "96.1% lithium-ion share",
+      "2.58-hour average duration",
+      "27.6% four-hour-plus share",
+      "1,195 equivalent utilization hours"
+    ],
+    "jurisdiction": "China",
+    "lang": "zh",
+    "staleness_days": 166,
+    "is_stale": false
+  },
+  {
+    "url": "https://www.cpnn.com.cn/news/zngc/202601/t20260107_1858418.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "t20260107 1858418",
+    "tier": "S3"
+  },
+  {
+    "url": "http://www.news.cn/fortune/20250820/9032dfbc84b747a6b6d7bc61ade593d9/c.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.news.cn",
+    "tier": "S3"
+  },
+  {
+    "url": "https://docs.nlr.gov/docs/fy25osti/93281.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "93281.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.energy-storage.news/long-duration-storage-increasingly-competitive-but-unlikely-to-match-li-ions-cost-reductions",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "long duration storage increasingly competitive but unlikely to match li ions cost reductions",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/global-energy-review-2026/technology-battery-storage",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "technology battery storage",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.telgian.com/nfpa-855-changes-in-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "NFPA 855 Changes in the 2026 Edition",
+    "tier": "S2",
+    "independent": true,
+    "supports": [
+      "2026 fire-code changes",
+      "Storage design and siting requirements"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.woodmac.com/press-releases/energy-storage-market-continues-strong-growth-in-q1-2025",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "energy storage market continues strong growth in q1 2025",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.useluminix.com/reports/market-research/climate-impact-of-repeal-of-endangerment-act/source/3",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.useluminix.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/lazard-says-us-energy-storage-cost-reduction-in-2025-offsets-prior-pandemic-driven-increases",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lazard says us energy storage cost reduction in 2025 offsets prior pandemic driven increases",
+    "tier": "S3"
+  },
+  {
+    "url": "https://response.epa.gov/site/site_profile.aspx?site_id=16485",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Site Profile – Gateway Energy Camino Lithium-Ion Battery Fire",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "Gateway Energy fire",
+      "Large-format BESS incident evidence"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.cpuc.ca.gov/-/media/cpuc-website/divisions/energy-division/documents/integrated-resource-plan-and-long-term-procurement-plan-irp-ltpp/2025_09_need-determination-analysis.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "2025 09 need determination analysis.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.kpp.energy/pagename/developer-investigating-recent-fire-at-california-energy-storage-facility",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "developer investigating recent fire at california energy storage facility",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.cpuc.ca.gov/news-and-updates/all-news/cpuc-advances-clean-and-affordable-electricity-with-new-procurement-decision",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "CPUC Advances Clean and Affordable Electricity with New Procurement Decision",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "California storage procurement",
+      "Resource-adequacy policy"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.pjm.com/-/media/DotCom/markets-ops/rpm/rpm-auction-info/2026-2027/2026-2027-bra-report.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "PJM 2026/2027 Base Residual Auction Report",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "PJM capacity-auction clearing results",
+      "Storage qualification and capacity economics"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.orrick.com/en/Insights/2024/03/California-Clarifies-Timelines-MidTerm-Reliability-Procurement-Mandates-Renewables-and-Storage",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "California Clarifies Timelines MidTerm Reliability Procurement Mandates Renewables and Storage",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.ferc.gov/explainer-interconnection-final-rule",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Explainer on the Interconnection Final Rule",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "FERC Order 2023 cluster reform",
+      "Readiness requirements",
+      "Withdrawal penalties"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.ercot.com/files/docs/2025/09/15/16.2-System-Planning-and-Weatherization-Update.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "16.2 System Planning and Weatherization Update.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.whitecase.com/insight-alert/amendments-ira-tax-credits-senate-budget-bill",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "amendments ira tax credits senate budget bill",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.govtech.com/products/after-fires-calif-county-to-set-battery-storage-standards",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "after fires calif county to set battery storage standards",
+    "tier": "S1"
+  },
+  {
+    "url": "https://liftoff.energy.gov/long-duration-energy-storage",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "The Pathway to Long Duration Energy Storage Commercial Liftoff",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "DOE intra-day and multi-day targets",
+      "Current LDES performance gap",
+      "Manufacturing-scale targets",
+      "Dependence on contracted revenue"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://ease-storage.eu/publications",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "publications",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.gov.uk/government/publications/uk-battery-strategy",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "uk battery strategy",
+    "tier": "S1"
+  },
+  {
+    "url": "https://aemo.com.au/energy-systems/major-publications/integrated-system-plan-isp",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "integrated system plan isp",
+    "tier": "S3"
+  },
+  {
+    "url": "https://ec.europa.eu/energy/topics/energy-storage_en",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Energy Storage – European Commission",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "EU energy-storage policy",
+      "European regulatory context"
+    ],
+    "jurisdiction": "EU",
+    "lang": "en"
+  },
+  {
+    "url": "https://formenergy.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "formenergy.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.irena.org/Publications/2024/Sep/Renewable-Power-Generation-Costs-in-2023",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Renewable Power Generation Costs in 2023",
+    "tier": "S3"
+  },
+  {
+    "url": "https://energydome.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "energydome.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/global-hydrogen-review-2024",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Global Hydrogen Review 2024",
+    "tier": "S1",
+    "independent": true,
+    "supports": [
+      "Hydrogen flexibility role",
+      "Dependence on industrial demand and offtake",
+      "Power-to-hydrogen-to-power constraints"
+    ],
+    "jurisdiction": "Global",
+    "lang": "en"
+  },
+  {
+    "url": "https://www.highviewpower.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.highviewpower.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://formenergy.com/battery-technology",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Battery Technology | Form Energy",
+    "tier": "S3",
+    "independent": false,
+    "supports": [
+      "Form Energy iron-air design",
+      "Approximately 100-hour duration claim"
+    ],
+    "jurisdiction": "US",
+    "lang": "en"
+  },
+  {
+    "url": "https://atb.nrel.gov/electricity/2024b/index",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "index",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.terna.it/en/electric-system/innovations-macse",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "innovations macse",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/Ausschreibungen/start.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "start",
+    "tier": "S3"
+  },
+  {
+    "url": "https://ease-storage.eu/publications/market-analyses",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "market analyses",
+    "tier": "S3"
+  },
+  {
+    "url": "https://about.bnef.com/blog/lithium-ion-battery-pack-prices-see-largest-drop-since-2017-falling-to-115-per-kilowatt-hour-bnef",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lithium ion battery pack prices see largest drop since 2017 falling to 115 per kilowatt hour bnef",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/global-critical-minerals-outlook-2025",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "global critical minerals outlook 2025",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.iea.org/reports/global-critical-minerals-outlook-2025/executive-summary",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "executive summary",
+    "tier": "S1"
+  },
+  {
+    "url": "https://ease-storage.eu/emmes-9-0-march-2025",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "emmes 9 0 march 2025",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.pjm.com/markets-and-operations/rpm",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "rpm",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/global-hydrogen-review-2024/hydrogen-production",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "hydrogen production",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.iea.org/reports/global-hydrogen-review-2024/executive-summary",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "executive summary",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.hydropower.org/publications/2024-world-hydropower-outlook",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "2024 world hydropower outlook",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.terna.it/en/electric-system/markets/macse",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "macse",
+    "tier": "S3"
+  },
+  {
+    "url": "https://ember-energy.org/latest/global-electricity-review-2025",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "global electricity review 2025",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.hydropower.org/outlook",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "outlook",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.hydropower.org/publications/2025-world-hydropower-outlook",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "2025 world hydropower outlook",
+    "tier": "S3"
+  },
+  {
+    "url": "https://essinc.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "essinc.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://invinity.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "invinity.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/renewables-2024",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "renewables 2024",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.iea.org/reports/electricity-2024",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "electricity 2024",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.antoraenergy.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.antoraenergy.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.hydrostor.ca",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.hydrostor.ca",
+    "tier": "S3"
+  },
+  {
+    "url": "https://redwoodmaterials.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "redwoodmaterials.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energyvault.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.energyvault.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.maltainc.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.maltainc.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/renewables-2024/executive-summary",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "executive summary",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.sungeel.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.sungeel.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://ascendelements.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "ascendelements.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://li-cycle.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "li-cycle.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32023R1542",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "TXT",
+    "tier": "S1"
+  },
+  {
+    "url": "https://rondoenergy.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "rondoenergy.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.terna.it/en/media/news/macse-storage-auction-results",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "macse storage auction results",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/electricity-2024/executive-summary",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "executive summary",
+    "tier": "S1"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Electricity_sector_in_India",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Electricity sector in India",
+    "tier": "S3"
+  },
+  {
+    "url": "https://arena.gov.au/projects",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "projects",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.energynest.com",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.energynest.com",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.nrel.gov/docs/fy25osti/93281.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "93281.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.iea.org/reports/world-energy-outlook-2024",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "world energy outlook 2024",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.ess-news.com/2025/11/24/massive-20-gwh-sodium-ion-battery-manufacturing-plant-announced-in-china",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "massive 20 gwh sodium ion battery manufacturing plant announced in china",
+    "tier": "S3"
+  },
+  {
+    "url": "https://volta.foundation/assessing-the-promise-and-potential-of-sodium-ion-batteries-in-2026",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "assessing the promise and potential of sodium ion batteries in 2026",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/batteries-and-secure-energy-transitions/outlook-for-battery-demand-and-supply",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "outlook for battery demand and supply",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.lazard.com/media/5tlbhyla/lazards-lcoeplus-june-2025-_vf.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lazards lcoeplus june 2025 vf.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://about.bnef.com/insights/clean-energy/global-energy-storage-market-set-to-hit-one-terawatt-hour-by-2030",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "global energy storage market set to hit one terawatt hour by 2030",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.woodmac.com/news/opinion/global-energy-storage-market-surpasses-100-gw-annual-installation-milestone-in-2025",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "global energy storage market surpasses 100 gw annual installation milestone in 2025",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.irena.org/-/media/Files/IRENA/Agency/Publication/2025/Jul/IRENA_TEC_RPGC_in_2024_2025.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "IRENA TEC RPGC in 2024 2025.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://iea.blob.core.windows.net/assets/cb39c1bf-d2b3-446d-8c35-aae6b1f3a4a0/BatteriesandSecureEnergyTransitions.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "BatteriesandSecureEnergyTransitions.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://emp.lbl.gov/queues",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "queues",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.ess-news.com/2024/07/09/global-energy-storage-fleet-to-surpass-1-tw-3-twh-by-2033-woodmac-says",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "global energy storage fleet to surpass 1 tw 3 twh by 2033 woodmac says",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.osti.gov/biblio/2583471",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "2583471",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.iea.org/reports/global-ev-outlook-2024/trends-in-electric-vehicle-batteries",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "trends in electric vehicle batteries",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.iea.org/reports/global-ev-outlook-2024/trends-in-electric-cars",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "trends in electric cars",
+    "tier": "S1"
+  },
+  {
+    "url": "https://emp.lbl.gov/sites/default/files/queued_up_2022_04-06-2023.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "queued up 2022 04 06 2023.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.pnnl.gov/sites/default/files/media/file/RedoxFlow_Methodology.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "RedoxFlow Methodology.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "http://en.cnesa.org/s/CNESA-Energy-Storage-Industry-WhitePaper-2024Summary-Version.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "CNESA Energy Storage Industry WhitePaper 2024Summary Version.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.osti.gov/servlets/purl/2583471",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "2583471",
+    "tier": "S1"
+  },
+  {
+    "url": "https://research.cnesa.org/report/info/detail/?id=6053",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "detail",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/data-and-statistics/data-tools/global-lng-capacity-tracker",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "global lng capacity tracker",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.energy-storage.news/lazard-us-utility-scale-energy-storage-lcos-has-increased-since-restrictions-on-chinese-cells-came-into-force",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lazard us utility scale energy storage lcos has increased since restrictions on chinese cells came into force",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.pnnl.gov/projects/esgc-cost-performance/lcos-estimates",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lcos estimates",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.lazard.com/media/kcfconhf/lazards-lcoeplus_vf.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lazards lcoeplus vf.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.irena.org/-/media/Files/IRENA/Agency/Publication/2017/Oct/IRENA_Electricity_Storage_Costs_2017_Summary.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "IRENA Electricity Storage Costs 2017 Summary.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-transitions.org/wp-content/uploads/2025/11/ETC-Systemiq-Innovation_Brief_Series-Sodium_ion_batteries-1.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "ETC Systemiq Innovation Brief Series Sodium ion batteries 1.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://about.bnef.com/insights/clean-energy/bloombergnefs-new-energy-outlook-2026-transition-to-newer-technologies-expanded-electrification-to-strengthen-nations-energy-security",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "bloombergnefs new energy outlook 2026 transition to newer technologies expanded electrification to strengthen nations energy security",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy.gov/sites/default/files/2023-07/Technology%20Strategy%20Assessment%20-%20Flow%20Batteries.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Technology Strategy Assessment   Flow Batteries.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://about.bnef.com/insights/clean-energy/global-energy-storage-boom-three-things-to-know",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "global energy storage boom three things to know",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.pnnl.gov/projects/esgc-cost-performance",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "esgc cost performance",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.utilitydive.com/news/600-gwh-of-us-energy-storage-expected-by-2030-benchmark-seia/813638",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "813638",
+    "tier": "S3"
+  },
+  {
+    "url": "https://about.bnef.com/insights/clean-energy/2h-2023-energy-storage-market-outlook",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "2h 2023 energy storage market outlook",
+    "tier": "S3"
+  },
+  {
+    "url": "https://about.bnef.com/insights/commodities/lithium-ion-battery-pack-prices-see-largest-drop-since-2017-falling-to-115-per-kilowatt-hour-bloombergnef",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lithium ion battery pack prices see largest drop since 2017 falling to 115 per kilowatt hour bloombergnef",
+    "tier": "S3"
+  },
+  {
+    "url": "https://about.bnef.com/insights/clean-energy/global-energy-storage-market-records-biggest-jump-yet",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "global energy storage market records biggest jump yet",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/commentaries/sodium-ion-battery-momentum-grows-but-challenges-remain",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "sodium ion battery momentum grows but challenges remain",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.ise.fraunhofer.de/content/dam/ise/de/documents/publications/studies/Photovoltaics-Report.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Photovoltaics Report.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://pris.iaea.org/pris/worldstatistics/worldtrendnuclearpowercapacity.aspx",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "worldtrendnuclearpowercapacity",
+    "tier": "S3"
+  },
+  {
+    "url": "https://emp.lbl.gov/sites/default/files/2024-04/Queued%20Up%202024%20Edition_1.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Queued Up 2024 Edition 1.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://iea-pvps.org/snapshot-reports/snapshot-2024",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "snapshot 2024",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www-pub.iaea.org/MTCD/Publications/PDF/p15748-RDS-2-44_web.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "p15748 RDS 2 44 web.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy.gov/sites/default/files/2023-07/Technology%20Strategy%20Assessment%20-%20Compressed%20Air%20Energy%20Storage.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Technology Strategy Assessment   Compressed Air Energy Storage.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.pnnl.gov/projects/esgc-cost-performance/estimates",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "estimates",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.irena.org/-/media/Files/IRENA/Agency/Publication/2023/Feb/IRENA_Changing_role_of_hydropower_2023.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "IRENA Changing role of hydropower 2023.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://energy.mit.edu/research/future-of-energy-storage",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "future of energy storage",
+    "tier": "S3"
+  },
+  {
+    "url": "https://about.bnef.com/insights/clean-energy/global-energy-storage-growth-upheld-by-new-markets",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "global energy storage growth upheld by new markets",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.pnnl.gov/lithium-ion-battery-lfp-and-nmc",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lithium ion battery lfp and nmc",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.pnnl.gov/vanadium-redox-flow-battery",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "vanadium redox flow battery",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.pnnl.gov/sites/default/files/media/file/ESGC_LCOS_Workbook_v2024_Documentation.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "ESGC LCOS Workbook v2024 Documentation.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://static1.squarespace.com/static/55826ab6e4b0a6d2b0f53e3d/t/68d51b2bf7537179c2011539/1758796587277/CNESA+Energy+Storage+Industry+WhitePaper+2025%28Summary+Version%29.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "CNESA+Energy+Storage+Industry+WhitePaper+2025(Summary+Version).pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/terawatt-hour-of-energy-storage-by-2030-bloombergnef-forecasts-boom-in-installations",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "terawatt hour of energy storage by 2030 bloombergnef forecasts boom in installations",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.pnnl.gov/sites/default/files/media/file/ESGC%20Cost%20Performance%20Report%202022%20PNNL-33283.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "ESGC Cost Performance Report 2022 PNNL 33283.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.irena.org/-/media/Files/IRENA/Agency/Publication/2025/Mar/IRENA_DAT_RE_Capacity_Highlights_2025.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "IRENA DAT RE Capacity Highlights 2025.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://news.mit.edu/2021/lithium-ion-battery-costs-0323",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lithium ion battery costs 0323",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/global-ev-outlook-2025/trends-in-electric-car-markets-2",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "trends in electric car markets 2",
+    "tier": "S1"
+  },
+  {
+    "url": "https://sumitomoelectric.com/products/flow-batteries/case-studies/hokkaido-largescalegrid",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "hokkaido largescalegrid",
+    "tier": "S3"
+  },
+  {
+    "url": "https://highviewpower.com/news-announcements/world-first-liquid-air-energy-storage-plant",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "world first liquid air energy storage plant",
+    "tier": "S3"
+  },
+  {
+    "url": "https://dspace.mit.edu/handle/1721.1/132660?show=full",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "132660",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.lazard.com/research-insights/levelized-cost-of-energyplus-lcoeplus",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "levelized cost of energyplus lcoeplus",
+    "tier": "S3"
+  },
+  {
+    "url": "https://ember-energy.org/latest-insights/how-cheap-is-battery-storage",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "how cheap is battery storage",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.irena.org/-/media/Files/IRENA/Agency/Publication/2020/Nov/IRENA_Innovation_Outlook_TES_2020.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "IRENA Innovation Outlook TES 2020.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://about.bnef.com/insights/clean-energy/battery-storage-costs-hit-record-lows-as-costs-of-other-clean-power-technologies-increased-bloombergnef",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "battery storage costs hit record lows as costs of other clean power technologies increased bloombergnef",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.lazard.com/research-insights/levelized-cost-of-energyplus",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "levelized cost of energyplus",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.nrel.gov/docs/fy25osti/91775.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "91775.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.nea.gov.cn",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.nea.gov.cn",
+    "tier": "S1"
+  },
+  {
+    "url": "https://emp.lbl.gov/publications/queued-2026-edition-characteristics",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "queued 2026 edition characteristics",
+    "tier": "S1"
+  },
+  {
+    "url": "https://energy.mit.edu/wp-content/uploads/2022/05/The-Future-of-Energy-Storage.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "The Future of Energy Storage.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://ease-storage.eu",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "ease-storage.eu",
+    "tier": "S3"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Battery_storage_power_station",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Battery storage power station",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.pnnl.gov/main/publications/external/technical_reports/PNNL-28866.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "PNNL 28866.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.formenergy.com/technology",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "technology",
+    "tier": "S3"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/List_of_energy_storage_projects",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "List of energy storage projects",
+    "tier": "S3"
+  },
+  {
+    "url": "https://antora.energy/technology",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "technology",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.osti.gov/biblio/1659581",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "1659581",
+    "tier": "S1"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Renewable_energy_in_Australia",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Renewable energy in Australia",
+    "tier": "S3"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Renewable_energy_in_India",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Renewable energy in India",
+    "tier": "S3"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Solar_power_in_India",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Solar power in India",
+    "tier": "S3"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Renewable_energy_in_Israel",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Renewable energy in Israel",
+    "tier": "S3"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Solar_power_in_Chile",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Solar power in Chile",
+    "tier": "S3"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Renewable_Energy_Independent_Power_Producer_Procurement_Programme",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Renewable Energy Independent Power Producer Procurement Programme",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.lazard.com/media/kcfconhf/lazards-lcoeplus_vf.pdf#page=36",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lazards lcoeplus vf.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Mohammed_bin_Rashid_Al_Maktoum_Solar_Park",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Mohammed bin Rashid Al Maktoum Solar Park",
+    "tier": "S3"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Hornsdale_Power_Reserve",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Hornsdale Power Reserve",
+    "tier": "S3"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/List_of_pumped-storage_hydroelectric_power_stations",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "List of pumped storage hydroelectric power stations",
+    "tier": "S3"
+  },
+  {
+    "url": "https://en.wikipedia.org/wiki/Renewable_energy_in_Saudi_Arabia",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Renewable energy in Saudi Arabia",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.lazard.com/media/kcfconhf/lazards-lcoeplus_vf.pdf?page=42",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lazards lcoeplus vf.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://ease-storage.eu/publication-category/market-analyses",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "market analyses",
+    "tier": "S3"
+  },
+  {
+    "url": "https://pubs.usgs.gov/periodicals/mcs2025/mcs2025-lithium.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "mcs2025 lithium.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://pubs.usgs.gov/periodicals/mcs2025/mcs2025-vanadium.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "mcs2025 vanadium.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://formenergy.com/technology",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "technology",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/batteries-and-secure-energy-transitions/status-of-battery-demand-and-supply",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "status of battery demand and supply",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.ferc.gov/media/order-no-2023",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "order no 2023",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.energy.gov/sites/default/files/2024-08/Achieving%20the%20Promise%20of%20Low-Cost%20Long%20Duration%20Energy%20Storage_FINAL_08052024.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Achieving the Promise of Low Cost Long Duration Energy Storage FINAL 08052024.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.nrel.gov/docs/fy21osti/78694.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "78694.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://pubs.usgs.gov/periodicals/mcs2025/mcs2025.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "mcs2025.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.eia.gov/todayinenergy/detail.php?id=64705.",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "detail",
+    "tier": "S1"
+  },
+  {
+    "url": "https://docs.nlr.gov/docs/fy23osti/85878.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "85878.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://rkpstorage.com/2025/08/01/rongke-power-commissions-another-100mw-400mwh-vanadium-flow-battery-project-in-northwest-china-surpassing-3-5-gwh-in-global-installations",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "rongke power commissions another 100mw 400mwh vanadium flow battery project in northwest china surpassing 3 5 gwh in global installations",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.woodmac.com/news/opinion/the-iso-interconnection-game",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "the iso interconnection game",
+    "tier": "S3"
+  },
+  {
+    "url": "https://rkpstorage.com/2025/04/08/rongke-power-delivers-the-worlds-first-gwh-scale-vanadium-flow-battery-energy-storage-project-now-in-operation-2",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "rongke power delivers the worlds first gwh scale vanadium flow battery energy storage project now in operation 2",
+    "tier": "S3"
+  },
+  {
+    "url": "https://electrek.co/2026/04/27/catl-sodium-ion-battery-60gwh-energy-storage-deal",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "catl sodium ion battery 60gwh energy storage deal",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.latitudemedia.com/news/forms-first-100-hour-batteries-are-hitting-the-grid",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "forms first 100 hour batteries are hitting the grid",
+    "tier": "S3"
+  },
+  {
+    "url": "https://data.usgs.gov/datacatalog/data/USGS:6797ff62d34ea8c18376e1cb",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "USGS:6797ff62d34ea8c18376e1cb",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.wecc.org/sites/default/files/documents/progress_report/2025/Moss%20Landing%20BESS%20Fire%20Report%20Final%2012.22.25.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Moss Landing BESS Fire Report Final 12.22.25.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://pubs.usgs.gov/periodicals/mcs2024/mcs2024-lithium.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "mcs2024 lithium.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.energy-storage.news/indias-energy-storage-market-in-2025-from-tenders-to-scaled-deployment",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "indias energy storage market in 2025 from tenders to scaled deployment",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/saudi-arabia-qualified-bidders-revealed-for-kingdoms-8gwh-first-battery-storage-tender",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "saudi arabia qualified bidders revealed for kingdoms 8gwh first battery storage tender",
+    "tier": "S3"
+  },
+  {
+    "url": "https://eta-publications.lbl.gov/sites/default/files/queued_up_2024_edition_r2.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "queued up 2024 edition r2.pdf",
+    "tier": "S1"
+  },
+  {
+    "url": "https://energydome.com/energy-dome-inks-a-strategic-commercial-agreement-with-google",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "energy dome inks a strategic commercial agreement with google",
+    "tier": "S3"
+  },
+  {
+    "url": "https://hydrostor.ca/hydrostor-files-application-for-certification-for-400-mw-x-8-hour-3200-mwh-pecho-energy-storage-center",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "hydrostor files application for certification for 400 mw x 8 hour 3200 mwh pecho energy storage center",
+    "tier": "S3"
+  },
+  {
+    "url": "https://hydrostor.ca/hydrostor-announces-development-of-advanced-compressed-air-energy-storage-project-in-greater-napanee-ontario",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "hydrostor announces development of advanced compressed air energy storage project in greater napanee ontario",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.aemo.com.au/energy-systems/major-publications/integrated-system-plan-isp",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "integrated system plan isp",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/hydropower-special-market-report/executive-summary",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "executive summary",
+    "tier": "S1"
+  },
+  {
+    "url": "https://pv-magazine-usa.com/2025/06/18/interconnection-shake-out-160-gw-of-solar-advances-as-12-of-projects-bow-out",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "interconnection shake out 160 gw of solar advances as 12 of projects bow out",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.morganlewis.com/pubs/2026/03/eu-and-uk-energy-storage-regulation-in-2026-and-beyond",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "eu and uk energy storage regulation in 2026 and beyond",
+    "tier": "S3"
+  },
+  {
+    "url": "https://modoenergy.com/research/en/battery-storage-us-electricity-markets",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "battery storage us electricity markets",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.lazard.com/news-announcements/lazard-releases-2026-levelized-cost-of-energyplus-report-pr",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "lazard releases 2026 levelized cost of energyplus report pr",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.zeroemissiongrid.com/iso-rto-meeting-summaries/caiso-interconnection-reforms-2025",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "caiso interconnection reforms 2025",
+    "tier": "S3"
+  },
+  {
+    "url": "https://ieefa.org/sites/default/files/2026-05/Viability%20of%20standalone%20battery%20energy%20storage%20tariffs%20discovered%20in%202025.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Viability of standalone battery energy storage tariffs discovered in 2025.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://renewablesnow.com/news/saudi-arabia-opens-tender-for-12-gwh-of-battery-storage-projects-1293546",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "saudi arabia opens tender for 12 gwh of battery storage projects 1293546",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.saurenergy.com/solar-energy-news/from-2-to-4-hours-the-quite-shift-in-indias-energy-storage-tenders-and-its-impact-12016991",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "from 2 to 4 hours the quite shift in indias energy storage tenders and its impact 12016991",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/global-critical-minerals-outlook-2025/overview-of-outlook-for-key-minerals",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "overview of outlook for key minerals",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.energy-storage.news/edf-total-acwa-tesla-gotion-and-envision-qualified-bidders-saudis-12gwh-bess-tender",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "edf total acwa tesla gotion and envision qualified bidders saudis 12gwh bess tender",
+    "tier": "S3"
+  },
+  {
+    "url": "https://ieefa.org/resources/our-next-energy-plan-already-out-date",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "our next energy plan already out date",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/electricity-2025",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "electricity 2025",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.utilitydive.com/news/innovation-long-duration-energy-storage-cost-reduction-flow-battery-compressed-air-pumped-hydro/724121",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "724121",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.nea.gov.cn/20260417/a6ef89bc89eb4814872959c4b10fd731/c.html",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.nea.gov.cn",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.ess-news.com/2026/07/01/energy-dome-to-build-23-mw-200-mwh-long-duration-carbon-battery-in-ireland",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "energy dome to build 23 mw 200 mwh long duration carbon battery in ireland",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/global-bess-deployments-soar-27-in-h1-2026-saudi-arabia-drives-figures-in-june",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "global bess deployments soar 27 in h1 2026 saudi arabia drives figures in june",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.iea.org/reports/the-future-of-hydrogen",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "the future of hydrogen",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.energy-storage.news/iron-air-multi-day-energy-storage-form-energy-first-pilot",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "iron air multi day energy storage form energy first pilot",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.aemo.com.au/-/media/files/major-publications/isp/2025/isp-toolkit.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "isp toolkit.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/worlds-first-gigawatt-hour-scale-flow-battery-project-goes-into-operation-in-china",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "worlds first gigawatt hour scale flow battery project goes into operation in china",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.ess-news.com/2025/07/04/china-completes-worlds-largest-vanadium-flow-battery-plant",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "china completes worlds largest vanadium flow battery plant",
+    "tier": "S3"
+  },
+  {
+    "url": "https://theenergy.co/article/isp-flags-less-transmission-more-solar-batteries",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "isp flags less transmission more solar batteries",
+    "tier": "S3"
+  },
+  {
+    "url": "https://commission.europa.eu/topics/competitiveness/green-deal-industrial-plan/net-zero-industry-act_en",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "net zero industry act en",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.energy-storage.news/chinese-system-integrators-capture-76-of-global-bess-market-as-competition-intensifies",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "chinese system integrators capture 76 of global bess market as competition intensifies",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/byd-lands-massive-12-5gwh-deal-with-saudi-electricity-company",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "byd lands massive 12 5gwh deal with saudi electricity company",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.dcceew.gov.au/energy/programs/cheaper-home-batteries",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "cheaper home batteries",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.energy-storage.news/germany-roundup-totalenergies-and-kyon-envision-and-juniz-flower-progress-bess-portfolios",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "germany roundup totalenergies and kyon envision and juniz flower progress bess portfolios",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/asian-development-bank-supports-500mwh-grid-forming-battery-energy-storage-project-in-cambodia",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "asian development bank supports 500mwh grid forming battery energy storage project in cambodia",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/pumped-hydro-costs-revised-up-battery-storage-costs-down-as-australias-",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "pumped hydro costs revised up battery storage costs down as australias",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/opdenergy-closes-us227-million-financing-for-chile-renewables-and-bess-portfolio",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "opdenergy closes us227 million financing for chile renewables and bess portfolio",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/australias-queensland-government-reportedly-shelves-20gwh-pumped-hydro-project",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "australias queensland government reportedly shelves 20gwh pumped hydro project",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/us-based-bess-companies-peak-energy-ess-inc-and-unigrid-aim-to-commercialise-sodium-ion-in-us-europe",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "us based bess companies peak energy ess inc and unigrid aim to commercialise sodium ion in us europe",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/its-really-about-flexibility-ferc-issues-show-cause-orders-to-us-grid-operators-on-large-load-integration",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "its really about flexibility ferc issues show cause orders to us grid operators on large load integration",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/battery-storage-costs-fall-11-16-as-australias-csiro-maps-least-cost-route-to-net-zero",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "battery storage costs fall 11 16 as australias csiro maps least cost route to net zero",
+    "tier": "S3"
+  },
+  {
+    "url": "https://cea.nic.in/wp-content/uploads/regulations_cpt/2025/08/Draft_Central_Electricity_Authority_Measures_relating_to_Safety_and_Electric_Supply_1st_Amendment_Regulations_2025.pdf",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "Draft Central Electricity Authority Measures relating to Safety and Electric Supply 1st Amendment Regulations 2025.pdf",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/over-4gwh-of-battery-storage-added-to-australias-updated-national-renewable-energy-priority-list",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "over 4gwh of battery storage added to australias updated national renewable energy priority list",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/thailand-is-creating-a-flexible-and-competitive-environment-for-energy-storage-market-participation",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "thailand is creating a flexible and competitive environment for energy storage market participation",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.industrialinfo.com/news/article/saudi-arabia-unveils-qualification-process-for-3-gw-of-bess-power-projects--357833",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "saudi arabia unveils qualification process for 3 gw of bess power projects 357833",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/alsym-energy-signs-9gwh-sodium-ion-bess-agreement-with-consultancy-for-global-mining-operations",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "alsym energy signs 9gwh sodium ion bess agreement with consultancy for global mining operations",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/giga-storage-secures-finance-for-2-8gwh-critical-infrastructure-belgium-bess",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "giga storage secures finance for 2 8gwh critical infrastructure belgium bess",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/honda-lg-es-begin-ess-cell-production-at-retooled-ohio-ev-cell-facility",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "honda lg es begin ess cell production at retooled ohio ev cell facility",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/leaked-eu-electrification-action-plan-recognises-need-for-200gw-of-energy-storage-by-2030",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "leaked eu electrification action plan recognises need for 200gw of energy storage by 2030",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.energy-storage.news/bess-developer-opts-for-california-energy-commission-fast-track-approval-after-facing-local-county-ordinance-obstacles",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "bess developer opts for california energy commission fast track approval after facing local county ordinance obstacles",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.ndrc.gov.cn",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "www.ndrc.gov.cn",
+    "tier": "S1"
+  },
+  {
+    "url": "https://www.terna.it/en/electric-system/markets-and-auctions/macse",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "macse",
+    "tier": "S3"
+  },
+  {
+    "url": "https://www.ferc.gov/media/order-no-2222-fact-sheet",
+    "source_origin": "fetched",
+    "reachable": true,
+    "title": "order no 2222 fact sheet",
+    "tier": "S1"
+  }
+]

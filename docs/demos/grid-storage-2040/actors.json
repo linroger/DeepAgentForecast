@@ -1,0 +1,2202 @@
+{
+  "central_question": "By 2040, will annual global grid-scale energy-storage additions reach at least 300 GW, and will non-lithium long-duration storage capture at least 20% of annual added GWh; if not, which lower-growth or lithium-dominant regime will prevail?",
+  "as_of_date": "2026-07-15",
+  "situation_brief": {
+    "current_situation": "Global battery-storage additions reached 112 GW and 307 GWh in 2025, an average duration of 2.74 hours, and the cited BloombergNEF outlook projects 158 GW of additions in 2026. LFP remains the bankable default for four-hour projects, supported by Chinese manufacturers holding about 85% of cell-manufacturing capacity and Chinese integrators about 76% of the 2025 BESS market. China reported 136 GW and 351 GWh of commissioned new-type storage at end-2025, although a CNESA series reported 144.7 GW, while non-lithium technologies still lack multiple large commercial reference projects with long operating histories. The central constraint has shifted from cell availability toward interconnection, duration-sensitive capacity accreditation, contracted revenue, safety compliance, and conversion of announced projects into operating assets.",
+    "context": "Lithium-ion pack prices fell by roughly 90% from about US$1,400/kWh in 2010 to below US$140/kWh in 2023, allowing LFP to accumulate manufacturing scale, warranties, EPC experience, financing templates, and operating references. As variable renewable penetration increased, storage deployment expanded faster than system operators redesigned interconnection and capacity rules, producing long queues, short average durations, and revenue cannibalization in early merchant markets. China subsequently moved from build mandates toward dispatch telemetry, utilization, and capacity compensation, while the United States, Europe, India, Australia, and the Gulf developed different combinations of queue reform, capacity markets, tolling contracts, local-content rules, and long-duration procurement.",
+    "dynamics": "LFP cost and integration scale continue to accelerate four-hour deployment, but ancillary-service saturation and declining merchant revenue weaken the economics of adding more identical assets. Regulators and system operators are beginning to reward duration, which could move investment toward flow batteries, compressed-air, liquid-air, thermal storage, and iron-air, but these routes remain constrained by thin operating records and limited non-recourse financing. Trade and local-content rules are fragmenting the global cost curve, while Chinese overcapacity simultaneously lowers equipment prices and intensifies dependence on Chinese materials and integration. The dossier assigns 30% to Lithium Dominance, 25% to LDES Diversified, 20% to China-Centric Vertical, and 25% to Stagnation, but a later chart presents a conflicting 47%/29%/18%/6% weighting that must not be silently averaged.",
+    "fault_lines": [
+      "Whether capacity markets and resource-adequacy rules should compensate duration and demonstrated availability rather than nameplate megawatts.",
+      "Whether LFP's system-integration and financing moat outweighs the architecture advantage of flow, compressed-air, thermal, liquid-air, and iron-air storage beyond eight hours.",
+      "Whether tariffs, FEOC restrictions, EU battery rules, and local-content mandates will diversify supply chains or mainly raise project costs and delay deployment.",
+      "How aggressively announced, tendered, or queued capacity should be discounted when historical completion rates and commissioning evidence are weak.",
+      "Whether safety, insurance, recycling, and siting requirements should be treated as necessary system costs or as barriers that disproportionately slow lithium-ion projects.",
+      "Whether public targets such as the IEA Net Zero trajectory and DOE LDES cost goals represent achievable deployment paths or policy aspirations unsupported by bankable cash flows."
+    ],
+    "catalysts": [
+      "China reaching or missing the official 180 GW new-type-storage target by 2027, together with changes in average duration and equivalent utilization hours.",
+      "FERC Order 2023 cluster-study results in 2027–2028 showing whether queue withdrawals fall and application-to-operation lead times improve.",
+      "ERCOT post-RTC+B battery revenue recovering above US$120/kW-year or remaining below US$70/kW-year for two consecutive years.",
+      "PJM capacity auctions maintaining prices above US$200/MW-day while admitting materially more duration-accredited storage.",
+      "At least two non-lithium technologies commissioning at least 5 GWh of non-demonstration capacity in two consecutive years before 2030.",
+      "A technology-neutral 10-hour-plus capacity contract clearing at US$50–75/kW-year equivalent for at least 15 years in a major market.",
+      "A 100 MW-plus flow, compressed-air, liquid-air, thermal, or iron-air reference project publishing at least 12 months of third-party availability and efficiency data.",
+      "A major BESS fire, moratorium, or insurer rule materially increasing spacing, testing, or insurance costs.",
+      "US FEOC and tax-credit implementation either preserving project finance for storage or materially excluding Chinese-origin components."
+    ]
+  },
+  "actors": [
+    {
+      "name": "National Development and Reform Commission of China",
+      "type": "Government",
+      "role": "China's principal economic planner and a central designer of storage scale targets, market compensation, technology-development priorities, and dispatch policy.",
+      "stance": "Supports at least 180 GW of new-type storage by 2027, continued lithium-ion scale, commercialization of compressed-air, flow, and sodium-ion routes, and a shift from mandatory construction toward dispatchable and market-compensated operation.",
+      "influence": "high",
+      "grade": "A2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "basis": "It sets national targets and market rules in the country responsible for roughly half of current global storage additions."
+      },
+      "description": "The National Development and Reform Commission is China's cabinet-level economic planning agency and co-author of the 2025–2027 new-type-storage scale-up program.",
+      "aliases": [
+        "NDRC",
+        "国家发展和改革委员会",
+        "China National Development and Reform Commission"
+      ],
+      "goals": [
+        "Reach at least 180 GW of operational new-type storage by the end of 2027.",
+        "Convert storage from a build mandate into a dispatchable system resource with sustainable revenue.",
+        "Preserve Chinese industrial leadership while commercializing selected non-lithium technologies."
+      ],
+      "constraints": [
+        "Provincial capacity-payment and market-access rules remain uneven.",
+        "Installed capacity does not automatically produce utilization or project-level returns.",
+        "Grid telemetry, safety, and dispatch compliance can delay market registration."
+      ],
+      "assets": [
+        "National planning authority",
+        "Pricing and market-design authority",
+        "Ability to coordinate investment targets and provincial implementation"
+      ],
+      "vulnerabilities": [
+        "A persistent gap between installed capacity and useful dispatch would undermine the policy shift.",
+        "Conflicting official capacity definitions weaken measurement and accountability.",
+        "Overbuilding short-duration LFP could deepen revenue cannibalization."
+      ],
+      "stated_vs_revealed": "The commission publicly promotes technology diversification, but the revealed scale strategy remains anchored overwhelmingly in lithium-ion while non-lithium routes are moved only gradually from demonstration toward commercialization.",
+      "worldview": {
+        "values": [
+          "Power-system reliability",
+          "Industrial scale",
+          "Controllability",
+          "Domestic technological leadership"
+        ],
+        "beliefs": [
+          "Storage must be observable, measurable, controllable, and compensated as a system resource.",
+          "Manufacturing capacity is no longer the principal constraint; utilization and market design are."
+        ],
+        "identity": "National planner balancing rapid construction with system discipline and industrial policy.",
+        "frame": "Storage is grid infrastructure and an industrial-development platform, not merely a collection of battery projects."
+      },
+      "incentives": [
+        {
+          "driver": "Achievement of national reliability and industrial targets",
+          "gains_if": "China exceeds 180 GW with rising duration, utilization, and domestic technology exports.",
+          "loses_if": "Capacity grows while utilization, safety, or project economics deteriorate.",
+          "intensity": "high"
+        },
+        {
+          "driver": "Orderly technology diversification",
+          "gains_if": "Chinese firms commercialize sodium-ion, flow, and compressed-air without disrupting LFP scale.",
+          "loses_if": "Foreign long-duration technologies establish bankable leadership or domestic demonstrations fail.",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "National targets",
+        "Market and capacity-payment reforms",
+        "Investment coordination",
+        "Technology classification and demonstration programs"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "It knows China has ample manufacturing capacity and a large installed base, and believes the next test is whether provincial markets can dispatch storage productively and compensate duration."
+    },
+    {
+      "name": "National Energy Administration of China",
+      "type": "Government",
+      "role": "China's energy regulator, official storage-statistics authority, and enforcer of grid-connection, dispatch, telemetry, utilization, and safety requirements.",
+      "stance": "Requires storage stations to become observable, measurable, controllable, responsive to dispatch, and compliant with lifecycle safety and market-registration rules.",
+      "influence": "high",
+      "grade": "A1",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "basis": "It controls the official operational definition, compliance regime, and market-registration conditions for China's storage fleet."
+      },
+      "description": "The National Energy Administration is China's national energy regulator and publisher of the official 136 GW/351 GWh end-2025 new-type-storage series.",
+      "aliases": [
+        "NEA",
+        "国家能源局",
+        "China National Energy Administration"
+      ],
+      "goals": [
+        "Ensure storage capacity is genuinely commissioned and dispatchable.",
+        "Increase utilization while maintaining safety and grid-code compliance.",
+        "Standardize operational data and enforce dispatch accountability."
+      ],
+      "constraints": [
+        "Provincial reporting and project definitions are not fully harmonized.",
+        "Public data lack granular provincial revenue and charge-discharge information.",
+        "Rapid deployment increases inspection and enforcement burdens."
+      ],
+      "assets": [
+        "Regulatory and market-registration authority",
+        "Official statistics",
+        "Grid-code and safety enforcement",
+        "Ability to remove non-compliant assets from market participation"
+      ],
+      "vulnerabilities": [
+        "The 136 GW official total conflicts with CNESA's 144.7 GW figure.",
+        "Headline utilization hours do not prove project-level profitability.",
+        "Safety incidents or telemetry failures could force a deployment slowdown."
+      ],
+      "stated_vs_revealed": "The NEA continues to report rapid scale growth, but its newer rules reveal a shift toward stricter operational discipline and away from treating installed megawatts as sufficient evidence of success.",
+      "worldview": {
+        "values": [
+          "Operational reliability",
+          "Measurement integrity",
+          "Safety",
+          "Dispatch compliance"
+        ],
+        "beliefs": [
+          "Storage has system value only when the grid can monitor and control it.",
+          "The next phase requires higher-quality operation rather than unqualified capacity growth."
+        ],
+        "identity": "Operational regulator and custodian of China's storage statistics.",
+        "frame": "Commissioning, telemetry, and utilization are the bridge from industrial policy to grid value."
+      },
+      "incentives": [
+        {
+          "driver": "Credible implementation of national storage policy",
+          "gains_if": "Official capacity targets are met with rising utilization and few major incidents.",
+          "loses_if": "Reported capacity proves unavailable, unsafe, or economically idle.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Licensing and registration powers",
+        "Official reporting channels",
+        "Safety and dispatch standards",
+        "Coordination with grid companies and provincial administrations"
+      ],
+      "risk_tolerance": "low",
+      "memory": "It has observed rapid capacity growth, a rise in four-hour-plus projects, and improving utilization, but also knows that statistical boundaries and provincial implementation remain inconsistent."
+    },
+    {
+      "name": "State Grid Corporation of China",
+      "type": "Organization",
+      "role": "The dominant Chinese grid operator whose connection approvals, dispatch commands, telemetry acceptance, and utilization practices determine whether installed storage becomes an operating system resource.",
+      "stance": "Supports controllable, grid-connected storage that follows dispatch instructions and contributes to renewable integration, reliability, and ancillary services.",
+      "influence": "high",
+      "grade": "A2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "It operates most of China's transmission system and can translate national policy into actual connection, dispatch, and utilization."
+      },
+      "description": "State Grid Corporation of China is the state-owned transmission and distribution utility serving most of mainland China.",
+      "aliases": [
+        "State Grid",
+        "SGCC",
+        "国家电网",
+        "State Grid China"
+      ],
+      "goals": [
+        "Integrate growing renewable generation without compromising reliability.",
+        "Use storage as a dispatchable flexibility and grid-forming resource.",
+        "Standardize telemetry and operating performance across provincial systems."
+      ],
+      "constraints": [
+        "Provincial market rules and compensation mechanisms differ.",
+        "Congestion and renewable profiles vary across the network.",
+        "Large volumes of short-duration storage may offer diminishing incremental value."
+      ],
+      "assets": [
+        "National-scale transmission and distribution infrastructure",
+        "Dispatch centers",
+        "Connection and telemetry acceptance processes",
+        "Operational data"
+      ],
+      "vulnerabilities": [
+        "Underutilized storage would expose inefficient capital allocation.",
+        "Telemetry or fire incidents could create reliability and political costs.",
+        "Inadequate duration could leave longer net-load gaps unresolved."
+      ],
+      "stated_vs_revealed": "State Grid's operating data show higher utilization, but the continued need for stronger telemetry and market-registration rules indicates that a material portion of the fleet has not yet reached uniform dispatch quality.",
+      "worldview": {
+        "values": [
+          "Reliability",
+          "Control",
+          "Standardization",
+          "System-wide optimization"
+        ],
+        "beliefs": [
+          "Storage value depends on dispatch performance rather than installed nameplate alone.",
+          "Grid-forming capability and telemetry are increasingly necessary as renewable penetration rises."
+        ],
+        "identity": "System operator responsible for converting storage investment into reliable grid flexibility.",
+        "frame": "Storage is useful when it behaves as controllable network infrastructure."
+      },
+      "incentives": [
+        {
+          "driver": "System reliability and renewable integration",
+          "gains_if": "Storage reduces curtailment and peak stress while obeying dispatch.",
+          "loses_if": "Storage is unavailable during stress periods or adds operational complexity without measurable benefits.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Dispatch authority",
+        "Interconnection access",
+        "Network planning",
+        "Operational telemetry",
+        "Procurement influence"
+      ],
+      "risk_tolerance": "low",
+      "memory": "It knows equivalent utilization increased to 1,175 hours on its grid in 2025, but also knows that duration, location, and provincial revenue rules determine whether that improvement is durable."
+    },
+    {
+      "name": "Contemporary Amperex Technology Co., Limited",
+      "type": "Organization",
+      "role": "A globally leading battery manufacturer whose LFP scale and 40 GWh sodium-ion expansion can materially influence chemistry costs, availability, and the timing of sodium-ion commercialization.",
+      "stance": "Continues to scale lithium-based batteries while investing heavily in sodium-ion as a complementary platform rather than publicly abandoning LFP.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "Its manufacturing scale and disclosed 40 GWh sodium-ion line give it direct leverage over both the incumbent chemistry and its most credible near-term substitute."
+      },
+      "description": "CATL is a major Chinese battery-cell manufacturer serving electric-vehicle and stationary-storage markets.",
+      "aliases": [
+        "CATL",
+        "宁德时代",
+        "Contemporary Amperex Technology"
+      ],
+      "goals": [
+        "Defend global cell leadership and LFP economics.",
+        "Establish sodium-ion as a commercial hedge and addressable niche platform.",
+        "Maintain access to export markets despite tariffs and local-content rules."
+      ],
+      "constraints": [
+        "Announced nameplate capacity does not guarantee accepted commercial shipments.",
+        "Utility-scale sodium-ion lacks a 100 MWh-class independent operating reference.",
+        "FEOC, tariff, carbon-footprint, and local-content rules constrain market access."
+      ],
+      "assets": [
+        "Large-scale cell manufacturing",
+        "LFP supply-chain integration",
+        "Sodium-ion research and planned production",
+        "Customer relationships and product-development scale"
+      ],
+      "vulnerabilities": [
+        "Dependence on Chinese processing and manufacturing creates trade-policy exposure.",
+        "Industry overcapacity can pressure margins and warranty reserves.",
+        "Failure to convert sodium-ion capacity into operating projects would weaken its diversification narrative."
+      ],
+      "stated_vs_revealed": "CATL's sodium-ion investment signals a serious hedge, but its revealed commercial base remains overwhelmingly lithium-based and the disclosed 40 GWh line is capacity, not commissioned grid deployment.",
+      "worldview": {
+        "values": [
+          "Manufacturing scale",
+          "Cost leadership",
+          "Technology optionality",
+          "Global market access"
+        ],
+        "beliefs": [
+          "LFP remains the default stationary chemistry, but sodium-ion can win where safety, cold performance, or supply-chain policy matters.",
+          "Commercial advantage comes from scaling complete manufacturing ecosystems rather than laboratory chemistry alone."
+        ],
+        "identity": "Incumbent battery leader hedging across chemistries.",
+        "frame": "New chemistry should complement and extend the existing manufacturing franchise, not prematurely replace it."
+      },
+      "incentives": [
+        {
+          "driver": "Global cell and system demand",
+          "gains_if": "LFP deployment grows rapidly and sodium-ion opens additional niches.",
+          "loses_if": "Trade barriers exclude Chinese content or non-lithium competitors establish bankable long-duration leadership.",
+          "intensity": "high"
+        },
+        {
+          "driver": "Return on sodium-ion investment",
+          "gains_if": "The Fujian line ships accepted cells into commercial projects from 2027 onward.",
+          "loses_if": "The line remains underutilized or sodium systems fail warranty and efficiency tests.",
+          "intensity": "medium"
+        }
+      ],
+      "resources": [
+        "Manufacturing capacity",
+        "Chemistry research",
+        "Supply-chain bargaining power",
+        "Scale purchasing",
+        "Global customer access"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "CATL knows LFP benefits from a mature bankability stack and treats sodium-ion as an option whose credibility will be determined by shipment, warranty, and operating data rather than announced gigawatt-hours."
+    },
+    {
+      "name": "Federal Energy Regulatory Commission",
+      "type": "Government",
+      "role": "The US federal regulator whose interconnection, wholesale-market, and tariff decisions govern most ISO/RTO storage development outside ERCOT.",
+      "stance": "Supports cluster-based interconnection studies, stronger project-readiness requirements, withdrawal penalties, and broader participation of storage and distributed resources in wholesale markets.",
+      "influence": "high",
+      "grade": "A1",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "basis": "Its orders determine queue rules and market access for most US regions, directly affecting whether announced projects can reach operation."
+      },
+      "description": "FERC is the independent US federal agency regulating interstate transmission and wholesale electricity markets.",
+      "aliases": [
+        "FERC",
+        "US Federal Energy Regulatory Commission"
+      ],
+      "goals": [
+        "Reduce speculative interconnection requests and accelerate viable projects.",
+        "Maintain non-discriminatory wholesale-market access.",
+        "Improve market participation for storage and distributed resources."
+      ],
+      "constraints": [
+        "ERCOT is largely outside FERC wholesale-market jurisdiction.",
+        "Implementation depends on ISO/RTO tariff filings and utility compliance.",
+        "Cluster reform cannot eliminate transmission scarcity or network-upgrade costs."
+      ],
+      "assets": [
+        "Tariff approval",
+        "Rulemaking",
+        "Compliance enforcement",
+        "Jurisdiction over interstate transmission and organized wholesale markets"
+      ],
+      "vulnerabilities": [
+        "Developers may continue over-submitting into clusters.",
+        "Reform may raise attrition without shortening total time to operation.",
+        "Litigation and implementation delays can weaken rule effectiveness."
+      ],
+      "stated_vs_revealed": "FERC presents cluster reform as a route to faster, more orderly interconnection, but the dossier indicates that surviving projects still face network costs, site-control requirements, and multi-year implementation delays.",
+      "worldview": {
+        "values": [
+          "Open access",
+          "Market efficiency",
+          "Queue discipline",
+          "Reliability"
+        ],
+        "beliefs": [
+          "Stronger readiness requirements and cluster studies can improve the quality of interconnection pipelines.",
+          "Market access should be technology-neutral within reliability constraints."
+        ],
+        "identity": "Federal arbiter of transmission and wholesale-market rules.",
+        "frame": "Storage deployment is primarily a market-access and transmission-planning problem once technology is commercially available."
+      },
+      "incentives": [
+        {
+          "driver": "Successful interconnection reform",
+          "gains_if": "Viable projects progress faster and speculative queue volume declines.",
+          "loses_if": "Lead times remain near five years and completion rates remain around historical lows.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Orders 2023 and 2222",
+        "Tariff jurisdiction",
+        "Administrative proceedings",
+        "Enforcement authority"
+      ],
+      "risk_tolerance": "low",
+      "memory": "FERC knows the US queue greatly exceeds plausible construction and that rule changes must distinguish mature projects from speculative applications without blocking needed capacity."
+    },
+    {
+      "name": "European Commission",
+      "type": "Government",
+      "role": "The EU executive that sets battery sustainability rules, industrial-policy targets, permitting frameworks, and the regulatory perimeter affecting storage deployment and imported systems.",
+      "stance": "Supports accelerated storage deployment, approximately 40% EU manufacturing capacity for strategic net-zero technologies by 2030, and phased carbon-footprint, due-diligence, performance, and recycling requirements.",
+      "influence": "high",
+      "grade": "A2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "basis": "It can alter project costs, supply-chain eligibility, and permitting across the EU while the region faces a large gap between operating capacity and modeled 2030 need."
+      },
+      "description": "The European Commission is the executive institution of the European Union and the originator of EU battery and net-zero industrial regulation.",
+      "aliases": [
+        "EC",
+        "EU Commission",
+        "European Union executive"
+      ],
+      "goals": [
+        "Expand storage to support electrification and renewable integration.",
+        "Build an EU manufacturing base and reduce strategic dependencies.",
+        "Enforce lifecycle sustainability, traceability, and recycling."
+      ],
+      "constraints": [
+        "Distribution-grid connection rules remain fragmented across member states.",
+        "Dual network charges and long DSO queues can negate faster equipment permitting.",
+        "Local-content and sustainability rules can raise costs before domestic capacity scales."
+      ],
+      "assets": [
+        "EU legislation",
+        "Industrial-policy funding",
+        "Competition and state-aid frameworks",
+        "Battery sustainability and due-diligence rules"
+      ],
+      "vulnerabilities": [
+        "A modeled 200 GW need is not a binding deployment mandate.",
+        "Only about 55 GW was operating or scheduled by end-2026 in the dossier's cited estimate.",
+        "Higher compliance costs could slow projects while failing to displace Chinese upstream dependence."
+      ],
+      "stated_vs_revealed": "The Commission seeks both rapid deployment and domestic industrial resilience, but the revealed near-term trade-off is that stricter sourcing and sustainability rules may raise delivered costs before European supply and grid access expand.",
+      "worldview": {
+        "values": [
+          "Strategic autonomy",
+          "Decarbonization",
+          "Lifecycle sustainability",
+          "Single-market standards"
+        ],
+        "beliefs": [
+          "Storage is essential to electrification but should not deepen uncontrolled supply-chain dependence.",
+          "Common product rules can shape global manufacturing practices."
+        ],
+        "identity": "Regional regulator combining climate policy with industrial strategy.",
+        "frame": "Deployment quality, domestic capability, and environmental compliance matter alongside gigawatts."
+      },
+      "incentives": [
+        {
+          "driver": "EU energy security and electrification",
+          "gains_if": "Storage expands quickly while a credible European supply chain emerges.",
+          "loses_if": "Connection queues persist and compliance costs leave the EU dependent on imports without achieving deployment targets.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "EU Battery Regulation",
+        "Net-Zero Industry Act",
+        "Funding and state-aid policy",
+        "Trade and carbon-footprint requirements"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "The Commission knows equipment availability alone will not close the deployment gap and views network access, bankable revenue, and strategic supply chains as simultaneous policy problems."
+    },
+    {
+      "name": "U.S. Department of Energy",
+      "type": "Government",
+      "role": "The US federal institution setting long-duration-storage cost and performance targets and supporting demonstrations, manufacturing, and commercialization.",
+      "stance": "Promotes commercial lift-off for intra-day and multi-day storage, with 2030 targets of US$650/kW and 75% round-trip efficiency for intra-day systems and US$1,100/kW with 55–60% efficiency for multi-day systems.",
+      "influence": "high",
+      "grade": "A2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "Its funding, targets, and manufacturing programs can determine whether non-lithium technologies cross from demonstration into bankable commercial reference projects."
+      },
+      "description": "The U.S. Department of Energy is the federal department funding and coordinating energy research, demonstrations, manufacturing, and commercialization policy.",
+      "aliases": [
+        "DOE",
+        "US DOE",
+        "Department of Energy"
+      ],
+      "goals": [
+        "Create commercially credible intra-day and multi-day storage technologies.",
+        "Reach approximately 3 GW/year of selected LDES manufacturing by 2030 and 10–15 GW/year by 2035.",
+        "Generate operating data that supports project finance and domestic supply chains."
+      ],
+      "constraints": [
+        "Cost and efficiency goals are targets rather than delivered commercial results.",
+        "Projects still require long-duration revenue contracts, tax credits, or 24/7 clean-energy demand.",
+        "Federal demonstrations cannot by themselves create ISO capacity accreditation."
+      ],
+      "assets": [
+        "Demonstration funding",
+        "National laboratories",
+        "Loan and manufacturing programs",
+        "Technical targets and public data"
+      ],
+      "vulnerabilities": [
+        "Delayed projects or weak operating data would make the 2030 targets appear aspirational.",
+        "Changes in tax policy and appropriations can interrupt commercialization.",
+        "Low-cycle assets may remain uneconomic despite low energy-media costs."
+      ],
+      "stated_vs_revealed": "DOE presents a pathway to LDES lift-off, while its own benchmarks reveal large remaining cost and efficiency gaps and dependence on contracted revenue.",
+      "worldview": {
+        "values": [
+          "Innovation",
+          "Domestic manufacturing",
+          "Grid resilience",
+          "Technology diversity"
+        ],
+        "beliefs": [
+          "Demonstration data and manufacturing scale can reduce bankability barriers.",
+          "Long-duration storage needs policy support because merchant markets underprice infrequent reliability value."
+        ],
+        "identity": "Technology-development principal attempting to bridge laboratory performance and commercial finance.",
+        "frame": "LDES is a commercialization and market-formation challenge, not only a research problem."
+      },
+      "incentives": [
+        {
+          "driver": "Commercial success of federally supported LDES",
+          "gains_if": "Several non-lithium routes commission large projects with independently verified performance.",
+          "loses_if": "The demonstration cohort slips and no route reaches repeatable project finance.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Grants",
+        "Loans",
+        "National-laboratory analysis",
+        "Manufacturing support",
+        "Public procurement and demonstration coordination"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "DOE knows current best-in-class LDES remains well above its 2030 targets and believes demonstrations must establish performance, warranty, and revenue evidence together."
+    },
+    {
+      "name": "BYD Company Limited",
+      "type": "Organization",
+      "role": "A vertically integrated Chinese cell and BESS supplier whose export scale, integration capability, and Saudi project frameworks reinforce the global LFP system moat.",
+      "stance": "Promotes turnkey, large-scale battery systems and long-term service packages for rapid grid deployment in China and export markets.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "It is a leading Chinese BESS integrator with the ability to bundle cells, systems, controls, EPC support, and export-scale delivery."
+      },
+      "description": "BYD is a Chinese battery, electric-vehicle, and energy-storage manufacturer and system integrator.",
+      "aliases": [
+        "BYD",
+        "比亚迪",
+        "Build Your Dreams"
+      ],
+      "goals": [
+        "Increase global BESS shipment and integration share.",
+        "Convert large frameworks, including Saudi projects, into commissioned capacity.",
+        "Defend turnkey cost leadership despite trade barriers."
+      ],
+      "constraints": [
+        "Framework agreements are not equivalent to commercial operation.",
+        "US and EU sourcing rules can restrict Chinese-origin content.",
+        "Hot-climate projects require reliable thermal management and long-term warranties."
+      ],
+      "assets": [
+        "Vertical integration",
+        "Cell and system manufacturing",
+        "Turnkey product capability",
+        "Global export and service relationships"
+      ],
+      "vulnerabilities": [
+        "Tariffs and FEOC restrictions",
+        "Margin pressure from Chinese overcapacity",
+        "Execution risk on very large overseas frameworks",
+        "Dependence on LFP-dominant demand"
+      ],
+      "stated_vs_revealed": "BYD's large international frameworks demonstrate commercial reach, but disclosed gigawatt-hours must still be discounted until projects reach commercial operation.",
+      "worldview": {
+        "values": [
+          "Scale",
+          "Vertical integration",
+          "Cost competitiveness",
+          "Rapid delivery"
+        ],
+        "beliefs": [
+          "Turnkey integration and service history are stronger competitive advantages than cell chemistry alone.",
+          "Long-term sovereign or utility contracts can offset technology and financing risk."
+        ],
+        "identity": "Integrated battery manufacturer and global project supplier.",
+        "frame": "The winning storage platform is the complete financed and warrantied system."
+      },
+      "incentives": [
+        {
+          "driver": "Global system shipments",
+          "gains_if": "Four-hour contracted procurement expands across China, the Gulf, Latin America, and other export markets.",
+          "loses_if": "Local-content rules fragment manufacturing or large framework projects slip.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Cell manufacturing",
+        "System integration",
+        "Power electronics",
+        "Export logistics",
+        "Service agreements"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "BYD knows Chinese integration scale is a bankability moat and that its overseas position depends on converting framework volume into commissioned, reliable assets."
+    },
+    {
+      "name": "PJM Interconnection",
+      "type": "Organization",
+      "role": "A major US regional transmission organization whose capacity auctions and accreditation rules can make four-hour or longer-duration storage financeable.",
+      "stance": "Uses capacity-market procurement and performance accreditation to secure resource adequacy, with recent auction outcomes making capacity revenue a central storage value stream.",
+      "influence": "high",
+      "grade": "A1",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "basis": "Its auction prices and qualification rules directly determine whether storage in the Eastern Interconnection can support debt service."
+      },
+      "description": "PJM Interconnection is the regional transmission organization and capacity-market operator serving much of the eastern United States.",
+      "aliases": [
+        "PJM",
+        "PJM RTO"
+      ],
+      "goals": [
+        "Procure sufficient reliable capacity.",
+        "Accredit storage according to availability and system need.",
+        "Move viable projects through reformed interconnection processes."
+      ],
+      "constraints": [
+        "Its tariffs remain subject to FERC approval.",
+        "High capacity prices face political and consumer scrutiny.",
+        "A large storage queue can eventually cannibalize capacity value."
+      ],
+      "assets": [
+        "Base Residual Auction",
+        "Capacity accreditation",
+        "Interconnection studies",
+        "Regional dispatch and planning"
+      ],
+      "vulnerabilities": [
+        "A future capacity-price collapse could undermine new storage finance.",
+        "Queue congestion may prevent qualified projects from reaching operation.",
+        "Rules that cap useful duration too low would deter 10-hour-plus systems."
+      ],
+      "stated_vs_revealed": "PJM's reliability framework is technology-neutral in principle, but the revealed economics depend heavily on how four-hour-class resources are accredited and whether auction scarcity persists.",
+      "worldview": {
+        "values": [
+          "Resource adequacy",
+          "Performance",
+          "Competitive procurement",
+          "Regional reliability"
+        ],
+        "beliefs": [
+          "Capacity should be paid according to dependable contribution during system stress.",
+          "Energy and ancillary revenue alone may not support sufficient firm capacity."
+        ],
+        "identity": "Capacity-market arbiter and regional reliability coordinator.",
+        "frame": "Storage value is its dependable contribution at scarcity hours, not just its energy arbitrage."
+      },
+      "incentives": [
+        {
+          "driver": "Reliable capacity procurement",
+          "gains_if": "Auctions attract dependable resources without sustained excessive prices.",
+          "loses_if": "Prices collapse before enough new capacity arrives or remain politically unsustainable.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Capacity auctions",
+        "Accreditation rules",
+        "Dispatch data",
+        "Queue administration",
+        "Tariff filings"
+      ],
+      "risk_tolerance": "low",
+      "memory": "PJM knows recent scarcity pricing can underwrite storage, but also knows that growing qualified supply may reproduce the revenue cannibalization observed in ERCOT."
+    },
+    {
+      "name": "Electric Reliability Council of Texas",
+      "type": "Organization",
+      "role": "The Texas system operator and energy-market administrator whose RTC+B implementation and scarcity-price design provide the leading test of merchant battery economics without a conventional capacity market.",
+      "stance": "Continues to integrate batteries through energy, ancillary-service, and real-time co-optimization reforms rather than adopting a PJM-style capacity market.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "basis": "ERCOT is the clearest live market test of whether storage can remain financeable after ancillary services saturate."
+      },
+      "description": "ERCOT is the independent system operator and wholesale-market administrator for most of Texas.",
+      "aliases": [
+        "ERCOT",
+        "Texas grid operator"
+      ],
+      "goals": [
+        "Maintain reliability in a rapidly changing generation mix.",
+        "Improve real-time co-optimization of batteries through RTC+B.",
+        "Preserve efficient scarcity and ancillary-service price signals."
+      ],
+      "constraints": [
+        "ERCOT lacks a conventional forward capacity market.",
+        "Battery entry has already compressed ancillary and arbitrage revenue.",
+        "It is largely outside FERC wholesale-market jurisdiction."
+      ],
+      "assets": [
+        "Real-time market design",
+        "Ancillary-service procurement",
+        "Dispatch and settlement rules",
+        "Operational data"
+      ],
+      "vulnerabilities": [
+        "Average battery revenue fell from about US$192/kW-year in 2023 to about US$55/kW-year in 2024.",
+        "Continued revenue weakness could halt merchant projects despite strong technical need.",
+        "A reliability event could trigger politically driven market redesign."
+      ],
+      "stated_vs_revealed": "ERCOT relies on energy and ancillary markets to reveal value, but the observed revenue collapse shows that the existing design underpays incremental identical batteries once services saturate.",
+      "worldview": {
+        "values": [
+          "Competitive energy markets",
+          "Operational flexibility",
+          "Scarcity pricing",
+          "Reliability"
+        ],
+        "beliefs": [
+          "Co-optimized real-time prices should guide flexible-resource behavior.",
+          "Administrative long-term capacity contracts are not the default solution."
+        ],
+        "identity": "Energy-only market operator testing whether merchant incentives can support storage at scale.",
+        "frame": "Storage should earn from real-time system value, even though fleet growth can erode that value."
+      },
+      "incentives": [
+        {
+          "driver": "Reliable operation without a conventional capacity market",
+          "gains_if": "RTC+B improves dispatch and restores adequate investment signals.",
+          "loses_if": "Revenue remains too low for new projects or a reliability event forces major redesign.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "RTC+B",
+        "Ancillary-service definitions",
+        "Settlement rules",
+        "Scarcity-pricing parameters"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "ERCOT knows batteries can saturate shallow service markets rapidly and treats post-RTC+B revenue as the decisive evidence on whether its market design remains investable."
+    },
+    {
+      "name": "National Energy System Operator",
+      "type": "Organization",
+      "role": "Great Britain's system planner and operator associated in the dossier with a cap-and-floor framework intended to make eight-hour-plus storage bankable.",
+      "stance": "Supports regulated revenue floors and caps for qualifying long-duration projects where merchant operating history is insufficient for project finance.",
+      "influence": "high",
+      "grade": "B2",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "basis": "Its long-duration procurement and planning framework can create the long-tenor cash flows needed for the UK's first commercial reference projects."
+      },
+      "description": "The National Energy System Operator is Great Britain's independent electricity and gas system planning and operating organization.",
+      "aliases": [
+        "NESO",
+        "UK National Energy System Operator"
+      ],
+      "goals": [
+        "Procure flexibility and reliability for a renewables-heavy power system.",
+        "Enable bankable long-duration projects through regulated revenue support.",
+        "Develop operating evidence for technologies beyond lithium-ion."
+      ],
+      "constraints": [
+        "Final eligibility, cap, floor, and award parameters determine bankability.",
+        "Regulated support can attract expensive projects if competition is weak.",
+        "Technology performance remains uncertain before long operating records exist."
+      ],
+      "assets": [
+        "System planning",
+        "Procurement design",
+        "Operational requirements",
+        "Cap-and-floor implementation influence"
+      ],
+      "vulnerabilities": [
+        "Undersubscribed or expensive procurement would weaken the UK reference model.",
+        "Project delays would postpone evidence for liquid-air and other LDES routes.",
+        "Poor performance could transfer risk to consumers."
+      ],
+      "stated_vs_revealed": "The cap-and-floor approach recognizes that merchant markets do not yet finance long-duration storage, effectively substituting regulated revenue for missing operating and warranty history.",
+      "worldview": {
+        "values": [
+          "System adequacy",
+          "Long-term flexibility",
+          "Financeability",
+          "Technology-neutral procurement"
+        ],
+        "beliefs": [
+          "Long-duration reliability value requires a contractual floor.",
+          "Reference projects are necessary before merchant finance can emerge."
+        ],
+        "identity": "System planner and market intermediary creating a bankability bridge for LDES.",
+        "frame": "Revenue certainty is the missing infrastructure for long-duration deployment."
+      },
+      "incentives": [
+        {
+          "driver": "Delivery of reliable long-duration capacity",
+          "gains_if": "Projects commission at competitive cost and meet availability requirements.",
+          "loses_if": "Contracts socialize costs without producing dependable capacity.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "System-needs analysis",
+        "Procurement mechanisms",
+        "Performance requirements",
+        "Long-term revenue structures"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "NESO knows long-duration projects lack merchant finance and treats regulated revenue as a temporary bridge to a commercially validated asset class."
+    },
+    {
+      "name": "Terna S.p.A.",
+      "type": "Organization",
+      "role": "Italy's transmission system operator and administrator of the MACSE framework, a major European test of contracted revenue for multi-hour storage.",
+      "stance": "Supports technology-neutral, long-tenor procurement of storage capacity to meet system adequacy and renewable-integration needs.",
+      "influence": "high",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "basis": "MACSE can determine whether European eight-to-twelve-hour projects obtain debt-serviceable contracts rather than remaining demonstrations."
+      },
+      "description": "Terna is Italy's national electricity transmission system operator.",
+      "aliases": [
+        "Terna",
+        "Terna Rete Elettrica Nazionale"
+      ],
+      "goals": [
+        "Procure storage capacity suited to Italy's renewable and adequacy needs.",
+        "Create competitive long-term cash flows for multi-hour resources.",
+        "Avoid overdependence on short-duration merchant batteries."
+      ],
+      "constraints": [
+        "The dossier did not directly verify all reported award volumes or clearing prices.",
+        "High contract prices could undermine political support.",
+        "Project delivery and technology performance remain uncertain."
+      ],
+      "assets": [
+        "Transmission planning",
+        "MACSE auction design",
+        "Capacity procurement",
+        "Operational qualification rules"
+      ],
+      "vulnerabilities": [
+        "Undersubscription or high clearing costs would weaken the European LDES model.",
+        "Contracted projects may still face permitting and connection delays."
+      ],
+      "stated_vs_revealed": "Terna's mechanism signals a willingness to pay for duration, but the commercial thesis remains unproven until contracted projects commission and publish performance.",
+      "worldview": {
+        "values": [
+          "System adequacy",
+          "Competitive procurement",
+          "Duration value",
+          "Long-term reliability"
+        ],
+        "beliefs": [
+          "Explicit capacity contracts are necessary for capital-intensive, low-utilization storage.",
+          "Technology-neutral auctions can reveal the least-cost duration mix."
+        ],
+        "identity": "Transmission operator using procurement to create a long-duration market.",
+        "frame": "Duration must be purchased explicitly rather than expected to emerge from energy arbitrage."
+      },
+      "incentives": [
+        {
+          "driver": "Successful MACSE delivery",
+          "gains_if": "Projects clear at affordable prices and provide dependable multi-hour capacity.",
+          "loses_if": "Projects fail to commission or costs exceed conventional capacity alternatives.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Auction authority",
+        "System planning",
+        "Connection oversight",
+        "Long-term capacity contracts"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Terna knows multi-hour storage needs contractual revenue and views commissioning results, not auction headlines, as the test of the mechanism."
+    },
+    {
+      "name": "Saudi Power Procurement Company",
+      "type": "Organization",
+      "role": "Saudi Arabia's central power procurer, using large four-hour BESS tenders and 15-year Storage Services Agreements to convert storage into contracted infrastructure.",
+      "stance": "Favors standardized build-own-operate storage blocks backed by long-term availability-style contracts.",
+      "influence": "high",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "Its procurement format can commission tens of gigawatt-hours and establish a Gulf benchmark for bankable four-hour storage."
+      },
+      "description": "Saudi Power Procurement Company is Saudi Arabia's principal buyer and tendering entity for new power capacity.",
+      "aliases": [
+        "SPPC",
+        "Saudi Power Procurement Co."
+      ],
+      "goals": [
+        "Commission large storage blocks to integrate renewable generation and meet peak demand.",
+        "Use 15-year contracts to obtain competitive financing and reliable availability.",
+        "Standardize hot-climate BESS delivery."
+      ],
+      "constraints": [
+        "Supplier concentration among a small number of Chinese integrators.",
+        "Hot-climate derating and thermal-management requirements.",
+        "Framework or award volume must still convert into commercial operation."
+      ],
+      "assets": [
+        "Centralized procurement",
+        "Long-term Storage Services Agreements",
+        "Sovereign-backed credit structure",
+        "Ability to standardize project specifications"
+      ],
+      "vulnerabilities": [
+        "Large project delays could create simultaneous reliability shortfalls.",
+        "Concentrated supply increases warranty and geopolitical exposure.",
+        "Four-hour standardization may underprovide longer-duration flexibility."
+      ],
+      "stated_vs_revealed": "SPPC's tender design reveals a preference for proven four-hour systems and contracted availability rather than early diversification into unproven long-duration technologies.",
+      "worldview": {
+        "values": [
+          "Execution certainty",
+          "Low financing cost",
+          "Availability",
+          "Standardization"
+        ],
+        "beliefs": [
+          "Long-term sovereign-quality contracts can reduce storage cost more reliably than merchant exposure.",
+          "Proven four-hour platforms are preferable to technology experimentation at the current stage."
+        ],
+        "identity": "Central buyer creating a standardized national storage market.",
+        "frame": "Storage is contracted utility infrastructure whose financing structure is as important as equipment price."
+      },
+      "incentives": [
+        {
+          "driver": "Timely contracted capacity",
+          "gains_if": "Awarded projects reach commercial operation on schedule and perform in extreme heat.",
+          "loses_if": "Framework volumes slip or imported-system dependence produces cost and availability problems.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Tender authority",
+        "Long-term contracts",
+        "Centralized credit support",
+        "Technical specifications"
+      ],
+      "risk_tolerance": "low",
+      "memory": "SPPC knows four-hour lithium systems are the most financeable current option and uses long contracts to shift projects away from merchant risk."
+    },
+    {
+      "name": "Saudi Electricity Company",
+      "type": "Organization",
+      "role": "Saudi Arabia's principal electricity utility and the counterparty associated with BYD's disclosed 12.5 GWh project portfolio.",
+      "stance": "Supports large, standardized battery deployments integrated with the Saudi grid and backed by long-term supplier relationships.",
+      "influence": "medium",
+      "grade": "C2",
+      "archetype": "actor",
+      "simulation_tier": 2,
+      "role_class": "principal",
+      "salience": {
+        "tier": "medium",
+        "basis": "It can convert one of the world's largest disclosed BESS frameworks into commissioned capacity, but the portfolio remains subject to execution."
+      },
+      "description": "Saudi Electricity Company is Saudi Arabia's vertically integrated national electricity utility.",
+      "aliases": [
+        "SEC",
+        "Saudi Electric Company"
+      ],
+      "goals": [
+        "Commission the disclosed BYD-backed storage portfolio.",
+        "Integrate storage with grid operations and renewable expansion.",
+        "Secure reliable performance under high-temperature conditions."
+      ],
+      "constraints": [
+        "The cited 12.5 GWh is disclosed project or framework volume rather than fully commissioned capacity.",
+        "Hot-climate performance and grid-forming integration must be demonstrated.",
+        "Supplier concentration creates execution dependence."
+      ],
+      "assets": [
+        "Utility network",
+        "Project ownership and procurement capacity",
+        "Long-term supplier relationships",
+        "Operational control"
+      ],
+      "vulnerabilities": [
+        "Schedule slippage or warranty failure across a concentrated supplier portfolio.",
+        "Confusion between announced and operating capacity."
+      ],
+      "stated_vs_revealed": "The scale of the BYD relationship demonstrates commitment, but commercial credibility depends on COD and operating data rather than framework announcements.",
+      "worldview": {
+        "values": [
+          "Grid reliability",
+          "Rapid delivery",
+          "Operational integration",
+          "Supplier accountability"
+        ],
+        "beliefs": [
+          "Large standardized portfolios can accelerate system learning.",
+          "Long-term service support is necessary for hot-climate BESS."
+        ],
+        "identity": "National utility responsible for turning procurement scale into operating reliability.",
+        "frame": "Commissioned and dispatchable gigawatt-hours matter more than framework size."
+      },
+      "incentives": [
+        {
+          "driver": "Successful portfolio commissioning",
+          "gains_if": "The BYD projects reach COD and deliver contracted availability.",
+          "loses_if": "Schedule, thermal, or integration failures leave announced capacity unavailable.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Grid access",
+        "Utility balance sheet",
+        "Operations workforce",
+        "Project contracting"
+      ],
+      "risk_tolerance": "low",
+      "memory": "SEC knows the portfolio is globally significant on paper and that its value depends on synchronized construction, grid integration, and long-term service performance."
+    },
+    {
+      "name": "Solar Energy Corporation of India",
+      "type": "Organization",
+      "role": "India's federal renewable-energy procurement intermediary, responsible for long-term storage tenders and structures intended to bridge the country's tender-to-commissioning gap.",
+      "stance": "Supports larger four-hour storage products, 15-year contracts, and viability-gap funding to accelerate commissioned BESS capacity.",
+      "influence": "high",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "basis": "Its tender and contract design can determine whether India's roughly 102 GWh of tendered storage converts into operating capacity."
+      },
+      "description": "Solar Energy Corporation of India is a state-owned federal implementing and procurement agency for renewable energy and storage.",
+      "aliases": [
+        "SECI",
+        "Solar Energy Corporation of India Limited"
+      ],
+      "goals": [
+        "Convert awarded storage projects into commissioned capacity.",
+        "Move procurement toward four-hour products suited to evening peaks.",
+        "Use long-term contracts and viability-gap funding to lower tariffs."
+      ],
+      "constraints": [
+        "State DISCOM credit quality and payment risk.",
+        "Connection-charge and open-access uncertainty.",
+        "Aggressive bids may depend on future cost declines or refinancing."
+      ],
+      "assets": [
+        "Federal tender platform",
+        "Long-term power and storage contracts",
+        "Viability-gap funding",
+        "Ability to aggregate state demand"
+      ],
+      "vulnerabilities": [
+        "Approximately 102 GWh tendered versus about 0.5 GWh commissioned exposes an execution gap.",
+        "Low bids may not remain financeable.",
+        "DISCOM and interconnection delays can strand awarded projects."
+      ],
+      "stated_vs_revealed": "SECI's tender volumes signal aggressive ambition, but revealed commissioning remains far below awards, indicating that offtake credit and execution are more binding than equipment availability.",
+      "worldview": {
+        "values": [
+          "Affordable tariffs",
+          "Scale",
+          "Contracted delivery",
+          "Renewable integration"
+        ],
+        "beliefs": [
+          "Centralized procurement and viability support can overcome early storage costs.",
+          "Four-hour contracts better match India's emerging system need than earlier two-hour products."
+        ],
+        "identity": "Federal market maker attempting to turn tender scale into operational storage.",
+        "frame": "The central challenge is contract and commissioning discipline, not a shortage of bids."
+      },
+      "incentives": [
+        {
+          "driver": "Tender-to-operation conversion",
+          "gains_if": "Awarded projects close financing, connect, and deliver at contracted tariffs.",
+          "loses_if": "The pipeline remains large while commissioned capacity stays negligible.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Tendering authority",
+        "Federal coordination",
+        "Viability-gap funding",
+        "Long-tenor contracts"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "SECI knows India has enough tendered volume to meet a meaningful share of future needs but that DISCOM credit, connection rules, and aggressive bidding can prevent COD."
+    },
+    {
+      "name": "Australian Energy Market Operator",
+      "type": "Organization",
+      "role": "Australia's electricity-market and system planner, whose Integrated System Plan determines the expected mix of batteries, pumped hydro, transmission, and deeper storage.",
+      "stance": "Plans for approximately 40 GW of utility-scale storage by 2050, with the largest share in four-to-twelve-hour batteries and a smaller pumped-hydro contribution.",
+      "influence": "high",
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "basis": "Its system plan and reliability requirements shape procurement after major Australian pumped-hydro projects were shelved, cancelled, or re-costed."
+      },
+      "description": "The Australian Energy Market Operator operates the National Electricity Market and publishes the Integrated System Plan.",
+      "aliases": [
+        "AEMO",
+        "Australian Energy Market Operator Limited"
+      ],
+      "goals": [
+        "Maintain reliability through coal retirement and renewable expansion.",
+        "Identify an efficient mix of batteries, transmission, pumped hydro, and deeper storage.",
+        "Avoid overreliance on delayed megaprojects."
+      ],
+      "constraints": [
+        "AEMO plans do not themselves guarantee project finance or construction.",
+        "Transmission delivery and social license remain binding.",
+        "Pumped-hydro cost overruns narrow the available deep-storage options."
+      ],
+      "assets": [
+        "Integrated System Plan",
+        "Market operation",
+        "Reliability modeling",
+        "Connection and system-strength requirements"
+      ],
+      "vulnerabilities": [
+        "Battery-heavy substitution for pumped hydro may leave multi-day reliability gaps.",
+        "Transmission delays could invalidate the optimal development path.",
+        "Planning assumptions may lag rapid behind-the-meter battery adoption."
+      ],
+      "stated_vs_revealed": "AEMO retains pumped hydro in the long-term mix, but recent project cancellations and cost escalation reveal a practical shift toward modular batteries and selective non-PHES long-duration options.",
+      "worldview": {
+        "values": [
+          "Least-cost reliability",
+          "System planning",
+          "Technology diversity",
+          "Operational security"
+        ],
+        "beliefs": [
+          "Storage duration must match the evolving reliability gap.",
+          "Modular batteries can substitute for some civil megaprojects but not necessarily all deep-storage needs."
+        ],
+        "identity": "System planner balancing executable projects against long-term reliability requirements.",
+        "frame": "The optimal technology is the one that can be delivered with its required transmission and reliability contribution."
+      },
+      "incentives": [
+        {
+          "driver": "Credible transition plan",
+          "gains_if": "Storage and transmission commission in time to replace retiring generation.",
+          "loses_if": "Pumped-hydro failures or battery duration shortfalls produce reliability gaps.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "System modeling",
+        "Market rules",
+        "Connection standards",
+        "Reliability assessments",
+        "Planning scenarios"
+      ],
+      "risk_tolerance": "low",
+      "memory": "AEMO knows batteries are deploying faster than earlier assumptions while pumped-hydro execution has weakened, forcing closer scrutiny of four-to-twelve-hour and multi-day adequacy."
+    },
+    {
+      "name": "Form Energy",
+      "type": "Organization",
+      "role": "The leading iron-air developer in the dossier, attempting to commercialize approximately 100-hour storage and provide a non-lithium option for cross-day and multi-day reliability.",
+      "stance": "Argues that low-cost iron-air energy modules can economically serve 100-hour reliability needs that daily-cycling lithium batteries cannot.",
+      "influence": "medium",
+      "grade": "C2",
+      "archetype": "actor",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "salience": {
+        "tier": "medium",
+        "basis": "Its projects are the dossier's leading indicator for whether metal-air storage can cross from pre-commercial demonstrations into repeatable utility deployment."
+      },
+      "description": "Form Energy is a US energy-storage company developing rechargeable iron-air batteries designed for multi-day discharge.",
+      "aliases": [
+        "Form",
+        "Form Energy Inc."
+      ],
+      "goals": [
+        "Commission utility projects with Georgia Power, Xcel Energy, and Great River Energy on schedule.",
+        "Demonstrate dependable 100-hour operation and bankable warranties.",
+        "Scale manufacturing sufficiently to reduce system cost."
+      ],
+      "constraints": [
+        "The technology remains pre-commercial at grid scale as of the cutoff.",
+        "Round-trip efficiency is far below LFP.",
+        "Low cycle frequency requires long-term capacity revenue rather than energy arbitrage."
+      ],
+      "assets": [
+        "Low-cost iron-based active materials",
+        "Approximately 100-hour product architecture",
+        "Utility project pipeline",
+        "Dedicated manufacturing strategy"
+      ],
+      "vulnerabilities": [
+        "Commissioning delays",
+        "Failure to achieve availability or efficiency claims",
+        "Insufficient 15-year revenue contracts",
+        "High power-side capex relative to low annual throughput"
+      ],
+      "stated_vs_revealed": "Form presents iron-air as a commercial multi-day solution, but the revealed evidence base remains limited commercial deployment without the multi-year operating record required for broad non-recourse finance.",
+      "worldview": {
+        "values": [
+          "Multi-day resilience",
+          "Abundant materials",
+          "Low energy-module cost",
+          "Grid decarbonization"
+        ],
+        "beliefs": [
+          "Lithium-ion is structurally expensive for 100-hour storage.",
+          "Low efficiency can be acceptable when renewable charging energy is abundant and reliability value is contracted."
+        ],
+        "identity": "Technology challenger seeking to create the iron-air asset class.",
+        "frame": "The relevant competition is firm multi-day capacity, not daily four-hour arbitrage."
+      },
+      "incentives": [
+        {
+          "driver": "Commercial reference performance",
+          "gains_if": "Projects commission and publish credible availability data under long-term utility contracts.",
+          "loses_if": "Projects slip or fail to meet efficiency and availability expectations.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Iron-air intellectual property",
+        "Manufacturing investment",
+        "Utility partnerships",
+        "Long-duration product design"
+      ],
+      "risk_tolerance": "high",
+      "memory": "Form knows it does not need to beat LFP at four hours, but must prove that low-cost energy capacity and contracted reliability outweigh low efficiency and limited operating history."
+    },
+    {
+      "name": "Hydrostor",
+      "type": "Organization",
+      "role": "A leading advanced compressed-air developer attempting to establish a bankable 8–24-hour reference class through large projects such as the 300 MW/2,100 MWh Apex project.",
+      "stance": "Promotes advanced compressed-air storage as a fuel-free, long-life alternative for long-duration applications where suitable sites and long-term contracts exist.",
+      "influence": "medium",
+      "grade": "C3",
+      "archetype": "actor",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "salience": {
+        "tier": "medium",
+        "basis": "A successful large Hydrostor project would materially improve the bankability of compressed-air storage, while failure would reinforce its niche status."
+      },
+      "description": "Hydrostor is a Canadian long-duration-storage developer specializing in advanced compressed-air energy storage.",
+      "aliases": [
+        "Hydrostor Inc.",
+        "Hydrostor A-CAES"
+      ],
+      "goals": [
+        "Deliver a utility-scale A-CAES reference project.",
+        "Secure long-tenor tolling or capacity contracts.",
+        "Demonstrate approximately 60–65% round-trip efficiency and reliable thermal management."
+      ],
+      "constraints": [
+        "Site geology and cavern availability",
+        "Long permitting and construction schedules",
+        "Unproven large-scale thermal-store cycle record",
+        "Need for Tier-1 EPC and long-term contracted revenue"
+      ],
+      "assets": [
+        "A-CAES engineering",
+        "Large disclosed project pipeline",
+        "Decoupled power and energy architecture",
+        "Long asset-life proposition"
+      ],
+      "vulnerabilities": [
+        "Civil-works overruns",
+        "Project delay",
+        "Failure to validate thermal management over repeated cycles",
+        "Dependence on location-specific infrastructure"
+      ],
+      "stated_vs_revealed": "Hydrostor argues that A-CAES is commercially ready, but the dossier finds no independently measured unit with the required large-scale, thousand-cycle operating history.",
+      "worldview": {
+        "values": [
+          "Long asset life",
+          "Mechanical supply chains",
+          "Duration flexibility",
+          "Fuel-free operation"
+        ],
+        "beliefs": [
+          "Compressed-air storage can outperform electrochemical systems at longer durations.",
+          "Geology and contracts, rather than the thermodynamic cycle alone, determine commercial success."
+        ],
+        "identity": "Infrastructure-scale challenger seeking to revive compressed-air storage with modern thermal management.",
+        "frame": "The asset should be compared with long-lived grid infrastructure, not short-lived battery containers."
+      },
+      "incentives": [
+        {
+          "driver": "First bankable large reference project",
+          "gains_if": "Apex or an equivalent project reaches COD within budget and achieves warranted performance.",
+          "loses_if": "Civil, permitting, or performance problems repeat the execution record of other megaprojects.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "A-CAES designs",
+        "Project-development capability",
+        "Geological site portfolio",
+        "Engineering partners"
+      ],
+      "risk_tolerance": "high",
+      "memory": "Hydrostor knows the architecture has duration advantages but that financiers will judge it primarily on construction execution, independent operating data, and contract tenor."
+    },
+    {
+      "name": "Highview Power",
+      "type": "Organization",
+      "role": "The leading liquid-air storage developer in the dossier, using UK regulated revenue support to move from a 50 MW demonstrator toward a proposed 300 MW commercial project.",
+      "stance": "Promotes liquid-air storage as a modular, non-lithium technology based on established turbomachinery and suitable for multi-hour grid service.",
+      "influence": "medium",
+      "grade": "B3",
+      "archetype": "actor",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "salience": {
+        "tier": "medium",
+        "basis": "Its UK projects are a direct test of whether a cap-and-floor mechanism can overcome limited cycle and warranty history for liquid-air storage."
+      },
+      "description": "Highview Power is a UK energy-storage developer commercializing liquid-air energy storage.",
+      "aliases": [
+        "Highview",
+        "Highview Power Storage",
+        "Highview Power Ltd."
+      ],
+      "goals": [
+        "Finance and commission a large UK liquid-air project.",
+        "Demonstrate repeatable availability and efficiency under a regulated revenue framework.",
+        "Establish a bankable supply chain based on conventional turbomachinery."
+      ],
+      "constraints": [
+        "Round-trip efficiency is approximately 50–60%.",
+        "No commercial unit has a decade-scale operating and warranty record.",
+        "Cryogenic equipment and project capex require long-term revenue support."
+      ],
+      "assets": [
+        "Liquid-air process design",
+        "Demonstrator experience",
+        "Access to established turbomachinery suppliers",
+        "UK policy alignment"
+      ],
+      "vulnerabilities": [
+        "Dependence on cap-and-floor terms",
+        "Project delays or cost escalation",
+        "Failure to establish long-term cycle performance",
+        "Competition from batteries and compressed-air systems"
+      ],
+      "stated_vs_revealed": "Highview emphasizes modularity and established components, but the use of regulated revenue support reveals that conventional project finance does not yet accept the technology's operating-history risk.",
+      "worldview": {
+        "values": [
+          "Supply-chain resilience",
+          "Modular siting",
+          "Long-duration flexibility",
+          "Commercial-scale demonstration"
+        ],
+        "beliefs": [
+          "Established industrial equipment can shorten the path to bankability.",
+          "Regulated revenue support can compensate temporarily for a thin operating record."
+        ],
+        "identity": "Liquid-air technology challenger seeking a first repeatable commercial reference.",
+        "frame": "The commercial bottleneck is warranty and financeability rather than basic thermodynamics."
+      },
+      "incentives": [
+        {
+          "driver": "Successful UK commercial reference",
+          "gains_if": "The large project reaches COD and performs within the cap-and-floor regime.",
+          "loses_if": "The project slips, exceeds capex expectations, or fails cycle-performance tests.",
+          "intensity": "high"
+        }
+      ],
+      "resources": [
+        "Liquid-air intellectual property",
+        "Demonstrator experience",
+        "UK development pipeline",
+        "Industrial equipment partnerships"
+      ],
+      "risk_tolerance": "high",
+      "memory": "Highview knows debt providers view regulated revenue as a substitute for missing operating history and must convert that support into independently verified performance."
+    }
+  ],
+  "relationships": [
+    {
+      "source": "National Development and Reform Commission of China",
+      "target": "National Energy Administration of China",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "grade": "A1",
+      "valence": "allied",
+      "polarity": 0.9,
+      "since": "2025-09-12",
+      "basis": "The two agencies jointly issued the 2025–2027 scale-up action plan establishing the 180 GW target and technology-commercialization priorities."
+    },
+    {
+      "source": "National Development and Reform Commission of China",
+      "target": "State Grid Corporation of China",
+      "type": "REGULATES",
+      "sign": "neutral",
+      "strength": "high",
+      "grade": "A2",
+      "valence": "directional",
+      "polarity": 0.0,
+      "basis": "NDRC policy establishes the market, pricing, dispatch, and system-resource framework that State Grid must implement."
+    },
+    {
+      "source": "National Energy Administration of China",
+      "target": "State Grid Corporation of China",
+      "type": "REGULATES",
+      "sign": "neutral",
+      "strength": "high",
+      "grade": "A1",
+      "valence": "directional",
+      "polarity": 0.0,
+      "basis": "NEA rules require connected storage to meet telemetry, dispatch, safety, and market-registration standards implemented through grid operators."
+    },
+    {
+      "source": "National Development and Reform Commission of China",
+      "target": "Contemporary Amperex Technology Co., Limited",
+      "type": "ENABLES",
+      "sign": "ally",
+      "strength": "high",
+      "grade": "B2",
+      "valence": "directional",
+      "polarity": 0.6,
+      "basis": "China's 180 GW target and explicit push to commercialize sodium-ion expand the addressable domestic market for CATL's LFP and planned sodium-ion capacity."
+    },
+    {
+      "source": "National Development and Reform Commission of China",
+      "target": "BYD Company Limited",
+      "type": "ENABLES",
+      "sign": "ally",
+      "strength": "high",
+      "grade": "B2",
+      "valence": "directional",
+      "polarity": 0.6,
+      "basis": "National scale targets and market-compensation reforms support continued demand for BYD's integrated battery systems."
+    },
+    {
+      "source": "Federal Energy Regulatory Commission",
+      "target": "PJM Interconnection",
+      "type": "REGULATES",
+      "sign": "neutral",
+      "strength": "high",
+      "grade": "A1",
+      "valence": "directional",
+      "polarity": 0.0,
+      "basis": "PJM's interconnection, capacity-market, and accreditation tariffs operate under FERC jurisdiction and approval."
+    },
+    {
+      "source": "European Commission",
+      "target": "Contemporary Amperex Technology Co., Limited",
+      "type": "REGULATES",
+      "sign": "neutral",
+      "strength": "medium",
+      "grade": "A2",
+      "valence": "directional",
+      "polarity": -0.2,
+      "basis": "EU battery carbon-footprint, due-diligence, recycling, and industrial-policy rules affect CATL products and supply chains entering the European market."
+    },
+    {
+      "source": "European Commission",
+      "target": "BYD Company Limited",
+      "type": "REGULATES",
+      "sign": "neutral",
+      "strength": "medium",
+      "grade": "A2",
+      "valence": "directional",
+      "polarity": -0.2,
+      "basis": "EU battery and local-manufacturing rules impose lifecycle and sourcing requirements on BYD systems deployed in Europe."
+    },
+    {
+      "source": "Contemporary Amperex Technology Co., Limited",
+      "target": "BYD Company Limited",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "high",
+      "grade": "B2",
+      "valence": "adversarial",
+      "polarity": -0.8,
+      "basis": "Both firms compete for global cell and integrated BESS shipments within the Chinese-dominated storage supply chain."
+    },
+    {
+      "source": "PJM Interconnection",
+      "target": "Electric Reliability Council of Texas",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "valence": "adversarial",
+      "polarity": -0.4,
+      "basis": "The dossier identifies storage capital reallocating between ERCOT's merchant market and PJM's capacity-backed market as their revenue conditions diverge."
+    },
+    {
+      "source": "U.S. Department of Energy",
+      "target": "Form Energy",
+      "type": "ENABLES",
+      "sign": "ally",
+      "strength": "medium",
+      "valence": "directional",
+      "polarity": 0.5,
+      "basis": "DOE's LDES demonstrations, cost targets, and manufacturing programs create the commercialization pathway against which Form Energy's iron-air projects are evaluated."
+    },
+    {
+      "source": "Terna S.p.A.",
+      "target": "Hydrostor",
+      "type": "ENABLES",
+      "sign": "ally",
+      "strength": "medium",
+      "valence": "directional",
+      "polarity": 0.4,
+      "basis": "MACSE-style long-tenor capacity procurement provides the type of revenue support required by capital-intensive 8–12-hour technologies such as A-CAES; no specific Hydrostor award is asserted."
+    },
+    {
+      "source": "National Energy System Operator",
+      "target": "Highview Power",
+      "type": "BACKS",
+      "sign": "ally",
+      "strength": "high",
+      "grade": "B2",
+      "valence": "allied",
+      "polarity": 0.7,
+      "basis": "The UK cap-and-floor framework supplies a regulated revenue floor for Highview's liquid-air project, substituting bankable cash flow for limited operating history."
+    },
+    {
+      "source": "BYD Company Limited",
+      "target": "Saudi Electricity Company",
+      "type": "SUPPLIES",
+      "sign": "neutral",
+      "strength": "high",
+      "grade": "C2",
+      "valence": "transactional",
+      "polarity": 0.6,
+      "basis": "BYD disclosed five Saudi Electricity Company projects aggregating 12.5 GWh, although disclosed volume is not equivalent to commissioned capacity."
+    },
+    {
+      "source": "Saudi Electricity Company",
+      "target": "BYD Company Limited",
+      "type": "CUSTOMER_OF",
+      "sign": "neutral",
+      "strength": "high",
+      "grade": "C2",
+      "valence": "transactional",
+      "polarity": 0.6,
+      "basis": "Saudi Electricity Company is the utility counterparty for BYD's disclosed 12.5 GWh Saudi project portfolio."
+    },
+    {
+      "source": "Saudi Power Procurement Company",
+      "target": "BYD Company Limited",
+      "type": "INFLUENCES",
+      "sign": "neutral",
+      "strength": "medium",
+      "valence": "directional",
+      "polarity": 0.3,
+      "basis": "SPPC's standardized four-hour tenders and 15-year Storage Services Agreements expand the Saudi market in which BYD is already an active system supplier; no SPPC award to BYD is asserted."
+    }
+  ],
+  "key_events": [
+    {
+      "date": "2010",
+      "event": "Lithium-ion battery packs were priced at roughly US$1,400/kWh, establishing the starting point for the subsequent approximately 90% cost decline."
+    },
+    {
+      "date": "2015",
+      "event": "Sumitomo Electric and Hokkaido Electric commissioned the 60 MW/252 MWh Yusaku vanadium-redox system, which became the principal decade-class flow-battery reference."
+    },
+    {
+      "date": "2022",
+      "event": "The Hokkaido flow-battery reference was expanded to approximately 60 MW/510 MWh."
+    },
+    {
+      "date": "2023",
+      "event": "FERC issued Order 2023, shifting US interconnection procedures toward cluster studies, stronger readiness requirements, and withdrawal penalties."
+    },
+    {
+      "date": "2024",
+      "event": "Average ERCOT battery revenue fell to about US$55/kW-year from approximately US$192/kW-year in 2023, demonstrating rapid ancillary-service and arbitrage cannibalization."
+    },
+    {
+      "date": "2025-01",
+      "event": "The Moss Landing battery fire intensified scrutiny of siting, emergency response, insurance, and NFPA 855 compliance."
+    },
+    {
+      "date": "2025-09-12",
+      "event": "China published its 2025–2027 new-type-storage scale-up action plan, targeting at least 180 GW by 2027 and approximately RMB 250 billion of direct investment."
+    },
+    {
+      "date": "2025-11-10",
+      "event": "China published Document 1360, framing storage as a controllable system resource subject to dispatch and telemetry requirements."
+    },
+    {
+      "date": "2025-12",
+      "event": "ERCOT implemented RTC+B, creating a live test of whether real-time co-optimization can restore storage revenue without a conventional capacity market."
+    },
+    {
+      "date": "2025-12-31",
+      "event": "Global battery additions reached 112 GW/307 GWh, while China ended the year with an official 136 GW/351 GWh of new-type storage."
+    },
+    {
+      "date": "2026-01-30",
+      "event": "The National Energy Administration reported China's 136 GW/351 GWh stock, 96.1% lithium-ion share, 2.58-hour average duration, 27.6% four-hour-plus share, and 1,195 equivalent utilization hours."
+    },
+    {
+      "date": "2026-05",
+      "event": "BloombergNEF projected 158 GW of global battery additions in 2026, rising to 308 GW in 2036, and framed a 3.8 TW cumulative station-scale-storage trajectory by 2035."
+    }
+  ],
+  "hot_topics": [
+    "Duration-sensitive capacity accreditation",
+    "ERCOT revenue cannibalization after RTC+B",
+    "PJM capacity-auction durability",
+    "FERC Order 2023 queue conversion",
+    "China's 180 GW by 2027 target",
+    "LFP system-integration and financing moat",
+    "Sodium-ion announced capacity versus commissioned projects",
+    "Flow-battery bankability and electrolyte risk",
+    "A-CAES, LAES, thermal, and iron-air commercial reference projects",
+    "FEOC, Section 301 tariffs, and EU local-content rules",
+    "BESS fire safety, NFPA 855, insurance, and siting",
+    "Tendered and queued capacity versus commercial operation",
+    "Pumped-hydro cost overruns and cancellations",
+    "Long-duration contracts under UK cap-and-floor and Italy MACSE",
+    "Hydrogen storage efficiency and industrial-offtake dependence"
+  ],
+  "quantitative_facts": [
+    {
+      "metric": "China cumulative new-type-storage power",
+      "series": "China commissioned new-type storage power",
+      "value": "136",
+      "unit": "GW",
+      "as_of_date": "2026-01-30",
+      "period_end": "2025-12-31",
+      "value_type": "observed",
+      "geography": "China",
+      "definition": "Cumulative power capacity classified by the National Energy Administration as built and operational new-type storage, excluding conventional pumped hydro.",
+      "source": "NEA press conference on 2025 new-type storage",
+      "source_url": "https://www.nea.gov.cn/20260130/50f657ce87f848e1a9a1861d1fd9aa23/c.html",
+      "tier": "S1"
+    },
+    {
+      "metric": "China cumulative new-type-storage energy",
+      "series": "China commissioned new-type storage energy",
+      "value": "351",
+      "unit": "GWh",
+      "as_of_date": "2026-01-30",
+      "period_end": "2025-12-31",
+      "value_type": "observed",
+      "geography": "China",
+      "definition": "Cumulative energy capacity associated with the NEA's built-and-operational new-type-storage fleet.",
+      "source": "NEA press conference on 2025 new-type storage",
+      "source_url": "https://www.nea.gov.cn/20260130/50f657ce87f848e1a9a1861d1fd9aa23/c.html",
+      "tier": "S1"
+    },
+    {
+      "metric": "China new-type-storage average duration",
+      "series": "China new-type storage average duration",
+      "value": "2.58",
+      "unit": "hours",
+      "as_of_date": "2026-01-30",
+      "period_end": "2025-12-31",
+      "value_type": "observed",
+      "geography": "China",
+      "definition": "Cumulative fleet energy capacity divided by cumulative power capacity for NEA-classified new-type storage.",
+      "source": "NEA press conference on 2025 new-type storage",
+      "source_url": "https://www.nea.gov.cn/20260130/50f657ce87f848e1a9a1861d1fd9aa23/c.html",
+      "tier": "S1"
+    },
+    {
+      "metric": "Lithium-ion share of China's new-type-storage power",
+      "series": "China new-type storage lithium-ion share",
+      "value": "96.1",
+      "unit": "%",
+      "as_of_date": "2026-01-30",
+      "period_end": "2025-12-31",
+      "value_type": "observed",
+      "geography": "China",
+      "technology_route": "Lithium-ion",
+      "definition": "Lithium-ion power capacity as a share of cumulative NEA-classified new-type-storage power.",
+      "source": "NEA press conference on 2025 new-type storage",
+      "source_url": "https://www.nea.gov.cn/20260130/50f657ce87f848e1a9a1861d1fd9aa23/c.html",
+      "tier": "S1"
+    },
+    {
+      "metric": "Four-hour-plus share of China's new-type-storage power",
+      "series": "China new-type storage four-hour-plus share",
+      "value": "27.6",
+      "unit": "%",
+      "as_of_date": "2026-01-30",
+      "period_end": "2025-12-31",
+      "value_type": "observed",
+      "geography": "China",
+      "definition": "Share of cumulative new-type-storage power associated with projects rated for at least four hours.",
+      "source": "NEA press conference on 2025 new-type storage",
+      "source_url": "https://www.nea.gov.cn/20260130/50f657ce87f848e1a9a1861d1fd9aa23/c.html",
+      "tier": "S1"
+    },
+    {
+      "metric": "China new-type-storage equivalent utilization",
+      "series": "China new-type storage equivalent utilization",
+      "value": "1195",
+      "unit": "equivalent full-load hours/year",
+      "as_of_date": "2026-01-30",
+      "period_end": "2025-12-31",
+      "value_type": "observed",
+      "geography": "China",
+      "definition": "Annual equivalent utilization hours reported across the State Grid and Southern Grid systems.",
+      "source": "NEA press conference on 2025 new-type storage",
+      "source_url": "https://www.nea.gov.cn/20260130/50f657ce87f848e1a9a1861d1fd9aa23/c.html",
+      "tier": "S1"
+    },
+    {
+      "metric": "State Grid new-type-storage equivalent utilization",
+      "series": "China grid-region storage equivalent utilization",
+      "value": "1175",
+      "unit": "equivalent full-load hours/year",
+      "as_of_date": "2026-01-30",
+      "period_end": "2025-12-31",
+      "value_type": "observed",
+      "geography": "State Grid service area, China",
+      "definition": "Annual equivalent utilization hours for new-type storage in the State Grid service area.",
+      "source": "NEA press conference on 2025 new-type storage",
+      "source_url": "https://www.nea.gov.cn/20260130/50f657ce87f848e1a9a1861d1fd9aa23/c.html",
+      "tier": "S1"
+    },
+    {
+      "metric": "Southern Grid new-type-storage equivalent utilization",
+      "series": "China grid-region storage equivalent utilization",
+      "value": "1294",
+      "unit": "equivalent full-load hours/year",
+      "as_of_date": "2026-01-30",
+      "period_end": "2025-12-31",
+      "value_type": "observed",
+      "geography": "China Southern Power Grid service area",
+      "definition": "Annual equivalent utilization hours for new-type storage in the Southern Grid service area.",
+      "source": "NEA press conference on 2025 new-type storage",
+      "source_url": "https://www.nea.gov.cn/20260130/50f657ce87f848e1a9a1861d1fd9aa23/c.html",
+      "tier": "S1"
+    },
+    {
+      "metric": "China 2027 new-type-storage target",
+      "series": "China new-type storage policy target",
+      "value": "180",
+      "unit": "GW",
+      "as_of_date": "2025-09-12",
+      "period_end": "2027-12-31",
+      "value_type": "target",
+      "geography": "China",
+      "definition": "Minimum cumulative new-type-storage power target under the 2025–2027 scale-up action plan.",
+      "source": "NDRC/NEA New-Type Storage Scaling Action Plan",
+      "source_url": "https://www.ndrc.gov.cn/xxgk/zcfb/tz/202509/P020250912338143145278.pdf",
+      "tier": "S1"
+    },
+    {
+      "metric": "China direct investment associated with the 2025–2027 storage plan",
+      "value": "250",
+      "unit": "RMB billion",
+      "as_of_date": "2025-09-12",
+      "period_end": "2027-12-31",
+      "value_type": "target",
+      "geography": "China",
+      "definition": "Direct investment associated in the dossier with implementation of the new-type-storage scale-up plan.",
+      "source": "NDRC/NEA New-Type Storage Scaling Action Plan",
+      "source_url": "https://www.ndrc.gov.cn/xxgk/zcfb/tz/202509/P020250912338143145278.pdf",
+      "tier": "S1"
+    },
+    {
+      "metric": "2030 intra-day LDES power-capex target",
+      "series": "LDES intra-day power capex",
+      "value": "650",
+      "unit": "USD/kW",
+      "as_of_date": "2026-01-21",
+      "period_end": "2030-12-31",
+      "value_type": "target",
+      "geography": "United States",
+      "definition": "Target installed power cost for intra-day long-duration storage, approximately 10–36 hours.",
+      "source": "LDES Council/EPRI Cost Benchmarking Report",
+      "source_url": "https://ldescouncil.com/wp-content/uploads/2026/01/Benchmarking-Report-21-Jan-EXTERNAL.pdf",
+      "tier": "S2"
+    },
+    {
+      "metric": "2030 intra-day LDES round-trip-efficiency target",
+      "series": "LDES intra-day round-trip efficiency",
+      "value": "75",
+      "unit": "%",
+      "as_of_date": "2026-01-21",
+      "period_end": "2030-12-31",
+      "value_type": "target",
+      "geography": "United States",
+      "definition": "Target round-trip efficiency paired with the intra-day LDES cost goal.",
+      "source": "LDES Council/EPRI Cost Benchmarking Report",
+      "source_url": "https://ldescouncil.com/wp-content/uploads/2026/01/Benchmarking-Report-21-Jan-EXTERNAL.pdf",
+      "tier": "S2"
+    },
+    {
+      "metric": "Current best intra-day LDES power capex",
+      "series": "LDES intra-day power capex",
+      "value": "1100-1400",
+      "unit": "USD/kW",
+      "as_of_date": "2026-01-21",
+      "value_type": "observed",
+      "geography": "Global benchmark",
+      "definition": "Current best-in-class power-cost range for intra-day LDES in the cited benchmarking framework.",
+      "source": "LDES Council/EPRI Cost Benchmarking Report",
+      "source_url": "https://ldescouncil.com/wp-content/uploads/2026/01/Benchmarking-Report-21-Jan-EXTERNAL.pdf",
+      "tier": "S2"
+    },
+    {
+      "metric": "Current best intra-day LDES round-trip efficiency",
+      "series": "LDES intra-day round-trip efficiency",
+      "value": "69",
+      "unit": "%",
+      "as_of_date": "2026-01-21",
+      "value_type": "observed",
+      "geography": "Global benchmark",
+      "definition": "Current best-in-class round-trip-efficiency benchmark for intra-day LDES.",
+      "source": "LDES Council/EPRI Cost Benchmarking Report",
+      "source_url": "https://ldescouncil.com/wp-content/uploads/2026/01/Benchmarking-Report-21-Jan-EXTERNAL.pdf",
+      "tier": "S2"
+    },
+    {
+      "metric": "2030 multi-day LDES power-capex target",
+      "series": "LDES multi-day power capex",
+      "value": "1100",
+      "unit": "USD/kW",
+      "as_of_date": "2026-01-21",
+      "period_end": "2030-12-31",
+      "value_type": "target",
+      "geography": "United States",
+      "definition": "Target installed power cost for multi-day storage, approximately 36–160 hours.",
+      "source": "LDES Council/EPRI Cost Benchmarking Report",
+      "source_url": "https://ldescouncil.com/wp-content/uploads/2026/01/Benchmarking-Report-21-Jan-EXTERNAL.pdf",
+      "tier": "S2"
+    },
+    {
+      "metric": "2030 multi-day LDES round-trip-efficiency target",
+      "series": "LDES multi-day round-trip efficiency",
+      "value": "55-60",
+      "unit": "%",
+      "as_of_date": "2026-01-21",
+      "period_end": "2030-12-31",
+      "value_type": "target",
+      "geography": "United States",
+      "definition": "Target round-trip-efficiency range paired with the multi-day LDES cost goal.",
+      "source": "LDES Council/EPRI Cost Benchmarking Report",
+      "source_url": "https://ldescouncil.com/wp-content/uploads/2026/01/Benchmarking-Report-21-Jan-EXTERNAL.pdf",
+      "tier": "S2"
+    },
+    {
+      "metric": "Current best multi-day LDES power capex",
+      "series": "LDES multi-day power capex",
+      "value": "1900-2500",
+      "unit": "USD/kW",
+      "as_of_date": "2026-01-21",
+      "value_type": "observed",
+      "geography": "Global benchmark",
+      "definition": "Current best-in-class power-cost range for multi-day LDES in the cited benchmarking framework.",
+      "source": "LDES Council/EPRI Cost Benchmarking Report",
+      "source_url": "https://ldescouncil.com/wp-content/uploads/2026/01/Benchmarking-Report-21-Jan-EXTERNAL.pdf",
+      "tier": "S2"
+    },
+    {
+      "metric": "Current best multi-day LDES round-trip efficiency",
+      "series": "LDES multi-day round-trip efficiency",
+      "value": "45",
+      "unit": "%",
+      "as_of_date": "2026-01-21",
+      "value_type": "observed",
+      "geography": "Global benchmark",
+      "definition": "Current best-in-class round-trip-efficiency benchmark for multi-day LDES.",
+      "source": "LDES Council/EPRI Cost Benchmarking Report",
+      "source_url": "https://ldescouncil.com/wp-content/uploads/2026/01/Benchmarking-Report-21-Jan-EXTERNAL.pdf",
+      "tier": "S2"
+    },
+    {
+      "metric": "Lithium Dominance scenario probability",
+      "series": "Dossier 2040 global storage scenario probability",
+      "value": "30",
+      "unit": "% probability",
+      "as_of_date": "2026-07-15",
+      "period_end": "2040-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Section 16 probability for annual additions at or above the high-growth threshold while non-lithium LDES remains below 20% of annual GWh.",
+      "source": "Global dossier §16 scenario synthesis"
+    },
+    {
+      "metric": "LDES Diversified scenario probability",
+      "series": "Dossier 2040 global storage scenario probability",
+      "value": "25",
+      "unit": "% probability",
+      "as_of_date": "2026-07-15",
+      "period_end": "2040-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Section 16 probability for high deployment and non-lithium LDES reaching at least 20% of annual GWh.",
+      "source": "Global dossier §16 scenario synthesis"
+    },
+    {
+      "metric": "China-Centric Vertical scenario probability",
+      "series": "Dossier 2040 global storage scenario probability",
+      "value": "20",
+      "unit": "% probability",
+      "as_of_date": "2026-07-15",
+      "period_end": "2040-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Section 16 probability for lower global deployment, continued lithium dominance, and a greater concentration of cumulative capacity in China.",
+      "source": "Global dossier §16 scenario synthesis"
+    },
+    {
+      "metric": "Stagnation scenario probability",
+      "series": "Dossier 2040 global storage scenario probability",
+      "value": "25",
+      "unit": "% probability",
+      "as_of_date": "2026-07-15",
+      "period_end": "2040-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Section 16 probability for deployment deceleration caused by interconnection, revenue, financing, and execution constraints.",
+      "source": "Global dossier §16 scenario synthesis"
+    },
+    {
+      "metric": "Global annual battery additions working interpolation",
+      "series": "Dossier global annual battery additions interpolation",
+      "value": "184",
+      "unit": "GW/year",
+      "as_of_date": "2026-07-15",
+      "period_end": "2030-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Analyst interpolation anchored to 112 GW added in 2025, 158 GW in the 2026 BloombergNEF outlook, and 308 GW in 2036.",
+      "source": "Global dossier analyst interpolation"
+    },
+    {
+      "metric": "Global annual battery additions working interpolation",
+      "series": "Dossier global annual battery additions interpolation",
+      "value": "236",
+      "unit": "GW/year",
+      "as_of_date": "2026-07-15",
+      "period_end": "2035-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Analyst interpolation anchored to the cited BloombergNEF additions trajectory.",
+      "source": "Global dossier analyst interpolation"
+    },
+    {
+      "metric": "Global annual battery additions working interpolation",
+      "series": "Dossier global annual battery additions interpolation",
+      "value": "280",
+      "unit": "GW/year",
+      "as_of_date": "2026-07-15",
+      "period_end": "2040-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Analyst extrapolation used in the Lithium Dominance deployment trajectory; it sits below the scenario's stated 300 GW threshold and is therefore a fragile internal assumption.",
+      "source": "Global dossier analyst interpolation"
+    },
+    {
+      "metric": "Global battery-storage average duration working assumption",
+      "series": "Dossier global battery-storage average duration",
+      "value": "3.4",
+      "unit": "hours",
+      "as_of_date": "2026-07-15",
+      "period_end": "2030-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Analyst assumption for average discharge duration across annual battery additions.",
+      "source": "Global dossier analyst interpolation"
+    },
+    {
+      "metric": "Global battery-storage average duration working assumption",
+      "series": "Dossier global battery-storage average duration",
+      "value": "4.0",
+      "unit": "hours",
+      "as_of_date": "2026-07-15",
+      "period_end": "2035-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Analyst assumption for average discharge duration across annual battery additions.",
+      "source": "Global dossier analyst interpolation"
+    },
+    {
+      "metric": "Global battery-storage average duration working assumption",
+      "series": "Dossier global battery-storage average duration",
+      "value": "5.2",
+      "unit": "hours",
+      "as_of_date": "2026-07-15",
+      "period_end": "2040-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Analyst assumption for average discharge duration across annual battery additions.",
+      "source": "Global dossier analyst interpolation"
+    },
+    {
+      "metric": "Global grid-scale cumulative storage power working trajectory",
+      "series": "Dossier global grid-scale cumulative storage power",
+      "value": "1.0",
+      "unit": "TW",
+      "as_of_date": "2026-07-15",
+      "period_end": "2030-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Working cumulative grid-scale power trajectory assuming approximately 80% of battery power additions are grid-scale or large front-of-meter.",
+      "source": "Global dossier analyst interpolation"
+    },
+    {
+      "metric": "Global grid-scale cumulative storage power working trajectory",
+      "series": "Dossier global grid-scale cumulative storage power",
+      "value": "2.1",
+      "unit": "TW",
+      "as_of_date": "2026-07-15",
+      "period_end": "2035-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Working cumulative grid-scale power trajectory under the dossier's grid-scale-share assumptions.",
+      "source": "Global dossier analyst interpolation"
+    },
+    {
+      "metric": "Global grid-scale cumulative storage power working trajectory",
+      "series": "Dossier global grid-scale cumulative storage power",
+      "value": "3.4",
+      "unit": "TW",
+      "as_of_date": "2026-07-15",
+      "period_end": "2040-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Working cumulative grid-scale power trajectory under the dossier's grid-scale-share assumptions; sensitivity range is approximately 3.0–3.8 TW.",
+      "source": "Global dossier analyst interpolation"
+    }
+  ],
+  "contested_claims": [
+    {
+      "claim": "China had either 136 GW or 144.7 GW of cumulative new-type storage at end-2025.",
+      "positions": [
+        {
+          "stance": "The National Energy Administration reported 136 GW and 351 GWh of built-and-operational new-type storage.",
+          "sources": [
+            "NEA press conference on 2025 new-type storage"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "CNESA reported 144.7 GW cumulative, equal to 51.9% of the global total.",
+          "sources": [
+            "China Releases Official Energy Storage Report Highlighting 130% Growth in Installed Capacity",
+            "Year-End Review 2025: China's New-Type Energy Storage Installed Capacity Surpasses 100 GW"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "The likely causes are cutoff timing and different treatment of commissioned, grid-connected, and demonstration projects; the dossier uses 136 GW as the resolution anchor and does not average the figures."
+    },
+    {
+      "claim": "The relevant 2025–2026 four-hour battery cost benchmark is either about US$78/MWh or US$210–292/MWh.",
+      "positions": [
+        {
+          "stance": "BloombergNEF reported an approximately US$78/MWh global four-hour battery LCOE, down 27% year-on-year.",
+          "sources": [
+            "Energy Storage Enters the 100-Gigawatt Era: Three Things to Know"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "Lazard reported a US-focused unsubsidized four-hour LCOS range of US$210–292/MWh.",
+          "sources": [
+            "Lazard's LCOE+ June 2025",
+            "Lazard Releases 2025 Levelized Cost of Energy+ Report"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "The figures use different geographies, financing assumptions, tariff cases, charging-cost treatment, and LCOE-versus-LCOS definitions; they are not like-for-like cost observations."
+    },
+    {
+      "claim": "Sodium-ion has already reached commercially significant grid-scale deployment.",
+      "positions": [
+        {
+          "stance": "CATL disclosed a 40 GWh Fujian sodium-ion expansion and HiNa describes sodium-ion as entering the commercial era.",
+          "sources": [
+            "CATL to add 40 GWh of sodium-ion battery capacity in $735m Fujian expansion",
+            "Sodium-Ion Batteries Enter the Commercial Era"
+          ],
+          "tier": "S3"
+        },
+        {
+          "stance": "The available shipment data remain overwhelmingly LFP-dominated and do not identify a 100 MWh-class sodium reference project with independent operating data.",
+          "sources": [
+            "2025 BESS cell and system shipments: BYD takes BESS crown, no Korean firms in top 10 cell suppliers",
+            "Lithium-Ion Batteries are set to Face Competition from Novel Tech for Long-Duration Storage"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "Vendors report nameplate capacity, production plans, and framework agreements, whereas the skeptical position requires commissioned projects, accepted cells, independent performance data, and bankable warranties."
+    },
+    {
+      "claim": "Global storage is on a trajectory consistent with approximately 1,500 GW by 2030.",
+      "positions": [
+        {
+          "stance": "The IEA Net Zero Emissions pathway requires about 1,500 GW of total grid-scale storage by 2030, including roughly 1,200 GW of batteries.",
+          "sources": [
+            "Batteries and Secure Energy Transitions",
+            "Executive summary – Batteries and Secure Energy Transitions"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "BloombergNEF's expected-build trajectory reaches approximately 3.8 TW of cumulative station-scale storage only by 2035.",
+          "sources": [
+            "Energy Storage Enters the 100-Gigawatt Era: Three Things to Know"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "The IEA number is a normative net-zero requirement with a broader boundary, while BloombergNEF is an expected deployment outlook under stated policy; the figures should not be treated as competing forecasts with identical scope."
+    },
+    {
+      "claim": "The dossier's four global scenario probabilities are stable and unambiguous.",
+      "positions": [
+        {
+          "stance": "Section 16 assigns 30% to Lithium Dominance, 25% to LDES Diversified, 20% to China-Centric Vertical, and 25% to Stagnation.",
+          "sources": [
+            "Dossier §16 Scenarios"
+          ]
+        },
+        {
+          "stance": "The chart-ready V7 table assigns 47% to high-growth lithium dominance, 29% to high-growth diversification, 18% to low-growth lithium dominance, and 6% to low-growth LDES leap.",
+          "sources": [
+            "Dossier §17.3 V7 Four-Scenario Probability Split"
+          ]
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "The probability weights drifted between the narrative scenario block and the later 2×2 chart restatement even though both purport to describe the same annual-additions and non-lithium-share axes; this extraction preserves Section 16 as primary and flags the inconsistency."
+    }
+  ],
+  "forecast_inputs": {
+    "scenarios": [
+      {
+        "name": "SCN-A — Lithium Dominance",
+        "probability": 0.3
+      },
+      {
+        "name": "SCN-B — LDES Diversified",
+        "probability": 0.25
+      },
+      {
+        "name": "SCN-C — China-Centric Vertical",
+        "probability": 0.2
+      },
+      {
+        "name": "SCN-D — Stagnation",
+        "probability": 0.25
+      }
+    ],
+    "base_rates": []
+  }
+}

@@ -1,0 +1,70 @@
+{
+ "pipeline_id": "pipe_0e1b84d2682a",
+ "report_id": "report_54f0a34a90b6",
+ "simulation_id": "sim_9fc88d28ccb1",
+ "graph_id": "mirofish_9b28c74de1214d2b",
+ "status": "completed",
+ "prompt": "Forecast the global grid-scale energy-storage industry from 2026 through 2040. Compare lithium iron phosphate, sodium-ion, flow batteries, thermal storage, compressed-air storage, pumped hydro, hydrogen-derived storage, and other long-duration routes. Analyze project economics, raw-material and equipment supply chains, grid interconnection, renewable curtailment, capacity-market design, safety rules, recycling, and competition between storage durations. Differentiate China, the United States, Europe, India, Australia, the Middle East, Africa, and Latin America. Quantify annual and cumulative GW/GWh deployment, duration mix, installed cost, levelized cost of storage, cycle life, renewable curtailment, project lead time, and manufacturing capacity. Identify inflection points at which specific technologies become commercially competitive for four-, eight-, twelve-, and multi-day storage. End with four mutually exclusive scenarios totaling 100%, 10-12 resolution-ready binary forecasts, and sourced visualizations of deployment, costs, technology shares, and regional policy milestones.",
+ "created_at": "2026-07-15T14:15:27.286816+00:00",
+ "mode": "full",
+ "rounds": 29,
+ "personas": 19,
+ "has_actors": true,
+ "research_log": {
+  "line_count": 1412,
+  "source_count": 10,
+  "complete": true,
+  "event_fidelity": "summarized_progress_events"
+ },
+ "dossier_assets": [
+  "research-charts/actor_network.png",
+  "research-charts/actor_network.html",
+  "research-charts/timeline.png",
+  "research-charts/timeline.html",
+  "research-charts/quant_metrics.png",
+  "research-charts/quant_metrics.html",
+  "research-charts/metric_trajectories.png",
+  "research-charts/metric_trajectories.html"
+ ],
+ "report_assets": [
+  "charts/binary_forecast_dotplot.png",
+  "charts/scenario_probabilities.png",
+  "charts/worldstate_trajectory.png",
+  "charts/metric_trajectories.png",
+  "charts/quantitative_claims.png",
+  "charts/timeline_lanes.png"
+ ],
+ "artifact_sha256": {
+  "research_log.txt": "c8d94ade5876ba47e50ab5f970949a69dafba14dc910e5ed958abd60f4e2d33f",
+  "dossier.md": "96c4f29b4a68cc705291371a21335f7840e153a82d1355da281eb7ef64566f1e",
+  "actors.json": "fe3279a72dfc9c0a2daef4d46c3b327f259c28949154ca7911f8cf6950d2af33",
+  "sources.json": "ed8a40fef3f6a86feeee60bf27d6f41537abbeaea06b7138b57c8ad309dda6c6",
+  "ontology.json": "d6437abba9d84d10d8dbce4f360e2bd9f58069e0d3e5de1cfb5c336a2250020b",
+  "graph.json": "efe49dcd832b4e3ca11db60ffbb06b1f43492e73c8af2cdad218531023229b14",
+  "forum.json": "97498bdbb6590ed5106cb7c29890d456f0f7da151c6dc87c061883800327c37a",
+  "report.md": "c05faf0c30588e9d67272ac8d08205193d20386178aeb9dc5f496bfc6f950856",
+  "research-charts/actor_network.png": "1b1e7dc177a741606919c7aede1d0d97b52002767e3d981dea54d8afa45a88ab",
+  "research-charts/actor_network.html": "f4216d403316c166e06670097dfec066ddb7b7c5ee8131e49b947ed4e2788cae",
+  "research-charts/timeline.png": "84b6c18bb2906c469ff383d45e069ce6ede77207f88dab25d2a95e80160ee745",
+  "research-charts/timeline.html": "15892a303b984a0b49d554f0c774194d6af96c5becd476fa984e4dac9585378d",
+  "research-charts/quant_metrics.png": "44edb99dfa5bdee43c91c6c5a3a80707f882a088585174f413b56fea384c48a5",
+  "research-charts/quant_metrics.html": "4e5a9b328b361ab3a049bea1144c270210c187ea34afd65fb9ff2be091557955",
+  "research-charts/metric_trajectories.png": "4201abcdf4b7a4703e33623677b5766d8f8fee35cef61aae0725a21421798f61",
+  "research-charts/metric_trajectories.html": "16011b6d5c77bd8f1003bdc4a43a598eea3fce3b2350922f7190fdb9357729a3",
+  "charts/binary_forecast_dotplot.png": "d0313bab48a5c3e1ca167670939352aad80f5297c86495c354f6defde3b7e536",
+  "charts/scenario_probabilities.png": "7a72e6f63119ff495da74dcbeda6b22f1917068a38868f764486d5811f86f54a",
+  "charts/worldstate_trajectory.png": "8a5f4de9f566542b8c8b526097148156bde3e7fca7efdb316cff8ee4fb741b7f",
+  "charts/metric_trajectories.png": "ae61f49591a74779feea8c069df79ec50be5d48a9f3c41371efd4748d17e7a1f",
+  "charts/quantitative_claims.png": "d4b080ed0e0f730f9437f8d3965ef3f391acfd3c7922df6afe4b3b93ff866963",
+  "charts/timeline_lanes.png": "022e25c02eea87c296a25240b7866df356dfbdabfb55dbb3ea80d1ca3224c68f"
+ },
+ "publication": {
+  "hard_passed": true,
+  "publish_passed": true,
+  "scenario_contract_valid": true,
+  "citation_coverage": 0.944,
+  "semantic_citations_passed": true,
+  "markdown_sha256": "0b0fd21fb0562dafa21f5bcbbd7c5794bf0b0c9ca8efc36708e2df29ac9a3804",
+  "forecast_sha256": "26c3f5691247499b2c45f354ebcd961a3cd8f66d403683169cd6e178cd3a5b08"
+ }
+}
