@@ -1,0 +1,711 @@
+{
+ "entity_types": [
+  {
+   "name": "Government",
+   "description": "Sovereign regulators, ministries, system operators that set binding storage policy, targets, and ...",
+   "attributes": [
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "国家或经济体管辖范围 (e.g., China, US-federal, EU, Saudi Arabia)"
+    },
+    {
+     "name": "policy_lever",
+     "type": "text",
+     "description": "主要政策杠杆 (e.g., capacity-market design, ITC/FEOC, NZIA, NDRC action plan)"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "对预测结果的影响力档位 (high/medium/low)"
+    }
+   ],
+   "examples": [
+    "NDRC/NEA (China)",
+    "Federal Energy Regulatory Commission (FERC)",
+    "DOE Liftoff program",
+    "European Commission (DG ENER / DG GROW)",
+    "National Energy System Operator (NESO, UK)",
+    "AEMO / DCCEEW (Australia)"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "BatteryIntegrator",
+   "description": "Vertically-integrated cell + system BESS vendors competing on cost and global market share",
+   "attributes": [
+    {
+     "name": "domicile",
+     "type": "text",
+     "description": "总部所在国 (China, Korea, US, EU)"
+    },
+    {
+     "name": "global_bess_share_2025",
+     "type": "text",
+     "description": "2025 年全球 BESS 系统市场份额 (e.g., ~76% Chinese bloc)"
+    },
+    {
+     "name": "chemistry_focus",
+     "type": "text",
+     "description": "主导化学体系 (LFP, sodium-ion, NMC, iron-air)"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "对预测结果的影响力档位 (high/medium/low)"
+    }
+   ],
+   "examples": [
+    "CATL (Contemporary Amperex Technology Co.)",
+    "BYD Company",
+    "Hyperstrong",
+    "EVE Energy",
+    "Hithium"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "GridOperator",
+   "description": "Independent system operators / TSOs that set capacity accreditation, interconnection rules, and r...",
+   "attributes": [
+    {
+     "name": "market_design",
+     "type": "text",
+     "description": "市场设计类型 (energy-only, capacity-market, MACSE, cap-and-floor)"
+    },
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "覆盖的电网区域 (e.g., Texas, PJM footprint, Italy, UK)"
+    },
+    {
+     "name": "queue_friction",
+     "type": "text",
+     "description": "互联队列摩擦强度 (high/medium/low)"
+    }
+   ],
+   "examples": [
+    "PJM Interconnection",
+    "ERCOT (Electric Reliability Council of Texas)",
+    "CAISO (California Independent System Operator)",
+    "Terna (Italian TSO)"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "UtilityOfTaker",
+   "description": "State-owned or sovereign off-takers procuring utility-scale storage under multi-year contracts",
+   "attributes": [
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "国家或地区 (e.g., Saudi Arabia, India)"
+    },
+    {
+     "name": "contract_tenor_years",
+     "type": "text",
+     "description": "典型合同期限 (e.g., 15-year SSAs)"
+    },
+    {
+     "name": "tendered_gwh",
+     "type": "text",
+     "description": "已招标 GWh 规模"
+    }
+   ],
+   "examples": [
+    "Saudi Power Procurement Company (SPPC)",
+    "Saudi Electricity Company (SEC)",
+    "IndiGrid / SECI / NTPC (India central procurement cluster)",
+    "State Grid Corporation of China",
+    "Southern Grid (China Southern Power Grid)"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "LDESTechVendor",
+   "description": "Non-lithium long-duration technology vendors at demonstration or early commercial scale (≥8 h niche)",
+   "attributes": [
+    {
+     "name": "duration_target_hours",
+     "type": "text",
+     "description": "目标时长 (e.g., 100 h, 8–24 h, multi-day)"
+    },
+    {
+     "name": "technology_route",
+     "type": "text",
+     "description": "技术路线 (iron-air, vanadium-flow, iron-flow, A-CAES, LAES, thermal, hydrogen)"
+    },
+    {
+     "name": "commercial_stage",
+     "type": "text",
+     "description": "商业化阶段 (demo / first-of-kind / commercial-scale)"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "对预测结果的影响力档位 (high/medium/low)"
+    }
+   ],
+   "examples": [
+    "Form Energy"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "MarketIntelProvider",
+   "description": "Research, trade, and benchmarking organizations publishing the load-bearing deployment and cost data",
+   "attributes": [
+    {
+     "name": "source_track",
+     "type": "text",
+     "description": "主要追踪领域 (deployment GW/GWh, cost curve, technology share)"
+    },
+    {
+     "name": "publication_type",
+     "type": "text",
+     "description": "发布类型 (forecast, benchmark, cost report)"
+    },
+    {
+     "name": "influence_tier",
+     "type": "text",
+     "description": "对预测结果的影响力档位 (high/medium/low)"
+    }
+   ],
+   "examples": [
+    "BloombergNEF (BNEF)",
+    "IEA (International Energy Agency)",
+    "Lazard",
+    "NREL",
+    "CSIRO GenCost",
+    "Wood Mackenzie",
+    "Modo Energy",
+    "SEIA / Benchmark",
+    "EASE",
+    "CNESA",
+    "LBNL (Berkeley Lab)"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "ChemTechRoute",
+   "description": "Specific battery / storage chemistry routes that compete for grid-scale GWh share (a trackable as...",
+   "attributes": [
+    {
+     "name": "duration_band_hours",
+     "type": "text",
+     "description": "经济竞争力时长带 (e.g., <4 h, 4–8 h, 8–12 h, 12–36 h, multi-day)"
+    },
+    {
+     "name": "rte_percent",
+     "type": "text",
+     "description": "当前最佳往返效率区间"
+    },
+    {
+     "name": "installed_cost_anchor",
+     "type": "text",
+     "description": "已观测或目标成本锚点 (e.g., Lazard $148–292/MWh, DOE $650/kW intra-day)"
+    }
+   ],
+   "examples": [
+    "LFP lithium-ion",
+    "Sodium-ion",
+    "Vanadium redox flow",
+    "Iron flow",
+    "Iron-air (Form Energy)",
+    "Advanced compressed-air (A-CAES/LAES)",
+    "Thermal storage",
+    "Hydrogen-derived storage",
+    "Pumped hydro storage"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "GridStorageProject",
+   "description": "Specific large-scale utility storage projects, tenders, or framework agreements used as empirical...",
+   "attributes": [
+    {
+     "name": "capacity_gw",
+     "type": "text",
+     "description": "额定功率 GW"
+    },
+    {
+     "name": "energy_gwh",
+     "type": "text",
+     "description": "额定能量 GWh"
+    },
+    {
+     "name": "duration_hours",
+     "type": "text",
+     "description": "时长 (小时)"
+    },
+    {
+     "name": "jurisdiction",
+     "type": "text",
+     "description": "所在国家或地区"
+    },
+    {
+     "name": "status",
+     "type": "text",
+     "description": "项目状态 (tendered / FID / under construction / operating)"
+    }
+   ],
+   "examples": [
+    "China NDRC/NEA 2027 180 GW target",
+    "Saudi SPPC Round 1 (2 GW / 8 GWh)",
+    "Saudi SPPC Round 2 (3 GW / 12 GWh)",
+    "BYD 12.5 GWh SEC framework",
+    "SECI December 2024 1,000 MW × 4-h block",
+    "UK NESO cap-and-floor Round 1 awards",
+    "Italy MACSE Round 1 (~10 GW)",
+    "Form Energy Georgia Power project"
+   ],
+   "archetype": "actor"
+  },
+  {
+   "name": "Organization",
+   "description": "Any organization not fitting other specific organization types.",
+   "attributes": [
+    {
+     "name": "org_name",
+     "type": "text",
+     "description": "Name of the organization"
+    },
+    {
+     "name": "org_type",
+     "type": "text",
+     "description": "Type of organization"
+    }
+   ],
+   "examples": [
+    "small business",
+    "community group"
+   ]
+  }
+ ],
+ "edge_types": [
+  {
+   "name": "REGULATES",
+   "description": "Sovereign regulator binds or sets rules on a market participant or system operator",
+   "source_targets": [
+    {
+     "source": "Government",
+     "target": "BatteryIntegrator"
+    },
+    {
+     "source": "Government",
+     "target": "GridOperator"
+    },
+    {
+     "source": "Government",
+     "target": "UtilityOfTaker"
+    },
+    {
+     "source": "Government",
+     "target": "LDESTechVendor"
+    },
+    {
+     "source": "Government",
+     "target": "ChemTechRoute"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "监管态度 (supportive / restrictive / neutral)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "规则约束力 (binding / guideline / aspirational)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "规则生效或发布年份"
+    },
+    {
+     "name": "mechanism",
+     "type": "text",
+     "description": "机制名称 (e.g., NDRC 136号, FERC Order 2023, NZIA, FEOC, Battery Regulation)"
+    }
+   ],
+   "family": "governance",
+   "valence": "directional"
+  },
+  {
+   "name": "SUPPLIES",
+   "description": "Vendor delivers cells, systems, or technology to an off-taker or operator",
+   "source_targets": [
+    {
+     "source": "BatteryIntegrator",
+     "target": "UtilityOfTaker"
+    },
+    {
+     "source": "BatteryIntegrator",
+     "target": "GridOperator"
+    },
+    {
+     "source": "LDESTechVendor",
+     "target": "UtilityOfTaker"
+    },
+    {
+     "source": "LDESTechVendor",
+     "target": "GridOperator"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "供应关系性质 (positive / neutral / constrained)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "供应规模档 (major / framework / pilot)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "合同或框架起始年份"
+    },
+    {
+     "name": "volume_gwh",
+     "type": "text",
+     "description": "已签订 GWh 数量"
+    }
+   ],
+   "family": "economic",
+   "valence": "transactional"
+  },
+  {
+   "name": "COMPETES_WITH",
+   "description": "Vendors or technology routes compete for the same deployment market or GWh share",
+   "source_targets": [
+    {
+     "source": "BatteryIntegrator",
+     "target": "BatteryIntegrator"
+    },
+    {
+     "source": "LDESTechVendor",
+     "target": "BatteryIntegrator"
+    },
+    {
+     "source": "ChemTechRoute",
+     "target": "ChemTechRoute"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "竞争态势 (intense / moderate / emerging)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "竞争强度 (high / medium / low)"
+    },
+    {
+     "name": "duration_band",
+     "type": "text",
+     "description": "竞争发生的时长带"
+    }
+   ],
+   "family": "antagonism",
+   "valence": "adversarial"
+  },
+  {
+   "name": "PARTNERS_WITH",
+   "description": "Counterparties cooperate on a procurement, demonstration, or policy program",
+   "source_targets": [
+    {
+     "source": "UtilityOfTaker",
+     "target": "UtilityOfTaker"
+    },
+    {
+     "source": "Government",
+     "target": "Government"
+    },
+    {
+     "source": "BatteryIntegrator",
+     "target": "LDESTechVendor"
+    },
+    {
+     "source": "GridOperator",
+     "target": "GridOperator"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "合作关系性质 (positive / neutral)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "合作规模或权重 (high / medium / low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "合作起始年份"
+    }
+   ],
+   "family": "alignment",
+   "valence": "allied"
+  },
+  {
+   "name": "INFLUENCES",
+   "description": "One actor's market design or experience materially shifts another's design choice (informational ...",
+   "source_targets": [
+    {
+     "source": "GridOperator",
+     "target": "GridOperator"
+    },
+    {
+     "source": "GridOperator",
+     "target": "BatteryIntegrator"
+    },
+    {
+     "source": "MarketIntelProvider",
+     "target": "Government"
+    },
+    {
+     "source": "MarketIntelProvider",
+     "target": "GridOperator"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "影响方向 (positive / negative / cautionary)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "影响强度 (high / medium / low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "影响观察起始年份"
+    }
+   ],
+   "family": "influence",
+   "valence": "directional"
+  },
+  {
+   "name": "SUPPORTS",
+   "description": "Government program underwrites, subsidizes, or targets a technology route or vendor",
+   "source_targets": [
+    {
+     "source": "Government",
+     "target": "LDESTechVendor"
+    },
+    {
+     "source": "Government",
+     "target": "ChemTechRoute"
+    },
+    {
+     "source": "Government",
+     "target": "BatteryIntegrator"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "支持方向 (positive)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "支持力度 (high / medium / low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "项目起始年份"
+    },
+    {
+     "name": "mechanism",
+     "type": "text",
+     "description": "机制名称 (e.g., DOE Liftoff, ITC, VGF, CAPEX subsidy)"
+    }
+   ],
+   "family": "alignment",
+   "valence": "allied"
+  },
+  {
+   "name": "DEPENDS_ON",
+   "description": "Vendor or technology's commercial viability depends on a specific policy, demonstration, or off-t...",
+   "source_targets": [
+    {
+     "source": "LDESTechVendor",
+     "target": "Government"
+    },
+    {
+     "source": "LDESTechVendor",
+     "target": "GridOperator"
+    },
+    {
+     "source": "BatteryIntegrator",
+     "target": "UtilityOfTaker"
+    },
+    {
+     "source": "ChemTechRoute",
+     "target": "Government"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "依赖关系的支持/制约方向 (positive / negative)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "依赖强度 (high / medium / low)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "依赖关系观察起始年份"
+    }
+   ],
+   "family": "dependency",
+   "valence": "directional"
+  },
+  {
+   "name": "ACCELERATES",
+   "description": "Policy or market reform causally accelerates deployment of a technology route (causal mechanism e...",
+   "source_targets": [
+    {
+     "source": "Government",
+     "target": "ChemTechRoute"
+    },
+    {
+     "source": "GridOperator",
+     "target": "ChemTechRoute"
+    },
+    {
+     "source": "UtilityOfTaker",
+     "target": "ChemTechRoute"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "方向 (positive = accelerates build; negative = throttles build)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "加速强度 (high / medium / low)"
+    },
+    {
+     "name": "lag_years",
+     "type": "text",
+     "description": "从机制到部署响应的预期滞后 (years)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "机制或事件起始年份"
+    }
+   ],
+   "family": "causal",
+   "valence": "directional"
+  },
+  {
+   "name": "CONSTRAINS",
+   "description": "Tariff, queue, or market-design rule causally throttles deployment of a technology or vendor (cau...",
+   "source_targets": [
+    {
+     "source": "Government",
+     "target": "BatteryIntegrator"
+    },
+    {
+     "source": "Government",
+     "target": "ChemTechRoute"
+    },
+    {
+     "source": "GridOperator",
+     "target": "BatteryIntegrator"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "方向 (negative = throttles build)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "约束强度 (high / medium / low)"
+    },
+    {
+     "name": "lag_years",
+     "type": "text",
+     "description": "约束传导的预期滞后 (years)"
+    },
+    {
+     "name": "since_date",
+     "type": "text",
+     "description": "约束机制起始年份"
+    }
+   ],
+   "family": "causal",
+   "valence": "directional"
+  },
+  {
+   "name": "REPORTS_ON",
+   "description": "Research or benchmarking organization publishes load-bearing data on an actor, project, or techno...",
+   "source_targets": [
+    {
+     "source": "MarketIntelProvider",
+     "target": "BatteryIntegrator"
+    },
+    {
+     "source": "MarketIntelProvider",
+     "target": "ChemTechRoute"
+    },
+    {
+     "source": "MarketIntelProvider",
+     "target": "GridStorageProject"
+    },
+    {
+     "source": "MarketIntelProvider",
+     "target": "Government"
+    }
+   ],
+   "attributes": [
+    {
+     "name": "sentiment",
+     "type": "text",
+     "description": "报道基调 (positive / negative / neutral)"
+    },
+    {
+     "name": "strength",
+     "type": "text",
+     "description": "数据权威性 (high / medium / low)"
+    },
+    {
+     "name": "as_of_year",
+     "type": "text",
+     "description": "数据截止年份"
+    }
+   ],
+   "family": "information",
+   "valence": "directional"
+  }
+ ],
+ "analysis_summary": "本预测问题聚焦 2030 年全球电网级储能新装机 GWh 中电池化学体系的份额竞争。本体覆盖四类能动主体：(1) 政府/监管者（Government，含 NDRC/NEA、FERC、DOE Liftoff、EU Commission、NESO、AEMO），设定目标、关税、容量市场设计；(2) 电池系统集成商（BatteryIntegrator，CATL、BYD 等），争夺全球 BESS 份额；(3) 电网/ISO/RTO（GridOperator，PJM、ERCOT、CAISO、Terna），决定互联队列与容量市场结构；(4) 公用事业/主权采购方（UtilityOfTaker，SPPC、SEC、SECI/NTPC、State Grid、Southern Grid），签订多年期储能采购合同。同时引入两类重要客体：(5) 长时储能技术供应商（LDESTechVendor，Form Energy 等），其商业化进展决定非锂份额；(6) 化学技术路线（ChemTechRoute，LFP、钠离子、液流、铁空气、CAES、热储能、氢储能、抽蓄），按时长带竞争；(7) 市场情报提供者（MarketIntelProvider，BNEF、IEA、Lazard、NREL、CSIRO、Modo、LBNL、SEIA/Benchmark、EASE、CNESA），是被动信息源；(8) 具体项目（GridStorageProject，180 GW 目标、Saudi Round 1/2、BYD 12.5 GWh、SECI 招标、MACSE Round 1 等）作为经验锚点。关系以因果族（ACCELERATES、CONSTRAINS）刻画政策—部署传导，配合 REGULATES、SUPPLIES、COMPETES_WITH、PARTNERS_WITH、INFLUENCES、SUPPORTS、DEPENDS_ON、REPORTS_ON 八类语义，覆盖监管、采购、竞争、合作、影响、补贴、依赖与信息发布。所有 MarketIntelProvider 实体类型标注 archetype=source 与 simulation_tier=3，避免被误读为能动 actor。属性设计侧重预测可检索性（jurisdiction、duration_band、installed_cost_anchor、status、volume_gwh、mechanism）。"
+}
