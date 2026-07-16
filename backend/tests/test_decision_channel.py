@@ -48,8 +48,10 @@ def test_elicit_round_filters_invalid_scenarios():
         {"decisions": [{"agent_id": 1, "scenario": "S1", "magnitude": 1, "confidence": 1},
                        {"agent_id": 2, "scenario": "BOGUS", "magnitude": 1, "confidence": 1}]},
     ])
-    out = _elicit_round_decisions(fake, ["S1", "S2"], [{"agent_id": 1}, {"agent_id": 2}], 1)
+    out, status = _elicit_round_decisions(
+        fake, ["S1", "S2"], [{"agent_id": 1}, {"agent_id": 2}], 1)
     assert len(out) == 1 and out[0]["scenario"] == "S1"   # invalid scenario dropped
+    assert status == "committed"                          # Foglamp 1C: typed round status
 
 
 def test_round_to_date_stamps_trajectory():
@@ -88,12 +90,23 @@ def test_roster_cache_dedupes_identical_rosters():
     assert res["n_rounds"] == 3 and len(res["trajectory"]) == 4
 
 
-# ------------------------------------------------------------------------ R2-SIM-2
+# ------------------------------------------------------------ R2-SIM-2 + Foglamp I-15
 def test_outcome_power_distinct_from_influence():
+    """Foglamp WP1 (I-15): visibility never defaults to outcome power. An actor
+    without an explicit ``outcome_power`` is UNKNOWN (absent from the power map)
+    and receives a declared-neutral 1.0 in the roster — never its
+    ``influence_weight``. The pre-containment fallback (unknown → influence 5.0)
+    let media prominence become institutional power by construction."""
     cfgs = [{"agent_id": 1, "influence_weight": 1.0, "outcome_power": 9.0},
-            {"agent_id": 2, "influence_weight": 5.0}]   # no outcome_power → falls back
+            {"agent_id": 2, "influence_weight": 5.0}]   # no outcome_power → UNKNOWN
     assert _activation_weight_map(cfgs) == {1: 1.0, 2: 5.0}
-    assert _outcome_power_map(cfgs) == {1: 9.0, 2: 5.0}
+    assert _outcome_power_map(cfgs) == {1: 9.0}          # I-15: no visibility fallback
+    roster = _build_active_roster(
+        [{"agent_id": 1, "influence": 1.0}, {"agent_id": 2, "influence": 5.0}],
+        _activation_weight_map(cfgs), _outcome_power_map(cfgs), cap=10)
+    by_id = {e["agent_id"]: e for e in roster}
+    assert by_id[1]["outcome_power"] == 9.0 and by_id[1]["outcome_power_known"] is True
+    assert by_id[2]["outcome_power"] == 1.0 and by_id[2]["outcome_power_known"] is False
 
 
 # ------------------------------------------------------------------------ R2-SIM-1/3

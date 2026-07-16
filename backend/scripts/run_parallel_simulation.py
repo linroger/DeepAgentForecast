@@ -3087,13 +3087,18 @@ class _InbandWorldEvolution:
                 ctx.update({"period": period, "n_rounds": self._n_rounds,
                             "horizon_date": self._horizon_date, "unit": self._unit})
             commitments = self._dc.elicit_round(roster, ctx) if roster else []
+            # Foglamp WP1 (1C/I-16): elicit_round 把类型化轮结果写入 ctx["round_status"]
+            # （committed/abstained/silent/failed/missing）；roster 为空即 missing。
+            # 失败/沉默轮冻结 WorldState 且不衰减收敛 EWMA——死通道不再伪装成均衡。
+            round_status = str(ctx.get("round_status") or "missing") if roster else "missing"
             # 真实时段 gap 的惯性 + 熵地板（spec §4）；snap 后首/尾残段 gap 天然偏离名义值
             eff_inertia = self._dc._inertia_for_gap(
                 self._inertia, self._prev_date, period_end, self._avg_gap)
             entropy_days = (self._dc._period_days(period)
                             if (self._entropy_on and period) else None)
             prev_shares = dict(self._ws.shares)
-            self._ws.step(commitments, inertia=eff_inertia, entropy_mix_days=entropy_days)
+            self._ws.step(commitments, inertia=eff_inertia, entropy_mix_days=entropy_days,
+                          round_status=round_status)
             out = self._ws.outcome()
             leader = out.get("leader")
             # leader_move：只取方向（up/down/flat），份额数值绝不进 agent 可见文本
@@ -3121,6 +3126,7 @@ class _InbandWorldEvolution:
                 self._decisions.append({k: v for k, v in c.items() if k != "weight"})
             # 轨迹行（spec §6：日期化 + 时段字段；as_of = period_end）
             snap: Dict[str, Any] = {"round": rnd, **out}
+            snap["round_status"] = round_status  # Foglamp 1C/I-16：逐轮有效性入账
             if period_end:
                 snap["as_of"] = period_end
             if period:

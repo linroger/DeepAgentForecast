@@ -176,9 +176,12 @@ def test_append_golden_result_and_calibration(tmp_path):
     append_golden_result(question_id="q2", probability=0.2, resolved_outcome=False, d=d)
     led = read_ledger(d)
     assert len(led) == 2
-    # golden entries flow straight into the existing calibration machinery
+    # Foglamp WP1 (1E, I-21)：生产口径的 calibration_summary 按记录类型排除黄金行；
+    # 评估通道显式 include_evaluation=True 才能给隔离账本打分。
     cs = calibration_summary(d)
-    assert cs["n_resolved"] == 2 and cs["mean_brier"] is not None
+    assert cs["n_resolved"] == 0
+    cs_eval = calibration_summary(d, include_evaluation=True)
+    assert cs_eval["n_resolved"] == 2 and cs_eval["mean_brier"] is not None
 
 
 def test_append_golden_result_rejects_bad_probability(tmp_path):

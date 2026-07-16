@@ -366,9 +366,17 @@ def _ledger_enabled(args) -> bool:
 
 def _append_matched_to_ledger(matched: List[Dict[str, Any]], ledger_dir: Optional[str]) -> int:
     """Append each matched (probability, known outcome) as a resolved golden binary
-    forecast so the calibration curve accumulates. Returns count appended."""
+    forecast so an EVALUATION calibration curve accumulates. Returns count appended.
+
+    Foglamp WP1 (1E, I-20/I-21): golden rows are answer-bearing characterization
+    data. ``append_golden_result`` refuses to land them in the production ledger —
+    a production-dir target (default or explicit) is transparently redirected to
+    the isolated evaluation ledger, and production ``calibration_summary`` /
+    ``recalibration_param`` exclude golden/characterization rows by record type.
+    """
     from app.services.forecast_ledger import append_golden_result
     appended = 0
+    redirected = 0
     for r in matched:
         e = append_golden_result(
             question_id=r["id"], probability=r["probability"], resolved_outcome=r["outcome"],
@@ -378,6 +386,11 @@ def _append_matched_to_ledger(matched: List[Dict[str, Any]], ledger_dir: Optiona
         )
         if e:
             appended += 1
+            if e.get("ledger_redirected"):
+                redirected += 1
+    if redirected:
+        print(f"note: {redirected} golden row(s) redirected to the isolated evaluation "
+              "ledger (production ledger.jsonl never accepts golden/characterization rows)")
     return appended
 
 
@@ -439,7 +452,10 @@ def cmd_score_ledger(args) -> int:
         if e.get("resolved") and e.get("outcome") and e.get("scenarios")
     ]
     cal = calibration_report(resolved, bins=args.bins) if resolved else {"n": 0}
-    summary = calibration_summary(args.ledger_dir, entries=entries)
+    # Foglamp WP1 (1E)：这是评估通道对（隔离）账本的显式打分——include_evaluation=True。
+    # 生产侧的 calibration_summary 默认排除 golden/characterization 行。
+    summary = calibration_summary(args.ledger_dir, entries=entries,
+                                  include_evaluation=True)
 
     # Golden-tagged entries carry a category → a per-category binary breakdown, using
     # the YES-scenario probability as the model's p and outcome=='YES' as the label.

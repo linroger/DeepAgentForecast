@@ -2526,7 +2526,14 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
     content = slice_head_tail(content, _bbudget, _bhr if _bhr is not None else 0.6)
     themes = [str(t).strip().lower() for t in (themes or []) if str(t).strip()] or None
     contrarian = bool(_cfg("FORECAST_BINARY_CONTRARIAN", True))
-    sim_sensitive = bool(_cfg("FORECAST_SIM_SENSITIVITY", True)) and bool((signal_pack or "").strip())
+    # Foglamp WP1 (1D, I-16)：模拟信号只有在 SIMULATION_FORECAST_EFFECT=legacy_prompt
+    # （特征化 fixture 专用）时才允许进入二元概率生成；默认 diagnostic_only 下模拟产出
+    # 不得移动任何已发布概率（simulation adjustments 是未晋升的预测政策）。
+    _sim_effect = str(_cfg("SIMULATION_FORECAST_EFFECT", "diagnostic_only")
+                      or "diagnostic_only").strip().lower()
+    sim_sensitive = (_sim_effect == "legacy_prompt"
+                     and bool(_cfg("FORECAST_SIM_SENSITIVITY", True))
+                     and bool((signal_pack or "").strip()))
     market_aware = (bool(_cfg("PREDICTION_MARKETS_ENABLED", True))
                     and bool((market_pack or "").strip()))
     # market_id → 隐含概率查找表（用我们抓取的快照回填模型转录的锚点，不盲信模型数字）。

@@ -52,10 +52,12 @@ EXPECTED = {
     "SIM_CONVERGENCE_STOP": True,  # SIM-1
     # Ontology
     "ONTOLOGY_AUTO_SELECT": True,  # ONTO-4
-    # Calibration keystones (R2-CAL)
+    # Calibration keystones (R2-CAL) — Foglamp WP1 (1D) containment defaults:
+    # single spine draw, identity extremization (an extremize>1 is a forecast
+    # policy that must pass WP14 outcome-blind promotion before overriding).
     "FORECAST_PROB_FLOOR": 0.03,
-    "REPORT_SPINE_SELFCONSISTENCY_K": 5,
-    "ENSEMBLE_EXTREMIZE_A": 2.0,
+    "REPORT_SPINE_SELFCONSISTENCY_K": 1,
+    "ENSEMBLE_EXTREMIZE_A": 1.0,
     "REPORT_SPINE_ANCHOR_WORLDSTATE": True,
     # Research
     "RESEARCH_QUALITY_FLOOR": 0.45,  # R2-RES-1

@@ -18,10 +18,13 @@ from tests.conftest import FakeLLMClient
 
 # ------------------------------------------------------------------ 熵地板 lam pin
 def test_entropy_lam_pinned_one_day():
-    """day（1 天）→ lam = 0.0005，逐字节 pin（spec §4 数值一致性修复）。"""
+    """day（1 天）→ lam = 0.0005，逐字节 pin（spec §4 数值一致性修复）。
+
+    Foglamp WP1 (1C)：空承诺轮必须带显式有效状态（abstained）才演化；无状态的空轮
+    被保守判为 silent 并冻结（不再让静默轮以熵地板伪装成演化）。"""
     ws = WorldState(["A", "B"], base_rates={"A": 0.7, "B": 0.3})
     ws.shares = {"A": 0.5, "B": 0.5}
-    ws.step([], entropy_mix_days=1)
+    ws.step([], entropy_mix_days=1, round_status="abstained")
     # 0.9995×0.5 + 0.0005×seed → A=0.5001, B=0.4999
     assert ws.shares == {"A": 0.5001, "B": 0.4999}
 
@@ -31,8 +34,18 @@ def test_entropy_lam_capped_at_half_year():
     for days in (100, 182, 365):  # 100 天恰好触顶（0.0005×100 = 0.05）
         ws = WorldState(["A", "B"], base_rates={"A": 0.7, "B": 0.3})
         ws.shares = {"A": 0.5, "B": 0.5}
-        ws.step([], entropy_mix_days=days)
+        ws.step([], entropy_mix_days=days, round_status="abstained")
         assert ws.shares == {"A": 0.51, "B": 0.49}, f"days={days}"
+
+
+def test_entropy_skipped_on_silent_round():
+    """Foglamp WP1 (1C/I-16)：无显式状态的空承诺轮 → silent → 状态冻结，
+    熵地板不得让「死通道」看起来仍在演化。"""
+    ws = WorldState(["A", "B"], base_rates={"A": 0.7, "B": 0.3})
+    ws.shares = {"A": 0.5, "B": 0.5}
+    ws.step([], entropy_mix_days=100)
+    assert ws.shares == {"A": 0.5, "B": 0.5}
+    assert ws.round_statuses == ["silent"]
 
 
 def test_entropy_mixes_toward_seed_prior_not_uniform():

@@ -568,7 +568,13 @@ class ZepGraphMemoryUpdater:
 
         ``<agent> STATED_AT_END_OF_SIM 模拟终局陈述`` (fact=回答全文)，让最丰富的收尾反思变成
         可检索的持久事实，而非被摘要后丢失。key-free（走本地 shim）。best-effort，失败返回 False。
+
+        Foglamp WP1 (1A, I-11)：采访是模拟产物。默认门 SIM_INTERVIEW_GRAPH_FEEDBACK=false
+        拒绝写入观察图——合成的终局反思不得变成可检索「事实」。采访全文仍保留在 run 产物里。
         """
+        if not getattr(Config, "SIM_INTERVIEW_GRAPH_FEEDBACK", False):
+            logger.debug("采访事实写入被 SIM_INTERVIEW_GRAPH_FEEDBACK=false 拒绝（Foglamp 1A/I-11）")
+            return False
         agent_name = (agent_name or "").strip()
         statement = (statement or "").strip()
         if not agent_name or not statement:

@@ -252,7 +252,8 @@ class PipelineState:
         return d
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PipelineState":
+    def from_dict(cls, data: dict[str, Any]) -> "PipelineState":  # noqa: C901
+        # (Foglamp 1B) safety_policy_v1 rides inside ``options`` — no schema bump.
         stages = {
             name: StageState.from_dict(stage if isinstance(stage, dict) else {"name": name})
             for name, stage in (data.get("stages") or {}).items()
@@ -285,6 +286,48 @@ class PipelineState:
             stages=stages,
             artifacts=data.get("artifacts") or {},  # T6.3: 老状态文件缺失则默认空 dict
         )
+
+
+# ---------------------------------------------------------------------------
+# Foglamp WP1 (slice 1B): compatibility safety-policy pin.
+#
+# Ambient Config flags changed their defaults in WP1 (graph feedback off,
+# single seed, identity extremization, diagnostic simulation effect). A run
+# admitted before a service reload must not silently change semantics, and a
+# resumed legacy run must never reconstruct UNSAFE semantics (writes into the
+# observed graph). The pin is captured at admission into
+# ``state.options["safety_policy_v1"]`` and read back via
+# ``PipelineOrchestrator._pinned_safety`` at every containment-relevant site.
+# WP4 later migrates this temporary pin into the immutable RunSpec.
+# ---------------------------------------------------------------------------
+SAFETY_POLICY_VERSION = "safety-policy/v1"
+
+
+def capture_safety_policy_v1(origin: str) -> dict[str, Any]:
+    """Snapshot the containment-relevant effective flags at admission time.
+
+    ``origin`` records how the pin came to exist: ``admission`` (new run) or
+    ``resume_reconstructed_safe`` (legacy run resumed after WP1 — it receives
+    the SAFE containment policy, never a reconstruction of unsafe legacy
+    ambient defaults; reconstruction of an unsafe policy is not approval to
+    resume it).
+    """
+    return {
+        "version": SAFETY_POLICY_VERSION,
+        "origin": origin,
+        "pinned_at": _utcnow(),
+        "sim_graph_feedback": bool(getattr(Config, "SIM_GRAPH_FEEDBACK", False)),
+        "sim_typed_feedback_edges": bool(getattr(Config, "SIM_TYPED_FEEDBACK_EDGES", False)),
+        "sim_interview_graph_feedback": bool(
+            getattr(Config, "SIM_INTERVIEW_GRAPH_FEEDBACK", False)),
+        "n_forecast_seeds": max(1, int(getattr(Config, "N_FORECAST_SEEDS", 1) or 1)),
+        "report_spine_selfconsistency_k": max(
+            1, int(getattr(Config, "REPORT_SPINE_SELFCONSISTENCY_K", 1) or 1)),
+        "ensemble_extremize_a": float(getattr(Config, "ENSEMBLE_EXTREMIZE_A", 1.0) or 1.0),
+        "simulation_forecast_effect": str(
+            getattr(Config, "SIMULATION_FORECAST_EFFECT", "diagnostic_only")
+            or "diagnostic_only"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -4396,6 +4439,9 @@ class PipelineOrchestrator:
             "research_language": language,
             "research_model": model or None,
         })
+        # Foglamp WP1 (1B)：新管线在准入时钉住安全政策快照——服务重载/环境变量漂移
+        # 不得让一条已准入的运行悄悄改变图谱反馈/种子/extremize/模拟影响语义。
+        state.options["safety_policy_v1"] = capture_safety_policy_v1("admission")
         PipelineManager.save(state)
 
         cls._cancel_events[pipeline_id] = threading.Event()
@@ -4612,6 +4658,22 @@ class PipelineOrchestrator:
             state.research_pid = None
             state.options["resumed_at"] = _utcnow()
             state.options["resume_count"] = int(state.options.get("resume_count") or 0) + 1
+            # Foglamp WP1 (1B)：WP1 之前准入的管线没有安全政策快照。此类 resume 一律钉入
+            # 当前的**安全**收容政策（graph feedback 关 / 单种子 / diagnostic_only），并显式
+            # 记录 origin=resume_reconstructed_safe——绝不重建旧的不安全环境语义（把生成活动
+            # 写进观察图）；重建出一个不安全政策不等于批准恢复它。已有快照的管线原样保留。
+            if not isinstance(state.options.get("safety_policy_v1"), dict):
+                state.options["safety_policy_v1"] = capture_safety_policy_v1(
+                    "resume_reconstructed_safe")
+                logger.warning(
+                    "[%s] 该管线早于 Foglamp WP1 准入、无安全政策快照；resume 以安全收容政策"
+                    "执行（sim_graph_feedback=%s, n_forecast_seeds=%s, "
+                    "simulation_forecast_effect=%s），不重建旧默认。",
+                    pipeline_id,
+                    state.options["safety_policy_v1"]["sim_graph_feedback"],
+                    state.options["safety_policy_v1"]["n_forecast_seeds"],
+                    state.options["safety_policy_v1"]["simulation_forecast_effect"],
+                )
             PipelineManager.save(state)
 
             cls._cancel_events[pipeline_id] = threading.Event()
@@ -4886,6 +4948,19 @@ class PipelineOrchestrator:
             return None
         return None
 
+    @staticmethod
+    def _pinned_safety(state: "PipelineState", key: str, default: Any) -> Any:
+        """Foglamp WP1 (1B): read a containment-relevant flag from the run's pinned
+        ``safety_policy_v1`` snapshot, falling back to ``default`` (the ambient —
+        now safe — Config value) when the pin or the key is absent. A run must
+        never silently change safety semantics on service reload."""
+        try:
+            pol = (state.options or {}).get("safety_policy_v1") or {}
+            v = pol.get(key)
+            return default if v is None else v
+        except Exception:  # noqa: BLE001 — 安全政策读取绝不让管线崩溃；回退环境值
+            return default
+
     def _maybe_run_seed_ensemble(self, state: "PipelineState", project: Any, graph_id: Optional[str],
                                  actors: Any, research: dict, report_md: str) -> None:
         """NEXTSTEPS P0-3: 同问多种子集成。
@@ -4897,7 +4972,10 @@ class PipelineOrchestrator:
         默认 N=1 → 该方法直接返回（与现状逐字节一致）。
         """
         try:
-            n_seeds = max(1, int(getattr(Config, "N_FORECAST_SEEDS", 1) or 1))
+            # Foglamp WP1 (1B/1D)：种子数读 run 钉住的安全政策（缺失回退环境值，现默认 1）。
+            n_seeds = max(1, int(self._pinned_safety(
+                state, "n_forecast_seeds",
+                getattr(Config, "N_FORECAST_SEEDS", 1)) or 1))
         except (TypeError, ValueError):
             n_seeds = 1
         if (n_seeds <= 1 or state.mode != "full"
@@ -5157,7 +5235,9 @@ class PipelineOrchestrator:
         run_kwargs: dict[str, Any] = {"platform": "parallel", "sim_seed": int(seed)}
         if max_rounds:
             run_kwargs["max_rounds"] = int(max_rounds)
-        if Config.SIM_GRAPH_FEEDBACK and graph_id:
+        # Foglamp WP1 (1A/1B)：读 run 钉住的安全政策（默认已为 false——观察图不得吃反馈）。
+        if self._pinned_safety(state, "sim_graph_feedback",
+                               Config.SIM_GRAPH_FEEDBACK) and graph_id:
             run_kwargs["enable_graph_memory_update"] = True
             run_kwargs["graph_id"] = graph_id
         SimulationRunner.start_simulation(simulation_id=sim_id, **run_kwargs)
@@ -5207,8 +5287,9 @@ class PipelineOrchestrator:
                 except Exception:  # noqa: BLE001
                     pass
             time.sleep(5)
-        # 反馈写入器排空（与主跑一致），保证报告读到完整图谱
-        if Config.SIM_GRAPH_FEEDBACK and graph_id:
+        # 反馈写入器排空（与主跑一致），保证报告读到完整图谱（Foglamp 1B：读钉住政策）
+        if self._pinned_safety(state, "sim_graph_feedback",
+                               Config.SIM_GRAPH_FEEDBACK) and graph_id:
             SimulationRunner.join_monitor_thread(sim_id, timeout=30)
             try:
                 ZepGraphMemoryManager.stop_updater(sim_id)
@@ -8723,8 +8804,10 @@ class PipelineOrchestrator:
                     None if _calendar_mode() else (Config.OASIS_DEFAULT_MAX_ROUNDS or None))
                 if _mr:
                     run_kwargs["max_rounds"] = int(_mr)
-                # T3.10: 打开「模拟 → 图谱」反馈回路（本地默认开），让报告阶段挖到的是模拟后的图谱。
-                if Config.SIM_GRAPH_FEEDBACK and graph_id:
+                # T3.10 → Foglamp WP1 (1A/1B)：模拟 → 观察图反馈默认【关】（I-11/I-12），
+                # 且按 run 钉住的安全政策决定，服务重载不改变已准入运行的语义。
+                if cls._pinned_safety(state, "sim_graph_feedback",
+                                      Config.SIM_GRAPH_FEEDBACK) and graph_id:
                     run_kwargs["enable_graph_memory_update"] = True
                     run_kwargs["graph_id"] = graph_id
                 SimulationRunner.start_simulation(simulation_id=sim_state.simulation_id, **run_kwargs)
@@ -8813,7 +8896,8 @@ class PipelineOrchestrator:
                 #       即便监控线程已停过也安全）。
                 # 仅在本次运行启用了反馈回路时才需要（与 RUN 启动条件一致）；任何卡顿降级为告警，
                 # 不让栅栏本身拖垮管线。
-                if Config.SIM_GRAPH_FEEDBACK and graph_id:
+                if cls._pinned_safety(state, "sim_graph_feedback",
+                                      Config.SIM_GRAPH_FEEDBACK) and graph_id:
                     # F-12-1 汇流栅栏：经公共访问点等待监控线程退出（不再直接读私有注册表）。
                     if not SimulationRunner.join_monitor_thread(sim_state.simulation_id, timeout=30):
                         logger.warning(

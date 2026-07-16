@@ -18,6 +18,54 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+# ---------------------------------------------------------------------------
+# Foglamp WP1 (slice 1C, invariant I-16): typed round validity accounting.
+#
+# Failure, silence, abstention, infeasibility, no change, and convergence are
+# DIFFERENT states. Before this containment, an elicitation failure produced an
+# empty commitment list, the shares stayed put, the EWMA delta decayed toward
+# zero, and the trajectory eventually reported ``converged=True`` — a dead
+# decision channel was indistinguishable from a genuine equilibrium.
+#
+# Round statuses (recorded per ``step``):
+#   committed  — at least one validated commitment was applied (valid evidence)
+#   abstained  — elicitation succeeded and actors explicitly abstained (valid
+#                evidence of "no move", per R2-CAL-13/SIM-9)
+#   silent     — elicitation succeeded but returned no usable decisions
+#                (ambiguous; NOT evidence of stability)
+#   failed     — provider/infrastructure error during elicitation
+#   missing    — no elicitation was attempted (e.g. empty roster/inputs)
+#   infeasible — reserved for WP11 feasibility rejection (not yet emitted)
+#
+# Only VALID_ROUND_STATUSES update the convergence EWMA. Invalid rounds freeze
+# the state (including the calendar entropy floor — an uninformative round
+# contributes nothing, not a synthetic drift).
+ROUND_STATUS_COMMITTED = "committed"
+ROUND_STATUS_ABSTAINED = "abstained"
+ROUND_STATUS_SILENT = "silent"
+ROUND_STATUS_FAILED = "failed"
+ROUND_STATUS_MISSING = "missing"
+ROUND_STATUS_INFEASIBLE = "infeasible"
+
+VALID_ROUND_STATUSES = frozenset({ROUND_STATUS_COMMITTED, ROUND_STATUS_ABSTAINED})
+KNOWN_ROUND_STATUSES = frozenset({
+    ROUND_STATUS_COMMITTED, ROUND_STATUS_ABSTAINED, ROUND_STATUS_SILENT,
+    ROUND_STATUS_FAILED, ROUND_STATUS_MISSING, ROUND_STATUS_INFEASIBLE,
+})
+
+# Frozen containment thresholds (EXECPLAN_FOGLAMP §9: "the exact thresholds are
+# frozen in a fixture policy before implementation; missing data yields
+# ``inconclusive``, not convergence").
+CONVERGENCE_POLICY_V1: Dict[str, Any] = {
+    "version": "foglamp-convergence-policy/v1",
+    # settled requires at least this many valid (committed/abstained) transitions
+    "min_valid_transitions": 3,
+    # and at least this fraction of accounted rounds must be valid
+    "min_valid_coverage": 0.5,
+    # any provider/infrastructure failure makes convergence at best inconclusive
+    "max_failed_rounds": 0,
+}
+
 
 def _norm_shares(shares: Dict[str, float]) -> Dict[str, float]:
     """Clamp negatives to 0 and renormalize to sum 1; empty/degenerate → uniform."""
@@ -105,10 +153,13 @@ class WorldState:
         self._ewma_delta = 1.0
         # P1-4: round at which the trajectory settled (set by the orchestration loop).
         self.converged_at: Optional[int] = None
+        # Foglamp WP1 (1C/I-16): per-round validity statuses, in step order.
+        self.round_statuses: List[str] = []
 
     def step(self, commitments: List[Dict[str, Any]],
              inertia: Optional[float] = None,
-             entropy_mix_days: Optional[int] = None) -> Dict[str, float]:
+             entropy_mix_days: Optional[int] = None,
+             round_status: Optional[str] = None) -> Dict[str, float]:
         """Evolve one round: aggregate resource-weighted commitments into a target
         distribution, blend with the prior by ``inertia``. No commitments → unchanged.
 
@@ -120,9 +171,34 @@ class WorldState:
         覆盖的日历天数时，在常规 blend/renormalize 之后再向**种子先验**回混
         ``lam = min(0.05, 0.0005×天数)``（day→0.0005，month→≈0.0152，half_year→0.05 封顶），
         防止长推演把分布锁死在极端值。``None``（所有旧调用方）→ 逐字节不变。
+
+        Foglamp WP1 (1C/I-16): ``round_status`` records why this round looks the
+        way it does. ``None`` infers ``committed`` when a positive-weight
+        commitment exists, else ``silent`` (conservative: an unexplained empty
+        round is NOT evidence of stability). Rounds whose status is not in
+        ``VALID_ROUND_STATUSES`` freeze the state and do NOT update the
+        convergence EWMA, so a failed/absent decision channel can no longer
+        decay into apparent convergence.
         """
         if not self.scenarios:
             return {}
+        status = round_status
+        if status is None:
+            has_signal = any(
+                isinstance(c, dict)
+                and str(c.get("scenario") or "") in set(self.scenarios)
+                for c in (commitments or [])
+            )
+            status = ROUND_STATUS_COMMITTED if has_signal else ROUND_STATUS_SILENT
+        elif status not in KNOWN_ROUND_STATUSES:
+            status = ROUND_STATUS_SILENT
+        if status not in VALID_ROUND_STATUSES:
+            # Invalid/uninformative round: freeze state, record the status, and
+            # leave the convergence EWMA untouched (I-16: no update, no decay).
+            self.round_statuses.append(status)
+            self.history.append(dict(self.shares))
+            return self.shares
+        self.round_statuses.append(status)
         eff_inertia = self.inertia if inertia is None else max(0.0, min(1.0, float(inertia)))
         votes: Dict[str, float] = dict.fromkeys(self.scenarios, 0.0)
         for c in commitments or []:
@@ -155,13 +231,62 @@ class WorldState:
         self.history.append(dict(self.shares))
         return self.shares
 
+    def round_accounting(self) -> Dict[str, Any]:
+        """Foglamp WP1 (1C/I-16): typed per-round accounting for the trajectory.
+
+        Returns counts by status plus the derived validity measures the
+        convergence policy consumes. Pure; safe on a fresh instance.
+        """
+        counts: Dict[str, int] = {}
+        for s in self.round_statuses:
+            counts[s] = counts.get(s, 0) + 1
+        total = len(self.round_statuses)
+        valid = sum(counts.get(s, 0) for s in VALID_ROUND_STATUSES)
+        return {
+            "policy_version": CONVERGENCE_POLICY_V1["version"],
+            "counts": counts,
+            "rounds_accounted": total,
+            "valid_transitions": valid,
+            "valid_coverage": round(valid / total, 6) if total else 0.0,
+            "failed_rounds": counts.get(ROUND_STATUS_FAILED, 0),
+            "missing_rounds": counts.get(ROUND_STATUS_MISSING, 0),
+        }
+
+    def convergence_state(self, eps: float = 0.02) -> str:
+        """Foglamp WP1 (1C/I-16): ``converged`` | ``inconclusive`` | ``active``.
+
+        ``converged`` requires the settled EWMA **and** the frozen
+        ``CONVERGENCE_POLICY_V1`` guards: enough valid transitions, enough valid
+        coverage, and zero provider/infrastructure failures. A settled EWMA that
+        fails a guard is ``inconclusive`` — stability of a starved channel is
+        not evidence of equilibrium. Missing data never yields convergence.
+        """
+        settled = self._ewma_delta < float(eps)
+        if not settled:
+            return "active"
+        acct = self.round_accounting()
+        policy = CONVERGENCE_POLICY_V1
+        if (acct["valid_transitions"] < int(policy["min_valid_transitions"])
+                or acct["valid_coverage"] < float(policy["min_valid_coverage"])
+                or acct["failed_rounds"] > int(policy["max_failed_rounds"])):
+            return "inconclusive"
+        return "converged"
+
     def converged(self, eps: float = 0.02) -> bool:
-        """True once the EWMA of per-round L1 change drops below ``eps`` (settled)."""
-        return self._ewma_delta < float(eps)
+        """True once the EWMA of per-round L1 change drops below ``eps`` (settled)
+        AND the ``CONVERGENCE_POLICY_V1`` validity guards pass (Foglamp 1C/I-16).
+        A failed or silent decision channel therefore can no longer report
+        convergence; use :meth:`convergence_state` to distinguish
+        ``inconclusive`` from ``active``."""
+        return self.convergence_state(eps) == "converged"
 
     def outcome(self) -> Dict[str, Any]:
         """The modeled outcome: scenario shares + leader + convergence diagnostics.
         This is what a forecaster reads INSTEAD of voice-share ``final_stance_share``.
+
+        Foglamp WP1 (1D/I-11): the block is labeled ``elicited_model_projection``
+        — it is an elicited model projection over scenario names, never observed
+        real-world evidence, and must be presented as such downstream.
         """
         ranked = sorted(self.shares.items(), key=lambda kv: -kv[1])
         return {
@@ -171,6 +296,9 @@ class WorldState:
             "rounds": max(0, len(self.history) - 1),
             "ewma_delta": self._ewma_delta,
             "converged": self.converged(),
+            "convergence_state": self.convergence_state(),  # Foglamp 1C/I-16
             "converged_at": self.converged_at,   # P1-4 (set by the loop; None until settled)
             "uniform_prior": self.uniform_prior,  # R2-CAL-13/SIM-9
+            "round_accounting": self.round_accounting(),     # Foglamp 1C/I-16
+            "epistemic_status": "elicited_model_projection",  # Foglamp 1D/I-11
         }

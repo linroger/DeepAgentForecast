@@ -2297,6 +2297,13 @@ class ReportAgent:
         计算一次后缓存在 self._signal_pack；仅在 Config.REPORT_SIGNAL_PACK 为真时调用。
         篇幅有界（单块各自截断），避免给每个章节提示词注入过量 token。
         """
+        # Foglamp WP1 (1D, I-11/I-16)：SIMULATION_FORECAST_EFFECT=no_update 时整包自抑制
+        # （连诊断散文也不注入）。默认 diagnostic_only：允许作为「显式标注模拟来源」的
+        # 诊断分析进入章节散文，但绝不进入概率生成路径（见 _derive_and_pin_forecast_spine）。
+        _effect = str(getattr(Config, "SIMULATION_FORECAST_EFFECT", "diagnostic_only")
+                      or "diagnostic_only").strip().lower()
+        if _effect == "no_update":
+            return ""
         parts: List[str] = []
         # 0) NEXTSTEPS P1-1: 决策通道演化出的「结果世界态」——建模出的 P(outcome)（按情景份额），
         # 比声量份额更接近真实结果。仅开启 SIM_DECISION_CHANNEL 时存在；置于最前（最权威）。
@@ -2362,13 +2369,20 @@ class ReportAgent:
 
         if not parts:
             return ""
+        # Foglamp WP1 (1D)：旧版指令要求把模拟产出「转写」为现实世界判断、同时禁止提及模拟——
+        # 这会把合成叙事洗成未标注的真实世界证据（social→institutional laundering）。
+        # 新规则：诊断材料可以分析，但引用时必须标注模拟来源，且不得据此给出/修改概率数字。
         header = (
-            "【内部情景推演·结构化产出（方法学材料——仅供你分析，绝不进入正文表述）】\n"
-            "使用规则：把以下产出**转写**为关于现实世界行为者的判断（权力集中度、联盟结构、"
-            "脆弱节点、议程设置力、结果概率），并结合研究材料给出具体、可核查的现实世界数字与 "
-            "[S#] 引用，避免「只有叙事、没有数字」的章节。"
-            "❌ 严禁在正文引用动作次数、轮次、动作类型、发帖/点赞/评论等机制细节；"
-            "❌ 严禁把推演本身当作叙述对象。需要更细粒度时再调用工具深挖。"
+            "【内部情景推演·诊断材料（elicited model projection——模型引出的推演投影，"
+            "非观察证据）】\n"
+            "使用规则：以下产出可用于机制分析（权力集中度、联盟结构、脆弱节点、议程设置力"
+            "的假设生成），但：\n"
+            "✅ 正文引用其任何判断时必须显式标注来源为内部情景推演（如「内部情景推演显示…」），"
+            "不得表述为观察到的现实世界事实；\n"
+            "✅ 现实世界的定量声明只能来自研究材料并带 [S#] 引用；\n"
+            "❌ 严禁依据本材料给出、调整或佐证任何结果概率数字——概率由预测骨架独立裁定，"
+            "本材料不进入概率生成路径（forecast_effect=diagnostic_only）；\n"
+            "❌ 严禁在正文引用动作次数、轮次、动作类型、发帖/点赞/评论等机制细节。"
         )
         return header + "\n\n" + "\n\n".join(parts)
 
@@ -2392,7 +2406,14 @@ class ReportAgent:
         shares = ((data or {}).get("outcome") or {}).get("shares") or {}
         if not isinstance(shares, dict) or not shares:
             return ""
-        lines = ["【预测结果分布 P(outcome)（内部分析先验；须与外部证据交叉验证）】"]
+        # Foglamp WP1 (1D, I-11)：WorldState 是 elicited model projection（模型引出的推演
+        # 投影），不是权威/硬模拟证据；标签随块携带，且带上 1C 的有效性裁定（若有）。
+        lines = ["【推演结果分布 P(outcome)（elicited model projection——模型引出的推演投影，"
+                 "非观察证据；仅供机制分析，不得据此调整概率）】"]
+        _validity = str((data or {}).get("validity") or "").strip().lower()
+        if _validity and _validity != "valid":
+            lines.append(f"⚠️ 有效性裁定：{_validity}（决策通道存在失败/沉默轮，"
+                         "本分布不可用作任何依据；forecast_effect=no_update）")
         for name, sh in sorted(shares.items(), key=lambda kv: -float(kv[1] or 0)):
             try:
                 lines.append(f"· {name}: {float(sh) * 100:.0f}%")
@@ -2755,14 +2776,25 @@ class ReportAgent:
                 forecast_inputs = _actors.forecast_inputs_block(self.actors) or ""
             except Exception:  # noqa: BLE001 — forecast_inputs 为可选增强
                 forecast_inputs = ""
-            # 信号包：优先复用已构建的（REPORT_SIGNAL_PACK 开时），否则为骨架单独构建一次
-            # （不写回 self._signal_pack，避免在该旗标关闭时改变各章注入行为）。
-            signal_pack = self._signal_pack
-            if not signal_pack:
-                try:
-                    signal_pack = self._build_signal_pack()
-                except Exception:  # noqa: BLE001
-                    signal_pack = ""
+            # Foglamp WP1 (1D, I-16/I-18)：预测骨架是概率权威。默认政策 diagnostic_only 下，
+            # 模拟信号包（WorldState 份额、联盟结构、反事实差异等 elicited model projection）
+            # **不得进入概率生成输入**——研究先验已经播种了 WorldState，再喂回骨架就是同一
+            # 意见走两条路径被数成两份独立证据（circular corroboration）。仅
+            # legacy_prompt（特征化 fixture 专用）保留旧行为，运行期显式告警。
+            _sim_effect = str(getattr(Config, "SIMULATION_FORECAST_EFFECT", "diagnostic_only")
+                              or "diagnostic_only").strip().lower()
+            if _sim_effect == "legacy_prompt":
+                logger.warning(
+                    "SIMULATION_FORECAST_EFFECT=legacy_prompt：模拟信号包将直接进入概率生成"
+                    "（仅限特征化 fixture；生产运行不得使用此政策）")
+                signal_pack = self._signal_pack
+                if not signal_pack:
+                    try:
+                        signal_pack = self._build_signal_pack()
+                    except Exception:  # noqa: BLE001
+                        signal_pack = ""
+            else:
+                signal_pack = ""
             # 预测市场信号包：优先复用已构建的（generate_report 已先构建），否则为骨架
             # 单独构建一次（现抓/读 handoff 皆 degrade-safe，失败为空串 → 提示词不变）。
             market_pack = getattr(self, "_market_pack", "")
@@ -9132,7 +9164,9 @@ class ReportAgent:
         sys_prompt = (
             "你是一名严格的报告章节质检员。仅依据下方给定材料，判断本章草稿是否同时满足四条标准：\n"
             "1) 概率一致性：正文若提及情景/事件概率，须与【预测骨架概率】一致，不得矛盾；\n"
-            "2) 硬数字接地：关键定量声明须带来源标注 [S#]，或与【信号包】中的硬数字一致；\n"
+            "2) 硬数字接地：关于现实世界的关键定量声明必须带来源标注 [S#]；【信号包】中的数字"
+            "是内部模拟推演产物（elicited model projection），只有在正文显式标注其模拟来源时"
+            "才可引用，绝不能替代 [S#] 作为现实世界声明的接地；\n"
             f"3) 篇幅下限：正文须有不少于 {floor} 字符的实质内容；\n"
             "4) 不复述前序章节：不得大段重复【前序章节摘要】中的内容。\n"
             f"全部满足 ⇒ 只输出 PASS（不要任何多余文字）；否则 ⇒ 只输出一条最关键、可执行、"

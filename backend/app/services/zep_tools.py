@@ -2150,7 +2150,10 @@ class ZepToolsService:
 
             # T3.14: 把采访回答持久化为 typed 图谱事实（<agent> STATED_AT_END_OF_SIM …），
             # 让最丰富的收尾反思可被后续检索；key-free 走本地 shim。best-effort，失败不影响采访结果。
-            if graph_id and result.interviews:
+            # Foglamp WP1 (1A, I-11)：采访是模拟产物，默认不得写入观察图（门默认 false）；
+            # 采访全文仍完整保留在 result.interviews（run 产物）。
+            if (graph_id and result.interviews
+                    and getattr(Config, "SIM_INTERVIEW_GRAPH_FEEDBACK", False)):
                 try:
                     from .zep_graph_memory_updater import ZepGraphMemoryUpdater
                     _updater = ZepGraphMemoryUpdater(graph_id)

@@ -279,11 +279,12 @@ class Config:
     # OASIS 抽样/人设生成确定性种子（EXECPLAN2 I-7-2；0/空=随机，复现/集成跑设同一正整数）。
     SIM_SEED = int(os.environ.get('SIM_SEED', '0') or '0')
     # NEXTSTEPS P0-3：同问多种子集成。LLM 驱动的模拟是随机生成器，单次=单抽样；对同一图谱用
-    # 不同 SIM_SEED 跑 N 次 sim+report，聚合各自 forecast.json→ensemble_forecast.json，把点估计
-    # 变成带区间的分布，inter-seed 一致度→报告信心。CONF-1：默认 1→3——单抽样过度自信是最大的
-    # 校准短板；额外种子只重跑 sim+report（不重跑研究/图谱），且严格串行（见 _maybe_run_seed_ensemble），
-    # 故 wall-clock 只放大模拟+报告段（约 ×3），非整条管线。设 1 复现旧行为。
-    N_FORECAST_SEEDS = max(1, int(os.environ.get('N_FORECAST_SEEDS', '3') or '3'))
+    # 不同 SIM_SEED 跑 N 次 sim+report，聚合各自 forecast.json→ensemble_forecast.json。
+    # Foglamp WP1 (1D, I-12)：默认回到【1】。当前额外种子共享同一 graph_id 且图谱反馈曾默认
+    # 开启——后种子可读到先种子写入的合成痕迹，并发种子还会产生顺序依赖状态；这样的
+    # spread/agreement 不是干净的不确定性度量（伪集成）。在 WP10/WP12 交付「快照一次 + 每种子
+    # 隔离 overlay + 独立 RNG」之前不得回调 >1。
+    N_FORECAST_SEEDS = max(1, int(os.environ.get('N_FORECAST_SEEDS', '1') or '1'))
     # PAR-3：多种子集成的并行度。此前额外种子严格串行（wall-clock ≈ ×N_FORECAST_SEEDS 的
     # sim+report 段）；每个种子跑在独立 simulation_id → 独立目录/DB/文件式 IPC/仅注入子进程的
     # env（见 _run_one_seed 的线程安全论证），故可安全并行。默认 2、上限 3（并行度越高对
@@ -307,12 +308,13 @@ class Config:
     # 结果坐在 ~0 处的灾难性 log-loss/Brier 失败。trivial 且 tail-dominant。
     FORECAST_PROB_FLOOR = float(os.environ.get('FORECAST_PROB_FLOOR', '0.03') or '0.03')
     # R2-CAL-1 / R2-CAL-17：把预测脊柱推导 K 次（共享情景名、变 temp），汇成均值概率 + spread→confidence。
-    # 全管线最便宜的「分布」：K 次廉价 LLM 调用、不重跑图谱/模拟，去掉单抽样过度自信，N_FORECAST_SEEDS=1
-    # 也能给出区间。1 = 复现今天的行为（degrade-safe）。
-    REPORT_SPINE_SELFCONSISTENCY_K = max(1, int(os.environ.get('REPORT_SPINE_SELFCONSISTENCY_K', '5') or '5'))
+    # Foglamp WP1 (1D)：默认回到【1】。同模型重抽样的 spread 不是校准过的不确定性——把它
+    # 当区间发布会高估独立性；重抽样只有在测得的不稳定性证明其成本合理时才加（WP15）。
+    REPORT_SPINE_SELFCONSISTENCY_K = max(1, int(os.environ.get('REPORT_SPINE_SELFCONSISTENCY_K', '1') or '1'))
     # R2-CAL-2：集成聚合用 log-odds（几何）pooling 的 extremizing 因子；算术均值作为诊断保留。
-    # 算术平均欠自信（拉向 0.5）；extremized log-odds pooling 跨 seed/自一致抽样锐化校准。
-    ENSEMBLE_EXTREMIZE_A = float(os.environ.get('ENSEMBLE_EXTREMIZE_A', '2.0') or '2.0')
+    # Foglamp WP1 (1D)：默认回到恒等【1.0】——extremize>1 是一个预测政策，必须先过 WP14 的
+    # outcome-blind 前瞻晋升门（promoted policy ID）才可覆盖，不得作为环境默认锐化概率。
+    ENSEMBLE_EXTREMIZE_A = float(os.environ.get('ENSEMBLE_EXTREMIZE_A', '1.0') or '1.0')
     # W9-5：多种子集成的语义情景对齐。种子间对同一情景常起不同的自由名（中英混排、
     # 'S1 — …' 前缀等），仅按精确规范名分桶会把它们打散成 support=1 的孤桶、一致度误报 0.0
     # （实测 3 种子 11 桶全 support=1、信心被误降为 low）。开启后名字不中时按
@@ -1276,10 +1278,20 @@ class Config:
     # 默认 'china_social' 完整保留当前的北京作息行为（与现状逐字节一致）；
     # 'us_business' / 'global_market' 是另两套预设，由 simulation_config_generator 消费。
     SIM_ACTIVITY_PROFILE = os.environ.get('SIM_ACTIVITY_PROFILE', 'china_social').strip().lower()
-    # 模拟 → 图谱反馈回路（本地默认开；写回模拟期间涌现的关系，报告阶段可见）(T3.10)
-    SIM_GRAPH_FEEDBACK = os.environ.get('SIM_GRAPH_FEEDBACK', 'true').strip().lower() == 'true'
-    # 反馈除自由文本 episode 外，再写带名实体的 typed 边（A LIKED/REPLIED_TO/FOLLOWED B）(T3.10)
-    SIM_TYPED_FEEDBACK_EDGES = os.environ.get('SIM_TYPED_FEEDBACK_EDGES', 'true').strip().lower() == 'true'
+    # Foglamp WP1 (1A, I-11/I-12)：模拟 → 观察图谱反馈回路默认【关】。
+    # 此前默认开：模拟活动被刻意去掉「模拟」前缀写成普通事实散文（zep_graph_memory_updater
+    # .to_episode_text），typed 边与终局采访也写进同一张观察图——下游阶段可把合成叙事当作
+    # 观察到的事实检索回来（观察/推断/假设/模拟四类永不静默合流是 I-11 的硬边界）。
+    # 在 WP10 的隔离 overlay（run/seed/scenario 作用域）就绪之前，任何生成活动都不得进入
+    # 观察图。显式设 true 仅用于特征化 fixture / 一次性隔离图，绝非生产回退。(T3.10→WP1)
+    SIM_GRAPH_FEEDBACK = os.environ.get('SIM_GRAPH_FEEDBACK', 'false').strip().lower() == 'true'
+    # 反馈除自由文本 episode 外，再写带名实体的 typed 边（A LIKED/REPLIED_TO/FOLLOWED B）
+    # (T3.10)。Foglamp WP1 (1A)：同上默认【关】。
+    SIM_TYPED_FEEDBACK_EDGES = os.environ.get('SIM_TYPED_FEEDBACK_EDGES', 'false').strip().lower() == 'true'
+    # Foglamp WP1 (1A)：终局采访（write_interview_fact，T3.14）单独设门并默认【关】——
+    # 采访是模拟产物，写入观察图等同把合成反思当事实。采访仍保留在 run 产物 JSON 里。
+    SIM_INTERVIEW_GRAPH_FEEDBACK = os.environ.get(
+        'SIM_INTERVIEW_GRAPH_FEEDBACK', 'false').strip().lower() == 'true'
     # 把 *_config 的 recsys 旋钮（recsys_type/refresh_rec_post_count/max_rec_post_len + echo→
     # following_post_count）映射到 oasis Platform；默认关 = 用 DefaultPlatformType（与旧行为一致）(T3.12)
     SIM_WIRE_RECSYS = os.environ.get('SIM_WIRE_RECSYS', 'false').strip().lower() == 'true'
@@ -1371,6 +1383,20 @@ class Config:
     # R2-SIM-1 / R2-CAL-3：默认开——硬前提：没有它脊柱只看到活动量、零建模结果。成本由
     # OASIS_DEFAULT_MAX_ROUNDS 封顶 + SIM_CONVERGENCE_STOP 早停 + 并行 elicitation 约束。
     SIM_DECISION_CHANNEL = os.environ.get('SIM_DECISION_CHANNEL', 'true').strip().lower() == 'true'
+    # Foglamp WP1 (1D, I-16/I-18)：模拟对已发布概率的影响政策（run-pinned）。
+    #   diagnostic_only —— 默认。模拟/WorldState 产出只进「显式标注模拟来源」的分析散文，
+    #                      不进 derive_forecast_spine() 的概率生成输入，不调整任何概率。
+    #   no_update       —— 连诊断散文也不注入（最保守）。
+    #   validated_update —— 仅当 WP6/12/14 交付 outcome-blind 前瞻晋升（immutable
+    #                      PromotionDecision）后才可用；当前一律回落 diagnostic_only。
+    #   legacy_prompt   —— 仅供特征化 fixture 复现旧行为（模拟数字直接喂概率生成），
+    #                      绝非生产回退；运行期使用会被显式告警。
+    SIMULATION_FORECAST_EFFECT = (
+        os.environ.get('SIMULATION_FORECAST_EFFECT', 'diagnostic_only').strip().lower()
+        if os.environ.get('SIMULATION_FORECAST_EFFECT', 'diagnostic_only').strip().lower()
+        in ('diagnostic_only', 'no_update', 'validated_update', 'legacy_prompt')
+        else 'diagnostic_only'
+    )
     SIM_DECISION_INERTIA = float(os.environ.get('SIM_DECISION_INERTIA', '0.7') or '0.7')  # 先验每轮持久度
     # NEXTSTEPS P1-4：收敛/均衡检测——按 WorldState 的逐轮变化 EWMA 早停（区别于按声量），
     # 把"收敛于 R 轮（稳定）" vs "未收敛（低信心）"本身作为校准信号。需 P1-1 的世界态（现已默认开）。

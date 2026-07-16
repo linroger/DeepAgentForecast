@@ -41,7 +41,16 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from .worldstate import WorldState, commitments_from_decisions
+from .worldstate import (
+    CONVERGENCE_POLICY_V1,
+    ROUND_STATUS_ABSTAINED,
+    ROUND_STATUS_COMMITTED,
+    ROUND_STATUS_FAILED,
+    ROUND_STATUS_MISSING,
+    ROUND_STATUS_SILENT,
+    WorldState,
+    commitments_from_decisions,
+)
 
 # 仅用 stdlib logging，保持本模块导入纯净（子进程 in-band 演化直接 import 本模块）。
 logger = logging.getLogger(__name__)
@@ -211,16 +220,29 @@ def _elicit_round_decisions(llm, scenarios: List[str], active: List[Dict[str, An
                             period: Optional[Dict[str, Any]] = None,
                             n_rounds: Optional[int] = None,
                             horizon_date: Optional[str] = None,
-                            unit: Optional[str] = None) -> List[Dict[str, Any]]:
+                            unit: Optional[str] = None,
+                            ) -> Tuple[List[Dict[str, Any]], str]:
     """One batched structured call assigning each active agent a scenario commitment.
 
-    Returns ``[{agent_id, scenario, magnitude, confidence}]`` (scenario validated against
-    the candidate set; ``ABSTAIN_TOKEN`` and any other non-candidate value are dropped).
-    Degrade-safe: empty inputs or any failure → ``[]``. ``period``/``n_rounds``/
-    ``horizon_date``/``unit`` 仅在日历模式提供，切换提示词为 spec §5 的时段框架。
+    Returns ``(decisions, round_status)`` where ``decisions`` is
+    ``[{agent_id, scenario, magnitude, confidence}]`` (scenario validated against
+    the candidate set; ``ABSTAIN_TOKEN`` and any other non-candidate value are
+    dropped) and ``round_status`` is the Foglamp WP1 (1C/I-16) typed outcome:
+
+    - ``committed``  — at least one validated commitment
+    - ``abstained``  — the model answered and every agent explicitly abstained
+    - ``silent``     — the model answered but produced no usable decision
+    - ``failed``     — provider/transport/contract failure (exception or
+      malformed payload). NOT interchangeable with abstention or equilibrium.
+    - ``missing``    — elicitation was not attempted (empty roster/scenarios)
+
+    Degrade-safe: empty inputs or any failure still yield an empty decision
+    list; the caller decides what the status means for WorldState/convergence.
+    ``period``/``n_rounds``/``horizon_date``/``unit`` 仅在日历模式提供，切换提示词
+    为 spec §5 的时段框架。
     """
     if not active or not scenarios:
-        return []
+        return [], ROUND_STATUS_MISSING
     try:
         raw = llm.chat_json(
             messages=[{"role": "user",
@@ -232,19 +254,26 @@ def _elicit_round_decisions(llm, scenarios: List[str], active: List[Dict[str, An
             max_tokens=2048,
         )
     except Exception as _elicit_err:  # noqa: BLE001 — 一轮 elicit 失败不拖垮整条决策通道
-        # 观测性：此前静默返回 []（该轮无承诺 → WorldState 仅按熵地板演化，轨迹看似真实
-        # 却实为近静态先验）。降级为 debug 级告警，便于事后区分「真实收敛」与「LLM 连续失败」。
-        logger.debug("决策通道单轮 elicit 失败（该轮承诺置空，演化退化为先验+熵地板）: %s",
-                     _elicit_err)
-        return []
+        # Foglamp WP1 (1C/I-16)：失败必须显式入账（round_status=failed），不得再
+        # 伪装成「无承诺→先验静态演化→看似收敛」。升级为 warning 级告警。
+        logger.warning("决策通道单轮 elicit 失败（round_status=failed，本轮不更新 WorldState）: %s",
+                       _elicit_err)
+        return [], ROUND_STATUS_FAILED
     decs = raw.get("decisions") if isinstance(raw, dict) else None
+    if not isinstance(decs, list):
+        # 模型返回了不符合契约的载荷：这是失败，不是沉默（I-16）。
+        return [], ROUND_STATUS_FAILED
     out: List[Dict[str, Any]] = []
+    abstained = 0
     valid = set(scenarios)
-    for d in (decs or []):
+    for d in decs:
         if not isinstance(d, dict):
             continue
         sc = str(d.get("scenario") or "").strip()
-        if sc not in valid:  # ABSTAIN_TOKEN / invalid → no commitment (R2-CAL-13/SIM-9)
+        if sc == ABSTAIN_TOKEN:
+            abstained += 1  # explicit opt-out (R2-CAL-13/SIM-9) — valid evidence
+            continue
+        if sc not in valid:  # invalid/non-candidate → no commitment
             continue
         out.append({
             "agent_id": d.get("agent_id"),
@@ -252,7 +281,9 @@ def _elicit_round_decisions(llm, scenarios: List[str], active: List[Dict[str, An
             "magnitude": d.get("magnitude", 1.0),
             "confidence": d.get("confidence", 0.7),
         })
-    return out
+    if out:
+        return out, ROUND_STATUS_COMMITTED
+    return [], (ROUND_STATUS_ABSTAINED if abstained else ROUND_STATUS_SILENT)
 
 
 def elicit_round(roster: List[Dict[str, Any]],
@@ -269,22 +300,30 @@ def elicit_round(roster: List[Dict[str, Any]],
     confidence，与 ``commitments_from_decisions`` 同口径），每项同时保留审计字段
     ``{agent_id, scenario, magnitude, confidence, round, outcome_power?, period_end?}``。
     Degrade-safe：空输入/任何失败 → ``[]``。
+
+    Foglamp WP1 (1C/I-16)：本轮的类型化结果写入 ``period_ctx["round_status"]``
+    （committed/abstained/silent/failed/missing）——调用方必须把它传给
+    ``WorldState.step(round_status=...)``，使失败/沉默轮不再伪装成稳定。
     """
     ctx = period_ctx or {}
     llm = ctx.get("llm")
     scenarios = [str(s) for s in (ctx.get("scenarios") or []) if str(s).strip()]
     if llm is None or not scenarios or not roster:
+        if isinstance(period_ctx, dict):
+            period_ctx["round_status"] = ROUND_STATUS_MISSING
         return []
     try:
         rnd = int(ctx.get("round_num") or 0)
     except (TypeError, ValueError):
         rnd = 0
     period = ctx.get("period") if isinstance(ctx.get("period"), dict) else None
-    decisions = _elicit_round_decisions(
+    decisions, round_status = _elicit_round_decisions(
         llm, scenarios, roster, rnd, ctx.get("as_of"),
         ctx.get("base_shares"), bool(ctx.get("abstain_allowed", True)),
         period=period, n_rounds=ctx.get("n_rounds"),
         horizon_date=ctx.get("horizon_date"), unit=ctx.get("unit"))
+    if isinstance(period_ctx, dict):
+        period_ctx["round_status"] = round_status
     pmap = {e.get("agent_id"): e.get("outcome_power", 1.0) for e in roster}
     period_end = str(period.get("period_end")) if period and period.get("period_end") else None
     out: List[Dict[str, Any]] = []
@@ -321,9 +360,14 @@ def _activation_weight_map(agent_configs: Optional[List[Dict[str, Any]]]) -> Dic
 def _outcome_power_map(agent_configs: Optional[List[Dict[str, Any]]]) -> Dict[Any, float]:
     """{agent_id: outcome_power} — drives how much a commitment moves the OUTCOME.
 
-    R2-SIM-2: defaults to ``influence_weight`` so today's behavior is preserved, but a
-    config may carry an explicit ``outcome_power`` (e.g. structural/resource leverage)
-    that differs from its voice/activation influence.
+    Foglamp WP1 (I-15): the map contains ONLY explicitly declared
+    ``outcome_power`` values. Visibility (``influence_weight`` — the chance of
+    being seen/heard) is never reused as institutional outcome power: a missing
+    power is UNKNOWN, and downstream consumers substitute a declared-neutral
+    1.0 (labeled ``outcome_power_known=False``), not the actor's loudness.
+    The pre-containment fallback let media prominence become legal/political/
+    resource power by construction (R2-SIM-2 preserved it "so today's behavior
+    is preserved"); that default is removed.
     """
     out: Dict[Any, float] = {}
     for c in (agent_configs or []):
@@ -331,7 +375,7 @@ def _outcome_power_map(agent_configs: Optional[List[Dict[str, Any]]]) -> Dict[An
             continue
         power = c.get("outcome_power")
         if power is None:
-            power = c.get("influence_weight", 1.0)
+            continue  # unknown power stays unknown (I-15) — no visibility fallback
         out[c["agent_id"]] = _to_weight(power)
     return out
 
@@ -360,13 +404,22 @@ def _build_active_roster(entries: List[Dict[str, Any]],
     the top ``cap`` individually; collapse the remaining tail into ONE weighted public
     block whose outcome power is the sum of the tail's (so the silent-majority signal is
     aggregated, never silently dropped by truncation).
+
+    Foglamp WP1 (I-15): an actor without an explicitly declared ``outcome_power``
+    receives a declared-neutral 1.0 with ``outcome_power_known=False`` — never
+    its activation/visibility weight. Loudness must not become outcome power.
     """
     enriched = []
     for e in entries:
         aid = e.get("agent_id")
         ee = dict(e)
         ee["_act"] = activation.get(aid, _to_weight(e.get("influence"), 1.0))
-        ee["outcome_power"] = power.get(aid, ee["_act"])
+        if aid in power:
+            ee["outcome_power"] = power[aid]
+            ee["outcome_power_known"] = True
+        else:
+            ee["outcome_power"] = 1.0  # declared-neutral default, NOT visibility (I-15)
+            ee["outcome_power_known"] = False
         enriched.append(ee)
     enriched.sort(key=lambda x: -float(x.get("_act", 0.0)))
     if cap <= 0 or len(enriched) <= cap:
@@ -637,9 +690,14 @@ def run_decision_channel(
         as_of = as_of_by_round[rnd]
         eff_inertia = _inertia_for_gap(inertia, prev_date, as_of, avg_gap)  # R2-SIM-12
         entropy_days = _period_days(p) if (entropy_mix_on and p) else None  # 熵地板（spec §4）
+        # Foglamp WP1 (1C/I-16): the typed elicitation status was written into the
+        # shared task ctx by elicit_round; a cached roster key reuses one status.
+        round_status = str((tasks[round_key[rnd]][1] or {}).get("round_status")
+                           or ROUND_STATUS_MISSING)
         ws.step(commitments_from_decisions(decisions), inertia=eff_inertia,
-                entropy_mix_days=entropy_days)
+                entropy_mix_days=entropy_days, round_status=round_status)
         snap = {"round": rnd, **ws.outcome()}
+        snap["round_status"] = round_status  # Foglamp 1C/I-16: per-round validity
         if as_of:
             snap["as_of"] = as_of
         if p:  # spec §6: 轨迹行带时段字段
@@ -663,6 +721,32 @@ def run_decision_channel(
     ws.converged_at = converged_at
     out = ws.outcome()
     out["converged_at"] = converged_at
+    # Foglamp WP1 (1C/1D, I-11/I-16): typed run-level validity verdict.
+    #  - valid        — every accounted round succeeded (committed/abstained) at
+    #                   policy coverage, no provider failures
+    #  - inconclusive — some usable rounds, but failures/silence keep the run
+    #                   below the frozen convergence policy's evidence bar
+    #  - invalid      — zero usable rounds (dead channel)
+    # A non-``valid`` run MUST NOT move a forecast: forecast_effect=no_update.
+    # Even a valid run defaults to diagnostic_only until an outcome-blind
+    # prospective study promotes a validated update rule (WP6/12/14).
+    accounting = ws.round_accounting()
+    if accounting["valid_transitions"] <= 0:
+        validity = "invalid"
+    elif (accounting["failed_rounds"] > 0
+          or accounting["valid_coverage"] < float(
+              CONVERGENCE_POLICY_V1["min_valid_coverage"])):
+        validity = "inconclusive"
+    else:
+        validity = "valid"
+    if validity != "valid":
+        forecast_effect = "no_update"
+    else:
+        effect_policy = str(_cfg("SIMULATION_FORECAST_EFFECT", "diagnostic_only")
+                            or "diagnostic_only").strip().lower()
+        # validated_update is unavailable until WP6/12/14 promotion (fail closed).
+        forecast_effect = ("diagnostic_only" if effect_policy != "no_update"
+                           else "no_update")
     result = {
         "outcome": out,
         "trajectory": trajectory,
@@ -671,6 +755,12 @@ def run_decision_channel(
         "n_rounds": max(ordered_rounds, default=0),
         "scenarios": scenarios,
         "schema_version": 2,
+        # Foglamp WP1 (1C/1D): validity + epistemic labeling. WorldState output
+        # is an elicited model projection, never authoritative evidence (I-11).
+        "round_accounting": accounting,
+        "validity": validity,
+        "forecast_effect": forecast_effect,
+        "epistemic_status": "elicited_model_projection",
     }
     if period_by_round:
         # 带日期轨迹 schema v3（spec §6）；v2 hours 路径原样。converged/converged_at

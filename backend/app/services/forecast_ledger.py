@@ -34,6 +34,34 @@ def _ledger_file(d: Optional[str] = None) -> str:
     return os.path.join(d or ledger_dir(), "ledger.jsonl")
 
 
+def evaluation_ledger_dir() -> str:
+    """Foglamp WP1 (1E, I-20/I-21): the isolated EVALUATION ledger directory.
+
+    Golden/characterization rows accumulate here — physically separate from the
+    production ledger so evaluation outcomes can never leak into production
+    calibration, recalibration, or earned-confidence numbers.
+    """
+    return os.path.join(os.path.dirname(ledger_dir().rstrip(os.sep)) or ".",
+                        "_evaluation_ledger")
+
+
+def is_production_calibration_row(e: Dict[str, Any]) -> bool:
+    """Foglamp WP1 (1E, I-21): True only for rows eligible for PRODUCTION calibration.
+
+    Excludes golden-question rows (``golden: true``), rows explicitly marked
+    ``characterization_only``, and rows whose ``record_class`` is ``evaluation``
+    — enforced here by record type, not by caller convention, so historical
+    mixed-ledger files stop contaminating production numbers.
+    """
+    if not isinstance(e, dict):
+        return False
+    if e.get("golden") or e.get("characterization_only"):
+        return False
+    if str(e.get("record_class") or "").strip().lower() == "evaluation":
+        return False
+    return True
+
+
 def append_forecast(forecast: Optional[Dict[str, Any]], *, report_id: str,
                     horizon: Optional[str] = None, resolution_date: Optional[str] = None,
                     created_at: Optional[str] = None, d: Optional[str] = None,
@@ -132,11 +160,22 @@ def append_golden_result(*, question_id: str, probability: Any, resolved_outcome
         "category": category,
         "question": question,
         "as_of_date": as_of_date,
+        # Foglamp WP1 (1E, I-20/I-21)：记录类型强制标注——黄金题是含答案的历史
+        # 回溯特征化数据，永不参与生产校准/重校准/晋升。
+        "record_class": "evaluation",
+        "characterization_only": True,
     }
     if isinstance(objective_signals, dict) and objective_signals:
         entry["objective_signals"] = objective_signals
     try:
-        target = _ledger_file(d)
+        # Foglamp WP1 (1E)：黄金题写入被路由到隔离的评估账本。目标目录解析为生产
+        # 账本目录（显式传入或默认）时一律改写到 evaluation_ledger_dir()，绝不落进
+        # 生产 ledger.jsonl —— 生产读侧的 is_production_calibration_row 是第二道防线。
+        _target_dir = os.path.abspath(d) if d else os.path.abspath(ledger_dir())
+        if _target_dir == os.path.abspath(ledger_dir()):
+            _target_dir = evaluation_ledger_dir()
+            entry["ledger_redirected"] = "evaluation"
+        target = _ledger_file(_target_dir)
         os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
         with open(target, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -190,17 +229,24 @@ def read_ledger(d: Optional[str] = None) -> List[Dict[str, Any]]:
     return out
 
 
-def calibration_summary(d: Optional[str] = None, entries: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def calibration_summary(d: Optional[str] = None, entries: Optional[List[Dict[str, Any]]] = None,
+                        *, include_evaluation: bool = False) -> Dict[str, Any]:
     """Historical calibration over RESOLVED ledger entries (Brier / ECE / count).
 
     Each resolved entry carries ``outcome`` = the scenario name that actually occurred.
     Returns ``{n_resolved, mean_brier, calibration_error}`` (Nones when nothing resolved).
+
+    Foglamp WP1 (1E, I-21): by default only PRODUCTION rows count —
+    golden/characterization/evaluation rows are excluded by record type. The
+    evaluation lane (``golden_eval``) may opt in with ``include_evaluation=True``
+    to score an isolated evaluation ledger; production callers never pass it.
     """
     led = entries if entries is not None else read_ledger(d)
     resolved = [
         {"forecast": {"scenarios": e.get("scenarios")}, "outcome": e.get("outcome")}
         for e in led
         if e.get("resolved") and e.get("outcome") and e.get("scenarios")
+        and (include_evaluation or is_production_calibration_row(e))
     ]
     if not resolved:
         return {"n_resolved": 0, "mean_brier": None, "calibration_error": None}
@@ -228,7 +274,8 @@ def due_for_resolution(as_of: str, d: Optional[str] = None) -> List[Dict[str, An
 
 
 def recalibration_param(d: Optional[str] = None,
-                        entries: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+                        entries: Optional[List[Dict[str, Any]]] = None,
+                        *, include_evaluation: bool = False) -> Dict[str, Any]:
     """R2-CAL-5: fit the 1-param logit-scale recalibrator over RESOLVED ledger entries.
 
     Returns ``{slope, n, fitted, enabled}``. ``enabled`` mirrors the
@@ -238,10 +285,13 @@ def recalibration_param(d: Optional[str] = None,
     a no-op (degrade-safe; deferred until labels accrue).
     """
     led = entries if entries is not None else read_ledger(d)
+    # Foglamp WP1 (1E, I-21)：重校准拟合默认只吃生产行（见 is_production_calibration_row）；
+    # include_evaluation=True 仅供评估通道在隔离账本上使用。
     resolved = [
         {"forecast": {"scenarios": e.get("scenarios")}, "outcome": e.get("outcome")}
         for e in led
         if e.get("resolved") and e.get("outcome") and e.get("scenarios")
+        and (include_evaluation or is_production_calibration_row(e))
     ]
     enabled = False
     try:

@@ -154,6 +154,10 @@ def test_binary_themes_parameterized(monkeypatch):
 def test_binary_source_provenance_and_signal_pack(monkeypatch):
     monkeypatch.setattr(Config, "FORECAST_BINARY_CONTRARIAN", False, raising=False)
     monkeypatch.setattr(Config, "FORECAST_SIM_SENSITIVITY", True, raising=False)
+    # Foglamp WP1 (1D)：模拟信号进入二元概率生成仅剩 legacy_prompt（特征化）路径；
+    # 本测试特征化该旧路径的溯源对账行为。默认 diagnostic_only 下模拟信号不再注入
+    # （见 test_foglamp_containment.test_diagnostic_policy_keeps_sim_out_of_binary_probability_prompts）。
+    monkeypatch.setattr(Config, "SIMULATION_FORECAST_EFFECT", "legacy_prompt", raising=False)
     rows = _binary_rows([0.8] * 10)
     rows[0]["source"] = "world-state outcome shares"
     llm = _JsonLLM(lambda c: {"binary_forecasts": [dict(r) for r in rows]})
