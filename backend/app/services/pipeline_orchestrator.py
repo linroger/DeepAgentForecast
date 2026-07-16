@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import atexit
+import glob
 import hashlib
 import json
 import math
@@ -61,6 +62,7 @@ from ..utils.actors import (
     extract_relationship_rows,
     situation_brief,
     situation_brief_block,
+    valid_scenario_distribution,
 )
 from ..utils.dates import parse_as_of
 from ..utils.logger import get_logger
@@ -705,7 +707,16 @@ class _DeerFlowSafetyOverlayError(RuntimeError):
     """A required tracked DeerFlow safety overlay could not be enforced."""
 
 
-def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
+class _DeerFlowSkillSyncError(RuntimeError):
+    """The required runtime skill bundle could not be deployed and verified."""
+
+
+_RUNTIME_SKILL_SYNC_HELPER_PATH = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "../../../deerflow_bridge/runtime_skill_sync.py"
+))
+
+
+def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> dict[str, Any]:
     """启动研究子进程前的漂移防护（2026-07-03 live-surfaced）。
 
     ``deerflow_bridge/``（仓库内、git 跟踪的源）与实际执行的
@@ -714,13 +725,13 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
     actor-cast 纪律等）只有重新运行 ``./setup.sh`` 才会同步到部署副本——一次实机
     forecast run 验证时发现子进程仍在跑没有 enforce_actor_cast 的旧代码（3217 行
     vs 源 3792 行），导致 28-actor 的档案未按 ACTOR_CAST_MAX=20 截断。
-    此函数在每次启动子进程前做一次内容哈希比对，检测到漂移就按 setup.sh 同款的
-    ``cp`` 逻辑自动重新同步（deerflow_research.py + 两个种子 skill），并记录一条
-    WARNING——不再依赖人工记得重跑 setup.sh。找不到 bridge 目录（例如生产环境只部署了
-    deer-flow/、没有 bridge 源）时保持 no-op；普通漂移检查异常仍退化为警告。若 tracked
-    lead-agent safety overlay 存在却无法应用，则必须阻断研究启动，避免已知跨 provider
-    summarization stall 在未打补丁的 runtime 中重现。
+    普通 bridge 模块仍沿用内容哈希同步；技能树则由共享 helper 构建确定性 manifest，
+    通过跨进程锁串行化，在同一文件系统完整 staging + 验证后原子交换 ``skills/public``。
+    任何必需 skill 缺失、复制失败或部署后哈希不一致都必须在启动研究子进程前失败关闭。
+    若 tracked lead-agent safety overlay 存在却无法应用，也必须阻断研究启动，避免已知跨
+    provider summarization stall 在未打补丁的 runtime 中重现。
     """
+    skill_sync_result: dict[str, Any] | None = None
     try:
         # backend/app/services/pipeline_orchestrator.py -> repo root 是三层上级，
         # 与 config.py 里 DEERFLOW_DIR 默认值的算法一致（同样以 __file__ 为基准）。
@@ -729,13 +740,64 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
         bridge_script = os.path.join(bridge_dir, "deerflow_research.py")
         deployed_script = os.path.join(deerflow_dir, "deerflow_research.py")
         if not os.path.isfile(bridge_script) or not os.path.isfile(deployed_script):
-            return  # 没有 bridge 源（如纯生产部署）——无法比对，也无需比对
+            raise _DeerFlowSkillSyncError(
+                "required DeerFlow bridge source/deployed entry point is missing"
+            )
+
+        # LOOP-014: the bridge skill source is authoritative.  Load the helper
+        # from its stable tracked path (the tests patch this module's __file__ to
+        # point at an isolated repository, while the mechanism itself remains the
+        # exact production implementation).
+        if not os.path.isfile(_RUNTIME_SKILL_SYNC_HELPER_PATH):
+            raise _DeerFlowSkillSyncError(
+                "required deterministic runtime skill sync helper is missing"
+            )
+        source_skills_dir = os.path.join(bridge_dir, "skills")
+        public_skills_dir = os.path.join(deerflow_dir, "skills", "public")
+        import importlib.util as _importlib_util
+
+        try:
+            _sync_spec = _importlib_util.spec_from_file_location(
+                "drf_runtime_skill_sync", _RUNTIME_SKILL_SYNC_HELPER_PATH
+            )
+            if _sync_spec is None or _sync_spec.loader is None:
+                raise RuntimeError("could not load deterministic skill sync helper")
+            _sync_module = _importlib_util.module_from_spec(_sync_spec)
+            _sync_spec.loader.exec_module(_sync_module)
+            skill_sync_result = _sync_module.sync_runtime_skills(
+                source_skills_dir,
+                public_skills_dir,
+                required_skills=_sync_module.DEFAULT_REQUIRED_SKILLS,
+            )
+        except Exception as skill_sync_err:  # noqa: BLE001 — retyped boundary
+            raise _DeerFlowSkillSyncError(
+                f"required runtime skill deployment failed: {skill_sync_err}"
+            ) from skill_sync_err
+
+        logger.info(
+            "Runtime skill bundle %s: source_manifest=%s deployed_manifest=%s "
+            "deployed_path=%s lazy_resource_hashes=%s",
+            skill_sync_result.get("outcome"),
+            skill_sync_result.get("source_manifest_hash"),
+            skill_sync_result.get("deployed_manifest_hash"),
+            skill_sync_result.get("deployed_path"),
+            json.dumps({
+                name: manifest.get("lazy_resource_hashes", {})
+                for name, manifest in skill_sync_result.get("skills", {}).items()
+            }, ensure_ascii=False, sort_keys=True),
+        )
 
         def _digest(path: str) -> str:
             with open(path, "rb") as fh:
                 return hashlib.sha256(fh.read()).hexdigest()
 
-        pairs = [(bridge_script, deployed_script)]
+        pairs = [
+            (bridge_script, deployed_script),
+            (
+                _RUNTIME_SKILL_SYNC_HELPER_PATH,
+                os.path.join(deerflow_dir, "runtime_skill_sync.py"),
+            ),
+        ]
         # ORCH-1(2): config-reflected tool modules registered in config.yaml as BARE
         # module names (`use: market_tools:...` / `search_tools:...` / `cached_fetch:...`).
         # deerflow_research.py runs with sys.path[0]==deer-flow/, so the harness
@@ -770,43 +832,19 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
         _ext_src = os.path.join(bridge_dir, "extensions_config.json")
         if os.path.isfile(_ext_src):
             pairs.append((_ext_src, os.path.join(deerflow_dir, "extensions_config.json")))
-        # ORCH-1(1): skill 同步从硬编码 2 个种子 skill 改为 glob 全量枚举——此前 bridge 侧
-        # 新增第 3 个 skill 只有重跑 ./setup.sh 才会部署，这里会静默漂移。与 setup.sh 语义
-        # 一致：仅当部署侧存在 skills/public/ 时才同步；目标 skill 目录缺失（新 skill 首次
-        # 部署）则按 setup.sh 的 mkdir -p 逻辑创建后拷贝。已存在的目标沿用内容哈希比对。
-        import glob as _glob
-        public_skills_dir = os.path.join(deerflow_dir, "skills", "public")
-        if os.path.isdir(public_skills_dir):
-            for src in sorted(_glob.glob(os.path.join(bridge_dir, "skills", "*", "SKILL.md"))):
-                skill = os.path.basename(os.path.dirname(src))
-                pairs.append((src, os.path.join(public_skills_dir, skill, "SKILL.md")))
-            # GATE-W9：技能捆绑脚本（如 forecast-visuals/scripts/render.py）也随 SKILL.md
-            # 一并同步——渲染器只部署 SKILL.md 时确定性图表步会静默降级为「renderer missing」。
-            for src in sorted(_glob.glob(os.path.join(bridge_dir, "skills", "*", "scripts", "*.py"))):
-                skill_dir = os.path.dirname(os.path.dirname(src))
-                skill = os.path.basename(skill_dir)
-                pairs.append((src, os.path.join(public_skills_dir, skill, "scripts", os.path.basename(src))))
-            # LOOP-010 progressive disclosure: the always-injected SKILL.md is
-            # compact; detailed tradecraft/final-dossier rules live in lazy
-            # references and must be deployed with it.
-            for src in sorted(_glob.glob(os.path.join(
-                bridge_dir, "skills", "*", "references", "*.md"
-            ))):
-                skill_dir = os.path.dirname(os.path.dirname(src))
-                skill = os.path.basename(skill_dir)
-                pairs.append((
-                    src,
-                    os.path.join(
-                        public_skills_dir, skill, "references", os.path.basename(src)
-                    ),
-                ))
-
         synced = []
         for src, dst in pairs:
             if os.path.isfile(dst) and _digest(src) == _digest(dst):
                 continue
             os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.copyfile(src, dst)
+            try:
+                shutil.copyfile(src, dst)
+            except Exception as copy_err:  # noqa: BLE001
+                if src == _RUNTIME_SKILL_SYNC_HELPER_PATH:
+                    raise _DeerFlowSkillSyncError(
+                        "runtime skill verifier could not be deployed"
+                    ) from copy_err
+                raise
             synced.append(os.path.relpath(dst, deerflow_dir))
 
         # LOOP-010: unlike copied modules, the lead-agent change is a narrow
@@ -877,28 +915,62 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
                     "backend/packages/harness/deerflow/models/factory.py"
                 )
 
-        # Subagent lifecycle admission is likewise a narrow transformation.
-        # Never copy an entire executor from a possibly older active runtime:
-        # the vendor seed carries tracing/session callbacks that must survive.
+        # The embedded subagent path is likewise a narrow, required
+        # transformation. Never copy entire vendor modules: the seed carries
+        # tracing/session callbacks that must survive. The overlay keeps the
+        # lifecycle lease, passes the exact client AppConfig, inherits the
+        # active model even when tracing metadata is absent, and rejects LLM
+        # error-fallback messages instead of publishing them as successful
+        # task evidence.
         _subagent_overlay = os.path.join(
             bridge_dir, "patches", "apply_subagent_overlays.py"
         )
-        if os.path.isfile(_subagent_overlay):
+        _subagent_targets = [
+            os.path.join(
+                deerflow_dir, "backend", "packages", "harness", "deerflow",
+                "client.py",
+            ),
+            os.path.join(
+                deerflow_dir, "backend", "packages", "harness", "deerflow",
+                "tools", "builtins", "task_tool.py",
+            ),
+            os.path.join(
+                deerflow_dir, "backend", "packages", "harness", "deerflow",
+                "subagents", "executor.py",
+            ),
+        ]
+        if all(os.path.isfile(path) for path in _subagent_targets):
+            if not os.path.isfile(_subagent_overlay):
+                raise _DeerFlowSafetyOverlayError(
+                    "required tracked DeerFlow subagent safety overlay is missing"
+                )
             import importlib.util as _importlib_util
 
-            _spec = _importlib_util.spec_from_file_location(
-                "deerflow_subagent_overlay", _subagent_overlay
-            )
-            if _spec is None or _spec.loader is None:
-                raise RuntimeError(
-                    "could not load tracked DeerFlow subagent overlay")
-            _overlay_module = _importlib_util.module_from_spec(_spec)
-            _spec.loader.exec_module(_overlay_module)
-            _overlay_status = _overlay_module.apply(deerflow_dir)
-            if _overlay_status == "applied":
-                synced.append(
-                    "backend/packages/harness/deerflow/subagents/executor.py"
+            try:
+                _spec = _importlib_util.spec_from_file_location(
+                    "deerflow_subagent_overlay", _subagent_overlay
                 )
+                if _spec is None or _spec.loader is None:
+                    raise RuntimeError(
+                        "could not load tracked DeerFlow subagent overlay")
+                _overlay_module = _importlib_util.module_from_spec(_spec)
+                _spec.loader.exec_module(_overlay_module)
+                _overlay_status = _overlay_module.apply(deerflow_dir)
+            except Exception as overlay_err:  # noqa: BLE001 — retyped below
+                raise _DeerFlowSafetyOverlayError(
+                    "required DeerFlow subagent safety overlay failed"
+                ) from overlay_err
+            if _overlay_status not in {"applied", "already_applied"}:
+                raise _DeerFlowSafetyOverlayError(
+                    "required DeerFlow subagent safety overlay is missing "
+                    f"its targets (status={_overlay_status!r})"
+                )
+            if _overlay_status == "applied":
+                synced.extend([
+                    "backend/packages/harness/deerflow/client.py",
+                    "backend/packages/harness/deerflow/tools/builtins/task_tool.py",
+                    "backend/packages/harness/deerflow/subagents/executor.py",
+                ])
 
         # ORCH-1(1) config.yaml：setup.sh 明确「绝不覆盖已存在的 deer-flow/config.yaml」
         # （部署侧可能有本地 provider stanza 改动），故此处只做漂移检测 + 提示手工 diff，
@@ -917,11 +989,17 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> None:
                 "研究子进程刚才会用旧代码运行。建议提交后运行一次 ./setup.sh 使其保持最新。",
                 ", ".join(synced),
             )
-    except _DeerFlowSafetyOverlayError as sync_err:
-        logger.error("DeerFlow 必需安全 overlay 无法应用，拒绝启动研究子进程: %s", sync_err)
+        return skill_sync_result
+    except (_DeerFlowSafetyOverlayError, _DeerFlowSkillSyncError) as sync_err:
+        logger.error("DeerFlow 必需运行时部署无法验证，拒绝启动研究子进程: %s", sync_err)
         raise
     except Exception as sync_err:  # noqa: BLE001 — 非安全 overlay 漂移继续退化为警告
         logger.warning("DeerFlow 部署副本漂移检测失败（忽略，不影响本次运行）: %s", sync_err)
+        if skill_sync_result is None:
+            raise _DeerFlowSkillSyncError(
+                "runtime skill deployment did not produce verification telemetry"
+            ) from sync_err
+        return skill_sync_result
 
 
 _RESEARCH_BUDGET_ENV_KEYS = (
@@ -929,6 +1007,7 @@ _RESEARCH_BUDGET_ENV_KEYS = (
     "RESEARCH_BUDGET_TELEMETRY_PATH",
     "RESEARCH_BUDGET_LANE_ID",
     "RESEARCH_BUDGET_RUN_ID",
+    "RESEARCH_BUDGET_EPOCH",
     "RESEARCH_BUDGET_ATTEMPTS_GLOBAL",
     "RESEARCH_BUDGET_SEARCH_GLOBAL",
     "RESEARCH_BUDGET_SEARCH_LANE",
@@ -939,6 +1018,219 @@ _RESEARCH_BUDGET_ENV_KEYS = (
 )
 
 
+def _research_budget_exhaustion(
+    telemetry_path: str,
+    expected_epoch: Optional[str] = None,
+) -> Optional[str]:
+    """Return the saturated global cap for the expected budget epoch.
+
+    The SQLite ledger is authoritative for admission, while this atomically
+    exported snapshot is sufficient for a pre-spawn guard.  An old snapshot
+    from a prior task is ignored rather than blocking a newly activated epoch.
+    """
+    try:
+        with open(telemetry_path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if expected_epoch and str(payload.get("epoch") or "") != expected_epoch:
+        return None
+    limits = payload.get("limits") or {}
+    counts = payload.get("global") or {}
+    checks = (
+        ("attempts_global", "attempts"),
+        ("search_global", "search_network"),
+        ("fetch_global", "fetch_network"),
+    )
+    for limit_name, count_name in checks:
+        try:
+            limit = int(limits.get(limit_name) or 0)
+            count = int(counts.get(count_name) or 0)
+        except (TypeError, ValueError):
+            continue
+        if limit > 0 and count >= limit:
+            return limit_name
+    return None
+
+
+def _budget_epoch_slug(value: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", str(value or "")).strip("-.")
+    return (slug or "task")[:80]
+
+
+def _activate_research_budget_epoch(
+    state: "PipelineState",
+    handoff_dir: str,
+) -> tuple[str, str, str]:
+    """Bind one durable tool-budget ledger to the current pipeline task.
+
+    All outer lanes and both synthesis attempts in one task share this SQLite
+    path.  Re-entry under the same task id reuses it.  A later explicit resume
+    receives a new task id and therefore a fresh bounded epoch, while prior
+    ledgers and final telemetry snapshots remain under ``research_budget_epochs``.
+    """
+    # Unit-level callers and one legacy first-run path can enter research before
+    # a queue task id has been persisted.  They still need a stable epoch, but
+    # must not silently share the old root ledger.  The pipeline-scoped fallback
+    # is deterministic for re-entry and a later explicit resume receives its
+    # real (new) task id, so it still opens a new bounded epoch.
+    task_id = str(
+        state.task_id or f"initial-{state.pipeline_id}"
+    ).strip()
+    root = os.path.join(handoff_dir, "research_budget_epochs")
+    os.makedirs(root, exist_ok=True)
+    history = state.options.setdefault("research_budget_epochs", [])
+    if not isinstance(history, list):
+        history = []
+        state.options["research_budget_epochs"] = history
+    for row in history:
+        if isinstance(row, dict) and str(row.get("task_id") or "") == task_id:
+            db_path = str(row.get("db_path") or "")
+            telemetry_path = str(
+                row.get("telemetry_path")
+                or os.path.join(handoff_dir, "research_budget.json")
+            )
+            epoch = str(row.get("epoch") or task_id)
+            if db_path:
+                return db_path, telemetry_path, epoch
+
+    max_epochs = max(1, int(getattr(Config, "RESEARCH_BUDGET_MAX_EPOCHS", 3) or 3))
+    if len(history) >= max_epochs:
+        raise RuntimeError(
+            "research budget epoch limit reached; inspect preserved evidence and "
+            "increase RESEARCH_BUDGET_MAX_EPOCHS only with explicit cost approval"
+        )
+
+    ordinal = len(history) + 1
+    epoch = task_id
+    epoch_dir = os.path.join(
+        root, f"epoch-{ordinal:03d}-{_budget_epoch_slug(task_id)}")
+    os.makedirs(epoch_dir, exist_ok=True)
+    telemetry_path = os.path.join(handoff_dir, "research_budget.json")
+    if os.path.isfile(telemetry_path):
+        previous = history[-1] if history and isinstance(history[-1], dict) else None
+        archive = os.path.join(
+            str(previous.get("epoch_dir") if previous else epoch_dir),
+            "final_research_budget.json" if previous else "legacy_research_budget.json",
+        )
+        try:
+            shutil.copy2(telemetry_path, archive)
+            if previous is not None:
+                previous["telemetry_archive"] = archive
+            else:
+                state.options["legacy_research_budget_telemetry"] = archive
+        except OSError as exc:
+            raise RuntimeError(
+                f"could not archive prior research budget telemetry: {exc}"
+            ) from exc
+
+    db_path = os.path.join(epoch_dir, "research_budget.sqlite3")
+    row = {
+        "ordinal": ordinal,
+        "epoch": epoch,
+        "task_id": task_id,
+        "epoch_dir": epoch_dir,
+        "db_path": db_path,
+        "telemetry_path": telemetry_path,
+        "created_at": _utcnow(),
+    }
+    history.append(row)
+    state.options["research_budget_epoch"] = row
+    legacy_db = os.path.join(handoff_dir, "research_budget.sqlite3")
+    if os.path.isfile(legacy_db):
+        state.options.setdefault("legacy_research_budget_db", legacy_db)
+
+    from ..utils.atomic import write_json_atomic
+
+    write_json_atomic(telemetry_path, {
+        "schema_version": 1,
+        "run_id": state.pipeline_id,
+        "epoch": epoch,
+        "created_at": time.time(),
+        "updated_at": time.time(),
+        "degraded": False,
+        "tool_budget_enabled": True,
+        "limits": {
+            "attempts_global": int(getattr(
+                Config, "RESEARCH_BUDGET_ATTEMPTS_GLOBAL", 1800)),
+            "search_global": int(getattr(
+                Config, "RESEARCH_BUDGET_SEARCH_GLOBAL", 900)),
+            "search_lane": int(getattr(
+                Config, "RESEARCH_BUDGET_SEARCH_LANE", 360)),
+            "fetch_global": int(getattr(
+                Config, "RESEARCH_BUDGET_FETCH_GLOBAL", 450)),
+            "fetch_lane": int(getattr(
+                Config, "RESEARCH_BUDGET_FETCH_LANE", 180)),
+        },
+        "global": {},
+        "lanes": {},
+    })
+    PipelineManager.save(state)
+    return db_path, telemetry_path, epoch
+
+
+def _synthesis_recovery_budget_epoch(
+    state: "PipelineState",
+    handoff_dir: str,
+) -> tuple[str, str, str]:
+    """Reuse an unexhausted synthesis-only epoch after a code/quality failure.
+
+    Evidence collection resumes receive a fresh bounded epoch.  Global
+    synthesis, however, performs no search/fetch work.  If a prior
+    synthesis-only attempt failed after generation while its tool ledger is
+    still unexhausted, consuming another epoch buys no additional evidence and
+    can strand an otherwise recoverable pipeline at the global epoch cap.
+    """
+    recovery = state.options.get("synthesis_recovery")
+    current = state.options.get("research_budget_epoch")
+    if (
+        isinstance(recovery, dict)
+        and recovery.get("attempted") is True
+        and recovery.get("passed") is False
+        and isinstance(current, dict)
+    ):
+        db_path = str(current.get("db_path") or "")
+        telemetry_path = str(
+            current.get("telemetry_path")
+            or os.path.join(handoff_dir, "research_budget.json")
+        )
+        epoch = str(current.get("epoch") or "")
+        if (
+            db_path
+            and telemetry_path
+            and epoch
+            and _research_budget_exhaustion(telemetry_path, epoch) is None
+        ):
+            state.options["synthesis_recovery_budget_reused"] = {
+                "epoch": epoch,
+                "ordinal": current.get("ordinal"),
+                "reused_at": _utcnow(),
+                "reason": "prior synthesis-only failure with unexhausted tool ledger",
+            }
+            PipelineManager.save(state)
+            return db_path, telemetry_path, epoch
+    return _activate_research_budget_epoch(state, handoff_dir)
+
+
+_SYNTHESIS_PROVIDER_UNAVAILABLE_MARKERS = (
+    "modelprovidersunavailable",
+    "rate limit",
+    "ratelimiterror",
+    "token plan",
+    "quota exhausted",
+    "2056",
+    "auth_unavailable",
+    "no auth available",
+)
+
+
+def _synthesis_provider_unavailable(error: Any) -> bool:
+    text = str(error or "").casefold()
+    return any(marker in text for marker in _SYNTHESIS_PROVIDER_UNAVAILABLE_MARKERS)
+
+
 def _configure_research_budget_env(
     env: dict[str, str],
     handoff_dir: str,
@@ -947,6 +1239,7 @@ def _configure_research_budget_env(
     budget_lane_id: Optional[str] = None,
     budget_telemetry_path: Optional[str] = None,
     budget_run_id: Optional[str] = None,
+    budget_epoch: Optional[str] = None,
 ) -> None:
     """Inject the shared LOOP-007 ledger contract into one research process.
 
@@ -967,6 +1260,10 @@ def _configure_research_budget_env(
         env["RESEARCH_BUDGET_RUN_ID"] = str(budget_run_id)
     else:
         env.pop("RESEARCH_BUDGET_RUN_ID", None)
+    if budget_epoch:
+        env["RESEARCH_BUDGET_EPOCH"] = str(budget_epoch)
+    else:
+        env.pop("RESEARCH_BUDGET_EPOCH", None)
     env["RESEARCH_BUDGET_ATTEMPTS_GLOBAL"] = str(getattr(
         Config, "RESEARCH_BUDGET_ATTEMPTS_GLOBAL", 1800))
     env["RESEARCH_BUDGET_SEARCH_GLOBAL"] = str(getattr(
@@ -1016,6 +1313,7 @@ class DeerFlowResearchRunner:
         budget_lane_id: Optional[str] = None,
         budget_telemetry_path: Optional[str] = None,
         budget_run_id: Optional[str] = None,
+        budget_epoch: Optional[str] = None,
         max_concurrent_subagents: Optional[int] = None,
         model_concurrency_global: Optional[int] = None,
         dual_track: Optional[bool] = None,
@@ -1045,7 +1343,7 @@ class DeerFlowResearchRunner:
             raise RuntimeError(f"DeerFlow 目录不存在: {deerflow_dir}（设置 DEERFLOW_DIR）")
         if not os.path.exists(script):
             raise RuntimeError(f"未找到 deerflow_research.py: {script}")
-        _sync_deerflow_bridge_if_stale(deerflow_dir)
+        skill_sync_result = _sync_deerflow_bridge_if_stale(deerflow_dir)
 
         os.makedirs(handoff_dir, exist_ok=True)
         expected_artifact_path = os.path.join(
@@ -1065,10 +1363,15 @@ class DeerFlowResearchRunner:
 
         def _fresh_expected_artifact() -> bool:
             current = _artifact_fingerprint(expected_artifact_path)
+            artifact_text = _read_text(expected_artifact_path)
             return (
                 current is not None
                 and current != artifact_before
-                and len(_read_text(expected_artifact_path).strip()) >= 400
+                and len(artifact_text.strip()) >= 400
+                and not (
+                    evidence_only
+                    and _evidence_pack_is_control_failure_only(artifact_text)
+                )
             )
         # 把（可能敏感的）研究问题写入文件，经 --prompt-file 传给子进程，避免出现在
         # ps / /proc/<pid>/cmdline 里（EXECPLAN2 F-0-7/F-13-3，与 llm_client 既有约定一致）。
@@ -1102,17 +1405,30 @@ class DeerFlowResearchRunner:
 
         env = dict(os.environ)
         env.setdefault("PYTHONUNBUFFERED", "1")
+        if isinstance(skill_sync_result, dict):
+            # The child re-hashes the exact live directories before constructing
+            # a research client.  This binds source/deployed manifest identities,
+            # lazy-resource hashes, sync outcome, and deployed path into its
+            # durable research_meta.json and progress log.
+            env["DRF_RUNTIME_SKILL_SYNC_REQUIRED"] = "1"
+            env["DRF_RUNTIME_SKILL_SYNC"] = json.dumps(
+                skill_sync_result,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
         # T6.6: deep 开场 pass 的递归上限从 Config 单一真源下发给子进程（旧版在 bridge 内直接读
         # os.environ）。Config 属性本身读 env（默认 220），故此处覆盖即「Config 即真源」。
         env["DEERFLOW_DEEP_OPENING_RECURSION_LIMIT"] = str(Config.DEERFLOW_DEEP_OPENING_RECURSION_LIMIT)
-        # 双轨研究开关：Config 即单一真源（默认 True）下发给子进程，决定 deerflow 是否在跑
-        # Track A（深度研究→research_report.md）的同时并行跑 Track B（角色本体研究→actor_dossier.md）。
-        # 关闭时子进程行为与今日逐字节一致（只跑 Track A，不产出 actor_dossier.md）。
-        _dual_track_enabled = (
+        # 双轨研究开关：Config 即单一真源（默认 True）下发给子进程。Evidence-only
+        # 子进程是 Track-A-only 的持久生产者；强制关闭 Track B，避免可选 actor 调用在
+        # provider 中断后扣住已经完成的 evidence_pack。Bridge 侧有同一防线，兼容部署漂移。
+        _dual_track_requested = (
             bool(dual_track)
             if dual_track is not None
             else bool(getattr(Config, "DEERFLOW_DUAL_TRACK", True))
         )
+        _dual_track_enabled = _dual_track_requested and not evidence_only
         env["DEERFLOW_DUAL_TRACK"] = (
             "true" if _dual_track_enabled else "false")
         _shared_actor_track = (
@@ -1163,6 +1479,7 @@ class DeerFlowResearchRunner:
             budget_lane_id=budget_lane_id,
             budget_telemetry_path=budget_telemetry_path,
             budget_run_id=budget_run_id,
+            budget_epoch=budget_epoch,
         )
         # Model-call leases are a correctness boundary, not merely a tool-cost
         # budget. Keep their shared SQLite path even when tool-budget admission
@@ -1324,7 +1641,7 @@ class DeerFlowResearchRunner:
                     raise RuntimeError(
                         "研究子进程收尾超时（30s）且产物不完整"
                         "（research_report.md 缺失/过短，或无结构化产物/checkpoint）——该轨失败"
-                    )
+                    ) from None
         finally:
             watchdog.cancel()
             if proc.poll() is None:
@@ -1399,12 +1716,26 @@ class DeerFlowResearchRunner:
                 "（提供方临时不可用/限流/额度、网络错误，或内容审核拦截），"
                 "请稍后重试、降低研究深度，或更换模型"
             )
+        if evidence_only and _evidence_pack_is_control_failure_only(report):
+            raise RuntimeError(
+                "DeerFlow evidence lane contains only terminal control failures "
+                "(for example research_budget_exhausted); refusing synthesis admission"
+            )
 
         # 双轨 Track B 产物：角色本体档案。旗标关闭或 Track B 未产出时文件缺失，
         # _read_text 返回 ""，下游按「空即退化」处理（document_texts/chunks 与单轨逐字节一致）。
         # RES-8 镜像：错误串/过短的卷宗按缺失处理（bridge 的 _is_degraded_artifact 同语义）。
-        actor_dossier = _read_text(os.path.join(handoff_dir, "actor_dossier.md"))
-        if actor_dossier and _is_degraded_dossier(actor_dossier):
+        # Evidence-only lanes never own an actor dossier. In particular, do not
+        # return a same-directory dossier left by an earlier resume attempt: that
+        # would silently admit stale Track-B bytes even though this child never
+        # produced or validated them.
+        actor_dossier = (
+            "" if evidence_only
+            else _read_text(os.path.join(handoff_dir, "actor_dossier.md"))
+        )
+        if actor_dossier and (
+                _is_degraded_dossier(actor_dossier)
+                or _evidence_pack_is_control_failure_only(actor_dossier)):
             logger.warning("actor_dossier.md 疑似降级产物（错误串/过短），按缺失处理")
             actor_dossier = ""
         actors = _read_json(os.path.join(handoff_dir, "actors.json"))
@@ -1474,6 +1805,63 @@ _LLM_ERROR_MARKERS = (
     "new_sensitive",                 # MiniMax 域内容过滤命中(code 1026)
     "Error code: 4", "Error code: 5",  # 4xx/5xx 错误串
 )
+
+
+_EVIDENCE_BLOCK_RE = re.compile(
+    r"^<!--\s*evidence-block:\d+\s*-->\s*$", re.MULTILINE)
+
+
+def _control_failure_block(text: str) -> bool:
+    block = str(text or "").strip()
+    if not block:
+        return True
+    if block.splitlines()[0].strip().startswith("SUBAGENT_OUTCOME: BLOCKED"):
+        return True
+    try:
+        payload = json.loads(block)
+    except (TypeError, ValueError):
+        payload = None
+    if isinstance(payload, dict) and payload.get("error") in {
+        "research_budget_exhausted",
+        "llm_provider_unavailable",
+    }:
+        return True
+    if any(marker in block for marker in _LLM_ERROR_MARKERS):
+        return True
+    lowered = block.lower()
+    return (
+        "research_budget_exhausted" in lowered
+        and any(marker in lowered for marker in (
+            "status: blocked",
+            "status:** blocked",
+            "no admissible evidence",
+            "no web-document evidence",
+            "cannot perform web",
+            "cannot fetch",
+            "unable to complete",
+            "research halted",
+        ))
+    )
+
+
+def _evidence_pack_is_control_failure_only(text: str) -> bool:
+    """Mirror the bridge gate at timeout/artifact admission boundaries."""
+    raw = str(text or "")
+    matches = list(_EVIDENCE_BLOCK_RE.finditer(raw))
+    if matches:
+        blocks = []
+        for index, match in enumerate(matches):
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(raw)
+            block = raw[match.end():end]
+            if index + 1 < len(matches):
+                block = re.sub(r"\n\s*\n---\s*\Z", "", block.rstrip())
+            if block.strip():
+                blocks.append(block.strip())
+    elif raw.strip().startswith("# Internal Evidence Lane Pack"):
+        blocks = []
+    else:
+        blocks = [raw.strip()] if raw.strip() else []
+    return not blocks or all(_control_failure_block(block) for block in blocks)
 
 
 def _is_degraded_dossier(text: str) -> bool:
@@ -1572,6 +1960,23 @@ def _preserve_research_attempt_progress(
                 f"{_utcnow()} [{kind}] global synthesis attempt {attempt} "
                 f"{normalized_outcome}{suffix}\n"
             )
+        # Keep the quality-failed candidate and its exact-byte judge beside the
+        # log.  These are forensic/recovery sidecars only and never enter the
+        # published research contract.  Previously cleanup discarded the most
+        # useful evidence for why a synthesis attempt failed.
+        stem = destination[:-4] if destination.endswith(".log") else destination
+        for name in (
+            "research_report.md",
+            "research_report_judge.json",
+            "research_report_refinement_candidate.md",
+            "research_report_refinement_candidate_judge.json",
+            "research_report_failure_candidate.md",
+            "research_report_failure_candidate_judge.json",
+            "meta.json",
+        ):
+            artifact = os.path.join(source_dir, name)
+            if os.path.isfile(artifact) and not os.path.islink(artifact):
+                shutil.copy2(artifact, f"{stem}.{name}")
         return destination
     except OSError as exc:
         logger.warning(
@@ -1597,6 +2002,19 @@ _RESEARCH_JUDGE_DIMS = (
 _RESEARCH_JUDGE_CRITICAL = (
     "thesis_specificity", "mechanism_chains", "contrarian_coverage",
     "citation_coverage",
+)
+_RESEARCH_JUDGE_FATAL_GAP_RE = re.compile(
+    r"\btruncat(?:e|ed|ion|ing)\b|"
+    r"\bmid[-\s]sentence\b|"
+    r"\bcut(?:s)?\s+off\b|"
+    r"\b(?:not|never)\s+(?:delivered|provided|included|completed)\b|"
+    r"\bno\s+(?:renderable\s+)?(?:actual|source)[-\s]data\s+tables?\b|"
+    r"\b(?:chart|visuali[sz]ation)\s+(?:ideas?|specifications?)\s+"
+    r"(?:alone|only|without)\b|"
+    r"\bincomplete\s+(?:\w+\s+){0,3}"
+    r"(?:citation|marker|table|section|list|forecast|scenario|milestone|deliverable)\b|"
+    r"截断|未写完|未完成|只有.{0,24}(?:规格|图表想法)|没有.{0,24}(?:真实数据表|来源数据表)",
+    re.IGNORECASE,
 )
 
 
@@ -1625,6 +2043,11 @@ def _research_judge_passes(scorecard: Any) -> bool:
     values = _research_judge_scores(scorecard)
     if values is None or str(scorecard.get("verdict", "")).strip().upper() != "PASS":
         return False
+    gaps = scorecard.get("gaps")
+    if isinstance(gaps, list) and any(
+            _RESEARCH_JUDGE_FATAL_GAP_RE.search(str(gap or ""))
+            for gap in gaps):
+        return False
     scores = scorecard["scores"]
     strict = str(os.environ.get("RESEARCH_REPORT_JUDGE_STRICT", "")).strip().lower()
     if strict in {"1", "true", "yes", "on"} and min(values) < 4:
@@ -1636,11 +2059,26 @@ def _research_judge_passes(scorecard: Any) -> bool:
     return sum(values) / len(values) >= 4.0
 
 
-def _validate_research_judge_contract(
+def _research_contract_quality_errors(
+    handoff_dir: str, *, require_judge: bool = False,
+) -> list[str]:
+    """Return publication-quality defects independently of checksum integrity."""
+    judge_path = os.path.join(handoff_dir, "research_report_judge.json")
+    if not os.path.isfile(judge_path):
+        return ["research_report_judge_missing"] if require_judge else []
+    scorecard = _read_json(judge_path)
+    if _research_judge_scores(scorecard) is None:
+        return ["research_report_judge_malformed"]
+    if not _research_judge_passes(scorecard):
+        return ["research_report_judge_failed"]
+    return []
+
+
+def _research_judge_contract_errors(
     root: str,
     entries: dict[str, Any],
     report: str,
-) -> bool:
+) -> list[str]:
     """Bind required deep-research judge evidence to the exact prose prefix.
 
     Deterministic market/chart annexes may follow the judged LLM prose.  The
@@ -1657,37 +2095,49 @@ def _validate_research_judge_contract(
         or isinstance(meta.get("global_synthesis_judge"), dict)
     )
     if not judge_required:
-        return True
+        return []
+    errors: list[str] = []
     if "research_report_judge.json" not in entries or "meta.json" not in entries:
-        return False
+        missing = [
+            name for name in ("research_report_judge.json", "meta.json")
+            if name not in entries
+        ]
+        return ["judge_required_artifact_missing:" + ",".join(missing)]
     scorecard = _read_json(os.path.join(root, "research_report_judge.json"))
     if _research_judge_scores(scorecard) is None:
-        return False
+        return ["judge_scorecard_schema_invalid"]
     judged = scorecard.get("_judged_prose")
     judge_input = scorecard.get("_judge_input")
     if not isinstance(judged, dict) or not isinstance(judge_input, dict):
-        return False
+        return ["judge_input_identity_missing"]
     try:
         chars = int(judged.get("chars"))
     except (TypeError, ValueError):
-        return False
+        return ["judge_prose_chars_invalid"]
     if chars <= 0 or chars > len(report) or judged.get("scope") != "llm-prose":
-        return False
+        return [
+            "judge_prose_boundary_invalid:"
+            f"chars={chars},report_chars={len(report)},scope={judged.get('scope')!r}"
+        ]
     prose = report[:chars]
     prose_sha = hashlib.sha256(prose.encode("utf-8")).hexdigest()
     if judged.get("sha256") != prose_sha:
-        return False
+        errors.append(
+            "judge_prose_hash_mismatch:"
+            f"expected={judged.get('sha256')},actual={prose_sha}"
+        )
     if judge_input != {
         "report_chars": chars,
         "input_chars": chars,
         "input_sha256": prose_sha,
         "truncated": False,
     }:
-        return False
+        errors.append("judge_input_identity_mismatch")
 
     summary = meta.get("research_report_judge")
     if not isinstance(summary, dict):
-        return False
+        errors.append("judge_meta_summary_missing")
+        return errors
     expected_pass = _research_judge_passes(scorecard)
     if (
         str(summary.get("verdict", "")).strip().upper()
@@ -1698,11 +2148,20 @@ def _validate_research_judge_contract(
         or summary.get("judged_prose_chars") != chars
         or summary.get("judge_scope") != "llm-prose"
     ):
-        return False
+        errors.append("judge_meta_summary_mismatch")
     global_summary = meta.get("global_synthesis_judge")
     if global_summary is not None and global_summary != summary:
-        return False
-    return True
+        errors.append("global_judge_summary_mismatch")
+    return errors
+
+
+def _validate_research_judge_contract(
+    root: str,
+    entries: dict[str, Any],
+    report: str,
+) -> bool:
+    """Compatibility bool wrapper around actionable judge diagnostics."""
+    return not _research_judge_contract_errors(root, entries, report)
 
 
 def _research_contract_path(handoff_dir: str) -> str:
@@ -1737,37 +2196,51 @@ def _research_contract_entries(root: str) -> dict[str, dict[str, Any]]:
     return entries
 
 
-def _validate_research_contract(handoff_dir: str) -> bool:
-    """Validate the manifest-last root contract before any research reuse."""
+def _research_contract_validation_errors(handoff_dir: str) -> list[str]:
+    """Return actionable manifest, artifact, and judge-binding violations."""
     manifest = _read_json(_research_contract_path(handoff_dir))
     if not isinstance(manifest, dict) or manifest.get("version") != 1:
-        return False
+        return ["manifest_missing_or_version_invalid"]
     entries = manifest.get("files")
     if not isinstance(entries, dict) or "research_report.md" not in entries:
-        return False
+        return ["manifest_files_invalid_or_report_missing"]
     root = os.path.realpath(handoff_dir)
+    errors: list[str] = []
     try:
         for relative, expected in entries.items():
             if (not isinstance(relative, str) or not isinstance(expected, dict)
                     or os.path.isabs(relative)):
-                return False
+                errors.append(f"manifest_entry_invalid:{relative!r}")
+                continue
             path = os.path.realpath(os.path.join(root, relative))
-            if os.path.commonpath([root, path]) != root or not os.path.isfile(path):
-                return False
+            if os.path.commonpath([root, path]) != root:
+                errors.append(f"artifact_path_escape:{relative}")
+                continue
+            if not os.path.isfile(path):
+                errors.append(f"artifact_missing:{relative}")
+                continue
             if os.path.getsize(path) != expected.get("bytes"):
-                return False
-            if _sha256_file(path) != expected.get("sha256"):
-                return False
+                errors.append(
+                    f"artifact_size_mismatch:{relative}:"
+                    f"expected={expected.get('bytes')},actual={os.path.getsize(path)}"
+                )
+                continue
+            actual_sha = _sha256_file(path)
+            if actual_sha != expected.get("sha256"):
+                errors.append(
+                    f"artifact_sha256_mismatch:{relative}:"
+                    f"expected={expected.get('sha256')},actual={actual_sha}"
+                )
         report = _read_text(os.path.join(root, "research_report.md"))
         if len(report.strip()) < 400:
-            return False
-        if not _validate_research_judge_contract(root, entries, report):
-            return False
+            errors.append("report_incomplete")
+        else:
+            errors.extend(_research_judge_contract_errors(root, entries, report))
         # Optional contract-owned artifacts absent from the generation manifest
         # would prove that a stale file survived promotion.
         for name in _RESEARCH_CONTRACT_FILES:
             if os.path.exists(os.path.join(root, name)) and name not in entries:
-                return False
+                errors.append(f"unmanifested_optional_artifact:{name}")
         if os.path.isdir(os.path.join(root, "charts")):
             actual_chart_files = {
                 rel for rel in _research_contract_entries(root)
@@ -1777,10 +2250,31 @@ def _validate_research_contract(handoff_dir: str) -> bool:
                 rel for rel in entries if rel.startswith("charts" + os.sep)
             }
             if actual_chart_files != expected_chart_files:
-                return False
-        return True
-    except (OSError, ValueError, TypeError):
-        return False
+                missing = sorted(expected_chart_files - actual_chart_files)
+                extra = sorted(actual_chart_files - expected_chart_files)
+                errors.append(
+                    "chart_artifact_set_mismatch:"
+                    f"missing={missing},extra={extra}"
+                )
+        return errors
+    except (OSError, ValueError, TypeError) as exc:
+        return [f"validation_exception:{type(exc).__name__}:{exc}"]
+
+
+def _validate_research_contract(handoff_dir: str) -> bool:
+    """Validate the manifest-last root contract before any research reuse."""
+    return not _research_contract_validation_errors(handoff_dir)
+
+
+def _research_report_is_judge_bound(handoff_dir: str) -> bool:
+    """Return whether the current manifest seals an exact report-judge binding."""
+    manifest = _read_json(_research_contract_path(handoff_dir))
+    entries = manifest.get("files") if isinstance(manifest, dict) else None
+    return bool(
+        manifest.get("version") == 1
+        and isinstance(entries, dict)
+        and "research_report_judge.json" in entries
+    )
 
 
 def _promote_research_contract(
@@ -1862,8 +2356,12 @@ def _promote_research_contract(
 
         from ..utils.atomic import write_json_atomic
         write_json_atomic(contract_path, manifest)
-        if not _validate_research_contract(root):
-            raise RuntimeError("promoted research contract failed checksum validation")
+        validation_errors = _research_contract_validation_errors(root)
+        if validation_errors:
+            raise RuntimeError(
+                "promoted research contract validation failed: "
+                + "; ".join(validation_errors[:8])
+            )
         return manifest
     except Exception:
         try:
@@ -1929,6 +2427,13 @@ def _finalize_research_contract(
     if not isinstance(report, str) or len(report.strip()) < 400:
         raise RuntimeError(
             "finalized research contract has no complete report"
+        )
+    root_report = _read_text(os.path.join(root, "research_report.md"))
+    if _research_report_is_judge_bound(root) and report != root_report:
+        raise RuntimeError(
+            "post-judge research report mutation rejected: the sealed judge "
+            "binds the exact LLM-prose bytes; run synthesis and judging again "
+            "instead of finalizing modified prose"
         )
     actors = research.get("actors")
     if actors is not None and not isinstance(actors, dict):
@@ -2168,6 +2673,60 @@ def _load_research_handoff(handoff_dir: str) -> dict[str, Any]:
         "exit_code": None,
         "resumed": True,
     }
+
+
+# ===========================================================================
+# SIM-ADD-1（决策通道点火的关键修复）：forecast_inputs 兜底注入
+# ---------------------------------------------------------------------------
+# 取证（pipe_bef6879b2e94 / sim_05ab2bdebbd2）：handoff/actors.json 无 'forecast_inputs'
+# 键 → world_state_seed_from_actors(actors) 返回 {} → 决策通道从未点火、无
+# world_state_trajectory.json → 18 轮模拟对任何 forecast 数字零贡献。研究报告本身几乎
+# 总带「## Four Mutually Exclusive Scenarios」这类带概率的情景节，actors.
+# forecast_inputs_from_report_markdown 早已能确定性解析回 forecast_inputs schema，只是
+# 从未接线。下面两个纯/半纯 helper 负责在**研究定稿**与 **PREPARE 种子前**两处把它接上：
+#   * _forecast_inputs_missing(actors)：actors 是否缺可用的 forecast_inputs.scenarios；
+#   * inject_forecast_inputs_from_report(actors, report_md)：缺则从报告解析并**就地**注入，
+#     返回注入用的 forecast_inputs（含非空 scenarios）——命中；否则 None（degrade-safe）。
+# 研究定稿处的注入在 _finalize_research_contract 之前完成，故 forecast_inputs 随契约一并
+# 密封进 actors.json（下游 + resume 皆可见，且不破坏 contract manifest 校验）。
+# ===========================================================================
+def _forecast_inputs_missing(actors: Any) -> bool:
+    """actors 是否缺少可用的 ``forecast_inputs.scenarios``（据此决定是否从报告兜底解析）。
+
+    仅当 actors 为 dict，且 forecast_inputs.scenarios 构成有名字、有可解析概率、总和约为
+    1 的分区时返回 False（已具备种子，无需兜底）；名字壳/缺概率/坏总和均返回 True。
+    actors 非 dict → False（无处可注入）。
+    """
+    if not isinstance(actors, dict):
+        return False
+    return not valid_scenario_distribution(actors.get("forecast_inputs"))
+
+
+def inject_forecast_inputs_from_report(
+    actors: Any, report_md: Optional[str]
+) -> Optional[dict[str, Any]]:
+    """actors 缺 forecast_inputs.scenarios 时，从 research_report.md 情景节确定性解析并**就地
+    注入** actors['forecast_inputs']（纯离线、无 LLM）。
+
+    返回注入用的 forecast_inputs（含非空 scenarios）——命中；否则 None：actors 已有种子、
+    非 dict、报告未解析出概率分布，或解析异常。degrade-safe——调用方保持今日行为。命中后
+    actors 被原地修改，故同一次运行的下游（world_state 种子、报告代理等）与随契约密封的
+    actors.json 都能看到它。
+    """
+    if not _forecast_inputs_missing(actors):
+        return None
+    try:
+        from ..utils.actors import forecast_inputs_from_report_markdown
+        parsed = forecast_inputs_from_report_markdown(report_md or "")
+    except Exception:  # noqa: BLE001 — 解析纯增强，任何异常都退化为「无种子」
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    scenarios = parsed.get("scenarios")
+    if not (isinstance(scenarios, list) and scenarios):
+        return None
+    actors["forecast_inputs"] = parsed
+    return parsed
 
 
 # ===========================================================================
@@ -3667,8 +4226,9 @@ class PipelineOrchestrator:
             # GraphBuilderService 实例方法（kg-backend 实际落地的形态）。
             _fn = getattr(_gb, "gc_stale_graphs", None)
             if _fn is None:
-                _fn = getattr(_gb.GraphBuilderService(api_key=Config.ZEP_API_KEY),
-                              "gc_stale_graphs")
+                _fn = _gb.GraphBuilderService(
+                    api_key=Config.ZEP_API_KEY
+                ).gc_stale_graphs
             _res = _fn(retain=retain)
             if isinstance(_res, dict) and _res:
                 logger.info(
@@ -4659,11 +5219,15 @@ class PipelineOrchestrator:
         except Exception:  # noqa: BLE001
             pass
         rid = f"report_{uuid.uuid4().hex[:12]}"
-        _agent_kwargs: dict[str, Any] = dict(
-            graph_id=graph_id, simulation_id=sim_id, simulation_requirement=state.prompt,
-            situation_brief=situation_brief(actors), actors=actors,
-            sources=research.get("sources"), research_report=report_md,
-        )
+        _agent_kwargs: dict[str, Any] = {
+            "graph_id": graph_id,
+            "simulation_id": sim_id,
+            "simulation_requirement": state.prompt,
+            "situation_brief": situation_brief(actors),
+            "actors": actors,
+            "sources": research.get("sources"),
+            "research_report": report_md,
+        }
         # W9-5：把主跑情景脊柱钉给种子报告（scenario_spine 参数由报告链工作流并行落地；
         # 尚未支持时 TypeError → 回退旧签名，落地顺序无关）。
         try:
@@ -6233,6 +6797,60 @@ class PipelineOrchestrator:
         except Exception as e:  # noqa: BLE001 — 罚分纯观测，失败不影响主流程
             logger.debug("[%s] forecast_confidence_penalty 计算跳过: %s", state.pipeline_id, e)
 
+    def _log_decision_channel_outcome(self, state: PipelineState, simulation_id: Optional[str]) -> None:
+        """SIM-ADD-2：RUN 结束后落一条决策通道端到端摘要（日志 + state.options）。
+
+        读注入 simulation_config.json 的 ``world_state_seed.scenarios`` 与模拟目录下的
+        ``world_state_trajectory.json``（决策通道产物），把「种子情景数 / 是否产出轨迹 /
+        终局结果份额 / 是否趋稳」汇成一条可审计记录——这正是取证时需要翻磁盘才能回答的
+        「这次模拟到底有没有贡献 forecast」。纯观测：只读盘、只写 options，绝不阻断主流程。
+        """
+        sim_dir = os.path.join(
+            getattr(Config, "OASIS_SIMULATION_DATA_DIR", "") or "", str(simulation_id or ""))
+        seed = {}
+        try:
+            cfg = _read_json(os.path.join(sim_dir, "simulation_config.json"))
+            if isinstance(cfg, dict) and isinstance(cfg.get("world_state_seed"), dict):
+                seed = cfg["world_state_seed"]
+        except Exception:  # noqa: BLE001
+            seed = {}
+        scenarios = [s for s in (seed.get("scenarios") or []) if str(s).strip()]
+        traj = _read_json(os.path.join(sim_dir, "world_state_trajectory.json"))
+        produced = isinstance(traj, dict) and bool(traj.get("trajectory"))
+        outcome = (traj.get("outcome") if isinstance(traj, dict) else None) or {}
+        shares = outcome.get("shares") if isinstance(outcome, dict) else None
+        converged_at = traj.get("converged_at") if isinstance(traj, dict) else None
+        summary = {
+            "scenarios_seeded": len(scenarios),
+            "trajectory_produced": bool(produced),
+            "leader": (outcome.get("leader") if isinstance(outcome, dict) else None),
+            "leader_share": (outcome.get("leader_share") if isinstance(outcome, dict) else None),
+            "converged_at": converged_at,
+        }
+        state.options["decision_channel_summary"] = summary
+        try:
+            PipelineManager.save(state)
+        except Exception:  # noqa: BLE001
+            pass
+        if produced:
+            _share_str = ""
+            if isinstance(shares, dict) and shares:
+                _top = sorted(shares.items(), key=lambda kv: -float(kv[1] or 0))[:4]
+                _share_str = "，".join(f"{k}={float(v):.0%}" for k, v in _top)
+            logger.info(
+                "[%s] 决策通道端到端：种子 %d 情景 → 已产出 world_state_trajectory.json"
+                "（终局 %s；converged_at=%s）",
+                state.pipeline_id, len(scenarios), _share_str or "?", converged_at)
+        elif scenarios:
+            logger.warning(
+                "[%s] 决策通道未产出 world_state_trajectory.json——已种子 %d 情景但轨迹缺失"
+                "（检查子进程 SIM_DECISION_CHANNEL(_INBAND) 与 LLM 可用性）",
+                state.pipeline_id, len(scenarios))
+        else:
+            logger.warning(
+                "[%s] 决策通道未点火：world_state_seed 无情景（研究阶段未产出概率分布）",
+                state.pipeline_id)
+
     # -- 内部：研究 as_of 锚校验 (R2-RES-7) -------------------------------
 
     @staticmethod
@@ -6280,6 +6898,216 @@ class PipelineOrchestrator:
         # as_of_date 存在但无效且无来源日可回退 → 运行日兜底（优于带脏日期入图）。
         return run_dt, note
 
+    # -- 内部：仅综合恢复（复用 immutable evidence lanes）-----------------
+
+    def _run_research_synthesis_recovery(
+        self, state: "PipelineState", handoff_dir: str,
+        upd: "Callable[[int, str], None]", manifest_path: str,
+    ) -> dict[str, Any]:
+        """Retry only global synthesis from sealed lane packs.
+
+        A checksum or report-quality failure occurs after evidence gathering.
+        Re-running three multi-hour lanes is both wasteful and unsafe.  The
+        evidence manifest already fingerprints every lane pack/source ledger;
+        the bridge validates it before writing and now exits nonzero on judge
+        FAIL.  This path therefore performs at most two clean synthesis attempts,
+        promotes only an integrity-valid PASS, and retains failed candidates.
+        """
+        from ..utils.atomic import write_text_atomic
+
+        _sync_deerflow_bridge_if_stale(Config.DEERFLOW_DIR)
+        manifest = _read_json(manifest_path)
+        lanes = manifest.get("lanes") if isinstance(manifest, dict) else None
+        if not isinstance(lanes, list) or not lanes:
+            raise RuntimeError(
+                "synthesis-only recovery requires a nonempty evidence manifest"
+            )
+        budget_db_path, budget_telemetry_path, budget_epoch = (
+            _synthesis_recovery_budget_epoch(state, handoff_dir)
+        )
+        exhausted = _research_budget_exhaustion(
+            budget_telemetry_path, budget_epoch)
+        if exhausted:
+            raise RuntimeError(
+                "research_budget_exhausted before synthesis-only recovery "
+                f"(epoch={budget_epoch}, budget={exhausted})"
+            )
+        global_cap = getattr(Config, "RESEARCH_GLOBAL_SUBAGENT_CAP", 9)
+        model_concurrency = research_model_concurrency_cap(
+            1,
+            global_cap,
+            getattr(Config, "RESEARCH_GLOBAL_MODEL_CONCURRENCY", 0),
+        )
+
+        dossier = _read_text(os.path.join(handoff_dir, "actor_dossier.md"))
+        market_lines: list[str] = []
+        seen_market_lines: set[str] = set()
+        candidate_paths = [
+            os.path.join(handoff_dir, "prediction_market_candidates.jsonl")
+        ]
+        candidate_paths.extend(sorted(glob.glob(os.path.join(
+            handoff_dir, "track_*", "prediction_market_candidates.jsonl"))))
+        for candidate_path in candidate_paths:
+            if not os.path.isfile(candidate_path):
+                continue
+            for line in _read_text(candidate_path).splitlines():
+                normalized = line.strip()
+                if normalized and normalized not in seen_market_lines:
+                    seen_market_lines.add(normalized)
+                    market_lines.append(normalized)
+
+        def _spawn(pid: int) -> None:
+            state.research_pid = int(pid)
+            PipelineManager.save(state)
+
+        def _progress(percent: int, message: str) -> None:
+            upd(
+                min(99, max(1, int(percent))),
+                f"[仅综合恢复] {message}",
+            )
+
+        final_res: Optional[dict[str, Any]] = None
+        source_dir = ""
+        errors: list[str] = []
+        attempts = 0
+        provider_blocked = False
+        for attempt in range(1, 3):
+            attempts = attempt
+            synthesis_dir = tempfile.mkdtemp(
+                prefix=f".synthesis-recovery-{attempt}-", dir=handoff_dir)
+            if dossier.strip():
+                write_text_atomic(
+                    os.path.join(synthesis_dir, "actor_dossier.md"), dossier)
+            if market_lines:
+                write_text_atomic(
+                    os.path.join(
+                        synthesis_dir, "prediction_market_candidates.jsonl"),
+                    "\n".join(market_lines) + "\n",
+                )
+            upd(
+                2,
+                f"复用 {len(lanes)} 条已校验证据轨，仅重跑全局综合（{attempt}/2）…",
+            )
+            try:
+                candidate = DeerFlowResearchRunner.run(
+                    state.prompt,
+                    synthesis_dir,
+                    on_progress=_progress,
+                    depth=state.options.get("depth"),
+                    language=state.options.get("research_language"),
+                    model=state.options.get("research_model"),
+                    cancel_event=type(self)._cancel_events.get(state.pipeline_id),
+                    on_spawn=_spawn,
+                    kg_graph_id=state.graph_id,
+                    budget_db_path=budget_db_path,
+                    budget_lane_id="global-synthesis-recovery",
+                    budget_telemetry_path=budget_telemetry_path,
+                    budget_run_id=state.pipeline_id,
+                    budget_epoch=budget_epoch,
+                    subagents=False,
+                    max_concurrent_subagents=1,
+                    model_concurrency_global=model_concurrency,
+                    dual_track=False,
+                    shared_actor_track=False,
+                    synthesis_manifest_path=manifest_path,
+                )
+                if int(candidate.get("exit_code") or 0) != 0:
+                    raise RuntimeError(
+                        "synthesis-only recovery returned non-zero exit "
+                        f"{candidate.get('exit_code')}"
+                    )
+                final_res = candidate
+                source_dir = synthesis_dir
+                break
+            except PipelineCancelled:
+                _preserve_research_attempt_progress(
+                    synthesis_dir,
+                    handoff_dir,
+                    attempt=attempt,
+                    outcome="cancelled",
+                    detail="synthesis-only recovery cancelled",
+                )
+                shutil.rmtree(synthesis_dir, ignore_errors=True)
+                raise
+            except Exception as exc:  # noqa: BLE001 - bounded retry
+                detail = f"{type(exc).__name__}: {exc}"
+                errors.append(detail)
+                provider_blocked = _synthesis_provider_unavailable(detail)
+                _preserve_research_attempt_progress(
+                    synthesis_dir,
+                    handoff_dir,
+                    attempt=attempt,
+                    outcome="failed",
+                    detail=detail,
+                )
+                shutil.rmtree(synthesis_dir, ignore_errors=True)
+                logger.warning(
+                    "[%s] 仅综合恢复尝试 %d/2 失败: %s",
+                    state.pipeline_id, attempt, exc,
+                )
+                if provider_blocked:
+                    logger.warning(
+                        "[%s] 主模型与回退模型均不可用；停止重复综合尝试，等待提供方恢复后安全续跑",
+                        state.pipeline_id,
+                    )
+                    break
+
+        state.research_pid = None
+        if final_res is None or not source_dir:
+            state.options["synthesis_recovery"] = {
+                "attempted": True,
+                "passed": False,
+                "evidence_manifest": manifest_path,
+                "attempts": attempts,
+                "errors": errors,
+                "blocked_by_provider": provider_blocked,
+            }
+            PipelineManager.save(state)
+            if provider_blocked:
+                raise RuntimeError(
+                    "全局综合暂时被模型提供方阻塞；MiniMax 有界重试及配置的 "
+                    "Antigravity/Quotio 回退均不可用。证据包保持封存，提供方恢复后可安全续跑，"
+                    "未重跑证据研究"
+                )
+            raise RuntimeError(
+                "全局综合恢复连续两次未通过质量门；已保留证据包、失败报告和 judge，"
+                "未重跑证据研究"
+            )
+
+        recovery_meta = {
+            "attempted": True,
+            "passed": True,
+            "evidence_manifest": manifest_path,
+            "evidence_lanes_consumed": len(lanes),
+            "attempts": attempts,
+        }
+        parallel_meta = dict(state.options.get("parallel_research") or {})
+        parallel_meta.update({
+            "architecture": "parallel_evidence_single_global_synthesis",
+            "evidence_manifest": manifest_path,
+            "evidence_lanes_consumed": len(lanes),
+            "global_synthesis_failed": False,
+            "global_synthesis_attempts": attempts,
+            "synthesis_only_recovery": True,
+        })
+        _promote_research_contract(
+            source_dir,
+            handoff_dir,
+            meta_patch={
+                "parallel_research": parallel_meta,
+                "synthesis_recovery": recovery_meta,
+            },
+        )
+        shutil.rmtree(source_dir, ignore_errors=True)
+        state.options["parallel_research"] = parallel_meta
+        state.options["synthesis_recovery"] = recovery_meta
+        PipelineManager.save(state)
+        loaded = _load_research_handoff(handoff_dir)
+        loaded["exit_code"] = 0
+        loaded["research_telemetry"] = (
+            final_res.get("research_telemetry") or {})
+        return loaded
+
     # -- 内部：PAR-2 多角度并行研究轨 ------------------------------------
 
     def _run_parallel_research_tracks(
@@ -6321,16 +7149,22 @@ class PipelineOrchestrator:
         harness_subagents = bool(
             getattr(Config, "DEERFLOW_SUBAGENTS", True) and subagent_cap > 0)
         os.makedirs(handoff_dir, exist_ok=True)
-        budget_db_path = os.path.join(handoff_dir, "research_budget.sqlite3")
-        budget_telemetry_path = os.path.join(handoff_dir, "research_budget.json")
-        # PAR-2：先在启动任何轨之前把 bridge→deployed 同步做一次。每个 .run 内部也会调
-        # _sync_deerflow_bridge_if_stale，但 K 条轨并发时它们会同时 shutil.copyfile 同一组
-        # 文件（非原子）→ 竞态可能让某轨读到半写的脚本。预同步后各轨内的同步退化为只读哈希
-        # 比对（no-op），消除该竞态。失败仅记录（同函数语义，绝不阻断研究）。
-        try:
-            _sync_deerflow_bridge_if_stale(Config.DEERFLOW_DIR)
-        except Exception:  # noqa: BLE001
-            pass
+        budget_db_path, budget_telemetry_path, budget_epoch = (
+            _activate_research_budget_epoch(state, handoff_dir)
+        )
+        exhausted = _research_budget_exhaustion(
+            budget_telemetry_path, budget_epoch)
+        if exhausted:
+            raise RuntimeError(
+                "research_budget_exhausted before track launch "
+                f"(epoch={budget_epoch}, budget={exhausted}); "
+                "explicit pipeline resume is required for a new bounded epoch"
+            )
+        # LOOP-014: synchronize once before admitting any lane.  Every runner
+        # verifies again under the same cross-process lock, but those calls are
+        # normally manifest-only no-ops.  A required bundle failure propagates
+        # here so no lane can start against stale or partially copied skills.
+        _sync_deerflow_bridge_if_stale(Config.DEERFLOW_DIR)
         upd(
             2,
             f"并行研究：排队 {n} 条多角度研究轨（同时 {outer_workers} 条；"
@@ -6411,6 +7245,7 @@ class PipelineOrchestrator:
                 budget_lane_id=f"outer-track-{idx + 1}",
                 budget_telemetry_path=budget_telemetry_path,
                 budget_run_id=state.pipeline_id,
+                budget_epoch=budget_epoch,
                 subagents=harness_subagents,
                 max_concurrent_subagents=max(1, subagent_cap),
                 model_concurrency_global=model_concurrency,
@@ -6491,6 +7326,24 @@ class PipelineOrchestrator:
                     evidence_bytes = evidence_handle.read()
                 with open(sources_path, "rb") as source_handle:
                     source_bytes = source_handle.read()
+                try:
+                    lane_sources = json.loads(source_bytes.decode("utf-8"))
+                except (UnicodeDecodeError, ValueError, TypeError) as exc:
+                    raise RuntimeError(
+                        "surviving research lane has an invalid source ledger: "
+                        f"{os.path.relpath(sources_path, handoff_dir)}"
+                    ) from exc
+                verified_lane_sources = [
+                    row for row in lane_sources
+                    if isinstance(row, dict)
+                    and str(row.get("url") or "").startswith(("http://", "https://"))
+                    and row.get("reachable") is not False
+                ] if isinstance(lane_sources, list) else []
+                if not verified_lane_sources:
+                    raise RuntimeError(
+                        "surviving research lane has no verified fetched sources: "
+                        f"{os.path.relpath(sources_path, handoff_dir)}"
+                    )
                 lane_manifest_rows.append({
                     "title": title,
                     "path": os.path.relpath(evidence_path, handoff_dir),
@@ -6523,6 +7376,27 @@ class PipelineOrchestrator:
             ]
             shared_dossier = max(
                 dossier_candidates, key=len, default="")
+            # Agent-vetted market observations are evidence too.  The previous
+            # manifest boundary copied only source ledgers, so global synthesis
+            # lost a real Optimus market and then spent ~17 minutes repeating
+            # keyless catalog calls during a transport outage.  Carry the
+            # immutable JSONL envelopes into the private synthesis generation;
+            # bridge relevance gating still decides which rows are canonical.
+            market_candidate_lines: list[str] = []
+            seen_market_candidate_lines: set[str] = set()
+            for _title, track_dir, _res in ordered:
+                candidate_path = os.path.join(
+                    track_dir, "prediction_market_candidates.jsonl")
+                if not os.path.isfile(candidate_path):
+                    continue
+                try:
+                    for line in _read_text(candidate_path).splitlines():
+                        normalized = line.strip()
+                        if normalized and normalized not in seen_market_candidate_lines:
+                            seen_market_candidate_lines.add(normalized)
+                            market_candidate_lines.append(normalized)
+                except OSError:
+                    continue
             def _global_progress(percent: int, message: str) -> None:
                 mapped = min(99, 96 + max(0, int(percent)) * 3 // 100)
                 upd(mapped, f"[全局综合] {message}")
@@ -6544,6 +7418,14 @@ class PipelineOrchestrator:
                             synthesis_dir, "actor_dossier.md"),
                         shared_dossier,
                     )
+                if market_candidate_lines:
+                    write_text_atomic(
+                        os.path.join(
+                            synthesis_dir,
+                            "prediction_market_candidates.jsonl",
+                        ),
+                        "\n".join(market_candidate_lines) + "\n",
+                    )
                 upd(
                     96,
                     f"全局综合 {survived} 条证据轨（单一 outline / citation / judge，"
@@ -6564,6 +7446,7 @@ class PipelineOrchestrator:
                         budget_lane_id="global-synthesis",
                         budget_telemetry_path=budget_telemetry_path,
                         budget_run_id=state.pipeline_id,
+                        budget_epoch=budget_epoch,
                         subagents=False,
                         max_concurrent_subagents=1,
                         model_concurrency_global=model_concurrency,
@@ -6693,7 +7576,8 @@ class PipelineOrchestrator:
 
         labeled_reports: list[tuple[str, str]] = []
         citation_audits: list[dict[str, int]] = []
-        for (title, _td, res), sources in zip(ordered, track_sources):
+        for (title, _td, res), sources in zip(
+                ordered, track_sources, strict=True):
             normalized_report, citation_audit = normalize_track_report_citations(
                 res["report"], sources, merged_sources)
             labeled_reports.append((title, normalized_report))
@@ -6965,14 +7849,37 @@ class PipelineOrchestrator:
             _stage_was_complete = bool(
                 _research_stage and _research_stage.status == "completed")
             _reuse_research = False
+            _evidence_manifest_path = os.path.join(
+                handoff_dir, "evidence_synthesis_manifest.json")
+            _synthesis_recovery_manifest: Optional[str] = None
             if _report_candidate:
                 if _contract_present:
-                    _reuse_research = _validate_research_contract(handoff_dir)
-                    if not _reuse_research:
+                    _integrity_valid = _validate_research_contract(handoff_dir)
+                    if not _integrity_valid:
                         logger.warning(
                             "[%s] 研究 contract manifest 校验失败，拒绝复用混合/篡改产物",
                             state.pipeline_id,
                         )
+                        if os.path.isfile(_evidence_manifest_path):
+                            _synthesis_recovery_manifest = _evidence_manifest_path
+                    else:
+                        _quality_errors = _research_contract_quality_errors(
+                            handoff_dir,
+                            require_judge=os.path.isfile(
+                                _evidence_manifest_path),
+                        )
+                        if _quality_errors:
+                            logger.warning(
+                                "[%s] 研究 contract 完整但未通过发布质量门（%s）；"
+                                "拒绝复用并仅重跑全局综合",
+                                state.pipeline_id,
+                                ", ".join(_quality_errors),
+                            )
+                            if os.path.isfile(_evidence_manifest_path):
+                                _synthesis_recovery_manifest = (
+                                    _evidence_manifest_path)
+                        else:
+                            _reuse_research = True
                 elif _stage_was_complete:
                     _reuse_research = self._validate_reuse(
                         state, STAGE_RESEARCH)
@@ -6981,6 +7888,11 @@ class PipelineOrchestrator:
                         "[%s] 发现未带完成阶段/contract manifest 的研究报告，拒绝长度式复用",
                         state.pipeline_id,
                     )
+            elif os.path.isfile(_evidence_manifest_path):
+                # A prior synthesis may have failed before publishing any root
+                # report.  Lane packs are still independently checksummed by
+                # this manifest, so recover synthesis without replaying research.
+                _synthesis_recovery_manifest = _evidence_manifest_path
             if _reuse_research:
                 upd(95, "复用已有研究报告，跳过 DeerFlow 研究阶段…")
                 research = _load_research_handoff(handoff_dir)
@@ -6991,58 +7903,80 @@ class PipelineOrchestrator:
                     state.research_pid = pid
                     PipelineManager.save(state)
 
+                if _synthesis_recovery_manifest:
+                    research = self._run_research_synthesis_recovery(
+                        state,
+                        handoff_dir,
+                        upd,
+                        _synthesis_recovery_manifest,
+                    )
                 # PAR-2：多角度并行研究轨。>1 时并行跑 K 个研究子进程（每轨角度特化）后
                 # 确定性合并回 handoff/；=1 时走今日单轨路径（下方 else 逐字节不变）。
-                try:
-                    _n_tracks = max(1, int(getattr(Config, "RESEARCH_PARALLEL_TRACKS", 3) or 3))
-                except (TypeError, ValueError):
-                    _n_tracks = 3
-                if _n_tracks > 1:
-                    research = self._run_parallel_research_tracks(
-                        state, handoff_dir, upd, _n_tracks)
                 else:
-                    # ITEM-3：本次研究阶段是 resume/orphan-reclaim 重试且 handoff_dir 已有
-                    # checkpoint（上一轮崩溃/超时前写下）→ 续跑而非全量重启。首跑无 checkpoint → False。
-                    _resume_research = _has_research_checkpoint(handoff_dir)
-                    if _resume_research:
-                        upd(1, "检测到研究断点，续跑（复用已完成 pass）…")
-                    _single_global_subagents = getattr(
-                        Config, "RESEARCH_GLOBAL_SUBAGENT_CAP", 9)
-                    _single_model_concurrency = research_model_concurrency_cap(
-                        1,
-                        _single_global_subagents,
-                        getattr(Config, "RESEARCH_GLOBAL_MODEL_CONCURRENCY", 0),
-                    )
-                    _single_subagent_cap = research_lane_subagent_cap(
-                        1,
-                        _single_global_subagents,
-                        getattr(Config, "RESEARCH_SUBAGENTS_PER_TRACK_MAX", 5),
-                        _single_model_concurrency,
-                    )
-                    research = DeerFlowResearchRunner.run(
-                        state.prompt,
-                        handoff_dir,
-                        on_progress=upd,
-                        depth=state.options.get("depth"),
-                        language=state.options.get("research_language"),  # T5.5
-                        model=state.options.get("research_model"),        # T5.5
-                        cancel_event=cls._cancel_events.get(state.pipeline_id),
-                        on_spawn=_persist_research_pid,
-                        resume=_resume_research,
-                        # W9-9：图谱已存在（resume-with-graph/fork/continue 血统）时接入 KG MCP；
-                        # 首跑 graph_id 为 None → env 与今日逐字节一致。
-                        kg_graph_id=state.graph_id,
-                        budget_db_path=os.path.join(handoff_dir, "research_budget.sqlite3"),
-                        budget_lane_id="outer-track-1",
-                        budget_telemetry_path=os.path.join(
-                            handoff_dir, "research_budget.json"),
-                        budget_run_id=state.pipeline_id,
-                        subagents=bool(
-                            getattr(Config, "DEERFLOW_SUBAGENTS", True)
-                            and _single_subagent_cap > 0),
-                        max_concurrent_subagents=max(1, _single_subagent_cap),
-                        model_concurrency_global=_single_model_concurrency,
-                    )
+                    try:
+                        _n_tracks = max(1, int(getattr(Config, "RESEARCH_PARALLEL_TRACKS", 3) or 3))
+                    except (TypeError, ValueError):
+                        _n_tracks = 3
+                    if _n_tracks > 1:
+                        research = self._run_parallel_research_tracks(
+                            state, handoff_dir, upd, _n_tracks)
+                    else:
+                        # ITEM-3：本次研究阶段是 resume/orphan-reclaim 重试且 handoff_dir 已有
+                        # checkpoint（上一轮崩溃/超时前写下）→ 续跑而非全量重启。首跑无 checkpoint → False。
+                        _resume_research = _has_research_checkpoint(handoff_dir)
+                        if _resume_research:
+                            upd(1, "检测到研究断点，续跑（复用已完成 pass）…")
+                        _single_global_subagents = getattr(
+                            Config, "RESEARCH_GLOBAL_SUBAGENT_CAP", 9)
+                        _single_model_concurrency = research_model_concurrency_cap(
+                            1,
+                            _single_global_subagents,
+                            getattr(Config, "RESEARCH_GLOBAL_MODEL_CONCURRENCY", 0),
+                        )
+                        _single_subagent_cap = research_lane_subagent_cap(
+                            1,
+                            _single_global_subagents,
+                            getattr(Config, "RESEARCH_SUBAGENTS_PER_TRACK_MAX", 5),
+                            _single_model_concurrency,
+                        )
+                        (
+                            _single_budget_db,
+                            _single_budget_telemetry,
+                            _single_budget_epoch,
+                        ) = _activate_research_budget_epoch(state, handoff_dir)
+                        _single_exhausted = _research_budget_exhaustion(
+                            _single_budget_telemetry, _single_budget_epoch)
+                        if _single_exhausted:
+                            raise RuntimeError(
+                                "research_budget_exhausted before track launch "
+                                f"(epoch={_single_budget_epoch}, "
+                                f"budget={_single_exhausted}); explicit pipeline "
+                                "resume is required for a new bounded epoch"
+                            )
+                        research = DeerFlowResearchRunner.run(
+                            state.prompt,
+                            handoff_dir,
+                            on_progress=upd,
+                            depth=state.options.get("depth"),
+                            language=state.options.get("research_language"),  # T5.5
+                            model=state.options.get("research_model"),        # T5.5
+                            cancel_event=cls._cancel_events.get(state.pipeline_id),
+                            on_spawn=_persist_research_pid,
+                            resume=_resume_research,
+                            # W9-9：图谱已存在（resume-with-graph/fork/continue 血统）时接入 KG MCP；
+                            # 首跑 graph_id 为 None → env 与今日逐字节一致。
+                            kg_graph_id=state.graph_id,
+                            budget_db_path=_single_budget_db,
+                            budget_lane_id="outer-track-1",
+                            budget_telemetry_path=_single_budget_telemetry,
+                            budget_run_id=state.pipeline_id,
+                            budget_epoch=_single_budget_epoch,
+                            subagents=bool(
+                                getattr(Config, "DEERFLOW_SUBAGENTS", True)
+                                and _single_subagent_cap > 0),
+                            max_concurrent_subagents=max(1, _single_subagent_cap),
+                            model_concurrency_global=_single_model_concurrency,
+                        )
                 state.research_pid = None  # 子进程已结束，清掉以免 reconcile 误杀复用 PID
                 # PAR-2：并行轨 PID 清单也一并清空（研究阶段已结束，避免 reconcile 误杀复用 PID）。
                 state.options.pop("research_track_pids", None)
@@ -7053,6 +7987,9 @@ class PipelineOrchestrator:
             if bool(getattr(Config, "REPORT_LINT", True)):
                 try:
                     from .report_lint import lint_report
+                    _judge_bound_report = _research_report_is_judge_bound(
+                        handoff_dir
+                    )
                     _lint_lang = (state.options.get("research_language")
                                   or getattr(Config, "DEERFLOW_RESEARCH_LANGUAGE", None))
                     if not _lint_lang:
@@ -7063,13 +8000,34 @@ class PipelineOrchestrator:
                         _lint_lang = "Chinese" if _cjk_n > max(1, len(_sample)) * 0.05 else "English"
                     _cleaned, _lint_rep = lint_report(report_md, _lint_lang, mode="research")
                     if isinstance(_cleaned, str) and _cleaned.strip() and _cleaned != report_md:
-                        report_md = _cleaned
-                        research["report"] = _cleaned
+                        if _judge_bound_report:
+                            # The bridge finalizes citations before its real
+                            # report judge.  Any parent-side prose edit would
+                            # invalidate that exact evidence binding.  Keep lint
+                            # as an audit only; a desired prose mutation belongs
+                            # upstream of judging, never in post-processing.
+                            logger.info(
+                                "[%s] 研究卷宗 lint 提议了 judge-bound 字节变更；"
+                                "已保留受审原文（audit-only）",
+                                state.pipeline_id,
+                            )
+                            if isinstance(_lint_rep, dict):
+                                _lint_rep = dict(_lint_rep)
+                                _lint_rep["post_judge_mutation_suppressed"] = True
+                        else:
+                            report_md = _cleaned
+                            research["report"] = _cleaned
                         # A manifest-owned report is finalized in a private
                         # generation below. Writing it here would invalidate
                         # the still-published producer contract before an
-                        # atomic replacement is ready.
-                        if not os.path.exists(_research_contract_path(handoff_dir)):
+                        # atomic replacement is ready. Judge-bound manifests
+                        # never adopt the proposal at all.
+                        if (
+                            not _judge_bound_report
+                            and not os.path.exists(
+                                _research_contract_path(handoff_dir)
+                            )
+                        ):
                             try:
                                 from ..utils.atomic import write_text_atomic
                                 write_text_atomic(
@@ -7156,6 +8114,29 @@ class PipelineOrchestrator:
                     logger.warning("[%s] dossier 覆盖偏低：%s", state.pipeline_id, "；".join(_weak))
             except Exception as _cov_err:  # noqa: BLE001 — 覆盖度纯观测，失败不影响主流程
                 logger.debug("[%s] dossier_coverage 计算跳过: %s", state.pipeline_id, _cov_err)
+
+            # SIM-ADD-1（决策通道点火的关键修复）：研究定稿前把 forecast_inputs 兜底注入
+            # actors——actors.json 常缺 forecast_inputs 键，导致 world_state 种子为空、决策
+            # 通道从未点火、模拟对 forecast 零贡献。此处从 research_report.md 情景节确定性解析
+            # 并就地注入 research["actors"]，紧接着的 _finalize_research_contract 会把它随契约
+            # 一并密封进 actors.json（下游 + resume 皆可见，且不破坏 manifest 校验）。
+            try:
+                _fi_seed = inject_forecast_inputs_from_report(actors, report_md)
+                if _fi_seed is not None:
+                    research["actors"] = actors  # 让契约密封与下游都用注入后的 cast
+                    logger.info(
+                        "[%s] forecast_inputs 兜底解析：从研究报告注入 %d 情景"
+                        "（决策通道世界态种子就绪）",
+                        state.pipeline_id, len(_fi_seed.get("scenarios") or []))
+                elif _forecast_inputs_missing(actors):
+                    # 显式的「响亮信号」（对齐先前审计的诉求）：种子仍为空，模拟不会点火。
+                    logger.warning(
+                        "[%s] forecast_inputs 缺失且研究报告未解析出情景概率分布——"
+                        "world_state 种子将为空、决策通道不会点火、模拟对 forecast 无贡献",
+                        state.pipeline_id)
+            except Exception as _fi_err:  # noqa: BLE001 — 兜底注入纯增强，绝不阻断研究定稿
+                logger.warning("[%s] forecast_inputs 兜底注入跳过: %s",
+                               state.pipeline_id, _fi_err)
 
             # A research stage is complete only after every sanctioned
             # postprocessor and the effective source ledger are sealed into a
@@ -7661,7 +8642,19 @@ class PipelineOrchestrator:
             if (_cal_gen or getattr(Config, "SIM_DECISION_CHANNEL", False)) and not _run_already_done:
                 try:
                     from ..utils.actors import world_state_seed_from_actors as _ws_seed
+                    # SIM-ADD-1（belt-and-suspenders）：种子前再兜底一次——若 actors 仍缺
+                    # forecast_inputs.scenarios（如老产物 resume、或研究定稿注入被跳过），就地
+                    # 从报告解析注入（仅内存，不写盘 → 契约安全；下游本轮直接读注入后的 actors）。
+                    _fi_prep = inject_forecast_inputs_from_report(actors, report_md)
+                    if _fi_prep is not None:
+                        logger.info("[%s] PREPARE 兜底注入 forecast_inputs：%d 情景",
+                                    state.pipeline_id, len(_fi_prep.get("scenarios") or []))
                     _seed = _ws_seed(actors)
+                    if not _seed.get("scenarios"):
+                        # 响亮信号：即便兜底解析后仍无情景分布，决策通道不会点火。
+                        logger.warning(
+                            "[%s] world_state 种子为空——研究阶段未产出可用情景概率分布，"
+                            "决策通道不会点火、模拟对 forecast 无贡献", state.pipeline_id)
                     if _cal_gen or _seed.get("scenarios"):
                         _seed["as_of_date"] = (actors.get("as_of_date") if isinstance(actors, dict) else None)
                         _seed["horizon_date"] = self._infer_horizon_date(state.prompt, actors)
@@ -7895,6 +8888,14 @@ class PipelineOrchestrator:
                 reused=run_stage_done,
             )
 
+            # SIM-ADD-2：决策通道端到端可观测性——一条 per-run 摘要，把「种子了几个情景 /
+            # 是否产出 world_state_trajectory.json / 终局结果份额」钉在日志与 options 里，
+            # 让「模拟是否真的贡献了 forecast」可事后审计（取证发现此前全靠翻磁盘才知道熄火）。
+            try:
+                self._log_decision_channel_outcome(state, sim_state.simulation_id)
+            except Exception as _dc_obs_err:  # noqa: BLE001 — 观测性，绝不影响主流程
+                logger.debug("[%s] 决策通道摘要跳过: %s", state.pipeline_id, _dc_obs_err)
+
             # ---- Stage 5: REPORT ----
             upd = self._make_stage_updater(state, STAGE_REPORT)
             self._update_manifest(state, STAGE_REPORT)  # I-8-1
@@ -7971,7 +8972,7 @@ class PipelineOrchestrator:
                         raise RuntimeError(
                             "报告前置探测失败：主/回退 LLM 提供方均不可用 —— 中止报告阶段以免"
                             f"烧掉全部章节成本（稍后 resume 可从 REPORT 续跑）: {str(_pf_err)[:200]}"
-                        )
+                        ) from _pf_err
                 # XRUN-15/LOOP-005: 铸新报告 = 新 attempt。清掉上一 attempt 的临时及正式
                 # REPORT-owned 指针/完整性行，随后在生成开始前持久化新 report_id。这样每次
                 # progress callback 都扫描当前 attempt 的 sections/charts，而非旧目录或空目录。
@@ -7995,18 +8996,18 @@ class PipelineOrchestrator:
                 # artifacts below and ReportVisualizer generates its own richer,
                 # report-owned Plotly set. Passing research paths into every section
                 # prompt would duplicate timeline/actor/quantitative figures.
-                _ra_kwargs: dict[str, Any] = dict(
-                    graph_id=graph_id,
-                    simulation_id=sim_state.simulation_id,
-                    simulation_requirement=state.prompt,
+                _ra_kwargs: dict[str, Any] = {
+                    "graph_id": graph_id,
+                    "simulation_id": sim_state.simulation_id,
+                    "simulation_requirement": state.prompt,
                     # T4.1: 钉入研究档案，报告不再从冷图盲搜重挖 cast/关系/时间线
-                    situation_brief=situation_brief(actors),
-                    actors=actors,
-                    sources=research.get("sources"),
-                    research_report=report_md,
-                    scenario_label=_scenario_label,
-                    base_simulation_id=_base_sim_id,
-                )
+                    "situation_brief": situation_brief(actors),
+                    "actors": actors,
+                    "sources": research.get("sources"),
+                    "research_report": report_md,
+                    "scenario_label": _scenario_label,
+                    "base_simulation_id": _base_sim_id,
+                }
                 # W9-8: 研究昂贵产物直通报告链——quantitative(339 行)/contested(29 条)/
                 # timeline(101 事件)/graph_priors(_structural) 此前落盘后零下游读者。
                 # 构造参数由报告链工作流并行落地（None 默认）；尚未支持时 TypeError →

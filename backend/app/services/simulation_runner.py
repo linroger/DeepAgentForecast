@@ -492,7 +492,7 @@ class SimulationRunner:
         config_path = os.path.join(sim_dir, "simulation_config.json")
         
         if not os.path.exists(config_path):
-            raise ValueError(f"模拟配置不存在，请先调用 /prepare 接口")
+            raise ValueError("模拟配置不存在，请先调用 /prepare 接口")
 
         # LOOP-011: a researched cast is executable only while the exact
         # profile/role manifests still match the prepared artifacts. This check
@@ -1330,10 +1330,25 @@ class SimulationRunner:
 
         新进程的 ``_processes`` 必为空，故任何持久化为活跃状态（RUNNING/STARTING/STOPPING/
         PAUSED）的模拟都是孤儿：杀掉其仍在烧额度的进程组，并把 run_state.json + state.json
-        落为终态，让前端轮询停下、并允许重跑。整个过程 try/except 包裹，绝不阻断启动。
+        落为终态，让前端轮询停下、并允许重跑。若目标端口已有后端在服务，则这个新进程
+        并非唯一 owner，必须整体跳过回收，避免在随后绑定端口失败前误杀活模拟。整个过程
+        try/except 包裹，绝不阻断启动。
         """
         active = {RunnerStatus.RUNNING, RunnerStatus.STARTING, RunnerStatus.STOPPING, RunnerStatus.PAUSED}
         try:
+            if bool(getattr(Config, "SIMULATION_RECLAIM_PORT_PROBE", True)):
+                import socket
+                try:
+                    port = int(os.environ.get("FLASK_PORT", "5001") or "5001")
+                except ValueError:
+                    port = 5001
+                try:
+                    with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                        logger.warning(
+                            "端口 %d 已被占用，疑似另一后端在跑——跳过孤儿模拟回收", port)
+                        return
+                except OSError:
+                    pass
             if not os.path.isdir(cls.RUN_STATE_DIR):
                 return
             for sim_id in os.listdir(cls.RUN_STATE_DIR):
@@ -2264,7 +2279,7 @@ class SimulationRunner:
                 logger.error(f"清理进程失败: {simulation_id}, error={e}")
         
         # 清理文件句柄
-        for simulation_id, file_handle in list(cls._stdout_files.items()):
+        for _simulation_id, file_handle in list(cls._stdout_files.items()):
             try:
                 if file_handle:
                     file_handle.close()
@@ -2272,7 +2287,7 @@ class SimulationRunner:
                 pass
         cls._stdout_files.clear()
         
-        for simulation_id, file_handle in list(cls._stderr_files.items()):
+        for _simulation_id, file_handle in list(cls._stderr_files.items()):
             try:
                 if file_handle:
                     file_handle.close()

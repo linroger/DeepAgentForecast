@@ -5,6 +5,10 @@ description: Use this skill during research and forecast runs when sourced struc
 
 # Forecast Visuals
 
+When this body is injected by the runtime, it is already complete in the
+conversation. Do **not** read `SKILL.md` again. Read a named reference only for
+a chart decision that needs it, and invoke the bundled renderer directly.
+
 Turn structured forecast evidence into figures that answer a reader question. The
 goal is not “three charts”; the goal is faster understanding of the forecast,
 its evidence, and what changed.
@@ -40,8 +44,9 @@ decision matrix, forecast-domain examples, and anti-patterns.
 
 Inputs live together in the run directory:
 
-- `quantitative.json` — `metric`, `value`, `unit`, `as_of_date`, `source`,
-  `tier`, and optional `definition`, `staleness_days`, `is_stale`. Automatic
+- `quantitative.json` — `metric`, stable `series`, `value`, `unit`, source
+  `as_of_date`, measurement/target `period_end`, `value_type`, `source`,
+  `source_url`, `tier`, and `definition`. Automatic
   comparison/revision charts require `definition`, source, and a parseable
   `as_of_date`; rows may still exist without them but remain table-only.
 - `timeline.json` — dated `event` rows.
@@ -63,6 +68,11 @@ PYBIN="${RESEARCH_CHARTS_PYTHON:-python3}"
 "$PYBIN" "$SKILL_DIR/scripts/render.py" --dir "$RUN_DIR"
 ```
 
+The default run emits forecast-domain figures only. Add `--context` (or
+`RESEARCH_CHARTS_INCLUDE_CONTEXT=1`) only when an actor relationship map is
+necessary to explain a named industrial-chain or policy-transmission claim.
+Add `--diagnostics` only for methodology/audit review.
+
 The renderer is local, deterministic, idempotent, and network-free. It writes
 self-contained Plotly HTML with a meaningful document title and embedded data
 favicon, PNG when Kaleido or matplotlib is available, and a stable `charts.json`
@@ -76,6 +86,7 @@ Use these outputs when their data is eligible:
 | Output | What it answers | Artifact |
 |---|---|---|
 | `quant_metrics` | Which comparable market, cost, rate, or technology benchmarks differ? | `quantitative.json` |
+| `metric_trajectories` | How did one definitionally stable cost, deployment, capacity, or adoption metric evolve across at least three periods? | `quantitative.json` |
 | `forecast_revisions` | How has the same published forecast changed across at least three vintages? | `quantitative.json` |
 | `timeline` | Which dated events or policy milestones define the inflection path? | `timeline.json` |
 | `market_probabilities` | What do liquid external markets imply as of a stated time? | `prediction_markets.json` |
@@ -90,6 +101,34 @@ it never turns an otherwise reported actual into a forecast. Such a future-dated
 actual is withheld from automatic comparison panels unless forecast/target
 semantics are independently present in the row.
 
+`metric_trajectories` groups rows by canonical `metric_family` over `year`, with
+one line per `region`/`technology` (and unit bucket, so percentages never mix
+with counts). A family renders only when it spans at least three distinct years, so
+different analysts' single-year forecasts for the same family connect into one
+observed-plus-forecast trajectory. Each row should carry the canonical schema
+(`metric_family`, `region`, `technology`, `year`, `value_num`, `value_kind`,
+`analyst`); the extraction stage fills these deterministically when derivable.
+When they are absent the renderer falls back to folding the `series` name and
+reading the year from `period_end` (or, for forecasts only, the target year in
+the metric text). The x-axis uses `period_end` (or the target year); `as_of_date`
+remains source/publication provenance in hover. Observations are solid circles
+and forecasts/targets are dashed diamonds. Never draw a trajectory by treating
+publication dates as measurement periods.
+
+Every trajectory point must retain a named source, definition, and parseable
+source-as-of date. A forecast/target point also needs an external `source_url`
+with an `http` or `https` scheme and a nonempty host; filenames, local URIs,
+JavaScript URLs, and arbitrary labels are not publication provenance.
+Rows labeled `dossier`, `internal synthesis`, `working assumption`, or `analyst
+interpolation` remain useful in a forecast table but MUST NOT be styled or
+captioned as a published forecast. Two points show a before/after comparison,
+not a trend; keep them in `quant_metrics` or a compact slope table.
+
+When an artifact contains an explicit numeric range (`1100–1400 USD/kW`),
+`quant_metrics` uses the canonical midpoint and draws the actual low/high
+whisker. It never replaces a range with its first number or invents an interval
+around a point estimate.
+
 `forecast_revisions` requires at least three rows for the same metric with
 trailing vintage labels such as `(2024)`, `(2025)`, `(2026)`. Each suffix must
 match the year in `as_of_date`; otherwise it may be a target year and is rejected.
@@ -101,12 +140,18 @@ misread as the vintage. Two points do not establish a reliable revision pattern.
 
 ## 4. Optional diagnostics
 
-- `actor_network` is optional when relationship structure itself is central to
+- `actor_network` is optional and off by default. Enable it with `--context`
+  only when relationship structure itself is central to
   industrial-chain competition, coalition behavior, or policy transmission.
   Explain that node size is an internal ranking proxy. Do not use it as evidence
   of market share, bargaining power, revenue, or forecast impact.
-- `source_quality` belongs in methodology or audit context. It does not count as
-  a forecast-domain data figure.
+- `source_quality` is a **diagnostic figure and is off by default**. The renderer
+  no longer produces it in the standard job set and never embeds it in the report
+  body; the user explicitly does not want the "source salience" chart in the
+  deliverable. Render it only for methodology/audit review by passing
+  `--diagnostics` or setting `RESEARCH_CHARTS_INCLUDE_DIAGNOSTICS=1`. It does not
+  count as a forecast-domain data figure and never satisfies the decision-chart
+  contract.
 
 Do not create or request an “influence vs salience” chart. Do not label weighted
 keyword frequency as a tornado or sensitivity analysis. A true tornado requires
@@ -135,15 +180,16 @@ timeline/market schema). Do not emit Mermaid for report delivery.
 
 The renderer owns these stable IDs and preserves custom producers:
 
-`actor_network`, `timeline`, `quant_metrics`, `forecast_revisions`,
-`market_probabilities`, `source_quality`.
+`actor_network`, `timeline`, `quant_metrics`, `metric_trajectories`, `forecast_revisions`,
+`market_probabilities`, `source_quality` (diagnostic-only, off by default — see §4).
 
 For every manifest row verify:
 
 - `path` exists and is the preferred PNG or HTML deliverable;
 - `html_path` exists when an interactive twin is declared;
 - `source_data` names the real producer artifact;
-- the chart has at least two comparable rows (three vintages for revisions);
+- the chart has at least two comparable rows (a trajectory family needs >=3
+  distinct years; revisions need three vintages);
 - labels, source/as-of hover, and observed-versus-forecast encoding are legible;
 - standalone HTML has a meaningful browser title, embedded favicon, and no
   runtime dependency on the parent site;

@@ -17,6 +17,7 @@ import re
 import logging
 import threading
 import contextvars
+from contextlib import contextmanager
 from typing import Dict, Any, List, Optional, Callable, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -489,6 +490,10 @@ class ReportSection:
     # 规划阶段产出的章节内容描述：传给章节撰写 prompt，让写作贴合大纲意图
     # （此前规划 LLM 生成了 description 却被解析丢弃，撰写时只见裸标题）。
     description: str = ""
+    # LOOP-015: 大纲兜底补齐（padding）产出的章节标记——章节生成路径据此把有效工具调用
+    # 下限降为 0（凑数章节直接综合已注入材料成文，不再烧满检索循环，见
+    # _effective_min_tool_calls）。不进 to_dict：序列化契约不变，恢复后的章节按普通章节处理。
+    padded: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -734,6 +739,18 @@ PLAN_USER_PROMPT_TEMPLATE = """\
 
 【再次提醒】报告章节数量：最少6个，最多14个；每章都是一篇深入详实的长篇分析，全面覆盖核心预测发现的不同维度。"""
 
+# R2-DETAIL-2 / LOOP-015: 预测优先的结构强制指令（require_forecast_structure=True 时追加）。
+# 此前强制「预测框架与方法」+「校准与信心」两节纯方法学章节——每节都烧满一轮 4-12 次的
+# 检索循环却不承载新预测内容；现合并为一节紧凑的「预测总表与校准」（情景/概率总表 + 校准说明）。
+FORECAST_STRUCTURE_MANDATE = (
+    "\n\n**结构强制要求（预测优先）**：本报告以上述预测骨架为核心，章节须围绕预测组织。"
+    "大纲必须显式覆盖以下两类章节："
+    "(1) 围绕各核心情景的「逐情景预测」章节，逐一论证其概率、关键驱动与判定/证伪标准；"
+    "(2) 一节紧凑的「预测总表与校准」——用情景/概率总表汇总各情景定价，并附校准说明："
+    "概率来源与研究证据基础、不确定性与置信区间，以及与外部证据、基率或预测市场的分歧。"
+    "其余章节可据预测发现自由设计，但上述两类必须被覆盖（标题可自拟，语义需对应）。"
+)
+
 # ── 章节生成 prompt ──
 
 SECTION_SYSTEM_PROMPT_TEMPLATE = """\
@@ -745,80 +762,42 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 
 当前要撰写的章节: {section_title}
 
-═══════════════════════════════════════════════════════════════
 【核心理念】
-═══════════════════════════════════════════════════════════════
-
-你正在撰写一份专业预测报告的章节。**研究材料**是事实证据来源；内部计算与情景分析
-只能帮助你形成预测，绝不是可引用的事实或报告叙事对象。报告的主语永远是现实世界的
-行为者与结果，读者不应看到任何内部方法学机制。
-
-你的任务是：
-- 揭示在设定条件下，未来最可能发生什么，以及为什么
-- 预测现实世界中各类行为者（企业、监管方、人群等）将如何反应和行动
-- 发现值得关注的未来趋势、风险和机会
-
-❌ 不要写成对现实世界现状的泛泛分析，更不要叙述内部推演过程
-✅ 要聚焦于"未来会怎样"——结构化预测给出判断，研究材料提供可引用证据
-
+**研究材料**是唯一可引用的事实证据来源；内部计算与情景分析只能帮助你形成预测判断，
+绝不是可引用的事实或报告叙事对象。报告的主语永远是现实世界的行为者与结果：揭示在
+设定条件下未来最可能发生什么、为什么，各类行为者（企业、监管方、人群等）将如何反应
+和行动，以及值得关注的未来趋势、风险和机会。❌ 不要写成对现状的泛泛分析，也不要叙述
+内部推演过程——读者不应看到任何内部方法学机制。
 【硬性禁令】章节标题与正文不得出现以下方法学词汇：
 模拟、Agent/智能体、轮次、动作次数、发帖/评论/点赞/关注、共识形成、派系聚类、
 因果图、图谱、simulation、agents、rounds、action counts、harness、agent clusters、
 simulated environment、world-state outputs、simulation-derived
 
-═══════════════════════════════════════════════════════════════
-【最重要的规则 - 必须遵守】
-═══════════════════════════════════════════════════════════════
+【证据归属与反捏造纪律（最高优先级）】
+1. 所有事实内容必须来自工具检索到的研究材料，禁止使用你自己的知识来编写报告内容
+2. 内部计算、角色输出和情景分析一律综合为作者的预测推理；不得引用、署名、拟人化，
+   不得出现「专家小组」「scenario panel」「模型中的某机构认为」等方法学归因；
+   ❌ 严禁『模拟代理人』『Simulation Agent』『Deduction/Reasoning』式直接引语，
+   严禁把内部观点伪装成真实人物、采访、分析师或媒体的话
+3. 真实世界的事实、数据和外部观点只能来自研究材料，并在**具体支持的句子或表格行末**
+   标注来源索引中的裸 [S12]；编号照抄索引，严禁自创或自动替换。一条来源只可支持其
+   title/supports/excerpt 明示的事实，不能因主题相近就把同一 [S#] 反复套到不同论断；
+   没有精确证据时保留无引文的预测判断并明确不确定性
+4. ❌ 严禁编造研究材料中不存在的数字、引文、来源、URL、日期或事件。每个**承重数字**：
+   要么在研究材料的明确证据片段中找到并标注 [S#]，要么属于系统提供的结构化预测概率并
+   称为「本报告估计」——绝不把估计写成已发生事实。证据不足时，只能基于研究证据和基率
+   推理并扩大不确定性、如实说明信息缺口；绝不用流畅叙事填补证据空白，也不得在成稿中
+   讨论内部信号质量
+5. 【直接引语】只有研究材料中可逐字验证的真实引语才可使用 `>` 格式：引语独立成段，
+   并在同一引语末尾标注 [S#]；不能逐字验证时改写为普通转述
+6. 【语言一致性】模拟需求和材料原文是中文时，报告必须全部用中文撰写；引用工具返回的
+   英文或中英混杂内容时，先译为流畅自然的中文再写入（正文与引用块 > 同样适用）
 
-1. 【必须调用工具检索证据】
-   - 所有事实内容必须来自工具检索到的研究材料；内部分析只用于形成预测判断
-   - 禁止使用你自己的知识来编写报告内容
-   - 每个章节至少调用{min_tool_calls}次工具（最多{max_tool_calls}次）获取证据
-
-2. 【证据归属——内部分析不可伪装成信源】
-   - 内部计算、角色输出和情景分析一律综合为作者的预测推理；不得引用、署名、拟人化，
-     也不得出现“专家小组”“scenario panel”“模型中的某机构认为”等方法学归因
-   - ❌ 禁止『模拟代理人』『Simulation Agent』『Deduction/Reasoning』及任何直接引语
-   - ❌ 严禁把内部观点伪装成真实人物、采访、分析师或媒体的话
-   - 真实世界的事实、数据和外部观点只能来自研究材料，并在**具体支持的句子或表格行末**
-     标注来源索引中的裸 [S12]；照抄编号，严禁自创或自动替换编号
-   - 一条来源只可支持其 title/supports/excerpt 明示的事实；不能因为主题相近就把同一 [S#]
-     反复套到不同论断。若没有精确证据，保留无引文的预测判断并明确不确定性
-
-3. 【语言一致性 - 引用内容必须翻译为报告语言】
-   - 工具返回的内容可能包含英文或中英文混杂的表述
-   - 如果模拟需求和材料原文是中文的，报告必须全部使用中文撰写
-   - 当你引用工具返回的英文或中英混杂内容时，必须将其翻译为流畅的中文后再写入报告
-   - 翻译时保持原意不变，确保表述自然通顺
-   - 这一规则同时适用于正文和引用块（> 格式）中的内容
-
-4. 【忠实呈现 —— 反捏造纪律（最高优先级）】
-   - 报告内容必须反映预测判断与研究材料，且“模型估计”和“外部事实”来源分明
-   - ❌ 严禁编造研究材料中不存在的数字、引文、来源、URL、日期或事件
-   - 每个**承重数字**：要么在研究材料的明确证据片段中找到并标注 [S12]，要么属于
-     系统提供的结构化预测概率并称为“本报告估计”；绝不把估计写成已发生事实
-   - 内部信号不足时，只能基于研究证据和基率推理并扩大不确定性；不得在成稿中讨论内部信号质量
-   - 信息不足时如实说明，绝不用流畅叙事填补证据空白
-
-5. 【写作质量 —— 拒绝「通用 LLM 腔」(评审一眼判死的就是这个)】
-   - 不要重复前文章节已说过的告诫/结论；读 previous_content，本章必须推进一个**新论点**
-   - 每个承重段落给出**机制**（A 导致 B、B 又迫使 C），而非笼统断言或形容词堆砌
-   - 至少呈现一处**真实分歧**：steelman 一个相反观点再回应它；禁止「众口一词」式叙述
-   - 控制破折号/「不仅…而且」「值得注意的是」等填充套话；用具体数字与实例代替修辞
-   - 允许自然的散文流，不必每段都套**粗体小标题**；像一个有观点的人类分析师那样写
-
-═══════════════════════════════════════════════════════════════
-【⚠️ 格式规范 - 极其重要！】
-═══════════════════════════════════════════════════════════════
-
-【一个章节 = 最小内容单位；用 ### 三级小标题组织内部结构】
-- 每个章节是报告的最小分块单位；章节主标题（## 级）由系统自动添加，你只需撰写正文
-- ❌ 禁止在章节内使用一级/二级标题（# 或 ##）——那是报告主标题/章节标题的层级，会破坏结构
-- ❌ 禁止在内容开头重复本章标题
-- ✅ **鼓励**在章节内用 2-4 个「### 三级小标题」把长正文切成清晰的子小节（提升可读性与结构密度）
-- ✅ 也可辅以**粗体**、段落分隔、引用、列表；但优先用 ### 组织主要子小节
-- ❌ 不要用 #### 及更深层级（四级及以下），保持 ### 单层子小节纪律
-
+【格式规范】
+- 章节主标题（## 级）由系统自动添加，你只写正文：❌ 禁止使用 # 或 ##（报告主标题/章节
+  标题层级），❌ 不要用 #### 及更深层级，❌ 禁止在内容开头重复本章标题
+- ✅ 用 2-4 个「### 三级小标题」把长正文切成清晰的子小节（每个子小节围绕一个论点），
+  辅以**粗体**、列表（-或1.2.3.）、引用块与空行分段
 【正确示例】
 ```
 本章节分析了事件的舆论传播态势。现有研究证据显示...
@@ -827,122 +806,49 @@ simulated environment、world-state outputs、simulation-derived
 
 微博作为舆情的第一现场，承担了信息首发的核心功能：
 
-> "微博贡献了68%的首发声量..."
+> "微博贡献了68%的首发声量..." [S12]
 
 ### 情绪放大阶段
 
-抖音平台进一步放大了事件影响力：
-
-- 视觉冲击力强
-- 情绪共鸣度高
+抖音平台进一步放大了事件影响力，视觉冲击力强、情绪共鸣度高。
 ```
 
-【错误示例】
-```
-## 执行摘要          ← 错误！## 是章节标题层级，不要在正文里用
-# 一、首发阶段        ← 错误！# 是报告主标题层级
-#### 1.1 详细分析     ← 错误！不要用 #### 及更深层级，最多到 ###
+【篇幅与结构】
+- 正文长度不少于 {section_floor_chars} 字，目标 {section_target_lo}–{section_target_hi} 字
+  （不含引用块）；❌ 严禁写成几百字的提纲式摘要或泛泛而谈
+- 层层展开：先给出整体判断，再分多个角度深入论证，每个角度都要有具体证据（研究材料
+  [S#]、预测市场）支撑并与结构化预测概率保持一致；充分展开因果链条、二阶效应、
+  不同人群的分化反应、潜在转折点
+- 【写作质量】仔细阅读已完成的章节内容，本章必须推进一个**新论点**，不重复前文的
+  告诫/结论与相同信息，并保持全报告逻辑连贯；每个承重段落给出**机制**（A 导致 B、
+  B 又迫使 C）而非形容词堆砌；至少 steelman 一个相反观点再回应它，禁止「众口一词」；
+  控制破折号与「不仅…而且」「值得注意的是」等填充套话，用具体数字与实例代替修辞，
+  像一个有观点的人类分析师那样写自然散文
 
-本章节分析了...
-```
-
-═══════════════════════════════════════════════════════════════
-【可用检索工具】（每章节调用{min_tool_calls}-{max_tool_calls}次）
-═══════════════════════════════════════════════════════════════
-
+【可用检索工具】（每章节调用 {min_tool_calls}-{max_tool_calls} 次获取证据）
 {tools_description}
 
-【工具使用建议 - 请混合使用不同工具，不要只用一种】
+【工具使用建议】请混合使用不同工具，不要只用一种。
 {tool_usage_hints}
 
-═══════════════════════════════════════════════════════════════
-【工作流程】
-═══════════════════════════════════════════════════════════════
-
-每次回复你只能做以下两件事之一（不可同时做）：
-
-选项A - 调用工具：
-输出你的思考，然后用以下格式调用一个工具：
+【工作流程】每次回复只能做以下两件事之一（不可同时做，每次回复最多调用一个工具）：
+选项A - 调用工具：输出你的思考，然后用以下格式调用一个工具；工具结果（Observation）
+由系统执行注入，禁止自己编造：
 <tool_call>
 {{"name": "工具名称", "parameters": {{"参数名": "参数值"}}}}
 </tool_call>
-系统会执行工具并把结果返回给你。你不需要也不能自己编写工具返回结果。
-
-选项B - 输出最终内容：
-当你已通过工具获取了足够信息，以 "Final Answer:" 开头输出章节内容。
-
-⚠️ 严格禁止：
-- 禁止在一次回复中同时包含工具调用和 Final Answer
-- 禁止自己编造工具返回结果（Observation），所有工具结果由系统注入
-- 每次回复最多调用一个工具
-
-═══════════════════════════════════════════════════════════════
-【章节内容要求】
-═══════════════════════════════════════════════════════════════
-
-0. 【篇幅要求 - 极其重要】本章节必须是一篇深入、详实、丰富的长篇分析：
-   - 正文长度不少于 {section_floor_chars} 字，目标 {section_target_lo}–{section_target_hi} 字（不含引用块）
-   - 用 2-4 个「### 三级小标题」把这篇长正文切成清晰的子小节，每个子小节围绕一个论点展开
-   - 必须层层展开：先给出整体判断，再分多个角度深入论证，每个角度都要有
-     具体证据（研究材料 [S#]、预测市场）支撑，并与结构化预测概率保持一致
-   - 充分展开因果链条、二阶效应、不同人群的分化反应、潜在转折点
-   - ❌ 严禁写成几百字的提纲式摘要或泛泛而谈——那是不合格的章节
-   - ✅ 像撰写一篇严肃深度报告的章节那样，写得充实、有洞察、有层次
-1. 内容必须基于工具检索到的证据（研究材料 [S#]、预测市场）和系统提供的结构化预测；
-   内部分析只能综合成现实世界判断，不得在成稿中出现或被引用
-2. 使用Markdown格式：
-   - ✅ 用「### 三级小标题」组织 2-4 个子小节（章节内部结构）
-   - 使用 **粗体文字** 标记子小节内的重点
-   - 使用列表（-或1.2.3.）组织要点
-   - 使用空行分隔不同段落
-   - ❌ 禁止使用 # 或 ##（报告主标题/章节标题层级），也不要用 #### 及更深层级
-3. 【直接引语格式规范】
-   只有研究材料中可逐字验证的真实引语才可使用 `>`，并必须在同一引语末尾标注 [S#]。
-   不能逐字验证时改写为普通转述；内部分析永远不得用直接引语。引语须独立成段：
-
-   ✅ 正确格式：
-   ```
-   校方的回应被认为缺乏实质内容。
-
-   > "校方的应对模式在瞬息万变的社交媒体环境中显得僵化和迟缓。" [S12]
-
-   这一评价反映了公众的普遍不满。
-   ```
-
-   ❌ 错误格式：
-   ```
-   校方的回应被认为缺乏实质内容。> "校方的应对模式..." 这一评价反映了...
-   ```
-4. 保持与其他章节的逻辑连贯性
-5. 【避免重复】仔细阅读下方已完成的章节内容，不要重复描述相同的信息
-6. 【再次强调】用 2-4 个「### 三级小标题」组织本章子小节；禁止 # 或 ##，也不要 #### 及更深层级"""
+选项B - 输出最终内容：信息充分后，以 "Final Answer:" 开头输出章节正文"""
 
 SECTION_USER_PROMPT_TEMPLATE = """\
-已完成的章节内容（请仔细阅读，避免重复）：
+已完成的章节内容：
 {previous_content}
 
-═══════════════════════════════════════════════════════════════
 【当前任务】撰写章节: {section_title}
-═══════════════════════════════════════════════════════════════
 
-【重要提醒】
-1. 仔细阅读上方已完成的章节，避免重复相同的内容！
-2. 开始前必须先调用工具获取证据
-3. 请混合使用不同工具，不要只用一种
-4. 报告内容必须来自检索结果，不要使用自己的知识
-5. 报告主语是现实世界的行为者与结果——正文与小标题不得出现
-   模拟/Agent/智能体/轮次/动作次数/simulation 等方法学词汇
-
-【⚠️ 格式警告 - 必须遵守】
-- ✅ 用 2-4 个「### 三级小标题」组织本章子小节（章节内部结构）
-- ❌ 不要用 # 或 ##（报告主标题/章节标题层级），也不要用 #### 及更深层级
-- ❌ 不要写"{section_title}"作为开头（章节标题由系统自动添加）
-
-请开始：
-1. 首先思考（Thought）这个章节需要什么信息
-2. 然后调用工具（Action）获取证据（建议 {min_tool_calls}-{max_tool_calls} 次，覆盖多个角度）
-3. 收集足够信息后输出 Final Answer（正文用 ### 三级小标题分节，不要用 # 或 ##）
-4. 【篇幅】Final Answer 必须充实详尽，不少于 {section_floor_chars} 字、目标 {section_target_lo}–{section_target_hi} 字，层层深入、证据扎实，不要写成简短摘要"""
+系统提示中的证据归属、格式与篇幅纪律全部适用。请开始：先思考（Thought）本章需要
+什么信息，再调用工具（Action）获取覆盖多个角度的证据（{min_tool_calls}-{max_tool_calls} 次），
+最后输出 Final Answer——不少于 {section_floor_chars} 字、目标 \
+{section_target_lo}–{section_target_hi} 字的完整章节正文。"""
 
 # ── ReACT 循环内消息模板 ──
 
@@ -974,7 +880,11 @@ REACT_TOOL_LIMIT_MSG = (
     '请立即基于已获取的信息，以 "Final Answer:" 开头输出章节内容。'
 )
 
-REACT_UNUSED_TOOLS_HINT = "\n💡 你还没有使用过: {unused_list}，建议尝试不同工具获取多角度信息"
+# LOOP-015: 从「凑工具多样性」改为相关性判据——只有承重论断仍缺证据时才值得再烧一次检索。
+REACT_UNUSED_TOOLS_HINT = (
+    "\n💡 仅当仍有承重论断缺乏证据支撑时才再调用一次工具"
+    "（可补充视角的未用工具: {unused_list}）；证据已充分则直接输出 Final Answer"
+)
 
 REACT_FORCE_FINAL_MSG = "已达到工具调用限制，请直接输出 Final Answer: 并生成章节内容。"
 
@@ -1068,12 +978,11 @@ def derive_report_shape(
 _OUTCOME_ACTOR_LINE_RE = re.compile(r"^-\s*(.+?)\(id=\d+\):\s*共\s*(\d+)\s*次动作")
 
 
-def salience_tiers_from_outcomes(outcomes_text: str) -> str:
-    """WAVE9：把 simulation_outcomes 的原始动作计数**确定性转写**为定性「议程设置力分层」。
+def _parse_outcome_actors(outcomes_text: str) -> List[Tuple[str, int]]:
+    """WAVE9/LOOP-015：从 simulation_outcomes 文本解析 (行为者名, 动作计数) 列表。
 
-    动作次数/轮次等机制数字是方法学细节，直接注入章节提示词会诱使模型把它们写进正文
-    （'TSMC 以 48 次动作居首' 型泄漏）。此处按相对活跃度分三档转写为可直接引用的定性
-    结论；解析不到至少 2 个行为者时返回 ""（调用方回退原始文本）。纯函数，便于单测。"""
+    从 salience_tiers_from_outcomes 抽出：信号包组装还要用同一解析判断「计数持平」
+    的无信号场景（见 _actor_counts_flat），保证两侧判定同源。纯函数，解析失败行跳过。"""
     actors: List[Tuple[str, int]] = []
     for ln in (outcomes_text or "").splitlines():
         m = _OUTCOME_ACTOR_LINE_RE.match(ln.strip())
@@ -1082,10 +991,41 @@ def salience_tiers_from_outcomes(outcomes_text: str) -> str:
                 actors.append((m.group(1).strip(), int(m.group(2))))
             except ValueError:
                 continue
+    return actors
+
+
+def _actor_counts_flat(actors: List[Tuple[str, int]]) -> bool:
+    """LOOP-015：判断动作计数是否「近乎持平」（max/min < 1.5）。
+
+    配置化节奏跑出来的计数常常全员相近（实测 12 个行为者全落在 52-63），此时按 0.6/0.25
+    阈值分层会把所有人塞进第一梯队——一个注入每个章节 ~4KB 的假层级信号。持平 ⇒ 分层
+    无信息量，应整体自抑制。min 为 0 时比值无意义，按有差异处理（tier3 仍有区分度）。纯函数。"""
+    counts = [c for _, c in actors]
+    if len(counts) < 2:
+        return False
+    lo, top = min(counts), max(counts)
+    return lo > 0 and top / lo < 1.5
+
+
+def salience_tiers_from_outcomes(outcomes_text: str) -> str:
+    """WAVE9：把 simulation_outcomes 的原始动作计数**确定性转写**为定性「议程设置力分层」。
+
+    动作次数/轮次等机制数字是方法学细节，直接注入章节提示词会诱使模型把它们写进正文
+    （'TSMC 以 48 次动作居首' 型泄漏）。此处按相对活跃度分三档转写为可直接引用的定性
+    结论；解析不到至少 2 个行为者时返回 ""（调用方回退原始文本）。LOOP-015：计数近乎
+    持平（max/min < 1.5）时同样返回 ""——分层退化为「全员第一梯队」的假层级，无信号
+    （调用方据 _actor_counts_flat 区分该场景并整块自抑制，绝不回退机制数字）。
+    纯函数，便于单测。"""
+    actors = _parse_outcome_actors(outcomes_text)
     if len(actors) < 2:
         return ""
     top = max(c for _, c in actors)
     if top <= 0:
+        return ""
+    if _actor_counts_flat(actors):
+        logger.debug(
+            f"salience_tiers: 动作计数近乎持平（min={min(c for _, c in actors)}, "
+            f"max={top}，{len(actors)} 个行为者），分层无信号，自抑制")
         return ""
     tier1 = [n for n, c in actors if c >= 0.6 * top]
     tier2 = [n for n, c in actors if 0.25 * top <= c < 0.6 * top]
@@ -1488,10 +1428,15 @@ class ReportAgent:
 
     # 大纲章节数契约（RQ-1：展开默认 6-14 节；PLAN_SYSTEM_PROMPT 同步要求 6-14 节）。此处为
     # 「无/大 page_budget」时的默认钳制边界；小 page_budget 报告经 _report_shape() 收敛回 5-8。
-    # 成功路径与 except 兜底均以 _report_shape() 的 min/max 钳制，确保任何路径产出的大纲都落在区间内。
+    # LOOP-015：min_sections 仅作为提示词的数量要求；成功解析的大纲改为「连贯性优先」——
+    # >= OUTLINE_PAD_FLOOR_SECTIONS 节即接受，不再用通用兜底标题硬凑（max 仍截断，except 兜底不变）。
     OUTLINE_MIN_SECTIONS = 6
     OUTLINE_MAX_SECTIONS = 14
-    # 兜底章节标题：数量需 >= 任意形状的 min_sections（展开 6），padding 时按需取用去重。
+    # LOOP-015：padding 触发线——规划器产出 >=4 节连贯大纲即接受；仅 <4 节时补齐到 4，
+    # 且补齐章节打 padded 标记（有效工具调用下限 0，见 _effective_min_tool_calls）。
+    OUTLINE_PAD_FLOOR_SECTIONS = 4
+    # 兜底章节标题：数量需 >= 任意形状的 min_sections（展开 6）——except 全量兜底大纲取用；
+    # padding 时按需取用去重。
     _FALLBACK_SECTION_TITLES = [
         "预测场景与核心发现",
         "关键行为者与系统动力",
@@ -2272,22 +2217,48 @@ class ReportAgent:
             getattr(self, "_charts_block", ""),
         ) if p]
         # W9-8: 章节定向证据块——标题命中关键词时追加争议表 / 时间线（块为空时自动跳过）。
-        title_l = (section_title or "").lower()
-        if title_l:
-            if any(k in title_l for k in (
-                    "风险", "不确定", "争议", "分歧", "risk", "uncertaint", "contested", "disagree")):
-                blk = getattr(self, "_contested_table_block", "")
-                if blk:
-                    prefix_parts.append(blk)
-            if any(k in title_l for k in (
-                    "时间线", "背景", "沿革", "演进", "历史", "timeline", "background",
-                    "chronolog", "history", "context")):
-                blk = getattr(self, "_chronology_block", "")
-                if blk:
-                    prefix_parts.append(blk)
+        prefix_parts.extend(self._section_evidence_blocks(section_title))
         if not prefix_parts:
             return prompt
         return "\n\n".join(prefix_parts) + "\n\n" + prompt
+
+    def _section_evidence_blocks(self, section_title: str) -> List[str]:
+        """W9-8 / LOOP-015: 章节定向证据块——标题命中关键词时返回争议性论断表 / 紧凑时间线。
+
+        从 _prepend_research_background 抽出为独立方法：注入路径用它拼提示词前缀，章节生成
+        路径用同一判据识别「提示词已自带匹配证据」的章节并下调有效工具调用下限
+        （见 _effective_min_tool_calls），两侧永不漂移。未传标题/未命中/块为空 → []
+        （与历史注入跳过语义逐字节一致）。"""
+        blocks: List[str] = []
+        title_l = (section_title or "").lower()
+        if not title_l:
+            return blocks
+        if any(k in title_l for k in (
+                "风险", "不确定", "争议", "分歧", "risk", "uncertaint", "contested", "disagree")):
+            blk = getattr(self, "_contested_table_block", "")
+            if blk:
+                blocks.append(blk)
+        if any(k in title_l for k in (
+                "时间线", "背景", "沿革", "演进", "历史", "timeline", "background",
+                "chronolog", "history", "context")):
+            blk = getattr(self, "_chronology_block", "")
+            if blk:
+                blocks.append(blk)
+        return blocks
+
+    def _effective_min_tool_calls(self, section: "ReportSection") -> int:
+        """LOOP-015: 章节的**有效**工具调用下限（token 成本护栏，供两条 section-gen 路径复用）。
+
+        - 大纲兜底补齐的 padding 章节（section.padded）→ 0：凑数章节直接综合提示词内已注入
+          的背景/信号/骨架材料成文，不再烧满一轮 4-12 次的检索循环；
+        - 标题命中定向证据块（争议表/时间线已钉入提示词，见 _section_evidence_blocks）→ 至多 1：
+          提示词自带匹配证据，强制凑满配置下限只会产出冗余回包；
+        - 其余章节维持配置下限 REPORT_AGENT_MIN_TOOL_CALLS（行为与历史一致）。"""
+        if getattr(section, "padded", False):
+            return 0
+        if self._section_evidence_blocks(getattr(section, "title", "") or ""):
+            return min(1, self.MIN_TOOL_CALLS_PER_SECTION)
+        return self.MIN_TOOL_CALLS_PER_SECTION
 
     def _prior_section_char_budget(self, floor_chars: int = 8000, n_items: int = 1) -> int:
         """RQ-7 / I-6-4：前序章节上下文切片的预算化字符上限。
@@ -2352,7 +2323,13 @@ class ReportAgent:
             if outcomes and not outcomes.strip().startswith("（"):
                 if getattr(Config, "REPORT_SIGNAL_PACK_QUALITATIVE", True):
                     tiers = salience_tiers_from_outcomes(outcomes)
-                    parts.append(tiers if tiers else outcomes[:3600])
+                    if tiers:
+                        parts.append(tiers)
+                    elif not _actor_counts_flat(_parse_outcome_actors(outcomes)):
+                        # 转写失败（解析不出行为者）才回退原始文本（历史行为）；LOOP-015：
+                        # 计数持平判空 = 无信号，整块自抑制——绝不回退原始动作计数，
+                        # 那正是 WAVE9 定性转写要挡住的机制数字泄漏。
+                        parts.append(outcomes[:3600])
                 else:
                     parts.append(outcomes[:3600])
         except Exception as e:  # noqa: BLE001 — 信号包为可选增强，失败仅告警不影响主流程
@@ -4251,6 +4228,104 @@ class ReportAgent:
             "passed": not unsupported and not overused,
         }
 
+    def _repair_overused_citations(
+        self, md: str, index_map: Optional[Dict[str, Any]] = None
+    ) -> Tuple[str, int]:
+        """SESSIONB-2 引用集中度修复：把单一来源的正文引用记号裁到配置上限之内。
+
+        终审 _final_audit_integrity_issues 把「引用来源过度集中」（单来源 >
+        REPORT_MAX_CITATIONS_PER_SOURCE 次）判为硬缺陷，但修复链此前没有任何一环
+        削减集中度——_stabilize_publish_markdown 可以收敛出一份「稳定」成稿、随后被
+        只读终审确定性否决，整份报告在全部章节成本烧完后被丢弃。此处按与
+        _audit_semantic_citations 完全同源的扫描纪律（围栏内跳过、表头/分隔行跳过、
+        References 附录块跳过、仅统计能解析到来源索引的 [S#] 记号）做确定性裁剪。
+
+        防振荡关键：_repair_final_quantitative_grounding 会给覆盖率不足时的**含数字**
+        无记号论断回填最佳来源记号——若从数字行摘记号，下一轮定量修复可能原样补回，
+        定点循环永不收敛。故数字行上的记号一律**钉住不动**，只从非数字行按首现顺序
+        保留 (cap - 钉住数) 次、剥离其后的富余记号（论断文字原样保留，只摘记号，与
+        悬空修复同样的诚实动作）。钉住数已超 cap 时无法确定性修复（与修复前一样交由
+        终审否决，绝不为凑数破坏定量接地）。返回 (新 markdown, 剥离的记号数)。"""
+        from .forecast_extractor import (
+            _NUMBER_RE as _number_re,
+            is_markdown_table_delimiter,
+            is_markdown_table_header,
+            markdown_fence_transition,
+        )
+        imap = index_map or self._citation_index_or_fallback()
+        try:
+            cap = max(1, int(getattr(Config, "REPORT_MAX_CITATIONS_PER_SOURCE", 20) or 20))
+        except (TypeError, ValueError):
+            cap = 20
+        marker_re = re.compile(r"[\[【]\s*(S\d+)\s*[\]】]", re.I)
+        lines = str(md or "").split("\n")
+        # 第一遍：按审计同源纪律采集可计数记号出现位置 (行号, span, tag, 是否数字行)。
+        occurrences: List[Tuple[int, Tuple[int, int], str, bool]] = []
+        fence_state = None
+        in_refs = False
+        for line_index, line in enumerate(lines):
+            was_in_fence = fence_state is not None
+            fence_state, is_fence_line = markdown_fence_transition(line, fence_state)
+            if is_fence_line or was_in_fence:
+                continue
+            heading = line.strip()
+            if heading.startswith("## "):
+                # 与终审 body/附录切分同源：附录条目自带 [S#]，绝不能被当作正文集中度裁剪。
+                in_refs = heading in _REFS_HEADINGS
+            if (in_refs
+                    or is_markdown_table_header(lines, line_index)
+                    or is_markdown_table_delimiter(line)):
+                continue
+            # 记号剥掉后再判数字行：记号本身的 S<n> 编号不能把纯文字行误判成数字行。
+            bare = marker_re.sub(" ", line)
+            numeric_line = bool(_number_re.search(bare))
+            for match in marker_re.finditer(line):
+                tag = match.group(1).upper()
+                if not isinstance(imap.get(tag), dict):
+                    continue   # 悬空/不可解析记号归悬空修复管，此处不动
+                occurrences.append((line_index, match.span(), tag, numeric_line))
+        counts: Dict[str, int] = {}
+        for _li, _sp, tag, _num in occurrences:
+            counts[tag] = counts.get(tag, 0) + 1
+        over_tags = {tag for tag, count in counts.items() if count > cap}
+        if not over_tags:
+            return md, 0
+        # 第二遍：决定剥离集合——数字行记号全部钉住；非数字行按首现顺序保留剩余预算。
+        strip_spans: Dict[int, List[Tuple[int, int]]] = {}
+        stripped = 0
+        for tag in over_tags:
+            rows = [row for row in occurrences if row[2] == tag]
+            pinned = sum(1 for row in rows if row[3])
+            budget = cap - pinned
+            if budget < 0:
+                logger.warning(
+                    f"引用集中度修复：来源 [{tag}] 在数字行上已被引用 {pinned} 次（> 上限 "
+                    f"{cap}），无法在不破坏定量接地的前提下确定性裁剪，保留原样交终审判定")
+                budget = 0   # 非数字行富余仍尽量剥离（best-effort 降低集中度）
+            kept_plain = 0
+            for line_index, span, _tag, numeric_line in rows:
+                if numeric_line:
+                    continue
+                if kept_plain < budget:
+                    kept_plain += 1
+                    continue
+                strip_spans.setdefault(line_index, []).append(span)
+                stripped += 1
+        if not stripped:
+            return md, 0
+        for line_index, spans in strip_spans.items():
+            line = lines[line_index]
+            for start, end in sorted(spans, reverse=True):
+                line = line[:start] + line[end:]
+            lines[line_index] = re.sub(
+                r"[ \t]{2,}", " ",
+                re.sub(r"\s+([，。,.;；、])", r"\1", line),
+            ).rstrip()
+        logger.info(
+            f"引用集中度修复：剥离 {stripped} 个非数字行富余记号（上限 {cap}/来源；超限来源 "
+            f"{sorted(((t, counts[t]) for t in over_tags), key=lambda kv: -kv[1])[:4]}）")
+        return "\n".join(lines), stripped
+
     def _repair_dangling_citations(self, md: str,
                                    dangling: List[str]) -> Tuple[str, Dict[str, int]]:
         """WAVE10 悬空引用修复：正文记号在注入索引里解析不到（[S246] 型幻觉编号）时，
@@ -4812,12 +4887,25 @@ class ReportAgent:
     def _translate_impurity_segments(
         self, segments: List[str], language: str
     ) -> List[Tuple[str, str]]:
-        """Translate impurity segments in bounded batches.
+        """Translate impurity segments in bounded batches with byte-exact token safety.
 
         The former single 60-item / 4096-token JSON call routinely returned a
         truncated mapping, leaving the tail untranslated.  Batches are isolated:
         one malformed response loses only that batch, and successful batches still
         feed the final replacement pass.
+
+        NUMERIC / CITATION INTEGRITY — this contamination-repair pass re-translates
+        residual source-language prose, and MiniMax-class models routinely drift the
+        numbers inside such prose (drop one, introduce a stray decimal, or render a
+        figure as a CJK numeral / unit word).  That drift is exactly the
+        "translation numeric-token multiset differs from primary" audit failure, so
+        every immutable token (numbers, percentages, [S#] citations, inline code,
+        URLs, comments) is placeholder-protected BEFORE the model sees the segment and
+        restored byte-for-byte AFTER.  A restored candidate is accepted only when it
+        preserves the source segment's number AND citation multiset exactly; any
+        candidate that dropped a placeholder or introduced a bare Arabic numeral is
+        discarded (the segment stays contaminated and is retried or fails closed,
+        never silently corrupting the numeric multiset).
         """
         if not segments:
             return []
@@ -4828,17 +4916,51 @@ class ReportAgent:
         except (TypeError, ValueError):
             batch_size = 20
         batch_size = max(5, min(30, batch_size))
+        # Protect immutable tokens per segment; the model only ever sees ⟦…⟧ opaque /
+        # self-describing placeholders in place of numbers, citations, code and URLs.
+        protected: List[Tuple[str, str, List[Tuple[str, str]]]] = []
+        for segment in segments:
+            hidden, seg_map = self._protect_translation_tokens(segment)
+            protected.append((segment, hidden, seg_map))
         mapping: List[Tuple[str, str]] = []
+
+        def _accepted_translation(
+            segment: str,
+            candidate: Any,
+            seg_map: List[Tuple[str, str]],
+        ) -> Optional[str]:
+            """Restore and validate one batch or single-fragment candidate."""
+            if not isinstance(candidate, str) or not candidate.strip():
+                return None
+            restored, issues = self._restore_translation_tokens(
+                candidate.strip(), seg_map
+            )
+            restored = restored.strip()
+            if not restored or restored == segment or issues:
+                return None
+            if self._translation_number_multiset(
+                restored
+            ) != self._translation_number_multiset(segment):
+                return None
+            if self._translation_marker_multiset(
+                restored
+            ) != self._translation_marker_multiset(segment):
+                return None
+            return restored
+
         sys_prompt = (
             f"You are a precise translator. Translate each numbered segment into {language}. "
-            "Preserve numbers, percentages, [S#] citation tags, and proper nouns verbatim. "
-            "Return ONLY a JSON object mapping each segment index (as a string) to its "
-            f'{language} translation, e.g. {{"1": "...", "2": "..."}}.'
+            "Tokens shaped ⟦P…⟧, ⟦X…⟧, or ⟦F…⟧ are immutable source bytes (numbers, "
+            "percentages, [S#] citations, code, URLs): copy every placeholder exactly once, "
+            "verbatim, and never translate, alter, split, reorder, or drop one. Do NOT add any "
+            "new Arabic numerals — all source numbers are already inside placeholders. Keep "
+            "proper nouns as-is. Return ONLY a JSON object mapping each segment index (as a "
+            f'string) to its {language} translation, e.g. {{"1": "...", "2": "..."}}.'
         )
-        for start in range(0, len(segments), batch_size):
-            batch = segments[start:start + batch_size]
+        for start in range(0, len(protected), batch_size):
+            batch = protected[start:start + batch_size]
             numbered = "\n".join(
-                f"{index}. {segment}" for index, segment in enumerate(batch, 1)
+                f"{index}. {hidden}" for index, (_seg, hidden, _m) in enumerate(batch, 1)
             )
             try:
                 parsed = self.llm.chat_json(
@@ -4857,12 +4979,50 @@ class ReportAgent:
                 continue
             if not isinstance(parsed, dict):
                 continue
-            for index, segment in enumerate(batch, 1):
-                translated = parsed.get(str(index)) or parsed.get(index)
-                if isinstance(translated, str):
-                    translated = translated.strip()
-                    if translated and translated != segment:
-                        mapping.append((segment, translated))
+            for index, (segment, _hidden, seg_map) in enumerate(batch, 1):
+                raw = parsed.get(str(index)) or parsed.get(index)
+                accepted = _accepted_translation(segment, raw, seg_map)
+                if accepted is not None:
+                    mapping.append((segment, accepted))
+
+        # Repeating the same temperature-zero JSON batch cannot recover a deterministic
+        # echo/truncation. Escalate only unresolved fragments through the module's proven
+        # prose-slot protocol, retaining the exact same token-integrity boundary above.
+        resolved_segments = {segment for segment, _translation in mapping}
+        for segment, hidden, seg_map in protected:
+            if segment in resolved_segments:
+                continue
+            raw = ""
+            try:
+                raw = self.llm.chat(
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "Translate this one Markdown prose fragment into "
+                                f"{language}. Preserve its Markdown punctuation. Copy every "
+                                "⟦…⟧ placeholder token exactly once, verbatim. Output ONLY "
+                                "the translated fragment. Do not add Arabic numerals, URLs, "
+                                "citations, code, or commentary. Keep proper nouns as-is."
+                            ),
+                        },
+                        {"role": "user", "content": hidden},
+                    ],
+                    temperature=0.0,
+                    max_tokens=max(512, min(4096, len(hidden) * 2 + 512)),
+                    tier="strong",
+                )
+            except Exception as exc:  # noqa: BLE001 — final bounded fragment attempt
+                logger.warning("语言纯度：单片段翻译调用失败（保留原文）: %s", exc)
+            candidate = str(raw or "").strip()
+            if candidate.startswith("```"):
+                candidate = re.sub(
+                    r"^```(?:markdown|md)?\s*", "", candidate, flags=re.I
+                )
+                candidate = re.sub(r"\s*```$", "", candidate).strip()
+            accepted = _accepted_translation(segment, candidate, seg_map)
+            if accepted is not None:
+                mapping.append((segment, accepted))
         # Longest first so a short phrase cannot split a longer one before it is replaced.
         mapping.sort(key=lambda item: len(item[0]), reverse=True)
         return mapping
@@ -5082,11 +5242,440 @@ class ReportAgent:
     # 译文数字完整性：提示词要求所有数字逐字节保留，因此不只校验百分比。
     # 边界避免从标识符中拆数；逗号千分位/小数/正负号/% 保持为一个 token。
     _NUMBER_INTEGRITY_RE = re.compile(
-        r"(?<![A-Za-z0-9_])[-+]?\d[\d,]*(?:\.\d+)?(?:\s*%)?"
+        r"(?<![A-Za-z0-9_])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)"
+        r"(?:\.\d+)?(?:\s*%)?"
+    )
+    _TRANSLATION_FENCE_RE = re.compile(
+        r"^(?P<marker>```|~~~)[^\n]*\n.*?^(?P=marker)[ \t]*$",
+        re.MULTILINE | re.DOTALL,
+    )
+    _TRANSLATION_INLINE_PROTECTED_RE = re.compile(
+        r"<!--.*?-->"
+        r"|`[^`\n]+`"
+        r"|(?<=\]\()[^)\s]+(?=\))"
+        r"|https?://[^\s<>()]+"
+        r"|[\[【]\s*S\d+(?:-[A-Za-z])?\s*[\]】]"
+        r"|(?<![A-Za-z0-9_])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)"
+        r"(?:\.\d+)?(?:\s*%)?",
+        re.IGNORECASE | re.DOTALL,
+    )
+    _TRANSLATION_ENCODED_PLACEHOLDER_RE = re.compile(
+        r"⟦P[A-Z]+:([A-Za-z0-9_-]+)⟧"
+    )
+    _TRANSLATION_SELF_DESCRIBING_RE = re.compile(
+        r"(?:[\[【]\s*S\d+(?:-[A-Za-z])?\s*[\]】])"
+        r"|(?:(?<![A-Za-z0-9_])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)"
+        r"(?:\.\d+)?(?:\s*%)?)",
+        re.IGNORECASE,
     )
 
+    @staticmethod
+    def _translation_placeholder_suffix(index: int) -> str:
+        """Return a digit-free base-26 identifier so placeholders add no numbers."""
+        value = max(0, int(index)) + 1
+        out = ""
+        while value:
+            value, remainder = divmod(value - 1, 26)
+            out = chr(65 + remainder) + out
+        return out
+
+    @classmethod
+    def _protect_translation_tokens(
+        cls, markdown: str
+    ) -> Tuple[str, List[Tuple[str, str]]]:
+        """Hide immutable bytes from the model and return their exact mapping.
+
+        Fenced blocks, comments, code and links use compact opaque IDs because
+        they can be large. Citations and numbers use short self-describing
+        base64url placeholders so deterministic fakes can exercise drift repair.
+        Keeping every placeholder short materially reduces copy errors and model
+        timeouts on evidence-dense tables.
+        """
+        import base64
+
+        mapping: List[Tuple[str, str]] = []
+
+        def _fence(match: "re.Match") -> str:
+            suffix = cls._translation_placeholder_suffix(len(mapping))
+            placeholder = f"⟦F{suffix}⟧"
+            mapping.append((placeholder, match.group(0)))
+            return placeholder
+
+        protected = cls._TRANSLATION_FENCE_RE.sub(_fence, markdown or "")
+
+        def _inline(match: "re.Match") -> str:
+            raw = match.group(0)
+            suffix = cls._translation_placeholder_suffix(len(mapping))
+            if cls._TRANSLATION_SELF_DESCRIBING_RE.fullmatch(raw):
+                encoded = base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+                encoded = encoded.rstrip("=")
+                placeholder = f"⟦P{suffix}:{encoded}⟧"
+            else:
+                placeholder = f"⟦X{suffix}⟧"
+            mapping.append((placeholder, raw))
+            return placeholder
+
+        protected = cls._TRANSLATION_INLINE_PROTECTED_RE.sub(_inline, protected)
+        return protected, mapping
+
+    @classmethod
+    def _decode_translation_placeholders(cls, text: str) -> str:
+        """Decode self-describing inline placeholders; opaque fences remain."""
+        import base64
+
+        def _decode(match: "re.Match") -> str:
+            encoded = match.group(1)
+            try:
+                padded = encoded + ("=" * (-len(encoded) % 4))
+                return base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+            except (ValueError, UnicodeDecodeError):
+                return match.group(0)
+
+        return cls._TRANSLATION_ENCODED_PLACEHOLDER_RE.sub(_decode, text or "")
+
+    @classmethod
+    def _restore_translation_tokens(
+        cls, candidate: str, mapping: List[Tuple[str, str]]
+    ) -> Tuple[str, List[str]]:
+        from collections import Counter, defaultdict
+
+        original = candidate or ""
+        restored = original
+        issues: List[str] = []
+        by_raw: Dict[str, List[str]] = defaultdict(list)
+        for placeholder, raw in mapping:
+            by_raw[raw].append(placeholder)
+
+        numeric_counts = Counter(cls._translation_number_multiset(original))
+        marker_counts = Counter(cls._translation_marker_multiset(original))
+        for raw, placeholders in by_raw.items():
+            normalized_number = cls._normalize_number_token(raw)
+            if cls._NUMBER_INTEGRITY_RE.fullmatch(raw):
+                raw_count = int(numeric_counts.get(normalized_number, 0))
+            else:
+                marker_match = re.fullmatch(
+                    r"[\[【]\s*(S\d+(?:-[A-Za-z])?)\s*[\]】]", raw, re.I
+                )
+                if marker_match:
+                    raw_count = int(marker_counts.get(marker_match.group(1).upper(), 0))
+                else:
+                    raw_count = original.count(raw)
+            represented = raw_count + sum(original.count(item) for item in placeholders)
+            expected = len(placeholders)
+            if represented < expected:
+                issues.append(f"missing:{placeholders[0]}")
+            elif represented > expected:
+                issues.append(f"duplicated:{placeholders[0]}")
+
+        for placeholder, raw in mapping:
+            count = restored.count(placeholder)
+            if count:
+                restored = restored.replace(placeholder, raw)
+        return restored, issues
+
+    @classmethod
+    def _split_translation_units(cls, markdown: str, max_chars: int = 4200) -> List[str]:
+        """Split a large H2 section at paragraph boundaries without losing text.
+
+        A single table or fenced block is never cut mid-block. This keeps model
+        calls bounded while preserving enough paragraph context for fluent prose.
+        Joining the returned units with two newlines reproduces the normalized
+        input exactly.
+        """
+        text = markdown or ""
+        if len(text) <= max_chars:
+            return [text]
+        # Protect complete fenced blocks *before* looking for paragraph breaks.
+        # A fence may legally contain blank lines; splitting first turns it into
+        # unmatched halves that the later token-protection pass cannot recognize.
+        fences: List[Tuple[str, str]] = []
+
+        def _hide_fence(match: "re.Match") -> str:
+            token = f"\x00DRF_FENCE_{cls._translation_placeholder_suffix(len(fences))}\x00"
+            fences.append((token, match.group(0)))
+            return token
+
+        protected = cls._TRANSLATION_FENCE_RE.sub(_hide_fence, text)
+        paragraphs = re.split(r"\n{2,}", protected)
+        units: List[str] = []
+        current = ""
+        for paragraph in paragraphs:
+            candidate = paragraph if not current else f"{current}\n\n{paragraph}"
+            if current and len(candidate) > max_chars:
+                units.append(current)
+                current = paragraph
+            else:
+                current = candidate
+        if current or not units:
+            units.append(current)
+        return [
+            cls._restore_hidden_translation_fences(unit, fences)
+            for unit in units
+        ]
+
+    @staticmethod
+    def _restore_hidden_translation_fences(
+        text: str, fences: List[Tuple[str, str]]
+    ) -> str:
+        restored = text
+        for token, fence in fences:
+            restored = restored.replace(token, fence)
+        return restored
+
+    # Structural line grammar used by the structure-preserving translator.  Every
+    # scaffold byte (heading hashes, list markers, blockquote arrows, table pipes)
+    # is copied verbatim; only the natural-language core of each unit becomes a
+    # translatable slot, so heading levels, table row/column counts and fenced
+    # blocks are identical to the source *by construction*, never by audit luck.
+    _STRUCT_HEADING_RE = re.compile(r"^(#{1,6}[ \t]+)(.*?)([ \t]*)$")
+    _STRUCT_LIST_RE = re.compile(r"^([ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)(.*)$")
+    _STRUCT_QUOTE_RE = re.compile(r"^([ \t]*>+[ \t]?)(.*)$")
+    _STRUCT_INDENT_RE = re.compile(r"^([ \t]*)(.*)$")
+    _STRUCT_TABLE_SEP_RE = re.compile(r"^[ \t]*\|?[ \t:\-|]+\|?[ \t]*$")
+    _STRUCT_SLOT_RE = re.compile("\x00SLOT([A-Z]+)\x00")
+
+    @classmethod
+    def _translation_placeholder_multiset(cls, text: str) -> Dict[str, int]:
+        """Return the multiset of immutable ⟦…⟧ placeholders in a slot candidate."""
+        from collections import Counter
+
+        return dict(Counter(re.findall(r"⟦[^⟧]*⟧", text or "")))
+
+    @classmethod
+    def _build_structural_slots(
+        cls, protected: str
+    ) -> Tuple[str, Dict[str, str]]:
+        """Split token-protected markdown into a scaffold template + prose slots.
+
+        The returned ``template`` reproduces the source line-for-line with every
+        translatable core replaced by a unique ``\\x00SLOTkey\\x00`` marker.  Only
+        cores that actually contain letters become slots; pure number/citation
+        placeholder cells stay literal so the model never touches them.  Restoring
+        the template with translated slots preserves the exact heading/list/table
+        pipe skeleton, so structural parity cannot drift.
+        """
+        slots: Dict[str, str] = {}
+
+        def _mk(core: str) -> str:
+            key = cls._translation_placeholder_suffix(len(slots))
+            slots[key] = core
+            return f"\x00SLOT{key}\x00"
+
+        def _has_translatable_text(core: str) -> bool:
+            # Ignore letters that belong to an immutable ⟦…⟧ placeholder (e.g. the
+            # fence token ⟦FA⟧).  A line that is only placeholders / punctuation /
+            # numbers must stay literal, or the model could append content that
+            # corrupts a restored fence/URL boundary.
+            stripped = re.sub(r"⟦[^⟧]*⟧", "", core)
+            return any(ch.isalpha() for ch in stripped)
+
+        def _slot_or_literal(core: str) -> str:
+            # A protected fence/comment/code placeholder or a pure number cell has
+            # no translatable letters — keep it literal so structure survives untouched.
+            return _mk(core) if _has_translatable_text(core) else core
+
+        out_lines: List[str] = []
+        for line in protected.split("\n"):
+            stripped = line.strip()
+            if not stripped:
+                out_lines.append(line)
+                continue
+            # Markdown table row (pipe-delimited) — never a heading/list.  Split on
+            # unescaped pipes, translate each lettered cell in place, and rejoin with
+            # the identical pipe skeleton so the column count is byte-preserved.
+            if stripped.startswith("|") and stripped.count("|") >= 2:
+                if cls._STRUCT_TABLE_SEP_RE.match(line):
+                    out_lines.append(line)
+                    continue
+                cells = re.split(r"(?<!\\)\|", line)
+                rebuilt: List[str] = []
+                for cell in cells:
+                    core = cell.strip()
+                    if not core or not _has_translatable_text(core):
+                        rebuilt.append(cell)
+                        continue
+                    lead = cell[: len(cell) - len(cell.lstrip())]
+                    trail = cell[len(cell.rstrip()):]
+                    rebuilt.append(lead + _mk(core) + trail)
+                out_lines.append("|".join(rebuilt))
+                continue
+            heading = cls._STRUCT_HEADING_RE.match(line)
+            if heading:
+                out_lines.append(
+                    heading.group(1) + _slot_or_literal(heading.group(2)) + heading.group(3)
+                )
+                continue
+            listed = cls._STRUCT_LIST_RE.match(line)
+            if listed:
+                out_lines.append(listed.group(1) + _slot_or_literal(listed.group(2)))
+                continue
+            quoted = cls._STRUCT_QUOTE_RE.match(line)
+            if quoted and quoted.group(1).strip():
+                out_lines.append(quoted.group(1) + _slot_or_literal(quoted.group(2)))
+                continue
+            indent = cls._STRUCT_INDENT_RE.match(line)
+            out_lines.append(indent.group(1) + _slot_or_literal(indent.group(2)))
+        return "\n".join(out_lines), slots
+
+    def _resolve_prose_slots(
+        self, slots: Dict[str, str], target_language_name: str
+    ) -> Dict[str, str]:
+        """Translate keyed prose cores; keep only structurally faithful candidates.
+
+        A candidate is accepted only when it (1) is non-empty, (2) carries the exact
+        same ⟦…⟧ placeholder multiset as its source core, and (3) introduces no bare
+        Arabic-number or citation token.  Because the immutable tokens are already
+        placeholders, this guarantees the reassembled document keeps the source
+        numeric/citation multiset.  Rejected cores fall back to the source text and
+        are handled by the later contamination-repair pass, never by silent drift.
+        """
+        def _accept(core: str, candidate: str, *, allow_echo: bool) -> bool:
+            if not isinstance(candidate, str) or not candidate.strip():
+                return False
+            if self._translation_placeholder_multiset(
+                candidate
+            ) != self._translation_placeholder_multiset(core):
+                return False
+            if self._translation_number_multiset(candidate):
+                return False
+            if self._translation_marker_multiset(candidate):
+                return False
+            if not allow_echo and candidate.strip() == core.strip():
+                return False
+            return True
+
+        resolved: Dict[str, str] = {}
+        pending = [
+            key for key in slots
+            if any(ch.isalpha() for ch in re.sub(r"⟦[^⟧]*⟧", "", slots[key]))
+        ]
+        for attempt in range(2):
+            if not pending:
+                break
+            batch_size = 16 if attempt == 0 else 4
+            next_pending: List[str] = []
+            for offset in range(0, len(pending), batch_size):
+                keys = pending[offset:offset + batch_size]
+                request = {key: slots[key] for key in keys}
+                sys_prompt = (
+                    "Translate every JSON string value into "
+                    f"{target_language_name}. Return ONLY one valid JSON object with the exact "
+                    "same alphabetic keys. Preserve Markdown punctuation and newlines inside "
+                    "each value. Copy every ⟦…⟧ placeholder token exactly once, verbatim, and "
+                    "never translate, split, reorder, or remove one. Do not add Arabic numerals, "
+                    "URLs, citations, code, comments, or keys inside translated values."
+                )
+                raw = ""
+                try:
+                    raw = self.llm.chat(
+                        messages=[
+                            {"role": "system", "content": sys_prompt},
+                            {
+                                "role": "user",
+                                "content": json.dumps(request, ensure_ascii=False),
+                            },
+                        ],
+                        temperature=0.0,
+                        max_tokens=max(1024, min(8192, len(json.dumps(request)) + 1024)),
+                        tier="strong",
+                    )
+                except Exception as exc:  # noqa: BLE001 — bounded fallback retries below
+                    logger.warning("双语报告：结构骨架 prose-slot 翻译调用失败: %s", exc)
+                text = str(raw or "").strip()
+                if text.startswith("```"):
+                    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
+                    text = re.sub(r"\s*```$", "", text)
+                parsed: Any = None
+                try:
+                    parsed = json.loads(text)
+                except (TypeError, ValueError):
+                    start, end_pos = text.find("{"), text.rfind("}")
+                    if start >= 0 and end_pos > start:
+                        try:
+                            parsed = json.loads(text[start:end_pos + 1])
+                        except (TypeError, ValueError):
+                            parsed = None
+                parsed = parsed if isinstance(parsed, dict) else {}
+                for key in keys:
+                    candidate = parsed.get(key)
+                    if _accept(slots[key], candidate, allow_echo=False):
+                        resolved[key] = candidate.replace("\n", " ")
+                    else:
+                        next_pending.append(key)
+            pending = list(dict.fromkeys(next_pending))
+
+        # A keyed JSON batch can still omit one value; retry those cores one by one.
+        for key in pending:
+            core = slots[key]
+            raw = ""
+            try:
+                raw = self.llm.chat(
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "Translate this one Markdown prose fragment into "
+                                f"{target_language_name}. Preserve its Markdown punctuation. "
+                                "Copy every ⟦…⟧ placeholder token exactly. Output ONLY the "
+                                "translated fragment. Do not add Arabic numerals, URLs, "
+                                "citations, code, or commentary."
+                            ),
+                        },
+                        {"role": "user", "content": core},
+                    ],
+                    temperature=0.0,
+                    max_tokens=max(512, min(4096, len(core) * 2 + 512)),
+                    tier="strong",
+                )
+            except Exception as exc:  # noqa: BLE001 — final bounded prose-only attempt
+                logger.warning("双语报告：单 prose-slot 翻译调用失败: %s", exc)
+            candidate = str(raw or "").strip()
+            if candidate.startswith("```"):
+                candidate = re.sub(r"^```(?:markdown|md)?\s*", "", candidate, flags=re.I)
+                candidate = re.sub(r"\s*```$", "", candidate).strip()
+            if _accept(core, candidate, allow_echo=False):
+                resolved[key] = candidate.replace("\n", " ")
+        return resolved
+
+    def _translate_from_source_skeleton(
+        self,
+        markdown: str,
+        target_language_name: str,
+    ) -> str:
+        """Structure-preserving translator: the primary guarantee, not a hope.
+
+        The source markdown is parsed into a scaffold template plus natural-language
+        slots.  Heading hashes/levels, table pipe skeletons and column counts, list
+        markers, blockquote arrows, and every immutable token (numbers, citations,
+        URLs, inline code, comments, fenced blocks) are copied byte-for-byte; only
+        the prose core of each unit is translated.  Reassembly therefore reproduces
+        the exact source skeleton, so heading-level sequence, table row/column
+        structure and the numeric/citation multiset are identical by construction.
+        Any slot the model cannot faithfully translate falls back to its source
+        bytes (later resolved by the contamination-repair pass), never to drift.
+        """
+        if not markdown.strip():
+            return markdown
+        protected, mapping = self._protect_translation_tokens(markdown)
+        template, slots = self._build_structural_slots(protected)
+        if not slots:
+            # No translatable prose (pure tables of numbers / fences) — restore
+            # tokens and return the structurally-identical source unchanged.
+            restored, _issues = self._restore_translation_tokens(protected, mapping)
+            return restored
+        resolved = self._resolve_prose_slots(slots, target_language_name)
+
+        def _fill(match: "re.Match") -> str:
+            key = match.group(1)
+            return resolved.get(key, slots.get(key, ""))
+
+        reassembled = self._STRUCT_SLOT_RE.sub(_fill, template)
+        restored, _issues = self._restore_translation_tokens(reassembled, mapping)
+        return restored
+
+    @staticmethod
     def _detect_translation_target(
-        self, md: str
+        md: str
     ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """复用 detect_output_language / CJK 比率判定成稿语言，返回
         (source_code, target_code, target_language_name)。中文→英文、英文→中文；
@@ -5174,12 +5763,35 @@ class ReportAgent:
         return widths
 
     @classmethod
+    def _translation_fence_signature(cls, md: str) -> List[str]:
+        """Return every complete fenced block in order, byte-for-byte."""
+        return [match.group(0) for match in cls._TRANSLATION_FENCE_RE.finditer(md or "")]
+
+    @staticmethod
+    def _normalize_number_token(token: str) -> str:
+        """Normalize a numeric token for cross-language parity comparison.
+
+        Whitespace is removed and a single leading ``+``/``-`` sign is dropped.  The
+        sign is stripped deliberately: numbers are placeholder-protected and restored
+        byte-for-byte, so their digit content never changes, but translation legitimately
+        alters the *surrounding* characters (e.g. English ``end-2030`` — a letter precedes
+        the hyphen so no sign is captured — becomes Chinese ``…-2030`` where a CJK char
+        precedes the hyphen and the regex would otherwise capture a spurious ``-2030``).
+        Comparing sign-free digit content keeps the multiset invariant to that punctuation
+        drift while the exact bytes remain guaranteed by the token restore step.
+        """
+        cleaned = re.sub(r"\s+", "", token or "")
+        if cleaned[:1] in "+-":
+            cleaned = cleaned[1:]
+        return cleaned
+
+    @classmethod
     def _translation_number_multiset(cls, md: str) -> Dict[str, int]:
         """Return normalized numeric-token multiplicities for exact parity checks."""
         from collections import Counter
 
         return dict(Counter(
-            re.sub(r"\s+", "", match.group(0))
+            cls._normalize_number_token(match.group(0))
             for match in cls._NUMBER_INTEGRITY_RE.finditer(md or "")
         ))
 
@@ -5218,6 +5830,57 @@ class ReportAgent:
         heading = refs[0].split("\n", 1)[0].strip() if refs else ""
         return body, reference_text, heading
 
+    @staticmethod
+    def _localize_translation_references(chunk_md: str, target_lang: str) -> str:
+        """Localize only the canonical References heading.
+
+        Citation titles, dates, tags, and URLs are provenance, not authored
+        narrative.  Sending the appendix through the model adds cost and lets a
+        harmless heading synonym make the complete namespace invisible to the
+        publication audit.  Preserve every entry byte-for-byte and deterministically
+        switch between the two accepted headings.
+        """
+        lines = (chunk_md or "").split("\n")
+        if not lines or lines[0].strip() not in _REFS_HEADINGS:
+            return chunk_md
+        lines[0] = _REFS_HEADINGS[1] if target_lang == "zh" else _REFS_HEADINGS[0]
+        return "\n".join(lines)
+
+    def _translation_chunk_quality(
+        self,
+        source: str,
+        candidate: str,
+        target_lang: str,
+    ) -> Dict[str, Any]:
+        """Return bounded per-chunk integrity signals used by one repair retry."""
+        hard: List[str] = []
+        if self._translation_heading_signature(source) != self._translation_heading_signature(
+            candidate
+        ):
+            hard.append("heading levels")
+        if self._translation_table_signature(source) != self._translation_table_signature(
+            candidate
+        ):
+            hard.append("table shape")
+        if self._translation_number_multiset(source) != self._translation_number_multiset(
+            candidate
+        ):
+            hard.append("numeric tokens")
+        if self._translation_marker_multiset(source) != self._translation_marker_multiset(
+            candidate
+        ):
+            hard.append("citation tokens")
+        if self._translation_fence_signature(source) != self._translation_fence_signature(
+            candidate
+        ):
+            hard.append("fenced blocks")
+        residual = self._collect_impurity_segments(
+            candidate,
+            target_is_cjk=(target_lang == "zh"),
+            cap=60,
+        )
+        return {"hard": hard, "residual": residual}
+
     def _audit_translation_variant(
         self,
         report_id: str,
@@ -5226,6 +5889,8 @@ class ReportAgent:
         source_lang: str,
         target_lang: str,
         primary_citations: Optional[Dict[str, Any]] = None,
+        *,
+        enforce_citations: bool = True,
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """Audit a language variant and build its isolated citation artifact.
 
@@ -5259,6 +5924,8 @@ class ReportAgent:
         table_variant = self._translation_table_signature(variant_md)
         number_source = self._translation_number_multiset(source_md)
         number_variant = self._translation_number_multiset(variant_md)
+        fences_source = self._translation_fence_signature(source_md)
+        fences_variant = self._translation_fence_signature(variant_md)
 
         target_name = "Chinese" if target_lang == "zh" else "English"
         _candidate, lint_audit = _rl.lint_report(
@@ -5293,6 +5960,8 @@ class ReportAgent:
             issues.append("translation table row/column structure differs from primary")
         if number_source != number_variant:
             issues.append("translation numeric-token multiset differs from primary")
+        if fences_source != fences_variant:
+            issues.append("translation fenced blocks differ from primary bytes")
         if source_markers != variant_markers:
             issues.append("translation citation-token multiset differs from primary")
         if source_body_markers != variant_body_markers:
@@ -5301,24 +5970,30 @@ class ReportAgent:
             issues.append("translation is missing a visible References appendix")
         if variant_refs and variant_heading not in _REFS_HEADINGS:
             issues.append("translation References heading is not canonical")
-        if source_body_markers and not primary_by_tag:
-            issues.append("primary citations.json is missing for a cited translation")
-        if marker_audit.get("dangling"):
-            issues.append(
-                f"translation contains {len(marker_audit['dangling'])} dangling citation tags"
-            )
-        if missing_reference_tags:
-            issues.append(
-                f"translation References misses {len(missing_reference_tags)} cited tags"
-            )
-        if missing_reference_urls:
-            issues.append(
-                f"translation References misses {len(missing_reference_urls)} source URLs"
-            )
-        if invalid_urls:
-            issues.append(
-                f"translation citation map contains {len(invalid_urls)} invalid source URLs"
-            )
+        # Citation-namespace binding is enforced for the published forecast report,
+        # whose curated citations.json is authoritative.  Free-standing research
+        # dossiers carry their own inline References appendix (preserved byte-for-byte
+        # by the structure-preserving translator) rather than that schema, so their
+        # audit validates marker-multiset parity and language/structure only.
+        if enforce_citations:
+            if source_body_markers and not primary_by_tag:
+                issues.append("primary citations.json is missing for a cited translation")
+            if marker_audit.get("dangling"):
+                issues.append(
+                    f"translation contains {len(marker_audit['dangling'])} dangling citation tags"
+                )
+            if missing_reference_tags:
+                issues.append(
+                    f"translation References misses {len(missing_reference_tags)} cited tags"
+                )
+            if missing_reference_urls:
+                issues.append(
+                    f"translation References misses {len(missing_reference_urls)} source URLs"
+                )
+            if invalid_urls:
+                issues.append(
+                    f"translation citation map contains {len(invalid_urls)} invalid source URLs"
+                )
         if lint_audit.get("changed"):
             issues.append("translation would still be rewritten by final editorial lint")
         if lint_audit.get("leakage_flags"):
@@ -5340,13 +6015,17 @@ class ReportAgent:
             row["display"] = display
             row["count"] = int(variant_body_markers.get(tag, 0))
             variant_rows.append(row)
+        source_sha = hashlib.sha256((source_md or "").encode("utf-8")).hexdigest()
         variant_sha = hashlib.sha256((variant_md or "").encode("utf-8")).hexdigest()
         citations_payload: Dict[str, Any] = {
+            "schema_version": 2,
+            "report_id": report_id,
             "grammar": "[S<n>]",
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "language": target_lang,
             "source_language": source_lang,
             "source_artifact": "citations.json",
+            "source_markdown_sha256": source_sha,
             "markdown_sha256": variant_sha,
             "heading": variant_heading,
             "markers": variant_rows,
@@ -5367,9 +6046,7 @@ class ReportAgent:
             "read_only": True,
             "markdown_chars": len(variant_md or ""),
             "markdown_sha256": variant_sha,
-            "source_markdown_sha256": hashlib.sha256(
-                (source_md or "").encode("utf-8")
-            ).hexdigest(),
+            "source_markdown_sha256": source_sha,
             "section_parity": {
                 "passed": heading_source == heading_variant,
                 "source_levels": heading_source,
@@ -5384,6 +6061,17 @@ class ReportAgent:
                 "passed": number_source == number_variant,
                 "source": number_source,
                 "variant": number_variant,
+            },
+            "fenced_block_parity": {
+                "passed": fences_source == fences_variant,
+                "source_sha256": [
+                    hashlib.sha256(item.encode("utf-8")).hexdigest()
+                    for item in fences_source
+                ],
+                "variant_sha256": [
+                    hashlib.sha256(item.encode("utf-8")).hexdigest()
+                    for item in fences_variant
+                ],
             },
             "citation_parity": {
                 "passed": not any((
@@ -5419,6 +6107,16 @@ class ReportAgent:
         精确记号清单（缺省空串时提示词与历史逐字节一致）。"""
         if not section_md.strip():
             return section_md
+        units = self._split_translation_units(section_md)
+        return "\n\n".join(
+            self._translate_markdown_unit(unit, target_language_name, extra_rules)
+            for unit in units
+        )
+
+    def _translate_markdown_unit(self, markdown: str, target_language_name: str,
+                                 extra_rules: str = "") -> str:
+        """Translate one bounded Markdown unit and restore immutable source bytes."""
+        protected_md, protected_mapping = self._protect_translation_tokens(markdown)
         sys_prompt = (
             "You are a professional translator for institutional analytic / forecasting reports. "
             f"Translate the following Markdown into {target_language_name}. "
@@ -5428,10 +6126,10 @@ class ReportAgent:
             "columns and the |---| separator row.\n"
             "2. Copy every fenced code block and mermaid block (``` or ~~~ fences, and everything "
             "inside them) UNCHANGED — never translate content inside fences.\n"
-            "3. Keep image references, URLs, citation markers (canonical form [S12]; also any "
-            "legacy 【S12】 / [S1-a] variants), numbers, percentages and probabilities "
-            "BYTE-IDENTICAL (e.g. '37%' stays '37%', '[S12]' stays '[S12]'). Never drop, merge "
-            "or renumber a citation marker.\n"
+            "3. Tokens shaped ⟦P…⟧, ⟦X…⟧, or ⟦F…⟧ are immutable source bytes. "
+            "Copy every placeholder exactly once and never translate, alter, split, reorder, "
+            "or remove one. Do not introduce any new Arabic numerals; the source numbers, URLs, "
+            "citations, link targets, inline code, comments, and fences are already protected.\n"
             "4. Keep proper nouns and source names as-is; do not invent name translations. You may "
             "add a target-language rendering in parentheses only where it aids readability.\n"
             "5. Output ONLY the translated Markdown — no preamble, no commentary, and do NOT wrap "
@@ -5440,19 +6138,19 @@ class ReportAgent:
         if extra_rules:
             sys_prompt += "\n" + extra_rules
         # 输出预算：中文比英文更紧凑，英译中略膨胀；给宽裕上限（有界，防单章截断）。
-        est = max(2048, min(16384, len(section_md) // 2 + 1024))
+        est = max(2048, min(16384, len(protected_md) // 2 + 1024))
         try:
             out = self.llm.chat(
                 messages=[{"role": "system", "content": sys_prompt},
-                          {"role": "user", "content": section_md}],
+                          {"role": "user", "content": protected_md}],
                 temperature=0.1, max_tokens=est, tier="strong",
             )
         except Exception as _te:  # noqa: BLE001 — 单章翻译失败保留原文，不牵连整篇
             logger.warning(f"双语报告：章节翻译调用失败，保留原文: {_te}")
-            return section_md
+            return markdown
         out = (out or "").strip()
         if not out:
-            return section_md
+            return markdown
         # 模型偶把整段答案包进 ``` 围栏——仅当首行是纯 fence 标记时剥掉，避免破坏结构。
         first = out.split("\n", 1)[0].strip()
         if first in ("```", "```markdown", "```md", "~~~") and out.rstrip().endswith(("```", "~~~")):
@@ -5460,9 +6158,174 @@ class ReportAgent:
             inner = inner.rsplit("```", 1)[0].rsplit("~~~", 1)[0]
             if inner.strip():
                 out = inner.rstrip()
-        return out
+        restored, placeholder_issues = self._restore_translation_tokens(
+            out, protected_mapping
+        )
+        # Structure is a hard invariant, not a hope: if the whole-unit candidate
+        # dropped/duplicated an immutable token, or drifted on heading levels, table
+        # row/column shape, or the numeric multiset, discard it and fall back to the
+        # structure-preserving translator which cannot drift by construction.
+        structural_drift = (
+            self._translation_heading_signature(markdown)
+            != self._translation_heading_signature(restored)
+            or self._translation_table_signature(markdown)
+            != self._translation_table_signature(restored)
+            or self._translation_number_multiset(markdown)
+            != self._translation_number_multiset(restored)
+            or self._translation_marker_multiset(markdown)
+            != self._translation_marker_multiset(restored)
+        )
+        if placeholder_issues or structural_drift:
+            logger.warning(
+                "双语报告：整块候选结构/占位符漂移，改走结构无损骨架翻译 "
+                "placeholder_issues=%s structural_drift=%s",
+                placeholder_issues[:8],
+                structural_drift,
+            )
+            return self._translate_from_source_skeleton(
+                markdown,
+                target_language_name,
+            ).strip()
+        return restored
 
-    def _generate_bilingual_report(self, report_id: str, report: "Report") -> None:
+    def _repair_variant_contamination(
+        self,
+        translated_md: str,
+        target_is_cjk: bool,
+        target_language_name: str,
+    ) -> str:
+        """Re-translate residual source-language lines until clean or a bounded cap.
+
+        Structure-preserving translation guarantees the skeleton but may keep a few
+        source-language cores when the model refuses one fragment.  This pass detects
+        those residual segments (fence-aware, inline-code/URL masked) and re-translates
+        only them in place, protecting immutable inline tokens so links/code cannot be
+        corrupted.  It is strictly bounded; anything still contaminated afterwards is
+        rejected by the read-only publication audit (fail-closed), never published.
+        """
+        try:
+            rounds = int(getattr(Config, "REPORT_TRANSLATION_CONTAMINATION_RETRIES", 3) or 3)
+        except (TypeError, ValueError):
+            rounds = 3
+        rounds = max(1, min(5, rounds))
+
+        def _scan(current: str) -> List[str]:
+            found: List[str] = []
+            seen: set = set()
+            for chunk in self._split_markdown_h2_sections(current):
+                for segment in self._collect_impurity_segments(
+                    chunk, target_is_cjk, cap=60
+                ):
+                    if segment not in seen:
+                        seen.add(segment)
+                        found.append(segment)
+            return found
+
+        def _replace(current: str, replacements: List[Tuple[str, str]]) -> Tuple[str, int]:
+            in_fence = False
+            count = 0
+            out_lines: List[str] = []
+            for line in current.splitlines():
+                if line.strip().startswith("```"):
+                    in_fence = not in_fence
+                    out_lines.append(line)
+                    continue
+                if in_fence:
+                    out_lines.append(line)
+                    continue
+                protected: List[str] = []
+
+                def _mask(match: "re.Match[str]", *, _p: List[str] = protected) -> str:
+                    _p.append(match.group(0))
+                    return f"\x00LP{len(_p) - 1}\x00"
+
+                new_line = self._LANG_INLINE_PROTECTED_RE.sub(_mask, line)
+                applied = 0
+                for original, translated in replacements:
+                    if original in new_line:
+                        new_line = new_line.replace(original, translated)
+                        applied += 1
+                for idx, token in enumerate(protected):
+                    new_line = new_line.replace(f"\x00LP{idx}\x00", token)
+                # Numeric fail-closed guard: a contamination replacement must never
+                # change the line's number multiset.  The segment translations are
+                # already token-protected upstream, but overlapping substring
+                # substitutions could in principle disturb a shared number; if the
+                # restored line's numbers drifted, revert this line verbatim so the
+                # audit's byte-exact numeric multiset stays identical by construction.
+                if applied and self._translation_number_multiset(
+                    new_line
+                ) != self._translation_number_multiset(line):
+                    out_lines.append(line)
+                    continue
+                count += applied
+                out_lines.append(new_line)
+            return "\n".join(out_lines), count
+
+        current = translated_md
+        for _round in range(rounds):
+            segments = _scan(current)
+            if not segments:
+                break
+            mapping = self._translate_impurity_segments(segments, target_language_name)
+            if not mapping:
+                break
+            candidate, replaced = _replace(current, mapping)
+            if not replaced or candidate == current:
+                break
+            current = candidate
+        return current
+
+    def _lint_variant_to_audit_fixed_point(
+        self,
+        translated_md: str,
+        lint_lang: str,
+        spine: Optional[Dict[str, Any]],
+        *,
+        max_iterations: int = 4,
+    ) -> str:
+        """Return a variant whose audit-body view is a final-lint fixed point.
+
+        LINT-BEFORE-AUDIT — the read-only publication audit re-runs the deterministic
+        final editorial lint on ``_translation_reference_parts(variant).body`` and
+        rejects the variant when that lint reports ``changed`` (the
+        "translation would still be rewritten by final editorial lint" issue).  Lint is
+        idempotent on a fixed document, but the reassembly of ``linted_body + refs`` is
+        re-decomposed by the audit, so a single pass is not guaranteed to be the exact
+        byte-view the audit lints.  We therefore lint the body, reassemble with the
+        References appendix, and re-derive the audit's exact body view, iterating until
+        that view is a lint fixed point (``changed == False``).  Because each lint pass
+        is idempotent this converges in one or two iterations; the bounded loop makes
+        "would still be rewritten" structurally impossible rather than audit-lucky.
+        """
+        from . import report_lint as _rl
+
+        current = translated_md
+        for _iteration in range(max(1, max_iterations)):
+            body, refs, _heading = self._translation_reference_parts(current)
+            linted_body, _rep = _rl.lint_report(body, lint_lang, mode="final", spine=spine)
+            if not linted_body.strip():
+                # Lint emptied the body (degenerate) — keep the pre-lint bytes and let
+                # the audit fail closed rather than publish an empty variant.
+                return current
+            rebuilt = linted_body.rstrip()
+            if refs.strip():
+                rebuilt += "\n\n" + refs.rstrip()
+            rebuilt = rebuilt.rstrip() + "\n"
+            # Re-derive the exact body view the audit will lint and check its fixed point.
+            audit_body, _audit_refs, _audit_heading = self._translation_reference_parts(rebuilt)
+            _relinted, rep2 = _rl.lint_report(audit_body, lint_lang, mode="final", spine=spine)
+            current = rebuilt
+            if not rep2.get("changed"):
+                break
+        return current
+
+    def _generate_bilingual_report(
+        self,
+        report_id: str,
+        report: "Report",
+        progress_callback: Optional[Callable[[int, str], None]] = None,
+    ) -> None:
         """BILINGUAL：在报告最终化/可视化/纯度处理之后，自动生成成稿的另一语种版本。
 
         流水：① 复用 detect_output_language 判定成稿语言（英⇄中，其它脚本跳过）；② 按 H2 边界
@@ -5484,6 +6347,26 @@ class ReportAgent:
             logger.info(f"双语报告：成稿语言非中/英（或无法判定），跳过翻译: {report_id}")
             return
 
+        source_sha = hashlib.sha256(md.encode("utf-8")).hexdigest()
+
+        def _progress(percent: int, message: str) -> None:
+            bounded = max(1, min(99, int(percent)))
+            ReportManager._set_translation_runtime_status(
+                report_id,
+                str(tgt_code),
+                "generating",
+                source_markdown_sha256=source_sha,
+                progress=bounded,
+                message=message,
+            )
+            if progress_callback is not None:
+                try:
+                    progress_callback(bounded, message)
+                except Exception as exc:  # noqa: BLE001 — observability cannot fail content
+                    logger.warning("双语报告进度回调失败（忽略）: %s", exc)
+
+        _progress(1, "translation initialized")
+
         chunks = self._split_markdown_h2_sections(md)
         if not chunks:
             return
@@ -5496,61 +6379,118 @@ class ReportAgent:
 
         def _work(pair: Tuple[int, str]) -> Tuple[int, str]:
             i, ch = pair
+            first = ch.split("\n", 1)[0].strip()
+            if first in _REFS_HEADINGS:
+                return i, self._localize_translation_references(ch, str(tgt_code))
             return i, self._translate_section(ch, tgt_name)
 
         if conc > 1 and len(chunks) > 1:
-            from concurrent.futures import ThreadPoolExecutor
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            parent_context = contextvars.copy_context()
             with ThreadPoolExecutor(max_workers=min(conc, len(chunks))) as ex:
-                for i, tr in ex.map(_work, list(enumerate(chunks))):
+                futures = [
+                    ex.submit(parent_context.copy().run, _work, pair)
+                    for pair in enumerate(chunks)
+                ]
+                completed = 0
+                for future in as_completed(futures):
+                    i, tr = future.result()
                     translated[i] = tr
+                    completed += 1
+                    _progress(
+                        5 + int(55 * completed / len(chunks)),
+                        f"translated {completed}/{len(chunks)} report sections",
+                    )
         else:
             for i, ch in enumerate(chunks):
-                translated[i] = self._translate_section(ch, tgt_name)
+                _, translated[i] = _work((i, ch))
+                _progress(
+                    5 + int(55 * (i + 1) / len(chunks)),
+                    f"translated {i + 1}/{len(chunks)} report sections",
+                )
 
-        # WAVE10（无缝引用）：逐 H2 块引用记号多重集对账。译文丢记号时对该块
-        # 做一次带精确库存的重译；仍漂移则最终硬审计拒绝这份译文，不再“warning 但照常发布”。
+        # 逐 H2 块做一次有界完整性修复。结构/数字/引用漂移，或长段源语言残留，都会触发
+        # 同一轮重译；只有严格改进的候选才会替换首译。References 已在上方确定性处理，不花
+        # LLM 调用。最终整篇只读审计仍是发布权威。
         citation_drift: List[Dict[str, Any]] = []
-        if getattr(Config, "REPORT_TRANSLATION_CITATION_PARITY", True):
-            from collections import Counter
-            _marker_re = re.compile(r"[\[【]\s*(S\d+(?:-[A-Za-z])?)\s*[\]】]")
-
-            def _marker_multiset(t: str) -> "Counter":
-                # 归一为规范形（去括号/空白、大写 S、后缀小写），CJK 括号变体与方括号同计。
-                return Counter(
-                    "S" + m.group(1)[1:].lower() if m.group(1)[:1] in "sS" else m.group(1)
-                    for m in _marker_re.finditer(t or ""))
-
-            for i, ch in enumerate(chunks):
-                src_ms = _marker_multiset(ch)
-                cur = translated[i] if translated[i] is not None else ch
-                dst_ms = _marker_multiset(cur)
-                if src_ms == dst_ms:
-                    continue
-                inventory = "，".join(f"[{t}] x{n}" for t, n in sorted(
-                    src_ms.items(), key=lambda kv: (len(kv[0]), kv[0]))) or "(none)"
+        for i, ch in enumerate(chunks):
+            if ch.split("\n", 1)[0].strip() in _REFS_HEADINGS:
+                continue
+            cur = translated[i] if translated[i] is not None else ch
+            quality = self._translation_chunk_quality(ch, cur, str(tgt_code))
+            citation_retry = bool(
+                "citation tokens" in quality["hard"]
+                and getattr(Config, "REPORT_TRANSLATION_CITATION_PARITY", True)
+            )
+            non_citation_hard = [
+                item for item in quality["hard"] if item != "citation tokens"
+            ]
+            if non_citation_hard or quality["residual"] or citation_retry:
+                marker_inventory = self._translation_marker_multiset(ch)
+                inventory = "，".join(
+                    f"[{tag}] x{count}" for tag, count in sorted(
+                        marker_inventory.items(), key=lambda item: (len(item[0]), item[0])
+                    )
+                ) or "(none)"
+                residual = " | ".join(quality["residual"][:12]) or "(none)"
+                language_rule = (
+                    "Translate every natural-language phrase, including prose in table cells, "
+                    "blockquotes, lists, scenario statements, and forecast statements. Leave "
+                    "only proper names and product/publication names in the source language."
+                )
                 extra = (
-                    "6. CITATION TOKEN INVENTORY — this section contains EXACTLY these "
-                    f"citation tokens (token x count): {inventory}. Your translation MUST "
-                    "reproduce every occurrence byte-identical, in the corresponding "
-                    "sentences. Do not add, drop, merge or renumber any of them.")
+                    "6. INTEGRITY RETRY — the prior candidate failed: "
+                    f"{', '.join(quality['hard']) or 'residual source-language prose'}. "
+                    f"{language_rule} "
+                    f"{('CITATION TOKEN INVENTORY: ' + inventory + '. ') if citation_retry else ''}"
+                    f"Residual examples: {residual}. Preserve every numeric and citation token "
+                    "byte-identical; do not add, drop, merge, or renumber any token."
+                )
                 try:
                     retry = self._translate_section(ch, tgt_name, extra_rules=extra)
-                except Exception as _pe:  # noqa: BLE001 — 重试失败保留首译
-                    logger.warning(f"双语报告：引用对账重译失败，保留首译: {_pe}")
+                except Exception as exc:  # noqa: BLE001 — one bounded retry only
+                    logger.warning(f"双语报告：完整性重译失败，保留首译: {exc}")
                     retry = ""
-                if retry and _marker_multiset(retry) == src_ms:
-                    translated[i] = retry
-                    continue
-                # 仍漂移：记录细节，下方硬审计会拒绝落盘。
-                diff = {t: {"src": src_ms.get(t, 0), "dst": dst_ms.get(t, 0)}
-                        for t in set(src_ms) | set(dst_ms)
-                        if src_ms.get(t, 0) != dst_ms.get(t, 0)}
+                if retry:
+                    retry_quality = self._translation_chunk_quality(
+                        ch, retry, str(tgt_code)
+                    )
+                    current_rank = (len(quality["hard"]), len(quality["residual"]))
+                    retry_rank = (
+                        len(retry_quality["hard"]),
+                        len(retry_quality["residual"]),
+                    )
+                    if retry_rank < current_rank:
+                        translated[i] = retry
+                        cur = retry
+                        quality = retry_quality
+
+            if "citation tokens" in quality["hard"]:
+                src_ms = self._translation_marker_multiset(ch)
+                dst_ms = self._translation_marker_multiset(cur)
+                diff = {
+                    tag: {"src": src_ms.get(tag, 0), "dst": dst_ms.get(tag, 0)}
+                    for tag in set(src_ms) | set(dst_ms)
+                    if src_ms.get(tag, 0) != dst_ms.get(tag, 0)
+                }
                 citation_drift.append({"chunk": i, "diff": diff})
-            if citation_drift:
+            if quality["hard"] or quality["residual"]:
                 logger.warning(
-                    f"双语报告引用对账告警: {report_id} {len(citation_drift)} 个章节的"
-                    f"引用记号多重集在重译后仍漂移: "
-                    f"{[d['chunk'] for d in citation_drift][:8]}")
+                    "双语报告：章节完整性重试后仍有问题 report=%s chunk=%s hard=%s residual=%s",
+                    report_id,
+                    i,
+                    quality["hard"],
+                    len(quality["residual"]),
+                )
+            _progress(
+                65 + int(25 * (i + 1) / len(chunks)),
+                f"audited {i + 1}/{len(chunks)} translated sections",
+            )
+        if citation_drift:
+            logger.warning(
+                f"双语报告引用对账告警: {report_id} {len(citation_drift)} 个章节的"
+                f"引用记号多重集在重译后仍漂移: "
+                f"{[d['chunk'] for d in citation_drift][:8]}")
 
         # 逐章 strip 后以空行拼接，保证 H2 章节间有标准 markdown 空行分隔（各段已含自身标题）。
         translated_md = "\n\n".join(
@@ -5563,7 +6503,12 @@ class ReportAgent:
         audit_path = ReportManager._get_report_final_audit_path(report_id, tgt_code)
 
         def _remove_stale_variant() -> None:
-            ReportManager._safe_unlink(out_path, pdf_path, citations_path)
+            ReportManager._safe_unlink(
+                out_path,
+                pdf_path,
+                ReportManager._get_report_pdf_manifest_path(report_id, tgt_code),
+                citations_path,
+            )
             remaining = [
                 entry for entry in (report.translations or [])
                 if not (isinstance(entry, dict) and entry.get("lang") == tgt_code)
@@ -5575,8 +6520,37 @@ class ReportAgent:
             return re.sub(r"\s+", " ", t or "").strip()
         if not translated_md.strip() or _collapse(translated_md) == _collapse(md):
             _remove_stale_variant()
+            ReportManager._set_translation_runtime_status(
+                report_id,
+                str(tgt_code),
+                "failed",
+                source_markdown_sha256=source_sha,
+                issues=["translation was empty or materially identical to the primary"],
+            )
             logger.info(f"双语报告：译文为空或与原文实质相同，跳过落盘: {report_id}")
             return
+
+        # CONTAMINATION：有界重译任何残留源语言行，随后落地为审计前的最终字节。结构无损翻译已保证
+        # 骨架，此处只补足纯度；仍污染者由下方只读终审 fail-closed 拒绝。
+        target_is_cjk = str(tgt_code) == "zh"
+        _progress(91, "repairing residual source-language lines")
+        translated_md = self._repair_variant_contamination(
+            translated_md, target_is_cjk, tgt_name
+        ).strip() + "\n"
+
+        # LINT-BEFORE-AUDIT：对译文正文运行与主报告完全相同的确定性终审 lint，并迭代到审计所见
+        # 正文视图的不动点（changed=False）。lint 幂等，但「lint 正文 + 拼回 References」会被审计
+        # 重新拆分，单趟不必然等于审计逐字节 lint 的视图；迭代到不动点使 "would still be rewritten"
+        # 结构性不可能触发；若 lint 破坏了与源文的结构一致，审计仍会 fail-closed（不发布坏译文）。
+        lint_lang = "Chinese" if target_is_cjk else "English"
+        lint_spine = (
+            self._forecast_spine
+            if isinstance(getattr(self, "_forecast_spine", None), dict)
+            else None
+        )
+        translated_md = self._lint_variant_to_audit_fixed_point(
+            translated_md, lint_lang, lint_spine
+        )
 
         primary_citations: Dict[str, Any] = {}
         try:
@@ -5587,6 +6561,7 @@ class ReportAgent:
         except (OSError, ValueError, TypeError):
             primary_citations = {}
 
+        _progress(95, "running isolated translation publication audit")
         audit, citations_payload = self._audit_translation_variant(
             report_id,
             md,
@@ -5605,6 +6580,14 @@ class ReportAgent:
         if not audit.get("hard_passed"):
             _remove_stale_variant()
             write_json_atomic(audit_path, audit)
+            ReportManager._set_translation_runtime_status(
+                report_id,
+                str(tgt_code),
+                "failed",
+                source_markdown_sha256=source_sha,
+                progress=100,
+                issues=list(audit.get("issues") or [])[:12],
+            )
             logger.error(
                 "双语报告硬审计未通过，译文不发布: %s %s issues=%s",
                 report_id, tgt_code, (audit.get("issues") or [])[:8],
@@ -5624,6 +6607,14 @@ class ReportAgent:
             )
             audit["hard_passed"] = False
             write_json_atomic(audit_path, audit)
+            ReportManager._set_translation_runtime_status(
+                report_id,
+                str(tgt_code),
+                "failed",
+                source_markdown_sha256=source_sha,
+                progress=100,
+                issues=list(audit.get("issues") or [])[:12],
+            )
             logger.error("双语报告工件落盘失败，已清理译文: %s", exc)
             return
 
@@ -5633,8 +6624,10 @@ class ReportAgent:
         except Exception:  # noqa: BLE001
             model_name = getattr(Config, "LLM_MODEL_NAME", "")
         entry = {
+            "report_id": report_id,
             "lang": tgt_code,
             "source_lang": src_code,
+            "source_markdown_sha256": source_sha,
             "path": f"full_report.{tgt_code}.md",
             "chars": len(translated_md),
             "bytes": len(translated_md.encode("utf-8")),
@@ -5653,9 +6646,129 @@ class ReportAgent:
         ]
         existing.append(entry)
         report.translations = existing
+        ReportManager._set_translation_runtime_status(
+            report_id,
+            str(tgt_code),
+            "available",
+            source_markdown_sha256=source_sha,
+            markdown_sha256=audit["markdown_sha256"],
+            progress=100,
+            message="translation passed isolated publication audit",
+        )
         logger.info(
             f"双语报告已生成: {report_id} {src_code}→{tgt_code}，{len(chunks)} 章，"
             f"{len(translated_md)} 字，variant_audit=passed")
+
+    def translate_research_markdown(
+        self,
+        md: str,
+        *,
+        label: str = "research_report",
+        primary_citations: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Structure-preserving translation of an arbitrary research-report markdown.
+
+        Reuses the exact same fail-closed primitives as the forecast bilingual path —
+        structural skeleton translation (guaranteed heading/table/number/citation
+        parity), bounded contamination repair, and lint-before-audit — then runs the
+        same isolated variant audit.  Performs no filesystem IO; the caller persists
+        the returned bytes only when ``audit['hard_passed']`` is True.  Returns a dict
+        with ``available``/``src``/``tgt``/``translated_md``/``audit``/``citations``.
+        """
+        from . import report_lint as _rl
+
+        md = md or ""
+        src_code, tgt_code, tgt_name = self._detect_translation_target(md)
+        if not tgt_code:
+            return {"available": False, "reason": "source language is not English/Chinese"}
+        # The published forecast report is already a final-lint fixed point at publish
+        # time, but a free-standing research dossier is not.  Normalize the source to
+        # that same fixed point first so structural parity is measured against a stable
+        # baseline (empty sections / internal telemetry strip identically on both sides
+        # instead of only on the freshly linted translation, which would spuriously
+        # differ in heading count).  The primary research_report.md is never mutated.
+        source_lint_lang = "Chinese" if str(src_code) == "zh" else "English"
+        baseline_md, _baseline_rep = _rl.lint_report(
+            md, source_lint_lang, mode="final", spine=None
+        )
+        if baseline_md.strip():
+            md = baseline_md
+        chunks = self._split_markdown_h2_sections(md)
+        if not chunks:
+            return {"available": False, "reason": "empty document"}
+
+        translated: List[str] = []
+        for chunk in chunks:
+            first = chunk.split("\n", 1)[0].strip()
+            if first in _REFS_HEADINGS:
+                translated.append(
+                    self._localize_translation_references(chunk, str(tgt_code))
+                )
+            else:
+                translated.append(self._translate_section(chunk, tgt_name))
+
+        # One bounded, structure-preserving integrity retry per drifting/residual chunk.
+        for i, chunk in enumerate(chunks):
+            if chunk.split("\n", 1)[0].strip() in _REFS_HEADINGS:
+                continue
+            quality = self._translation_chunk_quality(chunk, translated[i], str(tgt_code))
+            if quality["hard"] or quality["residual"]:
+                try:
+                    retry = self._translate_section(chunk, tgt_name)
+                except Exception as exc:  # noqa: BLE001 — one bounded retry only
+                    logger.warning("研究报告翻译：整章重译失败，保留首译: %s", exc)
+                    retry = ""
+                if retry:
+                    retry_quality = self._translation_chunk_quality(
+                        chunk, retry, str(tgt_code)
+                    )
+                    if (len(retry_quality["hard"]), len(retry_quality["residual"])) < (
+                        len(quality["hard"]),
+                        len(quality["residual"]),
+                    ):
+                        translated[i] = retry
+
+        translated_md = "\n\n".join(translated).strip() + "\n"
+
+        def _collapse(text: str) -> str:
+            return re.sub(r"\s+", " ", text or "").strip()
+        if not translated_md.strip() or _collapse(translated_md) == _collapse(md):
+            return {
+                "available": False,
+                "reason": "translation was empty or materially identical to source",
+                "src": src_code,
+                "tgt": tgt_code,
+            }
+
+        target_is_cjk = str(tgt_code) == "zh"
+        translated_md = self._repair_variant_contamination(
+            translated_md, target_is_cjk, tgt_name
+        ).strip() + "\n"
+
+        # LINT-BEFORE-AUDIT (research path): iterate to the audit's body-view fixed point
+        # so "would still be rewritten by final editorial lint" is structurally impossible.
+        lint_lang = "Chinese" if target_is_cjk else "English"
+        translated_md = self._lint_variant_to_audit_fixed_point(
+            translated_md, lint_lang, None
+        )
+
+        audit, citations_payload = self._audit_translation_variant(
+            label,
+            md,
+            translated_md,
+            str(src_code),
+            str(tgt_code),
+            primary_citations if isinstance(primary_citations, dict) else {},
+            enforce_citations=bool(primary_citations),
+        )
+        return {
+            "available": bool(audit.get("hard_passed")),
+            "src": src_code,
+            "tgt": tgt_code,
+            "translated_md": translated_md,
+            "audit": audit,
+            "citations": citations_payload,
+        }
 
     def _finalize_citations(self, report_id: str, report: "Report") -> None:
         """WAVE10 引用最终化：把正文 [S12] 记号解析为文末「References/参考来源」附录 +
@@ -5844,6 +6957,7 @@ class ReportAgent:
             "quantitative_rewrites": 0,
             "quantitative_grounding": {},
             "semantic_unsupported": None,
+            "overuse_stripped": 0,
             "stable": False,
             "lint": {},
         }
@@ -5851,6 +6965,16 @@ class ReportAgent:
         for pass_no in range(1, limit + 1):
             totals["passes"] = pass_no
             self._finalize_citations_for_publish(report_id, report)
+
+            # SESSIONB-2：来源集中度裁剪必须发生在收敛判定所依据的同一批字节上——
+            # 终审把「引用来源过度集中」判为硬缺陷，而此前修复链没有任何一环削减集中度，
+            # 稳定成稿仍可能被确定性否决（整份报告作废）。单调剥离 ⇒ 定点循环必然收敛。
+            overuse_capped, overuse_stripped = self._repair_overused_citations(
+                report.markdown_content or ""
+            )
+            if overuse_stripped:
+                totals["overuse_stripped"] += int(overuse_stripped)
+                report.markdown_content = overuse_capped
 
             quantitatively_grounded, quantitative_info = (
                 self._repair_final_quantitative_grounding(
@@ -5914,6 +7038,9 @@ class ReportAgent:
                 and lint_probe == current
                 and not final_lint.get("changed")
                 and unsupported == 0
+                # SESSIONB-2：终审对 overused_sources 一票否决，收敛判定必须与其对齐，
+                # 否则「稳定」成稿仍会在只读终审处被确定性丢弃。
+                and not semantic.get("overused_sources")
             ):
                 totals["stable"] = True
                 logger.info(
@@ -7589,8 +8716,9 @@ class ReportAgent:
             progress_callback: 进度回调函数
             forecast_spine_block: R2-DETAIL-2 预测骨架块（先于大纲推导）。非空时钉入大纲提示词，
                 让章节围绕可证伪的预测组织而非反向从叙事抽取。缺省空串 → 行为与历史一致。
-            require_forecast_structure: R2-DETAIL-2 为真时强制大纲覆盖「预测框架/逐情景预测/校准与
-                信心」三类章节。缺省 False → 不追加该指令，提示词与历史逐字节一致。
+            require_forecast_structure: R2-DETAIL-2/LOOP-015 为真时追加 FORECAST_STRUCTURE_MANDATE，
+                强制大纲覆盖「逐情景预测」+ 一节紧凑的「预测总表与校准」（合并旧的两节纯方法学
+                章节）。缺省 False → 不追加该指令，提示词与历史逐字节一致。
 
         Returns:
             ReportOutline: 报告大纲
@@ -7677,15 +8805,7 @@ class ReportAgent:
         if forecast_spine_block:
             user_prompt += "\n\n" + forecast_spine_block
         if require_forecast_structure:
-            user_prompt += (
-                "\n\n**结构强制要求（预测优先）**：本报告以上述预测骨架为核心，章节须围绕预测组织。"
-                "大纲必须显式覆盖以下三类章节："
-                "(1) 一节阐述「预测框架与方法」——研究证据基础、情景如何划分与定价（概率来源）；"
-                "(2) 围绕各核心情景的「逐情景预测」章节，逐一论证其概率、关键驱动与判定/证伪标准；"
-                "(3) 一节「校准与信心」——讨论不确定性、置信区间，以及本模型与外部证据、"
-                "基率或预测市场之间的分歧。"
-                "其余章节可据预测发现自由设计，但上述三类必须被覆盖（标题可自拟，语义需对应）。"
-            )
+            user_prompt += FORECAST_STRUCTURE_MANDATE
 
         try:
             response = self.llm.chat_json(
@@ -7718,23 +8838,26 @@ class ReportAgent:
                 except Exception as _tle:  # noqa: BLE001 — lint 失败保留原标题
                     logger.warning(f"大纲标题 lint 失败（忽略）: {_tle}")
 
-            # RQ-1(4): 钳制到本次报告形状的章节数区间（PLAN_SYSTEM_PROMPT 的硬约束）：不足补齐，
-            # 超出截断。小 page_budget → 5-8 节（紧凑），无/大 page_budget → 6-14 节（展开）。
-            # LLM 偶尔会无视数量要求，这里兜底以保证下游章节生成数量稳定。
+            # RQ-1(4)/LOOP-015: 章节数钳制。上限仍取形状 max_sections（超出截断）；下限改为
+            # 「连贯性优先」——规划器产出 >=4 节连贯大纲即接受，不再用通用兜底标题硬凑到形状
+            # min_sections（每个凑数章节此前都要烧满一轮 4-12 次工具调用的检索循环）。仅 <4 节
+            # 时补齐到 4，且补齐章节打 padded 标记——章节生成路径据此把有效工具调用下限降为 0
+            # （直接综合已注入材料成文，见 _effective_min_tool_calls）。
             _shape = self._report_shape()
-            _min_sections = _shape["min_sections"]
             _max_sections = _shape["max_sections"]
-            if len(sections) < _min_sections:
+            _pad_floor = min(self.OUTLINE_PAD_FLOOR_SECTIONS, _shape["min_sections"])
+            if len(sections) < _pad_floor:
                 _existing = {s.title for s in sections}
                 for _title in self._FALLBACK_SECTION_TITLES:
-                    if len(sections) >= _min_sections:
+                    if len(sections) >= _pad_floor:
                         break
                     if _title in _existing:
                         continue
-                    sections.append(ReportSection(title=_title))
+                    sections.append(ReportSection(title=_title, padded=True))
                     _existing.add(_title)
                 logger.warning(
-                    f"大纲章节数不足 {_min_sections}，已补齐至 {len(sections)} 节"
+                    f"大纲章节数不足 {_pad_floor}，已补齐至 {len(sections)} 节"
+                    "（补齐章节以零检索预算综合成文）"
                 )
             elif len(sections) > _max_sections:
                 logger.warning(
@@ -8239,6 +9362,10 @@ class ReportAgent:
         _section_heading = section.title
         if section.description:
             _section_heading = f"{section.title}\n本章内容定位（大纲规划）: {section.description}"
+        # LOOP-015: 与 ReAct 路径同源的有效工具调用下限（padding=0 / 证据预注入=1 / 其余=配置值）。
+        _eff_min = self._effective_min_tool_calls(section)
+        _prompt_kwargs = self._section_prompt_kwargs()  # RQ-1: 篇幅+工具调用范围槽位（随形状伸缩）
+        _prompt_kwargs["min_tool_calls"] = _eff_min
         system_prompt = self._lang_override() + SECTION_SYSTEM_PROMPT_TEMPLATE.format(
             report_title=outline.title,
             report_summary=outline.summary,
@@ -8246,7 +9373,7 @@ class ReportAgent:
             section_title=_section_heading,
             tools_description=self._get_tools_description(),
             tool_usage_hints=self._tool_usage_hints(),  # RPT-7: live 工具集
-            **self._section_prompt_kwargs(),  # RQ-1: 篇幅+工具调用范围槽位（随形状伸缩）
+            **_prompt_kwargs,
         )
         system_prompt = self._prepend_research_background(system_prompt,
                                                           section_title=section.title)
@@ -8255,7 +9382,7 @@ class ReportAgent:
             "\n\n【输出模式】你已具备原生工具调用能力：需要数据时直接发起工具调用（可多次），"
             "信息充分后直接输出本章 Markdown 正文（不要输出 Thought/Action/Final Answer 等标记，"
             "不要输出 JSON 工具包裹）。撰写正文前至少调用 "
-            f"{self.MIN_TOOL_CALLS_PER_SECTION} 次工具以获取实证。"
+            f"{_eff_min} 次工具以获取实证。"
         )
 
         if previous_sections:
@@ -8269,7 +9396,7 @@ class ReportAgent:
             previous_content = "（这是第一个章节）"
         user_prompt = SECTION_USER_PROMPT_TEMPLATE.format(
             previous_content=previous_content, section_title=section.title,
-            **self._section_prompt_kwargs(),  # RQ-1: 篇幅+工具调用范围槽位
+            **_prompt_kwargs,  # RQ-1: 篇幅+工具调用范围槽位（min_tool_calls 已按 LOOP-015 生效值覆盖）
         )
 
         messages: List[Dict[str, Any]] = [
@@ -8287,7 +9414,7 @@ class ReportAgent:
             # 回到完整 SECTION_MAX_TOKENS 预算以免截断。（原生路径此前用 chat_with_tools 的 4096 默认值。）
             _turn_max_tokens = (
                 Config.REPORT_AGENT_SECTION_MAX_TOKENS
-                if tool_calls_count >= self.MIN_TOOL_CALLS_PER_SECTION
+                if tool_calls_count >= _eff_min
                 else getattr(Config, "REPORT_AGENT_TOOL_TURN_MAX_TOKENS", 8192)
             )
             resp = self.llm.chat_with_tools(
@@ -8348,13 +9475,13 @@ class ReportAgent:
             # 无更多工具调用（或已达上限）→ 收尾出正文
             if content.strip():
                 # EXECPLAN2 F-7-2 工具调用不足且仍可继续检索 → 拒绝过早出正文，强制补足实证（对齐 ReAct 路径）
-                if tool_calls_count < self.MIN_TOOL_CALLS_PER_SECTION and tool_calls_count < max_tool_calls:
+                if tool_calls_count < _eff_min and tool_calls_count < max_tool_calls:
                     messages.append({"role": "assistant", "content": content})
                     messages.append({
                         "role": "user",
                         "content": (
                             f"你只调用了 {tool_calls_count} 次工具，少于本章要求的至少 "
-                            f"{self.MIN_TOOL_CALLS_PER_SECTION} 次。请勿现在输出正文，"
+                            f"{_eff_min} 次。请勿现在输出正文，"
                             "继续发起工具调用以补足实证后再撰写本章。"
                         ),
                     })
@@ -8409,6 +9536,11 @@ class ReportAgent:
         _section_heading = section.title
         if section.description:
             _section_heading = f"{section.title}\n本章内容定位（大纲规划）: {section.description}"
+        # LOOP-015: 有效工具调用下限先于提示词计算——padding / 证据预注入章节的更低下限
+        # 直接写进提示词槽位，与循环闸门保持一致（提示词不再逼模型凑满配置下限）。
+        min_tool_calls = self._effective_min_tool_calls(section)
+        _prompt_kwargs = self._section_prompt_kwargs()  # RQ-1: 篇幅+工具调用范围槽位（随形状伸缩）
+        _prompt_kwargs["min_tool_calls"] = min_tool_calls
         system_prompt = self._lang_override() + SECTION_SYSTEM_PROMPT_TEMPLATE.format(
             report_title=outline.title,
             report_summary=outline.summary,
@@ -8416,7 +9548,7 @@ class ReportAgent:
             section_title=_section_heading,
             tools_description=self._get_tools_description(),
             tool_usage_hints=self._tool_usage_hints(),  # RPT-7: live 工具集
-            **self._section_prompt_kwargs(),  # RQ-1: 篇幅+工具调用范围槽位（随形状伸缩）
+            **_prompt_kwargs,
         )
         # T4.1: 钉入研究背景档案 + 来源索引，让每章撰写复用真实角色/关系/时间线并按 [S#] 引用。
         system_prompt = self._prepend_research_background(system_prompt,
@@ -8439,7 +9571,7 @@ class ReportAgent:
         user_prompt = SECTION_USER_PROMPT_TEMPLATE.format(
             previous_content=previous_content,
             section_title=section.title,
-            **self._section_prompt_kwargs(),  # RQ-1: 篇幅+工具调用范围槽位
+            **_prompt_kwargs,  # RQ-1: 篇幅+工具调用范围槽位（min_tool_calls 已按 LOOP-015 生效值覆盖）
         )
 
         messages = [
@@ -8447,10 +9579,10 @@ class ReportAgent:
             {"role": "user", "content": user_prompt}
         ]
 
-        # ReACT循环
+        # ReACT循环（min_tool_calls 在提示词构建前经 _effective_min_tool_calls 计算，
+        # T4.4 配置下限 + LOOP-015 padding/证据预注入下调）
         tool_calls_count = 0
         max_iterations = 14  # RQ-1: 10→14，最大迭代轮数（更高以支撑更深入的检索与更长的章节）
-        min_tool_calls = self.MIN_TOOL_CALLS_PER_SECTION  # T4.4: 从 Config 读取（默认 4）
         conflict_retries = 0  # 工具调用与Final Answer同时出现的连续冲突次数
         contamination_retries = 0  # 输出被污染（系统提示泄漏/工具调用残留）的连续重试次数
         MAX_CONTAMINATION_RETRIES = 2  # 污染输出最多纠正重试次数
@@ -8770,8 +9902,60 @@ class ReportAgent:
         
         return final_answer
     
+    def _resurrect_failed_sections(
+        self,
+        report_id: str,
+        outline: "ReportOutline",
+        failed_titles: List[str],
+        generated_sections: List[str],
+    ) -> List[str]:
+        """SESSIONB-1 占位符章节复活：组装成稿前对失败章节做一轮有界重试。
+
+        终审 _final_audit_integrity_issues 对任何仍存在的失败占位符章节一票否决整份
+        成稿（拒绝发布部分成稿）——单个章节在生成时段的瞬时故障（限流/配额窗口/单次
+        5xx）会在全部章节、骨架与图表成本烧完后丢弃整份报告；resume 只能整报告重烧。
+        章节生成与终审之间往往隔着数十分钟（其余章节 + 骨架 + 抽取），足以跨过配额
+        重置/提供方恢复窗口，因此在组装前对每个占位符章节**再走一次**既有的
+        _generate_section_with_retry 全链路（含语言验收与反思修订）。成功即回写
+        section_NN.md 与上下文；仍失败则保留占位符、走既有部分成稿路径——终审语义
+        逐字节不变，本方法只是把「直接丢弃」换成「先重试一轮」。返回仍失败的标题列表。"""
+        from collections import Counter
+        pending = Counter(failed_titles)
+        still_failed: List[str] = []
+        for idx, section in enumerate(outline.sections):
+            if pending.get(section.title, 0) <= 0:
+                continue
+            pending[section.title] -= 1
+            section_num = idx + 1
+            logger.info(f"复活失败章节（重试一轮）: {section.title} ({section_num})")
+            try:
+                content = self._generate_section_with_retry(
+                    section=section,
+                    outline=outline,
+                    previous_sections=generated_sections,
+                    progress_callback=None,
+                    section_index=section_num,
+                )
+            except Exception as exc:  # noqa: BLE001 — 复活失败保留占位符，绝不拖垮成稿
+                logger.warning(f"章节复活重试仍失败（保留占位符）: {section.title} -> {exc}")
+                still_failed.append(section.title)
+                continue
+            if (not content or content == SECTION_FAILURE_PLACEHOLDER
+                    or content.strip().startswith("（本章节生成失败：")):
+                still_failed.append(section.title)
+                continue
+            section.content = content
+            ReportManager.save_section(report_id, section_num, section)
+            if 0 <= idx < len(generated_sections):
+                generated_sections[idx] = f"## {section.title}\n\n{content}"
+            logger.info(f"章节复活成功，已回写: {report_id}/section_{section_num:02d}.md")
+        # 计数兜底：标题未在大纲中命中（理论不可达）时如实保留为失败，不得凭空洗白。
+        for title, count in pending.items():
+            still_failed.extend([title] * max(0, count))
+        return still_failed
+
     def generate_report(
-        self, 
+        self,
         progress_callback: Optional[Callable[[str, int, str], None]] = None,
         report_id: Optional[str] = None
     ) -> Report:
@@ -9120,6 +10304,19 @@ class ReportAgent:
                     f"全部 {total_sections} 个章节生成失败（疑似 LLM 服务中断），"
                     "报告标记为失败（可重试），不写入全占位符的『完成』报告"
                 )
+
+            # SESSIONB-1：组装前复活占位符章节——终审对任何失败章节一票否决整份成稿，
+            # 而占位符可能只是章节时段的瞬时故障（限流/配额窗口）；此刻距故障已隔多章，
+            # 再走一轮既有生成链路，把「确定性丢弃整份报告」换成「先重试一轮」。仍失败
+            # 则保留占位符（终审语义不变）。旗标默认开；任何异常降级为不复活。
+            if (failed_section_titles
+                    and getattr(Config, "REPORT_RESURRECT_FAILED_SECTIONS", True)):
+                try:
+                    failed_section_titles = self._resurrect_failed_sections(
+                        report_id, outline, failed_section_titles, generated_sections
+                    )
+                except Exception as _rz_err:  # noqa: BLE001 — 复活为旁路增强
+                    logger.warning(f"失败章节复活尝试异常（忽略，保留占位符）: {_rz_err}")
 
             # 阶段3: 组装完整报告
             if progress_callback:
@@ -9504,6 +10701,18 @@ class ReportManager:
     _SIM_INDEX_FILENAME = "_sim_index.json"
     # 串行化索引文件的读改写（同进程内）
     _sim_index_lock = threading.Lock()
+    # Existing-report translation retries are user-triggerable.  A per-variant
+    # lock prevents duplicate model spend and conflicting metadata updates while
+    # allowing unrelated reports to translate concurrently.
+    _translation_locks_guard = threading.Lock()
+    _translation_locks: Dict[Tuple[str, str], threading.Lock] = {}
+    # PDF builds are publication work, not a stateless view transform.  Serialize
+    # each report/language bundle so concurrent requests cannot share temporary
+    # sources, replace one another's output, or validate a half-written cache.
+    _pdf_locks_guard = threading.Lock()
+    _pdf_locks: Dict[Tuple[str, str], threading.Lock] = {}
+    _PDF_MANIFEST_SCHEMA_VERSION = 1
+    _PDF_RENDERER_VERSION = "report-pdf-v3-a4-font-and-glyph-gated"
 
     @classmethod
     def _ensure_reports_dir(cls):
@@ -9610,6 +10819,321 @@ class ReportManager:
         return os.path.join(cls._get_report_folder(report_id), filename)
 
     @classmethod
+    def _get_translation_runtime_status_path(cls, report_id: str, lang: str) -> str:
+        return os.path.join(
+            cls._get_report_folder(report_id), f"translation_status.{lang}.json"
+        )
+
+    @classmethod
+    def _set_translation_runtime_status(
+        cls,
+        report_id: str,
+        lang: str,
+        status: str,
+        **fields: Any,
+    ) -> None:
+        if lang not in cls._TRANSLATION_LANGS:
+            return
+        existing = cls._load_translation_runtime_status(report_id, lang) or {}
+        payload = dict(existing) if isinstance(existing, dict) else {}
+        updated_at = datetime.now(timezone.utc).isoformat()
+        payload.update({
+            "schema_version": 1,
+            "report_id": report_id,
+            "lang": lang,
+            "status": status,
+            "updated_at": updated_at,
+        })
+        if status in {"pending", "processing", "generating"}:
+            payload["heartbeat_at"] = updated_at
+            payload.pop("issues", None)
+        elif status in {"failed", "available", "completed"}:
+            payload["progress"] = int(fields.get("progress", 100) or 100)
+        payload.update({key: value for key, value in fields.items() if value is not None})
+        write_json_atomic(cls._get_translation_runtime_status_path(report_id, lang), payload)
+
+    @classmethod
+    def _load_translation_runtime_status(
+        cls, report_id: str, lang: str
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            with open(
+                cls._get_translation_runtime_status_path(report_id, lang),
+                encoding="utf-8",
+            ) as handle:
+                payload = json.load(handle)
+        except (OSError, ValueError, TypeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        if payload.get("report_id") != report_id or payload.get("lang") != lang:
+            return None
+        return payload
+
+    @classmethod
+    def _translation_lock_for(cls, report_id: str, lang: str) -> threading.Lock:
+        key = (str(report_id), str(lang))
+        with cls._translation_locks_guard:
+            lock = cls._translation_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                cls._translation_locks[key] = lock
+            return lock
+
+    @classmethod
+    @contextmanager
+    def _translation_generation_lease(cls, report_id: str, lang: str):
+        """Serialize reservation and generation across threads and processes."""
+        lock = cls._translation_lock_for(report_id, lang)
+        lock_path = cls._get_translation_runtime_status_path(report_id, lang) + ".lock"
+        with lock, cls._advisory_file_lock(lock_path):
+            yield
+
+    @classmethod
+    def _pdf_lock_for(cls, report_id: str, lang: Optional[str]) -> threading.Lock:
+        key = (str(report_id), str(lang or "primary"))
+        with cls._pdf_locks_guard:
+            lock = cls._pdf_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                cls._pdf_locks[key] = lock
+            return lock
+
+    @classmethod
+    def translation_status(
+        cls,
+        report_id: str,
+        lang: Optional[str] = None,
+        report: Optional[Report] = None,
+    ) -> Dict[str, Any]:
+        """Describe one report's deterministic language-variant state.
+
+        A failed audit remains visible after its rejected Markdown is removed, so
+        the UI can offer an honest retry instead of silently hiding the feature.
+        Availability is derived from the publication barrier, never from metadata
+        or file existence alone.
+        """
+        report = report or cls.get_report(report_id)
+        result: Dict[str, Any] = {
+            "report_id": report_id,
+            "source_lang": None,
+            "target_lang": None,
+            "requested_lang": lang,
+            "status": "missing",
+            "available": False,
+            "can_generate": False,
+            "issues": [],
+        }
+        if report is None:
+            result["status"] = "not_found"
+            result["issues"] = ["report does not exist"]
+            return result
+
+        source_lang, target_lang, _target_name = ReportAgent._detect_translation_target(
+            report.markdown_content or ""
+        )
+        result["source_lang"] = source_lang
+        result["target_lang"] = target_lang
+        requested = lang or target_lang
+        result["requested_lang"] = requested
+        if requested not in cls._TRANSLATION_LANGS:
+            result["status"] = "unsupported"
+            result["issues"] = ["report language or requested target is unsupported"]
+            return result
+        if requested != target_lang:
+            result["status"] = "source_language"
+            result["available"] = requested == source_lang
+            result["issues"] = ["requested language is not this report's translation target"]
+            return result
+
+        source_sha = hashlib.sha256(
+            (report.markdown_content or "").encode("utf-8")
+        ).hexdigest()
+        result["source_markdown_sha256"] = source_sha
+
+        primary = cls.publication_status(report_id)
+        result["can_generate"] = bool(
+            primary.get("publishable") and getattr(Config, "REPORT_BILINGUAL", True)
+        )
+        if cls.is_publishable(report_id, requested):
+            result["status"] = "available"
+            result["available"] = True
+            result["issues"] = []
+            try:
+                with open(
+                    cls._get_report_translation_path(report_id, requested), "rb"
+                ) as handle:
+                    result["markdown_sha256"] = hashlib.sha256(handle.read()).hexdigest()
+            except OSError:
+                pass
+            result["translation"] = {
+                "report_id": report_id,
+                "lang": requested,
+                "source_lang": source_lang,
+                "path": f"full_report.{requested}.md",
+                "markdown_sha256": result.get("markdown_sha256"),
+                "source_markdown_sha256": source_sha,
+                "final_audit_path": f"final_audit.{requested}.json",
+                "final_audit_sha256": cls._sha256_file(
+                    cls._get_report_final_audit_path(report_id, requested)
+                ),
+                "audit_verified": True,
+                "available": True,
+            }
+            return result
+
+        runtime = cls._load_translation_runtime_status(report_id, requested)
+        if (isinstance(runtime, dict)
+                and runtime.get("source_markdown_sha256") == source_sha):
+            runtime_status = str(runtime.get("status") or "").lower()
+            if runtime_status in {"pending", "processing", "generating"}:
+                stale = False
+                try:
+                    updated = datetime.fromisoformat(
+                        str(runtime.get("updated_at") or "").replace("Z", "+00:00")
+                    )
+                    if updated.tzinfo is None:
+                        updated = updated.replace(tzinfo=timezone.utc)
+                    stale = (datetime.now(timezone.utc) - updated).total_seconds() > 900
+                except (TypeError, ValueError):
+                    stale = True
+                if not stale:
+                    result["status"] = "generating"
+                    result["can_generate"] = False
+                    result["issues"] = []
+                    result["message"] = str(runtime.get("message") or "")
+                    result["progress"] = int(runtime.get("progress") or 0)
+                    for key in ("task_id", "owner", "heartbeat_at", "updated_at"):
+                        if runtime.get(key) is not None:
+                            result[key] = runtime.get(key)
+                    return result
+                result["status"] = "interrupted"
+                result["issues"] = ["previous translation attempt stopped before completion"]
+                for key in ("task_id", "owner", "heartbeat_at", "updated_at"):
+                    if runtime.get(key) is not None:
+                        result[key] = runtime.get(key)
+                return result
+            if runtime_status == "failed":
+                result["status"] = "failed"
+                result["issues"] = [
+                    str(item) for item in (runtime.get("issues") or []) if item
+                ][:12]
+                result["progress"] = int(runtime.get("progress") or 100)
+                result["message"] = str(runtime.get("message") or "")
+                for key in ("task_id", "owner", "heartbeat_at", "updated_at"):
+                    if runtime.get(key) is not None:
+                        result[key] = runtime.get(key)
+
+        audit_path = cls._get_report_final_audit_path(report_id, requested)
+        try:
+            with open(audit_path, encoding="utf-8") as handle:
+                audit = json.load(handle)
+        except (OSError, ValueError, TypeError):
+            audit = None
+        if isinstance(audit, dict):
+            audit_source_sha = audit.get("source_markdown_sha256")
+            if audit_source_sha and audit_source_sha != source_sha:
+                result["status"] = "stale"
+                result["issues"] = ["translation audit belongs to older primary report bytes"]
+            elif audit.get("hard_passed") is False:
+                result["status"] = "failed"
+                result["issues"] = [
+                    str(item) for item in (audit.get("issues") or []) if item
+                ][:12]
+            else:
+                result["status"] = "invalid"
+                result["issues"] = list(
+                    cls.publication_status(report_id, requested).get("reasons") or []
+                )[:12]
+        elif not primary.get("publishable"):
+            result["status"] = "blocked"
+            result["issues"] = list(primary.get("reasons") or [])[:12]
+        elif not getattr(Config, "REPORT_BILINGUAL", True):
+            result["status"] = "disabled"
+            result["issues"] = ["bilingual report generation is disabled"]
+        return result
+
+    @classmethod
+    def _persist_translation_metadata(
+        cls, report_id: str, translations: Optional[List[Dict[str, Any]]]
+    ) -> None:
+        """Update only translation metadata while preserving all report fields."""
+        path = cls._get_report_path(report_id)
+        with open(path, encoding="utf-8") as handle:
+            payload = json.load(handle)
+        if not isinstance(payload, dict):
+            raise ValueError("meta.json is not an object")
+        if translations:
+            payload["translations"] = translations
+        else:
+            payload.pop("translations", None)
+        write_json_atomic(path, payload)
+
+    @classmethod
+    def generate_translation_variant(
+        cls,
+        report_id: str,
+        lang: str,
+        llm_client: Optional[LLMClient] = None,
+        progress_callback: Optional[Callable[[int, str], None]] = None,
+    ) -> Dict[str, Any]:
+        """Generate one missing language sidecar for an already published report.
+
+        The primary report is immutable.  The same fail-closed translator and
+        per-language audit used at report completion are reused, then only the
+        `translations` metadata field is merged into the existing `meta.json`.
+        """
+        lang = str(lang or "").strip().lower()
+        if lang not in cls._TRANSLATION_LANGS:
+            raise ValueError("unsupported translation language")
+        with cls._translation_generation_lease(report_id, lang):
+            report = cls.get_report(report_id)
+            if report is None:
+                raise FileNotFoundError(f"report does not exist: {report_id}")
+            if not cls.is_publishable(report_id):
+                raise ValueError("primary report is not publishable")
+            source_lang, target_lang, _target_name = ReportAgent._detect_translation_target(
+                report.markdown_content or ""
+            )
+            if not source_lang or target_lang != lang:
+                raise ValueError("requested language is not this report's translation target")
+            current = cls.translation_status(report_id, lang, report=report)
+            if current.get("available"):
+                return current
+
+            primary_sha = hashlib.sha256(
+                (report.markdown_content or "").encode("utf-8")
+            ).hexdigest()
+            worker = ReportAgent.__new__(ReportAgent)
+            worker.llm = llm_client or LLMClient()
+            worker.output_language = "Chinese" if source_lang == "zh" else "English"
+            worker.simulation_id = report.simulation_id
+            worker.graph_id = report.graph_id
+            worker._forecast_spine = cls.load_structured_forecast(report_id)
+            worker._generate_bilingual_report(
+                report_id,
+                report,
+                progress_callback=progress_callback,
+            )
+
+            # Refuse to bind a variant if the primary changed during the model call.
+            refreshed = cls.get_report(report_id)
+            refreshed_sha = hashlib.sha256(
+                ((refreshed.markdown_content if refreshed else "") or "").encode("utf-8")
+            ).hexdigest()
+            if refreshed_sha != primary_sha:
+                cls._safe_unlink(
+                    cls._get_report_translation_path(report_id, lang),
+                    cls._get_report_pdf_path(report_id, lang),
+                    cls._get_report_pdf_manifest_path(report_id, lang),
+                    cls._get_report_citations_path(report_id, lang),
+                )
+                raise RuntimeError("primary report changed during translation")
+
+            cls._persist_translation_metadata(report_id, report.translations)
+            return cls.translation_status(report_id, lang)
+
+    @classmethod
     def publication_status(
         cls, report_id: str, lang: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -9639,6 +11163,7 @@ class ReportManager:
         if failed_sections or meta.get("partial"):
             result["reasons"].append("report contains failed or partial sections")
 
+        primary: Optional[Dict[str, Any]] = None
         if lang:
             primary = cls.publication_status(report_id)
             if not primary.get("publishable"):
@@ -9654,6 +11179,11 @@ class ReportManager:
             return result
         markdown_sha = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
         result["markdown_sha256"] = markdown_sha
+        if not lang:
+            source_lang, _target_lang, _target_name = ReportAgent._detect_translation_target(
+                markdown
+            )
+            result["language"] = source_lang
 
         audit_path = cls._get_report_final_audit_path(report_id, lang)
         try:
@@ -9703,6 +11233,18 @@ class ReportManager:
                         "final audit fingerprint does not match structured forecast"
                     )
         else:
+            primary_sha = str((primary or {}).get("markdown_sha256") or "")
+            source_lang = str((primary or {}).get("language") or "")
+            if audit.get("report_id") != report_id:
+                result["reasons"].append("language audit belongs to another report")
+            if audit.get("language") != lang:
+                result["reasons"].append("language audit target does not match request")
+            if audit.get("source_language") != source_lang:
+                result["reasons"].append("language audit source language does not match primary")
+            if not primary_sha or audit.get("source_markdown_sha256") != primary_sha:
+                result["reasons"].append(
+                    "language audit source fingerprint does not match primary"
+                )
             citations_path = cls._get_report_citations_path(report_id, lang)
             try:
                 with open(citations_path, encoding="utf-8") as handle:
@@ -9711,6 +11253,45 @@ class ReportManager:
                     raise ValueError("citation map is not an object")
             except (OSError, ValueError, TypeError):
                 result["reasons"].append("language-isolated citation map is missing or invalid")
+                citations = None
+            if isinstance(citations, dict):
+                if citations.get("report_id") != report_id:
+                    result["reasons"].append(
+                        "language-isolated citation map belongs to another report"
+                    )
+                if citations.get("language") != lang:
+                    result["reasons"].append(
+                        "language-isolated citation target does not match request"
+                    )
+                if citations.get("source_language") != source_lang:
+                    result["reasons"].append(
+                        "language-isolated citation source does not match primary"
+                    )
+                if citations.get("source_markdown_sha256") != primary_sha:
+                    result["reasons"].append(
+                        "language-isolated citation source fingerprint does not match primary"
+                    )
+                if citations.get("markdown_sha256") != markdown_sha:
+                    result["reasons"].append(
+                        "language-isolated citation fingerprint does not match Markdown"
+                    )
+            entries = [
+                entry for entry in (meta.get("translations") or [])
+                if isinstance(entry, dict) and entry.get("lang") == lang
+            ]
+            identity_match = any(
+                entry.get("report_id") == report_id
+                and entry.get("source_lang") == source_lang
+                and entry.get("source_markdown_sha256") == primary_sha
+                and entry.get("markdown_sha256") == markdown_sha
+                and entry.get("path") == f"full_report.{lang}.md"
+                and entry.get("available") is True
+                for entry in entries
+            )
+            if not identity_match:
+                result["reasons"].append(
+                    "translation metadata is missing the exact report/source identity"
+                )
         result["publishable"] = not result["reasons"]
         return result
 
@@ -9732,6 +11313,12 @@ class ReportManager:
         name = f"full_report.{lang}.pdf" if lang in cls._TRANSLATION_LANGS else "full_report.pdf"
         return os.path.join(cls._get_report_folder(report_id), name)
 
+    @classmethod
+    def _get_report_pdf_manifest_path(
+        cls, report_id: str, lang: Optional[str] = None
+    ) -> str:
+        return cls._get_report_pdf_path(report_id, lang) + ".manifest.json"
+
     @staticmethod
     def _is_pdf_file(path: str) -> bool:
         """校验文件确为 PDF（首字节 %PDF-）。pandoc 若因输出格式误判吐出 HTML/文本，此门拦截
@@ -9741,6 +11328,413 @@ class ReportManager:
                 return f.read(5) == b"%PDF-"
         except OSError:
             return False
+
+    @staticmethod
+    def _sha256_file(path: str) -> Optional[str]:
+        try:
+            digest = hashlib.sha256()
+            with open(path, "rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            return digest.hexdigest()
+        except OSError:
+            return None
+
+    @staticmethod
+    def _path_fingerprint(path: Optional[str]) -> Optional[Dict[str, Any]]:
+        if not path:
+            return None
+        try:
+            stat = os.stat(path)
+        except OSError:
+            return None
+        return {
+            "path": os.path.realpath(path),
+            "size": int(stat.st_size),
+            "mtime_ns": int(stat.st_mtime_ns),
+        }
+
+    @staticmethod
+    def _match_pdf_font(candidates: List[str]) -> Optional[Dict[str, Any]]:
+        """Resolve the first exact installed font family and its backing file."""
+        import shutil
+        import subprocess
+
+        fc_match = shutil.which("fc-match")
+        for candidate in [str(item).strip() for item in candidates if str(item).strip()]:
+            if fc_match:
+                try:
+                    raw = subprocess.check_output(
+                        [fc_match, "-f", "%{family[0]}|%{file}", candidate],
+                        timeout=10,
+                    ).decode("utf-8", "replace")
+                    family, path = (raw.split("|", 1) + [""])[:2]
+                    if family.strip().casefold() == candidate.casefold() and os.path.exists(path):
+                        return {"family": family.strip(), "file": os.path.realpath(path)}
+                except Exception:  # noqa: BLE001 - try the next portable family
+                    pass
+            try:
+                from matplotlib import font_manager
+                path = font_manager.findfont(candidate, fallback_to_default=False)
+                if path and os.path.exists(path):
+                    return {"family": candidate, "file": os.path.realpath(path)}
+            except Exception:  # noqa: BLE001 - fontconfig is optional
+                pass
+        return None
+
+    @classmethod
+    def _resolve_pdf_fonts(cls) -> Dict[str, Optional[Dict[str, Any]]]:
+        configured_main = str(getattr(Config, "REPORT_PDF_MAIN_FONT", "") or "")
+        configured_cjk = str(getattr(Config, "REPORT_PDF_CJK_FONT", "") or "")
+        configured_mono = str(getattr(Config, "REPORT_PDF_MONO_FONT", "") or "")
+        return {
+            "main": cls._match_pdf_font([
+                configured_main, "DejaVu Sans", "Noto Sans", "Arial Unicode MS",
+            ]),
+            "cjk": cls._match_pdf_font([
+                configured_cjk, "Noto Sans CJK SC", "Source Han Sans SC",
+                "PingFang SC", "Arial Unicode MS",
+            ]),
+            "mono": cls._match_pdf_font([
+                configured_mono, "DejaVu Sans Mono", "Noto Sans Mono CJK SC", "Menlo",
+            ]),
+        }
+
+    @classmethod
+    def _pdf_renderer_fingerprint(cls) -> Dict[str, Any]:
+        resolved = cls._resolve_pandoc()
+        fonts = cls._resolve_pdf_fonts()
+        return {
+            "version": cls._PDF_RENDERER_VERSION,
+            "pandoc": cls._path_fingerprint(resolved[0] if resolved else None),
+            "xelatex": cls._path_fingerprint(resolved[1] if resolved else None),
+            "fonts": {
+                key: ({
+                    "family": value.get("family"),
+                    "file": cls._path_fingerprint(value.get("file")),
+                } if isinstance(value, dict) else None)
+                for key, value in fonts.items()
+            },
+            "page_size": "a4",
+            "margin": "2.5cm",
+            "toc": True,
+            "citation_footnotes": bool(getattr(
+                Config, "REPORT_PDF_CITATION_FOOTNOTES", True
+            )),
+        }
+
+    @classmethod
+    def _pdf_input_fingerprint(
+        cls, report_id: str, lang: Optional[str], md_path: str, folder: str
+    ) -> Dict[str, Any]:
+        audit_path = cls._get_report_final_audit_path(report_id, lang)
+        citations_path = cls._get_report_citations_path(report_id, lang)
+        charts_dir = os.path.realpath(os.path.join(folder, "charts"))
+        chart_rows: List[Dict[str, str]] = []
+        allowed = {".png", ".svg", ".jpg", ".jpeg", ".gif", ".webp", ".mmd"}
+        if os.path.isdir(charts_dir) and not os.path.islink(charts_dir):
+            for root, dirs, files in os.walk(charts_dir, followlinks=False):
+                dirs[:] = [
+                    name for name in dirs
+                    if not os.path.islink(os.path.join(root, name))
+                ]
+                for name in sorted(files):
+                    path = os.path.join(root, name)
+                    if os.path.islink(path) or os.path.splitext(name)[1].lower() not in allowed:
+                        continue
+                    digest = cls._sha256_file(path)
+                    if digest:
+                        chart_rows.append({
+                            "path": os.path.relpath(path, folder).replace(os.sep, "/"),
+                            "sha256": digest,
+                        })
+        chart_rows.sort(key=lambda row: row["path"])
+        return {
+            "report_id": report_id,
+            "lang": lang or "primary",
+            "markdown_sha256": cls._sha256_file(md_path),
+            "primary_markdown_sha256": cls._sha256_file(
+                cls._get_report_markdown_path(report_id)
+            ),
+            "audit_sha256": cls._sha256_file(audit_path),
+            "citations_sha256": cls._sha256_file(citations_path),
+            "viz_manifest_sha256": cls._sha256_file(
+                os.path.join(folder, "viz_manifest.json")
+            ),
+            "chart_assets": chart_rows,
+            "renderer": cls._pdf_renderer_fingerprint(),
+        }
+
+    @staticmethod
+    def _markdown_visible_text(markdown: str) -> str:
+        """Approximate the text a Markdown renderer exposes to a PDF reader.
+
+        Link destinations, HTML comments, and table delimiter rows are source
+        syntax rather than visible prose.  Fenced/code content and link labels
+        remain because readers can see them in the rendered document.
+        """
+        import html as _html
+
+        text = re.sub(r"<!--.*?-->", " ", markdown or "", flags=re.DOTALL)
+        text = re.sub(r"!\[([^\]]*)\]\([^)]*\)", r" \1 ", text)
+        text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r" \1 ", text)
+        text = re.sub(r"<((?:https?://|mailto:)[^>]+)>", r" \1 ", text)
+        text = re.sub(r"<[^>]+>", " ", text)
+        visible_lines: List[str] = []
+        for line in text.splitlines():
+            if ReportManager._is_markdown_table_delimiter(line):
+                continue
+            stripped = line.strip()
+            if stripped.startswith(("```", "~~~")):
+                continue
+            line = re.sub(r"^\s{0,3}(?:#{1,6}|>|[-+*]|\d+[.)])\s*", "", line)
+            line = line.replace("|", " ")
+            line = re.sub(r"[*_~`]", "", line)
+            visible_lines.append(line)
+        return _html.unescape("\n".join(visible_lines))
+
+    @staticmethod
+    def _pdf_text_key(text: str) -> str:
+        import unicodedata
+
+        normalized = unicodedata.normalize("NFKC", text or "")
+        normalized = re.sub(r"([A-Za-z])-\s*\n\s*([A-Za-z])", r"\1\2", normalized)
+        return "".join(
+            ch.lower() for ch in normalized
+            if ch.isalnum() or "\u3400" <= ch <= "\u9fff"
+        )
+
+    @staticmethod
+    def _markdown_heading_anchors(markdown: str) -> List[str]:
+        anchors: List[str] = []
+        in_fence = False
+        marker = ""
+        for line in (markdown or "").splitlines():
+            stripped = line.lstrip()
+            fence = re.match(r"^(`{3,}|~{3,})", stripped)
+            if fence:
+                current = fence.group(1)
+                if not in_fence:
+                    in_fence, marker = True, current[0]
+                elif current[0] == marker:
+                    in_fence, marker = False, ""
+                continue
+            if in_fence:
+                continue
+            match = re.match(r"^\s{0,3}(#{1,2})\s+(.+?)\s*#*\s*$", line)
+            if match:
+                anchor = ReportManager._pdf_text_key(match.group(2))
+                if anchor:
+                    anchors.append(anchor)
+        return anchors
+
+    @classmethod
+    def _validate_pdf_content(
+        cls, pdf_path: str, source_markdown: str
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """Parse output and fail closed on glyph, structure, and content loss."""
+        details: Dict[str, Any] = {"page_count": 0, "issues": []}
+        try:
+            import fitz
+            with fitz.open(pdf_path) as document:
+                details["page_count"] = len(document)
+                if len(document) <= 0:
+                    details["issues"].append("PDF contains no pages")
+                    return False, details
+                text = "\n".join(page.get_text("text") for page in document)
+        except Exception as exc:  # noqa: BLE001 - malformed PDFs must not publish
+            details["issues"].append(f"PDF parse failed ({type(exc).__name__})")
+            return False, details
+
+        replacement_count = text.count("\ufffd") + text.count("\x00")
+        details["replacement_glyphs"] = replacement_count
+        if replacement_count:
+            details["issues"].append(
+                f"PDF text contains {replacement_count} replacement glyphs"
+            )
+
+        protected = "≥≤₀₁₂₃₄₅₆₇₈₉€£¥°±→←×÷"
+        missing: Dict[str, Dict[str, int]] = {}
+        for char in protected:
+            expected = source_markdown.count(char)
+            actual = text.count(char)
+            if expected and actual < expected:
+                missing[char] = {"expected": expected, "actual": actual}
+        details["missing_protected_glyphs"] = missing
+        if missing:
+            details["issues"].append("PDF lost protected Unicode glyphs")
+
+        visible_source = cls._markdown_visible_text(source_markdown)
+        source_key = cls._pdf_text_key(visible_source)
+        extracted_key = cls._pdf_text_key(text)
+
+        heading_anchors = cls._markdown_heading_anchors(source_markdown)
+        missing_headings = [anchor for anchor in heading_anchors if anchor not in extracted_key]
+        details["heading_anchors"] = len(heading_anchors)
+        details["missing_heading_sha256"] = [
+            hashlib.sha256(anchor.encode("utf-8")).hexdigest()
+            for anchor in missing_headings
+        ]
+        if missing_headings:
+            details["issues"].append(
+                f"PDF is missing {len(missing_headings)} rendered section headings"
+            )
+
+        source_numbers = ReportAgent._translation_number_multiset(visible_source)
+        extracted_numbers = ReportAgent._translation_number_multiset(text)
+        missing_numbers = {
+            token: {"expected": count, "actual": int(extracted_numbers.get(token, 0))}
+            for token, count in source_numbers.items()
+            if int(extracted_numbers.get(token, 0)) < int(count)
+        }
+        details["missing_numeric_tokens"] = missing_numbers
+        if missing_numbers:
+            details["issues"].append("PDF lost visible numeric tokens")
+
+        source_markers = ReportAgent._translation_marker_multiset(source_markdown)
+        extracted_markers = ReportAgent._translation_marker_multiset(text)
+        footnotes = bool(getattr(Config, "REPORT_PDF_CITATION_FOOTNOTES", True))
+        missing_markers: Dict[str, Dict[str, int]] = {}
+        for tag, count in source_markers.items():
+            # Pandoc replaces the first body occurrence with a footnote marker;
+            # the canonical References label remains visible.  Every additional
+            # occurrence must survive byte-for-byte.
+            required = max(1, int(count) - (1 if footnotes else 0))
+            actual = int(extracted_markers.get(tag, 0))
+            if actual < required:
+                missing_markers[tag] = {"expected_min": required, "actual": actual}
+        details["missing_citation_markers"] = missing_markers
+        if missing_markers:
+            details["issues"].append("PDF lost visible citation markers")
+
+        # Latin token coverage catches one-page/truncated outputs while allowing
+        # harmless TOC/page-number additions and line-wrap hyphenation.
+        import unicodedata
+        normalized_source = unicodedata.normalize("NFKC", visible_source)
+        normalized_text = unicodedata.normalize("NFKC", text)
+        normalized_text = re.sub(
+            r"([A-Za-z])-\s*\n\s*([A-Za-z])", r"\1\2", normalized_text
+        )
+        source_words = re.findall(r"[A-Za-z][A-Za-z'-]{2,}", normalized_source.lower())
+        extracted_words = re.findall(r"[A-Za-z][A-Za-z'-]{2,}", normalized_text.lower())
+        from collections import Counter
+        source_word_counts = Counter(source_words)
+        extracted_word_counts = Counter(extracted_words)
+        matched_words = sum(
+            min(count, extracted_word_counts.get(word, 0))
+            for word, count in source_word_counts.items()
+        )
+        word_coverage = matched_words / max(1, sum(source_word_counts.values()))
+        unique_word_coverage = (
+            len(set(source_words) & set(extracted_words)) / max(1, len(set(source_words)))
+        )
+        details["latin_word_coverage"] = round(word_coverage, 4)
+        details["latin_unique_word_coverage"] = round(unique_word_coverage, 4)
+        if len(source_words) >= 6 and (
+            word_coverage < 0.72 or unique_word_coverage < 0.72
+        ):
+            details["issues"].append("PDF text extraction lost substantial Latin content")
+        elif 0 < len(source_words) < 6 and len(source_key) >= 8 and source_key not in extracted_key:
+            details["issues"].append("PDF text extraction lost the visible report body")
+
+        source_han = re.findall(r"[\u3400-\u9fff]", visible_source)
+        extracted_han = re.findall(r"[\u3400-\u9fff]", text)
+        details["source_han_chars"] = len(source_han)
+        details["extracted_han_chars"] = len(extracted_han)
+        if len(source_han) >= 20:
+            source_han_text = "".join(source_han)
+            extracted_han_text = "".join(extracted_han)
+            source_bigrams = {
+                source_han_text[index:index + 2]
+                for index in range(len(source_han_text) - 1)
+            }
+            extracted_bigrams = {
+                extracted_han_text[index:index + 2]
+                for index in range(len(extracted_han_text) - 1)
+            }
+            han_coverage = len(source_bigrams & extracted_bigrams) / max(1, len(source_bigrams))
+            details["han_bigram_coverage"] = round(han_coverage, 4)
+            if han_coverage < 0.72:
+                details["issues"].append(
+                    "PDF text extraction lost representative Han content"
+                )
+        elif source_han and source_key not in extracted_key:
+            details["issues"].append("PDF text extraction lost the visible report body")
+
+        # Several independent completeness signals can intentionally collapse
+        # onto the same user-facing diagnosis for very short bilingual reports.
+        # Keep the gate strict while returning an actionable, non-duplicated
+        # issue list to the API and UI.
+        details["issues"] = list(dict.fromkeys(details["issues"]))
+        details["text_chars"] = len(text)
+        return not details["issues"], details
+
+    @classmethod
+    def _cached_pdf_valid(
+        cls, pdf_path: str, manifest_path: str, expected_input: Dict[str, Any]
+    ) -> bool:
+        try:
+            with open(manifest_path, encoding="utf-8") as handle:
+                manifest = json.load(handle)
+        except (OSError, ValueError, TypeError):
+            return False
+        if not isinstance(manifest, dict):
+            return False
+        if manifest.get("schema_version") != cls._PDF_MANIFEST_SCHEMA_VERSION:
+            return False
+        if manifest.get("input") != expected_input or not cls._is_pdf_file(pdf_path):
+            return False
+        return bool(
+            manifest.get("pdf_sha256")
+            and manifest.get("pdf_sha256") == cls._sha256_file(pdf_path)
+            and int(manifest.get("page_count") or 0) > 0
+        )
+
+    @staticmethod
+    def _is_markdown_table_delimiter(line: str) -> bool:
+        body = (line or "").strip()
+        if body.startswith("|"):
+            body = body[1:]
+        if body.endswith("|"):
+            body = body[:-1]
+        cells = [cell.strip() for cell in re.split(r"(?<!\\)\|", body)]
+        return bool(
+            len(cells) >= 2
+            and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells)
+        )
+
+    @staticmethod
+    def _markdown_requires_pandoc(markdown: str) -> bool:
+        lines = (markdown or "").splitlines()
+        has_table_separator = any(
+            ReportManager._is_markdown_table_delimiter(line) for line in lines
+        )
+        return bool(
+            has_table_separator
+            or re.search(r"^\[\^[^\]]+\]:", markdown or "", re.MULTILINE)
+        )
+
+    @staticmethod
+    @contextmanager
+    def _advisory_file_lock(lock_path: str):
+        os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+        with open(lock_path, "a+b") as handle:
+            try:
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            except (ImportError, OSError):
+                fcntl = None  # type: ignore[assignment]
+            try:
+                yield
+            finally:
+                if fcntl is not None:
+                    try:
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                    except OSError:
+                        pass
+
+    # Backward-compatible name retained for downstream callers/tests.
+    _advisory_pdf_file_lock = _advisory_file_lock
 
     @staticmethod
     def _safe_unlink(*paths: str) -> None:
@@ -9853,34 +11847,18 @@ class ReportManager:
             logger.warning(f"读取 {filename} 失败（PDF 不做跨语种引用回退）: {e}")
             return {}
 
-    @staticmethod
+    @classmethod
     def _translation_publish_audit_valid(
-        folder: str, lang: str, markdown: str
+        cls, report_id: str, lang: str, markdown: str
     ) -> bool:
-        """Require a passing, byte-matched per-language audit before export."""
-        if lang not in ("en", "zh"):
-            return False
-        audit_path = os.path.join(folder, f"final_audit.{lang}.json")
-        citations_path = os.path.join(folder, f"citations.{lang}.json")
-        try:
-            with open(audit_path, encoding="utf-8") as handle:
-                audit = json.load(handle)
-            with open(citations_path, encoding="utf-8") as handle:
-                citations = json.load(handle)
-        except (OSError, ValueError, TypeError):
+        """Require the complete report/source-bound variant contract before export."""
+        if lang not in cls._TRANSLATION_LANGS:
             return False
         expected_sha = hashlib.sha256((markdown or "").encode("utf-8")).hexdigest()
+        status = cls.publication_status(report_id, lang)
         return bool(
-            isinstance(audit, dict)
-            and audit.get("hard_passed") is True
-            and audit.get("policy_version") == int(getattr(
-                Config, "REPORT_FINAL_AUDIT_POLICY_VERSION", 3
-            ))
-            and audit.get("language") == lang
-            and audit.get("markdown_sha256") == expected_sha
-            and isinstance(citations, dict)
-            and citations.get("language") == lang
-            and citations.get("markdown_sha256") == expected_sha
+            status.get("publishable")
+            and status.get("markdown_sha256") == expected_sha
         )
 
     @staticmethod
@@ -9958,30 +11936,53 @@ class ReportManager:
 
     @classmethod
     def _export_pdf_pandoc(cls, report_id: str, md: str, folder: str, pdf_path: str) -> bool:
-        """pandoc + xelatex 构建 PDF（CJKmainfont=PingFang SC、geometry margin 2.5cm、--toc）。
+        """Build an A4 PDF with explicit Latin/symbol, CJK, and mono fonts.
+
         成功（产出非空 PDF）→ True；pandoc 不可用/返回非零/无产出/超时 → False（触发回退）。"""
         import subprocess
+        import tempfile
+
         resolved = cls._resolve_pandoc()
         if not resolved:
             return False
         pandoc, xelatex = resolved
-        # 预处理后的成稿写临时 _pdf_source.md，pandoc 以它为输入（相对资源已绝对化，cwd=folder）。
-        src_md = os.path.join(folder, "_pdf_source.md")
-        # 临时产物必须以 .pdf 结尾——pandoc 由输出扩展名推断格式，用 .tmp 会退化为 HTML 而非 PDF。
-        tmp_pdf = os.path.join(folder, "_full_report.building.pdf")
+        fonts = cls._resolve_pdf_fonts()
+        main_font = fonts.get("main")
+        cjk_font = fonts.get("cjk")
+        mono_font = fonts.get("mono")
+        if not isinstance(main_font, dict):
+            logger.warning("pandoc PDF 拒绝构建：缺少支持符号的主字体")
+            return False
+        if re.search(r"[\u3400-\u9fff]", md or "") and not isinstance(cjk_font, dict):
+            logger.warning("pandoc PDF 拒绝构建：中文内容缺少可解析的 CJK 字体")
+            return False
+        source_fd, src_md = tempfile.mkstemp(
+            prefix=".pdf-source-", suffix=".md", dir=folder
+        )
+        output_fd, tmp_pdf = tempfile.mkstemp(
+            prefix=".pdf-building-", suffix=".pdf", dir=folder
+        )
+        os.close(source_fd)
+        os.close(output_fd)
         try:
             with open(src_md, "w", encoding="utf-8") as f:
                 f.write(md)
         except OSError as e:
             logger.warning(f"写 PDF 源 md 失败: {e}")
+            cls._safe_unlink(src_md, tmp_pdf)
             return False
         cmd = [
             pandoc, src_md,
             f"--pdf-engine={xelatex or 'xelatex'}",
-            "-V", "CJKmainfont=PingFang SC",
+            "-V", f"mainfont={main_font['family']}",
             "-V", "geometry:margin=2.5cm",
+            "-V", "papersize:a4",
             "--toc",
         ]
+        if isinstance(cjk_font, dict):
+            cmd += ["-V", f"CJKmainfont={cjk_font['family']}"]
+        if isinstance(mono_font, dict):
+            cmd += ["-V", f"monofont={mono_font['family']}"]
         # WAVE10（无缝引用）：脚注/参考来源链接着色为可见的可点击链接（colorlinks 是
         # hyperref 内建选项，无额外宏包依赖；zh 路径 PingFang SC 下同样安全）。
         if getattr(Config, "REPORT_PDF_CITATION_FOOTNOTES", True):
@@ -10020,10 +12021,14 @@ class ReportManager:
         pymupdf 缺失/渲染失败 → False。图片经绝对路径 + folder 归档尽力解析（缺图仍出文本）。"""
         try:
             import fitz  # PyMuPDF
+            import tempfile
         except Exception as e:  # noqa: BLE001
             logger.warning(f"PyMuPDF 不可用，无法回退导出 PDF: {e}")
             return False
-        tmp_pdf = pdf_path + ".tmp"
+        output_fd, tmp_pdf = tempfile.mkstemp(
+            prefix=".pdf-fallback-", suffix=".pdf", dir=folder
+        )
+        os.close(output_fd)
         try:
             html = cls._markdown_to_basic_html(md)
             page_rect = fitz.paper_rect("a4")
@@ -10149,77 +12154,195 @@ class ReportManager:
     @classmethod
     def export_pdf(cls, report_id: str, force: bool = False,
                    lang: Optional[str] = None) -> Optional[str]:
-        """PDF-1: 惰性把成稿导出为 PDF 并缓存（按源 md 的 mtime 失效）。
+        """Export one publication-bound PDF with a content-addressed cache.
 
         流水：① 读成稿 → 相对图表路径绝对化 + （PATH 有 mmdc 时）预渲染 Mermaid 为 PNG；
-        ② pandoc+xelatex（CJKmainfont=PingFang SC、geometry margin 2.5cm、--toc）；
-        ③ 失败回退 markdown→HTML→PyMuPDF Story。关闭 REPORT_PDF_EXPORT / 无成稿 → None
-        （degrade-safe）。返回 PDF 绝对路径或 None。
+        ② locked pandoc+xelatex with explicit symbol/CJK fonts and A4 layout;
+        ③ parse, text/glyph-integrity audit, and an exact dependency/output manifest.
+        The limited PyMuPDF fallback is allowed only for simple Markdown; a rich report
+        fails closed instead of flattening tables or footnotes.
 
         BILINGUAL：lang ∈ {en, zh} 时以双语版 full_report.<lang>.md 为源、产出
         full_report.<lang>.pdf。译文须有 SHA 一致且硬通过的 final_audit.<lang>.json，
         并且只读 citations.<lang>.json；绝不回退主语种引用空间。非法/缺省 lang 仍走主报告。
 
-        缓存：PDF 存在且 mtime ≥ 源 md mtime → 命中直接返回（force=True 强制重建）。"""
+        Cache reuse requires exact Markdown/audit/citation/chart/renderer fingerprints,
+        an exact PDF SHA-256, and a prior successful parse/content audit. ``force=True``
+        always rebuilds.  Process and advisory file locks prevent cross-request races.
+        """
         if not getattr(Config, "REPORT_PDF_EXPORT", True):
             return None
-        # 校验 lang：仅 {en, zh} 视为双语请求，其余（含 None/非法值）回退主报告。
         lang = lang if lang in cls._TRANSLATION_LANGS else None
         md_path = (cls._get_report_translation_path(report_id, lang)
                    if lang else cls._get_report_markdown_path(report_id))
-        if not os.path.exists(md_path):
-            return None
-        if not cls.is_publishable(report_id, lang):
-            logger.warning(
-                "PDF 拒绝导出：报告尚未通过最终发布屏障 report_id=%s lang=%s",
-                report_id, lang or "primary",
-            )
-            return None
         folder = cls._get_report_folder(report_id)
         pdf_path = cls._get_report_pdf_path(report_id, lang)
-        try:
-            with open(md_path, "r", encoding="utf-8") as f:
-                md = f.read()
-        except OSError as e:
-            logger.warning(f"读取 full_report.md 失败，无法导出 PDF: {e}")
-            return None
-        if lang and not cls._translation_publish_audit_valid(folder, lang, md):
-            logger.warning(
-                "译文 PDF 拒绝导出：%s 缺少通过且 SHA 一致的语种审计/引用工件",
-                lang,
+        manifest_path = cls._get_report_pdf_manifest_path(report_id, lang)
+        lock = cls._pdf_lock_for(report_id, lang)
+        with lock, cls._advisory_pdf_file_lock(manifest_path + ".lock"):
+            if not os.path.exists(md_path):
+                return None
+            if not cls.is_publishable(report_id, lang):
+                logger.warning(
+                    "PDF 拒绝导出：报告尚未通过最终发布屏障 report_id=%s lang=%s",
+                    report_id, lang or "primary",
+                )
+                return None
+            try:
+                with open(md_path, "r", encoding="utf-8") as handle:
+                    md = handle.read()
+            except OSError as exc:
+                logger.warning(f"读取 full_report.md 失败，无法导出 PDF: {exc}")
+                return None
+            if lang and not cls._translation_publish_audit_valid(report_id, lang, md):
+                logger.warning(
+                    "译文 PDF 拒绝导出：%s 缺少报告/源字节绑定的审计、引用或元数据",
+                    lang,
+                )
+                return None
+
+            try:
+                proc_md = cls._rewrite_chart_paths_for_pdf(md, folder)
+                proc_md = cls._prerender_mermaid_for_pdf(proc_md, folder)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"PDF 预处理失败，回退用原始成稿: {exc}")
+                proc_md = md
+            pandoc_md = proc_md
+            if getattr(Config, "REPORT_PDF_CITATION_FOOTNOTES", True):
+                try:
+                    citations = cls._load_citations_map(folder, lang=lang)
+                    if citations:
+                        pandoc_md = cls._rewrite_citations_for_pdf(proc_md, citations)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(f"PDF 引用脚注预处理失败（保留字面记号）: {exc}")
+                    pandoc_md = proc_md
+
+            expected_input = cls._pdf_input_fingerprint(
+                report_id, lang, md_path, folder
             )
-            return None
-        # mtime 缓存：先审计再命中，防止旧 PDF 绕过已失效的译文审计。
-        try:
-            if (not force and os.path.exists(pdf_path)
-                    and os.path.getmtime(pdf_path) >= os.path.getmtime(md_path)):
+            if (not force and cls._cached_pdf_valid(
+                    pdf_path, manifest_path, expected_input)):
                 return pdf_path
-        except OSError:
-            pass
-        # 预处理：绝对化图表路径 + 预渲染 Mermaid（无 mmdc 则保留围栏）。失败回退用原始成稿。
+            cls._safe_unlink(pdf_path, manifest_path)
+
+            def _accept(renderer: str) -> bool:
+                valid, content_audit = cls._validate_pdf_content(pdf_path, md)
+                if not valid:
+                    logger.warning(
+                        "PDF 内容完整性门失败 report=%s lang=%s renderer=%s issues=%s",
+                        report_id,
+                        lang or "primary",
+                        renderer,
+                        content_audit.get("issues"),
+                    )
+                    cls._safe_unlink(pdf_path, manifest_path)
+                    return False
+                current_input = cls._pdf_input_fingerprint(
+                    report_id, lang, md_path, folder
+                )
+                if current_input != expected_input or not cls.is_publishable(report_id, lang):
+                    logger.warning(
+                        "PDF 构建期间依赖或发布状态变化，拒绝提交 report=%s lang=%s",
+                        report_id,
+                        lang or "primary",
+                    )
+                    cls._safe_unlink(pdf_path, manifest_path)
+                    return False
+                pdf_sha = cls._sha256_file(pdf_path)
+                if not pdf_sha:
+                    cls._safe_unlink(pdf_path, manifest_path)
+                    return False
+                manifest = {
+                    "schema_version": cls._PDF_MANIFEST_SCHEMA_VERSION,
+                    "report_id": report_id,
+                    "lang": lang or "primary",
+                    "renderer": renderer,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "input": expected_input,
+                    "pdf_sha256": pdf_sha,
+                    "page_count": int(content_audit.get("page_count") or 0),
+                    "content_audit": content_audit,
+                }
+                try:
+                    write_json_atomic(manifest_path, manifest)
+                except Exception as exc:  # noqa: BLE001 - an unbound cache is unsafe
+                    logger.warning(f"PDF 清单持久化失败，拒绝发布: {exc}")
+                    cls._safe_unlink(pdf_path, manifest_path)
+                    return False
+                return True
+
+            if cls._export_pdf_pandoc(report_id, pandoc_md, folder, pdf_path):
+                if _accept("pandoc-xelatex"):
+                    return pdf_path
+
+            if cls._markdown_requires_pandoc(md):
+                logger.warning(
+                    "PDF 拒绝降级：富 Markdown 需要 pandoc 保留表格/脚注 report=%s",
+                    report_id,
+                )
+                return None
+            if cls._export_pdf_pymupdf(proc_md, folder, pdf_path):
+                if _accept("pymupdf-story"):
+                    return pdf_path
+            logger.warning(f"PDF 导出失败（所有安全渲染路径均未产出）: {report_id}")
+            return None
+
+    @classmethod
+    def export_document_pdf(
+        cls,
+        md: str,
+        folder: str,
+        pdf_path: str,
+        *,
+        label: str = "document",
+    ) -> Optional[str]:
+        """Render an arbitrary Markdown document to PDF with the SHARED LaTeX template.
+
+        This is the single rendering pipeline the forecast report uses: locked
+        pandoc + XeLaTeX with the explicit symbol/CJK/mono fonts and A4 layout
+        (`_export_pdf_pandoc`), the same `%PDF`/tofu/Han-coverage content gate
+        (`_validate_pdf_content`), and the same "rich Markdown must not silently
+        flatten" guard before the bounded PyMuPDF fallback.  Reusing it means the
+        research-report Mandarin PDF is byte-for-byte the same style/template as the
+        forecast-report Mandarin PDF.  Returns the PDF path on success, else None.
+        """
+        if not getattr(Config, "REPORT_PDF_EXPORT", True):
+            return None
+        if not (md or "").strip():
+            return None
         try:
             proc_md = cls._rewrite_chart_paths_for_pdf(md, folder)
             proc_md = cls._prerender_mermaid_for_pdf(proc_md, folder)
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"PDF 预处理失败，回退用原始成稿: {e}")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"文档 PDF 预处理失败，回退用原始 markdown: {exc}")
             proc_md = md
-        # WAVE10（无缝引用）：pandoc 路径把可解析 [S12] 改写为真脚注。
-        # 主报告读 citations.json；译文只读 citations.<lang>.json。
-        pandoc_md = proc_md
-        if getattr(Config, "REPORT_PDF_CITATION_FOOTNOTES", True):
-            try:
-                _citations = cls._load_citations_map(folder, lang=lang)
-                if _citations:
-                    pandoc_md = cls._rewrite_citations_for_pdf(proc_md, _citations)
-            except Exception as e:  # noqa: BLE001
-                logger.warning(f"PDF 引用脚注预处理失败（保留字面记号）: {e}")
-                pandoc_md = proc_md
-        # 主路径：pandoc + xelatex；失败回退 PyMuPDF Story。
-        if cls._export_pdf_pandoc(report_id, pandoc_md, folder, pdf_path):
-            return pdf_path
+        cls._safe_unlink(pdf_path)
+
+        def _accept(renderer: str) -> bool:
+            valid, content_audit = cls._validate_pdf_content(pdf_path, md)
+            if not valid:
+                logger.warning(
+                    "文档 PDF 内容完整性门失败 label=%s renderer=%s issues=%s",
+                    label,
+                    renderer,
+                    content_audit.get("issues"),
+                )
+                cls._safe_unlink(pdf_path)
+                return False
+            return True
+
+        if cls._export_pdf_pandoc(label, proc_md, folder, pdf_path):
+            if _accept("pandoc-xelatex"):
+                return pdf_path
+        if cls._markdown_requires_pandoc(md):
+            logger.warning(
+                "文档 PDF 拒绝降级：富 Markdown 需要 pandoc 保留表格/脚注 label=%s", label
+            )
+            return None
         if cls._export_pdf_pymupdf(proc_md, folder, pdf_path):
-            return pdf_path
-        logger.warning(f"PDF 导出失败（pandoc 与 PyMuPDF 回退均未产出）: {report_id}")
+            if _accept("pymupdf-story"):
+                return pdf_path
+        logger.warning(f"文档 PDF 导出失败（所有安全渲染路径均未产出）: {label}")
         return None
 
     # ── EXECPLAN2 F-7-3: simulation_id 轻量索引 + 仅读 meta 头部 ──

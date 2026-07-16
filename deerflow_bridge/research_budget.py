@@ -43,6 +43,9 @@ DEFAULT_SUBAGENT_CONCURRENCY_GLOBAL = 9
 DEFAULT_SUBAGENT_LEASE_WAIT_SECONDS = 10800
 DEFAULT_SUBAGENT_LEASE_TTL_SECONDS = 120
 DEFAULT_INFLIGHT_TTL_SECONDS = 120
+DEFAULT_PROVIDER_FAILURE_THRESHOLD = 5
+DEFAULT_PROVIDER_COOLDOWN_SECONDS = 120
+DEFAULT_PROVIDER_PROBE_LEASE_SECONDS = 30
 TELEMETRY_MIN_INTERVAL_SECONDS = 1.0
 
 _TELEMETRY_LOCK = threading.Lock()
@@ -138,6 +141,28 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
                acquired_at REAL NOT NULL, expires_at REAL NOT NULL,
                UNIQUE (kind, key_hash)
            )""")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS fetched_sources (
+               url_hash TEXT NOT NULL, lane TEXT NOT NULL, url TEXT NOT NULL,
+               content_sha256 TEXT NOT NULL, content_chars INTEGER NOT NULL,
+               title TEXT NOT NULL DEFAULT '', excerpt TEXT NOT NULL DEFAULT '',
+               provider TEXT NOT NULL DEFAULT '', receipt_id TEXT NOT NULL DEFAULT '',
+               cache_hits INTEGER NOT NULL DEFAULT 0,
+               first_seen REAL NOT NULL, last_seen REAL NOT NULL,
+               observations INTEGER NOT NULL DEFAULT 1,
+               PRIMARY KEY (url_hash, lane)
+           )""")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS provider_health (
+               provider TEXT PRIMARY KEY,
+               consecutive_transport_failures INTEGER NOT NULL DEFAULT 0,
+               total_transport_failures INTEGER NOT NULL DEFAULT 0,
+               opened_at REAL,
+               open_until REAL,
+               probe_until REAL,
+               last_error TEXT NOT NULL DEFAULT '',
+               updated_at REAL NOT NULL
+           )""")
     columns = {
         str(row[1])
         for row in conn.execute("PRAGMA table_info(negative_results)")
@@ -146,6 +171,21 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE negative_results ADD COLUMN "
             "retry_admissions INTEGER NOT NULL DEFAULT 0")
+    fetched_columns = {
+        str(row[1]) for row in conn.execute("PRAGMA table_info(fetched_sources)")
+    }
+    for name, ddl in (
+        ("provider", "TEXT NOT NULL DEFAULT ''"),
+        ("receipt_id", "TEXT NOT NULL DEFAULT ''"),
+        ("cache_hits", "INTEGER NOT NULL DEFAULT 0"),
+    ):
+        if name not in fetched_columns:
+            conn.execute(f"ALTER TABLE fetched_sources ADD COLUMN {name} {ddl}")
+    provider_columns = {
+        str(row[1]) for row in conn.execute("PRAGMA table_info(provider_health)")
+    }
+    if "probe_until" not in provider_columns:
+        conn.execute("ALTER TABLE provider_health ADD COLUMN probe_until REAL")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS metadata (
                key TEXT PRIMARY KEY, value TEXT NOT NULL
@@ -442,6 +482,285 @@ def record_positive(kind: str, exact_key: str) -> str:
     except Exception as exc:
         _emit_degraded(f"positive-write: {type(exc).__name__}: {exc}")
     return artifact_id
+
+
+def _source_title(content: str, url: str) -> str:
+    """Derive a compact stable title without model or network work."""
+    for line in str(content or "").splitlines()[:12]:
+        candidate = line.strip().lstrip("#").strip()
+        if 3 <= len(candidate) <= 240:
+            return candidate
+    try:
+        from urllib.parse import urlparse
+
+        return (urlparse(url).hostname or url)[:240]
+    except Exception:
+        return str(url or "")[:240]
+
+
+def record_fetched_source(
+    url: str,
+    content: str,
+    *,
+    provider: str = "",
+    cache_hit: bool = False,
+) -> None:
+    """Persist exact successful fetch provenance across isolated subagents.
+
+    Unlike counters, URLs intentionally remain in the run-local SQLite
+    artifact: the outer evidence lane needs them to produce an auditable
+    ``sources.json``. They are never copied into generic budget telemetry.
+    """
+    exact_url = str(url or "").strip()
+    body = str(content or "")
+    if not enabled() or not exact_url.startswith(("http://", "https://")):
+        return
+    if len(body.strip()) < 200 or body.lstrip().startswith("Error:"):
+        return
+    url_hash = hashlib.sha256(exact_url.encode("utf-8")).hexdigest()
+    content_sha = hashlib.sha256(body.encode("utf-8")).hexdigest()
+    provider_name = str(provider or "").strip().lower()[:40]
+    receipt_id = hashlib.sha256(
+        f"{exact_url}\n{content_sha}\n{provider_name}".encode("utf-8")
+    ).hexdigest()
+    compact = " ".join(body.split())
+    now = time.time()
+    try:
+        with closing(_connect()) as conn:
+            conn.execute(
+                """INSERT INTO fetched_sources(
+                       url_hash, lane, url, content_sha256, content_chars,
+                       title, excerpt, provider, receipt_id, cache_hits,
+                       first_seen, last_seen, observations
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                   ON CONFLICT(url_hash, lane) DO UPDATE SET
+                       url=excluded.url,
+                       content_sha256=excluded.content_sha256,
+                       content_chars=excluded.content_chars,
+                       title=excluded.title,
+                       excerpt=excluded.excerpt,
+                       provider=CASE
+                           WHEN excluded.provider IN ('', 'cache')
+                           THEN fetched_sources.provider
+                           ELSE excluded.provider
+                       END,
+                       receipt_id=CASE
+                           WHEN excluded.provider IN ('', 'cache')
+                                AND fetched_sources.receipt_id != ''
+                           THEN fetched_sources.receipt_id
+                           ELSE excluded.receipt_id
+                       END,
+                       cache_hits=fetched_sources.cache_hits+excluded.cache_hits,
+                       last_seen=excluded.last_seen,
+                       observations=fetched_sources.observations+1""",
+                (
+                    url_hash,
+                    _lane_id(),
+                    exact_url,
+                    content_sha,
+                    len(body),
+                    _source_title(body, exact_url),
+                    compact[:1200],
+                    provider_name,
+                    receipt_id,
+                    1 if cache_hit else 0,
+                    now,
+                    now,
+                ),
+            )
+        export_telemetry(force=False)
+    except Exception as exc:
+        _emit_degraded(f"fetched-source-write: {type(exc).__name__}: {exc}")
+
+
+def list_fetched_sources(lane: Optional[str] = None) -> list[dict[str, Any]]:
+    """Return successful provenance for one lane (current lane by default)."""
+    if not enabled():
+        return []
+    selected_lane = _lane_id() if lane is None else str(lane)
+    try:
+        with closing(_connect()) as conn:
+            if selected_lane == "*":
+                rows = conn.execute(
+                    """SELECT url, content_sha256, content_chars, title,
+                              excerpt, lane, observations, last_seen,
+                              provider, receipt_id, cache_hits
+                       FROM fetched_sources ORDER BY first_seen, url"""
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """SELECT url, content_sha256, content_chars, title,
+                              excerpt, lane, observations, last_seen,
+                              provider, receipt_id, cache_hits
+                       FROM fetched_sources WHERE lane=?
+                       ORDER BY first_seen, url""",
+                    (selected_lane,),
+                ).fetchall()
+        return [
+            {
+                "url": str(row[0]),
+                "content_sha256": str(row[1]),
+                "content_chars": int(row[2]),
+                "title": str(row[3]),
+                "excerpt": str(row[4]),
+                "lane": str(row[5]),
+                "observations": int(row[6]),
+                "last_seen": float(row[7]),
+                "provider": str(row[8]),
+                "receipt_id": str(row[9]),
+                "cache_hits": int(row[10]),
+            }
+            for row in rows
+        ]
+    except Exception as exc:
+        _emit_degraded(f"fetched-source-read: {type(exc).__name__}: {exc}")
+        return []
+
+
+def provider_circuit_open(provider: str) -> bool:
+    """Return True while cooling down or another worker owns the half-open probe.
+
+    Once cooldown expires, exactly one caller atomically acquires a short probe
+    lease and receives ``False``. Other concurrent callers continue to skip the
+    unhealthy provider until that probe records success/failure or its lease
+    expires. This prevents a resume wave from stampeding a recovering API.
+    """
+    name = str(provider or "").strip().lower()
+    if not enabled() or not name:
+        return False
+    try:
+        with closing(_connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT consecutive_transport_failures, open_until, probe_until "
+                "FROM provider_health WHERE provider=?",
+                (name,),
+            ).fetchone()
+            now = time.time()
+            failures = int(row[0] or 0) if row else 0
+            open_until = float(row[1] or 0.0) if row else 0.0
+            probe_until = float(row[2] or 0.0) if row else 0.0
+            is_open = open_until > now
+            if not is_open and failures > 0:
+                if probe_until > now:
+                    is_open = True
+                else:
+                    lease = _env_int(
+                        "RESEARCH_PROVIDER_PROBE_LEASE_SECONDS",
+                        DEFAULT_PROVIDER_PROBE_LEASE_SECONDS,
+                        minimum=1,
+                    )
+                    conn.execute(
+                        "UPDATE provider_health SET probe_until=?, updated_at=? "
+                        "WHERE provider=?",
+                        (now + lease, now, name),
+                    )
+            if is_open:
+                _increment(conn, "global", "", f"provider_{name}_circuit_skips")
+                _increment(
+                    conn, "lane", _lane_id(), f"provider_{name}_circuit_skips"
+                )
+            conn.commit()
+        export_telemetry(force=is_open)
+        return is_open
+    except Exception as exc:
+        _emit_degraded(f"provider-circuit-read: {type(exc).__name__}: {exc}")
+        return False
+
+
+def record_provider_transport_failure(provider: str, error: str) -> bool:
+    """Record a transport failure and return whether it opened the circuit."""
+    name = str(provider or "").strip().lower()
+    if not enabled() or not name:
+        return False
+    threshold = _env_int(
+        "RESEARCH_PROVIDER_FAILURE_THRESHOLD",
+        DEFAULT_PROVIDER_FAILURE_THRESHOLD,
+        minimum=1,
+    )
+    cooldown = _env_int(
+        "RESEARCH_PROVIDER_COOLDOWN_SECONDS",
+        DEFAULT_PROVIDER_COOLDOWN_SECONDS,
+        minimum=1,
+    )
+    now = time.time()
+    try:
+        with closing(_connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT consecutive_transport_failures FROM provider_health "
+                "WHERE provider=?",
+                (name,),
+            ).fetchone()
+            consecutive = (int(row[0]) if row else 0) + 1
+            opened = consecutive >= threshold
+            conn.execute(
+                """INSERT INTO provider_health(
+                       provider, consecutive_transport_failures,
+                       total_transport_failures, opened_at, open_until, probe_until,
+                       last_error, updated_at
+                   ) VALUES (?, ?, 1, ?, ?, NULL, ?, ?)
+                   ON CONFLICT(provider) DO UPDATE SET
+                       consecutive_transport_failures=excluded.consecutive_transport_failures,
+                       total_transport_failures=provider_health.total_transport_failures+1,
+                       opened_at=excluded.opened_at,
+                       open_until=excluded.open_until,
+                       probe_until=NULL,
+                       last_error=excluded.last_error,
+                       updated_at=excluded.updated_at""",
+                (
+                    name,
+                    consecutive,
+                    now if opened else None,
+                    now + cooldown if opened else None,
+                    str(error or "")[:500],
+                    now,
+                ),
+            )
+            _increment(conn, "global", "", f"provider_{name}_transport_failures")
+            _increment(
+                conn,
+                "lane",
+                _lane_id(),
+                f"provider_{name}_transport_failures",
+            )
+            if opened:
+                _increment(conn, "global", "", f"provider_{name}_circuit_opens")
+                _increment(
+                    conn, "lane", _lane_id(), f"provider_{name}_circuit_opens"
+                )
+            conn.commit()
+        export_telemetry(force=True)
+        return opened
+    except Exception as exc:
+        _emit_degraded(f"provider-circuit-write: {type(exc).__name__}: {exc}")
+        return False
+
+
+def record_provider_success(provider: str) -> None:
+    """Reset consecutive failures after a successful provider response."""
+    name = str(provider or "").strip().lower()
+    if not enabled() or not name:
+        return
+    try:
+        with closing(_connect()) as conn:
+            conn.execute(
+                """INSERT INTO provider_health(
+                       provider, consecutive_transport_failures,
+                       total_transport_failures, opened_at, open_until, probe_until,
+                       last_error, updated_at
+                   ) VALUES (?, 0, 0, NULL, NULL, NULL, '', ?)
+                   ON CONFLICT(provider) DO UPDATE SET
+                       consecutive_transport_failures=0,
+                       opened_at=NULL,
+                       open_until=NULL,
+                       probe_until=NULL,
+                       last_error='',
+                       updated_at=excluded.updated_at""",
+                (name, time.time()),
+            )
+    except Exception as exc:
+        _emit_degraded(f"provider-success-write: {type(exc).__name__}: {exc}")
 
 
 def compact_positive_result(tool: str, artifact_id: str) -> str:
@@ -950,6 +1269,8 @@ def _snapshot() -> dict[str, Any]:
 
     counter_rows: list[tuple[Any, ...]] = []
     negative_rows: list[tuple[Any, ...]] = []
+    provider_rows: list[tuple[Any, ...]] = []
+    fetched_source_row: Optional[tuple[Any, ...]] = None
     tool_created: Optional[tuple[Any, ...]] = None
     model_created: Optional[tuple[Any, ...]] = None
     peak_row: Optional[tuple[Any, ...]] = None
@@ -976,6 +1297,15 @@ def _snapshot() -> dict[str, Any]:
                     "SELECT kind, COUNT(*), COALESCE(SUM(failures), 0) "
                     "FROM negative_results GROUP BY kind ORDER BY kind"
                 ).fetchall())
+                provider_rows.extend(conn.execute(
+                    """SELECT provider, consecutive_transport_failures,
+                              total_transport_failures, open_until, last_error
+                       FROM provider_health ORDER BY provider"""
+                ).fetchall())
+                fetched_source_row = conn.execute(
+                    "SELECT COUNT(DISTINCT url_hash), COUNT(*) "
+                    "FROM fetched_sources"
+                ).fetchone()
             if spec["leases"]:
                 model_created = created
                 peak_row = conn.execute(
@@ -1018,6 +1348,7 @@ def _snapshot() -> dict[str, Any]:
     return {
         "schema_version": 1,
         "run_id": os.environ.get("RESEARCH_BUDGET_RUN_ID", ""),
+        "epoch": os.environ.get("RESEARCH_BUDGET_EPOCH", ""),
         "created_at": float(created[0]) if created else None,
         "updated_at": time.time(),
         "degraded": False,
@@ -1047,6 +1378,16 @@ def _snapshot() -> dict[str, Any]:
             "negative_retries": _env_int(
                 "RESEARCH_NEGATIVE_CACHE_RETRIES", DEFAULT_NEGATIVE_RETRIES
             ),
+            "provider_failure_threshold": _env_int(
+                "RESEARCH_PROVIDER_FAILURE_THRESHOLD",
+                DEFAULT_PROVIDER_FAILURE_THRESHOLD,
+                minimum=1,
+            ),
+            "provider_cooldown_seconds": _env_int(
+                "RESEARCH_PROVIDER_COOLDOWN_SECONDS",
+                DEFAULT_PROVIDER_COOLDOWN_SECONDS,
+                minimum=1,
+            ),
             "model_concurrency_global": _model_capacity(),
             "subagent_concurrency_global": _subagent_capacity(),
         },
@@ -1064,6 +1405,23 @@ def _snapshot() -> dict[str, Any]:
         "negative_cache": {
             kind: {"keys": int(keys), "failures": int(failures)}
             for kind, keys, failures in negative_rows
+        },
+        "fetched_source_provenance": {
+            "distinct_urls": (
+                int(fetched_source_row[0]) if fetched_source_row else 0
+            ),
+            "lane_rows": int(fetched_source_row[1]) if fetched_source_row else 0,
+        },
+        "provider_health": {
+            str(provider): {
+                "consecutive_transport_failures": int(consecutive),
+                "total_transport_failures": int(total),
+                "open_until": float(open_until) if open_until else None,
+                "circuit_open": bool(open_until and float(open_until) > time.time()),
+                "last_error": str(last_error),
+            }
+            for provider, consecutive, total, open_until, last_error
+            in provider_rows
         },
         "model_concurrency": {
             "scope": "application",

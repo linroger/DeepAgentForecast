@@ -15,14 +15,19 @@
                         供抽取尚未落盘时由 agent 自写数据的 write-step 流程）
 
 输出（全部落在 <dir>/charts/ 下 + <dir>/charts.json 清单）：
-    charts/actor_network.{html,png}   actor 关系网络（角色类着色、显式层级/关系度定径、语义边色）
+    charts/actor_network.{html,png}   actor 关系网络（可选 context；默认不产出）
     charts/timeline.{html,png}        分道事件时间线（按日期，≤40 事件，悬停出全文）
     charts/quant_metrics.{html,png}   同分母定量基准面板（实际值/预测值分符号）
+    charts/metric_trajectories.{html,png}
+                                      同一指标族（metric_family）跨地区/分析师的历史/预测轨迹
+                                      （同族 ≥3 个不同年份才连线；预测点须有外部发布来源）
     charts/forecast_revisions.{html,png}
                                       同一预测指标跨三个以上发布版本的修订轨迹
     charts/market_probabilities.{html,png}
                                       最高流动性预测市场的隐含 P(yes)
-    charts/source_quality.{html,png}  来源层级构成 + 时效性分布
+    charts/source_quality.{html,png}  来源层级构成 + 时效性分布（诊断图，默认不产出；
+                                      仅 --diagnostics / RESEARCH_CHARTS_INCLUDE_DIAGNOSTICS=1
+                                      时渲染，且绝不进研究报告正文）
 
 设计约束（与 SKILL.md 的失败模式清单一致）：
   * 缺哪个工件跳哪张图，绝不造数据；单图失败绝不拖垮其余（每图独立 try/except）。
@@ -31,7 +36,8 @@
     HTML（清单条目仍登记，path 指向 html）。
   * plotly 缺失 → matplotlib-only PNG；plotly 与 matplotlib 都缺 → exit 3 并给出明确
     stderr（调用方按 degrade-safe 跳过整步）。
-  * charts.json 原子整写（读旧清单 → 按稳定生产者 ID 替换 → 重写），幂等可重跑。
+  * charts.json 跨进程加锁并原子整写（读旧清单 → 按稳定生产者 ID 替换 → 重写），
+    幂等可重跑且并发渲染不会丢失外部生产者条目。
 
 Exit codes: 0 = 至少写出一张图或清单已更新；2 = 无任何可渲染工件；3 = 无图形库。
 """
@@ -39,6 +45,7 @@ Exit codes: 0 = 至少写出一张图或清单已更新；2 = 无任何可渲染
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import datetime as dt
 import html as html_lib
 import json
@@ -49,6 +56,11 @@ import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
+
+try:
+    import fcntl  # POSIX deployment: serialize cross-process manifest updates.
+except ImportError:  # pragma: no cover - Windows remains atomic last-writer-wins.
+    fcntl = None  # type: ignore
 
 # ---------------------------------------------------------------------------
 # 图形库探测（degrade 阶梯：plotly(+kaleido) → matplotlib → 无库退出 3）
@@ -98,10 +110,16 @@ _OWNED_CHART_IDS = (
     "actor_network",
     "timeline",
     "quant_metrics",
+    "metric_trajectories",
     "forecast_revisions",
     "market_probabilities",
     "source_quality",
 )
+def _env_truthy(value) -> bool:
+    """环境变量真值判定：1/true/yes/on（大小写不敏感）为真；空/未设/其它为假。"""
+    return str(value or "").strip().casefold() in {"1", "true", "yes", "on"}
+
+
 def _log(msg: str) -> None:
     print(f"[render] {msg}", file=sys.stderr)
 
@@ -142,6 +160,20 @@ def _num(v) -> float | None:
         return None
 
 
+def _num_range(value) -> tuple[float, float] | None:
+    """Return an explicit numeric range without inventing uncertainty."""
+    text = str(value or "").replace(",", "")
+    match = re.search(
+        r"(-?\d+(?:\.\d+)?)\s*(?:[-–—~]|to)\s*(-?\d+(?:\.\d+)?)",
+        text,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    lo, hi = float(match.group(1)), float(match.group(2))
+    return (min(lo, hi), max(lo, hi))
+
+
 _UNIT_ALIASES = {
     "% new vehicle sales": "% new car sales",
     "% of new vehicle sales": "% new car sales",
@@ -160,6 +192,11 @@ _FORECAST_SIGNAL_RE = re.compile(
     r"\b(?:forecast(?:ed|s|ing)?|project(?:ed|ion|ions)?|outlook|"
     r"estimate(?:d|s)?|expected|expectation|guidance|scenario|target|"
     r"revision|revised)\b",
+    re.IGNORECASE,
+)
+_INTERNAL_FORECAST_SOURCE_RE = re.compile(
+    r"\b(?:internal|dossier|synthesis|working\s+(?:assumption|interpolation)|"
+    r"analyst\s+interpolation|our\s+(?:case|estimate|forecast))\b|内部推演|本报告|分析师插值",
     re.IGNORECASE,
 )
 _DENOMINATOR_PATTERNS = (
@@ -186,7 +223,7 @@ _TIME_BASIS_PATTERNS = (
 _MEASURE_FAMILY_PATTERNS = (
     ("growth", r"\b(?:growth|cagr|change)\b"),
     ("share", r"\b(?:share|penetration|adoption|mix)\b"),
-    ("price", r"\b(?:price|cost)\b"),
+    ("price", r"\b(?:price|cost|capex)\b"),
     ("margin", r"\bmargin\b"),
     ("rate", r"\b(?:rate|yield)\b"),
     ("capacity", r"\bcapacity\b"),
@@ -259,6 +296,20 @@ def _is_projection(row: dict) -> bool:
 def _truncate(s: str, n: int) -> str:
     s = str(s or "").strip()
     return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def _plotly_text(value) -> str:
+    """Escape reader text and neutralize Plotly/MathJax dollar delimiters.
+
+    Plotly treats paired ``$`` characters as TeX.  A perfectly ordinary event
+    such as ``US$192 ... US$55`` therefore lost its numbered key and rendered a
+    stray math fragment in the PNG.  Currency is prose here, so spell it as
+    ``USD`` before HTML escaping instead of invoking MathJax.
+    """
+    text = str(value or "")
+    text = re.sub(r"\bUS\$", "USD ", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?<![A-Za-z])\$", "USD ", text)
+    return html_lib.escape(text)
 
 
 def _parse_date(v) -> dt.date | None:
@@ -357,6 +408,49 @@ def _split_quant_families(rows: list[dict]) -> list[list[dict]]:
         else:
             families.append({"rows": [row], "common": subjects})
     return [family["rows"] for family in families if len(family["rows"]) >= 2]
+
+
+def _quant_panel_subject(rows: list[dict]) -> str:
+    """Build a compact common-subject label for one strict comparison panel."""
+    if not rows:
+        return "Comparable benchmarks"
+    # Use metric labels for the visible title. Definitions are intentionally
+    # verbose and may share boilerplate such as "class range cited" or
+    # "approximately N hours" that is useful for grouping but awful as a title.
+    metric_tokens = []
+    for row in rows:
+        tokens = {
+            token
+            for token in re.findall(r"[a-z][a-z0-9]+", str(row.get("metric") or "").casefold())
+            if token not in _SUBJECT_STOPWORDS and not re.fullmatch(r"20\d{2}", token)
+        }
+        metric_tokens.append(tokens)
+    common = set(metric_tokens[0]) if metric_tokens else set()
+    for tokens in metric_tokens[1:]:
+        common &= tokens
+    common -= {"current", "best", "day", "intra", "multi", "target", "installed", "storage"}
+    ordered = []
+    first_text = str(rows[0].get("metric") or "")
+    for token in re.findall(r"[a-z][a-z0-9]+", first_text.casefold()):
+        if token in common and token not in ordered:
+            ordered.append(token)
+    if not ordered:
+        base = "Comparable benchmarks"
+    else:
+        display = {"ldes": "LDES", "ev": "EV", "ai": "AI", "lcos": "LCOS"}
+        base = " ".join(display.get(token, token) for token in ordered[:6])
+    projections = {bool(row.get("projection")) for row in rows}
+    if projections == {False}:
+        return f"Current {base}"
+    if projections == {True}:
+        years = {
+            int(year)
+            for row in rows
+            for year in re.findall(r"\b(20\d{2})\b", str(row.get("metric") or ""))
+        }
+        return f"{next(iter(years))} {base} targets" if len(years) == 1 \
+            else f"{base} forecasts / targets"
+    return base
 
 
 def _source_outlook_family(source: str) -> str:
@@ -623,7 +717,12 @@ def prep_quant(rows, max_bars: int = 10, max_panels: int = 3):
     for idx, r in enumerate(rows or []):
         if not isinstance(r, dict):
             continue
-        v = _num(r.get("value"))
+        interval = _num_range(r.get("value"))
+        # An explicit interval owns its displayed center. A conflicting model-
+        # supplied value_num must not place the marker outside its own whisker.
+        v = (sum(interval) / 2.0) if interval else _num(r.get("value_num"))
+        if v is None:
+            v = _num(r.get("value"))
         metric = str(r.get("metric") or "").strip()
         unit = _canonical_unit(r.get("unit"))
         if v is None or not metric or not _comparable_unit(unit):
@@ -648,6 +747,9 @@ def prep_quant(rows, max_bars: int = 10, max_panels: int = 3):
         key = (unit.casefold(), as_of.isoformat(), time_basis, denominator, measure_family)
         groups.setdefault(key, []).append({
             "metric": metric, "value": v,
+            "value_label": str(r.get("value") or f"{v:g}").strip(),
+            "low": interval[0] if interval else v,
+            "high": interval[1] if interval else v,
             "unit": unit,
             "as_of": as_of.isoformat(),
             "tier": str(r.get("tier") or "").strip(),
@@ -684,11 +786,230 @@ def prep_quant(rows, max_bars: int = 10, max_panels: int = 3):
             })
         panels.append({
             "unit": values[0]["unit"],
+            "title": _quant_panel_subject(values),
             "as_of": key[1],
             "time_basis": key[2],
             "bars": bars,
         })
     return {"panels": panels}
+
+
+def _trajectory_series_name(row: dict) -> str:
+    explicit = re.sub(r"\s+", " ", str(row.get("series") or "")).strip()
+    if explicit:
+        explicit = re.sub(r"\b20\d{2}\b", " ", explicit)
+        explicit = re.sub(
+            r"\b(?:actual|observed|reported|forecast|forecasted|projected|target|"
+            r"base case|q[1-4]|h[12]|fy)\b",
+            " ",
+            explicit,
+            flags=re.IGNORECASE,
+        )
+        explicit = re.sub(r"\s+", " ", explicit).strip(" -–—:()")
+        if explicit:
+            return explicit
+    metric = re.sub(r"\s+", " ", str(row.get("metric") or "")).strip()
+    metric = re.sub(r"\b20\d{2}\b", " ", metric)
+    metric = re.sub(
+        r"\b(?:actual|observed|reported|forecast|forecasted|projected|target)\b",
+        " ",
+        metric,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\s+", " ", metric).strip(" -–—:()")
+
+
+# 地区规范化（与 deerflow_research 的富化保持同义），供跨行同族按地区分线。
+_TRAJ_REGION_ALIASES = {
+    "us": "United States", "u.s.": "United States", "usa": "United States",
+    "u.s.a.": "United States", "america": "United States",
+    "united states": "United States", "united states of america": "United States",
+    "china": "China", "prc": "China", "mainland china": "China", "p.r.c.": "China",
+    "eu": "Europe", "e.u.": "Europe", "europe": "Europe", "european union": "Europe",
+    "european": "Europe", "india": "India", "bharat": "India",
+    "global": "Global", "world": "Global", "worldwide": "Global", "row": "Global",
+    "international": "Global",
+}
+
+
+def _canonical_region(text) -> str:
+    raw = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not raw:
+        return "Global"
+    return _TRAJ_REGION_ALIASES.get(raw.casefold(), raw)
+
+
+def _trajectory_unit_bucket(unit: str) -> str:
+    """单位桶：把 % 归成 'percent'，其余用规范单位小写。用于同族内隔离量纲，
+    防止把比率值与计数值误连进同一条轨迹（即便 metric_family 分类偶有噪声）。"""
+    low = (unit or "").casefold()
+    return "percent" if "%" in low else low
+
+
+def _trajectory_year(row: dict) -> "int | None":
+    """规范目标年（供 x 轴分桶）：canonical ``year`` → period_end/target_date →
+    period.end；仅对『预测/目标』行再兜底从 metric/series 文本取最晚年份。
+
+    观测行没有结构化 period_end 时不从文本猜——沿用旧约束，避免把发布日误画成观测年。
+    """
+    y = row.get("year")
+    if isinstance(y, (int, float)) and not isinstance(y, bool) and 1900 <= int(y) <= 2100:
+        return int(y)
+    for key in ("period_end", "target_date"):
+        d = _parse_date(row.get(key))
+        if d is not None:
+            return d.year
+    period = row.get("period") if isinstance(row.get("period"), dict) else {}
+    d = _parse_date(period.get("period_end") or period.get("end"))
+    if d is not None:
+        return d.year
+    if _is_projection(row):
+        text = f"{row.get('metric') or ''} {row.get('series') or ''}"
+        years = [int(m) for m in re.findall(r"\b(20\d{2})\b", text)]
+        if years:
+            return max(years)  # 预测行文本里的年份即目标年，取最晚
+    return None
+
+
+def _trajectory_family(row: dict) -> str:
+    """规范指标族：canonical ``metric_family`` 优先，否则折叠 series/metric 文本
+    （去年份/口径词）。前者让不同分析师/年份的散点归到同族连线；后者兼容旧数据
+    （同名系列跨年份仍能连成一条）。"""
+    fam = re.sub(r"\s+", " ", str(row.get("metric_family") or "")).strip()
+    if fam:
+        return fam.casefold()
+    return _trajectory_series_name(row).casefold()
+
+
+def _trajectory_value(row: dict) -> "float | None":
+    """取数：canonical ``value_num`` 优先，否则从 ``value`` 文本解析首个数字。"""
+    vn = row.get("value_num")
+    if isinstance(vn, (int, float)) and not isinstance(vn, bool) and vn == vn:
+        return float(vn)
+    return _num(row.get("value"))
+
+
+def _trajectory_is_forecast(row: dict) -> bool:
+    """actual/forecast：canonical ``value_kind`` 优先，否则回退既有 _is_projection。"""
+    vk = re.sub(r"[^a-z]+", "", str(row.get("value_kind") or "").casefold())
+    if vk in {"actual", "observed", "reported", "historical", "measured"}:
+        return False
+    if vk in {
+        "forecast", "forecasted", "projection", "projected", "target",
+        "estimate", "estimated", "expected", "guidance", "scenario",
+    }:
+        return True
+    return _is_projection(row)
+
+
+def _trajectory_row_is_publishable(row: dict, projection: bool) -> bool:
+    """Fail closed on provenance needed to call a line sourced/published.
+
+    Observations require a named source, definition and source as-of date.
+    Forecast points additionally require an external URL and reject explicit
+    dossier/internal analyst interpolations.  Such rows remain valid report
+    tables; they simply cannot be mislabeled as a published trajectory.
+    """
+    source = re.sub(r"\s+", " ", str(row.get("source") or row.get("analyst") or "")).strip()
+    definition = re.sub(r"\s+", " ", str(row.get("definition") or "")).strip()
+    as_of = _parse_date(row.get("as_of_date"))
+    if not source or not definition or as_of is None:
+        return False
+    if not projection:
+        return True
+    source_url = str(row.get("source_url") or "").strip()
+    parsed_url = urlsplit(source_url)
+    external_url = (
+        parsed_url.scheme.casefold() in {"http", "https"}
+        and bool(parsed_url.netloc)
+    )
+    return external_url and not _INTERNAL_FORECAST_SOURCE_RE.search(
+        f"{source} {definition}"
+    )
+
+
+def prep_trajectories(rows, max_series: int = 4):
+    """把 quantitative.json 的散点按 canonical 指标族归组，连成观测/预测轨迹。
+
+    分组键 = (metric_family, region, technology, unit 桶)：同族同地区同量纲的多年份点
+    连成一条线；观测点与预测点分色分符号（实线圆点 vs 虚线菱形）。x 轴用目标年（period_end
+    优先，缺失则由 canonical ``year`` 或预测行文本年兜底，落成 ``YYYY-12-31``）。
+
+    canonical 字段（value_num/year/metric_family/region/value_kind，由抽取侧富化补上）在则
+    走精确分组；缺失时退化：折叠 series 名当族、结构化日期取年——旧数据仍能连出同名跨年轨迹。
+    只渲染『≥3 个不同年份』的族，避免两点斜线被误读成趋势。观测点须有命名
+    来源/定义/as-of；预测点还须有外部 source_url，内部 dossier/analyst 插值仅保留表格。
+    """
+    grouped: dict[tuple[str, str, str, str], dict] = {}
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        value = _trajectory_value(row)
+        family = _trajectory_family(row)
+        year = _trajectory_year(row)
+        projection = _trajectory_is_forecast(row)
+        if value is None or not family or year is None \
+                or not _trajectory_row_is_publishable(row, projection):
+            continue
+        unit = _canonical_unit(row.get("unit"))
+        region = _canonical_region(row.get("region") or row.get("geography"))
+        tech = re.sub(
+            r"\s+", " ", str(row.get("technology") or row.get("technology_route") or "")
+        ).strip()
+        if tech.casefold() in {"all routes", "all", "n/a", "none"}:
+            tech = ""
+        # x 轴用真实 period_end（有则用），否则由目标年合成年末，保证可连线。
+        nested_period = row.get("period") if isinstance(row.get("period"), dict) else {}
+        period_end = _parse_date(
+            row.get("period_end")
+            or row.get("target_date")
+            or nested_period.get("period_end")
+            or nested_period.get("end")
+        )
+        period_end_iso = period_end.isoformat() if period_end else f"{year:04d}-12-31"
+        definition = re.sub(r"\s+", " ", str(row.get("definition") or "")).strip()
+        source = str(row.get("source") or row.get("analyst") or "").strip()
+        source_url = str(row.get("source_url") or "").strip()
+        as_of = _parse_date(row.get("as_of_date"))
+        # 展示名：优先 metric_family（规范族名）；否则折叠后的 series 名。
+        display_name = re.sub(r"\s+", " ", str(row.get("metric_family") or "")).strip() \
+            or _trajectory_series_name(row) or family
+        key = (family, region.casefold(), tech.casefold(), _trajectory_unit_bucket(unit))
+        series = grouped.setdefault(
+            key,
+            {
+                "name": display_name,
+                "unit": unit or "",
+                "geography": region,
+                "technology_route": tech or "All routes",
+                "points": {},
+            },
+        )
+        candidate = {
+            "period_end": period_end_iso,
+            "year": year,
+            "value": value,
+            "as_of": as_of.isoformat() if as_of else "",
+            "source": source,
+            "source_url": source_url,
+            "definition": definition,
+            "projection": projection,
+            "tier": str(row.get("tier") or "S3").strip().upper() or "S3",
+        }
+        # 同一年只保留最高层级（tier）的那个点，避免重复年份堆叠。
+        prior = series["points"].get(year)
+        if prior is None or _TIER_RANK.get(candidate["tier"], 9) < _TIER_RANK.get(
+            prior["tier"], 9
+        ):
+            series["points"][year] = candidate
+
+    eligible = []
+    for series in grouped.values():
+        points = [series["points"][yr] for yr in sorted(series["points"])]
+        if len({point["year"] for point in points}) >= 3:  # ≥3 个不同年份才成轨迹
+            eligible.append({**series, "points": points})
+    eligible.sort(key=lambda row: (-len(row["points"]), row["name"].casefold()))
+    return {"series": eligible[:max_series]} if eligible else None
 
 
 def prep_revisions(rows, max_series: int = 3):
@@ -963,6 +1284,10 @@ def _write_outputs(fig, mpl_draw, charts_dir: Path, stem: str) -> tuple[str | No
     返回 (png 相对路径 | None, html 相对路径 | None)；两者皆 None = 该图失败。"""
     html_rel = png_rel = None
     if _HAS_PLOTLY and fig is not None:
+        # Keep standalone PNG/PDF embedding legible in dark-mode viewers and
+        # respect each chart's content-driven height instead of stretching
+        # every figure to the same 750px canvas.
+        fig.update_layout(paper_bgcolor="#ffffff", plot_bgcolor="#ffffff")
         html_path = charts_dir / f"{stem}.html"
         try:
             fig.write_html(
@@ -989,7 +1314,14 @@ def _write_outputs(fig, mpl_draw, charts_dir: Path, stem: str) -> tuple[str | No
             _log(f"{stem}: write_html failed ({type(e).__name__}: {e})")
         png_path = charts_dir / f"{stem}.png"
         try:
-            fig.write_image(str(png_path), width=1200, height=750, scale=2)  # 需要 kaleido
+            layout_height = int(getattr(fig.layout, "height", None) or 750)
+            layout_width = int(getattr(fig.layout, "width", None) or 1200)
+            fig.write_image(
+                str(png_path),
+                width=max(800, min(layout_width, 1800)),
+                height=max(420, min(layout_height, 1800)),
+                scale=2,
+            )  # 需要 kaleido
             png_rel = f"charts/{stem}.png"
         except Exception as e:  # noqa: BLE001 — kaleido 缺失/Chrome 不可用 → matplotlib 降级
             _log(f"{stem}: plotly PNG export unavailable ({type(e).__name__}); trying matplotlib fallback")
@@ -1050,7 +1382,7 @@ def render_timeline(prep, charts_dir: Path):
             x=[p["date"] for p in pts], y=[p["lane"] for p in pts],
             mode="markers+text", text=[f"{p['index']:02d}" for p in pts],
             textposition="middle center", textfont={"size": 8, "color": "white"},
-            hovertext=[f"<b>{p['date']}</b><br>{p['full']}" for p in pts],
+            hovertext=[f"<b>{_plotly_text(p['date'])}</b><br>{_plotly_text(p['full'])}" for p in pts],
             hoverinfo="text",
             marker={"size": 20, "color": "#3b6fb0",
                     "line": {"color": "white", "width": 1.5}}))
@@ -1062,8 +1394,8 @@ def render_timeline(prep, charts_dir: Path):
             fig.add_annotation(
                 xref="paper", yref="paper", x=column / key_columns,
                 y=-(0.14 + row * 0.055), showarrow=False,
-                text=(f"<b>{point['index']:02d}</b>  {point['date']}  "
-                      f"{_truncate(point['label'], 68 if key_columns == 2 else 86)}"),
+                text=(f"<b>{point['index']:02d}</b>  {_plotly_text(point['date'])}  "
+                      f"{_plotly_text(_truncate(point['label'], 68 if key_columns == 2 else 86))}"),
                 xanchor="left", yanchor="top", align="left",
                 font={"size": 9, "color": "#24292f"},
             )
@@ -1099,10 +1431,14 @@ def render_quant(prep, charts_dir: Path):
     if _HAS_PLOTLY:
         fig = make_subplots(
             rows=len(panels), cols=1,
-            subplot_titles=[f"{panel['unit']} (n={len(panel['bars'])})" for panel in panels],
+            subplot_titles=[
+                f"{panel['title']} · {panel['unit']} (n={len(panel['bars'])})"
+                for panel in panels
+            ],
             # Static exports need explicit breathing room between a panel's
             # x-axis title and the next panel heading.
             vertical_spacing=0.16,
+            shared_xaxes=True,
         )
         shown = set()
         for row_no, panel in enumerate(panels, 1):
@@ -1127,13 +1463,22 @@ def render_quant(prep, charts_dir: Path):
                             "width": 2,
                         },
                     },
+                    error_x={
+                        "type": "data",
+                        "symmetric": False,
+                        "array": [max(0.0, bar["high"] - bar["value"]) for bar in bars],
+                        "arrayminus": [max(0.0, bar["value"] - bar["low"]) for bar in bars],
+                        "visible": any(bar["high"] > bar["low"] for bar in bars),
+                        "color": "#6e7781",
+                        "thickness": 1.5,
+                    },
                     hovertext=["<br>".join(
                         part for part in (
-                            f"<b>{bar['metric']}</b>",
-                            f"{bar['value']:g} {panel['unit']}",
+                            f"<b>{_plotly_text(bar['metric'])}</b>",
+                            f"{_plotly_text(bar['value_label'])} {panel['unit']}",
                             f"as of {bar['as_of']}" if bar["as_of"] else "",
-                            bar["definition"],
-                            bar["source"],
+                            _plotly_text(bar["definition"]),
+                            _plotly_text(bar["source"]),
                         ) if part
                     ) for bar in bars],
                     hoverinfo="text",
@@ -1144,7 +1489,7 @@ def render_quant(prep, charts_dir: Path):
         fig.update_layout(
             title=f"{title}<br><sup>Each panel shares one explicit denominator; hover for source and as-of.</sup>",
             template="plotly_white",
-            height=max(720, 380 * len(panels)),
+            height=max(440, 260 * len(panels) + 120),
             margin={"l": 330, "r": 40, "t": 90, "b": 85},
             legend={"orientation": "h", "y": -0.09, "x": 0.5,
                     "xanchor": "center", "yanchor": "top"},
@@ -1161,10 +1506,16 @@ def render_quant(prep, charts_dir: Path):
             colors = ["#b36b00" if bar["projection"] else "#3b6fb0" for bar in bars]
             markers = ["D" if bar["projection"] else "o" for bar in bars]
             for y, bar, color, marker in zip(ys, bars, colors, markers, strict=False):
-                ax.scatter([bar["value"]], [y], c=color, marker=marker, s=55)
+                ax.errorbar(
+                    [bar["value"]], [y],
+                    xerr=[[max(0.0, bar["value"] - bar["low"])],
+                          [max(0.0, bar["high"] - bar["value"])]],
+                    color=color, marker=marker, markersize=7, capsize=3,
+                    linestyle="none",
+                )
             ax.set_yticks(ys, [bar["label"] for bar in bars], fontsize=7)
             ax.invert_yaxis()
-            ax.set_title(panel["unit"])
+            ax.set_title(f"{panel['title']} · {panel['unit']}")
             ax.set_xlabel(panel["unit"])
             ax.grid(axis="x", alpha=0.25)
         f.suptitle(title)
@@ -1173,6 +1524,109 @@ def render_quant(prep, charts_dir: Path):
         plt.close(f)
 
     return _write_outputs(fig, mpl_draw, charts_dir, "quant_metrics")
+
+
+def render_trajectories(prep, charts_dir: Path):
+    series = prep["series"]
+    title = "Observed and Sourced Forecast Trajectories"
+    fig = None
+    if _HAS_PLOTLY:
+        fig = make_subplots(
+            rows=len(series), cols=1,
+            subplot_titles=[
+                f"{row['name']} · {row['geography']} · {row['unit']}"
+                for row in series
+            ],
+            vertical_spacing=0.14,
+        )
+        shown = set()
+        for row_no, row in enumerate(series, 1):
+            points = row["points"]
+            for projection in (False, True):
+                subset = [point for point in points if point["projection"] is projection]
+                if not subset:
+                    continue
+                status = "Published forecast / target" if projection else "Observed / reported"
+                fig.add_trace(
+                    go.Scatter(
+                        x=[point["year"] for point in subset],
+                        y=[point["value"] for point in subset],
+                        mode="lines+markers",
+                        name=status,
+                        legendgroup=status,
+                        showlegend=status not in shown,
+                        line={
+                            "color": "#b36b00" if projection else "#3b6fb0",
+                            "dash": "dash" if projection else "solid",
+                            "width": 3,
+                        },
+                        marker={
+                            "size": 10,
+                            "symbol": "diamond" if projection else "circle",
+                        },
+                        hovertext=["<br>".join(part for part in (
+                            f"<b>{row['name']}</b>",
+                            f"period end {point['period_end']}: {point['value']:g} {row['unit']}",
+                            f"source as of {point['as_of']}",
+                            _plotly_text(point["definition"]),
+                            _plotly_text(point["source"]),
+                            _plotly_text(point["source_url"]),
+                        ) if part) for point in subset],
+                        hoverinfo="text",
+                    ),
+                    row=row_no,
+                    col=1,
+                )
+                shown.add(status)
+            fig.update_xaxes(
+                title_text="measurement / target year", dtick=1,
+                row=row_no, col=1,
+            )
+            fig.update_yaxes(title_text=row["unit"], row=row_no, col=1)
+        fig.update_layout(
+            title=(
+                f"{title}<br><sup>Period dates drive the x-axis; publication/as-of dates "
+                "remain in hover. Dashed diamonds are forecasts or targets.</sup>"
+            ),
+            template="plotly_white",
+            height=max(560, 330 * len(series)),
+            margin={"l": 110, "r": 40, "t": 90, "b": 70},
+            legend={"orientation": "h", "y": -0.08, "x": 0.5, "xanchor": "center"},
+        )
+
+    def mpl_draw(path: str) -> None:
+        f, axes = plt.subplots(
+            len(series), 1,
+            figsize=(12, max(7.5, 4.2 * len(series))),
+            dpi=160,
+            squeeze=False,
+        )
+        for ax, row in zip(axes[:, 0], series, strict=False):
+            for projection, color, marker, linestyle in (
+                (False, "#3b6fb0", "o", "-"),
+                (True, "#b36b00", "D", "--"),
+            ):
+                points = [p for p in row["points"] if p["projection"] is projection]
+                if not points:
+                    continue
+                ax.plot(
+                    [p["year"] for p in points],
+                    [p["value"] for p in points],
+                    color=color,
+                    marker=marker,
+                    linestyle=linestyle,
+                    lw=2.5,
+                )
+            ax.set_title(f"{row['name']} · {row['geography']}")
+            ax.set_ylabel(row["unit"])
+            ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+            ax.grid(alpha=0.25)
+        f.suptitle(title)
+        f.tight_layout()
+        f.savefig(path)
+        plt.close(f)
+
+    return _write_outputs(fig, mpl_draw, charts_dir, "metric_trajectories")
 
 
 def render_revisions(prep, charts_dir: Path):
@@ -1428,6 +1882,32 @@ def _merge_manifest(manifest_path: Path, new_entries: list) -> list:
     return merged
 
 
+@contextmanager
+def _manifest_update_lock(manifest_path: Path):
+    """Serialize the manifest read-merge-write transaction across renderers."""
+    lock_path = manifest_path.with_name(manifest_path.name + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "a+", encoding="utf-8") as lock_file:
+        if fcntl is not None:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if fcntl is not None:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _update_manifest(manifest_path: Path, entries: list) -> list:
+    """Lock, merge, and atomically persist one renderer transaction."""
+    with _manifest_update_lock(manifest_path):
+        merged = _merge_manifest(manifest_path, entries)
+        _atomic_write(
+            manifest_path,
+            json.dumps(merged, ensure_ascii=False, indent=2) + "\n",
+        )
+        return merged
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="forecast-visuals bundled renderer (plotly-local)")
     ap.add_argument(
@@ -1438,7 +1918,35 @@ def main() -> int:
             "prediction_markets.json/sources.json"
         ),
     )
+    ap.add_argument(
+        "--context",
+        action="store_true",
+        default=None,
+        help=(
+            "additionally render the optional actor relationship map. Off by default "
+            "because context/proxy structure must not displace forecast-domain data; "
+            "RESEARCH_CHARTS_INCLUDE_CONTEXT=1 also enables it."
+        ),
+    )
+    ap.add_argument(
+        "--diagnostics",
+        action="store_true",
+        default=None,
+        help=(
+            "additionally render diagnostic-only charts (e.g. source_quality). These "
+            "are methodology/audit figures and never belong in the report body. Off by "
+            "default; RESEARCH_CHARTS_INCLUDE_DIAGNOSTICS=1 also enables them."
+        ),
+    )
     args = ap.parse_args()
+    # 诊断图开关：显式 --diagnostics 或环境变量为真才产出。默认关——用户明确不要
+    # source_quality「来源显著性」图进正文；关掉后它连 charts.json 都不登记。
+    include_diagnostics = bool(args.diagnostics) or _env_truthy(
+        os.environ.get("RESEARCH_CHARTS_INCLUDE_DIAGNOSTICS")
+    )
+    include_context = bool(args.context) or _env_truthy(
+        os.environ.get("RESEARCH_CHARTS_INCLUDE_CONTEXT")
+    )
     if not _HAS_PLOTLY and not _HAS_MPL:
         _log(
             "neither plotly nor matplotlib importable — install one "
@@ -1472,28 +1980,44 @@ def main() -> int:
     run_anchor = run_meta.get("finished_at") if isinstance(run_meta, dict) else None
 
     jobs = [
-        ("actor_network", prep_network(actors_obj), render_network,
-         "actors.json", "Actor Relationship Network",
-         "Node size uses declared tiers/scores when present, otherwise equal size; "
-         "colors encode role and relationship semantics."),
         ("timeline", prep_timeline(timeline_rows), render_timeline,
          "timeline.json", "Event Timeline",
-         "Dated key events driving the forecast, most recent window."),
+         "Dated key events driving the forecast, most recent window.", "forecast_domain"),
         ("quant_metrics", prep_quant(quant_rows), render_quant,
          "quantitative.json", "Comparable Forecast Benchmarks",
-         "Strict same-denominator panels; hover retains source, as-of, and forecast status."),
+         "Strict same-denominator panels; hover retains source, as-of, and forecast status.",
+         "forecast_domain"),
+        ("metric_trajectories", prep_trajectories(quant_rows), render_trajectories,
+         "quantitative.json", "Observed and Published Forecast Trajectories",
+         "Three or more sourced points on one definition; x-axis is period end, not publication date.",
+         "forecast_domain"),
         ("forecast_revisions", prep_revisions(quant_rows), render_revisions,
          "quantitative.json", "Forecast Revisions Across Published Vintages",
-         "The same sourced forecast metric across three or more published vintages."),
+         "The same sourced forecast metric across three or more published vintages.",
+         "forecast_domain"),
         ("market_probabilities", prep_markets(markets_payload), render_markets,
          "prediction_markets.json", "Prediction-Market Implied Probabilities",
-         "Most-liquid matched markets; implied probabilities are calibration anchors, not truth."),
-        ("source_quality", prep_sources(sources_payload, run_anchor), render_sources,
-         "sources.json", "Source Quality and Freshness",
-         "Deduplicated source counts by evidence tier and deterministic freshness bucket."),
+         "Most-liquid matched markets; implied probabilities are calibration anchors, not truth.",
+         "forecast_domain"),
     ]
+    if include_context:
+        jobs.insert(0, (
+            "actor_network", prep_network(actors_obj), render_network,
+            "actors.json", "Actor Relationship Network",
+            "Optional industrial-chain context. Node size uses declared tiers/scores when "
+            "present; it is not market share or forecast impact.", "context",
+        ))
+    # source_quality 是诊断图（data_class='diagnostic'），默认不产出、不登记进 charts.json，
+    # 更不会被 embed 进研究报告正文；仅在显式开诊断时补渲染，供方法学/审计场景。
+    if include_diagnostics:
+        jobs.append((
+            "source_quality", prep_sources(sources_payload, run_anchor), render_sources,
+            "sources.json", "Source Quality and Freshness",
+            "Deduplicated source counts by evidence tier and deterministic freshness bucket.",
+            "diagnostic",
+        ))
     entries = []
-    for stem, prep, renderer, source, title, caption in jobs:
+    for stem, prep, renderer, source, title, caption, data_class in jobs:
         if not prep:
             _log(f"{stem}: input artifact missing/empty — skipped (never fabricated)")
             continue
@@ -1505,18 +2029,26 @@ def main() -> int:
         path = png_rel or html_rel
         if not path:
             continue
-        entry = {"id": stem, "title": title, "caption": caption, "source_data": source, "path": path}
+        entry = {
+            "id": stem,
+            "title": title,
+            "caption": caption,
+            "source_data": source,
+            "data_class": data_class,
+            "path": path,
+        }
         if html_rel and png_rel:
             entry["html_path"] = html_rel
         entries.append(entry)
         _log(f"{stem}: wrote {path}" + (f" (+ {html_rel})" if html_rel and png_rel else ""))
 
     manifest_path = base / "charts.json"
-    merged = _merge_manifest(manifest_path, entries)
     # 若之前有 manifest，即使本次一张也没生成，也必须落盘清理结果；
     # 否则已删除的输入仍会在 UI 中显示上一轮的旧图。全新空目录不创建空清单。
     if entries or manifest_path.exists():
-        _atomic_write(manifest_path, json.dumps(merged, ensure_ascii=False, indent=2) + "\n")
+        merged = _update_manifest(manifest_path, entries)
+    else:
+        merged = []
     if not entries:
         _log(
             "no renderable artifacts found (actors.json/timeline.json/quantitative.json/"

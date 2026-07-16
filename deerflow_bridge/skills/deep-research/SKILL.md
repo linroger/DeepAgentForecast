@@ -1,11 +1,16 @@
 ---
 name: deep-research
-description: Use for web research, comparisons, explanations that depend on external evidence, and every forecast investigation. Provides the always-on core for KIQ decomposition, source grading, evidence-yield stopping, disconfirmation, forecast inputs, provenance, and phase-aware handoffs. Detailed tradecraft and the final-dossier contract live in lazy references so repeated slash activation stays token-efficient.
+description: Use for web research, comparisons, explanations that depend on external evidence, and every forecast investigation. Provides the always-on core for KIQ decomposition, source grading, evidence-yield stopping, disconfirmation, forecast inputs, provenance, and phase-aware handoffs. Detailed tradecraft and the final-dossier contract live in lazy references.
 ---
 
 # Deep Research — Core Contract
 
-Produce decision-grade research: real fetched evidence, graded provenance, explicit uncertainty, and forecast-useful structure. This core is intentionally compact because `/deep-research` may be activated in every independent pass. Load detailed references only when the current phase needs them.
+Produce decision-grade research: real fetched evidence, graded provenance, explicit uncertainty, and forecast-useful structure. This core is intentionally compact because `/deep-research` may be activated in every independent pass.
+
+## Activation discipline
+
+When this body is injected, do **not** reread `SKILL.md`; it is already in the
+conversation. Load only a named lazy reference when the phase needs it.
 
 ## Phase type comes first
 
@@ -15,12 +20,12 @@ Identify the current phase from its prompt. The phase contract overrides any fin
 - **Final dossier synthesis only** — the prompt explicitly says to write/synthesize/finalize the complete research dossier. Only this phase uses the long-form output contract in `references/final-dossier-contract.md`.
 - **Structured extraction/judging** — follow the requested JSON/scorecard schema, not the prose length contract.
 
-This distinction is mandatory. A global dossier floor applied to every pass multiplies latency and tokens without adding evidence.
+This distinction is mandatory. A global dossier floor applied to every pass multiplies latency and tokens.
 
 ## Core loop
 
 1. Decompose the brief into 3–7 Key Intelligence Questions (KIQs). Mark load-bearing KIQs, likely S1/S2 source classes, priors, and what would falsify them.
-2. Search for documents, not commentary. Use `web_search`, then `web_fetch` the strongest pages in full. For forecast calibration use `prediction_market_search`; if unavailable, use read-only `web_fetch` against the public Gamma API.
+2. Search for documents, not commentary. Use `web_search`, then `web_fetch` the strongest pages in full. For forecast calibration use `prediction_market_search`; if unavailable, use read-only `web_fetch` against the public Gamma API. Run the full market sweep **once, in the opening pass**; if it surfaces zero topically relevant markets, record `no_market_coverage` and skip market search in later phases (one refresh at synthesis only). A transport-failing market tool must not be retried within the same phase.
 3. Maintain an evidence ledger: `KIQ → claim → source/title/real URL/date/tier → independence → grade → open gap`.
 4. Prefer primary origins, verify numbers/units/as-of dates, trace repeated claims back to their origin, and seek the strongest opposing case.
 5. Check convergence after every evidence-bearing call. Continue only for a named unresolved KIQ with a credible next upgrade.
@@ -29,7 +34,7 @@ This distinction is mandatory. A global dossier floor applied to every pass mult
 ## Evidence discipline
 
 - **S1**: original/authoritative material — official statistics, filings, laws, court records, peer-reviewed papers, transcripts, primary datasets, direct first-party statements. Preferred for load-bearing facts.
-- **S2**: accountable high-quality reporting/analysis — major wires/outlets, serious trade press, established research bodies. Use for context and as a pointer to S1.
+- **S2**: accountable high-quality reporting/analysis — major wires/outlets, serious trade press, established research bodies. Context and a pointer to S1.
 - **S3**: conditional/biased/derivative — vendor research, expert blogs, preprints, Wikipedia as a map. Corroborate or attribute explicitly.
 - **S4**: reject — SEO/affiliate slop, anonymous/undated aggregators, unsupported statistics, synthetic rewrites. Do not fetch or cite.
 
@@ -49,7 +54,7 @@ Tool counts and source counts are safety telemetry, never quotas or quality prox
 - **Evidence delta**: a new independent origin, stronger tier, verified number, resolved contradiction, reference-class base rate, watchable indicator, or genuine disconfirmation.
 - **Yield stop**: two genuinely different angles produce no evidence delta. Stop that line and record the gap.
 - **Continue**: at least one priority KIQ remains unresolved and the next call has a named expected upgrade.
-- Never issue a near-duplicate query. Change actor, mechanism, document type, jurisdiction/language, or time window—not punctuation or word order.
+- Never issue a near-duplicate query. Change actor, mechanism, document type, jurisdiction/language, or time window—not punctuation.
 - Checkpoint the ledger after every pass; later phases must not re-research settled items.
 
 ## Forecast-specific requirements
@@ -66,7 +71,7 @@ Research forecasting inputs, not only present-state description:
 - chart-ready tables/series with definitions and provenance;
 - prediction-market question, market ID, P(yes), volume/liquidity, end date, URL, and fetch time for relevant liquid markets.
 
-Market prices are calibration anchors, not ground truth. Self-filter lexical false positives. Explain material forecast/market divergence instead of copying the price.
+Market prices are calibration anchors, not ground truth; self-filter lexical false positives and explain material divergence rather than copying the price.
 
 ## Synthesis gate
 
@@ -87,4 +92,4 @@ When—and only when—the prompt requests the complete final research dossier, 
 
 `references/final-dossier-contract.md`
 
-That reference contains the long-form completeness floor, structured handoff fields, citations, scenarios, market section, tables, conflicts, and failure checklist. Working phases must not load or inherit its length floor unless they are explicitly preparing final synthesis.
+That reference contains the long-form completeness floor, structured handoff fields, citations, scenarios, market section, tables, conflicts, and failure checklist; working phases must not load or inherit its length floor.

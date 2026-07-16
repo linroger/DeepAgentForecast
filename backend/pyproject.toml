@@ -17,6 +17,9 @@ dependencies = [
     
     # LLM 相关
     "openai>=1.0.0",
+    # LLM_HTTP2 defaults on; declare httpx's HTTP/2 runtime instead of warning
+    # and silently falling back to HTTP/1.1 on every client construction.
+    "h2>=4.1.0",
 
     # 本地知识图谱（替代 Zep Cloud，无需 API Key）：
     #   graphiti-core = 本地时序知识图谱内核（Zep Cloud 的开源底座）。

@@ -61,3 +61,4 @@ These feed `actors.json`, `sources.json`, `quantitative.json`, `timeline.json`, 
 - No internal simulation/agent dynamics language.
 - No repeated filler, research logs, tool chatter, or process residue.
 - Final length reflects evidence depth and is not an intermediate-pass floor multiplied across workers.
+- One canonical scenario partition owns the scenario names and probabilities. Every executive-summary mention, binary-forecast dependency, and visualization/source table that repeats it uses the exact same names and weights; an alternate split that also totals 100% is a contradiction, not a second valid presentation.

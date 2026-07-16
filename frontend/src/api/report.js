@@ -14,10 +14,10 @@ export const generateReport = (data) => {
 
 /**
  * 获取报告生成状态
- * @param {string} reportId
+ * @param {{task_id: string, simulation_id?: string}} data
  */
-export const getReportStatus = (reportId) => {
-  return service.get(`/api/report/generate/status`, { params: { report_id: reportId } })
+export const getReportStatus = (data) => {
+  return service.post('/api/report/generate/status', data)
 }
 
 /**
@@ -84,6 +84,26 @@ export const getSectionsPartial = (reportId) => {
 export const getReportTranslationMd = (reportId, lang) => {
   // responseType text：返回体是 text/markdown 原文而非 JSON，避免 axios 误当 JSON 解析。
   return service.get(`/api/report/${reportId}/full_report.${lang}.md`, { responseType: 'text' })
+}
+
+/** Start or deduplicate a publication-gated translation retry. */
+export const requestReportTranslation = (reportId, lang) => {
+  return service.post(`/api/report/${reportId}/translations/${lang}`)
+}
+
+/** Poll one report-bound translation task; task ids cannot cross reports/languages. */
+export const getReportTranslationStatus = (reportId, lang, taskId) => {
+  return service.get(`/api/report/${reportId}/translations/${lang}/status`, {
+    params: taskId ? { task_id: taskId } : undefined,
+  })
+}
+
+/** Direct Markdown download for the primary or selected published variant. */
+export const reportMarkdownUrl = (reportId, lang) => {
+  const path = lang
+    ? `/api/report/${reportId}/full_report.${encodeURIComponent(lang)}.md`
+    : `/api/report/${reportId}/download`
+  return apiUrl(path)
 }
 
 /**

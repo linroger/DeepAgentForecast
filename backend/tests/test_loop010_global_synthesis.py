@@ -236,6 +236,39 @@ def test_evidence_pack_rejects_all_provider_errors_but_keeps_partial_evidence():
         dr.render_evidence_pack([provider_error, "usable qualitative evidence"]))
 
 
+def test_evidence_pack_rejects_control_failures_but_keeps_mixed_evidence():
+    budget_error = (
+        '{"budget":"attempts_global","error":"research_budget_exhausted",'
+        '"request":"official source","results":[],"tool":"web_search"}'
+    )
+    blocked = (
+        "SUBAGENT_OUTCOME: BLOCKED code=research_budget_exhausted\n"
+        "No admissible evidence could be gathered."
+    )
+
+    assert dr.evidence_pack_is_control_failure_only(
+        dr.render_evidence_pack([budget_error, blocked]))
+    assert not dr.evidence_pack_is_control_failure_only(
+        dr.render_evidence_pack([budget_error, "usable qualitative evidence"]))
+
+
+def test_resume_evidence_merge_preserves_prior_pack_and_drops_control_failures():
+    prior = dr.render_evidence_pack([
+        "Prior fetched evidence [S1] with a measured deployment baseline."
+    ])
+    current = dr.render_evidence_pack([
+        '{"error":"research_budget_exhausted","tool":"web_search"}',
+        "New independently verified evidence [S2].",
+    ])
+
+    merged = dr.merge_resume_evidence_packs(prior, current)
+
+    assert dr.parse_evidence_pack(merged) == [
+        "Prior fetched evidence [S1] with a measured deployment baseline.",
+        "New independently verified evidence [S2].",
+    ]
+
+
 def test_manifest_sources_keep_global_ids_excerpts_and_filter_denied(monkeypatch):
     monkeypatch.delenv("RESEARCH_ALLOW_LOW_QUALITY_SOURCES", raising=False)
     monkeypatch.delenv("RESEARCH_SOURCE_DENY_DOMAINS", raising=False)
@@ -281,6 +314,18 @@ def test_shared_synthesis_boundary_invokes_multipart_once(monkeypatch):
     assert len(calls) == 1
     assert calls[0][1] == [
         ("lane one " * 100).strip(), ("lane two " * 100).strip()]
+
+
+def test_deep_multipart_failure_refuses_single_call_fallback(monkeypatch):
+    monkeypatch.setenv("ACTOR_SYNTH_MIN_CONTEXT_CHARS", "0")
+    monkeypatch.setattr(dr, "_multipart_synthesis_enabled", lambda _depth: True)
+    monkeypatch.setattr(dr, "synthesize_multipart", lambda *_args, **_kwargs: "")
+    result = dr.synthesize_from_evidence_parts(
+        ["lane evidence " * 100],
+        ["lane evidence"],
+        "What happens?", None, "claude", _Log(), "deep",
+    )
+    assert result == ""
 
 
 def test_single_call_synthesis_fallback_samples_all_lanes(monkeypatch):
@@ -512,7 +557,14 @@ def test_global_synthesis_double_failure_preserves_evidence_and_fails_closed(
             calls.append(f"evidence-{lane}")
             evidence = "# Internal Evidence Lane Pack\n\n" + "evidence " * 80
             (folder / "evidence_pack.md").write_text(evidence, encoding="utf-8")
-            (folder / "sources.json").write_text("[]", encoding="utf-8")
+            (folder / "sources.json").write_text(
+                json.dumps([{
+                    "url": f"https://example.com/lane-{lane}",
+                    "title": f"Lane {lane} source",
+                    "reachable": True,
+                }]),
+                encoding="utf-8",
+            )
             return {
                 "report": evidence, "report_path": str(folder / "evidence_pack.md"),
                 "actor_dossier": "", "actors": None, "sources": [],
@@ -545,6 +597,144 @@ def test_global_synthesis_double_failure_preserves_evidence_and_fails_closed(
     assert failure["global_synthesis_attempts"] == 2
     assert failure["evidence_lanes_consumed"] == 2
     assert not (handoff / "research_report.md").exists()
+
+
+def test_synthesis_only_recovery_reuses_manifest_without_restarting_lanes(
+        tmp_path, monkeypatch):
+    _configure_global_mode(monkeypatch, tmp_path)
+    handoff = tmp_path / "handoff"
+    handoff.mkdir()
+    manifest = handoff / "evidence_synthesis_manifest.json"
+    manifest.write_text(json.dumps({
+        "version": 2,
+        "lanes": [{"title": "sealed lane", "path": "track_1/evidence_pack.md"}],
+        "sources": [{"url": "https://example.gov/source"}],
+    }), encoding="utf-8")
+    budget_db = tmp_path / "research_budget.sqlite3"
+    telemetry = tmp_path / "research_budget.json"
+    monkeypatch.setattr(
+        po,
+        "_activate_research_budget_epoch",
+        lambda _state, _handoff: (str(budget_db), str(telemetry), 3),
+    )
+    monkeypatch.setattr(
+        po, "_research_budget_exhaustion", lambda _path, _epoch: None)
+
+    calls = []
+
+    def fake_run(prompt, handoff_dir, **kwargs):
+        folder = Path(handoff_dir)
+        calls.append(dict(kwargs))
+        assert kwargs.get("synthesis_manifest_path") == str(manifest)
+        assert kwargs.get("budget_lane_id") == "global-synthesis-recovery"
+        assert kwargs.get("subagents") is False
+        assert not kwargs.get("evidence_only")
+        assert not kwargs.get("resume")
+        (folder / "research_progress.log").write_text(
+            "synthesis attempt\n", encoding="utf-8")
+        if len(calls) == 1:
+            (folder / "research_report.md").write_text(
+                "quality-failed candidate " * 40, encoding="utf-8")
+            (folder / "research_report_judge.json").write_text(
+                '{"verdict":"FAIL"}', encoding="utf-8")
+            raise RuntimeError("simulated first synthesis failure")
+        report = "# Recovered dossier\n\n" + "verified forecast evidence " * 40
+        (folder / "research_report.md").write_text(report, encoding="utf-8")
+        (folder / "sources.json").write_text(
+            '[{"url":"https://example.gov/source"}]', encoding="utf-8")
+        (folder / "meta.json").write_text("{}", encoding="utf-8")
+        return {
+            "report": report,
+            "report_path": str(folder / "research_report.md"),
+            "actor_dossier": "",
+            "actors": None,
+            "sources": [{"url": "https://example.gov/source"}],
+            "timeline": None,
+            "exit_code": 0,
+            "research_telemetry": {"wall_s": 2, "tokens_total": 2},
+        }
+
+    monkeypatch.setattr(
+        po.DeerFlowResearchRunner, "run", staticmethod(fake_run))
+    state = po.PipelineState(
+        pipeline_id="pipe_synthesis_recovery",
+        prompt="Forecast the outcome",
+        handoff_dir=str(handoff),
+        options={"depth": "deep", "research_model": "minimax"},
+    )
+
+    result = po.PipelineOrchestrator()._run_research_synthesis_recovery(
+        state, str(handoff), lambda _pct, _msg: None, str(manifest))
+
+    assert len(calls) == 2
+    assert result["report"].startswith("# Recovered dossier")
+    assert po._validate_research_contract(str(handoff))
+    assert state.options["synthesis_recovery"]["passed"] is True
+    assert state.options["synthesis_recovery"]["attempts"] == 2
+    attempts = handoff / "research_attempts"
+    assert list(attempts.glob(
+        "global_synthesis_1_failed_*.research_report.md"))
+    assert not list(handoff.glob("track_*"))
+
+
+def test_synthesis_only_recovery_stops_after_provider_outage(
+        tmp_path, monkeypatch):
+    _configure_global_mode(monkeypatch, tmp_path)
+    handoff = tmp_path / "handoff"
+    handoff.mkdir()
+    manifest = handoff / "evidence_synthesis_manifest.json"
+    manifest.write_text(json.dumps({
+        "version": 2,
+        "lanes": [{"title": "sealed lane", "path": "track_1/evidence_pack.md"}],
+        "sources": [{"url": "https://example.gov/source"}],
+    }), encoding="utf-8")
+    monkeypatch.setattr(
+        po,
+        "_synthesis_recovery_budget_epoch",
+        lambda _state, _handoff: (
+            str(tmp_path / "budget.sqlite3"),
+            str(tmp_path / "budget.json"),
+            "epoch-3",
+        ),
+    )
+    monkeypatch.setattr(
+        po, "_research_budget_exhaustion", lambda _path, _epoch: None)
+    calls = []
+
+    def unavailable(_prompt, handoff_dir, **_kwargs):
+        calls.append(handoff_dir)
+        Path(handoff_dir, "research_progress.log").write_text(
+            "ModelProvidersUnavailable: MiniMax 429; Antigravity auth unavailable\n",
+            encoding="utf-8",
+        )
+        raise RuntimeError(
+            "DeerFlow failed: ModelProvidersUnavailable: primary and fallback")
+
+    monkeypatch.setattr(
+        po.DeerFlowResearchRunner, "run", staticmethod(unavailable))
+    state = po.PipelineState(
+        pipeline_id="pipe_provider_blocked",
+        prompt="Forecast the outcome",
+        handoff_dir=str(handoff),
+        options={"depth": "deep", "research_model": "minimax"},
+    )
+
+    with pytest.raises(RuntimeError, match="模型提供方阻塞"):
+        po.PipelineOrchestrator()._run_research_synthesis_recovery(
+            state, str(handoff), lambda _pct, _msg: None, str(manifest))
+
+    assert len(calls) == 1
+    assert state.options["synthesis_recovery"] == {
+        "attempted": True,
+        "passed": False,
+        "evidence_manifest": str(manifest),
+        "attempts": 1,
+        "errors": [
+            "RuntimeError: DeerFlow failed: ModelProvidersUnavailable: "
+            "primary and fallback"
+        ],
+        "blocked_by_provider": True,
+    }
 
 
 def test_research_contract_replaces_stale_optionals_and_detects_tamper(tmp_path):
@@ -642,3 +832,58 @@ def test_research_runner_rejects_nonzero_exit_with_stale_artifact(
             "forecast question", str(handoff),
             on_progress=lambda _pct, _msg: None, timeout=10,
         )
+
+
+def test_evidence_only_runner_does_not_reuse_stale_actor_dossier(
+        tmp_path, monkeypatch):
+    deerflow_dir = tmp_path / "deer-flow"
+    deerflow_dir.mkdir()
+    (deerflow_dir / "deerflow_research.py").write_text(
+        "# test entrypoint\n", encoding="utf-8")
+    handoff = tmp_path / "handoff"
+    handoff.mkdir()
+    (handoff / "evidence_pack.md").write_text(
+        "# Internal Evidence Lane Pack\n\n"
+        "This is a machine-routed evidence artifact, not publishable prose.\n\n"
+        "<!-- evidence-block:1 -->\n"
+        + "current evidence " * 40,
+        encoding="utf-8",
+    )
+    (handoff / "actor_dossier.md").write_text(
+        "# Stale actor dossier\n\n" + "prior attempt " * 50,
+        encoding="utf-8",
+    )
+
+    class CompletedProcess:
+        pid = 9877
+        stdout = []
+
+        @staticmethod
+        def poll():
+            return 0
+
+        @staticmethod
+        def wait(timeout=None):
+            return 0
+
+    monkeypatch.setattr(po.Config, "DEERFLOW_DIR", str(deerflow_dir))
+    monkeypatch.setattr(po.Config, "UPLOAD_FOLDER", str(tmp_path / "uploads"))
+    monkeypatch.setattr(po, "_sync_deerflow_bridge_if_stale", lambda _path: None)
+    captured = {}
+
+    def fake_popen(*args, **kwargs):
+        captured["env"] = kwargs["env"]
+        return CompletedProcess()
+
+    monkeypatch.setattr(po.subprocess, "Popen", fake_popen)
+
+    result = po.DeerFlowResearchRunner.run(
+        "forecast question",
+        str(handoff),
+        on_progress=lambda _pct, _msg: None,
+        timeout=10,
+        evidence_only=True,
+    )
+
+    assert result["actor_dossier"] == ""
+    assert captured["env"]["DEERFLOW_DUAL_TRACK"] == "false"

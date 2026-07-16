@@ -3,6 +3,7 @@ Report API路由
 提供模拟报告生成、获取、对话等接口
 """
 
+import hashlib
 import os
 import traceback
 import threading
@@ -28,6 +29,18 @@ def _report_publication_payload(report):
     payload["publication_issues"] = list(publication.get("reasons") or [])
     if not payload["publishable"]:
         payload["markdown_content"] = ""
+    payload["translation_status"] = ReportManager.translation_status(
+        report.report_id, report=report
+    )
+    verified = payload["translation_status"].get("translation")
+    payload["translations"] = []
+    if (isinstance(verified, dict)
+            and verified.get("available") is True
+            and verified.get("audit_verified") is True
+            and verified.get("source_markdown_sha256")
+            and verified.get("markdown_sha256")
+            and verified.get("final_audit_sha256")):
+        payload["translations"] = [verified]
     return payload
 
 
@@ -40,6 +53,24 @@ def _publication_rejection(report_id: str, lang=None):
         "publishable": False,
         "publication_issues": list(publication.get("reasons") or []),
     }), 409
+
+
+def _active_translation_task(report_id: str, lang: str):
+    """Return the newest in-flight task for exactly one report/language pair."""
+    for task in TaskManager().list_tasks(task_type="report_translate"):
+        metadata = task.get("metadata") or {}
+        if (metadata.get("report_id") == report_id
+                and metadata.get("lang") == lang
+                and task.get("status") in {
+                    TaskStatus.PENDING.value, TaskStatus.PROCESSING.value,
+                }):
+            return task
+    return None
+
+
+def _launch_translation_thread(target) -> None:
+    """Small seam kept explicit so API tests can run the worker synchronously."""
+    threading.Thread(target=target, daemon=True).start()
 
 
 # ============== 报告生成接口 ==============
@@ -568,18 +599,215 @@ def get_report_translation_md(report_id: str, lang: str):
         }), 500
 
 
+@report_bp.route('/<report_id>/translations/<lang>', methods=['POST'])
+def generate_report_translation(report_id: str, lang: str):
+    """Start one publication-gated, deduplicated language-variant retry.
+
+    Report completion still attempts translation automatically.  This endpoint
+    exists so a rejected/temporarily failed sidecar remains recoverable from the
+    UI without rerunning research, graph, simulation, or the English report.
+    """
+    lang = (lang or "").strip().lower()
+    if lang not in ReportManager._TRANSLATION_LANGS:
+        return jsonify({
+            "success": False,
+            "error": f"不支持的语种: {lang}（仅 en / zh）",
+        }), 400
+    report = ReportManager.get_report(report_id)
+    if report is None:
+        return jsonify({
+            "success": False,
+            "error": f"报告不存在: {report_id}",
+        }), 404
+    task_manager = TaskManager()
+    with ReportManager._translation_generation_lease(report_id, lang):
+        # Re-read under the cross-process lease.  This makes the durable task
+        # record the deduplication authority even when another worker owns the
+        # in-memory TaskManager entry.
+        state = ReportManager.translation_status(report_id, lang, report=report)
+        if state.get("available"):
+            return jsonify({"success": True, "data": state})
+        active = _active_translation_task(report_id, lang)
+        if active:
+            return jsonify({
+                "success": True,
+                "data": {
+                    **state,
+                    "status": active["status"],
+                    "task_id": active["task_id"],
+                    "progress": active.get("progress", 0),
+                    "message": active.get("message", ""),
+                },
+            }), 202
+        if state.get("status") == "generating":
+            return jsonify({"success": True, "data": state}), 202
+        if not state.get("can_generate"):
+            return jsonify({
+                "success": False,
+                "error": "该报告当前不能生成所请求的翻译版本",
+                "data": state,
+            }), 409
+
+        task_id = task_manager.create_task(
+            task_type="report_translate",
+            metadata={"report_id": report_id, "lang": lang},
+        )
+        source_sha = hashlib.sha256(
+            (report.markdown_content or "").encode("utf-8")
+        ).hexdigest()
+        owner = f"pid:{os.getpid()}"
+        ReportManager._set_translation_runtime_status(
+            report_id,
+            lang,
+            TaskStatus.PENDING.value,
+            source_markdown_sha256=source_sha,
+            task_id=task_id,
+            owner=owner,
+            progress=0,
+            message="翻译任务已排队",
+            issues=[],
+        )
+
+    def run_translation() -> None:
+        try:
+            task_manager.update_task(
+                task_id,
+                status=TaskStatus.PROCESSING,
+                progress=5,
+                message="正在生成并审计翻译版本",
+            )
+            result = ReportManager.generate_translation_variant(
+                report_id,
+                lang,
+                progress_callback=lambda progress, message: task_manager.update_task(
+                    task_id,
+                    status=TaskStatus.PROCESSING,
+                    progress=progress,
+                    message=message,
+                ),
+            )
+            if result.get("available"):
+                ReportManager._set_translation_runtime_status(
+                    report_id,
+                    lang,
+                    "available",
+                    source_markdown_sha256=source_sha,
+                    task_id=task_id,
+                    owner=owner,
+                    markdown_sha256=result.get("markdown_sha256"),
+                    progress=100,
+                    message="translation passed isolated publication audit",
+                    issues=[],
+                )
+                task_manager.complete_task(task_id, result=result)
+                return
+            issues = "; ".join(result.get("issues") or [])
+            ReportManager._set_translation_runtime_status(
+                report_id,
+                lang,
+                "failed",
+                source_markdown_sha256=source_sha,
+                task_id=task_id,
+                owner=owner,
+                progress=100,
+                message=issues or "翻译版本未通过发布审计",
+                issues=list(result.get("issues") or [])[:12],
+            )
+            task_manager.fail_task(task_id, issues or "翻译版本未通过发布审计")
+        except Exception as exc:  # noqa: BLE001 — task captures exact terminal failure
+            logger.error(
+                "报告翻译任务失败 report_id=%s lang=%s: %s",
+                report_id,
+                lang,
+                exc,
+            )
+            ReportManager._set_translation_runtime_status(
+                report_id,
+                lang,
+                "failed",
+                source_markdown_sha256=source_sha,
+                task_id=task_id,
+                owner=owner,
+                progress=100,
+                message=str(exc),
+                issues=[str(exc)],
+            )
+            task_manager.fail_task(task_id, str(exc))
+
+    _launch_translation_thread(run_translation)
+    return jsonify({
+        "success": True,
+        "data": {
+            **state,
+            "status": TaskStatus.PENDING.value,
+            "task_id": task_id,
+            "progress": 0,
+            "message": "翻译任务已启动",
+        },
+    }), 202
+
+
+@report_bp.route('/<report_id>/translations/<lang>/status', methods=['GET'])
+def get_report_translation_status(report_id: str, lang: str):
+    """Return durable artifact state plus optional in-memory task progress."""
+    lang = (lang or "").strip().lower()
+    if lang not in ReportManager._TRANSLATION_LANGS:
+        return jsonify({"success": False, "error": "不支持的语种"}), 400
+    report = ReportManager.get_report(report_id)
+    if report is None:
+        return jsonify({
+            "success": False,
+            "error": f"报告不存在: {report_id}",
+        }), 404
+    state = ReportManager.translation_status(report_id, lang, report=report)
+    task_id = (request.args.get("task_id") or "").strip()
+    task = TaskManager().get_task(task_id) if task_id else None
+    if task is not None:
+        task_data = task.to_dict()
+        metadata = task_data.get("metadata") or {}
+        if metadata.get("report_id") != report_id or metadata.get("lang") != lang:
+            return jsonify({
+                "success": False,
+                "error": "任务与报告或语种不匹配",
+            }), 409
+        return jsonify({
+            "success": True,
+            "data": {
+                **state,
+                "status": task_data["status"],
+                "task_id": task_id,
+                "progress": task_data.get("progress", 0),
+                "message": task_data.get("message", ""),
+                "error": task_data.get("error"),
+                "result": task_data.get("result"),
+            },
+        })
+    if state.get("available"):
+        return jsonify({"success": True, "data": state})
+
+    active = _active_translation_task(report_id, lang)
+    if active:
+        state.update({
+            "status": active["status"],
+            "task_id": active["task_id"],
+            "progress": active.get("progress", 0),
+            "message": active.get("message", ""),
+        })
+    return jsonify({"success": True, "data": state})
+
+
 # ============== 报告 PDF 导出接口（PDF-1）==============
 
 @report_bp.route('/<report_id>/pdf', methods=['GET'])
 def get_report_pdf(report_id: str):
-    """惰性构建并返回报告 PDF（reports/{id}/full_report.pdf）。
+    """Build and return one publication-bound PDF artifact.
 
-    首次访问（或 full_report.md 更新后）触发一次 pandoc+xelatex 构建（相对图表路径绝对化、
-    CJK 字体 PingFang SC、--toc；失败回退 markdown→HTML→PyMuPDF），随后按 full_report.md
-    的 mtime 缓存复用。REPORT_PDF_EXPORT 关闭 / 报告缺失 / 构建失败 → 404（degrade-safe）。
+    Cache reuse is content-addressed across Markdown, audits, citations, charts,
+    fonts, and renderer configuration. A PDF is served only after parse/text/glyph
+    integrity checks and an exact output manifest have passed.
 
     BILINGUAL：可选 ?lang=en|zh 从双语版 full_report.<lang>.md 构建 full_report.<lang>.pdf
-    （复用同一套 export 机制）；缺省/非法 lang → 主报告 PDF（默认，行为与历史一致）。
+    （复用同一套 export 机制）；缺省走主报告，显式非法 lang 返回 400。
 
     与同蓝图的 /download（Markdown）、/charts（图表资源）共用 /api/report/<id>/... 前缀约定。
     """
@@ -591,9 +819,23 @@ def get_report_pdf(report_id: str):
                 "error": f"报告不存在: {report_id}"
             }), 404
 
-        # BILINGUAL：?lang= 仅接受 {en, zh}，其余（含缺省）回退主报告。
-        lang = (request.args.get('lang') or '').strip().lower()
+        # BILINGUAL：缺省走主报告；显式非法语种必须失败，绝不静默回退为
+        # English/primary PDF 后仍让调用方误以为拿到了所请求的语言。
+        raw_lang = request.args.get('lang')
+        lang = (raw_lang or '').strip().lower()
+        if raw_lang is not None and lang and lang not in ReportManager._TRANSLATION_LANGS:
+            return jsonify({
+                "success": False,
+                "error": f"不支持的语种: {lang}（仅 en / zh）",
+            }), 400
         lang = lang if lang in ReportManager._TRANSLATION_LANGS else None
+
+        if not getattr(Config, "REPORT_PDF_EXPORT", True):
+            return jsonify({
+                "success": False,
+                "error": "PDF 导出服务未启用",
+                "code": "pdf_export_disabled",
+            }), 503
 
         if not ReportManager.is_publishable(report_id, lang):
             return _publication_rejection(report_id, lang)
@@ -602,8 +844,9 @@ def get_report_pdf(report_id: str):
         if not pdf_path or not os.path.exists(pdf_path):
             return jsonify({
                 "success": False,
-                "error": "PDF 导出不可用（未开启 REPORT_PDF_EXPORT、缺该语种版本或构建失败）"
-            }), 404
+                "error": "PDF 构建未通过渲染或内容完整性门",
+                "code": "pdf_build_failed",
+            }), 503
 
         download_name = f"{report_id}.{lang}.pdf" if lang else f"{report_id}.pdf"
         return send_file(
@@ -613,12 +856,12 @@ def get_report_pdf(report_id: str):
             mimetype="application/pdf",
         )
 
-    except Exception as e:
-        logger.error(f"导出报告 PDF 失败: {str(e)}")
+    except Exception:  # noqa: BLE001 - return a stable public error contract
+        logger.exception("导出报告 PDF 发生未预期错误 report_id=%s", report_id)
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": "PDF 导出发生内部错误",
+            "code": "pdf_internal_error",
         }), 500
 
 

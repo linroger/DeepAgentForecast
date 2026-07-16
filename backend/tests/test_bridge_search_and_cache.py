@@ -43,6 +43,7 @@ def test_select_provider_serper_beats_tavily_when_both_set(monkeypatch):
 def test_select_provider_ddg_default_zero_keys(monkeypatch):
     monkeypatch.delenv("SERPER_API_KEY", raising=False)
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
     assert st._select_search_provider() == "ddg"
 
 
@@ -50,6 +51,7 @@ def test_select_provider_blank_key_is_not_configured(monkeypatch):
     """空串 / 纯空白 key 视作未配（strip 后非空才算已配）。"""
     monkeypatch.setenv("SERPER_API_KEY", "   ")
     monkeypatch.setenv("TAVILY_API_KEY", "")
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "")
     assert st._select_search_provider() == "ddg"
 
 

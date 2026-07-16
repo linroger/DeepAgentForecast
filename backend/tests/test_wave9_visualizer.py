@@ -98,13 +98,16 @@ QUANTITATIVE = [
     {"metric": "resolution date", "value": "2030-12-31", "unit": "date", "tier": "S1"},  # 排除
     {"metric": "HBM 2028 market projection (2024)", "value": "45", "unit": "USD billion",
      "as_of_date": "2024-12-31", "source": "Analyst HBM Outlook 2024",
-     "definition": "Analyst 2024 forecast for 2028 HBM market revenue"},
+     "definition": "Published 2024 forecast for 2028 HBM market revenue",
+     "source_url": "https://example.com/hbm-outlook-2024"},
     {"metric": "HBM 2028 market projection (2025)", "value": "62", "unit": "USD billion",
      "as_of_date": "2025-12-31", "source": "Analyst HBM Outlook 2025",
-     "definition": "Analyst 2025 revision for 2028 HBM market revenue"},
+     "definition": "Published 2025 revision for 2028 HBM market revenue",
+     "source_url": "https://example.com/hbm-outlook-2025"},
     {"metric": "HBM 2028 market projection (2026)", "value": "79", "unit": "USD billion",
      "as_of_date": "2026-06-30", "source": "Analyst HBM Outlook 2026",
-     "definition": "Analyst 2026 revision for 2028 HBM market revenue"},
+     "definition": "Published 2026 revision for 2028 HBM market revenue",
+     "source_url": "https://example.com/hbm-outlook-2026"},
 ]
 
 SOURCES = [
@@ -176,12 +179,13 @@ def test_build_all_full_artifacts_produces_8_plus_charts(tmp_path):
     items = viz.build_all("w9_full", str(tmp_path), _full_artifacts())
     ids = {e["id"] for e in items}
     expected = {"scenario_probabilities", "binary_forecast_dotplot", "model_vs_market",
-                "timeline_lanes", "actor_network", "source_mix_sunburst",
+                "timeline_lanes",
                 "quantitative_claims", "forecast_revisions",
                 "worldstate_trajectory", "market_price_history_1"}
     assert expected <= ids
-    assert {"actor_influence_salience", "driver_tornado",
-            "contested_claims"}.isdisjoint(ids)
+    # actor_network 已随关系结构/方法论图降为 opt-in（默认不占报告槽位）。
+    assert {"actor_network", "actor_influence_salience", "driver_tornado",
+            "contested_claims", "source_mix_sunburst"}.isdisjoint(ids)
     assert len(items) >= 8
     for e in items:
         assert {"id", "path", "type", "title", "caption", "source",
@@ -202,13 +206,17 @@ def test_build_all_skipped_reasons_no_silent_skips(tmp_path):
                           {"forecast": json.loads(json.dumps(FORECAST))})
     m = json.loads((tmp_path / "viz_manifest.json").read_text(encoding="utf-8"))
     reasons = {s["builder"]: s["reason"] for s in m["skipped"]}
-    for builder in ("timeline_lanes", "actor_network", "source_mix_sunburst",
+    for builder in ("timeline_lanes",
+                    "metric_trajectories", "technology_shares", "regional_comparison",
                     "quantitative_claims", "forecast_revisions",
                     "worldstate_trajectory", "market_price_history"):
         assert reasons.get(builder) == "no_input", f"{builder} 应记 no_input"
     assert reasons["actor_influence_salience"] == "internal_proxy_not_reader_facing"
     assert reasons["driver_tornado"] == "proxy_not_sensitivity_analysis"
     assert reasons["contested_claims"] == "proxy_evidence_weight_not_reader_facing"
+    assert reasons["source_mix_sunburst"] == "methodology_not_reader_facing"
+    # actor_network 降为 opt-in：默认记 methodology_not_reader_facing（同 sunburst）。
+    assert reasons["actor_network"] == "methodology_not_reader_facing"
     assert any(e["id"] == "binary_forecast_dotplot" for e in items)
 
 
@@ -682,14 +690,15 @@ def test_build_all_real_handoff_integration(tmp_path):
     ids = {e["id"] for e in items}
     # 这份较旧的真实工件没有足够的来源/时点/口径语义，因此不再伪造
     # quantitative_claims；只要求它仍能诚实生成有资格的图。
+    # actor_network 已降为 opt-in（默认不占槽位）——不再进默认图集。
     assert ids == {
         "scenario_probabilities",
         "timeline_lanes",
-        "actor_network",
-        "source_mix_sunburst",
+        "metric_trajectories",
     }
     manifest = json.loads((tmp_path / "viz_manifest.json").read_text(encoding="utf-8"))
     reasons = {entry["builder"]: entry["reason"] for entry in manifest["skipped"]}
     assert reasons["quantitative_claims"] == "empty_after_parse"
+    assert reasons["actor_network"] == "methodology_not_reader_facing"
     for e in items:
         assert os.path.exists(str(tmp_path / e["path"]))

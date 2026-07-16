@@ -178,6 +178,40 @@ export function editDossier(pipelineId, payload) {
 }
 
 /**
+ * BILINGUAL（研究报告）：启动/去重结构无损的研究报告翻译（en⇄zh）。
+ * 后端复用与预测报告完全相同的翻译器（标题/表格/数字/引用逐一保真 + 污染重译 + 审计前 lint），
+ * 仅在隔离审计硬通过时落 research_report.<lang>.md + 审计侧车；失败不发布（fail-closed）。
+ * @param {String} pipelineId
+ * @param {String} lang - 'en' | 'zh'
+ */
+export function requestResearchTranslation(pipelineId, lang) {
+  return service.post(`/api/research/${pipelineId}/dossier/translations/${lang}`)
+}
+
+/**
+ * 拉取研究报告的某语种译文 Markdown + 审计状态。
+ * 返回 { success, data: { status, available, issues, source_lang, target_lang, report } }。
+ * 未生成/失败 → available:false（degrade-safe，调用方回退原文）。
+ * @param {String} pipelineId
+ * @param {String} lang - 'en' | 'zh'
+ */
+export function getResearchTranslation(pipelineId, lang) {
+  return service.get(`/api/research/${pipelineId}/dossier/translations/${lang}`)
+}
+
+/**
+ * 研究报告 PDF 直链（浏览器直下；绕过 axios）。lang ∈ {en,zh} 取审计通过的双语版（?lang=），
+ * 缺省取主报告。与预测报告 PDF 复用同一 LaTeX 模板（CJK/符号安全）。
+ * @param {String} pipelineId
+ * @param {String} [lang] - 'en' | 'zh'
+ * @returns {String} 可放进 <a href> 的 URL
+ */
+export function researchPdfUrl(pipelineId, lang) {
+  const base = `/api/research/${pipelineId}/dossier/pdf`
+  return apiUrl(lang ? `${base}?lang=${encodeURIComponent(lang)}` : base)
+}
+
+/**
  * 研究子进程进度日志（tail）
  * @param {String} pipelineId
  * @param {Number} lines

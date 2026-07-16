@@ -1194,6 +1194,16 @@ def scrub_simulation_mechanics(md: str, lang: str = "English") -> Tuple[str, Dic
     lines = (md or "").split("\n")
     mask = _fence_mask(lines)
 
+    # SESSIONB-3（取证 report_5ca1a799ee0d 发布不收敛）：References 条目
+    # 「…latest funding round 2025…」命中 LEAKAGE_PATTERNS 的 round 模式被整行删除，
+    # 而 _finalize_citations_for_publish 随后按引用索引重建同一条目 → lint 与引注
+    # 终结器互相改写、永不收敛。参考文献是逐字保真的出处记录，不是叙事正文——
+    # 本规则对 References 节与引用条目行（编号 + [S<n>] 起头）一律免检。
+    _refs_heading_re = re.compile(
+        r"^\s*#{1,6}\s*(references|参考文献|引用文献|资料来源)\s*$", re.I)
+    _ref_entry_re = re.compile(r"^\s*\d+[.)]\s*\[S\d+\]")
+    in_refs_section = False
+
     def _rewrite(text: str) -> str:
         out = text
         for pattern, replacement in _SIMULATION_OUTCOME_REWRITES:
@@ -1208,6 +1218,10 @@ def scrub_simulation_mechanics(md: str, lang: str = "English") -> Tuple[str, Dic
 
     for index, line in enumerate(lines):
         if mask[index] or not line.strip():
+            continue
+        if line.lstrip().startswith("#"):
+            in_refs_section = bool(_refs_heading_re.match(line))
+        if (in_refs_section and not line.lstrip().startswith("#")) or _ref_entry_re.match(line):
             continue
         rewritten = _rewrite(line)
         if rewritten.lstrip().startswith("|") and "|" in rewritten:

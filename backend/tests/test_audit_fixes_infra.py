@@ -308,6 +308,167 @@ def test_llm3_fallback_openai_client_pool_cached(monkeypatch):
     lc._FB_OPENAI_CLIENTS.clear()
 
 
+def test_cli_auth_failure_is_not_retried(monkeypatch):
+    """A deterministic 401 must not incur the generic three-attempt backoff."""
+    monkeypatch.delenv("LLM_FALLBACK_PROVIDER", raising=False)
+    client = lc.LLMClient(provider="claude-cli")
+    calls = {"n": 0}
+
+    def fail_auth(*_args, **_kwargs):
+        calls["n"] += 1
+        raise RuntimeError(
+            'Claude CLI failed: {"api_error_status":401,'
+            '"result":"Failed to authenticate. Invalid authentication credentials"}'
+        )
+
+    monkeypatch.setattr(client, "_chat_claude_cli", fail_auth)
+    monkeypatch.setattr(
+        lc,
+        "_retry_delay",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("must not retry")),
+    )
+    with pytest.raises(RuntimeError, match="Failed to authenticate"):
+        client.chat([{"role": "user", "content": "q"}])
+    assert calls["n"] == 1
+
+
+def test_fallback_auth_failure_enters_process_cooldown(monkeypatch):
+    """Parallel calls must not repeatedly invoke a fallback with broken credentials."""
+    lc._FB_AUTH_UNAVAILABLE_UNTIL.clear()
+    monkeypatch.setenv("LLM_FALLBACK_PROVIDER", "claude-cli")
+    monkeypatch.delenv("LLM_FALLBACK_MODEL", raising=False)
+    monkeypatch.delenv("LLM_FALLBACK_BASE_URL", raising=False)
+    calls = {"n": 0}
+
+    def fail_auth(self, *_args, **_kwargs):
+        calls["n"] += 1
+        raise RuntimeError("Failed to authenticate. API Error: 401 Invalid authentication credentials")
+
+    monkeypatch.setattr(lc.LLMClient, "chat", fail_auth)
+    primary = lc.LLMClient(provider="minimax", api_key="sk-test",
+                           base_url="http://127.0.0.1:1/v1", model="MiniMax-M3")
+    args = ([{"role": "user", "content": "q"}], 0.3, 64, None,
+            RuntimeError("primary timed out"))
+    assert primary._try_fallback(*args) is None
+    assert primary._try_fallback(*args) is None
+    assert calls["n"] == 1
+    lc._FB_AUTH_UNAVAILABLE_UNTIL.clear()
+
+
+def test_antigravity_fallback_uses_own_reasoning_contract(monkeypatch):
+    """Antigravity fallback gets low effort without inheriting MiniMax's extra_body."""
+    captured = {}
+
+    class _Completions:
+        @staticmethod
+        def create(**kwargs):
+            captured.update(kwargs)
+            message = SimpleNamespace(content="READY")
+            choice = SimpleNamespace(message=message, finish_reason="stop")
+            return SimpleNamespace(choices=[choice], usage=None)
+
+    client = object.__new__(lc.LLMClient)
+    client.provider = "antigravity"
+    client.model = "gemini-3-flash-preview"
+    client._openai_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=_Completions())
+    )
+    client._fast_openai_client = None
+    client._is_fallback = True
+    client._last_usage = None
+    monkeypatch.setattr(Config, "LLM_PROVIDER", "minimax", raising=False)
+    # Match production: tiering stays on and the global strong model conflicts
+    # with Quotio's alias. The fallback client must still own its model.
+    monkeypatch.setattr(Config, "LLM_TIERED_ROUTING", True, raising=False)
+    monkeypatch.setattr(Config, "LLM_STRONG_MODEL", "MiniMax-M3", raising=False)
+    monkeypatch.setenv("LLM_FALLBACK_REASONING_EFFORT", "low")
+
+    assert client._chat_openai(
+        [{"role": "user", "content": "Reply READY only."}], 0.1, 32
+    ) == "READY"
+    assert captured["model"] == "gemini-3-flash-preview"
+    assert captured["reasoning_effort"] == "low"
+    assert "extra_body" not in captured
+
+
+def test_antigravity_fallback_fast_tier_keeps_quotio_endpoint(monkeypatch):
+    """Fast routing must never replace a resolved fallback client's endpoint."""
+    primary_calls = []
+    decoy_calls = []
+
+    def response_for(calls):
+        class _Completions:
+            @staticmethod
+            def create(**kwargs):
+                calls.append(kwargs)
+                message = SimpleNamespace(content="READY", tool_calls=[])
+                choice = SimpleNamespace(message=message, finish_reason="stop")
+                return SimpleNamespace(choices=[choice], usage=None)
+
+        return SimpleNamespace(chat=SimpleNamespace(completions=_Completions()))
+
+    client = object.__new__(lc.LLMClient)
+    client.provider = "antigravity"
+    client.model = "gemini-3-flash-preview"
+    client._openai_client = response_for(primary_calls)
+    client._fast_openai_client = response_for(decoy_calls)
+    client._is_fallback = True
+    client._last_usage = None
+    monkeypatch.setattr(Config, "LLM_TIERED_ROUTING", True, raising=False)
+    monkeypatch.setattr(Config, "LLM_FAST_PROVIDER", "minimax", raising=False)
+    monkeypatch.setattr(Config, "LLM_FAST_MODEL", "MiniMax-M3", raising=False)
+    monkeypatch.setattr(Config, "LLM_TELEMETRY_ENABLED", False, raising=False)
+    monkeypatch.setattr(Config, "LLM_RUN_BUDGET_TOKENS", 0, raising=False)
+    monkeypatch.setattr(Config, "LLM_RUN_BUDGET_USD", 0.0, raising=False)
+    monkeypatch.setenv("LLM_FALLBACK_REASONING_EFFORT", "low")
+
+    assert client._chat_openai(
+        [{"role": "user", "content": "Reply READY only."}],
+        0.1,
+        32,
+        tier="fast",
+    ) == "READY"
+    tool_result = client.chat_with_tools(
+        [{"role": "user", "content": "Reply READY only."}],
+        [{
+            "type": "function",
+            "function": {
+                "name": "noop",
+                "description": "No operation",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }],
+        max_tokens=32,
+        tier="fast",
+    )
+
+    assert tool_result == {"content": "READY", "tool_calls": []}
+    assert [row["model"] for row in primary_calls] == [
+        "gemini-3-flash-preview", "gemini-3-flash-preview",
+    ]
+    assert decoy_calls == []
+
+
+def test_antigravity_is_a_fallback_only_quotio_provider():
+    """Backend failover preserves Antigravity identity without exposing it as primary."""
+    assert "antigravity" in lc.OPENAI_COMPATIBLE_PROVIDERS
+    assert "antigravity" not in Config.PROVIDER_META
+
+    client = lc.LLMClient(
+        provider="antigravity",
+        api_key="quotio-local-test",
+        base_url="http://127.0.0.1:8320/v1",
+        model="gemini-3-flash-preview",
+    )
+    try:
+        assert client.provider == "antigravity"
+        assert client._openai_client is not None
+    finally:
+        close = getattr(client._openai_client, "close", None)
+        if callable(close):
+            close()
+
+
 # ---------------------------------------------------------------- telemetry
 def test_xrun8_cost_basis_subscription_vs_mixed():
     rid = "test_cost_basis_run"

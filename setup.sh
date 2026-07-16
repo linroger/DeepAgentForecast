@@ -589,10 +589,14 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
   #     (resolve_variable -> import_module) imports these by bare name — they MUST
   #     sit next to config.yaml in deer-flow/ or web_search/web_fetch/prediction_market
   #     tools fail to load. Deploy all four so the wiring is reproducible.
-  for _tool_mod in market_tools.py search_tools.py cached_fetch.py research_budget.py; do
+  for _tool_mod in market_tools.py search_tools.py cached_fetch.py research_budget.py runtime_skill_sync.py; do
     if [ -f "$BRIDGE_DIR/$_tool_mod" ]; then
       cp "$BRIDGE_DIR/$_tool_mod" "$DEERFLOW_DIR/$_tool_mod"
-      ok "Installed $_tool_mod (config-reflected bridge tool)"
+      if [ "$_tool_mod" = "runtime_skill_sync.py" ]; then
+        ok "Installed runtime_skill_sync.py (runtime bundle verifier)"
+      else
+        ok "Installed $_tool_mod (config-reflected bridge tool)"
+      fi
     fi
   done
 
@@ -608,25 +612,24 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
     ok "Applied provider patches (claude_provider, credential_loader, patched_minimax)"
   fi
 
-  # (b2) Overhauled deep-research skill: source-quality tiering (S1–S4),
-  #     triangulation, circular-sourcing detection, and tool-budget discipline.
-  DF_SKILL="$DEERFLOW_DIR/skills/public/deep-research"
-  if [ -f "$BRIDGE_DIR/skills/deep-research/SKILL.md" ] && [ -d "$DF_SKILL" ]; then
-    cp -R "$BRIDGE_DIR/skills/deep-research/." "$DF_SKILL/"
-    ok "Applied compact deep-research skill + lazy tradecraft/dossier references"
-  fi
-
-  # (b2b) Actor/ontology research skill: an actor-centric, ontology-ready
-  #     specialization of deep-research (rank the real key actors over
-  #     reporters/outlets, profile each in depth, map directed/typed/valenced
-  #     relations + their evolution) with a multipass + AI-judge quality loop.
-  #     Feeds the ontology generator and actors.json. It is a NEW skill dir, so
-  #     create it under the runtime's public skills.
-  DF_AOR="$DEERFLOW_DIR/skills/public/actor-ontology-research"
-  if [ -f "$BRIDGE_DIR/skills/actor-ontology-research/SKILL.md" ] && [ -d "$DEERFLOW_DIR/skills/public" ]; then
-    mkdir -p "$DF_AOR"
-    cp "$BRIDGE_DIR/skills/actor-ontology-research/SKILL.md" "$DF_AOR/SKILL.md"
-    ok "Installed actor-ontology-research skill (actor-centric, ontology-ready research)"
+  # (b2) Authoritatively deploy the complete bridge-managed skill set.  setup
+  #     and the orchestrator invoke the same deterministic manifest, lock,
+  #     staging, verification, atomic-swap, and pruning implementation.
+  SKILL_SYNC_HELPER="$BRIDGE_DIR/runtime_skill_sync.py"
+  if [ -d "$BRIDGE_DIR/skills" ] && [ -d "$DEERFLOW_DIR/skills" ]; then
+    if [ ! -f "$SKILL_SYNC_HELPER" ] || ! have python3; then
+      warn "Required authoritative runtime skill sync helper/python3 is unavailable."
+      exit 1
+    fi
+    if _skill_sync_json="$(python3 "$SKILL_SYNC_HELPER" \
+      --source-root "$BRIDGE_DIR/skills" \
+      --deployed-public-root "$DEERFLOW_DIR/skills/public")"; then
+      ok "Authoritative runtime skill bundle deployed and verified"
+      info "    $_skill_sync_json"
+    else
+      warn "Required runtime skill bundle deployment failed; refusing partial setup."
+      exit 1
+    fi
   fi
 
   # (b3) Patched middlewares: loop-detection counters reset per agent run;
@@ -641,16 +644,20 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
     ok "Applied middleware patches (loop reset + exact-call model concurrency)"
   fi
 
-  # (b4) SubagentExecutor lifecycle overlay. Apply one narrow idempotent source
-  #     transformation so the active vendor version keeps all of its tracing,
-  #     session, callback, and token-record behavior.
+  # (b4) Embedded subagent safety overlay. Apply narrow idempotent transforms
+  #     so the active vendor version keeps all tracing/session/token behavior
+  #     while passing the exact AppConfig, inheriting the active model from
+  #     configurable state, and rejecting provider fallbacks as failed tasks.
   SUBAGENT_OVERLAY="$BRIDGE_DIR/patches/apply_subagent_overlays.py"
-  if [ -f "$SUBAGENT_OVERLAY" ]; then
-    if python3 "$SUBAGENT_OVERLAY" "$DEERFLOW_DIR" >/dev/null; then
-      ok "Applied subagent lifecycle concurrency boundary"
-    else
-      warn "Could not apply subagent overlay; inspect upstream executor drift"
-    fi
+  if [ ! -f "$SUBAGENT_OVERLAY" ]; then
+    warn "Required subagent safety overlay is missing: $SUBAGENT_OVERLAY"
+    exit 1
+  fi
+  if python3 "$SUBAGENT_OVERLAY" "$DEERFLOW_DIR" >/dev/null; then
+    ok "Applied subagent provider inheritance + failure boundary"
+  else
+    warn "Could not apply required subagent overlay; inspect upstream runtime drift"
+    exit 1
   fi
 
   # (b5) Lead-agent factory overlay: YAML ``trim_tokens_to_summarize: null`` is

@@ -92,6 +92,14 @@
             <span v-if="statusLabel" class="status-pill" :class="statusClass">
               {{ statusLabel }}
             </span>
+            <button
+              v-if="translationAction"
+              class="translate-btn"
+              type="button"
+              :disabled="translationBusy"
+              :title="translationAction.issues.join('; ')"
+              @click="generateTranslation"
+            >{{ translationButtonLabel }}</button>
             <!-- BILINGUAL：语种切换（仅在存在自动翻译版本时出现）。 -->
             <div v-if="langOptions.length > 1" class="lang-toggle" role="group" :aria-label="L('语言','Language')">
               <button
@@ -101,13 +109,24 @@
                 class="lang-btn"
                 :class="{ active: activeLang === opt.key }"
                 :disabled="langLoading"
+                :aria-pressed="activeLang === opt.key"
                 @click="switchLang(opt.key)"
               >{{ opt.label }}</button>
             </div>
+            <span v-if="translationMessage" class="translation-feedback" aria-live="polite">
+              {{ translationMessage }}
+            </span>
+            <span v-if="translationIssueMessage" class="translation-feedback translation-error" role="alert">
+              {{ translationIssueMessage }}
+            </span>
+            <button class="markdown-btn" type="button" :disabled="Boolean(exportBusy) || langLoading" @click="downloadArtifact('md')">
+              {{ exportBusy === 'md' ? L('导出中…','Exporting…') : L('下载 Markdown','Download Markdown') }}
+            </button>
             <!-- PDF-1：下载当前视图对应的 PDF（原文或所选语种）。 -->
-            <a class="pdf-btn" :href="pdfHref" target="_blank" rel="noopener noreferrer">
-              {{ L('下载 PDF','Download PDF') }}
-            </a>
+            <button class="pdf-btn" type="button" :disabled="Boolean(exportBusy) || langLoading" @click="downloadArtifact('pdf')">
+              {{ exportBusy === 'pdf' ? L('导出中…','Exporting…') : L('下载 PDF','Download PDF') }}
+            </button>
+            <span v-if="exportError" class="translation-feedback translation-error" role="alert">{{ exportError }}</span>
             <button class="copy-btn" type="button" @click="copyMarkdown">
               {{ copied ? L('已复制','Copied') : L('复制 Markdown','Copy Markdown') }}
             </button>
@@ -211,7 +230,8 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import {
   getReport, getVizManifest, getSectionsPartial,
-  getReportTranslationMd, reportPdfUrl, reportAssetUrl, getForecast
+  getReportTranslationMd, requestReportTranslation, getReportTranslationStatus,
+  reportMarkdownUrl, reportPdfUrl, reportAssetUrl, getForecast
 } from '../../api/report'
 import { renderMarkdown, extractHeadings } from '../../utils/markdown'
 import {
@@ -220,6 +240,15 @@ import {
   normalizeVizGallery,
   safeChartPath,
 } from '../../utils/vizManifest'
+import {
+  createLatestRequestGate,
+  downloadFilenameFromDisposition,
+  hasPdfMagic,
+  reportLanguageOptions,
+  reportTranslationAction,
+  reportTranslationIssues,
+  reportTranslationPollOutcome,
+} from '../../utils/reportLanguages'
 import { L } from '../../i18n'
 
 const props = defineProps({
@@ -242,6 +271,11 @@ const forecastPayload = ref(null)
 const activeLang = ref(null)
 const langMdCache = ref({})       // 翻译成稿缓存 { lang: markdown }
 const langLoading = ref(false)    // 翻译版本拉取中
+const translationBusy = ref(false)
+const translationMessage = ref('')
+const translationError = ref('')
+const exportBusy = ref('')
+const exportError = ref('')
 // PROGRESSIVE：生成期章节增量 [{index,title,status,content_md}]。
 const partialSections = ref([])
 
@@ -249,6 +283,11 @@ let copyTimer = null
 let pollTimer = null            // sections-partial 轮询句柄
 let pollStopped = false         // 端点缺失(404)/完成后置真，避免无谓重试
 let partialUnavailable = false  // sections-partial 端点缺失(404) → 仅靠 getReport 探测完成
+let loadVersion = 0
+let languageRequestVersion = 0
+let translationPollVersion = 0
+let translationPollTimer = null
+const exportRequestGate = createLatestRequestGate()
 
 // 生成中判定：报告已创建但尚未产出成稿（status ∈ pending/planning/generating 或成稿为空）。
 function isGeneratingStatus(s) {
@@ -261,16 +300,25 @@ const isGenerating = computed(() => {
 })
 
 async function load() {
+  const reportId = props.reportId
+  const version = ++loadVersion
+  languageRequestVersion += 1
+  stopTranslationPolling()
   stopPolling()
-  if (!props.reportId) {
+  cancelExportRequest()
+  activeLang.value = null
+  langMdCache.value = {}
+  langLoading.value = false
+  translationBusy.value = false
+  translationMessage.value = ''
+  translationError.value = ''
+  if (!reportId) {
     md.value = ''
     meta.value = {}
     error.value = ''
     loading.value = false
     vizManifest.value = []
     forecastPayload.value = null
-    activeLang.value = null
-    langMdCache.value = {}
     partialSections.value = []
     return
   }
@@ -278,47 +326,50 @@ async function load() {
   error.value = ''
   forecastPayload.value = null
   try {
-    const res = await getReport(props.reportId)
+    const res = await getReport(reportId)
+    if (version !== loadVersion || reportId !== props.reportId) return
     const data = (res && res.data) || {}
     md.value = data.markdown_content || ''
     meta.value = data || {}
-    activeLang.value = null
     // 成稿已就绪 → 拉可视化清单 + 结构化预测；否则进入生成期章节轮询（degrade-safe）。
     if (md.value) {
-      loadVizManifest()
-      loadForecast()
+      loadVizManifest(reportId, version)
+      loadForecast(reportId, version)
     } else {
-      startPolling()
+      startPolling(reportId, version)
     }
   } catch (e) {
+    if (version !== loadVersion || reportId !== props.reportId) return
     error.value = (e && (e.message || e.msg)) || L('报告加载失败','Failed to load report')
     md.value = ''
     meta.value = {}
   } finally {
-    loading.value = false
+    if (version === loadVersion && reportId === props.reportId) loading.value = false
   }
 }
 
 // VIZ-1：拉取可视化清单。失败/为空 → 空数组（前端不渲染图区）。
-async function loadVizManifest() {
+async function loadVizManifest(reportId = props.reportId, version = loadVersion) {
   try {
-    const res = await getVizManifest(props.reportId)
+    const res = await getVizManifest(reportId)
+    if (version !== loadVersion || reportId !== props.reportId) return
     const list = (res && res.data) || []
     vizManifest.value = Array.isArray(list) ? list : []
   } catch (e) {
-    vizManifest.value = []
+    if (version === loadVersion && reportId === props.reportId) vizManifest.value = []
   }
 }
 
 // FORECAST-DASH：拉取结构化预测。旧报告会返回 forecast:null；其余失败（404/409/网络错误）
 // → null → 仪表盘整体隐藏，报告正文不受影响（degrade-safe）。
-async function loadForecast() {
+async function loadForecast(reportId = props.reportId, version = loadVersion) {
   try {
-    const res = await getForecast(props.reportId)
+    const res = await getForecast(reportId)
+    if (version !== loadVersion || reportId !== props.reportId) return
     const data = (res && res.data) || {}
     forecastPayload.value = (data.forecast && typeof data.forecast === 'object') ? data.forecast : null
   } catch (e) {
-    forecastPayload.value = null
+    if (version === loadVersion && reportId === props.reportId) forecastPayload.value = null
   }
 }
 
@@ -413,13 +464,6 @@ const headings = computed(() => {
 })
 
 // ---------- BILINGUAL：可选语种与切换 ----------
-// translations 每条形如 {lang, source_lang, path, chars, ...}。据此构造语种切换项：
-// 首项为原文（primary，加载 markdown_content），其余为各翻译语种。
-const translations = computed(() => {
-  const list = meta.value && meta.value.translations
-  return Array.isArray(list) ? list.filter(t => t && t.lang) : []
-})
-
 function langLabel(code) {
   const c = String(code || '').toLowerCase()
   if (c === 'en') return 'EN'
@@ -428,31 +472,41 @@ function langLabel(code) {
 }
 
 const langOptions = computed(() => {
-  const t = translations.value
-  if (!t.length) return []
-  // 原文语种：取首条翻译的 source_lang（缺省则用中性 'primary'）。
-  const primaryCode = (t[0] && t[0].source_lang) || ''
-  const opts = [{ key: null, code: primaryCode, label: primaryCode ? langLabel(primaryCode) : L('原文', 'Original') }]
-  t.forEach(entry => {
-    opts.push({ key: entry.lang, code: entry.lang, label: langLabel(entry.lang) })
-  })
-  // 按语种码去重（原文语种若与某翻译重合极少见；保底避免重复项）。
-  const seen = new Set()
-  return opts.filter(o => {
-    const k = o.key == null ? '__primary__' : o.key
-    if (seen.has(k)) return false
-    seen.add(k)
-    return true
-  })
+  return reportLanguageOptions(meta.value, langLabel)
+})
+
+const translationAction = computed(() => reportTranslationAction(meta.value))
+
+const translationIssueMessage = computed(() => {
+  if (translationError.value) return translationError.value
+  if (translationBusy.value) return ''
+  return reportTranslationIssues(meta.value?.translation_status).join('; ')
+})
+
+const translationButtonLabel = computed(() => {
+  const action = translationAction.value
+  if (!action) return ''
+  const target = langLabel(action.targetLang)
+  if (translationBusy.value) return L(`正在生成 ${target}…`, `Generating ${target}…`)
+  if (action.retry) {
+    return L(`重试 ${target}`, `Retry ${target}`)
+  }
+  return L(`生成 ${target}`, `Generate ${target}`)
 })
 
 async function switchLang(key) {
   if (key === activeLang.value) return
+  if (key != null && !langOptions.value.some(option => option.key === key)) return
+  cancelExportRequest()
+  const reportId = props.reportId
+  const version = ++languageRequestVersion
+  translationError.value = ''
   if (key == null) { activeLang.value = null; return }
   if (langMdCache.value[key]) { activeLang.value = key; return }
   langLoading.value = true
   try {
-    const res = await getReportTranslationMd(props.reportId, key)
+    const res = await getReportTranslationMd(reportId, key)
+    if (version !== languageRequestVersion || reportId !== props.reportId) return
     // 端点返回 text/markdown 原文；axios 响应拦截器对非 JSON 直接透传字符串。
     const text = typeof res === 'string' ? res : (res && res.data ? res.data : '')
     if (text) {
@@ -460,14 +514,221 @@ async function switchLang(key) {
       activeLang.value = key
     }
   } catch (e) {
-    // 该语种版本不可用 → 保持当前展示（degrade-safe）。
+    if (version === languageRequestVersion && reportId === props.reportId) {
+      translationError.value = (e && e.message) || L('该语言版本不可用','Language variant unavailable')
+    }
   } finally {
-    langLoading.value = false
+    if (version === languageRequestVersion && reportId === props.reportId) {
+      langLoading.value = false
+    }
   }
 }
 
+function stopTranslationPolling() {
+  translationPollVersion += 1
+  if (translationPollTimer) clearTimeout(translationPollTimer)
+  translationPollTimer = null
+}
+
+function updateTranslationState(data, outcome = null) {
+  const current = meta.value?.translation_status
+  const next = data && typeof data === 'object' && !Array.isArray(data) ? data : {}
+  const overrides = outcome ? {
+    status: outcome.status,
+    available: outcome.available,
+    can_generate: outcome.canGenerate,
+    issues: outcome.issues,
+  } : {}
+  meta.value = {
+    ...meta.value,
+    translation_status: {
+      ...(current && typeof current === 'object' ? current : {}),
+      ...next,
+      ...overrides,
+    },
+  }
+}
+
+function terminalTranslationError(outcome) {
+  if (outcome.issues.length) return outcome.issues.join('; ')
+  if (outcome.reason === 'task_missing') {
+    return L('服务重启后翻译任务已中断', 'Translation task was interrupted after the service restarted')
+  }
+  if (outcome.reason === 'task_mismatch') {
+    return L('翻译任务与当前报告不匹配', 'Translation task does not match the current report')
+  }
+  if (outcome.reason === 'terminal_without_artifact') {
+    return L('翻译任务已结束，但未生成可发布版本', 'Translation finished without a publishable artifact')
+  }
+  if (outcome.reason === 'unknown_status') {
+    return L('后端返回了无效的翻译状态', 'Backend returned an invalid translation status')
+  }
+  return L(
+    `翻译已停止（${outcome.status || 'unknown'}）`,
+    `Translation stopped (${outcome.status || 'unknown'})`,
+  )
+}
+
+function finishTerminalTranslation(data, outcome) {
+  stopTranslationPolling()
+  updateTranslationState(data, outcome)
+  translationBusy.value = false
+  translationMessage.value = ''
+  translationError.value = terminalTranslationError(outcome)
+}
+
+async function activateCompletedTranslation(reportId, lang) {
+  stopTranslationPolling()
+  translationBusy.value = false
+  await load()
+  if (reportId !== props.reportId) return
+  if (!langOptions.value.some(option => option.key === lang)) {
+    translationError.value = L(
+      '翻译已完成，但当前身份审计未验证该版本',
+      'Translation completed, but its current identity audit was not verified',
+    )
+    return
+  }
+  await switchLang(lang)
+  if (reportId === props.reportId && activeLang.value === lang) {
+    const target = langLabel(lang)
+    translationMessage.value = L(`${target} 版本已就绪`, `${target} version is ready`)
+  }
+}
+
+async function pollTranslation(reportId, lang, taskId, version) {
+  if (version !== translationPollVersion || reportId !== props.reportId) return
+  try {
+    const res = await getReportTranslationStatus(reportId, lang, taskId)
+    if (version !== translationPollVersion || reportId !== props.reportId) return
+    const data = (res && res.data) || {}
+    const outcome = reportTranslationPollOutcome(data, taskId)
+    if (outcome.available) {
+      await activateCompletedTranslation(reportId, lang)
+      return
+    }
+    if (outcome.terminal) {
+      finishTerminalTranslation(data, outcome)
+      return
+    }
+    updateTranslationState(data)
+    translationMessage.value = data.message || L('正在生成并审计中文版本…','Generating and auditing Mandarin…')
+    translationPollTimer = setTimeout(
+      () => pollTranslation(reportId, lang, taskId, version),
+      1500,
+    )
+  } catch (e) {
+    if (version !== translationPollVersion || reportId !== props.reportId) return
+    stopTranslationPolling()
+    translationBusy.value = false
+    translationMessage.value = ''
+    translationError.value = (e && e.message) || L('翻译状态查询失败','Failed to check translation status')
+  }
+}
+
+async function generateTranslation() {
+  const action = translationAction.value
+  const reportId = props.reportId
+  if (!action || !reportId || translationBusy.value) return
+  stopTranslationPolling()
+  const version = translationPollVersion
+  translationBusy.value = true
+  translationError.value = ''
+  translationMessage.value = L('正在启动中文翻译…','Starting Mandarin translation…')
+  try {
+    const res = await requestReportTranslation(reportId, action.targetLang)
+    if (version !== translationPollVersion || reportId !== props.reportId) return
+    const data = (res && res.data) || {}
+    const taskId = String(data.task_id || '').trim()
+    const outcome = reportTranslationPollOutcome(data, taskId)
+    if (outcome.available) {
+      await activateCompletedTranslation(reportId, action.targetLang)
+      return
+    }
+    if (outcome.terminal) {
+      finishTerminalTranslation(data, outcome)
+      return
+    }
+    if (!taskId) throw new Error(L('后端未返回翻译任务','Translation task was not created'))
+    updateTranslationState(data)
+    translationMessage.value = data.message || L('正在生成并审计中文版本…','Generating and auditing Mandarin…')
+    await pollTranslation(reportId, action.targetLang, taskId, version)
+  } catch (e) {
+    if (version !== translationPollVersion || reportId !== props.reportId) return
+    stopTranslationPolling()
+    translationBusy.value = false
+    translationMessage.value = ''
+    translationError.value = (e && e.message) || L('无法启动翻译','Unable to start translation')
+  }
+}
+
+// ---------- Markdown / PDF：当前视图对应的发布工件直链 ----------
+const markdownHref = computed(() => reportMarkdownUrl(props.reportId, activeLang.value || undefined))
 // ---------- PDF-1：当前视图对应的 PDF 直链 ----------
 const pdfHref = computed(() => reportPdfUrl(props.reportId, activeLang.value || undefined))
+
+function cancelExportRequest() {
+  exportRequestGate.cancel()
+  exportBusy.value = ''
+  exportError.value = ''
+}
+
+async function downloadArtifact(kind) {
+  const reportId = props.reportId
+  const lang = activeLang.value || null
+  if (!reportId || exportBusy.value || langLoading.value) return
+  const request = exportRequestGate.begin()
+  exportBusy.value = kind
+  exportError.value = ''
+  const extension = kind === 'pdf' ? 'pdf' : 'md'
+  const fallback = `${reportId}${lang ? `.${lang}` : ''}.${extension}`
+  const href = kind === 'pdf' ? pdfHref.value : markdownHref.value
+  const ownsCurrentExport = () => exportRequestGate.isCurrent(request)
+    && reportId === props.reportId
+    && lang === (activeLang.value || null)
+  try {
+    const response = await fetch(href, {
+      headers: { Accept: kind === 'pdf' ? 'application/pdf' : 'text/markdown' },
+      signal: request.signal,
+    })
+    if (!ownsCurrentExport()) return
+    if (!response.ok) {
+      let message = `${L('导出失败','Export failed')} (${response.status})`
+      try {
+        const payload = await response.json()
+        if (payload?.error) message = payload.error
+      } catch (_) { /* non-JSON failure body */ }
+      throw new Error(message)
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    if (kind === 'pdf' && !hasPdfMagic(bytes)) {
+      throw new Error(L('服务器返回的文件不是有效 PDF','Server returned an invalid PDF'))
+    }
+    if (!ownsCurrentExport()) return
+    const filename = downloadFilenameFromDisposition(
+      response.headers.get('content-disposition'),
+      fallback,
+    )
+    const blob = new Blob([bytes], {
+      type: kind === 'pdf' ? 'application/pdf' : 'text/markdown;charset=utf-8',
+    })
+    const objectUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = objectUrl
+    anchor.download = filename
+    anchor.style.display = 'none'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
+  } catch (e) {
+    if (!ownsCurrentExport()) return
+    exportError.value = (e && e.message) || L('导出失败','Export failed')
+  } finally {
+    const ownsIdentity = reportId === props.reportId && lang === (activeLang.value || null)
+    if (exportRequestGate.finish(request) && ownsIdentity) exportBusy.value = ''
+  }
+}
 
 // ---------- VIZ-1：图表画廊（静态预览优先；Plotly HTML-only 也可直接打开）----------
 const galleryCharts = computed(() => {
@@ -568,20 +829,21 @@ function stopPolling() {
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
 }
 
-function startPolling() {
+function startPolling(reportId = props.reportId, version = loadVersion) {
   stopPolling()
   pollStopped = false
   partialUnavailable = false
-  pollOnce()
+  pollOnce(reportId, version)
 }
 
-async function pollOnce() {
-  if (pollStopped || !props.reportId) return
+async function pollOnce(reportId = props.reportId, version = loadVersion) {
+  if (pollStopped || !reportId || reportId !== props.reportId || version !== loadVersion) return
 
   // ① 章节增量（若端点可用）：驱动生成期的逐章展示。
   if (!partialUnavailable) {
     try {
-      const res = await getSectionsPartial(props.reportId)
+      const res = await getSectionsPartial(reportId)
+      if (reportId !== props.reportId || version !== loadVersion) return
       // 契约 { sections:[...], done:bool }；容错兼容 { success, data:{...} } 包裹形态。
       const body = (res && Array.isArray(res.sections)) ? res
         : (res && res.data && Array.isArray(res.data.sections)) ? res.data
@@ -597,17 +859,30 @@ async function pollOnce() {
 
   // ② 完成探测（权威信号）：getReport 一旦产出成稿或进入终态，就重载渲染最终报告。
   try {
-    const res = await getReport(props.reportId)
+    const res = await getReport(reportId)
+    if (reportId !== props.reportId || version !== loadVersion) return
     const data = (res && res.data) || {}
     const finalMd = data.markdown_content || ''
     const s = String(data.status || '').toLowerCase()
     // 同步最新元信息（状态/失败章节等），即便尚未完成也让 UI 反映真实进度。
     meta.value = data || {}
-    if (finalMd || s === 'completed' || s === 'failed') {
+    const translationPending = !reportTranslationPollOutcome(data.translation_status).terminal
+    const reportTerminal = s === 'completed' || s === 'failed'
+    if (finalMd) {
+      const firstFinalBody = !md.value
+      md.value = finalMd
+      activeLang.value = null
+      if (firstFinalBody) {
+        loadVizManifest(reportId, version)
+        loadForecast(reportId, version)
+      }
+    }
+    // A primary body may land before automatic translation metadata. Keep
+    // polling until both the report and its persisted translation state are
+    // terminal; failed/missing variants then surface the explicit retry action.
+    if (s === 'failed' || (reportTerminal && !translationPending)) {
       pollStopped = true
       stopPolling()
-      md.value = finalMd
-      if (finalMd) { activeLang.value = null; loadVizManifest(); loadForecast() }
       return
     }
   } catch (e) {
@@ -615,7 +890,7 @@ async function pollOnce() {
   }
 
   if (!pollStopped) {
-    pollTimer = setTimeout(pollOnce, 3000)
+    pollTimer = setTimeout(() => pollOnce(reportId, version), 3000)
   }
 }
 
@@ -723,7 +998,9 @@ async function copyMarkdown() {
 onMounted(load)
 watch(() => props.reportId, load)
 onBeforeUnmount(() => {
+  stopTranslationPolling()
   stopPolling()
+  cancelExportRequest()
   if (copyTimer) clearTimeout(copyTimer)
 })
 </script>
@@ -906,8 +1183,11 @@ onBeforeUnmount(() => {
 .report-head-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
   flex-shrink: 0;
+  max-width: 100%;
 }
 .status-pill {
   font-family: var(--mono);
@@ -1189,7 +1469,39 @@ onBeforeUnmount(() => {
 /* 被 #ref-Sxx 锚点命中的条目短暂高亮，帮助读者定位。 */
 .md-body :deep(.md-ref:target) { background: rgba(255, 69, 0, 0.08); }
 
-/* ---------- Header: PDF button + language toggle ---------- */
+/* ---------- Header: translation + Markdown/PDF exports + language toggle ---------- */
+.translate-btn,
+.markdown-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 12px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.translate-btn:hover:not(:disabled),
+.markdown-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: var(--ink);
+  color: var(--paper);
+}
+.translate-btn:disabled { opacity: 0.55; cursor: wait; }
+.markdown-btn:disabled,
+.pdf-btn:disabled { opacity: 0.55; cursor: wait; transform: none; }
+.translation-feedback {
+  max-width: 240px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.translation-error { color: var(--err); }
 .pdf-btn {
   font-family: var(--mono);
   font-size: 11px;
@@ -1204,7 +1516,7 @@ onBeforeUnmount(() => {
   text-decoration: none;
   transition: transform 0.12s ease, opacity 0.12s ease;
 }
-.pdf-btn:hover { transform: translateY(-1px); opacity: 0.9; }
+.pdf-btn:hover:not(:disabled) { transform: translateY(-1px); opacity: 0.9; }
 .lang-toggle {
   display: inline-flex;
   border: 1px solid var(--border);

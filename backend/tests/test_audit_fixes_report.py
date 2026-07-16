@@ -157,14 +157,19 @@ def test_binary_source_provenance_and_signal_pack(monkeypatch):
     rows = _binary_rows([0.8] * 10)
     rows[0]["source"] = "world-state outcome shares"
     llm = _JsonLLM(lambda c: {"binary_forecasts": [dict(r) for r in rows]})
-    out = fe.extract_binary_forecasts("dossier", llm, min_count=10,
-                                      signal_pack="【模拟量化信号】Top actor …")
+    # SESSION-B（编造溯源修复）：source 须可对账到确实注入过的信号块——包里必须真有
+    # world-state 块标记，该标签才被保留（不再无条件信任模型声称）。
+    out = fe.extract_binary_forecasts(
+        "dossier", llm, min_count=10,
+        signal_pack="【预测结果分布 P(outcome)（内部分析先验）】\n· 突破: 60%")
     # XRUN-1(b): sim signals injected + move-from-anchor requirement stated
     assert "[Simulation quantitative signals]" in llm.prompts[0]
     assert "SIMULATION SENSITIVITY" in llm.prompts[0]
-    # XRUN-1(a): explicit source preserved; missing source defaults to research-prior
+    # XRUN-1(a): explicit source preserved (block was injected); missing source
+    # defaults to research-prior
     assert out["binary_forecasts"][0]["source"] == "world-state outcome shares"
     assert out["binary_forecasts"][1]["source"] == "research-prior"
+    assert out["binary_quality"]["provenance_downgrades"] == 0
 
 
 # ────────────────────────────────── RPT-13 ──────────────────────────────────

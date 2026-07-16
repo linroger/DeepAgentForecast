@@ -7,7 +7,7 @@
   * ReportAgent._match_section —— placement_hint 关键词 → 章节标题模糊匹配；
   * ReportManager._rewrite_chart_paths_for_pdf —— 相对 charts 路径 → 绝对（绝对路径不受影响）；
   * ReportManager._markdown_to_basic_html —— 极简 md→HTML（标题/列表/图片/代码/转义）；
-  * ReportManager.export_pdf —— mtime 缓存 + 失效重建 + pandoc 失败回退（subprocess 全程 mock，
+  * ReportManager.export_pdf —— content-addressed cache + pandoc failure fallback (mocked,
     绝不依赖真实 pandoc/xelatex）。
 
 真实 pandoc 端到端路径不在此（需二进制），已在交付说明的 scratchpad 验证中单独跑过。
@@ -16,6 +16,8 @@
 import os
 import json
 import subprocess
+import threading
+import time
 
 import pytest
 
@@ -350,6 +352,15 @@ def _install_fake_pandoc(monkeypatch, calls):
     记录调用次数。绝不触碰真实 pandoc/xelatex。"""
     monkeypatch.setattr(ReportManager, "_resolve_pandoc",
                         classmethod(lambda cls: ("/fake/pandoc", "/fake/xelatex")))
+    monkeypatch.setattr(
+        ReportManager,
+        "_resolve_pdf_fonts",
+        classmethod(lambda cls: {
+            "main": {"family": "Fake Sans", "file": __file__},
+            "cjk": {"family": "Fake CJK", "file": __file__},
+            "mono": {"family": "Fake Mono", "file": __file__},
+        }),
+    )
 
     def _fake_run(cmd, *args, **kwargs):
         calls.append(cmd)
@@ -363,10 +374,20 @@ def _install_fake_pandoc(monkeypatch, calls):
         return _P()
 
     monkeypatch.setattr(subprocess, "run", _fake_run)
+    monkeypatch.setattr(
+        ReportManager,
+        "_validate_pdf_content",
+        staticmethod(lambda pdf_path, markdown: (True, {
+            "page_count": 1,
+            "issues": [],
+            "replacement_glyphs": 0,
+            "missing_protected_glyphs": {},
+        })),
+    )
 
 
-def test_export_pdf_builds_then_mtime_caches(report_folder, monkeypatch):
-    """首次构建调用 pandoc；PDF 比成稿新 → 二次命中缓存（不再调用）；成稿更新后失效重建。"""
+def test_export_pdf_builds_then_content_caches(report_folder, monkeypatch):
+    """Exact dependencies hit cache; changed Markdown bytes force a rebuild."""
     monkeypatch.setattr(Config, "REPORT_PDF_EXPORT", True, raising=False)
     (report_folder / "full_report.md").write_text("# R\n\n中文 text\n", encoding="utf-8")
     calls = []
@@ -378,15 +399,14 @@ def test_export_pdf_builds_then_mtime_caches(report_folder, monkeypatch):
     with open(pdf, "rb") as f:
         assert f.read(5) == b"%PDF-"
 
-    # 二次调用：PDF mtime ≥ md mtime → 命中缓存，subprocess 不再被调用。
+    # Exact input/output manifest → cache hit; renderer is not called again.
     pdf2 = ReportManager.export_pdf("rid")
     assert pdf2 == pdf
     assert len(calls) == 1
 
-    # 成稿更新（mtime 变新）→ 失效重建。
+    # Markdown bytes change even without relying on mtime ordering → rebuild.
     md_path = report_folder / "full_report.md"
-    newer = os.path.getmtime(pdf) + 10
-    os.utime(str(md_path), (newer, newer))
+    md_path.write_text("# R\n\n中文 text changed\n", encoding="utf-8")
     pdf3 = ReportManager.export_pdf("rid")
     assert pdf3 == pdf
     assert len(calls) == 2                        # 重新构建
@@ -403,12 +423,187 @@ def test_export_pdf_force_rebuilds(report_folder, monkeypatch):
     assert len(calls) == 2
 
 
+def test_export_pdf_rebuilds_when_cached_bytes_are_tampered(report_folder, monkeypatch):
+    monkeypatch.setattr(Config, "REPORT_PDF_EXPORT", True, raising=False)
+    (report_folder / "full_report.md").write_text("# R\n\nbody\n", encoding="utf-8")
+    calls = []
+    _install_fake_pandoc(monkeypatch, calls)
+    pdf = ReportManager.export_pdf("rid")
+    assert pdf and len(calls) == 1
+
+    with open(pdf, "ab") as handle:
+        handle.write(b"tampered")
+    assert ReportManager.export_pdf("rid") == pdf
+    assert len(calls) == 2
+
+
+def test_export_pdf_is_single_flight_per_report_language(report_folder, monkeypatch):
+    monkeypatch.setattr(Config, "REPORT_PDF_EXPORT", True, raising=False)
+    (report_folder / "full_report.md").write_text("# R\n\nbody\n", encoding="utf-8")
+    calls = []
+
+    def _fake_pandoc(cls, report_id, md, folder, pdf_path):
+        calls.append((report_id, pdf_path))
+        time.sleep(0.05)
+        with open(pdf_path, "wb") as handle:
+            handle.write(b"%PDF-1.4 fake")
+        return True
+
+    monkeypatch.setattr(ReportManager, "_export_pdf_pandoc", classmethod(_fake_pandoc))
+    monkeypatch.setattr(
+        ReportManager,
+        "_validate_pdf_content",
+        staticmethod(lambda path, md: (True, {"page_count": 1, "issues": []})),
+    )
+    results = []
+    threads = [
+        threading.Thread(target=lambda: results.append(ReportManager.export_pdf("rid")))
+        for _ in range(5)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        # Renderer fingerprinting and font discovery can legitimately take a
+        # few seconds on a cold macOS host.  The product invariant here is one
+        # render for five concurrent callers, not a two-second latency cap.
+        thread.join(timeout=10)
+
+    assert len(results) == 5 and len(set(results)) == 1
+    assert len(calls) == 1
+
+
+def test_rich_markdown_never_uses_structurally_degraded_fallback(
+    report_folder, monkeypatch,
+):
+    monkeypatch.setattr(Config, "REPORT_PDF_EXPORT", True, raising=False)
+    (report_folder / "full_report.md").write_text(
+        "# R\n\n| Scenario | Probability |\n|---|---:|\n| Base | 60% |\n",
+        encoding="utf-8",
+    )
+    fallback_calls = []
+    monkeypatch.setattr(
+        ReportManager,
+        "_export_pdf_pandoc",
+        classmethod(lambda cls, report_id, md, folder, pdf_path: False),
+    )
+    monkeypatch.setattr(
+        ReportManager,
+        "_export_pdf_pymupdf",
+        classmethod(lambda cls, md, folder, pdf_path: fallback_calls.append(md) or True),
+    )
+
+    assert ReportManager.export_pdf("rid") is None
+    assert fallback_calls == []
+
+
+@pytest.mark.parametrize("delimiter", ["--- | ---", ":--- | ---:"])
+def test_gfm_tables_without_outer_pipes_still_require_pandoc(delimiter):
+    markdown = f"Scenario | Probability\n{delimiter}\nBase | 60%\n"
+    assert ReportManager._markdown_requires_pandoc(markdown) is True
+
+
+def test_pdf_content_gate_rejects_missing_unicode_and_han(tmp_path):
+    import fitz
+
+    path = tmp_path / "lossy.pdf"
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "CO2 95 percent")
+    document.save(path)
+    document.close()
+
+    source = "CO₂ ≥95% 中文预测报告需要保留所有中文字符和比较符号。"
+    valid, audit = ReportManager._validate_pdf_content(str(path), source)
+    assert valid is False
+    assert audit["missing_protected_glyphs"]["₂"] == {"expected": 1, "actual": 0}
+    assert audit["missing_protected_glyphs"]["≥"] == {"expected": 1, "actual": 0}
+    assert "PDF text extraction lost representative Han content" in audit["issues"]
+
+
+def test_pdf_content_gate_accepts_parseable_plain_text(tmp_path):
+    import fitz
+
+    path = tmp_path / "plain.pdf"
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Plain report body")
+    document.save(path)
+    document.close()
+
+    valid, audit = ReportManager._validate_pdf_content(str(path), "Plain report body")
+    assert valid is True
+    assert audit["page_count"] == 1
+    assert audit["issues"] == []
+
+
+def test_pdf_content_gate_rejects_truncated_sections_numbers_and_citations(tmp_path):
+    import fitz
+
+    path = tmp_path / "truncated.pdf"
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Executive Summary")
+    document.save(path)
+    document.close()
+
+    source = (
+        "# Global Forecast\n\n"
+        "## Executive Summary\n\n"
+        "Deployment reaches 42% by 2035 according to the cited baseline [S1].\n\n"
+        "## Regional Outlook\n\n"
+        "Europe and Asia follow materially different infrastructure pathways.\n\n"
+        "## References\n\n1. [S1] Published baseline.\n"
+    )
+    valid, audit = ReportManager._validate_pdf_content(str(path), source)
+    assert valid is False
+    assert audit["missing_numeric_tokens"]["42%"] == {"expected": 1, "actual": 0}
+    assert audit["missing_numeric_tokens"]["2035"] == {"expected": 1, "actual": 0}
+    assert audit["missing_citation_markers"]["S1"]["actual"] == 0
+    assert len(audit["missing_heading_sha256"]) >= 2
+    assert "PDF text extraction lost substantial Latin content" in audit["issues"]
+
+
+def test_pdf_content_gate_rejects_duplicated_partial_han_text(tmp_path):
+    import fitz
+
+    path = tmp_path / "partial-han.pdf"
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text(
+        (72, 72),
+        "全球电力系统全球电力系统全球电力系统全球电力系统",
+        fontname="china-s",
+    )
+    document.save(path)
+    document.close()
+
+    source = (
+        "# 全球储能预测\n\n"
+        "全球电力系统正在重构，电池成本下降推动长期储能部署。"
+        "区域政策、并网瓶颈、循环寿命和制造能力共同决定商业化速度。"
+    )
+    valid, audit = ReportManager._validate_pdf_content(str(path), source)
+    assert valid is False
+    assert audit["extracted_han_chars"] >= 20
+    assert audit["han_bigram_coverage"] < 0.72
+    assert "PDF text extraction lost representative Han content" in audit["issues"]
+
+
 def test_export_pdf_falls_back_when_pandoc_bad(report_folder, monkeypatch):
     """pandoc 吐出非 PDF（%PDF 门失败）→ 回退 PyMuPDF；无 pymupdf 时整体 None。"""
     monkeypatch.setattr(Config, "REPORT_PDF_EXPORT", True, raising=False)
     (report_folder / "full_report.md").write_text("# R\n\nbody\n", encoding="utf-8")
     monkeypatch.setattr(ReportManager, "_resolve_pandoc",
                         classmethod(lambda cls: ("/fake/pandoc", "/fake/xelatex")))
+    monkeypatch.setattr(
+        ReportManager,
+        "_resolve_pdf_fonts",
+        classmethod(lambda cls: {
+            "main": {"family": "Fake Sans", "file": __file__},
+            "cjk": {"family": "Fake CJK", "file": __file__},
+            "mono": {"family": "Fake Mono", "file": __file__},
+        }),
+    )
 
     def _bad_run(cmd, *args, **kwargs):
         out = cmd[cmd.index("-o") + 1]
@@ -430,6 +625,11 @@ def test_export_pdf_falls_back_when_pandoc_bad(report_folder, monkeypatch):
         return True
 
     monkeypatch.setattr(ReportManager, "_export_pdf_pymupdf", classmethod(_fake_fb))
+    monkeypatch.setattr(
+        ReportManager,
+        "_validate_pdf_content",
+        staticmethod(lambda pdf_path, markdown: (True, {"page_count": 1, "issues": []})),
+    )
     pdf = ReportManager.export_pdf("rid")
     assert pdf and os.path.exists(pdf)
     assert fb_called["n"] == 1                    # pandoc 失败后走了回退

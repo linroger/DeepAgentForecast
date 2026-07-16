@@ -31,6 +31,11 @@ CLI_PROVIDERS = ('claude-cli', 'codex-cli')
 # 新增提供方只需在 config.py 改一处：openai / kimi / minimax / deepseek / qwen / glm）
 OPENAI_COMPATIBLE_PROVIDERS = tuple(
     pid for pid, meta in Config.PROVIDER_META.items() if meta.get('openai_compat')
+) + (
+    # Fallback-only identity: Antigravity is served through Quotio's local
+    # OpenAI-compatible adapter. Keep it out of Config.PROVIDER_META so it does
+    # not appear as a primary-provider setting or broaden runtime switching.
+    'antigravity',
 )
 
 # CLI 调用的瞬时失败重试配置
@@ -155,6 +160,24 @@ def _cb_reset(provider: str) -> None:
 # （每次一个新 httpx 连接池 + TLS 握手）；键=(provider, model, base_url)。只缓存底层 OpenAI
 # 客户端（官方文档保证线程安全），LLMClient 实例仍逐调用新建，避免 _last_usage 跨线程串档。
 _FB_OPENAI_CLIENTS: Dict[tuple, Any] = {}
+# A deterministic fallback authentication failure is process-scoped, not request-scoped.
+# Remember it long enough to keep parallel workers from repeating an expensive doomed CLI/API
+# call. A service restart or credential repair naturally clears the cache.
+_FB_AUTH_UNAVAILABLE_UNTIL: Dict[tuple, float] = {}
+_FB_AUTH_COOLDOWN_S = 900.0
+
+
+def _is_deterministic_auth_error(exc: Exception) -> bool:
+    """Return true for credential failures that retries cannot repair."""
+    text = str(exc or "").lower()
+    return bool(
+        "authenticationerror" in text
+        or "invalid authentication credentials" in text
+        or "failed to authenticate" in text
+        or "api_error_status\":401" in text
+        or "api_error_status': 401" in text
+        or re.search(r"(?:error|status|code)[^\n]{0,24}\b401\b", text)
+    )
 
 
 def _retry_delay(exc: Exception, attempt: int) -> float:
@@ -278,6 +301,12 @@ class LLMClient:
         - tier='strong'/None/未知 → Config.strong_model()（同样回退到当前模型）。
         CLI 订阅提供方只有单一订阅模型，tier 在 _chat_* 中被忽略，此处返回值仅用于计量一致性。
         """
+        # The fallback client is already fully resolved from LLM_FALLBACK_MODEL.
+        # Never replace it with the primary provider's global fast/strong alias:
+        # that sent MiniMax-M3 to Quotio's Antigravity endpoint and made every
+        # production failover return HTTP 400.
+        if getattr(self, "_is_fallback", False):
+            return self.model
         if not getattr(Config, "LLM_TIERED_ROUTING", False):
             return self.model
         if tier == "fast":
@@ -373,6 +402,12 @@ class LLMClient:
                 break
             except (RuntimeError, *_RETRYABLE_API_ERRORS) as exc:
                 last_error = exc
+                if _is_deterministic_auth_error(exc):
+                    logger.warning(
+                        "LLM authentication failure is deterministic; skipping retries: %s",
+                        _err_brief(exc),
+                    )
+                    break
                 if _is_quota(exc):
                     _cb_record_429(self.provider)  # LLM-3: 连续配额失败达阈值 → 冷却直连回退
                 if attempt < MAX_RETRIES - 1:
@@ -428,12 +463,23 @@ class LLMClient:
         fb_provider = (os.environ.get("LLM_FALLBACK_PROVIDER", "") or "").strip().lower()
         if not fb_provider or fb_provider == self.provider:
             return None
+        fb_model = (os.environ.get("LLM_FALLBACK_MODEL", "") or None)
+        fb_base_url = (os.environ.get("LLM_FALLBACK_BASE_URL", "") or None)
+        auth_key = (fb_provider, fb_model or "", fb_base_url or "")
+        with _CB_LOCK:
+            auth_unavailable_until = _FB_AUTH_UNAVAILABLE_UNTIL.get(auth_key, 0.0)
+        if auth_unavailable_until > time.monotonic():
+            logger.warning(
+                "Skipping fallback provider %s during deterministic-auth cooldown",
+                fb_provider,
+            )
+            return None
         try:
             fb = LLMClient(
                 provider=fb_provider,
-                model=(os.environ.get("LLM_FALLBACK_MODEL", "") or None),
+                model=fb_model,
                 api_key=(os.environ.get("LLM_FALLBACK_API_KEY", "") or None),
-                base_url=(os.environ.get("LLM_FALLBACK_BASE_URL", "") or None),
+                base_url=fb_base_url,
             )
             fb._is_fallback = True  # prevent recursive failover
             # LLM-3: 复用回退提供方的 OpenAI 连接池（每次失败转移重建 httpx 池 = 每调用一次
@@ -448,9 +494,16 @@ class LLMClient:
             logger.warning(f"主提供方 {self.provider} 失败（{_err_brief(primary_error) if primary_error else '?'}），"
                            f"切换到回退提供方 {fb_provider}")
             out = fb.chat(messages, temperature, max_tokens, response_format)
+            with _CB_LOCK:
+                _FB_AUTH_UNAVAILABLE_UNTIL.pop(auth_key, None)
             logger.info(f"回退提供方 {fb_provider} 成功接管本次调用")
             return out
         except Exception as e:  # noqa: BLE001 — fallback failed too; caller raises the primary error
+            if _is_deterministic_auth_error(e):
+                with _CB_LOCK:
+                    _FB_AUTH_UNAVAILABLE_UNTIL[auth_key] = (
+                        time.monotonic() + _FB_AUTH_COOLDOWN_S
+                    )
             logger.error(f"回退提供方 {fb_provider} 也失败: {_err_brief(e)}")
             return None
 
@@ -543,7 +596,9 @@ class LLMClient:
         # EXECPLAN2 I-6-2: 解析模型/客户端（默认 strong = 当前模型/主客户端，工具调用行为不变）。
         model = self._model_for_tier(tier)
         client = self._openai_client
-        if getattr(Config, "LLM_TIERED_ROUTING", False) and tier == "fast":
+        if (not self._is_fallback
+                and getattr(Config, "LLM_TIERED_ROUTING", False)
+                and tier == "fast"):
             fast_client = self._fast_provider_client()
             if fast_client is not None:
                 client = fast_client
@@ -555,9 +610,7 @@ class LLMClient:
             "tools": tools_schema,
             "tool_choice": "auto",
         }
-        extra_body = Config.reasoning_extra_body()
-        if extra_body:
-            kwargs["extra_body"] = extra_body
+        extra_body = self._apply_reasoning_options(kwargs)
         # Kimi K2.7 Code 网关按推理开关硬校验温度（开=1/关=0.6），覆盖调用方温度。
         kwargs["temperature"] = self._coerce_temperature(temperature, extra_body)
         # LLM-1: 此前原生工具路径完全绕过 chat() 的韧性/观测栈（无重试、无熔断记账、无计量、
@@ -742,6 +795,30 @@ class LLMClient:
         thinking_disabled = bool(extra_body and (extra_body.get("thinking") or {}).get("type") == "disabled")
         return 0.6 if thinking_disabled else 1.0
 
+    def _apply_reasoning_options(self, kwargs: Dict[str, Any]) -> Optional[Dict]:
+        """Apply reasoning controls for the provider actually serving this request.
+
+        A fallback client intentionally retains the global primary configuration, so request
+        options must be resolved from ``self.provider`` rather than Config.LLM_PROVIDER.
+        Quotio's Antigravity alias additionally accepts the OpenAI-compatible
+        ``reasoning_effort`` field.
+        """
+        extra_body = Config.reasoning_extra_body(self.provider)
+        if extra_body:
+            kwargs["extra_body"] = extra_body
+        if self._is_fallback:
+            reasoning_effort = (
+                os.environ.get("LLM_FALLBACK_REASONING_EFFORT", "") or ""
+            ).strip().lower()
+            if reasoning_effort:
+                if reasoning_effort not in {"minimal", "low", "medium", "high"}:
+                    raise ValueError(
+                        "LLM_FALLBACK_REASONING_EFFORT must be one of "
+                        "minimal/low/medium/high"
+                    )
+                kwargs["reasoning_effort"] = reasoning_effort
+        return extra_body
+
     # ------------------------------------------------------------------
     # openai 提供方
     # ------------------------------------------------------------------
@@ -757,7 +834,9 @@ class LLMClient:
         # 否则同提供方仅切模型名；关闭路由时 model=self.model、client=self._openai_client。
         model = self._model_for_tier(tier)
         client = self._openai_client
-        if getattr(Config, "LLM_TIERED_ROUTING", False) and tier == "fast":
+        if (not self._is_fallback
+                and getattr(Config, "LLM_TIERED_ROUTING", False)
+                and tier == "fast"):
             fast_client = self._fast_provider_client()
             if fast_client is not None:
                 client = fast_client
@@ -772,9 +851,7 @@ class LLMClient:
 
         # 推理模型(kimi/minimax/deepseek/qwen/glm)：默认关闭推理，避免 reasoning 吃光
         # max_tokens 导致 content 为空。reasoning_extra_body() 对非推理提供方返回 None。
-        extra_body = Config.reasoning_extra_body()
-        if extra_body:
-            kwargs["extra_body"] = extra_body
+        extra_body = self._apply_reasoning_options(kwargs)
 
         # Kimi K2.7 Code 网关按推理开关硬校验温度（开=1/关=0.6），覆盖调用方温度。
         kwargs["temperature"] = self._coerce_temperature(temperature, extra_body)
@@ -901,14 +978,14 @@ class LLMClient:
                 raise RuntimeError("Claude CLI returned empty result")
             return content
 
-        except subprocess.TimeoutExpired:
-            raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s")
-        except FileNotFoundError:
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s") from exc
+        except FileNotFoundError as exc:
             raise RuntimeError(
                 "未找到 `claude` 可执行文件，请确认已安装 Claude Code CLI 并加入 PATH"
-            )
+            ) from exc
         except OSError as exc:
-            raise RuntimeError(f"Claude CLI 进程启动失败: {exc}")
+            raise RuntimeError(f"Claude CLI 进程启动失败: {exc}") from exc
 
     # ------------------------------------------------------------------
     # codex-cli 提供方
@@ -955,12 +1032,12 @@ class LLMClient:
                 raise RuntimeError("Codex CLI 返回空结果")
             return cleaned
 
-        except subprocess.TimeoutExpired:
-            raise RuntimeError(f"Codex CLI timed out after {CLI_TIMEOUT}s")
-        except FileNotFoundError:
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"Codex CLI timed out after {CLI_TIMEOUT}s") from exc
+        except FileNotFoundError as exc:
             raise RuntimeError(
                 "未找到 `codex` 可执行文件，请确认已安装 Codex CLI 并加入 PATH"
-            )
+            ) from exc
         except OSError as exc:
             # 与 claude 路径对称（此前缺失）：非 ENOENT 的进程启动失败（EACCES/ENOMEM…）原本会以
             # 裸 OSError 冒泡，不在 chat() 的重试集合 (RuntimeError, *_RETRYABLE_API_ERRORS) 内

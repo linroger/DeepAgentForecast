@@ -9,7 +9,7 @@ than a dashboard of weak proxies.
 | Reader question | Required data contract | Preferred view | Non-negotiable check |
 |---|---|---|---|
 | How do regions differ now? | Same metric, denominator, period, and as-of rule by region | Sorted dot plot or grouped bar | Do not mix registrations, deliveries, and fleet share |
-| How is a market changing? | At least 3 dated observations of the same metric | Line or slope chart | Show gaps; do not interpolate missing periods silently |
+| How is a market changing? | At least 3 dated observations or externally published forecast points of the same metric | Line; small multiples when definitions differ | Show gaps; do not interpolate missing periods silently or call internal analyst paths "published" |
 | How did a published outlook change? | Same publisher/outlook, target metric, definition, and unit across at least 3 dated publication vintages | Revision line | X-axis is publication vintage corroborated by as-of, not target year |
 | Which technical route leads on measurable trade-offs? | Same test basis for cost, density, cycle life, charging, or yield | Small multiples or range dot plot | One axis per unit; include test basis |
 | Where is the cost inflection? | Dated comparable cost observations or scenario values | Line, indexed line, or slope chart | Keep nominal/real currency and system boundary explicit |
@@ -50,6 +50,75 @@ Good caption: “China and Singapore had moved far beyond the 2025 global adopti
 rate on the same new-sales denominator, while Europe and Turkey remained closer
 to the global baseline.”
 
+## Cross-domain showcase patterns
+
+The workflow forecasts more than EVs. The examples below define reader questions
+and row contracts for three showcase domains. Values in a real report must come
+from that run's artifacts; these are shape instructions, not permission to copy
+illustrative numbers.
+
+### Grid-scale energy storage
+
+1. **Deployment path:** plot annual GW and annual GWh as separate aligned
+   panels, with observed additions and externally published outlook points over
+   at least three target years. A derived average duration (`GWh / GW`) belongs
+   in a third hours panel only when both numerator and denominator share scope.
+   Why readers care: the same GW growth can imply radically different energy
+   service if duration changes.
+2. **Duration-cost inflection:** use small multiples for 4h, 8h, 12h, and
+   multi-day technologies. Plot installed power cost (`USD/kW`), energy cost
+   (`USD/kWh`), LCOS (`USD/MWh`), round-trip efficiency, and cycle life on
+   separate axes. Explicit current/target ranges get real whiskers. Why readers
+   care: technology winners change with duration and revenue design, not one
+   generic battery-cost line.
+3. **Regional execution gap:** compare tendered, under-construction, and
+   operating GW/GWh by region as grouped dots, never one undifferentiated
+   "pipeline" bar. Add project lead time only on a separate months/years panel.
+   Why readers care: announced capacity is not commissioned capacity.
+4. **Policy milestones:** lane proposal, auction award, rule effective date,
+   and commissioning deadline separately. Link each milestone to the scenario
+   or binary forecast it can resolve.
+
+### Humanoid and general-purpose robotics
+
+1. **Commercial scale path:** show annual shipments, installed base, and useful
+   operating hours in aligned panels. Separate pilots, paid deployments, and
+   repeat orders when the data permits. Why readers care: a large pilot count
+   is not recurring commercial adoption.
+2. **Economics:** pair ASP and BOM as a range/dot view, and show labor-payback
+   months in a separate panel by use case. Use cost-component bars for actuator,
+   battery, sensors, compute, and assembly only when the BOM rows reconcile; do
+   not stack unrelated vendor estimates.
+3. **Reliability frontier:** task success, human intervention rate, uptime, and
+   useful hours have different denominators; use small multiples with the test
+   setting in labels. Why readers care: a demo completion rate cannot establish
+   an unattended factory payback.
+4. **Regional adoption:** compare China, US, Japan, Korea, and Europe on the
+   same unit and period. If disclosure is company-specific, show named-company
+   dots rather than implying a complete regional market.
+
+### AI compute infrastructure and data-center power
+
+1. **Power bottleneck path:** align commissioned data-center power (GW), grid
+   interconnection queue (GW), and electricity demand (TWh) in separate panels.
+   Preserve observed, utility-plan target, and published forecast status. Why
+   readers care: accelerator supply can grow faster than energizable campuses.
+2. **Semiconductor constraint stack:** show accelerator shipments, HBM capacity,
+   advanced-packaging output, and networking throughput in unit-specific small
+   multiples. Never place wafers/month, stacks/year, and exaFLOP/s on one axis.
+3. **Resource intensity:** display water withdrawal/consumption and PUE/WUE only
+   with the same facility/system boundary. Separate design targets from measured
+   operation and annotate climate/region.
+4. **Published forecast revisions:** show how the same IEA, utility, or analyst
+   electricity-demand outlook changed across three vintages for one fixed target
+   year. Why readers care: revision velocity measures planning uncertainty.
+
+Across all domains, a reader-facing chart should expose an economically or
+physically binding quantity: deployment, cost, throughput, reliability,
+resource use, policy timing, or probability. Actor influence, source volume,
+keyword salience, and internal interpolation are context or methodology, not
+substitutes for those quantities.
+
 ### Technology cost comparison
 
 Input rows:
@@ -61,7 +130,11 @@ Input rows:
 | Stationary-storage pack price | 70 | USD per kWh | 2025-12-31 |
 
 Use a dot plot or bars with a zero baseline. Keep pack/cell and chemistry scope
-in the label. If historical rows exist, use a time series instead. A single
+in the label. If historical/forecast rows exist for the same `metric_family` and
+`region`, the renderer auto-connects them into a `metric_trajectories` cost curve
+(observed circles, forecast diamonds) once the family spans >=2 distinct years —
+tag rows with the canonical `metric_family`/`region`/`year`/`value_num`/
+`value_kind` fields so isolated single-year facts fold into one line. A single
 latest-year comparison must not imply a cost trajectory.
 
 ### Forecast revision
@@ -152,9 +225,11 @@ quantiles or ensemble paths, not an arbitrary band around a point forecast.
 |---|---|---|
 | Influence vs salience bubbles | Internal ordinal proxies, overlapping labels, no forecast quantity | Actual market shares, cost metrics, dated policy events, or omit |
 | “Top metrics” by absolute magnitude | Magnitude across unrelated definitions is meaningless | Strict same-denominator panels chosen by reader question |
-| Actor network as the lead chart | Relationship structure is not market size or impact | Optional industrial-chain map after data views |
+| Actor network in the default chart set | Relationship structure is not market size or impact and long labels often crowd the figure | Keep it off by default; enable only for a named industrial-chain transmission question after data views |
+| Internal/dossier interpolation styled as "published forecast" | It launders an analyst assumption into external evidence | Keep it in a clearly labeled forecast table or scenario chart; only external publications enter published trajectories |
+| Two-point line called a trend | Any two points create a slope, even when no trajectory is established | Use a before/after dot or table; require three periods for a trajectory |
 | Keyword-weighted “tornado” | Frequency is not an output perturbation | Real sensitivity deltas or a qualitative driver table |
-| Source-tier chart in the executive section | Methodology volume does not explain the forecast | Put in methodology; show domain data first |
+| Source-tier / "source salience" chart in the report body | Methodology volume does not explain the forecast; `source_quality` is diagnostic-only and off by default (`--diagnostics` to render) | Show domain data first; keep source diagnostics in methodology/audit review |
 | Dual-axis line/bar | Visual correlation can be manufactured by scale choices | Indexed series or aligned small multiples |
 | Pie/donut with many categories | Hard to compare and label | Sorted bars or 100% stacked bars |
 | Network hairball | Edge density hides the takeaway | Filter to a named transmission path or use a table |

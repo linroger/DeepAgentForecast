@@ -1,5 +1,108 @@
 # PLANS.md — Agentic Workflow Refinement Program
 
+## 2026-07-13 LOOP-014 — Mandarin report and PDF release integrity
+
+### Intent
+
+Before the next forecast runs, prove that a publication-valid English report
+can be translated into Mandarin, viewed and exported from the live UI, and
+downloaded as both Markdown and a genuinely readable Mandarin PDF. Audit the
+runtime skills activated by this path, tighten only instructions with a
+reproduced ambiguity, inefficiency, or failure mode, and keep source/deployed
+copies byte-identical. Make `npm start` stream service output and durable stage
+marks, then launch the user's humanoid-robotics, grid-storage, and AI-compute
+prompts as three independent parallel pipelines and monitor each to publication.
+
+### Acceptance criteria
+
+| ID | Criterion | Evidence |
+|---|---|---|
+| M1 | Mandarin generation is bound to the selected published report | API and UI scenario return the selected report's Mandarin artifact; stale, failed, unaudited, or mismatched artifacts fail closed |
+| M2 | Mandarin viewing and Markdown export work end to end | Real browser switches to Mandarin and downloads UTF-8 Markdown with the expected report identity and Chinese text |
+| M3 | Mandarin PDF export is a real, legible document | Export returns `%PDF` bytes with the correct content disposition; text extraction finds Chinese text; all rendered pages are inspected for missing glyphs, clipping, overlap, and broken layout |
+| M4 | English/Mandarin state remains coherent | Switching reports or language cannot show or export a previous report's translation; loading/error/availability states are explicit |
+| S1 | Every runtime skill used by this path is reviewed | Activation evidence maps runtime stage to skill; frontmatter, core workflow, failure behavior, resource routing, and source/deployed parity are checked |
+| S2 | Skill optimization is evidence-backed and validated | Any edited skill is concise, imperative, linked to required resources, validated with the repository and skill-creator validators, and forward-tested where practical |
+| O1 | Startup output is attached and stage-aware | `npm start` streams both service logs and concise durable `▶/✓/✕` stage transitions, repairs stale/misbound PID files, returns nonzero on readiness failure, and retains an explicit detached mode |
+| R1 | Three requested forecasts run independently in parallel | Three distinct pipeline IDs preserve the exact humanoid-robotics, grid-storage, and AI-compute prompts and begin without serial launch coupling |
+| R2 | Every new run completes end to end | Each pipeline has healthy heartbeats, real model/search/fetch activity, nonzero canonical evidence, terminal research/ontology/graph/prepare/run/report artifacts, and a publication-valid audited report |
+| Q1 | The repository is safe for the next run | Focused backend/frontend tests, production build, backend suite, dependency/environment/diff checks, API smoke, PDF render QA, and browser acceptance pass |
+
+### Execution order
+
+1. Characterize report publication, translation persistence, language switching,
+   Markdown export, PDF generation, font embedding, and error contracts.
+2. Inventory the exact runtime skills activated by translation/export and check
+   authoritative versus deployed copies before editing anything.
+3. Add failing-before regressions for every reproduced defect, implement the
+   smallest coherent repair, and optimize only implicated skill instructions.
+4. Exercise the selected EV report through API and real-browser scenarios;
+   inspect extracted PDF text and every rendered page.
+5. Exercise `npm start` against healthy, stale-PID, attached-stream, detached,
+   signal, and readiness-failure paths; prove stage transitions from durable state.
+6. Freeze the implementation diff, run proportional repository gates and an
+   independent review, then launch all three exact prompts together.
+7. Monitor and repair only reproducible in-scope regressions until all three
+   pipelines pass their terminal publication gates and artifacts are verified.
+8. Update continuity evidence, commit, push both canonical `main` remotes, and
+   verify a clean state.
+
+### Authorization and risk boundary
+
+The user explicitly authorized Mandarin/export verification, skill optimization,
+startup observability changes, and three new full parallel runs. Existing audited
+report bytes MUST remain immutable unless the translation contract explicitly
+creates a new language sidecar. The three supplied prompts MUST be preserved
+verbatim and MUST remain separate sessions. Healthy in-flight pipelines MUST NOT
+be restarted; failed/stalled work may be retried only after evidence identifies
+and validates an in-scope workflow correction.
+
+### Recovery amendment (2026-07-15T17:07:00Z)
+
+The current grid-storage successor is `pipe_0e1b84d2682a`. Its synthesis-only
+recovery reused 292 sealed sources and produced an exact-judge-passed 19,943-word
+dossier; it is now healthy in graph construction and MUST NOT be restarted or
+resumed again. Terminal acceptance additionally requires a non-fabricated
+simulation-contribution audit because the pre-fix process image failed to parse
+an aggregate `summing to 100%` scenario heading. The deterministic parser fix is
+covered by the exact live format and will apply after the next safe process
+start. A missing world-state trajectory in this in-flight attempt must be
+reported honestly and must never be mislabeled as a simulation signal.
+
+### Provider-routing amendment (2026-07-15T17:50:11Z)
+
+Grid graph ingestion exposed MiniMax `429/2062` throttling while the fallback
+provider field was blank. Quotio itself is healthy and returned `READY` from a
+low-effort live probe. Backend fallback now uses a fallback-only `antigravity`
+identity over Quotio, never a Claude/Gemini CLI. Fallback clients retain their
+resolved Quotio model even when primary fast/strong tiering is enabled; an
+exact live `_try_fallback` call proves `antigravity` plus
+`gemini-3-flash-preview` returns `READY`. The repair remains unloaded until the
+healthy current graph reaches a safe terminal state; no mid-run restart is
+permitted. The next service load MUST re-probe MiniMax primary, Quotio fallback,
+and the exact model/reasoning tuple before recovering the remaining pipelines.
+
+### Characterization amendment (2026-07-13T14:05:00Z)
+
+The EV run did attempt translation; the isolated audit rejected it and correctly
+removed the candidate, which made the conditional UI toggle disappear. The
+repair slice now includes: correct numeric-token parsing, deterministic canonical
+References handling, one bounded integrity/language retry for affected chunks,
+an observable publication-gated on-demand translation task, report-bound
+frontend caches/requests, and an explicit Markdown download beside PDF. These
+are one cohesive Mandarin-delivery contract and will be validated against the
+existing failed EV artifact before any new full forecast run.
+
+### Scope amendment (2026-07-13T15:20:00Z)
+
+The user added two release requirements. First, `scripts/start.sh` now defaults
+to attached log/stage streaming while services remain durable; `--detach`
+preserves non-attached operation. Second, after implementation gates pass, three
+new full sessions will run in parallel: global humanoid/general-purpose robots
+to 2035, global grid-scale storage to 2040, and global AI-compute/data-center
+power infrastructure to 2035. Each requires independent heartbeat, evidence,
+simulation, report-audit, visualization, and terminal-artifact verification.
+
 ## 2026-07-13 LOOP-013 — complete research provenance in localhost and demos
 
 ### Intent
@@ -415,3 +518,81 @@ Stop and report rather than guessing when a candidate requires production creden
 ## Approval and change control
 
 The user explicitly requested that the agent design the loop, run parallel agents, resolve findings, and keep iterating. This authorizes the plan's read-only forensic wave and bounded, reversible fixes inside the stated scope. Any deployment, paid live run, destructive cleanup, commit/push, or change that overlaps an active external owner requires a separate decision.
+
+## LOOP-015 — Deep-research cost, resilience, and sealed-contract recovery (2026-07-15)
+
+### Task brief
+
+The newest pipeline, `pipe_750d99882585`, spent roughly four hours in research, produced an under-length and judge-failing report, and then failed a 158 ms resume with `promoted research contract failed checksum validation`. The user explicitly authorized diagnosis, implementation, and safe continuation. The preserved evidence lanes MUST be reused; a healthy evidence stage MUST NOT be rerun merely to repair global synthesis or finalization.
+
+### Reproduced causes and invariants
+
+1. **Sealed report invariant:** `research_report_judge.json` binds the exact LLM-prose prefix. Post-judge citation lint changed seven citation variants in memory, and `_finalize_research_contract` attempted to promote those changed bytes with the old judge hash. The manifest checksums themselves were correct; the exception text was misleading.
+2. **Network resilience invariant:** the run had no configured Tavily/Brave/Exa/Firecrawl/InfoQuest fetch fallback. Anonymous Jina was the sole fetch provider. The shared epoch admitted 450 fetch network calls; 317 failures were recorded, dominated by connect timeouts, without a provider-wide circuit breaker.
+3. **Token-efficiency invariant:** 14,738,617 research tokens were reported. Adaptive gap closing consumed 7,720,291 (52.4%). Later turns replayed growing LangGraph histories (individual inputs exceeded 1.7M tokens), while full checkpoint/tool history was preferred over compact phase reports for the final evidence pack.
+4. **Quality invariant:** deep output was approximately 7–8K words against the judge's 15K floor. Multipart outline parsing failed and fell back to a single completion. A longer refine candidate was discarded after another FAIL. The quality score ignored `research_report_judge.json`, so an explicit report FAIL was masked by an inflated 0.862 aggregate.
+5. **Optional-market invariant:** unavailable prediction-market transport consumed about 17 minutes across pre-pass and final retries. A run-scoped transport failure MUST suppress redundant optional retries.
+
+### Acceptance checks
+
+| Requirement | Acceptance check | Expected evidence |
+|---|---|---|
+| Preserve judged bytes | Finalize a judge-bound contract after a lint proposal that would mutate citations | Promotion remains valid and the sealed report bytes are unchanged |
+| Actionable contract failures | Tamper each representative artifact/binding | Diagnostic names the failing file, size/hash, optional set, or judge-prose binding |
+| Bound Jina outage cost | Simulate concurrent transport failures | Shared circuit opens after the configured threshold; later calls fail over or fail fast without spending Jina timeout/network slots |
+| Preserve subagent provenance | Record successful fetches from isolated lanes and export the shared ledger | Lane/global source union contains exact successful URLs with stable content hashes |
+| Stop context replay | Exercise adaptive planning/evidence rendering | Adaptive workers use isolated threads/compact inputs, stop on no source gain or exhausted tools, and default to one bounded gap round |
+| Produce deep-length reports | Force malformed outline output | Deterministic multipart outline remains active; deep minimum and judge floor both equal 15K words |
+| Fail honestly on poor report | Feed an explicit report-judge FAIL | Aggregate quality cannot remain healthy/completed; preserved evidence is eligible for synthesis-only recovery |
+| Avoid duplicate optional-market waits | Simulate all-query transport failure in pre-pass | Final collection writes an explicit transport marker without another degradation retry ladder |
+| Recover newest run safely | Resume `pipe_750d99882585` after focused gates | Evidence lanes are reused, global synthesis/finalization reruns only as needed, and terminal artifacts pass manifest/judge/report checks |
+
+### Implementation order
+
+1. Repair sealed-contract/lint handling and add diagnostic validation plus focused tests.
+2. Add shared fetch provenance and provider circuit/fallback behavior with multiprocess-safe tests.
+3. Isolate late research turns, compact evidence assembly, bound adaptive passes, and stop on exhausted/no-gain work.
+4. Harden multipart outline fallback, align length floors, include the real report judge in quality, and make judge FAIL synthesis-recoverable.
+5. Add prediction-market transport short-circuiting.
+6. Sync the runtime bridge/skills, run focused and proportional gates, restart the backend once, and use the existing pipeline's safe resume path exactly once.
+
+### 2026-07-15 execution delta
+
+- The first synthesis-only recovery was mathematically unable to pass: independent section writers generated 37K/43K words while the exact-byte judge cap was 200K characters. The implementation now enforces one aggregate 15K–22K-word budget, bounded per-call outputs, and a 600K-character judge envelope.
+- Synthesis-only recovery reuses an unexhausted tool-budget epoch at the global epoch cap; it does not buy or consume another search/fetch epoch.
+- MiniMax quota `429/2056` is now a typed provider outage. MiniMax retries first; only then may tool-free calls fail over to Antigravity through Quotio (`gemini-3-flash-preview`, low reasoning). A process-local circuit prevents every parallel section from repeating the same doomed primary wait.
+- If both providers are unavailable, recovery stops after one attempt, preserves evidence/attempt diagnostics, and advertises a safe-resume blocker instead of zero-byte report or generic quality failure.
+- External blocker: Quotio has the correct model alias and endpoint, but its sole active Antigravity account is disabled upstream. Do not restore archived accounts to evade provider enforcement. Resume only after MiniMax resets or the user restores an authorized Quotio account.
+- The old grid-storage manifest is structurally valid but source-empty despite preserved real fetch activity. It is not publication-eligible; recover provenance deterministically or run only a bounded missing-source lane before synthesis.
+
+### Rollback boundary
+
+All edits remain scoped to the research bridge, research budget/fetch tools, orchestrator contract/recovery path, directly associated tests/config/docs, and runtime mirrors. Existing user changes and unrelated stages remain untouched. No new `/run` POST, commit, push, or site publication is part of this slice.
+
+## LOOP-016 — Execution-envelope, artifact-integrity, and renderer-parity closure (2026-07-15)
+
+### Objective and stopping conditions
+
+Close the four independent-review blockers before spending another paid model or simulation run. Completion requires: one shared multipart output-token ledger covering outline, section attempts, retries, expansions, and summary; oversized/deep-empty synthesis cannot reach judge/extraction through concatenated notes; no legacy streamed actor JSON can be promoted; every report-facing quantitative renderer uses target-period precedence, explicit-range midpoint semantics, and external provenance for forecast rows; and fallback clients retain their Quotio endpoint/model under both strong and fast tiers.
+
+### Execution order
+
+1. Add deterministic regressions for each blocker and implement the smallest fail-closed fixes.
+2. Sync the canonical bridge and runtime skill bundle to `deer-flow`, then prove byte/hash parity.
+3. Run focused bridge, extraction, visualizer, fallback, lifecycle, and scenario suites plus Ruff/compile/diff hygiene.
+4. Preflight MiniMax and Quotio-Antigravity, verify the grid dossier parses exactly four canonical scenarios, and resume `pipe_0e1b84d2682a` once through the existing `/resume` path.
+5. Monitor every stage and terminal artifact; only after grid publication passes should the humanoid and AI-compute pipelines be recovered.
+
+### Safety invariants
+
+- A terminal or unhealthy pipeline is never converted into a new `/run`; preserved evidence and the existing resume contract are used.
+- Test discovery/app construction MUST NOT reconcile or terminate production processes.
+- A forecast chart point without an externally reachable `http(s)` source URL remains report-table evidence only; it is not rendered as a published forecast trajectory.
+- A full canonical A/B/C/D scenario partition is authoritative. Any second full partition with different weights is a deterministic research-judge failure.
+
+### 2026-07-15T19:01Z provider-capacity checkpoint
+
+- The grid run passed the pre-resume code gates and advanced to RUN, but MiniMax exhausted Token Plan capacity and the only authorized fallback, Quotio Antigravity, subsequently exhausted/cooldowned its credentials.
+- The simulator was deliberately stopped only after both config-bound platform checkpoints were verified. This prevents quota hammering and protects output quality without replaying research or completed simulation rounds.
+- Current checkpoint floor is Twitter round 18/29; Reddit is round 23/29. A safe resume MUST use the existing pipeline and `SIM_RESUME`; no new `/run` is permitted.
+- The active automation now probes providers first. It MUST remain idle while both are unavailable, issue at most one resume after a health pass, and verify checkpoint continuation before considering the recovery successful.

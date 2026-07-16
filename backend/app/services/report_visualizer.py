@@ -7,11 +7,14 @@ contested / graph_priors / world_state_trajectory / comparison / market_price_hi
       角色网络在前端/PDF 均无法渲染且字符规整会毁文本，已由 plotly 等价图取代）。
   (B) matplotlib PNG（Agg 后端，可选依赖）——作为 plotly/kaleido 缺失或 PNG 导出失败时的
       降级回退族，另含 plotly 无等价图的对比分组柱与校准曲线。
-  (C) plotly 交互式 HTML + kaleido 静态 PNG 对（主族）——情景概率误差棒（吃 ensemble
-      stdev/min-max）、二元预测点阵、模型 vs 市场哑铃、时间线泳道、角色关系网络（networkx
-      spring 布局）、来源构成 sunburst、同分母定量基准、跨版本预测修订、市场价格历史折线、
-      世界态堆叠面积。影响力×显著度、关键词“tornado”和来源权重争议哑铃仍保留为诊断 helper，
-      但不占用默认读者报告槽位。每图为自包含
+  (C) plotly 交互式 HTML + kaleido 静态 PNG 对（主族，预测数据优先）——情景概率误差棒
+      （吃 ensemble stdev/min-max）、二元预测点阵、模型 vs 市场哑铃、研究指标轨迹（DRF2 按
+      metric_family 跨 year 分组，region/technology/analyst 拆线）、技术份额柱、区域对比柱、
+      时间线泳道、跨版本预测修订、世界态堆叠面积、市场价格历史折线、同分母定量基准。
+      角色关系网络（networkx spring 布局，关系结构而非预测数据）、影响力×显著度、关键词
+      “tornado”、来源权重争议哑铃与来源构成 sunburst 仍保留为诊断 helper，但不占用默认读者
+      报告槽位（REPORT_META_CHARTS 可恢复 actor_network 与 source_mix_sunburst）。
+      每图为自包含
       charts/<name>.html（plotly.js 内联，完全离线可开）+ charts/<name>.png（kaleido，
       scale=2、宽 1200，manifest 项挂 png_path）。
 
@@ -38,6 +41,8 @@ env 旋钮（Config，全部 degrade-safe 默认）：
   REPORT_VIZ_PNG_EXPORT  kaleido 静态 PNG 导出开关（默认开；kaleido 缺失/失败自动回退）
   REPORT_VIZ_TIMELINE_MAX_EVENTS  时间线泳道事件上限（默认 40）
   REPORT_VIZ_NETWORK_MAX_NODES    角色网络节点上限（默认 60）
+  REPORT_META_CHARTS     管线元数据/方法论自证图开关（默认关：角色关系网络 actor_network、
+                         来源构成 sunburst 等关系结构/方法论图不占默认报告槽位，仅显式开启时渲染）
 """
 
 from __future__ import annotations
@@ -50,6 +55,7 @@ import math
 import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +160,18 @@ def _cfg(name: str, default: Any) -> Any:
         return getattr(Config, name, default)
     except Exception:  # noqa: BLE001
         return default
+
+
+def _meta_charts_on() -> bool:
+    """REPORT_META_CHARTS 旋钮（默认关）：管线元数据/方法论自证图（来源构成 sunburst 等）
+    是否占用默认报告槽位。读者要的是预测数据图（成本曲线/部署轨迹/区域对比），元数据图
+    仅在显式开启（Config 属性，或 Config 缺键时读同名环境变量）后才恢复渲染。"""
+    val = _cfg("REPORT_META_CHARTS", None)
+    if val is None:
+        val = os.environ.get("REPORT_META_CHARTS")
+    if isinstance(val, str):
+        return val.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(val)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -547,6 +565,20 @@ def _to_float(v: Any) -> Optional[float]:
         return None
 
 
+def _explicit_numeric_range(value: Any) -> Optional[Tuple[float, float]]:
+    """Return a stated numeric interval, preserving it over scalar guesses."""
+    text = str(value or "").replace(",", "")
+    match = re.search(
+        r"(-?\d+(?:\.\d+)?)\s*(?:[-–—~]|to)\s*(-?\d+(?:\.\d+)?)",
+        text,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    low, high = float(match.group(1)), float(match.group(2))
+    return min(low, high), max(low, high)
+
+
 _QUANT_UNIT_ALIASES = {
     "% new vehicle sales": "% new car sales",
     "% of new vehicle sales": "% new car sales",
@@ -565,6 +597,12 @@ _FORECAST_SIGNAL_RE = re.compile(
     r"\b(?:forecast(?:ed|s|ing)?|project(?:ed|ion|ions)?|outlook|"
     r"estimate(?:d|s)?|expected|expectation|guidance|scenario|target|"
     r"revision|revised)\b",
+    re.IGNORECASE,
+)
+_INTERNAL_FORECAST_SOURCE_RE = re.compile(
+    r"\b(?:internal|dossier|synthesis|working\s+(?:assumption|interpolation)|"
+    r"analyst\s+interpolation|our\s+(?:case|estimate|forecast))\b|"
+    r"内部推演|本报告|分析师插值",
     re.IGNORECASE,
 )
 _DENOMINATOR_PATTERNS = (
@@ -663,6 +701,61 @@ def _parse_quant_date(value: Any) -> Optional[dt.date]:
         return dt.date.fromisoformat(match.group(0))
     except ValueError:
         return None
+
+
+def _metric_row_period_end(row: Dict[str, Any]) -> Optional[dt.date]:
+    """Return the target/observation period end before any publication date."""
+    candidates: List[Any] = [row.get("period_end"), row.get("target_date")]
+    period = row.get("period")
+    if isinstance(period, dict):
+        candidates.extend([
+            period.get("period_end"),
+            period.get("end"),
+        ])
+    for raw in candidates:
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        full = re.search(r"(?<!\d)(19\d{2}|20\d{2})-(\d{2})-(\d{2})(?!\d)", text)
+        if full:
+            try:
+                return dt.date(
+                    int(full.group(1)), int(full.group(2)), int(full.group(3)))
+            except ValueError:
+                continue
+        year = re.search(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)", text)
+        if year:
+            return dt.date(int(year.group(1)), 12, 31)
+    return None
+
+
+def _metric_row_is_publishable(
+        row: Dict[str, Any], kind: Optional[str] = None) -> bool:
+    """Apply the same provenance floor as the research forecast renderer.
+
+    Observations need source, definition and source as-of date. Forward points
+    additionally need an external HTTP(S) source and cannot be explicitly
+    described as an internal/dossier interpolation.
+    """
+    source = re.sub(
+        r"\s+", " ",
+        str(row.get("source") or row.get("analyst") or ""),
+    ).strip()
+    definition = re.sub(
+        r"\s+", " ", str(row.get("definition") or ""),
+    ).strip()
+    as_of = _parse_quant_date(row.get("as_of_date"))
+    if not source or not definition or as_of is None:
+        return False
+    resolved_kind = kind or _metric_row_kind(row)
+    if resolved_kind != "forecast":
+        return True
+    source_url = str(row.get("source_url") or "").strip()
+    parsed = urlsplit(source_url)
+    if parsed.scheme.casefold() not in {"http", "https"} or not parsed.netloc:
+        return False
+    return not bool(_INTERNAL_FORECAST_SOURCE_RE.search(
+        f"{source} {definition}"))
 
 
 def _quant_is_projection(row: Dict[str, Any]) -> bool:
@@ -845,7 +938,7 @@ def _prepare_quantitative_panels(
             continue
         metric = str(q.get("metric") or "").strip()
         unit = _canonical_quant_unit(q.get("unit"))
-        value = _to_float(q.get("value"))
+        value = _metric_row_value(q)
         if not metric or value is None or not _quant_unit_is_comparable(unit):
             continue
         source = str(q.get("source") or "").strip()
@@ -854,6 +947,9 @@ def _prepare_quantitative_panels(
         if not source or not definition or as_of is None:
             continue
         projection = _quant_is_projection(q)
+        if not _metric_row_is_publishable(
+                q, "forecast" if projection else "actual"):
+            continue
         staleness = _to_float(q.get("staleness_days"))
         if staleness is not None and staleness < 0 and not projection:
             continue
@@ -907,6 +1003,499 @@ def _prepare_quantitative_panels(
     return panels
 
 
+_METRIC_TIME_KEYS: Tuple[str, ...] = (
+    "period_end", "target_date", "period", "period_start",
+    "as_of_date", "as_of", "date",
+)
+
+
+def _parse_metric_point_time(row: Dict[str, Any]) -> Optional[dt.date]:
+    """从 quantitative 行提取轨迹时点（比 _parse_quant_date 宽松）：依序扫
+    date/as_of/period 族字段，接受 YYYY-MM-DD / YYYY-MM / YYYY / 'by YYYY' /
+    'YYYY年'；年/月粒度统一归到该期首日，保证同轴排序确定性。不可解析 → None。"""
+    period_end = _metric_row_period_end(row)
+    if period_end is not None:
+        return period_end
+    for key in _METRIC_TIME_KEYS:
+        raw = row.get(key)
+        if isinstance(raw, dict):  # period:{...} → 取显式期末/期初/标签子值
+            raw = (raw.get("period_end") or raw.get("end")
+                   or raw.get("period_start") or raw.get("start") or raw.get("label"))
+        s = str(raw or "").strip()
+        if not s:
+            continue
+        m = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", s)
+        if m:
+            try:
+                return dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            except ValueError:
+                pass  # 畸形全日期（如 13 月）→ 继续尝试更粗粒度
+        m = re.search(r"\b(\d{4})-(\d{2})\b", s)
+        if m and 1 <= int(m.group(2)) <= 12:
+            return dt.date(int(m.group(1)), int(m.group(2)), 1)
+        m = re.search(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)", s)
+        if m:  # 覆盖裸年份与 'by 2030' / '2030年' 措辞
+            return dt.date(int(m.group(1)), 1, 1)
+    return None
+
+
+def _metric_series_name(metric: str) -> str:
+    """把 metric 名折叠成序列身份：剥离内嵌年份/季度与 forecast/target 措辞——
+    研究抽取常把时点写进指标名（'Tesla Optimus 2026 target'、'GMI 2031 humanoid
+    market revenue'），不折叠则同一指标的多时点行永远聚不成轨迹。剥空 → 退回
+    原名（不猜）。"""
+    s = re.sub(r"\b(?:by\s+)?(?:19|20)\d{2}\b", " ", str(metric))
+    s = re.sub(r"\b(?:Q[1-4]|H[12]|FY)\b", " ", s)
+    s = re.sub(r"\b(?:actual|observed|reported|forecast(?:ed)?|projected|"
+               r"projections?|target|estimated?|estimates|guidance|plan)\b",
+               " ", s, flags=re.IGNORECASE)
+    s = re.sub(r"\s+", " ", s).strip(" -–—:(),")
+    return s or str(metric).strip()
+
+
+def _prepare_metric_trajectories(quantitative: Any,
+                                 *, max_series: int = 8) -> List[Dict[str, Any]]:
+    """把 quantitative 行聚成 (metric, unit) 时间序列——读者真正要的预测数据轨迹
+    （成本曲线 / 部署量 / 渗透率 / 区域对比）。序列键 = (_metric_series_name 折叠
+    后的指标名, 规范化 unit)；点资格 = 数值可解析 + 时点可解析；同一时点重复记录
+    保首现（真实工件常见双写）；<2 点的序列剔除；输出按点数降序、(名称, unit)
+    字典序截取前 max_series 条（确定性）。"""
+    if not isinstance(quantitative, list):
+        return []
+    groups: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for q in quantitative:
+        if not isinstance(q, dict):
+            continue
+        metric = str(q.get("metric") or "").strip()
+        unit = _canonical_quant_unit(q.get("unit"))
+        value = _metric_row_value(q)
+        when = _parse_metric_point_time(q)
+        kind = _metric_row_kind(q)
+        if (not metric or value is None or when is None
+                or not _metric_row_is_publishable(q, kind)):
+            continue
+        name = _metric_series_name(metric)
+        bucket = groups.setdefault((name.casefold(), unit.casefold()), {
+            "metric": name,
+            "unit": unit or "value",
+            "points": {},
+        })
+        points = bucket["points"]
+        if when in points:
+            continue
+        points[when] = {
+            "date": when,
+            "value": value,
+            "display_value": str(q.get("value") or value),
+            "metric": metric,
+            "source": str(q.get("source") or "").strip(),
+            "definition": str(q.get("definition") or "").strip(),
+            "stale": bool(q.get("is_stale")),
+            "projection": kind == "forecast",
+        }
+    series: List[Dict[str, Any]] = []
+    for bucket in groups.values():
+        points = bucket["points"]
+        if len(points) < 2:
+            continue
+        series.append({
+            "metric": bucket["metric"],
+            "unit": bucket["unit"],
+            "points": [points[d] for d in sorted(points)],
+        })
+    series.sort(key=lambda s: (-len(s["points"]), s["metric"], s["unit"]))
+    return series[:max(0, max_series)]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DRF2 定量 schema 新增字段读取（metric_family / region / technology / year /
+# value_num / value_kind / analyst）——由上游研究抽取补齐。全部「新字段优先、旧字段回退」：
+#   · region     → region ?? geography（真实 handoff 用 geography）
+#   · year       → year(int) ?? period_end/as_of_date 里的四位年（预测取目标/期末年，
+#                  而非发布日：'2030 forecast' 的轨迹应落在 2030 而非发布年）
+#   · value_num  → value_num(float) ?? _to_float(value)
+#   · value_kind → value_kind ?? value_type ?? _quant_is_projection 推断（actual/forecast）
+# 缺 metric_family 即视为「老数据」→ 走 _prepare_metric_trajectories 的折叠名回退路径。
+# ─────────────────────────────────────────────────────────────────────────────
+def _metric_row_family(row: Dict[str, Any]) -> Optional[str]:
+    """显式 metric_family（分组主键）；缺失 → None（调用方回退折叠名路径）。"""
+    fam = row.get("metric_family")
+    if isinstance(fam, str) and fam.strip():
+        return re.sub(r"\s+", " ", fam).strip()
+    return None
+
+
+def _metric_row_region(row: Dict[str, Any]) -> Optional[str]:
+    """区域标签：region 优先，回退真实工件里的 geography；均空 → None。"""
+    for key in ("region", "geography"):
+        v = row.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
+
+
+def _metric_row_technology(row: Dict[str, Any]) -> Optional[str]:
+    """技术标签（domain tech tag）；缺/空 → None（人形机器人跑通常为空 → 跳过技术份额图）。"""
+    v = row.get("technology")
+    if isinstance(v, str) and v.strip():
+        return v.strip()
+    return None
+
+
+def _metric_row_analyst(row: Dict[str, Any]) -> Optional[str]:
+    """分析机构标签；缺/空 → None。"""
+    v = row.get("analyst")
+    if isinstance(v, str) and v.strip():
+        return v.strip()
+    return None
+
+
+def _metric_row_year(row: Dict[str, Any]) -> Optional[int]:
+    """轨迹 x 轴年份：显式 year(int) 优先；否则从 period_end→as_of_date→date→period 顺序
+    取首个合理四位年（期末/目标年在前，发布日在后）。均不可解析 → None。"""
+    y = row.get("year")
+    if isinstance(y, bool):
+        y = None
+    if isinstance(y, (int, float)):
+        yi = int(y)
+        if 1900 <= yi <= 2100:
+            return yi
+    period_end = _metric_row_period_end(row)
+    if period_end is not None:
+        return period_end.year
+    for key in ("period_start", "as_of_date", "date", "as_of"):
+        raw = row.get(key)
+        if isinstance(raw, dict):  # period:{...} → 取显式期末/期初/标签子值
+            raw = (raw.get("period_end") or raw.get("end")
+                   or raw.get("period_start") or raw.get("start") or raw.get("label"))
+        m = re.search(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)", str(raw or ""))
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _metric_row_value(row: Dict[str, Any]) -> Optional[float]:
+    """Value midpoint for explicit ranges, then canonical scalar/fallback text."""
+    interval = _explicit_numeric_range(row.get("value"))
+    if interval is not None:
+        return (interval[0] + interval[1]) / 2.0
+    v = row.get("value_num")
+    if isinstance(v, bool):
+        v = None
+    if isinstance(v, (int, float)):
+        f = float(v)
+        if f == f:  # 过滤 NaN
+            return f
+    return _to_float(row.get("value"))
+
+
+def _metric_row_kind(row: Dict[str, Any]) -> str:
+    """观测/预测判定（actual|forecast）：value_kind 优先，回退 value_type，再回退
+    _quant_is_projection 语义推断。用于轨迹/区域图上区分实测点与预测点的记号样式。"""
+    for key in ("value_kind", "value_type"):
+        raw = row.get(key)
+        if isinstance(raw, str):
+            low = raw.strip().lower()
+            if low in {"actual", "observed", "historical", "reported"}:
+                return "actual"
+            if low in {"forecast", "forecasted", "projection", "projected",
+                       "target", "expected", "estimate", "estimated"}:
+                return "forecast"
+    return "forecast" if _quant_is_projection(row) else "actual"
+
+
+def _aggregate_metric_points(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """把同一条折线（同一 split 值）的行按 year 聚成逐年点：同年多行取均值（预测/观测
+    混排时优先取观测子集的均值并标 actual），确定性升序。rep 保留一条代表行供 hover。"""
+    by_year: Dict[int, List[Dict[str, Any]]] = {}
+    for r in rows:
+        by_year.setdefault(r["year"], []).append(r)
+    points: List[Dict[str, Any]] = []
+    for year in sorted(by_year):
+        grp = by_year[year]
+        actuals = [g for g in grp if g["kind"] == "actual"]
+        chosen = actuals or grp
+        mean = sum(g["value"] for g in chosen) / len(chosen)
+        points.append({
+            "x": year,
+            "x_label": str(year),
+            "period_end": chosen[0].get("period_end") or f"{year:04d}-12-31",
+            "value": mean,
+            "kind": "actual" if actuals else "forecast",
+            "stale": any(g["stale"] for g in chosen),
+            "n": len(grp),
+            "rep": chosen[0],
+        })
+    return points
+
+
+def _build_metric_trajectory_lines(rows: List[Dict[str, Any]],
+                                   split: Optional[str]) -> List[Dict[str, Any]]:
+    """按 split 维度（region/technology/analyst 之一，或 None）把家族内的行拆成折线。
+    split 为 None → 单折线（name=None）；否则每个非空 split 值一条折线（字典序）。"""
+    lines: List[Dict[str, Any]] = []
+    if split:
+        groups: Dict[str, List[Dict[str, Any]]] = {}
+        for r in rows:
+            key = r.get(split)
+            if not key:
+                continue  # split 值缺失的行不进任何折线（避免伪造归属）
+            groups.setdefault(str(key), []).append(r)
+        for name in sorted(groups):
+            pts = _aggregate_metric_points(groups[name])
+            if pts:
+                lines.append({"name": name, "points": pts})
+    else:
+        pts = _aggregate_metric_points(rows)
+        if pts:
+            lines.append({"name": None, "points": pts})
+    return lines
+
+
+def _prepare_metric_family_trajectories(quantitative: Any, *,
+                                        max_families: int = 8) -> List[Dict[str, Any]]:
+    """DRF2 主路径：按 metric_family（× unit）把行聚成家族，跨 year 画轨迹——一条折线对应
+    一个 region/technology/analyst 分组（择首个有 ≥2 个不同取值的维度做拆分，否则单折线）。
+    家族资格 = 该家族含 ≥2 个不同年份的点（否则不成轨迹）。观测点圆记号、预测点菱形记号。
+    输出规范化 panel（title/unit/split/lines），按点数降序、标题字典序截断 max_families 条。"""
+    if not isinstance(quantitative, list):
+        return []
+    families: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for q in quantitative:
+        if not isinstance(q, dict):
+            continue
+        fam = _metric_row_family(q)
+        if not fam:
+            continue
+        unit = _canonical_quant_unit(q.get("unit")) or "value"
+        year = _metric_row_year(q)
+        val = _metric_row_value(q)
+        kind = _metric_row_kind(q)
+        if (year is None or val is None
+                or not _metric_row_is_publishable(q, kind)):
+            continue
+        bucket = families.setdefault((fam.casefold(), unit.casefold()), {
+            "family": fam,
+            "unit": unit,
+            "rows": [],
+        })
+        bucket["rows"].append({
+            "year": year,
+            "value": val,
+            "kind": kind,
+            "period_end": (
+                _metric_row_period_end(q).isoformat()
+                if _metric_row_period_end(q) is not None
+                else f"{year:04d}-12-31"
+            ),
+            "region": _metric_row_region(q),
+            "technology": _metric_row_technology(q),
+            "analyst": _metric_row_analyst(q),
+            "stale": bool(q.get("is_stale")),
+            "metric": str(q.get("metric") or "").strip(),
+            "display_value": str(q.get("value") if q.get("value") is not None else val),
+            "source": str(q.get("source") or "").strip(),
+            "definition": str(q.get("definition") or "").strip(),
+        })
+    panels: List[Dict[str, Any]] = []
+    for bucket in families.values():
+        rows = bucket["rows"]
+        if len({r["year"] for r in rows}) < 2:  # 家族需 ≥2 个不同年份点才成轨迹
+            continue
+        split: Optional[str] = None
+        for dim in ("region", "technology", "analyst"):
+            if len({r[dim] for r in rows if r[dim]}) >= 2:
+                split = dim
+                break
+        lines = _build_metric_trajectory_lines(rows, split)
+        if not lines:
+            continue
+        panels.append({
+            "title": f"{bucket['family']} · {bucket['unit']}"
+                     + (f"  (by {split})" if split else ""),
+            "unit": bucket["unit"],
+            "split": split,
+            "lines": lines,
+        })
+    panels.sort(key=lambda p: (-sum(len(ln["points"]) for ln in p["lines"]), p["title"]))
+    return panels[:max(0, max_families)]
+
+
+def _legacy_metric_trajectory_panels(quantitative: Any, *,
+                                     max_families: int = 8) -> List[Dict[str, Any]]:
+    """老数据回退：复用 _prepare_metric_trajectories（折叠名 × unit 单序列）并适配成
+    与家族路径同构的 panel（单折线、x 为 ISO 日期字符串），供同一渲染器使用。"""
+    series = _prepare_metric_trajectories(quantitative, max_series=max_families)
+    panels: List[Dict[str, Any]] = []
+    for s in series:
+        pts = [{
+            "x": p["date"],
+            "x_label": p["date"].isoformat(),
+            "value": p["value"],
+            "kind": "forecast" if p["projection"] else "actual",
+            "stale": p["stale"],
+            "n": 1,
+            "rep": {
+                "metric": p["metric"],
+                "display_value": p["display_value"],
+                "source": p["source"],
+                "definition": p["definition"],
+            },
+        } for p in s["points"]]
+        panels.append({
+            "title": f"{s['metric']} · {s['unit']}",
+            "unit": s["unit"],
+            "split": None,
+            "lines": [{"name": None, "points": pts}],
+        })
+    return panels
+
+
+def _metric_trajectory_panels(quantitative: Any, *,
+                              max_families: int = 8) -> List[Dict[str, Any]]:
+    """轨迹渲染的统一入口：任一行带 metric_family → 走 DRF2 家族分组路径；该路径产出为空
+    （新字段不足）或全无 metric_family → 回退折叠名路径（保证老数据仍出图）。"""
+    if isinstance(quantitative, list) and any(
+            isinstance(q, dict) and _metric_row_family(q) for q in quantitative):
+        panels = _prepare_metric_family_trajectories(quantitative,
+                                                     max_families=max_families)
+        if panels:
+            return panels
+    return _legacy_metric_trajectory_panels(quantitative, max_families=max_families)
+
+
+def _prepare_technology_shares(quantitative: Any, *,
+                               max_families: int = 4) -> List[Dict[str, Any]]:
+    """DRF2 技术份额：某 metric_family 的行在某一年带 ≥2 个不同 technology → 取该家族
+    「最新且技术数 ≥2」的年份，产出各技术的 value_num 与占比（同技术同年多行取均值）。
+    人形机器人跑 technology 多为空 → 直接跳过；能源存储跑（磷酸铁锂/三元/钠离子…）会点亮。"""
+    if not isinstance(quantitative, list):
+        return []
+    families: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for q in quantitative:
+        if not isinstance(q, dict):
+            continue
+        fam = _metric_row_family(q)
+        tech = _metric_row_technology(q)
+        year = _metric_row_year(q)
+        val = _metric_row_value(q)
+        kind = _metric_row_kind(q)
+        if (not fam or not tech or year is None or val is None
+                or not _metric_row_is_publishable(q, kind)):
+            continue
+        unit = _canonical_quant_unit(q.get("unit")) or "value"
+        bucket = families.setdefault((fam.casefold(), unit.casefold()), {
+            "family": fam,
+            "unit": unit,
+            "rows": [],
+        })
+        bucket["rows"].append({
+            "tech": tech,
+            "year": year,
+            "value": val,
+            "kind": kind,
+            "metric": str(q.get("metric") or "").strip(),
+            "source": str(q.get("source") or "").strip(),
+            "display_value": str(q.get("value") if q.get("value") is not None else val),
+        })
+    panels: List[Dict[str, Any]] = []
+    for bucket in families.values():
+        by_year: Dict[int, Dict[str, List[Dict[str, Any]]]] = {}
+        for r in bucket["rows"]:
+            by_year.setdefault(r["year"], {}).setdefault(r["tech"], []).append(r)
+        chosen_year: Optional[int] = None
+        for year in sorted(by_year, reverse=True):  # 最新且技术数 ≥2 的年份
+            if len(by_year[year]) >= 2:
+                chosen_year = year
+                break
+        if chosen_year is None:
+            continue
+        techs: List[Dict[str, Any]] = []
+        for tech in sorted(by_year[chosen_year]):
+            grp = by_year[chosen_year][tech]
+            mean = sum(g["value"] for g in grp) / len(grp)
+            techs.append({"tech": tech, "value": mean, "n": len(grp), "rep": grp[0]})
+        total = sum(t["value"] for t in techs) or 1.0
+        for t in techs:
+            t["share"] = t["value"] / total
+        panels.append({
+            "family": bucket["family"],
+            "unit": bucket["unit"],
+            "year": chosen_year,
+            "techs": techs,
+        })
+    panels.sort(key=lambda p: (-len(p["techs"]), p["family"]))
+    return panels[:max(0, max_families)]
+
+
+def _prepare_regional_comparison(quantitative: Any, *,
+                                 max_families: int = 4) -> List[Dict[str, Any]]:
+    """DRF2 区域对比：某 metric_family 的行带 ≥2 个不同 region → 取该家族「最新且区域数 ≥2」
+    的年份，产出各区域的 value_num（同区域同年多行优先取观测均值）。<2 区域 → 跳过。"""
+    if not isinstance(quantitative, list):
+        return []
+    families: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for q in quantitative:
+        if not isinstance(q, dict):
+            continue
+        fam = _metric_row_family(q)
+        region = _metric_row_region(q)
+        year = _metric_row_year(q)
+        val = _metric_row_value(q)
+        kind = _metric_row_kind(q)
+        if (not fam or not region or year is None or val is None
+                or not _metric_row_is_publishable(q, kind)):
+            continue
+        unit = _canonical_quant_unit(q.get("unit")) or "value"
+        bucket = families.setdefault((fam.casefold(), unit.casefold()), {
+            "family": fam,
+            "unit": unit,
+            "rows": [],
+        })
+        bucket["rows"].append({
+            "region": region,
+            "year": year,
+            "value": val,
+            "kind": kind,
+            "metric": str(q.get("metric") or "").strip(),
+            "source": str(q.get("source") or "").strip(),
+            "display_value": str(q.get("value") if q.get("value") is not None else val),
+        })
+    panels: List[Dict[str, Any]] = []
+    for bucket in families.values():
+        by_year: Dict[int, Dict[str, List[Dict[str, Any]]]] = {}
+        for r in bucket["rows"]:
+            by_year.setdefault(r["year"], {}).setdefault(r["region"], []).append(r)
+        chosen_year: Optional[int] = None
+        for year in sorted(by_year, reverse=True):  # 最新且区域数 ≥2 的年份
+            if len(by_year[year]) >= 2:
+                chosen_year = year
+                break
+        if chosen_year is None:
+            continue
+        regions: List[Dict[str, Any]] = []
+        for region in sorted(by_year[chosen_year]):
+            grp = by_year[chosen_year][region]
+            actuals = [g for g in grp if g["kind"] == "actual"]
+            chosen = actuals or grp
+            mean = sum(g["value"] for g in chosen) / len(chosen)
+            regions.append({
+                "region": region,
+                "value": mean,
+                "kind": "actual" if actuals else "forecast",
+                "n": len(grp),
+                "rep": chosen[0],
+            })
+        panels.append({
+            "family": bucket["family"],
+            "unit": bucket["unit"],
+            "year": chosen_year,
+            "regions": regions,
+        })
+    panels.sort(key=lambda p: (-len(p["regions"]), p["family"]))
+    return panels[:max(0, max_families)]
+
+
 def _prepare_forecast_revision_series(
     quantitative: Any,
     *,
@@ -933,12 +1522,14 @@ def _prepare_forecast_revision_series(
         descriptive = " ".join((metric, str(q.get("definition") or "")))
         if not _FORECAST_SIGNAL_RE.search(descriptive):
             continue
-        value = _to_float(q.get("value"))
+        value = _metric_row_value(q)
         unit = _canonical_quant_unit(q.get("unit"))
         source = str(q.get("source") or "").strip()
         definition = str(q.get("definition") or "").strip()
         as_of = _parse_quant_date(q.get("as_of_date"))
-        if value is None or not unit or not source or not definition or as_of is None:
+        if (value is None or not unit or not source or not definition
+                or as_of is None
+                or not _metric_row_is_publishable(q, "forecast")):
             continue
         vintage = int(match.group(1))
         if vintage != as_of.year:
@@ -2869,6 +3460,188 @@ class ReportVisualizer:
             logger.debug("build_source_sunburst_html 失败（跳过该图）：%s", exc)
             return None
 
+    @staticmethod
+    def _metric_point_hover(point: Dict[str, Any], unit: str) -> str:
+        """轨迹/折线单点 hover：代表行原始 metric 名 + 值/单位/年份 + 观测/预测 + 陈旧标记
+        +（多行聚合时的 n）+ 口径 + 来源。空片段自动剔除。"""
+        rep = point.get("rep") or {}
+        head = _wrap_hover(rep.get("metric") or "", 56, max_len=160)
+        line2 = (f"{rep.get('display_value', point['value'])} {unit} @ {point['x_label']}"
+                 + (" · forecast" if point["kind"] == "forecast" else " · actual")
+                 + (f" · n={point['n']}" if point.get("n", 1) > 1 else "")
+                 + (" · ⚠ stale" if point.get("stale") else ""))
+        return "<br>".join(x for x in (
+            f"<b>{head}</b>" if head else "",
+            line2,
+            _wrap_hover(rep.get("definition") or "", 56, max_len=200),
+            _wrap_hover(rep.get("source") or "", 56, max_len=160),
+        ) if x)
+
+    def build_metric_trajectories_html(self, quantitative: Any,
+                                       charts_dir: str) -> Optional[str]:
+        """(D5b) 研究抽取指标轨迹——读者真正要的预测数据图（成本曲线 / 部署量 / 渗透率 /
+        区域对比），而非管线自证。DRF2：任一行带 metric_family → 按家族跨 year 分组，每条折线
+        对应一个 region/technology/analyst 分组；否则回退折叠名单序列（老数据仍出图）。逐面板
+        画折线+散点，观测点圆记号、预测点菱形记号，hover 保留口径/来源/年份。无合格面板 → None。"""
+        if not self._interactive_ok():
+            return None
+        try:
+            panels = _metric_trajectory_panels(quantitative)
+            if not panels:
+                return None
+            from plotly.subplots import make_subplots
+            fig = make_subplots(
+                rows=len(panels), cols=1, shared_xaxes=False,
+                subplot_titles=[_html_text(p["title"], max_len=80) for p in panels],
+                # 面板数可达 8：间距须 < 1/(rows-1)，随行数收缩以免 plotly 校验抛错。
+                vertical_spacing=min(0.12, 0.8 / max(1, len(panels))),
+            )
+            # 多折线面板需图例区分 region/tech/analyst；同名折线跨面板去重（legendgroup 联动）。
+            multi = any(len(p["lines"]) > 1 for p in panels)
+            legend_seen: set = set()
+            for ri, panel in enumerate(panels, 1):
+                for li, line in enumerate(panel["lines"]):
+                    pts = line["points"]
+                    named = line["name"] is not None
+                    color = (_PALETTE[li % len(_PALETTE)]
+                             if (panel["split"] or multi) else _COLOR_MODEL)
+                    show_legend = named and line["name"] not in legend_seen
+                    if named:
+                        legend_seen.add(line["name"])
+                    fig.add_trace(go.Scatter(
+                        x=[p["x_label"] for p in pts],
+                        y=[p["value"] for p in pts],
+                        mode="lines+markers",
+                        name=line["name"] or "series",
+                        legendgroup=line["name"] or f"__panel{ri}",
+                        showlegend=show_legend,
+                        line={"color": color, "width": 2.5},
+                        marker={
+                            "size": 10,
+                            "symbol": ["diamond" if p["kind"] == "forecast" else "circle"
+                                       for p in pts],
+                            "color": color,
+                            "line": {
+                                "color": [_COLOR_STALE if p["stale"] else _SURFACE
+                                          for p in pts],
+                                "width": 2,
+                            },
+                        },
+                        hovertext=[self._metric_point_hover(p, panel["unit"]) for p in pts],
+                        hoverinfo="text",
+                    ), row=ri, col=1)
+                fig.update_yaxes(title_text=panel["unit"], row=ri, col=1)
+            _apply_layout(
+                fig, "Key Metric Trajectories (research-extracted)",
+                height=max(420, 240 * len(panels) + 140),
+            )
+            if multi:
+                fig.update_layout(legend={
+                    "orientation": "h", "yanchor": "bottom", "y": 1.02,
+                    "xanchor": "right", "x": 1,
+                })
+            return self._save_pair(fig, charts_dir, "metric_trajectories",
+                                   "metric_trajectories")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("build_metric_trajectories_html 失败（跳过该图）：%s", exc)
+            return None
+
+    def build_technology_shares_html(self, quantitative: Any,
+                                     charts_dir: str) -> Optional[str]:
+        """(D5c) 技术份额柱：某 metric_family 在其最新「技术数 ≥2」的年份，按 technology 画
+        value_num 分组柱并标占比%。逐家族一个面板。无 ≥2 技术的家族 → None（degrade-safe）。"""
+        if not self._interactive_ok():
+            return None
+        try:
+            panels = _prepare_technology_shares(quantitative)
+            if not panels:
+                return None
+            from plotly.subplots import make_subplots
+            fig = make_subplots(
+                rows=len(panels), cols=1, shared_xaxes=False,
+                subplot_titles=[
+                    _html_text(f"{p['family']} · {p['unit']} ({p['year']})", max_len=80)
+                    for p in panels
+                ],
+                vertical_spacing=min(0.16, 0.8 / max(1, len(panels))),
+            )
+            for ri, panel in enumerate(panels, 1):
+                techs = panel["techs"]
+                fig.add_trace(go.Bar(
+                    x=[_html_text(t["tech"], max_len=40) for t in techs],
+                    y=[t["value"] for t in techs],
+                    marker_color=[_PALETTE[i % len(_PALETTE)] for i in range(len(techs))],
+                    text=[f"{t['share']:.0%}" for t in techs],
+                    textposition="outside",
+                    hovertext=["<br>".join(x for x in (
+                        f"<b>{_html_text(t['tech'], max_len=48)}</b>",
+                        f"{t['rep'].get('display_value', t['value'])} {panel['unit']}"
+                        f" · {t['share']:.1%} share @ {panel['year']}"
+                        + (f" · n={t['n']}" if t["n"] > 1 else ""),
+                        _wrap_hover(t["rep"].get("source") or "", 56, max_len=160),
+                    ) if x) for t in techs],
+                    hoverinfo="text", showlegend=False,
+                ), row=ri, col=1)
+                fig.update_yaxes(title_text=panel["unit"], row=ri, col=1)
+            _apply_layout(
+                fig, "Technology Shares by Metric Family (research-extracted)",
+                height=max(420, 260 * len(panels) + 120),
+            )
+            return self._save_pair(fig, charts_dir, "technology_shares",
+                                   "technology_shares")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("build_technology_shares_html 失败（跳过该图）：%s", exc)
+            return None
+
+    def build_regional_comparison_html(self, quantitative: Any,
+                                       charts_dir: str) -> Optional[str]:
+        """(D5d) 区域对比柱：某 metric_family 在其最新「区域数 ≥2」的年份，按 region 画
+        value_num 分组柱（观测柱/预测柱颜色区分）。逐家族一个面板。<2 区域 → None。"""
+        if not self._interactive_ok():
+            return None
+        try:
+            panels = _prepare_regional_comparison(quantitative)
+            if not panels:
+                return None
+            from plotly.subplots import make_subplots
+            fig = make_subplots(
+                rows=len(panels), cols=1, shared_xaxes=False,
+                subplot_titles=[
+                    _html_text(f"{p['family']} · {p['unit']} ({p['year']})", max_len=80)
+                    for p in panels
+                ],
+                vertical_spacing=min(0.16, 0.8 / max(1, len(panels))),
+            )
+            for ri, panel in enumerate(panels, 1):
+                regions = panel["regions"]
+                fig.add_trace(go.Bar(
+                    x=[_html_text(r["region"], max_len=40) for r in regions],
+                    y=[r["value"] for r in regions],
+                    marker_color=[_PALETTE[2] if r["kind"] == "forecast" else _COLOR_MODEL
+                                  for r in regions],
+                    text=[f"{r['rep'].get('display_value', r['value'])}" for r in regions],
+                    textposition="outside",
+                    hovertext=["<br>".join(x for x in (
+                        f"<b>{_html_text(r['region'], max_len=48)}</b>",
+                        f"{r['rep'].get('display_value', r['value'])} {panel['unit']} @ {panel['year']}"
+                        + (" · forecast" if r["kind"] == "forecast" else " · actual")
+                        + (f" · n={r['n']}" if r["n"] > 1 else ""),
+                        _wrap_hover(r["rep"].get("metric") or "", 56, max_len=160),
+                        _wrap_hover(r["rep"].get("source") or "", 56, max_len=160),
+                    ) if x) for r in regions],
+                    hoverinfo="text", showlegend=False,
+                ), row=ri, col=1)
+                fig.update_yaxes(title_text=panel["unit"], row=ri, col=1)
+            _apply_layout(
+                fig, "Regional Comparison by Metric Family (latest year, research-extracted)",
+                height=max(420, 260 * len(panels) + 120),
+            )
+            return self._save_pair(fig, charts_dir, "regional_comparison",
+                                   "regional_comparison")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("build_regional_comparison_html 失败（跳过该图）：%s", exc)
+            return None
+
     def build_quantitative_dots_html(self, quantitative: Any,
                                      charts_dir: str) -> Optional[str]:
         """(D6) Comparable quantitative benchmarks from sourced forecast data.
@@ -3269,10 +4042,20 @@ class ReportVisualizer:
             _attempt("timeline_lanes", "timeline", "Event Timeline", "timeline",
                      bool(tl),
                      lambda: self.build_timeline_lanes_html(tl, charts_dir))
-            _attempt("actor_network", "actors", "Actor Relationship Network", "actors",
-                     bool(actors),
-                     lambda: self.build_actor_network_html(actors, charts_dir,
-                                                           graph_priors=graph_priors))
+            # Actor relationship network is relationship *structure* (who relates to
+            # whom, source salience) — not reader-facing forecast data. Demote to
+            # opt-in exactly like source_mix_sunburst: default reports spend no slot on
+            # it, REPORT_META_CHARTS restores it, and the builder stays callable.
+            if _meta_charts_on():
+                _attempt("actor_network", "actors", "Actor Relationship Network",
+                         "actors", bool(actors),
+                         lambda: self.build_actor_network_html(actors, charts_dir,
+                                                               graph_priors=graph_priors))
+            else:
+                skipped.append({
+                    "builder": "actor_network",
+                    "reason": "methodology_not_reader_facing",
+                })
             # Internal actor-ranking proxies are useful diagnostics, not customer-facing
             # forecast evidence. Keep the builder callable for compatibility but never
             # spend a default report slot on ordinal influence/salience scores.
@@ -3281,11 +4064,35 @@ class ReportVisualizer:
                 "reason": "internal_proxy_not_reader_facing",
             })
             src = artifacts.get("sources")
-            _attempt("source_mix_sunburst", "sources",
-                     "Source Mix — tier / origin / reachability", "sources",
-                     isinstance(src, list) and bool(src),
-                     lambda: self.build_source_sunburst_html(src, charts_dir))
+            # Source-mix composition is pipeline methodology (how we researched),
+            # not reader-facing forecast evidence. Never spend a default report
+            # slot on it; REPORT_META_CHARTS restores the old behaviour explicitly.
+            if _meta_charts_on():
+                _attempt("source_mix_sunburst", "sources",
+                         "Source Mix — tier / origin / reachability", "sources",
+                         isinstance(src, list) and bool(src),
+                         lambda: self.build_source_sunburst_html(src, charts_dir))
+            else:
+                skipped.append({
+                    "builder": "source_mix_sunburst",
+                    "reason": "methodology_not_reader_facing",
+                })
             quant = artifacts.get("quantitative")
+            quant_ok = isinstance(quant, list) and bool(quant)
+            _attempt("metric_trajectories", "quantitative",
+                     "Key Metric Trajectories (research-extracted)", "quantitative",
+                     quant_ok,
+                     lambda: self.build_metric_trajectories_html(quant, charts_dir))
+            # 技术份额 / 区域对比：DRF2 新字段（technology / region）在时才点亮，builder
+            # 内部 <2 技术/区域即返回 None（记 empty_after_parse），degrade-safe。
+            _attempt("technology_shares", "quantitative",
+                     "Technology Shares by Metric Family", "quantitative",
+                     quant_ok,
+                     lambda: self.build_technology_shares_html(quant, charts_dir))
+            _attempt("regional_comparison", "quantitative",
+                     "Regional Comparison by Metric Family", "quantitative",
+                     quant_ok,
+                     lambda: self.build_regional_comparison_html(quant, charts_dir))
             _attempt("quantitative_claims", "quantitative",
                      "Comparable Forecast Benchmarks", "quantitative",
                      isinstance(quant, list) and bool(quant),
@@ -3415,11 +4222,14 @@ class ReportVisualizer:
         _fallback("timeline_lanes", "timeline", "Event Timeline", "timeline",
                   lambda: self.build_timeline_lanes(
                       artifacts.get("timeline"), charts_dir))
-        _fallback("actor_network", "actors", "Actor Relationship Network", "actors",
-                  lambda: self.build_actor_network(
-                      artifacts.get("actors"), charts_dir,
-                      graph_priors=(artifacts.get("graph_priors")
-                                    or artifacts.get("graph_priors_structural"))))
+        # actor_network 已降为 opt-in（见 build_all）：仅 REPORT_META_CHARTS 开时才补静态回退，
+        # 否则这里会把它作为独立 PNG 项重新塞回 manifest，抵消降位。
+        if _meta_charts_on():
+            _fallback("actor_network", "actors", "Actor Relationship Network", "actors",
+                      lambda: self.build_actor_network(
+                          artifacts.get("actors"), charts_dir,
+                          graph_priors=(artifacts.get("graph_priors")
+                                        or artifacts.get("graph_priors_structural"))))
         _fallback("worldstate_trajectory", "world_state_trajectory",
                   "Forecast Outcome-Share Trajectory", "scenarios",
                   lambda: self.build_worldstate_area(

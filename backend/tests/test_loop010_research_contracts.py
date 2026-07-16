@@ -55,6 +55,30 @@ def test_every_independent_research_phase_reinjects_its_slash_skill(
     assert research_module.build_actor_ontology_prompt(
         "Q", "deep", None
     ).startswith("/actor-ontology-research\n")
+
+
+def test_deep_evidence_lane_uses_lean_prompt_and_suppresses_nested_delegation(
+    research_module, monkeypatch,
+):
+    research_module._set_agentic_delegation(True)
+    prompt = research_module.build_research_prompt(
+        "Q", "deep", None, evidence_only=True)
+    assert "evidence-lane research analyst" in prompt
+    assert "deep-research lead analyst" not in prompt
+    assert "Use tools aggressively" not in prompt
+    assert "AGENTIC DELEGATION" not in prompt
+
+    monkeypatch.setenv("RESEARCH_EVIDENCE_ONLY", "true")
+    monkeypatch.delenv("RESEARCH_EVIDENCE_LANE_DELEGATION", raising=False)
+    phase_prompt = research_module.build_deep_phase_prompt(
+        "Q",
+        {"label": "primary-evidence", "focus": "Verify evidence"},
+        2,
+        5,
+        None,
+    )
+    assert "AGENTIC DELEGATION" not in phase_prompt
+    research_module._set_agentic_delegation(False)
     assert research_module.build_actor_refinement_prompt(
         "Q", ["gap"], "deep", None
     ).startswith("/actor-ontology-research\n")
@@ -242,7 +266,6 @@ def test_final_dossier_reference_is_lazy_bounded_and_in_final_prompts_only(
     }]
     final_prompts = [
         research_module.build_synthesis_prompt("Q", None, "deep"),
-        research_module.build_synthesis_outline_prompt("Q", None),
         research_module.build_synthesis_section_prompt(
             "Q", outline, outline[0], 0, 1, "notes", "evidence", None),
         research_module.build_synthesis_expand_prompt(
@@ -252,6 +275,9 @@ def test_final_dossier_reference_is_lazy_bounded_and_in_final_prompts_only(
         assert "FINAL DOSSIER CONTRACT (lazy reference; mandatory)" in prompt
         assert "Prediction Market Signals" in prompt
         assert "No internal simulation/agent dynamics language" in prompt
+    outline_prompt = research_module.build_synthesis_outline_prompt("Q", None)
+    assert "FINAL DOSSIER CONTRACT (lazy reference; mandatory)" not in outline_prompt
+    assert "actual-data visualization specifications" in outline_prompt
 
     # This repair call owns only two opening blocks. Replaying the full 13-part
     # dossier contract here would conflict with that narrow task.

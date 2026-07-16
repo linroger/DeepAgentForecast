@@ -56,14 +56,15 @@ HARNESS_BUILTIN_TOOLS = {"tool_search"}  # tool_search.enabled=true 时由 harne
 # ---------------------------------------------------------------------------
 # INT-3 跨树技能漂移守卫。同一份 SKILL.md 方法论有**三处副本**，各自的角色不同：
 #   deerflow_bridge/skills/<name>/          —— 源（Wave-1-3 的方法论升级都落在这里）
-#   deer-flow/skills/public/<name>/         —— orchestrator 的 glob 同步 + gate 部署的运行副本
+#   deer-flow/skills/public/<name>/         —— authoritative atomic mirror 的运行副本
 #   drf2/skills/custom/<name>/              —— DRF-2 新脚手架里的副本
 # 两个不变式需要长期守卫：
 #   (1) bridge↔drf2 共享方法论不能悄悄结构性分叉；
-#   (2) bridge→deer-flow 部署必须逐字节一致（glob 同步 + gate 的直接结果）。
+#   (2) bridge→deer-flow 部署必须逐字节一致（manifest mirror + gate 的直接结果）。
 # ---------------------------------------------------------------------------
 BRIDGE_SKILLS_ROOT = REPO_ROOT / "deerflow_bridge" / "skills"
 DEERFLOW_PUBLIC_ROOT = REPO_ROOT / "deer-flow" / "skills" / "public"
+RUNTIME_SKILL_SYNC_HELPER = REPO_ROOT / "deerflow_bridge" / "runtime_skill_sync.py"
 
 # bridge 已吸收 Wave-1-3 升级（深度档位、市场自取、prediction-markets 口径重构），所以
 # bridge 与 drf2 的正文已**合法分叉** —— 逐行 body-diff 会长期误报。改为守一个更弱但仍
@@ -140,7 +141,7 @@ def _drf2_custom_skill_names() -> set[str]:
 
 
 def _git_tracked_bridge_skill_files() -> list[Path] | None:
-    """git 已跟踪（= 已提交基线）的 bridge SKILL.md 路径列表；git 不可用/失败时返回 None。
+    """Return every tracked file in a bridge skill bundle.
 
     并发工作树里，兄弟 subagent 常有尚未提交的在途新技能（git `??` 状态），此时 orchestrator
     的 glob 同步 / gate 还没把它部署到 deer-flow/。对这类在途技能做「必须已部署」的硬断言会
@@ -154,9 +155,45 @@ def _git_tracked_bridge_skill_files() -> list[Path] | None:
         return None
     if out.returncode != 0:
         return None
-    files = [rel for rel in out.stdout.split("\0")
-             if rel.strip() and rel.endswith("/SKILL.md")]
+    files = [
+        rel for rel in out.stdout.split("\0")
+        if rel.strip()
+        and "/__pycache__/" not in rel
+        and not rel.endswith((".pyc", ".pyo", "/.DS_Store"))
+    ]
     return sorted(REPO_ROOT / rel for rel in files)
+
+
+def _dirty_bridge_skill_files() -> set[Path]:
+    """工作树里有未提交改动（modified/untracked/renamed）的 bridge 技能文件。
+
+    并发会话会在 orchestrator 下一次 pre-launch 同步之前编辑源技能：这个瞬时窗口内
+    deployed 副本**合法地**滞后于源，对 dirty 文件做逐字节断言必然误报（与在途新增
+    技能「尚未部署」同属瞬时状态）。clean（已提交且未改动）文件不受影响 —— CI 的
+    干净 checkout 里该集合为空，两层守卫保持全强度。"""
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain", "-z", "--", "deerflow_bridge/skills"],
+            cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    if out.returncode != 0:
+        return set()
+    dirty: set[Path] = set()
+    tokens = out.stdout.split("\0")
+    index = 0
+    while index < len(tokens):
+        entry = tokens[index]
+        index += 1
+        if len(entry) < 4:
+            continue
+        status, path = entry[:2], entry[3:]
+        dirty.add(REPO_ROOT / path)
+        # rename/copy 记录额外携带一个 NUL 分隔的旧路径字段，一并视为 dirty
+        if status[0] in ("R", "C") and index < len(tokens) and tokens[index]:
+            dirty.add(REPO_ROOT / tokens[index])
+            index += 1
+    return dirty
 
 
 def _skill_dirs() -> list[Path]:
@@ -581,12 +618,22 @@ class TestCrossTreeSkillStructureDrift:
 
 
 class TestBridgeSkillsDeployedByteIdentical:
-    """deerflow_bridge/skills/*/SKILL.md 必须逐字节部署到 deer-flow/skills/public/<name>/SKILL.md。
-    orchestrator 的 glob 同步 + gate 维持这一点；fresh checkout 无 deer-flow/ 时干净 skip。
+    """Every tracked skill body/resource must deploy byte-identically.
+
+    This includes lazy references, renderer scripts, and future nested assets;
+    checking only SKILL.md can leave an apparently healthy but unusable bundle.
 
     两层守卫：committed 基线走「存在性 + 逐字节」强断言（gate 负责同步的集合），全部已部署
     副本再走一层「内容不得与源分叉」的宽漂移网 —— 后者连并发在途、尚未纳入基线的技能也一并
     监控内容一致性，同时对「新增但尚未同步」这种瞬时状态不误报。"""
+
+    def test_setup_uses_the_same_authoritative_sync_helper(self):
+        setup = (REPO_ROOT / "setup.sh").read_text(encoding="utf-8")
+        assert 'SKILL_SYNC_HELPER="$BRIDGE_DIR/runtime_skill_sync.py"' in setup
+        assert '--source-root "$BRIDGE_DIR/skills"' in setup
+        assert '--deployed-public-root "$DEERFLOW_DIR/skills/public"' in setup
+        assert 'cp -R "$_skill_src/." "$_skill_dst/"' not in setup
+        assert RUNTIME_SKILL_SYNC_HELPER.is_file()
 
     def test_committed_bridge_skills_deployed_byte_identical(self):
         # 已提交的 bridge 技能是 gate 负责的部署基线：必须存在于 deer-flow/public 且逐字节一致。
@@ -596,17 +643,20 @@ class TestBridgeSkillsDeployedByteIdentical:
         if tracked is None:
             pytest.skip("git unavailable — cannot determine the committed bridge-skill baseline")
         if not tracked:
-            pytest.skip("no git-tracked deerflow_bridge/skills/*/SKILL.md in this checkout")
+            pytest.skip("no git-tracked deerflow_bridge skill resources in this checkout")
+        dirty = _dirty_bridge_skill_files()
         for src in tracked:
-            name = src.parent.name
-            deployed = DEERFLOW_PUBLIC_ROOT / name / "SKILL.md"
+            if src in dirty:
+                continue  # 在途未提交改动：deployed 合法滞后，待 orchestrator pre-launch 同步
+            rel = src.relative_to(BRIDGE_SKILLS_ROOT)
+            deployed = DEERFLOW_PUBLIC_ROOT / rel
             assert deployed.is_file(), (
-                f"{name}: committed bridge skill not deployed at "
+                f"{rel}: committed bridge skill resource not deployed at "
                 f"{deployed.relative_to(REPO_ROOT)} — orchestrator glob sync / gate did not run")
             src_bytes = src.read_bytes()
             deployed_bytes = deployed.read_bytes()
             assert src_bytes == deployed_bytes, (
-                f"{name}: deployed SKILL.md drifted from the deerflow_bridge source "
+                f"{rel}: deployed skill resource drifted from the deerflow_bridge source "
                 f"(bridge={len(src_bytes)}B, deployed={len(deployed_bytes)}B) — "
                 f"re-run the orchestrator skill sync to redeploy byte-identical")
 
@@ -615,20 +665,31 @@ class TestBridgeSkillsDeployedByteIdentical:
         # 分叉。未部署的在途技能（同步尚未追平）跳过，不误报；已部署却内容漂移则立刻变红。
         if not DEERFLOW_PUBLIC_ROOT.is_dir():
             pytest.skip("deer-flow/skills/public absent (fresh checkout without the deployed tree)")
-        bridge_skill_files = sorted(BRIDGE_SKILLS_ROOT.glob("*/SKILL.md"))
+        bridge_skill_files = [
+            path for path in sorted(BRIDGE_SKILLS_ROOT.rglob("*"))
+            if path.is_file()
+            and not any(part.startswith(".") or part == "__pycache__"
+                        for part in path.relative_to(BRIDGE_SKILLS_ROOT).parts)
+            and path.suffix not in {".pyc", ".pyo"}
+            and (BRIDGE_SKILLS_ROOT / path.relative_to(BRIDGE_SKILLS_ROOT).parts[0]
+                 / "SKILL.md").is_file()
+        ]
         if not bridge_skill_files:
             pytest.skip("deerflow_bridge/skills has no SKILL.md")
+        dirty = _dirty_bridge_skill_files()
         checked = 0
         for src in bridge_skill_files:
-            name = src.parent.name
-            deployed = DEERFLOW_PUBLIC_ROOT / name / "SKILL.md"
+            if src in dirty:
+                continue  # 在途未提交改动：deployed 合法滞后，待 orchestrator pre-launch 同步
+            rel = src.relative_to(BRIDGE_SKILLS_ROOT)
+            deployed = DEERFLOW_PUBLIC_ROOT / rel
             if not deployed.is_file():
                 continue  # 在途新增、glob 同步尚未部署 —— 属瞬时状态，非内容漂移
             checked += 1
             src_bytes = src.read_bytes()
             deployed_bytes = deployed.read_bytes()
             assert src_bytes == deployed_bytes, (
-                f"{name}: deployed SKILL.md diverged from the deerflow_bridge source "
+                f"{rel}: deployed skill resource diverged from the deerflow_bridge source "
                 f"(bridge={len(src_bytes)}B, deployed={len(deployed_bytes)}B) — "
                 f"re-run the orchestrator skill sync to redeploy byte-identical")
         if checked == 0:

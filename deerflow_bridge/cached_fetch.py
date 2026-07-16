@@ -31,12 +31,17 @@ jina `web_fetch` 工具包成一层**磁盘缓存**：命中且未过期即秒�
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import hashlib
+import ipaddress
 import json
 import logging
 import os
+import socket
 import time
+from html.parser import HTMLParser
 from typing import Any, Awaitable, Callable, Optional
+from urllib.parse import urljoin, urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +55,451 @@ DEAD_FETCH_MIN_CHARS = 200
 # env 缺省
 DEFAULT_TTL_HOURS = 72.0
 DEFAULT_MAX_MB = 500.0
+# —— Firecrawl 花费护栏（Session B：单 run 烧掉 ~$100 credit 的事后防线）——
+# Firecrawl /scrape 按调用计费。两道闸：maxAge 让窗口内未变的页面由 Firecrawl 端缓存直接
+# 返回（不触发全新计费抓取）；进程内调用硬上限兜住失控循环（每个研究子进程即一条 lane，
+# 进程内计数就是 per-lane 计数，无需跨进程账本）。
+DEFAULT_FIRECRAWL_MAX_AGE_SECONDS = 172_800.0  # 2 天；0=每次真抓（载荷不带 maxAge 字段）
+DEFAULT_FIRECRAWL_FETCH_CALL_CEILING = 400     # 单进程 /scrape 计费调用上限；<=0=不限
+_firecrawl_fetch_calls = 0         # 本进程已发出的真实 /scrape 计费调用数
+_firecrawl_ceiling_warned = False  # 越线只 warn 一次，不逐调用刷屏
 DEFAULT_LOW_QUALITY_DOMAINS = (
     "economicsummarizer.com",
     "insights.triplegains.com",
 )
+_TRANSPORT_FAILURE_MARKERS = (
+    "connecttimeout",
+    "readtimeout",
+    "pooltimeout",
+    "connecterror",
+    "connection refused",
+    "connection reset",
+    "network is unreachable",
+    "timed out",
+    "timeout",
+)
+_CONTENT_FAILURE_MARKERS = (
+    "access denied",
+    "403 forbidden",
+    "404 not found",
+    "page not found",
+    "verify you are human",
+    "enable javascript and cookies",
+    "captcha",
+)
+_FETCH_PROVIDER: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "research_fetch_provider", default=""
+)
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_float(name: str, default: float, minimum: float = 0.1) -> float:
+    try:
+        value = float(os.environ.get(name, str(default)) or str(default))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, value)
+
+
+def _is_transport_failure(value: Any) -> bool:
+    lowered = str(value or "").lower()
+    return any(marker in lowered for marker in _TRANSPORT_FAILURE_MARKERS)
+
+
+class _TextExtractor(HTMLParser):
+    """Small dependency-free fallback when DeerFlow readability cannot parse."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._suppressed = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in {"script", "style", "noscript", "svg"}:
+            self._suppressed += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"script", "style", "noscript", "svg"}:
+            self._suppressed = max(0, self._suppressed - 1)
+
+    def handle_data(self, data: str) -> None:
+        if not self._suppressed and data.strip():
+            self.parts.append(data.strip())
+
+
+async def _host_is_public(host: str) -> bool:
+    """Reject local/private direct-fallback targets before opening a socket."""
+    normalized = str(host or "").strip().rstrip(".")
+    if not normalized or normalized.lower() == "localhost":
+        return False
+    try:
+        addresses = await asyncio.to_thread(
+            socket.getaddrinfo, normalized, None, type=socket.SOCK_STREAM
+        )
+    except OSError:
+        return False
+    ips = {row[4][0] for row in addresses if row and row[4]}
+    if not ips:
+        return False
+    try:
+        return all(ipaddress.ip_address(ip).is_global for ip in ips)
+    except ValueError:
+        return False
+
+
+async def _direct_http_fetch(url: str) -> str:
+    """Keyless bounded fallback for a public page when Jina is unavailable."""
+    try:
+        import httpx
+
+        timeout = _env_float("RESEARCH_DIRECT_FETCH_TIMEOUT_SECONDS", 12.0)
+        max_bytes = int(float(os.environ.get(
+            "RESEARCH_DIRECT_FETCH_MAX_MB", "8") or "8") * 1024 * 1024)
+        current = str(url or "").strip()
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (compatible; DeepAgentForecastResearch/1.0; "
+                "+https://github.com/linroger/DeepAgentForecast)"
+            )
+        }
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=False,
+            headers=headers,
+            trust_env=True,
+        ) as client:
+            response = None
+            for _ in range(6):
+                parsed = urlparse(current)
+                if parsed.scheme not in {"http", "https"} or not await _host_is_public(
+                    parsed.hostname or ""
+                ):
+                    return "Error: direct fallback rejected a non-public URL"
+                response = await client.get(current)
+                if response.status_code in {301, 302, 303, 307, 308}:
+                    location = response.headers.get("location")
+                    if not location:
+                        return "Error: direct fallback redirect had no location"
+                    current = urljoin(current, location)
+                    continue
+                break
+            if response is None:
+                return "Error: direct fallback produced no response"
+            if response.status_code >= 400:
+                return f"Error: direct fallback HTTP {response.status_code}"
+            if len(response.content) > max(200_000, max_bytes):
+                return "Error: direct fallback response exceeded size limit"
+            content_type = response.headers.get("content-type", "").lower()
+            if "pdf" in content_type or response.content.startswith(b"%PDF"):
+                try:
+                    import io
+                    from pypdf import PdfReader
+
+                    reader = PdfReader(io.BytesIO(response.content))
+                    text = "\n\n".join(
+                        str(page.extract_text() or "") for page in reader.pages[:80]
+                    )
+                    return text[:12000] if len(text.strip()) >= 200 else (
+                        "Error: direct fallback PDF had no extractable text"
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    return f"Error: direct fallback PDF extraction failed: {type(exc).__name__}"
+            raw = response.text
+            if "html" not in content_type and "<html" not in raw[:1000].lower():
+                return raw[:12000]
+            try:
+                from deerflow.utils.readability import ReadabilityExtractor
+
+                article = await asyncio.to_thread(
+                    ReadabilityExtractor().extract_article, raw
+                )
+                markdown = article.to_markdown()
+                if len(str(markdown or "").strip()) >= 200:
+                    return str(markdown)[:12000]
+            except Exception:  # noqa: BLE001
+                pass
+            parser = _TextExtractor()
+            parser.feed(raw)
+            plain = "\n".join(parser.parts)
+            return plain[:12000] if len(plain.strip()) >= 200 else (
+                "Error: direct fallback extracted no usable content"
+            )
+    except Exception as exc:  # noqa: BLE001
+        return f"Error: direct fallback failed: {type(exc).__name__}: {exc}"
+
+
+async def _exa_fetch(url: str) -> str:
+    """Fetch one public URL through Exa when its configured credential exists."""
+    api_key = os.environ.get("EXA_API_KEY", "").strip()
+    if not api_key:
+        return "Error: Exa fallback unavailable (EXA_API_KEY is not configured)"
+    try:
+        from exa_py import Exa
+
+        max_chars = max(
+            4096,
+            int(os.environ.get("RESEARCH_EXA_FETCH_MAX_CHARS", "12000") or "12000"),
+        )
+
+        def _request() -> Any:
+            client = Exa(api_key=api_key)
+            return client.get_contents(
+                [url], text={"max_characters": max_chars}
+            )
+
+        result = await asyncio.wait_for(
+            asyncio.to_thread(_request),
+            timeout=_env_float("RESEARCH_EXA_FETCH_TIMEOUT_SECONDS", 15.0),
+        )
+        rows = list(getattr(result, "results", None) or [])
+        if not rows:
+            return "Error: Exa fallback returned no results"
+        row = rows[0]
+        title = str(getattr(row, "title", None) or "Untitled")
+        body = str(getattr(row, "text", None) or "").strip()
+        if not body:
+            return "Error: Exa fallback returned no page text"
+        return f"# {title}\n\n{body[:max_chars]}"
+    except Exception as exc:  # noqa: BLE001
+        # Do not include provider exception text: some clients echo request
+        # headers or credentials in their exception representation.
+        return f"Error: Exa fallback failed: {type(exc).__name__}"
+
+
+def _firecrawl_max_age_ms() -> int:
+    """RESEARCH_FIRECRAWL_MAX_AGE_SECONDS（秒，缺省 172800=2 天）→ Firecrawl 期望的毫秒。
+
+    >0 → /scrape 载荷带 maxAge：页面在窗口内未变即由 Firecrawl 端缓存回放，不再产生一次
+    全新计费抓取；0 → 不带该字段（每次真抓，与加此旋钮前逐字节一致）。非法值回退默认。
+    """
+    raw = os.environ.get("RESEARCH_FIRECRAWL_MAX_AGE_SECONDS", "").strip()
+    try:
+        seconds = float(raw) if raw else DEFAULT_FIRECRAWL_MAX_AGE_SECONDS
+    except (TypeError, ValueError):
+        seconds = DEFAULT_FIRECRAWL_MAX_AGE_SECONDS
+    return int(max(0.0, seconds) * 1000.0)
+
+
+def _firecrawl_fetch_call_ceiling() -> int:
+    """单进程 /scrape 计费调用硬上限。RESEARCH_FIRECRAWL_MAX_FETCH_CALLS_PER_PROCESS
+    缺省 400；<=0=不限。非法值回退默认。"""
+    raw = os.environ.get(
+        "RESEARCH_FIRECRAWL_MAX_FETCH_CALLS_PER_PROCESS", "").strip()
+    try:
+        value = int(float(raw)) if raw else DEFAULT_FIRECRAWL_FETCH_CALL_CEILING
+    except (TypeError, ValueError):
+        value = DEFAULT_FIRECRAWL_FETCH_CALL_CEILING
+    return value
+
+
+def _firecrawl_over_ceiling() -> Optional[str]:
+    """越线 → 返回 "Error:" 哨兵串（与 transport 失败同形：不落缓存、_resilient_fetch
+    顺链落 Jina/Exa）；未越线 → None。越线时刻只 warn 一次。"""
+    global _firecrawl_ceiling_warned
+    ceiling = _firecrawl_fetch_call_ceiling()
+    if ceiling <= 0 or _firecrawl_fetch_calls < ceiling:
+        return None
+    if not _firecrawl_ceiling_warned:
+        _firecrawl_ceiling_warned = True
+        logger.warning(
+            "cached_fetch: Firecrawl 本进程 scrape 计费调用已达上限 %d，"
+            "后续抓取直接走 Jina/Exa 回退链（不再产生 Firecrawl 费用）", ceiling)
+    return f"Error: Firecrawl per-run call ceiling reached ({ceiling})"
+
+
+def get_firecrawl_call_counts() -> dict[str, int]:
+    """进程内 Firecrawl 计费调用计数快照（供未来预算遥测导出；本模块只有 fetch 面）。"""
+    return {"fetch": _firecrawl_fetch_calls}
+
+
+async def _firecrawl_fetch(url: str) -> str:
+    """Fetch one URL through Firecrawl v2 /scrape when its credential exists.
+
+    托管抓取（渲染 JS、绕过常见反爬、直接产出 markdown），修复取证发现的 Jina 53%
+    ConnectTimeout 失败率。直连 HTTP（httpx），不引入 firecrawl-py 依赖——deer-flow venv
+    版本钉死，多一个 SDK 就多一个部署漂移面。错误串一律 "Error:" 开头（供
+    _is_cacheable/_is_transport_failure 分类），且绝不回显异常正文（可能含请求头/凭据）。
+    """
+    global _firecrawl_fetch_calls
+    api_key = os.environ.get("FIRECRAWL_API_KEY", "").strip()
+    if not api_key:
+        return "Error: Firecrawl unavailable (FIRECRAWL_API_KEY is not configured)"
+    ceiling_sentinel = _firecrawl_over_ceiling()
+    if ceiling_sentinel is not None:
+        return ceiling_sentinel
+    try:
+        import httpx
+
+        max_chars = max(
+            4096,
+            int(os.environ.get(
+                "RESEARCH_FIRECRAWL_FETCH_MAX_CHARS", "12000") or "12000"),
+        )
+        timeout = _env_float("RESEARCH_FIRECRAWL_FETCH_TIMEOUT_SECONDS", 25.0)
+        payload_body: dict[str, Any] = {
+            "url": str(url or "").strip(),
+            "formats": ["markdown"],
+            "onlyMainContent": True,
+        }
+        max_age_ms = _firecrawl_max_age_ms()
+        if max_age_ms > 0:
+            # Firecrawl 端缓存回放窗口（毫秒）：未变页面不再触发全新计费抓取。
+            payload_body["maxAge"] = max_age_ms
+        _firecrawl_fetch_calls += 1  # 计在发出请求前：HTTP 4xx/5xx 同样可能计费
+        async with httpx.AsyncClient(timeout=timeout, trust_env=True) as client:
+            response = await client.post(
+                os.environ.get(
+                    "FIRECRAWL_API_URL", "https://api.firecrawl.dev/v2/scrape"
+                ).strip() or "https://api.firecrawl.dev/v2/scrape",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload_body,
+            )
+        if response.status_code == 402:
+            return "Error: Firecrawl failed: payment required / quota exhausted"
+        if response.status_code == 429:
+            return "Error: Firecrawl failed: rate limited (429 timeout)"
+        if response.status_code >= 400:
+            return f"Error: Firecrawl failed: HTTP {response.status_code}"
+        payload = response.json()
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            return "Error: Firecrawl returned no scrape data"
+        body = str(data.get("markdown") or "").strip()
+        if not body:
+            return "Error: Firecrawl returned no page text"
+        metadata = data.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+        title = str(metadata.get("title") or "").strip()
+        return (f"# {title}\n\n{body[:max_chars]}" if title else body[:max_chars])
+    except Exception as exc:  # noqa: BLE001
+        # Do not include provider exception text (may echo the bearer header).
+        return f"Error: Firecrawl failed: {type(exc).__name__}"
+
+
+def _provider_circuit_open(provider: str) -> bool:
+    return bool(
+        _research_budget is not None
+        and hasattr(_research_budget, "provider_circuit_open")
+        and _research_budget.provider_circuit_open(provider)
+    )
+
+
+def _record_provider_failure(provider: str, result: str) -> None:
+    if (
+        _research_budget is not None
+        and hasattr(_research_budget, "record_provider_transport_failure")
+        and _is_transport_failure(result)
+    ):
+        _research_budget.record_provider_transport_failure(provider, result)
+
+
+def _record_provider_success(provider: str) -> None:
+    if _research_budget is not None and hasattr(
+        _research_budget, "record_provider_success"
+    ):
+        _research_budget.record_provider_success(provider)
+
+
+def _reserve_additional_physical_fetch(url: str) -> Optional[str]:
+    """Count a fallback request after the outer reservation counted request one."""
+    if _research_budget is None:
+        return None
+    admission = _research_budget.admit_network("fetch")
+    if admission.allowed:
+        return None
+    return _research_budget.denial_result(
+        "web_fetch", admission.reason, str(url or "").strip()
+    )
+
+
+async def _resilient_fetch(url: str) -> str:
+    """Try Firecrawl (when keyed), then Jina, then Exa, then opt-in direct.
+
+    ``cached_fetch`` reserves request one. Every additional physical provider
+    request reserves another network unit here, so failover cannot silently
+    double or triple the configured fetch allowance. Firecrawl leads when its
+    key is configured: it is the managed, render-capable extractor; anonymous
+    Jina (53% ConnectTimeout in the 2026-07-14 humanoid run) becomes fallback.
+    """
+    _FETCH_PROVIDER.set("")
+    physical_attempts = 0
+    firecrawl_result = ""
+    if (os.environ.get("FIRECRAWL_API_KEY", "").strip()
+            and not _provider_circuit_open("firecrawl")):
+        ceiling_sentinel = _firecrawl_over_ceiling()
+        if ceiling_sentinel is not None:
+            # 花费护栏越线：不发请求、不计物理尝试（Jina 无需追加预算占用）、
+            # 不喂 provider 熔断（本地上限≠传输故障，不应波及其他 lane）。
+            firecrawl_result = ceiling_sentinel
+        else:
+            physical_attempts += 1
+            firecrawl_result = await _firecrawl_fetch(url)
+            if _is_cacheable(firecrawl_result):
+                _FETCH_PROVIDER.set("firecrawl")
+                _record_provider_success("firecrawl")
+                return firecrawl_result
+            _record_provider_failure("firecrawl", firecrawl_result)
+
+    primary_result = ""
+    if not _provider_circuit_open("jina"):
+        if physical_attempts:
+            denial = _reserve_additional_physical_fetch(url)
+            if denial is not None:
+                return denial
+        physical_attempts += 1
+        try:
+            primary_result = await asyncio.wait_for(
+                _jina_delegate_fetch(url),
+                timeout=_env_float("RESEARCH_JINA_PRIMARY_TIMEOUT_SECONDS", 10.0),
+            )
+        except Exception as exc:  # noqa: BLE001
+            primary_result = f"Error: Jina primary failed: {type(exc).__name__}: {exc}"
+        if _is_cacheable(primary_result):
+            _FETCH_PROVIDER.set("jina")
+            _record_provider_success("jina")
+            return primary_result
+        _record_provider_failure("jina", primary_result)
+
+    exa_result = ""
+    if os.environ.get("EXA_API_KEY", "").strip() and not _provider_circuit_open("exa"):
+        if physical_attempts:
+            denial = _reserve_additional_physical_fetch(url)
+            if denial is not None:
+                return denial
+        physical_attempts += 1
+        exa_result = await _exa_fetch(url)
+        if _is_cacheable(exa_result):
+            _FETCH_PROVIDER.set("exa")
+            _record_provider_success("exa")
+            return exa_result
+        _record_provider_failure("exa", exa_result)
+
+    # Raw crawling has more variable robots/readability behavior than either
+    # content provider, so it remains an explicit operator opt-in.
+    direct_result = ""
+    if _env_flag("RESEARCH_DIRECT_FETCH_FALLBACK", False):
+        if physical_attempts:
+            denial = _reserve_additional_physical_fetch(url)
+            if denial is not None:
+                return denial
+        direct_result = await _direct_http_fetch(url)
+        if _is_cacheable(direct_result):
+            _FETCH_PROVIDER.set("direct")
+            return direct_result
+
+    return direct_result or exa_result or primary_result or firecrawl_result or (
+        "Error: no web-fetch provider was available"
+    )
 
 
 def _source_policy_rejection(url: str) -> Optional[str]:
@@ -147,6 +593,18 @@ def _is_cacheable(content: Any) -> bool:
     stripped = content.strip()
     if not stripped or stripped.startswith("Error:"):
         return False
+    prefix = stripped[:1200].lower()
+    if any(marker in prefix for marker in _CONTENT_FAILURE_MARKERS):
+        return False
+    if stripped.startswith("{"):
+        try:
+            envelope = json.loads(stripped)
+            if isinstance(envelope, dict) and (
+                envelope.get("error") or envelope.get("status") in {"error", "failed"}
+            ):
+                return False
+        except (TypeError, ValueError):
+            pass
     return len(content) >= DEAD_FETCH_MIN_CHARS
 
 
@@ -260,6 +718,10 @@ async def cached_fetch(
             hit = None
         if hit is not None:
             if _research_budget is not None:
+                if hasattr(_research_budget, "record_fetched_source"):
+                    _research_budget.record_fetched_source(
+                        exact_key, hit, provider="cache", cache_hit=True
+                    )
                 if not str(revisit_reason or "").strip():
                     artifact_id = _research_budget.positive_repeat(
                         "fetch", exact_key)
@@ -296,6 +758,10 @@ async def cached_fetch(
                     # cache body in full; network dedupe must not become
                     # cross-context evidence loss.
                     _research_budget.record_positive("fetch", exact_key)
+                    if hasattr(_research_budget, "record_fetched_source"):
+                        _research_budget.record_fetched_source(
+                            exact_key, hit, provider="cache", cache_hit=True
+                        )
                     return hit
                 claim_token = _research_budget.claim_request("fetch", exact_key)
                 if claim_token:
@@ -333,6 +799,13 @@ async def cached_fetch(
             if _is_cacheable(content):
                 _research_budget.clear_negative("fetch", exact_key)
                 _research_budget.record_positive("fetch", exact_key)
+                if hasattr(_research_budget, "record_fetched_source"):
+                    _research_budget.record_fetched_source(
+                        exact_key,
+                        content,
+                        provider=_FETCH_PROVIDER.get(),
+                        cache_hit=False,
+                    )
             else:
                 _research_budget.record_negative("fetch", exact_key)
         if ttl > 0 and _is_cacheable(content):
@@ -349,7 +822,7 @@ async def _jina_delegate_fetch(url: str) -> str:
     import importlib
 
     mod = importlib.import_module("deerflow.community.jina_ai.tools")
-    tool_obj = getattr(mod, "web_fetch_tool")
+    tool_obj = mod.web_fetch_tool
     fn = getattr(tool_obj, "coroutine", None)  # async @tool 的原协程函数
     if fn is not None:
         return await fn(url)
@@ -375,7 +848,7 @@ try:
             url: The URL to fetch the contents of.
             revisit_reason: Optional specific reason the already-returned full page must be revisited. Leave empty for normal use.
         """
-        return await cached_fetch(url, _jina_delegate_fetch, revisit_reason)
+        return await cached_fetch(url, _resilient_fetch, revisit_reason)
 
 except ImportError:  # noqa: BLE001 — 离线环境无 langchain：纯缓存逻辑仍可测
     web_fetch_tool = None  # type: ignore[assignment]

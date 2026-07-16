@@ -1887,6 +1887,45 @@ def _parse_probability_value(value: Any) -> Optional[float]:
     return round(mid, 6)
 
 
+def valid_scenario_distribution(forecast_inputs: Any) -> bool:
+    """Return whether scenario rows form a named, weighted probability partition.
+
+    A name-only shell is not a usable decision-channel seed: treating it as one
+    suppresses deterministic report parsing and silently forces uniform priors.
+    The accepted contract is one to six unique named rows, each with a parseable
+    point probability or probability band, whose midpoint total is approximately
+    one. A single scenario is retained for legacy compatibility only at P=1.
+    """
+    if not isinstance(forecast_inputs, dict):
+        return False
+    scenarios = forecast_inputs.get("scenarios")
+    if not isinstance(scenarios, list) or not 1 <= len(scenarios) <= 6:
+        return False
+    names: set[str] = set()
+    probabilities: list[float] = []
+    for row in scenarios:
+        if not isinstance(row, dict):
+            return False
+        name = str(row.get("name") or row.get("scenario") or "").strip()
+        normalized = normalize_name(name)
+        if not normalized or normalized in names:
+            return False
+        names.add(normalized)
+        value = None
+        for key in (
+            "probability", "likelihood", "base_rate", "prob",
+            "probability_band",
+        ):
+            if row.get(key) is not None:
+                value = _parse_probability_value(row.get(key))
+                if value is not None:
+                    break
+        if value is None:
+            return False
+        probabilities.append(value)
+    return abs(sum(probabilities) - 1.0) <= 0.02
+
+
 def _match_reference_class_to_scenario(reference_class: str, names: List[str]) -> Optional[str]:
     """R2-CAL-13: 把一条 base_rate 的 reference_class 映射回某个情景名（标准化子串匹配）。
 
@@ -1972,6 +2011,156 @@ def world_state_seed_from_actors(actors: Optional[Any]) -> Dict[str, Any]:
         isinstance(v, (int, float)) and v > 0 for v in rates.values()
     )
     return {"scenarios": names, "base_rates": rates, "uniform_prior": uniform_prior}
+
+
+# ------------------- 研究报告 → forecast_inputs 情景种子（决策通道兜底解析）-------------------
+# 取证：41 次模拟无一存在 world_state_trajectory.json——actors.json 缺 forecast_inputs.scenarios
+# 时 world_state_seed_from_actors 返回 {}，决策通道从未点火。而研究报告本身几乎总带有
+# 「## Four Mutually Exclusive Scenarios」/「### Scenario Probability Distribution」这类带概率的
+# 情景节。下列正则把该节确定性解析回 forecast_inputs schema（纯离线、无 LLM）。
+_SCENARIO_SECTION_CUE_RE = re.compile(r"scenario|情景|情境|场景", re.I)
+_SCENARIO_AGGREGATE_TOTAL_RE = re.compile(
+    r"mutually\s+exclusive|collectively\s+exhaustive|sum(?:ming|s|med)?\s+(?:up\s+)?to|"
+    r"total(?:ing|s|led)?\s+(?:up\s+)?to|互斥|穷尽|合计|总计|总和|概率(?:之)?和",
+    re.I,
+)
+_MD_HEADING_RE = re.compile(r"^(#{2,6})\s*(.+?)\s*$")
+_MD_BOLD_LIST_ITEM_RE = re.compile(r"^\s*[-*+]\s*\*\*(?P<bold>.+?)\*\*(?P<rest>.*)$")
+# 概率表达（按优先级）：① 百分数区间 "35–45%"（首数字后允许可选 %，兼容 "35%–45%"）；
+# ② 中英「概率/probability + 小数」如 "概率 0.35"；③ 单点百分数 "(45%)"。
+_PROB_RANGE_RE = re.compile(
+    r"\d{1,3}(?:\.\d+)?\s*%?\s*[-–—~～至到]\s*\d{1,3}(?:\.\d+)?\s*%")
+_PROB_DECIMAL_RE = re.compile(
+    r"(?:概率|probability)\s*[:：=为约]?\s*(?:of\s+)?(0?\.\d+|1(?:\.0+)?)(?!\s*%)", re.I)
+_PROB_PERCENT_RE = re.compile(r"\d{1,3}(?:\.\d+)?\s*%")
+
+
+def _extract_probability_text(text: str) -> Optional[str]:
+    """从一行标题/粗体名里抽出概率原文（"35–45%" / "0.35" / "45%"）；无 → None。"""
+    for pat in (_PROB_RANGE_RE, _PROB_DECIMAL_RE, _PROB_PERCENT_RE):
+        m = pat.search(text or "")
+        if m:
+            return m.group(1) if m.lastindex else m.group(0)
+    return None
+
+
+def _is_scenario_section_heading(title: str) -> bool:
+    """Return whether ``title`` introduces a scenario distribution section.
+
+    Distribution headings commonly state the aggregate invariant themselves,
+    for example ``Scenarios (4 mutually exclusive, summing to 100%)``.  The
+    previous parser rejected every heading containing a percentage so that an
+    item such as ``Scenario A (45%)`` could not become its own section.  That
+    also rejected the aggregate 100% invariant and silently disabled the
+    simulation decision channel.  Permit exactly that aggregate-total form;
+    all other probability-bearing headings remain item headings.
+    """
+    if not _SCENARIO_SECTION_CUE_RE.search(title or ""):
+        return False
+    prob_text = _extract_probability_text(title)
+    if prob_text is None:
+        return True
+    probability = _parse_probability_value(prob_text)
+    return bool(
+        probability is not None
+        and abs(probability - 1.0) <= 1e-9
+        and _SCENARIO_AGGREGATE_TOTAL_RE.search(title or "")
+    )
+
+
+def _strip_probability_annotation(name: str, prob_text: str) -> str:
+    """从情景名里剥掉概率括注（中英括号皆可）与裸概率残留，再去首尾标点。"""
+    out = re.sub(r"[（(][^()（）]*" + re.escape(prob_text) + r"[^()（）]*[)）]", "", str(name or ""))
+    out = out.replace(prob_text, "")
+    return out.strip(" \t*:：—–-·，,。").strip()
+
+
+def _append_scenario_row(rows: List[Dict[str, Any]], seen: set,
+                         raw_name: str, prob_text: str) -> None:
+    """把一个候选情景条目规整为 forecast_inputs 情景行（名去括注、概率区间保留原文）。"""
+    name = _strip_probability_annotation(raw_name, prob_text)
+    key = normalize_name(name)
+    if not name or not key or key in seen:
+        return
+    mid = _parse_probability_value(prob_text)
+    if mid is None:
+        return
+    seen.add(key)
+    row: Dict[str, Any] = {"name": name}
+    if _PROB_RANGE_RE.search(prob_text):
+        row["probability_band"] = prob_text  # 区间保留原文，中点由消费方按需计算
+    else:
+        row["probability"] = mid
+    rows.append(row)
+
+
+def forecast_inputs_from_report_markdown(report_md: str) -> Dict[str, Any]:
+    """把研究报告的情景节确定性解析回 forecast_inputs schema（纯函数、离线、无 LLM）。
+
+    预期调用点：pipeline_orchestrator 的 **prepare 阶段**，在 world_state_seed_from_actors
+    之前——当 actors.json 缺 forecast_inputs（或其 scenarios 为空）时，用本函数从
+    handoff/research_report.md 兜底解析出情景种子，使决策通道（世界态种子）不再因抽取
+    遗漏而熄火。调用方形如：``seed = world_state_seed_from_actors(
+    {"forecast_inputs": forecast_inputs_from_report_markdown(report_md)})``。
+
+    识别两种真实版式（EN/zh 皆可，节标题含 scenario/情景/情境/场景 线索）：
+      * 标题式：「## Four Mutually Exclusive Scenarios」下的
+        「### Scenario A: …… (45% probability)」；
+      * 粗体列表式：「### Scenario Probability Distribution」下的
+        「- **Base Scenario (55% probability):** ……」（中文如「- **基准情景（概率 0.35）**：……」）。
+    概率支持 '(35%)'、'35–45%'、'概率 0.35' 三型；区间在输出里保留为 ``probability_band``
+    原文（消费方 _parse_probability_value 取中点），点估计折成 ``probability`` 小数。
+
+    校验：2-6 个情景、每个都解析出概率、且中点之和落在 [0.9, 1.1]；任一不满足 → ``{}``
+    （调用方视同无种子，degrade-safe）。命中时返回
+    ``{"scenarios": [{"name", "probability"|"probability_band"}], "base_rates": []}``——
+    与 extract_forecast_inputs / world_state_seed_from_actors 消费的 schema 一致。
+    """
+    lines = str(report_md or "").splitlines()
+    # 候选情景节 = 含情景线索且不是带概率的单个情景条目。允许节标题陈述
+    # 「summing to 100%」/「概率合计 100%」这类分布约束；其他带概率标题（如
+    # 「### Scenario A: …… (45%)」）仍不能被当成节起点。逐个候选节尝试，取第一个
+    # 收齐 2-6 个带概率条目的节作为**唯一**情景节（避免把全文多处情景复述混成一锅）。
+    for i, ln in enumerate(lines):
+        m = _MD_HEADING_RE.match(ln)
+        if not m or not _is_scenario_section_heading(m.group(2)):
+            continue
+        level = len(m.group(1))
+        rows: List[Dict[str, Any]] = []
+        seen: set = set()
+        for body_ln in lines[i + 1:]:
+            hm = _MD_HEADING_RE.match(body_ln)
+            if hm:
+                if len(hm.group(1)) <= level:
+                    break  # 同级/更浅标题 = 节结束
+                prob_text = _extract_probability_text(hm.group(2))
+                if prob_text:
+                    _append_scenario_row(rows, seen, hm.group(2), prob_text)
+                continue
+            bm = _MD_BOLD_LIST_ITEM_RE.match(body_ln)
+            if not bm:
+                continue
+            bold = bm.group("bold")
+            prob_text = _extract_probability_text(bold)
+            if not prob_text:
+                # 概率可能紧跟在粗体名后（"- **X**（概率 35%）：……"）；只看首个冒号前的
+                # 短前缀，避免把描述正文里的无关百分数（"份额达 55-60%"）误当概率。
+                rest_head = re.split(r"[:：]", bm.group("rest"), maxsplit=1)[0]
+                prob_text = _extract_probability_text(rest_head[:60])
+            if prob_text:
+                _append_scenario_row(rows, seen, bold, prob_text)
+        if not (2 <= len(rows) <= 6):
+            continue  # 该候选节不是概率分布节，尝试下一个
+        mids = [_parse_probability_value(r.get("probability_band") or r.get("probability"))
+                for r in rows]
+        if any(v is None for v in mids) or not (0.9 <= sum(mids) <= 1.1):
+            # 该候选节的概率不构成分布（缺失/合计不到 ~100%）→ **跳过并尝试下一个候选节**，
+            # 而非直接放弃。真实报告常有多处情景复述（执行摘要「Scenario A (48%)」、地区节
+            # 「…for China, US, EU (sum=100%)」、以及权威的「## Scenarios (…summing to 100%)」），
+            # 早前一个杂乱节不该埋葬后面那个干净的分布节。绝不播下失真种子：只采纳合计≈100% 的节。
+            continue
+        return {"scenarios": rows, "base_rates": []}
+    return {}
 
 
 # 关系价 → 到预测时点的保守轨迹先验。结构性纽带（联盟/对抗）有惯性、更"黏"；交易性纽带随利益

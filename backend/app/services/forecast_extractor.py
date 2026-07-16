@@ -1099,6 +1099,197 @@ _BINARY_MARKET_RULE = (
     "\"implied_yes_prob\": 0.0-1.0}; OMIT market_anchor entirely when no listed market applies."
 )
 
+# ------------------------------------------------- source 溯源确定性校验（编造溯源修复）
+# 取证（report_9147b3f6a0a9 6/12、report_c83f21765b96 9/20、report_1b70ace5c9e8 8/13）：模型把
+# source 标成 "world-state outcome shares"，而 41 次模拟中 world_state_trajectory.json 从未存在
+# ——该信号从未进过提示词，属**编造溯源**。修复：从实际注入提示词的 signal_pack 切片（与提示词
+# 逐字节同源）确定性推导「允许的信号标签集」，抽取后把不能对账到该集合的 source 降级为
+# 'research-prior'（原话保留在 source_claimed 供审计），降级条数落 binary_quality.provenance_downgrades。
+# 每行 = (规范信号名, 信号包块标记——对注入切片匹配, source 标签识别——对模型自由文本匹配)；
+# 块标记逐字节取自各渲染器的标题行（report_agent._world_state_block / zep_tools.coalition_map 等），
+# 渲染器改头时此表须同步。
+_SIM_SIGNAL_TAXONOMY: List[Tuple[str, re.Pattern, re.Pattern]] = [
+    ("world-state outcome shares",
+     re.compile(r"【预测结果分布\s*P\(outcome\)"),
+     re.compile(r"world[\s_-]*state|outcome\s*shares?|P\(outcome\)|世界态|结果分布|结果份额", re.I)),
+    ("salience tiers",
+     re.compile(r"议程设置力分层"),
+     re.compile(r"salience|agenda[\s_-]*setting|tier|议程设置|梯队|分层", re.I)),
+    ("coalition map",
+     re.compile(r"##\s*派系/联盟图"),
+     re.compile(r"coalition|faction|联盟|派系", re.I)),
+    ("causal spine",
+     re.compile(r"【因果骨架"),
+     re.compile(r"causal|chokepoint|cascade|因果|传导|支点", re.I)),
+    ("scenario diff",
+     re.compile(r"##\s*情景对比\s*/\s*反事实差异"),
+     re.compile(r"scenario[\s_-]*diff|counterfactual|反事实|情景对比", re.I)),
+    ("projected edges",
+     re.compile(r"【关系演化投影"),
+     re.compile(r"projected[\s_-]*edges?|relationship\s*(?:projection|trajectory)|关系演化|投影", re.I)),
+    ("simulation outcomes",
+     re.compile(r"##\s*模拟量化结果"),
+     re.compile(r"simulation[\s_-]*outcomes?|action\s*(?:counts?|volume|types?)|top[\s_-]*actor"
+                r"|模拟量化|动作(?:量|计数|类型)|最活跃", re.I)),
+]
+
+# 非模拟信号的合法 source：research-prior（缺省值）与 scenario-partition
+# （reconcile_forecast_contract 的确定性改写）永远放行，不参与对账。
+_SOURCE_ALWAYS_ALLOWED_RE = re.compile(
+    r"research[\s_-]*prior|scenario[\s_-]*partition|研究先验|情景划分", re.I)
+# 预测市场标签：market_pack 实际注入时放行（市场表是提示词里的真实信号，非编造）。
+_SOURCE_MARKET_LABEL = "prediction markets"
+_SOURCE_MARKET_RE = re.compile(
+    r"polymarket|prediction[\s_-]*market|market[\s_-]*implied|预测市场|市场隐含", re.I)
+
+
+def allowed_signal_labels(signal_pack: Optional[str]) -> set:
+    """从**实际注入提示词**的 signal_pack 切片推导允许的规范信号名集合（确定性、离线）。
+
+    只有块标记真实出现在切片里的信号才可被 source 引用；空/None → 空集（即所有模拟信号
+    标签都不被允许）。调用方必须传入与提示词完全相同的截断切片，保证「允许集」与模型
+    实际看到的内容逐字节对齐。
+    """
+    text = str(signal_pack or "")
+    return {canon for canon, marker, _label in _SIM_SIGNAL_TAXONOMY if marker.search(text)}
+
+
+def _enforce_source_provenance(binaries: List[Dict[str, Any]], allowed: set) -> int:
+    """把不能对账到 ``allowed`` 集合的模拟信号 source 降级为 'research-prior'，返回降级条数。
+
+    research-prior / scenario-partition 永远放行；能归类到已知信号但该信号块未注入 →
+    降级；无法归类到任何已知信号（模型自造名）同样降级——溯源必须可对账到确实注入过的
+    信号块。原话保留在 ``source_claimed``（审计可回放模型原始声称）。原地修改
+    （与 reconcile_forecast_contract 同风格）；纯离线，绝不抛异常。
+    """
+    downgrades = 0
+    for b in (binaries or []):
+        if not isinstance(b, dict):
+            continue
+        src = str(b.get("source") or "").strip()
+        if not src or _SOURCE_ALWAYS_ALLOWED_RE.search(src):
+            continue
+        if _SOURCE_MARKET_RE.search(src):
+            canon: Optional[str] = _SOURCE_MARKET_LABEL
+        else:
+            canon = next((c for c, _marker, label in _SIM_SIGNAL_TAXONOMY
+                          if label.search(src)), None)
+        if canon is not None and canon in allowed:
+            continue
+        b["source_claimed"] = src
+        b["source"] = "research-prior"
+        downgrades += 1
+    return downgrades
+
+
+# ------------------------------------------------- SIM-ADD-3：世界态结果分布 → 显式 sim 先验
+# 取证（sim_05ab2bdebbd2 等）：即便决策通道真的产出了 world_state_trajectory.json，其收敛的
+# P(outcome) 份额此前只作为提示词里的一段文本影响 LLM，从不作为**可对账的显式先验**落进
+# forecast.json——sim 的贡献既不可审计、也无法量化「相对研究先验移动了多少」。下列解析器从
+# **实际注入提示词**的世界态块（report_agent._world_state_block 渲染，块标记逐字节同源）里
+# 抽出收敛结果份额与趋稳判定，供 reconcile_forecast_contract 记成 forecast.sim_adjustment。
+# 份额来自渲染文本（整数百分比），故做一次归一并标注为先验（非精确观测），degrade-safe。
+_WS_OUTCOME_HEADER_RE = re.compile(r"【预测结果分布\s*P\(outcome\)")
+_WS_OUTCOME_SHARE_RE = re.compile(
+    r"^·\s*(?P<name>.+?)\s*[:：]\s*(?P<pct>\d{1,3}(?:\.\d+)?)\s*%\s*$")
+# 世界态块内**份额行之后**的其它小节起始（碰到即停止份额收集，避免把日历航点/诊断行混入）。
+_WS_OUTCOME_SECTION_BREAK = ("【", "演化航点", "稳定性诊断", "截至", "于 ", "注", "预测期限")
+
+
+def world_state_outcome_from_signal_pack(
+    signal_pack: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    """从 signal_pack 的世界态结果分布块解析决策通道的收敛 P(outcome) 份额（纯离线、确定性）。
+
+    识别 ``【预测结果分布 P(outcome)…】`` 块及其下的 ``· <情景名>: <NN>%`` 份额行，归一后
+    返回 ``{"scenario_shares": {name: frac}, "converged": bool|None,
+    "source": "world-state outcome shares"}``；块缺失/无份额行 → ``None``（调用方视同 sim
+    无收敛结果，degrade-safe）。``converged`` 由块内「已趋稳/尚未趋稳」文案判定（无 → None）。
+    """
+    text = str(signal_pack or "")
+    m = _WS_OUTCOME_HEADER_RE.search(text)
+    if not m:
+        return None
+    tail = text[m.end():]
+    shares: Dict[str, float] = {}
+    for ln in tail.splitlines():
+        s = ln.strip()
+        if not s:
+            continue
+        if s.startswith(_WS_OUTCOME_SECTION_BREAK):
+            break  # 到达块内其它小节/下一个信号块 → 份额行收集结束
+        mm = _WS_OUTCOME_SHARE_RE.match(s)
+        if mm:
+            try:
+                shares[mm.group("name").strip()] = float(mm.group("pct")) / 100.0
+            except ValueError:
+                continue
+    if not shares:
+        return None
+    total = sum(shares.values())
+    if total > 0:
+        shares = {k: v / total for k, v in shares.items()}  # 整数百分比未必精确求和 → 归一
+    converged: Optional[bool] = None
+    if "尚未趋稳" in tail:
+        converged = False
+    elif "趋稳" in tail:
+        converged = True
+    return {
+        "scenario_shares": {k: round(v, 4) for k, v in shares.items()},
+        "converged": converged,
+        "source": "world-state outcome shares",
+    }
+
+
+def _norm_scenario_key(name: Any) -> str:
+    """情景名归一（大小写/空白/标点无关）——用于把 sim 份额对齐到 forecast 情景先验。"""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w一-鿿]+", " ", str(name or "").lower())).strip()
+
+
+def _record_sim_adjustment(
+    forecast: Dict[str, Any], world_state_outcome: Optional[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """SIM-ADD-3：把决策通道的收敛结果份额记成 ``forecast['sim_adjustment']``（显式、可审计）。
+
+    ``world_state_outcome`` = ``world_state_outcome_from_signal_pack`` 的输出（或等价 dict，
+    含 ``scenario_shares``）。计算每个情景 sim 份额相对**研究先验**（forecast['scenarios'] 的
+    probability）的位移 ``delta_vs_research_prior``，并把 ``{scenario_shares, converged,
+    converged_at, delta_vs_research_prior, source}`` 写入 forecast。缺份额 → 不写、返回 None
+    （trajectory 缺席时保持今日行为，绝不虚构 sim 贡献）。返回写入的 sim_adjustment 或 None。
+    """
+    if not isinstance(world_state_outcome, dict):
+        return None
+    shares = world_state_outcome.get("scenario_shares")
+    if not (isinstance(shares, dict) and shares):
+        return None
+    # 研究先验：forecast 情景概率（sim 从不改情景表，故它即外部/研究视角先验）。
+    prior: Dict[str, float] = {}
+    for row in (forecast.get("scenarios") or []):
+        if not isinstance(row, dict):
+            continue
+        p = _coerce_float(row.get("probability"))
+        nm = _norm_scenario_key(row.get("name") or row.get("scenario"))
+        if nm and p is not None:
+            prior[nm] = p
+    delta: Dict[str, float] = {}
+    for name, sh in shares.items():
+        sv = _coerce_float(sh)
+        if sv is None:
+            continue
+        pv = prior.get(_norm_scenario_key(name))
+        if pv is not None:
+            delta[str(name)] = round(sv - pv, 4)
+    adjustment: Dict[str, Any] = {
+        "scenario_shares": {str(k): round(float(v), 4) for k, v in shares.items()
+                            if _coerce_float(v) is not None},
+        "converged": world_state_outcome.get("converged"),
+        "converged_at": world_state_outcome.get("converged_at"),
+        "delta_vs_research_prior": delta,
+        "source": "world-state outcome shares",
+    }
+    forecast["sim_adjustment"] = adjustment
+    return adjustment
+
 
 def _binary_key(stmt: str) -> str:
     return re.sub(r"\W+", " ", str(stmt or "").lower()).strip()
@@ -2091,12 +2282,22 @@ def audit_market_anchor_integrity(forecast: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def reconcile_forecast_contract(forecast: Dict[str, Any]) -> Dict[str, Any]:
+def reconcile_forecast_contract(
+    forecast: Dict[str, Any],
+    world_state_outcome: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Make scenario-equivalent binaries and market anchors one canonical contract.
 
     The function mutates ``forecast`` intentionally and returns a diagnostics
     payload.  Only propositions fully determined by mutually exclusive scenario
     bins are reconciled; unrelated binaries retain their independent estimates.
+
+    SIM-ADD-3：额外把决策通道收敛的世界态结果份额记成显式、可审计的
+    ``forecast['sim_adjustment']``（scenario_shares + 相对研究先验的位移）。
+    ``world_state_outcome`` 显式传入优先；未传时自动从
+    ``forecast['binary_quality']['world_state_outcome']`` 读取（extract_binary_forecasts 在
+    世界态块确实注入提示词时钉在那里）。两者都缺 → 不写 sim_adjustment，保持今日行为
+    （trajectory 缺席时绝不虚构 sim 贡献）；诊断负载记 ``sim_adjustment`` 是否落地。
     """
     binaries = [
         row for row in (forecast.get("binary_forecasts") or []) if isinstance(row, dict)
@@ -2220,6 +2421,14 @@ def reconcile_forecast_contract(forecast: Dict[str, Any]) -> Dict[str, Any]:
         "market_anchors": market_audit,
         "passed": after["passed"] and market_audit["passed"],
     }
+    # SIM-ADD-3：记录 sim 的显式先验（如存在）。显式参数优先，其次 binary_quality 里的挂载。
+    _ws_out = world_state_outcome
+    if _ws_out is None:
+        _bq = forecast.get("binary_quality")
+        if isinstance(_bq, dict) and isinstance(_bq.get("world_state_outcome"), dict):
+            _ws_out = _bq["world_state_outcome"]
+    _sim_adj = _record_sim_adjustment(forecast, _ws_out)
+    diagnostics["sim_adjustment"] = _sim_adj if _sim_adj is not None else None
     forecast["proposition_consistency"] = diagnostics
     return diagnostics
 
@@ -2470,11 +2679,34 @@ def extract_binary_forecasts(report_markdown: str, llm, *, min_count: int = 10,
         except Exception as _ae:  # noqa: BLE001 — 锚定为增强，绝不阻断二元抽取
             logger.warning(f"预测市场锚定失败（忽略，保留无锚点结果）: {_ae}")
             market_comparison = None
+    # 编造溯源修复：source 只允许指向**确实注入过提示词**的信号块。允许集取自与 _draw 提示词
+    # 相同的 [:4000] 切片（sim_sensitive 关/包空 → 空集）；market_pack 注入时额外放行市场标签。
+    # 不在集合内（含模型自造名，如从未存在过的 world-state 信号）→ 降级 research-prior，原话
+    # 存 source_claimed，计数落 binary_quality.provenance_downgrades（审计可对账）。
+    _allowed_labels = allowed_signal_labels(str(signal_pack)[:4000] if sim_sensitive else "")
+    if market_aware:
+        _allowed_labels.add(_SOURCE_MARKET_LABEL)
+    provenance_downgrades = _enforce_source_provenance(binaries, _allowed_labels)
     out: Dict[str, Any] = {
         "binary_forecasts": binaries,
         "binary_quality": _binary_quality(binaries, min_count=min_count,
                                           themes_expected=themes),
     }
+    _bq_prov = out["binary_quality"]
+    if isinstance(_bq_prov, dict):
+        _bq_prov["provenance_downgrades"] = provenance_downgrades
+        if provenance_downgrades:
+            _bq_prov.setdefault("issues", []).append(
+                f"{provenance_downgrades} forecast(s) claimed a simulation signal that was never "
+                "injected into the prompt — source downgraded to research-prior (see source_claimed)")
+    # SIM-ADD-3：世界态结果分布块**确实注入**（在允许集内）时，把决策通道收敛的 P(outcome)
+    # 份额解析出来钉进 binary_quality.world_state_outcome。report_agent 在调用
+    # reconcile_forecast_contract 前会把本 binary_quality 挂到 forecast 上，reconcile 据此
+    # 记成显式、可审计的 forecast.sim_adjustment（sim 真实贡献才被记录；块未注入 → 不加）。
+    if "world-state outcome shares" in _allowed_labels and isinstance(_bq_prov, dict):
+        _ws_out = world_state_outcome_from_signal_pack(str(signal_pack)[:4000])
+        if _ws_out:
+            _bq_prov["world_state_outcome"] = _ws_out
     # ITEM 12：把多模型集成诊断落进 binary_quality（该块经 report_agent 落到 forecast['binary_quality']
     # 并被 render_binary_forecasts_block 消费）。仅当 FORECAST_ENSEMBLE_MODELS 非空时附加（默认整段不加
     # → schema 逐字节不变）。low_agreement 收 spread>阈值的预测 id，其陈述在报表以 ±spread 高亮分歧；

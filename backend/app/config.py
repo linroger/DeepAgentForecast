@@ -475,6 +475,11 @@ class Config:
     # 启动回收前先探测本机端口是否已有后端在服务：占用则整体跳过孤儿回收（注定 Address-in-use
     # 而死的重复进程不得破坏活进程拥有的管线状态）。
     PIPELINE_RECLAIM_PORT_PROBE = os.environ.get('PIPELINE_RECLAIM_PORT_PROBE', 'true').strip().lower() == 'true'
+    # 与管线回收同构：第二个后端（或任何误启动的 app factory）若发现目标端口已有
+    # 健康 owner，不得在自身绑定端口失败之前先终止那个 owner 的活模拟。
+    SIMULATION_RECLAIM_PORT_PROBE = os.environ.get(
+        'SIMULATION_RECLAIM_PORT_PROBE', 'true'
+    ).strip().lower() == 'true'
     # 报告阶段起飞前 ~10 token 探测主/回退提供方可用性；双双不可用时 <60s 内以可恢复的
     # REPORT 阶段失败收场，而不是烧完全部章节成本后才被健康门拦下。
     REPORT_LLM_PREFLIGHT = os.environ.get('REPORT_LLM_PREFLIGHT', 'true').strip().lower() == 'true'
@@ -514,6 +519,11 @@ class Config:
         'RESEARCH_BUDGET_FETCH_GLOBAL', '450') or '450')
     RESEARCH_BUDGET_FETCH_LANE = int(os.environ.get(
         'RESEARCH_BUDGET_FETCH_LANE', '180') or '180')
+    # One explicit pipeline task/resume owns one independently bounded ledger.
+    # Keep a small hard ceiling so repeated resumes cannot create unbounded paid
+    # search/fetch epochs while still allowing a timed-out deep run to recover.
+    RESEARCH_BUDGET_MAX_EPOCHS = int(os.environ.get(
+        'RESEARCH_BUDGET_MAX_EPOCHS', '3') or '3')
     RESEARCH_NEGATIVE_CACHE_TTL_SECONDS = int(os.environ.get(
         'RESEARCH_NEGATIVE_CACHE_TTL_SECONDS', '600') or '600')
     RESEARCH_NEGATIVE_CACHE_RETRIES = int(os.environ.get(
@@ -760,13 +770,17 @@ class Config:
     }
 
     @classmethod
-    def reasoning_extra_body(cls):
+    def reasoning_extra_body(cls, provider=None):
         """OpenAI 兼容推理提供方关闭推理用的 extra_body；非推理提供方或开关关闭时返回 None。
 
         kimi/minimax 沿用各自历史开关；deepseek/qwen/glm 统一受 LLM_DISABLE_THINKING 控制。
         关闭推理可避免 reasoning 吃光 max_tokens 导致 content 为空、JSON 解析失败。
         """
-        p = cls.LLM_PROVIDER
+        # An explicit provider matters for failover clients.  Reading only the global primary
+        # provider made an ``openai`` fallback inherit MiniMax's non-standard
+        # ``thinking.type=disabled`` payload, which can make an otherwise healthy proxy reject
+        # the request.  Existing callers may omit the argument and retain the old behavior.
+        p = (provider or cls.LLM_PROVIDER or '').strip().lower()
         if p == 'kimi' and not cls.LLM_KIMI_DISABLE_THINKING:
             return None
         if p == 'minimax' and not cls.LLM_MINIMAX_DISABLE_THINKING:
@@ -850,12 +864,12 @@ class Config:
             model = sanitize_env_value(model) if model else model
             base_url = sanitize_env_value(base_url) if base_url else base_url
         except ValueError as e:
-            raise ValueError(f"非法字段（含换行/控制字符）：{e}")
+            raise ValueError(f"非法字段（含换行/控制字符）：{e}") from e
         if is_openai_compat and base_url:
             try:
                 validate_safe_url(base_url, block_private=cls.APP_BLOCK_PRIVATE_URLS)
             except ValueError as e:
-                raise ValueError(f"非法的 base_url：{e}")
+                raise ValueError(f"非法的 base_url：{e}") from e
 
         # 在锁内完成「改类属性 + 改 os.environ + 写 .env」整段读改写（F-8-4）。
         with cls._provider_lock:

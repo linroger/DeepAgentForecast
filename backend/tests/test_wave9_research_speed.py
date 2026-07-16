@@ -72,10 +72,10 @@ def test_advance_gap_set_caps_fresh_list():
     assert new_gaps[0] == "gap 0"
 
 
-def test_adaptive_default_budget_is_three_gap_passes():
-    """默认 RESEARCH_MAX_ADAPTIVE_PASSES 9 - (1 开场 + 5 相位) = 3 轮收口预算。"""
-    assert dr.adaptive_passes_remaining(0, 9) == 3
-    assert dr.adaptive_passes_remaining(2, 9) == 1  # 覆盖轮吃掉预算
+def test_adaptive_default_budget_is_one_gap_pass():
+    """默认总上限 7 - (1 开场 + 5 相位) = 1 轮收口预算。"""
+    assert dr.adaptive_passes_remaining(0, 7) == 1
+    assert dr.adaptive_passes_remaining(2, 7) == 0
 
 
 # ================================================================ 2) Retry-After 封顶（claude_provider）
@@ -341,6 +341,19 @@ def _text_event(text, msg_id="m9"):
     return _Event("messages-tuple", {"type": "ai", "content": text, "id": msg_id})
 
 
+def _budget_denial_event(i):
+    return _Event("messages-tuple", {
+        "type": "tool",
+        "name": "web_search",
+        "tool_call_id": f"budget-{i}",
+        "content": json.dumps({
+            "error": "research_budget_exhausted",
+            "budget": "attempts_global",
+            "results": [],
+        }),
+    })
+
+
 class _FakeClient:
     def __init__(self, segments):
         self._segments = list(segments)
@@ -408,6 +421,23 @@ def test_degenerate_loop_counter_resets_on_valid_call(monkeypatch, tmp_path):
         plog.close()
     assert out == "done"
     assert len(client.sent) == 1  # 从未触发纠偏段
+
+
+def test_budget_denial_breaks_turn_and_salvages(monkeypatch, tmp_path):
+    monkeypatch.setenv("RESEARCH_BUDGET_DENIAL_BREAK_AT", "3")
+    events = [_text_event("usable notes", "mA")]
+    events.extend(_budget_denial_event(i) for i in range(3))
+    events.append(_text_event("must not be reached", "mB"))
+    client = _FakeClient([events])
+    plog = _plog(tmp_path)
+    try:
+        out = dr.run_streamed_turn(
+            client, "prompt", "t-budget", 200, plog, "test:budget")
+    finally:
+        plog.close()
+    assert out == "usable notes"
+    log_text = (tmp_path / "progress.log").read_text(encoding="utf-8")
+    assert "research tool budget exhausted" in log_text
 
 
 def test_degen_thresholds_env_parsing(monkeypatch):

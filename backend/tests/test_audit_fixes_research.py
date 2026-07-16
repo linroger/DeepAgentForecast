@@ -7,8 +7,10 @@ running main() — there is no other pytest coverage for the bridge.
 
 import datetime as dt
 import importlib.util
+import json
+import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -56,6 +58,117 @@ def test_progress_log_reopen_appends_instead_of_overwriting_prior_attempt(mod, t
     assert lines[1].endswith("[stage] recovered attempt")
 
 
+def test_requested_forecast_visuals_reject_generic_diagnostics(mod, monkeypatch):
+    monkeypatch.setenv("RESEARCH_CHARTS_MIN", "3")
+    prompt = (
+        "Provide actual-data visualizations showing cost curves, deployment "
+        "trajectories, regional comparisons, and published forecast revisions."
+    )
+    generic = [
+        {"id": "actor_network"},
+        {"id": "timeline"},
+        {"id": "source_quality"},
+    ]
+    audit = mod._visual_contract_audit(prompt, generic)
+    assert audit["passed"] is False
+    assert audit["rendered_diagnostic_ids"] == ["actor_network", "source_quality"]
+    assert audit["missing_required_ids"] == [
+        "forecast_revisions", "metric_trajectories", "quant_metrics"
+    ]
+
+    actual = [
+        {"id": "metric_trajectories"},
+        {"id": "quant_metrics"},
+        {"id": "forecast_revisions"},
+    ]
+    assert mod._visual_contract_audit(prompt, actual)["passed"] is True
+
+
+def test_evidence_only_mode_never_starts_optional_actor_track(mod, monkeypatch):
+    """Track B must not be able to hold an evidence-only lane open.
+
+    Evidence lanes are durable inputs to the later global synthesis process.  The
+    optional actor dossier is not part of that contract, so a provider outage in
+    Track B must never delay publication of Track A's completed evidence pack.
+    """
+    monkeypatch.setenv("DEERFLOW_DUAL_TRACK", "true")
+    assert mod._should_run_actor_track(evidence_only=True) is False
+    assert mod._should_run_actor_track(evidence_only=False) is True
+
+    monkeypatch.setenv("DEERFLOW_DUAL_TRACK", "false")
+    assert mod._should_run_actor_track(evidence_only=False) is False
+
+
+def test_evidence_only_main_publishes_track_a_without_calling_track_b(
+        mod, tmp_path, monkeypatch):
+    """Exercise the CLI wiring without a real provider call or hanging thread."""
+    monkeypatch.setenv("MINIMAX_API_KEY", "test-key-not-used")
+    monkeypatch.setenv("DEERFLOW_DUAL_TRACK", "true")
+    monkeypatch.setenv("RESEARCH_EVIDENCE_ONLY", "false")
+    monkeypatch.setattr(
+        mod,
+        "runtime_skill_sync_telemetry",
+        lambda: {
+            "runtime_verified": False,
+            "outcome": "test",
+            "skills": {},
+        },
+    )
+
+    fake_deerflow = ModuleType("deerflow")
+    fake_client_module = ModuleType("deerflow.client")
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+    fake_client_module.DeerFlowClient = FakeClient
+    monkeypatch.setitem(sys.modules, "deerflow", fake_deerflow)
+    monkeypatch.setitem(sys.modules, "deerflow.client", fake_client_module)
+
+    calls = {"track_a": 0, "track_b": 0}
+
+    def fake_track_a(*_args, **_kwargs):
+        calls["track_a"] += 1
+        return mod.render_evidence_pack(["Verified evidence. " * 60])
+
+    def forbidden_track_b(*_args, **_kwargs):
+        calls["track_b"] += 1
+        raise AssertionError("evidence-only invoked optional Track B")
+
+    monkeypatch.setattr(mod, "run_research_stage", fake_track_a)
+    monkeypatch.setattr(mod, "run_actor_ontology_stage", forbidden_track_b)
+    monkeypatch.setattr(
+        mod,
+        "export_fetched_sources_for_manifest",
+        lambda: [{
+            "url": "https://example.com/source",
+            "title": "Verified source",
+            "tier": "S1",
+            "ok": True,
+        }],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "deerflow_research.py",
+            "--prompt", "Forecast question",
+            "--out-dir", str(tmp_path),
+            "--model", "minimax",
+            "--depth", "deep",
+            "--evidence-only",
+        ],
+    )
+
+    assert mod.main() == 0
+    assert calls == {"track_a": 1, "track_b": 0}
+    assert (tmp_path / mod.EVIDENCE_PACK_FILENAME).stat().st_size > 400
+    meta = json.loads((tmp_path / mod.META_FILENAME).read_text(encoding="utf-8"))
+    assert meta["status"] == "completed"
+    assert "actor_dossier_chars" not in meta
+
+
 # ---------------------------------------------------------------------------
 # RES-2: per-turn fetch accounting (id pairing, FIFO fallback, locked merge)
 # ---------------------------------------------------------------------------
@@ -71,12 +184,28 @@ class TestFetchAccountingV2:
         by_id = {p["call_id"]: p["ok"] for p in pending}
         assert by_id == {"c1": True, "c2": False}
 
-    def test_fifo_fallback_without_ids(self, mod):
+    def test_missing_id_refuses_ambiguous_parallel_pairing(self, mod):
         pending = []
         mod._pending_record_fetch(pending, "web_fetch", {"url": "http://a.com"})
         mod._pending_record_fetch(pending, "web_fetch", {"url": "http://b.com"})
         mod._pending_mark_result(pending, "web_fetch", LIVE_CONTENT)
-        assert pending[0]["ok"] is True and pending[1]["ok"] is None
+        assert [row["ok"] for row in pending] == [None, None]
+
+    def test_missing_id_pairs_only_single_unresolved_fetch(self, mod):
+        pending = []
+        mod._pending_record_fetch(pending, "web_fetch", {"url": "http://a.com"})
+        mod._pending_mark_result(pending, "web_fetch", LIVE_CONTENT)
+        assert pending[0]["ok"] is True
+
+    def test_unknown_nonempty_id_never_falls_back_to_another_call(self, mod):
+        pending = []
+        mod._pending_record_fetch(
+            pending, "web_fetch", {"url": "http://a.com"}, call_id="known"
+        )
+        mod._pending_mark_result(
+            pending, "web_fetch", LIVE_CONTENT, call_id="unknown"
+        )
+        assert pending[0]["ok"] is None
 
     def test_repeat_fetch_keeps_alignment(self, mod):
         # the wedged run re-fetched the same URL in 4 passes; each repeat must own a slot

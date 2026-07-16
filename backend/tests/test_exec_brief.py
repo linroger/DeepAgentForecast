@@ -135,27 +135,55 @@ def _make_report_dir(reports_tmp, rid="report_test", full_md=_FULL_MD_EN,
 
 
 def _write_passing_audit(rid, markdown, lang=None):
+    markdown_sha = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
+    primary = ReportManager.publication_status(rid) if lang else None
+    source_lang = str((primary or {}).get("language") or "en")
+    source_sha = str((primary or {}).get("markdown_sha256") or "")
     with open(
         ReportManager._get_report_final_audit_path(rid, lang),
         "w",
         encoding="utf-8",
     ) as handle:
-        json.dump({
+        audit = {
             "policy_version": 3,
             "hard_passed": True,
             "hard_issues": [],
-            "markdown_sha256": hashlib.sha256(markdown.encode("utf-8")).hexdigest(),
+            "markdown_sha256": markdown_sha,
             "publish_gate": {"enabled": True, "passed": True},
             "structured_forecast": {"required": False, "valid": True},
             "citation_artifacts": {"required": False, "passed": True},
-        }, handle)
+        }
+        if lang:
+            audit.update({
+                "report_id": rid,
+                "language": lang,
+                "source_language": source_lang,
+                "source_markdown_sha256": source_sha,
+            })
+        json.dump(audit, handle)
     if lang:
         with open(
             ReportManager._get_report_citations_path(rid, lang),
             "w",
             encoding="utf-8",
         ) as handle:
-            json.dump({"language": lang, "markers": []}, handle)
+            json.dump({
+                "report_id": rid,
+                "language": lang,
+                "source_language": source_lang,
+                "source_markdown_sha256": source_sha,
+                "markdown_sha256": markdown_sha,
+                "markers": [],
+            }, handle)
+        ReportManager._persist_translation_metadata(rid, [{
+            "report_id": rid,
+            "lang": lang,
+            "source_lang": source_lang,
+            "source_markdown_sha256": source_sha,
+            "markdown_sha256": markdown_sha,
+            "path": f"full_report.{lang}.md",
+            "available": True,
+        }])
 
 
 # ─────────────────────────── 纯函数 ───────────────────────────

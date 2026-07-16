@@ -400,6 +400,241 @@ def get_dossier(pipeline_id: str):
     })
 
 
+_RESEARCH_TRANSLATION_LANGS = ("en", "zh")
+_research_translation_lock = __import__("threading").Lock()
+_research_translation_inflight: set = set()
+
+
+def _research_report_paths(handoff: str, lang: str):
+    """Return (source_md, variant_md, audit_json, status_json, pdf) paths for a lang."""
+    return (
+        os.path.join(handoff, "research_report.md"),
+        os.path.join(handoff, f"research_report.{lang}.md"),
+        os.path.join(handoff, f"research_report.final_audit.{lang}.json"),
+        os.path.join(handoff, f"research_report.translation.{lang}.json"),
+        os.path.join(handoff, f"research_report.{lang}.pdf"),
+    )
+
+
+def _research_source_sha(src_path: str):
+    import hashlib
+    try:
+        with open(src_path, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+    except OSError:
+        return None
+
+
+def _write_research_status(status_path: str, payload: dict) -> None:
+    import json as _json
+    tmp = status_path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as handle:
+            _json.dump(payload, handle, ensure_ascii=False)
+        os.replace(tmp, status_path)
+    except OSError as exc:
+        logger.warning(f"研究报告翻译状态写入失败（忽略）: {exc}")
+
+
+def _read_research_status(status_path: str):
+    import json as _json
+    try:
+        with open(status_path, encoding="utf-8") as handle:
+            data = _json.load(handle)
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _run_research_translation(pipeline_id: str, lang: str) -> None:
+    """Background worker: structure-preserving translation of research_report.md.
+
+    Reuses the exact forecast translator (guaranteed heading/table/number/citation
+    parity, contamination repair, lint-before-audit) via ReportAgent.  Persists the
+    variant Markdown + audit sidecar only when the isolated audit hard-passes; a
+    failed translation records its issues and publishes nothing (fail-closed).
+    """
+    import json as _json
+    from ..services.report_agent import ReportAgent
+    from ..utils.llm_client import LLMClient
+
+    handoff = PipelineManager.handoff_dir(pipeline_id)
+    src_path, variant_path, audit_path, status_path, _pdf = _research_report_paths(
+        handoff, lang
+    )
+    source_sha = _research_source_sha(src_path)
+    try:
+        with open(src_path, encoding="utf-8") as handle:
+            md = handle.read()
+        worker = ReportAgent.__new__(ReportAgent)
+        worker.llm = LLMClient()
+        worker.output_language = "English"
+        worker._forecast_spine = None
+        result = worker.translate_research_markdown(md, label=f"research::{pipeline_id}")
+        if result.get("tgt") and result["tgt"] != lang:
+            _write_research_status(status_path, {
+                "status": "failed", "available": False, "source_sha256": source_sha,
+                "issues": ["requested language is not this report's translation target"],
+            })
+            return
+        audit = result.get("audit") or {}
+        if not result.get("available"):
+            tmp = audit_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as handle:
+                _json.dump(audit, handle, ensure_ascii=False)
+            os.replace(tmp, audit_path)
+            _write_research_status(status_path, {
+                "status": "failed", "available": False, "source_sha256": source_sha,
+                "issues": list(audit.get("issues") or [])[:12],
+            })
+            return
+        for path, text in (
+            (audit_path, _json.dumps(audit, ensure_ascii=False)),
+            (variant_path, result["translated_md"]),
+        ):
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as handle:
+                handle.write(text)
+            os.replace(tmp, path)
+        _write_research_status(status_path, {
+            "status": "available", "available": True, "source_sha256": source_sha,
+            "target_lang": lang, "source_lang": result.get("src"), "issues": [],
+        })
+    except Exception as exc:  # noqa: BLE001 — worker must never crash the process
+        logger.error(f"研究报告翻译失败: {exc}", exc_info=True)
+        _write_research_status(status_path, {
+            "status": "failed", "available": False, "source_sha256": source_sha,
+            "issues": [f"translation worker error: {type(exc).__name__}"],
+        })
+    finally:
+        with _research_translation_lock:
+            _research_translation_inflight.discard((pipeline_id, lang))
+
+
+@research_bp.route('/<pipeline_id>/dossier/translations/<lang>', methods=['POST'])
+def start_research_translation(pipeline_id: str, lang: str):
+    """Start (or deduplicate) a structure-preserving research-report translation."""
+    import threading
+    lang = (lang or "").strip().lower()
+    if lang not in _RESEARCH_TRANSLATION_LANGS:
+        return jsonify({"success": False, "error": "unsupported language"}), 400
+    handoff = PipelineManager.handoff_dir(pipeline_id)
+    src_path, variant_path, audit_path, status_path, _pdf = _research_report_paths(
+        handoff, lang
+    )
+    if not os.path.isdir(handoff) or not os.path.exists(src_path):
+        return jsonify({"success": False, "error": "研究报告不存在"}), 404
+    source_sha = _research_source_sha(src_path)
+    # Already available for the current source bytes → return without re-running.
+    status = _read_research_status(status_path)
+    if (status and status.get("status") == "available"
+            and status.get("source_sha256") == source_sha
+            and os.path.exists(variant_path)):
+        return jsonify({"success": True, "data": status}), 200
+    with _research_translation_lock:
+        if (pipeline_id, lang) in _research_translation_inflight:
+            return jsonify({"success": True, "data": {
+                "status": "generating", "available": False, "source_sha256": source_sha,
+            }}), 202
+        _research_translation_inflight.add((pipeline_id, lang))
+    _write_research_status(status_path, {
+        "status": "generating", "available": False, "source_sha256": source_sha,
+    })
+    threading.Thread(
+        target=_run_research_translation, args=(pipeline_id, lang), daemon=True,
+    ).start()
+    return jsonify({"success": True, "data": {
+        "status": "generating", "available": False, "source_sha256": source_sha,
+    }}), 202
+
+
+@research_bp.route('/<pipeline_id>/dossier/translations/<lang>', methods=['GET'])
+def get_research_translation(pipeline_id: str, lang: str):
+    """Return the research-report language variant Markdown + audit status."""
+    lang = (lang or "").strip().lower()
+    if lang not in _RESEARCH_TRANSLATION_LANGS:
+        return jsonify({"success": False, "error": "unsupported language"}), 400
+    handoff = PipelineManager.handoff_dir(pipeline_id)
+    src_path, variant_path, audit_path, status_path, _pdf = _research_report_paths(
+        handoff, lang
+    )
+    if not os.path.isdir(handoff):
+        return jsonify({"success": False, "error": "管线不存在"}), 404
+    status = _read_research_status(status_path) or {"status": "unavailable", "available": False}
+    source_sha = _research_source_sha(src_path)
+    report_md = None
+    if (status.get("status") == "available"
+            and status.get("source_sha256") == source_sha
+            and os.path.exists(variant_path)):
+        try:
+            with open(variant_path, encoding="utf-8") as handle:
+                report_md = handle.read()
+        except OSError:
+            report_md = None
+    return jsonify({"success": True, "data": {
+        "status": status.get("status"),
+        "available": bool(report_md),
+        "issues": list(status.get("issues") or []),
+        "source_lang": status.get("source_lang"),
+        "target_lang": lang,
+        "report": report_md,
+    }})
+
+
+@research_bp.route('/<pipeline_id>/dossier/pdf', methods=['GET'])
+def get_research_pdf(pipeline_id: str):
+    """Export the research report as PDF using the SAME shared LaTeX template as the
+    forecast report.  ``?lang=en|zh`` exports the audited language variant (fail-closed:
+    a Mandarin PDF requires a hard-passing translation audit); otherwise the primary."""
+    from flask import send_file
+    from ..services.report_agent import ReportManager
+    lang = (request.args.get("lang") or "").strip().lower() or None
+    if lang and lang not in _RESEARCH_TRANSLATION_LANGS:
+        return jsonify({"success": False, "error": "unsupported language"}), 400
+    handoff = PipelineManager.handoff_dir(pipeline_id)
+    if not os.path.isdir(handoff):
+        return jsonify({"success": False, "error": "管线不存在"}), 404
+    src_path, variant_path, audit_path, status_path, pdf_path = _research_report_paths(
+        handoff, lang or "zh"
+    )
+    if lang:
+        status = _read_research_status(status_path)
+        source_sha = _research_source_sha(src_path)
+        if not (status and status.get("status") == "available"
+                and status.get("source_sha256") == source_sha
+                and os.path.exists(variant_path)):
+            return jsonify({
+                "success": False,
+                "error": "该语种译文尚未通过发布审计（fail-closed）",
+            }), 409
+        md_path = variant_path
+        out_pdf = pdf_path
+        label = f"research::{pipeline_id}::{lang}"
+    else:
+        md_path = src_path
+        out_pdf = os.path.join(handoff, "research_report.pdf")
+        label = f"research::{pipeline_id}"
+    if not os.path.exists(md_path):
+        return jsonify({"success": False, "error": "研究报告不存在"}), 404
+    try:
+        with open(md_path, encoding="utf-8") as handle:
+            md = handle.read()
+    except OSError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 500
+    try:
+        result = ReportManager.export_document_pdf(md, handoff, out_pdf, label=label)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"研究报告 PDF 导出异常: {exc}", exc_info=True)
+        return jsonify({"success": False, "code": "pdf_internal_error"}), 500
+    if not result or not os.path.exists(out_pdf):
+        return jsonify({"success": False, "error": "PDF 生成失败"}), 500
+    suffix = f".{lang}" if lang else ""
+    return send_file(
+        out_pdf, mimetype="application/pdf", as_attachment=True,
+        download_name=f"research_report{suffix}.pdf",
+    )
+
+
 @research_bp.route('/<pipeline_id>/dossier', methods=['PUT'])
 def edit_dossier(pipeline_id: str):
     """T5.4: 编辑研究档案（research_report.md / actors.json），人类介入后再继续。

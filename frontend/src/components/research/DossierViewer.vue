@@ -21,6 +21,45 @@
     <section v-show="activeTab === 'report'" class="panel" role="tabpanel">
       <div class="panel-head">
         <span class="diamond">◇</span>{{ L('研究报告', 'Research Report') }}
+        <!-- BILINGUAL：原文/译文切换 + PDF 下载（与预测报告一致，degrade-safe） -->
+        <span v-if="hasReport && !editing && pipelineId" class="report-lang-actions">
+          <span class="lang-toggle" role="group" :aria-label="L('语言', 'Language')">
+            <button
+              type="button"
+              class="lang-btn"
+              :class="{ active: activeReportLang === null }"
+              :aria-pressed="activeReportLang === null"
+              :disabled="reportLangLoading"
+              @click="switchReportLang(null)"
+            >{{ L('原文', 'Source') }}</button>
+            <button
+              type="button"
+              class="lang-btn"
+              :class="{ active: activeReportLang === targetLang }"
+              :aria-pressed="activeReportLang === targetLang"
+              :disabled="reportLangLoading"
+              @click="switchReportLang(targetLang)"
+            >{{ targetLang === 'zh' ? '中文' : 'EN' }}</button>
+          </span>
+          <button
+            v-if="showGenerateTranslation"
+            type="button"
+            class="edit-btn"
+            :disabled="translationBusy"
+            :title="translationIssues.join('; ')"
+            @click="generateResearchTranslation"
+          >{{ translationButtonLabel }}</button>
+          <span v-if="translationFeedback" class="report-lang-feedback" aria-live="polite">{{ translationFeedback }}</span>
+          <a
+            class="edit-btn"
+            :href="researchPdfHref"
+            target="_blank"
+            rel="noopener"
+            :class="{ disabled: pdfDisabled }"
+            :aria-disabled="pdfDisabled"
+            @click="onPdfClick"
+          >{{ L('下载 PDF', 'Download PDF') }}</a>
+        </span>
         <!-- T5.4: 编辑入口（仅可编辑时显示） -->
         <span v-if="editable && hasReport" class="edit-actions">
           <button v-if="!editing" type="button" class="edit-btn" @click="startEdit">✎ {{ L('编辑', 'Edit') }}</button>
@@ -209,10 +248,14 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { renderMarkdown } from '../../utils/markdown'
 import { L } from '../../i18n'
-import { editDossier, researchChartUrl } from '../../api/research'
+import {
+  editDossier, researchChartUrl,
+  requestResearchTranslation, getResearchTranslation, researchPdfUrl,
+} from '../../api/research'
+import { detectTranslationTarget } from '../../utils/researchTranslation'
 
 const props = defineProps({
   dossier: {
@@ -227,6 +270,29 @@ const props = defineProps({
 const emit = defineEmits(['saved-continue'])
 
 const activeTab = ref('report')
+
+// ---- BILINGUAL: research-report language toggle + PDF ---------------------
+// activeReportLang: null = source markdown; otherwise the translated target code.
+const activeReportLang = ref(null)
+const researchLangCache = ref({})   // { lang: translated markdown }
+const reportLangLoading = ref(false)
+const translationBusy = ref(false)
+const translationStatus = ref('')   // '' | generating | available | failed | unavailable
+const translationIssues = ref([])
+let researchLangVersion = 0
+let translationPollTimer = null
+
+function stopTranslationPolling() {
+  if (translationPollTimer) {
+    clearTimeout(translationPollTimer)
+    translationPollTimer = null
+  }
+}
+
+// Source-language sniff → the translation target is the OTHER language.
+const targetLang = computed(() =>
+  detectTranslationTarget((props.dossier && props.dossier.report) || '')
+)
 
 // ---- T5.4: edit-and-continue ----
 const editing = ref(false)
@@ -379,12 +445,21 @@ const hasReport = computed(() => {
   return !!(d && d.has_report && d.report && String(d.report).trim() !== '')
 })
 
+// Active markdown: the cached translation when a target language is selected and
+// available, otherwise the source report.  Selecting a not-yet-loaded language shows
+// the source until its verified bytes arrive (never another pipeline's translation).
+const reportMarkdown = computed(() => {
+  const lang = activeReportLang.value
+  if (lang && researchLangCache.value[lang]) return researchLangCache.value[lang]
+  return (props.dossier && props.dossier.report) || ''
+})
+
 const renderedReport = computed(() => {
   if (!hasReport.value) return ''
   try {
     // GATE-W9：研究卷宗的 Visual Annex 内嵌相对 charts/*.png（W9 确定性渲染步产出），
     // 经产物深链端点（chart_<文件名>，原始字节直出）解析；无 pipelineId 时优雅降级。
-    return renderMarkdown(props.dossier.report, {
+    return renderMarkdown(reportMarkdown.value, {
       resolveUrl: (rel) => researchChartUrl(props.pipelineId, rel),
       citations: citationTitles.value
     })
@@ -392,6 +467,124 @@ const renderedReport = computed(() => {
     return ''
   }
 })
+
+const showGenerateTranslation = computed(() => {
+  // Offer generate/retry only when the target variant is not currently available.
+  if (activeReportLang.value !== targetLang.value) return false
+  return translationStatus.value !== 'available'
+    && !researchLangCache.value[targetLang.value]
+})
+
+const translationButtonLabel = computed(() => {
+  if (translationBusy.value || translationStatus.value === 'generating') {
+    return L('翻译中…', 'Translating…')
+  }
+  if (translationStatus.value === 'failed') return L('重试翻译', 'Retry translation')
+  return targetLang.value === 'zh' ? L('生成中文', 'Generate 中文') : L('Generate EN', 'Generate EN')
+})
+
+const translationFeedback = computed(() => {
+  if (activeReportLang.value !== targetLang.value) return ''
+  if (translationStatus.value === 'generating' || translationBusy.value) {
+    return L('正在生成译文，请稍候…', 'Generating translation…')
+  }
+  if (translationStatus.value === 'failed') {
+    return L('译文未通过发布审计', 'Translation did not pass the publication audit')
+  }
+  return ''
+})
+
+const pdfDisabled = computed(() => {
+  // A language PDF is fail-closed on the audit: only offer it once the variant is ready.
+  if (activeReportLang.value && !researchLangCache.value[activeReportLang.value]) return true
+  return false
+})
+
+const researchPdfHref = computed(() => {
+  if (pdfDisabled.value) return 'javascript:void(0)'
+  return researchPdfUrl(props.pipelineId, activeReportLang.value || undefined)
+})
+
+function onPdfClick(event) {
+  if (pdfDisabled.value) event.preventDefault()
+}
+
+async function loadResearchTranslation(lang, { trigger = false } = {}) {
+  if (!props.pipelineId || !lang) return
+  const version = researchLangVersion
+  reportLangLoading.value = true
+  try {
+    const res = await getResearchTranslation(props.pipelineId, lang)
+    if (version !== researchLangVersion) return   // report changed mid-flight
+    const data = (res && res.data && res.data.data) || {}
+    translationStatus.value = data.status || 'unavailable'
+    translationIssues.value = Array.isArray(data.issues) ? data.issues : []
+    if (data.available && typeof data.report === 'string' && data.report.trim()) {
+      researchLangCache.value = { ...researchLangCache.value, [lang]: data.report }
+      stopTranslationPolling()
+    } else if (trigger && translationStatus.value !== 'generating') {
+      await generateResearchTranslation()
+    } else if (translationStatus.value === 'generating') {
+      scheduleTranslationPoll(lang)
+    }
+  } catch (e) {
+    if (version === researchLangVersion) translationStatus.value = 'unavailable'
+  } finally {
+    if (version === researchLangVersion) reportLangLoading.value = false
+  }
+}
+
+function scheduleTranslationPoll(lang) {
+  stopTranslationPolling()
+  const version = researchLangVersion
+  translationPollTimer = setTimeout(() => {
+    if (version === researchLangVersion) loadResearchTranslation(lang)
+  }, 4000)
+}
+
+async function generateResearchTranslation() {
+  if (!props.pipelineId || translationBusy.value) return
+  const lang = targetLang.value
+  translationBusy.value = true
+  try {
+    const res = await requestResearchTranslation(props.pipelineId, lang)
+    const data = (res && res.data && res.data.data) || {}
+    translationStatus.value = data.status || 'generating'
+    if (data.available) {
+      await loadResearchTranslation(lang)
+    } else {
+      scheduleTranslationPoll(lang)
+    }
+  } catch (e) {
+    translationStatus.value = 'failed'
+  } finally {
+    translationBusy.value = false
+  }
+}
+
+function switchReportLang(lang) {
+  activeReportLang.value = lang
+  if (lang && !researchLangCache.value[lang]) {
+    loadResearchTranslation(lang, { trigger: false })
+  }
+}
+
+// Report-identity guard: clearing the cache and resetting language whenever the
+// pipeline changes prevents a second dossier from ever showing the previous
+// pipeline's translated bytes (the same stale-variant bug fixed on the forecast view).
+watch(
+  () => [props.pipelineId, (props.dossier && props.dossier.report) || ''],
+  () => {
+    researchLangVersion += 1
+    stopTranslationPolling()
+    activeReportLang.value = null
+    researchLangCache.value = {}
+    reportLangLoading.value = false
+    translationBusy.value = false
+    translationStatus.value = ''
+    translationIssues.value = []
+  },
+)
 
 // ---- Tabs ----------------------------------------------------------------
 
@@ -891,6 +1084,64 @@ function formatUsd(value) {
   color: #666;
   margin: 0 0 10px;
   line-height: 1.6;
+}
+
+/* BILINGUAL: research-report language toggle + PDF controls */
+.report-lang-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.report-lang-actions .lang-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.report-lang-actions .lang-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: #fff;
+  color: #000;
+  cursor: pointer;
+}
+
+.report-lang-actions .lang-btn:last-child {
+  border-right: none;
+}
+
+.report-lang-actions .lang-btn.active {
+  background: #000;
+  color: #fff;
+}
+
+.report-lang-actions .lang-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.report-lang-actions .edit-btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.report-lang-actions .edit-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.report-lang-feedback {
+  font-size: 11px;
+  color: #666;
 }
 
 .edit-textarea {

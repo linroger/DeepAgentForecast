@@ -48,6 +48,7 @@ import re
 import sys
 import tempfile
 import threading
+import time
 import traceback
 import uuid
 from contextlib import nullcontext
@@ -155,6 +156,44 @@ def skill_activation_estimate(skill_name: str = "deep-research") -> dict[str, An
         "estimated_tokens_per_activation": None,
         "lazy_references_excluded": True,
     }
+
+
+def runtime_skill_sync_telemetry() -> dict[str, Any]:
+    """Verify parent-provided skill provenance against the live runtime tree.
+
+    Orchestrated runs require the payload and fail before constructing a research
+    client if any source/deployed hash, resource inventory, or persisted manifest
+    differs.  Direct standalone bridge invocations remain supported, but are
+    explicitly recorded as unverified instead of fabricating deployment proof.
+    """
+
+    required = os.environ.get("DRF_RUNTIME_SKILL_SYNC_REQUIRED", "").strip().lower()
+    required = required in {"1", "true", "yes", "on"}
+    raw = os.environ.get("DRF_RUNTIME_SKILL_SYNC", "").strip()
+    deployed_path = Path(__file__).resolve().parent / "skills" / "public"
+    if not raw:
+        if required:
+            raise RuntimeError("required runtime skill sync telemetry is missing")
+        return {
+            "schema_version": 1,
+            "outcome": "standalone-unverified",
+            "runtime_verified": False,
+            "deployed_path": str(deployed_path),
+            "reason": "standalone bridge invocation has no orchestrator sync payload",
+        }
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("runtime skill sync telemetry is not valid JSON") from exc
+    try:
+        import runtime_skill_sync as _runtime_skill_sync
+
+        return _runtime_skill_sync.verify_runtime_sync_payload(
+            payload,
+            deployed_path,
+        )
+    except Exception as exc:  # noqa: BLE001 — fail-closed child boundary
+        raise RuntimeError(f"runtime skill bundle verification failed: {exc}") from exc
 
 
 _FINAL_DOSSIER_CONTRACT_MAX_CHARS = 12000
@@ -760,6 +799,7 @@ def _tag_parallel_evidence(text: str) -> str:
 # 逐字节不改今日行为）。build_research_prompt 读取本值；INT-1 复用初始快照喂给结构化抽取。
 _MARKET_PRICING_BLOCK: str = ""
 _INITIAL_PM_MARKETS: list[dict] = []
+_PM_TRANSPORT_UNAVAILABLE: bool = False
 
 # AGENTIC-SEARCH: 当 --subagents 开启（client 侧 subagent_enabled=True，解锁 harness 内建
 # `task` 工具，lead agent 可委派 scoped-researcher 子代理）时置 True。研究阶段的各提示词
@@ -794,6 +834,11 @@ def _set_market_pricing_block(text: str) -> None:
 def _set_initial_pm_markets(markets: list[dict]) -> None:
     global _INITIAL_PM_MARKETS
     _INITIAL_PM_MARKETS = list(markets or [])
+
+
+def _set_pm_transport_unavailable(unavailable: bool) -> None:
+    global _PM_TRANSPORT_UNAVAILABLE
+    _PM_TRANSPORT_UNAVAILABLE = bool(unavailable)
 
 
 def _flag_research_degradation(reason: str) -> None:
@@ -835,6 +880,7 @@ def _reset_fetched_sources() -> None:
     _RESEARCH_FLAGS.clear()
     _set_market_pricing_block("")   # PM-4: 每 run 重置注入的市场定价块
     _set_initial_pm_markets([])
+    _set_pm_transport_unavailable(False)
     _set_pinned_citation_index([])  # WAVE9-RQ2: 每 run 重置钉住的引注索引
     _set_agentic_delegation(False)  # AGENTIC-SEARCH: 每 run 复位；main() 依 --subagents 重设
     with _FANOUT_NOTES_LOCK:
@@ -1073,7 +1119,13 @@ def _pending_record_fetch(pending: list, tool_name: Any, args: Any, call_id: Any
 
 
 def _pending_mark_result(pending: list, tool_name: Any, content: Any, call_id: Any = None) -> None:
-    """Resolve a pending row: exact tool_call_id pairing first, FIFO fallback (never raises)."""
+    """Resolve one pending fetch without guessing across concurrent calls.
+
+    Exact tool-call identity is authoritative. A result without an identity may
+    be paired only when exactly one unresolved fetch exists; FIFO pairing across
+    two or more parallel calls previously attached bodies to the wrong URLs and
+    corrupted citation provenance.
+    """
     try:
         if str(tool_name or "").lower() not in _FETCH_TOOLS:
             return
@@ -1083,11 +1135,10 @@ def _pending_mark_result(pending: list, tool_name: Any, content: Any, call_id: A
                 if s.get("ok") is None and s.get("call_id") == call_id:
                     entry = s
                     break
-        if entry is None:
-            for s in pending:  # FIFO 兜底：流事件缺 tool_call_id 时按发出顺序配对
-                if s.get("ok") is None:
-                    entry = s
-                    break
+        if entry is None and not call_id:
+            unresolved = [s for s in pending if s.get("ok") is None]
+            if len(unresolved) == 1:
+                entry = unresolved[0]
         if entry is None:
             return
         entry["ok"] = not _is_dead_fetch(content)
@@ -1143,6 +1194,95 @@ def _merge_pending_fetches(pending: list) -> None:
                         existing["excerpt"] = str(s["excerpt"])
     except Exception:  # noqa: BLE001
         pass
+
+
+def _merge_shared_fetched_sources() -> int:
+    """Import successful fetches performed by isolated subagent processes.
+
+    Harness subagents do not stream their nested tool events through the outer
+    lead process, so `_FETCHED_SOURCES` alone loses valid URL provenance. The
+    shared run ledger is written by `cached_fetch` at the actual success point;
+    merging it here makes lane source exports complete without replaying tool
+    history or asking the model to reconstruct URLs from prose.
+    """
+    if _research_budget is None or not hasattr(
+        _research_budget, "list_fetched_sources"
+    ):
+        return 0
+    try:
+        shared = _research_budget.list_fetched_sources()
+    except Exception:  # noqa: BLE001
+        return 0
+    admitted: list[dict[str, Any]] = []
+    for item in shared or []:
+        if not isinstance(item, dict):
+            continue
+        url = _norm_url(item.get("url"))
+        if not _is_valid_http_url(url) or _source_domain_denied(url):
+            continue
+        row: dict[str, Any] = {"url": url, "ok": True}
+        for key in (
+            "title",
+            "excerpt",
+            "content_sha256",
+            "content_chars",
+            "provider",
+            "receipt_id",
+            "cache_hits",
+            "lane",
+            "observations",
+        ):
+            if item.get(key) not in (None, ""):
+                row[key] = item[key]
+        admitted.append(row)
+    if not admitted:
+        return 0
+
+    added = 0
+    with _FETCHED_LOCK:
+        prior_urls = {
+            _norm_url(row.get("url"))
+            for row in _FETCHED_SOURCES
+            if _norm_url(row.get("url"))
+        }
+        if _env_flag("RESEARCH_SHARED_FETCH_PROVENANCE_AUTHORITATIVE", True):
+            # Every standard web_fetch success writes this receipt at the
+            # wrapper boundary. Prefer those exact arguments over best-effort
+            # streamed fragments, which may be truncated or paired out of
+            # order by an upstream event serializer.
+            deduped: dict[str, dict[str, Any]] = {}
+            for row in admitted:
+                deduped.setdefault(str(row["url"]), row)
+            _FETCHED_SOURCES[:] = list(deduped.values())
+            return len(set(deduped) - prior_urls)
+
+        by_url = {
+            _norm_url(row.get("url")): row
+            for row in _FETCHED_SOURCES
+            if _norm_url(row.get("url"))
+        }
+        for item in admitted:
+            url = str(item["url"])
+            existing = by_url.get(url)
+            if existing is None:
+                existing = {"url": url, "ok": True}
+                _FETCHED_SOURCES.append(existing)
+                by_url[url] = existing
+                added += 1
+            else:
+                existing["ok"] = True
+            for key in (
+                "title",
+                "excerpt",
+                "content_sha256",
+                "content_chars",
+                "provider",
+                "receipt_id",
+                "cache_hits",
+            ):
+                if item.get(key) not in (None, "") and not existing.get(key):
+                    existing[key] = item[key]
+    return added
 
 
 # QUALITY-OPT D7: baseline credibility tier from the domain when the model didn't tier a
@@ -1210,6 +1350,7 @@ def distinct_fetched_count() -> int:
     未决 pending 也计入，覆盖门被虚高）。收紧后覆盖门在途中可能触发更多 top-up pass，
     这是有意的成本变化；RESEARCH_FETCH_ACCOUNTING_V2=false 回退旧计数。
     """
+    _merge_shared_fetched_sources()
     if _fetch_accounting_v2():
         with _FETCHED_LOCK:
             return len({_norm_url(s.get("url")) for s in _FETCHED_SOURCES
@@ -1228,6 +1369,7 @@ def merge_fetched_into_sources(extracted: Any) -> "tuple[list[dict], int]":
     - Model sources with NO real url are DROPPED as ungrounded (this is what removed the
       URL-less / fabricated entries); the dropped count is returned for logging.
     """
+    _merge_shared_fetched_sources()
     ex = [s for s in (extracted or []) if isinstance(s, dict)]
     by_url: dict[str, dict] = {}
     dropped = 0
@@ -1314,6 +1456,23 @@ def _env_flag(name: str, default: bool) -> bool:
     if raw is None or not str(raw).strip():
         return default
     return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _should_run_actor_track(*, evidence_only: bool) -> bool:
+    """Return whether this process may start the optional actor-dossier lane.
+
+    ``--evidence-only`` is a producer contract: it publishes Track A evidence
+    for a later global synthesis process and deliberately skips dossier
+    synthesis, judging, extraction, markets, and charts. Starting Track B in
+    that mode violates the contract and, more importantly, lets an optional
+    provider call hold an already-complete evidence pack in memory forever.
+    Keep this bridge-side check even when an older orchestrator accidentally
+    forwards ``DEERFLOW_DUAL_TRACK=true``.
+    """
+    return (
+        not evidence_only
+        and _env_flag("DEERFLOW_DUAL_TRACK", True)
+    )
 
 
 def _actor_cast_max() -> int:
@@ -1707,8 +1866,11 @@ def _citation_index_cap() -> int:
 
 
 def _research_charts_min() -> int:
-    """WAVE9-RQ4: 卷宗最少图表数（actor 网络 / 时间线 / 定量 Top 指标）。0 = 关闭强制图表
-    （write-step 提示词回退旧 OPTIONAL 措辞，确定性渲染步跳过）。非法值回退 3。"""
+    """Minimum decision-relevant domain charts when the brief requests visuals.
+
+    Actor networks and source-quality diagnostics never satisfy this count.
+    Zero explicitly disables deterministic rendering/publication gating.
+    """
     try:
         v = int(os.environ.get("RESEARCH_CHARTS_MIN", "3") or "3")
     except ValueError:
@@ -1841,7 +2003,7 @@ def render_references_section(entries: "list[dict]", cited: "set[int] | list[int
     by_n = {e.get("n"): e for e in entries or [] if isinstance(e, dict)}
     rows = [
         f"- [S{n}] {by_n[n].get('title') or 'source'} — {by_n[n].get('url') or ''}".rstrip(" —")
-        for n in sorted(set(int(c) for c in cited))
+        for n in sorted({int(c) for c in cited})
         if n in by_n
     ]
     if not rows:
@@ -1897,6 +2059,31 @@ def build_research_prompt(
     if target_language:
         deliverable = "evidence notes" if evidence_only else "final report"
         lang_line = f"\n\nWrite the {deliverable} in {target_language}."
+    if evidence_only:
+        evidence_guidance = str(preset["guidance"]).replace(
+            "write the report", "finish the evidence notes")
+        return (
+            "/deep-research\n"
+            "You are an evidence-lane research analyst. Gather and verify the "
+            "source material that a separate global synthesis process will turn "
+            "into the final dossier. Use the deep-research methodology: search "
+            "the web from multiple angles, fetch and read important primary "
+            "sources in full, and test opposing explanations.\n\n"
+            f"RESEARCH BRIEF:\n{question}\n\n"
+            f"{_market_pricing_prompt_block()}"
+            f"{evidence_guidance}\n\n"
+            "Return dense, structured WORKING EVIDENCE NOTES, not an executive "
+            "summary and not a client-facing report. Preserve concrete figures "
+            "with units and as-of dates, named actors and incentives, dated "
+            "events, contradictions, forecast implications, source titles, and "
+            "the exact URLs you actually fetched. Do not spend tokens polishing "
+            "transitions, an introduction, a conclusion, or a References section; "
+            "the global writer owns outline, prose, citation numbering, and final "
+            "judgment. End with an explicit `## Gaps to carry into the next pass` "
+            "section containing the complete set of still-open KIQs, or leave the "
+            "section empty when all KIQs are resolved."
+            f"{lang_line}"
+        )
     if depth == "deep":
         return (
             "/deep-research\n"
@@ -1926,31 +2113,6 @@ def build_research_prompt(
             "IMPORTANT: Do NOT write the final dossier yet. Do NOT stop after a short "
             "summary. The downstream forecast needs dense, sourced facts, named actors, "
             "timelines, incentives, and disputed claims gathered across multiple passes."
-            f"{lang_line}"
-        )
-    if evidence_only:
-        evidence_guidance = str(preset["guidance"]).replace(
-            "write the report", "finish the evidence notes")
-        return (
-            "/deep-research\n"
-            "You are an evidence-lane research analyst. Gather and verify the "
-            "source material that a separate global synthesis process will turn "
-            "into the final dossier. Use the deep-research methodology: search "
-            "the web from multiple angles, fetch and read important primary "
-            "sources in full, and test opposing explanations.\n\n"
-            f"RESEARCH BRIEF:\n{question}\n\n"
-            f"{_market_pricing_prompt_block()}"
-            f"{evidence_guidance}\n\n"
-            "Return dense, structured WORKING EVIDENCE NOTES, not an executive "
-            "summary and not a client-facing report. Preserve concrete figures "
-            "with units and as-of dates, named actors and incentives, dated "
-            "events, contradictions, forecast implications, source titles, and "
-            "the exact URLs you actually fetched. Do not spend tokens polishing "
-            "transitions, an introduction, a conclusion, or a References section; "
-            "the global writer owns outline, prose, citation numbering, and final "
-            "judgment. End with an explicit `## Gaps to carry into the next pass` "
-            "section containing the complete set of still-open KIQs, or leave the "
-            "section empty when all KIQs are resolved."
             f"{lang_line}"
         )
     # WAVE9-RQ2: standard 主路径由 agent 在同一条消息里自编号——[S<n>] 记号必须与其
@@ -2040,6 +2202,13 @@ def build_deep_phase_prompt(question: str, phase: dict[str, Any], index: int, to
             "the calculations and Plotly/static rendering. Do not invoke a shell or an "
             "unavailable analysis/chart skill.\n\n"
         )
+    delegation = _agentic_delegation_block()
+    if (_env_flag("RESEARCH_EVIDENCE_ONLY", False)
+            and not _env_flag("RESEARCH_EVIDENCE_LANE_DELEGATION", False)):
+        # Three outer evidence lanes already provide the breadth plane.  Asking
+        # every pass in every lane to fan out again created nested delegation,
+        # overlapping searches, and multi-million-token transcript replay.
+        delegation = ""
     return (
         "/deep-research\n"
         f"DEEP RESEARCH PASS {index}/{total}: {phase['label']}\n\n"
@@ -2047,7 +2216,7 @@ def build_deep_phase_prompt(question: str, phase: dict[str, Any], index: int, to
         f"{gap_block}"
         f"PASS OBJECTIVE:\n{phase['focus']}\n\n"
         f"{quantitative_line}"
-        f"{_agentic_delegation_block()}"
+        f"{delegation}"
         "Use web search and full-text fetching as needed. Prefer primary sources and "
         "high-authority sources. Capture concrete numbers, dates, organizations, named "
         "people, URLs/titles, direct source attribution, and unresolved uncertainty. "
@@ -2321,15 +2490,309 @@ def _synthesis_workers() -> int:
 
 
 def _synthesis_min_words(depth: str) -> int:
-    """SCALE-1: 长度门的最少散文词数。env 显式设置对所有深度生效（0=关闭）；未设置 →
-    deep 10000 / 其余 4500（仅为质量下限；最终交付物没有上限）。"""
+    """SCALE-1: minimum evidence-dense prose floor."""
     raw = (os.environ.get("RESEARCH_SYNTHESIS_MIN_WORDS", "") or "").strip()
     if raw:
         try:
             return max(0, int(raw))
         except ValueError:
             pass
-    return 10000 if depth == "deep" else 4500
+    return 15000 if depth == "deep" else 4500
+
+
+def _synthesis_max_words(depth: str) -> int:
+    """Soft useful-length ceiling used to budget independent section writers.
+
+    The former "no maximum" contract let every parallel writer spend the
+    provider's enormous 512K output allowance.  One 15K-word assignment became
+    a 43K-word dossier that no single judge call could read, wasting more than
+    half a million additional tokens.  This is a planning/output budget, not a
+    destructive truncation rule: an evidence-dense section may still run long,
+    but writers no longer receive an invitation to do so.
+    """
+    raw = (os.environ.get("RESEARCH_SYNTHESIS_MAX_WORDS", "") or "").strip()
+    if raw:
+        try:
+            return max(0, int(raw))
+        except ValueError:
+            pass
+    return 22000 if depth == "deep" else 7000
+
+
+def _synthesis_summary_word_reserve(depth: str) -> int:
+    """Reserve dossier headroom for the 600-900 word executive summary.
+
+    Section allocation previously consumed the full report ceiling and then
+    added an independently budgeted summary.  Reserve only slack above the hard
+    body floor so a user-configured ``min == max`` remains internally coherent.
+    """
+    minimum = max(0, _synthesis_min_words(depth))
+    maximum = max(0, _synthesis_max_words(depth))
+    if maximum <= 0:
+        return 1000 if depth == "deep" else 700
+    desired = 1000 if depth == "deep" else 700
+    return min(desired, max(0, maximum - minimum))
+
+
+def _synthesis_execution_output_token_limit(depth: str) -> int:
+    """One output-token allowance for every multipart model invocation.
+
+    This is an execution/spend envelope, distinct from the final prose-word
+    gate.  Outline, initial sections, truncation retries, expansions and summary
+    all debit this same ledger before a provider call starts.
+    """
+    raw = (os.environ.get(
+        "RESEARCH_SYNTHESIS_EXECUTION_MAX_OUTPUT_TOKENS", "") or "").strip()
+    if raw:
+        try:
+            return max(1000, int(raw))
+        except ValueError:
+            pass
+    maximum_words = _synthesis_max_words(depth)
+    if maximum_words <= 0:
+        maximum_words = max(8000, _synthesis_min_words(depth))
+    return max(8000, int(round(maximum_words * 1.6)))
+
+
+def rebalance_synthesis_outline(
+        outline: list[dict], depth: str) -> list[dict]:
+    """Scale model-proposed section targets into one bounded dossier budget.
+
+    Relative weights survive, but no writer can independently claim a 3,500
+    word budget when 14-20 writers run in parallel.  The resulting aggregate is
+    guaranteed to sit between the configured floor and ceiling whenever a
+    ceiling is enabled.
+    """
+    if not outline:
+        return []
+    minimum = max(0, _synthesis_min_words(depth))
+    maximum = max(0, _synthesis_max_words(depth))
+    if maximum:
+        maximum = max(0, maximum - _synthesis_summary_word_reserve(depth))
+    if maximum and minimum > maximum:
+        maximum = minimum
+    target_total = max(minimum, int(round(minimum * 1.15)))
+    if target_total <= 0:
+        target_total = sum(max(1, int(row.get("target_words") or 1))
+                           for row in outline)
+    if maximum:
+        target_total = min(target_total, maximum)
+
+    # Allocate an exact integer total.  A former repeated scale/round loop could
+    # drift outside the ceiling (notably a 24-section standard-depth outline,
+    # where a fixed 300-word per-section floor alone exceeded 7,000 words).
+    # Keep a modest floor when feasible, then distribute the remainder by the
+    # model's clipped relative weights using largest remainders.
+    target_total = max(len(outline), target_total)
+    if maximum:
+        maximum = max(maximum, len(outline))
+        target_total = min(target_total, maximum)
+    raw = [max(1, int(row.get("target_words") or 1)) for row in outline]
+    raw_mean = sum(raw) / len(raw)
+    weights = [min(1.25, max(0.75, value / raw_mean)) for value in raw]
+    per_section_floor = max(1, min(300, target_total // len(outline)))
+    allocations = [per_section_floor] * len(outline)
+    remaining = target_total - (per_section_floor * len(outline))
+    if remaining > 0:
+        weight_total = sum(weights)
+        shares = [remaining * weight / weight_total for weight in weights]
+        whole = [int(share) for share in shares]
+        allocations = [
+            current + extra
+            for current, extra in zip(allocations, whole, strict=True)
+        ]
+        residual = target_total - sum(allocations)
+        order = sorted(
+            range(len(shares)),
+            key=lambda idx: (shares[idx] - whole[idx], -idx),
+            reverse=True,
+        )
+        for idx in order[:residual]:
+            allocations[idx] += 1
+
+    balanced: list[dict] = []
+    for row, target_words in zip(outline, allocations, strict=True):
+        updated = dict(row)
+        updated["target_words"] = target_words
+        balanced.append(updated)
+    return balanced
+
+
+def allocate_synthesis_section_output_tokens(
+        outline: list[dict], depth: str) -> list[int]:
+    """Allocate one bounded final-output envelope across all section writers.
+
+    Retry allowances are replacement candidates, not independent invitations to
+    spend the provider maximum. The aggregate final section envelope is derived
+    from the dossier word ceiling and divided by the rebalanced section weights.
+    A final prose-word gate still rejects pathological one-token-per-word output.
+    """
+    if not outline:
+        return []
+    maximum_words = _synthesis_max_words(depth)
+    if maximum_words > 0:
+        maximum_words = max(
+            1, maximum_words - _synthesis_summary_word_reserve(depth))
+    if maximum_words <= 0:
+        maximum_words = max(
+            4000,
+            sum(max(1, int(row.get("target_words") or 1)) for row in outline),
+        )
+    aggregate_tokens = max(len(outline) * 256, int(round(maximum_words * 1.15)))
+    weights = [max(1, int(row.get("target_words") or 1)) for row in outline]
+    weight_total = sum(weights)
+    raw = [aggregate_tokens * weight / weight_total for weight in weights]
+    allocated = [max(256, int(value)) for value in raw]
+    # Minimums can overshoot only for very large outlines; normalize back to the
+    # aggregate using largest allocations first while retaining 256 tokens each.
+    while sum(allocated) > aggregate_tokens:
+        idx = max(range(len(allocated)), key=lambda i: (allocated[i], -i))
+        if allocated[idx] <= 256:
+            break
+        allocated[idx] -= 1
+    remainder = aggregate_tokens - sum(allocated)
+    order = sorted(
+        range(len(raw)),
+        key=lambda i: (-(raw[i] - int(raw[i])), i),
+    )
+    for offset in range(max(0, remainder)):
+        allocated[order[offset % len(order)]] += 1
+    return allocated
+
+
+def _forecast_trajectory_metrics(question: str) -> str:
+    """Return prompt-specific metric examples without inventing new obligations."""
+    brief = str(question or "").casefold()
+    if any(term in brief for term in ("humanoid", "general-purpose robot", "机器人")):
+        return (
+            "annual shipments, installed base, ASP/BOM cost, useful operating "
+            "hours, intervention rate, task success rate, and labor-cost payback"
+        )
+    if any(term in brief for term in (
+            "grid-scale", "energy storage", "battery storage", "储能")):
+        return (
+            "annual/cumulative GW and GWh, duration mix, installed cost/LCOS, "
+            "cycle life, curtailment, lead time, and manufacturing capacity"
+        )
+    if any(term in brief for term in (
+            "data-center", "data center", "ai compute", "accelerator", "hbm")):
+        return (
+            "electricity demand, commissioned power, capex, accelerator shipments, "
+            "advanced-packaging/HBM capacity, utilization, water use, and compute cost"
+        )
+    return "every quantitative trajectory explicitly requested in the research brief"
+
+
+def enforce_synthesis_outline_contract(
+        outline: list[dict], question: str = "") -> list[dict]:
+    """Deterministically assign the forecast deliverables models often omit.
+
+    Outline generation is advisory; publication requirements are not.  This
+    pass preserves the model's sections while enriching (or appending) owners
+    for causal mechanisms, MECE scenarios, milestones, resolution-ready binary
+    forecasts, and renderable actual-data visualizations.  ``rebalance`` still
+    owns the final aggregate word budget after these weights are added.
+    """
+    rows = [dict(row) for row in (outline or []) if isinstance(row, dict)]
+
+    def _text(row: dict) -> str:
+        return " ".join([
+            str(row.get("title") or ""),
+            str(row.get("scope") or ""),
+            " ".join(str(item) for item in (row.get("covers") or [])),
+        ]).casefold()
+
+    def _find(terms: tuple[str, ...]) -> int | None:
+        for index, row in enumerate(rows):
+            if any(term in _text(row) for term in terms):
+                return index
+        return None
+
+    def _assign(
+            terms: tuple[str, ...], title: str, requirement: str,
+            cover: str, target_words: int) -> None:
+        index = _find(terms)
+        if index is None:
+            rows.append({
+                "title": title,
+                "scope": requirement,
+                "target_words": target_words,
+                "covers": [cover],
+            })
+            return
+        row = rows[index]
+        scope = str(row.get("scope") or row.get("title") or "").strip()
+        if requirement.casefold() not in scope.casefold():
+            row["scope"] = f"{scope}. {requirement}" if scope else requirement
+        covers = [str(item).strip() for item in (row.get("covers") or [])
+                  if str(item).strip()]
+        if cover.casefold() not in {item.casefold() for item in covers}:
+            covers.append(cover)
+        row["covers"] = covers[-12:]
+        try:
+            current_target = int(row.get("target_words") or 0)
+        except (TypeError, ValueError):
+            current_target = 0
+        row["target_words"] = max(current_target, target_words)
+
+    metrics = _forecast_trajectory_metrics(question)
+    _assign(
+        ("mechanism", "causal chain", "cause-effect", "transmission chain",
+         "机制", "因果链", "传导链"),
+        "Causal Mechanism Chains and Second-Order Effects",
+        "Write 3–5 numbered A→B→C→outcome chains. Each chain MUST cite its "
+        "inputs, name a measurable threshold, trace at least one second-order "
+        "effect, and state a falsifier; slogans or unlinked driver lists fail.",
+        "3–5 sourced causal chains with thresholds, second-order effects, and falsifiers",
+        1500,
+    )
+    _assign(
+        ("scenario", "scenarios", "情景", "场景"),
+        "Scenarios, Probabilities, and Annual Trajectories",
+        "Provide exactly four mutually exclusive and collectively exhaustive "
+        "scenarios whose probabilities total 100%. For every scenario include "
+        f"annual rows from 2026 through the brief endpoint for {metrics}, clearly "
+        "separating observed baselines, targets, and forecasts. Declare one canonical "
+        "A/B/C/D probability partition; every executive-summary mention, binary-forecast "
+        "reference, and visualization source table MUST repeat those exact names and "
+        "weights rather than inventing an alternate 100% split.",
+        "four MECE scenarios totaling 100% with annual prompt-specific trajectories",
+        1600,
+    )
+    _assign(
+        ("milestone", "inflection", "里程碑", "拐点"),
+        "Milestones, Inflection Points, and Observable Triggers",
+        "Complete every milestone/inflection point requested by the brief. Give "
+        "each a date or window, numeric trigger, dependencies, leading indicator, "
+        "and observable confirmation or failure condition; do not trail off mid-list.",
+        "complete dated milestones with thresholds, dependencies, and observable triggers",
+        1500,
+    )
+    _assign(
+        ("resolution-ready", "binary forecast", "binary prediction",
+         "可结算", "二元预测"),
+        "Resolution-Ready Binary Forecasts",
+        "Give 10–12 complete binary forecasts. Every item MUST contain an "
+        "outside-view base rate, case-specific adjustment, probability, exact "
+        "deadline, named resolution source, and unambiguous pass/fail rule. End "
+        "with a completeness check confirming no item or citation is truncated.",
+        "10–12 complete resolution-ready binary forecasts with base rates and exact rules",
+        1800,
+    )
+    _assign(
+        ("actual-data", "actual data", "visual", "chart", "visualization",
+         "可视化", "图表"),
+        "Sourced Actual-Data Visualizations and Published Forecast Revisions",
+        "Provide renderable source-data tables, not chart ideas or specifications "
+        "alone. Cover the brief's cost, deployment, regional-comparison, technology-"
+        "share/policy, and published-forecast-revision views where applicable. "
+        "Every row MUST include value, unit, period, data_class "
+        "(observation/target/forecast), source, and as-of date; mark unsupported "
+        "cells unavailable rather than inventing them.",
+        "actual or published-forecast data tables with value/unit/period/class/source/as-of",
+        1700,
+    )
+    return rows
 
 
 def build_synthesis_outline_prompt(question: str, target_language: str | None) -> str:
@@ -2351,15 +2814,79 @@ def build_synthesis_outline_prompt(question: str, target_language: str | None) -
         "- 'scope': 2-4 sentences of concrete keywords — the named actors, numbers, "
         "events, and questions THIS section must cover (used to route evidence to the "
         "section writer, so be specific).\n"
-        "- 'target_words': normally 1500-3000 per section; a genuinely dense evidence "
-        "cluster may request up to 3500. There is NO final dossier word/character maximum; "
-        "add sections or depth when the brief and evidence require it, never padding.\n"
+        "- 'target_words': normally 800-1,400 per section; a genuinely dense evidence "
+        "cluster may request up to 1,800. The complete deep dossier should normally total "
+        "15,000-22,000 evidence-dense prose words, never padding or repeating sections.\n"
         "- 'covers': the evidence clusters / key intelligence questions from the "
         "research this section is responsible for.\n"
         f"{lang_line}\n\n"
-        f"{_final_dossier_contract_block()}\n\n"
+        "The eventual dossier must satisfy the full brief, use source-bound "
+        "quantitative evidence, distinguish observations/targets/forecasts, and "
+        "include scenarios, resolution-ready forecasts, risks, regional contrasts, "
+        "and actual-data visualization specifications when the brief asks for them.\n\n"
         "=== GATHERED RESEARCH (plan strictly from this) ===\n"
     )
+
+
+def default_synthesis_outline(
+        question: str, target_language: str | None) -> list[dict]:
+    """Return a deterministic deep-dossier skeleton when outline JSON is malformed.
+
+    MiniMax can occasionally answer an ``ONLY JSON`` outline request with a long
+    prose draft.  Falling back to one monolithic completion then recreates the
+    physical output-limit failure multipart synthesis exists to prevent.  This
+    bounded skeleton keeps section ownership, evidence routing, and the 15k-word
+    contract alive without spending another planning call.
+    """
+    language = str(target_language or "").lower()
+    chinese = any(tag in language for tag in ("chinese", "mandarin", "中文", "汉语", "zh"))
+    rows = (
+        [
+            ("执行摘要与核心判断", "核心论点、基准情景、最重要的可证伪结论和决策含义"),
+            ("范围、口径与历史基线", "研究边界、单位、截至日期、历史实际值、参照类与数据定义"),
+            ("需求驱动与采用机制", "增长驱动、采用障碍、客户价值、替代关系、因果链与二阶效应"),
+            ("技术路线与性能前沿", "竞争技术、性能指标、成熟度、学习曲线、路线切换与技术拐点"),
+            ("成本曲线与单位经济", "价格、BOM或资本成本、运营成本、利用率、回收期及敏感性"),
+            ("供给链、产能与物理瓶颈", "原料、零部件、制造、基础设施、交付周期、扩产约束"),
+            ("企业竞争与价值链重塑", "主要参与者、价值获取、商业模式、进入壁垒、整合与淘汰"),
+            ("政策、监管与责任框架", "国家政策、监管期限、安全、责任、劳工与环境约束"),
+            ("区域分化", "逐地区比较实际基线、政策、成本、供需、采用速度与结构性差异"),
+            ("终端市场与细分用例", "客户和行业细分、购买标准、部署场景、支付意愿与采用顺序"),
+            ("风险、矛盾证据与反共识", "瓶颈、失败模式、最强反证、共识压力测试和触发条件"),
+            ("2026年至终点年的里程碑", "逐年或分阶段拐点、先行指标、依赖关系和可观测里程碑"),
+            ("情景、概率与敏感性", "四个互斥且穷尽的情景、概率总和100%、关键变量与更新规则"),
+            ("可结算预测与数据可视化", "带精确截止日的二元预测；真实或已发布预测数据图、来源与as-of元数据"),
+            ("结论、监测清单与来源", "综合判断、需要持续监测的数据、证据局限、引用与来源索引"),
+        ]
+        if chinese else
+        [
+            ("Executive Thesis and Decision Summary", "load-bearing thesis, base case, falsifiable conclusions, and decision implications"),
+            ("Scope, Definitions, and Historical Baseline", "research boundary, units, as-of dates, observed historical data, reference classes, and measurement definitions"),
+            ("Demand Drivers and Adoption Mechanisms", "growth drivers, adoption barriers, customer value, substitution, causal chains, and second-order effects"),
+            ("Technology Routes and Performance Frontier", "competing technologies, performance metrics, maturity, learning curves, route shifts, and technical inflection points"),
+            ("Cost Curves and Unit Economics", "prices, bill of materials or capital cost, operating cost, utilization, payback, and sensitivity"),
+            ("Supply Chain, Capacity, and Physical Bottlenecks", "materials, components, manufacturing, infrastructure, lead times, and scale constraints"),
+            ("Competitive Landscape and Value-Chain Reshaping", "leading actors, value capture, business models, entry barriers, consolidation, and displacement"),
+            ("Policy, Regulation, Safety, Labor, and Liability", "national policy, regulatory deadlines, safety, liability, labor, and environmental constraints"),
+            ("Regional Divergence", "region-by-region observed baselines, policy, costs, supply-demand balance, adoption pace, and structural differences"),
+            ("End Markets and Use-Case Segmentation", "customer and industry segments, purchase criteria, deployment settings, willingness to pay, and adoption sequence"),
+            ("Risks, Contradictory Evidence, and Non-Consensus Case", "bottlenecks, failure modes, strongest counterevidence, consensus stress test, and triggers"),
+            ("Milestones and Inflection Points", "year-by-year or phased milestones, leading indicators, dependencies, and observable thresholds"),
+            ("Scenarios, Probabilities, and Sensitivities", "four mutually exclusive collectively exhaustive scenarios totaling 100%, key variables, and update rules"),
+            ("Resolution-Ready Forecasts and Actual-Data Visuals", "binary forecasts with exact deadlines; actual or published-forecast charts with source and as-of metadata"),
+            ("Conclusions, Monitoring Dashboard, and Sources", "integrated judgment, monitoring data, evidence limitations, citations, and source index"),
+        ]
+    )
+    brief = " ".join(str(question or "").split())[:1200]
+    return [
+        {
+            "title": title,
+            "scope": f"{scope}. Apply specifically to this brief: {brief}",
+            "target_words": 1150 if index not in {0, 14} else 900,
+            "covers": [scope],
+        }
+        for index, (title, scope) in enumerate(rows)
+    ]
 
 
 def _parse_json_array(text: str) -> list | None:
@@ -2403,7 +2930,7 @@ def parse_synthesis_outline(text: str) -> list[dict]:
     （调用方据此回退单调用路径并打 _RESEARCH_FLAGS）。
 
     容错：``{"sections":[...]}`` / ``{"outline":[...]}`` / 裸顶层数组 / 围栏包裹均可；
-    行内缺 title 的条目丢弃；target_words 钳到 1500-3500（缺失/非法 → 2200）；
+    行内缺 title 的条目丢弃；target_words 钳到 700-1800（缺失/非法 → 1100）；
     有效分节 <3 视为解析失败（一份 1-2 节的"大纲"不构成多段合成的骨架），>24 截断。
     """
     rows: list | None = None
@@ -2429,7 +2956,7 @@ def parse_synthesis_outline(text: str) -> list[dict]:
             tw = int(row.get("target_words") or 0)
         except (TypeError, ValueError):
             tw = 0
-        tw = min(3500, max(1500, tw)) if tw > 0 else 2200
+        tw = min(1800, max(700, tw)) if tw > 0 else 1100
         covers_raw = row.get("covers")
         covers = (
             [str(c).strip() for c in covers_raw if str(c).strip()][:12]
@@ -2652,7 +3179,7 @@ def stitch_synthesis_sections(outline: list[dict], texts: list[str]) -> str:
     空节跳过；分节正文若以重复大纲标题的 markdown 标题开头则去掉那一行（写手常
     自带标题，避免 '## X' 下再来一个 '## X'）。并发完成顺序不影响输出顺序。"""
     parts: list[str] = []
-    for sec, txt in zip(outline, texts):
+    for sec, txt in zip(outline, texts, strict=False):
         body = (txt or "").strip()
         if not body:
             continue
@@ -2676,6 +3203,60 @@ def _section_lead(text: str, max_words: int = 200) -> str:
     """SCALE-1（纯函数）：分节开头 ~200 词（供执笔执行摘要的轻量调用，不喂全文）。"""
     words = (text or "").split()
     return " ".join(words[:max_words])
+
+
+def _synthesis_section_contract(section: dict) -> str:
+    """Render deterministic acceptance clauses for dense forecast owners."""
+    haystack = " ".join([
+        str(section.get("title") or ""),
+        str(section.get("scope") or ""),
+        " ".join(str(item) for item in (section.get("covers") or [])),
+    ]).casefold()
+    clauses: list[str] = []
+
+    def has(*terms: str) -> bool:
+        return any(term in haystack for term in terms)
+
+    if has("mechanism", "causal chain", "cause-effect", "机制", "因果链"):
+        clauses.append(
+            "MECHANISMS: write 3–5 numbered A→B→C→outcome chains; every "
+            "chain needs cited inputs, a measurable threshold, a second-order "
+            "effect, and a falsifier. A driver list is not a mechanism chain."
+        )
+    if has("scenario", "scenarios", "情景", "场景"):
+        clauses.append(
+            "SCENARIOS: exactly four MECE cases with probabilities totaling "
+            "100%; include annual 2026-to-endpoint trajectories for every "
+            "quantitative metric requested by the brief and label each value as "
+            "observation, target, or forecast."
+        )
+    if has("milestone", "inflection", "里程碑", "拐点"):
+        clauses.append(
+            "MILESTONES: finish the complete requested list. Each item needs a "
+            "date/window, numeric trigger, dependency, leading indicator, and "
+            "observable confirmation/failure condition."
+        )
+    if has("resolution-ready", "binary forecast", "binary prediction",
+           "可结算", "二元预测"):
+        clauses.append(
+            "BINARY FORECASTS: provide 10–12 complete items. Each item needs an "
+            "outside-view base rate, case adjustment, probability, exact deadline, "
+            "named resolution source, and unambiguous pass/fail rule. Verify the "
+            "final item and every citation marker are complete."
+        )
+    if has("actual-data", "actual data", "visual", "chart", "visualization",
+           "可视化", "图表"):
+        clauses.append(
+            "ACTUAL-DATA VISUALS: chart descriptions/specifications alone FAIL. "
+            "Supply the renderable raw data tables for the decision-relevant views "
+            "requested by the brief. Every row needs value, unit, period, data_class "
+            "(observation/target/forecast), source, and as-of date. Diagnostic "
+            "influence/salience charts do not count. Mark unavailable evidence; "
+            "never invent a cell."
+        )
+    if not clauses:
+        return ""
+    return "\n\nSECTION-SPECIFIC ACCEPTANCE CONTRACT:\n- " + "\n- ".join(clauses)
 
 
 def build_synthesis_section_prompt(question: str, outline: list[dict], section: dict,
@@ -2707,7 +3288,9 @@ def build_synthesis_section_prompt(question: str, outline: list[dict], section: 
         f"FULL DOSSIER OUTLINE (for coherence — do not write the other sections):\n{outline_lines}\n\n"
         f"YOUR SECTION: {section['title']}\n"
         f"SCOPE: {section['scope']}\n"
-        f"TARGET LENGTH: about {section['target_words']} words of dense analytical prose."
+        f"TARGET LENGTH: about {section['target_words']} words of dense analytical prose. "
+        f"HARD LIMIT: do not exceed {max(400, int(section['target_words'] * 1.15))} words; "
+        "prioritize the strongest evidence instead of repeating or padding."
         f"{covers_line}\n\n"
         "RULES:\n"
         "- Base EVERY claim strictly on the gathered research below; never invent facts, "
@@ -2729,6 +3312,7 @@ def build_synthesis_section_prompt(question: str, outline: list[dict], section: 
         "disagreement explicitly with both sources instead of silently picking a different "
         "number."
         f"{_dossier_style_rules_block()}"
+        f"{_synthesis_section_contract(section)}"
         f"{citation_block}"
         f"{_final_dossier_contract_block()}"
         f"{lang_line}"
@@ -2784,15 +3368,271 @@ def build_synthesis_summary_prompt(question: str, leads: list[tuple[str, str]],
     )
 
 
-def _bare_synth_invoke(synth_model: str, prompt: str) -> str:
+def _model_response_usage(response: Any) -> "tuple[int, int, int] | None":
+    """Normalize common LangChain/OpenAI usage metadata shapes."""
+    candidates = [getattr(response, "usage_metadata", None)]
+    response_meta = getattr(response, "response_metadata", None)
+    if isinstance(response_meta, dict):
+        candidates.extend([
+            response_meta.get("token_usage"),
+            response_meta.get("usage"),
+        ])
+    for usage in candidates:
+        if not isinstance(usage, dict):
+            continue
+        raw_in = usage.get("input_tokens", usage.get("prompt_tokens"))
+        raw_out = usage.get("output_tokens", usage.get("completion_tokens"))
+        raw_total = usage.get("total_tokens")
+        try:
+            tokens_in = int(raw_in or 0)
+            tokens_out = int(raw_out or 0)
+            tokens_total = int(raw_total or (tokens_in + tokens_out))
+        except (TypeError, ValueError):
+            continue
+        if tokens_in or tokens_out or tokens_total:
+            return tokens_in, tokens_out, tokens_total
+    return None
+
+
+def _log_model_response_usage(
+        plog: "ProgressLog | None", label: str, response: Any) -> None:
+    if plog is None:
+        return
+    usage = _model_response_usage(response)
+    if usage is None:
+        plog.write(
+            "usage-missing",
+            f"{label}: provider response omitted token usage",
+        )
+        return
+    tokens_in, tokens_out, tokens_total = usage
+    plog.write(
+        "usage",
+        f"tokens in={tokens_in} out={tokens_out} total={tokens_total} "
+        f"phase={label}",
+    )
+
+
+def _model_finish_reason(response: Any) -> str:
+    """Return a normalized provider finish/stop reason when one is exposed.
+
+    LangChain adapters do not agree on one metadata field.  MiniMax/OpenAI put
+    ``finish_reason`` in ``response_metadata`` while Anthropic-style adapters
+    commonly expose ``stop_reason``.  Keep this pure and defensive so a missing
+    field never turns into a synthesis failure by itself.
+    """
+    candidates = [
+        getattr(response, "response_metadata", None),
+        getattr(response, "generation_info", None),
+        getattr(response, "additional_kwargs", None),
+    ]
+    direct = getattr(response, "finish_reason", None)
+    if direct is not None:
+        return str(direct).strip().casefold()
+    for metadata in candidates:
+        if not isinstance(metadata, dict):
+            continue
+        for key in ("finish_reason", "stop_reason"):
+            raw = metadata.get(key)
+            if raw is not None and str(raw).strip():
+                return str(raw).strip().casefold()
+    return ""
+
+
+def _model_output_was_truncated(
+        response: Any, max_output_tokens: int | None) -> bool:
+    """Detect an output-token cutoff from reason metadata or exact saturation."""
+    reason = _model_finish_reason(response).replace("-", "_").replace(" ", "_")
+    if reason in {"length", "max_tokens", "max_output_tokens", "token_limit"}:
+        return True
+    # Some OpenAI-compatible gateways omit the finish reason.  Hitting the exact
+    # local completion allowance is still a reliable cutoff signal when there
+    # was no explicit non-truncating reason such as ``stop``.
+    if reason or max_output_tokens is None:
+        return False
+    usage = _model_response_usage(response)
+    return bool(usage and usage[1] >= max(1, int(max_output_tokens)))
+
+
+_MODEL_FAILOVER_LOCK = threading.Lock()
+_MODEL_FAILOVER_UNTIL: dict[tuple[str, str], float] = {}
+_MODEL_FAILOVER_MARKERS = (
+    "rate_limit", "rate limit", "429", "2056", "quota", "token plan",
+    "overloaded", "timeout", "timed out", "connection", "502", "503", "504",
+    "unprocessable_entity", "new_sensitive", "content filter",
+)
+
+
+class ModelProvidersUnavailable(RuntimeError):
+    """Primary and configured fallback both failed for a tool-free model call."""
+
+
+class TruncatedModelOutput(RuntimeError):
+    """A bounded synthesis call ended because its completion allowance ran out."""
+
+
+class OversizedSynthesisOutput(RuntimeError):
+    """A stitched multipart report exceeded its configured aggregate word ceiling."""
+
+
+class SynthesisExecutionBudgetExceeded(RuntimeError):
+    """A multipart model call would exceed the run's output-token envelope."""
+
+
+class SynthesisExecutionBudget:
+    """Thread-safe reservation ledger for all multipart output allowances."""
+
+    def __init__(self, limit: int):
+        self.limit = max(1, int(limit))
+        self.spent = 0
+        self._lock = threading.Lock()
+
+    def reserve(self, label: str, tokens: int) -> None:
+        requested = max(1, int(tokens))
+        with self._lock:
+            remaining = self.limit - self.spent
+            if requested > remaining:
+                raise SynthesisExecutionBudgetExceeded(
+                    f"{label} requested {requested} output tokens with only "
+                    f"{remaining} remaining in aggregate execution envelope "
+                    f"{self.limit}"
+                )
+            self.spent += requested
+
+    @property
+    def remaining(self) -> int:
+        with self._lock:
+            return max(0, self.limit - self.spent)
+
+
+def _configured_model_fallback(primary_model: str) -> str:
+    fallback = (os.environ.get("DEERFLOW_FALLBACK_MODEL", "") or "").strip()
+    return fallback if fallback and fallback != primary_model else ""
+
+
+def _model_error_allows_failover(exc: BaseException) -> bool:
+    text = f"{type(exc).__name__}: {exc}".casefold()
+    return any(marker in text for marker in _MODEL_FAILOVER_MARKERS)
+
+
+def _model_failover_cooldown_seconds() -> float:
+    try:
+        return max(1.0, float(os.environ.get(
+            "DEERFLOW_FALLBACK_COOLDOWN_SECONDS", "900") or "900"))
+    except ValueError:
+        return 900.0
+
+
+def _build_tool_free_model(model_name: str, max_output_tokens: int | None):
+    from deerflow.models import create_chat_model
+
+    model = create_chat_model(model_name, thinking_enabled=False)
+    if max_output_tokens is not None:
+        # Model profiles intentionally expose large general-purpose allowances.
+        # Outline/section/judge calls need a local completion budget instead.
+        model = model.bind(max_tokens=max(256, int(max_output_tokens)))
+    return model
+
+
+def _invoke_tool_free_model(
+        model_name: str, messages: list, *, max_output_tokens: int | None,
+        plog: "ProgressLog | None", label: str):
+    """Invoke MiniMax first, then the explicit DeerFlow fallback when warranted.
+
+    The provider SDK performs its own bounded retries.  Once a quota/content/
+    transport error survives those retries, a process-local circuit routes the
+    remaining parallel section calls directly to the fallback for 15 minutes.
+    This avoids paying the same doomed MiniMax retry delay 10-20 times while
+    still probing MiniMax first on every new synthesis process.
+    """
+    fallback = _configured_model_fallback(model_name)
+    key = (model_name, fallback)
+    now = time.monotonic()
+    with _MODEL_FAILOVER_LOCK:
+        primary_circuit_open = bool(
+            fallback and _MODEL_FAILOVER_UNTIL.get(key, 0.0) > now)
+
+    primary_error: BaseException | None = None
+    if not primary_circuit_open:
+        try:
+            return (
+                _invoke_model(
+                    _build_tool_free_model(model_name, max_output_tokens),
+                    messages,
+                ),
+                model_name,
+            )
+        except Exception as exc:  # noqa: BLE001 — typed below before failover
+            primary_error = exc
+            if not fallback or not _model_error_allows_failover(exc):
+                raise
+            with _MODEL_FAILOVER_LOCK:
+                _MODEL_FAILOVER_UNTIL[key] = (
+                    time.monotonic() + _model_failover_cooldown_seconds())
+            if plog is not None:
+                plog.write(
+                    "warn",
+                    f"{label}: primary model {model_name} exhausted bounded retries "
+                    f"({type(exc).__name__}); opening provider circuit and trying "
+                    f"{fallback}",
+                )
+    elif plog is not None:
+        plog.write(
+            "stage",
+            f"{label}: primary model circuit open; routing directly to {fallback}",
+        )
+
+    try:
+        response = _invoke_model(
+            _build_tool_free_model(fallback, max_output_tokens), messages)
+    except Exception as fallback_error:  # noqa: BLE001 — preserve both causes
+        if plog is not None:
+            plog.write(
+                "error",
+                f"{label}: fallback model {fallback} failed "
+                f"({type(fallback_error).__name__}: {fallback_error})",
+            )
+        if primary_error is None:
+            raise
+        raise ModelProvidersUnavailable(
+            f"primary model {model_name} failed ({type(primary_error).__name__}); "
+            f"fallback model {fallback} also failed "
+            f"({type(fallback_error).__name__})"
+        ) from fallback_error
+    if plog is not None:
+        plog.write("ok", f"{label}: fallback model {fallback} served the call")
+    return response, fallback
+
+
+def _bare_synth_invoke(
+        synth_model: str, prompt: str, plog: "ProgressLog | None" = None,
+        label: str = "bare-model", max_output_tokens: int | None = None,
+        fail_on_truncation: bool = False) -> str:
     """SCALE-1: 一次裸模型（无工具、无思考）调用 → strip_think 后的纯文本。
     与 synthesize_from_thread 的单调用路径同一套 create_chat_model 机制；每次调用
     独立建模型实例，供 ThreadPoolExecutor 的并发分节调用安全复用。"""
-    from deerflow.models import create_chat_model
     from langchain_core.messages import HumanMessage
 
-    model = create_chat_model(synth_model, thinking_enabled=False)
-    resp = _invoke_model(model, [HumanMessage(content=prompt)])
+    resp, served_model = _invoke_tool_free_model(
+        synth_model,
+        [HumanMessage(content=prompt)],
+        max_output_tokens=max_output_tokens,
+        plog=plog,
+        label=label,
+    )
+    usage_label = label if served_model == synth_model else f"{label}:{served_model}"
+    _log_model_response_usage(plog, usage_label, resp)
+    if fail_on_truncation and _model_output_was_truncated(
+            resp, max_output_tokens):
+        reason = _model_finish_reason(resp) or "output-token saturation"
+        if plog is not None:
+            plog.write(
+                "warn",
+                f"{label}: model output truncated ({reason}; "
+                f"max_output_tokens={max_output_tokens})",
+            )
+        raise TruncatedModelOutput(
+            f"{label} truncated ({reason}; max_output_tokens={max_output_tokens})")
     return _message_text(getattr(resp, "content", resp))
 
 
@@ -2803,10 +3643,30 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
     调用方回退到今天的单调用路径；所有降级均已写入 _RESEARCH_FLAGS。"""
     import concurrent.futures as _cf
 
+    execution_budget = SynthesisExecutionBudget(
+        _synthesis_execution_output_token_limit(depth))
+
+    def _budgeted_invoke(
+            prompt: str, label: str, max_output_tokens: int,
+            fail_on_truncation: bool = False) -> str:
+        execution_budget.reserve(label, max_output_tokens)
+        return _bare_synth_invoke(
+            synth_model,
+            prompt,
+            plog,
+            label,
+            max_output_tokens,
+            fail_on_truncation,
+        )
+
     # (1) OUTLINE —— only a compact representative slice is needed to plan
     # ownership. Replaying the entire evidence corpus just to name sections is
     # pure input-token waste.
-    plog.write("stage", "synthesize/multipart: requesting adaptive section outline (10-20 typical; no final output cap)")
+    plog.write(
+        "stage",
+        "synthesize/multipart: requesting adaptive section outline "
+        "(10-20 typical; bounded aggregate dossier budget)",
+    )
     try:
         outline_context_cap = max(
             20000,
@@ -2816,20 +3676,36 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
     except ValueError:
         outline_context_cap = 120000
     outline_prompt = build_synthesis_outline_prompt(question, target_language)
-    outline_evidence_cap = max(
-        0, outline_context_cap - len(_final_dossier_contract_block()))
+    outline_evidence_cap = outline_context_cap
     outline_context = build_stratified_outline_context(
         blocks, outline_evidence_cap)
-    outline_raw = _bare_synth_invoke(
-        synth_model,
+    outline_raw = _budgeted_invoke(
         outline_prompt + outline_context,
+        "synthesis-outline",
+        2500,
     )
     outline = parse_synthesis_outline(outline_raw)
     if not outline:
-        plog.write("warn", f"synthesize/multipart: outline JSON unparseable ({len(outline_raw)} chars); falling back to single-call synthesis")
-        _flag_research_degradation("multipart synthesis: outline JSON unparseable; fell back to single-call synthesis")
-        return ""
-    plog.write("stage", f"synthesize/multipart: outline parsed — {len(outline)} sections: " + ", ".join(s["title"][:40] for s in outline))
+        outline = default_synthesis_outline(question, target_language)
+        plog.write(
+            "warn",
+            "synthesize/multipart: outline JSON unparseable "
+            f"({len(outline_raw)} chars); using deterministic "
+            f"{len(outline)}-section skeleton",
+        )
+        _flag_research_degradation(
+            "multipart synthesis: outline JSON unparseable; used deterministic "
+            "section skeleton"
+        )
+    outline = enforce_synthesis_outline_contract(outline, question)
+    outline = rebalance_synthesis_outline(outline, depth)
+    planned_words = sum(int(section["target_words"]) for section in outline)
+    plog.write(
+        "stage",
+        f"synthesize/multipart: outline parsed — {len(outline)} sections / "
+        f"{planned_words} planned prose words: "
+        + ", ".join(s["title"][:40] for s in outline),
+    )
 
     # (2) SECTION CALLS —— 逐节并行裸调用（镜像 run_deep_fanout 的执行器模式）。
     # 每节吃：大纲全貌 + 本节任务书 + 需求原文 + working-notes 摘要 + 关键词分片证据。
@@ -2857,6 +3733,23 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
         len(outline), max(8000, cap - len(notes_digest) - 12000))
     workers = min(_synthesis_workers(), len(outline))
     texts: list[str] = [""] * len(outline)
+    section_output_budgets = allocate_synthesis_section_output_tokens(
+        outline, depth)
+
+    def _invoke_with_truncation_retry(
+            prompt: str, label: str, initial_tokens: int,
+            retry_tokens: int) -> str:
+        """Retry one known output cutoff; a second cutoff remains fatal."""
+        try:
+            return _budgeted_invoke(
+                prompt, label, initial_tokens, True)
+        except TruncatedModelOutput:
+            plog.write(
+                "warn",
+                f"{label}: retrying once with max_output_tokens={retry_tokens}",
+            )
+            return _budgeted_invoke(
+                prompt, f"{label}-truncation-retry", retry_tokens, True)
 
     def _write_section(i: int) -> str:
         sec = outline[i]
@@ -2874,9 +3767,17 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
                 max_entries=32,
                 evidence_text=sec_ctx,
             ))
-        return _bare_synth_invoke(synth_model, build_synthesis_section_prompt(
+        prompt = build_synthesis_section_prompt(
             question, outline, sec, i, len(outline), notes_digest, sec_ctx, target_language,
-            citation_block=section_citations))
+            citation_block=section_citations)
+        retry_tokens = section_output_budgets[i]
+        initial_tokens = max(
+            128,
+            min(retry_tokens - 64, int(retry_tokens * 0.72)),
+        )
+        return _invoke_with_truncation_retry(
+            prompt, f"synthesis-section-{i + 1}",
+            initial_tokens, retry_tokens)
 
     plog.write(
         "stage",
@@ -2886,13 +3787,29 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
     )
     with _cf.ThreadPoolExecutor(max_workers=workers) as ex:
         futs = {ex.submit(_write_section, i): i for i in range(len(outline))}
+        fatal_truncations: list[TruncatedModelOutput] = []
+        fatal_budget_errors: list[SynthesisExecutionBudgetExceeded] = []
         for fut in _cf.as_completed(futs):
             i = futs[fut]
             try:
                 texts[i] = (fut.result() or "").strip()
             except Exception as exc:  # noqa: BLE001 — 单节失败不拖垮整份报告
                 plog.write("warn", f"synthesize/multipart: section '{outline[i]['title']}' failed ({type(exc).__name__}: {exc})")
+                if isinstance(exc, TruncatedModelOutput):
+                    fatal_truncations.append(exc)
+                if isinstance(exc, SynthesisExecutionBudgetExceeded):
+                    fatal_budget_errors.append(exc)
                 texts[i] = ""
+    if fatal_budget_errors:
+        raise SynthesisExecutionBudgetExceeded(
+            f"multipart section writing exhausted aggregate execution envelope "
+            f"{execution_budget.limit}; refusing partial report"
+        ) from fatal_budget_errors[0]
+    if fatal_truncations:
+        raise TruncatedModelOutput(
+            f"{len(fatal_truncations)} section(s) remained truncated after retry; "
+            "refusing incomplete multipart report"
+        ) from fatal_truncations[0]
     written = sum(1 for t in texts if t)
     if written < max(3, (len(outline) + 1) // 2):
         plog.write("warn", f"synthesize/multipart: only {written}/{len(outline)} sections produced text; falling back to single-call synthesis")
@@ -2922,8 +3839,20 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
                 max_blocks=_synthesis_section_max_blocks(),
             )
             try:
-                expanded = _bare_synth_invoke(synth_model, build_synthesis_expand_prompt(
-                    question, sec, texts[i], sec_ctx, target_language)).strip()
+                expand_prompt = build_synthesis_expand_prompt(
+                    question, sec, texts[i], sec_ctx, target_language)
+                retry_tokens = section_output_budgets[i]
+                initial_tokens = max(
+                    128,
+                    min(retry_tokens - 64, int(retry_tokens * 0.82)),
+                )
+                expanded = _invoke_with_truncation_retry(
+                    expand_prompt, f"synthesis-expand-{i + 1}",
+                    initial_tokens, retry_tokens).strip()
+            except TruncatedModelOutput:
+                raise
+            except SynthesisExecutionBudgetExceeded:
+                raise
             except Exception as exc:  # noqa: BLE001 — 再扩写是加法，失败保留原节稿
                 plog.write("warn", f"synthesize/multipart: re-expansion of '{sec['title']}' failed ({type(exc).__name__}: {exc})")
                 expanded = ""
@@ -2949,7 +3878,16 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
     summary = ""
     try:
         leads = [(outline[i]["title"], _section_lead(texts[i])) for i in range(len(outline)) if texts[i]]
-        summary = _bare_synth_invoke(synth_model, build_synthesis_summary_prompt(question, leads, target_language)).strip()
+        summary = _invoke_with_truncation_retry(
+            build_synthesis_summary_prompt(question, leads, target_language),
+            "synthesis-summary",
+            1600,
+            2400,
+        ).strip()
+    except TruncatedModelOutput:
+        raise
+    except SynthesisExecutionBudgetExceeded:
+        raise
     except Exception as exc:  # noqa: BLE001 — 摘要是加法，失败不弃正文
         plog.write("warn", f"synthesize/multipart: exec-summary call failed ({type(exc).__name__}: {exc})")
     if summary:
@@ -2957,7 +3895,25 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
     else:
         _flag_research_degradation("multipart synthesis: exec-summary call failed/empty; dossier shipped without executive summary")
         report = body
-    plog.write("stage", f"synthesize/multipart: produced {len(report)} chars / {count_prose_words(report)} prose words across {written} sections")
+    report_words = count_prose_words(report)
+    max_words = _synthesis_max_words(depth)
+    if max_words and report_words > max_words:
+        plog.write(
+            "error",
+            "synthesize/multipart: stitched report exceeded aggregate ceiling "
+            f"({report_words} > {max_words} prose words); refusing downstream "
+            "extraction/judging instead of destructively truncating prose",
+        )
+        raise OversizedSynthesisOutput(
+            f"multipart report {report_words} prose words exceeds aggregate "
+            f"ceiling {max_words}"
+        )
+    plog.write(
+        "stage",
+        f"synthesize/multipart: produced {len(report)} chars / {report_words} "
+        f"prose words across {written} sections; execution output budget "
+        f"spent={execution_budget.spent}/{execution_budget.limit} tokens",
+    )
     return report
 
 
@@ -3085,6 +4041,8 @@ def parse_evidence_pack(text: str) -> list[str]:
     matches = list(_EVIDENCE_BLOCK_MARKER_RE.finditer(raw))
     if not matches:
         stripped = raw.strip()
+        if stripped.startswith("# Internal Evidence Lane Pack"):
+            return []
         return [stripped] if stripped else []
     blocks: list[str] = []
     for index, marker in enumerate(matches):
@@ -3358,6 +4316,7 @@ def seed_manifest_sources(sources: list[dict]) -> int:
 
 def export_fetched_sources_for_manifest() -> list[dict]:
     """Persist real fetched evidence, including excerpts needed for routing."""
+    _merge_shared_fetched_sources()
     exported: list[dict] = []
     seen: set[str] = set()
     with _FETCHED_LOCK:
@@ -3457,15 +4416,37 @@ def synthesize_from_evidence_parts(
                 parts, ai_parts, context, plog)
             if multi.strip():
                 return multi
-        except Exception as e:  # noqa: BLE001 — deterministic fallback below
+        except (OversizedSynthesisOutput,
+                SynthesisExecutionBudgetExceeded):
+            # These are deterministic aggregate-envelope violations, not a
+            # structural reason to fall back.  Propagate so pass notes can never
+            # masquerade as a judged report after an over-budget write.
+            raise
+        except Exception as e:  # noqa: BLE001 — fail closed for deep below
             plog.write(
                 "warn",
                 "synthesize/multipart: crashed "
-                f"({type(e).__name__}: {e}); falling back to single-call synthesis",
+                f"({type(e).__name__}: {e})",
+            )
+            if isinstance(e, ModelProvidersUnavailable) or (
+                    _model_error_allows_failover(e)):
+                # A provider outage is not a structural multipart failure.  Do
+                # not erase it into a misleading zero-byte report and then pay
+                # for a doomed judge call; let the parent preserve the exact
+                # cause and expose a safe-resume state.
+                raise
+            _flag_research_degradation(
+                f"multipart synthesis crashed ({type(e).__name__})")
+        if depth == "deep":
+            plog.write(
+                "error",
+                "synthesize/multipart: deep synthesis produced no usable "
+                "multipart report; refusing physically undersized single-call fallback",
             )
             _flag_research_degradation(
-                f"multipart synthesis crashed ({type(e).__name__}); "
-                "fell back to single-call synthesis")
+                "deep multipart synthesis failed; refused undersized single-call fallback"
+            )
+            return ""
 
     plog.write(
         "stage",
@@ -3473,10 +4454,8 @@ def synthesize_from_evidence_parts(
         "of gathered research",
     )
     try:
-        from deerflow.models import create_chat_model
         from langchain_core.messages import HumanMessage
 
-        model = create_chat_model(synth_model, thinking_enabled=False)
         _cit_block = ""
         if _inline_citations_enabled():
             _cit_entries = build_citation_index(
@@ -3491,7 +4470,19 @@ def synthesize_from_evidence_parts(
             "(base the report ONLY on this; do not invent) ===\n"
             + context
         )
-        resp = _invoke_model(model, [HumanMessage(content=prompt)])
+        resp, served_model = _invoke_tool_free_model(
+            synth_model,
+            [HumanMessage(content=prompt)],
+            max_output_tokens=None,
+            plog=plog,
+            label="single-call-synthesis",
+        )
+        usage_label = (
+            "single-call-synthesis"
+            if served_model == synth_model
+            else f"single-call-synthesis:{served_model}"
+        )
+        _log_model_response_usage(plog, usage_label, resp)
         text = _message_text(getattr(resp, "content", resp))
         plog.write("stage", f"synthesize: produced {len(text)} chars")
         return text
@@ -3522,7 +4513,18 @@ def synthesize_from_thread(client, thread_id: str, question: str, target_languag
         parts, ai_parts, question, target_language, model_name, plog, depth)
 
 
-def extract_structured_tool_free(report: str, target_language: str | None, model_name: str, depth: str, plog: "ProgressLog") -> str:
+class StructuredExtractionText(str):
+    """String-compatible model output carrying completion-integrity metadata."""
+
+    def __new__(cls, value: str, *, finish_reason: str = "",
+                truncated: bool = False):
+        obj = super().__new__(cls, value or "")
+        obj.finish_reason = str(finish_reason or "")
+        obj.truncated = bool(truncated)
+        return obj
+
+
+def extract_structured_tool_free(report: str, target_language: str | None, model_name: str, depth: str, plog: "ProgressLog") -> StructuredExtractionText:
     """Tool-free structured extraction from the finished report.
 
     The agent turn (with tools bound) is unreliable for the JSON extraction: eager
@@ -3533,7 +4535,6 @@ def extract_structured_tool_free(report: str, target_language: str | None, model
     Returns the raw model text ('' on failure) for ``extract_json_object`` to parse.
     """
     try:
-        from deerflow.models import create_chat_model
         from langchain_core.messages import HumanMessage
 
         # RESEARCH-5: a master "light extraction" switch drops the heaviest OPTIONAL
@@ -3546,7 +4547,6 @@ def extract_structured_tool_free(report: str, target_language: str | None, model
         # （更强/更便宜的 JSON 产出器），同一 create_chat_model 查表机制；未设置 →
         # 沿用研究模型，行为逐字节不变。
         extraction_model = os.environ.get("DEERFLOW_EXTRACTION_MODEL", "").strip() or model_name
-        model = create_chat_model(extraction_model, thinking_enabled=False)
         prompt = (
             build_extraction_prompt(
                 target_language, depth,
@@ -3556,13 +4556,169 @@ def extract_structured_tool_free(report: str, target_language: str | None, model
             + "\n\n=== RESEARCH REPORT (extract the JSON strictly from this; do not search, do not invent) ===\n"
             + _extraction_report_excerpt(report)
         )
-        resp = _invoke_model(model, [HumanMessage(content=prompt)])
+        max_output_tokens = _structured_extraction_max_tokens(recovery=False)
+        resp, served_model = _invoke_tool_free_model(
+            extraction_model,
+            [HumanMessage(content=prompt)],
+            max_output_tokens=max_output_tokens,
+            plog=plog,
+            label="structured-extraction",
+        )
+        usage_label = (
+            "structured-extraction"
+            if served_model == extraction_model
+            else f"structured-extraction:{served_model}"
+        )
+        _log_model_response_usage(plog, usage_label, resp)
+        finish_reason = _model_finish_reason(resp)
+        if finish_reason:
+            plog.write(
+                "stage",
+                f"extract (tool-free): finish_reason={finish_reason}",
+            )
         text = _message_text(getattr(resp, "content", resp))
         plog.write("stage", f"extract (tool-free): produced {len(text)} chars")
-        return text
+        return StructuredExtractionText(
+            text,
+            finish_reason=finish_reason,
+            truncated=_model_output_was_truncated(resp, max_output_tokens),
+        )
     except Exception as e:  # noqa: BLE001
         plog.write("warn", f"extract (tool-free) model call failed ({type(e).__name__}: {e})")
-        return ""
+        return StructuredExtractionText("")
+
+
+def _structured_extraction_max_tokens(*, recovery: bool) -> int:
+    """Bound extraction output separately from the model profile's huge default."""
+    name = (
+        "RESEARCH_EXTRACTION_RECOVERY_MAX_TOKENS"
+        if recovery else "RESEARCH_EXTRACTION_MAX_TOKENS"
+    )
+    default = 24000 if recovery else 48000
+    try:
+        configured = int(os.environ.get(name, str(default)) or str(default))
+        return min(default, max(4000, configured))
+    except ValueError:
+        return default
+
+
+def build_extraction_recovery_prompt(target_language: str | None) -> str:
+    """Compact essential schema for a bounded no-tools extraction fallback."""
+    lang = target_language or "the report's language"
+    return (
+        "Extract a compact simulation-ready JSON object from the report below. "
+        "This is a recovery pass after a richer JSON response was malformed. Use "
+        "ONLY report evidence; do not browse, call tools, explain, or invent. Emit "
+        "one valid JSON object and nothing else. Keep arrays within the stated caps.\n\n"
+        "Required keys:\n"
+        '- "central_question": string\n'
+        '- "as_of_date": "YYYY-MM-DD"\n'
+        '- "situation_brief": {"current_situation": string, "context": string, '
+        '"dynamics": string, "fault_lines": [string], "catalysts": [string]}\n'
+        '- "actors": 10-20 objects with name, type, role, stance, influence, '
+        "description, aliases, goals, constraints, assets, vulnerabilities, memory\n"
+        '- "relationships": at most 40 directed objects with source, target, type, '
+        "sign, strength, basis; both endpoints MUST occur in actors\n"
+        '- "key_events": at most 30 {"date": string, "event": string} rows\n'
+        '- "hot_topics": at most 20 strings\n'
+        '- "quantitative_facts": at most 80 objects with metric, series, value, '
+        "unit, as_of_date, period_end, value_type (observed/forecast/target), "
+        "geography, technology_route, definition, source, source_url, tier\n"
+        '- "contested_claims": at most 12 objects with claim, positions, status, '
+        "why_they_differ\n"
+        '- "sources": [] (the pipeline will attach its sealed fetched-source ledger)\n\n'
+        f"Write natural-language values in {lang}. Use empty arrays for unsupported "
+        "optional rows. Finish and close the JSON object before the output limit.\n\n"
+        "=== RESEARCH REPORT ===\n"
+    )
+
+
+def extract_structured_recovery_tool_free(
+        report: str, target_language: str | None, model_name: str,
+        plog: "ProgressLog") -> StructuredExtractionText:
+    """One bounded, tool-free compact extraction; never re-enter the research agent."""
+    try:
+        from langchain_core.messages import HumanMessage
+
+        extraction_model = (
+            os.environ.get("DEERFLOW_EXTRACTION_MODEL", "").strip()
+            or model_name
+        )
+        prompt = (
+            build_extraction_recovery_prompt(target_language)
+            + _extraction_report_excerpt(report)
+        )
+        max_output_tokens = _structured_extraction_max_tokens(recovery=True)
+        resp, served_model = _invoke_tool_free_model(
+            extraction_model,
+            [HumanMessage(content=prompt)],
+            max_output_tokens=max_output_tokens,
+            plog=plog,
+            label="structured-extraction-recovery",
+        )
+        usage_label = (
+            "structured-extraction-recovery"
+            if served_model == extraction_model
+            else f"structured-extraction-recovery:{served_model}"
+        )
+        _log_model_response_usage(plog, usage_label, resp)
+        text = _message_text(getattr(resp, "content", resp))
+        finish_reason = _model_finish_reason(resp)
+        plog.write(
+            "stage",
+            "extract (tool-free recovery): produced "
+            f"{len(text)} chars; finish_reason={finish_reason or 'unknown'}",
+        )
+        return StructuredExtractionText(
+            text,
+            finish_reason=finish_reason,
+            truncated=_model_output_was_truncated(resp, max_output_tokens),
+        )
+    except Exception as exc:  # noqa: BLE001 — caller decides final fallback policy
+        plog.write(
+            "warn",
+            "extract (tool-free recovery) failed "
+            f"({type(exc).__name__}: {exc})",
+        )
+        return StructuredExtractionText("")
+
+
+def preserve_unparseable_extraction(out_dir: Path, raw: str) -> str:
+    """Retain exact malformed bytes for parser forensics instead of discarding them."""
+    payload = str(raw or "")
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    name = f"structured_extraction_unparseable_{digest[:12]}.txt"
+    _atomic_write_text(Path(out_dir) / name, payload)
+    return name
+
+
+def persist_structured_extraction_failures(
+        out_dir: Path,
+        failures: "list[tuple[str, StructuredExtractionText, str]]",
+        meta: dict,
+        write_meta,
+) -> list[dict]:
+    """Persist every rejected extraction candidate with exact-byte diagnostics."""
+    records: list[dict] = []
+    for phase, raw, reason in failures:
+        artifact = preserve_unparseable_extraction(out_dir, raw)
+        payload = str(raw or "")
+        records.append({
+            "phase": phase,
+            "reason": reason,
+            "artifact": artifact,
+            "chars": len(payload),
+            "sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+            "finish_reason": str(
+                getattr(raw, "finish_reason", "") or ""),
+            "truncated": bool(getattr(raw, "truncated", False)),
+        })
+    if records:
+        # Preserve the original compatibility field while exposing all attempts.
+        meta["structured_extraction_failure"] = dict(records[0])
+        meta["structured_extraction_failures"] = records
+        write_meta()
+    return records
 
 
 def _extraction_report_excerpt(report: str) -> str:
@@ -3758,11 +4914,17 @@ def build_extraction_prompt(
             '  "quantitative_facts": [               // OPTIONAL dated, unit-bearing numbers (SKILL §6 number hygiene)\n'
             "    {\n"
             '      "metric": string,                  // what is measured, e.g. "TSMC 2026 capex guidance"\n'
+            '      "series": string,                  // OPTIONAL stable comparable series name reused verbatim across dates/regions\n'
             '      "value": string,                   // the number as stated, e.g. "52-56"\n'
             '      "unit": string,                    // REQUIRED unit/currency, e.g. "USD billion", "%", "units/yr"\n'
-            '      "as_of_date": string,              // REQUIRED YYYY-MM-DD the figure is as-of (NOT the article date if they differ)\n'
+            '      "as_of_date": string,              // REQUIRED YYYY-MM-DD source/publication as-of date\n'
+            '      "period_end": string,              // OPTIONAL YYYY-MM-DD observation-period end or forecast target date; REQUIRED for trajectory charts\n'
+            '      "value_type": "observed"|"forecast"|"target", // REQUIRED actual-vs-forward semantics\n'
+            '      "geography": string,               // OPTIONAL denominator geography, e.g. Global / China / EU\n'
+            '      "technology_route": string,        // OPTIONAL route/chemistry/platform represented by the row\n'
             '      "definition": string,              // how the metric is defined (guards against definition drift)\n'
             '      "source": string,                  // short source ref/title for the figure\n'
+            '      "source_url": string,              // OPTIONAL real fetched URL supporting this exact row\n'
             '      "tier": "S1"|"S2"|"S3"|"S4"        // OPTIONAL source tier of the figure\n'
             "    }\n"
             "  ],\n"
@@ -3803,7 +4965,10 @@ def build_extraction_prompt(
     if forecast_inputs:
         quant_note = (
             "QUANTITATIVE_FACTS: extract the load-bearing numbers from the report, each with its unit and as-of date "
-            "(the date the figure refers to, which may differ from the article's publication date) and a one-line definition. "
+            "(the source/publication date), value_type, and a one-line definition. When a number measures a historical "
+            "period or forecasts a target period, also set period_end to that observation/target date; never substitute "
+            "the article date for the measurement period. Reuse the exact same series string only for definitionally "
+            "comparable rows so deterministic charts can build honest cost/deployment trajectories and regional panels. "
             'Omit any number you cannot give a unit and as-of date for. An empty array ("quantitative_facts": []) is fine.\n'
         )
 
@@ -3916,23 +5081,45 @@ def build_extraction_prompt(
 # ---------------------------------------------------------------------------
 
 
-def extract_json_object(text: str) -> dict | None:
-    if not text:
+_EXPECTED_EXTRACTION_KEYS = (
+    "actors", "relationships", "situation_brief", "key_events",
+    "quantitative_facts", "contested_claims", "sources", "hot_topics",
+)
+
+
+def _lenient_json_loads(cand: str) -> "dict | None":
+    """json.loads，失败则容错重试：剥去 ``}``/``]`` 前的尾逗号后再解析。"""
+    cand = (cand or "").strip()
+    if not cand:
         return None
-    # 1. Try fenced ```json blocks first.
-    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    candidates: list[str] = []
-    if fence:
-        candidates.append(fence.group(1))
-    # 2. Fall back to the first balanced top-level {...} span. String-aware so
-    #    that braces inside quoted JSON string values don't close the span early.
-    start = text.find("{")
-    if start != -1:
+    try:
+        obj = json.loads(cand)
+        return obj if isinstance(obj, dict) else None
+    except json.JSONDecodeError:
+        pass
+    repaired = re.sub(r",(\s*[}\]])", r"\1", cand)  # 尾逗号
+    if repaired != cand:
+        try:
+            obj = json.loads(repaired)
+            return obj if isinstance(obj, dict) else None
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def _iter_balanced_json_objects(text: str):
+    """产出 text 中每个顶层平衡 ``{...}`` 片段（string-aware，braces-in-strings 安全）。"""
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] != "{":
+            i += 1
+            continue
         depth = 0
         in_str = False
         escaped = False
-        for i in range(start, len(text)):
-            ch = text[i]
+        j = i
+        while j < n:
+            ch = text[j]
             if in_str:
                 if escaped:
                     escaped = False
@@ -3940,24 +5127,155 @@ def extract_json_object(text: str) -> dict | None:
                     escaped = True
                 elif ch == '"':
                     in_str = False
-                continue
-            if ch == '"':
+            elif ch == '"':
                 in_str = True
             elif ch == "{":
                 depth += 1
             elif ch == "}":
                 depth -= 1
                 if depth == 0:
-                    candidates.append(text[start : i + 1])
+                    yield text[i : j + 1]
                     break
+            j += 1
+        i = (j + 1) if j > i else (i + 1)
+
+
+def _repair_truncated_json(text: str) -> "str | None":
+    """抢救**被输出上限截断**的 JSON（MiniMax 在超大报告上的结构化抽取常触发）：从首个
+    ``{`` 起 string-aware 扫描，记录括号栈；到文本末仍未闭合时，丢掉尾部残缺的
+    ``"key": <partial>`` 片段、去尾逗号，并按栈逆序补齐 ``]``/``}``，得到可解析的最长前缀。"""
+    start = text.find("{")
+    if start == -1:
+        return None
+    stack: list[str] = []
+    in_str = False
+    escaped = False
+    last_complete = -1  # 最近一个「值边界」位置（栈深回落或字符串闭合后的分隔符处）
+    i = start
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+        else:
+            if ch == '"':
+                in_str = True
+            elif ch in "{[":
+                stack.append("}" if ch == "{" else "]")
+            elif ch in "}]":
+                if stack:
+                    stack.pop()
+                last_complete = i
+            elif ch == "," and stack:
+                last_complete = i - 1  # 逗号前是一个完整值
+        i += 1
+    if not stack:
+        return None  # 未截断（或已平衡）——交给常规路径
+    if last_complete <= start:
+        return None
+    frag = text[start : last_complete + 1].rstrip().rstrip(",")
+    frag += "".join(reversed(stack))
+    return frag
+
+
+def extract_json_object(text: str) -> dict | None:
+    """从模型输出中稳健抽取一个 JSON 对象。
+
+    抗三类脏输出：``` 代码围栏 / 前后散文（含 MiniMax `<think>` 里的杂散花括号）/
+    **输出上限截断**（超大报告的结构化抽取最易触发，历史上直接导致 actors.json、
+    quantitative.json 全部丢失）。收集所有候选（围栏块、每个顶层平衡对象、一个截断
+    抢救候选），逐一容错解析；多个成功时按「命中的抽取期望键数、再按长度」择优——
+    这样 judge 记分牌（单对象）行为不变，而抽取场景稳取那个最富的大对象。"""
+    if not text:
+        return None
+    candidates: list[str] = []
+    for m in re.finditer(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL):
+        candidates.append(m.group(1))
+    candidates.extend(_iter_balanced_json_objects(text))
+    repaired = _repair_truncated_json(text)
+    if repaired:
+        candidates.append(repaired)
+
+    parsed: list[dict] = []
     for cand in candidates:
-        try:
-            obj = json.loads(cand)
-            if isinstance(obj, dict):
-                return obj
-        except json.JSONDecodeError:
-            continue
+        obj = _lenient_json_loads(cand)
+        if obj is not None:
+            parsed.append(obj)
+    if not parsed:
+        return None
+    if len(parsed) == 1:
+        return parsed[0]
+
+    def _score(o: dict) -> tuple:
+        keys = sum(1 for k in _EXPECTED_EXTRACTION_KEYS if o.get(k))
+        return (keys, len(json.dumps(o, ensure_ascii=False, default=str)))
+
+    parsed.sort(key=_score, reverse=True)
+    return parsed[0]
+
+
+def _structured_extraction_incomplete_reason(
+        raw: str, obj: Any) -> "str | None":
+    """Return why a parsed extraction cannot be promoted to canonical artifacts."""
+    if bool(getattr(raw, "truncated", False)):
+        finish_reason = str(getattr(raw, "finish_reason", "") or "").strip()
+        return "provider_truncated_output" + (
+            f":{finish_reason}" if finish_reason else ""
+        )
+    if not isinstance(obj, dict):
+        return "unparseable_json"
+    actors = obj.get("actors")
+    if not isinstance(actors, list) or not any(
+        isinstance(actor, dict)
+        and str(actor.get("name") or "").strip()
+        for actor in actors
+    ):
+        return "empty_actors"
     return None
+
+
+def extract_complete_structured_tool_free(
+        report: str, target_language: str | None, model_name: str, depth: str,
+        plog: "ProgressLog",
+) -> "tuple[StructuredExtractionText, dict | None, list[tuple[str, StructuredExtractionText, str]], bool]":
+    """Run one rich extraction and at most one compact recovery.
+
+    A syntactically repaired prefix is diagnostic, not a complete artifact, when
+    the provider says it was truncated. Likewise an empty actor shell cannot
+    suppress recovery merely because it parses as a dict. Failed candidates are
+    returned byte-for-byte so the caller can persist them by content hash.
+    """
+    raw = extract_structured_tool_free(
+        report, target_language, model_name, depth, plog)
+    obj = extract_json_object(raw)
+    reason = _structured_extraction_incomplete_reason(raw, obj)
+    if reason is None:
+        return raw, obj, [], False
+
+    failed = [("primary", raw, reason)]
+    plog.write(
+        "warn",
+        "primary structured extraction incomplete "
+        f"({reason}); attempting one bounded compact no-tools recovery",
+    )
+    recovery_raw = extract_structured_recovery_tool_free(
+        report, target_language, model_name, plog)
+    recovery_obj = extract_json_object(recovery_raw)
+    recovery_reason = _structured_extraction_incomplete_reason(
+        recovery_raw, recovery_obj)
+    if recovery_reason is not None:
+        failed.append(("compact_recovery", recovery_raw, recovery_reason))
+        plog.write(
+            "warn",
+            f"compact structured extraction incomplete ({recovery_reason})",
+        )
+        return recovery_raw, None, failed, True
+    return recovery_raw, recovery_obj, failed, True
 
 
 def source_tier_histogram(sources: Any) -> dict[str, int]:
@@ -4196,6 +5514,25 @@ def compute_research_quality(sources: Any, actors_obj: Any, judge_scorecard: Any
         den += w
     score = round(max(0.0, num / den - min(0.15, max(0.0, quant_penalty))), 3) if den > 0 else None
     out = {"score": score, "components": comps}
+    # An explicit, schema-valid report-judge FAIL is authoritative.  The old
+    # weighted average could omit the missing report-judge component from its
+    # denominator—or accidentally load the actor-dossier judge—and award 0.86
+    # to prose that the actual report judge rejected on every critical axis.
+    # Cap below the default 0.45 quality floor while preserving component
+    # telemetry for diagnosis.  Judge transport/parse failure remains unknown,
+    # not an invented FAIL.
+    try:
+        valid_report_judge = _validated_report_scores(judge_scorecard) is not None
+    except NameError:  # pragma: no cover - only possible during partial import
+        valid_report_judge = False
+    if valid_report_judge:
+        judge_passed = report_passes(judge_scorecard)
+        out["judge_passed"] = judge_passed
+        if not judge_passed:
+            out["score_before_judge_fail_cap"] = score
+            out["score"] = min(0.44, score) if score is not None else 0.44
+            out["degraded"] = True
+            out["degradation"] = ["research report judge failed"]
     if quant_penalty:
         out["quant_penalty"] = round(min(0.15, max(0.0, quant_penalty)), 3)
     return out
@@ -4375,7 +5712,7 @@ def reconcile_quantitative(quant_facts: Any) -> tuple[list, list]:
         if ratio < 1.1:  # within ~10% → not a material disagreement
             continue
         positions = []
-        for v, r in nums:
+        for _v, r in nums:
             src = str(r.get("source", "") or "").strip()
             positions.append({
                 "stance": f"{r.get('value')} {r.get('unit', '')}".strip() + (f" ({src})" if src else ""),
@@ -4403,6 +5740,213 @@ def reconcile_quantitative(quant_facts: Any) -> tuple[list, list]:
                 "values": [str(r.get("value")) for _, r in nums],
             })
     return extra_contested, unit_errors
+
+
+# ---- SESSION-B viz: canonical quant enrichment（确定性、加法、degrade-safe）----
+# 抽取出的 quantitative.json 每行原本各自为战（series 名唯一、unit 常是 "units" 这类
+# 歧义分母），于是 render.py 的 metric_trajectories/quant_metrics 找不到「同族 ≥2 个不同
+# 年份」的可连线序列，整张成本/部署轨迹图空白。这里在不破坏任何既有字段的前提下，为每行
+# 补出一组规范字段（canonical schema，与 forecast 报告图表消费的 schema 完全一致）：
+#   metric_family / region / technology / year / value_num / value_kind / analyst
+# 只在 LLM 没给（缺失或 None）时才填；填不出的行原样保留其 legacy 字段、只是不参与分组。
+
+# 地区规范化：把口语/缩写映射到 canonical 名，供跨行同族按地区连线。
+_QUANT_REGION_ALIASES = {
+    "us": "United States", "u.s.": "United States", "usa": "United States",
+    "u.s.a.": "United States", "america": "United States",
+    "united states": "United States", "united states of america": "United States",
+    "china": "China", "prc": "China", "mainland china": "China", "p.r.c.": "China",
+    "eu": "Europe", "e.u.": "Europe", "europe": "Europe", "european union": "Europe",
+    "european": "Europe", "india": "India", "bharat": "India",
+    "global": "Global", "world": "Global", "worldwide": "Global", "row": "Global",
+    "international": "Global",
+}
+# 规范指标族：它是可视化分组元数据，不是证据字段。顺序敏感——先匹配概率/效率/
+# 时长/成本这些强语义及分母，再落到份额/部署/出货。模型偶尔会把同一 series
+# 的三行分别标成 market share / cumulative deployment / annual revenue；该字段必须用
+# 行内 metric+series+definition+unit 确定性重算，否则图会连出语义不可能的轨迹。
+_QUANT_FAMILY_RULES = (
+    ("scenario probability",
+     r"(?:\bscenario\b|情景|情境|场景).{0,40}(?:\bprobabilit(?:y|ies)\b|概率)|"
+     r"(?:\bprobabilit(?:y|ies)\b|概率).{0,40}(?:\bscenario\b|情景|情境|场景)|"
+     r"%\s*probability"),
+    ("round-trip efficiency", r"\b(?:round[- ]trip efficiency|rte)\b|往返效率"),
+    ("task success rate", r"\b(?:home[- ]task|task)\s+success(?:\s+rate)?\b|任务成功率"),
+    ("intervention rate", r"\b(?:human[- ]intervention|intervention)\s+rate\b|人工介入率"),
+    ("duration", r"\b(?:average\s+)?(?:discharge\s+)?duration\b|平均时长|储能时长"),
+    ("utilization", r"\b(?:utili[sz]ation|full[- ]load hours?|useful operating hours?)\b|利用率|利用小时"),
+    ("project lead time", r"\b(?:project|construction|interconnection)\s+lead\s+time\b|项目周期|并网周期"),
+    ("cycle life", r"\bcycle life\b|循环寿命"),
+    ("curtailment", r"\bcurtailment\b|弃风|弃光|弃电"),
+    ("LCOS", r"\b(?:lcos|levelized cost of storage)\b|平准化储能成本"),
+    ("power capex", r"\b(?:power[- ]?capex|power cost|cost per kw)\b|\busd\s*/?\s*kw\b|元\s*/\s*kw"),
+    ("energy capex", r"\b(?:energy[- ]?capex|cost per kwh|pack price)\b|\busd\s*/?\s*kwh\b|元\s*/\s*kwh"),
+    ("growth rate", r"\b(?:growth|cagr|yoy|year[- ]over[- ]year|output growth)\b"),
+    ("market share", r"\b(?:market share|penetration|adoption rate|\bshare\b)\b"),
+    ("success rate", r"\b(?:success rate|accuracy)\b"),
+    ("average selling price",
+     r"\b(?:asp|average selling price|selling price|price per unit|unit price)\b"),
+    ("BOM cost", r"\b(?:bom|bill of materials)\b"),
+    ("installed cost", r"\b(?:installed cost|turnkey cost|system cost|capex)\b|\blcoe\b"),
+    ("manufacturing capacity", r"\bmanufacturing capacity\b|制造产能"),
+    ("electricity demand", r"\b(?:electricity|power) demand\b|用电量|电力需求"),
+    ("water use", r"\bwater (?:use|consumption|withdrawal)\b|用水量|耗水"),
+    ("valuation", r"\bvaluation\b"),
+    ("annual revenue", r"\b(?:revenue|turnover)\b"),
+    ("net income", r"\bnet\s+(?:loss|income|profit|earnings)\b"),
+    ("order book", r"\b(?:order book|orders?|backlog)\b"),
+    ("cumulative deployment", r"\b(?:cumulative|installed base|operating fleet)\b|累计装机|保有量"),
+    ("annual installations",
+     r"\b(?:annual\s+)?(?:additions?|installations?)\b|\b(?:additions?|installations?)\s+per\s+year\b|"
+     r"年度新增|年度装机"),
+    ("annual shipments",
+     r"\b(?:shipments?|deliver(?:y|ies)|units?\s+(?:shipped|sold|produced|deployed)|"
+     r"mass[- ]production|production volume)\b|年度出货|交付量"),
+)
+_QUANT_ACTUAL_KINDS = {"observed", "actual", "reported", "historical", "measured"}
+_QUANT_FORECAST_KINDS = {
+    "forecast", "forecasted", "projection", "projected", "target",
+    "estimate", "estimated", "expected", "guidance", "scenario",
+}
+
+
+def _canonical_region(text: Any) -> "str | None":
+    """把地理串规范到 canonical 名（映射未命中则原样 Title-Case，空 → None）。"""
+    raw = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not raw:
+        return None
+    return _QUANT_REGION_ALIASES.get(raw.casefold(), raw)
+
+
+def _quant_value_num(value: Any) -> "float | None":
+    """把 value 串解析成纯数字：剥离 >,<,~,≈,货币符号/千分位/单位词/%；区间取中点。
+
+    例：'>250000'→250000、'13-17'→15、'40-60'→50、'<12'→12、'~$54B'→54、'0.125'→0.125。
+    区间（首两个数字之间夹连字符/to）取算术中点；否则取首个数字。解析失败 → None。
+    """
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value) if value == value else None  # NaN 守卫
+    s = str(value or "")
+    if not s.strip():
+        return None
+    # 去货币符号与千分位逗号（连字符保留以判区间；比较运算符本就不匹配数字正则）。
+    s = re.sub(r"[,\$€£¥]", "", s)
+    # 区间：两个数字之间是连字符/波浪线/"to"（且非日期式 YYYY-MM-DD 已被上面判断排除）。
+    rng = re.search(r"(\d+(?:\.\d+)?)\s*(?:[-–—~]|to)\s*(\d+(?:\.\d+)?)", s)
+    if rng:
+        try:
+            lo, hi = float(rng.group(1)), float(rng.group(2))
+            return (lo + hi) / 2.0
+        except ValueError:
+            pass
+    m = re.search(r"-?\d+(?:\.\d+)?", s)
+    if not m:
+        return None
+    try:
+        return float(m.group(0))
+    except ValueError:
+        return None
+
+
+def _quant_metric_family(metric: Any, definition: Any, unit: Any,
+                         series: Any = None) -> "str | None":
+    """按关键词规则给出 canonical 指标族；命不中 → None（该行不参与同族分组）。"""
+    text = f"{metric} {series} {definition} {unit}".casefold()
+    for family, pattern in _QUANT_FAMILY_RULES:
+        if re.search(pattern, text):
+            return family
+    return None
+
+
+def _quant_year_of(row: dict) -> "int | None":
+    """规范目标年：period_end → target_date → period.end → as_of_date（结构化优先）。
+
+    只吃结构化日期字段，不从自由文本猜——文本年份的兜底放在 render 侧（且仅对预测行），
+    以免把发布日误当观测年。返回 4 位年份 int 或 None。
+    """
+    for key in ("period_end", "target_date"):
+        d = _parse_date(row.get(key))
+        if d is not None:
+            return d.year
+    period = row.get("period")
+    if isinstance(period, dict):
+        d = _parse_date(period.get("period_end") or period.get("end"))
+        if d is not None:
+            return d.year
+    d = _parse_date(row.get("as_of_date"))
+    if d is not None:
+        return d.year
+    return None
+
+
+def _quant_value_kind(row: dict) -> "str | None":
+    """actual / forecast 二分：显式 value_type/is_projection 优先，否则文本信号兜底。"""
+    for key in ("value_kind", "value_type", "observation_type", "fact_type", "status"):
+        label = re.sub(r"[^a-z]+", "", str(row.get(key) or "").casefold())
+        if label in _QUANT_ACTUAL_KINDS:
+            return "actual"
+        if label in _QUANT_FORECAST_KINDS:
+            return "forecast"
+    explicit = row.get("is_projection")
+    if isinstance(explicit, bool):
+        return "forecast" if explicit else "actual"
+    text = " ".join(str(row.get(k) or "") for k in ("metric", "definition"))
+    return "forecast" if re.search(
+        r"\b(?:forecast|project|outlook|estimate|expected|guidance|scenario|target)\b",
+        text, re.IGNORECASE,
+    ) else None
+
+
+def enrich_quantitative_rows(rows: Any) -> list:
+    """SESSION-B：为 quant 行补 canonical 分组字段（原地、确定性）。
+
+    返回同一个 list（就地补字段）。每行尝试补：
+      value_num（数值解析）、year（结构化目标年）、value_kind（actual/forecast）、
+      region（geography 规范化）、technology（technology_route 兜底）、
+      analyst（source 兜底）、metric_family（关键词分类）。
+    证据字段只补缺失项，绝不重写。``metric_family`` 是本地派生的显示/分组
+    元数据：能从本行确定性推出时必须覆盖冲突的模型标签，并把原值留在
+    ``metric_family_claimed`` 供审计。这不改变任何数值、定义或来源。
+    """
+    if not isinstance(rows, list):
+        return rows if isinstance(rows, list) else []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        metric = row.get("metric")
+        definition = row.get("definition")
+        unit = row.get("unit")
+        if row.get("value_num") is None:
+            vn = _quant_value_num(row.get("value"))
+            if vn is not None:
+                row["value_num"] = vn
+        if row.get("year") is None:
+            yr = _quant_year_of(row)
+            if yr is not None:
+                row["year"] = yr
+        if row.get("value_kind") is None:
+            vk = _quant_value_kind(row)
+            if vk is not None:
+                row["value_kind"] = vk
+        if row.get("region") is None:
+            reg = _canonical_region(row.get("geography"))
+            if reg is not None:
+                row["region"] = reg
+        if row.get("technology") is None:
+            tech = re.sub(r"\s+", " ", str(row.get("technology_route") or "")).strip()
+            if tech and tech.casefold() not in {"all routes", "all", "n/a", "none"}:
+                row["technology"] = tech
+        if row.get("analyst") is None:
+            analyst = re.sub(r"\s+", " ", str(row.get("source") or "")).strip()
+            if analyst:
+                row["analyst"] = analyst
+        fam = _quant_metric_family(metric, definition, unit, row.get("series"))
+        if fam is not None:
+            claimed = re.sub(r"\s+", " ", str(row.get("metric_family") or "")).strip()
+            if claimed and claimed.casefold() != fam.casefold():
+                row.setdefault("metric_family_claimed", claimed)
+            row["metric_family"] = fam
+    return rows
 
 
 # ---- R2-RES-4: recency / staleness annotation -----------------------------
@@ -4537,6 +6081,63 @@ def evidence_pack_is_provider_error_only(text: str) -> bool:
     )
 
 
+def _is_control_failure_block(text: str) -> bool:
+    """Recognize typed execution failures without matching ordinary prose."""
+    block = str(text or "").strip()
+    if not block:
+        return True
+    first_line = block.splitlines()[0].strip()
+    if first_line.startswith("SUBAGENT_OUTCOME: BLOCKED"):
+        return True
+    try:
+        payload = json.loads(block)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        payload = None
+    if isinstance(payload, dict) and payload.get("error") in {
+        "research_budget_exhausted",
+        "llm_provider_unavailable",
+    }:
+        return True
+    if any(sentinel in block for sentinel in _LLM_ERROR_SENTINELS):
+        return True
+    lowered = block.lower()
+    return (
+        "research_budget_exhausted" in lowered
+        and any(marker in lowered for marker in (
+            "status: blocked",
+            "status:** blocked",
+            "no admissible evidence",
+            "no web-document evidence",
+            "cannot perform web",
+            "cannot fetch",
+            "unable to complete",
+            "research halted",
+        ))
+    )
+
+
+def evidence_pack_is_control_failure_only(text: str) -> bool:
+    """Return true when a lane contains no routable evidence, only failures."""
+    parts = parse_evidence_pack(text)
+    return not parts or all(_is_control_failure_block(part) for part in parts)
+
+
+def merge_resume_evidence_packs(previous: str, current: str) -> str:
+    """Losslessly retain prior durable evidence and discard typed failures.
+
+    This is the resume boundary when a prior process-local LangGraph thread is
+    unavailable.  The caller invokes it only after checkpoint question/depth
+    validation, so bytes from a different research request cannot cross over.
+    """
+    parts = [
+        part
+        for pack in (previous, current)
+        for part in parse_evidence_pack(pack)
+        if not _is_control_failure_block(part)
+    ]
+    return render_evidence_pack(parts)
+
+
 def _is_degraded_artifact(text: str, min_chars: int) -> bool:
     """RES-8: True 当非空文本是 LLM 错误降级消息或低于最短长度门。
 
@@ -4609,6 +6210,10 @@ class _DegenerateToolLoopError(RuntimeError):
     """WAVE9：连续被拒的工具调用达到熔断阈值——中断回合、按既有 salvage 路径打捞已有文本。"""
 
 
+class _ResearchToolBudgetExhausted(RuntimeError):
+    """Shared research budget is closed; stop replaying context into denied tools."""
+
+
 # WAVE9：注入的单行纠偏消息（确定性文本，无需模型生成）。实测一条轨里 201 次空-query
 # web_search 被拒——每次仍是一步全上下文模型调用（~8 分钟纯损耗），而 _validate_tool_args
 # 只跳过记账、无人终止或纠正这种退化环。
@@ -4638,6 +6243,15 @@ def _degen_loop_thresholds() -> "tuple[int, int]":
             _read("RESEARCH_DEGENERATE_TOOL_BREAK_AT", 16))
 
 
+def _budget_denial_break_at() -> int:
+    """Consecutive shared-budget denials that end an agent turn (default 3)."""
+    raw = os.environ.get("RESEARCH_BUDGET_DENIAL_BREAK_AT", "").strip()
+    try:
+        return int(raw) if raw else 3
+    except ValueError:
+        return 3
+
+
 def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int, plog: ProgressLog, label: str) -> str:
     """Run one agent turn, logging tool activity, returning the final AI text.
 
@@ -4656,7 +6270,9 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
     _v2 = _fetch_accounting_v2()
     _pending_fetches: list[dict] = []
     _correct_at, _break_at = _degen_loop_thresholds()
+    _budget_break_at = _budget_denial_break_at()
     _consec_rejected = 0        # 连续被拒计数；任一有效工具调用即清零
+    _consec_budget_denials = 0  # 预算已关闭后别继续烧全线程模型回合
     _corrective_pending = False  # 已到纠偏阈值，待结束本流段注入纠偏消息
     _corrective_sent = False     # 纠偏消息只注入一次
     _next_message = message
@@ -4706,6 +6322,19 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
                             last_id = msg_id
                     elif mtype == "tool":
                         plog.write("result", f"{data.get('name')} → {_truncate(data.get('content', ''))}")
+                        _control = _structured_fetch_control_result(
+                            data.get("content", ""))
+                        if (_control is not None
+                                and _control.get("error") == "research_budget_exhausted"):
+                            _consec_budget_denials += 1
+                            if (_budget_break_at > 0
+                                    and _consec_budget_denials >= _budget_break_at):
+                                raise _ResearchToolBudgetExhausted(
+                                    f"{_consec_budget_denials} consecutive "
+                                    "research_budget_exhausted tool results"
+                                )
+                        else:
+                            _consec_budget_denials = 0
                         if _v2:  # R1: drop dead fetches (exact tool_call_id pairing, FIFO fallback)
                             _pending_mark_result(_pending_fetches, data.get("name"), data.get("content"), call_id=data.get("tool_call_id"))
                         else:
@@ -4729,7 +6358,9 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
         # is exhausted; other transient errors can also break the stream mid-turn.
         # Whatever text was accumulated so far is still useful, so we fall through to
         # the existing return instead of letting the exception nuke the whole report.
-        if isinstance(exc, _DegenerateToolLoopError):
+        if isinstance(exc, _ResearchToolBudgetExhausted):
+            kind = "research tool budget exhausted"
+        elif isinstance(exc, _DegenerateToolLoopError):
             kind = "degenerate tool-loop break"
         elif type(exc).__name__ == "GraphRecursionError":
             kind = "recursion-limit/budget exhausted"
@@ -5251,8 +6882,11 @@ def build_brief_correction_prompt(question: str, drift: dict, target_language: s
 # → pass-through（发当前稿，与 judge_dossier 同一 degrade 语义）。仅对 deep 生效（多-pass 路径下
 # top-up 研究相对总预算便宜，且 INSIGHT CONTRACT 本就是 deep 合成的契约）。
 
-# RQ-3: judge 输入上限（卷宗与研究报告共用）60000→200000，见 judge_dossier 的截断说明。
-_JUDGE_INPUT_CAP = 200000
+# RQ-3: exact-byte judge envelope.  MiniMax is configured with a one-million
+# token context window; 600K characters remains conservative while covering a
+# useful 15-22K-word dossier in one pass.  The previous 200K-character cap made
+# every overlong multipart report structurally unpublishable after generation.
+_JUDGE_INPUT_CAP = 600000
 
 _REPORT_JUDGE_DIMS = (
     "thesis_specificity", "base_rate_usage", "mechanism_chains", "quantitative_density",
@@ -5260,7 +6894,142 @@ _REPORT_JUDGE_DIMS = (
 )
 # 不可妥协的四维：论点具体性 / 机制链 / 反共识覆盖 / 引用覆盖 —— 最能区分「锐利 POV」与「泛化 slop」。
 _REPORT_JUDGE_CRITICAL = ("thesis_specificity", "mechanism_chains", "contrarian_coverage", "citation_coverage")
+_REPORT_JUDGE_FATAL_GAP_RE = re.compile(
+    r"\btruncat(?:e|ed|ion|ing)\b|"
+    r"\bmid[-\s]sentence\b|"
+    r"\bcut(?:s)?\s+off\b|"
+    r"\b(?:not|never)\s+(?:delivered|provided|included|completed)\b|"
+    r"\bno\s+(?:renderable\s+)?(?:actual|source)[-\s]data\s+tables?\b|"
+    r"\b(?:chart|visuali[sz]ation)\s+(?:ideas?|specifications?)\s+"
+    r"(?:alone|only|without)\b|"
+    r"\bincomplete\s+(?:\w+\s+){0,3}"
+    r"(?:citation|marker|table|section|list|forecast|scenario|milestone|deliverable)\b|"
+    r"截断|未写完|未完成|只有.{0,24}(?:规格|图表想法)|没有.{0,24}(?:真实数据表|来源数据表)",
+    re.IGNORECASE,
+)
 _REPORT_JUDGE_FILENAME = "research_report_judge.json"
+_REPORT_FAILURE_CANDIDATE_FILENAME = "research_report_failure_candidate.md"
+_REPORT_FAILURE_JUDGE_FILENAME = "research_report_failure_candidate_judge.json"
+
+
+_SCENARIO_KEY_PATTERNS = (
+    re.compile(r"\bSCN\s*[-–—]?\s*([A-F])\b", re.IGNORECASE),
+    re.compile(r"\bScenario\s+([A-F])\b", re.IGNORECASE),
+    re.compile(r"^\s*([A-F])\s*[.)：:–—-]", re.IGNORECASE),
+)
+_PERCENT_RE = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?)\s*%")
+_MD_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+_MD_TABLE_DELIMITER = re.compile(
+    r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$"
+)
+
+
+def _scenario_key(text: Any) -> "str | None":
+    for pattern in _SCENARIO_KEY_PATTERNS:
+        match = pattern.search(str(text or ""))
+        if match:
+            return match.group(1).upper()
+    return None
+
+
+def _scenario_percent(text: Any) -> "float | None":
+    values = [float(value) for value in _PERCENT_RE.findall(str(text or ""))]
+    if len(values) != 1 or not 0.0 < values[0] <= 100.0:
+        return None
+    return values[0]
+
+
+def _table_cells(line: str) -> list[str]:
+    return [cell.strip() for cell in str(line or "").strip().strip("|").split("|")]
+
+
+def scenario_probability_conflicts(report: Any) -> list[dict[str, Any]]:
+    """Detect a repeated scenario table that contradicts the canonical section.
+
+    Deep dossiers may legitimately contain technology- or region-specific
+    scenario partitions.  The canonical forecast is the shallow ``Scenarios``
+    section.  Only a later markdown table explicitly carrying a Probability
+    column and the same A–F scenario keys is compared, so unrelated percentages
+    and local scenario families are ignored.
+    """
+    lines = str(report or "").splitlines()
+    candidates: list[tuple[tuple[int, int, int], int, dict[str, float]]] = []
+    for index, line in enumerate(lines):
+        heading = _MD_HEADING.match(line)
+        if not heading:
+            continue
+        level = len(heading.group(1))
+        title = heading.group(2).strip()
+        lower = title.casefold()
+        if "scenario" not in lower or level > 2:
+            continue
+        if not (
+            re.match(r"^(?:\d+[.)]\s*)?scenarios?\b", lower)
+            or ("mutually exclusive" in lower and "scenario" in lower)
+        ):
+            continue
+        rows: dict[str, float] = {}
+        for body_line in lines[index + 1:]:
+            nested = _MD_HEADING.match(body_line)
+            if nested and len(nested.group(1)) <= level:
+                break
+            if not nested:
+                continue
+            key = _scenario_key(nested.group(2))
+            probability = _scenario_percent(nested.group(2))
+            if key and probability is not None:
+                rows[key] = probability
+        if 2 <= len(rows) <= 6 and 90.0 <= sum(rows.values()) <= 110.0:
+            canonical_prefix = int(bool(re.match(r"^(?:\d+[.)]\s*)?scenarios?\b", lower)))
+            candidates.append(((canonical_prefix, -level, index), index, rows))
+    if not candidates:
+        return []
+    _priority, canonical_index, canonical = max(candidates, key=lambda row: row[0])
+
+    conflicts: list[dict[str, Any]] = []
+    nearest_heading = ""
+    index = canonical_index + 1
+    while index + 1 < len(lines):
+        heading = _MD_HEADING.match(lines[index])
+        if heading:
+            nearest_heading = heading.group(2).strip()
+        if "|" not in lines[index] or not _MD_TABLE_DELIMITER.match(lines[index + 1]):
+            index += 1
+            continue
+        headers = _table_cells(lines[index])
+        probability_columns = [
+            column for column, header in enumerate(headers)
+            if "probability" in header.casefold() or "概率" in header
+        ]
+        if not probability_columns:
+            index += 2
+            continue
+        probability_column = probability_columns[0]
+        repeated: dict[str, float] = {}
+        cursor = index + 2
+        while cursor < len(lines) and "|" in lines[cursor]:
+            cells = _table_cells(lines[cursor])
+            if probability_column < len(cells):
+                key = _scenario_key(cells[0] if cells else "")
+                probability = _scenario_percent(cells[probability_column])
+                if key and probability is not None:
+                    repeated[key] = probability
+            cursor += 1
+        overlap = sorted(set(canonical) & set(repeated))
+        if (
+            len(overlap) >= 2
+            and 90.0 <= sum(repeated.values()) <= 110.0
+        ):
+            for key in overlap:
+                if abs(canonical[key] - repeated[key]) > 0.5:
+                    conflicts.append({
+                        "scenario_key": key,
+                        "canonical_probability_pct": canonical[key],
+                        "repeated_probability_pct": repeated[key],
+                        "repeated_table_heading": nearest_heading,
+                    })
+        index = max(cursor, index + 2)
+    return conflicts
 
 
 def build_report_judge_prompt(question: str, target_language: str | None,
@@ -5286,6 +7055,14 @@ def build_report_judge_prompt(question: str, target_language: str | None,
         "- citation_coverage：主要断言是否可归因到具名来源（标题+URL/来源分级）。\n"
         "PASS 标准（不可妥协）：无任何维度 <3；且 thesis_specificity / mechanism_chains / "
         "contrarian_coverage / citation_coverage 四项各 ≥4；且总体均分 ≥4。否则 FAIL。\n"
+        "结构完整性硬门：任何章节在句中/表格中/引用标记中截断，或题目要求的编号清单、"
+        "里程碑、情景、二元预测未写完，必须 verdict=FAIL，并把最相关维度打到 ≤2。\n"
+        "可视化判定：PNG/HTML 图像由下游确定性渲染器生成，不得仅因本阶段未嵌入图片而 FAIL；"
+        "但若只有图表想法/规格、没有可渲染的带 value/unit/period/data_class/source/as-of 的"
+        "真实或已发布预测数据表，必须 verdict=FAIL。\n"
+        "情景一致性硬门：逐项核对权威情景节与执行摘要、二元预测、可视化源表中的重复情景。"
+        "同一 A/B/C/D 情景的名称或概率在任何重述中不一致，必须 verdict=FAIL；不得把两个"
+        "互相矛盾但各自合计 100% 的分区视为合格。\n"
         "若 FAIL，给出**定向**的 gaps 清单（具体、可执行，如：'缺 X 预测的基率与历史类比'、"
         f"'无反共识小节'、'断言 Y 无来源归属'）{lang}。只输出 JSON，不要解释：\n"
         '{"scores": {' + ", ".join(f'"{d}": 0-5' for d in _REPORT_JUDGE_DIMS) + '}, '
@@ -5340,6 +7117,14 @@ def report_passes(scorecard: Any) -> bool:
         return False
     if str(scorecard.get("verdict", "")).strip().upper() == "FAIL":
         return False
+    gaps = scorecard.get("gaps")
+    if isinstance(gaps, list) and any(
+            _REPORT_JUDGE_FATAL_GAP_RE.search(str(gap or ""))
+            for gap in gaps):
+        # A PASS whose own narrative admits truncation or an unfinished hard
+        # deliverable is internally contradictory.  Numeric dimensions cannot
+        # launder that structural defect.
+        return False
     scores = scorecard["scores"]
     if _env_flag("RESEARCH_REPORT_JUDGE_STRICT", False) and min(vals) < 4:
         return False
@@ -5349,6 +7134,67 @@ def report_passes(scorecard: Any) -> bool:
         if float(scores[k]) < 4:
             return False
     return (sum(vals) / len(vals)) >= 4.0
+
+
+def _judge_length_floor_words(depth: str) -> int:
+    """判长下限（与 judge_research_report 提示词的 target_words 文本严格一致）。"""
+    return 15000 if depth == "deep" else 3500
+
+
+def _normalize_judge_scorecard(sc: dict, report: str, depth: str,
+                               plog: "ProgressLog") -> dict:
+    """在记分牌出生点做**确定性**归一（取证：pipe_bef6879b2e94 两次全局综合均产出
+    17K+ 词/301 引注的报告，judge 却给 length_vs_target=3 + verdict FAIL，$100 的
+    证据 run 因一次客观错误的评审而整体报废）。两条规则，均带完整溯源：
+
+    1. 长度是**客观可测**维度，不由 LLM 裁量：count_prose_words(report) ≥ 目标下限
+       而 judge 打分 <4 → 修正为 4，并记录 length_override{measured, floor, judge_score}。
+    LLM 的显式 verdict 不做确定性改写。数值维度并不编码诸如章节在句中截断、枚举项
+    缺失、引用标记残缺或只有图表规格而没有真实数据表等离散缺陷；因此即使长度修正后
+    七维数值越线，显式 FAIL 仍然是权威失败。归一发生在记分牌诞生处，桥内
+    report_passes 与编排器 _research_judge_passes 两个消费方读到的是同一份已归一
+    记分牌，闸门口径天然一致。"""
+    if _validated_report_scores(sc) is None:
+        return sc
+    scores = sc.get("scores") or {}
+    floor = _judge_length_floor_words(depth)
+    try:
+        measured = count_prose_words(report or "")
+    except Exception:  # noqa: BLE001 — 计数失败 → 不归一，保持 judge 原样
+        return sc
+    judged_length = float(scores.get("length_vs_target", 0))
+    if measured >= floor and judged_length < 4:
+        scores["length_vs_target"] = 4.0
+        sc["length_override"] = {
+            "measured_prose_words": measured,
+            "floor_words": floor,
+            "judge_score": judged_length,
+        }
+        plog.write(
+            "ok",
+            f"judge length_vs_target deterministically corrected {judged_length:g}→4 "
+            f"({measured} measured prose words ≥ floor {floor})",
+        )
+    scenario_conflicts = scenario_probability_conflicts(report)
+    if scenario_conflicts:
+        sc["verdict"] = "FAIL"
+        sc["scenario_probability_conflicts"] = scenario_conflicts
+        gap = (
+            "Canonical scenario probabilities conflict with a repeated "
+            "scenario/visualization table; use one exact A/B/C/D partition everywhere"
+        )
+        gaps = sc.get("gaps")
+        if not isinstance(gaps, list):
+            gaps = []
+        if gap not in gaps:
+            gaps.append(gap)
+        sc["gaps"] = gaps
+        plog.write(
+            "warn",
+            "judge deterministic scenario consistency gate: FAIL "
+            f"({len(scenario_conflicts)} probability conflict(s))",
+        )
+    return sc
 
 
 def build_report_refine_prompt(question: str, gaps: list, depth: str,
@@ -5415,16 +7261,14 @@ def judge_research_report(report: str, question: str, target_language: str | Non
                           depth: str, model_name: str, plog: "ProgressLog") -> "dict | None":
     """对研究报告做一次无工具的 AI-judge 评审，返回记分牌 dict（解析失败/异常→None，pass-through）。"""
     try:
-        from deerflow.models import create_chat_model
         from langchain_core.messages import HumanMessage
 
         # RQ-3: 复用 DEERFLOW_JUDGE_MODEL 路由（与 judge_dossier 同一批评家）；未设置 → model_name。
         judge_model = os.environ.get("DEERFLOW_JUDGE_MODEL", "").strip() or model_name
-        model = create_chat_model(judge_model, thinking_enabled=False)
         target_words = (
-            "at least 15,000 evidence-dense words, expanding as needed with no final maximum"
+            "15,000-22,000 evidence-dense words, with no padding or repeated sections"
             if depth == "deep"
-            else "at least 3,500 evidence-dense words, expanding as needed"
+            else "4,500-7,000 evidence-dense words, with no padding"
         )
         bounded_report, judge_input = _report_judge_input(report)
         prompt = (
@@ -5432,7 +7276,19 @@ def judge_research_report(report: str, question: str, target_language: str | Non
                                       _dossier_source_signal(report or ""))
             + "\n=== 研究报告 ===\n" + bounded_report
         )
-        resp = _invoke_model(model, [HumanMessage(content=prompt)])
+        resp, served_model = _invoke_tool_free_model(
+            judge_model,
+            [HumanMessage(content=prompt)],
+            max_output_tokens=2500,
+            plog=plog,
+            label="research-report-judge",
+        )
+        usage_label = (
+            "research-report-judge"
+            if served_model == judge_model
+            else f"research-report-judge:{served_model}"
+        )
+        _log_model_response_usage(plog, usage_label, resp)
         text = _message_text(getattr(resp, "content", resp))
         sc = extract_json_object(text)
         if isinstance(sc, dict):
@@ -5447,7 +7303,7 @@ def judge_research_report(report: str, question: str, target_language: str | Non
                     "research-report judge input was truncated; refusing PASS "
                     f"({judge_input['input_chars']}/{judge_input['report_chars']} chars)",
                 )
-            return sc
+            return _normalize_judge_scorecard(sc, report, depth, plog)
         plog.write("warn", "research-report judge: could not parse scorecard JSON")
         return None
     except Exception as e:  # noqa: BLE001 — judge 失败不阻断，回退发当前稿
@@ -5874,7 +7730,8 @@ def run_incremental_report_patch(question: str, report: str, notes: str,
             question, titles, (report or "")[:_JUDGE_INPUT_CAP], (notes or "")[:60000],
             target_language, kind, _max_secs,
         )
-        raw = strip_think(_bare_synth_invoke(synth_model, prompt))
+        raw = strip_think(_bare_synth_invoke(
+            synth_model, prompt, plog, f"incremental-patch-{kind}"))
         parsed = parse_report_patch(raw)
         if parsed is None:
             plog.write("warn", f"incremental patch ({kind}): no parseable patch blocks; falling back to full re-synthesis")
@@ -5973,13 +7830,49 @@ def run_triangulation_topup(client, thread_id: str, question: str, depth: str,
     return report
 
 
-def run_research_stage(client, question: str, depth: str, target_language: str | None, model_name: str, thread_id: str, plog: ProgressLog, *, resume_completed=None, out_dir=None) -> str:
+def compact_prior_research_notes(reports: list[str]) -> str:
+    """Bound prior working notes before handing them to an isolated late pass.
+
+    The former same-thread design replayed every search result and subagent event
+    on each adaptive turn (more than 1.7M input tokens per late call in the
+    failed run).  A stratified 60k-character digest preserves every evidence
+    lane's representation while making late-pass cost independent of raw thread
+    history size.
+    """
+    blocks = [str(item).strip() for item in (reports or []) if str(item).strip()]
+    if not blocks:
+        return ""
+    raw = os.environ.get("RESEARCH_PRIOR_NOTES_CONTEXT_CHARS", "").strip()
+    try:
+        cap = max(8000, int(raw)) if raw else 60000
+    except ValueError:
+        cap = 60000
+    return build_stratified_outline_context(
+        blocks,
+        cap,
+        max_blocks=min(48, len(blocks)),
+    )
+
+
+def _prompt_with_compact_prior_notes(prompt: str, reports: list[str]) -> str:
+    prior = compact_prior_research_notes(reports)
+    if not prior:
+        return prompt
+    return (
+        prompt
+        + "\n\n=== COMPACT PRIOR WORKING NOTES ===\n"
+        + prior
+        + "\n=== END COMPACT PRIOR WORKING NOTES ===\n"
+    )
+
+
+def run_research_stage(client, question: str, depth: str, target_language: str | None, model_name: str, thread_id: str, plog: ProgressLog, *, resume_completed=None, out_dir=None, resume_evidence_pack: str = "") -> str:
     """Run the research stage.
 
-    Quick/standard remain one DeerFlow turn. Deep is intentionally multi-pass:
-    several scoped research turns share the same thread/checkpointer, then a
-    tool-free synthesis turn writes the final dossier from all accumulated notes
-    and fetched sources.
+    Quick/standard remain one DeerFlow turn. Deep is intentionally multi-pass.
+    The opening/scope checkpoint remains durable for resume, while later
+    evidence turns use isolated threads plus compact prior notes so LangGraph
+    cannot replay an ever-growing raw tool transcript into every model call.
 
     ITEM-3 断点续跑：``out_dir`` 非空时每完成一个 pass 就把 research_checkpoint.json
     落盘（记录复用所需的 thread_id + 已完成 pass-id + gaps + 抓取数）。``resume_completed``
@@ -6105,11 +7998,16 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
         if _evidence_only:
             parts, _ai_parts = collect_thread_evidence_parts(
                 client, thread_id, plog)
-            return render_evidence_pack(parts or [text])
+            current = render_evidence_pack(parts or [text])
+            return merge_resume_evidence_packs(
+                resume_evidence_pack, current)
         return text
 
     plog.write("stage", f"deep: starting multi-pass research protocol (up to {len(DEEP_RESEARCH_PHASES) + 1} research turns; KIQ scheduler may skip redundant phases; final synthesis follows)")
-    reports: list[str] = []
+    reports: list[str] = (
+        parse_evidence_pack(resume_evidence_pack)
+        if resume_evidence_pack else []
+    )
     # SCALE-2: 开场默认 220→300（环境覆盖照旧生效）——开场负责铺源图/定 KIQ，预算与
     # 各 pass 的 ×1.5 扩容保持同一比例。
     opening_limit = int(os.environ.get("DEERFLOW_DEEP_OPENING_RECURSION_LIMIT", "300"))
@@ -6380,7 +8278,7 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                 _skipped_phases.add(_i)
 
         plog.write("stage", f"deep: running {len(_to_run)} middle phases in parallel — " + ", ".join(p["label"] for _i, p in _to_run))
-        _phase_results: dict[int, str] = {_i: "" for _i in _skipped_phases}
+        _phase_results: dict[int, str] = dict.fromkeys(_skipped_phases, "")
         _parallel_success: set[int] = set()
         if _to_run:
             try:
@@ -6404,20 +8302,26 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
             except Exception as _exc:  # noqa: BLE001 — 执行器层异常 → 整组回退顺序
                 plog.write("warn", f"deep parallel phases pool failed: {_exc}; falling back to sequential for the group")
 
-        # (3) 任一 pass 并行未出笔记 → 主线程顺序补跑（其笔记本就落主线程 checkpoint，不再折叠）。
+        # (3) 任一 pass 并行未出笔记 → 隔离线程顺序补跑，再只把最终笔记注入 checkpoint。
         # 续跑跳过的相位（_skipped_phases）不补跑。
         for _i, _phase in _parallel_group:
             if _i in _parallel_success or _i in _skipped_phases:
                 continue
-            plog.write("warn", f"deep phase {_i} ({_phase['label']}): parallel worker empty; running sequential fallback on main thread")
+            plog.write("warn", f"deep phase {_i} ({_phase['label']}): parallel worker empty; running sequential fallback on an isolated thread")
             try:
+                _fallback_thread_id = (
+                    f"{thread_id}-fallback-{_i}-{uuid.uuid4().hex[:8]}"
+                )
                 _fb = run_streamed_turn(
                     client,
-                    build_deep_phase_prompt(
-                        question, _phase, _i, _total_phases, target_language,
-                        prior_gaps=accumulated_gaps if _gap_threading else None,
+                    _prompt_with_compact_prior_notes(
+                        build_deep_phase_prompt(
+                            question, _phase, _i, _total_phases, target_language,
+                            prior_gaps=accumulated_gaps if _gap_threading else None,
+                        ),
+                        reports,
                     ),
-                    thread_id,
+                    _fallback_thread_id,
                     _phase_budget(int(_phase["recursion_limit"])),
                     plog,
                     f"research:deep-{_i}-{_phase['label']}:fallback",
@@ -6426,9 +8330,23 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                 plog.write("warn", f"deep phase {_i} sequential fallback failed: {_exc}")
                 _fb = ""
             _phase_results[_i] = _fb
-            # 顺序补跑直接写主线程 checkpoint → 立即记完成（其笔记无需再经吸收）。
+            # 只在最终笔记已持久化进主 checkpoint 后记完成。
             if _fb.strip():
-                ckpt.record_pass(f"deep-phase-{_i}")
+                _fallback_injected = inject_thread_message(
+                    client,
+                    thread_id,
+                    _tag_parallel_evidence(
+                        f"Fallback evidence for deep phase {_i} "
+                        f"({_phase['label']}).\n\n" + _fb),
+                )
+                if _fallback_injected:
+                    ckpt.record_pass(f"deep-phase-{_i}")
+                else:
+                    plog.write(
+                        "warn",
+                        f"deep-phase-{_i} fallback checkpoint injection "
+                        "failed; leaving pass resumable",
+                    )
 
         # (4) 把并行成功的三 pass 笔记吸收进主线程（uncut 至 cap），让顺序收尾 pass 看得到。
         _merged_parallel = "\n\n---\n\n".join(
@@ -6505,15 +8423,23 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
             if _txt.strip():
                 reports.append(_txt)
 
-        # (6) forecast-implications —— 顺序、主线程，看得到 scope + 三并行 pass 的全部证据与缺口。
+        # (6) forecast-implications —— isolated thread + compact prior notes.
+        # The old main-thread call replayed opening, all tool results, injected
+        # parallel notes, and subagent events on every model step.  The final
+        # phase needs the evidence conclusions, not the raw transport transcript.
         if should_run_pass(f"deep-phase-{_total_phases}", _resume_done, _resume):
-            _final_text = run_streamed_turn(
-                client,
+            _final_thread_id = f"{thread_id}-forecast-{uuid.uuid4().hex[:8]}"
+            _final_prompt = _prompt_with_compact_prior_notes(
                 build_deep_phase_prompt(
                     question, _final_phase, _total_phases, _total_phases, target_language,
                     prior_gaps=accumulated_gaps if _gap_threading else None,
                 ),
-                thread_id,
+                reports,
+            )
+            _final_text = run_streamed_turn(
+                client,
+                _final_prompt,
+                _final_thread_id,
                 _phase_budget(int(_final_phase["recursion_limit"])),
                 plog,
                 f"research:deep-{_total_phases}-{_final_phase['label']}",
@@ -6526,7 +8452,21 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                         _final_text,
                         replace=_env_flag("RESEARCH_GAP_SET_REPLACE", True),
                     )
-                ckpt.record_pass(f"deep-phase-{_total_phases}", gaps=accumulated_gaps)
+                if inject_thread_message(
+                        client,
+                        thread_id,
+                        _tag_parallel_evidence(
+                            "Forecast-implications evidence produced on an isolated "
+                            "thread from compact prior notes.\n\n" + _final_text),
+                ):
+                    ckpt.record_pass(
+                        f"deep-phase-{_total_phases}", gaps=accumulated_gaps)
+                else:
+                    plog.write(
+                        "warn",
+                        "forecast-implications checkpoint injection failed; "
+                        "leaving pass resumable instead of claiming durable completion",
+                    )
         else:
             plog.write("resume", f"跳过已完成 pass: deep-phase-{_total_phases}（{_final_phase['label']}）")
     else:
@@ -6544,13 +8484,19 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                 plog.write("resume", f"跳过已完成 pass: {_seq_pass_id}（{phase['label']}）")
                 continue
             limit = _phase_budget(int(phase["recursion_limit"]))  # SCALE-2: 读取时应用倍率
+            _seq_thread_id = (
+                f"{thread_id}-phase-{idx}-{uuid.uuid4().hex[:8]}"
+            )
             phase_text = run_streamed_turn(
                 client,
-                build_deep_phase_prompt(
-                    question, phase, idx, len(DEEP_RESEARCH_PHASES), target_language,
-                    prior_gaps=accumulated_gaps if _gap_threading else None,
+                _prompt_with_compact_prior_notes(
+                    build_deep_phase_prompt(
+                        question, phase, idx, len(DEEP_RESEARCH_PHASES), target_language,
+                        prior_gaps=accumulated_gaps if _gap_threading else None,
+                    ),
+                    reports,
                 ),
-                thread_id,
+                _seq_thread_id,
                 limit,
                 plog,
                 f"research:deep-{idx}-{phase['label']}",
@@ -6563,7 +8509,20 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                         phase_text,
                         replace=_env_flag("RESEARCH_GAP_SET_REPLACE", True),
                     )
-                ckpt.record_pass(_seq_pass_id, gaps=accumulated_gaps)
+                if inject_thread_message(
+                        client,
+                        thread_id,
+                        _tag_parallel_evidence(
+                            f"Evidence for deep phase {idx} ({phase['label']}) "
+                            "produced on an isolated thread.\n\n" + phase_text),
+                ):
+                    ckpt.record_pass(_seq_pass_id, gaps=accumulated_gaps)
+                else:
+                    plog.write(
+                        "warn",
+                        f"{_seq_pass_id} checkpoint injection failed; leaving "
+                        "the pass resumable",
+                    )
 
     # LOOP-010: breadth telemetry remains useful, but a fixed source floor is not
     # a reason to spend another model turn.  The explicit KIQ gap ledger below is
@@ -6584,24 +8543,36 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
 
     # SCALE-5: 自适应收尾 pass —— 覆盖门（源数量）满足后，只要**上一轮笔记仍报出未决 gaps**
     # 且总 pass 数未触顶，就再跑一次**定向**收口调研（补 gaps，而非泛化拓源）。总 pass 上限
-    # RESEARCH_MAX_ADAPTIVE_PASSES（WAVE9 默认 12→9：5 相位 + 开场固定占 6，有效收口预算
-    # 6→3——旧 merge-only 缺口集按构造不收敛，实测每轮都跑满 6 轮预算、44 分钟纯尾巴；
-    # 收口集合改为整体替换后 3 轮足够，env 显式设置照旧生效）。收敛条件：新 pass 不再报出
-    # gaps → 停；或缺口集连续两轮零变化（平台期）→ 停。任何异常绝不破坏本轮（degrade-safe）。
+    # RESEARCH_MAX_ADAPTIVE_PASSES 默认 7：5 相位 + 开场固定占 6，只留 1 个定向收口轮。
+    # 最新故障中 3 个 late passes 消耗了 52.4% 全部 token，却未提升最终 judge。显式 env
+    # 仍可提高上限；每轮必须关闭至少一个旧 gap 或新增一个真实 fetched source，否则立即停。
+    # 每个 late pass 使用隔离线程 + 有界 prior-notes 摘要，禁止重放主线程全部 tool history。
     if _gap_threading and accumulated_gaps and _env_flag("RESEARCH_ADAPTIVE_PASSES", True):
         try:
-            _max_adaptive_total = max(0, int(os.environ.get("RESEARCH_MAX_ADAPTIVE_PASSES", "9") or "9"))
+            _max_adaptive_total = max(0, int(os.environ.get("RESEARCH_MAX_ADAPTIVE_PASSES", "7") or "7"))
         except ValueError:
-            _max_adaptive_total = 9
+            _max_adaptive_total = 7
         _budget = adaptive_passes_remaining(_coverage_rounds_run, _max_adaptive_total)  # 剩余自适应 pass 预算
         _adaptive_ran = 0
         while accumulated_gaps and _adaptive_ran < _budget:
             plog.write("warn", f"adaptive gap-closing (pass {_adaptive_ran + 1}/{_budget}): {len(accumulated_gaps)} unresolved gap(s); running one targeted closing pass")
+            _before_sources = distinct_fetched_count()
+            _before_gap_norm = {
+                _normalize_gap(g) for g in accumulated_gaps if _normalize_gap(g)
+            }
             try:
+                _adaptive_thread_id = (
+                    f"{thread_id}-adaptive-{_adaptive_ran + 1}-"
+                    f"{uuid.uuid4().hex[:8]}"
+                )
                 _gtxt = run_streamed_turn(
                     client,
-                    build_gap_closing_prompt(question, accumulated_gaps, target_language),
-                    thread_id,
+                    _prompt_with_compact_prior_notes(
+                        build_gap_closing_prompt(
+                            question, accumulated_gaps, target_language),
+                        reports,
+                    ),
+                    _adaptive_thread_id,
                     int(os.environ.get("DEERFLOW_ADAPTIVE_PASS_RECURSION_LIMIT", "360") or "360"),
                     plog,
                     f"research:deep-adaptive-gap-{_adaptive_ran + 1}",
@@ -6628,8 +8599,21 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
                 accumulated_gaps, _gtxt,
                 replace=_env_flag("RESEARCH_GAP_SET_REPLACE", True),
             )
+            _after_gap_norm = {
+                _normalize_gap(g) for g in accumulated_gaps if _normalize_gap(g)
+            }
+            _sources_added = max(
+                0, distinct_fetched_count() - _before_sources)
+            _gaps_closed = len(_before_gap_norm - _after_gap_norm)
             if not _fresh:  # 本轮不再报出新 gaps → 视为收敛，停止
                 plog.write("ok", f"adaptive gap-closing: converged after {_adaptive_ran} pass(es) (no fresh gaps surfaced)")
+                break
+            if _sources_added == 0 and _gaps_closed == 0:
+                plog.write(
+                    "warn",
+                    "adaptive gap-closing: no evidence yield (0 new fetched "
+                    "sources, 0 prior gaps closed); stopping",
+                )
                 break
             if _plateau:
                 plog.write("ok", f"adaptive gap-closing: gap set unchanged after pass {_adaptive_ran} (plateau); stopping — remaining gaps deemed unclosable")
@@ -6642,25 +8626,66 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
     ckpt.update_progress(gaps=accumulated_gaps)
 
     if _evidence_only:
-        parts, _ai_parts = collect_thread_evidence_parts(
-            client, thread_id, plog)
+        # Prefer the compact, explicitly retained output of each pass.  Reading
+        # the latest LangGraph checkpoint here used to export raw tool messages
+        # and duplicated injected worker notes, making the global synthesis
+        # corpus much larger and noisier than the actual research conclusions.
+        parts = list(reports)
         if not parts:
-            parts = reports
+            parts, _ai_parts = collect_thread_evidence_parts(
+                client, thread_id, plog)
+        else:
+            _ai_parts = list(parts)
+            append_uncheckpointed_worker_notes(
+                parts, _ai_parts, _collected_worker_notes())
+        current = render_evidence_pack(parts)
+        merged = merge_resume_evidence_packs(
+            resume_evidence_pack, current)
         plog.write(
             "stage",
-            f"deep: evidence lane complete — exporting {len(parts)} blocks; "
+            f"deep: evidence lane complete — exporting "
+            f"{len(parse_evidence_pack(merged))} blocks; "
             "global synthesis owns outline, section writing, and judge",
         )
-        return render_evidence_pack(parts)
+        return merged
 
-    synth = synthesize_from_thread(client, thread_id, question, target_language, model_name, plog, depth=depth)
+    # Synthesize from compact pass outputs, never from the raw checkpoint tool
+    # transcript.  Checkpoint reconstruction remains a last-resort recovery for
+    # old runs that do not have durable evidence packs.
+    synthesis_parts = list(reports)
+    if not synthesis_parts:
+        synthesis_parts, _ai_parts = collect_thread_evidence_parts(
+            client, thread_id, plog)
+    else:
+        _ai_parts = list(synthesis_parts)
+        append_uncheckpointed_worker_notes(
+            synthesis_parts, _ai_parts, _collected_worker_notes())
+    synth = synthesize_from_evidence_parts(
+        synthesis_parts,
+        _ai_parts,
+        question,
+        target_language,
+        model_name,
+        plog,
+        depth,
+    )
     if synth.strip():
         # RQ-3: 合成出报告后跑 INSIGHT-CONTRACT judge→定向 top-up→重合成环（默认开、有界、pass-through）。
         synth = run_report_judge_refine(client, thread_id, question, depth, target_language, model_name, synth, plog)
         return synth
 
-    plog.write("warn", "deep: tool-free synthesis returned empty text; falling back to concatenated pass notes")
-    _flag_research_degradation("deep synthesis empty → concatenated pass notes (numbers may be ungrounded)")  # S10
+    if depth == "deep":
+        raise RuntimeError(
+            "deep synthesis produced no usable report; refusing to promote "
+            "concatenated pass notes to judge/extraction"
+        )
+    plog.write(
+        "warn",
+        "standard synthesis returned empty text; falling back to concatenated "
+        "pass notes",
+    )
+    _flag_research_degradation(
+        "standard synthesis empty → concatenated pass notes")
     return "\n\n---\n\n".join(reports)
 
 
@@ -6893,6 +8918,7 @@ def judge_dossier(dossier: str, question: str, target_language: str | None,
             + "\n=== 卷宗 ===\n" + (dossier or "")[:_JUDGE_INPUT_CAP]
         )
         resp = _invoke_model(model, [HumanMessage(content=prompt)])
+        _log_model_response_usage(plog, "actor-dossier-judge", resp)
         text = _message_text(getattr(resp, "content", resp))
         sc = extract_json_object(text)
         if isinstance(sc, dict):
@@ -6998,6 +9024,7 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
                 + context
             )
             resp = _invoke_model(model, [HumanMessage(content=prompt)])
+            _log_model_response_usage(plog, "actor-dossier-synthesis", resp)
             dossier = _message_text(getattr(resp, "content", resp))
             plog.write("stage", f"actor-ontology synthesize: produced {len(dossier)} chars")
             if len(dossier.strip()) >= len(research_text.strip()):
@@ -7342,7 +9369,8 @@ def derive_market_queries_llm(question: str, hot_topics: list | None,
     返回 []，调用方回退确定性 ``_pm_derive_queries``（degrade-safe）。"""
     try:
         prompt = build_market_queries_prompt(question, hot_topics, actor_names)
-        raw = _bare_synth_invoke(model_name, prompt)
+        raw = _bare_synth_invoke(
+            model_name, prompt, plog, "prediction-market-query-derivation")
         queries = _parse_market_queries(raw)
         if queries:
             plog.write("ok", f"prediction markets: LLM derived {len(queries)} market-title queries")
@@ -7437,7 +9465,8 @@ def score_market_relevance(question: str, markets: list[dict], model_name: str,
             'Output ONLY a JSON object mapping each id to its integer score, e.g. '
             '{"12345": 8, "67890": 2}. Include every id.'
         )
-        raw = _bare_synth_invoke(model_name, prompt)
+        raw = _bare_synth_invoke(
+            model_name, prompt, plog, "prediction-market-relevance")
         scores = _parse_relevance_scores(raw, [str(m.get("market_id") or "") for m in markets])
         if scores:
             plog.write("ok", f"prediction markets: LLM relevance-scored {len(scores)}/{len(markets)} markets")
@@ -7449,27 +9478,38 @@ def score_market_relevance(question: str, markets: list[dict], model_name: str,
         return {}
 
 
-def _polymarket_get(path: str, params: dict, timeout: float = 15.0,
+def _polymarket_get(path: str, params: dict, timeout: float | None = None,
                     base_url: str | None = None) -> Any:
-    """stdlib GET + JSON（keyless）。瞬时错误（网络/超时/5xx/429）重试一次；仍失败则抛（调用方兜底）。
+    """stdlib GET + JSON（keyless）with a short, configurable transport bound.
 
     PM-6: 默认打 Gamma（_POLYMARKET_BASE_URL）；base_url 传 _CLOB_BASE_URL 即复用同一套重试逻辑
     打 CLOB 历史价端点（未传 → 与旧行为逐字节一致）。"""
     import urllib.error
     import urllib.parse
     import urllib.request
+    if timeout is None:
+        try:
+            timeout = max(0.5, float(os.environ.get(
+                "PREDICTION_MARKETS_HTTP_TIMEOUT_SECONDS", "3") or "3"))
+        except ValueError:
+            timeout = 3.0
+    try:
+        attempts = max(1, min(2, int(os.environ.get(
+            "PREDICTION_MARKETS_HTTP_ATTEMPTS", "1") or "1")))
+    except ValueError:
+        attempts = 1
     url = (base_url or _POLYMARKET_BASE_URL) + path
     if params:
         url += "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
     last_err: Any = None
-    for attempt in (1, 2):
+    for attempt in range(1, attempts + 1):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             last_err = e
-            if e.code in _POLYMARKET_TRANSIENT and attempt == 1:
+            if e.code in _POLYMARKET_TRANSIENT and attempt < attempts:
                 continue
             break  # 4xx 参数错误不重试
         except Exception as e:  # noqa: BLE001 — URLError/超时/JSON 解析 → 重试一次
@@ -7605,25 +9645,89 @@ def _pm_cap_per_event(ranked: list[dict], max_per_event: int, max_total: int) ->
 def _pm_snapshot(queries: list[str], per_query: int = 8, max_total: int = 20,
                  min_volume: float = 200, max_per_event: int = 3,
                  diagnostics: dict[str, int] | None = None) -> list[dict]:
-    """对一组检索词取市场快照：public-search 返回活跃事件，展开其市场，按 market_id 去重、
-    过滤、按成交量降序，每个事件最多 max_per_event 条，最后限量。单个 query 失败只丢那一批。"""
+    """Fetch one bounded concurrent market snapshot with a transport circuit.
+
+    The previous serial loop allowed 16 queries × two 15-second attempts, and
+    repeated that before and after synthesis.  A catalog outage therefore cost
+    17 minutes.  This implementation has a run-level deadline, short requests,
+    bounded workers, and opens the circuit after repeated transport failures.
+    """
+    import concurrent.futures as _cf
+    import time as _time
+
     by_id: dict[str, dict] = {}
+    clean_queries = [str(q or "").strip() for q in queries if str(q or "").strip()]
+    try:
+        workers = max(1, min(8, int(os.environ.get(
+            "PREDICTION_MARKETS_WORKERS", "4") or "4")))
+    except ValueError:
+        workers = 4
+    try:
+        deadline_s = max(1.0, float(os.environ.get(
+            "PREDICTION_MARKETS_DEADLINE_SECONDS", "15") or "15"))
+    except ValueError:
+        deadline_s = 15.0
+    try:
+        failure_threshold = max(1, int(os.environ.get(
+            "PREDICTION_MARKETS_TRANSPORT_FAILURE_BREAK_AT", "3") or "3"))
+    except ValueError:
+        failure_threshold = 3
     attempted = 0
     successful = 0
     failures = 0
-    for q in queries:
-        q = str(q or "").strip()
-        if not q:
-            continue
-        attempted += 1
+
+    def _fetch(index: int, query: str) -> tuple[int, str, Any, Exception | None]:
         try:
             data = _polymarket_get("/public-search",
-                                   {"q": q, "limit_per_type": per_query,
+                                   {"q": query, "limit_per_type": per_query,
                                     "events_status": "active"})
-        except Exception:  # noqa: BLE001 — 单 query 失败不影响其余
-            failures += 1
+            return index, query, data, None
+        except Exception as exc:  # noqa: BLE001
+            return index, query, None, exc
+
+    completed: list[tuple[int, str, Any, Exception | None]] = []
+    executor = _cf.ThreadPoolExecutor(max_workers=min(workers, max(1, len(clean_queries))))
+    futures = {
+        executor.submit(_fetch, index, query): (index, query)
+        for index, query in enumerate(clean_queries)
+    }
+    attempted = len(futures)
+    deadline_at = _time.monotonic() + deadline_s
+    try:
+        pending = set(futures)
+        while pending:
+            remaining = deadline_at - _time.monotonic()
+            if remaining <= 0:
+                break
+            done, pending = _cf.wait(
+                pending,
+                timeout=remaining,
+                return_when=_cf.FIRST_COMPLETED,
+            )
+            if not done:
+                break
+            for future in done:
+                try:
+                    row = future.result()
+                except Exception as exc:  # pragma: no cover - _fetch contains failures
+                    index, query = futures[future]
+                    row = (index, query, None, exc)
+                completed.append(row)
+                if row[3] is None:
+                    successful += 1
+                else:
+                    failures += 1
+            if successful == 0 and failures >= failure_threshold:
+                break
+        for future in pending:
+            future.cancel()
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+    # Deterministic query order despite concurrent completion.
+    for _index, q, data, error in sorted(completed, key=lambda row: row[0]):
+        if error is not None:
             continue
-        successful += 1
         events = data.get("events") if isinstance(data, dict) else None
         if not isinstance(events, list):
             continue
@@ -7644,6 +9748,10 @@ def _pm_snapshot(queries: list[str], per_query: int = 8, max_total: int = 20,
             "successful_query_count": successful,
             "transport_failure_count": failures,
         })
+        if successful == 0 and failures >= failure_threshold:
+            diagnostics["transport_circuit_open"] = 1
+        if len(completed) < attempted:
+            diagnostics["deadline_exhausted"] = 1
     return _pm_cap_per_event(ranked, max_per_event, max_total)
 
 
@@ -7876,12 +9984,26 @@ def _pm_initial_snapshot(question: str, model_name: str, plog: "ProgressLog") ->
     if not queries:
         return []
     max_total, min_volume, max_per_event = _pm_env_caps()
+    diagnostics: dict[str, int] = {}
     markets = _pm_snapshot(queries, per_query=_pm_per_query(),
                            max_total=max_total, min_volume=min_volume,
-                           max_per_event=max_per_event)
+                           max_per_event=max_per_event,
+                           diagnostics=diagnostics)
     if not markets:
+        all_transport_failed = bool(
+            diagnostics.get("attempted_query_count", 0) > 0
+            and diagnostics.get("successful_query_count", 0) == 0
+            and (
+                diagnostics.get("transport_failure_count", 0) > 0
+                or diagnostics.get("transport_circuit_open", 0)
+                or diagnostics.get("deadline_exhausted", 0)
+            )
+        )
+        if all_transport_failed:
+            _set_pm_transport_unavailable(True)
         plog.write("warn", f"prediction markets (pre-pass): no active markets (queries={queries})")
         return []
+    _set_pm_transport_unavailable(False)
     scores = score_market_relevance(question, markets, model_name, plog)
     return _apply_relevance_gate(markets, scores, _pm_min_relevance())
 
@@ -7919,7 +10041,43 @@ def _collect_prediction_markets(out_dir: Path, question: str, report: str,
     except Exception:  # noqa: BLE001 — actors.json 只是查询词的可选增强
         pass
     tool_candidates = _load_tool_market_candidates(out_dir)
-    queries = _pm_resolve_queries(question, hot_topics, actor_names, model_name, plog)
+    if _PM_TRANSPORT_UNAVAILABLE and not tool_candidates:
+        payload = {
+            "as_of": _utcnow(),
+            "source": "polymarket",
+            "queries": [],
+            "markets": [],
+            "no_relevant_markets": True,
+            "reason": "pre-pass transport circuit open",
+            "status": {
+                "attempted": True,
+                "query_count": 0,
+                "successful_query_count": 0,
+                "transport_failure_count": 1,
+                "tool_observation_count": 0,
+                "candidate_count": 0,
+                "selected_count": 0,
+                "empty_reason": "transport_failure",
+            },
+        }
+        _atomic_write_text(
+            out_dir / PREDICTION_MARKETS_FILENAME,
+            json.dumps(payload, ensure_ascii=False, indent=2),
+        )
+        meta["prediction_markets_count"] = 0
+        plog.write(
+            "warn",
+            "prediction markets: pre-pass transport circuit is open; "
+            "skipped duplicate post-report refresh",
+        )
+        return
+    refresh_with_tool_candidates = _env_flag(
+        "PREDICTION_MARKETS_REFRESH_WITH_TOOL_CANDIDATES", False)
+    queries = (
+        [] if tool_candidates and not refresh_with_tool_candidates
+        else _pm_resolve_queries(
+            question, hot_topics, actor_names, model_name, plog)
+    )
     if not queries and not tool_candidates:
         # PM-HZ: 无检索词也**始终落盘**显式空标记——下游（报告市场包/置信度理由）能
         # 陈述「无市场锚点」而非在静默缺文件与「阶段没跑」之间无法区分。
@@ -7940,6 +10098,16 @@ def _collect_prediction_markets(out_dir: Path, question: str, report: str,
                                      max_total=max_total, min_volume=min_volume,
                                      max_per_event=max_per_event,
                                      diagnostics=refresh_diagnostics) if queries else []
+    initial_all_transport_failed = bool(
+        queries
+        and refresh_diagnostics.get("attempted_query_count", 0) > 0
+        and refresh_diagnostics.get("successful_query_count", 0) == 0
+        and (
+            refresh_diagnostics.get("transport_failure_count", 0) > 0
+            or refresh_diagnostics.get("transport_circuit_open", 0)
+            or refresh_diagnostics.get("deadline_exhausted", 0)
+        )
+    )
     # LOOP-009: one canonical relevance decision over the deterministic refresh
     # and every market the agent actually fetched mid-research.  The refresh wins
     # mutable fields (price/liquidity) for duplicate IDs; tool provenance remains.
@@ -7991,7 +10159,8 @@ def _collect_prediction_markets(out_dir: Path, question: str, report: str,
     # 与主路径的 fail-open 不同）；降级命中逐行打 horizon_degraded 标签留痕。
     degraded_stage = ""
     degraded_queries: list[str] = []
-    if not markets and _env_flag("PREDICTION_MARKETS_HORIZON_RETRY", True):
+    if (not markets and not initial_all_transport_failed
+            and _env_flag("PREDICTION_MARKETS_HORIZON_RETRY", True)):
         for _stage, _stage_queries in degrade_market_queries(queries):
             plog.write("warn", f"prediction markets: horizon-degradation retry ({_stage}) with {len(_stage_queries)} broadened queries")
             _stage_diagnostics: dict[str, int] = {}
@@ -8033,13 +10202,7 @@ def _collect_prediction_markets(out_dir: Path, question: str, report: str,
     if degraded_stage:
         payload["horizon_degraded"] = degraded_stage
         payload["degraded_queries"] = degraded_queries
-    all_queries_failed = bool(
-        queries
-        and refresh_diagnostics.get("attempted_query_count", 0) > 0
-        and refresh_diagnostics.get("successful_query_count", 0) == 0
-        and refresh_diagnostics.get("transport_failure_count", 0)
-        >= refresh_diagnostics.get("attempted_query_count", 0)
-    )
+    all_queries_failed = initial_all_transport_failed
     payload["status"] = {
         "attempted": True,
         "query_count": len(queries),
@@ -8129,6 +10292,59 @@ def _collect_market_price_history(out_dir: Path, markets: list[dict],
 # ---------------------------------------------------------------------------
 
 CHARTS_MANIFEST_FILENAME = "charts.json"
+_DECISION_VISUAL_IDS = {
+    "timeline",
+    "quant_metrics",
+    "metric_trajectories",
+    "forecast_revisions",
+    "market_probabilities",
+}
+
+
+def _visual_contract_requirements(question: str) -> tuple[bool, set[str]]:
+    text = str(question or "").casefold()
+    explicit = any(token in text for token in (
+        "visualization", "visualisation", "visualizations", "visualisations",
+        "chart", "charts", "figure", "figures", "可视化", "图表",
+    ))
+    required: set[str] = set()
+    if re.search(r"cost\s+curve|deployment\s+traject|deployment\s+path|time\s*series", text):
+        required.add("metric_trajectories")
+    if re.search(r"regional\s+compar|region(?:al)?\s+benchmark|cross[- ]region", text):
+        required.add("quant_metrics")
+    if re.search(r"forecast\s+revision|published\s+forecast", text):
+        required.add("forecast_revisions")
+    if re.search(r"policy\s+milestone|dated\s+milestone|inflection\s+timeline", text):
+        required.add("timeline")
+    if re.search(r"market[- ]implied|prediction[- ]market|market\s+probabil", text):
+        required.add("market_probabilities")
+    return explicit, required
+
+
+def _visual_contract_audit(question: str, charts: Any) -> dict[str, Any]:
+    explicit, required = _visual_contract_requirements(question)
+    rows = [row for row in (charts or []) if isinstance(row, dict)]
+    ids = {
+        str(row.get("id") or "").strip()
+        for row in rows
+        if str(row.get("id") or "").strip()
+    }
+    decision_ids = sorted(ids & _DECISION_VISUAL_IDS)
+    minimum = _research_charts_min() if explicit else 0
+    missing = sorted(required - ids)
+    shortfall = max(0, minimum - len(decision_ids))
+    enabled = _research_charts_min() > 0
+    return {
+        "enabled": enabled,
+        "explicitly_requested": explicit,
+        "required_ids": sorted(required),
+        "rendered_decision_ids": decision_ids,
+        "rendered_diagnostic_ids": sorted(ids - _DECISION_VISUAL_IDS),
+        "minimum_decision_charts": minimum,
+        "missing_required_ids": missing,
+        "decision_chart_shortfall": shortfall,
+        "passed": bool(not enabled or not explicit or (not missing and shortfall == 0)),
+    }
 
 
 def _charts_timeout() -> float:
@@ -8153,6 +10369,21 @@ def _charts_python() -> str:
     return sys.executable
 
 
+# 诊断类图表 ID（永不进研究报告正文）。render.py 默认已不产出 source_quality，此处再兜一层：
+# 即便旧 charts.json 或显式 --diagnostics 里带上它，embed 也把它挡在 Visual Annex 之外。
+_DIAGNOSTIC_CHART_IDS = {"source_quality"}
+
+
+def _is_diagnostic_chart(entry: "dict") -> bool:
+    """判断某 charts.json 条目是否为诊断类（id 命中或 data_class=='diagnostic'）。"""
+    if not isinstance(entry, dict):
+        return False
+    cid = str(entry.get("id") or "").strip().lower()
+    if cid in _DIAGNOSTIC_CHART_IDS:
+        return True
+    return str(entry.get("data_class") or "").strip().lower() == "diagnostic"
+
+
 def embed_chart_refs(report_text: str, charts: "list[dict]") -> str:
     """WAVE9-RQ4（纯函数）：把 charts.json 清单的图表以 '## Visual Annex' 节内嵌进报告 ——
     PNG 条目走 markdown 图片 ``![title](charts/x.png)`` + 交互版链接 + 斜体 caption；
@@ -8160,6 +10391,10 @@ def embed_chart_refs(report_text: str, charts: "list[dict]") -> str:
     尚缺条目（不重复标题）。空清单/无有效条目 → 原样返回。"""
     rows = [c for c in (charts or [])
             if isinstance(c, dict) and str(c.get("path") or "").strip()]
+    # SESSION-B：诊断类图表（source_quality 之流 / data_class=='diagnostic'）绝不进正文
+    # Visual Annex —— 用户明确不要这张「来源显著性」图。它仍可被显式 --diagnostics 渲染进
+    # charts.json 供方法学/审计消费，但研究报告正文只呈现 forecast-domain 决策图。
+    rows = [c for c in rows if not _is_diagnostic_chart(c)]
     # The research agent may already have placed figures beside the relevant
     # evidence. Annex only genuinely missing paths; do not duplicate a correct
     # contextual embed merely because the deterministic renderer ran later.
@@ -8189,7 +10424,12 @@ def embed_chart_refs(report_text: str, charts: "list[dict]") -> str:
     return (report_text or "").rstrip() + "\n\n" + "\n".join(lines).rstrip() + "\n"
 
 
-def _render_research_charts(out_dir: Path, meta: dict, plog: "ProgressLog") -> None:
+def _render_research_charts(
+    out_dir: Path,
+    meta: dict,
+    plog: "ProgressLog",
+    question: str = "",
+) -> dict[str, Any]:
     """WAVE9-RQ4: 确定性图表渲染步（best effort，调用方再包一层 try/except）。
 
     子进程跑 skills/forecast-visuals/scripts/render.py --dir <out_dir>：渲染器读
@@ -8199,7 +10439,9 @@ def _render_research_charts(out_dir: Path, meta: dict, plog: "ProgressLog") -> N
     一行日志跳过，绝不影响已产出的研究契约（degrade-safe）。
     """
     if _research_charts_min() <= 0:
-        return
+        audit = _visual_contract_audit(question, [])
+        meta["chart_quality_gate"] = audit
+        return audit
     # GATE-W9: 双布局探测——bridge 源树是 skills/<name>/，部署树（deer-flow/）是
     # skills/public/<name>/（setup.sh / _sync_deerflow_bridge_if_stale 的部署语义）。
     _base = Path(__file__).resolve().parent
@@ -8210,7 +10452,9 @@ def _render_research_charts(out_dir: Path, meta: dict, plog: "ProgressLog") -> N
     render_py = next((p for p in _candidates if p.exists()), None)
     if render_py is None:
         plog.write("warn", f"research charts: bundled renderer missing (tried {', '.join(str(p) for p in _candidates)}); skipped")
-        return
+        audit = _visual_contract_audit(question, [])
+        meta["chart_quality_gate"] = audit
+        return audit
     import subprocess
     py = _charts_python()
     plog.write("stage", f"research charts: rendering via {py} {render_py.name} (out={out_dir})")
@@ -8221,26 +10465,44 @@ def _render_research_charts(out_dir: Path, meta: dict, plog: "ProgressLog") -> N
         )
     except subprocess.TimeoutExpired:
         plog.write("warn", f"research charts: render.py timed out after {_charts_timeout():.0f}s; skipped")
-        return
+        audit = _visual_contract_audit(question, [])
+        meta["chart_quality_gate"] = audit
+        return audit
     _out_tail = ((proc.stderr or proc.stdout or "").strip().splitlines() or [""])[-1]
     if proc.returncode != 0:
         plog.write("warn", f"research charts: render.py exited {proc.returncode} ({_out_tail}); skipped")
-        return
+        audit = _visual_contract_audit(question, [])
+        meta["chart_quality_gate"] = audit
+        return audit
     manifest_path = out_dir / CHARTS_MANIFEST_FILENAME
     if not manifest_path.exists():
         plog.write("warn", "research charts: render.py produced no charts.json; skipped")
-        return
+        audit = _visual_contract_audit(question, [])
+        meta["chart_quality_gate"] = audit
+        return audit
     try:
         charts = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         plog.write("warn", f"research charts: charts.json unreadable ({e}); skipped")
-        return
+        audit = _visual_contract_audit(question, [])
+        meta["chart_quality_gate"] = audit
+        return audit
     if not isinstance(charts, list) or not charts:
         plog.write("warn", "research charts: charts.json empty; nothing to embed")
-        return
+        audit = _visual_contract_audit(question, [])
+        meta["chart_quality_gate"] = audit
+        return audit
     meta["charts_count"] = len(charts)
-    if len(charts) < _research_charts_min():
-        plog.write("warn", f"research charts: only {len(charts)}/{_research_charts_min()} required charts rendered (missing input artifacts?)")
+    audit = _visual_contract_audit(question, charts)
+    meta["chart_quality_gate"] = audit
+    if not audit["passed"]:
+        plog.write(
+            "warn",
+            "research charts: publication contract failed; "
+            f"decision charts={audit['rendered_decision_ids']}, "
+            f"missing={audit['missing_required_ids']}, "
+            f"shortfall={audit['decision_chart_shortfall']}",
+        )
     report_path = out_dir / REPORT_FILENAME
     if report_path.exists():
         try:
@@ -8253,6 +10515,7 @@ def _render_research_charts(out_dir: Path, meta: dict, plog: "ProgressLog") -> N
         except OSError as e:
             plog.write("warn", f"research charts: could not embed into {REPORT_FILENAME} ({e}); charts remain on disk")
     plog.write("ok", f"wrote {CHARTS_MANIFEST_FILENAME} ({len(charts)} charts) + charts/ files")
+    return audit
 
 
 # ---------------------------------------------------------------------------
@@ -8292,10 +10555,34 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
                 )
             else:
                 extraction_input = report
-            raw = extract_structured_tool_free(extraction_input, args.target_language, args.model, args.depth, plog)
-            obj = extract_json_object(raw)
+            raw, obj, failed_candidates, recovery_used = (
+                extract_complete_structured_tool_free(
+                    extraction_input,
+                    args.target_language,
+                    args.model,
+                    args.depth,
+                    plog,
+                )
+            )
+            persisted_failures = persist_structured_extraction_failures(
+                out_dir, failed_candidates, meta, write_meta)
+            if persisted_failures:
+                plog.write(
+                    "warn",
+                    "extract-only: preserved rejected extraction candidate(s): "
+                    + ", ".join(
+                        f"{row['phase']}={row['artifact']} ({row['reason']})"
+                        for row in persisted_failures
+                    ),
+                )
+            if obj is not None and recovery_used:
+                meta["structured_extraction_recovery"] = {
+                    "used": True,
+                    "mode": "compact_tool_free",
+                }
+                write_meta()
             if obj is None:
-                plog.write("warn", "extract-only: 结构化 JSON 解析失败；actors.json/sources.json 跳过")
+                plog.write("warn", "extract-only: 紧凑结构化恢复失败；actors.json/sources.json 跳过")
             else:
                 sources = obj.pop("sources", None)
                 try:
@@ -8313,6 +10600,13 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
                     meta["timeline_count"] = len(key_events)
                     plog.write("ok", f"extract-only: wrote {TIMELINE_FILENAME} ({len(key_events)} events)")
                 quant = _clean_optional_rows(obj.get("quantitative_facts"))
+                # SESSION-B：补 canonical 分组字段（value_num/year/metric_family/...），
+                # 让 render 侧能把散点归族连成成本/部署轨迹。加法、degrade-safe。
+                if quant and _env_flag("RESEARCH_QUANT_ENRICH", True):
+                    try:
+                        enrich_quantitative_rows(quant)
+                    except Exception:  # noqa: BLE001 — 富化纯加法，失败不拖垮抽取
+                        pass
                 extra_contested: list = []
                 if quant and _env_flag("RESEARCH_QUANT_RECONCILE", True):
                     try:
@@ -8346,7 +10640,7 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
     # WAVE9-RQ4: 打捞路径同样补渲染研究图表（结构化工件刚补出来；与正常 Stage 4 一致，
     # degrade-safe——渲染失败绝不令打捞失败）。
     try:
-        _render_research_charts(out_dir, meta, plog)
+        _render_research_charts(out_dir, meta, plog, question)
         write_meta()
     except Exception as _ch_err:  # noqa: BLE001 — 图表为可选增强
         plog.write("warn", f"extract-only: research charts skipped (non-fatal): {_ch_err}")
@@ -8416,15 +10710,93 @@ def main() -> int:
     _atomic_write_text(out_dir / REQUIREMENT_FILENAME, question + "\n")
 
     plog = ProgressLog(out_dir / PROGRESS_FILENAME)
-    activation_telemetry = skill_activation_estimate()
-    if activation_telemetry.get("chars_per_activation") is not None:
+    try:
+        runtime_skill_sync = runtime_skill_sync_telemetry()
+    except Exception as skill_sync_error:  # noqa: BLE001 — integrity boundary
+        failure = {
+            "status": "failed",
+            "question": question,
+            "model": args.model,
+            "depth": args.depth,
+            "target_language": args.target_language,
+            "started_at": _utcnow(),
+            "finished_at": _utcnow(),
+            "error": str(skill_sync_error),
+            "runtime_skill_sync": {
+                "outcome": "failed",
+                "error": str(skill_sync_error),
+            },
+        }
+        _atomic_write_text(
+            out_dir / META_FILENAME,
+            json.dumps(failure, ensure_ascii=False, indent=2),
+        )
+        plog.write("error", f"runtime skill deployment rejected: {skill_sync_error}")
+        plog.close()
+        print(f"ERROR: {skill_sync_error}", file=sys.stderr)
+        return 3
+    if runtime_skill_sync.get("runtime_verified"):
         plog.write(
             "stage",
-            "skill activation: deep-research core "
-            f"{activation_telemetry['chars_per_activation']} chars / "
-            f"~{activation_telemetry['estimated_tokens_per_activation']} tokens per slash "
-            "activation (lazy references excluded)",
+            "runtime skill bundle: "
+            f"outcome={runtime_skill_sync.get('outcome')} "
+            f"source_manifest_hash={runtime_skill_sync.get('source_manifest_hash')} "
+            f"deployed_manifest_hash={runtime_skill_sync.get('deployed_manifest_hash')} "
+            f"deployed_path={runtime_skill_sync.get('deployed_path')}",
         )
+        for skill_name, skill_manifest in sorted(
+            runtime_skill_sync.get("skills", {}).items()
+        ):
+            plog.write(
+                "stage",
+                f"runtime skill lazy-resource hashes: skill={skill_name} "
+                + json.dumps(
+                    skill_manifest.get("lazy_resource_hashes", {}),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
+    else:
+        plog.write(
+            "warn",
+            "runtime skill bundle is not orchestrator-verified "
+            f"(outcome={runtime_skill_sync.get('outcome')})",
+        )
+    activation_telemetry = skill_activation_estimate()
+    if args.extract_only:
+        activation_telemetry.update({
+            "activated": False,
+            "mode": "none",
+            "reason": "extract-only path constructs no research client",
+        })
+    elif args.synthesis_manifest:
+        activation_telemetry.update({
+            "activated": False,
+            "mode": "resource-read",
+            "resource": "deep-research/references/final-dossier-contract.md",
+            "reason": "global synthesis reads the contract directly without slash activation",
+        })
+    else:
+        activation_telemetry.update({
+            "activated": True,
+            "mode": "slash",
+        })
+    if activation_telemetry.get("chars_per_activation") is not None:
+        if activation_telemetry["mode"] == "slash":
+            plog.write(
+                "stage",
+                "slash skill payload: deep-research core "
+                f"{activation_telemetry['chars_per_activation']} chars / "
+                f"~{activation_telemetry['estimated_tokens_per_activation']} tokens "
+                "(lazy references excluded)",
+            )
+        elif activation_telemetry["mode"] == "resource-read":
+            plog.write(
+                "stage",
+                "skill resource read: deep-research final-dossier contract "
+                "(no SKILL.md activation in global synthesis)",
+            )
     _reset_fetched_sources()  # #1: fresh fetched-URL collector per run
     # AGENTIC-SEARCH: 依 --subagents 打开研究提示词里的「主动委派 scoped-researcher」指令块。
     # 必须在 _reset_fetched_sources()（其把该标志复位 False）之后设置。仅当同时开启 --subagents
@@ -8436,6 +10808,7 @@ def main() -> int:
     # 否则（缺失/stale/hash 不匹配）→ 全量重启并把原因记入 meta（打标）。--extract-only 不续跑。
     resume_completed: set[str] = set()
     resume_info: dict[str, Any] = {}
+    resume_evidence_pack = ""
     if getattr(args, "resume", False) and not getattr(args, "extract_only", False) and _checkpoint_enabled():
         _ckpt = load_research_checkpoint(out_dir)
         _plan = plan_research_resume(_ckpt, question, args.depth)
@@ -8443,9 +10816,17 @@ def main() -> int:
             thread_id = _plan["thread_id"]
             resume_completed = set(_plan["completed_passes"])
             restored_sources = seed_validated_resume_sources(out_dir)
+            prior_pack_path = out_dir / EVIDENCE_PACK_FILENAME
+            if prior_pack_path.is_file():
+                candidate_pack = prior_pack_path.read_text(encoding="utf-8")
+                if (parse_evidence_pack(candidate_pack)
+                        and not evidence_pack_is_control_failure_only(candidate_pack)):
+                    resume_evidence_pack = candidate_pack
             resume_info = {"resumed": True, "thread_id": thread_id,
                            "skipped_passes": sorted(resume_completed),
-                           "restored_sources": restored_sources}
+                           "restored_sources": restored_sources,
+                           "durable_evidence_blocks": len(
+                               parse_evidence_pack(resume_evidence_pack))}
             plog.write("resume", f"续跑研究：复用线程 {thread_id}，跳过 {len(resume_completed)} 个已完成 pass")
         else:
             resume_info = {"resumed": False, "reason": _plan["reason"]}
@@ -8460,6 +10841,7 @@ def main() -> int:
         "started_at": started_at,
         "target_language": args.target_language,
         "skill_activation": activation_telemetry,
+        "runtime_skill_sync": runtime_skill_sync,
         "workflow_mode": (
             "evidence_only" if args.evidence_only else
             "global_synthesis" if args.synthesis_manifest else "full"
@@ -8589,12 +10971,46 @@ def main() -> int:
         )
         plog.write("init", "client ready; available skills will load on demand (deep-research)")
 
+        # The checkpoint sidecar is only a skip plan; it is not proof that the
+        # previous process's LangGraph state still exists.  Preserve completed
+        # passes only when either the live checkpointer can reconstruct evidence
+        # or a same-question durable evidence pack exists.  Otherwise replay the
+        # passes on a fresh thread instead of exporting an empty 100-byte pack.
+        if resume_completed and not resume_evidence_pack:
+            checkpoint_parts, _checkpoint_ai = collect_thread_evidence_parts(
+                client, thread_id, plog)
+            if checkpoint_parts:
+                resume_evidence_pack = render_evidence_pack(checkpoint_parts)
+            else:
+                prior_thread_id = thread_id
+                thread_id = f"research-{uuid.uuid4().hex[:12]}"
+                resume_completed.clear()
+                resume_info.update({
+                    "resumed": False,
+                    "reason": (
+                        "checkpoint thread has no durable messages and no "
+                        "validated evidence pack"
+                    ),
+                    "stale_thread_id": prior_thread_id,
+                    "replacement_thread_id": thread_id,
+                    "skipped_passes": [],
+                })
+                meta["thread_id"] = thread_id
+                meta["resume"] = resume_info
+                write_meta()
+                plog.write(
+                    "resume",
+                    "checkpoint context missing; replaying passes on a fresh "
+                    "thread instead of publishing empty evidence",
+                )
+
         # --- PM-4: 研究开跑前的初始市场快照（仅用问题派生检索词）---
         # 把一段紧凑「当前市场定价」块注入 pass-0 提示词，让开场就带着「市场把 X 定在
         # NN%——去查为什么」的锚点搜；同一批市场也在 Stage 2 喂给结构化抽取（INT-1）。
         # Degrade-safe：任何市场失败 → 研究照常无块进行。
         try:
             if (not args.evidence_only
+                    and not args.synthesis_manifest
                     and _env_flag("PREDICTION_MARKETS_ENABLED", True)
                     and _env_flag("PREDICTION_MARKETS_PREPASS", True)):
                 _init_markets = _pm_initial_snapshot(question, args.model, plog)
@@ -8606,7 +11022,7 @@ def main() -> int:
             plog.write("warn", f"pre-pass market snapshot skipped (non-fatal): {_pm_pre_err}")
 
         # --- Stage 1: research + report ---
-        # 双轨：开启 DEERFLOW_DUAL_TRACK（默认开）时，Track A（广覆盖证据报告）与
+        # 双轨：非 evidence-only 运行开启 DEERFLOW_DUAL_TRACK（默认开）时，Track A（广覆盖证据报告）与
         # Track B（actor-ontology 卷宗）在 SAME client 上用 ISOLATED thread_id 并发跑
         # （沿用 run_deep_fanout 已验证安全的并发回合模式）。Track A 结果仍是 report，
         # 下游逻辑逐字节不变；Track B 结果记为 dossier。Track B 任何异常/空 → dossier=""
@@ -8689,6 +11105,25 @@ def main() -> int:
                         plog,
                         context="global post-refine",
                     )
+                    # Keep the exact candidate/judge pair even when the
+                    # monotonic adoption gate rejects it.  The previous
+                    # implementation spent a full refinement turn, then
+                    # discarded the only artifacts capable of explaining why
+                    # the turn did not improve the report.  These sidecars are
+                    # forensic only; the contract still seals ``report`` and
+                    # its adopted scorecard below.
+                    _atomic_write_text(
+                        out_dir / "research_report_refinement_candidate.md",
+                        patched,
+                    )
+                    _atomic_write_text(
+                        out_dir / "research_report_refinement_candidate_judge.json",
+                        json.dumps(
+                            patched_scorecard,
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
+                    )
                     if _report_scorecard_adoptable(patched_scorecard, scorecard):
                         report = patched
                         scorecard = patched_scorecard
@@ -8704,7 +11139,7 @@ def main() -> int:
             final_judged_report = report
             final_judge_stage = "global-synthesis-final"
             final_targeted_refinement = refined
-        elif _env_flag("DEERFLOW_DUAL_TRACK", True):
+        elif _should_run_actor_track(evidence_only=args.evidence_only):
             import concurrent.futures as _cf
 
             actor_thread_id = thread_id + "-actor"
@@ -8722,6 +11157,7 @@ def main() -> int:
                     plog,
                     resume_completed=resume_completed,
                     out_dir=out_dir,
+                    resume_evidence_pack=resume_evidence_pack,
                 )
 
             def _run_track_b():
@@ -8766,6 +11202,13 @@ def main() -> int:
             if not dossier.strip():
                 plog.write("warn", "dual-track: Track B produced no dossier; continuing single-track")
         else:
+            if (args.evidence_only
+                    and _env_flag("DEERFLOW_DUAL_TRACK", True)):
+                plog.write(
+                    "stage",
+                    "evidence-only: optional Track B is disabled; publishing "
+                    "Track A evidence independently",
+                )
             report = run_research_stage(
                 client,
                 question,
@@ -8776,6 +11219,7 @@ def main() -> int:
                 plog,
                 resume_completed=resume_completed,  # ITEM-3 续跑：跳过已完成 pass
                 out_dir=out_dir,                    # ITEM-3：每完成一 pass 落 checkpoint
+                resume_evidence_pack=resume_evidence_pack,
             )
 
         if args.evidence_only:
@@ -8784,29 +11228,39 @@ def main() -> int:
                     "# Internal Evidence Lane Pack")
                 else render_evidence_pack([report])
             )
-            _atomic_write_text(out_dir / EVIDENCE_PACK_FILENAME, evidence_pack)
+            if resume_evidence_pack:
+                evidence_pack = merge_resume_evidence_packs(
+                    resume_evidence_pack, evidence_pack)
             source_rows = export_fetched_sources_for_manifest()
             # Replace even with []: leaving a prior file untouched makes a
             # successful no-source retry silently inherit another attempt's
             # citation ledger. Valid resume sources were explicitly restored
             # only after question/depth checkpoint validation above.
-            persist_evidence_sources(out_dir, source_rows)
-            if (not source_rows
-                    and evidence_pack_is_provider_error_only(evidence_pack)):
+            _require_lane_sources = _env_flag(
+                "RESEARCH_EVIDENCE_LANE_REQUIRE_SOURCES", True)
+            if not source_rows and (
+                    _require_lane_sources
+                    or evidence_pack_is_control_failure_only(evidence_pack)):
                 error = (
-                    "evidence lane contains only LLM provider error fallbacks"
+                    "evidence lane has no verified fetched sources"
+                    if _require_lane_sources else
+                    "evidence lane contains only terminal control failures"
                 )
                 meta.update(
                     status="failed", error=error, finished_at=_utcnow())
                 write_meta()
                 plog.write(
                     "error",
-                    "evidence lane failed: every routable block is an LLM "
-                    "provider error and no sources were fetched",
+                    "evidence lane failed: no verified fetched source can "
+                    "ground its synthesis blocks",
                 )
                 plog.close()
                 return 2
-            if dossier.strip() and not _is_degraded_artifact(dossier, 400):
+            _atomic_write_text(out_dir / EVIDENCE_PACK_FILENAME, evidence_pack)
+            persist_evidence_sources(out_dir, source_rows)
+            if (dossier.strip()
+                    and not _is_degraded_artifact(dossier, 400)
+                    and not _is_control_failure_block(dossier)):
                 dossier = unwrap_markdown_fence(dossier)
                 _atomic_write_text(
                     out_dir / ACTOR_DOSSIER_FILENAME, dossier)
@@ -8914,6 +11368,21 @@ def main() -> int:
                     if args.synthesis_manifest else "synthesis-final"
                 )
             if not _judge_input_matches_report(final_report_scorecard, report):
+                # Preserve the expensive candidate even though it is not safe
+                # to publish.  Parent recovery copies these forensic sidecars
+                # before deleting the private synthesis directory.
+                _atomic_write_text(
+                    out_dir / _REPORT_FAILURE_CANDIDATE_FILENAME,
+                    report,
+                )
+                _atomic_write_text(
+                    out_dir / _REPORT_FAILURE_JUDGE_FILENAME,
+                    json.dumps(
+                        final_report_scorecard,
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                )
                 raise RuntimeError(
                     "final research-report judge is incomplete or not bound "
                     "to the exact final prose bytes"
@@ -8934,6 +11403,37 @@ def main() -> int:
                 )
         plog.write("ok", f"wrote {REPORT_FILENAME} ({len(report)} chars)")
         write_meta()
+        if judge_required and not report_passes(final_report_scorecard):
+            # Integrity-valid is not publication-valid.  The previous bridge
+            # persisted an explicit seven-dimension FAIL, then returned exit 0;
+            # the parent promoted that inadequate report and even calculated a
+            # high quality score from the unrelated actor-dossier judge.  Keep
+            # all evidence/report/judge artifacts for bounded synthesis-only
+            # recovery, but fail the research stage before extraction and
+            # publication can bless the prose as completed.
+            _quality_error = (
+                "research report quality gate failed: explicit final judge FAIL"
+            )
+            meta["research_report_quality_gate"] = {
+                "passed": False,
+                "verdict": str(
+                    final_report_scorecard.get("verdict", "")
+                ).strip().upper(),
+                "scores": dict(final_report_scorecard.get("scores") or {}),
+                "gaps": list(final_report_scorecard.get("gaps") or [])[:20],
+            }
+            meta.update(
+                status="failed",
+                error=_quality_error,
+                finished_at=_utcnow(),
+            )
+            write_meta()
+            if (_research_budget is not None and hasattr(
+                    _research_budget, "export_telemetry")):
+                _research_budget.export_telemetry(force=True)
+            plog.write("error", _quality_error)
+            plog.close()
+            return 2
 
         # RES-8: 卷宗与 report 适用同一 LLM 错误哨兵/最短长度门，且必须清掉「变量」而非只跳过
         # 落盘——同一个 dossier 局部变量还会在下方作为抽取「主」输入排在真报告之前；一条短的
@@ -8978,32 +11478,39 @@ def main() -> int:
                         )
                     except Exception:  # noqa: BLE001 — 附加市场表是加法，失败保留原输入
                         pass
-                raw = extract_structured_tool_free(extraction_input, args.target_language, args.model, args.depth, plog)
-                obj = extract_json_object(raw)
-                if obj is None:
-                    # FALLBACK: the in-thread agent turn (older path) in case the bare call failed.
-                    plog.write("warn", "tool-free extraction unparseable; falling back to in-thread agent extraction")
-                    extraction_prompt = build_extraction_prompt(
-                        args.target_language, args.depth)
-                    if args.synthesis_manifest:
-                        # The global synthesis thread has no research history;
-                        # give its fallback the actual dossier instead of an
-                        # empty checkpoint context.
-                        extraction_prompt += (
-                            "\n\n=== GLOBAL DOSSIER TO EXTRACT ===\n"
-                            + extraction_input[:_JUDGE_INPUT_CAP]
-                        )
-                    raw = run_streamed_turn(
-                        client,
-                        extraction_prompt,
-                        thread_id,  # same thread → research context preserved via checkpointer
-                        80 if args.depth == "deep" else 40,
+                raw, obj, failed_candidates, recovery_used = (
+                    extract_complete_structured_tool_free(
+                        extraction_input,
+                        args.target_language,
+                        args.model,
+                        args.depth,
                         plog,
-                        "extract",
                     )
-                    obj = extract_json_object(raw)
+                )
+                persisted_failures = persist_structured_extraction_failures(
+                    out_dir, failed_candidates, meta, write_meta)
+                if persisted_failures:
+                    plog.write(
+                        "warn",
+                        "preserved rejected structured extraction candidate(s): "
+                        + ", ".join(
+                            f"{row['phase']}={row['artifact']} ({row['reason']})"
+                            for row in persisted_failures
+                        ),
+                    )
+                if obj is not None and recovery_used:
+                    meta["structured_extraction_recovery"] = {
+                        "used": True,
+                        "mode": "compact_tool_free",
+                    }
+                    write_meta()
                 if obj is None:
-                    plog.write("warn", "could not parse structured JSON; actors.json/sources.json skipped")
+                    plog.write(
+                        "warn",
+                        "bounded structured extraction and compact recovery "
+                        "both failed integrity validation; refusing legacy "
+                        "streamed-agent salvage and skipping actors.json/sources.json",
+                    )
                 else:
                     sources = obj.pop("sources", None)
                     # #1: ground sources.json in URLs the agent ACTUALLY FETCHED (drops
@@ -9062,6 +11569,14 @@ def main() -> int:
                     # quantitative.json (mirrors the timeline.json pattern; kept inside
                     # actors.json too for back-compat). Degrades silently when absent.
                     quant = _clean_optional_rows(obj.get("quantitative_facts"))
+                    # SESSION-B：先补 canonical 分组字段（value_num/year/metric_family/
+                    # region/value_kind/analyst），再走对账/落盘——这样 quantitative.json
+                    # 一落盘就自带可分组语义，render 能连出成本/部署轨迹。加法、degrade-safe。
+                    if quant and _env_flag("RESEARCH_QUANT_ENRICH", True):
+                        try:
+                            enrich_quantitative_rows(quant)
+                        except Exception:  # noqa: BLE001 — 富化纯加法，失败不拖垮抽取
+                            pass
                     # R2-RES-11: reconcile numeric facts by (metric,unit) BEFORE writing
                     # contested.json so synthesized disagreements survive the JSON boundary.
                     extra_contested: list = []
@@ -9117,7 +11632,10 @@ def main() -> int:
                     # contract-critical meta key consumed by the RESEARCH_QUALITY_FLOOR gate.
                     try:
                         judge_sc = None
-                        _jp = out_dir / "actor_dossier_judge.json"
+                        # Research prose quality must be scored by the report
+                        # judge.  The actor-dossier judge measures a different
+                        # artifact and previously inflated failed reports.
+                        _jp = out_dir / _REPORT_JUDGE_FILENAME
                         if _jp.exists():
                             try:
                                 judge_sc = json.loads(_jp.read_text(encoding="utf-8"))
@@ -9165,7 +11683,10 @@ def main() -> int:
                         # the report flags that some numbers may be ungrounded.
                         if _RESEARCH_FLAGS:
                             rq["degraded"] = True
-                            rq["degradation"] = list(_RESEARCH_FLAGS)
+                            rq["degradation"] = list(dict.fromkeys(
+                                list(rq.get("degradation") or [])
+                                + list(_RESEARCH_FLAGS)
+                            ))
                             meta["research_degradation"] = list(_RESEARCH_FLAGS)
                             plog.write("warn", f"research degraded ({len(_RESEARCH_FLAGS)} event(s)): {_RESEARCH_FLAGS[:2]}")
                         meta["research_quality"] = rq
@@ -9231,14 +11752,48 @@ def main() -> int:
         # 结构化工件都已落盘后直接子进程渲染 actor 网络/时间线/定量 Top 指标图，并把 PNG
         # 内嵌进 research_report.md 的 Visual Annex。Degrade-safe：python/plotly 缺失或
         # 渲染失败 → 一行日志跳过，绝不影响已产出的研究契约。
+        _chart_audit: dict[str, Any] = _visual_contract_audit(question, [])
         try:
-            _render_research_charts(out_dir, meta, plog)
+            _chart_audit = _render_research_charts(
+                out_dir, meta, plog, question)
         except Exception as _ch_err:  # noqa: BLE001 — 图表为可选增强
             plog.write("warn", f"research charts skipped (non-fatal): {_ch_err}")
         finally:
             if not _record_persisted_report_identity(out_dir, meta):
                 plog.write("warn", "research report identity unavailable after chart stage")
             write_meta()
+
+        if not _chart_audit.get("passed", True):
+            _chart_error = (
+                "research visualization contract shortfall: "
+                f"missing={_chart_audit.get('missing_required_ids')}, "
+                f"decision_chart_shortfall="
+                f"{_chart_audit.get('decision_chart_shortfall')}"
+            )
+            # 取证（pipe_bef6879b2e94 恢复两连败）：judge PASS 的 19K 词报告因
+            # metric_trajectories/quant_metrics/forecast_revisions 三张图渲不出来而
+            # 整体 exit=2 报废——图表是研究契约的**增强**，不是前置条件；数据形状决定
+            # 哪些图可渲，缺图绝不吞掉已判优的报告。默认降级为 warn + meta 遥测
+            # （visual_contract 审计原样保留），仅 RESEARCH_VIZ_GATE_STRICT=true 时
+            # 保留旧的硬失败语义。
+            if _env_flag("RESEARCH_VIZ_GATE_STRICT", False):
+                meta.update(
+                    status="failed",
+                    error=_chart_error,
+                    finished_at=_utcnow(),
+                )
+                write_meta()
+                plog.write("error", _chart_error)
+                plog.close()
+                return 2
+            meta["visual_contract_shortfall"] = {
+                "missing_required_ids": _chart_audit.get("missing_required_ids"),
+                "decision_chart_shortfall": _chart_audit.get(
+                    "decision_chart_shortfall"),
+            }
+            write_meta()
+            plog.write("warn", _chart_error + " (non-fatal; charts are an "
+                       "enhancement, the judged report proceeds)")
 
         meta.update(status="completed", finished_at=_utcnow())
         write_meta()

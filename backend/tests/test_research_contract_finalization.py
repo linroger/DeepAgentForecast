@@ -101,7 +101,9 @@ def test_deep_research_contract_requires_complete_exact_judge(tmp_path):
         encoding="utf-8",
     )
 
-    with pytest.raises(RuntimeError, match="checksum validation"):
+    with pytest.raises(
+        RuntimeError, match="judge_required_artifact_missing"
+    ):
         po._promote_research_contract(str(source), str(handoff))
     assert not (handoff / po._RESEARCH_CONTRACT_FILENAME).exists()
 
@@ -148,7 +150,12 @@ def test_research_contract_rejects_inconsistent_or_unbound_judge(
         corrupt_prose_hash=corrupt_prose_hash,
     )
 
-    with pytest.raises(RuntimeError, match="checksum validation"):
+    expected = (
+        "judge_meta_summary_mismatch"
+        if verdict == "FAIL"
+        else "judge_prose_hash_mismatch"
+    )
+    with pytest.raises(RuntimeError, match=expected):
         po._promote_research_contract(str(source), str(handoff))
     assert not (handoff / po._RESEARCH_CONTRACT_FILENAME).exists()
 
@@ -217,6 +224,50 @@ def test_finalization_seals_lint_cast_and_effective_sources_together(tmp_path):
     assert not list(handoff.glob(".research-final-*"))
     assert not list(handoff.glob(".research-stage-*"))
     assert not list(handoff.glob(".research-rollback-*"))
+
+
+def test_judge_bound_finalization_rejects_post_judge_report_mutation(tmp_path):
+    handoff = tmp_path / "handoff"
+    producer = tmp_path / "producer"
+    original_report = _write_judged_generation(producer)
+    original = po._promote_research_contract(str(producer), str(handoff))
+
+    with pytest.raises(RuntimeError, match="post-judge research report mutation"):
+        po._finalize_research_contract(str(handoff), {
+            "report": original_report.replace("[Chart]", "[Chart linted]"),
+            "actors": None,
+            "sources": None,
+            "meta": json.loads((handoff / "meta.json").read_text()),
+        })
+
+    assert po._validate_research_contract(str(handoff)) is True
+    assert (handoff / "research_report.md").read_text() == original_report
+    assert json.loads(
+        (handoff / po._RESEARCH_CONTRACT_FILENAME).read_text()
+    )["generation"] == original["generation"]
+
+
+def test_judge_bound_finalization_can_seal_non_report_artifacts(tmp_path):
+    handoff = tmp_path / "handoff"
+    producer = tmp_path / "producer"
+    report = _write_judged_generation(producer)
+    po._promote_research_contract(str(producer), str(handoff))
+    actors = {"actors": [{"name": "Bound Actor"}], "relationships": []}
+    sources = [{"url": "https://example.gov/bound", "tier": "S1"}]
+    meta = json.loads((handoff / "meta.json").read_text())
+    meta["research_budget"] = {"denials": 3}
+
+    po._finalize_research_contract(str(handoff), {
+        "report": report,
+        "actors": actors,
+        "sources": sources,
+        "meta": meta,
+    })
+
+    assert po._validate_research_contract(str(handoff)) is True
+    assert (handoff / "research_report.md").read_text() == report
+    assert json.loads((handoff / "actors.json").read_text()) == actors
+    assert json.loads((handoff / "sources.json").read_text()) == sources
 
 
 def test_unchanged_resume_keeps_existing_generation(tmp_path, monkeypatch):

@@ -635,8 +635,17 @@ class OasisProfileGenerator:
                 except Exception as e:
                     logger.debug(f"社区身份附加失败 ({entity_name}): {e}")
 
-            logger.info(f"Zep混合检索完成: {entity_name}, 获取 {len(results['facts'])} 条事实, {len(results['node_summaries'])} 个相关节点")
-            
+            # SIM-ADD-4(b)：区分「检索到 grounded 内容」与「检索空转」。后者意味着该 actor 的
+            # persona/每轮上下文缺 KG 支撑（图谱未覆盖该实体或检索未命中），逐轮发声将退回纯
+            # LLM 先验——这是真实降级，须响亮可见（此前 0/0 也只记 INFO，静默）。
+            if results["facts"] or results["node_summaries"]:
+                logger.info(f"Zep混合检索完成: {entity_name}, 获取 {len(results['facts'])} 条事实, {len(results['node_summaries'])} 个相关节点")
+            else:
+                logger.warning(
+                    f"Zep混合检索空转: {entity_name} 未命中任何事实/关系/节点"
+                    f"（graph_id={self.graph_id}）——该 actor 的模拟上下文缺 KG 支撑，"
+                    f"每轮发声将退回纯 LLM 先验")
+
         except concurrent.futures.TimeoutError:
             logger.warning(f"Zep检索超时 ({entity_name})")
         except Exception as e:

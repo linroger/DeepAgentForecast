@@ -5,6 +5,10 @@ description: Use this skill whenever a research question is a forecast — anyth
 
 # Prediction Markets Skill
 
+When this body is eagerly loaded for a scoped researcher, it is already complete
+in the conversation. Do **not** read `SKILL.md` from the filesystem again; use
+the permitted tools directly and record the resulting market rows.
+
 ## 1. Why markets, and what they are not
 
 Prediction-market prices are the **aggregated, money-weighted belief of people with skin in the game** — an excellent *calibration anchor* for a forecast. They are NOT ground truth: prices move continuously, thin markets are noisy, and market questions rarely match your research question's resolution criteria word-for-word. The workflow is: fetch → filter → compare → explain divergence — never copy.
@@ -27,6 +31,14 @@ endpoint. Do not invoke a shell, CLI, wallet, CLOB order endpoint, or any state-
 market operation. If both permitted paths have a real transport/protocol failure, record
 that degraded status and continue without a market anchor. A valid empty or
 relevance-filtered result is not a transport failure.
+
+**The stop rule.** The full market sweep (the derived queries of §2) runs **once, in the
+opening pass**. If it surfaces no liquid, topically relevant market, record
+`no_market_coverage` and **stop querying markets** — coverage does not appear because a
+later phase rephrases the question; one refresh at final synthesis is the only follow-up.
+Likewise never loop retries on a `transport_failure`: after a real transport/protocol
+failure, record the degraded status once and do not re-call the failing path within the
+same phase.
 
 ## 2. Query craft (match how markets are titled)
 
@@ -77,3 +89,5 @@ populated from the tool's `question`, `implied_yes_prob`, `volume`, `end_date`, 
 - ❌ Treating a market with mismatched threshold/date as equivalent to your statement.
 - ❌ Fabricating market IDs, prices, or URLs when the tool returns nothing.
 - ❌ Presenting the snapshot as live truth without the freshness caveat.
+- ❌ Re-running market search phase after phase once `no_market_coverage` is recorded (§1 stop rule; one synthesis refresh only).
+- ❌ Retrying a transport-failing market path within the same phase instead of recording the degraded status and moving on.

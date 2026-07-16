@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "launch_mode": "parallel",
+  "runs": [
+    {
+      "slug": "humanoid-robots-2035",
+      "status": "running",
+      "pipeline_id": "pipe_33f54602f2a0",
+      "initial_task_id": "10f2bb09-2b3d-402f-a238-8e92a85252b9",
+      "task_id": "714718e9-e05c-4b1a-a4dc-e5643747bd8d",
+      "resume_count": 6,
+      "research_budget_epoch": "714718e9-e05c-4b1a-a4dc-e5643747bd8d",
+      "prompt": "Forecast the commercialization of humanoid and general-purpose robots worldwide from 2026 through 2035. Compare end-to-end learned control, modular robotics stacks, teleoperation-assisted learning, and task-specific automation; analyze actuator, battery, sensor, compute, and manufacturing bottlenecks; assess unit economics and adoption in manufacturing, logistics, construction, retail, healthcare, and home assistance; and examine safety regulation, labor policy, liability, and public acceptance. Differentiate China, the United States, Japan, South Korea, and Europe. Quantify annual shipments, installed base, average selling price, bill-of-materials cost, useful operating hours, intervention rate, task success rate, and labor-cost payback periods. Identify the milestones separating pilot deployments from repeatable commercial scale. End with four mutually exclusive scenarios totaling 100%, 10–12 resolution-ready binary forecasts, and actual-data visualizations showing cost curves, deployment trajectories, regional comparisons, and published forecast revisions."
+    },
+    {
+      "slug": "grid-storage-2040",
+      "status": "running",
+      "pipeline_id": "pipe_ef32d3d420f4",
+      "initial_task_id": "38ced75e-0eb2-4065-9dc8-a07ccc79e20a",
+      "task_id": "79ea7132-518d-4b94-9e10-c24896e95c3b",
+      "resume_count": 7,
+      "research_budget_epoch": "79ea7132-518d-4b94-9e10-c24896e95c3b",
+      "prompt": "Forecast the global grid-scale energy-storage industry from 2026 through 2040. Compare lithium iron phosphate, sodium-ion, flow batteries, thermal storage, compressed-air storage, pumped hydro, hydrogen-derived storage, and other long-duration routes. Analyze project economics, raw-material and equipment supply chains, grid interconnection, renewable curtailment, capacity-market design, safety rules, recycling, and competition between storage durations. Differentiate China, the United States, Europe, India, Australia, the Middle East, Africa, and Latin America. Quantify annual and cumulative GW/GWh deployment, duration mix, installed cost, levelized cost of storage, cycle life, renewable curtailment, project lead time, and manufacturing capacity. Identify inflection points at which specific technologies become commercially competitive for four-, eight-, twelve-, and multi-day storage. End with four mutually exclusive scenarios totaling 100%, 10–12 resolution-ready binary forecasts, and sourced visualizations of deployment, costs, technology shares, and regional policy milestones."
+    },
+    {
+      "slug": "ai-compute-power-2035",
+      "status": "running",
+      "pipeline_id": "pipe_68a0a2365670",
+      "initial_task_id": "78d43477-532f-4700-933d-fd1121312d9f",
+      "task_id": "5a0283be-a202-495d-83b4-4028a8a0b5c1",
+      "resume_count": 6,
+      "research_budget_epoch": "5a0283be-a202-495d-83b4-4028a8a0b5c1",
+      "prompt": "Forecast the development of the global AI compute infrastructure and data-center power ecosystem from 2026 through 2035. Analyze five dimensions: evolution of accelerator, memory, networking, and cooling technologies; data-center construction and grid interconnection; competition across semiconductor, cloud, utility, and infrastructure supply chains; national policy and environmental constraints; and differentiated development across the United States, China, Europe, the Gulf states, India, and Southeast Asia. Quantify historical baselines and forecast ranges for data-center electricity demand, commissioned power capacity, capital expenditure, accelerator shipments, advanced-packaging and HBM capacity, utilization, water use, and cost per unit of compute. Identify major growth drivers, physical bottlenecks, regional divergences, and landmark inflection points during 2027–2035. End with four mutually exclusive scenarios totaling 100%, 10–12 resolution-ready binary forecasts with exact deadlines, and visualizations built only from sourced actual or published forecast data with source and as-of metadata. Clearly distinguish observations, targets, and forecasts."
+    }
+  ]
+}

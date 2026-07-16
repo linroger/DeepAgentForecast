@@ -91,6 +91,41 @@ def test_main_removes_all_stale_owned_rows_when_inputs_are_absent(tmp_path, monk
     assert json.loads(manifest.read_text(encoding="utf-8")) == [custom]
 
 
+def test_main_demotes_actor_network_by_default_and_requires_context_opt_in(
+    tmp_path, monkeypatch,
+):
+    renderer = _load_renderer()
+    (tmp_path / "actors.json").write_text(
+        json.dumps({
+            "actors": [
+                {"name": "A", "role_class": "principal"},
+                {"name": "B", "role_class": "stakeholder"},
+                {"name": "C", "role_class": "arbiter"},
+            ],
+            "relationships": [{"source": "A", "target": "B", "type": "SUPPLIES"}],
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(renderer, "_HAS_MPL", True)
+    monkeypatch.setattr(
+        renderer,
+        "render_network",
+        lambda prep, charts_dir: ("charts/actor_network.png", "charts/actor_network.html"),
+    )
+    monkeypatch.setattr(sys, "argv", [str(RENDERER_PATH), "--dir", str(tmp_path)])
+
+    assert renderer.main() == 2
+    assert not (tmp_path / "charts.json").exists()
+
+    monkeypatch.setattr(
+        sys, "argv", [str(RENDERER_PATH), "--dir", str(tmp_path), "--context"]
+    )
+    assert renderer.main() == 0
+    assert [r["id"] for r in json.loads(
+        (tmp_path / "charts.json").read_text(encoding="utf-8")
+    )] == ["actor_network"]
+
+
 def test_merge_preserves_custom_rows_even_when_their_path_looks_owned(tmp_path):
     renderer = _load_renderer()
     manifest = tmp_path / "charts.json"
@@ -125,6 +160,20 @@ def test_merge_preserves_idless_custom_chart_that_shares_renderer_source(tmp_pat
 
     assert renderer._merge_manifest(manifest, []) == [custom]
     assert renderer._owned_chart_id(custom) is None
+
+
+def test_update_manifest_locks_the_read_merge_write_transaction(tmp_path):
+    renderer = _load_renderer()
+    manifest = tmp_path / "charts.json"
+    custom = {"id": "custom_chart", "path": "charts/custom.png"}
+    current = {"id": "timeline", "path": "charts/timeline.png"}
+    _write_manifest(manifest, [custom])
+
+    merged = renderer._update_manifest(manifest, [current])
+
+    assert merged == [custom, current]
+    assert json.loads(manifest.read_text(encoding="utf-8")) == merged
+    assert (tmp_path / "charts.json.lock").exists()
 
 
 def test_merge_handles_malformed_legacy_rows_and_is_deterministic(tmp_path):
@@ -294,6 +343,24 @@ def test_prep_quant_builds_comparable_panels_not_largest_ambiguous_unit_group():
     assert all(panel["unit"] not in {"%", "USD billion"} for panel in prepared["panels"])
 
 
+def test_prep_quant_uses_canonical_midpoint_and_preserves_explicit_range():
+    renderer = _load_renderer()
+    rows = [
+        {"metric": "Current best intra-day LDES power capex", "value": "1100-1400",
+         "value_num": 999, "unit": "USD/kW", "as_of_date": "2026-01-21",
+         "source": "EPRI benchmark", "definition": "Intra-day LDES power capex"},
+        {"metric": "2030 intra-day LDES power capex target", "value": "650",
+         "value_num": 650, "unit": "USD/kW", "as_of_date": "2026-01-21",
+         "source": "EPRI benchmark", "definition": "Intra-day LDES power capex target"},
+    ]
+    prepared = renderer.prep_quant(rows)
+    assert prepared is not None
+    bars = prepared["panels"][0]["bars"]
+    ranged = next(bar for bar in bars if bar["metric"].startswith("Current best"))
+    assert (ranged["value"], ranged["low"], ranged["high"]) == (1250.0, 1100.0, 1400.0)
+    assert "LDES power capex" in prepared["panels"][0]["title"]
+
+
 def test_prep_quant_requires_semantic_compatibility_and_provenance():
     renderer = _load_renderer()
     rows = [
@@ -362,6 +429,137 @@ def test_prep_quant_drops_future_dated_actuals_but_keeps_forecasts():
     prepared = renderer.prep_quant(forecasts)
     assert prepared is not None
     assert all(point["projection"] is True for point in prepared["panels"][0]["bars"])
+
+
+def test_prep_trajectories_uses_period_end_not_publication_date():
+    renderer = _load_renderer()
+    rows = [
+        {
+            "metric": f"Global robot shipments {year}",
+            "series": "Global annual humanoid robot shipments",
+            "value": value,
+            "unit": "robots/year",
+            "as_of_date": "2026-07-01",
+            "period_end": f"{year}-12-31",
+            "value_type": "observed" if year <= 2025 else "forecast",
+            "geography": "Global",
+            "technology_route": "All routes",
+            "definition": "Calendar-year worldwide commercial humanoid robot shipments",
+            "source": "Industry shipment dataset",
+            "source_url": "https://example.test/shipments",
+            "tier": "S2",
+        }
+        for year, value in ((2024, 1200), (2025, 3500), (2027, 18000), (2030, 120000))
+    ]
+
+    prepared = renderer.prep_trajectories(rows)
+
+    assert prepared is not None
+    points = prepared["series"][0]["points"]
+    assert [point["period_end"] for point in points] == [
+        "2024-12-31", "2025-12-31", "2027-12-31", "2030-12-31"
+    ]
+    assert [point["projection"] for point in points] == [False, False, True, True]
+    assert {point["as_of"] for point in points} == {"2026-07-01"}
+
+
+def test_prep_trajectories_uses_nested_period_end_before_publication_date():
+    renderer = _load_renderer()
+    rows = [
+        {
+            "metric": f"Global robot shipments {year}",
+            "series": "Global annual humanoid robot shipments",
+            "value_num": value,
+            "unit": "robots/year",
+            "as_of_date": "2026-07-01",
+            "period": {"end": f"{year}-12-31"},
+            "value_kind": "actual" if year <= 2025 else "forecast",
+            "definition": "Calendar-year worldwide commercial humanoid robot shipments",
+            "source": "Industry shipment dataset",
+            "source_url": "https://example.test/shipments",
+        }
+        for year, value in ((2024, 1200), (2025, 3500), (2030, 120000))
+    ]
+
+    prepared = renderer.prep_trajectories(rows)
+
+    assert prepared is not None
+    points = prepared["series"][0]["points"]
+    assert [point["year"] for point in points] == [2024, 2025, 2030]
+    assert [point["period_end"] for point in points] == [
+        "2024-12-31", "2025-12-31", "2030-12-31",
+    ]
+
+
+def test_prep_trajectories_requires_three_periods_and_published_projection_provenance():
+    renderer = _load_renderer()
+    base = {
+        "series": "Global storage deployment",
+        "metric_family": "cumulative deployment",
+        "unit": "GW",
+        "region": "Global",
+        "definition": "Cumulative operating grid-scale storage power",
+        "as_of_date": "2026-07-01",
+    }
+    two_rows = [
+        {**base, "metric": f"Deployment {year}", "value_num": value, "year": year,
+         "period_end": f"{year}-12-31", "value_kind": "actual", "source": "Agency"}
+        for year, value in ((2024, 100), (2025, 150))
+    ]
+    assert renderer.prep_trajectories(two_rows) is None
+
+    internal = two_rows + [{
+        **base,
+        "metric": "Deployment 2030",
+        "value_num": 900,
+        "year": 2030,
+        "period_end": "2030-12-31",
+        "value_kind": "forecast",
+        "source": "Global dossier analyst interpolation",
+    }]
+    assert renderer.prep_trajectories(internal) is None
+
+    published = [dict(row) for row in internal]
+    published[-1]["source"] = "Published industry outlook"
+    published[-1]["source_url"] = "https://example.test/outlook"
+    assert renderer.prep_trajectories(published) is not None
+
+    for invalid_url in (
+        "not-a-url", "file:///tmp/outlook", "javascript:alert(1)",
+        "https:///missing-host",
+    ):
+        invalid = [dict(row) for row in published]
+        invalid[-1]["source_url"] = invalid_url
+        assert renderer.prep_trajectories(invalid) is None
+
+
+def test_timeline_display_text_neutralizes_plotly_math_delimiters():
+    renderer = _load_renderer()
+    text = renderer._plotly_text(
+        "Revenue fell from US$192/kW-year to US$55/kW-year."
+    )
+    assert "$" not in text
+    assert "USD 192/kW-year" in text
+    assert "USD 55/kW-year" in text
+
+
+def test_prep_trajectories_rejects_rows_without_explicit_period_end():
+    renderer = _load_renderer()
+    rows = [
+        {
+            "metric": f"Battery cost {year}",
+            "series": "Battery cost",
+            "value": value,
+            "unit": "USD/kWh",
+            "as_of_date": f"{year}-12-31",
+            "value_type": "observed",
+            "definition": "Volume-weighted battery pack cost",
+            "source": "Published battery survey",
+        }
+        for year, value in ((2023, 140), (2024, 115), (2025, 108))
+    ]
+
+    assert renderer.prep_trajectories(rows) is None
 
 
 def _bnef_revision_rows():
@@ -671,7 +869,11 @@ def test_main_registers_market_and_source_figures(tmp_path, monkeypatch):
         "render_sources",
         lambda prep, charts_dir: ("charts/source_quality.png", "charts/source_quality.html"),
     )
-    monkeypatch.setattr(sys, "argv", [str(RENDERER_PATH), "--dir", str(tmp_path)])
+    # source_quality is a diagnostic figure and is off by default; opt in explicitly
+    # so this test still exercises the source path under the new diagnostics gate.
+    monkeypatch.setattr(
+        sys, "argv", [str(RENDERER_PATH), "--dir", str(tmp_path), "--diagnostics"]
+    )
 
     assert renderer.main() == 0
     manifest = json.loads((tmp_path / "charts.json").read_text(encoding="utf-8"))

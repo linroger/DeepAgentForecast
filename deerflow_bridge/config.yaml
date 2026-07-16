@@ -61,25 +61,24 @@ models:
     supports_vision: true
     enable_prompt_caching: true
 
-  # === ACTIVE: Antigravity via vibeproxy (OpenAI-compatible local proxy) ===
+  # === FALLBACK: Antigravity via Quotio (OpenAI-compatible local proxy) ===
   # Use with `--model antigravity` (deerflow_research.py) or set MiroFish's
-  # DEERFLOW_MODEL=antigravity. vibeproxy exposes an OpenAI-compatible gateway at
-  # http://localhost:8317/v1 that fronts Antigravity / Google Gemini models. Auth is
-  # a placeholder (the local proxy ignores the value), so the key is the literal
-  # `sk-dummy`. Native tool calling is supported (verified), which the deep-research
-  # tool loop requires. The bare id `gemini-3.5-flash` is NOT served (proxy returns
-  # "unknown provider"); only the reasoning-tier variants exist — `gemini-3.5-flash-low`
-  # (used here) and `gemini-3.5-flash-extra-low`. PatchedChatOpenAI preserves Gemini
-  # tool-call thought_signature values across multi-turn tool calls.
+  # DEERFLOW_MODEL=antigravity. Quotio exposes Antigravity through the local endpoint
+  # configured by LLM_FALLBACK_BASE_URL/API_KEY.  The provider remains Antigravity;
+  # ``gemini-3-flash-preview`` is Quotio's model alias.  Low reasoning effort is
+  # explicit so fallback latency/cost stays bounded. PatchedChatOpenAI preserves
+  # thought-signature values across multi-turn tool calls.
   - name: antigravity
-    display_name: Gemini 3.5 Flash (Antigravity/vibeproxy)
+    display_name: Gemini 3 Flash Preview (Antigravity/Quotio)
     use: deerflow.models.patched_openai:PatchedChatOpenAI
-    model: gemini-3.5-flash-low
-    api_key: sk-dummy
-    base_url: http://localhost:8317/v1
+    model: gemini-3-flash-preview
+    api_key: $LLM_FALLBACK_API_KEY
+    base_url: $LLM_FALLBACK_BASE_URL
+    reasoning_effort: low
+    supports_reasoning_effort: true
     request_timeout: 900.0
     max_retries: 2
-    # gemini-3.5-flash: 1,048,576 input / 65,536 output token limits. Long-form dossier +
+    # Gemini 3 Flash: 1,048,576 input / 65,536 output token limits. Long-form dossier +
     # tool-free synthesis report want the full output ceiling to avoid truncation.
     max_tokens: 65536
     context_window_tokens: 1048576

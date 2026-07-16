@@ -57,6 +57,9 @@ RUNS = {
     # added 2026-07-04 — GRAPH-12 schema-echo-unwrap validation runs
     "us-trade-2028": "pipe_bf2bb3095d11",
     "us-midterms-2026": "pipe_aa0fb94abe92",
+    # added 2026-07-16 — MiniMax run with additive decision-channel simulation,
+    # forecast-data charts (no source-quality), and groupable metric trajectories
+    "grid-storage-2040": "pipe_0e1b84d2682a",
 }
 
 PLACEHOLDER_MARKER = "本章节生成失败"

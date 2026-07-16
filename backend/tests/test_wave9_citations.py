@@ -500,6 +500,25 @@ class _CiteLLM:
         self.calls.append(messages)
         sys_p = (messages or [{}])[0].get("content", "")
         user = (messages or [{}])[-1].get("content", "")
+        if "same alphabetic keys" in sys_p:
+            payload = json.loads(user)
+
+            def _slot(value):
+                return (value
+                        .replace("The Outlook base case is", "展望基准情景为")
+                        .replace("with confirmation", "且有确认")
+                        .replace("and a floor", "与下限")
+                        .replace("The Outlook tail sits at", "展望尾部风险为")
+                        .replace("# Outlook Report", "# 展望报告")
+                        .replace("> Summary.", "> 摘要。")
+                        .replace("## Findings", "## 研究结果")
+                        .replace("## Tail", "## 尾部风险"))
+
+            return json.dumps(
+                {key: _slot(value) for key, value in payload.items()},
+                ensure_ascii=False,
+            )
+        user = ReportAgent._decode_translation_placeholders(user)
         replacements = {
             "# Outlook Report": "# 展望报告",
             "> Summary.": "> 摘要。",
@@ -521,7 +540,7 @@ class _CiteLLM:
         return out
 
 
-def test_bilingual_parity_retry_restores_markers(reports_tmp, monkeypatch):
+def test_bilingual_source_skeleton_restores_dropped_markers(reports_tmp, monkeypatch):
     monkeypatch.setattr(Config, "REPORT_TRANSLATION_CONCURRENCY", 1, raising=False)
     rid = "report_parity_ok"
     ReportManager._ensure_report_folder(rid)
@@ -538,8 +557,8 @@ def test_bilingual_parity_retry_restores_markers(reports_tmp, monkeypatch):
     with open(zh_path, encoding="utf-8") as f:
         out = f.read()
     assert out.count("[S1]") == 3 and out.count("[S2]") == 2   # 正文 + References
-    assert any("CITATION TOKEN INVENTORY" in (c or [{}])[0].get("content", "")
-               for c in llm.calls)                              # 确实带清单重试过
+    assert any("same alphabetic keys" in (c or [{}])[0].get("content", "")
+               for c in llm.calls)                              # 确实走源骨架恢复
     entry = report.translations[0]
     assert entry["translation_quality"] == "ok"
     assert "citation_drift" not in entry
@@ -547,7 +566,9 @@ def test_bilingual_parity_retry_restores_markers(reports_tmp, monkeypatch):
     assert os.path.exists(os.path.join(reports_tmp, rid, "final_audit.zh.json"))
 
 
-def test_bilingual_parity_persistent_drift_blocks_publication(reports_tmp, monkeypatch):
+def test_bilingual_source_skeleton_handles_persistent_model_marker_drop(
+    reports_tmp, monkeypatch
+):
     monkeypatch.setattr(Config, "REPORT_TRANSLATION_CONCURRENCY", 1, raising=False)
     rid = "report_parity_drift"
     ReportManager._ensure_report_folder(rid)
@@ -556,18 +577,22 @@ def test_bilingual_parity_persistent_drift_blocks_publication(reports_tmp, monke
                     simulation_requirement="req", status=ReportStatus.COMPLETED,
                     markdown_content=_EN_CITED)
     _write_primary_citations(reports_tmp, rid)
-    a = _agent(llm=_CiteLLM(drop_always=True), output_language="English")
+    llm = _CiteLLM(drop_always=True)
+    a = _agent(llm=llm, output_language="English")
     a._generate_bilingual_report(rid, report)
-    assert report.translations is None
-    assert not os.path.exists(os.path.join(reports_tmp, rid, "full_report.zh.md"))
+    assert report.translations and report.translations[0]["translation_quality"] == "ok"
+    assert os.path.exists(os.path.join(reports_tmp, rid, "full_report.zh.md"))
     with open(os.path.join(reports_tmp, rid, "final_audit.zh.json"), encoding="utf-8") as f:
         audit = json.load(f)
-    assert audit["hard_passed"] is False
-    assert audit["citation_drift"]
-    assert audit["citation_drift"][0]["diff"]["S1"] == {"src": 2, "dst": 1}
+    assert audit["hard_passed"] is True
+    assert "citation_drift" not in audit
+    assert any("same alphabetic keys" in (c or [{}])[0].get("content", "")
+               for c in llm.calls)
 
 
-def test_bilingual_retry_toggle_cannot_bypass_final_parity_gate(reports_tmp, monkeypatch):
+def test_bilingual_retry_toggle_cannot_disable_skeleton_or_final_gate(
+    reports_tmp, monkeypatch
+):
     monkeypatch.setattr(Config, "REPORT_TRANSLATION_CONCURRENCY", 1, raising=False)
     monkeypatch.setattr(Config, "REPORT_TRANSLATION_CITATION_PARITY", False, raising=False)
     rid = "report_parity_off"
@@ -580,11 +605,13 @@ def test_bilingual_retry_toggle_cannot_bypass_final_parity_gate(reports_tmp, mon
     llm = _CiteLLM(drop_always=False)
     a = _agent(llm=llm, output_language="English")
     a._generate_bilingual_report(rid, report)
-    # 关闭只影响重译机会，不得绕过最终引用完整性门。
+    # 关闭只影响旧式引用清单重译，不得关闭确定性源骨架或最终完整性门。
     assert not any("CITATION TOKEN INVENTORY" in (c or [{}])[0].get("content", "")
                    for c in llm.calls)
-    assert report.translations is None
-    assert not os.path.exists(os.path.join(reports_tmp, rid, "full_report.zh.md"))
+    assert any("same alphabetic keys" in (c or [{}])[0].get("content", "")
+               for c in llm.calls)
+    assert report.translations and report.translations[0]["translation_quality"] == "ok"
+    assert os.path.exists(os.path.join(reports_tmp, rid, "full_report.zh.md"))
 
 
 # ───────────────────── PDF footnote rewrite ───────────────────────────────

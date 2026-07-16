@@ -10,6 +10,14 @@ import sys
 
 import pytest
 
+# Hard test-process boundary: importing or constructing the Flask app runs
+# lifecycle recovery hooks in production.  Without this marker, a pytest
+# process can scan the real uploads tree, mistake a simulator owned by the live
+# localhost backend for an orphan, and terminate it.  Set this at conftest
+# import time (before test modules are imported), not in a fixture, so even
+# module-level app construction remains non-destructive.
+os.environ["DRF_TEST_PROCESS"] = "1"
+
 # Make `import app...` work when running pytest from the backend/ dir.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -57,6 +65,15 @@ def _no_prediction_market_network(monkeypatch):
         monkeypatch.setattr(Config, "PREDICTION_MARKETS_ENABLED", False, raising=False)
     except Exception:  # noqa: BLE001 — Config 不可导入时旗标已由环境变量兜底
         pass
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_firecrawl_key(monkeypatch):
+    """Firecrawl 凭据离线化（offline-first 契约）：app.config 以 override=True 加载 .env，
+    真实 FIRECRAWL_API_KEY 会泄入 pytest 进程并把 search/fetch 调度路由到付费直连后端，
+    使既有 delegate/DDG 断言按环境漂移。测试一律剥离该 key；需要 firecrawl 路由的测试
+    显式 setenv 假 key 并 mock httpx（见 test_sessionb_firecrawl.py）。"""
+    monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
 
 
 @pytest.fixture

@@ -20,7 +20,7 @@ git clone https://github.com/linroger/DeepAgentForecast.git
 cd DeepAgentForecast
 ./setup.sh        # 交互式：选择你的 LLM 提供方并一键安装全部依赖
 npm run doctor    # 数秒内体检环境是否就绪
-npm run dev       # 后端 :5001 + 前端 :3000
+npm start         # 后端 :5001 + 前端 :3000；流式日志 + 阶段标记
 ```
 
 随后打开 **<http://localhost:3000/research>**，输入问题，点击 **运行研究 + 模拟 + 预测**。
@@ -101,7 +101,7 @@ npm run dev       # 后端 :5001 + 前端 :3000
 - **自动联网研究（规模化）**：**三条多角度研究轨并行**运行（基础证据 · 基率与参照类 · 激励/反面/市场），每条轨再**并行**跑「双轨」DeerFlow 工作流 —— 一路「深度研究」写出循证研究档案，一路「角色本体研究」深挖真正的关键行动者：其角色、价值观、信念、动机、资源，以及彼此之间有向、带类型、**带极性（盟友≠对手≠交易方）**的关系；同时把仅被引用的记者/媒体/来源降级为上下文。底层每一路都会运行**分阶段多轮协议**、**8 路 per-KIQ/per-actor 扇出**+ harness **子代理**的智能体式检索、**研究 judge→refine 环**、通用 **S1–S4 来源分级**+三角验证补充，以及**多段并行合成**，最终产出 **1.5–2.5 万字**的深度档案。研究阶段还会从 **Polymarket** 拉取实时市场隐含概率作为校准锚点。
 - **构建高保真平行世界**：把研究成果蒸馏进一张带**分层、行为画像丰富的本体**的时序知识图谱（GraphRAG），并为每位**关键行动者**（决策者与利益相关方）生成一位数字人格 —— 按显著度（salience）而非单纯连接度排序。
 - **以日历时间模拟未来演化**：系统会从你的问题中**自动抽取预测判定日**（「到 2030 年」「未来 18 个月」「2035 年底」……），把研究基准日到判定日之间的时间跨度切分为**每轮一个整日历单位**（日 / 周 / 半月 / 月 / 季度 / 半年）的回合 —— 轮数随判定日**动态伸缩**（问到 2035 的轮数多于问到 2029 的），单位也始终与问题匹配：「到 2030 年」→ 18 个季度轮，「三周内」→ 21 个单日轮。每一轮，LLM 人格都在**世界时钟**下扮演真实行动者**在整个时段内**会做的事 —— 决策、公告、结盟或战略性按兵不动；调研得到的真实事件会在其实际日期所在的回合触发；**世界态**在轮与轮之间演化（日历尺度惯性 + 基率熵底），并把「上一时段发生了什么」的定性摘要回灌给智能体。可选的**多种子集成**会重跑模拟+报告并聚合概率。
-- **产出可交互预测报告**：由报告 Agent 在图谱与模拟之上做工具增强的检索，综合写出一份分章节的预测报告 —— 内嵌**图表**（Mermaid + matplotlib）、**逐条预测的 Polymarket 锚定**，并支持一键 **PDF 导出**。
+- **产出可交互预测报告**：由报告 Agent 在图谱与模拟之上做工具增强的检索，综合写出一份分章节的预测报告 —— 内嵌**预测数据图表**（交互式 Plotly，HTML + PNG 成对输出：情景概率、二元预测点图、指标轨迹、模型 vs 市场）、**逐条预测的 Polymarket 锚定**，并支持一键 **PDF 导出**。
 
 整条链路由 **一个提示词（one prompt）** 触发，全程自动衔接，无需人工在各阶段之间手动搬运中间产物。
 
@@ -181,6 +181,71 @@ flowchart LR
  └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘
 ```
 
+### 全流程精细视图
+
+下图中的每个方框都对应一条真实代码路径——阶段进入条件、阶段内部步骤、质量门与每一步读写的持久化产物。实线为主路径；judge 的 FAIL 边与虚线的状态/图谱边是恢复与持久化路径。（同一张图带 `file:line` 引用的版本见 [`DRF_ARCHITECTURE.md`](DRF_ARCHITECTURE.md)。）
+
+```mermaid
+flowchart TD
+    U([用户提示词]) --> API["POST /api/pipeline/run<br/>预检 → pipe_&lt;id&gt; + 任务<br/>守护线程 · 30 秒心跳 · 恢复/分叉/取消"]
+    API --> SYNC
+
+    subgraph S1["阶段 1 · 深度研究（0–30%）— DeerFlow 子进程 · 独立 venv"]
+        SYNC["运行时技能 + 桥接同步<br/>与已部署 deer-flow/ 做 SHA-256 比对（漂移即拒绝）"] --> EPOCH
+        EPOCH["工具预算纪元（SQLite 台账）<br/>尝试 1800 · 搜索 900 · 抓取 450<br/>每条管线至多 3 个纪元"] --> LANES
+        subgraph LANES["3 条并行 evidence-only 证据轨（各有专属视角）"]
+            direction LR
+            L1["轨 1 · 基础证据<br/>+ Track B 角色本体档案"]
+            L2["轨 2 · 基率与历史类比"]
+            L3["轨 3 · 激励 · 反面 · 市场"]
+        end
+        LANES --> LOOP["每轨深度循环<br/>开局 → 划界 → 3 个限定阶段并行 → 预测启示<br/>+ 每 KIQ 扇出（8 路）· 子代理（全局租约 ≤ 9）<br/>+ 自适应补缺轮（平台期即停）<br/>工具：web_search · web_fetch（带缓存）· prediction_market_search"]
+        LOOP --> PACKS["每轨 evidence_pack.md + sources.json<br/>封存进 evidence_synthesis_manifest.json（SHA-256）"]
+        PACKS --> GS["全局综合子进程<br/>大纲 → 多段章节 → 合并<br/>≤ 2 次尝试 · 恢复时仅重跑综合"]
+        GS --> JUDGE{"七维报告评审<br/>记分牌与字节绑定"}
+        JUDGE -- 通过 --> EXTRACT["结构化抽取<br/>actors.json · timeline.json · quantitative.json<br/>contested.json · prediction_markets.json · charts/"]
+        JUDGE -- 不通过 --> GS
+        EXTRACT --> CONTRACT["研究契约晋升<br/>manifest 最后落盘 · 可回滚<br/>research_report.md 封存"]
+    end
+
+    CONTRACT --> ONT
+    subgraph S2["阶段 2 · 本体生成（30–40%）"]
+        ONT["LLM 推导实体 + 关系类型<br/>每实体：原型 + 模拟层级<br/>每关系：族 + 极性 → ontology.json"]
+    end
+    ONT --> GB
+    subgraph S3["阶段 3 · 图谱构建（40–60%）— 本地 Graphiti 时序知识图谱"]
+        GB["档案分块 → 批量灌入情节<br/>本地 LLM 抽取 + MiniLM 嵌入<br/>嵌入式 FalkorDB（无服务进程、无 Key）"] --> GP["社区检测 → 实体消歧<br/>→ 剪枝（≤ 400 节点）→ graph_priors.json"]
+    end
+    GP --> CAST
+    subgraph S4["阶段 4 · 环境搭建（60–72%）"]
+        CAST["阵容遴选（按显著度排序，≤ 20）<br/>确定性角色契约（不经 LLM）"] --> PERS["人格装配<br/>价值观 · 信念 · 动机 · 资源<br/>+ 调研得来的盟友/对手网络"]
+        PERS --> SIMCFG["simulation_config.json<br/>temporal_config：到判定日的日历轮<br/>world_state_seed（情景 + 基率）"]
+    end
+    SIMCFG --> OASIS
+    subgraph S5["阶段 5 · 群体模拟（72–92%）— OASIS 子进程"]
+        OASIS["Twitter + Reddit 双平台模拟<br/>1 轮 = 1 个日历单位（日 … 半年）<br/>每轮世界时钟 · 真实事件按日期入轮<br/>轮间世界态演化"] --> RS["run_summary.json<br/>卡死看门狗（30 分钟）· 可选图谱回灌"]
+    end
+    RS --> RA
+    subgraph S6["阶段 6 · 预测报告（92–100%）"]
+        RA["ReportAgent ReAct 循环<br/>大纲 6–14 章 → 逐章撰写<br/>insight_forge 检索图谱 + 模拟信号"] --> FX["forecast_extractor<br/>4 个情景（Σ = 100%）· 10–13 条二元预测<br/>Polymarket 锚定 · 出处校验"]
+        FX --> VIZ["report_visualizer（确定性，不经 LLM）<br/>情景概率 · 二元预测点图 · 模型 vs 市场<br/>指标轨迹 · 时间线 · 角色网络<br/>元数据图仅可显式开启"]
+        VIZ --> GATES["报告 lint（judge 后只审计）→ 硬审计<br/>→ PDF（pandoc/XeLaTeX，中文安全）<br/>→ 可选中文侧车（经审计）→ 高管简报"]
+        GATES --> ENS["可选多种子集成<br/>逐种子重跑 prepare→run→report<br/>→ ensemble_forecast.json"]
+    end
+    ENS --> DONE([交互式预测报告<br/>full_report.md · forecast.json · charts/ · PDF])
+
+    KG[("Graphiti 时序知识图谱<br/>嵌入式 FalkorDB")]
+    GB -.写入.-> KG
+    PERS -.读取.-> KG
+    RA -.insight_forge.-> KG
+
+    STATE[("pipeline_state.json · run.json<br/>handoff/manifest.json（SHA-256）<br/>按产物恢复 · 孤儿对账")]
+    S1 -.检查点.-> STATE
+    S3 -.-> STATE
+    S5 -.-> STATE
+    S6 -.-> STATE
+```
+
 | 阶段 | 名称 | 说明 |
 |------|------|------|
 | 1 | **research（多角度 · 双轨 · 规模化）** | 编排器扇出**三条并行研究轨**（基础证据 · 基率与参照类 · 激励/反面/市场），每条轨是一个 DeerFlow 子进程（独立 Python venv），在其中**同时运行两个研究工作流**；各轨结果确定性合并（来源取并集保留最高分级、阵容去重对账、质量取最小、市场取最新）。底层每一路运行分阶段**多轮协议**、**8 路 per-KIQ/per-actor 扇出**+ harness **子代理**、**研究 judge→refine 环**、通用 **S1–S4 来源分级**+三角验证补充、**多段并行合成**，产出 **1.5–2.5 万字**深度档案；并捕获 **Polymarket** 实时市场作为校准锚。全部写入基于文件的「交接契约」：`research_report.md`（Track A 广覆盖深度研究档案，用于增强图谱/本体/局势上下文）、`actor_dossier.md`（Track B 角色本体档案：分层排序的行动者阵容 + 价值观/信念/动机/资源 + 有向带极性的关系网）、`actors.json`（从两者抽取的结构化阵容与关系，**以角色档案为主、研究报告为辅**）、`sources.json`、`prediction_requirement.txt`、`timeline.json`、`meta.json`、`research_progress.log`、`market_price_history.json`（被锚定市场的 90 天 Polymarket 价格序列）。 |
@@ -188,7 +253,7 @@ flowchart LR
 | 3 | **graph（图谱构建）** | 将**两份档案**分块灌入本地运行的 Graphiti 时序知识图谱（GraphRAG，嵌入式 FalkorDB）；实体/关系由你配置的本地 LLM 抽取，向量嵌入由本地 sentence-transformers 多语言模型计算。 |
 | 4 | **prepare（环境搭建）** | **仅为关键行动者**（第 1 层决策者 + 第 2 层利益相关方，次要实体留作图谱上下文）生成数字人格，按**显著度（salience）**而非单纯邻边数排序；每位人格携带其**行为画像（行为 DNA：价值观/信念/动机/资源）**与调研得来的盟友/对手/供应商/投资方关系网。**模拟时间线由问题的预测判定日确定性推导**（单位 + 轮数 + 带日期的回合边界，写入版本化的 `temporal_config`）。 |
 | 5 | **run（群体模拟）** | OASIS 以**日历时间**运行双平台（Twitter + Reddit）多智能体模拟：每轮对应研究基准日与判定日之间的一个整日历单位（日 / 周 / 半月 / 月 / 季度 / 半年）——「到 2030 年」→ 18 个季度轮，「到 2035 年」→ 19 个半年轮。智能体在每轮的**世界时钟**下扮演其行动者在该时段内的作为（头部**主角级**行动者每轮必然行动），带日期的真实事件在其真实回合触发，**世界态概率轨迹**逐轮演化直至判定日（数值概率对智能体隐藏以防羊群效应）。旧的新闻周期模式可经 `SIM_TEMPORAL_MODE=hours` 恢复。 |
-| 6 | **report（预测报告）** | ReportAgent（一个带 `insight_forge` 工具的 ReAct 循环）从图谱 + 模拟结果中检索，写出一份分章节的预测报告：桥水式三部分骨架（二元预测表 · 框架综合 · 附录）、**逐条预测的 Polymarket 锚定**（含 10pp 分歧须说明规则）、确定性**可视化层**（Mermaid + matplotlib 图表内嵌进报告），并支持一键 **PDF 导出**。可选的**多种子集成**会重跑模拟+报告并聚合概率。 |
+| 6 | **report（预测报告）** | ReportAgent（一个带 `insight_forge` 工具的 ReAct 循环）从图谱 + 模拟结果中检索，写出一份分章节的预测报告：桥水式三部分骨架（二元预测表 · 框架综合 · 附录）、**逐条预测的 Polymarket 锚定**（含 10pp 分歧须说明规则）、确定性**可视化层**（交互式 Plotly 图表，HTML + PNG 成对输出，matplotlib 兜底），并支持一键 **PDF 导出**。图表槽位**只放预测数据**：情景概率、二元预测点图、模型 vs 市场分歧、研究抽取的**指标轨迹**（成本曲线、部署路径）、事件时间线与角色网络——来源构成、影响力代理值等**管线元数据图默认关闭、仅可显式开启**，绝不挤占预测图表。可选的**多种子集成**会重跑模拟+报告并聚合概率。 |
 
 ---
 
@@ -197,7 +262,7 @@ flowchart LR
 - **一句话 → 完整预测**：单个问题端到端驱动「研究 → 模拟 → 报告」整条管线，无需在阶段间手动搬运中间产物。
 - **规模化自主深度研究**：**三条并行多角度轨**各自多角度联网搜索 + 全文抓取，沉淀为带行动者与来源的结构化研究档案。选择 `deep` 深度时，DeerFlow 会执行分阶段多轮协议（来源版图、原始证据、行动者/激励、矛盾/风险、预测输入、最终长文综合），并配合 **8 路 per-KIQ 扇出**、harness **子代理**、**研究 judge→refine 环**、通用 **S1–S4 来源分级**+三角验证补充，以及**多段并行合成** —— 突破单次补全的字数天花板，产出 **1.5–2.5 万字**深度档案。
 - **预测市场锚定（Polymarket）**：研究阶段通过 LLM 生成的**市场化检索词**+**相关性门控**，从 Polymarket 官方 **Gamma + CLOB** API **无需 Key** 拉取隐含概率，注入为研究前**校准锚点**；报告阶段做**逐条预测锚定**（10pp 分歧须说明规则）、**双时态重报价**（研究期价 vs 现价 + Δ），并渲染 **90 天价格历史**图表。
-- **确定性报告可视化 + PDF**：一个免 LLM 的可视化层渲染 **Mermaid** 图（时间线 / 因果路径 / 派系 / 角色关系网络）与 **matplotlib** 图（情景误差棒、模型 vs 市场哑铃、世界态堆叠面积、对比柱、校准曲线）并内嵌进报告；可按需 **PDF 导出**（pandoc / XeLaTeX，中文安全）。
+- **确定性报告可视化 + PDF**：一个免 LLM 的可视化层渲染**交互式 Plotly 图表**（HTML + PNG 成对输出，matplotlib 兜底）并内嵌进报告——默认槽位只放**预测数据**（情景概率含集成误差带、二元预测点图、模型 vs 市场哑铃、研究抽取的指标轨迹、跨版本预测修订、事件时间线、角色网络、世界态轨迹、市场价格历史），来源构成 sunburst、影响力/显著度代理值等元数据诊断图**默认关闭、仅可显式开启**；可按需 **PDF 导出**（pandoc / XeLaTeX，中文安全）。
 - **多种子集成 & 自适应上下文**：可选的多种子集成会重跑模拟+报告并聚合概率；上下文切片（前序章节、人设、世界简报）会**按提供方上下文窗口预算化**。
 - **DeerFlow harness 技能**：四个技能 —— `deep-research`、`actor-ontology-research`、`prediction-markets`、`forecast-visuals` —— 被部署到 DeerFlow 2.0 超级智能体 harness，并被智能体提示词引用。
 - **研究档案驱动的人设**：结构化行动者档案（`actors.json`：每位真实世界行动者的角色、立场、影响力、记忆）为本体生成、**智能体人格、每个智能体的立场/影响力配置以及模拟的初始帖子**提供种子 —— 智能体从调研得来的事实出发，而非 LLM 的凭空猜测。
@@ -284,10 +349,12 @@ npm run doctor
 ### 3. 运行
 
 ```bash
-npm run dev        # 后端 :5001 + 前端 :3000
+npm start          # 后端 :5001 + 前端 :3000；实时日志 + 阶段标记
 ```
 
 打开 **<http://localhost:3000/research>**，输入你的问题，点击 **Run research + simulate + forecast**。后端会在发起运行时对配置做预检（preflight）—— 配置有误会在几秒内被报告，而不是等一场 40 分钟的研究跑完才发现。
+
+`npm start` 仍以可持久运行的方式启动两个服务，同时在当前终端跟随前后端日志，并在每个持久化工作流阶段变化时输出简洁的 `▶/✓/✕` 标记。按 **Ctrl-C 只停止日志流**；使用 `npm stop` 停止服务。若只需完成就绪检查后立即返回，可运行 `npm start -- --detach`。传统的前台开发启动方式 `npm run dev` 仍然保留。
 
 ---
 
@@ -347,9 +414,10 @@ npm run dev        # 后端 :5001 + 前端 :3000
 | `RESEARCH_MULTIPART_SYNTHESIS` | *（空 → 仅 deep）* | 大纲 → 并行分节撰写 → 缝合 → 长度门，产出 1.5–2.5 万字档案。 |
 | `RESEARCH_FANOUT_WIDTH` | `8` | scope pass 后并行 per-KIQ / per-actor 子调查的宽度上限。 |
 | `DEERFLOW_SUBAGENTS` | `true` | 启用 DeerFlow harness 子代理（并行 scoped workers）。 |
+| `FIRECRAWL_API_KEY` | *（空）* | **推荐配置。**配置 [Firecrawl](https://firecrawl.dev) key 后：`web_fetch` 以 Firecrawl v2 `/scrape` 为**主抓**（托管渲染抓取，匿名 Jina 降为回退）；未配 `SERPER_API_KEY`/`TAVILY_API_KEY` 时 `web_search` 以 v2 `/search` 为后端（取代零 key 的社区 DDG）。留空 → 保持原 Jina/DDG 行为。花费护栏：`RESEARCH_FIRECRAWL_SEARCH_LIMIT`（默认 5）钳制单次搜索计费结果条数，`RESEARCH_FIRECRAWL_MAX_AGE_SECONDS`（默认 172800）让未变页面吃 Firecrawl 端缓存而非全新计费抓取，`RESEARCH_FIRECRAWL_MAX_FETCH_CALLS_PER_PROCESS`/`RESEARCH_FIRECRAWL_MAX_SEARCH_CALLS_PER_PROCESS`（400/300）为单研究子进程计费调用硬上限。 |
 | `PREDICTION_MARKETS_ENABLED` | `true` | 拉取无 Key 的 Polymarket 先验并注入为校准锚。 |
 | `FORECAST_MARKET_ANCHORING` | `true` | 把每条二元预测确定性锚定到相关性门控的市场（10pp 分歧须说明规则）。 |
-| `REPORT_VISUALIZER` | `true` | 把 Mermaid + matplotlib 图表渲染进 `reports/{id}/charts/` + `viz_manifest.json`。 |
+| `REPORT_VISUALIZER` | `true` | 把预测数据图表（Plotly HTML + PNG 成对输出，matplotlib 兜底）渲染进 `reports/{id}/charts/` + `viz_manifest.json`；来源构成、影响力代理值等管线元数据诊断图默认关闭、仅可显式开启。 |
 | `REPORT_PDF_EXPORT` | `true` | 启用 `/pdf` 端点（pandoc + XeLaTeX，中文安全）。 |
 | `REPORT_OUTPUT_LANGUAGE` | *（空 → 自动侦测）* | 强制报告语言（如 `English` / `Chinese`）；否则从 brief 侦测。 |
 | `SIM_TEMPORAL_MODE` | `calendar` | 日历时间模拟：每轮 = 研究基准日到问题判定日之间的一个整日历单位；`hours` 恢复旧的新闻周期模式。 |
@@ -478,7 +546,7 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 
 ### 导出与可视化
 
-报告阶段会在 `full_report.md` 之外同时产出：一个 **charts/** 目录（Mermaid `.mmd` 代码块 + matplotlib PNG）与一份 **`viz_manifest.json`**（描述每个工件），均由上面的端点服务。报告以 brief 的语言**原生撰写**（EN 或 ZH；可用 `REPORT_OUTPUT_LANGUAGE` 强制），并经纯度扫描保持单一语言 —— 没有单独的「翻译文件」，而是按报告生成时的语言请求其 **PDF**（`/pdf`）或 **Markdown**（`/download`）。图表生成、注入正文与 PDF 导出各自独立可开关（`REPORT_VISUALIZER`、`REPORT_VISUALIZATIONS`、`REPORT_PDF_EXPORT`）。
+报告阶段会在 `full_report.md` 之外同时产出：一个 **charts/** 目录（交互式 Plotly `.html` + `.png` 成对文件）与一份 **`viz_manifest.json`**（描述每个工件），均由上面的端点服务。报告以 brief 的语言**原生撰写**（EN 或 ZH；可用 `REPORT_OUTPUT_LANGUAGE` 强制），并经纯度扫描保持单一语言 —— 没有单独的「翻译文件」，而是按报告生成时的语言请求其 **PDF**（`/pdf`）或 **Markdown**（`/download`）。图表生成、注入正文与 PDF 导出各自独立可开关（`REPORT_VISUALIZER`、`REPORT_VISUALIZATIONS`、`REPORT_PDF_EXPORT`）。
 
 ### 设置（`/api/settings`）
 
@@ -523,7 +591,7 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 
 ### 规模化深度研究
 
-- **多段并行合成**：不再用单次补全（其长度就是档案的物理天花板），合成阶段先推导大纲，**并行**撰写各分节（各带关键词分片上下文），确定性缝合，并强制散文词数下限 —— 产出 **1.5–2.5 万字**的深度档案（`RESEARCH_MULTIPART_SYNTHESIS`、`RESEARCH_SYNTHESIS_MIN_WORDS`）。
+- **多段并行合成**：不再用单次补全（其长度就是档案的物理天花板），合成阶段先推导大纲，**并行**撰写各分节（各带关键词分片上下文），确定性缝合，并在 **1.5–2.2 万词**总档案边界内，为大纲、分节初稿、截断重试、扩写和摘要共用一个输出 token 账本（`RESEARCH_MULTIPART_SYNTHESIS`、`RESEARCH_SYNTHESIS_MIN_WORDS`、`RESEARCH_SYNTHESIS_MAX_WORDS`）。深研合成失败会保留证据并失败关闭，不会把 pass notes 冒充报告。
 - **多角度并行研究轨**：编排器同时跑**三个**研究子进程 —— 基础证据、基率与参照类、激励/反面/市场 —— 各带看门狗，再确定性合并（来源取并集保留最高分级、阵容对账、质量取最小、市场取最新）；某轨失败时优雅降级而非拖垮整次运行（`RESEARCH_PARALLEL_TRACKS`）。
 - **8 路扇出 + 子代理**：开场 scope pass 后并行派发 per-KIQ / per-actor 子调查（`RESEARCH_DEEP_FANOUT`、`RESEARCH_FANOUT_WIDTH`），深度协议 phase 2–4 并行跑（`RESEARCH_PARALLEL_PHASES`）—— harness 的子代理智能体式检索终于被打开。
 - **judge→refine 环**：Track-A 报告与 Track-B 角色档案在被采纳前都要通过 AI-judge → 定向 refine 环，对照 INSIGHT / 角色质量契约（`RESEARCH_REPORT_JUDGE`、`ACTOR_DOSSIER_JUDGE`）。
@@ -538,7 +606,7 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 
 ### 报告可视化、PDF 与语言
 
-- **确定性可视化层**：`report_visualizer.py` 渲染 **Mermaid**（时间线 / 因果路径 / 派系 / 角色关系网络）与 **matplotlib**（情景误差棒、模型 vs 市场哑铃、世界态堆叠面积、对比柱、校准曲线、市场价格历史），**不产生任何 LLM 调用**，落 `reports/{id}/charts/` + `viz_manifest.json`；图表被注入 `full_report.md`（匹配的 Mermaid 就地插入，其余归入 Visual Annex）（`REPORT_VISUALIZER`、`REPORT_VIZ_*`、`REPORT_VISUALIZATIONS`）。
+- **确定性可视化层**：`report_visualizer.py` 渲染**交互式 Plotly 图表**（HTML + kaleido PNG 成对输出，matplotlib 兜底），**不产生任何 LLM 调用**，落 `reports/{id}/charts/` + `viz_manifest.json`；图表注入 `full_report.md` 的 Visual Annex（`REPORT_VISUALIZER`、`REPORT_VIZ_*`、`REPORT_VISUALIZATIONS`）。默认槽位**只放预测数据**：情景概率（含集成误差带）、二元预测点图、模型 vs 市场哑铃、研究抽取的**指标轨迹**（成本曲线、部署路径）、跨版本预测修订、事件时间线、角色网络、世界态轨迹与市场价格历史；来源构成 sunburst、影响力/显著度代理值、争议声量权重、关键词 tornado 等元数据诊断图**一律降级为显式开启**，绝不挤占预测图表槽位。
 - **PDF 导出**：`GET /api/report/{id}/pdf` 惰性把 `full_report.md` 经 **pandoc + XeLaTeX** 导出为 PDF（图表路径绝对化、`CJKmainfont=PingFang SC`、`--toc`；失败回退 PyMuPDF），按报告 mtime 缓存（`REPORT_PDF_EXPORT`）。
 - **原生语言报告（EN ↔ ZH）**：报告以 brief 的语言**原生撰写** —— 自动侦测，或经 `REPORT_OUTPUT_LANGUAGE` 强制 —— 写完后一道**语言纯度扫描**内联翻译零散的 CJK / 非 CJK 片段，使成稿保持单一语言（`REPORT_LANGUAGE_PURITY`）。仪表盘 UI 与演示站均为双语（English + 中文）。
 

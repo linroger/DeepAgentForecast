@@ -805,18 +805,42 @@ class SimulationConfigGenerator:
     # TEMPORAL: principal 节奏名额上限与影响力门槛（全体主角每轮必激活，规模失控会挤掉采样阵容）
     PRINCIPAL_CADENCE_MAX = 20
     PRINCIPAL_CADENCE_MIN_INFLUENCE = 0.6
+    # SIM-ADD-4：退化守卫参数。取证（sim_05ab2bdebbd2）：12 名 actor 全落 principal（每轮必激活）
+    # → 每轮名册恒等 → 决策通道 elicitation 缓存塌成 1 条 unique roster → 18 轮模拟只贡献一个
+    # 重复信号（节奏毫无区分度）。仅在「按满额会让**整个非受众阵容**都成 principal、且阵容
+    # 够大」时，把名额压到 ceil(阵容 × FRACTION)，强制保留一个 sampled 层，让逐轮名册产生可分辨
+    # 差异（头部真主角仍每轮必激活）。已有 sampled 层的阵容（如 23 合格取 20、余 3 采样）不受影响。
+    PRINCIPAL_CADENCE_FRACTION = 0.5
+    PRINCIPAL_CADENCE_GRADE_MIN = 4
 
     def _assign_cadence_tiers(self, agent_configs: List[AgentActivityConfig]) -> int:
         """TEMPORAL: 非受众且 influence_weight ≥ 0.6 的阵容按影响力降序（并列按 agent_id
-        升序）取前 20 名标记 cadence="principal"；其余（含全部受众）保持 "sampled"。
-        返回标记数。确定性实现，不依赖随机数。"""
-        eligible = [
+        升序）取头部标记 cadence="principal"；其余（含全部受众）保持 "sampled"。返回标记数。
+        确定性实现，不依赖随机数。
+
+        SIM-ADD-4：仅当满额 principal 会覆盖**整个**非受众阵容（=零 sampled 非受众 → 每轮
+        名册恒等、决策通道信号塌成单条重复）且阵容 > PRINCIPAL_CADENCE_GRADE_MIN 时，把名额
+        压到 ``max(GRADE_MIN, ceil(非受众数 × FRACTION))``，强制保留 sampled 层。其余情形（已存在
+        sampled 非受众、或小阵容）行为与旧「前 20」实现逐字节一致。
+        """
+        non_audience = [
             c for c in agent_configs
             if c.entity_type != self.AUDIENCE_ENTITY_TYPE
-            and c.influence_weight >= self.PRINCIPAL_CADENCE_MIN_INFLUENCE
+        ]
+        eligible = [
+            c for c in non_audience
+            if c.influence_weight >= self.PRINCIPAL_CADENCE_MIN_INFLUENCE
         ]
         eligible.sort(key=lambda c: (-c.influence_weight, c.agent_id))
-        chosen = eligible[:self.PRINCIPAL_CADENCE_MAX]
+        principal_budget = self.PRINCIPAL_CADENCE_MAX
+        # 退化守卫：满额会让整个非受众阵容都成 principal（零 sampled 非受众）→ 收紧名额。
+        if (len(non_audience) > self.PRINCIPAL_CADENCE_GRADE_MIN
+                and min(len(eligible), principal_budget) >= len(non_audience)):
+            principal_budget = max(
+                self.PRINCIPAL_CADENCE_GRADE_MIN,
+                math.ceil(len(non_audience) * self.PRINCIPAL_CADENCE_FRACTION),
+            )
+        chosen = eligible[:principal_budget]
         for c in chosen:
             c.cadence = "principal"
         return len(chosen)

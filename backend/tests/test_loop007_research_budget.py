@@ -10,6 +10,7 @@ import sqlite3
 import sys
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -439,7 +440,7 @@ def test_search_cache_hit_spends_attempt_not_network(monkeypatch, tmp_path):
 
     assert st.web_search_impl(query, 10) == cached
     assert calls["delegate"] == 0
-    telemetry = json.loads((tmp_path / "research_budget.json").read_text())
+    telemetry = rb.export_telemetry(force=True)
     assert telemetry["global"]["search_attempts"] == 1
     assert telemetry["global"].get("search_network", 0) == 0
 
@@ -503,6 +504,106 @@ def test_fetch_dead_result_gets_one_delegate_retry(monkeypatch, tmp_path):
     third = json.loads(asyncio.run(cf.cached_fetch(url, delegate)))
     assert third["error"] == "research_negative_cache_suppressed"
     assert calls["delegate"] == 2
+
+
+def test_successful_fetch_provenance_survives_isolated_lanes(
+        monkeypatch, tmp_path):
+    _set_budget_env(monkeypatch, tmp_path)
+    url = "https://example.test/primary-evidence"
+    body = "# Primary evidence\n\n" + "auditable source content " * 30
+
+    rb.record_fetched_source(url, body, provider="exa")
+    lane_a = rb.list_fetched_sources()
+    monkeypatch.setenv("RESEARCH_BUDGET_LANE_ID", "lane-b")
+    rb.record_fetched_source(url, body, provider="exa")
+    lane_b = rb.list_fetched_sources()
+    all_lanes = rb.list_fetched_sources("*")
+
+    assert [row["url"] for row in lane_a] == [url]
+    assert [row["url"] for row in lane_b] == [url]
+    assert len(all_lanes) == 2
+    assert all(row["content_sha256"] for row in all_lanes)
+    assert all(row["provider"] == "exa" for row in all_lanes)
+    assert all(row["receipt_id"] for row in all_lanes)
+    telemetry = rb.export_telemetry(force=True)
+    assert telemetry["fetched_source_provenance"] == {
+        "distinct_urls": 1,
+        "lane_rows": 2,
+    }
+
+
+def test_shared_provider_circuit_opens_and_success_resets(
+        monkeypatch, tmp_path):
+    _set_budget_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("RESEARCH_PROVIDER_FAILURE_THRESHOLD", "2")
+    monkeypatch.setenv("RESEARCH_PROVIDER_COOLDOWN_SECONDS", "60")
+
+    assert rb.record_provider_transport_failure("jina", "ConnectTimeout") is False
+    assert rb.provider_circuit_open("jina") is False
+    assert rb.record_provider_transport_failure("jina", "ReadTimeout") is True
+    assert rb.provider_circuit_open("jina") is True
+
+    rb.record_provider_success("jina")
+    assert rb.provider_circuit_open("jina") is False
+    telemetry = rb.export_telemetry(force=True)
+    assert telemetry["provider_health"]["jina"][
+        "total_transport_failures"
+    ] == 2
+    assert telemetry["provider_health"]["jina"]["circuit_open"] is False
+
+
+def test_jina_transport_failure_falls_back_and_open_circuit_skips_primary(
+        monkeypatch, tmp_path):
+    _set_budget_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("RESEARCH_PROVIDER_FAILURE_THRESHOLD", "1")
+    monkeypatch.setenv("EXA_API_KEY", "test-key-not-used")
+    calls = {"jina": 0, "exa": 0}
+
+    async def failed_jina(_url):
+        calls["jina"] += 1
+        return "Error: Request to Jina API failed: ConnectTimeout"
+
+    async def exa(_url):
+        calls["exa"] += 1
+        return "# Exa evidence\n\n" + "fallback source content " * 30
+
+    monkeypatch.setattr(cf, "_jina_delegate_fetch", failed_jina)
+    monkeypatch.setattr(cf, "_exa_fetch", exa)
+
+    first = asyncio.run(cf._resilient_fetch("https://example.test/a"))
+    second = asyncio.run(cf._resilient_fetch("https://example.test/b"))
+
+    assert first.startswith("# Exa evidence")
+    assert second.startswith("# Exa evidence")
+    assert calls == {"jina": 1, "exa": 2}
+    assert rb.provider_circuit_open("jina") is True
+
+
+def test_failover_counts_each_physical_provider_request(monkeypatch, tmp_path):
+    _set_budget_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("EXA_API_KEY", "test-key-not-used")
+    monkeypatch.setenv("RESEARCH_SOURCE_CACHE_DIR", str(tmp_path / "fetch-cache"))
+
+    async def failed_jina(_url):
+        return "Error: Request to Jina API failed: ConnectTimeout"
+
+    async def exa(_url):
+        return "# Exa evidence\n\n" + "fallback source content " * 30
+
+    monkeypatch.setattr(cf, "_jina_delegate_fetch", failed_jina)
+    monkeypatch.setattr(cf, "_exa_fetch", exa)
+    result = asyncio.run(cf.cached_fetch("https://example.test/failover", cf._resilient_fetch))
+
+    assert result.startswith("# Exa evidence")
+    telemetry = rb.export_telemetry(force=True)
+    assert telemetry["global"]["fetch_network"] == 2
+    receipt = rb.list_fetched_sources()[0]
+    assert receipt["provider"] == "exa"
+    assert receipt["receipt_id"]
+
+
+def test_access_denied_body_is_not_positive_evidence():
+    assert cf._is_cacheable("Access denied. " + "blocked " * 80) is False
 
 
 def test_repeated_successful_fetch_returns_compact_artifact_reference(
@@ -676,6 +777,143 @@ def test_orchestrator_injects_shared_paths_lane_and_defaults(monkeypatch, tmp_pa
     assert env["RESEARCH_BUDGET_FETCH_LANE"] == "180"
     assert env["RESEARCH_NEGATIVE_CACHE_TTL_SECONDS"] == "600"
     assert env["RESEARCH_NEGATIVE_CACHE_RETRIES"] == "1"
+
+
+def test_research_budget_epoch_is_stable_per_task_and_fresh_per_resume(
+        monkeypatch, tmp_path):
+    monkeypatch.setattr(po.Config, "RESEARCH_BUDGET_MAX_EPOCHS", 3, raising=False)
+    saves = []
+    monkeypatch.setattr(
+        po.PipelineManager,
+        "save",
+        classmethod(lambda cls, state: saves.append(state.to_dict())),
+    )
+    state = po.PipelineState(
+        pipeline_id="pipe-epoch",
+        task_id="task-a",
+        prompt="forecast",
+        handoff_dir=str(tmp_path),
+    )
+
+    first = po._activate_research_budget_epoch(state, str(tmp_path))
+    same_task = po._activate_research_budget_epoch(state, str(tmp_path))
+    assert same_task == first
+    assert Path(first[0]).parent.name.startswith("epoch-001-task-a")
+
+    state.task_id = "task-b"
+    second = po._activate_research_budget_epoch(state, str(tmp_path))
+    assert second != first
+    assert Path(second[0]).parent.name.startswith("epoch-002-task-b")
+    history = state.options["research_budget_epochs"]
+    assert [row["task_id"] for row in history] == ["task-a", "task-b"]
+    assert saves
+
+
+def test_research_budget_epoch_cap_prevents_unbounded_resume_spend(
+        monkeypatch, tmp_path):
+    monkeypatch.setattr(po.Config, "RESEARCH_BUDGET_MAX_EPOCHS", 1, raising=False)
+    monkeypatch.setattr(
+        po.PipelineManager, "save", classmethod(lambda cls, state: None))
+    state = po.PipelineState(
+        pipeline_id="pipe-capped",
+        task_id="task-a",
+        prompt="forecast",
+        handoff_dir=str(tmp_path),
+    )
+    po._activate_research_budget_epoch(state, str(tmp_path))
+    state.task_id = "task-b"
+
+    with pytest.raises(RuntimeError, match="budget epoch limit"):
+        po._activate_research_budget_epoch(state, str(tmp_path))
+
+
+def test_synthesis_recovery_reuses_unexhausted_epoch_at_cap(
+        monkeypatch, tmp_path):
+    monkeypatch.setattr(po.Config, "RESEARCH_BUDGET_MAX_EPOCHS", 1, raising=False)
+    saves = []
+    monkeypatch.setattr(
+        po.PipelineManager,
+        "save",
+        classmethod(lambda cls, state: saves.append(state.to_dict())),
+    )
+    state = po.PipelineState(
+        pipeline_id="pipe-synthesis-reuse",
+        task_id="task-a",
+        prompt="forecast",
+        handoff_dir=str(tmp_path),
+    )
+    first = po._activate_research_budget_epoch(state, str(tmp_path))
+    state.options["synthesis_recovery"] = {
+        "attempted": True,
+        "passed": False,
+    }
+    state.task_id = "task-b"
+    Path(first[1]).write_text(json.dumps({
+        "epoch": first[2],
+        "limits": {
+            "attempts_global": 10,
+            "search_global": 8,
+            "fetch_global": 4,
+        },
+        "global": {"attempts": 2, "search_network": 1, "fetch_network": 1},
+    }), encoding="utf-8")
+
+    reused = po._synthesis_recovery_budget_epoch(state, str(tmp_path))
+
+    assert reused == first
+    assert len(state.options["research_budget_epochs"]) == 1
+    assert state.options["synthesis_recovery_budget_reused"]["epoch"] == first[2]
+    assert saves
+
+
+def test_synthesis_recovery_opens_fresh_epoch_when_tool_ledger_exhausted(
+        monkeypatch, tmp_path):
+    monkeypatch.setattr(po.Config, "RESEARCH_BUDGET_MAX_EPOCHS", 2, raising=False)
+    monkeypatch.setattr(
+        po.PipelineManager, "save", classmethod(lambda cls, state: None))
+    state = po.PipelineState(
+        pipeline_id="pipe-synthesis-fresh",
+        task_id="task-a",
+        prompt="forecast",
+        handoff_dir=str(tmp_path),
+    )
+    first = po._activate_research_budget_epoch(state, str(tmp_path))
+    state.options["synthesis_recovery"] = {
+        "attempted": True,
+        "passed": False,
+    }
+    state.task_id = "task-b"
+    Path(first[1]).write_text(json.dumps({
+        "epoch": first[2],
+        "limits": {
+            "attempts_global": 10,
+            "search_global": 8,
+            "fetch_global": 4,
+        },
+        "global": {"attempts": 10, "search_network": 1, "fetch_network": 1},
+    }), encoding="utf-8")
+
+    fresh = po._synthesis_recovery_budget_epoch(state, str(tmp_path))
+
+    assert fresh != first
+    assert fresh[2] == "task-b"
+    assert len(state.options["research_budget_epochs"]) == 2
+
+
+def test_budget_snapshot_exhaustion_is_epoch_bound(tmp_path):
+    path = tmp_path / "research_budget.json"
+    path.write_text(json.dumps({
+        "epoch": "task-a",
+        "limits": {
+            "attempts_global": 10,
+            "search_global": 8,
+            "fetch_global": 4,
+        },
+        "global": {"attempts": 10, "search_network": 6, "fetch_network": 3},
+    }), encoding="utf-8")
+
+    assert po._research_budget_exhaustion(str(path), "task-a") == "attempts_global"
+    assert po._research_budget_exhaustion(str(path), "task-b") is None
 
 
 def test_orchestrator_disable_removes_inherited_budget_env(monkeypatch, tmp_path):

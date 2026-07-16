@@ -11,6 +11,8 @@ gate math, and stitch order. Loaded via importlib like test_audit_fixes_research
 
 import importlib.util
 import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -51,7 +53,7 @@ class TestOutlineParse:
         out = mod.parse_synthesis_outline(text)
         assert len(out) == 11
         assert out[0] == {"title": "Section 0", "scope": "scope keywords 0",
-                          "target_words": 2000, "covers": ["KIQ-0"]}
+                          "target_words": 1800, "covers": ["KIQ-0"]}
 
     def test_parses_fenced_json_with_prose_around_it(self, mod):
         text = "Here is the plan:\n```json\n" + json.dumps({"sections": _outline(5)}) + "\n```\nDone."
@@ -80,16 +82,468 @@ class TestOutlineParse:
 
     def test_untitled_rows_dropped_and_target_words_clamped(self, mod):
         rows = _outline(3) + [{"scope": "no title -> dropped"}]
-        rows[0]["target_words"] = 99999   # clamp down to 3500
-        rows[1]["target_words"] = 10      # clamp up to 1500
-        rows[2]["target_words"] = "junk"  # non-int -> default 2200
+        rows[0]["target_words"] = 99999   # clamp down to 1800
+        rows[1]["target_words"] = 10      # clamp up to 700
+        rows[2]["target_words"] = "junk"  # non-int -> default 1100
         out = mod.parse_synthesis_outline(json.dumps({"sections": rows}))
-        assert [s["target_words"] for s in out] == [3500, 1500, 2200]
+        assert [s["target_words"] for s in out] == [1800, 700, 1100]
         assert len(out) == 3
 
     def test_outline_capped_at_twenty_four_sections(self, mod):
         out = mod.parse_synthesis_outline(json.dumps({"sections": _outline(30)}))
         assert len(out) == 24
+
+    def test_parallel_section_targets_share_one_dossier_budget(
+            self, mod, monkeypatch):
+        monkeypatch.delenv("RESEARCH_SYNTHESIS_MIN_WORDS", raising=False)
+        monkeypatch.delenv("RESEARCH_SYNTHESIS_MAX_WORDS", raising=False)
+        original = _outline(18, target_words=1800)
+
+        balanced = mod.rebalance_synthesis_outline(original, "deep")
+
+        assert 15000 <= sum(row["target_words"] for row in balanced) <= 22000
+        assert max(row["target_words"] for row in balanced) < 1800
+        assert all(row["target_words"] == 1800 for row in original)
+
+    def test_standard_twenty_four_section_outline_stays_under_ceiling(
+            self, mod, monkeypatch):
+        monkeypatch.delenv("RESEARCH_SYNTHESIS_MIN_WORDS", raising=False)
+        monkeypatch.delenv("RESEARCH_SYNTHESIS_MAX_WORDS", raising=False)
+
+        balanced = mod.rebalance_synthesis_outline(
+            _outline(24, target_words=1800), "standard")
+
+        assert sum(row["target_words"] for row in balanced) == 5175
+        assert all(row["target_words"] > 0 for row in balanced)
+
+    @pytest.mark.parametrize("depth,sections,expected_total", [
+        ("deep", 18, 24150),
+        ("standard", 24, 7245),
+    ])
+    def test_section_completion_allowances_share_one_aggregate_envelope(
+            self, mod, monkeypatch, depth, sections, expected_total):
+        monkeypatch.delenv("RESEARCH_SYNTHESIS_MIN_WORDS", raising=False)
+        monkeypatch.delenv("RESEARCH_SYNTHESIS_MAX_WORDS", raising=False)
+        balanced = mod.rebalance_synthesis_outline(
+            _outline(sections, target_words=1800), depth)
+
+        budgets = mod.allocate_synthesis_section_output_tokens(balanced, depth)
+
+        assert len(budgets) == sections
+        assert sum(budgets) == expected_total
+        assert all(value >= 256 for value in budgets)
+
+    def test_outline_contract_adds_mechanisms_and_enriches_dense_owners(
+            self, mod):
+        original = [
+            {"title": "Scenarios", "scope": "four cases", "target_words": 900,
+             "covers": []},
+            {"title": "Milestones", "scope": "turning points", "target_words": 900,
+             "covers": []},
+            {"title": "Resolution-Ready Binary Forecasts", "scope": "predictions",
+             "target_words": 900, "covers": []},
+            {"title": "Actual-Data Visualizations", "scope": "charts",
+             "target_words": 900, "covers": []},
+        ]
+
+        enforced = mod.enforce_synthesis_outline_contract(
+            original,
+            "Forecast humanoid robots with shipments, ASP, BOM and payback through 2035",
+        )
+        joined = "\n".join(
+            f"{row['title']} {row['scope']}" for row in enforced)
+
+        assert len(enforced) == 5
+        assert "Causal Mechanism Chains" in joined
+        assert "annual shipments, installed base, ASP/BOM cost" in joined
+        assert "probabilities total 100%" in joined
+        assert "outside-view base rate" in joined
+        assert "value, unit, period, data_class" in joined
+        assert "numeric trigger" in joined
+        assert original[0]["scope"] == "four cases"  # caller data not mutated
+
+    @pytest.mark.parametrize("depth,minimum,maximum", [
+        ("deep", 15000, 22000),
+        ("standard", 4500, 7000),
+    ])
+    def test_mandatory_outline_owners_stay_inside_aggregate_budget(
+            self, mod, monkeypatch, depth, minimum, maximum):
+        monkeypatch.delenv("RESEARCH_SYNTHESIS_MIN_WORDS", raising=False)
+        monkeypatch.delenv("RESEARCH_SYNTHESIS_MAX_WORDS", raising=False)
+
+        enforced = mod.enforce_synthesis_outline_contract(
+            _outline(20, target_words=1800), "Forecast an industry through 2035")
+        balanced = mod.rebalance_synthesis_outline(enforced, depth)
+        total = sum(row["target_words"] for row in balanced)
+
+        assert minimum <= total <= maximum
+        # The canonical scenario owner also owns its exact matching
+        # visualization source table, so the visual contract is intentionally
+        # merged rather than creating a competing probability-table section.
+        assert len(balanced) == 24
+        assert all(row["target_words"] > 0 for row in balanced)
+
+    def test_section_prompt_carries_a_hard_local_output_limit(self, mod):
+        outline = _outline(3, target_words=1000)
+        prompt = mod.build_synthesis_section_prompt(
+            "Forecast robots", outline, outline[0], 0, 3, "", "evidence", None)
+
+        assert "TARGET LENGTH: about 1000 words" in prompt
+        assert "HARD LIMIT: do not exceed 1150 words" in prompt
+
+    @pytest.mark.parametrize(
+        "title,required",
+        [
+            ("Causal Mechanism Chains", "3–5 numbered A→B→C→outcome chains"),
+            ("Scenarios and Probabilities", "exactly four MECE cases"),
+            ("Milestones and Inflection Points", "numeric trigger"),
+            ("Resolution-Ready Binary Forecasts", "10–12 complete items"),
+            ("Sourced Actual-Data Visualizations", "chart descriptions/specifications alone FAIL"),
+        ],
+    )
+    def test_section_prompt_carries_owner_specific_acceptance_contract(
+            self, mod, title, required):
+        section = {
+            "title": title,
+            "scope": "deliver the requested evidence",
+            "target_words": 1000,
+            "covers": [],
+        }
+        prompt = mod.build_synthesis_section_prompt(
+            "Forecast robots", [section], section, 0, 1, "", "evidence", None)
+
+        assert "SECTION-SPECIFIC ACCEPTANCE CONTRACT" in prompt
+        assert required in prompt
+
+    def test_judge_prompt_distinguishes_downstream_rendering_from_missing_data(
+            self, mod):
+        prompt = mod.build_report_judge_prompt(
+            "Forecast robots with actual-data visuals", None, "15,000+ words")
+
+        assert "PNG/HTML" in prompt
+        assert "不得仅因本阶段未嵌入图片而 FAIL" in prompt
+        assert "value/unit/period/data_class/source/as-of" in prompt
+        assert "任何章节在句中/表格中/引用标记中截断" in prompt
+
+    def test_tool_free_model_fails_over_once_then_uses_process_circuit(
+            self, mod, monkeypatch):
+        monkeypatch.setenv("DEERFLOW_FALLBACK_MODEL", "antigravity")
+        mod._MODEL_FAILOVER_UNTIL.clear()
+        created = []
+        invoked = []
+
+        class FakeModel:
+            def __init__(self, name):
+                self.name = name
+
+            def bind(self, **_kwargs):
+                return self
+
+        models_module = types.ModuleType("deerflow.models")
+
+        def create_chat_model(name, **_kwargs):
+            created.append(name)
+            return FakeModel(name)
+
+        models_module.create_chat_model = create_chat_model
+        deerflow_module = types.ModuleType("deerflow")
+        deerflow_module.models = models_module
+        monkeypatch.setitem(sys.modules, "deerflow", deerflow_module)
+        monkeypatch.setitem(sys.modules, "deerflow.models", models_module)
+
+        def invoke(model, _messages):
+            invoked.append(model.name)
+            if model.name == "minimax":
+                raise RuntimeError("429 token plan quota exhausted (2056)")
+            return types.SimpleNamespace(content="READY")
+
+        monkeypatch.setattr(mod, "_invoke_model", invoke)
+
+        first, first_provider = mod._invoke_tool_free_model(
+            "minimax", ["prompt"], max_output_tokens=32,
+            plog=None, label="outline")
+        second, second_provider = mod._invoke_tool_free_model(
+            "minimax", ["prompt"], max_output_tokens=32,
+            plog=None, label="section")
+
+        assert first.content == second.content == "READY"
+        assert first_provider == second_provider == "antigravity"
+        assert created == ["minimax", "antigravity", "antigravity"]
+        assert invoked == created
+
+    def test_tool_free_model_does_not_mask_non_provider_programming_error(
+            self, mod, monkeypatch):
+        monkeypatch.setenv("DEERFLOW_FALLBACK_MODEL", "antigravity")
+        mod._MODEL_FAILOVER_UNTIL.clear()
+        created = []
+
+        class FakeModel:
+            def bind(self, **_kwargs):
+                return self
+
+        models_module = types.ModuleType("deerflow.models")
+        models_module.create_chat_model = (
+            lambda name, **_kwargs: created.append(name) or FakeModel())
+        deerflow_module = types.ModuleType("deerflow")
+        deerflow_module.models = models_module
+        monkeypatch.setitem(sys.modules, "deerflow", deerflow_module)
+        monkeypatch.setitem(sys.modules, "deerflow.models", models_module)
+        monkeypatch.setattr(
+            mod, "_invoke_model",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                ValueError("local prompt construction bug")),
+        )
+
+        with pytest.raises(ValueError, match="prompt construction"):
+            mod._invoke_tool_free_model(
+                "minimax", ["prompt"], max_output_tokens=32,
+                plog=None, label="outline")
+
+        assert created == ["minimax"]
+
+    @pytest.mark.parametrize(
+        "metadata,expected",
+        [
+            ({"finish_reason": "length"}, "length"),
+            ({"stop_reason": "max_tokens"}, "max_tokens"),
+            ({"finish_reason": "STOP"}, "stop"),
+            ({}, ""),
+        ],
+    )
+    def test_model_finish_reason_normalizes_provider_metadata(
+            self, mod, metadata, expected):
+        response = types.SimpleNamespace(response_metadata=metadata)
+
+        assert mod._model_finish_reason(response) == expected
+
+    def test_model_output_truncation_detects_reason_and_exact_saturation(
+            self, mod):
+        by_reason = types.SimpleNamespace(
+            response_metadata={"finish_reason": "length"},
+            usage_metadata={"output_tokens": 100, "input_tokens": 10},
+        )
+        by_saturation = types.SimpleNamespace(
+            response_metadata={},
+            usage_metadata={"output_tokens": 3200, "input_tokens": 10},
+        )
+        explicit_stop = types.SimpleNamespace(
+            response_metadata={"finish_reason": "stop"},
+            usage_metadata={"output_tokens": 3200, "input_tokens": 10},
+        )
+
+        assert mod._model_output_was_truncated(by_reason, 3200) is True
+        assert mod._model_output_was_truncated(by_saturation, 3200) is True
+        assert mod._model_output_was_truncated(explicit_stop, 3200) is False
+
+    def test_bare_synthesis_fails_closed_on_truncated_completion(
+            self, mod, monkeypatch):
+        langchain_core = types.ModuleType("langchain_core")
+        messages = types.ModuleType("langchain_core.messages")
+        messages.HumanMessage = lambda content: types.SimpleNamespace(content=content)
+        langchain_core.messages = messages
+        monkeypatch.setitem(sys.modules, "langchain_core", langchain_core)
+        monkeypatch.setitem(sys.modules, "langchain_core.messages", messages)
+        response = types.SimpleNamespace(
+            content="incomplete sentence",
+            response_metadata={"finish_reason": "length"},
+            usage_metadata={"output_tokens": 1200, "input_tokens": 10},
+        )
+        monkeypatch.setattr(
+            mod, "_invoke_tool_free_model",
+            lambda *_args, **_kwargs: (response, "minimax"),
+        )
+
+        with pytest.raises(mod.TruncatedModelOutput, match="test-call truncated"):
+            mod._bare_synth_invoke(
+                "minimax", "prompt", None, "test-call", 1200, True)
+
+    def test_multipart_section_retries_one_truncation_with_larger_budget(
+            self, mod, monkeypatch):
+        labels = []
+        budgets = {}
+
+        def fake_invoke(_model, _prompt, _plog=None, label="bare-model",
+                        max_output_tokens=None, _fail_on_truncation=False):
+            labels.append(label)
+            budgets[label] = max_output_tokens
+            if label == "synthesis-outline":
+                return json.dumps({"sections": _outline(3, target_words=1000)})
+            if label == "synthesis-section-1":
+                raise mod.TruncatedModelOutput("forced cutoff")
+            if label == "synthesis-summary":
+                return "## Executive Summary\n\nGrounded summary."
+            return "Grounded analytical prose with dates, units, and sources. " * 20
+
+        class Log:
+            def write(self, _kind, _message):
+                pass
+
+        monkeypatch.setattr(mod, "_bare_synth_invoke", fake_invoke)
+        monkeypatch.setattr(mod, "_synthesis_workers", lambda: 1)
+        monkeypatch.setattr(mod, "_inline_citations_enabled", lambda: False)
+        monkeypatch.setattr(mod, "_dedup_shingles_enabled", lambda: False)
+        monkeypatch.setenv("RESEARCH_SYNTHESIS_MIN_WORDS", "0")
+
+        report = mod.synthesize_multipart(
+            "Forecast robots through 2035",
+            None,
+            "deep",
+            "minimax",
+            ["Observed evidence 2025 source https://example.com"],
+            ["working note"],
+            "Observed evidence",
+            Log(),
+        )
+
+        retry = "synthesis-section-1-truncation-retry"
+        assert retry in labels
+        assert budgets[retry] > budgets["synthesis-section-1"]
+        assert "## Section 0" in report
+
+    def test_malformed_outline_uses_deterministic_multipart_skeleton(
+            self, mod, monkeypatch):
+        calls = []
+
+        def fake_invoke(_model, _prompt, *_args):
+            calls.append(_prompt)
+            if len(calls) == 1:
+                return "not JSON; accidental long prose outline"
+            return "Grounded section prose with observations, dates, units, and sources. " * 8
+
+        class Log:
+            def __init__(self):
+                self.rows = []
+
+            def write(self, kind, message):
+                self.rows.append((kind, message))
+
+        monkeypatch.setattr(mod, "_bare_synth_invoke", fake_invoke)
+        monkeypatch.setattr(mod, "_synthesis_workers", lambda: 1)
+        monkeypatch.setattr(mod, "_inline_citations_enabled", lambda: False)
+        monkeypatch.setattr(mod, "_dedup_shingles_enabled", lambda: False)
+        monkeypatch.setenv("RESEARCH_SYNTHESIS_MIN_WORDS", "0")
+        log = Log()
+        report = mod.synthesize_multipart(
+            "Forecast robots through 2035 with scenarios and actual-data visuals",
+            None,
+            "deep",
+            "model",
+            ["Observed evidence 2025 source https://example.com"],
+            ["working note"],
+            "Observed evidence",
+            log,
+        )
+        outline = mod.default_synthesis_outline("Q", None)
+        assert len(outline) == 15
+        assert all(f"## {section['title']}" in report for section in outline)
+        assert any("deterministic 15-section skeleton" in msg for _kind, msg in log.rows)
+        # One malformed outline call + one call per deterministic section + summary.
+        assert len(calls) == 17
+
+    def test_multipart_rejects_real_output_above_aggregate_ceiling(
+            self, mod, monkeypatch):
+        """Per-section token allowances cannot bypass the dossier-level maximum."""
+        def fake_invoke(_model, _prompt, _plog=None, label="bare-model",
+                        max_output_tokens=None, _fail_on_truncation=False):
+            if label == "synthesis-outline":
+                return json.dumps({"sections": _outline(3, target_words=1000)})
+            if label == "synthesis-summary":
+                return "executive summary " * 40
+            return "evidence grounded analysis " * 80
+
+        class Log:
+            def write(self, _kind, _message):
+                pass
+
+        monkeypatch.setattr(mod, "_bare_synth_invoke", fake_invoke)
+        monkeypatch.setattr(mod, "_synthesis_workers", lambda: 1)
+        monkeypatch.setattr(mod, "_inline_citations_enabled", lambda: False)
+        monkeypatch.setattr(mod, "_dedup_shingles_enabled", lambda: False)
+        monkeypatch.setenv("RESEARCH_SYNTHESIS_MIN_WORDS", "0")
+        monkeypatch.setenv("RESEARCH_SYNTHESIS_MAX_WORDS", "100")
+
+        with pytest.raises(mod.OversizedSynthesisOutput, match="aggregate ceiling 100"):
+            mod.synthesize_multipart(
+                "Forecast robots through 2035",
+                None,
+                "deep",
+                "minimax",
+                ["Observed evidence 2025 source https://example.com"],
+                ["working note"],
+                "Observed evidence",
+                Log(),
+            )
+
+    def test_execution_budget_bounds_outline_sections_retries_and_summary(
+            self, mod, monkeypatch):
+        calls = []
+
+        def fake_invoke(_model, _prompt, _plog=None, label="bare-model",
+                        max_output_tokens=None, _fail_on_truncation=False):
+            calls.append((label, max_output_tokens))
+            if label == "synthesis-outline":
+                return json.dumps({"sections": _outline(3, target_words=40)})
+            return "grounded evidence " * 20
+
+        class Log:
+            def write(self, _kind, _message):
+                pass
+
+        monkeypatch.setattr(mod, "_bare_synth_invoke", fake_invoke)
+        monkeypatch.setattr(mod, "_synthesis_workers", lambda: 1)
+        monkeypatch.setattr(mod, "_inline_citations_enabled", lambda: False)
+        monkeypatch.setattr(mod, "_dedup_shingles_enabled", lambda: False)
+        monkeypatch.setenv("RESEARCH_SYNTHESIS_MIN_WORDS", "0")
+        monkeypatch.setenv("RESEARCH_SYNTHESIS_MAX_WORDS", "100")
+        monkeypatch.setenv(
+            "RESEARCH_SYNTHESIS_EXECUTION_MAX_OUTPUT_TOKENS", "3000")
+
+        with pytest.raises(
+                mod.SynthesisExecutionBudgetExceeded,
+                match="aggregate execution envelope"):
+            mod.synthesize_multipart(
+                "Forecast robots through 2035",
+                None,
+                "deep",
+                "minimax",
+                ["Observed evidence 2025 source https://example.com"],
+                ["working note"],
+                "Observed evidence",
+                Log(),
+            )
+
+        assert sum(tokens for _label, tokens in calls) <= 3000
+
+    def test_oversized_multipart_cannot_fall_through_to_single_call(
+            self, mod, monkeypatch):
+        fallback_calls = []
+
+        monkeypatch.setattr(mod, "_multipart_synthesis_enabled", lambda _depth: True)
+        monkeypatch.setattr(
+            mod,
+            "synthesize_multipart",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                mod.OversizedSynthesisOutput("too large")),
+        )
+        monkeypatch.setattr(
+            mod,
+            "_bare_synth_invoke",
+            lambda *_args, **_kwargs: fallback_calls.append(True) or "fallback",
+        )
+        monkeypatch.setattr(mod, "_synth_min_context_chars", lambda: 0)
+
+        with pytest.raises(mod.OversizedSynthesisOutput, match="too large"):
+            mod.synthesize_from_evidence_parts(
+                ["source-grounded evidence"],
+                ["research note"],
+                "Forecast robots",
+                None,
+                "minimax",
+                type("Log", (), {"write": lambda *_args: None})(),
+                "deep",
+            )
+
+        assert fallback_calls == []
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +725,7 @@ class TestProseWordGate:
 
     def test_min_words_defaults_and_override(self, mod, monkeypatch):
         monkeypatch.delenv("RESEARCH_SYNTHESIS_MIN_WORDS", raising=False)
-        assert mod._synthesis_min_words("deep") == 10000
+        assert mod._synthesis_min_words("deep") == 15000
         assert mod._synthesis_min_words("standard") == 4500
         monkeypatch.setenv("RESEARCH_SYNTHESIS_MIN_WORDS", "12000")
         assert mod._synthesis_min_words("deep") == 12000
@@ -279,7 +733,7 @@ class TestProseWordGate:
         monkeypatch.setenv("RESEARCH_SYNTHESIS_MIN_WORDS", "0")  # 0 = gate off
         assert mod._synthesis_min_words("deep") == 0
         monkeypatch.setenv("RESEARCH_SYNTHESIS_MIN_WORDS", "junk")  # 非法回退默认
-        assert mod._synthesis_min_words("deep") == 10000
+        assert mod._synthesis_min_words("deep") == 15000
 
     def test_select_thinnest_sections_orders_by_prose_words(self, mod):
         outline = _outline(4)

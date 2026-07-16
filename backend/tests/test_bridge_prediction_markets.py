@@ -452,6 +452,17 @@ def test_report_judge_input_cap_is_explicit_and_cannot_pass(monkeypatch):
     assert d.report_passes(scorecard) is False
 
 
+def test_report_judge_default_envelope_covers_useful_deep_dossier():
+    report = "x" * 350_000
+
+    bounded, identity = d._report_judge_input(report)
+
+    assert bounded == report
+    assert identity["report_chars"] == len(report)
+    assert identity["input_chars"] == len(report)
+    assert identity["truncated"] is False
+
+
 def test_report_passes_full_scorecard_gate():
     dims = d._REPORT_JUDGE_DIMS
     # 全 5 分 → PASS

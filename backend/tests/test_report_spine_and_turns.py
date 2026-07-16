@@ -215,9 +215,11 @@ def test_react_unused_hint_excludes_interview_agents():
     ])
     _run_react(a)
     # The observation after the first tool call carries the unused-tools hint.
+    # LOOP-015: the nudge text changed from "你还没有使用过" to a relevance-gated hint;
+    # match on the new constant's distinctive phrasing.
     hint_msgs = [
         m["content"] for call in a.llm.calls for m in call["messages"]
-        if isinstance(m.get("content"), str) and "你还没有使用过" in m["content"]
+        if isinstance(m.get("content"), str) and "可补充视角的未用工具" in m["content"]
     ]
     assert hint_msgs, "expected an unused-tools nudge to be emitted"
     for msg in hint_msgs:

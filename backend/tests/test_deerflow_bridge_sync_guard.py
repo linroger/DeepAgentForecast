@@ -18,14 +18,33 @@ import pytest
 
 from app.services.pipeline_orchestrator import (
     _DeerFlowSafetyOverlayError,
+    _DeerFlowSkillSyncError,
     _sync_deerflow_bridge_if_stale,
 )
 
 
 def _write(path, content):
+    path = Path(path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(content)
+    # Most tests isolate a non-skill bridge behavior but the production guard now
+    # requires the complete research skill set before any bridge work can launch.
+    if path.name == "deerflow_research.py" and path.parent.name == "deerflow_bridge":
+        for skill in (
+            "actor-ontology-research",
+            "deep-research",
+            "forecast-visuals",
+            "prediction-markets",
+        ):
+            skill_file = path.parent / "skills" / skill / "SKILL.md"
+            if not skill_file.exists():
+                skill_file.parent.mkdir(parents=True, exist_ok=True)
+                skill_file.write_text(f"---\nname: {skill}\n---\n", encoding="utf-8")
+    elif path.name == "deerflow_research.py":
+        # The authoritative helper creates skills/public atomically but requires
+        # the vendor's stable skills/ parent to exist.
+        (path.parent / "skills").mkdir(parents=True, exist_ok=True)
 
 
 def _digest(path):
@@ -84,8 +103,18 @@ def test_syncs_skill_files_too(tmp_path, monkeypatch):
     _write(bridge_dir / "skills" / "actor-ontology-research" / "SKILL.md", "NEW cast-cap rule\n")
     _write(deployed_dir / "skills" / "public" / "actor-ontology-research" / "SKILL.md", "OLD rule\n")
     _write(
+        deployed_dir / "skills" / "public" / "actor-ontology-research"
+        / "references" / "destination-only.md",
+        "must be pruned\n",
+    )
+    _write(
         bridge_dir / "skills" / "actor-ontology-research" / "references" / "details.md",
         "lazy reference\n",
+    )
+    _write(
+        bridge_dir / "skills" / "actor-ontology-research"
+        / "assets" / "templates" / "contract.json",
+        '{"schema": 1}\n',
     )
 
     monkeypatch.setattr(
@@ -93,7 +122,7 @@ def test_syncs_skill_files_too(tmp_path, monkeypatch):
         str(repo_root / "backend" / "app" / "services" / "pipeline_orchestrator.py"),
     )
 
-    _sync_deerflow_bridge_if_stale(str(deployed_dir))
+    sync_result = _sync_deerflow_bridge_if_stale(str(deployed_dir))
 
     deployed_skill = deployed_dir / "skills" / "public" / "actor-ontology-research" / "SKILL.md"
     assert deployed_skill.read_text() == "NEW cast-cap rule\n"
@@ -101,6 +130,24 @@ def test_syncs_skill_files_too(tmp_path, monkeypatch):
         deployed_dir / "skills" / "public" / "actor-ontology-research"
         / "references" / "details.md"
     ).read_text() == "lazy reference\n"
+    assert (
+        deployed_dir / "skills" / "public" / "actor-ontology-research"
+        / "assets" / "templates" / "contract.json"
+    ).read_text() == '{"schema": 1}\n'
+    assert not (
+        deployed_dir / "skills" / "public" / "actor-ontology-research"
+        / "references" / "destination-only.md"
+    ).exists()
+    assert sync_result["source_manifest_hash"] == sync_result["deployed_manifest_hash"]
+    assert sync_result["deployed_path"] == str(
+        (deployed_dir / "skills" / "public").resolve()
+    )
+    assert sync_result["skills"]["actor-ontology-research"][
+        "lazy_resource_hashes"
+    ]["references/details.md"] == _digest(
+        bridge_dir / "skills" / "actor-ontology-research"
+        / "references" / "details.md"
+    )
 
 
 def test_syncs_config_reflected_tool_modules(tmp_path, monkeypatch):
@@ -321,7 +368,7 @@ def test_sync_applies_model_factory_metadata_overlay(tmp_path, monkeypatch):
     assert factory.read_text(encoding="utf-8") == once
 
 
-def test_syncs_tracked_subagent_executor_overlay(tmp_path, monkeypatch):
+def test_syncs_tracked_embedded_subagent_overlay(tmp_path, monkeypatch):
     repo_root = tmp_path
     bridge_dir = repo_root / "deerflow_bridge"
     deployed_dir = repo_root / "deer-flow"
@@ -335,17 +382,46 @@ def test_syncs_tracked_subagent_executor_overlay(tmp_path, monkeypatch):
         bridge_dir / "patches" / "apply_subagent_overlays.py",
         real_overlay.read_text(encoding="utf-8"),
     )
-    deployed_subagents = (
+    deployed_harness = (
         deployed_dir / "backend" / "packages" / "harness" / "deerflow"
-        / "subagents")
+    )
     _write(
-        deployed_subagents / "executor.py",
-        '''class SubagentExecutor:
+        deployed_harness / "client.py",
+        '''class DeerFlowClient:
+    def stream(self, thread_id):
+        context = {"thread_id": thread_id}
+        return context
+''',
+    )
+    _write(
+        deployed_harness / "tools" / "builtins" / "task_tool.py",
+        '''def task_tool(runtime):
+    metadata = runtime.config.get("metadata", {})
+    if runtime is not None:
+        parent_model = metadata.get("model_name")
+    return parent_model
+''',
+    )
+    _write(
+        deployed_harness / "subagents" / "executor.py",
+        '''import asyncio
+
+logger = logging.getLogger(__name__)
+
+class SubagentExecutor:
     tracing_and_session_behavior = "preserve-me"
 
     async def _aexecute(self, task: str, result_holder: SubagentResult | None = None) -> SubagentResult:
         """Upstream body remains byte-for-byte after its signature."""
-        return self.tracing_and_session_behavior
+        try:
+            final_state = {}
+            ai_messages = []
+            logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} completed async execution")
+            result.try_set_terminal(
+                SubagentStatus.COMPLETED,
+                result=final_result,
+            )
+            return self.tracing_and_session_behavior
 ''',
     )
 
@@ -359,51 +435,112 @@ def test_syncs_tracked_subagent_executor_overlay(tmp_path, monkeypatch):
 
     _sync_deerflow_bridge_if_stale(str(deployed_dir))
 
-    deployed = (deployed_subagents / "executor.py").read_text()
-    assert "async_subagent_lifecycle_lease" in deployed
-    assert "async def _aexecute_under_lease" in deployed
-    assert 'tracing_and_session_behavior = "preserve-me"' in deployed
-    assert "Upstream body remains byte-for-byte" in deployed
+    client_source = (deployed_harness / "client.py").read_text()
+    task_source = (
+        deployed_harness / "tools" / "builtins" / "task_tool.py"
+    ).read_text()
+    executor_source = (deployed_harness / "subagents" / "executor.py").read_text()
+    assert '"app_config": self._app_config' in client_source
+    assert 'configurable.get("model_name")' in task_source
+    assert "async_subagent_lifecycle_lease" in executor_source
+    assert "async def _aexecute_under_lease" in executor_source
+    assert "provider fallback messages are failed tasks" in executor_source
+    assert "classify typed blocked outcomes" in executor_source
+    assert "Subagent evidence tools exhausted before any usable result" in executor_source
+    assert 'tracing_and_session_behavior = "preserve-me"' in executor_source
+    assert "Upstream body remains byte-for-byte" in executor_source
 
     # Idempotence: the drift guard may run before every outer lane.
-    once = deployed
+    once = (client_source, task_source, executor_source)
     _sync_deerflow_bridge_if_stale(str(deployed_dir))
-    assert (deployed_subagents / "executor.py").read_text() == once
+    assert (
+        (deployed_harness / "client.py").read_text(),
+        (deployed_harness / "tools" / "builtins" / "task_tool.py").read_text(),
+        (deployed_harness / "subagents" / "executor.py").read_text(),
+    ) == once
 
 
 def test_subagent_overlay_preserves_current_vendor_observability(tmp_path):
     repo_root = Path(__file__).resolve().parents[2]
-    vendor = (
-        repo_root / "deer-flow-2.0.0" / "backend" / "packages"
-        / "harness" / "deerflow" / "subagents" / "executor.py"
+    vendor_root = repo_root / "deer-flow-2.0.0"
+    vendor_harness = (
+        vendor_root / "backend" / "packages" / "harness" / "deerflow"
     )
     overlay = (
         repo_root / "deerflow_bridge" / "patches"
         / "apply_subagent_overlays.py"
     )
-    deployed = (
+    deployed_harness = (
         tmp_path / "backend" / "packages" / "harness" / "deerflow"
-        / "subagents" / "executor.py"
     )
-    _write(deployed, vendor.read_text(encoding="utf-8"))
+    for relative in (
+        Path("client.py"),
+        Path("tools/builtins/task_tool.py"),
+        Path("subagents/executor.py"),
+    ):
+        _write(
+            deployed_harness / relative,
+            (vendor_harness / relative).read_text(encoding="utf-8"),
+        )
 
     module = runpy.run_path(str(overlay))
     assert module["apply"](tmp_path) == "applied"
     assert module["apply"](tmp_path) == "already_applied"
 
-    source = deployed.read_text(encoding="utf-8")
-    assert "async_subagent_lifecycle_lease" in source
+    client_source = (deployed_harness / "client.py").read_text(encoding="utf-8")
+    task_source = (
+        deployed_harness / "tools" / "builtins" / "task_tool.py"
+    ).read_text(encoding="utf-8")
+    executor_source = (
+        deployed_harness / "subagents" / "executor.py"
+    ).read_text(encoding="utf-8")
+    assert '"app_config": self._app_config' in client_source
+    assert 'configurable.get("model_name")' in task_source
+    assert "async_subagent_lifecycle_lease" in executor_source
+    assert "provider fallback messages are failed tasks" in executor_source
     for preserved in (
         "build_tracing_callbacks",
         "inject_langfuse_metadata",
         "checkpointer=False",
         "user_id=self.user_id",
     ):
-        assert preserved in source
+        assert preserved in executor_source
 
 
-def test_degrades_safely_when_bridge_dir_missing(tmp_path, monkeypatch):
-    """No deerflow_bridge/ source (e.g. pure production deploy) -> silent no-op, never raises."""
+def test_subagent_overlay_fails_closed_on_model_inheritance_drift(tmp_path):
+    repo_root = Path(__file__).resolve().parents[2]
+    vendor_harness = (
+        repo_root / "deer-flow-2.0.0" / "backend" / "packages"
+        / "harness" / "deerflow"
+    )
+    deployed_harness = (
+        tmp_path / "backend" / "packages" / "harness" / "deerflow"
+    )
+    for relative in (
+        Path("client.py"),
+        Path("tools/builtins/task_tool.py"),
+        Path("subagents/executor.py"),
+    ):
+        source = (vendor_harness / relative).read_text(encoding="utf-8")
+        if relative.name == "task_tool.py":
+            source = source.replace(
+                '        parent_model = metadata.get("model_name")\n',
+                "        parent_model = vendor_changed_this_contract()\n",
+                1,
+            )
+        _write(deployed_harness / relative, source)
+
+    overlay = (
+        repo_root / "deerflow_bridge" / "patches"
+        / "apply_subagent_overlays.py"
+    )
+    module = runpy.run_path(str(overlay))
+    with pytest.raises(RuntimeError, match="context drifted"):
+        module["apply"](tmp_path)
+
+
+def test_fails_closed_when_required_bridge_skill_source_is_missing(tmp_path, monkeypatch):
+    """A run without authoritative skill sources cannot prove executable bytes."""
     repo_root = tmp_path
     deployed_dir = repo_root / "deer-flow"
     _write(deployed_dir / "deerflow_research.py", "whatever\n")
@@ -413,13 +550,16 @@ def test_degrades_safely_when_bridge_dir_missing(tmp_path, monkeypatch):
         str(repo_root / "backend" / "app" / "services" / "pipeline_orchestrator.py"),
     )
 
-    # Must not raise even though deerflow_bridge/ doesn't exist at all.
-    _sync_deerflow_bridge_if_stale(str(deployed_dir))
+    with pytest.raises(
+        _DeerFlowSkillSyncError,
+        match="required DeerFlow bridge source/deployed entry point is missing",
+    ):
+        _sync_deerflow_bridge_if_stale(str(deployed_dir))
     assert (deployed_dir / "deerflow_research.py").read_text() == "whatever\n"
 
 
-def test_degrades_safely_on_unexpected_error(tmp_path, monkeypatch):
-    """Any exception inside the guard is swallowed - it must never break a pipeline launch."""
+def test_copy_failure_fails_closed_before_bridge_or_research_launch(tmp_path, monkeypatch):
+    """A shared shutil failure must not leave a partial bundle eligible to run."""
     repo_root = tmp_path
     bridge_dir = repo_root / "deerflow_bridge"
     deployed_dir = repo_root / "deer-flow"
@@ -436,5 +576,9 @@ def test_degrades_safely_on_unexpected_error(tmp_path, monkeypatch):
 
     monkeypatch.setattr("app.services.pipeline_orchestrator.shutil.copyfile", _boom)
 
-    # Should not raise - degrades to a logged warning only.
-    _sync_deerflow_bridge_if_stale(str(deployed_dir))
+    with pytest.raises(
+        _DeerFlowSkillSyncError,
+        match="required runtime skill deployment failed.*simulated disk failure",
+    ):
+        _sync_deerflow_bridge_if_stale(str(deployed_dir))
+    assert (deployed_dir / "deerflow_research.py").read_text() == "y\n"

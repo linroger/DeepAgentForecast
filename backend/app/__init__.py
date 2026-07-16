@@ -51,24 +51,34 @@ def create_app(config_class=Config):
         _origins = [o.strip() for o in _cors_cfg.split(',') if o.strip()] or ["http://localhost:3000"]
     CORS(app, resources={r"/api/*": {"origins": _origins}})
     
-    # 注册模拟进程清理函数（确保服务器关闭时终止所有模拟进程）
-    from .services.simulation_runner import SimulationRunner
-    SimulationRunner.register_cleanup()
-    # 回收上一进程遗留、仍在烧 LLM 额度的孤儿 OASIS 模拟进程（EXECPLAN2 F-12-0/F-6-5）。
-    SimulationRunner.reconcile_orphans()
-    if should_log_startup:
-        logger.info("已注册模拟进程清理函数并回收孤儿模拟")
+    # 进程生命周期挂钩会发送真实 OS 信号并改写 uploads 下的持久化状态。pytest
+    # 构造 Flask app 只为测试路由，绝不能把另一个 localhost 后端拥有的活模拟误判为
+    # 孤儿。测试 harness 在 conftest import 时设置 DRF_TEST_PROCESS；TESTING 配置是
+    # 应用嵌入方的等价显式开关。生产进程仍保持原有注册/回收语义。
+    _runtime_lifecycle_enabled = (
+        not app.config.get('TESTING', False)
+        and os.environ.get('DRF_TEST_PROCESS') != '1'
+    )
+    if _runtime_lifecycle_enabled:
+        # 注册模拟进程清理函数（确保服务器关闭时终止所有模拟进程）
+        from .services.simulation_runner import SimulationRunner
+        SimulationRunner.register_cleanup()
+        # 回收上一进程遗留、仍在烧 LLM 额度的孤儿 OASIS 模拟进程（EXECPLAN2 F-12-0/F-6-5）。
+        SimulationRunner.reconcile_orphans()
+        if should_log_startup:
+            logger.info("已注册模拟进程清理函数并回收孤儿模拟")
 
-    # 统一管线（DeerFlow 研究 → 预测）的生命周期挂钩：
-    #  1) 启动时回收上一个进程遗留的孤儿管线（status=running 但无对应线程 → 标记 failed），
-    #     否则前端会对着永远停在 running 的 pipeline_state.json 无限轮询。
-    #  2) 注册关闭清理，终止在飞的 DeerFlow 研究子进程组（需放在 SimulationRunner 之后，
-    #     以便链式调用其信号处理器）。
-    from .services.pipeline_orchestrator import PipelineOrchestrator
-    PipelineOrchestrator.reconcile_orphans()
-    PipelineOrchestrator.register_cleanup()
-    if should_log_startup:
-        logger.info("已注册研究管线清理函数并回收孤儿管线")
+        # 统一管线（DeerFlow 研究 → 预测）的生命周期挂钩：
+        #  1) 启动时回收上一个进程遗留、无活 owner 的孤儿管线；
+        #  2) 注册关闭清理，终止在飞的 DeerFlow 研究子进程组（需放在
+        #     SimulationRunner 之后，以便链式调用其信号处理器）。
+        from .services.pipeline_orchestrator import PipelineOrchestrator
+        PipelineOrchestrator.reconcile_orphans()
+        PipelineOrchestrator.register_cleanup()
+        if should_log_startup:
+            logger.info("已注册研究管线清理函数并回收孤儿管线")
+    elif should_log_startup:
+        logger.info("测试进程：已禁用破坏性运行时注册与孤儿回收")
     
     # 鉴权/暴露面闸门（EXECPLAN2 F-13-0）：
     #   - 环回来源（本机前端经 vite 代理而来）一律放行，保持本地工作流不变；
@@ -146,4 +156,3 @@ def create_app(config_class=Config):
         logger.info("MiroFish Backend 启动完成")
     
     return app
-

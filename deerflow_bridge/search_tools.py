@@ -7,6 +7,7 @@ community 工具函数——因此行为与直接在 config 里选那个 provide
 
     SERPER_API_KEY 已配 → deerflow.community.serper.tools:web_search_tool
     否则 TAVILY_API_KEY 已配 → deerflow.community.tavily.tools:web_search_tool
+    否则 FIRECRAWL_API_KEY 已配 → 本模块直连 Firecrawl v2 /search（无 community 模块）
     都没配（零 key）→ deerflow.community.ddg_search.tools:web_search_tool（社区 DDG，无需 key）
 
 约束（对齐 market_tools.py 的部署/自包含语义）：
@@ -66,6 +67,14 @@ _PROVIDER_MODULES = {
 
 # 默认 max_results：与 config.yaml 本 stanza 对齐（深研究单轮吃 10 条覆盖面翻倍）。
 DEFAULT_MAX_RESULTS = 10
+
+# —— Firecrawl 花费护栏（Session B：单 run 烧掉 ~$100 credit 的事后防线）——
+# Firecrawl /search 按**返回结果条数**计费：实际上送 limit=min(调用方 max_results, 条数
+# 上限)。调用硬上限兜住失控循环（每个研究子进程即一条 lane，进程内计数就是 per-lane 计数）。
+DEFAULT_FIRECRAWL_SEARCH_LIMIT = 5           # 单次 /search 计费结果条数上限
+DEFAULT_FIRECRAWL_SEARCH_CALL_CEILING = 300  # 单进程 /search 计费调用上限；<=0=不限
+_firecrawl_search_calls = 0        # 本进程已发出的真实 /search 计费调用数
+_firecrawl_ceiling_warned = False  # 越线只 warn 一次，不逐调用刷屏
 
 # ---------------------------------------------------------------------------
 # WAVE9 —— web_search 结果磁盘缓存（镜像 cached_fetch.py 的模式，自包含不 import 桥）。
@@ -313,16 +322,139 @@ def _enforce_search_cache_cap(root: str, max_bytes: int) -> None:
 
 
 def _select_search_provider() -> str:
-    """按 env 里配了哪把 key 选后端：serper > tavily > ddg（纯函数，可离线单测）。
+    """按 env 里配了哪把 key 选后端：serper > tavily > firecrawl > ddg（纯函数，可离线单测）。
 
     只读 env，不触网、不 import deerflow——供 monkeypatch 环境变量的调度单测直接调用。
     键值取 strip 后非空才算「已配」（空串=未配，与桥的 provider-key 预置空串卫生一致）。
+    firecrawl 无 harness community 模块，走本模块的直连实现（_firecrawl_search）；取证
+    显示零 key 的社区 DDG 在 2026-07-14 人形机器人 run 中 78% 返回空结果，配置 Firecrawl
+    key 后它取代 DDG 成为实际后端。
     """
     if os.environ.get("SERPER_API_KEY", "").strip():
         return "serper"
     if os.environ.get("TAVILY_API_KEY", "").strip():
         return "tavily"
+    if os.environ.get("FIRECRAWL_API_KEY", "").strip():
+        return "firecrawl"
     return "ddg"
+
+
+def _firecrawl_search_available() -> bool:
+    """firecrawl 后端可用 = key 已配 + httpx 可导入（不触网，供调度回退判断）。"""
+    if not os.environ.get("FIRECRAWL_API_KEY", "").strip():
+        return False
+    try:
+        import httpx  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def _firecrawl_search_limit_cap() -> int:
+    """单次 /search 计费结果条数上限。RESEARCH_FIRECRAWL_SEARCH_LIMIT 缺省 5；下限 1。
+    非法值回退默认。Firecrawl 按条计费，实际上送 limit=min(调用方 max_results, 此上限)。"""
+    raw = os.environ.get("RESEARCH_FIRECRAWL_SEARCH_LIMIT", "").strip()
+    try:
+        value = int(float(raw)) if raw else DEFAULT_FIRECRAWL_SEARCH_LIMIT
+    except (TypeError, ValueError):
+        value = DEFAULT_FIRECRAWL_SEARCH_LIMIT
+    return max(1, value)
+
+
+def _firecrawl_search_call_ceiling() -> int:
+    """单进程 /search 计费调用硬上限。RESEARCH_FIRECRAWL_MAX_SEARCH_CALLS_PER_PROCESS
+    缺省 300；<=0=不限。非法值回退默认。"""
+    raw = os.environ.get(
+        "RESEARCH_FIRECRAWL_MAX_SEARCH_CALLS_PER_PROCESS", "").strip()
+    try:
+        value = int(float(raw)) if raw else DEFAULT_FIRECRAWL_SEARCH_CALL_CEILING
+    except (TypeError, ValueError):
+        value = DEFAULT_FIRECRAWL_SEARCH_CALL_CEILING
+    return value
+
+
+def get_firecrawl_call_counts() -> dict[str, int]:
+    """进程内 Firecrawl 计费调用计数快照（供未来预算遥测导出；本模块只有 search 面）。"""
+    return {"search": _firecrawl_search_calls}
+
+
+def _firecrawl_search(query: str, max_results: int) -> str:
+    """Firecrawl v2 /search 直连实现，输出与 community 工具同形的 JSON 字符串。
+
+    成功 → {"query", "total_results", "results":[{title,url,content}]}；真实空结果 →
+    total_results=0 + results=[]（可被负缓存抑制重复空查询）；传输/HTTP 错误 →
+    {"error", "query"}（不负缓存，交由上层按瞬态处理）。绝不抛异常、绝不回显凭据。
+    花费护栏：limit 被 RESEARCH_FIRECRAWL_SEARCH_LIMIT 钳制（按条计费）；进程内计费调用
+    数达上限后直接返回瞬态 {"error"} 形状（不触网、不负缓存），越线只 warn 一次。
+    """
+    global _firecrawl_search_calls, _firecrawl_ceiling_warned
+    api_key = os.environ.get("FIRECRAWL_API_KEY", "").strip()
+    q = str(query or "").strip()
+    ceiling = _firecrawl_search_call_ceiling()
+    if ceiling > 0 and _firecrawl_search_calls >= ceiling:
+        if not _firecrawl_ceiling_warned:
+            _firecrawl_ceiling_warned = True
+            logger.warning(
+                "search_tools: Firecrawl 本进程 search 计费调用已达上限 %d，"
+                "后续搜索直接返回瞬态错误（不再产生 Firecrawl 费用）", ceiling)
+        return json.dumps(
+            {"error": f"firecrawl search per-run call ceiling reached ({ceiling})",
+             "query": q},
+            ensure_ascii=False)
+    try:
+        import httpx
+
+        timeout = float(os.environ.get(
+            "RESEARCH_FIRECRAWL_SEARCH_TIMEOUT_SECONDS", "20") or "20")
+        endpoint = os.environ.get(
+            "FIRECRAWL_SEARCH_API_URL", "https://api.firecrawl.dev/v2/search"
+        ).strip() or "https://api.firecrawl.dev/v2/search"
+        limit = max(1, min(int(max_results), _firecrawl_search_limit_cap()))
+        _firecrawl_search_calls += 1  # 计在发出请求前：HTTP 4xx/5xx 同样可能计费
+        with httpx.Client(timeout=timeout, trust_env=True) as client:
+            response = client.post(
+                endpoint,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "query": q,
+                    "limit": limit,
+                    "sources": ["web"],
+                },
+            )
+        if response.status_code >= 400:
+            return json.dumps(
+                {"error": f"firecrawl search HTTP {response.status_code}",
+                 "query": q},
+                ensure_ascii=False)
+        payload = response.json()
+        data = payload.get("data") if isinstance(payload, dict) else None
+        # v2 按 source 分组（{"web":[...]}）；容忍 v1 风格的裸列表。
+        rows = data.get("web") if isinstance(data, dict) else data
+        results = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            url = str(row.get("url") or "").strip()
+            if not url:
+                continue
+            results.append({
+                "title": str(row.get("title") or "").strip() or url,
+                "url": url,
+                "content": str(row.get("description") or row.get("snippet")
+                               or "").strip(),
+            })
+        return json.dumps(
+            {"query": q, "total_results": len(results), "results": results},
+            ensure_ascii=False)
+    except Exception as exc:  # noqa: BLE001 — 不回显异常正文（可能含 bearer 头）
+        return json.dumps(
+            {"error": f"firecrawl search failed: {type(exc).__name__}",
+             "query": q},
+            ensure_ascii=False)
 
 
 def _load_search_module(provider: str) -> Optional[Any]:
@@ -376,16 +508,22 @@ def web_search_impl(
         attempt = _research_budget.admit_attempt("search")
         if not attempt.allowed:
             return _budget_denial("web_search", attempt.reason, query)
-    mod = _load_search_module(provider)
-    if (mod is None or getattr(mod, "web_search_tool", None) is None) and provider != "ddg":
-        # 被选后端不可用 → 回退社区 DDG（零 key 兜底路径，无需任何依赖之外的东西）
-        logger.warning("search_tools: 后端 %s 不可用，回退 DDG", provider)
-        provider = "ddg"  # WAVE9：缓存键按实际委派的后端记，避免跨后端串味
-        mod = _load_search_module("ddg")
-    tool_obj = getattr(mod, "web_search_tool", None) if mod is not None else None
-    if tool_obj is None:
-        return json.dumps({"error": "no web_search backend available", "query": query},
-                          ensure_ascii=False)
+    if provider == "firecrawl" and not _firecrawl_search_available():
+        # firecrawl 依赖缺失（无 httpx）→ 与 community 模块导入失败同类，回退 DDG。
+        logger.warning("search_tools: 后端 firecrawl 不可用（httpx 缺失），回退 DDG")
+        provider = "ddg"
+    tool_obj = None
+    if provider != "firecrawl":
+        mod = _load_search_module(provider)
+        if (mod is None or getattr(mod, "web_search_tool", None) is None) and provider != "ddg":
+            # 被选后端不可用 → 回退社区 DDG（零 key 兜底路径，无需任何依赖之外的东西）
+            logger.warning("search_tools: 后端 %s 不可用，回退 DDG", provider)
+            provider = "ddg"  # WAVE9：缓存键按实际委派的后端记，避免跨后端串味
+            mod = _load_search_module("ddg")
+        tool_obj = getattr(mod, "web_search_tool", None) if mod is not None else None
+        if tool_obj is None:
+            return json.dumps({"error": "no web_search backend available", "query": query},
+                              ensure_ascii=False)
     # Provider fallback changes the actual request identity; negative-cache the
     # delegate that was really used, just like the positive disk-cache key.
     exact_key = f"{provider}\n{_normalize_query(query)}\n{int(max_results)}"
@@ -475,7 +613,9 @@ def web_search_impl(
             return _budget_denial("web_search", network.reason, query)
 
     try:
-        result = _call_delegate(tool_obj, query, max_results)
+        result = (_firecrawl_search(query, max_results)
+                  if provider == "firecrawl"
+                  else _call_delegate(tool_obj, query, max_results))
         result = result if isinstance(result, str) else str(result)
         result = _filter_denied_search_results(result)
     except Exception as e:  # noqa: BLE001 — 工具层最后兜底：绝不向 agent 循环抛异常

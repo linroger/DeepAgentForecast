@@ -84,8 +84,14 @@ def _assert_collision_free(boxes):
 @pytest.mark.skipif(not rv.MATPLOTLIB_AVAILABLE, reason="matplotlib not installed")
 def test_plotly_disabled_emits_static_timeline_and_actor_network_manifest_items(
         tmp_path, monkeypatch):
-    """Both formerly interactive-only figures remain publishable without Plotly."""
+    """Both formerly interactive-only figures remain publishable without Plotly.
+
+    actor_network is now opt-in (relationship structure, not forecast data), so the
+    static fallback only emits it when REPORT_META_CHARTS is on — set it here to keep
+    exercising the matplotlib fallback path for that figure.
+    """
     monkeypatch.setattr(rv, "PLOTLY_AVAILABLE", False)
+    monkeypatch.setenv("REPORT_META_CHARTS", "1")
 
     items = ReportVisualizer().build_all(
         "loop006-static",
@@ -243,8 +249,12 @@ def test_dense_static_outputs_are_byte_deterministic(tmp_path):
     reason="matplotlib/plotly not installed",
 )
 def test_kaleido_missing_attaches_static_timeline_and_actor_pngs(tmp_path, monkeypatch):
-    """Interactive cards keep HTML while the new static equivalents supply PDF-safe PNGs."""
+    """Interactive cards keep HTML while the new static equivalents supply PDF-safe PNGs.
+
+    actor_network is opt-in now, so enable REPORT_META_CHARTS to keep it in the manifest.
+    """
     monkeypatch.setattr(ReportVisualizer, "_png_export_ok", lambda self: False)
+    monkeypatch.setenv("REPORT_META_CHARTS", "1")
     items = ReportVisualizer().build_all(
         "loop006-no-kaleido",
         str(tmp_path),

@@ -120,8 +120,9 @@ def test_prepare_quantitative_panels_drops_future_dated_actuals_but_keeps_foreca
         {**row,
          "metric": row["metric"].replace("reported", "2030 forecast"),
          "definition": row["definition"].replace("Observed", "Forecast"),
-         "as_of_date": "2030-12-31"}
-        for row in future_actuals
+         "as_of_date": "2030-12-31",
+         "source_url": f"https://example.com/{index}"}
+        for index, row in enumerate(future_actuals)
     ]
     panels = rv._prepare_quantitative_panels(forecasts)
     assert len(panels) == 1
@@ -133,15 +134,18 @@ def _bnef_revision_rows():
         {"metric": "BNEF US 2030 EV share projection (2024)", "value": "48",
          "unit": "% of US new car sales", "as_of_date": "2024-12-31",
          "definition": "BNEF 2024 forecast for US 2030 EV share",
-         "source": "BNEF EVO 2024"},
+         "source": "BNEF EVO 2024",
+         "source_url": "https://example.com/bnef-evo-2024"},
         {"metric": "BNEF US 2030 EV share projection (2025)", "value": "27",
          "unit": "% of US new car sales", "as_of_date": "2025-12-31",
          "definition": "BNEF 2025 revision for US 2030 EV share",
-         "source": "BNEF EVO 2026 [S10]"},
+         "source": "BNEF EVO 2026 [S10]",
+         "source_url": "https://example.com/bnef-evo-2025"},
         {"metric": "BNEF US 2030 EV share projection (2026)", "value": "17",
          "unit": "% of US new car sales", "as_of_date": "2026-06-30",
          "definition": "BNEF 2026 revision for US 2030 EV share post-IRA repeal",
-         "source": "BNEF EVO 2026 [S10]"},
+         "source": "BNEF EVO 2026 [S10]",
+         "source_url": "https://example.com/bnef-evo-2026"},
     ]
 
 
@@ -890,11 +894,12 @@ def test_build_all_includes_html_when_plotly(tmp_path):
     arts["market_price_history"] = _synthetic_price_history()
     manifest = viz.build_all("report_html", str(tmp_path), arts)
     htmls = [e for e in manifest if e["type"] == "html"]
-    # WAVE9：至少 scenario + binary dotplot + model-vs-market + timeline + actor network +
-    # actor bubble + worldstate + 1 市场价格历史
+    # WAVE9：至少 scenario + binary dotplot + model-vs-market + timeline + worldstate +
+    # 1 市场价格历史（actor_network 已降为 opt-in，默认不占槽位）。
     assert len(htmls) >= 6
     hints = {e["placement_hint"] for e in htmls}
-    assert {"scenarios", "binary_forecasts", "timeline", "actors"} <= hints
+    assert {"scenarios", "binary_forecasts", "timeline"} <= hints
+    assert "actors" not in hints  # 关系结构图默认不入报告
     assert "simulation" not in hints
     for e in htmls:
         assert e["path"].startswith("charts/") and e["path"].endswith(".html")

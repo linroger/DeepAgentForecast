@@ -96,3 +96,6 @@ deer-flow-2.0.0/
 CLAUDE.md
 **/CLAUDE.md
 handoff.md
+
+# Foglamp codebase scan state (the lock file contains a private edit token)
+.foglamp/
