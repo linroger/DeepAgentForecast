@@ -737,6 +737,10 @@ def test_round_checkpoint_default_writes_without_resume(tmp_path, monkeypatch):
 def test_round_checkpoint_disabled_when_sim_checkpoint_false(tmp_path, monkeypatch):
     # ITEM 3: 显式 SIM_CHECKPOINT=false 且未开 SIM_RESUME → 完全不产出 checkpoint.json（degrade-safe）。
     monkeypatch.delenv("SIM_RESUME", raising=False)
+    # 环境防漏：_cfg_flag 在环境变量缺失时回退 Config；开发机 .env 里 SIM_RESUME=true
+    # 会经 Config.SIM_RESUME 泄漏进来把检查点强制打开。两条通道都必须被隔离。
+    from app.config import Config as _Cfg
+    monkeypatch.setattr(_Cfg, "SIM_RESUME", False, raising=False)
     monkeypatch.setenv("SIM_CHECKPOINT", "false")
     os.makedirs(tmp_path / "twitter")
     rps._write_round_checkpoint(str(tmp_path), "twitter", 1, 1, 10, 1)

@@ -3089,8 +3089,10 @@ class _InbandWorldEvolution:
             commitments = self._dc.elicit_round(roster, ctx) if roster else []
             # Foglamp WP1 (1C/I-16): elicit_round 把类型化轮结果写入 ctx["round_status"]
             # （committed/abstained/silent/failed/missing）；roster 为空即 missing。
+            # 旧签名的 elicit 替身（测试/降级路径）不写状态 → 传 None，由
+            # WorldState.step 按承诺内容保守推断（有有效承诺=committed，空=silent）。
             # 失败/沉默轮冻结 WorldState 且不衰减收敛 EWMA——死通道不再伪装成均衡。
-            round_status = str(ctx.get("round_status") or "missing") if roster else "missing"
+            round_status = ctx.get("round_status") if roster else "missing"
             # 真实时段 gap 的惯性 + 熵地板（spec §4）；snap 后首/尾残段 gap 天然偏离名义值
             eff_inertia = self._dc._inertia_for_gap(
                 self._inertia, self._prev_date, period_end, self._avg_gap)

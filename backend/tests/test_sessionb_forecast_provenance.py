@@ -65,6 +65,9 @@ def _provenance_config(monkeypatch):
     from app.config import Config
     monkeypatch.setattr(Config, "FORECAST_BINARY_CONTRARIAN", False, raising=False)
     monkeypatch.setattr(Config, "FORECAST_SIM_SENSITIVITY", True, raising=False)
+    # Foglamp WP1 (1D)：模拟信号进入二元概率生成仅剩 legacy_prompt（特征化）路径；
+    # 本组测试特征化该旧路径的溯源对账/加性行为。
+    monkeypatch.setattr(Config, "SIMULATION_FORECAST_EFFECT", "legacy_prompt", raising=False)
     monkeypatch.setattr(Config, "FORECAST_ENSEMBLE_MODELS", "", raising=False)
 
 
