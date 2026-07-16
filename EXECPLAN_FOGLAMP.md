@@ -289,8 +289,8 @@ Update this table at the start and end of every implementation session. A checke
 
 | Work package | State | Commit | Evidence |
 |---|---|---|---|
-| 0. Baseline, characterization, and ADRs | Not started | — | — |
-| 1. Immediate correctness containment | Not started | — | — |
+| 0. Baseline, characterization, and ADRs | Implementing (0B/0C/0D landed; 0A tooling landed, owner artifact-root capture pending) | see handoff 2026-07-17 | `backend/tests/test_architecture_characterization.py` (13 pass + 11 strict-xfail), `docs/adr/0001/0002`, `docs/foglamp/current-shape-map.md`, `backend/scripts/architecture_baseline.py` (+CLI tests) |
+| 1. Immediate correctness containment | Implementation complete (1A–1E + I-15 fallback removal) | see handoff 2026-07-17 | `backend/tests/test_foglamp_containment.py` (19 pass); focused suites green |
 | 2. Core domain and predictive-validity contracts | Not started | — | — |
 | 3. Metadata and immutable artifact stores | Not started | — | — |
 | 4. Stable identity, research revisions, and command idempotency | Not started | — | — |
@@ -1444,6 +1444,11 @@ Append decisions; do not rewrite history.
 | 2026-07-17 | Keep files/JSONL as compatibility projections during migration | Existing recovery/history/UI depend on them | Authority switches require shadow parity and run-pinned modes |
 | 2026-07-17 | Disable shared simulation graph feedback before building overlays | Current untagged writes can contaminate observed evidence and other seeds/forks | Generated activity remains in run artifacts until safe overlays exist |
 | 2026-07-17 | Treat simulation as diagnostic until prospective incremental skill is proved | Current research-prior reuse, social-action laundering, and evaluation leakage make quantitative authority unearned | Experiment results can generate hypotheses but default to no probability movement |
+| 2026-07-17 | WP1 implemented on branch `codex/foglamp` in place (branch isolation, path-limited staging) instead of a physical worktree | `backend/.venv` is directory-bound (stale-shebang history); a separate worktree would have no runnable test environment | Commit isolation preserved; deviation recorded in handoff.md |
+| 2026-07-17 | 1B safety pin lives in `state.options["safety_policy_v1"]`; pre-WP1 runs resume with the SAFE containment policy (origin=resume_reconstructed_safe), never a reconstruction of unsafe legacy defaults | All pre-WP1 runs had `SIM_GRAPH_FEEDBACK=true`; reconstructing that policy would resume writes into the observed graph | No schema bump; WP4 migrates the pin into immutable RunSpec |
+| 2026-07-17 | I-15 containment uses a declared-neutral outcome power 1.0 (`outcome_power_known=false`) for unknown power instead of full quantitative ineligibility | Full ineligibility is WP11's action-contract work; a neutral default removes the visibility→power conflation now without gutting the diagnostic-only channel | `test_wp_11_prevents_neutral_weight_for_unknown_power` remains strict-xfail until WP11 |
+| 2026-07-17 | `calibration_summary`/`recalibration_param` gained `include_evaluation` (default false) instead of a separate evaluation scorer | golden_eval legitimately scores isolated evaluation ledgers; production callers keep record-type exclusion by default | Production report/monitor callers never pass the flag |
+| 2026-07-17 | 0A owner-designated read-only artifact-root capture deferred; characterization uses deterministic synthetic fixtures + source-shape assertions | No approved `FOGLAMP_SOURCE_ARTIFACT_ROOT` was available in this autonomous session | Baseline CLI is ready; owner can run `capture` when a root is designated |
 
 ---
 
