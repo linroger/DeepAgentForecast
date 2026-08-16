@@ -254,6 +254,22 @@ class PipelineCancelled(BaseException):
     """
 
 
+class ProviderOutageHalt(BaseException):
+    """DEFECT-1：LLM 提供方疑似全面中断时的运行级止损信号（run-level outage halt）。
+
+    2026-07-08 复盘：提供方额度耗尽后，一条管线以最高 231 错误/分钟连续锤了 ~26 小时
+    （10,584 行 ERROR）；07-15 又出现 8,856 次重试告警 + 4,117 次回退失败，报告阶段
+    只做「单报告提前中止」然后继续下一个报告，从未有任何运行级止损。本信号由
+    ``_RunOutageBreaker``（连续 N 次提供方级失败、零成功间隔）触发，在进度回调 /
+    阶段边界抬升。
+
+    与 :class:`PipelineCancelled` 同理继承 BaseException：必须穿透各阶段布设的
+    ``except Exception`` 纵深防御层（否则会被降级成占位符章节/单阶段失败），直达
+    ``_run`` 的专用处理器——该处理器把管线落成 status='failed' 这一**既有**可恢复
+    检查点终态（`resume()` 会复用已完成阶段与研究断点原地续跑），不发明并行状态机。
+    """
+
+
 class IncompatiblePipelineSchema(RuntimeError):
     """I-4-4: 试图操作一个由更新版代码写出的 pipeline_state.json。
 
@@ -328,6 +344,315 @@ def _pid_alive(pid: Optional[int]) -> bool:
         return True
     except OSError:
         return False
+
+
+# ---------------------------------------------------------------------------
+# DEFECT-1：run 级提供方中断熔断器（run-level provider-outage breaker）
+#
+# llm_client 自 iteration 2 起在「主提供方熔断冷却 + 回退不可用」时让 chat() 立即抛出
+# （不再烧 3 次退避重试 + 二次回退），编排器因此能看到一条快速、可分类的失败流。这里
+# 把它聚合成运行级判定：连续 N 次提供方级失败（配额/连接/认证）且零成功间隔 → 置
+# tripped；探针对该 run 的后续 LLM 调用直接快速失败（不再发起任何真实调用），编排器在
+# 进度回调（_make_stage_updater.update，即各阶段的高频取消点）抬升 ProviderOutageHalt，
+# 经 _run 的专用处理器落成 status='failed' 的既有可恢复检查点态。
+#
+# 作用域：编排器进程内驱动的阶段（ontology/graph/prepare/report + 进程内的研究合并
+# 调用）。研究/模拟子进程有自己的重试环，不做进程注入——只在编排器边界按「阶段级失败」
+# 计数（_note_provider_stage_failure：并行研究轨失败、仅综合恢复尝试失败）。
+# ---------------------------------------------------------------------------
+
+_PROVIDER_OUTAGE_FAST_FAIL_PREFIX = "LLM_OUTAGE_HALT"
+
+# 连接类中断的文本指纹（openai SDK / httpx / CLI 超时的常见形态）。仅用于分类已发生的
+# LLM 调用异常，宽松一点是安全的：误判的代价只是向连续计数 +1，任一成功即清零。
+_PROVIDER_OUTAGE_CONNECTION_MARKERS = (
+    "apiconnectionerror", "apitimeouterror", "connecterror", "connectionerror",
+    "connection refused", "connection reset", "connection aborted",
+    "connection error", "econnrefused", "econnreset", "getaddrinfo",
+    "nodename nor servname", "name or service not known",
+    "temporary failure in name resolution", "remotedisconnected",
+    "server disconnected", "network is unreachable", "timed out", "sslerror",
+)
+
+
+def _outage_halt_threshold() -> int:
+    """DEFECT-1 旋钮 LLM_OUTAGE_HALT_CONSECUTIVE（默认 10；≤0 关闭）。
+
+    本迭代 config.py 归另一 agent 所有，故按跨 agent 约定读取：env 显式非零值优先，
+    否则回退 ``Config.LLM_OUTAGE_HALT_CONSECUTIVE``，属性缺失时用内建默认 10。
+    显式关闭：env 置负数，或 config 里设 0（env '0' 会按 ``int(x or 0) or fallback``
+    的既定折叠语义落回 config/默认）。
+    """
+    try:
+        env_val = int(os.environ.get("LLM_OUTAGE_HALT_CONSECUTIVE", "") or 0)
+    except (TypeError, ValueError):
+        env_val = 0
+    if env_val:
+        return env_val
+    try:
+        return int(getattr(Config, "LLM_OUTAGE_HALT_CONSECUTIVE", 10) or 0)
+    except (TypeError, ValueError):
+        return 10
+
+
+def _classify_provider_outage(exc: Any) -> Optional[str]:
+    """把一次 LLM 调用/研究阶段失败分类为「提供方级中断」或 None（不计数）。
+
+    提供方级 = 配额/限流（llm_client._is_quota）、确定性认证失败
+    （llm_client._is_deterministic_auth_error）、连接/传输失败、以及 llm_client 的
+    双通道快失败（主提供方熔断冷却 + 回退不可用）。内容审查（422）、JSON 解析、
+    预算护栏（BudgetExceeded）、取消信号等都不是「提供方中断」——既不计数也不清零。
+    """
+    if isinstance(exc, (PipelineCancelled, ProviderOutageHalt)):
+        return None
+    try:
+        from ..utils.telemetry import BudgetExceeded
+        if isinstance(exc, BudgetExceeded):
+            return None
+    except Exception:  # noqa: BLE001 — telemetry 不可导入时继续按文本分类
+        pass
+    text = str(exc or "")
+    if not text.strip():
+        return None
+    if text.startswith(_PROVIDER_OUTAGE_FAST_FAIL_PREFIX):
+        return None  # 本熔断器自己的快失败信号，不得自我喂养
+    _is_quota = _is_auth = None
+    try:
+        from ..utils.llm_client import (
+            _is_deterministic_auth_error as _is_auth,
+            _is_quota,
+        )
+    except Exception:  # noqa: BLE001 — 帮手不可导入时退化为本地指纹
+        pass
+    if _is_auth is not None and _is_auth(exc):
+        return "auth"
+    # llm_client 双通道中断快失败（消息含 '422/429 熔断冷却' → _is_quota 也会命中，
+    # 但显式归类更可读）。
+    low = text.casefold()
+    if "熔断冷却" in text or "circuit-breaker" in low or "回退提供方不可用" in text:
+        return "circuit_breaker"
+    if _is_quota is not None and _is_quota(exc):
+        return "quota"
+    if isinstance(exc, BaseException):
+        tname = type(exc).__name__.casefold()
+        if "connection" in tname or "timeout" in tname:
+            return "connection"
+    if any(marker in low for marker in _PROVIDER_OUTAGE_CONNECTION_MARKERS):
+        return "connection"
+    return None
+
+
+class _RunOutageBreaker:
+    """单条管线的「连续提供方级 LLM 失败」熔断器（线程安全）。
+
+    计数语义：提供方级失败 +1；任一成功清零；非提供方级失败（内容审查、解析错误等）
+    既不计数也不清零——它们不是「中间成功」。达到阈值置 ``tripped``（保留首次触发时的
+    证据，不再累计），此后探针对该 run 的 chat() 直接快速失败。
+    """
+
+    def __init__(self, run_id: str, threshold: int) -> None:
+        self.run_id = str(run_id)
+        self.threshold = max(1, int(threshold))
+        self.consecutive = 0
+        self.tripped = False
+        self.tripped_at: Optional[str] = None
+        self.last_reason: Optional[str] = None
+        self.last_error: Optional[str] = None
+        self._lock = threading.Lock()
+
+    def record_success(self) -> None:
+        with self._lock:
+            if not self.tripped:
+                self.consecutive = 0
+
+    def record_provider_failure(self, exc: Any, reason: str) -> bool:
+        """记一次已分类的提供方级失败；恰在本次达到阈值时返回 True。"""
+        tripped_now = False
+        with self._lock:
+            if self.tripped:
+                return False
+            self.consecutive += 1
+            self.last_reason = str(reason)
+            self.last_error = str(exc or "")[:300]
+            if self.consecutive >= self.threshold:
+                self.tripped = True
+                self.tripped_at = _utcnow()
+                tripped_now = True
+        if tripped_now:
+            logger.error(
+                "[%s] 提供方中断熔断触发：连续 %d 次提供方级 LLM 失败（%s），"
+                "该 run 的后续 LLM 调用将快速失败并在下一进度回调处止损",
+                self.run_id, self.consecutive, self.last_reason,
+            )
+        return tripped_now
+
+    def note_failure(self, exc: Any) -> bool:
+        """分类 + 记录一次失败；仅提供方级失败计数。返回是否恰在本次触发。"""
+        reason = _classify_provider_outage(exc)
+        if reason is None:
+            return False
+        return self.record_provider_failure(exc, reason)
+
+    def fail_fast_message(self) -> str:
+        return (
+            f"{_PROVIDER_OUTAGE_FAST_FAIL_PREFIX}: run {self.run_id} 的提供方中断"
+            f"熔断已触发（连续 {self.consecutive} 次 {self.last_reason} 类失败），"
+            "跳过新的 LLM 调用"
+        )
+
+    def halt_message(self) -> str:
+        provider = str(getattr(Config, "LLM_PROVIDER", "") or "unknown")
+        return (
+            f"LLM 提供方疑似全面中断（provider outage: {self.last_reason}）："
+            f"主提供方 '{provider}' 连续 {self.consecutive} 次提供方级调用失败、"
+            f"零成功间隔（最后错误：{self.last_error}）。管线已止损并保存为可恢复"
+            f"检查点（status=failed；已完成阶段与研究断点全部保留）。修复提供方后"
+            f"执行 POST /api/research/{self.run_id}/resume 原地续跑。"
+        )
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "consecutive_failures": self.consecutive,
+                "threshold": self.threshold,
+                "tripped": self.tripped,
+                "tripped_at": self.tripped_at,
+                "reason": self.last_reason,
+                "last_error": self.last_error,
+            }
+
+
+_RUN_OUTAGE_LOCK = threading.Lock()
+_RUN_OUTAGE_BREAKERS: dict[str, _RunOutageBreaker] = {}
+
+
+def _register_outage_breaker(run_id: str) -> Optional[_RunOutageBreaker]:
+    """为一次管线 attempt 注册新熔断器（旧计数不跨 attempt 遗留）。关闭时返回 None。"""
+    threshold = _outage_halt_threshold()
+    with _RUN_OUTAGE_LOCK:
+        if threshold <= 0:
+            _RUN_OUTAGE_BREAKERS.pop(str(run_id), None)
+            return None
+        breaker = _RunOutageBreaker(str(run_id), threshold)
+        _RUN_OUTAGE_BREAKERS[str(run_id)] = breaker
+        return breaker
+
+
+def _outage_breaker_for(run_id: Optional[str]) -> Optional[_RunOutageBreaker]:
+    if not run_id:
+        return None
+    with _RUN_OUTAGE_LOCK:
+        return _RUN_OUTAGE_BREAKERS.get(str(run_id))
+
+
+def _clear_outage_breaker(run_id: str) -> None:
+    with _RUN_OUTAGE_LOCK:
+        _RUN_OUTAGE_BREAKERS.pop(str(run_id), None)
+
+
+def _current_outage_breaker() -> Optional[_RunOutageBreaker]:
+    """当前线程所属 run 的熔断器。
+
+    归属解析与 FOG-TEL-1 同思路：先取 telemetry 的 run contextvar；工作线程
+    （ThreadPoolExecutor 不继承 contextvars）退回「唯一活跃 run」；仍含糊时若注册表
+    恰好只有一个熔断器则用它；0 个或 ≥2 个候选 → None（宁可不计数也不跨 run 污染）。
+    """
+    if not _RUN_OUTAGE_BREAKERS:
+        return None
+    rid: Optional[str] = None
+    try:
+        from ..utils.telemetry import active_run_ids, get_run_context
+        rid = get_run_context()[0]
+        if not rid:
+            ids = active_run_ids()
+            rid = ids[0] if len(ids) == 1 else None
+    except Exception:  # noqa: BLE001 — telemetry 不可用时退回注册表单例判定
+        rid = None
+    if rid:
+        return _outage_breaker_for(rid)
+    with _RUN_OUTAGE_LOCK:
+        if len(_RUN_OUTAGE_BREAKERS) == 1:
+            return next(iter(_RUN_OUTAGE_BREAKERS.values()))
+    return None
+
+
+def _note_provider_stage_failure(run_id: Optional[str], exc: Any) -> None:
+    """子进程阶段（研究轨/仅综合恢复）在编排器边界的失败计入运行级熔断。
+
+    研究与模拟子进程有自己的重试环，不做进程注入；编排器观察到的一次「阶段级
+    失败」若可分类为提供方级，就向同一熔断器 +1。best-effort：绝不抛。
+    """
+    try:
+        breaker = _outage_breaker_for(run_id)
+        if breaker is not None:
+            breaker.note_failure(exc)
+    except Exception:  # noqa: BLE001 — 计数是观测增益，失败不影响主流程
+        pass
+
+
+_LLM_PROBE_LOCK = threading.Lock()
+
+
+def _install_llm_outage_probe() -> bool:
+    """给 LLMClient.chat 装进程级探针（幂等、自愈）：按 run 计连续提供方级失败。
+
+    探针语义：
+    - 当前线程无可归属熔断器（未注册/关闭/归属含糊）或 self 是回退客户端
+      （``_is_fallback``，其失败已由外层主调用统一计一次）→ 完全透传，行为不变；
+    - 熔断已触发 → 立即抛 RuntimeError（前缀 LLM_OUTAGE_HALT），不发起任何真实调用；
+    - 调用成功 → 清零连续计数；失败 → 分类后计数（PipelineCancelled 原样穿透）。
+
+    幂等以函数标记 ``_drf_outage_probe`` 判定（而非进程旗标）：测试环境若有人整体
+    monkeypatch 掉 LLMClient.chat，下一次安装会自愈重装。原始实现挂在探针的
+    ``_drf_outage_probe_orig`` 上，_uninstall_llm_outage_probe（测试辅助）用它还原。
+    """
+    with _LLM_PROBE_LOCK:
+        try:
+            from ..utils.llm_client import LLMClient
+        except Exception as exc:  # noqa: BLE001 — llm_client 不可导入时探针缺席
+            logger.debug("outage probe: LLMClient 不可导入，跳过安装: %s", exc)
+            return False
+        if getattr(LLMClient.chat, "_drf_outage_probe", False):
+            return True
+        orig = LLMClient.chat
+
+        def _outage_probed_chat(self, *args, **kwargs):
+            if getattr(self, "_is_fallback", False):
+                return orig(self, *args, **kwargs)
+            breaker = _current_outage_breaker()
+            if breaker is None:
+                return orig(self, *args, **kwargs)
+            if breaker.tripped:
+                raise RuntimeError(breaker.fail_fast_message())
+            try:
+                result = orig(self, *args, **kwargs)
+            except PipelineCancelled:
+                raise
+            except BaseException as exc:
+                breaker.note_failure(exc)
+                raise
+            breaker.record_success()
+            return result
+
+        _outage_probed_chat.__name__ = "chat"
+        _outage_probed_chat.__qualname__ = getattr(orig, "__qualname__", "LLMClient.chat")
+        _outage_probed_chat.__doc__ = getattr(orig, "__doc__", None)
+        _outage_probed_chat._drf_outage_probe = True
+        _outage_probed_chat._drf_outage_probe_orig = orig
+        LLMClient.chat = _outage_probed_chat
+        return True
+
+
+def _uninstall_llm_outage_probe() -> None:
+    """测试辅助：还原 LLMClient.chat（仅当当前实现确为本探针时）。生产不调用。"""
+    with _LLM_PROBE_LOCK:
+        try:
+            from ..utils.llm_client import LLMClient
+        except Exception:  # noqa: BLE001
+            return
+        orig = getattr(LLMClient.chat, "_drf_outage_probe_orig", None)
+        if orig is not None:
+            LLMClient.chat = orig
 
 
 @dataclass
@@ -1543,6 +1868,65 @@ def _configure_research_budget_env(
         Config, "RESEARCH_NEGATIVE_CACHE_RETRIES", 1))
 
 
+def _flush_failed_research_attempt_spend(spend: Optional[dict[str, Any]],
+                                         attempt_status: str,
+                                         run_id: Optional[str] = None) -> bool:
+    """DEFECT-2：把一次**未成功**研究 attempt 已累计的 token 花费计入统一计量。
+
+    审计取证（31.9M 实耗 vs 5.35M 入账）：per-attempt 的 _tok_in/_tok_out 在每次研究
+    子进程启动时清零、research_telemetry 只在成功路径构建、_record_research_telemetry
+    是研究花费进 LLMMeter 的唯一入口——失败/超时/SIGTERM/取消把整个 attempt 的账直接
+    丢掉。本函数由 :meth:`DeerFlowResearchRunner.run` 包装层在异常出口调用，向 LLMMeter
+    写一条 stage='research' 的合成记录（provider/model 映射与 _record_research_telemetry
+    完全一致）。
+
+    恰好一次 / 不与成功路径重复：``spend['flushed']`` 置位保证幂等；包装层只在异常出口
+    调用（成功 return 的 attempt 仍由调用方经 _record_research_telemetry 入账，成功路径
+    逐字节不变）。LLMMeter 记录 schema 无附加字段位，attempt_status 无法进计量行——以
+    告警日志留痕（含 status 与 token 数）作可审计标签。
+
+    返回是否真的写了计量记录（无 token / 计量关闭 / 已 flush → False）。
+    """
+    if not isinstance(spend, dict) or spend.get("flushed"):
+        return False
+    spend["flushed"] = True
+    t_in = int(spend.get("tokens_in") or 0)
+    t_out = int(spend.get("tokens_out") or 0)
+    if t_in <= 0 and t_out <= 0:
+        return False  # 该研究模型未报 usage → 无可计量 token
+    if not bool(getattr(Config, "LLM_TELEMETRY_ENABLED", True)):
+        return False
+    try:
+        from ..utils.telemetry import LLMMeter
+        model = str(spend.get("model") or getattr(Config, "DEERFLOW_MODEL", "claude"))
+        # 与 _record_research_telemetry 相同的计价 provider 映射：CLI 订阅类（claude/
+        # codex）边际成本 0，其余复用同名 provider 的定价表（缺失则成本 0，仍记 token）。
+        provider = "claude-cli" if model in ("claude", "codex") else model
+        try:
+            wall_ms = max(0.0, time.time() - float(spend.get("t_start") or 0.0)) * 1000.0 \
+                if spend.get("t_start") else 0.0
+        except (TypeError, ValueError):
+            wall_ms = 0.0
+        LLMMeter.record(
+            provider=provider,
+            model=model,
+            prompt_tokens=t_in,
+            completion_tokens=t_out,
+            latency_ms=wall_ms,
+            stage=STAGE_RESEARCH,
+            run_id=str(run_id) if run_id else None,  # None → contextvar/单活跃 run 回退
+        )
+        logger.warning(
+            "研究 attempt 以 %s 终止，已消耗 tokens in=%d out=%d（model=%s）——"
+            "已计入 stage='research' 合成计量，不再随失败丢账",
+            attempt_status, t_in, t_out, model,
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001 — 计量是观测增益，绝不放大原始失败
+        logger.debug("失败研究 attempt 的花费计量跳过: %s", exc)
+        return False
+
+
 class DeerFlowResearchRunner:
     """启动 deerflow_research.py 子进程并把进度回传给回调。"""
 
@@ -1558,7 +1942,36 @@ class DeerFlowResearchRunner:
             cls._live_procs.discard(proc)
 
     @staticmethod
-    def run(
+    def run(prompt: str, handoff_dir: str, *,
+            model: Optional[str] = None,
+            budget_run_id: Optional[str] = None,
+            **kwargs: Any) -> dict[str, Any]:
+        """DEFECT-2 花费护栏包装层：签名/行为与 :meth:`_run_attempt` 一致（后者持有
+        完整参数契约与文档），唯一差异是给 attempt 挂一个共享 tally（``_spend``），并在
+        **任何异常出口**（失败/超时/收尾杀/取消）把已累计的 token 恰好一次地计入
+        stage='research' 计量——成功 return 不在此计量（仍由调用方经
+        _record_research_telemetry 入账），故成功路径逐字节不变、绝无双计。
+        """
+        spend: dict[str, Any] = {
+            "tokens_in": 0, "tokens_out": 0, "tokens_total": 0,
+            "t_start": time.time(),
+            "model": model or Config.DEERFLOW_MODEL,
+            "flushed": False,
+        }
+        try:
+            return DeerFlowResearchRunner._run_attempt(
+                prompt, handoff_dir, model=model, budget_run_id=budget_run_id,
+                _spend=spend, **kwargs)
+        except PipelineCancelled:
+            _flush_failed_research_attempt_spend(spend, "cancelled", run_id=budget_run_id)
+            raise
+        except BaseException as exc:
+            _flush_failed_research_attempt_spend(
+                spend, f"failed({type(exc).__name__})", run_id=budget_run_id)
+            raise
+
+    @staticmethod
+    def _run_attempt(
         prompt: str,
         handoff_dir: str,
         *,
@@ -1585,8 +1998,14 @@ class DeerFlowResearchRunner:
         shared_actor_track: Optional[bool] = None,
         evidence_only: bool = False,
         synthesis_manifest_path: Optional[str] = None,
+        _spend: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """运行研究子进程，阻塞直到结束。返回 handoff 摘要。
+
+        DEFECT-2 ``_spend``：:meth:`run` 包装层注入的 attempt 级共享 tally。读循环把
+        [usage] 行的 token 数同步写入该 dict，使包装层在异常出口仍能拿到已烧掉的账
+        （旧实现里这些局部变量随异常蒸发——31.9M vs 5.35M 差账的机制）。None（直接
+        调用 _run_attempt / 旧测试桩）时行为与历史逐字节一致。
 
         ITEM-3 ``resume``：True 时给子进程加 ``--resume``——bridge 若在 handoff_dir 找到
         question_hash 匹配的 research_checkpoint.json，就复用其 LangGraph thread、跳过已完成
@@ -1868,6 +2287,8 @@ class DeerFlowResearchRunner:
         _tok_in = _tok_out = _tok_total = 0
         _result_events = 0
         _t_start = time.time()
+        if _spend is not None:
+            _spend["t_start"] = _t_start  # 精确到读循环起点（扣除启动/同步开销）
         try:
             assert proc.stdout is not None
             for raw in proc.stdout:
@@ -1896,6 +2317,11 @@ class DeerFlowResearchRunner:
                         _tok_in += _i
                         _tok_out += _o
                         _tok_total += (_t if _t else _i + _o)
+                        if _spend is not None:
+                            # DEFECT-2：同步进 attempt 级共享 tally，异常出口不丢账。
+                            _spend["tokens_in"] = _tok_in
+                            _spend["tokens_out"] = _tok_out
+                            _spend["tokens_total"] = _tok_total
                 elif "[ok]" in line or "[done]" in line:
                     on_progress(local, _tail(line))
                 elif "[error]" in line:
@@ -8080,6 +8506,12 @@ class PipelineOrchestrator:
             ev = PipelineOrchestrator._cancel_events.get(state.pipeline_id)
             if ev is not None and ev.is_set():
                 raise PipelineCancelled("管线已被用户取消")
+            # DEFECT-1：与取消同款的高频止损点。运行级提供方中断熔断触发后，在下一次
+            # 进度回调处抬升 ProviderOutageHalt（BaseException 穿透语义），使止损无需
+            # 等阶段边界——报告阶段不会再「中止本报告后继续下一个报告」。
+            _breaker = _outage_breaker_for(state.pipeline_id)
+            if _breaker is not None and _breaker.tripped:
+                raise ProviderOutageHalt(_breaker.halt_message())
             st = state.stages.get(stage)
             if st is None:
                 st = StageState(name=stage)
@@ -8875,6 +9307,36 @@ class PipelineOrchestrator:
         PipelineManager.save(state)
         # W9-3：失败也是阶段转换——立即落一版遥测账（失败跑的花费不再消失）。
         self._flush_run_telemetry(state)
+
+    def _halt_for_provider_outage(self, state: PipelineState, task_manager: Any,
+                                  error: BaseException) -> None:
+        """DEFECT-1：把 ProviderOutageHalt 落成既有的可恢复检查点终态。
+
+        status='failed' + 当前阶段 failed + 明确点名提供方中断与 resume 路径的错误消息；
+        熔断器证据快照留在 options['provider_outage_halt']。resume()（POST
+        /api/research/<id>/resume）会重置失败阶段的 attempt 并复用其余已完成产物与研究
+        断点——与任何其他失败的恢复语义完全一致，不发明并行状态机。
+        """
+        msg = str(error)
+        logger.error(f"[{state.pipeline_id}] 管线因提供方中断止损（可恢复）: {msg}")
+        state.status = "failed"
+        state.error = msg
+        breaker = _outage_breaker_for(state.pipeline_id)
+        state.options["provider_outage_halt"] = {
+            **(breaker.snapshot() if breaker is not None else {}),
+            "provider": str(getattr(Config, "LLM_PROVIDER", "") or "unknown"),
+            "halted_at": _utcnow(),
+            "halted_stage": state.current_stage,
+            "resume": f"POST /api/research/{state.pipeline_id}/resume",
+        }
+        if state.current_stage:
+            self._fail_stage(state, state.current_stage, msg)
+        PipelineManager.save(state)
+        if state.task_id:
+            try:
+                task_manager.fail_task(state.task_id, msg)
+            except Exception:  # noqa: BLE001 — 任务簿失败不影响状态落盘
+                pass
 
     # -- 内部：产物完整性校验（复用前守卫） (I-4-3) ------------------------
 
@@ -9813,6 +10275,8 @@ class PipelineOrchestrator:
                 detail = f"{type(exc).__name__}: {exc}"
                 errors.append(detail)
                 provider_blocked = _synthesis_provider_unavailable(detail)
+                # DEFECT-1：仅综合恢复的失败在编排器边界按阶段级失败计入运行级熔断。
+                _note_provider_stage_failure(state.pipeline_id, exc)
                 _preserve_research_attempt_progress(
                     synthesis_dir,
                     handoff_dir,
@@ -10083,6 +10547,9 @@ class PipelineOrchestrator:
                 except Exception as te:  # noqa: BLE001 — 单轨失败用存活轨继续
                     logger.warning("[%s] 研究轨 %d 失败（跳过，用存活轨继续）: %s",
                                    state.pipeline_id, i + 1, te)
+                    # DEFECT-1：研究子进程有自己的重试环，不做进程注入——在编排器边界把
+                    # 「可分类为提供方级」的轨失败计入运行级熔断（best-effort）。
+                    _note_provider_stage_failure(state.pipeline_id, te)
                     with prog_lock:
                         failed_tracks.add(i)
                     try:
@@ -10371,6 +10838,8 @@ class PipelineOrchestrator:
                         "[%s] 全局证据综合尝试 %d/2 失败（%s）",
                         state.pipeline_id, attempt, synthesis_error,
                     )
+                    # DEFECT-1：全局综合的失败在编排器边界按阶段级失败计入运行级熔断。
+                    _note_provider_stage_failure(state.pipeline_id, synthesis_error)
 
             if final_res is None or not synthesis_source_dir:
                 failure_meta = {
@@ -10709,6 +11178,10 @@ class PipelineOrchestrator:
         # EXECPLAN2 I-5-0/I-5-2: 把本次管线所有 LLM 调用归属到该 pipeline_id（contextvars）。
         from ..utils.telemetry import set_run_context, LLMMeter
         set_run_context(state.pipeline_id)
+        # DEFECT-1：注册本 attempt 的运行级中断熔断器（旋钮关闭时返回 None、零行为差异），
+        # 并确保 LLMClient.chat 的进程级探针在位（幂等、自愈；无熔断器时完全透传）。
+        if _register_outage_breaker(state.pipeline_id) is not None:
+            _install_llm_outage_probe()
         # W9-3: attempt 起点初始化遥测增量落盘（捕获上一 attempt 的账作合并基底）。
         self._init_telemetry_flush(state)
         # I-8-1: 管线起飞即写首版 run.json（解析后的研究深度/模型/图谱/环境指纹），
@@ -12129,6 +12602,10 @@ class PipelineOrchestrator:
                     task_manager.fail_task(state.task_id, str(e))
                 except Exception:
                     pass
+        except ProviderOutageHalt as e:
+            # DEFECT-1：提供方全面中断 → 复用既有的 status='failed' 可恢复检查点终态
+            # （resume() 接受 failed/cancelled 并复用已完成阶段与研究断点），不发明新状态。
+            self._halt_for_provider_outage(state, task_manager, e)
         except Exception as e:  # noqa: BLE001
             logger.error(f"[{state.pipeline_id}] 管线失败: {e}", exc_info=True)
             state.status = "failed"
@@ -12234,6 +12711,9 @@ class PipelineOrchestrator:
                 LLMMeter.reset(state.pipeline_id)
             except Exception as _te:
                 logger.debug(f"[{state.pipeline_id}] 写入 run_telemetry 失败（忽略）: {_te}")
+            # DEFECT-1：本 attempt 的中断熔断器随线程终结注销（下一 attempt 重新注册，
+            # 计数不跨 attempt 遗留；注册表清空后探针对全进程完全透传）。
+            _clear_outage_breaker(state.pipeline_id)
             # 线程结束即从注册表移除，避免 _threads 无界增长，并让 reconcile_orphans 的
             # "pid in _threads" 判定准确反映当前在飞的线程。
             cls._threads.pop(state.pipeline_id, None)

@@ -140,6 +140,26 @@ def _default_op_timeout() -> float | None:
         return 1800.0
 
 
+def _chunk_attempt_budget() -> int | None:
+    """W10-COST: per-chunk cap on TOTAL full-extraction attempts (outermost layer).
+
+    One "attempt" = one complete ``_add_episode_once`` pass (which internally
+    still runs graphiti's tenacity ×4 and the llm_adapter temperature ladder ×2
+    per extraction call). The budget spans the episode-level schema re-roll,
+    the fallback-provider swap AND the concurrent batch's rate-limit replay, so
+    a doomed chunk can no longer stack ladders (measured: 23,496 rate-limit/
+    connection-error log lines in one day). Reads Config.GRAPH_CHUNK_MAX_ATTEMPTS
+    (default 2); <=0 → None = uncapped legacy topology.
+    """
+    try:
+        from ...config import Config
+
+        value = int(getattr(Config, "GRAPH_CHUNK_MAX_ATTEMPTS", 2) or 0)
+    except Exception:  # noqa: BLE001 — 读不到配置时保守封顶
+        return 2
+    return value if value > 0 else None
+
+
 def _graph_ingest_rate_limit_cooldown_s() -> float:
     """Return the single post-fan-out 429 cooldown, clamped to a safe bound.
 
@@ -636,15 +656,32 @@ class GraphitiRuntime:
                     with contextlib.suppress(Exception):
                         g.clients.llm_client = primary
 
+    def _fallback_llm_available(self) -> bool:
+        """W10-COST: probe (and lazily build) the ingest-fallback client; never raises."""
+        try:
+            return self._get_fallback_llm() is not None
+        except Exception:  # noqa: BLE001 — 探测失败按不可用处理
+            return False
+
     async def _add_episode_locked(
         self, graph_id, *, name, body, source_type, source_description, reference_time,
-        record_skip_reason: bool = True,
+        record_skip_reason: bool = True, attempt_budget: int | None = None,
     ) -> str:
         """Write one episode. Caller MUST hold ``self._graph_lock(graph_id)``.
 
         Concurrent batches defer skip accounting until their one post-fan-out
         replay has completed; direct/serial callers retain the existing immediate
         accounting behavior.
+
+        W10-COST: ``attempt_budget`` (default = ``GRAPH_CHUNK_MAX_ATTEMPTS``, 2)
+        caps the TOTAL number of full ``_add_episode_once`` passes for this
+        chunk — schema re-rolls and the fallback-provider pass share ONE budget,
+        with the final budgeted slot reserved for the fallback provider when it
+        is available (a different provider beats re-rolling the one that just
+        schema-echoed). The attempts actually used are attached to the raised
+        exception (``_graphiti_ingest_attempts``) so the concurrent batch's
+        rate-limit replay can spend only the remainder. ``None``+knob<=0 keeps
+        the uncapped legacy topology.
         """
         g = await self._ensure_graph(graph_id)
         try:
@@ -653,10 +690,17 @@ class GraphitiRuntime:
             schema_retries = max(0, int(getattr(Config, "GRAPH_EPISODE_SCHEMA_RETRIES", 1) or 0))
         except Exception:  # noqa: BLE001
             schema_retries = 1
+        budget = attempt_budget if attempt_budget is not None else _chunk_attempt_budget()
+        if budget is not None:
+            budget = max(1, int(budget))
+        max_primary = 1 + schema_retries
+        if budget is not None:
+            max_primary = max(1, min(max_primary, budget))
 
         last_exc: Exception | None = None
         reason = "other"
-        for attempt in range(1 + schema_retries):
+        attempts_used = 0
+        for attempt in range(max_primary):
             try:
                 if attempt:
                     logger.info("[%s] episode %s: schema-echo retry %d/%d (re-rolls the "
@@ -668,14 +712,22 @@ class GraphitiRuntime:
                 )
             except Exception as exc:  # noqa: BLE001 — 分类后决定重试/兜底/上抛
                 # CancelledError 是 BaseException，自然穿透（不吞取消）。
+                attempts_used += 1
                 last_exc = exc
                 reason = self._classify_ingest_error(exc)
                 # 只有 schema 类失败值得整 episode 重滚；限流/超时等已有各自的内层处理。
                 if reason not in ("schema_echo", "schema_validation", "schema_parse"):
                     break
+                # W10-COST: 预算只剩最后一个名额且兜底提供方可用时，停止主提供方重滚，
+                # 把最后名额留给兜底（换提供方比再滚刚 schema-echo 的同一提供方更值）。
+                if (budget is not None and attempt < max_primary - 1
+                        and attempts_used == budget - 1
+                        and self._fallback_llm_available()):
+                    break
 
-        # 重试耗尽：schema 类失败换入兜底提供方再抽一次（若配置且可用）。
-        if reason in ("schema_echo", "schema_validation", "schema_parse"):
+        # 重试耗尽：schema 类失败换入兜底提供方再抽一次（若配置且可用，且预算未耗尽）。
+        if reason in ("schema_echo", "schema_validation", "schema_parse") and (
+                budget is None or attempts_used < budget):
             async with self._fallback_llm_swapped(graph_id, g) as swapped:
                 if swapped:
                     try:
@@ -690,14 +742,17 @@ class GraphitiRuntime:
                                     "extraction", graph_id, name)
                         return uuid
                     except Exception as exc:  # noqa: BLE001 — CancelledError 自然穿透
+                        attempts_used += 1
                         last_exc = exc
                         reason = f"fallback_{self._classify_ingest_error(exc)}"
 
         assert last_exc is not None
-        # Preserve the final reason (including fallback_* provenance) across the
-        # raised exception so a concurrent batch can account only after replay.
+        # Preserve the final reason (including fallback_* provenance) and the
+        # attempts spent across the raised exception so a concurrent batch can
+        # account only after replay AND keep the replay within the same budget.
         with contextlib.suppress(Exception):
             last_exc._graphiti_ingest_reason = reason
+            last_exc._graphiti_ingest_attempts = attempts_used
         if record_skip_reason:
             self._record_skip_reason(graph_id, reason)
         raise last_exc
@@ -1038,7 +1093,7 @@ class GraphitiRuntime:
         await self._ensure_graph(graph_id)  # warm once before fan-out (avoid lock stampede)
         sem = asyncio.Semaphore(max(1, int(concurrency)))
 
-        async def ingest(i, ep):
+        async def ingest(i, ep, attempt_budget=None):
             # Caller holds the per-graph write lock, so call the lock-free core
             # and defer accounting until the bounded replay decision is final.
             return await self._add_episode_locked(
@@ -1049,6 +1104,7 @@ class GraphitiRuntime:
                 source_description=ep.get("source_description", "") or "mirofish",
                 reference_time=ep.get("reference_time"),
                 record_skip_reason=False,
+                attempt_budget=attempt_budget,
             )
 
         async def one(i, ep):
@@ -1072,6 +1128,15 @@ class GraphitiRuntime:
         # Retain the exact failed index/input/reason after fan-out. Only transient
         # rate-limit failures get one batch-level replay; schema/content/other hard
         # failures remain skipped, preserving the existing failure boundary.
+        # W10-COST: the replay shares the per-chunk attempt budget with the fan-out
+        # pass — a chunk that already exhausted GRAPH_CHUNK_MAX_ATTEMPTS is skipped
+        # immediately, and an eligible replay may spend only the remainder.
+        budget = _chunk_attempt_budget()
+
+        def _attempts_spent(exc: BaseException) -> int:
+            spent = getattr(exc, "_graphiti_ingest_attempts", None)
+            return spent if isinstance(spent, int) and spent > 0 else 1
+
         failed = [
             (idx, episodes[idx], self._classify_ingest_error(result), result)
             for idx, result in enumerate(results)
@@ -1081,6 +1146,7 @@ class GraphitiRuntime:
             item
             for item in failed
             if item[2] in ("rate_limit", "fallback_rate_limit")
+            and (budget is None or _attempts_spent(item[3]) < budget)
         ]
         recovered = 0
         if rate_limited:
@@ -1096,8 +1162,12 @@ class GraphitiRuntime:
             # concurrency exactly 1 and prevents a second fan-out/retry storm.
             async with self._graph_lock(graph_id):
                 for idx, ep, _reason, _exc in rate_limited:
+                    remaining = (
+                        None if budget is None
+                        else max(1, budget - _attempts_spent(_exc))
+                    )
                     try:
-                        results[idx] = await ingest(idx, ep)
+                        results[idx] = await ingest(idx, ep, attempt_budget=remaining)
                         recovered += 1
                     except Exception as replay_exc:  # noqa: BLE001 — final skip below
                         results[idx] = replay_exc

@@ -57,6 +57,10 @@ class Config:
     # 每个 run 的 token / 成本上限（0=不限）。超限后下一次 LLM 调用抛 BudgetExceeded，止血式中止。
     LLM_RUN_BUDGET_TOKENS = int(os.environ.get('LLM_RUN_BUDGET_TOKENS', '0') or '0')
     LLM_RUN_BUDGET_USD = float(os.environ.get('LLM_RUN_BUDGET_USD', '0') or '0')
+    # DEFECT-1（run 级中断熔断）：编排器进程内连续 N 次提供方级 LLM 失败（配额/连接/认证，
+    # 零成功间隔）→ 管线止损为可恢复的 failed 检查点态（POST /api/research/<id>/resume 续跑），
+    # 而非对已死提供方持续空转（2026-07-08 曾以 231 错误/分钟磨了 ~26 小时）。≤0 关闭。
+    LLM_OUTAGE_HALT_CONSECUTIVE = int(os.environ.get('LLM_OUTAGE_HALT_CONSECUTIVE', '10') or '10')
     # ITEM-18：每个 provider 的 $/Mtok 成本覆盖表（JSON），形如 {"openai":[5.0,15.0],"myprov":[0.5,1.5]}
     # （每百万 token 的 [输入, 输出] 美元价）。叠加在 telemetry._COST_PER_1K 的保守内建默认之上（同名覆盖、
     # 新名新增）。留空=纯用内建默认；解析失败=退回无覆盖（degrade-safe，见 telemetry._cost_overrides）。
@@ -1247,6 +1251,22 @@ class Config:
     GRAPH_EPISODE_SCHEMA_RETRIES = int(os.environ.get('GRAPH_EPISODE_SCHEMA_RETRIES', '1') or '1')
     # schema-echo 重试耗尽后，是否用 LLM_FALLBACK_PROVIDER（若已配置）再兜底重抽一次该 episode。
     GRAPH_INGEST_FALLBACK = os.environ.get('GRAPH_INGEST_FALLBACK', 'true').strip().lower() == 'true'
+    # W10-COST（cast 相关性 chunk 预过滤）：提交 LLM 抽取前，先按「已种入图谱的 cast
+    # （actors.json names+aliases+关系端点，归一化子串匹配）」过滤 chunk——零命中的 chunk
+    # 直接跳过、不发任何 LLM 调用，计入 skipped_cast_filter（与 LLM 失败的 skip 原因分开，
+    # GRAPH_MAX_SKIPPED_RATIO 告警分母只算实际提交 LLM 的 chunk）。
+    # 实测依据（2026-07 forensic audit）：graph 阶段 8h37m 占一次 13h58m run 的 62%；
+    # dossier_only 466 chunk 中 278（60%）在烧完整套重试阶梯后才被跳过，抽取膨胀到 823
+    # 节点又被实体消解+剪枝砍回 GRAPH_MAX_ENTITIES=400——大部分抽取产出是设计上注定丢弃的。
+    # false = 关闭预过滤（旧行为：所有 chunk 全量送抽取）。
+    GRAPH_CAST_CHUNK_FILTER = os.environ.get('GRAPH_CAST_CHUNK_FILTER', 'true').strip().lower() == 'true'
+    # W10-COST（重试阶梯封顶）：单 chunk 的「完整抽取尝试」总数上限，作用在最外层图侧
+    # 阶梯（episode 级 schema 重滚 + 兜底提供方换入 + 并发批的 429 重放合并计数）。
+    # 此前最坏叠加：episode 重滚 2 × 兜底 +1 × 批重放 +1，每次完整尝试内部又叠 graphiti
+    # tenacity 4 × llm_adapter 升温 2 × llm_client 3——一天 23,496 条 rate-limit/连接错误
+    # 日志即由此放大。默认 2：注定失败的 chunk 最多两次完整尝试后立即跳过（schema 类失败
+    # 的最后一个名额优先给兜底提供方）。<=0 = 不封顶（旧拓扑）。
+    GRAPH_CHUNK_MAX_ATTEMPTS = int(os.environ.get('GRAPH_CHUNK_MAX_ATTEMPTS', '2') or '2')
 
     # 远程 Graphiti/Zep 才需要分批限流停顿；本地 FalkorDB 关闭死延迟（T2.6）
     GRAPHITI_REMOTE = os.environ.get('GRAPHITI_REMOTE', 'false').strip().lower() == 'true'

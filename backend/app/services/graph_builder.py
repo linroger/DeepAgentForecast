@@ -691,6 +691,58 @@ def fold_priors_with_aliases(
 
 
 # ============================================================
+# W10-COST：cast 相关性 chunk 预过滤（GRAPH_CAST_CHUNK_FILTER，默认开）。
+# 实测（2026-07 forensic audit）：graph 阶段 8h37m 占一次 run 的 62%，dossier_only
+# 466 chunk 有 278（60%）在烧完整套重试阶梯后才被跳过，而抽取产出的大部分节点又被
+# 剪枝砍回 GRAPH_MAX_ENTITIES——不含任何 cast 名的 chunk 根本不该进 LLM 抽取。
+# 纯函数 + 模块级，便于离线单测（与本文件其余 Wave9 纯函数同一范式）。
+# ============================================================
+
+def cast_filter_terms_from_actors(actors: Optional[Any]) -> List[str]:
+    """从 actors.json 提取归一化 cast 匹配词表：actor 名 + aliases + 关系端点。
+
+    与 seed_actors 种入图谱的 cast 完全同源；normalize_name（NFKC/小写/去空白标点）
+    保证与 chunk 侧同规归一。丢弃归一后 <2 字符的词（单字符匹配一切，无过滤价值）。
+    """
+    terms: List[str] = []
+    seen: set = set()
+
+    def _add(raw: Any) -> None:
+        if not isinstance(raw, str):
+            return
+        t = normalize_name(raw)
+        if len(t) >= 2 and t not in seen:
+            seen.add(t)
+            terms.append(t)
+
+    for row in extract_actor_rows(actors):
+        _add(row.get("name"))
+        aliases = row.get("aliases")
+        if isinstance(aliases, list):
+            for a in aliases:
+                _add(a)
+    for rel in extract_relationship_rows(actors):
+        _add(rel.get("source"))
+        _add(rel.get("target"))
+    return terms
+
+
+def chunk_mentions_cast(chunk: str, terms: List[str]) -> bool:
+    """chunk 是否提及任一 cast 词（双方 normalize_name 归一后子串匹配）。
+
+    归一化剥掉空白/常见标点，"Elon  Musk"/"elon-musk" 均命中 "elonmusk"；CJK 名
+    天然无词边界，子串匹配即正确语义。误报（把无关 chunk 判为提及）只是少过滤一个
+    chunk，安全；词表为空时恒 True（不过滤）。
+    """
+    if not terms:
+        return True
+    norm = normalize_name(chunk)
+    if not norm:
+        return False
+    return any(t in norm for t in terms)
+
+
+# ============================================================
 # Wave9-KG：UI 子图 / TTL 缓存 / 布局预计算 / 陈旧图谱 GC 的纯函数与模块级设施。
 # 模块级（而非实例方法）是刻意的：graph_pruner 无需构造 GraphBuilderService/Zep
 # 客户端即可复用布局与缓存失效；纯函数可离线单测。
@@ -783,11 +835,14 @@ def filter_subgraph(
     return kept, induced
 
 
-# slim 模式保留的字段（heavy 字段 summary/attributes/fact/episodes/时间戳走 detail 接口）。
+# slim 模式保留的字段（heavy 字段 summary/attributes/fact/episodes 走 detail 接口）。
+# W10-COST/前端时间维度：valid_at/invalid_at 是双时态轴（前端 temporal dimming 的门控
+# 字段），体积可忽略，必须随 slim 边下发——剥掉它们会让默认列表视图无法按时间淡显。
 _SLIM_NODE_KEYS = ("uuid", "name", "labels")
 _SLIM_EDGE_KEYS = (
     "uuid", "name", "fact_type",
     "source_node_uuid", "target_node_uuid", "source_node_name", "target_node_name",
+    "valid_at", "invalid_at",
 )
 
 
@@ -1018,8 +1073,11 @@ class GraphBuilderService:
         self.task_manager = TaskManager()
         # KG-5: 最近一次 add_text_batches 的落库记账（total/failed/succeeded），供编排器
         # 把「部分文本块被跳过」写进 pipeline_state/health。None = 尚未跑过建图。
-        self.last_ingest_stats: Optional[Dict[str, int]] = None
+        self.last_ingest_stats: Optional[Dict[str, Any]] = None
         self.last_actor_graph_seed_manifest: Optional[Dict[str, Any]] = None
+        # W10-COST: graph_id → 归一化 cast 词表（seed_actors 时登记；add_text_batches
+        # 的 cast 相关性预过滤按此匹配）。未登记的 graph_id 不过滤（degrade-safe）。
+        self._cast_chunk_terms: Dict[str, List[str]] = {}
     
     def build_graph_async(
         self,
@@ -1297,6 +1355,17 @@ class GraphBuilderService:
         名字+embedding dedup，所以后续文本抽取会「富化」这些种子节点而非重复创建。
         返回写入的边数。幂等：重复种同一三元组不会产生重复（T2.7 依赖此性质）。
         """
+        # W10-COST: 登记本图的 cast 词表（names+aliases+关系端点，归一化），供
+        # add_text_batches 的 cast 相关性预过滤使用。登记失败绝不影响种子写入；
+        # __new__ 构造的实例（测试/工具路径）无 _cast_chunk_terms 时就地补建。
+        try:
+            registry = getattr(self, "_cast_chunk_terms", None)
+            if registry is None:
+                registry = {}
+                self._cast_chunk_terms = registry
+            registry[graph_id] = cast_filter_terms_from_actors(actors)
+        except Exception as exc:  # noqa: BLE001 — 词表是过滤增强，绝不阻断种子
+            logger.debug("[%s] cast filter term registration failed: %s", graph_id, exc)
         if _current_actor_seed_contract(actors):
             return self._seed_actor_intelligence_v1(
                 graph_id,
@@ -2227,8 +2296,35 @@ class GraphBuilderService:
         """分批添加文本到图谱，返回所有 episode 的 uuid 列表。
 
         ``reference_time``（T2.3）会写入每个 chunk 的双时态 valid 锚点（缺省 = 落库时刻）。
+
+        W10-COST（GRAPH_CAST_CHUNK_FILTER，默认开）：提交 LLM 抽取前先按 seed_actors
+        登记的 cast 词表过滤——零 cast 命中的 chunk 不发任何 LLM 调用，计入
+        ``skipped_cast_filter``（与 LLM 失败 skip 分开记账；``total``/``skip_ratio``
+        只算实际提交的 chunk，故 GRAPH_MAX_SKIPPED_RATIO 告警分母随之收窄，不会把
+        故意过滤误报成抽取降级）。
         """
         episode_uuids = []
+        input_chunks = len(chunks)
+        cast_filtered = 0
+        if getattr(Config, "GRAPH_CAST_CHUNK_FILTER", True):
+            terms = (getattr(self, "_cast_chunk_terms", None) or {}).get(graph_id) or []
+            if terms:
+                kept = [c for c in chunks if chunk_mentions_cast(c, terms)]
+                if kept:
+                    cast_filtered = input_chunks - len(kept)
+                    chunks = kept
+                    if cast_filtered:
+                        logger.info(
+                            "[%s] cast chunk filter: skipped %d/%d chunks with zero "
+                            "cast mentions (%d cast terms), submitting %d to extraction",
+                            graph_id, cast_filtered, input_chunks, len(terms), len(kept))
+                elif input_chunks:
+                    # 全量被过滤 = 词表与语料错配的信号（例如另一种文字/转写）。此时
+                    # 绕过过滤、全量提交，绝不静默产出只剩种子的空图谱（degrade-safe）。
+                    logger.warning(
+                        "[%s] cast chunk filter matched 0/%d chunks (%d terms) — "
+                        "suspected term/corpus mismatch, bypassing the filter",
+                        graph_id, input_chunks, len(terms))
         total_chunks = len(chunks)
         failed_chunks = 0
 
@@ -2296,12 +2392,20 @@ class GraphBuilderService:
             skip_reasons = get_runtime().pop_ingest_skip_reasons(graph_id)
         except Exception as exc:  # noqa: BLE001 — 审计增强绝不影响建图主流程
             logger.debug("[%s] pop_ingest_skip_reasons failed: %s", graph_id, exc)
+        # W10-COST: cast 预过滤计数以独立标签并入 skip 原因分布（与 schema_echo/
+        # rate_limit 等 LLM 失败原因可区分）；``total``/``skip_ratio`` 只覆盖实际
+        # 提交 LLM 的 chunk（编排器的 GRAPH_MAX_SKIPPED_RATIO 告警读 failed/total）。
+        if cast_filtered:
+            skip_reasons["skipped_cast_filter"] = (
+                skip_reasons.get("skipped_cast_filter", 0) + cast_filtered)
         self.last_ingest_stats = {
             "total": total_chunks,
             "failed": failed_chunks,
             "succeeded": len(episode_uuids),
             "skip_ratio": round(failed_chunks / total_chunks, 4) if total_chunks else 0.0,
             "skip_reasons": skip_reasons,
+            "input_chunks": input_chunks,
+            "skipped_cast_filter": cast_filtered,
         }
         if skip_reasons:
             logger.warning("[%s] episode skip reasons: %s", graph_id,

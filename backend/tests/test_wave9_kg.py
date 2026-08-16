@@ -834,7 +834,7 @@ class TestConcurrentIngestRecovery:
 
         async def add_episode_locked(
             graph_id, *, name, body, source_type, source_description,
-            reference_time, record_skip_reason=True,
+            reference_time, record_skip_reason=True, attempt_budget=None,
         ):
             nonlocal replay_active, max_replay_active
             assert graph_id == "g-replay"
