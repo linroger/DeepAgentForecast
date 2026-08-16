@@ -1,0 +1,955 @@
+{
+  "schema_version": "1.0.0",
+  "inventory_kind": "logical_llm_call_families",
+  "generated_date": "2026-07-22",
+  "source_revision": "fcf7378b2e2fabcfd836fb6e2c512fe153c6727c",
+  "record_count": 42,
+  "scope": {
+    "included": [
+      "Public upstream DeerFlow v2.0.0 native harness behavior, cross-checked against the optional ignored local deer-flow-2.0.0 source drop; the clean-clone fallback pin is older and is not treated as byte-equivalent",
+      "Current DeepResearchForecast Stage-1 embedded DeerFlow 2 integration under deerflow_bridge and the generated deer-flow deployment, including exactly one default shared Track-B actor-intelligence owner",
+      "The drf2 target architecture exactly as currently implemented/configured, marked pre-cutover"
+    ],
+    "excluded": [
+      "DeerFlow 1.x",
+      "Downstream non-DeerFlow LLM calls outside the Stage-1 integration",
+      "Deterministic computations that do not invoke a model"
+    ],
+    "counting_rule": "The 42 calls below each represent one logical model-invocation family. Runtime instances are governed by each entry's multiplicity and retry semantics; this inventory does not imply a fixed total call count. Provider-internal retries are attempts within a logical invocation, not separate families. Deterministic actor coverage/finalization/context/role/validation passes are interfaces, not extra model families.",
+    "as_is_note": "Mapped from the current working tree atop source_revision. Statuses distinguish native capability, current Stage-1 use, and configured-but-pre-cutover drf2 behavior. Opaque model calls inside external tools are explicitly bounded as opaque rather than guessed."
+  },
+  "status_legend": {
+    "native_available": "Implemented by the DeerFlow 2.0 harness; deployment policy determines whether it fires.",
+    "active_current": "Executed by the current DeepAgentForecast Stage-1 bridge when its stated trigger is met.",
+    "conditional_current": "Available in the current Stage-1 bridge but requires a flag, threshold, failure path, or data-dependent condition.",
+    "disabled_current": "Implemented but disabled by the current Stage-1 bridge policy.",
+    "pre_cutover": "Implemented/configured in drf2 but not yet the authoritative production path.",
+    "opaque_extension": "Execution may occur inside a configured external tool/provider, beyond harness visibility."
+  },
+  "calls": [
+    {
+      "id": "native.lead_agent_model_loop",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "trigger": "A gateway Runs API request, embedded DeerFlowClient turn, or subgraph invocation enters the lead-agent graph.",
+      "caller": "create_lead_agent / compiled LangGraph agent; gateway run worker or embedded client is the outer caller.",
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/lead_agent/agent.py:405-545",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/runtime/runs/worker.py:282-337",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/client.py:684-820"
+      ],
+      "model_selection": "The requested/default harness model is created with the run's thinking flag and model-specific reasoning configuration, then bound to the tools surviving middleware and policy filtering.",
+      "model_input": {
+        "messages": "Checkpointed conversation state, including user, assistant, tool, summary, and injected skill messages.",
+        "instructions": "Lead-agent static prompt plus dynamic reminders, memory/skill injections when enabled, runtime context, and tool schemas.",
+        "context": "user_id, thread_id, sandbox/workspace, selected resources, model name, thinking mode, and extension context admitted by the run contract."
+      },
+      "model_output": "AIMessage content and/or reasoning, tool_calls, finish metadata, and usage metadata.",
+      "receiver": "LangGraph state. Tool calls route to the tool node and return ToolMessages; terminal assistant content routes to stream consumers and final state readers.",
+      "persistence": "Graph state is checkpointed per thread by the configured checkpointer. Gateway run/event stores persist run lifecycle and selected events; tool-created files persist in the thread workspace.",
+      "multiplicity": "Zero or more model invocations per submitted request; an ordinary admitted model/tool loop has one or more. Middleware short-circuits, such as invalid or disallowed slash-skill activation, can return with zero lead-model calls. Each tool-call round otherwise returns to the model.",
+      "retry_and_failure_semantics": "Provider/model retry policy and LLM error middleware govern attempts. Tool errors become model-visible ToolMessages where handled. A normally returned graph interrupt remains visible in checkpoint/value events but the current worker records the run as success; only explicit cancellation is classified as interrupted. Uncaught timeout exceptions are currently classified as RunStatus.error; although the enum declares timeout, this worker never assigns it.",
+      "active_policy_notes": [
+        "Current Stage-1 constructs DeerFlowClient with thinking_enabled=true and four allowed research skills.",
+        "drf2 routes research/forecast to claude-sonnet and structured stages to minimax-m3; that configuration is pre-cutover."
+      ]
+    },
+    {
+      "id": "native.context_summarization",
+      "plane": "deerflow2_native",
+      "status": "conditional_current",
+      "trigger": "Before/around model execution when an enabled summarization trigger crosses its token, message, or fraction threshold.",
+      "caller": "SummarizationMiddleware",
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/lead_agent/agent.py:80-143",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/middlewares/summarization_middleware.py:133-219",
+        "deerflow_bridge/config.yaml:1293-1367",
+        "deerflow_bridge/patches/apply_lead_agent_overlays.py:8-88",
+        "drf2/config/config.yaml:392-410"
+      ],
+      "model_selection": "Deployment-specific summary model policy. Current Stage-1 sets model_name=null and the tracked overlay resolves that to the selected run model; drf2 pre-cutover explicitly names minimax-m3.",
+      "model_input": "The selected discard span plus summary prompt and preservation rules. Current Stage-1 forwards trim_tokens_to_summarize=null explicitly, so the summarizer receives the complete discarded span rather than a library-default trimmed tail.",
+      "model_output": "A compact textual summary wrapped as a replacement message, with the most recent messages retained verbatim.",
+      "receiver": "The next lead-agent invocation through rewritten graph state.",
+      "persistence": "The rewritten message history is checkpointed. The summary call is tagged no-stream so it is not presented as an ordinary assistant turn.",
+      "multiplicity": "Zero until a threshold is crossed; can recur as a long thread repeatedly regrows past configured thresholds.",
+      "retry_and_failure_semantics": "The summarizer catches model exceptions and converts them to literal `Error generating summary: ...` text. That text is then checkpointed as the hidden summary HumanMessage, so failure does not interrupt the run and can replace the discarded span with an error marker.",
+      "active_policy_notes": [
+        "Current Stage-1: enabled; token trigger 80000; keep target 16000 tokens; model_name=null inherits the active run model; trim_tokens_to_summarize=null preserves the full discarded span; forecast-evidence-ledger prompt and skill preservation are configured.",
+        "drf2 pre-cutover: enabled; minimax-m3; token trigger 60000; keep 10 messages and preserve recent skill content."
+      ]
+    },
+    {
+      "id": "native.thread_title_generation",
+      "plane": "deerflow2_native",
+      "status": "disabled_current",
+      "trigger": "After the first sufficiently complete user/assistant exchange when titles are enabled and the thread has no title.",
+      "caller": "TitleMiddleware",
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/middlewares/title_middleware.py:29-110",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/middlewares/title_middleware.py:146-188",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/runtime/runs/worker.py:415-426",
+        "deerflow_bridge/config.yaml:1279-1285",
+        "drf2/config/config.yaml:386-390"
+      ],
+      "model_selection": "Configured title model. The asynchronous gateway path invokes that model; the synchronous embedded path can return its local fallback title result without an LLM call.",
+      "model_input": "Bounded excerpts from the first user request and assistant response plus a concise-title prompt and word/character limits.",
+      "model_output": "A trimmed title string.",
+      "receiver": "Graph state title field; the gateway worker mirrors it into durable thread metadata.",
+      "persistence": "Thread metadata and checkpoint state in gateway mode. No Stage-1 call because the feature is disabled there.",
+      "multiplicity": "At most once per untitled thread under ordinary execution.",
+      "retry_and_failure_semantics": "Failures are non-core metadata failures; title absence does not replace the agent answer.",
+      "active_policy_notes": [
+        "Current Stage-1 bridge sets title.enabled=false, so this family performs zero model calls there.",
+        "drf2 pre-cutover enables title generation with minimax-m3, max 6 words and 60 characters."
+      ]
+    },
+    {
+      "id": "native.long_term_memory_update",
+      "plane": "deerflow2_native",
+      "status": "disabled_current",
+      "trigger": "After a meaningful conversation completes when memory is enabled; updates are queued and debounced.",
+      "caller": "MemoryMiddleware -> memory queue -> MemoryUpdater",
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/middlewares/memory_middleware.py:28-110",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/memory/updater.py:380-537",
+        "deerflow_bridge/config.yaml:1374-1385",
+        "drf2/config/config.yaml:412-422"
+      ],
+      "model_selection": "Configured memory model, invoked by the background updater rather than the foreground lead-agent graph.",
+      "model_input": "Current durable memory, filtered conversation, user identity, and prompts that distinguish new facts, corrections, and reinforcements.",
+      "model_output": "Structured JSON describing memory additions, updates, confidence, and removals.",
+      "receiver": "Memory parser/storage, and later memory injection middleware when enabled.",
+      "persistence": "Durable per-user memory store/file; queue state is process-managed and debounced.",
+      "multiplicity": "Zero when disabled; otherwise background updates can occur after conversations, with nearby events coalesced by debounce.",
+      "retry_and_failure_semantics": "Updater validates/parses model JSON and records update failure rather than placing unvalidated text into memory.",
+      "active_policy_notes": [
+        "Current Stage-1 disables memory and injection.",
+        "drf2 pre-cutover also disables memory and injection for one-purpose pipeline threads."
+      ]
+    },
+    {
+      "id": "native.subagent_model_loop",
+      "plane": "deerflow2_native",
+      "status": "conditional_current",
+      "trigger": "The lead agent emits a task tool call for an enabled general-purpose or named custom subagent.",
+      "caller": "task tool -> SubagentExecutor",
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/subagents/executor.py:341-367",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/subagents/executor.py:431-493",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/subagents/executor.py:495-650",
+        "deerflow_bridge/config.yaml:1150-1221",
+        "deerflow_bridge/deerflow_research.py:10953-10972",
+        "deerflow_bridge/patches/apply_subagent_overlays.py:1-184",
+        "drf2/config/config.yaml:207-376"
+      ],
+      "model_selection": "Subagent-specific model if configured; otherwise inherit/general-purpose policy. The current Stage-1 overlay resolves model=inherit from the exact active AppConfig configurable model when trace metadata is absent. Each child receives only configured tools and skills.",
+      "model_input": "Task description, subagent system prompt, selected skill bodies, inherited user/thread/sandbox context, and the subagent's bounded tool schemas.",
+      "model_output": "The subagent's terminal AI text plus internal AI messages, usage, status, and error metadata returned through the task tool.",
+      "receiver": "Lead agent as the task tool result/ToolMessage; the parent may reason over or incorporate the returned work.",
+      "persistence": "Subagent graph uses checkpointer=false and is ephemeral. Returned text is part of the parent thread checkpoint; files written to the shared sandbox/workspace can persist.",
+      "multiplicity": "Each task can invoke the model repeatedly up to max_turns. Multiple tasks can run concurrently within configured executor and global model-call limits.",
+      "retry_and_failure_semantics": "Per-model retries apply inside each turn. Executor timeouts, max-turn limits, task errors, and concurrency bounds produce structured task failures returned to the lead. The current overlay maps provider fallback markers, typed blocked outcomes, and all-budget-denied evidence work to FAILED instead of a misleading successful task result.",
+      "active_policy_notes": [
+        "Current Stage-1 only exposes task delegation when DeerFlowClient is constructed with subagent_enabled=true via --subagents.",
+        "The current bridge also has its own research fanout; bridge fanout is suppressed when harness delegation is active so only one breadth plane owns the work.",
+        "Current child construction receives the client's exact AppConfig, uses an application-wide lifecycle lease, and fails closed on fallback/blocked/all-budget-denied outcomes.",
+        "drf2 pre-cutover config defines researcher, ontology-builder, sim-configurer, and forecaster custom subagents."
+      ]
+    },
+    {
+      "id": "native.skill_security_scan",
+      "plane": "deerflow2_native",
+      "status": "disabled_current",
+      "trigger": "A skill installation or write path requests an LLM security assessment for skill content.",
+      "caller": "SkillSecurityScanner",
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/skills/security_scanner.py:70-109",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/skills/storage/local_skill_storage.py:30-131",
+        "deerflow_bridge/config.yaml:1397-1402",
+        "drf2/config/config.yaml:427-428"
+      ],
+      "model_selection": "The scanner's configured model.",
+      "model_input": "Skill text, location/name, executable context, and a security rubric covering prompt injection, credential/data access, unsafe commands, and policy violations.",
+      "model_output": "Strict structured verdict: allow, warn, or block, with reasons.",
+      "receiver": "Skill installation/storage policy.",
+      "persistence": "The accepted/rejected installation decision affects skill storage; raw model reasoning is not a conversation turn.",
+      "multiplicity": "One call per directly scanned file. An archive installation can make 1..M calls for SKILL.md plus every qualifying support file; zero calls when evolution/install scanning is disabled or no scan is requested.",
+      "retry_and_failure_semantics": "Unparseable output and scanner failure fail closed rather than silently approving content.",
+      "active_policy_notes": [
+        "Current Stage-1 and drf2 both set skill_evolution.enabled=false, so ordinary runs make zero calls in this family."
+      ]
+    },
+    {
+      "id": "native.followup_suggestions",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "trigger": "A client calls POST /api/threads/{thread_id}/suggestions while suggestions are globally enabled and the thread contains usable recent messages.",
+      "caller": "Gateway suggestions router",
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/app/gateway/routers/suggestions.py:19-35",
+        "deer-flow-2.0.0/backend/app/gateway/routers/suggestions.py:129-186",
+        "drf2/config/config.yaml:152-153"
+      ],
+      "model_selection": "Optional request model or configured default suggestion model.",
+      "model_input": "Recent thread messages, a system instruction, and requested suggestion count n (1-5).",
+      "model_output": "A JSON string list of follow-up questions, cleaned and bounded to n.",
+      "receiver": "HTTP response consumer, normally the frontend.",
+      "persistence": "Not written into the conversation or checkpoint by this endpoint.",
+      "multiplicity": "One model call per qualifying endpoint request.",
+      "retry_and_failure_semantics": "Model, parsing, or data failures return an empty suggestions array.",
+      "active_policy_notes": [
+        "The embedded Stage-1 bridge does not call this endpoint.",
+        "drf2 pre-cutover explicitly disables suggestions."
+      ]
+    },
+    {
+      "id": "native.opaque_tool_owned_model_calls",
+      "plane": "deerflow2_native",
+      "status": "opaque_extension",
+      "trigger": "A bound builtin, config-reflected, MCP, ACP, or remote tool internally chooses to invoke its own model.",
+      "caller": "External tool implementation outside the lead/subagent model wrapper.",
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/tools/tools.py:44-176",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/mcp/tools.py:412-653"
+      ],
+      "model_selection": "Owned by the external tool/service and not observable as a DeerFlow harness model invocation.",
+      "model_input": "The tool arguments and any service-owned context; exact prompts are outside this repository boundary unless the tool implementation is local.",
+      "model_output": "Tool-owned response converted into ToolMessage-compatible text, structured content, resource, image, or error blocks.",
+      "receiver": "DeerFlow tool node, then the lead/subagent model as a ToolMessage.",
+      "persistence": "Only the returned tool result and any explicit external artifact are visible to DeerFlow; provider-internal transcripts are not harness checkpoints.",
+      "multiplicity": "Unknown and tool-dependent; the harness can count the outer tool call but cannot truthfully enumerate internal model calls.",
+      "retry_and_failure_semantics": "Owned by the tool/service. DeerFlow applies its tool error and output-budget middleware to the returned boundary value.",
+      "active_policy_notes": [
+        "This entry prevents hidden external-service reasoning from being misrepresented as a known fixed call count."
+      ]
+    },
+    {
+      "id": "bridge.prediction_market_query_derivation",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "Before the initial market snapshot and again during post-report market refresh when LLM query derivation is enabled and a model is configured.",
+      "caller": "_pm_resolve_queries -> derive_market_queries_llm",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:9364-9432",
+        "deerflow_bridge/deerflow_research.py:9968-9977",
+        "deerflow_bridge/deerflow_research.py:9980-10008",
+        "deerflow_bridge/deerflow_research.py:10011-10080"
+      ],
+      "model_selection": "Tool-free, thinking-disabled synthesis model through _bare_synth_invoke; explicit fallback model only after retry-surviving provider errors.",
+      "model_input": "Forecast question plus any available hot topics and actor names, with instructions to produce market-title-shaped search queries.",
+      "model_output": "Parsed bounded list of query strings.",
+      "receiver": "Deterministic Polymarket snapshot fetcher.",
+      "persistence": "Queries and selected markets are written into prediction_markets.json; the pre-pass snapshot is also injected into research prompts and extraction context.",
+      "multiplicity": "Normally up to two logical calls per full run: one pre-pass and one post-report refresh. The refresh may be skipped when agent-tool candidates are sufficient or transport policy suppresses it.",
+      "retry_and_failure_semantics": "Provider SDK bounded retries, then explicit fallback/circuit routing. Any model error, empty response, or parse failure falls back to deterministic query derivation.",
+      "active_policy_notes": [
+        "Controlled by PREDICTION_MARKETS_ENABLED and PREDICTION_MARKETS_LLM_QUERIES.",
+        "The market HTTP requests and deterministic horizon query degradation are not LLM calls."
+      ]
+    },
+    {
+      "id": "bridge.prediction_market_relevance_scoring",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "A pre-pass, post-report refresh, or horizon-degradation retry has market candidates requiring semantic relevance gating.",
+      "caller": "score_market_relevance",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:9447-9485",
+        "deerflow_bridge/deerflow_research.py:10007-10008",
+        "deerflow_bridge/deerflow_research.py:10111-10144",
+        "deerflow_bridge/deerflow_research.py:10157-10193"
+      ],
+      "model_selection": "Tool-free, thinking-disabled model through _bare_synth_invoke with the configured primary/fallback policy.",
+      "model_input": "Forecast question and compact candidate records containing market IDs, titles, event titles, close dates, prices, volume, and liquidity.",
+      "model_output": "JSON mapping candidate market IDs to relevance scores from 0 through 10.",
+      "receiver": "Deterministic relevance gate, diversity cap, and canonical prediction-market registry writer.",
+      "persistence": "Selected market rows, score-derived inclusion, diagnostics, and empty reasons are persisted in prediction_markets.json and meta.json.",
+      "multiplicity": "Zero with no candidates. Usually one pre-pass and one post-report scoring call; each horizon-degradation candidate batch can add another conditional call.",
+      "retry_and_failure_semantics": "Bounded provider retries plus explicit fallback. Main refresh has a constrained deterministic/report-citation fallback; widened horizon candidates fail closed when semantic scoring is unavailable.",
+      "active_policy_notes": [
+        "Multiplicity is data-dependent and can exceed two when broadened market-query stages produce candidates."
+      ]
+    },
+    {
+      "id": "bridge.track_a_opening_agent_turn",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "trigger": "Track A begins or resumes without a completed opening pass.",
+      "caller": "run_research_stage -> run_streamed_turn",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:6255-6355",
+        "deerflow_bridge/deerflow_research.py:7869-8058",
+        "deerflow_bridge/deerflow_research.py:10953-10972"
+      ],
+      "model_selection": "Embedded DeerFlowClient lead agent, selected --model, thinking enabled, research tools and four allowed skills; optional native subagents.",
+      "model_input": "Question, depth, target language, research contract, /deep-research activation, initial market snapshot, checkpoint/resume context, and tool schemas.",
+      "model_output": "Streamed assistant reasoning/content, tool calls/results, custom events, usage, and opening research notes.",
+      "receiver": "Track A thread checkpoint, bridge stream accumulator, source/tool ledgers, progress log, and subsequent fixed/adaptive phases.",
+      "persistence": "LangGraph thread state/checkpoint plus research_progress.log, research_checkpoint.json, fetched-source ledger, market-candidate ledger, and tool-created files.",
+      "multiplicity": "One logical opening turn, internally one-to-many model invocations because every tool result can return control to the model.",
+      "retry_and_failure_semantics": "The streamed turn has recursion limits, model/tool error propagation, salvage of received content, and at most one corrective continuation for a degenerate tool-loop pattern.",
+      "active_policy_notes": [
+        "Deep and standard paths use different opening prompt contracts and recursion budgets.",
+        "The pre-pass market snapshot is data input, not a separate research-agent call."
+      ]
+    },
+    {
+      "id": "bridge.track_a_fixed_phase_agent_turns",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "trigger": "Deep research schedules the fixed protocol phases that are not already complete, redundant, or pruned by the KIQ scheduler.",
+      "caller": "run_research_stage -> run_streamed_turn for DEEP_RESEARCH_PHASES",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:255-314",
+        "deerflow_bridge/deerflow_research.py:8075-8494"
+      ],
+      "model_selection": "Same embedded, thinking-enabled DeerFlowClient lead agent as Track A opening; middle phases may use isolated worker threads under shared model leases.",
+      "model_input": "Question plus phase-specific instructions for scope/source map, evidence, actors/contradictions, and forecast implications; prior notes/evidence are injected or available in checkpoint/workspace.",
+      "model_output": "Phase research notes and tool traces.",
+      "receiver": "Shared or isolated phase thread state, then deterministic merge/injection into the canonical Track A evidence context.",
+      "persistence": "Per-phase completion is recorded in research_checkpoint.json; accumulated evidence and source/tool ledgers persist under the handoff directory.",
+      "multiplicity": "Zero to the configured number of DEEP_RESEARCH_PHASES after scheduling. Middle phases may run concurrently; each phase is itself a multi-invocation tool loop.",
+      "retry_and_failure_semantics": "Isolated parallel phase failure can fall back to an isolated or sequential phase path. Resume skips only recorded completed passes with matching checkpoint identity.",
+      "active_policy_notes": [
+        "There is no truthful fixed total LLM count: phase scheduling, tools, retries, and resume all change it."
+      ]
+    },
+    {
+      "id": "bridge.track_a_bridge_fanout_worker_turns",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "Deep fanout is enabled and the harness-native subagent path is not being used as the preferred delegation mechanism.",
+      "caller": "run_deep_fanout -> _scoped_worker -> run_streamed_turn",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:1784-1797",
+        "deerflow_bridge/deerflow_research.py:6534-6550",
+        "deerflow_bridge/deerflow_research.py:6608-6675"
+      ],
+      "model_selection": "Same embedded DeerFlowClient model under isolated worker thread IDs and the shared cross-process model lease.",
+      "model_input": "One bounded key-intelligence-question or actor/source scope, the forecast question, research depth, target-language requirements, and available tools.",
+      "model_output": "Scoped evidence notes, URLs/tool observations, and usage.",
+      "receiver": "Fanout aggregator and later absorption/injection into Track A.",
+      "persistence": "Worker checkpoints and on-disk evidence/progress artifacts; selected completion markers enter the research checkpoint.",
+      "multiplicity": "Variable fanout width, concurrent within configured caps; each worker is a multi-invocation tool loop.",
+      "retry_and_failure_semantics": "Individual worker errors are collected without necessarily discarding successful siblings; global budget/model leases and timeouts bound fanout.",
+      "active_policy_notes": [
+        "Current policy avoids running both bridge fanout and harness-native task delegation at full width at the same time."
+      ]
+    },
+    {
+      "id": "bridge.track_a_fanout_absorption_turn",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "Fanout or isolated phase results need model-mediated absorption and direct checkpoint injection is unavailable or insufficient.",
+      "caller": "run_research_stage fanout/phase merge fallback -> run_streamed_turn",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:8140-8160",
+        "deerflow_bridge/deerflow_research.py:8224-8244",
+        "deerflow_bridge/deerflow_research.py:8365-8386"
+      ],
+      "model_selection": "Canonical Track A embedded lead agent with thinking and tools enabled.",
+      "model_input": "Worker notes, evidence/source metadata, and explicit instructions to absorb without treating unverified worker prose as final fact.",
+      "model_output": "Canonicalized working notes in the main research thread.",
+      "receiver": "Track A checkpoint and subsequent gap/synthesis phases.",
+      "persistence": "Main thread checkpoint and research checkpoint/progress artifacts.",
+      "multiplicity": "Zero when deterministic/plain message injection succeeds; otherwise one per absorption boundary, internally potentially multi-invocation.",
+      "retry_and_failure_semantics": "A failed model-mediated absorption leaves the bridge's collected worker artifacts available for deterministic synthesis paths.",
+      "active_policy_notes": [
+        "This is a fallback call family, not an unconditional extra call after every worker."
+      ]
+    },
+    {
+      "id": "bridge.track_a_adaptive_gap_closure_turns",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "Coverage analysis identifies fresh research gaps after standard KIQ work or the deep fixed-phase protocol.",
+      "caller": "run_research_stage adaptive coverage loop -> run_streamed_turn",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:7935-7965",
+        "deerflow_bridge/deerflow_research.py:8550-8605"
+      ],
+      "model_selection": "Same thinking-enabled Track A DeerFlowClient lead agent.",
+      "model_input": "A bounded set of uncovered KIQs/evidence gaps, accumulated coverage state, and instructions to seek only net-new evidence.",
+      "model_output": "Gap-closing evidence notes and tool traces.",
+      "receiver": "Coverage evaluator, Track A checkpoint, and final synthesis input builder.",
+      "persistence": "Coverage-round completion and evidence deltas are checkpointed/logged.",
+      "multiplicity": "Zero to the configured coverage-round budget; exits early on no fresh gaps, no evidence yield, budget exhaustion, or sufficient coverage.",
+      "retry_and_failure_semantics": "Each turn inherits streamed recursion/correction semantics. A failed or non-yielding round stops further waste rather than forcing the maximum count.",
+      "active_policy_notes": [
+        "Adaptive closure is bounded and evidence-yield-sensitive, so counts vary by question and resume state."
+      ]
+    },
+    {
+      "id": "bridge.track_a_report_refinement_research_turn",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "The report judge fails and returns actionable evidence gaps for a permitted refinement round.",
+      "caller": "report judge loop -> run_streamed_turn",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:7260-7330",
+        "deerflow_bridge/deerflow_research.py:7467-7555",
+        "deerflow_bridge/deerflow_research.py:11349-11353"
+      ],
+      "model_selection": "Tool-enabled, thinking-enabled Track A DeerFlowClient for evidence acquisition; distinct from the tool-free report judge and patch writer.",
+      "model_input": "Judge gaps, forecast question, current report context, and instructions to research missing evidence rather than rewrite the report directly.",
+      "model_output": "New source-backed refinement notes/tool observations.",
+      "receiver": "Incremental report patch call and candidate-vs-current deterministic selection.",
+      "persistence": "Notes/tool evidence enter the thread/checkpoint and progress/source ledgers; adopted report candidates and scorecards are written separately.",
+      "multiplicity": "Zero when the initial judge passes; otherwise up to the configured report-refinement mutation count, normally one.",
+      "retry_and_failure_semantics": "Streamed turn semantics apply. A failed evidence turn prevents an unsupported patch from being adopted.",
+      "active_policy_notes": [
+        "The judge call and patch-writing call are separate logical families below."
+      ]
+    },
+    {
+      "id": "bridge.track_a_triangulation_verification_turn",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "Deep-mode post-extraction analysis finds eligible high-impact claims supported by only one origin and triangulation is enabled.",
+      "caller": "triangulation pass -> run_streamed_turn",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:7770-7840"
+      ],
+      "model_selection": "Thinking-enabled Track A DeerFlowClient with research tools.",
+      "model_input": "Up to the bounded set of single-origin claims, existing source context, and instructions to independently verify, qualify, or reject them.",
+      "model_output": "Verification evidence and source/tool traces.",
+      "receiver": "Incremental report patch path and final evidence/provenance state.",
+      "persistence": "Verification notes and sources persist in the checkpoint/ledgers; any adopted patch persists in the finalized report lineage.",
+      "multiplicity": "Zero or one logical triangulation turn per qualifying run, internally multi-invocation; the claim set is capped.",
+      "retry_and_failure_semantics": "Failure is degrade-safe: the system retains the original report and does not claim successful triangulation.",
+      "active_policy_notes": [
+        "Current bound limits the candidate claim set to ten before the turn."
+      ]
+    },
+    {
+      "id": "bridge.track_b_actor_research_turn",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "trigger": "Under checked-in defaults, the outer coordinator assigns dual_track=true to exactly the broad baseline evidence lane; explicit dual-track disablement suppresses this family. Full non-evidence-only compatibility runs can also own Track B.",
+      "caller": "Track B runner -> run_streamed_turn",
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:2974-2980",
+        "backend/app/services/pipeline_orchestrator.py:7400-7552",
+        "deerflow_bridge/deerflow_research.py:1517-1531",
+        "deerflow_bridge/deerflow_research.py:10025-10071"
+      ],
+      "model_selection": "Same embedded DeerFlowClient/model but a distinct Track B thread ID, actor-ontology skill/prompt, and shared model lease.",
+      "model_input": "Forecast question, depth/language, research tools and the 17-dimension actor/network/trajectory contract spanning identity/history, values, incentives, motivations, capabilities/constraints, operational preferences, alliances/opponents, decision authority/triggers, current actions, future plans, investments, track record, likely actions, red lines and knowledge state. Claims must bind an exact supporting quote/span to a current Track-B fetched-source receipt/content hash, distinguish source-publication from claim-valid time and carry evidence/status/horizon/confidence/qualifiers.",
+      "model_output": "Force-ranked actor-landscape notes, fetched evidence, grounded relationship observations, tool traces and query-bound stage1-search-result-receipt/v1 producer receipts under semantic actor identity discipline.",
+      "receiver": "The same Track-B checkpoint and mandatory cast-wide actor-intelligence completion family.",
+      "persistence": "Isolated Track-B thread/checkpoint, progress and fetched-source ledgers; accepted evidence is incorporated into actor_dossier.md and actor-intelligence/v1.",
+      "multiplicity": "One logical opening Track-B stream for the single baseline owner, internally one-to-many lead-model invocations; it can run concurrently with baseline Track A subject to model leases.",
+      "retry_and_failure_semantics": "Default baseline ownership fails closed at the evidence-lane gate if no accountable dossier survives; the older full-run compatibility path can continue with an absent dossier after recording failure.",
+      "active_policy_notes": [
+        "Track A and Track B share one client object but use isolated thread IDs and separate artifacts.",
+        "Only the broad baseline outer lane owns Track B. The other default evidence lanes and the fresh global-synthesis child explicitly receive dual_track=false."
+      ]
+    },
+    {
+      "id": "bridge.track_b_actor_intelligence_completion_turn",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "trigger": "The single Track-B owner completes its opening landscape turn; this second pass is scheduled regardless of whether the lead elected to delegate during the opening.",
+      "caller": "run_actor_ontology_stage -> run_streamed_turn",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:9635-9668",
+        "deerflow_bridge/deerflow_research.py:10072-10101"
+      ],
+      "model_selection": "The same tool-enabled, thinking-enabled Track-B DeerFlowClient/thread and shared model lease; recursion is separately bounded by DEERFLOW_ACTOR_COVERAGE_RECURSION_LIMIT, defaulting to at most 180.",
+      "model_input": "Candidate cast and prior Track-B checkpoint plus a cast-wide instruction to close all 17 dimensions for every Tier-1/2 actor, prioritizing future plans/actions/investments, decision authority/triggers, information access, leverage/dependencies, preferences, likely actions and red lines. Each claim requires an exact quote/span and current receipt/content hash plus evidence type, source-publication time, claim-valid time, confidence and applicable horizon/status/dependencies/contradictions; unsupported slots become typed gaps only after bounded query-bound attempts.",
+      "model_output": "Dense cast-wide coverage notes and a per-actor/per-dimension accountability ledger containing sealed claim candidates or typed gaps with query, attempt count, result IDs, receipt IDs, exhausted and reason.",
+      "receiver": "Actor-dossier synthesis, then deterministic source-bound coverage and the ten-dimension judge.",
+      "persistence": "Same isolated Track-B checkpoint/progress/source ledgers; no separate report file is authoritative before synthesis.",
+      "multiplicity": "Exactly one logical completion attempt per Track-B execution; internally one-to-many model/tool invocations.",
+      "retry_and_failure_semantics": "The call failure is logged and synthesis may continue from prior evidence, but the deterministic final coverage gate remains authoritative and prevents an incomplete dossier from being published.",
+      "active_policy_notes": [
+        "This is the explicit cast-wide accountability pass missing from the earlier one-shot architecture.",
+        "It runs in the default three-lane architecture only inside the one shared baseline Track B."
+      ]
+    },
+    {
+      "id": "bridge.track_b_gap_research_turns",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "The actor-dossier judge fails with actionable gaps and the configured refinement-round limit has not been reached.",
+      "caller": "Track B judge loop -> run_streamed_turn",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:10181-10313"
+      ],
+      "model_selection": "Tool-enabled, thinking-enabled Track B DeerFlowClient.",
+      "model_input": "Whole-document-sanitized, non-executably delimited judge gaps, actor-dossier requirements, prior research context and a bounded instruction to gather only the missing actor/network evidence. Critical gaps require two distinct query-bound result receipts before exhaustion can be claimed.",
+      "model_output": "Additional source-bound actor evidence notes, query-bound result receipts and typed residual gaps for the exact authorized refinement attempt.",
+      "receiver": "Next actor-dossier synthesis and judge iteration.",
+      "persistence": "Track B checkpoint, source/progress ledgers, dossier candidate lineage.",
+      "multiplicity": "Zero when the dossier passes; otherwise up to the configured Track B refinement rounds, default two.",
+      "retry_and_failure_semantics": "Failure preserves the current candidate only if it still passes deterministic coverage and has no explicit final judge FAIL; otherwise the baseline lane publishes no dossier and fails closed.",
+      "active_policy_notes": [
+        "Each successful gap turn is followed by resynthesis. When the last candidate differs from the judged bytes, one final post-refinement judge binds the final candidate.",
+        "Conditional within the default one-owner Track B: zero when the initial dossier passes."
+      ]
+    },
+    {
+      "id": "bridge.actor_dossier_synthesis",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "trigger": "Track B has research context to convert into the actor/relationship dossier, initially and after successful refinement evidence turns.",
+      "caller": "synthesize_actor_dossier",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:10103-10172"
+      ],
+      "model_selection": "Direct tool-free model invoke with thinking disabled under the global model lease. This path constructs one selected model and does not use the bridge's explicit `_invoke_tool_free_model` primary/fallback circuit.",
+      "model_input": "Forecast question, whole-document-sanitized and non-executably delimited Track-B checkpoint/tool evidence from the landscape and cast-wide completion passes, target language, and the ontology-ready dossier plus ACTOR_INTELLIGENCE_LEDGER_V1 contract. Governing instructions and untrusted evidence occupy separate System/Human messages.",
+      "model_output": "Markdown dossier with a semantically identified force-ranked cast, substantive per-actor profiles, directed source-grounded relationships with canonical IDs and causal attributes, evolution timeline, drivers/indicators/scenarios and exactly one complete Tier-1/2-by-17-dimension ledger of source-bound claims or typed gaps.",
+      "receiver": "Deterministic source-bound coverage audit, actor-dossier judge, baseline artifact validator and global-synthesis manifest.",
+      "persistence": "Accepted actor_dossier.md, actor_dossier_coverage.json, optional actor_dossier_judge.json, current-attempt meta hashes and the final research contract.",
+      "multiplicity": "One initial call plus one after each successful Track-B refinement round; one to three with the default two-round bound when synthesis is reached.",
+      "retry_and_failure_semantics": "The direct model invocation has no explicit bridge fallback circuit. Missing, short, error-like, coverage-incomplete or explicitly final-judge-failed output is rejected; in the default baseline lane that rejection fails the lane rather than silently removing actor context.",
+      "active_policy_notes": [
+        "This executes in the default architecture inside the single baseline evidence lane; non-owner evidence lanes and the global child do not synthesize another dossier."
+      ]
+    },
+    {
+      "id": "bridge.actor_dossier_judge",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "An actor-dossier candidate exists and Track B quality judging is enabled.",
+      "caller": "judge_actor_dossier",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:9811-9978",
+        "deerflow_bridge/deerflow_research.py:9981-10278"
+      ],
+      "model_selection": "Direct tool-free, thinking-disabled judge model under the global model lease. This path constructs one selected model and does not use the bridge's explicit primary/fallback circuit.",
+      "model_input": "The whole-document-sanitized dossier bounded by a 200,000-character transport ceiling, forecast question/language and fresh source/receipt-bound coverage. A PASS is inadmissible if any sanitized byte was truncated. The separate governing System message defines the ten dimensions cast correctness, salience ranking, per-actor depth, relationship completeness, history evolution, evidence grounding, contradiction handling, ontology readiness, forward behavior coverage and cast-wide accountability.",
+      "model_output": "Strict JSON containing exactly all ten finite 0-5 scores, PASS/FAIL, actionable gaps and a structured source/sanitized/input byte attestation; malformed, non-finite, stale or truncated judgments fail closed.",
+      "receiver": "Track B refinement controller and artifact metadata.",
+      "persistence": "actor_dossier_judge.json when parseable; exact bytes/hash are bound by current lane meta, the version-3 global manifest and the successful research contract.",
+      "multiplicity": "Normally one judgment before each of up to two refinement decisions, plus one final post-refinement judgment if the last candidate bytes changed: one to three calls by default. Zero when disabled, length-skipped, empty or not reached.",
+      "retry_and_failure_semantics": "Parse/model failure is recorded and leaves the deterministic source-bound coverage audit as the degradation authority. A valid explicit final FAIL is publication-invalid and cannot enter global synthesis.",
+      "active_policy_notes": [
+        "Judgment is separate from actor evidence acquisition and dossier synthesis.",
+        "Default-on for the one shared baseline Track B, but explicitly disableable/skippable by documented flags."
+      ]
+    },
+    {
+      "id": "bridge.multipart_synthesis_outline",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "trigger": "Final Track A or global multi-lane synthesis selects multipart synthesis.",
+      "caller": "synthesize_multipart outline stage",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:3639-3708"
+      ],
+      "model_selection": "Tool-free, thinking-disabled synthesis model under explicit fallback, output-token budget, and model lease.",
+      "model_input": "Forecast question, target-language contract, and a stratified bounded slice of the evidence/working-note corpus.",
+      "model_output": "JSON section outline with titles, scopes, coverage tags, and word targets.",
+      "receiver": "Deterministic outline parser, contract enforcer/rebalancer, then section prompt builders.",
+      "persistence": "Outline is primarily transient synthesis state; synthesis manifest and final report record the resulting section plan/lineage where configured.",
+      "multiplicity": "One call per multipart synthesis attempt.",
+      "retry_and_failure_semantics": "Provider retries/fallback apply. Unparseable/empty output uses a deterministic default outline rather than requiring another outline call.",
+      "active_policy_notes": [
+        "The outline receives a representative evidence slice, not the entire evidence corpus."
+      ]
+    },
+    {
+      "id": "bridge.multipart_synthesis_section_writers",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "trigger": "A validated/rebalanced multipart outline has N sections.",
+      "caller": "synthesize_multipart _write_section workers",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:3710-3817"
+      ],
+      "model_selection": "Independent tool-free, thinking-disabled model instance per section; calls share global model leases and an aggregate synthesis-output budget.",
+      "model_input": "Full outline, one section task, question, notes digest, a keyword/rule-routed evidence subset, target language, and a shared global citation index subset.",
+      "model_output": "One Markdown section owned by that writer.",
+      "receiver": "Parallel result collector, truncation/budget checks, deterministic section stitcher and cross-section deduplicator.",
+      "persistence": "Section text is transient until stitched; successful final/candidate report bytes and synthesis manifest persist.",
+      "multiplicity": "N parallel logical calls, one per outline section; N is adaptive. Each can add exactly one retry call when output-token truncation is detected.",
+      "retry_and_failure_semantics": "A known cutoff retries once with a larger section budget. A second cutoff or aggregate budget exhaustion rejects an incomplete multipart report. Non-truncation section failures are tolerated only while a minimum successful-section threshold remains.",
+      "active_policy_notes": [
+        "Global citation IDs are pinned before section fanout so independently written sections use one source namespace."
+      ]
+    },
+    {
+      "id": "bridge.multipart_synthesis_section_expansion",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "Stitched multipart prose is below the depth-specific word floor.",
+      "caller": "synthesize_multipart length gate",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:3826-3865"
+      ],
+      "model_selection": "Same tool-free synthesis model, fallback policy, lease, and aggregate execution budget as section writers.",
+      "model_input": "One of the two thinnest section drafts, its section contract, routed evidence, question, and target language.",
+      "model_output": "Expanded replacement section.",
+      "receiver": "Deterministic prose-length comparator and restitcher; expansion replaces a section only if it is genuinely longer.",
+      "persistence": "Only adopted expanded text survives into report candidates/final artifacts.",
+      "multiplicity": "Zero when the word floor is met; otherwise up to two section-expansion calls, each with at most one truncation retry.",
+      "retry_and_failure_semantics": "Truncation retries once and then rejects the incomplete output. Other expansion failures keep the original section and mark degradation.",
+      "active_policy_notes": [
+        "This is an additive repair, not an unconditional rewrite of every section."
+      ]
+    },
+    {
+      "id": "bridge.multipart_synthesis_executive_summary",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "trigger": "Multipart body sections have been stitched and length handling is complete.",
+      "caller": "synthesize_multipart executive-summary stage",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:3877-3908"
+      ],
+      "model_selection": "Tool-free, thinking-disabled synthesis model with fallback and a small dedicated output budget.",
+      "model_input": "Section titles and bounded lead excerpts, not the entire evidence corpus.",
+      "model_output": "Executive summary text.",
+      "receiver": "Deterministic final report assembler.",
+      "persistence": "Included at the front of the multipart report when successful.",
+      "multiplicity": "One per multipart synthesis attempt, with at most one retry if token truncation is detected.",
+      "retry_and_failure_semantics": "Truncation retries once. Other failures are degrade-safe: the body can ship without a generated executive summary.",
+      "active_policy_notes": [
+        "Summary timing deliberately follows length expansion so it reflects the final body."
+      ]
+    },
+    {
+      "id": "bridge.single_call_report_synthesis",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "The configured synthesis mode is single-call, multipart synthesis is not selected, or a structurally failed multipart attempt permits fallback.",
+      "caller": "synthesize_from_thread single-call path",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:4370-4494"
+      ],
+      "model_selection": "Tool-free, thinking-disabled synthesis model with context/output caps, cross-process lease, provider retry, and explicit fallback.",
+      "model_input": "Forecast question, research notes/tool evidence packed to context limits, target-language/depth contract, final dossier structure, citation/source index, and market context.",
+      "model_output": "Complete Markdown research report.",
+      "receiver": "Citation finalizer, deterministic quality/artifact gates, report judge, extraction, and file writer.",
+      "persistence": "research_report.md or a candidate artifact plus metadata and synthesis lineage.",
+      "multiplicity": "At most one per synthesis attempt/path selection.",
+      "retry_and_failure_semantics": "Provider SDK retries and explicit fallback apply. Deep mode refuses an undersized fallback report instead of presenting it as complete.",
+      "active_policy_notes": [
+        "This family is not added after a successful multipart synthesis."
+      ]
+    },
+    {
+      "id": "bridge.research_report_judge",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "A deep-mode or synthesis-manifest report candidate is ready for initial quality judgment or for re-judgment after an adopted mutation. Quick/standard non-manifest paths skip this family.",
+      "caller": "judge_research_report",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:7260-7330",
+        "deerflow_bridge/deerflow_research.py:7467-7555"
+      ],
+      "model_selection": "Tool-free, thinking-disabled judge model using current primary/fallback policy and model lease.",
+      "model_input": "The exact candidate report bytes, forecast question, target language, depth, and seven-dimension quality rubric.",
+      "model_output": "Strict JSON scorecard, overall pass/fail, per-dimension scores, and actionable gaps.",
+      "receiver": "Refinement controller, candidate selection, and judge-binding metadata writer.",
+      "persistence": "research_report_judge.json and meta.json include candidate/result details and a digest binding the judge to the exact prose bytes.",
+      "multiplicity": "One initial call plus one after each candidate mutation that reaches evaluation; normally at most two with the default one-mutation limit.",
+      "retry_and_failure_semantics": "Provider retries/fallback and strict scorecard normalization apply. A malformed/unavailable judgment is not silently represented as a passing score.",
+      "active_policy_notes": [
+        "Deterministic appendices added after the prose judgment are tracked separately from the bound prose digest.",
+        "The main bridge dispatch calls this family only when depth=deep or --synthesis-manifest is active."
+      ]
+    },
+    {
+      "id": "bridge.incremental_report_patch",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "A judge-refinement, triangulation, or global-refinement path has new evidence/gaps and requests a bounded mutation of the current report.",
+      "caller": "refine_research_report_incrementally",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:7707-7758"
+      ],
+      "model_selection": "Tool-free, thinking-disabled synthesis model under model lease and primary/fallback policy.",
+      "model_input": "Current report, forecast question, new source-backed notes or judge gaps, target language, and a patch contract naming permitted replace/insert operations.",
+      "model_output": "Structured patch blocks rather than an unconstrained full rewrite.",
+      "receiver": "Deterministic patch parser/applier, candidate artifact writer, and report re-judge.",
+      "persistence": "Candidate report, candidate scorecard, mutation metadata, and adopted final report lineage.",
+      "multiplicity": "Zero without a refinement/triangulation mutation; normally one per permitted mutation and bounded by refinement policy.",
+      "retry_and_failure_semantics": "Invalid/unapplicable patches are rejected. Configured paths may fall back to full synthesis, but an invalid patch is never blindly applied.",
+      "active_policy_notes": [
+        "Modes distinguish judge-refine, triangulation, and global-judge-refine while sharing one logical patch family."
+      ]
+    },
+    {
+      "id": "bridge.structured_extraction_primary",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "The final global report and checksum-admitted shared actor dossier/market context are ready for the single Stage-2 structured artifact extraction owner and extraction is not disabled.",
+      "caller": "extract_structured_tool_free",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:5335-5454",
+        "deerflow_bridge/deerflow_research.py:6103-6139",
+        "deerflow_bridge/deerflow_research.py:11455-11872"
+      ],
+      "model_selection": "Tool-free, thinking-disabled extraction model under the current primary/fallback and cross-process lease policy.",
+      "model_input": "Final global report, required sealed shared actor dossier, prediction-market context, target language, actor-cast constraints and a rich JSON schema covering all 17 dimensions, exact claim/source-support fields, semantic actor identities, grounded relationship/causal attributes and typed gaps. Untrusted prose is sanitized/delimited separately from governing extraction instructions.",
+      "model_output": "JSON text for actors with nested intelligence claims, grounded relationships/context entities, sources, timeline, quantitative facts, contested claims, hot topics and forecast inputs; every current-v1 identity, seal and gap contract is recomputed deterministically after the model response.",
+      "receiver": "Strict parser and actor-cast normalization, then deterministic actor-intelligence/v1 finalization and per-artifact writers.",
+      "persistence": "actors.json with nested actor-intelligence/v1 and a top contract binding report/dossier/sources/actor IDs, plus sources.json, timeline.json, quantitative.json, contested.json, metadata and research manifest entries.",
+      "multiplicity": "One primary call per extraction execution, including an extract-only salvage subprocess when invoked after a timed-out report run.",
+      "retry_and_failure_semantics": "Provider retries/fallback apply. Truncated, unparseable, or structurally empty actor output can trigger the compact recovery family below.",
+      "active_policy_notes": [
+        "Actor-cast normalization, stable actor/source IDs, 17-dimension explicit-gap completion, hash binding and artifact splitting after the model response are deterministic.",
+        "The bridge skips this call family entirely under --no-actors."
+      ]
+    },
+    {
+      "id": "bridge.structured_extraction_recovery",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "Primary structured extraction is truncated, unparseable, or returns no usable actors.",
+      "caller": "extract_structured_recovery_tool_free",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:5456-5535",
+        "deerflow_bridge/deerflow_research.py:6103-6139"
+      ],
+      "model_selection": "Tool-free, thinking-disabled extraction model with a compact output contract and normal fallback/lease policy.",
+      "model_input": "A sanitized/delimited compact subset of the final report/sealed shared dossier and reduced JSON schema prioritizing semantic actors, source-supported intelligence claims, grounded relationships and fetched-source recovery.",
+      "model_output": "Smaller structured JSON designed to fit within output constraints; deterministic finalization still fills every missing dimension with an explicit gap.",
+      "receiver": "Same strict parser, actor-intelligence/v1 finalizer and artifact writers as primary extraction.",
+      "persistence": "Recovered actors/sources and sibling structured artifacts, actor-intelligence contract, and degradation/recovery metadata.",
+      "multiplicity": "Zero or one immediately after a failed primary extraction.",
+      "retry_and_failure_semantics": "Provider retries/fallback apply. If recovery also fails, the bridge records degraded/absent structured outputs rather than inventing them.",
+      "active_policy_notes": [
+        "This recovery is not a second extraction call on healthy primary output."
+      ]
+    },
+    {
+      "id": "bridge.orchestrator_parallel_track_opening_reconciliation",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "At least two outer research tracks survive, RESEARCH_GLOBAL_SYNTHESIS is disabled, and RESEARCH_TRACK_RECONCILE is enabled on the deterministic track-merge path.",
+      "caller": "PipelineOrchestrator._run_parallel_research_tracks -> reconcile_track_reports",
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:3086-3169",
+        "backend/app/services/pipeline_orchestrator.py:7763-7790"
+      ],
+      "model_selection": "Backend LLMClient using the backend report/provider configuration rather than the embedded DeerFlowClient model wrapper.",
+      "model_input": "Only each surviving track's title and bounded executive-summary excerpt, capped to approximately 30000 prompt characters, plus an editorial/citation-preservation contract.",
+      "model_output": "A single Markdown Executive Summary and Cross-track disagreements opening; it does not rewrite the evidence bodies.",
+      "receiver": "Deterministic structure and citation audit, then the track-report merger that prepends an accepted opening to untouched/demoted evidence parts.",
+      "persistence": "The accepted opening becomes part of merged research_report.md; application/rejection reason and audit are stored in pipeline state options.",
+      "multiplicity": "Zero on the default single-global-synthesis architecture. Otherwise at most one call per multi-track deterministic merge with two or more survivors.",
+      "retry_and_failure_semantics": "LLMClient applies its configured provider behavior. Any exception, short/error-like output, invalid opening structure, lost required citation marker, or invented marker falls back to a deterministic merged opening/body.",
+      "active_policy_notes": [
+        "Current Config defaults RESEARCH_GLOBAL_SYNTHESIS=true, so this family is a retained conditional compatibility path rather than the default multi-lane architecture.",
+        "Disabling the LLM editor still performs deterministic duplicate-opening removal and heading demotion."
+      ]
+    },
+    {
+      "id": "bridge.checkpoint_drift_correction_turn",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "trigger": "The bridge detects that expected injected state/brief context is not visible after a checkpoint/message-injection boundary.",
+      "caller": "run_research_stage checkpoint drift fallback -> run_streamed_turn",
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:8040-8060"
+      ],
+      "model_selection": "Canonical Track A embedded DeerFlowClient with thinking/tools enabled.",
+      "model_input": "A compact correction reminding the agent of the active question, research contract, and current pass context.",
+      "model_output": "Acknowledged/re-anchored research state, potentially with tool activity if the model chooses it.",
+      "receiver": "Canonical Track A checkpoint and next phase scheduler.",
+      "persistence": "Main thread checkpoint and progress log.",
+      "multiplicity": "Zero under normal injection; at most the bounded correction path when drift is detected.",
+      "retry_and_failure_semantics": "Uses normal streamed-turn recursion/error handling. Failure does not alter the original question hash/checkpoint identity.",
+      "active_policy_notes": [
+        "This is a defensive fallback, not a normal phase in every run."
+      ]
+    },
+    {
+      "id": "drf2.chat_researcher_subagent_loop",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "trigger": "In the exploratory chat architecture, the lead delegates the research stage to the named researcher custom subagent.",
+      "caller": "Lead task tool -> researcher subagent",
+      "source_anchors": [
+        "drf2/config/config.yaml:214-254",
+        "drf2/README.md:86-116"
+      ],
+      "model_selection": "claude-sonnet / claude-sonnet-4-6, thinking-capable, max 250 turns and 2700 seconds.",
+      "model_input": "Forecast question, researcher system prompt, deep-research, actor-ontology-research and prediction-markets skills, plus whitelisted web/file/KG tools.",
+      "model_output": "Subagent terminal text and files research_report.md and actor_dossier.md, with optional structured/supporting artifacts.",
+      "receiver": "Lead agent and the shared thread workspace; subsequent ontology/graph work reads the files.",
+      "persistence": "Subagent model state is ephemeral; returned text is checkpointed in the parent, and files persist under /mnt/user-data/outputs.",
+      "multiplicity": "One delegated task loop per chat-driven research stage, with one-to-many internal model invocations and tool rounds.",
+      "retry_and_failure_semantics": "Native subagent max-turn/timeout/model retry behavior; missing deliverables remain visible as missing files.",
+      "active_policy_notes": [
+        "Configured and offline-validated, but not the current authoritative production path."
+      ]
+    },
+    {
+      "id": "drf2.chat_ontology_builder_subagent_loop",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "trigger": "In exploratory chat, the lead delegates ontology design and KG construction to ontology-builder.",
+      "caller": "Lead task tool -> ontology-builder subagent",
+      "source_anchors": [
+        "drf2/config/config.yaml:256-297",
+        "drf2/README.md:103-113"
+      ],
+      "model_selection": "minimax-m3 / MiniMax-M3, max 120 turns and 1200 seconds.",
+      "model_input": "Stage-1 dossier/report/actors, ontology-generation and kg-construction skills, and whitelisted file plus kg_* MCP tools.",
+      "model_output": "ontology.json, KG ingestion/verification actions, kg_build_summary.json, and terminal status text.",
+      "receiver": "Lead agent, shared workspace, KG MCP engine, and later simulation-design work.",
+      "persistence": "Files persist in the thread workspace; graph writes persist in the KG engine; subagent checkpoint is ephemeral.",
+      "multiplicity": "One delegated task loop can contain many model/tool rounds and many kg_* tool calls.",
+      "retry_and_failure_semantics": "Native subagent and model bounds; graph-tool errors are returned into the loop and final verification defects are expected to be surfaced.",
+      "active_policy_notes": [
+        "The deterministic driver represents ontology and graph as two separate harness stages; this chat subagent combines them."
+      ]
+    },
+    {
+      "id": "drf2.chat_sim_configurer_subagent_loop",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "trigger": "In exploratory chat, the lead delegates simulation configuration to sim-configurer.",
+      "caller": "Lead task tool -> sim-configurer subagent",
+      "source_anchors": [
+        "drf2/config/config.yaml:299-332",
+        "drf2/README.md:103-116"
+      ],
+      "model_selection": "minimax-m3 / MiniMax-M3, max 80 turns and 900 seconds.",
+      "model_input": "Actors, KG retrieval, simulation-design skill, run budget, and whitelisted file/KG/simulation tools.",
+      "model_output": "simulation_config.json, sim_start tool request/result containing sim_id, and terminal handoff text.",
+      "receiver": "Lead/driver and detached simulation engine.",
+      "persistence": "Configuration file persists in workspace; simulation job state/artifacts persist in the simulation engine; subagent checkpoint is ephemeral.",
+      "multiplicity": "One subagent loop for configuration. The long simulation is explicitly not an LLM/subagent loop.",
+      "retry_and_failure_semantics": "Native subagent/model/tool error handling. The subagent is instructed not to wait for the detached simulation.",
+      "active_policy_notes": [
+        "Configured and pre-cutover; simulation internals may use their own models, outside this DeerFlow call inventory."
+      ]
+    },
+    {
+      "id": "drf2.chat_forecaster_subagent_loop",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "trigger": "In exploratory chat, the lead delegates final forecasting after research, KG, and simulation results are available.",
+      "caller": "Lead task tool -> forecaster subagent",
+      "source_anchors": [
+        "drf2/config/config.yaml:334-376",
+        "drf2/README.md:103-116"
+      ],
+      "model_selection": "claude-sonnet / claude-sonnet-4-6, max 150 turns and 2700 seconds.",
+      "model_input": "Research/dossier, KG tools, sim_results/interviews, prediction-market tool, and forecast-report/prediction-markets/deep-research skills.",
+      "model_output": "full_report.md, forecast.json, and terminal synthesis text.",
+      "receiver": "Lead agent, workspace, and downstream deliverable gates/readers.",
+      "persistence": "Files persist in /mnt/user-data/outputs; subagent internal state is ephemeral, returned terminal text enters parent checkpoint.",
+      "multiplicity": "One delegated forecast loop, internally one-to-many model/tool rounds.",
+      "retry_and_failure_semantics": "Native subagent/model bounds; missing/weak files remain subject to deterministic deliverable and conviction gates in the driver architecture.",
+      "active_policy_notes": [
+        "Configured and pre-cutover."
+      ]
+    },
+    {
+      "id": "drf2.driver_research_harness_run",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "trigger": "The deterministic PipelineDriver reaches the research stage and no hash-verified reusable stage exists.",
+      "caller": "PipelineDriver._execute_harness_stage -> RunsApiHarness.run_stage",
+      "source_anchors": [
+        "drf2/driver/pipeline.py:36-84",
+        "drf2/driver/pipeline.py:166-232",
+        "drf2/driver/harness_client.py:56-142"
+      ],
+      "model_selection": "Lead-agent model chosen by the harness/default routing for a /deep-research slash-activated turn; native model loop and middleware apply.",
+      "model_input": "One user message containing /deep-research, question, exact /mnt/user-data/outputs artifact contract, and read-not-rewrite guidance for prior stages.",
+      "model_output": "Agent/tool loop whose required durable output is research_report.md; optional dossier/actors/sources/timeline/meta files may also be written.",
+      "receiver": "Runs API run state; driver polls terminal status, reads workspace files, applies research gate, and records hashes.",
+      "persistence": "One persistent DeerFlow thread, workspace files, run/event/checkpoint stores, drf2 state.json, and manifest.json.",
+      "multiplicity": "One harness run per stage attempt; internal model calls are unbounded only within harness recursion/loop/model limits. Resume skips only after manifest verification.",
+      "retry_and_failure_semantics": "Driver-side timeout attempts run cancellation. Missing required artifact or hard gate failure marks the stage/pipeline failed; a hash mismatch forces rebuild on resume.",
+      "active_policy_notes": [
+        "This is implemented but pre-cutover and not the current Stage-1 subprocess path."
+      ]
+    },
+    {
+      "id": "drf2.driver_ontology_harness_run",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "trigger": "The deterministic driver reaches ontology after research and lacks a hash-verified reusable ontology stage.",
+      "caller": "PipelineDriver._execute_harness_stage",
+      "source_anchors": [
+        "drf2/driver/pipeline.py:36-84",
+        "drf2/driver/pipeline.py:166-232"
+      ],
+      "model_selection": "Harness lead-agent model for a /ontology-generation slash-activated turn.",
+      "model_input": "Question, exact ontology.json output path/contract, and access to prior research artifacts in the persistent workspace.",
+      "model_output": "Agent/tool loop that writes ontology.json and optionally actors.json.",
+      "receiver": "Driver artifact existence/probe gate and manifest recorder; graph stage consumes ontology.json.",
+      "persistence": "Workspace artifacts, persistent thread checkpoint/run state, driver state.json, and content-hash manifest.",
+      "multiplicity": "One harness run per stage attempt, skipped only after verified reuse.",
+      "retry_and_failure_semantics": "Normal harness retries/limits plus driver timeout/cancel. Missing ontology.json fails the stage.",
+      "active_policy_notes": [
+        "Pre-cutover. The driver splits ontology design from graph construction even though the exploratory custom subagent combines them."
+      ]
+    },
+    {
+      "id": "drf2.driver_graph_harness_run",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "trigger": "The deterministic driver reaches graph construction and lacks a hash-verified reusable graph stage.",
+      "caller": "PipelineDriver._execute_harness_stage",
+      "source_anchors": [
+        "drf2/driver/pipeline.py:36-84",
+        "drf2/driver/pipeline.py:166-232",
+        "drf2/config/extensions_config.json:1-18"
+      ],
+      "model_selection": "Harness lead-agent model for /kg-construction, using deferred kg_* MCP tools as promoted.",
+      "model_input": "Question, prior ontology/research artifacts, kg-construction skill instructions, exact kg_build_summary.json contract, and KG tool schemas/results.",
+      "model_output": "Multi-turn model/tool loop issuing KG writes/queries and writing kg_build_summary.json.",
+      "receiver": "KG MCP engine for tool calls; driver for required artifact and manifest checks.",
+      "persistence": "Graph engine state, workspace summary file, thread/run/checkpoint state, driver state and manifest.",
+      "multiplicity": "One harness stage attempt with potentially many model rounds and KG tool calls.",
+      "retry_and_failure_semantics": "Harness/model/tool error handling plus driver timeout/cancel; missing kg_build_summary.json fails the stage.",
+      "active_policy_notes": [
+        "Pre-cutover; tool_search is enabled in drf2 so KG tools can be deferred until selected."
+      ]
+    },
+    {
+      "id": "drf2.driver_prepare_harness_run",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "trigger": "The deterministic driver reaches simulation preparation and lacks a hash-verified reusable prepare stage.",
+      "caller": "PipelineDriver._execute_harness_stage",
+      "source_anchors": [
+        "drf2/driver/pipeline.py:36-84",
+        "drf2/driver/pipeline.py:166-232"
+      ],
+      "model_selection": "Harness lead-agent model for /simulation-design.",
+      "model_input": "Question, prior actor/ontology/graph artifacts, simulation-design skill, and exact simulation_config.json path/contract.",
+      "model_output": "Agent/tool loop that writes simulation_config.json and optionally agent_profiles.json.",
+      "receiver": "Driver artifact/gate/manifest logic; the subsequent deterministic RUN stage reads the config.",
+      "persistence": "Workspace config/profile files, thread/run/checkpoint state, driver state and manifest.",
+      "multiplicity": "One harness run per prepare-stage attempt.",
+      "retry_and_failure_semantics": "Harness/model limits and driver timeout/cancel; missing simulation_config.json fails the stage.",
+      "active_policy_notes": [
+        "The following RUN simulation stage is deliberately not an LLM call and therefore has no call-family entry."
+      ]
+    },
+    {
+      "id": "drf2.driver_report_harness_runs",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "trigger": "The deterministic driver reaches report generation after a completed simulation, or one report is required per ensemble seed.",
+      "caller": "PipelineDriver._execute_harness_stage or _execute_ensemble -> RunsApiHarness.run_stage",
+      "source_anchors": [
+        "drf2/driver/pipeline.py:36-84",
+        "drf2/driver/pipeline.py:166-232",
+        "drf2/driver/pipeline.py:276-336"
+      ],
+      "model_selection": "Harness lead-agent model for /forecast-report; native middleware/tool policy applies.",
+      "model_input": "Question, research/KG/simulation artifacts, exact full_report.md and forecast.json contracts, and per-seed output subdirectory for ensemble runs.",
+      "model_output": "Agent/tool loop that writes full_report.md and forecast.json.",
+      "receiver": "On the single-simulation path: required-artifact, deliverable, and binary-conviction gates plus the manifest. On the ensemble path: the per-seed deliverable gate and deterministic log-odds aggregator; required run_summary and binary-conviction gates are currently omitted.",
+      "persistence": "Per-seed or root report/forecast files, thread/run/checkpoint state, state.json, manifest.json, and ensemble_forecast.json when applicable.",
+      "multiplicity": "One report harness run for a single simulation, or one report run per configured ensemble seed executed sequentially. Completed-stage reuse is hash-verified only when manifest entries exist; an empty manifest currently permits status-only reuse.",
+      "retry_and_failure_semantics": "Harness/model limits and driver timeout/cancel apply. The single path fails on required-artifact, deliverable, or binary-conviction gates. The ensemble path captures per-seed exceptions and deliverable failures but currently omits required run_summary and binary-conviction checks; all seed workers failing hard fails the stage, while partial success yields a degraded aggregate.",
+      "active_policy_notes": [
+        "Ensemble pooling after the model outputs is deterministic and not an extra LLM call."
+      ]
+    }
+  ]
+}

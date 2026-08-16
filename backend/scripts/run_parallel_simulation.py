@@ -71,6 +71,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 import argparse
 import asyncio
+import hashlib
 import inspect
 import json
 import logging
@@ -88,6 +89,7 @@ from typing import Dict, Any, List, Optional, Tuple
 # 全局变量：用于信号处理
 _shutdown_event = None
 _cleanup_done = False
+_VALIDATED_CONFIG_MANIFEST_SHA256 = ""
 
 
 # EXECPLAN2 I-7-2: 确定性随机数种子（默认 None = 维持当前非确定性行为）。
@@ -549,6 +551,147 @@ def _inject_behavior_hint(agent, hint: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def _replace_agent_system_message(agent, content: str) -> None:
+    """Replace, rather than append to, the exact effective system message."""
+    original = getattr(agent, "_original_system_message", None)
+    if original is None or not hasattr(original, "content"):
+        raise ValueError("OASIS agent exposes no replaceable system message")
+    new_msg = original.create_new_instance(str(content))
+    agent._original_system_message = new_msg
+    agent._system_message = agent._generate_system_message_for_output_language()
+    agent.init_messages()
+    actual = getattr(agent, "_original_system_message", None)
+    if actual is None or str(getattr(actual, "content", "")) != str(content):
+        raise ValueError("OASIS agent did not retain the sealed system message")
+    effective = getattr(agent, "_system_message", None)
+    if effective is None or str(getattr(effective, "content", "")) != str(content):
+        raise ValueError("OASIS appended unsealed effective system-message text")
+
+
+def _enforce_canonical_reddit_system_messages(
+    agent_graph,
+    profile_path: str,
+) -> List[Dict[str, Any]]:
+    """Replace OASIS' demographic template for every current canonical role."""
+    role_manifest_path = os.path.splitext(profile_path)[0] + "_roles.json"
+    if not os.path.exists(role_manifest_path):
+        return []
+    from app.services.oasis_profile_generator import (
+        CANONICAL_REDDIT_SYSTEM_MESSAGE_VERSION,
+        OasisProfileGenerator,
+        canonical_reddit_system_message,
+    )
+    from app.utils.actors import ACTOR_INTELLIGENCE_SCHEMA_VERSION
+
+    manifest = OasisProfileGenerator.validate_role_prompt_manifest(profile_path)
+    with open(profile_path, encoding="utf-8") as handle:
+        profiles = json.load(handle)
+    agents = {int(agent_id): agent for agent_id, agent in agent_graph.get_agents()}
+    runtime_rows: List[Dict[str, Any]] = []
+    for role in manifest.get("roles") or []:
+        if not isinstance(role, dict):
+            continue
+        contract = role.get("contract")
+        if not isinstance(contract, dict) or contract.get(
+            "actor_intelligence_schema_version"
+        ) != ACTOR_INTELLIGENCE_SCHEMA_VERSION:
+            continue
+        if role.get("reddit_system_message_version") != (
+            CANONICAL_REDDIT_SYSTEM_MESSAGE_VERSION
+        ):
+            raise ValueError("canonical Reddit system-message schema is missing")
+        index = role.get("profile_index")
+        if type(index) is not int or not 0 <= index < len(profiles):
+            raise ValueError("canonical Reddit role profile index is invalid")
+        agent = agents.get(index)
+        if agent is None:
+            raise ValueError(f"canonical Reddit agent {index} is missing")
+        profile = profiles[index]
+        base_message = canonical_reddit_system_message(
+            profile.get("username"), profile.get("persona")
+        )
+        base_sha = hashlib.sha256(base_message.encode("utf-8")).hexdigest()
+        if role.get("reddit_base_system_message_sha256") != base_sha:
+            raise ValueError("canonical Reddit base system-message seal mismatch")
+        _replace_agent_system_message(agent, base_message)
+        runtime_rows.append({
+            "profile_index": index,
+            "actor_id": role.get("actor_id"),
+            "base_system_message": base_message,
+        })
+    return runtime_rows
+
+
+def _attest_canonical_reddit_system_messages(
+    agent_graph,
+    profile_path: str,
+    config: Dict[str, Any],
+    runtime_rows: List[Dict[str, Any]],
+    config_manifest_sha256: str,
+) -> None:
+    """Verify and seal final bytes after every allowed system-message injection."""
+    if not runtime_rows:
+        return
+    if not config_manifest_sha256:
+        raise ValueError("canonical Reddit runtime lacks a validated config seal")
+    agents = {int(agent_id): agent for agent_id, agent in agent_graph.get_agents()}
+    brief = str(config.get("world_brief") or "").strip()
+    temporal = config.get("temporal_config")
+    temporal = temporal if isinstance(temporal, dict) else {}
+    calendar = str(temporal.get("mode") or "").strip().lower() == "calendar"
+    calendar_unit = str(temporal.get("unit") or "").strip()
+    attestations: List[Dict[str, Any]] = []
+    for row in runtime_rows:
+        expected = str(row["base_system_message"])
+        composition = ["canonical_role_only_base"]
+        if _world_brief_enabled() and brief:
+            expected += "\n\n# WORLD BRIEF（共同世界背景）\n" + brief
+            composition.append("sealed_world_brief")
+        if calendar and calendar_unit:
+            expected += "\n\n" + _CALENDAR_ACTION_VOCAB_TEMPLATE.format(
+                unit=calendar_unit
+            )
+            composition.append("sealed_calendar_vocabulary")
+        agent = agents.get(int(row["profile_index"]))
+        effective = getattr(agent, "_system_message", None)
+        actual = str(getattr(effective, "content", ""))
+        if actual != expected:
+            raise ValueError(
+                "canonical Reddit final system message differs from sealed composition"
+            )
+        if "years old, with an MBTI personality type" in actual:
+            raise ValueError("canonical Reddit system message contains demographics")
+        attestations.append({
+            "profile_index": int(row["profile_index"]),
+            "actor_id": row.get("actor_id"),
+            "composition": composition,
+            "system_message_sha256": hashlib.sha256(
+                actual.encode("utf-8")
+            ).hexdigest(),
+            "system_message_chars": len(actual),
+        })
+    role_manifest_path = os.path.splitext(profile_path)[0] + "_roles.json"
+    with open(role_manifest_path, "rb") as handle:
+        role_manifest_sha = hashlib.sha256(handle.read()).hexdigest()
+    from app.utils.atomic import write_json_atomic
+    write_json_atomic(
+        os.path.join(
+            os.path.dirname(profile_path),
+            "reddit_runtime_system_messages.json",
+        ),
+        {
+            "schema_version": "reddit-runtime-system-messages/v1",
+            "simulation_config_manifest_sha256": config_manifest_sha256,
+            "actor_role_manifest_sha256": role_manifest_sha,
+            "actor_count": len(attestations),
+            "messages": attestations,
+        },
+        ensure_ascii=False,
+        indent=2,
+        allow_nan=False,
+    )
 
 
 # CAL-TEMPORAL: 日历模式一次性动作词汇表（spec §5 verbatim）——一轮=一个日历时段，
@@ -1110,10 +1253,82 @@ class ParallelIPCHandler:
             return True
 
 
-def load_config(config_path: str) -> Dict[str, Any]:
-    """加载配置文件"""
-    with open(config_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+def load_config(
+    config_path: str,
+    expected_sha256: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Load the exact child-executed bytes and optionally enforce their seal."""
+    with open(config_path, "rb") as handle:
+        config_bytes = handle.read()
+    if expected_sha256 and hashlib.sha256(config_bytes).hexdigest() != expected_sha256:
+        raise ValueError("simulation config changed after seal validation")
+    config = json.loads(config_bytes.decode("utf-8"))
+    if not isinstance(config, dict):
+        raise ValueError("simulation config must be an object")
+    return config
+
+
+def validate_direct_child_config_seal(
+    config_path: str,
+    expected_manifest_sha256: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Revalidate the READY artifact closure at the direct child boundary."""
+    simulation_dir = os.path.dirname(os.path.abspath(config_path))
+    state_path = os.path.join(simulation_dir, "state.json")
+    state: Dict[str, Any] = {}
+    if os.path.exists(state_path):
+        with open(state_path, encoding="utf-8") as handle:
+            loaded = json.load(handle)
+        if isinstance(loaded, dict):
+            state = loaded
+    state_manifest_sha = str(
+        state.get("simulation_config_manifest_sha256") or ""
+    )
+    state_config_sha = str(state.get("simulation_config_sha256") or "")
+    if (
+        expected_manifest_sha256
+        and state_manifest_sha
+        and expected_manifest_sha256 != state_manifest_sha
+    ):
+        raise ValueError("runner and prepared state disagree on config seal")
+
+    current_role_evidence = False
+    for filename in (
+        "reddit_profiles_roles.json",
+        "twitter_profiles_roles.json",
+    ):
+        path = os.path.join(simulation_dir, filename)
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as handle:
+            role_manifest = json.load(handle)
+        if isinstance(role_manifest, dict) and (
+            role_manifest.get("role_contract_version") != "actor-role/v1"
+            or role_manifest.get("actor_context_required")
+        ):
+            current_role_evidence = True
+    require = bool(
+        expected_manifest_sha256
+        or state_manifest_sha
+        or current_role_evidence
+        or state.get("actor_context_count")
+    )
+    if current_role_evidence and not (state_manifest_sha and state_config_sha):
+        raise ValueError(
+            "current actor roles require state-bound simulation config fingerprints"
+        )
+    if require and os.path.basename(config_path) != "simulation_config.json":
+        raise ValueError("sealed child config must be simulation_config.json")
+    from app.services.simulation_manager import validate_simulation_config_seal
+    return validate_simulation_config_seal(
+        simulation_dir,
+        expected_manifest_sha256=(
+            expected_manifest_sha256 or state_manifest_sha or None
+        ),
+        expected_config_sha256=(state_config_sha or None),
+        expected_simulation_id=(str(state.get("simulation_id") or "") or None),
+        require=require,
+    )
 
 
 # 需要过滤掉的非核心动作类型（这些动作对分析价值较低）
@@ -4105,6 +4320,13 @@ async def run_reddit_simulation(
         except Exception as _rap_err:  # noqa: BLE001
             log_info(f"角色动作可供性应用失败（已隔离，回退全局动作清单）: {_rap_err}")
 
+    # Current canonical Reddit actors have one behavioral authority: the
+    # sealed actor-role prompt. Replace OASIS' demographic template *after*
+    # optional role-action hints so no unsealed behavioral suffix survives.
+    canonical_runtime_rows = _enforce_canonical_reddit_system_messages(
+        result.agent_graph, profile_path
+    )
+
     # NEXTSTEPS SIM_WORLD_BRIEF: 全体 Agent 共享世界底稿（默认开）。与角色动作裁剪一样必须在
     # env.reset() 之前注入；config 无 world_brief 字段（旧配置）→ no-op。
     if _world_brief_enabled():
@@ -4120,6 +4342,17 @@ async def run_reddit_simulation(
             _inject_calendar_vocabulary(result.agent_graph, temporal_config, log_info)
         except Exception as _cv_err:  # noqa: BLE001
             log_info(f"日历动作词汇注入失败（已隔离，系统提示保持原样）: {_cv_err}")
+
+    # Fail closed before env.reset/model execution unless every final effective
+    # system-message byte is exactly the deterministic composition of the
+    # sealed role plus the sealed config's optional world/calendar blocks.
+    _attest_canonical_reddit_system_messages(
+        result.agent_graph,
+        profile_path,
+        config,
+        canonical_runtime_rows,
+        _VALIDATED_CONFIG_MANIFEST_SHA256,
+    )
 
     # XRUN-14: 幻觉工具参数（如 like_comment(post_id=...)）降级为改名/丢参而非整个动作被吞
     try:
@@ -4552,6 +4785,12 @@ async def main():
         help='配置文件路径 (simulation_config.json)'
     )
     parser.add_argument(
+        '--config-seal',
+        type=str,
+        default=None,
+        help='prepare/runner 已验证的 simulation_config_manifest.json SHA-256',
+    )
+    parser.add_argument(
         '--twitter-only',
         action='store_true',
         help='只运行Twitter模拟'
@@ -4588,15 +4827,24 @@ async def main():
     args = parser.parse_args()
     
     # 在 main 函数开始时创建 shutdown 事件，确保整个程序都能响应退出信号
-    global _shutdown_event
+    global _shutdown_event, _VALIDATED_CONFIG_MANIFEST_SHA256
     _shutdown_event = asyncio.Event()
     
     if not os.path.exists(args.config):
         print(f"错误: 配置文件不存在: {args.config}")
         sys.exit(1)
     
-    config = load_config(args.config)
     simulation_dir = os.path.dirname(args.config) or "."
+    validated_config_manifest = validate_direct_child_config_seal(
+        args.config, args.config_seal
+    )
+    _VALIDATED_CONFIG_MANIFEST_SHA256 = str(
+        validated_config_manifest.get("manifest_sha256") or ""
+    )
+    config = load_config(
+        args.config,
+        str(validated_config_manifest.get("simulation_config_sha256") or "") or None,
+    )
     wait_for_commands = not args.no_wait
     
     # 初始化日志配置（禁用 OASIS 日志，清理旧文件）

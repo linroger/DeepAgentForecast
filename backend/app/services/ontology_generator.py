@@ -8,6 +8,10 @@ from collections import Counter
 from typing import Dict, Any, List, Optional
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
+from .actor_role_prompt import (
+    delimit_untrusted_research_text,
+    sanitize_untrusted_research_text,
+)
 
 try:
     # 读取可选配置旗标（本文件不拥有 config.py，仅通过 getattr 读取，缺失即降级）。
@@ -696,8 +700,17 @@ class OntologyGenerator:
     ) -> str:
         """构建用户消息"""
 
-        # 合并文本
-        combined_text = "\n\n---\n\n".join(document_texts)
+        # Every report/document string is research evidence, never prompt
+        # control. Sanitize each document independently so one malicious line
+        # does not erase safe neighbouring reports, then delimit the combined
+        # evidence block before it reaches the model.
+        combined_text = "\n\n---\n\n".join(
+            sanitize_untrusted_research_text(
+                text,
+                max_chars=self.MAX_TEXT_LENGTH_FOR_LLM,
+            )
+            for text in document_texts
+        )
         original_length = len(combined_text)
 
         # ONTO-3: 文本超长时按 head+middle+tail 采样（仅影响传给LLM的内容，不影响图谱构建）
@@ -708,20 +721,35 @@ class OntologyGenerator:
                 f"{self.MAX_TEXT_LENGTH_FOR_LLM}字用于本体分析)..."
             )
 
+        requirement_block = delimit_untrusted_research_text(
+            "simulation requirement",
+            simulation_requirement,
+            max_chars=12_000,
+        )
+        documents_block = delimit_untrusted_research_text(
+            "research documents",
+            combined_text,
+            max_chars=self.MAX_TEXT_LENGTH_FOR_LLM + 400,
+        )
         message = f"""## 模拟需求
 
-{simulation_requirement}
+{requirement_block}
 
 ## 文档内容
 
-{combined_text}
+{documents_block}
 """
 
         if additional_context:
+            additional_block = delimit_untrusted_research_text(
+                "additional actor context",
+                additional_context,
+                max_chars=16_000,
+            )
             message += f"""
 ## 额外说明
 
-{additional_context}
+{additional_block}
 """
 
         # EXECPLAN2 I-1-3: general_forecast 模板下注入领域自适应规则（central_question + 角色
@@ -754,13 +782,25 @@ class OntologyGenerator:
         领域而定，而非套用社媒模板。
         """
         parts: List[str] = ["\n"]
-        cq = str(central_question or "").strip()
+        cq = delimit_untrusted_research_text(
+            "central forecast question",
+            central_question,
+            max_chars=4_000,
+        )
         if cq:
             parts.append(f"## 预测核心问题\n\n{cq}\n")
 
         hist = self._actor_type_histogram(actors)
         if hist:
-            ranked = ", ".join(f"{typ}×{n}" for typ, n in hist.most_common())
+            ranked = ", ".join(
+                f"{sanitize_untrusted_research_text(typ, max_chars=160)}×{n}"
+                for typ, n in hist.most_common()
+            )
+            ranked = delimit_untrusted_research_text(
+                "actor type histogram",
+                ranked,
+                max_chars=4_000,
+            )
             parts.append(
                 "## 角色阵容统计（深度研究实证的 actor 类型分布）\n\n"
                 f"{ranked}\n\n"

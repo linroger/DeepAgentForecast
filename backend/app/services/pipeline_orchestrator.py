@@ -38,6 +38,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import unicodedata
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -46,7 +47,14 @@ from typing import Any, Callable, Optional
 from ..config import Config
 from ..models.project import ProjectManager, ProjectStatus
 from ..models.task import TaskManager
-from ..services.graph_builder import GraphBuilderService
+from ..services.graph_builder import (
+    GraphBuilderService,
+    build_actor_graph_seed_manifest,
+)
+from ..services.actor_role_prompt import (
+    delimit_untrusted_research_text,
+    sanitize_untrusted_research_text,
+)
 from ..services.ontology_generator import OntologyGenerator
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.research_progress import (
@@ -60,6 +68,7 @@ from ..services.zep_graph_memory_updater import ZepGraphMemoryManager
 from ..utils.actors import (
     REL_LABEL,
     extract_relationship_rows,
+    normalize_name,
     situation_brief,
     situation_brief_block,
     valid_scenario_distribution,
@@ -93,6 +102,141 @@ STAGE_BANDS: dict[str, tuple[int, int]] = {
 
 # research_only 模式下，研究阶段独占 0-100
 RESEARCH_ONLY_BANDS: dict[str, tuple[int, int]] = {STAGE_RESEARCH: (0, 100)}
+
+ACTOR_INTELLIGENCE_SCHEMA_VERSION = "actor-intelligence/v1"
+ACTOR_INTELLIGENCE_POLICY_VERSION = "actor-intelligence-policy/v1"
+ACTOR_INTELLIGENCE_LINEAGE_FILENAME = "actor_intelligence_lineage.json"
+ACTOR_INTELLIGENCE_LINEAGE_SCHEMA_VERSION = "actor-artifact-lineage/v1"
+ACTOR_GRAPH_SEED_MANIFEST_FILENAME = "actor_graph_seed_manifest.json"
+ACTOR_GRAPH_SEED_MANIFEST_SCHEMA_VERSION = "actor-graph-seed-manifest/v1"
+ACTOR_GRAPH_SEED_READBACK_SCHEMA_VERSION = "actor-graph-seed-readback/v1"
+ACTOR_INTELLIGENCE_DIMENSIONS = (
+    "identity_history",
+    "values_worldview",
+    "incentives",
+    "motivations",
+    "capabilities",
+    "constraints",
+    "operational_preferences",
+    "alliances",
+    "opponents_competitors",
+    "decision_rights_process_triggers",
+    "current_actions",
+    "future_plans",
+    "investments_capital_allocation",
+    "track_record",
+    "likely_actions",
+    "red_lines",
+    "knowledge_state",
+)
+_ACTOR_BEHAVIOR_READY_FAMILIES = {
+    "identity_history": ("identity_history",),
+    "incentives_motivations_values": (
+        "values_worldview", "incentives", "motivations",
+    ),
+    "capabilities_constraints": ("capabilities", "constraints"),
+    "actions_plans_investments": (
+        "current_actions", "future_plans", "investments_capital_allocation",
+    ),
+    "decision_likely_actions_red_lines": (
+        "decision_rights_process_triggers", "likely_actions", "red_lines",
+    ),
+}
+_ACTOR_SEARCH_RESULT_RECEIPT_SCHEMA = "stage1-search-result-receipt/v1"
+_ACTOR_UNSAFE_EVIDENCE_TEXT_REPLACEMENT = (
+    "[unsafe instruction-like evidence text omitted]"
+)
+_ACTOR_UNSAFE_EVIDENCE_CONTROL_PATTERNS = (
+    re.compile(
+        r"\b(?:you\s+are\s+now|act\s+as|pretend\s+to\s+be|"
+        r"assume\s+the\s+role|new\s+role)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:system|developer|assistant)\s+(?:message|prompt|"
+        r"instructions?|role|administrator)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"<\s*/?\s*(?:system|developer|assistant|tool|user)\b|"
+        r"<\|\s*(?:system|developer|assistant|tool|user)\s*\|>",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:ignore|disregard|override|forget|bypass|do\s+not\s+follow)\b"
+        r"[^.?\n]{0,400}\b(?:instructions?|prompts?|brief|policy|message|"
+        r"system|developer)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:follow|obey)\b[^.!?\n]{0,300}\b(?:developer|system|hidden)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:reveal|exfiltrate|disclose|leak|print|output|show)\b"
+        r"[^.!?\n]{0,100}\b(?:secrets?|credentials?|passwords?|api\s*keys?|"
+        r"chain[- ]of[- ]thought|hidden\s+(?:prompt|instructions?)|system\s+prompt)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:call|invoke|run|execute|use)\b[^.!?\n]{0,70}"
+        r"\b(?:tools?|shell|terminal|commands?|browser)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bwhen\s+(?:generating|writing|creating|answering|responding|"
+        r"simulating)\b[^.!?\n]{0,120}\b(?:write|say|respond|output|return|"
+        r"claim|state|include|omit)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:^|[.!?]\s+)(?:write|say|respond|output|return|claim|state)\s+"
+        r"(?:only|exactly|that)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(?:begin|end)\s+untrusted\b", re.IGNORECASE),
+    re.compile(
+        r"(?:^|\s)#{1,6}\s*(?:system|developer|assistant)\b",
+        re.IGNORECASE,
+    ),
+)
+_ACTOR_UNSAFE_EVIDENCE_CONTROL_FRAGMENT_PATTERN = re.compile(
+    r"\b(?:ignore|disregard|override|forget|bypass|follow|obey|reveal|"
+    r"exfiltrate|disclose|leak|print|output|show|call|invoke|run|execute|"
+    r"system|developer|assistant|hidden)\b",
+    re.IGNORECASE,
+)
+_ACTOR_STAGE1_BLOCK_SENTINEL_RE = re.compile(
+    r"^STAGE1BLOCKBOUNDARY[0-9A-F]{12}$"
+)
+_ACTOR_INTELLIGENCE_QUALIFIER_KEYS = (
+    "conditions", "amount", "unit", "scale", "type", "action_type",
+    "strategic_purpose", "objective", "purpose", "basis", "leverage",
+    "project", "program", "product", "asset", "counterparty", "geography",
+    "allocation_type", "contingencies", "driver", "gains_if", "loses_if",
+    "decision_kind", "trigger", "authority", "decision_maker",
+    "preference_kind", "polarity", "subject", "direction", "intensity",
+    "strength", "limits", "available", "revealed_by",
+)
+_ACTOR_RELATIONSHIP_CAUSAL_ATTRIBUTE_KEYS = (
+    "valence",
+    "polarity",
+    "sign",
+    "strength",
+    "grade",
+    "since",
+    "until",
+    "lag",
+)
+_ACTOR_KNOWLEDGE_VISIBILITY_VALUES = {
+    "public", "actor_known", "known_to_actor", "actor_internal",
+    "internal_to_actor", "private_actor_knowledge", "research_only",
+    "analyst_only", "not_known_to_actor", "unknown",
+}
+_ACTOR_DOSSIER_LEDGER_RE = re.compile(
+    r"<!--\s*ACTOR_INTELLIGENCE_LEDGER_V1\s+(\{.*?\})\s*-->",
+    re.DOTALL,
+)
 
 # I-4-4: pipeline_state.json 的 schema 版本。每次形状演进 +1，并在 _MIGRATIONS 注册
 # 一个把「上一版 → 本版」就地补齐的纯函数。v1 = 历史无 schema_version 字段的状态文件。
@@ -327,6 +471,30 @@ def capture_safety_policy_v1(origin: str) -> dict[str, Any]:
         "simulation_forecast_effect": str(
             getattr(Config, "SIMULATION_FORECAST_EFFECT", "diagnostic_only")
             or "diagnostic_only"),
+    }
+
+
+def capture_actor_intelligence_policy_v1(
+    origin: str,
+    *,
+    required: Optional[bool] = None,
+) -> dict[str, Any]:
+    """Pin whether this run requested the versioned Track-B actor plane.
+
+    Absence of this policy identifies a pre-policy pipeline and intentionally
+    retains its legacy/no-actor compatibility.  New admissions pin the ambient
+    dual-track choice once so a later service reload cannot silently turn a
+    required actor contract into an optional one (or vice versa).
+    """
+    return {
+        "version": ACTOR_INTELLIGENCE_POLICY_VERSION,
+        "origin": str(origin or "unknown"),
+        "pinned_at": _utcnow(),
+        "required": (
+            bool(getattr(Config, "DEERFLOW_DUAL_TRACK", True))
+            if required is None else bool(required)
+        ),
+        "schema_version": ACTOR_INTELLIGENCE_SCHEMA_VERSION,
     }
 
 
@@ -746,6 +914,49 @@ def _strip_data_uri_images(text: str) -> str:
         return text
 
 
+def _graph_research_chunks(text: Any, label: str) -> list[str]:
+    """Prepare research evidence for the Graphiti model boundary.
+
+    Stage-1 reports and actor dossiers are evidence, not instructions.  Graph
+    ingestion ultimately invokes an extraction model, so sending the raw prose
+    would recreate the same prompt-control seam already closed for ontology,
+    configuration, and OASIS personas.  Sanitize the complete document first
+    (so a directive split across a future chunk boundary is still detected),
+    split only the safe text, and wrap *every* resulting episode in its own
+    explicit non-executable data boundary.
+
+    The cap is derived from the input length rather than a presentation budget:
+    graph ingestion must retain the full safe evidence corpus.  Normal graph
+    chunk size/overlap still provide the actual per-episode bound.
+    """
+    raw = _strip_data_uri_images(str(text or ""))
+    if not raw.strip():
+        return []
+    safe_document = sanitize_untrusted_research_text(
+        raw,
+        # An unsafe one-word line expands to a stable omission marker. Reserve
+        # that worst-case per-line growth so security replacement never
+        # truncates neighbouring evidence before the normal chunker runs.
+        max_chars=max(1, len(raw) + (raw.count("\n") + 1) * 64),
+    )
+    raw_chunks = TextProcessor.split_text(
+        safe_document,
+        Config.DEFAULT_CHUNK_SIZE,
+        Config.DEFAULT_CHUNK_OVERLAP,
+    )
+    total = len(raw_chunks)
+    prepared: list[str] = []
+    for index, chunk in enumerate(raw_chunks, start=1):
+        bounded = delimit_untrusted_research_text(
+            f"{label} chunk {index}/{total}",
+            chunk,
+            max_chars=max(1, len(chunk) * 2),
+        )
+        if bounded:
+            prepared.append(bounded)
+    return prepared
+
+
 class _DeerFlowSafetyOverlayError(RuntimeError):
     """A required tracked DeerFlow safety overlay could not be enforced."""
 
@@ -1103,6 +1314,15 @@ def _budget_epoch_slug(value: str) -> str:
     return (slug or "task")[:80]
 
 
+def _research_budget_attempt_ids(state: "PipelineState") -> set[str]:
+    """Return task epochs already admitted by parent pipeline authority."""
+    return {
+        str(row.get("epoch") or "").strip()
+        for row in (state.options.get("research_budget_epochs") or [])
+        if isinstance(row, dict) and str(row.get("epoch") or "").strip()
+    }
+
+
 def _activate_research_budget_epoch(
     state: "PipelineState",
     handoff_dir: str,
@@ -1357,6 +1577,8 @@ class DeerFlowResearchRunner:
         budget_telemetry_path: Optional[str] = None,
         budget_run_id: Optional[str] = None,
         budget_epoch: Optional[str] = None,
+        resume_attempt_id: Optional[str] = None,
+        resume_checkpoint_id: Optional[str] = None,
         max_concurrent_subagents: Optional[int] = None,
         model_concurrency_global: Optional[int] = None,
         dual_track: Optional[bool] = None,
@@ -1370,6 +1592,12 @@ class DeerFlowResearchRunner:
         question_hash 匹配的 research_checkpoint.json，就复用其 LangGraph thread、跳过已完成
         pass、从下一 pass 续跑（否则全量重启）。调用方仅在既存 checkpoint 时置 True（崩溃/超时
         重试路径），故正常首跑逐字节不变。
+
+        ``resume_attempt_id`` / ``resume_checkpoint_id`` are parent-validated
+        lineage, distinct from the fresh physical budget database allocated to
+        a later explicit pipeline task.  They let the strict bridge reuse only
+        the exact prior thread/pass checkpoint without weakening its run,
+        question, lane, attempt, or checkpoint-identity checks.
 
         W9-9 ``kg_graph_id``：非空且 RESEARCH_MCP_KG 开启时，把 DEER_FLOW_EXTENSIONS_CONFIG_PATH
         指向部署目录的 extensions_config.json 并注入 DRF_MCP_KG_GRAPH_ID——研究子进程可经 MCP
@@ -1448,6 +1676,9 @@ class DeerFlowResearchRunner:
 
         env = dict(os.environ)
         env.setdefault("PYTHONUNBUFFERED", "1")
+        # Checkpoint identity is parent-owned per launch; never inherit an
+        # ambient value from the backend process into a different handoff.
+        env.pop("RESEARCH_CHECKPOINT_ID", None)
         if isinstance(skill_sync_result, dict):
             # The child re-hashes the exact live directories before constructing
             # a research client.  This binds source/deployed manifest identities,
@@ -1463,15 +1694,19 @@ class DeerFlowResearchRunner:
         # T6.6: deep 开场 pass 的递归上限从 Config 单一真源下发给子进程（旧版在 bridge 内直接读
         # os.environ）。Config 属性本身读 env（默认 220），故此处覆盖即「Config 即真源」。
         env["DEERFLOW_DEEP_OPENING_RECURSION_LIMIT"] = str(Config.DEERFLOW_DEEP_OPENING_RECURSION_LIMIT)
-        # 双轨研究开关：Config 即单一真源（默认 True）下发给子进程。Evidence-only
-        # 子进程是 Track-A-only 的持久生产者；强制关闭 Track B，避免可选 actor 调用在
-        # provider 中断后扣住已经完成的 evidence_pack。Bridge 侧有同一防线，兼容部署漂移。
+        # 双轨研究开关：常规运行默认跟随 Config。Evidence-only 外轨必须显式分配
+        # ownership：仅 broad baseline 以 ``dual_track=True`` 同时生产共享 Track B；
+        # 其它 evidence lane 即便全局 Config 开启，也保持 actor-free。这样三轨默认架构
+        # 精确运行一份共享 actor intelligence，而不是 0 份或 K 份。
         _dual_track_requested = (
             bool(dual_track)
             if dual_track is not None
-            else bool(getattr(Config, "DEERFLOW_DUAL_TRACK", True))
+            else (
+                False if evidence_only
+                else bool(getattr(Config, "DEERFLOW_DUAL_TRACK", True))
+            )
         )
-        _dual_track_enabled = _dual_track_requested and not evidence_only
+        _dual_track_enabled = _dual_track_requested
         env["DEERFLOW_DUAL_TRACK"] = (
             "true" if _dual_track_enabled else "false")
         _shared_actor_track = (
@@ -1524,6 +1759,22 @@ class DeerFlowResearchRunner:
             budget_run_id=budget_run_id,
             budget_epoch=budget_epoch,
         )
+        if resume and str(resume_attempt_id or "").strip():
+            # Checkpoint lineage and cost-ledger allocation are distinct
+            # authorities on explicit resume.  The new DB remains bounded and
+            # isolated, while the strict bridge receives the prior attempt ID
+            # that its checkpoint was sealed against.
+            env["RESEARCH_BUDGET_RUN_ID"] = str(budget_run_id or "").strip()
+            env["RESEARCH_BUDGET_LANE_ID"] = str(budget_lane_id or "").strip()
+            env["RESEARCH_BUDGET_EPOCH"] = str(resume_attempt_id).strip()
+            if str(resume_checkpoint_id or "").strip():
+                # Bind the bridge to the exact parent-validated checkpoint,
+                # including its thread and completed-pass state.  A mutation
+                # between parent admission and child startup must fail closed
+                # instead of becoming a different, self-consistent resume.
+                env["RESEARCH_CHECKPOINT_ID"] = str(
+                    resume_checkpoint_id
+                ).strip()
         # Model-call leases are a correctness boundary, not merely a tool-cost
         # budget. Keep their shared SQLite path even when tool-budget admission
         # is explicitly disabled, so outer processes cannot multiply provider
@@ -1765,17 +2016,21 @@ class DeerFlowResearchRunner:
                 "(for example research_budget_exhausted); refusing synthesis admission"
             )
 
-        # 双轨 Track B 产物：角色本体档案。旗标关闭或 Track B 未产出时文件缺失，
-        # _read_text 返回 ""，下游按「空即退化」处理（document_texts/chunks 与单轨逐字节一致）。
-        # RES-8 镜像：错误串/过短的卷宗按缺失处理（bridge 的 _is_degraded_artifact 同语义）。
-        # Evidence-only lanes never own an actor dossier. In particular, do not
-        # return a same-directory dossier left by an earlier resume attempt: that
-        # would silently admit stale Track-B bytes even though this child never
-        # produced or validated them.
-        actor_dossier = (
-            "" if evidence_only
-            else _read_text(os.path.join(handoff_dir, "actor_dossier.md"))
-        )
+        # Exactly one evidence lane—the explicitly assigned broad baseline—owns
+        # the shared Track-B dossier. Admission is metadata/checksum based so a
+        # resumed track directory can never leak an earlier dossier. Other
+        # evidence lanes always return empty actor context.
+        if evidence_only:
+            actor_dossier = (
+                _load_fresh_evidence_lane_actor_dossier(
+                    handoff_dir,
+                    prompt=prompt,
+                )
+                if _dual_track_enabled else ""
+            )
+        else:
+            actor_dossier = _read_text(
+                os.path.join(handoff_dir, "actor_dossier.md"))
         if actor_dossier and (
                 _is_degraded_dossier(actor_dossier)
                 or _evidence_pack_is_control_failure_only(actor_dossier)):
@@ -1919,6 +2174,105 @@ def _is_degraded_dossier(text: str) -> bool:
     return any(m in t for m in _LLM_ERROR_MARKERS)
 
 
+def _load_fresh_evidence_lane_actor_dossier(
+    handoff_dir: str,
+    *,
+    prompt: str,
+) -> str:
+    """Admit only the actor dossier produced by this evidence-lane attempt.
+
+    Evidence lanes routinely reuse ``track_1`` directories for bounded resume.
+    File existence or mtime therefore cannot distinguish current output from a
+    stale dossier.  The bridge rewrites ``meta.json`` at process start and only
+    marks ``actor_dossier_generated`` after the current Track-B dossier,
+    deterministic coverage audit, and sidecar checks have completed.  Bind all
+    of those bytes here before returning the shared dossier to the orchestrator.
+    """
+    meta = _read_json(os.path.join(handoff_dir, "meta.json"))
+    if not isinstance(meta, dict):
+        raise RuntimeError(
+            "baseline evidence lane did not emit current actor-dossier metadata"
+        )
+    if (
+        meta.get("status") != "completed"
+        or meta.get("workflow_mode") != "evidence_only"
+        or meta.get("question") != prompt
+        or meta.get("actor_dossier_generated") is not True
+        or meta.get("actor_dossier_required") is not True
+    ):
+        raise RuntimeError(
+            "baseline evidence lane actor dossier lacks current-attempt provenance"
+        )
+
+    dossier_path = os.path.join(handoff_dir, "actor_dossier.md")
+    dossier = _read_text(dossier_path)
+    if (
+        not dossier.strip()
+        or _is_degraded_dossier(dossier)
+        or _evidence_pack_is_control_failure_only(dossier)
+    ):
+        raise RuntimeError(
+            "baseline evidence lane actor dossier is missing or degraded"
+        )
+    dossier_sha = hashlib.sha256(dossier.encode("utf-8")).hexdigest()
+    if meta.get("actor_dossier_sha256") != dossier_sha:
+        raise RuntimeError(
+            "baseline evidence lane actor dossier checksum mismatch"
+        )
+
+    coverage_path = os.path.join(
+        handoff_dir, "actor_dossier_coverage.json")
+    coverage_bytes = b""
+    try:
+        with open(coverage_path, "rb") as coverage_handle:
+            coverage_bytes = coverage_handle.read()
+        coverage = json.loads(coverage_bytes.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError, TypeError) as exc:
+        raise RuntimeError(
+            "baseline evidence lane actor coverage sidecar is missing or invalid"
+        ) from exc
+    if (
+        not isinstance(coverage, dict)
+        or coverage.get("accountable") is not True
+        or coverage.get("schema_version") != "actor-intelligence/v1"
+        or not int(coverage.get("tier_1_2_actor_count") or 0)
+        or coverage != meta.get("actor_dossier_coverage")
+        or hashlib.sha256(coverage_bytes).hexdigest()
+        != meta.get("actor_dossier_coverage_sha256")
+    ):
+        raise RuntimeError(
+            "baseline evidence lane actor coverage is not current and accountable"
+        )
+
+    # A current judge is optional only when transport/parsing failed.  The
+    # bridge removes old sidecars before Track B, and binds any current one in
+    # meta.  Thus an absent hash is a safe degraded judge, while a bound
+    # explicit FAIL is always unusable.
+    judge_sha = str(meta.get("actor_dossier_judge_sha256") or "").strip()
+    if judge_sha:
+        judge_path = os.path.join(handoff_dir, "actor_dossier_judge.json")
+        try:
+            with open(judge_path, "rb") as judge_handle:
+                judge_bytes = judge_handle.read()
+            judge = json.loads(judge_bytes.decode("utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError, TypeError) as exc:
+            raise RuntimeError(
+                "baseline evidence lane actor judge sidecar is invalid"
+            ) from exc
+        if hashlib.sha256(judge_bytes).hexdigest() != judge_sha:
+            raise RuntimeError(
+                "baseline evidence lane actor judge checksum mismatch"
+            )
+        if (
+            isinstance(judge, dict)
+            and str(judge.get("verdict") or "").strip().upper() == "FAIL"
+        ):
+            raise RuntimeError(
+                "baseline evidence lane actor dossier has an explicit final judge FAIL"
+            )
+    return dossier
+
+
 def _read_text(path: str) -> str:
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -1948,6 +2302,112 @@ def _has_research_checkpoint(handoff_dir: str) -> bool:
         return os.path.exists(p) and os.path.getsize(p) > 0
     except OSError:
         return False
+
+
+def _research_checkpoint_identity(checkpoint: dict[str, Any]) -> str:
+    """Mirror the bridge's immutable checkpoint identity projection."""
+    identity = {
+        key: checkpoint.get(key)
+        for key in (
+            "version", "thread_id", "question_hash", "depth", "run_id",
+            "attempt_id", "lane_id", "completed_passes",
+            "fetched_source_count", "gaps",
+        )
+    }
+    return "checkpoint_" + hashlib.sha256(json.dumps(
+        identity,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()[:24]
+
+
+def _validated_research_checkpoint_lineage(
+    handoff_dir: str,
+    *,
+    prompt: str,
+    depth: str,
+    run_id: str,
+    lane_id: str,
+    expected_attempt_ids: Optional[set[str]] = None,
+) -> dict[str, str]:
+    """Return exact prior lineage only for an untampered v2 checkpoint.
+
+    An explicit pipeline resume receives a fresh cost ledger, but the bridge's
+    checkpoint identity deliberately binds the prior research attempt.  Reusing
+    the new task ID as ``attempt_id`` makes the bridge reject a healthy same-run
+    checkpoint and replay every completed pass.  Parent authority therefore
+    validates the immutable checkpoint first and forwards its prior attempt
+    identity separately from the new budget database.  Any cross-run, question,
+    depth, lane, thread, or identity drift returns an empty value and forces a
+    clean research start.
+    """
+    checkpoint = _read_json(os.path.join(
+        handoff_dir, "research_checkpoint.json"
+    ))
+    if not isinstance(checkpoint, dict) or checkpoint.get("version") != 2:
+        return {}
+    thread_id = str(checkpoint.get("thread_id") or "").strip()
+    attempt_id = str(checkpoint.get("attempt_id") or "").strip()
+    if not thread_id or not attempt_id:
+        return {}
+    if checkpoint.get("question_hash") != _actor_question_hash(prompt):
+        return {}
+    if str(checkpoint.get("depth") or "") != str(depth or ""):
+        return {}
+    if str(checkpoint.get("run_id") or "") != str(run_id or ""):
+        return {}
+    if str(checkpoint.get("lane_id") or "") != str(lane_id or ""):
+        return {}
+    allowed_attempts = {
+        str(value or "").strip()
+        for value in (expected_attempt_ids or set())
+        if str(value or "").strip()
+    }
+    if expected_attempt_ids is not None and attempt_id not in allowed_attempts:
+        return {}
+    completed_passes = checkpoint.get("completed_passes")
+    if (
+        not isinstance(completed_passes, list)
+        or any(
+            not isinstance(value, str) or not value.strip()
+            for value in completed_passes
+        )
+        or not isinstance(checkpoint.get("gaps"), list)
+        or any(not isinstance(value, str) for value in checkpoint["gaps"])
+        or isinstance(checkpoint.get("fetched_source_count"), bool)
+        or not isinstance(checkpoint.get("fetched_source_count"), int)
+        or checkpoint["fetched_source_count"] < 0
+    ):
+        return {}
+    expected_checkpoint_id = _research_checkpoint_identity(checkpoint)
+    if checkpoint.get("checkpoint_id") != expected_checkpoint_id:
+        return {}
+    return {
+        "attempt_id": attempt_id,
+        "checkpoint_id": expected_checkpoint_id,
+        "thread_id": thread_id,
+    }
+
+
+def _validated_research_checkpoint_attempt_id(
+    handoff_dir: str,
+    *,
+    prompt: str,
+    depth: str,
+    run_id: str,
+    lane_id: str,
+    expected_attempt_ids: Optional[set[str]] = None,
+) -> str:
+    """Compatibility projection for callers that only need the attempt ID."""
+    return _validated_research_checkpoint_lineage(
+        handoff_dir,
+        prompt=prompt,
+        depth=depth,
+        run_id=run_id,
+        lane_id=lane_id,
+        expected_attempt_ids=expected_attempt_ids,
+    ).get("attempt_id", "")
 
 
 def _track_artifacts_survived(handoff_dir: str) -> bool:
@@ -2030,7 +2490,9 @@ def _preserve_research_attempt_progress(
 
 _RESEARCH_CONTRACT_FILENAME = "research_contract_manifest.json"
 _RESEARCH_CONTRACT_FILES = (
-    "research_report.md", "actor_dossier.md", "actors.json", "sources.json",
+    "research_report.md", "actor_dossier.md", "actor_dossier_coverage.json",
+    "actor_dossier_judge.json", "actors.json", "sources.json",
+    ACTOR_INTELLIGENCE_LINEAGE_FILENAME,
     "timeline.json", "quantitative.json", "contested.json",
     "prediction_markets.json", "market_price_history.json",
     "research_report_judge.json", "research_progress.log", "meta.json",
@@ -2730,9 +3192,1839 @@ def _load_research_handoff(handoff_dir: str) -> dict[str, Any]:
 #   * _forecast_inputs_missing(actors)：actors 是否缺可用的 forecast_inputs.scenarios；
 #   * inject_forecast_inputs_from_report(actors, report_md)：缺则从报告解析并**就地**注入，
 #     返回注入用的 forecast_inputs（含非空 scenarios）——命中；否则 None（degrade-safe）。
-# 研究定稿处的注入在 _finalize_research_contract 之前完成，故 forecast_inputs 随契约一并
-# 密封进 actors.json（下游 + resume 皆可见，且不破坏 contract manifest 校验）。
+# 对 pre-v1 研究，定稿处的注入在 _finalize_research_contract 前完成，故 forecast_inputs
+# 随外层 research manifest 一并密封。actor-intelligence/v1 自己已经过 producer sealing，
+# 任何缺失都必须上游重做；这个兼容 helper 对它严格 no-op。
 # ===========================================================================
+def _is_sealed_actor_intelligence_v1(actors: Any) -> bool:
+    """Return whether ``actors`` carries the producer-owned v1 top contract."""
+    if not isinstance(actors, dict):
+        return False
+    contract = actors.get("actor_intelligence_contract")
+    return bool(
+        isinstance(contract, dict)
+        and contract.get("schema_version") == ACTOR_INTELLIGENCE_SCHEMA_VERSION
+    )
+
+
+def _reconcile_research_cast(actors: Any) -> tuple[Any, dict[str, Any]]:
+    """Reconcile legacy casts while treating sealed v1 actors as immutable.
+
+    ``reconcile_cast`` remains useful as a pure duplicate detector for a v1
+    artifact, but its merge representation is a legacy compatibility shape: it
+    wraps canonical dimension lists in ``{"claims": ...}`` and necessarily
+    changes the actor roster.  Applying that output after the producer sealed
+    ``actor_count``/``actor_ids_sha256`` would create a self-contradictory
+    contract.  For v1, retain the exact original object and expose the proposed
+    merge only as an audit.  Pre-v1 payloads keep the historical mutation path.
+    """
+    from ..utils.actors import reconcile_cast
+
+    reconciled, raw_audit = reconcile_cast(actors)
+    audit = dict(raw_audit or {})
+    merged = list(audit.get("merged") or [])
+    if _is_sealed_actor_intelligence_v1(actors):
+        hypothetical_n_after = audit.get("n_after")
+        audit.update({
+            "applied": False,
+            "reason": "sealed_actor_intelligence_v1_is_immutable",
+            "schema_version": ACTOR_INTELLIGENCE_SCHEMA_VERSION,
+            "hypothetical_n_after": hypothetical_n_after,
+            "n_after": audit.get("n_before"),
+        })
+        return actors, audit
+    audit.update({
+        "applied": bool(merged),
+        "reason": "legacy_reconcile_applied" if merged else "no_duplicates",
+    })
+    return reconciled, audit
+
+
+def _actor_explicit_simulation_tier(actor: dict[str, Any]) -> Optional[int]:
+    """Mirror the producer's explicit Tier 1-4 parser for contract checks."""
+    raw = actor.get("simulation_tier")
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int) and raw in (1, 2, 3, 4):
+        return raw
+    if isinstance(raw, str):
+        value = raw.strip()
+        if re.fullmatch(r"[1-4]", value):
+            return int(value)
+    return None
+
+
+def _actor_roster_name(actor: dict[str, Any]) -> str:
+    """Mirror the producer's NFKC identity namespace exactly."""
+    return _actor_normalized_name(actor.get("name"))
+
+
+def _valid_actor_source_url(value: Any) -> bool:
+    """Mirror the producer URL admission needed by fetched-source receipts."""
+    try:
+        from urllib.parse import unquote, urlparse
+
+        raw = str(value or "").strip()
+        if not raw or any(char.isspace() or ord(char) < 32 for char in raw):
+            return False
+        parsed = urlparse(raw)
+        if (
+            parsed.scheme not in ("http", "https")
+            or not parsed.netloc
+            or parsed.username
+            or parsed.password
+        ):
+            return False
+        host = (parsed.hostname or "").lower().rstrip(".")
+        if len([label for label in host.split(".") if label]) < 2:
+            return False
+        path = unquote(parsed.path or "")
+        if path.endswith(("_", "…", "...")):
+            return False
+        if host.endswith("wikipedia.org"):
+            if not path.startswith("/wiki/"):
+                return False
+            slug = path[len("/wiki/"):].strip("/")
+            if not slug:
+                return False
+            if len(slug) < 3 and not (slug.isalpha() and slug.isupper()):
+                return False
+            if re.search(r"_[A-Za-z]$", slug):
+                return False
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _actor_source_is_fetched(source: dict[str, Any]) -> bool:
+    if not isinstance(source, dict) or not _valid_actor_source_url(
+        source.get("url")
+    ):
+        return False
+    origin = str(source.get("source_origin") or "").strip().casefold()
+    return (
+        (origin == "fetched" and source.get("reachable") is True)
+        or source.get("ok") is True
+    )
+
+
+def _actor_as_items(value: Any) -> list[Any]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    return [value]
+
+
+def _actor_stable_id(name: Any) -> str:
+    """Mirror the producer's semantic actor identity exactly."""
+    normalized = _actor_normalized_name(name)
+    if not normalized:
+        return ""
+    return "actor_" + hashlib.sha256(
+        normalized.encode("utf-8")
+    ).hexdigest()[:16]
+
+
+def _actor_normalized_name(value: Any) -> str:
+    """Canonicalize every actor name/alias in the stable-ID namespace."""
+    import unicodedata
+
+    return " ".join(
+        unicodedata.normalize("NFKC", str(value or "")).casefold().split()
+    )
+
+
+def _actor_source_identity_url(value: Any) -> str:
+    from urllib.parse import urlsplit, urlunsplit
+
+    raw = str(value or "").strip().rstrip("/")
+    if not _valid_actor_source_url(raw):
+        return raw
+    parsed = urlsplit(raw)
+    return urlunsplit((
+        parsed.scheme.lower(), parsed.netloc.lower(), parsed.path,
+        parsed.query, "",
+    )).rstrip("/")
+
+
+def _actor_stable_source_id(value: Any) -> str:
+    normalized = _actor_source_identity_url(value)
+    if not _valid_actor_source_url(normalized):
+        return ""
+    return "src_" + hashlib.sha256(
+        normalized.encode("utf-8")
+    ).hexdigest()[:16]
+
+
+def _actor_receipt_scopes(source: dict[str, Any]) -> list[dict[str, str]]:
+    """Return the producer's normalized receipt-scope projection."""
+    scopes: list[dict[str, str]] = []
+    for raw in _actor_as_items(source.get("receipt_scopes")):
+        if not isinstance(raw, dict):
+            continue
+        scope = {
+            "thread_id": str(raw.get("thread_id") or "").strip(),
+            "lane": str(raw.get("lane") or "").strip(),
+            "purpose": str(raw.get("purpose") or "").strip(),
+            "receipt_id": str(raw.get("receipt_id") or "").strip(),
+            "content_sha256": str(
+                raw.get("content_sha256") or ""
+            ).strip().lower(),
+        }
+        if any(scope.values()):
+            scopes.append(scope)
+    direct = {
+        "thread_id": str(source.get("thread_id") or "").strip(),
+        "lane": str(source.get("lane") or "").strip(),
+        "purpose": str(source.get("purpose") or "").strip(),
+        "receipt_id": str(source.get("receipt_id") or "").strip(),
+        "content_sha256": str(
+            source.get("content_sha256") or ""
+        ).strip().lower(),
+    }
+    if any(direct.values()) and direct not in scopes:
+        scopes.append(direct)
+    return scopes
+
+
+def _actor_is_track_b_purpose(value: Any) -> bool:
+    purpose = str(value or "").strip().casefold()
+    return purpose.startswith("actor-") or purpose.startswith("actor_")
+
+
+def _actor_valid_sha256(value: Any) -> bool:
+    return bool(re.fullmatch(r"[0-9a-fA-F]{64}", str(value or "").strip()))
+
+
+def _actor_normalized_support_text(value: Any) -> str:
+    import unicodedata
+
+    return " ".join(
+        unicodedata.normalize("NFKC", str(value or "")).casefold().split()
+    )
+
+
+def _actor_support_span(source_text: str, quote: str) -> Optional[dict[str, Any]]:
+    if not source_text or not quote:
+        return None
+    exact_start = source_text.find(quote)
+    if exact_start >= 0:
+        return {
+            "basis": "exact_excerpt",
+            "start": exact_start,
+            "end": exact_start + len(quote),
+        }
+    normalized_source = _actor_normalized_support_text(source_text)
+    normalized_quote = _actor_normalized_support_text(quote)
+    normalized_start = normalized_source.find(normalized_quote)
+    if normalized_quote and normalized_start >= 0:
+        return {
+            "basis": "normalized_excerpt",
+            "start": normalized_start,
+            "end": normalized_start + len(normalized_quote),
+        }
+    return None
+
+
+def _actor_source_lookup(
+    source_rows: list[dict[str, Any]],
+) -> tuple[dict[str, str], dict[str, dict[str, Any]], list[str]]:
+    """Build producer-compatible source aliases and reject identity drift."""
+    lookup: dict[str, str] = {}
+    records: dict[str, dict[str, Any]] = {}
+    title_ids: dict[str, set[str]] = {}
+    errors: list[str] = []
+    track_b_thread_ids = {
+        str(scope.get("thread_id") or "").strip()
+        for source in source_rows
+        for scope in _actor_receipt_scopes(source)
+        if _actor_is_track_b_purpose(scope.get("purpose"))
+        and str(scope.get("lane") or "").strip().casefold() == "track-b"
+        and str(scope.get("thread_id") or "").strip()
+    }
+    if len(track_b_thread_ids) != 1:
+        errors.append(
+            "track_b_receipt_thread_unresolvable:"
+            f"count={len(track_b_thread_ids)}"
+        )
+    for index, source in enumerate(source_rows, start=1):
+        if not _actor_source_is_fetched(source):
+            continue
+        source_id = _actor_stable_source_id(source.get("url"))
+        supplied_id = str(source.get("source_id") or "").strip()
+        if not source_id or supplied_id != source_id:
+            errors.append(f"source_id_not_canonical:{supplied_id or index}")
+            continue
+        if source_id in records:
+            errors.append(f"source_id_duplicate:{source_id}")
+            continue
+        records[source_id] = source
+        raw_url = str(source.get("url") or "").strip().rstrip("/")
+        identity_url = _actor_source_identity_url(raw_url)
+        for alias in (
+            source_id, source_id.casefold(), raw_url, raw_url.casefold(),
+            identity_url, identity_url.casefold(), f"s{index}", f"[s{index}]",
+        ):
+            if alias:
+                lookup[alias] = source_id
+        title = " ".join(str(source.get("title") or "").casefold().split())
+        if title:
+            title_ids.setdefault(title, set()).add(source_id)
+    for title, ids in title_ids.items():
+        if len(ids) == 1:
+            lookup[title] = next(iter(ids))
+    if len(track_b_thread_ids) != 1:
+        # Mirror the producer's Track-B lookup: when the receipt ledger does
+        # not identify exactly one actor-research thread, no claim may resolve
+        # through a stale or mixed thread by happenstance.
+        lookup.clear()
+        records.clear()
+    return lookup, records, errors
+
+
+def _actor_search_result_receipt_id(receipt: dict[str, Any]) -> str:
+    """Mirror the producer-owned identity of one Track-B search result."""
+    identity = {
+        key: receipt.get(key)
+        for key in (
+            "schema_version", "thread_id", "lane", "purpose",
+            "query_sha256", "result_sha256", "result_chars",
+        )
+    }
+    canonical = json.dumps(
+        identity,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return "search_result_" + hashlib.sha256(canonical).hexdigest()[:24]
+
+
+def _actor_search_query_from_args(value: Any) -> str:
+    """Mirror the producer's canonical search-query text projection."""
+    if isinstance(value, dict):
+        raw = value.get("query") or value.get("q") or value.get("queries") or ""
+        if isinstance(raw, list):
+            raw = " ".join(str(item) for item in raw)
+    else:
+        raw = value if isinstance(value, str) else ""
+    return " ".join(str(raw or "").split()).strip()
+
+
+def _actor_validated_search_result_receipt(
+    value: Any,
+    *,
+    required_thread_id: str,
+) -> Optional[dict[str, Any]]:
+    """Return the producer's exact canonical current-thread receipt."""
+    if not isinstance(value, dict) or isinstance(value.get("result_chars"), bool):
+        return None
+    try:
+        result_chars = int(value.get("result_chars"))
+    except (TypeError, ValueError):
+        return None
+    query = _actor_search_query_from_args(value.get("query"))
+    canonical = {
+        "schema_version": str(value.get("schema_version") or "").strip(),
+        "thread_id": str(value.get("thread_id") or "").strip(),
+        "lane": str(value.get("lane") or "").strip().casefold(),
+        "purpose": str(value.get("purpose") or "").strip(),
+        "query": query,
+        "query_sha256": str(value.get("query_sha256") or "").strip().lower(),
+        "result_sha256": str(value.get("result_sha256") or "").strip().lower(),
+        "result_chars": result_chars,
+    }
+    result_id = str(value.get("result_id") or "").strip()
+    if (
+        canonical["schema_version"] != _ACTOR_SEARCH_RESULT_RECEIPT_SCHEMA
+        or canonical["thread_id"] != str(required_thread_id or "").strip()
+        or canonical["lane"] != "track-b"
+        or not _actor_is_track_b_purpose(canonical["purpose"])
+        or not query
+        or not _actor_valid_sha256(canonical["query_sha256"])
+        or canonical["query_sha256"] != hashlib.sha256(
+            query.encode("utf-8")
+        ).hexdigest()
+        or not _actor_valid_sha256(canonical["result_sha256"])
+        or result_chars <= 0
+        or result_id != _actor_search_result_receipt_id(canonical)
+    ):
+        return None
+    canonical["result_id"] = result_id
+    return canonical
+
+
+def _actor_track_b_provenance_reception_seals(
+    sources: list[dict[str, Any]],
+    coverage: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Recompute current Track-B source and search-receipt projections.
+
+    The coverage sidecar is producer output, not reception authority.  Source
+    admission is rebuilt from ``sources.json`` receipt scopes, while every
+    search receipt is independently canonicalized and bound to that same sole
+    current Track-B thread before its set hash is accepted.
+    """
+    errors: list[str] = []
+    thread_ids = {
+        str(scope.get("thread_id") or "").strip()
+        for source in sources
+        for scope in _actor_receipt_scopes(source)
+        if _actor_is_track_b_purpose(scope.get("purpose"))
+        and str(scope.get("lane") or "").strip().casefold() == "track-b"
+        and str(scope.get("thread_id") or "").strip()
+    }
+    current_thread = next(iter(thread_ids)) if len(thread_ids) == 1 else ""
+    if not current_thread:
+        errors.append(
+            "actor_dossier_track_b_receipt_thread_unresolvable:"
+            f"count={len(thread_ids)}"
+        )
+
+    admitted_source_ids: list[str] = []
+    if current_thread:
+        for source in sources:
+            if not _actor_source_is_fetched(source):
+                continue
+            source_id = _actor_stable_source_id(source.get("url"))
+            if not source_id or str(source.get("source_id") or "") != source_id:
+                continue
+            current_scopes = [
+                scope for scope in _actor_receipt_scopes(source)
+                if _actor_is_track_b_purpose(scope.get("purpose"))
+                and str(scope.get("lane") or "").strip().casefold() == "track-b"
+                and str(scope.get("thread_id") or "").strip() == current_thread
+            ]
+            if not current_scopes:
+                continue
+            valid_scopes = [
+                scope for scope in current_scopes
+                if str(scope.get("receipt_id") or "").strip()
+                and _actor_valid_sha256(scope.get("content_sha256"))
+                and (
+                    not _actor_valid_sha256(source.get("content_sha256"))
+                    or str(scope.get("content_sha256") or "").strip().lower()
+                    == str(source.get("content_sha256") or "").strip().lower()
+                )
+            ]
+            if not valid_scopes:
+                errors.append(
+                    f"actor_dossier_track_b_receipt_scope_invalid:{source_id}"
+                )
+                continue
+            admitted_source_ids.append(source_id)
+    admitted_source_ids = sorted(set(admitted_source_ids))
+
+    raw_receipts = coverage.get("search_result_receipts")
+    if not isinstance(raw_receipts, list):
+        errors.append("actor_dossier_search_result_receipt_list_invalid")
+        raw_receipts = []
+    canonical_receipts: list[dict[str, Any]] = []
+    seen_result_ids: set[str] = set()
+    for index, value in enumerate(raw_receipts):
+        canonical = _actor_validated_search_result_receipt(
+            value,
+            required_thread_id=current_thread,
+        )
+        if canonical is None or canonical != value:
+            errors.append(
+                f"actor_dossier_search_result_receipt_invalid:{index}"
+            )
+            continue
+        result_id = canonical["result_id"]
+        if result_id in seen_result_ids:
+            errors.append(
+                f"actor_dossier_search_result_receipt_duplicate:{result_id}"
+            )
+            continue
+        seen_result_ids.add(result_id)
+        canonical_receipts.append(canonical)
+    canonical_receipts.sort(key=lambda row: row["result_id"])
+    if raw_receipts != canonical_receipts:
+        errors.append("actor_dossier_search_result_receipt_order_or_set_mismatch")
+    canonical_receipt_bytes = json.dumps(
+        canonical_receipts,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    receipt_sha256 = hashlib.sha256(canonical_receipt_bytes).hexdigest()
+    if coverage.get("search_result_receipts_sha256") != receipt_sha256:
+        errors.append("actor_dossier_search_result_receipt_sha256_mismatch")
+
+    return {
+        "required_receipt_lane": "track-b",
+        "required_receipt_thread_id": current_thread,
+        "admitted_source_ids": admitted_source_ids,
+        "admitted_source_ids_sha256": hashlib.sha256(
+            "\n".join(admitted_source_ids).encode("utf-8")
+        ).hexdigest(),
+        "search_result_receipts": canonical_receipts,
+        "search_result_receipts_sha256": receipt_sha256,
+    }, errors
+
+
+def _actor_resolve_source_ref(value: Any, lookup: dict[str, str]) -> str:
+    if isinstance(value, dict):
+        value = (
+            value.get("source_id") or value.get("url") or value.get("title")
+            or value.get("ref")
+        )
+    key = str(value or "").strip()
+    if not key:
+        return ""
+    normalized_title = " ".join(key.casefold().split())
+    return str(
+        lookup.get(key)
+        or lookup.get(key.casefold())
+        or lookup.get(_actor_source_identity_url(key))
+        or lookup.get(_actor_source_identity_url(key).casefold())
+        or lookup.get(normalized_title)
+        or ""
+    )
+
+
+def _actor_normalize_source_support(
+    value: dict[str, Any],
+    raw_refs: list[Any],
+    lookup: dict[str, str],
+    records: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Revalidate exact quote/receipt/content identities for Track-B claims."""
+    candidates = _actor_as_items(
+        value.get("source_support")
+        or value.get("evidence_support")
+        or value.get("supporting_evidence")
+    )
+    if not candidates:
+        quote = (
+            value.get("supporting_quote") or value.get("exact_quote")
+            or value.get("source_quote")
+        )
+        if quote:
+            candidates = [{
+                "source_ref": raw_refs[0] if len(raw_refs) == 1 else "",
+                "supporting_quote": quote,
+                "supporting_span": value.get("supporting_span"),
+            }]
+    normalized: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for raw in candidates:
+        if not isinstance(raw, dict):
+            continue
+        ref = (
+            raw.get("source_ref") or raw.get("source_id") or raw.get("url")
+            or raw.get("ref")
+        )
+        if not ref and len(raw_refs) == 1:
+            ref = raw_refs[0]
+        source_id = _actor_resolve_source_ref(ref, lookup)
+        source = records.get(source_id)
+        if not source_id or not isinstance(source, dict):
+            continue
+        supplied = {
+            "thread_id": str(raw.get("thread_id") or "").strip(),
+            "lane": str(raw.get("lane") or "").strip(),
+            "purpose": str(raw.get("purpose") or "").strip(),
+            "receipt_id": str(raw.get("receipt_id") or "").strip(),
+            "content_sha256": str(
+                raw.get("content_sha256") or ""
+            ).strip().lower(),
+        }
+        scope = next((
+            candidate for candidate in _actor_receipt_scopes(source)
+            if _actor_is_track_b_purpose(candidate.get("purpose"))
+            and str(candidate.get("lane") or "").strip().casefold() == "track-b"
+            and all(str(candidate.get(key) or "").strip() for key in (
+                "thread_id", "lane", "purpose", "receipt_id", "content_sha256"
+            ))
+            and _actor_valid_sha256(candidate.get("content_sha256"))
+            and all(
+                not supplied[key] or supplied[key] == candidate.get(key)
+                for key in supplied
+            )
+        ), None)
+        if scope is None:
+            continue
+        quote = str(
+            raw.get("supporting_quote") or raw.get("exact_quote")
+            or raw.get("quote") or raw.get("text") or ""
+        ).strip()
+        source_text = ""
+        for key in ("content", "excerpt"):
+            candidate_text = source.get(key)
+            if isinstance(candidate_text, str) and candidate_text.strip():
+                source_text = candidate_text
+                break
+        span = _actor_support_span(source_text, quote)
+        if span is None:
+            continue
+        if isinstance(source.get("content"), str) and source.get("content"):
+            if hashlib.sha256(source["content"].encode("utf-8")).hexdigest() != str(
+                scope.get("content_sha256") or ""
+            ).lower():
+                continue
+        dedupe_key = (source_id, _actor_normalized_support_text(quote))
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        normalized.append({
+            "source_id": source_id,
+            "supporting_quote": quote,
+            "supporting_span": span,
+            "receipt_id": scope["receipt_id"],
+            "content_sha256": scope["content_sha256"],
+            "source_publication_date": str(
+                source.get("publication_date") or source.get("published_at")
+                or source.get("date") or ""
+            ).strip(),
+            "thread_id": scope["thread_id"],
+            "lane": scope["lane"],
+            "purpose": scope["purpose"],
+        })
+    return normalized
+
+
+def _actor_claim_text(value: dict[str, Any]) -> str:
+    for key in (
+        "claim", "summary", "fact", "detail", "description", "plan",
+        "action", "investment", "decision", "preference", "value",
+    ):
+        text = str(value.get(key) or "").strip()
+        if text:
+            return text
+    semantic: list[str] = []
+    for key in (
+        "driver", "gains_if", "loses_if", "status", "horizon",
+        "dependencies", "trigger", "basis",
+    ):
+        raw = value.get(key)
+        if raw not in (None, "", [], {}):
+            semantic.append(f"{key}={raw}")
+    return "; ".join(semantic)
+
+
+def _actor_claim_projection(
+    actor_id: str,
+    dimension: str,
+    claim: dict[str, Any],
+) -> dict[str, Any]:
+    support_projection = sorted(({
+        "source_id": str(row.get("source_id") or ""),
+        "supporting_quote_sha256": hashlib.sha256(
+            _actor_normalized_support_text(
+                row.get("supporting_quote")
+            ).encode("utf-8")
+        ).hexdigest(),
+        "receipt_id": str(row.get("receipt_id") or ""),
+        "content_sha256": str(row.get("content_sha256") or ""),
+    } for row in (claim.get("source_support") or []) if isinstance(row, dict)),
+        key=lambda row: (
+            row["source_id"], row["supporting_quote_sha256"], row["receipt_id"]
+        ),
+    )
+    return {
+        "actor_id": str(actor_id or ""),
+        "dimension": str(dimension or ""),
+        "claim": " ".join(str(claim.get("claim") or "").split()),
+        "evidence_type": str(claim.get("evidence_type") or ""),
+        "claim_valid_at": str(claim.get("claim_valid_at") or ""),
+        "horizon": str(claim.get("horizon") or ""),
+        "status": str(claim.get("status") or ""),
+        "confidence": str(claim.get("confidence") or ""),
+        "dependencies": sorted({
+            " ".join(str(item).split())
+            for item in (claim.get("dependencies") or []) if str(item).strip()
+        }),
+        "contradictions": sorted({
+            " ".join(str(item).split())
+            for item in (claim.get("contradictions") or []) if str(item).strip()
+        }),
+        "qualifiers": claim.get("qualifiers") or {},
+        "source_support": support_projection,
+    }
+
+
+def _actor_relationship_causal_attributes(
+    relationship: dict[str, Any],
+) -> dict[str, Any]:
+    """Rebuild the producer's canonical causal identity projection.
+
+    Persisted actor-intelligence/v1 relationships are already normalized by
+    Stage 1.  Reception therefore rejects, rather than silently normalizes,
+    non-canonical values.  This prevents two different received byte
+    projections from sharing the same canonical relationship identity.
+    """
+    normalized: dict[str, Any] = {}
+    for key in _ACTOR_RELATIONSHIP_CAUSAL_ATTRIBUTE_KEYS:
+        if key not in relationship:
+            continue
+        raw = relationship[key]
+        if raw in (None, "", [], {}):
+            raise ValueError(f"{key} must be omitted when empty")
+        if isinstance(raw, str):
+            value: Any = " ".join(
+                unicodedata.normalize("NFKC", raw).split()
+            )
+            if not value:
+                raise ValueError(f"{key} must be omitted when empty")
+            if value != raw:
+                raise ValueError(f"{key} is not canonically normalized")
+        elif isinstance(raw, bool):
+            value = raw
+        elif isinstance(raw, (int, float)):
+            if isinstance(raw, float) and not math.isfinite(raw):
+                raise ValueError(f"{key} must be finite")
+            value = raw
+        else:
+            raise ValueError(f"{key} must be a JSON scalar")
+        normalized[key] = value
+    return normalized
+
+
+def _actor_normalize_claim(
+    value: Any,
+    *,
+    actor_id: str,
+    dimension: str,
+    lookup: dict[str, str],
+    records: dict[str, dict[str, Any]],
+    causal_attributes: Optional[dict[str, Any]] = None,
+) -> Optional[dict[str, Any]]:
+    """Rebuild the producer's canonical claim projection from received bytes."""
+    if not isinstance(value, dict):
+        return None
+    text = _actor_claim_text(value)
+    if not text:
+        return None
+    raw_qualifiers = (
+        value.get("qualifiers")
+        if isinstance(value.get("qualifiers"), dict) else {}
+    )
+    raw_refs: list[Any] = []
+    for key in (
+        "source_refs", "sources", "source_urls", "source_ids", "citations",
+        "evidence_refs",
+    ):
+        raw_refs.extend(_actor_as_items(value.get(key)))
+        raw_refs.extend(_actor_as_items(raw_qualifiers.get(key)))
+    claim_valid_at = str(
+        value.get("claim_valid_at") or value.get("valid_at")
+        or value.get("as_of_date") or value.get("as_of")
+        or raw_qualifiers.get("claim_valid_at")
+        or raw_qualifiers.get("valid_at")
+        or raw_qualifiers.get("as_of_date")
+        or raw_qualifiers.get("as_of") or ""
+    ).strip()
+    confidence = str(
+        value.get("confidence") or raw_qualifiers.get("confidence") or "unknown"
+    ).strip().lower()
+    if confidence not in {"high", "medium", "low", "unknown"}:
+        confidence = "unknown"
+    evidence_type = str(
+        value.get("evidence_type") or value.get("epistemic_status")
+        or raw_qualifiers.get("evidence_type")
+        or raw_qualifiers.get("epistemic_status") or "unknown"
+    ).strip().lower().replace("-", "_").replace(" ", "_")
+    if evidence_type not in {
+        "verified_fact", "actor_stated_claim", "analyst_inference",
+        "contested", "unknown",
+    }:
+        evidence_type = "unknown"
+    horizon = str(
+        value.get("horizon") or raw_qualifiers.get("horizon") or ""
+    ).strip()
+    status = str(
+        value.get("status") or raw_qualifiers.get("status") or ""
+    ).strip()
+    dependencies = [
+        str(item).strip() for item in _actor_as_items(
+            value.get("dependencies") or raw_qualifiers.get("dependencies")
+        ) if str(item).strip()
+    ]
+    contradictions = [
+        str(item).strip() for item in _actor_as_items(
+            value.get("contradictions") or raw_qualifiers.get("contradictions")
+        ) if str(item).strip()
+    ]
+    qualifiers: dict[str, Any] = {}
+    for key in _ACTOR_INTELLIGENCE_QUALIFIER_KEYS:
+        raw = value.get(key)
+        if raw in (None, "", [], {}):
+            raw = raw_qualifiers.get(key)
+        if raw not in (None, "", [], {}):
+            qualifiers[key] = raw
+    actor_knows = value.get("actor_knows")
+    if actor_knows in (None, ""):
+        actor_knows = raw_qualifiers.get("actor_knows")
+    if isinstance(actor_knows, bool):
+        qualifiers["actor_knows"] = actor_knows
+    visibility = str(
+        value.get("visibility") or raw_qualifiers.get("visibility") or ""
+    ).strip().casefold().replace("-", "_").replace(" ", "_")
+    if visibility in _ACTOR_KNOWLEDGE_VISIBILITY_VALUES:
+        qualifiers["visibility"] = visibility
+    source_support = _actor_normalize_source_support(
+        value, raw_refs, lookup, records)
+    claim = {
+        "claim": text,
+        "evidence_type": evidence_type,
+        "claim_valid_at": claim_valid_at,
+        "as_of_date": claim_valid_at,
+        "horizon": horizon,
+        "status": status,
+        "confidence": confidence,
+        "source_refs": sorted({
+            str(row.get("source_id") or "")
+            for row in source_support if row.get("source_id")
+        }),
+        "source_support": source_support,
+        "dependencies": dependencies,
+        "contradictions": contradictions,
+        "qualifiers": qualifiers,
+    }
+    projection = _actor_claim_projection(actor_id, dimension, claim)
+    if causal_attributes is not None:
+        projection["causal_attributes"] = causal_attributes
+    digest = hashlib.sha256(json.dumps(
+        projection,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+    claim["claim_id"] = f"claim_{digest[:20]}"
+    claim["claim_sha256"] = digest
+    return claim
+
+
+def _actor_multiset_sha256(values: list[str]) -> str:
+    counts = {value: values.count(value) for value in sorted(set(values))}
+    return hashlib.sha256(json.dumps(
+        counts,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+
+
+def _actor_lineage_id(payload: dict[str, Any]) -> str:
+    body = {
+        key: value for key, value in payload.items()
+        if key not in {"lineage_id", "sealed_at"}
+    }
+    return "actor_lineage_" + hashlib.sha256(json.dumps(
+        body,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()[:24]
+
+
+def _actor_sealed_visible_claim_text(value: Any) -> str:
+    """Mirror Stage 1's bounded, human-visible family-claim rendition."""
+    raw = unicodedata.normalize("NFKC", str(value or ""))
+    raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+    raw = re.sub(r"[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]", "", raw)
+    raw = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", raw)
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in raw.split("\n")]
+    protected = {
+        index for index, line in enumerate(lines)
+        if _ACTOR_STAGE1_BLOCK_SENTINEL_RE.fullmatch(line)
+    }
+    unsafe = {
+        index for index, line in enumerate(lines)
+        if index not in protected and line and any(
+            pattern.search(line)
+            for pattern in _ACTOR_UNSAFE_EVIDENCE_CONTROL_PATTERNS
+        )
+    }
+    nonempty = [index for index, line in enumerate(lines) if line]
+    for width in range(2, min(8, len(nonempty)) + 1):
+        for start in range(0, len(nonempty) - width + 1):
+            indexes = nonempty[start:start + width]
+            if any(
+                right - left > 3
+                for left, right in zip(indexes, indexes[1:], strict=False)
+            ):
+                continue
+            window = " ".join(lines[index] for index in indexes)
+            matched_patterns = [
+                pattern
+                for pattern in _ACTOR_UNSAFE_EVIDENCE_CONTROL_PATTERNS
+                if pattern.search(window)
+            ]
+            if not matched_patterns:
+                continue
+            attributed = [index for index in indexes if index in unsafe]
+            if attributed:
+                attributed_text = " ".join(lines[index] for index in attributed)
+                if any(
+                    not pattern.search(attributed_text)
+                    for pattern in matched_patterns
+                ):
+                    unsafe.update(
+                        index for index in indexes
+                        if index not in protected
+                        and _ACTOR_UNSAFE_EVIDENCE_CONTROL_FRAGMENT_PATTERN.search(
+                            lines[index]
+                        )
+                    )
+                continue
+            unsafe.update(index for index in indexes if index not in protected)
+
+    rendered: list[str] = []
+    for index, line in enumerate(lines):
+        if not line:
+            if rendered and rendered[-1] != "":
+                rendered.append("")
+            continue
+        if index in unsafe:
+            rendered.append(_ACTOR_UNSAFE_EVIDENCE_TEXT_REPLACEMENT)
+            continue
+        if index in protected:
+            rendered.append(line)
+            continue
+        fragments = [
+            fragment.strip()
+            for fragment in re.split(r"(?<=[.!?。！？;；])\s+", line)
+            if fragment.strip()
+        ] or [line]
+        safe_fragments: list[str] = []
+        for fragment in fragments:
+            replacement = (
+                _ACTOR_UNSAFE_EVIDENCE_TEXT_REPLACEMENT
+                if any(
+                    pattern.search(fragment)
+                    for pattern in _ACTOR_UNSAFE_EVIDENCE_CONTROL_PATTERNS
+                )
+                else fragment
+            )
+            if not (
+                replacement == _ACTOR_UNSAFE_EVIDENCE_TEXT_REPLACEMENT
+                and safe_fragments
+                and safe_fragments[-1]
+                == _ACTOR_UNSAFE_EVIDENCE_TEXT_REPLACEMENT
+            ):
+                safe_fragments.append(replacement)
+        rendered.append(" ".join(safe_fragments))
+    while rendered and rendered[-1] == "":
+        rendered.pop()
+    safe = "\n".join(rendered).strip()
+    if len(safe) > 900:
+        safe = safe[:899].rstrip() + "…"
+    safe = re.sub(r"\[\s*S\d+\s*\]", "", safe, flags=re.IGNORECASE)
+    safe = " ".join(unicodedata.normalize("NFKC", safe).split())
+    substantive = safe.replace(_ACTOR_UNSAFE_EVIDENCE_TEXT_REPLACEMENT, " ")
+    if len(re.sub(r"[^\w]+", "", substantive, flags=re.UNICODE)) < 24:
+        return ""
+    return safe
+
+
+def _actor_claim_is_behavior_ready(claim: Any) -> bool:
+    """Mirror the producer's floor for behavior-family evidence."""
+    if not isinstance(claim, dict) or not claim.get("source_support"):
+        return False
+    if str(claim.get("evidence_type") or "").strip() in {"", "unknown"}:
+        return False
+    if str(claim.get("confidence") or "").strip() in {"", "unknown"}:
+        return False
+    return all(
+        str(claim.get(key) or "").strip()
+        for key in ("claim_valid_at", "horizon", "status")
+    )
+
+
+def _actor_dossier_reception_seals(
+    dossier: str,
+    *,
+    lookup: dict[str, str],
+    records: dict[str, dict[str, Any]],
+) -> tuple[dict[str, Any], list[str]]:
+    """Recompute semantic actor and claim seals from the dossier ledger."""
+    errors: list[str] = []
+    matches = list(_ACTOR_DOSSIER_LEDGER_RE.finditer(str(dossier or "")))
+    if len(matches) != 1:
+        return {}, [f"dossier_ledger_count:{len(matches)}"]
+    try:
+        ledger = json.loads(matches[0].group(1))
+    except (TypeError, ValueError):
+        return {}, ["dossier_ledger_unparseable"]
+    if not isinstance(ledger, dict):
+        return {}, ["dossier_ledger_not_object"]
+    if ledger.get("schema_version") != ACTOR_INTELLIGENCE_SCHEMA_VERSION:
+        errors.append("dossier_ledger_schema_mismatch")
+    raw_rows = ledger.get("actors")
+    if not isinstance(raw_rows, list) or not raw_rows:
+        return {}, [*errors, "dossier_actor_rows_empty"]
+    actor_ids: list[str] = []
+    roster: list[str] = []
+    claim_hashes: list[str] = []
+    behavior_family_projection: list[dict[str, Any]] = []
+    behavior_ready_family_count = 0
+    for index, row in enumerate(raw_rows):
+        if not isinstance(row, dict):
+            errors.append(f"dossier_actor_not_object:{index}")
+            continue
+        name = str(row.get("name") or "").strip()
+        actor_id = _actor_stable_id(name)
+        if not actor_id:
+            errors.append(f"dossier_actor_name_missing:{index}")
+            continue
+        if _actor_explicit_simulation_tier(row) not in (1, 2):
+            errors.append(f"dossier_actor_tier_invalid:{actor_id}")
+            continue
+        actor_ids.append(actor_id)
+        roster.append(_actor_roster_name(row))
+        dimensions = row.get("dimensions")
+        if not isinstance(dimensions, dict):
+            errors.append(f"dossier_dimensions_not_object:{actor_id}")
+            continue
+        behavior_ready_claims: dict[str, list[dict[str, Any]]] = {}
+        for dimension in ACTOR_INTELLIGENCE_DIMENSIONS:
+            cell = dimensions.get(dimension)
+            if not isinstance(cell, dict):
+                errors.append(
+                    f"dossier_dimension_missing:{actor_id}:{dimension}"
+                )
+                continue
+            status = str(cell.get("status") or "").strip().casefold()
+            if status == "gap":
+                continue
+            if status != "covered":
+                errors.append(
+                    f"dossier_dimension_status_invalid:{actor_id}:{dimension}"
+                )
+                continue
+            raw_claims = cell.get("claims")
+            if not isinstance(raw_claims, list) or not raw_claims:
+                errors.append(
+                    f"dossier_covered_without_claims:{actor_id}:{dimension}"
+                )
+                continue
+            for claim_index, raw_claim in enumerate(raw_claims):
+                normalized = _actor_normalize_claim(
+                    raw_claim,
+                    actor_id=actor_id,
+                    dimension=dimension,
+                    lookup=lookup,
+                    records=records,
+                )
+                if not normalized or not normalized.get("source_support"):
+                    errors.append(
+                        "dossier_claim_not_quote_receipt_bound:"
+                        f"{actor_id}:{dimension}:{claim_index}"
+                    )
+                    continue
+                claim_hashes.append(normalized["claim_sha256"])
+                if _actor_claim_is_behavior_ready(normalized):
+                    behavior_ready_claims.setdefault(dimension, []).append(
+                        normalized
+                    )
+        family_projection: dict[str, Any] = {
+            "actor": name,
+            "actor_id": actor_id,
+            "families": {},
+        }
+        for family, family_dimensions in _ACTOR_BEHAVIOR_READY_FAMILIES.items():
+            candidates = [
+                (
+                    family_dimensions.index(dimension),
+                    dimension,
+                    claim,
+                    visible_claim_text,
+                )
+                for dimension in family_dimensions
+                for claim in behavior_ready_claims.get(dimension, [])
+                if (
+                    visible_claim_text := _actor_sealed_visible_claim_text(
+                        claim.get("claim")
+                    )
+                )
+            ]
+            if not candidates:
+                errors.append(
+                    f"dossier_behavior_family_missing:{actor_id}:{family}"
+                )
+                continue
+            behavior_ready_family_count += 1
+            (
+                _order,
+                selected_dimension,
+                selected_claim,
+                visible_claim_text,
+            ) = min(
+                candidates,
+                key=lambda item: (
+                    item[0], str(item[2].get("claim_sha256") or "")
+                ),
+            )
+            family_projection["families"][family] = {
+                "dimension": selected_dimension,
+                "claim_id": str(selected_claim.get("claim_id") or ""),
+                "claim_sha256": str(
+                    selected_claim.get("claim_sha256") or ""
+                ),
+                "visible_claim_text": visible_claim_text,
+                "source_ids": sorted({
+                    str(support.get("source_id") or "")
+                    for support in selected_claim.get("source_support") or []
+                    if isinstance(support, dict)
+                    and str(support.get("source_id") or "")
+                }),
+            }
+        behavior_family_projection.append(family_projection)
+    canonical_family_projection = json.dumps(
+        behavior_family_projection,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return {
+        "tier_1_2_actor_count": len(actor_ids),
+        "tier_1_2_actor_roster_sha256": hashlib.sha256(
+            "\n".join(sorted(roster)).encode("utf-8")
+        ).hexdigest(),
+        "tier_1_2_actor_ids_ordered_sha256": hashlib.sha256(
+            "\n".join(actor_ids).encode("utf-8")
+        ).hexdigest(),
+        "tier_1_2_actor_ids_multiset_sha256": _actor_multiset_sha256(actor_ids),
+        "claim_projection_count": len(claim_hashes),
+        "claim_projection_multiset_sha256": _actor_multiset_sha256(claim_hashes),
+        "required_behavior_ready_families": list(
+            _ACTOR_BEHAVIOR_READY_FAMILIES
+        ),
+        "behavior_ready_family_count": behavior_ready_family_count,
+        "behavior_ready_family_slots": (
+            len(actor_ids) * len(_ACTOR_BEHAVIOR_READY_FAMILIES)
+        ),
+        "behavior_ready_family_failures": [],
+        "behavior_family_projection": behavior_family_projection,
+        "behavior_family_projection_sha256": hashlib.sha256(
+            canonical_family_projection
+        ).hexdigest(),
+    }, errors
+
+
+def _actor_question_hash(question: Any) -> str:
+    normalized = " ".join(str(question or "").split()).strip().lower()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+
+
+def _actor_lineage_reception_errors(
+    handoff_dir: str,
+    *,
+    actors: dict[str, Any],
+    sources: list[dict[str, Any]],
+    report: str,
+    dossier: str,
+    contract: dict[str, Any],
+    dossier_seals: dict[str, Any],
+    expected_question: str,
+    expected_depth: str,
+    expected_run_id: str,
+    expected_attempt_ids: set[str],
+) -> list[str]:
+    """Validate manifest, metadata, dossier, and actor-artifact lineage seals."""
+    root = os.path.realpath(str(handoff_dir or ""))
+    if not root or not os.path.isdir(root):
+        return ["actor_reception_handoff_missing"]
+    errors: list[str] = []
+    manifest = _read_json(_research_contract_path(root))
+    manifest_files = manifest.get("files") if isinstance(manifest, dict) else None
+    if (
+        not isinstance(manifest_files, dict)
+        or ACTOR_INTELLIGENCE_LINEAGE_FILENAME not in manifest_files
+    ):
+        errors.append("actor_lineage_not_manifested")
+    elif not _validate_research_contract(root):
+        errors.append("research_contract_invalid_at_actor_reception")
+
+    disk_actors = _read_json(os.path.join(root, "actors.json"))
+    disk_sources = _read_json(os.path.join(root, "sources.json"))
+    disk_report = _read_text(os.path.join(root, "research_report.md"))
+    disk_dossier = _read_text(os.path.join(root, "actor_dossier.md"))
+    if disk_actors != actors:
+        errors.append("actors_memory_disk_mismatch")
+    if disk_sources != sources:
+        errors.append("sources_memory_disk_mismatch")
+    if disk_report != report:
+        errors.append("report_memory_disk_mismatch")
+    if disk_dossier != dossier:
+        errors.append("dossier_memory_disk_mismatch")
+
+    lineage_path = os.path.join(root, ACTOR_INTELLIGENCE_LINEAGE_FILENAME)
+    lineage = _read_json(lineage_path)
+    if not isinstance(lineage, dict):
+        return [*errors, "actor_lineage_missing_or_invalid"]
+    if lineage.get("schema_version") != ACTOR_INTELLIGENCE_LINEAGE_SCHEMA_VERSION:
+        errors.append("actor_lineage_schema_mismatch")
+    if lineage.get("lineage_id") != _actor_lineage_id(lineage):
+        errors.append("actor_lineage_id_mismatch")
+    if expected_question and lineage.get("question_hash") != _actor_question_hash(
+        expected_question
+    ):
+        errors.append("actor_lineage_question_mismatch")
+    if expected_depth and str(lineage.get("depth") or "") != str(
+        expected_depth
+    ).strip():
+        errors.append("actor_lineage_depth_mismatch")
+    if expected_run_id and str(lineage.get("run_id") or "") != expected_run_id:
+        errors.append("actor_lineage_run_mismatch")
+    attempt_id = str(lineage.get("attempt_id") or "").strip()
+    if not attempt_id:
+        errors.append("actor_lineage_attempt_missing")
+    elif expected_run_id and not expected_attempt_ids:
+        errors.append("actor_lineage_attempt_authority_missing")
+    elif expected_attempt_ids and attempt_id not in expected_attempt_ids:
+        errors.append("actor_lineage_attempt_mismatch")
+    lane_id = str(lineage.get("lane_id") or "").strip()
+    if lane_id not in {
+        "outer-track-1", "global-synthesis", "global-synthesis-recovery"
+    }:
+        errors.append("actor_lineage_lane_invalid")
+    lineage_thread_id = str(lineage.get("thread_id") or "").strip()
+    meta = _read_json(os.path.join(root, "meta.json"))
+    meta_thread_id = (
+        str(meta.get("thread_id") or "").strip()
+        if isinstance(meta, dict) else ""
+    )
+    if not lineage_thread_id:
+        errors.append("actor_lineage_thread_missing")
+    elif not meta_thread_id or lineage_thread_id != meta_thread_id:
+        errors.append("actor_lineage_thread_mismatch")
+
+    lineage_checkpoint_id = str(
+        lineage.get("checkpoint_id") or ""
+    ).strip()
+    if lineage_checkpoint_id:
+        checkpoint = _read_json(os.path.join(
+            root, "research_checkpoint.json"
+        ))
+        if not isinstance(checkpoint, dict):
+            errors.append("actor_lineage_checkpoint_missing")
+        else:
+            if (
+                checkpoint.get("checkpoint_id") != lineage_checkpoint_id
+                or lineage_checkpoint_id
+                != _research_checkpoint_identity(checkpoint)
+            ):
+                errors.append("actor_lineage_checkpoint_identity_mismatch")
+            checkpoint_bindings = {
+                "question_hash": lineage.get("question_hash"),
+                "depth": lineage.get("depth"),
+                "run_id": lineage.get("run_id"),
+                "attempt_id": lineage.get("attempt_id"),
+                "lane_id": lineage.get("lane_id"),
+                "thread_id": lineage_thread_id,
+            }
+            for key, expected in checkpoint_bindings.items():
+                if checkpoint.get(key) != expected:
+                    errors.append(
+                        f"actor_lineage_checkpoint_mismatch:{key}"
+                    )
+
+    artifact_paths = {
+        "report_sha256": os.path.join(root, "research_report.md"),
+        "dossier_sha256": os.path.join(root, "actor_dossier.md"),
+        "sources_file_sha256": os.path.join(root, "sources.json"),
+        "actors_file_sha256": os.path.join(root, "actors.json"),
+    }
+    for key, path in artifact_paths.items():
+        actual = _sha256_file(path)
+        if not actual or lineage.get(key) != actual:
+            errors.append(f"actor_lineage_artifact_mismatch:{key}")
+    for key in (
+        "actor_ids_ordered_sha256", "actor_ids_multiset_sha256",
+        "claim_projection_multiset_sha256",
+    ):
+        if lineage.get(key) != contract.get(key):
+            errors.append(f"actor_lineage_contract_mismatch:{key}")
+
+    coverage = _read_json(os.path.join(root, "actor_dossier_coverage.json"))
+    if not isinstance(coverage, dict) or coverage.get("accountable") is not True:
+        errors.append("actor_dossier_coverage_missing_or_unaccountable")
+    else:
+        provenance_seals, provenance_errors = (
+            _actor_track_b_provenance_reception_seals(sources, coverage)
+        )
+        errors.extend(provenance_errors)
+        expected_coverage_values = {
+            "schema_version": ACTOR_INTELLIGENCE_SCHEMA_VERSION,
+            "source_binding_required": True,
+            "required_receipt_purpose": "track-b",
+            **dossier_seals,
+            **provenance_seals,
+        }
+        for key, expected in expected_coverage_values.items():
+            if coverage.get(key) != expected:
+                errors.append(f"actor_dossier_coverage_mismatch:{key}")
+
+    actor_meta = meta.get("actor_intelligence") if isinstance(meta, dict) else None
+    if not isinstance(actor_meta, dict):
+        errors.append("actor_intelligence_meta_missing")
+    else:
+        for key in (
+            "schema_version", "actor_count", "tier_1_2_actor_count", "coverage",
+            "report_sha256", "dossier_sha256", "sources_sha256",
+            "actor_ids_sha256", "actor_ids_ordered_sha256",
+            "actor_ids_multiset_sha256", "tier_1_2_actor_roster_sha256",
+            "claim_projection_count", "claim_projection_multiset_sha256",
+            "relationship_count", "relationships_sha256",
+            "relationship_omission_count", "source_provenance",
+        ):
+            if actor_meta.get(key) != contract.get(key):
+                errors.append(f"actor_intelligence_meta_mismatch:{key}")
+        if actor_meta.get("lineage_id") != lineage.get("lineage_id"):
+            errors.append("actor_intelligence_meta_lineage_id_mismatch")
+        if actor_meta.get("lineage_file") != ACTOR_INTELLIGENCE_LINEAGE_FILENAME:
+            errors.append("actor_intelligence_meta_lineage_file_mismatch")
+        if isinstance(coverage, dict) and actor_meta.get("dossier_coverage") != coverage:
+            errors.append("actor_intelligence_meta_dossier_coverage_mismatch")
+    return errors
+
+
+def _actor_intelligence_reception_errors(
+    actors: Any,
+    *,
+    report: Any,
+    dossier: Any,
+    sources: Any,
+    handoff_dir: str = "",
+    expected_question: str = "",
+    expected_depth: str = "",
+    expected_run_id: str = "",
+    expected_attempt_ids: Optional[set[str]] = None,
+) -> list[str]:
+    """Validate the exact actor-intelligence/v1 object received from Stage 1.
+
+    This is the parent-side activation gate.  It independently recomputes every
+    non-circular producer binding available at the handoff boundary and rejects
+    the legacy ``{"claims": ...}`` dimension wrapper.  The outer research
+    manifest still owns the complete ``actors.json`` byte fingerprint.
+    """
+    errors: list[str] = []
+    if not isinstance(actors, dict):
+        return ["actors_not_object"]
+    raw_rows = actors.get("actors")
+    if not isinstance(raw_rows, list):
+        return ["actor_rows_not_list"]
+    if not raw_rows:
+        errors.append("actor_rows_empty")
+    if any(not isinstance(row, dict) for row in raw_rows):
+        errors.append("actor_row_not_object")
+    rows = [row for row in raw_rows if isinstance(row, dict)]
+
+    contract = actors.get("actor_intelligence_contract")
+    if not isinstance(contract, dict):
+        errors.append("top_contract_missing")
+        return errors
+    if contract.get("schema_version") != ACTOR_INTELLIGENCE_SCHEMA_VERSION:
+        errors.append("top_contract_schema_mismatch")
+
+    expected_dimensions = list(ACTOR_INTELLIGENCE_DIMENSIONS)
+    if contract.get("dimensions") != expected_dimensions:
+        errors.append("top_contract_dimensions_mismatch")
+
+    if sources is None:
+        source_rows: list[dict[str, Any]] = []
+    elif isinstance(sources, list):
+        source_rows = [row for row in sources if isinstance(row, dict)]
+        if len(source_rows) != len(sources):
+            errors.append("source_row_not_object")
+    else:
+        source_rows = []
+        errors.append("sources_not_list")
+    canonical_sources = json.dumps(
+        sorted(source_rows, key=lambda row: str(row.get("source_id") or "")),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    lookup, source_records, source_errors = _actor_source_lookup(source_rows)
+    errors.extend(source_errors)
+
+    actor_ids: list[str] = []
+    actor_by_id: dict[str, dict[str, Any]] = {}
+    namespace_owners: dict[str, set[str]] = {}
+    covered_slots = 0
+    grounded_slots = 0
+    explicit_gaps = 0
+    tier_1_2_count = 0
+    tier_1_2_roster: list[str] = []
+    claim_projection_hashes: list[str] = []
+    for index, actor in enumerate(rows):
+        actor_id = str(actor.get("actor_id") or "").strip()
+        actor_name = _actor_roster_name(actor)
+        if not actor_name:
+            errors.append(f"actor_name_missing:{actor_id or index}")
+        if not actor_id:
+            errors.append(f"actor_id_missing:{index}")
+        elif actor_id in actor_ids:
+            errors.append(f"actor_id_duplicate:{actor_id}")
+        else:
+            actor_ids.append(actor_id)
+        expected_actor_id = _actor_stable_id(actor.get("name"))
+        if actor_id and actor_id != expected_actor_id:
+            errors.append(f"actor_id_not_semantic:{actor_id}")
+        tier = _actor_explicit_simulation_tier(actor)
+        if (
+            tier not in (1, 2)
+            or isinstance(actor.get("simulation_tier"), bool)
+            or not isinstance(actor.get("simulation_tier"), int)
+        ):
+            errors.append(f"simulation_tier_not_exact_enum:{actor_id or index}")
+        else:
+            tier_1_2_count += 1
+            tier_1_2_roster.append(actor_name)
+        if actor_id:
+            actor_by_id[actor_id] = actor
+        aliases = actor.get("aliases")
+        if aliases is not None and not isinstance(aliases, list):
+            errors.append(f"actor_aliases_not_list:{actor_id or index}")
+            aliases = []
+        for identity in [actor.get("name"), *(aliases or [])]:
+            normalized_identity = _actor_roster_name({"name": identity})
+            if normalized_identity:
+                namespace_owners.setdefault(
+                    normalized_identity, set()
+                ).add(actor_id or str(index))
+
+        intelligence = actor.get("intelligence")
+        if not isinstance(intelligence, dict):
+            errors.append(f"actor_intelligence_missing:{actor_id or index}")
+            continue
+        if intelligence.get("schema_version") != ACTOR_INTELLIGENCE_SCHEMA_VERSION:
+            errors.append(f"actor_intelligence_schema_mismatch:{actor_id or index}")
+        dimensions = intelligence.get("dimensions")
+        if not isinstance(dimensions, dict):
+            errors.append(f"dimensions_not_object:{actor_id or index}")
+            continue
+        if list(dimensions) != expected_dimensions:
+            errors.append(f"dimension_keys_or_order_mismatch:{actor_id or index}")
+        gaps = intelligence.get("evidence_gaps")
+        if not isinstance(gaps, dict):
+            errors.append(f"evidence_gaps_not_object:{actor_id or index}")
+            gaps = {}
+        omission_audit = intelligence.get("omission_audit")
+        if not isinstance(omission_audit, list):
+            errors.append(f"omission_audit_not_list:{actor_id or index}")
+        actor_covered: list[str] = []
+        actor_grounded: list[str] = []
+        actor_gap_count = 0
+        for dimension in ACTOR_INTELLIGENCE_DIMENSIONS:
+            claims = dimensions.get(dimension)
+            if not isinstance(claims, list):
+                errors.append(
+                    f"dimension_not_canonical_list:{actor_id or index}:{dimension}"
+                )
+                claims = []
+            elif any(not isinstance(claim, dict) for claim in claims):
+                errors.append(
+                    f"dimension_claim_not_object:{actor_id or index}:{dimension}"
+                )
+            for claim in claims:
+                if not isinstance(claim, dict):
+                    continue
+                normalized_claim = _actor_normalize_claim(
+                    claim,
+                    actor_id=actor_id,
+                    dimension=dimension,
+                    lookup=lookup,
+                    records=source_records,
+                )
+                if not normalized_claim or not normalized_claim.get(
+                    "source_support"
+                ):
+                    errors.append(
+                        "dimension_claim_not_quote_receipt_bound:"
+                        f"{actor_id or index}:{dimension}"
+                    )
+                    continue
+                if claim != normalized_claim:
+                    errors.append(
+                        f"dimension_claim_canonical_mismatch:"
+                        f"{actor_id or index}:{dimension}"
+                    )
+                    continue
+                claim_projection_hashes.append(
+                    normalized_claim["claim_sha256"]
+                )
+            if claims:
+                covered_slots += 1
+                actor_covered.append(dimension)
+            if any(
+                isinstance(claim, dict) and bool(claim.get("source_support"))
+                for claim in claims
+            ):
+                grounded_slots += 1
+                actor_grounded.append(dimension)
+            dimension_gaps = gaps.get(dimension)
+            if not isinstance(dimension_gaps, list):
+                errors.append(
+                    f"dimension_gap_not_list:{actor_id or index}:{dimension}"
+                )
+            else:
+                explicit_gaps += len(dimension_gaps)
+                actor_gap_count += len(dimension_gaps)
+        expected_actor_coverage = {
+            "covered_dimensions": actor_covered,
+            "grounded_dimensions": actor_grounded,
+            "dimension_coverage_ratio": round(
+                len(actor_covered) / len(ACTOR_INTELLIGENCE_DIMENSIONS), 4
+            ),
+            "grounded_coverage_ratio": round(
+                len(actor_grounded) / len(ACTOR_INTELLIGENCE_DIMENSIONS), 4
+            ),
+            "explicit_gap_count": actor_gap_count,
+        }
+        if intelligence.get("coverage") != expected_actor_coverage:
+            errors.append(f"actor_coverage_binding_mismatch:{actor_id or index}")
+
+    for identity, owners in namespace_owners.items():
+        if len(owners) > 1:
+            errors.append(f"actor_identity_namespace_overlap:{identity}")
+
+    actor_count = len(rows)
+    if contract.get("actor_count") != actor_count:
+        errors.append(
+            f"actor_count_mismatch:contract={contract.get('actor_count')},actual={actor_count}"
+        )
+    if contract.get("tier_1_2_actor_count") != tier_1_2_count:
+        errors.append("tier_1_2_actor_count_mismatch")
+    if tier_1_2_count == 0:
+        errors.append("tier_1_2_actor_count_zero")
+    actual_actor_ids_ordered_sha = hashlib.sha256(
+        "\n".join(actor_ids).encode("utf-8")
+    ).hexdigest()
+    actual_actor_ids_multiset_sha = _actor_multiset_sha256(actor_ids)
+    if contract.get("actor_ids_sha256") != actual_actor_ids_multiset_sha:
+        errors.append("actor_ids_sha256_mismatch")
+    if contract.get("actor_ids_ordered_sha256") != actual_actor_ids_ordered_sha:
+        errors.append("actor_ids_ordered_sha256_mismatch")
+    if contract.get("actor_ids_multiset_sha256") != actual_actor_ids_multiset_sha:
+        errors.append("actor_ids_multiset_sha256_mismatch")
+    actual_tier_roster_sha = hashlib.sha256(
+        "\n".join(sorted(tier_1_2_roster)).encode("utf-8")
+    ).hexdigest()
+    if contract.get("tier_1_2_actor_roster_sha256") != actual_tier_roster_sha:
+        errors.append("tier_1_2_actor_roster_sha256_mismatch")
+
+    report_text = report if isinstance(report, str) else ""
+    dossier_text = dossier if isinstance(dossier, str) else ""
+    if not report_text.strip():
+        errors.append("report_empty")
+    if contract.get("report_sha256") != hashlib.sha256(
+        report_text.encode("utf-8")
+    ).hexdigest():
+        errors.append("report_sha256_mismatch")
+    if contract.get("dossier_sha256") != hashlib.sha256(
+        dossier_text.encode("utf-8")
+    ).hexdigest():
+        errors.append("dossier_sha256_mismatch")
+
+    if contract.get("source_count") != len(source_rows):
+        errors.append("source_count_mismatch")
+    if contract.get("sources_sha256") != hashlib.sha256(
+        canonical_sources
+    ).hexdigest():
+        errors.append("sources_sha256_mismatch")
+    provenance_rows = [{
+        "source_id": str(source.get("source_id") or ""),
+        "content_sha256": str(source.get("content_sha256") or ""),
+        "receipt_id": str(source.get("receipt_id") or ""),
+        "provider": str(source.get("provider") or ""),
+        "cache_hits": source.get("cache_hits", 0),
+        "receipt_scopes": _actor_receipt_scopes(source),
+    } for source in sorted(
+        (row for row in source_rows if _actor_source_is_fetched(row)),
+        key=lambda row: str(row.get("source_id") or ""),
+    )]
+    canonical_provenance = json.dumps(
+        provenance_rows,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    cache_hit_total = 0
+    for row in provenance_rows:
+        try:
+            cache_hit_total += max(0, int(row.get("cache_hits") or 0))
+        except (TypeError, ValueError):
+            continue
+    expected_source_provenance = {
+        "fetched_source_count": len(provenance_rows),
+        "content_hash_count": sum(
+            bool(row["content_sha256"]) for row in provenance_rows
+        ),
+        "receipt_count": sum(bool(row["receipt_id"]) for row in provenance_rows),
+        "providers": sorted({
+            row["provider"] for row in provenance_rows if row["provider"]
+        }),
+        "cache_hit_total": cache_hit_total,
+        "sha256": hashlib.sha256(canonical_provenance).hexdigest(),
+    }
+    if contract.get("source_provenance") != expected_source_provenance:
+        errors.append("source_provenance_binding_mismatch")
+
+    if contract.get("claim_projection_count") != len(claim_projection_hashes):
+        errors.append("claim_projection_count_mismatch")
+    actual_claim_multiset_sha = _actor_multiset_sha256(
+        claim_projection_hashes
+    )
+    if (
+        contract.get("claim_projection_multiset_sha256")
+        != actual_claim_multiset_sha
+    ):
+        errors.append("claim_projection_multiset_sha256_mismatch")
+
+    raw_relationships = actors.get("relationships")
+    if not isinstance(raw_relationships, list):
+        errors.append("relationships_not_list")
+        relationships: list[dict[str, Any]] = []
+    else:
+        relationships = [
+            row for row in raw_relationships if isinstance(row, dict)
+        ]
+        if len(relationships) != len(raw_relationships):
+            errors.append("relationship_not_object")
+    relationship_id_indexes: dict[str, int] = {}
+    for relation_index, relation in enumerate(relationships):
+        source_actor_id = str(relation.get("source_actor_id") or "")
+        target_actor_id = str(relation.get("target_actor_id") or "")
+        source_actor = actor_by_id.get(source_actor_id)
+        target_actor = actor_by_id.get(target_actor_id)
+        if source_actor is None or target_actor is None:
+            errors.append(f"relationship_endpoint_unbound:{relation_index}")
+            continue
+        if (
+            relation.get("source_actor_id") != source_actor_id
+            or relation.get("target_actor_id") != target_actor_id
+            or relation.get("source") != str(source_actor.get("name") or "")
+            or relation.get("target") != str(target_actor.get("name") or "")
+        ):
+            errors.append(f"relationship_endpoint_name_mismatch:{relation_index}")
+        received_type = relation.get("type")
+        canonical_type = str(received_type or "OTHER").strip().upper()
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]{1,63}", canonical_type):
+            canonical_type = "OTHER"
+        received_label = relation.get("relation_label")
+        canonical_label = str(received_label or "").strip()
+        if received_type != canonical_type:
+            errors.append(f"relationship_type_noncanonical:{relation_index}")
+        if received_label != canonical_label:
+            errors.append(f"relationship_label_noncanonical:{relation_index}")
+        claim_value = dict(relation)
+        claim_value["claim"] = str(relation.get("basis") or "")
+        claim_value.pop("type", None)
+        claim_value.pop("basis", None)
+        try:
+            causal_attributes = _actor_relationship_causal_attributes(relation)
+        except ValueError as exc:
+            errors.append(
+                f"relationship_causal_attributes_invalid:{relation_index}:{exc}"
+            )
+            continue
+        for key in _ACTOR_RELATIONSHIP_CAUSAL_ATTRIBUTE_KEYS:
+            claim_value.pop(key, None)
+        expected_claim = _actor_normalize_claim(
+            claim_value,
+            actor_id=source_actor_id,
+            dimension="relationship",
+            lookup=lookup,
+            records=source_records,
+            causal_attributes=causal_attributes,
+        )
+        if not expected_claim or not expected_claim.get("source_support"):
+            errors.append(
+                f"relationship_not_quote_receipt_bound:{relation_index}"
+            )
+            continue
+        for key in (
+            "claim", "evidence_type", "claim_valid_at", "as_of_date",
+            "horizon", "status", "confidence", "source_refs", "source_support",
+            "qualifiers", "claim_id", "claim_sha256",
+        ):
+            expected = expected_claim[key]
+            received = relation.get("basis") if key == "claim" else relation.get(key)
+            if received != expected:
+                errors.append(
+                    f"relationship_claim_canonical_mismatch:{relation_index}:{key}"
+                )
+                break
+        identity_payload = {
+            "source_actor_id": source_actor_id,
+            "target_actor_id": target_actor_id,
+            "type": canonical_type,
+            "relation_label": canonical_label,
+            "claim_sha256": expected_claim["claim_sha256"],
+            "causal_attributes": causal_attributes,
+        }
+        expected_relationship_id = "relation_" + hashlib.sha256(json.dumps(
+            identity_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()[:20]
+        received_relationship_id = relation.get("relationship_id")
+        if received_relationship_id != expected_relationship_id:
+            errors.append(f"relationship_id_mismatch:{relation_index}")
+        if isinstance(received_relationship_id, str):
+            prior_index = relationship_id_indexes.get(received_relationship_id)
+            if prior_index is not None:
+                errors.append(
+                    "relationship_id_duplicate:"
+                    f"{prior_index}:{relation_index}:{received_relationship_id}"
+                )
+            else:
+                relationship_id_indexes[received_relationship_id] = relation_index
+    relationship_bytes = json.dumps(
+        relationships,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    if contract.get("relationship_count") != len(relationships):
+        errors.append("relationship_count_mismatch")
+    if contract.get("relationships_sha256") != hashlib.sha256(
+        relationship_bytes
+    ).hexdigest():
+        errors.append("relationships_sha256_mismatch")
+    relationship_omissions = actors.get("relationship_omission_audit")
+    if not isinstance(relationship_omissions, list):
+        errors.append("relationship_omission_audit_not_list")
+        relationship_omissions = []
+    if contract.get("relationship_omission_count") != len(
+        relationship_omissions
+    ):
+        errors.append("relationship_omission_count_mismatch")
+
+    dossier_seals, dossier_errors = _actor_dossier_reception_seals(
+        dossier_text,
+        lookup=lookup,
+        records=source_records,
+    )
+    errors.extend(dossier_errors)
+    dossier_contract_bindings = {
+        "tier_1_2_actor_count": contract.get("tier_1_2_actor_count"),
+        "tier_1_2_actor_roster_sha256": contract.get(
+            "tier_1_2_actor_roster_sha256"
+        ),
+        "tier_1_2_actor_ids_ordered_sha256": contract.get(
+            "actor_ids_ordered_sha256"
+        ),
+        "tier_1_2_actor_ids_multiset_sha256": contract.get(
+            "actor_ids_multiset_sha256"
+        ),
+        "claim_projection_count": contract.get("claim_projection_count"),
+        "claim_projection_multiset_sha256": contract.get(
+            "claim_projection_multiset_sha256"
+        ),
+    }
+    for key, expected in dossier_contract_bindings.items():
+        if dossier_seals.get(key) != expected:
+            errors.append(f"dossier_contract_seal_mismatch:{key}")
+
+    dimension_slots = actor_count * len(ACTOR_INTELLIGENCE_DIMENSIONS)
+    expected_coverage = {
+        "dimension_slots": dimension_slots,
+        "covered_dimension_slots": covered_slots,
+        "grounded_dimension_slots": grounded_slots,
+        "coverage_ratio": round(
+            covered_slots / dimension_slots, 4
+        ) if dimension_slots else 0.0,
+        "grounded_coverage_ratio": round(
+            grounded_slots / dimension_slots, 4
+        ) if dimension_slots else 0.0,
+        "explicit_gap_count": explicit_gaps,
+    }
+    if contract.get("coverage") != expected_coverage:
+        errors.append("coverage_binding_mismatch")
+    if not str(contract.get("generated_at") or "").strip():
+        errors.append("generated_at_missing")
+    errors.extend(_actor_lineage_reception_errors(
+        handoff_dir,
+        actors=actors,
+        sources=source_rows,
+        report=report_text,
+        dossier=dossier_text,
+        contract=contract,
+        dossier_seals=dossier_seals,
+        expected_question=expected_question,
+        expected_depth=expected_depth,
+        expected_run_id=expected_run_id,
+        expected_attempt_ids=set(expected_attempt_ids or set()),
+    ))
+    return errors
+
+
+def _enforce_actor_intelligence_reception(
+    state: PipelineState,
+    actors: Any,
+    *,
+    report: Any,
+    dossier: Any,
+    sources: Any,
+    handoff_dir: str = "",
+) -> None:
+    """Apply the run-pinned parent reception policy before ONTOLOGY/GRAPH."""
+    policy = (state.options or {}).get("actor_intelligence_policy_v1")
+    if policy is None:
+        # Pre-policy runs did not request this versioned interface.  Retain the
+        # historical no-actor/legacy path rather than retroactively changing a
+        # persisted run's contract from ambient configuration.
+        state.options["actor_intelligence_reception"] = {
+            "required": False,
+            "passed": True,
+            "reason": "legacy_run_without_pinned_policy",
+        }
+        return
+    if (
+        not isinstance(policy, dict)
+        or policy.get("version") != ACTOR_INTELLIGENCE_POLICY_VERSION
+        or policy.get("schema_version") != ACTOR_INTELLIGENCE_SCHEMA_VERSION
+        or not isinstance(policy.get("required"), bool)
+    ):
+        raise RuntimeError("actor-intelligence/v1 reception policy is malformed")
+    if policy["required"] is False:
+        state.options["actor_intelligence_reception"] = {
+            "required": False,
+            "passed": True,
+            "reason": "actor_track_explicitly_disabled_at_admission",
+        }
+        return
+
+    expected_attempt_ids = _research_budget_attempt_ids(state)
+    errors = _actor_intelligence_reception_errors(
+        actors,
+        report=report,
+        dossier=dossier,
+        sources=sources,
+        handoff_dir=handoff_dir,
+        expected_question=state.prompt,
+        expected_depth=str(
+            state.options.get("depth")
+            or getattr(Config, "DEERFLOW_RESEARCH_DEPTH", "standard")
+        ),
+        expected_run_id=state.pipeline_id,
+        expected_attempt_ids=expected_attempt_ids,
+    )
+    state.options["actor_intelligence_reception"] = {
+        "required": True,
+        "passed": not errors,
+        "schema_version": ACTOR_INTELLIGENCE_SCHEMA_VERSION,
+        "actor_count": (
+            len(actors.get("actors") or []) if isinstance(actors, dict) else 0
+        ),
+        "errors": errors,
+    }
+    if errors:
+        raise RuntimeError(
+            "actor-intelligence/v1 reception failed before ontology/graph: "
+            + "; ".join(errors[:12])
+        )
+
+
 def _forecast_inputs_missing(actors: Any) -> bool:
     """actors 是否缺少可用的 ``forecast_inputs.scenarios``（据此决定是否从报告兜底解析）。
 
@@ -2752,10 +5044,16 @@ def inject_forecast_inputs_from_report(
     注入** actors['forecast_inputs']（纯离线、无 LLM）。
 
     返回注入用的 forecast_inputs（含非空 scenarios）——命中；否则 None：actors 已有种子、
-    非 dict、报告未解析出概率分布，或解析异常。degrade-safe——调用方保持今日行为。命中后
-    actors 被原地修改，故同一次运行的下游（world_state 种子、报告代理等）与随契约密封的
-    actors.json 都能看到它。
+    是不可变的 actor-intelligence/v1、非 dict、报告未解析出概率分布，或解析异常。
+    degrade-safe——调用方保持 legacy 行为。命中后 pre-v1 actors 被原地修改，故同一次运行
+    的下游与随后密封的外层 research generation 都能看到它。
     """
+    # The versioned producer contract is immutable after sealing.  Scenario
+    # extraction belongs upstream of that boundary; mutating even an unrelated
+    # top-level key here would make the in-memory actor object differ from the
+    # exact ``actors.json`` generation consumed by actor-context provenance.
+    if _is_sealed_actor_intelligence_v1(actors):
+        return None
     if not _forecast_inputs_missing(actors):
         return None
     try:
@@ -3728,6 +6026,112 @@ def _actors_to_context(actors: Optional[dict]) -> Optional[str]:
     rows = actors.get("actors") or []
     if not rows:
         return None
+
+    contract = actors.get("actor_intelligence_contract")
+    if (
+        isinstance(contract, dict)
+        and contract.get("schema_version") == ACTOR_INTELLIGENCE_SCHEMA_VERSION
+    ):
+        # A received v1 cast has already passed the parent claim contract.  Do
+        # not reintroduce the model-authored flat role/stance/brief/topic plane
+        # into ontology generation: those fields are outside the seal and can
+        # contradict the canonical source-bound dimensions.  The ontology sees
+        # only structural identity/type plus a bounded canonical claim view.
+        lines = [
+            "Actor intelligence（actor-intelligence/v1；仅结构身份与来源绑定声明）："
+        ]
+        context_chars = len(lines[0])
+        for actor in rows[:25]:
+            if not isinstance(actor, dict):
+                continue
+            name = str(actor.get("name") or "?").strip()
+            actor_id = str(actor.get("actor_id") or "").strip()
+            actor_type = str(actor.get("type") or "").strip()
+            tier = _actor_explicit_simulation_tier(actor)
+            aliases = [
+                " ".join(str(alias).split())
+                for alias in (actor.get("aliases") or [])
+                if isinstance(alias, str) and alias.strip()
+            ] if isinstance(actor.get("aliases"), list) else []
+            identity = f"- {name}"
+            if actor_id:
+                identity += f" <{actor_id}>"
+            if actor_type:
+                identity += f" type={actor_type}"
+            if tier is not None:
+                identity += f" simulation_tier={tier}"
+            if aliases:
+                identity += " aliases=" + "|".join(aliases[:8])
+
+            intelligence = actor.get("intelligence")
+            dimensions = (
+                intelligence.get("dimensions")
+                if isinstance(intelligence, dict) else None
+            )
+            claim_bits: list[str] = []
+            if isinstance(dimensions, dict):
+                for dimension in ACTOR_INTELLIGENCE_DIMENSIONS:
+                    claims = dimensions.get(dimension)
+                    if not isinstance(claims, list):
+                        continue
+                    claim = next((
+                        candidate for candidate in claims
+                        if isinstance(candidate, dict)
+                        and re.fullmatch(
+                            r"claim_[0-9a-f]{20}",
+                            str(candidate.get("claim_id") or ""),
+                        )
+                        and _actor_valid_sha256(
+                            candidate.get("claim_sha256")
+                        )
+                        and any(
+                            isinstance(support, dict)
+                            and str(support.get("source_id") or "").strip()
+                            and str(support.get("receipt_id") or "").strip()
+                            and _actor_valid_sha256(
+                                support.get("content_sha256")
+                            )
+                            for support in candidate.get("source_support") or []
+                        )
+                    ), None)
+                    if claim is None:
+                        continue
+                    text = " ".join(
+                        str(claim.get("claim") or "").split()
+                    )[:360]
+                    if not text:
+                        continue
+                    provenance = "/".join(filter(None, (
+                        str(claim.get("evidence_type") or "").strip(),
+                        str(claim.get("confidence") or "").strip(),
+                        str(claim.get("status") or "").strip(),
+                        str(claim.get("horizon") or "").strip(),
+                        str(
+                            claim.get("claim_valid_at")
+                            or claim.get("as_of_date") or ""
+                        ).strip(),
+                    )))
+                    source_ids = sorted({
+                        str(support.get("source_id") or "").strip()
+                        for support in claim.get("source_support") or []
+                        if isinstance(support, dict)
+                        and str(support.get("source_id") or "").strip()
+                    })
+                    claim_bits.append(
+                        f"{dimension}={text}"
+                        + (f" [{provenance}]" if provenance else "")
+                        + (f" sources={','.join(source_ids)}" if source_ids else "")
+                    )
+            rendered = identity
+            if claim_bits:
+                rendered += ": " + "; ".join(claim_bits)
+            if context_chars + len(rendered) > 12000:
+                break
+            lines.append(rendered)
+            context_chars += len(rendered)
+        return "\n".join(lines)
+
+    # Legacy/no-contract actors retain the historical permissive projection.
     lines = ["根据深度研究，本事件涉及以下真实命名实体（请让本体覆盖这些类型的角色）："]
     for a in rows[:25]:
         if not isinstance(a, dict):
@@ -3737,6 +6141,7 @@ def _actors_to_context(actors: Optional[dict]) -> Optional[str]:
         role = a.get("role", "")
         stance = a.get("stance", "")
         lines.append(f"- {name}（{typ}）：{role} 立场：{stance}".strip())
+
     topics = actors.get("hot_topics") or []
     if topics:
         lines.append("热点议题：" + "、".join(str(t) for t in topics[:10]))
@@ -3759,6 +6164,237 @@ def _actors_to_context(actors: Optional[dict]) -> Optional[str]:
             label = REL_LABEL.get(typ, typ or "关联")
             lines.append(f"- {r.get('source')} --[{label}/{typ}]--> {r.get('target')}")
     return "\n".join(lines)
+
+
+def _expected_actor_seed_count(actors: Any) -> int:
+    """Return the exact triplet attempts expected from ``seed_actors``."""
+    if not isinstance(actors, dict):
+        return 0
+    rows = [
+        row for row in (actors.get("actors") or [])
+        if isinstance(row, dict) and str(row.get("name") or "").strip()
+    ]
+    relationships = extract_relationship_rows(actors)
+    if _is_sealed_actor_intelligence_v1(actors):
+        # The strict v1 writer always emits one deterministic actor-identity
+        # edge per roster member before aliases and relationships.  The legacy
+        # writer only needs isolated-actor edges, which is handled below.
+        expected = len(rows) + len(relationships)
+        for row in rows:
+            name = str(row.get("name") or "")
+            aliases = row.get("aliases")
+            if not isinstance(aliases, list):
+                continue
+            expected += sum(
+                1 for alias in aliases
+                if isinstance(alias, str) and alias.strip()
+                and normalize_name(alias) != normalize_name(name)
+            )
+        return expected
+    seeded_names = {
+        str(value or "")
+        for relation in relationships
+        for value in (relation.get("source"), relation.get("target"))
+        if str(value or "")
+    }
+    expected = len(relationships) + sum(
+        str(row.get("name") or "") not in seeded_names for row in rows
+    )
+    for row in rows:
+        name = str(row.get("name") or "")
+        aliases = row.get("aliases")
+        if not isinstance(aliases, list):
+            continue
+        expected += sum(
+            1 for alias in aliases
+            if isinstance(alias, str) and alias.strip()
+            and normalize_name(alias) != normalize_name(name)
+        )
+    return expected
+
+
+def _actor_graph_seed_manifest_sha256(manifest: Any) -> str:
+    """Independently verify the graph-owned manifest's canonical identity."""
+    if not isinstance(manifest, dict):
+        raise RuntimeError("actor graph seed manifest is not an object")
+    body = {
+        key: value for key, value in manifest.items()
+        if key != "manifest_sha256"
+    }
+    return hashlib.sha256(json.dumps(
+        body,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+
+
+def _load_actor_graph_seed_manifest(state: Any) -> Optional[dict[str, Any]]:
+    """Load the persisted strict-v1 graph seed identity for resume checks."""
+    handoff_dir = state.handoff_dir or PipelineManager.handoff_dir(
+        state.pipeline_id
+    )
+    artifact_path = state.artifacts.get("actor_graph_seed_manifest")
+    path = str(
+        artifact_path
+        or os.path.join(handoff_dir, ACTOR_GRAPH_SEED_MANIFEST_FILENAME)
+    )
+    value = _read_json(path)
+    return value if isinstance(value, dict) else None
+
+
+def _validate_actor_graph_seed_contract(
+    builder: Any,
+    graph_id: str,
+    actors: Any,
+    *,
+    phase: str,
+    expected_manifest: Optional[dict[str, Any]] = None,
+    state: Any = None,
+    persist: bool = False,
+) -> Optional[dict[str, Any]]:
+    """Prove the deterministic v1 seed exists, with exact UUIDs and attrs.
+
+    Count-only success is insufficient: duplicate deterministic UUIDs, entity
+    resolution, pruning, or stale graph reuse can all leave fewer or different
+    physical records while reporting successful calls.  The graph service owns
+    projection/readback details; the parent independently binds its immutable
+    expected manifest to the admitted actor contract and pipeline graph.
+    """
+    if not _is_sealed_actor_intelligence_v1(actors):
+        return None
+    try:
+        current_manifest = build_actor_graph_seed_manifest(graph_id, actors)
+    except Exception as exc:
+        raise RuntimeError(
+            f"sealed actor-intelligence/v1 graph seed manifest failed:{phase}"
+        ) from exc
+    if (
+        not isinstance(current_manifest, dict)
+        or current_manifest.get("schema_version")
+        != ACTOR_GRAPH_SEED_MANIFEST_SCHEMA_VERSION
+        or current_manifest.get("strict") is not True
+        or current_manifest.get("graph_id") != graph_id
+    ):
+        raise RuntimeError(
+            f"sealed actor-intelligence/v1 graph seed manifest invalid:{phase}"
+        )
+    current_sha = _actor_graph_seed_manifest_sha256(current_manifest)
+    if current_manifest.get("manifest_sha256") != current_sha:
+        raise RuntimeError(
+            f"sealed actor-intelligence/v1 graph seed manifest hash invalid:{phase}"
+        )
+    if expected_manifest is not None:
+        expected_sha = _actor_graph_seed_manifest_sha256(expected_manifest)
+        if (
+            expected_manifest.get("manifest_sha256") != expected_sha
+            or expected_sha != current_sha
+        ):
+            raise RuntimeError(
+                "sealed actor-intelligence/v1 graph seed manifest identity "
+                f"mismatch:{phase}"
+            )
+    validator = getattr(builder, "validate_actor_graph_seed_readback", None)
+    if not callable(validator):
+        raise RuntimeError(
+            "sealed actor-intelligence/v1 graph seed readback unavailable:"
+            f"{phase}"
+        )
+    try:
+        audit = validator(graph_id, current_manifest)
+    except Exception as exc:
+        raise RuntimeError(
+            f"sealed actor-intelligence/v1 graph seed readback failed:{phase}"
+        ) from exc
+    if (
+        not isinstance(audit, dict)
+        or audit.get("schema_version")
+        != ACTOR_GRAPH_SEED_READBACK_SCHEMA_VERSION
+        or audit.get("status") != "ok"
+        or audit.get("strict") is not True
+        or audit.get("graph_id") != graph_id
+        or audit.get("manifest_sha256") != current_sha
+        or audit.get("expected_counts")
+        != current_manifest.get("expected_counts")
+    ):
+        raise RuntimeError(
+            f"sealed actor-intelligence/v1 graph seed readback invalid:{phase}"
+        )
+
+    if state is not None:
+        state.options["graph_seed_manifest_sha256"] = current_sha
+        validations = state.options.setdefault("graph_seed_readback", {})
+        validations[phase] = json.loads(json.dumps(
+            audit,
+            ensure_ascii=False,
+            sort_keys=True,
+        ))
+    if persist:
+        if state is None:
+            raise RuntimeError("graph seed manifest persistence requires state")
+        from ..utils.atomic import write_json_atomic
+
+        handoff_dir = state.handoff_dir or PipelineManager.handoff_dir(
+            state.pipeline_id
+        )
+        os.makedirs(handoff_dir, exist_ok=True)
+        path = os.path.join(
+            handoff_dir,
+            ACTOR_GRAPH_SEED_MANIFEST_FILENAME,
+        )
+        write_json_atomic(path, current_manifest)
+        state.artifacts["actor_graph_seed_manifest"] = path
+    return current_manifest
+
+
+def _seed_research_actors(
+    builder: Any,
+    graph_id: str,
+    actors: Any,
+    *,
+    valid_at: Any,
+) -> Optional[int]:
+    """Seed actors, failing closed for an admitted v1 cast.
+
+    ``GraphBuilderService.seed_actors`` historically degrades per-triplet write
+    failures into a short count.  That remains acceptable for legacy payloads,
+    but a current v1 cast is a required, parent-admitted Stage-1 artifact: a
+    disabled, raised, missing, zero, or partial seed cannot silently fall back
+    to prose extraction.
+    """
+    if not actors:
+        return None
+    required = _is_sealed_actor_intelligence_v1(actors)
+    if not getattr(Config, "GRAPH_SEED_FROM_ACTORS", False):
+        if required:
+            raise RuntimeError(
+                "sealed actor-intelligence/v1 graph seeding is disabled"
+            )
+        return None
+    expected = _expected_actor_seed_count(actors)
+    if required and expected <= 0:
+        raise RuntimeError(
+            "sealed actor-intelligence/v1 has no graph seed projection"
+        )
+    try:
+        seeded = builder.seed_actors(graph_id, actors, valid_at=valid_at)
+    except Exception as exc:
+        if required:
+            raise RuntimeError(
+                "sealed actor-intelligence/v1 graph seeding failed"
+            ) from exc
+        logger.warning("[%s] actor seeding skipped: %s", graph_id, exc)
+        return None
+    if required and (
+        isinstance(seeded, bool)
+        or not isinstance(seeded, int)
+        or seeded < expected
+    ):
+        raise RuntimeError(
+            "sealed actor-intelligence/v1 graph seeding incomplete: "
+            f"expected={expected},seeded={seeded!r}"
+        )
+    return seeded
 
 
 # ---------------------------------------------------------------------------
@@ -3872,6 +6508,9 @@ def _build_run_manifest(state: "PipelineState") -> dict[str, Any]:
                 "depth": str(depth).lower() if depth else None,
                 "timeout_s": research_timeout,
                 "language": opts.get("research_language"),
+                "actor_intelligence_policy": opts.get(
+                    "actor_intelligence_policy_v1"
+                ),
             },
             # provider 在每阶段边界由 _update_manifest 钉入实际值（可热切换）
             "ontology": {"provider": None, "model_name": None},
@@ -4439,6 +7078,9 @@ class PipelineOrchestrator:
             "research_language": language,
             "research_model": model or None,
         })
+        state.options["actor_intelligence_policy_v1"] = (
+            capture_actor_intelligence_policy_v1("admission")
+        )
         # Foglamp WP1 (1B)：新管线在准入时钉住安全政策快照——服务重载/环境变量漂移
         # 不得让一条已准入的运行悄悄改变图谱反馈/种子/extremize/模拟影响语义。
         state.options["safety_policy_v1"] = capture_safety_policy_v1("admission")
@@ -4795,6 +7437,12 @@ class PipelineOrchestrator:
             "base_pipeline_id": base_pipeline_id,
             "project_name": base_state.options.get("project_name"),
         }
+        _actor_policy = base_state.options.get("actor_intelligence_policy_v1")
+        if isinstance(_actor_policy, dict):
+            # Scenario forks consume the base research generation.  Preserve
+            # the base run's exact actor requirement instead of consulting
+            # today's ambient dual-track flag.
+            new_state.options["actor_intelligence_policy_v1"] = dict(_actor_policy)
         if (overlay or {}).get("max_rounds"):
             try:
                 new_state.options["max_rounds"] = int(overlay["max_rounds"])
@@ -4861,6 +7509,22 @@ class PipelineOrchestrator:
             fallback = max(agents, key=lambda x: x.get("influence_weight", 1.0), default=None)
             fb_id = fallback.get("agent_id") if fallback else 0
             fb_name = fallback.get("entity_name") if fallback else ""
+            existing_injection_counts: dict[str, int] = {}
+            for existing in sched:
+                if not isinstance(existing, dict) or not existing.get(
+                    "is_scenario_injection"
+                ):
+                    continue
+                key = json.dumps(
+                    existing,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                existing_injection_counts[key] = (
+                    existing_injection_counts.get(key, 0) + 1
+                )
+            requested_injection_counts: dict[str, int] = {}
             for ev in injected:
                 poster_name = str(ev.get("poster_name", "") or "").strip()
                 a = by_name.get(normalize_name(poster_name)) if poster_name else None
@@ -4882,14 +7546,34 @@ class PipelineOrchestrator:
                         else:
                             _round = 0  # 早于 as_of → 起手轮
                             logger.warning("注入事件日期 %s 早于 as_of，落到第 0 轮", ev.get("date"))
-                sched.append({
+                event_row = {
                     "round": _round,
                     "content": str(ev.get("content", "") or ""),
                     "date": ev.get("date"),
                     "poster_agent_id": a.get("agent_id") if a else fb_id,
                     "poster_name": a.get("entity_name") if a else fb_name,
                     "is_scenario_injection": True,
-                })
+                }
+                event_key = json.dumps(
+                    event_row,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                requested_injection_counts[event_key] = (
+                    requested_injection_counts.get(event_key, 0) + 1
+                )
+                # Reapplying PREPARE after a corrupt RUN must reconstruct the
+                # same desired overlay, not append another copy. Preserve an
+                # intentional duplicate within the overlay by matching counts.
+                if existing_injection_counts.get(event_key, 0) >= (
+                    requested_injection_counts[event_key]
+                ):
+                    continue
+                sched.append(event_row)
+                existing_injection_counts[event_key] = (
+                    existing_injection_counts.get(event_key, 0) + 1
+                )
         return config
 
     # -- NEXTSTEPS P0-3: 同问多种子集成 -----------------------------------
@@ -5953,11 +8637,19 @@ class PipelineOrchestrator:
             specs.append(("ontology", os.path.join(hd, "ontology.json")))
         elif stage == STAGE_GRAPH:
             specs.append(("communities", os.path.join(hd, "communities.json")))
+            specs.append((
+                "actor_graph_seed_manifest",
+                os.path.join(hd, ACTOR_GRAPH_SEED_MANIFEST_FILENAME),
+            ))
         elif stage == STAGE_PREPARE:
             sim_id = state.simulation_id
             if sim_id:
                 sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, sim_id)
                 specs.append(("initial_posts", os.path.join(sim_dir, "simulation_config.json")))
+                specs.append((
+                    "simulation_config_manifest",
+                    os.path.join(sim_dir, "simulation_config_manifest.json"),
+                ))
                 for fname in ("twitter_profiles.csv", "reddit_profiles.json"):
                     specs.append(("personas", os.path.join(sim_dir, fname)))
                 specs.append(("actor_cast", os.path.join(
@@ -6999,9 +9691,20 @@ class PipelineOrchestrator:
         _sync_deerflow_bridge_if_stale(Config.DEERFLOW_DIR)
         manifest = _read_json(manifest_path)
         lanes = manifest.get("lanes") if isinstance(manifest, dict) else None
-        if not isinstance(lanes, list) or not lanes:
+        actor_descriptor = (
+            manifest.get("actor_dossier")
+            if isinstance(manifest, dict) else None
+        )
+        if (
+            not isinstance(manifest, dict)
+            or int(manifest.get("version") or 0) < 3
+            or not isinstance(lanes, list)
+            or not lanes
+            or not isinstance(actor_descriptor, dict)
+        ):
             raise RuntimeError(
-                "synthesis-only recovery requires a nonempty evidence manifest"
+                "synthesis-only recovery requires a version-3 evidence manifest "
+                "with a checksum-bound shared actor dossier"
             )
         budget_db_path, budget_telemetry_path, budget_epoch = (
             _synthesis_recovery_budget_epoch(state, handoff_dir)
@@ -7020,7 +9723,6 @@ class PipelineOrchestrator:
             getattr(Config, "RESEARCH_GLOBAL_MODEL_CONCURRENCY", 0),
         )
 
-        dossier = _read_text(os.path.join(handoff_dir, "actor_dossier.md"))
         market_lines: list[str] = []
         seen_market_lines: set[str] = set()
         candidate_paths = [
@@ -7056,9 +9758,6 @@ class PipelineOrchestrator:
             attempts = attempt
             synthesis_dir = tempfile.mkdtemp(
                 prefix=f".synthesis-recovery-{attempt}-", dir=handoff_dir)
-            if dossier.strip():
-                write_text_atomic(
-                    os.path.join(synthesis_dir, "actor_dossier.md"), dossier)
             if market_lines:
                 write_text_atomic(
                     os.path.join(
@@ -7308,9 +10007,22 @@ class PipelineOrchestrator:
             track_dir = os.path.join(handoff_dir, f"track_{idx + 1}")
             os.makedirs(track_dir, exist_ok=True)
             track_prompt = (prefix + state.prompt) if prefix else state.prompt
+            track_lane_id = f"outer-track-{idx + 1}"
             # ITEM-3：每轨各写自己的 track_<k>/research_checkpoint.json；重试时逐轨判定续跑
             # （某轨已完成的 pass 不重跑，只补未完成的）。首跑无 checkpoint → 全量跑该轨。
-            _resume_track = _has_research_checkpoint(track_dir)
+            _resume_lineage = _validated_research_checkpoint_lineage(
+                track_dir,
+                prompt=track_prompt,
+                depth=str(
+                    state.options.get("depth")
+                    or getattr(Config, "DEERFLOW_RESEARCH_DEPTH", "standard")
+                ),
+                run_id=state.pipeline_id,
+                lane_id=track_lane_id,
+                expected_attempt_ids=_research_budget_attempt_ids(state),
+            )
+            _resume_attempt_id = _resume_lineage.get("attempt_id", "")
+            _resume_track = bool(_resume_attempt_id)
             res = DeerFlowResearchRunner.run(
                 track_prompt,
                 track_dir,
@@ -7323,10 +10035,14 @@ class PipelineOrchestrator:
                 resume=_resume_track,
                 kg_graph_id=state.graph_id,  # W9-9：图谱已存在时接入 KG MCP（首跑为 None → no-op）
                 budget_db_path=budget_db_path,
-                budget_lane_id=f"outer-track-{idx + 1}",
+                budget_lane_id=track_lane_id,
                 budget_telemetry_path=budget_telemetry_path,
                 budget_run_id=state.pipeline_id,
                 budget_epoch=budget_epoch,
+                resume_attempt_id=_resume_attempt_id,
+                resume_checkpoint_id=_resume_lineage.get(
+                    "checkpoint_id", ""
+                ),
                 subagents=harness_subagents,
                 max_concurrent_subagents=max(1, subagent_cap),
                 model_concurrency_global=model_concurrency,
@@ -7388,6 +10104,34 @@ class PipelineOrchestrator:
         merged_sources = merge_sources_union(track_sources)
 
         if global_synthesis:
+            # The broad baseline (index 0) is the sole owner of shared actor
+            # intelligence.  Evidence from other angles is useful without that
+            # lane, but the final report/simulation contract is not: fail closed
+            # instead of publishing an actor-free synthesis or picking the
+            # "longest" dossier from an unintended lane.
+            if 0 not in results:
+                raise RuntimeError(
+                    "broad baseline evidence lane failed; required shared actor "
+                    "intelligence is unavailable"
+                )
+            baseline_title, baseline_dir, baseline_result = results[0]
+            shared_dossier = str(
+                baseline_result.get("actor_dossier") or "").strip()
+            if not shared_dossier:
+                raise RuntimeError(
+                    "broad baseline evidence lane returned no fresh shared actor dossier"
+                )
+            leaked_actor_lanes = [
+                index + 1
+                for index, (_title, _track_dir, result) in results.items()
+                if index != 0 and str(result.get("actor_dossier") or "").strip()
+            ]
+            if leaked_actor_lanes:
+                raise RuntimeError(
+                    "non-baseline evidence lanes produced actor dossiers: "
+                    + ", ".join(str(index) for index in leaked_actor_lanes)
+                )
+
             manifest_path = os.path.join(
                 handoff_dir, "evidence_synthesis_manifest.json")
             lane_manifest_rows: list[dict[str, Any]] = []
@@ -7434,6 +10178,77 @@ class PipelineOrchestrator:
                     "sources_bytes": len(source_bytes),
                     "sources_sha256": hashlib.sha256(source_bytes).hexdigest(),
                 })
+
+            def _sealed_actor_artifact(
+                    path: str, *, label: str) -> tuple[bytes, str]:
+                if not os.path.isfile(path) or os.path.islink(path):
+                    raise RuntimeError(
+                        f"baseline actor dossier has missing {label}: "
+                        f"{os.path.relpath(path, handoff_dir)}"
+                    )
+                with open(path, "rb") as artifact_handle:
+                    raw = artifact_handle.read()
+                if not raw:
+                    raise RuntimeError(
+                        f"baseline actor dossier has empty {label}: "
+                        f"{os.path.relpath(path, handoff_dir)}"
+                    )
+                return raw, os.path.relpath(path, handoff_dir)
+
+            dossier_path = os.path.join(
+                baseline_dir, "actor_dossier.md")
+            coverage_path = os.path.join(
+                baseline_dir, "actor_dossier_coverage.json")
+            baseline_sources_path = os.path.join(
+                baseline_dir, "sources.json")
+            dossier_bytes, dossier_relative = _sealed_actor_artifact(
+                dossier_path, label="dossier")
+            coverage_bytes, coverage_relative = _sealed_actor_artifact(
+                coverage_path, label="coverage audit")
+            baseline_source_bytes, baseline_source_relative = (
+                _sealed_actor_artifact(
+                    baseline_sources_path, label="source ledger")
+            )
+            if dossier_bytes.decode("utf-8").strip() != shared_dossier:
+                raise RuntimeError(
+                    "baseline runner dossier differs from sealed actor_dossier.md"
+                )
+            actor_descriptor: dict[str, Any] = {
+                "lane_index": 1,
+                "lane_title": baseline_title,
+                "path": dossier_relative,
+                "bytes": len(dossier_bytes),
+                "sha256": hashlib.sha256(dossier_bytes).hexdigest(),
+                "coverage_path": coverage_relative,
+                "coverage_bytes": len(coverage_bytes),
+                "coverage_sha256": hashlib.sha256(
+                    coverage_bytes).hexdigest(),
+                # load_manifest_actor_dossier reuses the same strict positional
+                # ledger reader as evidence lanes to remap local [S<n>] markers.
+                "sources_path": baseline_source_relative,
+                "sources_bytes": len(baseline_source_bytes),
+                "sources_sha256": hashlib.sha256(
+                    baseline_source_bytes).hexdigest(),
+            }
+            baseline_meta = _read_json(os.path.join(
+                baseline_dir, "meta.json"))
+            current_judge_sha = str(
+                (baseline_meta or {}).get("actor_dossier_judge_sha256") or ""
+            ).strip() if isinstance(baseline_meta, dict) else ""
+            if current_judge_sha:
+                judge_path = os.path.join(
+                    baseline_dir, "actor_dossier_judge.json")
+                judge_bytes, judge_relative = _sealed_actor_artifact(
+                    judge_path, label="judge scorecard")
+                if hashlib.sha256(judge_bytes).hexdigest() != current_judge_sha:
+                    raise RuntimeError(
+                        "baseline actor judge does not match current-attempt metadata"
+                    )
+                actor_descriptor.update({
+                    "judge_path": judge_relative,
+                    "judge_bytes": len(judge_bytes),
+                    "judge_sha256": current_judge_sha,
+                })
             canonical_sources = json.dumps(
                 merged_sources,
                 ensure_ascii=False,
@@ -7441,22 +10256,15 @@ class PipelineOrchestrator:
                 separators=(",", ":"),
             ).encode("utf-8")
             manifest = {
-                "version": 2,
+                "version": 3,
                 "pipeline_id": state.pipeline_id,
                 "lanes": lane_manifest_rows,
                 "sources": merged_sources,
                 "sources_count": len(merged_sources),
                 "sources_sha256": hashlib.sha256(canonical_sources).hexdigest(),
+                "actor_dossier": actor_descriptor,
             }
             write_json_atomic(manifest_path, manifest)
-
-            dossier_candidates = [
-                str(res.get("actor_dossier") or "").strip()
-                for _title, _track_dir, res in ordered
-                if str(res.get("actor_dossier") or "").strip()
-            ]
-            shared_dossier = max(
-                dossier_candidates, key=len, default="")
             # Agent-vetted market observations are evidence too.  The previous
             # manifest boundary copied only source ledgers, so global synthesis
             # lost a real Optimus market and then spent ~17 minutes repeating
@@ -7493,12 +10301,6 @@ class PipelineOrchestrator:
                 synthesis_attempts = attempt
                 synthesis_dir = tempfile.mkdtemp(
                     prefix=f".global-synthesis-{attempt}-", dir=handoff_dir)
-                if shared_dossier:
-                    write_text_atomic(
-                        os.path.join(
-                            synthesis_dir, "actor_dossier.md"),
-                        shared_dossier,
-                    )
                 if market_candidate_lines:
                     write_text_atomic(
                         os.path.join(
@@ -8004,7 +10806,29 @@ class PipelineOrchestrator:
                     else:
                         # ITEM-3：本次研究阶段是 resume/orphan-reclaim 重试且 handoff_dir 已有
                         # checkpoint（上一轮崩溃/超时前写下）→ 续跑而非全量重启。首跑无 checkpoint → False。
-                        _resume_research = _has_research_checkpoint(handoff_dir)
+                        _resume_lineage = (
+                            _validated_research_checkpoint_lineage(
+                                handoff_dir,
+                                prompt=state.prompt,
+                                depth=str(
+                                    state.options.get("depth")
+                                    or getattr(
+                                        Config,
+                                        "DEERFLOW_RESEARCH_DEPTH",
+                                        "standard",
+                                    )
+                                ),
+                                run_id=state.pipeline_id,
+                                lane_id="outer-track-1",
+                                expected_attempt_ids=(
+                                    _research_budget_attempt_ids(state)
+                                ),
+                            )
+                        )
+                        _resume_attempt_id = _resume_lineage.get(
+                            "attempt_id", ""
+                        )
+                        _resume_research = bool(_resume_attempt_id)
                         if _resume_research:
                             upd(1, "检测到研究断点，续跑（复用已完成 pass）…")
                         _single_global_subagents = getattr(
@@ -8052,6 +10876,10 @@ class PipelineOrchestrator:
                             budget_telemetry_path=_single_budget_telemetry,
                             budget_run_id=state.pipeline_id,
                             budget_epoch=_single_budget_epoch,
+                            resume_attempt_id=_resume_attempt_id,
+                            resume_checkpoint_id=_resume_lineage.get(
+                                "checkpoint_id", ""
+                            ),
                             subagents=bool(
                                 getattr(Config, "DEERFLOW_SUBAGENTS", True)
                                 and _single_subagent_cap > 0),
@@ -8135,21 +10963,24 @@ class PipelineOrchestrator:
             dossier_md = research.get("actor_dossier")
             actors = research.get("actors")
             # NEXTSTEPS P3-2: 抽取后跨轨去重，把同一实体的重复行合并为规范行（默认开；只会收紧
-            # cast，无重复时 no-op）。在下游 ontology/graph/prepare/report 用 actors 之前完成。
+            # cast，无重复时 no-op）。actor-intelligence/v1 已在 producer 边界封存 roster/hash，
+            # 因此只能做只读重复审计；legacy/pre-v1 才保留实际合并。
             if getattr(Config, "CAST_RECONCILE", True) and actors:
                 try:
-                    from ..utils.actors import reconcile_cast as _reconcile
-                    _recon, _audit = _reconcile(actors)
+                    _recon, _audit = _reconcile_research_cast(actors)
                     if _audit.get("merged"):
-                        actors = _recon
-                        research["actors"] = _recon  # 让下游 sources/report 也用规范 cast
+                        if _audit.get("applied"):
+                            actors = _recon
+                            # Legacy cast: keep downstream and outer checksum
+                            # generation aligned with the reconciled object.
+                            research["actors"] = _recon
                         _hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
                         try:
                             from ..utils.atomic import write_json_atomic
-                            # Keep a sealed producer generation byte-stable
-                            # until report, cast, and source changes can be
-                            # promoted together as one final contract.
-                            if not os.path.exists(_research_contract_path(_hd)):
+                            if (
+                                _audit.get("applied")
+                                and not os.path.exists(_research_contract_path(_hd))
+                            ):
                                 write_json_atomic(
                                     os.path.join(_hd, "actors.json"), _recon)
                             write_json_atomic(os.path.join(_hd, "cast_reconciliation.json"), _audit)
@@ -8159,11 +10990,28 @@ class PipelineOrchestrator:
                         state.options["cast_reconciliation"] = {
                             "n_before": _audit.get("n_before"), "n_after": _audit.get("n_after"),
                             "merges": len(_audit.get("merged") or []),
+                            "applied": bool(_audit.get("applied")),
+                            "reason": _audit.get("reason"),
+                            "hypothetical_n_after": _audit.get("hypothetical_n_after"),
                         }
-                        logger.info("[%s] cast 去重：%s→%s（合并 %s 组）", state.pipeline_id,
-                                    _audit.get("n_before"), _audit.get("n_after"),
-                                    len(_audit.get("merged") or []))
+                        if _audit.get("applied"):
+                            logger.info("[%s] cast 去重：%s→%s（合并 %s 组）", state.pipeline_id,
+                                        _audit.get("n_before"), _audit.get("n_after"),
+                                        len(_audit.get("merged") or []))
+                        else:
+                            logger.warning(
+                                "[%s] sealed actor-intelligence/v1 检出 %s 组潜在重复；"
+                                "保留 producer roster 原样（hypothetical %s→%s）",
+                                state.pipeline_id,
+                                len(_audit.get("merged") or []),
+                                _audit.get("n_before"),
+                                _audit.get("hypothetical_n_after"),
+                            )
                 except Exception as _rc_err:  # noqa: BLE001 — 去重为增强，失败回退原 cast
+                    if _is_sealed_actor_intelligence_v1(actors):
+                        raise RuntimeError(
+                            "sealed actor-intelligence/v1 duplicate audit failed"
+                        ) from _rc_err
                     logger.warning("[%s] cast 去重跳过: %s", state.pipeline_id, _rc_err)
             # I-5-7: 把研究阶段遥测并入统一计量（stash 到 options + 喂给 meter）。
             self._record_research_telemetry(state, research.get("research_telemetry"))
@@ -8196,11 +11044,9 @@ class PipelineOrchestrator:
             except Exception as _cov_err:  # noqa: BLE001 — 覆盖度纯观测，失败不影响主流程
                 logger.debug("[%s] dossier_coverage 计算跳过: %s", state.pipeline_id, _cov_err)
 
-            # SIM-ADD-1（决策通道点火的关键修复）：研究定稿前把 forecast_inputs 兜底注入
-            # actors——actors.json 常缺 forecast_inputs 键，导致 world_state 种子为空、决策
-            # 通道从未点火、模拟对 forecast 零贡献。此处从 research_report.md 情景节确定性解析
-            # 并就地注入 research["actors"]，紧接着的 _finalize_research_contract 会把它随契约
-            # 一并密封进 actors.json（下游 + resume 皆可见，且不破坏 manifest 校验）。
+            # SIM-ADD-1：pre-v1 研究定稿前可继续从报告补 forecast_inputs。v1 producer
+            # contract 不可变；若漏产该字段，只能显式告警并在上游重做，不能在 reception 后
+            # 改写 actors.json 或内存副本。
             try:
                 _fi_seed = inject_forecast_inputs_from_report(actors, report_md)
                 if _fi_seed is not None:
@@ -8211,10 +11057,17 @@ class PipelineOrchestrator:
                         state.pipeline_id, len(_fi_seed.get("scenarios") or []))
                 elif _forecast_inputs_missing(actors):
                     # 显式的「响亮信号」（对齐先前审计的诉求）：种子仍为空，模拟不会点火。
-                    logger.warning(
-                        "[%s] forecast_inputs 缺失且研究报告未解析出情景概率分布——"
-                        "world_state 种子将为空、决策通道不会点火、模拟对 forecast 无贡献",
-                        state.pipeline_id)
+                    if _is_sealed_actor_intelligence_v1(actors):
+                        logger.warning(
+                            "[%s] sealed actor-intelligence/v1 缺 forecast_inputs；"
+                            "拒绝 post-seal 注入，world_state 种子将为空",
+                            state.pipeline_id,
+                        )
+                    else:
+                        logger.warning(
+                            "[%s] forecast_inputs 缺失且研究报告未解析出情景概率分布——"
+                            "world_state 种子将为空、决策通道不会点火、模拟对 forecast 无贡献",
+                            state.pipeline_id)
             except Exception as _fi_err:  # noqa: BLE001 — 兜底注入纯增强，绝不阻断研究定稿
                 logger.warning("[%s] forecast_inputs 兜底注入跳过: %s",
                                state.pipeline_id, _fi_err)
@@ -8230,6 +11083,19 @@ class PipelineOrchestrator:
             # Read the now-finalized metadata so a budget degradation staged
             # above is reflected in the advisory confidence penalty.
             self._surface_forecast_confidence_penalty(state, handoff_dir)
+            if state.mode != "research_only":
+                # A current full run that requested Track B MUST receive the
+                # producer's nonempty, hash-bound v1 actor plane.  Validate
+                # before declaring RESEARCH complete so a missing actor plane
+                # is a Stage-1 contract failure, never an ontology fallback.
+                _enforce_actor_intelligence_reception(
+                    state,
+                    actors,
+                    report=report_md,
+                    dossier=dossier_md,
+                    sources=research.get("sources"),
+                    handoff_dir=handoff_dir,
+                )
             self._complete_stage(
                 state,
                 STAGE_RESEARCH,
@@ -8338,12 +11204,38 @@ class PipelineOrchestrator:
             graph_stage_done = state.stages.get(STAGE_GRAPH) and state.stages[STAGE_GRAPH].status == "completed"
             graph_id = state.graph_id or getattr(project, "graph_id", None)
             _reuse_graph = bool(graph_stage_done and graph_id)
+            _reuse_builder: Optional[GraphBuilderService] = None
             # I-4-3: 复用前先按产物清单校验 GRAPH 阶段的文件产物（communities.json 等）未被半写/篡改；
             # 不符则回落重建并留痕（与下方既有的实体数健康检查并列，两道防线各管一半）。
             if _reuse_graph and not self._reuse_ok(state, STAGE_GRAPH):
                 _reuse_graph = False
                 state.options["resumed_stage_validation"] = "graph_rebuilt_manifest_mismatch"
                 logger.info("[%s] 图谱产物清单校验未通过，回落到重建", state.pipeline_id)
+            if _reuse_graph and _is_sealed_actor_intelligence_v1(actors):
+                try:
+                    persisted_seed_manifest = _load_actor_graph_seed_manifest(state)
+                    if persisted_seed_manifest is None:
+                        raise RuntimeError("persisted actor graph seed manifest missing")
+                    _reuse_builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+                    _validate_actor_graph_seed_contract(
+                        _reuse_builder,
+                        graph_id,
+                        actors,
+                        phase="reuse",
+                        expected_manifest=persisted_seed_manifest,
+                        state=state,
+                    )
+                except Exception as exc:  # noqa: BLE001 — invalid reuse must rebuild
+                    _reuse_graph = False
+                    state.options["resumed_stage_validation"] = (
+                        "graph_rebuilt_actor_seed_readback_mismatch"
+                    )
+                    logger.warning(
+                        "[%s] v1 actor graph seed reuse validation failed; "
+                        "rebuilding graph: %s",
+                        state.pipeline_id,
+                        exc,
+                    )
             if _reuse_graph:
                 # T6.1/T2.7: 复用前做廉价健康检查——0 实体的图谱被复用会在 PREPARE 阶段崩溃，
                 # 故实体数为 0（或查询失败）时回落到重建，并留痕。
@@ -8367,7 +11259,9 @@ class PipelineOrchestrator:
                 # 随后被 typed-entity 过滤器整体丢弃。幂等、纯内存写，绝不失败该阶段。
                 try:
                     if project is not None and project.ontology:
-                        GraphBuilderService(api_key=Config.ZEP_API_KEY).set_ontology(graph_id, project.ontology)
+                        (_reuse_builder or GraphBuilderService(
+                            api_key=Config.ZEP_API_KEY
+                        )).set_ontology(graph_id, project.ontology)
                 except Exception as _ro_err:  # noqa: BLE001
                     logger.warning("reuse-path set_ontology skipped: %s", _ro_err)
                 self._complete_stage(state, STAGE_GRAPH, "图谱已恢复", reused=True)
@@ -8377,9 +11271,18 @@ class PipelineOrchestrator:
                 # ORCH-1(5): 切块前剔除 base64/data-URI 内嵌图片（保留 alt/图注）——
                 # 图表型报告的单张内嵌图就是数万字符的 base64 噪声，切块后会整段
                 # 灌进图谱 episode。仅影响建图输入；本体/报告落盘仍用原文。
-                _graph_report_md = _strip_data_uri_images(report_md)
-                _graph_dossier_md = _strip_data_uri_images(dossier_md) if dossier_md else dossier_md
-                chunks = TextProcessor.split_text(_graph_report_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP)
+                report_chunks = _graph_research_chunks(
+                    report_md,
+                    "Stage 1 research report",
+                )
+                dossier_chunks = (
+                    _graph_research_chunks(
+                        dossier_md,
+                        "Stage 1 actor dossier",
+                    )
+                    if dossier_md else []
+                )
+                chunks = report_chunks
                 # 双轨：角色本体档案非空时也切块并前置注入（角色中心内容先种入图谱，
                 # 再由广覆盖研究报告补充）。dynamic-band 用 len(chunks) 重算仍成立。旗标关闭/
                 # Track B 缺失时 dossier_md 为 None/""，chunks 与今日逐字节一致。
@@ -8393,13 +11296,13 @@ class PipelineOrchestrator:
                 _chunk_src = str(getattr(Config, "GRAPH_CHUNK_SOURCE", "both") or "both").strip().lower()
                 _have_dossier = bool(dossier_md and dossier_md.strip())
                 if _have_dossier and _chunk_src == "dossier_only":
-                    chunks = TextProcessor.split_text(_graph_dossier_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP)
+                    chunks = dossier_chunks
                     state.options["graph_chunk_source"] = "dossier_only"
                 elif _chunk_src == "report_only":
                     # 报告 chunk 已在 `chunks` 中；dossier 有意不再切块。
                     state.options["graph_chunk_source"] = "report_only"
                 elif _have_dossier:
-                    chunks = TextProcessor.split_text(_graph_dossier_md, Config.DEFAULT_CHUNK_SIZE, Config.DEFAULT_CHUNK_OVERLAP) + chunks
+                    chunks = dossier_chunks + chunks
                     state.options["graph_chunk_source"] = "both"
                 self._recompute_dynamic_bands(state, chunk_count=len(chunks))  # T6.7: 已知 chunk 数→重排区间
                 graph_id = builder.create_graph(name=project.name)
@@ -8430,13 +11333,20 @@ class PipelineOrchestrator:
                         as_of = parse_as_of((actors or {}).get("as_of_date")) if isinstance(actors, dict) else None
                 else:
                     as_of = parse_as_of((actors or {}).get("as_of_date")) if isinstance(actors, dict) else None
-                if Config.GRAPH_SEED_FROM_ACTORS and actors:
-                    try:
-                        seeded = builder.seed_actors(graph_id, actors, valid_at=as_of)
-                        upd(8, f"已注入 {seeded} 条调研关系/角色种子…")
-                        state.options["graph_seeded_edges"] = seeded
-                    except Exception as e:
-                        logger.warning("[%s] actor seeding skipped: %s", state.pipeline_id, e)
+                seeded = _seed_research_actors(
+                    builder, graph_id, actors, valid_at=as_of
+                )
+                actor_seed_manifest = _validate_actor_graph_seed_contract(
+                    builder,
+                    graph_id,
+                    actors,
+                    phase="post_seed",
+                    state=state,
+                    persist=True,
+                )
+                if seeded is not None:
+                    upd(8, f"已注入 {seeded} 条调研关系/角色种子…")
+                    state.options["graph_seeded_edges"] = seeded
 
                 def add_cb(msg: str, ratio: float):
                     upd(int(10 + ratio * 55), msg)
@@ -8538,6 +11448,20 @@ class PipelineOrchestrator:
                     except Exception as _pr_err:  # noqa: BLE001 — 裁剪失败绝不拖垮建图
                         logger.warning("[%s] 图谱裁剪跳过: %s", state.pipeline_id, _pr_err)
 
+                # A current-v1 seed is an immutable Stage-3 contract, not a
+                # best-effort hint.  Re-read every deterministic UUID and
+                # required attribute after prose extraction, entity resolution,
+                # and optional pruning so those mutators cannot silently erase
+                # or override the admitted identity/provenance projection.
+                _validate_actor_graph_seed_contract(
+                    builder,
+                    graph_id,
+                    actors,
+                    phase="post_mutation",
+                    expected_manifest=actor_seed_manifest,
+                    state=state,
+                )
+
                 # J1: 并发抽取（GRAPH_BUILD_CONCURRENCY>1）的重名实体守卫。
                 # add_episodes_concurrent 的 read-before-commit dedup 在并发下可能让两个 episode
                 # 都漏掉对方在飞的同名新节点，各自建出重名重复节点（runtime 文档 F-2-5；DB 无名唯一约束）。
@@ -8631,6 +11555,26 @@ class PipelineOrchestrator:
                 state.options["resumed_stage_validation"] = "prepare_rebuilt_manifest_mismatch"
                 logger.info("[%s] 模拟环境产物清单校验未通过，回落到重建", state.pipeline_id)
             if _prepare_reuse:
+                try:
+                    sim_manager.validate_prepared_simulation_config(
+                        sim_state.simulation_id
+                    )
+                except Exception as exc:  # noqa: BLE001 — seal proof is mandatory
+                    _prepare_reuse = False
+                    state.options["resumed_stage_validation"] = (
+                        "prepare_rebuilt_config_seal_mismatch"
+                    )
+                    state.options["artifact_validation_error"] = {
+                        "stage": STAGE_PREPARE,
+                        "artifact": "simulation_config_manifest",
+                        "error": str(exc)[:300],
+                    }
+                    logger.warning(
+                        "[%s] 已完成 PREPARE 的配置封印校验失败，回落到重建: %s",
+                        state.pipeline_id,
+                        exc,
+                    )
+            if _prepare_reuse:
                 upd(100, "复用已有模拟环境…")
                 _prepare_completion_message = "环境已恢复"
             else:
@@ -8697,6 +11641,7 @@ class PipelineOrchestrator:
                 and self._run_reuse_ready(state, sim_state)
                 and self._reuse_ok(state, STAGE_RUN)
             )
+            _config_mutated_after_prepare = False
             if _overlay and not _run_already_done:
                 try:
                     _cfg_path = os.path.join(
@@ -8710,6 +11655,7 @@ class PipelineOrchestrator:
                         with open(_tmp, "w", encoding="utf-8") as _cf:
                             json.dump(_cfg, _cf, ensure_ascii=False, indent=2)
                         os.replace(_tmp, _cfg_path)
+                        _config_mutated_after_prepare = True
                         logger.info("[%s] 情景 overlay 已应用到 simulation_config", state.pipeline_id)
                 except Exception as e:  # noqa: BLE001
                     logger.warning("[%s] 情景 overlay 应用跳过: %s", state.pipeline_id, e)
@@ -8723,9 +11669,9 @@ class PipelineOrchestrator:
             if (_cal_gen or getattr(Config, "SIM_DECISION_CHANNEL", False)) and not _run_already_done:
                 try:
                     from ..utils.actors import world_state_seed_from_actors as _ws_seed
-                    # SIM-ADD-1（belt-and-suspenders）：种子前再兜底一次——若 actors 仍缺
-                    # forecast_inputs.scenarios（如老产物 resume、或研究定稿注入被跳过），就地
-                    # 从报告解析注入（仅内存，不写盘 → 契约安全；下游本轮直接读注入后的 actors）。
+                    # SIM-ADD-1（belt-and-suspenders）：pre-v1 种子前再兜底一次。sealed
+                    # actor-intelligence/v1 严格 no-op，保持 actor context 的 exact-object
+                    # provenance；新契约缺 seed 时只能告警并由 producer 重做。
                     _fi_prep = inject_forecast_inputs_from_report(actors, report_md)
                     if _fi_prep is not None:
                         logger.info("[%s] PREPARE 兜底注入 forecast_inputs：%d 情景",
@@ -8753,11 +11699,22 @@ class PipelineOrchestrator:
                                 _seed["horizon_defaulted"] = bool(_tc.get("horizon_defaulted"))
                             _wcfg["world_state_seed"] = _seed
                             write_json_atomic(_wcfg_path, _wcfg)
+                            _config_mutated_after_prepare = True
                             logger.info("[%s] WorldState 种子已注入 simulation_config（%d 情景, horizon=%s）",
                                         state.pipeline_id, len(_seed.get("scenarios") or []),
                                         _seed.get("horizon_date"))
                 except Exception as _ws_err:  # noqa: BLE001
                     logger.warning("[%s] WorldState 种子注入跳过: %s", state.pipeline_id, _ws_err)
+
+            # The manager sealed the initially generated config before the two
+            # PREPARE-owned mutation blocks above.  Rebind the exact final bytes
+            # and all cast/context/role authorities before RUN can observe the
+            # file.  A reseal failure is an admission failure, not a degradable
+            # enrichment error.  A completed read-only reuse never reaches it.
+            if _config_mutated_after_prepare:
+                sim_state = sim_manager.reseal_simulation_config(
+                    sim_state.simulation_id
+                )
 
             # PREPARE's integrity fingerprint must cover the final config consumed
             # by RUN. Scenario/world-state injection above mutates

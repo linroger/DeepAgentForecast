@@ -1,0 +1,16 @@
+{
+  "generated_at_utc": "2026-07-22T01:35:19.444Z",
+  "generator": "tldraw 5.2.5 via official browser SDK export APIs",
+  "source_revision": "fcf7378b2e2fabcfd836fb6e2c512fe153c6727c",
+  "page_count": 1,
+  "shape_count": 198,
+  "declared_shape_count": 198,
+  "declared_unique_shape_count": 198,
+  "arrow_count": 89,
+  "binding_count": 178,
+  "svg_width": 7080,
+  "svg_height": 4766,
+  "png_width": 7080,
+  "png_height": 4766,
+  "source": "tldraw-generator/src/main.jsx"
+}

@@ -1,0 +1,180 @@
+# DeepResearchForecast agent progress
+
+## Project overview
+
+This repository implements a six-stage forecast workflow: DeerFlow 2 research, ontology generation, temporal graph construction, simulation preparation, OASIS simulation, and publication-gated reporting. The active feature strengthens the complete actor-evidence contract from deep research through the exact OASIS runtime persona.
+
+## Session log
+
+### 2026-08-16T17:35:00Z — branch `codex/shenzhen`
+
+- **Feature/program:** `LOOP-017` measurable cost, reliable localhost, and forecast-quality refinement. The identifier was corrected after independent review because an older July 15 program already used LOOP-016.
+- **Target behavior:** Make the six-stage workflow observably faster and more reliable while preserving provenance and Foglamp safety; route localhost directly to the DeepResearchForecast workflow; improve UI/accessibility, market integration, and decision visuals.
+- **Read-only findings:** `pipe_f23527f7d903` has an 82,983,739-token durably recorded main-run meter total/lower bound, not a proven 162,733,517-token total; the larger number double-counts the synthetic 79,749,778-token research entry. True usage remains unknown because same-message-ID subagent usage is dropped and OASIS tokens are not recorded. Research is 96.1% of that recorded lower bound; graph is the time bottleneck at 8h37m, with twelve 900-second operations representing three aggregate timeout-hours. Current source already contains several historical research/graph mitigations that require validation rather than duplicate implementation.
+- **Current-source defects:** Stage-1 usage drops later parent-plus-subagent cumulative snapshots; budgets do not govern RESEARCH/RUN subprocess spend; scenario-fork APIs reconstruct the wrong handoff directory; live ETA/heartbeat/spend helpers are disconnected; low-confidence Polymarket matches can change a forecast before provenance is removed; selected tool markets lack CLOB/history fields.
+- **Concurrent work boundary:** Separate user-owned frontend and backend slices are present: the frontend routes `/` to ResearchView and improves styling/accessibility, while the backend adds SPA serving, fallback-model/fail-fast handling, visualization-axis/shared-Plotly changes, and pytest log isolation. The frontend rebrand still breaks the existing launcher readiness signature, its brand targets `/legacy`, and Vite plus `start.sh` can open two tabs. These external changes were inspected but not modified or attributed to this session; each is assigned to its corresponding future feature for review and verification.
+- **Files touched by this session:** `PLANS.md`, `feature_list.json`, and `agent-progress.txt` only. The feature list was extended additively with nine implementation features plus one separately authorized controlled-run acceptance feature; the completed actor-intelligence entry was not altered.
+- **Checks run:** Repository/memory/continuity inspection, three independent read-only audits, durable pipeline/log/artifact reconciliation, source tracing, and dirty-tree/concurrent-edit monitoring. No services, paid pipeline, provider call, runtime code, pipeline state, commit, or push was changed.
+- **Result:** Audit and approval-gated plan complete; implementation pending user approval.
+- **Next steps:** After approval, execute LOOP-017 Slice 1 only: reconcile and browser-validate the localhost/UI entry slice, including readiness signature, root/alias/history/unknown routing, single browser opener, responsive keyboard behavior, and no duplicate `/run`.
+
+### 2026-08-16T18:03:34Z — branch `codex/shenzhen`
+
+- **Feature/program:** LOOP-017 pre-implementation acceptance and concurrent-change re-baseline; no feature pass flag changed.
+- **External changes reviewed:** Root ResearchView/router/SPA delivery and UI polish; fallback fail-fast/model guard; visualization axes/shared Plotly; pytest log quarantine. The external owner committed this combined 24-file slice as `3306af8` while validation was running. It remains user-owned, is not attributed to this session, and is not accepted merely because it is committed.
+- **Launcher result:** The real `scripts/start.sh --detach --no-open` path reproduced the stale-brand failure after both services became healthy, exited 1, and safely removed its owned listeners/PID files. The current launcher test fixture is stale and false-greens. Vite and the shell also both own browser opening, Vite binds beyond loopback, and backend-port authority is inconsistent.
+- **Browser result:** Flask-served `/`, `/research`, refresh, history, and unknown-route behavior worked with zero `/run` POSTs. Product-brand navigation incorrectly entered `/legacy`. Settings lacked modal semantics, focus entry/restore, an accessible close name, and Escape behavior. Root had no horizontal overflow at 320/390 px, but source review found mobile history overflow plus broader tab/progress/graph/dialog/contrast/reduced-motion gaps.
+- **Backend re-baseline:** A concurrent owner landed serve-time Plotly bundle injection after the initial failing repro. Refreshed tests and a real Plotly HTTP replay proved the bundle is inlined under the opaque CSP and direct JS remains blocked; the stale Plotly delivery blocker was retracted. Graphiti still bypasses fallback-model guarding; cross-provider fallback can inherit the primary credential/base; and every HTTP 400 can poison the fallback tuple for 15 minutes. Exact `/api`, unknown non-GET API, missing asset, and missing-build response semantics also remain incorrect.
+- **Checks run:** 107 initial focused backend tests; 31/31 frontend unit tests; production frontend build; scoped Ruff; `git diff --check`; actual launcher rollback acceptance; direct desktop/mobile browser route, focus, console, request, and overflow checks; 25 refreshed chart/axis/SPA/fallback tests; real Plotly HTTP/CSP integration replay. The app fixture kept 32 graphs and deleted zero. No provider or pipeline action occurred.
+- **Files touched by this session:** `PLANS.md`, `handoff.md`, and `agent-progress.txt` only. This session did not stage, commit, or push; `3306af8` was created by the concurrent owner. Temporary browser artifacts were moved to Trash; ports 3000/5001 and managed PID files were clean at handoff.
+- **Result:** External slices are partially functional but not accepted. LOOP-017 remains approval-gated; all ten new feature entries remain `passes: false`.
+- **Next steps:** Obtain LOOP-017 approval, then implement Slice 1 red/green only: stable readiness marker, one optional browser opener, loopback/port authority, correct SPA/API/static fallbacks, root-safe brand, launch-intent idempotency, truthful preflight, and accessible/responsive modal/navigation behavior. Re-run the full launcher/browser matrix before starting Slice 2.
+
+### 2026-07-21T19:56:45Z — branch `codex/foglamp`
+
+- **Feature:** `feature_actor_intelligence_grounding_v2`
+- **Target behavior:** Every simulation-relevant actor receives a distinct, source-grounded intelligence profile and a bounded actor-specific slice of global research context. Actor plans, incentives, investments, likely actions, alliances, competitors, constraints, and uncertainties also feed the unified deep-research report.
+- **Initial state:** The repository already has an `actor-role/v1` safety and runtime-delivery contract, but the current default DeerFlow 2 research topology normally suppresses Track B and does not produce a deep actor dossier. The live implementation must be re-read before selecting the enrichment seam.
+- **Files touched:** `feature_list.json`, `agent-progress.txt`, `init.sh`, `PLANS.md`, and `handoff.md` for the required harness and initial execution contract.
+- **Checks run:** Repository/memory/continuity inspection only. Implementation and scenario checks are pending source reconciliation.
+- **Result:** In progress.
+- **Next steps:** Map the current actor producer, research manifest, role compiler, prepare artifacts, and OASIS consumer in parallel; decide the minimal versioned contract; add failing regression scenarios before implementation.
+
+### 2026-07-21T20:12:45Z — branch `codex/foglamp`
+
+- **Feature:** `feature_actor_intelligence_grounding_v2`
+- **Milestone:** Producer/consumer/test source reconstruction complete; implementation contracts selected.
+- **Findings:** Fresh default global-synthesis runs disable the dedicated actor Track B; structured extraction can promote any nonempty actor list; actor-role/v1 loses the requested forward-looking and decision-model fields; the full report never reaches the per-actor executable OASIS identity.
+- **Decisions:** Run one shared baseline actor plane before global synthesis; carry `actor-intelligence/v1` inside the compatibility `actors.json`; materialize bounded `actor-context/v1` packs from exact report/actor bytes; compile `actor-role/v2`; bind the new packs into existing cast/profile/role/runner integrity checks.
+- **Files touched:** `handoff.md` and `agent-progress.txt` only for this milestone; three code slices were assigned with non-overlapping ownership.
+- **Operational recovery:** `uv cache clean` removed 49,713 disposable cache files (1.2 GiB) after a worker-spawn failure caused by a full data volume. No source or user artifact was deleted.
+- **Checks run:** `./init.sh` passed; prior harness JSON/diff checks passed; implementation tests remain pending.
+- **Result:** In progress.
+- **Next steps:** Integrate the three implementation slices, add cross-boundary regression scenarios, update architecture documentation, synchronize the tracked DeerFlow runtime overlay, and run focused plus broader quality gates.
+
+### 2026-07-21T20:23:15Z — branch `codex/foglamp`
+
+- **Feature:** `feature_actor_intelligence_grounding_v2`
+- **Milestone:** First-principles cross-slice contract review completed while implementation remained in progress.
+- **Findings:** The research producer's stronger claim-level `dimensions` schema had diverged from flat-field consumer drafts; plan/action/investment qualifiers risked being flattened; generic intelligence tokens could contaminate report relevance; actor type drift could churn IDs; and Stage-2/graph compatibility summaries could omit the nested intelligence object.
+- **Decisions:** Canonicalize the claim-level schema, retain flat aliases only for compatibility reads, preserve temporal/evidence/status qualifiers, separate public evidence from actor knowledge and analyst inference, require actor-specific relevance signals, make IDs stable across harmless type changes, and carry bounded intelligence into ontology/graph summaries.
+- **Checks run:** Manual cross-file contract inspection of the in-progress producer, role compiler, context-pack builder, ontology handoff, and graph seed path. No executable gate was run against partially edited files.
+- **Result:** In progress; concrete corrections were sent to each implementation owner before their contracts stabilized.
+- **Next steps:** Receive and integrate completed slices, then run syntax/focused scenario gates before any documentation or diagram claims are finalized.
+
+### 2026-07-21T20:39:43Z — branch `codex/foglamp`
+
+- **Feature:** `feature_actor_intelligence_grounding_v2`
+- **Milestone:** The PREPARE/runtime actor-context slice is implemented and has released file ownership.
+- **Outcome:** Each selected actor receives a deterministic `actor-context/v1` pack bound to exact dossier/report fingerprints. Context is actor-specific, preserves public-evidence versus actor-knowledge boundaries, reaches both actual OASIS persona fields, participates in the role/profile/runner hash chain, and fails closed on new-contract tampering while keeping legacy `actor-role/v1` resumes compatible.
+- **Checks run by slice owner:** 79 focused/regression tests passed, including 11 new actor-context tests; ruff on the new module/test and `git diff --check` passed. Root-level integration gates are still pending.
+- **Result:** Runtime slice complete; whole feature remains in progress while research and role slices converge.
+- **Next steps:** Review the released runtime diff with the other contracts, receive the remaining slices, then run the combined focused and cross-stage suite.
+
+### 2026-07-21T20:54:26Z — branch `codex/foglamp`
+
+- **Feature:** `feature_actor_intelligence_grounding_v2`
+- **Milestone:** The producer, role compiler, PREPARE/runtime, synthesis-owner, Stage-2/graph, and tracked DeerFlow skill slices were integrated.
+- **Independent audit:** Five release blockers were found despite the initial green focused suite: historical v1 roles were being recreated with a v2 compiler, partial v1 evidence could downgrade, returned packs could diverge from sealed bytes, inconsistent context/role counts could bypass validation, and raw context claims could reach the configuration LLM.
+- **Response:** The runtime slice was reopened with one explicit negative regression per gap. The actor documentation and diagrams remained provisional until those gaps closed.
+- **Checks:** The actor skill passed repository hygiene, deployed-overlay synchronization, and `quick_validate.py`; the first full backend run exposed four intentional mandatory-report-owner expectation changes plus one clean-source, actor-unrelated translation fixture failure.
+- **Result:** In progress; audit verdict correctly remained not clean.
+
+### 2026-07-21T21:06:14Z — branch `codex/foglamp`
+
+- **Feature:** `feature_actor_intelligence_grounding_v2`
+- **Milestone:** Qualifier round-trip and epistemic leakage regressions were added red-first and fixed.
+- **Outcome:** Canonical nested plan/action/investment/decision/preference/capability qualifiers now survive repeated normalization; visibility is allowlisted; `actor_knows` is normalized only from recognized values. Analyst inference remains modeler-only, and contested/unknown evidence becomes actor-visible only with explicit boolean access while retaining its uncertainty label.
+- **Checks:** The focused producer and epistemic tests pass; changed actor producer/compiler files pass Ruff; `init.sh` compiles all modified actor workflow modules and passes.
+- **Result:** In progress pending the reopened runtime audit and final artifacts.
+
+### 2026-07-21T21:21:30Z — branch `codex/foglamp`
+
+- **Feature:** `feature_actor_intelligence_grounding_v2`
+- **Milestone:** Runtime audit blockers closed; executable and visual validation completed.
+- **Outcome:** Legacy v1 manifests now verify their original sealed fragments without v2 recompilation; nested v1 evidence cannot omit its top-level contract; returned packs/manifests are deep-decoded from exact persisted bytes; role provenance is checked against pack, pack-file, manifest, report, actors, dossier, source catalog, intelligence, and roster hashes; the runner rejects count/schema/platform/sidecar downgrades and validates every prepared platform; configuration projections recursively allowlist and sanitize context data. Blank top-level compatibility qualifiers also no longer shadow valid nested canonical qualifiers.
+- **Tests:** 95 focused actor/runtime tests passed. The full backend suite produced exactly the known clean-source language-purity fixture failure; rerunning the entire suite with only that test excluded passed at 100%.
+- **Visual checks:** Both editable tldraw scenes regenerated and validated through the official browser export path: whole system 198 shapes / 89 arrows / 178 bindings at 7080x4766; DeerFlow 2 subsystem 150 / 66 / 132 at 6380x4445. Native-resolution inspection found no clipping or topology error. The compact actor-provenance visual also passed desktop/mobile rendering and interaction checks.
+- **Result:** In progress only while the final prose, JSON inventories, and independent settled-tree audit finish.
+- **Next steps:** Reconcile documentation/inventory counts, rerun source/link/JSON/lint/hygiene gates, accept or resolve the independent audit, then mark the feature passing and close `handoff.md`.
+
+### 2026-07-21T21:30:51Z — branch `codex/foglamp`
+
+- **Feature:** `feature_actor_intelligence_grounding_v2`
+- **Milestone:** Final broad producer-to-runtime audit superseded the provisional closure and reopened implementation.
+- **Reproduced blockers:** Actor extraction can complete without a sealed roster; post-seal reconciliation can mutate the cast; source-less claims can be promoted through an evidence-gap waiver; raw research strings can reach ontology/configuration model prompts; unqualified or string-like knowledge access can become actor-known; the dossier ledger is not roster-bound; an all-gap dossier can pass without a judge; and fetched-content receipts/hashes/length are dropped before sealing.
+- **Response:** Assigned three non-overlapping red/green remediation slices for producer/provenance gates, immutable sealed-cast orchestration, and prompt/epistemic isolation. Added a deterministic behavior-ready floor across five evidence families for every Tier-1/2 actor.
+- **Checks:** Independent audit supplied concrete reproductions for all eight failures. The prior 95-test and visual gates remain useful evidence but are not acceptance evidence for these newly exposed paths.
+- **Result:** In progress; documentation and diagrams remain provisional until combined regressions and a fresh independent settled-tree audit pass.
+- **Next steps:** Integrate the three fixes, close any remaining Graphiti research-data boundary, rerun all focused and full backend gates, reconcile architecture artifacts, and obtain a clean independent re-audit before marking the feature passing.
+
+### 2026-07-21T22:02:52Z — branch `codex/foglamp`
+
+- **Feature:** `feature_actor_intelligence_grounding_v2`
+- **Milestone:** Exact OASIS v1 delivery and the first stable cross-stage integration gate passed, then a deeper semantic Stage-1 audit deliberately reopened release acceptance.
+- **Completed since the prior entry:** Actor-enabled extraction and parent reception now fail closed; sealed v1 casts are immutable; canonical roles/context use only source-bound claims; ontology, graph, and configuration model inputs are sanitized and delimited; exact Reddit `persona` and Twitter `user_char` are role-only v2 bytes; unsupported explicit future schemas cannot downgrade to legacy flat behavior.
+- **Checks:** The stable producer-to-runner selection passed 410 tests. Three extra future-schema regressions passed. Targeted Ruff passed with only the profile/config files' documented pre-existing `F541`, `B905`, and `C420` categories excluded.
+- **New adversarial findings:** Twelve offline reproductions exposed ambiguous/untiered cast admission, source-less relationship split-brain, unrelated-URL and stale-plan laundering, roster-only dossier binding, Stage-1 prompt reinjection, truncated/malformed judge attestation, oversized late-actor omission, stale resume lineage, homonym/alias collapse, evidence-free gaps, Track-A receipt leakage into Track B, and a duplicate helper overriding actor claim parsing.
+- **Response:** Two non-overlapping implementation slices now own producer/provenance/identity/lineage and model-boundary/judge/report-coverage remedies. No full-suite or documentation result will be treated as final until all twelve have red/green regressions.
+- **Result:** In progress; no paid research, OASIS run, provider mutation, publication, commit, or push occurred.
+- **Next steps:** Integrate and independently review all twelve fixes, rerun semantic and combined gates, then execute full backend/hygiene gates and reconcile every architecture artifact before closure.
+
+### 2026-07-22T02:01:06Z — branch `codex/foglamp`
+
+- **Feature:** `feature_actor_intelligence_grounding_v2`
+- **Milestone:** Complete. The first-principles actor-intelligence contract is sealed end to end from shared Track-B research through report, ontology, graph, PREPARE, exact OASIS runtime fields, final simulation-config seal, runner admission, and direct-child byte use.
+- **Implementation outcome:** Every Tier-1/2 simulation actor has an exact semantic identity and 17-dimension source-bound intelligence profile; unsupported claims become typed exhausted gaps rather than invented detail. Plans, investments, incentives, actions, capabilities, constraints, relationships, decision rules, likely actions, and red lines feed both the global report and a distinct bounded actor context. Current-v1 runtime behavior comes only from deterministic `actor-role/v2`; legacy flat fields, private/modeler-only evidence, raw report/graph prose, synthetic Reddit demographics, and generic fallbacks cannot override it.
+- **Integrity outcome:** Producer, dossier, report, roster, claims, relationships, lineage, context, role/profile, cast, config, graph seed, and direct-child load are hash/identity bound. Authorized scenario/WorldState config changes are idempotent and resealed; completed reuse validates without rewriting and rediscovers adjacent current-v2 evidence; genuine unsealed v1 compatibility remains isolated.
+- **Documentation outcome:** English and Mandarin READMEs, the actor-intelligence report, whole-system atlas, DeerFlow 2 atlas, approach comparison, 95-flow/101-route inventory, 100-family LLM census, and both editable/rendered tldraw scenes describe the settled architecture in parity.
+- **Tests:** 1,037 selected cross-stage actor tests passed. Final collection is 2,815; the counted full run is 2,803 passed, 11 expected xfailed, and one unchanged actor-unrelated language-purity fixture deselected. Seven calendar tests that temporarily hit the intentional 2.0 GiB disk floor passed 7/7 after deleting only this session's pytest temp trees.
+- **Artifact/quality gates:** Exact 101/101 Flask AST route parity; 400 local links; 1,131 source line ranges; 13/13 bilingual architecture-link parity; Pandoc over six documents; four JSON inventories; official tldraw validation at 198/89/178 and 150/66/132; `init.sh`; compileall; actor skill validation; changed-file Ruff with only documented legacy classes excluded; strict DeerFlow producer Ruff; `git diff --check`; no Vite/Chrome/preview debris. The final independent behavior and citation audits returned CLEAN.
+- **Known unrelated issue:** `test_language_purity_batches_large_residual_set` remains red because its unchanged `_BatchLLM` lacks `.chat`; neither the fixture nor `report_agent.py` was modified by this feature.
+- **Safety:** No live/paid research, OASIS simulation, provider change, external publication, generated `deer-flow/` mutation, commit, stage, or push occurred. `deerflow_bridge/.cache/` and unrelated dirty work remain preserved.
+- **Next steps:** None for this feature. A separately authorized live run can validate external provider/search/OASIS behavior later; it is not required for the completed offline implementation gate.
+
+### 2026-08-17T18:05:00Z — branch `codex/shenzhen` (created by a concurrent session at fcf7378; same tip as codex/foglamp)
+
+- **Feature:** continuous improvement loop, iteration 1 (study + first fix slice)
+- **Study:** 7-agent audit over code + run logs. Tokens: research = 96% of metered (79.75M at 49:1 in:out, full-thread resends ×3 tracks); graph + sim are metering blind spots (contextvars lost in executor workers; sim meter never persisted). Time: graph = 62% (8h37m, retry storms, 60% chunks discarded re-deriving structured actors.json content); sim re-runs vs exhausted quota and report publish-gate rework account for the rest.
+- **Landed (commit 3306af8):** '/' → Research UI (+lazy legacy, tokens.css, brand, i18n sync, ConfirmDialog, SVG icons); Flask serves dist as SPA at :5001; fallback-model 400 bug fixed + invalid-model cooldown; dual-outage fail-fast; metric_trajectories axis fix; plotly 'directory' mode + serve-time bundle inlining (CSP sandbox preserved); pytest log quarantine.
+- **Tests:** 25 new focused green; visualizer 191, research-wiring 55, viz-manifest/pdf/SPA 41 all pass; full suite: only the 1 known pre-existing language-purity failure. Frontend build exit 0, 31/31 unit tests; real-dist smoke check green.
+- **Next:** iteration 2 targets by rank — graph-stage ingest bounding + retry caps (~8h), research thread compaction/caching (tens of M tokens), metering blind-spot fix, run-level provider halt, report section concurrency + language-purity cap, Polymarket transport swap. NOTE: several targets live in files carrying other sessions' uncommitted work (graph_builder, pipeline_orchestrator) — re-check git state at wake before editing.
+
+### 2026-08-16T18:06:17Z — primary validation reconciliation after concurrent commit `3306af8`
+
+- **Scope of correction:** The preceding concurrent-owner entry records useful implementation and test evidence, but its word “Landed” MUST NOT be read as feature acceptance. This primary-agent entry preserves the commit while recording the user-scenario failures that its focused/full suites did not exercise.
+- **Current tip:** `3306af8` contains the 24-file UI/SPA/fallback/visualization/log slice. The refreshed Plotly serve-time injection is green and the root SPA is directly loadable, but the real launcher still rejects the current HTML and rolls back. The product brand enters `/legacy`; Vite and the shell can open two tabs; Vite exposes the loopback-trusted API beyond loopback; port authority is split; exact/non-GET API and missing-asset/build fallbacks are incorrect; preflight can false-green; launch retry has no server idempotency key; and modal/keyboard/contrast/mobile-history acceptance remains red.
+- **Fallback correction:** The generic fallback guard does not protect Graphiti's direct fallback construction. Offline probes also prove cross-provider primary credential/base inheritance and provider-wide cooldown from request-specific HTTP 400s. These are release blockers for the fallback portion of the commit.
+- **Cost correction:** Historical graph attribution loss is not proof of a current ContextVar defect because current source already propagates context into Graphiti executor work. The durable token denominator remains incomplete for different reasons: same-message-ID Stage-1 subagent deltas and RUN subprocess tokens. The accepted baseline remains the lower-bound accounting in LOOP-017, not a reconstructed exact 150M total.
+- **Status/next:** All LOOP-017 flags remain false. Runtime correction still waits for explicit LOOP-017 approval, then begins with Slice 1 red/green only; Slice 2 cannot start until the launcher/browser/idempotency/accessibility acceptance matrix passes.
+
+### 2026-08-16T18:27:21Z — branch `codex/shenzhen`
+
+- **Feature:** LOOP-017 read-only forensic baseline and plan refinement; no runtime feature was started.
+- **Milestone:** Four independent evidence streams were reconciled across RESEARCH, GRAPH, RUN/REPORT, and Polymarket/visual delivery. The study used the source-backed codebase-research workflow and preserved current-source versus historical-run boundaries.
+- **Token result:** RESEARCH is 79,749,778 tokens and 96.1% of the recorded main-run lower bound, but totals are not complete. Failed lanes can disappear: `pipe_0f2bee7bd649` retains 25,161,961 attempted tokens while state reports 6,110,831. Reference adaptive passes consumed 20,286,821 tokens, including six zero-convergence Track-1 passes costing 15,817,428.
+- **Time result:** GRAPH is the dominant reference critical path at 8h37m. Its sequential outer loop incurred twelve whole-batch 900-second deadlines, exactly three critical-path hours, and caller-accounted 278/466 chunks as skipped. The required fix is per-episode salvage/deadlines plus structured-v1 parity, not a blind concurrency increase.
+- **Quality result:** REPORT prompt retransmission and duplicate graph payloads are a measurable secondary cost; interrupted RUN checkpoints are written but disabled for default pipeline resume; historical ensemble reports spent 6,356,626 tokens for zero aggregate agreement. Polymarket has a P0 influence-boundary defect plus reversed-token and concurrent-ledger P1s. Plotly delivery has a sibling-symlink/size containment P1.
+- **Files touched:** `PLANS.md`, `handoff.md`, and `agent-progress.txt` only. `feature_list.json` remains unchanged in this milestone and all LOOP-017 flags remain false.
+- **Offline verification evidence:** Graph owners reported 116 focused tests plus one custom telemetry bridge fixture green. Market/visual owners reported 417 focused tests green, while four new deterministic boundary fixtures reproduced defects not covered by that suite. Research/report artifacts were reconciled read-only; no paid/provider call was issued.
+- **Independent QA:** Recomputed arithmetic and authorization gates passed. The reviewer found two missing traceability checks, so LOOP-017 now explicitly tests lost-response launch idempotency/local-only API/static failure behavior and provider credential/cooldown isolation. The 299 graph-seed count was clarified as persisted operations rather than the sum of actor/relationship/alias categories.
+- **Concurrent drift:** An uncommitted external `prediction_markets.py` transport edit appeared after the audit. Read-only reconciliation found only browser-UA, bounded retry/backoff/timeout, and transport-diagnostic changes; it does not close the forecast-influence, CLOB identity, or resolution-ledger defects and was left untouched.
+- **Concurrent telemetry test:** An untracked external `test_telemetry_fallback_attribution.py` appeared during final verification. It covers inferred LLMMeter attribution with one active run, not F1 provider credentials/cooldowns, and its historical lost-ContextVar premise conflicts with the current full-path propagation fixture; it was preserved for later source reconciliation.
+- **Snapshot freeze:** The final status also gained concurrent `report_agent.py`, `telemetry.py`, and `test_prediction_markets.py` edits after the fan-in. They were not reviewed as settled implementation. The evidence snapshot is frozen at 2026-08-16T18:35:53Z, and affected later slices must rebaseline before editing.
+- **Safety:** No runtime edit, pipeline start/resume, provider mutation, service launch, publication, staging, commit, or push. All unrelated dirty actor-intelligence and documentation work remains preserved.
+- **Result/next:** Evidence baseline complete; implementation is gated. Obtain explicit approval of LOOP-017, then work only Slice 1 through launcher/browser/idempotency/accessibility acceptance. A paid comparison run remains separately gated.
+
+### 2026-08-17T18:50:00Z — branch `codex/shenzhen`
+
+- **Feature:** continuous improvement loop, iteration 2 (commit b83b716)
+- **Landed:** telemetry single-active-run fallback attribution (graph tokens now metered + budget-enforceable; unattributed_process persisted; per-test registry isolation in conftest after the full suite exposed cross-test leakage); language-purity escalation guard/cap/short-circuit (outage worst case 180→3 strong-tier calls; known failing test now PASSES — zero standing failures); Polymarket backend transport hardened (browser UA, backoff, error-class diagnostics) + surgical uncommitted fix to deerflow bridge _polymarket_get (UA, 8s/2 attempts, transport_error_classes persisted).
+- **Notable:** section-concurrency audit finding was stale (default already 6) — comments corrected, no flip; Polymarket config knobs deliberately NOT added (bridge reads env directly; unwired Config mirror = dead code).
+- **Tests:** full backend suite exit 0 (first fully-green full suite on record here); 500+ focused across telemetry/report/market suites; ruff clean.
+- **Next:** iteration 3 — dataviz quality package on clean files (uncertainty encodings, near-empty chart slots→tables, GraphPanel visual encoding, Step4 chart gallery); the graph-stage 8h fix + research 78M-token fix still gated on the dirty-file/checkpoint decision (concurrent codex session active on this checkout).
+
+### 2026-08-17T19:42:00Z — branch `codex/shenzhen`
+
+- **Feature:** continuous improvement loop, iteration 3 (commit 63c1954)
+- **Landed:** honest uncertainty on forecast charts (self-consistency spread → p_low/p_high with provenance, never fabricated; point estimates labeled as such); chart density gates with markdown-table fallback + manifest skip reasons; PNG label wrapping and collision fixes; GraphPanel visual encoding (degree sizing, arrowheads, temporal dim/filter, search, stable CVD-validated palette — legacy palette failed the validator); live simulation trajectory chart + contained /trajectory endpoint.
+- **Tests:** full backend suite exit 0 / zero failures; 291 viz + 26 new + 10 endpoint + 44 frontend; fixtures visually QA'd. Gate lesson: one run mis-collected from repo root (445 collection errors) — always gate from backend/.
+- **Next:** iteration 4 decision point — the remaining top-ranked items (graph-stage 8h re-derivation, research 78M-token resends, run-level provider halt, orchestrator research-telemetry leak, _SLIM_EDGE_KEYS temporal fields) all live in files carrying prior-session uncommitted work; plan is a labeled checkpoint commit of that work (precedent 801faf4) unless the concurrent codex session shows activity.

@@ -219,6 +219,16 @@ class _GraphNamespace:
         target_label: str = "Entity",
         source_summary: str = "",
         target_summary: str = "",
+        source_attributes: Optional[dict] = None,
+        target_attributes: Optional[dict] = None,
+        edge_attributes: Optional[dict] = None,
+        source_uuid: str = "",
+        target_uuid: str = "",
+        edge_uuid: str = "",
+        source_model_text: str = "",
+        target_model_text: str = "",
+        fact_model_text: str = "",
+        deterministic_seed: bool = False,
         **_: Any,
     ) -> str:
         """Write a known typed (source, edge_type, target) relationship (EXECPLAN T2.1).
@@ -230,15 +240,62 @@ class _GraphNamespace:
         same-name entities (KG cookbook: descriptions are the resolution signal). Returns
         the edge uuid.
         """
+        if not any((
+            deterministic_seed,
+            source_attributes,
+            target_attributes,
+            edge_attributes,
+            source_uuid,
+            target_uuid,
+            edge_uuid,
+            source_model_text,
+            target_model_text,
+            fact_model_text,
+        )):
+            # Preserve the historical positional adapter contract for legacy
+            # runtimes/tests that implement only the original ten arguments.
+            return self._rt.add_triplet(
+                graph_id,
+                source_name,
+                edge_type,
+                target_name,
+                fact,
+                valid_at,
+                source_label,
+                target_label,
+                source_summary,
+                target_summary,
+            )
         return self._rt.add_triplet(
-            graph_id, source_name, edge_type, target_name, fact,
-            valid_at, source_label, target_label,
-            source_summary, target_summary,
+            graph_id,
+            source_name,
+            edge_type,
+            target_name,
+            fact,
+            valid_at=valid_at,
+            source_label=source_label,
+            target_label=target_label,
+            source_summary=source_summary,
+            target_summary=target_summary,
+            source_attributes=source_attributes,
+            target_attributes=target_attributes,
+            edge_attributes=edge_attributes,
+            source_uuid=source_uuid,
+            target_uuid=target_uuid,
+            edge_uuid=edge_uuid,
+            source_model_text=source_model_text,
+            target_model_text=target_model_text,
+            fact_model_text=fact_model_text,
+            deterministic_seed=deterministic_seed,
         )
 
     def build_communities(self, graph_id: str, **_: Any) -> List[dict]:
         """T2.4: 在该图上跑社区发现，返回 [{uuid,name,summary}]。"""
         return self._rt.build_communities(graph_id)
+
+    def actor_graph_seed_state(self, graph_id: str, **_: Any) -> dict:
+        """Return uncapped seed nodes/edges for strict manifest validation."""
+        return self._rt.actor_graph_seed_state(graph_id)
 
     # --- retrieval -------------------------------------------------------
     # EXECPLAN2 I-1-0: map the legacy ``reranker`` arg (which the facade used to

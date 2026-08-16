@@ -95,3 +95,48 @@ def test_compactor_renders_real_structured_brief_and_incentives_as_markdown():
     assert "**Intensity:** high" in md
     assert "{'" not in md and "'}" not in md
     assert stats["actors_rendered"] == 1
+
+
+def test_compactor_preserves_bounded_actor_intelligence_for_graph_seeding():
+    actor = _actor("Northstar", .98)
+    actor["intelligence"] = {
+        "schema_version": "actor-intelligence/v1",
+        "dimensions": {
+            "identity_history": {"claims": [{"claim": "Founded in 2004.", "source_refs": ["S1"]}]},
+            "motivations": {"claims": [{"claim": "Preserve market leadership.", "source_refs": ["S2"]}]},
+            "capabilities": {"claims": [{"claim": "Can deploy 2 GW.", "source_refs": ["S3"]}]},
+            "current_actions": {"claims": [{"claim": "Is building storage.", "source_refs": ["S4"]}]},
+            "future_plans": {"claims": [{"claim": "Plans an acquisition if rates hold.", "source_refs": ["S5"]}]},
+            "investments_capital_allocation": {"claims": [{
+                "claim": "Allocated $800 million to resilience.", "source_refs": ["S6"]
+            }]},
+            "decision_rights_process_triggers": {"claims": [{
+                "claim": "Board approval is required.", "source_refs": ["S7"]
+            }]},
+            "knowledge_state": {"claims": [{"claim": "Knows its private outage forecast."}]},
+            "red_lines": {"claims": [{"claim": "Rejects unfunded mandates."}]},
+        },
+        "evidence_gaps": {"future_plans": ["Target identity is unknown."]},
+    }
+
+    md, stats = render_compact_actor_dossier({"actors": [actor], "relationships": []})
+
+    for expected in (
+        "**History / track record:**",
+        "Founded in 2004",
+        "**Motivations:**",
+        "**Capabilities / limits:**",
+        "**Current actions:**",
+        "Is building storage",
+        "**Future plans / conditions:**",
+        "Plans an acquisition",
+        "**Investments / capital allocation:**",
+        "Allocated $800 million",
+        "**Decision model / triggers:**",
+        "**Knowledge state:**",
+        "**Actual red lines:**",
+        "**Actor-intelligence evidence gaps:**",
+        "Target identity is unknown",
+    ):
+        assert expected in md
+    assert stats["truncated"] is False

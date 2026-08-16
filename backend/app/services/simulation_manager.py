@@ -19,8 +19,20 @@ from ..utils.logger import get_logger
 from .zep_entity_reader import ZepEntityReader, FilteredEntities
 from .oasis_profile_generator import OasisProfileGenerator, OasisAgentProfile
 from .simulation_config_generator import SimulationConfigGenerator, SimulationParameters
+from .actor_context import (
+    ACTOR_CONTEXT_VERSION,
+    ACTOR_INTELLIGENCE_VERSION,
+    actor_id_for,
+    build_actor_context_artifacts,
+    context_binding_by_actor_id,
+    validate_actor_context_artifacts,
+)
+from ..utils.atomic import write_json_atomic
 
 logger = get_logger('mirofish.simulation')
+
+
+SIMULATION_CONFIG_MANIFEST_VERSION = "simulation-config-manifest/v1"
 
 
 def _canonical_json_sha256(value: Any) -> str:
@@ -28,6 +40,185 @@ def _canonical_json_sha256(value: Any) -> str:
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
         allow_nan=False,
     ).encode("utf-8")).hexdigest()
+
+
+def _file_sha256(path: str) -> str:
+    if not os.path.isfile(path):
+        raise ValueError(f"sealed artifact is missing: {os.path.basename(path)}")
+    with open(path, "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+
+def build_simulation_config_seal(
+    sim_dir: str,
+    *,
+    simulation_id: str,
+    actor_cast_manifest_sha256: Optional[str],
+    actor_context_manifest_sha256: Optional[str],
+    actor_role_manifest_sha256: Dict[str, str],
+) -> tuple[str, str]:
+    """Seal the exact executable config and every upstream authority artifact."""
+    config_path = os.path.join(sim_dir, "simulation_config.json")
+    with open(config_path, "rb") as handle:
+        config_bytes = handle.read()
+    config_sha = hashlib.sha256(config_bytes).hexdigest()
+    config = json.loads(config_bytes.decode("utf-8"))
+    if not isinstance(config, dict):
+        raise ValueError("simulation config must be an object")
+    config_simulation_id = str(config.get("simulation_id") or "")
+    if config_simulation_id and config_simulation_id != str(simulation_id):
+        raise ValueError("simulation config identity mismatch")
+
+    bindings: Dict[str, Any] = {
+        "actor_cast_manifest": None,
+        "actor_context_manifest": None,
+        "actor_role_manifests": {},
+    }
+    for key, filename, expected in (
+        (
+            "actor_cast_manifest",
+            "actor_cast_manifest.json",
+            actor_cast_manifest_sha256,
+        ),
+        (
+            "actor_context_manifest",
+            "actor_context_manifest.json",
+            actor_context_manifest_sha256,
+        ),
+    ):
+        path = os.path.join(sim_dir, filename)
+        if expected:
+            actual = _file_sha256(path)
+            if actual != expected:
+                raise ValueError(f"{key.replace('_', ' ')} fingerprint mismatch")
+            bindings[key] = {"file": filename, "sha256": actual}
+        elif os.path.exists(path):
+            # A discovered authority artifact must never be silently omitted
+            # from a newly-created seal.
+            bindings[key] = {"file": filename, "sha256": _file_sha256(path)}
+
+    role_files = {
+        "reddit": "reddit_profiles_roles.json",
+        "twitter": "twitter_profiles_roles.json",
+    }
+    if not isinstance(actor_role_manifest_sha256, dict):
+        raise ValueError("actor role manifest fingerprints must be an object")
+    for platform, expected in sorted(actor_role_manifest_sha256.items()):
+        if platform not in role_files or not expected:
+            raise ValueError("unsupported or empty actor role manifest binding")
+        filename = role_files[platform]
+        actual = _file_sha256(os.path.join(sim_dir, filename))
+        if actual != expected:
+            raise ValueError(f"{platform} actor role manifest fingerprint mismatch")
+        bindings["actor_role_manifests"][platform] = {
+            "file": filename,
+            "sha256": actual,
+        }
+
+    manifest = {
+        "schema_version": SIMULATION_CONFIG_MANIFEST_VERSION,
+        "simulation_id": str(simulation_id),
+        "simulation_config_file": "simulation_config.json",
+        "simulation_config_sha256": config_sha,
+        "simulation_config_canonical_sha256": _canonical_json_sha256(config),
+        "bindings": bindings,
+    }
+    manifest_path = os.path.join(sim_dir, "simulation_config_manifest.json")
+    write_json_atomic(
+        manifest_path,
+        manifest,
+        ensure_ascii=False,
+        indent=2,
+        allow_nan=False,
+    )
+    return config_sha, _file_sha256(manifest_path)
+
+
+def validate_simulation_config_seal(
+    sim_dir: str,
+    *,
+    expected_manifest_sha256: Optional[str] = None,
+    expected_config_sha256: Optional[str] = None,
+    expected_simulation_id: Optional[str] = None,
+    require: bool = False,
+) -> Dict[str, Any]:
+    """Validate the exact config plus cast/context/role authority closure."""
+    manifest_path = os.path.join(sim_dir, "simulation_config_manifest.json")
+    if not os.path.exists(manifest_path):
+        if require or expected_manifest_sha256 or expected_config_sha256:
+            raise ValueError("simulation config manifest is missing")
+        return {}
+    manifest_sha = _file_sha256(manifest_path)
+    if expected_manifest_sha256 and manifest_sha != expected_manifest_sha256:
+        raise ValueError("simulation config manifest fingerprint mismatch")
+    with open(manifest_path, encoding="utf-8") as handle:
+        manifest = json.load(handle)
+    if not isinstance(manifest, dict):
+        raise ValueError("simulation config manifest must be an object")
+    if manifest.get("schema_version") != SIMULATION_CONFIG_MANIFEST_VERSION:
+        raise ValueError("simulation config manifest schema is stale")
+    if expected_simulation_id and manifest.get("simulation_id") != str(
+        expected_simulation_id
+    ):
+        raise ValueError("simulation config manifest identity mismatch")
+    if manifest.get("simulation_config_file") != "simulation_config.json":
+        raise ValueError("simulation config manifest points to a different config")
+
+    config_path = os.path.join(sim_dir, "simulation_config.json")
+    with open(config_path, "rb") as handle:
+        config_bytes = handle.read()
+    config_sha = hashlib.sha256(config_bytes).hexdigest()
+    if config_sha != manifest.get("simulation_config_sha256"):
+        raise ValueError("simulation config fingerprint mismatch")
+    if expected_config_sha256 and config_sha != expected_config_sha256:
+        raise ValueError("prepared simulation config fingerprint mismatch")
+    config = json.loads(config_bytes.decode("utf-8"))
+    if not isinstance(config, dict):
+        raise ValueError("simulation config must be an object")
+    if _canonical_json_sha256(config) != manifest.get(
+        "simulation_config_canonical_sha256"
+    ):
+        raise ValueError("simulation config canonical fingerprint mismatch")
+    config_simulation_id = str(config.get("simulation_id") or "")
+    if config_simulation_id and config_simulation_id != str(
+        manifest.get("simulation_id") or ""
+    ):
+        raise ValueError("simulation config identity differs from its manifest")
+
+    bindings = manifest.get("bindings")
+    if not isinstance(bindings, dict):
+        raise ValueError("simulation config bindings are missing")
+    for key, expected_file in (
+        ("actor_cast_manifest", "actor_cast_manifest.json"),
+        ("actor_context_manifest", "actor_context_manifest.json"),
+    ):
+        binding = bindings.get(key)
+        if binding is None:
+            continue
+        if not isinstance(binding, dict) or binding.get("file") != expected_file:
+            raise ValueError(f"invalid {key.replace('_', ' ')} binding")
+        if _file_sha256(os.path.join(sim_dir, expected_file)) != binding.get("sha256"):
+            raise ValueError(f"{key.replace('_', ' ')} fingerprint mismatch")
+
+    role_bindings = bindings.get("actor_role_manifests")
+    if not isinstance(role_bindings, dict):
+        raise ValueError("actor role manifest bindings are invalid")
+    role_files = {
+        "reddit": "reddit_profiles_roles.json",
+        "twitter": "twitter_profiles_roles.json",
+    }
+    for platform, binding in role_bindings.items():
+        expected_file = role_files.get(platform)
+        if (
+            not expected_file
+            or not isinstance(binding, dict)
+            or binding.get("file") != expected_file
+        ):
+            raise ValueError("actor role manifest binding is invalid")
+        if _file_sha256(os.path.join(sim_dir, expected_file)) != binding.get("sha256"):
+            raise ValueError(f"{platform} actor role manifest fingerprint mismatch")
+    manifest["manifest_sha256"] = manifest_sha
+    return manifest
 
 
 def ensure_dossier_actor_entities(
@@ -127,14 +318,49 @@ def ensure_dossier_actor_entities(
     }
 
 
+def _dossier_uses_current_actor_intelligence(
+    actors: Optional[Dict[str, Any]],
+) -> bool:
+    """Return whether the admitted dossier has switched to current v1 authority.
+
+    The root contract is the normal admission marker.  Looking at actor rows as
+    well closes the migration seam where a producer emitted canonical rows just
+    before persisting the root contract.  Unversioned dossiers deliberately
+    remain on the legacy compatibility path.
+    """
+    if not isinstance(actors, dict):
+        return False
+    contract = actors.get("actor_intelligence_contract")
+    if (
+        isinstance(contract, dict)
+        and str(contract.get("schema_version") or "").strip()
+        == ACTOR_INTELLIGENCE_VERSION
+    ):
+        return True
+
+    from ..utils.actors import extract_actor_rows
+
+    return any(
+        isinstance(row.get("intelligence"), dict)
+        and str(row["intelligence"].get("schema_version") or "").strip()
+        == ACTOR_INTELLIGENCE_VERSION
+        for row in extract_actor_rows(actors)
+    )
+
+
 def select_agent_pool(
     entities: List[Any],
     actors: Optional[Dict[str, Any]] = None,
     graph_priors: Optional[Dict[str, float]] = None,
 ) -> List[Any]:
-    """选择进入模拟 agent 池的实体（T3.13 上限 + ACTOR-CAST discipline）。
+    """选择进入模拟 agent 池的实体（v1 authority + legacy discipline）。
 
-    两条路径（按 Config 旗标取值二选一）：
+    ``actor-intelligence/v1`` is an authority switch: every admitted agent must
+    match one eligible dossier actor, aliases occupy one seat, and legacy graph
+    fill/max flags cannot reopen admission.  The selected current-v1 roster is
+    therefore independent of ``ACTOR_CAST_MAX`` and ``OASIS_MAX_AGENTS``.
+
+    Unversioned dossiers retain the two historical flag-driven paths below:
 
     * **主阵容路径（默认）** —— 当 ``ACTOR_CAST_MAX``>0 且小于 ``OASIS_MAX_AGENTS``
       （或 OASIS_MAX_AGENTS=0 不设上限）、且至少有一个实体匹配到研究 actor 时：
@@ -254,6 +480,47 @@ def select_agent_pool(
         sal_key = sal_key + 0.5 * _centrality(e)
         return (matched_flag, eligible_flag, sal_key, iw, len(e.related_edges or []))
 
+    # ---- actor-intelligence/v1 authority path ----
+    # Once the run admits the current producer contract, the sealed actor roster
+    # is the only source of simulation identities.  ACTOR_CAST_MAX=0 and
+    # unset-high/oversized values used to fall through to T3.13 and repopulate
+    # the cast with unrelated graph nodes.  Ignore both legacy max controls for
+    # this versioned path and retain every distinct, eligible matched actor.
+    if _dossier_uses_current_actor_intelligence(actors):
+        eligible = [
+            entity
+            for entity in entities
+            if _matched.get(id(entity))
+            and _is_agent_eligible(_matched.get(id(entity)))
+        ]
+        excluded_n = _matched_count - len(eligible)
+        by_actor_id: Dict[str, Any] = {}
+        dedup_dropped = 0
+        for entity in sorted(eligible, key=_rank, reverse=True):
+            actor = _matched.get(id(entity))
+            actor_key = actor_id_for(actor) if isinstance(actor, dict) else ""
+            if actor_key in by_actor_id:
+                dedup_dropped += 1
+                continue
+            by_actor_id[actor_key] = entity
+        kept = list(by_actor_id.values())
+        logger.info(
+            "[actor-cast] actor-intelligence/v1 authority: entities %d "
+            "(matched %d) -> %d eligible matched actors "
+            "(tier/media excluded %d, alias nodes deduplicated %d, "
+            "unmatched graph nodes rejected %d; ignored ACTOR_CAST_MAX=%d, "
+            "OASIS_MAX_AGENTS=%d)",
+            len(entities),
+            _matched_count,
+            len(kept),
+            excluded_n,
+            dedup_dropped,
+            len(entities) - _matched_count,
+            _cast_max,
+            _oasis_max,
+        )
+        return kept
+
     # ---- 主阵容路径（ACTOR-CAST discipline，默认开）----
     _cast_discipline = (
         _cast_max > 0
@@ -372,6 +639,13 @@ class SimulationState:
     actor_role_count: int = 0
     actor_cast_manifest_sha256: Optional[str] = None
     actor_role_manifest_sha256: Dict[str, str] = field(default_factory=dict)
+    actor_context_contract_version: Optional[str] = None
+    actor_context_count: int = 0
+    actor_context_manifest_sha256: Optional[str] = None
+    actor_context_report_sha256: Optional[str] = None
+    actor_context_actors_sha256: Optional[str] = None
+    simulation_config_sha256: Optional[str] = None
+    simulation_config_manifest_sha256: Optional[str] = None
     
     # 配置生成信息
     config_generated: bool = False
@@ -405,6 +679,15 @@ class SimulationState:
             "actor_role_count": self.actor_role_count,
             "actor_cast_manifest_sha256": self.actor_cast_manifest_sha256,
             "actor_role_manifest_sha256": self.actor_role_manifest_sha256,
+            "actor_context_contract_version": self.actor_context_contract_version,
+            "actor_context_count": self.actor_context_count,
+            "actor_context_manifest_sha256": self.actor_context_manifest_sha256,
+            "actor_context_report_sha256": self.actor_context_report_sha256,
+            "actor_context_actors_sha256": self.actor_context_actors_sha256,
+            "simulation_config_sha256": self.simulation_config_sha256,
+            "simulation_config_manifest_sha256": (
+                self.simulation_config_manifest_sha256
+            ),
             "config_generated": self.config_generated,
             "config_reasoning": self.config_reasoning,
             "current_round": self.current_round,
@@ -428,6 +711,14 @@ class SimulationState:
             "actor_role_contract_version": self.actor_role_contract_version,
             "actor_role_count": self.actor_role_count,
             "actor_role_manifest_sha256": self.actor_role_manifest_sha256,
+            "actor_context_contract_version": self.actor_context_contract_version,
+            "actor_context_count": self.actor_context_count,
+            "actor_context_manifest_sha256": self.actor_context_manifest_sha256,
+            "actor_context_report_sha256": self.actor_context_report_sha256,
+            "simulation_config_sha256": self.simulation_config_sha256,
+            "simulation_config_manifest_sha256": (
+                self.simulation_config_manifest_sha256
+            ),
             "config_generated": self.config_generated,
             "error": self.error,
         }
@@ -509,6 +800,15 @@ class SimulationManager:
                 data.get("actor_role_manifest_sha256")
                 if isinstance(data.get("actor_role_manifest_sha256"), dict)
                 else {}
+            ),
+            actor_context_contract_version=data.get("actor_context_contract_version"),
+            actor_context_count=int(data.get("actor_context_count", 0) or 0),
+            actor_context_manifest_sha256=data.get("actor_context_manifest_sha256"),
+            actor_context_report_sha256=data.get("actor_context_report_sha256"),
+            actor_context_actors_sha256=data.get("actor_context_actors_sha256"),
+            simulation_config_sha256=data.get("simulation_config_sha256"),
+            simulation_config_manifest_sha256=data.get(
+                "simulation_config_manifest_sha256"
             ),
             config_generated=data.get("config_generated", False),
             config_reasoning=data.get("config_reasoning", ""),
@@ -631,20 +931,21 @@ class SimulationManager:
             filtered.entities, actor_cast_manifest = ensure_dossier_actor_entities(
                 filtered.entities, actors
             )
-            # T3.13 + ACTOR-CAST discipline：agent 池选择（抽取为模块级 select_agent_pool，
-            # 便于单测）。默认（ACTOR_CAST_MAX=20 < OASIS_MAX_AGENTS=80）：池子从主阵容派生
-            # （匹配研究 actor 且 tier 1/2 能动者，按 salience/影响力排序取 top ≤cast_max），
-            # 不再向 80 填充图谱通用节点；ACTOR_CAST_MAX 设为 ≥ OASIS_MAX_AGENTS（或 0）时
-            # 走旧的 T3.13 路径，行为与现状逐字节一致（degrade-safe）。
+            # Current actor-intelligence/v1 makes the dossier roster the sole
+            # identity authority: only eligible matched actors survive, no max
+            # flag can repopulate generic graph nodes. Unversioned dossiers keep
+            # the historical ACTOR_CAST_MAX/T3.13 compatibility behavior.
             filtered.entities = select_agent_pool(
                 filtered.entities, actors=actors, graph_priors=graph_priors
             )
             selected_rows: Dict[str, Any] = {}
+            selected_actor_rows: List[Dict[str, Any]] = []
             from ..utils.actors import match_actor as _match_selected_actor
             for entity in filtered.entities:
                 row = _match_selected_actor(entity.name, actors)
                 if isinstance(row, dict):
                     selected_rows[str(row.get("name") or "").strip()] = entity
+                    selected_actor_rows.append(row)
             selected_names = set(selected_rows)
             missing_eligible: List[str] = []
             for decision in actor_cast_manifest["decisions"]:
@@ -673,6 +974,43 @@ class SimulationManager:
             with open(actor_cast_path, "rb") as actor_cast_handle:
                 actor_cast_sha = hashlib.sha256(actor_cast_handle.read()).hexdigest()
             filtered.filtered_count = len(filtered.entities)
+
+            # Compile and seal one exact research-context pack for every actor
+            # in the selected cast *before* any persona LLM/rule/error path runs.
+            # This prevents generic personas from being produced first and then
+            # retrofitted with unaudited report snippets after the fact.
+            actor_context_packs: Dict[str, Dict[str, Any]] = {}
+            actor_context_manifest: Dict[str, Any] = {}
+            actor_context_manifest_sha = ""
+            if selected_actor_rows:
+                actor_context_packs, actor_context_manifest, actor_context_manifest_sha = (
+                    build_actor_context_artifacts(
+                        sim_dir,
+                        actors or {},
+                        selected_actor_rows,
+                        document_text,
+                    )
+                )
+                expected_actor_ids = [actor_id_for(row) for row in selected_actor_rows]
+                validate_actor_context_artifacts(
+                    sim_dir,
+                    expected_count=len(selected_actor_rows),
+                    expected_manifest_sha256=actor_context_manifest_sha,
+                    expected_report_sha256=actor_context_manifest.get("report_sha256"),
+                    expected_actors_sha256=actor_context_manifest.get("actors_sha256"),
+                    expected_actor_ids=expected_actor_ids,
+                )
+                state.actor_context_contract_version = ACTOR_CONTEXT_VERSION
+                state.actor_context_count = len(actor_context_packs)
+                state.actor_context_manifest_sha256 = actor_context_manifest_sha
+                state.actor_context_report_sha256 = actor_context_manifest.get("report_sha256")
+                state.actor_context_actors_sha256 = actor_context_manifest.get("actors_sha256")
+            else:
+                state.actor_context_contract_version = None
+                state.actor_context_count = 0
+                state.actor_context_manifest_sha256 = None
+                state.actor_context_report_sha256 = None
+                state.actor_context_actors_sha256 = None
 
             state.entities_count = filtered.filtered_count
             state.entity_types = list(filtered.entity_types)
@@ -711,6 +1049,13 @@ class SimulationManager:
             )
             generator.role_dossier_sha256 = actor_cast_manifest.get("dossier_sha256") or ""
             generator.role_cast_manifest_sha256 = actor_cast_sha
+            generator.actor_context_bindings = context_binding_by_actor_id(
+                actor_context_manifest
+            )
+            generator.actor_context_manifest_sha256 = actor_context_manifest_sha
+            generator.actor_context_report_sha256 = (
+                actor_context_manifest.get("report_sha256") or ""
+            )
             
             def profile_progress(current, total, msg):
                 if progress_callback:
@@ -741,7 +1086,8 @@ class SimulationManager:
                 parallel_count=parallel_profile_count,  # 并行生成数量
                 realtime_output_path=realtime_output_path,  # 实时保存路径
                 output_platform=realtime_platform,  # 输出格式
-                actors=actors  # 深度研究档案（可选）：实证立场/记忆注入 persona
+                actors=actors,  # 深度研究档案（可选）：实证立场/记忆注入 persona
+                actor_context_packs=actor_context_packs,
             )
 
             role_count = int(
@@ -826,6 +1172,7 @@ class SimulationManager:
                 enable_twitter=state.enable_twitter,
                 enable_reddit=state.enable_reddit,
                 actors=actors,  # 深度研究档案（可选）：实证立场/热点/时间线进配置
+                actor_context_packs=actor_context_packs,
                 max_rounds=max_rounds,  # PREP-1: 定时事件按真实执行轮数窗排期
                 research_language=research_language,  # PREP-4: 英文调研→global_market 画像
             )
@@ -893,6 +1240,18 @@ class SimulationManager:
             # 启动模拟时，simulation_runner 会从 scripts/ 目录运行脚本
 
             if state.actor_role_count:
+                if state.actor_context_count != state.actor_role_count:
+                    raise RuntimeError(
+                        "actor context coverage differs from actor role coverage"
+                    )
+                validate_actor_context_artifacts(
+                    sim_dir,
+                    expected_count=state.actor_role_count,
+                    expected_manifest_sha256=state.actor_context_manifest_sha256,
+                    expected_report_sha256=state.actor_context_report_sha256,
+                    expected_actors_sha256=state.actor_context_actors_sha256,
+                    expected_actor_ids=[actor_id_for(row) for row in selected_actor_rows],
+                )
                 role_profile_paths: List[str] = []
                 if state.enable_reddit:
                     role_profile_paths.append(os.path.join(sim_dir, "reddit_profiles.json"))
@@ -915,6 +1274,28 @@ class SimulationManager:
                 state.actor_role_manifest_sha256 = role_manifest_shas
             else:
                 state.actor_role_manifest_sha256 = {}
+
+            (
+                state.simulation_config_sha256,
+                state.simulation_config_manifest_sha256,
+            ) = build_simulation_config_seal(
+                sim_dir,
+                simulation_id=simulation_id,
+                actor_cast_manifest_sha256=state.actor_cast_manifest_sha256,
+                actor_context_manifest_sha256=(
+                    state.actor_context_manifest_sha256
+                ),
+                actor_role_manifest_sha256=state.actor_role_manifest_sha256,
+            )
+            validate_simulation_config_seal(
+                sim_dir,
+                expected_manifest_sha256=(
+                    state.simulation_config_manifest_sha256
+                ),
+                expected_config_sha256=state.simulation_config_sha256,
+                expected_simulation_id=simulation_id,
+                require=True,
+            )
             
             # 更新状态
             state.status = SimulationStatus.READY
@@ -933,7 +1314,143 @@ class SimulationManager:
             state.error = str(e)
             self._save_simulation_state(state)
             raise
-    
+
+    def reseal_simulation_config(self, simulation_id: str) -> SimulationState:
+        """Seal an authorized final config mutation before RUN admission.
+
+        ``prepare_simulation`` seals the initially generated executable config.
+        The pipeline orchestrator can subsequently add its scenario overlay or
+        deterministic WorldState seed.  Those are legitimate PREPARE-owned
+        mutations, but RUN must never accept them under the old fingerprint.
+        Rebuild the complete config/cast/context/role closure, persist the new
+        state-bound hashes, and immediately revalidate the exact bytes.
+        """
+        state = self._load_simulation_state(simulation_id)
+        if state is None:
+            raise ValueError(f"模拟不存在: {simulation_id}")
+        sim_dir = self._get_simulation_dir(simulation_id)
+        (
+            state.simulation_config_sha256,
+            state.simulation_config_manifest_sha256,
+        ) = build_simulation_config_seal(
+            sim_dir,
+            simulation_id=simulation_id,
+            actor_cast_manifest_sha256=state.actor_cast_manifest_sha256,
+            actor_context_manifest_sha256=state.actor_context_manifest_sha256,
+            actor_role_manifest_sha256=state.actor_role_manifest_sha256,
+        )
+        validate_simulation_config_seal(
+            sim_dir,
+            expected_manifest_sha256=state.simulation_config_manifest_sha256,
+            expected_config_sha256=state.simulation_config_sha256,
+            expected_simulation_id=simulation_id,
+            require=True,
+        )
+        self._save_simulation_state(state)
+        return state
+
+    def validate_prepared_simulation_config(
+        self, simulation_id: str
+    ) -> Dict[str, Any]:
+        """Validate a completed PREPARE seal without rewriting any artifact.
+
+        Generic pipeline artifact manifests are deliberately backward compatible
+        and may omit newer optional entries.  Current actor-context/role runs
+        cannot use that compatibility behavior to bypass their state-bound
+        executable-config seal, while a genuinely legacy unsealed simulation
+        remains readable.
+        """
+        state = self._load_simulation_state(simulation_id)
+        if state is None:
+            raise ValueError(f"模拟不存在: {simulation_id}")
+        sim_dir = self._get_simulation_dir(simulation_id)
+        discovered_role_counts: List[int] = []
+        discovered_role_versions: List[str] = []
+        discovered_context_required = False
+        for filename in (
+            "reddit_profiles_roles.json",
+            "twitter_profiles_roles.json",
+        ):
+            path = os.path.join(sim_dir, filename)
+            if not os.path.exists(path):
+                continue
+            with open(path, encoding="utf-8") as handle:
+                role_manifest = json.load(handle)
+            if not isinstance(role_manifest, dict):
+                raise ValueError("actor role manifest must be an object")
+            role_count = role_manifest.get("actor_role_count")
+            if type(role_count) is not int or role_count < 0:
+                raise ValueError("actor role manifest count is invalid")
+            discovered_role_counts.append(role_count)
+            discovered_role_versions.append(str(
+                role_manifest.get("role_contract_version") or ""
+            ))
+            discovered_context_required = (
+                discovered_context_required
+                or bool(role_manifest.get("actor_context_required"))
+            )
+        if len(set(discovered_role_counts)) > 1:
+            raise ValueError("platform role manifests disagree on actor coverage")
+        if len(set(discovered_role_versions)) > 1:
+            raise ValueError("platform role manifests disagree on role schema")
+
+        discovered_roles = max(discovered_role_counts, default=0)
+        discovered_role_version = (
+            discovered_role_versions[0] if discovered_role_versions else ""
+        )
+        state_role_count = int(state.actor_role_count or 0)
+        state_role_version = str(state.actor_role_contract_version or "")
+        if discovered_roles and state_role_count != discovered_roles:
+            raise ValueError("prepared state omits or changes discovered actor roles")
+        if state_role_count and not discovered_role_counts:
+            raise ValueError("prepared actor roles have no role manifest")
+        if discovered_roles and state_role_version != discovered_role_version:
+            raise ValueError("prepared role schema differs from role manifests")
+
+        context_path = os.path.join(sim_dir, "actor_context_manifest.json")
+        context_exists = os.path.exists(context_path)
+        state_context_count = int(state.actor_context_count or 0)
+        if context_exists and state_context_count <= 0:
+            raise ValueError("prepared state omits the discovered actor context")
+        if state_context_count > 0 and not context_exists:
+            raise ValueError("prepared actor context manifest is missing")
+        if state_context_count > 0 and state_context_count != state_role_count:
+            raise ValueError("prepared actor context does not cover every actor role")
+        if discovered_context_required and not context_exists:
+            raise ValueError("required actor context manifest is missing")
+        if discovered_context_required and state_context_count != discovered_roles:
+            raise ValueError("actor context coverage differs from role coverage")
+
+        manifest_sha = state.simulation_config_manifest_sha256
+        config_sha = state.simulation_config_sha256
+        if bool(manifest_sha) != bool(config_sha):
+            raise ValueError("prepared simulation config fingerprints are incomplete")
+        current_actor_contract = bool(
+            context_exists
+            or state_context_count
+            or discovered_context_required
+            or (
+                discovered_roles
+                and discovered_role_version != "actor-role/v1"
+            )
+            or (
+                state_role_version
+                and state_role_version != "actor-role/v1"
+            )
+            or state.actor_context_contract_version == ACTOR_CONTEXT_VERSION
+        )
+        if current_actor_contract and not (manifest_sha and config_sha):
+            raise ValueError(
+                "current actor roles require state-bound simulation config fingerprints"
+            )
+        return validate_simulation_config_seal(
+            sim_dir,
+            expected_manifest_sha256=manifest_sha,
+            expected_config_sha256=config_sha,
+            expected_simulation_id=simulation_id,
+            require=bool(current_actor_contract or manifest_sha or config_sha),
+        )
+
     def get_simulation(self, simulation_id: str) -> Optional[SimulationState]:
         """获取模拟状态"""
         return self._load_simulation_state(simulation_id)

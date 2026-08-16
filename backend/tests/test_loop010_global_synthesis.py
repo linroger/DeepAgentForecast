@@ -380,6 +380,30 @@ def _configure_global_mode(monkeypatch, tmp_path):
         po.PipelineManager, "save", classmethod(lambda cls, state: None))
 
 
+def _write_shared_actor_artifacts(folder: Path) -> str:
+    dossier = (
+        "# Shared actor dossier\n\n### Actor: Core Actor\n\n"
+        + "Sourced history incentives actions plans investments decisions and relationships. "
+        * 20
+    ).strip()
+    coverage = {
+        "schema_version": "actor-intelligence/v1",
+        "accountable": True,
+        "tier_1_2_actor_count": 1,
+        "dimension_slots": 17,
+        "covered_dimension_slots": 17,
+        "grounded_dimension_slots": 17,
+        "explicit_gap_slots": 0,
+        "coverage_ratio": 1.0,
+        "grounded_coverage_ratio": 1.0,
+        "errors": [],
+    }
+    (folder / "actor_dossier.md").write_text(dossier, encoding="utf-8")
+    (folder / "actor_dossier_coverage.json").write_text(
+        json.dumps(coverage), encoding="utf-8")
+    return dossier
+
+
 def test_three_outer_lanes_produce_one_global_report_not_three(tmp_path, monkeypatch):
     _configure_global_mode(monkeypatch, tmp_path)
     calls = []
@@ -400,9 +424,7 @@ def test_three_outer_lanes_produce_one_global_report_not_three(tmp_path, monkeyp
             }]
             (folder / "sources.json").write_text(
                 json.dumps(sources), encoding="utf-8")
-            dossier = "actor evidence " * 100 if lane == 1 else ""
-            if dossier:
-                (folder / "actor_dossier.md").write_text(dossier, encoding="utf-8")
+            dossier = _write_shared_actor_artifacts(folder) if lane == 1 else ""
             return {
                 "report": evidence,
                 "evidence_pack": evidence,
@@ -433,7 +455,7 @@ def test_three_outer_lanes_produce_one_global_report_not_three(tmp_path, monkeyp
         return {
             "report": report,
             "report_path": str(folder / "research_report.md"),
-            "actor_dossier": "actor evidence " * 100,
+            "actor_dossier": _write_shared_actor_artifacts(folder),
             "actors": actors,
             "sources": manifest["sources"],
             "timeline": None,
@@ -474,9 +496,12 @@ def test_three_outer_lanes_produce_one_global_report_not_three(tmp_path, monkeyp
     assert len(json.loads((handoff / "evidence_synthesis_manifest.json").read_text())[
         "lanes"]) == 3
     manifest = json.loads((handoff / "evidence_synthesis_manifest.json").read_text())
-    assert manifest["version"] == 2
+    assert manifest["version"] == 3
     assert manifest["sources_count"] == 3
     assert all(row.get("sha256") and row.get("sources_sha256") for row in manifest["lanes"])
+    assert manifest["actor_dossier"]["lane_index"] == 1
+    assert manifest["actor_dossier"]["sha256"]
+    assert manifest["actor_dossier"]["coverage_sha256"]
 
 
 def test_global_synthesis_failure_retries_manifest_only_once(tmp_path, monkeypatch):
@@ -496,9 +521,10 @@ def test_global_synthesis_failure_retries_manifest_only_once(tmp_path, monkeypat
             (folder / "evidence_pack.md").write_text(evidence, encoding="utf-8")
             (folder / "sources.json").write_text(
                 json.dumps(sources), encoding="utf-8")
+            dossier = _write_shared_actor_artifacts(folder) if lane == 1 else ""
             return {
                 "report": evidence, "report_path": str(folder / "evidence_pack.md"),
-                "actor_dossier": "", "actors": None, "sources": sources,
+                "actor_dossier": dossier, "actors": None, "sources": sources,
                 "timeline": None, "exit_code": 0,
                 "research_telemetry": {"wall_s": 4, "tokens_total": 4},
             }
@@ -514,9 +540,10 @@ def test_global_synthesis_failure_retries_manifest_only_once(tmp_path, monkeypat
         report = "# Recovered global dossier\n\n" + "forecast evidence " * 50
         (folder / "research_report.md").write_text(report, encoding="utf-8")
         (folder / "meta.json").write_text("{}", encoding="utf-8")
+        dossier = _write_shared_actor_artifacts(folder)
         return {
             "report": report, "report_path": str(folder / "research_report.md"),
-            "actor_dossier": "", "actors": None, "sources": [],
+            "actor_dossier": dossier, "actors": None, "sources": [],
             "timeline": None, "exit_code": 0,
             "research_telemetry": {"wall_s": 2, "tokens_total": 2},
         }
@@ -565,9 +592,10 @@ def test_global_synthesis_double_failure_preserves_evidence_and_fails_closed(
                 }]),
                 encoding="utf-8",
             )
+            dossier = _write_shared_actor_artifacts(folder) if lane == 1 else ""
             return {
                 "report": evidence, "report_path": str(folder / "evidence_pack.md"),
-                "actor_dossier": "", "actors": None, "sources": [],
+                "actor_dossier": dossier, "actors": None, "sources": [],
                 "timeline": None, "exit_code": 0,
                 "research_telemetry": {"wall_s": 4, "tokens_total": 4},
             }
@@ -606,9 +634,10 @@ def test_synthesis_only_recovery_reuses_manifest_without_restarting_lanes(
     handoff.mkdir()
     manifest = handoff / "evidence_synthesis_manifest.json"
     manifest.write_text(json.dumps({
-        "version": 2,
+        "version": 3,
         "lanes": [{"title": "sealed lane", "path": "track_1/evidence_pack.md"}],
         "sources": [{"url": "https://example.gov/source"}],
+        "actor_dossier": {},
     }), encoding="utf-8")
     budget_db = tmp_path / "research_budget.sqlite3"
     telemetry = tmp_path / "research_budget.json"
@@ -684,9 +713,10 @@ def test_synthesis_only_recovery_stops_after_provider_outage(
     handoff.mkdir()
     manifest = handoff / "evidence_synthesis_manifest.json"
     manifest.write_text(json.dumps({
-        "version": 2,
+        "version": 3,
         "lanes": [{"title": "sealed lane", "path": "track_1/evidence_pack.md"}],
         "sources": [{"url": "https://example.gov/source"}],
+        "actor_dossier": {},
     }), encoding="utf-8")
     monkeypatch.setattr(
         po,
@@ -887,3 +917,32 @@ def test_evidence_only_runner_does_not_reuse_stale_actor_dossier(
 
     assert result["actor_dossier"] == ""
     assert captured["env"]["DEERFLOW_DUAL_TRACK"] == "false"
+
+
+def test_current_baseline_actor_dossier_requires_meta_and_sidecar_hashes(tmp_path):
+    handoff = tmp_path / "track_1"
+    handoff.mkdir()
+    dossier = _write_shared_actor_artifacts(handoff)
+    coverage_path = handoff / "actor_dossier_coverage.json"
+    coverage_bytes = coverage_path.read_bytes()
+    coverage = json.loads(coverage_bytes)
+    (handoff / "meta.json").write_text(json.dumps({
+        "status": "completed",
+        "workflow_mode": "evidence_only",
+        "question": "baseline prompt",
+        "actor_dossier_generated": True,
+        "actor_dossier_required": True,
+        "actor_dossier_sha256": hashlib.sha256(
+            dossier.encode("utf-8")).hexdigest(),
+        "actor_dossier_coverage_sha256": hashlib.sha256(
+            coverage_bytes).hexdigest(),
+        "actor_dossier_coverage": coverage,
+    }), encoding="utf-8")
+
+    assert po._load_fresh_evidence_lane_actor_dossier(
+        str(handoff), prompt="baseline prompt") == dossier
+    (handoff / "actor_dossier.md").write_text(
+        dossier + "\nmutated", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="checksum mismatch"):
+        po._load_fresh_evidence_lane_actor_dossier(
+            str(handoff), prompt="baseline prompt")

@@ -4,8 +4,13 @@ Exercises the pure clustering/survivor-selection logic and the resolve_entities
 orchestration via a fake runtime — no graph, no embedder, no LLM.
 """
 
+import asyncio
+import contextlib
+import copy
 import os
 import sys
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -14,6 +19,19 @@ from app.services import zep_entity_resolver as er  # noqa: E402
 
 def _node(uuid, name, label="Company"):
     return {"uuid": uuid, "name": name, "labels": [label], "summary": ""}
+
+
+def _seed_node(uuid, name, actor_id, kind="actor", label="Company"):
+    return {
+        **_node(uuid, name, label),
+        "attributes": {
+            "seed_schema_version": "actor-graph-seed/v1",
+            "seed_kind": kind,
+            "actor_id": actor_id,
+            "seed_record_sha256": "a" * 64,
+            "canonical_claims_sha256": "b" * 64,
+        },
+    }
 
 
 # -------------------------------------------------------------------- helpers
@@ -66,6 +84,33 @@ def test_plan_merges_same_canonical_duplicates_do_merge():
     emb = [[1.0, 0.0], [1.0, 0.0]]
     plan = er.plan_merges(nodes, emb, {"openai"}, threshold=0.9)
     assert len(plan) == 1 and len(plan[0]["victims"]) == 1
+
+
+def test_seeded_canonical_survivor_wins_regardless_of_input_order():
+    extracted = _node("prose-node", "OpenAI")
+    seeded = _seed_node("canonical-seed-node", "OpenAI", "actor_openai")
+
+    for nodes in ([extracted, seeded], [seeded, extracted]):
+        plan = er.plan_merges(
+            nodes,
+            None,
+            {"openai"},
+            threshold=0.88,
+        )
+        assert len(plan) == 1
+        assert plan[0]["survivor_uuid"] == "canonical-seed-node"
+        assert [row["uuid"] for row in plan[0]["victims"]] == ["prose-node"]
+
+
+def test_seed_entity_type_node_is_excluded_from_resolution_candidates():
+    actor = _seed_node("actor-node", "Organization", "actor_org")
+    entity_type = _seed_node(
+        "type-node", "Organization", "", kind="entity_type"
+    )
+
+    assert er.plan_merges(
+        [actor, entity_type], None, {"organization"}, threshold=0.88
+    ) == []
 
 
 def test_plan_merges_respects_label_boundary():
@@ -325,3 +370,136 @@ def test_resolve_entities_under_cap_keeps_full_containment(monkeypatch):
     audit = er.resolve_entities("g1", {"actors": [{"name": "OpenAI"}]}, threshold=0.9, runtime=rt)
     assert audit["merged_nodes"] == 1
     assert rt.merge_calls == [("u1", "u2")]
+
+
+def test_runtime_merge_preserves_seed_attrs_relationship_uuid_and_endpoints(
+    monkeypatch,
+):
+    from graphiti_core.edges import EntityEdge
+    from graphiti_core.nodes import EntityNode
+
+    from app.services.graphiti_client.runtime import GraphitiRuntime
+
+    survivor = EntityNode(
+        uuid="canonical-seed-node",
+        name="OpenAI",
+        group_id="graph-seed-merge",
+        labels=["Entity", "Company"],
+        summary="canonical summary",
+        attributes={
+            "seed_schema_version": "actor-graph-seed/v1",
+            "seed_kind": "actor",
+            "actor_id": "actor_openai",
+            "seed_record_sha256": "a" * 64,
+            "canonical_claims_json": "[]",
+        },
+    )
+    victim = EntityNode(
+        uuid="prose-node",
+        name="openai",
+        group_id="graph-seed-merge",
+        labels=["Entity"],
+        summary="prose summary",
+        attributes={"prose_attribute": "preserve as additive context"},
+    )
+    relationship_attrs = {
+        "seed_schema_version": "actor-graph-seed/v1",
+        "seed_kind": "relationship",
+        "relationship_id": "relation_stable",
+        "claim_sha256": "c" * 64,
+    }
+    seeded_edge = EntityEdge(
+        uuid="stable-relationship-edge",
+        name="OPPOSES",
+        fact="seeded fact",
+        group_id="graph-seed-merge",
+        source_node_uuid="prose-node",
+        target_node_uuid="other-actor-node",
+        created_at=datetime.now(timezone.utc),
+        episodes=[],
+        attributes=copy.deepcopy(relationship_attrs),
+    )
+    prose_edge = EntityEdge(
+        uuid="old-prose-edge",
+        name="MENTIONS_CONTEXT",
+        fact="prose fact",
+        group_id="graph-seed-merge",
+        source_node_uuid="prose-node",
+        target_node_uuid="context-node",
+        created_at=datetime.now(timezone.utc),
+        episodes=[],
+        attributes={},
+    )
+    nodes = {survivor.uuid: survivor, victim.uuid: victim}
+    saved_edges = []
+    saved_nodes = []
+    deleted_nodes = []
+
+    async def get_node(_cls, _driver, node_uuid):
+        return nodes[node_uuid]
+
+    async def get_edges(_cls, _driver, node_uuid):
+        assert node_uuid == "prose-node"
+        return [seeded_edge, prose_edge]
+
+    async def save_edge(self, _driver):
+        saved_edges.append({
+            "uuid": self.uuid,
+            "source_node_uuid": self.source_node_uuid,
+            "target_node_uuid": self.target_node_uuid,
+            "attributes": copy.deepcopy(self.attributes),
+        })
+
+    async def save_node(self, _driver):
+        saved_nodes.append(copy.deepcopy(self.attributes))
+
+    async def delete_node(self, _driver):
+        deleted_nodes.append(self.uuid)
+
+    monkeypatch.setattr(EntityNode, "get_by_uuid", classmethod(get_node))
+    monkeypatch.setattr(EntityEdge, "get_by_node_uuid", classmethod(get_edges))
+    monkeypatch.setattr(EntityEdge, "save", save_edge)
+    monkeypatch.setattr(EntityNode, "save", save_node)
+    monkeypatch.setattr(EntityNode, "delete", delete_node)
+
+    @contextlib.asynccontextmanager
+    async def graph_lock():
+        yield
+
+    runtime = GraphitiRuntime.__new__(GraphitiRuntime)
+
+    async def ensure_graph(_graph_id):
+        return SimpleNamespace(driver=object())
+
+    runtime._ensure_graph = ensure_graph
+    runtime._graph_lock = lambda _graph_id: graph_lock()
+
+    result = asyncio.run(runtime._merge_nodes(
+        "graph-seed-merge", "canonical-seed-node", "prose-node"
+    ))
+
+    stable = next(
+        row for row in saved_edges
+        if row["uuid"] == "stable-relationship-edge"
+    )
+    rewired_prose = next(
+        row for row in saved_edges
+        if row["uuid"] != "stable-relationship-edge"
+    )
+    assert stable == {
+        "uuid": "stable-relationship-edge",
+        "source_node_uuid": "canonical-seed-node",
+        "target_node_uuid": "other-actor-node",
+        "attributes": relationship_attrs,
+    }
+    assert rewired_prose["uuid"] != "old-prose-edge"
+    assert survivor.attributes["seed_record_sha256"] == "a" * 64
+    assert survivor.attributes["canonical_claims_json"] == "[]"
+    assert survivor.attributes["prose_attribute"] == (
+        "preserve as additive context"
+    )
+    assert saved_nodes[-1] == survivor.attributes
+    assert deleted_nodes == ["prose-node"]
+    assert result["survivor_uuid"] == "canonical-seed-node"
+    assert result["rewired"] == 2
+    assert result["deleted"] is True

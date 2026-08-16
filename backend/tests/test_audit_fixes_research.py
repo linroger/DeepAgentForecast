@@ -6,6 +6,7 @@ running main() — there is no other pytest coverage for the bridge.
 """
 
 import datetime as dt
+import hashlib
 import importlib.util
 import json
 import sys
@@ -84,22 +85,101 @@ def test_requested_forecast_visuals_reject_generic_diagnostics(mod, monkeypatch)
     assert mod._visual_contract_audit(prompt, actual)["passed"] is True
 
 
-def test_evidence_only_mode_never_starts_optional_actor_track(mod, monkeypatch):
-    """Track B must not be able to hold an evidence-only lane open.
+def _actor_gap_search_receipts(mod):
+    receipts = []
+    for name in mod.ACTOR_INTELLIGENCE_DIMENSIONS:
+        for attempt in (1, 2):
+            query = f"{name} query {attempt}"
+            result = f"No additional grounded {name} evidence in attempt {attempt}."
+            receipt = {
+                "schema_version": mod._SEARCH_RESULT_RECEIPT_SCHEMA,
+                "thread_id": "research-test",
+                "lane": "track-b",
+                "purpose": "actor-intelligence-coverage",
+                "query": query,
+                "query_sha256": hashlib.sha256(query.encode("utf-8")).hexdigest(),
+                "result_sha256": hashlib.sha256(result.encode("utf-8")).hexdigest(),
+                "result_chars": len(result),
+            }
+            receipt["result_id"] = mod._search_result_receipt_id(receipt)
+            receipts.append(receipt)
+    return receipts
 
-    Evidence lanes are durable inputs to the later global synthesis process.  The
-    optional actor dossier is not part of that contract, so a provider outage in
-    Track B must never delay publication of Track A's completed evidence pack.
-    """
+
+def _valid_actor_dossier(mod, search_receipts):
+    result_ids_by_query = {
+        row["query"]: row["result_id"]
+        for row in search_receipts
+    }
+    behavior_dimensions = {
+        "identity_history",
+        "incentives",
+        "capabilities",
+        "current_actions",
+        "decision_rights_process_triggers",
+    }
+    dimensions = {}
+    for name in mod.ACTOR_INTELLIGENCE_DIMENSIONS:
+        quote = f"Core Actor has grounded {name} evidence."
+        covered = name in behavior_dimensions
+        dimensions[name] = {
+            "status": "covered" if covered else "gap",
+            "source_refs": ["https://example.com/source"] if covered else [],
+            "claims": ([{
+                "claim": quote,
+                "evidence_type": "verified_fact",
+                "claim_valid_at": "2026-07-01",
+                "horizon": "current",
+                "status": "observed",
+                "confidence": "high",
+                "source_refs": ["https://example.com/source"],
+                "source_support": [{
+                    "source_ref": "https://example.com/source",
+                    "supporting_quote": quote,
+                }],
+            }] if covered else []),
+            "gap": ("" if covered else {
+                "reason": f"No grounded {name} evidence found.",
+                "attempted_queries": [f"{name} query 1", f"{name} query 2"],
+                "receipt_ids": [],
+                "result_ids": [
+                    result_ids_by_query[f"{name} query {attempt}"]
+                    for attempt in (1, 2)
+                ],
+                "attempt_count": 2,
+                "exhausted": True,
+            }),
+        }
+    ledger = {
+        "schema_version": mod.ACTOR_INTELLIGENCE_SCHEMA_VERSION,
+        "actors": [{
+            "name": "Core Actor",
+            "simulation_tier": 1,
+            "dimensions": dimensions,
+        }],
+    }
+    return (
+        "# Actor dossier\n\n### Actor: Core Actor\n\n"
+        + "Substantive sourced actor history, incentives, plans, actions, "
+        "investments, decisions, relationships, and constraints. " * 12
+        + "\n\n<!-- ACTOR_INTELLIGENCE_LEDGER_V1\n"
+        + json.dumps(ledger)
+        + "\n-->\n"
+    )
+
+
+def test_evidence_only_baseline_can_own_shared_actor_track(mod, monkeypatch):
+    """The orchestrator assigns Track B to exactly the baseline evidence lane."""
     monkeypatch.setenv("DEERFLOW_DUAL_TRACK", "true")
-    assert mod._should_run_actor_track(evidence_only=True) is False
+    assert mod._should_run_actor_track(evidence_only=True) is True
     assert mod._should_run_actor_track(evidence_only=False) is True
 
     monkeypatch.setenv("DEERFLOW_DUAL_TRACK", "false")
+    assert mod._should_run_actor_track(evidence_only=True) is False
     assert mod._should_run_actor_track(evidence_only=False) is False
 
 
-def test_evidence_only_main_publishes_track_a_without_calling_track_b(
+def test_evidence_only_main_publishes_track_a_with_shared_track_b(
         mod, tmp_path, monkeypatch):
     """Exercise the CLI wiring without a real provider call or hanging thread."""
     monkeypatch.setenv("MINIMAX_API_KEY", "test-key-not-used")
@@ -127,26 +207,64 @@ def test_evidence_only_main_publishes_track_a_without_calling_track_b(
     monkeypatch.setitem(sys.modules, "deerflow.client", fake_client_module)
 
     calls = {"track_a": 0, "track_b": 0}
+    search_receipts = _actor_gap_search_receipts(mod)
 
     def fake_track_a(*_args, **_kwargs):
         calls["track_a"] += 1
         return mod.render_evidence_pack(["Verified evidence. " * 60])
 
-    def forbidden_track_b(*_args, **_kwargs):
+    def fake_track_b(*_args, **_kwargs):
         calls["track_b"] += 1
-        raise AssertionError("evidence-only invoked optional Track B")
+        return _valid_actor_dossier(mod, search_receipts)
 
     monkeypatch.setattr(mod, "run_research_stage", fake_track_a)
-    monkeypatch.setattr(mod, "run_actor_ontology_stage", forbidden_track_b)
+    monkeypatch.setattr(mod, "run_actor_ontology_stage", fake_track_b)
+    monkeypatch.setattr(
+        mod,
+        "_track_b_search_result_receipts",
+        lambda _thread_id="": [dict(row) for row in search_receipts],
+    )
     monkeypatch.setattr(
         mod,
         "export_fetched_sources_for_manifest",
-        lambda: [{
-            "url": "https://example.com/source",
-            "title": "Verified source",
-            "tier": "S1",
-            "ok": True,
-        }],
+        lambda: [(
+            lambda excerpt: {
+                "url": "https://example.com/source",
+                "title": "Verified source",
+                "tier": "S1",
+                "source_origin": "fetched",
+                "reachable": True,
+                "excerpt": excerpt,
+                "content_sha256": hashlib.sha256(
+                    excerpt.encode("utf-8")
+                ).hexdigest(),
+                "receipt_id": "receipt-track-b-1",
+                "thread_id": "research-test",
+                "lane": "track-b",
+                "purpose": "actor-ontology",
+                "receipt_scopes": [
+                    {
+                        "thread_id": "research-test",
+                        "lane": "track-b",
+                        "purpose": "actor-ontology",
+                        "receipt_id": f"receipt-track-b-{attempt}",
+                        "content_sha256": hashlib.sha256(
+                            excerpt.encode("utf-8")
+                        ).hexdigest(),
+                    }
+                    for attempt in (1, 2)
+                ],
+            }
+        )("\n".join(
+            f"Core Actor has grounded {name} evidence."
+            for name in (
+                "identity_history",
+                "incentives",
+                "capabilities",
+                "current_actions",
+                "decision_rights_process_triggers",
+            )
+        ))],
     )
     monkeypatch.setattr(
         sys,
@@ -162,11 +280,13 @@ def test_evidence_only_main_publishes_track_a_without_calling_track_b(
     )
 
     assert mod.main() == 0
-    assert calls == {"track_a": 1, "track_b": 0}
+    assert calls == {"track_a": 1, "track_b": 1}
     assert (tmp_path / mod.EVIDENCE_PACK_FILENAME).stat().st_size > 400
     meta = json.loads((tmp_path / mod.META_FILENAME).read_text(encoding="utf-8"))
     assert meta["status"] == "completed"
-    assert "actor_dossier_chars" not in meta
+    assert meta["actor_dossier_generated"] is True
+    assert meta["actor_dossier_required"] is True
+    assert meta["actor_dossier_coverage"]["accountable"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -418,6 +538,7 @@ class TestJudgePassBar:
         "cast_correctness": 5, "salience_ranking": 4, "per_actor_depth": 4,
         "relationship_completeness": 4, "history_evolution": 4, "evidence_grounding": 4,
         "contradiction_handling": 3, "ontology_readiness": 5,
+        "forward_behavior_coverage": 4, "cast_wide_accountability": 4,
     }}
 
     def test_default_bar_tolerates_one_noncritical_3(self, mod, monkeypatch):
@@ -430,7 +551,7 @@ class TestJudgePassBar:
 
     def test_skill_doc_states_implemented_bar(self, mod):
         skill = (REPO / "deerflow_bridge" / "skills" / "actor-ontology-research" / "SKILL.md").read_text(encoding="utf-8")
-        assert "The **mean** across all eight dimensions is ≥ **4**" in skill
+        assert "The **mean** across all ten dimensions is ≥ **4**" in skill
         assert "- **Every** dimension ≥ **4**, AND" not in skill
 
 # ---------------------------------------------------------------------------

@@ -667,7 +667,8 @@ def test_missing_legacy_run_summary_is_backfilled_once(monkeypatch, tmp_path):
 
 
 def _exercise_prepare_run_resume(
-        monkeypatch, tmp_path, *, rebuild_prepare, corrupt_run=False):
+        monkeypatch, tmp_path, *, rebuild_prepare, corrupt_run=False,
+        corrupt_prepare_seal=False):
     """Run the real orchestrator state machine with every external service faked."""
     pipeline_root = tmp_path / "pipelines"
     simulation_root = tmp_path / "simulations"
@@ -715,7 +716,7 @@ def _exercise_prepare_run_resume(
     old_dir = simulation_root / old_id
     old_dir.mkdir(parents=True)
     old_config = old_dir / "simulation_config.json"
-    old_config.write_text(json.dumps({
+    old_config_payload = {
         "temporal_config": {
             "mode": "calendar",
             "unit": "year",
@@ -728,7 +729,23 @@ def _exercise_prepare_run_resume(
             "as_of_date": "2026-07-12",
             "horizon_date": "2035-12-31",
         },
-    }, indent=2), encoding="utf-8")
+    }
+    if corrupt_run:
+        # Model an already-overlaid PREPARE artifact whose RUN summary later
+        # becomes invalid. Reapplying the same overlay must not duplicate it.
+        old_config_payload["event_config"] = {
+            "scheduled_events": [{
+                "round": 0,
+                "content": "Policy shock",
+                "date": None,
+                "poster_agent_id": 0,
+                "poster_name": "",
+                "is_scenario_injection": True,
+            }],
+        }
+    old_config.write_text(
+        json.dumps(old_config_payload, indent=2), encoding="utf-8"
+    )
     (old_dir / "twitter_profiles.csv").write_text("name\nEV OEM\n", encoding="utf-8")
     old_summary = old_dir / "run_summary.json"
     original_summary = json.dumps({
@@ -737,6 +754,25 @@ def _exercise_prepare_run_resume(
         "simulation_health": "ok",
     }, indent=2).encode()
     old_summary.write_bytes(original_summary)
+    from app.services.simulation_manager import (
+        build_simulation_config_seal,
+        validate_simulation_config_seal,
+    )
+    old_config_sha, old_config_manifest_sha = build_simulation_config_seal(
+        str(old_dir),
+        simulation_id=old_id,
+        actor_cast_manifest_sha256=None,
+        actor_context_manifest_sha256=None,
+        actor_role_manifest_sha256={},
+    )
+    old_config_manifest = old_dir / "simulation_config_manifest.json"
+    old_config_manifest_bytes = old_config_manifest.read_bytes()
+    if corrupt_prepare_seal:
+        stale_manifest = json.loads(old_config_manifest.read_text(encoding="utf-8"))
+        stale_manifest["simulation_config_sha256"] = "0" * 64
+        old_config_manifest.write_text(
+            json.dumps(stale_manifest, indent=2), encoding="utf-8"
+        )
     manifest = {
         "initial_posts": _po._manifest_entry_for(
             "initial_posts", str(old_config), _po.STAGE_PREPARE),
@@ -759,9 +795,15 @@ def _exercise_prepare_run_resume(
             project_id="proj",
             graph_id="graph",
             status=_po.SimulationStatus.COMPLETED,
+            actor_cast_manifest_sha256=None,
+            actor_context_manifest_sha256=None,
+            actor_role_manifest_sha256={},
+            actor_context_count=0,
+            simulation_config_sha256=old_config_sha,
+            simulation_config_manifest_sha256=old_config_manifest_sha,
         ),
     }
-    manager_calls = {"create": 0, "prepare": 0}
+    manager_calls = {"create": 0, "prepare": 0, "reseal": 0, "validate": 0}
 
     class FakeSimulationManager:
         def get_simulation(self, simulation_id):
@@ -774,6 +816,12 @@ def _exercise_prepare_run_resume(
                 project_id=project_id,
                 graph_id=graph_id,
                 status=_po.SimulationStatus.CREATED,
+                actor_cast_manifest_sha256=None,
+                actor_context_manifest_sha256=None,
+                actor_role_manifest_sha256={},
+                actor_context_count=0,
+                simulation_config_sha256=None,
+                simulation_config_manifest_sha256=None,
             )
             return states[new_id]
 
@@ -793,11 +841,72 @@ def _exercise_prepare_run_resume(
             }, indent=2), encoding="utf-8")
             (sim_dir / "twitter_profiles.csv").write_text(
                 "name\nEV OEM\n", encoding="utf-8")
+            config_sha, config_manifest_sha = build_simulation_config_seal(
+                str(sim_dir),
+                simulation_id=simulation_id,
+                actor_cast_manifest_sha256=None,
+                actor_context_manifest_sha256=None,
+                actor_role_manifest_sha256={},
+            )
+            states[simulation_id].simulation_config_sha256 = config_sha
+            states[simulation_id].simulation_config_manifest_sha256 = (
+                config_manifest_sha
+            )
             states[simulation_id].status = _po.SimulationStatus.READY
             return states[simulation_id]
 
+        def reseal_simulation_config(self, simulation_id):
+            manager_calls["reseal"] += 1
+            sim_dir = simulation_root / simulation_id
+            state = states[simulation_id]
+            config_sha, manifest_sha = build_simulation_config_seal(
+                str(sim_dir),
+                simulation_id=simulation_id,
+                actor_cast_manifest_sha256=state.actor_cast_manifest_sha256,
+                actor_context_manifest_sha256=state.actor_context_manifest_sha256,
+                actor_role_manifest_sha256=state.actor_role_manifest_sha256,
+            )
+            state.simulation_config_sha256 = config_sha
+            state.simulation_config_manifest_sha256 = manifest_sha
+            validate_simulation_config_seal(
+                str(sim_dir),
+                expected_manifest_sha256=manifest_sha,
+                expected_config_sha256=config_sha,
+                expected_simulation_id=simulation_id,
+                require=True,
+            )
+            self._save_simulation_state(state)
+            return state
+
+        def validate_prepared_simulation_config(self, simulation_id):
+            manager_calls["validate"] += 1
+            state = states[simulation_id]
+            return validate_simulation_config_seal(
+                str(simulation_root / simulation_id),
+                expected_manifest_sha256=(
+                    state.simulation_config_manifest_sha256
+                ),
+                expected_config_sha256=state.simulation_config_sha256,
+                expected_simulation_id=simulation_id,
+                require=bool(
+                    state.actor_context_count
+                    or state.simulation_config_manifest_sha256
+                    or state.simulation_config_sha256
+                ),
+            )
+
         def _save_simulation_state(self, state):
             states[state.simulation_id] = state
+            sim_dir = simulation_root / state.simulation_id
+            sim_dir.mkdir(parents=True, exist_ok=True)
+            (sim_dir / "state.json").write_text(json.dumps({
+                "simulation_id": state.simulation_id,
+                "actor_context_count": state.actor_context_count,
+                "simulation_config_sha256": state.simulation_config_sha256,
+                "simulation_config_manifest_sha256": (
+                    state.simulation_config_manifest_sha256
+                ),
+            }, indent=2), encoding="utf-8")
 
     fake_manager = FakeSimulationManager()
     monkeypatch.setattr(_po, "SimulationManager", lambda: fake_manager)
@@ -930,6 +1039,9 @@ def _exercise_prepare_run_resume(
         summary_writes=summary_writes,
         manager_calls=manager_calls,
         manifest=_po.PipelineManager.load_artifact_manifest(pid),
+        old_config_sha=old_config_sha,
+        old_config_manifest_sha=old_config_manifest_sha,
+        old_config_manifest_bytes=old_config_manifest_bytes,
     )
 
 
@@ -939,7 +1051,9 @@ def test_prepare_rebuild_invalidates_and_executes_run_end_to_end(monkeypatch, tm
 
     assert result.state.status == "completed"
     assert result.state.simulation_id == result.new_id
-    assert result.manager_calls == {"create": 1, "prepare": 1}
+    assert result.manager_calls == {
+        "create": 1, "prepare": 1, "reseal": 1, "validate": 0,
+    }
     assert result.start_calls == [result.new_id]
     assert result.summary_writes == [result.new_id]
     config_path = result.simulation_root / result.new_id / "simulation_config.json"
@@ -948,6 +1062,21 @@ def test_prepare_rebuild_invalidates_and_executes_run_end_to_end(monkeypatch, tm
     entry = result.manifest["initial_posts"]
     assert os.path.realpath(entry["path"]) == os.path.realpath(config_path)
     assert entry["sha256"] == _po._sha256_file(str(config_path))
+    prepared_state = json.loads(
+        (result.simulation_root / result.new_id / "state.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert prepared_state["simulation_config_sha256"] == (
+        _po._sha256_file(str(config_path))
+    )
+    from scripts.run_parallel_simulation import validate_direct_child_config_seal
+    child_manifest = validate_direct_child_config_seal(
+        str(config_path), prepared_state["simulation_config_manifest_sha256"]
+    )
+    assert child_manifest["manifest_sha256"] == (
+        prepared_state["simulation_config_manifest_sha256"]
+    )
     assert result.manifest["run_summary"]["path"].endswith(
         f"{result.new_id}/run_summary.json")
     assert result.state.stages[_po.STAGE_RUN].message == "模拟完成"
@@ -959,11 +1088,20 @@ def test_prepare_and_run_reuse_is_read_only_end_to_end(monkeypatch, tmp_path):
 
     assert result.state.status == "completed"
     assert result.state.simulation_id == result.old_id
-    assert result.manager_calls == {"create": 0, "prepare": 0}
+    assert result.manager_calls == {
+        "create": 0, "prepare": 0, "reseal": 0, "validate": 1,
+    }
     assert result.start_calls == []
     assert result.summary_writes == []
     summary = result.simulation_root / result.old_id / "run_summary.json"
     assert summary.read_bytes() == result.original_summary
+    config_path = result.simulation_root / result.old_id / "simulation_config.json"
+    assert _po._sha256_file(str(config_path)) == result.old_config_sha
+    config_manifest = (
+        result.simulation_root / result.old_id / "simulation_config_manifest.json"
+    )
+    assert config_manifest.read_bytes() == result.old_config_manifest_bytes
+    assert _po._sha256_file(str(config_manifest)) == result.old_config_manifest_sha
     assert result.state.stages[_po.STAGE_RUN].message == "模拟已恢复"
 
 
@@ -973,13 +1111,68 @@ def test_invalid_run_manifest_applies_overlay_before_rerun(monkeypatch, tmp_path
 
     assert result.state.status == "completed"
     assert result.state.simulation_id == result.old_id
-    assert result.manager_calls == {"create": 0, "prepare": 0}
+    assert result.manager_calls == {
+        "create": 0, "prepare": 0, "reseal": 1, "validate": 1,
+    }
     assert result.start_calls == [result.old_id]
     assert result.summary_writes == [result.old_id]
     config_path = result.simulation_root / result.old_id / "simulation_config.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    assert config["event_config"]["scheduled_events"][0]["content"] == "Policy shock"
+    scenario_events = config["event_config"]["scheduled_events"]
+    assert len(scenario_events) == 1
+    assert scenario_events[0]["content"] == "Policy shock"
     assert result.state.stages[_po.STAGE_RUN].message == "模拟完成"
+
+
+def test_scenario_overlay_replay_preserves_requested_duplicate_multiplicity():
+    config = {
+        "agent_configs": [{
+            "agent_id": 7,
+            "entity_name": "Policy actor",
+            "influence_weight": 2.0,
+        }],
+    }
+    event = {
+        "content": "Two deliberately distinct announcements",
+        "round": 3,
+        "poster_name": "Policy actor",
+    }
+    overlay = {"injected_events": [dict(event), dict(event)]}
+
+    _po.PipelineOrchestrator.apply_scenario_overlay_to_config(config, overlay)
+    _po.PipelineOrchestrator.apply_scenario_overlay_to_config(config, overlay)
+
+    scheduled = config["event_config"]["scheduled_events"]
+    assert len(scheduled) == 2
+    assert all(row["poster_agent_id"] == 7 for row in scheduled)
+    assert all(row["is_scenario_injection"] is True for row in scheduled)
+
+
+def test_prepare_reuse_rebuilds_when_state_bound_config_seal_is_tampered(
+    monkeypatch, tmp_path
+):
+    result = _exercise_prepare_run_resume(
+        monkeypatch,
+        tmp_path,
+        rebuild_prepare=False,
+        corrupt_prepare_seal=True,
+    )
+
+    assert result.state.status == "completed"
+    assert result.state.simulation_id == result.new_id
+    assert result.manager_calls == {
+        "create": 1, "prepare": 1, "reseal": 1, "validate": 1,
+    }
+    assert result.state.options["resumed_stage_validation"] == (
+        "run_rebuilt_prepare_identity_changed"
+    )
+    assert result.state.options["artifact_validation_error"]["artifact"] == (
+        "simulation_config_manifest"
+    )
+    assert "fingerprint mismatch" in result.state.options[
+        "artifact_validation_error"
+    ]["error"]
+    assert result.start_calls == [result.new_id]
 
 
 def test_research_html_artifact_is_raw_served_in_opaque_sandbox(monkeypatch, tmp_path):

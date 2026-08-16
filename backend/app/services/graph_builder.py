@@ -7,6 +7,10 @@ import os
 import re
 import uuid
 import time
+import json
+import hashlib
+import math
+import unicodedata
 import logging
 import threading
 from typing import Dict, Any, List, Optional, Callable
@@ -19,6 +23,7 @@ from ..config import Config
 from ..models.task import TaskManager, TaskStatus
 from ..utils.zep_paging import fetch_all_nodes, fetch_all_edges
 from ..utils.actors import (
+    ACTOR_INTELLIGENCE_SCHEMA_VERSION,
     extract_actor_rows,
     extract_relationship_rows,
     actor_briefing,
@@ -29,6 +34,11 @@ from ..utils.actors import (
     salience_score,
     relation_valence,
     relation_polarity,
+)
+from .actor_role_prompt import (
+    UNSAFE_RESEARCH_TEXT_REPLACEMENT,
+    delimit_untrusted_research_text,
+    sanitize_untrusted_research_text,
 )
 from .text_processor import TextProcessor
 
@@ -52,6 +62,471 @@ RESERVED_ATTR_NAMES = {'uuid', 'name', 'group_id', 'name_embedding', 'summary', 
 # node count so a pathologically large graph can never stall the (gated) post-build pass.
 # KG-3: 仅作 Config.GRAPH_CHOKEPOINT_MAX_NODES 缺失/非法时的兜底值（真正的旋钮在 Config）。
 _CHOKEPOINT_MAX_NODES = 1500
+
+_ACTOR_GRAPH_SEED_SCHEMA_VERSION = "actor-graph-seed/v1"
+_ACTOR_GRAPH_SEED_MANIFEST_VERSION = "actor-graph-seed-manifest/v1"
+_ACTOR_GRAPH_SEED_READBACK_VERSION = "actor-graph-seed-readback/v1"
+_RELATIONSHIP_CAUSAL_KEYS = (
+    "valence",
+    "polarity",
+    "sign",
+    "strength",
+    "grade",
+    "since",
+    "until",
+    "lag",
+)
+
+
+class ActorGraphSeedError(RuntimeError):
+    """A sealed actor-intelligence graph seed could not be written exactly."""
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+
+def _canonical_sha256(value: Any) -> str:
+    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def _canonical_causal_attributes(
+    value: Dict[str, Any],
+    *,
+    location: str,
+) -> Dict[str, Any]:
+    """Mirror the admitted producer's causal identity normalization exactly."""
+    out: Dict[str, Any] = {}
+    for key in _RELATIONSHIP_CAUSAL_KEYS:
+        raw = value.get(key)
+        if raw in (None, ""):
+            continue
+        if isinstance(raw, str):
+            normalized = " ".join(unicodedata.normalize("NFKC", raw).split())
+            if normalized:
+                out[key] = normalized
+            continue
+        if isinstance(raw, bool):
+            out[key] = raw
+            continue
+        if isinstance(raw, (int, float)):
+            if not math.isfinite(float(raw)):
+                raise ActorGraphSeedError(
+                    f"{location} causal attribute {key} is non-finite"
+                )
+            out[key] = raw
+            continue
+        raise ActorGraphSeedError(
+            f"{location} causal attribute {key} is not a scalar"
+        )
+    return out
+
+
+def _seed_uuid(graph_id: str, kind: str, identity: str) -> str:
+    """Return a deterministic Graphiti UUID without conflating graph tenants."""
+    return str(uuid.uuid5(
+        uuid.NAMESPACE_URL,
+        f"deepresearchforecast:{graph_id}:{kind}:{identity}",
+    ))
+
+
+def _current_actor_seed_contract(actors: Optional[Dict[str, Any]]) -> bool:
+    """Select the strict v1 boundary while keeping unversioned inputs legacy.
+
+    A top-level seal is authoritative.  The row-level check is retained only as
+    a migration seam for early v1 artifacts that carried the actor marker before
+    the top-level contract was added.  Any explicit unknown version fails closed.
+    """
+    if not isinstance(actors, dict):
+        return False
+    contract = actors.get("actor_intelligence_contract")
+    root_version = str(
+        contract.get("schema_version") if isinstance(contract, dict) else ""
+    ).strip()
+    row_versions = {
+        str((row.get("intelligence") or {}).get("schema_version") or "").strip()
+        for row in (actors.get("actors") or [])
+        if isinstance(row, dict) and isinstance(row.get("intelligence"), dict)
+    }
+    row_versions.discard("")
+    explicit_versions = ({root_version} if root_version else set()) | row_versions
+    unsupported = explicit_versions - {ACTOR_INTELLIGENCE_SCHEMA_VERSION}
+    if unsupported:
+        raise ActorGraphSeedError(
+            "unsupported actor-intelligence graph seed schema: "
+            + ", ".join(sorted(unsupported))
+        )
+    return ACTOR_INTELLIGENCE_SCHEMA_VERSION in explicit_versions
+
+
+def _strict_identity_text(value: Any, *, field: str, max_chars: int = 240) -> str:
+    """Sanitize structural identity without silently changing hostile identities."""
+    raw = str(value or "").strip()
+    clean = sanitize_untrusted_research_text(raw, max_chars=max_chars).strip()
+    clean = " ".join(clean.split())
+    if not clean:
+        raise ActorGraphSeedError(f"current actor seed {field} is empty")
+    if UNSAFE_RESEARCH_TEXT_REPLACEMENT in clean:
+        raise ActorGraphSeedError(
+            f"current actor seed {field} contains instruction-like text"
+        )
+    return clean
+
+
+def _delimited_seed_record(label: str, value: Any, *, max_chars: int = 30000) -> str:
+    """Sanitize the complete record, then mark it as non-executable model data."""
+    whole_document = _canonical_json(value)
+    # JSON escaping must not turn a directive split across research lines into
+    # an opaque ``\\n`` token before the whole-document detector sees it.
+    whole_document = (
+        whole_document.replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\r", "\n")
+    )
+    sanitized = sanitize_untrusted_research_text(
+        whole_document,
+        max_chars=max_chars,
+    )
+    block = delimit_untrusted_research_text(
+        label,
+        sanitized,
+        max_chars=max_chars,
+    )
+    if not block:
+        raise ActorGraphSeedError(f"current actor seed {label} rendered empty")
+    return block
+
+
+def _validated_source_support(value: Any, *, location: str) -> List[Dict[str, Any]]:
+    """Require the quote/span/receipt/content identity of an admitted v1 claim."""
+    if not isinstance(value, list) or not value or any(
+        not isinstance(row, dict) for row in value
+    ):
+        raise ActorGraphSeedError(f"{location} source support is missing or malformed")
+    rows: List[Dict[str, Any]] = []
+    for support_index, row in enumerate(value):
+        quote = str(row.get("supporting_quote") or "").strip()
+        span = row.get("supporting_span")
+        receipt_id = str(row.get("receipt_id") or "").strip()
+        content_sha256 = str(row.get("content_sha256") or "").strip().lower()
+        source_identity = str(
+            row.get("source_id") or row.get("source_ref") or ""
+        ).strip()
+        try:
+            start = int(span.get("start")) if isinstance(span, dict) else -1
+            end = int(span.get("end")) if isinstance(span, dict) else -1
+        except (TypeError, ValueError):
+            start = end = -1
+        if (
+            not source_identity
+            or not quote
+            or start < 0
+            or end <= start
+            or not receipt_id
+            or not re.fullmatch(r"[0-9a-f]{64}", content_sha256)
+        ):
+            raise ActorGraphSeedError(
+                f"{location} source support is not quote/receipt bound: "
+                f"{support_index}"
+            )
+        rows.append(row)
+    return rows
+
+
+def _source_bound_actor_claims(actor: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Project only canonical, source-bound v1 dimension claims.
+
+    Flat role/description/stance/memory fields are intentionally unreachable
+    from this function.  Nested evidence is retained in a deterministic shape so
+    it can be written as provenance attributes as well as sanitized model text.
+    """
+    intelligence = actor.get("intelligence")
+    if not isinstance(intelligence, dict) or str(
+        intelligence.get("schema_version") or ""
+    ).strip() != ACTOR_INTELLIGENCE_SCHEMA_VERSION:
+        raise ActorGraphSeedError(
+            f"actor {actor.get('actor_id') or actor.get('name')} lacks canonical v1 intelligence"
+        )
+    dimensions = intelligence.get("dimensions")
+    if not isinstance(dimensions, dict):
+        raise ActorGraphSeedError(
+            f"actor {actor.get('actor_id') or actor.get('name')} dimensions are not an object"
+        )
+    if any(not isinstance(dimension, str) for dimension in dimensions):
+        raise ActorGraphSeedError("actor intelligence dimension names are not strings")
+    projected: List[Dict[str, Any]] = []
+    for dimension in sorted(dimensions):
+        raw_claims = dimensions[dimension]
+        if not isinstance(raw_claims, list):
+            raise ActorGraphSeedError(
+                f"actor {actor.get('actor_id') or actor.get('name')} dimension {dimension} is not a list"
+            )
+        for claim_index, claim in enumerate(raw_claims):
+            if not isinstance(claim, dict):
+                raise ActorGraphSeedError(
+                    f"actor claim is not an object: {dimension}[{claim_index}]"
+                )
+            claim_text = str(claim.get("claim") or "").strip()
+            raw_source_refs = claim.get("source_refs")
+            if not isinstance(raw_source_refs, list):
+                raise ActorGraphSeedError(
+                    f"actor claim source_refs are not a list: {dimension}[{claim_index}]"
+                )
+            source_refs = [
+                str(item).strip()
+                for item in raw_source_refs
+                if isinstance(item, str) and item.strip()
+            ]
+            if not claim_text or not source_refs:
+                raise ActorGraphSeedError(
+                    f"actor claim is not source-bound: {dimension}[{claim_index}]"
+                )
+            source_support = _validated_source_support(
+                claim.get("source_support"),
+                location=f"actor claim {dimension}[{claim_index}]",
+            )
+            payload = {
+                "dimension": str(dimension),
+                "claim": claim_text,
+                "evidence_type": str(claim.get("evidence_type") or ""),
+                "claim_valid_at": str(
+                    claim.get("claim_valid_at") or claim.get("as_of_date") or ""
+                ),
+                "horizon": str(claim.get("horizon") or ""),
+                "status": str(claim.get("status") or ""),
+                "confidence": str(claim.get("confidence") or ""),
+                "source_refs": source_refs,
+                "source_support": source_support,
+                "dependencies": claim.get("dependencies") or [],
+                "contradictions": claim.get("contradictions") or [],
+                "qualifiers": claim.get("qualifiers") or {},
+                "causal_attributes": _canonical_causal_attributes(
+                    claim,
+                    location=f"actor claim {dimension}[{claim_index}]",
+                ),
+            }
+            claim_sha256 = str(claim.get("claim_sha256") or "").strip().lower()
+            claim_id = str(claim.get("claim_id") or "").strip()
+            if not re.fullmatch(r"[0-9a-f]{64}", claim_sha256) or not claim_id:
+                raise ActorGraphSeedError(
+                    f"actor claim identity is not sealed: {dimension}[{claim_index}]"
+                )
+            payload["claim_sha256"] = claim_sha256
+            payload["claim_id"] = claim_id
+            projected.append(payload)
+    return projected
+
+
+def _actor_seed_manifest_from_plan(
+    graph_id: str,
+    contract: Dict[str, Any],
+    actor_records: Dict[str, Dict[str, Any]],
+    operations: List[tuple[str, tuple[Any, ...], Dict[str, Any]]],
+) -> Dict[str, Any]:
+    """Describe the exact physical seed state independently of DB readback."""
+    nodes_by_uuid: Dict[str, Dict[str, Any]] = {}
+    edges: List[Dict[str, Any]] = []
+
+    def add_node(
+        *,
+        node_uuid: str,
+        name: str,
+        label: str,
+        summary: str,
+        attributes: Dict[str, Any],
+    ) -> None:
+        entry = {
+            "uuid": node_uuid,
+            "name": name,
+            "required_labels": sorted({"Entity", label} - {""}),
+            "summary_sha256": hashlib.sha256(
+                str(summary or "").encode("utf-8")
+            ).hexdigest(),
+            "seed_kind": str(attributes.get("seed_kind") or ""),
+            "required_attributes": dict(attributes),
+            "required_attributes_sha256": _canonical_sha256(attributes),
+        }
+        existing = nodes_by_uuid.get(node_uuid)
+        if existing is not None and existing != entry:
+            raise ActorGraphSeedError(
+                f"seed plan maps node UUID {node_uuid} to conflicting identities"
+            )
+        nodes_by_uuid[node_uuid] = entry
+
+    for operation_id, args, kwargs in operations:
+        add_node(
+            node_uuid=kwargs["source_uuid"],
+            name=str(args[1]),
+            label=str(kwargs.get("source_label") or "Entity"),
+            summary=str(kwargs.get("source_summary") or ""),
+            attributes=dict(kwargs.get("source_attributes") or {}),
+        )
+        add_node(
+            node_uuid=kwargs["target_uuid"],
+            name=str(args[3]),
+            label=str(kwargs.get("target_label") or "Entity"),
+            summary=str(kwargs.get("target_summary") or ""),
+            attributes=dict(kwargs.get("target_attributes") or {}),
+        )
+        edge_attributes = dict(kwargs.get("edge_attributes") or {})
+        edges.append({
+            "operation_id": operation_id,
+            "uuid": kwargs["edge_uuid"],
+            "name": str(args[2]),
+            "source_node_uuid": kwargs["source_uuid"],
+            "target_node_uuid": kwargs["target_uuid"],
+            "fact_sha256": hashlib.sha256(
+                str(args[4] or "").encode("utf-8")
+            ).hexdigest(),
+            "seed_kind": str(edge_attributes.get("seed_kind") or ""),
+            "required_attributes": edge_attributes,
+            "required_attributes_sha256": _canonical_sha256(edge_attributes),
+        })
+
+    edge_uuids = [entry["uuid"] for entry in edges]
+    if len(edge_uuids) != len(set(edge_uuids)):
+        raise ActorGraphSeedError("seed plan contains duplicate edge UUIDs")
+    nodes = sorted(nodes_by_uuid.values(), key=lambda row: row["uuid"])
+    edges.sort(key=lambda row: row["uuid"])
+
+    actor_nodes = [row for row in nodes if row["seed_kind"] == "actor"]
+    alias_nodes = [row for row in nodes if row["seed_kind"] == "actor_alias"]
+    entity_type_nodes = [
+        row for row in nodes if row["seed_kind"] == "entity_type"
+    ]
+    identity_edges = [
+        row for row in edges if row["seed_kind"] == "actor_identity"
+    ]
+    alias_edges = [row for row in edges if row["seed_kind"] == "actor_alias"]
+    relationship_edges = [
+        row for row in edges if row["seed_kind"] == "relationship"
+    ]
+
+    actor_index = {
+        row["required_attributes"]["actor_id"]: row for row in actor_nodes
+    }
+    actors_projection = [{
+        "actor_id": actor_id,
+        "name": record["name"],
+        "node_uuid": actor_index[actor_id]["uuid"],
+        "seed_record_sha256": record["attributes"]["seed_record_sha256"],
+        "canonical_claims_sha256": record["attributes"][
+            "canonical_claims_sha256"
+        ],
+        "actor_intelligence_sha256": record["attributes"][
+            "actor_intelligence_sha256"
+        ],
+    } for actor_id, record in sorted(actor_records.items())]
+    aliases_projection = [{
+        "actor_id": row["required_attributes"]["actor_id"],
+        "alias": row["required_attributes"]["alias"],
+        "node_uuid": row["uuid"],
+        "edge_uuid": next(
+            edge["uuid"] for edge in alias_edges
+            if edge["target_node_uuid"] == row["uuid"]
+        ),
+    } for row in alias_nodes]
+    relationships_projection = [{
+        "relationship_id": row["required_attributes"]["relationship_id"],
+        "edge_uuid": row["uuid"],
+        "source_actor_id": row["required_attributes"]["source_actor_id"],
+        "target_actor_id": row["required_attributes"]["target_actor_id"],
+        "source_node_uuid": row["source_node_uuid"],
+        "target_node_uuid": row["target_node_uuid"],
+        "claim_sha256": row["required_attributes"]["claim_sha256"],
+        "seed_record_sha256": row["required_attributes"]["seed_record_sha256"],
+        "provenance_sha256": _canonical_sha256({
+            key: row["required_attributes"].get(key)
+            for key in (
+                "source_refs_json",
+                "source_support_json",
+                "supporting_quotes_json",
+                "supporting_spans_json",
+                "receipt_ids_json",
+                "content_sha256s_json",
+            )
+        }),
+    } for row in relationship_edges]
+    aliases_projection.sort(key=lambda row: (row["actor_id"], row["alias"]))
+    relationships_projection.sort(key=lambda row: row["relationship_id"])
+
+    payload: Dict[str, Any] = {
+        "schema_version": _ACTOR_GRAPH_SEED_MANIFEST_VERSION,
+        "strict": True,
+        "graph_id": graph_id,
+        "actor_intelligence_schema_version": ACTOR_INTELLIGENCE_SCHEMA_VERSION,
+        "source_contract": {
+            key: contract.get(key)
+            for key in (
+                "report_sha256",
+                "dossier_sha256",
+                "sources_sha256",
+                "actor_ids_sha256",
+                "actor_ids_ordered_sha256",
+                "actor_ids_multiset_sha256",
+                "claim_projection_multiset_sha256",
+                "relationships_sha256",
+            )
+            if contract.get(key) not in (None, "")
+        },
+        "actors": actors_projection,
+        "aliases": aliases_projection,
+        "identity_edges": [{
+            "actor_id": row["required_attributes"]["actor_id"],
+            "edge_uuid": row["uuid"],
+            "source_node_uuid": row["source_node_uuid"],
+            "target_node_uuid": row["target_node_uuid"],
+            "seed_record_sha256": row["required_attributes"][
+                "seed_record_sha256"
+            ],
+        } for row in identity_edges],
+        "relationships": relationships_projection,
+        "seed_nodes": nodes,
+        "seed_edges": edges,
+        "expected_counts": {
+            "actor_nodes": len(actor_nodes),
+            "alias_nodes": len(alias_nodes),
+            "entity_type_nodes": len(entity_type_nodes),
+            "seed_nodes": len(nodes),
+            "identity_edges": len(identity_edges),
+            "alias_edges": len(alias_edges),
+            "relationship_edges": len(relationship_edges),
+            "seed_edges": len(edges),
+            "required_writes": len(operations),
+        },
+    }
+    payload["seed_nodes_sha256"] = _canonical_sha256(nodes)
+    payload["seed_edges_sha256"] = _canonical_sha256(edges)
+    payload["manifest_sha256"] = _canonical_sha256(payload)
+    return payload
+
+
+def build_actor_graph_seed_manifest(
+    graph_id: str,
+    actors: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build the immutable expected seed manifest used by parent orchestration."""
+    if not _current_actor_seed_contract(actors):
+        payload = {
+            "schema_version": "actor-graph-seed-manifest/legacy-unversioned",
+            "strict": False,
+            "graph_id": graph_id,
+        }
+        payload["manifest_sha256"] = _canonical_sha256(payload)
+        return payload
+    service = GraphBuilderService.__new__(GraphBuilderService)
+    plan = service._prepare_actor_intelligence_v1_seed(
+        graph_id,
+        actors,
+        valid_at=None,
+    )
+    return plan["manifest"]
 
 
 def _brandes_betweenness(adj: Dict[Any, set]) -> Dict[Any, float]:
@@ -544,6 +1019,7 @@ class GraphBuilderService:
         # KG-5: 最近一次 add_text_batches 的落库记账（total/failed/succeeded），供编排器
         # 把「部分文本块被跳过」写进 pipeline_state/health。None = 尚未跑过建图。
         self.last_ingest_stats: Optional[Dict[str, int]] = None
+        self.last_actor_graph_seed_manifest: Optional[Dict[str, Any]] = None
     
     def build_graph_async(
         self,
@@ -821,6 +1297,12 @@ class GraphBuilderService:
         名字+embedding dedup，所以后续文本抽取会「富化」这些种子节点而非重复创建。
         返回写入的边数。幂等：重复种同一三元组不会产生重复（T2.7 依赖此性质）。
         """
+        if _current_actor_seed_contract(actors):
+            return self._seed_actor_intelligence_v1(
+                graph_id,
+                actors,
+                valid_at=valid_at,
+            )
         rows = extract_actor_rows(actors)
         rels = extract_relationship_rows(actors)
         if not rows and not rels:
@@ -906,7 +1388,7 @@ class GraphBuilderService:
                     if body:
                         fact = f"{fact}；{body}" if fact else body
                 # C8（ONTOLOGY 富 schema）：把本体分类属性 archetype/simulation_tier/salience
-                # 作为「节点属性」折进种子节点事实文本（add_triplet 不暴露节点 attributes，
+                # 作为「节点属性」折进种子节点事实文本（旧版未封存路径不提供 attributes，
                 # 故沿用本文件既有「把调研属性折进 fact」的范式）。属性键经 safe_attr_name 规范，
                 # 避开 Zep 保留字。仅在 actor **显式携带**这些字段时追加，否则逐字节不变。
                 node_attrs: List[str] = []
@@ -959,6 +1441,780 @@ class GraphBuilderService:
                 except Exception as e:
                     logger.warning("[%s] seed alias skipped (%s~%s): %s", graph_id, name, al, e)
         return n
+
+    def _seed_actor_intelligence_v1(
+        self,
+        graph_id: str,
+        actors: Dict[str, Any],
+        *,
+        valid_at: Any = None,
+    ) -> int:
+        plan = self._prepare_actor_intelligence_v1_seed(
+            graph_id,
+            actors,
+            valid_at=valid_at,
+        )
+        operations = plan["operations"]
+        expected_count = len(operations)
+        written = 0
+        for operation_id, args, kwargs in operations:
+            try:
+                edge_uuid = self.client.graph.add_triplet(*args, **kwargs)
+            except Exception as exc:
+                raise ActorGraphSeedError(
+                    f"required current actor graph seed failed: {operation_id}: {exc}"
+                ) from exc
+            if not edge_uuid:
+                raise ActorGraphSeedError(
+                    f"required current actor graph seed returned no edge: {operation_id}"
+                )
+            written += 1
+        if written != expected_count:
+            raise ActorGraphSeedError(
+                f"current actor graph seed count mismatch: {written}/{expected_count}"
+            )
+        self.last_actor_graph_seed_manifest = plan["manifest"]
+        return written
+
+    def validate_actor_graph_seed_readback(
+        self,
+        graph_id: str,
+        manifest: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Strictly validate the physical seed after build, resolve, or reuse.
+
+        Alias bridge nodes may be intentionally collapsed into their canonical
+        seeded actor by entity resolution.  Every actor/type node, actor identity
+        edge, and canonical relationship edge remains exact; relationship UUIDs,
+        endpoints, and provenance attributes are never optional.
+        """
+        if not isinstance(manifest, dict):
+            raise ActorGraphSeedError("actor graph seed manifest is not an object")
+        supplied_digest = str(manifest.get("manifest_sha256") or "")
+        digest_payload = {
+            key: value for key, value in manifest.items()
+            if key != "manifest_sha256"
+        }
+        expected_digest = _canonical_sha256(digest_payload)
+        if supplied_digest != expected_digest:
+            raise ActorGraphSeedError("actor graph seed manifest_sha256 mismatch")
+        if manifest.get("graph_id") != graph_id:
+            raise ActorGraphSeedError("actor graph seed manifest graph_id mismatch")
+        if manifest.get("strict") is False:
+            return {
+                "schema_version": _ACTOR_GRAPH_SEED_READBACK_VERSION,
+                "status": "ok",
+                "strict": False,
+                "graph_id": graph_id,
+                "manifest_sha256": supplied_digest,
+                "expected_counts": {},
+                "observed_counts": {},
+            }
+        if manifest.get("schema_version") != _ACTOR_GRAPH_SEED_MANIFEST_VERSION:
+            raise ActorGraphSeedError("unsupported actor graph seed manifest schema")
+
+        try:
+            state = self.client.graph.actor_graph_seed_state(graph_id=graph_id)
+        except Exception as exc:
+            raise ActorGraphSeedError(
+                f"actor graph seed readback failed: {exc}"
+            ) from exc
+        if not isinstance(state, dict):
+            raise ActorGraphSeedError("actor graph seed readback is not an object")
+        observed_nodes = state.get("nodes")
+        observed_edges = state.get("edges")
+        if not isinstance(observed_nodes, list) or not isinstance(observed_edges, list):
+            raise ActorGraphSeedError(
+                "actor graph seed readback lacks node/edge lists"
+            )
+
+        errors: List[str] = []
+        node_rows: Dict[str, List[Dict[str, Any]]] = {}
+        edge_rows: Dict[str, List[Dict[str, Any]]] = {}
+        for row in observed_nodes:
+            if not isinstance(row, dict) or not row.get("uuid"):
+                errors.append("observed_seed_node_invalid")
+                continue
+            node_rows.setdefault(str(row["uuid"]), []).append(row)
+        for row in observed_edges:
+            if not isinstance(row, dict) or not row.get("uuid"):
+                errors.append("observed_seed_edge_invalid")
+                continue
+            edge_rows.setdefault(str(row["uuid"]), []).append(row)
+        for node_uuid, rows in node_rows.items():
+            if len(rows) != 1:
+                errors.append(f"duplicate_seed_node_uuid:{node_uuid}")
+        for edge_uuid, rows in edge_rows.items():
+            if len(rows) != 1:
+                errors.append(f"duplicate_seed_edge_uuid:{edge_uuid}")
+
+        expected_nodes = {
+            str(row.get("uuid") or ""): row
+            for row in (manifest.get("seed_nodes") or [])
+            if isinstance(row, dict) and row.get("uuid")
+        }
+        expected_edges = {
+            str(row.get("uuid") or ""): row
+            for row in (manifest.get("seed_edges") or [])
+            if isinstance(row, dict) and row.get("uuid")
+        }
+        if len(expected_nodes) != len(manifest.get("seed_nodes") or []):
+            errors.append("manifest_seed_node_uuid_collision")
+        if len(expected_edges) != len(manifest.get("seed_edges") or []):
+            errors.append("manifest_seed_edge_uuid_collision")
+
+        actor_by_id = {
+            row["actor_id"]: row
+            for row in (manifest.get("actors") or [])
+            if isinstance(row, dict) and row.get("actor_id")
+        }
+        alias_by_node_uuid = {
+            row["node_uuid"]: row
+            for row in (manifest.get("aliases") or [])
+            if isinstance(row, dict) and row.get("node_uuid")
+        }
+        collapsed_alias_nodes: set[str] = set()
+        collapsed_alias_edges: set[str] = set()
+
+        def validate_required_attributes(
+            kind: str,
+            identity: str,
+            expected: Dict[str, Any],
+            observed: Dict[str, Any],
+        ) -> None:
+            attrs = observed.get("attributes")
+            attrs = attrs if isinstance(attrs, dict) else {}
+            for key, value in (expected.get("required_attributes") or {}).items():
+                if attrs.get(key) != value:
+                    errors.append(f"{kind}_attribute_mismatch:{identity}:{key}")
+
+        for node_uuid, expected in expected_nodes.items():
+            observed_group = node_rows.get(node_uuid) or []
+            if expected.get("seed_kind") == "actor_alias" and not observed_group:
+                alias = alias_by_node_uuid.get(node_uuid) or {}
+                actor = actor_by_id.get(alias.get("actor_id")) or {}
+                actor_rows = node_rows.get(str(actor.get("node_uuid") or "")) or []
+                actor_attrs = (
+                    actor_rows[0].get("attributes")
+                    if len(actor_rows) == 1 and isinstance(actor_rows[0], dict)
+                    else {}
+                )
+                try:
+                    aliases = json.loads(str(actor_attrs.get("aliases_json") or "[]"))
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    aliases = []
+                if alias.get("alias") not in aliases:
+                    errors.append(f"collapsed_alias_not_preserved:{node_uuid}")
+                else:
+                    collapsed_alias_nodes.add(node_uuid)
+                    collapsed_alias_edges.add(str(alias.get("edge_uuid") or ""))
+                continue
+            if len(observed_group) != 1:
+                errors.append(f"seed_node_missing_or_duplicate:{node_uuid}")
+                continue
+            observed = observed_group[0]
+            if observed.get("name") != expected.get("name"):
+                errors.append(f"seed_node_name_mismatch:{node_uuid}")
+            required_labels = set(expected.get("required_labels") or [])
+            if not required_labels.issubset(set(observed.get("labels") or [])):
+                errors.append(f"seed_node_labels_mismatch:{node_uuid}")
+            summary_sha = hashlib.sha256(
+                str(observed.get("summary") or "").encode("utf-8")
+            ).hexdigest()
+            if summary_sha != expected.get("summary_sha256"):
+                errors.append(f"seed_node_summary_mismatch:{node_uuid}")
+            validate_required_attributes("seed_node", node_uuid, expected, observed)
+
+        for edge_uuid, expected in expected_edges.items():
+            observed_group = edge_rows.get(edge_uuid) or []
+            if edge_uuid in collapsed_alias_edges and not observed_group:
+                continue
+            if len(observed_group) != 1:
+                errors.append(f"seed_edge_missing_or_duplicate:{edge_uuid}")
+                continue
+            observed = observed_group[0]
+            for key in ("name", "source_node_uuid", "target_node_uuid"):
+                if observed.get(key) != expected.get(key):
+                    errors.append(f"seed_edge_{key}_mismatch:{edge_uuid}")
+            fact_sha = hashlib.sha256(
+                str(observed.get("fact") or "").encode("utf-8")
+            ).hexdigest()
+            if fact_sha != expected.get("fact_sha256"):
+                errors.append(f"seed_edge_fact_mismatch:{edge_uuid}")
+            validate_required_attributes("seed_edge", edge_uuid, expected, observed)
+
+        allowed_node_uuids = set(expected_nodes) - collapsed_alias_nodes
+        unexpected_nodes = set(node_rows) - allowed_node_uuids
+        if unexpected_nodes:
+            errors.append(
+                "unexpected_seed_node_uuids:" + ",".join(sorted(unexpected_nodes))
+            )
+        allowed_edge_uuids = set(expected_edges) - collapsed_alias_edges
+        unexpected_edges = set(edge_rows) - allowed_edge_uuids
+        if unexpected_edges:
+            errors.append(
+                "unexpected_seed_edge_uuids:" + ",".join(sorted(unexpected_edges))
+            )
+
+        relationship_ids: Dict[str, List[str]] = {}
+        for edge_uuid, rows in edge_rows.items():
+            for row in rows:
+                attrs = row.get("attributes")
+                if not isinstance(attrs, dict) or attrs.get("seed_kind") != "relationship":
+                    continue
+                relationship_ids.setdefault(
+                    str(attrs.get("relationship_id") or ""), []
+                ).append(edge_uuid)
+        for relationship_id, uuids in relationship_ids.items():
+            if not relationship_id or len(uuids) != 1:
+                errors.append(
+                    f"duplicate_or_empty_relationship_id:{relationship_id}"
+                )
+
+        if errors:
+            raise ActorGraphSeedError(
+                "actor graph seed readback mismatch: " + "; ".join(errors)
+            )
+        expected_counts = dict(manifest.get("expected_counts") or {})
+        return {
+            "schema_version": _ACTOR_GRAPH_SEED_READBACK_VERSION,
+            "status": "ok",
+            "strict": True,
+            "graph_id": graph_id,
+            "manifest_sha256": supplied_digest,
+            "expected_counts": expected_counts,
+            "observed_counts": {
+                "seed_nodes": len(observed_nodes),
+                "seed_edges": len(observed_edges),
+                "collapsed_alias_nodes": len(collapsed_alias_nodes),
+                "collapsed_alias_edges": len(collapsed_alias_edges),
+                "relationship_edges": len(relationship_ids),
+            },
+        }
+
+    def _prepare_actor_intelligence_v1_seed(
+        self,
+        graph_id: str,
+        actors: Dict[str, Any],
+        *,
+        valid_at: Any = None,
+    ) -> Dict[str, Any]:
+        """Prepare an admitted actor-intelligence/v1 seed without graph I/O.
+
+        It preflights the complete sealed roster and returns both the exact write
+        plan and immutable readback manifest.  Seeding and parent reuse checks
+        therefore derive identity from one implementation rather than parallel
+        projections that can drift.
+        """
+        raw_rows = actors.get("actors")
+        if not isinstance(raw_rows, list) or not raw_rows:
+            raise ActorGraphSeedError(
+                "current actor-intelligence graph seed has zero actors"
+            )
+        if any(not isinstance(row, dict) for row in raw_rows):
+            raise ActorGraphSeedError(
+                "current actor-intelligence graph seed contains a non-object actor"
+            )
+        contract = actors.get("actor_intelligence_contract")
+        contract = contract if isinstance(contract, dict) else {}
+        if "actor_count" in contract and contract.get("actor_count") != len(raw_rows):
+            raise ActorGraphSeedError(
+                "current actor-intelligence actor_count does not match roster"
+            )
+
+        actor_records: Dict[str, Dict[str, Any]] = {}
+        endpoint_index: Dict[str, str] = {}
+        canonical_name_index: Dict[str, str] = {}
+        claim_count = 0
+        for row_index, actor in enumerate(raw_rows):
+            actor_id = _strict_identity_text(
+                actor.get("actor_id"), field=f"actors[{row_index}].actor_id"
+            )
+            name = _strict_identity_text(
+                actor.get("name"), field=f"actors[{row_index}].name"
+            )
+            if actor_id in actor_records:
+                raise ActorGraphSeedError(f"duplicate actor_id in seed: {actor_id}")
+            name_key = normalize_name(name)
+            if not name_key or name_key in canonical_name_index:
+                raise ActorGraphSeedError(f"duplicate actor name in seed: {name}")
+            actor_type = _strict_identity_text(
+                actor.get("type") or "Entity",
+                field=f"actors[{row_index}].type",
+                max_chars=80,
+            )
+            claims = _source_bound_actor_claims(actor)
+            claim_count += len(claims)
+            aliases_raw = actor.get("aliases", [])
+            if aliases_raw is None:
+                aliases_raw = []
+            if not isinstance(aliases_raw, list):
+                raise ActorGraphSeedError(
+                    f"current actor seed aliases are not a list: {actor_id}"
+                )
+            aliases: List[str] = []
+            seen_aliases: set[str] = set()
+            for alias_index, alias_raw in enumerate(aliases_raw):
+                if not isinstance(alias_raw, str):
+                    raise ActorGraphSeedError(
+                        f"current actor seed alias is not text: "
+                        f"actors[{row_index}].aliases[{alias_index}]"
+                    )
+                alias = _strict_identity_text(
+                    alias_raw,
+                    field=f"actors[{row_index}].aliases[{alias_index}]",
+                )
+                alias_key = normalize_name(alias)
+                if not alias_key or alias_key == name_key or alias_key in seen_aliases:
+                    continue
+                seen_aliases.add(alias_key)
+                aliases.append(alias)
+            projection = {
+                "seed_schema_version": _ACTOR_GRAPH_SEED_SCHEMA_VERSION,
+                "kind": "actor",
+                "actor_id": actor_id,
+                "name": name,
+                "aliases": aliases,
+                "type": actor_type,
+                "simulation_tier": actor.get("simulation_tier"),
+                "archetype": actor.get("archetype"),
+                "canonical_claims": claims,
+            }
+            summary = _delimited_seed_record(
+                f"actor graph seed {actor_id}", projection
+            )
+            attrs = {
+                "seed_schema_version": _ACTOR_GRAPH_SEED_SCHEMA_VERSION,
+                "seed_kind": "actor",
+                "actor_id": actor_id,
+                "actor_name": name,
+                # Keep the established synthetic-entity lookup keys as aliases
+                # while exposing the canonical v1 names above.
+                "dossier_actor_id": actor_id,
+                "dossier_actor_name": name,
+                "actor_type": actor_type,
+                "aliases_json": _canonical_json(aliases),
+                "canonical_claim_count": len(claims),
+                "canonical_claims_json": _canonical_json(claims),
+                "canonical_claims_sha256": _canonical_sha256(claims),
+                "actor_intelligence_sha256": _canonical_sha256(
+                    actor.get("intelligence")
+                ),
+                "actor_seed_record_json": _canonical_json(projection),
+                "seed_record_sha256": _canonical_sha256(projection),
+                "source_report_sha256": str(contract.get("report_sha256") or ""),
+                "source_dossier_sha256": str(contract.get("dossier_sha256") or ""),
+                "source_sources_sha256": str(contract.get("sources_sha256") or ""),
+            }
+            actor_records[actor_id] = {
+                "actor_id": actor_id,
+                "name": name,
+                "name_key": name_key,
+                "type": actor_type,
+                "label": ACTOR_TYPE_TO_LABEL.get(actor_type, "Entity"),
+                "aliases": aliases,
+                "summary": summary,
+                "attributes": attrs,
+            }
+            canonical_name_index[name_key] = actor_id
+
+        if (
+            "claim_projection_count" in contract
+            and contract.get("claim_projection_count") != claim_count
+        ):
+            raise ActorGraphSeedError(
+                "current actor-intelligence claim count does not match contract"
+            )
+
+        # Canonical names win first; aliases may resolve an endpoint only when
+        # they do not collide with a different sealed identity.
+        endpoint_index.update(canonical_name_index)
+        for actor_id, record in actor_records.items():
+            for alias in record["aliases"]:
+                alias_key = normalize_name(alias)
+                existing = endpoint_index.get(alias_key)
+                if existing is not None and existing != actor_id:
+                    raise ActorGraphSeedError(
+                        f"ambiguous actor alias in current seed: {alias}"
+                    )
+                endpoint_index[alias_key] = actor_id
+
+        raw_relationships = actors.get("relationships", [])
+        if raw_relationships is None:
+            raw_relationships = []
+        if not isinstance(raw_relationships, list) or any(
+            not isinstance(row, dict) for row in raw_relationships
+        ):
+            raise ActorGraphSeedError(
+                "current actor-intelligence relationships are not a list of objects"
+            )
+        if (
+            "relationship_count" in contract
+            and contract.get("relationship_count") != len(raw_relationships)
+        ):
+            raise ActorGraphSeedError(
+                "current actor-intelligence relationship_count does not match rows"
+            )
+
+        # Each tuple is (human-readable identity, positional args, keyword args).
+        # Building this complete operation list is the preflight: no malformed
+        # actor/claim/relationship can leave a half-seeded graph.
+        operations: List[tuple[str, tuple[Any, ...], Dict[str, Any]]] = []
+        for actor_id, record in actor_records.items():
+            type_record = {
+                "seed_schema_version": _ACTOR_GRAPH_SEED_SCHEMA_VERSION,
+                "kind": "entity_type",
+                "name": record["type"],
+            }
+            type_block = _delimited_seed_record(
+                "actor graph entity type", type_record, max_chars=2000
+            )
+            edge_attrs = {
+                "seed_schema_version": _ACTOR_GRAPH_SEED_SCHEMA_VERSION,
+                "seed_kind": "actor_identity",
+                "actor_id": actor_id,
+                "seed_record_sha256": record["attributes"]["seed_record_sha256"],
+            }
+            operations.append((
+                f"actor:{actor_id}",
+                (graph_id, record["name"], "IS_A", record["type"], record["summary"]),
+                {
+                    "valid_at": valid_at,
+                    "source_label": record["label"],
+                    "target_label": record["label"],
+                    "source_summary": record["summary"],
+                    "target_summary": type_block,
+                    "source_attributes": record["attributes"],
+                    "target_attributes": {
+                        "seed_schema_version": _ACTOR_GRAPH_SEED_SCHEMA_VERSION,
+                        "seed_kind": "entity_type",
+                        "entity_type": record["type"],
+                    },
+                    "edge_attributes": edge_attrs,
+                    "source_uuid": _seed_uuid(graph_id, "actor", actor_id),
+                    "target_uuid": _seed_uuid(
+                        graph_id, "entity_type", record["type"]
+                    ),
+                    "edge_uuid": _seed_uuid(graph_id, "actor_identity", actor_id),
+                    "source_model_text": record["summary"],
+                    "target_model_text": type_block,
+                    "fact_model_text": record["summary"],
+                    "deterministic_seed": True,
+                },
+            ))
+            for alias in record["aliases"]:
+                alias_record = {
+                    "seed_schema_version": _ACTOR_GRAPH_SEED_SCHEMA_VERSION,
+                    "kind": "actor_alias",
+                    "actor_id": actor_id,
+                    "canonical_name": record["name"],
+                    "alias": alias,
+                }
+                alias_block = _delimited_seed_record(
+                    f"actor alias seed {actor_id}", alias_record, max_chars=3000
+                )
+                alias_key = normalize_name(alias)
+                operations.append((
+                    f"alias:{actor_id}:{alias_key}",
+                    (
+                        graph_id,
+                        record["name"],
+                        "ALSO_KNOWN_AS",
+                        alias,
+                        alias_block,
+                    ),
+                    {
+                        "valid_at": valid_at,
+                        "source_label": record["label"],
+                        "target_label": record["label"],
+                        "source_summary": record["summary"],
+                        "target_summary": alias_block,
+                        "source_attributes": record["attributes"],
+                        "target_attributes": {
+                            "seed_schema_version": _ACTOR_GRAPH_SEED_SCHEMA_VERSION,
+                            "seed_kind": "actor_alias",
+                            "actor_id": actor_id,
+                            "dossier_actor_id": actor_id,
+                            "canonical_name": record["name"],
+                            "alias": alias,
+                        },
+                        "edge_attributes": {
+                            "seed_schema_version": _ACTOR_GRAPH_SEED_SCHEMA_VERSION,
+                            "seed_kind": "actor_alias",
+                            "actor_id": actor_id,
+                            "alias": alias,
+                            "seed_record_sha256": _canonical_sha256(alias_record),
+                        },
+                        "source_uuid": _seed_uuid(graph_id, "actor", actor_id),
+                        "target_uuid": _seed_uuid(
+                            graph_id, "actor_alias", f"{actor_id}:{alias_key}"
+                        ),
+                        "edge_uuid": _seed_uuid(
+                            graph_id, "actor_alias_edge", f"{actor_id}:{alias_key}"
+                        ),
+                        "source_model_text": record["summary"],
+                        "target_model_text": alias_block,
+                        "fact_model_text": alias_block,
+                        "deterministic_seed": True,
+                    },
+                ))
+
+        seen_relationship_ids: set[str] = set()
+        seen_relationship_edge_uuids: set[str] = set()
+        for relationship_index, relationship in enumerate(raw_relationships):
+            source_key = normalize_name(str(relationship.get("source") or ""))
+            target_key = normalize_name(str(relationship.get("target") or ""))
+            source_actor_id = endpoint_index.get(source_key)
+            target_actor_id = endpoint_index.get(target_key)
+            if source_actor_id is None or target_actor_id is None:
+                raise ActorGraphSeedError(
+                    f"relationship endpoint is not in sealed roster: {relationship_index}"
+                )
+            supplied_source_id = str(
+                relationship.get("source_actor_id") or source_actor_id
+            )
+            supplied_target_id = str(
+                relationship.get("target_actor_id") or target_actor_id
+            )
+            if (
+                supplied_source_id != source_actor_id
+                or supplied_target_id != target_actor_id
+            ):
+                raise ActorGraphSeedError(
+                    f"relationship actor identity mismatch: {relationship_index}"
+                )
+            source = actor_records[source_actor_id]
+            target = actor_records[target_actor_id]
+            relation_type = _strict_identity_text(
+                str(relationship.get("type") or "OTHER").upper(),
+                field=f"relationships[{relationship_index}].type",
+                max_chars=64,
+            )
+            if not re.fullmatch(r"[A-Z][A-Z0-9_]{1,63}", relation_type):
+                raise ActorGraphSeedError(
+                    f"relationship type is not canonical: {relationship_index}"
+                )
+            edge_type = REL_EDGE_NAME.get(relation_type)
+            if relation_type == "OTHER" or not edge_type:
+                relation_label = _strict_identity_text(
+                    relationship.get("relation_label") or "RELATES_TO",
+                    field=f"relationships[{relationship_index}].relation_label",
+                    max_chars=64,
+                )
+                edge_type = re.sub(
+                    r"[^0-9A-Za-z_]+", "_", relation_label
+                ).strip("_").upper()
+                if not edge_type:
+                    raise ActorGraphSeedError(
+                        f"relationship label is empty: {relationship_index}"
+                    )
+            claim = str(
+                relationship.get("basis") or relationship.get("claim") or ""
+            ).strip()
+            raw_source_refs = relationship.get("source_refs")
+            if not isinstance(raw_source_refs, list):
+                raise ActorGraphSeedError(
+                    f"relationship source_refs are not a list: {relationship_index}"
+                )
+            source_refs = [
+                str(item).strip()
+                for item in raw_source_refs
+                if isinstance(item, str) and item.strip()
+            ]
+            source_support = _validated_source_support(
+                relationship.get("source_support"),
+                location=f"relationship[{relationship_index}]",
+            )
+            if (
+                not claim
+                or not source_refs
+            ):
+                raise ActorGraphSeedError(
+                    f"relationship claim is not canonical and source-bound: {relationship_index}"
+                )
+            relationship_projection = {
+                "seed_schema_version": _ACTOR_GRAPH_SEED_SCHEMA_VERSION,
+                "kind": "relationship",
+                "source_actor_id": source_actor_id,
+                "target_actor_id": target_actor_id,
+                "source": source["name"],
+                "target": target["name"],
+                "type": relation_type,
+                "relation_label": str(relationship.get("relation_label") or ""),
+                "direction": str(
+                    relationship.get("direction") or "source_to_target"
+                ),
+                "claim": claim,
+                "claim_id": str(relationship.get("claim_id") or ""),
+                "claim_sha256": str(relationship.get("claim_sha256") or ""),
+                "evidence_type": str(relationship.get("evidence_type") or ""),
+                "claim_valid_at": str(
+                    relationship.get("claim_valid_at")
+                    or relationship.get("as_of_date")
+                    or ""
+                ),
+                "horizon": str(relationship.get("horizon") or ""),
+                "status": str(relationship.get("status") or ""),
+                "confidence": str(relationship.get("confidence") or ""),
+                "source_refs": source_refs,
+                "source_support": source_support,
+                "qualifiers": relationship.get("qualifiers") or {},
+            }
+            causal_attributes = _canonical_causal_attributes(
+                relationship,
+                location=f"relationship[{relationship_index}]",
+            )
+            relationship_projection["causal_attributes"] = causal_attributes
+            relationship_projection["causal_tokens"] = (
+                "，".join(
+                    f"{key}={value}" for key, value in causal_attributes.items()
+                )
+                + ("，" if causal_attributes else "")
+            )
+            if not re.fullmatch(
+                r"[0-9a-f]{64}", relationship_projection["claim_sha256"]
+            ) or not relationship_projection["claim_id"]:
+                raise ActorGraphSeedError(
+                    f"relationship claim identity is not sealed: {relationship_index}"
+                )
+            identity_payload = {
+                "source_actor_id": source_actor_id,
+                "target_actor_id": target_actor_id,
+                "type": relation_type,
+                "relation_label": relationship_projection["relation_label"],
+                "claim_sha256": relationship_projection["claim_sha256"],
+                "causal_attributes": causal_attributes,
+            }
+            expected_relationship_id = (
+                "relation_" + _canonical_sha256(identity_payload)[:20]
+            )
+            relationship_id = str(relationship.get("relationship_id") or "")
+            if relationship_id and relationship_id != expected_relationship_id:
+                raise ActorGraphSeedError(
+                    f"relationship_id is not canonical: {relationship_index}"
+                )
+            relationship_id = relationship_id or expected_relationship_id
+            relationship_edge_uuid = _seed_uuid(
+                graph_id, "relationship", relationship_id
+            )
+            if relationship_id in seen_relationship_ids:
+                raise ActorGraphSeedError(
+                    f"duplicate relationship_id in current seed: {relationship_id}"
+                )
+            if relationship_edge_uuid in seen_relationship_edge_uuids:
+                raise ActorGraphSeedError(
+                    "duplicate relationship edge UUID in current seed: "
+                    f"{relationship_edge_uuid}"
+                )
+            seen_relationship_ids.add(relationship_id)
+            seen_relationship_edge_uuids.add(relationship_edge_uuid)
+            relationship_projection["relationship_id"] = relationship_id
+            fact_block = _delimited_seed_record(
+                f"relationship graph seed {relationship_id}",
+                relationship_projection,
+            )
+            quotes = [
+                row.get("supporting_quote")
+                or row.get("exact_quote")
+                or row.get("quote")
+                or ""
+                for row in source_support
+            ]
+            spans = [
+                row.get("supporting_span") or row.get("span") or {}
+                for row in source_support
+            ]
+            receipt_ids = [
+                str(row.get("receipt_id") or "") for row in source_support
+            ]
+            content_hashes = [
+                str(row.get("content_sha256") or "") for row in source_support
+            ]
+            quote_hashes = [
+                hashlib.sha256(str(quote).encode("utf-8")).hexdigest()
+                for quote in quotes
+            ]
+            edge_attrs = {
+                "seed_schema_version": _ACTOR_GRAPH_SEED_SCHEMA_VERSION,
+                "seed_kind": "relationship",
+                "relationship_id": relationship_id,
+                "source_actor_id": source_actor_id,
+                "target_actor_id": target_actor_id,
+                "source_actor_name": source["name"],
+                "target_actor_name": target["name"],
+                "relationship_type": relation_type,
+                "relationship_label": relationship_projection["relation_label"],
+                "direction": relationship_projection["direction"],
+                "claim": claim,
+                "claim_id": relationship_projection["claim_id"],
+                "claim_sha256": relationship_projection["claim_sha256"],
+                "evidence_type": relationship_projection["evidence_type"],
+                "claim_valid_at": relationship_projection["claim_valid_at"],
+                "horizon": relationship_projection["horizon"],
+                "status": relationship_projection["status"],
+                "confidence": relationship_projection["confidence"],
+                "qualifiers_json": _canonical_json(
+                    relationship_projection["qualifiers"]
+                ),
+                "causal_attributes_json": _canonical_json(causal_attributes),
+                "source_refs_json": _canonical_json(source_refs),
+                "source_support_json": _canonical_json(source_support),
+                "supporting_quotes_json": _canonical_json(quotes),
+                "supporting_quote_sha256s_json": _canonical_json(quote_hashes),
+                "supporting_spans_json": _canonical_json(spans),
+                "receipt_ids_json": _canonical_json(receipt_ids),
+                "content_sha256s_json": _canonical_json(content_hashes),
+                "relationship_record_json": _canonical_json(
+                    relationship_projection
+                ),
+                "seed_record_sha256": _canonical_sha256(
+                    relationship_projection
+                ),
+            }
+            edge_attrs.update(causal_attributes)
+            operations.append((
+                f"relationship:{relationship_id}",
+                (
+                    graph_id,
+                    source["name"],
+                    edge_type,
+                    target["name"],
+                    fact_block,
+                ),
+                {
+                    "valid_at": valid_at,
+                    "source_label": source["label"],
+                    "target_label": target["label"],
+                    "source_summary": source["summary"],
+                    "target_summary": target["summary"],
+                    "source_attributes": source["attributes"],
+                    "target_attributes": target["attributes"],
+                    "edge_attributes": edge_attrs,
+                    "source_uuid": _seed_uuid(
+                        graph_id, "actor", source_actor_id
+                    ),
+                    "target_uuid": _seed_uuid(
+                        graph_id, "actor", target_actor_id
+                    ),
+                    "edge_uuid": relationship_edge_uuid,
+                    "source_model_text": source["summary"],
+                    "target_model_text": target["summary"],
+                    "fact_model_text": fact_block,
+                    "deterministic_seed": True,
+                },
+            ))
+
+        if not operations:
+            raise ActorGraphSeedError(
+                "current actor-intelligence graph seed has no required writes"
+            )
+        manifest = _actor_seed_manifest_from_plan(
+            graph_id,
+            contract,
+            actor_records,
+            operations,
+        )
+        return {"operations": operations, "manifest": manifest}
 
     def add_text_batches(
         self,
@@ -1127,7 +2383,7 @@ class GraphBuilderService:
             if ra != rb:
                 parent[ra] = rb
 
-        degree: Dict[Any, int] = {nid: 0 for nid in node_ids}
+        degree: Dict[Any, int] = dict.fromkeys(node_ids, 0)
         for e in edges:
             s = getattr(e, "source_node_uuid", None)
             t = getattr(e, "target_node_uuid", None)

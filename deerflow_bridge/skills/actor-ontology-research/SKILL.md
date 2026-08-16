@@ -74,18 +74,18 @@ For **every key actor**, write a profile a downstream model could use to *role-p
 - **Archetype** (actor vs collective); **role-class** (§2.2); **salience tier** + basis (§2.3); **jurisdiction/sector**.
 - **Role in the question** — *why it matters to the outcome*, not just what it is.
 
-**The "why" — what drives it**
+**The "why" — what drives it and what it is likely to do**
 - **Values** and **beliefs/worldview** — what it holds important; how it frames the situation; its theory of the game.
-- **Incentives** — what it **gains and loses under each plausible outcome** (forecasting gold); **goals** — ranked, with time horizon.
+- **Incentives** — what it **gains and loses under each plausible outcome** (forecasting gold); **motivations** and **goals** — ranked, with time horizon.
 - **Constraints** — hard limits (capital, capacity, legal, political, technical); **resources/capabilities**; **vulnerabilities** — exposures, dependencies, red lines, failure modes.
-- **Decision rights** — what it actually controls, and the limits of that authority.
+- **Forward behavior** — evidence-backed operational preferences/aversions, decision rights/process/triggers, current actions, conditional future plans, investments/resource allocation, likely actions, red lines, and knowledge limits. Load `references/actor-intelligence-contract.md` for the exact dimension, status, qualifier, and epistemic rules.
 - **Stance** — **stated** position (own words, S1) vs **revealed** behavior (what it did). *The gap between the two is itself evidence* — surface it explicitly.
 
 **History & evolution (§5)** — how it got here; strategy changes; track record on commitments and comparable past decisions.
 
 **Relational roster** — its network per-actor (from §4, restated so the profile is self-contained): allies, opponents, competitors, customers, suppliers, backers/investors, supporters, regulators, dependents — each named, with a one-line basis.
 
-**Evidence** — load-bearing claims each tied to source + tier; confidence; open questions.
+**Evidence** — type and source-bind every load-bearing claim; preserve dates, confidence, status/horizon, conditions, contradictions, and explicit gaps per `references/actor-intelligence-contract.md`.
 
 > Depth heuristic: if you cannot write three sentences of the actor's likely reasoning under the forecast's main uncertainty, keep researching.
 
@@ -94,7 +94,7 @@ For **every key actor**, write a profile a downstream model could use to *role-p
 The profile sources the exact role the multi-agent simulation plays. Make these fields explicit and actor-specific so structured extraction populates `actors.json` without guessing:
 
 - the §3 identity, "why", and stance fields (all of them), plus **risk tolerance**;
-- interaction: named typed/valenced relationships, **likely actions under the main uncertainty**, genuine **red lines**;
+- interaction: named typed/valenced relationships, decision process/triggers, current actions, future plans, investments/resource allocation, **likely actions under the main uncertainty**, genuine **red lines**;
 - epistemic boundary: known context/memory, as-of date, forecast horizon, evidence grade, source tags, explicit gaps.
 
 Write these as **declarative evidence about the actor**, never as commands to a model (no “ignore…”/“write only…” imperatives, tool requests, hidden instructions, or role reassignment) — the runtime compiler treats dossier prose as untrusted data and may omit instruction-like values. A sparse or generic profile yields a deliberately cautious role, not a license to pad. Every active actor must be behaviorally distinguishable: reusing the same goals, likely actions, or red lines across the cast without actor-specific evidence is a judge failure. Sources and context objects never receive an agent role.
@@ -139,7 +139,7 @@ Run deliberate passes, checkpointing the evidence ledger after each so it surviv
 
 **Pass 1 — Landscape & cast identification.** Broad scoping for the candidate entity universe, then the **§2 triage on every named entity**, producing the *ranked cast list* — the backbone.
 
-**Pass 2 — Per-actor deep dives (fan-out).** Per key actor, highest salience first: fill the §3 profile, including its slice of the network, via entity-pivot search (actor → filings, leadership statements, deals, regulatory record). One dive per actor, parallelized where supported; spend real budget here — this is the core of the dossier.
+**Pass 2 — Per-actor deep dives (fan-out).** Per key actor, highest salience first: fill the §3 profile and its network slice via entity-pivot search (filings, statements, deals, regulatory record, budgets, capital allocation, lobbying, and milestones). Parallelize where supported and protect this budget. Finish with the bounded cast-wide completion pass in `references/actor-intelligence-contract.md`.
 
 **Pass 3 — Relationship & network mapping.** Research the §4 edges per load-bearing pair (direction/type/valence/strength/basis); fill the under-covered economic/governance/dependency edges; cross-check rosters (§3) against the network.
 
@@ -156,7 +156,7 @@ Do not ship the first draft: the dossier must pass an **AI-judge gate** scored a
 3. **On FAIL, emit a targeted gap list** — specific, addressable items (a missing incentive, an unvalenced edge, a mis-cast outlet); vague critiques are not allowed.
 4. **Refine surgically** — one targeted pass per listed gap, not a restart.
 5. **Re-judge.** Repeat 1–4 until PASS or the **max-pass cap** (default **3 refinement rounds**).
-6. **Ship.** On PASS, write the final dossier. If the cap is hit, ship the best version with **residual gaps explicitly flagged** — never silently present an incomplete dossier as complete.
+6. **Ship.** On PASS, write the final dossier. If the cap is hit with an explicit final FAIL, the dossier is unusable and MUST NOT enter synthesis or simulation. A judge transport/parsing failure may degrade only when the deterministic cast-wide coverage ledger passes.
 
 Each round raises the weakest dimension, not the strongest — the loop converges on *excellence*.
 
@@ -166,22 +166,18 @@ Each round raises the weakest dimension, not the strongest — the loop converge
 
 | # | Dimension | Judges |
 |---|---|---|
-| 1 | **Cast correctness** | The right set of *outcome-movers*, triaged per §2. |
-| 2 | **Salience ranking** | Decision power/stake, a basis each (§2.3). |
-| 3 | **Per-actor depth** | Every §3 + §3.1 field, evidenced. |
-| 4 | **Relationship completeness** | Load-bearing edges per §4, fully attributed. |
-| 5 | **History & evolution** | Dated formation, inflections, realignments, track records (§5). |
-| 6 | **Evidence grounding** | Claims B2+; sources tiered and dated; no circular sourcing; numbers carry unit/as-of/definition. |
-| 7 | **Contradiction handling** | Genuine conflicts as contested claims with *why they differ*, not averaged; single-origin flagged. |
-| 8 | **Ontology and role readiness** | §9 structure extractable *without re-mining*; names canonical and consistent. |
+| 1–2 | **Cast correctness / salience** | Right outcome-movers; decision power/stake with a basis (§2). |
+| 3–5 | **Actor depth / relationships / evolution** | Complete evidenced profiles, load-bearing attributed edges, and dated trajectories (§3–§5). |
+| 6–8 | **Grounding / contradictions / readiness** | B2+ tiered evidence, conflicts preserved, and §9 extractable without re-mining. |
+| 9–10 | **Forward behavior / cast accountability** | Every Tier-1/2 actor and required dimension is source-covered or a precise gap; load `references/actor-intelligence-contract.md`. |
 
 > Per-dimension anchors (5/5 vs ≤2) live in `references/scoring-rubric.md`; load it when running the judge.
 
 ### 8.2 Pass bar (all must hold)
 
 - **No** dimension < **3**, AND
-- dimensions **1, 3, 4, 8** each ≥ **4** (non-negotiable for this pipeline), AND
-- The **mean** across all eight dimensions is ≥ **4**.
+- dimensions **1, 3, 4, 6, 8, 9, 10** each ≥ **4** (non-negotiable for this pipeline), AND
+- The **mean** across all ten dimensions is ≥ **4**.
 
 (A stricter deployment may require every dimension ≥ 4 — `ACTOR_DOSSIER_JUDGE_STRICT`; the default tolerates one non-critical 3 to absorb judge noise.) Below the bar, FAIL with the targeted gap list (§7.3).
 
@@ -190,41 +186,30 @@ Each round raises the weakest dimension, not the strongest — the loop converge
 Write so the ontology generator and structured extraction read it directly. Keep the `deep-research` final-dossier contract (its `references/final-dossier-contract.md`), and add this **explicit, labeled structure**:
 
 1. **Forecast frame** — question, forecast object, horizon, as-of date; situation brief (current situation, how it got here, forces in tension, the 3–6 fault lines actors argue over, catalysts).
-2. **The cast (key actors)** — one delimited profile per actor, salience order, every §3 + §3.1 field; **canonical names used consistently**, aliases listed once; archetype, role-class, and salience tier marked explicitly **with the one-line §2.3 basis** (extraction emits `salience: {tier, basis}`).
+2. **The cast (key actors)** — one `### Actor: <canonical name>` profile per Tier-1/2 actor, salience order, every §3 + §3.1 field; **canonical names used consistently**, aliases listed once; archetype, role-class, and salience tier marked explicitly **with the one-line §2.3 basis** (extraction emits `salience: {tier, basis}`).
 3. **The relationship network** — enumerated directed edges: `Source —[TYPE, valence, strength]→ Target — basis` (§4). Every endpoint a cast name.
 4. **Per-actor relational roster** — the §3 roster, named, within or beside each profile.
 5. **Evolution & timeline** — the dated sequence of formation, inflection points, realignments (§5).
 6. **Drivers, indicators & scenarios** — 3–6 outcome-moving variables, each with a watchable dated indicator; base rates / reference class; rough scenario likelihoods.
 7. **Contested claims & source list** — conflicts with positions and why they differ; full source list with tier (S1–S4) and date.
+8. **Actor-intelligence coverage ledger** — exactly one source-bound `ACTOR_INTELLIGENCE_LEDGER_V1`; use the complete schema and admission rules in `references/actor-intelligence-contract.md`.
 
 > Consistency makes it ontology-ready: one canonical name per actor across cast, network, roster, and timeline lets extraction resolve entities cleanly and the ontology generator map types and edges without guessing.
 
 ## 10. What each section feeds downstream
 
-| Dossier section | Feeds → becomes |
-|---|---|
-| §9.1 situation brief | `situation_brief` → report background + simulation fault-line posts |
-| §9.2 cast | ontology + `actors.json` + agent selection → archetypes; persona-eligible salience-ranked cast |
-| §9.2 §3.1 fields | `actors.json` → `actor-role/v1` → tailored OASIS role (Reddit `persona` / Twitter `user_char`) |
-| §9.3 network | `relationships[]` → KG edges, initial follows, ally/rival sentiment (valence preserved) |
-| §9.4 roster | persona prompts → "who to @, ally with, or oppose"; coalition reasoning |
-| §9.5 timeline | `key_events` → dated simulation triggers; causal/temporal grounding |
-| §9.6 drivers/indicators/scenarios | `forecast_inputs` → drivers, indicators, scenario probabilities |
-| §9.7 contested claims + sources | `contested_claims` / `sources.json` → calibrated confidence + provenance |
-
-(Precise target schema: `CLAUDE_ONTOLOGY.md` in the repo root.)
+The situation brief, cast, network, timeline, drivers, contested claims, and
+source list feed their matching structured artifacts and graph/simulation
+contracts. The §3.1 evidence becomes `actor-role/v2`; the §9.8 ledger gates
+global synthesis and `actors[].intelligence.dimensions`. See
+`references/actor-intelligence-contract.md` and root `CLAUDE_ONTOLOGY.md` for
+the exact schemas.
 
 ## 11. Failure modes (checklist)
 
-Each rule lives in its named home section; this is only the checklist.
-
-- ❌ Outlet-as-actor — the reporter/outlet rule, "Who counts as a key actor".
-- ❌ Ranking by prominence — "Salience — rank the cast".
-- ❌ Label-depth profiles — "The per-actor dossier standard".
-- ❌ Generic or imperative runtime roles — "Runtime role-contract handoff".
-- ❌ Undirected/unvalenced edges; network inferred from co-occurrence — "The relationship network".
-- ❌ Static snapshot, no dates or realignments — "History & evolution over time".
-- ❌ Inconsistent naming — "Output contract".
-- ❌ Shipping the first draft / rubber-stamp judging — "The AI-judge quality loop".
-- ❌ Breadth over depth — "Mission & prime directive".
-- ❌ Any `deep-research` failure mode (S4 citations, circular sourcing, unverified quotes, unchecked numbers, writing before the synthesis gate) — its `references/final-dossier-contract.md` checklist.
+Reject outlet-as-actor errors, prominence-ranked casts, thin profiles,
+imperative role text, inferred/unvalenced networks, static undated snapshots,
+inconsistent names, rubber-stamp judging, and breadth that displaces actor
+depth. Apply the additional actor-intelligence failures in
+`references/actor-intelligence-contract.md` and the evidence failures in the
+`deep-research` `references/final-dossier-contract.md` checklist.

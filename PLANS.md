@@ -1,5 +1,357 @@
 # PLANS.md — Agentic Workflow Refinement Program
 
+## 2026-08-17 LOOP-017 — measurable cost, reliable localhost, and forecast-quality refinement
+
+### Status and approval gate
+
+**Status:** Plan proposed; implementation by this session is not approved yet.
+
+This is a complex, multi-surface program. Per the repository working agreement,
+the implementation slices below MUST remain pending until the user approves this
+plan. Read-only inspection, offline artifact analysis, and continuity updates are
+allowed before approval. No paid pipeline, provider mutation, resume, restart,
+publication, commit, or push is part of the approval request.
+
+Concurrent changes already present in the dirty working tree are user-owned. They
+MUST be reviewed and reconciled rather than reverted, duplicated, or attributed
+to this session. During read-only validation, the external owner committed the
+root-route/UI, Flask SPA serving, fallback-model/fail-fast, visualization-axis/
+shared-Plotly, and pytest-log-isolation slice together as `3306af8`. That commit
+is an evidence checkpoint, not feature acceptance: the real launcher and several
+cross-component safety/accessibility scenarios remain red. Its changes are inputs
+to Slices 1, 4, 7, and the Q1 gate respectively; each must be reviewed and
+verified in its own feature rather than duplicated or treated as one accepted
+localhost change.
+
+### Intent
+
+Make the six-stage DeepResearchForecast workflow measurable, faster, safer, and
+more legible without weakening provenance, publication gates, or Foglamp's
+diagnostic-only simulation boundary. The program has four linked outcomes:
+
+1. `localhost` opens the DeepResearchForecast research workflow directly and
+   survives the actual launcher/readiness/browser acceptance path.
+2. Token and time accounting is exact enough to identify real waste by pipeline,
+   attempt, stage, lane, phase, provider, model, and request rather than relying
+   on double-counted or zero-filled summaries.
+3. The highest-cost stages stop predictably on provider/time/budget exhaustion
+   and avoid repeating work whose marginal evidence value is exhausted.
+4. Forecast, market, graph, simulation, and report artifacts preserve explicit
+   lineage into a professional, accessible UI and decision-relevant visuals.
+
+### Evidence baseline and corrections
+
+- Current runtime authority is `PipelineOrchestrator` plus
+  `uploads/pipelines/<id>/pipeline_state.json`, executing
+  `RESEARCH -> ONTOLOGY -> GRAPH -> PREPARE -> RUN -> REPORT`. Native DeerFlow
+  Gateway and `drf2/` are not current authority.
+- For completed reference pipeline `pipe_f23527f7d903`, the durably recorded
+  main-run meter total/lower bound at `options.llm_telemetry.total` is
+  **82,983,739 tokens**, of which the synthetic RESEARCH entry is
+  **79,749,778 (96.1%)**. Adding `options.research_telemetry.tokens_total` to
+  `options.llm_telemetry.total` produces **162,733,517**, but that double-counts
+  the same research aggregate. Two additional ensemble reports add a known
+  6,356,626 tokens, yielding an all-in durable lower bound of 89,340,365.
+- The same run lasted 13h57m. GRAPH occupied 8h37m (61.8% elapsed). Its outer
+  ten-chunk batch loop was sequential, so all twelve 900-second whole-batch
+  deadlines were on the critical path: **10,800 seconds / 3 hours / 34.8% of
+  GRAPH**. The caller accounted 278/466 chunks as skipped, including 120 chunks
+  hidden by those all-or-nothing batch deadlines; some cancelled batches may
+  still have produced partial durable writes that the caller could not retain.
+- The denominator is still incomplete: current DeerFlow message-ID accounting
+  drops later parent-plus-subagent usage snapshots, and RUN records calls/errors
+  but not prompt/output tokens. A mechanically reproduced 10 -> 110 same-ID
+  usage growth emitted only 10. Therefore neither 82.98M nor the reported 150M
+  is a trustworthy true total until accounting is fixed.
+- Failed RESEARCH lanes create a second, larger accounting hole. In
+  `pipe_0f2bee7bd649`, retained logs contain **25,161,961** known attempted
+  tokens while pipeline state reports only **6,110,831**; the failed Track 1 and
+  Track 3 spend of **19,051,130 (75.7%)** is omitted because final aggregation
+  sums successful lanes only. Current telemetry has no `usage_complete`,
+  missing-call count, or lower-bound reason, and provider retries before a
+  successful fallback are not measured.
+- Historical graph zero-token telemetry predates the current ContextVar executor
+  propagation fix. That historical record MUST NOT be presented as proof that
+  current graph attribution is still broken; it needs a controlled validation.
+- Historical adaptive research waste is real. In the reference run, late passes
+  consumed **20,286,821 tokens (25.44% of RESEARCH)**, including six Track-1
+  passes costing 15,817,428 tokens while its gap count stayed at 20 throughout.
+  The 63 retained reference usage rows reconcile exactly to 79,749,778, but the
+  historical topology had 24 legacy fanout workers, nine middle-phase workers,
+  repeated merge/correction turns, and 4,974 emitted tool attempts. Current
+  source already suppresses legacy fanout, limits each of three evidence lanes
+  to three isolated middle phases, centralizes synthesis, bounds inherited notes
+  to 60,000 characters, and permits at most one adaptive pass with plateau/
+  zero-yield stopping. Its expected reduction is source-derived: no completed
+  current-topology run yet proves the savings. Emitted tool attempts also MUST
+  be distinguished from cache admission and real network calls before query
+  retry waste is quantified.
+- GRAPH historically re-extracted work already present in structured Stage-1
+  artifacts: 25 curated actors, 196 normalized unique relationships, and 109
+  aliases were seeded, then both the 356-chunk report and 110-chunk dossier were
+  sent through prose extraction. The current `dossier_only` default would reduce
+  that corpus from 466 to about 109 episodes, and current sealed
+  `actor-intelligence/v1` structural writes are deterministic; neither change
+  existed in the reference run. A controlled fixture must prove a v1
+  `structured_only` or residual-only path preserves identities, relationships,
+  receipts, and PREPARE cast coverage before prose extraction is removed.
+- The concurrent UI tree now routes `/` to `ResearchView`, but the rebrand no
+  longer matches `scripts/start.sh`'s `DeepAgentForecast` readiness signature.
+  The launcher would roll back healthy services. The brand also sends users to
+  `/legacy`, and Vite plus `start.sh` can open two browser tabs.
+- The real launcher has now reproduced that failure: both services became
+  healthy, the stale frontend signature timed out, and the launcher safely
+  rolled both owned processes back. Focused launcher tests still false-green
+  because their HTML fixture hard-codes the retired identity. Direct Flask SPA
+  browser checks proved `/`, `/research`, refresh, history, and unknown-route
+  behavior without a `/run` POST, but also proved that the brand enters
+  `/legacy`; Settings has no dialog semantics, focus entry/restore, or Escape
+  close; and preflight can display a false green state when its request fails.
+- The local-serving contract has additional integration and security gaps:
+  Vite binds on all interfaces while proxying into a loopback-trusted API,
+  backend-port authority is split across the shell, `.env`, Python, and a
+  literal Vite target, exact `/api` and missing assets fall through to SPA HTML,
+  and a missing `dist` reports HTTP 200 success instead of an unavailable UI.
+  The client prevents an immediate double-click, but a lost successful `/run`
+  response plus manual retry can still create a second costly pipeline because
+  the server has no stable launch-intent idempotency key.
+- A concurrent owner repaired directory-mode Plotly delivery during validation:
+  one shared on-disk bundle is injected at serve time while the opaque sandbox
+  remains intact. Real Plotly HTTP replay and the focused regression set pass,
+  so the earlier bundle-delivery P0 is retracted. Remaining hardening is to
+  reject sibling bundle symlinks/oversize files and cover the complete research
+  artifact path.
+- The concurrent fallback-model guard is incomplete and unsafe across provider
+  boundaries. Graphiti constructs its fallback outside the guarded resolver;
+  absent fallback fields can inherit the primary model, base URL, or API key,
+  including transmitting a primary credential to another endpoint. Generic
+  request-specific HTTP 400s also poison the whole fallback tuple for 15
+  minutes. Fallback configuration and deterministic-error classification must
+  be centralized before this slice is accepted.
+- Polymarket currently has a forecast-integrity bug: topical relevance alone
+  injects a market into research, the scenario spine, every report chapter, and
+  binary-generation instructions before contract equivalence is known. At the
+  later anchor boundary, an exact/near match at confidence 0.49 can revise a
+  forecast from 0.80 to 0.40, then be removed from final provenance while the
+  changed probability and market rationale survive. A completed Optimus artifact
+  confirms the broader leak: a 12.5% market became a major research/report anchor
+  even though the canonical forecast retained zero accepted market anchors.
+- Tool-normalized markets also omit CLOB IDs, bid/ask, and daily change, and a
+  selected tool row suppresses deterministic refresh by default. History then
+  assumes the first unlabeled CLOB token is `Yes`; a reversed `[No, Yes]` fixture
+  selected the `NO_TOKEN` series and would label it P(Yes). Resolution polling
+  accepts any nonempty anchor market ID without equivalence/binding provenance,
+  and its read-before-append ledger admitted two concurrent rows for the same
+  key, double-weighting Brier summaries.
+- After the market audit completed, a concurrent uncommitted edit appeared in
+  `backend/app/utils/prediction_markets.py` adding a browser-like Gamma user agent,
+  jittered transient-error backoff, shorter timeout, and transport diagnostics.
+  It is useful external input for transport reliability but does not change the
+  pre-equivalence influence, schema/CLOB identity, or resolution-ledger defects;
+  it MUST be reconciled rather than overwritten when Slice 6 begins.
+- The shared Plotly delivery repair works for ordinary generated charts and
+  preserves the opaque sandbox, but its sibling-bundle loader follows symlinks,
+  has no chart-directory containment check, and reads without a size bound. An
+  offline fixture inlined an outside file into served chart HTML. No saved
+  post-`3306af8` report yet proves the complete current visual path in a browser.
+- The reference REPORT stage is itself measurably prompt-heavy: 3,042,322 of
+  3,168,162 report tokens (96.0%) were prompt tokens. Its 57 tool results contain
+  1,569,434 raw characters; because the ReAct transcript resends prior results on
+  later turns, those payloads account for an estimated 5,476,501 character-
+  transmissions (~1.37M tokens at the repository's four-characters-per-token
+  estimator). `insight_forge` and `panorama_search` contribute 88.7% of the raw
+  result text. Current ReAct mode places their unbounded `to_text()` output into
+  the next prompt; Panorama also serializes all 940 node names and up to 100
+  facts without exact deduplication. In the saved run, exact duplicate lines make
+  up 45.9% of Panorama result bytes. The existing retrieval cache/parallel
+  helpers are not operational configuration: they read
+  `Config.REPORT_RETRIEVAL_CACHE`, `REPORT_RETRIEVAL_PARALLEL`, and worker fields
+  that `config.py` never defines, so environment settings cannot enable them.
+- REPORT also lost 13m42s (24.6% of the stage) to a two-attempt forecast-spine
+  JSON call that ultimately failed on an unescaped quote and was discarded. Its
+  telemetry has only stage totals; concurrent section mode intentionally leaves
+  `sections=[]`, so spine, outline, retrieval, reflection, grounding repair,
+  language repair, and translation cannot be costed separately. The late repair
+  path then spent about 6m33s raising citation coverage from 0.43 to 0.907, and
+  the final report still closed degraded with five implausible headline stats.
+- RUN's completed-result reuse is provenance-safe, but interrupted-run recovery
+  is operationally disconnected: `SIM_CHECKPOINT=true` writes sealed round
+  checkpoints by default while pipeline resume calls `start_simulation(...,
+  resume=None)`; with the default `SIM_RESUME=false`, those checkpoints are not
+  consumed and stale action logs are rotated before a fresh run. RUN additionally
+  records 109 Twitter plus 112 Reddit model calls but no usage. It would need to
+  average more than 360,858 tokens per call to overtake the recorded RESEARCH
+  total, but exact RUN cost remains unknown until child-process usage is persisted.
+- The historical three-seed ensemble spent another 6,356,626 known report tokens
+  yet produced 11/12 unmatched scenario rows, each with support=1/3 and aggregate
+  agreement 0.0. Current scenario-spine alignment addresses the naming defect and
+  the default is safely back to one seed, but `_run_one_seed` still executes the
+  complete PREPARE -> RUN -> prose REPORT path. Multi-seed mode MUST stay disabled
+  until seed work is forecast-only and measured against a quality gain.
+
+### Invariants
+
+1. Every provider call receives one locally generated immutable logical
+   `call_id`, which contributes to cumulative lineage exactly once. Provider
+   request IDs and LangGraph message IDs are metadata, not the accounting key;
+   growing cumulative snapshots for one message ID contribute only positive
+   deltas to their owning logical call(s).
+2. Budgets apply across process boundaries and resume attempts. A resume does
+   not silently reset lineage spend, and estimated usage is labeled as estimated.
+3. A healthy in-flight pipeline is never restarted or duplicated. No implementation
+   test may issue a paid `/run` or provider call without separate explicit approval.
+4. Forecast probabilities can change only through a retained, source-bound input
+   whose equivalence, confidence, timestamp, and transformation remain visible.
+5. Scenario simulation stays diagnostic-only unless a separately validated
+   promotion contract authorizes an update.
+6. Root, alias, refresh, history, and unknown-route navigation never duplicate a
+   `/run` POST and never route the product brand to the legacy MiroFish surface.
+7. Historical artifacts remain immutable; new policy/version metadata describes
+   their limitations instead of rewriting them.
+
+### Requirements -> acceptance checks
+
+| ID | Requirement | Scenario-level acceptance check | Evidence |
+|---|---|---|---|
+| L1 | Reliable direct localhost entry | Start through the real launcher; load `/`, `/research`, refresh, back/forward, and an unknown path | One browser tab, ResearchView at `/`, readiness passes, no console/network errors, no duplicate `/run` |
+| L2 | Professional and accessible workflow UI | Keyboard-only desktop/mobile pass over prompt, advanced controls, tabs, settings, history, confirmations, progress, graph, report, and exports | Focus order, dialog focus/escape/restore, ARIA/name checks, contrast and overflow screenshots |
+| L3 | Durable and local-only launch boundary | Lose the first successful `/run` response, replay the same intent/body, replay the key with a different body, and probe exact `/api`, unknown non-GET APIs, missing assets, and missing `dist` through the real launcher | One loopback-only Vite listener and one opener; same intent returns one durable pipeline; changed payload is rejected; API/static/build failures are typed non-HTML/non-success responses |
+| T1 | Exact Stage-1 usage | Replay same-ID 10 -> 110 usage, the 63-row reference, and a failed-lane fixture | Exactly 110 recorded; reference reconciles once to 79,749,778; all 25,161,961 failed/successful-lane tokens remain visible; incomplete inputs set a typed lower-bound reason |
+| T2 | Cross-process lineage ledger | Offline fixtures emit research, graph, simulation, report, translation, retry, and resume events with local call IDs plus provider/message metadata | Unique logical-call sum equals lineage total; attempt/current/cumulative views are distinct |
+| T3 | Enforceable budgets | Simulated subprocess crosses token/cost budget between calls; parallel workers race at the remaining-budget boundary | Reservation is atomic, aggregate overshoot is bounded by policy, the next unreserved call is rejected with a durable receipt, and completed work remains resumable |
+| O1 | Truthful live observability | Poll an active fixture, a stalled fixture, and a completed fixture | UI/API show stage elapsed, ETA approximation, heartbeat age, stale state, token/cost lower bound, and remaining budget |
+| F1 | Provider failover is credential- and failure-isolated | Route primary and fallback through distinct canary endpoints/credentials; inject a request-specific 400 and a proven deterministic configuration error through normal and Graphiti paths | Fallback uses only its explicit complete tuple or fails closed; no primary secret/base/model crosses providers; request-specific 400 does not cooldown a healthy provider; only the matching deterministic configuration signature is suppressed |
+| G1 | Bounded graph failure tail | Run nine fast episodes plus one hanging episode, then a sealed-v1 structured-only fixture | Nine successes are retained, one typed timeout returns within budget, no lock/task leaks, next batch starts immediately, and structured identity/relationship/cast parity is preserved |
+| R1 | Efficient research convergence | Replay historical constant-gap, duplicate-query, and failed-lane fixtures through current controls | At most one default adaptive pass, no merge-only gap growth, 60k inherited-context cap, exact-query retry suppression, emitted/admitted/network/result counts separated, quality contract retained |
+| P1 | Efficient report evidence synthesis | Replay the saved oversized Panorama/InsightForge payloads plus malformed-spine and concurrent-section fixtures | Tool payloads are relevance-ranked, deduplicated, and bounded before entering prompts; every report operation has attributable time/tokens; malformed spine exits within its operation budget; forecast/citation quality does not regress |
+| I1 | Cross-stage artifact authority | Exercise base pipeline, scenario fork, resume, and stale/tampered handoff fixtures | Every API resolves `state.handoff_dir`; hashes/attempt lineage match; stale or tampered reuse fails closed |
+| M1 | Market influence is provenance-safe | Feed a topically related non-equivalent market plus confidence 0.49 and 0.50 matches through prepass, anchor, divergence, reconciliation, report, and publication | Non-equivalent/0.49 rows cannot enter probability instructions or call divergence and leave the forecast byte-identical; accepted match remains visible with exact reason and price |
+| M2 | Selected markets support history | Select a tool market lacking CLOB fields, then batch-enrich by exact ID | One bounded enrichment, schema parity, CLOB history when available, explicit unavailable reason otherwise |
+| M3 | Market outcome and resolution lifecycle are authoritative | Feed reversed outcome/token ordering plus repeated/concurrent unresolved, ambiguous, and resolved polling fixtures | History uses the token mapped to literal `Yes`; exactly one provenance-complete ledger row survives concurrent polling; only unambiguous resolution becomes calibration authority |
+| V1 | Decision-relevant truthful visuals | Render binary, scenario, market, diagnostic simulation, revisions, timeline, and quantitative fixtures; serve legitimate, symlinked, non-regular, and oversize bundles | Correct chronology/units/uncertainty, readable labels, policy/source hashes, diagnostic simulation disclaimer and skip reasons; only contained regular size-bounded bundles are inlined |
+| S1 | Simulation resume avoids repeated spend | Replay a completed-simulation/report-only resume and a partial run with a sealed round checkpoint under default configuration | Completed simulation is reused; pipeline resume explicitly elects sealed-checkpoint recovery for the partial run; it starts after the last sealed round; no completed round or provider call is duplicated |
+| E1 | Multi-seed work has positive marginal value | Replay the historical 11/12 support=1 ensemble and a semantically aligned forecast-only fixture | Historical mismatch is detected; no full prose report is generated per seed; agreement/support reconcile by canonical resolution criteria; extra spend is emitted and mode remains off without a measured quality gain |
+| Q1 | Scoped, reviewable delivery | Run focused tests per slice, then affected backend/frontend suites, build, launcher smoke, browser acceptance, lint/compile/diff checks | No new failures; known unrelated fixture remains separately identified; unrelated dirty files remain untouched |
+
+### Dependency-ordered implementation slices
+
+Only one slice may be in progress at a time. Every slice starts with a failing
+regression or adopts and replays an already-authored external red/green pair,
+then ends with its scenario acceptance check and updates `handoff.md` and
+`agent-progress.txt`. A feature-list `passes` flag changes only after every slice
+and acceptance step belonging to that feature is green; Slice 2 alone therefore
+cannot pass `feature_usage_lineage_truth` before Slice 3 completes the ledger.
+
+1. **Stabilize and accept the concurrent localhost/UI slice.** Reconcile the
+   current uncommitted UI and SPA-serving changes; replace the brittle
+   readiness-brand predicate with a stable application marker; keep the product
+   brand on `/`; make `start.sh` the sole optional browser opener; bind Vite to
+   loopback; and centralize the backend port/proxy authority. Make exact `/api`,
+   non-GET unknown API routes, missing assets, and missing `dist` fail with the
+   correct non-HTML/non-success response. Add a persisted launch-intent key so an
+   ambiguous successful `/run` response cannot create a duplicate pipeline on
+   manual retry. Repair preflight state ownership, modal/focus/keyboard/live-region
+   semantics, contrast, responsive history controls, and documentation drift.
+   Run the production build/unit tests and real launcher/browser matrix. Do not
+   claim the external slice as this session's implementation, and do not sweep
+   its unrelated fallback/viz/log changes into this feature.
+2. **Make Stage-1 usage delta-correct.** Replace boolean per-message-ID
+   de-duplication with cumulative positive-delta accounting; preserve streamed
+   lane/phase/model usage, including rows from failed, cancelled, and timed-out
+   lanes. Persist completeness, missing-call, measured/estimated, and lower-bound
+   semantics. This is the first cost optimization because every later percentage
+   and budget depends on it.
+3. **Introduce an immutable cross-process request ledger.** Define the additive
+   logical-`call_id` record contract and instrument RESEARCH/Graphiti/OASIS/REPORT
+   plus retries and resumes; retain provider request and LangGraph message IDs as
+   metadata. Preserve lower-bound/estimated labels where providers omit usage.
+4. **Connect live health, spend, and budgets.** Review the external fallback and
+   dual-outage edits in this feature. Centralize fallback-provider resolution so
+   Graphiti and normal calls cannot inherit a primary model, base URL, or
+   credential across providers; scope cooldowns to proven deterministic
+   configuration signatures rather than every HTTP 400. Expose existing
+   heartbeat/ETA calculations plus ledger snapshots through status; atomically
+   reserve budget before calls across subprocesses; present a compact stage-cost
+   panel in the UI.
+5. **Repair shared-handoff API resolution.** Centralize `state.handoff_dir`
+   resolution for dossier, translation, PDF, editing, progress, visualization,
+   and scenario-fork routes, with tamper and reuse regressions.
+6. **Repair Polymarket forecast integrity.** Gate confidence/equivalence before
+   any probability/scenario instruction and before divergence; strengthen
+   rationale binding; align all normalizers; and enrich only selected market IDs
+   for CLOB/history/provenance with a typed unavailable reason. Map CLOB tokens by
+   the literal `Yes` outcome. Require equivalence/confidence/binding hashes in the
+   resolution ledger and make concurrent polling atomically idempotent and
+   fail-closed. Do not repeat broad searches when the exact selected ID is known.
+7. **Improve forecast presentation and visualization truthfulness.** Revalidate
+   the external axis/shared-Plotly and serve-time-inlining edits as one delivery
+   contract, including research-artifact HTTP delivery, bundle containment,
+   non-symlink/size checks, and browser execution under the opaque sandbox. Add
+   a first-class sortable binary table; surface market equivalence/freshness and
+   visualization skip reasons; label simulation trajectories diagnostic-only;
+   version manifests; fix chronology, truncation, whitespace, uncertainty, and
+   responsive/accessibility defects against real saved artifacts.
+8. **Bound graph failure and redundant extraction.** Benchmark current chunk,
+   retry, resolution, and community-detection defaults first. Replace the
+   all-or-nothing outer batch deadline with per-episode deadlines that retain
+   completed episode UUIDs and cancel only pending tasks. Add one logical
+   retry/wall-budget ledger across adapter, Graphiti, schema-reroll, fallback,
+   and rate-limit replay layers. For sealed `actor-intelligence/v1` only, gate a
+   structured-only or deterministic-residual path behind a flag after parity
+   fixtures pass. Preserve a signed degradation receipt and make graph telemetry
+   monotonic across flush/reuse boundaries; do not raise static concurrency.
+9. **Validate and tune research marginal yield.** Compare current convergence
+   controls to historical fixtures; deduplicate exact normalized searches, stop
+   terminal market transport retries, compact invariant history, and continue a
+   pass only for a named KIQ/source/contradiction/forecast-input gain. Persist
+   emitted tool attempts, admitted calls, cache hits, network calls, results, and
+   negative-cache decisions separately so savings are not inferred from prompt
+   attempts alone. Do not reduce the three evidence angles without a measured
+   marginal-yield fixture.
+10. **Eliminate avoidable report/simulation repetition.** Prove report-only
+    resume reuses a completed simulation and make pipeline resume explicitly
+    consume a compatible sealed checkpoint for an interrupted RUN under default
+    settings, without duplicate completed rounds or calls. Persist child-process
+    prompt/output usage from the same OASIS request wrapper that already records
+    calls/errors. Add report operation telemetry for spine, graph preload,
+    outline, each concurrent section/tool, reflection, grounding repair,
+    three-part synthesis, language repair, and translation. Shape ReAct and
+    native-tool results through one deterministic, tool-specific relevance/
+    deduplication/budget boundary; do not blind-slice after serializing an entire
+    graph. Put the two-attempt structured spine behind an operation deadline and
+    schema/repair contract so malformed output cannot consume two 600-second HTTP
+    windows. Replace fixed minimum tool-call counts with an evidence-sufficiency
+    gate only if replay proves citation/forecast quality is preserved. If
+    ensembles are re-enabled, produce forecast-only seed outputs rather than full
+    PREPARE -> RUN -> prose reports, and reconcile by canonical resolution
+    criteria. Preserve `N_FORECAST_SEEDS=1` until forecast-only seeds pass.
+11. **Controlled end-to-end comparison (separate approval).** Only after offline
+    gates pass, request authorization for one fresh controlled run. Compare
+    reconciled measured tokens plus explicitly labeled estimates/lower bounds,
+    stage time, evidence quality, judge outcomes, market coverage, artifact
+    completeness, and visuals against the historical baselines. A paid run is
+    not implied by approval of slices 1-10; an incomplete provider denominator
+    MUST NOT be called exact.
+
+### Risks, rollback, and stopping rules
+
+- A semantic optimization that improves tokens/time but degrades source coverage,
+  judge quality, provenance, or publication integrity MUST be rolled back.
+- Provider outages, budget exhaustion, or graph degradation MUST stop with typed,
+  resumable state; they MUST NOT trigger unbounded retries or a duplicate run.
+- UI refactors MUST remain separable from workflow semantics and preserve the
+  non-retried `/run` POST safeguard.
+- If a concurrent owner changes an in-scope file, pause that slice, re-baseline,
+  and reconcile rather than overwrite.
+- No completion claim is valid from a historical replay alone. Historical replay
+  proves regressions; a later approved controlled run validates external behavior.
+
+### Immediate decision requested
+
+Approve LOOP-017 as written, or specify changes. On approval, implementation
+begins with Slice 1 only: stabilize and browser-validate the current localhost/UI
+entry work. Slice 2 begins only after Slice 1 is green and documented.
+
 ## 2026-07-13 LOOP-014 — Mandarin report and PDF release integrity
 
 ### Intent
@@ -596,3 +948,146 @@ Close the four independent-review blockers before spending another paid model or
 - The simulator was deliberately stopped only after both config-bound platform checkpoints were verified. This prevents quota hammering and protects output quality without replaying research or completed simulation rounds.
 - Current checkpoint floor is Twitter round 18/29; Reddit is round 23/29. A safe resume MUST use the existing pipeline and `SIM_RESUME`; no new `/run` is permitted.
 - The active automation now probes providers first. It MUST remain idle while both are unavailable, issue at most one resume after a health pass, and verify checkpoint continuation before considering the recovery successful.
+
+## 2026-07-21 — DeerFlow 2.0 architecture atlas, tldraw map, and bilingual README
+
+### Intent
+
+Replace the documentation emphasis on the original DeerFlow execution model with a source-backed account of the checked-in DeerFlow 2.0 super-agent architecture and DeepAgentForecast's DeerFlow-2-facing integration. Produce a new tldraw-native diagram and a detailed report without reusing the Foglamp map or presenting proposed Foglamp components. Update the English and Simplified Chinese root READMEs in parity while preserving the distinction between the currently assembled DeerFlow 2.0 research runtime and the pre-cutover `drf2` orchestration scaffold.
+
+### Acceptance criteria
+
+| ID | Criterion | Evidence |
+|---|---|---|
+| D1 | DeerFlow 2.0 is reconstructed from current source | Report traces entrypoints, lead-agent graph, middleware, subagents, skills, tools, sandbox, memory, MCP, model routing, state/checkpoint flow, streaming, and frontend/API surfaces with valid `file:line` anchors |
+| D2 | DeepAgentForecast integration is explicit | Report distinguishes the optional local-only `deer-flow-2.0.0` source drop, assembled `deer-flow/`, tracked `deerflow_bridge`, and pre-cutover `drf2`, and maps exact inputs, outputs, transports, and authority boundaries |
+| V1 | A new tldraw-native diagram exists | Editable `.tldr` scene plus SVG and PNG renders cover DeerFlow 2.0 internals and DRF integration; all shapes/connectors are valid and the full-resolution render passes visual inspection |
+| R1 | English README reflects DeerFlow 2.0 | Architecture overview, diagrams, workflow, project layout, status, and documentation links describe DeerFlow 2.0 primitives without claiming an unverified DRF-2 cutover |
+| R2 | Mandarin README is semantically equivalent | The same architecture/status content appears in natural Simplified Chinese with matching links and diagram references |
+| Q1 | Documentation is reproducible and scoped | Markdown renders, local links and source anchors resolve, bilingual structural parity checks pass, tldraw artifacts validate, relevant tests/builds pass if README-visible tooling is affected, and unrelated dirty paths remain untouched |
+
+### Execution order
+
+1. Inventory the repository and read the root READMEs in full, then map DeerFlow 2.0 core runtime, integration seams, and README/status contracts in parallel.
+2. Confirm the official tldraw file/export path, install only the required tooling in an isolated temporary directory, and create a reproducible scene generator.
+3. Reconcile every delegated claim against current source and write a standalone DeerFlow 2.0 architecture report with explicit runtime-status labels.
+4. Generate the `.tldr` canvas and SVG/PNG renders, inspect the result at full resolution, and revise layout/labels until readable.
+5. Rewrite the English and Mandarin README architecture sections in parity, linking the new report and diagram while keeping setup/runtime statements source-accurate.
+6. Validate source anchors, Markdown, links, bilingual parity, scene schema, renders, and scoped diffs; update `handoff.md` with exact evidence.
+
+### Authorization and risk boundary
+
+The user's explicit request authorizes downloading and installing tldraw tooling and editing documentation/diagram artifacts. It does not authorize launching, stopping, resuming, or replacing a forecast pipeline; changing provider credentials; mutating the generated `deer-flow/` runtime; committing/pushing; or publishing externally. Existing untracked `deerflow_bridge/.cache/`, `docs/architecture/`, and `docs/research/` paths are preserved. This written plan is the approved execution plan for the requested end-to-end documentation task.
+
+### Scope correction — 2026-07-20T20:19:02Z
+
+The user clarified that the primary deliverable MUST map the **entire DeepResearchForecast workflow**, with DeerFlow 2 represented as the Stage-1 research subsystem, rather than making DeerFlow 2 itself the top-level system. Original DeerFlow remains out of scope. The corrected critical path is:
+
+1. Re-audit the existing whole-system atlas, dataflow inventory, LLM-call inventory, frontend/API routes, six-stage orchestrator, persistence surfaces, and downstream publication paths against current source.
+2. Reconcile the full workflow as user/API → pipeline control → DeerFlow 2 Stage 1 → validated research handoff → ontology → temporal KG → persona/simulation preparation → OASIS run → ReportAgent/forecast extraction → visualization, translation, PDF, and resolution/monitoring outputs.
+3. Produce a new whole-system tldraw canvas with the DeerFlow 2 model/tool/subagent loop nested inside Stage 1 and with every stable producer, transport, receiver, persisted artifact, LLM call family, and control/recovery path represented or indexed.
+4. Update the whole-system report and machine inventories, then make both root READMEs lead with the whole DeepResearchForecast architecture while linking the DeerFlow 2 report/canvas as a subsystem deep dive.
+5. Validate current-source anchors, routes, call-family coverage, Markdown links/headings, bilingual parity, tldraw structure/renders, visual legibility, scoped regressions, and worktree hygiene; obtain an independent settled-tree review before completion.
+
+### Completion outcome — 2026-07-20T22:36:50Z
+
+The corrected whole-system scope is implemented. `docs/architecture/DEEPRESEARCHFORECAST_SYSTEM_ATLAS.md` now follows the complete six-stage product from user/API admission through terminal completion and post-run feedback, with the embedded DeerFlow 2 model/tool/subagent loop expanded inside Stage 1 and DeerFlow 1.x excluded. The machine companions contain 90 material flows, all 101 Flask interfaces, 78 lookup records that normalize to a 99-family model census, and the deeper 41-call/65-interface DeerFlow 2 inventories.
+
+The new primary tldraw canvas is reproducibly generated and exported as editable `.tldr`, SVG, and PNG. Its final structure has 197 shapes, 88 arrows, and 176 endpoint bindings at 7,080 × 4,766 pixels. The English and Mandarin READMEs now lead with the complete DeepResearchForecast architecture, distinguish live/default, conditional, manual/compatibility, and pre-cutover paths, and link the DeerFlow 2 subsystem deep dive without presenting the original DeerFlow architecture as current.
+
+Validation covered JSON/count/source-anchor integrity, exact route coverage, local Markdown links and GFM parsing, bilingual architecture-link parity, excluded-scope scanning, both tldraw validators and dependency audits, original-resolution visual QA, 165 focused backend contract tests, all 31 frontend unit tests, the production frontend build, and `git diff --check`. No runtime, provider, pipeline, credential, generated checkout, publication, commit, or push was changed or invoked.
+
+The final independent settled-tree, artifact, and native-resolution visual audits are clean. They reconfirmed the corrected Stage-5 failure corridor, Stage-6 publication/admin/multi-seed routing, render freshness, exact inventory/source/link reconciliation, dependency health, and removal of all task-generated browser traces and helper processes.
+
+## 2026-07-22 — provenance-bound actor intelligence from research to simulation
+
+### Intent
+
+Make actor realism a first-class cross-stage contract. The workflow MUST deeply research every actor that can enter the simulation cast, carry actor-specific history and forward-looking evidence through the sealed research handoff, include decision-relevant plans and incentives in the unified dossier, compile a distinct safe role for each actor, and prove that the exact bounded context reaches the OASIS-consumed persona. “More detail” MUST not mean uncited biography, a shared generic prompt, hidden fabrication, unbounded token growth, or a new prompt-injection path.
+
+### Acceptance criteria
+
+| ID | Criterion | Evidence |
+|---|---|---|
+| AI1 | Every simulation-relevant actor has one canonical intelligence profile | Stable actor ID/aliases plus history, incentives, values, capabilities, motivations, preferences, alliances, competitors, plans, actions, investments, constraints, vulnerabilities, decision rules, and uncertainty/evidence gaps |
+| AI2 | Actor intelligence is deeply researched and source-bound | Actor-specific searches/fetches or equivalent scoped evidence passes persist source IDs, as-of dates, confidence, contradictions, and coverage; no material claim is anonymous |
+| AI3 | The unified deep-research report uses the actor research | Report sections explicitly analyze actor plans, incentives, investments, likely actions, conflicts, dependencies, and forecast implications; structured artifacts and prose share actor IDs |
+| AI4 | Research reuse is exact | A versioned actor-intelligence artifact and content hashes are bound by the research manifest; stale, partial, mismatched, or tampered profiles cannot be silently reused |
+| AI5 | Prepare compiles relevant context safely | `ActorRoleContract` receives allowlisted declarative fields plus a bounded actor-specific/global-context selection; sparse evidence remains explicit and imperative/model-control text is rejected |
+| AI6 | The simulation consumes the intended context | The exact distinct prompt reaches Reddit `persona` and Twitter `user_char`; role/profile/cast/roster/runtime fingerprints validate at runner start |
+| AI7 | Scale and failure behavior are explicit | Actor count, per-actor evidence/context budgets, concurrency, retry, source diversity, sparse fallback, and terminal failure semantics are deterministic and observable |
+| AI8 | Cross-stage regression proof is green | Fresh, reuse, sparse, adversarial, multi-actor, and tamper scenarios pass focused tests; bridge/deployed skill parity and relevant broader suites pass |
+
+### Execution order
+
+1. Trace the current producer/consumer contract from DeerFlow actor discovery and report synthesis through manifest sealing, graph/cast merge, role compilation, profile generation, prepare outputs, and OASIS runtime fields.
+2. Identify all first-principles gaps: identity, evidence/provenance, recency, contradictions, coverage, boundedness, distinctness, trust boundaries, stage reuse, observability, and failure semantics.
+3. Write failing characterization/regression scenarios for the chosen versioned contract before implementation.
+4. Implement one cohesive actor-intelligence artifact and its research/report integration, then extend `actor-role/v1` or version it only where the consumer contract requires new fields.
+5. Bind hashes through manifests and prepare/runner validation; synchronize tracked DeerFlow skill/runtime overlays when their contract changes.
+6. Run focused tests after each slice, then cross-stage actor/research/orchestrator/runner gates, compile/lint, bridge parity, and diff review. Do not launch a paid research or OASIS run without separate authorization.
+
+### Initial assumptions and risks
+
+- The existing fail-closed actor-role seam is the consumer foundation and SHOULD be extended rather than replaced.
+- The current default global-synthesis topology normally omits Track B, so actor enrichment must not rely on a branch that is absent in default runs.
+- Researching actors one-by-one can multiply model/search cost. The implementation must use a deterministic roster, shared evidence registry/cache, bounded per-actor passes, concurrency limits, and explicit coverage rather than unconstrained fan-out.
+- The full research report is too large and contains untrusted prose. OASIS actors should receive an actor-specific evidence contract plus a deterministic relevant global-context digest, never raw unbounded report bytes.
+- No live paid pipeline, provider mutation, publication, generated-runtime mutation, commit, or push is authorized by this implementation plan.
+
+### Stage-1 semantic-provenance amendment — 2026-07-21T22:02:52Z
+
+The first producer-to-runner implementation and its 410-test integration gate
+proved structural delivery but did not yet prove that the *meaning* of every
+actor claim was supported by the cited receipt. The release gate is therefore
+expanded before documentation closure:
+
+1. Cast admission MUST use an exact persisted tier and stable semantic identity;
+   ambiguous tier strings, untiered retained rows, homonym collapse, and alias
+   collisions fail closed.
+2. Actor claims and relationships MUST carry a supporting source span or quote
+   bound to the fetched receipt and content hash. Merely naming any fetched URL
+   is not evidence that the URL supports the claim. Plans, actions, and
+   investments additionally require explicit temporal and status semantics.
+3. The dossier ledger and extracted actors MUST be claim-bound, not merely
+   roster-bound. Stable per-actor/per-dimension claim projections, relationships,
+   source ledgers, and question/run/checkpoint lineage participate in sealing and
+   resume validation.
+4. Evidence gaps MUST record bounded research attempts and receipts; Track-A
+   receipts cannot silently ground Track-B actor research.
+5. Every Stage-1 reinjection of tool, model, dossier, report, or judge-gap text
+   MUST cross a whole-document sanitizer and an explicit non-executable evidence
+   boundary before model use. Actor-judge PASS MUST attest the exact complete
+   input and a strict finite scorecard.
+6. Global synthesis MUST route bounded per-actor blocks to a dedicated cast-wide
+   owner and deterministically verify that every Tier-1/2 actor and each
+   decision-critical behavior family appears in the final report with citations.
+
+These additions are not optional hardening. They close reproduced paths that
+could otherwise produce a polished but semantically ungrounded actor simulation.
+No full-suite, README, inventory, or final-audit result counts as acceptance
+evidence until the corresponding adversarial regressions pass.
+
+### Completion outcome — 2026-07-22T02:01:06Z
+
+All actor-intelligence acceptance criteria are implemented and verified. The
+settled path is one shared baseline Track-B actor research plane with exact
+tiering/semantic identity, seventeen source-bound dimensions, typed exhausted
+gaps, behavior-family coverage, claim/relationship/lineage seals, and a
+cast-wide report owner. ONTOLOGY and GRAPH preserve only canonical structural
+identity plus admitted claims; PREPARE creates sealed actor-context/v1 packs,
+deterministically compiles role-only actor-role/v2 behavior, derives current-v1
+configuration without legacy flat overrides, and admits only explicit-public
+shared world evidence. The final config/cast/context/platform-role closure is
+resealed after authorized outer-PREPARE mutations, revalidated on reuse and at
+runner admission, and the direct child hashes the exact bytes it parses.
+
+The documentation suite now describes the entire DeepResearchForecast system,
+with DeerFlow 2 as the deep Stage-1 subsystem: 95 material flows, all 101 Flask
+routes, 100 normalized model-call families, 42 DeerFlow 2 call families, and 68
+DeerFlow 2 interfaces. Official tldraw validation reports 198/89/178 whole-system
+shapes/arrows/bindings and 150/66/132 DeerFlow 2 shapes/arrows/bindings. The
+final backend collection is 2,815 tests; the feature gate passes with 2,803
+passed, 11 expected xfails, and the one unchanged actor-unrelated language-purity
+fixture deselected. No paid research/OASIS run, provider mutation, publication,
+generated-runtime edit, commit, or push occurred.

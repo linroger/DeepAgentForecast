@@ -1,0 +1,162 @@
+[
+  {
+    "id": "feature_actor_intelligence_grounding_v2",
+    "category": "cross-stage",
+    "description": "Research every simulation-relevant actor as a provenance-bound intelligence profile and deliver that actor's relevant history, incentives, values, capabilities, motivations, preferences, alliances, competitors, plans, actions, investments, constraints, uncertainties, and global research context into the exact OASIS-consumed persona without weakening safety or reproducibility.",
+    "steps": [
+      "Start a deep-research run and identify the canonical actor roster with stable actor IDs and aliases.",
+      "For every actor eligible for the simulation cast, gather actor-specific evidence covering history, incentives, values, capabilities, motivations, preferences, alliances, competitors, future plans, expected actions, investments, constraints, vulnerabilities, decision rules, and uncertainties.",
+      "Bind every material actor claim to source identities, recency/as-of metadata, confidence or evidence-gap state, and the initiating research contract.",
+      "Include decision-relevant actor plans, incentives, investments, likely actions, conflicts, and dependencies in the unified deep-research report and structured actor artifacts.",
+      "Persist a versioned actor-intelligence contract whose hashes and provenance participate in research manifest validation and stage reuse.",
+      "Compile the structured intelligence into a bounded actor-role contract while preserving declarative-data boundaries and rejecting prompt-control content.",
+      "Pass each actor only its own relevant intelligence plus a bounded, forecast-relevant global research context, scenario context, and relationships; do not substitute one generic report summary for all actors.",
+      "Verify the exact actor-specific context reaches Reddit persona and Twitter user_char fields and remains distinct across actors and platforms.",
+      "Fail closed on identity mismatch, tampered hashes, malformed contracts, or missing required evidence; represent sparse evidence explicitly without fabricating detail.",
+      "Exercise fresh, reuse, sparse, adversarial, multi-actor, and runtime-tamper scenarios with focused and cross-stage tests, then update documentation and continuity evidence."
+    ],
+    "passes": true
+  },
+  {
+    "id": "feature_localhost_drf_entry",
+    "category": "functional-ui",
+    "description": "The supported localhost launcher opens one DeepResearchForecast research UI directly and preserves correct routing, readiness, navigation, accessibility, and no-duplicate-run behavior.",
+    "steps": [
+      "Launch the application through the supported npm start workflow without manually starting Vite or Flask.",
+      "Verify exactly one browser tab opens and the root URL renders ResearchView rather than the legacy MiroFish page.",
+      "Load /research, refresh the root and alias routes, use browser back and forward, and load an unknown route.",
+      "Click the DeepResearchForecast brand and verify it stays in or safely resets the research workflow rather than navigating to /legacy.",
+      "Exercise prompt entry, advanced controls, settings, history, confirmation dialogs, workspace tabs, and progress surfaces by keyboard at desktop and mobile widths.",
+      "Verify launcher readiness, console and network health, responsive overflow, accessible names and focus behavior, and that navigation never duplicates POST /api/research/run."
+    ],
+    "passes": false
+  },
+  {
+    "id": "feature_usage_lineage_truth",
+    "category": "observability",
+    "description": "Every provider request across research, graph, simulation, report, retry, ensemble, translation, and resume lineage is counted exactly once with explicit measured or estimated provenance.",
+    "steps": [
+      "Replay a same-message-ID usage snapshot that grows after subagent completion and verify positive-delta accounting records the final cumulative usage without duplication.",
+      "Persist per-call pipeline, attempt, stage, substage, lane, phase, provider, model, local logical call ID, provider request ID metadata, input/output/cache tokens, latency, retry, outcome, and cost fields.",
+      "Assign one local immutable logical call ID to every provider call while retaining provider request IDs and LangGraph message IDs only as reconciliation metadata.",
+      "Merge research, Graphiti, OASIS, report, translation, extraction, audit, and ensemble child-process records into one immutable lineage ledger.",
+      "Distinguish current-attempt, cumulative-lineage, measured-lower-bound, and estimated totals after retries and resumes.",
+      "Reconcile each stage and the complete pipeline as the sum of unique local logical call IDs and reject double-counted synthetic aggregates."
+    ],
+    "passes": false
+  },
+  {
+    "id": "feature_live_budget_and_health",
+    "category": "reliability",
+    "description": "Users can see truthful live stage health, time, spend, and remaining budget, and cross-process token/cost budgets stop new calls without corrupting resumable work.",
+    "steps": [
+      "Expose elapsed stage time, approximate ETA, heartbeat age, owner health, stale state, measured or estimated tokens, cost, and budget remaining through the status API.",
+      "Render a compact live health and cost panel above the pipeline timeline with explicit unknown and stale states.",
+      "Apply one durable pipeline-and-attempt budget across research, graph, simulation, and report subprocesses.",
+      "Race parallel provider fixtures at the remaining-budget boundary and verify atomic reservations prevent every worker from independently passing the same pre-call check.",
+      "Cross a budget in an offline provider fixture and verify the next request is rejected with a typed durable receipt while completed artifacts remain resumable.",
+      "Verify a provider outage or stale heartbeat stops boundedly and cannot issue a duplicate run or unbounded retry storm."
+    ],
+    "passes": false
+  },
+  {
+    "id": "feature_shared_handoff_api_authority",
+    "category": "cross-stage",
+    "description": "Base pipelines, scenario forks, and resumes resolve every dossier, translation, PDF, editing, progress, visualization, and report API through the state-authoritative shared handoff directory.",
+    "steps": [
+      "Create offline base-pipeline and scenario-fork states where the fork intentionally points at the base handoff directory.",
+      "Read dossier, translation, PDF, edit, progress, visualization, and report surfaces through both base and fork pipeline IDs.",
+      "Verify every route resolves state.handoff_dir with a safe pipeline-local fallback only for compatible legacy state.",
+      "Tamper with handoff identity, hashes, or attempt lineage and verify reuse fails closed rather than reading unrelated bytes.",
+      "Verify resume and fork operations preserve the same artifact authority in both internal orchestration and external APIs."
+    ],
+    "passes": false
+  },
+  {
+    "id": "feature_polymarket_provenance_history",
+    "category": "forecast-quality",
+    "description": "Polymarket evidence can influence a forecast only when equivalence and confidence are retained, and selected markets carry exact provenance, current price, liquidity, spread, CLOB identity, and bounded history enrichment.",
+    "steps": [
+      "Feed exact or near market matches at confidence 0.49 and 0.50 through anchoring, divergence, reconciliation, and publication.",
+      "Verify the rejected 0.49 match causes no revision call and leaves probability and rationale byte-for-byte unchanged.",
+      "Require accepted market rationales to bind the exact market ID or question and quoted price, not merely contain the word market.",
+      "Align agent-tool, deterministic, report, and UI market schemas for IDs, URLs, prices, bid and ask, liquidity, volume, change, timestamps, relevance, equivalence, and confidence.",
+      "Batch-enrich only selected exact market IDs through one bounded Gamma lookup and fetch CLOB history when available, recording an explicit unavailable reason otherwise.",
+      "Map each CLOB token through its declared outcome label and use only the token for literal Yes, never an assumed first array position.",
+      "Poll unresolved, ambiguous, and resolved markets repeatedly and verify idempotent ledger updates with only unambiguous resolution becoming calibration authority.",
+      "Render research-versus-current price, freshness, equivalence, confidence, spread, history, and capture provenance in the dossier and report UI."
+    ],
+    "passes": false
+  },
+  {
+    "id": "feature_forecast_visual_quality",
+    "category": "visualization-ui",
+    "description": "The report UI presents readable, source-bound binary, scenario, market, uncertainty, diagnostic simulation, revision, timeline, and quantitative evidence with explicit coverage limitations.",
+    "steps": [
+      "Render a first-class sortable binary forecast table with resolution criteria, horizon, confidence, and source provenance.",
+      "Render scenario probabilities and ensemble uncertainty without silently inventing residual or extra scenarios.",
+      "Show market comparisons with exact contract links, equivalence, confidence, freshness, and price history.",
+      "Label world-state and other simulation trajectories as diagnostic elicited-model projections that do not update forecast probabilities.",
+      "Version visualization manifests with producer policy, generation time, input hashes, source metadata, and explicit skip reasons.",
+      "Replay saved reports and verify chronological axes, comparable units, readable labels, uncertainty, responsive layout, alt text or table alternatives, and no excessive inline Plotly duplication."
+    ],
+    "passes": false
+  },
+  {
+    "id": "feature_graph_timeout_efficiency",
+    "category": "performance-reliability",
+    "description": "Graph construction avoids multi-hour timeout tails and redundant extraction while preserving a sealed, explicit degradation contract for partial graphs.",
+    "steps": [
+      "Benchmark current chunk size, retry limits, community-detection defaults, resolution guards, structured seeds, and executor attribution against historical fixtures.",
+      "Inject repeated 900-second-equivalent timeouts and verify a short consecutive-timeout or provider circuit stops the stage boundedly.",
+      "Retain successful chunks, rejected-chunk counts, timeout causes, and completeness limits in a signed degradation receipt.",
+      "Use compact structured actor and relationship artifacts to avoid re-deriving already-sealed facts where equivalence is proven.",
+      "Verify downstream prepare and report stages either accept the declared partial graph under policy or fail closed deterministically.",
+      "Compare wall time, model calls, tokens, retained facts, and forecast-quality fixtures against the historical graph baseline."
+    ],
+    "passes": false
+  },
+  {
+    "id": "feature_research_marginal_yield",
+    "category": "performance-quality",
+    "description": "Research continues only while a bounded pass adds independent decision-relevant evidence, closes a named gap, resolves a contradiction, or changes a forecast input without weakening the dossier judge contract.",
+    "steps": [
+      "Replay historical late-gap and duplicate-query logs through the current isolated-thread, compact-prior, gap-replacement, plateau, and zero-yield controls.",
+      "Normalize and deduplicate exact search queries and stop repeated terminal transport failures within one run.",
+      "Measure tokens, wall time, tool calls, fetch failures, independent retained sources, KIQ closures, contradiction resolutions, and forecast-input changes per pass.",
+      "Stop a pass when marginal evidence yield is exhausted, while retaining explicit uncovered gaps rather than inventing completion.",
+      "Verify actor, source, citation, judge, extraction, and publication contracts are no weaker than the historical accepted baseline."
+    ],
+    "passes": false
+  },
+  {
+    "id": "feature_report_ensemble_efficiency",
+    "category": "performance-quality",
+    "description": "Report retries and optional forecast ensembles reuse invariant work and never regenerate full prose, translation, visualization, and audit artifacts when only a structured probability vector is required.",
+    "steps": [
+      "Split report telemetry into section writing, extraction, repair, translation, audit, visualization, and retry operations.",
+      "Keep the default forecast seed count at one until a forecast-only ensemble path is verified.",
+      "Generate an extra ensemble seed as a structured forecast vector without a full prose report, translation, visual render, or publication audit.",
+      "Bound language-purity and section repair to the affected content instead of escalating to whole-report regeneration or unbounded sequential calls.",
+      "Resume a report-only pipeline after a completed simulation and verify the sealed simulation is reused without any repeated simulation calls.",
+      "Resume a partial simulation from its last sealed round and verify completed rounds and their provider calls are not replayed.",
+      "Verify published report bytes and audit identities remain immutable while sidecar ensemble evidence is separately sealed.",
+      "Compare calls, tokens, latency, probability output, and publication integrity against the historical full-report ensemble baseline."
+    ],
+    "passes": false
+  },
+  {
+    "id": "feature_controlled_optimization_validation",
+    "category": "acceptance",
+    "description": "After separate paid-run authorization, one fresh controlled pipeline proves the optimized current source reduces cost and latency without degrading evidence, forecast, market, simulation, artifact, or UI quality.",
+    "steps": [
+      "Obtain explicit authorization for exactly one new paid run and record the prompt, model, provider, configuration, budget, and immutable baseline comparison contract.",
+      "Launch exactly one pipeline and verify no duplicate POST, healthy heartbeats, provider identity, and per-request ledger activity from the first call.",
+      "Capture per-stage and per-substage calls, reconciled measured tokens, explicitly labeled estimates and lower bounds, cache usage, cost, wall time, retries, errors, evidence yield, and degradation receipts.",
+      "Verify all six stage artifacts, cross-stage hashes, market provenance, diagnostic simulation policy, report audit, visualization manifest, translation or PDF if requested, and localhost presentation.",
+      "Compare against the historical reference runs and reject any optimization that saves resources by weakening source coverage, judge outcomes, provenance, or publication quality.",
+      "Record exact results and decide the next single improvement slice from measured residual bottlenecks."
+    ],
+    "passes": false
+  }
+]

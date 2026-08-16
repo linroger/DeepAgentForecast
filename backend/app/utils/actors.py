@@ -27,7 +27,22 @@ handoff 契约中的 actors.json 形如（NEW 字段均为可选，缺失即降�
          "worldview": {"values": ["..."], "beliefs": ["..."], "identity": "...", "frame": "..."},
          "incentives": [{"driver": "...", "gains_if": "...", "loses_if": "...", "intensity": "high|medium|low"}],
          "resources": ["..."],                    // assets 的超集/别名
-         "risk_tolerance": "low|medium|high"}
+         "risk_tolerance": "low|medium|high",
+         // NEW actor-intelligence/v1：对每个演员做证据绑定的深度研究，供模拟角色直接消费。
+         "intelligence": {
+           "schema_version": "actor-intelligence/v1",
+           "dimensions": {
+             "identity_history": [{"claim": "...", "evidence_type": "verified_fact",
+                                    "as_of_date": "...", "confidence": "high", "source_refs": ["src_..."]}],
+             // 同样的 claim[] 单元还用于 values_worldview / incentives / motivations /
+             // capabilities / constraints / operational_preferences / alliances /
+             // opponents_competitors / decision_rights_process_triggers / current_actions /
+             // future_plans / investments_capital_allocation / track_record / likely_actions /
+             // red_lines / knowledge_state。金额、条件等有限字段位于 qualifiers。
+           },
+           "evidence_gaps": {"future_plans": ["..."]},
+           "coverage": {"covered_dimensions": ["..."]}
+         }}
       ],
       "relationships": [                         // NEW — 命名 actor 之间的有向、带类型边
         {"source": "...", "target": "...",       // source/target 必须 = 某个 actors[].name
@@ -109,6 +124,8 @@ None / 空串 / 空列表，绝不让结构化数据的缺陷阻断原有的纯 
 
 from __future__ import annotations
 
+import copy
+import json
 import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
@@ -168,6 +185,261 @@ def extract_actor_rows(actors: Optional[Any]) -> List[Dict[str, Any]]:
     if not isinstance(rows, list):
         return []
     return [r for r in rows if isinstance(r, dict) and r.get("name")]
+
+
+ACTOR_INTELLIGENCE_SCHEMA_VERSION = "actor-intelligence/v1"
+
+
+def actor_intelligence_schema_version(actor: Optional[Dict[str, Any]]) -> str:
+    """Return the actor's explicit intelligence schema marker, if any."""
+    if not isinstance(actor, dict):
+        return ""
+    value = actor.get("intelligence")
+    if not isinstance(value, dict):
+        return ""
+    return str(value.get("schema_version") or "").strip()
+
+
+def has_unsupported_actor_intelligence_schema(
+    actor: Optional[Dict[str, Any]],
+) -> bool:
+    """Whether an explicit future/unknown actor contract must fail closed.
+
+    Unversioned rows remain the legacy compatibility path.  Once a producer
+    declares a schema, however, consumers must not reinterpret an unsupported
+    contract through older flat fields.
+    """
+    version = actor_intelligence_schema_version(actor)
+    return bool(version and version != ACTOR_INTELLIGENCE_SCHEMA_VERSION)
+
+
+def actor_intelligence_payload(actor: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return a supported actor-intelligence payload without weakening old rows.
+
+    The versioned shape is authoritative.  Unversioned dictionaries are also
+    accepted as a migration compatibility path because early research outputs
+    emitted the same additive fields before the schema marker existed.  A
+    different explicit version fails closed so a future incompatible contract
+    cannot silently be interpreted as v1.
+    """
+    if not isinstance(actor, dict):
+        return {}
+    value = actor.get("intelligence")
+    if not isinstance(value, dict):
+        return {}
+    version = actor_intelligence_schema_version(actor)
+    if version and version != ACTOR_INTELLIGENCE_SCHEMA_VERSION:
+        return {}
+    return value
+
+
+def actor_intelligence_dimension(
+    actor: Optional[Dict[str, Any]],
+    canonical: str,
+    *flat_aliases: str,
+) -> Any:
+    """Read one canonical ``intelligence.dimensions`` value with flat aliases."""
+    intelligence = actor_intelligence_payload(actor)
+    dimensions = intelligence.get("dimensions")
+    value = dimensions.get(canonical) if isinstance(dimensions, dict) else None
+    if isinstance(value, dict):
+        for key in ("claims", "items", "entries"):
+            if value.get(key) not in (None, "", []):
+                return value.get(key)
+    if value not in (None, "", []):
+        return value
+    for key in flat_aliases:
+        if intelligence.get(key) not in (None, "", []):
+            return intelligence.get(key)
+    return None
+
+
+def _intelligence_has_source_refs(value: Any, depth: int = 0) -> bool:
+    if depth > 12:
+        return False
+    if isinstance(value, dict):
+        if any(
+            value.get(key)
+            for key in ("source_refs", "source_ids", "evidence_refs", "citations")
+        ):
+            return True
+        return any(_intelligence_has_source_refs(item, depth + 1) for item in value.values())
+    if isinstance(value, list):
+        return any(_intelligence_has_source_refs(item, depth + 1) for item in value)
+    return False
+
+
+def actor_intelligence_claims(
+    actor: Optional[Dict[str, Any]],
+    canonical: str,
+    *flat_aliases: str,
+    limit: int = 3,
+    max_chars: int = 260,
+) -> List[str]:
+    """Render bounded claim/evidence rows for legacy prompt consumers."""
+    value = actor_intelligence_dimension(actor, canonical, *flat_aliases)
+    if isinstance(value, dict):
+        rows = [value]
+    elif isinstance(value, list):
+        rows = value
+    elif value not in (None, ""):
+        rows = [value]
+    else:
+        rows = []
+    out: List[str] = []
+    for raw in rows:
+        if isinstance(raw, dict):
+            claim = str(
+                raw.get("claim")
+                or raw.get("finding")
+                or raw.get("description")
+                or raw.get("text")
+                or ""
+            ).strip()
+            rendered_qualifiers: List[str] = []
+            nested = raw.get("qualifiers")
+            nested = nested if isinstance(nested, dict) else {}
+            for label, keys in (
+                ("as of", ("as_of_date", "as_of")),
+                ("confidence", ("confidence",)),
+                ("evidence type", ("evidence_type", "epistemic_status")),
+                ("status", ("status",)),
+                ("horizon", ("horizon", "timeframe")),
+                ("conditions", ("conditions", "dependencies")),
+                ("amount", ("amount",)),
+                ("unit", ("unit",)),
+                ("action type", ("action_type", "type")),
+                ("purpose", ("strategic_purpose",)),
+            ):
+                selected = next((
+                    raw.get(key) for key in keys if raw.get(key) not in (None, "", [])
+                ), None)
+                if selected in (None, "", []):
+                    selected = next((
+                        nested.get(key) for key in keys
+                        if nested.get(key) not in (None, "", [])
+                    ), None)
+                if isinstance(selected, list):
+                    item = "; ".join(str(value).strip() for value in selected[:4] if str(value).strip())
+                else:
+                    item = str(selected or "").strip()
+                if item:
+                    rendered_qualifiers.append(f"{label}={item}")
+            refs = raw.get("source_refs") or raw.get("source_ids") or raw.get("evidence_refs")
+            refs = refs or nested.get("source_refs") or nested.get("source_ids")
+            if isinstance(refs, list):
+                rendered_refs = ",".join(str(ref).strip() for ref in refs[:4] if str(ref).strip())
+                if rendered_refs:
+                    rendered_qualifiers.append(f"sources={rendered_refs}")
+            text = claim + (
+                f" [{'; '.join(rendered_qualifiers)}]"
+                if claim and rendered_qualifiers else ""
+            )
+        else:
+            text = str(raw or "").strip()
+        text = re.sub(r"\s+", " ", text)
+        if len(text) > max_chars:
+            text = text[: max(0, max_chars - 1)].rstrip() + "…"
+        if text:
+            out.append(text)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def actor_intelligence_dimension_presence(
+    actor: Optional[Dict[str, Any]],
+) -> Dict[str, bool]:
+    """Report evidence-bearing v1 dimensions for quality gates and telemetry.
+
+    This helper only checks whether a dimension carries content; it does not
+    claim that the content is true or sufficient.  That distinction keeps the
+    coverage gate useful without turning a structural check into a confidence
+    score.
+    """
+    intel = actor_intelligence_payload(actor)
+    preferences = actor_intelligence_dimension(
+        actor, "operational_preferences", "preferences"
+    )
+    if isinstance(preferences, dict):
+        has_preferences = bool(preferences.get("likes") or preferences.get("dislikes"))
+    else:
+        has_preferences = bool(preferences or intel.get("aversions"))
+    decision = actor_intelligence_dimension(
+        actor, "decision_rights_process_triggers", "decision_model"
+    )
+    has_decision = bool(decision)
+    context_pack = intel.get("context_pack")
+    has_report_context = bool(intel.get("relevant_report_context")) or (
+        isinstance(context_pack, dict)
+        and bool(context_pack.get("actor_relevant_report_sections"))
+    )
+    return {
+        "identity_history": bool(
+            actor_intelligence_dimension(actor, "identity_history", "history")
+        ),
+        "track_record": bool(
+            actor_intelligence_dimension(actor, "track_record", "track_record")
+        ),
+        "history": bool(
+            actor_intelligence_dimension(actor, "identity_history", "history")
+            or actor_intelligence_dimension(actor, "track_record", "track_record")
+        ),
+        "values_worldview": bool(
+            actor_intelligence_dimension(actor, "values_worldview", "values_worldview")
+        ),
+        "incentives": bool(
+            actor_intelligence_dimension(actor, "incentives", "intelligence_incentives")
+        ),
+        "motivations": bool(actor_intelligence_dimension(actor, "motivations", "motivations")),
+        "capabilities": bool(actor_intelligence_dimension(actor, "capabilities", "capabilities")),
+        "constraints": bool(
+            actor_intelligence_dimension(actor, "constraints", "constraints")
+        ),
+        "preferences": has_preferences,
+        "alliances": bool(
+            actor_intelligence_dimension(actor, "alliances", "alliances")
+        ),
+        "opponents_competitors": bool(
+            actor_intelligence_dimension(
+                actor, "opponents_competitors", "opponents_competitors"
+            )
+        ),
+        "current_actions": bool(
+            actor_intelligence_dimension(
+                actor, "current_actions", "current_actions", "actions_in_progress"
+            )
+        ),
+        "future_plans": bool(
+            actor_intelligence_dimension(actor, "future_plans", "future_plans", "plans")
+        ),
+        "investments": bool(
+            actor_intelligence_dimension(
+                actor,
+                "investments_capital_allocation",
+                "investments",
+                "capital_allocation",
+                "capex_divestments",
+            )
+        ),
+        "decision_model": has_decision,
+        "likely_actions": bool(
+            actor_intelligence_dimension(
+                actor, "likely_actions", "intelligence_likely_actions"
+            )
+        ),
+        "red_lines": bool(
+            actor_intelligence_dimension(actor, "red_lines", "red_lines")
+        ),
+        "knowledge_state": bool(
+            actor_intelligence_dimension(actor, "knowledge_state", "knowledge_state")
+        ),
+        "report_context": has_report_context,
+        "source_refs": _intelligence_has_source_refs(intel),
+        "provenance": isinstance(intel.get("provenance"), dict) and bool(intel.get("provenance")),
+        "evidence_gaps": bool(intel.get("evidence_gaps")),
+        "producer_coverage": isinstance(intel.get("coverage"), dict) and bool(intel.get("coverage")),
+    }
 
 
 def match_actor(entity_name: str, actors: Optional[Any]) -> Optional[Dict[str, Any]]:
@@ -233,7 +505,11 @@ def influence_weight(actor: Optional[Dict[str, Any]]) -> Optional[float]:
     return None
 
 
-def actor_briefing(actor: Optional[Dict[str, Any]], max_memory_chars: int = 600) -> str:
+def actor_briefing(
+    actor: Optional[Dict[str, Any]],
+    max_memory_chars: int = 600,
+    max_intelligence_chars: int = 2200,
+) -> str:
     """单个 actor 的提示词注入块（空 actor 返回空串）。
 
     persona / agent 配置生成的提示词里以「研究实证」的口吻注入，引导 LLM
@@ -261,6 +537,56 @@ def actor_briefing(actor: Optional[Dict[str, Any]], max_memory_chars: int = 600)
         if len(memory) > max_memory_chars:
             memory = memory[:max_memory_chars] + "…"
         parts.append(f"- 已知事实/记忆: {memory}")
+    intelligence_lines: List[str] = []
+    for label, dimension, aliases in (
+        ("历史/轨迹", "identity_history", ("history",)),
+        ("决策记录", "track_record", ("track_record",)),
+        ("深层动机", "motivations", ("motivations",)),
+        ("可调动能力及边界", "capabilities", ("capabilities",)),
+        ("操作偏好/反感", "operational_preferences", ("preferences", "aversions")),
+        ("当前行动", "current_actions", ("current_actions", "actions_in_progress")),
+        ("未来计划/承诺", "future_plans", ("future_plans", "plans")),
+        ("投资/资本配置", "investments_capital_allocation", ("investments", "capital_allocation")),
+        ("决策权/流程/触发条件", "decision_rights_process_triggers", ("decision_model",)),
+        ("已知信息边界", "knowledge_state", ("knowledge_state",)),
+        ("红线", "red_lines", ("red_lines",)),
+    ):
+        values = actor_intelligence_claims(actor, dimension, *aliases, limit=2)
+        if values:
+            intelligence_lines.append(f"- {label}: " + "；".join(values))
+    gaps = actor_intelligence_payload(actor).get("evidence_gaps")
+    if gaps:
+        # Evidence gaps are outside dimensions, so render them directly with
+        # the same bounded claim convention.
+        gap_values: List[str] = []
+        if isinstance(gaps, dict):
+            for dimension in sorted(gaps, key=str):
+                raw_values = gaps.get(dimension)
+                values = raw_values if isinstance(raw_values, list) else [raw_values]
+                for raw in values:
+                    claim = raw.get("claim") if isinstance(raw, dict) else raw
+                    value = re.sub(r"\s+", " ", str(claim or "")).strip()
+                    if value:
+                        gap_values.append(f"{dimension}: {value[:220]}")
+                    if len(gap_values) >= 3:
+                        break
+                if len(gap_values) >= 3:
+                    break
+        elif isinstance(gaps, list):
+            for raw in gaps[:3]:
+                claim = raw.get("claim") if isinstance(raw, dict) else raw
+                value = re.sub(r"\s+", " ", str(claim or "")).strip()
+                if value:
+                    gap_values.append(value[:260])
+        if gap_values:
+            intelligence_lines.append("- 证据缺口: " + "；".join(gap_values))
+    used = 0
+    for line in intelligence_lines:
+        addition = len(line) + (1 if used else 0)
+        if used + addition > max(0, int(max_intelligence_chars)):
+            break
+        parts.append(line)
+        used += addition
     if not parts:
         return ""
     return (
@@ -301,6 +627,16 @@ def actors_digest(
             goals = row.get("goals")
             if isinstance(goals, list) and goals and str(goals[0]).strip():
                 seg += f" | 核心目标: {str(goals[0]).strip()}"
+            for label, dimension, aliases in (
+                ("当前行动", "current_actions", ("current_actions",)),
+                ("未来计划", "future_plans", ("future_plans", "plans")),
+                ("资本配置", "investments_capital_allocation", ("investments",)),
+            ):
+                claims = actor_intelligence_claims(
+                    row, dimension, *aliases, limit=1, max_chars=140
+                )
+                if claims:
+                    seg += f" | {label}: {claims[0]}"
             lines.append(seg)
 
     events = actors.get("key_events")
@@ -905,6 +1241,16 @@ def behavioral_dna_block(actor: Optional[Dict[str, Any]]) -> str:
     risk = str(actor.get("risk_tolerance", "") or "").strip()
     if risk:
         parts.append(f"- 风险偏好: {risk}")
+
+    for label, dimension, aliases in (
+        ("研究确认的价值观/世界观", "values_worldview", ("values_worldview",)),
+        ("研究确认的激励", "incentives", ("intelligence_incentives",)),
+        ("研究确认的深层动机", "motivations", ("motivations",)),
+        ("研究确认的操作偏好", "operational_preferences", ("preferences",)),
+    ):
+        claims = actor_intelligence_claims(actor, dimension, *aliases, limit=3)
+        if claims:
+            parts.append(f"- {label}: " + "；".join(claims))
 
     if not parts:
         return ""
@@ -1600,13 +1946,39 @@ def dossier_coverage(actors: Optional[Any]) -> Dict[str, Any]:
     信号。本函数把它量化为可读指标（写进 meta.json / 经研究质量面板暴露 / 可触发 refine 或加宽
     不确定度）。纯函数；actors 为空/畸形时返回零骨架。
 
-    返回：{n_actors, n_relationships, n_tier12, pct_actors_with_incentives,
-    pct_tier12_with_worldview, pct_edges_valenced, edges_per_actor, salience_basis_present}。
+    返回既有关系/激励指标，以及 actor-intelligence/v1 每个关键维度的覆盖率。
+    新指标是纯添加的，不会改变任何旧调用方所依赖的键或数值。
     """
     zero = {
         "n_actors": 0, "n_relationships": 0, "n_tier12": 0,
         "pct_actors_with_incentives": 0.0, "pct_tier12_with_worldview": 0.0,
         "pct_edges_valenced": 0.0, "edges_per_actor": 0.0, "salience_basis_present": 0.0,
+        "n_actor_intelligence_v1": 0,
+        "pct_actors_with_actor_intelligence": 0.0,
+        "pct_tier12_with_complete_actor_intelligence": 0.0,
+        "pct_intelligence_with_history": 0.0,
+        "pct_intelligence_with_identity_history": 0.0,
+        "pct_intelligence_with_track_record": 0.0,
+        "pct_intelligence_with_values_worldview": 0.0,
+        "pct_intelligence_with_incentives": 0.0,
+        "pct_intelligence_with_motivations": 0.0,
+        "pct_intelligence_with_capabilities": 0.0,
+        "pct_intelligence_with_constraints": 0.0,
+        "pct_intelligence_with_preferences": 0.0,
+        "pct_intelligence_with_alliances": 0.0,
+        "pct_intelligence_with_opponents_competitors": 0.0,
+        "pct_intelligence_with_current_actions": 0.0,
+        "pct_intelligence_with_future_plans": 0.0,
+        "pct_intelligence_with_investments": 0.0,
+        "pct_intelligence_with_decision_model": 0.0,
+        "pct_intelligence_with_likely_actions": 0.0,
+        "pct_intelligence_with_red_lines": 0.0,
+        "pct_intelligence_with_knowledge_state": 0.0,
+        "pct_intelligence_with_report_context": 0.0,
+        "pct_intelligence_with_source_refs": 0.0,
+        "pct_intelligence_with_provenance": 0.0,
+        "pct_intelligence_with_evidence_gaps": 0.0,
+        "pct_intelligence_with_producer_coverage": 0.0,
     }
     rows = extract_actor_rows(actors)
     n = len(rows)
@@ -1617,10 +1989,49 @@ def dossier_coverage(actors: Optional[Any]) -> Dict[str, Any]:
         v = a.get(key)
         return bool(v) if isinstance(v, (list, dict)) else bool(v)
 
-    n_incent = sum(1 for a in rows if _truthy_field(a, "incentives"))
+    n_incent = sum(
+        1 for a in rows
+        if _truthy_field(a, "incentives")
+        or actor_intelligence_dimension(a, "incentives", "intelligence_incentives")
+    )
     tier12 = [a for a in rows if entity_simulation_tier(a) in (1, 2)]
-    n_wv = sum(1 for a in tier12 if isinstance(a.get("worldview"), dict) and a.get("worldview"))
+    n_wv = sum(
+        1 for a in tier12
+        if (isinstance(a.get("worldview"), dict) and a.get("worldview"))
+        or actor_intelligence_dimension(a, "values_worldview", "values_worldview")
+    )
     n_sal = sum(1 for a in rows if _truthy_field(a, "salience"))
+
+    intelligence_rows = [
+        a for a in rows
+        if actor_intelligence_payload(a).get("schema_version")
+        == ACTOR_INTELLIGENCE_SCHEMA_VERSION
+    ]
+    intelligence_presence = [
+        actor_intelligence_dimension_presence(a) for a in intelligence_rows
+    ]
+    critical_dimensions = (
+        "identity_history", "values_worldview", "incentives", "motivations",
+        "capabilities", "constraints", "preferences", "alliances",
+        "opponents_competitors", "decision_model", "current_actions",
+        "future_plans", "investments", "track_record", "likely_actions",
+        "red_lines", "knowledge_state", "source_refs",
+    )
+    complete_tier12 = sum(
+        1 for actor in tier12
+        if actor_intelligence_payload(actor).get("schema_version")
+        == ACTOR_INTELLIGENCE_SCHEMA_VERSION
+        and all(
+            actor_intelligence_dimension_presence(actor).get(dimension, False)
+            for dimension in critical_dimensions
+        )
+    )
+
+    def _intel_rate(dimension: str) -> float:
+        if not intelligence_presence:
+            return 0.0
+        present = sum(1 for row in intelligence_presence if row.get(dimension))
+        return round(present / len(intelligence_presence), 3)
 
     rels = extract_relationship_rows(actors)
     n_rels = len(rels)
@@ -1639,6 +2050,34 @@ def dossier_coverage(actors: Optional[Any]) -> Dict[str, Any]:
         "pct_edges_valenced": round(n_valenced / n_rels, 3) if n_rels else 0.0,
         "edges_per_actor": round(n_rels / n, 2),
         "salience_basis_present": round(n_sal / n, 3),
+        "n_actor_intelligence_v1": len(intelligence_rows),
+        "pct_actors_with_actor_intelligence": round(len(intelligence_rows) / n, 3),
+        "pct_tier12_with_complete_actor_intelligence": (
+            round(complete_tier12 / len(tier12), 3) if tier12 else 0.0
+        ),
+        "pct_intelligence_with_history": _intel_rate("history"),
+        "pct_intelligence_with_identity_history": _intel_rate("identity_history"),
+        "pct_intelligence_with_track_record": _intel_rate("track_record"),
+        "pct_intelligence_with_values_worldview": _intel_rate("values_worldview"),
+        "pct_intelligence_with_incentives": _intel_rate("incentives"),
+        "pct_intelligence_with_motivations": _intel_rate("motivations"),
+        "pct_intelligence_with_capabilities": _intel_rate("capabilities"),
+        "pct_intelligence_with_constraints": _intel_rate("constraints"),
+        "pct_intelligence_with_preferences": _intel_rate("preferences"),
+        "pct_intelligence_with_alliances": _intel_rate("alliances"),
+        "pct_intelligence_with_opponents_competitors": _intel_rate("opponents_competitors"),
+        "pct_intelligence_with_current_actions": _intel_rate("current_actions"),
+        "pct_intelligence_with_future_plans": _intel_rate("future_plans"),
+        "pct_intelligence_with_investments": _intel_rate("investments"),
+        "pct_intelligence_with_decision_model": _intel_rate("decision_model"),
+        "pct_intelligence_with_likely_actions": _intel_rate("likely_actions"),
+        "pct_intelligence_with_red_lines": _intel_rate("red_lines"),
+        "pct_intelligence_with_knowledge_state": _intel_rate("knowledge_state"),
+        "pct_intelligence_with_report_context": _intel_rate("report_context"),
+        "pct_intelligence_with_source_refs": _intel_rate("source_refs"),
+        "pct_intelligence_with_provenance": _intel_rate("provenance"),
+        "pct_intelligence_with_evidence_gaps": _intel_rate("evidence_gaps"),
+        "pct_intelligence_with_producer_coverage": _intel_rate("producer_coverage"),
     }
 
 
@@ -1668,6 +2107,217 @@ def _rows_same_entity(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
     if pa and pb and min(len(pa), len(pb)) >= 4 and (pa in pb or pb in pa):
         return True
     return False
+
+
+_INTELLIGENCE_DIMENSION_ALIASES = {
+    "identity_history": ("history",),
+    "values_worldview": ("values_worldview",),
+    "incentives": ("intelligence_incentives",),
+    "motivations": ("motivations",),
+    "capabilities": ("capabilities",),
+    "constraints": ("constraints",),
+    "operational_preferences": ("preferences", "aversions"),
+    "alliances": ("alliances",),
+    "opponents_competitors": ("opponents_competitors",),
+    "decision_rights_process_triggers": ("decision_model",),
+    "current_actions": ("current_actions", "actions_in_progress"),
+    "future_plans": ("future_plans", "plans"),
+    "investments_capital_allocation": (
+        "investments", "capital_allocation", "capex_divestments",
+    ),
+    "track_record": ("track_record",),
+    "likely_actions": ("intelligence_likely_actions",),
+    "red_lines": ("red_lines",),
+    "knowledge_state": ("knowledge_state",),
+}
+
+
+def _claim_merge_key(value: Any) -> str:
+    if isinstance(value, dict):
+        claim = next((
+            value.get(key) for key in (
+                "claim", "finding", "description", "text", "event", "action",
+                "plan", "investment", "capability", "subject",
+            ) if value.get(key)
+        ), None)
+        if claim:
+            return "claim:" + re.sub(r"\s+", " ", str(claim)).strip().casefold()
+    if isinstance(value, str):
+        return "claim:" + re.sub(r"\s+", " ", value).strip().casefold()
+    try:
+        return "json:" + json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return "repr:" + repr(value)
+
+
+def _dimension_claim_rows(value: Any, dimension: str) -> List[Dict[str, Any]]:
+    if isinstance(value, dict) and isinstance(value.get("claims"), list):
+        rows: List[Any] = value["claims"]
+    elif isinstance(value, dict) and dimension == "operational_preferences":
+        rows = []
+        for kind, key in (("like", "likes"), ("dislike", "dislikes")):
+            raw = value.get(key)
+            values = raw if isinstance(raw, list) else ([raw] if raw else [])
+            for item in values:
+                row = copy.deepcopy(item) if isinstance(item, dict) else {"claim": item}
+                row.setdefault("preference_kind", kind)
+                rows.append(row)
+    elif isinstance(value, dict) and dimension == "decision_rights_process_triggers":
+        rows = []
+        for kind, keys in (
+            ("decision_right", ("decision_rights",)),
+            ("decision_process", ("decision_process", "process")),
+            ("trigger", ("triggers",)),
+            ("red_line", ("red_lines",)),
+        ):
+            raw = next((value.get(key) for key in keys if value.get(key)), None)
+            values = raw if isinstance(raw, list) else ([raw] if raw else [])
+            for item in values:
+                row = copy.deepcopy(item) if isinstance(item, dict) else {"claim": item}
+                row.setdefault("decision_kind", kind)
+                rows.append(row)
+    elif isinstance(value, list):
+        rows = value
+    elif value not in (None, "", {}):
+        rows = [value]
+    else:
+        rows = []
+    return [
+        copy.deepcopy(row) if isinstance(row, dict) else {"claim": row}
+        for row in rows if row not in (None, "")
+    ]
+
+
+def _merge_actor_intelligence(
+    members: List[Dict[str, Any]],
+) -> tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Union duplicate actor intelligence without discarding claim variants."""
+    payloads = [
+        (str(row.get("name") or ""), actor_intelligence_payload(row))
+        for row in members
+        if actor_intelligence_payload(row)
+    ]
+    # Preserve original row order so union output is stable regardless of which
+    # duplicate wins the unrelated scalar-richness tie-break.
+    unique_payloads: List[tuple[str, Dict[str, Any]]] = []
+    seen_payloads: set[str] = set()
+    for source_name, payload in payloads:
+        fingerprint = _claim_merge_key(payload)
+        if fingerprint not in seen_payloads:
+            seen_payloads.add(fingerprint)
+            unique_payloads.append((source_name, payload))
+    if not unique_payloads:
+        return None, []
+
+    merged: Dict[str, Any] = {
+        "schema_version": ACTOR_INTELLIGENCE_SCHEMA_VERSION,
+        "dimensions": {},
+    }
+    conflicts: List[Dict[str, Any]] = []
+    variant_audit: List[Dict[str, Any]] = []
+    for dimension, aliases in _INTELLIGENCE_DIMENSION_ALIASES.items():
+        claim_by_key: Dict[str, Dict[str, Any]] = {}
+        claim_sources: Dict[str, List[str]] = {}
+        for source_name, payload in unique_payloads:
+            pseudo_actor = {"intelligence": payload}
+            value = actor_intelligence_dimension(pseudo_actor, dimension, *aliases)
+            for claim in _dimension_claim_rows(value, dimension):
+                key = _claim_merge_key(claim)
+                if key not in claim_by_key:
+                    claim_by_key[key] = claim
+                    claim_sources[key] = [source_name]
+                    continue
+                current = claim_by_key[key]
+                claim_sources[key].append(source_name)
+                for field, incoming in claim.items():
+                    if field in ("source_refs", "source_ids", "evidence_refs"):
+                        current_refs = current.get("source_refs")
+                        if not isinstance(current_refs, list):
+                            current_refs = []
+                        incoming_refs = incoming if isinstance(incoming, list) else [incoming]
+                        current["source_refs"] = list(dict.fromkeys([
+                            *current_refs,
+                            *(ref for ref in incoming_refs if ref not in (None, "")),
+                        ]))
+                    elif current.get(field) in (None, "", []):
+                        current[field] = copy.deepcopy(incoming)
+                    elif incoming not in (None, "", []) and current.get(field) != incoming:
+                        conflicts.append({
+                            "scope": "actor_intelligence_claim",
+                            "dimension": dimension,
+                            "claim_key": key,
+                            "field": field,
+                            "kept": copy.deepcopy(current.get(field)),
+                            "alternate": copy.deepcopy(incoming),
+                            "from": source_name,
+                        })
+        if claim_by_key:
+            claims = list(claim_by_key.values())
+            merged["dimensions"][dimension] = {"claims": claims}
+            if len(claims) > 1 and dimension in {
+                "current_actions", "future_plans", "investments_capital_allocation",
+                "decision_rights_process_triggers", "red_lines",
+            }:
+                variant_audit.append({
+                    "dimension": dimension,
+                    "claim_keys": list(claim_by_key),
+                    "sources_by_claim": claim_sources,
+                    "interpretation": "retained variants; may be complementary or contradictory",
+                })
+
+    evidence_gaps: Dict[str, Dict[str, Any]] = {}
+    for _source_name, payload in unique_payloads:
+        raw_gaps = payload.get("evidence_gaps")
+        if isinstance(raw_gaps, dict):
+            gap_groups = raw_gaps.items()
+        else:
+            gap_groups = (("general", raw_gaps),)
+        for dimension, raw_values in gap_groups:
+            values = raw_values if isinstance(raw_values, list) else ([raw_values] if raw_values else [])
+            dimension_gaps = evidence_gaps.setdefault(str(dimension), {})
+            for gap in values:
+                dimension_gaps.setdefault(_claim_merge_key(gap), copy.deepcopy(gap))
+    if evidence_gaps:
+        merged["evidence_gaps"] = {
+            dimension: list(values.values())
+            for dimension, values in evidence_gaps.items()
+            if values
+        }
+    source_refs: List[Any] = []
+    for _, payload in unique_payloads:
+        for key in ("source_refs", "source_ids", "evidence_refs"):
+            raw_refs = payload.get(key)
+            values = raw_refs if isinstance(raw_refs, list) else ([raw_refs] if raw_refs else [])
+            for ref in values:
+                if ref not in source_refs:
+                    source_refs.append(copy.deepcopy(ref))
+    if source_refs:
+        merged["source_refs"] = source_refs
+
+    # Preserve producer coverage snapshots and source provenance verbatim for
+    # audit instead of selecting whichever duplicate happened to be richest.
+    coverage_snapshots = [
+        {"actor_name": name, "coverage": copy.deepcopy(payload.get("coverage"))}
+        for name, payload in unique_payloads if payload.get("coverage")
+    ]
+    provenance_snapshots = [
+        {"actor_name": name, "provenance": copy.deepcopy(payload.get("provenance"))}
+        for name, payload in unique_payloads if payload.get("provenance")
+    ]
+    merged["merge_provenance"] = {
+        "source_actor_rows": [name for name, _ in unique_payloads],
+        "coverage_snapshots": coverage_snapshots,
+        "provenance_snapshots": provenance_snapshots,
+        "claim_variants": variant_audit,
+        "conflicts": copy.deepcopy(conflicts),
+    }
+    # Promote a single unchanged producer coverage/provenance object for legacy
+    # readers while retaining every snapshot above.
+    if len(coverage_snapshots) == 1:
+        merged["coverage"] = coverage_snapshots[0]["coverage"]
+    if len(provenance_snapshots) == 1:
+        merged["provenance"] = provenance_snapshots[0]["provenance"]
+    return merged, conflicts
 
 
 def reconcile_cast(actors: Optional[Any]) -> tuple:
@@ -1713,7 +2363,8 @@ def reconcile_cast(actors: Optional[Any]) -> tuple:
         return actors, {"merged": [], "n_before": n_before, "n_after": n_before}
 
     _RICH_KEYS = ("role", "stance", "influence", "memory", "incentives", "worldview",
-                  "resources", "aliases", "goals", "constraints", "type", "salience")
+                  "resources", "aliases", "goals", "constraints", "type", "salience",
+                  "intelligence")
     _SCALAR_CONFLICT_KEYS = ("role", "stance", "type", "influence")
 
     def _richness(row: Dict[str, Any]) -> int:
@@ -1745,13 +2396,17 @@ def reconcile_cast(actors: Optional[Any]) -> tuple:
             for a in (m.get("aliases") or []):
                 aliases.add(str(a))
             for k, v in m.items():
-                if k in ("name", "aliases"):
+                if k in ("name", "aliases", "intelligence"):
                     continue
                 if not merged.get(k) and v:
                     merged[k] = v
                 elif (k in _SCALAR_CONFLICT_KEYS and isinstance(v, str)
                       and isinstance(merged.get(k), str) and merged[k] and v and merged[k] != v):
                     conflicts.append({"field": k, "kept": merged[k], "dropped": v, "from": vn})
+        merged_intelligence, intelligence_conflicts = _merge_actor_intelligence(members)
+        if merged_intelligence:
+            merged["intelligence"] = merged_intelligence
+        conflicts.extend(intelligence_conflicts)
         aliases.discard(str(merged.get("name") or ""))
         if aliases:
             merged["aliases"] = sorted(aliases)

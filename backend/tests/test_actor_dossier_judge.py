@@ -15,29 +15,36 @@ import deerflow_research as dr  # noqa: E402
 
 
 def test_dossier_passes_all_high():
-    sc = {"scores": {k: 5 for k in dr._JUDGE_DIMS}, "verdict": "PASS"}
+    sc = {"scores": dict.fromkeys(dr._JUDGE_DIMS, 5), "verdict": "PASS"}
     assert dr.dossier_passes(sc) is True
 
 
 def test_dossier_passes_fails_on_low_critical_dim():
-    sc = {"scores": {**{k: 4 for k in dr._JUDGE_DIMS}, "cast_correctness": 3}}
+    sc = {"scores": {**dict.fromkeys(dr._JUDGE_DIMS, 4), "cast_correctness": 3}}
     assert dr.dossier_passes(sc) is False        # a critical dim < 4
 
 
 def test_dossier_passes_fails_on_any_dim_below_3():
-    sc = {"scores": {**{k: 5 for k in dr._JUDGE_DIMS}, "history_evolution": 2}}
+    sc = {"scores": {**dict.fromkeys(dr._JUDGE_DIMS, 5), "history_evolution": 2}}
     assert dr.dossier_passes(sc) is False        # any dim < 3
 
 
 def test_dossier_passes_allows_noncritical_at_3():
-    sc = {"scores": {**{k: 5 for k in dr._JUDGE_DIMS}, "history_evolution": 3, "salience_ranking": 3}}
+    sc = {
+        "verdict": "PASS",
+        "scores": {
+            **dict.fromkeys(dr._JUDGE_DIMS, 5),
+            "history_evolution": 3,
+            "salience_ranking": 3,
+        },
+    }
     assert dr.dossier_passes(sc) is True          # criticals >=4, none <3, mean >=4
 
 
-def test_dossier_passes_degrades_without_scorecard():
-    assert dr.dossier_passes(None) is True
-    assert dr.dossier_passes({}) is True                      # no scores, no FAIL → don't block
-    assert dr.dossier_passes({"verdict": "FAIL"}) is False    # explicit FAIL, no scores
+def test_dossier_passes_fails_closed_without_complete_scorecard():
+    assert dr.dossier_passes(None) is False
+    assert dr.dossier_passes({}) is False
+    assert dr.dossier_passes({"verdict": "FAIL"}) is False
 
 
 def test_build_judge_prompt_mentions_dims_and_question():

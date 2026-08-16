@@ -26,6 +26,7 @@ for _p in (_BACKEND, _BRIDGE):
         sys.path.insert(0, _p)
 
 import deerflow_research as dr  # noqa: E402
+from app.services import pipeline_orchestrator as po  # noqa: E402
 
 
 # ------------------------------------------------------------------ _question_hash
@@ -153,6 +154,52 @@ def test_plan_resume_non_list_completed_passes_coerced():
     assert plan["completed_passes"] == []
 
 
+@pytest.mark.parametrize(
+    ("field", "expected", "reason"),
+    [
+        ("expected_run_id", "run-other", "run_id mismatch"),
+        ("expected_attempt_id", "attempt-other", "attempt_id mismatch"),
+        ("expected_lane_id", "lane-other", "lane_id mismatch"),
+    ],
+)
+def test_plan_resume_rejects_cross_lineage_checkpoint(
+        tmp_path, field, expected, reason):
+    dr.write_research_checkpoint(
+        tmp_path,
+        thread_id="thread-a",
+        completed_passes=["deep-opening"],
+        fetched_source_count=2,
+        gaps=[],
+        depth="deep",
+        question_hash=dr._question_hash("Q"),
+        run_id="run-a",
+        attempt_id="attempt-a",
+        lane_id="lane-a",
+    )
+    checkpoint = dr.load_research_checkpoint(tmp_path)
+    plan = dr.plan_research_resume(
+        checkpoint, "Q", "deep", **{field: expected})
+    assert plan["resume"] is False
+    assert reason in plan["reason"]
+
+
+def test_plan_resume_rejects_tampered_checkpoint_identity(tmp_path):
+    dr.write_research_checkpoint(
+        tmp_path,
+        thread_id="thread-a",
+        completed_passes=["deep-opening"],
+        fetched_source_count=2,
+        gaps=[],
+        depth="deep",
+        question_hash=dr._question_hash("Q"),
+    )
+    checkpoint = dr.load_research_checkpoint(tmp_path)
+    checkpoint["completed_passes"].append("deep-phase-1")
+    plan = dr.plan_research_resume(checkpoint, "Q", "deep")
+    assert plan["resume"] is False
+    assert plan["reason"] == "checkpoint identity mismatch"
+
+
 # ------------------------------------------------------ should_run_pass (pure planner)
 
 def test_should_run_pass_no_resume_always_runs():
@@ -273,11 +320,196 @@ def test_normal_run_does_not_route_to_extract_only(tmp_path, monkeypatch):
 # ------------------------------------------------------ 编排器 _has_research_checkpoint
 
 def test_orchestrator_has_research_checkpoint(tmp_path):
-    from app.services.pipeline_orchestrator import _has_research_checkpoint
     hd = str(tmp_path)
-    assert _has_research_checkpoint(hd) is False
+    assert po._has_research_checkpoint(hd) is False
     cp = tmp_path / "research_checkpoint.json"
     cp.write_text("", encoding="utf-8")  # 空文件 → 视为无
-    assert _has_research_checkpoint(hd) is False
+    assert po._has_research_checkpoint(hd) is False
     cp.write_text(json.dumps({"thread_id": "t"}), encoding="utf-8")
-    assert _has_research_checkpoint(hd) is True
+    assert po._has_research_checkpoint(hd) is True
+
+
+# ------------------------------------------ parent explicit-resume authority
+
+def _write_parent_resume_checkpoint(tmp_path):
+    dr.write_research_checkpoint(
+        tmp_path,
+        thread_id="research-durable-thread",
+        completed_passes=["deep-opening", "deep-phase-1"],
+        fetched_source_count=12,
+        gaps=["remaining gap"],
+        depth="deep",
+        question_hash=dr._question_hash("Will X happen?"),
+        run_id="pipe-resume",
+        attempt_id="task-original",
+        lane_id="outer-track-1",
+    )
+    return dr.load_research_checkpoint(tmp_path)
+
+
+def test_parent_accepts_exact_prior_attempt_for_fresh_task_resume(tmp_path):
+    checkpoint = _write_parent_resume_checkpoint(tmp_path)
+
+    lineage = po._validated_research_checkpoint_lineage(
+        str(tmp_path),
+        prompt="Will X happen?",
+        depth="deep",
+        run_id="pipe-resume",
+        lane_id="outer-track-1",
+        expected_attempt_ids={"task-original", "task-fresh"},
+    )
+
+    assert lineage == {
+        "attempt_id": "task-original",
+        "checkpoint_id": checkpoint["checkpoint_id"],
+        "thread_id": "research-durable-thread",
+    }
+    bridge_plan = dr.plan_research_resume(
+        checkpoint,
+        "Will X happen?",
+        "deep",
+        expected_run_id="pipe-resume",
+        expected_attempt_id=lineage["attempt_id"],
+        expected_lane_id="outer-track-1",
+        expected_checkpoint_id=lineage["checkpoint_id"],
+    )
+    assert bridge_plan["resume"] is True
+    assert dr.should_run_pass(
+        "deep-opening", bridge_plan["completed_passes"], True
+    ) is False
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"prompt": "Will Y happen?"},
+        {"run_id": "pipe-other"},
+        {"lane_id": "outer-track-2"},
+        {"expected_attempt_ids": {"task-other"}},
+    ],
+)
+def test_parent_rejects_cross_lineage_resume_checkpoint(tmp_path, overrides):
+    _write_parent_resume_checkpoint(tmp_path)
+    arguments = {
+        "prompt": "Will X happen?",
+        "depth": "deep",
+        "run_id": "pipe-resume",
+        "lane_id": "outer-track-1",
+        "expected_attempt_ids": {"task-original"},
+        **overrides,
+    }
+
+    assert po._validated_research_checkpoint_lineage(
+        str(tmp_path), **arguments
+    ) == {}
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("thread_id", "research-tampered-thread"),
+        ("completed_passes", ["deep-opening", "deep-phase-2"]),
+        ("fetched_source_count", 999),
+        ("gaps", ["rewritten gap"]),
+    ],
+)
+def test_parent_rejects_tampered_resume_checkpoint_identity(
+    tmp_path, field, value,
+):
+    checkpoint = _write_parent_resume_checkpoint(tmp_path)
+    checkpoint[field] = value
+    (tmp_path / dr.RESEARCH_CHECKPOINT_FILENAME).write_text(
+        json.dumps(checkpoint, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    assert po._validated_research_checkpoint_lineage(
+        str(tmp_path),
+        prompt="Will X happen?",
+        depth="deep",
+        run_id="pipe-resume",
+        lane_id="outer-track-1",
+        expected_attempt_ids={"task-original"},
+    ) == {}
+
+
+def test_parent_rejects_resealed_malformed_completed_passes(tmp_path):
+    checkpoint = _write_parent_resume_checkpoint(tmp_path)
+    checkpoint["completed_passes"] = ["deep-opening", {"forged": True}]
+    checkpoint["checkpoint_id"] = dr._checkpoint_identity(checkpoint)
+    (tmp_path / dr.RESEARCH_CHECKPOINT_FILENAME).write_text(
+        json.dumps(checkpoint, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    assert po._validated_research_checkpoint_lineage(
+        str(tmp_path),
+        prompt="Will X happen?",
+        depth="deep",
+        run_id="pipe-resume",
+        lane_id="outer-track-1",
+        expected_attempt_ids={"task-original"},
+    ) == {}
+
+
+def test_runner_uses_prior_checkpoint_identity_with_fresh_budget_database(
+    tmp_path, monkeypatch,
+):
+    deerflow_dir = tmp_path / "deer-flow"
+    deerflow_dir.mkdir()
+    (deerflow_dir / "deerflow_research.py").write_text(
+        "# test entrypoint\n", encoding="utf-8"
+    )
+    handoff = tmp_path / "handoff"
+    handoff.mkdir()
+    (handoff / "research_report.md").write_text(
+        "research evidence " * 40, encoding="utf-8"
+    )
+    captured = {}
+
+    class CompletedProcess:
+        pid = 4322
+        stdout = []
+
+        @staticmethod
+        def poll():
+            return 0
+
+        @staticmethod
+        def wait(timeout=None):
+            return 0
+
+    def fake_popen(*args, **kwargs):
+        captured["cmd"] = args[0]
+        captured["env"] = kwargs["env"]
+        return CompletedProcess()
+
+    monkeypatch.setattr(po.Config, "DEERFLOW_DIR", str(deerflow_dir))
+    monkeypatch.setattr(po.Config, "UPLOAD_FOLDER", str(tmp_path / "uploads"))
+    monkeypatch.setattr(po, "_sync_deerflow_bridge_if_stale", lambda _path: None)
+    monkeypatch.setattr(po.subprocess, "Popen", fake_popen)
+    fresh_db = tmp_path / "fresh-task" / "research_budget.sqlite3"
+    fresh_telemetry = tmp_path / "research_budget.json"
+
+    po.DeerFlowResearchRunner.run(
+        "Will X happen?",
+        str(handoff),
+        on_progress=lambda _pct, _message: None,
+        timeout=10,
+        resume=True,
+        budget_db_path=str(fresh_db),
+        budget_telemetry_path=str(fresh_telemetry),
+        budget_run_id="pipe-resume",
+        budget_lane_id="outer-track-1",
+        budget_epoch="task-fresh",
+        resume_attempt_id="task-original",
+        resume_checkpoint_id="checkpoint_parent_validated",
+    )
+
+    assert "--resume" in captured["cmd"]
+    assert captured["env"]["RESEARCH_BUDGET_DB"] == str(fresh_db)
+    assert captured["env"]["RESEARCH_BUDGET_EPOCH"] == "task-original"
+    assert captured["env"]["RESEARCH_BUDGET_RUN_ID"] == "pipe-resume"
+    assert captured["env"]["RESEARCH_BUDGET_LANE_ID"] == "outer-track-1"
+    assert (
+        captured["env"]["RESEARCH_CHECKPOINT_ID"]
+        == "checkpoint_parent_validated"
+    )

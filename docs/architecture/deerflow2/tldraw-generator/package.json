@@ -1,0 +1,18 @@
+{
+  "name": "deepagentforecast-deerflow2-tldraw",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "render": "vite --host 127.0.0.1",
+    "validate": "node scripts/validate.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "6.0.3",
+    "react": "19.2.1",
+    "react-dom": "19.2.1",
+    "tldraw": "5.2.5",
+    "vite": "8.1.5"
+  }
+}

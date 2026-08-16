@@ -29,14 +29,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.utils.actors import (  # noqa: E402
     REL_EDGE_NAME,
     REL_LABEL,
+    actor_briefing,
+    actor_intelligence_dimension_presence,
+    actors_digest,
     behavioral_dna_block,
     build_initial_follow_graph,
+    dossier_coverage,
     entity_archetype,
     entity_simulation_tier,
     is_agent_eligible,
     normalize_name,
     relation_polarity,
     relation_valence,
+    reconcile_cast,
     relational_roster,
     salience_score,
 )
@@ -451,3 +456,136 @@ def test_ontology_from_actors_empty_when_no_types():
     assert ontology_from_actors(None) == {}
     assert ontology_from_actors({"actors": [{"name": "A"}]}) == {}  # no type, no rels
     assert ontology_seed_block(None) == ""                          # renderer degrades to ""
+
+
+def _intel_claim(text, source, **extra):
+    return {"claim": text, "source_refs": [source], "confidence": "high", **extra}
+
+
+def test_canonical_actor_intelligence_coverage_and_legacy_context_helpers():
+    actor = {
+        "name": "Intelligent Actor",
+        "simulation_tier": 1,
+        "intelligence": {
+            "schema_version": "actor-intelligence/v1",
+            "dimensions": {
+                "identity_history": {"claims": [_intel_claim("Founded in 2001.", "S-H")]},
+                "values_worldview": {"claims": [_intel_claim("Values continuity.", "S-V")]},
+                "incentives": {"claims": [_intel_claim("Revenue protects autonomy.", "S-N")]},
+                "motivations": {"claims": [_intel_claim("Preserve market leadership.", "S-M")]},
+                "capabilities": {"claims": [_intel_claim("Can deploy a large sales force.", "S-C")]},
+                "constraints": {"claims": [_intel_claim("Must retain licenses.", "S-X")]},
+                "operational_preferences": {"claims": [_intel_claim("Prefers negotiated rules.", "S-P")]},
+                "alliances": {"claims": [_intel_claim("Works with Trade Group.", "S-L")]},
+                "opponents_competitors": {"claims": [_intel_claim("Competes with Rival.", "S-O")]},
+                "current_actions": {"claims": [_intel_claim("Is expanding in Region A.", "S-A")]},
+                "future_plans": {"claims": [_intel_claim("Plans a 2028 launch if licensed.", "S-F")]},
+                "investments_capital_allocation": {"claims": [
+                    _intel_claim("Allocated $2 billion to the launch.", "S-I")
+                ]},
+                "decision_rights_process_triggers": {"claims": [
+                    _intel_claim("Board approval is required.", "S-D")
+                ]},
+                "track_record": {"claims": [_intel_claim("Delayed a prior launch.", "S-T")]},
+                "likely_actions": {"claims": [_intel_claim("Likely to seek approval.", "S-Y")]},
+                "red_lines": {"claims": [_intel_claim("Will not exit its home market.", "S-R")]},
+                "knowledge_state": {"claims": [_intel_claim("Knows internal demand.", "S-K")]},
+            },
+            "context_pack": {
+                "actor_relevant_report_sections": [{"claim": "Demand is rising."}],
+            },
+            "evidence_gaps": {"future_plans": ["License timing is unknown."]},
+            "coverage": {"required_dimensions": 17, "covered_dimensions": 17},
+            "provenance": {"report_sha256": "a" * 64},
+        },
+    }
+    presence = actor_intelligence_dimension_presence(actor)
+    assert all(presence.values())
+
+    coverage = dossier_coverage({"actors": [actor], "relationships": []})
+    assert coverage["n_actor_intelligence_v1"] == 1
+    assert coverage["pct_actors_with_actor_intelligence"] == 1.0
+    assert coverage["pct_tier12_with_complete_actor_intelligence"] == 1.0
+    assert coverage["pct_intelligence_with_future_plans"] == 1.0
+    assert coverage["pct_intelligence_with_source_refs"] == 1.0
+
+    briefing = actor_briefing(actor)
+    assert "Is expanding in Region A" in briefing
+    assert "Plans a 2028 launch" in briefing
+    assert "Allocated $2 billion" in briefing
+    assert "License timing is unknown" in briefing
+    digest = actors_digest({"actors": [actor]}, max_chars=2000)
+    assert "Is expanding in Region A" in digest
+    assert "Plans a 2028 launch" in digest
+    assert "Allocated $2 billion" in digest
+
+
+def test_reconcile_cast_unions_intelligence_claims_and_audits_conflicts():
+    actor_a = {
+        "name": "Northstar Energy",
+        "aliases": ["Northstar"],
+        "role": "Grid operator",
+        "intelligence": {
+            "schema_version": "actor-intelligence/v1",
+            "dimensions": {
+                "identity_history": {"claims": [_intel_claim("Founded in 2004.", "S1")]},
+                "capabilities": {"claims": [_intel_claim("Operates 2 GW.", "S2")]},
+                "current_actions": {"claims": [
+                    _intel_claim("Build storage.", "S3", status="active")
+                ]},
+                "future_plans": {"claims": [_intel_claim("Acquire StorageCo.", "S4")]},
+                "operational_preferences": {"claims": [_intel_claim("Prefers staged rules.", "S5")]},
+            },
+            "evidence_gaps": {"investments": ["Amount unknown."]},
+            "source_refs": ["S1", "S2"],
+        },
+    }
+    actor_b = {
+        "name": "Northstar Energy Corp.",
+        "aliases": ["Northstar Energy"],
+        "stance": "Reliability first",
+        "intelligence": {
+            "schema_version": "actor-intelligence/v1",
+            "dimensions": {
+                "current_actions": {"claims": [
+                    _intel_claim("Build storage.", "S6", status="paused")
+                ]},
+                "future_plans": {"claims": [_intel_claim("Enter Region B.", "S7")]},
+                "investments_capital_allocation": {"claims": [
+                    _intel_claim("Budget $800 million for storage.", "S8")
+                ]},
+            },
+            "evidence_gaps": {"future_plans": ["Region B date unknown."]},
+            "source_refs": ["S6", "S8"],
+        },
+    }
+    reconciled, audit = reconcile_cast({
+        "actors": [actor_a, actor_b],
+        "relationships": [{
+            "source": "Northstar Energy Corp.",
+            "target": "Counterparty",
+            "type": "OPPOSES",
+        }],
+    })
+
+    assert len(reconciled["actors"]) == 1
+    intelligence = reconciled["actors"][0]["intelligence"]
+    dimensions = intelligence["dimensions"]
+    assert len(dimensions["future_plans"]["claims"]) == 2
+    assert dimensions["capabilities"]["claims"][0]["claim"] == "Operates 2 GW."
+    assert dimensions["investments_capital_allocation"]["claims"][0]["claim"].startswith("Budget")
+    current = dimensions["current_actions"]["claims"][0]
+    assert current["source_refs"] == ["S3", "S6"]
+    assert current["status"] == "active"
+    assert intelligence["source_refs"] == ["S1", "S2", "S6", "S8"]
+    assert intelligence["evidence_gaps"] == {
+        "investments": ["Amount unknown."],
+        "future_plans": ["Region B date unknown."],
+    }
+    provenance = intelligence["merge_provenance"]
+    assert any(item["dimension"] == "future_plans" for item in provenance["claim_variants"])
+    assert any(
+        item["dimension"] == "current_actions" and item["field"] == "status"
+        for item in provenance["conflicts"]
+    )
+    assert audit["merged"][0]["conflicts"]

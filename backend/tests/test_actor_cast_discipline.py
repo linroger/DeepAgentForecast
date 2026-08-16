@@ -9,8 +9,9 @@ Offline: no LLM/network. Covers:
   安全网（绝不清空阵容）、cap=0 恢复旧行为；
 - 抽取/本体提示词携带主角色纪律措辞（cap 数字 + 媒体排除）；
 - 模拟 agent 池派生（simulation_manager.select_agent_pool）：主阵容路径（不再向
-  OASIS_MAX_AGENTS 填充图谱通用节点）、媒体排除、无 actors 时按 cap 裁剪、
-  ACTOR_CAST_MAX unset-high 时逐字节恢复旧 T3.13 填充行为；
+  OASIS_MAX_AGENTS 填充图谱通用节点）、current-v1 在 cap=0/unset-high 下仍只接纳
+  研究 actor、媒体排除、无 actors 时按 cap 裁剪、unversioned ACTOR_CAST_MAX
+  unset-high 时逐字节恢复旧 T3.13 填充行为；
 - 受众填充（SIM_AUDIENCE_AGENTS）：默认 0 → 无受众；>0 → M 个连续 agent_id 的受众配置
   + 与之对齐的零 LLM 受众 profile（generate_audience_profiles）。
 """
@@ -327,6 +328,43 @@ def test_pool_cast_discipline_caps_and_drops_unmatched(monkeypatch):
         assert f"Cast{i}" in names  # 高影响力主阵容必留
 
 
+@pytest.mark.parametrize(
+    ("actor_cast_max", "oasis_max_agents"),
+    [
+        (0, 80),       # historical disable sentinel
+        (999, 80),     # historical unset-high / graph-fill recovery sentinel
+        (1, 1),        # even a tiny legacy max cannot truncate the sealed roster
+    ],
+)
+def test_pool_current_v1_is_matched_only_under_all_legacy_max_sentinels(
+    monkeypatch,
+    actor_cast_max,
+    oasis_max_agents,
+):
+    monkeypatch.setattr(Config, "ACTOR_CAST_MAX", actor_cast_max, raising=False)
+    monkeypatch.setattr(Config, "OASIS_MAX_AGENTS", oasis_max_agents, raising=False)
+    rows = [
+        _actor(
+            f"Canonical{i}",
+            influence="high",
+            actor_id=f"actor_canonical_{i}",
+            intelligence={"schema_version": "actor-intelligence/v1"},
+        )
+        for i in range(2)
+    ]
+    dossier = _make_actors(rows)
+    dossier["actor_intelligence_contract"] = {
+        "schema_version": "actor-intelligence/v1",
+    }
+    entities = [_entity(row["name"]) for row in rows]
+    entities += [_entity(f"UNMATCHED_GRAPH_SENTINEL_{i}", n_edges=100) for i in range(5)]
+
+    kept = select_agent_pool(entities, actors=dossier)
+
+    assert {entity.name for entity in kept} == {"Canonical0", "Canonical1"}
+    assert not any("UNMATCHED_GRAPH_SENTINEL" in entity.name for entity in kept)
+
+
 def test_pool_cast_discipline_excludes_media_actors(monkeypatch):
     monkeypatch.setattr(Config, "OASIS_MAX_AGENTS", 80, raising=False)
     monkeypatch.setattr(Config, "ACTOR_CAST_MAX", 20, raising=False)
@@ -407,6 +445,20 @@ def test_pool_legacy_recovery_unset_high(monkeypatch):
     names = {e.name for e in kept}
     assert all(f"Cast{i}" in names for i in range(10))
     assert any(n.startswith("GraphNoise") for n in names)  # 旧的填充行为可恢复
+
+
+def test_pool_unversioned_zero_cap_preserves_legacy_graph_fill(monkeypatch):
+    monkeypatch.setattr(Config, "OASIS_MAX_AGENTS", 80, raising=False)
+    monkeypatch.setattr(Config, "ACTOR_CAST_MAX", 0, raising=False)
+    rows = [_actor("LegacyCast", influence="high")]
+    entities = [_entity("LegacyCast"), _entity("LEGACY_GRAPH_FILL_SENTINEL")]
+
+    kept = select_agent_pool(entities, actors=_make_actors(rows))
+
+    assert [entity.name for entity in kept] == [
+        "LegacyCast",
+        "LEGACY_GRAPH_FILL_SENTINEL",
+    ]
 
 
 def test_pool_legacy_under_cap_untouched(monkeypatch):

@@ -1,0 +1,1823 @@
+{
+  "schema_version": "1.0.0",
+  "inventory_kind": "system_interfaces_and_data_passes",
+  "generated_date": "2026-07-22",
+  "source_revision": "fcf7378b2e2fabcfd836fb6e2c512fe153c6727c",
+  "record_count": 68,
+  "scope": {
+    "included": [
+      "DeerFlow 2.0 browser, gateway, runtime, model, tool, skill, sandbox, persistence, streaming, and artifact boundaries",
+      "Current DeepResearchForecast Stage-1 API-to-orchestrator-to-embedded-DeerFlow-2 bridge, including the default single shared Track-B actor-intelligence path and its artifact handoff",
+      "Implemented/configured drf2 target interfaces, explicitly marked pre-cutover"
+    ],
+    "excluded": [
+      "DeerFlow 1.x",
+      "Detailed downstream simulation/report internals outside the DeerFlow 2 integration boundary"
+    ],
+    "interpretation": "The 68 interfaces below are mapped from the current working tree atop source_revision. Each entry is a typed boundary, not necessarily a network API. passes_and_receptions records who sends, who receives, and what crosses. Authority describes which side is canonical for that datum; durability describes what survives process restart."
+  },
+  "status_legend": {
+    "native_available": "Implemented in public DeerFlow 2.0 and cross-checked against the optional local source drop; enabled/disabled by deployment policy. The clean-clone fallback pin is an older DeerFlow 2 revision.",
+    "active_current": "Part of the current authoritative DeepAgentForecast Stage-1 path.",
+    "conditional_current": "Part of the current path only when a flag, mode, data condition, retry, or failure path is active.",
+    "pre_cutover": "Implemented/configured in drf2 but not yet authoritative for production runs.",
+    "opaque_external": "The repository sees only the outer request/response contract."
+  },
+  "interfaces": [
+    {
+      "id": "native.browser_turn_submission",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "user_input",
+      "direction": "browser_to_gateway",
+      "producer": "DeerFlow 2.0 web client thread composer",
+      "input": "Typed user text plus selected model, thinking flag, enabled subagents, attachments/resources, and thread/runtime options.",
+      "transport": "Frontend state -> JSON request and streaming client hook.",
+      "receiver": "Gateway thread/run endpoints.",
+      "output": "A new or existing thread identifier, run identifier, and live event subscription.",
+      "authority": "The submitted user message is authoritative user input; the gateway validates and normalizes the run envelope.",
+      "durability": "The browser form is transient. Accepted messages become thread checkpoint/run state.",
+      "security_boundary": "Browser-originated content is untrusted and crosses HTTP, CSRF/auth, context allowlisting, upload/resource validation, and tool/sandbox policy boundaries.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "user", "receiver": "frontend composer", "payload": "text, options, resource selections"},
+        {"step": 2, "sender": "frontend composer", "receiver": "gateway", "payload": "thread/run JSON plus credentials and stream controls"},
+        {"step": 3, "sender": "gateway", "receiver": "frontend stream hook", "payload": "thread/run identity and event stream"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/frontend/src/core/threads/hooks.ts:526-568",
+        "deer-flow-2.0.0/frontend/src/core/threads/hooks.ts:944-989",
+        "deer-flow-2.0.0/frontend/src/core/api/api-client.ts:82-119"
+      ],
+      "notes": "The UI is one client. The Runs API and embedded client can submit equivalent turns without the browser."
+    },
+    {
+      "id": "native.browser_file_upload",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "binary_input",
+      "direction": "browser_to_gateway_to_workspace",
+      "producer": "Browser file picker/uploader",
+      "input": "One or more files within configured per-file size, aggregate size, count, filename, and path limits. A suffix is consulted only when optional document conversion is configured; there is no general upload extension allowlist in this path.",
+      "transport": "Multipart HTTP upload.",
+      "receiver": "Gateway upload router, then thread/user workspace and optional sandbox synchronization.",
+      "output": "Validated stored file metadata/path that can be referenced from run context or read by tools.",
+      "authority": "Stored workspace bytes are authoritative after successful validation/write; client filenames are labels, not trusted paths.",
+      "durability": "Files persist on the configured workspace/storage backend until removed by lifecycle policy.",
+      "security_boundary": "Filename/path normalization, per-file/aggregate size and count limits, user/thread workspace scope, and sandbox path mapping. Optional conversion can be suffix-specific, but unsupported extensions are not rejected by a general allowlist here.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "browser", "receiver": "upload router", "payload": "multipart filename, MIME metadata, bytes"},
+        {"step": 2, "sender": "upload router", "receiver": "workspace storage", "payload": "validated normalized bytes/path"},
+        {"step": 3, "sender": "workspace storage", "receiver": "run/tool context", "payload": "resource reference or sandbox-visible path"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/app/gateway/routers/uploads.py:213-320",
+        "deer-flow-2.0.0/config.example.yaml:1007-1045"
+      ],
+      "notes": "Document conversion is deployment-configurable and is not intrinsically an LLM call."
+    },
+    {
+      "id": "native.reverse_proxy_api_edge",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "network_edge",
+      "direction": "client_to_gateway_and_frontend",
+      "producer": "HTTP client",
+      "input": "Browser/API request paths, headers, cookies, bodies, and optional streaming connection.",
+      "transport": "Nginx HTTP reverse proxy with path routing/rewrite and buffering controls.",
+      "receiver": "Frontend server or gateway API.",
+      "output": "Proxied HTTP response or SSE stream.",
+      "authority": "Nginx owns external path routing; application services own request semantics.",
+      "durability": "None at the proxy layer.",
+      "security_boundary": "First deployed network boundary; preserves/sets forwarding headers and applies response/stream settings. Application auth remains downstream.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "client", "receiver": "nginx", "payload": "HTTP request"},
+        {"step": 2, "sender": "nginx", "receiver": "gateway or frontend", "payload": "routed/re-written request"},
+        {"step": 3, "sender": "gateway/frontend", "receiver": "client via nginx", "payload": "response bytes or unbuffered SSE"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/docker/nginx/nginx.conf:41-65"
+      ],
+      "notes": "SSE paths require response buffering to remain disabled end to end."
+    },
+    {
+      "id": "native.csrf_auth_and_identity",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "security_control",
+      "direction": "client_credentials_to_request_context",
+      "producer": "Browser/API client and gateway authentication dependencies",
+      "input": "Credentials/cookies, CSRF token/header for browser mutations, and requested user/thread identity.",
+      "transport": "HTTP headers/cookies and gateway dependency injection.",
+      "receiver": "Thread, run, upload, artifact, suggestion, and tool-context services.",
+      "output": "Authenticated user context or rejected request.",
+      "authority": "Gateway-authenticated identity is authoritative; arbitrary client context fields do not override it.",
+      "durability": "Authentication state depends on deployment; resolved request context is transient per request.",
+      "security_boundary": "Separates user-controlled request metadata from trusted runtime identity and ownership checks.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "client", "receiver": "gateway auth/CSRF layer", "payload": "credentials and anti-forgery token"},
+        {"step": 2, "sender": "auth layer", "receiver": "service/router", "payload": "validated user identity"},
+        {"step": 3, "sender": "service", "receiver": "store/runtime", "payload": "identity-bound operation"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/frontend/src/core/api/api-client.ts:17-39",
+        "deer-flow-2.0.0/backend/app/gateway/services.py:294-439"
+      ],
+      "notes": "Exact authentication backend is deployment-configurable; ownership validation remains a service boundary."
+    },
+    {
+      "id": "native.thread_creation_and_metadata",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "control_api",
+      "direction": "client_to_thread_store",
+      "producer": "Browser, SDK, or deterministic driver",
+      "input": "Optional client-selected thread_id plus thread metadata.",
+      "transport": "POST /api/threads and related thread APIs.",
+      "receiver": "Gateway thread service/store.",
+      "output": "Created or idempotently resolved thread record.",
+      "authority": "Thread store is canonical for ownership and metadata; checkpoint store is canonical for graph state.",
+      "durability": "Thread metadata survives restart only when the configured thread store is durable; an in-memory configuration is process-local.",
+      "security_boundary": "Path thread IDs are ownership-scoped and later path-based run/artifact operations validate that owner. The run-config seam described below can nevertheless choose a different effective checkpoint namespace during execution.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "client", "receiver": "thread router", "payload": "thread creation request"},
+        {"step": 2, "sender": "thread service", "receiver": "thread store", "payload": "owner-bound thread record"},
+        {"step": 3, "sender": "thread store", "receiver": "client", "payload": "thread metadata"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/app/gateway/routers/threads.py:247-324",
+        "drf2/driver/harness_client.py:93-111"
+      ],
+      "notes": "drf2's driver relies on the create operation being idempotent for one persistent path thread. That record does not by itself prove that every later run executes in the same effective checkpoint namespace."
+    },
+    {
+      "id": "native.run_creation",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "control_api",
+      "direction": "client_to_run_manager",
+      "producer": "Browser stream hook, SDK, or Runs API client",
+      "input": "Path thread ID plus RunCreate fields: assistant_id, input, command, metadata, broadly forwarded RunnableConfig overrides in config, allowlisted DeerFlow-specific overrides in context, webhook, checkpoint_id/checkpoint, interrupt_before/after, stream_mode/subgraphs/resumable, on_disconnect/on_completion, multitask_strategy, after_seconds, if_not_exists, and feedback_keys. The current service consumes only a subset of the declared lifecycle fields.",
+      "transport": "POST /api/threads/{thread_id}/runs or /runs/stream.",
+      "receiver": "Gateway run service and RunManager.",
+      "output": "RunRecord immediately, and optionally an SSE stream joined to its events.",
+      "authority": "RunManager/store owns lifecycle status; graph/checkpointer owns agent state. The route authenticates and looks up the path thread, but a client-supplied body.config.configurable.thread_id can currently select a different execution/checkpoint namespace.",
+      "durability": "Run records/events persist according to configured stores; live task handles are process-local.",
+      "security_boundary": "The path thread is ownership-checked and authenticated user_id is server-stamped. body.context uses a DeerFlow-key allowlist, but body.config is broadly forwarded: configurable.thread_id can override the path thread in the no-context branch and top-level values can override defaults such as recursion_limit. This is a current trust seam, not an owner-bound invariant.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "client", "receiver": "thread_runs router", "payload": "RunCreate body"},
+        {"step": 2, "sender": "router/service", "receiver": "RunManager", "payload": "path-owner-checked run specification plus broadly forwarded config overrides"},
+        {"step": 3, "sender": "RunManager", "receiver": "worker and client", "payload": "scheduled task plus RunRecord/run_id"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/app/gateway/routers/thread_runs.py:37-77",
+        "deer-flow-2.0.0/backend/app/gateway/routers/thread_runs.py:142-202",
+        "deer-flow-2.0.0/backend/app/gateway/services.py:294-439"
+      ],
+      "notes": "Background runs and stream-joined runs share the same run lifecycle, but disconnect policy differs. POST /runs/wait is a distinct create-and-wait route itemized next. webhook, checkpoint_id, inline checkpoint, stream_resumable, on_completion, after_seconds, if_not_exists, and feedback_keys are schema-declared but not consumed by the current start_run path. Schema-valid multitask_strategy=enqueue is rejected as HTTP 501. The config/thread namespace seam should be closed before treating gateway isolation as strict."
+    },
+    {
+      "id": "native.run_create_wait_state_reception",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "control_api",
+      "direction": "client_to_created_run_to_path_thread_final_state",
+      "producer": "Runs API client",
+      "input": "Path thread ID plus the same RunCreate body used by ordinary run creation.",
+      "transport": "POST /api/threads/{thread_id}/runs/wait.",
+      "receiver": "start_run schedules the worker; wait_for_run_completion observes its terminal record; the route then performs a checkpointer lookup keyed by the path thread ID.",
+      "output": "Final path-thread channel values when a checkpoint exists, otherwise a terminal status/error projection.",
+      "authority": "The created graph executes under the effective merged RunnableConfig, but the final response lookup reconstructs state from the path thread. A client-supplied configurable.thread_id override can therefore checkpoint namespace B while the wait response reads namespace A.",
+      "durability": "Run/state durability depends on the configured run store and checkpointer; the blocking HTTP wait itself is transient.",
+      "security_boundary": "The path thread is ownership-checked, but the broad body.config seam can select another execution/checkpoint namespace while the response remains path-keyed.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "client", "receiver": "runs/wait route", "payload": "path thread plus RunCreate body"},
+        {"step": 2, "sender": "route/start_run", "receiver": "RunManager and worker", "payload": "new run under effective merged config"},
+        {"step": 3, "sender": "run store/manager", "receiver": "wait_for_run_completion", "payload": "terminal run record"},
+        {"step": 4, "sender": "path-thread checkpoint lookup", "receiver": "client", "payload": "final channel values or status/error fallback"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/app/gateway/routers/thread_runs.py:178-202",
+        "deer-flow-2.0.0/backend/app/gateway/services.py:294-439"
+      ],
+      "notes": "This is create-and-wait, not a wait endpoint for an existing run. Its split effective-config/path-thread authority makes the configurable.thread_id seam externally observable."
+    },
+    {
+      "id": "native.run_concurrency_and_multitask_admission",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "concurrency_control",
+      "direction": "run_request_to_active_thread_slot",
+      "producer": "Run service",
+      "input": "New run plus existing active run state and requested multitask strategy.",
+      "transport": "In-process RunManager coordination backed by run store state.",
+      "receiver": "Existing run and/or newly scheduled worker.",
+      "output": "Accepted; rejected/conflict; or the prior run interrupted/rolled back before admission. Only reject, interrupt, and rollback are implemented; enqueue is schema-valid but returns HTTP 501.",
+      "authority": "The process-local RunManager serializes admission by path thread ID; it is not a distributed or effective-checkpoint-namespace lock.",
+      "durability": "Admission locks and task-cancellation handles are process-local. Run statuses survive restart only when the configured run store is durable; MemoryRunStore does not.",
+      "security_boundary": "It prevents overlapping runs admitted under the same path thread in one manager process. Because body.config can override configurable.thread_id, distinct path threads can still alias one effective checkpoint namespace.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "run service", "receiver": "RunManager", "payload": "thread_id, new run, multitask strategy"},
+        {"step": 2, "sender": "RunManager", "receiver": "active/new task", "payload": "admit/reject/interrupt decision"},
+        {"step": 3, "sender": "RunManager", "receiver": "client", "payload": "run record or conflict"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/app/gateway/services.py:294-439",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/runtime/runs/manager.py:543-629"
+      ],
+      "notes": "drf2's deterministic Runs API client uses multitask_strategy=reject to preserve intended single-writer behavior on its one path thread. That is not a strict global checkpoint-namespace invariant until the config/thread override seam is closed. There is no implemented queue/replacement behavior in this source snapshot."
+    },
+    {
+      "id": "native.worker_graph_input_and_runtime_context",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "runtime_boundary",
+      "direction": "run_manager_to_langgraph",
+      "producer": "Gateway run worker",
+      "input": "Normalized input/command; authenticated user_id; path-derived run identity; and merged client/server RunnableConfig containing model/thinking/subagent configuration, resources, sandbox/workspace, recursion and stream settings. Client body.config is not comprehensively allowlisted.",
+      "transport": "In-process worker constructs RunnableConfig and RuntimeContext, then calls graph.astream.",
+      "receiver": "Compiled lead-agent LangGraph.",
+      "output": "Graph state transitions and namespaced stream events.",
+      "authority": "Authenticated user_id is server-stamped and body.context is selectively merged, but config.configurable.thread_id and arbitrary top-level RunnableConfig values can survive into the worker. The effective config/checkpoint namespace, not merely the path thread, governs graph execution.",
+      "durability": "Runtime objects are transient; accepted state transitions are checkpointed.",
+      "security_boundary": "This is the main control/data-plane join. Authenticated identity and allowlisted body.context fields are bounded, but broad body.config forwarding leaves a current thread-namespace and runtime-option trust seam before tools, model factories, sandbox, memory, and subagents.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "RunManager", "receiver": "worker", "payload": "RunRecord and validated request"},
+        {"step": 2, "sender": "worker", "receiver": "LangGraph", "payload": "input/command plus server-stamped identity and merged, partly client-controlled runtime config"},
+        {"step": 3, "sender": "LangGraph", "receiver": "worker", "payload": "events and terminal graph outcome"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/runtime/runs/worker.py:124-337",
+        "deer-flow-2.0.0/backend/app/gateway/services.py:294-439"
+      ],
+      "notes": "Embedded DeerFlowClient builds an equivalent graph/runtime boundary in-process without gateway HTTP."
+    },
+    {
+      "id": "native.middleware_state_pipeline",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "state_transform",
+      "direction": "graph_state_through_middleware_to_model_and_tools",
+      "producer": "Lead-agent graph",
+      "input": "Current AgentState, runtime context, model request, tool calls, and tool results.",
+      "transport": "Ordered LangChain/LangGraph AgentMiddleware hooks around model and tool execution.",
+      "receiver": "Subsequent middleware, model node, tool node, and final graph state.",
+      "output": "Injected/trimmed/summarized messages, selected model/tools, normalized errors, title/memory updates, loop/safety decisions, and budgeted tool messages.",
+      "authority": "Middleware order is authoritative for how state and tool/model requests are transformed.",
+      "durability": "Only resulting state updates are checkpointed; middleware objects/caches are generally process-local.",
+      "security_boundary": "Enforces tool policy, sandbox/tool-result bounds, safety finish reasons, loop detection, and runtime-owned identity around untrusted model actions.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "graph", "receiver": "before-model middleware chain", "payload": "state and model request"},
+        {"step": 2, "sender": "middleware chain", "receiver": "model or tool", "payload": "transformed request"},
+        {"step": 3, "sender": "model/tool", "receiver": "after-model/after-tool chain", "payload": "AIMessage or tool result"},
+        {"step": 4, "sender": "middleware chain", "receiver": "graph state", "payload": "validated/transformed update"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/lead_agent/agent.py:261-405",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/middlewares/tool_error_handling_middleware.py:129-248"
+      ],
+      "notes": "Summarization, title, memory, and subagent model calls are itemized in the call inventory."
+    },
+    {
+      "id": "native.model_provider_request_response",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "model_api",
+      "direction": "harness_to_provider_and_back",
+      "producer": "Lead/subagent/middleware model wrapper",
+      "input": "Normalized messages, system instructions, bound tool schemas, max tokens, thinking/reasoning configuration, sampling parameters, credentials, and timeout/retry settings.",
+      "transport": "Provider SDK or direct HTTP. The inspected native providers do not invoke a local CLI subprocess for inference.",
+      "receiver": "Configured model provider.",
+      "output": "AIMessage content/reasoning/tool_calls, usage, finish reason, response metadata, or typed error.",
+      "authority": "Provider response is authoritative only as model output; tool calls remain proposals subject to harness policy and validation.",
+      "durability": "Response enters checkpoint/run events according to graph/store policy; provider-side retention is external.",
+      "security_boundary": "Credentials and selected context leave the local runtime. Provider configuration and tool-schema exposure bound what is sent.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "model wrapper", "receiver": "provider", "payload": "prompt/messages/tool schemas and inference parameters"},
+        {"step": 2, "sender": "provider", "receiver": "model wrapper", "payload": "completion/tool calls/usage or error"},
+        {"step": 3, "sender": "model wrapper", "receiver": "graph/middleware", "payload": "normalized AIMessage or exception"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/lead_agent/agent.py:405-545",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/models/factory.py:82-204",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/models/claude_provider.py:28-145",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/models/openai_codex_provider.py:19-107",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/models/openai_codex_provider.py:205-255"
+      ],
+      "notes": "Claude can source OAuth credentials from Claude CLI-origin auth but invokes the Anthropic SDK. The Codex provider can read Codex CLI-origin credentials but calls the Codex Responses endpoint directly over HTTP. Credential provenance is not inference transport. Logical call families and retry multiplicity are enumerated separately in deerflow2-call-inventory.json."
+    },
+    {
+      "id": "native.tool_registry_assembly",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "capability_discovery",
+      "direction": "config_extensions_to_agent_toolset",
+      "producer": "Harness config loader and tool builder",
+      "input": "Configured builtin/config-reflected tools, tool groups, MCP/ACP extensions, runtime sandbox capabilities, model capabilities, and enabled feature flags.",
+      "transport": "In-process reflection/import plus extension discovery.",
+      "receiver": "Lead-agent/subagent tool binding and deferred tool catalog.",
+      "output": "Deduplicated named tools with schemas, descriptions, groups, and execution callables.",
+      "authority": "Configured/local tool registry and extension discovery are authoritative; name precedence/deduplication determines collisions.",
+      "durability": "Registry is built per agent/runtime and cached as implementation permits; configuration files are durable.",
+      "security_boundary": "Bash, vision, sandbox, user, and policy gates can omit tools even if configured.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "config and extension loaders", "receiver": "tool builder", "payload": "tool definitions and enabled flags"},
+        {"step": 2, "sender": "tool builder", "receiver": "policy/deferred catalog", "payload": "deduplicated tool objects"},
+        {"step": 3, "sender": "policy/catalog", "receiver": "agent model", "payload": "currently exposed tool schemas"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/tools/tools.py:44-176"
+      ],
+      "notes": "A configured tool is not necessarily exposed to every agent or every turn."
+    },
+    {
+      "id": "native.deferred_tool_search_and_promotion",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "capability_discovery",
+      "direction": "agent_query_to_deferred_catalog_to_active_tools",
+      "producer": "Lead/subagent model via tool_search",
+      "input": "Text query over a policy-filtered catalog of deferred tool names/descriptions/schemas.",
+      "transport": "Local tool invocation and catalog search/hash matching.",
+      "receiver": "DeferredToolManager/catalog.",
+      "output": "Matching tool metadata and promotion of selected tools into subsequent model requests.",
+      "authority": "The policy-filtered catalog is authoritative; tool_search cannot promote a tool excluded by allowed-tool policy.",
+      "durability": "Catalog and promotions are runtime/thread state, not external durable artifacts unless reflected in checkpoint messages.",
+      "security_boundary": "Prevents the model from discovering/promoting tools outside the current agent/skill policy.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "model", "receiver": "tool_search", "payload": "capability query"},
+        {"step": 2, "sender": "tool_search", "receiver": "deferred catalog", "payload": "normalized search/hash request"},
+        {"step": 3, "sender": "catalog", "receiver": "model/tool binder", "payload": "matches and promoted tool schemas"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/tools/builtins/tool_search.py:50-221",
+        "drf2/config/config.yaml:134-137"
+      ],
+      "notes": "Current Stage-1 config disables tool_search; drf2 pre-cutover enables it for the larger KG/simulation catalog."
+    },
+    {
+      "id": "native.tool_call_dispatch_and_result",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "agent_action",
+      "direction": "model_to_tool_to_model",
+      "producer": "AIMessage.tool_calls",
+      "input": "Tool name, call ID, and JSON arguments proposed by the model.",
+      "transport": "LangGraph tool node through validation, policy, middleware, and the tool callable.",
+      "receiver": "Builtin/config-reflected/MCP/ACP/sandbox tool.",
+      "output": "ToolMessage containing text/structured/multimodal result or a normalized error.",
+      "authority": "Tool implementation owns observed result; the model does not execute actions directly.",
+      "durability": "ToolMessage joins checkpoint state. Side effects/files persist only according to tool/backend semantics.",
+      "security_boundary": "Tool name/schema validation, allowed-tool policy, runtime identity, sandbox/path checks, error handling, and output budget all interpose.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "model", "receiver": "tool node", "payload": "tool name, call_id, arguments"},
+        {"step": 2, "sender": "tool node", "receiver": "tool implementation", "payload": "validated arguments plus trusted runtime context"},
+        {"step": 3, "sender": "tool implementation", "receiver": "tool middleware", "payload": "raw result or exception"},
+        {"step": 4, "sender": "tool middleware", "receiver": "model via graph", "payload": "bounded ToolMessage"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/lead_agent/agent.py:405-545",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/middlewares/tool_error_handling_middleware.py:59-126"
+      ],
+      "notes": "The next model invocation receives the ToolMessage, producing the iterative agent loop."
+    },
+    {
+      "id": "native.mcp_tool_discovery",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "extension_protocol",
+      "direction": "harness_to_mcp_server_and_back",
+      "producer": "MCP extension loader",
+      "input": "Enabled MCP server definitions, transport settings, command/URL, environment, auth, and runtime user/thread scoping.",
+      "transport": "MCP stdio or HTTP/session transport.",
+      "receiver": "Configured MCP server.",
+      "output": "Remote tool list/schemas wrapped as DeerFlow-compatible tools.",
+      "authority": "The MCP server advertises its tools; local config and policy decide whether each is enabled/exposed.",
+      "durability": "Server configuration is durable; discovered wrappers/session pools are runtime state.",
+      "security_boundary": "Launching a stdio server crosses a process/env boundary; HTTP crosses a network/auth boundary. Tool policy still filters advertised capabilities.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "extension loader", "receiver": "MCP server", "payload": "initialize/list_tools under configured transport"},
+        {"step": 2, "sender": "MCP server", "receiver": "MCP loader", "payload": "tool names, descriptions, input schemas"},
+        {"step": 3, "sender": "MCP loader", "receiver": "tool registry", "payload": "wrapped local tool callables"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/mcp/tools.py:541-653",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/tools/tools.py:44-176"
+      ],
+      "notes": "Discovery does not itself imply a tool will be exposed or called."
+    },
+    {
+      "id": "native.mcp_tool_execution",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "extension_protocol",
+      "direction": "agent_tool_node_to_mcp_server_and_back",
+      "producer": "Wrapped MCP tool",
+      "input": "Validated tool name/arguments plus runtime user/thread/sandbox-derived cwd and configured environment.",
+      "transport": "Pooled MCP stdio session per scoped runtime or MCP HTTP transport.",
+      "receiver": "MCP server tool implementation.",
+      "output": "MCP text, image, embedded-resource, resource-link, structured content, or error blocks converted for LangChain/DeerFlow. Audio and unknown block types have no dedicated converter and fall through to textual string representation.",
+      "authority": "MCP server owns operation result; local converter owns the shape presented to the agent.",
+      "durability": "Tool result enters checkpoint; server-side mutations and files follow server semantics; sessions are pooled runtime resources.",
+      "security_boundary": "Arguments leave the harness process. User/thread pooling keys, cwd/temp roots, environment, auth, timeouts, and content conversion bound the call.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "tool node", "receiver": "MCP wrapper/session pool", "payload": "tool name, arguments, trusted runtime scope"},
+        {"step": 2, "sender": "MCP client", "receiver": "MCP server", "payload": "call_tool request"},
+        {"step": 3, "sender": "MCP server", "receiver": "content converter", "payload": "MCP content/result blocks"},
+        {"step": 4, "sender": "content converter", "receiver": "tool node/model", "payload": "ToolMessage-compatible result"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/mcp/tools.py:309-409",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/mcp/tools.py:412-538"
+      ],
+      "notes": "Any model calls internal to an MCP server are opaque and separately marked in the call inventory."
+    },
+    {
+      "id": "native.sandbox_file_boundary",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "filesystem_capability",
+      "direction": "agent_tool_to_sandbox_workspace",
+      "producer": "File tools such as ls/read_file/glob/grep/write_file/str_replace",
+      "input": "Tool-requested sandbox path and operation-specific arguments/content.",
+      "transport": "Sandbox provider API with virtual-to-host/container path mapping.",
+      "receiver": "Thread/user sandbox filesystem.",
+      "output": "Bounded listing/content/search/edit result or validation error.",
+      "authority": "Sandbox provider's normalized path mapping is authoritative; raw model-proposed paths are not.",
+      "durability": "Workspace writes persist according to sandbox provider; reads/results in ToolMessages are checkpointed.",
+      "security_boundary": "Path normalization, allowed roots, traversal prevention, symlink/file checks, operation/tool policy, and output limits.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "model", "receiver": "file tool", "payload": "sandbox path and operation arguments"},
+        {"step": 2, "sender": "file tool", "receiver": "sandbox provider", "payload": "validated normalized request"},
+        {"step": 3, "sender": "sandbox provider", "receiver": "file tool/model", "payload": "filesystem result or error"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/sandbox/tools.py:389-720",
+        "deerflow_bridge/config.yaml:993-1045",
+        "drf2/config/config.yaml:103-132"
+      ],
+      "notes": "Current Stage-1 and drf2 use a local sandbox provider; deployment providers can change the isolation boundary."
+    },
+    {
+      "id": "native.host_bash_boundary",
+      "plane": "deerflow2_native",
+      "status": "conditional_current",
+      "kind": "process_capability",
+      "direction": "agent_tool_to_shell_process",
+      "producer": "bash tool",
+      "input": "Model-proposed shell command and sandbox/runtime working context.",
+      "transport": "Sandbox provider command execution or explicitly allowed host bash.",
+      "receiver": "Shell process.",
+      "output": "Exit status and bounded stdout/stderr.",
+      "authority": "Sandbox/config policy decides whether execution is permitted and where it runs.",
+      "durability": "Process is transient; filesystem/network side effects follow command/provider semantics; result enters checkpoint.",
+      "security_boundary": "High-risk boundary controlled by tool exposure, allow_host_bash, sandbox provider, user identity, cwd/path limits, timeouts, and output caps.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "model", "receiver": "bash tool", "payload": "command"},
+        {"step": 2, "sender": "bash tool", "receiver": "sandbox/host shell", "payload": "policy-approved command and cwd"},
+        {"step": 3, "sender": "shell", "receiver": "tool middleware/model", "payload": "bounded stdout/stderr/exit"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/sandbox/tools.py:720-980",
+        "deerflow_bridge/config.yaml:993-1045",
+        "drf2/config/config.yaml:192-197"
+      ],
+      "notes": "Both repository configs allow host bash only under their stated trusted local single-user assumption."
+    },
+    {
+      "id": "native.tool_result_budget_and_error_normalization",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "result_transform",
+      "direction": "raw_tool_result_to_agent_message_and_artifact",
+      "producer": "Tool implementation or exception",
+      "input": "Potentially large text/multimodal result or thrown error.",
+      "transport": "ToolErrorHandlingMiddleware and ToolOutputBudgetMiddleware.",
+      "receiver": "Agent graph/model and optional .tool-results workspace storage.",
+      "output": "Normalized ToolMessage; large output can become head/tail preview plus pointer to the externalized full result.",
+      "authority": "Full externalized bytes are authoritative when created; preview is explicitly partial. Error messages are normalized observations, not successful results.",
+      "durability": "Externalized files persist in the workspace; ToolMessages persist in checkpoint state.",
+      "security_boundary": "Caps context amplification and prevents raw exceptions from crashing ordinary recoverable tool loops; exempt tools remain configurable.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "tool", "receiver": "error/output middleware", "payload": "raw result or exception"},
+        {"step": 2, "sender": "output middleware", "receiver": "workspace", "payload": "full result if externalization threshold is crossed"},
+        {"step": 3, "sender": "middleware", "receiver": "model", "payload": "bounded result/preview/pointer or normalized error"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/middlewares/tool_output_budget_middleware.py:108-275",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/middlewares/tool_error_handling_middleware.py:59-126",
+        "drf2/config/config.yaml:138-151"
+      ],
+      "notes": "drf2 enables externalization at 12000 characters under .tool-results."
+    },
+    {
+      "id": "native.skill_discovery_and_slash_activation",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "instruction_capability",
+      "direction": "skill_storage_and_user_command_to_agent_context",
+      "producer": "Skill loader plus user /skill-name message",
+      "input": "Enabled public/custom skill metadata, SKILL.md body, optional resources, available-skill whitelist, and slash activation syntax.",
+      "transport": "Local skill storage scan followed by SkillActivationMiddleware message injection.",
+      "receiver": "Lead/subagent model request and tool policy union.",
+      "output": "Selected skill instructions inserted into agent context, with safe/full content controls and recent-skill preservation metadata.",
+      "authority": "On-disk enabled skill body is authoritative for workflow instructions; the available-skill whitelist bounds visibility.",
+      "durability": "Skills persist on disk; injected skill messages become checkpoint state and may be preserved across summarization.",
+      "security_boundary": "Skill enablement, whitelist, safe-content mode, security scan/evolution policy, and allowed-tools constrain instruction/code injection.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "skill storage", "receiver": "skill loader", "payload": "metadata and SKILL.md/resources"},
+        {"step": 2, "sender": "user message", "receiver": "activation middleware", "payload": "/skill-name plus task"},
+        {"step": 3, "sender": "activation middleware", "receiver": "model request", "payload": "selected skill instruction message"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/middlewares/skill_activation_middleware.py:66-289",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/skills/storage/local_skill_storage.py:30-131",
+        "deerflow_bridge/deerflow_research.py:10953-10972"
+      ],
+      "notes": "Current Stage-1 whitelists exactly deep-research, actor-ontology-research, prediction-markets, and forecast-visuals."
+    },
+    {
+      "id": "native.skill_tool_policy_union",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "authorization_policy",
+      "direction": "active_skills_and_agent_config_to_exposed_tools",
+      "producer": "Skill tool-policy resolver",
+      "input": "Agent base tools, per-agent whitelist, active skills' allowed-tools, deferred catalog, and feature/runtime capability gates.",
+      "transport": "In-process policy computation before model tool binding/promotion.",
+      "receiver": "Lead/subagent model request and tool_search catalog.",
+      "output": "Final allowed tool-name set and filtered tool objects.",
+      "authority": "Computed policy is authoritative for exposure; model text cannot grant itself additional tools.",
+      "durability": "Policy is recomputed/runtime state; active-skill messages are checkpointed.",
+      "security_boundary": "Least-capability boundary between untrusted model intent and executable tools.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "agent/skill config", "receiver": "policy resolver", "payload": "base and skill allowed-tool sets"},
+        {"step": 2, "sender": "policy resolver", "receiver": "tool registry/search", "payload": "allowed union/intersection result as implemented"},
+        {"step": 3, "sender": "tool registry", "receiver": "model", "payload": "filtered tool schemas"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/skills/tool_policy.py:13-44",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/tools/builtins/tool_search.py:50-221"
+      ],
+      "notes": "Policy applies both to immediately bound tools and deferred discovery."
+    },
+    {
+      "id": "native.subagent_task_pass_and_return",
+      "plane": "deerflow2_native",
+      "status": "conditional_current",
+      "kind": "delegation_boundary",
+      "direction": "lead_agent_to_ephemeral_subagent_to_lead_agent",
+      "producer": "Lead agent task tool call",
+      "input": "Named subagent/task description, custom prompt, allowed skills/tools, model/turn/timeout settings, and inherited sandbox/user/thread context.",
+      "transport": "In-process task tool and ephemeral compiled subagent graph.",
+      "receiver": "Subagent executor/model/tool loop.",
+      "output": "Terminal subagent text, message/usage/status metadata, or structured task error returned as a ToolMessage.",
+      "authority": "Parent owns final decisions; subagent output is evidence/advice until the parent receives and acts on it.",
+      "durability": "Subagent checkpointer=false. Parent ToolMessage and any shared-workspace files persist.",
+      "security_boundary": "Per-subagent model/tool/skill whitelist, task timeout/max_turns, concurrency cap, and inherited trusted runtime context.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "lead model", "receiver": "task tool", "payload": "subagent name and bounded task"},
+        {"step": 2, "sender": "task tool", "receiver": "subagent graph", "payload": "prompt, tools, skills, runtime context"},
+        {"step": 3, "sender": "subagent graph", "receiver": "task tool", "payload": "terminal text/status/usage"},
+        {"step": 4, "sender": "task tool", "receiver": "lead model", "payload": "ToolMessage result"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/subagents/executor.py:341-367",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/subagents/executor.py:431-650"
+      ],
+      "notes": "Current Stage-1 gates this boundary with --subagents; drf2 defines four pre-cutover custom agents."
+    },
+    {
+      "id": "native.clarification_terminal_reception",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "terminal_clarification",
+      "direction": "tool_call_to_terminal_message_to_next_human_turn",
+      "producer": "ClarificationMiddleware intercepting ask_clarification",
+      "input": "Tool-call arguments containing a question, optional context/options, and clarification type.",
+      "transport": "Middleware creates a ToolMessage and returns Command(goto=END); the client displays that terminal turn and submits any answer as a new HumanMessage in a later run.",
+      "receiver": "Checkpointed message state and frontend/API client; a later ordinary turn receives the user's answer.",
+      "output": "Formatted clarification ToolMessage followed by normal run completion, not a LangGraph interrupt payload or Command.resume value.",
+      "authority": "The persisted ToolMessage records the question; the user's later HumanMessage is authoritative for the answer.",
+      "durability": "The clarification ToolMessage is checkpointed with the completed turn. There is no paused clarification frame to resume.",
+      "security_boundary": "The next turn follows ordinary thread/run access controls and tool policy; clarification itself grants no capability.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "lead model", "receiver": "ClarificationMiddleware", "payload": "ask_clarification tool call"},
+        {"step": 2, "sender": "middleware", "receiver": "graph state", "payload": "ToolMessage plus Command(goto=END)"},
+        {"step": 3, "sender": "run stream/checkpoint", "receiver": "client/human", "payload": "terminal clarification message"},
+        {"step": 4, "sender": "human client", "receiver": "later ordinary run", "payload": "new HumanMessage answer"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/middlewares/clarification_middleware.py:117-200"
+      ],
+      "notes": "Despite comments that use the word interrupt, this implementation terminates the turn at END and does not call LangGraph interrupt()."
+    },
+    {
+      "id": "native.graph_interrupt_checkpoint_and_resume",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "human_in_the_loop",
+      "direction": "graph_interrupt_to_checkpoint_and_later_resume_command",
+      "producer": "LangGraph node interrupt or configured interrupt_before/interrupt_after boundary",
+      "input": "Interrupt payload and checkpointed graph/task state.",
+      "transport": "Interrupt/checkpoint content appears in graph value/update events; a later run can submit command.resume.",
+      "receiver": "Client/operator and later worker invocation of the checkpointed graph.",
+      "output": "Resumed graph transitions, explicit cancellation, or a still-paused checkpoint.",
+      "authority": "Checkpoint/task/interrupt event content identifies the paused graph state. Current RunRecord status alone does not: a graph that returns normally at an interrupt is recorded as success unless explicitly cancelled.",
+      "durability": "Interrupt and task state follow checkpointer durability. Run status persists separately and may say success for a normal interrupt return.",
+      "security_boundary": "Path run/thread lookup is owner-checked, while the documented body.config thread-namespace seam still applies to execution config.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "graph", "receiver": "checkpointer/event stream", "payload": "interrupt plus checkpoint/task state"},
+        {"step": 2, "sender": "gateway", "receiver": "client/operator", "payload": "value/update event containing interrupt state"},
+        {"step": 3, "sender": "client", "receiver": "new run worker", "payload": "command.resume value"},
+        {"step": 4, "sender": "worker", "receiver": "checkpointed graph", "payload": "Command(resume=...)"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/runtime/runs/worker.py:282-438",
+        "deer-flow-2.0.0/backend/app/gateway/routers/thread_runs.py:142-260"
+      ],
+      "notes": "This generic LangGraph mechanism is distinct from ask_clarification, which ends the turn rather than pausing it."
+    },
+    {
+      "id": "native.internal_stream_event_bridge",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "event_stream",
+      "direction": "langgraph_to_run_event_log",
+      "producer": "LangGraph astream namespaces and worker lifecycle",
+      "input": "messages-tuple deltas/tool messages, updates, custom events, interrupts, metadata, usage, errors, and end signals.",
+      "transport": "In-memory bounded append-only event log with monotonic event IDs and subscriber condition signaling.",
+      "receiver": "Gateway SSE consumers and run event persistence hooks.",
+      "output": "Ordered StreamEvent records; Last-Event-ID replay window; heartbeat when idle.",
+      "authority": "Run worker/event bridge order and event IDs are authoritative for live stream sequencing, not for full durable transcript unless the configured event store records it.",
+      "durability": "In-memory bridge retains a bounded 256-event window and is process-local; configured run event backend supplies durability separately.",
+      "security_boundary": "Subscribers are attached through owner-validated run endpoints; bounded retention limits memory amplification.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "graph/worker", "receiver": "event bridge", "payload": "normalized run event"},
+        {"step": 2, "sender": "event bridge", "receiver": "subscriber", "payload": "ordered event/replay or 15-second heartbeat"},
+        {"step": 3, "sender": "worker", "receiver": "event/run store", "payload": "persistable lifecycle/event subset"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/runtime/stream_bridge/memory.py:25-133",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/runtime/runs/worker.py:282-438"
+      ],
+      "notes": "Late subscribers can replay only what remains in the live bounded bridge unless they query durable stores/state."
+    },
+    {
+      "id": "native.sse_client_reception",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "event_stream",
+      "direction": "gateway_to_browser_or_api_client",
+      "producer": "Gateway stream_run/join consumer",
+      "input": "Run event subscription with optional Last-Event-ID and disconnect policy.",
+      "transport": "HTTP Server-Sent Events, unbuffered through nginx.",
+      "receiver": "Frontend stream hook or API client parser.",
+      "output": "Incremental assistant text/reasoning, tool calls/results, state/custom/interrupt/error/end events.",
+      "authority": "SSE is a live presentation channel; final run status/checkpoint/artifacts are authoritative after completion.",
+      "durability": "Client event state is transient; event store/checkpoint may persist underlying data.",
+      "security_boundary": "Run ownership is checked before attach; disconnect policy can continue or cancel a run.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "client", "receiver": "gateway", "payload": "stream/join request and replay cursor"},
+        {"step": 2, "sender": "event bridge", "receiver": "SSE serializer", "payload": "StreamEvent"},
+        {"step": 3, "sender": "SSE response", "receiver": "client hook", "payload": "event name/id/data frames"},
+        {"step": 4, "sender": "client hook", "receiver": "UI state", "payload": "assembled messages/tool activity/status"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/app/gateway/services.py:442-520",
+        "deer-flow-2.0.0/frontend/src/core/threads/hooks.ts:526-568",
+        "deer-flow-2.0.0/docker/nginx/nginx.conf:41-65"
+      ],
+      "notes": "drf2's deterministic driver deliberately polls RunRecord status instead of parsing SSE."
+    },
+    {
+      "id": "native.existing_run_status_join_stream_and_cancel",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "control_api",
+      "direction": "client_to_run_manager_and_store",
+      "producer": "Browser/API/driver",
+      "input": "Path thread ID plus an existing run ID for get, join, stream join, or cancel; cancellation may include wait and action options.",
+      "transport": "GET run/list/join/stream endpoints and POST cancel or stream-with-action endpoints.",
+      "receiver": "RunManager/live task and run store.",
+      "output": "Run record/list, awaited terminal record, live/replayed SSE when a bridge exists, cancellation result, or conflict/not-found.",
+      "authority": "The live in-memory run record/task is authoritative for immediate execution, streaming, and cancellation. A configured durable store can remain authoritative for stored status after restart; a store-only run has no live stream/task.",
+      "durability": "Stored status survives restart only with a durable run store; MemoryRunStore is process-local. Join/subscription connections and live event bridges are transient.",
+      "security_boundary": "Path-thread ownership and record thread association are checked before control. Those checks do not repair a creation-time effective checkpoint namespace selected through body.config.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "client", "receiver": "run router", "payload": "existing-run status/list/join/stream/cancel request"},
+        {"step": 2, "sender": "router", "receiver": "run store or RunManager", "payload": "owner-validated run lookup/control"},
+        {"step": 3, "sender": "store/manager", "receiver": "client", "payload": "record, events, or cancellation outcome"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/app/gateway/routers/thread_runs.py:205-327",
+        "deer-flow-2.0.0/backend/app/gateway/services.py:442-520"
+      ],
+      "notes": "POST /runs/wait is not an existing-run wait operation; it creates a new run and is itemized separately. With a configured durable store, a hydrated store-only terminal run remains status-readable even when no live event bridge exists."
+    },
+    {
+      "id": "native.thread_checkpoint_persistence",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "state_persistence",
+      "direction": "langgraph_to_checkpointer_and_back",
+      "producer": "Compiled graph nodes/middleware",
+      "input": "Thread-scoped AgentState updates, messages, titles, summaries, interrupts, and checkpoint metadata.",
+      "transport": "LangGraph checkpointer backend selected by harness/gateway or embedded client.",
+      "receiver": "Checkpoint storage.",
+      "output": "Latest/history checkpoint state used by subsequent turns, resume, get_state, and history APIs.",
+      "authority": "Checkpoint is canonical for agent conversational/graph state; sidecar progress/report files are separate artifacts.",
+      "durability": "Depends on configured backend; gateway defaults/config can provide durable DB-backed checkpoints, embedded clients may use their configured/local checkpointer.",
+      "security_boundary": "Checkpoint keys come from the effective RunnableConfig. The gateway path thread is owner-checked and authenticated user_id is server-stamped, but body.config.configurable.thread_id can currently override the no-context branch's path-derived thread namespace.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "graph", "receiver": "checkpointer", "payload": "state delta/checkpoint keyed by thread"},
+        {"step": 2, "sender": "checkpointer", "receiver": "next graph invocation", "payload": "reconstructed state"},
+        {"step": 3, "sender": "checkpointer", "receiver": "state/history API", "payload": "latest or historical checkpoint snapshots"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/agents/lead_agent/agent.py:405-545",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/runtime/runs/worker.py:282-438",
+        "deer-flow-2.0.0/backend/packages/harness/deerflow/client.py:684-820"
+      ],
+      "notes": "A separate Stage-1 research_checkpoint.json is only a bridge skip plan; it is not itself the LangGraph checkpoint."
+    },
+    {
+      "id": "native.database_run_event_and_thread_stores",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "metadata_persistence",
+      "direction": "gateway_services_to_configured_stores",
+      "producer": "Thread/run/event services and worker",
+      "input": "Thread records, run records/status transitions, run events/traces, token usage, timestamps, errors, and selected metadata.",
+      "transport": "Configured store implementations created as gateway singletons.",
+      "receiver": "MemoryRunStore or configured durable database run repository, plus separately configured thread and event stores.",
+      "output": "Queryable thread/run/event history; restart hydration only for record types backed by durable stores.",
+      "authority": "Each store is canonical for its record type; checkpoint and workspace remain separate authorities for graph state and artifacts.",
+      "durability": "Conditional by store. Without a database session factory, the gateway selects MemoryRunStore and run records are lost on restart; thread, checkpoint, and event persistence are independently configured. drf2 config intends SQLite database and JSONL run events.",
+      "security_boundary": "Store access is internal; services enforce user/thread ownership before reads/writes returned to clients.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "gateway service/worker", "receiver": "thread/run/event store", "payload": "record create/update/append"},
+        {"step": 2, "sender": "store", "receiver": "gateway service", "payload": "hydrated/query result"},
+        {"step": 3, "sender": "gateway service", "receiver": "authorized client/runtime", "payload": "record or runtime hydration"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/app/gateway/deps.py:144-236",
+        "drf2/config/config.yaml:430-441"
+      ],
+      "notes": "The presence of a store interface does not imply durable deployment. Event retention/truncation settings mean persisted events are an audit channel, not necessarily an unlimited verbatim transcript."
+    },
+    {
+      "id": "native.workspace_artifact_retrieval",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "artifact_output",
+      "direction": "thread_workspace_to_authorized_client",
+      "producer": "Agent/file/tool execution in the thread workspace",
+      "input": "Artifact path/reference scoped to user/thread workspace.",
+      "transport": "Gateway artifact route and file response/metadata APIs.",
+      "receiver": "Browser/API client or deterministic driver reading a host-mapped workspace path.",
+      "output": "Artifact bytes, directory/listing metadata, or not-found/forbidden response.",
+      "authority": "Workspace file bytes are authoritative artifacts; chat text describing a file is not a substitute.",
+      "durability": "Workspace/provider dependent and normally persistent across run completion.",
+      "security_boundary": "User/thread ownership, normalized path containment, file existence/type, and response content-type protections.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "agent/tool", "receiver": "workspace", "payload": "artifact bytes"},
+        {"step": 2, "sender": "client", "receiver": "artifact router", "payload": "authorized artifact reference"},
+        {"step": 3, "sender": "artifact router", "receiver": "client", "payload": "validated bytes/metadata"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/app/gateway/routers/artifacts.py:99-202",
+        "drf2/driver/harness_client.py:136-142"
+      ],
+      "notes": "The drf2 driver can bypass HTTP artifact download only when workspace_root provides a trusted host mapping."
+    },
+    {
+      "id": "native.followup_suggestion_api",
+      "plane": "deerflow2_native",
+      "status": "native_available",
+      "kind": "derived_output_api",
+      "direction": "client_to_gateway_to_client",
+      "producer": "Suggestion endpoint client",
+      "input": "Thread ID, requested count n, and optional model selection.",
+      "transport": "POST /api/threads/{thread_id}/suggestions.",
+      "receiver": "Suggestion router/model, then HTTP client.",
+      "output": "Cleaned follow-up question list or empty list.",
+      "authority": "Suggestions are optional UI assistance, not conversation state or pipeline instructions.",
+      "durability": "Not persisted into thread state by the endpoint.",
+      "security_boundary": "Thread ownership and global feature flag; only bounded recent messages are sent to the suggestion model.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "client", "receiver": "suggestion router", "payload": "thread_id, n, optional model"},
+        {"step": 2, "sender": "router", "receiver": "model", "payload": "bounded recent conversation and JSON-list instruction"},
+        {"step": 3, "sender": "router", "receiver": "client", "payload": "suggestions[]"}
+      ],
+      "source_anchors": [
+        "deer-flow-2.0.0/backend/app/gateway/routers/suggestions.py:129-186"
+      ],
+      "notes": "Current embedded Stage-1 never calls this API; drf2 disables it."
+    },
+    {
+      "id": "stage1.research_run_api_input",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "application_api",
+      "direction": "spa_or_sdk_to_pipeline_orchestrator",
+      "producer": "DeepAgentForecast client",
+      "input": "prompt, mode (full or research_only), project_name, depth, optional max_rounds, language or its accepted research_language alias, and model.",
+      "transport": "POST /api/research/run JSON; SDK alias delegates to the same orchestrator.",
+      "receiver": "Flask research route -> preflight -> PipelineOrchestrator.start.",
+      "output": "Immediate pipeline_id, task_id, mode, and initial status, or validation/preflight errors.",
+      "authority": "Pipeline state created by PipelineOrchestrator is authoritative; request values are validated before launch.",
+      "durability": "pipeline_state.json persists the accepted request/options and lifecycle.",
+      "security_boundary": "Input schema/value validation, supported model list, preflight credentials/services, and pipeline ID/path controls.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "client", "receiver": "research route", "payload": "forecast prompt and run options"},
+        {"step": 2, "sender": "research route", "receiver": "preflight", "payload": "mode/model/environment requirements"},
+        {"step": 3, "sender": "route", "receiver": "PipelineOrchestrator", "payload": "validated start arguments"},
+        {"step": 4, "sender": "orchestrator", "receiver": "client", "payload": "pipeline/task identity and status"}
+      ],
+      "source_anchors": [
+        "backend/app/api/research.py:1-14",
+        "backend/app/api/research.py:43-122"
+      ],
+      "notes": "This is the current production entry, separate from DeerFlow 2.0's native chat Runs API."
+    },
+    {
+      "id": "stage1.pipeline_status_and_progress_output",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "observability_api",
+      "direction": "pipeline_files_to_client",
+      "producer": "PipelineManager and merged research progress readers",
+      "input": "pipeline_id plus progress scope tail/full and optional line limit.",
+      "transport": "GET /api/research/status/{pipeline_id} and GET /api/research/{pipeline_id}/progress.",
+      "receiver": "SPA/SDK/operator.",
+      "output": "Durable aggregate pipeline state and either bounded merged progress tails or an exact bounded full snapshot.",
+      "authority": "pipeline_state.json is authoritative for lifecycle. Progress logs are human-readable summarized events, not a raw model transcript.",
+      "durability": "State/progress files survive backend restart; tail polling is computed on demand.",
+      "security_boundary": "Pipeline ID validation and safe read limits; full snapshot returns 413 rather than mislabeling truncation as complete.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "client", "receiver": "status/progress route", "payload": "pipeline_id and read scope"},
+        {"step": 2, "sender": "route", "receiver": "state/progress files", "payload": "validated bounded read"},
+        {"step": 3, "sender": "route", "receiver": "client", "payload": "no-store JSON state or summarized progress events"}
+      ],
+      "source_anchors": [
+        "backend/app/api/research.py:299-308",
+        "backend/app/api/research.py:775-825",
+        "backend/app/services/research_progress.py:269-396"
+      ],
+      "notes": "Parallel lane progress is merged from handoff/track_N/research_progress.log."
+    },
+    {
+      "id": "stage1.dossier_and_artifact_output_api",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "artifact_output_api",
+      "direction": "handoff_and_registered_artifacts_to_client",
+      "producer": "Stage-1 bridge and orchestrator artifact registry",
+      "input": "pipeline_id and optionally a registered artifact name.",
+      "transport": "GET /api/research/{pipeline_id}/dossier and /artifact/{name}.",
+      "receiver": "SPA/SDK/operator.",
+      "output": "Research report plus decoded actors/sources/timeline/quantitative/contested/markets/charts, or registered JSON/text/binary artifact bytes.",
+      "authority": "Handoff file bytes and registered artifact path are authoritative; route decodes/serves them without asking an LLM.",
+      "durability": "Files persist in pipeline handoff/artifact directories.",
+      "security_boundary": "Pipeline/artifact registration, path existence/containment, symlink checks for charts, MIME handling, CSP/nosniff/referrer headers for active formats.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "bridge", "receiver": "handoff/artifact directories", "payload": "report/JSON/chart artifacts"},
+        {"step": 2, "sender": "client", "receiver": "dossier/artifact route", "payload": "pipeline_id and artifact name"},
+        {"step": 3, "sender": "route", "receiver": "client", "payload": "decoded JSON/text or protected binary response"}
+      ],
+      "source_anchors": [
+        "backend/app/api/research.py:350-400",
+        "backend/app/api/research.py:699-772"
+      ],
+      "notes": "Research translation/PDF endpoints are downstream presentation features, not DeerFlow 2.0 model-loop interfaces in scope here."
+    },
+    {
+      "id": "stage1.orchestrator_subprocess_launch",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "process_boundary",
+      "direction": "backend_orchestrator_to_deployed_deerflow_bridge",
+      "producer": "DeerFlowResearchRunner",
+      "input": "Prompt file path, output directory, model, depth, target language, flags for subagents/resume/evidence-only/synthesis-manifest, plus a controlled environment.",
+      "transport": "subprocess.Popen in a new process session, using the DeerFlow deployment's Python and deerflow_research.py.",
+      "receiver": "Generated/live deer-flow/deerflow_research.py process using the retained assembled DeerFlow 2 base plus synchronized tracked overlays; a fresh base may come from the optional local drop or the configured upstream fallback pin.",
+      "output": "stdout progress/usage, exit code, handoff artifacts, and optional child PID callback.",
+      "authority": "Backend Config and orchestrator launch arguments are authoritative for current production policy; the bridge writes the Stage-1 contract.",
+      "durability": "Child is transient; PID/state and output files persist. Process group enables cleanup.",
+      "security_boundary": "Explicit executable/cwd/env, private prompt file, no shell interpolation, start_new_session, bounded timeout, cancellation, and artifact freshness checks.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "orchestrator", "receiver": "prompt file", "payload": "0600 user forecast question"},
+        {"step": 2, "sender": "orchestrator", "receiver": "child process", "payload": "argv paths/flags plus policy environment"},
+        {"step": 3, "sender": "child", "receiver": "orchestrator", "payload": "stdout lines, exit status, files in handoff_dir"},
+        {"step": 4, "sender": "orchestrator", "receiver": "PipelineState/downstream", "payload": "validated research handoff summary"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:1326-1395",
+        "backend/app/services/pipeline_orchestrator.py:1419-1559",
+        "backend/app/services/pipeline_orchestrator.py:1702-1812"
+      ],
+      "notes": "deerflow_bridge is the maintained source; the deployed deer-flow copy is synchronized before launch."
+    },
+    {
+      "id": "stage1.private_prompt_file",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "sensitive_input_handoff",
+      "direction": "orchestrator_to_child_process",
+      "producer": "DeerFlowResearchRunner",
+      "input": "Raw user research/forecast question.",
+      "transport": "Temporary file inside handoff_dir passed by --prompt-file.",
+      "receiver": "Bridge CLI parser at child startup.",
+      "output": "Question string loaded into bridge memory; file removed after process exit/kill.",
+      "authority": "Prompt file bytes are the exact question for this child attempt and feed the question hash/checkpoint identity.",
+      "durability": "Deliberately ephemeral; chmod 0600 best effort and deleted in runner finally block.",
+      "security_boundary": "Avoids exposing sensitive prompt text in argv/process listings; file remains within per-pipeline handoff directory.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "orchestrator", "receiver": "temporary file", "payload": "prompt bytes"},
+        {"step": 2, "sender": "child parser", "receiver": "bridge runtime", "payload": "loaded prompt string"},
+        {"step": 3, "sender": "runner finally", "receiver": "filesystem", "payload": "unlink temporary prompt file"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:1419-1435",
+        "backend/app/services/pipeline_orchestrator.py:1688-1697",
+        "deerflow_bridge/deerflow_research.py:10660-10693"
+      ],
+      "notes": "The durable report/checkpoint may still contain question-derived content; this control specifically protects process argv exposure."
+    },
+    {
+      "id": "stage1.child_policy_environment",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "configuration_handoff",
+      "direction": "backend_config_to_bridge_runtime",
+      "producer": "Pipeline orchestrator",
+      "input": "Skill-sync identity, recursion budget, dual-track/fanout/cast/market flags, subagent/model concurrency, artifact root, budget/lease DB paths, optional KG extension config and graph ID.",
+      "transport": "Explicit subprocess environment variables and config.yaml path.",
+      "receiver": "Bridge control plane, embedded DeerFlowClient, tools, and MCP extension loader.",
+      "output": "One run-scoped active policy captured in research_meta/progress and enforced across agent/model/tool stages.",
+      "authority": "Backend Config is the current production single source for values explicitly passed; bridge defaults apply only where not overridden.",
+      "durability": "Environment is transient; selected policy/skill-sync identities and telemetry are persisted in run metadata.",
+      "security_boundary": "Only intended settings/paths are injected; secrets may be inherited from the backend environment and must not be logged.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "Backend Config", "receiver": "runner env builder", "payload": "validated policy values"},
+        {"step": 2, "sender": "runner", "receiver": "child process", "payload": "environment plus config path"},
+        {"step": 3, "sender": "bridge", "receiver": "research_meta/progress", "payload": "effective policy/sync telemetry without secrets"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:1449-1546",
+        "deerflow_bridge/config.yaml:712-1402"
+      ],
+      "notes": "Model-call leases remain enabled even if tool-budget admission is diagnostically disabled."
+    },
+    {
+      "id": "stage1.stdout_progress_and_usage_reception",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "observability_stream",
+      "direction": "child_stdout_to_orchestrator_state_and_client_progress",
+      "producer": "Bridge ProgressLog/stdout",
+      "input": "Tagged lines: init, stage, tool, result, usage, ok, done, warn, and error.",
+      "transport": "Merged child stdout/stderr pipe, line buffered.",
+      "receiver": "DeerFlowResearchRunner progress estimator, telemetry accumulator, and callback.",
+      "output": "Monotonic Stage-1 progress messages, token/tool/result telemetry, last error line, and durable progress log consumed by the API.",
+      "authority": "Handoff artifacts/exit status determine success; progress lines are observability signals and summaries.",
+      "durability": "research_progress.log persists; pipe and estimator state are transient.",
+      "security_boundary": "Progress lines intentionally summarize tool payloads and should not expose secrets/raw complete model transcripts.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "bridge", "receiver": "stdout and research_progress.log", "payload": "tagged event summary"},
+        {"step": 2, "sender": "stdout pipe", "receiver": "runner estimator", "payload": "one line"},
+        {"step": 3, "sender": "runner", "receiver": "PipelineState/progress callback", "payload": "bounded percent/message and usage totals"},
+        {"step": 4, "sender": "progress API", "receiver": "client", "payload": "merged summarized event snapshot"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:1608-1653",
+        "backend/app/services/research_progress.py:198-396"
+      ],
+      "notes": "A provider that omits usage may yield zero/unknown token telemetry without making the report invalid."
+    },
+    {
+      "id": "stage1.process_cancel_timeout_and_salvage",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "lifecycle_control",
+      "direction": "backend_control_to_child_process_group_and_artifacts",
+      "producer": "User cancel event, watchdog timer, backend shutdown, or stdout-close timeout",
+      "input": "Cancellation signal, time budget, child PID/process group, and expected artifact fingerprints.",
+      "transport": "threading event/timer, os.killpg signals, process wait, and filesystem validation.",
+      "receiver": "Bridge process group and runner outcome evaluator.",
+      "output": "PipelineCancelled, timeout failure, clean exit, or salvage of a fresh sufficiently complete report/evidence pack with optional extract-only recovery.",
+      "authority": "A fresh artifact plus structural/checkpoint gates can authorize salvage; process exit alone is insufficient.",
+      "durability": "Cancellation/status and surviving artifacts persist; process/task handles do not.",
+      "security_boundary": "PID/process-group identity prevents leaving cost-consuming descendants; freshness/fingerprint checks prevent accepting stale prior artifacts.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "cancel/watchdog", "receiver": "child process group", "payload": "SIGTERM/SIGKILL as path requires"},
+        {"step": 2, "sender": "runner", "receiver": "artifact validator", "payload": "pre/post fingerprints and file contents"},
+        {"step": 3, "sender": "artifact validator", "receiver": "pipeline outcome", "payload": "salvage/failed/cancelled decision"},
+        {"step": 4, "sender": "optional salvage", "receiver": "extract-only child", "payload": "existing report for bounded structured recovery"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:1581-1606",
+        "backend/app/services/pipeline_orchestrator.py:1654-1743"
+      ],
+      "notes": "User stop, provider failure, timeout, and successful artifact salvage remain distinct outcomes."
+    },
+    {
+      "id": "stage1.global_model_lease_and_budget",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "cross_process_concurrency_and_budget",
+      "direction": "all_lanes_and_synthesis_calls_to_shared_sqlite_admission",
+      "producer": "Bridge streamed/tool-free model wrappers and orchestrator lane scheduler",
+      "input": "Run/lane/epoch identity, model-call weight, global concurrency limit, and research budget counters.",
+      "transport": "Shared SQLite lease/budget database with process-safe acquisition/release and coalesced telemetry export.",
+      "receiver": "Provider-facing model invocation admission.",
+      "output": "Lease granted/waited/rejected, budget exhaustion, and run/lane telemetry.",
+      "authority": "The shared lease DB is authoritative for concurrent provider streams across outer child processes; epoch budget state is authoritative for bounded run admission.",
+      "durability": "SQLite and exported telemetry persist across child processes/restarts; live lease ownership uses bounded expiry/cleanup semantics.",
+      "security_boundary": "Prevents outer lanes, Track A/B, subagents, and section writers from multiplying provider calls beyond the configured envelope.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "orchestrator", "receiver": "child env", "payload": "shared lease/budget paths, limits, lane/run/epoch IDs"},
+        {"step": 2, "sender": "model wrapper", "receiver": "SQLite admission", "payload": "acquire request and weight"},
+        {"step": 3, "sender": "SQLite admission", "receiver": "model wrapper", "payload": "lease or bounded failure"},
+        {"step": 4, "sender": "bridge", "receiver": "telemetry artifact", "payload": "coalesced usage/budget/lease state"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:1527-1533",
+        "backend/app/services/pipeline_orchestrator.py:2811-2863",
+        "deerflow_bridge/deerflow_research.py:1112-1356",
+        "deerflow_bridge/deerflow_research.py:11798-11805"
+      ],
+      "notes": "This is separate from provider SDK retries and from tool-cost budget accounting."
+    },
+    {
+      "id": "stage1.embedded_deerflow_client_construction",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "embedded_runtime",
+      "direction": "bridge_configuration_to_in_process_deerflow_graph",
+      "producer": "Bridge main",
+      "input": "config path, requested model, thinking=true, subagent flag, and exact four-skill whitelist.",
+      "transport": "Python import and DeerFlowClient constructor inside the bridge child process.",
+      "receiver": "Embedded DeerFlow 2.0 client/compiled lead agent.",
+      "output": "Client capable of streamed turns and checkpoint state access under isolated thread IDs.",
+      "authority": "Constructor arguments plus config.yaml define the active embedded harness policy.",
+      "durability": "Client object is process-local; graph checkpoint/workspace artifacts provide persistence.",
+      "security_boundary": "Available-skill whitelist avoids advertising the entire public catalog; config controls tools, sandbox, memory/title/summarization, subagents, and model providers.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "bridge CLI/env", "receiver": "DeerFlowClient constructor", "payload": "model/config/thinking/subagent/skill policy"},
+        {"step": 2, "sender": "DeerFlowClient", "receiver": "Track A/B runners", "payload": "stream/state interface"},
+        {"step": 3, "sender": "Track runner", "receiver": "client graph", "payload": "message, thread_id, recursion config"}
+      ],
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:10947-10972",
+        "deerflow_bridge/config.yaml:712-1402"
+      ],
+      "notes": "--extract-only deliberately bypasses client construction and uses only tool-free extraction/market paths."
+    },
+    {
+      "id": "stage1.existing_kg_mcp_feedback",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "kind": "tool_extension_feedback",
+      "direction": "existing_backend_kg_to_current_deerflow2_lead_loop",
+      "producer": "PipelineOrchestrator extension gate and backend KG FastMCP server",
+      "input": "An already-existing state.graph_id, RESEARCH_MCP_KG=true, deployed extensions_config.json, and lead-selected KG tool arguments.",
+      "transport": "The orchestrator injects DEER_FLOW_EXTENSIONS_CONFIG_PATH and DRF_MCP_KG_GRAPH_ID; DeerFlow 2 starts the configured backend Python module as a stdio MCP child and invokes reflected tool schemas.",
+      "receiver": "Current Track-A DeerFlow 2 lead loops through ToolMessage reception. The global-synthesis child receives the environment variables but its manifest-driven outline/section/judge path is tool-free and does not consume these MCP tools.",
+      "output": "KG hybrid search, cascade/path trace, entity summary/list, centrality priors, graph statistics, or a structured non-hanging error result.",
+      "authority": "The existing backend graph/service owns KG contents. The bridge checkpoint owns only the received tool result and subsequent model reasoning; this boundary does not create the graph.",
+      "durability": "The stdio session is process-scoped. Tool results can enter the DeerFlow checkpoint/progress trace; the underlying KG and pipeline graph_id persist in backend storage/state.",
+      "security_boundary": "Feature flag, non-empty trusted graph_id, deployed config-file existence, explicit MCP process/env boundary, per-call timeout, and structured errors when the graph/store is absent. The extension file also registers simulation tools, but this current gate supplies no simulation ID.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "PipelineOrchestrator", "receiver": "research child environment", "payload": "extension-config path plus existing graph ID"},
+        {"step": 2, "sender": "DeerFlow MCP manager", "receiver": "backend KG FastMCP child", "payload": "stdio startup and tools/list"},
+        {"step": 3, "sender": "lead agent", "receiver": "selected KG tool", "payload": "tool name, arguments, and default/explicit graph ID"},
+        {"step": 4, "sender": "KG tool", "receiver": "lead agent", "payload": "content/structured result or structured error as ToolMessage"}
+      ],
+      "source_anchors": [
+        "backend/app/config.py:501-505",
+        "backend/app/services/pipeline_orchestrator.py:1374-1377",
+        "backend/app/services/pipeline_orchestrator.py:1534-1546",
+        "backend/app/services/pipeline_orchestrator.py:7324-7324",
+        "deerflow_bridge/extensions_config.json:1-40",
+        "backend/app/mcp/kg_server.py:219-358"
+      ],
+      "notes": "Normally absent on a first run because Stage 1 precedes graph construction. It becomes usable on fork/continue/resume-with-graph, and only Track-A agent loops can call it. This is current KG feedback, not the broader pre-cutover drf2 KG-plus-simulation engine design."
+    },
+    {
+      "id": "stage1.track_a_track_b_split_and_join",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "internal_parallelism",
+      "direction": "one_question_to_isolated_research_threads_to_report_and_dossier",
+      "producer": "Outer parallel coordinator and baseline bridge Stage-1 controller",
+      "input": "Question, depth, language, model, canonical Track-A thread_id, derived actor thread_id and per-lane ownership flag. Under checked-in defaults only the broad baseline outer lane receives dual_track=true; the other evidence lanes and the global child receive false.",
+      "transport": "Same DeerFlowClient with isolated LangGraph thread IDs; ThreadPoolExecutor when two model slots exist, otherwise sequential.",
+      "receiver": "Baseline Track A broad evidence protocol and its isolated Track B actor-landscape/completion/synthesis/quality protocol.",
+      "output": "Baseline evidence_pack.md/source ledger plus the one required shared actor dossier, deterministic receipt/source-bound coverage sidecar, actor-intelligence lineage/seals and optional final judge; non-owner lanes output Track A evidence only.",
+      "authority": "Track A owns baseline evidence; Track B owns actor_dossier.md and its canonical semantic cast. In the default evidence lane an absent, identity-ambiguous, receipt-unbound or unaccountable actor result fails the baseline lane closed, so a valid Track-A pack cannot silently remove required actor context.",
+      "durability": "Separate thread checkpoints plus baseline dossier/coverage/judge/meta hashes and shared handoff ledgers.",
+      "security_boundary": "Explicit one-owner routing, global model lease, distinct thread IDs, current-attempt question/run/depth/attempt/lane/thread lineage, NFKC semantic identity seals, query-bound producer receipts, source/content/claim/relationship/family seals and exact-input final-judge checks prevent duplicate, stale, colliding or substituted actor producers.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "outer coordinator", "receiver": "baseline bridge child", "payload": "angle-prefixed question plus dual_track=true/shared_actor_track=true"},
+        {"step": 2, "sender": "baseline bridge controller", "receiver": "Track A and isolated Track B", "payload": "broad-evidence contract on thread_id and actor-intelligence contract on thread_id-actor"},
+        {"step": 3, "sender": "Track B landscape turn", "receiver": "same Track-B thread", "payload": "fetched actor evidence and provisional cast"},
+        {"step": 4, "sender": "cast-wide completion/synthesis/quality loop", "receiver": "baseline artifact gate", "payload": "dossier, receipt/source-bound coverage, semantic cast/claim/relationship/family seals and optional exact-complete-input final judge"},
+        {"step": 5, "sender": "baseline artifact gate", "receiver": "outer manifest builder", "payload": "Track-A pack plus required current-attempt Track-B artifacts and hashes"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:2974-2980",
+        "backend/app/services/pipeline_orchestrator.py:7400-7623",
+        "deerflow_bridge/deerflow_research.py:1517-1531",
+        "deerflow_bridge/deerflow_research.py:10025-10313",
+        "deerflow_bridge/deerflow_research.py:12322-12516"
+      ],
+      "notes": "This boundary is part of the default three-lane/global-synthesis architecture exactly once, inside the broad baseline lane. The fresh global child consumes the sealed dossier but does not run another Track B."
+    },
+    {
+      "id": "stage1.actor_dossier_quality_and_coverage_gate",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "quality_artifact_contract",
+      "direction": "track_b_candidates_to_source_bound_coverage_and_final_judge",
+      "producer": "Shared Track-B landscape/completion evidence and dossier synthesizer",
+      "input": "Exact dossier candidate bytes, fetched baseline source ledger, current Track-B source and query-result receipts, semantic Tier-1/2 cast ledger, 17 required dimensions, grounded relationships/causal attributes, typed gap records and the ten-dimension judge rubric.",
+      "transport": "Deterministic actor_dossier_coverage_audit after synthesis and after bounded refinement; default-on tool-free exact-complete-input judge, zero-to-two targeted streamed gap turns/resyntheses, and one final rejudge whenever final bytes changed. Whole untrusted documents are sanitized and non-executably delimited before every model boundary.",
+      "receiver": "Baseline evidence-lane publication gate and version-3 actor-dossier manifest descriptor.",
+      "output": "actor_dossier_coverage.json with semantic roster seals, accountable/covered/grounded/gap counts, producer receipts and claim/relationship/family projections; optional actor_dossier_judge.json with structured exact-input attestation; explicit final FAIL, truncation, malformed/non-finite scores, identity collision or uncovered slot yields no dossier.",
+      "authority": "The deterministic fresh source-bound coverage audit is always authoritative for cast-wide accountability. A parseable judge adds a quality decision; an explicit final FAIL cannot degrade to pass, while judge transport/parse absence cannot bypass coverage.",
+      "durability": "Dossier, coverage and optional judge bytes persist in the baseline lane, then are checksum-bound by lane meta, global synthesis manifest and successful research contract.",
+      "security_boundary": "Exactly one ledger comment, all 17 slots for every Tier-1/2 actor, exact supporting quote/span plus current receipt/content hash for covered claims, typed gaps with bounded-attempt evidence, canonical grounded relationship/causal IDs, ordered and multiset roster seals, exact complete dossier/judge attestations, current-attempt sidecar cleanup and fail-closed baseline admission.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "cast-wide completion and dossier synthesis", "receiver": "coverage audit", "payload": "candidate dossier plus actual fetched-source ledger"},
+        {"step": 2, "sender": "coverage audit", "receiver": "actor judge", "payload": "candidate bytes and source-bound accountability summary"},
+        {"step": 3, "sender": "judge FAIL gaps", "receiver": "targeted Track-B research/resynthesis", "payload": "bounded actionable gaps, zero to two rounds by default"},
+        {"step": 4, "sender": "final candidate", "receiver": "coverage audit and optional post-refinement judge", "payload": "exact final bytes"},
+        {"step": 5, "sender": "quality gate", "receiver": "baseline meta/global manifest", "payload": "accepted dossier/coverage/optional judge bytes and SHA-256 or explicit failure"}
+      ],
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:9728-9794",
+        "deerflow_bridge/deerflow_research.py:9811-10313",
+        "deerflow_bridge/deerflow_research.py:12405-12516",
+        "backend/app/services/pipeline_orchestrator.py:1930-2026"
+      ],
+      "notes": "AI judging can be disabled or length-skipped, but the deterministic 17-dimension source-bound audit remains mandatory and cannot be bypassed."
+    },
+    {
+      "id": "stage1.embedded_stream_event_reception",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "embedded_event_stream",
+      "direction": "deerflow_client_graph_to_bridge_accumulators",
+      "producer": "DeerFlowClient.stream/graph event stream",
+      "input": "messages-tuple AI chunks and ToolMessages, custom events, metadata, interrupts/errors, and end usage.",
+      "transport": "In-process Python iterator; no gateway SSE.",
+      "receiver": "run_streamed_turn accumulator and ProgressLog/source/tool ledgers.",
+      "output": "Assembled assistant text, logged tool calls/results, captured fetched URLs/market candidates, usage totals, and success/error/salvage state.",
+      "authority": "LangGraph checkpoint/tool artifacts remain authoritative; the accumulator's text is the bridge's received terminal/partial evidence for the pass.",
+      "durability": "Progress/source/tool ledgers and checkpoint persist; iterator/chunk assembly is transient.",
+      "security_boundary": "Tool outputs are summarized for progress; recursion/corrective-loop/error handling bounds event consumption.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "bridge", "receiver": "DeerFlowClient", "payload": "message, thread_id, recursion_limit"},
+        {"step": 2, "sender": "client graph", "receiver": "run_streamed_turn", "payload": "event tuples/custom/end"},
+        {"step": 3, "sender": "run_streamed_turn", "receiver": "progress/source/tool ledgers", "payload": "summaries, URLs, candidates, usage"},
+        {"step": 4, "sender": "run_streamed_turn", "receiver": "research phase controller", "payload": "assembled text or typed failure"}
+      ],
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:6255-6355"
+      ],
+      "notes": "This is the current Stage-1 reception path; native browser SSE is not involved in the child process."
+    },
+    {
+      "id": "stage1.research_checkpoint_and_resume",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "resume_contract",
+      "direction": "completed_passes_and_graph_state_to_next_attempt",
+      "producer": "ResearchCheckpointer and orchestrator resume logic",
+      "input": "Question/depth hash, thread ID, completed passes, evidence counts/packs, timestamps, and existing live graph checkpoint if available.",
+      "transport": "Atomic research_checkpoint.json sidecar plus DeerFlowClient checkpointer state and optional durable evidence pack.",
+      "receiver": "Bridge resume planner and run_research_stage scheduler.",
+      "output": "Skip/replay plan, restored evidence, same thread reuse, or a fresh replacement thread when checkpoint messages/evidence are unavailable.",
+      "authority": "The sidecar authorizes only pass skipping after identity validation; it is not proof of recoverable LangGraph messages. Live checkpoint or validated durable evidence is required to avoid empty resume.",
+      "durability": "Sidecar/evidence files persist in handoff; embedded checkpoint persistence depends on client configuration.",
+      "security_boundary": "Question/depth hash prevents cross-question reuse; stale/empty state causes replay rather than publication of an empty evidence pack.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "completed pass", "receiver": "research_checkpoint.json", "payload": "pass marker, thread identity, evidence metadata"},
+        {"step": 2, "sender": "orchestrator", "receiver": "child", "payload": "--resume only when checkpoint exists"},
+        {"step": 3, "sender": "bridge", "receiver": "DeerFlow checkpointer/evidence pack", "payload": "state reconstruction probe"},
+        {"step": 4, "sender": "resume planner", "receiver": "phase scheduler", "payload": "validated skip list or full replay on new thread"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:1367-1372",
+        "backend/app/services/pipeline_orchestrator.py:1940-1968",
+        "deerflow_bridge/deerflow_research.py:10974-11006"
+      ],
+      "notes": "Outer parallel lanes keep independent track_N/research_checkpoint.json files."
+    },
+    {
+      "id": "stage1.source_and_tool_provenance_ledgers",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "evidence_persistence",
+      "direction": "tool_observations_to_synthesis_and_artifacts",
+      "producer": "Streamed web/file/market tool events and deterministic collectors",
+      "input": "Fetched URLs/source metadata, tool calls/results, prediction-market observations, capture timestamps, and per-pass evidence notes.",
+      "transport": "Process-local registries plus append-only/bounded files such as fetched-source export and prediction_market_candidates.jsonl.",
+      "receiver": "Citation index, evidence pack/manifest, grounding audits, market reconciliation, synthesis prompt packers, and final metadata.",
+      "output": "Stable source IDs, source rows, tool-observation candidates, provenance counts, and evidence blocks.",
+      "authority": "Machine-observed fetched/tool ledgers ground claims; model prose claiming a URL/source without a recorded observation does not become equivalent provenance.",
+      "durability": "Per-lane source ledgers and candidate JSONL persist under handoff; in-memory registries are exported before completion.",
+      "security_boundary": "Records are bounded/normalized, malformed lines skipped, and externalized tool results remain in controlled artifact roots.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "tool event", "receiver": "bridge stream collector", "payload": "URL/result/candidate observation"},
+        {"step": 2, "sender": "collector", "receiver": "source/candidate ledger", "payload": "normalized provenance row"},
+        {"step": 3, "sender": "ledger", "receiver": "citation/synthesis/extraction/market audit", "payload": "stable observed evidence"},
+        {"step": 4, "sender": "finalizer", "receiver": "sources.json/meta/manifest", "payload": "selected/audited provenance"}
+      ],
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:6255-6355",
+        "deerflow_bridge/deerflow_research.py:9899-9965",
+        "deerflow_bridge/deerflow_research.py:11225-11284"
+      ],
+      "notes": "Progress logs contain summaries; source/candidate ledgers carry the machine-readable provenance boundary."
+    },
+    {
+      "id": "stage1.outer_evidence_lane_fanout",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "process_fanout",
+      "direction": "one_pipeline_question_to_multiple_bridge_children",
+      "producer": "PipelineOrchestrator parallel research controller",
+      "input": "Original question plus per-lane angle prefix, isolated track_N handoff directory, shared budget/lease database, and explicit lane-specific dual-track ownership; lane 0 is the one shared actor producer when DEERFLOW_DUAL_TRACK is enabled.",
+      "transport": "ThreadPoolExecutor launches one DeerFlowResearchRunner subprocess per outer lane.",
+      "receiver": "Independent evidence-only bridge children.",
+      "output": "evidence_pack.md, source ledger, progress/checkpoint/meta per surviving lane; the baseline additionally must emit dossier/coverage/optional judge. A baseline actor failure is not accepted as an actor-free surviving baseline.",
+      "authority": "Each lane owns only its sealed evidence pack/source ledger. No lane individually owns the final global report when global synthesis is enabled.",
+      "durability": "track_N directories and lane checkpoints/telemetry persist; child processes are transient.",
+      "security_boundary": "Outer worker count, global subagent/model caps, shared leases/budget epoch, cancellation propagation, exactly-one Track-B assignment, non-owner suppression and artifact gates.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "parallel controller", "receiver": "lane scheduler", "payload": "angles, caps, shared budget/lease identity"},
+        {"step": 2, "sender": "lane scheduler", "receiver": "baseline bridge child", "payload": "angle-prefixed prompt, isolated out-dir and dual_track=true"},
+        {"step": 3, "sender": "lane scheduler", "receiver": "non-baseline bridge children", "payload": "angle-prefixed prompts, isolated out-dirs and dual_track=false"},
+        {"step": 4, "sender": "bridge children", "receiver": "track_N directories/controller", "payload": "sealed evidence/source/status/progress plus baseline actor artifacts"},
+        {"step": 5, "sender": "controller", "receiver": "global evidence manifest builder", "payload": "validated lanes plus exactly one current shared dossier"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:2974-2980",
+        "backend/app/services/pipeline_orchestrator.py:7400-7623",
+        "deerflow_bridge/deerflow_research.py:12322-12516"
+      ],
+      "notes": "Lane 1/baseline receives the original broad prompt and owns the shared Track B; other lanes add base-rate or incentives/contrarian/market angles and remain actor-track-free."
+    },
+    {
+      "id": "stage1.evidence_synthesis_manifest",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "integrity_manifest",
+      "direction": "sealed_lane_artifacts_to_single_global_synthesis_child",
+      "producer": "Parallel research controller",
+      "input": "Validated lane pack/source paths, sizes/hashes/identity, lane labels and market candidates plus exactly one baseline actor-dossier descriptor with exact dossier/coverage/source/lineage bytes and hashes, actor/claim/relationship/family seals and optional final-judge bytes/hash.",
+      "transport": "evidence_synthesis_manifest.json passed by --synthesis-manifest to a fresh bridge child.",
+      "receiver": "Bridge load_evidence_manifest plus load_manifest_actor_dossier, then the single global synthesis/final judge path.",
+      "output": "One canonical source namespace/evidence-part set plus one citation-remapped authoritative actor-intelligence block feeding one outline/section/judge pipeline and final report contract.",
+      "authority": "Version-3 manifest fingerprints and fresh source-bound actor coverage define admitted immutable evidence. Global synthesis owns the final report; the baseline dossier remains authoritative cast-wide actor evidence inside that report.",
+      "durability": "Manifest, lane packs, candidate reports/judges, and final promoted contract persist. Synthesis-only recovery reuses them without rerunning lanes.",
+      "security_boundary": "Root-contained paths, exact byte counts/SHA-256, source counts, actor descriptor, question/run/depth/attempt/lane/thread lineage, semantic identity and projection seals, optional exact-input final-judge validation and fresh receipt/source-bound coverage equality prevent substituting, mutating or silently omitting lane/actor evidence. Recovery authorizes only the exact prior attempt while using a fresh physical budget database.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "lane/baseline validators", "receiver": "manifest writer", "payload": "sealed lane pack/source identities plus dossier/coverage/optional judge identities"},
+        {"step": 2, "sender": "orchestrator", "receiver": "fresh global synthesis child", "payload": "--synthesis-manifest path and market candidates; dual_track=false"},
+        {"step": 3, "sender": "manifest loaders", "receiver": "fresh coverage/citation remapper", "payload": "verified evidence parts, stable sources and verified shared dossier"},
+        {"step": 4, "sender": "citation remapper", "receiver": "global synthesizer", "payload": "shared actor dossier as first synthesis block followed by Track-A evidence blocks"},
+        {"step": 5, "sender": "global synthesizer/judge/extractor", "receiver": "contract promotion", "payload": "integrity-valid report, actor dossier and structured artifacts"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:7625-7828",
+        "deerflow_bridge/deerflow_research.py:4664-4993",
+        "deerflow_bridge/deerflow_research.py:4996-5097",
+        "deerflow_bridge/deerflow_research.py:12266-12307"
+      ],
+      "notes": "Default RESEARCH_GLOBAL_SYNTHESIS=true makes this active. Synthesis-only recovery performs at most two attempts over the same sealed evidence and never reruns Track B."
+    },
+    {
+      "id": "stage1.shared_actor_dossier_global_reception",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "cross_lane_join",
+      "direction": "baseline_actor_dossier_to_global_report_and_structured_extraction",
+      "producer": "Version-3 actor_dossier descriptor and load_manifest_actor_dossier",
+      "input": "Checksum-bound dossier/coverage/baseline source ledger and optional final judge from the sole Track-B owner.",
+      "transport": "Exact-byte/root/path/lineage/seal validation, fresh receipt/source-bound coverage equality, citation remapping into the global source namespace, then the sanitized/delimited actor_dossier_synthesis_block prepended to synthesis parts.",
+      "receiver": "Global outline/section/stitch/judge pipeline, final report and the one structured-extraction owner.",
+      "output": "The final report integrates actor history, incentives, plans/actions/investments, decision logic, relationships, preferences, likely actions, red lines and explicit gaps. A deterministic report audit requires each behavior-ready family to expose exact sealed claim text, actor identity and an admitted citation in visible report content; the unchanged shared dossier remains a sibling canonical artifact.",
+      "authority": "The sealed dossier is authoritative cast-wide actor evidence; the global report is authoritative narrative synthesis; the later normalized actors.json is authoritative machine-readable actor contract.",
+      "durability": "The manifest, shared actor artifacts, globally synthesized report and normalized structured artifacts persist in the promoted research contract.",
+      "security_boundary": "No mutable-directory discovery, no second Track B, no unbound citation namespace, no explicit final judge FAIL, no hidden/generic actor marker satisfying the report audit and no coverage/lineage/seal sidecar differing from a fresh parent recomputation.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "manifest descriptor", "receiver": "load_manifest_actor_dossier", "payload": "relative paths, byte counts and SHA-256 for dossier/coverage/sources/optional judge"},
+        {"step": 2, "sender": "verified dossier/source ledger", "receiver": "citation remapper", "payload": "local actor citations plus global source index"},
+        {"step": 3, "sender": "actor_dossier_synthesis_block", "receiver": "global synthesizer", "payload": "first synthesis block labeled authoritative shared actor intelligence"},
+        {"step": 4, "sender": "global report plus dossier", "receiver": "structured extraction", "payload": "one merged narrative/evidence context for actor-intelligence/v1"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:7688-7757",
+        "deerflow_bridge/deerflow_research.py:4996-5097",
+        "deerflow_bridge/deerflow_research.py:12266-12307"
+      ],
+      "notes": "This is a required default join, not the older optional-dossier compatibility branch."
+    },
+    {
+      "id": "stage1.parallel_track_deterministic_merge_compatibility_path",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "kind": "alternate_merge_boundary",
+      "direction": "surviving_full_track_contracts_to_one_merged_handoff",
+      "producer": "PipelineOrchestrator parallel-track merger when single global synthesis is disabled",
+      "input": "Surviving per-track report/evidence/structured artifacts plus the sole baseline lane's actor dossier when present; non-baseline lanes remain actor-track-free even on this compatibility path.",
+      "transport": "Deterministic Python merge/normalization plus an optional one-call opening reconciler; atomic writes to the root handoff directory.",
+      "receiver": "Root Stage-1 handoff and downstream consumers.",
+      "output": "One merged report with globally remapped citations/references, a bounded deterministic actor-dossier/cast projection (or the best sole surviving dossier fallback), merged data/quality/meta and optional audited unified opening.",
+      "authority": "Deterministic merged unions and remapped source namespace define the result. The optional model may edit only the opening and cannot rewrite evidence bodies; audit failure reverts to deterministic output.",
+      "durability": "Merged root artifacts and reconcile audit in pipeline options persist; original track_N artifacts remain available.",
+      "security_boundary": "Exactly-one Track-B routing, surviving-track gates, normalized URL/source deduplication, global citation remap, deterministic dossier/data compaction, bounded summary-only LLM input, citation/structure audit and atomic writes. This branch does not masquerade as version-3 single-global-synthesis provenance.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "surviving track_N contracts", "receiver": "deterministic merger", "payload": "per-track report/structured artifacts/meta plus at most one baseline dossier"},
+        {"step": 2, "sender": "merger", "receiver": "optional opening reconciler", "payload": "track titles and bounded executive summaries only"},
+        {"step": 3, "sender": "opening audit", "receiver": "merged report assembler", "payload": "accepted opening or deterministic fallback"},
+        {"step": 4, "sender": "assembler", "receiver": "root handoff/downstream", "payload": "atomic merged report, global references, structured unions and meta"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:2891-3169",
+        "backend/app/services/pipeline_orchestrator.py:7950-8141",
+        "backend/app/services/actor_dossier_compactor.py:151-320"
+      ],
+      "notes": "This is not the default multi-lane policy: Config defaults RESEARCH_GLOBAL_SYNTHESIS=true, which uses sealed evidence lanes and one fresh global synthesis child instead."
+    },
+    {
+      "id": "stage1.report_and_judge_binding",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "quality_artifact_contract",
+      "direction": "synthesis_candidate_to_judge_to_adopted_report",
+      "producer": "Multipart/single-call synthesis and incremental patch paths",
+      "input": "Research evidence, question, target-language/depth contract, source index, markets, and candidate report bytes.",
+      "transport": "Tool-free synthesis/judge calls plus deterministic citation, patch, score-normalization, monotonic adoption, and atomic file writes.",
+      "receiver": "Report quality controller, orchestrator artifact gates, structured extraction, and downstream pipeline.",
+      "output": "research_report.md, research_report_judge.json, report meta with digest binding the adopted judge to exact prose, and bridge-local candidate/refinement sidecars.",
+      "authority": "The atomically persisted adopted report is canonical only when its matching judge/meta integrity gates pass. Candidate/refinement sidecars can document attempted mutations in the bridge output or failed-attempt archive, but are not part of the successful Stage-1 promoted contract.",
+      "durability": "The adopted report, judge, and promoted contract files persist in handoff. Candidate/refinement sidecars are written in the bridge output directory but the successful-promotion allowlist omits them; a failed-attempt archive may preserve them separately.",
+      "security_boundary": "Strict parsing, digest binding, minimum report/error-marker gates, citation/source audit, monotonic candidate adoption, and no unjudged silent overwrite.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "evidence context", "receiver": "synthesizer", "payload": "bounded evidence/source/citation contract"},
+        {"step": 2, "sender": "synthesizer", "receiver": "report finalizer/judge", "payload": "candidate Markdown"},
+        {"step": 3, "sender": "judge", "receiver": "adoption controller", "payload": "scorecard bound to candidate bytes"},
+        {"step": 4, "sender": "adoption controller", "receiver": "handoff and bridge-local forensics", "payload": "promoted adopted report/judge/meta; non-promoted candidate sidecar when written"}
+      ],
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:3639-4494",
+        "deerflow_bridge/deerflow_research.py:7260-7758",
+        "deerflow_bridge/deerflow_research.py:11064-11141",
+        "backend/app/services/pipeline_orchestrator.py:2109-2319"
+      ],
+      "notes": "Deterministic chart/market appendices can follow the prose judgment; metadata records the persisted report identity and judge scope."
+    },
+    {
+      "id": "stage1.actor_dossier_contract",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "quality_artifact_contract",
+      "direction": "track_b_research_to_dossier_to_downstream",
+      "producer": "The sole baseline Track B: actor landscape turn, mandatory cast-wide completion, dossier synthesizer, deterministic coverage audit and optional/default-on judge/refinement loop",
+      "input": "Question/language/depth, fetched actor/network/trajectory evidence, all 17 actor-intelligence dimensions, exact quote/span plus current receipt/content provenance, separate publication/claim-valid time, semantic actor identity, grounded relationship/causal attributes and typed-gap rules.",
+      "transport": "Isolated Track-B thread, streamed research/completion/gap turns with query-bound search-result receipts, tool-free sanitized/delimited synthesis/judge, deterministic receipt/source-bound audit and atomic artifact writes.",
+      "receiver": "Version-3 global-synthesis manifest/loader, global report synthesis, structured extraction, graph/simulation context and dossier APIs.",
+      "output": "Required default actor_dossier.md, actor_dossier_coverage.json and optional actor_dossier_judge.json when parseable; disabled/failing compatibility modes can produce explicit absence, but the default baseline lane fails closed.",
+      "authority": "The checksum-admitted dossier owns narrative cast-wide actor evidence. The fresh deterministic audit owns semantic cast identity, 17-dimension accountability and claim/relationship/family projections; a complete finite final judge owns quality only for its structured exact-input attestation; normalized actors.json later owns the machine-readable cast/intelligence contract.",
+      "durability": "Dossier/coverage/optional judge persist in baseline and promoted handoff, with exact bytes/hashes in current lane meta, evidence_synthesis_manifest.json and research_contract_manifest.json.",
+      "security_boundary": "Exactly-one ownership, isolated thread, whole-document prompt sanitization, fetched-source/receipt/content binding, NFKC semantic identity/collision rejection, 17-dimension typed ledger, grounded relationship/causal seals, judge truncation rejection at the 200,000-character ceiling, finite exact-key scoring, final-byte rejudge, minimum/error/control-failure gates, stale-sidecar cleanup and current-attempt lineage/hash admission. Direct synthesis/judge calls still have no explicit bridge fallback circuit.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "landscape turn", "receiver": "cast-wide completion", "payload": "provisional force-ranked cast and fetched evidence"},
+        {"step": 2, "sender": "completion pass", "receiver": "dossier synthesizer", "payload": "every Tier-1/2 actor by all 17 dimensions, exact receipt/source-supported claim or typed attempted gap"},
+        {"step": 3, "sender": "synthesizer", "receiver": "coverage audit and actor judge", "payload": "exact dossier candidate and fetched-source ledger"},
+        {"step": 4, "sender": "judge gaps", "receiver": "bounded targeted research/resynthesis", "payload": "zero to two default gap rounds, followed by final-byte rejudge when changed"},
+        {"step": 5, "sender": "artifact gates", "receiver": "version-3 manifest/global synthesis", "payload": "accepted dossier/coverage/optional judge with exact bytes/hashes or explicit failure"}
+      ],
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:9635-10313",
+        "deerflow_bridge/deerflow_research.py:12322-12516",
+        "backend/app/services/pipeline_orchestrator.py:1930-2026",
+        "backend/app/services/pipeline_orchestrator.py:7688-7757"
+      ],
+      "notes": "This contract is present exactly once in the default three-lane/global-synthesis path. Explicit dual-track disablement and legacy/single-lane compatibility remain labeled conditional branches; they do not justify calling Track B absent by default."
+    },
+    {
+      "id": "stage1.structured_extraction_outputs",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "structured_artifact_contract",
+      "direction": "report_and_dossier_to_machine_readable_handoff",
+      "producer": "Primary/recovery extraction calls plus deterministic normalizers/audits",
+      "input": "Final global report, required checksum-admitted shared actor dossier, market context, actor-cast policy, target language and rich extraction schema including 17 dimensions, semantic identities, exact source-support records, grounded relationship/causal attributes and typed gaps. Prose is sanitized/delimited separately from governing extraction instructions.",
+      "transport": "One primary tool-free model JSON response, at most one compact recovery, strict parse/cast normalization, deterministic actor-intelligence finalization and atomic JSON files.",
+      "receiver": "Downstream graph/simulation/report services, API dossier, research quality gates, and visual renderer.",
+      "output": "actors.json with stable semantic actor IDs, nested actor-intelligence/v1 claims/relationships/gaps and top-level identity/source/claim/relationship/family hash/coverage contract; sources.json with stable IDs and receipts; timeline.json, quantitative.json, contested.json, actor_intelligence_lineage.json and meta quality/audit fields.",
+      "authority": "Each persisted JSON file is canonical for its machine-readable domain; research_report.md/dossier remain canonical narrative evidence. Model-proposed IDs/contracts are not trusted: deterministic finalization owns identities, source admission, missing-dimension gaps and provenance hashes.",
+      "durability": "Atomic files persist in handoff and are sealed by the manifest-last research contract before downstream admission.",
+      "security_boundary": "Strict JSON/schema/type handling, exact tier enum and deterministic demotion/exclusion, NFKC homonym/alias-collision rejection, one bounded recovery, malformed-row cleanup, fetched-source/receipt normalization, typed gaps, canonical relationship/causal IDs, non-circular ordered/multiset seals, quantitative reconciliation and extraction failure isolation.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "final global report/shared dossier", "receiver": "extraction model", "payload": "bounded text plus rich structured and 17-dimension actor schema"},
+        {"step": 2, "sender": "extraction model", "receiver": "parser/recovery controller", "payload": "JSON text or truncation/error"},
+        {"step": 3, "sender": "parser", "receiver": "cast/source normalizers", "payload": "structured actor/relationship/source object"},
+        {"step": 4, "sender": "actor-intelligence finalizer", "receiver": "artifact writers", "payload": "stable IDs, source-grounded claims, explicit gaps and top contract"},
+        {"step": 5, "sender": "artifact writers", "receiver": "research manifest/downstream", "payload": "split atomic JSON artifacts and quality/provenance metadata"}
+      ],
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:5335-5535",
+        "deerflow_bridge/deerflow_research.py:6103-6139",
+        "deerflow_bridge/deerflow_research.py:11455-11872",
+        "deerflow_bridge/deerflow_research.py:2046-2308"
+      ],
+      "notes": "An extract-only salvage child can reconstruct this contract from an already-written report without rerunning research."
+    },
+    {
+      "id": "stage1.actor_intelligence_contract_finalization",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "deterministic_evidence_contract",
+      "direction": "model_extracted_actor_claims_to_sealed_actor_intelligence_v1",
+      "producer": "persist_final_actor_intelligence_contract after final report/chart/triangulation mutations",
+      "input": "Final exact research_report.md and actor_dossier.md text, extracted actors/relationships, and the final fetched sources.json ledger.",
+      "transport": "Deterministic normalization assigns stable semantic source/actor/claim/relationship IDs, admits only resolvable current-receipt fetched-source support, normalizes temporal/evidence/qualifier and causal fields, fills each absent dimension with a typed gap, writes sources first and actors second, then the parent independently recomputes projection seals and fingerprints final bytes.",
+      "receiver": "Ontology bounded projection, graph actor seed, PREPARE actor-context builder and research contract validator/promoter.",
+      "output": "Every actor has actor-intelligence/v1 dimensions/coverage/typed gaps and canonical grounded relationships; the top contract binds generated_at, exact report/dossier/canonical-source hashes, ordered and multiset actor identities, claim/relationship/family projections, source/actor/Tier-1/2 counts, ordered 17 dimensions and aggregate coverage, while actor_intelligence_lineage.json binds question/run/depth/attempt/lane/thread/checkpoint.",
+      "authority": "This deterministic finalizer, not model-authored IDs or a model-authored contract, owns actor identity/provenance. The top contract deliberately omits a self-hash; research_contract_manifest.json seals complete actors.json bytes.",
+      "durability": "Rewritten sources.json/actors.json and meta actor-intelligence summary persist; manifest-last staged promotion and sealed-copy validation bind every final file before downstream use.",
+      "security_boundary": "NFKC semantic identity derivation with homonym/alias-collision rejection, current receipt/content-bound support, exact report/dossier/source plus ordered/multiset actor and claim/relationship/family seals, full ordered dimension contract, typed gaps, no mutation after finalization and parent independent exact-file/lineage/projection validation.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "structured extraction", "receiver": "deterministic normalizer", "payload": "model-proposed actors, relationships and intelligence claims"},
+        {"step": 2, "sender": "final report/dossier/source bytes", "receiver": "normalizer", "payload": "non-circular hash inputs and fetched-source lookup"},
+        {"step": 3, "sender": "normalizer", "receiver": "sources.json then actors.json", "payload": "stable IDs, normalized claims, explicit gaps and top contract"},
+        {"step": 4, "sender": "research contract builder", "receiver": "staged validator/promoter", "payload": "exact file byte counts/SHA-256 and report-judge/provenance binding"},
+        {"step": 5, "sender": "promoted handoff", "receiver": "ontology/graph/PREPARE", "payload": "sealed actor-intelligence/v1 contract and lineage"}
+      ],
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:1715-1734",
+        "deerflow_bridge/deerflow_research.py:1828-2308",
+        "deerflow_bridge/deerflow_research.py:11865-11872",
+        "deerflow_bridge/deerflow_research.py:13107-13114",
+        "backend/app/services/pipeline_orchestrator.py:2322-2516"
+      ],
+      "notes": "This is deterministic post-processing and therefore intentionally absent from the LLM-call census."
+    },
+    {
+      "id": "stage1.prediction_market_input_and_output",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "kind": "external_data_interface",
+      "direction": "public_market_api_and_agent_tool_observations_to_research_and_handoff",
+      "producer": "Query derivation plus Polymarket public Gamma API and prediction_market_search tool ledger",
+      "input": "Question-derived queries, optional hot topics/actors, volume/relevance/diversity caps, and agent-observed candidates.",
+      "transport": "Keyless HTTPS snapshot requests plus append-only candidate JSONL and deterministic reconciliation.",
+      "receiver": "Opening research prompt, structured extraction, final market registry/report section, and downstream calibration consumers.",
+      "output": "Initial pricing block and canonical prediction_markets.json with as_of, queries, selected markets, provenance, degradation, counts, and explicit empty reason.",
+      "authority": "Machine-fetched market snapshot is an as-of calibration signal, not truth. prediction_markets.json is canonical for what the run admitted.",
+      "durability": "Candidates JSONL, canonical market JSON, and meta persist.",
+      "security_boundary": "Public-network timeouts/circuit/degrade-safe behavior, normalized IDs, volume/relevance gates, fail-closed widened-query scoring, per-event caps, and explicit empty markers.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "question/actors", "receiver": "query resolver", "payload": "topic context"},
+        {"step": 2, "sender": "snapshot/tool", "receiver": "market collector", "payload": "machine-fetched market rows and observations"},
+        {"step": 3, "sender": "relevance/reconciliation", "receiver": "opening prompt/extraction", "payload": "initial admitted pricing block"},
+        {"step": 4, "sender": "post-report collector", "receiver": "prediction_markets.json/report/downstream", "payload": "canonical refreshed/reconciled registry or explicit empty status"}
+      ],
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:9364-9485",
+        "deerflow_bridge/deerflow_research.py:9968-10220",
+        "deerflow_bridge/deerflow_research.py:11007-11022",
+        "deerflow_bridge/deerflow_research.py:11741-11749"
+      ],
+      "notes": "Query/relevance model calls are inventoried separately; HTTP retrieval and market caps are deterministic/external-data operations."
+    },
+    {
+      "id": "stage1.deterministic_chart_outputs",
+      "plane": "stage1_bridge",
+      "status": "conditional_current",
+      "kind": "visual_artifact_output",
+      "direction": "structured_handoff_to_chart_files_and_report_annex",
+      "producer": "forecast-visuals render script invoked after structured artifacts and markets are written",
+      "input": "actors, relationships, timeline, quantitative facts, markets, report identity, and chart policy.",
+      "transport": "Deterministic renderer subprocess/file IO; no LLM.",
+      "receiver": "charts directory, charts.json/meta, research report Visual Annex, artifact registry/API.",
+      "output": "PNG/SVG/HTML chart assets where supported plus visual-contract audit and report references.",
+      "authority": "Underlying structured JSON remains authoritative data; charts are derived visualizations.",
+      "durability": "Chart assets and chart metadata persist under handoff/charts and may be registered as pipeline artifacts.",
+      "security_boundary": "Renderer input/output roots, safe artifact registration, symlink/path revalidation, MIME/CSP on serving, and non-fatal default gate.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "structured artifacts", "receiver": "chart renderer", "payload": "validated JSON and report context"},
+        {"step": 2, "sender": "renderer", "receiver": "charts directory/meta", "payload": "assets and chart manifest"},
+        {"step": 3, "sender": "chart finalizer", "receiver": "research report", "payload": "Visual Annex references"},
+        {"step": 4, "sender": "artifact API", "receiver": "client", "payload": "path-revalidated protected chart bytes"}
+      ],
+      "source_anchors": [
+        "deerflow_bridge/deerflow_research.py:11751-11797",
+        "backend/app/api/research.py:717-764"
+      ],
+      "notes": "Current default treats unavailable charts as a documented non-fatal enhancement shortfall unless strict visual gating is enabled."
+    },
+    {
+      "id": "stage1.authoritative_handoff_to_downstream",
+      "plane": "stage1_bridge",
+      "status": "active_current",
+      "kind": "stage_boundary",
+      "direction": "validated_stage1_artifacts_to_pipeline_stages_and_clients",
+      "producer": "Bridge finalizer and orchestrator contract promoter/loader",
+      "input": "research_report.md, shared actor_dossier.md/coverage/optional judge, actor-intelligence/v1 actors.json, sources/timeline/quantitative/contested JSON, markets, charts, report judge, meta, research manifest, checkpoint/provenance/telemetry.",
+      "transport": "Filesystem handoff directory plus PipelineState artifact mapping and in-process result dictionary.",
+      "receiver": "Knowledge-graph, simulation, forecast-report pipeline stages; dossier/artifact APIs; resume/health logic.",
+      "output": "Validated research summary object and durable canonical Stage-1 contract, including semantic actor identities, source-supported behavior claims, grounded relationships, typed gaps and lineage consumable without reparsing prose.",
+      "authority": "research_report.md and the shared dossier are canonical narratives; actor-intelligence/v1 actors.json and sibling JSON files are canonical structured lanes; coverage/judges/meta/research manifest bind integrity and health; pipeline_state.json owns lifecycle.",
+      "durability": "All contract artifacts persist under the pipeline handoff directory and registered artifact/state files.",
+      "security_boundary": "Minimum/error/control-failure checks, exact actor-dossier current-attempt hashes, question/run/depth/attempt/lane/thread lineage, report-judge and visible actor-family audit binding, parent-recomputed actor/source/claim/relationship/family seals, manifest/file/schema checks, sealed staged-copy validation, freshness, atomic promotion and directory containment prevent half-written, stale, colliding, downgraded or provenance-free actor contracts from reaching downstream.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "bridge finalizers", "receiver": "staged handoff", "payload": "report/dossier/coverage/judges and finalized actor-intelligence JSON/provenance artifacts"},
+        {"step": 2, "sender": "runner/orchestrator", "receiver": "artifact validators", "payload": "expected contract and freshness/integrity evidence"},
+        {"step": 3, "sender": "validators", "receiver": "PipelineState", "payload": "stage success/degraded/failure and registered artifact paths"},
+        {"step": 4, "sender": "handoff/PipelineState", "receiver": "ontology/graph/PREPARE/API/resume", "payload": "canonical Stage-1 data, actor contract and lineage"}
+      ],
+      "source_anchors": [
+        "backend/app/services/pipeline_orchestrator.py:1930-2026",
+        "backend/app/services/pipeline_orchestrator.py:2138-2585",
+        "deerflow_bridge/deerflow_research.py:2224-2308",
+        "deerflow_bridge/deerflow_research.py:13107-13114"
+      ],
+      "notes": "This is the current cut line: downstream stages consume files, not the embedded agent's transient chat text."
+    },
+    {
+      "id": "drf2.harness_configuration_surface",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "kind": "configuration",
+      "direction": "drf2_config_to_deerflow2_runtime",
+      "producer": "drf2/config/config.yaml",
+      "input": "Model providers/routes, tools/groups, deferred search, output budgets, loop/safety, uploads/sandbox, subagents, skills, title/summarization/memory, database, and event settings.",
+      "transport": "DEER_FLOW_CONFIG_PATH or copied project config loaded by DeerFlow 2.0.",
+      "receiver": "Harness config loader, agent/tool/model factories, gateway stores, and middleware.",
+      "output": "Configured pre-cutover DRF-2 harness runtime.",
+      "authority": "The selected config file is authoritative for the target harness process; absolute paths and environment placeholders must resolve on that deployment.",
+      "durability": "YAML is durable source/config; runtime objects are process-local; DB/events/workspaces persist separately.",
+      "security_boundary": "Environment-backed credentials, local host-bash assumption, skill/tool whitelists, model capability flags, and externalization/loop/safety policies.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "operator environment", "receiver": "harness config loader", "payload": "config path and secret environment values"},
+        {"step": 2, "sender": "config loader", "receiver": "runtime factories", "payload": "validated model/tool/agent/middleware/store configuration"},
+        {"step": 3, "sender": "runtime factories", "receiver": "gateway/agents", "payload": "active configured services"}
+      ],
+      "source_anchors": [
+        "drf2/config/config.yaml:1-180",
+        "drf2/config/config.yaml:180-441",
+        "drf2/README.md:72-101"
+      ],
+      "notes": "This configuration is implemented/offline-validated but the current Stage-1 bridge remains authoritative until live parity/cutover."
+    },
+    {
+      "id": "drf2.kg_and_simulation_mcp_extensions",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "kind": "extension_protocol",
+      "direction": "deerflow2_harness_to_drf2_engine_processes",
+      "producer": "drf2 extensions config and MCP tool calls",
+      "input": "Enabled stdio server definitions, backend venv Python commands, PYTHONPATH, FalkorDB/Graphiti/MiniMax environment, and kg_*/sim_* tool requests.",
+      "transport": "MCP stdio child processes; config supports replacing with HTTP MCP URLs.",
+      "receiver": "drf2.engines.kg.server and drf2.engines.simulation.server.",
+      "output": "KG write/search/causal/centrality results and simulation job start/status/results/stop/interview results.",
+      "authority": "KG engine owns graph state; simulation engine owns job state/results. Harness ToolMessages are received snapshots of those systems.",
+      "durability": "KG/database and simulation files/jobs follow engine semantics; MCP sessions are runtime resources; selected output files persist in workspace.",
+      "security_boundary": "Separate processes/environments, stdio protocol, allowed-tools policy, deferred discovery, path/config arguments, and externalized large results.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "extensions loader", "receiver": "engine process", "payload": "spawn command, env, MCP initialize/list_tools"},
+        {"step": 2, "sender": "agent/driver", "receiver": "MCP tool wrapper", "payload": "kg_* or sim_* call"},
+        {"step": 3, "sender": "engine", "receiver": "harness/agent", "payload": "structured result/error"},
+        {"step": 4, "sender": "engine/artifact tool", "receiver": "workspace/driver", "payload": "durable graph/job/artifact identity"}
+      ],
+      "source_anchors": [
+        "drf2/config/extensions_config.json:1-43",
+        "drf2/README.md:52-70"
+      ],
+      "notes": "The deterministic driver's current simulation client is HTTP, while the chat architecture exposes the simulation engine through MCP; that boundary is explicitly separate below."
+    },
+    {
+      "id": "drf2.exploratory_chat_pipeline",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "kind": "orchestration_mode",
+      "direction": "user_chat_to_lead_to_four_custom_subagents_and_engines",
+      "producer": "User in DeerFlow 2.0 UI/API and lead agent",
+      "input": "Forecast question and request to run researcher -> ontology-builder -> sim-configurer -> forecaster, with subagents enabled.",
+      "transport": "Native Runs API/SSE and task-tool subagent delegation; MCP/file tools for engine/artifact exchange.",
+      "receiver": "Four configured custom subagents and their whitelisted skill/tool sets.",
+      "output": "Research/dossier, ontology/KG summary, simulation config/job ID/results, final report/forecast artifacts and parent chat updates.",
+      "authority": "Workspace/engine artifacts are authoritative outputs; lead chat coordinates but does not replace deterministic health gates.",
+      "durability": "Parent thread/checkpoint and workspace/engine artifacts persist; each subagent graph is ephemeral.",
+      "security_boundary": "Per-subagent model, tools, skills, max turns/timeouts; MCP process boundaries; shared workspace; native run ownership/policy.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "user", "receiver": "lead agent", "payload": "forecast request"},
+        {"step": 2, "sender": "lead", "receiver": "researcher", "payload": "Stage-1 task; receives report/dossier"},
+        {"step": 3, "sender": "lead/workspace", "receiver": "ontology-builder", "payload": "research artifacts; receives ontology/KG summary"},
+        {"step": 4, "sender": "lead/workspace/KG", "receiver": "sim-configurer", "payload": "actors/graph/budget; receives config and sim_id"},
+        {"step": 5, "sender": "simulation engine/results", "receiver": "forecaster", "payload": "research/KG/sim/markets; receives full_report.md/forecast.json"},
+        {"step": 6, "sender": "subagents/workspace", "receiver": "lead/user", "payload": "terminal summaries and artifact references"}
+      ],
+      "source_anchors": [
+        "drf2/config/config.yaml:199-376",
+        "drf2/README.md:86-116"
+      ],
+      "notes": "This is exploratory/agent-coordinated. The deterministic driver is a separate implemented orchestration mode."
+    },
+    {
+      "id": "drf2.driver_cli_input_and_summary",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "kind": "operator_interface",
+      "direction": "operator_to_pipeline_driver_and_back",
+      "producer": "CLI operator/automation",
+      "input": "Config/base-dir plus run question, optional pipeline_id/seeds/dry-run; or resume/status pipeline_id.",
+      "transport": "python -m drf2.driver.cli command-line arguments and stdout/stderr JSON/text.",
+      "receiver": "StateStore and PipelineDriver.",
+      "output": "Pipeline ID, overall status/error, and per-stage status/health/reuse/issues. Run/resume exit 0 only for a completed pipeline; status exits 0 whenever the requested state exists, including running or failed state.",
+      "authority": "Persisted driver state is authoritative; CLI summary is a projection of it.",
+      "durability": "Arguments are transient; state/manifest/workspace artifacts persist under driver base_dir and harness workspace.",
+      "security_boundary": "Pipeline ID validation, YAML/config path, credential/API settings, dry-run isolation, and no silent success on failed state.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "operator", "receiver": "CLI parser", "payload": "run/resume/status arguments"},
+        {"step": 2, "sender": "CLI", "receiver": "PipelineDriver/StateStore", "payload": "validated configuration and command"},
+        {"step": 3, "sender": "driver state", "receiver": "stdout/operator", "payload": "JSON summary and exit code"}
+      ],
+      "source_anchors": [
+        "drf2/driver/cli.py:120-223"
+      ],
+      "notes": "Dry-run uses deterministic fixture effects and a fake simulation engine; it does not prove live provider/engine integration."
+    },
+    {
+      "id": "drf2.driver_runs_api_transport",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "kind": "control_api_client",
+      "direction": "pipeline_driver_to_deerflow2_gateway",
+      "producer": "RunsApiHarness",
+      "input": "One persistent thread ID; per-stage slash-skill prompt; optional context; base URL/user/workspace/API key; timeout and poll interval.",
+      "transport": "POST /api/threads, POST /api/threads/{id}/runs, repeated GET /runs/{run_id}, and best-effort POST /cancel on timeout.",
+      "receiver": "Native DeerFlow 2.0 gateway/run worker.",
+      "output": "Run ID and terminal RunResult status/error/elapsed; files are read separately from the mapped workspace.",
+      "authority": "Gateway RunRecord is authoritative for run lifecycle; driver timeout can request cancel but workspace/gates determine stage artifact success.",
+      "durability": "Gateway run/thread/checkpoint persists per config, and a live driver process can keep polling its local run_id across a gateway restart. The driver does not persist the in-flight run_id in DriverState, so a driver-process restart cannot reattach to that run and a persisted running stage is not safely resumable.",
+      "security_boundary": "Bearer API key if configured, owner-bound thread, multitask_strategy=reject, on_disconnect=continue, JSON errors, bounded HTTP/poll timeout.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "driver", "receiver": "gateway threads API", "payload": "idempotent persistent thread create"},
+        {"step": 2, "sender": "driver", "receiver": "gateway runs API", "payload": "single user message with slash-skill stage prompt"},
+        {"step": 3, "sender": "gateway", "receiver": "driver poll loop", "payload": "RunRecord status until terminal"},
+        {"step": 4, "sender": "driver timeout", "receiver": "gateway cancel API", "payload": "best-effort run cancellation"}
+      ],
+      "source_anchors": [
+        "drf2/driver/harness_client.py:1-17",
+        "drf2/driver/harness_client.py:56-142"
+      ],
+      "notes": "The implemented driver uses status polling rather than SSE. Store-hydrated run records can survive a gateway restart while the original driver process retains run_id; this is not driver-process reattachment or recovery."
+    },
+    {
+      "id": "drf2.driver_persistent_thread_workspace",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "kind": "artifact_bus",
+      "direction": "stage_agent_outputs_to_later_stages_and_driver",
+      "producer": "Five harness knowledge-stage runs and the driver simulation stage",
+      "input": "Files written under /mnt/user-data/outputs, including prior stage artifacts and per-seed subdirectories.",
+      "transport": "One persistent DeerFlow thread workspace mapped on host as users/{user_id}/threads/{thread_id}/user-data/outputs.",
+      "receiver": "Later stage agents, deterministic gates/manifest, simulation client, and operator artifact readers.",
+      "output": "research_report.md, ontology.json, kg_build_summary.json, simulation_config.json, run_summary.json when produced, full_report.md, forecast.json, optional files, seed outputs, and ensemble forecast. The current ensemble branch can complete a seed without a required run_summary file.",
+      "authority": "File bytes are the cross-stage contract. On the single-simulation path, a successful RunRecord without required files does not complete a stage. The ensemble branch currently checks only simulation issues plus the deliverable gate and can therefore complete despite a missing per-seed run_summary or failed binary-conviction condition.",
+      "durability": "Workspace files persist per harness workspace provider; one thread ID is persisted in driver state.",
+      "security_boundary": "Thread/user workspace containment, exact filenames, driver-configured trusted host workspace_root, and read-do-not-rewrite instruction for prior artifacts.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "stage N agent", "receiver": "workspace outputs", "payload": "exact required/optional files"},
+        {"step": 2, "sender": "workspace", "receiver": "driver", "payload": "host-resolved artifact paths for checks/hashes"},
+        {"step": 3, "sender": "workspace", "receiver": "stage N+1 agent", "payload": "prior artifacts available for read"},
+        {"step": 4, "sender": "driver simulation", "receiver": "workspace", "payload": "run_summary.json for report stage"}
+      ],
+      "source_anchors": [
+        "drf2/driver/pipeline.py:45-84",
+        "drf2/driver/harness_client.py:136-142",
+        "drf2/driver/pipeline.py:234-274"
+      ],
+      "notes": "Workspace_root must match the gateway's actual storage mapping; otherwise the driver can observe terminal runs but cannot validate artifacts."
+    },
+    {
+      "id": "drf2.driver_state_and_hash_manifest",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "kind": "resume_and_integrity_state",
+      "direction": "stage_transitions_and_files_to_persisted_driver_state",
+      "producer": "PipelineDriver, StateStore, and ArtifactManifest",
+      "input": "Pipeline question/thread/seeds/options, per-stage transitions/health/issues/attempts/artifact paths, and artifact bytes/schema probes.",
+      "transport": "Atomic state.json and manifest.json writes under per-pipeline driver directory.",
+      "receiver": "Resume/status path and stage scheduler.",
+      "output": "Schema-versioned DriverState plus name -> absolute path/sha256/bytes/stage/time/schema_ok manifest entries.",
+      "authority": "State owns orchestration lifecycle; manifest/files own whether a completed stage can be reused. Bare completed status is insufficient when recorded hashes fail.",
+      "durability": "Atomic JSON files survive driver restart; newer unsupported schema causes explicit refusal.",
+      "security_boundary": "Pipeline ID regex/path containment, schema versioning/migration, valid state transitions, JSON structural probes, file size/hash verification.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "driver", "receiver": "StateStore", "payload": "stage start/complete/fail/reuse state"},
+        {"step": 2, "sender": "stage files", "receiver": "ArtifactManifest", "payload": "path, bytes, sha256, schema probe"},
+        {"step": 3, "sender": "resume", "receiver": "manifest verifier", "payload": "completed stage and expected artifact specs"},
+        {"step": 4, "sender": "verifier", "receiver": "scheduler", "payload": "reuse or force rebuild with problem"}
+      ],
+      "source_anchors": [
+        "drf2/driver/state.py:24-230",
+        "drf2/driver/manifest.py:27-138",
+        "drf2/driver/pipeline.py:166-209"
+      ],
+      "notes": "For backward compatibility, a completely empty/absent manifest causes unconditional status-only reuse: verify_stage returns success without checking expected paths. Once entries exist, recorded path/hash/schema mismatches force rebuild."
+    },
+    {
+      "id": "drf2.deterministic_stage_gates",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "kind": "quality_control",
+      "direction": "stage_artifacts_to_pass_degraded_fail_decision",
+      "producer": "Driver artifact checks and gates module",
+      "input": "On the single-simulation path: required artifact presence, research report/dossier/meta, deliverable report/forecast JSON, binary forecast distribution/count, and simulation run summary/actions state. The ensemble path evaluates simulation issues and the deliverable gate per seed but omits required run_summary and binary-conviction gates.",
+      "transport": "Direct file/JSON reads and deterministic Python checks; never an LLM call.",
+      "receiver": "PipelineDriver stage transition and health fields.",
+      "output": "GateResult with name, pass/degraded/fail, issues, and metadata.",
+      "authority": "Gate verdict determines stage health/completion; model self-report cannot override missing/invalid files or hard gates.",
+      "durability": "Verdict/issues are persisted in driver state; evidence files and manifest persist separately.",
+      "security_boundary": "Single-path gates include fail-closed required artifacts, structured JSON validation, report-size/count/conviction thresholds, hollow-simulation distinction, and explicit degraded vs hard-fail semantics. The ensemble implementation is weaker: it does not enforce required per-seed run_summary or binary-conviction checks.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "stage workspace", "receiver": "artifact presence/schema checks", "payload": "required and optional files"},
+        {"step": 2, "sender": "checks", "receiver": "semantic gate", "payload": "parsed artifact metrics"},
+        {"step": 3, "sender": "gate", "receiver": "PipelineDriver", "payload": "pass/degraded/fail with issues/meta"},
+        {"step": 4, "sender": "PipelineDriver", "receiver": "state/manifest/next stage", "payload": "stop, record degraded, or proceed"}
+      ],
+      "source_anchors": [
+        "drf2/driver/pipeline.py:45-68",
+        "drf2/driver/pipeline.py:136-164",
+        "drf2/driver/pipeline.py:212-232",
+        "drf2/driver/gates.py:1-220"
+      ],
+      "notes": "These complete gates describe the single-simulation path. The ensemble branch omits two of them as noted above. The offline dry run exercises driver mechanics, but no live end-to-end drf2 gate run has yet established cutover parity."
+    },
+    {
+      "id": "drf2.driver_simulation_engine_boundary",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "kind": "detached_job_control",
+      "direction": "pipeline_driver_to_simulation_job_service_and_back",
+      "producer": "PipelineDriver RUN stage through HttpSimEngine",
+      "input": "Parsed simulation_config.json plus optional seed and timeout/stall/poll policy.",
+      "transport": "Provisional expected/TODO HTTP client contract: POST /simulations, GET /simulations/{id}, POST /simulations/{id}/stop. No matching HTTP server is implemented in this tree; the present simulation server exposes stdio MCP for chat-native mode.",
+      "receiver": "Expected future HTTP adapter in front of the drf2 simulation job service/OASIS detached process; currently missing from the deterministic-driver topology.",
+      "output": "If the missing adapter is supplied: sim_id, repeated completion/error/current_round status, optional sim_dir/run_summary, and optional stop outcome. The driver writes run_summary.json only when the returned summary is a dictionary or a summary file exists under sim_dir.",
+      "authority": "The implemented stdio MCP simulation service owns job state/results. The driver owns stage timeout/stall decisions and workspace copies, but its provisional HTTP client cannot currently reach that service without an adapter.",
+      "durability": "Detached engine job/files can persist through the implemented service; driver state/manifest and copied summaries persist. Any future HTTP polling session would be transient.",
+      "security_boundary": "The provisional client defines a configured base URL, JSON contract, request timeouts, no-round-advance stall watchdog, overall timeout, best-effort stop, and hollow-simulation gate. None of those establishes a live server boundary until the transport mismatch is resolved.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "workspace", "receiver": "driver", "payload": "simulation_config.json"},
+        {"step": 2, "sender": "driver", "receiver": "simulation service", "payload": "start config and optional seed"},
+        {"step": 3, "sender": "simulation service", "receiver": "driver poll loop", "payload": "sim_id then status/current_round/result/error"},
+        {"step": 4, "sender": "watchdog", "receiver": "simulation service", "payload": "stop on stall/timeout"},
+        {"step": 5, "sender": "driver", "receiver": "workspace/gate", "payload": "run_summary.json and simulation health evidence"}
+      ],
+      "source_anchors": [
+        "drf2/driver/harness_client.py:193-236",
+        "drf2/driver/harness_client.py:265-295",
+        "drf2/driver/pipeline.py:234-274",
+        "drf2/engines/simulation/server.py:1-68",
+        "drf2/config/extensions_config.json:20-33"
+      ],
+      "notes": "This is an intended driver contract, not a presently connected job API. Driver stall detection watches current_round and timeout requests a best-effort stop only after a matching HTTP adapter exists. Chat-native simulation MCP is a separate implemented path."
+    },
+    {
+      "id": "drf2.deterministic_iteration_and_pooling",
+      "plane": "drf2_target",
+      "status": "pre_cutover",
+      "kind": "deterministic_iteration",
+      "direction": "seed_list_to_sequential_simulation_report_pairs_to_aggregate",
+      "producer": "PipelineDriver._execute_ensemble",
+      "input": "Configured seeds, shared upstream artifacts/simulation_config, per-seed output subdirectories, report prompt/gates, and optional extremization parameter.",
+      "transport": "A plain sequential driver loop executes one simulation job and one forecast-report harness run per seed, followed by deterministic log-odds aggregation.",
+      "receiver": "Per-seed simulation engine/jobs and report runs, then ensemble aggregator/manifest/state.",
+      "output": "Per-seed full_report.md and forecast.json, run_summary.json when produced, ensemble_forecast.json, and per-seed success/errors plus degraded/failed stage health. A missing run_summary alone does not currently fail the ensemble seed.",
+      "authority": "Per-seed artifacts own individual results; ensemble_forecast.json owns deterministic pooled probabilities. No extra LLM decides the aggregate.",
+      "durability": "Per-seed workspace files, aggregate JSON, manifest entries, and driver state persist.",
+      "security_boundary": "Seed directory isolation, simulation-issue capture, per-seed deliverable gates, exception capture, all-seed hard failure, partial-seed degradation, and deterministic bounded probability math. Required per-seed run_summary and binary-conviction checks are currently omitted.",
+      "passes_and_receptions": [
+        {"step": 1, "sender": "driver sequential loop", "receiver": "one seed worker at a time", "payload": "seed, shared config, isolated subdir"},
+        {"step": 2, "sender": "simulation worker", "receiver": "seed workspace/report run", "payload": "run_summary.json"},
+        {"step": 3, "sender": "report run", "receiver": "seed gate/aggregator", "payload": "full_report.md and forecast.json"},
+        {"step": 4, "sender": "aggregator", "receiver": "workspace/manifest/state", "payload": "ensemble_forecast.json and seed outcome metadata"}
+      ],
+      "source_anchors": [
+        "drf2/driver/pipeline.py:276-336",
+        "drf2/driver/ensemble.py:1-126"
+      ],
+      "notes": "Report-model call multiplicity is enumerated in the call inventory. Iteration is sequential and pooling itself is deterministic."
+    }
+  ]
+}

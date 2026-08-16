@@ -499,6 +499,7 @@ class SimulationRunner:
         # sits at the runner boundary so API, pipeline, and direct service starts
         # cannot bypass it.
         state_path = os.path.join(sim_dir, "state.json")
+        config_seal_manifest_sha = ""
         try:
             prepared_state: Dict[str, Any] = {}
             state_exists = os.path.exists(state_path)
@@ -511,6 +512,9 @@ class SimulationRunner:
             # detect that a role-bearing prepared artifact exists; the complete
             # sealed validation below remains authoritative.
             discovered_role_counts: List[int] = []
+            discovered_role_versions: List[str] = []
+            discovered_role_manifest_shas: Dict[str, str] = {}
+            discovered_context_required = False
             for profile_name in ("reddit_profiles.json", "twitter_profiles.csv"):
                 candidate = os.path.join(
                     sim_dir,
@@ -518,40 +522,223 @@ class SimulationRunner:
                 )
                 if not os.path.exists(candidate):
                     continue
+                platform_name = (
+                    "twitter" if profile_name.endswith(".csv") else "reddit"
+                )
+                with open(candidate, "rb") as role_bytes_handle:
+                    discovered_role_manifest_shas[platform_name] = hashlib.sha256(
+                        role_bytes_handle.read()
+                    ).hexdigest()
                 with open(candidate, encoding="utf-8") as role_handle:
                     candidate_manifest = json.load(role_handle)
                 if not isinstance(candidate_manifest, dict):
                     raise ValueError("actor role manifest must be an object")
-                discovered_role_counts.append(
-                    int(candidate_manifest.get("actor_role_count", -1))
+                manifest_role_count = int(
+                    candidate_manifest.get("actor_role_count", -1)
                 )
+                if manifest_role_count < 0:
+                    raise ValueError("actor role manifest count is invalid")
+                discovered_role_counts.append(manifest_role_count)
+                discovered_role_versions.append(str(
+                    candidate_manifest.get("role_contract_version") or ""
+                ))
+                discovered_context_required = (
+                    discovered_context_required
+                    or bool(candidate_manifest.get("actor_context_required"))
+                )
+            if len(set(discovered_role_counts)) > 1:
+                raise ValueError("platform role manifests disagree on actor coverage")
+            if len(set(discovered_role_versions)) > 1:
+                raise ValueError("platform role manifests disagree on role schema")
             discovered_roles = max(discovered_role_counts, default=0)
+            discovered_role_version = (
+                discovered_role_versions[0] if discovered_role_versions else ""
+            )
             if discovered_roles > 0 and not state_exists:
                 raise ValueError("prepared state is missing for role-bearing profiles")
 
             role_count = int(prepared_state.get("actor_role_count", 0) or 0)
             if discovered_roles > 0 and role_count <= 0:
                 raise ValueError("prepared state omits the discovered actor roles")
+            if role_count > 0 and not discovered_role_counts:
+                raise ValueError("prepared actor roles have no role manifest")
+            if discovered_role_counts and discovered_roles != role_count:
+                raise ValueError("prepared role count differs from role manifests")
+            state_role_version = str(
+                prepared_state.get("actor_role_contract_version") or ""
+            )
+            if role_count > 0 and (
+                not discovered_role_version
+                or state_role_version != discovered_role_version
+            ):
+                raise ValueError("prepared role schema differs from role manifests")
+            context_manifest_path = os.path.join(
+                sim_dir, "actor_context_manifest.json"
+            )
+            context_manifest_exists = os.path.exists(context_manifest_path)
+            context_count = int(
+                prepared_state.get("actor_context_count", 0) or 0
+            )
+            if context_manifest_exists and not state_exists:
+                raise ValueError(
+                    "prepared state is missing for actor-context artifacts"
+                )
+            if context_manifest_exists and context_count <= 0:
+                raise ValueError(
+                    "prepared state omits the discovered actor context"
+                )
+            if context_count > 0 and role_count <= 0:
+                raise ValueError("prepared actor context exists without actor roles")
+            if context_count > 0 and not context_manifest_exists:
+                raise ValueError("prepared actor context manifest is missing")
+            new_role_evidence = (
+                role_count > 0 and discovered_role_version != "actor-role/v1"
+            )
+            if new_role_evidence and not discovered_context_required:
+                raise ValueError("current actor roles cannot downgrade actor context")
+            if context_count > 0 and not discovered_context_required:
+                raise ValueError("actor context is not bound by the role manifests")
+            if discovered_context_required and not context_manifest_exists:
+                raise ValueError("required actor context manifest is missing")
+            if discovered_context_required and context_count != role_count:
+                raise ValueError(
+                    "prepared actor context does not cover every actor role"
+                )
+            if context_count and any(
+                not prepared_state.get(key)
+                for key in (
+                    "actor_context_contract_version",
+                    "actor_context_manifest_sha256",
+                    "actor_context_report_sha256",
+                    "actor_context_actors_sha256",
+                )
+            ):
+                raise ValueError(
+                    "prepared actor context fingerprints are missing"
+                )
             if role_count:
-                cast_path = os.path.join(sim_dir, "actor_cast_manifest.json")
+                prepared_role_manifest_shas = prepared_state.get(
+                    "actor_role_manifest_sha256"
+                )
+                if (
+                    not isinstance(prepared_role_manifest_shas, dict)
+                    or not prepared_role_manifest_shas
+                ):
+                    raise ValueError(
+                        "prepared role manifest fingerprints are missing"
+                    )
+                if prepared_role_manifest_shas != discovered_role_manifest_shas:
+                    raise ValueError(
+                        "prepared role manifest set or fingerprints differ from disk"
+                    )
+            current_v1_authority = bool(
+                context_count > 0
+                or (
+                    role_count > 0
+                    and discovered_role_version != "actor-role/v1"
+                )
+            )
+            state_config_sha = str(
+                prepared_state.get("simulation_config_sha256") or ""
+            )
+            state_config_manifest_sha = str(
+                prepared_state.get("simulation_config_manifest_sha256") or ""
+            )
+            if bool(state_config_sha) != bool(state_config_manifest_sha):
+                raise ValueError(
+                    "prepared simulation config fingerprints are incomplete"
+                )
+            if current_v1_authority and not state_config_manifest_sha:
+                raise ValueError(
+                    "current actor roles require a state-bound simulation config seal"
+                )
+            from .simulation_manager import validate_simulation_config_seal
+            config_seal = validate_simulation_config_seal(
+                sim_dir,
+                expected_manifest_sha256=(
+                    state_config_manifest_sha or None
+                ),
+                expected_config_sha256=(state_config_sha or None),
+                expected_simulation_id=simulation_id,
+                require=current_v1_authority or bool(state_config_manifest_sha),
+            )
+            if config_seal:
+                config_seal_manifest_sha = str(
+                    config_seal.get("manifest_sha256") or ""
+                )
+            cast_path = os.path.join(sim_dir, "actor_cast_manifest.json")
+            if os.path.exists(cast_path):
+                with open(cast_path, encoding="utf-8") as cast_state_handle:
+                    cast_manifest = json.load(cast_state_handle)
+                if not isinstance(cast_manifest, dict):
+                    raise ValueError("actor cast manifest must be an object")
+                selected_cast_count = cast_manifest.get("selected_actor_count")
+                if selected_cast_count is not None and (
+                    type(selected_cast_count) is not int
+                    or selected_cast_count < 0
+                    or selected_cast_count != role_count
+                ):
+                    raise ValueError(
+                        "actor cast coverage differs from prepared actor roles"
+                    )
+            if role_count:
                 with open(cast_path, "rb") as cast_handle:
                     cast_sha = hashlib.sha256(cast_handle.read()).hexdigest()
                 if cast_sha != prepared_state.get("actor_cast_manifest_sha256"):
                     raise ValueError("actor cast manifest fingerprint mismatch")
                 from .oasis_profile_generator import OasisProfileGenerator
+                if context_count:
+                    from .actor_context import (
+                        ACTOR_CONTEXT_VERSION,
+                        validate_actor_context_artifacts,
+                    )
+                    if prepared_state.get(
+                        "actor_context_contract_version"
+                    ) != ACTOR_CONTEXT_VERSION:
+                        raise ValueError("prepared actor context schema is stale")
+                    validate_actor_context_artifacts(
+                        sim_dir,
+                        expected_count=role_count,
+                        expected_manifest_sha256=prepared_state.get(
+                            "actor_context_manifest_sha256"
+                        ),
+                        expected_report_sha256=prepared_state.get(
+                            "actor_context_report_sha256"
+                        ),
+                        expected_actors_sha256=prepared_state.get(
+                            "actor_context_actors_sha256"
+                        ),
+                    )
                 role_manifest_shas = prepared_state.get(
                     "actor_role_manifest_sha256"
                 )
-                if not isinstance(role_manifest_shas, dict):
+                if not isinstance(role_manifest_shas, dict) or not role_manifest_shas:
                     raise ValueError("prepared role manifest fingerprints are missing")
-                profile_names = []
+                if role_manifest_shas != discovered_role_manifest_shas:
+                    raise ValueError(
+                        "prepared role manifest set or fingerprints differ from disk"
+                    )
+                requested_platforms: List[str] = []
                 if platform in ("parallel", "reddit"):
-                    profile_names.append("reddit_profiles.json")
+                    requested_platforms.append("reddit")
                 if platform in ("parallel", "twitter"):
-                    profile_names.append("twitter_profiles.csv")
-                for profile_name in profile_names:
+                    requested_platforms.append("twitter")
+                if any(
+                    platform_name not in role_manifest_shas
+                    for platform_name in requested_platforms
+                ):
+                    raise ValueError(
+                        "requested platform has no prepared role manifest"
+                    )
+                # Validate every prepared platform, not only the requested one;
+                # an unrequested but state-bound profile is still part of the
+                # exact READY artifact set and cannot be silently missing/stale.
+                for platform_name in sorted(role_manifest_shas):
+                    profile_name = (
+                        "twitter_profiles.csv"
+                        if platform_name == "twitter" else "reddit_profiles.json"
+                    )
                     profile_path = os.path.join(sim_dir, profile_name)
-                    platform_name = "twitter" if profile_name.endswith(".csv") else "reddit"
                     role_manifest_path = OasisProfileGenerator._role_manifest_path(
                         profile_path
                     )
@@ -559,7 +746,7 @@ class SimulationRunner:
                         role_manifest_sha = hashlib.sha256(
                             role_manifest_handle.read()
                         ).hexdigest()
-                    if role_manifest_shas.get(platform_name) != role_manifest_sha:
+                    if role_manifest_shas[platform_name] != role_manifest_sha:
                         raise ValueError(
                             f"{platform_name} role manifest fingerprint mismatch"
                         )
@@ -722,6 +909,8 @@ class SimulationRunner:
                 script_path,
                 "--config", config_path,  # 使用完整配置文件路径
             ]
+            if script_name == "run_parallel_simulation.py" and config_seal_manifest_sha:
+                cmd.extend(["--config-seal", config_seal_manifest_sha])
             
             # 如果指定了最大轮数，添加到命令行参数
             if max_rounds is not None and max_rounds > 0:

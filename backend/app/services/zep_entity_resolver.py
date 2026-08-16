@@ -33,6 +33,27 @@ from ..utils.actors import extract_actor_rows, normalize_name
 
 logger = logging.getLogger("mirofish.entity_resolver")
 
+_ACTOR_GRAPH_SEED_SCHEMA_VERSION = "actor-graph-seed/v1"
+
+
+def _seed_kind(node: Dict[str, Any]) -> str:
+    attrs = node.get("attributes") if isinstance(node, dict) else None
+    if not isinstance(attrs, dict):
+        return ""
+    if attrs.get("seed_schema_version") != _ACTOR_GRAPH_SEED_SCHEMA_VERSION:
+        return ""
+    return str(attrs.get("seed_kind") or "")
+
+
+def _seed_survivor_priority(node: Dict[str, Any]) -> int:
+    """Canonical actor seed wins; alias seed may collapse into that actor."""
+    kind = _seed_kind(node)
+    if kind == "actor":
+        return 0
+    if kind == "actor_alias":
+        return 2
+    return 1
+
 
 # ----------------------------------------------------------------- pure helpers
 def canonical_norm_set(actors: Any) -> set:
@@ -78,7 +99,7 @@ def _cosine(a: Optional[List[float]], b: Optional[List[float]]) -> Optional[floa
     """Cosine similarity, or None if either vector is missing/empty."""
     if not a or not b or len(a) != len(b):
         return None
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(y * y for y in b))
     if na == 0 or nb == 0:
@@ -209,6 +230,8 @@ def plan_merges(nodes: List[Dict[str, Any]], embeddings: Optional[List[List[floa
     dossier_canon = [amap.get(norms[i], norms[i] if norms[i] in canonical_norms else None)
                      for i in range(n)]
     is_canon = [norms[i] in canonical_norms and bool(norms[i]) for i in range(n)]
+    seed_kinds = [_seed_kind(node) for node in nodes]
+    seed_priorities = [_seed_survivor_priority(node) for node in nodes]
 
     uf = _UnionFind(n)
     sim_cache: Dict[tuple, float] = {}
@@ -236,6 +259,10 @@ def plan_merges(nodes: List[Dict[str, Any]], embeddings: Optional[List[List[floa
         if not norms[i]:
             continue
         for j in range(i + 1, n):
+            if "entity_type" in (seed_kinds[i], seed_kinds[j]):
+                continue  # schema/type nodes are not actor-resolution candidates
+            if seed_kinds[i] == seed_kinds[j] == "actor":
+                continue  # duplicate sealed actor nodes are validation failures
             if not norms[j] or not _labels_mergeable(labels[i], labels[j]):
                 continue
             if is_canon[i] and is_canon[j] and norms[i] != norms[j]:
@@ -262,11 +289,21 @@ def plan_merges(nodes: List[Dict[str, Any]], embeddings: Optional[List[List[floa
                 continue
             _try_union(i, j, cos)
 
-    return _finalize_clusters(nodes, uf, n, is_canon, norms, labels, sim_cache)
+    return _finalize_clusters(
+        nodes,
+        uf,
+        n,
+        is_canon,
+        norms,
+        labels,
+        sim_cache,
+        seed_priorities,
+    )
 
 
 def _finalize_clusters(nodes, uf, n: int, is_canon: List[bool], norms: List[str],
-                       labels: List[str], sim_cache: Dict[tuple, float]) -> List[Dict[str, Any]]:
+                       labels: List[str], sim_cache: Dict[tuple, float],
+                       seed_priorities: Optional[List[int]] = None) -> List[Dict[str, Any]]:
     """Shared tail for both plan_merges (full) and plan_merges_fast: group union-find
     components into clusters, split components that contain DISTINCT canonicals, pick a
     survivor per cluster. Pure; no graph access. Identical to the original plan_merges
@@ -298,11 +335,15 @@ def _finalize_clusters(nodes, uf, n: int, is_canon: List[bool], norms: List[str]
                 groups[norms[best_c]].append(m)
             for grp in groups.values():
                 if len(grp) >= 2:
-                    survivor = _pick_survivor(grp, is_canon, norms, labels)
+                    survivor = _pick_survivor(
+                        grp, is_canon, norms, labels, nodes, seed_priorities
+                    )
                     out.append(_make_cluster(nodes, survivor,
                                              [m for m in grp if m != survivor], _sim))
         else:
-            survivor = _pick_survivor(members, is_canon, norms, labels)
+            survivor = _pick_survivor(
+                members, is_canon, norms, labels, nodes, seed_priorities
+            )
             out.append(_make_cluster(nodes, survivor,
                                      [m for m in members if m != survivor], _sim))
     return out
@@ -331,6 +372,8 @@ def plan_merges_fast(nodes: List[Dict[str, Any]], embeddings: Optional[List[List
     dossier_canon = [amap.get(norms[i], norms[i] if norms[i] in canonical_norms else None)
                      for i in range(n)]
     is_canon = [norms[i] in canonical_norms and bool(norms[i]) for i in range(n)]
+    seed_kinds = [_seed_kind(node) for node in nodes]
+    seed_priorities = [_seed_survivor_priority(node) for node in nodes]
 
     uf = _UnionFind(n)
     sim_cache: Dict[tuple, float] = {}
@@ -368,6 +411,10 @@ def plan_merges_fast(nodes: List[Dict[str, Any]], embeddings: Optional[List[List
         base = idxs[0]
         for k in idxs[1:]:
             a, b = base, k
+            if "entity_type" in (seed_kinds[a], seed_kinds[b]):
+                continue
+            if seed_kinds[a] == seed_kinds[b] == "actor":
+                continue
             if not _labels_mergeable(labels[a], labels[b]):
                 continue
             if is_canon[a] and is_canon[b] and norms[a] != norms[b]:
@@ -379,18 +426,33 @@ def plan_merges_fast(nodes: List[Dict[str, Any]], embeddings: Optional[List[List
                 continue
             _try_union(a, b, cos)
 
-    return _finalize_clusters(nodes, uf, n, is_canon, norms, labels, sim_cache)
+    return _finalize_clusters(
+        nodes,
+        uf,
+        n,
+        is_canon,
+        norms,
+        labels,
+        sim_cache,
+        seed_priorities,
+    )
 
 
 def _pick_survivor(members: List[int], is_canon: List[bool], norms: List[str],
-                   labels: List[str]) -> int:
+                   labels: List[str], nodes: List[Dict[str, Any]],
+                   seed_priorities: Optional[List[int]] = None) -> int:
     """Prefer a canonical member; among equals prefer a TYPED label over the generic
     'Entity' (R2-KG-8: a cross-label merge keeps the entity's type on the survivor);
     then the longest normalized name. Tie-break by name string for determinism."""
-    canon = [m for m in members if is_canon[m]]
-    pool = canon if canon else members
-    return min(pool, key=lambda m: (0 if labels[m] != "Entity" else 1,
-                                    -len(norms[m]), norms[m]))
+    priorities = seed_priorities or [_seed_survivor_priority(node) for node in nodes]
+    return min(members, key=lambda m: (
+        priorities[m],
+        0 if is_canon[m] else 1,
+        0 if labels[m] != "Entity" else 1,
+        -len(norms[m]),
+        norms[m],
+        str(nodes[m].get("uuid") or ""),
+    ))
 
 
 def _make_cluster(nodes, survivor: int, victims: List[int], sim_fn) -> Dict[str, Any]:

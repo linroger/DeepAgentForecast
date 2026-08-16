@@ -11,6 +11,7 @@ OASIS Agent Profile生成器
 import json
 import os
 import random
+import re
 import time
 import hashlib
 from typing import Dict, Any, List, Optional
@@ -21,10 +22,13 @@ from .graphiti_client import Zep
 
 from ..config import Config
 from ..utils.actors import (
+    ACTOR_INTELLIGENCE_SCHEMA_VERSION,
     actor_briefing,
     behavioral_dna_block,
+    extract_actor_rows,
     influence_weight,
     match_actor,
+    normalize_name,
     relationship_briefing,
     roster_block,
 )
@@ -32,6 +36,7 @@ from ..utils.atomic import write_text_atomic, write_json_atomic  # EXECPLAN2 F-5
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .actor_role_prompt import (
+    ROLE_CONTRACT_VERSION,
     build_actor_role_contract,
     compile_actor_role_prompt,
     resolve_actor_role_prompt_max_chars,
@@ -39,9 +44,46 @@ from .actor_role_prompt import (
     sanitize_untrusted_dossier,
     sanitize_untrusted_dossier_text,
 )
+from .actor_context import (
+    ACTOR_CONTEXT_VERSION,
+    actor_id_for,
+    canonical_json_sha256,
+    context_binding_by_actor_id,
+    validate_actor_context_artifacts,
+)
 from .zep_entity_reader import EntityNode, ZepEntityReader
 
 logger = get_logger('mirofish.oasis_profile')
+
+
+CANONICAL_REDDIT_SYSTEM_MESSAGE_VERSION = "canonical-reddit-system-message/v1"
+
+
+def canonical_reddit_system_message(username: Any, role_prompt: Any) -> str:
+    """Compose the exact role-only Reddit system message for current v1.
+
+    OASIS' bundled Reddit template appends age, gender, MBTI, and country even
+    when those values are loader defaults.  Current canonical actors must not
+    receive that synthetic personality authority.  The child process replaces
+    OASIS' generated message with this deterministic structural wrapper and
+    then attests the final bytes after sealed world/calendar context is added.
+    """
+    name = str(username or "").strip()
+    role = str(role_prompt or "").strip()
+    if not name or not role:
+        raise ValueError("canonical Reddit system message requires username and role")
+    return f"""
+# OBJECTIVE
+You're a Reddit user, and I'll present you with some tweets. After you see the tweets, choose some actions from the following functions.
+
+# SELF-DESCRIPTION
+Your actions should be consistent with your self-description and personality.
+Your name is {name}.
+Your have profile: {role}.
+
+# RESPONSE METHOD
+Please perform actions by tool calling.
+"""
 
 
 @dataclass
@@ -86,22 +128,60 @@ class OasisAgentProfile:
     persona_design: Optional[Dict[str, Any]] = None
 
     # Every named actor selected from the DeerFlow dossier receives a deterministic
-    # runtime role.  ``role_prompt`` is appended to ``persona`` (and therefore reaches
-    # Reddit's persona / Twitter's user_char); the structured contract and hash are
-    # retained separately for provenance and audit.
+    # runtime role. Pre-v1 actors append ``role_prompt`` to their legacy persona;
+    # canonical actor-intelligence/v1 actors use it as the complete Reddit persona /
+    # Twitter user_char. The structured contract and hash remain available for audit.
     role_contract: Optional[Dict[str, Any]] = None
     role_prompt: Optional[str] = None
     role_prompt_sha256: Optional[str] = None
     role_prompt_max_chars: Optional[int] = None
+    # Exact actor-context artifact binding used to compile this role.  These
+    # values are kept out of OASIS' runtime schema but sealed in the adjacent
+    # role manifest so prepare/reuse/run can detect missing or altered packs.
+    actor_context_file: Optional[str] = None
+    actor_context_sha256: Optional[str] = None
+    actor_context_manifest_sha256: Optional[str] = None
+    actor_context_report_sha256: Optional[str] = None
+
+    def _canonical_role_only_persona(self) -> Optional[str]:
+        """Return the sole behavioral runtime field for a canonical v1 actor.
+
+        ``actor-intelligence/v1`` deliberately invalidates the old flat
+        ``goals``/``memory``/``plans`` shortcuts.  Once its actor-role/v2
+        contract exists, neither a generated base persona nor a rule fallback
+        may sit beside that contract in OASIS' system-level persona field.
+        Validate the sealed fragment here as a final serialization guard so a
+        caller cannot accidentally reintroduce a legacy base persona by
+        mutating ``profile.persona`` after generation.
+        """
+        contract = self.role_contract
+        if not isinstance(contract, dict) or (
+            contract.get("schema_version") != ROLE_CONTRACT_VERSION
+            or contract.get("actor_intelligence_schema_version")
+            != ACTOR_INTELLIGENCE_SCHEMA_VERSION
+        ):
+            return None
+        prompt = str(self.role_prompt or "")
+        if not prompt:
+            raise ValueError(
+                "canonical actor-intelligence/v1 profile has no runtime role prompt"
+            )
+        actual_sha = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        if self.role_prompt_sha256 != actual_sha:
+            raise ValueError(
+                "canonical actor-intelligence/v1 runtime role fingerprint mismatch"
+            )
+        return prompt
 
     def to_reddit_format(self) -> Dict[str, Any]:
         """转换为Reddit平台格式"""
+        runtime_persona = self._canonical_role_only_persona() or self.persona
         profile = {
             "user_id": self.user_id,
             "username": self.user_name,  # OASIS 库要求字段名为 username（无下划线）
             "name": self.name,
             "bio": self.bio,
-            "persona": self.persona,
+            "persona": runtime_persona,
             "karma": self.karma,
             "created_at": self.created_at,
         }
@@ -124,12 +204,13 @@ class OasisAgentProfile:
     
     def to_twitter_format(self) -> Dict[str, Any]:
         """转换为Twitter平台格式"""
+        runtime_persona = self._canonical_role_only_persona() or self.persona
         profile = {
             "user_id": self.user_id,
             "username": self.user_name,  # OASIS 库要求字段名为 username（无下划线）
             "name": self.name,
             "bio": self.bio,
-            "persona": self.persona,
+            "persona": runtime_persona,
             "friend_count": self.friend_count,
             "follower_count": self.follower_count,
             "statuses_count": self.statuses_count,
@@ -154,12 +235,13 @@ class OasisAgentProfile:
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为完整字典格式"""
+        runtime_persona = self._canonical_role_only_persona() or self.persona
         data = {
             "user_id": self.user_id,
             "user_name": self.user_name,
             "name": self.name,
             "bio": self.bio,
-            "persona": self.persona,
+            "persona": runtime_persona,
             "karma": self.karma,
             "friend_count": self.friend_count,
             "follower_count": self.follower_count,
@@ -302,6 +384,306 @@ class OasisProfileGenerator:
                 self.zep_client = Zep(api_key=self.zep_api_key)
             except Exception as e:
                 logger.warning(f"Zep客户端初始化失败: {e}")
+
+    def _bind_actor_context_provenance(
+        self,
+        role_contract: Optional[Dict[str, Any]],
+        actor: Optional[Dict[str, Any]],
+        context_pack: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Bind a compiled role to the exact persisted pack and manifest."""
+        if not isinstance(context_pack, dict):
+            return {}
+        if not isinstance(role_contract, dict) or not isinstance(actor, dict):
+            raise ValueError("actor context cannot be bound without an actor role")
+        actor_id = actor_id_for(actor)
+        if context_pack.get("actor_id") != actor_id:
+            raise ValueError("actor context identity differs from its actor role")
+        bindings = getattr(self, "actor_context_bindings", {}) or {}
+        binding = dict(bindings.get(actor_id) or {}) if isinstance(bindings, dict) else {}
+        manifest_sha = str(
+            getattr(self, "actor_context_manifest_sha256", "") or ""
+        )
+        report_sha = str(getattr(self, "actor_context_report_sha256", "") or "")
+        if not all((binding.get("file"), binding.get("sha256"), manifest_sha, report_sha)):
+            raise ValueError(
+                f"persisted actor context binding is incomplete for {actor_id}"
+            )
+        source = context_pack.get("source")
+        if not isinstance(source, dict) or source.get("report_sha256") != report_sha:
+            raise ValueError("actor role context report binding is inconsistent")
+        provenance = role_contract.get("provenance")
+        if not isinstance(provenance, dict):
+            provenance = {}
+            role_contract["provenance"] = provenance
+        provenance.update({
+            "context_pack_sha256": canonical_json_sha256(context_pack),
+            "context_pack_file_sha256": str(binding["sha256"]),
+            "manifest_sha256": manifest_sha,
+            "actors_sha256": str(source.get("actors_sha256") or ""),
+            "report_sha256": report_sha,
+            "actor_intelligence_sha256": str(
+                source.get("actor_intelligence_sha256") or ""
+            ),
+            "dossier_sha256": str(source.get("dossier_sha256") or ""),
+            "source_catalog_sha256": str(source.get("sources_sha256") or ""),
+            "actor_ids_sha256": str(source.get("actor_ids_sha256") or ""),
+        })
+        return binding
+
+    @staticmethod
+    def _explicit_actor_intelligence_schema(
+        actor: Optional[Dict[str, Any]],
+    ) -> str:
+        intelligence = actor.get("intelligence") if isinstance(actor, dict) else None
+        if not isinstance(intelligence, dict):
+            return ""
+        return str(intelligence.get("schema_version") or "").strip()
+
+    @classmethod
+    def _uses_canonical_actor_intelligence(
+        cls,
+        actor: Optional[Dict[str, Any]],
+    ) -> bool:
+        """Whether the actor has opted into the source-bound v1 authority."""
+        return (
+            cls._explicit_actor_intelligence_schema(actor)
+            == ACTOR_INTELLIGENCE_SCHEMA_VERSION
+        )
+
+    @classmethod
+    def _dossier_uses_canonical_actor_intelligence(
+        cls,
+        actors: Optional[Dict[str, Any]],
+    ) -> bool:
+        """Whether the admitted batch has switched to current v1 authority."""
+        if not isinstance(actors, dict):
+            return False
+        contract = actors.get("actor_intelligence_contract")
+        if (
+            isinstance(contract, dict)
+            and str(contract.get("schema_version") or "").strip()
+            == ACTOR_INTELLIGENCE_SCHEMA_VERSION
+        ):
+            return True
+        return any(
+            cls._uses_canonical_actor_intelligence(row)
+            for row in extract_actor_rows(actors)
+        )
+
+    def _validated_canonical_batch_context(
+        self,
+        *,
+        entity: EntityNode,
+        actor: Optional[Dict[str, Any]],
+        actors: Optional[Dict[str, Any]],
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]],
+    ) -> Dict[str, Any]:
+        """Resolve one selected current-v1 actor and its sealed context identity.
+
+        This is a batch-admission preflight, deliberately stricter than the
+        low-level profile helper retained for isolated contract compilation
+        tests.  It runs before the thread pool, graph retrieval, or any persona
+        generator so a current-v1 run cannot recover through legacy behavior.
+        """
+        entity_name = str(getattr(entity, "name", "") or "").strip()
+        if not isinstance(actor, dict):
+            raise ValueError(
+                "actor-intelligence/v1 selected entity has no sealed actor "
+                f"identity: {entity_name or '<unnamed>'}"
+            )
+        if not self._uses_canonical_actor_intelligence(actor):
+            raise ValueError(
+                "current actor-intelligence/v1 run selected a non-v1 actor row: "
+                f"{entity_name or '<unnamed>'}"
+            )
+        if not isinstance(actors, dict):
+            raise ValueError("current actor-intelligence/v1 dossier identity is missing")
+
+        actor_id = actor_id_for(actor)
+        pack = (
+            actor_context_packs.get(actor_id)
+            if isinstance(actor_context_packs, dict)
+            else None
+        )
+        if not isinstance(pack, dict):
+            raise ValueError(
+                f"canonical actor {actor_id} requires a sealed actor-context/v1 pack"
+            )
+        if str(pack.get("schema_version") or "") != ACTOR_CONTEXT_VERSION:
+            raise ValueError(
+                f"canonical actor {actor_id} has an unsupported actor-context schema"
+            )
+        if str(pack.get("actor_id") or "") != actor_id:
+            raise ValueError(f"canonical actor-context identity mismatch for {actor_id}")
+        if normalize_name(str(pack.get("actor_name") or "")) != normalize_name(
+            str(actor.get("name") or "")
+        ):
+            raise ValueError(f"canonical actor-context name mismatch for {actor_id}")
+
+        actor_intelligence = actor.get("intelligence")
+        pack_intelligence = pack.get("actor_intelligence")
+        if not isinstance(actor_intelligence, dict) or not isinstance(
+            pack_intelligence, dict
+        ):
+            raise ValueError(
+                f"canonical actor-context intelligence is missing for {actor_id}"
+            )
+        intelligence_sha = canonical_json_sha256(actor_intelligence)
+        if canonical_json_sha256(pack_intelligence) != intelligence_sha:
+            raise ValueError(
+                f"canonical actor-context intelligence mismatch for {actor_id}"
+            )
+
+        source = pack.get("source")
+        actors_sha = canonical_json_sha256(actors)
+        report_sha = str(getattr(self, "actor_context_report_sha256", "") or "")
+        manifest_sha = str(
+            getattr(self, "actor_context_manifest_sha256", "") or ""
+        )
+        if not isinstance(source, dict):
+            raise ValueError(
+                f"canonical actor-context provenance is missing for {actor_id}"
+            )
+        if (
+            str(source.get("actor_intelligence_contract_version") or "")
+            != ACTOR_INTELLIGENCE_SCHEMA_VERSION
+            or str(source.get("actor_intelligence_sha256") or "")
+            != intelligence_sha
+            or str(source.get("actors_sha256") or "") != actors_sha
+        ):
+            raise ValueError(
+                f"canonical actor-context provenance mismatch for {actor_id}"
+            )
+        if not report_sha or str(source.get("report_sha256") or "") != report_sha:
+            raise ValueError(
+                f"canonical actor-context report binding mismatch for {actor_id}"
+            )
+
+        bindings = getattr(self, "actor_context_bindings", {}) or {}
+        binding = bindings.get(actor_id) if isinstance(bindings, dict) else None
+        if not isinstance(binding, dict) or not all(
+            str(binding.get(key) or "")
+            for key in ("actor_id", "actor_name", "file", "sha256")
+        ):
+            raise ValueError(
+                f"persisted actor context binding is incomplete for {actor_id}"
+            )
+        if (
+            str(binding.get("actor_id") or "") != actor_id
+            or normalize_name(str(binding.get("actor_name") or ""))
+            != normalize_name(str(actor.get("name") or ""))
+        ):
+            raise ValueError(
+                f"persisted actor context identity mismatch for {actor_id}"
+            )
+        persisted_pack_sha = hashlib.sha256(json.dumps(
+            pack,
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+            allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        if str(binding.get("sha256") or "") != persisted_pack_sha:
+            raise ValueError(
+                f"persisted actor context fingerprint mismatch for {actor_id}"
+            )
+        if not manifest_sha:
+            raise ValueError(
+                f"persisted actor context manifest binding is missing for {actor_id}"
+            )
+        return pack
+
+    @classmethod
+    def _reject_unsupported_actor_intelligence(
+        cls,
+        actor: Optional[Dict[str, Any]],
+    ) -> None:
+        version = cls._explicit_actor_intelligence_schema(actor)
+        if version and version != ACTOR_INTELLIGENCE_SCHEMA_VERSION:
+            raise ValueError(
+                f"unsupported actor intelligence schema {version}; refusing "
+                "legacy persona downgrade"
+            )
+
+    def _canonical_actor_role_profile(
+        self,
+        *,
+        entity: EntityNode,
+        user_id: int,
+        actor: Dict[str, Any],
+        actors: Optional[Dict[str, Any]],
+        context_pack: Optional[Dict[str, Any]],
+        generation_path: str,
+    ) -> OasisAgentProfile:
+        """Build an actor-intelligence/v1 profile without legacy behavior.
+
+        Canonical v1 means the producer has already decided which behavioral
+        claims survived source validation.  Re-running free-form persona
+        generation over the legacy flat actor row, graph summary, or entity
+        attributes would resurrect claims the producer deliberately dropped.
+        Therefore the deterministic actor-role/v2 prompt is the complete
+        behavioral persona. Only the structural actor name/type and stable
+        entity identifier remain outside that contract.
+        """
+        role_contract = build_actor_role_contract(actor, actors, context_pack)
+        if not isinstance(role_contract, dict) or (
+            role_contract.get("schema_version") != ROLE_CONTRACT_VERSION
+            or role_contract.get("actor_intelligence_schema_version")
+            != ACTOR_INTELLIGENCE_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                "canonical actor-intelligence/v1 did not compile actor-role/v2"
+            )
+        context_binding = self._bind_actor_context_provenance(
+            role_contract, actor, context_pack
+        )
+        role_prompt_max_chars = resolve_actor_role_prompt_max_chars()
+        role_prompt = compile_actor_role_prompt(
+            role_contract, max_chars=role_prompt_max_chars
+        )
+        if not role_prompt:
+            raise ValueError(
+                "canonical actor-intelligence/v1 compiled an empty runtime role"
+            )
+        role_sha = role_prompt_sha256(role_prompt)
+        runtime_name = sanitize_untrusted_dossier_text(
+            role_contract.get("actor_name") or entity.name,
+            240,
+        )
+        runtime_entity_type = sanitize_untrusted_dossier_text(
+            entity.get_entity_type() or actor.get("type") or "Entity",
+            160,
+        )
+        structural_bio = sanitize_untrusted_dossier_text(
+            f"{runtime_entity_type}: {runtime_name}",
+            500,
+        )
+        return OasisAgentProfile(
+            user_id=user_id,
+            user_name=self._generate_username(runtime_name),
+            name=runtime_name,
+            bio=structural_bio,
+            persona=role_prompt,
+            profession=runtime_entity_type,
+            source_entity_uuid=entity.uuid,
+            source_entity_type=runtime_entity_type,
+            generation_path=generation_path,
+            role_contract=role_contract,
+            role_prompt=role_prompt,
+            role_prompt_sha256=role_sha,
+            role_prompt_max_chars=role_prompt_max_chars,
+            actor_context_file=context_binding.get("file"),
+            actor_context_sha256=context_binding.get("sha256"),
+            actor_context_manifest_sha256=(
+                str(getattr(self, "actor_context_manifest_sha256", "") or "")
+                or None
+            ),
+            actor_context_report_sha256=(
+                str(getattr(self, "actor_context_report_sha256", "") or "")
+                or None
+            ),
+        )
     
     def generate_profile_from_entity(
         self,
@@ -310,6 +692,7 @@ class OasisProfileGenerator:
         use_llm: bool = True,
         actor: Optional[Dict[str, Any]] = None,
         actors: Optional[Dict[str, Any]] = None,
+        context_pack: Optional[Dict[str, Any]] = None,
     ) -> OasisAgentProfile:
         """
         从Zep实体生成OASIS Agent Profile
@@ -318,14 +701,32 @@ class OasisProfileGenerator:
             entity: Zep实体节点
             user_id: 用户ID（用于OASIS）
             use_llm: 是否使用LLM生成详细人设
-            actor: 深度研究 actors.json 中匹配到的结构化角色行（可选；
-                   含 role/stance/influence/memory，注入人设提示词作为实证依据）
-            actors: 完整研究档案对象（含 relationships[]），用于注入该 actor 的社会关系网（T3.1）
+            actor: 深度研究 actors.json 中匹配到的结构化角色行。pre-v1 行保留
+                   role/stance/memory 兼容路径；actor-intelligence/v1 只使用
+                   source-bound actor-role/v2 契约。
+            actors: 完整研究档案对象。pre-v1 保留 relationship 兼容路径；v1
+                    行只允许契约编译器认可的 canonical/context 证据。
+            context_pack: exact persisted actor-context/v1 pack for this actor
 
         Returns:
             OasisAgentProfile
         """
+        self._reject_unsupported_actor_intelligence(actor)
         entity_type = entity.get_entity_type() or "Entity"
+
+        # The canonical producer contract is an authority switch, not another
+        # additive hint.  Branch before graph-context retrieval and before both
+        # persona generators so source-less legacy fields can never influence a
+        # prompt, a rule overlay, a fallback, or the exact OASIS runtime field.
+        if self._uses_canonical_actor_intelligence(actor):
+            return self._canonical_actor_role_profile(
+                entity=entity,
+                user_id=user_id,
+                actor=actor,
+                actors=actors,
+                context_pack=context_pack,
+                generation_path="canonical_role",
+            )
 
         # 基础信息
         name = entity.name
@@ -366,6 +767,7 @@ class OasisProfileGenerator:
                 context=prompt_context,
                 actor=prompt_actor,
                 actors=prompt_actors,
+                context_pack=context_pack,
             )
             # PREP-8: LLM 3 次尝试全败时 _generate_profile_with_llm 会静默退回规则模板，
             # 此前对任何健康门不可见——这里读出并剥离路径标记，落到 profile 上供聚合统计。
@@ -403,7 +805,10 @@ class OasisProfileGenerator:
         # bounded role prompt *after* LLM generation.  This prevents the LLM from
         # omitting or rewriting the role and guarantees the same evidence-bounded
         # instructions on the LLM, rule, and rule-fallback paths.
-        role_contract = build_actor_role_contract(actor, actors)
+        role_contract = build_actor_role_contract(actor, actors, context_pack)
+        context_binding = self._bind_actor_context_provenance(
+            role_contract, actor, context_pack
+        )
         role_prompt_max_chars = resolve_actor_role_prompt_max_chars()
         role_prompt = compile_actor_role_prompt(
             role_contract, max_chars=role_prompt_max_chars
@@ -447,6 +852,14 @@ class OasisProfileGenerator:
             role_prompt=role_prompt or None,
             role_prompt_sha256=role_sha or None,
             role_prompt_max_chars=role_prompt_max_chars if role_prompt else None,
+            actor_context_file=context_binding.get("file"),
+            actor_context_sha256=context_binding.get("sha256"),
+            actor_context_manifest_sha256=(
+                str(getattr(self, "actor_context_manifest_sha256", "") or "") or None
+            ),
+            actor_context_report_sha256=(
+                str(getattr(self, "actor_context_report_sha256", "") or "") or None
+            ),
         )
 
     def _error_stub_profile(
@@ -455,10 +868,24 @@ class OasisProfileGenerator:
         user_id: int,
         actor: Optional[Dict[str, Any]] = None,
         actors: Optional[Dict[str, Any]] = None,
+        context_pack: Optional[Dict[str, Any]] = None,
     ) -> OasisAgentProfile:
         """Build a loadable failure stub without dropping a researched actor's role."""
+        self._reject_unsupported_actor_intelligence(actor)
+        if self._uses_canonical_actor_intelligence(actor):
+            return self._canonical_actor_role_profile(
+                entity=entity,
+                user_id=user_id,
+                actor=actor,
+                actors=actors,
+                context_pack=context_pack,
+                generation_path="error_stub",
+            )
         entity_type = entity.get_entity_type() or "Entity"
-        role_contract = build_actor_role_contract(actor, actors)
+        role_contract = build_actor_role_contract(actor, actors, context_pack)
+        context_binding = self._bind_actor_context_provenance(
+            role_contract, actor, context_pack
+        )
         role_prompt_max_chars = resolve_actor_role_prompt_max_chars()
         role_prompt = compile_actor_role_prompt(
             role_contract, max_chars=role_prompt_max_chars
@@ -488,6 +915,14 @@ class OasisProfileGenerator:
             role_prompt=role_prompt or None,
             role_prompt_sha256=role_prompt_sha256(role_prompt) or None,
             role_prompt_max_chars=role_prompt_max_chars if role_prompt else None,
+            actor_context_file=context_binding.get("file"),
+            actor_context_sha256=context_binding.get("sha256"),
+            actor_context_manifest_sha256=(
+                str(getattr(self, "actor_context_manifest_sha256", "") or "") or None
+            ),
+            actor_context_report_sha256=(
+                str(getattr(self, "actor_context_report_sha256", "") or "") or None
+            ),
         )
 
     def _generate_username(self, name: str) -> str:
@@ -1134,6 +1569,12 @@ class OasisProfileGenerator:
         constraints_red_lines；risk_tolerance → decision_style；stated_vs_revealed →
         rhetoric。档案为空或全字段缺失 → None。
         """
+        self._reject_unsupported_actor_intelligence(actor)
+        if self._uses_canonical_actor_intelligence(actor):
+            # Canonical v1 behavior is rendered only by actor-role/v2.  This
+            # legacy design helper reads flat goals, worldview, resources, and
+            # relationship rows, so invoking it would bypass source pruning.
+            return None
         if not isinstance(actor, dict) or not actor:
             return None
 
@@ -1212,6 +1653,7 @@ class OasisProfileGenerator:
         context: str,
         actor: Optional[Dict[str, Any]] = None,
         actors: Optional[Dict[str, Any]] = None,
+        context_pack: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         使用LLM生成非常详细的人设
@@ -1220,6 +1662,12 @@ class OasisProfileGenerator:
         - 个人实体：生成具体的人物设定
         - 群体/机构实体：生成代表性账号设定
         """
+        self._reject_unsupported_actor_intelligence(actor)
+        if self._uses_canonical_actor_intelligence(actor):
+            raise ValueError(
+                "actor-intelligence/v1 must use the deterministic role-only "
+                "profile boundary"
+            )
 
         is_individual = self._is_individual_entity(entity_type)
 
@@ -1245,7 +1693,7 @@ class OasisProfileGenerator:
 
         # LOOP-011 ACTOR_ROLE: 同一份 allowlist 化的确定性契约稍后会被拼进 OASIS 运行时
         # 字段；这里同步以「仅数据」形态提供给人设模型，作为可审计的证据底座。
-        role_evidence_contract = build_actor_role_contract(actor, actors)
+        role_evidence_contract = build_actor_role_contract(actor, actors, context_pack)
 
         if is_individual:
             prompt = self._build_individual_persona_prompt(
@@ -1677,6 +2125,12 @@ class OasisProfileGenerator:
 
         actor 缺失时行为与旧实现完全一致（返回纯类型模板）。
         """
+        self._reject_unsupported_actor_intelligence(actor)
+        if self._uses_canonical_actor_intelligence(actor):
+            raise ValueError(
+                "actor-intelligence/v1 must use the deterministic role-only "
+                "profile boundary"
+            )
         base = self._rule_based_base(entity_name, entity_type, entity_summary, entity_attributes)
         if not isinstance(actor, dict) or not actor:
             return base
@@ -1807,7 +2261,8 @@ class OasisProfileGenerator:
         parallel_count: int = 5,
         realtime_output_path: Optional[str] = None,
         output_platform: str = "reddit",
-        actors: Optional[Dict[str, Any]] = None
+        actors: Optional[Dict[str, Any]] = None,
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> List[OasisAgentProfile]:
         """
         批量从实体生成Agent Profile（支持并行生成）
@@ -1832,6 +2287,26 @@ class OasisProfileGenerator:
         # 设置graph_id用于Zep检索
         if graph_id:
             self.graph_id = graph_id
+
+        # Current actor-intelligence is a run-level authority boundary. Resolve
+        # and validate the complete selected roster synchronously before any
+        # worker can retrieve graph context or enter an LLM/rule/error fallback.
+        # An unversioned dossier deliberately skips this block and preserves the
+        # historical best-effort behavior below.
+        canonical_run = self._dossier_uses_canonical_actor_intelligence(actors)
+        canonical_inputs: Dict[
+            int, tuple[Dict[str, Any], Dict[str, Any]]
+        ] = {}
+        if canonical_run:
+            for idx, entity in enumerate(entities):
+                actor = match_actor(entity.name, actors)
+                context_pack = self._validated_canonical_batch_context(
+                    entity=entity,
+                    actor=actor,
+                    actors=actors,
+                    actor_context_packs=actor_context_packs,
+                )
+                canonical_inputs[idx] = (actor, context_pack)
         
         total = len(entities)
         profiles = [None] * total  # 预分配列表保持顺序
@@ -1878,7 +2353,13 @@ class OasisProfileGenerator:
         def generate_single_profile(idx: int, entity: EntityNode) -> tuple:
             """生成单个profile的工作函数"""
             entity_type = entity.get_entity_type() or "Entity"
-            actor = match_actor(entity.name, actors)
+            if canonical_run:
+                actor, context_pack = canonical_inputs[idx]
+            else:
+                actor = match_actor(entity.name, actors)
+                context_pack = None
+                if isinstance(actor, dict) and isinstance(actor_context_packs, dict):
+                    context_pack = actor_context_packs.get(actor_id_for(actor))
 
             try:
                 # 深度研究档案匹配：命中则把实证立场/记忆注入 persona 提示词
@@ -1890,6 +2371,7 @@ class OasisProfileGenerator:
                     use_llm=use_llm,
                     actor=actor,
                     actors=actors,  # 完整研究档案 → 注入社会关系网（T3.1）
+                    context_pack=context_pack,
                 )
                 
                 # 实时输出生成的人设到控制台和日志
@@ -1899,11 +2381,17 @@ class OasisProfileGenerator:
                 
             except Exception as e:
                 logger.error(f"生成实体 {entity.name} 的人设失败: {str(e)}")
+                if canonical_run:
+                    # A current-v1 generation error is an admission/provenance
+                    # failure.  Producing a generic or even partially-bound
+                    # stub would hide the broken sealed identity.
+                    raise
                 fallback_profile = self._error_stub_profile(
                     entity=entity,
                     user_id=idx,
                     actor=actor,
                     actors=actors,
+                    context_pack=context_pack,
                 )
                 return idx, fallback_profile, str(e)
         
@@ -1950,13 +2438,20 @@ class OasisProfileGenerator:
                         
                 except Exception as e:
                     logger.error(f"处理实体 {entity.name} 时发生异常: {str(e)}")
+                    if canonical_run:
+                        raise
                     with lock:
                         completed_count[0] += 1
+                    _actor = match_actor(entity.name, actors)
+                    _context_pack = None
+                    if isinstance(_actor, dict) and isinstance(actor_context_packs, dict):
+                        _context_pack = actor_context_packs.get(actor_id_for(_actor))
                     profiles[idx] = self._error_stub_profile(
                         entity=entity,
                         user_id=idx,
-                        actor=match_actor(entity.name, actors),
+                        actor=_actor,
                         actors=actors,
+                        context_pack=_context_pack,
                     )
                     # 实时写入文件（即使是备用人设）
                     save_profiles_realtime()
@@ -1984,6 +2479,15 @@ class OasisProfileGenerator:
             raise RuntimeError(
                 "researched actors missing runtime role prompts: "
                 + ", ".join(missing_role_names[:8])
+            )
+        if canonical_run and (
+            len(done) != total
+            or researched_actor_count != total
+            or role_prompt_count != total
+        ):
+            raise RuntimeError(
+                "actor-intelligence/v1 profile coverage differs from the "
+                "sealed selected cast"
             )
         n_fallback = sum(1 for p in done if getattr(p, "generation_path", "llm") == "rule_fallback")
         n_stub = sum(1 for p in done if getattr(p, "generation_path", "llm") == "error_stub")
@@ -2156,7 +2660,15 @@ class OasisProfileGenerator:
             if not prompt or profile.role_prompt_sha256 != actual_sha:
                 raise ValueError(f"invalid role prompt fingerprint for {profile.name}")
             runtime_role = prompt.replace("\n", " ").replace("\r", " ") if is_csv else prompt
-            if is_csv:
+            canonical_role = profile._canonical_role_only_persona()
+            if canonical_role is not None:
+                runtime_profile = (
+                    canonical_role.replace("\n", " ").replace("\r", " ")
+                    if is_csv
+                    else canonical_role
+                )
+                runtime_field = "user_char" if is_csv else "persona"
+            elif is_csv:
                 runtime_profile = profile.bio
                 if profile.persona and profile.persona != profile.bio:
                     runtime_profile = f"{profile.bio} {profile.persona}"
@@ -2172,7 +2684,7 @@ class OasisProfileGenerator:
                 raise ValueError(
                     f"runtime profile field does not contain role prompt for {profile.name}"
                 )
-            rows.append({
+            manifest_row = {
                 "profile_index": profile_index,
                 "user_id": profile.user_id,
                 "name": profile.name,
@@ -2191,12 +2703,51 @@ class OasisProfileGenerator:
                     profile.role_prompt_max_chars
                     or resolve_actor_role_prompt_max_chars()
                 ),
-            })
+                "actor_context_file": profile.actor_context_file,
+                "actor_context_sha256": profile.actor_context_sha256,
+                "actor_context_manifest_sha256": profile.actor_context_manifest_sha256,
+                "actor_context_report_sha256": profile.actor_context_report_sha256,
+            }
+            if canonical_role is not None and not is_csv:
+                reddit_system_message = canonical_reddit_system_message(
+                    profile.user_name, canonical_role
+                )
+                manifest_row.update({
+                    "reddit_system_message_version": (
+                        CANONICAL_REDDIT_SYSTEM_MESSAGE_VERSION
+                    ),
+                    "reddit_base_system_message_sha256": role_prompt_sha256(
+                        reddit_system_message
+                    ),
+                    "reddit_base_system_message_chars": len(reddit_system_message),
+                })
+            rows.append(manifest_row)
         with open(profile_path, "rb") as profile_handle:
             profile_file_sha256 = hashlib.sha256(profile_handle.read()).hexdigest()
+        context_bound_rows = [
+            row for row in rows
+            if row.get("actor_context_file") or row.get("actor_context_sha256")
+        ]
+        if context_bound_rows and len(context_bound_rows) != len(rows):
+            raise ValueError("actor context must cover every researched runtime role")
+        context_manifest_values = {
+            str(row.get("actor_context_manifest_sha256") or "")
+            for row in context_bound_rows
+        }
+        report_hash_values = {
+            str(row.get("actor_context_report_sha256") or "")
+            for row in context_bound_rows
+        }
+        if context_bound_rows and (
+            len(context_manifest_values) != 1
+            or "" in context_manifest_values
+            or len(report_hash_values) != 1
+            or "" in report_hash_values
+        ):
+            raise ValueError("actor context bindings are incomplete or inconsistent")
         manifest = {
             "schema_version": "actor-role-manifest/v2",
-            "role_contract_version": "actor-role/v1",
+            "role_contract_version": ROLE_CONTRACT_VERSION,
             "profile_file": os.path.basename(profile_path),
             "profile_file_sha256": profile_file_sha256,
             "profile_count": len(profiles),
@@ -2206,6 +2757,13 @@ class OasisProfileGenerator:
             ),
             "actor_cast_manifest_sha256": str(
                 getattr(self, "role_cast_manifest_sha256", "") or ""
+            ),
+            "actor_context_required": bool(context_bound_rows),
+            "actor_context_manifest_sha256": (
+                next(iter(context_manifest_values)) if context_manifest_values else ""
+            ),
+            "actor_context_report_sha256": (
+                next(iter(report_hash_values)) if report_hash_values else ""
             ),
             "actor_roster_sha256": hashlib.sha256(json.dumps(
                 [
@@ -2252,8 +2810,14 @@ class OasisProfileGenerator:
             raise ValueError("actor role manifest must be an object")
         if manifest.get("schema_version") != "actor-role-manifest/v2":
             raise ValueError("actor role manifest schema is stale")
-        if manifest.get("role_contract_version") != "actor-role/v1":
+        recorded_role_version = manifest.get("role_contract_version")
+        if recorded_role_version not in {"actor-role/v1", ROLE_CONTRACT_VERSION}:
             raise ValueError("actor role contract version is stale")
+        if (
+            recorded_role_version == "actor-role/v1"
+            and manifest.get("actor_context_required")
+        ):
+            raise ValueError("legacy actor role manifest cannot require actor context")
         if manifest.get("profile_file") != os.path.basename(profile_path):
             raise ValueError("actor role manifest points to a different profile file")
         actual_profile_sha = hashlib.sha256(profile_bytes).hexdigest()
@@ -2271,6 +2835,26 @@ class OasisProfileGenerator:
                 and manifest.get("actor_cast_manifest_sha256")
                 != expected_cast_manifest_sha256):
             raise ValueError("actor role manifest cast fingerprint mismatch")
+
+        context_manifest: Dict[str, Any] = {}
+        context_packs: Dict[str, Dict[str, Any]] = {}
+        context_bindings: Dict[str, Dict[str, Any]] = {}
+        if manifest.get("actor_context_required"):
+            expected_context_sha = str(
+                manifest.get("actor_context_manifest_sha256") or ""
+            )
+            expected_report_sha = str(
+                manifest.get("actor_context_report_sha256") or ""
+            )
+            if not expected_context_sha or not expected_report_sha:
+                raise ValueError("actor role manifest context fingerprints are missing")
+            context_manifest, context_packs = validate_actor_context_artifacts(
+                os.path.dirname(profile_path),
+                expected_count=role_count,
+                expected_manifest_sha256=expected_context_sha,
+                expected_report_sha256=expected_report_sha,
+            )
+            context_bindings = context_binding_by_actor_id(context_manifest)
 
         is_csv = profile_path.lower().endswith(".csv")
         if is_csv:
@@ -2307,25 +2891,157 @@ class OasisProfileGenerator:
                 raise ValueError("actor role contract must be an object")
             if contract.get("actor_id") != actor_id:
                 raise ValueError("actor role contract identity mismatch")
+            if contract.get("schema_version") != recorded_role_version:
+                raise ValueError("actor role contract schema differs from its manifest")
+            if manifest.get("actor_context_required"):
+                binding = context_bindings.get(actor_id)
+                context_pack = context_packs.get(actor_id)
+                if not binding:
+                    raise ValueError(
+                        f"actor role context binding is missing for {actor_id}"
+                    )
+                for role_key, context_key in (
+                    ("actor_context_file", "file"),
+                    ("actor_context_sha256", "sha256"),
+                ):
+                    if role.get(role_key) != binding.get(context_key):
+                        raise ValueError(
+                            f"actor role context pack binding mismatch for {actor_id}"
+                        )
+                if role.get("actor_context_manifest_sha256") != manifest.get(
+                    "actor_context_manifest_sha256"
+                ):
+                    raise ValueError(
+                        f"actor role context manifest binding mismatch for {actor_id}"
+                    )
+                if role.get("actor_context_report_sha256") != context_manifest.get(
+                    "report_sha256"
+                ):
+                    raise ValueError(
+                        f"actor role report binding mismatch for {actor_id}"
+                    )
+                if not isinstance(context_pack, dict):
+                    raise ValueError(
+                        f"actor role context pack is missing for {actor_id}"
+                    )
+                source = context_pack.get("source")
+                provenance = contract.get("provenance")
+                if not isinstance(source, dict) or not isinstance(provenance, dict):
+                    raise ValueError(
+                        f"actor role context provenance is missing for {actor_id}"
+                    )
+                expected_provenance = {
+                    "context_pack_sha256": canonical_json_sha256(context_pack),
+                    "context_pack_file_sha256": binding.get("sha256"),
+                    "manifest_sha256": manifest.get(
+                        "actor_context_manifest_sha256"
+                    ),
+                    "actors_sha256": source.get("actors_sha256"),
+                    "report_sha256": source.get("report_sha256"),
+                    "actor_intelligence_sha256": source.get(
+                        "actor_intelligence_sha256"
+                    ),
+                    "dossier_sha256": source.get("dossier_sha256"),
+                    "source_catalog_sha256": source.get("sources_sha256"),
+                    "actor_ids_sha256": source.get("actor_ids_sha256"),
+                }
+                for key, expected in expected_provenance.items():
+                    if str(provenance.get(key) or "") != str(expected or ""):
+                        raise ValueError(
+                            f"actor role context provenance {key} mismatch for {actor_id}"
+                        )
             compiler_max = role.get("compiler_max_chars")
             if type(compiler_max) is not int:
                 raise ValueError("actor role compiler limit is missing")
-            compiled_prompt = compile_actor_role_prompt(
-                contract, max_chars=compiler_max
-            )
-            compiled_sha = role_prompt_sha256(compiled_prompt)
-            if role.get("prompt_sha256") != compiled_sha:
-                raise ValueError("actor role compiled prompt fingerprint mismatch")
-            if role.get("prompt_chars") != len(compiled_prompt):
-                raise ValueError("actor role compiled prompt length mismatch")
-            runtime_role = (
-                compiled_prompt.replace("\n", " ").replace("\r", " ")
-                if is_csv else compiled_prompt
-            )
-            if role.get("runtime_prompt_sha256") != role_prompt_sha256(runtime_role):
-                raise ValueError("actor role runtime fragment fingerprint mismatch")
-            if runtime_role not in runtime_value:
-                raise ValueError("actor role fragment is absent from runtime profile")
+            if recorded_role_version == "actor-role/v1":
+                # The v1 compiler is intentionally not retained as executable
+                # compatibility code. Verify the exact fragment and full field
+                # hashes that the genuine v1 manifest sealed, without
+                # recompiling its contract through the current v2 compiler.
+                prompt_chars = role.get("prompt_chars")
+                prompt_sha = str(role.get("prompt_sha256") or "")
+                runtime_prompt_sha = str(
+                    role.get("runtime_prompt_sha256") or ""
+                )
+                if (
+                    type(prompt_chars) is not int
+                    or prompt_chars <= 0
+                    or prompt_chars > compiler_max
+                    or prompt_chars > len(runtime_value)
+                    or not re.fullmatch(r"[0-9a-f]{64}", prompt_sha)
+                    or not re.fullmatch(r"[0-9a-f]{64}", runtime_prompt_sha)
+                ):
+                    raise ValueError("legacy actor role fragment seal is invalid")
+                expected_transform = "newlines_to_spaces" if is_csv else "none"
+                if role.get("runtime_transform") != expected_transform:
+                    raise ValueError("legacy actor role runtime transform is invalid")
+                if not is_csv and prompt_sha != runtime_prompt_sha:
+                    raise ValueError("legacy actor role prompt seals disagree")
+                candidate_starts = [
+                    match.start()
+                    for match in re.finditer("ROLE BRIEF", runtime_value)
+                ]
+                fragment_found = any(
+                    role_prompt_sha256(
+                        runtime_value[start:start + prompt_chars]
+                    ) == runtime_prompt_sha
+                    for start in candidate_starts
+                )
+                if not fragment_found:
+                    raise ValueError(
+                        "legacy actor role runtime fragment fingerprint mismatch"
+                    )
+            else:
+                compiled_prompt = compile_actor_role_prompt(
+                    contract, max_chars=compiler_max
+                )
+                compiled_sha = role_prompt_sha256(compiled_prompt)
+                if role.get("prompt_sha256") != compiled_sha:
+                    raise ValueError("actor role compiled prompt fingerprint mismatch")
+                if role.get("prompt_chars") != len(compiled_prompt):
+                    raise ValueError("actor role compiled prompt length mismatch")
+                runtime_role = (
+                    compiled_prompt.replace("\n", " ").replace("\r", " ")
+                    if is_csv else compiled_prompt
+                )
+                if role.get("runtime_prompt_sha256") != role_prompt_sha256(runtime_role):
+                    raise ValueError("actor role runtime fragment fingerprint mismatch")
+                if runtime_role not in runtime_value:
+                    raise ValueError("actor role fragment is absent from runtime profile")
+                if (
+                    not is_csv
+                    and contract.get("actor_intelligence_schema_version")
+                    == ACTOR_INTELLIGENCE_SCHEMA_VERSION
+                ):
+                    if role.get("reddit_system_message_version") != (
+                        CANONICAL_REDDIT_SYSTEM_MESSAGE_VERSION
+                    ):
+                        raise ValueError(
+                            "canonical Reddit system-message schema is missing"
+                        )
+                    username = str(profile_rows[index].get("username") or "")
+                    expected_system_message = canonical_reddit_system_message(
+                        username, runtime_value
+                    )
+                    if role.get("reddit_base_system_message_sha256") != (
+                        role_prompt_sha256(expected_system_message)
+                    ):
+                        raise ValueError(
+                            "canonical Reddit base system-message fingerprint mismatch"
+                        )
+                    if role.get("reddit_base_system_message_chars") != len(
+                        expected_system_message
+                    ):
+                        raise ValueError(
+                            "canonical Reddit base system-message length mismatch"
+                        )
+                    if any(
+                        profile_rows[index].get(field) not in (None, "")
+                        for field in ("age", "gender", "mbti", "country")
+                    ):
+                        raise ValueError(
+                            "canonical Reddit profile contains synthetic demographics"
+                        )
             roster_rows.append({
                 "actor_id": actor_id,
                 "input_sha256": (
@@ -2375,10 +3091,17 @@ class OasisProfileGenerator:
 
         # 写入数据行
         for idx, profile in enumerate(profiles):
-            # user_char: 完整人设（bio + persona），用于LLM系统提示
-            user_char = profile.bio
-            if profile.persona and profile.persona != profile.bio:
-                user_char = f"{profile.bio} {profile.persona}"
+            # Canonical v1 has one behavioral authority: the sealed
+            # actor-role/v2 prompt.  Legacy profiles retain the historical
+            # ``bio + persona`` composition byte-for-byte.
+            canonical_role = profile._canonical_role_only_persona()
+            if canonical_role is not None:
+                user_char = canonical_role
+            else:
+                # user_char: 完整人设（bio + persona），用于LLM系统提示
+                user_char = profile.bio
+                if profile.persona and profile.persona != profile.bio:
+                    user_char = f"{profile.bio} {profile.persona}"
             # 处理换行符（CSV中用空格替代）
             user_char = user_char.replace('\n', ' ').replace('\r', ' ')
 
@@ -2449,6 +3172,24 @@ class OasisProfileGenerator:
         n_age_default = n_mbti_default = n_country_default = 0
         data = []
         for idx, profile in enumerate(profiles):
+            canonical_role = profile._canonical_role_only_persona()
+            if canonical_role is not None:
+                # OASIS requires these keys, but their values are not part of
+                # actor-intelligence/v1. Empty loader placeholders are replaced
+                # by the child process' sealed role-only system message before
+                # any model call; never serialize generated/default identity or
+                # personality attributes for a canonical actor.
+                runtime_age: Any = ""
+                runtime_gender = ""
+                runtime_mbti = ""
+                runtime_country = ""
+            else:
+                runtime_age = profile.age if profile.age else 30
+                runtime_gender = self._normalize_gender(profile.gender)
+                runtime_mbti = profile.mbti if profile.mbti else "ISTJ"
+                runtime_country = (
+                    profile.country if profile.country else default_country
+                )
             # 使用与 to_reddit_format() 一致的格式
             # PREP-8: bio 截断从 150 提到 300——提示词要求 200 字简介，旧上限把成功生成的
             # bio 也在句中拦腰截断（Twitter CSV 一直是全量 bio，两产物口径不一致）。
@@ -2457,18 +3198,24 @@ class OasisProfileGenerator:
                 "username": profile.user_name,
                 "name": profile.name,
                 "bio": profile.bio[:300] if profile.bio else f"{profile.name}",
-                "persona": profile.persona or f"{profile.name} is a participant in social discussions.",
+                "persona": (
+                    canonical_role
+                    if canonical_role is not None
+                    else profile.persona
+                    or f"{profile.name} is a participant in social discussions."
+                ),
                 "karma": profile.karma if profile.karma else 1000,
                 "created_at": profile.created_at,
                 # OASIS必需字段 - 确保都有默认值
-                "age": profile.age if profile.age else 30,
-                "gender": self._normalize_gender(profile.gender),
-                "mbti": profile.mbti if profile.mbti else "ISTJ",
-                "country": profile.country if profile.country else default_country,
+                "age": runtime_age,
+                "gender": runtime_gender,
+                "mbti": runtime_mbti,
+                "country": runtime_country,
             }
-            n_age_default += 0 if profile.age else 1
-            n_mbti_default += 0 if profile.mbti else 1
-            n_country_default += 0 if profile.country else 1
+            if canonical_role is None:
+                n_age_default += 0 if profile.age else 1
+                n_mbti_default += 0 if profile.mbti else 1
+                n_country_default += 0 if profile.country else 1
 
             # 可选字段
             if profile.profession:

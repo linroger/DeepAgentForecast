@@ -39,8 +39,30 @@ from ..utils.dates import parse_as_of
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .zep_entity_reader import EntityNode, ZepEntityReader
+from .actor_context import (
+    ACTOR_CONTEXT_VERSION,
+    ACTOR_INTELLIGENCE_VERSION,
+    INTELLIGENCE_DIMENSIONS,
+    actor_id_for,
+    canonical_json_sha256,
+    is_hard_public_relationship,
+    normalize_evidence_gap_map,
+)
+from .actor_role_prompt import (
+    delimit_untrusted_research_text,
+    sanitize_untrusted_dossier_text,
+    sanitize_untrusted_research_text,
+)
 
 logger = get_logger('mirofish.simulation_config')
+
+ACTOR_CONFIG_EVIDENCE_GAP_AUDIT_VERSION = (
+    "actor-config-evidence-gap-audit/v1"
+)
+ACTOR_CONFIG_EVIDENCE_GAP_AUDIT_KEY = (
+    "evidence_gap_audit_not_actor_or_llm_knowledge"
+)
+ACTOR_CONFIG_EVIDENCE_GAP_AUDIT_MAX_BYTES = 65_536
 
 # C5: 旧 8 类关系（valence 价感知前就存在的类型）。仅当 relationships[] 出现「新信号」
 # ——任一关系带显式 valence/polarity 字段，或带一个超出这 8 类的新关系类型——才认为
@@ -206,6 +228,16 @@ class AgentActivityConfig:
     # 只跟随 stance 标签。缺失即空串 → asdict 仍输出空值、子进程忽略、决策通道退化为仅按立场。
     gains_if: str = ""
     loses_if: str = ""
+
+    # Deterministic actor-specific projection of actor-context/v1 used when
+    # selecting activity, topics, stance and influence.  It remains in the
+    # saved config for audit and downstream behavior hooks; audience agents
+    # and legacy dossiers leave both fields empty.
+    actor_context_digest: str = ""
+    actor_context_evidence_gap_audit: Dict[str, Any] = field(
+        default_factory=dict
+    )
+    actor_context_urgency: str = ""
 
     # TEMPORAL: 激活节奏分层。"sampled"（默认）= 按活跃度概率采样激活；"principal" =
     # 日历模式运行脚本每轮无条件激活的主角（非受众且 influence_weight ≥ 0.6 的前 20 名，
@@ -425,6 +457,7 @@ class SimulationConfigGenerator:
         enable_reddit: bool = True,
         progress_callback: Optional[Callable[[int, int, str], None]] = None,
         actors: Optional[Dict[str, Any]] = None,
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
         max_rounds: Optional[int] = None,
         research_language: Optional[str] = None,
     ) -> SimulationParameters:
@@ -444,6 +477,8 @@ class SimulationConfigGenerator:
             actors: 深度研究 actors.json 顶层对象（可选）。提供时：上下文与事件
                     配置注入调研实证（立场/影响力/时间线/热点），初始帖子可按
                     actor 名字定向到对应 Agent，Agent 配置以实证立场为准
+            actor_context_packs: selected cast's sealed actor-context/v1 packs;
+                    each matching actor receives only its bounded projection
             max_rounds: 运行阶段实际执行的轮数预算（可选）。PREP-1：定时事件按
                         min(配置轮数, max_rounds) 排期，避免关键 flashpoint 落在
                         截断窗口之外被静默丢弃。None → 按 SIM_SCHEDULE_CLAMP_ROUNDS
@@ -487,7 +522,8 @@ class SimulationConfigGenerator:
             simulation_requirement=simulation_requirement,
             document_text=document_text,
             entities=entities,
-            actors=actors
+            actors=actors,
+            actor_context_packs=actor_context_packs,
         )
 
         reasoning_parts = []
@@ -541,8 +577,18 @@ class SimulationConfigGenerator:
 
         # ========== 步骤2: 生成事件配置 ==========
         report_progress(2, "生成事件配置和热点话题...")
-        event_config_result = self._generate_event_config(context, simulation_requirement, entities, actors=actors)
-        event_config = self._parse_event_config(event_config_result, actors=actors)
+        event_config_result = self._generate_event_config(
+            context,
+            simulation_requirement,
+            entities,
+            actors=actors,
+            actor_context_packs=actor_context_packs,
+        )
+        event_config = self._parse_event_config(
+            event_config_result,
+            actors=actors,
+            actor_context_packs=actor_context_packs,
+        )
         reasoning_parts.append(f"事件配置: {event_config_result.get('reasoning', '成功')}")
         
         # ========== 世界底稿（NEXTSTEPS SIM_WORLD_BRIEF）==========
@@ -560,6 +606,7 @@ class SimulationConfigGenerator:
             world_brief = self._build_world_brief(
                 simulation_requirement, actors, event_config.hot_topics,
                 prediction_markets=market_priors,
+                actor_context_packs=actor_context_packs,
             )
             if world_brief:
                 reasoning_parts.append(f"世界简报: {len(world_brief)} 字")
@@ -587,7 +634,8 @@ class SimulationConfigGenerator:
                 entities=batch_entities,
                 start_idx=start_idx,
                 simulation_requirement=simulation_requirement,
-                actors=actors
+                actors=actors,
+                actor_context_packs=actor_context_packs,
             )
             all_agent_configs.extend(batch_configs)
         
@@ -620,6 +668,8 @@ class SimulationConfigGenerator:
                 start_idx=len(all_agent_configs),
                 event_config=event_config,
                 actors=actors,
+                main_agent_configs=all_agent_configs,
+                actor_context_packs=actor_context_packs,
             )
             if audience_configs:
                 all_agent_configs.extend(audience_configs)
@@ -643,7 +693,12 @@ class SimulationConfigGenerator:
         # 研究 relationships[] → 有向关注边（方向遵循 actors.build_initial_follow_graph 的语义），
         # 再用图谱邻边补充（relationships[] 稀疏时也能成形）。模拟开始前注入，杜绝空社交图。
         try:
-            event_config.initial_follows = self._build_initial_follows(all_agent_configs, entities, actors)
+            event_config.initial_follows = self._build_initial_follows(
+                all_agent_configs,
+                entities,
+                actors,
+                actor_context_packs=actor_context_packs,
+            )
             reasoning_parts.append(f"初始关注图: {len(event_config.initial_follows)} 条关注边")
             logger.info(f"初始关注图: {len(event_config.initial_follows)} 条关注边")
         except Exception as e:
@@ -657,6 +712,7 @@ class SimulationConfigGenerator:
             event_config.scheduled_events = self._build_scheduled_events(
                 actors, time_config, all_agent_configs, max_rounds=max_rounds,
                 timeline=temporal_timeline,
+                actor_context_packs=actor_context_packs,
             )
             if event_config.scheduled_events:
                 reasoning_parts.append(f"定时事件: {len(event_config.scheduled_events)} 个")
@@ -668,7 +724,10 @@ class SimulationConfigGenerator:
         # ========== 把 echo-chamber 同温层关注补进初始关注图（T3.4）==========
         try:
             extra = self._build_echo_chamber_follows(
-                all_agent_configs, twitter_config_strength=None, actors=actors
+                all_agent_configs,
+                twitter_config_strength=None,
+                actors=actors,
+                actor_context_packs=actor_context_packs,
             )
             if extra:
                 merged = {(a, b) for (a, b) in (tuple(p) for p in event_config.initial_follows)}
@@ -746,6 +805,7 @@ class SimulationConfigGenerator:
         agent_configs: List[AgentActivityConfig],
         entities: List[EntityNode],
         actors: Optional[Dict[str, Any]],
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> List[List[int]]:
         """T3.2: relationships[] + 图谱邻边 → 去重的初始关注边 [[follower, followee]]。
 
@@ -770,35 +830,49 @@ class SimulationConfigGenerator:
                 f"初始关注图: {len(dup_names)} 个重名实体（首个胜出，上游实体解析可能有泄漏）: {dup_names[:5]}"
             )
         pairs: set = set()
-        # 1. 研究关系（带方向语义）
-        for f in build_initial_follow_graph(actors, agent_id_by_name):
-            if len(f) == 2:
-                pairs.add((f[0], f[1]))
+        canonical_v1 = self._dossier_uses_canonical_intelligence(actors)
+        # 1. 研究关系（带方向语义）。Canonical v1 never reopens raw
+        # top-level relationships; only sealed, source-bound public/actor-local
+        # rows may shape behavior.
+        if canonical_v1:
+            relationship_rows = self._canonical_context_relationship_rows(
+                actors, actor_context_packs
+            )
+            pairs.update(self._canonical_relationship_follow_pairs(
+                relationship_rows, agent_id_by_name
+            ))
+        else:
+            for f in build_initial_follow_graph(actors, agent_id_by_name):
+                if len(f) == 2:
+                    pairs.add((f[0], f[1]))
         # 2. 图谱邻边补充
-        name_by_uuid = {e.uuid: e.name for e in entities}
-        for e in entities:
-            src = agent_id_by_name.get(normalize_name(e.name))
-            if src is None:
-                continue
-            added = 0
-            for edge in (e.related_edges or []):
-                if added >= self.MAX_GRAPH_FOLLOWS_PER_AGENT:
-                    break
-                other_uuid = edge.get("target_node_uuid") or edge.get("source_node_uuid")
-                if not other_uuid:
+        # Graph-neighbor edges are an unsealed compatibility source. They are
+        # retained byte-for-byte for unversioned dossiers and excluded for v1.
+        if not canonical_v1:
+            name_by_uuid = {e.uuid: e.name for e in entities}
+            for e in entities:
+                src = agent_id_by_name.get(normalize_name(e.name))
+                if src is None:
                     continue
-                other_name = name_by_uuid.get(other_uuid)
-                if not other_name:
-                    continue
-                dst = agent_id_by_name.get(normalize_name(other_name))
-                if dst is None or dst == src:
-                    continue
-                # 出边：src 关注邻居；入边：邻居关注 src（监控/受影响方向）
-                if edge.get("direction") == "outgoing":
-                    pairs.add((src, dst))
-                else:
-                    pairs.add((dst, src))
-                added += 1
+                added = 0
+                for edge in (e.related_edges or []):
+                    if added >= self.MAX_GRAPH_FOLLOWS_PER_AGENT:
+                        break
+                    other_uuid = edge.get("target_node_uuid") or edge.get("source_node_uuid")
+                    if not other_uuid:
+                        continue
+                    other_name = name_by_uuid.get(other_uuid)
+                    if not other_name:
+                        continue
+                    dst = agent_id_by_name.get(normalize_name(other_name))
+                    if dst is None or dst == src:
+                        continue
+                    # 出边：src 关注邻居；入边：邻居关注 src（监控/受影响方向）
+                    if edge.get("direction") == "outgoing":
+                        pairs.add((src, dst))
+                    else:
+                        pairs.add((dst, src))
+                    added += 1
         valid = {c.agent_id for c in agent_configs}
         return [[a, b] for (a, b) in sorted(pairs) if a in valid and b in valid]
 
@@ -944,6 +1018,7 @@ class SimulationConfigGenerator:
         agent_configs: List[AgentActivityConfig],
         max_rounds: Optional[int] = None,
         timeline: Optional[sim_timeline.SimulationTimeline] = None,
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> List[Dict[str, Any]]:
         """T3.8: 研究 key_events → 映射到 [0,total_rounds) 的定时事件，附最相关高影响力发布者。
 
@@ -964,13 +1039,29 @@ class SimulationConfigGenerator:
         """
         if not isinstance(actors, dict) or not agent_configs:
             return []
+        event_source = actors
+        if self._dossier_uses_canonical_intelligence(actors):
+            safe_events = self._canonical_context_event_rows(
+                actors, actor_context_packs
+            )
+            if not safe_events:
+                return []
+            # Utilities below consume only key_events/as_of_date.  Canonical
+            # event content comes exclusively from sealed public rows.
+            event_source = {
+                "as_of_date": actors.get("as_of_date"),
+                "key_events": safe_events,
+            }
         calendar = timeline is not None
         if calendar:
             schedule, beyond = events_to_calendar_rounds(
-                actors, timeline.round_dates, timeline.as_of_date, timeline.horizon_date
+                event_source,
+                timeline.round_dates,
+                timeline.as_of_date,
+                timeline.horizon_date,
             )
             timeline.beyond_horizon_events = beyond
-            evs = actors.get("key_events")
+            evs = event_source.get("key_events")
             unparsed = sum(
                 1 for e in (evs if isinstance(evs, list) else [])
                 if isinstance(e, dict) and parse_as_of(e.get("date")) is None
@@ -999,8 +1090,8 @@ class SimulationConfigGenerator:
             total_rounds = min(config_rounds, budget) if budget > 0 else config_rounds
             if total_rounds < config_rounds:
                 logger.info(f"定时事件: 排期轮数按执行预算钳制 {config_rounds} -> {total_rounds}")
-            as_of = actors.get("as_of_date")
-            schedule = events_to_schedule(actors, total_rounds, as_of)
+            as_of = event_source.get("as_of_date")
+            schedule = events_to_schedule(event_source, total_rounds, as_of)
         if not schedule:
             return []
         # 名字 → agent 索引（用于把事件定向到被提及的真实角色）
@@ -1030,7 +1121,11 @@ class SimulationConfigGenerator:
             })
         return out
 
-    def _valence_signal_active(self, actors: Optional[Dict[str, Any]]) -> bool:
+    def _valence_signal_active(
+        self,
+        actors: Optional[Dict[str, Any]],
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
+    ) -> bool:
         """C5 准入门：研究档案是否携带「价感知」信号。
 
         仅当 SIM_VALENCED_RELATIONS 为真，且 relationships[] 中至少有一条边携带显式
@@ -1044,9 +1139,14 @@ class SimulationConfigGenerator:
             return False
         if not isinstance(actors, dict):
             return False
-        rels = actors.get("relationships")
-        if not isinstance(rels, list):
-            return False
+        if self._dossier_uses_canonical_intelligence(actors):
+            rels = self._canonical_context_relationship_rows(
+                actors, actor_context_packs
+            )
+        else:
+            rels = actors.get("relationships")
+            if not isinstance(rels, list):
+                return False
         for r in rels:
             if not isinstance(r, dict):
                 continue
@@ -1066,6 +1166,7 @@ class SimulationConfigGenerator:
         self,
         actor_name: str,
         actors: Optional[Dict[str, Any]],
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> float:
         """C5: 由一个具名角色的关系边聚合出对其整体情感偏置的「加性微调」∈ [-0.5, 0.5]。
 
@@ -1077,7 +1178,13 @@ class SimulationConfigGenerator:
         """
         if not actor_name:
             return 0.0
-        rows = extract_relationship_rows(actors)
+        canonical_v1 = self._dossier_uses_canonical_intelligence(actors)
+        rows = (
+            self._canonical_context_relationship_rows(
+                actors, actor_context_packs
+            )
+            if canonical_v1 else extract_relationship_rows(actors)
+        )
         if not rows:
             return 0.0
         me = normalize_name(actor_name)
@@ -1088,6 +1195,12 @@ class SimulationConfigGenerator:
             s = normalize_name(str(r.get("source", "") or ""))
             t = normalize_name(str(r.get("target", "") or ""))
             if me != s and me != t:
+                continue
+            if (
+                canonical_v1
+                and r.get("_runtime_scope") == "actor_local"
+                and me != normalize_name(str(r.get("_context_actor_name") or ""))
+            ):
                 continue
             polarities.append(relation_polarity(r))
         if not polarities:
@@ -1101,6 +1214,7 @@ class SimulationConfigGenerator:
         agent_configs: List[AgentActivityConfig],
         twitter_config_strength: Optional[float] = None,
         actors: Optional[Dict[str, Any]] = None,
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> "set":
         """T3.4: 按 (stance 桶, 主导议题) 聚类，在簇内加同温层关注边，高影响力 Agent 留跨簇桥。
 
@@ -1155,26 +1269,53 @@ class SimulationConfigGenerator:
 
         # ---- C5 价感知补边（仅当研究档案携带 valence/polarity/新关系类型时）----
         # 旧 8 类、无新字段的今日数据走 _valence_signal_active==False，整段跳过 → pairs 不变。
-        if self._valence_signal_active(actors):
+        if self._valence_signal_active(actors, actor_context_packs):
             agent_by_name: Dict[str, AgentActivityConfig] = {}
             for c in agent_configs:
                 if c.entity_name:
                     # 同名只保留首个（与初始关注图按出现序的口径一致）
                     agent_by_name.setdefault(normalize_name(c.entity_name), c)
-            for r in extract_relationship_rows(actors):
+            canonical_v1 = self._dossier_uses_canonical_intelligence(actors)
+            relationship_rows = (
+                self._canonical_context_relationship_rows(
+                    actors, actor_context_packs
+                )
+                if canonical_v1 else extract_relationship_rows(actors)
+            )
+            for r in relationship_rows:
                 src = agent_by_name.get(normalize_name(str(r.get("source", "") or "")))
                 dst = agent_by_name.get(normalize_name(str(r.get("target", "") or "")))
                 if src is None or dst is None or src.agent_id == dst.agent_id:
                     continue
                 valence = relation_valence(r)
+                local_owner = agent_by_name.get(normalize_name(
+                    str(r.get("_context_actor_name") or "")
+                ))
                 if valence == "allied":
                     # 盟友互相关注，把同盟拉得更紧
-                    pairs.add((src.agent_id, dst.agent_id))
-                    pairs.add((dst.agent_id, src.agent_id))
+                    candidates = [
+                        (src.agent_id, dst.agent_id),
+                        (dst.agent_id, src.agent_id),
+                    ]
                 elif valence == "adversarial":
                     # 桥接式对立：对立双方互相关注（盯住对方阵营），narratives 跨阵营可见
-                    pairs.add((src.agent_id, dst.agent_id))
-                    pairs.add((dst.agent_id, src.agent_id))
+                    candidates = [
+                        (src.agent_id, dst.agent_id),
+                        (dst.agent_id, src.agent_id),
+                    ]
+                else:
+                    candidates = []
+                for follower, followee in candidates:
+                    if (
+                        canonical_v1
+                        and r.get("_runtime_scope") == "actor_local"
+                        and (
+                            local_owner is None
+                            or follower != local_owner.agent_id
+                        )
+                    ):
+                        continue
+                    pairs.add((follower, followee))
         return pairs
 
     # NEXTSTEPS SIM_WORLD_BRIEF: 世界底稿的确定性长度上限（无 LLM 调用，纯拼装）。
@@ -1226,6 +1367,399 @@ class SimulationConfigGenerator:
             logger.debug(f"读取 handoff prediction_markets.json 失败（降级跳过）: {e}")
         return []
 
+    @staticmethod
+    def _actor_intelligence_version(actor: Optional[Dict[str, Any]]) -> str:
+        intelligence = actor.get("intelligence") if isinstance(actor, dict) else None
+        if not isinstance(intelligence, dict):
+            return ""
+        return str(intelligence.get("schema_version") or "").strip()
+
+    @classmethod
+    def _is_canonical_actor(cls, actor: Optional[Dict[str, Any]]) -> bool:
+        return cls._actor_intelligence_version(actor) == ACTOR_INTELLIGENCE_VERSION
+
+    @classmethod
+    def _dossier_uses_canonical_intelligence(
+        cls, actors: Optional[Dict[str, Any]]
+    ) -> bool:
+        if not isinstance(actors, dict):
+            return False
+        contract = actors.get("actor_intelligence_contract")
+        if (
+            isinstance(contract, dict)
+            and str(contract.get("schema_version") or "").strip()
+            == ACTOR_INTELLIGENCE_VERSION
+        ):
+            return True
+        return any(cls._is_canonical_actor(row) for row in extract_actor_rows(actors))
+
+    @classmethod
+    def _validated_canonical_context_pack(
+        cls,
+        actor: Dict[str, Any],
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]],
+    ) -> Dict[str, Any]:
+        """Return the exact source-bound actor-context/v1 pack or fail closed.
+
+        A canonical actor may not fall back to the legacy flat role/stance/
+        influence/memory/incentive fields.  The pack is therefore a required
+        authority boundary for every selected v1 actor, not an optional prompt
+        enhancement.  These local checks protect direct callers as well as the
+        normal PREPARE path, which has already validated the root manifest.
+        """
+        if not cls._is_canonical_actor(actor):
+            raise ValueError("canonical actor-context requested for a legacy actor")
+        actor_id = actor_id_for(actor)
+        pack = (
+            actor_context_packs.get(actor_id)
+            if isinstance(actor_context_packs, dict) else None
+        )
+        if not isinstance(pack, dict):
+            raise ValueError(
+                f"canonical actor {actor_id} requires a sealed actor-context/v1 pack"
+            )
+        if str(pack.get("schema_version") or "") != ACTOR_CONTEXT_VERSION:
+            raise ValueError(
+                f"canonical actor {actor_id} has an unsupported actor-context schema"
+            )
+        if str(pack.get("actor_id") or "") != actor_id:
+            raise ValueError(f"canonical actor-context identity mismatch for {actor_id}")
+        if normalize_name(str(pack.get("actor_name") or "")) != normalize_name(
+            str(actor.get("name") or "")
+        ):
+            raise ValueError(f"canonical actor-context name mismatch for {actor_id}")
+
+        actor_intelligence = actor.get("intelligence")
+        pack_intelligence = pack.get("actor_intelligence")
+        if not isinstance(actor_intelligence, dict) or not isinstance(pack_intelligence, dict):
+            raise ValueError(f"canonical actor-context intelligence missing for {actor_id}")
+        actor_intelligence_sha = canonical_json_sha256(actor_intelligence)
+        if canonical_json_sha256(pack_intelligence) != actor_intelligence_sha:
+            raise ValueError(f"canonical actor-context intelligence mismatch for {actor_id}")
+
+        source = pack.get("source")
+        if not isinstance(source, dict):
+            raise ValueError(f"canonical actor-context provenance missing for {actor_id}")
+        if (
+            str(source.get("actor_intelligence_contract_version") or "")
+            != ACTOR_INTELLIGENCE_VERSION
+            or str(source.get("actor_intelligence_sha256") or "")
+            != actor_intelligence_sha
+        ):
+            raise ValueError(f"canonical actor-context provenance mismatch for {actor_id}")
+        return pack
+
+    _PUBLIC_ACTOR_CONTEXT_VISIBILITIES = {
+        "public", "public_record", "publicly_known", "open_source",
+    }
+    _ACTOR_LOCAL_CONTEXT_VISIBILITIES = {
+        "actor_known", "known_to_actor", "actor_internal",
+        "internal_to_actor", "private_actor_knowledge",
+    }
+    _NON_BEHAVIORAL_EVIDENCE_TYPES = {
+        "analyst_inference", "contested", "unknown",
+    }
+
+    @classmethod
+    def _validate_actor_context_dossier_binding(
+        cls,
+        pack: Dict[str, Any],
+        actors: Optional[Dict[str, Any]],
+    ) -> None:
+        """Require cross-actor runtime rows to be sealed to this dossier."""
+        if not isinstance(actors, dict):
+            raise ValueError("canonical actor-context dossier binding is missing")
+        source = pack.get("source")
+        expected = canonical_json_sha256(actors)
+        if (
+            not isinstance(source, dict)
+            or str(source.get("actors_sha256") or "") != expected
+        ):
+            raise ValueError("canonical actor-context dossier fingerprint mismatch")
+
+    @classmethod
+    def _canonical_context_relationship_rows(
+        cls,
+        actors: Optional[Dict[str, Any]],
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]],
+    ) -> List[Dict[str, Any]]:
+        """Return sealed relationship evidence safe for runtime behavior.
+
+        Only source-bound, explicitly public verified facts and public
+        actor-stated claims may shape runtime behavior. Modeler-only,
+        uncertain, and private/actor-local rows remain audit data and are not
+        executable simulation authority.
+        """
+        if not isinstance(actors, dict) or not isinstance(actor_context_packs, dict):
+            return []
+        raw_rows = actors.get("relationships")
+        raw_rows = raw_rows if isinstance(raw_rows, list) else []
+        raw_fingerprints = {
+            canonical_json_sha256(row)
+            for row in raw_rows if isinstance(row, dict)
+        }
+        rows: List[Dict[str, Any]] = []
+        seen = set()
+        for actor in extract_actor_rows(actors):
+            if not cls._is_canonical_actor(actor):
+                continue
+            actor_id = actor_id_for(actor)
+            if actor_id not in actor_context_packs:
+                continue
+            pack = cls._validated_canonical_context_pack(
+                actor, actor_context_packs
+            )
+            pack_rows = pack.get("relationships")
+            if not isinstance(pack_rows, list) or not pack_rows:
+                continue
+            cls._validate_actor_context_dossier_binding(pack, actors)
+            for raw in pack_rows:
+                if not isinstance(raw, dict):
+                    continue
+                if canonical_json_sha256(raw) not in raw_fingerprints:
+                    raise ValueError(
+                        f"canonical actor-context relationship is not dossier-bound for {actor_id}"
+                    )
+                safe = cls._safe_actor_context_relationship(raw)
+                if not safe.get("source") or not safe.get("target"):
+                    continue
+                if not is_hard_public_relationship(safe):
+                    continue
+                safe["_runtime_scope"] = "public"
+                key = (
+                    normalize_name(str(safe.get("source") or "")),
+                    normalize_name(str(safe.get("target") or "")),
+                    str(safe.get("type") or "").upper(),
+                    str(safe.get("evidence_type") or ""),
+                    str(safe.get("visibility") or ""),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append(safe)
+        return rows
+
+    @staticmethod
+    def _canonical_relationship_follow_pairs(
+        rows: List[Dict[str, Any]],
+        agent_id_by_name: Dict[str, int],
+    ) -> "set":
+        """Compile sealed relationship rows without legacy flat influence."""
+        pairs: set = set()
+        for row in rows:
+            source_name = normalize_name(str(row.get("source") or ""))
+            target_name = normalize_name(str(row.get("target") or ""))
+            source_id = agent_id_by_name.get(source_name)
+            target_id = agent_id_by_name.get(target_name)
+            if source_id is None or target_id is None or source_id == target_id:
+                continue
+            relation_type = str(row.get("type") or "").strip().upper()
+            candidates = []
+            if relation_type in {
+                "ALLY_OF", "PARTNERS_WITH", "OPPOSES", "COMPETES_WITH",
+                "SANCTIONS", "LITIGATES_AGAINST", "CRITICIZES",
+            }:
+                candidates = [(source_id, target_id), (target_id, source_id)]
+            elif relation_type in {"DEPENDS_ON", "REGULATES", "CUSTOMER_OF"}:
+                candidates = [(source_id, target_id)]
+            elif relation_type in {
+                "INFLUENCES", "SUPPLIES", "FUNDS", "INVESTS_IN", "BACKS",
+                "OWNS", "SUPPORTS", "ENDORSES",
+            }:
+                candidates = [(target_id, source_id)]
+            context_actor_id = agent_id_by_name.get(normalize_name(
+                str(row.get("_context_actor_name") or "")
+            ))
+            for follower, followee in candidates:
+                if (
+                    row.get("_runtime_scope") == "actor_local"
+                    and follower != context_actor_id
+                ):
+                    continue
+                pairs.add((follower, followee))
+        return pairs
+
+    @classmethod
+    def _canonical_context_event_rows(
+        cls,
+        actors: Optional[Dict[str, Any]],
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]],
+    ) -> List[Dict[str, Any]]:
+        """Return globally schedulable public events from sealed v1 packs."""
+        if not isinstance(actors, dict) or not isinstance(actor_context_packs, dict):
+            return []
+        raw_events = actors.get("key_events")
+        raw_events = raw_events if isinstance(raw_events, list) else []
+        raw_fingerprints = {
+            canonical_json_sha256(row)
+            for row in raw_events if isinstance(row, dict)
+        }
+        events: List[Dict[str, Any]] = []
+        seen = set()
+        for actor in extract_actor_rows(actors):
+            if not cls._is_canonical_actor(actor):
+                continue
+            actor_id = actor_id_for(actor)
+            if actor_id not in actor_context_packs:
+                continue
+            pack = cls._validated_canonical_context_pack(
+                actor, actor_context_packs
+            )
+            pack_events = pack.get("events")
+            if not isinstance(pack_events, list) or not pack_events:
+                continue
+            cls._validate_actor_context_dossier_binding(pack, actors)
+            for raw in pack_events:
+                if not isinstance(raw, dict):
+                    continue
+                if canonical_json_sha256(raw) not in raw_fingerprints:
+                    raise ValueError(
+                        f"canonical actor-context event is not dossier-bound for {actor_id}"
+                    )
+                refs = cls._safe_actor_context_list(
+                    raw.get("source_refs"), limit=8, max_chars=180
+                )
+                event = cls._safe_actor_context_scalar(raw.get("event"), 600)
+                date = cls._safe_actor_context_scalar(raw.get("date"), 40)
+                visibility = str(
+                    raw.get("visibility") or ""
+                ).strip().casefold().replace("-", "_").replace(" ", "_")
+                evidence_type = str(
+                    raw.get("evidence_type") or ""
+                ).strip().casefold().replace("-", "_").replace(" ", "_")
+                if (
+                    not event or not date or not refs
+                    or visibility not in cls._PUBLIC_ACTOR_CONTEXT_VISIBILITIES
+                    or evidence_type in cls._NON_BEHAVIORAL_EVIDENCE_TYPES
+                ):
+                    continue
+                key = (str(date), str(event).casefold())
+                if key in seen:
+                    continue
+                seen.add(key)
+                events.append({
+                    "date": date,
+                    "event": event,
+                    "source_refs": refs,
+                    "visibility": visibility,
+                })
+        return events
+
+    @classmethod
+    def _canonical_public_world_rows(
+        cls,
+        actors: Optional[Dict[str, Any]],
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]],
+    ) -> List[Dict[str, Any]]:
+        """Select only explicitly public, source-bound canonical evidence.
+
+        Analyst inference is modeler-only even when malformed input labels it
+        public.  Contested/unknown rows may be shared only when their visibility
+        is explicitly public, and retain their uncertainty label in the brief.
+        A missing pack is not interpreted through raw dossier fields.
+        """
+        if not isinstance(actor_context_packs, dict):
+            return []
+        rows: List[Dict[str, Any]] = []
+        seen_claims = set()
+        for actor in extract_actor_rows(actors):
+            if not cls._is_canonical_actor(actor):
+                continue
+            actor_id = actor_id_for(actor)
+            if actor_id not in actor_context_packs:
+                continue
+            pack = cls._validated_canonical_context_pack(actor, actor_context_packs)
+            cls._validate_actor_context_dossier_binding(pack, actors)
+            intelligence = pack.get("actor_intelligence") or {}
+            dimensions = intelligence.get("dimensions") or {}
+            if not isinstance(dimensions, dict):
+                continue
+            for dimension in INTELLIGENCE_DIMENSIONS:
+                claims = dimensions.get(dimension)
+                if not isinstance(claims, list):
+                    continue
+                for raw in claims:
+                    if not isinstance(raw, dict):
+                        continue
+                    claim = sanitize_untrusted_dossier_text(raw.get("claim"), 520)
+                    refs = cls._safe_actor_context_list(
+                        raw.get("source_refs"), limit=6, max_chars=120
+                    )
+                    if not claim or not refs:
+                        continue
+                    evidence_type = str(
+                        raw.get("evidence_type") or "unknown"
+                    ).strip().casefold().replace("-", "_").replace(" ", "_")
+                    if evidence_type == "analyst_inference":
+                        continue
+                    qualifiers = raw.get("qualifiers")
+                    qualifiers = qualifiers if isinstance(qualifiers, dict) else {}
+                    visibility = str(
+                        raw.get("visibility") or qualifiers.get("visibility") or ""
+                    ).strip().casefold().replace("-", "_").replace(" ", "_")
+                    if visibility not in cls._PUBLIC_ACTOR_CONTEXT_VISIBILITIES:
+                        continue
+                    dedupe_key = claim.casefold()
+                    if dedupe_key in seen_claims:
+                        continue
+                    seen_claims.add(dedupe_key)
+                    rows.append({
+                        "actor_name": sanitize_untrusted_dossier_text(
+                            pack.get("actor_name"), 180
+                        ),
+                        "dimension": dimension,
+                        "claim": claim,
+                        "evidence_type": evidence_type,
+                        "as_of_date": sanitize_untrusted_dossier_text(
+                            raw.get("as_of_date"), 40
+                        ),
+                        "source_refs": refs,
+                    })
+        return rows
+
+    @classmethod
+    def _build_canonical_public_world_brief(
+        cls,
+        simulation_requirement: str,
+        actors: Optional[Dict[str, Any]],
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]],
+        max_chars: int,
+    ) -> str:
+        public_rows = cls._canonical_public_world_rows(actors, actor_context_packs)
+        if not public_rows:
+            return ""
+        parts: List[str] = []
+        question = " ".join(str(simulation_requirement or "").split()).strip()
+        if question:
+            question = sanitize_untrusted_dossier_text(
+                question, cls.WORLD_BRIEF_QUESTION_CHARS
+            )
+            parts.append(
+                "## 核心预测问题（这个世界正在争论什么）\n" + question
+            )
+        header = "## 公开且来源绑定的共同事实"
+        evidence_lines: List[str] = []
+        for row in public_rows:
+            uncertainty = ""
+            evidence_type = str(row.get("evidence_type") or "unknown")
+            if evidence_type in {"contested", "unknown"}:
+                uncertainty = f" [{evidence_type}; not established fact]"
+            refs = ",".join(str(ref) for ref in row.get("source_refs") or [])
+            as_of = f"; as-of={row['as_of_date']}" if row.get("as_of_date") else ""
+            line = (
+                f"- {row.get('actor_name') or 'Actor'} / {row.get('dimension')}: "
+                f"{row.get('claim')}{uncertainty} [sources={refs}{as_of}]"
+            )
+            candidate_lines = [*evidence_lines, line]
+            candidate_parts = [*parts, header + "\n" + "\n".join(candidate_lines)]
+            if len("\n\n".join(candidate_parts)) > max_chars:
+                continue
+            evidence_lines.append(line)
+        if not evidence_lines:
+            return ""
+        parts.append(header + "\n" + "\n".join(evidence_lines))
+        return "\n\n".join(parts).strip()
+
     def _build_market_pricing_block(
         self, prediction_markets: Optional[List[Dict[str, Any]]]
     ) -> str:
@@ -1269,6 +1803,7 @@ class SimulationConfigGenerator:
         actors: Optional[Dict[str, Any]],
         hot_topics: Optional[List[str]],
         prediction_markets: Optional[List[Dict[str, Any]]] = None,
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> str:
         """NEXTSTEPS SIM_WORLD_BRIEF: 拼装全体 Agent 共享的紧凑世界底稿（≤1400 字）。
 
@@ -1281,12 +1816,28 @@ class SimulationConfigGenerator:
         (d) ITEM 11 SIM_MARKET_PRIORS: 市场定价块（top 5 相关市场 question + 隐含 P，
             让全体 Agent 知道 priced beliefs 并据此争论）——仅当传入非空市场且开关开。
 
+        actor-intelligence/v1 is fail-closed: raw situation_brief/hot_topics and
+        unbound market rows are not shared with every actor.  Its brief is built
+        only from explicitly-public, source-bound rows in validated
+        actor-context/v1 packs; actor-private and modeler-only evidence cannot
+        become common knowledge.  Legacy/unversioned dossiers retain the exact
+        historical assembly below.
+
         可降级：任一段缺失 → 简报变短；全部缺失或 SIM_WORLD_BRIEF=false → 空串
         （调用方省略配置字段，运行脚本整体跳过注入）。
         """
         raw_flag = getattr(Config, "SIM_WORLD_BRIEF", True)
         if str(raw_flag).strip().lower() in ("false", "0", "no", "off"):
             return ""
+
+        max_chars = self._world_brief_max_chars()
+        if self._dossier_uses_canonical_intelligence(actors):
+            return self._build_canonical_public_world_brief(
+                simulation_requirement,
+                actors,
+                actor_context_packs,
+                max_chars,
+            )
 
         parts: List[str] = []
         question = " ".join(str(simulation_requirement or "").split()).strip()
@@ -1314,7 +1865,6 @@ class SimulationConfigGenerator:
         # （MiniMax 512K / DeepSeek 1M）抬到 SIM_WORLD_BRIEF_MAX_CHARS（默认 3000）以承载更完整的
         # 世界背景，小窗口/未知提供方守住 WORLD_BRIEF_MAX_CHARS（1400 floor）。ADAPTIVE_CONTEXT=false
         # 或任何异常 → 1400（degrade-safe，逐字节与历史一致）。
-        max_chars = self._world_brief_max_chars()
         return "\n\n".join(parts).strip()[:max_chars]
 
     def _world_brief_max_chars(self) -> int:
@@ -1344,47 +1894,99 @@ class SimulationConfigGenerator:
         simulation_requirement: str,
         document_text: str,
         entities: List[EntityNode],
-        actors: Optional[Dict[str, Any]] = None
+        actors: Optional[Dict[str, Any]] = None,
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> str:
         """构建LLM上下文，截断到最大长度"""
 
-        # 实体摘要
+        # Every interpolated value below is research-derived. Sanitize values
+        # before composition and wrap each logical block so the LLM receives
+        # evidence data, never executable instructions.
+        requirement_block = delimit_untrusted_research_text(
+            "simulation requirement",
+            simulation_requirement,
+            max_chars=4_000,
+        )
+
+        canonical_v1 = self._dossier_uses_canonical_intelligence(actors)
+        if canonical_v1:
+            # Canonical v1 is an authority switch. Graph summaries and the
+            # whole report are retrieval/indexing artifacts, not executable
+            # behavior evidence. The shared config context therefore contains
+            # only the caller's forecast question plus explicitly-public,
+            # source-bound rows from validated actor-context/v1 packs. Missing
+            # public evidence stays missing; it never reopens the raw report.
+            context_parts = [f"## 模拟需求\n{requirement_block}"]
+            public_context = self._build_canonical_public_world_brief(
+                "", actors, actor_context_packs, 10_000
+            )
+            if public_context:
+                context_parts.append("\n" + public_context)
+            return "\n".join(context_parts)
+
+        # Exact unversioned compatibility path. Keep the historical graph and
+        # whole-document inputs byte-compatible for dossiers that have not
+        # opted into actor-intelligence/v1.
         entity_summary = self._summarize_entities(entities)
-
-        # 构建上下文
+        entity_block = delimit_untrusted_research_text(
+            "graph entity summary",
+            entity_summary,
+            max_chars=10_000,
+        )
         context_parts = [
-            f"## 模拟需求\n{simulation_requirement}",
-            f"\n## 实体信息 ({len(entities)}个)\n{entity_summary}",
+            f"## 模拟需求\n{requirement_block}",
+            f"\n## 实体信息 ({len(entities)}个)\n{entity_block}",
         ]
-
-        # T3.9: 局势简报（调研实证）置顶，作为所有 Agent 的共同事实基线——它先于被截断的
-        # 原始文档进入上下文，确保时间/事件配置 LLM 推理的是简报而非半句切断的长文档。
         brief_block = situation_brief_block(actors)
         if brief_block:
-            context_parts.insert(1, f"\n{brief_block}")
+            safe_brief = delimit_untrusted_research_text(
+                "situation brief",
+                brief_block,
+                max_chars=6_000,
+            )
+            context_parts.insert(1, f"\n## 局势简报\n{safe_brief}")
 
-        # 深度研究档案（actors.json）：立场/影响力/时间线/热点都是调研实证，
-        # 优先于原始文档进入上下文（文档随后按剩余空间截断）。
         digest = actors_digest(actors)
         if digest:
-            context_parts.append(f"\n## 深度研究档案（调研实证，生成配置时优先采信）\n{digest}")
+            safe_digest = delimit_untrusted_research_text(
+                "actor dossier digest",
+                digest,
+                max_chars=10_000,
+            )
+            context_parts.append(
+                "\n## 深度研究档案（调研实证，生成配置时优先采信）\n"
+                + safe_digest
+            )
 
-        # NEXTSTEPS P0-4: 注入 forecast_inputs（参考类基率/驱动因素/观察指标/候选情景）。
-        # 此前这些研究painstakingly抽取的分析锚点只渲染进最终报告，模拟侧零使用——智能体只能
-        # 自由联想而非对照分析锚点推理。把它喂进配置生成上下文（事件/议题/逐智能体配置），让模拟
-        # 围绕真实的基率与驱动因素展开。actors 无 forecast_inputs 时返回空串（degrade-safe）。
         fi_block = forecast_inputs_block(actors)
         if fi_block:
-            context_parts.append(f"\n## 预测输入（分析锚点：基率/驱动/指标/情景，模拟应据此推理）\n{fi_block}")
+            safe_forecast_inputs = delimit_untrusted_research_text(
+                "forecast inputs",
+                fi_block,
+                max_chars=8_000,
+            )
+            context_parts.append(
+                "\n## 预测输入（分析锚点：基率/驱动/指标/情景，模拟应据此推理）\n"
+                + safe_forecast_inputs
+            )
 
         current_length = sum(len(p) for p in context_parts)
         remaining_length = self.MAX_CONTEXT_LENGTH - current_length - 500  # 留500字符余量
 
         if remaining_length > 0 and document_text:
-            doc_text = document_text[:remaining_length]
-            if len(document_text) > remaining_length:
+            raw_document = str(document_text)
+            doc_text = sanitize_untrusted_research_text(
+                raw_document,
+                max_chars=remaining_length,
+            )
+            if len(raw_document) > remaining_length:
                 doc_text += "\n...(文档已截断)"
-            context_parts.append(f"\n## 原始文档内容\n{doc_text}")
+            document_block = delimit_untrusted_research_text(
+                "research report or source document",
+                doc_text,
+                max_chars=remaining_length + 40,
+            )
+            context_parts.append(f"\n## 原始文档内容\n{document_block}")
 
         return "\n".join(context_parts)
     
@@ -1401,13 +2003,27 @@ class SimulationConfigGenerator:
             by_type[t].append(e)
         
         for entity_type, type_entities in by_type.items():
-            lines.append(f"\n### {entity_type} ({len(type_entities)}个)")
+            safe_type = sanitize_untrusted_research_text(
+                entity_type,
+                max_chars=160,
+            )
+            lines.append(f"\n### {safe_type} ({len(type_entities)}个)")
             # 使用配置的显示数量和摘要长度
             display_count = self.ENTITIES_PER_TYPE_DISPLAY
             summary_len = self.ENTITY_SUMMARY_LENGTH
             for e in type_entities[:display_count]:
-                summary_preview = (e.summary[:summary_len] + "...") if len(e.summary) > summary_len else e.summary
-                lines.append(f"- {e.name}: {summary_preview}")
+                raw_summary = str(e.summary or "")
+                summary_preview = sanitize_untrusted_research_text(
+                    raw_summary,
+                    max_chars=summary_len,
+                )
+                if len(raw_summary) > summary_len:
+                    summary_preview += "..."
+                safe_name = sanitize_untrusted_research_text(
+                    e.name,
+                    max_chars=180,
+                )
+                lines.append(f"- {safe_name}: {summary_preview}")
             if len(type_entities) > display_count:
                 lines.append(f"  ... 还有 {len(type_entities) - display_count} 个")
         
@@ -1648,63 +2264,133 @@ class SimulationConfigGenerator:
         context: str,
         simulation_requirement: str,
         entities: List[EntityNode],
-        actors: Optional[Dict[str, Any]] = None
+        actors: Optional[Dict[str, Any]] = None,
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """生成事件配置"""
 
-        # 为每种类型列出代表性实体名称
-        type_examples = {}
-        for e in entities:
-            etype = e.get_entity_type() or "Unknown"
-            if etype not in type_examples:
-                type_examples[etype] = []
-            if len(type_examples[etype]) < 3:
-                type_examples[etype].append(e.name)
+        canonical_v1 = self._dossier_uses_canonical_intelligence(actors)
+        # Canonical v1 never exposes graph labels or graph names to the event
+        # model. Its available poster roster is reconstructed from the exact
+        # validated actor-context packs selected for this run. The legacy path
+        # retains the historical graph-derived type examples.
+        type_examples: Dict[str, List[str]] = {}
+        if canonical_v1:
+            canonical_names: List[str] = []
+            for actor in extract_actor_rows(actors):
+                if not self._is_canonical_actor(actor):
+                    continue
+                actor_id = actor_id_for(actor)
+                if not isinstance(actor_context_packs, dict) or actor_id not in actor_context_packs:
+                    continue
+                pack = self._validated_canonical_context_pack(
+                    actor, actor_context_packs
+                )
+                self._validate_actor_context_dossier_binding(pack, actors)
+                name = sanitize_untrusted_dossier_text(pack.get("actor_name"), 180)
+                if name and name not in canonical_names:
+                    canonical_names.append(name)
+            if canonical_names:
+                type_examples["Actor"] = canonical_names
+        else:
+            for e in entities:
+                etype = e.get_entity_type() or "Unknown"
+                if etype not in type_examples:
+                    type_examples[etype] = []
+                if len(type_examples[etype]) < 3:
+                    type_examples[etype].append(e.name)
 
         type_info = "\n".join([
-            f"- {t}: {', '.join(examples)}"
+            "- "
+            + sanitize_untrusted_research_text(t, max_chars=160)
+            + ": "
+            + ", ".join(
+                sanitize_untrusted_research_text(name, max_chars=180)
+                for name in examples
+            )
             for t, examples in type_examples.items()
         ])
+        type_info_block = delimit_untrusted_research_text(
+            "available entity types and examples",
+            type_info,
+            max_chars=6_000,
+        )
 
         # 使用配置的上下文截断长度
         context_truncated = context[:self.EVENT_CONFIG_CONTEXT_LENGTH]
 
-        # 深度研究档案：初始帖子要落在真实角色的真实立场上，而不是 LLM 再编一遍
-        digest = actors_digest(actors, max_chars=2500)
+        # Canonical v1 accepts only explicitly-public, source-bound rows here;
+        # unversioned dossiers retain the historical raw digest.
+        digest = (
+            self._build_canonical_public_world_brief(
+                "", actors, actor_context_packs, 2_500
+            )
+            if canonical_v1
+            else actors_digest(actors, max_chars=2500)
+        )
         research_block = ""
         poster_name_hint = ""
         if digest:
-            research_block = f"\n## 深度研究档案（调研实证）\n{digest}\n"
-            poster_name_hint = (
-                "\n**强烈建议**: 初始帖子尽量出自研究档案中的真实角色——为这类帖子额外给出 "
-                "poster_name（角色名，从档案中选），内容必须与该角色的实证立场一致；"
-                "热点话题优先复用档案中的热点议题。"
+            safe_digest = delimit_untrusted_research_text(
+                "event actor dossier digest",
+                digest,
+                max_chars=2_500,
             )
+            research_block = f"\n## 深度研究档案（调研实证）\n{safe_digest}\n"
+            if canonical_v1:
+                poster_name_hint = (
+                    "\n**要求**: 初始帖子只能陈述上述公开且来源绑定的证据；可给出 "
+                    "poster_name（角色名），但不得把角色私有知识、分析师推断或旧版平面立场"
+                    "改写成公开事实。"
+                )
+            else:
+                poster_name_hint = (
+                    "\n**强烈建议**: 初始帖子尽量出自研究档案中的真实角色——为这类帖子额外给出 "
+                    "poster_name（角色名，从档案中选），内容必须与该角色的实证立场一致；"
+                    "热点话题优先复用档案中的热点议题。"
+                )
 
         # T3.9(2): 让初始帖子覆盖局势简报里的每条「争议断层」(fault_lines)，由最相关的真实角色发声
         fault_lines = []
-        if isinstance(actors, dict):
+        if not canonical_v1 and isinstance(actors, dict):
             sb = actors.get("situation_brief")
             if isinstance(sb, dict) and isinstance(sb.get("fault_lines"), list):
-                fault_lines = [str(x) for x in sb["fault_lines"] if str(x).strip()][:6]
+                fault_lines = [
+                    sanitize_untrusted_research_text(x, max_chars=500)
+                    for x in sb["fault_lines"]
+                    if str(x).strip()
+                ][:6]
         if fault_lines:
             fl_lines = "\n".join(f"  - {x}" for x in fault_lines)
+            fault_lines_block = delimit_untrusted_research_text(
+                "event fault lines",
+                fl_lines,
+                max_chars=4_000,
+            )
             research_block += (
-                "\n## 争议断层（来自局势简报，必须覆盖）\n" + fl_lines + "\n"
+                "\n## 争议断层（来自局势简报，必须覆盖）\n"
+                + fault_lines_block
+                + "\n"
             )
             poster_name_hint += (
                 "\n**要求**: 为上述每一条「争议断层」至少生成一条初始帖子，由对该议题最相关的研究角色"
                 "（poster_name）发声，立场与其实证立场一致，让模拟开局即围绕真实争议点展开。"
             )
 
+        requirement_block = delimit_untrusted_research_text(
+            "event simulation requirement",
+            simulation_requirement,
+            max_chars=8_000,
+        )
         prompt = f"""基于以下模拟需求，生成事件配置。
 
-模拟需求: {simulation_requirement}
+模拟需求:
+{requirement_block}
 
 {context_truncated}
 {research_block}
 ## 可用实体类型及示例
-{type_info}
+{type_info_block}
 
 ## 任务
 请生成事件配置JSON：
@@ -1739,10 +2425,16 @@ class SimulationConfigGenerator:
                 "reasoning": "使用默认配置"
             }
 
-    def _parse_event_config(self, result: Dict[str, Any], actors: Optional[Dict[str, Any]] = None) -> EventConfig:
+    def _parse_event_config(
+        self,
+        result: Dict[str, Any],
+        actors: Optional[Dict[str, Any]] = None,
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
+    ) -> EventConfig:
         """解析事件配置结果。LLM 漏掉热点时回填研究档案中的热点议题。"""
         hot_topics = result.get("hot_topics", [])
-        if not hot_topics and isinstance(actors, dict):
+        canonical_v1 = self._dossier_uses_canonical_intelligence(actors)
+        if not hot_topics and not canonical_v1 and isinstance(actors, dict):
             researched = actors.get("hot_topics")
             if isinstance(researched, list):
                 hot_topics = [str(t) for t in researched[:12]]
@@ -1759,7 +2451,11 @@ class SimulationConfigGenerator:
         # positions. Narrow (only the empty case) + degrade-safe (any error → empty, unchanged).
         if not initial_posts and getattr(Config, "SIM_SYNTH_SEED_POSTS", True):
             try:
-                initial_posts = self._synthesize_initial_posts(actors, hot_topics)
+                initial_posts = self._synthesize_initial_posts(
+                    actors,
+                    hot_topics,
+                    actor_context_packs=actor_context_packs,
+                )
                 if initial_posts:
                     logger.info(
                         "事件配置: LLM 返回 0 初始帖 → 已从研究档案合成 %d 条种子帖"
@@ -1778,6 +2474,7 @@ class SimulationConfigGenerator:
         self,
         actors: Optional[Dict[str, Any]],
         hot_topics: Optional[List[str]],
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> List[Dict[str, Any]]:
         """从研究档案合成种子帖（SIM_SYNTH_SEED_POSTS 兜底）。
 
@@ -1788,6 +2485,43 @@ class SimulationConfigGenerator:
         """
         if not isinstance(actors, dict):
             return []
+        if self._dossier_uses_canonical_intelligence(actors):
+            public_rows = self._canonical_public_world_rows(
+                actors, actor_context_packs
+            )
+            topics = [
+                str(topic).strip() for topic in (hot_topics or [])
+                if str(topic).strip()
+            ]
+            max_posts = max(
+                1, int(getattr(Config, "SIM_SYNTH_SEED_POSTS_MAX", 10) or 10)
+            )
+            posts: List[Dict[str, Any]] = []
+            used_actors = set()
+            for row in public_rows:
+                name = str(row.get("actor_name") or "").strip()
+                actor_key = normalize_name(name)
+                if not name or actor_key in used_actors:
+                    continue
+                claim = str(row.get("claim") or "").strip()
+                if not claim:
+                    continue
+                evidence_type = str(row.get("evidence_type") or "unknown")
+                if evidence_type in {"contested", "unknown"}:
+                    claim = f"[{evidence_type}; not established fact] {claim}"
+                topic = topics[len(posts) % len(topics)] if topics else ""
+                content = f"{topic}: {claim}" if topic else claim
+                posts.append({
+                    "content": content[:600],
+                    "poster_type": "Actor",
+                    "poster_name": name,
+                })
+                used_actors.add(actor_key)
+                if len(posts) >= max_posts:
+                    break
+            return posts
+
+        # Exact unversioned compatibility path.
         rows = actors.get("actors")
         if not isinstance(rows, list):
             return []
@@ -1962,42 +2696,142 @@ class SimulationConfigGenerator:
         entities: List[EntityNode],
         start_idx: int,
         simulation_requirement: str,
-        actors: Optional[Dict[str, Any]] = None
+        actors: Optional[Dict[str, Any]] = None,
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> List[AgentActivityConfig]:
         """分批生成Agent配置"""
 
-        # 构建实体信息（使用配置的摘要长度）；命中研究档案的实体带上实证字段
+        # Build the model-facing roster.  actor-intelligence/v1 is an
+        # authority switch: graph labels, summaries, and unmatched graph names
+        # are indexing artifacts, never behavior evidence.  Every canonical
+        # row is therefore either a validated actor-context projection or a
+        # deterministic anonymous neutral slot.  The unversioned path remains
+        # byte-compatible with the historical graph-derived prompt.
         entity_list = []
         summary_len = self.AGENT_SUMMARY_LENGTH
         matched_actors: Dict[int, Dict[str, Any]] = {}
+        context_projections: Dict[int, Dict[str, Any]] = {}
+        canonical_agent_ids = set()
+        canonical_run = self._dossier_uses_canonical_intelligence(actors)
+        canonical_runtime_names: Dict[int, str] = {}
         for i, e in enumerate(entities):
             agent_id = start_idx + i
-            row: Dict[str, Any] = {
-                "agent_id": agent_id,
-                "entity_name": e.name,
-                "entity_type": e.get_entity_type() or "Unknown",
-                "summary": e.summary[:summary_len] if e.summary else ""
-            }
             actor = match_actor(e.name, actors)
-            if actor is not None:
-                matched_actors[agent_id] = actor
-                researched = {
-                    "role": str(actor.get("role", "") or ""),
-                    "stance": str(actor.get("stance", "") or ""),
-                    "influence": str(actor.get("influence", "") or ""),
+            if canonical_run:
+                # A current-v1 batch never leaks unmatched graph metadata into
+                # either the LLM or the deterministic rule path.  In a healthy
+                # selected cast every row matches a pack; the anonymous label
+                # is a fail-neutral compatibility guard for extra graph nodes.
+                row = {
+                    "agent_id": agent_id,
+                    "entity_name": f"Unbound Actor {agent_id}",
+                    "entity_type": "Actor",
                 }
-                memory = str(actor.get("memory", "") or "")
-                if memory:
-                    researched["memory"] = memory[:300]
-                row["researched_profile"] = {k: v for k, v in researched.items() if v}
+                canonical_agent_ids.add(agent_id)
+                canonical_runtime_names[agent_id] = row["entity_name"]
+            else:
+                row = {
+                    "agent_id": agent_id,
+                    "entity_name": sanitize_untrusted_research_text(
+                        e.name,
+                        max_chars=180,
+                    ),
+                    "entity_type": sanitize_untrusted_research_text(
+                        e.get_entity_type() or "Unknown",
+                        max_chars=160,
+                    ),
+                    "summary": sanitize_untrusted_research_text(
+                        e.summary,
+                        max_chars=summary_len,
+                    ) if e.summary else "",
+                }
+            if actor is not None and (not canonical_run or self._is_canonical_actor(actor)):
+                matched_actors[agent_id] = actor
+                canonical_v1 = self._is_canonical_actor(actor)
+                if canonical_v1:
+                    pack = self._validated_canonical_context_pack(
+                        actor, actor_context_packs
+                    )
+                    canonical_agent_ids.add(agent_id)
+                else:
+                    pack = None
+                    if isinstance(actor_context_packs, dict):
+                        pack = actor_context_packs.get(actor_id_for(actor))
+                if isinstance(pack, dict):
+                    projection = self._actor_context_config_projection(pack)
+                    context_projections[agent_id] = projection
+                    behavior_projection = self._actor_context_behavior_projection(
+                        projection
+                    )
+                    if canonical_v1:
+                        self._validate_actor_context_dossier_binding(pack, actors)
+                        runtime_name = str(
+                            behavior_projection.get("actor_name")
+                            or pack.get("actor_name")
+                            or ""
+                        ).strip()
+                        if not runtime_name:
+                            raise ValueError(
+                                f"canonical actor {actor_id_for(actor)} has no safe runtime name"
+                            )
+                        canonical_runtime_names[agent_id] = runtime_name
+                        row["entity_name"] = runtime_name
+                        row["entity_type"] = "Actor"
+                if canonical_v1 and not context_projections.get(agent_id):
+                    raise ValueError(
+                        f"canonical actor {actor_id_for(actor)} has no safe config projection"
+                    )
+                if not canonical_v1:
+                    # Exact legacy compatibility path.  Canonical v1 actors may
+                    # never reopen these unversioned behavior fields.
+                    researched = {
+                        "role": sanitize_untrusted_research_text(
+                            actor.get("role"), max_chars=500
+                        ),
+                        "stance": sanitize_untrusted_research_text(
+                            actor.get("stance"), max_chars=500
+                        ),
+                        "influence": sanitize_untrusted_research_text(
+                            actor.get("influence"), max_chars=160
+                        ),
+                    }
+                    memory = sanitize_untrusted_research_text(
+                        actor.get("memory"),
+                        max_chars=300,
+                    )
+                    if memory:
+                        researched["memory"] = memory
+                    row["researched_profile"] = {
+                        k: v for k, v in researched.items() if v
+                    }
+                if agent_id in context_projections:
+                    row["actor_context"] = self._actor_context_behavior_projection(
+                        context_projections[agent_id]
+                    )
             entity_list.append(row)
 
         research_rule = ""
-        if matched_actors:
+        if matched_actors and not canonical_agent_ids:
             research_rule = (
                 "\n- **带 researched_profile 的实体是深度调研实证数据**：其 stance/sentiment_bias/"
                 "influence_weight 必须与 researched_profile 的立场和影响力一致（high≈2.5-3.0, "
                 "medium≈1.5-2.0, low≈0.8-1.2），不要凭空另行猜测"
+                "；若带 actor_context，活动频率、响应速度、关注议题必须反映其中有来源的"
+                "当前行动、未来计划、投资、能力边界、决策触发条件与时间紧迫性。"
+                "analyst_inference/contested 只能作为建模不确定性，不能伪装成角色已知事实"
+            )
+        elif canonical_agent_ids:
+            legacy_prefix = ""
+            if len(canonical_agent_ids) != len(matched_actors):
+                legacy_prefix = (
+                    "\n- **带 researched_profile 的旧版实体继续按其调研字段配置**；"
+                )
+            research_rule = legacy_prefix + (
+                "\n- **带 actor_context 的 actor-intelligence/v1 实体只以该来源绑定投影为准**："
+                "活动频率、响应速度、关注议题、stance、sentiment_bias 与 influence_weight "
+                "必须从 documented rows 推导；缺乏证据时保持 neutral/unknown，不得回读旧版 "
+                "role/stance/influence/memory/incentives。analyst_inference/contested 只能表达"
+                "建模不确定性，不能伪装成角色已知事实"
             )
 
         # 作息口径由活动画像决定；china_social 分支与历史措辞逐字节一致
@@ -2012,13 +2846,24 @@ class SimulationConfigGenerator:
         else:
             rhythm_line = f"{agent_prompt_rhythm}\n"
 
+        requirement_block = delimit_untrusted_research_text(
+            "agent configuration simulation requirement",
+            simulation_requirement,
+            max_chars=8_000,
+        )
+        entity_list_block = delimit_untrusted_research_text(
+            "agent roster and actor-context projection JSON",
+            json.dumps(entity_list, ensure_ascii=False, indent=2),
+            max_chars=24_000,
+        )
         prompt = f"""基于以下信息，为每个实体生成社交媒体活动配置。
 
-模拟需求: {simulation_requirement}
+模拟需求:
+{requirement_block}
 
 ## 实体列表
 ```json
-{json.dumps(entity_list, ensure_ascii=False, indent=2)}
+{entity_list_block}
 ```
 
 ## 任务
@@ -2055,23 +2900,24 @@ class SimulationConfigGenerator:
         # 修正 LLM 把 agent_id 输出成字符串（"5"）导致 int 查找全部 miss 的隐性退化。
         raw_cfgs: List[Any] = []
         llm_configs: Dict[int, Dict[str, Any]] = {}
-        try:
-            result = self._call_llm_with_retry(prompt, system_prompt)
-            raw_cfgs = result.get("agent_configs", []) or []
-            for cfg in raw_cfgs:
-                if not isinstance(cfg, dict):
-                    continue
-                aid = cfg.get("agent_id")
-                if aid is None:
-                    continue
-                try:
-                    llm_configs[int(aid)] = cfg  # 强制 int 化："5" / 5.0 -> 5
-                except (TypeError, ValueError):
-                    logger.warning(f"跳过无法解析 agent_id 的配置: {aid!r}")
-        except Exception as e:
-            logger.warning(f"Agent配置批次LLM生成失败: {e}, 使用规则生成")
-            raw_cfgs = []
-            llm_configs = {}
+        if not canonical_run:
+            try:
+                result = self._call_llm_with_retry(prompt, system_prompt)
+                raw_cfgs = result.get("agent_configs", []) or []
+                for cfg in raw_cfgs:
+                    if not isinstance(cfg, dict):
+                        continue
+                    aid = cfg.get("agent_id")
+                    if aid is None:
+                        continue
+                    try:
+                        llm_configs[int(aid)] = cfg  # 强制 int 化："5" / 5.0 -> 5
+                    except (TypeError, ValueError):
+                        logger.warning(f"跳过无法解析 agent_id 的配置: {aid!r}")
+            except Exception as e:
+                logger.warning(f"Agent配置批次LLM生成失败: {e}, 使用规则生成")
+                raw_cfgs = []
+                llm_configs = {}
 
         # PREP-4(1): 按批记录 LLM 成功/规则回退（generate_config 初始化；直接调用本方法时缺省跳过）
         _stats = getattr(self, "_agent_batch_stats", None)
@@ -2081,32 +2927,54 @@ class SimulationConfigGenerator:
         # 构建AgentActivityConfig对象
         configs = []
         # C5：是否启用价感知情感种子（旧 8 类/无新字段的今日数据 → False，逐批跳过 → 情感不变）
-        valence_on = self._valence_signal_active(actors)
+        valence_on = self._valence_signal_active(actors, actor_context_packs)
         for i, entity in enumerate(entities):
             agent_id = start_idx + i
+            canonical_v1 = agent_id in canonical_agent_ids
             # EXECPLAN F-5-2: 优先按 id 命中；miss 时按位置回退（覆盖 LLM 漏写/写错 agent_id
             # 但仍按输入顺序返回配置的情况），最后再退化到规则生成。
             from_rule = False
-            cfg = llm_configs.get(agent_id)
-            if not cfg and i < len(raw_cfgs) and isinstance(raw_cfgs[i], dict):
+            cfg = None if canonical_v1 else llm_configs.get(agent_id)
+            if (
+                not canonical_v1
+                and not cfg
+                and i < len(raw_cfgs)
+                and isinstance(raw_cfgs[i], dict)
+            ):
                 cfg = raw_cfgs[i]
 
             # 如果LLM没有生成，使用规则生成
-            if not cfg:
+            if canonical_v1:
+                cfg = self._generate_canonical_agent_config_by_rule(
+                    self._actor_context_behavior_projection(
+                        context_projections.get(agent_id) or {}
+                    )
+                )
+                from_rule = True
+                if isinstance(_stats, dict):
+                    _stats["rule_agents"] += 1
+            elif not cfg:
                 cfg = self._generate_agent_config_by_rule(entity)
                 from_rule = True
                 if isinstance(_stats, dict):
                     _stats["rule_agents"] += 1
-                # 规则路径没有 LLM 参与：直接落研究档案的实证影响力
-                researched_weight = influence_weight(matched_actors.get(agent_id))
-                if researched_weight is not None:
-                    cfg["influence_weight"] = researched_weight
+                if not canonical_v1:
+                    # Legacy-only compatibility: canonical actors never read
+                    # the unversioned flat influence field.
+                    researched_weight = influence_weight(matched_actors.get(agent_id))
+                    if researched_weight is not None:
+                        cfg["influence_weight"] = researched_weight
 
             config = AgentActivityConfig(
                 agent_id=agent_id,
                 entity_uuid=entity.uuid,
-                entity_name=entity.name,
-                entity_type=entity.get_entity_type() or "Unknown",
+                entity_name=(
+                    canonical_runtime_names.get(agent_id, f"Unbound Actor {agent_id}")
+                    if canonical_v1 else entity.name
+                ),
+                entity_type=(
+                    "Actor" if canonical_v1 else entity.get_entity_type() or "Unknown"
+                ),
                 activity_level=cfg.get("activity_level", 0.5),
                 posts_per_hour=cfg.get("posts_per_hour", 0.5),
                 comments_per_hour=cfg.get("comments_per_hour", 1.0),
@@ -2120,24 +2988,75 @@ class SimulationConfigGenerator:
                 # 保证 T3.4 同温层聚类键 (stance, topic) 不退化为仅按 stance。
                 interested_topics=(
                     [str(t) for t in (cfg.get("interested_topics") or [])][:5]
-                    or self._default_interested_topics(entity)
+                    or ([] if canonical_v1 else self._default_interested_topics(entity))
                 ),
             )
             # T3.6: 在两条路径（LLM 成功 / 规则兜底）上都强制落研究档案的实证影响力，
             # 避免 LLM-success 路径只被「提示」而给出任意权重，破坏 T3.5 的影响力加权激活。
-            researched_weight = influence_weight(matched_actors.get(agent_id))
-            if researched_weight is not None:
-                config.influence_weight = researched_weight
+            if not canonical_v1:
+                researched_weight = influence_weight(matched_actors.get(agent_id))
+                if researched_weight is not None:
+                    config.influence_weight = researched_weight
             # R2-SIM-3: 把研究档案的得失结构（incentives 的 gains_if/loses_if）落到配置，
             # 供决策通道按利害驱动承诺。缺失即空串，行为不变（degrade-safe）。
-            gains_if, loses_if = self._extract_actor_incentive_summary(matched_actors.get(agent_id))
+            gains_if, loses_if = self._extract_actor_incentive_summary(
+                matched_actors.get(agent_id),
+                self._actor_context_behavior_projection(
+                    context_projections.get(agent_id) or {}
+                ) if canonical_v1 else None,
+            )
             config.gains_if = gains_if
             config.loses_if = loses_if
+            projection = context_projections.get(agent_id) or {}
+            if projection:
+                behavior_projection = self._actor_context_behavior_projection(
+                    projection
+                )
+                config.actor_context_digest = json.dumps(
+                    behavior_projection,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                )
+                gap_audit = projection.get(
+                    ACTOR_CONFIG_EVIDENCE_GAP_AUDIT_KEY
+                )
+                if isinstance(gap_audit, dict):
+                    config.actor_context_evidence_gap_audit = gap_audit
+                urgency = str(behavior_projection.get("urgency") or "")
+                config.actor_context_urgency = urgency
+                context_topics = self._actor_context_topics(behavior_projection)
+                merged_topics: List[str] = []
+                for topic in [*context_topics, *config.interested_topics]:
+                    clean = str(topic or "").strip()
+                    if clean and clean.casefold() not in {
+                        item.casefold() for item in merged_topics
+                    }:
+                        merged_topics.append(clean)
+                if merged_topics:
+                    config.interested_topics = merged_topics[:5]
+                # A documented active/near-term trigger should not yield a
+                # dormant main actor on the rule or LLM path. The conservative
+                # floors leave naturally more-active outputs unchanged.
+                if urgency in {"active", "near_term"}:
+                    try:
+                        config.activity_level = max(float(config.activity_level), 0.4)
+                    except (TypeError, ValueError):
+                        config.activity_level = 0.4
+                    try:
+                        config.response_delay_max = min(
+                            int(config.response_delay_max), 120
+                        )
+                    except (TypeError, ValueError):
+                        config.response_delay_max = 120
             # C5: 价感知情感种子——把该角色关系网的聚合极性（盟友为正、对手为负）加性叠到
             # sentiment_bias 上，让对立双方开局即带方向性情绪，而非清一色由 stance 推。
             # 仅 valence_on（研究档案带新信号）时生效；今日数据走 valence_on==False，情感不变。
             if valence_on:
-                nudge = self._relation_sentiment_nudge(entity.name, actors)
+                nudge = self._relation_sentiment_nudge(
+                    config.entity_name, actors, actor_context_packs
+                )
                 if nudge:
                     config.sentiment_bias = max(-1.0, min(1.0, config.sentiment_bias + nudge))
             # PREP-2: 规则兜底路径此前丢弃调研立场——LLM 整批失败时全体 neutral，产出零对比度
@@ -2146,7 +3065,11 @@ class SimulationConfigGenerator:
             # 播下方向性情感种子。LLM 明确给出非 neutral 立场的路径不受影响。
             if getattr(Config, "SIM_RULE_FALLBACK_STANCE", True):
                 actor_row = matched_actors.get(agent_id)
-                if isinstance(actor_row, dict) and (from_rule or config.stance == "neutral"):
+                if (
+                    not canonical_v1
+                    and isinstance(actor_row, dict)
+                    and (from_rule or config.stance == "neutral")
+                ):
                     bucket = self._classify_stance(str(actor_row.get("stance", "") or ""))
                     if bucket != "neutral" and bucket != config.stance:
                         config.stance = bucket
@@ -2195,14 +3118,41 @@ class SimulationConfigGenerator:
                 out.append(h)
         return out
 
-    @staticmethod
-    def _extract_actor_incentive_summary(actor: Optional[Dict[str, Any]]) -> tuple:
+    @classmethod
+    def _extract_actor_incentive_summary(
+        cls,
+        actor: Optional[Dict[str, Any]],
+        canonical_projection: Optional[Dict[str, Any]] = None,
+    ) -> tuple:
         """R2-SIM-3: aggregate an actor's incentives[] into compact (gains_if, loses_if)
         strings for the decision channel. Each incentive is ``{driver, gains_if, loses_if,
         intensity}`` (deep-research actors-and-incentives schema). Missing/empty → ("", ""),
         so old dossiers without the field leave the config unchanged (degrade-safe)."""
         if not isinstance(actor, dict):
             return "", ""
+        if cls._is_canonical_actor(actor):
+            if (
+                not isinstance(canonical_projection, dict)
+                or canonical_projection.get("schema_version")
+                != "actor-config-context/v1"
+            ):
+                raise ValueError(
+                    "canonical actor incentive summary requires actor-context/v1 projection"
+                )
+            gains: List[str] = []
+            loses: List[str] = []
+            for inc in canonical_projection.get("decision_incentives") or []:
+                if not isinstance(inc, dict):
+                    continue
+                g = str(inc.get("gains_if") or "").strip()
+                l = str(inc.get("loses_if") or "").strip()
+                if g and g not in gains:
+                    gains.append(g)
+                if l and l not in loses:
+                    loses.append(l)
+            return "；".join(gains), "；".join(loses)
+
+        # Exact unversioned compatibility path.
         incentives = actor.get("incentives")
         if not isinstance(incentives, list):
             return "", ""
@@ -2218,6 +3168,450 @@ class SimulationConfigGenerator:
             if l and l not in loses:
                 loses.append(l)
         return "；".join(gains), "；".join(loses)
+
+    _ACTOR_CONTEXT_EVIDENCE_TYPES = {
+        "verified_fact", "actor_stated_claim", "analyst_inference",
+        "contested", "unknown",
+    }
+    _ACTOR_CONTEXT_QUALIFIERS = {
+        "conditions", "amount", "unit", "scale", "type", "action_type",
+        "strategic_purpose", "basis", "leverage", "project", "program",
+        "product", "asset", "counterparty", "geography", "actor_knows",
+        "visibility", "deployability", "driver", "gains_if", "loses_if",
+        "intensity",
+    }
+
+    @staticmethod
+    def _safe_actor_context_scalar(value: Any, max_chars: int = 320) -> Any:
+        if isinstance(value, bool) or value is None:
+            return value
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return value if math.isfinite(value) else None
+        if isinstance(value, (dict, list, tuple)):
+            try:
+                value = json.dumps(
+                    value, ensure_ascii=False, sort_keys=True, allow_nan=False
+                )
+            except (TypeError, ValueError):
+                return "[invalid nested actor-context value omitted]"
+        return sanitize_untrusted_dossier_text(value, max_chars)
+
+    @classmethod
+    def _safe_actor_context_list(
+        cls, value: Any, *, limit: int, max_chars: int
+    ) -> List[Any]:
+        if not isinstance(value, list):
+            return []
+        out: List[Any] = []
+        for item in value[:limit]:
+            clean = cls._safe_actor_context_scalar(item, max_chars)
+            if clean not in (None, "", [], {}):
+                out.append(clean)
+        return out
+
+    @classmethod
+    def _actor_context_claim_rows(
+        cls, pack: Dict[str, Any], dimensions: List[str]
+    ) -> List[Dict[str, Any]]:
+        intelligence = pack.get("actor_intelligence")
+        dimension_map = (
+            intelligence.get("dimensions")
+            if isinstance(intelligence, dict) else None
+        )
+        if not isinstance(dimension_map, dict):
+            return []
+        intelligence_version = str(intelligence.get("schema_version") or "").strip()
+        if intelligence_version and intelligence_version != "actor-intelligence/v1":
+            raise ValueError(
+                "unsupported actor intelligence schema in actor context: "
+                + intelligence_version
+            )
+        canonical_v1 = intelligence_version == "actor-intelligence/v1"
+        rows: List[Dict[str, Any]] = []
+        for dimension in dimensions:
+            claims = dimension_map.get(dimension)
+            if not isinstance(claims, list):
+                continue
+            for claim in claims:
+                if not isinstance(claim, dict) or not str(claim.get("claim") or "").strip():
+                    continue
+                if canonical_v1 and not (
+                    isinstance(claim.get("source_refs"), list)
+                    and any(str(ref or "").strip() for ref in claim["source_refs"])
+                ):
+                    continue
+                evidence_type = str(
+                    claim.get("evidence_type") or "unknown"
+                ).strip().casefold()
+                if evidence_type not in cls._ACTOR_CONTEXT_EVIDENCE_TYPES:
+                    evidence_type = "unknown"
+                row: Dict[str, Any] = {
+                    "dimension": dimension,
+                    "claim": cls._safe_actor_context_scalar(
+                        claim.get("claim"), 600
+                    ),
+                    "evidence_type": evidence_type,
+                }
+                for key, limit in (
+                    ("as_of_date", 40), ("horizon", 120),
+                    ("status", 80), ("confidence", 40), ("visibility", 40),
+                ):
+                    clean = cls._safe_actor_context_scalar(claim.get(key), limit)
+                    if clean not in (None, ""):
+                        row[key] = clean
+                if isinstance(claim.get("actor_knows"), bool):
+                    row["actor_knows"] = claim["actor_knows"]
+                for key, limit, max_chars in (
+                    ("source_refs", 8, 180),
+                    ("dependencies", 6, 240),
+                    ("contradictions", 6, 240),
+                ):
+                    clean_list = cls._safe_actor_context_list(
+                        claim.get(key), limit=limit, max_chars=max_chars
+                    )
+                    if clean_list:
+                        row[key] = clean_list
+                qualifiers = claim.get("qualifiers")
+                if isinstance(qualifiers, dict):
+                    safe_qualifiers = {
+                        key: cls._safe_actor_context_scalar(value, 320)
+                        for key, value in qualifiers.items()
+                        if key in cls._ACTOR_CONTEXT_QUALIFIERS
+                    }
+                    safe_qualifiers = {
+                        key: value for key, value in safe_qualifiers.items()
+                        if value not in (None, "", [], {})
+                    }
+                    if safe_qualifiers:
+                        row["qualifiers"] = safe_qualifiers
+                rows.append(row)
+        return rows
+
+    @classmethod
+    def _safe_actor_context_relationship(
+        cls, row: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        safe: Dict[str, Any] = {}
+        for key, limit in (
+            ("source", 180), ("target", 180), ("type", 80),
+            ("relation_label", 80), ("direction", 40), ("strength", 40),
+            ("valence", 40), ("sign", 40), ("basis", 400),
+            ("confidence", 40), ("status", 80), ("as_of_date", 40),
+            ("evidence_type", 40), ("visibility", 40), ("polarity", 40),
+        ):
+            clean = cls._safe_actor_context_scalar(row.get(key), limit)
+            if clean not in (None, ""):
+                safe[key] = clean
+        if isinstance(row.get("actor_knows"), bool):
+            safe["actor_knows"] = row["actor_knows"]
+        refs = cls._safe_actor_context_list(
+            row.get("source_refs"), limit=8, max_chars=180
+        )
+        if refs:
+            safe["source_refs"] = refs
+        return safe
+
+    @classmethod
+    def _actor_context_behavior_projection(
+        cls,
+        projection: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Return only the 1,800-character behavior view.
+
+        The sealed gap ledger is config audit state. It must survive typed in
+        the persisted config, but it must never enter actor/LLM knowledge or
+        influence activity, topics, stance, incentives, or urgency.
+        """
+        if not isinstance(projection, dict):
+            return {}
+        return {
+            key: value
+            for key, value in projection.items()
+            if key != ACTOR_CONFIG_EVIDENCE_GAP_AUDIT_KEY
+        }
+
+    @classmethod
+    def _actor_context_config_projection(
+        cls, pack: Dict[str, Any], max_chars: int = 1_800
+    ) -> Dict[str, Any]:
+        """Build behavior context plus a separately bounded typed gap audit.
+
+        ``max_chars`` applies only to the behavior view returned by
+        :meth:`_actor_context_behavior_projection`. The gap audit has its own
+        deterministic bound and seal so all current v1 dimension gaps survive
+        without consuming prompt/model tokens or influencing actor behavior.
+        """
+        if not isinstance(pack, dict):
+            return {}
+        priority_dimensions = [
+            "current_actions",
+            "future_plans",
+            "investments_capital_allocation",
+            "capabilities",
+            "decision_rights_process_triggers",
+            "incentives",
+            "motivations",
+            "constraints",
+        ]
+        claims = cls._actor_context_claim_rows(pack, priority_dimensions)
+        documented: List[Dict[str, Any]] = []
+        inference: List[Dict[str, Any]] = []
+        contested: List[Dict[str, Any]] = []
+        for claim in claims:
+            evidence_type = str(claim.get("evidence_type") or "unknown")
+            if evidence_type == "analyst_inference":
+                inference.append(claim)
+            elif evidence_type in {"contested", "unknown"}:
+                contested.append(claim)
+            else:
+                documented.append(claim)
+
+        projection: Dict[str, Any] = {
+            "schema_version": "actor-config-context/v1",
+            "actor_id": cls._safe_actor_context_scalar(pack.get("actor_id"), 180),
+            "actor_name": cls._safe_actor_context_scalar(pack.get("actor_name"), 240),
+            "source": {},
+            "decision_incentives": [],
+            "documented": [],
+            "analyst_inference_not_actor_knowledge": [],
+            "contested_not_actor_knowledge": [],
+            "relationships_and_leverage": [],
+            "report_section_headings": [],
+        }
+
+        raw_source = pack.get("source")
+        if isinstance(raw_source, dict):
+            for key in (
+                "actor_intelligence_contract_version",
+                "actor_intelligence_sha256", "actors_sha256", "report_sha256",
+                "dossier_sha256", "sources_sha256", "actor_ids_sha256",
+            ):
+                clean = cls._safe_actor_context_scalar(raw_source.get(key), 180)
+                if clean not in (None, ""):
+                    projection["source"][key] = clean
+
+        # The post-simulation decision channel consumes gains_if/loses_if
+        # directly.  Preserve those structured, source-bound payoffs ahead of
+        # the general 1,800-character activity projection so earlier action or
+        # plan rows cannot starve them from the decision-facing contract.
+        for row in documented:
+            if row.get("dimension") != "incentives":
+                continue
+            qualifiers = row.get("qualifiers")
+            if not isinstance(qualifiers, dict):
+                continue
+            incentive = {
+                key: cls._safe_actor_context_scalar(qualifiers.get(key), 220)
+                for key in ("driver", "gains_if", "loses_if", "intensity")
+                if qualifiers.get(key) not in (None, "")
+            }
+            if not incentive.get("gains_if") and not incentive.get("loses_if"):
+                continue
+            candidate = dict(projection)
+            candidate["decision_incentives"] = [
+                *projection["decision_incentives"], incentive
+            ]
+            if len(json.dumps(
+                candidate, ensure_ascii=False, sort_keys=True, allow_nan=False
+            )) > max_chars:
+                break
+            projection["decision_incentives"].append(incentive)
+            if len(projection["decision_incentives"]) >= 4:
+                break
+
+        def add_rows(key: str, rows: List[Dict[str, Any]], limit: int) -> None:
+            for row in rows[:limit]:
+                candidate = dict(projection)
+                candidate[key] = [*projection[key], row]
+                if len(json.dumps(
+                    candidate, ensure_ascii=False, sort_keys=True, allow_nan=False
+                )) > max_chars:
+                    break
+                projection[key].append(row)
+
+        add_rows("documented", documented, 14)
+        add_rows("analyst_inference_not_actor_knowledge", inference, 5)
+        add_rows("contested_not_actor_knowledge", contested, 5)
+        relationships = pack.get("relationships")
+        if isinstance(relationships, list):
+            add_rows(
+                "relationships_and_leverage",
+                [
+                    cls._safe_actor_context_relationship(row)
+                    for row in relationships
+                    if isinstance(row, dict)
+                    and is_hard_public_relationship(row)
+                ],
+                8,
+            )
+        sections = pack.get("relevant_sections")
+        if isinstance(sections, list):
+            for row in sections:
+                if not isinstance(row, dict):
+                    continue
+                heading = cls._safe_actor_context_scalar(
+                    row.get("heading"), 240
+                )
+                if not heading:
+                    continue
+                candidate = dict(projection)
+                candidate["report_section_headings"] = [
+                    *projection["report_section_headings"], heading
+                ]
+                if len(json.dumps(
+                    candidate, ensure_ascii=False, sort_keys=True, allow_nan=False
+                )) > max_chars:
+                    break
+                projection["report_section_headings"].append(heading)
+
+        documented_dimensions = {
+            str(row.get("dimension")) for row in projection["documented"]
+        }
+        if "current_actions" in documented_dimensions:
+            urgency = "active"
+        elif documented_dimensions.intersection({
+            "future_plans", "decision_rights_process_triggers"
+        }):
+            near_tokens = ("now", "immediate", "near-term", "next 90", "本月", "近期", "立即")
+            blob = json.dumps(projection["documented"], ensure_ascii=False).casefold()
+            urgency = "near_term" if any(token in blob for token in near_tokens) else "strategic"
+        else:
+            urgency = "baseline"
+        projection["urgency"] = urgency
+        projection["epistemic_policy"] = (
+            "Use documented rows as actor-grounded behavior evidence. Analyst inference "
+            "and contested rows express modeler uncertainty, not actor knowledge. "
+            "Evidence-gap queries and receipt/result identifiers are modeler-only "
+            "research audit metadata and never establish actor knowledge."
+        )
+        # Final hard bound after adding policy/urgency. Remove complete lowest-
+        # priority items rather than slicing serialized JSON mid-claim.
+        trim_order = [
+            "report_section_headings",
+            "relationships_and_leverage",
+            "contested_not_actor_knowledge",
+            "analyst_inference_not_actor_knowledge",
+            "documented",
+        ]
+        while len(json.dumps(
+            projection, ensure_ascii=False, sort_keys=True, allow_nan=False
+        )) > max_chars:
+            trimmed = False
+            for key in trim_order:
+                values = projection.get(key)
+                if isinstance(values, list) and values:
+                    values.pop()
+                    trimmed = True
+                    break
+            if not trimmed:
+                break
+
+        behavior_chars = len(json.dumps(
+            projection, ensure_ascii=False, sort_keys=True, allow_nan=False
+        ))
+        if behavior_chars > max_chars:
+            raise ValueError(
+                "actor config behavior projection exceeds its character budget: "
+                f"{behavior_chars} > {max_chars}"
+            )
+
+        intelligence = pack.get("actor_intelligence")
+        raw_gaps = (
+            intelligence.get("evidence_gaps")
+            if isinstance(intelligence, dict) else None
+        )
+        typed_gaps = normalize_evidence_gap_map(
+            raw_gaps,
+            require_lossless=(
+                isinstance(intelligence, dict)
+                and intelligence.get("schema_version")
+                == ACTOR_INTELLIGENCE_VERSION
+            ),
+        )
+        if typed_gaps:
+            audit_payload = {
+                "schema_version": ACTOR_CONFIG_EVIDENCE_GAP_AUDIT_VERSION,
+                "actor_id": projection["actor_id"],
+                "actor_intelligence_sha256": projection["source"].get(
+                    "actor_intelligence_sha256"
+                ),
+                "evidence_gaps": typed_gaps,
+            }
+            audit_bytes = len(json.dumps(
+                audit_payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8"))
+            if audit_bytes > ACTOR_CONFIG_EVIDENCE_GAP_AUDIT_MAX_BYTES:
+                raise ValueError(
+                    "actor config evidence-gap audit exceeds its byte budget: "
+                    f"{audit_bytes} > "
+                    f"{ACTOR_CONFIG_EVIDENCE_GAP_AUDIT_MAX_BYTES}"
+                )
+            projection[ACTOR_CONFIG_EVIDENCE_GAP_AUDIT_KEY] = {
+                **audit_payload,
+                "canonical_bytes": audit_bytes,
+                "max_bytes": ACTOR_CONFIG_EVIDENCE_GAP_AUDIT_MAX_BYTES,
+                "sha256": canonical_json_sha256(audit_payload),
+            }
+        return projection
+
+    @staticmethod
+    def _actor_context_topics(projection: Dict[str, Any]) -> List[str]:
+        topics: List[str] = []
+        for row in projection.get("documented") or []:
+            if not isinstance(row, dict):
+                continue
+            qualifiers = row.get("qualifiers")
+            if isinstance(qualifiers, dict):
+                for key in ("project", "program", "product", "asset", "strategic_purpose"):
+                    value = str(qualifiers.get(key) or "").strip()
+                    if value:
+                        topics.append(value[:100])
+            claim = str(row.get("claim") or "").strip()
+            if claim and row.get("dimension") in {
+                "current_actions", "future_plans", "investments_capital_allocation"
+            }:
+                topics.append(claim[:100])
+        topics.extend(
+            str(item).strip()
+            for item in (projection.get("report_section_headings") or [])
+            if str(item).strip()
+        )
+        unique: List[str] = []
+        for topic in topics:
+            if topic and topic.casefold() not in {item.casefold() for item in unique}:
+                unique.append(topic)
+        return unique[:3]
+
+    @classmethod
+    def _generate_canonical_agent_config_by_rule(
+        cls, projection: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Return the deterministic fail-neutral v1 activity baseline.
+
+        Graph type, graph summary, and unversioned actor shortcuts are not
+        authoritative after the actor-intelligence/v1 cutover.  Known,
+        source-bound context may add topics and the caller may later apply the
+        documented urgency floor; everything else remains neutral rather than
+        being guessed from an institution/person stereotype.
+        """
+        return {
+            "activity_level": 0.5,
+            "posts_per_hour": 0.5,
+            "comments_per_hour": 1.0,
+            "active_hours": list(range(9, 23)),
+            "response_delay_min": 5,
+            "response_delay_max": 60,
+            "sentiment_bias": 0.0,
+            "stance": "neutral",
+            "influence_weight": 1.0,
+            "interested_topics": cls._actor_context_topics(projection),
+        }
 
     def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
         """基于规则生成单个Agent配置（中国人作息）"""
@@ -2379,7 +3773,9 @@ class SimulationConfigGenerator:
         return random.Random(seed ^ 0x4155_4449)  # "AUDI"
 
     def _audience_stance_distribution(
-        self, actors: Optional[Dict[str, Any]]
+        self,
+        actors: Optional[Dict[str, Any]],
+        main_agent_configs: Optional[List[AgentActivityConfig]] = None,
     ) -> Dict[str, float]:
         """I-2-2: 由调研 actor 立场推导受众立场抽样分布。
 
@@ -2387,15 +3783,31 @@ class SimulationConfigGenerator:
         归一化为概率分布。无 actor 或全部无法解析 → 返回均匀分布（不偏向任何阵营）。
         受众默认偏向「沉默」，因此把无法明确归类者计入 neutral，使大多数保持中立潜水。
         """
-        counts: Dict[str, float] = {b: 0.0 for b in self._AUDIENCE_STANCE_BUCKETS}
+        counts: Dict[str, float] = dict.fromkeys(
+            self._AUDIENCE_STANCE_BUCKETS, 0.0
+        )
+        safe_v1_stance_by_name = {
+            normalize_name(config.entity_name): str(config.stance or "neutral")
+            for config in (main_agent_configs or [])
+            if isinstance(config, AgentActivityConfig) and config.entity_name
+        }
         for row in extract_actor_rows(actors):
-            bucket = self._classify_stance(str(row.get("stance", "") or ""))
+            if self._is_canonical_actor(row):
+                # The named config was generated from actor-context/v1.  Use
+                # that safe result; direct callers without it get neutral,
+                # never the invalidated flat actor.stance compatibility field.
+                raw_stance = safe_v1_stance_by_name.get(
+                    normalize_name(str(row.get("name") or "")), "neutral"
+                )
+            else:
+                raw_stance = str(row.get("stance", "") or "")
+            bucket = self._classify_stance(raw_stance)
             counts[bucket] += 1.0
         total = sum(counts.values())
         if total <= 0:
             # 无实证立场：均匀分布
             n = len(self._AUDIENCE_STANCE_BUCKETS)
-            return {b: 1.0 / n for b in self._AUDIENCE_STANCE_BUCKETS}
+            return dict.fromkeys(self._AUDIENCE_STANCE_BUCKETS, 1.0 / n)
         return {b: c / total for b, c in counts.items()}
 
     def _classify_stance(self, raw_stance: str) -> str:
@@ -2424,6 +3836,8 @@ class SimulationConfigGenerator:
         start_idx: int,
         event_config: EventConfig,
         actors: Optional[Dict[str, Any]],
+        main_agent_configs: Optional[List[AgentActivityConfig]] = None,
+        actor_context_packs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> List[AgentActivityConfig]:
         """I-2-2: 程序化生成 M 个低影响力「沉默大多数」受众 Agent 配置。
 
@@ -2454,7 +3868,9 @@ class SimulationConfigGenerator:
         size = min(size, 5000)
 
         rng = self._build_audience_rng()
-        distribution = self._audience_stance_distribution(actors)
+        distribution = self._audience_stance_distribution(
+            actors, main_agent_configs=main_agent_configs
+        )
 
         # 受众默认每轮激活上限（仅记录到 reasoning / 供运行脚本采样限流参考）——
         # 真正的「每轮只激活一小撮受众」由运行脚本的加权激活采样配合低 activity_level 实现。
@@ -2470,7 +3886,7 @@ class SimulationConfigGenerator:
 
         # C5：是否启用价感知情感种子。受众为匿名「公众_k」，名字不在 relationships[] 中，
         # _relation_sentiment_nudge 恒返回 0.0 → 受众情感逐字节不变；此处保持与具名路径一致的写法。
-        valence_on = self._valence_signal_active(actors)
+        valence_on = self._valence_signal_active(actors, actor_context_packs)
 
         configs: List[AgentActivityConfig] = []
         for k in range(size):
@@ -2494,7 +3910,9 @@ class SimulationConfigGenerator:
             # C5: 价感知情感种子，加性叠加（不消耗 RNG，故不扰乱受众抽样的确定性）。匿名受众名
             # 不在 relationships[] 中 → nudge 恒为 0.0 → 受众情感保持原值，今日数据逐字节不变。
             if valence_on:
-                nudge = self._relation_sentiment_nudge(f"公众_{k}", actors)
+                nudge = self._relation_sentiment_nudge(
+                    f"公众_{k}", actors, actor_context_packs
+                )
                 if nudge:
                     sentiment_bias = round(max(-1.0, min(1.0, sentiment_bias + nudge)), 3)
 
@@ -2527,5 +3945,3 @@ class SimulationConfigGenerator:
             ))
 
         return configs
-
-

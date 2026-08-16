@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-from ..utils.actors import entity_simulation_tier, normalize_name, salience_score
+from ..utils.actors import (
+    actor_intelligence_claims,
+    actor_intelligence_payload,
+    entity_simulation_tier,
+    normalize_name,
+    salience_score,
+)
 
 
 def _structured_text(value: Any) -> str:
@@ -220,6 +226,50 @@ def render_compact_actor_dossier(
             if values:
                 lines.extend(["", f"**{label}:** " + "; ".join(values)])
         lines.extend(_render_incentives(actor.get("incentives")))
+        for label, dimension, aliases in (
+            ("History / track record", "identity_history", ("history",)),
+            ("Motivations", "motivations", ("motivations",)),
+            ("Capabilities / limits", "capabilities", ("capabilities",)),
+            ("Operational preferences", "operational_preferences", ("preferences",)),
+            ("Current actions", "current_actions", ("current_actions",)),
+            ("Future plans / conditions", "future_plans", ("future_plans", "plans")),
+            ("Investments / capital allocation", "investments_capital_allocation", ("investments",)),
+            ("Decision model / triggers", "decision_rights_process_triggers", ("decision_model",)),
+            ("Knowledge state", "knowledge_state", ("knowledge_state",)),
+            ("Actual red lines", "red_lines", ("red_lines",)),
+        ):
+            claims = actor_intelligence_claims(
+                actor,
+                dimension,
+                *aliases,
+                limit=3,
+                max_chars=320,
+            )
+            if claims:
+                lines.extend(["", f"**{label}:**"])
+                lines.extend(f"- {claim}" for claim in claims)
+        intelligence = actor_intelligence_payload(actor)
+        gaps = intelligence.get("evidence_gaps")
+        if gaps:
+            rendered_gaps = []
+            if isinstance(gaps, dict):
+                grouped = gaps.items()
+            else:
+                grouped = (("general", gaps),)
+            for dimension, raw_values in grouped:
+                values = raw_values if isinstance(raw_values, list) else [raw_values]
+                for gap in values:
+                    value = gap.get("claim") if isinstance(gap, dict) else gap
+                    rendered = _text(value, 240)
+                    if rendered:
+                        rendered_gaps.append(f"{dimension}: {rendered}")
+                    if len(rendered_gaps) >= 4:
+                        break
+                if len(rendered_gaps) >= 4:
+                    break
+            if rendered_gaps:
+                lines.extend(["", "**Actor-intelligence evidence gaps:**"])
+                lines.extend(f"- {gap}" for gap in rendered_gaps)
 
     lines.extend(["", "## Key One-Hop Relationships"])
     for row in relations:

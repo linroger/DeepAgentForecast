@@ -153,7 +153,11 @@ class TestOutlineParse:
         joined = "\n".join(
             f"{row['title']} {row['scope']}" for row in enforced)
 
-        assert len(enforced) == 5
+        # Five historical owners plus the mandatory cast-wide actor-
+        # intelligence owner. The latter prevents forward plans, investments,
+        # and decision context from living only in an optional sidecar.
+        assert len(enforced) == 6
+        assert "Cast-Wide Actor Intelligence" in joined
         assert "Causal Mechanism Chains" in joined
         assert "annual shipments, installed base, ASP/BOM cost" in joined
         assert "probabilities total 100%" in joined
@@ -180,7 +184,10 @@ class TestOutlineParse:
         # The canonical scenario owner also owns its exact matching
         # visualization source table, so the visual contract is intentionally
         # merged rather than creating a competing probability-table section.
-        assert len(balanced) == 24
+        # 20 proposed sections + five appended owners: actor intelligence,
+        # mechanisms, scenarios, milestones, and binary forecasts. The visual
+        # contract remains merged into its matching owner.
+        assert len(balanced) == 25
         assert all(row["target_words"] > 0 for row in balanced)
 
     def test_section_prompt_carries_a_hard_local_output_limit(self, mod):
@@ -194,6 +201,10 @@ class TestOutlineParse:
     @pytest.mark.parametrize(
         "title,required",
         [
+            (
+                "Cast-Wide Actor Intelligence and Behavioral Drivers",
+                "cover every Tier-1/2 actor, not a sample",
+            ),
             ("Causal Mechanism Chains", "3–5 numbered A→B→C→outcome chains"),
             ("Scenarios and Probabilities", "exactly four MECE cases"),
             ("Milestones and Inflection Points", "numeric trigger"),
@@ -434,11 +445,11 @@ class TestOutlineParse:
             log,
         )
         outline = mod.default_synthesis_outline("Q", None)
-        assert len(outline) == 15
+        assert len(outline) == 16
         assert all(f"## {section['title']}" in report for section in outline)
-        assert any("deterministic 15-section skeleton" in msg for _kind, msg in log.rows)
+        assert any("deterministic 16-section skeleton" in msg for _kind, msg in log.rows)
         # One malformed outline call + one call per deterministic section + summary.
-        assert len(calls) == 17
+        assert len(calls) == 18
 
     def test_multipart_rejects_real_output_above_aggregate_ceiling(
             self, mod, monkeypatch):

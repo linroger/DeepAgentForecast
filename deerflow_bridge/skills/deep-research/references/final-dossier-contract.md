@@ -14,7 +14,7 @@ Quick/standard final outputs should match the evidence and brief without arbitra
 2. Situation brief: current state, path to it, forces in tension, fault lines, catalysts.
 3. KIQ-owned analysis sections with known/inferred/assumed/unknown clearly separated.
 4. Outside view: reference classes, base rates, analogues, and case-specific adjustments.
-5. Actors and incentives: key actors only; stated/revealed behavior, capabilities, constraints, gains/losses.
+5. Cast-wide actor intelligence: every Tier-1/2 outcome-mover; identity/history, values/worldview, incentives, motivations, capabilities, constraints, evidence-backed operational preferences/aversions, decision rights/process/triggers and knowledge limits, current actions, future plans with status/horizon/dependencies, investments/resource allocation, track record, likely actions, red lines, and explicit gaps. Keep verified fact, actor-stated claim, analyst inference, contested evidence, and unknowns distinct with citations/as-of/confidence/qualifiers.
 6. Directed actor relationships: source, target, type/sign, basis, and material temporal change.
 7. Drivers and causal pathways: countervailing mechanisms and second-order effects.
 8. Scenarios/forecast implications: rough likelihoods, resolution conditions, assumptions, disconfirmation.
@@ -42,6 +42,7 @@ The final dossier must carry data that downstream extraction and deterministic P
 - quantitative table: metric, value/range, unit, as-of date, definition, geography/population, source tag/URL;
 - timeline table: date/window, event, actors, evidence, forecast relevance;
 - actor relationship table: source actor, target actor, relationship type, valence, evidence basis;
+- actor-intelligence table/section: canonical actor, dimension, claim, evidence type, as-of, horizon/status, confidence, source refs, dependencies/contradictions/qualifiers, or explicit gap;
 - drivers/indicators table: driver, mechanism, leading indicator, threshold, horizon, source;
 - scenario/probability table with assumptions and resolution criteria;
 - prediction-market table with freshness fields;
@@ -57,6 +58,7 @@ These feed `actors.json`, `sources.json`, `quantitative.json`, `timeline.json`, 
 - Base rates and opposing evidence are present.
 - Quantities have units, dates, definitions, and provenance.
 - Actor graph is constrained to decision-relevant actors and material relations.
+- Every Tier-1/2 actor is behaviorally substantive or has explicit per-dimension gaps; no announced aspiration is silently promoted into an approved/funded action, and no personality likes/dislikes are invented.
 - Market hits are relevant to the same event/horizon/resolution rule.
 - No internal simulation/agent dynamics language.
 - No repeated filler, research logs, tool chatter, or process residue.
