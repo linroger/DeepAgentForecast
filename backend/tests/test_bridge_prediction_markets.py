@@ -170,7 +170,196 @@ def test_market_snapshot_diagnostics_distinguish_transport_failure(monkeypatch):
         "attempted_query_count": 2,
         "successful_query_count": 0,
         "transport_failure_count": 2,
+        # TRANSPORT-DIAG: 无 error_class 附注的裸异常按类型名计数
+        "transport_error_classes": {"RuntimeError": 2},
     }
+
+
+def test_market_snapshot_diagnostics_carry_error_class_and_http_status(monkeypatch):
+    """_polymarket_get 挂载的 error_class/http_status 逐 query 聚合进 diagnostics。"""
+    def fail(*_args, **_kwargs):
+        err = RuntimeError("polymarket GET /public-search failed: HTTP Error 403: Forbidden")
+        err.error_class = "HTTPError"
+        err.http_status = 403
+        raise err
+
+    monkeypatch.setattr(d, "_polymarket_get", fail)
+    diagnostics = {}
+    assert d._pm_snapshot(["AI bubble", "US recession"], diagnostics=diagnostics) == []
+    assert diagnostics["transport_error_classes"] == {"HTTPError:403": 2}
+
+
+# ---------------------------------------------------------------- transport hardening
+
+class _FakeHTTPBody:
+    """urlopen 上下文管理器形状的极小假响应。"""
+
+    def __init__(self, payload):
+        self._payload = payload
+
+    def read(self):
+        return json.dumps(self._payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+
+def test_polymarket_get_sends_browser_ua_and_new_default_timeout(monkeypatch):
+    """每个请求必须带浏览器形 User-Agent + Accept；无 env 旋钮时默认超时 8s。
+    （真实事故差分：stdlib 默认 "Python-urllib/3.x" UA 被 Cloudflare 拦，41/41 全灭。）"""
+    import urllib.request
+    monkeypatch.delenv("PREDICTION_MARKETS_HTTP_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("PREDICTION_MARKETS_HTTP_ATTEMPTS", raising=False)
+    seen = {}
+
+    def fake_urlopen(req, timeout=None):
+        seen["ua"] = req.get_header("User-agent")
+        seen["accept"] = req.get_header("Accept")
+        seen["timeout"] = timeout
+        return _FakeHTTPBody({"events": []})
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert d._polymarket_get("/public-search", {"q": "x"}) == {"events": []}
+    assert seen["ua"].startswith("Mozilla/5.0")
+    assert "AppleWebKit" in seen["ua"]
+    assert seen["accept"] == "application/json"
+    assert seen["timeout"] == 8.0                        # 默认超时 3s→8s
+
+
+def test_polymarket_get_retries_transient_5xx_with_backoff_then_succeeds(monkeypatch):
+    """瞬时 503 → 抖动退避一次后重试成功（默认 attempts 1→2）。"""
+    import urllib.error
+    import urllib.request
+    monkeypatch.delenv("PREDICTION_MARKETS_HTTP_ATTEMPTS", raising=False)
+    backoffs = []
+    monkeypatch.setattr(d, "_polymarket_backoff", lambda attempt: backoffs.append(attempt))
+    calls = []
+
+    def fake_urlopen(req, timeout=None):
+        calls.append(1)
+        if len(calls) == 1:
+            raise urllib.error.HTTPError(req.full_url, 503, "Service Unavailable", None, None)
+        return _FakeHTTPBody({"events": [{"title": "Ev"}]})
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    out = d._polymarket_get("/public-search", {"q": "x"})
+    assert out == {"events": [{"title": "Ev"}]}
+    assert len(calls) == 2                               # 默认恰好重试一次
+    assert backoffs == [1]                               # 退避发生在重试前
+
+
+def test_polymarket_get_exhaustion_attaches_error_class_and_status(monkeypatch):
+    """重试耗尽 → RuntimeError 携带 error_class/http_status（诊断沿 _pm_snapshot 持久化）。"""
+    import urllib.error
+    import urllib.request
+    monkeypatch.delenv("PREDICTION_MARKETS_HTTP_ATTEMPTS", raising=False)
+    monkeypatch.setattr(d, "_polymarket_backoff", lambda attempt: None)
+    calls = []
+
+    def fake_urlopen(req, timeout=None):
+        calls.append(1)
+        raise urllib.error.HTTPError(req.full_url, 503, "Service Unavailable", None, None)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    try:
+        d._polymarket_get("/public-search", {"q": "x"})
+        raise AssertionError("expected RuntimeError")
+    except RuntimeError as err:
+        assert err.error_class == "HTTPError"
+        assert err.http_status == 503
+    assert len(calls) == 2
+
+    # 非瞬时 4xx（如 Cloudflare 403）不重试，但状态照样挂载。
+    calls.clear()
+
+    def fake_403(req, timeout=None):
+        calls.append(1)
+        raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", None, None)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_403)
+    try:
+        d._polymarket_get("/public-search", {"q": "x"})
+        raise AssertionError("expected RuntimeError")
+    except RuntimeError as err:
+        assert err.error_class == "HTTPError"
+        assert err.http_status == 403
+    assert len(calls) == 1
+
+    # URLError（连接失败/超时）→ 重试后仍失败：类名挂载、无状态码。
+    calls.clear()
+
+    def fake_urlerror(req, timeout=None):
+        calls.append(1)
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlerror)
+    try:
+        d._polymarket_get("/public-search", {"q": "x"})
+        raise AssertionError("expected RuntimeError")
+    except RuntimeError as err:
+        assert err.error_class == "URLError"
+        assert err.http_status is None
+    assert len(calls) == 2
+
+
+def test_collector_persists_transport_error_classes_in_status(tmp_path, monkeypatch):
+    """刷新快照全灭 → prediction_markets.json status 必须带 transport_error_classes
+    （真实事故只有失败计数、无错误类别，下次断网仍不可诊断——这是回归钉）。"""
+    def fail(*_args, **_kwargs):
+        err = RuntimeError("polymarket GET /public-search failed: HTTP Error 403: Forbidden")
+        err.error_class = "HTTPError"
+        err.http_status = 403
+        raise err
+
+    monkeypatch.setattr(d, "_polymarket_get", fail)
+    monkeypatch.setattr(d, "_pm_resolve_queries", lambda *_args, **_kwargs: ["AI bubble"])
+    monkeypatch.setattr(d, "score_market_relevance", lambda *_args, **_kwargs: {})
+    monkeypatch.setenv("PREDICTION_MARKETS_ENABLED", "true")
+    monkeypatch.setenv("PREDICTION_MARKETS_PRICE_HISTORY", "false")
+    d._set_pm_transport_unavailable(False)
+
+    class Log:
+        def write(self, level, message):
+            pass
+
+    meta = {}
+    d._collect_prediction_markets(
+        tmp_path, "Will the AI investment boom unwind in 2026?", "report body",
+        meta, Log(), model_name="test",
+    )
+
+    payload = json.loads((tmp_path / d.PREDICTION_MARKETS_FILENAME).read_text(encoding="utf-8"))
+    assert payload["no_relevant_markets"] is True
+    assert payload["status"]["empty_reason"] == "transport_failure"
+    assert payload["status"]["transport_failure_count"] == 1
+    assert payload["status"]["transport_error_classes"] == {"HTTPError:403": 1}
+
+
+def test_collector_circuit_open_persists_prepass_error_classes(tmp_path, monkeypatch):
+    """前置快照断网（circuit open）→ 跳过重复刷新，但落盘 status 带前置错误类别。"""
+    monkeypatch.setenv("PREDICTION_MARKETS_ENABLED", "true")
+
+    class Log:
+        def write(self, level, message):
+            pass
+
+    d._set_pm_transport_unavailable(True, {"HTTPError:403": 16})
+    try:
+        meta = {}
+        d._collect_prediction_markets(
+            tmp_path, "Will X happen?", "report body", meta, Log(), model_name="test",
+        )
+    finally:
+        d._set_pm_transport_unavailable(False)
+
+    payload = json.loads((tmp_path / d.PREDICTION_MARKETS_FILENAME).read_text(encoding="utf-8"))
+    assert payload["reason"] == "pre-pass transport circuit open"
+    assert payload["status"]["empty_reason"] == "transport_failure"
+    assert payload["status"]["transport_error_classes"] == {"HTTPError:403": 16}
+    assert meta["prediction_markets_count"] == 0
 
 
 # ---------------------------------------------------------------- PM-1 market normalization enrich

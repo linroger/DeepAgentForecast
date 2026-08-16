@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import re
 import time
 from typing import Any, Dict, List, Optional
@@ -38,6 +39,17 @@ CLOB_BASE_URL = "https://clob.polymarket.com"
 
 # 可重试的瞬时错误状态码（限流/网关抖动）；4xx 参数错误不重试。
 _TRANSIENT_STATUS = frozenset({429, 500, 502, 503, 504})
+
+# TRANSPORT-DIAG: gamma-api 前面的 Cloudflare 会拦/降权默认的编程 UA（真实运行里
+# stdlib "Python-urllib/3.x" 41/41 全灭、同日浏览器形 UA 正常的差分根因）；统一发
+# 浏览器形 UA（与 deerflow_bridge/_polymarket_get 的 _POLYMARKET_UA 一致）。
+_BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+               "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
+
+
+def _backoff_sleep(attempt: int) -> None:
+    """瞬时错误（429/5xx/网络抖动）重试前的抖动退避（~0.5-1.0s）；单测 monkeypatch 成 no-op。"""
+    time.sleep(min(2.0, 0.5 * attempt) + random.uniform(0.0, 0.5))
 
 # MON-1 解析终态阈值：已判定市场的 outcomePrices 收敛到 ~0/1。某一结局价 ≥ HI 视作该
 # 结局实现（胜出），另一结局对称落到 ≤ LO。留 0.99/0.01 的余量吸收浮点/微量残余流动性。
@@ -195,14 +207,19 @@ def _cap_per_event(ranked: List[Dict[str, Any]], max_per_event: int,
 
 
 class PolymarketClient:
-    """极薄的 Polymarket Gamma 客户端：15s 超时、瞬时错误重试一次、任何失败降级为空结果。
+    """极薄的 Polymarket Gamma 客户端：10s 超时、瞬时错误抖动退避后重试一次、任何失败降级为空结果。
 
     无需 API key（公开 API）；仅 PREDICTION_MARKETS_ENABLED（默认开）时才发请求。
+    TRANSPORT-DIAG：失败的错误类名/HTTP 状态 additive 记入 ``self.last_error``（最近一次失败的
+    {error_class, http_status, url}）与 ``self.transport_errors``（"类名[:状态]" → 累计次数），
+    供调用方持久化诊断——真实事故里只有失败计数、无错误类别，断网无从归因。
     """
 
-    def __init__(self, base_url: str = POLYMARKET_BASE_URL, timeout: float = 15.0):
+    def __init__(self, base_url: str = POLYMARKET_BASE_URL, timeout: float = 10.0):
         self.base_url = str(base_url or POLYMARKET_BASE_URL).rstrip("/")
         self.timeout = timeout
+        self.last_error: Optional[Dict[str, Any]] = None
+        self.transport_errors: Dict[str, int] = {}
 
     @property
     def enabled(self) -> bool:
@@ -211,26 +228,44 @@ class PolymarketClient:
 
     # ------------------------------------------------------------------ HTTP
     def _request(self, url: str, params: Dict[str, Any]) -> Any:
-        """GET 一个绝对 URL 并解析 JSON。瞬时错误（网络/超时/5xx/429）重试一次；
-        其余失败记 warning 后返回 None（degrade-safe，绝不向上抛）。Gamma 与 CLOB 两个
-        宿主共用这套超时/重试/降级纪律。"""
+        """GET 一个绝对 URL 并解析 JSON。瞬时错误（网络/超时/5xx/429）抖动退避后重试一次；
+        其余失败记 warning 后返回 None（degrade-safe，绝不向上抛）。失败的错误类名/HTTP
+        状态 additive 记入 self.last_error / self.transport_errors（供调用方持久化诊断）。
+        Gamma 与 CLOB 两个宿主共用这套超时/重试/降级纪律。"""
         last_err: Any = None
+        last_status: Optional[int] = None
         for attempt in (1, 2):
             try:
                 resp = httpx.get(url, params=params, timeout=self.timeout,
-                                 headers={"Accept": "application/json"})
+                                 headers={"Accept": "application/json",
+                                          "User-Agent": _BROWSER_UA})
                 if resp.status_code in _TRANSIENT_STATUS and attempt == 1:
                     last_err = f"HTTP {resp.status_code}"
+                    last_status = resp.status_code
+                    _backoff_sleep(attempt)
                     continue
                 resp.raise_for_status()
                 return resp.json()
-            except httpx.TransportError as e:  # 连接/超时类瞬时错误 → 重试一次
+            except httpx.TransportError as e:  # 连接/超时类瞬时错误 → 退避后重试一次
                 last_err = e
+                last_status = None
+                if attempt == 1:
+                    _backoff_sleep(attempt)
                 continue
             except Exception as e:  # noqa: BLE001 — 4xx/JSON 解析等非瞬时错误不重试
                 last_err = e
+                _status = getattr(getattr(e, "response", None), "status_code", None)
+                if _status is not None:
+                    last_status = _status
                 break
-        logger.warning(f"Polymarket GET {url} 失败（降级为空结果）: {last_err}")
+        # TRANSPORT-DIAG: 记录具体错误类名 + HTTP 状态（重试耗尽的瞬时状态码沿用 last_status）。
+        error_class = ("HTTPStatusError" if isinstance(last_err, str)
+                       else type(last_err).__name__ if last_err is not None else "UnknownError")
+        label = f"{error_class}:{last_status}" if last_status is not None else error_class
+        self.last_error = {"error_class": error_class, "http_status": last_status, "url": url}
+        self.transport_errors[label] = self.transport_errors.get(label, 0) + 1
+        logger.warning(f"Polymarket GET {url} 失败（降级为空结果；error_class={error_class}, "
+                       f"http_status={last_status}）: {last_err}")
         return None
 
     def _get(self, path: str, params: Dict[str, Any]) -> Any:

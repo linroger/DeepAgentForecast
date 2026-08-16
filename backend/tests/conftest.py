@@ -167,3 +167,25 @@ def _quarantine_mirofish_log_handlers(tmp_path_factory):
     except Exception:  # noqa: BLE001 — never fail the session over log plumbing
         pass
     yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_telemetry_active_runs():
+    """FOG-TEL-1: the single-active-run fallback registry is process-global.
+
+    Tests that call set_run_context()/LLMMeter without deregistering would
+    otherwise leak "active" runs into later tests, silently absorbing their
+    unattributed records (observed: pipe_translation_context lingering across
+    files in the full suite). Clear the registry around every test.
+    """
+    try:
+        from app.utils import telemetry as _telemetry
+        _telemetry._clear_active_runs()
+    except Exception:  # noqa: BLE001 — telemetry not importable in this test's env
+        _telemetry = None
+    yield
+    if _telemetry is not None:
+        try:
+            _telemetry._clear_active_runs()
+        except Exception:  # noqa: BLE001
+            pass

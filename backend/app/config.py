@@ -650,6 +650,11 @@ class Config:
     # 语言纯度：单个 H2 块污染片段数超此阈值 → 整章重译（子串内联补丁在重污染章节产出
     # 'SK SK Hynix' 型混合垃圾）；<=0 关闭整章重译（恒走内联路径）。默认 8。
     REPORT_PURITY_RETRANSLATE_SEGMENTS = int(os.environ.get('REPORT_PURITY_RETRANSLATE_SEGMENTS', '8') or '8')
+    # COST-1(b)：语言纯度逐段升级上限。批量 chat_json 未解决/被拒的片段才逐段走 strong-tier
+    # chat 升级，每段一次调用且各自携带完整重试梯；无上限时提供方故障会把至多
+    # REPORT_PURITY_MAX_SEGMENTS(180) 个片段全部串行升级。每份报告至多升级此数量，
+    # 其余片段保留原文（末端只读纯度审计仍兜底）；<=0 关闭逐段升级。默认 12。
+    REPORT_PURITY_ESCALATION_MAX = int(os.environ.get('REPORT_PURITY_ESCALATION_MAX', '12') or '12')
     # 反思修订反收缩护栏：修订稿长度下限 = max(原稿 × 此比例, 章节字符下限)；短于下限且确实
     # 缩水的修订一律拒绝（14824→1518 的「章节销毁」故障）。默认 0.6。
     REPORT_REVISION_MIN_RATIO = float(os.environ.get('REPORT_REVISION_MIN_RATIO', '0.6') or '0.6')
@@ -1433,6 +1438,7 @@ class Config:
     # REPORT-1：1→3。正文章节相互独立，并行 ~2.5-3.5x 加速；正文段自动走 brief 上下文避免 O(N²) token。
     # PAR-3：3→6——正文章节彼此独立、并发受 OASIS 信号量同源约束封顶，进一步抬高并发上限压缩
     # 报告阶段 wall-clock；实际并发始终 min(此值, 正文章节数)，故对短报告无副作用。
+    # 串行成本实测（COST-2 审计）：12 章节串行 ≈ 24.6 分钟 / 216 次 LLM 调用——默认必须 >1。
     REPORT_SECTION_CONCURRENCY = int(os.environ.get('REPORT_SECTION_CONCURRENCY', '6') or '6')
     # 章节上下文模式（I-6-3）：full = 每章注入此前所有章节全文；brief = 注入大纲+各章 1-2 句摘要
     # （去除 O(N²) 上下文膨胀）。并发模式下正文章节强制用 brief（并行时拿不到彼此全文）。

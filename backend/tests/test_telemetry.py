@@ -43,6 +43,13 @@ def test_context_roundtrip():
     assert T.get_run_context() == ("rid", "STAGE")
     T.set_stage("OTHER")
     assert T.get_run_context() == ("rid", "OTHER")
+    # FOG-TEL-1: set_run_context now also registers the run as process-active (for
+    # single-active-run fallback attribution). Clean up so "rid" doesn't linger as a
+    # stale sole-active run and silently absorb other tests' unattributed records.
+    T.set_run_context(None, None)
+    # Assert on "rid" specifically, not an empty registry: in a full-suite run
+    # other tests may legitimately hold active registrations of their own.
+    assert "rid" not in T.active_run_ids()
 
 
 # ---------------------------------------------------------------- OBS-1 tests

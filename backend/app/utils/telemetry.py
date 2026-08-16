@@ -13,6 +13,7 @@ import contextvars
 import hashlib
 import json
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -24,8 +25,31 @@ _current_stage: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("
 
 _DEFAULT_BUCKET = "_global"
 
+# FOG-TEL-1: 进程内「活跃 run」注册表（run_id → 登记时刻）。ThreadPoolExecutor 工作线程
+# 不继承 contextvars——graphiti 抽取等池线程里的 LLM 调用会失去 run 归属而落 '_global'
+# 桶（既不落任何 run 工件，也逃过 per-run 预算；2026-07 取证：graph 阶段 100+ 分钟持续
+# 抽取在 telemetry.json 里 calls=0/tokens=0）。该注册表让 record()/check_budget() 在
+# 「恰好一个 run 在飞」时把无归属调用回退归属到该 run（fallback attribution，另计
+# fallback_attributed 计数器以示区分）；0 个或 ≥2 个活跃 run 时归属真正含糊，保持旧的
+# '_global' 行为。登记：set_run_context(run_id) 时；注销：LLMMeter.reset(run_id)
+# （管线终局路径），或本线程 set_run_context(None) 还原时注销该线程当前的 run
+# （独立报告生成的 finally 路径）。
+_ACTIVE_LOCK = threading.Lock()
+_active_runs: Dict[str, float] = {}
+
 
 def set_run_context(run_id: Optional[str], stage: Optional[str] = None) -> None:
+    if run_id:
+        with _ACTIVE_LOCK:
+            _active_runs[run_id] = time.time()
+    else:
+        # 清空上下文视作「本线程归还其 run」：若无其它归属证据（LLMMeter.reset 才是
+        # 权威终局），也把该 run 从活跃表摘除，避免独立报告等短生命周期 run 永久滞留、
+        # 稀释单活跃 run 的回退归属。
+        prev = _current_run.get()
+        if prev:
+            with _ACTIVE_LOCK:
+                _active_runs.pop(prev, None)
     _current_run.set(run_id)
     _current_stage.set(stage)
 
@@ -36,6 +60,26 @@ def set_stage(stage: Optional[str]) -> None:
 
 def get_run_context() -> Tuple[Optional[str], Optional[str]]:
     return _current_run.get(), _current_stage.get()
+
+
+def active_run_ids() -> List[str]:
+    """FOG-TEL-1: run ids currently registered as active in this process."""
+    with _ACTIVE_LOCK:
+        return list(_active_runs)
+
+
+def _sole_active_run() -> Optional[str]:
+    """Return the single active run id, or None when zero / 2+ runs are active."""
+    with _ACTIVE_LOCK:
+        if len(_active_runs) == 1:
+            return next(iter(_active_runs))
+    return None
+
+
+def _clear_active_runs() -> None:
+    """Test/maintenance helper: forget all active-run registrations."""
+    with _ACTIVE_LOCK:
+        _active_runs.clear()
 
 
 class BudgetExceeded(RuntimeError):
@@ -165,6 +209,9 @@ class _RunMeter:
     total: _Counter = field(default_factory=_Counter)
     by_stage: Dict[str, _Counter] = field(default_factory=dict)
     by_model: Dict[str, _Counter] = field(default_factory=dict)
+    # FOG-TEL-1: 无 run 上下文、经「单活跃 run」回退归属到本 run 的那部分（total 的子集，
+    # 单独累计使推断归属与显式归属可区分/可审计）。
+    fallback: _Counter = field(default_factory=_Counter)
 
 
 # TEL-1: '_global' 桶只该接住零星的无归属调用（reset 从不清它，跨 run 累积）。它一旦变大，
@@ -183,18 +230,36 @@ class LLMMeter:
     def record(cls, provider: str, model: str, prompt_tokens: int, completion_tokens: int,
                latency_ms: float, *, cached: bool = False, stage: Optional[str] = None,
                run_id: Optional[str] = None) -> None:
-        rid = run_id or _current_run.get() or _DEFAULT_BUCKET
+        rid = run_id or _current_run.get()
+        fallback = False
+        if not rid:
+            # FOG-TEL-1: 无 run 上下文（典型：ThreadPoolExecutor 工作线程未继承 contextvars）
+            # 且进程内恰好只有一个 run 在飞 → 回退归属到该 run，另计 fallback 计数器。
+            # 0 个或 ≥2 个活跃 run 时归属含糊，保持旧的 '_global' 行为。
+            rid = _sole_active_run()
+            fallback = rid is not None
+        if not rid:
+            rid = _DEFAULT_BUCKET
         stg = stage or _current_stage.get() or "_unstaged"
         cost = 0.0 if cached else estimate_cost(provider, prompt_tokens, completion_tokens)
         warn_calls = 0
+        first_fallback = False
         with cls._lock:
             rm = cls._runs.setdefault(rid, _RunMeter())
             rm.total.add(prompt_tokens, completion_tokens, latency_ms, cost, cached)
             rm.by_stage.setdefault(stg, _Counter()).add(prompt_tokens, completion_tokens, latency_ms, cost, cached)
             rm.by_model.setdefault(f"{provider}:{model}", _Counter()).add(
                 prompt_tokens, completion_tokens, latency_ms, cost, cached)
+            if fallback:
+                rm.fallback.add(prompt_tokens, completion_tokens, latency_ms, cost, cached)
+                first_fallback = rm.fallback.calls == 1
             if rid == _DEFAULT_BUCKET and rm.total.calls in _GLOBAL_BUCKET_WARN_AT:
                 warn_calls = rm.total.calls
+        if first_fallback:
+            import logging
+            logging.getLogger("mirofish.telemetry").info(
+                "LLM 计量缺 run 上下文，已回退归属到唯一活跃 run %s"
+                "（快照另计 fallback_attributed；预算按该 run 生效）", rid)
         if warn_calls:
             import logging
             logging.getLogger("mirofish.telemetry").warning(
@@ -205,12 +270,32 @@ class LLMMeter:
 
     @classmethod
     def snapshot(cls, run_id: Optional[str] = None) -> Dict[str, Any]:
+        """Per-run usage snapshot. Additive keys (existing keys keep their meaning):
+
+        - ``fallback_attributed`` (FOG-TEL-1): the subset of ``total`` that was inferred
+          onto this run via single-active-run fallback (no run contextvar on the calling
+          thread); all zeros when attribution was always explicit.
+        - ``unattributed_process`` (FOG-TEL-1): the process-wide '_global' bucket totals
+          at snapshot time — spend whose attribution stayed ambiguous (zero or 2+ active
+          runs). Cumulative for the process lifetime (per-run reset never clears it) and
+          shared across concurrent runs; carried on every run snapshot so persisted
+          artifacts (run_telemetry.json) can never hide unattributed spend. Omitted only
+          when snapshotting the '_global' bucket itself (it would duplicate ``total``).
+        """
         rid = run_id or _current_run.get() or _DEFAULT_BUCKET
         with cls._lock:
+            g = cls._runs.get(_DEFAULT_BUCKET)
+            unattributed = g.total.as_dict() if g else _Counter().as_dict()
             rm = cls._runs.get(rid)
             if not rm:
-                return {"run_id": rid, "total": _Counter().as_dict(), "by_stage": {},
-                        "by_model": {}, "cost_estimated": False, "cost_basis": "api"}
+                out: Dict[str, Any] = {
+                    "run_id": rid, "total": _Counter().as_dict(), "by_stage": {},
+                    "by_model": {}, "cost_estimated": False, "cost_basis": "api",
+                    "fallback_attributed": _Counter().as_dict(),
+                }
+                if rid != _DEFAULT_BUCKET:
+                    out["unattributed_process"] = unattributed
+                return out
             by_model = {k: v.as_dict() for k, v in rm.by_model.items()}
             # OBS-1: flag whether the aggregate USD figure is authoritative. by_model keys
             # are "provider:model"; once any token volume comes from a proxy/aggregator-
@@ -234,14 +319,18 @@ class LLMMeter:
                 cost_basis = "mixed"
             else:
                 cost_basis = "api"
-            return {
+            out = {
                 "run_id": rid,
                 "total": rm.total.as_dict(),
                 "by_stage": {k: v.as_dict() for k, v in rm.by_stage.items()},
                 "by_model": by_model,
                 "cost_estimated": cost_estimated,
                 "cost_basis": cost_basis,
+                "fallback_attributed": rm.fallback.as_dict(),
             }
+            if rid != _DEFAULT_BUCKET:
+                out["unattributed_process"] = unattributed
+            return out
 
     @classmethod
     def status_snapshot(cls, run_id: Optional[str] = None) -> Dict[str, Any]:
@@ -262,6 +351,10 @@ class LLMMeter:
     @classmethod
     def reset(cls, run_id: Optional[str] = None) -> None:
         rid = run_id or _current_run.get() or _DEFAULT_BUCKET
+        # FOG-TEL-1: reset 是 run 的权威终局（管线 finally 调用）——同时注销活跃登记，
+        # 让后续单活跃 run 的回退归属不再考虑它。
+        with _ACTIVE_LOCK:
+            _active_runs.pop(rid, None)
         with cls._lock:
             cls._runs.pop(rid, None)
 
@@ -317,7 +410,13 @@ def check_budget(run_id: Optional[str] = None) -> None:
     max_cost = float(getattr(Config, "LLM_RUN_BUDGET_USD", 0) or 0)
     if max_tokens <= 0 and max_cost <= 0:
         return
-    snap = LLMMeter.snapshot(run_id)["total"]
+    rid = run_id or _current_run.get()
+    if not rid:
+        # FOG-TEL-1: 与 record() 同一回退——无归属线程（如 graphiti 池线程）在唯一活跃
+        # run 时按该 run 的预算执行，使失控的 graph 阶段能真正触发 LLM_RUN_BUDGET_TOKENS。
+        # 0 个或 ≥2 个活跃 run 时保持旧语义（读 '_global' 桶；纯含糊花费不计入任何 run 预算）。
+        rid = _sole_active_run() or _DEFAULT_BUCKET
+    snap = LLMMeter.snapshot(rid)["total"]
     if max_tokens > 0 and snap["total_tokens"] > max_tokens:
         raise BudgetExceeded(
             f"run exceeded token budget: {snap['total_tokens']} > {max_tokens}")
@@ -374,13 +473,18 @@ def build_stage_telemetry(run_id: Optional[str],
         "est_cost_usd": round(sum(s["est_cost_usd"] for s in stages.values()), 6),
         "wall_seconds": round(sum(s["wall_seconds"] for s in stages.values()), 1),
     }
-    return {
+    out = {
         "run_id": snap.get("run_id") or run_id or _DEFAULT_BUCKET,
         "by_stage": stages,
         "total": total,
         "cost_estimated": bool(snap.get("cost_estimated")),
         "cost_basis": snap.get("cost_basis", "api"),
     }
+    # FOG-TEL-1: 把进程级无归属桶透传进落盘的 telemetry.json（附加键，纯观测）。
+    _up = snap.get("unattributed_process")
+    if isinstance(_up, dict):
+        out["unattributed_process"] = _up
+    return out
 
 
 def render_telemetry_appendix(stage_telemetry: Optional[Dict[str, Any]],

@@ -25,6 +25,9 @@ from app.services.forecast_extractor import (
 )
 from tests.conftest import FakeLLMClient
 
+# import 时捕获真实退避函数（autouse fixture 会把 pm._backoff_sleep 换成 no-op 提速）。
+_REAL_BACKOFF_SLEEP = pm._backoff_sleep
+
 
 # ---------------------------------------------------------------- helpers
 
@@ -35,8 +38,9 @@ class FakeResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
+            # response=self 镜像真实 httpx：异常携带 .response.status_code（诊断持久化读取）。
             raise httpx.HTTPStatusError(
-                f"HTTP {self.status_code}", request=None, response=None)
+                f"HTTP {self.status_code}", request=None, response=self)
 
     def json(self):
         return self._payload
@@ -73,6 +77,12 @@ def enabled(monkeypatch):
     monkeypatch.setattr(Config, "PREDICTION_MARKETS_ENABLED", True, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _no_backoff_sleep(monkeypatch):
+    """瞬时错误重试退避在测试里 no-op（保持套件秒级）；需要断言退避的测试自行覆盖。"""
+    monkeypatch.setattr(pm, "_backoff_sleep", lambda attempt: None)
+
+
 # ---------------------------------------------------------------- client
 
 def test_disabled_makes_no_http_call(monkeypatch):
@@ -100,7 +110,11 @@ def test_search_events_parses_and_keyless(enabled, monkeypatch):
     assert seen["params"] == {"q": "tariff", "limit_per_type": 5,
                               "events_status": "active"}
     assert "X-API-Key" not in seen["headers"]            # keyless：不发鉴权头
-    assert seen["timeout"] == 15.0
+    assert seen["timeout"] == 10.0                       # 默认超时 15s→10s（transport 加固）
+    # Cloudflare 拦/降权编程 UA → 必须发浏览器形 User-Agent（真实断网事故的差分根因）
+    assert seen["headers"]["User-Agent"].startswith("Mozilla/5.0")
+    assert "AppleWebKit" in seen["headers"]["User-Agent"]
+    assert seen["headers"]["Accept"] == "application/json"
 
 
 def test_transport_error_retries_once_then_degrades_to_empty(enabled, monkeypatch):
@@ -133,6 +147,72 @@ def test_non_transient_4xx_does_not_retry(enabled, monkeypatch):
     monkeypatch.setattr(pm.httpx, "get", fake_get)
     assert PolymarketClient().search_events("tariff") == []
     assert len(calls) == 1  # 4xx 不重试
+
+
+def test_transient_retry_backs_off_with_jitter_before_second_attempt(enabled, monkeypatch):
+    """瞬时 5xx → 第二次尝试前必须走抖动退避（_backoff_sleep(1)）；成功后不再退避。"""
+    backoffs = []
+    monkeypatch.setattr(pm, "_backoff_sleep", lambda attempt: backoffs.append(attempt))
+    responses = [FakeResponse(status_code=503),
+                 FakeResponse(_payload([_event("Ev", [_raw("m1")])]))]
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: responses.pop(0))
+    out = PolymarketClient().search_events("tariff")
+    assert [e["title"] for e in out] == ["Ev"]
+    assert backoffs == [1]                               # 恰好一次、发生在重试前
+
+
+def test_backoff_sleep_is_jittered_and_bounded(monkeypatch):
+    """真实退避函数：~0.5-1.0s（attempt=1）、带 random 抖动、上限 2.0+抖动。
+    （autouse fixture 把 pm._backoff_sleep 换成 no-op，这里直捣 import 时捕获的原函数。）"""
+    slept = []
+    monkeypatch.setattr(pm.time, "sleep", lambda s: slept.append(s))
+    _REAL_BACKOFF_SLEEP(1)
+    _REAL_BACKOFF_SLEEP(10)                              # 大 attempt 也被 2.0s 基数封顶
+    assert 0.5 <= slept[0] <= 1.0
+    assert 2.0 <= slept[1] <= 2.5
+
+
+def test_exhausted_transient_5xx_records_error_class_and_status(enabled, monkeypatch):
+    """重试仍 5xx → 降级为空，但错误类名 + HTTP 状态 additive 落在 client 上（可持久化诊断）。"""
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: FakeResponse(status_code=503))
+    client = PolymarketClient()
+    assert client.search_events("tariff") == []
+    assert client.last_error["error_class"] == "HTTPStatusError"
+    assert client.last_error["http_status"] == 503
+    assert client.last_error["url"].endswith("/public-search")
+    assert client.transport_errors == {"HTTPStatusError:503": 1}
+
+
+def test_connect_error_records_error_class_without_status(enabled, monkeypatch):
+    def boom(*a, **k):
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(pm.httpx, "get", boom)
+    client = PolymarketClient()
+    assert client.search_events("tariff") == []
+    assert client.last_error["error_class"] == "ConnectError"
+    assert client.last_error["http_status"] is None
+    assert client.transport_errors == {"ConnectError": 1}
+
+
+def test_non_transient_4xx_records_status_and_errors_accumulate(enabled, monkeypatch):
+    """404（Cloudflare 拦截常见形态是 403）不重试，但状态码必须被记录；计数跨请求累计。"""
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: FakeResponse(status_code=404))
+    client = PolymarketClient()
+    assert client.search_events("tariff") == []
+    assert client.search_events("recession") == []
+    assert client.last_error["error_class"] == "HTTPStatusError"
+    assert client.last_error["http_status"] == 404
+    assert client.transport_errors == {"HTTPStatusError:404": 2}
+
+
+def test_success_leaves_no_transport_error_records(enabled, monkeypatch):
+    monkeypatch.setattr(pm.httpx, "get",
+                        lambda *a, **k: FakeResponse(_payload([_event("Ev", [_raw("m1")])])))
+    client = PolymarketClient()
+    assert client.search_events("tariff")
+    assert client.last_error is None
+    assert client.transport_errors == {}
 
 
 # ------------------------------------------------------------- snapshot

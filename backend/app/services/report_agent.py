@@ -4961,18 +4961,26 @@ class ReportAgent:
             candidate: Any,
             seg_map: List[Tuple[str, str]],
         ) -> Optional[str]:
-            """Restore and validate one batch or single-fragment candidate."""
+            """Restore and validate one batch or single-fragment candidate.
+
+            COST-1(d): number parity here folds formatting-only equivalences
+            (thousands separators, full-width digits) — a translation that renders
+            "1,000" as "1000" or "１０００" as "1000" preserves the value and must
+            not be force-escalated; any digit-content change still mismatches and
+            is rejected. The bilingual whole-report path keeps the strict
+            byte-level multiset (fold_formatting defaults to False there).
+            """
             if not isinstance(candidate, str) or not candidate.strip():
                 return None
             restored, issues = self._restore_translation_tokens(
-                candidate.strip(), seg_map
+                candidate.strip(), seg_map, fold_formatting=True
             )
             restored = restored.strip()
             if not restored or restored == segment or issues:
                 return None
-            if self._translation_number_multiset(
+            if self._folded_number_multiset(
                 restored
-            ) != self._translation_number_multiset(segment):
+            ) != self._folded_number_multiset(segment):
                 return None
             if self._translation_marker_multiset(
                 restored
@@ -5020,11 +5028,50 @@ class ReportAgent:
         # Repeating the same temperature-zero JSON batch cannot recover a deterministic
         # echo/truncation. Escalate only unresolved fragments through the module's proven
         # prose-slot protocol, retaining the exact same token-integrity boundary above.
+        # COST-1: escalation is one strong-tier chat call PER SEGMENT, each carrying the
+        # provider's full retry ladder, and _apply_language_purity can feed up to
+        # REPORT_PURITY_MAX_SEGMENTS (180) segments here — so this path is (a) skipped
+        # wholesale when the provider lacks .chat, (b) hard-capped per report, and
+        # (c) short-circuited after 3 consecutive call failures (provider-down signal).
         resolved_segments = {segment for segment, _translation in mapping}
-        for segment, hidden, seg_map in protected:
-            if segment in resolved_segments:
-                continue
-            raw = ""
+        unresolved = [item for item in protected if item[0] not in resolved_segments]
+        if unresolved and not hasattr(self.llm, "chat"):
+            # COST-1(a): stub/degraded provider without .chat — skip escalation entirely,
+            # keep originals, and say so once (not one swallowed AttributeError per segment).
+            logger.info(
+                "语言纯度：LLM 无 chat 接口，跳过 %d 个未解决片段的逐段升级（保留原文）",
+                len(unresolved),
+            )
+            unresolved = []
+        try:
+            escalation_cap = int(
+                getattr(Config, "REPORT_PURITY_ESCALATION_MAX", 12) or 12
+            )
+        except (TypeError, ValueError):
+            escalation_cap = 12
+        escalation_cap = max(0, escalation_cap)
+        escalated = 0
+        accepted_escalations = 0
+        consecutive_call_failures = 0
+        for position, (segment, hidden, seg_map) in enumerate(unresolved):
+            if escalated >= escalation_cap:
+                # COST-1(b): per-report escalation budget exhausted — the rest keep
+                # their original text (the final read-only purity audit still gates).
+                logger.info(
+                    "语言纯度：逐段升级达到上限 %d，其余 %d 个片段保留原文",
+                    escalation_cap, len(unresolved) - position,
+                )
+                break
+            if consecutive_call_failures >= 3:
+                # COST-1(c): 3 consecutive escalation CALL failures (exceptions, not
+                # validation rejects) ⇒ provider outage — stop escalating this report.
+                logger.warning(
+                    "语言纯度：连续 %d 次逐段升级调用失败——判定提供方故障，"
+                    "停止本报告的逐段升级（其余 %d 个片段保留原文）",
+                    consecutive_call_failures, len(unresolved) - position,
+                )
+                break
+            escalated += 1
             try:
                 raw = self.llm.chat(
                     messages=[
@@ -5045,7 +5092,10 @@ class ReportAgent:
                     tier="strong",
                 )
             except Exception as exc:  # noqa: BLE001 — final bounded fragment attempt
+                consecutive_call_failures += 1
                 logger.warning("语言纯度：单片段翻译调用失败（保留原文）: %s", exc)
+                continue
+            consecutive_call_failures = 0  # 调用成功 ⇒ 提供方存活；校验拒绝不计入短路
             candidate = str(raw or "").strip()
             if candidate.startswith("```"):
                 candidate = re.sub(
@@ -5055,6 +5105,13 @@ class ReportAgent:
             accepted = _accepted_translation(segment, candidate, seg_map)
             if accepted is not None:
                 mapping.append((segment, accepted))
+                accepted_escalations += 1
+        if escalated:
+            logger.info(
+                "语言纯度：逐段升级 %d/%d 个未解决片段（采纳 %d，保留原文 %d）",
+                escalated, len(unresolved), accepted_escalations,
+                len(unresolved) - accepted_escalations,
+            )
         # Longest first so a short phrase cannot split a longer one before it is replaced.
         mapping.sort(key=lambda item: len(item[0]), reverse=True)
         return mapping
@@ -5367,8 +5424,16 @@ class ReportAgent:
 
     @classmethod
     def _restore_translation_tokens(
-        cls, candidate: str, mapping: List[Tuple[str, str]]
+        cls, candidate: str, mapping: List[Tuple[str, str]],
+        fold_formatting: bool = False,
     ) -> Tuple[str, List[str]]:
+        """Restore placeholders and report unaccounted/duplicated immutable tokens.
+
+        ``fold_formatting=True`` (language-purity segment repair only) counts a
+        bare numeric rendering that differs solely in thousands separators or
+        full-width digits as accounting for its placeholder (COST-1(d)); the
+        default keeps the strict byte-level accounting the bilingual path pins.
+        """
         from collections import Counter, defaultdict
 
         original = candidate or ""
@@ -5378,10 +5443,16 @@ class ReportAgent:
         for placeholder, raw in mapping:
             by_raw[raw].append(placeholder)
 
-        numeric_counts = Counter(cls._translation_number_multiset(original))
+        if fold_formatting:
+            numeric_counts = Counter(cls._folded_number_multiset(original))
+        else:
+            numeric_counts = Counter(cls._translation_number_multiset(original))
         marker_counts = Counter(cls._translation_marker_multiset(original))
         for raw, placeholders in by_raw.items():
-            normalized_number = cls._normalize_number_token(raw)
+            normalized_number = (
+                cls._fold_number_token(raw) if fold_formatting
+                else cls._normalize_number_token(raw)
+            )
             if cls._NUMBER_INTEGRITY_RE.fullmatch(raw):
                 raw_count = int(numeric_counts.get(normalized_number, 0))
             else:
@@ -5826,6 +5897,40 @@ class ReportAgent:
             cls._normalize_number_token(match.group(0))
             for match in cls._NUMBER_INTEGRITY_RE.finditer(md or "")
         ))
+
+    # COST-1(d): formatting-only numeric equivalences. Full-width digits map to
+    # ASCII; thousands-separator commas are stripped. Both are pure rendering
+    # choices — the token regex only ever captures ',' in the \d{1,3}(,\d{3})+
+    # grouping form, so a comma inside a captured token is always a separator.
+    _FULLWIDTH_DIGIT_TRANS = str.maketrans("０１２３４５６７８９", "0123456789")
+
+    @classmethod
+    def _fold_number_token(cls, token: str) -> str:
+        """Normalize then fold formatting equivalences of one numeric token."""
+        return (
+            cls._normalize_number_token(token)
+            .translate(cls._FULLWIDTH_DIGIT_TRANS)
+            .replace(",", "")
+        )
+
+    @classmethod
+    def _folded_number_multiset(cls, md: str) -> Dict[str, int]:
+        """Numeric multiset that treats value-preserving reformatting as equal.
+
+        Used by the language-purity segment repair (`_translate_impurity_segments`)
+        so a legitimate translation rendering "1,000" as "1000" (or full-width
+        "１０００" as "1000") is not rejected and force-escalated to strong-tier
+        calls. The bilingual whole-report path deliberately keeps the strict
+        `_translation_number_multiset` (byte-level keys like "1,808,511").
+        """
+        from collections import Counter
+
+        folded: "Counter[str]" = Counter()
+        for token, count in cls._translation_number_multiset(md).items():
+            folded[
+                token.translate(cls._FULLWIDTH_DIGIT_TRANS).replace(",", "")
+            ] += count
+        return dict(folded)
 
     @classmethod
     def _translation_marker_multiset(cls, md: str) -> Dict[str, int]:
@@ -10162,9 +10267,11 @@ class ReportAgent:
             _consecutive_failures = 0
             _abort_on_outage = bool(getattr(Config, "REPORT_ABORT_ON_LLM_OUTAGE", True))
 
-            # EXECPLAN2 I-6-3: optionally pre-generate sections concurrently. Default
-            # REPORT_SECTION_CONCURRENCY=1 → _precomputed stays None → the serial loop
-            # below calls _generate_section inline exactly as before (byte-identical).
+            # EXECPLAN2 I-6-3: optionally pre-generate sections concurrently. The
+            # shipped Config default is REPORT_SECTION_CONCURRENCY=6 (REPORT-1 1→3,
+            # PAR-3 3→6; serial cost measured at 12 sections ≈ 24.6 min / 216 calls).
+            # Setting it to 1 → _precomputed stays None → the serial loop below calls
+            # _generate_section inline exactly as the legacy path (byte-identical).
             # REPORT_SECTION_CONTEXT_MODE=brief (serial path) swaps the O(N²) full
             # prior-section context for the compact synthesis brief.
             _precomputed = None

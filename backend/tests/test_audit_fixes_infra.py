@@ -509,6 +509,13 @@ def test_tel1_global_bucket_leak_warning():
     lg.addHandler(h)
     try:
         tel.LLMMeter._runs.pop("_global", None)
+        # FOG-TEL-1 contract update: unattributed records now fall back to the sole
+        # active run when exactly one is registered; the '_global' leak warning only
+        # fires when attribution is genuinely ambiguous (zero or 2+ active runs).
+        # Clear this thread's context + the registry so the test exercises the
+        # genuinely-unattributed path regardless of suite order.
+        tel.set_run_context(None, None)
+        tel._clear_active_runs()
         for _ in range(20):
             tel.LLMMeter.record("minimax", "M3", 1, 1, 0.1, run_id=None, stage=None)
     finally:

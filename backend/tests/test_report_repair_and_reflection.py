@@ -19,8 +19,10 @@ Covers:
     _generate_section_with_retry.
 """
 
+import logging
 import os
 import sys
+from contextlib import contextmanager
 
 import pytest
 
@@ -70,6 +72,28 @@ class _JsonChatLLM:
     def chat_json(self, messages=None, temperature=0.3, max_tokens=4096, tier="strong", **kw):
         self.calls.append({"messages": messages, "tier": tier})
         return dict(self.mapping)
+
+
+@contextmanager
+def _capture_report_agent_logs():
+    """Collect 'mirofish.report_agent' messages (its logger has propagate=False,
+    so pytest's caplog never sees them — attach a probe handler directly)."""
+
+    class _Probe(logging.Handler):
+        def __init__(self):
+            super().__init__()
+            self.messages = []
+
+        def emit(self, record):
+            self.messages.append(record.getMessage())
+
+    probe = _Probe()
+    target = logging.getLogger("mirofish.report_agent")
+    target.addHandler(probe)
+    try:
+        yield probe.messages
+    finally:
+        target.removeHandler(probe)
 
 
 _LONG = "This is a sufficiently long English body paragraph with real analysis. " * 20  # >800 chars
@@ -545,16 +569,29 @@ def test_language_purity_batches_large_residual_set(monkeypatch, tmp_path):
     monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"), raising=False)
 
     class _BatchLLM:
+        """chat_json-only provider honoring the placeholder contract.
+
+        Each numbered input line carries the segment's ⟦…⟧ number placeholder;
+        a contract-valid translation copies it verbatim, so the restored
+        candidate keeps the source number multiset and the BATCH path accepts
+        it. The stub deliberately has no ``.chat``: per COST-1(a) escalation is
+        guard-skipped for such providers, so batching alone must repair purity
+        (pre-COST-1 the old stub's digit-corrupted translations were rejected,
+        all 25 segments escalated, and 25 AttributeErrors were swallowed).
+        """
+
         def __init__(self):
             self.calls = []
 
         def chat_json(self, messages=None, **kwargs):
             self.calls.append(messages)
-            lines = messages[-1]["content"].splitlines()
-            return {
-                str(index): f"translated term {len(self.calls)}-{index}"
-                for index, _line in enumerate(lines, 1)
-            }
+            out = {}
+            for index, line in enumerate(messages[-1]["content"].splitlines(), 1):
+                token = ""
+                if "⟦" in line and "⟧" in line:
+                    token = line[line.index("⟦"): line.index("⟧") + 1]
+                out[str(index)] = f"translated term {token}".strip()
+            return out
 
     llm = _BatchLLM()
     a = _repair_agent(output_language="English", llm=llm)
@@ -563,8 +600,128 @@ def test_language_purity_batches_large_residual_set(monkeypatch, tmp_path):
 
     a._apply_language_purity("rid_batches", rep)
 
+    # 25 segments / batch size 20 → exactly 2 batched chat_json calls and zero
+    # per-segment strong-tier escalations (the stub has no .chat to call).
     assert len(llm.calls) == 2
     assert not a._collect_impurity_segments(rep.markdown_content, False, cap=100)
+    # Placeholder-protected digits survive the round trip byte-for-byte.
+    assert "translated term 0" in rep.markdown_content
+    assert "translated term 24" in rep.markdown_content
+
+
+# ──────────────── COST-1: purity-escalation guard / cap / short-circuit ───────────────
+class _EscalationLLM:
+    """chat_json resolves nothing (forcing escalation); .chat is scripted."""
+
+    def __init__(self, chat_behavior):
+        self.chat_calls = 0
+        self.json_calls = 0
+        self._chat_behavior = chat_behavior
+
+    def chat_json(self, messages=None, **kwargs):
+        self.json_calls += 1
+        return {}
+
+    def chat(self, messages=None, **kwargs):
+        self.chat_calls += 1
+        result = self._chat_behavior(self.chat_calls)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+def test_purity_escalation_max_default_is_twelve():
+    # New knob (COST-1(b)) — nothing in .env can predate it, so the class
+    # attribute reflects the shipped default directly.
+    assert Config.REPORT_PURITY_ESCALATION_MAX == 12
+
+
+def test_purity_escalation_skipped_without_chat_logs_once():
+    """COST-1(a): no .chat → escalation skipped wholesale with ONE log line,
+    not one swallowed AttributeError per segment (25 pre-fix)."""
+
+    class _JsonOnly:
+        def chat_json(self, messages=None, **kwargs):
+            return {}
+
+    a = _repair_agent(llm=_JsonOnly())
+    segments = [f"残留片段{i}" for i in range(5)]
+    with _capture_report_agent_logs() as messages:
+        mapping = a._translate_impurity_segments(segments, "English")
+    assert mapping == []
+    skip_lines = [m for m in messages if "无 chat 接口" in m]
+    assert len(skip_lines) == 1 and "5" in skip_lines[0]
+    assert not any("单片段翻译调用失败" in m for m in messages)
+
+
+def test_purity_escalation_capped_per_report(monkeypatch):
+    """COST-1(b): at most REPORT_PURITY_ESCALATION_MAX strong-tier calls per
+    report; validation rejects do NOT count toward the outage short-circuit."""
+    monkeypatch.setattr(Config, "REPORT_PURITY_ESCALATION_MAX", 4, raising=False)
+    llm = _EscalationLLM(lambda n: "")  # every call completes but is rejected
+    a = _repair_agent(llm=llm)
+    segments = [f"残留片段{i}" for i in range(10)]
+    with _capture_report_agent_logs() as messages:
+        mapping = a._translate_impurity_segments(segments, "English")
+    assert mapping == []
+    assert llm.chat_calls == 4  # > 3 rejects in a row, yet no short-circuit
+    assert any("达到上限" in m for m in messages)
+
+
+def test_purity_escalation_short_circuits_after_three_consecutive_failures():
+    """COST-1(c): 3 consecutive escalation-call exceptions ⇒ provider-down,
+    stop escalating for this report (default cap 12 would otherwise allow more)."""
+    llm = _EscalationLLM(lambda n: RuntimeError("provider down"))
+    a = _repair_agent(llm=llm)
+    segments = [f"残留片段{i}" for i in range(10)]
+    with _capture_report_agent_logs() as messages:
+        mapping = a._translate_impurity_segments(segments, "English")
+    assert mapping == []
+    assert llm.chat_calls == 3
+    assert any("判定提供方故障" in m for m in messages)
+
+
+def test_purity_escalation_failure_streak_resets_on_success():
+    """Only CONSECUTIVE call failures short-circuit: a completed call (even if
+    its candidate is rejected by validation) resets the streak."""
+    llm = _EscalationLLM(
+        lambda n: RuntimeError("blip") if n % 3 else ""  # fail, fail, complete, …
+    )
+    a = _repair_agent(llm=llm)
+    segments = [f"残留片段{i}" for i in range(10)]
+    mapping = a._translate_impurity_segments(segments, "English")
+    assert mapping == []
+    assert llm.chat_calls == 10  # never 3 consecutive failures → cap(12) not hit
+
+
+def test_purity_number_folding_accepts_reformat_rejects_corruption():
+    """COST-1(d): value-preserving number reformatting (full-width digits,
+    thousands separators) is accepted by the batch path; digit-content changes
+    are still rejected. The strict multiset (bilingual path) stays strict."""
+    # (1) Full-width digits in a CJK segment, English translation with ASCII digits.
+    seg_fullwidth = "市场规模１０００亿元"
+    good_en = "market size totals 1000 billion yuan"
+    # Pre-COST-1 the strict multiset rejected exactly this legitimate pair:
+    assert ReportAgent._translation_number_multiset(seg_fullwidth) \
+        != ReportAgent._translation_number_multiset(good_en)
+    a = _repair_agent(llm=_JsonChatLLM({"1": good_en}))
+    mapping = a._translate_impurity_segments([seg_fullwidth], "English")
+    assert mapping == [(seg_fullwidth, good_en)]
+
+    # (2) Thousands separator dropped by a legitimate Chinese rendering.
+    seg_latin = "The market reached 1,000 units across all regions"
+    good_zh = "市场在所有地区达到1000个单位"
+    assert ReportAgent._translation_number_multiset(seg_latin) \
+        != ReportAgent._translation_number_multiset(good_zh)
+    a = _repair_agent(llm=_JsonChatLLM({"1": good_zh}))
+    mapping = a._translate_impurity_segments([seg_latin], "简体中文")
+    assert mapping == [(seg_latin, good_zh)]
+
+    # (3) Corrupted digit content is still rejected (no .chat → no escalation).
+    for bad in ("市场在所有地区达到100个单位",          # 1,000 → 100
+                "市场在所有地区达到1000个单位另加50"):  # stray new number
+        a = _repair_agent(llm=_JsonChatLLM({"1": bad}))
+        assert a._translate_impurity_segments([seg_latin], "简体中文") == []
 
 
 def test_language_purity_rescans_whole_section_translation(monkeypatch, tmp_path):
