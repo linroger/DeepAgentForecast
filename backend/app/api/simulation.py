@@ -1995,6 +1995,112 @@ def get_simulation_timeline(simulation_id: str):
         }), 500
 
 
+# ============== 决策通道轨迹接口（Step3 实时可视化） ==============
+
+# 响应体上界：文件大小上限（正常轨迹只有几 KB；超限拒绝解析）与返回行数上限
+# （超限保留最新行并标记 truncated）。
+TRAJECTORY_MAX_BYTES = 5 * 1024 * 1024
+TRAJECTORY_MAX_ROWS = 720
+
+
+@simulation_bp.route('/<simulation_id>/trajectory', methods=['GET'])
+def get_simulation_trajectory(simulation_id: str):
+    """读取模拟目录的 world_state_trajectory.json（决策通道产物）供前端实时轮询。
+
+    Step3 的世界态堆叠面积图按详细状态轮询节奏调用本端点；模拟早期轮次文件
+    尚未产出属正常态 → 404，前端静默等待。
+
+    安全姿态与报告图表端点（report.get_report_chart）一致：realpath containment
+    钉死在 OASIS_SIMULATION_DATA_DIR 下 + 拒绝 symlink；越界/缺失一律 404，不泄漏
+    路径细节。响应体有界（TRAJECTORY_MAX_BYTES / TRAJECTORY_MAX_ROWS）。
+
+    返回：
+        {
+            "success": true,
+            "data": {
+                "simulation_id": "sim_xxx",
+                "rows_count": 18,
+                "total_rows": 18,
+                "truncated": false,
+                "trajectory": [{"round": 0, "shares": {"情景A": 0.5, ...}, ...}, ...]
+            }
+        }
+    """
+    try:
+        raw_id = str(simulation_id or "")
+        # 字符层校验先行（NUL/控制字符会让 realpath 直接抛错，须在其前拒绝）
+        if (not raw_id or raw_id in (".", "..") or "/" in raw_id or "\\" in raw_id
+                or any(ord(char) < 32 or ord(char) == 127 for char in raw_id)):
+            return jsonify({
+                "success": False,
+                "error": f"模拟不存在: {simulation_id}"
+            }), 404
+        sim_root = os.path.realpath(Config.OASIS_SIMULATION_DATA_DIR)
+        sim_dir = os.path.realpath(os.path.join(sim_root, raw_id))
+        if (os.path.commonpath([sim_dir, sim_root]) != sim_root
+                or sim_dir == sim_root):
+            return jsonify({
+                "success": False,
+                "error": f"模拟不存在: {simulation_id}"
+            }), 404
+
+        path = os.path.join(sim_dir, "world_state_trajectory.json")
+        if os.path.islink(path) or not os.path.isfile(path):
+            return jsonify({
+                "success": False,
+                "error": "世界态轨迹尚未生成（决策通道未产出或模拟尚在早期轮次）"
+            }), 404
+        if os.path.getsize(path) > TRAJECTORY_MAX_BYTES:
+            return jsonify({
+                "success": False,
+                "error": "轨迹文件超出大小上限"
+            }), 413
+
+        import json
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except ValueError:
+            return jsonify({
+                "success": False,
+                "error": "轨迹文件解析失败"
+            }), 500
+
+        # 兼容 {trajectory: [...]}（schema v2/v3）与裸列表；只保留 dict 行。
+        rows = payload.get("trajectory") if isinstance(payload, dict) else payload
+        if not isinstance(rows, list):
+            rows = []
+        rows = [r for r in rows if isinstance(r, dict)]
+        total_rows = len(rows)
+        truncated = total_rows > TRAJECTORY_MAX_ROWS
+        if truncated:
+            rows = rows[-TRAJECTORY_MAX_ROWS:]  # 保留最新的行（图表关心的是最近走势）
+
+        data = {
+            "simulation_id": raw_id,
+            "rows_count": len(rows),
+            "total_rows": total_rows,
+            "truncated": truncated,
+            "trajectory": rows,
+        }
+        if isinstance(payload, dict):
+            # 只透传有界的标量元数据，绝不透传未知的大对象。
+            for key in ("schema_version", "converged", "settled_round"):
+                value = payload.get(key)
+                if key in payload and isinstance(value, (str, int, float, bool)):
+                    data[key] = value
+
+        return jsonify({"success": True, "data": data})
+
+    except Exception as e:
+        logger.error(f"读取世界态轨迹失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
 @simulation_bp.route('/<simulation_id>/agent-stats', methods=['GET'])
 def get_agent_stats(simulation_id: str):
     """

@@ -32,6 +32,14 @@ FORECAST = {
          "probability": 0.55,
          "market_anchor": {"market_id": "HBM-27", "implied_yes_prob": 0.48,
                            "divergence": 0.07}},
+        # VIZ-GAP2 密度门：model_vs_market 需 ≥3 条锚定命题才配整页哑铃图。
+        # 追加两条锚点（market_id 不在价格历史里 → 价格历史图集不受影响）。
+        {"id": "F4", "statement": "CoWoS-L capacity doubles by end of 2027",
+         "probability": 0.61,
+         "market_anchor": {"market_id": "COWOS-27", "implied_yes_prob": 0.55}},
+        {"id": "F5", "statement": "China mature-node share exceeds 40% in 2028",
+         "probability": 0.44,
+         "market_anchor": {"market_id": "CN-MATURE-28", "implied_yes_prob": 0.52}},
     ],
 }
 
@@ -191,11 +199,13 @@ def test_build_all_full_artifacts_produces_8_plus_charts(tmp_path):
         assert {"id", "path", "type", "title", "caption", "source",
                 "placement_hint"} <= set(e.keys())
         assert os.path.exists(str(tmp_path / e["path"]))
-    # manifest v2 落盘：items 一致 + skipped 是 {builder,reason} 列表
+    # manifest v2 落盘：items 一致 + skipped 是 {builder,reason[,fallback_path]} 列表
+    # （VIZ-GAP2：密度门降级可附带 markdown 表回退路径）
     m = json.loads((tmp_path / "viz_manifest.json").read_text(encoding="utf-8"))
     assert m["schema_version"] == 2
     assert m["items"] == items
-    assert all(set(s.keys()) == {"builder", "reason"} for s in m["skipped"])
+    assert all({"builder", "reason"} <= set(s.keys())
+               <= {"builder", "reason", "fallback_path"} for s in m["skipped"])
 
 
 @needs_plotly

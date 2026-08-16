@@ -242,6 +242,12 @@ FORECAST = {
         {"id": "F5", "statement": "Dems win OH Senate", "probability": 0.45,
          "market_anchor": {"market_id": "SENATEOHS-26-D", "implied_yes_prob": 0.52,
                            "divergence": -0.07}},
+        # VIZ-GAP2 密度门：model_vs_market 需 ≥3 条锚定命题。补两条锚点；其
+        # market_id 不在合成价格历史里 → 「恰 1 个命中锚点」的价格历史断言不变。
+        {"id": "F6", "statement": "Dems win NC Senate", "probability": 0.38,
+         "market_anchor": {"market_id": "SENATENCS-26-D", "implied_yes_prob": 0.41}},
+        {"id": "F7", "statement": "GOP holds GA Senate", "probability": 0.56,
+         "market_anchor": {"market_id": "SENATEGAS-26-R", "implied_yes_prob": 0.60}},
     ],
 }
 

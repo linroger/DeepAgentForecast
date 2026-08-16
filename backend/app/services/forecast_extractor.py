@@ -2953,6 +2953,74 @@ def _pool_spine_draws(draws: List[Dict[str, Any]], floor: float) -> Dict[str, An
     return out
 
 
+SELF_CONSISTENCY_INTERVAL_SOURCE = "self_consistency_spread"
+
+
+def apply_self_consistency_intervals(forecast: Any) -> Any:
+    """VIZ-GAP1(a): derive honest per-scenario intervals from pooled self-consistency data.
+
+    ``_pool_spine_draws`` computes per-scenario ``p_low``/``p_high`` from K draws, and
+    forecast.json publishes ``self_consistency_k`` / ``self_consistency_mean_spread`` —
+    but downstream passes (the red-team critique re-runs ``_normalize_scenarios``, the
+    pre-mortem shifts probabilities) strip or invalidate those bounds, so real runs
+    shipped bare point estimates and every uncertainty encoding downstream stayed dead.
+
+    This helper re-establishes the interval contract additively and deterministically:
+
+    * requires ``self_consistency_k >= 2`` AND a finite non-negative
+      ``self_consistency_mean_spread`` — otherwise it EMITS NOTHING (never fabricates);
+    * a scenario whose existing bounds are valid (``0 <= p_low <= p <= p_high <= 1``)
+      keeps them; pooled bounds (marked by ``self_consistency_n >= 2``) additionally
+      gain ``interval_source`` so their provenance survives serialization, while
+      model-declared bounds are left untagged (they are not self-consistency evidence);
+    * a scenario with missing/invalidated bounds gets
+      ``p_low/p_high = clamp(p ± mean_spread)`` tagged
+      ``interval_source='self_consistency_spread'``;
+    * the forecast gains top-level ``interval_provenance = {source, k, spread}`` so
+      renderers can annotate charts with where the interval came from.
+
+    Mutates ``forecast`` in place and returns it; non-dict input is returned unchanged.
+    """
+    if not isinstance(forecast, dict):
+        return forecast
+    try:
+        k = int(forecast.get("self_consistency_k"))
+    except (TypeError, ValueError):
+        return forecast
+    spread = _coerce_float(forecast.get("self_consistency_mean_spread"))
+    if k < 2 or spread is None or spread < 0:
+        return forecast
+    scenarios = [s for s in (forecast.get("scenarios") or []) if isinstance(s, dict)]
+    tagged = False
+    for scenario in scenarios:
+        p = _coerce_float(scenario.get("probability"))
+        if p is None or not 0.0 <= p <= 1.0:
+            continue
+        lo = _coerce_float(scenario.get("p_low"))
+        hi = _coerce_float(scenario.get("p_high"))
+        has_valid_bounds = (lo is not None and hi is not None
+                            and 0.0 <= lo <= p <= hi <= 1.0)
+        if has_valid_bounds:
+            pooled_n = _coerce_float(scenario.get("self_consistency_n"))
+            if scenario.get("interval_source") == SELF_CONSISTENCY_INTERVAL_SOURCE:
+                tagged = True
+            elif "interval_source" not in scenario and pooled_n is not None and pooled_n >= 2:
+                scenario["interval_source"] = SELF_CONSISTENCY_INTERVAL_SOURCE
+                tagged = True
+            continue
+        scenario["p_low"] = round(max(0.0, p - spread), 4)
+        scenario["p_high"] = round(min(1.0, p + spread), 4)
+        scenario["interval_source"] = SELF_CONSISTENCY_INTERVAL_SOURCE
+        tagged = True
+    if tagged:
+        forecast["interval_provenance"] = {
+            "source": SELF_CONSISTENCY_INTERVAL_SOURCE,
+            "k": k,
+            "spread": spread,
+        }
+    return forecast
+
+
 def derive_forecast_spine(llm, *, central_question: str = "", horizon: str = "",
                           situation_brief: Optional[str] = None,
                           forecast_inputs: str = "", signal_pack: str = "",
@@ -3073,7 +3141,8 @@ def derive_forecast_spine(llm, *, central_question: str = "", horizon: str = "",
             out.setdefault("quality", {})["model_vs_sim_divergence"] = divergences
             if out.get("confidence") == "high":
                 out["confidence"] = "medium"
-    return out
+    # VIZ-GAP1(a)：给池化区间补显式溯源标记（K=1 时无 self_consistency_k → no-op）。
+    return apply_self_consistency_intervals(out)
 
 
 def render_forecast_spine_block(forecast: Optional[Dict[str, Any]], max_scenarios: int = 6) -> str:
@@ -3410,7 +3479,9 @@ def self_critique_forecast(forecast: Dict[str, Any], llm) -> Dict[str, Any]:
         if audit_scenario_contract(out).get("valid") is not True:
             return forecast
         out["critiqued"] = True
-        return out
+        # VIZ-GAP1(a)：_normalize_scenarios 剥掉了池化的 p_low/p_high——发布前从顶层
+        # self_consistency 数据确定性重建区间（K<2/缺 spread 时 no-op，绝不编造）。
+        return apply_self_consistency_intervals(out)
     except Exception:
         return forecast
 
@@ -3525,7 +3596,17 @@ def premortem_forecast(forecast: Dict[str, Any], llm) -> Dict[str, Any]:
         _synchronize_scenario_probability_narratives(out["scenarios"])
         out["premortem"] = {"underweighted_scenario": str(raw.get("underweighted_scenario") or ""),
                             "missed_signals": missed[:8]}
-        return out
+        # VIZ-GAP1(a)：概率被谦逊转移后旧区间可能不再包住 p——先作废再按 ±spread 重建。
+        for s in out["scenarios"]:
+            p = _coerce_float(s.get("probability"))
+            lo = _coerce_float(s.get("p_low"))
+            hi = _coerce_float(s.get("p_high"))
+            if p is not None and lo is not None and hi is not None \
+                    and not lo <= p <= hi:
+                s.pop("p_low", None)
+                s.pop("p_high", None)
+                s.pop("interval_source", None)
+        return apply_self_consistency_intervals(out)
     except Exception:
         return forecast
 

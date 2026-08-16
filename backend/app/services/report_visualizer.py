@@ -202,6 +202,53 @@ _INK_2 = "#52514e"
 _LEVEL_NUM = {"very high": 4.0, "high": 3.0, "medium": 2.0, "med": 2.0,
               "moderate": 2.0, "low": 1.0, "very low": 0.5}
 
+# VIZ-GAP2 最小数据密度门：整页图表必须承载足够信息，否则降级为紧凑表格
+# （取证：1200px 的 model_vs_market.png 只画 1 条命题；quantitative_claims.png 两个
+# 堆叠面板共 4 个数）。model-vs-market 需 ≥3 条带市场锚点的命题（单锚点已由二元点阵
+# 图的成对菱形承载）；量化面板需 ≥4 个点或 ≥2 个互异指标。
+_MODEL_VS_MARKET_MIN_ANCHORED = 3
+_QUANT_PANEL_MIN_POINTS = 4
+_QUANT_PANEL_MIN_CATEGORIES = 2
+
+
+def _quant_panel_is_dense(panel: Dict[str, Any]) -> bool:
+    rows = panel.get("rows") or []
+    if len(rows) >= _QUANT_PANEL_MIN_POINTS:
+        return True
+    metrics = {str(row.get("metric") or "") for row in rows}
+    return len(metrics) >= _QUANT_PANEL_MIN_CATEGORIES
+
+
+def _quant_panel_subtitles(panels: List[Dict[str, Any]]) -> List[str]:
+    """VIZ-GAP3(d)：面板互异的子图标题——绝不出现两个一模一样的 'USD/kW (n=2)'。
+    先用 单位+as-of，重名再追加口径与首行指标名，仍重名则追加序号（确定性）。"""
+    base = [
+        f"{panel.get('unit', '')} — as of {panel.get('as_of', '?')}"
+        f" (n={len(panel.get('rows') or [])})"
+        for panel in panels
+    ]
+    counts: Dict[str, int] = {}
+    for title in base:
+        counts[title] = counts.get(title, 0) + 1
+    titles: List[str] = []
+    for panel, title in zip(panels, base, strict=True):
+        if counts[title] > 1:
+            basis = _html_text(panel.get("time_basis"), max_len=20)
+            lead_rows = panel.get("rows") or []
+            lead = _html_text(lead_rows[0].get("metric") if lead_rows else "",
+                              max_len=26)
+            detail = " · ".join(part for part in (basis, lead) if part)
+            if detail:
+                title = f"{title} · {detail}"
+        titles.append(title)
+    seen: Dict[str, int] = {}
+    out: List[str] = []
+    for title in titles:
+        n = seen.get(title, 0)
+        seen[title] = n + 1
+        out.append(title if n == 0 else f"{title} ({n + 1})")
+    return out
+
 # 证据层级 → 序数权重（S1 最强）。用于量化断言排序/着色与争议断言证据权重。
 _TIER_RANK = {"S1": 0, "S2": 1, "S3": 2, "S4": 3}
 _TIER_COLOR = {"S1": "#184f95", "S2": "#3987e5", "S3": "#9ec5f4", "S4": "#cde2fb"}
@@ -525,6 +572,48 @@ def _html_text(text: Any, fallback: str = "", max_len: int = 60) -> str:
     if s.count("$") >= 2:
         s = s.replace("$", "&#36;")
     return s
+
+
+def _wrap_label(text: Any, fallback: str = "", width: int = 55,
+                max_lines: int = 2) -> str:
+    """VIZ-GAP3：PNG 可读的轴/键标签——按词折行成 ≤max_lines 行（<br> 分隔），只有超出
+    width*max_lines 总预算才截断加省略号（hover 在 PNG 里不存在，截断即信息丢失）。
+    无空格的 CJK 长串按宽度硬切；成对 '$' 的 MathJax 防护与 _html_text 一致。"""
+    s = str(text if text is not None else "").strip()
+    s = re.sub(r"\s+", " ", s).strip()
+    if not s:
+        return fallback
+    budget = width * max_lines
+    if len(s) > budget:
+        s = s[: budget - 1].rstrip() + "…"
+    if s.count("$") >= 2:
+        s = s.replace("$", "&#36;")
+    words: List[str] = []
+    for word in s.split(" "):
+        while len(word) > width:  # 无空格长词（CJK/URL）硬切，绝不整串溢出
+            words.append(word[:width])
+            word = word[width:]
+        if word:
+            words.append(word)
+    lines: List[str] = []
+    cur = ""
+    for word in words:
+        if cur and len(cur) + 1 + len(word) > width:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = f"{cur} {word}".strip()
+    if cur:
+        lines.append(cur)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        lines[-1] = lines[-1].rstrip("…").rstrip() + "…"
+    return "<br>".join(lines)
+
+
+def _md_cell(text: Any, max_len: int = 80) -> str:
+    """markdown 表单元格文本：_html_text 规整 + 竖线转义（防拆列）。"""
+    return _html_text(text, max_len=max_len).replace("|", "/")
 
 
 def _node_id(counter: Dict[str, str], name: str) -> str:
@@ -1648,6 +1737,9 @@ class ReportVisualizer:
         self._png_done: Dict[str, str] = {}                   # item_id -> rel png path
         self._batch_mode = False
         self._kaleido_failed = False
+        # VIZ-GAP2：构建器返回 None 时的结构化跳过说明（密度门降级为紧凑表格）。
+        # item_id -> {"reason": ..., "fallback_path": ...}；build_all 的 _attempt 消费。
+        self._skip_notes: Dict[str, Dict[str, str]] = {}
 
     # ============================ (A) Mermaid 族 ============================
     # 全部为 @staticmethod 纯函数：入参普通 dict/list，返回 ```mermaid``` 代码块字符串；
@@ -1899,7 +1991,7 @@ class ReportVisualizer:
             y = list(range(len(names)))[::-1]  # 顶部为第一个情景
             fig, ax = plt.subplots(figsize=(9, max(2.2, 0.7 * len(names) + 1.2)))
             ax.barh(y, probs, color="#3b6fb0", height=0.6)
-            for source in ("ensemble", "declared"):
+            for source in _SCENARIO_INTERVAL_ORDER:
                 indices = [i for i, value in enumerate(interval_sources) if value == source]
                 if not indices:
                     continue
@@ -1924,11 +2016,18 @@ class ReportVisualizer:
             ax.set_yticklabels(names, fontsize=9, fontproperties=label_font)
             ax.set_xlabel("Probability", fontsize=10)
             ax.set_xlim(0, max(1.0, max(probs) * 1.15))
-            ax.set_title(_scenario_interval_title(rows), fontsize=12, fontweight="bold")
+            ax.set_title(_scenario_interval_title(rows), fontsize=12,
+                         fontweight="bold", pad=18)
+            # VIZ-GAP1(b)：区间溯源/裸点估计的副标题（PNG 是 PDF 的最终形态，必须自明）。
+            subtitle = _scenario_interval_subtitle(rows, forecast).replace("<br>", " ")
+            ax.text(0.5, 1.005, _mpl_text(subtitle, max_len=110),
+                    transform=ax.transAxes, ha="center", va="bottom",
+                    fontsize=8, color="#52514e")
             if any(interval_sources):
                 ax.legend(loc="lower right", frameon=False, fontsize=8)
-            for yi, p in zip(y, probs, strict=True):
-                ax.text(p + 0.01, yi, f"{p * 100:.0f}%", va="center", fontsize=9)
+            for yi, p, err in zip(y, probs, hi_err, strict=True):
+                # 数值标签让位于误差棒（放到区间上界之外），避免被误差线横穿。
+                ax.text(p + err + 0.01, yi, f"{p * 100:.0f}%", va="center", fontsize=9)
             ax.grid(axis="x", linestyle=":", alpha=0.4)
             fig.tight_layout()
             return self._save(fig, charts_dir, "scenario_probabilities.png")
@@ -1971,6 +2070,10 @@ class ReportVisualizer:
                 model_p.append(mp)
                 market_p.append(kp)
             if not labels:
+                return None
+            # VIZ-GAP2：与 plotly 版同一密度门——<3 条锚定命题不再产出整页静态图
+            # （markdown 表降级由 plotly 构建器负责，避免重复登记）。
+            if len(labels) < _MODEL_VS_MARKET_MIN_ANCHORED:
                 return None
             label_text = " ".join(labels)
             if not _mpl_labels_supported(label_text):
@@ -2735,6 +2838,25 @@ class ReportVisualizer:
             if self._save_png(fig, abs_path):
                 self._png_done[item_id] = rel_path
 
+    def _write_density_fallback(self, item_id: str, stem: str,
+                                lines: List[str], charts_dir: str) -> None:
+        """VIZ-GAP2：低于密度门的图槽降级——落一张紧凑 markdown 表（charts/<stem>_table.md，
+        原子写），并登记 {"reason": "below_density_threshold", "fallback_path": ...} 跳过
+        说明供 build_all 写进 viz_manifest.json 的 skipped[]（schema v2 允许附加字符串键）。
+        表落盘失败只丢 fallback_path，跳过原因仍如实记录（degrade-safe）。"""
+        note = {"reason": "below_density_threshold"}
+        try:
+            os.makedirs(charts_dir, exist_ok=True)
+            path = os.path.join(charts_dir, f"{stem}_table.md")
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+            os.replace(tmp, path)
+            note["fallback_path"] = os.path.join("charts", f"{stem}_table.md")
+        except Exception as exc:  # noqa: BLE001 - 表格是降级产物，失败不阻断
+            logger.debug("密度降级表落盘失败 %s：%s", stem, exc)
+        self._skip_notes[item_id] = note
+
     def _save_pair(self, fig, charts_dir: str, stem: str,
                    item_id: Optional[str] = None) -> Optional[str]:
         """WAVE9：HTML+PNG 成对落盘——HTML 即时写，PNG 排队/即时导出（见 _queue_png）。
@@ -2773,11 +2895,22 @@ class ReportVisualizer:
                 hover.append("<br>".join(parts))
             fig = go.Figure(go.Bar(
                 x=probs, y=names, orientation="h", marker_color=_COLOR_MODEL,
-                text=[f"{p * 100:.0f}%" for p in probs], textposition="outside",
                 hovertext=hover, hoverinfo="text",
                 name="Scenario probability", showlegend=False,
             ))
-            for source in ("ensemble", "declared"):
+            # 数值标签放在区间上界之外（有区间时）——柱端标签会被误差棒横穿（PNG 取证）。
+            x_max = max(1.0, max(probs) * 1.2)
+            for row in rows:
+                has_interval = (row["lo"] is not None and row["hi"] is not None
+                                and row["hi"] > row["lo"])
+                edge = row["hi"] if has_interval else row["p"]
+                fig.add_annotation(
+                    x=min(edge + 0.015 * x_max, x_max), y=row["name"],
+                    text=f"{row['p'] * 100:.0f}%", showarrow=False,
+                    xanchor="left", yanchor="middle",
+                    font={"size": 11, "color": _INK_2, "family": _VIZ_FONT},
+                )
+            for source in _SCENARIO_INTERVAL_ORDER:
                 source_rows = [
                     row for row in rows
                     if row.get("interval_source") == source
@@ -2794,7 +2927,7 @@ class ReportVisualizer:
                     marker={
                         "color": style["color"],
                         "size": 6,
-                        "symbol": "circle" if source == "ensemble" else "diamond",
+                        "symbol": style["plotly_symbol"],
                     },
                     error_x={
                         "type": "data",
@@ -2813,12 +2946,16 @@ class ReportVisualizer:
                         + "<extra></extra>"
                     ),
                 ))
-            title = _scenario_interval_title(rows)
-            _apply_layout(fig, title, height=max(320, 42 * len(names) + 140))
+            # VIZ-GAP1(b)：标题下挂一行区间溯源副标题；裸点估计明说而非沉默呈现为确定性。
+            subtitle = _scenario_interval_subtitle(rows, forecast)
+            title = (f"{_scenario_interval_title(rows)}"
+                     f"<br><sup>{subtitle}</sup>")
+            _apply_layout(fig, title, height=max(340, 42 * len(names) + 160))
             fig.update_layout(
                 xaxis_title="Probability",
                 xaxis=dict(range=[0, max(1.0, max(probs) * 1.2)], tickformat=".0%"),
                 yaxis=dict(autorange="reversed"),  # 概率最高的情景显示在顶部
+                margin={"l": 10, "r": 24, "t": 74, "b": 46},  # 两行标题需要更高的顶边距
             )
             return self._save_pair(fig, charts_dir, "scenario_probabilities",
                                    "scenario_probabilities")
@@ -2839,6 +2976,7 @@ class ReportVisualizer:
             labels: List[str] = []
             model_p: List[float] = []
             market_p: List[float] = []
+            statements: List[str] = []
             for bf in bfs:
                 if not isinstance(bf, dict):
                     continue
@@ -2856,8 +2994,32 @@ class ReportVisualizer:
                 labels.append(lab)
                 model_p.append(mp)
                 market_p.append(kp)
+                statements.append(_html_text(
+                    bf.get("statement") or bf.get("id") or anchor.get("market_id"),
+                    fallback=lab, max_len=110))
             if not labels:
                 return None
+            # VIZ-GAP2：<3 条锚定命题撑不起整页哑铃图（单锚点在二元点阵图里已有成对
+            # 菱形）——降级为紧凑 markdown 表并登记 below_density_threshold。
+            if len(labels) < _MODEL_VS_MARKET_MIN_ANCHORED:
+                table = [
+                    "# Model vs Market (binary forecasts)",
+                    "",
+                    (f"Only {len(labels)} market-anchored proposition(s) — below the "
+                     f"{_MODEL_VS_MARKET_MIN_ANCHORED}-row chart threshold; the market "
+                     "anchor also appears as a paired diamond on the binary dotplot."),
+                    "",
+                    "| Proposition | Model P(yes) | Market implied | Δ (model − market) |",
+                    "| --- | --- | --- | --- |",
+                ]
+                for stmt, mp, kp in zip(statements, model_p, market_p, strict=True):
+                    table.append(
+                        f"| {_md_cell(stmt, max_len=110)} | {mp:.1%} | {kp:.1%} "
+                        f"| {(mp - kp) * 100:+.1f}pp |")
+                self._write_density_fallback(
+                    "model_vs_market", "model_vs_market", table, charts_dir)
+                return None
+            self._skip_notes.pop("model_vs_market", None)
             fig = go.Figure()
             # 先画连线段（哑铃杆），每条一 trace 但不进图例。
             for lab, mp, kp in zip(labels, model_p, market_p):
@@ -2878,12 +3040,17 @@ class ReportVisualizer:
                             line=dict(color=_SURFACE, width=2)),
                 hovertemplate="%{y} — model: %{x:.1%}<extra></extra>",
             ))
-            _apply_layout(fig, "Model vs Market (binary forecasts)",
-                          height=max(320, 40 * len(labels) + 150))
+            _apply_layout(
+                fig,
+                ("Model vs Market (binary forecasts)"
+                 f"<br><sup>{len(labels)} market-anchored propositions — "
+                 "point estimates vs market-implied P(yes)</sup>"),
+                height=max(320, 40 * len(labels) + 170))
             fig.update_layout(
                 xaxis_title="P(yes)", xaxis=dict(range=[0, 1], tickformat=".0%"),
                 yaxis=dict(autorange="reversed"),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin={"l": 10, "r": 24, "t": 74, "b": 46},
             )
             return self._save_pair(fig, charts_dir, "model_vs_market", "model_vs_market")
         except Exception as exc:  # noqa: BLE001
@@ -3042,7 +3209,10 @@ class ReportVisualizer:
                 market = (_first_float(anchor, ("implied_yes_prob", "implied_prob"))
                           if isinstance(anchor, dict) else None)
                 bid = _html_text(bf.get("id"), fallback=f"F{len(rows) + 1}", max_len=10)
-                stmt = _html_text(bf.get("statement"), fallback=bid, max_len=64)
+                # VIZ-GAP3(a)：PNG 里没有 hover——语句折成 ≤2 行（~110 字符）而不是
+                # 在阈值中间截到 64 字符。
+                stmt = _wrap_label(bf.get("statement"), fallback=bid,
+                                   width=55, max_lines=2)
                 rows.append({
                     "label": f"{bid} · {stmt}", "p": p, "conf": conf, "market": market,
                     "hover": "<br>".join(x for x in (
@@ -3100,13 +3270,23 @@ class ReportVisualizer:
             title = "Binary Forecasts — P(yes)"
             if encode_confidence:
                 title += " with declared confidence"
+            else:
+                # VIZ-GAP1(b)：无声明 confidence 时明说是裸点估计（沉默呈现=虚假确定性）。
+                subtitle_parts = ["point estimates — confidence not declared"]
+                if anchored:
+                    subtitle_parts.append(
+                        f"{len(anchored)} market-anchored (paired diamonds)")
+                title += f"<br><sup>{'; '.join(subtitle_parts)}</sup>"
+            # 折行标签的行更高（两行文本），避免相邻标签互相压盖。
+            row_height = 44 if any("<br>" in lab for lab in labels) else 30
             _apply_layout(fig, title,
-                          height=max(340, 30 * len(rows) + 170))
+                          height=max(340, row_height * len(rows) + 170))
             fig.update_layout(
                 xaxis_title="P(yes)", xaxis=dict(range=[0, 1], tickformat=".0%"),
                 yaxis=dict(autorange="reversed", categoryorder="array",
                            categoryarray=labels),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin={"l": 10, "r": 24, "t": 74, "b": 46},
             )
             return self._save_pair(fig, charts_dir, "binary_forecast_dotplot",
                                    "binary_forecast_dotplot")
@@ -3163,14 +3343,35 @@ class ReportVisualizer:
             display_dates = {
                 (event["dt"], event["text"]): event["date"] for event in events
             }
-            key_columns = 2 if len(ordered_key) > 5 else 1
-            key_rows = max(1, math.ceil(len(ordered_key) / key_columns))
+            # VIZ-GAP3(b)：key 标签从事件全文折行（≤2 行 ~110 字符），不再 52 字符截断
+            # （PNG 里没有 hover，截断即信息丢失）。
+            wrapped_key = [
+                ((event_date, event_text), placement,
+                 _wrap_label(event_text, fallback=placement["label"],
+                             width=55, max_lines=2))
+                for (event_date, event_text), placement in ordered_key
+            ]
+            unlabeled = max(0, len(events) - len(ordered_key))
+            key_columns = 2 if len(wrapped_key) > 5 else 1
+            key_rows = max(1, math.ceil(len(wrapped_key) / key_columns))
+            # 行距逐行计算：该行（跨列取最大）有折行标签时 25 → 41，避免两行文本压到下一行。
+            row_line_counts = [1] * key_rows
+            for position, (_, _, wrapped_label) in enumerate(wrapped_key):
+                row = position % key_rows
+                row_line_counts[row] = max(row_line_counts[row],
+                                           wrapped_label.count("<br>") + 1)
+            row_offsets = [48]
+            for lines_in_row in row_line_counts:
+                row_offsets.append(row_offsets[-1] + (25 if lines_in_row == 1 else 41))
+            more_note_height = 22 if unlabeled and wrapped_key else 0
             plot_height = max(390, 82 * len(used) + 155)
-            key_height = 70 + 27 * key_rows
+            key_height = (30 + row_offsets[-1] + more_note_height) if wrapped_key else 70
             paper_height = max(260, plot_height - 58)
             _apply_layout(fig, "Event Timeline", height=plot_height + key_height)
             fig.update_layout(
-                xaxis_title="Date",
+                # VIZ-GAP3(c)：key 区在场时压下 'Date' 轴标题——PNG 导出里它与
+                # key 块可见碰撞，且日期刻度本身已自明。
+                xaxis_title=None if wrapped_key else "Date",
                 yaxis=dict(
                     tickvals=[lane_idx[c] for c in used], ticktext=used,
                     # 显式倒序区间（首个泳道在顶部）；不与 autorange 混用。
@@ -3180,25 +3381,36 @@ class ReportVisualizer:
                 showlegend=False,
                 margin=dict(l=12, r=24, t=58, b=key_height),
             )
-            if ordered_key:
+            if wrapped_key:
                 fig.add_annotation(
                     xref="paper", yref="paper", x=0.0, y=-18 / paper_height,
                     text="<b>Key events</b>", showarrow=False,
                     xanchor="left", yanchor="top", align="left",
                     font=dict(size=10, color=_INK, family=_VIZ_FONT),
                 )
-            for position, ((event_date, _event_text), placement) in enumerate(ordered_key):
+            for position, ((event_date, _event_text), placement,
+                           wrapped_label) in enumerate(wrapped_key):
                 column = position // key_rows
                 row = position % key_rows
                 fig.add_annotation(
                     xref="paper", yref="paper",
                     x=column / key_columns + 0.01,
-                    y=-(48 + row * 25) / paper_height,
+                    y=-row_offsets[row] / paper_height,
                     text=(f"<b>{placement['index']:02d}</b>  "
                           f"{_html_text(display_dates.get((event_date, _event_text)), max_len=24)}  "
-                          f"{_html_text(placement['label'], max_len=52)}"),
+                          f"{wrapped_label}"),
                     showarrow=False, xanchor="left", yanchor="top", align="left",
                     font=dict(size=9, color=_INK_2, family=_VIZ_FONT),
+                )
+            # VIZ-GAP3(c)：计划外事件不再是匿名圆点——给出 +N more 说明。
+            if unlabeled and wrapped_key:
+                fig.add_annotation(
+                    xref="paper", yref="paper", x=0.0,
+                    y=-(row_offsets[-1] + 4) / paper_height,
+                    text=(f"+{unlabeled} more event(s) shown as unlabeled dots — "
+                          "full text in the interactive chart hover"),
+                    showarrow=False, xanchor="left", yanchor="top", align="left",
+                    font={"size": 9, "color": _INK_2, "family": _VIZ_FONT},
                 )
             return self._save_pair(fig, charts_dir, "timeline_lanes", "timeline_lanes")
         except Exception as exc:  # noqa: BLE001
@@ -3731,13 +3943,46 @@ class ReportVisualizer:
             panels = _prepare_quantitative_panels(quantitative)
             if not panels:
                 return None
+            # VIZ-GAP2：面板密度门——每个面板须 ≥4 个点或 ≥2 个互异指标；全部低于门槛
+            # 时整图降级为紧凑 markdown 表（4 个数不配两个堆叠面板的整页版面）。
+            dense_panels = [panel for panel in panels if _quant_panel_is_dense(panel)]
+            if not dense_panels:
+                table = [
+                    "# Comparable Forecast Benchmarks",
+                    "",
+                    (f"All panels fall below the density threshold "
+                     f"(≥{_QUANT_PANEL_MIN_POINTS} points or "
+                     f"≥{_QUANT_PANEL_MIN_CATEGORIES} distinct metrics per panel) — "
+                     "compact table instead of a full-page chart."),
+                    "",
+                    "| Metric | Value | Unit | As of | Tier | Status | Source |",
+                    "| --- | --- | --- | --- | --- | --- | --- |",
+                ]
+                for panel in panels:
+                    for row in panel["rows"]:
+                        status = ("forecast/target" if row.get("projection")
+                                  else "observed")
+                        if row.get("stale"):
+                            status += " · stale"
+                        table.append(
+                            f"| {_md_cell(row.get('metric'), max_len=80)} "
+                            f"| {_md_cell(row.get('display_value'), max_len=24)} "
+                            f"| {_md_cell(row.get('unit'), max_len=24)} "
+                            f"| {_md_cell(row.get('as_of'), max_len=12)} "
+                            f"| {_md_cell(row.get('tier'), max_len=4)} "
+                            f"| {status} "
+                            f"| {_md_cell(row.get('source'), max_len=48)} |")
+                self._write_density_fallback(
+                    "quantitative_claims", "quantitative_claims", table, charts_dir)
+                return None
+            self._skip_notes.pop("quantitative_claims", None)
+            panels = dense_panels
             from plotly.subplots import make_subplots
             heights = [len(panel["rows"]) for panel in panels]
             fig = make_subplots(
                 rows=len(panels), cols=1, shared_xaxes=False,
-                subplot_titles=[
-                    f"{panel['unit']} (n={len(panel['rows'])})" for panel in panels
-                ],
+                # VIZ-GAP3(d)：面板互异的子图标题（不再出现两个 'USD/kW (n=2)'）。
+                subplot_titles=_quant_panel_subtitles(panels),
                 # Leave enough room for each panel's x-axis title and the next
                 # subplot title.  Dense multi-panel exports otherwise remain
                 # technically legible in HTML but collide in the static PNG.
@@ -4060,6 +4305,7 @@ class ReportVisualizer:
         self._png_done = {}
         self._batch_mode = True
         self._kaleido_failed = False
+        self._skip_notes = {}
 
         forecast = artifacts.get("forecast")
         ensemble = artifacts.get("ensemble")
@@ -4086,7 +4332,10 @@ class ReportVisualizer:
                                 "reason": f"exception:{type(exc).__name__}"})
                 return
             if not rel:
-                skipped.append({"builder": item_id, "reason": "empty_after_parse"})
+                # VIZ-GAP2：构建器可能留下结构化跳过说明（密度门 + markdown 表降级）。
+                note = self._skip_notes.pop(item_id, None)
+                skipped.append({"builder": item_id,
+                                **(note or {"reason": "empty_after_parse"})})
                 return
             items.append({
                 "id": item_id, "path": rel, "type": "html",
@@ -4602,32 +4851,82 @@ _SCENARIO_INTERVAL_STYLES = {
         "label": "Ensemble spread",
         "color": "#2b2b2b",
         "marker": "o",
+        "plotly_symbol": "circle",
         "capsize": 5,
     },
     "declared": {
         "label": "Declared uncertainty interval",
         "color": "#b26a00",
         "marker": "D",
+        "plotly_symbol": "diamond",
+        "capsize": 4,
+    },
+    # VIZ-GAP1：forecast.json 的自一致性池化区间（K 次抽取的 ±spread）。颜色取分类槽 5
+    # 紫（与柱蓝/近黑/橙棕成对均过 CVD 相邻校验），标记方形作次级编码。
+    "self_consistency": {
+        "label": "Self-consistency spread",
+        "color": "#4a3aa7",
+        "marker": "s",
+        "plotly_symbol": "square",
         "capsize": 4,
     },
 }
 
+# 情景区间来源的绘制/图例顺序（matplotlib 与 plotly 构建器共用，确定性）。
+_SCENARIO_INTERVAL_ORDER = ("ensemble", "declared", "self_consistency")
+
+_SCENARIO_INTERVAL_TITLES = {
+    "ensemble": "Scenario Probabilities (ensemble spread)",
+    "declared": "Scenario Probabilities (declared uncertainty intervals)",
+    "self_consistency": "Scenario Probabilities (self-consistency spread)",
+}
+
+
+def _scenario_rows_with_interval(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        row for row in rows
+        if row.get("lo") is not None and row.get("hi") is not None
+        and row["hi"] > row["lo"]
+    ]
+
 
 def _scenario_interval_title(rows: List[Dict[str, Any]]) -> str:
     """Describe plotted interval provenance without overstating its evidence."""
-    sources = {
-        row.get("interval_source")
-        for row in rows
-        if row.get("lo") is not None and row.get("hi") is not None
-        and row["hi"] > row["lo"]
-    }
-    if sources == {"ensemble"}:
-        return "Scenario Probabilities (ensemble spread)"
-    if sources == {"declared"}:
-        return "Scenario Probabilities (declared uncertainty intervals)"
-    if sources == {"ensemble", "declared"}:
+    sources = {row.get("interval_source") for row in _scenario_rows_with_interval(rows)}
+    if len(sources) == 1:
+        title = _SCENARIO_INTERVAL_TITLES.get(next(iter(sources)))
+        if title:
+            return title
+    if len(sources) > 1:
         return "Scenario Probabilities (intervals by source)"
     return "Scenario Probabilities"
+
+
+def _scenario_interval_subtitle(rows: List[Dict[str, Any]], forecast: Any = None) -> str:
+    """VIZ-GAP1(b)：一句话区间溯源副标题；裸点估计必须明说，不得沉默呈现为确定性。"""
+    with_interval = _scenario_rows_with_interval(rows)
+    if not with_interval:
+        return "point estimates only — no interval data supplied"
+    sources = {row.get("interval_source") for row in with_interval}
+    partial = "" if len(with_interval) == len(rows) else "; unmarked bars are point estimates"
+    if sources == {"self_consistency"}:
+        prov = forecast.get("interval_provenance") if isinstance(forecast, dict) else None
+        k = spread = None
+        if isinstance(prov, dict):
+            k = _to_float(prov.get("k"))
+            spread = _to_float(prov.get("spread"))
+        if k is None and isinstance(forecast, dict):
+            k = _to_float(forecast.get("self_consistency_k"))
+            spread = _to_float(forecast.get("self_consistency_mean_spread"))
+        if k and spread is not None:
+            return (f"interval: ±{spread * 100:.1f}pp spread from k={int(k)} "
+                    f"self-consistency draws{partial}")
+        return f"interval: ± spread across self-consistency draws{partial}"
+    if sources == {"ensemble"}:
+        return f"interval: min–max across ensemble runs{partial}"
+    if sources == {"declared"}:
+        return f"interval: declared p_low–p_high from forecast.json{partial}"
+    return f"intervals: mixed provenance — see legend{partial}"
 
 
 def _extract_scenario_rows(forecast: Any, ensemble: Any = None) -> List[Dict[str, Any]]:
@@ -4705,14 +5004,21 @@ def _extract_scenario_rows(forecast: Any, ensemble: Any = None) -> List[Dict[str
                 if match is not None:
                     used_ensemble.add(match[0])
                     source = match[1]
+                # VIZ-GAP1：canonical 情景可携带显式 interval_source（自一致性池化
+                # 的 ±spread）；没有该标记的自带区间仍按模型声明呈现。
+                own_source = (
+                    "self_consistency"
+                    if str(scenario.get("interval_source") or "").strip().lower()
+                    == "self_consistency_spread" else "declared"
+                )
                 lo, hi, stdev, support = _uncertainty(source, p)
-                interval_source = "ensemble" if match is not None else "declared"
+                interval_source = "ensemble" if match is not None else own_source
                 if lo is None or hi is None:
                     # A matching ensemble row without usable bounds is not evidence that the
                     # canonical p_low/p_high came from an ensemble. Preserve those declared
                     # bounds explicitly instead of dropping or laundering their provenance.
                     lo, hi, _, _ = _uncertainty(scenario, p)
-                    interval_source = "declared"
+                    interval_source = own_source
                     stdev, support = None, None
                 if lo is None or hi is None:
                     interval_source = None

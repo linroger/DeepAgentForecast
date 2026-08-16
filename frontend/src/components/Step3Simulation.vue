@@ -103,6 +103,77 @@
       </div>
     </div>
 
+    <!-- Live Charts: 世界态份额 + 每轮动作数（随轮询实时更新） -->
+    <div class="live-charts" v-if="phase > 0">
+      <!-- (a) 结果世界态份额堆叠面积（world_state_trajectory.json，决策通道产物） -->
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-title">OUTCOME SHARES</span>
+          <span v-if="latestTrajectoryLabel" class="chart-sub mono">{{ latestTrajectoryLabel }}</span>
+        </div>
+        <template v-if="worldAreaBands.length">
+          <svg class="mini-chart" viewBox="0 0 100 30" preserveAspectRatio="none" role="img" aria-label="Outcome share trajectory">
+            <path
+              v-for="(band, i) in worldAreaBands"
+              :key="'band-' + band.name"
+              :d="band.d"
+              :fill="seriesColor(i, band.name)"
+            />
+            <!-- 带间白色分隔线（表面色间隙，non-scaling 保持恒定线宽） -->
+            <polyline
+              v-for="band in worldAreaBands"
+              :key="'line-' + band.name"
+              :points="band.topLine"
+              fill="none"
+              stroke="#FFFFFF"
+              stroke-width="1.5"
+              vector-effect="non-scaling-stroke"
+            />
+            <!-- 逐轮悬停命中区（原生 title 提示） -->
+            <rect
+              v-for="col in areaHoverCols"
+              :key="'hit-' + col.key"
+              :x="col.x"
+              y="0"
+              :width="col.w"
+              height="30"
+              fill="transparent"
+            ><title>{{ col.title }}</title></rect>
+          </svg>
+          <div class="chart-legend">
+            <span class="legend-chip" v-for="(item, i) in worldLegend" :key="item.name">
+              <span class="chip-dot" :style="{ background: seriesColor(i, item.name) }"></span>
+              <span class="chip-name" :title="item.name">{{ item.name }}</span>
+              <span class="chip-value mono">{{ latestShareLabel(item.name) }}</span>
+            </span>
+          </div>
+        </template>
+        <div v-else class="chart-empty">Waiting for world-state trajectory...</div>
+      </div>
+
+      <!-- (b) 每轮动作数 mini 柱状图（动作流已在客户端，零额外请求） -->
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-title">ACTIONS / ROUND</span>
+          <span v-if="allActions.length" class="chart-sub mono">{{ allActions.length }} TOTAL</span>
+        </div>
+        <template v-if="actionBarRects.length">
+          <svg class="mini-chart" viewBox="0 0 100 30" preserveAspectRatio="none" role="img" aria-label="Actions per round">
+            <rect
+              v-for="bar in actionBarRects"
+              :key="'bar-' + bar.round"
+              :x="bar.x"
+              :y="bar.y"
+              :width="bar.w"
+              :height="bar.h"
+              fill="#333"
+            ><title>R{{ bar.round }} · {{ bar.count }} actions</title></rect>
+          </svg>
+        </template>
+        <div v-else class="chart-empty">Waiting for agent actions...</div>
+      </div>
+    </div>
+
     <!-- Main Content: Dual Timeline -->
     <div class="main-content-area" ref="scrollContainer">
       <!-- Timeline Header -->
@@ -288,13 +359,20 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { 
-  startSimulation, 
+import {
+  startSimulation,
   stopSimulation,
-  getRunStatus, 
+  getRunStatus,
   getRunStatusDetail
 } from '../api/simulation'
 import { generateReport } from '../api/report'
+import service from '../api/index'
+import {
+  actionsPerRound,
+  barGeometry,
+  buildTrajectoryStack,
+  stackedAreaPaths,
+} from '../utils/simTrajectory'
 
 const props = defineProps({
   simulationId: String,
@@ -338,6 +416,72 @@ const redditActionsCount = computed(() => {
   return allActions.value.filter(a => a.platform === 'reddit').length
 })
 
+// ===== 实时 mini 图表：世界态份额堆叠面积 + 每轮动作数柱状 =====
+// 情景配色：dataviz 校验通过的 8 槽分类调色板（固定顺序分配，超出折叠为 Other）。
+// 图例 + 悬停数值提供第二编码通道（低对比槽位的 relief）。
+const SERIES_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948']
+const OTHER_COLOR = '#8a8a85'
+
+const trajectoryRows = ref([]) // world_state_trajectory.json 的 trajectory 行（后端 /trajectory 轮询）
+
+const worldStack = computed(() => buildTrajectoryStack(trajectoryRows.value, SERIES_COLORS.length))
+const worldAreaBands = computed(() => stackedAreaPaths(worldStack.value, 100, 30))
+const worldLegend = computed(() => worldStack.value.names.map(name => ({ name })))
+
+const seriesColor = (index, name) => {
+  if (name === 'Other') return OTHER_COLOR
+  return SERIES_COLORS[index % SERIES_COLORS.length]
+}
+
+const latestTrajectoryPoint = computed(() => {
+  const points = worldStack.value.points
+  return points.length ? points[points.length - 1] : null
+})
+
+const latestTrajectoryLabel = computed(() => {
+  const point = latestTrajectoryPoint.value
+  if (!point) return ''
+  return point.label ? `R${point.round} · ${point.label}` : `R${point.round}`
+})
+
+const latestShareLabel = (name) => {
+  const point = latestTrajectoryPoint.value
+  const value = point ? point.shares[name] : null
+  return value == null ? '' : `${(value * 100).toFixed(0)}%`
+}
+
+// 逐轮悬停命中列（原生 <title> 提示：轮次 + 各情景份额）
+const areaHoverCols = computed(() => {
+  const stack = worldStack.value
+  const n = stack.points.length
+  if (n < 2) return []
+  const step = 100 / (n - 1)
+  return stack.points.map((point, i) => {
+    const left = Math.max(0, i * step - step / 2)
+    const right = Math.min(100, i * step + step / 2)
+    const title = `R${point.round}` + (point.label ? ` · ${point.label}` : '') + '\n'
+      + stack.names.map(name => `${name}: ${((point.shares[name] || 0) * 100).toFixed(1)}%`).join('\n')
+    return { key: i, x: left, w: right - left, title }
+  })
+})
+
+const actionRounds = computed(() => actionsPerRound(allActions.value))
+const actionBarRects = computed(() => barGeometry(actionRounds.value, 100, 30, 0.6))
+
+// 轮询 world_state_trajectory.json（决策通道产物）；早期轮次文件尚未生成 → 404，
+// 静默等待（空态由模板显示），绝不打断动作轮询。
+const fetchTrajectory = async () => {
+  if (!props.simulationId) return
+  try {
+    const res = await service.get(`/api/simulation/${props.simulationId}/trajectory`)
+    if (res && res.success && res.data && Array.isArray(res.data.trajectory)) {
+      trajectoryRows.value = res.data.trajectory
+    }
+  } catch (_err) {
+    // 404（尚未产出）/瞬时网络错误：保留已有数据，下个轮询周期重试
+  }
+}
+
 // 格式化模拟流逝时间（根据轮次和每轮分钟数计算）
 const formatElapsedTime = (currentRound) => {
   if (!currentRound || currentRound <= 0) return '0h 0m'
@@ -368,6 +512,7 @@ const resetAllState = () => {
   runStatus.value = {}
   allActions.value = []
   actionIds.value = new Set()
+  trajectoryRows.value = []
   prevTwitterRound.value = 0
   prevRedditRound.value = 0
   startError.value = null
@@ -468,7 +613,11 @@ const startStatusPolling = () => {
 }
 
 const startDetailPolling = () => {
-  detailTimer = setInterval(fetchRunStatusDetail, 3000)
+  fetchTrajectory() // 启动即拉一次（重启/恢复时图表立即回填）
+  detailTimer = setInterval(() => {
+    fetchRunStatusDetail()
+    fetchTrajectory() // 与详细状态同节奏轮询决策通道轨迹
+  }, 3000)
 }
 
 const stopPolling = () => {
@@ -527,6 +676,7 @@ const fetchRunStatus = async () => {
         addLog('✓ 模拟已完成')
         phase.value = 2
         stopPolling()
+        fetchTrajectory() // 收尾再拉一次，图表定格在最终世界态
         emit('update-status', 'completed')
       }
     }
@@ -901,6 +1051,100 @@ onUnmounted(() => {
 .action-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+/* --- Live Charts Strip --- */
+.live-charts {
+  display: flex;
+  gap: 12px;
+  padding: 10px 24px;
+  background: #FFF;
+  border-bottom: 1px solid #EAEAEA;
+  flex-shrink: 0;
+}
+
+.chart-card {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chart-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.chart-title {
+  font-size: 9px;
+  font-weight: 600;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.chart-sub {
+  font-size: 9px;
+  color: #BBB;
+}
+
+.mini-chart {
+  width: 100%;
+  height: 56px;
+  display: block;
+  background: #FFF;
+  border: 1px solid #EAEAEA;
+  border-radius: 2px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-height: 14px;
+}
+
+.legend-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #666;
+  max-width: 100%;
+}
+
+.chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.chip-name {
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip-value {
+  color: #999;
+  font-size: 9px;
+}
+
+.chart-empty {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #EAEAEA;
+  border-radius: 2px;
+  color: #CCC;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 /* --- Main Content Area --- */

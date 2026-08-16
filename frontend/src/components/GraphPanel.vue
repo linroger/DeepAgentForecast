@@ -4,6 +4,35 @@
       <span class="panel-title">{{ L('图谱关系可视化', 'Graph Relationship Visualization') }}</span>
       <!-- 顶部工具栏 (Internal Top Right) -->
       <div class="header-tools">
+        <!-- 节点搜索：按名称匹配，Enter 循环切换匹配项 -->
+        <div v-if="graphData" class="graph-search">
+          <input
+            type="search"
+            class="search-input"
+            v-model="searchQuery"
+            :placeholder="L('搜索节点', 'Search nodes')"
+            :title="L('按名称搜索节点（Enter 切换匹配）', 'Search nodes by name (Enter cycles matches)')"
+            @input="onSearchInput"
+            @keydown.enter.prevent="onSearchEnter"
+          />
+          <span v-if="searchQuery" class="search-count">{{ searchCountLabel }}</span>
+        </div>
+        <!-- 时间过滤：按边的 valid_at 截断（载荷带时间字段时才显示） -->
+        <div
+          v-if="graphData && timeFilterTimes.length"
+          class="time-filter"
+          :title="L('按事实生效时间过滤边', 'Filter edges by fact valid time')"
+        >
+          <span class="time-filter-label">{{ timeFilterLabel }}</span>
+          <input
+            class="time-filter-slider"
+            type="range"
+            min="0"
+            :max="timeFilterTimes.length"
+            step="1"
+            v-model.number="timeFilterIndex"
+          />
+        </div>
         <button class="tool-btn" @click="$emit('refresh')" :disabled="loading" :title="L('刷新图谱', 'Refresh graph')">
           <span class="icon-refresh" :class="{ 'spinning': loading }">↻</span>
           <span class="btn-text">{{ L('刷新', 'Refresh') }}</span>
@@ -285,6 +314,7 @@ import {
   graphPayloadMeta,
   graphPayloadRevision,
 } from '../utils/graphPayload'
+import { assignTypeColors, nodeRadius } from '../utils/graphStyle'
 
 // ===== KG 渲染性能参数 =====
 // 聚焦模式阈值：节点数超过该值时默认只渲染 Top-K 子图（可用 VITE_GRAPH_UI_MAX_NODES 覆盖）
@@ -413,21 +443,97 @@ async function hydrateSelfLoopDetail(id) {
   }
 }
 
-// 计算实体类型用于图例
+// 计算实体类型用于图例。颜色按「类型名哈希 → 调色板槽位」确定性分配
+// （utils/graphStyle），同名类型在不同图谱/不同刷新间保持同色。
 const entityTypes = computed(() => {
   if (!props.graphData?.nodes) return []
-  const typeMap = {}
-  // 美观的颜色调色板
-  const colors = ['#FF6B35', '#004E89', '#7B2D8E', '#1A936F', '#C5283D', '#E9724C', '#3498db', '#9b59b6', '#27ae60', '#f39c12']
-  
+  const counts = new Map()
   props.graphData.nodes.forEach(node => {
     const type = node.labels?.find(l => l !== 'Entity') || 'Entity'
-    if (!typeMap[type]) {
-      typeMap[type] = { name: type, count: 0, color: colors[Object.keys(typeMap).length % colors.length] }
-    }
-    typeMap[type].count++
+    counts.set(type, (counts.get(type) || 0) + 1)
   })
-  return Object.values(typeMap)
+  const colorMap = assignTypeColors([...counts.keys()])
+  return [...counts.entries()].map(([name, count]) => ({
+    name,
+    count,
+    color: colorMap.get(name) || '#999',
+  }))
+})
+
+// ===== 节点搜索（按名称，Enter 循环匹配） =====
+const searchQuery = ref('')
+const searchMatchCount = ref(0)
+const searchMatchIndex = ref(-1)
+let searchSceneApi = null // renderGraph 每次重建后指向当前场景的搜索接口
+
+const searchCountLabel = computed(() =>
+  searchMatchCount.value > 0 ? `${searchMatchIndex.value + 1}/${searchMatchCount.value}` : '0/0'
+)
+
+function normalizeSearchText(value) {
+  try {
+    return String(value || '').normalize('NFKC').toLowerCase().trim()
+  } catch (_e) {
+    return String(value || '').toLowerCase().trim()
+  }
+}
+
+function runSearch({ focus = false } = {}) {
+  if (!searchSceneApi) return
+  const query = normalizeSearchText(searchQuery.value)
+  const count = searchSceneApi.setQuery(query)
+  searchMatchCount.value = count
+  searchMatchIndex.value = count > 0 ? 0 : -1
+  if (count > 0 && focus) searchSceneApi.focusMatch(0)
+}
+
+function onSearchInput() {
+  runSearch({ focus: true })
+}
+
+function onSearchEnter() {
+  if (!searchSceneApi) return
+  if (searchMatchCount.value === 0) {
+    runSearch({ focus: true })
+    return
+  }
+  searchMatchIndex.value = (searchMatchIndex.value + 1) % searchMatchCount.value
+  searchSceneApi.focusMatch(searchMatchIndex.value)
+}
+
+function resetSearchState() {
+  searchQuery.value = ''
+  searchMatchCount.value = 0
+  searchMatchIndex.value = -1
+}
+
+// ===== 时间过滤（按边的 valid_at 截断；slim 载荷无时间字段时控件自动隐藏） =====
+const timeFilterTimes = ref([])   // 当前渲染边的 valid_at 时间戳（升序去重，ms）
+const timeFilterIndex = ref(0)    // 滑块位置；== times.length 表示不过滤（全部）
+let timeFilterCutoffMs = null     // 语义化截断时间；null = 全部（跨重渲染保留）
+let applyTimeFilterFn = null      // renderGraph 每次重建后指向当前场景的过滤函数
+
+const timeFilterLabel = computed(() => {
+  const times = timeFilterTimes.value
+  const idx = timeFilterIndex.value
+  if (!times.length || idx >= times.length) return L('全部时间', 'All time')
+  return formatFilterDate(times[Math.max(0, idx)])
+})
+
+function formatFilterDate(ms) {
+  try {
+    return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  } catch (_e) {
+    return String(ms)
+  }
+}
+
+watch(timeFilterIndex, () => {
+  const times = timeFilterTimes.value
+  timeFilterCutoffMs = (!times.length || timeFilterIndex.value >= times.length)
+    ? null
+    : times[Math.max(0, timeFilterIndex.value)]
+  if (applyTimeFilterFn) applyTimeFilterFn()
 })
 
 // 格式化时间
@@ -829,6 +935,8 @@ function synchronizeGraphState() {
     userTouchedEdgeLabels.value = false
     showEdgeLabels.value = true
     savedTransform = null // 新图不继承旧图的视口
+    resetSearchState()    // 搜索与时间过滤都不跨图保留
+    timeFilterCutoffMs = null
   }
   if (restoreFullMode) nextTick(() => loadFullGraph({ force: true }))
   return graphChanged
@@ -869,6 +977,22 @@ function buildPositionLookup(raw, width, height) {
       y: pad + (p.y - minY) / spanY * Math.max(height - pad * 2, 1)
     }
   }
+}
+
+// 边的 valid_at → 时间戳 ms（无字段 / 不可解析 / 自环组 → null）。
+// slim 概览载荷不带时间字段（后端 _SLIM_EDGE_KEYS），此时时间过滤控件自动隐藏，
+// 完整图谱模式与旧版全量后端载荷带字段时才启用 —— degrade-safe。
+function edgeValidMs(d) {
+  const raw = d?.rawData
+  if (!raw || raw.isSelfLoopGroup) return null
+  if (!raw.valid_at) return null
+  const t = Date.parse(raw.valid_at)
+  return Number.isFinite(t) ? t : null
+}
+
+// 过期事实：invalid_at 已设置（载荷无该字段时恒 false）→ 淡化 + 虚线
+function isExpiredEdge(d) {
+  return Boolean(!d?.isSelfLoop && d?.rawData && d.rawData.invalid_at)
 }
 
 // 标签隐藏无法 getBBox 时按字符宽度估算：CJK/全角 ≈ 9px，其他 ≈ 5.5px（font-size 9px）
@@ -928,6 +1052,18 @@ const renderGraph = () => {
   const nodeMap = {}
   nodesData.forEach(n => nodeMap[n.uuid] = n)
 
+  // 度数 → 节点半径（sqrt 比例，6-18px）：枢纽节点一眼可辨（数据已在客户端）
+  const degreeByUuid = new Map()
+  for (const e of edgesData) {
+    if (!e?.source_node_uuid || !e?.target_node_uuid) continue
+    degreeByUuid.set(e.source_node_uuid, (degreeByUuid.get(e.source_node_uuid) || 0) + 1)
+    if (e.target_node_uuid !== e.source_node_uuid) {
+      degreeByUuid.set(e.target_node_uuid, (degreeByUuid.get(e.target_node_uuid) || 0) + 1)
+    }
+  }
+  let maxDegree = 0
+  degreeByUuid.forEach(v => { if (v > maxDegree) maxDegree = v })
+
   // 为已存在的节点种入上一次的坐标，仅新节点重新布局（F-10-1）；
   // 无旧坐标时用后端预计算布局（graphData.positions）作为初始位置。
   const posLookup = buildPositionLookup(props.graphData, width, height)
@@ -943,6 +1079,7 @@ const renderGraph = () => {
       id: n.uuid,
       name: n.name || 'Unnamed',
       type: n.labels?.find(l => l !== 'Entity') || 'Entity',
+      r: nodeRadius(degreeByUuid.get(n.uuid) || 0, maxDegree),
       rawData: n,
       ...(seed ? { x: seed.x, y: seed.y } : {})
     }
@@ -1083,6 +1220,40 @@ const renderGraph = () => {
 
   const g = svg.append('g')
 
+  // ===== 方向箭头（marker-end）=====
+  // 有向边加小箭头；颜色跟随边的三种描边色（默认/选中/关联高亮），
+  // userSpaceOnUse 固定像素尺寸，跟随缩放整体变换，逐帧零开销。
+  const EDGE_COLOR_DEFAULT = '#C0C0C0'
+  const EDGE_COLOR_ACTIVE = '#3498db'
+  const EDGE_COLOR_ACCENT = '#E91E63'
+  const arrowIds = {
+    [EDGE_COLOR_DEFAULT]: 'gp-arrow-default',
+    [EDGE_COLOR_ACTIVE]: 'gp-arrow-active',
+    [EDGE_COLOR_ACCENT]: 'gp-arrow-accent',
+  }
+  const defs = svg.append('defs')
+  for (const [color, id] of Object.entries(arrowIds)) {
+    defs.append('marker')
+      .attr('id', id)
+      .attr('viewBox', '0 -4 8 8')
+      .attr('refX', 8)
+      .attr('refY', 0)
+      .attr('markerWidth', 8)
+      .attr('markerHeight', 8)
+      .attr('markerUnits', 'userSpaceOnUse')
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M0,-4L8,0L0,4')
+      .attr('fill', color)
+  }
+  const edgeMarker = color => `url(#${arrowIds[color] || arrowIds[EDGE_COLOR_DEFAULT]})`
+  // 统一的边描边样式（描边色 + 线宽 + 对应色箭头）；所有重置/高亮路径都走这里
+  function styleEdges(sel, color, width) {
+    sel.attr('stroke', color)
+      .attr('stroke-width', width)
+      .attr('marker-end', d => (d.isSelfLoop ? null : edgeMarker(color)))
+  }
+
   // 标签 LOD：低倍率下隐藏节点/边标签，减少缩放/平移时需要重绘的矢量元素数量
   let lodLabelsHidden = (savedTransform ? savedTransform.k : 1) < LOD_LABEL_MIN_ZOOM
   let latestTransform = savedTransform || d3.zoomIdentity
@@ -1122,28 +1293,37 @@ const renderGraph = () => {
   const linkGroup = g.append('g').attr('class', 'links')
   
   // 计算曲线路径
+  // 箭头留白：路径终点从目标节点圆心回缩到圆边外侧，箭头才不会被节点盖住
+  const ARROW_GAP = 3
   const getLinkPath = (d) => {
     const sx = d.source.x, sy = d.source.y
     const tx = d.target.x, ty = d.target.y
-    
+
     // 检测自环
     if (d.isSelfLoop) {
-      // 自环：绘制一个圆弧从节点出发再返回
+      // 自环：绘制一个圆弧从节点出发再返回（起终点贴节点圆边）
       const loopRadius = 30
-      // 从节点右侧出发，绕一圈回来
-      const x1 = sx + 8  // 起点偏移
+      const nr = Math.max((d.source.r || 10) - 2, 4)
+      const x1 = sx + nr  // 起点偏移
       const y1 = sy - 4
-      const x2 = sx + 8  // 终点偏移
+      const x2 = sx + nr  // 终点偏移
       const y2 = sy + 4
       // 使用圆弧绘制自环（sweep-flag=1 顺时针）
       return `M${x1},${y1} A${loopRadius},${loopRadius} 0 1,1 ${x2},${y2}`
     }
-    
+
+    const targetPad = (d.target.r || 10) + ARROW_GAP
+
     if (d.curvature === 0) {
-      // 直线
-      return `M${sx},${sy} L${tx},${ty}`
+      // 直线：终点沿连线方向回缩，给箭头留位
+      const dx = tx - sx, dy = ty - sy
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1
+      const cut = Math.min(targetPad, Math.max(dist - 2, 0))
+      const ex = tx - dx / dist * cut
+      const ey = ty - dy / dist * cut
+      return `M${sx},${sy} L${ex},${ey}`
     }
-    
+
     // 计算曲线控制点 - 根据边数量和距离动态调整
     const dx = tx - sx, dy = ty - sy
     const dist = Math.sqrt(dx * dx + dy * dy)
@@ -1156,8 +1336,14 @@ const renderGraph = () => {
     const offsetY = dx / dist * d.curvature * baseOffset
     const cx = (sx + tx) / 2 + offsetX
     const cy = (sy + ty) / 2 + offsetY
-    
-    return `M${sx},${sy} Q${cx},${cy} ${tx},${ty}`
+
+    // 曲线：沿终点切线方向（控制点 → 终点）回缩
+    const cdx = tx - cx, cdy = ty - cy
+    const cdist = Math.sqrt(cdx * cdx + cdy * cdy) || 1
+    const cut = Math.min(targetPad, Math.max(cdist - 2, 0))
+    const ex = tx - cdx / cdist * cut
+    const ey = ty - cdy / cdist * cut
+    return `M${sx},${sy} Q${cx},${cy} ${ex},${ey}`
   }
   
   // 计算曲线中点（用于标签定位）
@@ -1196,19 +1382,24 @@ const renderGraph = () => {
   const link = linkGroup.selectAll('path')
     .data(edges)
     .enter().append('path')
-    .attr('stroke', '#C0C0C0')
+    .attr('stroke', EDGE_COLOR_DEFAULT)
     .attr('stroke-width', 1.5)
     .attr('fill', 'none')
+    // 有向边加箭头；自环组无方向语义，不加
+    .attr('marker-end', d => (d.isSelfLoop ? null : edgeMarker(EDGE_COLOR_DEFAULT)))
+    // 时间编码：invalid_at 已设置的过期事实淡化 + 虚线（元素级 opacity 连箭头一起淡化）
+    .attr('stroke-dasharray', d => (isExpiredEdge(d) ? '4,3' : null))
+    .attr('opacity', d => (isExpiredEdge(d) ? 0.35 : null))
     .style('cursor', 'pointer')
     .on('click', (event, d) => {
       event.stopPropagation()
       // 重置之前选中边的样式
-      linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
+      styleEdges(link, EDGE_COLOR_DEFAULT, 1.5)
       linkLabelBg.attr('fill', 'rgba(255,255,255,0.95)')
       linkLabels.attr('fill', '#666')
       // 高亮当前选中的边
-      d3.select(event.target).attr('stroke', '#3498db').attr('stroke-width', 3)
-      
+      styleEdges(d3.select(event.target), EDGE_COLOR_ACTIVE, 3)
+
       selectEdgeItem(d.rawData)
     })
 
@@ -1226,13 +1417,13 @@ const renderGraph = () => {
     .style('pointer-events', 'all')
     .on('click', (event, d) => {
       event.stopPropagation()
-      linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
+      styleEdges(link, EDGE_COLOR_DEFAULT, 1.5)
       linkLabelBg.attr('fill', 'rgba(255,255,255,0.95)')
       linkLabels.attr('fill', '#666')
       // 高亮对应的边
-      link.filter(l => l === d).attr('stroke', '#3498db').attr('stroke-width', 3)
+      styleEdges(link.filter(l => l === d), EDGE_COLOR_ACTIVE, 3)
       d3.select(event.target).attr('fill', 'rgba(52, 152, 219, 0.1)')
-      
+
       selectEdgeItem(d.rawData)
     })
 
@@ -1250,13 +1441,13 @@ const renderGraph = () => {
     .style('font-family', 'system-ui, sans-serif')
     .on('click', (event, d) => {
       event.stopPropagation()
-      linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
+      styleEdges(link, EDGE_COLOR_DEFAULT, 1.5)
       linkLabelBg.attr('fill', 'rgba(255,255,255,0.95)')
       linkLabels.attr('fill', '#666')
       // 高亮对应的边
-      link.filter(l => l === d).attr('stroke', '#3498db').attr('stroke-width', 3)
+      styleEdges(link.filter(l => l === d), EDGE_COLOR_ACTIVE, 3)
       d3.select(event.target).attr('fill', '#3498db')
-      
+
       selectEdgeItem(d.rawData)
     })
   
@@ -1343,11 +1534,25 @@ const renderGraph = () => {
       const bgs = linkLabelBg.nodes()
       linkLabels.each(function (d, i) {
         const mid = getLinkMidpoint(d)
-        const disp = inView(mid.x, mid.y) ? '' : 'none'
+        // 时间过滤隐藏的边，其标签也一并隐藏
+        const disp = (!d._timeHidden && inView(mid.x, mid.y)) ? '' : 'none'
         this.style.display = disp
         if (bgs[i]) bgs[i].style.display = disp
       })
     }
+  }
+
+  // ===== 时间过滤（按 valid_at 截断）=====
+  // 只切换 display，不动仿真/布局 —— 滑动过滤零布局开销
+  function applyTimeFilter() {
+    const cutoff = timeFilterCutoffMs
+    link.each(function (d) {
+      const t = edgeValidMs(d)
+      d._timeHidden = cutoff != null && t != null && t > cutoff
+      this.style.display = d._timeHidden ? 'none' : ''
+    })
+    // 标签的显隐经由视口剔除统一收敛（其判定已含 _timeHidden）
+    applyViewportCull()
   }
 
   // 拖拽期间只更新被拖拽节点及其关联元素的选择集缓存（大图不重启全局仿真）
@@ -1361,7 +1566,7 @@ const renderGraph = () => {
     .data(nodes.filter(d => isSeedNode(d)))
     .enter().append('circle')
     .attr('class', 'seed-ring')
-    .attr('r', 14)
+    .attr('r', d => (d.r || 10) + 4)
     .attr('fill', 'none')
     .attr('stroke', '#FF4500')
     .attr('stroke-width', 2)
@@ -1373,7 +1578,7 @@ const renderGraph = () => {
     .data(nodes)
     .enter().append('circle')
     .attr('class', 'node-dot')
-    .attr('r', 10)
+    .attr('r', d => d.r || 10)
     .attr('fill', d => getColor(d.type))
     .attr('stroke', '#fff')
     .attr('stroke-width', 2.5)
@@ -1443,14 +1648,16 @@ const renderGraph = () => {
       event.stopPropagation()
       // 重置所有节点样式
       node.attr('stroke', '#fff').attr('stroke-width', 2.5)
-      linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
+      styleEdges(link, EDGE_COLOR_DEFAULT, 1.5)
       // 高亮选中节点
       d3.select(event.target).attr('stroke', '#E91E63').attr('stroke-width', 4)
       // 高亮与此节点相连的边
-      link.filter(l => l.source.id === d.id || l.target.id === d.id)
-        .attr('stroke', '#E91E63')
-        .attr('stroke-width', 2.5)
-      
+      styleEdges(
+        link.filter(l => l.source.id === d.id || l.target.id === d.id),
+        EDGE_COLOR_ACCENT,
+        2.5
+      )
+
       selectNodeItem(d, getColor(d.type))
 
       // 聚焦模式：点击同时展开该节点的一跳邻居（保留现有节点位置，仅新节点参与布局）
@@ -1467,16 +1674,29 @@ const renderGraph = () => {
       }
     })
 
+  // 悬停显示完整名称（原生 SVG <title>，零渲染开销）
+  node.append('title').text(d => d.name)
+
+  // 搜索命中高亮环：单个元素，ticked 时跟随命中节点
+  const searchRing = nodeGroup.append('circle')
+    .attr('class', 'search-ring')
+    .attr('fill', 'none')
+    .attr('stroke', '#E91E63')
+    .attr('stroke-width', 3)
+    .style('display', 'none')
+    .style('pointer-events', 'none')
+  let searchFocusDatum = null
+
   // Node Labels —— 独立成组，LOD 显隐只切换组的 display
   const nodeLabelGroup = g.append('g').attr('class', 'node-labels')
   const nodeLabels = nodeLabelGroup.selectAll('text')
     .data(nodes)
     .enter().append('text')
-    .text(d => d.name.length > 8 ? d.name.substring(0, 8) + '…' : d.name)
+    .text(d => d.name.length > 18 ? d.name.substring(0, 18) + '…' : d.name)
     .attr('font-size', '11px')
     .attr('fill', '#333')
     .attr('font-weight', '500')
-    .attr('dx', 14)
+    .attr('dx', d => (d.r || 10) + 4)
     .attr('dy', 4)
     .style('pointer-events', 'none')
     .style('font-family', 'system-ui, sans-serif')
@@ -1501,6 +1721,10 @@ const renderGraph = () => {
       .attr('cx', d => d.x)
       .attr('cy', d => d.y)
 
+    if (searchFocusDatum) {
+      searchRing.attr('cx', searchFocusDatum.x).attr('cy', searchFocusDatum.y)
+    }
+
     if (!lodLabelsHidden) placeNodeLabels()
   }
 
@@ -1513,18 +1737,78 @@ const renderGraph = () => {
   svg.on('click', () => {
     closeDetailPanel()
     node.attr('stroke', '#fff').attr('stroke-width', 2.5)
-    linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
+    styleEdges(link, EDGE_COLOR_DEFAULT, 1.5)
     linkLabelBg.attr('fill', 'rgba(255,255,255,0.95)')
     linkLabels.attr('fill', '#666')
   })
+
+  // ===== 场景级搜索接口（模块级 runSearch/onSearchEnter 经 searchSceneApi 调用） =====
+  let searchMatches = []
+  searchSceneApi = {
+    setQuery(queryNorm) {
+      if (!queryNorm) {
+        searchMatches = []
+        searchFocusDatum = null
+        searchRing.style('display', 'none')
+        return 0
+      }
+      searchMatches = nodes.filter(n => normalizeSearchText(n.name).includes(queryNorm))
+      if (!searchMatches.length) {
+        searchFocusDatum = null
+        searchRing.style('display', 'none')
+      }
+      return searchMatches.length
+    },
+    focusMatch(index) {
+      if (!searchMatches.length) return
+      const datum = searchMatches[((index % searchMatches.length) + searchMatches.length) % searchMatches.length]
+      if (!datum || !Number.isFinite(datum.x) || !Number.isFinite(datum.y)) return
+      searchFocusDatum = datum
+      searchRing
+        .style('display', null)
+        .attr('r', (datum.r || 10) + 5)
+        .attr('cx', datum.x)
+        .attr('cy', datum.y)
+      // 平移/缩放到命中节点（沿用 zoomBehavior，RAF 合并管线不变）
+      const k = Math.max(latestTransform.k, 1)
+      const t = d3.zoomIdentity
+        .translate(width / 2 - k * datum.x, height / 2 - k * datum.y)
+        .scale(k)
+      svg.transition().duration(400).call(zoomBehavior.transform, t)
+    },
+  }
+
+  // ===== 时间过滤数据源：当前渲染边的 valid_at 全集（跨重渲染保留语义截断点） =====
+  const validTimeSet = new Set()
+  edges.forEach(e => {
+    const t = edgeValidMs(e)
+    if (t != null) validTimeSet.add(t)
+  })
+  const sortedValidTimes = [...validTimeSet].sort((a, b) => a - b)
+  timeFilterTimes.value = sortedValidTimes
+  if (timeFilterCutoffMs == null || !sortedValidTimes.length) {
+    timeFilterCutoffMs = null
+    timeFilterIndex.value = sortedValidTimes.length
+  } else {
+    // 语义截断点吸附到新时间轴的对应刻度，保证滑块标签与实际过滤一致
+    const idx = Math.max(0, sortedValidTimes.filter(t => t <= timeFilterCutoffMs).length - 1)
+    timeFilterCutoffMs = sortedValidTimes[idx]
+    timeFilterIndex.value = idx
+  }
 
   // 初始可见性 + 首帧绘制（预计算布局/低 alpha 时也能即刻成图）
   updateLabelLayerVisibility()
   ticked()
 
-  // 模块级句柄：边标签开关 watcher 使用
+  // 模块级句柄：边标签开关 watcher / 时间过滤 watcher 使用
   updateLabelLayerVisibilityFn = updateLabelLayerVisibility
+  applyTimeFilterFn = applyTimeFilter
   sceneReady = true
+
+  // 持久化的时间截断在新场景上重放（无截断时也顺带初始化 _timeHidden 标记）
+  applyTimeFilter()
+  // 输入框里有保留的查询词时，静默刷新匹配集（不平移视口）
+  if (searchQuery.value) runSearch()
 }
 
 // 廉价响应式触发：监听引用与节点/边数量变化，替代对整个 graphData 的 deep watch
@@ -1564,6 +1848,8 @@ onUnmounted(() => {
     resizeTimer = null
   }
   updateLabelLayerVisibilityFn = null
+  applyTimeFilterFn = null
+  searchSceneApi = null
   if (currentSimulation) {
     currentSimulation.stop()
   }
@@ -1634,6 +1920,66 @@ onUnmounted(() => {
 
 .tool-btn .btn-text {
   font-size: 12px;
+}
+
+/* 节点搜索输入框（跟随 tool-btn 视觉） */
+.graph-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-input {
+  height: 32px;
+  width: 150px;
+  padding: 0 10px;
+  border: 1px solid #E0E0E0;
+  background: #FFF;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #333;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus {
+  border-color: #7B2D8E;
+}
+
+.search-count {
+  font-size: 11px;
+  color: #888;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 时间过滤（按 valid_at 截断边） */
+.time-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #E0E0E0;
+  background: #FFF;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.time-filter-label {
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+  min-width: 74px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-filter-slider {
+  width: 90px;
+  accent-color: #7B2D8E;
+  cursor: pointer;
 }
 
 .icon-refresh.spinning {
