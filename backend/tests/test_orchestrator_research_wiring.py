@@ -940,10 +940,19 @@ def _exercise_prepare_run_resume(
         states[simulation_id].status = _po.SimulationStatus.RUNNING
 
     def get_run_state(cls, simulation_id):
+        # DEFECT-2: a real COMPLETED runner state always carries the enabled +
+        # simulation_end completion flags (the monitor only publishes COMPLETED
+        # after every enabled platform emitted its marker). The completion-
+        # evidence gate at the RUN boundary now demands that authority, so the
+        # fake must model it faithfully.
         return SimpleNamespace(
             total_rounds=9,
             current_round=9,
             runner_status=_po.RunnerStatus.COMPLETED,
+            twitter_enabled=True,
+            reddit_enabled=True,
+            twitter_completed=True,
+            reddit_completed=True,
         )
 
     def write_summary(cls, simulation_id, communities=None):

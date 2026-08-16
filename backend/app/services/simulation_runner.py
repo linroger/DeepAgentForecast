@@ -1301,6 +1301,9 @@ class SimulationRunner:
         "ipc_telemetry.jsonl",
         "llm_health.json",
         "llm_fallback.jsonl",
+        # DEFECT-3: 上一轮子进程的 token 计量快照必须随重跑轮转——否则新一轮启动即失败时,
+        # 编排器会把上一轮（可能已入账过的）花费当作本轮的账消费。
+        "sim_llm_telemetry.json",
     )
 
     @classmethod

@@ -576,6 +576,12 @@ class Config:
     SIM_IDLE_CLOSE_MIN = float(os.environ.get('SIM_IDLE_CLOSE_MIN', '60') or '60')  # <=0 = 无限等待
     SIM_LLM_ERROR_RATE_THRESHOLD = float(os.environ.get('SIM_LLM_ERROR_RATE_THRESHOLD', '0.5') or '0.5')
     SIM_RESUME = os.environ.get('SIM_RESUME', 'false').strip().lower() == 'true'
+    # DEFECT-1 (resume 复用已完成模拟)：RUN 阶段启动时，若 sim 目录已存在「绑定同一份密封
+    # simulation_config 的已完成模拟」（每个启用平台的 simulation_end 完成标记 + 有效
+    # run_summary + simulation_config seal 身份校验通过），直接复用产物、不再重启模拟子进程
+    # （2026-07-15 取证：resume 对着耗尽的配额把同一场 18 轮模拟重跑 4 次，损失 3h34m）。
+    # 置 false 恢复旧行为（stage 位丢失即无条件重跑）。不完整/无效/身份不匹配的模拟仍照旧重跑。
+    SIM_RESUME_REUSE_COMPLETED = os.environ.get('SIM_RESUME_REUSE_COMPLETED', 'true').strip().lower() == 'true'
     # ITEM 3: 轮级检查点写入开关（默认开）。开启时每轮原子落盘 <platform>/checkpoint.json
     # （含 config_hash + python-random RNG 状态），使任意崩溃/被杀/后端重启后的运行可被续跑；
     # 续跑本身仍由 SIM_RESUME/--resume 触发。置 false → 不产出 checkpoint.json（RUN-7 早期 degrade-safe 行为）。

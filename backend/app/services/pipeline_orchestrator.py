@@ -7064,6 +7064,53 @@ def _manifest_entry_for(name: str, path: str, stage: str) -> Optional[dict[str, 
     }
 
 
+def _sim_reuse_completed_enabled() -> bool:
+    """SIM-REUSE (DEFECT-1) 旋钮：RUN 阶段是否允许复用磁盘上已完成的模拟。
+
+    env 显式值优先（模拟/编排可能在不同 shell 注入），其次 Config 属性，默认开。
+    任何「非 true」的显式取值（false/0/off/…）都恢复 legacy 行为（无条件重跑）。
+    """
+    raw = os.environ.get("SIM_RESUME_REUSE_COMPLETED")
+    if raw is not None and raw.strip():
+        return raw.strip().lower() in ("1", "true", "yes", "on")
+    try:
+        return bool(getattr(Config, "SIM_RESUME_REUSE_COMPLETED", True))
+    except Exception:  # noqa: BLE001 — 配置读取失败按默认开处理
+        return True
+
+
+def _actions_simulation_end_present(path: str, tail_bytes: int = 262144) -> bool:
+    """完成标记探针：actions.jsonl 尾部是否含 ``simulation_end`` 事件（绝不抛出）。
+
+    每个启用平台的模拟脚本在干净收尾时向 actions.jsonl 追加一条
+    ``{"event_type": "simulation_end", ...}``——这是模拟阶段的权威完成证据
+    （LOOP-001/RUN-17：进程退出码不是证据）。run_state.json 由后端监控线程维护，
+    后端重启/崩溃时它可能停留在 RUNNING/FAILED，而 actions.jsonl 由子进程直写、
+    不会说谎。只读尾部 ``tail_bytes`` 字节：simulation_end 是收尾事件，恒在文件尾部；
+    大文件整读既慢又无必要。
+    """
+    try:
+        if not path or not os.path.exists(path):
+            return False
+        size = os.path.getsize(path)
+        with open(path, "rb") as f:
+            if size > tail_bytes:
+                f.seek(size - tail_bytes)
+            data = f.read().decode("utf-8", errors="replace")
+        for line in reversed(data.splitlines()):
+            if '"simulation_end"' not in line:
+                continue
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(event, dict) and event.get("event_type") == "simulation_end":
+                return True
+        return False
+    except OSError:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # 编排器
 # ---------------------------------------------------------------------------
@@ -9483,6 +9530,151 @@ class PipelineOrchestrator:
             return False
         return _probe_artifact_schema("run_summary", summary_path)
 
+    @staticmethod
+    def _sim_platform_completion_missing(sim_id: str, run_state: Any = None) -> list[str]:
+        """返回缺少权威完成证据的启用平台清单（空清单 = 完成证据齐全）。
+
+        逐平台的证据 = run_state 持久化的 ``*_completed`` 位 **或** 该平台
+        actions.jsonl 尾部的 ``simulation_end`` 事件。位优先（旧的已清理运行可能只剩
+        run_state），文件兜底（后端重启窗口里 run_state 可能停在 RUNNING/FAILED，而
+        detached 子进程早已干净收尾——actions.jsonl 由子进程直写，不会说谎）。
+        启用集合取 run_state 的 ``*_enabled``；两者皆缺（legacy）时回退「actions.jsonl
+        存在即启用」（与 SimulationRunner._check_all_platforms_completed 同构）。
+        任何证据都不存在时返回 ``["<no-platform-evidence>"]``（fail closed）。
+        """
+        sim_dir = os.path.join(SimulationRunner.RUN_STATE_DIR, str(sim_id or ""))
+        tw_enabled = bool(getattr(run_state, "twitter_enabled", False) or False)
+        rd_enabled = bool(getattr(run_state, "reddit_enabled", False) or False)
+        if not tw_enabled and not rd_enabled:
+            tw_enabled = os.path.exists(os.path.join(sim_dir, "twitter", "actions.jsonl"))
+            rd_enabled = os.path.exists(os.path.join(sim_dir, "reddit", "actions.jsonl"))
+        if not tw_enabled and not rd_enabled:
+            return ["<no-platform-evidence>"]
+        missing: list[str] = []
+        for platform, enabled in (("twitter", tw_enabled), ("reddit", rd_enabled)):
+            if not enabled:
+                continue
+            if run_state is not None and bool(
+                getattr(run_state, f"{platform}_completed", False)
+            ):
+                continue
+            if _actions_simulation_end_present(
+                os.path.join(sim_dir, platform, "actions.jsonl")
+            ):
+                continue
+            missing.append(platform)
+        return missing
+
+    def _completed_sim_reusable(
+        self, state: PipelineState, sim_state: Any
+    ) -> tuple[bool, str]:
+        """DEFECT-1 探测器：磁盘上是否已有可复用的「同一密封配置的已完成模拟」。
+
+        stage 位不是证据（崩溃/重启会把它抹掉）；复用资格由三层磁盘证据构成：
+          1. **完成标记**：每个启用平台的 ``simulation_end``（位或 actions.jsonl 尾部，
+             与 DEFECT-2 完成证据门共用探针——rc=0 的 hollow 运行在此即被拒绝复用）；
+          2. **run_summary**：存在则必须结构有效且属于本模拟（半写/异构 → 不可复用；
+             缺失可由复用路径按完整动作日志回填，随后仍受完成证据门硬校验）；
+          3. **身份**：与 runner 启动边界（LOOP-011）同一把最严校验——
+             ``validate_simulation_config_seal`` 按 prepared state 指纹核验
+             simulation_config_manifest ↔ 配置字节 ↔ cast/context/role 闭包；另有
+             运行期见证（reddit_runtime_system_messages.json 携带子进程启动时验证过的
+             seal SHA）时必须与当前 seal 一致，把「这场已完成的运行」和「当前密封配置」
+             直接绑死。无任何 seal 身份可核验（pre-seal 遗留）→ fail closed 照旧重跑。
+        返回 ``(可复用, 不可复用原因)``；探测自身异常一律 fail closed。
+        """
+        try:
+            if not _sim_reuse_completed_enabled():
+                return False, "sim_resume_reuse_completed_disabled"
+            sim_id = state.simulation_id
+            if not sim_id or sim_state is None:
+                return False, "no_simulation_identity"
+            if str(getattr(sim_state, "simulation_id", "")) != str(sim_id):
+                return False, "simulation_identity_mismatch"
+            sim_dir = os.path.join(SimulationRunner.RUN_STATE_DIR, sim_id)
+            if not os.path.isdir(sim_dir):
+                return False, "simulation_dir_missing"
+            rs = SimulationRunner.get_run_state(sim_id)
+            # 仍有存活进程在跑回合（尚未完成）→ 绝不把半成品文件当完成结果复用。
+            if rs is not None and rs.runner_status in (
+                RunnerStatus.STARTING, RunnerStatus.RUNNING,
+            ):
+                try:
+                    if SimulationRunner._is_simulation_alive(rs):
+                        return False, "simulation_process_still_running"
+                except Exception:  # noqa: BLE001 — 存活性未知时保守拒绝复用
+                    return False, "simulation_liveness_unknown"
+            missing = self._sim_platform_completion_missing(sim_id, rs)
+            if missing:
+                return False, "missing_simulation_end:" + ",".join(missing)
+            summary_path = os.path.join(sim_dir, "run_summary.json")
+            if os.path.exists(summary_path):
+                summary = _read_json(summary_path)
+                if not isinstance(summary, dict):
+                    return False, "run_summary_invalid"
+                if summary.get("simulation_id") not in (None, "", sim_id):
+                    return False, "run_summary_identity_mismatch"
+                if not _probe_artifact_schema("run_summary", summary_path):
+                    return False, "run_summary_schema_invalid"
+            expected_manifest = str(getattr(
+                sim_state, "simulation_config_manifest_sha256", "") or "")
+            expected_config = str(getattr(
+                sim_state, "simulation_config_sha256", "") or "")
+            manifest_path = os.path.join(sim_dir, "simulation_config_manifest.json")
+            if not (expected_manifest or expected_config) and not os.path.exists(
+                manifest_path
+            ):
+                return False, "no_config_seal_identity"
+            from .simulation_manager import validate_simulation_config_seal
+            try:
+                seal = validate_simulation_config_seal(
+                    sim_dir,
+                    expected_manifest_sha256=expected_manifest or None,
+                    expected_config_sha256=expected_config or None,
+                    expected_simulation_id=sim_id,
+                    require=True,
+                )
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as seal_err:
+                return False, f"config_seal_mismatch:{str(seal_err)[:160]}"
+            sealed_manifest_sha = str((seal or {}).get("manifest_sha256") or "")
+            attest = _read_json(os.path.join(
+                sim_dir, "reddit_runtime_system_messages.json"))
+            if isinstance(attest, dict):
+                attest_sha = str(
+                    attest.get("simulation_config_manifest_sha256") or "")
+                if attest_sha and sealed_manifest_sha and attest_sha != sealed_manifest_sha:
+                    return False, "runtime_attestation_seal_mismatch"
+            return True, ""
+        except Exception as e:  # noqa: BLE001 — 未证明身份/完整性时拒绝复用
+            return False, f"reuse_check_error:{str(e)[:160]}"
+
+    def _require_run_completion_evidence(
+        self,
+        state: PipelineState,
+        sim_id: str,
+        run_state: Any,
+        summary_published: bool,
+    ) -> None:
+        """DEFECT-2 hollow-run 完成证据门（RUN 完成边界，新跑与复用共用）。
+
+        进程退出码 / stage 位 / 状态投影都不是完成证据（bug-sweep：子进程可以 rc=0
+        退出却从未产出 simulation_end，下游把它当成功消费）。权威证据 =「每个启用平台
+        的 simulation_end 完成标记」+「有效 run_summary.json」。缺任一 → 以清晰讯息抛
+        RuntimeError（RUN 阶段判失败、可 resume；与 DEFECT-1 组合：该结果同样不可复用）。
+        """
+        missing = self._sim_platform_completion_missing(sim_id, run_state)
+        if missing:
+            raise RuntimeError(
+                "模拟未产出完成证据：启用平台缺少 simulation_end 完成标记"
+                f"（{', '.join(missing)}）。进程退出码不是完成证据——该运行按 RUN 阶段"
+                "失败处理，产物不可复用；修复后可 resume 重跑模拟"
+            )
+        if not summary_published:
+            raise RuntimeError(
+                "模拟完成证据不完整：run_summary.json 缺失或结构无效。该运行按 RUN "
+                "阶段失败处理，产物不可复用；修复后可 resume 重跑模拟"
+            )
+
     def _publish_run_summary(
         self,
         state: PipelineState,
@@ -9854,6 +10046,97 @@ class PipelineOrchestrator:
             )
         except Exception as e:  # noqa: BLE001
             logger.debug("[%s] 研究阶段合成计量跳过: %s", state.pipeline_id, e)
+
+    # -- 内部：模拟阶段遥测 (DEFECT-3) -------------------------------------
+
+    def _record_sim_run_telemetry(
+        self, state: PipelineState, simulation_id: Optional[str]
+    ) -> None:
+        """DEFECT-3: 把模拟子进程落盘的 sim_llm_telemetry.json 纳入统一计量（恰好一次）。
+
+        RUN 的 LLM 调用发生在 detached 子进程——contextvars 与 LLMMeter 都不跨进程，
+        这是 run_telemetry.json 拿到模拟花费的唯一入口。镜像 _record_research_telemetry：
+        (1) 始终 stash 摘要到 state.options['sim_llm_telemetry']（计量关闭也是免费观测）；
+        (2) 计量开启且确有 token 时，向 LLMMeter 写一条 stage='run' 的合成记录
+            （provider/model 取快照自报值；缺失时按研究路径同款映射兜底——CLI 订阅类
+            claude/codex → 'claude-cli' 边际成本 0，其余复用同名 provider 定价表）。
+
+        恰好一次（跨 attempt 持久）：state.options['sim_llm_telemetry_recorded'] 记住
+        快照的 ``meter_run_token``（每次子进程启动铸新、同进程重写不变）。同一场运行的
+        后续边界调用（成功收尾、后续 resume 的复用路径）全部跳过；重跑产生新 token →
+        新一笔真实花费照记。标记先持久化、计量后写：中间窗口崩溃宁可少记（诚实下限），
+        绝不双计。成功、复用与失败边界各调用一次；全程 degrade-safe，绝不抛出。
+        """
+        try:
+            if not simulation_id:
+                return
+            tel_path = os.path.join(
+                SimulationRunner.RUN_STATE_DIR, str(simulation_id),
+                "sim_llm_telemetry.json")
+            tel = _read_json(tel_path)
+            if not isinstance(tel, dict):
+                return
+            token = str(tel.get("meter_run_token") or "") or (
+                _sha256_file(tel_path) or "")
+            marker = state.options.get("sim_llm_telemetry_recorded")
+            if (isinstance(marker, dict)
+                    and str(marker.get("simulation_id") or "") == str(simulation_id)
+                    and str(marker.get("meter_run_token") or "") == token):
+                return  # 恰好一次：这场子进程运行已入账
+            # 先解析全部字段（解析失败 → 不入账也不落标记，下个边界重试）。
+            t_in = int(tel.get("prompt_tokens") or 0)
+            t_out = int(tel.get("completion_tokens") or 0)
+            calls = int(tel.get("calls") or 0)
+            model = str(tel.get("model") or "unknown")
+            provider = str(tel.get("provider") or "")
+            if not provider or provider == "unknown":
+                provider = "claude-cli" if model in ("claude", "codex") else model
+            try:
+                wall_ms = float(tel.get("wall_s") or 0.0) * 1000.0
+            except (TypeError, ValueError):
+                wall_ms = 0.0
+            state.options["sim_llm_telemetry"] = {
+                "provider": provider,
+                "model": model,
+                "calls": calls,
+                "errors": int(tel.get("errors") or 0),
+                "prompt_tokens": t_in,
+                "completion_tokens": t_out,
+                "total_tokens": int(tel.get("total_tokens") or (t_in + t_out)),
+                "by_source": (tel.get("by_source")
+                              if isinstance(tel.get("by_source"), dict) else {}),
+                "wall_s": tel.get("wall_s"),
+            }
+            state.options["sim_llm_telemetry_recorded"] = {
+                "simulation_id": str(simulation_id),
+                "meter_run_token": token,
+                "recorded_at": _utcnow(),
+            }
+            try:
+                PipelineManager.save(state)
+            except Exception:  # noqa: BLE001 — stash/标记落盘失败不影响主流程
+                pass
+            if not bool(getattr(Config, "LLM_TELEMETRY_ENABLED", True)):
+                return
+            if t_in <= 0 and t_out <= 0:
+                return  # 无可计量 token（空场/0 调用）→ 不写空记录
+            from ..utils.telemetry import LLMMeter
+            LLMMeter.record(
+                provider=provider,
+                model=model,
+                prompt_tokens=t_in,
+                completion_tokens=t_out,
+                latency_ms=wall_ms,
+                stage=STAGE_RUN,
+                run_id=state.pipeline_id,
+            )
+            logger.info(
+                "[%s] 模拟子进程花费已入账 stage='run'（provider=%s model=%s "
+                "calls=%d tokens in=%d out=%d）",
+                state.pipeline_id, provider, model, calls, t_in, t_out,
+            )
+        except Exception as e:  # noqa: BLE001 — 计量是观测增益，绝不放大失败
+            logger.debug("[%s] 模拟阶段合成计量跳过: %s", state.pipeline_id, e)
 
     # -- 内部：研究覆盖度/质量记分牌 (I-0-3) -------------------------------
 
@@ -12108,7 +12391,29 @@ class PipelineOrchestrator:
 
             # T4.6: 情景 overlay — 把影响力/立场覆盖 + 注入事件确定性落到 simulation_config.json
             _overlay = state.options.get("scenario_overlay")
-            _run_already_done = bool(
+            # DEFECT-1 (SIM_RESUME_REUSE_COMPLETED): RUN stage 位丢失（崩溃/重启窗口、
+            # resume 重置）但磁盘上已有「绑定同一密封配置的已完成模拟」时复用产物，不再
+            # 重启子进程重烧配额（2026-07-15 取证：18 轮模拟被 resume 重跑 4 次、损失
+            # 3h34m）。必须在下方 PREPARE 的配置注入块之前判定：复用路径要保持配置字节
+            # 与该场运行密封时完全一致（重注入/重密封会破坏 seal↔运行的身份绑定）。
+            _sim_disk_reuse = False
+            if (_prepare_reuse
+                    and not (state.stages.get(STAGE_RUN)
+                             and state.stages[STAGE_RUN].status == "completed")):
+                _sim_ok, _sim_why = self._completed_sim_reusable(state, sim_state)
+                if _sim_ok and self._reuse_ok(state, STAGE_RUN):
+                    _sim_disk_reuse = True
+                    logger.info(
+                        "[%s] RUN stage 位缺失，但发现同一密封配置的已完成模拟 %s"
+                        "（simulation_end 完成标记 + seal 身份已核验）——复用产物，跳过重跑",
+                        state.pipeline_id, sim_state.simulation_id,
+                    )
+                elif _sim_why and _sim_why != "sim_resume_reuse_completed_disabled":
+                    logger.debug(
+                        "[%s] 已完成模拟复用不成立（%s）→ 照旧重跑",
+                        state.pipeline_id, _sim_why,
+                    )
+            _run_already_done = _sim_disk_reuse or bool(
                 _prepare_reuse and state.stages.get(STAGE_RUN)
                 and state.stages[STAGE_RUN].status == "completed"
                 and self._run_reuse_ready(state, sim_state)
@@ -12221,6 +12526,15 @@ class PipelineOrchestrator:
                 run_stage_done = False
                 state.options["resumed_stage_validation"] = "run_rebuilt_manifest_mismatch"
                 logger.info("[%s] 模拟结果产物清单校验未通过，回落到重跑", state.pipeline_id)
+            # DEFECT-1: stage 位丢失但磁盘证据（完成标记 + seal 身份 + 产物清单）已在
+            # PREPARE 边界核验通过 → 走复用分支，不再重启模拟子进程。
+            if not run_stage_done and _sim_disk_reuse:
+                run_stage_done = True
+                state.options["resumed_stage_validation"] = "run_reused_completed_simulation"
+                logger.info(
+                    "[%s] 复用磁盘上已完成的模拟 %s（SIM_RESUME_REUSE_COMPLETED）",
+                    state.pipeline_id, sim_state.simulation_id,
+                )
             if run_stage_done:
                 upd(100, "复用已有模拟结果…")
                 _run_completion_message = "模拟已恢复"
@@ -12313,6 +12627,13 @@ class PipelineOrchestrator:
                                 logger.warning(f"[{state.pipeline_id}] 看门狗停止模拟失败: {_wd_err}")
                             raise RuntimeError(f"模拟约 {int(_stall_s)}s 无进展（疑似卡死），看门狗已终止")
                         time.sleep(5)
+                except BaseException:
+                    # DEFECT-3: 失败/取消/停滞的模拟同样烧了真金白银——在阶段失败前把
+                    # 子进程已落盘的 sim_llm_telemetry.json 恰好一次入账（_run 的 finally
+                    # 会把 LLMMeter 快照终版落盘 run_telemetry.json）。方法自身绝不抛出，
+                    # 原始异常原样上抛。
+                    self._record_sim_run_telemetry(state, sim_state.simulation_id)
+                    raise
                 finally:
                     _wd_ctl["stop"] = True  # C1/C2/ORCH-6: 任何退出路径都退休独立看门狗
                 # EXECPLAN2 F-12-1: 模拟结束后、读 actions.jsonl 写 run_summary 与跑报告之前，
@@ -12362,6 +12683,25 @@ class PipelineOrchestrator:
                     logger.warning("[%s] run_summary 未生成或结构无效", state.pipeline_id)
             except Exception as e:  # noqa: BLE001
                 logger.warning("[%s] run_summary 写出跳过: %s", state.pipeline_id, e)
+
+            # DEFECT-3: RUN 完成边界（新跑与复用共用）恰好一次入账模拟子进程的 token
+            # 花费。刻意放在下方完成证据门**之前**：token 已经真实烧掉，门若判失败也不
+            # 该丢账（meter_run_token 幂等守卫保证复用/重入/失败钩子的任何组合都不双计；
+            # _complete_stage / _fail_stage 都会随后 flush LLMMeter 快照进 run_telemetry）。
+            self._record_sim_run_telemetry(state, sim_state.simulation_id)
+
+            # DEFECT-2: hollow-run 完成证据门——rc=0/stage 返回/状态投影都不是完成证据
+            # （bug-sweep：子进程可以 rc=0 退出却从未产出 simulation_end，下游把它当成功
+            # 消费）。每个启用平台必须有 simulation_end 完成标记，且 run_summary.json 必须
+            # 有效；缺任一 → RUN 阶段以清晰讯息判失败（可 resume）。新跑与复用共用此门：
+            # legacy 完成位伪装的 hollow 结果同样在此被拦下（与 DEFECT-1 组合：不可复用）。
+            _gate_rs = (
+                SimulationRunner.get_run_state(sim_state.simulation_id)
+                if run_stage_done else rs
+            )
+            self._require_run_completion_evidence(
+                state, sim_state.simulation_id, _gate_rs, _run_summary_published,
+            )
 
             # Reconcile both freshly executed and reused RUNs. The successful EV
             # resume proved that a valid reused summary can coexist with a stale

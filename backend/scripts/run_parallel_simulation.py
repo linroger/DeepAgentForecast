@@ -80,7 +80,9 @@ import random
 import shutil
 import signal
 import sqlite3
+import threading
 import time
+import uuid
 import warnings
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
@@ -2003,6 +2005,208 @@ def _inject_period_context(env, active_ids, round_num, period, timeline,
 # 416/416 全部失败仍报 simulation_health='ok' 的整场空跑。模型请求层是唯一可靠的
 # 观测点：在这里计数调用/异常，循环结束落 llm_health.json 供健康门消费。
 # ============================================================================
+# ============================================================================
+# DEFECT-3: sim 子进程 token 计量落盘（最后一个记账盲区）。审计取证：648 次已确认的
+# LLM 调用在 run_telemetry.json 里记为 0 token——oasis_llm 为每次调用构造 usage
+# （CLI 桥接/回退路径按文本长度估算，直连路径为提供方真实值），但该 usage 喂给 camel
+# 后即被丢弃，子进程退出时整场模拟的 token 账随进程蒸发。这里在模型请求边界
+# （_wrap_model_llm_counter）逐调用累计 usage，按来源分桶：
+#   * source='provider'：提供方返回的真实 usage 字段；
+#   * source='estimate'：oasis_llm._build_chat_completion 伪造的长度估算——其
+#     completion id 恒以 'chatcmpl-cli-' 开头（CLI 桥接与 LLMClient 回退路径）；
+#   * source='missing'：响应不带 usage（只计调用数，token 记 0）。
+# 决策通道 / in-band 世界演化走 LLMClient 直连（不经 camel 模型边界）→ 由
+# _wrap_llm_client_usage 以同一累计器入账（精确 usage 优先，缺失时长度估算）。
+# 快照以 sim_llm_telemetry.json 原子落盘：模拟回路结束后写一版（命令等待模式可能
+# 驻留很久甚至被 SIGKILL），进程退出路径（__main__ 的 finally，含失败/信号优雅退出）
+# 再写终版。编排器在 RUN 阶段边界读取该文件并恰好一次地计入 stage='run' 的 LLMMeter
+# 记录（pipeline_orchestrator._record_sim_run_telemetry；meter_run_token 是幂等去重键，
+# 每次子进程启动铸新、同进程重写不变）。纯附加遥测：任何失败都被吞掉，绝不影响模拟。
+# ============================================================================
+SIM_LLM_TELEMETRY_FILE = "sim_llm_telemetry.json"
+SIM_LLM_TELEMETRY_SCHEMA = "sim-llm-telemetry/v1"
+_SIM_LLM_METER_RUN_TOKEN = uuid.uuid4().hex
+_SIM_LLM_METER_STARTED = time.time()
+_SIM_LLM_USAGE_LOCK = threading.Lock()
+_SIM_LLM_USAGE: Dict[str, Any] = {
+    "calls": 0,
+    "errors": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "by_source": {},
+    "by_model": {},
+}
+# main() 钉定、__main__ 的 finally 消费：任何退出路径都能写终版快照。
+_SIM_LLM_TELEMETRY_SINK: Dict[str, Any] = {"dir": None, "config": None}
+
+
+def _record_sim_llm_usage(source: str, model: str,
+                          prompt_tokens: Any, completion_tokens: Any) -> None:
+    """向进程级累计器记一笔调用（线程安全、绝不抛出）。"""
+    try:
+        pt = max(0, int(prompt_tokens or 0))
+        ct = max(0, int(completion_tokens or 0))
+        key = str(model or "unknown")
+        with _SIM_LLM_USAGE_LOCK:
+            u = _SIM_LLM_USAGE
+            u["calls"] += 1
+            u["prompt_tokens"] += pt
+            u["completion_tokens"] += ct
+            for bucket_map, bucket_key in ((u["by_source"], str(source)),
+                                           (u["by_model"], key)):
+                b = bucket_map.setdefault(
+                    bucket_key,
+                    {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0})
+                b["calls"] += 1
+                b["prompt_tokens"] += pt
+                b["completion_tokens"] += ct
+    except Exception:  # noqa: BLE001 — 计量绝不影响调用路径
+        pass
+
+
+def _record_sim_llm_error() -> None:
+    """记一次模型边界调用失败（token 无从谈起，只计失败数）。"""
+    try:
+        with _SIM_LLM_USAGE_LOCK:
+            _SIM_LLM_USAGE["errors"] += 1
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _accumulate_sim_llm_response(response: Any) -> None:
+    """从一次 chat-completion 响应提取 usage 并入账（degrade-safe）。
+
+    oasis_llm._build_chat_completion 伪造的估算响应 id 恒以 'chatcmpl-cli-' 开头
+    （CLI 桥接与 LLMClient 回退路径）→ source='estimate'；其余带 usage 的响应视为
+    提供方真实值 → source='provider'；无 usage → source='missing'（token 记 0）。"""
+    try:
+        model = str(getattr(response, "model", "") or "unknown")
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            _record_sim_llm_usage("missing", model, 0, 0)
+            return
+        source = (
+            "estimate"
+            if str(getattr(response, "id", "") or "").startswith("chatcmpl-cli-")
+            else "provider"
+        )
+        _record_sim_llm_usage(
+            source, model,
+            getattr(usage, "prompt_tokens", 0),
+            getattr(usage, "completion_tokens", 0),
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _wrap_llm_client_usage(client: Any) -> Any:
+    """DEFECT-3: 包装决策通道 / in-band 演化所用 LLMClient 的 chat/chat_json。
+
+    这两条路径不经 camel 模型边界，其 LLMMeter 记录只活在子进程内存里。精确 usage
+    （client._last_usage，OpenAI 兼容直连路径填充）→ source='provider'；CLI 提供方
+    无精确 usage → 按文本长度估算 → source='estimate'。包装失败原样返回 client。"""
+    if client is None:
+        return client
+    try:
+        from app.utils.oasis_llm import _estimate_tokens_of
+
+        def _wrap_method(name: str) -> None:
+            orig = getattr(client, name, None)
+            if not callable(orig):
+                return
+
+            def _wrapped(messages, *args, **kwargs):
+                try:
+                    result = orig(messages, *args, **kwargs)
+                except Exception:
+                    _record_sim_llm_error()
+                    raise
+                try:
+                    model = str(
+                        getattr(client, "model", "")
+                        or getattr(client, "provider", "")
+                        or "unknown"
+                    )
+                    usage = getattr(client, "_last_usage", None)
+                    if isinstance(usage, dict) and (
+                        usage.get("prompt_tokens") or usage.get("completion_tokens")
+                    ):
+                        _record_sim_llm_usage(
+                            "provider", model,
+                            usage.get("prompt_tokens", 0),
+                            usage.get("completion_tokens", 0),
+                        )
+                    else:
+                        _record_sim_llm_usage(
+                            "estimate", model,
+                            _estimate_tokens_of(messages),
+                            _estimate_tokens_of(result),
+                        )
+                except Exception:  # noqa: BLE001 — 计量绝不影响调用结果
+                    pass
+                return result
+
+            setattr(client, name, _wrapped)
+
+        _wrap_method("chat")
+        _wrap_method("chat_json")
+    except Exception:  # noqa: BLE001 — 包装失败 → 该路径放弃计量，不阻断
+        pass
+    return client
+
+
+def _write_sim_llm_telemetry(simulation_dir: str,
+                             config: Optional[Dict[str, Any]] = None,
+                             log_info=None) -> None:
+    """把当前 usage 快照原子落盘 <sim_dir>/sim_llm_telemetry.json（幂等、绝不抛出）。"""
+    try:
+        from app.utils.atomic import write_json_atomic
+        with _SIM_LLM_USAGE_LOCK:
+            usage = json.loads(json.dumps(_SIM_LLM_USAGE))
+        cfg = config if isinstance(config, dict) else {}
+        try:
+            from app.utils.oasis_llm import _resolve_provider
+            provider = _resolve_provider(cfg)
+        except Exception:  # noqa: BLE001
+            provider = "unknown"
+        # 主导模型标签：按调用数取最大者；无调用时回退配置模型名/provider。
+        by_model = usage.get("by_model") or {}
+        model = ""
+        if by_model:
+            model = max(by_model.items(), key=lambda kv: kv[1].get("calls", 0))[0]
+        if not model or model == "unknown":
+            model = str(cfg.get("llm_model") or provider or "unknown")
+        payload = {
+            "schema_version": SIM_LLM_TELEMETRY_SCHEMA,
+            "simulation_id": str(
+                cfg.get("simulation_id")
+                or os.path.basename(os.path.abspath(simulation_dir))
+            ),
+            "meter_run_token": _SIM_LLM_METER_RUN_TOKEN,
+            "provider": str(provider or "unknown"),
+            "model": model,
+            "calls": int(usage.get("calls") or 0),
+            "errors": int(usage.get("errors") or 0),
+            "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+            "completion_tokens": int(usage.get("completion_tokens") or 0),
+            "total_tokens": (int(usage.get("prompt_tokens") or 0)
+                             + int(usage.get("completion_tokens") or 0)),
+            "by_source": usage.get("by_source") or {},
+            "by_model": by_model,
+            "wall_s": round(max(0.0, time.time() - _SIM_LLM_METER_STARTED), 3),
+            "written_at": datetime.now().isoformat(),
+        }
+        write_json_atomic(
+            os.path.join(simulation_dir, SIM_LLM_TELEMETRY_FILE), payload)
+        if log_info:
+            log_info(
+                f"sim_llm_telemetry.json 已落盘（calls={payload['calls']}, "
+                f"tokens={payload['total_tokens']}, provider={payload['provider']}）"
+            )
+    except Exception:  # noqa: BLE001 — 遥测落盘失败绝不影响模拟结果
+        pass
+
+
 def _wrap_model_llm_counter(model) -> Dict[str, int]:
     """包装模型的 chat-completion 请求方法以计数调用与异常。只包异步路径
     （OASIS astep 全走 _arequest_chat_completion；CLIModel 的异步实现委托同步方法，
@@ -2014,10 +2218,14 @@ def _wrap_model_llm_counter(model) -> Dict[str, int]:
             async def _acounted(*args, **kwargs):
                 counter["calls"] += 1
                 try:
-                    return await _aorig(*args, **kwargs)
+                    result = await _aorig(*args, **kwargs)
                 except Exception:
                     counter["errors"] += 1
+                    _record_sim_llm_error()
                     raise
+                # DEFECT-3: 逐调用累计 usage（真实/估算按来源分桶）；纯附加，绝不抛出。
+                _accumulate_sim_llm_response(result)
+                return result
             model._arequest_chat_completion = _acounted
         else:
             _orig = model._request_chat_completion
@@ -2025,10 +2233,13 @@ def _wrap_model_llm_counter(model) -> Dict[str, int]:
             def _counted(*args, **kwargs):
                 counter["calls"] += 1
                 try:
-                    return _orig(*args, **kwargs)
+                    result = _orig(*args, **kwargs)
                 except Exception:
                     counter["errors"] += 1
+                    _record_sim_llm_error()
                     raise
+                _accumulate_sim_llm_response(result)  # DEFECT-3（同上）
+                return result
             model._request_chat_completion = _counted
     except Exception:  # noqa: BLE001 — 遥测是附加物，绝不阻断模型创建
         pass
@@ -3138,7 +3349,8 @@ class _InbandWorldEvolution:
         self._finalized = False
         try:
             from app.utils.llm_client import LLMClient
-            self._llm = LLMClient()
+            # DEFECT-3: in-band 演化的 LLM 调用同样进 sim token 计量（不经 camel 边界）。
+            self._llm = _wrap_llm_client_usage(LLMClient())
         except Exception as _llm_err:  # noqa: BLE001 — LLM 缺席时演化退化为先验+熵地板
             self._llm = None
             log_info(f"in-band 世界演化 LLM 初始化失败（承诺恒空，轨迹退化为先验+熵地板）: {_llm_err}")
@@ -4835,6 +5047,9 @@ async def main():
         sys.exit(1)
     
     simulation_dir = os.path.dirname(args.config) or "."
+    # DEFECT-3: 尽早钉定遥测落盘目标——__main__ 的 finally 在任何退出路径（正常/异常/
+    # sys.exit/信号触发的优雅退出）都会据此写终版 sim_llm_telemetry.json。
+    _SIM_LLM_TELEMETRY_SINK["dir"] = simulation_dir
     validated_config_manifest = validate_direct_child_config_seal(
         args.config, args.config_seal
     )
@@ -4845,6 +5060,7 @@ async def main():
         args.config,
         str(validated_config_manifest.get("simulation_config_sha256") or "") or None,
     )
+    _SIM_LLM_TELEMETRY_SINK["config"] = config  # DEFECT-3: 落盘时解析 provider/model
     wait_for_commands = not args.no_wait
     
     # 初始化日志配置（禁用 OASIS 日志，清理旧文件）
@@ -4942,6 +5158,11 @@ async def main():
     log_manager.info("=" * 60)
     log_manager.info(f"模拟循环完成! 总耗时: {total_elapsed:.1f}秒")
 
+    # DEFECT-3: 模拟回路刚结束就落一版 token 快照——命令等待模式可能驻留很久甚至被
+    # SIGKILL，先把回路花费钉在盘上；进程退出路径（__main__ 的 finally）会再写终版
+    # （原子覆盖，含随后的决策通道/采访花费）。
+    _write_sim_llm_telemetry(simulation_dir, config, log_manager.info)
+
     # EXECPLAN2 I-2-0: 模拟结束后（只读）计算涌现结构 / 观点动力学度量。
     # 默认关闭（SIM_EMERGENT_METRICS!=true 时完全跳过，run 产物逐字节不变）；
     # 全程 try/except 隔离，失败不影响已完成的模拟与后续 interview/关闭流程。
@@ -4991,7 +5212,9 @@ async def main():
             _tc_posthoc = config.get("temporal_config") if isinstance(config, dict) else None
             _tc_posthoc = _tc_posthoc if isinstance(_tc_posthoc, dict) else {}
             _res = run_decision_channel(
-                _acts, config.get("agent_configs"), _ws_seed, LLMClient(),
+                # DEFECT-3: 决策通道批调用同样进 sim token 计量（不经 camel 边界）。
+                _acts, config.get("agent_configs"), _ws_seed,
+                _wrap_llm_client_usage(LLMClient()),
                 inertia=_inertia, conv_eps=_eps,
                 round_to_date=_build_round_to_date(_ws_seed, config),
                 # 日历模式回退：精确 round→时段映射（hours 模式无 temporal_config → None，
@@ -5127,6 +5350,13 @@ if __name__ == "__main__":
     except SystemExit:
         pass
     finally:
+        # DEFECT-3: 终版 token 快照——失败/中断/信号退出路径也不丢账（目录未钉定 =
+        # 从未进入 main 主体 = 无任何调用可记）。写入原子且绝不抛出。
+        if _SIM_LLM_TELEMETRY_SINK.get("dir"):
+            _write_sim_llm_telemetry(
+                _SIM_LLM_TELEMETRY_SINK["dir"],
+                _SIM_LLM_TELEMETRY_SINK.get("config"),
+            )
         # 清理 multiprocessing 资源跟踪器（防止退出时的警告）
         try:
             from multiprocessing import resource_tracker
