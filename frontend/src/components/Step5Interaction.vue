@@ -63,6 +63,44 @@
               </div>
             </div>
           </div>
+
+          <!-- VIZ-GALLERY：viz_manifest 图表画廊（与 Step4 同一模式）。
+               无清单（旧报告 404 / 空清单）→ 整块隐藏，不产生错误噪音。 -->
+          <div v-if="vizGalleryCards.length" class="viz-gallery-block">
+            <div class="viz-gallery-divider"></div>
+            <h3 class="viz-gallery-title">图表 / Charts</h3>
+            <div class="viz-gallery-grid">
+              <figure v-for="card in vizGalleryCards" :key="card.id" class="viz-chart-card">
+                <a
+                  v-if="card.src"
+                  class="viz-chart-thumb-link"
+                  :href="card.interactive || card.src"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <img class="viz-chart-img" :src="card.src" :alt="card.caption || card.id" loading="lazy" />
+                </a>
+                <a
+                  v-else-if="card.interactive"
+                  class="viz-chart-html-only"
+                  :href="card.interactive"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >打开交互式图表 ↗</a>
+                <figcaption class="viz-chart-caption">
+                  <span class="viz-chart-caption-text">{{ card.caption || card.id }}</span>
+                  <a
+                    v-if="card.interactive && card.src"
+                    class="viz-chart-interactive"
+                    :href="card.interactive"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >交互版 ↗</a>
+                </figcaption>
+              </figure>
+            </div>
+            <p v-if="vizSkippedNote" class="viz-skipped-note">{{ vizSkippedNote }}</p>
+          </div>
         </div>
 
         <!-- Waiting State -->
@@ -412,8 +450,10 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { chatWithReport, getReport, getAgentLog } from '../api/report'
+import { chatWithReport, getReport, getAgentLog, getVizManifest, reportAssetUrl } from '../api/report'
 import { interviewAgents, getSimulationProfilesRealtime } from '../api/simulation'
+import { normalizeVizGallery } from '../utils/vizManifest'
+import { stripLegacyVizMarkup, vizSkippedFootnote } from '../utils/legacyReportViz'
 
 const props = defineProps({
   reportId: String,
@@ -451,6 +491,44 @@ const generatedSections = ref({})
 const collapsedSections = ref(new Set())
 const currentSectionIndex = ref(null)
 const profiles = ref([])
+
+// VIZ-GALLERY State（viz_manifest 驱动的图表画廊，与 Step4 同一模式）
+const vizGalleryItems = ref([])
+const vizSkipped = ref([])
+let vizManifestToken = 0
+
+// 拉取 viz_manifest：老报告无清单（404）/ 网络错误 → 置空并静默隐藏画廊。
+const loadVizGallery = async () => {
+  if (!props.reportId) return
+  const token = ++vizManifestToken
+  const requestReportId = props.reportId
+  try {
+    const res = await getVizManifest(requestReportId)
+    if (token !== vizManifestToken || requestReportId !== props.reportId) return
+    const list = Array.isArray(res && res.data) ? res.data : []
+    vizGalleryItems.value = normalizeVizGallery(list)
+    vizSkipped.value = Array.isArray(res && res.skipped) ? res.skipped : []
+  } catch {
+    if (token === vizManifestToken && requestReportId === props.reportId) {
+      vizGalleryItems.value = []
+      vizSkipped.value = []
+    }
+  }
+}
+
+// 画廊卡片：PNG 缩略图（png_path 经 reportAssetUrl）+ 图注 + 交互式 HTML 孪生链接。
+const vizGalleryCards = computed(() => {
+  if (!props.reportId) return []
+  return vizGalleryItems.value.map((item, idx) => ({
+    id: item.id || `chart-${idx}`,
+    caption: item.caption || '',
+    src: item.imagePath ? reportAssetUrl(props.reportId, item.imagePath) : '',
+    interactive: item.interactivePath ? reportAssetUrl(props.reportId, item.interactivePath) : ''
+  }))
+})
+
+// skipped[] → 单行低调脚注。
+const vizSkippedNote = computed(() => vizSkippedFootnote(vizSkipped.value))
 
 // Helper Methods
 const isSectionCompleted = (sectionIndex) => {
@@ -555,6 +633,9 @@ const renderMarkdown = (content) => {
   if (!content) return ''
   
   let processedContent = content.replace(/^##\s+.+\n+/, '')
+  // VIZ-GALLERY 缓解：本渲染器不支持图片语法，图表行（<!-- viz:… --> 标记与
+  // ![…](charts/…) 图片）会以字面文本漏出 → 整行剥离，图表由画廊展示。
+  processedContent = stripLegacyVizMarkup(processedContent)
   let html = processedContent.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
   html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
   html = html.replace(/^#### (.+)$/gm, '<h5 class="md-h5">$1</h5>')
@@ -881,6 +962,9 @@ const loadReportData = async () => {
       // Load agent logs to get report outline and sections
       await loadAgentLogs()
     }
+
+    // VIZ-GALLERY：报告 id 就绪即拉图表清单（degrade-safe，失败静默隐藏）
+    loadVizGallery()
   } catch (err) {
     addLog(`加载报告失败: ${err.message}`)
   }
@@ -2570,5 +2654,108 @@ watch(() => props.simulationId, (newId) => {
   border: none;
   border-top: 1px solid #E5E7EB;
   margin: 24px 0;
+}
+
+/* VIZ-GALLERY：图表画廊（与 Step4 同一灰阶/衬线词汇表） */
+.viz-gallery-block {
+  margin-top: 40px;
+}
+
+.viz-gallery-divider {
+  height: 1px;
+  background: #E5E7EB;
+  width: 100%;
+  margin-bottom: 28px;
+}
+
+.viz-gallery-title {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 16px 0;
+}
+
+.viz-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.viz-chart-card {
+  margin: 0;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  background: #FFFFFF;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s ease;
+}
+
+.viz-chart-card:hover {
+  border-color: #D1D5DB;
+}
+
+.viz-chart-thumb-link {
+  display: block;
+  background: #F9FAFB;
+  line-height: 0;
+}
+
+.viz-chart-img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.viz-chart-html-only {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  background: #F9FAFB;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.viz-chart-html-only:hover {
+  text-decoration: underline;
+}
+
+.viz-chart-caption {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid #F3F4F6;
+  font-size: 12px;
+  color: #6B7280;
+  line-height: 1.5;
+}
+
+.viz-chart-caption-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.viz-chart-interactive {
+  color: #374151;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.viz-chart-interactive:hover {
+  text-decoration: underline;
+}
+
+.viz-skipped-note {
+  margin: 12px 0 0 0;
+  font-size: 12px;
+  color: #9CA3AF;
 }
 </style>
