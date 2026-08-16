@@ -186,3 +186,17 @@ This repository implements a six-stage forecast workflow: DeerFlow 2 research, o
 - **Landed:** graph-stage cast-relevance chunk pre-filter (zero-hit chunks skip LLM extraction; safe bypass guards; alarm denominators adjusted) + shared per-chunk attempt budget (GRAPH_CHUNK_MAX_ATTEMPTS=2 across schema re-roll/fallback/429-replay; was 3-4 full passes ≈ ~24 provider calls per failing slot); run-level provider-outage breaker (LLM_OUTAGE_HALT_CONSECUTIVE=10 → existing failed→resume checkpoint state, no more 26h grinds); research attempt spend flushed to the meter exactly once on failure/timeout/cancel (fixes 31.9M vs 5.35M); _SLIM_EDGE_KEYS temporal fields; deployed skill overlay re-synced (byte-identity suite caught post-checkpoint drift — deer-flow/ is gitignored runtime, fixed on disk via runtime_skill_sync).
 - **Tests:** full backend suite exit 0 / zero failures; 57 new red-first tests; 464 graph-adjacent + 318 orchestrator-suite green; ruff clean.
 - **Next:** remaining backlog — research thread compaction/caching recommendation doc (product-behavior knobs need user sign-off), sim resume reuse, sim-subprocess meter persistence, chart theme unification, Step4 chart gallery. Expected impact so far: graph stage ~8h→bounded (filter + caps), outages halt in minutes not days, telemetry now complete for graph + failed research attempts.
+
+### 2026-08-17T21:22:00Z — branch `codex/shenzhen`
+
+- **Feature:** continuous improvement loop, iteration 5 (commits 0c2348f + 97fe0f5)
+- **Landed:** sim resume reuse (three-layer fail-closed identity incl. LOOP-011 seal authority; SIM_RESUME_REUSE_COMPLETED=true), hollow-run completion gate, sim-subprocess meter persistence (last token blind spot closed; exactly-once orchestrator record); docs/RESEARCH_STAGE_OPTIMIZATION.md (owner-gated 78M-token levers); Step4/Step5 manifest-driven chart gallery + literal '![' strip; frontend dist rebuilt so :5001 serves the latest UI.
+- **Tests:** full backend suite 3,003 collected exit 0 (sim agent's own gate); frontend 53/53; all focused suites green.
+- **Loop total so far:** 7 commits (i1 UI entry/serving/failover, i2 telemetry/purity/polymarket, i3 dataviz, checkpoint, i4 graph bounding + outage halt, i5 sim fixes, i5b gallery). Every audit finding-cluster now addressed or owner-gated.
+- **Next:** iteration 6 candidates (safe残余): research/report chart theme unification (forecast-visuals render.py now committed), self-hosted fonts, disk-usage report (no deletion — 3.2GB uploads retention needs owner sign-off), then loop wind-down pending owner review of RESEARCH_STAGE_OPTIMIZATION.md decisions.
+
+### 2026-08-17T22:08:00Z — branch `codex/shenzhen`
+
+- **Feature:** continuous improvement loop, iteration 6 (final)
+- **Landed:** research-stage charts unified to the WAVE9 report theme (15 constants AST-verified identical; superior date-axis/dashed-forecast behaviors preserved; role palette re-validated; deployed overlay re-synced byte-identical); self-hosted fonts (@fontsource, CDN links removed, zero external refs in built page); backend/scripts/disk_usage_report.py (read-only; found 1.57GB of the 1.9GB reports footprint is 3 pre-i2 inline-plotly reports).
+- **Loop wind-down:** safe-autonomous backlog exhausted. Owner-gated remainder: research token levers (docs/RESEARCH_STAGE_OPTIMIZATION.md), disk cleanup (report script ready), legacy-tree deletion, port-80 Apache (sudo), prompt-caching spike (paid provider experiments).

@@ -716,9 +716,18 @@ def test_market_and_source_ownership_replaces_legacy_rows_but_preserves_custom(t
 def test_timeline_matplotlib_fallback_annotates_each_event_once(tmp_path, monkeypatch):
     renderer = _load_renderer()
 
+    class FakeSpine:
+        def set_color(self, *args, **kwargs):
+            return None
+
+    class FakePatch:
+        def set_facecolor(self, *args, **kwargs):
+            return None
+
     class FakeAxes:
         def __init__(self):
             self.annotations = []
+            self.spines = {"left": FakeSpine(), "bottom": FakeSpine()}
 
         def scatter(self, *args, **kwargs):
             return None
@@ -738,11 +747,27 @@ def test_timeline_matplotlib_fallback_annotates_each_event_once(tmp_path, monkey
         def set_xticks(self, *args, **kwargs):
             return None
 
+        def set_facecolor(self, *args, **kwargs):
+            return None
+
+        def tick_params(self, *args, **kwargs):
+            return None
+
     class FakeFigure:
+        # Mirrors the real matplotlib Figure surface the renderer's WAVE9
+        # finalizer touches: patch/get_axes for the surface color, savefig
+        # with a facecolor kwarg.
+        def __init__(self, axes):
+            self.patch = FakePatch()
+            self._axes = [axes]
+
+        def get_axes(self):
+            return self._axes
+
         def tight_layout(self):
             return None
 
-        def savefig(self, path):
+        def savefig(self, path, **kwargs):
             Path(path).touch()
 
     class FakePyplot:
@@ -750,7 +775,7 @@ def test_timeline_matplotlib_fallback_annotates_each_event_once(tmp_path, monkey
             self.axes = FakeAxes()
 
         def subplots(self, *args, **kwargs):
-            return FakeFigure(), self.axes
+            return FakeFigure(self.axes), self.axes
 
         def close(self, *args, **kwargs):
             return None

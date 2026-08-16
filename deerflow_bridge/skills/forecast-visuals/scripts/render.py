@@ -31,6 +31,9 @@
 
 设计约束（与 SKILL.md 的失败模式清单一致）：
   * 缺哪个工件跳哪张图，绝不造数据；单图失败绝不拖垮其余（每图独立 try/except）。
+  * 视觉主题与报告端 WAVE9 统一（见下方 WAVE9-THEME 块：#fcfcfb 画布、CVD-safe
+    分类色板、顶部右侧图例、同款字体栈/网格），源真值是
+    backend/app/services/report_visualizer.py。
   * HTML 自包含（plotly.js 内联），无网络依赖。
   * PNG：kaleido 可导入且能出图 → 用之；否则 matplotlib 简化重绘；两者皆无 → 只出
     HTML（清单条目仍登记，path 指向 html）。
@@ -83,22 +86,100 @@ except Exception:  # noqa: BLE001
     plt = None  # type: ignore
     _HAS_MPL = False
 
-# 角色类 → 颜色（与 SKILL.md 的 role_class 分组一致；未知类回退灰）。
+# ---------------------------------------------------------------------------
+# WAVE9-THEME — duplicated verbatim from the report-stage renderer so research
+# and report charts read as one product.
+# SOURCE OF TRUTH: backend/app/services/report_visualizer.py（“WAVE9 统一图表
+# 风格” 常量块 _VIZ_FONT/_PALETTE/_SEQ_BLUES/_COLOR_*/_SURFACE/_GRID/_AXIS/
+# _INK/_INK_2 与 _apply_layout）。本脚本运行在 deer-flow venv、不可 import
+# backend 包，只能整块复制。
+# SYNC OBLIGATION: report_visualizer.py 的主题常量一旦变更，必须同步改这里
+# （整块保持逐字一致以便 diff 校验），并重跑 runtime_skill_sync.py 让
+# deer-flow/skills/public 的部署副本保持字节一致。未在本文件使用的常量
+# （如 _COLOR_MARKET/_COLOR_GOOD）也保留，正是为了整块 diff 可核对。
+# ---------------------------------------------------------------------------
+_VIZ_FONT = ('system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, '
+             '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", '
+             'sans-serif')
+_PALETTE = ["#2a78d6", "#1baf7a", "#eda100", "#008300",
+            "#4a3aa7", "#e34948", "#e87ba4", "#eb6834"]
+_SEQ_BLUES = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95"]
+_COLOR_MODEL = "#2a78d6"    # 模型概率（分类槽 1 蓝）
+_COLOR_MARKET = "#e34948"   # 市场隐含概率（发散对红极）
+_COLOR_POS = "#1baf7a"      # 正向/结盟边
+_COLOR_NEG = "#e34948"      # 负向/对抗边
+_COLOR_NEU = "#b3b1a9"      # 中性/交易型边
+_COLOR_STALE = "#d03b3b"    # 状态色 critical（陈旧/不可达标记，不与分类色混用）
+_COLOR_GOOD = "#0ca30c"     # 状态色 good（可达）
+_SURFACE = "#fcfcfb"
+_GRID = "#e1e0d9"
+_AXIS = "#c3c2b7"
+_INK = "#0b0b0b"
+_INK_2 = "#52514e"
+
+# WAVE9 图例约定：顶部右侧横排（与 report_visualizer 各构建器一致）。
+_WAVE9_LEGEND = {"orientation": "h", "yanchor": "bottom", "y": 1.02,
+                 "xanchor": "right", "x": 1}
+
+# 观测/预测双态色：与 report_visualizer 的 quantitative 构建器完全一致
+# （Observed / reported = 分类槽 1 蓝；Published forecast / target = 分类槽 3 琥珀）。
+_COLOR_OBSERVED = _COLOR_MODEL
+_COLOR_FORECAST = _PALETTE[2]
+
+
+def _apply_wave9_layout(fig, title: str, height=None, **kwargs) -> None:
+    """统一 plotly 布局（镜像 report_visualizer._apply_layout）：浅色画布 + 细网格 +
+    固定分类色板 + CJK 安全字体栈。就地修改 fig；height=None 时保留内容自驱高度。
+    kwargs 覆盖默认布局键（margin/legend/axis 等），与 report 端调用形态一致。"""
+    layout = dict(
+        title=dict(text=title, font=dict(size=16, color=_INK, family=_VIZ_FONT), x=0.02),
+        font=dict(family=_VIZ_FONT, size=12, color=_INK_2),
+        paper_bgcolor=_SURFACE, plot_bgcolor=_SURFACE,
+        colorway=list(_PALETTE),
+        margin=dict(l=10, r=24, t=58, b=46),
+        hoverlabel=dict(font=dict(family=_VIZ_FONT, size=12)),
+    )
+    if height is not None:
+        layout["height"] = height
+    layout.update(kwargs)
+    fig.update_layout(**layout)
+    fig.update_xaxes(gridcolor=_GRID, zerolinecolor=_AXIS, linecolor=_AXIS,
+                     tickfont=dict(size=11))
+    fig.update_yaxes(gridcolor=_GRID, zerolinecolor=_AXIS, linecolor=_AXIS,
+                     tickfont=dict(size=11))
+
+
+def _mpl_finalize(f, path: str) -> None:
+    """matplotlib 降级面同样落在 WAVE9 画布上：surface 底色 + 灰轴/刻度，再保存关图。"""
+    f.patch.set_facecolor(_SURFACE)
+    for ax in f.get_axes():
+        ax.set_facecolor(_SURFACE)
+        for spine in ax.spines.values():
+            spine.set_color(_AXIS)
+        ax.tick_params(colors=_INK_2, labelcolor=_INK_2)
+    f.tight_layout()
+    f.savefig(path, facecolor=_SURFACE)
+    plt.close(f)
+
+
+# 角色类 → 颜色（与 SKILL.md 的 role_class 分组一致；未知类回退中性灰）。
+# 色相取自 WAVE9 固定顺序分类色板（绝不循环生成）；槽位组合已通过 dataviz
+# 六检验证（all-pairs），CVD 6–8 底线对由节点常开直接标签兜底。
 _ROLE_COLORS = {
-    "principal": "#3b6fb0",
-    "arbiter": "#8250df",
-    "stakeholder": "#2f8f5b",
-    "amplifier": "#c0603a",
-    "intermediary": "#b08a2e",
+    "principal": _PALETTE[0],     # 蓝
+    "arbiter": _PALETTE[4],       # 紫
+    "stakeholder": _PALETTE[1],   # 绿
+    "amplifier": _PALETTE[2],     # 琥珀
+    "intermediary": _PALETTE[6],  # 粉
 }
-_ROLE_FALLBACK = "#6e7781"
-# 边 valence → 颜色：对抗红 / 合作绿 / 治理紫 / 其他灰。
+_ROLE_FALLBACK = _COLOR_NEU
+# 边 valence → 颜色：对抗（发散红极）/ 合作（正向绿）/ 治理（紫槽）/ 其他中性灰。
 _EDGE_COLORS = {
-    "adversarial": "#c04a3a",
-    "cooperative": "#2f8f5b",
-    "governance": "#8250df",
+    "adversarial": _COLOR_NEG,
+    "cooperative": _COLOR_POS,
+    "governance": _PALETTE[4],
 }
-_EDGE_FALLBACK = "#9aa0a6"
+_EDGE_FALLBACK = _COLOR_NEU
 _LEVEL_WEIGHT = {
     "very high": 4.0, "high": 3.0, "medium": 2.0, "moderate": 2.0,
     "med": 2.0, "low": 1.0, "very low": 0.5,
@@ -1284,10 +1365,10 @@ def _write_outputs(fig, mpl_draw, charts_dir: Path, stem: str) -> tuple[str | No
     返回 (png 相对路径 | None, html 相对路径 | None)；两者皆 None = 该图失败。"""
     html_rel = png_rel = None
     if _HAS_PLOTLY and fig is not None:
-        # Keep standalone PNG/PDF embedding legible in dark-mode viewers and
-        # respect each chart's content-driven height instead of stretching
-        # every figure to the same 750px canvas.
-        fig.update_layout(paper_bgcolor="#ffffff", plot_bgcolor="#ffffff")
+        # Pin the WAVE9 light surface so standalone PNG/PDF embedding stays
+        # legible in dark-mode viewers, and respect each chart's content-driven
+        # height instead of stretching every figure to the same 750px canvas.
+        fig.update_layout(paper_bgcolor=_SURFACE, plot_bgcolor=_SURFACE)
         html_path = charts_dir / f"{stem}.html"
         try:
             fig.write_html(
@@ -1349,26 +1430,26 @@ def render_network(prep, charts_dir: Path):
             mode="markers+text", text=[n["name"] for n in nodes], textposition="top center",
             textfont={"size": 10},
             marker={"size": [n["size"] for n in nodes], "color": [n["color"] for n in nodes],
-                        "line": {"color": "#ffffff", "width": 1}},
+                        "line": {"color": _SURFACE, "width": 1}},
             hovertext=[f"{n['name']} ({n['role_class']})" for n in nodes], hoverinfo="text",
             showlegend=False))
-        fig.update_layout(title="Actor Relationship Network", template="plotly_white",
-                          xaxis={"visible": False}, yaxis={"visible": False},
-                          margin={"l": 20, "r": 20, "t": 60, "b": 20})
+        _apply_wave9_layout(
+            fig, "Actor Relationship Network",
+            xaxis={"visible": False}, yaxis={"visible": False},
+            margin={"l": 20, "r": 20, "t": 60, "b": 20},
+        )
 
     def mpl_draw(path: str) -> None:
         f, ax = plt.subplots(figsize=(12, 7.5), dpi=160)
         for e in prep["edges"]:
             ax.plot([e["x0"], e["x1"]], [e["y0"], e["y1"]], color=e["color"], lw=0.9, alpha=0.7, zorder=1)
         for n in prep["nodes"]:
-            ax.scatter([n["x"]], [n["y"]], s=n["size"] ** 1.6, c=n["color"], zorder=2, edgecolors="white")
+            ax.scatter([n["x"]], [n["y"]], s=n["size"] ** 1.6, c=n["color"], zorder=2, edgecolors=_SURFACE)
             ax.annotate(n["name"], (n["x"], n["y"]), textcoords="offset points", xytext=(0, 8),
                         ha="center", fontsize=7)
         ax.set_title("Actor Relationship Network")
         ax.axis("off")
-        f.tight_layout()
-        f.savefig(path)
-        plt.close(f)
+        _mpl_finalize(f, path)
 
     return _write_outputs(fig, mpl_draw, charts_dir, "actor_network")
 
@@ -1381,11 +1462,11 @@ def render_timeline(prep, charts_dir: Path):
         fig = go.Figure(go.Scatter(
             x=[p["date"] for p in pts], y=[p["lane"] for p in pts],
             mode="markers+text", text=[f"{p['index']:02d}" for p in pts],
-            textposition="middle center", textfont={"size": 8, "color": "white"},
+            textposition="middle center", textfont={"size": 8, "color": _SURFACE},
             hovertext=[f"<b>{_plotly_text(p['date'])}</b><br>{_plotly_text(p['full'])}" for p in pts],
             hoverinfo="text",
-            marker={"size": 20, "color": "#3b6fb0",
-                    "line": {"color": "white", "width": 1.5}}))
+            marker={"size": 20, "color": _COLOR_MODEL,
+                    "line": {"color": _SURFACE, "width": 1.5}}))
         key_columns = 2 if len(pts) > 14 else 1
         key_rows = max(1, math.ceil(len(pts) / key_columns))
         for position, point in enumerate(pts):
@@ -1397,18 +1478,19 @@ def render_timeline(prep, charts_dir: Path):
                 text=(f"<b>{point['index']:02d}</b>  {_plotly_text(point['date'])}  "
                       f"{_plotly_text(_truncate(point['label'], 68 if key_columns == 2 else 86))}"),
                 xanchor="left", yanchor="top", align="left",
-                font={"size": 9, "color": "#24292f"},
+                font={"size": 9, "color": _INK_2},
             )
-        fig.update_layout(title=f"Event Timeline ({len(pts)} key events)", template="plotly_white",
-                          yaxis={"visible": False, "range": [0, lane_ceiling]}, xaxis_title="date",
-                          height=max(620, 430 + 28 * key_rows),
-                          margin={"l": 30, "r": 30, "t": 60,
-                                  "b": 90 + 23 * key_rows})
+        _apply_wave9_layout(
+            fig, f"Event Timeline ({len(pts)} key events)",
+            height=max(620, 430 + 28 * key_rows),
+            yaxis={"visible": False, "range": [0, lane_ceiling]}, xaxis_title="date",
+            margin={"l": 30, "r": 30, "t": 60, "b": 90 + 23 * key_rows},
+        )
 
     def mpl_draw(path: str) -> None:
         f, ax = plt.subplots(figsize=(12, 7.5), dpi=160)
         xs = list(range(len(pts)))
-        ax.scatter(xs, [p["lane"] for p in pts], s=28, c="#3b6fb0", zorder=2)
+        ax.scatter(xs, [p["lane"] for p in pts], s=28, c=_COLOR_MODEL, zorder=2)
         for x, p in zip(xs, pts, strict=False):
             ax.annotate(f"{p['index']:02d}  {p['date']}\n{_truncate(p['label'], 54)}",
                         (x, p["lane"]),
@@ -1417,9 +1499,7 @@ def render_timeline(prep, charts_dir: Path):
         ax.set_ylim(0, lane_ceiling)
         ax.set_yticks([])
         ax.set_xticks([])
-        f.tight_layout()
-        f.savefig(path)
-        plt.close(f)
+        _mpl_finalize(f, path)
 
     return _write_outputs(fig, mpl_draw, charts_dir, "timeline")
 
@@ -1447,9 +1527,10 @@ def render_quant(prep, charts_dir: Path):
                 if not bars:
                     continue
                 status = "Published forecast / target" if projection else "Observed / reported"
+                status_color = _COLOR_FORECAST if projection else _COLOR_OBSERVED
                 fig.add_trace(go.Scatter(
                     x=[bar["value"] for bar in bars],
-                    y=[bar["label"] for bar in bars],
+                    y=[bar["label"] + (" ⚠" if bar["stale"] else "") for bar in bars],
                     mode="markers",
                     name=status,
                     legendgroup=status,
@@ -1457,9 +1538,9 @@ def render_quant(prep, charts_dir: Path):
                     marker={
                         "size": 11,
                         "symbol": "diamond" if projection else "circle",
-                        "color": "#b36b00" if projection else "#3b6fb0",
+                        "color": status_color,
                         "line": {
-                            "color": ["#c04a3a" if bar["stale"] else "#ffffff" for bar in bars],
+                            "color": [_COLOR_STALE if bar["stale"] else _SURFACE for bar in bars],
                             "width": 2,
                         },
                     },
@@ -1469,13 +1550,14 @@ def render_quant(prep, charts_dir: Path):
                         "array": [max(0.0, bar["high"] - bar["value"]) for bar in bars],
                         "arrayminus": [max(0.0, bar["value"] - bar["low"]) for bar in bars],
                         "visible": any(bar["high"] > bar["low"] for bar in bars),
-                        "color": "#6e7781",
-                        "thickness": 1.5,
+                        "color": status_color,
+                        "thickness": 1.4,
                     },
                     hovertext=["<br>".join(
                         part for part in (
                             f"<b>{_plotly_text(bar['metric'])}</b>",
-                            f"{_plotly_text(bar['value_label'])} {panel['unit']}",
+                            f"{_plotly_text(bar['value_label'])} {panel['unit']}"
+                            + (" · ⚠ stale" if bar["stale"] else ""),
                             f"as of {bar['as_of']}" if bar["as_of"] else "",
                             _plotly_text(bar["definition"]),
                             _plotly_text(bar["source"]),
@@ -1486,13 +1568,12 @@ def render_quant(prep, charts_dir: Path):
                 shown.add(status)
             fig.update_xaxes(title_text=panel["unit"], row=row_no, col=1)
             fig.update_yaxes(autorange="reversed", row=row_no, col=1)
-        fig.update_layout(
-            title=f"{title}<br><sup>Each panel shares one explicit denominator; hover for source and as-of.</sup>",
-            template="plotly_white",
+        _apply_wave9_layout(
+            fig,
+            f"{title}<br><sup>Each panel shares one explicit denominator; hover for source and as-of.</sup>",
             height=max(440, 260 * len(panels) + 120),
-            margin={"l": 330, "r": 40, "t": 90, "b": 85},
-            legend={"orientation": "h", "y": -0.09, "x": 0.5,
-                    "xanchor": "center", "yanchor": "top"},
+            margin={"l": 330, "r": 40, "t": 90, "b": 60},
+            legend=dict(_WAVE9_LEGEND),
         )
 
     def mpl_draw(path: str) -> None:
@@ -1503,7 +1584,7 @@ def render_quant(prep, charts_dir: Path):
         for ax, panel in zip(axes[:, 0], panels, strict=False):
             bars = panel["bars"]
             ys = list(range(len(bars)))
-            colors = ["#b36b00" if bar["projection"] else "#3b6fb0" for bar in bars]
+            colors = [_COLOR_FORECAST if bar["projection"] else _COLOR_OBSERVED for bar in bars]
             markers = ["D" if bar["projection"] else "o" for bar in bars]
             for y, bar, color, marker in zip(ys, bars, colors, markers, strict=False):
                 ax.errorbar(
@@ -1513,15 +1594,14 @@ def render_quant(prep, charts_dir: Path):
                     color=color, marker=marker, markersize=7, capsize=3,
                     linestyle="none",
                 )
-            ax.set_yticks(ys, [bar["label"] for bar in bars], fontsize=7)
+            ax.set_yticks(ys, [bar["label"] + (" ⚠" if bar["stale"] else "") for bar in bars],
+                          fontsize=7)
             ax.invert_yaxis()
             ax.set_title(f"{panel['title']} · {panel['unit']}")
             ax.set_xlabel(panel["unit"])
-            ax.grid(axis="x", alpha=0.25)
+            ax.grid(axis="x", color=_GRID)
         f.suptitle(title)
-        f.tight_layout()
-        f.savefig(path)
-        plt.close(f)
+        _mpl_finalize(f, path)
 
     return _write_outputs(fig, mpl_draw, charts_dir, "quant_metrics")
 
@@ -1547,6 +1627,7 @@ def render_trajectories(prep, charts_dir: Path):
                 if not subset:
                     continue
                 status = "Published forecast / target" if projection else "Observed / reported"
+                status_color = _COLOR_FORECAST if projection else _COLOR_OBSERVED
                 fig.add_trace(
                     go.Scatter(
                         x=[point["year"] for point in subset],
@@ -1556,13 +1637,15 @@ def render_trajectories(prep, charts_dir: Path):
                         legendgroup=status,
                         showlegend=status not in shown,
                         line={
-                            "color": "#b36b00" if projection else "#3b6fb0",
+                            "color": status_color,
                             "dash": "dash" if projection else "solid",
                             "width": 3,
                         },
                         marker={
                             "size": 10,
                             "symbol": "diamond" if projection else "circle",
+                            "color": status_color,
+                            "line": {"color": _SURFACE, "width": 2},
                         },
                         hovertext=["<br>".join(part for part in (
                             f"<b>{row['name']}</b>",
@@ -1583,15 +1666,15 @@ def render_trajectories(prep, charts_dir: Path):
                 row=row_no, col=1,
             )
             fig.update_yaxes(title_text=row["unit"], row=row_no, col=1)
-        fig.update_layout(
-            title=(
+        _apply_wave9_layout(
+            fig,
+            (
                 f"{title}<br><sup>Period dates drive the x-axis; publication/as-of dates "
                 "remain in hover. Dashed diamonds are forecasts or targets.</sup>"
             ),
-            template="plotly_white",
             height=max(560, 330 * len(series)),
-            margin={"l": 110, "r": 40, "t": 90, "b": 70},
-            legend={"orientation": "h", "y": -0.08, "x": 0.5, "xanchor": "center"},
+            margin={"l": 110, "r": 40, "t": 90, "b": 55},
+            legend=dict(_WAVE9_LEGEND),
         )
 
     def mpl_draw(path: str) -> None:
@@ -1603,8 +1686,8 @@ def render_trajectories(prep, charts_dir: Path):
         )
         for ax, row in zip(axes[:, 0], series, strict=False):
             for projection, color, marker, linestyle in (
-                (False, "#3b6fb0", "o", "-"),
-                (True, "#b36b00", "D", "--"),
+                (False, _COLOR_OBSERVED, "o", "-"),
+                (True, _COLOR_FORECAST, "D", "--"),
             ):
                 points = [p for p in row["points"] if p["projection"] is projection]
                 if not points:
@@ -1620,11 +1703,9 @@ def render_trajectories(prep, charts_dir: Path):
             ax.set_title(f"{row['name']} · {row['geography']}")
             ax.set_ylabel(row["unit"])
             ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
-            ax.grid(alpha=0.25)
+            ax.grid(color=_GRID)
         f.suptitle(title)
-        f.tight_layout()
-        f.savefig(path)
-        plt.close(f)
+        _mpl_finalize(f, path)
 
     return _write_outputs(fig, mpl_draw, charts_dir, "metric_trajectories")
 
@@ -1647,8 +1728,9 @@ def render_revisions(prep, charts_dir: Path):
                 mode="lines+markers+text",
                 text=[f"{point['value']:g}" for point in points],
                 textposition="top center",
-                line={"color": "#3b6fb0", "width": 3},
-                marker={"size": 10, "color": "#3b6fb0"},
+                line={"color": _COLOR_MODEL, "width": 3},
+                marker={"size": 10, "color": _COLOR_MODEL,
+                        "line": {"color": _SURFACE, "width": 2}},
                 hovertext=["<br>".join(part for part in (
                     f"<b>{row['name']}</b>",
                     f"vintage {point['vintage']}: {point['value']:g} {row['unit']}",
@@ -1660,8 +1742,8 @@ def render_revisions(prep, charts_dir: Path):
             ), row=row_no, col=1)
             fig.update_xaxes(title_text="forecast vintage", dtick=1, row=row_no, col=1)
             fig.update_yaxes(title_text=row["unit"], row=row_no, col=1)
-        fig.update_layout(
-            title=title, template="plotly_white", height=max(520, 320 * len(series)),
+        _apply_wave9_layout(
+            fig, title, height=max(520, 320 * len(series)),
             margin={"l": 100, "r": 40, "t": 75, "b": 45},
         )
 
@@ -1674,7 +1756,7 @@ def render_revisions(prep, charts_dir: Path):
             points = row["points"]
             xs = [point["vintage"] for point in points]
             ys = [point["value"] for point in points]
-            ax.plot(xs, ys, color="#3b6fb0", marker="o", lw=2.5)
+            ax.plot(xs, ys, color=_COLOR_MODEL, marker="o", lw=2.5)
             for x, y in zip(xs, ys, strict=False):
                 ax.annotate(f"{y:g}", (x, y), xytext=(0, 7), textcoords="offset points",
                             ha="center", fontsize=8)
@@ -1682,11 +1764,9 @@ def render_revisions(prep, charts_dir: Path):
             ax.set_xlabel("forecast vintage")
             ax.set_ylabel(row["unit"])
             ax.set_xticks(xs)
-            ax.grid(alpha=0.25)
+            ax.grid(color=_GRID)
         f.suptitle(title)
-        f.tight_layout()
-        f.savefig(path)
-        plt.close(f)
+        _mpl_finalize(f, path)
 
     return _write_outputs(fig, mpl_draw, charts_dir, "forecast_revisions")
 
@@ -1711,7 +1791,8 @@ def render_markets(prep, charts_dir: Path):
             orientation="h",
             marker={
                 "color": probabilities,
-                "colorscale": [[0.0, "#dce8f5"], [0.5, "#6f9fca"], [1.0, "#245b8f"]],
+                "colorscale": [[i / (len(_SEQ_BLUES) - 1), c]
+                               for i, c in enumerate(_SEQ_BLUES)],
                 "cmin": 0,
                 "cmax": 100,
             },
@@ -1724,10 +1805,9 @@ def render_markets(prep, charts_dir: Path):
                 "<br>Ends: %{customdata[3]}<extra></extra>"
             ),
         ))
-        fig.add_vline(x=50, line_dash="dot", line_color="#6e7781", line_width=1)
-        fig.update_layout(
-            title=title,
-            template="plotly_white",
+        fig.add_vline(x=50, line_dash="dot", line_color=_AXIS, line_width=1)
+        _apply_wave9_layout(
+            fig, title,
             xaxis={"title": "market-implied P(yes)", "range": [0, 100], "ticksuffix": "%"},
             margin={"l": 360, "r": 40, "t": 70, "b": 40},
             showlegend=False,
@@ -1735,17 +1815,15 @@ def render_markets(prep, charts_dir: Path):
 
     def mpl_draw(path: str) -> None:
         f, ax = plt.subplots(figsize=(12, 7.5), dpi=160)
-        bars = ax.barh([row["label"] for row in markets], probabilities, color="#3b6fb0")
+        bars = ax.barh([row["label"] for row in markets], probabilities, color=_COLOR_MODEL)
         if hasattr(ax, "bar_label"):
             ax.bar_label(bars, fmt="%.1f%%", padding=3, fontsize=7)
-        ax.axvline(50, color="#6e7781", lw=1, ls="--")
+        ax.axvline(50, color=_AXIS, lw=1, ls="--")
         ax.set_xlim(0, 100)
         ax.set_title(title)
         ax.set_xlabel("market-implied P(yes), %")
         ax.tick_params(axis="y", labelsize=7)
-        f.tight_layout()
-        f.savefig(path)
-        plt.close(f)
+        _mpl_finalize(f, path)
 
     return _write_outputs(fig, mpl_draw, charts_dir, "market_probabilities")
 
@@ -1769,7 +1847,7 @@ def render_sources(prep, charts_dir: Path):
                 x=[row["count"] for row in tiers],
                 y=[row["label"] for row in tiers],
                 orientation="h",
-                marker_color="#8250df",
+                marker_color=_PALETTE[4],
                 hovertemplate="%{y}: %{x} sources<extra></extra>",
                 showlegend=False,
             ),
@@ -1781,7 +1859,7 @@ def render_sources(prep, charts_dir: Path):
                 x=[row["count"] for row in freshness],
                 y=[row["label"] for row in freshness],
                 orientation="h",
-                marker_color="#2f8f5b",
+                marker_color=_PALETTE[1],
                 hovertemplate="%{y}: %{x} sources<extra></extra>",
                 showlegend=False,
             ),
@@ -1801,31 +1879,28 @@ def render_sources(prep, charts_dir: Path):
             freshness_note = f"Dated buckets are relative to {reference}; undated rows are explicit."
         else:
             freshness_note = "No parseable source dates; freshness is reported as undated."
-        fig.update_layout(
-            title={"text": f"{title}<br><sup>{freshness_note}</sup>"},
-            template="plotly_white",
-            margin={"l": 100, "r": 40, "t": 100, "b": 45},
-        )
         fig.update_xaxes(title_text="source count", row=1, col=1)
         fig.update_xaxes(title_text="source count", row=1, col=2)
+        _apply_wave9_layout(
+            fig, f"{title}<br><sup>{freshness_note}</sup>",
+            margin={"l": 100, "r": 40, "t": 100, "b": 45},
+        )
 
     def mpl_draw(path: str) -> None:
         f, axes = plt.subplots(1, 2, figsize=(12, 7.5), dpi=160)
         axes[0].barh([row["label"] for row in tiers], [row["count"] for row in tiers],
-                     color="#8250df")
+                     color=_PALETTE[4])
         axes[0].set_title("Evidence tier")
         axes[0].set_xlabel("source count")
         axes[1].barh(
             [row["label"] for row in freshness],
             [row["count"] for row in freshness],
-            color="#2f8f5b",
+            color=_PALETTE[1],
         )
         axes[1].set_title("Freshness" + (f" vs {reference}" if reference else ""))
         axes[1].set_xlabel("source count")
         f.suptitle(title)
-        f.tight_layout()
-        f.savefig(path)
-        plt.close(f)
+        _mpl_finalize(f, path)
 
     return _write_outputs(fig, mpl_draw, charts_dir, "source_quality")
 
