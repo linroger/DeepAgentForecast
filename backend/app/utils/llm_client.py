@@ -180,6 +180,28 @@ def _is_deterministic_auth_error(exc: Exception) -> bool:
     )
 
 
+def _is_deterministic_invalid_request_error(exc: Exception) -> bool:
+    """400-class invalid-request failures (unknown/invalid model, malformed request)
+    that retries cannot repair. Observed 2026-07-08: an openai-compatible fallback
+    gateway rejecting an inherited primary model name returned 400 'unknown provider
+    for model MiniMax-M2' on every failover — unlike 401s these never entered the
+    deterministic cooldown and retried forever."""
+    if getattr(exc, "status_code", None) == 400:
+        return True
+    text = str(exc or "").lower()
+    return bool(
+        "badrequesterror" in text
+        or "unknown provider for model" in text
+        or "model_not_found" in text
+        or "invalid_request_error" in text
+        or re.search(r"(?:error|status|code)[^\n]{0,24}\b400\b", text)
+    )
+
+
+# 每个误配置的回退提供方只告警一次（进程级）；并发 chat() 失败转移时避免刷屏。
+_FB_MISCONFIG_WARNED: set = set()
+
+
 def _retry_delay(exc: Exception, attempt: int) -> float:
     """退避时长：默认指数退避；若 429 错误带 Retry-After 头则尊重之（封顶 RETRY_AFTER_CAP）。"""
     base = RETRY_BASE_DELAY * (2 ** attempt)
@@ -387,6 +409,15 @@ class LLMClient:
             if _fb is not None:
                 result = _fb
                 served_by_fallback = True
+            else:
+                # 双通道皆不可用：主提供方处于熔断冷却，回退失败/未配置。此前会继续掉进
+                # 完整的 3 次主重试（指数退避睡眠）+ 第二次回退 —— 双中断期间每次 chat()
+                # 白烧 5 次注定失败的调用（2026-07-08 实测：最高 231 错误/分钟持续 26 小时）。
+                # 直接抛出（复用穷尽路径的异常类型），让调用方快速失败。
+                raise RuntimeError(
+                    f"LLM 调用失败：主提供方 {self.provider} 处于 422/429 熔断冷却，"
+                    f"且回退提供方不可用"
+                )
         for attempt in range(MAX_RETRIES):
             if result is not None:
                 break
@@ -465,12 +496,28 @@ class LLMClient:
             return None
         fb_model = (os.environ.get("LLM_FALLBACK_MODEL", "") or None)
         fb_base_url = (os.environ.get("LLM_FALLBACK_BASE_URL", "") or None)
+        # LLM_FALLBACK_MODEL 未配置时 LLMClient.__init__ 会把 model 默认成主提供方的
+        # Config.LLM_MODEL_NAME —— 对指向另一家网关的 OpenAI 兼容回退是必然的 400
+        # （'unknown provider for model MiniMax-M2'，2026-07-08 生产实测），构建即注定失败。
+        # 直接拒绝构建该回退客户端（进程内只告警一次）。CLI 回退（claude-cli/codex-cli）
+        # 不受影响：订阅提供方不在请求里发 model 字段。
+        if (fb_model is None and fb_provider in OPENAI_COMPATIBLE_PROVIDERS
+                and (fb_provider != self.provider
+                     or (fb_base_url or "") != (self.base_url or ""))):
+            if fb_provider not in _FB_MISCONFIG_WARNED:
+                _FB_MISCONFIG_WARNED.add(fb_provider)
+                logger.warning(
+                    "回退提供方 %s 未配置 LLM_FALLBACK_MODEL，拒绝继承主提供方模型名 %r"
+                    "（会导致必然的 400 invalid-model）；请设置 LLM_FALLBACK_MODEL",
+                    fb_provider, Config.LLM_MODEL_NAME,
+                )
+            return None
         auth_key = (fb_provider, fb_model or "", fb_base_url or "")
         with _CB_LOCK:
             auth_unavailable_until = _FB_AUTH_UNAVAILABLE_UNTIL.get(auth_key, 0.0)
         if auth_unavailable_until > time.monotonic():
             logger.warning(
-                "Skipping fallback provider %s during deterministic-auth cooldown",
+                "Skipping fallback provider %s during deterministic-failure cooldown",
                 fb_provider,
             )
             return None
@@ -499,7 +546,9 @@ class LLMClient:
             logger.info(f"回退提供方 {fb_provider} 成功接管本次调用")
             return out
         except Exception as e:  # noqa: BLE001 — fallback failed too; caller raises the primary error
-            if _is_deterministic_auth_error(e):
+            # 确定性失败（401 凭据坏 / 400 invalid-model 类）进入进程级冷却：重试修不好，
+            # 并行 worker 不该反复对同一注定失败的回退发起昂贵调用。服务重启或修好配置自然清零。
+            if _is_deterministic_auth_error(e) or _is_deterministic_invalid_request_error(e):
                 with _CB_LOCK:
                     _FB_AUTH_UNAVAILABLE_UNTIL[auth_key] = (
                         time.monotonic() + _FB_AUTH_COOLDOWN_S

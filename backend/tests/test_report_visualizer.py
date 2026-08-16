@@ -780,21 +780,24 @@ def test_price_history_deterministic_and_dedup(tmp_path):
 # ============================ (C) ITEM-16 plotly 交互式 HTML 族 ============================
 
 def _assert_offline_html(path):
-    """自包含 HTML 断言：文件存在、含 <html>、且整份 plotly.js 已内联（离线可开）。
+    """离线 HTML 断言（include_plotlyjs='directory' 契约，见 _save_html/TASK 4a）：
+    文件存在、含 <html>、以相对路径引用同目录共享 plotly.min.js，且该 bundle 确实
+    落在旁边 —— charts/ 目录整体（file:// 或打包分发）离线可开。
 
-    离线判据用「文件体量」而非扫描 URL 子串：include_plotlyjs='inline' 会把 ~3.5MB 的 plotly.js
-    整体嵌入文档，故 HTML 必然 >1MB；若是 CDN/directory 模式则只会外链一个 <script src=...> 且
-    文档仅几 KB。（plotly.js 捆绑源码内含 mapbox/topojson 等 URL 字符串常量——仅地理图 trace 才
-    用到，我们只画 bar/scatter/stackplot，运行期零网络——故不能据 URL 子串判定「外链」。）"""
+    体量断言相对旧 inline 契约反转：directory 模式下单图 HTML 仅数十 KB；>1MB 意味着
+    共享 bundle 写失败、inline 回退被意外触发（每图重新内联 ~4.9MB plotly.js，
+    正是 TASK 4a 修掉的 ~40MB/报告、1.9GB 累积膨胀）。"""
     assert os.path.exists(path)
     with open(path, "r", encoding="utf-8") as f:
         html = f.read()
     assert "<html" in html.lower()
-    assert "Plotly" in html            # plotly 运行时存在
     assert "<title>" in html
     assert 'rel="icon" href="data:image/svg+xml' in html
-    # >1MB ⟺ 整份 plotly.js 已内联（CDN 模式的 HTML 仅数 KB）→ 真正离线自包含
-    assert len(html) > 1_000_000
+    # 共享 bundle 外链（同目录相对引用）+ bundle 实际存在 → 目录级离线自包含
+    assert 'src="plotly.min.js"' in html
+    assert len(html) < 1_000_000  # 不再逐图内联整份 plotly.js
+    bundle = os.path.join(os.path.dirname(path), "plotly.min.js")
+    assert os.path.exists(bundle) and os.path.getsize(bundle) > 1_000_000
 
 
 @pytest.mark.skipif(not rv.PLOTLY_AVAILABLE, reason="plotly not installed")

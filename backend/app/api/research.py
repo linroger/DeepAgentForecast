@@ -744,8 +744,17 @@ def get_artifact(pipeline_id: str, name: str):
                         "error": f"产物 '{name}' 不存在",
                     }), 404
                 path = resolved
-            from flask import send_file
-            response = send_file(path, mimetype=_asset_mime)
+            from flask import send_file, Response as _FlaskResponse
+            from ..utils.chart_html import inline_plotly_bundle
+            if _ext == '.html':
+                # 沙箱 CSP（见下）拦截外部脚本；directory 模式图表在服务时把同目录
+                # plotly.min.js 内联进 HTML，而不是放宽沙箱（utils/chart_html）。
+                _inlined = inline_plotly_bundle(path)
+                response = (_FlaskResponse(_inlined, mimetype=_asset_mime)
+                            if _inlined is not None
+                            else send_file(path, mimetype=_asset_mime))
+            else:
+                response = send_file(path, mimetype=_asset_mime)
             if _ext == '.html':
                 response.headers["Content-Security-Policy"] = (
                     "sandbox allow-scripts; default-src 'none'; "

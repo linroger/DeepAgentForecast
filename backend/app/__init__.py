@@ -11,7 +11,7 @@ import warnings
 # 需要在所有其他导入之前设置
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 from .config import Config
@@ -19,9 +19,24 @@ from .utils.logger import setup_logger, get_logger
 from .utils.security import redact_secrets
 
 
+def _frontend_dist_dir() -> str:
+    """SPA 静态资源目录：默认 <repo>/frontend/dist（Vite build 产物）。
+
+    FRONTEND_DIST 环境变量可覆盖（测试指向 tmp 目录 / 自定义部署路径）。
+    始终返回绝对路径。
+    """
+    override = (os.environ.get('FRONTEND_DIST') or '').strip()
+    if override:
+        return os.path.abspath(override)
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(repo_root, 'frontend', 'dist')
+
+
 def create_app(config_class=Config):
     """Flask应用工厂函数"""
-    app = Flask(__name__)
+    # 静态托管前端构建产物：static_url_path='' 使 dist 内文件直接挂在根路径
+    # （/assets/xxx.js 等）。SPA history 回退见下方 _serve_spa。
+    app = Flask(__name__, static_folder=_frontend_dist_dir(), static_url_path='')
     app.config.from_object(config_class)
     
     # 设置JSON编码：确保中文直接显示（而不是 \uXXXX 格式）
@@ -151,7 +166,43 @@ def create_app(config_class=Config):
     @app.route('/health')
     def health():
         return {'status': 'ok', 'service': 'MiroFish Backend'}
-    
+
+    # SPA 静态托管（frontend/dist）：http://localhost:5001 直接出 UI，无需另起 vite。
+    #   - 存在的静态文件（/assets/xxx.js、/index.html…）原样服务；
+    #   - 其余非 API 路径回退 index.html（Vue Router history 模式的客户端路由）；
+    #   - /api/* 永不返回 HTML：未匹配任何蓝图的 API 路径 → JSON 404；
+    #   - dist 未构建 → '/' 返回 JSON 提示（200），不崩溃。
+    # 上方 _auth_gate 只审 /api/ 前缀路径，静态服务不受影响（环回/远端均可拿到 UI，
+    # 数据面仍由 /api 闸门保护）。
+    def _serve_spa(filename: str = ''):
+        if filename == 'health' or filename.startswith('api/'):
+            # 防御分支：/health 与已注册 API 由更具体的路由优先匹配；落到这里的只有
+            # 未知 /api/* —— 保持 JSON 404，绝不把 index.html 喂给 API 客户端。
+            return jsonify({
+                "success": False,
+                "error": f"not found: /{filename}",
+            }), 404
+        dist = app.static_folder or ''
+        if filename:
+            from werkzeug.security import safe_join
+            candidate = safe_join(dist, filename)
+            if candidate and os.path.isfile(candidate):
+                return send_from_directory(dist, filename)
+        if os.path.isfile(os.path.join(dist, 'index.html')):
+            return send_from_directory(dist, 'index.html')
+        return jsonify({
+            "success": True,
+            "service": "MiroFish Backend",
+            "hint": "frontend not built — run: cd frontend && npm run build",
+        }), 200
+
+    # Flask 内建 static 路由（static_url_path='' → 规则 '/<path:filename>'）与任何自定义
+    # catch-all 同构，且注册在先、必然优先匹配（Werkzeug 同构规则按注册序取胜）——单独
+    # 注册 '/<path:path>' 会被它遮蔽、客户端路由全部 404。故直接替换 static 端点的视图
+    # 函数为 SPA 处理器，再补上根路径 '/'（path 转换器不匹配空串）。
+    app.view_functions['static'] = _serve_spa
+    app.add_url_rule('/', 'spa_index', _serve_spa)
+
     if should_log_startup:
         logger.info("MiroFish Backend 启动完成")
     

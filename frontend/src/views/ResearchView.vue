@@ -6,8 +6,18 @@
       <div class="nav-links">
         <span class="nav-tag">{{ L('STEP 0 · 深度研究 → 模拟 → 预测', 'STEP 0 · Research → Simulate → Forecast') }}</span>
         <button class="nav-icon-btn" :title="L('界面语言','Language')" @click="toggleLocale">{{ locale === 'en' ? '中' : 'EN' }}</button>
-        <button class="nav-icon-btn" :title="L('设置','Settings')" @click="showSettings = true">⚙</button>
-        <button class="nav-hist-btn" @click="showHistory = !showHistory">{{ L('历史推演','History') }} ☰</button>
+        <button class="nav-icon-btn" :title="L('设置','Settings')" :aria-label="L('设置','Settings')" @click="showSettings = true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+        <button class="nav-hist-btn" :title="L('历史推演','History')" @click="showHistory = !showHistory">
+          <span class="nav-hist-label">{{ L('历史推演','History') }}</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
       </div>
     </nav>
 
@@ -16,7 +26,11 @@
       <div v-if="showHistory" class="history-drawer">
         <div class="drawer-head">
           <span>{{ L('历史推演','Run history') }}</span>
-          <button class="drawer-close" @click="showHistory = false">✕</button>
+          <button class="drawer-close" :aria-label="L('关闭','Close')" @click="showHistory = false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
         <PipelineHistory :active-id="pipelineId" @select="selectPipeline" @deleted="onRunDeleted" />
       </div>
@@ -25,6 +39,9 @@
 
     <!-- 设置 -->
     <SettingsMenu v-if="showSettings" @close="showSettings = false" @changed="onProviderChanged" />
+
+    <!-- 危险操作确认弹窗（替代 window.confirm） -->
+    <ConfirmDialog ref="confirmDlg" />
 
     <div class="main-content">
       <!-- ====== 输入阶段 ====== -->
@@ -124,7 +141,14 @@
       <section v-else class="run-section">
         <div class="run-header">
           <div>
-            <div class="console-label">{{ L('管线','Pipeline') }} {{ pipelineId }}</div>
+            <div class="console-label">
+              {{ L('管线','Pipeline') }}
+              <button type="button" class="pid-chip" :title="pipelineId"
+                :aria-label="L('复制管线 ID','Copy pipeline id')" @click="copyPipelineId">
+                {{ shortPipelineId }}
+                <span v-if="pidCopied" class="pid-copied">✓ {{ L('已复制','Copied') }}</span>
+              </button>
+            </div>
             <h2 class="run-title">{{ statusTitle }}</h2>
           </div>
           <div class="run-actions">
@@ -208,10 +232,13 @@ import SimulationView from '../components/research/SimulationView.vue'
 import ForecastReport from '../components/research/ForecastReport.vue'
 import PipelineHistory from '../components/research/PipelineHistory.vue'
 import SettingsMenu from '../components/research/SettingsMenu.vue'
+import ConfirmDialog from '../components/research/ConfirmDialog.vue'
 import GraphPanel from '../components/GraphPanel.vue'
 
 const router = useRouter()
-const ACTIVE_PIPELINE_KEY = 'mirofish_active_pipeline'
+const ACTIVE_PIPELINE_KEY = 'drf_active_pipeline'
+// One-time migration: earlier builds persisted under the old MiroFish key.
+const LEGACY_PIPELINE_KEY = 'mirofish_active_pipeline'
 
 // —— 输入 ——
 const prompt = ref('')
@@ -504,9 +531,17 @@ async function finalizeResearchLog(id, generation) {
 const cancelling = ref(false)
 const resuming = ref(false)
 const canResume = computed(() => !!pipelineId.value && (status.value === 'failed' || status.value === 'cancelled'))
+const confirmDlg = ref(null)
 async function cancel() {
   if (!pipelineId.value || cancelling.value) return
-  if (!window.confirm(L('确定取消本次推演？正在运行的研究/模拟将被终止。', 'Cancel this run? The in-flight research/simulation will be stopped.'))) return
+  const ok = confirmDlg.value && await confirmDlg.value.open({
+    title: L('取消推演', 'Cancel run'),
+    message: L('确定取消本次推演？正在运行的研究/模拟将被终止。', 'Cancel this run? The in-flight research/simulation will be stopped.'),
+    confirmLabel: L('确定取消', 'Yes, cancel'),
+    cancelLabel: L('继续运行', 'Keep running'),
+    danger: true
+  })
+  if (!ok) return
   cancelling.value = true
   try {
     await cancelPipeline(pipelineId.value)
@@ -717,6 +752,41 @@ function selectPipeline(id) {
 
 function goHome() { router.push({ name: 'Home' }) }
 
+// —— 管线 ID：截断显示 + 点击复制完整 ID ——
+const pidCopied = ref(false)
+let pidCopiedTimer = null
+const shortPipelineId = computed(() => (pipelineId.value ? pipelineId.value.slice(0, 8) : ''))
+async function copyPipelineId() {
+  const text = pipelineId.value
+  if (!text) return
+  let copied = false
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text)
+      copied = true
+    }
+  } catch (e) { copied = false }
+  if (!copied) {
+    // 非安全上下文（如 http://LAN）没有 navigator.clipboard，回退到 execCommand。
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.setAttribute('readonly', '')
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      copied = document.execCommand('copy')
+      document.body.removeChild(ta)
+    } catch (e) { copied = false }
+  }
+  if (copied) {
+    pidCopied.value = true
+    if (pidCopiedTimer) clearTimeout(pidCopiedTimer)
+    pidCopiedTimer = setTimeout(() => { pidCopied.value = false }, 1600)
+  }
+}
+
 function resetState() {
   stopPolling()
   status.value = 'running'; globalProgress.value = 0; currentStage.value = ''
@@ -742,13 +812,27 @@ function onRunDeleted(id) {
 
 onMounted(() => {
   let saved = null
-  try { saved = localStorage.getItem(ACTIVE_PIPELINE_KEY) } catch (e) { saved = null }
+  try {
+    saved = localStorage.getItem(ACTIVE_PIPELINE_KEY)
+    if (!saved) {
+      // 一次性迁移旧 MiroFish 键：读旧写新，随后删除旧键。
+      const legacy = localStorage.getItem(LEGACY_PIPELINE_KEY)
+      if (legacy) {
+        saved = legacy
+        localStorage.setItem(ACTIVE_PIPELINE_KEY, legacy)
+        localStorage.removeItem(LEGACY_PIPELINE_KEY)
+      }
+    }
+  } catch (e) { saved = null }
   if (saved) beginPipeline(saved)
   else checkPreflight()  // T5.6: 落地即检查就绪状态
 })
 // T5.6: 切换模式时重新检查（research_only 跳过图谱/报告 LLM 检查）
 watch(mode, () => { if (!pipelineId.value) checkPreflight() })
-onUnmounted(stopPolling)
+onUnmounted(() => {
+  stopPolling()
+  if (pidCopiedTimer) { clearTimeout(pidCopiedTimer); pidCopiedTimer = null }
+})
 </script>
 
 <style scoped>
@@ -764,7 +848,7 @@ onUnmounted(stopPolling)
 .nav-tag { font-family: var(--mono); font-size:.74rem; color:#bbb; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .nav-icon-btn { background:transparent; border:1px solid #444; color:#ddd; font-family:var(--mono); font-size:.74rem; min-width:30px; width:30px; height:30px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
 .nav-icon-btn:hover { border-color:var(--orange); color:#fff; }
-.nav-hist-btn { background:transparent; border:1px solid #444; color:#ddd; font-family:var(--mono); font-size:.74rem; padding:6px 12px; cursor:pointer; }
+.nav-hist-btn { background:transparent; border:1px solid #444; color:#ddd; font-family:var(--mono); font-size:.74rem; padding:6px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:7px; }
 .nav-hist-btn:hover { border-color:var(--orange); color:#fff; }
 
 .main-content { max-width:1480px; margin:0 auto; padding:40px; }
@@ -779,7 +863,7 @@ onUnmounted(stopPolling)
 .tag-row { display:flex; gap:15px; align-items:center; margin-bottom:20px; font-family:var(--mono); font-size:.8rem; }
 .orange-tag { background:var(--orange); color:#fff; padding:4px 10px; font-weight:700; letter-spacing:1px; font-size:.75rem; }
 .version-text { color:#999; }
-.main-title { font-size:3rem; line-height:1.2; font-weight:500; letter-spacing:0; margin:0 0 22px; }
+.main-title { font-size:clamp(2rem, 4.5vw, 3.25rem); line-height:1.2; font-weight:500; letter-spacing:0; margin:0 0 22px; }
 .gradient-text { background:linear-gradient(90deg,#000,#FF4500); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
 .lead { color:#666; line-height:1.85; max-width:820px; margin-bottom:34px; }
 .console-box { border:1px solid #CCC; padding:8px; }
@@ -809,9 +893,9 @@ onUnmounted(stopPolling)
 .adv-row { margin-top:6px; }
 .adv-select { border:1px solid #DDD; padding:8px 10px; font-family:var(--mono); font-size:.85rem; width:200px; outline:none; background:#fff; cursor:pointer; }
 /* T5.6 就绪横幅 */
-.preflight-banner { margin-top:14px; padding:10px 14px; font-family:var(--mono); font-size:.8rem; border-radius:2px; }
-.preflight-banner.ok-banner { color:#0a7d28; background:#f0fff4; border:1px solid #b7ebc6; }
-.preflight-banner.err-banner { color:#a40000; background:#fff5f5; border:1px solid #f0bcbc; }
+.preflight-banner { margin-top:14px; padding:10px 14px; font-family:var(--mono); font-size:.8rem; border-radius:var(--radius, 2px); }
+.preflight-banner.ok-banner { color:var(--color-ok, #16A34A); background:#f0fff4; border:1px solid #b7ebc6; }
+.preflight-banner.err-banner { color:var(--color-err, #B91C1C); background:#fff5f5; border:1px solid #f0bcbc; }
 .pf-title { font-weight:700; margin-bottom:6px; }
 .pf-list { margin:0; padding-left:18px; }
 .pf-list li { margin:3px 0; line-height:1.5; }
@@ -823,6 +907,9 @@ onUnmounted(stopPolling)
 
 .run-header { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:20px; }
 .console-label { font-family:var(--mono); font-size:.72rem; color:#999; }
+.pid-chip { background:none; border:1px dashed #ccc; color:#777; font-family:var(--mono); font-size:.72rem; padding:1px 7px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.pid-chip:hover { border-color:var(--orange); color:#000; }
+.pid-copied { color:var(--color-ok, #16A34A); font-weight:700; }
 .run-title { font-size:1.7rem; font-weight:520; margin:6px 0 0; }
 .run-actions { display:flex; gap:12px; }
 .primary-btn { background:var(--orange); color:#fff; border:none; padding:12px 18px; font-family:var(--mono); font-weight:700; cursor:pointer; }
@@ -845,7 +932,7 @@ onUnmounted(stopPolling)
 .tab.active { color:#000; border-color:var(--border); border-bottom:2px solid var(--orange); background:#fff; font-weight:700; }
 .tab.disabled { color:#ccc; cursor:not-allowed; background:#FAFAFA; }
 .tab-badge { background:var(--orange); color:#fff; font-size:.62rem; padding:1px 6px; border-radius:8px; }
-.tab-body { border:1px solid var(--border); border-top:none; min-height:560px; background:#fff; }
+.tab-body { border:1px solid var(--border); border-top:none; min-height:min(560px, 70vh); background:#fff; }
 .graph-wrap { height:600px; }
 .graph-wrap.max { height:calc(100vh - 220px); }
 .lazy-empty { height:100%; display:flex; align-items:center; justify-content:center; color:#999; font-family:var(--mono); font-size:.85rem; padding:40px; }
@@ -853,7 +940,6 @@ onUnmounted(stopPolling)
 @media (max-width: 1080px) {
   .run-layout { grid-template-columns:1fr; }
   .rail { position:static; }
-  .main-title { font-size:2.2rem; }
 }
 
 @media (max-width: 640px) {
@@ -861,10 +947,9 @@ onUnmounted(stopPolling)
   .nav-brand { font-size:.95rem; line-height:30px; }
   .nav-links { flex:0 0 auto; gap:8px; }
   .nav-tag { display:none; }
-  .nav-hist-btn { width:30px; height:30px; padding:0; overflow:hidden; color:transparent; position:relative; }
-  .nav-hist-btn::after { content:'☰'; color:#ddd; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  .nav-hist-btn { width:30px; height:30px; padding:0; justify-content:center; }
+  .nav-hist-label { display:none; }
   .main-content { padding:28px 16px; }
-  .main-title { font-size:2rem; line-height:1.24; }
   .lead { font-size:.95rem; line-height:1.75; }
   .console-section { padding:16px; }
   .params-row { gap:18px; }

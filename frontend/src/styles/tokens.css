@@ -1,0 +1,52 @@
+/**
+ * Global design tokens for DeepResearchForecast.
+ *
+ * This file is imported FIRST in src/main.js so every component (scoped or not)
+ * can rely on these custom properties. It replaces the accidental global
+ * `:root` block that used to live inside Home.vue's <style scoped> (Vue emits
+ * `:root` selectors un-scoped, so the whole app was depending on it).
+ */
+:root {
+  /* —— Legacy tokens (moved verbatim from Home.vue) —— */
+  --black: #000000;
+  --white: #FFFFFF;
+  --orange: #FF4500;
+  --gray-light: #F5F5F5;
+  --gray-text: #666666;
+  --border: #E5E5E5;
+  --font-cn: 'Noto Sans SC', system-ui, sans-serif;
+
+  /* —— Semantic tokens —— */
+  --color-ink: #0A0A0A;
+  --color-paper: #FFFFFF;
+  --color-accent: #FF4500;
+  --color-ok: #16A34A;
+  --color-warn: #D97706;
+  --color-err: #B91C1C;
+  --color-border: #E5E5E5;
+  --color-soft: #FAFAFA;
+  --color-muted: #666;
+  --color-faint: #999;
+
+  /* Typography (font-mono gains a ui-monospace fallback over the legacy value) */
+  --font-sans: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Spacing scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  --radius: 2px;
+}
+
+/* Visible keyboard-focus ring, app-wide. */
+:focus-visible {
+  outline: 2px solid var(--color-accent, #FF4500);
+  outline-offset: 2px;
+}

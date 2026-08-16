@@ -24,11 +24,18 @@
           @click="load"
           :title="L('刷新历史列表','Refresh history list')"
         >
-          <span class="ph-refresh-icon" :class="{ spinning: loading }">↻</span>
+          <svg class="ph-refresh-icon" :class="{ spinning: loading }" width="16" height="16" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
           {{ L('刷新','Refresh') }}
         </button>
       </span>
     </header>
+
+    <!-- 危险操作确认弹窗（替代 window.confirm） -->
+    <ConfirmDialog ref="confirmDlg" />
 
     <!-- 错误态 -->
     <div v-if="error" class="ph-error">
@@ -104,6 +111,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { listPipelines, cancelPipeline, deletePipeline, cleanPipelines } from '../../api/research'
 import { L } from '../../i18n'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 const props = defineProps({
   activeId: { type: String, default: '' }
@@ -116,6 +124,13 @@ const loading = ref(false)
 const error = ref('')
 const busyId = ref('')
 const cleaning = ref(false)
+const confirmDlg = ref(null)
+
+/** Promise-based destructive-action confirmation (in-app modal). */
+function confirmDanger(title, message, confirmLabel) {
+  if (!confirmDlg.value) return Promise.resolve(false)
+  return confirmDlg.value.open({ title, message, confirmLabel, danger: true })
+}
 
 const failedCount = computed(() =>
   items.value.filter(it => {
@@ -133,7 +148,12 @@ function isRunning(item) {
 async function cancelRun(item) {
   const id = item && item.pipeline_id
   if (!id || busyId.value) return
-  if (!window.confirm(L('确定取消该推演？正在运行的研究/模拟将被终止。', 'Cancel this run? The in-flight research/simulation will be stopped.'))) return
+  const ok = await confirmDanger(
+    L('取消推演', 'Cancel run'),
+    L('确定取消该推演？正在运行的研究/模拟将被终止。', 'Cancel this run? The in-flight research/simulation will be stopped.'),
+    L('确定取消', 'Yes, cancel')
+  )
+  if (!ok) return
   busyId.value = id
   try {
     await cancelPipeline(id)
@@ -150,7 +170,12 @@ async function cancelRun(item) {
 async function deleteRun(item) {
   const id = item && item.pipeline_id
   if (!id || busyId.value) return
-  if (!window.confirm(L('确定删除该运行记录？研究档案等产物将一并删除，不可恢复。', 'Delete this run? Its research dossier and artifacts will be removed permanently.'))) return
+  const ok = await confirmDanger(
+    L('删除运行记录', 'Delete run'),
+    L('确定删除该运行记录？研究档案等产物将一并删除，不可恢复。', 'Delete this run? Its research dossier and artifacts will be removed permanently.'),
+    L('确定删除', 'Delete')
+  )
+  if (!ok) return
   busyId.value = id
   try {
     await deletePipeline(id)
@@ -166,7 +191,12 @@ async function deleteRun(item) {
 /** 批量清理失败/已取消的运行记录。 */
 async function cleanFailed() {
   if (cleaning.value) return
-  if (!window.confirm(L(`确定清理全部 ${failedCount.value} 条失败/已取消的记录？不可恢复。`, `Delete all ${failedCount.value} failed/cancelled runs? This cannot be undone.`))) return
+  const ok = await confirmDanger(
+    L('清理失败记录', 'Clear failed runs'),
+    L(`确定清理全部 ${failedCount.value} 条失败/已取消的记录？不可恢复。`, `Delete all ${failedCount.value} failed/cancelled runs? This cannot be undone.`),
+    L('确定清理', 'Delete all')
+  )
+  if (!ok) return
   cleaning.value = true
   try {
     const res = await cleanPipelines()

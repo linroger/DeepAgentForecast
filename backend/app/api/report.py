@@ -16,6 +16,7 @@ from ..services.pipeline_orchestrator import load_research_dossier_for_simulatio
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
+from ..utils.chart_html import inline_plotly_bundle
 from ..utils.logger import get_logger
 
 logger = get_logger('mirofish.api.report')
@@ -1080,12 +1081,19 @@ def get_report_chart(report_id: str, filename: str):
                 or any(os.path.islink(os.path.join(charts_dir, *parts[:i]))
                        for i in range(1, len(parts) + 1))):
             return jsonify({"success": False, "error": f"图表不存在: {filename}"}), 404
-        response = send_file(candidate_real)
         ext = os.path.splitext(candidate_real)[1].lower()
         if ext == ".html":
             # Interactive charts may contain agent-produced inline JS. Run them
             # in an opaque sandboxed origin: scripts work, app cookies/storage
-            # and network access do not.
+            # and network access do not. The sandbox blocks external scripts,
+            # so directory-mode charts get their sibling plotly.min.js spliced
+            # in at serve time rather than a relaxed policy (utils/chart_html).
+            inlined = inline_plotly_bundle(candidate_real)
+            response = (Response(inlined, mimetype="text/html")
+                        if inlined is not None else send_file(candidate_real))
+        else:
+            response = send_file(candidate_real)
+        if ext == ".html":
             response.headers["Content-Security-Policy"] = (
                 "sandbox allow-scripts; default-src 'none'; "
                 "script-src 'unsafe-inline'; style-src 'unsafe-inline'; "

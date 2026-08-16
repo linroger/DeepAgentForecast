@@ -2583,9 +2583,10 @@ class ReportVisualizer:
             _close_matplotlib_figure(fig)
 
     # ============================ (C) plotly 交互式 HTML 族 ============================
-    # ITEM-16：全部为实例方法，入参普通 dict/list + 输出目录，成功落盘自包含 HTML 返回相对路径，
+    # ITEM-16：全部为实例方法，入参普通 dict/list + 输出目录，成功落盘 HTML 返回相对路径，
     # 否则 None（或 []）。plotly 缺失/关闭 → 直接跳过（build_all 会整族略过）。每个 HTML 用
-    # include_plotlyjs='inline' 内联 plotly.js，完全离线可开（不依赖 CDN/外链）。数据抽取逻辑与
+    # include_plotlyjs='directory' 引用同目录共享 plotly.min.js（一份 ~4.9MB 全报告共享，
+    # 不依赖 CDN/外链；见 _ensure_plotly_bundle，写不出 bundle 时回退 inline）。数据抽取逻辑与
     # 对应 matplotlib 构建器逐字对齐（复用 _to_float / _first_float / _normalize_price_anchors），
     # 保证同一工件下 PNG 与 HTML 描绘同一份数据。
 
@@ -2598,16 +2599,69 @@ class ReportVisualizer:
         return (KALEIDO_AVAILABLE and _KALEIDO_RUNTIME_OK
                 and bool(_cfg("REPORT_VIZ_PNG_EXPORT", True)))
 
+    _PLOTLY_BUNDLE_NAME = "plotly.min.js"
+
+    def _ensure_plotly_bundle(self, charts_dir: str) -> bool:
+        """确保 charts_dir 下存在共享 plotly.min.js（幂等、原子写）。成功/已存在 → True。
+
+        此前每份图表 HTML 都内联整份 plotly.js（4.86MB/图、~40MB/报告，累计 1.9GB）。
+        改为整个 charts/ 目录共享一份 bundle，各 HTML 以相对路径引用（同目录，file://
+        离线打开同样成立）。写入失败 → False（调用方回退 inline，离线自包含优先于体积）。"""
+        bundle_path = os.path.join(charts_dir, self._PLOTLY_BUNDLE_NAME)
+        if os.path.isfile(bundle_path):
+            return True
+        try:
+            from plotly.offline import get_plotlyjs
+            tmp = f"{bundle_path}.{os.getpid()}.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(get_plotlyjs())
+            os.replace(tmp, bundle_path)
+            return True
+        except Exception as exc:  # noqa: BLE001 - bundle 落盘失败只降级，不阻断图表
+            logger.debug("共享 plotly.min.js 落盘失败（本图回退 inline）：%s", exc)
+            return False
+
+    @staticmethod
+    def _inject_plotly_load_guard(html: str) -> str:
+        """directory 模式的优雅降级：若共享 plotly.min.js 未能随 HTML 一起送达（例如
+        经限制外链脚本的服务端点打开），在页顶插入一条可操作的提示，而不是留一页空白。
+        内联脚本本身不依赖任何外部资源。"""
+        guard = (
+            '<script>window.addEventListener("DOMContentLoaded",function(){'
+            'if(!window.Plotly){var d=document.createElement("div");'
+            'd.style.cssText="margin:16px;padding:12px 16px;border:1px solid #d03b3b;'
+            'border-radius:6px;font-family:system-ui,sans-serif;font-size:14px;'
+            'color:#0b0b0b;background:#fdf1f1";'
+            'd.textContent="Interactive chart could not load the shared plotly.min.js '
+            'that lives next to this file. Open this chart from the report\'s charts/ '
+            'folder (which contains plotly.min.js).";'
+            'document.body.insertBefore(d,document.body.firstChild);}});</script>'
+        )
+        if "</body>" in html:
+            return html.replace("</body>", guard + "</body>", 1)
+        return html + guard
+
     def _save_html(self, fig, charts_dir: str, filename: str) -> Optional[str]:
-        """把 plotly figure 存成自包含 HTML（plotly.js 内联，离线可开）并返回相对 report_dir 的
-        路径 'charts/<file>'。原子写（.tmp→replace），失败 → None。"""
+        """把 plotly figure 存成 HTML 并返回相对 report_dir 的路径 'charts/<file>'。
+
+        include_plotlyjs='directory'：HTML 仅 ~20-60KB，引用同目录共享 plotly.min.js
+        （见 _ensure_plotly_bundle；此前逐图内联 4.86MB）。charts/ 目录整体分发（文件
+        系统 / 打包下载）时相对引用离线成立。共享包写不出来 → 回退 inline（仍离线
+        自包含）。原子写（.tmp→replace），失败 → None。"""
         try:
             os.makedirs(charts_dir, exist_ok=True)
             out_path = os.path.join(charts_dir, filename)
-            # include_plotlyjs='inline'：把整份 plotly.js 内联进 HTML → 无外链、完全离线自包含。
-            html = fig.to_html(include_plotlyjs="inline", full_html=True,
+            # REPORT_VIZ_PLOTLYJS_INLINE（默认关）：一键回退旧的逐图内联行为——经只允许
+            # 内联脚本的沙箱端点（/api/report/*/charts、/api/research/*/artifact）分发交互
+            # 图时的运维逃生阀，代价是恢复每图 ~4.9MB 的体积。
+            force_inline = bool(_cfg("REPORT_VIZ_PLOTLYJS_INLINE", False))
+            include = ("inline" if force_inline or not self._ensure_plotly_bundle(charts_dir)
+                       else "directory")
+            html = fig.to_html(include_plotlyjs=include, full_html=True,
                                config={"displayModeBar": True, "responsive": True})
             html = _finalize_plotly_html(html, _plotly_document_title(fig, filename))
+            if include == "directory":
+                html = self._inject_plotly_load_guard(html)
             tmp = out_path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 f.write(html)
@@ -3500,6 +3554,13 @@ class ReportVisualizer:
             multi = any(len(p["lines"]) > 1 for p in panels)
             legend_seen: set = set()
             for ri, panel in enumerate(panels, 1):
+                # x 轴修复（shipped-chart bug）：此前一律传 x_label 字符串 → plotly 类别轴
+                # 按「首现顺序」排布，多折线时首条线的 2027 会排在 2025 左边（年轴倒序）。
+                # 家族路径的 p['x'] 为整型年份 → 直接按数值作图（轴天然升序）；legacy 路径
+                # （ISO 日期标签）退回类别轴并强制 'category ascending'（ISO 字典序=时间序）。
+                panel_numeric = all(
+                    isinstance(p["x"], int) and not isinstance(p["x"], bool)
+                    for line in panel["lines"] for p in line["points"])
                 for li, line in enumerate(panel["lines"]):
                     pts = line["points"]
                     named = line["name"] is not None
@@ -3509,9 +3570,10 @@ class ReportVisualizer:
                     if named:
                         legend_seen.add(line["name"])
                     fig.add_trace(go.Scatter(
-                        x=[p["x_label"] for p in pts],
+                        x=[(p["x"] if panel_numeric else p["x_label"]) for p in pts],
                         y=[p["value"] for p in pts],
-                        mode="lines+markers",
+                        # 单点折线画不出线段（不可见）→ 仅记号；≥2 点才画线。
+                        mode="lines+markers" if len(pts) >= 2 else "markers",
                         name=line["name"] or "series",
                         legendgroup=line["name"] or f"__panel{ri}",
                         showlegend=show_legend,
@@ -3531,15 +3593,26 @@ class ReportVisualizer:
                         hoverinfo="text",
                     ), row=ri, col=1)
                 fig.update_yaxes(title_text=panel["unit"], row=ri, col=1)
+                if panel_numeric:
+                    years = sorted({p["x"] for line in panel["lines"]
+                                    for p in line["points"]})
+                    # 整年刻度：小跨度逐年打刻度，避免 2025.5 之类的分数年刻度。
+                    fig.update_xaxes(tickformat="d", row=ri, col=1)
+                    if years and years[-1] - years[0] <= 12:
+                        fig.update_xaxes(dtick=1, row=ri, col=1)
+                else:
+                    fig.update_xaxes(categoryorder="category ascending", row=ri, col=1)
             _apply_layout(
                 fig, "Key Metric Trajectories (research-extracted)",
                 height=max(420, 240 * len(panels) + 140),
             )
             if multi:
-                fig.update_layout(legend={
-                    "orientation": "h", "yanchor": "bottom", "y": 1.02,
-                    "xanchor": "right", "x": 1,
-                })
+                # 图例置于整图底部：此前 y=1.02 的横向图例压在首个子图标题上。
+                fig.update_layout(
+                    legend={"orientation": "h", "yanchor": "top", "y": -0.04,
+                            "xanchor": "left", "x": 0},
+                    margin={"b": 96},
+                )
             return self._save_pair(fig, charts_dir, "metric_trajectories",
                                    "metric_trajectories")
         except Exception as exc:  # noqa: BLE001

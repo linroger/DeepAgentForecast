@@ -90,3 +90,80 @@ def tmp_run_dir(tmp_path):
     d = tmp_path / "run"
     d.mkdir()
     return str(d)
+
+
+# ---------------------------------------------------------------------------
+# pytest must not pollute production logs (backend/logs/mirofish.log*).
+# Test runs previously logged through the real 'mirofish' logger hierarchy into
+# backend/logs/mirofish.log — the 2026-07-22 rotated file is 3.2MB of pure
+# pytest noise, corrupting run forensics. Quarantine for the whole session:
+# every FileHandler pointing into backend/logs is swapped for one shared
+# handler under the pytest tmp dir (NullHandler if even that fails), and
+# app.utils.logger.LOG_DIR is repointed so loggers first created mid-session
+# also land in tmp. Nothing is restored afterwards — session end == process
+# end. Defensive throughout: a logging hiccup must never fail the test session.
+# ---------------------------------------------------------------------------
+
+_BACKEND_LOGS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _quarantine_mirofish_log_handlers(tmp_path_factory):
+    import logging
+
+    sink_dir = None
+    try:
+        sink_dir = str(tmp_path_factory.mktemp("mirofish-logs"))
+    except Exception:  # noqa: BLE001 — tmp unavailable → NullHandler below
+        sink_dir = None
+
+    sink_handler = None
+    if sink_dir:
+        try:
+            sink_handler = logging.FileHandler(
+                os.path.join(sink_dir, "mirofish.log"), encoding="utf-8")
+            sink_handler.setLevel(logging.DEBUG)
+        except Exception:  # noqa: BLE001
+            sink_handler = None
+    if sink_handler is None:
+        sink_handler = logging.NullHandler()
+
+    # Loggers created later in the session call setup_logger(), which reads
+    # LOG_DIR at call time — repoint it so their new FileHandlers also land in
+    # the tmp sink instead of backend/logs.
+    if sink_dir:
+        try:
+            from app.utils import logger as _app_logger_module
+            _app_logger_module.LOG_DIR = sink_dir
+        except Exception:  # noqa: BLE001 — app package not importable: nothing to repoint
+            pass
+
+    logs_root = os.path.abspath(_BACKEND_LOGS_DIR)
+    try:
+        names = {n for n in list(logging.Logger.manager.loggerDict)
+                 if n == "mirofish" or n.startswith("mirofish.")}
+        names.add("mirofish")
+        for name in sorted(names):
+            lg = logging.getLogger(name)
+            for handler in list(getattr(lg, "handlers", None) or []):
+                base = getattr(handler, "baseFilename", None)
+                if not base:
+                    continue  # console/NullHandler etc. — leave untouched
+                try:
+                    inside = os.path.commonpath(
+                        [os.path.abspath(base), logs_root]) == logs_root
+                except ValueError:  # e.g. different drives on Windows
+                    inside = False
+                if not inside:
+                    continue
+                lg.removeHandler(handler)
+                try:
+                    handler.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                if sink_handler not in lg.handlers:
+                    lg.addHandler(sink_handler)
+    except Exception:  # noqa: BLE001 — never fail the session over log plumbing
+        pass
+    yield
