@@ -82,31 +82,49 @@ def test_adaptive_default_budget_is_one_gap_pass():
 
 
 def _load_claude_provider():
-    """用最小桩顶替 anthropic / langchain_anthropic / langchain_core 后按路径加载模块。"""
+    """用最小桩顶替 anthropic / langchain_anthropic / langchain_core 后按路径加载模块。
+
+    本 loader 注册的桩在加载后全部从 sys.modules 弹出：deerflow_research 的
+    ``_stage1_model_messages`` 依赖 ``from langchain_core.messages import
+    HumanMessage`` 在 backend venv 里抛 ImportError；残留的无参 HumanMessage 桩会
+    毒化同进程内晚于本文件收集的用例（显式点名 wave9 在 test_stage1_model_boundaries
+    之前运行即可复现）。已加载的 provider 模块自身持有桩类引用，测试一律经模块对象访问。
+    """
     if "wave9_claude_provider" in sys.modules:
         return sys.modules["wave9_claude_provider"]
+    created = []
     if "anthropic" not in sys.modules:
         anthropic_stub = types.ModuleType("anthropic")
         anthropic_stub.RateLimitError = type("RateLimitError", (Exception,), {})
         anthropic_stub.InternalServerError = type("InternalServerError", (Exception,), {})
         sys.modules["anthropic"] = anthropic_stub
+        created.append("anthropic")
     if "langchain_anthropic" not in sys.modules:
         lc_anthropic = types.ModuleType("langchain_anthropic")
         lc_anthropic.ChatAnthropic = type("ChatAnthropic", (), {})
         sys.modules["langchain_anthropic"] = lc_anthropic
+        created.append("langchain_anthropic")
     if "langchain_core.messages" not in sys.modules:
-        lc_core = sys.modules.get("langchain_core") or types.ModuleType("langchain_core")
+        lc_core = sys.modules.get("langchain_core")
+        if lc_core is None:
+            lc_core = types.ModuleType("langchain_core")
+            sys.modules["langchain_core"] = lc_core
+            created.append("langchain_core")
         lc_msgs = types.ModuleType("langchain_core.messages")
         lc_msgs.BaseMessage = type("BaseMessage", (), {})
         lc_msgs.HumanMessage = type("HumanMessage", (), {})
         lc_core.messages = lc_msgs
-        sys.modules["langchain_core"] = lc_core
         sys.modules["langchain_core.messages"] = lc_msgs
-    path = os.path.join(_BRIDGE_DIR, "patches", "models", "claude_provider.py")
-    spec = importlib.util.spec_from_file_location("wave9_claude_provider", path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["wave9_claude_provider"] = mod
-    spec.loader.exec_module(mod)
+        created.append("langchain_core.messages")
+    try:
+        path = os.path.join(_BRIDGE_DIR, "patches", "models", "claude_provider.py")
+        spec = importlib.util.spec_from_file_location("wave9_claude_provider", path)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["wave9_claude_provider"] = mod
+        spec.loader.exec_module(mod)
+    finally:
+        for name in created:
+            sys.modules.pop(name, None)
     return mod
 
 

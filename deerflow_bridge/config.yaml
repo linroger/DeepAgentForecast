@@ -59,6 +59,11 @@ models:
     context_window_tokens: 200000
     supports_thinking: false
     supports_vision: true
+    # Research-stage token lever 1: cache_control breakpoints on the re-sent
+    # LangGraph thread — ON by default for BOTH auth modes, the Code-plan OAuth
+    # path included (the provider used to force-disable caching for OAuth).
+    # Caching never changes model outputs. Per-run kill-switch:
+    # DEERFLOW_CLAUDE_PROMPT_CACHE=0 (restores the historical marker-free payload).
     enable_prompt_caching: true
 
   # === FALLBACK: Antigravity via Quotio (OpenAI-compatible local proxy) ===
@@ -1334,6 +1339,11 @@ summarization:
   # deleting early KIQ evidence.  The 80K trigger + 16K preserved tail bounds a
   # summary call to roughly 64K input tokens, which every configured research
   # model supports; no evidence disappears before the ledger can represent it.
+  # Research-stage token lever 2 (A/B only — this default is unchanged): the
+  # RESEARCH_TRIM_TOKENS_TO_SUMMARIZE env var overrides this value at the
+  # middleware construction site without editing config. Unset → this value;
+  # positive integer → cap the summarizer's input; "none"/"null"/"full" → force
+  # full-segment summarization. Invalid values are logged and ignored.
   trim_tokens_to_summarize: null
 
   # Preserve the forecasting state instead of producing a generic chat recap.

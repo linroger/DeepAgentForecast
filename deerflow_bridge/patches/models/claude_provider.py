@@ -7,6 +7,16 @@ Supports two authentication modes:
      - Requires anthropic-beta: oauth-2025-04-20,claude-code-20250219
      - Requires billing header in system prompt for all OAuth requests
 
+Prompt caching (research-stage token lever 1): every agentic step re-sends the
+accumulated LangGraph thread, so the request prefix (tools + system + all but the
+newest turns) is byte-stable between calls.  ``_apply_prompt_caching`` marks that
+prefix with Anthropic ``cache_control`` breakpoints on BOTH auth modes — the
+OAuth/subscription path included — so re-sent thread tokens bill as cache reads
+instead of full-price input.  Caching never changes model outputs; it is ON by
+default and killable per-run with ``DEERFLOW_CLAUDE_PROMPT_CACHE=0`` (which also
+restores the historical "no cache_control ever leaves the client" OAuth payload
+byte-for-byte).
+
 Auto-loads credentials from explicit runtime handoff:
   - $ANTHROPIC_API_KEY environment variable
   - $CLAUDE_CODE_OAUTH_TOKEN or $ANTHROPIC_AUTH_TOKEN
@@ -52,6 +62,34 @@ THINKING_BUDGET_RATIO = 0.5
 _DEFAULT_BILLING_HEADER = "x-anthropic-billing-header: cc_version=2.1.85.351; cc_entrypoint=cli; cch=6c6d5;"
 OAUTH_BILLING_HEADER = os.environ.get("ANTHROPIC_BILLING_HEADER", _DEFAULT_BILLING_HEADER)
 
+# Kill-switch for provider-side prompt caching (research-stage token lever 1).
+# Unset → the config field (``enable_prompt_caching``, default true) governs.
+# "0"/"false"/"no"/"off" → hard off: no cache_control marker leaves the client
+#   (byte-identical to the pre-lever OAuth payloads).
+# "1"/"true"/"yes"/"on" → force on even if the model config disabled it.
+PROMPT_CACHE_ENV = "DEERFLOW_CLAUDE_PROMPT_CACHE"
+_ENV_FALSY = frozenset({"0", "false", "no", "off"})
+_ENV_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+# The Anthropic API allows at most 4 cache_control breakpoints per request
+# (the same hard limit applies on AWS Bedrock).
+MAX_CACHE_BREAKPOINTS = 4
+
+# Content-block types that accept a cache_control marker per the Anthropic docs.
+# Notably ``thinking`` / ``redacted_thinking`` blocks do NOT — marking one is a
+# request-rejecting 400, so breakpoint placement must skip them.
+CACHEABLE_BLOCK_TYPES = frozenset({"text", "image", "tool_use", "tool_result", "document"})
+
+
+def _env_prompt_cache_override() -> bool | None:
+    """Tri-state env override for prompt caching: True/False when set, else None."""
+    raw = os.environ.get(PROMPT_CACHE_ENV, "").strip().lower()
+    if raw in _ENV_FALSY:
+        return False
+    if raw in _ENV_TRUTHY:
+        return True
+    return None
+
 
 class RetryAfterCapExceededError(RuntimeError):
     """Retry-After exceeds the configured cap — a weekly/plan quota limit, not a transient 429.
@@ -73,6 +111,10 @@ def _retry_after_cap_ms() -> int:
 
 class ClaudeChatModel(ChatAnthropic):
     """ChatAnthropic with OAuth Bearer auth, prompt caching, and smart thinking.
+
+    Prompt caching is default-ON for both auth modes (API key and OAuth
+    subscription) and controlled by ``enable_prompt_caching`` in config plus the
+    DEERFLOW_CLAUDE_PROMPT_CACHE env kill-switch (see module docstring).
 
     Config example:
         - name: claude-sonnet-4.6
@@ -150,9 +192,16 @@ class ClaudeChatModel(ChatAnthropic):
                 **(self.default_headers or {}),
                 "anthropic-beta": OAUTH_ANTHROPIC_BETAS,
             }
-            # OAuth tokens have a limit of 4 cache_control blocks — disable prompt caching
-            self.enable_prompt_caching = False
-            logger.info("OAuth token detected — will use Authorization: Bearer header")
+            # Prompt caching stays ENABLED on the OAuth/subscription path (lever 1).
+            # This provider historically force-disabled it here, citing the
+            # 4-cache_control-block limit — but that limit is the standard API-wide
+            # maximum, ``_apply_prompt_caching`` strips stray markers and never
+            # emits more than MAX_CACHE_BREAKPOINTS, and Claude Code itself caches
+            # on these same OAuth tokens. Kill-switch: DEERFLOW_CLAUDE_PROMPT_CACHE=0.
+            logger.info(
+                "OAuth token detected — will use Authorization: Bearer header "
+                f"(prompt caching {'enabled' if self._prompt_cache_enabled() else 'disabled'})"
+            )
         else:
             if current_key:
                 self.anthropic_api_key = SecretStr(current_key)
@@ -175,6 +224,17 @@ class ClaudeChatModel(ChatAnthropic):
             client.api_key = None
             client.auth_token = self._oauth_access_token
 
+    def _prompt_cache_enabled(self) -> bool:
+        """Resolve the effective prompt-cache state: env override wins, else config.
+
+        Evaluated per request so an operator can flip DEERFLOW_CLAUDE_PROMPT_CACHE
+        between runs without reconstructing the model.
+        """
+        override = _env_prompt_cache_override()
+        if override is not None:
+            return override
+        return bool(self.enable_prompt_caching)
+
     def _get_request_payload(
         self,
         input_: Any,
@@ -182,14 +242,25 @@ class ClaudeChatModel(ChatAnthropic):
         stop: list[str] | None = None,
         **kwargs: Any,
     ) -> dict:
-        """Override to inject prompt caching, thinking budget, and OAuth billing."""
+        """Override to inject OAuth billing, prompt caching, and thinking budget.
+
+        Every langchain-anthropic request path (_generate/_agenerate/_stream/_astream)
+        builds its payload here before handing it to ``_create``/``_acreate``, so
+        this is the single choke point: with caching enabled the payload carries at
+        most MAX_CACHE_BREAKPOINTS deliberate breakpoints; with caching disabled the
+        payload carries none at all.
+        """
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
 
         if self._is_oauth:
             self._apply_oauth_billing(payload)
 
-        if self.enable_prompt_caching:
+        if self._prompt_cache_enabled():
             self._apply_prompt_caching(payload)
+        else:
+            # Hard off (kill-switch or config): guarantee zero cache_control markers
+            # reach the API — byte-identical to the historical OAuth payload shape.
+            self._strip_cache_control(payload)
 
         if self.auto_thinking_budget:
             self._apply_thinking_budget(payload)
@@ -234,65 +305,85 @@ class ClaudeChatModel(ChatAnthropic):
             )
 
     def _apply_prompt_caching(self, payload: dict) -> None:
-        """Apply ephemeral cache_control to system, recent messages, and last tool definition.
+        """Place ephemeral cache_control breakpoints for incremental thread reuse.
 
-        Uses a budget of MAX_CACHE_BREAKPOINTS (4) breakpoints — the hard limit
-        enforced by both the Anthropic API and AWS Bedrock.  Breakpoints are
-        placed on the *last* eligible blocks because later breakpoints cover a
-        larger prefix and yield better cache hit rates.
+        Placement (never more than MAX_CACHE_BREAKPOINTS = 4 total — the hard
+        API/Bedrock limit; any pre-existing stray markers are stripped first so the
+        budget is exact and the transform is idempotent):
+
+        1. One anchor on the LAST system text block. The prompt renders as
+           tools → system → messages, so this single breakpoint caches the tool
+           definitions AND the system prompt together — the per-run-stable prefix
+           that survives even a summarization reset of the message history. When
+           there is no system prompt the anchor falls back to the last tool
+           definition.
+        2. Up to the remaining budget: one breakpoint on the last cacheable block
+           of each of the newest ``prompt_cache_size`` messages. This is the
+           standard incremental-conversation pattern — the thread grows append-only,
+           so the previous request's breakpoints always sit inside the next
+           request's prefix, and spreading the newest markers across turns keeps a
+           prior breakpoint within the API's 20-block cache lookback window even
+           when a single agentic turn appends many tool_result blocks.
+
+        ``thinking`` blocks never accept cache_control (400) and are skipped.
 
         The system prompt is expected to be fully static (no per-user memory or
-        current date).  Dynamic context is injected per-turn via
-        DynamicContextMiddleware as a <system-reminder> in the first HumanMessage.
+        current date). Dynamic context is injected once per conversation via
+        DynamicContextMiddleware as a <system-reminder> HumanMessage, and the OAuth
+        billing block prepended by ``_apply_oauth_billing`` is byte-identical on
+        every call — so nothing volatile sits ahead of these breakpoints.
         """
-        MAX_CACHE_BREAKPOINTS = 4
+        self._strip_cache_control(payload)
+        marked: list[dict] = []
 
-        # Collect candidate blocks in document order:
-        #   1. system text blocks
-        #   2. content blocks of the last prompt_cache_size messages
-        #   3. the last tool definition
-        candidates: list[dict] = []
-
-        # 1. System blocks
+        # 1. Stable-prefix anchor: last system text block (covers tools + system),
+        #    falling back to the last tool definition when no system prompt exists.
         system = payload.get("system")
-        if system and isinstance(system, list):
-            for block in system:
+        if isinstance(system, str) and system:
+            system = [{"type": "text", "text": system}]
+            payload["system"] = system
+        anchor: dict | None = None
+        if isinstance(system, list):
+            for block in reversed(system):
                 if isinstance(block, dict) and block.get("type") == "text":
-                    candidates.append(block)
-        elif system and isinstance(system, str):
-            new_block: dict = {"type": "text", "text": system}
-            payload["system"] = [new_block]
-            candidates.append(new_block)
+                    anchor = block
+                    break
+        if anchor is None:
+            tools = payload.get("tools")
+            if isinstance(tools, list) and tools and isinstance(tools[-1], dict):
+                anchor = tools[-1]
+        if anchor is not None:
+            marked.append(anchor)
 
-        # 2. Recent message blocks
+        # 2. Incremental-conversation breakpoints on the newest messages.
         messages = payload.get("messages", [])
-        cache_start = max(0, len(messages) - self.prompt_cache_size)
-        for i in range(cache_start, len(messages)):
-            msg = messages[i]
+        budget = MAX_CACHE_BREAKPOINTS - len(marked)
+        recent = messages[-self.prompt_cache_size:] if self.prompt_cache_size > 0 else []
+        for msg in reversed(recent):
+            if budget <= 0:
+                break
             if not isinstance(msg, dict):
                 continue
             content = msg.get("content")
-            if isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict):
-                        candidates.append(block)
-            elif isinstance(content, str) and content:
-                new_block = {"type": "text", "text": content}
-                msg["content"] = [new_block]
-                candidates.append(new_block)
+            if isinstance(content, str):
+                if not content:
+                    continue
+                block: dict = {"type": "text", "text": content}
+                msg["content"] = [block]
+                marked.append(block)
+                budget -= 1
+            elif isinstance(content, list):
+                for block in reversed(content):
+                    if isinstance(block, dict) and block.get("type") in CACHEABLE_BLOCK_TYPES:
+                        marked.append(block)
+                        budget -= 1
+                        break
 
-        # 3. Last tool definition
-        tools = payload.get("tools", [])
-        if tools and isinstance(tools[-1], dict):
-            candidates.append(tools[-1])
-
-        # Apply cache_control only to the last MAX_CACHE_BREAKPOINTS candidates
-        # to stay within the API limit.
-        for block in candidates[-MAX_CACHE_BREAKPOINTS:]:
+        for block in marked:
             block["cache_control"] = {"type": "ephemeral"}
 
     def _apply_thinking_budget(self, payload: dict) -> None:
-        """Auto-allocate thinking budget (80% of max_tokens)."""
+        """Auto-allocate thinking budget (THINKING_BUDGET_RATIO × max_tokens)."""
         thinking = payload.get("thinking")
         if not thinking or not isinstance(thinking, dict):
             return
@@ -306,7 +397,13 @@ class ClaudeChatModel(ChatAnthropic):
 
     @staticmethod
     def _strip_cache_control(payload: dict) -> None:
-        """Remove cache_control markers before OAuth requests reach Anthropic."""
+        """Remove every cache_control marker from system, messages, and tools.
+
+        Used two ways: as the strip-first pass inside ``_apply_prompt_caching``
+        (so the 4-breakpoint budget is exact regardless of upstream markers), and
+        as the hard-off path when caching is disabled via config or the
+        DEERFLOW_CLAUDE_PROMPT_CACHE kill-switch.
+        """
         for section in ("system", "messages"):
             items = payload.get(section)
             if not isinstance(items, list):
@@ -327,15 +424,11 @@ class ClaudeChatModel(ChatAnthropic):
                 if isinstance(tool, dict):
                     tool.pop("cache_control", None)
 
-    def _create(self, payload: dict) -> Any:
-        if self._is_oauth:
-            self._strip_cache_control(payload)
-        return super()._create(payload)
-
-    async def _acreate(self, payload: dict) -> Any:
-        if self._is_oauth:
-            self._strip_cache_control(payload)
-        return await super()._acreate(payload)
+    # NOTE: the historical ``_create``/``_acreate`` overrides that stripped
+    # cache_control from every OAuth payload are intentionally gone. All four
+    # langchain-anthropic request paths build their payload via
+    # ``_get_request_payload`` (which now owns both the apply and the hard-off
+    # strip), so an extra strip here would only silently undo lever 1.
 
     def _generate(self, messages: list[BaseMessage], stop: list[str] | None = None, **kwargs: Any) -> Any:
         """Override with OAuth patching and retry logic."""

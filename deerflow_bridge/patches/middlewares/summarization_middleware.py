@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any, Protocol, override, runtime_checkable
@@ -19,6 +20,51 @@ from deerflow.agents.middlewares.dynamic_context_middleware import is_dynamic_co
 from deerflow.agents.middlewares.tool_call_metadata import clone_ai_message_with_tool_calls
 
 logger = logging.getLogger(__name__)
+
+# Research-stage token lever 2 (inter-phase thread compaction): A/B override for
+# LangChain's ``trim_tokens_to_summarize`` — how much of the discarded history
+# segment the summarizer itself gets to read. Unset (the default) preserves
+# today's behavior EXACTLY: the configured value flows through untouched
+# (config.yaml ships ``null`` → None → summarize the complete discarded
+# segment). Set to a positive integer to cap the summarizer's input at that
+# many tokens; set to "none"/"null"/"full" to force full-segment summarization
+# regardless of config. Invalid values are logged and ignored — never guessed.
+TRIM_TOKENS_ENV = "RESEARCH_TRIM_TOKENS_TO_SUMMARIZE"
+_TRIM_NONE_SENTINELS = frozenset({"none", "null", "full"})
+
+
+def _resolve_trim_tokens_override() -> tuple[bool, int | None]:
+    """Parse TRIM_TOKENS_ENV into ``(has_override, value)``.
+
+    ``(False, None)`` means "no override — leave the configured value alone",
+    which is also the fail-safe result for any unparseable input.
+    """
+    raw = os.environ.get(TRIM_TOKENS_ENV)
+    if raw is None:
+        return False, None
+    text = raw.strip().lower()
+    if not text:
+        return False, None
+    if text in _TRIM_NONE_SENTINELS:
+        return True, None
+    try:
+        value = int(text)
+    except ValueError:
+        logger.warning(
+            "%s=%r is neither a positive integer nor one of %s — ignoring the override",
+            TRIM_TOKENS_ENV,
+            raw,
+            sorted(_TRIM_NONE_SENTINELS),
+        )
+        return False, None
+    if value < 1:
+        logger.warning(
+            "%s=%r must be >= 1 (or a null sentinel) — ignoring the override",
+            TRIM_TOKENS_ENV,
+            raw,
+        )
+        return False, None
+    return True, value
 
 
 @dataclass(frozen=True)
@@ -110,6 +156,20 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         preserve_recent_skill_tokens_per_skill: int = 5_000,
         **kwargs,
     ) -> None:
+        # Lever-2 env knob. ``trim_tokens_to_summarize`` is keyword-only on the
+        # LangChain parent, so every construction path (the lead-agent factory is
+        # the sole entry point today) routes it through ``kwargs`` — overriding
+        # here covers them all. No env → kwargs pass through byte-for-byte.
+        has_trim_override, trim_override = _resolve_trim_tokens_override()
+        if has_trim_override:
+            configured = kwargs.get("trim_tokens_to_summarize", "<parent default>")
+            kwargs["trim_tokens_to_summarize"] = trim_override
+            logger.info(
+                "%s override active: trim_tokens_to_summarize %s -> %s",
+                TRIM_TOKENS_ENV,
+                configured,
+                trim_override,
+            )
         super().__init__(*args, **kwargs)
         self._skills_container_path = skills_container_path or "/mnt/skills"
         self._skill_file_read_tool_names = frozenset(skill_file_read_tool_names or {"read_file", "read", "view", "cat"})
