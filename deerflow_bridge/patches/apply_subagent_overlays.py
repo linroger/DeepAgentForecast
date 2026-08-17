@@ -37,6 +37,89 @@ _CLIENT_CONTEXT_PATCHED = (
     '        context = {"thread_id": thread_id, "app_config": self._app_config}\n'
 )
 
+# LOOP-017 F1: same-message-id usage snapshots are NOT always identical.
+# ``TokenUsageAttributionMiddleware`` folds subagent spend into an already
+# streamed AIMessage's cumulative ``usage_metadata``, so a later snapshot for
+# the same id can be strictly larger (parent-only 10 → parent+subagents 110).
+# The client's first-seen-wins dedup dropped that growth, undercounting
+# Stage-1 research spend in ``cumulative_usage`` (the durable end-event
+# total). The overlay tracks the counted amount per id and accounts only the
+# positive delta; identical re-arrivals (values-vs-messages duplicates) still
+# count zero, and negative movement is never subtracted.
+_CLIENT_USAGE_MARKER = "DRF overlay: same-id usage snapshots are not always identical"
+_CLIENT_USAGE_DECL_ORIGINAL = (
+    "        # The same message id carries identical cumulative ``usage_metadata``\n"
+    "        # in both the final ``messages`` chunk and the values snapshot —\n"
+    "        # count it only on whichever arrives first.\n"
+    "        counted_usage_ids: set[str] = set()\n"
+)
+_CLIENT_USAGE_DECL_PATCHED = (
+    "        # DRF overlay: same-id usage snapshots are not always identical —\n"
+    "        # the token-usage middleware folds subagent spend into an already\n"
+    "        # streamed AIMessage's cumulative usage_metadata, so a later\n"
+    "        # snapshot for the same id can be strictly larger. Track counted\n"
+    "        # amounts per id and account only the positive delta.\n"
+    "        counted_usage_by_id: dict[str, dict[str, int]] = {}\n"
+)
+_CLIENT_USAGE_BODY_ORIGINAL = (
+    "            if not usage:\n"
+    "                return None\n"
+    "            if msg_id and msg_id in counted_usage_ids:\n"
+    "                return None\n"
+    "            if msg_id:\n"
+    "                counted_usage_ids.add(msg_id)\n"
+    "            input_tokens = usage.get(\"input_tokens\", 0) or 0\n"
+    "            output_tokens = usage.get(\"output_tokens\", 0) or 0\n"
+    "            total_tokens = usage.get(\"total_tokens\", 0) or 0\n"
+    "            cumulative_usage[\"input_tokens\"] += input_tokens\n"
+    "            cumulative_usage[\"output_tokens\"] += output_tokens\n"
+    "            cumulative_usage[\"total_tokens\"] += total_tokens\n"
+    "            return {\n"
+    "                \"input_tokens\": input_tokens,\n"
+    "                \"output_tokens\": output_tokens,\n"
+    "                \"total_tokens\": total_tokens,\n"
+    "            }\n"
+)
+_CLIENT_USAGE_BODY_PATCHED = (
+    "            if not usage:\n"
+    "                return None\n"
+    "            input_tokens = usage.get(\"input_tokens\", 0) or 0\n"
+    "            output_tokens = usage.get(\"output_tokens\", 0) or 0\n"
+    "            total_tokens = usage.get(\"total_tokens\", 0) or 0\n"
+    "            if msg_id:\n"
+    "                prev = counted_usage_by_id.get(msg_id)\n"
+    "                if prev is not None:\n"
+    "                    delta_in = max(0, input_tokens - prev[\"input_tokens\"])\n"
+    "                    delta_out = max(0, output_tokens - prev[\"output_tokens\"])\n"
+    "                    delta_total = max(0, total_tokens - prev[\"total_tokens\"])\n"
+    "                    if not (delta_in or delta_out or delta_total):\n"
+    "                        return None\n"
+    "                    prev[\"input_tokens\"] = max(prev[\"input_tokens\"], input_tokens)\n"
+    "                    prev[\"output_tokens\"] = max(prev[\"output_tokens\"], output_tokens)\n"
+    "                    prev[\"total_tokens\"] = max(prev[\"total_tokens\"], total_tokens)\n"
+    "                    cumulative_usage[\"input_tokens\"] += delta_in\n"
+    "                    cumulative_usage[\"output_tokens\"] += delta_out\n"
+    "                    cumulative_usage[\"total_tokens\"] += delta_total\n"
+    "                    return {\n"
+    "                        \"input_tokens\": delta_in,\n"
+    "                        \"output_tokens\": delta_out,\n"
+    "                        \"total_tokens\": delta_total,\n"
+    "                    }\n"
+    "                counted_usage_by_id[msg_id] = {\n"
+    "                    \"input_tokens\": input_tokens,\n"
+    "                    \"output_tokens\": output_tokens,\n"
+    "                    \"total_tokens\": total_tokens,\n"
+    "                }\n"
+    "            cumulative_usage[\"input_tokens\"] += input_tokens\n"
+    "            cumulative_usage[\"output_tokens\"] += output_tokens\n"
+    "            cumulative_usage[\"total_tokens\"] += total_tokens\n"
+    "            return {\n"
+    "                \"input_tokens\": input_tokens,\n"
+    "                \"output_tokens\": output_tokens,\n"
+    "                \"total_tokens\": total_tokens,\n"
+    "            }\n"
+)
+
 _TASK_MODEL_ORIGINAL = '        parent_model = metadata.get("model_name")\n'
 _TASK_MODEL_PATCHED = (
     '        # DRF overlay: embedded clients carry the active model under\n'
@@ -220,13 +303,31 @@ def apply(deerflow_root: str | os.PathLike[str]) -> str:
 
     updates: dict[Path, str] = {}
 
-    client_source, changed = _updated_source(
-        targets["client"],
-        _CLIENT_CONTEXT_ORIGINAL,
-        _CLIENT_CONTEXT_PATCHED,
-        "task subagents must receive the exact per-client config",
-    )
-    if changed:
+    client_source = targets["client"].read_text(encoding="utf-8")
+    client_changed = False
+    if "task subagents must receive the exact per-client config" not in client_source:
+        if client_source.count(_CLIENT_CONTEXT_ORIGINAL) != 1:
+            raise RuntimeError(
+                "subagent overlay context drifted; refusing an unsafe edit: "
+                f"{targets['client']}"
+            )
+        client_source = client_source.replace(
+            _CLIENT_CONTEXT_ORIGINAL, _CLIENT_CONTEXT_PATCHED, 1
+        )
+        client_changed = True
+    if _CLIENT_USAGE_MARKER not in client_source:
+        for original, patched, what in (
+            (_CLIENT_USAGE_DECL_ORIGINAL, _CLIENT_USAGE_DECL_PATCHED, "declaration"),
+            (_CLIENT_USAGE_BODY_ORIGINAL, _CLIENT_USAGE_BODY_PATCHED, "body"),
+        ):
+            if client_source.count(original) != 1:
+                raise RuntimeError(
+                    f"client usage overlay {what} context drifted; refusing "
+                    f"an unsafe edit: {targets['client']}"
+                )
+            client_source = client_source.replace(original, patched, 1)
+        client_changed = True
+    if client_changed:
         updates[targets["client"]] = client_source
 
     task_source, changed = _updated_source(

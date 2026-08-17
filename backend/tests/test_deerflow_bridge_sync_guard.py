@@ -390,7 +390,32 @@ def test_syncs_tracked_embedded_subagent_overlay(tmp_path, monkeypatch):
         '''class DeerFlowClient:
     def stream(self, thread_id):
         context = {"thread_id": thread_id}
-        return context
+        # The same message id carries identical cumulative ``usage_metadata``
+        # in both the final ``messages`` chunk and the values snapshot —
+        # count it only on whichever arrives first.
+        counted_usage_ids: set[str] = set()
+        cumulative_usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+        def _account_usage(msg_id, usage):
+            if not usage:
+                return None
+            if msg_id and msg_id in counted_usage_ids:
+                return None
+            if msg_id:
+                counted_usage_ids.add(msg_id)
+            input_tokens = usage.get("input_tokens", 0) or 0
+            output_tokens = usage.get("output_tokens", 0) or 0
+            total_tokens = usage.get("total_tokens", 0) or 0
+            cumulative_usage["input_tokens"] += input_tokens
+            cumulative_usage["output_tokens"] += output_tokens
+            cumulative_usage["total_tokens"] += total_tokens
+            return {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+            }
+
+        return context, _account_usage
 ''',
     )
     _write(
@@ -441,6 +466,8 @@ class SubagentExecutor:
     ).read_text()
     executor_source = (deployed_harness / "subagents" / "executor.py").read_text()
     assert '"app_config": self._app_config' in client_source
+    assert "counted_usage_by_id" in client_source
+    assert "counted_usage_ids" not in client_source
     assert 'configurable.get("model_name")' in task_source
     assert "async_subagent_lifecycle_lease" in executor_source
     assert "async def _aexecute_under_lease" in executor_source
