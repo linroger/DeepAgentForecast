@@ -768,10 +768,10 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   border: 1px solid var(--border);
-  border-left: 2px solid var(--err);
-  background: var(--soft);
+  border-left: 3px solid var(--err);
+  background: var(--color-err-soft, #FEF2F2);
   padding: 8px 12px;
-  border-radius: 2px;
+  border-radius: var(--radius, 2px);
   font-size: 12px;
 }
 

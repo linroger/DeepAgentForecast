@@ -44,9 +44,9 @@
 
     <!-- 列表 -->
     <div class="ph-list" role="list">
-      <!-- 加载态（仅首次空列表时显示骨架） -->
+      <!-- 加载态（仅首次空列表时显示） -->
       <div v-if="loading && !items.length" class="ph-loading">
-        <span class="ph-loading-dot"></span>{{ L('加载中…','Loading…') }}
+        <span class="ph-spinner" aria-hidden="true"></span>{{ L('加载中…','Loading…') }}
       </div>
 
       <!-- 空态 -->
@@ -379,8 +379,9 @@ defineExpose({ load })
   font-family: var(--mono);
   font-size: 0.72rem;
   font-weight: 600;
+  border-radius: var(--radius, 2px);
   cursor: pointer;
-  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  transition: transform var(--dur-2, 180ms) var(--ease, ease), border-color var(--dur-2, 180ms) var(--ease, ease), background var(--dur-2, 180ms) var(--ease, ease);
 }
 
 .ph-refresh:hover:not(:disabled) {
@@ -450,12 +451,17 @@ defineExpose({ load })
   letter-spacing: 0.5px;
 }
 
-.ph-loading-dot {
-  width: 6px;
-  height: 6px;
+.ph-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--orange);
   border-radius: 50%;
-  background: var(--orange);
-  animation: ph-blink 1s step-end infinite;
+  animation: ph-spin-load 0.8s linear infinite;
+}
+
+@keyframes ph-spin-load {
+  to { transform: rotate(360deg); }
 }
 
 @keyframes ph-blink {
@@ -475,7 +481,7 @@ defineExpose({ load })
   cursor: pointer;
   font-family: inherit;
   color: inherit;
-  transition: background 0.16s ease, transform 0.16s ease, border-color 0.16s ease;
+  transition: background var(--dur-1, 120ms) var(--ease, ease), border-color var(--dur-1, 120ms) var(--ease, ease);
 }
 
 .ph-row:last-child {
@@ -484,12 +490,16 @@ defineExpose({ load })
 
 .ph-row:hover {
   background: #FAFAFA;
-  transform: translateY(-1px);
+  border-left-color: #ddd;
+}
+
+.ph-row:focus-visible {
+  outline-offset: -2px;
 }
 
 .ph-row.active {
   border-left: 3px solid var(--orange);
-  background: #FFF6F2;
+  background: var(--color-accent-soft, #FFF6F2);
 }
 
 .ph-row-top {
@@ -622,12 +632,13 @@ defineExpose({ load })
 .ph-action {
   background: #fff;
   border: 1px solid var(--border);
+  border-radius: var(--radius, 2px);
   padding: 4px 10px;
   font-family: var(--mono);
   font-size: 0.66rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.16s ease, color 0.16s ease;
+  transition: border-color var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease);
 }
 
 .ph-action:disabled { color: #bbb; cursor: default; }

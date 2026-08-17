@@ -702,14 +702,17 @@ function formatUsd(value) {
   gap: 16px;
 }
 
-/* ---- Segmented tabs ---- */
+/* ---- Segmented tabs ----
+   Per-button borders with -1px collapse (instead of a clipping container
+   border) so the tab set wraps to extra rows at narrow widths with clean
+   separators — previously overflow:hidden made trailing tabs unreachable. */
 .tabs {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 0;
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  overflow: hidden;
   align-self: flex-start;
+  padding-top: 1px;
+  padding-left: 1px;
   background: #fff;
 }
 
@@ -723,24 +726,22 @@ function formatUsd(value) {
   letter-spacing: 0.04em;
   background: #fff;
   color: #000;
-  border: none;
-  border-right: 1px solid var(--border);
+  border: 1px solid var(--border);
+  margin: -1px 0 0 -1px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, transform 0.15s;
-}
-
-.tab:last-child {
-  border-right: none;
+  transition: background var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease);
 }
 
 .tab:hover:not(.active) {
   background: #FAFAFA;
-  transform: translateY(-1px);
 }
 
 .tab.active {
   background: #000;
+  border-color: #000;
   color: #fff;
+  position: relative; /* keep the dark border above collapsed neighbours */
+  z-index: 1;
 }
 
 .tab-count {
@@ -1059,8 +1060,13 @@ function formatUsd(value) {
   background: #fff;
   color: #000;
   cursor: pointer;
-  border-radius: 2px;
-  transition: background 0.15s, color 0.15s;
+  border-radius: var(--radius, 2px);
+  transition: background var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease), border-color var(--dur-1, 120ms) var(--ease, ease);
+}
+
+.edit-btn:hover:not(:disabled):not(.primary):not(.disabled) {
+  border-color: var(--orange);
+  color: var(--orange);
 }
 
 .edit-btn.primary {
@@ -1162,7 +1168,7 @@ function formatUsd(value) {
 }
 
 .edit-error {
-  color: #a40000;
+  color: var(--color-err, #B91C1C);
   font-size: 12px;
   font-family: var(--mono);
   margin: 8px 0 0;

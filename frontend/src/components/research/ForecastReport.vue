@@ -1841,4 +1841,33 @@ onBeforeUnmount(() => {
   .partial-warning { margin: 14px 18px 0; }
   .report-title { font-size: 19px; }
 }
+
+/* ---------- Print: report body as a clean document ---------- */
+@media print {
+  .report-layout { display: block; }
+  .report-nav,
+  .report-head-right,
+  .writing-indicator { display: none !important; }
+  .report-head { border-bottom: 2px solid #000; padding: 0 0 12px; }
+  .report-scroll {
+    overflow: visible;
+    padding: 18px 0 0;
+  }
+  .md-body { max-width: none; }
+  .md-body :deep(pre) {
+    background: #f5f5f5;
+    color: #111;
+    border: 1px solid #ddd;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .md-body :deep(a) { color: #000; border-bottom: none; }
+  .md-body :deep(h2),
+  .md-body :deep(h3) { break-after: avoid-page; }
+  .md-body :deep(table),
+  .md-body :deep(.md-img),
+  .chart-fig { break-inside: avoid-page; }
+  .forecast-dash,
+  .chart-gallery { max-width: none; }
+}
 </style>

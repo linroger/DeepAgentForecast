@@ -3,7 +3,7 @@
     <!-- Header -->
     <header class="app-header">
       <div class="header-left">
-        <div class="brand" @click="router.push('/')">DeepResearchForecast</div>
+        <div class="brand" @click="router.push('/')">DeepResearch<span class="brand-accent">Forecast</span></div>
       </div>
       
       <div class="header-center">
@@ -15,7 +15,7 @@
             :class="{ active: viewMode === mode }"
             @click="viewMode = mode"
           >
-            {{ { graph: '图谱', split: '双栏', workbench: '工作台' }[mode] }}
+            {{ { graph: L('图谱', 'Graph'), split: L('双栏', 'Split'), workbench: L('工作台', 'Workbench') }[mode] }}
           </button>
         </div>
       </div>
@@ -77,6 +77,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { L } from '../i18n'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step1GraphBuild from '../components/Step1GraphBuild.vue'
 import Step2EnvSetup from '../components/Step2EnvSetup.vue'
@@ -91,7 +92,13 @@ const viewMode = ref('split') // graph | split | workbench
 
 // Step State
 const currentStep = ref(1) // 1: 图谱构建, 2: 环境搭建, 3: 开始模拟, 4: 报告生成, 5: 深度互动
-const stepNames = ['图谱构建', '环境搭建', '开始模拟', '报告生成', '深度互动']
+const stepNames = computed(() => [
+  L('图谱构建', 'Graph build'),
+  L('环境搭建', 'Environment setup'),
+  L('开始模拟', 'Run simulation'),
+  L('报告生成', 'Report generation'),
+  L('深度互动', 'Deep interaction')
+])
 
 // Data State
 const currentProjectId = ref(route.params.projectId)
@@ -130,11 +137,11 @@ const statusClass = computed(() => {
 })
 
 const statusText = computed(() => {
-  if (error.value) return 'Error'
-  if (currentPhase.value >= 2) return 'Ready'
-  if (currentPhase.value === 1) return 'Building Graph'
-  if (currentPhase.value === 0) return 'Generating Ontology'
-  return 'Initializing'
+  if (error.value) return L('错误', 'Error')
+  if (currentPhase.value >= 2) return L('就绪', 'Ready')
+  if (currentPhase.value === 1) return L('构建图谱中', 'Building graph')
+  if (currentPhase.value === 0) return L('生成本体中', 'Generating ontology')
+  return L('初始化中', 'Initializing')
 })
 
 // --- Helpers ---
@@ -159,7 +166,7 @@ const toggleMaximize = (target) => {
 const handleNextStep = (params = {}) => {
   if (currentStep.value < 5) {
     currentStep.value++
-    addLog(`进入 Step ${currentStep.value}: ${stepNames[currentStep.value - 1]}`)
+    addLog(`进入 Step ${currentStep.value}: ${stepNames.value[currentStep.value - 1]}`)
     
     // 如果是从 Step 2 进入 Step 3，记录模拟轮数配置
     if (currentStep.value === 3 && params.maxRounds) {
@@ -171,7 +178,7 @@ const handleNextStep = (params = {}) => {
 const handleGoBack = () => {
   if (currentStep.value > 1) {
     currentStep.value--
-    addLog(`返回 Step ${currentStep.value}: ${stepNames[currentStep.value - 1]}`)
+    addLog(`返回 Step ${currentStep.value}: ${stepNames.value[currentStep.value - 1]}`)
   }
 }
 
@@ -441,6 +448,14 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
+.brand:hover {
+  color: var(--color-accent, #FF4500);
+}
+
+.brand-accent {
+  color: var(--color-accent, #FF4500);
+}
+
 .view-switcher {
   display: flex;
   background: #F5F5F5;
@@ -513,9 +528,9 @@ onUnmounted(() => {
   background: #CCC;
 }
 
-.status-indicator.processing .dot { background: #FF5722; animation: pulse 1s infinite; }
-.status-indicator.completed .dot { background: #4CAF50; }
-.status-indicator.error .dot { background: #F44336; }
+.status-indicator.processing .dot { background: var(--color-accent, #FF4500); animation: pulse 1s infinite; }
+.status-indicator.completed .dot { background: var(--color-ok, #16A34A); }
+.status-indicator.error .dot { background: var(--color-err, #B91C1C); }
 
 @keyframes pulse { 50% { opacity: 0.5; } }
 

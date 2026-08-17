@@ -320,15 +320,15 @@ onMounted(() => {
   white-space: nowrap;
 }
 .rc-line-counter { font-family:var(--mono); font-size:.68rem; color:var(--muted); white-space:nowrap; }
-.rc-history-state { border:1px solid #c7d2fe; background:#eef2ff; color:#3730a3; padding:3px 7px; font-family:var(--mono); font-size:.62rem; font-weight:700; letter-spacing:.3px; white-space:nowrap; }
-.rc-history-state.complete { border-color:#bbf7d0; background:#f0fdf4; color:#166534; }
-.rc-history-state.warning { border-color:#fecaca; background:#fff1f2; color:#b91c1c; }
-.rc-refresh-btn { border:1px solid var(--border); background:#fff; color:#444; padding:5px 9px; font-family:var(--mono); font-size:.64rem; cursor:pointer; }
+.rc-history-state { border:1px solid var(--border); background:var(--color-soft, #FAFAFA); color:var(--muted); border-radius:var(--radius-pill, 999px); padding:3px 10px; font-family:var(--mono); font-size:.62rem; font-weight:700; letter-spacing:.3px; white-space:nowrap; transition:color var(--dur-2, 180ms) var(--ease, ease), border-color var(--dur-2, 180ms) var(--ease, ease), background var(--dur-2, 180ms) var(--ease, ease); }
+.rc-history-state.complete { border-color:#bbf7d0; background:var(--color-ok-soft, #F0FDF4); color:#166534; }
+.rc-history-state.warning { border-color:#fecaca; background:var(--color-err-soft, #FEF2F2); color:#b91c1c; }
+.rc-refresh-btn { border:1px solid var(--border); border-radius:var(--radius, 2px); background:#fff; color:#444; padding:5px 9px; font-family:var(--mono); font-size:.64rem; cursor:pointer; transition:border-color var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease); }
 .rc-refresh-btn:hover:not(:disabled) { border-color:var(--orange); color:var(--orange); }
 .rc-refresh-btn:disabled { color:#aaa; cursor:wait; }
 .rc-pages { display:inline-flex; align-items:center; gap:4px; font-family:var(--mono); font-size:.62rem; color:var(--muted); }
 .rc-pages span { min-width:92px; text-align:right; }
-.rc-pages button { border:1px solid var(--border); background:#fff; color:#444; padding:3px 6px; font:inherit; cursor:pointer; }
+.rc-pages button { border:1px solid var(--border); border-radius:var(--radius, 2px); background:#fff; color:#444; padding:3px 6px; font:inherit; cursor:pointer; transition:border-color var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease); }
 .rc-pages button:hover:not(:disabled) { border-color:var(--orange); color:var(--orange); }
 .rc-pages button:disabled { color:#bbb; cursor:default; }
 
@@ -336,6 +336,8 @@ onMounted(() => {
 .rc-filter {
   display: inline-flex;
   border: 1px solid var(--border);
+  border-radius: var(--radius, 2px);
+  overflow: hidden;
 }
 
 .rc-filter-btn {
@@ -349,16 +351,16 @@ onMounted(() => {
   letter-spacing: 0.5px;
   padding: 5px 12px;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  transition: background var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease);
 }
 
 .rc-filter-btn:last-child {
   border-right: none;
 }
 
-.rc-filter-btn:hover {
+.rc-filter-btn:hover:not(.active) {
   color: #000;
-  transform: translateY(-1px);
+  background: var(--color-soft, #FAFAFA);
 }
 
 .rc-filter-btn.active {
@@ -429,9 +431,10 @@ onMounted(() => {
   font-size: 0.66rem;
   letter-spacing: 0.5px;
   padding: 5px 11px;
+  border-radius: var(--radius-pill, 999px);
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-  transition: transform 0.15s ease, opacity 0.15s ease;
+  transition: transform var(--dur-1, 120ms) var(--ease, ease), opacity var(--dur-1, 120ms) var(--ease, ease);
 }
 
 .rc-jump-btn:hover {

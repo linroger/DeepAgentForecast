@@ -75,14 +75,18 @@ defineExpose({ open })
 .cd-scrim {
   position: fixed; inset: 0; background: rgba(0, 0, 0, .4); z-index: 70;
   display: flex; align-items: center; justify-content: center;
+  animation: cd-fade var(--dur-2, 180ms) var(--ease, ease);
 }
 .cd-modal {
   width: 440px; max-width: 92vw; max-height: 88vh; background: var(--color-paper, #fff);
   border: 1px solid var(--color-ink, #000); display: flex; flex-direction: column;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, .3);
+  box-shadow: var(--shadow-pop, 0 24px 64px rgba(10, 10, 10, .28));
   font-family: var(--font-sans, 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif);
   color: var(--color-ink, #000);
+  animation: cd-rise var(--dur-3, 250ms) var(--ease, ease);
 }
+@keyframes cd-fade { from { opacity: 0; } }
+@keyframes cd-rise { from { opacity: 0; transform: translateY(10px); } }
 .cd-head {
   display: flex; justify-content: space-between; align-items: center;
   padding: 14px 18px; border-bottom: 1px solid var(--color-border, #E5E5E5);
@@ -99,13 +103,15 @@ defineExpose({ open })
   padding: 12px 18px; border-top: 1px solid var(--color-border, #E5E5E5);
 }
 .cd-ghost {
-  background: var(--color-paper, #fff); border: 1px solid #DDD; padding: 9px 16px;
+  background: var(--color-paper, #fff); border: 1px solid #DDD; border-radius: var(--radius, 2px); padding: 9px 16px;
   font-family: var(--font-mono, monospace); font-size: .8rem; cursor: pointer; color: inherit;
+  transition: border-color var(--dur-1, 120ms) var(--ease, ease);
 }
 .cd-ghost:hover { border-color: var(--color-ink, #000); }
 .cd-confirm {
-  background: var(--color-ink, #000); color: #fff; border: none; padding: 9px 18px;
+  background: var(--color-ink, #000); color: #fff; border: none; border-radius: var(--radius, 2px); padding: 9px 18px;
   font-family: var(--font-mono, monospace); font-size: .8rem; font-weight: 700; cursor: pointer;
+  transition: opacity var(--dur-1, 120ms) var(--ease, ease);
 }
 .cd-confirm.danger { background: var(--color-err, #B91C1C); }
 .cd-confirm:hover { opacity: .88; }

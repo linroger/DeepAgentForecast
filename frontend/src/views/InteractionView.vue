@@ -3,7 +3,7 @@
     <!-- Header -->
     <header class="app-header">
       <div class="header-left">
-        <div class="brand" @click="router.push('/')">MIROFISH</div>
+        <div class="brand" @click="router.push('/')">DeepResearch<span class="brand-accent">Forecast</span></div>
       </div>
       
       <div class="header-center">
@@ -15,7 +15,7 @@
             :class="{ active: viewMode === mode }"
             @click="viewMode = mode"
           >
-            {{ { graph: '图谱', split: '双栏', workbench: '工作台' }[mode] }}
+            {{ { graph: L('图谱', 'Graph'), split: L('双栏', 'Split'), workbench: L('工作台', 'Workbench') }[mode] }}
           </button>
         </div>
       </div>
@@ -23,7 +23,7 @@
       <div class="header-right">
         <div class="workflow-step">
           <span class="step-num">Step 5/5</span>
-          <span class="step-name">深度互动</span>
+          <span class="step-name">{{ L('深度互动', 'Deep interaction') }}</span>
         </div>
         <div class="step-divider"></div>
         <span class="status-indicator" :class="statusClass">
@@ -64,6 +64,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { L } from '../i18n'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step5Interaction from '../components/Step5Interaction.vue'
 import { getProject, getGraphData } from '../api/graph'
@@ -109,10 +110,10 @@ const statusClass = computed(() => {
 })
 
 const statusText = computed(() => {
-  if (currentStatus.value === 'error') return 'Error'
-  if (currentStatus.value === 'completed') return 'Completed'
-  if (currentStatus.value === 'processing') return 'Processing'
-  return 'Ready'
+  if (currentStatus.value === 'error') return L('错误', 'Error')
+  if (currentStatus.value === 'completed') return L('已完成', 'Completed')
+  if (currentStatus.value === 'processing') return L('处理中', 'Processing')
+  return L('就绪', 'Ready')
 })
 
 // --- Helpers ---
@@ -250,6 +251,14 @@ onMounted(() => {
   cursor: pointer;
 }
 
+.brand:hover {
+  color: var(--color-accent, #FF4500);
+}
+
+.brand-accent {
+  color: var(--color-accent, #FF4500);
+}
+
 .view-switcher {
   display: flex;
   background: #F5F5F5;
@@ -322,10 +331,10 @@ onMounted(() => {
   background: #CCC;
 }
 
-.status-indicator.ready .dot { background: #4CAF50; }
+.status-indicator.ready .dot { background: var(--color-ok, #16A34A); }
 .status-indicator.processing .dot { background: #FF9800; animation: pulse 1s infinite; }
-.status-indicator.completed .dot { background: #4CAF50; }
-.status-indicator.error .dot { background: #F44336; }
+.status-indicator.completed .dot { background: var(--color-ok, #16A34A); }
+.status-indicator.error .dot { background: var(--color-err, #B91C1C); }
 
 @keyframes pulse { 50% { opacity: 0.5; } }
 

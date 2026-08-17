@@ -1,7 +1,7 @@
 <template>
   <div class="graph-panel">
     <div class="panel-header">
-      <span class="panel-title">{{ L('图谱关系可视化', 'Graph Relationship Visualization') }}</span>
+      <span class="panel-title"><span class="panel-diamond" aria-hidden="true">◇</span>{{ L('图谱关系可视化', 'Graph Relationship Visualization') }}</span>
       <!-- 顶部工具栏 (Internal Top Right) -->
       <div class="header-tools">
         <!-- 节点搜索：按名称匹配，Enter 循环切换匹配项 -->
@@ -266,7 +266,7 @@
 
       <!-- 等待/空状态 -->
       <div v-else class="graph-state">
-        <div class="empty-icon">❖</div>
+        <div class="empty-icon">◇</div>
         <p class="empty-text">{{ L('等待本体生成...', 'Waiting for ontology generation...') }}</p>
       </div>
     </div>
@@ -1882,10 +1882,22 @@ onUnmounted(() => {
 }
 
 .panel-title {
-  font-size: 14px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 12px;
   font-weight: 600;
-  color: #333;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink, #0A0A0A);
   pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.panel-diamond {
+  color: var(--color-accent, #FF4500);
+  font-size: 12px;
+  line-height: 1;
 }
 
 .header-tools {
@@ -1898,28 +1910,29 @@ onUnmounted(() => {
 .tool-btn {
   height: 32px;
   padding: 0 12px;
-  border: 1px solid #E0E0E0;
+  border: 1px solid var(--color-border, #E5E5E5);
   background: #FFF;
-  border-radius: 6px;
+  border-radius: var(--radius, 2px);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   cursor: pointer;
   color: #666;
-  transition: all 0.2s;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  transition: background var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease), border-color var(--dur-1, 120ms) var(--ease, ease);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(10,10,10,0.06));
   font-size: 13px;
 }
 
 .tool-btn:hover {
-  background: #F5F5F5;
+  background: var(--color-soft, #FAFAFA);
   color: #000;
-  border-color: #CCC;
+  border-color: var(--color-accent, #FF4500);
 }
 
 .tool-btn .btn-text {
   font-size: 12px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
 }
 
 /* 节点搜索输入框（跟随 tool-btn 视觉） */
@@ -1933,18 +1946,18 @@ onUnmounted(() => {
   height: 32px;
   width: 150px;
   padding: 0 10px;
-  border: 1px solid #E0E0E0;
+  border: 1px solid var(--color-border, #E5E5E5);
   background: #FFF;
-  border-radius: 6px;
+  border-radius: var(--radius, 2px);
   font-size: 12px;
   color: #333;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(10,10,10,0.06));
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--dur-2, 180ms) var(--ease, ease);
 }
 
 .search-input:focus {
-  border-color: #7B2D8E;
+  border-color: var(--color-accent, #FF4500);
 }
 
 .search-count {
@@ -1961,10 +1974,10 @@ onUnmounted(() => {
   gap: 8px;
   height: 32px;
   padding: 0 10px;
-  border: 1px solid #E0E0E0;
+  border: 1px solid var(--color-border, #E5E5E5);
   background: #FFF;
-  border-radius: 6px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  border-radius: var(--radius, 2px);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(10,10,10,0.06));
 }
 
 .time-filter-label {
@@ -1978,7 +1991,7 @@ onUnmounted(() => {
 
 .time-filter-slider {
   width: 90px;
-  accent-color: #7B2D8E;
+  accent-color: var(--color-accent, #FF4500);
   cursor: pointer;
 }
 
@@ -2006,12 +2019,15 @@ onUnmounted(() => {
   transform: translate(-50%, -50%);
   text-align: center;
   color: #999;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 13px;
 }
 
 .empty-icon {
-  font-size: 48px;
+  font-size: 40px;
   margin-bottom: 16px;
-  opacity: 0.2;
+  color: var(--color-accent, #FF4500);
+  opacity: 0.55;
 }
 
 /* Entity Types Legend - Bottom Left */
@@ -2021,20 +2037,21 @@ onUnmounted(() => {
   left: 24px;
   background: rgba(255,255,255,0.95);
   padding: 12px 16px;
-  border-radius: 8px;
-  border: 1px solid #EAEAEA;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  border-radius: var(--radius, 2px);
+  border: 1px solid var(--color-border, #E5E5E5);
+  box-shadow: var(--shadow-md, 0 2px 10px rgba(10,10,10,0.08));
   z-index: 10;
 }
 
 .legend-title {
   display: block;
-  font-size: 11px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 10px;
   font-weight: 600;
-  color: #E91E63;
+  color: var(--color-muted, #666);
   margin-bottom: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.08em;
 }
 
 .legend-items {
@@ -2081,16 +2098,17 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   background: rgba(255, 255, 255, 0.96);
-  border: 1px solid #E0E0E0;
-  border-radius: 20px;
+  border: 1px solid var(--color-border, #E5E5E5);
+  border-radius: var(--radius-pill, 999px);
   padding: 8px 14px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-md, 0 2px 10px rgba(10,10,10,0.08));
   z-index: 15;
   max-width: calc(100% - 48px);
 }
 
 .graph-focus-banner .focus-text {
-  font-size: 12px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
   color: #555;
   white-space: nowrap;
   overflow: hidden;
@@ -2098,24 +2116,25 @@ onUnmounted(() => {
 }
 
 .graph-focus-banner .focus-expanding {
-  color: #7B2D8E;
+  color: var(--color-accent, #FF4500);
 }
 
 .graph-focus-banner .focus-btn {
   flex-shrink: 0;
   height: 26px;
   padding: 0 12px;
-  border: 1px solid #7B2D8E;
+  border: 1px solid var(--color-accent, #FF4500);
   background: #FFF;
-  color: #7B2D8E;
-  border-radius: 13px;
-  font-size: 12px;
+  color: var(--color-accent, #FF4500);
+  border-radius: var(--radius-pill, 999px);
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease);
 }
 
 .graph-focus-banner .focus-btn:hover {
-  background: #7B2D8E;
+  background: var(--color-accent, #FF4500);
   color: #FFF;
 }
 
@@ -2134,9 +2153,9 @@ onUnmounted(() => {
   gap: 10px;
   background: #FFF;
   padding: 8px 14px;
-  border-radius: 20px;
-  border: 1px solid #E0E0E0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border-radius: var(--radius-pill, 999px);
+  border: 1px solid var(--color-border, #E5E5E5);
+  box-shadow: var(--shadow-md, 0 2px 10px rgba(10,10,10,0.08));
   z-index: 10;
 }
 
@@ -2178,11 +2197,17 @@ onUnmounted(() => {
 }
 
 input:checked + .slider {
-  background-color: #7B2D8E;
+  background-color: var(--color-ink, #0A0A0A);
 }
 
 input:checked + .slider:before {
   transform: translateX(18px);
+}
+
+/* Keyboard focus on the visually-hidden checkbox lights up the switch. */
+input:focus-visible + .slider {
+  outline: 2px solid var(--color-accent, #FF4500);
+  outline-offset: 2px;
 }
 
 .toggle-label {
@@ -2198,11 +2223,11 @@ input:checked + .slider:before {
   width: 320px;
   max-height: calc(100% - 100px);
   background: #FFF;
-  border: 1px solid #EAEAEA;
-  border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  border: 1px solid var(--color-border, #E5E5E5);
+  border-radius: var(--radius, 2px);
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(10,10,10,0.12));
   overflow: hidden;
-  font-family: 'Noto Sans SC', system-ui, sans-serif;
+  font-family: var(--font-sans, 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif);
   font-size: 13px;
   z-index: 20;
   display: flex;
@@ -2227,7 +2252,7 @@ input:checked + .slider:before {
 
 .detail-type-badge {
   padding: 4px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-pill, 999px);
   font-size: 11px;
   font-weight: 500;
   margin-left: auto;
@@ -2264,7 +2289,7 @@ input:checked + .slider:before {
 }
 
 .detail-status.detail-error {
-  color: #9B4B00;
+  color: var(--color-warn, #D97706);
   background: #FFF8ED;
 }
 
@@ -2350,8 +2375,8 @@ input:checked + .slider:before {
   display: inline-block;
   padding: 4px 12px;
   background: #F5F5F5;
-  border: 1px solid #E0E0E0;
-  border-radius: 16px;
+  border: 1px solid var(--color-border, #E5E5E5);
+  border-radius: var(--radius-pill, 999px);
   font-size: 11px;
   color: #555;
 }
@@ -2367,7 +2392,7 @@ input:checked + .slider:before {
   padding: 6px 10px;
   background: #F8F8F8;
   border: 1px solid #E8E8E8;
-  border-radius: 6px;
+  border-radius: var(--radius, 2px);
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
   color: #666;
@@ -2378,7 +2403,7 @@ input:checked + .slider:before {
 .edge-relation-header {
   background: #F8F8F8;
   padding: 12px;
-  border-radius: 8px;
+  border-radius: var(--radius, 2px);
   margin-bottom: 16px;
   font-size: 13px;
   font-weight: 500;
@@ -2419,12 +2444,12 @@ input:checked + .slider:before {
 .memory-icon {
   width: 18px;
   height: 18px;
-  color: #4CAF50;
+  color: var(--color-ok, #16A34A);
 }
 
 @keyframes breathe {
-  0%, 100% { opacity: 0.7; transform: scale(1); filter: drop-shadow(0 0 2px rgba(76, 175, 80, 0.3)); }
-  50% { opacity: 1; transform: scale(1.15); filter: drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)); }
+  0%, 100% { opacity: 0.7; transform: scale(1); filter: drop-shadow(0 0 2px rgba(22, 163, 74, 0.3)); }
+  50% { opacity: 1; transform: scale(1.15); filter: drop-shadow(0 0 8px rgba(22, 163, 74, 0.6)); }
 }
 
 /* 模拟结束后的提示样式 */
@@ -2475,8 +2500,8 @@ input:checked + .slider:before {
 .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #E0E0E0;
-  border-top-color: #7B2D8E;
+  border: 3px solid var(--color-border, #E5E5E5);
+  border-top-color: var(--color-accent, #FF4500);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 16px;
@@ -2508,8 +2533,8 @@ input:checked + .slider:before {
 
 .self-loop-item {
   background: #FAFAFA;
-  border: 1px solid #EAEAEA;
-  border-radius: 8px;
+  border: 1px solid var(--color-border, #E5E5E5);
+  border-radius: var(--radius, 2px);
 }
 
 .self-loop-item-header {

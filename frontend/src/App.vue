@@ -15,33 +15,26 @@
 }
 
 #app {
-  font-family: 'JetBrains Mono', 'Space Grotesk', 'Noto Sans SC', monospace;
+  /* Sans-first: the UI is set in Space Grotesk / Noto Sans SC; JetBrains Mono
+     is opted into per-element via --font-mono (labels, code, metrics). */
+  font-family: var(--font-sans, 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: #000000;
-  background-color: #ffffff;
-}
-
-/* 滚动条样式 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #000000;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #333333;
+  text-rendering: optimizeLegibility;
+  color: var(--color-ink, #0A0A0A);
+  background-color: var(--color-paper, #ffffff);
 }
 
 /* 全局按钮样式 */
 button {
   font-family: inherit;
+}
+
+/* Printing the primary flow: chrome (nav, rails, controls) is hidden by the
+   view-level @media print rules; keep the page itself clean here. */
+@media print {
+  #app {
+    background: #fff;
+  }
 }
 </style>

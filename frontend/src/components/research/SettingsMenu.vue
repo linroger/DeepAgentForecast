@@ -3,7 +3,7 @@
     <div class="settings-modal">
       <div class="modal-head">
         <span class="modal-title">◇ {{ L('设置', 'Settings') }}</span>
-        <button class="modal-close" @click="$emit('close')">✕</button>
+        <button class="modal-close" :aria-label="L('关闭', 'Close')" @click="$emit('close')">✕</button>
       </div>
 
       <div class="modal-body">
@@ -201,29 +201,34 @@ onMounted(load)
 </script>
 
 <style scoped>
-.settings-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60; display: flex; align-items: center; justify-content: center; }
+.settings-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60; display: flex; align-items: center; justify-content: center; animation: sm-fade var(--dur-2, 180ms) var(--ease, ease); }
 .settings-modal {
   width: 560px; max-width: 92vw; max-height: 88vh; background: #fff; border: 1px solid #000;
-  display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,.3);
+  display: flex; flex-direction: column; box-shadow: var(--shadow-pop, 0 24px 64px rgba(10,10,10,.28));
   --orange: #FF4500; --border: #E5E5E5; --mono: 'JetBrains Mono', monospace;
   font-family: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif;
+  animation: sm-rise var(--dur-3, 250ms) var(--ease, ease);
 }
+@keyframes sm-fade { from { opacity: 0; } }
+@keyframes sm-rise { from { opacity: 0; transform: translateY(10px); } }
 .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
 .modal-title { font-family: var(--mono); font-weight: 700; font-size: .95rem; }
-.modal-close { background: none; border: none; font-size: 1.1rem; cursor: pointer; }
+.modal-close { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: var(--color-muted, #666); transition: color var(--dur-1, 120ms) var(--ease, ease); }
+.modal-close:hover { color: var(--color-ink, #000); }
 .modal-body { padding: 20px; overflow-y: auto; }
 .block { margin-bottom: 24px; }
 .block-label { font-family: var(--mono); font-size: .74rem; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
 .hint { font-size: .78rem; color: #888; line-height: 1.6; margin-bottom: 14px; }
-.seg { display: inline-flex; border: 1px solid #DDD; }
-.seg button { background: #fff; border: none; border-right: 1px solid #eee; padding: 8px 18px; font-family: var(--mono); font-size: .82rem; cursor: pointer; color: #555; }
+.seg { display: inline-flex; border: 1px solid #DDD; border-radius: var(--radius, 2px); overflow: hidden; }
+.seg button { background: #fff; border: none; border-right: 1px solid #eee; padding: 8px 18px; font-family: var(--mono); font-size: .82rem; cursor: pointer; color: #555; transition: background var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease); }
 .seg button:last-child { border-right: none; }
+.seg button:hover:not(.active) { background: var(--color-soft, #FAFAFA); color: #000; }
 .seg button.active { background: #000; color: #fff; }
 .loading { color: #999; font-family: var(--mono); font-size: .82rem; }
 .provider-list { display: flex; flex-direction: column; gap: 8px; }
-.provider-card { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); padding: 12px 14px; cursor: pointer; transition: border-color .15s; }
-.provider-card:hover { border-color: #bbb; }
-.provider-card.active { border-color: var(--orange); background: #FFF8F5; }
+.provider-card { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: var(--radius, 2px); padding: 12px 14px; cursor: pointer; transition: border-color var(--dur-1, 120ms) var(--ease, ease), background var(--dur-1, 120ms) var(--ease, ease); }
+.provider-card:hover { border-color: #bbb; background: var(--color-soft, #FAFAFA); }
+.provider-card.active { border-color: var(--orange); background: var(--color-accent-soft, #FFF6F2); }
 .provider-card input { accent-color: var(--orange); }
 .provider-main { flex: 1; }
 .provider-name { font-weight: 600; font-size: .92rem; display: flex; align-items: center; gap: 8px; }
@@ -237,9 +242,11 @@ onMounted(load)
 .advanced { margin-top: 8px; }
 .advanced summary { font-family: var(--mono); font-size: .74rem; color: #888; cursor: pointer; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); }
-.primary-btn { background: var(--orange); color: #fff; border: none; padding: 10px 20px; font-family: var(--mono); font-weight: 700; cursor: pointer; }
+.primary-btn { background: var(--orange); color: #fff; border: none; border-radius: var(--radius, 2px); padding: 10px 20px; font-family: var(--mono); font-weight: 700; cursor: pointer; transition: opacity var(--dur-1, 120ms) var(--ease, ease); }
+.primary-btn:hover:not(:disabled) { opacity: .88; }
 .primary-btn:disabled { background: #E5E5E5; color: #999; cursor: not-allowed; }
-.ghost-btn { background: #fff; border: 1px solid #DDD; padding: 10px 18px; font-family: var(--mono); cursor: pointer; }
+.ghost-btn { background: #fff; border: 1px solid #DDD; border-radius: var(--radius, 2px); padding: 10px 18px; font-family: var(--mono); cursor: pointer; transition: border-color var(--dur-1, 120ms) var(--ease, ease); }
+.ghost-btn:hover { border-color: var(--color-ink, #000); }
 .err { color: var(--orange); font-family: var(--mono); font-size: .8rem; margin-top: 12px; }
 .ok { color: #16a34a; font-family: var(--mono); font-size: .8rem; margin-top: 12px; }
 .test-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }

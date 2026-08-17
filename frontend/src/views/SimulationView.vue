@@ -3,7 +3,7 @@
     <!-- Header -->
     <header class="app-header">
       <div class="header-left">
-        <div class="brand" @click="router.push('/')">MIROFISH</div>
+        <div class="brand" @click="router.push('/')">DeepResearch<span class="brand-accent">Forecast</span></div>
       </div>
       
       <div class="header-center">
@@ -15,7 +15,7 @@
             :class="{ active: viewMode === mode }"
             @click="viewMode = mode"
           >
-            {{ { graph: '图谱', split: '双栏', workbench: '工作台' }[mode] }}
+            {{ { graph: L('图谱', 'Graph'), split: L('双栏', 'Split'), workbench: L('工作台', 'Workbench') }[mode] }}
           </button>
         </div>
       </div>
@@ -23,7 +23,7 @@
       <div class="header-right">
         <div class="workflow-step">
           <span class="step-num">Step 2/5</span>
-          <span class="step-name">环境搭建</span>
+          <span class="step-name">{{ L('环境搭建', 'Environment setup') }}</span>
         </div>
         <div class="step-divider"></div>
         <span class="status-indicator" :class="statusClass">
@@ -66,6 +66,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { L } from '../i18n'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step2EnvSetup from '../components/Step2EnvSetup.vue'
 import { getProject, getGraphData } from '../api/graph'
@@ -109,9 +110,9 @@ const statusClass = computed(() => {
 })
 
 const statusText = computed(() => {
-  if (currentStatus.value === 'error') return 'Error'
-  if (currentStatus.value === 'completed') return 'Ready'
-  return 'Preparing'
+  if (currentStatus.value === 'error') return L('错误', 'Error')
+  if (currentStatus.value === 'completed') return L('就绪', 'Ready')
+  return L('准备中', 'Preparing')
 })
 
 // --- Helpers ---
@@ -328,6 +329,14 @@ onMounted(async () => {
   cursor: pointer;
 }
 
+.brand:hover {
+  color: var(--color-accent, #FF4500);
+}
+
+.brand-accent {
+  color: var(--color-accent, #FF4500);
+}
+
 .header-center {
   position: absolute;
   left: 50%;
@@ -406,9 +415,9 @@ onMounted(async () => {
   background: #CCC;
 }
 
-.status-indicator.processing .dot { background: #FF5722; animation: pulse 1s infinite; }
-.status-indicator.completed .dot { background: #4CAF50; }
-.status-indicator.error .dot { background: #F44336; }
+.status-indicator.processing .dot { background: var(--color-accent, #FF4500); animation: pulse 1s infinite; }
+.status-indicator.completed .dot { background: var(--color-ok, #16A34A); }
+.status-indicator.error .dot { background: var(--color-err, #B91C1C); }
 
 @keyframes pulse { 50% { opacity: 0.5; } }
 
