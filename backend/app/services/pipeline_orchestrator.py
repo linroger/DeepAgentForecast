@@ -9877,14 +9877,27 @@ class PipelineOrchestrator:
         }
         # ORCH-7: 恢复过的管线以 resumed_at 为耗时锚——created_at 可能是数天前，用它线性外推
         # 会立刻顶到 PIPELINE_ETA_CAP_S（resume_count=5 的管线每个会话 ETA 全是噪声）。
-        _anchor = state.options.get("resumed_at") if isinstance(state.options, dict) else None
-        elapsed = _age_seconds(_anchor) if _anchor else None
-        if elapsed is None:
-            elapsed = _age_seconds(state.created_at)
-        if elapsed is not None:
-            out["elapsed_s"] = int(elapsed)
         status = state.status
         terminal = status in ("completed", "failed", "cancelled")
+        _anchor = state.options.get("resumed_at") if isinstance(state.options, dict) else None
+        anchor_age = _age_seconds(_anchor) if _anchor else None
+        if anchor_age is None:
+            anchor_age = _age_seconds(state.created_at)
+        if terminal:
+            # i8（F2 取证）：终态 elapsed 此前是「距现在的年龄」——一条 33 天前完成的
+            # 管线报 elapsed_s≈2,855,077。终态耗时应冻结在 anchor→updated_at 的真实
+            # 运行时长；时间戳缺失/倒挂 → 省略而非给误导数字。
+            end_age = _age_seconds(state.updated_at)
+            elapsed = (
+                anchor_age - end_age
+                if (anchor_age is not None and end_age is not None
+                    and anchor_age >= end_age)
+                else None
+            )
+        else:
+            elapsed = anchor_age
+        if elapsed is not None:
+            out["elapsed_s"] = int(elapsed)
         # staleness：仅对在飞管线有意义。
         ref = state.last_progress_at or state.updated_at
         age = _age_seconds(ref)

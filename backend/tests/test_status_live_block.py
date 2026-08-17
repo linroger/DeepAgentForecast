@@ -71,13 +71,30 @@ def test_status_running_carries_live_block(tmp_path, monkeypatch, client):
     assert "owner_alive" in live
 
 
-def test_status_terminal_eta_zero(tmp_path, monkeypatch, client):
+def test_status_terminal_eta_zero_and_frozen_elapsed(tmp_path, monkeypatch, client):
     monkeypatch.setattr(Config, "PIPELINE_DATA_DIR", str(tmp_path), raising=False)
     _write_state(tmp_path, PID, status="completed", global_progress=100)
 
     live = client.get(f"/api/research/status/{PID}").get_json()["data"]["live"]
     assert live["eta_s"] == 0
     assert live["stale"] is False
+    # i8（F2 取证）：终态 elapsed 冻结在 created/resumed→updated 的真实时长
+    # （fixture: created 600s 前、updated 5s 前 → ≈595s），不再随「现在」增长。
+    assert live["elapsed_s"] is not None and 585 <= live["elapsed_s"] <= 600
+
+
+def test_estimate_eta_terminal_elapsed_omitted_on_missing_updated_at():
+    """助手层守卫：终态且 updated_at 缺失 → elapsed 省略，绝不给误导数字。
+
+    （API 路径到不了这里：from_dict 会把 null updated_at 回填成「现在」——守卫保护的
+    是直接构造 PipelineState 的调用方。）"""
+    state = po.PipelineState(pipeline_id="pipe_x", prompt="q", mode="full",
+                             status="completed")
+    state.created_at = _utc(600)
+    state.updated_at = None
+    out = po.PipelineOrchestrator().estimate_eta(state)
+    assert out["elapsed_s"] is None
+    assert out["eta_s"] == 0
 
 
 def test_status_budget_block_with_metered_spend(tmp_path, monkeypatch, client):

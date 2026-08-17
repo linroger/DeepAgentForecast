@@ -152,6 +152,9 @@
               </button>
             </div>
             <h2 class="run-title">{{ statusTitle }}</h2>
+            <RunVitals :live="liveVitals" :status="status"
+              :created-at="runTiming.createdAt" :updated-at="runTiming.updatedAt"
+              :resumed-at="runTiming.resumedAt" />
           </div>
           <div class="run-actions">
             <button v-if="status === 'running'" class="ghost-btn cancel-btn" :disabled="cancelling" @click="cancel">
@@ -235,6 +238,7 @@ import {
   needsFinalProgressSnapshot
 } from '../utils/liveProgress'
 import StageTimeline from '../components/research/StageTimeline.vue'
+import RunVitals from '../components/research/RunVitals.vue'
 import ResearchConsole from '../components/research/ResearchConsole.vue'
 import DossierViewer from '../components/research/DossierViewer.vue'
 import SimulationView from '../components/research/SimulationView.vue'
@@ -307,6 +311,9 @@ async function continueToFull() {
     pipelineId.value = id
     mode.value = 'full'
     status.value = 'running'
+    // The previous terminal snapshot's `live` block would mislead under a
+    // "running" header (its elapsed is age-since-created); wait for fresh data.
+    liveVitals.value = null
     try { localStorage.setItem(ACTIVE_PIPELINE_KEY, id) } catch (e) { /* noop */ }
     startPolling()
   } catch (e) {
@@ -344,6 +351,13 @@ const logHistoryLoading = ref(false)
 const logHistoryError = ref('')
 const dossier = ref(null)
 const showHistory = ref(false)
+
+// OBS-1/I-7: computed `live` block from the same status poll (may be absent —
+// older servers, helper failure — and every field is individually nullable).
+// runTiming carries the sibling timestamps RunVitals needs to derive a
+// truthful final duration for terminal states.
+const liveVitals = ref(null)
+const runTiming = ref({ createdAt: '', updatedAt: '', resumedAt: '' })
 
 // —— 标签 / 图谱 ——
 const activeTab = ref('log')
@@ -571,6 +585,7 @@ async function resume() {
     const id = (res && res.data && res.data.pipeline_id) || pipelineId.value
     pipelineId.value = id
     status.value = 'running'
+    liveVitals.value = null  // same reasoning as continueToFull: await fresh live data
     // A failed/cancelled terminal snapshot is exact only for the pre-resume
     // stream. The resumed producer may append new research events.
     logHistoryFinalized.value = false
@@ -673,6 +688,13 @@ async function poll(generation) {
     stages.value = d.stages || {}
     if (d.mode) mode.value = d.mode
     if (typeof d.prompt === 'string') runPrompt.value = d.prompt
+    // Per-response truth: an absent `live` block renders no vitals strip.
+    liveVitals.value = (d.live && typeof d.live === 'object' && !Array.isArray(d.live)) ? d.live : null
+    runTiming.value = {
+      createdAt: d.created_at || '',
+      updatedAt: d.updated_at || '',
+      resumedAt: (d.options && d.options.resumed_at) || ''
+    }
     if (d.graph_id) graphId.value = d.graph_id
     if (d.simulation_id) simulationId.value = d.simulation_id
     if (d.report_id) reportId.value = d.report_id
@@ -801,6 +823,7 @@ function resetState() {
   status.value = 'running'; globalProgress.value = 0; currentStage.value = ''
   stages.value = {}; graphId.value = ''; simulationId.value = ''; reportId.value = ''
   runPrompt.value = ''; logLines.value = []; logSourceCount.value = 0
+  liveVitals.value = null; runTiming.value = { createdAt: '', updatedAt: '', resumedAt: '' }
   logHistoryHydrated.value = false; logHistoryFinalized.value = false
   logInitialSnapshotAttempted.value = false; logFinalSnapshotAttempts.value = 0
   logHistoryLoading.value = false; logHistoryError.value = ''
@@ -987,7 +1010,7 @@ onUnmounted(() => {
    navigation chrome, rails and controls are suppressed. */
 @media print {
   .navbar, .history-drawer, .drawer-scrim, .rail, .tabbar,
-  .run-actions, .pid-chip, .run-err { display:none !important; }
+  .run-actions, .pid-chip, .run-vitals, .run-err { display:none !important; }
   .research-container { background:#fff; }
   .main-content { max-width:none; padding:0; }
   .run-layout { display:block; }
