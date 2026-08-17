@@ -856,6 +856,33 @@ class PipelineManager:
         return os.path.join(cls._dir(pipeline_id), "handoff")
 
     @classmethod
+    def resolve_handoff_dir(cls, pipeline_id: str) -> str:
+        """按状态解析 handoff 目录：fork 情景（T4.6）共享 base 的 handoff，state.handoff_dir
+        指向 base 目录；而静态 handoff_dir() 对 fork 只会算出被 ensure_dirs 建成空壳的
+        fork 本地目录——API 层若用静态路径，dossier/翻译/PDF/进度/图表端点对 fork 全部
+        静默拿空。解析次序：state.handoff_dir 存在且 realpath 收容于 PIPELINE_DATA_DIR
+        之下 → 用它；缺失/逃逸/状态不可读 → 回落静态路径（非 fork 行为逐字节不变）。
+        id 校验与 handoff_dir() 相同（非法 id 抛 ValueError）。"""
+        static = cls.handoff_dir(pipeline_id)
+        try:
+            data = cls.load(pipeline_id)
+        except Exception:  # noqa: BLE001 — 状态不可读 → 静态回落
+            return static
+        if not isinstance(data, dict):
+            return static
+        configured = str(data.get("handoff_dir") or "").strip()
+        if not configured or configured == static:
+            return static
+        try:
+            root = os.path.realpath(Config.PIPELINE_DATA_DIR)
+            resolved = os.path.realpath(configured)
+            if os.path.commonpath([resolved, root]) != root:
+                return static
+        except (OSError, ValueError):  # 不同盘符/异常路径 → 静态回落
+            return static
+        return configured
+
+    @classmethod
     def manifest_path(cls, pipeline_id: str) -> str:
         """I-8-1: uploads/pipelines/<id>/run.json 的路径（可复现性清单）。"""
         return os.path.join(cls._dir(pipeline_id), "run.json")

@@ -330,8 +330,8 @@ raise SystemExit(
 _frontend_ready() {
   local body
   body="$(curl -fsS --max-time "$HEALTH_CURL_TIMEOUT_SECONDS" "$FRONTEND_URL" 2>/dev/null)" || return 1
-  [[ "$body" == *'<title>DeepAgentForecast'* \
-    && "$body" == *'name="description" content="DeepAgentForecast'* \
+  [[ "$body" == *'<title>DeepResearchForecast'* \
+    && "$body" == *'name="description" content="DeepResearchForecast'* \
     && "$body" == *'id="app"'* ]]
 }
 
@@ -686,7 +686,7 @@ while true; do
   else
     if [ -z "$FRONTEND_UNHEALTHY_SINCE" ]; then
       FRONTEND_UNHEALTHY_SINCE="$now"
-      echo "[service] WARN: Frontend failed its DeepAgentForecast HTML signature; allowing ${HEALTH_FAILURE_GRACE_SECONDS}s grace." >&2
+      echo "[service] WARN: Frontend failed its DeepResearchForecast HTML signature; allowing ${HEALTH_FAILURE_GRACE_SECONDS}s grace." >&2
     fi
     frontend_unhealthy_for=$((now - FRONTEND_UNHEALTHY_SINCE))
     if [ "$frontend_unhealthy_for" -ge "$HEALTH_FAILURE_GRACE_SECONDS" ]; then

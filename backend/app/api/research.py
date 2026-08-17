@@ -21,7 +21,12 @@ from flask import jsonify, request
 
 from . import research_bp
 from ..config import Config
-from ..services.pipeline_orchestrator import PipelineManager, PipelineOrchestrator, preflight_pipeline
+from ..services.pipeline_orchestrator import (
+    PipelineManager,
+    PipelineOrchestrator,
+    PipelineState,
+    preflight_pipeline,
+)
 from ..services.research_progress import (
     ResearchProgressLimitError,
     merged_research_progress_full,
@@ -298,10 +303,29 @@ def clean_pipelines():
 
 @research_bp.route('/status/<pipeline_id>', methods=['GET'])
 def pipeline_status(pipeline_id: str):
-    """返回管线聚合进度（直接读 pipeline_state.json，可在后端重启后存活）。"""
+    """返回管线聚合进度（直接读 pipeline_state.json，可在后端重启后存活）。
+
+    OBS-1/I-5-6 落地：状态响应额外拼一个计算出的 ``live`` 块（heartbeat 年龄、owner 存活、
+    ETA/staleness、进程内累计花费、预算余量）。此前这些助手（heartbeat_status/estimate_eta/
+    LLMMeter.status_snapshot）没有任何生产调用方，UI 无从显示「还活着吗/还要多久/烧了多少」。
+    纯附加键，state 原文不动；任何助手失败只丢 ``live``，绝不拖垮状态端点。"""
     data = PipelineManager.load(pipeline_id)
     if data is None:
         return jsonify({"success": False, "error": "管线不存在"}), 404
+    try:
+        live = PipelineOrchestrator().heartbeat_status(PipelineState.from_dict(data))
+        budget_tokens = int(getattr(Config, "LLM_RUN_BUDGET_TOKENS", 0) or 0)
+        if budget_tokens > 0:
+            spent = int((live.get("spend_so_far") or {}).get("tokens") or 0)
+            live["budget"] = {
+                "limit_tokens": budget_tokens,
+                "spent_tokens": spent,
+                "remaining_tokens": max(0, budget_tokens - spent),
+            }
+        data = dict(data)
+        data["live"] = live
+    except Exception as _live_exc:  # noqa: BLE001 — best-effort 附加块
+        logger.debug(f"status live 块计算失败（忽略）: {_live_exc}")
     response = jsonify({"success": True, "data": data})
     response.headers["Cache-Control"] = "no-store, max-age=0"
     response.headers["Pragma"] = "no-cache"
@@ -350,7 +374,7 @@ def preflight():
 @research_bp.route('/<pipeline_id>/dossier', methods=['GET'])
 def get_dossier(pipeline_id: str):
     """返回深度研究产出的研究报告 + 结构化 actors/sources。"""
-    handoff = PipelineManager.handoff_dir(pipeline_id)
+    handoff = PipelineManager.resolve_handoff_dir(pipeline_id)
     if not os.path.isdir(handoff):
         return jsonify({"success": False, "error": "管线不存在"}), 404
 
@@ -458,7 +482,7 @@ def _run_research_translation(pipeline_id: str, lang: str) -> None:
     from ..services.report_agent import ReportAgent
     from ..utils.llm_client import LLMClient
 
-    handoff = PipelineManager.handoff_dir(pipeline_id)
+    handoff = PipelineManager.resolve_handoff_dir(pipeline_id)
     src_path, variant_path, audit_path, status_path, _pdf = _research_report_paths(
         handoff, lang
     )
@@ -518,7 +542,7 @@ def start_research_translation(pipeline_id: str, lang: str):
     lang = (lang or "").strip().lower()
     if lang not in _RESEARCH_TRANSLATION_LANGS:
         return jsonify({"success": False, "error": "unsupported language"}), 400
-    handoff = PipelineManager.handoff_dir(pipeline_id)
+    handoff = PipelineManager.resolve_handoff_dir(pipeline_id)
     src_path, variant_path, audit_path, status_path, _pdf = _research_report_paths(
         handoff, lang
     )
@@ -554,7 +578,7 @@ def get_research_translation(pipeline_id: str, lang: str):
     lang = (lang or "").strip().lower()
     if lang not in _RESEARCH_TRANSLATION_LANGS:
         return jsonify({"success": False, "error": "unsupported language"}), 400
-    handoff = PipelineManager.handoff_dir(pipeline_id)
+    handoff = PipelineManager.resolve_handoff_dir(pipeline_id)
     src_path, variant_path, audit_path, status_path, _pdf = _research_report_paths(
         handoff, lang
     )
@@ -591,7 +615,7 @@ def get_research_pdf(pipeline_id: str):
     lang = (request.args.get("lang") or "").strip().lower() or None
     if lang and lang not in _RESEARCH_TRANSLATION_LANGS:
         return jsonify({"success": False, "error": "unsupported language"}), 400
-    handoff = PipelineManager.handoff_dir(pipeline_id)
+    handoff = PipelineManager.resolve_handoff_dir(pipeline_id)
     if not os.path.isdir(handoff):
         return jsonify({"success": False, "error": "管线不存在"}), 404
     src_path, variant_path, audit_path, status_path, pdf_path = _research_report_paths(
@@ -657,7 +681,7 @@ def edit_dossier(pipeline_id: str):
         return jsonify({"success": False, "error": "当前状态不允许编辑档案（仅完成的 research_only 或建图前的失败管线可编辑）"}), 409
 
     body = request.get_json(silent=True) or {}
-    handoff = PipelineManager.handoff_dir(pipeline_id)
+    handoff = PipelineManager.resolve_handoff_dir(pipeline_id)
     if not os.path.isdir(handoff):
         return jsonify({"success": False, "error": "管线产物目录不存在"}), 404
 
@@ -711,6 +735,15 @@ def get_artifact(pipeline_id: str, name: str):
     # the completion boundary registers the formal key.
     if not path and name.startswith("chart_"):
         path = artifacts.get(f"{name}_partial")
+    if not path and name.startswith("chart_"):
+        # fork 情景的 artifacts 注册表生而为空（fork() 不复制 base 的指针）；研究阶段
+        # 图表实际躺在共享 handoff/charts 下。按解析后的目录直推候选路径，交给下方与
+        # 注册表指针完全相同的 basename/symlink/收容复验（此回退只在指针缺失时触发，
+        # 非 fork 管线的既有注册表行为不变）。
+        _cand = os.path.join(PipelineManager.resolve_handoff_dir(pipeline_id),
+                             "charts", name[len("chart_"):])
+        if os.path.exists(_cand):
+            path = _cand
     if not path or not os.path.exists(path):
         return jsonify({"success": False, "error": f"产物 '{name}' 不存在"}), 404
     try:
@@ -730,7 +763,7 @@ def get_artifact(pipeline_id: str, name: str):
                 # Revalidate the persisted pointer at serve time. A renderer can
                 # replace a once-regular chart with a symlink after a live scan;
                 # formal/partial registration is therefore not a trust boundary.
-                handoff = os.path.realpath(PipelineManager.handoff_dir(pipeline_id))
+                handoff = os.path.realpath(PipelineManager.resolve_handoff_dir(pipeline_id))
                 charts_root = os.path.realpath(os.path.join(handoff, "charts"))
                 resolved = os.path.realpath(path)
                 expected_file = name[len("chart_"):]
@@ -795,7 +828,7 @@ def get_progress_log(pipeline_id: str):
     if PipelineManager.load(pipeline_id) is None:
         return jsonify({"success": False, "error": "管线不存在"}), 404
     try:
-        handoff = PipelineManager.handoff_dir(pipeline_id)
+        handoff = PipelineManager.resolve_handoff_dir(pipeline_id)
     except ValueError:
         return jsonify({"success": False, "error": "管线不存在"}), 404
     scope = str(request.args.get('scope', 'tail') or 'tail').strip().lower()

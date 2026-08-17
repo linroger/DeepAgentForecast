@@ -21,8 +21,8 @@ EXPECTED_BACKEND_BODY = '{"service":"MiroFish Backend","status":"ok"}'
 EXPECTED_FRONTEND_BODY = """<!doctype html>
 <html>
   <head>
-    <meta name="description" content="DeepAgentForecast — test app" />
-    <title>DeepAgentForecast · test app</title>
+    <meta name="description" content="DeepResearchForecast — test app" />
+    <title>DeepResearchForecast · test app</title>
   </head>
   <body><div id="app"></div></body>
 </html>
