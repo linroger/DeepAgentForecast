@@ -695,6 +695,12 @@ class Config:
     # 10pp 规则：锚定后 |model_p − market_p|>0.10 且理由未提及市场的预测，做一次有界重述，
     # 须在理由中引用市场或有依据地保留分歧（绝不静默移动概率）。默认开；关闭=不重述。
     FORECAST_MARKET_DIVERGENCE_REVISION = os.environ.get('FORECAST_MARKET_DIVERGENCE_REVISION', 'true').strip().lower() == 'true'
+    # LOOP-017 P0（影响边界）：分歧重述的**资格**门槛——只有 match_confidence >= 此值的锚点
+    # 才被允许把概率移向市场（缺失/None 一律不合格）。低置信匹配仍可作为校准展示锚点，
+    # 但绝不获得移动发布概率的资格（取证事故：0.4x 置信的错配把概率拉向无关市场，随后
+    # 对账弹出锚点、修订概率却永久保留）。默认 0.6——高于锚点完整性下限
+    # （_market_anchor_complete 的 0.5）：影响概率的门槛必须严于仅作展示的门槛。
+    FORECAST_MARKET_DIVERGENCE_MIN_CONFIDENCE = float(os.environ.get('FORECAST_MARKET_DIVERGENCE_MIN_CONFIDENCE', '0.6') or '0.6')
 
     # —— RQ-2：成稿后抽取切片（head+tail，结论在文末）+ 抽取 max_tokens（forecast_extractor 经 getattr 读取）——
     # 情景/二元抽取此前只取正文开头 [:budget]，把文末的收敛判断切掉；改为「前 head_ratio +

@@ -194,7 +194,7 @@ def normalize_market(raw: Any, matched_query: str,
     liquidity = _coerce_float(raw.get("liquidity")) or 0.0
     if volume < float(min_volume):
         return None  # 极低量的价格是噪声，不配当锚点
-    return {
+    record: Dict[str, Any] = {
         "market_id": market_id,
         "exchange": "polymarket",
         "question": question,
@@ -206,6 +206,26 @@ def normalize_market(raw: Any, matched_query: str,
         "url": _market_url(event_slug, str(raw.get("slug") or "").strip()),
         "end_date": str(raw.get("endDate") or "").strip(),
     }
+    # LOOP-017 P1：工具选中的市场必须带下游（历史价时间线 _pm_fetch_price_history /
+    # 重报价核对）所需的 CLOB/结局字段——candidates.jsonl → registry 合并按整行 dict
+    # 透传，字段在此处缺了就永远缺了（历史事故：只被工具发现、未被确定性刷新重召回的
+    # 市场画不出历史价）。clobTokenIds 与 outcomes **位置对齐**（Gamma 契约），市场偶有
+    # ["No","Yes"] 排序：额外给显式的 clob_yes_token_id（按 "Yes" 下标定位，绝非下标 0；
+    # 下标超出 token 范围时不造假）。全部 additive、缺失不造假（键不出现）。
+    outcome_names = [str(n).strip() for n in _as_list(raw.get("outcomes"))]
+    if outcome_names:
+        record["outcomes"] = outcome_names
+    outcome_prices = [_coerce_float(p) for p in _as_list(raw.get("outcomePrices"))]
+    if outcome_prices and all(p is not None for p in outcome_prices):
+        record["outcome_prices"] = [round(float(p), 4) for p in outcome_prices]
+    clob_ids = [str(t).strip() for t in _as_list(raw.get("clobTokenIds")) if str(t).strip()]
+    if clob_ids:
+        record["clob_token_ids"] = clob_ids
+        yes_idx = next((i for i, n in enumerate(outcome_names)
+                        if n.lower() == "yes"), None)
+        if yes_idx is not None and yes_idx < len(clob_ids):
+            record["clob_yes_token_id"] = clob_ids[yes_idx]
+    return record
 
 
 def _cap_per_event(ranked: List[Dict[str, Any]], max_per_event: int,

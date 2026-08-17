@@ -1066,9 +1066,13 @@ def test_anchor_disabled_by_flag(monkeypatch):
 
 # --------------------------------------------------- PM-2: 10pp divergence rule
 def _divergent_binary():
+    # LOOP-017 P0：分歧重述的资格现在要求 match_confidence >= 门槛（默认 0.6）——
+    # 本组测试针对「重述采纳」机制本身，故锚点带一枚高置信匹配；置信门槛本身的
+    # 红线在 test_market_influence_boundary.py。
     return {"id": "F1", "statement": "X happens", "probability": 0.20,
             "adjustment_rationale": "base rate says low",
             "market_anchor": {"market_id": "m", "implied_yes_prob": 0.55,
+                              "match_confidence": 0.9,
                               "divergence": round(0.20 - 0.55, 4)}}
 
 

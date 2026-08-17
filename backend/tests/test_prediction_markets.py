@@ -468,6 +468,64 @@ def test_normalize_preserves_clob_token_ids(enabled, monkeypatch):
     assert "clob_token_ids" not in by["m-noclob"]        # 缺失不造假
 
 
+# ------------------------- LOOP-017 P1: reversed-token（outcomes 顺序颠倒）红线
+# Gamma 的 clobTokenIds 与 outcomes **位置对齐**；市场偶有 ["No","Yes"] 排序。任何
+# 消费方（历史价时间线取 Yes 腿）都不得假设下标 0 是 Yes——快照行必须带 outcomes 原
+# 名单 + 显式的 clob_yes_token_id（按 "Yes" 下标定位），令位置假设从数据层面失效。
+def test_normalize_reversed_outcomes_selects_yes_token_by_name(enabled, monkeypatch):
+    payload = _payload([_event("Ev", [
+        _raw("m-rev", vol=5000, outcomes='["No","Yes"]', prices='["0.30","0.70"]',
+             clobTokenIds='["0xNO","0xYES"]'),
+        _raw("m-norm", vol=5000, outcomes='["Yes","No"]', prices='["0.40","0.60"]',
+             clobTokenIds='["0xY","0xN"]'),
+    ])])
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: FakeResponse(payload))
+    by = {m["market_id"]: m for m in PolymarketClient().snapshot_for_queries(["x"])}
+    rev = by["m-rev"]
+    assert rev["implied_yes_prob"] == 0.70               # 价按 "Yes" 名定位（回归钉）
+    assert rev["clob_token_ids"] == ["0xNO", "0xYES"]    # 原始位置序保留（与 outcomes 对齐）
+    assert rev["outcomes"] == ["No", "Yes"]              # 名单落盘 → 对齐可解释
+    assert rev["clob_yes_token_id"] == "0xYES"           # Yes 腿按名定位，绝非下标 0
+    assert by["m-norm"]["clob_yes_token_id"] == "0xY"    # 正常序同样正确
+
+
+def test_normalize_no_outcomes_never_fabricates_yes_token(enabled, monkeypatch):
+    """outcomes 缺失/长度不齐时绝不猜 Yes 腿（键不出现）；clob_token_ids 原样保留。"""
+    payload = _payload([_event("Ev", [
+        # 长度不齐：3 个 token、2 个结局名 → Yes 下标虽在，但保守要求下标落在 token 范围内。
+        _raw("m-short", vol=5000, outcomes='["No","Yes"]', prices='["0.30","0.70"]',
+             clobTokenIds='["0xONLY"]'),
+    ])])
+    monkeypatch.setattr(pm.httpx, "get", lambda *a, **k: FakeResponse(payload))
+    by = {m["market_id"]: m for m in PolymarketClient().snapshot_for_queries(["x"])}
+    row = by["m-short"]
+    assert row["clob_token_ids"] == ["0xONLY"]
+    assert "clob_yes_token_id" not in row                # Yes 下标 1 超出 token 列表 → 不造假
+
+
+def test_parse_resolution_reversed_outcomes_by_name():
+    """判定终态解析按结局**名**定位（钉住证明）：outcomes 颠倒时 resolved_outcome 与
+    resolved_yes_price 仍正确——"No" 胜出时 Yes 终价 ~0，反之 ~1。纯函数、无网络。"""
+    no_won = pm._parse_resolution({
+        "id": "m1", "closed": True,
+        "outcomes": '["No","Yes"]', "outcomePrices": '["0.995","0.005"]'})
+    assert no_won["resolved"] is True
+    assert no_won["resolved_outcome"] == "No"
+    assert no_won["resolved_yes_price"] == 0.005         # Yes 名定位（下标 1），非位置 0
+    yes_won = pm._parse_resolution({
+        "id": "m2", "closed": True,
+        "outcomes": '["No","Yes"]', "outcomePrices": '["0.004","0.996"]'})
+    assert yes_won["resolved_outcome"] == "Yes"
+    assert yes_won["resolved_yes_price"] == 0.996
+
+
+def test_fresh_yes_price_reversed_outcomes_by_name():
+    """重报价路径同样按名取 "Yes" 价（钉住证明）：颠倒序返回 Yes 腿现价。"""
+    assert pm._fresh_yes_price({
+        "id": "m", "closed": False,
+        "outcomes": '["No","Yes"]', "outcomePrices": '["0.30","0.70"]'}) == 0.70
+
+
 def test_render_markets_block_shows_delta_column_on_requote():
     """重报价后有价格移动 → 追加 Δ 列（34%→41%）；未移动的行留占位符；
     无 price_at_research → 不加 Δ 列（与旧渲染一致）。"""

@@ -14480,9 +14480,22 @@ def _pm_normalize_market(raw: Any, matched_query: str, min_volume: float,
         row["best_ask"] = round(best_ask, 4)
     # PM-6: CLOB token id（Yes/No 各一）——画历史价时间线（_pm_fetch_price_history）的入口；
     # Gamma 里是 JSON 串 '["0x..","0x.."]'，规整成 list 保留；缺失不造假（键不出现）。镜像 backend。
+    # i7（LOOP-017 P1 收尾，镜像 market_tools.normalize_market）：clobTokenIds 与 outcomes
+    # **位置对齐**（Gamma 契约），市场偶有 ["No","Yes"] 排序——额外落 outcomes/outcome_prices
+    # 与显式 clob_yes_token_id（按 "Yes" 下标定位，绝非下标 0；越界/定位不到不造假）。
+    outcome_names = [str(n).strip() for n in _pm_as_list(raw.get("outcomes"))]
+    if outcome_names:
+        row["outcomes"] = outcome_names
+    outcome_prices = [_pm_float(p) for p in _pm_as_list(raw.get("outcomePrices"))]
+    if outcome_prices and all(p is not None for p in outcome_prices):
+        row["outcome_prices"] = [round(float(p), 4) for p in outcome_prices]
     clob_ids = [str(t).strip() for t in _pm_as_list(raw.get("clobTokenIds")) if str(t).strip()]
     if clob_ids:
         row["clob_token_ids"] = clob_ids
+        yes_idx = next((i for i, n in enumerate(outcome_names)
+                        if n.lower() == "yes"), None)
+        if yes_idx is not None and yes_idx < len(clob_ids):
+            row["clob_yes_token_id"] = clob_ids[yes_idx]
     return row
 
 
@@ -15135,12 +15148,32 @@ def _collect_prediction_markets(out_dir: Path, question: str, report: str,
         plog.write("warn", f"market price history skipped (non-fatal): {_ph_err}")
 
 
+def _pm_yes_leg_token(m: dict) -> str:
+    """i7（LOOP-017 P1）：定位一个市场的 **Yes 腿** CLOB token。
+
+    此前 `_collect_market_price_history` 直接取 `clob_ids[0]` 并注释「约定俗成 Yes 腿」——
+    Gamma 的 clobTokenIds 与 outcomes 同序但不保证 Yes 在前，["No","Yes"] 市场真实存在，
+    取下标 0 会把整条历史价画成 NO 腿（静默错腿，比没图更糟）。解析次序：
+    显式 clob_yes_token_id（规整化时已按名定位）→ outcomes 里按名找 "Yes" 下标 →
+    定位不到/越界 → 返回 ""（调用方跳过该市场，fail-closed 不猜腿）。Pure。"""
+    explicit = str(m.get("clob_yes_token_id") or "").strip()
+    if explicit:
+        return explicit
+    clob_ids = [str(t).strip() for t in (m.get("clob_token_ids") or []) if str(t).strip()]
+    names = [str(n).strip() for n in (m.get("outcomes") or [])]
+    yes_idx = next((i for i, n in enumerate(names) if n.lower() == "yes"), None)
+    if yes_idx is not None and yes_idx < len(clob_ids):
+        return clob_ids[yes_idx]
+    return ""
+
+
 def _collect_market_price_history(out_dir: Path, markets: list[dict],
                                   plog: "ProgressLog") -> int:
     """PM-6: 为每个（通过相关性门的）市场抓 CLOB 历史价时间线，写 {market_id: [{t,p}]}。
 
-    每市场用第一个 CLOB token（约定俗成 Yes 腿）画线；cap 20 市场、90 天、1d 档（镜像 backend）。
-    degrade-to-empty：无 clob token / 网络失败 → 该市场跳过；全部为空 → 不写文件。返回落盘的序列条数。"""
+    每市场用 **Yes 腿** token 画线（_pm_yes_leg_token，绝非裸 clob_ids[0]——见其注释）；
+    cap 20 市场、90 天、1d 档（镜像 backend）。degrade-to-empty：无法定位 Yes 腿 / 网络
+    失败 → 该市场跳过（记 warn）；全部为空 → 不写文件。返回落盘的序列条数。"""
     try:
         cap = int(os.environ.get("PREDICTION_MARKETS_PRICE_HISTORY_MAX", "20") or "20")
     except ValueError:
@@ -15153,10 +15186,14 @@ def _collect_market_price_history(out_dir: Path, markets: list[dict],
     hist_map: dict[str, list] = {}
     for m in list(markets or [])[:max(0, cap)]:
         mid = str(m.get("market_id") or "").strip()
-        clob_ids = m.get("clob_token_ids") or []
-        if not mid or not clob_ids:
+        if not mid or not (m.get("clob_token_ids") or []):
             continue
-        series = _pm_fetch_price_history(str(clob_ids[0]), interval=interval, days=days)
+        yes_token = _pm_yes_leg_token(m)
+        if not yes_token:
+            plog.write("warn", f"market price history: cannot locate YES leg for {mid} "
+                               f"(outcomes={m.get('outcomes')!r}); skipped rather than guessing")
+            continue
+        series = _pm_fetch_price_history(yes_token, interval=interval, days=days)
         if series:
             hist_map[mid] = series
     if not hist_map:

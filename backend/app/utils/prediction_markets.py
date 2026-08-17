@@ -545,9 +545,20 @@ class PolymarketClient:
                 out[dst_key] = round(val, 4)
         # CLOB token id（Yes/No 各一）：画历史价时间线（fetch_price_history）与重报价核对的入口；
         # Gamma 里是 JSON 串 '["0x..","0x.."]'，规整成 list 保留；缺失不造假（键不出现）。
+        # LOOP-017 P1（reversed-token 防线）：clobTokenIds 与 outcomes 是**位置对齐**的
+        # （Gamma 契约），而市场偶有 ["No","Yes"] 排序——任何消费方都不得假设下标 0 是
+        # Yes 腿。快照行额外带 outcomes 原名单（对齐可解释）+ 显式的 clob_yes_token_id
+        # （按 "Yes" 下标定位；下标超出 token 范围时不造假，键不出现）。
         clob_ids = [str(t).strip() for t in _as_list(raw.get("clobTokenIds")) if str(t).strip()]
+        outcome_names = [str(n).strip() for n in _as_list(raw.get("outcomes"))]
+        if outcome_names:
+            out["outcomes"] = outcome_names
         if clob_ids:
             out["clob_token_ids"] = clob_ids
+            yes_idx = next((i for i, n in enumerate(outcome_names)
+                            if n.lower() == "yes"), None)
+            if yes_idx is not None and yes_idx < len(clob_ids):
+                out["clob_yes_token_id"] = clob_ids[yes_idx]
         return out
 
 

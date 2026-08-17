@@ -1235,3 +1235,60 @@ def test_research_prompt_deterministically_activates_deep_research_skill():
     d._set_market_pricing_block("")
     prompt = d.build_research_prompt("Will X happen?", "standard", None)
     assert prompt.startswith("/deep-research\n")
+
+
+# ---------------------------------------------------- i7: Yes 腿 token（LOOP-017 P1 收尾）
+
+def test_pm_normalize_market_emits_yes_token_for_reversed_outcomes():
+    """["No","Yes"] 排序的市场：clob_yes_token_id 必须按名定位（绝非下标 0），
+    outcomes/outcome_prices 随行落盘（镜像 market_tools.normalize_market）。"""
+    raw = {
+        "id": "m-rev", "question": "Reversed outcome ordering?",
+        "outcomes": '["No","Yes"]', "outcomePrices": '["0.875","0.125"]',
+        "volume": "5000", "liquidity": "800",
+        "clobTokenIds": '["tok-no","tok-yes"]',
+    }
+    row = d._pm_normalize_market(raw, matched_query="x", min_volume=200)
+    assert row is not None
+    assert row["outcomes"] == ["No", "Yes"]
+    assert row["clob_token_ids"] == ["tok-no", "tok-yes"]
+    assert row["clob_yes_token_id"] == "tok-yes"
+    assert row["outcome_prices"] == [0.875, 0.125]
+    assert row["implied_yes_prob"] == 0.125
+
+
+def test_pm_yes_leg_token_resolution_order():
+    assert d._pm_yes_leg_token({"clob_yes_token_id": "explicit"}) == "explicit"
+    assert d._pm_yes_leg_token({"clob_token_ids": ["tn", "ty"],
+                                "outcomes": ["No", "Yes"]}) == "ty"
+    # 定位不到 Yes 腿 → 空串（fail-closed，绝不猜 clob_ids[0]）
+    assert d._pm_yes_leg_token({"clob_token_ids": ["t0", "t1"]}) == ""
+    assert d._pm_yes_leg_token({"clob_token_ids": ["t0"],
+                                "outcomes": ["Alpha", "Beta"]}) == ""
+
+
+def test_collect_price_history_fetches_yes_leg_not_index_zero(monkeypatch, tmp_path):
+    """历史价抓取必须走 Yes 腿：["No","Yes"] 市场抓 tok-yes（旧行为抓 clob_ids[0]=NO 腿），
+    定位不到 Yes 腿的市场跳过而非猜腿。"""
+    from pathlib import Path
+
+    calls = []
+
+    def _fake_fetch(token, interval="1d", days=90):
+        calls.append(token)
+        return [{"t": 1, "p": 0.5}]
+
+    monkeypatch.setattr(d, "_pm_fetch_price_history", _fake_fetch)
+
+    class _Plog:
+        def write(self, *_a, **_k):
+            pass
+
+    markets = [
+        {"market_id": "rev", "clob_token_ids": ["tok-no", "tok-yes"],
+         "outcomes": ["No", "Yes"]},
+        {"market_id": "unknowable", "clob_token_ids": ["a", "b"]},
+    ]
+    n = d._collect_market_price_history(Path(str(tmp_path)), markets, _Plog())
+    assert calls == ["tok-yes"]
+    assert n == 1

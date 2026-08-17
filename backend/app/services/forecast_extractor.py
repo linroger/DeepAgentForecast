@@ -1800,15 +1800,51 @@ def anchor_binaries_to_markets(binaries: List[Dict[str, Any]], markets: Optional
     return anchored
 
 
+def _stamp_market_influence(binary: Dict[str, Any], anchor: Dict[str, Any], *,
+                            prior_p: float, revised_p: float) -> None:
+    """LOOP-017 P0：把「市场把概率从 prior 移到 revised」盖成耐久的 market_influence 印章。
+
+    与 market_anchor **分离**存放：对账（reconcile_forecast_contract）可依据命题/完整性
+    弹出锚点，但影响印章必须存活——它是恢复被错误匹配移动的概率的唯一凭据，也是
+    build_market_comparison ``influences`` 审计面的数据源。重复重述时保留最初的
+    prior_probability（真实的未受影响值），只滚动 revised/修订时市场价。任何后续 pass
+    都不得弹出此键（取证事故：锚点被弹出后，修订概率永久保留而市场溯源全部消失）。"""
+    market_id = str(anchor.get("market_id") or "").strip()
+    record: Dict[str, Any] = {
+        "market_id": market_id,
+        "market_question": str(anchor.get("question") or ""),
+        "price_at_revision": _coerce_float(anchor.get("implied_yes_prob")),
+        "prior_probability": round(prior_p, 4),
+        "revised_probability": revised_p,
+        "match_confidence": _coerce_float(anchor.get("match_confidence")),
+        "resolution_equivalence": anchor.get("resolution_equivalence"),
+    }
+    existing = binary.get("market_influence")
+    if (isinstance(existing, dict)
+            and str(existing.get("market_id") or "").strip() == market_id
+            and _coerce_float(existing.get("prior_probability")) is not None):
+        record["prior_probability"] = round(
+            float(_coerce_float(existing["prior_probability"])), 4)
+    binary["market_influence"] = record
+
+
 def enforce_market_divergence(binaries: List[Dict[str, Any]], llm, *,
                               language: str = "English") -> int:
     """PM-2 的 10pp 规则：锚定后 |divergence|>0.10 且理由未提及市场的预测做一次有界重述。
 
     重述须在理由中引用市场；否则不接受（绝不静默移动概率）。就地改写 binaries，重算
     market_anchor.divergence。旗标 FORECAST_MARKET_DIVERGENCE_REVISION 关闭 / 无候选 /
-    调用异常 → 原样返回。返回被接受的重述条数。"""
+    调用异常 → 原样返回。返回被接受的重述条数。
+
+    LOOP-017 P0（影响边界）：只有 ``match_confidence >=
+    FORECAST_MARKET_DIVERGENCE_MIN_CONFIDENCE``（默认 0.6；缺失/None 一律不合格）的锚点
+    才有**移动概率**的资格——低置信匹配仍可作为校准展示锚点，但绝不拉动发布概率。
+    被采纳且确实移动了概率的重述会盖 ``market_influence`` 印章（见 _stamp_market_influence）。"""
     if not _cfg("FORECAST_MARKET_DIVERGENCE_REVISION", True):
         return 0
+    min_conf = _coerce_float(_cfg("FORECAST_MARKET_DIVERGENCE_MIN_CONFIDENCE", 0.6))
+    if min_conf is None:
+        min_conf = 0.6
     candidates = []
     for b in (binaries or []):
         if not isinstance(b, dict):
@@ -1821,6 +1857,9 @@ def enforce_market_divergence(binaries: List[Dict[str, Any]], llm, *,
             continue
         if _rationale_cites_market(b.get("adjustment_rationale"), anchor):
             continue  # 已解释分歧 → 无需重述
+        mc = _coerce_float(anchor.get("match_confidence"))
+        if mc is None or mc < float(min_conf):
+            continue  # 低置信/无置信匹配 → 无移动概率资格（展示锚点照旧，见 docstring）
         candidates.append(b)
     if not candidates:
         return 0
@@ -1862,10 +1901,15 @@ def enforce_market_divergence(binaries: List[Dict[str, Any]], llm, *,
         new_p = _coerce_float(r.get("probability"))
         if new_p is not None:
             new_p = round(max(0.02, min(0.98, new_p)), 2)
+            prior_p = _coerce_float(b.get("probability"))
             b["probability"] = new_p
             ip = _coerce_float(anchor.get("implied_yes_prob"))
             if ip is not None:
                 anchor["divergence"] = round(new_p - ip, 4)
+            # LOOP-017 P0（影响耐久性）：重述确实移动了概率 → 盖 market_influence 印章。
+            # 仅重写理由/概率未变的「保留分歧」情形不盖章（无需恢复凭据）。
+            if prior_p is not None and abs(prior_p - new_p) > 1e-9:
+                _stamp_market_influence(b, anchor, prior_p=prior_p, revised_p=new_p)
         revised += 1
     return revised
 
@@ -1874,7 +1918,12 @@ def build_market_comparison(binaries: List[Dict[str, Any]]) -> Dict[str, Any]:
     """PM-2：从已锚定的二元预测汇出确定性的 market_comparison 负载（供落 market_comparison.json）。
 
     Pure / 无副作用：扫描 binaries 的 market_anchor，逐条给出 预测概率 vs 市场隐含概率、
-    分歧、是否超 10pp、是否已在理由中引用市场。无锚定预测 → comparisons 为空列表。"""
+    分歧、是否超 10pp、是否已在理由中引用市场。无锚定预测 → comparisons 为空列表。
+
+    LOOP-017 P0（影响审计面）：额外汇出 ``influences``——每条被市场**实际移动过**概率的
+    预测（market_influence 印章，含锚点其后被对账移除的情形），带 prior/revised/现值/
+    修订时市场价/anchor_removed/probability_restored。无影响记录时两个键都不出现
+    （缺失不造假，schema 向后兼容）。"""
     comps: List[Dict[str, Any]] = []
     for b in (binaries or []):
         if not isinstance(b, dict):
@@ -1905,7 +1954,32 @@ def build_market_comparison(binaries: List[Dict[str, Any]]) -> Dict[str, Any]:
             "endDate": anchor.get("endDate"),
             "rationale_cites_market": _rationale_cites_market(b.get("adjustment_rationale"), anchor),
         })
-    return {"anchored_count": len(comps), "comparisons": comps}
+    influences: List[Dict[str, Any]] = []
+    for b in (binaries or []):
+        if not isinstance(b, dict):
+            continue
+        inf = b.get("market_influence")
+        if not isinstance(inf, dict) or not str(inf.get("market_id") or "").strip():
+            continue
+        influences.append({
+            "forecast_id": b.get("id"),
+            "statement": b.get("statement"),
+            "market_id": inf.get("market_id"),
+            "market_question": inf.get("market_question"),
+            "price_at_revision": _coerce_float(inf.get("price_at_revision")),
+            "prior_probability": _coerce_float(inf.get("prior_probability")),
+            "revised_probability": _coerce_float(inf.get("revised_probability")),
+            "current_probability": _coerce_float(b.get("probability")),
+            "match_confidence": _coerce_float(inf.get("match_confidence")),
+            "resolution_equivalence": inf.get("resolution_equivalence"),
+            "anchor_removed": bool(inf.get("anchor_removed", False)),
+            "probability_restored": bool(inf.get("probability_restored", False)),
+        })
+    out: Dict[str, Any] = {"anchored_count": len(comps), "comparisons": comps}
+    if influences:
+        out["influences"] = influences
+        out["influence_count"] = len(influences)
+    return out
 
 
 # ------------------------------------------ cross-artifact proposition contract
@@ -2282,6 +2356,51 @@ def audit_market_anchor_integrity(forecast: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _restore_market_influence(binary: Dict[str, Any], removed_market_id: str,
+                              restored: List[str]) -> None:
+    """LOOP-017 P0：对账弹出了「曾把概率移向市场」的锚点 → 恢复 prior_probability。
+
+    只在影响仍是现值的直接成因（binary.probability == 印章里的 revised_probability）时
+    回滚——概率若已被后续步骤（如情景分区对账）取代，该影响已被更权威机制覆盖，绝不
+    回滚 canonical 值。两种情形都把 anchor_removed=True 记进影响印章（印章永不弹出）；
+    真正回滚才记 probability_restored=True、追加解释理由并把 forecast id 收进 pass 诊断。
+    「保留分歧」型重述（概率未动）不产生印章，天然无需恢复。"""
+    influence = binary.get("market_influence")
+    if not isinstance(influence, dict):
+        return
+    if (str(influence.get("market_id") or "").strip()
+            != str(removed_market_id or "").strip() or not str(removed_market_id or "").strip()):
+        return
+    influence["anchor_removed"] = True
+    # 分区治理优先：本 pass 已用互斥情景分区验证/改写过该概率（membership.method 为
+    # canonical 标记）→ 概率的权威来源是分区而非市场，哪怕数值恰与 revised 巧合相等，
+    # 也绝不回滚 canonical 值（回滚会制造 after 审计里的分区失配）。
+    membership = binary.get("scenario_membership")
+    if (isinstance(membership, dict)
+            and membership.get("method") == "mutually-exclusive-scenario-partition"):
+        influence["probability_restored"] = False
+        return
+    prior = _coerce_float(influence.get("prior_probability"))
+    revised = _coerce_float(influence.get("revised_probability"))
+    current = _coerce_float(binary.get("probability"))
+    live_cause = (prior is not None and revised is not None and current is not None
+                  and abs(current - revised) <= 1e-9 and abs(current - prior) > 1e-9)
+    if not live_cause:
+        influence["probability_restored"] = False
+        return
+    binary["probability"] = round(prior, 4)
+    influence["probability_restored"] = True
+    note = (
+        f"Market anchor {removed_market_id} was removed during contract reconciliation; "
+        f"the market-influenced revision to {revised:.0%} is reverted and the "
+        f"pre-influence probability {prior:.0%} is restored."
+    )
+    rationale = str(binary.get("adjustment_rationale") or "").strip()
+    if note not in rationale:
+        binary["adjustment_rationale"] = (rationale + " " + note).strip()
+    restored.append(str(binary.get("id") or ""))
+
+
 def reconcile_forecast_contract(
     forecast: Dict[str, Any],
     world_state_outcome: Optional[Dict[str, Any]] = None,
@@ -2359,6 +2478,7 @@ def reconcile_forecast_contract(
             richest_by_id[market_id] = dict(anchor)
 
     removed_anchors: List[str] = []
+    restored_influences: List[str] = []
     for binary in binaries:
         anchor = binary.get("market_anchor")
         if not isinstance(anchor, dict):
@@ -2375,6 +2495,9 @@ def reconcile_forecast_contract(
         if not proposition_matches or not _market_anchor_complete(merged):
             binary.pop("market_anchor", None)
             removed_anchors.append(str(binary.get("id") or ""))
+            # LOOP-017 P0：这枚锚点若曾移动过概率（market_influence 印章），恢复
+            # prior_probability——「匹配被判错 → 修订概率永久保留」的事故链在此闭合。
+            _restore_market_influence(binary, market_id, restored_influences)
             continue
         binary["market_anchor"] = merged
 
@@ -2415,6 +2538,8 @@ def reconcile_forecast_contract(
         "corrected": corrected,
         "corrected_count": len(corrected),
         "removed_market_anchors": removed_anchors,
+        # LOOP-017 P0：被移除锚点曾移动过概率、且本 pass 恢复了 prior 的 forecast id。
+        "restored_market_influences": restored_influences,
         "transferred_market_anchors": transferred,
         "before": before,
         "after": after,

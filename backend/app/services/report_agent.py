@@ -1310,6 +1310,38 @@ def _mc_comparisons_from_forecast(forecast: Dict[str, Any]) -> List[Dict[str, An
     return out
 
 
+def _mc_influences_from_forecast(forecast: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """LOOP-017 P0：汇出市场**实际移动过**概率的记录（含锚点其后被对账移除的情形）。
+
+    优先 forecast['market_comparison']['influences']（抽取器/对账已算好的负载），缺失时
+    从 binary_forecasts[].market_influence 印章现场推导（同字段口径）。纯函数；无 → []。"""
+    mc = forecast.get("market_comparison")
+    if isinstance(mc, dict) and isinstance(mc.get("influences"), list):
+        rows = [r for r in mc["influences"] if isinstance(r, dict) and r.get("market_id")]
+        if rows:
+            return rows
+    out: List[Dict[str, Any]] = []
+    for b in (forecast.get("binary_forecasts") or []):
+        if not isinstance(b, dict):
+            continue
+        inf = b.get("market_influence")
+        if not isinstance(inf, dict) or not str(inf.get("market_id") or "").strip():
+            continue
+        out.append({
+            "forecast_id": b.get("id"),
+            "market_id": inf.get("market_id"),
+            "market_question": inf.get("market_question"),
+            "price_at_revision": _mc_float(inf.get("price_at_revision")),
+            "prior_probability": _mc_float(inf.get("prior_probability")),
+            "revised_probability": _mc_float(inf.get("revised_probability")),
+            "current_probability": _mc_float(b.get("probability")),
+            "match_confidence": _mc_float(inf.get("match_confidence")),
+            "anchor_removed": bool(inf.get("anchor_removed", False)),
+            "probability_restored": bool(inf.get("probability_restored", False)),
+        })
+    return out
+
+
 def render_market_comparison_block(forecast: Optional[Dict[str, Any]],
                                    markets: Optional[List[Dict[str, Any]]] = None,
                                    lang: str = "en") -> str:
@@ -1321,10 +1353,15 @@ def render_market_comparison_block(forecast: Optional[Dict[str, Any]],
         市场链接（有 url 时渲染为可点链接）；
       * 未匹配市场：markets 快照中未被任何预测锚定的市场（按成交量降序），提示尚未接入的信号。
     数据源：forecast['market_comparison'].comparisons（PM-2 抽取器负载）或 binary_forecasts[]
-    .market_anchor 现场推导。无对照且无未匹配市场 → ""（调用方跳过，绝不写空块）。双语表头随 lang。"""
+    .market_anchor 现场推导。无对照且无未匹配市场 → ""（调用方跳过，绝不写空块）。双语表头随 lang。
+
+    LOOP-017 P0（影响溯源不丢失）：追加「市场影响的概率修订」小节——每条市场实际移动过
+    发布概率的预测（market_influence 印章 / market_comparison.influences），**含锚点其后
+    被对账移除的情形**（标注是否已恢复 prior）。仅有影响记录时也必须出块。"""
     if not isinstance(forecast, dict):
         return ""
     comps = _mc_comparisons_from_forecast(forecast)
+    influences = _mc_influences_from_forecast(forecast)
     # 未匹配市场 = 快照中 market_id 未出现在任一对照行的市场（按成交量降序，稳定）。
     anchored_ids = {str(c.get("market_id") or "").strip() for c in comps if c.get("market_id")}
     snapshot = [m for m in (markets or []) if isinstance(m, dict)]
@@ -1332,8 +1369,8 @@ def render_market_comparison_block(forecast: Optional[Dict[str, Any]],
                  if str(m.get("market_id") or "").strip()
                  and str(m.get("market_id")).strip() not in anchored_ids]
     unmatched.sort(key=lambda m: -(_mc_float(m.get("volume")) or 0.0))
-    if not comps and not unmatched:
-        return ""  # 无任何可对照/未匹配信息 → 不写块
+    if not comps and not unmatched and not influences:
+        return ""  # 无任何可对照/未匹配/影响信息 → 不写块
     # 语言判定与 render_binary_forecasts_block 同口径：仅 "en"/"English" 前缀视作英文，
     # 其余（"zh"/"Chinese"/"中文" 等）走中文，兼容短码与语言全名两种传入。
     zh = not str(lang or "").lower().startswith("en")
@@ -1381,6 +1418,50 @@ def render_market_comparison_block(forecast: Optional[Dict[str, Any]],
             market_cell = f"[{q}]({_mc_cell(url)})" if (q and url) else (q or "—")
             lines.append("| " + " | ".join(
                 [fid, stmt, mp_s, ip_s, dv_s, verdict, market_cell]) + " |")
+    # LOOP-017 P0：市场实际移动过概率的记录——即使锚点其后被对账移除，影响溯源也必须
+    # 在报告面可见（是否恢复 prior 一并标注）。确定性渲染，无 LLM。
+    if influences:
+
+        def _pct(v: Any) -> str:
+            f = _mc_float(v)
+            return f"{f * 100:.0f}%" if f is not None else "—"
+
+        lines.append("")
+        if zh:
+            lines.append("**市场影响的概率修订（分歧重述实际移动过的发布概率；"
+                         "锚点其后被移除者仍列出）：**")
+        else:
+            lines.append("**Market-influenced probability revisions (accepted divergence "
+                         "revisions that moved a published probability; removed anchors "
+                         "remain listed):**")
+        for inf in influences:
+            fid = _mc_cell(inf.get("forecast_id") or "")
+            q = _mc_cell(str(inf.get("market_question") or "")[:100])
+            mid = _mc_cell(inf.get("market_id") or "")
+            move = f"{_pct(inf.get('prior_probability'))} → {_pct(inf.get('revised_probability'))}"
+            conf = _mc_float(inf.get("match_confidence"))
+            conf_s = f"{conf:.2f}" if conf is not None else "—"
+            if zh:
+                item = (f"- {fid} — {q or '—'}（{mid}）：{move}"
+                        f"（修订时市场 P(yes) {_pct(inf.get('price_at_revision'))}，"
+                        f"匹配置信度 {conf_s}）")
+                if inf.get("anchor_removed"):
+                    if inf.get("probability_restored"):
+                        item += (f"—— 锚点在对账中被移除；概率已恢复为 "
+                                 f"{_pct(inf.get('current_probability'))}")
+                    else:
+                        item += "—— 锚点在对账中被移除（修订其后已被取代，未回滚）"
+            else:
+                item = (f"- {fid} — {q or '—'} ({mid}): {move} at market P(yes) "
+                        f"{_pct(inf.get('price_at_revision'))}, match confidence {conf_s}")
+                if inf.get("anchor_removed"):
+                    if inf.get("probability_restored"):
+                        item += (" — anchor removed in reconciliation; probability restored "
+                                 f"to {_pct(inf.get('current_probability'))}")
+                    else:
+                        item += (" — anchor removed in reconciliation (revision already "
+                                 "superseded; not rolled back)")
+            lines.append(item)
     if unmatched:
         lines.append("")
         if zh:
@@ -3471,6 +3552,7 @@ class ReportAgent:
                 "table_rows_removed": 0,
                 "table_cells_cleared": 0,
                 "unverifiable_claims_preserved": 0,
+                "market_claims_preserved": 0,
                 "passed": True,
             }
 
@@ -3485,6 +3567,7 @@ class ReportAgent:
         table_rows_removed = 0
         table_cells_cleared = 0
         unverifiable_claims_preserved = 0
+        market_claims_preserved = 0
 
         lines = text.split("\n")
         authored_markers_valid = _authored_markers_balanced(lines)
@@ -3497,6 +3580,7 @@ class ReportAgent:
             nonlocal citations_added
             nonlocal sentences_removed
             nonlocal unverifiable_claims_preserved
+            nonlocal market_claims_preserved
             fragments = _claim_units(surface)
             if not fragments:
                 return surface, False
@@ -3518,6 +3602,12 @@ class ReportAgent:
                 if tag:
                     kept.append(fragment.rstrip() + f" [{tag}]")
                     citations_added += 1
+                elif status == "market_supported":
+                    # i7：市场语境 + 快照价精确命中 ⇒ 机器抓取的真价，保留原句、
+                    # 不发明 [S#]（快照不是编号来源）。历史事故：真实 Polymarket 价
+                    # 在此被当 fabrication 删除。
+                    kept.append(fragment)
+                    market_claims_preserved += 1
                 elif status == "unverifiable":
                     kept.append(fragment)
                     unverifiable_claims_preserved += 1
@@ -3619,6 +3709,7 @@ class ReportAgent:
             "table_rows_removed": table_rows_removed,
             "table_cells_cleared": table_cells_cleared,
             "unverifiable_claims_preserved": unverifiable_claims_preserved,
+            "market_claims_preserved": market_claims_preserved,
             "passed": after_coverage >= threshold,
         }
         if repaired != text:
@@ -4058,16 +4149,77 @@ class ReportAgent:
         imap.setdefault(best[3], best[4])
         return best[3]
 
+    # i7：市场语境判据与 forecast_extractor._MARKET_MENTION_RE 同族（另加 gamma/clob）。
+    _MARKET_CONTEXT_RE = re.compile(
+        r"market|polymarket|gamma|clob|implied|市场|預測|预测市场", re.I)
+
+    def _market_snapshot_price_variants(self) -> set:
+        """机器抓取的市场快照价的可引用字符串形态集合（现价 + 研究期价）。
+
+        证据源：self._prediction_markets（PM-3 缓存快照）与 _forecast_spine 里已锚定的
+        market_anchor / market_comparison（同源快照价）。每个 p∈(0,1] 生成三种常见书写：
+        小数原样（0.125）、百分数（12.5）、四舍五入整百分数（12）。Pure、degrade-safe。"""
+        prices: set = set()
+
+        def _collect(value: Any) -> None:
+            try:
+                p = float(value)
+            except (TypeError, ValueError):
+                return
+            if not (0.0 < p <= 1.0):
+                return
+            prices.add(f"{p:g}")
+            prices.add(f"{p * 100:g}")
+            prices.add(f"{round(p * 100):d}")
+
+        for m in (getattr(self, "_prediction_markets", None) or []):
+            if isinstance(m, dict):
+                _collect(m.get("implied_yes_prob"))
+                _collect(m.get("price_at_research"))
+        spine = getattr(self, "_forecast_spine", None)
+        if isinstance(spine, dict):
+            for b in (spine.get("binary_forecasts") or []):
+                anchor = b.get("market_anchor") if isinstance(b, dict) else None
+                if isinstance(anchor, dict):
+                    _collect(anchor.get("implied_yes_prob"))
+                    _collect(anchor.get("price_at_research"))
+            mc = spine.get("market_comparison")
+            if isinstance(mc, dict):
+                for c in (mc.get("comparisons") or []):
+                    if isinstance(c, dict):
+                        _collect(c.get("market_implied_yes_prob"))
+                        _collect(c.get("price_at_research"))
+        return prices
+
+    def _market_corroborated_claim(self, claim: str) -> bool:
+        """一条数字声明是否被市场快照精确佐证。
+
+        须同时满足：市场语境关键词命中 + 快照价（现价或研究期价）在句中按数字边界精确
+        匹配（``(?<![\\d.])v(?![\\d])``，防「2012 撞 12」）。裸数字碰巧撞价不豁免。"""
+        text = str(claim or "")
+        if not text or not self._MARKET_CONTEXT_RE.search(text):
+            return False
+        for v in self._market_snapshot_price_variants():
+            if re.search(rf"(?<![\d.]){re.escape(v)}(?![\d])", text):
+                return True
+        return False
+
     def _quantitative_semantic_decision(self, claim: str) -> Tuple[str, str]:
         """Return ``(supported tag, status)`` for one numeric claim unit.
 
         ``unverifiable`` is deliberately distinct from ``unsupported``. The
         former survives uncited so the unchanged quality gate fails honestly;
         only deterministically unsupported precision may be removed.
+        ``market_supported`` (i7) marks a claim whose number exactly matches the
+        machine-fetched prediction-market snapshot in a market context: kept
+        as-is, never assigned an invented ``[S#]``, never removed — the
+        historical failure removed true Polymarket prices as fabrication.
         """
         tag = self._best_semantic_source_tag_for_line(claim)
         if tag:
             return tag, "supported"
+        if self._market_corroborated_claim(claim):
+            return "", "market_supported"
         outcomes: List[bool] = []
         saw_unverifiable = False
         for source in getattr(self, "sources", None) or []:
@@ -9263,6 +9415,10 @@ class ReportAgent:
         """RQ-5：一次廉价批判调用。返回 None 表示 PASS，否则返回单条修订指令。"""
         spine_txt = self._reflection_spine_probs()
         signal_txt = (getattr(self, "_signal_pack", "") or "")[:1500]
+        # i7 P0 尾巴：市场表此前只注入章节撰写提示、不给质检员——正文引用的真实市场价
+        # 因无 [S#] 被规则 2 判为未接地，修订指令随即把真价当 fabrication 改写/删除
+        # （Tesla Optimus P=0.125 事故的报告侧机制之一）。质检材料必须与撰写材料同源。
+        market_txt = (getattr(self, "_market_pack", "") or "")[:1200]
         prior = "\n\n".join((s or "")[:600] for s in (previous_sections or [])[:6])[:2400]
         floor = self._section_char_floor()  # WAVE9：800 → 章节目标的 40%（随形状伸缩）
         lang = getattr(self, "output_language", None) or "English"
@@ -9271,7 +9427,9 @@ class ReportAgent:
             "1) 概率一致性：正文若提及情景/事件概率，须与【预测骨架概率】一致，不得矛盾；\n"
             "2) 硬数字接地：关于现实世界的关键定量声明必须带来源标注 [S#]；【信号包】中的数字"
             "是内部模拟推演产物（elicited model projection），只有在正文显式标注其模拟来源时"
-            "才可引用，绝不能替代 [S#] 作为现实世界声明的接地；\n"
+            "才可引用，绝不能替代 [S#] 作为现实世界声明的接地；【预测市场表】中的隐含概率/"
+            "价格是机器抓取的真实市场数据（Polymarket 公开 API），正文引用且与表内数值一致时"
+            "视为已接地，不要求 [S#]，绝不能当作捏造数字要求删除或改写；\n"
             f"3) 篇幅下限：正文须有不少于 {floor} 字符的实质内容；\n"
             "4) 不复述前序章节：不得大段重复【前序章节摘要】中的内容。\n"
             f"全部满足 ⇒ 只输出 PASS（不要任何多余文字）；否则 ⇒ 只输出一条最关键、可执行、"
@@ -9280,6 +9438,7 @@ class ReportAgent:
         usr_prompt = (
             f"【预测骨架概率】\n{spine_txt or '（无）'}\n\n"
             f"【信号包（硬数字）】\n{signal_txt or '（无）'}\n\n"
+            f"【预测市场表】\n{market_txt or '（无）'}\n\n"
             f"【前序章节摘要】\n{prior or '（无）'}\n\n"
             f"【本章标题】{section.title}\n\n"
             f"【本章草稿】\n{content[:6000]}"

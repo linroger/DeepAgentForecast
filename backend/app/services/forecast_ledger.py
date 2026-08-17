@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from typing import Any, Dict, List, Optional
 
 
@@ -349,15 +350,34 @@ def _resolution_key(report_id: Any, forecast_id: Any, market_id: Any) -> str:
     return f"{str(report_id or '')}\x1f{str(forecast_id or '')}\x1f{str(market_id or '')}"
 
 
+# LOOP-017 P1：晋升的「查重 + 追加」必须是同一临界区。旧实现先读键集再无锁追加——
+# 两个并发晋升方（监测线程 × API 线程 / 重跑）都会读到「不存在」然后各写一行，重复
+# 入账直接污染持续 Brier。进程内用本锁串行化；进程间用 fcntl.flock 对目标文件加排它
+# 锁（advisory，best-effort：平台/文件系统不支持时退化为仅进程内互斥，绝不抛异常）。
+_RESOLUTIONS_WRITE_LOCK = threading.Lock()
+
+
+def _flock_exclusive(f: Any) -> None:
+    """尽力对已打开的判定账本文件加进程间排它锁；不支持的平台静默跳过（degrade-safe）。"""
+    try:
+        import fcntl
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+    except (ImportError, OSError, ValueError):  # noqa: BLE001 — advisory 锁为增强
+        pass
+
+
 def append_market_resolution(*, report_id: str, forecast_id: str, market_id: str,
                              resolved_outcome: Optional[str], model_p: Optional[float],
                              market_p_at_research: Optional[float],
                              brier_contribution: Optional[float], resolved_at: str,
                              resolved_yes_price: Optional[float] = None,
                              d: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """追加一条市场判定记录（jsonl）；**幂等**——同一 (report_id, forecast_id, market_id)
-    已在账本里则跳过并返回 None，故 resolution_monitor 反复重跑不会重复入账、不污染 Brier。
+    """追加一条市场判定记录（jsonl）；**幂等且并发安全**——同一 (report_id, forecast_id,
+    market_id) 已在账本里则跳过并返回 None，故 resolution_monitor 反复重跑不会重复入账、
+    不污染 Brier；重复晋升也绝不改写首行（首次入账的 resolved_at/brier 保持原样）。
 
+    LOOP-017 P1：查重与追加在同一临界区内完成（进程内 threading.Lock + 进程间
+    fcntl.flock，见 _RESOLUTIONS_WRITE_LOCK）——并发晋升同一判定恰有一个胜者。
     Best-effort：缺 report_id/forecast_id/market_id → None；落盘失败 → None（degrade-safe）。
     返回新写入的 entry；重复/失败 → None。
     """
@@ -366,13 +386,7 @@ def append_market_resolution(*, report_id: str, forecast_id: str, market_id: str
     mid = str(market_id or "").strip()
     if not rid or not fid or not mid:
         return None
-    # 幂等门：先读现有键集，命中即跳过（同目录小文件，成本可忽略）。
     key = _resolution_key(rid, fid, mid)
-    existing = read_market_resolutions(d)
-    seen = {_resolution_key(e.get("report_id"), e.get("forecast_id"), e.get("market_id"))
-            for e in existing}
-    if key in seen:
-        return None
     entry: Dict[str, Any] = {
         "report_id": rid,
         "forecast_id": fid,
@@ -388,8 +402,19 @@ def append_market_resolution(*, report_id: str, forecast_id: str, market_id: str
     try:
         target = _resolutions_file(d)
         os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
-        with open(target, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        with _RESOLUTIONS_WRITE_LOCK:
+            # 以追加模式持有文件句柄再加 flock：锁的生命周期覆盖「读键集 → 判重 →
+            # 单次整行写入」，其他遵循同一协议的写者（含跨进程）被排它。
+            with open(target, "a", encoding="utf-8") as f:
+                _flock_exclusive(f)
+                existing = read_market_resolutions(d)
+                seen = {_resolution_key(e.get("report_id"), e.get("forecast_id"),
+                                        e.get("market_id"))
+                        for e in existing}
+                if key in seen:
+                    return None  # 幂等门：重复晋升 = no-op（with 退出自动释放锁）
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                f.flush()
         return entry
     except OSError:
         return None

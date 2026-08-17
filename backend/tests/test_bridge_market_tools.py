@@ -251,3 +251,85 @@ def test_singleflight_waiter_timeout_is_unknown_not_verified_empty(monkeypatch):
     assert "still in flight" in waiter["note"]
     assert "No active, liquid markets matched" not in waiter["note"]
     assert owner_payload[0]["status"]["state"] == "verified_empty"
+
+
+# ---------------------- LOOP-017 P1: tool-selected markets carry CLOB/history fields
+def _gamma_row(**overrides):
+    row = {
+        "id": "m-clob", "question": "Will Optimus ship commercially in 2027?",
+        "outcomes": '["No","Yes"]', "outcomePrices": '["0.875","0.125"]',
+        "clobTokenIds": '["0xNO","0xYES"]',
+        "volume": "5000", "liquidity": "800", "closed": False,
+        "endDate": "2027-12-31T00:00:00Z", "slug": "optimus-market",
+    }
+    row.update(overrides)
+    return row
+
+
+def test_normalize_market_persists_clob_and_outcome_fields():
+    """研究侧工具选中的市场必须带下游（历史价时间线/重报价）所需字段：
+    clob_token_ids（原始位置序，与 outcomes 对齐）、outcomes、outcome_prices、
+    clob_yes_token_id（按 "Yes" 下标定位，绝非下标 0）、url、end_date。
+    历史事故：工具候选缺这些键 → 只被工具发现的市场（未被确定性刷新重召回）
+    永远画不出历史价时间线。"""
+    module = _load_module()
+    rec = module.normalize_market(_gamma_row(), matched_query="optimus",
+                                  event_title="Optimus", event_slug="optimus-2027")
+    assert rec is not None
+    assert rec["implied_yes_prob"] == 0.125              # 颠倒序仍按 "Yes" 名取价
+    assert rec["clob_token_ids"] == ["0xNO", "0xYES"]    # 原始位置序（与 outcomes 对齐）
+    assert rec["outcomes"] == ["No", "Yes"]
+    assert rec["outcome_prices"] == [0.875, 0.125]
+    assert rec["clob_yes_token_id"] == "0xYES"           # Yes 腿按名定位
+    assert rec["url"] == "https://polymarket.com/event/optimus-2027"
+    assert rec["end_date"] == "2027-12-31T00:00:00Z"
+
+
+def test_normalize_market_degrades_when_gamma_omits_clob_fields():
+    """Gamma 行缺 clobTokenIds/outcomes → 键不出现（缺失不造假），行仍有效。"""
+    module = _load_module()
+    row = _gamma_row()
+    del row["clobTokenIds"]
+    rec = module.normalize_market(row, matched_query="q")
+    assert rec is not None and "clob_token_ids" not in rec
+    assert "clob_yes_token_id" not in rec
+    assert rec["outcomes"] == ["No", "Yes"]              # outcomes 仍在（价即由它定位）
+    # outcomes 解析不出时（非法 JSON）连价都定位不了 → 整行不合格（既有行为）。
+    bad = _gamma_row(outcomes="not-json")
+    assert module.normalize_market(bad, matched_query="q") is None
+
+
+def test_normalize_market_yes_index_outside_tokens_never_fabricates():
+    """Yes 下标超出 clobTokenIds 范围 → 不造假（clob_yes_token_id 键不出现）。"""
+    module = _load_module()
+    rec = module.normalize_market(_gamma_row(clobTokenIds='["0xONLY"]'),
+                                  matched_query="q")
+    assert rec is not None
+    assert rec["clob_token_ids"] == ["0xONLY"]
+    assert "clob_yes_token_id" not in rec
+
+
+def test_captured_tool_candidates_keep_clob_fields(tmp_path, monkeypatch):
+    """工具结果落进 prediction_market_candidates.jsonl 时 CLOB/结局字段原样保留
+    （registry 合并按整行 dict 透传，字段在此处丢了就永远丢了）。"""
+    module = _load_module()
+
+    def fake_fetch(query, limit):
+        return [{"title": "Optimus", "slug": "optimus-2027",
+                 "markets": [_gamma_row()]}]
+
+    monkeypatch.setattr(module, "snapshot_for_queries",
+                        lambda queries, **kw: [
+                            module.normalize_market(_gamma_row(), matched_query=q,
+                                                    event_slug="optimus-2027")
+                            for q in queries])
+    monkeypatch.setenv("DEERFLOW_RUN_ARTIFACT_DIR", str(tmp_path))
+    module._reset_market_query_cache()
+    payload = json.loads(module.prediction_market_search_impl("optimus 2027"))
+    assert payload["markets"][0]["clob_yes_token_id"] == "0xYES"
+    ledger = (tmp_path / module.MARKET_CANDIDATES_FILENAME).read_text(encoding="utf-8")
+    row = json.loads(ledger.splitlines()[0])["markets"][0]
+    assert row["clob_token_ids"] == ["0xNO", "0xYES"]
+    assert row["clob_yes_token_id"] == "0xYES"
+    assert row["outcomes"] == ["No", "Yes"]
+    assert row["outcome_prices"] == [0.875, 0.125]

@@ -59,6 +59,9 @@ EXPECTED = {
     "REPORT_SPINE_SELFCONSISTENCY_K": 1,
     "ENSEMBLE_EXTREMIZE_A": 1.0,
     "REPORT_SPINE_ANCHOR_WORLDSTATE": True,
+    # LOOP-017 P0 market-influence boundary: only matches at/above this confidence
+    # may move a published probability toward a market (display anchoring is not gated).
+    "FORECAST_MARKET_DIVERGENCE_MIN_CONFIDENCE": 0.6,
     # Research
     "RESEARCH_QUALITY_FLOOR": 0.45,  # R2-RES-1
 }
