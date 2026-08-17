@@ -71,6 +71,23 @@
           </div>
         </section>
 
+        <!-- i8/MON-1：市场判定监测手动触发（202=已启动 / 409=上一轮在飞 / 网络错误）。 -->
+        <section class="block">
+          <div class="block-label">{{ L('维护', 'Maintenance') }}</div>
+          <p class="hint">
+            {{ L('检查近期预测中锚定的预测市场是否已判定，并把结果回填到历史运行（后台执行，随时可触发；同一时刻只跑一轮）。',
+                 'Checks whether prediction markets anchored in recent forecasts have resolved and back-fills outcomes into past runs (runs in the background; only one round at a time).') }}
+          </p>
+          <div class="test-row">
+            <button class="test-btn" :disabled="monitorBusy" @click="runMonitor">
+              {{ monitorBusy ? L('触发中…', 'Starting…') : L('市场判定监测', 'Market resolution check') }}
+            </button>
+            <span v-if="monitorNote" class="test-result" :class="monitorNote.tone" aria-live="polite">
+              {{ monitorNote.text }}
+            </span>
+          </div>
+        </section>
+
         <p v-if="error" class="err">{{ error }}</p>
         <p v-if="okMsg" class="ok">{{ okMsg }}</p>
       </div>
@@ -86,8 +103,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { getLlmSettings, setLlmSettings, testLlmSettings } from '../../api/settings'
+import { runResolutionMonitor } from '../../api/research'
 import { locale, setLocale, L } from '../../i18n'
 
 const emit = defineEmits(['close', 'changed'])
@@ -194,10 +212,46 @@ async function save() {
   }
 }
 
+// ---------- i8/MON-1：市场判定监测手动触发 ----------
+const monitorBusy = ref(false)
+const monitorNote = ref(null)   // { tone: 'ok'|'warn'|'err', text } — 瞬态提示，6s 后自清
+let monitorNoteTimer = null
+
+function setMonitorNote(tone, text) {
+  monitorNote.value = { tone, text }
+  if (monitorNoteTimer) clearTimeout(monitorNoteTimer)
+  monitorNoteTimer = setTimeout(() => { monitorNote.value = null }, 6000)
+}
+
+async function runMonitor() {
+  if (monitorBusy.value) return
+  monitorBusy.value = true
+  monitorNote.value = null
+  try {
+    const res = await runResolutionMonitor()
+    if (res && res.data && res.data.started) {
+      setMonitorNote('ok', '✓ ' + L('已在后台启动一轮判定监测', 'Resolution check started in the background'))
+    } else {
+      // 2xx 但缺 started 契约字段：防御性提示，不假装确认成功。
+      setMonitorNote('warn', L('请求已受理，但后端未确认启动', 'Request accepted, but the backend did not confirm a start'))
+    }
+  } catch (e) {
+    const resp = e && e.response
+    if ((resp && resp.status === 409) || (resp && resp.data && resp.data.inflight)) {
+      setMonitorNote('warn', L('上一轮判定监测仍在运行', 'A resolution check is already running'))
+    } else {
+      setMonitorNote('err', '✗ ' + ((e && e.message) || L('无法启动判定监测', 'Unable to start the resolution check')))
+    }
+  } finally {
+    monitorBusy.value = false
+  }
+}
+
 // 切换提供方时清掉上一次的测试结果，避免误读为新选择的状态
 watch(selected, () => { testResult.value = null })
 
 onMounted(load)
+onBeforeUnmount(() => { if (monitorNoteTimer) clearTimeout(monitorNoteTimer) })
 </script>
 
 <style scoped>
@@ -256,4 +310,5 @@ onMounted(load)
 .test-result { font-family: var(--mono); font-size: .76rem; line-height: 1.5; word-break: break-word; }
 .test-result.ok { color: #16a34a; margin-top: 0; }
 .test-result.err { color: var(--orange); margin-top: 0; }
+.test-result.warn { color: var(--color-warn, #D97706); margin-top: 0; }
 </style>

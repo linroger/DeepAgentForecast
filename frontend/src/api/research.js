@@ -212,6 +212,16 @@ export function researchPdfUrl(pipelineId, lang) {
 }
 
 /**
+ * i8/MON-1：手动触发一轮市场判定监测（后台子进程 `run --all-recent`）。
+ * 后端自带在飞去重：202 {started:true}=已启动；409 {inflight:true}=上一轮仍在运行。
+ * 绝不用 requestWithRetry 包裹——重试会把 409 的「已在跑」语义误报成失败/双触发。
+ * @returns {Promise}
+ */
+export function runResolutionMonitor() {
+  return service.post('/api/research/resolution-monitor/run')  // non-idempotent: do not retry
+}
+
+/**
  * 研究子进程进度日志（tail）
  * @param {String} pipelineId
  * @param {Number} lines

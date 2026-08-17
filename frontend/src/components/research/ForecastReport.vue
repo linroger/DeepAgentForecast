@@ -188,6 +188,9 @@
               </div>
             </div>
           </section>
+          <!-- LOOP-017：一等公民二元预测表（forecast.binary_forecasts，与仪表盘同源同门）。
+               行模型在 utils/binaryForecasts.js（纯函数）；无二元预测 → 组件整体不渲染。 -->
+          <BinaryForecastTable :forecast="fc" />
           <!-- VIZ-1：图表画廊（确定性生成的 PNG/SVG 图表 + 图注）。无工件时整体不渲染。 -->
           <section v-if="galleryCharts.length" class="chart-gallery">
             <div class="gallery-head">
@@ -233,6 +236,7 @@ import {
   getReportTranslationMd, requestReportTranslation, getReportTranslationStatus,
   reportMarkdownUrl, reportPdfUrl, reportAssetUrl, getForecast
 } from '../../api/report'
+import BinaryForecastTable from './BinaryForecastTable.vue'
 import { renderMarkdown, extractHeadings } from '../../utils/markdown'
 import {
   chartAssetKind,
