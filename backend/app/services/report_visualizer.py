@@ -48,6 +48,7 @@ env 旋钮（Config，全部 degrade-safe 默认）：
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import html as html_lib
 import json
 import logging
@@ -4489,7 +4490,8 @@ class ReportVisualizer:
                                     ensemble, items, skipped)
 
         # ---- 落盘 manifest（原子写；失败不影响已生成的图表）+ INFO 汇总（不再沉默跳过）----
-        self._persist_manifest(report_dir, items, skipped)
+        self._persist_manifest(report_dir, items, skipped,
+                               provenance=self._manifest_provenance(artifacts))
         skip_summary = ", ".join(f"{s['builder']}={s['reason']}" for s in skipped) or "-"
         logger.info("报告可视化完成 report=%s：产出 %d 项（png_pair=%d），跳过 %d 项 [%s]",
                     report_id, len(items),
@@ -4632,24 +4634,70 @@ class ReportVisualizer:
 
     @staticmethod
     def _persist_manifest(report_dir: str, items: List[Dict[str, str]],
-                          skipped: Optional[List[Dict[str, str]]] = None) -> None:
+                          skipped: Optional[List[Dict[str, str]]] = None,
+                          provenance: Optional[Dict[str, Any]] = None) -> None:
         """原子写 reports/{id}/viz_manifest.json（WAVE9 schema v2：
-        {"schema_version":2,"items":[...],"skipped":[{builder,reason}]}）。
+        {"schema_version":2,"items":[...],"skipped":[{builder,reason}]}；
+        i9 起可附加 additive 顶层键 "provenance"——消费方按键读取，未知键无害）。
         目录不可写等失败仅 debug 日志（degrade-safe）。"""
         try:
             os.makedirs(report_dir, exist_ok=True)
             path = os.path.join(report_dir, "viz_manifest.json")
             tmp = path + ".tmp"
-            payload = {
+            payload: Dict[str, Any] = {
                 "schema_version": 2,
                 "items": items,
                 "skipped": skipped or [],
             }
+            if isinstance(provenance, dict) and provenance:
+                payload["provenance"] = provenance
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
             os.replace(tmp, path)
         except Exception as exc:  # noqa: BLE001
             logger.debug("viz_manifest.json 落盘失败：%s", exc)
+
+    @staticmethod
+    def _manifest_provenance(artifacts: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """i9（LOOP-017「manifests lack policy/input hashes」）：图表溯源块。
+
+        inputs_sha256：每个可 JSON 规范化（sort_keys）的输入工件的 sha256——审计方可以
+        证明「这批图出自哪一版 forecast/sim 数据」；不可序列化的键跳过（记入
+        unhashed_inputs，绝不冒充覆盖完整）。policy：影响渲染产物的关键旋钮描述符 +
+        其自身 sha256。Pure、degrade-safe：任何失败返回 {}（manifest 不带 provenance，
+        与 i8 前字节兼容）。"""
+        try:
+            inputs: Dict[str, str] = {}
+            unhashed: List[str] = []
+            for key in sorted((artifacts or {}).keys()):
+                value = (artifacts or {})[key]
+                try:
+                    canonical = json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                           default=None, separators=(",", ":"))
+                except (TypeError, ValueError):
+                    unhashed.append(str(key))
+                    continue
+                inputs[str(key)] = hashlib.sha256(
+                    canonical.encode("utf-8")).hexdigest()
+            policy = {
+                "renderer": "report_visualizer",
+                "theme": "WAVE9",
+                "schema_version": 2,
+                "plotlyjs_inline": bool(_cfg("REPORT_VIZ_PLOTLYJS_INLINE", False)),
+            }
+            policy_sha = hashlib.sha256(json.dumps(
+                policy, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":")).encode("utf-8")).hexdigest()
+            out: Dict[str, Any] = {
+                "inputs_sha256": inputs,
+                "policy": policy,
+                "policy_sha256": policy_sha,
+            }
+            if unhashed:
+                out["unhashed_inputs"] = unhashed
+            return out
+        except Exception:  # noqa: BLE001 — 溯源是旁路增强
+            return {}
 
     @staticmethod
     def _load_price_history(report_dir: str, artifacts: Dict[str, Any]) -> Dict[str, Any]:
