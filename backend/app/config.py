@@ -276,6 +276,12 @@ class Config:
     RESOLUTION_MONITOR_RECENT_N = int(os.environ.get('RESOLUTION_MONITOR_RECENT_N', '10') or '10')  # --all-recent 缺省处理的最近报告条数
     RESOLUTION_MONITOR_LOOKBACK_DAYS = int(os.environ.get('RESOLUTION_MONITOR_LOOKBACK_DAYS', '0') or '0')  # 0=不限；>0 仅监测 created_at 在近 N 天内的报告
     RESOLUTION_MONITOR_DRIFT_THRESHOLD = float(os.environ.get('RESOLUTION_MONITOR_DRIFT_THRESHOLD', '0.05') or '0.05')  # 研究期价→现价 |Δ|≥此值才计入「biggest movers」
+    # i8（LOOP-017 尾巴「resolution monitor never ran」）：脚本此前没有任何调度方——判定
+    # 账本/价格轨迹永远是空的。>0 时后端进程内以该小时数为周期在后台跑一次
+    # `scripts/resolution_monitor.py run --all-recent`（子进程隔离，失败只记日志）。
+    # 默认 0=关：行为与今日逐字节一致；开启是 owner 的一行 env 决定（keyless 公共
+    # Gamma 重报价，无 LLM/付费调用）。仅 run.py 生产入口启动，测试进程绝不自启。
+    RESOLUTION_MONITOR_AUTORUN_HOURS = float(os.environ.get('RESOLUTION_MONITOR_AUTORUN_HOURS', '0') or '0')
     # NEXTSTEPS P3-8：把已实现关系按价投影一个「到预测时点的轨迹」（allied→likely_persists /
     # adversarial→persists_or_escalates / transactional→contingent），喂进报告信号包帮助情景分叉
     # 分析（contingent 纽带=支点）。**模型先验非证据**，块内显式标注。默认关（保守，避免被当成证据）。

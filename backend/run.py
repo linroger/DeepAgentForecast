@@ -35,6 +35,11 @@ def main():
     
     # 创建应用
     app = create_app()
+
+    # i8：MON-1 判定监测的进程内调度（RESOLUTION_MONITOR_AUTORUN_HOURS>0 才启动；默认 0=关）。
+    # 只在生产入口挂——create_app() 的测试消费者绝不自启后台网络轮询。
+    from app.services.resolution_autorun import start as start_resolution_autorun
+    start_resolution_autorun()
     
     # 获取运行配置
     # 默认仅绑定环回（EXECPLAN2 F-13-0）：服务无鉴权时不应暴露在所有网卡上。

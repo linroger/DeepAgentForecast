@@ -337,6 +337,19 @@ def list_pipelines():
     return jsonify({"success": True, "data": {"pipelines": PipelineManager.list_pipelines()}})
 
 
+@research_bp.route('/resolution-monitor/run', methods=['POST'])
+def run_resolution_monitor():
+    """i8：手动触发一轮 MON-1 判定监测（后台子进程，`run --all-recent`）。
+
+    脚本此前从未被任何调度方跑过（LOOP-017「resolution monitor never ran」）。202=已启动；
+    409=上一轮仍在飞（在飞去重，绝不并发双跑）。周期自动跑由 RESOLUTION_MONITOR_AUTORUN_HOURS
+    控制（默认关），本端点独立于该旋钮随时可用。"""
+    from ..services import resolution_autorun
+    if resolution_autorun.trigger_once():
+        return jsonify({"success": True, "data": {"started": True}}), 202
+    return jsonify({"success": False, "error": "上一轮判定监测仍在运行", "inflight": True}), 409
+
+
 @research_bp.route('/preflight', methods=['GET'])
 def preflight():
     """T5.6: 启动前就绪检查（不发起管线）。复用 POST /run 的同一套检查，避免漂移。
