@@ -1943,28 +1943,59 @@ def _configure_research_budget_env(
         Config, "RESEARCH_NEGATIVE_CACHE_RETRIES", 1))
 
 
+def _research_process_usage(telemetry: dict[str, Any]) -> dict[str, Any]:
+    """Small immutable-identity snapshot; never includes question or provider text."""
+    return {key: telemetry.get(key) for key in (
+        "process_attempt_id", "model", "tokens_in", "tokens_out", "wall_s",
+    )}
+
+
+def _record_research_process_usage(
+    telemetry: dict[str, Any], run_id: Optional[str], *, status: str,
+) -> bool:
+    """Commit emitted process coverage before final synthetic rollups can repeat it."""
+    from ..utils.telemetry import LLMMeter, get_run_context
+    rid = run_id or get_run_context()[0]
+    operation_id = telemetry.get("process_attempt_id")
+    if not rid or not operation_id or not LLMMeter.is_durable_run(rid):
+        return False
+    model = str(telemetry.get("model") or Config.DEERFLOW_MODEL)
+    provider = f"{model}-cli" if model in ("claude", "codex") else model
+    LLMMeter.record_snapshot(
+        source="research_process", operation_id=str(operation_id), provider=provider,
+        model=model, prompt_tokens=int(telemetry.get("tokens_in") or 0),
+        completion_tokens=int(telemetry.get("tokens_out") or 0),
+        latency_ms=float(telemetry.get("wall_s") or 0) * 1000,
+        run_id=rid, stage=STAGE_RESEARCH, calls=1, status=status,
+        # Stdout aggregates do not prove complete request-level/provider usage.
+        usage_source="unknown", billing_basis="subscription" if provider.endswith("-cli") else "estimated_api",
+    )
+    return True
+
+
+def _merged_research_process_usage(telemetries: list[dict]) -> list[dict]:
+    """Carry source operations through lane/global summaries instead of recharging totals."""
+    snapshots = []
+    for telemetry in telemetries:
+        if isinstance(telemetry.get("process_usage_snapshots"), list):
+            snapshots.extend(telemetry["process_usage_snapshots"])
+        elif telemetry.get("process_attempt_id"):
+            snapshots.append(_research_process_usage(telemetry))
+    return snapshots
+
+
 def _flush_failed_research_attempt_spend(spend: Optional[dict[str, Any]],
                                          attempt_status: str,
                                          run_id: Optional[str] = None) -> bool:
-    """DEFECT-2：把一次**未成功**研究 attempt 已累计的 token 花费计入统一计量。
+    """Reconcile emitted usage on failure, retaining legacy unbound behavior.
 
-    审计取证（31.9M 实耗 vs 5.35M 入账）：per-attempt 的 _tok_in/_tok_out 在每次研究
-    子进程启动时清零、research_telemetry 只在成功路径构建、_record_research_telemetry
-    是研究花费进 LLMMeter 的唯一入口——失败/超时/SIGTERM/取消把整个 attempt 的账直接
-    丢掉。本函数由 :meth:`DeerFlowResearchRunner.run` 包装层在异常出口调用，向 LLMMeter
-    写一条 stage='research' 的合成记录（provider/model 映射与 _record_research_telemetry
-    完全一致）。
-
-    恰好一次 / 不与成功路径重复：``spend['flushed']`` 置位保证幂等；包装层只在异常出口
-    调用（成功 return 的 attempt 仍由调用方经 _record_research_telemetry 入账，成功路径
-    逐字节不变）。LLMMeter 记录 schema 无附加字段位，attempt_status 无法进计量行——以
-    告警日志留痕（含 status 与 token 数）作可审计标签。
-
-    返回是否真的写了计量记录（无 token / 计量关闭 / 已 flush → False）。
+    Bound pipelines stream durable process snapshots while the child runs. This
+    failure observation updates the same operation; duplicate credit is impossible.
+    Unbound callers retain one synthetic attempt record. Emitted token coverage
+    does not prove complete provider usage or historical billing.
     """
     if not isinstance(spend, dict) or spend.get("flushed"):
         return False
-    spend["flushed"] = True
     t_in = int(spend.get("tokens_in") or 0)
     t_out = int(spend.get("tokens_out") or 0)
     if t_in <= 0 and t_out <= 0:
@@ -1973,6 +2004,11 @@ def _flush_failed_research_attempt_spend(spend: Optional[dict[str, Any]],
         return False
     try:
         from ..utils.telemetry import LLMMeter
+        current = dict(spend)
+        current["wall_s"] = max(0.0, time.time() - float(spend.get("t_start") or time.time()))
+        if _record_research_process_usage(current, run_id, status="failed"):
+            spend["flushed"] = True
+            return True
         model = str(spend.get("model") or getattr(Config, "DEERFLOW_MODEL", "claude"))
         # 与 _record_research_telemetry 相同的计价 provider 映射：CLI 订阅类（claude/
         # codex）边际成本 0，其余复用同名 provider 的定价表（缺失则成本 0，仍记 token）。
@@ -1991,6 +2027,7 @@ def _flush_failed_research_attempt_spend(spend: Optional[dict[str, Any]],
             stage=STAGE_RESEARCH,
             run_id=str(run_id) if run_id else None,  # None → contextvar/单活跃 run 回退
         )
+        spend["flushed"] = True
         logger.warning(
             "研究 attempt 以 %s 终止，已消耗 tokens in=%d out=%d（model=%s）——"
             "已计入 stage='research' 合成计量，不再随失败丢账",
@@ -2125,7 +2162,11 @@ class DeerFlowResearchRunner:
                 return None
 
         artifact_before = _artifact_fingerprint(expected_artifact_path)
+        from ..utils.telemetry import LLMMeter
+        LLMMeter.assert_accounting_available(budget_run_id)
         process_attempt_id = uuid.uuid4().hex
+        if _spend is not None:
+            _spend["process_attempt_id"] = process_attempt_id
 
         def _fresh_expected_artifact() -> bool:
             current = _artifact_fingerprint(expected_artifact_path)
@@ -2399,6 +2440,12 @@ class DeerFlowResearchRunner:
                             _spend["tokens_in"] = _tok_in
                             _spend["tokens_out"] = _tok_out
                             _spend["tokens_total"] = _tok_total
+                        _record_research_process_usage({
+                            "process_attempt_id": process_attempt_id,
+                            "model": model or Config.DEERFLOW_MODEL,
+                            "tokens_in": _tok_in, "tokens_out": _tok_out,
+                            "wall_s": time.time() - _t_start,
+                        }, budget_run_id, status="running")
                 elif "[ok]" in line or "[done]" in line:
                     on_progress(local, _tail(line))
                 elif "[error]" in line:
@@ -2548,6 +2595,7 @@ class DeerFlowResearchRunner:
         timeline = _read_json(os.path.join(handoff_dir, "timeline.json"))
         # I-5-7: 汇总研究阶段遥测。token 行可能整轮缺失（某些研究模型不报 usage）→ 全 0/None。
         research_telemetry = {
+            "process_attempt_id": process_attempt_id,
             "model": (model or Config.DEERFLOW_MODEL),
             "depth": effective_depth,
             "tokens_in": _tok_in,
@@ -2557,6 +2605,7 @@ class DeerFlowResearchRunner:
             "results": _result_events,
             "wall_s": round(time.time() - _t_start, 1),
         }
+        research_telemetry["process_usage_snapshots"] = [_research_process_usage(research_telemetry)]
         on_progress(
             100,
             f"研究完成（{'证据包' if evidence_only else '报告'} {len(report)} 字）",
@@ -7217,6 +7266,8 @@ class PipelineOrchestrator:
         self._tel_prev: Optional[dict] = None
         self._tel_prev_cum: Optional[dict] = None
         self._tel_last_flush_calls: int = 0
+        self._tel_legacy_sim: Optional[dict] = None
+        self._tel_initialized = False
 
     # -- W9-3: run 遥测增量落盘 --------------------------------------------
     # 两条失败跑的教训：LLMMeter 是进程内存累加器，重启即清零；run_telemetry.json 只在
@@ -7230,20 +7281,65 @@ class PipelineOrchestrator:
     def _init_telemetry_flush(self, state: "PipelineState") -> None:
         """attempt 起点：定位 run_telemetry.json 并捕获上一 attempt 的账作为合并基底。"""
         self._tel_path = os.path.join(PipelineManager._dir(state.pipeline_id), "run_telemetry.json")
+        self._tel_initialized = False
         self._tel_prev = None
         self._tel_prev_cum = None
         self._tel_last_flush_calls = 0
+        self._tel_legacy_sim = None
+        prev = None
         try:
             prev = _read_json(self._tel_path)
-            if isinstance(prev, dict) and (prev.get("total") or {}).get("calls"):
+            if isinstance(prev, dict) and (prev.get("cumulative_total") or prev.get("total")):
                 self._tel_prev = {
                     "total": prev.get("total"),
                     "report_id": prev.get("report_id"),
                     "status": prev.get("status"),
                 }
                 self._tel_prev_cum = prev.get("cumulative_total") or prev.get("total") or {}
-        except Exception:  # noqa: BLE001 — 基底捕获失败按首写处理
-            pass
+        except Exception:  # noqa: BLE001 — validated against durable storage below
+            prev = None
+        from ..utils.telemetry import LLMMeter
+        from ..utils.usage_ledger import read_snapshot, UsageLedgerStorageError
+        # Derive storage from the actual pipeline directory, including isolated
+        # test roots. Never open a second Config-derived runtime tree implicitly.
+        ledger_path = os.path.join(os.path.dirname(os.path.dirname(self._tel_path)), "usage_ledger.sqlite3")
+        foreign_snapshot = isinstance(prev, dict) and any(
+            prev[key] != state.pipeline_id for key in ("run_id", "pipeline_id") if key in prev)
+        requires_existing = (
+                foreign_snapshot
+                or
+                (os.path.exists(self._tel_path) and not isinstance(prev, dict))
+                or (isinstance(prev, dict) and not (
+                    isinstance(prev.get("cumulative_total"), dict) or isinstance(prev.get("total"), dict)))
+                or (isinstance(prev, dict) and prev.get("durable"))
+                or state.options.get("usage_attempt_id"))
+        # Fresh runs enter the transactional initializer directly. A speculative
+        # read could otherwise see another cold initializer's uncommitted schema.
+        if requires_existing and read_snapshot(ledger_path, state.pipeline_id) is None:
+            raise UsageLedgerStorageError(
+                "Prior usage storage is missing or unreadable; cannot restart accounting at zero")
+        legacy = prev if isinstance(prev, dict) and not prev.get("durable") and not foreign_snapshot else None
+        attempt_id = LLMMeter.attach_durable_run(
+            state.pipeline_id, ledger_path, attempt_id=state.task_id or None,
+            legacy_snapshot=legacy,
+        )
+        state.options["usage_attempt_id"] = attempt_id
+        if legacy and isinstance(state.options.get("sim_llm_telemetry_recorded"), dict):
+            self._tel_legacy_sim = {
+                "marker": dict(state.options["sim_llm_telemetry_recorded"]),
+                "summary": dict(state.options.get("sim_llm_telemetry") or {}),
+            }
+            marker = self._tel_legacy_sim["marker"]
+            summary = self._tel_legacy_sim["summary"]
+            if not summary or not marker.get("simulation_id") or not marker.get("meter_run_token"):
+                raise UsageLedgerStorageError(
+                    "Legacy child usage marker lacks a snapshot or stable identity")
+            # Seed migration high-water before any durable JSON projection can
+            # replace the old baseline marker, including a crash before RUN.
+            self._record_durable_sim_usage(state, str(marker["simulation_id"]), {
+                **summary, "meter_run_token": marker["meter_run_token"],
+            })
+        self._tel_initialized = True
 
     def _flush_run_telemetry(self, state: "PipelineState", *, final: bool = False,
                              extra: Optional[dict] = None) -> None:
@@ -7253,7 +7349,7 @@ class PipelineOrchestrator:
         初始化（_tel_path 为 None）时为 no-op。
         """
         tpath = self._tel_path
-        if not tpath:
+        if not tpath or not self._tel_initialized:
             return
         from ..utils.telemetry import LLMMeter
         from ..utils.atomic import write_json_atomic
@@ -7269,8 +7365,19 @@ class PipelineOrchestrator:
                     data.update(extra)
                 if not final:
                     data["in_flight"] = True  # 运行中快照标记（终版落盘时消失）
+                cumulative = LLMMeter.cumulative_snapshot(state.pipeline_id)
+                if cumulative is not None:
+                    data["cumulative_total"] = cumulative["total"]
+                    data["cumulative_by_stage"] = cumulative.get("by_stage", {})
+                    data["usage_accounting"] = {
+                        key: cumulative.get(key) for key in (
+                            "coverage", "usage_complete", "usage_by_class", "cache_partition_known",
+                            "legacy_baseline_present", "legacy_baseline_ambiguous",
+                        )
+                    }
                 if self._tel_prev:
                     data["previous_attempt"] = self._tel_prev
+                if self._tel_prev and cumulative is None:
                     base = self._tel_prev_cum or {}
                     cur = data.get("total") or {}
                     cum: dict[str, Any] = {}
@@ -8641,53 +8748,58 @@ class PipelineOrchestrator:
                                Config.SIM_GRAPH_FEEDBACK) and graph_id:
             run_kwargs["enable_graph_memory_update"] = True
             run_kwargs["graph_id"] = graph_id
-        SimulationRunner.start_simulation(simulation_id=sim_id, **run_kwargs)
-        cancel_ev = type(self)._cancel_events.get(state.pipeline_id)
-        last_progress_at = time.monotonic()
-        last_round = -1
         try:
-            stall_s = float(getattr(Config, "PIPELINE_RUN_STALL_S", 1800) or 1800)
-        except (TypeError, ValueError):
-            stall_s = 1800.0
-        # W9-2：种子轮询内的心跳刷新节律（与看护线程同参）。
-        try:
-            _hb_interval = float(getattr(Config, "PIPELINE_HEARTBEAT_INTERVAL_S", 30) or 30)
-        except (TypeError, ValueError):
-            _hb_interval = 30.0
-        _last_hb = time.monotonic()
-        while True:
-            if cancel_ev is not None and cancel_ev.is_set():
-                try:
-                    SimulationRunner.stop_simulation(sim_id)
-                except Exception:  # noqa: BLE001
-                    pass
-                raise PipelineCancelled("多种子集成期间被取消")
-            rs = SimulationRunner.get_run_state(sim_id)
-            if rs is None:
-                raise RuntimeError("集成种子模拟运行状态丢失")
-            cur = getattr(rs, "current_round", 0) or 0
-            if cur != last_round:
-                last_round = cur
-                last_progress_at = time.monotonic()
-            if rs.runner_status == RunnerStatus.COMPLETED:
-                break
-            if rs.runner_status in (RunnerStatus.FAILED, RunnerStatus.STOPPED):
-                raise RuntimeError(f"集成种子模拟未正常结束: {rs.runner_status}")
-            if stall_s > 0 and (time.monotonic() - last_progress_at) > stall_s:
-                try:
-                    SimulationRunner.stop_simulation(sim_id)
-                except Exception:  # noqa: BLE001
-                    pass
-                raise RuntimeError(f"集成种子模拟约 {int(stall_s)}s 无进展，看门狗终止")
-            # W9-2：种子轮询期间按心跳节律刷新 heartbeat_at——集成窗口内心跳不再冻结，
-            # 别的进程的 reconcile_orphans 能看到「这条管线还活着」。
-            if (time.monotonic() - _last_hb) >= _hb_interval:
-                _last_hb = time.monotonic()
-                try:
-                    PipelineManager.touch_heartbeat(state.pipeline_id, pid=os.getpid())
-                except Exception:  # noqa: BLE001
-                    pass
-            time.sleep(5)
+            from ..utils.telemetry import LLMMeter
+            LLMMeter.assert_accounting_available(state.pipeline_id)
+            SimulationRunner.start_simulation(simulation_id=sim_id, **run_kwargs)
+            cancel_ev = type(self)._cancel_events.get(state.pipeline_id)
+            last_progress_at = time.monotonic()
+            last_round = -1
+            try:
+                stall_s = float(getattr(Config, "PIPELINE_RUN_STALL_S", 1800) or 1800)
+            except (TypeError, ValueError):
+                stall_s = 1800.0
+            # W9-2：种子轮询内的心跳刷新节律（与看护线程同参）。
+            try:
+                _hb_interval = float(getattr(Config, "PIPELINE_HEARTBEAT_INTERVAL_S", 30) or 30)
+            except (TypeError, ValueError):
+                _hb_interval = 30.0
+            _last_hb = time.monotonic()
+            while True:
+                if cancel_ev is not None and cancel_ev.is_set():
+                    try:
+                        SimulationRunner.stop_simulation(sim_id)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    raise PipelineCancelled("多种子集成期间被取消")
+                rs = SimulationRunner.get_run_state(sim_id)
+                if rs is None:
+                    raise RuntimeError("集成种子模拟运行状态丢失")
+                cur = getattr(rs, "current_round", 0) or 0
+                if cur != last_round:
+                    last_round = cur
+                    last_progress_at = time.monotonic()
+                if rs.runner_status == RunnerStatus.COMPLETED:
+                    break
+                if rs.runner_status in (RunnerStatus.FAILED, RunnerStatus.STOPPED):
+                    raise RuntimeError(f"集成种子模拟未正常结束: {rs.runner_status}")
+                if stall_s > 0 and (time.monotonic() - last_progress_at) > stall_s:
+                    try:
+                        SimulationRunner.stop_simulation(sim_id)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    raise RuntimeError(f"集成种子模拟约 {int(stall_s)}s 无进展，看门狗终止")
+                # W9-2：种子轮询期间按心跳节律刷新 heartbeat_at——集成窗口内心跳不再冻结，
+                # 别的进程的 reconcile_orphans 能看到「这条管线还活着」。
+                if (time.monotonic() - _last_hb) >= _hb_interval:
+                    _last_hb = time.monotonic()
+                    try:
+                        PipelineManager.touch_heartbeat(state.pipeline_id, pid=os.getpid())
+                    except Exception:  # noqa: BLE001
+                        pass
+                time.sleep(5)
+        finally:
+            self._record_sim_run_telemetry(state, sim_id)
         # 反馈写入器排空（与主跑一致），保证报告读到完整图谱（Foglamp 1B：读钉住政策）
         if self._pinned_safety(state, "sim_graph_feedback",
                                Config.SIM_GRAPH_FEEDBACK) and graph_id:
@@ -10136,30 +10248,76 @@ class PipelineOrchestrator:
         return out
 
     def heartbeat_status(self, state: PipelineState) -> dict[str, Any]:
-        """I-4-1/I-5-6: 汇总 ETA/staleness 心跳 + （计量开启时）当前累计花费，供状态 API 透出。
+        """Read heartbeat and cumulative recorded spend without attaching a meter.
 
-        spend_so_far 来自 LLMMeter.snapshot（进程内累计，仅对本进程在飞的管线有数据；
-        重启后或别的 worker 的管线读不到 → 省略该字段，不臆造）。整体 best-effort。
+        A registered ledger's zero is meaningful. Missing/corrupt accounting is
+        unavailable, and must never become a fresh process's zero-filled meter.
+        Old saved snapshots are partial fallback evidence only before cutover.
         """
+        import math
+        from ..utils.usage_ledger import read_snapshot, UsageLedgerStorageError
+
         info = self.estimate_eta(state)
         # owner/心跳液体性（reconcile 也用同一判据，这里只读不改）。
         info["owner_pid"] = state.owner_pid
         info["owner_alive"] = _pid_alive(state.owner_pid) if state.owner_pid else None
         hb_age = _age_seconds(state.heartbeat_at)
         info["heartbeat_age_s"] = int(hb_age) if hb_age is not None else None
-        if bool(getattr(Config, "LLM_TELEMETRY_ENABLED", True)):
-            try:
-                from ..utils.telemetry import LLMMeter
-                snap = LLMMeter.snapshot(state.pipeline_id)
-                tot = snap.get("total") or {}
-                # 仅在确有计量数据时透出（全 0 视为「本进程无数据」省略）。
-                if tot.get("total_tokens") or tot.get("cost_usd"):
-                    info["spend_so_far"] = {
-                        "tokens": tot.get("total_tokens"),
-                        "cost_usd": tot.get("cost_usd"),
-                    }
-            except Exception:  # noqa: BLE001
-                pass
+        spend = {"available": False, "tokens": None, "cost_usd": None,
+                 "source": None, "coverage": "unavailable", "usage_complete": False,
+                 "unavailable_reason": "not_recorded"}
+        info["spend_so_far"] = spend
+        try:
+            run_dir = PipelineManager._dir(state.pipeline_id)
+            ledger_path = os.path.join(os.path.dirname(run_dir), "usage_ledger.sqlite3")
+            snap = read_snapshot(ledger_path, state.pipeline_id)
+            if snap is None:
+                if state.options.get("usage_attempt_id"):
+                    raise UsageLedgerStorageError("Previously registered usage ledger is missing")
+                try:
+                    with open(os.path.join(run_dir, "run_telemetry.json"), encoding="utf-8") as f:
+                        snap = json.load(f)
+                except FileNotFoundError:
+                    return info
+                if (not isinstance(snap, dict) or snap.get("durable")
+                        or snap.get("ledger_schema") or "usage_accounting" in snap):
+                    raise UsageLedgerStorageError("Saved telemetry is invalid or requires its durable ledger")
+                identities = [snap[key] for key in ("pipeline_id", "run_id") if key in snap]
+                if not identities or any(identity != state.pipeline_id for identity in identities):
+                    raise UsageLedgerStorageError("Saved telemetry does not identify this run")
+                total = snap.get("cumulative_total") if "cumulative_total" in snap else snap.get("total")
+                source, coverage = "legacy_snapshot", "legacy_saved_snapshot"
+            else:
+                total = snap.get("total")
+                source, coverage = "durable_ledger", snap.get("coverage", "recorded_observations")
+            if not isinstance(total, dict):
+                raise UsageLedgerStorageError("Saved telemetry has no accounting total")
+
+            def recorded_number(key: str, *, integer: bool = False):
+                value = total.get(key)
+                if value is None:
+                    return None
+                if (isinstance(value, bool) or not isinstance(value, (int, float))
+                        or not math.isfinite(value) or value < 0
+                        or (integer and int(value) != value)):
+                    raise UsageLedgerStorageError("Saved telemetry has an invalid accounting total")
+                return int(value) if integer else value
+
+            tokens = recorded_number("total_tokens", integer=True)
+            cost = recorded_number("cost_usd")
+            if tokens is None and cost is None:
+                raise UsageLedgerStorageError("Saved telemetry has no recorded spend")
+            spend.update({"available": True, "tokens": tokens, "cost_usd": cost,
+                          "source": source, "coverage": coverage, "unavailable_reason": None,
+                          "cost_basis": snap.get("cost_basis", "unknown"),
+                          "cost_estimated": snap.get("cost_estimated", True)})
+            for key in ("usage_by_class", "cache_partition_known",
+                        "legacy_baseline_present", "legacy_baseline_ambiguous"):
+                if key in snap:
+                    spend[key] = snap[key]
+        except Exception as exc:  # noqa: BLE001 — status stays available, accounting fails closed
+            spend["unavailable_reason"] = "storage_unavailable"
+            logger.debug("[%s] Status usage accounting unavailable: %s", state.pipeline_id, exc)
         return info
 
     # -- 内部：心跳看护线程 (I-4-1) ----------------------------------------
@@ -10265,20 +10423,32 @@ class PipelineOrchestrator:
 
     def _record_research_telemetry(self, state: PipelineState,
                                    telemetry: Optional[dict[str, Any]]) -> None:
-        """I-5-7: 把 DeerFlowResearchRunner 返回的研究遥测纳入统一计量。
+        """Persist final research diagnostics and reconcile source process observations.
 
-        (1) 始终 stash 到 state.options['research_telemetry']（即使计量关闭，也是免费观测）；
-        (2) 计量开启且确有 token 时，向 LLMMeter 写一条 stage='research' 的合成记录，
-            让 run_telemetry.json 的整轮 token/成本 rollup 把最贵的研究阶段也算进去。
-        resume 路径无遥测（telemetry=None）→ 直接跳过，保持旧行为。
+        Bound pipelines retain each lane and synthesis process identity, so final
+        aggregate publication cannot credit their streaming usage a second time.
+        Unbound legacy callers retain their synthetic research-stage record.
         """
         if not isinstance(telemetry, dict):
             return
+        from ..utils.telemetry import LLMMeter
+        durable = LLMMeter.is_durable_run(state.pipeline_id)
+        if durable:
+            # Child observations were already credited while streaming. Reconcile
+            # their final high-water values; never add the merged lane total again.
+            observations = _merged_research_process_usage([telemetry])
+            for observation in observations:
+                _record_research_process_usage(observation, state.pipeline_id,
+                                               status="completed")
+            if not observations:
+                state.options["research_usage_gap"] = "missing_process_attempt_identity"
         try:
             state.options["research_telemetry"] = telemetry
             PipelineManager.save(state)
         except Exception:  # noqa: BLE001 — stash 失败不影响主流程
             pass
+        if durable:
+            return
         if not bool(getattr(Config, "LLM_TELEMETRY_ENABLED", True)):
             return
         t_in = int(telemetry.get("tokens_in") or 0)
@@ -10306,23 +10476,71 @@ class PipelineOrchestrator:
 
     # -- 内部：模拟阶段遥测 (DEFECT-3) -------------------------------------
 
+    def _record_durable_sim_usage(self, state: PipelineState, simulation_id: str,
+                                  telemetry: dict[str, Any]) -> None:
+        """Reconcile a child high-water snapshot before writing compatibility markers."""
+        from ..utils.telemetry import LLMMeter
+        token = str(telemetry.get("meter_run_token") or "")
+        if not token:
+            # File hashes change as a snapshot grows and cannot identify a launch.
+            state.options["simulation_usage_gap"] = "missing_meter_run_token"
+            return
+        provider = str(telemetry.get("provider") or "unknown")
+        model = str(telemetry.get("model") or "unknown")
+        if provider == "unknown" and model in ("claude", "codex"):
+            provider = f"{model}-cli"
+
+        def reconcile(snapshot: dict, *, baseline_included: bool = False) -> None:
+            LLMMeter.record_snapshot(
+                source="simulation_process", operation_id=f"{simulation_id}:{token}",
+                provider=provider,
+                # The producer's model label is the current dominant model and
+                # can change within one process. Keep aggregate identity stable;
+                # exact per-model diagnostics remain in the compatibility data.
+                model="simulation-aggregate",
+                prompt_tokens=snapshot.get("prompt_tokens", 0),
+                completion_tokens=snapshot.get("completion_tokens", 0),
+                latency_ms=float(snapshot.get("wall_s") or 0) * 1000,
+                calls=snapshot.get("calls", 0), run_id=state.pipeline_id,
+                stage=STAGE_RUN, usage_source="unknown",
+                billing_basis="subscription" if provider.endswith("-cli") else "estimated_api",
+                baseline_included=baseline_included,
+            )
+
+        legacy = self._tel_legacy_sim
+        if legacy and legacy["marker"].get("simulation_id") == simulation_id and (
+                legacy["marker"].get("meter_run_token") == token):
+            summary = legacy["summary"]
+            if summary:
+                # Old marker-first imports cannot prove whether credit happened.
+                # Seed their saved value, flag ambiguity, then accept only growth.
+                reconcile(summary, baseline_included=True)
+            else:
+                state.options["simulation_usage_gap"] = "legacy_marker_without_snapshot"
+                return
+        reconcile(telemetry)
+        summary = {key: telemetry.get(key) for key in (
+            "provider", "model", "calls", "errors", "prompt_tokens",
+            "completion_tokens", "total_tokens", "by_source", "by_model", "wall_s",
+        )}
+        state.options["sim_llm_telemetry"] = summary
+        state.options["sim_llm_telemetry_recorded"] = {
+            "simulation_id": simulation_id, "meter_run_token": token,
+            "recorded_at": _utcnow(), "authority": "usage_ledger",
+        }
+        # A cache write failure is replayable: the ledger already owns the credit.
+        PipelineManager.save(state)
+
     def _record_sim_run_telemetry(
         self, state: PipelineState, simulation_id: Optional[str]
     ) -> None:
-        """DEFECT-3: 把模拟子进程落盘的 sim_llm_telemetry.json 纳入统一计量（恰好一次）。
+        """Import detached simulation usage at success, failure, and reuse boundaries.
 
-        RUN 的 LLM 调用发生在 detached 子进程——contextvars 与 LLMMeter 都不跨进程，
-        这是 run_telemetry.json 拿到模拟花费的唯一入口。镜像 _record_research_telemetry：
-        (1) 始终 stash 摘要到 state.options['sim_llm_telemetry']（计量关闭也是免费观测）；
-        (2) 计量开启且确有 token 时，向 LLMMeter 写一条 stage='run' 的合成记录
-            （provider/model 取快照自报值；缺失时按研究路径同款映射兜底——CLI 订阅类
-            claude/codex → 'claude-cli' 边际成本 0，其余复用同名 provider 定价表）。
-
-        恰好一次（跨 attempt 持久）：state.options['sim_llm_telemetry_recorded'] 记住
-        快照的 ``meter_run_token``（每次子进程启动铸新、同进程重写不变）。同一场运行的
-        后续边界调用（成功收尾、后续 resume 的复用路径）全部跳过；重跑产生新 token →
-        新一笔真实花费照记。标记先持久化、计量后写：中间窗口崩溃宁可少记（诚实下限），
-        绝不双计。成功、复用与失败边界各调用一次；全程 degrade-safe，绝不抛出。
+        Bound pipelines reconcile monotonic process snapshots transactionally.
+        Compatibility markers are diagnostics, written after ledger credit.
+        Missing child identity is an explicit coverage gap. Storage failures stop
+        new bound provider work; a JSON projection failure is safely replayable.
+        The marker-based path below is retained only for unbound legacy callers.
         """
         try:
             if not simulation_id:
@@ -10332,6 +10550,10 @@ class PipelineOrchestrator:
                 "sim_llm_telemetry.json")
             tel = _read_json(tel_path)
             if not isinstance(tel, dict):
+                return
+            from ..utils.telemetry import LLMMeter
+            if LLMMeter.is_durable_run(state.pipeline_id):
+                self._record_durable_sim_usage(state, str(simulation_id), tel)
                 return
             token = str(tel.get("meter_run_token") or "") or (
                 _sha256_file(tel_path) or "")
@@ -10393,6 +10615,9 @@ class PipelineOrchestrator:
                 state.pipeline_id, provider, model, calls, t_in, t_out,
             )
         except Exception as e:  # noqa: BLE001 — 计量是观测增益，绝不放大失败
+            from ..utils.usage_ledger import UsageLedgerConflict, UsageLedgerStorageError
+            if isinstance(e, (UsageLedgerConflict, UsageLedgerStorageError)):
+                raise
             logger.debug("[%s] 模拟阶段合成计量跳过: %s", state.pipeline_id, e)
 
     # -- 内部：研究覆盖度/质量记分牌 (I-0-3) -------------------------------
@@ -11466,6 +11691,7 @@ class PipelineOrchestrator:
                 return sum(int(tel.get(key) or 0) for tel in all_tels)
 
             merged_tel = {
+                "process_usage_snapshots": _merged_research_process_usage(all_tels),
                 "model": final_tel.get("model") or Config.DEERFLOW_MODEL,
                 "depth": final_tel.get("depth"),
                 "tokens_in": _sum_tel("tokens_in"),
@@ -11663,6 +11889,7 @@ class PipelineOrchestrator:
             return sum(int(t.get(key) or 0) for t in tels)
 
         merged_tel = {
+            "process_usage_snapshots": _merged_research_process_usage(tels),
             "model": (tels[0].get("model") if tels else None) or Config.DEERFLOW_MODEL,
             "depth": tels[0].get("depth") if tels else None,
             "tokens_in": _sum("tokens_in"),
@@ -11754,8 +11981,6 @@ class PipelineOrchestrator:
         # 并确保 LLMClient.chat 的进程级探针在位（幂等、自愈；无熔断器时完全透传）。
         if _register_outage_breaker(state.pipeline_id) is not None:
             _install_llm_outage_probe()
-        # W9-3: attempt 起点初始化遥测增量落盘（捕获上一 attempt 的账作合并基底）。
-        self._init_telemetry_flush(state)
         # I-8-1: 管线起飞即写首版 run.json（解析后的研究深度/模型/图谱/环境指纹），
         # 后续每阶段进入时把热切换出的报告/模拟 provider 钉入。
         self._write_run_manifest(state)
@@ -11763,6 +11988,9 @@ class PipelineOrchestrator:
         # 心跳让 reconcile_orphans 把「死管线」与「慢但活（深研究/persona 静默数分钟）」区分开。
         hb_stop = self._start_heartbeat(state)
         try:
+            # Ledger initialization is inside the failure/cleanup boundary: a
+            # storage failure must not strand a running task or launch research.
+            self._init_telemetry_flush(state)
             # ---- Stage 0: RESEARCH ----
             upd = self._make_stage_updater(state, STAGE_RESEARCH)
             handoff_dir = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
@@ -12149,6 +12377,7 @@ class PipelineOrchestrator:
             )
 
             if state.mode == "research_only":
+                LLMMeter.assert_accounting_available(state.pipeline_id)
                 state.status = "completed"
                 state.global_progress = 100
                 PipelineManager.save(state)
@@ -12843,6 +13072,7 @@ class PipelineOrchestrator:
                                       Config.SIM_GRAPH_FEEDBACK) and graph_id:
                     run_kwargs["enable_graph_memory_update"] = True
                     run_kwargs["graph_id"] = graph_id
+                LLMMeter.assert_accounting_available(state.pipeline_id)
                 SimulationRunner.start_simulation(simulation_id=sim_state.simulation_id, **run_kwargs)
                 # 轮询直到完成
                 cancel_ev = cls._cancel_events.get(state.pipeline_id)
@@ -13200,6 +13430,7 @@ class PipelineOrchestrator:
             # Hard-fails (raises → status=failed) on an empty/placeholder report or missing
             # forecast.json; records a degraded health block otherwise. Makes broken runs visible.
             self._enforce_pipeline_health(state)
+            LLMMeter.assert_accounting_available(state.pipeline_id)
             state.status = "completed"
             state.global_progress = 100
             PipelineManager.save(state)
@@ -13253,6 +13484,8 @@ class PipelineOrchestrator:
                 hb_stop.set()
             # EXECPLAN2 I-5-1: 落盘本次管线的 LLM 计量（token/成本/延迟，按阶段/模型），便于复盘。
             try:
+                if not self._tel_initialized:
+                    raise RuntimeError("Accounting initialization failed; preserving prior telemetry artifacts")
                 tpath = os.path.join(PipelineManager._dir(state.pipeline_id), "run_telemetry.json")
                 _tel_extra: dict[str, Any] = {
                     "pipeline_id": state.pipeline_id,
@@ -13337,9 +13570,10 @@ class PipelineOrchestrator:
                                         _rpath, _existing.rstrip() + "\n\n" + _appendix.rstrip() + "\n")
                 except Exception as _ste:  # noqa: BLE001 — 阶段遥测为观测增益，失败不影响管线终态
                     logger.debug(f"[{state.pipeline_id}] 阶段级遥测处理失败（忽略）: {_ste}")
-                LLMMeter.reset(state.pipeline_id)
             except Exception as _te:
                 logger.debug(f"[{state.pipeline_id}] 写入 run_telemetry 失败（忽略）: {_te}")
+            finally:
+                LLMMeter.reset(state.pipeline_id)
             # DEFECT-1：本 attempt 的中断熔断器随线程终结注销（下一 attempt 重新注册，
             # 计数不跨 attempt 遗留；注册表清空后探针对全进程完全透传）。
             _clear_outage_breaker(state.pipeline_id)

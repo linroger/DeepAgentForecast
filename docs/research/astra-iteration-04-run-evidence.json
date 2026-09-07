@@ -1,0 +1,1535 @@
+{
+  "schema": "astra-run-forensics/v1",
+  "generated_at": "2026-09-07T17:19:48.719325+00:00",
+  "implementation_head": "38c857e67463fac6fd86d030d210676b238cd589",
+  "saved_artifact_root": "/Users/rogerlin/Downloads/DeepResearchForecast",
+  "implementation_root": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
+  "scope": "Read-only historical reconciliation. No provider calls or runtime mutations. No current production benchmark.",
+  "inventory": {
+    "count": 32,
+    "earliest_created_at": "2026-06-08T18:23:22.499025+00:00",
+    "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+    "newer_than_prior_audit_count": 0,
+    "status_counts": {
+      "completed": 26,
+      "failed": 3,
+      "cancelled": 3
+    },
+    "missing_run_telemetry_count": 12,
+    "zero_recorded_total_count": 8,
+    "runs": [
+      {
+        "id": "pipe_8b47373016f1",
+        "created_at": "2026-06-08T18:23:22.499025+00:00",
+        "updated_at": "2026-06-08T19:12:46.832365+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": null,
+        "accounting_key": null,
+        "state_source": "saved:backend/uploads/pipelines/pipe_8b47373016f1/pipeline_state.json"
+      },
+      {
+        "id": "pipe_8bd4981639ac",
+        "created_at": "2026-06-08T21:23:22.754757+00:00",
+        "updated_at": "2026-06-08T23:33:53.791706+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": null,
+        "accounting_key": null,
+        "state_source": "saved:backend/uploads/pipelines/pipe_8bd4981639ac/pipeline_state.json"
+      },
+      {
+        "id": "pipe_66838c1c67de",
+        "created_at": "2026-06-09T12:37:50.585326+00:00",
+        "updated_at": "2026-06-09T13:53:05.327730+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": null,
+        "accounting_key": null,
+        "state_source": "saved:backend/uploads/pipelines/pipe_66838c1c67de/pipeline_state.json"
+      },
+      {
+        "id": "pipe_2a5b07f9f8c1",
+        "created_at": "2026-06-09T12:52:27.965574+00:00",
+        "updated_at": "2026-06-09T15:19:35.510799+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": null,
+        "accounting_key": null,
+        "state_source": "saved:backend/uploads/pipelines/pipe_2a5b07f9f8c1/pipeline_state.json"
+      },
+      {
+        "id": "pipe_5985916eb3be",
+        "created_at": "2026-06-10T08:56:02.874621+00:00",
+        "updated_at": "2026-06-10T09:49:01.777602+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": null,
+        "accounting_key": null,
+        "state_source": "saved:backend/uploads/pipelines/pipe_5985916eb3be/pipeline_state.json"
+      },
+      {
+        "id": "pipe_f01ed9fe06de",
+        "created_at": "2026-06-10T10:13:32.427949+00:00",
+        "updated_at": "2026-06-10T13:04:51.015308+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": null,
+        "accounting_key": null,
+        "state_source": "saved:backend/uploads/pipelines/pipe_f01ed9fe06de/pipeline_state.json"
+      },
+      {
+        "id": "pipe_764249df9c38",
+        "created_at": "2026-06-10T18:06:20.410556+00:00",
+        "updated_at": "2026-06-10T20:19:03.557672+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": null,
+        "accounting_key": null,
+        "state_source": "saved:backend/uploads/pipelines/pipe_764249df9c38/pipeline_state.json"
+      },
+      {
+        "id": "pipe_8118312f7b79",
+        "created_at": "2026-06-11T10:11:34.799395+00:00",
+        "updated_at": "2026-06-11T13:26:41.202949+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": null,
+        "accounting_key": null,
+        "state_source": "saved:backend/uploads/pipelines/pipe_8118312f7b79/pipeline_state.json"
+      },
+      {
+        "id": "pipe_a90b338fdfa0",
+        "created_at": "2026-06-11T19:22:03.541561+00:00",
+        "updated_at": "2026-06-12T07:29:11.442743+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": null,
+        "accounting_key": null,
+        "state_source": "saved:backend/uploads/pipelines/pipe_a90b338fdfa0/pipeline_state.json"
+      },
+      {
+        "id": "pipe_e2egold02",
+        "created_at": "2026-06-13T20:36:05.149934+00:00",
+        "updated_at": "2026-06-13T21:35:55.120239+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": null,
+        "accounting_key": null,
+        "state_source": "saved:backend/uploads/pipelines/pipe_e2egold02/pipeline_state.json"
+      },
+      {
+        "id": "pipe_cbbd2d4fe2fa",
+        "created_at": "2026-06-20T16:04:38.776209+00:00",
+        "updated_at": "2026-06-20T18:53:45.481858+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": 8148521,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_cbbd2d4fe2fa/pipeline_state.json"
+      },
+      {
+        "id": "pipe_41522d5d9790",
+        "created_at": "2026-06-20T19:34:51.783165+00:00",
+        "updated_at": "2026-06-22T04:15:40.496819+00:00",
+        "status": "completed",
+        "resume_count": 2,
+        "recorded_tokens": 0,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_41522d5d9790/pipeline_state.json"
+      },
+      {
+        "id": "pipe_3272477a8dc1",
+        "created_at": "2026-06-27T08:22:45.690436+00:00",
+        "updated_at": "2026-06-27T12:48:53.017322+00:00",
+        "status": "completed",
+        "resume_count": 1,
+        "recorded_tokens": 72913,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_3272477a8dc1/pipeline_state.json"
+      },
+      {
+        "id": "pipe_8bbc44016735",
+        "created_at": "2026-06-27T17:49:55.810281+00:00",
+        "updated_at": "2026-06-27T20:36:35.487031+00:00",
+        "status": "completed",
+        "resume_count": 1,
+        "recorded_tokens": 0,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_8bbc44016735/pipeline_state.json"
+      },
+      {
+        "id": "pipe_69f88f22ed30",
+        "created_at": "2026-06-28T22:00:02.918498+00:00",
+        "updated_at": "2026-06-29T00:28:57.520429+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": 12906174,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_69f88f22ed30/pipeline_state.json"
+      },
+      {
+        "id": "pipe_a335177097fb",
+        "created_at": "2026-07-01T01:17:40.425562+00:00",
+        "updated_at": "2026-07-02T03:52:19.502283+00:00",
+        "status": "completed",
+        "resume_count": 5,
+        "recorded_tokens": 940433,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_a335177097fb/pipeline_state.json"
+      },
+      {
+        "id": "pipe_bf2bb3095d11",
+        "created_at": "2026-07-02T18:50:02.567717+00:00",
+        "updated_at": "2026-07-02T20:57:58.320145+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": 6453039,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_bf2bb3095d11/pipeline_state.json"
+      },
+      {
+        "id": "pipe_aa0fb94abe92",
+        "created_at": "2026-07-03T06:25:08.429052+00:00",
+        "updated_at": "2026-07-03T10:17:27.668978+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": 15045707,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_aa0fb94abe92/pipeline_state.json"
+      },
+      {
+        "id": "pipe_7ef597666938",
+        "created_at": "2026-07-05T20:40:51.138907+00:00",
+        "updated_at": "2026-07-05T22:11:39.668912+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": 4816286,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_7ef597666938/pipeline_state.json"
+      },
+      {
+        "id": "pipe_12251c96e78d",
+        "created_at": "2026-07-05T20:41:02.494543+00:00",
+        "updated_at": "2026-07-05T22:01:49.536086+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": 5179254,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_12251c96e78d/pipeline_state.json"
+      },
+      {
+        "id": "pipe_a8986bffd918",
+        "created_at": "2026-07-07T18:36:17.261105+00:00",
+        "updated_at": "2026-07-10T18:14:22Z",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": null,
+        "accounting_key": null,
+        "state_source": "saved:backend/uploads/pipelines/pipe_a8986bffd918/pipeline_state.json"
+      },
+      {
+        "id": "pipe_0f2bee7bd649",
+        "created_at": "2026-07-08T10:55:36.331602+00:00",
+        "updated_at": "2026-07-10T18:14:22Z",
+        "status": "completed",
+        "resume_count": 2,
+        "recorded_tokens": 0,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_0f2bee7bd649/pipeline_state.json"
+      },
+      {
+        "id": "pipe_f23527f7d903",
+        "created_at": "2026-07-09T08:12:33.491844+00:00",
+        "updated_at": "2026-07-09T22:10:12.244567+00:00",
+        "status": "completed",
+        "resume_count": 0,
+        "recorded_tokens": 82983739,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json"
+      },
+      {
+        "id": "pipe_91aaf91f6392",
+        "created_at": "2026-07-12T14:18:53.207724+00:00",
+        "updated_at": "2026-07-12T19:47:22.495504+00:00",
+        "status": "completed",
+        "resume_count": 4,
+        "recorded_tokens": 30322382,
+        "accounting_key": "$.cumulative_total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_91aaf91f6392/pipeline_state.json"
+      },
+      {
+        "id": "pipe_33f54602f2a0",
+        "created_at": "2026-07-13T17:31:40.788907+00:00",
+        "updated_at": "2026-07-14T15:50:52.020128+00:00",
+        "status": "failed",
+        "resume_count": 6,
+        "recorded_tokens": 0,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_33f54602f2a0/pipeline_state.json"
+      },
+      {
+        "id": "pipe_ef32d3d420f4",
+        "created_at": "2026-07-13T17:31:40.788999+00:00",
+        "updated_at": "2026-07-14T15:50:51.635070+00:00",
+        "status": "failed",
+        "resume_count": 7,
+        "recorded_tokens": 0,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_ef32d3d420f4/pipeline_state.json"
+      },
+      {
+        "id": "pipe_68a0a2365670",
+        "created_at": "2026-07-13T17:31:40.789278+00:00",
+        "updated_at": "2026-07-14T15:50:51.229609+00:00",
+        "status": "failed",
+        "resume_count": 6,
+        "recorded_tokens": 0,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_68a0a2365670/pipeline_state.json"
+      },
+      {
+        "id": "pipe_dbeb8c3a4663",
+        "created_at": "2026-07-14T11:51:21.019128+00:00",
+        "updated_at": "2026-07-14T14:24:13.999782+00:00",
+        "status": "cancelled",
+        "resume_count": 0,
+        "recorded_tokens": null,
+        "accounting_key": null,
+        "state_source": "saved:backend/uploads/pipelines/pipe_dbeb8c3a4663/pipeline_state.json"
+      },
+      {
+        "id": "pipe_750d99882585",
+        "created_at": "2026-07-14T14:24:51.953989+00:00",
+        "updated_at": "2026-07-15T16:10:14.633302+00:00",
+        "status": "cancelled",
+        "resume_count": 6,
+        "recorded_tokens": 0,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_750d99882585/pipeline_state.json"
+      },
+      {
+        "id": "pipe_bef6879b2e94",
+        "created_at": "2026-07-14T21:20:23.971987+00:00",
+        "updated_at": "2026-07-15T05:30:26.467685+00:00",
+        "status": "completed",
+        "resume_count": 7,
+        "recorded_tokens": 5353285,
+        "accounting_key": "$.cumulative_total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json"
+      },
+      {
+        "id": "pipe_f538c1371a96",
+        "created_at": "2026-07-15T11:46:28.939722+00:00",
+        "updated_at": "2026-07-15T14:09:04.827559+00:00",
+        "status": "cancelled",
+        "resume_count": 2,
+        "recorded_tokens": 0,
+        "accounting_key": "$.total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_f538c1371a96/pipeline_state.json"
+      },
+      {
+        "id": "pipe_0e1b84d2682a",
+        "created_at": "2026-07-15T14:15:27.286816+00:00",
+        "updated_at": "2026-07-15T21:32:43.078426+00:00",
+        "status": "completed",
+        "resume_count": 9,
+        "recorded_tokens": 2954750,
+        "accounting_key": "$.cumulative_total",
+        "state_source": "saved:backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json"
+      }
+    ]
+  },
+  "selected_runs": [
+    {
+      "pipeline_id": "pipe_f23527f7d903",
+      "created_at": "2026-07-09T08:12:33.491844+00:00",
+      "state_source": "saved:backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json",
+      "meter_source": "saved:backend/uploads/pipelines/pipe_f23527f7d903/run_telemetry.json",
+      "compact_source": "saved:backend/uploads/pipelines/pipe_f23527f7d903/telemetry.json",
+      "resume_count": 0,
+      "usage": {
+        "unit": "tokens",
+        "current_attempt": 82983739,
+        "previous_attempt": null,
+        "persisted_cumulative_or_total": 82983739,
+        "earlier_attempt_residual": null,
+        "research_option": 79749778,
+        "research_in_current_meter": 79749778,
+        "by_stage": {
+          "research": {
+            "calls": 1,
+            "prompt_tokens": 78156386,
+            "completion_tokens": 1593392,
+            "total_tokens": 79749778,
+            "latency_ms": 9472500.0
+          },
+          "ontology": {
+            "calls": 1,
+            "prompt_tokens": 39251,
+            "completion_tokens": 5509,
+            "total_tokens": 44760,
+            "latency_ms": 44593.8
+          },
+          "prepare": {
+            "calls": 4,
+            "prompt_tokens": 14838,
+            "completion_tokens": 6020,
+            "total_tokens": 20858,
+            "latency_ms": 44274.6
+          },
+          "report": {
+            "calls": 130,
+            "prompt_tokens": 3042495,
+            "completion_tokens": 125848,
+            "total_tokens": 3168343,
+            "latency_ms": 1475848.4
+          }
+        },
+        "keys": [
+          "$.total.total_tokens",
+          "$.previous_attempt.total.total_tokens",
+          "$.cumulative_total.total_tokens",
+          "$.options.research_telemetry.tokens_total"
+        ],
+        "scope": "Research option may overlap earlier attempts and is not added."
+      },
+      "wall_time": {
+        "unit": "seconds",
+        "elapsed_created_to_updated": 50258.752723,
+        "stage_durations": {
+          "research": 9472.501548,
+          "ontology": 44.616705,
+          "graph": 31050.610534,
+          "prepare": 290.855449,
+          "run": 590.535693,
+          "report": 3336.804616
+        },
+        "stage_sum": 44785.924545,
+        "stage_union": 44785.924545,
+        "overlap": 0.0,
+        "uncovered_elapsed": 5472.828178,
+        "keys": "$.stages.*.started_at / finished_at; $.created_at / updated_at",
+        "caveat": "Saved endpoints can include resume downtime or historical restamping. Sum is not critical-path time; uncovered time is not proven waste."
+      },
+      "graph": {
+        "total_chunks": 466,
+        "skipped_chunks": 278,
+        "skipped_pct": 59.657,
+        "keys": "$.options.graph_total_chunks / graph_skipped_chunks"
+      },
+      "simulation": {
+        "id": "sim_a0a936f8104c",
+        "health_calls": 221,
+        "parent_run_tokens": 0,
+        "health_key": "$.sim_llm_health.platforms.*.llm_calls",
+        "snapshot_exists": false,
+        "caveat": "Calls are not tokens; historical zero-token RUN records are incomplete."
+      },
+      "report": {
+        "id": "report_a03be154febc",
+        "source": "saved:backend/uploads/reports/report_a03be154febc/telemetry.json",
+        "key_prefix": "$.totals",
+        "agent_log_source": "saved:backend/uploads/reports/report_a03be154febc/agent_log.jsonl",
+        "duration_s": 3336.66,
+        "tokens": 3168162,
+        "llm_calls": 129,
+        "reported_tool_calls": 0,
+        "logged_tool_calls": 57,
+        "tool_counts": {
+          "panorama_search": 9,
+          "insight_forge": 14,
+          "interview_agents": 4,
+          "simulation_outcomes": 10,
+          "quick_search": 11,
+          "opinion_shift": 6,
+          "trace_cascade": 1,
+          "coalition_map": 2
+        },
+        "identical_tool_parameter_repeats": 8,
+        "caveat": "Report tokens overlap parent REPORT. Repeated signatures are not proven cache misses."
+      }
+    },
+    {
+      "pipeline_id": "pipe_91aaf91f6392",
+      "created_at": "2026-07-12T14:18:53.207724+00:00",
+      "state_source": "saved:backend/uploads/pipelines/pipe_91aaf91f6392/pipeline_state.json",
+      "meter_source": "saved:backend/uploads/pipelines/pipe_91aaf91f6392/run_telemetry.json",
+      "compact_source": "saved:backend/uploads/pipelines/pipe_91aaf91f6392/telemetry.json",
+      "resume_count": 4,
+      "usage": {
+        "unit": "tokens",
+        "current_attempt": 2386860,
+        "previous_attempt": 2568182,
+        "persisted_cumulative_or_total": 30322382,
+        "earlier_attempt_residual": 25367340,
+        "research_option": 18740529,
+        "research_in_current_meter": 0,
+        "by_stage": {
+          "report": {
+            "calls": 131,
+            "prompt_tokens": 2269946,
+            "completion_tokens": 116914,
+            "total_tokens": 2386860,
+            "latency_ms": 1237912.1
+          }
+        },
+        "keys": [
+          "$.total.total_tokens",
+          "$.previous_attempt.total.total_tokens",
+          "$.cumulative_total.total_tokens",
+          "$.options.research_telemetry.tokens_total"
+        ],
+        "scope": "Research option may overlap earlier attempts and is not added."
+      },
+      "wall_time": {
+        "unit": "seconds",
+        "elapsed_created_to_updated": 19709.28778,
+        "stage_durations": {
+          "research": 19101.389899,
+          "ontology": 13560.966091,
+          "graph": 13535.791631,
+          "prepare": 11841.678108,
+          "run": 11716.46694,
+          "report": 11605.998885
+        },
+        "stage_sum": 81362.291554,
+        "stage_union": 19709.211554,
+        "overlap": 61653.08,
+        "uncovered_elapsed": 0.076226,
+        "keys": "$.stages.*.started_at / finished_at; $.created_at / updated_at",
+        "caveat": "Saved endpoints can include resume downtime or historical restamping. Sum is not critical-path time; uncovered time is not proven waste."
+      },
+      "graph": {
+        "total_chunks": 44,
+        "skipped_chunks": 14,
+        "skipped_pct": 31.818,
+        "keys": "$.options.graph_total_chunks / graph_skipped_chunks"
+      },
+      "simulation": {
+        "id": "sim_85b123350ee3",
+        "health_calls": 456,
+        "parent_run_tokens": 0,
+        "health_key": "$.sim_llm_health.platforms.*.llm_calls",
+        "snapshot_exists": false,
+        "caveat": "Calls are not tokens; historical zero-token RUN records are incomplete."
+      },
+      "report": {
+        "id": "report_9147b3f6a0a9",
+        "source": "saved:backend/uploads/reports/report_9147b3f6a0a9/telemetry.json",
+        "key_prefix": "$.totals",
+        "agent_log_source": "saved:backend/uploads/reports/report_9147b3f6a0a9/agent_log.jsonl",
+        "duration_s": 605.43,
+        "tokens": 2386683,
+        "llm_calls": 130,
+        "reported_tool_calls": 0,
+        "logged_tool_calls": 47,
+        "tool_counts": {
+          "insight_forge": 32,
+          "panorama_search": 4,
+          "quick_search": 11
+        },
+        "identical_tool_parameter_repeats": 0,
+        "caveat": "Report tokens overlap parent REPORT. Repeated signatures are not proven cache misses."
+      }
+    },
+    {
+      "pipeline_id": "pipe_bef6879b2e94",
+      "created_at": "2026-07-14T21:20:23.971987+00:00",
+      "state_source": "saved:backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json",
+      "meter_source": "saved:backend/uploads/pipelines/pipe_bef6879b2e94/run_telemetry.json",
+      "compact_source": "saved:backend/uploads/pipelines/pipe_bef6879b2e94/telemetry.json",
+      "resume_count": 7,
+      "usage": {
+        "unit": "tokens",
+        "current_attempt": 2558618,
+        "previous_attempt": 2794667,
+        "persisted_cumulative_or_total": 5353285,
+        "earlier_attempt_residual": 0,
+        "research_option": 366872,
+        "research_in_current_meter": 0,
+        "by_stage": {
+          "report": {
+            "calls": 217,
+            "prompt_tokens": 2350514,
+            "completion_tokens": 208104,
+            "total_tokens": 2558618,
+            "latency_ms": 2977566.9
+          }
+        },
+        "keys": [
+          "$.total.total_tokens",
+          "$.previous_attempt.total.total_tokens",
+          "$.cumulative_total.total_tokens",
+          "$.options.research_telemetry.tokens_total"
+        ],
+        "scope": "Research option may overlap earlier attempts and is not added."
+      },
+      "wall_time": {
+        "unit": "seconds",
+        "elapsed_created_to_updated": 29402.495698,
+        "stage_durations": {
+          "research": 363.493682,
+          "ontology": 42.409762,
+          "graph": 5991.835988,
+          "prepare": 272.076894,
+          "run": 2880.28938,
+          "report": 1477.434577
+        },
+        "stage_sum": 11027.540283,
+        "stage_union": 11027.540283,
+        "overlap": 0.0,
+        "uncovered_elapsed": 18374.955415,
+        "keys": "$.stages.*.started_at / finished_at; $.created_at / updated_at",
+        "caveat": "Saved endpoints can include resume downtime or historical restamping. Sum is not critical-path time; uncovered time is not proven waste."
+      },
+      "graph": {
+        "total_chunks": 79,
+        "skipped_chunks": 36,
+        "skipped_pct": 45.57,
+        "keys": "$.options.graph_total_chunks / graph_skipped_chunks"
+      },
+      "simulation": {
+        "id": "sim_05ab2bdebbd2",
+        "health_calls": 648,
+        "parent_run_tokens": 0,
+        "health_key": "$.sim_llm_health.platforms.*.llm_calls",
+        "snapshot_exists": false,
+        "caveat": "Calls are not tokens; historical zero-token RUN records are incomplete."
+      },
+      "report": {
+        "id": "report_970e5aa53841",
+        "source": "saved:backend/uploads/reports/report_970e5aa53841/telemetry.json",
+        "key_prefix": "$.totals",
+        "agent_log_source": "saved:backend/uploads/reports/report_970e5aa53841/agent_log.jsonl",
+        "duration_s": 1477.34,
+        "tokens": 2558443,
+        "llm_calls": 216,
+        "reported_tool_calls": 0,
+        "logged_tool_calls": 33,
+        "tool_counts": {
+          "panorama_search": 7,
+          "insight_forge": 18,
+          "quick_search": 8
+        },
+        "identical_tool_parameter_repeats": 0,
+        "caveat": "Report tokens overlap parent REPORT. Repeated signatures are not proven cache misses."
+      }
+    },
+    {
+      "pipeline_id": "pipe_0e1b84d2682a",
+      "created_at": "2026-07-15T14:15:27.286816+00:00",
+      "state_source": "saved:backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json",
+      "meter_source": "saved:backend/uploads/pipelines/pipe_0e1b84d2682a/run_telemetry.json",
+      "compact_source": "saved:backend/uploads/pipelines/pipe_0e1b84d2682a/telemetry.json",
+      "resume_count": 9,
+      "usage": {
+        "unit": "tokens",
+        "current_attempt": 2940662,
+        "previous_attempt": 14088,
+        "persisted_cumulative_or_total": 2954750,
+        "earlier_attempt_residual": 0,
+        "research_option": 763197,
+        "research_in_current_meter": 0,
+        "by_stage": {
+          "report": {
+            "calls": 252,
+            "prompt_tokens": 2679956,
+            "completion_tokens": 260706,
+            "total_tokens": 2940662,
+            "latency_ms": 2573199.2
+          }
+        },
+        "keys": [
+          "$.total.total_tokens",
+          "$.previous_attempt.total.total_tokens",
+          "$.cumulative_total.total_tokens",
+          "$.options.research_telemetry.tokens_total"
+        ],
+        "scope": "Research option may overlap earlier attempts and is not added."
+      },
+      "wall_time": {
+        "unit": "seconds",
+        "elapsed_created_to_updated": 26235.79161,
+        "stage_durations": {
+          "research": 3509.004019,
+          "ontology": 60.201604,
+          "graph": 3238.177338,
+          "prepare": 2920.656117,
+          "run": 670.857553,
+          "report": 1239.705523
+        },
+        "stage_sum": 11638.602154,
+        "stage_union": 11578.40055,
+        "overlap": 60.201604,
+        "uncovered_elapsed": 14657.39106,
+        "keys": "$.stages.*.started_at / finished_at; $.created_at / updated_at",
+        "caveat": "Saved endpoints can include resume downtime or historical restamping. Sum is not critical-path time; uncovered time is not proven waste."
+      },
+      "graph": {
+        "total_chunks": 91,
+        "skipped_chunks": 20,
+        "skipped_pct": 21.978,
+        "keys": "$.options.graph_total_chunks / graph_skipped_chunks"
+      },
+      "simulation": {
+        "id": "sim_9fc88d28ccb1",
+        "health_calls": 212,
+        "parent_run_tokens": 0,
+        "health_key": "$.sim_llm_health.platforms.*.llm_calls",
+        "snapshot_exists": false,
+        "caveat": "Calls are not tokens; historical zero-token RUN records are incomplete."
+      },
+      "report": {
+        "id": "report_54f0a34a90b6",
+        "source": "saved:backend/uploads/reports/report_54f0a34a90b6/telemetry.json",
+        "key_prefix": "$.totals",
+        "agent_log_source": "saved:backend/uploads/reports/report_54f0a34a90b6/agent_log.jsonl",
+        "duration_s": 1239.62,
+        "tokens": 2940488,
+        "llm_calls": 251,
+        "reported_tool_calls": 0,
+        "logged_tool_calls": 37,
+        "tool_counts": {
+          "insight_forge": 12,
+          "quick_search": 17,
+          "panorama_search": 8
+        },
+        "identical_tool_parameter_repeats": 0,
+        "caveat": "Report tokens overlap parent REPORT. Repeated signatures are not proven cache misses."
+      }
+    }
+  ],
+  "reference_reconciliation": {
+    "pipeline_id": "pipe_f23527f7d903",
+    "main_recorded_tokens": 82983739,
+    "research_already_in_parent": 79749778,
+    "research_share_pct": 96.103,
+    "ensemble_lineage_source": "saved:backend/uploads/pipelines/pipe_f23527f7d903/handoff/ensemble_forecast.json",
+    "distinct_extra_reports": [
+      {
+        "report_id": "report_c80ca48e67d1",
+        "source": "saved:backend/uploads/reports/report_c80ca48e67d1/telemetry.json",
+        "tokens": 2007374,
+        "duration_s": 3490.57,
+        "key_prefix": "$.totals"
+      },
+      {
+        "report_id": "report_cf220c2cb963",
+        "source": "saved:backend/uploads/reports/report_cf220c2cb963/telemetry.json",
+        "tokens": 4349252,
+        "duration_s": 3900.36,
+        "key_prefix": "$.totals"
+      }
+    ],
+    "extra_report_tokens": 6356626,
+    "reconciled_recorded_tokens": 89340365,
+    "formula": "82983739 + 2007374 + 4349252 = 89340365; do not add overlapping research or main report totals.",
+    "coverage_limit": "Failed requests, graph and simulation are incompletely metered. Aggregate overcount cannot be excluded. Recorded coverage is not billing or a proven usage lower bound."
+  },
+  "application_log_aggregates": [
+    {
+      "source": "saved:backend/logs/mirofish.log.2026-07-09",
+      "file_date": "2026-07-09",
+      "unit": "log_lines",
+      "lines": 9437,
+      "exact_marker": "Error code: 429",
+      "matching_lines": 1001,
+      "by_logger_prefix": {
+        "mirofish.llm_client.chat": 671,
+        "mirofish.llm_client._try_fallback": 315,
+        "mirofish.oasis_llm._fallback_completion": 15
+      },
+      "naive_timestamp_range": [
+        "2026-07-09 02:34:54",
+        "2026-07-09 23:59:15"
+      ],
+      "scope": "Whole shared application log, including settings probes. One exception may repeat. Not unique requests, billing, or critical-path latency. Timestamps have no timezone."
+    },
+    {
+      "source": "saved:backend/logs/mirofish.log.2026-07-15",
+      "file_date": "2026-07-15",
+      "unit": "log_lines",
+      "lines": 36569,
+      "exact_marker": "Error code: 429",
+      "matching_lines": 8906,
+      "by_logger_prefix": {
+        "mirofish.llm_client.chat": 4555,
+        "mirofish.llm_client._try_fallback": 2056,
+        "mirofish.simulation_config._call_llm_with_retry": 9,
+        "mirofish.simulation_config._generate_event_config": 1,
+        "mirofish.simulation_config._generate_agent_configs_batch": 2,
+        "mirofish.oasis_llm._fallback_completion": 2262,
+        "mirofish.pipeline._run": 1,
+        "unclassified": 2,
+        "mirofish.api.settings._test_openai_compat_provider": 18
+      },
+      "naive_timestamp_range": [
+        "2026-07-15 07:04:00",
+        "2026-07-15 23:58:09"
+      ],
+      "scope": "Whole shared application log, including settings probes. One exception may repeat. Not unique requests, billing, or critical-path latency. Timestamps have no timezone."
+    },
+    {
+      "source": "saved:backend/logs/mirofish.log.2026-07-16",
+      "file_date": "2026-07-16",
+      "unit": "log_lines",
+      "lines": 9680,
+      "exact_marker": "Error code: 429",
+      "matching_lines": 437,
+      "by_logger_prefix": {
+        "mirofish.llm_client.chat": 263,
+        "mirofish.llm_client._try_fallback": 93,
+        "mirofish.oasis_llm._fallback_completion": 37,
+        "mirofish.api.settings._test_openai_compat_provider": 44
+      },
+      "naive_timestamp_range": [
+        "2026-07-16 01:14:12",
+        "2026-07-16 04:58:49"
+      ],
+      "scope": "Whole shared application log, including settings probes. One exception may repeat. Not unique requests, billing, or critical-path latency. Timestamps have no timezone."
+    }
+  ],
+  "progress_log_aggregates": [
+    {
+      "pipeline_id": "pipe_f23527f7d903",
+      "source": "saved:backend/uploads/simulations/sim_a0a936f8104c/simulation.log",
+      "lines": 195,
+      "unit": "log_lines",
+      "unicode_replacement_count": 4,
+      "patterns": {
+        "retry_mentions": "retry|retrying|重试",
+        "checkpoint_mentions": "checkpoint|恢复",
+        "timeout_mentions": "timeout|timed out|超时"
+      },
+      "counts": {
+        "retry_mentions": 0,
+        "checkpoint_mentions": 3,
+        "timeout_mentions": 0
+      },
+      "scope": "Substring indicators, not distinct attempts or latency."
+    },
+    {
+      "pipeline_id": "pipe_91aaf91f6392",
+      "source": "saved:backend/uploads/pipelines/pipe_91aaf91f6392/handoff/research_progress.log",
+      "lines": 33,
+      "unit": "log_lines",
+      "unicode_replacement_count": 0,
+      "patterns": {
+        "retry_mentions": "retry|retrying|重试",
+        "checkpoint_mentions": "checkpoint|恢复",
+        "timeout_mentions": "timeout|timed out|超时"
+      },
+      "counts": {
+        "retry_mentions": 2,
+        "checkpoint_mentions": 0,
+        "timeout_mentions": 0
+      },
+      "scope": "Substring indicators, not distinct attempts or latency."
+    },
+    {
+      "pipeline_id": "pipe_91aaf91f6392",
+      "source": "saved:backend/uploads/simulations/sim_85b123350ee3/simulation.log",
+      "lines": 136,
+      "unit": "log_lines",
+      "unicode_replacement_count": 0,
+      "patterns": {
+        "retry_mentions": "retry|retrying|重试",
+        "checkpoint_mentions": "checkpoint|恢复",
+        "timeout_mentions": "timeout|timed out|超时"
+      },
+      "counts": {
+        "retry_mentions": 0,
+        "checkpoint_mentions": 1,
+        "timeout_mentions": 0
+      },
+      "scope": "Substring indicators, not distinct attempts or latency."
+    },
+    {
+      "pipeline_id": "pipe_bef6879b2e94",
+      "source": "saved:backend/uploads/pipelines/pipe_bef6879b2e94/handoff/research_progress.log",
+      "lines": 62,
+      "unit": "log_lines",
+      "unicode_replacement_count": 0,
+      "patterns": {
+        "retry_mentions": "retry|retrying|重试",
+        "checkpoint_mentions": "checkpoint|恢复",
+        "timeout_mentions": "timeout|timed out|超时"
+      },
+      "counts": {
+        "retry_mentions": 0,
+        "checkpoint_mentions": 0,
+        "timeout_mentions": 0
+      },
+      "scope": "Substring indicators, not distinct attempts or latency."
+    },
+    {
+      "pipeline_id": "pipe_bef6879b2e94",
+      "source": "saved:backend/uploads/simulations/sim_05ab2bdebbd2/simulation.log",
+      "lines": 142,
+      "unit": "log_lines",
+      "unicode_replacement_count": 0,
+      "patterns": {
+        "retry_mentions": "retry|retrying|重试",
+        "checkpoint_mentions": "checkpoint|恢复",
+        "timeout_mentions": "timeout|timed out|超时"
+      },
+      "counts": {
+        "retry_mentions": 0,
+        "checkpoint_mentions": 1,
+        "timeout_mentions": 0
+      },
+      "scope": "Substring indicators, not distinct attempts or latency."
+    },
+    {
+      "pipeline_id": "pipe_0e1b84d2682a",
+      "source": "saved:backend/uploads/pipelines/pipe_0e1b84d2682a/handoff/research_progress.log",
+      "lines": 72,
+      "unit": "log_lines",
+      "unicode_replacement_count": 0,
+      "patterns": {
+        "retry_mentions": "retry|retrying|重试",
+        "checkpoint_mentions": "checkpoint|恢复",
+        "timeout_mentions": "timeout|timed out|超时"
+      },
+      "counts": {
+        "retry_mentions": 6,
+        "checkpoint_mentions": 0,
+        "timeout_mentions": 0
+      },
+      "scope": "Substring indicators, not distinct attempts or latency."
+    },
+    {
+      "pipeline_id": "pipe_0e1b84d2682a",
+      "source": "saved:backend/uploads/simulations/sim_9fc88d28ccb1/simulation.log",
+      "lines": 143,
+      "unit": "log_lines",
+      "unicode_replacement_count": 0,
+      "patterns": {
+        "retry_mentions": "retry|retrying|重试",
+        "checkpoint_mentions": "checkpoint|恢复",
+        "timeout_mentions": "timeout|timed out|超时"
+      },
+      "counts": {
+        "retry_mentions": 0,
+        "checkpoint_mentions": 7,
+        "timeout_mentions": 0
+      },
+      "scope": "Substring indicators, not distinct attempts or latency."
+    }
+  ],
+  "current_source_observations": [
+    {
+      "source": "code:backend/app/utils/telemetry.py",
+      "line": 230,
+      "observation": "In-memory meter"
+    },
+    {
+      "source": "code:backend/app/utils/telemetry.py",
+      "line": 402,
+      "observation": "Budget reads only current meter"
+    },
+    {
+      "source": "code:backend/app/services/pipeline_orchestrator.py",
+      "line": 7231,
+      "observation": "Prior-attempt baseline captured separately"
+    },
+    {
+      "source": "code:backend/app/services/pipeline_orchestrator.py",
+      "line": 10309,
+      "observation": "Simulation marker skips same-token growth and precedes credit"
+    },
+    {
+      "source": "code:backend/app/services/pipeline_orchestrator.py",
+      "line": 8845,
+      "observation": "Reuse-aware completion already preserves stage timestamps"
+    },
+    {
+      "source": "code:backend/app/utils/llm_client.py",
+      "line": 104,
+      "observation": "Quota circuit breaker already exists"
+    },
+    {
+      "source": "code:backend/app/services/report_agent.py",
+      "line": 1692,
+      "observation": "Shared report instance per-section tool counter"
+    },
+    {
+      "source": "code:backend/app/services/report_agent.py",
+      "line": 9747,
+      "observation": "Tool path increments shared counter"
+    },
+    {
+      "source": "code:backend/app/services/graphiti_client/runtime.py",
+      "line": 1071,
+      "observation": "Concurrent graph batches already exist"
+    },
+    {
+      "source": "code:backend/app/services/graph_builder.py",
+      "line": 2296,
+      "observation": "Graph batch ingestion and skip counters"
+    }
+  ],
+  "ranked_bottlenecks": [
+    {
+      "rank": 1,
+      "recommendation": "ASTRA-04",
+      "finding": "Cumulative budgets and subprocess accounting need one durable authority.",
+      "evidence": "Latest selected runs have 7 and 9 resumes; 5,353,285 and 2,954,750 cumulative tokens. Simulation health shows 648 and 212 calls with zero parent RUN tokens.",
+      "mechanism": "Budget reads process total. Same-token snapshots suppress later growth; marker precedes in-memory credit.",
+      "acceptance": "Restart includes prior spend; snapshots 100 then 150 credit 150; replay adds zero; crash cannot drop or duplicate committed usage.",
+      "constraint": "Unknown usage remains unknown; no actual-billing claim."
+    },
+    {
+      "rank": 2,
+      "recommendation": "ASTRA-06",
+      "finding": "Graph dominated reference wall time with substantial skipped evidence.",
+      "evidence": "31,050.610534 s graph time; 278/466 chunks skipped. Newer runs skipped 14/44, 36/79 and 20/91.",
+      "mechanism": "Concurrent batches exist. Durable episode identity/deadline boundaries still need acceptance.",
+      "acceptance": "Partial timeout preserves committed receipts and retry cannot duplicate episodes.",
+      "constraint": "Preserve typed evidence gaps and source provenance."
+    },
+    {
+      "rank": 3,
+      "recommendation": "ASTRA-05 / ASTRA-12",
+      "finding": "Repeated report attempts coexist with incomplete operation counts.",
+      "evidence": "Selected reports log 33–57 tool calls while telemetry says zero. One resumed pipeline retains 30,322,382 cumulative vs 2,386,860 current tokens.",
+      "mechanism": "Shared per-section tool counter; durable completed-work reuse and independent attribution need validation.",
+      "acceptance": "Interrupt after completed section and reuse validated output; parallel section counts reconcile to event records.",
+      "constraint": "Keep quality gates and lineage."
+    },
+    {
+      "rank": 4,
+      "recommendation": "Measure provider admission after ASTRA-04",
+      "finding": "Historical quota storms suggest retry waste but current breakers exist.",
+      "evidence": "Exact 429 marker occurs 1,001, 8,906 and 437 times in selected daily logs.",
+      "mechanism": "Current quota and deterministic fallback-auth cooldowns exist; old counts do not prove they are missing.",
+      "acceptance": "Injected quota responses produce bounded distinct retries across processes.",
+      "constraint": "Do not infer unique requests from repeated logs or hit paid endpoints."
+    }
+  ],
+  "already_addressed_or_unproven": [
+    "Current reused-stage completion preserves timestamps; historical inflated sums do not prove the fix absent.",
+    "Current quota breakers and simulation imports exist; inspect remaining boundaries instead of adding duplicates.",
+    "Only reference main report shows 8 repeated exact tool signatures; newer selected reports show none, and cache-hit status is unavailable.",
+    "No saved run newer than July 15 exists; current production Pareto frontier and comparative speedups are unknown."
+  ],
+  "arithmetic_validation": {
+    "current_totals_equal_stage_sum": true,
+    "reference_reconciled": true,
+    "wall_union_not_larger_than_sum": true
+  },
+  "source_files": {
+    "saved:backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "23b04b0b065ef9cd1639041ed0d87a3615a95f06dc242466a5ebe7522add1e22",
+      "bytes": 22537
+    },
+    "saved:backend/uploads/pipelines/pipe_bef6879b2e94/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_bef6879b2e94/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "42dace2bb7276a04eb3f987ee232fee04905852bd97691449cc59dcb1e22ff1e",
+      "bytes": 2216
+    },
+    "saved:backend/uploads/pipelines/pipe_764249df9c38/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_764249df9c38/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "64a2d547911e90a0ca1438674ffb19b2d85907f1cda2384a5341c29f23719680",
+      "bytes": 4429
+    },
+    "saved:backend/uploads/pipelines/pipe_69f88f22ed30/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_69f88f22ed30/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "445262ec23947a42e13d599a0af2c1e4c9c2a608344b3dd58ecd1fc9f0270e3a",
+      "bytes": 10388
+    },
+    "saved:backend/uploads/pipelines/pipe_69f88f22ed30/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_69f88f22ed30/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "ceeeb9734f06908d993fec1e69a98ac6c49105ed4f5134c2404981100b721117",
+      "bytes": 1454
+    },
+    "saved:backend/uploads/pipelines/pipe_66838c1c67de/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_66838c1c67de/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "a073d17441bb263d52d4d4b31e2129881001211ced347eacbfacd5e29c72a746",
+      "bytes": 2502
+    },
+    "saved:backend/uploads/pipelines/pipe_750d99882585/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_750d99882585/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "1fa6e74448c45237c0cd8ea298539bcc0408e6bbf5c11e1ee95644bad7d14906",
+      "bytes": 14294
+    },
+    "saved:backend/uploads/pipelines/pipe_750d99882585/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_750d99882585/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "10b5ef6be9a361d508d2229b141041ecf1296670d1a28ad55959d1d6c25ced4a",
+      "bytes": 374
+    },
+    "saved:backend/uploads/pipelines/pipe_dbeb8c3a4663/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_dbeb8c3a4663/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "f33617aa824274c48d4f9401ff41bb2f1312a7e702f4084bafa4935d0e2b4b78",
+      "bytes": 3661
+    },
+    "saved:backend/uploads/pipelines/pipe_8bd4981639ac/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_8bd4981639ac/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "df60f12889e7be918f3885b79da0f691406646e4c78d530531f0b7c5aaedfaa5",
+      "bytes": 2409
+    },
+    "saved:backend/uploads/pipelines/pipe_2a5b07f9f8c1/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_2a5b07f9f8c1/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "09be1309777af1f2b036f295534d0222a988e29453dd69f2e9a26c0207e3d34a",
+      "bytes": 2661
+    },
+    "saved:backend/uploads/pipelines/pipe_bf2bb3095d11/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_bf2bb3095d11/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "ae62add8d03461a091016d24536c1be8af91fc74d0dcb0e2903add7b8e9c7e0d",
+      "bytes": 7948
+    },
+    "saved:backend/uploads/pipelines/pipe_bf2bb3095d11/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_bf2bb3095d11/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "8176d88773802a067b8c0424a6b93658612c5c962d37573dbaa3db1178013037",
+      "bytes": 5115
+    },
+    "saved:backend/uploads/pipelines/pipe_8b47373016f1/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_8b47373016f1/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "2384af49e7f35ac17a95eab11b94a4d95d37ce014e911c06d70cfb27929e949a",
+      "bytes": 3442
+    },
+    "saved:backend/uploads/pipelines/pipe_12251c96e78d/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_12251c96e78d/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "49063d2fe938fcff34c923745d7eb8b8e58ca903a78ea6b0a0e2948b070899a9",
+      "bytes": 7147
+    },
+    "saved:backend/uploads/pipelines/pipe_12251c96e78d/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_12251c96e78d/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "a8324aa8921baf3c87323461f03e3543885354de1a14a09ae4865466ba9b07a9",
+      "bytes": 5330
+    },
+    "saved:backend/uploads/pipelines/pipe_a335177097fb/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_a335177097fb/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "feddda1aa239746cdd3901df8dcf089348f49c31285361db9a5133f6086f1b2f",
+      "bytes": 12391
+    },
+    "saved:backend/uploads/pipelines/pipe_a335177097fb/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_a335177097fb/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "675a0c0e7d8cf5e3ac537641a0a4af3c51ef45b67c5132f5a0084a24aec2dc5a",
+      "bytes": 831
+    },
+    "saved:backend/uploads/pipelines/pipe_e2egold02/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_e2egold02/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "78195344ace339609a828a1d9b68635d97a49d9bde293c32202c467d956c96b3",
+      "bytes": 2674
+    },
+    "saved:backend/uploads/pipelines/pipe_cbbd2d4fe2fa/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_cbbd2d4fe2fa/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "9ccc94be152f06c104baf74bde261c9c1ed32c7d9502e58140835557b13a569e",
+      "bytes": 6368
+    },
+    "saved:backend/uploads/pipelines/pipe_cbbd2d4fe2fa/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_cbbd2d4fe2fa/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "5f224d8074ac4be6b89908579b797760a13b676778c1f5a83921a37139bdc4f0",
+      "bytes": 1446
+    },
+    "saved:backend/uploads/pipelines/pipe_8118312f7b79/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_8118312f7b79/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "532bc4a641541792ede712b3436c555d10eabfc37e0f0b7fe2bf8867af47d0fa",
+      "bytes": 2540
+    },
+    "saved:backend/uploads/pipelines/pipe_3272477a8dc1/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_3272477a8dc1/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "be7fb8c8736debb4d5b0ca786ec3bef3ddf1d078517b9820dc5a367a4710b173",
+      "bytes": 10205
+    },
+    "saved:backend/uploads/pipelines/pipe_3272477a8dc1/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_3272477a8dc1/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "19ee4063d10f52d2e65a41be7194ef88d5eda8c61f02814510cf4b4e20ecfed0",
+      "bytes": 1045
+    },
+    "saved:backend/uploads/pipelines/pipe_68a0a2365670/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_68a0a2365670/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "d2899d3e8fde724b6487406e8899ae0035f882ef6034bb4a2b87ded56006ccdb",
+      "bytes": 8680
+    },
+    "saved:backend/uploads/pipelines/pipe_68a0a2365670/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_68a0a2365670/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "5436b94a60ded81645edc962c383bcf0b9ae110aa01005a6eac5ee2a736209ff",
+      "bytes": 374
+    },
+    "saved:backend/uploads/pipelines/pipe_ef32d3d420f4/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_ef32d3d420f4/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "949e68a1959d6b42052e314f8951ce256edaf47a71fe46274182a1a911b79091",
+      "bytes": 6943
+    },
+    "saved:backend/uploads/pipelines/pipe_ef32d3d420f4/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_ef32d3d420f4/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "a7fae4657d22e2ea67f9ac9b138b0b4b95e27ef22b5c64ea6faceb9eeca23e37",
+      "bytes": 374
+    },
+    "saved:backend/uploads/pipelines/pipe_33f54602f2a0/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_33f54602f2a0/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "4312bc32ce9bdd444d62e1ce3fe1bf47e5ec8a2bafa93201edf129db540abfc5",
+      "bytes": 6925
+    },
+    "saved:backend/uploads/pipelines/pipe_33f54602f2a0/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_33f54602f2a0/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "24d677008c344710bd6b9e05132221b0e453508f1c4b64261bbf24cc96000663",
+      "bytes": 374
+    },
+    "saved:backend/uploads/pipelines/pipe_a8986bffd918/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_a8986bffd918/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "c5f423f86610c238d08d361c65bdb12cdf0702c759d9ffb88487516d7b10eb60",
+      "bytes": 8913
+    },
+    "saved:backend/uploads/pipelines/pipe_8bbc44016735/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_8bbc44016735/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "09ee6469ffc8a4d744c488b42fa42db920995560ae5cdc70fb475ec845c6f30f",
+      "bytes": 10337
+    },
+    "saved:backend/uploads/pipelines/pipe_8bbc44016735/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_8bbc44016735/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "be15bb78c7eccf4f497a0f04f688519341552491b7bac1c62de05a25a322c8ee",
+      "bytes": 368
+    },
+    "saved:backend/uploads/pipelines/pipe_a90b338fdfa0/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_a90b338fdfa0/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "35bb9f324404951c76a4871c40d5b7ca39b8896857754840a60ee96a771dfe19",
+      "bytes": 7315
+    },
+    "saved:backend/uploads/pipelines/pipe_41522d5d9790/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_41522d5d9790/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "2fb7c908f1159fc3ee60914fc66261480e9b5eb46d112385954f0800975f2660",
+      "bytes": 6392
+    },
+    "saved:backend/uploads/pipelines/pipe_41522d5d9790/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_41522d5d9790/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "f759c7aa495334f2bf5b795af6ac45ee4020568db94ddf5a303ffc9489fdf5d5",
+      "bytes": 341
+    },
+    "saved:backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "d35ebcbe44d251b120b9d1d23546efca5935bf11d23782e2bc5f8aaa6fac1bbc",
+      "bytes": 10262
+    },
+    "saved:backend/uploads/pipelines/pipe_f23527f7d903/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_f23527f7d903/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "a952a3790fec998f1d64bf78a8b41f6189972cf0303a6250daf0f4a0f5c2f240",
+      "bytes": 2566
+    },
+    "saved:backend/uploads/pipelines/pipe_f01ed9fe06de/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_f01ed9fe06de/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "fb5696a8d349b1e97031231e5b170522d5c2f58de2e9d9c6db27434bcc40c181",
+      "bytes": 3035
+    },
+    "saved:backend/uploads/pipelines/pipe_aa0fb94abe92/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_aa0fb94abe92/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "0a24b8f2b60f6202b911b1b59eeda97fee15a2db39c309dd830fdf0a1f6a3743",
+      "bytes": 7918
+    },
+    "saved:backend/uploads/pipelines/pipe_aa0fb94abe92/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_aa0fb94abe92/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "76fc9c250caabf9483a0bde096a9bf40a48282e076e2dbb2cc7a05cd2c44b5bb",
+      "bytes": 5046
+    },
+    "saved:backend/uploads/pipelines/pipe_f538c1371a96/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_f538c1371a96/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "5f037a933cace7df2f957492fb4043447b003c87c2a4ae4ae11f58d4bfc97564",
+      "bytes": 17565
+    },
+    "saved:backend/uploads/pipelines/pipe_f538c1371a96/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_f538c1371a96/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "a3dcc85b35c24f3320fd21b807481398f579db32a098891b86d4354175fa056c",
+      "bytes": 756
+    },
+    "saved:backend/uploads/pipelines/pipe_91aaf91f6392/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_91aaf91f6392/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "cc4544cde9f9a5b0210187230cefdf2b988dfc692b9bd64b862e7884d5117436",
+      "bytes": 20869
+    },
+    "saved:backend/uploads/pipelines/pipe_91aaf91f6392/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_91aaf91f6392/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "c6281f59d12a9d6e84f70254d9218c3799f2082469ae5d96263671fe43fad1a6",
+      "bytes": 2218
+    },
+    "saved:backend/uploads/pipelines/pipe_0f2bee7bd649/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_0f2bee7bd649/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "13ce1061298168da98ba0b99928e1dc82271bb51988de7901053f0d483b71c80",
+      "bytes": 10648
+    },
+    "saved:backend/uploads/pipelines/pipe_0f2bee7bd649/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_0f2bee7bd649/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "1d8742291e919378afc4092025262977ff2fe9c640da18e8171b82ce386d5ae4",
+      "bytes": 371
+    },
+    "saved:backend/uploads/pipelines/pipe_5985916eb3be/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_5985916eb3be/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "37a3b41a4f0abe2a31d67cd00c77d78a615b6015f14f169418a481f68533c14a",
+      "bytes": 3035
+    },
+    "saved:backend/uploads/pipelines/pipe_7ef597666938/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_7ef597666938/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "d9d884c0961420cf0370f06095c3e30b258a46349eb68d725e0edca1b714966a",
+      "bytes": 7734
+    },
+    "saved:backend/uploads/pipelines/pipe_7ef597666938/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_7ef597666938/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "870d4673bf9dffb8900c758105b2ac8b6202ae45cd6f71c907aac4a0793877a7",
+      "bytes": 4536
+    },
+    "saved:backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json": {
+      "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json",
+      "root": "saved_artifact_root",
+      "sha256": "f2ba0ca5dadcb28264c29ef948d35f04453498530bc1819d4e0a5532ab8684c1",
+      "bytes": 24201
+    },
+    "saved:backend/uploads/pipelines/pipe_0e1b84d2682a/run_telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/run_telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "71f60f4930ba2d325c8ce6f395f1b897cbbcd4c17aaa912d0ce936e46ecad968",
+      "bytes": 2187
+    },
+    "saved:backend/uploads/pipelines/pipe_f23527f7d903/telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_f23527f7d903/telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "84e35da0add43607e399eadb2254ba2410d49e99fb5da87292eb869c03839e86",
+      "bytes": 1207
+    },
+    "saved:backend/uploads/reports/report_a03be154febc/telemetry.json": {
+      "path": "backend/uploads/reports/report_a03be154febc/telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "fcefac47293cf1a1edba83837b4168df0d6671fd6a598de59d4bce24df57b6a1",
+      "bytes": 379
+    },
+    "saved:backend/uploads/reports/report_a03be154febc/agent_log.jsonl": {
+      "path": "backend/uploads/reports/report_a03be154febc/agent_log.jsonl",
+      "root": "saved_artifact_root",
+      "sha256": "35acc5d988df3d6744f08adba9e77959040ab720f103e19217cd6c6e954e60f8",
+      "bytes": 2546472
+    },
+    "saved:backend/uploads/simulations/sim_a0a936f8104c/simulation.log": {
+      "path": "backend/uploads/simulations/sim_a0a936f8104c/simulation.log",
+      "root": "saved_artifact_root",
+      "sha256": "b66719dd1048a9ca0fb423e4d2192b64aedb4b8b079ce95044aa95497e29a37c",
+      "bytes": 59930
+    },
+    "saved:backend/uploads/pipelines/pipe_91aaf91f6392/telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_91aaf91f6392/telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "9ac7bcaf5954de237fa2c8efde371ea876be3995109b390dfafdd1c9a9ce9a51",
+      "bytes": 1319
+    },
+    "saved:backend/uploads/reports/report_9147b3f6a0a9/telemetry.json": {
+      "path": "backend/uploads/reports/report_9147b3f6a0a9/telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "36ed3340dda5fa97967789ec18c34488d720953dd386ae4d8fff0de3720da98e",
+      "bytes": 379
+    },
+    "saved:backend/uploads/reports/report_9147b3f6a0a9/agent_log.jsonl": {
+      "path": "backend/uploads/reports/report_9147b3f6a0a9/agent_log.jsonl",
+      "root": "saved_artifact_root",
+      "sha256": "3c6abb942ddad3b0aafcf096cd85a65521f8e6826ed414bc8205d0abcba9bc67",
+      "bytes": 2566471
+    },
+    "saved:backend/uploads/pipelines/pipe_91aaf91f6392/handoff/research_progress.log": {
+      "path": "backend/uploads/pipelines/pipe_91aaf91f6392/handoff/research_progress.log",
+      "root": "saved_artifact_root",
+      "sha256": "63bfd56c15e2540e2523acf6be1c8ca630a75537dfab8850d0f3d2fcecf277f7",
+      "bytes": 4851
+    },
+    "saved:backend/uploads/simulations/sim_85b123350ee3/simulation.log": {
+      "path": "backend/uploads/simulations/sim_85b123350ee3/simulation.log",
+      "root": "saved_artifact_root",
+      "sha256": "d1a7392faf6e124598f756f2e212cd31173ea83645bc81975a559c4e29f98ef3",
+      "bytes": 122419
+    },
+    "saved:backend/uploads/pipelines/pipe_bef6879b2e94/telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_bef6879b2e94/telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "35edf3bb387d0b8014887a9c86de39aacce922a332d052c9154f033808a874b0",
+      "bytes": 1160
+    },
+    "saved:backend/uploads/reports/report_970e5aa53841/telemetry.json": {
+      "path": "backend/uploads/reports/report_970e5aa53841/telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "c4d98b6a87d5817a7fc10806c01d764248936237d0c6d3f0c5fc2038de61c142",
+      "bytes": 380
+    },
+    "saved:backend/uploads/reports/report_970e5aa53841/agent_log.jsonl": {
+      "path": "backend/uploads/reports/report_970e5aa53841/agent_log.jsonl",
+      "root": "saved_artifact_root",
+      "sha256": "f1d55f45474bb910c3c949edf365b476433a39d3ea6ec4626590b045fbd5c178",
+      "bytes": 2288097
+    },
+    "saved:backend/uploads/pipelines/pipe_bef6879b2e94/handoff/research_progress.log": {
+      "path": "backend/uploads/pipelines/pipe_bef6879b2e94/handoff/research_progress.log",
+      "root": "saved_artifact_root",
+      "sha256": "79fbf2db0e954ed29be8134c1e3e50cd8ccdc703a161913ca1c0f66f74d3b3d8",
+      "bytes": 8738
+    },
+    "saved:backend/uploads/simulations/sim_05ab2bdebbd2/simulation.log": {
+      "path": "backend/uploads/simulations/sim_05ab2bdebbd2/simulation.log",
+      "root": "saved_artifact_root",
+      "sha256": "979ff3ea6d56f2b95365c0fe57bf728d6a9fa8c401d8f65bbc324518fd0079fb",
+      "bytes": 136527
+    },
+    "saved:backend/uploads/pipelines/pipe_0e1b84d2682a/telemetry.json": {
+      "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "94041282d939bdc09729e839b8205a74199c340fd5fd205c4d12b49f3affe38b",
+      "bytes": 1161
+    },
+    "saved:backend/uploads/reports/report_54f0a34a90b6/telemetry.json": {
+      "path": "backend/uploads/reports/report_54f0a34a90b6/telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "99f00fc40efd8b0bcca86d0d62345422837cda2755fe21e406d339201222ca9c",
+      "bytes": 380
+    },
+    "saved:backend/uploads/reports/report_54f0a34a90b6/agent_log.jsonl": {
+      "path": "backend/uploads/reports/report_54f0a34a90b6/agent_log.jsonl",
+      "root": "saved_artifact_root",
+      "sha256": "da65af36bace003f16a13a18108d6f65731f5deea49f5d0806c124a39928c101",
+      "bytes": 2140820
+    },
+    "saved:backend/uploads/pipelines/pipe_0e1b84d2682a/handoff/research_progress.log": {
+      "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/handoff/research_progress.log",
+      "root": "saved_artifact_root",
+      "sha256": "57dfb775ca19cef9c5bbebef88f7a3832af5a8ed7aa327985c5c4ecf6e4b79ce",
+      "bytes": 9672
+    },
+    "saved:backend/uploads/simulations/sim_9fc88d28ccb1/simulation.log": {
+      "path": "backend/uploads/simulations/sim_9fc88d28ccb1/simulation.log",
+      "root": "saved_artifact_root",
+      "sha256": "360a18f8b0c7fe7e121fe903b1ac525c1cb00e89e93b93d43dd0c83a78460027",
+      "bytes": 144725
+    },
+    "saved:backend/logs/mirofish.log.2026-07-09": {
+      "path": "backend/logs/mirofish.log.2026-07-09",
+      "root": "saved_artifact_root",
+      "sha256": "255a5c3108e98652812af5ad00dc2e680bdf137151ebec15adba0699d7f97076",
+      "bytes": 2856684
+    },
+    "saved:backend/logs/mirofish.log.2026-07-15": {
+      "path": "backend/logs/mirofish.log.2026-07-15",
+      "root": "saved_artifact_root",
+      "sha256": "d2a6dc7aeae69e19dc71c56b5cc554309cf3975af784f66f29a02277dc6756e5",
+      "bytes": 7455128
+    },
+    "saved:backend/logs/mirofish.log.2026-07-16": {
+      "path": "backend/logs/mirofish.log.2026-07-16",
+      "root": "saved_artifact_root",
+      "sha256": "c9162222567c593b472823d492c46ddd61fa9893f5b6f1f2cd4deb661d109265",
+      "bytes": 1621187
+    },
+    "saved:backend/uploads/pipelines/pipe_f23527f7d903/handoff/ensemble_forecast.json": {
+      "path": "backend/uploads/pipelines/pipe_f23527f7d903/handoff/ensemble_forecast.json",
+      "root": "saved_artifact_root",
+      "sha256": "cf274aa3dec2c8da549ee3bcbeaaca86cec9ec2f03978f2f624b39feca4ddaf0",
+      "bytes": 13361
+    },
+    "saved:backend/uploads/reports/report_c80ca48e67d1/telemetry.json": {
+      "path": "backend/uploads/reports/report_c80ca48e67d1/telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "97b4d8e4e600404ab3fa47a3389ffcb3f57887302ccc9867cbb9978c0cc84eb4",
+      "bytes": 381
+    },
+    "saved:backend/uploads/reports/report_cf220c2cb963/telemetry.json": {
+      "path": "backend/uploads/reports/report_cf220c2cb963/telemetry.json",
+      "root": "saved_artifact_root",
+      "sha256": "b7e8831dfac311a80ccc3d365f16abc84a321112328e8c0495926fc6cdb4cb46",
+      "bytes": 382
+    },
+    "code:backend/app/utils/telemetry.py": {
+      "path": "backend/app/utils/telemetry.py",
+      "root": "implementation_root",
+      "sha256": "4293385b0890a4633dd187de20a988939fdb352d57df7f0bc1d2791c7eadf339",
+      "bytes": 27138,
+      "git_revision": "38c857e67463fac6fd86d030d210676b238cd589"
+    },
+    "code:backend/app/services/pipeline_orchestrator.py": {
+      "path": "backend/app/services/pipeline_orchestrator.py",
+      "root": "implementation_root",
+      "sha256": "5a764fa33a1eaf3186a50f43d5e998423d1ff2d58903044a20771c88db0392db",
+      "bytes": 669767,
+      "git_revision": "38c857e67463fac6fd86d030d210676b238cd589"
+    },
+    "code:backend/app/utils/llm_client.py": {
+      "path": "backend/app/utils/llm_client.py",
+      "root": "implementation_root",
+      "sha256": "235beb48d1a3cc4102eeb2e79e8c626c86eecac2e2e199612569066fccbb4e31",
+      "bytes": 56627,
+      "git_revision": "38c857e67463fac6fd86d030d210676b238cd589"
+    },
+    "code:backend/app/services/report_agent.py": {
+      "path": "backend/app/services/report_agent.py",
+      "root": "implementation_root",
+      "sha256": "e1431e0957bc44fdbe8f874ea49d9946c41833c1e0a3520d0da8f2b30e264b14",
+      "bytes": 684930,
+      "git_revision": "38c857e67463fac6fd86d030d210676b238cd589"
+    },
+    "code:backend/app/services/graphiti_client/runtime.py": {
+      "path": "backend/app/services/graphiti_client/runtime.py",
+      "root": "implementation_root",
+      "sha256": "a9461c52de48efb0c8d49eb3068094c1db6c7334b58df95144c8c13834907028",
+      "bytes": 111533,
+      "git_revision": "38c857e67463fac6fd86d030d210676b238cd589"
+    },
+    "code:backend/app/services/graph_builder.py": {
+      "path": "backend/app/services/graph_builder.py",
+      "root": "implementation_root",
+      "sha256": "0eb3150596342ee3ea5de2603f36f1aefe8f5743323245161067070c2174c18c",
+      "bytes": 128689,
+      "git_revision": "38c857e67463fac6fd86d030d210676b238cd589"
+    }
+  },
+  "source_scope": "Code observations refer to the committed baseline implementation_head before ASTRA-04 edits. Concurrent agents are changing current worktree files; verify code hashes through git show <revision>:<path>, not the mutable working tree. Saved artifact hashes were independently rechecked.",
+  "validation_notes": [
+    "All 77 saved-artifact source hashes rechecked successfully. Six code source hashes bind to the committed baseline, avoiding concurrent edit drift.",
+    "Report aggregates use $.totals; initial flat-schema assumption was corrected before export.",
+    "Four invalid UTF-8 replacements in the reference simulation log; exported counters use replacement decoding and omit raw text.",
+    "The six stage intervals for pipe_91aaf91f6392 sum to 81,362.291554 seconds. Its compact file additionally includes 130.5 ensemble seconds (total 81,492.9); both overlap and must not be interpreted as elapsed time."
+  ]
+}

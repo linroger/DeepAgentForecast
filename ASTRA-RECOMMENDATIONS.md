@@ -374,3 +374,7 @@ The created [drf-run-cost-forensics skill](docs/workflows/drf-run-cost-forensics
 This report delivers a current architecture map, recomputed historical baseline, 20 prioritized recommendations with concrete acceptance criteria, an implementation sequence, and the requested compact recurring-work shortlist. The companion evidence JSON and narrow forensic skill support reproduction.
 
 The recommendations remain open implementation work, indexed by `ASTRA-01` through `ASTRA-20`; they are not marked as passing features. No remote issue or speculative automation was opened for each suggestion. Existing application work in the dirty checkout remains user-owned. The continuity record links this audit to the next session without changing the project's feature specification.
+
+## Implementation progress — 2026-09-07
+
+ASTRA-01/02/03 are implemented and verified offline on the isolated optimization branch. ASTRA-04a now adds durable usage accounting, idempotent growing child imports, correct nested-call/persona attribution, and cumulative status with explicit unknown coverage. Full ASTRA-04 remains in progress because reservation and live-child coverage are pending. See [the implementation ledger](astra-improvement-state.json), [accounting runbook](docs/research/astra-usage-verification.md), and [new saved-run analysis](docs/research/astra-iteration-04-run-evidence.json). The hourly improvement loop continues; these changes do not establish global or production Pareto optimality.

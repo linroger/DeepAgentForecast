@@ -387,7 +387,7 @@ def pipeline_status(pipeline_id: str):
     """返回管线聚合进度（直接读 pipeline_state.json，可在后端重启后存活）。
 
     OBS-1/I-5-6 落地：状态响应额外拼一个计算出的 ``live`` 块（heartbeat 年龄、owner 存活、
-    ETA/staleness、进程内累计花费、预算余量）。此前这些助手（heartbeat_status/estimate_eta/
+    ETA/staleness、持久化累计花费、预算余量）。此前这些助手（heartbeat_status/estimate_eta/
     LLMMeter.status_snapshot）没有任何生产调用方，UI 无从显示「还活着吗/还要多久/烧了多少」。
     纯附加键，state 原文不动；任何助手失败只丢 ``live``，绝不拖垮状态端点。"""
     data = PipelineManager.load(pipeline_id)
@@ -397,11 +397,15 @@ def pipeline_status(pipeline_id: str):
         live = PipelineOrchestrator().heartbeat_status(PipelineState.from_dict(data))
         budget_tokens = int(getattr(Config, "LLM_RUN_BUDGET_TOKENS", 0) or 0)
         if budget_tokens > 0:
-            spent = int((live.get("spend_so_far") or {}).get("tokens") or 0)
+            spend = live.get("spend_so_far") or {}
+            spent = spend.get("tokens") if spend.get("available") is True else None
             live["budget"] = {
                 "limit_tokens": budget_tokens,
                 "spent_tokens": spent,
-                "remaining_tokens": max(0, budget_tokens - spent),
+                "remaining_tokens": max(0, budget_tokens - spent) if spent is not None else None,
+                "available": spent is not None,
+                "coverage": spend.get("coverage", "unavailable"),
+                "usage_complete": False,
             }
         data = dict(data)
         data["live"] = live

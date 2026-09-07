@@ -9,7 +9,10 @@ heartbeat_status/estimate_eta/LLMMeter.status_snapshot 三个助手此前没有�
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from flask import Flask
@@ -103,18 +106,122 @@ def test_status_budget_block_with_metered_spend(tmp_path, monkeypatch, client):
     monkeypatch.setattr(Config, "LLM_TELEMETRY_ENABLED", True, raising=False)
     _write_state(tmp_path, PID)
 
-    from app.utils import telemetry as tel
-    tel.set_run_context(PID, stage="graph")
-    try:
-        tel.LLMMeter.record("test-provider", "test-model", 1200, 300, 5.0)
-    finally:
-        tel.set_run_context(None)
+    # A different worker commits two attempts; the serving process never
+    # attaches an LLMMeter binding and must still see the cumulative total.
+    subprocess.run([sys.executable, "-c", """
+import sys
+from app.utils.usage_ledger import UsageLedger
+ledger = UsageLedger(sys.argv[1])
+ledger.initialize(sys.argv[2])
+for attempt in ('first', 'resumed'):
+    ledger.record_snapshot(run_id=sys.argv[2], attempt_id=attempt, source='test',
+        operation_id=attempt, metadata={'stage': 'graph', 'provider': 'test',
+        'model': 'test', 'usage_class': 'known', 'billing_basis': 'estimated_api'},
+        counters={'calls': 1, 'prompt_tokens': 600, 'completion_tokens': 150,
+        'cost_usd': 0.02})
+""", str(tmp_path / "usage_ledger.sqlite3"), PID], check=True,
+                   cwd=Path(__file__).resolve().parents[1])
+    from app.utils.telemetry import LLMMeter
+    LLMMeter.reset(PID)
 
     live = client.get(f"/api/research/status/{PID}").get_json()["data"]["live"]
     assert live["spend_so_far"]["tokens"] == 1500
     assert live["budget"]["limit_tokens"] == 1_000_000
     assert live["budget"]["spent_tokens"] == 1500
     assert live["budget"]["remaining_tokens"] == 1_000_000 - 1500
+    assert live["spend_so_far"]["source"] == "durable_ledger"
+    assert live["spend_so_far"]["available"] is True
+    assert live["spend_so_far"]["coverage"] == "recorded_observations"
+    assert live["spend_so_far"]["usage_complete"] is False
+    assert live["budget"]["usage_complete"] is False
+
+
+@pytest.mark.parametrize("telemetry_enabled", [True, False])
+def test_status_preserves_registered_zero_and_uses_actual_pipeline_root(
+        tmp_path, monkeypatch, client, telemetry_enabled):
+    from app.utils.usage_ledger import UsageLedger
+    monkeypatch.setattr(Config, "PIPELINE_DATA_DIR", str(tmp_path / "unused"))
+    monkeypatch.setattr(Config, "LLM_RUN_BUDGET_TOKENS", 1000)
+    monkeypatch.setattr(Config, "LLM_TELEMETRY_ENABLED", telemetry_enabled)
+    monkeypatch.setattr(po.PipelineManager, "_dir", classmethod(lambda cls, pid: str(tmp_path / pid)))
+    _write_state(tmp_path, PID)
+    UsageLedger(str(tmp_path / "usage_ledger.sqlite3")).initialize(PID)
+
+    live = client.get(f"/api/research/status/{PID}").get_json()["data"]["live"]
+    assert live["spend_so_far"]["tokens"] == 0
+    assert live["spend_so_far"]["cost_usd"] == 0
+    assert live["spend_so_far"]["available"] is True
+    assert live["budget"]["spent_tokens"] == 0
+    assert live["budget"]["remaining_tokens"] == 1000
+    assert not (tmp_path / "unused").exists()
+
+
+@pytest.mark.parametrize("failure", ["absent", "unregistered", "corrupt", "lost", "durable_cache", "bad_cache", "wrong_run"])
+def test_status_unknown_spend_never_becomes_unused_budget(tmp_path, monkeypatch, client, failure):
+    from app.utils.usage_ledger import UsageLedger
+    monkeypatch.setattr(Config, "PIPELINE_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(Config, "LLM_RUN_BUDGET_TOKENS", 1000)
+    run_dir = _write_state(tmp_path, PID, options={"usage_attempt_id": "old"} if failure == "lost" else {})
+    ledger_path = tmp_path / "usage_ledger.sqlite3"
+    if failure == "unregistered":
+        UsageLedger(str(ledger_path)).initialize("another-run")
+    if failure == "corrupt":
+        ledger_path.write_bytes(b"not a sqlite database")
+        # A valid stale cache must not conceal ledger corruption.
+        (run_dir / "run_telemetry.json").write_text(json.dumps({
+            "pipeline_id": PID, "total": {"total_tokens": 10, "cost_usd": 0.1}}))
+    if failure in {"durable_cache", "wrong_run", "lost"}:
+        (run_dir / "run_telemetry.json").write_text(json.dumps({
+            "pipeline_id": "another-run" if failure == "wrong_run" else PID,
+            "durable": failure == "durable_cache",
+            "total": {"total_tokens": 0, "cost_usd": 0}}))
+    if failure == "bad_cache":
+        (run_dir / "run_telemetry.json").write_text("{broken")
+    before = ledger_path.read_bytes() if ledger_path.exists() else None
+
+    live = client.get(f"/api/research/status/{PID}").get_json()["data"]["live"]
+    assert live["spend_so_far"]["available"] is False
+    assert live["spend_so_far"]["tokens"] is None
+    assert live["spend_so_far"]["cost_usd"] is None
+    assert live["spend_so_far"]["usage_complete"] is False
+    assert live["budget"]["spent_tokens"] is None
+    assert live["budget"]["remaining_tokens"] is None
+    assert live["budget"]["available"] is False
+    assert (ledger_path.read_bytes() if ledger_path.exists() else None) == before
+
+
+@pytest.mark.parametrize("tokens", [0, 1700])
+def test_status_legacy_saved_cumulative_snapshot_is_explicitly_partial(tmp_path, monkeypatch, client, tokens):
+    monkeypatch.setattr(Config, "PIPELINE_DATA_DIR", str(tmp_path))
+    run_dir = _write_state(tmp_path, PID)
+    (run_dir / "run_telemetry.json").write_text(json.dumps({
+        "pipeline_id": PID, "total": {"total_tokens": min(tokens, 10), "cost_usd": 0},
+        "cumulative_total": {"total_tokens": tokens, "cost_usd": 0},
+    }))
+    live = client.get(f"/api/research/status/{PID}").get_json()["data"]["live"]
+    assert live["spend_so_far"]["available"] is True
+    assert live["spend_so_far"]["tokens"] == tokens
+    assert live["spend_so_far"]["source"] == "legacy_snapshot"
+    assert live["spend_so_far"]["coverage"] == "legacy_saved_snapshot"
+    assert live["spend_so_far"]["usage_complete"] is False
+    assert not (tmp_path / "usage_ledger.sqlite3").exists()
+
+
+@pytest.mark.parametrize("total", [{}, {"total_tokens": False}, {"total_tokens": -1},
+                                  {"total_tokens": 1.5}, {"total_tokens": "0"},
+                                  {"total_tokens": float("nan")}, {"cost_usd": float("inf")}])
+def test_status_invalid_legacy_cumulative_total_cannot_fall_back_to_attempt_zero(
+        tmp_path, monkeypatch, client, total):
+    monkeypatch.setattr(Config, "PIPELINE_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(Config, "LLM_RUN_BUDGET_TOKENS", 1000)
+    run_dir = _write_state(tmp_path, PID)
+    (run_dir / "run_telemetry.json").write_text(json.dumps({
+        "pipeline_id": PID, "total": {"total_tokens": 0, "cost_usd": 0},
+        "cumulative_total": total,
+    }))
+    live = client.get(f"/api/research/status/{PID}").get_json()["data"]["live"]
+    assert live["spend_so_far"]["available"] is False
+    assert live["budget"]["remaining_tokens"] is None
 
 
 def test_status_survives_helper_failure(tmp_path, monkeypatch, client):

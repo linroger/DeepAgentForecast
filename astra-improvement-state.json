@@ -1,11 +1,13 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T17:08:19.592929+00:00",
+  "updated_at": "2026-09-07T18:00:54.750363+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
   "audit_commit": "6f47f47",
-  "current_slice": [],
+  "current_slice": [
+    "ASTRA-04"
+  ],
   "consecutive_blocked_iterations": 0,
   "automation_id": "astra-workflow-improvement-loop",
   "stopping_condition": "All justified recommendations verified or evidence-backed deferred; no measured bottleneck warrants another safe change. Pause after three consecutive iterations blocked by the same external dependency.",
@@ -55,8 +57,34 @@
       "id": "ASTRA-04",
       "priority": "P1",
       "title": "Unify durable usage and cumulative budget enforcement",
-      "status": "pending",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        "docs/research/astra-usage-verification.json",
+        "docs/research/astra-usage-benchmark.json",
+        "docs/research/astra-usage-browser.json",
+        "docs/research/astra-iteration-04-run-evidence.json"
+      ],
+      "subtasks": [
+        {
+          "id": "ASTRA-04a",
+          "title": "Durable trustworthy usage accounting and snapshot imports",
+          "status": "verified_offline",
+          "evidence": "docs/research/astra-usage-verification.json"
+        },
+        {
+          "id": "ASTRA-04b",
+          "title": "Provider-boundary reservations and cumulative budget coverage",
+          "status": "pending"
+        }
+      ],
+      "limits": [
+        "ASTRA-04b provider-boundary reservations and live detached-child coverage are pending.",
+        "Budget checks use cumulative recorded observations but remain post-call; not a complete hard spend cap.",
+        "Exact CLI request provenance and cumulative checkpoint-message delta extraction remain incomplete.",
+        "Simulation aggregate model labels retain stable identity; detailed model diagnostics are separate.",
+        "Imported historical baselines are opaque and legacy marker-first ambiguity is explicit.",
+        "Unknown/cache partition coverage is not inferred; usage_complete remains false."
+      ]
     },
     {
       "id": "ASTRA-05",
@@ -198,5 +226,19 @@
       "implementation_commit": "06dc8b9"
     }
   ],
-  "last_implementation_commit": "06dc8b9"
+  "last_implementation_commit": "06dc8b9",
+  "optimization_objectives": {
+    "minimize": [
+      "provider work and accounted consumption",
+      "critical-path elapsed time",
+      "resource use",
+      "recovery and regeneration work"
+    ],
+    "preserve": [
+      "source and actor provenance",
+      "quality acceptance",
+      "recovery correctness"
+    ],
+    "evidence_rule": "Accept improvements only with source-backed mechanism and falsifiable checks; record tradeoffs and unmeasured production effects."
+  }
 }

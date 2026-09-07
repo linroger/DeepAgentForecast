@@ -24,6 +24,8 @@ import asyncio
 import json
 import os
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import pytest
@@ -40,6 +42,7 @@ from app.config import Config  # noqa: E402
 from app.services import pipeline_orchestrator as po  # noqa: E402
 from app.services.simulation_runner import SimulationRunner  # noqa: E402
 from app.utils.telemetry import LLMMeter  # noqa: E402
+from app.utils.llm_client import LLMClient  # noqa: E402
 
 SIM_ID = "sim_meter_fixture"
 
@@ -221,6 +224,93 @@ def test_wrap_llm_client_counts_errors_and_reraises(fresh_usage):
         client.chat([])
     assert rps._SIM_LLM_USAGE["errors"] == 1
     assert rps._SIM_LLM_USAGE["calls"] == 0
+
+
+@pytest.mark.parametrize("responses", [["{\"ok\": true}"], ["not json", "{\"ok\": true}"]])
+def test_real_chat_json_counts_each_inner_call_once(fresh_usage, responses):
+    """Use the production JSON repair loop with an offline chat boundary."""
+    class OfflineJSONClient(LLMClient):
+        def __init__(self):
+            self.provider = "minimax"
+            self.model = "MiniMax-M3"
+            self._last_usage = None
+            self.responses = iter(responses)
+
+        def chat(self, messages, **kwargs):
+            self._last_usage = {"prompt_tokens": 100, "completion_tokens": 20}
+            return next(self.responses)
+
+    client = rps._wrap_llm_client_usage(OfflineJSONClient())
+    assert client.chat_json([{"role": "user", "content": "offline JSON"}]) == {"ok": True}
+    assert fresh_usage["calls"] == len(responses)
+    assert fresh_usage["prompt_tokens"] == 100 * len(responses)
+    assert fresh_usage["completion_tokens"] == 20 * len(responses)
+    assert fresh_usage["errors"] == 0
+
+
+def test_nested_chat_json_failure_counts_one_model_error(fresh_usage):
+    class BrokenJSONClient(LLMClient):
+        model = "offline-model"
+
+        def __init__(self):
+            pass
+
+        def chat(self, messages, **kwargs):
+            raise RuntimeError("offline failure")
+
+    client = rps._wrap_llm_client_usage(BrokenJSONClient())
+    with pytest.raises(RuntimeError, match="offline failure"):
+        client.chat_json([])
+    assert fresh_usage["errors"] == 1
+    assert fresh_usage["calls"] == 0
+
+
+def test_json_parse_failure_keeps_paid_inner_calls_without_inventing_model_error(fresh_usage):
+    class InvalidJSONClient(LLMClient):
+        model = "offline-model"
+
+        def __init__(self):
+            self._last_usage = None
+
+        def chat(self, messages, **kwargs):
+            self._last_usage = {"prompt_tokens": 20, "completion_tokens": 10}
+            return "unparseable response"
+
+    client = rps._wrap_llm_client_usage(InvalidJSONClient())
+    with pytest.raises(ValueError, match="JSON"):
+        client.chat_json([])
+    assert fresh_usage["calls"] == 2
+    assert fresh_usage["prompt_tokens"] == 40
+    assert fresh_usage["errors"] == 0
+
+
+def test_nested_usage_isolation_for_simultaneous_requests_and_later_direct_call(fresh_usage):
+    barrier = threading.Barrier(2)
+
+    class ConcurrentJSONClient(LLMClient):
+        model = "offline-model"
+
+        def __init__(self):
+            self.local = threading.local()
+
+        @property
+        def _last_usage(self):
+            return getattr(self.local, "usage", None)
+
+        def chat(self, messages, **kwargs):
+            if messages:
+                barrier.wait(timeout=5)
+            self.local.usage = {"prompt_tokens": 30, "completion_tokens": 15}
+            return '{"ok": true}'
+
+    client = rps._wrap_llm_client_usage(ConcurrentJSONClient())
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(client.chat_json, [{"role": "user", "content": str(i)}]) for i in range(2)]
+        assert [future.result(timeout=10) for future in futures] == [{"ok": True}] * 2
+    client.chat([])
+    assert fresh_usage["calls"] == 3
+    assert fresh_usage["prompt_tokens"] == 90
+    assert fresh_usage["completion_tokens"] == 45
 
 
 # ---------------------------------------------------- 子进程侧：快照落盘

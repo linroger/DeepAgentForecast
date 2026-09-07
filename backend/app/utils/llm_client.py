@@ -381,8 +381,12 @@ class LLMClient:
         model = self._model_for_tier(tier)
         # EXECPLAN2 I-6-0/I-5-0/I-5-3: 内容寻址缓存命中直接返回；否则正常调用后记录
         # token/延迟/成本计量并做预算检查。计量默认开（开销极小），缓存/预算默认关。
-        from .telemetry import LLMMeter, LLMCache, get_run_context, check_budget, estimate_tokens
+        from .telemetry import (
+            LLMMeter, LLMCache, get_run_context, check_budget, estimate_tokens,
+            UsageLedgerConflict, UsageLedgerStorageError,
+        )
         run_id, stage = get_run_context()
+        LLMMeter.assert_accounting_available(run_id)
         cache_key = None
         if Config.LLM_CACHE_ENABLED:
             # 缓存键纳入解析后的 model，避免 fast/strong 两档结果互相串档。
@@ -421,6 +425,7 @@ class LLMClient:
         for attempt in range(MAX_RETRIES):
             if result is not None:
                 break
+            LLMMeter.assert_accounting_available(run_id)
             try:
                 if self.provider in OPENAI_COMPATIBLE_PROVIDERS:
                     result = self._chat_openai(messages, temperature, max_tokens, response_format, tier=tier)
@@ -431,6 +436,8 @@ class LLMClient:
                     result = self._chat_claude_cli(messages, temperature, max_tokens, response_format)
                 _cb_reset(self.provider)  # primary succeeded → clear its 422/429 streaks
                 break
+            except (UsageLedgerStorageError, UsageLedgerConflict):
+                raise
             except (RuntimeError, *_RETRYABLE_API_ERRORS) as exc:
                 last_error = exc
                 if _is_deterministic_auth_error(exc):
@@ -489,6 +496,10 @@ class LLMClient:
         """QUALITY-OPT S9: retry the request once on a configured fallback provider when the
         primary exhausts retries / hits a content-filter. Off unless LLM_FALLBACK_PROVIDER is
         set; never recurses (the fallback client has failover disabled). Returns text or None."""
+        from .telemetry import LLMMeter, UsageLedgerConflict, UsageLedgerStorageError
+        if isinstance(primary_error, (UsageLedgerStorageError, UsageLedgerConflict)):
+            raise primary_error
+        LLMMeter.assert_accounting_available()
         if getattr(self, "_is_fallback", False):
             return None
         fb_provider = (os.environ.get("LLM_FALLBACK_PROVIDER", "") or "").strip().lower()
@@ -545,6 +556,8 @@ class LLMClient:
                 _FB_AUTH_UNAVAILABLE_UNTIL.pop(auth_key, None)
             logger.info(f"回退提供方 {fb_provider} 成功接管本次调用")
             return out
+        except (UsageLedgerStorageError, UsageLedgerConflict):
+            raise
         except Exception as e:  # noqa: BLE001 — fallback failed too; caller raises the primary error
             # 确定性失败（401 凭据坏 / 400 invalid-model 类）进入进程级冷却：重试修不好，
             # 并行 worker 不该反复对同一注定失败的回退发起昂贵调用。服务重启或修好配置自然清零。
@@ -666,16 +679,22 @@ class LLMClient:
         # 无预算门）——REPORT_NATIVE_TOOLS 默认开时每章一次裸调用。对齐 chat()：瞬时错误退避重试、
         # 422 记入熔断、成功后计量+预算检查。原生工具没有 CLI 回退（CLI 无 tools=），最终失败原样
         # 抛出，由 report_agent 的 per-section 捕获降级 ReAct。
-        from .telemetry import LLMMeter, get_run_context, check_budget
+        from .telemetry import (
+            LLMMeter, get_run_context, check_budget,
+            UsageLedgerConflict, UsageLedgerStorageError,
+        )
         _run_id, _stage = get_run_context()
         _started = time.monotonic()
         response = None
         last_error: Optional[Exception] = None
         for attempt in range(MAX_RETRIES):
+            LLMMeter.assert_accounting_available(_run_id)
             try:
                 response = client.chat.completions.create(**kwargs)
                 _cb_reset(self.provider)
                 break
+            except (UsageLedgerStorageError, UsageLedgerConflict):
+                raise
             except (RuntimeError, *_RETRYABLE_API_ERRORS) as exc:
                 last_error = exc
                 if _is_quota(exc):
@@ -702,7 +721,9 @@ class LLMClient:
                 LLMMeter.record(self.provider, model, _pt, _ct,
                                 (time.monotonic() - _started) * 1000.0,
                                 cached=False, stage=_stage, run_id=_run_id)
-            except Exception:  # noqa: BLE001 — 计量失败不影响返回
+            except (UsageLedgerStorageError, UsageLedgerConflict):
+                raise
+            except Exception:  # noqa: BLE001 — optional legacy telemetry may degrade
                 pass
         if Config.LLM_RUN_BUDGET_TOKENS or Config.LLM_RUN_BUDGET_USD:
             check_budget(_run_id)  # 超预算抛 BudgetExceeded

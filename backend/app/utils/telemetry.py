@@ -14,8 +14,14 @@ import hashlib
 import json
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+
+from .usage_ledger import (
+    METRICS, UsageLedger, UsageLedgerConflict, UsageLedgerStorageError,
+    empty_counter, normalize_counter,
+)
 
 # ---------------------------------------------------------------- run context
 # Tag every LLM call with the run (pipeline/report id) and stage that issued it,
@@ -203,6 +209,10 @@ class _Counter:
             "cost_usd": round(self.cost_usd, 6),
         }
 
+    def add_delta(self, delta: Dict[str, Any]) -> None:
+        for key in ("calls", "cached", "prompt_tokens", "completion_tokens", "latency_ms", "cost_usd"):
+            setattr(self, key, getattr(self, key) + delta[key])
+
 
 @dataclass
 class _RunMeter:
@@ -212,6 +222,14 @@ class _RunMeter:
     # FOG-TEL-1: 无 run 上下文、经「单活跃 run」回退归属到本 run 的那部分（total 的子集，
     # 单独累计使推断归属与显式归属可区分/可审计）。
     fallback: _Counter = field(default_factory=_Counter)
+    attempt_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    operations: Dict[Tuple[str, str], dict] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class _DurableRun:
+    ledger: UsageLedger
+    attempt_id: str
 
 
 # TEL-1: '_global' 桶只该接住零星的无归属调用（reset 从不清它，跨 run 累积）。它一旦变大，
@@ -225,6 +243,167 @@ class LLMMeter:
 
     _lock = threading.Lock()
     _runs: Dict[str, _RunMeter] = {}
+    _durable: Dict[str, _DurableRun] = {}
+    _durable_failures: Dict[str, str] = {}
+    _write_lock = threading.Lock()
+
+    @classmethod
+    def is_durable_run(cls, run_id: Optional[str] = None) -> bool:
+        """Inspect the local binding without scanning or creating storage."""
+        rid = run_id or _current_run.get() or _sole_active_run() or _DEFAULT_BUCKET
+        with cls._lock:
+            return rid in cls._durable
+
+    @classmethod
+    def _remember_accounting_failure(cls, run_id: str) -> None:
+        # Keep no exception traceback: it can retain provider response bodies.
+        with cls._lock:
+            if run_id in cls._durable:
+                cls._durable_failures[run_id] = "Durable accounting failed during this attempt"
+
+    @classmethod
+    def assert_accounting_available(cls, run_id: Optional[str] = None) -> None:
+        """Stop new provider attempts after a durable accounting failure.
+
+        A successful later read cannot prove that a failed usage observation
+        was recovered. The stop persists until explicit reset/new attempt.
+        Already-in-flight responses may still settle their observations.
+        """
+        rid = run_id or _current_run.get() or _sole_active_run() or _DEFAULT_BUCKET
+        with cls._lock:
+            binding = cls._durable.get(rid)
+            failure = cls._durable_failures.get(rid)
+        if binding is None:
+            return
+        if failure:
+            raise UsageLedgerStorageError(failure)
+        try:
+            binding.ledger.assert_available(rid)
+        except UsageLedgerStorageError:
+            cls._remember_accounting_failure(rid)
+            raise
+
+    @classmethod
+    def attach_durable_run(cls, run_id: str, ledger_path: str,
+                           attempt_id: Optional[str] = None,
+                           legacy_snapshot: Optional[Dict[str, Any]] = None) -> str:
+        """Bind explicitly before provider work; never infer a filesystem path.
+
+        Reattaching the same binding is idempotent. A new attempt requires reset
+        so two live owners cannot silently move each other's attribution.
+        """
+        ledger = UsageLedger(ledger_path)
+        with cls._lock:
+            existing = cls._durable.get(run_id)
+            if existing is not None:
+                if existing.ledger.path != ledger.path or (attempt_id is not None and attempt_id != existing.attempt_id):
+                    raise UsageLedgerConflict("Run already has a different durable binding")
+                return existing.attempt_id
+            rm = cls._runs.get(run_id)
+            if rm is not None and any(rm.total.as_dict().values()):
+                raise UsageLedgerConflict("Attach durable accounting before recording usage")
+            selected_attempt = attempt_id or uuid.uuid4().hex
+            if not isinstance(selected_attempt, str) or not selected_attempt or len(selected_attempt) > 512:
+                raise ValueError("Invalid accounting attempt identity")
+            # Initialization happens while binding is locked, ensuring no local
+            # record can slip into the memory bucket between import and attach.
+            ledger.initialize(run_id, legacy_snapshot)
+            cls._durable[run_id] = _DurableRun(ledger, selected_attempt)
+            return selected_attempt
+
+    @classmethod
+    def cumulative_snapshot(cls, run_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Return all durable attempts, or None only for an unbound run."""
+        rid = run_id or _current_run.get() or _DEFAULT_BUCKET
+        with cls._lock:
+            binding = cls._durable.get(rid)
+        if binding is None:
+            return None
+        try:
+            return binding.ledger.snapshot(rid)
+        except UsageLedgerStorageError:
+            cls._remember_accounting_failure(rid)
+            raise
+
+    @classmethod
+    def record_snapshot(cls, source: str, operation_id: str, provider: str, model: str,
+                        prompt_tokens: int, completion_tokens: int, latency_ms: float, *,
+                        run_id: Optional[str] = None, stage: Optional[str] = None,
+                        calls: int = 1, cached: int = 0, status: str = "completed",
+                        usage_source: str = "unknown", billing_basis: Optional[str] = None,
+                        cache_read_tokens: int = 0, cache_write_tokens: int = 0,
+                        uncached_tokens: Optional[int] = None,
+                        cost_usd: Optional[float] = None,
+                        baseline_included: bool = False,
+                        _fallback: bool = False) -> Dict[str, Any]:
+        """Reconcile one stable cumulative observation, never an anonymous sum.
+
+        A new attempt receives only positive growth discovered during that
+        attempt. Initial ownership of an old operation remains unchanged. The
+        explicit legacy seed flag suppresses only first-import credit.
+        """
+        rid = run_id or _current_run.get()
+        fallback = _fallback
+        if not rid:
+            rid = _sole_active_run()
+            fallback = rid is not None
+        rid = rid or _DEFAULT_BUCKET
+        stg = stage or _current_stage.get() or "_unstaged"
+        with cls._lock:
+            bound_at_validation = rid in cls._durable
+        try:
+            usage_class = {"provider": "known", "reported": "known", "estimate": "estimated",
+                           "missing": "unknown", "legacy": "unknown"}.get(usage_source, usage_source)
+            if usage_class not in {"known", "estimated", "unknown", "mixed"}:
+                raise ValueError("Invalid usage source")
+            basis = billing_basis or ("subscription" if provider in {"claude-cli", "codex-cli"} else "api")
+            counters = normalize_counter({
+                "calls": calls, "cached": cached, "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens, "latency_ms": latency_ms,
+                "cost_usd": cost_usd if cost_usd is not None else (0.0 if cached else estimate_cost(provider, prompt_tokens, completion_tokens)),
+                "cache_read_tokens": cache_read_tokens, "cache_write_tokens": cache_write_tokens,
+                "uncached_tokens": uncached_tokens if uncached_tokens is not None else 0,
+            })
+            metadata = {"stage": stg, "provider": provider, "model": model,
+                        "usage_class": usage_class, "usage_source": usage_source,
+                        "billing_basis": basis, "cost_estimated": cost_usd is None,
+                        "fallback": fallback, "cache_partition_known": uncached_tokens is not None}
+        except (ValueError, TypeError, OverflowError) as exc:
+            if not bound_at_validation:
+                raise
+            cls._remember_accounting_failure(rid)
+            raise UsageLedgerStorageError("Invalid observation for durable accounting") from exc
+        with cls._lock:
+            binding = cls._durable.get(rid)
+            if binding is None:
+                if baseline_included:
+                    raise UsageLedgerConflict("Legacy baseline seeding requires durable accounting")
+                rm = cls._runs.setdefault(rid, _RunMeter())
+                key = (source, operation_id)
+                previous_record = rm.operations.get(key)
+                previous = previous_record["counter"] if previous_record else empty_counter()
+                if previous_record and any(previous_record["metadata"][k] != metadata[k] for k in ("stage", "provider", "model", "billing_basis", "fallback")):
+                    raise UsageLedgerConflict("Usage operation identity has different attribution")
+                highwater = {k: max(previous[k], counters[k]) for k in METRICS}
+                highwater["total_tokens"] = highwater["prompt_tokens"] + highwater["completion_tokens"]
+                delta = {k: highwater[k] - previous[k] for k in METRICS}
+                rm.operations[key] = {"counter": highwater, "metadata": metadata}
+                rm.total.add_delta(delta)
+                rm.by_stage.setdefault(stg, _Counter()).add_delta(delta)
+                rm.by_model.setdefault(f"{provider}:{model}", _Counter()).add_delta(delta)
+                if fallback:
+                    rm.fallback.add_delta(delta)
+                return delta
+        try:
+            return binding.ledger.record_snapshot(
+                run_id=rid, attempt_id=binding.attempt_id, source=source, operation_id=operation_id,
+                metadata=metadata, counters=counters, status=status, baseline_included=baseline_included)
+        except (UsageLedgerStorageError, UsageLedgerConflict):
+            cls._remember_accounting_failure(rid)
+            raise
+        except (ValueError, TypeError, OverflowError) as exc:
+            cls._remember_accounting_failure(rid)
+            raise UsageLedgerStorageError("Invalid attribution for durable accounting") from exc
 
     @classmethod
     def record(cls, provider: str, model: str, prompt_tokens: int, completion_tokens: int,
@@ -241,20 +420,28 @@ class LLMMeter:
         if not rid:
             rid = _DEFAULT_BUCKET
         stg = stage or _current_stage.get() or "_unstaged"
-        cost = 0.0 if cached else estimate_cost(provider, prompt_tokens, completion_tokens)
         warn_calls = 0
         first_fallback = False
         with cls._lock:
-            rm = cls._runs.setdefault(rid, _RunMeter())
-            rm.total.add(prompt_tokens, completion_tokens, latency_ms, cost, cached)
-            rm.by_stage.setdefault(stg, _Counter()).add(prompt_tokens, completion_tokens, latency_ms, cost, cached)
-            rm.by_model.setdefault(f"{provider}:{model}", _Counter()).add(
-                prompt_tokens, completion_tokens, latency_ms, cost, cached)
-            if fallback:
-                rm.fallback.add(prompt_tokens, completion_tokens, latency_ms, cost, cached)
-                first_fallback = rm.fallback.calls == 1
-            if rid == _DEFAULT_BUCKET and rm.total.calls in _GLOBAL_BUCKET_WARN_AT:
-                warn_calls = rm.total.calls
+            binding = cls._durable.get(rid)
+            if binding is None:
+                cost = 0.0 if cached else estimate_cost(provider, prompt_tokens, completion_tokens)
+                rm = cls._runs.setdefault(rid, _RunMeter())
+                rm.total.add(prompt_tokens, completion_tokens, latency_ms, cost, cached)
+                rm.by_stage.setdefault(stg, _Counter()).add(prompt_tokens, completion_tokens, latency_ms, cost, cached)
+                rm.by_model.setdefault(f"{provider}:{model}", _Counter()).add(
+                    prompt_tokens, completion_tokens, latency_ms, cost, cached)
+                if fallback:
+                    rm.fallback.add(prompt_tokens, completion_tokens, latency_ms, cost, cached)
+                    first_fallback = rm.fallback.calls == 1
+                if rid == _DEFAULT_BUCKET and rm.total.calls in _GLOBAL_BUCKET_WARN_AT:
+                    warn_calls = rm.total.calls
+        if binding is not None:
+            cls.record_snapshot("llm_call", uuid.uuid4().hex, provider, model,
+                                prompt_tokens, completion_tokens, latency_ms,
+                                cached=int(cached), run_id=rid, stage=stg,
+                                usage_source="known" if cached else "unknown", _fallback=fallback)
+            return
         if first_fallback:
             import logging
             logging.getLogger("mirofish.telemetry").info(
@@ -283,6 +470,19 @@ class LLMMeter:
           when snapshotting the '_global' bucket itself (it would duplicate ``total``).
         """
         rid = run_id or _current_run.get() or _DEFAULT_BUCKET
+        with cls._lock:
+            binding = cls._durable.get(rid)
+            global_run = cls._runs.get(_DEFAULT_BUCKET)
+            global_total = global_run.total.as_dict() if global_run else _Counter().as_dict()
+        if binding is not None:
+            try:
+                out = binding.ledger.snapshot(rid, attempt_id=binding.attempt_id)
+            except UsageLedgerStorageError:
+                cls._remember_accounting_failure(rid)
+                raise
+            if rid != _DEFAULT_BUCKET:
+                out["unattributed_process"] = global_total
+            return out
         with cls._lock:
             g = cls._runs.get(_DEFAULT_BUCKET)
             unattributed = g.total.as_dict() if g else _Counter().as_dict()
@@ -357,45 +557,57 @@ class LLMMeter:
             _active_runs.pop(rid, None)
         with cls._lock:
             cls._runs.pop(rid, None)
+            cls._durable.pop(rid, None)
+            cls._durable_failures.pop(rid, None)
 
     @classmethod
     def write_run_telemetry(cls, path: str, run_id: Optional[str] = None,
                             extra: Optional[Dict[str, Any]] = None) -> None:
-        """Persist a run's telemetry to ``path`` atomically (I-5-1).
+        """Write a compatibility projection without adding one attempt twice.
 
-        XRUN-8: resume/re-report 会对同一管线写多次；此前直接覆盖会让上一 attempt 的成本
-        （以及它指向的 report_id）凭空消失，跨 run 的 token 审计对不上账。改为合并：保留上一
-        attempt 的 total/report_id 摘要（previous_attempt），并滚动累计 cumulative_total，
-        使文件既反映「本 attempt」又反映「整条管线」的真实开销。首写行为不变。
+        Durable runs use the ledger's cumulative projection. Unbound legacy
+        callers retain a stable in-memory attempt ID and a fixed persisted base;
+        repeated writes replace that attempt's snapshot instead of adding it.
         """
         import os as _os
         from .atomic import write_json_atomic
-        data = cls.snapshot(run_id)
-        if extra:
-            data.update(extra)
-        try:
+        rid = run_id or _current_run.get() or _DEFAULT_BUCKET
+        with cls._write_lock:
+            data = cls.snapshot(rid)
+            with cls._lock:
+                binding = cls._durable.get(rid)
+                attempt_id = binding.attempt_id if binding else cls._runs.setdefault(rid, _RunMeter()).attempt_id
+            previous = None
             if _os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
-                    prev = json.load(f)
-                if isinstance(prev, dict) and (prev.get("total") or {}).get("calls"):
-                    data["previous_attempt"] = {
-                        "total": prev.get("total"),
-                        "report_id": prev.get("report_id"),
-                        "status": prev.get("status"),
-                    }
-                    base = prev.get("cumulative_total") or prev.get("total") or {}
-                    cur = data.get("total") or {}
-                    cum: Dict[str, Any] = {}
-                    for k in ("calls", "cached", "prompt_tokens", "completion_tokens",
-                              "total_tokens", "latency_ms", "cost_usd"):
-                        try:
-                            cum[k] = round((base.get(k) or 0) + (cur.get(k) or 0), 6)
-                        except TypeError:
-                            continue
-                    data["cumulative_total"] = cum
-        except Exception:  # noqa: BLE001 — 合并是观测增益，失败退回单 attempt 覆盖写
-            pass
-        write_json_atomic(path, data)
+                    previous = json.load(f)
+                if not isinstance(previous, dict):
+                    raise UsageLedgerStorageError("Invalid previous telemetry projection")
+            base = {}
+            previous_attempt = None
+            if previous:
+                if previous.get("attempt_id") == attempt_id:
+                    base = previous.get("attempt_base_total") or {}
+                    previous_attempt = previous.get("previous_attempt")
+                else:
+                    base = previous.get("cumulative_total") or previous.get("total") or {}
+                    previous_attempt = {"total": previous.get("total"),
+                                        "report_id": previous.get("report_id"), "status": previous.get("status")}
+            if extra:
+                data.update(extra)
+            data["attempt_id"] = attempt_id
+            data["attempt_base_total"] = base
+            if previous_attempt:
+                data["previous_attempt"] = previous_attempt
+            cumulative = cls.cumulative_snapshot(rid)
+            if cumulative is not None:
+                data["cumulative_total"] = cumulative["total"]
+                data["cumulative_by_stage"] = cumulative["by_stage"]
+            else:
+                current = data.get("total") or {}
+                data["cumulative_total"] = {key: round((base.get(key) or 0) + (current.get(key) or 0), 6)
+                                            for key in METRICS}
+            write_json_atomic(path, data)
 
 
 # ---------------------------------------------------------------- budget guard
@@ -416,7 +628,8 @@ def check_budget(run_id: Optional[str] = None) -> None:
         # run 时按该 run 的预算执行，使失控的 graph 阶段能真正触发 LLM_RUN_BUDGET_TOKENS。
         # 0 个或 ≥2 个活跃 run 时保持旧语义（读 '_global' 桶；纯含糊花费不计入任何 run 预算）。
         rid = _sole_active_run() or _DEFAULT_BUCKET
-    snap = LLMMeter.snapshot(rid)["total"]
+    cumulative = LLMMeter.cumulative_snapshot(rid)
+    snap = (cumulative if cumulative is not None else LLMMeter.snapshot(rid))["total"]
     if max_tokens > 0 and snap["total_tokens"] > max_tokens:
         raise BudgetExceeded(
             f"run exceeded token budget: {snap['total_tokens']} > {max_tokens}")

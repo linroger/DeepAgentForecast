@@ -71,6 +71,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 import argparse
 import asyncio
+import contextvars
 import hashlib
 import inspect
 import json
@@ -2110,41 +2111,56 @@ def _wrap_llm_client_usage(client: Any) -> Any:
     try:
         from app.utils.oasis_llm import _estimate_tokens_of
 
+        # chat_json calls the wrapped chat once or twice for JSON repair. Each
+        # nested chat owns its usage; the outer JSON wrapper must not record the
+        # last response again. This counter follows one synchronous invocation
+        # tree, independently in every thread/context, and resets at its root.
+        invocation_count = contextvars.ContextVar("sim_llm_usage_invocations", default=0)
+
         def _wrap_method(name: str) -> None:
             orig = getattr(client, name, None)
             if not callable(orig):
                 return
 
             def _wrapped(messages, *args, **kwargs):
+                before = invocation_count.get()
+                token = invocation_count.set(before + 1)
                 try:
-                    result = orig(messages, *args, **kwargs)
-                except Exception:
-                    _record_sim_llm_error()
-                    raise
-                try:
-                    model = str(
-                        getattr(client, "model", "")
-                        or getattr(client, "provider", "")
-                        or "unknown"
-                    )
-                    usage = getattr(client, "_last_usage", None)
-                    if isinstance(usage, dict) and (
-                        usage.get("prompt_tokens") or usage.get("completion_tokens")
-                    ):
-                        _record_sim_llm_usage(
-                            "provider", model,
-                            usage.get("prompt_tokens", 0),
-                            usage.get("completion_tokens", 0),
+                    try:
+                        result = orig(messages, *args, **kwargs)
+                    except Exception:
+                        if invocation_count.get() == before + 1:
+                            _record_sim_llm_error()
+                        raise
+                    if invocation_count.get() != before + 1:
+                        return result  # Inner calls already recorded their own outcomes.
+                    try:
+                        model = str(
+                            getattr(client, "model", "")
+                            or getattr(client, "provider", "")
+                            or "unknown"
                         )
-                    else:
-                        _record_sim_llm_usage(
-                            "estimate", model,
-                            _estimate_tokens_of(messages),
-                            _estimate_tokens_of(result),
-                        )
-                except Exception:  # noqa: BLE001 — 计量绝不影响调用结果
-                    pass
-                return result
+                        usage = getattr(client, "_last_usage", None)
+                        if isinstance(usage, dict) and (
+                            usage.get("prompt_tokens") or usage.get("completion_tokens")
+                        ):
+                            _record_sim_llm_usage(
+                                "provider", model,
+                                usage.get("prompt_tokens", 0),
+                                usage.get("completion_tokens", 0),
+                            )
+                        else:
+                            _record_sim_llm_usage(
+                                "estimate", model,
+                                _estimate_tokens_of(messages),
+                                _estimate_tokens_of(result),
+                            )
+                    except Exception:  # noqa: BLE001 — 计量绝不影响调用结果
+                        pass
+                    return result
+                finally:
+                    if before == 0:
+                        invocation_count.reset(token)
 
             setattr(client, name, _wrapped)
 

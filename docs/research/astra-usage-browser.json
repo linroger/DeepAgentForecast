@@ -1,0 +1,132 @@
+{
+  "schema": "astra-browser-acceptance/v1",
+  "slice": "ASTRA-04a",
+  "verified_at": "2026-09-07T17:57:09.459657+00:00",
+  "result": "passed",
+  "browser_acceptance": {
+    "fixture_origin": "http://127.0.0.1:18743",
+    "fixture_marker": "astra-launch-offline/v1",
+    "scenarios": {
+      "known": {
+        "text": "ELAPSED\n1m 00s\nACTIVE\nSPEND\n2.5K tok\n$0.75\nBUDGET\n7.5K\nLEFT",
+        "budget_title": "2.5K / 10K tokens \u00b7 25% \u00b7 based on recorded usage only; coverage is incomplete",
+        "fill": {
+          "inline_width": "25%",
+          "same_node": true,
+          "computed_width": "14.8438px",
+          "display": "block"
+        }
+      },
+      "unavailable": {
+        "text": "ELAPSED\n1m 00s\nACTIVE\nSPEND\nunknown tok\nBUDGET\nunknown\nLEFT",
+        "budget_title": "unknown / 10K tokens \u00b7 based on recorded usage only; coverage is incomplete",
+        "fill": {
+          "inline_width": "",
+          "same_node": true,
+          "computed_width": "auto",
+          "display": "none"
+        }
+      },
+      "zero": {
+        "text": "ELAPSED\n1m 00s\nACTIVE\nSPEND\n0 tok\n$0.00\nBUDGET\n10K\nLEFT",
+        "budget_title": "0 / 10K tokens \u00b7 0% \u00b7 based on recorded usage only; coverage is incomplete",
+        "fill": {
+          "inline_width": "0%",
+          "same_node": true,
+          "computed_width": "0px",
+          "display": "block"
+        }
+      }
+    },
+    "status_reads": {
+      "known": 1,
+      "unavailable": 1,
+      "zero": 1
+    },
+    "assertions": {
+      "same_dom_node": true,
+      "stale_inline_width_cleared": true,
+      "unavailable_fill_hidden": true,
+      "unavailable_labels_explicit": true,
+      "unavailable_has_no_numeric_spend": true,
+      "recorded_zero_visible": true,
+      "incomplete_coverage_disclosed": true
+    },
+    "page_errors": [],
+    "blocked_requests": [],
+    "browser": "150.0.7871.187"
+  },
+  "fixture": {
+    "server": "backend/tests/fixtures/astra_launch_qa_server.py",
+    "origin": "http://127.0.0.1:18743",
+    "marker": "astra-launch-offline/v1",
+    "status_source": "Synthetic GET responses intercepted by the manual Playwright harness for pipe_usageqa1",
+    "launch_records": 0,
+    "fixture_requests_by_method": {
+      "GET": 14
+    },
+    "isolation": "Origin and method guard installed before navigation. Fixture marker and origin verified before localStorage setup. No backend proxy, provider calls, or launch POSTs."
+  },
+  "verification": {
+    "frontend_unit_and_ssr": {
+      "tests": 113,
+      "passed": 113,
+      "failed": 0,
+      "elapsed_ms": 312.5955
+    },
+    "production_build": {
+      "passed": true,
+      "elapsed_seconds": 1.23,
+      "vite_version": "7.2.7"
+    },
+    "script_syntax": "passed node --check",
+    "source_sha256": {
+      "frontend/src/components/research/RunVitals.vue": "63f0b236c7e30e08673bc9abf99cb0caeef19007b7bc711b1a433de4511dcfe3",
+      "frontend/src/utils/runVitals.js": "a04360e2175d866642918ff43e0b06320213a4309d20261211137381ece49f67",
+      "frontend/tests/runVitals.test.mjs": "82aa62a188849e0315b91943c99f17fbf3f94a064bc7f4297d68e4a650dca222",
+      "frontend/tests/runVitalsRender.test.mjs": "e3f6ec41505c565c1659ee9fc8b9c94c8f2dd59df9c97a32a35c9e518eaba2ca",
+      "frontend/tests/manual/astra-usage.playwright.js": "0b68320f13d30136970458b9e9f18cf58d6bc2aed26fdae2a2538c9a2eb4f69e",
+      "backend/tests/fixtures/astra_launch_qa_server.py": "79035f3c739e06a7d606d50e46ef42b43ca4d66c6b778bedb97c81eed675ad4c"
+    },
+    "tested_bundle_sha256": {
+      "frontend/dist/index.html": "1a8e6f368d5e36edb9c3ac05e317d60e227e96a0cd06b7497ccc85328211f445",
+      "frontend/dist/assets/index-Bm5ZTCB8.js": "5033af6e14704898bc43c6dab3d63626989fb910f66d8fee16e7b6b920147d1f"
+    }
+  },
+  "findings_and_corrections": [
+    "An initial split-command browser process closed during the check; the supervised browser lifecycle was used for final acceptance.",
+    "The first production bundle predated the null-width guard and the transition timed out. The fixture bundle was rebuilt from current source.",
+    "Native Chromium showed that clearing inline width alone expanded the block fill to its full 59.3906px track, versus 14.8438px at known 25%. The component now uses v-show to hide only the fill when percentage is unknown; track layout and DOM node identity remain intact.",
+    "The new SSR assertion requiring the unknown fill to be hidden failed before the v-show correction and passed afterward. Native acceptance then verified known 25% -> hidden unknown -> visible recorded zero on the same DOM node."
+  ],
+  "reproduction": {
+    "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
+    "environment": {
+      "npm_config_offline": "true"
+    },
+    "build": "cd frontend && node node_modules/vite/bin/vite.js build",
+    "fixture": "python3 backend/tests/fixtures/astra_launch_qa_server.py --directory frontend/dist",
+    "manual_script": "frontend/tests/manual/astra-usage.playwright.js",
+    "cli": "/Users/rogerlin/.codex/skills/playwright/scripts/playwright_cli.sh",
+    "browser_steps": [
+      "Open named session astra-usage at about:blank with the cached Playwright CLI.",
+      "Read the manual script file and pass its exact contents as the run-code argument with --json.",
+      "Close only the named astra-usage browser in finally, then terminate the owned fixture process."
+    ]
+  },
+  "cleanup": {
+    "named_browser": "astra-usage",
+    "browser_closed": true,
+    "fixture_stopped": true,
+    "fixture_port_closed": true,
+    "generated_artifacts_archive": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-usage-evidence-n8ws23_9",
+    "generated_checkout_directories_archived": [
+      ".playwright-cli",
+      "output"
+    ]
+  },
+  "limits": [
+    "This is a real Chromium presentation acceptance using synthetic status data, not live provider or backend execution evidence.",
+    "Recorded usage coverage remains incomplete; zero is the observed ledger total and does not establish complete provider coverage."
+  ]
+}
