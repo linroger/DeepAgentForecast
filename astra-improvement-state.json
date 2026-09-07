@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T18:32:47.705762+00:00",
+  "updated_at": "2026-09-07T18:35:21.474979+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -83,7 +83,8 @@
               "id": "ASTRA-04b1",
               "title": "Checkpoint-relative incremental research stream accounting",
               "status": "verified_offline",
-              "evidence": "docs/research/astra-research-stream-verification.json"
+              "evidence": "docs/research/astra-research-stream-verification.json",
+              "implementation_commit": "099bdbe58579fc94ae862faa778b785b349dafb9"
             },
             {
               "id": "ASTRA-04b2",
@@ -258,10 +259,11 @@
       ],
       "result": "577 backend+98 overlay tests passed, plus23 complete-client upgrade checks;2 deployment-only skips. Independent review clear.",
       "next": "ASTRA-04b2 physical API response accounting and SDK retry ownership before reservations.",
-      "verified_source_hashes": "docs/research/astra-research-stream-verification.json"
+      "verified_source_hashes": "docs/research/astra-research-stream-verification.json",
+      "implementation_commit": "099bdbe58579fc94ae862faa778b785b349dafb9"
     }
   ],
-  "last_implementation_commit": "8eaa71b",
+  "last_implementation_commit": "099bdbe58579fc94ae862faa778b785b349dafb9",
   "optimization_objectives": {
     "minimize": [
       "provider work and accounted consumption",

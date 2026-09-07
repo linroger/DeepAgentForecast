@@ -355,5 +355,6 @@
     "No workflow-wide hard budget or invoice bound; per-attempt response accounting, SDK retry ownership and reservations remain next.",
     "One checkpoint read per stream and small per-message/transport state add accounting overhead; no end-to-end speedup or Pareto optimality is claimed.",
     "GitHub publication remains blocked by the previously rejected authentication; no retry without evidence of change."
-  ]
+  ],
+  "implementation_commit": "099bdbe58579fc94ae862faa778b785b349dafb9"
 }
