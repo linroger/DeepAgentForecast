@@ -288,7 +288,9 @@ class UsageLedger:
                 if counter["calls"] or counter["total_tokens"]:
                     bases.add(row["billing_basis"])
                     estimated = estimated or bool(row["cost_estimated"])
-                    cache_partition_known = cache_partition_known and bool(row["cache_partition_known"])
+                # Late cache detail can grow in a resumed attempt without any
+                # new calls or total tokens; its partition remains unknown.
+                cache_partition_known = cache_partition_known and bool(row["cache_partition_known"])
             for counter in [total, fallback, *by_stage.values(), *by_model.values(), *by_source.values()]:
                 counter["latency_ms"] = round(counter["latency_ms"], 1)
                 counter["cost_usd"] = round(counter["cost_usd"], 6)

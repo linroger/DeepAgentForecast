@@ -1,0 +1,359 @@
+{
+  "schema": "astra-research-stream-verification/v1",
+  "verified_at": "2026-09-07T18:32:47.705762+00:00",
+  "slice": "ASTRA-04b1",
+  "status": "verified_offline",
+  "baseline_commit": "0c37c316effeeb33969c27084177428787c15c43",
+  "scope": "Checkpoint-relative incremental research observations through the full client, bridge log, parent process and durable ledger; full ASTRA-04 remains incomplete.",
+  "gates": {
+    "backend": {
+      "passed": 577,
+      "failures": 0,
+      "skipped": [
+        {
+          "suite": "tests.test_audit_fixes_research.TestConfigParity",
+          "test": "test_bridge_matches_deployed",
+          "reason": "deployed deer-flow checkout absent"
+        }
+      ],
+      "seconds": 7.662,
+      "command": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-o",
+        "addopts=",
+        "-q",
+        "backend/tests/test_usage_ledger.py",
+        "backend/tests/test_durable_telemetry.py",
+        "backend/tests/test_llm_durable_accounting_stop.py",
+        "backend/tests/test_durable_pipeline_usage.py",
+        "backend/tests/test_usage_completion_gate.py",
+        "backend/tests/test_telemetry.py",
+        "backend/tests/test_telemetry_fallback_attribution.py",
+        "backend/tests/test_audit_fixes_infra.py",
+        "backend/tests/test_research_spend_flush.py",
+        "backend/tests/test_wave9_orchestrator.py",
+        "backend/tests/test_orchestrator_research_wiring.py",
+        "backend/tests/test_token_budget.py",
+        "backend/tests/test_seed_ensemble.py",
+        "backend/tests/test_status_live_block.py",
+        "backend/tests/test_launch_intent_api.py",
+        "backend/tests/test_launch_intents.py",
+        "backend/tests/test_sim_meter_persistence.py",
+        "backend/tests/test_persona_meter_context.py",
+        "backend/tests/test_sim_context_persona.py",
+        "backend/tests/test_actor_role_prompt.py",
+        "backend/tests/test_research_stream_usage.py",
+        "backend/tests/test_research_cache_observations.py",
+        "backend/tests/test_wave9_research_speed.py",
+        "backend/tests/test_audit_fixes_research.py",
+        "backend/tests/test_astra_compaction_bridge.py",
+        "backend/tests/test_deerflow_bridge_sync_guard.py",
+        "backend/tests/test_loop010_global_synthesis.py",
+        "--disable-warnings",
+        "--maxfail=3",
+        "--junitxml=/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-stream-evidence-agm48lif/backend.xml"
+      ],
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    },
+    "overlay-fresh": {
+      "passed": 98,
+      "failures": 0,
+      "skipped": [
+        {
+          "suite": "deerflow_bridge.patches.tests.test_client_usage_overlay",
+          "test": "test_deployed_client_carries_the_overlay",
+          "reason": "deployed deer-flow tree absent"
+        }
+      ],
+      "seconds": 0.933,
+      "command": {
+        "argv": [
+          "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/python",
+          "-B",
+          "-m",
+          "pytest",
+          "-o",
+          "addopts=",
+          "-q",
+          "deerflow_bridge/patches/tests",
+          "--junitxml=/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-stream-evidence-agm48lif/overlay-fresh.xml"
+        ],
+        "env": {
+          "DEERFLOW_CLIENT_TEST_SOURCE": "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow-2.0.0/backend/packages/harness/deerflow/client.py"
+        }
+      },
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    },
+    "client-upgrade": {
+      "passed": 23,
+      "failures": 0,
+      "skipped": [],
+      "seconds": 0.183,
+      "command": {
+        "argv": [
+          "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/python",
+          "-B",
+          "-m",
+          "pytest",
+          "-o",
+          "addopts=",
+          "-q",
+          "deerflow_bridge/patches/tests/test_client_stream_usage.py",
+          "--junitxml=/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-stream-evidence-agm48lif/client-upgrade.xml"
+        ],
+        "env": {
+          "DEERFLOW_CLIENT_TEST_SOURCE": "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/packages/harness/deerflow/client.py"
+        }
+      },
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    }
+  },
+  "numeric_reproduction": {
+    "cases": {
+      "checkpoint_replay": {
+        "after": 7,
+        "before": 107
+      },
+      "component_highwater": {
+        "after": 130,
+        "before": 120
+      },
+      "early_consumer_close": {
+        "after": 7,
+        "before": 0
+      },
+      "interrupted_stream": {
+        "after": 7,
+        "before": 0
+      },
+      "same_id_values_growth": {
+        "after": 110,
+        "before": 10
+      }
+    },
+    "schema": "astra-stream-usage-reproduction/v1",
+    "source_sha256": {
+      "patched_complete_client": "3fd207aa810c8c68bab4efeec46623526fa3565f08604a66cd11978f31337fed",
+      "prior_overlay_complete_client": "f78a37f7c5a4d8315fb4e933815ad7507e718a1b74afcc635bde4f0c2f6e694b",
+      "vendor": "8ec3018479bd6ca859989e49eb142a92153f50a8b60ec60e54efd13b143b7ddb"
+    }
+  },
+  "numeric_reproduction_command": {
+    "argv": [
+      "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/python",
+      "-B",
+      "-m",
+      "pytest",
+      "-o",
+      "addopts=",
+      "-q",
+      "-s",
+      "deerflow_bridge/patches/tests/test_client_stream_usage.py::test_complete_client_before_after_numeric_receipt"
+    ],
+    "env": {
+      "DEERFLOW_CLIENT_TEST_SOURCE": "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow-2.0.0/backend/packages/harness/deerflow/client.py"
+    }
+  },
+  "additional_regressions": {
+    "already_received_values_frame": {
+      "initial_iteration_observed": 7,
+      "corrected_observed": 18,
+      "checkpoint_replay_adds": 0
+    },
+    "quoted_usage_tag": {
+      "baseline_wrongly_recorded": 12006,
+      "corrected_fixture_tokens": 18
+    },
+    "corrective_break": "The generator is not advanced after the triggering display; no extra model step is admitted by that iteration.",
+    "cache_only_resume": "Zero new input/output/calls with positive cache growth keeps cache_partition_known=false.",
+    "typed_compaction_stop": "Observed7tokens and confirmed source receipts survive; next graph.stream calls=0; fetch retry is not invoked."
+  },
+  "review": {
+    "result": "No remaining blocking findings within ASTRA-04b1.",
+    "reviewer": "past_run_bottlenecks",
+    "resolved": [
+      "Account every AI message in a received values frame before any display can trigger interruption.",
+      "Accumulate additive LangChain chunks before cumulative same-message snapshot comparison.",
+      "Preserve unknown cache partition for cache-only resumed observations.",
+      "Anchor parent event parsing and escape bridge CR/LF so source text does not manufacture usage events."
+    ],
+    "permanent_compaction_checks": true
+  },
+  "quality": {
+    "ruff": "All9 changed Python files passed.",
+    "python_parse": "All changed Python files parsed successfully.",
+    "diff_check": "passed",
+    "existing_dependency_warning": "LangChainPendingDeprecationWarning from installed checkpoint serde allowed_objects default; not introduced or configured by this slice.",
+    "frontend": "No frontend files changed; no frontend rerun claimed."
+  },
+  "saved_run_evidence": {
+    "prior_analysis": "docs/research/astra-iteration-04-run-evidence.json",
+    "current_inventory_count": 32,
+    "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+    "research_share_of_reference_main_recorded_tokens_percent": 96.103,
+    "interpretation": "Historical recorded coverage, not invoice billing or current production performance.",
+    "state_sha256": [
+      {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json",
+        "sha256": "f2ba0ca5dadcb28264c29ef948d35f04453498530bc1819d4e0a5532ab8684c1"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_0f2bee7bd649/pipeline_state.json",
+        "sha256": "13ce1061298168da98ba0b99928e1dc82271bb51988de7901053f0d483b71c80"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_12251c96e78d/pipeline_state.json",
+        "sha256": "49063d2fe938fcff34c923745d7eb8b8e58ca903a78ea6b0a0e2948b070899a9"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_2a5b07f9f8c1/pipeline_state.json",
+        "sha256": "09be1309777af1f2b036f295534d0222a988e29453dd69f2e9a26c0207e3d34a"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_3272477a8dc1/pipeline_state.json",
+        "sha256": "be7fb8c8736debb4d5b0ca786ec3bef3ddf1d078517b9820dc5a367a4710b173"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_33f54602f2a0/pipeline_state.json",
+        "sha256": "4312bc32ce9bdd444d62e1ce3fe1bf47e5ec8a2bafa93201edf129db540abfc5"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_41522d5d9790/pipeline_state.json",
+        "sha256": "2fb7c908f1159fc3ee60914fc66261480e9b5eb46d112385954f0800975f2660"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_5985916eb3be/pipeline_state.json",
+        "sha256": "37a3b41a4f0abe2a31d67cd00c77d78a615b6015f14f169418a481f68533c14a"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_66838c1c67de/pipeline_state.json",
+        "sha256": "a073d17441bb263d52d4d4b31e2129881001211ced347eacbfacd5e29c72a746"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_68a0a2365670/pipeline_state.json",
+        "sha256": "d2899d3e8fde724b6487406e8899ae0035f882ef6034bb4a2b87ded56006ccdb"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_69f88f22ed30/pipeline_state.json",
+        "sha256": "445262ec23947a42e13d599a0af2c1e4c9c2a608344b3dd58ecd1fc9f0270e3a"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_750d99882585/pipeline_state.json",
+        "sha256": "1fa6e74448c45237c0cd8ea298539bcc0408e6bbf5c11e1ee95644bad7d14906"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_764249df9c38/pipeline_state.json",
+        "sha256": "64a2d547911e90a0ca1438674ffb19b2d85907f1cda2384a5341c29f23719680"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_7ef597666938/pipeline_state.json",
+        "sha256": "d9d884c0961420cf0370f06095c3e30b258a46349eb68d725e0edca1b714966a"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_8118312f7b79/pipeline_state.json",
+        "sha256": "532bc4a641541792ede712b3436c555d10eabfc37e0f0b7fe2bf8867af47d0fa"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_8b47373016f1/pipeline_state.json",
+        "sha256": "2384af49e7f35ac17a95eab11b94a4d95d37ce014e911c06d70cfb27929e949a"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_8bbc44016735/pipeline_state.json",
+        "sha256": "09ee6469ffc8a4d744c488b42fa42db920995560ae5cdc70fb475ec845c6f30f"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_8bd4981639ac/pipeline_state.json",
+        "sha256": "df60f12889e7be918f3885b79da0f691406646e4c78d530531f0b7c5aaedfaa5"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/pipeline_state.json",
+        "sha256": "cc4544cde9f9a5b0210187230cefdf2b988dfc692b9bd64b862e7884d5117436"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_a335177097fb/pipeline_state.json",
+        "sha256": "feddda1aa239746cdd3901df8dcf089348f49c31285361db9a5133f6086f1b2f"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_a8986bffd918/pipeline_state.json",
+        "sha256": "c5f423f86610c238d08d361c65bdb12cdf0702c759d9ffb88487516d7b10eb60"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_a90b338fdfa0/pipeline_state.json",
+        "sha256": "35bb9f324404951c76a4871c40d5b7ca39b8896857754840a60ee96a771dfe19"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_aa0fb94abe92/pipeline_state.json",
+        "sha256": "0a24b8f2b60f6202b911b1b59eeda97fee15a2db39c309dd830fdf0a1f6a3743"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json",
+        "sha256": "23b04b0b065ef9cd1639041ed0d87a3615a95f06dc242466a5ebe7522add1e22"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_bf2bb3095d11/pipeline_state.json",
+        "sha256": "ae62add8d03461a091016d24536c1be8af91fc74d0dcb0e2903add7b8e9c7e0d"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_cbbd2d4fe2fa/pipeline_state.json",
+        "sha256": "9ccc94be152f06c104baf74bde261c9c1ed32c7d9502e58140835557b13a569e"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_dbeb8c3a4663/pipeline_state.json",
+        "sha256": "f33617aa824274c48d4f9401ff41bb2f1312a7e702f4084bafa4935d0e2b4b78"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_e2egold02/pipeline_state.json",
+        "sha256": "78195344ace339609a828a1d9b68635d97a49d9bde293c32202c467d956c96b3"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_ef32d3d420f4/pipeline_state.json",
+        "sha256": "949e68a1959d6b42052e314f8951ce256edaf47a71fe46274182a1a911b79091"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_f01ed9fe06de/pipeline_state.json",
+        "sha256": "fb5696a8d349b1e97031231e5b170522d5c2f58de2e9d9c6db27434bcc40c181"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json",
+        "sha256": "d35ebcbe44d251b120b9d1d23546efca5935bf11d23782e2bc5f8aaa6fac1bbc"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_f538c1371a96/pipeline_state.json",
+        "sha256": "5f037a933cace7df2f957492fb4043447b003c87c2a4ae4ae11f58d4bfc97564"
+      }
+    ]
+  },
+  "source_sha256": {
+    "backend/app/services/pipeline_orchestrator.py": "c7a66e00ff078a65944c3c203f2f126ec6af51030b1021d3640556be7f943c0c",
+    "backend/app/utils/usage_ledger.py": "78bfce9e70443fb209db7c3f844f4e7342795ac8f1ff9cc7c971476b9625da62",
+    "backend/tests/test_deerflow_bridge_sync_guard.py": "6d2926f5e4b0b29614d637074197c4ff9ea96a6669ebc36cae59ea78a8c79c1b",
+    "backend/tests/test_research_cache_observations.py": "e5e26e7c4c81f259f54f8a9072c0d82fed74c2abbc61b7bee4f5bc655d960a21",
+    "backend/tests/test_research_stream_usage.py": "aaabf8239ed37c928ebedf61bd7ce59d65d53c61341a9faac10e74a8ad8b0bf3",
+    "deerflow_bridge/deerflow_research.py": "1c22150d648ffca22f71b23afc9c4901cd1f8c799ecb8f56258fd5e5bd7a57a6",
+    "deerflow_bridge/patches/apply_subagent_overlays.py": "b0305452d8d64c55071e1158eec74a0f0617dd6db836ee1650af691f2b58cab1",
+    "deerflow_bridge/patches/tests/test_client_stream_usage.py": "b97e483f455e4de6956d718e716b138bdbe671a0d7672799de29c861ce2fe457",
+    "deerflow_bridge/patches/tests/test_client_usage_overlay.py": "b5fae069f18a9db5cbec138c3dd3a951b9eb2f9a2550de854babddf9dbb44c8b"
+  },
+  "read_only_client_sources_sha256": {
+    "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/packages/harness/deerflow/client.py": "db561446400faab15ff165cb316d34fd7ab302b12633092a0987a14a550be312",
+    "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow-2.0.0/backend/packages/harness/deerflow/client.py": "8ec3018479bd6ca859989e49eb142a92153f50a8b60ec60e54efd13b143b7ddb"
+  },
+  "raw_evidence_directory": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-stream-evidence-agm48lif",
+  "automation": {
+    "id": "astra-workflow-improvement-loop",
+    "kind": "heartbeat",
+    "status": "ACTIVE"
+  },
+  "limits": [
+    "No provider requests, production synchronization, saved pipeline mutation or live restart.",
+    "Physical request identity and missing producer usage remain incomplete; usage_complete=false.",
+    "Idless current observations remain explicitly uncertain and may overlap.",
+    "A crash before an observation reaches the parent can still leave an accounting gap.",
+    "Malformed or unidentified checkpoint AI usage prevents graph execution and needs explicit baseline reconciliation.",
+    "No workflow-wide hard budget or invoice bound; per-attempt response accounting, SDK retry ownership and reservations remain next.",
+    "One checkpoint read per stream and small per-message/transport state add accounting overhead; no end-to-end speedup or Pareto optimality is claimed.",
+    "GitHub publication remains blocked by the previously rejected authentication; no retry without evidence of change."
+  ]
+}

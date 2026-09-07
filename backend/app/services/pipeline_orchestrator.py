@@ -1945,9 +1945,15 @@ def _configure_research_budget_env(
 
 def _research_process_usage(telemetry: dict[str, Any]) -> dict[str, Any]:
     """Small immutable-identity snapshot; never includes question or provider text."""
-    return {key: telemetry.get(key) for key in (
+    observation = {key: telemetry.get(key) for key in (
         "process_attempt_id", "model", "tokens_in", "tokens_out", "wall_s",
     )}
+    observation.update(
+        cache_read_tokens=telemetry.get("cache_read_tokens", 0),
+        cache_write_tokens=telemetry.get("cache_write_tokens", 0),
+        cache_partition="unknown",
+    )
+    return observation
 
 
 def _record_research_process_usage(
@@ -1967,6 +1973,11 @@ def _record_research_process_usage(
         completion_tokens=int(telemetry.get("tokens_out") or 0),
         latency_ms=float(telemetry.get("wall_s") or 0) * 1000,
         run_id=rid, stage=STAGE_RESEARCH, calls=1, status=status,
+        cache_read_tokens=telemetry.get("cache_read_tokens", 0),
+        cache_write_tokens=telemetry.get("cache_write_tokens", 0),
+        # These are partial cache observations already included in input usage.
+        # Their absence or remainder cannot establish uncached-token usage.
+        uncached_tokens=None,
         # Stdout aggregates do not prove complete request-level/provider usage.
         usage_source="unknown", billing_basis="subscription" if provider.endswith("-cli") else "estimated_api",
     )
@@ -1998,7 +2009,8 @@ def _flush_failed_research_attempt_spend(spend: Optional[dict[str, Any]],
         return False
     t_in = int(spend.get("tokens_in") or 0)
     t_out = int(spend.get("tokens_out") or 0)
-    if t_in <= 0 and t_out <= 0:
+    if (t_in <= 0 and t_out <= 0
+            and not spend.get("cache_read_tokens") and not spend.get("cache_write_tokens")):
         return False  # 该研究模型未报 usage → 无可计量 token
     if not bool(getattr(Config, "LLM_TELEMETRY_ENABLED", True)):
         return False
@@ -2066,6 +2078,8 @@ class DeerFlowResearchRunner:
         """
         spend: dict[str, Any] = {
             "tokens_in": 0, "tokens_out": 0, "tokens_total": 0,
+            "cache_read_tokens": 0, "cache_write_tokens": 0,
+            "cache_partition": "unknown",
             "t_start": time.time(),
             "model": model or Config.DEERFLOW_MODEL,
             "flushed": False,
@@ -2403,6 +2417,7 @@ class DeerFlowResearchRunner:
         # I-5-7: 结构化研究阶段遥测（token/工具量/壁钟）。bridge 已在 stdout 发出 [usage] 行，
         # 此前只用于推进进度启发，token 数字被丢弃；这里顺带累加，使最贵的研究阶段也进入统一计量。
         _tok_in = _tok_out = _tok_total = 0
+        _cache_read = _cache_write = 0
         _result_events = 0
         _t_start = time.time()
         if _spend is not None:
@@ -2415,42 +2430,52 @@ class DeerFlowResearchRunner:
                     continue
                 last_line = line
                 local = estimator.observe(line)
+                event = _RESEARCH_LOG_EVENT_RE.match(line)
+                event_kind = event.group("kind") if event else None
                 # 解析进度日志的事件类型 [tool]/[result]/[stage]/[ok]/[done]/[error]/[usage]
-                if "[tool]" in line:
+                if event_kind == "tool":
                     tool_events += 1
                     on_progress(local, _tail(line))
-                elif "[result]" in line:
+                elif event_kind == "result":
                     _result_events += 1
                     on_progress(local, _tail(line))
-                elif "[stage]" in line:
+                elif event_kind == "stage":
                     # ResearchProgressEstimator already reserves honest bands for
                     # synthesis/extraction/finalization.  The legacy 92 cap would
                     # now regress a 95% track when triangulation emits [stage].
                     on_progress(local, _tail(line))
-                elif "[usage]" in line:
+                elif event_kind == "usage":
                     # I-5-7: 仅累加 token，不动进度（usage 行非进度信号）。
                     parsed = _parse_usage_line(line)
                     if parsed is not None:
                         _i, _o, _t = parsed
+                        _read, _write = _parse_usage_cache_line(line)
                         _tok_in += _i
                         _tok_out += _o
                         _tok_total += (_t if _t else _i + _o)
+                        _cache_read += _read
+                        _cache_write += _write
                         if _spend is not None:
                             # DEFECT-2：同步进 attempt 级共享 tally，异常出口不丢账。
                             _spend["tokens_in"] = _tok_in
                             _spend["tokens_out"] = _tok_out
                             _spend["tokens_total"] = _tok_total
+                            _spend["cache_read_tokens"] = _cache_read
+                            _spend["cache_write_tokens"] = _cache_write
                         _record_research_process_usage({
                             "process_attempt_id": process_attempt_id,
                             "model": model or Config.DEERFLOW_MODEL,
                             "tokens_in": _tok_in, "tokens_out": _tok_out,
+                            "cache_read_tokens": _cache_read,
+                            "cache_write_tokens": _cache_write,
+                            "cache_partition": "unknown",
                             "wall_s": time.time() - _t_start,
                         }, budget_run_id, status="running")
-                elif "[ok]" in line or "[done]" in line:
+                elif event_kind in {"ok", "done"}:
                     on_progress(local, _tail(line))
-                elif "[error]" in line:
+                elif event_kind == "error":
                     on_progress(local, _tail(line))
-                elif "[init]" in line:
+                elif event_kind == "init":
                     on_progress(max(local, 4), _tail(line))
                 if timed_out["hit"] or time.time() > deadline:
                     break
@@ -2601,6 +2626,9 @@ class DeerFlowResearchRunner:
             "tokens_in": _tok_in,
             "tokens_out": _tok_out,
             "tokens_total": _tok_total or (_tok_in + _tok_out),
+            "cache_read_tokens": _cache_read,
+            "cache_write_tokens": _cache_write,
+            "cache_partition": "unknown",
             "tool_calls": tool_events,
             "results": _result_events,
             "wall_s": round(time.time() - _t_start, 1),
@@ -2626,14 +2654,26 @@ class DeerFlowResearchRunner:
 # I-5-7: 解析 DeerFlow bridge 已发出的「[usage] tokens in=.. out=.. total=..」行
 # （deerflow_research.py:ProgressLog.write('usage', ...)）。容错：out/total 可能为 None
 # 时 bridge 会打印字面 "None"，故各组匹配数字或 None；no-match → 该行不计入。
-_USAGE_RE = re.compile(
-    r"tokens in=(?P<in>\d+|None)\s+out=(?P<out>\d+|None)\s+total=(?P<total>\d+|None)"
+_RESEARCH_LOG_EVENT_RE = re.compile(
+    r"^(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?\+00:00[ \t]+)?"
+    r"\[(?P<kind>[a-z][a-z0-9_-]*)\][ \t]+"
 )
+_USAGE_RE = re.compile(
+    r"tokens in=(?P<in>\d+|None)[ \t]+out=(?P<out>\d+|None)[ \t]+total=(?P<total>\d+|None)(?=\s|$)"
+)
+_USAGE_CACHE_RE = re.compile(r"(?:^|\s)cache_(read|write)=(\d+)(?=\s|$)")
 
 
 def _parse_usage_line(line: str) -> Optional[tuple[int, int, int]]:
     """从一行 [usage] 日志解析 (in, out, total) token；解析不出返回 None。"""
-    m = _USAGE_RE.search(line)
+    event = _RESEARCH_LOG_EVENT_RE.match(line)
+    if event is not None:
+        if event.group("kind") != "usage":
+            return None
+        line = line[event.end():]
+    # Direct callers may provide bare counters. Never scan source content or
+    # skip a malformed usage header to find a later, unrelated token string.
+    m = _USAGE_RE.match(line)
     if not m:
         return None
 
@@ -2641,6 +2681,16 @@ def _parse_usage_line(line: str) -> Optional[tuple[int, int, int]]:
         return int(s) if s and s.isdigit() else 0
 
     return _num(m.group("in")), _num(m.group("out")), _num(m.group("total"))
+
+
+def _parse_usage_cache_line(line: str) -> tuple[int, int]:
+    """Read optional cache observations; legacy logs establish no partition.
+
+    The base usage tuple remains unchanged for existing callers. Cache tokens
+    are already included in input tokens and are never added to that total.
+    """
+    values = {kind: int(value) for kind, value in _USAGE_CACHE_RE.findall(line)}
+    return values.get("read", 0), values.get("write", 0)
 
 
 def _tail(s: str, limit: int = 160) -> str:
@@ -11698,6 +11748,9 @@ class PipelineOrchestrator:
                 "tokens_out": _sum_tel("tokens_out"),
                 "tokens_total": _sum_tel("tokens_total") or (
                     _sum_tel("tokens_in") + _sum_tel("tokens_out")),
+                "cache_read_tokens": _sum_tel("cache_read_tokens"),
+                "cache_write_tokens": _sum_tel("cache_write_tokens"),
+                "cache_partition": "unknown",
                 "tool_calls": _sum_tel("tool_calls"),
                 "results": _sum_tel("results"),
                 # Research lanes overlap; the one global synthesis follows them.
@@ -11895,6 +11948,9 @@ class PipelineOrchestrator:
             "tokens_in": _sum("tokens_in"),
             "tokens_out": _sum("tokens_out"),
             "tokens_total": _sum("tokens_total") or (_sum("tokens_in") + _sum("tokens_out")),
+            "cache_read_tokens": _sum("cache_read_tokens"),
+            "cache_write_tokens": _sum("cache_write_tokens"),
+            "cache_partition": "unknown",
             "tool_calls": _sum("tool_calls"),
             "results": _sum("results"),
             "wall_s": max((float(t.get("wall_s") or 0.0) for t in tels), default=0.0),

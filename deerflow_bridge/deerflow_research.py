@@ -4405,6 +4405,9 @@ class ProgressLog:
         self._lock = threading.Lock()
 
     def write(self, kind: str, message: str) -> None:
+        # Each stdout line is one parent-consumed event. Source/tool text must
+        # never manufacture another event by embedding a newline and a tag.
+        message = message.replace("\r", r"\r").replace("\n", r"\n")
         line = f"{_utcnow()} [{kind}] {message}".rstrip()
         with self._lock:
             self._fh.write(line + "\n")
@@ -9796,6 +9799,99 @@ def _budget_denial_break_at() -> int:
         return 3
 
 
+class _ResearchStreamUsage:
+    """Validate and log observed stream deltas before a turn can be interrupted.
+
+    Stream identity and sequence protect transport replay, not provider request
+    identity. Coverage and cache partition remain unknown even for a clean end.
+    Legacy clients retain their end-only aggregate contract.
+    """
+
+    schema = "research-stream-usage/v1"
+
+    def __init__(self, plog: ProgressLog, thread_id: str, used_stream_ids: set[str]):
+        self.plog = plog
+        self.thread_id = thread_id
+        self.used_stream_ids = used_stream_ids
+        self.stream_id = None
+        self.observations: dict[int, tuple] = {}
+        self.total = (0, 0, 0, 0, 0)
+        self.ended = False
+
+    @staticmethod
+    def counters(usage: dict) -> tuple[int, int, int, int, int]:
+        if not isinstance(usage, dict):
+            raise RuntimeError("Research stream usage is not an object")
+
+        def number(value):
+            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 2**53:
+                raise RuntimeError("Invalid research stream usage counter")
+            return value
+
+        inputs = number(usage.get("input_tokens"))
+        outputs = number(usage.get("output_tokens"))
+        total = number(usage.get("total_tokens"))
+        if total != inputs + outputs:
+            raise RuntimeError("Inconsistent research stream usage total")
+        details = usage.get("input_token_details", {})
+        if not isinstance(details, dict):
+            raise RuntimeError("Invalid research stream cache observations")
+        # Cache observations can arrive after the inclusive input delta. They
+        # must not be added to input or interpreted as a complete partition.
+        return inputs, outputs, total, number(details.get("cache_read", 0)), number(details.get("cache_creation", 0))
+
+    def observe(self, data: dict) -> None:
+        if not isinstance(data, dict) or data.get("schema") != self.schema:
+            raise RuntimeError("Unsupported research stream usage schema")
+        stream_id, sequence = data.get("stream_id"), data.get("sequence")
+        if (not isinstance(stream_id, str) or not stream_id or len(stream_id) > 128
+                or isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0
+                or data.get("thread_id") != self.thread_id):
+            raise RuntimeError("Invalid research stream usage identity")
+        if data.get("usage_complete") is not False or data.get("cache_partition_known") is not False:
+            raise RuntimeError("Unsupported research stream usage completeness claim")
+        counts = self.counters(data.get("usage"))
+        identity_stable = data.get("identity_stable")
+        message_id = data.get("message_id")
+        if (not isinstance(identity_stable, bool)
+                or (sequence > 0 and identity_stable and (not isinstance(message_id, str) or not message_id))):
+            raise RuntimeError("Invalid research usage message identity")
+        signature = (counts, data.get("kind"), message_id, identity_stable, data.get("baseline"))
+        if self.stream_id is None:
+            if sequence != 0 or data.get("kind") != "start" or any(counts) or stream_id in self.used_stream_ids:
+                raise RuntimeError("Missing or reused research stream usage start")
+            self.stream_id = stream_id
+            self.used_stream_ids.add(stream_id)
+        if stream_id != self.stream_id:
+            raise RuntimeError("Research usage changed stream identity")
+        if sequence in self.observations:
+            if self.observations[sequence] != signature:
+                raise RuntimeError("Conflicting research stream usage replay")
+            return
+        if self.ended or sequence != len(self.observations) or (sequence > 0 and data.get("kind") != "delta"):
+            raise RuntimeError("Research stream usage sequence gap")
+        self.observations[sequence] = signature
+        self.total = tuple(a + b for a, b in zip(self.total, counts, strict=True))
+        inputs, outputs, total, cache_read, cache_write = counts
+        self.plog.write("usage", f"tokens in={inputs} out={outputs} total={total} "
+                        f"cache_read={cache_read} cache_write={cache_write} cache_partition=unknown "
+                        f"identity={'stable' if identity_stable else 'unknown'}")
+        if not identity_stable:
+            self.plog.write("warn", "Research usage message identity is unavailable; observations may overlap")
+
+    def finish(self, data: dict) -> None:
+        if self.stream_id is None and not data.get("usage_schema"):
+            usage = data.get("usage", {})
+            self.plog.write("usage", f"tokens in={usage.get('input_tokens')} out={usage.get('output_tokens')} total={usage.get('total_tokens')}")
+            return
+        if (self.stream_id is None or data.get("usage_schema") != self.schema
+                or data.get("stream_id") != self.stream_id):
+            raise RuntimeError("Research stream usage end has no matching start")
+        if self.counters(data.get("usage")) != self.total:
+            raise RuntimeError("Research stream usage end disagrees with observed deltas")
+        self.ended = True  # The final aggregate is a reconciliation, never new usage.
+
+
 def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int, plog: ProgressLog, label: str) -> str:
     """Run one agent turn, logging tool activity, returning the final AI text.
 
@@ -9822,17 +9918,20 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
     _corrective_sent = False     # 纠偏消息只注入一次
     _next_message = message
     _next_limit = recursion_limit
+    _usage_stream_ids: set[str] = set()
     plog.write("stage", f"{label}: starting agent turn (recursion_limit={recursion_limit})")
 
     try:
         while True:
+            _stream_usage = _ResearchStreamUsage(plog, thread_id, _usage_stream_ids)
             for event in _leased_client_stream(
                     client, _next_message, thread_id=thread_id,
                     recursion_limit=_next_limit):
-                if _corrective_pending:
-                    break  # 触发事件已完整处理；结束本流段去注入纠偏消息（生成器随 break 关闭）
                 etype = event.type
                 data = event.data or {}
+                if etype == "usage":
+                    _stream_usage.observe(data)
+                    continue
                 if etype == "messages-tuple":
                     mtype = data.get("type")
                     if mtype == "ai":
@@ -9907,8 +10006,11 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
                 elif etype == "custom":
                     plog.write("custom", _truncate(json.dumps(data, ensure_ascii=False)))
                 elif etype == "end":
-                    usage = data.get("usage", {})
-                    plog.write("usage", f"tokens in={usage.get('input_tokens')} out={usage.get('output_tokens')} total={usage.get('total_tokens')}")
+                    _stream_usage.finish(data)
+                if _corrective_pending:
+                    # The producer emitted usage before this display event.
+                    # Do not advance the generator into another provider step.
+                    break
             if _corrective_pending and not _corrective_sent:
                 _corrective_pending = False
                 _corrective_sent = True

@@ -120,6 +120,209 @@ _CLIENT_USAGE_BODY_PATCHED = (
     "            }\n"
 )
 
+# ASTRA-04b1 must upgrade already-installed LOOP-017 helpers as well as fresh
+# vendor source. The original blocks above remain exact migration anchors.
+_CLIENT_STREAM_USAGE_MARKER = "DRF overlay: checkpoint-relative stream usage v1"
+_CLIENT_STREAM_USAGE_DECL = '''        # DRF overlay: checkpoint-relative stream usage v1
+        counted_usage_by_id: dict[str, dict[str, Any]] = {}
+        chunk_usage_by_id: dict[str, dict[str, Any]] = {}
+        usage_stream_id = str(uuid.uuid4())
+        usage_sequence = -1
+        usage_baseline = "unverified"
+
+        def _normalize_stream_usage(usage, *, check_cache_bounds=True):
+            if usage is None:
+                return None
+            if not isinstance(usage, dict):
+                raise RuntimeError("Invalid research usage metadata")
+            def number(value):
+                if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 2**53:
+                    raise RuntimeError("Invalid research usage counter")
+                return value
+            if "input_tokens" not in usage or "output_tokens" not in usage:
+                raise RuntimeError("Research usage requires input and output counters")
+            result = {key: number(usage[key]) for key in ("input_tokens", "output_tokens")}
+            result["total_tokens"] = result["input_tokens"] + result["output_tokens"]
+            if "total_tokens" in usage and number(usage["total_tokens"]) != result["total_tokens"]:
+                raise RuntimeError("Inconsistent research usage total")
+            details = usage.get("input_token_details")
+            if details is not None:
+                if not isinstance(details, dict):
+                    raise RuntimeError("Invalid research cache details")
+                normalized = {}
+                if "cache_read" in details:
+                    normalized["cache_read"] = number(details["cache_read"])
+                creation_keys = ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens")
+                if "cache_creation" in details or any(key in details for key in creation_keys):
+                    # Anthropic's adapter may use TTL fields instead of the
+                    # generic creation field. These describe the same tokens.
+                    normalized["cache_creation"] = max(
+                        number(details.get("cache_creation", 0)),
+                        sum(number(details[key]) for key in creation_keys if key in details),
+                    )
+                if check_cache_bounds and sum(normalized.values()) > result["input_tokens"]:
+                    raise RuntimeError("Research cache counters exceed inclusive input")
+                if normalized:
+                    result["input_token_details"] = normalized
+            return result
+
+        def _message_usage_snapshot(msg_id, message):
+            from langchain_core.messages import AIMessageChunk
+
+            is_chunk = isinstance(message, AIMessageChunk)
+            current = _normalize_stream_usage(message.usage_metadata, check_cache_bounds=not is_chunk)
+            if current is None or not is_chunk or not msg_id:
+                return current
+            # LangChain chunks add usage when combined. Values/AIMessage usage
+            # is cumulative; first assemble the chunk-side snapshot, then let
+            # the shared highwater deduplicate it against values snapshots.
+            combined = chunk_usage_by_id.setdefault(msg_id, {
+                "input_tokens": 0, "output_tokens": 0, "total_tokens": 0,
+            })
+            for key in ("input_tokens", "output_tokens", "total_tokens"):
+                combined[key] += current[key]
+            if "input_token_details" in current:
+                details = combined.setdefault("input_token_details", {})
+                for key, value in current["input_token_details"].items():
+                    details[key] = details.get(key, 0) + value
+            return combined
+
+        def _stream_usage_event(msg_id, usage, *, kind="delta"):
+            nonlocal usage_sequence
+            usage_sequence += 1
+            return StreamEvent(type="usage", data={
+                "schema": "research-stream-usage/v1", "stream_id": usage_stream_id,
+                "sequence": usage_sequence, "usage": usage, "kind": kind,
+                "thread_id": thread_id, "message_id": msg_id,
+                "identity_stable": kind == "start" or bool(msg_id),
+                "baseline": usage_baseline, "usage_complete": False,
+                # Folded child totals need not preserve all child partitions.
+                "cache_partition_known": False,
+            })
+'''
+_CLIENT_STREAM_USAGE_BODY = '''            current = _normalize_stream_usage(usage)
+            if current is None:
+                return None
+            if msg_id is not None and (not isinstance(msg_id, str) or not msg_id):
+                raise RuntimeError("Invalid research usage message identity")
+            previous = counted_usage_by_id.get(msg_id, {}) if msg_id else {}
+            highwater = {key: max(previous.get(key, 0), current[key])
+                         for key in ("input_tokens", "output_tokens")}
+            highwater["total_tokens"] = highwater["input_tokens"] + highwater["output_tokens"]
+            delta = {key: highwater[key] - previous.get(key, 0)
+                     for key in ("input_tokens", "output_tokens", "total_tokens")}
+            old_details = previous.get("input_token_details", {})
+            details = dict(old_details)
+            detail_delta = {}
+            for key, value in current.get("input_token_details", {}).items():
+                details[key] = max(old_details.get(key, 0), value)
+                detail_delta[key] = details[key] - old_details.get(key, 0)
+            if details:
+                highwater["input_token_details"] = details
+            if msg_id:
+                counted_usage_by_id[msg_id] = highwater
+            if not any(delta.values()) and not any(detail_delta.values()):
+                return None
+            for key in ("input_tokens", "output_tokens", "total_tokens"):
+                cumulative_usage[key] += delta[key]
+            if detail_delta:
+                delta["input_token_details"] = detail_delta
+                total_details = cumulative_usage.setdefault("input_token_details", {})
+                for key, value in detail_delta.items():
+                    total_details[key] = total_details.get(key, 0) + value
+            return delta
+'''
+_CLIENT_STREAM_LOOP = "        for item in self._agent.stream(\n"
+_CLIENT_STREAM_BASELINE = '''        # Read the effective compiled graph's checkpoint before invoking it.
+        # A configured default checkpointer may exist even if the client was
+        # constructed without an explicit one.
+        if not hasattr(self._agent, "checkpointer"):
+            raise RuntimeError("Cannot determine research checkpoint usage baseline")
+        if self._agent.checkpointer is None or self._agent.checkpointer is False:
+            usage_baseline = "stateless"
+        else:
+            checkpoint = self._agent.get_state(config)
+            baseline_values = getattr(checkpoint, "values", None)
+            if not isinstance(baseline_values, dict):
+                raise RuntimeError("Cannot read research checkpoint usage baseline")
+            baseline_messages = baseline_values.get("messages", [])
+            if not isinstance(baseline_messages, (list, tuple)):
+                raise RuntimeError("Invalid research checkpoint messages")
+            for baseline_message in baseline_messages:
+                if not isinstance(baseline_message, AIMessage):
+                    continue
+                baseline_id = getattr(baseline_message, "id", None)
+                baseline_usage = _normalize_stream_usage(getattr(baseline_message, "usage_metadata", None))
+                if not isinstance(baseline_id, str) or not baseline_id or baseline_usage is None:
+                    raise RuntimeError("Research checkpoint AI usage has unknown identity or counters")
+                _account_usage(baseline_id, baseline_usage)
+            cumulative_usage.clear()
+            cumulative_usage.update(input_tokens=0, output_tokens=0, total_tokens=0)
+            usage_baseline = "checkpoint"
+        yield _stream_usage_event(None, dict(cumulative_usage), kind="start")
+
+'''
+_CLIENT_VALUES_ID = '''            for msg in messages:
+                msg_id = getattr(msg, "id", None)
+'''
+_CLIENT_VALUES_USAGE = '''            # Account the entire observed frame before display can trigger a
+            # corrective close. Later values can enrich already-displayed AI
+            # messages with completed subagent usage.
+            frame_usage = []
+            for msg in messages:
+                msg_id = getattr(msg, "id", None)
+                counted_usage = None
+                if isinstance(msg, AIMessage):
+                    counted_usage = _account_usage(msg_id, getattr(msg, "usage_metadata", None))
+                    if counted_usage is not None:
+                        yield _stream_usage_event(msg_id, counted_usage)
+                frame_usage.append(counted_usage)
+
+            for msg, counted_usage in zip(messages, frame_usage, strict=True):
+                msg_id = getattr(msg, "id", None)
+'''
+_CLIENT_MESSAGES_USAGE = "                    counted_usage = _account_usage(msg_id, msg_chunk.usage_metadata)\n"
+_CLIENT_MESSAGES_EMISSION = '''                    counted_usage = _account_usage(msg_id, _message_usage_snapshot(msg_id, msg_chunk))
+                    if counted_usage is not None:
+                        yield _stream_usage_event(msg_id, counted_usage)
+'''
+_CLIENT_END_ORIGINAL = '        yield StreamEvent(type="end", data={"usage": cumulative_usage})\n'
+_CLIENT_END_PATCHED = '''        yield StreamEvent(type="end", data={
+            "usage": cumulative_usage, "usage_schema": "research-stream-usage/v1",
+            "stream_id": usage_stream_id, "usage_complete": False,
+        })
+'''
+
+
+def _patch_client_stream_usage(source: str, target: Path) -> str:
+    """Upgrade the whole generator path, refusing partial/drifted overlays."""
+    replacements = (
+        (_CLIENT_USAGE_DECL_PATCHED, _CLIENT_STREAM_USAGE_DECL),
+        (_CLIENT_USAGE_BODY_PATCHED, _CLIENT_STREAM_USAGE_BODY),
+        (_CLIENT_STREAM_LOOP, _CLIENT_STREAM_BASELINE + _CLIENT_STREAM_LOOP),
+        (_CLIENT_MESSAGES_USAGE, _CLIENT_MESSAGES_EMISSION),
+        (_CLIENT_VALUES_ID, _CLIENT_VALUES_USAGE),
+        ('                        _account_usage(msg_id, getattr(msg, "usage_metadata", None))\n', ''),
+        ('                    counted_usage = _account_usage(msg_id, msg.usage_metadata)\n', ''),
+        (_CLIENT_END_ORIGINAL, _CLIENT_END_PATCHED),
+        ('StreamEventType = Literal["values", "messages-tuple", "custom", "end"]',
+         'StreamEventType = Literal["values", "messages-tuple", "custom", "usage", "end"]'),
+    )
+    if _CLIENT_STREAM_USAGE_MARKER in source:
+        required = (_CLIENT_STREAM_USAGE_DECL, _CLIENT_STREAM_USAGE_BODY,
+                    _CLIENT_STREAM_BASELINE + _CLIENT_STREAM_LOOP,
+                    _CLIENT_MESSAGES_EMISSION,
+                    _CLIENT_VALUES_USAGE, _CLIENT_END_PATCHED,
+                    replacements[-1][1])
+        if any(source.count(block) != 1 for block in required):
+            raise RuntimeError(f"client stream usage overlay is partial or drifted: {target}")
+        return source
+    for original, patched in replacements:
+        if source.count(original) != 1:
+            raise RuntimeError(f"client stream usage overlay context drifted: {target}")
+        source = source.replace(original, patched, 1)
+    return source
+
 _TASK_MODEL_ORIGINAL = '        parent_model = metadata.get("model_name")\n'
 _TASK_MODEL_PATCHED = (
     '        # DRF overlay: embedded clients carry the active model under\n'
@@ -315,7 +518,7 @@ def apply(deerflow_root: str | os.PathLike[str]) -> str:
             _CLIENT_CONTEXT_ORIGINAL, _CLIENT_CONTEXT_PATCHED, 1
         )
         client_changed = True
-    if _CLIENT_USAGE_MARKER not in client_source:
+    if _CLIENT_USAGE_MARKER not in client_source and _CLIENT_STREAM_USAGE_MARKER not in client_source:
         for original, patched, what in (
             (_CLIENT_USAGE_DECL_ORIGINAL, _CLIENT_USAGE_DECL_PATCHED, "declaration"),
             (_CLIENT_USAGE_BODY_ORIGINAL, _CLIENT_USAGE_BODY_PATCHED, "body"),
@@ -327,6 +530,9 @@ def apply(deerflow_root: str | os.PathLike[str]) -> str:
                 )
             client_source = client_source.replace(original, patched, 1)
         client_changed = True
+    stream_source = _patch_client_stream_usage(client_source, targets["client"])
+    client_changed = client_changed or stream_source != client_source
+    client_source = stream_source
     if client_changed:
         updates[targets["client"]] = client_source
 

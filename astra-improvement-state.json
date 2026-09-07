@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T18:02:50.384090+00:00",
+  "updated_at": "2026-09-07T18:32:47.705762+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -62,7 +62,9 @@
         "docs/research/astra-usage-verification.json",
         "docs/research/astra-usage-benchmark.json",
         "docs/research/astra-usage-browser.json",
-        "docs/research/astra-iteration-04-run-evidence.json"
+        "docs/research/astra-iteration-04-run-evidence.json",
+        "docs/research/astra-research-stream-verification.json",
+        "docs/research/astra-research-stream-verification.md"
       ],
       "subtasks": [
         {
@@ -75,13 +77,26 @@
         {
           "id": "ASTRA-04b",
           "title": "Provider-boundary reservations and cumulative budget coverage",
-          "status": "pending"
+          "status": "in_progress",
+          "subtasks": [
+            {
+              "id": "ASTRA-04b1",
+              "title": "Checkpoint-relative incremental research stream accounting",
+              "status": "verified_offline",
+              "evidence": "docs/research/astra-research-stream-verification.json"
+            },
+            {
+              "id": "ASTRA-04b2",
+              "title": "Record each physical backend API attempt before validation and control SDK retries",
+              "status": "pending"
+            }
+          ]
         }
       ],
       "limits": [
         "ASTRA-04b provider-boundary reservations and live detached-child coverage are pending.",
         "Budget checks use cumulative recorded observations but remain post-call; not a complete hard spend cap.",
-        "Exact CLI request provenance and cumulative checkpoint-message delta extraction remain incomplete.",
+        "Checkpoint-relative stream deltas are verified offline; exact CLI request provenance, idless observations and pre-delivery crash gaps remain incomplete.",
         "Simulation aggregate model labels retain stable identity; detailed model diagnostics are separate.",
         "Imported historical baselines are opaque and legacy marker-first ambiguity is explicit.",
         "Unknown/cache partition coverage is not inferred; usage_complete remains false."
@@ -202,7 +217,7 @@
   ],
   "next_recommendation": "ASTRA-04",
   "last_completed_slice": [
-    "ASTRA-03"
+    "ASTRA-04b1"
   ],
   "iterations": [
     {
@@ -225,9 +240,28 @@
       "next": "ASTRA-04 durable usage and cumulative budget enforcement.",
       "verified_source_hashes": "docs/research/astra-launch-verification.json",
       "implementation_commit": "06dc8b9"
+    },
+    {
+      "completed_at": "2026-09-07T18:00:54.750363+00:00",
+      "recommendations": [
+        "ASTRA-04a"
+      ],
+      "result": "Durable accounting foundation verified offline:532 tests, browser acceptance and independent review.",
+      "next": "ASTRA-04b accounting prerequisites and reservations.",
+      "verified_source_hashes": "docs/research/astra-usage-verification.json",
+      "implementation_commit": "8eaa71b"
+    },
+    {
+      "completed_at": "2026-09-07T18:32:47.705762+00:00",
+      "recommendations": [
+        "ASTRA-04b1"
+      ],
+      "result": "577 backend+98 overlay tests passed, plus23 complete-client upgrade checks;2 deployment-only skips. Independent review clear.",
+      "next": "ASTRA-04b2 physical API response accounting and SDK retry ownership before reservations.",
+      "verified_source_hashes": "docs/research/astra-research-stream-verification.json"
     }
   ],
-  "last_implementation_commit": "06dc8b9",
+  "last_implementation_commit": "8eaa71b",
   "optimization_objectives": {
     "minimize": [
       "provider work and accounted consumption",
