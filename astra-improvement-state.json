@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T15:57:43+00:00",
+  "updated_at": "2026-09-07T17:05:06.148759+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -37,8 +37,19 @@
       "id": "ASTRA-03",
       "priority": "P1",
       "title": "Add durable launch-intent idempotency",
-      "status": "pending",
-      "evidence": []
+      "status": "verified_offline",
+      "evidence": [
+        "docs/research/astra-launch-verification.json",
+        "docs/research/astra-launch-benchmark.json",
+        "docs/research/astra-launch-verification.md"
+      ],
+      "deployment": "Not deployed; implementation is on the isolated branch.",
+      "limits": [
+        "Keyed initial admission only; legacy unkeyed launches remain non-idempotent.",
+        "No general cross-process resume locking guarantee.",
+        "Crash before pipeline-state persistence retains identity/snapshot; existing resume cannot materialize missing JSON.",
+        "Ledger tombstones do not expire; independent ledger removal/rollback loses admission history."
+      ]
     },
     {
       "id": "ASTRA-04",
@@ -160,10 +171,9 @@
       "evidence": []
     }
   ],
-  "next_recommendation": "ASTRA-03",
+  "next_recommendation": "ASTRA-04",
   "last_completed_slice": [
-    "ASTRA-01",
-    "ASTRA-02"
+    "ASTRA-03"
   ],
   "iterations": [
     {
@@ -176,6 +186,15 @@
       "next": "Durable launch-intent idempotency (ASTRA-03).",
       "verified_source_hashes": "docs/research/astra-compaction-verification.json",
       "implementation_commit": "ccb88d2"
+    },
+    {
+      "completed_at": "2026-09-07T17:05:06.148759+00:00",
+      "recommendations": [
+        "ASTRA-03"
+      ],
+      "result": "Durable keyed admission and atomic retirement independently reviewed;239 offline tests plus isolated real-browser acceptance passed.",
+      "next": "ASTRA-04 durable usage and cumulative budget enforcement.",
+      "verified_source_hashes": "docs/research/astra-launch-verification.json"
     }
   ],
   "last_implementation_commit": "ccb88d2"

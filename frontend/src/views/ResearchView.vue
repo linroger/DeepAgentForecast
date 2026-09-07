@@ -65,12 +65,12 @@
           <div class="console-section">
             <div class="console-header"><span class="console-label">&gt;_ {{ L('研究 / 预测问题', 'Research / forecast question') }}</span></div>
             <div class="input-wrapper">
-              <textarea v-model="prompt" class="code-input" rows="6" :disabled="starting"
+              <textarea v-model="prompt" class="code-input" rows="6" :disabled="launchFormLocked"
                 :placeholder="L('// 例：预判2035年前全球电动汽车市场的发展趋势', '// e.g. Forecast global EV market trends through 2035')"></textarea>
             </div>
             <div class="examples">
               <span class="ex-label">{{ L('示例：','Examples:') }}</span>
-              <button v-for="(ex, i) in exampleList" :key="i" class="ex-chip" @click="prompt = ex" :disabled="starting">{{ exShort(ex) }}</button>
+              <button v-for="(ex, i) in exampleList" :key="i" class="ex-chip" @click="prompt = ex" :disabled="launchFormLocked">{{ exShort(ex) }}</button>
             </div>
           </div>
 
@@ -80,19 +80,19 @@
             <div class="param">
               <label>{{ L('模式','Mode') }}</label>
               <div class="seg">
-                <button :class="{active: mode==='full'}" @click="mode='full'" :disabled="starting">{{ L('完整管线','Full pipeline') }}</button>
-                <button :class="{active: mode==='research_only'}" @click="mode='research_only'" :disabled="starting">{{ L('仅研究','Research only') }}</button>
+                <button :class="{active: mode==='full'}" @click="mode='full'" :disabled="launchFormLocked">{{ L('完整管线','Full pipeline') }}</button>
+                <button :class="{active: mode==='research_only'}" @click="mode='research_only'" :disabled="launchFormLocked">{{ L('仅研究','Research only') }}</button>
               </div>
             </div>
             <div class="param">
               <label>{{ L('研究深度','Research depth') }}</label>
               <div class="seg">
-                <button v-for="d in depths" :key="d" :class="{active: depth===d}" @click="depth=d" :disabled="starting">{{ depthLabel(d) }}</button>
+                <button v-for="d in depths" :key="d" :class="{active: depth===d}" @click="depth=d" :disabled="launchFormLocked">{{ depthLabel(d) }}</button>
               </div>
             </div>
             <div class="param" v-if="mode==='full'">
               <label>{{ L('回合上限（日历模式下将粗化时间粒度，不截断预测期）','Round cap (calendar mode coarsens time granularity, never truncates the horizon)') }}</label>
-              <input v-model.number="maxRounds" type="number" min="1" :placeholder="L('留空=按时长自动','blank = auto')" class="num-input" :disabled="starting"/>
+              <input v-model.number="maxRounds" type="number" min="1" :placeholder="L('留空=按时长自动','blank = auto')" class="num-input" :disabled="launchFormLocked"/>
             </div>
           </div>
 
@@ -104,13 +104,13 @@
           <div v-show="showAdvanced" class="console-section params-row adv-row">
             <div class="param">
               <label>{{ L('研究语言','Research language') }}</label>
-              <select v-model="researchLanguage" class="adv-select" :disabled="starting">
+              <select v-model="researchLanguage" class="adv-select" :disabled="launchFormLocked">
                 <option v-for="o in LANGUAGE_OPTIONS" :key="o.v" :value="o.v">{{ locale==='en' ? o.en : o.zh }}</option>
               </select>
             </div>
             <div class="param">
               <label>{{ L('研究模型','Research model') }}</label>
-              <select v-model="researchModel" class="adv-select" :disabled="starting">
+              <select v-model="researchModel" class="adv-select" :disabled="launchFormLocked">
                 <option value="">{{ L('默认','Default') }}</option>
                 <option v-for="m in DEERFLOW_MODELS" :key="m" :value="m">{{ m }}</option>
               </select>
@@ -129,7 +129,20 @@
           </div>
 
           <div class="console-section btn-section">
-            <button class="start-engine-btn" @click="start" :disabled="!canStart || starting">
+            <div v-if="launchIntent" class="launch-recovery" role="status" aria-live="polite">
+              <p v-if="launchIntent.admission?.launch_status === 'abandoned'">{{ L('此请求已在启动前撤回。您可以新建请求并修改输入。', 'This request was retired before launch. Choose New to edit the inputs.') }}</p>
+              <p v-else-if="launchIntent.admission?.launch_status === 'unavailable'">{{ L('已保存的管线状态不可用，但启动标识仍然保留。请再次检查，或明确新建另一请求。', 'The saved pipeline state is unavailable, but its launch identity is retained. Check again or deliberately create another request.') }}</p>
+              <p v-else-if="launchIntent.admission?.recovery_required">{{ L('无法确认最初的启动结果。请打开已保存的运行查看当前状态，或再次检查启动结果。', 'The initial launch confirmation is unavailable. Open the saved run to inspect its current status, or check this launch again.') }}</p>
+              <p v-else>{{ L('此问题已有保存的启动请求。请检查启动结果，或使用同一请求重试。', 'This question has a saved launch request. Check its outcome or retry the same request.') }}</p>
+              <div class="launch-recovery-actions">
+                <button class="ghost-btn" @click="checkSavedLaunch" :disabled="starting || restoringLaunch">{{ L('检查启动结果', 'Check launch') }}</button>
+                <button v-if="!launchIntent.admission" class="ghost-btn" @click="retrySavedLaunch" :disabled="starting || restoringLaunch">{{ L('重试此启动请求', 'Retry this launch') }}</button>
+                <button v-else-if="launchIntent.admission.pipeline_id && launchIntent.admission.launch_status !== 'unavailable'" class="ghost-btn" @click="openSavedLaunch" :disabled="starting || restoringLaunch">{{ L('打开已保存的运行', 'Open saved run') }}</button>
+                <button v-if="!launchIntent.admission" class="ghost-btn" @click="discardSavedLaunch" :disabled="starting || restoringLaunch">{{ L('撤回尚未启动的请求', 'Discard unsubmitted launch') }}</button>
+                <button v-if="launchIntent.admission" class="ghost-btn" @click="reset" :disabled="starting || restoringLaunch">{{ L('新建', 'New') }}</button>
+              </div>
+            </div>
+            <button v-else class="start-engine-btn" @click="start" :disabled="!canStart || starting || restoringLaunch">
               <span v-if="!starting">{{ mode==='full' ? L('启动 研究 + 模拟 + 预测','Run research + simulate + forecast') : L('启动深度研究','Run deep research') }}</span>
               <span v-else>{{ L('初始化中…','Initializing…') }}</span>
               <span class="btn-arrow">→</span>
@@ -167,7 +180,7 @@
               {{ continuing ? L('继续中…','Continuing…') : L('继续完整管线 →','Continue to full pipeline →') }}
             </button>
             <button class="ghost-btn" @click="showHistory = true">{{ L('历史','History') }}</button>
-            <button class="ghost-btn" @click="reset">＋ {{ L('新建','New') }}</button>
+            <button class="ghost-btn" @click="reset" :disabled="starting || restoringLaunch">＋ {{ L('新建','New') }}</button>
           </div>
         </div>
 
@@ -229,7 +242,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { runPipeline, cancelPipeline, resumePipeline, getPipelineStatus, getProgressLog, getDossier, continuePipeline, getPreflight } from '../api/research'
+import { runPipeline, getLaunchIntent, abandonLaunchIntent, cancelPipeline, resumePipeline, getPipelineStatus, getProgressLog, getDossier, continuePipeline, getPreflight } from '../api/research'
+import { createLaunchIntentController } from '../utils/launchIntent'
 import { getGraphData } from '../api/graph'
 import { locale, setLocale, L } from '../i18n'
 import {
@@ -263,6 +277,10 @@ function depthLabel(d) {
 }
 const maxRounds = ref(null)
 const starting = ref(false)
+const restoringLaunch = ref(true)
+const launchIntent = ref(null)
+const launchFormLocked = computed(() => starting.value || restoringLaunch.value || !!launchIntent.value)
+let launchViewActive = true
 const error = ref('')
 const showSettings = ref(false)
 
@@ -277,6 +295,27 @@ const LANGUAGE_OPTIONS = [
   { v: 'English', zh: '英文', en: 'English' },
   { v: 'auto', zh: '自动', en: 'Auto' }
 ]
+
+function restoreLaunchInputs(record) {
+  if (!record) return
+  const data = record.payload
+  prompt.value = data.prompt
+  mode.value = data.mode || 'full'
+  depth.value = data.depth || 'deep'
+  maxRounds.value = data.max_rounds ?? null
+  researchLanguage.value = data.language || ''
+  researchModel.value = data.model || ''
+}
+
+const launchController = createLaunchIntentController({
+  submit: runPipeline,
+  lookup: getLaunchIntent,
+  abandon: abandonLaunchIntent,
+  onChange: record => {
+    launchIntent.value = record
+    restoreLaunchInputs(record)
+  }
+})
 
 // —— T5.6: 启动前就绪检查 ——
 const preflightReady = ref(true)
@@ -456,24 +495,62 @@ watch([() => reportId.value, () => (dossier.value && dossier.value.has_report)],
 })
 
 async function start() {
-  if (!canStart.value || starting.value) return
+  if (!canStart.value || starting.value || restoringLaunch.value) return
+  await performLaunchAction(() => launchController.start({
+    prompt: prompt.value.trim(),
+    mode: mode.value,
+    depth: depth.value,
+    max_rounds: maxRounds.value || undefined,
+    language: researchLanguage.value || undefined,
+    model: researchModel.value || undefined
+  }))
+}
+
+async function performLaunchAction(action, { openAdmitted = true } = {}) {
+  if (starting.value) return
   starting.value = true
   error.value = ''
   try {
-    const res = await runPipeline({
-      prompt: prompt.value.trim(),
-      mode: mode.value,
-      depth: depth.value,
-      max_rounds: maxRounds.value || undefined,
-      language: researchLanguage.value || undefined,  // T5.5
-      model: researchModel.value || undefined          // T5.5
-    })
-    beginPipeline(res.data.pipeline_id, prompt.value.trim())
+    const res = await action()
+    // Admission without dispatch remains visible for deliberate recovery.
+    if (launchViewActive && openAdmitted && res.data.pipeline_id && !res.data.recovery_required) {
+      beginPipeline(res.data.pipeline_id, launchController.current().payload.prompt)
+    }
   } catch (e) {
-    error.value = e?.message || L('启动失败', 'Failed to start')
+    error.value = e?.response?.status === 404
+      ? L('尚未找到此启动请求。您可以使用保存的同一请求重试。', 'This launch has not been found. You can explicitly retry the same saved request.')
+      : e?.message || L('启动结果未确认，请检查已保存的请求。', 'The launch outcome is unconfirmed. Check the saved request.')
   } finally {
     starting.value = false
   }
+}
+
+function checkSavedLaunch() { return performLaunchAction(() => launchController.check()) }
+function retrySavedLaunch() { return performLaunchAction(() => launchController.retry()) }
+async function discardSavedLaunch() {
+  if (starting.value || restoringLaunch.value) return
+  starting.value = true
+  let confirmed = false
+  try {
+    confirmed = !!(confirmDlg.value && await confirmDlg.value.open({
+      title: L('撤回尚未启动的请求', 'Discard unsubmitted launch'),
+      message: L(
+        '服务器将检查此请求。若已启动，会保留现有运行；否则会永久关闭该请求，您就可以修改输入。',
+        'The server will check this request. If it has already started, the existing run will be retained. Otherwise the request will be permanently closed so you can edit the inputs.'
+      ),
+      confirmLabel: L('检查并撤回', 'Check and discard'),
+      cancelLabel: L('保留请求', 'Keep request')
+    }))
+  } finally {
+    starting.value = false
+  }
+  if (confirmed && launchViewActive) await performLaunchAction(() => launchController.abandon(), { openAdmitted: false })
+}
+function openSavedLaunch() {
+  const saved = launchController.current()
+  if (starting.value || restoringLaunch.value || !saved?.admission?.pipeline_id || saved.admission.launch_status === 'unavailable') return
+  // Opening a known identity is read-only; any same-ID resume remains explicit.
+  beginPipeline(saved.admission.pipeline_id, saved.payload.prompt)
 }
 
 function beginPipeline(id, initialPrompt = '') {
@@ -831,18 +908,50 @@ function resetState() {
   graphData.value = null; graphLoading.value = false; graphMax.value = false
   activeTab.value = 'log'; userPickedTab.value = false; error.value = ''
 }
-function reset() {
-  resetState()
-  pipelineId.value = ''
-  try { localStorage.removeItem(ACTIVE_PIPELINE_KEY) } catch (e) { /* noop */ }
+async function reset() {
+  if (starting.value || restoringLaunch.value) return
+  starting.value = true
+  try {
+    // Only an explicit New action releases an already-admitted launch intent.
+    // A stale tab is not allowed to clear another tab's replacement request.
+    const admission = launchController.current()?.admission
+    let confirmRecovery = false
+    if (admission?.recovery_required) {
+      confirmRecovery = !!(confirmDlg.value && await confirmDlg.value.open({
+        title: L('有意创建新的推演', 'Create an intentional new run'),
+        message: L(
+          `已有管线 ${admission.pipeline_id} 可能仍在运行。新建会允许另一次独立推演，不会取消已有管线。确定继续？`,
+          `Existing pipeline ${admission.pipeline_id} could still be running. New allows a separate forecast and does not cancel that pipeline. Continue?`
+        ),
+        confirmLabel: L('新建独立推演', 'Create separate run'),
+        cancelLabel: L('保留已有请求', 'Keep saved launch')
+      }))
+      if (!confirmRecovery) return
+    }
+    await launchController.newLaunch({ confirmRecovery })
+    resetState()
+    pipelineId.value = ''
+    try { localStorage.removeItem(ACTIVE_PIPELINE_KEY) } catch (e) { /* noop */ }
+    checkPreflight()
+  } catch (e) {
+    error.value = e?.message || L('无法新建，请先检查已有启动请求。', 'Check the existing launch before creating another.')
+  } finally {
+    starting.value = false
+  }
 }
 
 /** 历史抽屉里删掉的运行若正是当前查看的运行，回到输入页（避免对已删 id 继续轮询/展示）。 */
 function onRunDeleted(id) {
-  if (id && id === pipelineId.value) reset()
+  if (id && id === pipelineId.value) {
+    resetState()
+    pipelineId.value = ''
+    try { localStorage.removeItem(ACTIVE_PIPELINE_KEY) } catch (e) { /* noop */ }
+    // Deletion changes the view, never the launch intent. Only explicit New
+    // releases the retained identity; the server's admission tombstone remains.
+  }
 }
 
-onMounted(() => {
+onMounted(async () => {
   let saved = null
   try {
     saved = localStorage.getItem(ACTIVE_PIPELINE_KEY)
@@ -856,12 +965,26 @@ onMounted(() => {
       }
     }
   } catch (e) { saved = null }
-  if (saved) beginPipeline(saved)
-  else checkPreflight()  // T5.6: 落地即检查就绪状态
+  try {
+    const intent = await launchController.restore()
+    if (!launchViewActive) return
+    // A historical run selected after admission remains the current view.
+    // Unresolved requests still take precedence so their outcome is not lost.
+    if (saved && intent?.admission?.pipeline_id && !intent.admission.recovery_required && saved !== intent.admission.pipeline_id) beginPipeline(saved)
+    else if (intent) await checkSavedLaunch() // Reload only checks; it never submits.
+    else if (saved) beginPipeline(saved)
+  } catch (e) {
+    error.value = e?.message || L('无法读取保存的启动请求。', 'Could not read the saved launch.')
+    if (launchViewActive && saved) beginPipeline(saved)
+  } finally {
+    restoringLaunch.value = false
+    if (launchViewActive && !pipelineId.value) checkPreflight()
+  }
 })
 // T5.6: 切换模式时重新检查（research_only 跳过图谱/报告 LLM 检查）
 watch(mode, () => { if (!pipelineId.value) checkPreflight() })
 onUnmounted(() => {
+  launchViewActive = false
   stopPolling()
   if (pidCopiedTimer) { clearTimeout(pidCopiedTimer); pidCopiedTimer = null }
 })
@@ -904,6 +1027,9 @@ onUnmounted(() => {
 .console-box { border:1px solid var(--color-border, #E5E5E5); border-radius:var(--radius, 2px); padding:8px; box-shadow:var(--shadow-sm, 0 1px 3px rgba(10,10,10,.06)); background:#fff; }
 .console-section { padding:20px; }
 .console-section.btn-section { padding-top:0; }
+.launch-recovery { border:1px solid #DDD; background:#FAFAFA; padding:16px; margin-bottom:12px; }
+.launch-recovery p { margin:0 0 12px; line-height:1.6; }
+.launch-recovery-actions { display:flex; flex-wrap:wrap; gap:10px; }
 .console-header { display:flex; justify-content:space-between; margin-bottom:12px; font-family:var(--mono); font-size:.75rem; color:#666; }
 .input-wrapper { border:1px solid #DDD; background:#FAFAFA; border-radius:var(--radius, 2px); transition:border-color var(--dur-2, 180ms) var(--ease, ease), background var(--dur-2, 180ms) var(--ease, ease); }
 .input-wrapper:focus-within { border-color:var(--orange); background:#fff; }

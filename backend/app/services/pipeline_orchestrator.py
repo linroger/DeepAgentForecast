@@ -7590,7 +7590,7 @@ class PipelineOrchestrator:
             pass
 
     @classmethod
-    def start(
+    def _new_launch_state(
         cls,
         prompt: str,
         *,
@@ -7601,16 +7601,8 @@ class PipelineOrchestrator:
         language: Optional[str] = None,
         model: Optional[str] = None,
     ) -> PipelineState:
-        """创建管线记录并在后台线程启动。立即返回（含 pipeline_id / task_id）。"""
+        """Build an admission snapshot without files, tasks, or background work."""
         pipeline_id = f"pipe_{uuid.uuid4().hex[:12]}"
-        PipelineManager.ensure_dirs(pipeline_id)
-
-        task_manager = TaskManager()
-        task_id = task_manager.create_task(
-            task_type=f"pipeline:{mode}",
-            metadata={"pipeline_id": pipeline_id},
-        )
-
         bands = RESEARCH_ONLY_BANDS if mode == "research_only" else STAGE_BANDS
         stages = {name: StageState(name=name) for name in bands.keys()}
 
@@ -7618,9 +7610,11 @@ class PipelineOrchestrator:
             pipeline_id=pipeline_id,
             prompt=prompt,
             mode=mode,
-            status="running",
-            task_id=task_id,
+            status="pending",
             handoff_dir=PipelineManager.handoff_dir(pipeline_id),
+            owner_pid=os.getpid(),
+            owner_boot_id=_BOOT_ID,
+            heartbeat_at=_utcnow(),
             stages=stages,
         )
         state.options.update({
@@ -7638,6 +7632,31 @@ class PipelineOrchestrator:
         # Foglamp WP1 (1B)：新管线在准入时钉住安全政策快照——服务重载/环境变量漂移
         # 不得让一条已准入的运行悄悄改变图谱反馈/种子/extremize/模拟影响语义。
         state.options["safety_policy_v1"] = capture_safety_policy_v1("admission")
+        return state
+
+    @classmethod
+    def start(
+        cls,
+        prompt: str,
+        *,
+        mode: str = "full",
+        project_name: Optional[str] = None,
+        depth: Optional[str] = None,
+        max_rounds: Optional[int] = None,
+        language: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> PipelineState:
+        """创建管线记录并在后台线程启动。立即返回（含 pipeline_id / task_id）。"""
+        state = cls._new_launch_state(
+            prompt, mode=mode, project_name=project_name, depth=depth,
+            max_rounds=max_rounds, language=language, model=model,
+        )
+        pipeline_id = state.pipeline_id
+        PipelineManager.ensure_dirs(pipeline_id)
+        state.task_id = TaskManager().create_task(
+            task_type=f"pipeline:{mode}", metadata={"pipeline_id": pipeline_id},
+        )
+        state.status = "running"
         PipelineManager.save(state)
 
         cls._cancel_events[pipeline_id] = threading.Event()
@@ -7650,6 +7669,150 @@ class PipelineOrchestrator:
         cls._threads[pipeline_id] = t
         t.start()
         return state
+
+    @classmethod
+    def _launch_intent_result(cls, record: dict[str, Any], *, replayed: bool) -> dict[str, Any]:
+        """Project current execution state without reconciling or restarting it."""
+        if record["launch_status"] == "abandoned":
+            return {
+                "pipeline_id": None, "task_id": None, "mode": None,
+                "status": "cancelled", "launch_status": "abandoned",
+                "replayed": replayed, "recovery_required": False,
+            }
+        pipeline_id = record["pipeline_id"]
+        initial = record["initial_state"]
+        try:
+            data = PipelineManager.load(pipeline_id)
+            readable = (
+                isinstance(data, dict)
+                and PipelineManager.is_incompatible(data) is None
+                and data.get("pipeline_id") == pipeline_id
+                and data.get("status") in {"pending", "running", "completed", "failed", "cancelled"}
+            )
+        except (OSError, ValueError, TypeError, KeyError):
+            data, readable = None, False
+        launch_status = record["launch_status"] if readable else "unavailable"
+        return {
+            "pipeline_id": pipeline_id,
+            "task_id": data.get("task_id") if readable else initial.get("task_id"),
+            "mode": data.get("mode", initial.get("mode", "full")) if readable else initial.get("mode", "full"),
+            "status": data["status"] if readable else "failed",
+            "launch_status": launch_status,
+            "replayed": replayed,
+            # Admission is at-most-once. Ambiguous dispatch requires an explicit
+            # same-ID recovery decision; a response retry never makes it.
+            "recovery_required": launch_status != "dispatched",
+        }
+
+    @classmethod
+    def lookup_launch_intent(
+        cls, key: str, canonical_request: Optional[dict[str, Any]] = None,
+    ) -> Optional[dict[str, Any]]:
+        """Look up a launch before model/preflight checks, including after reload."""
+        from .launch_intents import LaunchIntentStore
+        record = LaunchIntentStore(Config.PIPELINE_DATA_DIR).lookup(key, canonical_request)
+        return cls._launch_intent_result(record, replayed=True) if record is not None else None
+
+    @classmethod
+    def abandon_launch_intent(cls, key: str) -> dict[str, Any]:
+        """Retire an unadmitted key, or disclose an admission that already won."""
+        from .launch_intents import LaunchIntentStore
+        record, created = LaunchIntentStore(Config.PIPELINE_DATA_DIR).abandon(key)
+        return cls._launch_intent_result(record, replayed=not created)
+
+    @classmethod
+    def _run_admitted_launch(cls, state: PipelineState) -> None:
+        """Fence a delayed initial thread against an explicit same-ID recovery."""
+        with cls._lifecycle_lock:
+            data = PipelineManager.load(state.pipeline_id)
+            if (not isinstance(data, dict) or PipelineManager.is_incompatible(data) is not None
+                    or data.get("task_id") != state.task_id or data.get("status") != "running"):
+                return
+            # A same-process resume holds this lock while replacing task_id.
+            # Either it won first and this stale initial worker exits, or this
+            # thread is now alive and resume's live-thread guard rejects overlap.
+        cls._run(state)
+
+    @classmethod
+    def start_idempotent(
+        cls, key: str, canonical_request: dict[str, Any], **launch_kwargs: Any,
+    ) -> dict[str, Any]:
+        """Admit one durable identity and at most one initial dispatch per key.
+
+        The SQLite reservation commits before task/state/thread side effects.
+        Existing reservations are never reclaimed, including when the state is
+        unavailable. Only an explicit same-ID resume may perform recovery.
+        """
+        from .launch_intents import LaunchIntentStore, LaunchIntentStorageError
+        store = LaunchIntentStore(Config.PIPELINE_DATA_DIR)
+        initial_state = cls._new_launch_state(**launch_kwargs)
+        record, created = store.reserve(key, canonical_request, initial_state.to_dict())
+        if not created:
+            return cls._launch_intent_result(record, replayed=True)
+
+        state = initial_state
+        pipeline_id = state.pipeline_id
+        thread = None
+        started = False
+        start_attempted = False
+        start_interrupted = False
+        try:
+            with cls._lifecycle_lock:
+                state.task_id = TaskManager().create_task(
+                    task_type=f"pipeline:{state.mode}", metadata={"pipeline_id": pipeline_id},
+                )
+                state.status = "running"
+                cls._cancel_events[pipeline_id] = threading.Event()
+                thread = threading.Thread(
+                    target=cls._run_admitted_launch, args=(state,), name=f"pipeline-{pipeline_id}", daemon=True,
+                )
+                # Register before saving running state so startup reconciliation
+                # in this process cannot reclaim the admission-to-start window.
+                cls._threads[pipeline_id] = thread
+                PipelineManager.save(state)
+                record = store.transition(key, "dispatching")
+                start_attempted = True
+                thread.start()
+                started = True
+                try:
+                    record = store.transition(key, "dispatched")
+                except LaunchIntentStorageError:
+                    # Work already started. Never mark it failed or launch again
+                    # merely because the dispatch acknowledgement could not save.
+                    return cls._launch_intent_result(record, replayed=False)
+        except Exception:
+            if started or (thread is not None and thread.ident is not None):
+                # Thread.start itself can be interrupted after the worker is
+                # alive. That is an ambiguous acknowledgement, not permission
+                # to fail the live worker or discard its ownership registry.
+                return cls._launch_intent_result(record, replayed=False)
+            # Preserve identity and report a resumable failure where state
+            # storage remains available; raw exception text may contain secrets.
+            try:
+                PipelineManager.mark_failed(pipeline_id, "Pipeline launch was interrupted before dispatch")
+            except Exception:
+                pass
+            if state.task_id:
+                TaskManager().fail_task(state.task_id, "Pipeline launch was interrupted before dispatch")
+            try:
+                record = store.transition(key, "failed", error_code="launch_dispatch_failed")
+            except LaunchIntentStorageError:
+                pass
+            return cls._launch_intent_result(record, replayed=False)
+        except BaseException:
+            # CPython may create the OS thread before assigning its ident. An
+            # interrupt in that window is ambiguous: retain the handle, and let
+            # the guarded worker entry reject any superseded admission task.
+            start_interrupted = start_attempted
+            raise
+        finally:
+            if not started and not start_interrupted and (thread is None or thread.ident is None):
+                # Also clean process-local registrations on a simulated crash
+                # (BaseException). The durable admission survives unchanged.
+                if cls._threads.get(pipeline_id) is thread:
+                    cls._threads.pop(pipeline_id, None)
+                cls._cancel_events.pop(pipeline_id, None)
+        return cls._launch_intent_result(record, replayed=False)
 
     @classmethod
     def cancel(cls, pipeline_id: str) -> dict[str, Any]:

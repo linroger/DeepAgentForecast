@@ -21,6 +21,11 @@ from flask import jsonify, request
 
 from . import research_bp
 from ..config import Config
+from ..services.launch_intents import (
+    LaunchIntentConflict,
+    LaunchIntentStorageError,
+    validate_intent_key,
+)
 from ..services.pipeline_orchestrator import (
     PipelineManager,
     PipelineOrchestrator,
@@ -45,6 +50,85 @@ _VALID_LANGUAGES = {"Chinese", "English", "auto"}
 MIN_DOSSIER_CHARS = 400
 
 
+def _launch_request(data):
+    """Normalize caller inputs without folding mutable server defaults into identity."""
+    if not isinstance(data, dict):
+        raise ValueError("请求必须是 JSON 对象")
+
+    def optional_text(name):
+        value = data.get(name)
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError(f"{name} 必须是字符串")
+        return value.strip() or None
+
+    prompt = optional_text('prompt')
+    if not prompt:
+        raise ValueError("缺少 prompt")
+    mode = (optional_text('mode') or 'full').lower()
+    if mode not in _VALID_MODE:
+        raise ValueError(f"mode 必须是 {sorted(_VALID_MODE)} 之一")
+    depth = optional_text('depth')
+    if depth:
+        depth = depth.lower()
+        if depth not in _VALID_DEPTH:
+            raise ValueError(f"depth 必须是 {sorted(_VALID_DEPTH)} 之一")
+    max_rounds = data.get('max_rounds')
+    if max_rounds is not None:
+        if isinstance(max_rounds, bool) or not isinstance(max_rounds, (str, int, float)):
+            raise ValueError("max_rounds 必须是整数")
+        try:
+            normalized_rounds = int(max_rounds)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("max_rounds 必须是整数") from exc
+        if isinstance(max_rounds, float) and normalized_rounds != max_rounds:
+            raise ValueError("max_rounds 必须是整数")
+        max_rounds = normalized_rounds
+    language = optional_text('language') or optional_text('research_language')
+    if language is not None and language not in _VALID_LANGUAGES:
+        raise ValueError(f"language 必须是 {sorted(_VALID_LANGUAGES)} 之一")
+    if language == 'auto':
+        language = ''
+    model = optional_text('model')
+    return {
+        'prompt': prompt,
+        'mode': mode,
+        'project_name': optional_text('project_name'),
+        'depth': depth,
+        'max_rounds': max_rounds,
+        'language': language,
+        'model': model.lower() if model else None,
+    }
+
+
+def _launch_error(exc, status, code):
+    body = {"success": False, "error": str(exc), "code": code}
+    if getattr(exc, 'pipeline_id', None):
+        body['pipeline_id'] = exc.pipeline_id
+    return jsonify(body), status
+
+
+@research_bp.route('/launch-intents/<intent_key>', methods=['GET'])
+def lookup_launch_intent(intent_key):
+    """Read an admitted identity. Lookup never dispatches or resumes a pipeline."""
+    try:
+        validate_intent_key(intent_key)
+        result = PipelineOrchestrator.lookup_launch_intent(intent_key)
+        if result is None:
+            return jsonify({
+                "success": False, "error": "启动意图尚未登记", "code": "launch_intent_not_found",
+            }), 404
+        return jsonify({"success": True, "data": result})
+    except ValueError as exc:
+        return _launch_error(exc, 400, "invalid_launch_intent")
+    except LaunchIntentStorageError as exc:
+        return _launch_error(exc, 503, "launch_intent_unavailable")
+    except Exception as exc:
+        logger.error("查询启动意图失败", exc_info=True)
+        return _launch_error(exc, 500, "launch_intent_lookup_failed")
+
+
 @research_bp.route('/run', methods=['POST'])
 def run_pipeline():
     """启动统一管线。
@@ -57,44 +141,20 @@ def run_pipeline():
         max_rounds: int        OASIS 最大轮数（可选，截断模拟）
     """
     try:
-        data = request.get_json(silent=True) or {}
-        prompt = (data.get('prompt') or '').strip()
-        if not prompt:
-            return jsonify({"success": False, "error": "缺少 prompt"}), 400
+        canonical = _launch_request(request.get_json(silent=True))
+        intent_key = request.headers.get('Idempotency-Key')
+        if intent_key is not None:
+            validate_intent_key(intent_key)
+            existing = PipelineOrchestrator.lookup_launch_intent(intent_key, canonical)
+            if existing is not None:
+                return jsonify({"success": True, "data": existing})
 
-        mode = (data.get('mode') or 'full').strip().lower()
-        if mode not in _VALID_MODE:
-            return jsonify({"success": False, "error": f"mode 必须是 {_VALID_MODE} 之一"}), 400
-
-        depth = (data.get('depth') or Config.DEERFLOW_RESEARCH_DEPTH).strip().lower()
-        if depth not in _VALID_DEPTH:
-            return jsonify({"success": False, "error": f"depth 必须是 {_VALID_DEPTH} 之一"}), 400
-
-        max_rounds = data.get('max_rounds')
-        if max_rounds is not None:
-            try:
-                max_rounds = int(max_rounds)
-            except (TypeError, ValueError):
-                return jsonify({"success": False, "error": "max_rounds 必须是整数"}), 400
-
-        # T5.5: 每次运行可覆盖研究语言/模型（缺省回退 Config）。在任何子进程启动前校验，杜绝
-        # 一个拼错的模型名烧完研究额度后才暴露。
-        # research_language 是内部字段名（PipelineState.options/scheduled_rerun.py 用它）；
-        # 接口契约字段是 language——同时接受两者，避免调用方按内部命名类比误传后静默退回默认语言。
-        language = (data.get('language') or data.get('research_language') or '').strip() or None
-        if language is not None and language not in _VALID_LANGUAGES:
-            return jsonify({"success": False, "error": f"language 必须是 {sorted(_VALID_LANGUAGES)} 之一"}), 400
-        if language == 'auto':
-            language = ''  # 空串 → 研究子进程不传 --target-language，交给模型自选
-        model = (data.get('model') or '').strip() or None
+        mode, model = canonical['mode'], canonical['model']
         if model is not None and model.lower() not in Config.SUPPORTED_DEERFLOW_MODELS:
             return jsonify({
                 "success": False,
                 "error": f"model 必须是 {', '.join(Config.SUPPORTED_DEERFLOW_MODELS)} 之一",
             }), 400
-        if model:
-            model = model.lower()
-
         # 起飞前体检：把"研究跑完 40 分钟后才发现 Zep Key 是占位符"这类失败提前到现在
         preflight_errors = preflight_pipeline(mode=mode, model=model)
         if preflight_errors:
@@ -104,15 +164,14 @@ def run_pipeline():
                 "preflight_errors": preflight_errors,
             }), 400
 
-        state = PipelineOrchestrator.start(
-            prompt=prompt,
-            mode=mode,
-            project_name=data.get('project_name'),
-            depth=depth,
-            max_rounds=max_rounds,
-            language=language,
-            model=model,
-        )
+        start_options = dict(canonical)
+        start_options['depth'] = canonical['depth'] or Config.DEERFLOW_RESEARCH_DEPTH
+        if start_options['depth'] not in _VALID_DEPTH:
+            raise ValueError(f"depth 必须是 {sorted(_VALID_DEPTH)} 之一")
+        if intent_key is not None:
+            result = PipelineOrchestrator.start_idempotent(intent_key, canonical, **start_options)
+            return jsonify({"success": True, "data": result})
+        state = PipelineOrchestrator.start(**start_options)
         return jsonify({
             "success": True,
             "data": {
@@ -122,9 +181,31 @@ def run_pipeline():
                 "status": state.status,
             },
         })
+    except LaunchIntentConflict as exc:
+        return _launch_error(exc, 409, "launch_intent_conflict")
+    except LaunchIntentStorageError as exc:
+        return _launch_error(exc, 503, "launch_intent_unavailable")
+    except ValueError as exc:
+        return _launch_error(exc, 400, "invalid_launch_request")
     except Exception as e:
         logger.error(f"启动管线失败: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@research_bp.route('/launch-intents/<intent_key>/abandon', methods=['POST'])
+def abandon_launch_intent(intent_key):
+    """Explicitly retire an unadmitted key; preserve any already-admitted run."""
+    try:
+        validate_intent_key(intent_key)
+        result = PipelineOrchestrator.abandon_launch_intent(intent_key)
+        return jsonify({"success": True, "data": result})
+    except ValueError as exc:
+        return _launch_error(exc, 400, "invalid_launch_intent")
+    except LaunchIntentStorageError as exc:
+        return _launch_error(exc, 503, "launch_intent_unavailable")
+    except Exception as exc:
+        logger.error("终止未登记的启动意图失败", exc_info=True)
+        return _launch_error(exc, 500, "launch_intent_abandon_failed")
 
 
 @research_bp.route('/<pipeline_id>/cancel', methods=['POST'])

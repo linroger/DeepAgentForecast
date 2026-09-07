@@ -1,0 +1,99 @@
+{
+  "schema": "astra-implementation-evidence/v1",
+  "verified_at": "2026-09-07T17:07:15.198947+00:00",
+  "slice": [
+    "ASTRA-03"
+  ],
+  "implementation_base_commit": "4d37b22",
+  "suites": [
+    {
+      "name": "backend",
+      "tests": 134,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "elapsed_seconds": 2.17,
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend",
+      "command": "DRF_TEST_PROCESS=1 /Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python -m pytest tests/test_launch_intents.py tests/test_launch_intent_api.py tests/test_runtime_lifecycle_isolation.py tests/test_audit_fixes_infra.py tests/test_wave9_orchestrator.py --junitxml=../output/astra-launch/backend.xml -q"
+    },
+    {
+      "name": "frontend",
+      "tests": 105,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "elapsed_seconds": 0.056474,
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
+      "command": "npm --prefix frontend run test:unit"
+    }
+  ],
+  "total_tests": 239,
+  "browser_acceptance": {
+    "lost_response_get_recovery": true,
+    "post_count_before_reload": 1,
+    "post_count_after_reload": 1,
+    "cross_tab_shared_identity": true,
+    "explicit_new_key": true,
+    "stale_tab_blocked": true,
+    "final_post_count": 2,
+    "mobile_overflow": false,
+    "rejected_payload_retirement": true,
+    "lost_abandon_response_get_recovery": true,
+    "interrupted_saved_run_open": true,
+    "uncertain_new_confirmation": true,
+    "confirmation_focus": true,
+    "page_errors": []
+  },
+  "browser_fixture": {
+    "origin": "http://127.0.0.1:18743",
+    "marker": "astra-launch-offline/v1",
+    "server": "backend/tests/fixtures/astra_launch_qa_server.py",
+    "script": "frontend/tests/manual/astra-launch.playwright.js",
+    "runbook": "docs/research/astra-launch-verification.md",
+    "isolation": "No outbound backend proxy; exact origin and fixture marker checked before localStorage reset; page requests to other origins blocked.",
+    "expected_console_errors": "Injected ERR_EMPTY_RESPONSE twice and deterministic HTTP400; no unexpected page errors."
+  },
+  "quality_gates": {
+    "production_build": "passed; Vite7.2.7, final build1.36s",
+    "ruff": "passed all changed Python source, tests and fixture",
+    "javascript_syntax": "manual browser acceptance script passed node --check",
+    "diff_whitespace": "passed",
+    "independent_review": "No remaining blocking application or test-harness findings after corrections."
+  },
+  "resolved_review_findings": [
+    "Cold SQLite schema-read race waits boundedly and damaged storage still fails closed.",
+    "Deterministic rejected payloads can be atomically retired, including delayedPOST and lost abandonment response.",
+    "Known interrupted launches can be opened explicitly; deliberate New requires confirmation with prior identity.",
+    "Historical dispatch ambiguity is not rewritten after resume or described as current execution failure.",
+    "Delayed initial worker checks persisted task identity before _run.",
+    "Browser fixture resets verify fixture marker and origin, including inside the storage mutation callback."
+  ],
+  "performance_artifact": "docs/research/astra-launch-benchmark.json",
+  "source_sha256": {
+    "backend/app/services/launch_intents.py": "1962e68c69df3c8b0c5d981fa27e1dcfd51561e14b0dbafb3711f71399d247e4",
+    "backend/app/services/pipeline_orchestrator.py": "5a764fa33a1eaf3186a50f43d5e998423d1ff2d58903044a20771c88db0392db",
+    "backend/app/api/research.py": "f5a7efe7a2ff7617a60502a025ef6cbcff7f58c0b8f8760ee89b30995fa7d907",
+    "frontend/src/utils/launchIntent.js": "e4b1b16aa55adf4d4e6206abbd144f8d1ad08ab51f4802b0afabf734f2f32ad0",
+    "frontend/src/api/research.js": "67122b7c5df2897eb9a6c8176238afd71b36ccf20ccce3ac5fb5aa9f12267c58",
+    "frontend/src/views/ResearchView.vue": "a97acee1a045a43af51301df12961690a2eb993554291868456e0118055ef378",
+    "backend/tests/test_launch_intents.py": "32f248080b2845216686fbd3c46b90126ae17a71f18eec681d18a69bf1f82950",
+    "backend/tests/test_launch_intent_api.py": "91ede654f25bca7de1fd19eeb579a9c05a130202c045f40230b0118585923c84",
+    "backend/tests/fixtures/astra_launch_qa_server.py": "79035f3c739e06a7d606d50e46ef42b43ca4d66c6b778bedb97c81eed675ad4c",
+    "frontend/tests/launchIntent.test.mjs": "57e73e6c35c4c41583729fff65af4cf18c743d7a9be95fa35c2103a1483933c3",
+    "frontend/tests/manual/astra-launch.playwright.js": "5726fa05bec8bff07515008e553e3215ebec409889d82b776e03009449b530f0"
+  },
+  "artifact_sha256": {
+    "docs/research/astra-launch/astra-launch-mobile.png": "1eb946a6caa4b3f948a4278f4c331a7f4b9ab07332324d6864868920c6f1d077",
+    "docs/research/astra-launch/astra-launch-recovered.png": "f275f47db74ab4eb71b36221e3443a58d9816516b862c538fe091fb221578e9a",
+    "docs/research/astra-launch/astra-launch-uncertain-new.png": "43ccbc3fa2e88bcac9ae5c7aa1290ce31ac08d9c50b93c90d7a6f4d5849b4287"
+  },
+  "limits": [
+    "Keyed initial admission only; legacy unkeyed launches remain non-idempotent.",
+    "No general cross-process resume locking guarantee.",
+    "Crash before pipeline-state persistence retains identity/snapshot; existing resume cannot materialize missing JSON.",
+    "Ledger tombstones do not expire; independent ledger removal/rollback loses admission history.",
+    "Browser requires durable localStorage, Web Locks and cryptographic UUID on HTTPS or localhost.",
+    "No paid requests, saved pipeline execution, live deployment, service restart or production speedup measurement.",
+    "Original checkout dirty frontend cleanup remains separate; dependencies reused from original installed environments."
+  ]
+}
