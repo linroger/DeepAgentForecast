@@ -132,7 +132,8 @@
                   "id": "ASTRA-04b5a",
                   "title": "Avoid complete usage projections on each cumulative budget check",
                   "status": "verified_offline",
-                  "evidence": "docs/research/astra-budget-verification.json"
+                  "evidence": "docs/research/astra-budget-verification.json",
+                  "implementation_commit": "99eac2abc2a90977d7b935699f837f227b2a04ac"
                 },
                 {
                   "id": "ASTRA-04b5b",
@@ -351,10 +352,11 @@
       ],
       "result": "998 backend tests passed, one deployment-only skip; independent38-case review and paired warm guard comparison clear. Token-only10000-row stress median21.6447\u21923.6771ms; cost-enabled21.6541\u219215.6073ms.",
       "next": "ASTRA-04b5b bounded transactional API reservation/settlement with explicit uncertainty.",
-      "verified_source_hashes": "docs/research/astra-budget-verification.json"
+      "verified_source_hashes": "docs/research/astra-budget-verification.json",
+      "implementation_commit": "99eac2abc2a90977d7b935699f837f227b2a04ac"
     }
   ],
-  "last_implementation_commit": "af5d2a1305bffabe04dc7d33475b2c99640256db",
+  "last_implementation_commit": "99eac2abc2a90977d7b935699f837f227b2a04ac",
   "optimization_objectives": {
     "minimize": [
       "provider work and accounted consumption",
