@@ -32,6 +32,8 @@ Exit codes:
         runtime, import, extraction/finalization, and unexpected caught errors.
     3 = usage/config error before research starts — empty question, or a missing/expired
         Claude credential caught by the pre-flight check.
+    4 = compaction stopped safely; no automatic retry/salvage. This reserved
+        status reaches the parent even when the failure metadata cannot be saved.
 """
 
 from __future__ import annotations
@@ -63,6 +65,31 @@ except ImportError:  # package import path used by backend unit tests
         from deerflow_bridge import research_budget as _research_budget
     except ImportError:  # deployed bridge without optional control module
         _research_budget = None  # type: ignore[assignment]
+
+try:
+    import research_compaction as _research_compaction
+except ImportError:  # package import path used by backend unit tests
+    from deerflow_bridge import research_compaction as _research_compaction
+
+
+# Share the stop with the harness's exact provider-admission boundary so a
+# sibling already inside client.stream cannot keep spending after failure.
+ResearchCompactionError = _research_compaction.ResearchCompactionError
+validate_compaction = _research_compaction.validate_compaction
+_raise_if_compaction_stopped = _research_compaction.raise_if_compaction_stopped
+_stop_after_compaction_failure = _research_compaction.stop_after_compaction_failure
+_reset_compaction_stop = _research_compaction.reset_compaction_stop
+
+
+def _compaction_boundary(function):
+    """Do not let optional fallbacks turn a stopped lane into a successful stage."""
+    @functools.wraps(function)
+    def guarded(*args, **kwargs):
+        _raise_if_compaction_stopped()
+        result = function(*args, **kwargs)
+        _raise_if_compaction_stopped()
+        return result
+    return guarded
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
@@ -1094,7 +1121,7 @@ class ResearchCheckpointer:
                 if pid and pid not in self.completed_passes:
                     self.completed_passes.append(pid)
 
-    def _flush_locked(self) -> None:
+    def _flush_locked(self, *, strict: bool = False) -> None:
         if not self.enabled:
             return
         try:
@@ -1111,6 +1138,11 @@ class ResearchCheckpointer:
                 lane_id=self.lane_id,
             )
         except Exception:  # noqa: BLE001 — 断点记录纯增益，绝不阻断研究
+            if strict:
+                error = ResearchCompactionError(
+                    "checkpoint_persistence_failed", self.thread_id)
+                _stop_after_compaction_failure(error)
+                raise error from None
             pass
 
     def _refresh_fetched_locked(self, fetched_source_count) -> None:
@@ -1124,6 +1156,7 @@ class ResearchCheckpointer:
 
     def record_pass(self, pass_id: str, *, gaps=None, fetched_source_count=None) -> None:
         """记录一个已完成 pass（其笔记确已落在复用线程的 checkpoint 里）+ 刷新进度落盘。"""
+        _raise_if_compaction_stopped()
         if not self.enabled or not pass_id:
             return
         with self._lock:
@@ -1134,7 +1167,8 @@ class ResearchCheckpointer:
             self._refresh_fetched_locked(fetched_source_count)
             self._flush_locked()
 
-    def update_progress(self, *, gaps=None, fetched_source_count=None) -> None:
+    def update_progress(self, *, gaps=None, fetched_source_count=None,
+                        strict: bool = False) -> None:
         """只刷新进度（gaps/来源数），不新增 completed pass（覆盖门/自适应轮用）。"""
         if not self.enabled:
             return
@@ -1142,7 +1176,7 @@ class ResearchCheckpointer:
             if gaps is not None:
                 self.gaps = list(gaps)
             self._refresh_fetched_locked(fetched_source_count)
-            self._flush_locked()
+            self._flush_locked(strict=strict)
 
 # ---------------------------------------------------------------------------
 # #1 STRUCTURAL SOURCE CAPTURE — collect URLs the agent ACTUALLY FETCHED.
@@ -4455,8 +4489,17 @@ def _model_call_lease(weight: int = 1):
 
 def _invoke_model(model, messages):
     """Invoke any bare model under the same cross-process provider envelope."""
+    _raise_if_compaction_stopped()
     with _model_call_lease(1):
-        return model.invoke(messages)
+        # A sibling can stop while this call waits for a provider permit.
+        _raise_if_compaction_stopped()
+        try:
+            result = model.invoke(messages)
+        except ResearchCompactionError as exc:
+            _stop_after_compaction_failure(exc)
+            raise
+    _raise_if_compaction_stopped()
+    return result
 
 
 def _leased_client_stream(client, message: str, *, thread_id: str, recursion_limit: int):
@@ -4466,8 +4509,16 @@ def _leased_client_stream(client, message: str, *, thread_id: str, recursion_lim
     web/tool intervals and would serialize tool-bound research while the model
     is idle. Bare bridge model calls still use :func:`_invoke_model`.
     """
-    yield from client.stream(
-        message, thread_id=thread_id, recursion_limit=recursion_limit)
+    _raise_if_compaction_stopped()
+    try:
+        for event in client.stream(
+                message, thread_id=thread_id, recursion_limit=recursion_limit):
+            _raise_if_compaction_stopped()
+            yield event
+    except ResearchCompactionError as exc:
+        _stop_after_compaction_failure(exc)
+        raise
+    _raise_if_compaction_stopped()
 
 
 def _bridge_fanout_enabled() -> bool:
@@ -6802,7 +6853,8 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
 
 
 def collect_synthesis_message_parts(
-        messages: list) -> "tuple[list[str], list[str]]":
+        messages: list, *, required_thread_id: str = ""
+        ) -> "tuple[list[str], list[str]]":
     """Collect durable evidence while excluding arbitrary human prompts.
 
     Parallel worker notes are injected as typed human messages to avoid a
@@ -6825,6 +6877,22 @@ def collect_synthesis_message_parts(
         elif message_type == "ai":
             parts.append(text)
             ai_parts.append(text)
+        elif (message_type in {"human", "user"}
+              and isinstance(message.get("additional_kwargs"), dict)
+              and "drf_compaction" in message["additional_kwargs"]):
+            # Invalid typed summaries must not fall through to the legacy
+            # worker-note prefix, even if their content imitates that prefix.
+            if not validate_compaction(message, required_thread_id):
+                continue
+            envelope = message["additional_kwargs"]["drf_compaction"]
+            evidence = (
+                "[Derived conversation summary; compaction receipt "
+                f"{envelope['message_id']}; original thread "
+                f"{required_thread_id}. This receipt attests derivation, "
+                "not independent source retrieval.]\n" + text
+            )
+            parts.append(evidence)
+            ai_parts.append(evidence)
         elif (message_type in {"human", "user"}
               and text.startswith(_PARALLEL_EVIDENCE_PREFIX)):
             evidence = text[len(_PARALLEL_EVIDENCE_PREFIX):].lstrip()
@@ -6878,7 +6946,8 @@ def collect_thread_evidence_parts(
     if not messages:
         plog.write("warn", "synthesize: no messages found in thread checkpoints")
         return [], []
-    parts, ai_parts = collect_synthesis_message_parts(messages)
+    parts, ai_parts = collect_synthesis_message_parts(
+        messages, required_thread_id=thread_id)
     append_uncheckpointed_worker_notes(
         parts, ai_parts, _collected_worker_notes())
     return parts, ai_parts
@@ -7883,6 +7952,7 @@ def synthesize_from_evidence_parts(
         return ""
 
 
+@_compaction_boundary
 def synthesize_from_thread(client, thread_id: str, question: str, target_language: str | None, model_name: str, plog: "ProgressLog", depth: str = "standard") -> str:
     """Tool-free report synthesis from a thread's already-gathered research.
 
@@ -9848,7 +9918,16 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
                 _next_limit = max(32, int(recursion_limit) - tool_calls)  # 续跑段用剩余预算的近似值
                 continue
             break
+    except ResearchCompactionError as exc:
+        _stop_after_compaction_failure(exc)
+        if _v2:
+            # Retain already-confirmed source receipts, but do not start a
+            # network retry after the workflow has stopped.
+            _merge_pending_fetches(_pending_fetches)
+        plog.write("error", f"{label}: {exc}; conversation retained; research stopped")
+        raise
     except Exception as exc:  # noqa: BLE001 — salvage partial output; never discard accumulated report text
+        _raise_if_compaction_stopped()
         # LangGraph raises GraphRecursionError when the step budget (recursion_limit)
         # is exhausted; other transient errors can also break the stream mid-turn.
         # Whatever text was accumulated so far is still useful, so we fall through to
@@ -9865,6 +9944,7 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
         plog.write("warn", f"{label}: stream ended early ({kind}: {exc}); salvaging {salvaged_len} chars")
         _flag_research_degradation(f"{label}: {kind} (salvaged {salvaged_len} chars)")  # S10
 
+    _raise_if_compaction_stopped()
     if _v2:
         _retry_dead_fetches(_pending_fetches, plog)  # R2: 死抓取丢弃前程序化重试一次（~8s 退避）
         _merge_pending_fetches(_pending_fetches)  # RES-2: 锁内合并本回合确认成功的抓取
@@ -11825,6 +11905,7 @@ def _prompt_with_compact_prior_notes(prompt: str, reports: list[str]) -> str:
     )
 
 
+@_compaction_boundary
 def run_research_stage(client, question: str, depth: str, target_language: str | None, model_name: str, thread_id: str, plog: ProgressLog, *, resume_completed=None, out_dir=None, resume_evidence_pack: str = "") -> str:
     """Run the research stage.
 
@@ -11845,7 +11926,31 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
     _resume = bool(_resume_done)
     _evidence_only = _env_flag("RESEARCH_EVIDENCE_ONLY", False)
     ckpt = ResearchCheckpointer(out_dir, thread_id, depth, question, enabled=_checkpoint_enabled())
-    ckpt.seed_completed(_resume_done)
+    existing_checkpoint = load_research_checkpoint(out_dir)
+    existing_plan = plan_research_resume(
+        existing_checkpoint, question, depth,
+        expected_run_id=ckpt.run_id,
+        expected_attempt_id=ckpt.attempt_id,
+        expected_lane_id=ckpt.lane_id,
+    )
+    admitted_checkpoint = (
+        resume_completed is not None and existing_plan.get("resume")
+        and existing_plan.get("thread_id") == thread_id
+        and set(existing_plan.get("completed_passes") or []) == _resume_done
+    )
+    if admitted_checkpoint:
+        # Preserve the admitted checkpoint's ordering and progress. Do not
+        # reseal it as an empty discovery record before resumed work begins.
+        ckpt.seed_completed(existing_plan["completed_passes"])
+        ckpt.gaps = list(existing_checkpoint.get("gaps") or [])
+        ckpt.fetched_source_count = int(
+            existing_checkpoint.get("fetched_source_count") or 0)
+    else:
+        ckpt.seed_completed(_resume_done)
+    # Persist thread discovery even when the very first pass stops before it
+    # can record a completion. LangGraph retains that pass's message state.
+    if not admitted_checkpoint:
+        ckpt.update_progress(strict=True)
     if depth != "deep":
         if should_run_pass("standard", _resume_done, _resume):
             text = run_streamed_turn(
@@ -13626,6 +13731,7 @@ def judge_dossier(dossier: str, question: str, target_language: str | None,
         return None
 
 
+@_compaction_boundary
 def run_actor_ontology_stage(client, question: str, depth: str, target_language: str | None,
                              model_name: str, thread_id: str, plog: "ProgressLog",
                              out_dir=None) -> str:
@@ -13722,19 +13828,10 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
         if not messages:
             plog.write("warn", "actor-ontology synthesize: no messages in thread; using research-turn text")
             return research_text
-        parts: list[str] = []
-        for m in messages:
-            if not isinstance(m, dict):
-                continue
-            mtype = m.get("type")
-            text = _message_text(m.get("content"))
-            if not text:
-                continue
-            if mtype == "tool":
-                name = m.get("name") or "source"
-                parts.append(f"[{name}] {text}")
-            elif mtype == "ai":
-                parts.append(text)
+        # Share the validated projection, without importing global Track-A
+        # worker-note fallback into this actor thread.
+        parts, _ = collect_synthesis_message_parts(
+            messages, required_thread_id=thread_id)
         result_receipts = _track_b_search_result_receipts(thread_id)
         if result_receipts:
             parts.append(
@@ -15673,6 +15770,8 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
 
 
 def main() -> int:
+    _reset_compaction_stop()
+    os.environ["RESEARCH_COMPACTION_RUN_SCOPED"] = "true"
     parser = argparse.ArgumentParser(description="DeerFlow deep-research bridge for MiroFish.")
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--prompt", help="The research / prediction question (inline).")
@@ -15718,6 +15817,11 @@ def main() -> int:
 
     out_dir = Path(args.out_dir).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Standalone execution has the same durable evidence boundary as an
+    # orchestrated run; disabling tool budgets must not disable this archive.
+    if not os.environ.get("RESEARCH_COMPACTION_DB", "").strip():
+        os.environ["RESEARCH_COMPACTION_DB"] = str(
+            out_dir / "research_compaction.sqlite3")
 
     # Always write the requirement immediately so the contract has it even on failure.
     # RES-10: 走原子写 — 该文件被后续阶段逐字消费（报告背景/预测问题），watchdog SIGKILL
@@ -15860,6 +15964,8 @@ def main() -> int:
     started_at = _utcnow()
     meta: dict[str, Any] = {
         "status": "running",
+        "research_process_attempt_id": os.environ.get(
+            "RESEARCH_PROCESS_ATTEMPT_ID", ""),
         "thread_id": thread_id,
         "model": args.model,
         "depth": args.depth,
@@ -15887,6 +15993,8 @@ def main() -> int:
         ]
 
     def write_meta() -> None:
+        if meta.get("status") == "completed":
+            _raise_if_compaction_stopped()
         _atomic_write_text(out_dir / META_FILENAME, json.dumps(meta, ensure_ascii=False, indent=2))
 
     write_meta()
@@ -16002,12 +16110,20 @@ def main() -> int:
         # passes only when either the live checkpointer can reconstruct evidence
         # or a same-question durable evidence pack exists.  Otherwise replay the
         # passes on a fresh thread instead of exporting an empty 100-byte pack.
-        if resume_completed and not resume_evidence_pack:
+        if resume_info.get("resumed") and not resume_evidence_pack:
             checkpoint_parts, _checkpoint_ai = collect_thread_evidence_parts(
                 client, thread_id, plog)
             if checkpoint_parts:
                 resume_evidence_pack = render_evidence_pack(checkpoint_parts)
             else:
+                if not resume_completed:
+                    # An interrupted first pass has no completed-pass skip
+                    # plan. Do not silently replace its retained thread and
+                    # call that a resume when its evidence cannot be loaded.
+                    error = ResearchCompactionError(
+                        "checkpoint_unavailable", thread_id)
+                    _stop_after_compaction_failure(error)
+                    raise error
                 prior_thread_id = thread_id
                 thread_id = f"research-{uuid.uuid4().hex[:12]}"
                 resume_completed.clear()
@@ -16264,6 +16380,7 @@ def main() -> int:
                 resume_evidence_pack=resume_evidence_pack,
             )
 
+        _raise_if_compaction_stopped()
         if args.evidence_only:
             evidence_pack = (
                 report if str(report or "").startswith(
@@ -16969,8 +17086,26 @@ def main() -> int:
         return 0
 
     except Exception as e:
+        compaction_stop = _research_compaction.get_compaction_stop()
+        if compaction_stop is None and isinstance(e, ResearchCompactionError):
+            _stop_after_compaction_failure(e)
+            compaction_stop = e
+        if compaction_stop is not None:
+            e = compaction_stop
+            meta["compaction_stop"] = {
+                "code": e.code,
+                "reason": e.reason,
+                "thread_id": e.thread_id,
+                "message_replacement_committed": False,
+                "bridge_automatic_retry": False,
+            }
         meta.update(status="failed", error=str(e), traceback=traceback.format_exc(), finished_at=_utcnow())
-        write_meta()
+        try:
+            write_meta()
+        except Exception:
+            # Disk exhaustion may be the reason compaction stopped. Preserve
+            # its reserved exit status even when this diagnostic cannot write.
+            pass
         try:
             if _research_budget is not None and hasattr(
                     _research_budget, "export_telemetry"):
@@ -16979,6 +17114,12 @@ def main() -> int:
             plog.close()
         except Exception:
             pass
+        if compaction_stop is not None:
+            try:
+                print(f"ERROR: {e}", file=sys.stderr)
+            except (OSError, ValueError):
+                pass
+            return 4
         print(f"ERROR: {e}", file=sys.stderr)
         traceback.print_exc()
         return 2

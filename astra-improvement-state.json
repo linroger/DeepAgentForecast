@@ -1,0 +1,180 @@
+{
+  "schema": "astra-improvement-state/v1",
+  "updated_at": "2026-09-07T15:55:54+00:00",
+  "status": "active",
+  "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
+  "branch": "codex/astra-workflow-review-2026-09-07",
+  "audit_commit": "6f47f47",
+  "current_slice": [],
+  "consecutive_blocked_iterations": 0,
+  "automation_id": "astra-workflow-improvement-loop",
+  "stopping_condition": "All justified recommendations verified or evidence-backed deferred; no measured bottleneck warrants another safe change. Pause after three consecutive iterations blocked by the same external dependency.",
+  "publication": "Blocked: configured GitHub authentication rejected audit push; local work may continue.",
+  "recommendations": [
+    {
+      "id": "ASTRA-01",
+      "priority": "P1",
+      "title": "Make compaction failure non-destructive",
+      "status": "verified_offline",
+      "evidence": [
+        "docs/research/astra-compaction-verification.json",
+        "docs/research/astra-compaction-benchmark.json"
+      ],
+      "deployment": "Not deployed; implementation is on the isolated branch."
+    },
+    {
+      "id": "ASTRA-02",
+      "priority": "P1",
+      "title": "Carry typed compaction evidence into every synthesis consumer",
+      "status": "verified_offline",
+      "evidence": [
+        "docs/research/astra-compaction-verification.json",
+        "docs/research/astra-compaction-benchmark.json"
+      ],
+      "deployment": "Not deployed; implementation is on the isolated branch."
+    },
+    {
+      "id": "ASTRA-03",
+      "priority": "P1",
+      "title": "Add durable launch-intent idempotency",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-04",
+      "priority": "P1",
+      "title": "Unify durable usage and cumulative budget enforcement",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-05",
+      "priority": "P1",
+      "title": "Checkpoint report sections and repair phases",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-06",
+      "priority": "P1",
+      "title": "Checkpoint graph episodes and use individual deadlines",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-07",
+      "priority": "P1",
+      "title": "Seal full WorldState before enabling partial calendar resume",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-08",
+      "priority": "P2",
+      "title": "Move decision-model waits off the simulation event loop",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-09",
+      "priority": "P2",
+      "title": "Read graph edges once per snapshot",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-10",
+      "priority": "P2",
+      "title": "Read only the required research checkpoint; balance actor context",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-11",
+      "priority": "P2",
+      "title": "Measure cache economics and marginal evidence yield",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-12",
+      "priority": "P2",
+      "title": "Bound report tool results consistently and attribute operations",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-13",
+      "priority": "P2",
+      "title": "Make all UI polling lifecycle- and revision-aware",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-14",
+      "priority": "P2",
+      "title": "Reduce chart transfer/parse cost and harden bundle reads",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-15",
+      "priority": "P2",
+      "title": "Produce forecast vectors per ensemble seed, then one report",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-16",
+      "priority": "P2",
+      "title": "Validate reproducible CI and current frontend acceptance",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-17",
+      "priority": "P2",
+      "title": "Build dependency-aware retention around the existing cleanup work",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-18",
+      "priority": "P2",
+      "title": "Avoid reparsing every successful JSON response",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-19",
+      "priority": "P2",
+      "title": "Share backend port configuration and probe through the UI origin",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-20",
+      "priority": "P3",
+      "title": "Extract a few stable stage interfaces and shorten continuity reads",
+      "status": "pending",
+      "evidence": []
+    }
+  ],
+  "next_recommendation": "ASTRA-03",
+  "last_completed_slice": [
+    "ASTRA-01",
+    "ASTRA-02"
+  ],
+  "iterations": [
+    {
+      "completed_at": "2026-09-07T15:55:54+00:00",
+      "recommendations": [
+        "ASTRA-01",
+        "ASTRA-02"
+      ],
+      "result": "Implemented and independently reviewed; 427 offline tests passed, no production speedup claimed.",
+      "next": "Durable launch-intent idempotency (ASTRA-03).",
+      "verified_source_hashes": "docs/research/astra-compaction-verification.json"
+    }
+  ]
+}

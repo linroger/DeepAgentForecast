@@ -21,26 +21,47 @@ try:
 except ImportError:  # Ordinary DeerFlow deployments do not need this control plane.
     _research_budget = None  # type: ignore[assignment]
 
+try:
+    import research_compaction as _research_compaction
+except ImportError:  # Ordinary DeerFlow deployments have no research stop latch.
+    _research_compaction = None  # type: ignore[assignment]
+
+
+def _raise_if_compaction_stopped() -> None:
+    if _research_compaction is not None:
+        _research_compaction.raise_if_compaction_stopped()
+
 
 @contextmanager
 def provider_model_lease():
-    """Reserve exactly one provider call, or no-op outside forecast runs."""
+    """Admit one provider call only while the research run remains healthy."""
+    _raise_if_compaction_stopped()
     if _research_budget is None or not hasattr(_research_budget, "model_call_lease"):
         yield
+        _raise_if_compaction_stopped()
         return
     with _research_budget.model_call_lease(1):
+        # A sibling can stop during the capacity wait. Release the acquired
+        # permit without entering the provider when that has happened.
+        _raise_if_compaction_stopped()
         yield
+        # Already-started calls may finish, but cannot conceal a sibling stop.
+        _raise_if_compaction_stopped()
 
 
 @asynccontextmanager
 async def async_provider_model_lease():
     """Async exact-call permit without blocking the LangGraph event loop."""
+    _raise_if_compaction_stopped()
     if _research_budget is None or not hasattr(
             _research_budget, "async_model_call_lease"):
         yield
+        _raise_if_compaction_stopped()
         return
     async with _research_budget.async_model_call_lease(1):
+        _raise_if_compaction_stopped()
         yield
+        _raise_if_compaction_stopped()
 
 
 @asynccontextmanager

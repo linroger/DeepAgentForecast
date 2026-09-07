@@ -2,6 +2,8 @@
 
 **Review date:** 2026-09-07. **Source baseline:** `main` at `4be3ce4`, including the pre-existing uncommitted frontend cleanup visible during this review. **Scope:** architecture, workflow throughput, token efficiency, recoverability, observability, and operational cost. This report proposes changes; it does not claim they have been implemented or benchmarked.
 
+**Implementation tracking:** The user subsequently authorized implementation. Current status and verification are recorded in [astra-improvement-state.json](astra-improvement-state.json) and [the optimization handoff](docs/handoff/astra-optimization/handoff.md). The findings and source anchors below describe the original audit baseline; they are not a claim that every issue remains open after later commits.
+
 The largest remaining opportunity is to preserve completed work and evidence across component boundaries. The system already has substantial concurrency, caching, retry limits, artifact validation, and recovery logic. Increasing concurrency or shortening research prompts indiscriminately would risk amplifying provider pressure, losing evidence, and creating more expensive retries. The next improvements should make compaction safe, make spending and launch admission durable, checkpoint expensive sub-operations, and remove repeated reads and polling.
 
 The strongest immediate findings are:

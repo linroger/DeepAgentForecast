@@ -1,0 +1,65 @@
+{
+  "schema": "astra-implementation-evidence/v1",
+  "verified_at": "2026-09-07T15:55:54+00:00",
+  "audit_base_commit": "6f47f47",
+  "slice": [
+    "ASTRA-01",
+    "ASTRA-02"
+  ],
+  "suites": [
+    {
+      "name": "backend",
+      "tests": 364,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "elapsed_seconds": 4.641,
+      "command": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python -m pytest -q backend/tests/test_astra_compaction_bridge.py backend/tests/test_research_compaction.py backend/tests/test_research_compaction_stop.py backend/tests/test_research_checkpoint.py backend/tests/test_deerflow_bridge_sync_guard.py backend/tests/test_loop007_research_budget.py backend/tests/test_loop010_research_contracts.py backend/tests/test_actor_intelligence_producer.py backend/tests/test_multipart_synthesis.py backend/tests/test_loop010_global_synthesis.py",
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    },
+    {
+      "name": "overlay",
+      "tests": 63,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "elapsed_seconds": 0.875,
+      "command": "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/python -m pytest -q deerflow_bridge/patches/tests/test_summarization_failure_contract.py deerflow_bridge/patches/tests/test_provider_compaction_stop.py deerflow_bridge/patches/tests/test_summarization_trim_env.py deerflow_bridge/patches/tests/test_lead_agent_trim_none.py",
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    }
+  ],
+  "total_tests": 427,
+  "quality_gates": {
+    "ruff": "passed all changed Python source and test files",
+    "shell_syntax": "bash -n setup.sh passed",
+    "diff_whitespace": "git diff --check passed",
+    "independent_review": "No remaining blocking correctness findings after fixes; reviewer separately ran 26 bridge/parent and 9 native cases."
+  },
+  "resolved_review_findings": [
+    "Preserve admitted resume checkpoint bytes and progress.",
+    "Reject invalid summary metadata before legacy worker-prefix fallback.",
+    "Use reserved exit code 4 when failure metadata cannot be written.",
+    "Install helper for backend-only native startup, retain durable archive fallback, and isolate native session failures."
+  ],
+  "regression_baselines": {
+    "middleware_initial": "20 failed, 1 passed before implementation",
+    "provider_admission": "10 failed, 6 passed before implementation",
+    "native_compatibility": "4 failed before compatibility fix"
+  },
+  "source_sha256": {
+    "deerflow_bridge/research_compaction.py": "f60d2811fcc1c4b05a1f9a0a7c14ff637f60a2d8217f1d53cf5db8ab6fd99752",
+    "deerflow_bridge/deerflow_research.py": "2fe8bc2d1ec58db363b411a93cdcc6808ce914991507daa74bb1948ebd5e0a9e",
+    "deerflow_bridge/patches/middlewares/summarization_middleware.py": "89b7b18f743964daf670193b9f9d468977ed31066982c89eb05c2d83e5641247",
+    "deerflow_bridge/patches/middlewares/model_concurrency_middleware.py": "96194d42f0748458d6ad5c292b3faaff6d799c36f20363604b835692feb1439d",
+    "backend/app/services/pipeline_orchestrator.py": "c4fba95a725ef0e1897a34d43c7c5b7e219b78b8997ac99c124b8f9238cf8e5b",
+    "setup.sh": "8161472b84c5b6fced211d7fa0c09fc287fa24a759084cfd1d5e4b007b249102"
+  },
+  "performance_artifact": "docs/research/astra-compaction-benchmark.json",
+  "limits": [
+    "Offline injected providers; no paid requests or saved-pipeline execution.",
+    "No application deployment or live service restart.",
+    "In-flight outer child processes may finish; the stop is not a global cross-process budget.",
+    "Native dependency/import/isolation tests do not constitute a complete gateway UI launch.",
+    "Existing LangChain serializer pending-deprecation warning observed; no dependency migration included."
+  ]
+}

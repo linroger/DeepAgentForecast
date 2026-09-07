@@ -1091,3 +1091,16 @@ final backend collection is 2,815 tests; the feature gate passes with 2,803
 passed, 11 expected xfails, and the one unchanged actor-unrelated language-purity
 fixture deselected. No paid research/OASIS run, provider mutation, publication,
 generated-runtime edit, commit, or push occurred.
+
+
+## ASTRA implementation program — authorized 2026-09-07
+
+The user explicitly requested implementation of ASTRA-RECOMMENDATIONS.md and a continuous improvement loop. This authorizes the following bounded implementation plan; older plan-approval notes above describe prior work. Work lives on `codex/astra-workflow-review-2026-09-07` in `/Users/rogerlin/.codex/worktrees/drf-astra-improvements`, isolated from the original checkout's unrelated frontend and cleanup work.
+
+1. Repair the compaction/evidence boundary (ASTRA-01/02) as one coherent feature. Summary failures must raise a typed stop, retain pre-compaction messages, and preserve the first-pass checkpoint. Successful summaries require durable original-message capture and producer-owned metadata. Global and actor synthesis must share the validated collector without promoting derived summaries to fetched-source receipts.
+2. Add offline failure, tamper, same-thread restart, consumer, and runtime-sync regression checks. Independently review the combined boundary and run affected existing checks. Do not issue provider calls, start/resume saved pipelines, or restart services for validation.
+3. Record each recommendation in `astra-improvement-state.json` with status and acceptance evidence. Commit verified slices only; GitHub publication is currently blocked by configured authentication. Do not change credentials or repeatedly retry unchanged failures.
+4. Continue hourly in this same task. Each iteration rechecks live source and ownership, picks one highest-value justified slice, records the expected improvement, implements it, validates quality/recovery and relevant performance, reviews, and commits. Preserve existing contracts, concurrency permits, provider state, and unrelated edits. Do not overlap owners or use paid benchmarks without an explicit bounded authorization.
+5. Stop and pause the loop when every justified recommendation is verified or explicitly deferred with evidence, and no measured bottleneck justifies another safe change. After three consecutive iterations requiring the same missing input or external access, pause and report that dependency. Do not equate a green test suite with measured optimal performance; avoid speculative refactors and report unmeasured gains honestly.
+
+Acceptance of the first feature requires timeout/rate-limit/empty/malformed cases in both summary paths; no evidence removal or optional-hook side effects on failure; no further bridge model calls or successful publication after a fatal stop; fresh-process receipt validation and checkpoint preservation; rejection of forged human summaries/content/identity/thread changes; successful serializer transport and global/actor projection; and unchanged source-receipt semantics.

@@ -13,6 +13,8 @@ import hashlib
 import os
 from pathlib import Path
 import runpy
+import subprocess
+import sys
 
 import pytest
 
@@ -167,6 +169,7 @@ def test_syncs_config_reflected_tool_modules(tmp_path, monkeypatch):
     _write(bridge_dir / "search_tools.py", "# search_tools body\n")
     _write(bridge_dir / "cached_fetch.py", "# cached_fetch body\n")
     _write(bridge_dir / "research_budget.py", "# research_budget body\n")
+    _write(bridge_dir / "research_compaction.py", "# research_compaction body\n")
 
     monkeypatch.setattr(
         "app.services.pipeline_orchestrator.__file__",
@@ -179,6 +182,44 @@ def test_syncs_config_reflected_tool_modules(tmp_path, monkeypatch):
     assert (deployed_dir / "search_tools.py").read_text() == "# search_tools body\n"
     assert (deployed_dir / "cached_fetch.py").read_text() == "# cached_fetch body\n"
     assert (deployed_dir / "research_budget.py").read_text() == "# research_budget body\n"
+    assert (deployed_dir / "research_compaction.py").read_text() == "# research_compaction body\n"
+    assert (deployed_dir / "backend" / "research_compaction.py").read_text() == (
+        "# research_compaction body\n")
+
+    _write(bridge_dir / "research_compaction.py", "# updated compaction contract\n")
+    _sync_deerflow_bridge_if_stale(str(deployed_dir))
+    assert (deployed_dir / "research_compaction.py").read_text() == (
+        "# updated compaction contract\n")
+    assert (deployed_dir / "backend" / "research_compaction.py").read_text() == (
+        "# updated compaction contract\n")
+
+
+def test_native_backend_startup_imports_its_synced_compaction_helper(tmp_path, monkeypatch):
+    bridge_dir = tmp_path / "deerflow_bridge"
+    deployed_dir = tmp_path / "deer-flow"
+    _write(bridge_dir / "deerflow_research.py", "# bridge\n")
+    _write(deployed_dir / "deerflow_research.py", "# bridge\n")
+    helper = Path(__file__).resolve().parents[2] / "deerflow_bridge" / "research_compaction.py"
+    _write(bridge_dir / "research_compaction.py", helper.read_text(encoding="utf-8"))
+    monkeypatch.setattr(
+        "app.services.pipeline_orchestrator.__file__",
+        str(tmp_path / "backend" / "app" / "services" / "pipeline_orchestrator.py"),
+    )
+    _sync_deerflow_bridge_if_stale(str(deployed_dir))
+    result = subprocess.run(
+        [sys.executable, "-c", (
+            "from pathlib import Path; import research_compaction as rc; "
+            "assert Path(rc.__file__).resolve() == Path('research_compaction.py').resolve(); "
+            "rc.record_compaction(thread_id='native-thread', message_id='summary-1', "
+            "content='Derived evidence', source_messages=[{'type': 'ai', 'data': "
+            "{'content': 'original evidence'}}], archive_path='archive.sqlite3'); "
+            "print('native helper imported and archived')"
+        )],
+        cwd=deployed_dir / "backend", env={"PYTHONPATH": "."},
+        capture_output=True, text=True, check=True,
+    )
+    assert result.stdout.strip() == "native helper imported and archived"
+    assert (deployed_dir / "backend" / "archive.sqlite3").is_file()
 
 
 def test_syncs_tracked_middleware_overlay(tmp_path, monkeypatch):

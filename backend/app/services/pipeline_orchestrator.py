@@ -1412,11 +1412,18 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> dict[str, Any]:
         # setup.sh copies them, but a bridge-only edit (no ./setup.sh rerun) would
         # otherwise drift exactly like deerflow_research.py did; mirror that guard here.
         for _tool_mod in (
-            "market_tools.py", "search_tools.py", "cached_fetch.py", "research_budget.py"
+            "market_tools.py", "search_tools.py", "cached_fetch.py", "research_budget.py",
+            "research_compaction.py",
         ):
             _tool_src = os.path.join(bridge_dir, _tool_mod)
             if os.path.isfile(_tool_src):
                 pairs.append((_tool_src, os.path.join(deerflow_dir, _tool_mod)))
+                if _tool_mod == "research_compaction.py":
+                    # The native Gateway starts in backend/ with PYTHONPATH=.;
+                    # keep its helper identical to the root bridge's import.
+                    pairs.append((
+                        _tool_src, os.path.join(deerflow_dir, "backend", _tool_mod),
+                    ))
         # LOOP-009 provider-call admission and middleware-internal model calls
         # must be reproducible from the tracked bridge overlay. ``deer-flow/``
         # is gitignored, so syncing only the root bridge script would leave a
@@ -1846,6 +1853,45 @@ def _synthesis_provider_unavailable(error: Any) -> bool:
     return any(marker in text for marker in _SYNTHESIS_PROVIDER_UNAVAILABLE_MARKERS)
 
 
+class _ResearchCompactionStopped(RuntimeError):
+    """A producer-confirmed stop that cannot be retried or salvaged implicitly."""
+
+    code = "research_compaction_failed"
+
+    def __init__(self, reason: str = "compaction_failed", thread_id: str = ""):
+        self.reason = (
+            reason if isinstance(reason, str)
+            and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", reason)
+            else "compaction_failed"
+        )
+        self.thread_id = thread_id if isinstance(thread_id, str) else ""
+        super().__init__(f"{self.code}: {self.reason}")
+
+
+def _raise_current_research_compaction_stop(
+    handoff_dir: str, process_attempt_id: str, exit_code: Optional[int] = None,
+) -> None:
+    """Read this launch's typed stop, including when failure metadata cannot save.
+
+    Exit code 4 is reserved by the trusted bridge for a compaction stop. It is
+    the fallback if the archive and metadata share a full/read-only filesystem;
+    ordinary stdout text never becomes stop authority.
+    """
+    meta = _read_json(os.path.join(handoff_dir, "meta.json"))
+    if (
+        isinstance(meta, dict) and process_attempt_id
+        and meta.get("research_process_attempt_id") == process_attempt_id
+        and meta.get("status") == "failed"
+    ):
+        stop = meta.get("compaction_stop")
+        if isinstance(stop, dict) and stop.get("code") == _ResearchCompactionStopped.code:
+            raise _ResearchCompactionStopped(
+                stop.get("reason"), stop.get("thread_id"),
+            )
+    if exit_code == 4:
+        raise _ResearchCompactionStopped()
+
+
 def _configure_research_budget_env(
     env: dict[str, str],
     handoff_dir: str,
@@ -1858,10 +1904,12 @@ def _configure_research_budget_env(
 ) -> None:
     """Inject the shared LOOP-007 ledger contract into one research process.
 
-    All descendants inherit these values.  Disabling the feature removes any
-    stale variables copied from the backend process so an operator can reliably
-    turn the control plane off for a diagnostic run.
+    All descendants inherit these values. Disabling budgets removes inherited
+    budget variables but preserves the independent compaction evidence archive.
+    Its handoff-local path is stable across budget epochs and process resumes.
     """
+    env["RESEARCH_COMPACTION_DB"] = os.path.join(
+        handoff_dir, "research_compaction.sqlite3")
     if not bool(getattr(Config, "RESEARCH_BUDGET_ENABLED", True)):
         for key in _RESEARCH_BUDGET_ENV_KEYS:
             env.pop(key, None)
@@ -2077,6 +2125,7 @@ class DeerFlowResearchRunner:
                 return None
 
         artifact_before = _artifact_fingerprint(expected_artifact_path)
+        process_attempt_id = uuid.uuid4().hex
 
         def _fresh_expected_artifact() -> bool:
             current = _artifact_fingerprint(expected_artifact_path)
@@ -2121,6 +2170,7 @@ class DeerFlowResearchRunner:
             cmd += ["--synthesis-manifest", str(synthesis_manifest_path)]
 
         env = dict(os.environ)
+        env["RESEARCH_PROCESS_ATTEMPT_ID"] = process_attempt_id
         env.setdefault("PYTHONUNBUFFERED", "1")
         # Checkpoint identity is parent-owned per launch; never inherit an
         # ambient value from the backend process into a different handoff.
@@ -2359,6 +2409,8 @@ class DeerFlowResearchRunner:
                     break
             try:
                 returncode = proc.wait(timeout=30)
+                _raise_current_research_compaction_stop(
+                    handoff_dir, process_attempt_id, returncode)
             except subprocess.TimeoutExpired:
                 # W9-4：stdout 已经 EOF 但子进程组 30s 内没退出（bridge 的孙子进程/线程收尾慢）。
                 # 旧行为让 TimeoutExpired 直接冒泡 → 整条轨被当失败丢弃——pipe_0f2bee 因此把
@@ -2370,6 +2422,8 @@ class DeerFlowResearchRunner:
                     returncode = proc.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     returncode = -9  # 进程组已被 SIGKILL，wait 仍超时视作强杀
+                _raise_current_research_compaction_stop(
+                    handoff_dir, process_attempt_id, returncode)
                 _fresh = _fresh_expected_artifact()
                 _evidence_survived = evidence_only and _fresh
                 _report_survived = (
@@ -10594,6 +10648,11 @@ class PipelineOrchestrator:
                 )
                 shutil.rmtree(synthesis_dir, ignore_errors=True)
                 raise
+            except _ResearchCompactionStopped:
+                state.research_pid = None
+                # Keep the actual checkpoint/archive directory for an explicit
+                # resume; a new temporary attempt would strand its lineage.
+                raise
             except Exception as exc:  # noqa: BLE001 - bounded retry
                 detail = f"{type(exc).__name__}: {exc}"
                 errors.append(detail)
@@ -10857,9 +10916,26 @@ class PipelineOrchestrator:
 
         results: dict[int, tuple] = {}
         cancelled: Optional[PipelineCancelled] = None
+        compaction_failures: list[_ResearchCompactionStopped] = []
+
+        def _run_track_with_stop(*args):
+            # Set this before a worker returns to its executor, so queued lanes
+            # cannot launch another process while the parent handles fan-in.
+            with prog_lock:
+                if compaction_failures:
+                    stopped = compaction_failures[0]
+                    raise _ResearchCompactionStopped(stopped.reason, stopped.thread_id)
+            try:
+                return _run_track(*args)
+            except _ResearchCompactionStopped as stopped:
+                with prog_lock:
+                    if not compaction_failures:
+                        compaction_failures.append(stopped)
+                raise
+
         with ThreadPoolExecutor(
                 max_workers=outer_workers, thread_name_prefix="research-track") as ex:
-            futs = {ex.submit(_run_track, i, angles[i][1], angles[i][2]): i for i in range(n)}
+            futs = {ex.submit(_run_track_with_stop, i, angles[i][1], angles[i][2]): i for i in range(n)}
             for fut in as_completed(futs):
                 i = futs[fut]
                 try:
@@ -10867,6 +10943,12 @@ class PipelineOrchestrator:
                     results[idx] = (angle_title, track_dir, res)
                 except PipelineCancelled as pc:
                     cancelled = pc  # 取消须穿透，不当作「可跳过的轨失败」
+                except _ResearchCompactionStopped:
+                    for pending in futs:
+                        pending.cancel()
+                    # A compaction stop is stage-wide, never a disposable lane.
+                    # Already-running siblings are allowed to preserve their work.
+                    raise
                 except Exception as te:  # noqa: BLE001 — 单轨失败用存活轨继续
                     logger.warning("[%s] 研究轨 %d 失败（跳过，用存活轨继续）: %s",
                                    state.pipeline_id, i + 1, te)
@@ -11144,6 +11226,10 @@ class PipelineOrchestrator:
                         detail=str(cancelled),
                     )
                     shutil.rmtree(synthesis_dir, ignore_errors=True)
+                    raise
+                except _ResearchCompactionStopped:
+                    state.research_pid = None
+                    # Preserve the stopped attempt and do not start attempt two.
                     raise
                 except Exception as synthesis_error:  # noqa: BLE001 — bounded retry
                     _preserve_research_attempt_progress(
