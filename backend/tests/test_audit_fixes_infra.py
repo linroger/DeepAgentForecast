@@ -223,14 +223,17 @@ def test_llm1_chat_with_tools_meters_usage(monkeypatch):
     client._openai_client = SimpleNamespace(
         chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **k: resp)))
     recorded = []
-    monkeypatch.setattr(tel.LLMMeter, "record",
+    monkeypatch.setattr(tel.LLMMeter, "record_snapshot",
                         classmethod(lambda cls, *a, **k: recorded.append((a, k))))
     monkeypatch.setattr(Config, "LLM_TELEMETRY_ENABLED", True, raising=False)
     out = client.chat_with_tools([{"role": "user", "content": "hi"}], tools_schema=[])
     assert out["content"] == "ok" and out["tool_calls"] == []
-    assert len(recorded) == 1
-    args = recorded[0][0]
-    assert args[0] == "minimax" and args[2] == 11 and args[3] == 7
+    assert len(recorded) == 2  # zero-counter dispatch marker, then one settlement
+    assert recorded[0][1]["calls"] == 0 and recorded[0][1]["status"] == "in_flight"
+    args = recorded[1][0]
+    assert args[0] == "llm_api_attempt" and args[2] == "minimax"
+    assert args[4:6] == (11, 7)
+    assert args[1] == recorded[0][0][1]  # one physical operation, not two calls
 
 
 def test_llm2_fallback_served_call_not_double_metered(monkeypatch):

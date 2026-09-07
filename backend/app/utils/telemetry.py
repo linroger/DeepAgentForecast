@@ -82,6 +82,23 @@ def _sole_active_run() -> Optional[str]:
     return None
 
 
+def resolve_run_attribution(run_id: Optional[str] = None,
+                            stage: Optional[str] = None) -> Tuple[str, str, bool]:
+    """Pin attribution once for a request spanning dispatch and settlement.
+
+    The active-run registry can change while a provider is working. Returning
+    the resolved bucket and inference flag lets every observation for the same
+    physical attempt retain its original ownership without changing contextvars.
+    The flag describes inferred run ownership, not provider failover.
+    """
+    rid = run_id or _current_run.get()
+    inferred = False
+    if not rid:
+        rid = _sole_active_run()
+        inferred = rid is not None
+    return rid or _DEFAULT_BUCKET, stage or _current_stage.get() or "_unstaged", inferred
+
+
 def _clear_active_runs() -> None:
     """Test/maintenance helper: forget all active-run registrations."""
     with _ACTIVE_LOCK:

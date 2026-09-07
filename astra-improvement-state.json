@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T18:35:21.474979+00:00",
+  "updated_at": "2026-09-07T19:29:32.165379+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -10,7 +10,7 @@
   ],
   "consecutive_blocked_iterations": 0,
   "automation_id": "astra-workflow-improvement-loop",
-  "stopping_condition": "All justified recommendations verified or evidence-backed deferred; no measured bottleneck warrants another safe change. Pause after three consecutive iterations blocked by the same external dependency.",
+  "stopping_condition": "All justified recommendations verified or evidence-backed deferred; no measured bottleneck warrants another safe change. Pause after three consecutive iterations blocked by the same external dependency that prevents all independent progress.",
   "publication": "Blocked: configured GitHub authentication rejected audit push; local work may continue.",
   "recommendations": [
     {
@@ -64,7 +64,11 @@
         "docs/research/astra-usage-browser.json",
         "docs/research/astra-iteration-04-run-evidence.json",
         "docs/research/astra-research-stream-verification.json",
-        "docs/research/astra-research-stream-verification.md"
+        "docs/research/astra-research-stream-verification.md",
+        "docs/research/astra-api-attempt-verification.json",
+        "docs/research/astra-api-attempt-verification.md",
+        "docs/research/astra-api-attempt-comparison.json",
+        "docs/research/astra-api-run-evidence.json"
       ],
       "subtasks": [
         {
@@ -89,6 +93,12 @@
             {
               "id": "ASTRA-04b2",
               "title": "Record each physical backend API attempt before validation and control SDK retries",
+              "status": "verified_offline",
+              "evidence": "docs/research/astra-api-attempt-verification.json"
+            },
+            {
+              "id": "ASTRA-04b3",
+              "title": "Expose unresolved physical operations and define restart-safe admission before reservations",
               "status": "pending"
             }
           ]
@@ -96,11 +106,12 @@
       ],
       "limits": [
         "ASTRA-04b provider-boundary reservations and live detached-child coverage are pending.",
-        "Budget checks use cumulative recorded observations but remain post-call; not a complete hard spend cap.",
+        "Checks use cumulative recorded observations before and after API attempts; concurrent admission is not reserved and does not provide a complete hard spend cap.",
         "Checkpoint-relative stream deltas are verified offline; exact CLI request provenance, idless observations and pre-delivery crash gaps remain incomplete.",
         "Simulation aggregate model labels retain stable identity; detailed model diagnostics are separate.",
         "Imported historical baselines are opaque and legacy marker-first ambiguity is explicit.",
-        "Unknown/cache partition coverage is not inferred; usage_complete remains false."
+        "Unknown/cache partition coverage is not inferred; usage_complete remains false.",
+        "Physical backend API attempts are verified offline; detached simulation exports and unresolved-operation aggregate projections remain incomplete."
       ]
     },
     {
@@ -218,7 +229,7 @@
   ],
   "next_recommendation": "ASTRA-04",
   "last_completed_slice": [
-    "ASTRA-04b1"
+    "ASTRA-04b2"
   ],
   "iterations": [
     {
@@ -261,6 +272,15 @@
       "next": "ASTRA-04b2 physical API response accounting and SDK retry ownership before reservations.",
       "verified_source_hashes": "docs/research/astra-research-stream-verification.json",
       "implementation_commit": "099bdbe58579fc94ae862faa778b785b349dafb9"
+    },
+    {
+      "completed_at": "2026-09-07T19:29:32.165379+00:00",
+      "recommendations": [
+        "ASTRA-04b2"
+      ],
+      "result": "741 backend tests passed, one deployment-only skip; actual-SDK comparison and independent review clear.",
+      "next": "ASTRA-04b3 unresolved operations and recovery/admission policy, then transactional reservations and detached-child physical coverage.",
+      "verified_source_hashes": "docs/research/astra-api-attempt-verification.json"
     }
   ],
   "last_implementation_commit": "099bdbe58579fc94ae862faa778b785b349dafb9",

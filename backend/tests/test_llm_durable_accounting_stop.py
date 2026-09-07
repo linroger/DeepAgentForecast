@@ -100,8 +100,7 @@ def test_missing_ledger_before_request_admits_no_provider_call(bound_run, monkey
 
 def test_chat_write_failure_escapes_without_fallback_or_retry(bound_run, monkeypatch):
     calls = []
-    client = _client(lambda **k: _response())
-    monkeypatch.setattr(client, "_chat_openai", lambda *a, **k: calls.append("chat") or "ok")
+    client = _client(lambda **k: calls.append("chat") or _response())
     monkeypatch.setattr(client, "_try_fallback", lambda *a, **k: calls.append("fallback") or "fallback")
     monkeypatch.setattr(UsageLedger, "_insert_delta", staticmethod(_full_disk))
     with pytest.raises(UsageLedgerStorageError):
