@@ -182,7 +182,7 @@ def test_invalid_usage_stops_without_retry_and_retains_unknown_operation(bound, 
         api.chat([])
     assert seen == [True]
     rows = operations(path)
-    assert len(rows) == 1 and rows[0]["status"] == "unknown"
+    assert len(rows) == 1 and rows[0]["status"] == "accounting_error"
 
 
 def test_cache_hit_creates_no_physical_operation_and_clears_last_usage(bound, monkeypatch):

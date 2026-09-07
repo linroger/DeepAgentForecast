@@ -1,0 +1,378 @@
+{
+  "schema": "astra-unresolved-verification/v1",
+  "verified_at": "2026-09-07T20:26:09.611959+00:00",
+  "slice": "ASTRA-04b3",
+  "status": "verified_offline",
+  "baseline_commit": "d09ee4fe3cb2c926eb5a96a683cf89660872d9ff",
+  "scope": "Durable unresolved backend API operation visibility, recovery admission and completion integrity. Full ASTRA-04 remains in progress.",
+  "gates": {
+    "backend": {
+      "passed": 782,
+      "failures": 0,
+      "errors": 0,
+      "skipped": [
+        {
+          "suite": "tests.test_audit_fixes_research.TestConfigParity",
+          "test": "test_bridge_matches_deployed",
+          "reason": "deployed deer-flow checkout absent"
+        }
+      ],
+      "seconds": 9.001,
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-o",
+        "addopts=",
+        "-q",
+        "backend/tests/test_usage_ledger.py",
+        "backend/tests/test_durable_telemetry.py",
+        "backend/tests/test_llm_durable_accounting_stop.py",
+        "backend/tests/test_durable_pipeline_usage.py",
+        "backend/tests/test_usage_completion_gate.py",
+        "backend/tests/test_telemetry.py",
+        "backend/tests/test_telemetry_fallback_attribution.py",
+        "backend/tests/test_audit_fixes_infra.py",
+        "backend/tests/test_research_spend_flush.py",
+        "backend/tests/test_wave9_orchestrator.py",
+        "backend/tests/test_orchestrator_research_wiring.py",
+        "backend/tests/test_token_budget.py",
+        "backend/tests/test_seed_ensemble.py",
+        "backend/tests/test_status_live_block.py",
+        "backend/tests/test_launch_intent_api.py",
+        "backend/tests/test_launch_intents.py",
+        "backend/tests/test_sim_meter_persistence.py",
+        "backend/tests/test_persona_meter_context.py",
+        "backend/tests/test_sim_context_persona.py",
+        "backend/tests/test_actor_role_prompt.py",
+        "backend/tests/test_research_stream_usage.py",
+        "backend/tests/test_research_cache_observations.py",
+        "backend/tests/test_wave9_research_speed.py",
+        "backend/tests/test_audit_fixes_research.py",
+        "backend/tests/test_astra_compaction_bridge.py",
+        "backend/tests/test_deerflow_bridge_sync_guard.py",
+        "backend/tests/test_loop010_global_synthesis.py",
+        "--disable-warnings",
+        "--maxfail=3",
+        "backend/tests/test_llm_physical_attempts.py",
+        "backend/tests/test_llm_sdk_attempt_boundary.py",
+        "backend/tests/test_llm_fallback_model.py",
+        "backend/tests/test_graph_cost_containment.py",
+        "backend/tests/test_graph_optimizations.py",
+        "backend/tests/test_wave9_kg.py",
+        "backend/tests/test_report_chart_quality.py",
+        "backend/tests/test_unresolved_usage_ledger.py",
+        "backend/tests/test_unresolved_usage_pipeline.py",
+        "--junitxml=/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-unresolved-evidence-874gok27/backend.xml"
+      ],
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    }
+  },
+  "comparison": {
+    "path": "docs/research/astra-unresolved-comparison.json",
+    "sha256": "5ee0bef62735f1090c11a916097aae24dbe44e41277f55abc5b6029f0c50453b",
+    "command": {
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+        "backend/scripts/benchmark_unresolved_usage.py",
+        "--baseline-ref",
+        "d09ee4f",
+        "--history-rows",
+        "10000",
+        "--samples",
+        "100",
+        "--output",
+        "docs/research/astra-unresolved-comparison.json"
+      ],
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    },
+    "cases": {
+      "healthy": {
+        "before": {
+          "admission_allowed": true,
+          "error_type": null,
+          "api_operation_state": null,
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "median_admission_ms": 0.0944,
+          "samples": 100
+        },
+        "after": {
+          "admission_allowed": true,
+          "error_type": null,
+          "api_operation_state": {
+            "schema": "llm-api-operation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "current_attempt_id": "current-owner",
+            "in_flight": 0,
+            "current_attempt_in_flight": 0,
+            "other_attempt_in_flight": 0,
+            "unknown": 0,
+            "accounting_error": 0
+          },
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "median_admission_ms": 0.1061,
+          "samples": 100
+        }
+      },
+      "same_owner_in_flight": {
+        "before": {
+          "admission_allowed": true,
+          "error_type": null,
+          "api_operation_state": null,
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "median_admission_ms": 0.0929,
+          "samples": 100
+        },
+        "after": {
+          "admission_allowed": true,
+          "error_type": null,
+          "api_operation_state": {
+            "schema": "llm-api-operation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "current_attempt_id": "current-owner",
+            "in_flight": 1,
+            "current_attempt_in_flight": 1,
+            "other_attempt_in_flight": 0,
+            "unknown": 0,
+            "accounting_error": 0
+          },
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "median_admission_ms": 0.1058,
+          "samples": 100
+        }
+      },
+      "other_owner_in_flight": {
+        "before": {
+          "admission_allowed": true,
+          "error_type": null,
+          "api_operation_state": null,
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "median_admission_ms": 0.0938,
+          "samples": 100
+        },
+        "after": {
+          "admission_allowed": false,
+          "error_type": "UsageLedgerUnresolvedError",
+          "api_operation_state": {
+            "schema": "llm-api-operation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "current_attempt_id": "current-owner",
+            "in_flight": 1,
+            "current_attempt_in_flight": 0,
+            "other_attempt_in_flight": 1,
+            "unknown": 0,
+            "accounting_error": 0
+          },
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "median_admission_ms": 0.1072,
+          "samples": 100
+        }
+      },
+      "durable_accounting_error": {
+        "before": {
+          "admission_allowed": true,
+          "error_type": null,
+          "api_operation_state": null,
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "median_admission_ms": 0.0915,
+          "samples": 100
+        },
+        "after": {
+          "admission_allowed": false,
+          "error_type": "UsageLedgerUnresolvedError",
+          "api_operation_state": {
+            "schema": "llm-api-operation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "current_attempt_id": "current-owner",
+            "in_flight": 0,
+            "current_attempt_in_flight": 0,
+            "other_attempt_in_flight": 0,
+            "unknown": 0,
+            "accounting_error": 1
+          },
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "median_admission_ms": 0.0989,
+          "samples": 100
+        }
+      },
+      "unknown_transport": {
+        "before": {
+          "admission_allowed": true,
+          "error_type": null,
+          "api_operation_state": null,
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "median_admission_ms": 0.0927,
+          "samples": 100
+        },
+        "after": {
+          "admission_allowed": true,
+          "error_type": null,
+          "api_operation_state": {
+            "schema": "llm-api-operation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "current_attempt_id": "current-owner",
+            "in_flight": 0,
+            "current_attempt_in_flight": 0,
+            "other_attempt_in_flight": 0,
+            "unknown": 1,
+            "accounting_error": 0
+          },
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "median_admission_ms": 0.1044,
+          "samples": 100
+        }
+      }
+    },
+    "scaling": {
+      "completed_operations": 10000,
+      "before": {
+        "admission_allowed": true,
+        "error_type": null,
+        "api_operation_state": null,
+        "recorded_calls": 10000,
+        "recorded_tokens": 150000,
+        "median_admission_ms": 0.094,
+        "samples": 100
+      },
+      "after": {
+        "admission_allowed": false,
+        "error_type": "UsageLedgerUnresolvedError",
+        "api_operation_state": {
+          "schema": "llm-api-operation-state/v1",
+          "coverage": "recorded_llm_api_attempts",
+          "current_attempt_id": "current-owner",
+          "in_flight": 1,
+          "current_attempt_in_flight": 0,
+          "other_attempt_in_flight": 1,
+          "unknown": 0,
+          "accounting_error": 0
+        },
+        "recorded_calls": 10000,
+        "recorded_tokens": 150000,
+        "median_admission_ms": 0.1128,
+        "samples": 100
+      },
+      "query_plan": [
+        [
+          3,
+          0,
+          0,
+          "SEARCH usage_operations USING COVERING INDEX usage_operations_run_source_status_owner (run_id=? AND source=? AND status=?)"
+        ]
+      ]
+    }
+  },
+  "saved_run_evidence": {
+    "path": "docs/research/astra-unresolved-run-evidence.json",
+    "sha256": "b7d68ba5ab311dd99e86908aecd42ae34a9a133a83d2447f8ed8a4b64e1f3516",
+    "saved_hashes_matching": 77,
+    "bounded_log_hashes_unchanged": 12,
+    "pipeline_count": 32,
+    "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+    "precision_correction": "Selected historical RUN meter entries are absent, not recorded zero. Unresolved physical counts are unavailable."
+  },
+  "acceptance": {
+    "crash_boundary": "os._exit(37) inside fixture SDK create after durable marker: other owner observes1in_flight and starts0newSDKcalls, includingcaps0.",
+    "owner_race": "Competing processes cannot both commit different-owner dispatch markers; same-owner concurrent markers remain allowed.",
+    "reconciliation": "Precise known same-operation settlement releases a policy stop without reset; estimated/unknown replay cannot release accounting_error.",
+    "projection": "Run-wide state is independent of attempt token filters and comes from the cumulative read in both telemetry export paths.",
+    "completion": "Full and research-only completion reject same-owner in_flight or accounting_error; unknown transport state does not independently block.",
+    "compatibility": "Old v1 databases remain read-only and byte-identical until ordinary initialization adds the optional index."
+  },
+  "review": {
+    "reviewer": "api_attempt_review",
+    "result": "No blocking findings remain within ASTRA-04b3.",
+    "independent_tests_passed": 62,
+    "resolved": [
+      "Persisted malformed usage uses recoverable uncertainty instead of a redundant sticky storage latch.",
+      "Orchestrator top-level and nested operation states come from the same cumulative snapshot."
+    ],
+    "evidence_review": "Nine source hashes, baseline/receipt hashes, case data, fixture arithmetic and final JUnit counts independently verified. Crash fixture wording distinguishes the shared dispatch helper from an installed SDK transport."
+  },
+  "quality": {
+    "ruff": {
+      "result": "All nine changed Python files passed.",
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/ruff",
+        "check",
+        "backend/app/utils/usage_ledger.py",
+        "backend/app/utils/telemetry.py",
+        "backend/app/utils/llm_client.py",
+        "backend/app/services/pipeline_orchestrator.py",
+        "backend/app/api/research.py",
+        "backend/tests/test_unresolved_usage_ledger.py",
+        "backend/tests/test_unresolved_usage_pipeline.py",
+        "backend/tests/test_llm_physical_attempts.py",
+        "backend/scripts/benchmark_unresolved_usage.py"
+      ]
+    },
+    "python_parse": "All nine changed Python files parsed successfully.",
+    "diff_check": "passed",
+    "frontend": "No frontend implementation; public JSON compatibility and unknown remainder were covered by Flask API acceptance."
+  },
+  "source_sha256": {
+    "backend/app/utils/usage_ledger.py": "0654e72dafb62008d2ab3c3b1bdc004624b81416014d27fb0b4020a53e4bf939",
+    "backend/app/utils/telemetry.py": "9b918d8b80fd0b2762dca0d19d927a80d59bdf479566e46f9f488421541bb4ad",
+    "backend/app/utils/llm_client.py": "0bddc767931df4ed3637ee52710c4079db7b60b769c6c1d12cc6feeb81b3f643",
+    "backend/app/services/pipeline_orchestrator.py": "163ff9759a3048f22d5fc3f564bc63568d3c562550e501599d8fef95c00df71e",
+    "backend/app/api/research.py": "dc9910c10f28e82d70c653c387bb41fb51d7aa53dbbc3d54169ca437f249eabd",
+    "backend/tests/test_unresolved_usage_ledger.py": "6ce69ba3517c771a8a07df0635c8ada9aa8b3d2368b3ca08d76082a5e3a6c2c5",
+    "backend/tests/test_unresolved_usage_pipeline.py": "4921ba1992ef4ecf3d6e09c81ec9029efae02ab69589a887ebb9355e9eb97f68",
+    "backend/tests/test_llm_physical_attempts.py": "09194c6bc3c4cb16041ee6420108c65662ae6abf2d8586330a5b782cc7105209",
+    "backend/scripts/benchmark_unresolved_usage.py": "1d41def07824aafa5fe772d355a8fccaf4fbe84890b80ee7107068c114742fe4"
+  },
+  "raw_evidence_directory": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-unresolved-evidence-874gok27",
+  "automation": {
+    "id": "astra-workflow-improvement-loop",
+    "kind": "heartbeat",
+    "status": "ACTIVE"
+  },
+  "limits": [
+    "No provider requests, runtime synchronization, live restarts, saved-run mutations or deployment.",
+    "API operation state covers recorded backend llm_api_attempt rows only; absent historical or detached-child receipts are not zero usage.",
+    "Unknown transport outcomes remain visible and admissible under existing retry policy; legacy unknown rows cannot be retroactively distinguished from malformed usage.",
+    "Attempt ownership is an explicit reference, not proof of liveness or death; missing reference produces null current/other owner counts.",
+    "A crash between marker commit and actual dispatch can block later work despite no provider request having happened. No automatic expiry, reconciliation endpoint or evidence-free release is implemented.",
+    "Precise known settlement of the same identity releases durable uncertainty. Actual storage-write failures remain sticky; failed observations cannot be proven recovered by a later read alone.",
+    "Concurrent same-owner calls remain allowed; this is not token reservation or a hard workflow/invoice spend bound. Caps0 retains unlimited spending semantics.",
+    "Complete detached simulation attempts, CLI physical provenance and full reservation/admission coverage remain pending; usage_complete stays false.",
+    "Local indexed-read timing is overhead characterization, not production latency or Pareto optimality.",
+    "GitHub publication remains blocked by the prior authentication rejection; local improvement continues."
+  ],
+  "historical_precision_check": {
+    "run": "pipe_f23527f7d903",
+    "sources": [
+      {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/run_telemetry.json",
+        "sha256": "a952a3790fec998f1d64bf78a8b41f6189972cf0303a6250daf0f4a0f5c2f240"
+      },
+      {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/telemetry.json",
+        "sha256": "84e35da0add43607e399eadb2254ba2410d49e99fb5da87292eb869c03839e86"
+      }
+    ],
+    "raw_meter": {
+      "$.by_stage.graph": {
+        "present": false
+      },
+      "$.by_stage.run": {
+        "present": false
+      }
+    },
+    "compact_stage_projection": {
+      "$.by_stage.graph.input_tokens": 0,
+      "$.by_stage.run.input_tokens": 0
+    },
+    "interpretation": "Raw GRAPH/RUN meter entries are absent. Compact projection zeros do not establish measured zero consumption."
+  }
+}

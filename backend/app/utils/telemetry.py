@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from .usage_ledger import (
-    METRICS, UsageLedger, UsageLedgerConflict, UsageLedgerStorageError,
+    METRICS, UsageLedger, UsageLedgerConflict, UsageLedgerStorageError, UsageLedgerUnresolvedError,
     empty_counter, normalize_counter,
 )
 
@@ -286,6 +286,15 @@ class LLMMeter:
         was recovered. The stop persists until explicit reset/new attempt.
         Already-in-flight responses may still settle their observations.
         """
+        cls._assert_accounting(run_id, require_settled=False)
+
+    @classmethod
+    def assert_accounting_settled(cls, run_id: Optional[str] = None) -> None:
+        """Reject completion while an API call is in flight or has invalid usage."""
+        cls._assert_accounting(run_id, require_settled=True)
+
+    @classmethod
+    def _assert_accounting(cls, run_id: Optional[str], *, require_settled: bool) -> None:
         rid = run_id or _current_run.get() or _sole_active_run() or _DEFAULT_BUCKET
         with cls._lock:
             binding = cls._durable.get(rid)
@@ -295,7 +304,12 @@ class LLMMeter:
         if failure:
             raise UsageLedgerStorageError(failure)
         try:
-            binding.ledger.assert_available(rid)
+            binding.ledger.assert_available(rid, current_attempt_id=binding.attempt_id,
+                                            require_settled=require_settled)
+        except UsageLedgerUnresolvedError:
+            # A later precise settlement can release this policy stop. Unlike
+            # a failed storage write, it must not poison the process-local latch.
+            raise
         except UsageLedgerStorageError:
             cls._remember_accounting_failure(rid)
             raise
@@ -337,7 +351,7 @@ class LLMMeter:
         if binding is None:
             return None
         try:
-            return binding.ledger.snapshot(rid)
+            return binding.ledger.snapshot(rid, current_attempt_id=binding.attempt_id)
         except UsageLedgerStorageError:
             cls._remember_accounting_failure(rid)
             raise
@@ -415,6 +429,8 @@ class LLMMeter:
             return binding.ledger.record_snapshot(
                 run_id=rid, attempt_id=binding.attempt_id, source=source, operation_id=operation_id,
                 metadata=metadata, counters=counters, status=status, baseline_included=baseline_included)
+        except UsageLedgerUnresolvedError:
+            raise
         except (UsageLedgerStorageError, UsageLedgerConflict):
             cls._remember_accounting_failure(rid)
             raise
@@ -493,7 +509,8 @@ class LLMMeter:
             global_total = global_run.total.as_dict() if global_run else _Counter().as_dict()
         if binding is not None:
             try:
-                out = binding.ledger.snapshot(rid, attempt_id=binding.attempt_id)
+                out = binding.ledger.snapshot(rid, attempt_id=binding.attempt_id,
+                                               current_attempt_id=binding.attempt_id)
             except UsageLedgerStorageError:
                 cls._remember_accounting_failure(rid)
                 raise
@@ -558,12 +575,15 @@ class LLMMeter:
         orchestrator) can splice this under a ``llm_telemetry`` key. Cheap and lock-safe.
         """
         snap = cls.snapshot(run_id)
-        return {
+        result = {
             "run_id": snap["run_id"],
             "total": snap["total"],
             "by_stage": snap["by_stage"],
             "cost_estimated": snap["cost_estimated"],
         }
+        if "api_operation_state" in snap:
+            result["api_operation_state"] = snap["api_operation_state"]
+        return result
 
     @classmethod
     def reset(cls, run_id: Optional[str] = None) -> None:
@@ -620,6 +640,7 @@ class LLMMeter:
             if cumulative is not None:
                 data["cumulative_total"] = cumulative["total"]
                 data["cumulative_by_stage"] = cumulative["by_stage"]
+                data["api_operation_state"] = cumulative["api_operation_state"]
             else:
                 current = data.get("total") or {}
                 data["cumulative_total"] = {key: round((base.get(key) or 0) + (current.get(key) or 0), 6)

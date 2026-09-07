@@ -2,7 +2,7 @@
 
 **Review date:** 2026-09-07. **Source baseline:** `main` at `4be3ce4`, including the pre-existing uncommitted frontend cleanup visible during this review. **Scope:** architecture, workflow throughput, token efficiency, recoverability, observability, and operational cost. This report proposes changes; it does not claim they have been implemented or benchmarked.
 
-**Implementation tracking:** The user subsequently authorized implementation. Current status and verification are recorded in [astra-improvement-state.json](astra-improvement-state.json) and [the optimization handoff](docs/handoff/astra-optimization/handoff.md). The findings and source anchors below describe the original audit baseline; they are not a claim that every issue remains open after later commits. Latest verified accounting slice: [ASTRA-04b2 physical API attempts and retry ownership](docs/research/astra-api-attempt-verification.md); full budget enforcement remains in progress.
+**Implementation tracking:** The user subsequently authorized implementation. Current status and verification are recorded in [astra-improvement-state.json](astra-improvement-state.json) and [the optimization handoff](docs/handoff/astra-optimization/handoff.md). The findings and source anchors below describe the original audit baseline; they are not a claim that every issue remains open after later commits. Latest verified accounting slice: [ASTRA-04b3 unresolved operation recovery](docs/research/astra-unresolved-verification.md); full budget enforcement remains in progress.
 
 The largest remaining opportunity is to preserve completed work and evidence across component boundaries. The system already has substantial concurrency, caching, retry limits, artifact validation, and recovery logic. Increasing concurrency or shortening research prompts indiscriminately would risk amplifying provider pressure, losing evidence, and creating more expensive retries. The next improvements should make compaction safe, make spending and launch admission durable, checkpoint expensive sub-operations, and remove repeated reads and polling.
 
@@ -104,11 +104,13 @@ Reference: `pipe_f23527f7d903`, created July 9, 2026 at 08:12:33 UTC and last up
 |---|---:|---:|---|
 | RESEARCH | 2h37m53s | 79,749,778 | 96.10% of recorded main-run tokens; dominant recorded token consumer |
 | ONTOLOGY | 45s | 44,760 | Small contribution in this run |
-| GRAPH | 8h37m31s | 0 recorded | 61.78% of total elapsed; zero is a historical metering gap, not free work |
+| GRAPH | 8h37m31s | Raw meter entry absent | 61.78% of total elapsed; provider usage is unquantified |
 | PREPARE | 4m51s | 20,858 | Excludes any historically unattributed work |
-| RUN | 9m51s | 0 recorded | Separate health artifact records 221 platform LLM calls |
+| RUN | 9m51s | Raw meter entry absent | Separate health artifact records 221 platform LLM calls |
 | REPORT | 55m37s | 3,168,343 | Parent stage meter; report-local total is 3,168,162 |
 | **Main-run meter** | **Stage sum: 12h26m26s** | **82,983,739** | A recorded aggregate with known missing coverage |
+
+Precision correction from the September 7 refresh: the compact stage telemetry projects zero values for GRAPH and RUN, while the raw run meter omits both stage entries. Their usage is therefore unquantified. See [the refreshed verification](docs/research/astra-unresolved-verification.json).
 
 Two additional report artifacts record **2,007,374** and **4,349,252** tokens, totaling **6,356,626**. Adding these distinct report records produces **89,340,365 tokens of reconciled recorded coverage**. It still does not reconstruct all historical graph/simulation/failed-request usage. Without request-level history, the large synthetic research aggregate also cannot be independently proven free of upstream cumulative-snapshot overcount. Consequently this is not a mathematically established lower bound on actual provider consumption.
 
@@ -380,3 +382,5 @@ The recommendations remain open implementation work, indexed by `ASTRA-01` throu
 ASTRA-01/02/03 are implemented and verified offline on the isolated optimization branch. ASTRA-04a now adds durable usage accounting, idempotent growing child imports, correct nested-call/persona attribution, and cumulative status with explicit unknown coverage. Full ASTRA-04 remains in progress because reservation and live-child coverage are pending. See [the implementation ledger](astra-improvement-state.json), [accounting runbook](docs/research/astra-usage-verification.md), and [new saved-run analysis](docs/research/astra-iteration-04-run-evidence.json). The hourly improvement loop continues; these changes do not establish global or production Pareto optimality.
 
 - 2026-09-07T19:29:32.165379+00:00: ASTRA-04b1/04b2 now cover checkpoint-relative research observations and backend API attempts before response validation. The latest offline comparison reduces nested retries from nine to three transports and stops further calls after an empty response crosses the recorded budget. The final affected gate passed 741 tests; one deployment-only check skipped. Added accounting has a measured local overhead, and detached-child/reservation coverage remains incomplete. See [API attempt runbook](docs/research/astra-api-attempt-verification.md), [comparison](docs/research/astra-api-attempt-comparison.json), and [saved-run/log refresh](docs/research/astra-api-run-evidence.json).
+
+- 2026-09-07T20:26:09.611959+00:00: ASTRA-04b3 adds visible unresolved API operations, indexed/transactional admission between owners, durable recoverable accounting errors and consistent completion/status projections.782 backend tests passed with one deployment-only skip. The [runbook](docs/research/astra-unresolved-verification.md) records the availability/uncertainty tradeoff and local read overhead. [Refreshed historical evidence](docs/research/astra-unresolved-run-evidence.json) explicitly distinguishes missing RUN entries from measured zero. Detached simulation attempt transport and reservations remain open.

@@ -450,7 +450,7 @@ class LLMClient:
         """
         from .telemetry import (
             BudgetExceeded, LLMMeter, UsageLedgerConflict, UsageLedgerStorageError,
-            check_budget, resolve_run_attribution,
+            UsageLedgerUnresolvedError, check_budget, resolve_run_attribution,
         )
         run_id, stage, inferred = resolve_run_attribution()
         LLMMeter.assert_accounting_available(run_id)
@@ -490,9 +490,10 @@ class LLMClient:
         try:
             usage = self._response_usage(response, kwargs["messages"])
         except (ValueError, TypeError, OverflowError, AttributeError) as exc:
-            record(status="unknown", latency_ms=elapsed)
-            LLMMeter._remember_accounting_failure(run_id)
-            raise UsageLedgerStorageError("Invalid provider usage; consumption remains unknown") from exc
+            record(status="accounting_error", latency_ms=elapsed)
+            # The committed error survives restart and blocks new dispatch.
+            # Precise recovery may settle it without a separate storage latch.
+            raise UsageLedgerUnresolvedError("Invalid provider usage; precise settlement required") from exc
         record(latency_ms=elapsed, **usage)
         if usage["usage_source"] == "known":
             self._last_usage = {key: usage[key] for key in ("prompt_tokens", "completion_tokens")}

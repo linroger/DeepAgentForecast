@@ -30,6 +30,10 @@ class UsageLedgerStorageError(RuntimeError):
     """Durable accounting is unavailable; callers must not assume zero spend."""
 
 
+class UsageLedgerUnresolvedError(UsageLedgerStorageError):
+    """Recorded API uncertainty blocks work until evidence settles the operation."""
+
+
 class UsageLedgerConflict(ValueError):
     """An operation identity was reused with different immutable attribution."""
 
@@ -87,18 +91,45 @@ class UsageLedger:
         conn.row_factory = sqlite3.Row
         return conn
 
-    def assert_available(self, run_id: str) -> None:
-        """Check the bound database without aggregating the entire usage log."""
+    def assert_available(self, run_id: str, *, current_attempt_id: str | None = None,
+                         require_settled: bool = False) -> None:
+        """Check indexed API uncertainty without aggregating usage deltas.
+
+        Admission allows concurrent work owned by the referenced attempt. With
+        no reference, any in-flight operation is unresolved. Completion always
+        requires all in-flight work to settle. Unknown transport outcomes remain
+        visible but do not disable the configured provider retry policy.
+        """
         conn = None
         try:
+            if current_attempt_id is not None:
+                _label(current_attempt_id, "current_attempt_id")
             conn = self._connect(write=False)
+            conn.execute("BEGIN")
             if conn.execute("SELECT 1 FROM usage_runs WHERE run_id=?", (run_id,)).fetchone() is None:
                 raise ValueError("Unknown durable run")
+            self._assert_api_admission(conn, run_id, current_attempt_id, require_settled)
         except (OSError, sqlite3.Error, ValueError) as exc:
             raise UsageLedgerStorageError("Durable usage storage is unavailable") from exc
         finally:
             if conn is not None:
                 conn.close()
+
+    @staticmethod
+    def _assert_api_admission(conn: sqlite3.Connection, run_id: str,
+                              current_attempt_id: str | None, require_settled: bool) -> None:
+        predicate = "run_id=? AND source='llm_api_attempt'"
+        if conn.execute(f"SELECT 1 FROM usage_operations WHERE {predicate} AND status='accounting_error' LIMIT 1",
+                        (run_id,)).fetchone():
+            raise UsageLedgerUnresolvedError("API accounting error requires precise usage settlement")
+        owner_condition, params = "", [run_id]
+        if not require_settled and current_attempt_id is not None:
+            owner_condition = " AND owner_attempt_id<>?"
+            params.append(current_attempt_id)
+        if conn.execute(f"SELECT 1 FROM usage_operations WHERE {predicate} AND status='in_flight'{owner_condition} LIMIT 1",
+                        params).fetchone():
+            reason = "Unsettled API operation" if require_settled else "API operation from another or unknown attempt"
+            raise UsageLedgerUnresolvedError(f"{reason} remains in flight")
 
     @staticmethod
     def _schema(conn: sqlite3.Connection) -> None:
@@ -119,6 +150,8 @@ class UsageLedger:
             snapshot_version INTEGER NOT NULL,
             PRIMARY KEY (run_id, source, operation_id)
         )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS usage_operations_run_source_status_owner "
+                     "ON usage_operations(run_id, source, status, owner_attempt_id)")
         columns = ", ".join(f"{key} {'REAL' if key in _FLOAT_METRICS else 'INTEGER'} NOT NULL" for key in METRICS)
         conn.execute(f"""CREATE TABLE IF NOT EXISTS usage_deltas (
             id INTEGER PRIMARY KEY, run_id TEXT NOT NULL, attempt_id TEXT NOT NULL,
@@ -190,6 +223,8 @@ class UsageLedger:
         for name, value in (("run_id", run_id), ("attempt_id", attempt_id), ("source", source),
                             ("operation_id", operation_id), ("status", status)):
             _label(value, name)
+        if source == "llm_api_attempt" and status not in {"in_flight", "completed", "unknown", "accounting_error"}:
+            raise ValueError("Invalid API operation status")
         meta = dict(metadata)
         for key in ("stage", "provider", "model", "billing_basis"):
             _label(meta.get(key), key)
@@ -210,6 +245,10 @@ class UsageLedger:
                 raise ValueError("A baseline-included snapshot requires an imported legacy baseline")
             old = conn.execute("SELECT * FROM usage_operations WHERE run_id=? AND source=? AND operation_id=?",
                                (run_id, source, operation_id)).fetchone()
+            if source == "llm_api_attempt" and status == "in_flight" and old is None:
+                # Serialize dispatch markers across attempt owners. Read/check
+                # races cannot authorize a second owner after the first marker.
+                self._assert_api_admission(conn, run_id, attempt_id, False)
             previous = json.loads(old["counter_json"]) if old is not None else empty_counter()
             if old is not None:
                 original_meta = json.loads(old["metadata_json"])
@@ -221,7 +260,25 @@ class UsageLedger:
             version = (old["snapshot_version"] if old is not None else 0) + 1
             # A regressing/replayed snapshot cannot revert a completed status.
             effective_status = status
-            if old is not None and not any(delta.values()) and old["status"] not in {"in_flight", "running", "unknown"}:
+            if source == "llm_api_attempt" and old is not None:
+                old_status = old["status"]
+                # A replay may add genuine positive counters, but cannot turn
+                # an already-observed outcome back into a dispatch marker.
+                precise_settlement = (
+                    status == "completed" and meta["usage_class"] == "known"
+                    and all(current[key] >= previous[key] for key in (
+                        "calls", "prompt_tokens", "completion_tokens", "cache_read_tokens",
+                        "cache_write_tokens", "uncached_tokens"))
+                )
+                if old_status == "accounting_error" and not precise_settlement:
+                    effective_status = "accounting_error"
+                elif old_status == "unknown" and status == "completed" and not precise_settlement:
+                    effective_status = "unknown"
+                elif old_status == "completed" and status in {"in_flight", "unknown"}:
+                    effective_status = "completed"
+                elif old_status != "in_flight" and status == "in_flight":
+                    effective_status = old_status
+            elif old is not None and not any(delta.values()) and old["status"] not in {"in_flight", "running", "unknown"}:
                 effective_status = old["status"]
             conn.execute("""INSERT INTO usage_operations VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(run_id, source, operation_id) DO UPDATE SET
@@ -247,13 +304,37 @@ class UsageLedger:
             if conn is not None:
                 conn.close()
 
+    @staticmethod
+    def _api_operation_state(conn: sqlite3.Connection, run_id: str,
+                             current_attempt_id: str | None) -> dict[str, Any]:
+        """Run-wide operation state, independent of delta attribution filters."""
+        state = {"schema": "llm-api-operation-state/v1", "coverage": "recorded_llm_api_attempts",
+                 "current_attempt_id": current_attempt_id, "in_flight": 0,
+                 "current_attempt_in_flight": 0 if current_attempt_id is not None else None,
+                 "other_attempt_in_flight": 0 if current_attempt_id is not None else None,
+                 "unknown": 0, "accounting_error": 0}
+        rows = conn.execute("""SELECT status, COUNT(*) AS operations,
+            SUM(CASE WHEN owner_attempt_id=? THEN 1 ELSE 0 END) AS current_operations
+            FROM usage_operations WHERE run_id=? AND source='llm_api_attempt'
+            AND status IN ('in_flight', 'unknown', 'accounting_error') GROUP BY status""",
+                            (current_attempt_id, run_id)).fetchall()
+        for row in rows:
+            state[row["status"]] = row["operations"]
+            if row["status"] == "in_flight" and current_attempt_id is not None:
+                state["current_attempt_in_flight"] = row["current_operations"]
+                state["other_attempt_in_flight"] = row["operations"] - row["current_operations"]
+        return state
+
     def snapshot(self, run_id: str, *, attempt_id: str | None = None,
+                 current_attempt_id: str | None = None,
                  missing_ok: bool = False) -> dict[str, Any] | None:
         """Read one consistent projection; missing/corrupt storage is not zero."""
         if missing_ok and not self.path.exists():
             return None
         conn = None
         try:
+            if current_attempt_id is not None:
+                _label(current_attempt_id, "current_attempt_id")
             conn = self._connect(write=False)
             conn.execute("BEGIN")
             run = conn.execute("SELECT legacy_json, legacy_ambiguous FROM usage_runs WHERE run_id=?", (run_id,)).fetchone()
@@ -294,8 +375,10 @@ class UsageLedger:
             for counter in [total, fallback, *by_stage.values(), *by_model.values(), *by_source.values()]:
                 counter["latency_ms"] = round(counter["latency_ms"], 1)
                 counter["cost_usd"] = round(counter["cost_usd"], 6)
+            api_operation_state = self._api_operation_state(conn, run_id, current_attempt_id)
             conn.commit()
             return {"run_id": run_id, "attempt_id": attempt_id, "total": total,
+                    "api_operation_state": api_operation_state,
                     "by_stage": by_stage, "by_model": by_model,
                     "usage_by_class": by_source, "fallback_attributed": fallback,
                     "cost_estimated": estimated, "cost_basis": next(iter(bases)) if len(bases) == 1 else ("mixed" if bases else "unknown"),
@@ -312,6 +395,8 @@ class UsageLedger:
 
 
 def read_snapshot(ledger_path: str, run_id: str,
-                  attempt_id: str | None = None) -> dict[str, Any] | None:
+                  attempt_id: str | None = None, *,
+                  current_attempt_id: str | None = None) -> dict[str, Any] | None:
     """Read without attaching or creating storage; distinguish absent from bad."""
-    return UsageLedger(ledger_path).snapshot(run_id, attempt_id=attempt_id, missing_ok=True)
+    return UsageLedger(ledger_path).snapshot(run_id, attempt_id=attempt_id,
+                                            current_attempt_id=current_attempt_id, missing_ok=True)

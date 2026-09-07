@@ -1,0 +1,202 @@
+{
+  "schema": "astra-unresolved-comparison/v1",
+  "baseline_commit": "d09ee4fe3cb2c926eb5a96a683cf89660872d9ff",
+  "source_sha256": {
+    "before": "78bfce9e70443fb209db7c3f844f4e7342795ac8f1ff9cc7c971476b9625da62",
+    "after": "0654e72dafb62008d2ab3c3b1bdc004624b81416014d27fb0b4020a53e4bf939"
+  },
+  "provider_requests": 0,
+  "network_requests": 0,
+  "cases": {
+    "healthy": {
+      "before": {
+        "admission_allowed": true,
+        "error_type": null,
+        "api_operation_state": null,
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "median_admission_ms": 0.0944,
+        "samples": 100
+      },
+      "after": {
+        "admission_allowed": true,
+        "error_type": null,
+        "api_operation_state": {
+          "schema": "llm-api-operation-state/v1",
+          "coverage": "recorded_llm_api_attempts",
+          "current_attempt_id": "current-owner",
+          "in_flight": 0,
+          "current_attempt_in_flight": 0,
+          "other_attempt_in_flight": 0,
+          "unknown": 0,
+          "accounting_error": 0
+        },
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "median_admission_ms": 0.1061,
+        "samples": 100
+      }
+    },
+    "same_owner_in_flight": {
+      "before": {
+        "admission_allowed": true,
+        "error_type": null,
+        "api_operation_state": null,
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "median_admission_ms": 0.0929,
+        "samples": 100
+      },
+      "after": {
+        "admission_allowed": true,
+        "error_type": null,
+        "api_operation_state": {
+          "schema": "llm-api-operation-state/v1",
+          "coverage": "recorded_llm_api_attempts",
+          "current_attempt_id": "current-owner",
+          "in_flight": 1,
+          "current_attempt_in_flight": 1,
+          "other_attempt_in_flight": 0,
+          "unknown": 0,
+          "accounting_error": 0
+        },
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "median_admission_ms": 0.1058,
+        "samples": 100
+      }
+    },
+    "other_owner_in_flight": {
+      "before": {
+        "admission_allowed": true,
+        "error_type": null,
+        "api_operation_state": null,
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "median_admission_ms": 0.0938,
+        "samples": 100
+      },
+      "after": {
+        "admission_allowed": false,
+        "error_type": "UsageLedgerUnresolvedError",
+        "api_operation_state": {
+          "schema": "llm-api-operation-state/v1",
+          "coverage": "recorded_llm_api_attempts",
+          "current_attempt_id": "current-owner",
+          "in_flight": 1,
+          "current_attempt_in_flight": 0,
+          "other_attempt_in_flight": 1,
+          "unknown": 0,
+          "accounting_error": 0
+        },
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "median_admission_ms": 0.1072,
+        "samples": 100
+      }
+    },
+    "durable_accounting_error": {
+      "before": {
+        "admission_allowed": true,
+        "error_type": null,
+        "api_operation_state": null,
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "median_admission_ms": 0.0915,
+        "samples": 100
+      },
+      "after": {
+        "admission_allowed": false,
+        "error_type": "UsageLedgerUnresolvedError",
+        "api_operation_state": {
+          "schema": "llm-api-operation-state/v1",
+          "coverage": "recorded_llm_api_attempts",
+          "current_attempt_id": "current-owner",
+          "in_flight": 0,
+          "current_attempt_in_flight": 0,
+          "other_attempt_in_flight": 0,
+          "unknown": 0,
+          "accounting_error": 1
+        },
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "median_admission_ms": 0.0989,
+        "samples": 100
+      }
+    },
+    "unknown_transport": {
+      "before": {
+        "admission_allowed": true,
+        "error_type": null,
+        "api_operation_state": null,
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "median_admission_ms": 0.0927,
+        "samples": 100
+      },
+      "after": {
+        "admission_allowed": true,
+        "error_type": null,
+        "api_operation_state": {
+          "schema": "llm-api-operation-state/v1",
+          "coverage": "recorded_llm_api_attempts",
+          "current_attempt_id": "current-owner",
+          "in_flight": 0,
+          "current_attempt_in_flight": 0,
+          "other_attempt_in_flight": 0,
+          "unknown": 1,
+          "accounting_error": 0
+        },
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "median_admission_ms": 0.1044,
+        "samples": 100
+      }
+    }
+  },
+  "scaling": {
+    "completed_operations": 10000,
+    "before": {
+      "admission_allowed": true,
+      "error_type": null,
+      "api_operation_state": null,
+      "recorded_calls": 10000,
+      "recorded_tokens": 150000,
+      "median_admission_ms": 0.094,
+      "samples": 100
+    },
+    "after": {
+      "admission_allowed": false,
+      "error_type": "UsageLedgerUnresolvedError",
+      "api_operation_state": {
+        "schema": "llm-api-operation-state/v1",
+        "coverage": "recorded_llm_api_attempts",
+        "current_attempt_id": "current-owner",
+        "in_flight": 1,
+        "current_attempt_in_flight": 0,
+        "other_attempt_in_flight": 1,
+        "unknown": 0,
+        "accounting_error": 0
+      },
+      "recorded_calls": 10000,
+      "recorded_tokens": 150000,
+      "median_admission_ms": 0.1128,
+      "samples": 100
+    },
+    "query_plan": [
+      [
+        3,
+        0,
+        0,
+        "SEARCH usage_operations USING COVERING INDEX usage_operations_run_source_status_owner (run_id=? AND source=? AND status=?)"
+      ]
+    ]
+  },
+  "limits": [
+    "Temporary synthetic operation histories; no historical production crash frequency is inferred.",
+    "Admission decisions are ledger checks, not provider dispatch or transactional token reservations.",
+    "Both implementations read the same current-format fixture database, including its optional index.",
+    "The accounting_error case tests durable policy; the baseline producer did not yet emit that distinct status.",
+    "Timings characterize local read overhead only; no workflow speedup or spend bound is claimed."
+  ]
+}

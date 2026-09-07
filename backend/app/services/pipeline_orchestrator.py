@@ -7419,10 +7419,14 @@ class PipelineOrchestrator:
                 if cumulative is not None:
                     data["cumulative_total"] = cumulative["total"]
                     data["cumulative_by_stage"] = cumulative.get("by_stage", {})
+                    # A response may settle between the attempt and cumulative
+                    # reads. Both operation-state views belong to this read.
+                    data["api_operation_state"] = cumulative.get("api_operation_state")
                     data["usage_accounting"] = {
                         key: cumulative.get(key) for key in (
                             "coverage", "usage_complete", "usage_by_class", "cache_partition_known",
                             "legacy_baseline_present", "legacy_baseline_ambiguous",
+                            "api_operation_state",
                         )
                     }
                 if self._tel_prev:
@@ -10320,7 +10324,10 @@ class PipelineOrchestrator:
         try:
             run_dir = PipelineManager._dir(state.pipeline_id)
             ledger_path = os.path.join(os.path.dirname(run_dir), "usage_ledger.sqlite3")
-            snap = read_snapshot(ledger_path, state.pipeline_id)
+            snap = read_snapshot(
+                ledger_path, state.pipeline_id,
+                current_attempt_id=state.options.get("usage_attempt_id") or None,
+            )
             if snap is None:
                 if state.options.get("usage_attempt_id"):
                     raise UsageLedgerStorageError("Previously registered usage ledger is missing")
@@ -10362,7 +10369,8 @@ class PipelineOrchestrator:
                           "cost_basis": snap.get("cost_basis", "unknown"),
                           "cost_estimated": snap.get("cost_estimated", True)})
             for key in ("usage_by_class", "cache_partition_known",
-                        "legacy_baseline_present", "legacy_baseline_ambiguous"):
+                        "legacy_baseline_present", "legacy_baseline_ambiguous",
+                        "api_operation_state"):
                 if key in snap:
                     spend[key] = snap[key]
         except Exception as exc:  # noqa: BLE001 — status stays available, accounting fails closed
@@ -12047,6 +12055,9 @@ class PipelineOrchestrator:
             # Ledger initialization is inside the failure/cleanup boundary: a
             # storage failure must not strand a running task or launch research.
             self._init_telemetry_flush(state)
+            # A fresh process must reconcile another attempt's unfinished API
+            # work before starting a stage, including paths that reuse artifacts.
+            LLMMeter.assert_accounting_available(state.pipeline_id)
             # ---- Stage 0: RESEARCH ----
             upd = self._make_stage_updater(state, STAGE_RESEARCH)
             handoff_dir = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
@@ -12433,7 +12444,7 @@ class PipelineOrchestrator:
             )
 
             if state.mode == "research_only":
-                LLMMeter.assert_accounting_available(state.pipeline_id)
+                LLMMeter.assert_accounting_settled(state.pipeline_id)
                 state.status = "completed"
                 state.global_progress = 100
                 PipelineManager.save(state)
@@ -13486,7 +13497,7 @@ class PipelineOrchestrator:
             # Hard-fails (raises → status=failed) on an empty/placeholder report or missing
             # forecast.json; records a degraded health block otherwise. Makes broken runs visible.
             self._enforce_pipeline_health(state)
-            LLMMeter.assert_accounting_available(state.pipeline_id)
+            LLMMeter.assert_accounting_settled(state.pipeline_id)
             state.status = "completed"
             state.global_progress = 100
             PipelineManager.save(state)

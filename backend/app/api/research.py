@@ -399,11 +399,18 @@ def pipeline_status(pipeline_id: str):
         if budget_tokens > 0:
             spend = live.get("spend_so_far") or {}
             spent = spend.get("tokens") if spend.get("available") is True else None
+            operations = spend.get("api_operation_state") or {}
+            pending = bool(operations.get("in_flight") or operations.get("accounting_error"))
+            # Recorded totals stay visible, but unfinished work has no known
+            # consumption to subtract from the configured limit yet.
+            remainder_available = spent is not None and not pending
             live["budget"] = {
                 "limit_tokens": budget_tokens,
                 "spent_tokens": spent,
-                "remaining_tokens": max(0, budget_tokens - spent) if spent is not None else None,
-                "available": spent is not None,
+                "remaining_tokens": max(0, budget_tokens - spent) if remainder_available else None,
+                "available": remainder_available,
+                "unavailable_reason": "unresolved_api_operations" if pending else spend.get("unavailable_reason"),
+                "api_operation_state": spend.get("api_operation_state"),
                 "coverage": spend.get("coverage", "unavailable"),
                 "usage_complete": False,
             }

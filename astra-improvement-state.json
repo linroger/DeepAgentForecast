@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T19:31:57.470666+00:00",
+  "updated_at": "2026-09-07T20:26:09.611959+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -68,7 +68,11 @@
         "docs/research/astra-api-attempt-verification.json",
         "docs/research/astra-api-attempt-verification.md",
         "docs/research/astra-api-attempt-comparison.json",
-        "docs/research/astra-api-run-evidence.json"
+        "docs/research/astra-api-run-evidence.json",
+        "docs/research/astra-unresolved-verification.json",
+        "docs/research/astra-unresolved-verification.md",
+        "docs/research/astra-unresolved-comparison.json",
+        "docs/research/astra-unresolved-run-evidence.json"
       ],
       "subtasks": [
         {
@@ -100,6 +104,12 @@
             {
               "id": "ASTRA-04b3",
               "title": "Expose unresolved physical operations and define restart-safe admission before reservations",
+              "status": "verified_offline",
+              "evidence": "docs/research/astra-unresolved-verification.json"
+            },
+            {
+              "id": "ASTRA-04b4",
+              "title": "Transport detached simulation physical attempts into durable parent accounting",
               "status": "pending"
             }
           ]
@@ -112,7 +122,7 @@
         "Simulation aggregate model labels retain stable identity; detailed model diagnostics are separate.",
         "Imported historical baselines are opaque and legacy marker-first ambiguity is explicit.",
         "Unknown/cache partition coverage is not inferred; usage_complete remains false.",
-        "Physical backend API attempts are verified offline; detached simulation exports and unresolved-operation aggregate projections remain incomplete."
+        "Physical backend API attempts and unresolved-operation projections/admission are verified offline; detached simulation physical exports remain incomplete."
       ]
     },
     {
@@ -230,7 +240,7 @@
   ],
   "next_recommendation": "ASTRA-04",
   "last_completed_slice": [
-    "ASTRA-04b2"
+    "ASTRA-04b3"
   ],
   "iterations": [
     {
@@ -283,6 +293,15 @@
       "next": "ASTRA-04b3 unresolved operations and recovery/admission policy, then transactional reservations and detached-child physical coverage.",
       "verified_source_hashes": "docs/research/astra-api-attempt-verification.json",
       "implementation_commit": "60925d1bf002db724358d452ff43f17ac1492e06"
+    },
+    {
+      "completed_at": "2026-09-07T20:26:09.611959+00:00",
+      "recommendations": [
+        "ASTRA-04b3"
+      ],
+      "result": "782 backend tests passed, one deployment-only skip; crash/restart, indexed-read comparison and independent review clear.",
+      "next": "ASTRA-04b4 detached simulation physical-attempt transport before wider reservation coverage.",
+      "verified_source_hashes": "docs/research/astra-unresolved-verification.json"
     }
   ],
   "last_implementation_commit": "60925d1bf002db724358d452ff43f17ac1492e06",
