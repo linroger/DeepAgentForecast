@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T18:00:54.750363+00:00",
+  "updated_at": "2026-09-07T18:02:50.384090+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -69,7 +69,8 @@
           "id": "ASTRA-04a",
           "title": "Durable trustworthy usage accounting and snapshot imports",
           "status": "verified_offline",
-          "evidence": "docs/research/astra-usage-verification.json"
+          "evidence": "docs/research/astra-usage-verification.json",
+          "implementation_commit": "8eaa71b"
         },
         {
           "id": "ASTRA-04b",
