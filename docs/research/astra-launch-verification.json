@@ -95,5 +95,6 @@
     "Browser requires durable localStorage, Web Locks and cryptographic UUID on HTTPS or localhost.",
     "No paid requests, saved pipeline execution, live deployment, service restart or production speedup measurement.",
     "Original checkout dirty frontend cleanup remains separate; dependencies reused from original installed environments."
-  ]
+  ],
+  "implementation_commit": "06dc8b9"
 }
