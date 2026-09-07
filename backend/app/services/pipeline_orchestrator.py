@@ -7423,11 +7423,12 @@ class PipelineOrchestrator:
                     # A response may settle between the attempt and cumulative
                     # reads. Both operation-state views belong to this read.
                     data["api_operation_state"] = cumulative.get("api_operation_state")
+                    data["token_reservation_state"] = cumulative.get("token_reservation_state")
                     data["usage_accounting"] = {
                         key: cumulative.get(key) for key in (
                             "coverage", "usage_complete", "usage_by_class", "cache_partition_known",
                             "legacy_baseline_present", "legacy_baseline_ambiguous",
-                            "api_operation_state",
+                            "api_operation_state", "token_reservation_state",
                         )
                     }
                 if self._tel_prev:
@@ -10372,7 +10373,7 @@ class PipelineOrchestrator:
                           "cost_estimated": snap.get("cost_estimated", True)})
             for key in ("usage_by_class", "cache_partition_known",
                         "legacy_baseline_present", "legacy_baseline_ambiguous",
-                        "api_operation_state"):
+                        "api_operation_state", "token_reservation_state"):
                 if key in snap:
                     spend[key] = snap[key]
         except Exception as exc:  # noqa: BLE001 — status stays available, accounting fails closed

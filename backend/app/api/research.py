@@ -396,21 +396,34 @@ def pipeline_status(pipeline_id: str):
     try:
         live = PipelineOrchestrator().heartbeat_status(PipelineState.from_dict(data))
         budget_tokens = int(getattr(Config, "LLM_RUN_BUDGET_TOKENS", 0) or 0)
+        spend = live.get("spend_so_far") or {}
+        reservations = spend.get("token_reservation_state") or {}
+        pinned_limit = reservations.get("token_limit")
+        configured_limit = budget_tokens
+        if isinstance(pinned_limit, int) and pinned_limit > 0:
+            budget_tokens = pinned_limit
+        policy_mismatch = pinned_limit is not None and configured_limit != pinned_limit
         if budget_tokens > 0:
-            spend = live.get("spend_so_far") or {}
             spent = spend.get("tokens") if spend.get("available") is True else None
             operations = spend.get("api_operation_state") or {}
             pending = bool(operations.get("in_flight") or operations.get("accounting_error"))
+            held = reservations.get("reserved_tokens", 0)
             # Recorded totals stay visible, but unfinished work has no known
             # consumption to subtract from the configured limit yet.
-            remainder_available = spent is not None and not pending
+            remainder_available = spent is not None and not pending and not policy_mismatch
             live["budget"] = {
                 "limit_tokens": budget_tokens,
+                "configured_limit_tokens": configured_limit,
                 "spent_tokens": spent,
-                "remaining_tokens": max(0, budget_tokens - spent) if remainder_available else None,
+                "reserved_tokens": held,
+                "recorded_remaining_tokens": max(0, budget_tokens - spent) if spent is not None else None,
+                "remaining_tokens": max(0, budget_tokens - spent - held) if remainder_available else None,
+                "remaining_basis": "recorded_plus_planned_holds" if pinned_limit is not None else "recorded_usage",
                 "available": remainder_available,
-                "unavailable_reason": "unresolved_api_operations" if pending else spend.get("unavailable_reason"),
+                "unavailable_reason": ("reservation_policy_mismatch" if policy_mismatch else
+                                       "unresolved_api_operations" if pending else spend.get("unavailable_reason")),
                 "api_operation_state": spend.get("api_operation_state"),
+                "token_reservation_state": spend.get("token_reservation_state"),
                 "coverage": spend.get("coverage", "unavailable"),
                 "usage_complete": False,
             }

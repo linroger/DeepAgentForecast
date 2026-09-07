@@ -38,6 +38,10 @@ class UsageLedgerConflict(ValueError):
     """An operation identity was reused with different immutable attribution."""
 
 
+class UsageLedgerBudgetExceeded(RuntimeError):
+    """A configured reservation policy cannot admit another API attempt."""
+
+
 def empty_counter() -> dict[str, Any]:
     return {key: 0.0 if key in _FLOAT_METRICS else 0 for key in METRICS}
 
@@ -184,6 +188,27 @@ class UsageLedger:
             cache_partition_known INTEGER NOT NULL, {columns}
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS usage_deltas_run_attempt ON usage_deltas(run_id, attempt_id)")
+        UsageLedger._reservation_extension_present(conn)
+        conn.execute("""CREATE TABLE IF NOT EXISTS usage_token_policy (
+            run_id TEXT PRIMARY KEY, token_limit INTEGER NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS usage_reservations (
+            run_id TEXT NOT NULL, source TEXT NOT NULL, operation_id TEXT NOT NULL,
+            prompt_tokens_estimate INTEGER NOT NULL, completion_tokens_limit INTEGER NOT NULL,
+            estimator TEXT NOT NULL, planned_tokens INTEGER NOT NULL,
+            remaining_tokens INTEGER NOT NULL, state TEXT NOT NULL,
+            PRIMARY KEY (run_id, source, operation_id)
+        )""")
+        # Old marker-aware writers share this database but do not know the
+        # reservation extension. Stop their unreserved dispatch before send.
+        # Old terminal observations remain writable and cannot release a hold.
+        conn.execute("""CREATE TRIGGER IF NOT EXISTS usage_require_api_reservation
+            BEFORE INSERT ON usage_operations
+            WHEN NEW.source='llm_api_attempt' AND NEW.status='in_flight'
+              AND EXISTS (SELECT 1 FROM usage_token_policy WHERE run_id=NEW.run_id)
+              AND NOT EXISTS (SELECT 1 FROM usage_reservations
+                  WHERE run_id=NEW.run_id AND source=NEW.source AND operation_id=NEW.operation_id)
+            BEGIN SELECT RAISE(ABORT, 'Token reservation required before API dispatch'); END""")
 
     @staticmethod
     def _insert_delta(conn: sqlite3.Connection, run_id: str, attempt_id: str,
@@ -241,7 +266,8 @@ class UsageLedger:
 
     def record_snapshot(self, *, run_id: str, attempt_id: str, source: str,
                         operation_id: str, metadata: dict, counters: dict,
-                        status: str = "completed", baseline_included: bool = False) -> dict[str, Any]:
+                        status: str = "completed", baseline_included: bool = False,
+                        token_reservation: dict[str, Any] | None = None) -> dict[str, Any]:
         for name, value in (("run_id", run_id), ("attempt_id", attempt_id), ("source", source),
                             ("operation_id", operation_id), ("status", status)):
             _label(value, name)
@@ -256,6 +282,10 @@ class UsageLedger:
         meta.setdefault("cost_estimated", True)
         meta.setdefault("cache_partition_known", False)
         current = normalize_counter(counters)
+        if token_reservation is not None:
+            self._validate_token_reservation(token_reservation)
+            if source != "llm_api_attempt" or status != "in_flight" or any(current.values()) or baseline_included:
+                raise ValueError("Reservations require a zero-counter API dispatch marker")
         conn = None
         try:
             conn = self._connect(write=True)
@@ -276,6 +306,8 @@ class UsageLedger:
                 original_meta = json.loads(old["metadata_json"])
                 if any(original_meta.get(key) != meta.get(key) for key in ("stage", "provider", "model", "billing_basis", "fallback")):
                     raise UsageLedgerConflict("Usage operation identity has different attribution")
+            reservation = self._prepare_token_reservation(
+                conn, run_id, source, operation_id, token_reservation, old is not None, status)
             highwater = {key: max(previous[key], current[key]) for key in METRICS}
             highwater["total_tokens"] = highwater["prompt_tokens"] + highwater["completion_tokens"]
             delta = {key: highwater[key] - previous[key] for key in METRICS}
@@ -316,6 +348,15 @@ class UsageLedger:
                     delta = empty_counter()
             if any(delta.values()):
                 self._insert_delta(conn, run_id, attempt_id, source, operation_id, meta, delta)
+            if reservation is not None and reservation["state"] == "held":
+                precise = (status in {"completed", "unknown"} and meta["usage_class"] == "known"
+                           and all(current[key] >= previous[key] for key in (
+                               "calls", "prompt_tokens", "completion_tokens", "cache_read_tokens",
+                               "cache_write_tokens", "uncached_tokens")))
+                remaining = 0 if precise else max(reservation["planned_tokens"] - highwater["total_tokens"], 0)
+                conn.execute("UPDATE usage_reservations SET remaining_tokens=?, state=? "
+                             "WHERE run_id=? AND source=? AND operation_id=?",
+                             (remaining, "released" if precise else "held", run_id, source, operation_id))
             conn.commit()
             return delta
         except (OSError, sqlite3.Error, KeyError, TypeError, ValueError) as exc:
@@ -325,6 +366,96 @@ class UsageLedger:
         finally:
             if conn is not None:
                 conn.close()
+
+    @staticmethod
+    def _validate_token_reservation(reservation: dict[str, Any]) -> None:
+        if not isinstance(reservation, dict) or set(reservation) != {
+            "token_limit", "prompt_tokens_estimate", "completion_tokens_limit", "estimator"
+        }:
+            raise ValueError("Invalid token reservation contract")
+        for key in ("token_limit", "prompt_tokens_estimate", "completion_tokens_limit"):
+            value = reservation[key]
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0 or value > 2**53:
+                raise ValueError("Token reservation counters must be nonnegative integers below 2**53")
+        if reservation["token_limit"] == 0 or reservation["completion_tokens_limit"] == 0:
+            raise ValueError("Token reservations require positive token and completion limits")
+        if reservation["estimator"] != "utf8-json-quarter/v1":
+            raise ValueError("Unsupported token reservation estimator")
+
+    @staticmethod
+    def _reservation_extension_present(conn: sqlite3.Connection) -> bool:
+        expected = {("table", "usage_token_policy"), ("table", "usage_reservations"),
+                    ("trigger", "usage_require_api_reservation")}
+        found = {tuple(row) for row in conn.execute(
+            "SELECT type, name FROM sqlite_master WHERE name IN (?, ?, ?)",
+            tuple(name for _, name in expected))}
+        if found and found != expected:
+            raise ValueError("Incomplete token reservation extension")
+        return bool(found)
+
+    def _prepare_token_reservation(self, conn: sqlite3.Connection, run_id: str, source: str,
+                                   operation_id: str, supplied: dict[str, Any] | None,
+                                   operation_exists: bool, status: str) -> sqlite3.Row | None:
+        if source != "llm_api_attempt":
+            return None  # Aggregate/CLI observations cannot own API holds.
+        if not self._reservation_extension_present(conn):
+            if supplied is not None:
+                raise UsageLedgerStorageError("Token reservations require an initialized extension")
+            return None  # Old v1 storage remains usable without creating schema.
+        reservation = conn.execute("SELECT * FROM usage_reservations WHERE run_id=? AND source=? AND operation_id=?",
+                                   (run_id, source, operation_id)).fetchone()
+        if supplied is None:
+            if (reservation is None and source == "llm_api_attempt" and status == "in_flight"
+                    and conn.execute("SELECT 1 FROM usage_token_policy WHERE run_id=?", (run_id,)).fetchone()):
+                raise UsageLedgerBudgetExceeded("Active token policy requires an API reservation")
+            return reservation
+        policy = conn.execute("SELECT token_limit FROM usage_token_policy WHERE run_id=?", (run_id,)).fetchone()
+        if policy is None:
+            if conn.execute("""SELECT 1 FROM usage_operations AS operation
+                WHERE operation.run_id=? AND operation.source='llm_api_attempt'
+                  AND operation.status IN ('in_flight', 'unknown', 'accounting_error')
+                  AND NOT EXISTS (SELECT 1 FROM usage_reservations AS reservation
+                    WHERE reservation.run_id=operation.run_id AND reservation.source=operation.source
+                      AND reservation.operation_id=operation.operation_id) LIMIT 1""", (run_id,)).fetchone():
+                raise UsageLedgerUnresolvedError("Unreserved API uncertainty prevents reservation activation")
+            conn.execute("INSERT INTO usage_token_policy VALUES (?, ?)", (run_id, supplied["token_limit"]))
+        elif policy["token_limit"] != supplied["token_limit"]:
+            raise UsageLedgerBudgetExceeded("Token budget differs from the active run reservation policy")
+        if reservation is not None:
+            if any(reservation[key] != supplied[key] for key in (
+                "prompt_tokens_estimate", "completion_tokens_limit", "estimator")):
+                raise UsageLedgerConflict("API reservation identity has different planned usage")
+            return reservation
+        if operation_exists:
+            raise UsageLedgerConflict("Cannot reserve an already observed API operation")
+        planned = supplied["prompt_tokens_estimate"] + supplied["completion_tokens_limit"]
+        spent = self._budget_totals(conn, run_id, include_cost=False)["total_tokens"]
+        held = conn.execute("SELECT COALESCE(SUM(remaining_tokens), 0) FROM usage_reservations "
+                            "WHERE run_id=? AND state='held'", (run_id,)).fetchone()[0]
+        if spent + held + planned > supplied["token_limit"]:
+            # Persist the first policy even when it rejects this dispatch, so
+            # an older marker writer cannot bypass the newly activated limit.
+            conn.commit()
+            raise UsageLedgerBudgetExceeded("Run has insufficient unreserved token allowance")
+        conn.execute("INSERT INTO usage_reservations VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'held')",
+                     (run_id, source, operation_id, supplied["prompt_tokens_estimate"],
+                      supplied["completion_tokens_limit"], supplied["estimator"], planned, planned))
+        return conn.execute("SELECT * FROM usage_reservations WHERE run_id=? AND source=? AND operation_id=?",
+                            (run_id, source, operation_id)).fetchone()
+
+    @classmethod
+    def _token_reservation_state(cls, conn: sqlite3.Connection, run_id: str) -> dict[str, Any]:
+        state = {"schema": "token-reservation-state/v1", "coverage": "recorded_llm_api_attempts",
+                 "token_limit": None, "active_operations": 0, "reserved_tokens": 0, "estimated": True}
+        if not cls._reservation_extension_present(conn):
+            return state
+        policy = conn.execute("SELECT token_limit FROM usage_token_policy WHERE run_id=?", (run_id,)).fetchone()
+        if policy is None:
+            return state
+        row = conn.execute("SELECT COUNT(*) AS operations, COALESCE(SUM(remaining_tokens), 0) AS tokens "
+                           "FROM usage_reservations WHERE run_id=? AND state='held'", (run_id,)).fetchone()
+        return {**state, "token_limit": policy["token_limit"],
+                "active_operations": row["operations"], "reserved_tokens": row["tokens"]}
 
     @staticmethod
     def _api_operation_state(conn: sqlite3.Connection, run_id: str,
@@ -347,6 +478,40 @@ class UsageLedger:
                 state["other_attempt_in_flight"] = row["operations"] - row["current_operations"]
         return state
 
+    @staticmethod
+    def _budget_totals(conn: sqlite3.Connection, run_id: str, *, include_cost: bool) -> dict[str, Any]:
+        # Keep these dimensions aligned with snapshot(); no rounding
+        # occurs until all cost groups have been accumulated in Python.
+        dimensions = "stage, provider, model, usage_class, billing_basis, cost_estimated, fallback, cache_partition_known"
+        if include_cost:
+            rows = conn.execute(
+                "SELECT SUM(total_tokens) AS total_tokens, SUM(cost_usd) AS cost_usd "
+                f"FROM usage_deltas WHERE run_id=? GROUP BY {dimensions}", (run_id,),
+            ).fetchall()
+            total_tokens, cost_usd = 0, 0.0
+            for row in rows:
+                total_tokens += row["total_tokens"]
+                cost_usd += row["cost_usd"]
+            cost_usd = round(cost_usd, 6)
+        else:
+            try:
+                row = conn.execute("SELECT SUM(total_tokens) AS total_tokens FROM usage_deltas WHERE run_id=?",
+                                   (run_id,)).fetchone()
+                total_tokens = row["total_tokens"] if row["total_tokens"] is not None else 0
+            except sqlite3.OperationalError as exc:
+                if str(exc) != "integer overflow":
+                    raise
+                # A valid cross-group total can exceed SQLite's signed
+                # integer range. Match snapshot's Python accumulation in
+                # this exceptional case without weakening other failures.
+                rows = conn.execute("SELECT SUM(total_tokens) AS total_tokens FROM usage_deltas "
+                                    f"WHERE run_id=? GROUP BY {dimensions}", (run_id,)).fetchall()
+                total_tokens = sum(row["total_tokens"] for row in rows)
+            cost_usd = None
+        if not isinstance(total_tokens, int) or total_tokens < 0:
+            raise ValueError("Invalid cumulative token counter")
+        return {"total_tokens": total_tokens, "cost_usd": cost_usd}
+
     def budget_totals(self, run_id: str, *, include_cost: bool) -> dict[str, Any]:
         """Read cumulative budget counters without building report projections.
 
@@ -360,38 +525,9 @@ class UsageLedger:
             conn.execute("BEGIN")
             if conn.execute("SELECT 1 FROM usage_runs WHERE run_id=?", (run_id,)).fetchone() is None:
                 raise ValueError("Unknown durable run")
-            # Keep these dimensions aligned with snapshot(); no rounding
-            # occurs until all cost groups have been accumulated in Python.
-            dimensions = "stage, provider, model, usage_class, billing_basis, cost_estimated, fallback, cache_partition_known"
-            if include_cost:
-                rows = conn.execute(
-                    "SELECT SUM(total_tokens) AS total_tokens, SUM(cost_usd) AS cost_usd "
-                    f"FROM usage_deltas WHERE run_id=? GROUP BY {dimensions}", (run_id,),
-                ).fetchall()
-                total_tokens, cost_usd = 0, 0.0
-                for row in rows:
-                    total_tokens += row["total_tokens"]
-                    cost_usd += row["cost_usd"]
-                cost_usd = round(cost_usd, 6)
-            else:
-                try:
-                    row = conn.execute("SELECT SUM(total_tokens) AS total_tokens FROM usage_deltas WHERE run_id=?",
-                                       (run_id,)).fetchone()
-                    total_tokens = row["total_tokens"] if row["total_tokens"] is not None else 0
-                except sqlite3.OperationalError as exc:
-                    if str(exc) != "integer overflow":
-                        raise
-                    # A valid cross-group total can exceed SQLite's signed
-                    # integer range. Match snapshot's Python accumulation in
-                    # this exceptional case without weakening other failures.
-                    rows = conn.execute("SELECT SUM(total_tokens) AS total_tokens FROM usage_deltas "
-                                        f"WHERE run_id=? GROUP BY {dimensions}", (run_id,)).fetchall()
-                    total_tokens = sum(row["total_tokens"] for row in rows)
-                cost_usd = None
-            if not isinstance(total_tokens, int) or total_tokens < 0:
-                raise ValueError("Invalid cumulative token counter")
+            result = self._budget_totals(conn, run_id, include_cost=include_cost)
             conn.commit()
-            return {"total_tokens": total_tokens, "cost_usd": cost_usd}
+            return result
         except (OSError, sqlite3.Error, ValueError, KeyError, TypeError) as exc:
             raise UsageLedgerStorageError("Cannot read durable budget accounting") from exc
         finally:
@@ -449,9 +585,11 @@ class UsageLedger:
                 counter["latency_ms"] = round(counter["latency_ms"], 1)
                 counter["cost_usd"] = round(counter["cost_usd"], 6)
             api_operation_state = self._api_operation_state(conn, run_id, current_attempt_id)
+            token_reservation_state = self._token_reservation_state(conn, run_id)
             conn.commit()
             return {"run_id": run_id, "attempt_id": attempt_id, "total": total,
                     "api_operation_state": api_operation_state,
+                    "token_reservation_state": token_reservation_state,
                     "by_stage": by_stage, "by_model": by_model,
                     "usage_by_class": by_source, "fallback_attributed": fallback,
                     "cost_estimated": estimated, "cost_basis": next(iter(bases)) if len(bases) == 1 else ("mixed" if bases else "unknown"),

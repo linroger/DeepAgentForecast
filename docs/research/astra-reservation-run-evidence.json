@@ -1,0 +1,405 @@
+{
+  "schema": "astra-reservation-run-evidence/v1",
+  "validated_at": "2026-09-07T23:14:00.793856+00:00",
+  "iteration_baseline": "5924dd46cf18c4f111ecc780b269db5041bac36b",
+  "scope": "Read-only ASTRA-04b5b reservation evidence refresh. Historical aggregates plus pinned source concurrency mechanisms; no providers, runtime changes, network, private payload exports or original saved writes.",
+  "saved_artifact_root": "/Users/rogerlin/Downloads/DeepResearchForecast",
+  "prior_receipts": [
+    {
+      "path": "docs/research/astra-budget-run-evidence.json",
+      "sha256": "f4936a0752fdc45235eb4819ac8d0109f10e183d57f580981e63e40f304f6d4e"
+    },
+    {
+      "path": "docs/research/astra-simulation-run-evidence.json",
+      "sha256": "ce479031708da725d197919d635f0b82e2a3438dbed94eb40f77e742ced86037"
+    },
+    {
+      "path": "docs/research/astra-api-run-evidence.json",
+      "sha256": "a7086b6927062fcbfc066951d6be011c9e223765352023a1ec3be66c1682d6be"
+    },
+    {
+      "path": "docs/research/astra-iteration-04-run-evidence.json",
+      "sha256": "e127201a3fb3fc4592d018e1b4915d0bb93b5b999ecce8e44677140a191e9264"
+    }
+  ],
+  "validation": {
+    "saved_artifacts": {
+      "checked": 77,
+      "matched": 77,
+      "changed_paths": [],
+      "missing_paths": []
+    },
+    "pipeline_inventory": {
+      "count": 32,
+      "status_counts": {
+        "cancelled": 3,
+        "completed": 26,
+        "failed": 3
+      },
+      "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+      "new_ids": [],
+      "removed_ids": [],
+      "changed_state_hash_ids": []
+    },
+    "bounded_logs": {
+      "prior_files_hashed": 12,
+      "changed_paths": [],
+      "missing_paths": [],
+      "latest_prior_dated_filename": "mirofish.log.2026-08-17",
+      "new_dated_paths": [],
+      "new_file_boundary": "Only dated names newer than the previous maximum are newly selected; every prior bounded file, including active mirofish.log, is rehashed. Older unselected logs remain outside scope.",
+      "new_or_changed_logs_parsed": 0,
+      "parsed_aggregates": [],
+      "prior_counts_reused": true
+    },
+    "selected_health_snapshots": {
+      "count": 4,
+      "source_receipt": "docs/research/astra-simulation-run-evidence.json",
+      "all_health_hashes_match": true,
+      "all_child_token_snapshots_still_absent": true,
+      "all_parent_run_entries_still_absent": true
+    }
+  },
+  "selected_runs": [
+    {
+      "pipeline_id": "pipe_f23527f7d903",
+      "simulation_id": "sim_a0a936f8104c",
+      "created_at": "2026-07-09T08:12:33.491844+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json",
+        "sha256": "d35ebcbe44d251b120b9d1d23546efca5935bf11d23782e2bc5f8aaa6fac1bbc"
+      },
+      "manifest_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/run.json",
+        "sha256": "4c56590a6ddb5e1691cbfbe9229a331a16dfab1128979d76243f5e0858bea2be"
+      },
+      "simulation_state_source": {
+        "path": "backend/uploads/simulations/sim_a0a936f8104c/state.json",
+        "sha256": "29b2f60e079aea37f571ab121173c08aff15a599eedb492f1daa2c63b7c87df0"
+      },
+      "lineage_matches": true,
+      "configured_platforms": {
+        "enable_twitter": {
+          "key": "$.enable_twitter",
+          "present": true,
+          "value": true
+        },
+        "enable_reddit": {
+          "key": "$.enable_reddit",
+          "present": true,
+          "value": true
+        }
+      },
+      "manifest_budget_or_concurrency_hits": [],
+      "historical_token_cap": null,
+      "historical_usd_cap": null,
+      "historical_peak_simultaneous_physical_requests": null,
+      "historical_budget_overshoot_tokens": null,
+      "saved_health_calls": 221,
+      "health_evidence": "astra-simulation-run-evidence.json selected_runs matching pipeline_id; health_calls unit is a model-boundary counter, not physical requests.",
+      "run_meter_entry_present": false,
+      "sim_token_snapshot_exists": false
+    },
+    {
+      "pipeline_id": "pipe_91aaf91f6392",
+      "simulation_id": "sim_85b123350ee3",
+      "created_at": "2026-07-12T14:18:53.207724+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/pipeline_state.json",
+        "sha256": "cc4544cde9f9a5b0210187230cefdf2b988dfc692b9bd64b862e7884d5117436"
+      },
+      "manifest_source": {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/run.json",
+        "sha256": "b7404294eef796f71ef5b3fc086bd351bfd9ef621c765b94298fc1368ae16b30"
+      },
+      "simulation_state_source": {
+        "path": "backend/uploads/simulations/sim_85b123350ee3/state.json",
+        "sha256": "5d6250d7b71f08eccaf7b7d9a4b66f41f53c72fd0c2d1e1f7837ae9cfee1911f"
+      },
+      "lineage_matches": true,
+      "configured_platforms": {
+        "enable_twitter": {
+          "key": "$.enable_twitter",
+          "present": true,
+          "value": true
+        },
+        "enable_reddit": {
+          "key": "$.enable_reddit",
+          "present": true,
+          "value": true
+        }
+      },
+      "manifest_budget_or_concurrency_hits": [],
+      "historical_token_cap": null,
+      "historical_usd_cap": null,
+      "historical_peak_simultaneous_physical_requests": null,
+      "historical_budget_overshoot_tokens": null,
+      "saved_health_calls": 456,
+      "health_evidence": "astra-simulation-run-evidence.json selected_runs matching pipeline_id; health_calls unit is a model-boundary counter, not physical requests.",
+      "run_meter_entry_present": false,
+      "sim_token_snapshot_exists": false
+    },
+    {
+      "pipeline_id": "pipe_bef6879b2e94",
+      "simulation_id": "sim_05ab2bdebbd2",
+      "created_at": "2026-07-14T21:20:23.971987+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json",
+        "sha256": "23b04b0b065ef9cd1639041ed0d87a3615a95f06dc242466a5ebe7522add1e22"
+      },
+      "manifest_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/run.json",
+        "sha256": "59e2683039b0d5646138068b7b2202170eefd21a627c6c8524a8ce58a59cf3ff"
+      },
+      "simulation_state_source": {
+        "path": "backend/uploads/simulations/sim_05ab2bdebbd2/state.json",
+        "sha256": "f09c8a69fc863bbf3a11724b59a57ad7c8e584a7cdaed3e7485a35c05700f0a7"
+      },
+      "lineage_matches": true,
+      "configured_platforms": {
+        "enable_twitter": {
+          "key": "$.enable_twitter",
+          "present": true,
+          "value": true
+        },
+        "enable_reddit": {
+          "key": "$.enable_reddit",
+          "present": true,
+          "value": true
+        }
+      },
+      "manifest_budget_or_concurrency_hits": [],
+      "historical_token_cap": null,
+      "historical_usd_cap": null,
+      "historical_peak_simultaneous_physical_requests": null,
+      "historical_budget_overshoot_tokens": null,
+      "saved_health_calls": 648,
+      "health_evidence": "astra-simulation-run-evidence.json selected_runs matching pipeline_id; health_calls unit is a model-boundary counter, not physical requests.",
+      "run_meter_entry_present": false,
+      "sim_token_snapshot_exists": false
+    },
+    {
+      "pipeline_id": "pipe_0e1b84d2682a",
+      "simulation_id": "sim_9fc88d28ccb1",
+      "created_at": "2026-07-15T14:15:27.286816+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json",
+        "sha256": "f2ba0ca5dadcb28264c29ef948d35f04453498530bc1819d4e0a5532ab8684c1"
+      },
+      "manifest_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/run.json",
+        "sha256": "90a89e823e19070c9ef18a2a4ff15f1337db4df91af922b1de0dd6d1c7bb2cdd"
+      },
+      "simulation_state_source": {
+        "path": "backend/uploads/simulations/sim_9fc88d28ccb1/state.json",
+        "sha256": "d58649d3fd7dcdb19d69653e4eac91af22c7bde8d3a796e57d9ee41ad217a769"
+      },
+      "lineage_matches": true,
+      "configured_platforms": {
+        "enable_twitter": {
+          "key": "$.enable_twitter",
+          "present": true,
+          "value": true
+        },
+        "enable_reddit": {
+          "key": "$.enable_reddit",
+          "present": true,
+          "value": true
+        }
+      },
+      "manifest_budget_or_concurrency_hits": [],
+      "historical_token_cap": null,
+      "historical_usd_cap": null,
+      "historical_peak_simultaneous_physical_requests": null,
+      "historical_budget_overshoot_tokens": null,
+      "saved_health_calls": 212,
+      "health_evidence": "astra-simulation-run-evidence.json selected_runs matching pipeline_id; health_calls unit is a model-boundary counter, not physical requests.",
+      "run_meter_entry_present": false,
+      "sim_token_snapshot_exists": false
+    }
+  ],
+  "manifest_lookup": {
+    "scope": "Recursive dictionary-key lookup in the four selected run.json manifests; no environment-file or current service setting inspection.",
+    "exact_key_allowlist": [
+      "LLM_RUN_BUDGET_TOKENS",
+      "LLM_RUN_BUDGET_USD",
+      "OASIS_SEMAPHORE",
+      "OASIS_CLI_SEMAPHORE",
+      "run_budget_tokens",
+      "run_budget_usd",
+      "budget_tokens",
+      "budget_usd",
+      "seed_concurrency",
+      "ensemble_seed_concurrency"
+    ],
+    "absence_interpretation": "No matching fields means the selected manifests do not establish enabled historical caps or runtime semaphore values; it does not establish zero limits or no concurrency."
+  },
+  "reused_log_aggregates": {
+    "prior_receipt": "docs/research/astra-api-run-evidence.json",
+    "key": "$.selected_application_logs",
+    "unit": "Literal physical log lines matching exact stored regex patterns; counts overlap and are not distinct request totals.",
+    "logs": [
+      {
+        "path": "backend/logs/mirofish.log.2026-07-09",
+        "sha256": "255a5c3108e98652812af5ad00dc2e680bdf137151ebec15adba0699d7f97076",
+        "counts": {
+          "exact_429": 1001,
+          "app_retry_schedule": 2287,
+          "empty_api_content": 0
+        },
+        "overlap_429_and_retry_schedule": 671
+      },
+      {
+        "path": "backend/logs/mirofish.log.2026-07-15",
+        "sha256": "d2a6dc7aeae69e19dc71c56b5cc554309cf3975af784f66f29a02277dc6756e5",
+        "counts": {
+          "exact_429": 8906,
+          "app_retry_schedule": 14039,
+          "empty_api_content": 0
+        },
+        "overlap_429_and_retry_schedule": 4555
+      },
+      {
+        "path": "backend/logs/mirofish.log.2026-07-16",
+        "sha256": "c9162222567c593b472823d492c46ddd61fa9893f5b6f1f2cd4deb661d109265",
+        "counts": {
+          "exact_429": 437,
+          "app_retry_schedule": 413,
+          "empty_api_content": 0
+        },
+        "overlap_429_and_retry_schedule": 263
+      }
+    ],
+    "peak_concurrent_requests": null,
+    "enabled_budget_violations": null
+  },
+  "pinned_source_snapshot": [
+    {
+      "path": "backend/app/config.py",
+      "revision": "5924dd46cf18c4f111ecc780b269db5041bac36b",
+      "sha256": "99427a7b8f7cf862a43dedcc664198f584cf0782c897d0f77a60874bec394770",
+      "anchors": {
+        "LLM_RUN_BUDGET_TOKENS =": 58,
+        "LLM_RUN_BUDGET_USD =": 59,
+        "OASIS_SEMAPHORE =": 1049
+      }
+    },
+    {
+      "path": "backend/app/utils/oasis_llm.py",
+      "revision": "5924dd46cf18c4f111ecc780b269db5041bac36b",
+      "sha256": "51271cfe0692dfd1352a0ff1c01c1785fc2b2b00d30d2bc6ed944f76c7e66092",
+      "anchors": {
+        "DEFAULT_CLI_SEMAPHORE =": 30,
+        "DEFAULT_OPENAI_SEMAPHORE =": 31,
+        "def get_oasis_semaphore": 616
+      }
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "revision": "5924dd46cf18c4f111ecc780b269db5041bac36b",
+      "sha256": "01fcb83305e9b5e883d59ffaf422bea0f6e1e38f9f9d0b417740aea76ee403de",
+      "anchors": {
+        "semaphore=get_oasis_semaphore(config, use_boost=False": 4105,
+        "semaphore=get_oasis_semaphore(config, use_boost=True": 4626,
+        "results = await asyncio.gather(": 1047
+      }
+    },
+    {
+      "path": "backend/app/services/pipeline_orchestrator.py",
+      "revision": "5924dd46cf18c4f111ecc780b269db5041bac36b",
+      "sha256": "e0c2ed1a451c6b1854a12a95a15497b1e2e1a6917374794a66b8137f8f3ddce4",
+      "anchors": {
+        "seed_conc = max": 8625,
+        "with ThreadPoolExecutor(max_workers=seed_conc": 8698,
+        "\"budget_tokens\": int(Config.LLM_RUN_BUDGET_TOKENS": 10554
+      }
+    },
+    {
+      "path": "backend/app/utils/llm_client.py",
+      "revision": "5924dd46cf18c4f111ecc780b269db5041bac36b",
+      "sha256": "70c44e2e46f71a7ad8cc9c27fe00efb9c32927abaa370d4e575be427891060d1",
+      "anchors": {
+        "def _create_openai_completion": 442,
+        "record(calls=0, status=\"in_flight\")": 479
+      }
+    },
+    {
+      "path": "backend/app/utils/oasis_usage.py",
+      "revision": "5924dd46cf18c4f111ecc780b269db5041bac36b",
+      "sha256": "614cd62fba35cd190d56c97d4fcc849297d601b5a91e9bd120dd8f85fc840fc2",
+      "anchors": {
+        "class _Attempt:": 35,
+        "self.record(calls=0, status=\"in_flight\")": 56
+      }
+    },
+    {
+      "path": "backend/app/utils/telemetry.py",
+      "revision": "5924dd46cf18c4f111ecc780b269db5041bac36b",
+      "sha256": "c9f34e7d15a0e50113130c80843b0d5e7492551db0b9e8e98f87cf605d0e9cdf",
+      "anchors": {
+        "def check_budget": 728,
+        "if max_tokens <= 0 and max_cost <= 0:": 737
+      }
+    }
+  ],
+  "source_supported_mechanisms": {
+    "budget_defaults": {
+      "token_cap_default": 0,
+      "usd_cap_default": 0,
+      "disabled_when_both_caps_nonpositive": true,
+      "active_service_values": null,
+      "source": "backend/app/config.py; backend/app/utils/telemetry.py"
+    },
+    "parallel_simulations": {
+      "default_gather_platforms": 2,
+      "semaphore_divides_cap_by_platforms": true,
+      "native_helper_fallback_cap": 30,
+      "native_config_default_cap": 24,
+      "cli_helper_fallback_cap": 8,
+      "actual_child_environment_cap": null,
+      "source": "backend/app/utils/oasis_llm.py; backend/scripts/run_parallel_simulation.py; backend/app/config.py"
+    },
+    "ensemble_seed_workers": {
+      "default": 2,
+      "minimum": 1,
+      "maximum": 3,
+      "actual_saved_worker_count": null,
+      "source": "backend/app/services/pipeline_orchestrator.py"
+    },
+    "api_budget_admission": {
+      "shared_client_predispatch_recorded_budget_check": true,
+      "native_oasis_predispatch_recorded_budget_check": true,
+      "transactional_allowance_reservation_present": false,
+      "source": "backend/app/utils/llm_client.py; backend/app/utils/oasis_usage.py",
+      "interpretation": "A zero-counter in-flight marker records unfinished work but does not deduct prospective token/cost allowance. Concurrent requests can read the same settled totals; this is a source-supported race mechanism, not a measured historical overshoot.",
+      "in_flight_marker_recorded_tokens": 0,
+      "reserved_allowance": null
+    }
+  },
+  "arithmetic_validation": {
+    "selected_health_calls": [
+      221,
+      456,
+      648,
+      212
+    ],
+    "selected_health_sum_not_used": true,
+    "log_overlap_not_exceeding_either_component": true,
+    "source_default_division_examples": {
+      "native_helper_dual_platform_per_platform": 15,
+      "native_config_dual_platform_per_platform_if_exported": 12,
+      "cli_helper_dual_platform_per_platform": 4
+    },
+    "examples_are_not_saved_runtime_measurements": true
+  },
+  "interpretation": [
+    "The saved health counters and enabled-platform flags support activity on both platforms, not proof that physical requests overlapped. Request spans and historical peak concurrency are missing.",
+    "Retry log markers are source-backed evidence of repeated failure/retry reporting. Shared logs and overlapping patterns prevent summing them into requests, budget violations or billed retries.",
+    "All four selected RUN meter entries and child token snapshots are absent; missing usage remains unknown. No physical reservation requirement is calibrated from aggregate calls alone.",
+    "Current source supports concurrent work plus recorded-spend checks without prospective allowance. Deterministic competing-request/process tests are required to quantify and fix the race.",
+    "Enabled caps are a necessary condition for budget reservations to limit work. Source defaults are zero; neither historical manifests nor this refresh prove caps were enabled on saved or active runs.",
+    "Native helper and Config semaphore defaults differ at the pinned revision. This receipt labels both and does not infer an active value or change either default.",
+    "Reservations based on estimated input or requested output are admission estimates, not a complete token or invoice ceiling. Missing usage, retries, unknown outcomes, cross-process identity and disabled caps require explicit acceptance.",
+    "No newer saved artifact/log changes support a production comparison; no production saving or historical budget overshoot is claimed."
+  ]
+}

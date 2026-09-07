@@ -212,12 +212,12 @@ def test_storage_failure_stays_sticky_without_sdk_retry(run, models, monkeypatch
 
 @pytest.mark.parametrize("asynchronous", [False, True])
 def test_budget_stop_survives_failing_response_cleanup(run, models, monkeypatch, asynchronous):
-    monkeypatch.setattr(Config, "LLM_RUN_BUDGET_TOKENS", 10)
+    monkeypatch.setattr(Config, "LLM_RUN_BUDGET_TOKENS", 30)
     sent = []
 
     def transport(request):
         sent.append(request)
-        result = httpx.Response(200, json=response())
+        result = httpx.Response(200, json=response(usage={"prompt_tokens": 40, "completion_tokens": 5, "total_tokens": 45}))
 
         def close():
             raise RuntimeError("offline close failure")
@@ -229,11 +229,12 @@ def test_budget_stop_survives_failing_response_cleanup(run, models, monkeypatch,
         return result
 
     model = oasis._wrap_openai_fallback_guard(models(transport), "openai")
+    model.model_config_dict = {"max_tokens": 5}
     for _ in range(2):
         with pytest.raises(tel.BudgetExceeded):
             call(model, asynchronous)
     assert len(sent) == 1
-    assert tel.LLMMeter.cumulative_snapshot(run.id)["total"]["total_tokens"] == 15
+    assert tel.LLMMeter.cumulative_snapshot(run.id)["total"]["total_tokens"] == 45
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])

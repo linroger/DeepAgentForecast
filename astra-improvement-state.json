@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T22:25:48.747239+00:00",
+  "updated_at": "2026-09-07T23:34:46.600565+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -80,7 +80,11 @@
         "docs/research/astra-budget-verification.json",
         "docs/research/astra-budget-verification.md",
         "docs/research/astra-budget-comparison.json",
-        "docs/research/astra-budget-run-evidence.json"
+        "docs/research/astra-budget-run-evidence.json",
+        "docs/research/astra-reservation-verification.md",
+        "docs/research/astra-reservation-verification.json",
+        "docs/research/astra-reservation-run-evidence.json",
+        "docs/research/astra-reservation-comparison.json"
       ],
       "subtasks": [
         {
@@ -138,7 +142,25 @@
                 {
                   "id": "ASTRA-04b5b",
                   "title": "Implement bounded transactional API reservation and settlement with explicit uncertainty",
-                  "status": "pending"
+                  "status": "in_progress",
+                  "subtasks": [
+                    {
+                      "id": "ASTRA-04b5b1",
+                      "title": "Atomically reserve and settle estimated API token allowance with pinned policy and visible uncertainty",
+                      "status": "verified_offline",
+                      "evidence": "docs/research/astra-reservation-verification.json"
+                    },
+                    {
+                      "id": "ASTRA-04b5b2",
+                      "title": "Expose explicit native output caps through the production factory and child configuration without changing defaults",
+                      "status": "pending"
+                    },
+                    {
+                      "id": "ASTRA-04b5b3",
+                      "title": "Design and validate estimated monetary reservation policy with explicit rate and missing-price coverage",
+                      "status": "pending"
+                    }
+                  ]
                 }
               ]
             }
@@ -146,14 +168,15 @@
         }
       ],
       "limits": [
-        "ASTRA-04b transactional reservations and CLI physical provenance remain pending; explicitly launched simulation API work now shares the live parent ledger.",
-        "Checks use cumulative recorded observations before and after API attempts; concurrent admission is not reserved and does not provide a complete hard spend cap.",
+        "Token-enabled durable API sends now reserve estimated allowance; monetary reservations and CLI physical provenance remain pending.",
+        "Concurrent planned token allowance is reserved atomically for covered API sends. Input estimates and opaque history prevent a hard provider-token or invoice cap claim.",
         "Checkpoint-relative stream deltas are verified offline; exact CLI request provenance, idless observations and pre-delivery crash gaps remain incomplete.",
         "Simulation aggregate model labels retain stable identity; detailed model diagnostics are separate.",
         "Imported historical baselines are opaque and legacy marker-first ambiguity is explicit.",
         "Unknown/cache partition coverage is not inferred; usage_complete remains false.",
-        "Physical backend and factory-installed nonstreaming CAMEL API attempts, unresolved projections/admission, and detached shared-ledger coverage are verified offline; CLI physical failures, custom SDK replacement and reservations remain incomplete.",
-        "Enabled budget guards use a verified narrow projection; token sums remain O(delta rows), and cost grouping is retained for exact rounding compatibility. No default-disabled or production speedup claim."
+        "Backend and factory-instrumented nonstreaming CAMEL physical attempts, unresolved recovery and token reservations are verified offline; production native output-cap configuration, monetary reservations, CLI physical failures and custom SDK replacement remain incomplete.",
+        "Enabled budget guards use a verified narrow projection; token sums remain O(delta rows), and cost grouping is retained for exact rounding compatibility. No default-disabled or production speedup claim.",
+        "Native factory requests remain uncapped by default and are rejected before send if token reservations are enabled. Explicit production output-cap configuration is next; held allowance is separate from recorded usage."
       ]
     },
     {
@@ -271,7 +294,7 @@
   ],
   "next_recommendation": "ASTRA-04",
   "last_completed_slice": [
-    "ASTRA-04b5a"
+    "ASTRA-04b5b1"
   ],
   "iterations": [
     {
@@ -354,6 +377,15 @@
       "next": "ASTRA-04b5b bounded transactional API reservation/settlement with explicit uncertainty.",
       "verified_source_hashes": "docs/research/astra-budget-verification.json",
       "implementation_commit": "99eac2abc2a90977d7b935699f837f227b2a04ac"
+    },
+    {
+      "completed_at": "2026-09-07T23:33:46.182071+00:00",
+      "recommendations": [
+        "ASTRA-04b5b1"
+      ],
+      "result": "1072 backend tests passed with one deployment-only skip; independent74-case review clear. Offline competing calls2\u21921, unknown timeout retries3\u21922 with28tokens held; successful local median2.1434\u21922.2144ms.",
+      "next": "ASTRA-04b5b2 explicit native output-cap configuration through the production factory and child path; then monetary policy and remaining coverage.",
+      "verified_source_hashes": "docs/research/astra-reservation-verification.json"
     }
   ],
   "last_implementation_commit": "99eac2abc2a90977d7b935699f837f227b2a04ac",
@@ -379,6 +411,15 @@
       "description": "18 baseline Ruff findings in the three simulation entry scripts and oasis_llm.py; no new findings introduced by ASTRA-04b4.",
       "evidence": "docs/research/astra-simulation-verification.json",
       "resolution": "Address as a separate verified cleanup slice; retain source-aware differential lint until then."
+    },
+    {
+      "id": "ASTRA-TOKEN-01",
+      "priority": "P2",
+      "status": "planned",
+      "recommendation": "ASTRA-04b5b2",
+      "description": "Native production model creation has no explicit output-token cap configuration path. Token-enabled reservations therefore stop its uncapped requests before dispatch.",
+      "evidence": "docs/research/astra-reservation-verification.md",
+      "resolution": "Add validated opt-in output-cap configuration through the factory and child launch path, preserving current uncapped defaults and actor/source provenance; cover actual SDK sends offline."
     }
   ]
 }

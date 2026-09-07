@@ -12,6 +12,7 @@ from contextlib import suppress
 from typing import Any
 
 from .llm_client import LLMClient
+from .api_budget import plan_token_reservation
 from .telemetry import (
     BudgetExceeded, LLMMeter, UsageLedgerConflict, UsageLedgerStorageError,
     UsageLedgerUnresolvedError, check_budget, resolve_run_attribution,
@@ -53,6 +54,7 @@ class _Attempt:
             raise UsageLedgerStorageError("Durable OASIS requires model and message attribution")
         self.provider = provider
         self.operation_id = LLMMeter.new_operation_id(self.run_id)
+        self.reservation = plan_token_reservation(body, self.run_id)
         self.record(calls=0, status="in_flight")
         self.started = time.monotonic()
 
@@ -65,11 +67,18 @@ class _Attempt:
             run_id=self.run_id, stage=self.stage, _fallback=self.inferred,
             calls=calls, status=status, usage_source=usage_source,
             uncached_tokens=None, **cache,
+            token_reservation=self.reservation if status == "in_flight" else None,
         )
 
     def unknown(self) -> None:
         self.record(status="unknown", latency_ms=(time.monotonic() - self.started) * 1000)
-        check_budget(self.run_id)
+        self.check_budget()
+
+    def check_budget(self) -> None:
+        if self.reservation is not None:
+            check_budget(self.run_id, token_limit=self.reservation["token_limit"])
+        else:
+            check_budget(self.run_id)
 
     def settle(self, response: Any) -> None:
         elapsed = (time.monotonic() - self.started) * 1000
@@ -96,7 +105,7 @@ class _Attempt:
         # Completed means a response's usage was settled before SDK parsing; it
         # does not assert that tool arguments or structured output are valid.
         self.record(status="completed" if response.is_success else "unknown", latency_ms=elapsed, **usage)
-        check_budget(self.run_id)
+        self.check_budget()
 
 
 def _instrument_client(sdk: Any, provider: str, expected_run: str, *, asynchronous: bool) -> None:

@@ -111,9 +111,9 @@ def test_budget_consumed_by_empty_response_prevents_retry(run, client_factory, m
 
     client, _ = client_factory(transport)
     with pytest.raises(tel.BudgetExceeded):
-        client.chat([])
+        client.chat([], max_tokens=5)
     with pytest.raises(tel.BudgetExceeded):
-        client.chat_with_tools([], [])
+        client.chat_with_tools([], [], max_tokens=5)
     assert len(transmissions) == 1
     assert tel.LLMMeter.cumulative_snapshot(run.id)["total"]["total_tokens"] == 25
 
@@ -148,7 +148,7 @@ def test_attempt_attribution_does_not_move_when_active_registry_changes(run, cli
 
     try:
         client, _ = client_factory(transport)
-        assert client.chat([]) == "accepted"
+        assert client.chat([], max_tokens=5) == "accepted"
         snap = tel.LLMMeter.cumulative_snapshot(run.id)
         assert snap["total"]["total_tokens"] == 15
         assert snap["fallback_attributed"]["total_tokens"] == 15

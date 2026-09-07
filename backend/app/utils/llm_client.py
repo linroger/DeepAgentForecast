@@ -444,7 +444,8 @@ class LLMClient:
         """One SDK dispatch and durable settlement, before content validation.
 
         An interrupted process can leave the zero-counter in-flight row behind.
-        It is an unresolved observation, not a reservation or proof of no spend.
+        When a durable token cap is enabled, the marker also holds the planned
+        request allowance. An unresolved observation is never proof of no spend.
         Completed means a response's usage was settled, not that its content or
         tool arguments passed the caller's subsequent validation.
         """
@@ -452,9 +453,12 @@ class LLMClient:
             BudgetExceeded, LLMMeter, UsageLedgerConflict, UsageLedgerStorageError,
             UsageLedgerUnresolvedError, check_budget, resolve_run_attribution,
         )
+        from .api_budget import prepare_token_request
         run_id, stage, inferred = resolve_run_attribution()
         LLMMeter.assert_accounting_available(run_id)
         check_budget(run_id)
+        # Plan and send one private snapshot when token planning is enabled.
+        kwargs, reservation = prepare_token_request(kwargs, run_id)
         self._last_usage = None
         # Request-local options also cover shared/injected SDK clients whose
         # constructor defaults still permit retries. Lightweight offline fakes
@@ -473,8 +477,15 @@ class LLMClient:
                     prompt_tokens, completion_tokens, latency_ms,
                     run_id=run_id, stage=stage, calls=calls, status=status,
                     usage_source=usage_source, uncached_tokens=None,
+                    token_reservation=reservation if status == "in_flight" else None,
                     _fallback=inferred, **cache,
                 )
+
+        def check_attempt_budget() -> None:
+            if reservation is not None:
+                check_budget(run_id, token_limit=reservation["token_limit"])
+            else:
+                check_budget(run_id)
 
         record(calls=0, status="in_flight")
         started = time.monotonic()
@@ -484,7 +495,7 @@ class LLMClient:
             raise
         except Exception:
             record(status="unknown", latency_ms=(time.monotonic() - started) * 1000)
-            check_budget(run_id)
+            check_attempt_budget()
             raise
         elapsed = (time.monotonic() - started) * 1000
         try:
@@ -497,7 +508,7 @@ class LLMClient:
         record(latency_ms=elapsed, **usage)
         if usage["usage_source"] == "known":
             self._last_usage = {key: usage[key] for key in ("prompt_tokens", "completion_tokens")}
-        check_budget(run_id)
+        check_attempt_budget()
         return response
 
     # ------------------------------------------------------------------

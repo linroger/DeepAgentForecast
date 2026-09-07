@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from .usage_ledger import (
-    METRICS, UsageLedger, UsageLedgerConflict, UsageLedgerStorageError, UsageLedgerUnresolvedError,
+    METRICS, UsageLedger, UsageLedgerBudgetExceeded, UsageLedgerConflict, UsageLedgerStorageError, UsageLedgerUnresolvedError,
     empty_counter, normalize_counter,
 )
 
@@ -442,6 +442,7 @@ class LLMMeter:
                         uncached_tokens: Optional[int] = None,
                         cost_usd: Optional[float] = None,
                         baseline_included: bool = False,
+                        token_reservation: Optional[Dict[str, Any]] = None,
                         _fallback: bool = False) -> Dict[str, Any]:
         """Reconcile one stable cumulative observation, never an anonymous sum.
 
@@ -483,6 +484,8 @@ class LLMMeter:
         with cls._lock:
             binding = cls._durable.get(rid)
             if binding is None:
+                if token_reservation is not None:
+                    raise BudgetExceeded("Token reservation requires a durable run binding")
                 if baseline_included:
                     raise UsageLedgerConflict("Legacy baseline seeding requires durable accounting")
                 rm = cls._runs.setdefault(rid, _RunMeter())
@@ -504,7 +507,10 @@ class LLMMeter:
         try:
             return binding.ledger.record_snapshot(
                 run_id=rid, attempt_id=binding.attempt_id, source=source, operation_id=operation_id,
-                metadata=metadata, counters=counters, status=status, baseline_included=baseline_included)
+                metadata=metadata, counters=counters, status=status, baseline_included=baseline_included,
+                token_reservation=token_reservation)
+        except UsageLedgerBudgetExceeded as exc:
+            raise BudgetExceeded(str(exc)) from exc
         except UsageLedgerUnresolvedError:
             raise
         except (UsageLedgerStorageError, UsageLedgerConflict):
@@ -659,6 +665,8 @@ class LLMMeter:
         }
         if "api_operation_state" in snap:
             result["api_operation_state"] = snap["api_operation_state"]
+        if "token_reservation_state" in snap:
+            result["token_reservation_state"] = snap["token_reservation_state"]
         return result
 
     @classmethod
@@ -717,6 +725,7 @@ class LLMMeter:
                 data["cumulative_total"] = cumulative["total"]
                 data["cumulative_by_stage"] = cumulative["by_stage"]
                 data["api_operation_state"] = cumulative["api_operation_state"]
+                data["token_reservation_state"] = cumulative["token_reservation_state"]
             else:
                 current = data.get("total") or {}
                 data["cumulative_total"] = {key: round((base.get(key) or 0) + (current.get(key) or 0), 6)
@@ -725,14 +734,15 @@ class LLMMeter:
 
 
 # ---------------------------------------------------------------- budget guard
-def check_budget(run_id: Optional[str] = None) -> None:
+def check_budget(run_id: Optional[str] = None, *, token_limit: Optional[int] = None) -> None:
     """Raise :class:`BudgetExceeded` if the run is over its configured budget (I-5-3).
 
-    Limits come from Config (0/unset = unlimited). Cheap; called after each LLM
-    call so a runaway run aborts instead of silently burning the whole budget.
+    Limits come from Config (0/unset = unlimited). A reserved API attempt passes
+    its captured token limit after settlement so a mid-call config change cannot
+    discard that attempt's policy. USD checks retain their configured behavior.
     """
     from ..config import Config
-    max_tokens = int(getattr(Config, "LLM_RUN_BUDGET_TOKENS", 0) or 0)
+    max_tokens = token_limit if token_limit is not None else int(getattr(Config, "LLM_RUN_BUDGET_TOKENS", 0) or 0)
     max_cost = float(getattr(Config, "LLM_RUN_BUDGET_USD", 0) or 0)
     if max_tokens <= 0 and max_cost <= 0:
         return

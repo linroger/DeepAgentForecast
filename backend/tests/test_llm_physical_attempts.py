@@ -300,7 +300,7 @@ def test_fallback_clears_stale_primary_receipt_and_budget_stop_escapes(bound, mo
         api._try_fallback([], 0.3, 10, None, RuntimeError("primary down"))
     with pytest.raises(tel.BudgetExceeded):
         api.chat([])
-    assert replies == [True, True]
+    assert replies == [True]  # Remaining allowance rejects fallback before dispatch.
 
 
 def test_predispatch_storage_failure_creates_no_operation_or_provider_call(bound, monkeypatch):

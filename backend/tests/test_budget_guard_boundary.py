@@ -24,9 +24,9 @@ def forbid_full_projection(monkeypatch):
 @pytest.mark.parametrize("native_tools", [False, True])
 def test_shared_api_stops_after_usage_crossing_without_full_projection(
         run, client_factory, monkeypatch, kind, native_tools):
-    monkeypatch.setattr(Config, "LLM_RUN_BUDGET_TOKENS", 10 if kind != "cost" else 0)
+    monkeypatch.setattr(Config, "LLM_RUN_BUDGET_TOKENS", 20 if kind != "cost" else 0)
     monkeypatch.setattr(Config, "LLM_RUN_BUDGET_USD", 1 if kind != "tokens" else 0)
-    monkeypatch.setattr(tel, "estimate_cost", lambda *args: 2)
+    monkeypatch.setattr(tel, "estimate_cost", lambda provider, prompt, completion: 2 if prompt + completion else 0)
     transmissions = []
 
     def transport(request):
@@ -36,7 +36,7 @@ def test_shared_api_stops_after_usage_crossing_without_full_projection(
     client, _ = client_factory(transport)
     forbid_full_projection(monkeypatch)
     def invoke():
-        return client.chat_with_tools([], []) if native_tools else client.chat([])
+        return client.chat_with_tools([], [], max_tokens=5) if native_tools else client.chat([], max_tokens=5)
     with pytest.raises(tel.BudgetExceeded):
         invoke()
     # The repeated call is denied before dispatch; neither a response retry nor
@@ -54,16 +54,17 @@ def test_shared_api_stops_after_usage_crossing_without_full_projection(
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.parametrize("kind", ["tokens", "cost"])
 def test_native_sdk_stops_without_retry_or_full_projection(run, models, monkeypatch, asynchronous, kind):
-    monkeypatch.setattr(Config, "LLM_RUN_BUDGET_TOKENS", 10 if kind == "tokens" else 0)
+    monkeypatch.setattr(Config, "LLM_RUN_BUDGET_TOKENS", 30 if kind == "tokens" else 0)
     monkeypatch.setattr(Config, "LLM_RUN_BUDGET_USD", 1 if kind == "cost" else 0)
-    monkeypatch.setattr(tel, "estimate_cost", lambda *args: 2)
+    monkeypatch.setattr(tel, "estimate_cost", lambda provider, prompt, completion: 2 if prompt + completion else 0)
     transmissions = []
 
     def transport(request):
         transmissions.append(request)
-        return httpx.Response(200, json=response("", 20, 5))
+        return httpx.Response(200, json=response("", 40, 5))
 
     model = models(transport, retries=3)
+    model.model_config_dict = {"max_tokens": 5}
     forbid_full_projection(monkeypatch)
     with pytest.raises(tel.BudgetExceeded):
         call(model, asynchronous)
