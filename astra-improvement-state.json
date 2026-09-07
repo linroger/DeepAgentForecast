@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T23:34:46.600565+00:00",
+  "updated_at": "2026-09-07T23:37:33.781203+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -148,7 +148,8 @@
                       "id": "ASTRA-04b5b1",
                       "title": "Atomically reserve and settle estimated API token allowance with pinned policy and visible uncertainty",
                       "status": "verified_offline",
-                      "evidence": "docs/research/astra-reservation-verification.json"
+                      "evidence": "docs/research/astra-reservation-verification.json",
+                      "implementation_commit": "04c981b4119726019a50ec15eb19272e4ac012da"
                     },
                     {
                       "id": "ASTRA-04b5b2",
@@ -385,10 +386,11 @@
       ],
       "result": "1072 backend tests passed with one deployment-only skip; independent74-case review clear. Offline competing calls2\u21921, unknown timeout retries3\u21922 with28tokens held; successful local median2.1434\u21922.2144ms.",
       "next": "ASTRA-04b5b2 explicit native output-cap configuration through the production factory and child path; then monetary policy and remaining coverage.",
-      "verified_source_hashes": "docs/research/astra-reservation-verification.json"
+      "verified_source_hashes": "docs/research/astra-reservation-verification.json",
+      "implementation_commit": "04c981b4119726019a50ec15eb19272e4ac012da"
     }
   ],
-  "last_implementation_commit": "99eac2abc2a90977d7b935699f837f227b2a04ac",
+  "last_implementation_commit": "04c981b4119726019a50ec15eb19272e4ac012da",
   "optimization_objectives": {
     "minimize": [
       "provider work and accounted consumption",
