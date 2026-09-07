@@ -135,11 +135,23 @@ def test_primary_and_ensemble_children_all_reconcile(pipeline):
 def test_seed_runner_imports_success_and_failure(pipeline, monkeypatch, failed):
     orch, state, root = pipeline
     orch._init_telemetry_flush(state)
-    write_sim(root, sim_id="seed-1")
     manager = SimpleNamespace(create_simulation=lambda *a, **kw: SimpleNamespace(simulation_id="seed-1"),
                               prepare_simulation=lambda **kw: None)
     monkeypatch.setattr(po, "SimulationManager", lambda: manager)
-    monkeypatch.setattr(po.SimulationRunner, "start_simulation", lambda **kw: None)
+    def start_child(**kwargs):
+        from app.utils.simulation_usage import authority
+        context = kwargs["usage_context"]
+        # A newly launched child now records physical usage directly. Its JSON
+        # is a diagnostic projection, including when the runner later fails.
+        for index in range(2):
+            LLMMeter.record_snapshot("llm_api_attempt", f"{context['launch_token']}:{index}",
+                                     "minimax", "m", 50, 10, 1,
+                                     run_id=state.pipeline_id, stage="run", usage_source="known")
+        payload = write_sim(root, sim_id="seed-1", token=context["launch_token"])
+        payload.update(simulation_id="seed-1", usage_authority=authority(context))
+        (root / "simulations/seed-1/sim_llm_telemetry.json").write_text(json.dumps(payload))
+
+    monkeypatch.setattr(po.SimulationRunner, "start_simulation", start_child)
     monkeypatch.setattr(po.SimulationRunner, "get_run_state", lambda *a: SimpleNamespace(
         current_round=1, runner_status=po.RunnerStatus.FAILED if failed else po.RunnerStatus.COMPLETED))
     monkeypatch.setattr(po.SimulationRunner, "write_run_summary", lambda *a: None)

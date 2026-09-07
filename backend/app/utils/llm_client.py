@@ -15,7 +15,6 @@ import re
 import subprocess
 import threading
 import time
-import uuid
 from typing import Optional, Dict, Any, List
 
 from ..config import Config
@@ -382,12 +381,13 @@ class LLMClient:
     def _usage_field(value: Any, name: str, default: Any = None) -> Any:
         return value.get(name, default) if isinstance(value, dict) else getattr(value, name, default)
 
-    def _response_usage(self, response: Any, messages: List[Dict]) -> Dict[str, Any]:
+    @staticmethod
+    def _response_usage(response: Any, messages: List[Dict]) -> Dict[str, Any]:
         """Validate reported counters; absent usage permits only labeled estimates."""
         from .telemetry import estimate_tokens
         from .usage_ledger import normalize_counter
 
-        field = self._usage_field
+        field = LLMClient._usage_field
         usage = field(response, "usage")
         if usage is not None and not (isinstance(usage, dict) or hasattr(usage, "__dict__")):
             raise ValueError("Provider usage must be an object")
@@ -462,7 +462,7 @@ class LLMClient:
         if callable(getattr(client, "with_options", None)):
             client = client.with_options(max_retries=0)
         metered = Config.LLM_TELEMETRY_ENABLED or LLMMeter.is_durable_run(run_id)
-        operation_id = uuid.uuid4().hex
+        operation_id = LLMMeter.new_operation_id(run_id)
 
         def record(*, calls: int = 1, status: str = "completed", latency_ms: float = 0.0,
                    prompt_tokens: int = 0, completion_tokens: int = 0,
@@ -540,7 +540,7 @@ class LLMClient:
             cache_key = LLMCache.key(provider, model, messages, temperature, max_tokens, response_format)
             hit = LLMCache.get(cache_key)
             if hit is not None:
-                if Config.LLM_TELEMETRY_ENABLED:
+                if Config.LLM_TELEMETRY_ENABLED or LLMMeter.is_durable_run(run_id):
                     LLMMeter.record(provider, model, 0, 0, 0.0, cached=True, stage=stage, run_id=run_id)
                 return hit
 
@@ -623,7 +623,7 @@ class LLMClient:
             else:
                 raise last_error if last_error is not None else RuntimeError("LLM 调用失败")
 
-        if Config.LLM_TELEMETRY_ENABLED and not served_by_fallback and self.provider in CLI_PROVIDERS:
+        if (Config.LLM_TELEMETRY_ENABLED or LLMMeter.is_durable_run(run_id)) and not served_by_fallback and self.provider in CLI_PROVIDERS:
             latency_ms = (time.monotonic() - started) * 1000.0
             # CLI compatibility accounting remains logical-call text estimates.
             pt = sum(estimate_tokens(str(m.get("content", ""))) for m in messages)

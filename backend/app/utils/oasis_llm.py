@@ -21,6 +21,7 @@ from openai.types.chat.chat_completion import ChatCompletion
 from ..config import Config
 from .llm_client import LLMClient, CLI_PROVIDERS
 from .logger import get_logger
+from .telemetry import BudgetExceeded, UsageLedgerConflict, UsageLedgerStorageError
 
 logger = get_logger('mirofish.oasis_llm')
 
@@ -300,6 +301,8 @@ def _record_llm_fallback(provider: str, with_tool_call: bool, exc: Exception) ->
 
 def _should_fallback_exc(exc: Exception) -> bool:
     """是否为值得转投回退链路的错误（内容审查/限流/额度）。复用 llm_client 的分类器。"""
+    if isinstance(exc, (BudgetExceeded, UsageLedgerStorageError, UsageLedgerConflict)):
+        return False
     try:
         from .llm_client import _is_content_filter
         if _is_content_filter(exc):
@@ -338,6 +341,8 @@ def _fallback_completion(model, provider: str, exc: Exception, *args, **kwargs) 
             content, tool_calls = _parse_tool_call_text(content, _tool_names(tools))
         else:
             content = llm.chat(messages=messages, temperature=temperature, max_tokens=max_tokens)
+    except (BudgetExceeded, UsageLedgerStorageError, UsageLedgerConflict):
+        raise
     except Exception as fb_exc:  # noqa: BLE001 — 回退也失败：保留主路径的原始异常语义
         logger.error(f"OASIS {provider} 回退链路也失败: {type(fb_exc).__name__}: {str(fb_exc)[:160]}")
         raise exc
@@ -597,7 +602,15 @@ def create_oasis_model(config: Dict[str, Any], use_boost: bool = False):
             logger.warning(f"OASIS {provider}: 注入 extra_body 失败（继续，但可能触发空 content）: {e}")
     # RUN-18: 直连路径接入 LLMClient 故障转移（内容审查/限流时才触发；SIM_LLM_FALLBACK=false 关闭）。
     model = _wrap_openai_fallback_guard(model, provider)
-    return model
+    # Kimi replaces both SDK clients above; install after that replacement.
+    # CLI synthetic completions and LLMClient fallback own separate accounting.
+    from .oasis_usage import instrument_oasis_model
+    accounting_provider = provider
+    if use_boost and os.environ.get("LLM_BOOST_API_KEY", ""):
+        # Boost credentials can target another service. An undeclared provider
+        # cannot inherit the primary route's pricing attribution.
+        accounting_provider = os.environ.get("LLM_BOOST_PROVIDER", "").strip().lower() or "unknown"
+    return instrument_oasis_model(model, accounting_provider)
 
 
 def get_oasis_semaphore(config: Dict[str, Any], use_boost: bool = False, platforms: int = 1) -> int:

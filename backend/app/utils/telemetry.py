@@ -96,7 +96,8 @@ def resolve_run_attribution(run_id: Optional[str] = None,
     if not rid:
         rid = _sole_active_run()
         inferred = rid is not None
-    return rid or _DEFAULT_BUCKET, stage or _current_stage.get() or "_unstaged", inferred
+    rid = rid or _DEFAULT_BUCKET
+    return rid, stage or _current_stage.get() or LLMMeter.default_stage(rid) or "_unstaged", inferred
 
 
 def _clear_active_runs() -> None:
@@ -247,6 +248,8 @@ class _RunMeter:
 class _DurableRun:
     ledger: UsageLedger
     attempt_id: str
+    default_stage: Optional[str] = None
+    operation_scope: Optional[str] = None
 
 
 # TEL-1: '_global' 桶只该接住零星的无归属调用（reset 从不清它，跨 run 累积）。它一旦变大，
@@ -272,6 +275,21 @@ class LLMMeter:
             return rid in cls._durable
 
     @classmethod
+    def durable_binding(cls, run_id: str) -> Optional[Dict[str, str]]:
+        """Copy explicit storage ownership for a trusted subprocess launcher."""
+        with cls._lock:
+            binding = cls._durable.get(run_id)
+            return ({"run_id": run_id, "ledger_path": str(binding.ledger.path),
+                     "attempt_id": binding.attempt_id} if binding else None)
+
+    @classmethod
+    def default_stage(cls, run_id: str) -> Optional[str]:
+        """Explicit process binding fallback for executor threads without context."""
+        with cls._lock:
+            binding = cls._durable.get(run_id)
+            return binding.default_stage if binding else None
+
+    @classmethod
     def _remember_accounting_failure(cls, run_id: str) -> None:
         # Keep no exception traceback: it can retain provider response bodies.
         with cls._lock:
@@ -287,6 +305,32 @@ class LLMMeter:
         Already-in-flight responses may still settle their observations.
         """
         cls._assert_accounting(run_id, require_settled=False)
+
+    @classmethod
+    def new_operation_id(cls, run_id: str) -> str:
+        """Give child dispatches a durable launch scope without changing owner."""
+        with cls._lock:
+            binding = cls._durable.get(run_id)
+            scope = binding.operation_scope if binding else None
+        return f"{scope}:{uuid.uuid4().hex}" if scope else uuid.uuid4().hex
+
+    @classmethod
+    def assert_local_accounting_settled(cls, run_id: str) -> None:
+        """Finish one launched child while allowing active sibling API work."""
+        cls.assert_accounting_available(run_id)
+        with cls._lock:
+            binding = cls._durable.get(run_id)
+        if binding is None:
+            return
+        if not binding.operation_scope:
+            raise UsageLedgerConflict("Local completion requires an explicit operation scope")
+        try:
+            binding.ledger.assert_scope_settled(run_id, binding.attempt_id, binding.operation_scope)
+        except UsageLedgerUnresolvedError:
+            raise
+        except UsageLedgerStorageError:
+            cls._remember_accounting_failure(run_id)
+            raise
 
     @classmethod
     def assert_accounting_settled(cls, run_id: Optional[str] = None) -> None:
@@ -317,18 +361,26 @@ class LLMMeter:
     @classmethod
     def attach_durable_run(cls, run_id: str, ledger_path: str,
                            attempt_id: Optional[str] = None,
-                           legacy_snapshot: Optional[Dict[str, Any]] = None) -> str:
+                           legacy_snapshot: Optional[Dict[str, Any]] = None, *,
+                           existing_only: bool = False,
+                           default_stage: Optional[str] = None,
+                           operation_scope: Optional[str] = None) -> str:
         """Bind explicitly before provider work; never infer a filesystem path.
 
         Reattaching the same binding is idempotent. A new attempt requires reset
         so two live owners cannot silently move each other's attribution.
         """
         ledger = UsageLedger(ledger_path)
+        if operation_scope is not None and (not isinstance(operation_scope, str) or not operation_scope
+                                           or len(operation_scope) > 128 or not operation_scope.isalnum()):
+            raise ValueError("Invalid accounting operation scope")
         with cls._lock:
             existing = cls._durable.get(run_id)
             if existing is not None:
                 if existing.ledger.path != ledger.path or (attempt_id is not None and attempt_id != existing.attempt_id):
                     raise UsageLedgerConflict("Run already has a different durable binding")
+                if existing.operation_scope != operation_scope or existing.default_stage != default_stage:
+                    raise UsageLedgerConflict("Run already has a different process accounting scope")
                 return existing.attempt_id
             rm = cls._runs.get(run_id)
             if rm is not None and any(rm.total.as_dict().values()):
@@ -338,8 +390,14 @@ class LLMMeter:
                 raise ValueError("Invalid accounting attempt identity")
             # Initialization happens while binding is locked, ensuring no local
             # record can slip into the memory bucket between import and attach.
-            ledger.initialize(run_id, legacy_snapshot)
-            cls._durable[run_id] = _DurableRun(ledger, selected_attempt)
+            if existing_only:
+                if legacy_snapshot is not None:
+                    raise ValueError("Existing-only attachment cannot import a baseline")
+                # Uses mode=ro; neither this read nor later writes create storage.
+                ledger.snapshot(run_id)
+            else:
+                ledger.initialize(run_id, legacy_snapshot)
+            cls._durable[run_id] = _DurableRun(ledger, selected_attempt, default_stage, operation_scope)
             return selected_attempt
 
     @classmethod
@@ -379,7 +437,7 @@ class LLMMeter:
             rid = _sole_active_run()
             fallback = rid is not None
         rid = rid or _DEFAULT_BUCKET
-        stg = stage or _current_stage.get() or "_unstaged"
+        stg = stage or _current_stage.get() or cls.default_stage(rid) or "_unstaged"
         with cls._lock:
             bound_at_validation = rid in cls._durable
         try:
@@ -452,7 +510,7 @@ class LLMMeter:
             fallback = rid is not None
         if not rid:
             rid = _DEFAULT_BUCKET
-        stg = stage or _current_stage.get() or "_unstaged"
+        stg = stage or _current_stage.get() or cls.default_stage(rid) or "_unstaged"
         warn_calls = 0
         first_fallback = False
         with cls._lock:

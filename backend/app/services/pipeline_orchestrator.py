@@ -7312,6 +7312,7 @@ class PipelineOrchestrator:
         self._partial_scan_at: dict[str, float] = {}
         # W9-3: run_telemetry.json 增量落盘状态（attempt 起点由 _init_telemetry_flush 填充）。
         self._tel_lock = threading.Lock()
+        self._simulation_usage_lock = threading.Lock()
         self._tel_path: Optional[str] = None
         self._tel_prev: Optional[dict] = None
         self._tel_prev_cum: Optional[dict] = None
@@ -8805,6 +8806,7 @@ class PipelineOrchestrator:
         try:
             from ..utils.telemetry import LLMMeter
             LLMMeter.assert_accounting_available(state.pipeline_id)
+            run_kwargs["usage_context"] = self._simulation_usage_context(state, sim_id)
             SimulationRunner.start_simulation(simulation_id=sim_id, **run_kwargs)
             cancel_ev = type(self)._cancel_events.get(state.pipeline_id)
             last_progress_at = time.monotonic()
@@ -10534,14 +10536,59 @@ class PipelineOrchestrator:
 
     # -- 内部：模拟阶段遥测 (DEFECT-3) -------------------------------------
 
+    def _simulation_usage_context(self, state: PipelineState, simulation_id: str) -> Optional[dict]:
+        """Persist launch ownership before the runner can dispatch a child."""
+        from ..utils.telemetry import LLMMeter
+        from ..utils.simulation_usage import SCHEMA, authority
+        context = LLMMeter.durable_binding(state.pipeline_id)
+        if context is None:
+            if state.options.get("usage_attempt_id"):
+                from ..utils.usage_ledger import UsageLedgerStorageError
+                raise UsageLedgerStorageError("Durable parent binding is missing before simulation launch")
+            return None
+        context.update({
+            "schema": SCHEMA, "simulation_id": simulation_id,
+            "launch_token": uuid.uuid4().hex,
+            "pipeline_state_path": os.path.abspath(os.path.join(
+                PipelineManager._dir(state.pipeline_id), "pipeline_state.json")),
+            "budget_tokens": int(Config.LLM_RUN_BUDGET_TOKENS or 0),
+            "budget_usd": float(Config.LLM_RUN_BUDGET_USD or 0),
+        })
+        with self._simulation_usage_lock:
+            # Main and ensemble calls on this orchestrator share one state object.
+            state.options.setdefault("simulation_usage_launches", {})[context["launch_token"]] = authority(context)
+            PipelineManager.save(state)
+        return context
+
     def _record_durable_sim_usage(self, state: PipelineState, simulation_id: str,
                                   telemetry: dict[str, Any]) -> None:
         """Reconcile a child high-water snapshot before writing compatibility markers."""
         from ..utils.telemetry import LLMMeter
         token = str(telemetry.get("meter_run_token") or "")
-        if not token:
+        launches = state.options.get("simulation_usage_launches") or {}
+        shared_simulation = any(isinstance(item, dict) and item.get("simulation_id") == simulation_id
+                                for item in launches.values())
+        claimed = telemetry.get("usage_authority")
+        if not token and not shared_simulation and claimed is None:
             # File hashes change as a snapshot grows and cannot identify a launch.
             state.options["simulation_usage_gap"] = "missing_meter_run_token"
+            return
+        launch = launches.get(token)
+        if shared_simulation or launch is not None or claimed is not None:
+            from ..utils.usage_ledger import UsageLedgerConflict
+            if (not isinstance(launch, dict) or launch != claimed
+                    or launch.get("run_id") != state.pipeline_id
+                    or launch.get("simulation_id") != simulation_id
+                    or telemetry.get("simulation_id") != simulation_id):
+                raise UsageLedgerConflict("Simulation usage authority does not match its admitted launch")
+            # Spend is already durable, including failures with no child JSON.
+            # These success-only compatibility totals must never be added again.
+            state.options["sim_llm_telemetry"] = {**telemetry, "diagnostic_only": True}
+            state.options["sim_llm_telemetry_recorded"] = {
+                "simulation_id": simulation_id, "meter_run_token": token,
+                "recorded_at": _utcnow(), "authority": "shared_usage_ledger",
+            }
+            PipelineManager.save(state)
             return
         provider = str(telemetry.get("provider") or "unknown")
         model = str(telemetry.get("model") or "unknown")
@@ -13140,6 +13187,7 @@ class PipelineOrchestrator:
                     run_kwargs["enable_graph_memory_update"] = True
                     run_kwargs["graph_id"] = graph_id
                 LLMMeter.assert_accounting_available(state.pipeline_id)
+                run_kwargs["usage_context"] = self._simulation_usage_context(state, sim_state.simulation_id)
                 SimulationRunner.start_simulation(simulation_id=sim_state.simulation_id, **run_kwargs)
                 # 轮询直到完成
                 cancel_ev = cls._cancel_events.get(state.pipeline_id)

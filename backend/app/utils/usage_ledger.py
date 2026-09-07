@@ -115,6 +115,28 @@ class UsageLedger:
             if conn is not None:
                 conn.close()
 
+    def assert_scope_settled(self, run_id: str, attempt_id: str, scope: str) -> None:
+        """One child can finish while current-owner sibling scopes remain busy."""
+        conn = None
+        try:
+            _label(scope, "operation_scope")
+            conn = self._connect(write=False)
+            conn.execute("BEGIN")
+            if conn.execute("SELECT 1 FROM usage_runs WHERE run_id=?", (run_id,)).fetchone() is None:
+                raise ValueError("Unknown durable run")
+            self._assert_api_admission(conn, run_id, attempt_id, False)
+            if conn.execute(
+                "SELECT 1 FROM usage_operations WHERE run_id=? AND source='llm_api_attempt' "
+                "AND status='in_flight' AND operation_id>=? AND operation_id<? LIMIT 1",
+                (run_id, scope + ":", scope + ";"),
+            ).fetchone():
+                raise UsageLedgerUnresolvedError("This simulation launch has unfinished API work")
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            raise UsageLedgerStorageError("Durable usage storage is unavailable") from exc
+        finally:
+            if conn is not None:
+                conn.close()
+
     @staticmethod
     def _assert_api_admission(conn: sqlite3.Connection, run_id: str,
                               current_attempt_id: str | None, require_settled: bool) -> None:

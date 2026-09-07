@@ -1,0 +1,97 @@
+{
+  "schema": "astra-simulation-comparison/v1",
+  "baseline_commit": "b9a9f7981f92b13100140570ea160d29ab950517",
+  "baseline_source_sha256": "bceec7b7122e8d1c436f206e70badea16692f459fc941b47a2eb9be1c927558f",
+  "current_source_sha256": {
+    "backend/app/utils/oasis_llm.py": "51271cfe0692dfd1352a0ff1c01c1785fc2b2b00d30d2bc6ed944f76c7e66092",
+    "backend/app/utils/oasis_usage.py": "614cd62fba35cd190d56c97d4fcc849297d601b5a91e9bd120dd8f85fc840fc2",
+    "backend/scripts/benchmark_simulation_usage.py": "aeb9220ca2b08c4c128ab8637dbf5b70ab1b0652e6c5e33aa9f8b4559ee2b983"
+  },
+  "provider_requests": 0,
+  "network_requests": 0,
+  "transport": "Actual synchronous OpenAI SDK calls over httpx.MockTransport; both factories receive same fixture model and current durable meter. Async calls are covered by separate regressions.",
+  "timing_scope": "Only repeated successful-request medians are reported; one-sample scenarios are cold/order-sensitive and have no timing comparison.",
+  "cases": {
+    "rate_limit_then_success": {
+      "before": {
+        "mock_transport_requests": 2,
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "unknown_operations": 0,
+        "outcome": "success",
+        "median_local_elapsed_ms": null,
+        "samples": 1
+      },
+      "after": {
+        "mock_transport_requests": 2,
+        "recorded_calls": 2,
+        "recorded_tokens": 15,
+        "unknown_operations": 1,
+        "outcome": "success",
+        "median_local_elapsed_ms": null,
+        "samples": 1
+      }
+    },
+    "empty_response": {
+      "before": {
+        "mock_transport_requests": 1,
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "unknown_operations": 0,
+        "outcome": "success",
+        "median_local_elapsed_ms": null,
+        "samples": 1
+      },
+      "after": {
+        "mock_transport_requests": 1,
+        "recorded_calls": 1,
+        "recorded_tokens": 15,
+        "unknown_operations": 0,
+        "outcome": "success",
+        "median_local_elapsed_ms": null,
+        "samples": 1
+      }
+    },
+    "parse_failure": {
+      "before": {
+        "mock_transport_requests": 1,
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "unknown_operations": 0,
+        "outcome": "ValidationError",
+        "median_local_elapsed_ms": null,
+        "samples": 1
+      },
+      "after": {
+        "mock_transport_requests": 1,
+        "recorded_calls": 1,
+        "recorded_tokens": 15,
+        "unknown_operations": 0,
+        "outcome": "ValidationError",
+        "median_local_elapsed_ms": null,
+        "samples": 1
+      }
+    },
+    "successful_request_overhead": {
+      "before": {
+        "mock_transport_requests": 30,
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "unknown_operations": 0,
+        "outcome": "success",
+        "median_local_elapsed_ms": 0.1847,
+        "samples": 30
+      },
+      "after": {
+        "mock_transport_requests": 30,
+        "recorded_calls": 30,
+        "recorded_tokens": 450,
+        "unknown_operations": 0,
+        "outcome": "success",
+        "median_local_elapsed_ms": 1.26,
+        "samples": 30
+      }
+    }
+  },
+  "limits": "Isolates native transport capture before compatibility export. Both modes retain SDK retries. Local elapsed overhead is not production latency or a workflow speedup; failed CLI subprocess usage and hard reservations remain outside coverage."
+}

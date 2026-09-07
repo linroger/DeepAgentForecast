@@ -457,6 +457,7 @@ class SimulationRunner:
         graph_id: Optional[str] = None,  # Zep图谱ID（启用图谱更新时必需）
         sim_seed: Optional[int] = None,  # NEXTSTEPS P0-3: 本次运行的确定性采样种子（仅注入子进程环境，不改全局）
         resume: Optional[bool] = None,  # RUN-7: True=显式续跑；None=由 SIM_RESUME 自动判定；False=强制全新
+        usage_context: Optional[Dict[str, Any]] = None,  # Explicit parent accounting ownership.
     ) -> SimulationRunState:
         """
         启动模拟
@@ -922,7 +923,6 @@ class SimulationRunner:
             
             # 创建主日志文件，避免 stdout/stderr 管道缓冲区满导致进程阻塞
             main_log_path = os.path.join(sim_dir, "simulation.log")
-            main_log_file = open(main_log_path, 'w', encoding='utf-8')
             
             # 设置子进程环境变量，确保 Windows 上使用 UTF-8 编码
             # 这可以修复第三方库（如 OASIS）读取文件时未指定编码的问题
@@ -937,6 +937,10 @@ class SimulationRunner:
             # 原子落盘 checkpoint.json，使后续崩溃/重启可以续跑而非从第 0 轮重烧额度。
             if sim_resume_flag or resume_active:
                 env['SIM_RESUME'] = 'true'
+
+            from ..utils.simulation_usage import child_environment
+            env = child_environment(env, usage_context, config_path)
+            main_log_file = open(main_log_path, 'w', encoding='utf-8')
 
             # 设置工作目录为模拟目录（数据库等文件会生成在此）
             # 使用 start_new_session=True 创建新的进程组，确保可以通过 os.killpg 终止所有子进程

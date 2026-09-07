@@ -985,6 +985,8 @@ class RedditSimulationRunner:
                       f"- elapsed: {elapsed:.1f}s")
 
         # EXECPLAN F-9-0: 记录 simulation_end —— SimulationRunner 完成检测的关键事件。
+        from app.utils.simulation_usage import assert_complete
+        assert_complete()
         action_logger.log_simulation_end(total_rounds, total_actions)
 
         total_elapsed = (datetime.now() - start_time).total_seconds()
@@ -1064,6 +1066,8 @@ async def main():
     
     # 初始化日志配置（使用固定文件名，清理旧日志）
     simulation_dir = os.path.dirname(args.config) or "."
+    from app.utils.simulation_usage import bootstrap
+    bootstrap(args.config)
     setup_oasis_logging(os.path.join(simulation_dir, "log"))
     
     runner = RedditSimulationRunner(
@@ -1099,6 +1103,8 @@ if __name__ == "__main__":
     setup_signal_handlers()
     try:
         asyncio.run(main())
+        from app.utils.simulation_usage import assert_complete
+        assert_complete()
     except KeyboardInterrupt:
         print("\n程序被中断")
     except SystemExit:
