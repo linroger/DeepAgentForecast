@@ -415,6 +415,24 @@ class LLMMeter:
             raise
 
     @classmethod
+    def cumulative_budget_totals(cls, run_id: Optional[str] = None, *,
+                                 include_cost: bool) -> Optional[Dict[str, Any]]:
+        """Return narrow durable budget totals, or None only for an unbound run."""
+        rid = run_id or _current_run.get() or _DEFAULT_BUCKET
+        with cls._lock:
+            binding = cls._durable.get(rid)
+            failure = cls._durable_failures.get(rid)
+        if binding is None:
+            return None
+        if failure:
+            raise UsageLedgerStorageError(failure)
+        try:
+            return binding.ledger.budget_totals(rid, include_cost=include_cost)
+        except UsageLedgerStorageError:
+            cls._remember_accounting_failure(rid)
+            raise
+
+    @classmethod
     def record_snapshot(cls, source: str, operation_id: str, provider: str, model: str,
                         prompt_tokens: int, completion_tokens: int, latency_ms: float, *,
                         run_id: Optional[str] = None, stage: Optional[str] = None,
@@ -724,8 +742,8 @@ def check_budget(run_id: Optional[str] = None) -> None:
         # run 时按该 run 的预算执行，使失控的 graph 阶段能真正触发 LLM_RUN_BUDGET_TOKENS。
         # 0 个或 ≥2 个活跃 run 时保持旧语义（读 '_global' 桶；纯含糊花费不计入任何 run 预算）。
         rid = _sole_active_run() or _DEFAULT_BUCKET
-    cumulative = LLMMeter.cumulative_snapshot(rid)
-    snap = (cumulative if cumulative is not None else LLMMeter.snapshot(rid))["total"]
+    cumulative = LLMMeter.cumulative_budget_totals(rid, include_cost=max_cost > 0)
+    snap = cumulative if cumulative is not None else LLMMeter.snapshot(rid)["total"]
     if max_tokens > 0 and snap["total_tokens"] > max_tokens:
         raise BudgetExceeded(
             f"run exceeded token budget: {snap['total_tokens']} > {max_tokens}")

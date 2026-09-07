@@ -347,6 +347,57 @@ class UsageLedger:
                 state["other_attempt_in_flight"] = row["operations"] - row["current_operations"]
         return state
 
+    def budget_totals(self, run_id: str, *, include_cost: bool) -> dict[str, Any]:
+        """Read cumulative budget counters without building report projections.
+
+        Token-only guards use an integer scalar SUM. USD guards preserve the
+        full snapshot's grouping and accumulation order: summing floats in a
+        different order can change its six-decimal budget threshold.
+        """
+        conn = None
+        try:
+            conn = self._connect(write=False)
+            conn.execute("BEGIN")
+            if conn.execute("SELECT 1 FROM usage_runs WHERE run_id=?", (run_id,)).fetchone() is None:
+                raise ValueError("Unknown durable run")
+            # Keep these dimensions aligned with snapshot(); no rounding
+            # occurs until all cost groups have been accumulated in Python.
+            dimensions = "stage, provider, model, usage_class, billing_basis, cost_estimated, fallback, cache_partition_known"
+            if include_cost:
+                rows = conn.execute(
+                    "SELECT SUM(total_tokens) AS total_tokens, SUM(cost_usd) AS cost_usd "
+                    f"FROM usage_deltas WHERE run_id=? GROUP BY {dimensions}", (run_id,),
+                ).fetchall()
+                total_tokens, cost_usd = 0, 0.0
+                for row in rows:
+                    total_tokens += row["total_tokens"]
+                    cost_usd += row["cost_usd"]
+                cost_usd = round(cost_usd, 6)
+            else:
+                try:
+                    row = conn.execute("SELECT SUM(total_tokens) AS total_tokens FROM usage_deltas WHERE run_id=?",
+                                       (run_id,)).fetchone()
+                    total_tokens = row["total_tokens"] if row["total_tokens"] is not None else 0
+                except sqlite3.OperationalError as exc:
+                    if str(exc) != "integer overflow":
+                        raise
+                    # A valid cross-group total can exceed SQLite's signed
+                    # integer range. Match snapshot's Python accumulation in
+                    # this exceptional case without weakening other failures.
+                    rows = conn.execute("SELECT SUM(total_tokens) AS total_tokens FROM usage_deltas "
+                                        f"WHERE run_id=? GROUP BY {dimensions}", (run_id,)).fetchall()
+                    total_tokens = sum(row["total_tokens"] for row in rows)
+                cost_usd = None
+            if not isinstance(total_tokens, int) or total_tokens < 0:
+                raise ValueError("Invalid cumulative token counter")
+            conn.commit()
+            return {"total_tokens": total_tokens, "cost_usd": cost_usd}
+        except (OSError, sqlite3.Error, ValueError, KeyError, TypeError) as exc:
+            raise UsageLedgerStorageError("Cannot read durable budget accounting") from exc
+        finally:
+            if conn is not None:
+                conn.close()
+
     def snapshot(self, run_id: str, *, attempt_id: str | None = None,
                  current_attempt_id: str | None = None,
                  missing_ok: bool = False) -> dict[str, Any] | None:

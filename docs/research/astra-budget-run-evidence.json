@@ -1,0 +1,777 @@
+{
+  "schema": "astra-budget-run-evidence/v1",
+  "validated_at": "2026-09-07T22:11:24.210792+00:00",
+  "iteration_baseline": "1c87a2954a3e5230676b5bfbad071cd36ce42030",
+  "scope": "Read-only historical ledger-history calibration for ASTRA-04b5; selected numeric aggregates only. No providers, network, runtime actions, original writes or raw payload exports.",
+  "saved_artifact_root": "/Users/rogerlin/Downloads/DeepResearchForecast",
+  "prior_receipts": [
+    {
+      "path": "docs/research/astra-simulation-run-evidence.json",
+      "sha256": "ce479031708da725d197919d635f0b82e2a3438dbed94eb40f77e742ced86037"
+    },
+    {
+      "path": "docs/research/astra-api-run-evidence.json",
+      "sha256": "a7086b6927062fcbfc066951d6be011c9e223765352023a1ec3be66c1682d6be"
+    },
+    {
+      "path": "docs/research/astra-iteration-04-run-evidence.json",
+      "sha256": "e127201a3fb3fc4592d018e1b4915d0bb93b5b999ecce8e44677140a191e9264"
+    }
+  ],
+  "validation": {
+    "saved_artifacts": {
+      "checked": 77,
+      "matched": 77,
+      "changed_paths": [],
+      "missing_paths": []
+    },
+    "pipeline_inventory": {
+      "count": 32,
+      "status_counts": {
+        "cancelled": 3,
+        "completed": 26,
+        "failed": 3
+      },
+      "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+      "new_ids": [],
+      "removed_ids": [],
+      "changed_state_hash_ids": []
+    },
+    "bounded_logs": {
+      "prior_files_hashed": 12,
+      "changed_paths": [],
+      "missing_paths": [],
+      "latest_prior_dated_filename": "mirofish.log.2026-08-17",
+      "new_dated_paths": [],
+      "new_file_boundary": "Only dated names newer than the previous maximum are newly selected; every prior bounded file, including active mirofish.log, is rehashed. Older unselected logs remain outside scope.",
+      "new_or_changed_logs_parsed": 0,
+      "parsed_aggregates": [],
+      "prior_pattern_counts_reused": true
+    }
+  },
+  "inventory_aggregate_call_scale": {
+    "source_inventory": "Prior inventory source_files saved: pipeline run_telemetry.json entries; current existence checked across all 32 pipeline_state.json directories.",
+    "pipeline_count": 32,
+    "meter_file_count": 20,
+    "meter_file_missing_count": 12,
+    "current_calls_key": "$.total.calls",
+    "current_calls_present_count": 20,
+    "current_calls_missing_count": 0,
+    "current_calls_zero_count": 8,
+    "current_calls_min": 0,
+    "current_calls_max": 252,
+    "current_calls_median": 12.5,
+    "current_calls_frequency": {
+      "0": 8,
+      "3": 1,
+      "10": 1,
+      "15": 1,
+      "68": 2,
+      "73": 1,
+      "84": 1,
+      "85": 1,
+      "131": 1,
+      "136": 1,
+      "217": 1,
+      "252": 1
+    },
+    "cumulative_calls_key": "$.cumulative_total.calls",
+    "cumulative_calls_present_count": 3,
+    "cumulative_calls_missing_count": 17,
+    "cumulative_calls_sorted": [
+      255,
+      335,
+      629
+    ],
+    "usage_operations_present_count": 0,
+    "actual_request_count": null,
+    "actual_delta_row_count": null
+  },
+  "selected_runs": [
+    {
+      "pipeline_id": "pipe_f23527f7d903",
+      "simulation_id": "sim_a0a936f8104c",
+      "created_at": "2026-07-09T08:12:33.491844+00:00",
+      "status": "completed",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json",
+        "sha256": "d35ebcbe44d251b120b9d1d23546efca5935bf11d23782e2bc5f8aaa6fac1bbc"
+      },
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/run_telemetry.json",
+        "sha256": "a952a3790fec998f1d64bf78a8b41f6189972cf0303a6250daf0f4a0f5c2f240"
+      },
+      "resume_count": {
+        "key": "$.options.resume_count",
+        "present": false,
+        "value": null
+      },
+      "current": {
+        "key_prefix": "$.total",
+        "present": true,
+        "values": {
+          "calls": 136,
+          "cached": 0,
+          "prompt_tokens": 81252970,
+          "completion_tokens": 1730769,
+          "total_tokens": 82983739
+        },
+        "missing_fields": []
+      },
+      "previous": {
+        "key_prefix": "$.previous_attempt.total",
+        "present": false,
+        "values": {
+          "calls": null,
+          "cached": null,
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "total_tokens": null
+        },
+        "missing_fields": [
+          "calls",
+          "cached",
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens"
+        ]
+      },
+      "cumulative": {
+        "key_prefix": "$.cumulative_total",
+        "present": false,
+        "values": {
+          "calls": null,
+          "cached": null,
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "total_tokens": null
+        },
+        "missing_fields": [
+          "calls",
+          "cached",
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens"
+        ]
+      },
+      "stages": {
+        "research": {
+          "key_prefix": "$.by_stage.research",
+          "present": true,
+          "values": {
+            "calls": 1,
+            "total_tokens": 79749778
+          },
+          "missing_fields": []
+        },
+        "ontology": {
+          "key_prefix": "$.by_stage.ontology",
+          "present": true,
+          "values": {
+            "calls": 1,
+            "total_tokens": 44760
+          },
+          "missing_fields": []
+        },
+        "graph": {
+          "key_prefix": "$.by_stage.graph",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "prepare": {
+          "key_prefix": "$.by_stage.prepare",
+          "present": true,
+          "values": {
+            "calls": 4,
+            "total_tokens": 20858
+          },
+          "missing_fields": []
+        },
+        "run": {
+          "key_prefix": "$.by_stage.run",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "report": {
+          "key_prefix": "$.by_stage.report",
+          "present": true,
+          "values": {
+            "calls": 130,
+            "total_tokens": 3168343
+          },
+          "missing_fields": []
+        }
+      },
+      "usage_operations": {
+        "key": "$.usage_operations",
+        "present": false,
+        "value": null
+      },
+      "usage_complete": {
+        "key": "$.usage_complete",
+        "present": false,
+        "value": null
+      },
+      "actual_physical_requests": null,
+      "durable_operation_rows": null,
+      "snapshot_delta_rows": null
+    },
+    {
+      "pipeline_id": "pipe_91aaf91f6392",
+      "simulation_id": "sim_85b123350ee3",
+      "created_at": "2026-07-12T14:18:53.207724+00:00",
+      "status": "completed",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/pipeline_state.json",
+        "sha256": "cc4544cde9f9a5b0210187230cefdf2b988dfc692b9bd64b862e7884d5117436"
+      },
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/run_telemetry.json",
+        "sha256": "c6281f59d12a9d6e84f70254d9218c3799f2082469ae5d96263671fe43fad1a6"
+      },
+      "resume_count": {
+        "key": "$.options.resume_count",
+        "present": true,
+        "value": 4
+      },
+      "current": {
+        "key_prefix": "$.total",
+        "present": true,
+        "values": {
+          "calls": 131,
+          "cached": 4,
+          "prompt_tokens": 2269946,
+          "completion_tokens": 116914,
+          "total_tokens": 2386860
+        },
+        "missing_fields": []
+      },
+      "previous": {
+        "key_prefix": "$.previous_attempt.total",
+        "present": true,
+        "values": {
+          "calls": 136,
+          "cached": 4,
+          "prompt_tokens": 2445191,
+          "completion_tokens": 122991,
+          "total_tokens": 2568182
+        },
+        "missing_fields": []
+      },
+      "cumulative": {
+        "key_prefix": "$.cumulative_total",
+        "present": true,
+        "values": {
+          "calls": 629,
+          "cached": 20,
+          "prompt_tokens": 29338770,
+          "completion_tokens": 983612,
+          "total_tokens": 30322382
+        },
+        "missing_fields": []
+      },
+      "stages": {
+        "research": {
+          "key_prefix": "$.by_stage.research",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "ontology": {
+          "key_prefix": "$.by_stage.ontology",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "graph": {
+          "key_prefix": "$.by_stage.graph",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "prepare": {
+          "key_prefix": "$.by_stage.prepare",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "run": {
+          "key_prefix": "$.by_stage.run",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "report": {
+          "key_prefix": "$.by_stage.report",
+          "present": true,
+          "values": {
+            "calls": 131,
+            "total_tokens": 2386860
+          },
+          "missing_fields": []
+        }
+      },
+      "usage_operations": {
+        "key": "$.usage_operations",
+        "present": false,
+        "value": null
+      },
+      "usage_complete": {
+        "key": "$.usage_complete",
+        "present": false,
+        "value": null
+      },
+      "actual_physical_requests": null,
+      "durable_operation_rows": null,
+      "snapshot_delta_rows": null
+    },
+    {
+      "pipeline_id": "pipe_bef6879b2e94",
+      "simulation_id": "sim_05ab2bdebbd2",
+      "created_at": "2026-07-14T21:20:23.971987+00:00",
+      "status": "completed",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json",
+        "sha256": "23b04b0b065ef9cd1639041ed0d87a3615a95f06dc242466a5ebe7522add1e22"
+      },
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/run_telemetry.json",
+        "sha256": "42dace2bb7276a04eb3f987ee232fee04905852bd97691449cc59dcb1e22ff1e"
+      },
+      "resume_count": {
+        "key": "$.options.resume_count",
+        "present": true,
+        "value": 7
+      },
+      "current": {
+        "key_prefix": "$.total",
+        "present": true,
+        "values": {
+          "calls": 217,
+          "cached": 12,
+          "prompt_tokens": 2350514,
+          "completion_tokens": 208104,
+          "total_tokens": 2558618
+        },
+        "missing_fields": []
+      },
+      "previous": {
+        "key_prefix": "$.previous_attempt.total",
+        "present": true,
+        "values": {
+          "calls": 118,
+          "cached": 0,
+          "prompt_tokens": 2619677,
+          "completion_tokens": 174990,
+          "total_tokens": 2794667
+        },
+        "missing_fields": []
+      },
+      "cumulative": {
+        "key_prefix": "$.cumulative_total",
+        "present": true,
+        "values": {
+          "calls": 335,
+          "cached": 12,
+          "prompt_tokens": 4970191,
+          "completion_tokens": 383094,
+          "total_tokens": 5353285
+        },
+        "missing_fields": []
+      },
+      "stages": {
+        "research": {
+          "key_prefix": "$.by_stage.research",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "ontology": {
+          "key_prefix": "$.by_stage.ontology",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "graph": {
+          "key_prefix": "$.by_stage.graph",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "prepare": {
+          "key_prefix": "$.by_stage.prepare",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "run": {
+          "key_prefix": "$.by_stage.run",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "report": {
+          "key_prefix": "$.by_stage.report",
+          "present": true,
+          "values": {
+            "calls": 217,
+            "total_tokens": 2558618
+          },
+          "missing_fields": []
+        }
+      },
+      "usage_operations": {
+        "key": "$.usage_operations",
+        "present": false,
+        "value": null
+      },
+      "usage_complete": {
+        "key": "$.usage_complete",
+        "present": false,
+        "value": null
+      },
+      "actual_physical_requests": null,
+      "durable_operation_rows": null,
+      "snapshot_delta_rows": null
+    },
+    {
+      "pipeline_id": "pipe_0e1b84d2682a",
+      "simulation_id": "sim_9fc88d28ccb1",
+      "created_at": "2026-07-15T14:15:27.286816+00:00",
+      "status": "completed",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json",
+        "sha256": "f2ba0ca5dadcb28264c29ef948d35f04453498530bc1819d4e0a5532ab8684c1"
+      },
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/run_telemetry.json",
+        "sha256": "71f60f4930ba2d325c8ce6f395f1b897cbbcd4c17aaa912d0ce936e46ecad968"
+      },
+      "resume_count": {
+        "key": "$.options.resume_count",
+        "present": true,
+        "value": 9
+      },
+      "current": {
+        "key_prefix": "$.total",
+        "present": true,
+        "values": {
+          "calls": 252,
+          "cached": 26,
+          "prompt_tokens": 2679956,
+          "completion_tokens": 260706,
+          "total_tokens": 2940662
+        },
+        "missing_fields": []
+      },
+      "previous": {
+        "key_prefix": "$.previous_attempt.total",
+        "present": true,
+        "values": {
+          "calls": 3,
+          "cached": 0,
+          "prompt_tokens": 8626,
+          "completion_tokens": 5462,
+          "total_tokens": 14088
+        },
+        "missing_fields": []
+      },
+      "cumulative": {
+        "key_prefix": "$.cumulative_total",
+        "present": true,
+        "values": {
+          "calls": 255,
+          "cached": 26,
+          "prompt_tokens": 2688582,
+          "completion_tokens": 266168,
+          "total_tokens": 2954750
+        },
+        "missing_fields": []
+      },
+      "stages": {
+        "research": {
+          "key_prefix": "$.by_stage.research",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "ontology": {
+          "key_prefix": "$.by_stage.ontology",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "graph": {
+          "key_prefix": "$.by_stage.graph",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "prepare": {
+          "key_prefix": "$.by_stage.prepare",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "run": {
+          "key_prefix": "$.by_stage.run",
+          "present": false,
+          "values": {
+            "calls": null,
+            "total_tokens": null
+          },
+          "missing_fields": [
+            "calls",
+            "total_tokens"
+          ]
+        },
+        "report": {
+          "key_prefix": "$.by_stage.report",
+          "present": true,
+          "values": {
+            "calls": 252,
+            "total_tokens": 2940662
+          },
+          "missing_fields": []
+        }
+      },
+      "usage_operations": {
+        "key": "$.usage_operations",
+        "present": false,
+        "value": null
+      },
+      "usage_complete": {
+        "key": "$.usage_complete",
+        "present": false,
+        "value": null
+      },
+      "actual_physical_requests": null,
+      "durable_operation_rows": null,
+      "snapshot_delta_rows": null
+    }
+  ],
+  "arithmetic_validation": {
+    "status": "passed",
+    "selected_checks": [
+      {
+        "pipeline_id": "pipe_f23527f7d903",
+        "current_calls_sum_of_present_stages": 136,
+        "current_calls_reported": 136,
+        "current_tokens_sum_of_present_stages": 82983739,
+        "current_tokens_reported": 82983739,
+        "token_component_checks": {
+          "current": true
+        }
+      },
+      {
+        "pipeline_id": "pipe_91aaf91f6392",
+        "current_calls_sum_of_present_stages": 131,
+        "current_calls_reported": 131,
+        "current_tokens_sum_of_present_stages": 2386860,
+        "current_tokens_reported": 2386860,
+        "token_component_checks": {
+          "current": true,
+          "previous": true,
+          "cumulative": true
+        },
+        "cumulative_less_current_and_saved_previous": {
+          "calls": 362,
+          "total_tokens": 25367340
+        }
+      },
+      {
+        "pipeline_id": "pipe_bef6879b2e94",
+        "current_calls_sum_of_present_stages": 217,
+        "current_calls_reported": 217,
+        "current_tokens_sum_of_present_stages": 2558618,
+        "current_tokens_reported": 2558618,
+        "token_component_checks": {
+          "current": true,
+          "previous": true,
+          "cumulative": true
+        },
+        "cumulative_less_current_and_saved_previous": {
+          "calls": 0,
+          "total_tokens": 0
+        }
+      },
+      {
+        "pipeline_id": "pipe_0e1b84d2682a",
+        "current_calls_sum_of_present_stages": 252,
+        "current_calls_reported": 252,
+        "current_tokens_sum_of_present_stages": 2940662,
+        "current_tokens_reported": 2940662,
+        "token_component_checks": {
+          "current": true,
+          "previous": true,
+          "cumulative": true
+        },
+        "cumulative_less_current_and_saved_previous": {
+          "calls": 0,
+          "total_tokens": 0
+        }
+      }
+    ],
+    "residual_interpretation": "Cumulative minus current minus saved previous is a projection residual, not new additive spend or proven distinct request history.",
+    "no_cross_pipeline_or_parent_child_sum": true
+  },
+  "implementation_snapshot": [
+    {
+      "revision": "1c87a2954a3e5230676b5bfbad071cd36ce42030",
+      "path": "backend/app/utils/telemetry.py",
+      "sha256": "9db5c875efd26f2e8f65a4f85fccadb8113c637dfbcd9d75accb53fea5e3d490",
+      "anchors": {
+        "def cumulative_snapshot": 404,
+        "def check_budget": 710
+      }
+    },
+    {
+      "revision": "1c87a2954a3e5230676b5bfbad071cd36ce42030",
+      "path": "backend/app/utils/usage_ledger.py",
+      "sha256": "84fe326f916241093cb6fcbf4cf9da15dcf7e2737f1a74399ae8645416476765",
+      "anchors": {
+        "def record_snapshot": 242,
+        "sums = \", \".join": 372
+      }
+    },
+    {
+      "revision": "1c87a2954a3e5230676b5bfbad071cd36ce42030",
+      "path": "backend/app/services/pipeline_orchestrator.py",
+      "sha256": "e0c2ed1a451c6b1854a12a95a15497b1e2e1a6917374794a66b8137f8f3ddce4",
+      "anchors": {
+        "def _record_research_telemetry": 10484,
+        "def _record_durable_sim_usage": 10563
+      }
+    }
+  ],
+  "fixture_calibration": {
+    "observed_aggregate_call_scale": "Dozens to hundreds: current recorded count maximum 252, selected cumulative maximum 629. Research imports can represent many provider requests as one call; some counts also include cache hits.",
+    "suggested_history_sizes": [
+      100,
+      1000,
+      10000
+    ],
+    "size_interpretation": {
+      "100": "Within observed aggregate call scale; synthetic history shape remains distinct from historical physical rows.",
+      "1000": "Rounded sensitivity fixture above the largest observed cumulative aggregate count 629; not an observed request total.",
+      "10000": "Explicit scaling stress to expose repeated cumulative query costs; not a measured typical run or historical row count."
+    },
+    "required_dimensions": [
+      "Separate usage_operations from additive usage_deltas; growing snapshots can produce several delta rows for one operation.",
+      "Include repeated unchanged snapshots, resumed cumulative histories, unknown zero-counter markers and cache hits without counting them as distinct paid requests.",
+      "Preserve exact cumulative totals under replay and benchmark budget admission before/after on the same synthetic rows."
+    ],
+    "production_speedup_estimate": null
+  },
+  "interpretation": [
+    "The expensive reference records 79,749,778 research tokens under one stage call. This is aggregate-import accounting and cannot calibrate exact research physical requests.",
+    "Saved current/cumulative calls include logical/cache/import semantics; they must not be equated to usage_operations or usage_deltas row counts. Missing operation histories are null, not zero.",
+    "Current, saved previous and cumulative projections overlap. The July 12 residual of 362 calls and 25,367,340 tokens shows older cumulative coverage, not a separate directly measured request set.",
+    "Four selected RUN and GRAPH stage entries are absent. Child health counts from the prior receipt are overlapping parent copies and not added to parent calls.",
+    "All 77 saved hashes, 32 state hashes and 12 bounded logs are unchanged. No newer production benchmark or current ledger row-count distribution is available from this refresh.",
+    "Historical retry log lines are nonexclusive shared-log markers; they neither identify requests nor size a pipeline ledger. Existing counts are referenced, not recounted or summed.",
+    "The pinned current implementation can record physical operations and growing snapshot deltas beyond historical aggregate call counts. Use controlled row-count sensitivity fixtures, preserve provenance and report measured local overhead/savings without inferring billing or critical-path production time."
+  ],
+  "numeric_projection_schema": {
+    "key_rule": "Each selected projection uses key_prefix plus a dot and each values field name as its source JSON key path.",
+    "absence_rule": "present describes the prefix object; missing_fields lists absent child fields. An absent field has a null value, while a present null field is excluded from missing_fields."
+  }
+}

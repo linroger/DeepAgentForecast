@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T21:39:35.964849+00:00",
+  "updated_at": "2026-09-07T22:25:48.747239+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -76,7 +76,11 @@
         "docs/research/astra-simulation-verification.json",
         "docs/research/astra-simulation-verification.md",
         "docs/research/astra-simulation-comparison.json",
-        "docs/research/astra-simulation-run-evidence.json"
+        "docs/research/astra-simulation-run-evidence.json",
+        "docs/research/astra-budget-verification.json",
+        "docs/research/astra-budget-verification.md",
+        "docs/research/astra-budget-comparison.json",
+        "docs/research/astra-budget-run-evidence.json"
       ],
       "subtasks": [
         {
@@ -122,7 +126,20 @@
             {
               "id": "ASTRA-04b5",
               "title": "Profile cumulative-budget query scaling and implement transactional API admission reservations with explicit uncertainty",
-              "status": "pending"
+              "status": "in_progress",
+              "subtasks": [
+                {
+                  "id": "ASTRA-04b5a",
+                  "title": "Avoid complete usage projections on each cumulative budget check",
+                  "status": "verified_offline",
+                  "evidence": "docs/research/astra-budget-verification.json"
+                },
+                {
+                  "id": "ASTRA-04b5b",
+                  "title": "Implement bounded transactional API reservation and settlement with explicit uncertainty",
+                  "status": "pending"
+                }
+              ]
             }
           ]
         }
@@ -134,7 +151,8 @@
         "Simulation aggregate model labels retain stable identity; detailed model diagnostics are separate.",
         "Imported historical baselines are opaque and legacy marker-first ambiguity is explicit.",
         "Unknown/cache partition coverage is not inferred; usage_complete remains false.",
-        "Physical backend and factory-installed nonstreaming CAMEL API attempts, unresolved projections/admission, and detached shared-ledger coverage are verified offline; CLI physical failures, custom SDK replacement and reservations remain incomplete."
+        "Physical backend and factory-installed nonstreaming CAMEL API attempts, unresolved projections/admission, and detached shared-ledger coverage are verified offline; CLI physical failures, custom SDK replacement and reservations remain incomplete.",
+        "Enabled budget guards use a verified narrow projection; token sums remain O(delta rows), and cost grouping is retained for exact rounding compatibility. No default-disabled or production speedup claim."
       ]
     },
     {
@@ -252,7 +270,7 @@
   ],
   "next_recommendation": "ASTRA-04",
   "last_completed_slice": [
-    "ASTRA-04b4"
+    "ASTRA-04b5a"
   ],
   "iterations": [
     {
@@ -325,6 +343,15 @@
       "next": "ASTRA-04b5 cumulative-budget query scaling and transactional API reservations.",
       "verified_source_hashes": "docs/research/astra-simulation-verification.json",
       "implementation_commit": "af5d2a1305bffabe04dc7d33475b2c99640256db"
+    },
+    {
+      "completed_at": "2026-09-07T22:25:48.747239+00:00",
+      "recommendations": [
+        "ASTRA-04b5a"
+      ],
+      "result": "998 backend tests passed, one deployment-only skip; independent38-case review and paired warm guard comparison clear. Token-only10000-row stress median21.6447\u21923.6771ms; cost-enabled21.6541\u219215.6073ms.",
+      "next": "ASTRA-04b5b bounded transactional API reservation/settlement with explicit uncertainty.",
+      "verified_source_hashes": "docs/research/astra-budget-verification.json"
     }
   ],
   "last_implementation_commit": "af5d2a1305bffabe04dc7d33475b2c99640256db",
