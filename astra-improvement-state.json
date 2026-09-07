@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T19:29:32.165379+00:00",
+  "updated_at": "2026-09-07T19:31:57.470666+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -94,7 +94,8 @@
               "id": "ASTRA-04b2",
               "title": "Record each physical backend API attempt before validation and control SDK retries",
               "status": "verified_offline",
-              "evidence": "docs/research/astra-api-attempt-verification.json"
+              "evidence": "docs/research/astra-api-attempt-verification.json",
+              "implementation_commit": "60925d1bf002db724358d452ff43f17ac1492e06"
             },
             {
               "id": "ASTRA-04b3",
@@ -280,10 +281,11 @@
       ],
       "result": "741 backend tests passed, one deployment-only skip; actual-SDK comparison and independent review clear.",
       "next": "ASTRA-04b3 unresolved operations and recovery/admission policy, then transactional reservations and detached-child physical coverage.",
-      "verified_source_hashes": "docs/research/astra-api-attempt-verification.json"
+      "verified_source_hashes": "docs/research/astra-api-attempt-verification.json",
+      "implementation_commit": "60925d1bf002db724358d452ff43f17ac1492e06"
     }
   ],
-  "last_implementation_commit": "099bdbe58579fc94ae862faa778b785b349dafb9",
+  "last_implementation_commit": "60925d1bf002db724358d452ff43f17ac1492e06",
   "optimization_objectives": {
     "minimize": [
       "provider work and accounted consumption",
