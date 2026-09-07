@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T15:55:54+00:00",
+  "updated_at": "2026-09-07T15:57:43+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -174,7 +174,9 @@
       ],
       "result": "Implemented and independently reviewed; 427 offline tests passed, no production speedup claimed.",
       "next": "Durable launch-intent idempotency (ASTRA-03).",
-      "verified_source_hashes": "docs/research/astra-compaction-verification.json"
+      "verified_source_hashes": "docs/research/astra-compaction-verification.json",
+      "implementation_commit": "ccb88d2"
     }
-  ]
+  ],
+  "last_implementation_commit": "ccb88d2"
 }
