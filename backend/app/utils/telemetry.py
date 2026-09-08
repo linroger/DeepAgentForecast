@@ -242,6 +242,7 @@ class _RunMeter:
     fallback: _Counter = field(default_factory=_Counter)
     attempt_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     operations: Dict[Tuple[str, str], dict] = field(default_factory=dict)
+    quoted_cost_observed: bool = False
 
 
 @dataclass(frozen=True)
@@ -441,6 +442,7 @@ class LLMMeter:
                         cache_read_tokens: int = 0, cache_write_tokens: int = 0,
                         uncached_tokens: Optional[int] = None,
                         cost_usd: Optional[float] = None,
+                        cost_quote: Optional[Dict[str, Any]] = None,
                         baseline_included: bool = False,
                         token_reservation: Optional[Dict[str, Any]] = None,
                         _fallback: bool = False) -> Dict[str, Any]:
@@ -460,6 +462,15 @@ class LLMMeter:
         with cls._lock:
             bound_at_validation = rid in cls._durable
         try:
+            selected_quote = None
+            if cost_quote is not None:
+                from .api_cost import quote_cost, validate_cost_quote
+                if source != "llm_api_attempt" or cost_usd is not None:
+                    raise ValueError("An API cost quote cannot accompany another source or explicit cost")
+                selected_quote = validate_cost_quote(cost_quote, provider=provider, model=model)
+                observed_cost = quote_cost(selected_quote, prompt_tokens, completion_tokens)
+            else:
+                observed_cost = cost_usd if cost_usd is not None else (0.0 if cached else estimate_cost(provider, prompt_tokens, completion_tokens))
             usage_class = {"provider": "known", "reported": "known", "estimate": "estimated",
                            "missing": "unknown", "legacy": "unknown"}.get(usage_source, usage_source)
             if usage_class not in {"known", "estimated", "unknown", "mixed"}:
@@ -468,7 +479,7 @@ class LLMMeter:
             counters = normalize_counter({
                 "calls": calls, "cached": cached, "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens, "latency_ms": latency_ms,
-                "cost_usd": cost_usd if cost_usd is not None else (0.0 if cached else estimate_cost(provider, prompt_tokens, completion_tokens)),
+                "cost_usd": observed_cost,
                 "cache_read_tokens": cache_read_tokens, "cache_write_tokens": cache_write_tokens,
                 "uncached_tokens": uncached_tokens if uncached_tokens is not None else 0,
             })
@@ -476,6 +487,8 @@ class LLMMeter:
                         "usage_class": usage_class, "usage_source": usage_source,
                         "billing_basis": basis, "cost_estimated": cost_usd is None,
                         "fallback": fallback, "cache_partition_known": uncached_tokens is not None}
+            if selected_quote is not None:
+                metadata["cost_quote"] = selected_quote
         except (ValueError, TypeError, OverflowError) as exc:
             if not bound_at_validation:
                 raise
@@ -494,10 +507,16 @@ class LLMMeter:
                 previous = previous_record["counter"] if previous_record else empty_counter()
                 if previous_record and any(previous_record["metadata"][k] != metadata[k] for k in ("stage", "provider", "model", "billing_basis", "fallback")):
                     raise UsageLedgerConflict("Usage operation identity has different attribution")
+                if previous_record and previous_record["metadata"].get("cost_quote") != selected_quote:
+                    raise UsageLedgerConflict("Usage operation identity has a different cost quote")
                 highwater = {k: max(previous[k], counters[k]) for k in METRICS}
                 highwater["total_tokens"] = highwater["prompt_tokens"] + highwater["completion_tokens"]
+                if selected_quote is not None:
+                    highwater["cost_usd"] = quote_cost(selected_quote, highwater["prompt_tokens"], highwater["completion_tokens"])
                 delta = {k: highwater[k] - previous[k] for k in METRICS}
                 rm.operations[key] = {"counter": highwater, "metadata": metadata}
+                if selected_quote is not None and (highwater["calls"] or highwater["total_tokens"]):
+                    rm.quoted_cost_observed = True
                 rm.total.add_delta(delta)
                 rm.by_stage.setdefault(stg, _Counter()).add_delta(delta)
                 rm.by_model.setdefault(f"{provider}:{model}", _Counter()).add_delta(delta)
@@ -621,7 +640,7 @@ class LLMMeter:
             cost_estimated = any(
                 cost_is_estimated(k.split(":", 1)[0]) and v.get("total_tokens", 0) > 0
                 for k, v in by_model.items()
-            )
+            ) or rm.quoted_cost_observed
             # XRUN-8: CLI 订阅提供方的 $0 不是「免费」而是「订阅内边际成本 0」。显式标注计价
             # 基准，避免 ~940K token 的报告 run 在成本审计里显得凭空免费。
             _sub = {"claude-cli", "codex-cli"}

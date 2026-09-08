@@ -209,6 +209,58 @@ class UsageLedger:
               AND NOT EXISTS (SELECT 1 FROM usage_reservations
                   WHERE run_id=NEW.run_id AND source=NEW.source AND operation_id=NEW.operation_id)
             BEGIN SELECT RAISE(ABORT, 'Token reservation required before API dispatch'); END""")
+        UsageLedger._cost_quote_guards(conn)
+
+    @staticmethod
+    def _cost_quote_guards(conn: sqlite3.Connection) -> None:
+        # A copied quote is not enough: older writers can still calculate cost
+        # from ambient rates. Fence both metadata loss and inconsistent counters.
+        invalid = """
+            NEW.source<>'llm_api_attempt'
+            OR json_type(NEW.metadata_json, '$.cost_quote') IS NOT 'object'
+            OR json_extract(NEW.metadata_json, '$.cost_quote.schema') IS NOT 'api-cost-quote/v1'
+            OR json_type(NEW.metadata_json, '$.cost_quote.provider') IS NOT 'text'
+            OR json_type(NEW.metadata_json, '$.cost_quote.model') IS NOT 'text'
+            OR json_extract(NEW.metadata_json, '$.cost_quote.provider') IS NOT json_extract(NEW.metadata_json, '$.provider')
+            OR json_extract(NEW.metadata_json, '$.cost_quote.model') IS NOT json_extract(NEW.metadata_json, '$.model')
+            OR json_type(NEW.metadata_json, '$.cost_estimated') IS NOT 'true'
+            OR COALESCE(json_extract(NEW.metadata_json, '$.cost_quote.source'), '')
+                NOT IN ('configured_model', 'configured_provider', 'builtin_provider', 'unpriced')
+            OR (json_extract(NEW.metadata_json, '$.cost_quote.source')='unpriced' AND (
+                json_type(NEW.metadata_json, '$.cost_quote.input_usd_per_1k') IS NOT 'null'
+                OR json_type(NEW.metadata_json, '$.cost_quote.output_usd_per_1k') IS NOT 'null'
+                OR json_type(NEW.metadata_json, '$.cost_quote.rate_key') IS NOT 'null'))
+            OR (json_extract(NEW.metadata_json, '$.cost_quote.source')<>'unpriced' AND (
+                COALESCE(json_type(NEW.metadata_json, '$.cost_quote.input_usd_per_1k'), '') NOT IN ('integer', 'real')
+                OR COALESCE(json_type(NEW.metadata_json, '$.cost_quote.output_usd_per_1k'), '') NOT IN ('integer', 'real')
+                OR json_type(NEW.metadata_json, '$.cost_quote.rate_key') IS NOT 'text'
+                OR json_extract(NEW.metadata_json, '$.cost_quote.input_usd_per_1k') NOT BETWEEN 0 AND 9007199254740992
+                OR json_extract(NEW.metadata_json, '$.cost_quote.output_usd_per_1k') NOT BETWEEN 0 AND 9007199254740992))
+            OR json_type(NEW.counter_json, '$.prompt_tokens') IS NOT 'integer'
+            OR json_type(NEW.counter_json, '$.completion_tokens') IS NOT 'integer'
+            OR json_extract(NEW.counter_json, '$.prompt_tokens') NOT BETWEEN 0 AND 9007199254740992
+            OR json_extract(NEW.counter_json, '$.completion_tokens') NOT BETWEEN 0 AND 9007199254740992
+            OR COALESCE(json_type(NEW.counter_json, '$.cost_usd'), '') NOT IN ('integer', 'real')
+            OR json_extract(NEW.counter_json, '$.cost_usd') NOT BETWEEN 0 AND 9007199254740992
+            OR json_extract(NEW.counter_json, '$.cost_usd') IS NOT CASE
+                WHEN json_extract(NEW.metadata_json, '$.cost_quote.source')='unpriced' THEN 0.0
+                ELSE (json_extract(NEW.counter_json, '$.prompt_tokens') / 1000.0)
+                    * json_extract(NEW.metadata_json, '$.cost_quote.input_usd_per_1k')
+                    + (json_extract(NEW.counter_json, '$.completion_tokens') / 1000.0)
+                    * json_extract(NEW.metadata_json, '$.cost_quote.output_usd_per_1k') END
+        """
+        # Initialization installs the current guard bodies in the same schema
+        # transaction. Ordinary reads/writes never repair a missing guard.
+        conn.execute("DROP TRIGGER IF EXISTS usage_preserve_api_cost_quote")
+        conn.execute(f"""CREATE TRIGGER usage_preserve_api_cost_quote BEFORE UPDATE ON usage_operations
+            WHEN (OLD.source='llm_api_attempt' AND json_extract(OLD.metadata_json, '$.cost_quote')
+                    IS NOT json_extract(NEW.metadata_json, '$.cost_quote'))
+              OR (json_type(NEW.metadata_json, '$.cost_quote') IS NOT NULL AND ({invalid}))
+            BEGIN SELECT RAISE(ABORT, 'API cost quote or quoted counter is inconsistent'); END""")
+        conn.execute("DROP TRIGGER IF EXISTS usage_validate_api_cost_quote_insert")
+        conn.execute(f"""CREATE TRIGGER usage_validate_api_cost_quote_insert BEFORE INSERT ON usage_operations
+            WHEN json_type(NEW.metadata_json, '$.cost_quote') IS NOT NULL AND ({invalid})
+            BEGIN SELECT RAISE(ABORT, 'API cost quote or quoted counter is inconsistent'); END""")
 
     @staticmethod
     def _insert_delta(conn: sqlite3.Connection, run_id: str, attempt_id: str,
@@ -282,6 +334,17 @@ class UsageLedger:
         meta.setdefault("cost_estimated", True)
         meta.setdefault("cache_partition_known", False)
         current = normalize_counter(counters)
+        cost_quote = None
+        if "cost_quote" in meta:
+            from .api_cost import quote_cost, validate_cost_quote
+            if source != "llm_api_attempt":
+                raise ValueError("Only API attempts can carry a cost quote")
+            cost_quote = validate_cost_quote(meta["cost_quote"], provider=meta["provider"], model=meta["model"])
+            if meta["cost_estimated"] is not True:
+                raise ValueError("Quoted API costs must remain estimates")
+            if current["cost_usd"] != quote_cost(cost_quote, current["prompt_tokens"], current["completion_tokens"]):
+                raise ValueError("API cost does not match its captured quote")
+            meta["cost_quote"] = cost_quote
         if token_reservation is not None:
             self._validate_token_reservation(token_reservation)
             if source != "llm_api_attempt" or status != "in_flight" or any(current.values()) or baseline_included:
@@ -293,6 +356,11 @@ class UsageLedger:
             run = conn.execute("SELECT legacy_json FROM usage_runs WHERE run_id=?", (run_id,)).fetchone()
             if run is None:
                 raise ValueError("Run must be initialized before accounting")
+            if cost_quote is not None and conn.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN "
+                "('usage_preserve_api_cost_quote', 'usage_validate_api_cost_quote_insert')"
+            ).fetchone()[0] != 2:
+                raise UsageLedgerStorageError("Quoted API writes require both cost quote guards")
             if baseline_included and run["legacy_json"] is None:
                 raise ValueError("A baseline-included snapshot requires an imported legacy baseline")
             old = conn.execute("SELECT * FROM usage_operations WHERE run_id=? AND source=? AND operation_id=?",
@@ -306,10 +374,21 @@ class UsageLedger:
                 original_meta = json.loads(old["metadata_json"])
                 if any(original_meta.get(key) != meta.get(key) for key in ("stage", "provider", "model", "billing_basis", "fallback")):
                     raise UsageLedgerConflict("Usage operation identity has different attribution")
+                if ("cost_quote" in original_meta) != ("cost_quote" in meta) or original_meta.get("cost_quote") != cost_quote:
+                    raise UsageLedgerConflict("Usage operation identity has a different cost quote")
+                if cost_quote is not None:
+                    previous = normalize_counter(previous)
+                    if (original_meta["cost_estimated"] is not True
+                            or previous["cost_usd"] != quote_cost(cost_quote, previous["prompt_tokens"], previous["completion_tokens"])):
+                        raise ValueError("Stored API cost does not match its captured quote")
             reservation = self._prepare_token_reservation(
                 conn, run_id, source, operation_id, token_reservation, old is not None, status)
             highwater = {key: max(previous[key], current[key]) for key in METRICS}
             highwater["total_tokens"] = highwater["prompt_tokens"] + highwater["completion_tokens"]
+            if cost_quote is not None:
+                # Componentwise growth can combine different cumulative frames.
+                # Price their merged token coverage, not merely max(frame cost).
+                highwater["cost_usd"] = quote_cost(cost_quote, highwater["prompt_tokens"], highwater["completion_tokens"])
             delta = {key: highwater[key] - previous[key] for key in METRICS}
             version = (old["snapshot_version"] if old is not None else 0) + 1
             # A regressing/replayed snapshot cannot revert a completed status.

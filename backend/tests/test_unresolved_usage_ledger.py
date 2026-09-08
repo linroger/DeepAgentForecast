@@ -35,6 +35,20 @@ def operation_status(ledger, operation="operation"):
         return conn.execute("SELECT status FROM usage_operations WHERE operation_id=?", (operation,)).fetchone()[0]
 
 
+def recover_quoted_api(ledger, operation, *, owner="attempt-a", inputs, outputs):
+    """Precise recovery retains the price receipt captured before the failed API call."""
+    from app.utils.api_cost import quote_cost
+    with sqlite3.connect(ledger.path) as conn:
+        metadata = json.loads(conn.execute("SELECT metadata_json FROM usage_operations "
+                              "WHERE operation_id=?", (operation,)).fetchone()[0])
+    quote = metadata["cost_quote"]
+    metadata.update(usage_class="known", usage_source="known")
+    return ledger.record_snapshot(run_id=RUN, attempt_id=owner, source="llm_api_attempt",
+        operation_id=operation, status="completed", metadata=metadata,
+        counters={"calls": 1, "prompt_tokens": inputs, "completion_tokens": outputs,
+                  "cost_usd": quote_cost(quote, inputs, outputs)})
+
+
 def marker_then_exit(path):
     record(UsageLedger(path))
     os._exit(37)
@@ -182,7 +196,7 @@ def test_malformed_usage_error_survives_reset_until_precise_recovery(meter):
         fake_client(calls).chat([])
     assert calls == [True]
     assert RUN not in tel.LLMMeter._durable_failures
-    record(meter, operation, owner="recovery", status="completed", usage="known", calls=1, inputs=10, outputs=5)
+    recover_quoted_api(meter, operation, owner="recovery", inputs=10, outputs=5)
     tel.LLMMeter.assert_accounting_available(RUN)
     tel.LLMMeter.assert_accounting_settled(RUN)
 
@@ -197,7 +211,7 @@ def test_precise_recovery_releases_originating_malformed_stop_without_reset(mete
     assert calls == [True]
     with sqlite3.connect(meter.path) as conn:
         operation = conn.execute("SELECT operation_id FROM usage_operations").fetchone()[0]
-    record(meter, operation, status="completed", usage="known", calls=1, inputs=2, outputs=1)
+    recover_quoted_api(meter, operation, inputs=2, outputs=1)
     assert fake_client(calls).chat([]) == "offline"
     assert calls == [True, True]
 
@@ -216,7 +230,7 @@ def test_failed_accounting_error_write_remains_sticky_after_exact_settlement(met
     with sqlite3.connect(meter.path) as conn:
         operation, status = conn.execute("SELECT operation_id, status FROM usage_operations").fetchone()
     assert status == "in_flight"
-    record(meter, operation, status="completed", usage="known", calls=1, inputs=2, outputs=1)
+    recover_quoted_api(meter, operation, inputs=2, outputs=1)
     assert meter.snapshot(RUN)["api_operation_state"]["in_flight"] == 0
     with pytest.raises(UsageLedgerStorageError, match="failed during this attempt"):
         fake_client(calls).chat([])

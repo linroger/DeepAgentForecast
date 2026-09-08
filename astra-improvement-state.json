@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-08T00:40:49.727088+00:00",
+  "updated_at": "2026-09-08T01:41:49.138035+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -88,7 +88,11 @@
         "docs/research/astra-native-cap-verification.json",
         "docs/research/astra-native-cap-verification.md",
         "docs/research/astra-native-cap-comparison.json",
-        "docs/research/astra-native-cap-run-evidence.json"
+        "docs/research/astra-native-cap-run-evidence.json",
+        "docs/research/astra-api-cost-verification.json",
+        "docs/research/astra-api-cost-verification.md",
+        "docs/research/astra-api-cost-comparison.json",
+        "docs/research/astra-monetary-run-evidence.json"
       ],
       "subtasks": [
         {
@@ -165,7 +169,20 @@
                     {
                       "id": "ASTRA-04b5b3",
                       "title": "Design and validate estimated monetary reservation policy with explicit rate and missing-price coverage",
-                      "status": "pending"
+                      "status": "in_progress",
+                      "subtasks": [
+                        {
+                          "id": "ASTRA-04b5b3a",
+                          "title": "Capture immutable API price estimates with explicit missing-price admission and replay consistency",
+                          "status": "verified_offline",
+                          "evidence": "docs/research/astra-api-cost-verification.json"
+                        },
+                        {
+                          "id": "ASTRA-04b5b3b",
+                          "title": "Define and implement monetary admission with pinned rates and caps, unknown-price coverage and durable held estimates",
+                          "status": "pending"
+                        }
+                      ]
                     }
                   ]
                 }
@@ -183,7 +200,8 @@
         "Unknown/cache partition coverage is not inferred; usage_complete remains false.",
         "Backend and factory-instrumented nonstreaming CAMEL physical attempts, unresolved recovery and token reservations are verified offline; monetary reservations, CLI physical failures and custom SDK replacement remain incomplete.",
         "Enabled budget guards use a verified narrow projection; token sums remain O(delta rows), and cost grouping is retained for exact rounding compatibility. No default-disabled or production speedup claim.",
-        "Native factory requests remain uncapped by default and are rejected before send if token reservations are enabled. An explicit native output policy now reaches actual factory/child requests and is pinned per simulation; held allowance stays separate from recorded usage."
+        "Native factory requests remain uncapped by default and are rejected before send if token reservations are enabled. An explicit native output policy now reaches actual factory/child requests and is pinned per simulation; held allowance stays separate from recorded usage.",
+        "API operations now retain captured estimated price quotes and positive dollar caps reject unpriced new requests. Run-wide price/cap pinning, historical unpriced coverage and monetary holds remain pending; no invoice accuracy or hard monetary cap claim."
       ]
     },
     {
@@ -301,7 +319,7 @@
   ],
   "next_recommendation": "ASTRA-04",
   "last_completed_slice": [
-    "ASTRA-04b5b2"
+    "ASTRA-04b5b3a"
   ],
   "iterations": [
     {
@@ -404,6 +422,15 @@
       "next": "ASTRA-04b5b3: monetary reservation feasibility, rate and missing-price policy, then remaining accounting coverage and graph/report recovery.",
       "verified_source_hashes": "docs/research/astra-native-cap-verification.json",
       "implementation_commit": "4de6d4fc67bef158d765752a6f02ca47dc581fe4"
+    },
+    {
+      "completed_at": "2026-09-08T01:41:49.138035+00:00",
+      "recommendations": [
+        "ASTRA-04b5b3a"
+      ],
+      "result": "1,266 backend tests passed with one deployment-only skip; all101 new pricing/ledger/child cases independently reviewed. Paired mocked paths reject missing-price work before send and preserve captured settlement and zero-delta exact replay.",
+      "next": "ASTRA-04b5b3b: monetary admission with explicit rate/cap pinning and incomplete-price coverage; graph/report recovery follows.",
+      "verified_source_hashes": "docs/research/astra-api-cost-verification.json"
     }
   ],
   "last_implementation_commit": "4de6d4fc67bef158d765752a6f02ca47dc581fe4",
@@ -439,6 +466,25 @@
       "evidence": "docs/research/astra-native-cap-verification.json",
       "resolution": "Validated opt-in native output policy reaches actual factory/SDK and child shared-ledger requests without changing uncapped defaults, agent memory or sealed configuration. Policy and budgets bind new authorities; same-simulation launches reject drift. 67 new cases independently reviewed.",
       "resolved_at": "2026-09-08T00:36:08.402049+00:00"
+    },
+    {
+      "id": "ASTRA-COST-01",
+      "priority": "P1",
+      "status": "resolved_offline",
+      "recommendation": "ASTRA-04b5b3a",
+      "description": "API price recalculation can add cost on unchanged replay, while missing prices pass a positive dollar guard as zero.",
+      "evidence": "docs/research/astra-api-cost-verification.json",
+      "resolution": "Strict captured API estimates persist through response, replay and child recovery. Explicit unpriced rates reject new dollar-enabled sends; old-writer inconsistent costs fail transactionally.",
+      "resolved_at": "2026-09-08T01:41:49.138035+00:00"
+    },
+    {
+      "id": "ASTRA-COST-02",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-04b5b3b",
+      "description": "Recorded dollar guards do not reserve concurrent planned costs; rates and dollar caps are not run-wide pinned, and prior unpriced/opaque history cannot establish total price coverage.",
+      "evidence": "docs/research/astra-api-cost-verification.json",
+      "resolution": "Next slice must define explicit run-wide price/cap and unknown-coverage contracts before monetary holds. Preserve estimates separately from reported consumption and avoid invoice-bound claims."
     }
   ]
 }

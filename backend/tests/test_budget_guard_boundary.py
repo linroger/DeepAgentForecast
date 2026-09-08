@@ -26,7 +26,9 @@ def test_shared_api_stops_after_usage_crossing_without_full_projection(
         run, client_factory, monkeypatch, kind, native_tools):
     monkeypatch.setattr(Config, "LLM_RUN_BUDGET_TOKENS", 20 if kind != "cost" else 0)
     monkeypatch.setattr(Config, "LLM_RUN_BUDGET_USD", 1 if kind != "tokens" else 0)
-    monkeypatch.setattr(tel, "estimate_cost", lambda provider, prompt, completion: 2 if prompt + completion else 0)
+    # Five reported output tokens cost two fixture dollars; use the captured
+    # rate contract rather than replacing the legacy estimate function.
+    monkeypatch.setattr(Config, "LLM_COST_PER_MTOK", '{"openai":[0,400000]}')
     transmissions = []
 
     def transport(request):
@@ -56,7 +58,7 @@ def test_shared_api_stops_after_usage_crossing_without_full_projection(
 def test_native_sdk_stops_without_retry_or_full_projection(run, models, monkeypatch, asynchronous, kind):
     monkeypatch.setattr(Config, "LLM_RUN_BUDGET_TOKENS", 30 if kind == "tokens" else 0)
     monkeypatch.setattr(Config, "LLM_RUN_BUDGET_USD", 1 if kind == "cost" else 0)
-    monkeypatch.setattr(tel, "estimate_cost", lambda provider, prompt, completion: 2 if prompt + completion else 0)
+    monkeypatch.setattr(Config, "LLM_COST_PER_MTOK", '{"openai":[0,400000]}')
     transmissions = []
 
     def transport(request):

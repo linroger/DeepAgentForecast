@@ -65,7 +65,7 @@ Config.LLM_RUN_BUDGET_USD = 0
 LLMMeter.attach_durable_run(sys.argv[1], sys.argv[2], 'crashed-owner')
 set_run_context(sys.argv[1], 'report')
 sdk = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw: os._exit(37))))
-LLMClient.__new__(LLMClient)._create_openai_completion(sdk, 'minimax', 'offline', {'messages': []})
+LLMClient.__new__(LLMClient)._create_openai_completion(sdk, 'minimax', 'offline', {'model': 'offline', 'messages': []})
 """
     result = subprocess.run(
         [sys.executable, "-c", program, state.pipeline_id, str(ledger.path)],

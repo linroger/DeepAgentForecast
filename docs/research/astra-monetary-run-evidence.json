@@ -1,0 +1,853 @@
+{
+  "schema": "astra-monetary-run-evidence/v1",
+  "validated_at": "2026-09-08T01:16:30.198721+00:00",
+  "iteration_baseline": "186af1a6bcd5ec8587365b398dfeb49d98d2ef63",
+  "scope": "Read-only historical monetary evidence refresh using exact allowlisted aggregate fields. No providers, runtime probes, original writes or private payload exports.",
+  "saved_artifact_root": "/Users/rogerlin/Downloads/DeepResearchForecast",
+  "prior_receipts": [
+    {
+      "path": "docs/research/astra-native-cap-run-evidence.json",
+      "sha256": "d490f7b754241e1ce72ef1a4dc3ca62b458461a5f223780e8c921de357f73e1d"
+    },
+    {
+      "path": "docs/research/astra-iteration-04-run-evidence.json",
+      "sha256": "e127201a3fb3fc4592d018e1b4915d0bb93b5b999ecce8e44677140a191e9264"
+    },
+    {
+      "path": "docs/research/astra-api-run-evidence.json",
+      "sha256": "a7086b6927062fcbfc066951d6be011c9e223765352023a1ec3be66c1682d6be"
+    },
+    {
+      "path": "docs/research/astra-simulation-run-evidence.json",
+      "sha256": "ce479031708da725d197919d635f0b82e2a3438dbed94eb40f77e742ced86037"
+    },
+    {
+      "path": "docs/research/astra-reservation-run-evidence.json",
+      "sha256": "60c9f378cfc49cfc8ff391a332893c6e71e4b96fee63a62293e9ff98308a4b12"
+    }
+  ],
+  "validation": {
+    "saved_artifacts": {
+      "checked": 77,
+      "matched": 77,
+      "changed_paths": [],
+      "missing_paths": []
+    },
+    "pipeline_inventory": {
+      "count": 32,
+      "status_counts": {
+        "cancelled": 3,
+        "completed": 26,
+        "failed": 3
+      },
+      "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+      "new_ids": [],
+      "removed_ids": [],
+      "changed_state_hash_ids": []
+    },
+    "bounded_logs": {
+      "prior_files_hashed": 12,
+      "changed_paths": [],
+      "missing_paths": [],
+      "latest_prior_dated_filename": "mirofish.log.2026-08-17",
+      "new_dated_paths": [],
+      "new_file_boundary": "Only dated names newer than the previous maximum are newly selected; every prior bounded file, including active mirofish.log, is rehashed. Older unselected logs remain outside scope.",
+      "new_or_changed_logs_parsed": 0,
+      "parsed_aggregates": [],
+      "prior_aggregates_reused": true,
+      "prior_aggregate_reference": "astra-reservation-run-evidence.json reused_log_aggregates; counts remain nonexclusive literal log markers."
+    },
+    "selected_child_health": {
+      "checked": 4,
+      "all_hashes_match": true,
+      "all_parent_run_entries_still_absent": true,
+      "all_child_token_snapshots_still_absent": true
+    }
+  },
+  "field_scope": {
+    "counter_allowlist": [
+      "calls",
+      "cached",
+      "prompt_tokens",
+      "completion_tokens",
+      "total_tokens",
+      "cost_usd"
+    ],
+    "embedded_stage_counter_allowlist": [
+      "calls",
+      "input_tokens",
+      "output_tokens",
+      "est_cost_usd"
+    ],
+    "raw_label_allowlist": [
+      "cost_estimated",
+      "cost_basis"
+    ],
+    "settings_rate_invoice_key_allowlist": [
+      "LLM_COST_PER_MTOK",
+      "LLM_RUN_BUDGET_USD",
+      "actual_cost_usd",
+      "billed_cost_usd",
+      "billing_receipt",
+      "budget_usd",
+      "completion_rate_per_million",
+      "cost_limit_usd",
+      "input_rate_per_million",
+      "invoice",
+      "invoice_id",
+      "invoice_usd",
+      "max_cost_usd",
+      "max_usd",
+      "output_rate_per_million",
+      "price_known",
+      "pricing",
+      "pricing_known",
+      "pricing_rates",
+      "prompt_rate_per_million",
+      "rate_snapshot",
+      "rate_table",
+      "run_budget_usd",
+      "unknown_price",
+      "unpriced",
+      "unpriced_calls",
+      "unpriced_tokens",
+      "usd_budget",
+      "usd_limit"
+    ],
+    "settings_documents": "Recursive exact-key lookup over four selected run telemetry files, pipeline states, run manifests and simulation configurations; arbitrary text and nonnumeric setting values are never exported.",
+    "cache_partition_keys_absent_from_all_selected_current_counters": [
+      "uncached_tokens",
+      "cache_read_tokens",
+      "cache_write_tokens",
+      "uncached_tokens_covered",
+      "cache_read_tokens_covered",
+      "cache_write_tokens_covered",
+      "cache_partition_known"
+    ],
+    "missing_fields": "Absent objects retain present=false and values=null. Explicit saved zero stage counters are retained separately from absent raw meter entries."
+  },
+  "selected_runs": [
+    {
+      "pipeline_id": "pipe_f23527f7d903",
+      "simulation_id": "sim_a0a936f8104c",
+      "created_at": "2026-07-09T08:12:33.491844+00:00",
+      "sources": {
+        "meter": {
+          "path": "backend/uploads/pipelines/pipe_f23527f7d903/run_telemetry.json",
+          "sha256": "a952a3790fec998f1d64bf78a8b41f6189972cf0303a6250daf0f4a0f5c2f240"
+        },
+        "state": {
+          "path": "backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json",
+          "sha256": "d35ebcbe44d251b120b9d1d23546efca5935bf11d23782e2bc5f8aaa6fac1bbc"
+        },
+        "manifest": {
+          "path": "backend/uploads/pipelines/pipe_f23527f7d903/run.json",
+          "sha256": "4c56590a6ddb5e1691cbfbe9229a331a16dfab1128979d76243f5e0858bea2be"
+        },
+        "simulation_config": {
+          "path": "backend/uploads/simulations/sim_a0a936f8104c/simulation_config.json",
+          "sha256": "66c82ab26e5e496ec5b1ae85ad2e7a2442ee9a59f3a9f1fdd1e15aa528f0fbbf"
+        }
+      },
+      "scopes": {
+        "current": {
+          "key_path": "$.total",
+          "present": true,
+          "values": {
+            "calls": 136,
+            "cached": 0,
+            "prompt_tokens": 81252970,
+            "completion_tokens": 1730769,
+            "total_tokens": 82983739,
+            "cost_usd": 26.279737
+          }
+        },
+        "previous_attempt": {
+          "key_path": "$.previous_attempt.total",
+          "present": false,
+          "values": null
+        },
+        "cumulative": {
+          "key_path": "$.cumulative_total",
+          "present": false,
+          "values": null
+        }
+      },
+      "raw_cost_labels": {
+        "cost_estimated": {
+          "key_path": "$.cost_estimated",
+          "present": true,
+          "value": false
+        },
+        "cost_basis": {
+          "key_path": "$.cost_basis",
+          "present": true,
+          "value": "api"
+        }
+      },
+      "current_by_stage": {
+        "key_path": "$.by_stage",
+        "values": {
+          "research": {
+            "calls": 1,
+            "cached": 0,
+            "prompt_tokens": 78156386,
+            "completion_tokens": 1593392,
+            "total_tokens": 79749778,
+            "cost_usd": 25.199647
+          },
+          "ontology": {
+            "calls": 1,
+            "cached": 0,
+            "prompt_tokens": 39251,
+            "completion_tokens": 5509,
+            "total_tokens": 44760,
+            "cost_usd": 0.017835
+          },
+          "prepare": {
+            "calls": 4,
+            "cached": 0,
+            "prompt_tokens": 14838,
+            "completion_tokens": 6020,
+            "total_tokens": 20858,
+            "cost_usd": 0.011073
+          },
+          "report": {
+            "calls": 130,
+            "cached": 0,
+            "prompt_tokens": 3042495,
+            "completion_tokens": 125848,
+            "total_tokens": 3168343,
+            "cost_usd": 1.051181
+          }
+        }
+      },
+      "current_by_model": {
+        "key_path": "$.by_model",
+        "values": {
+          "minimax:minimax": {
+            "calls": 1,
+            "cached": 0,
+            "prompt_tokens": 78156386,
+            "completion_tokens": 1593392,
+            "total_tokens": 79749778,
+            "cost_usd": 25.199647
+          },
+          "minimax:MiniMax-M3": {
+            "calls": 135,
+            "cached": 0,
+            "prompt_tokens": 3096584,
+            "completion_tokens": 137377,
+            "total_tokens": 3233961,
+            "cost_usd": 1.08009
+          }
+        }
+      },
+      "embedded_stage_total": {
+        "key_path": "$.options.llm_telemetry.total",
+        "values": {
+          "calls": 136,
+          "input_tokens": 81252970,
+          "output_tokens": 1730769,
+          "est_cost_usd": 26.279736
+        }
+      },
+      "embedded_run_projection": {
+        "key_path": "$.options.llm_telemetry.by_stage.run",
+        "present": true,
+        "values": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "est_cost_usd": 0.0
+        }
+      },
+      "run_meter_entry_present": false,
+      "child_token_snapshot_exists": false,
+      "saved_health_calls": 221,
+      "monetary_settings_and_receipts": {
+        "meter": {
+          "matching_fields": []
+        },
+        "state": {
+          "matching_fields": []
+        },
+        "manifest": {
+          "matching_fields": []
+        },
+        "simulation_config": {
+          "matching_fields": []
+        }
+      },
+      "historical_active_usd_cap": null,
+      "historical_rate_policy": null,
+      "historical_unknown_price_request_count": null,
+      "billed_invoice_cost_usd": null,
+      "invoice_discrepancy_usd": null
+    },
+    {
+      "pipeline_id": "pipe_91aaf91f6392",
+      "simulation_id": "sim_85b123350ee3",
+      "created_at": "2026-07-12T14:18:53.207724+00:00",
+      "sources": {
+        "meter": {
+          "path": "backend/uploads/pipelines/pipe_91aaf91f6392/run_telemetry.json",
+          "sha256": "c6281f59d12a9d6e84f70254d9218c3799f2082469ae5d96263671fe43fad1a6"
+        },
+        "state": {
+          "path": "backend/uploads/pipelines/pipe_91aaf91f6392/pipeline_state.json",
+          "sha256": "cc4544cde9f9a5b0210187230cefdf2b988dfc692b9bd64b862e7884d5117436"
+        },
+        "manifest": {
+          "path": "backend/uploads/pipelines/pipe_91aaf91f6392/run.json",
+          "sha256": "b7404294eef796f71ef5b3fc086bd351bfd9ef621c765b94298fc1368ae16b30"
+        },
+        "simulation_config": {
+          "path": "backend/uploads/simulations/sim_85b123350ee3/simulation_config.json",
+          "sha256": "7dacef09a06023b62f4a614f06235c2a93d1fa8c8fb18dc343789322949f80f8"
+        }
+      },
+      "scopes": {
+        "current": {
+          "key_path": "$.total",
+          "present": true,
+          "values": {
+            "calls": 131,
+            "cached": 4,
+            "prompt_tokens": 2269946,
+            "completion_tokens": 116914,
+            "total_tokens": 2386860,
+            "cost_usd": 0.809589
+          }
+        },
+        "previous_attempt": {
+          "key_path": "$.previous_attempt.total",
+          "present": true,
+          "values": {
+            "calls": 136,
+            "cached": 4,
+            "prompt_tokens": 2445191,
+            "completion_tokens": 122991,
+            "total_tokens": 2568182,
+            "cost_usd": 0.868847
+          }
+        },
+        "cumulative": {
+          "key_path": "$.cumulative_total",
+          "present": true,
+          "values": {
+            "calls": 629,
+            "cached": 20,
+            "prompt_tokens": 29338770,
+            "completion_tokens": 983612,
+            "total_tokens": 30322382,
+            "cost_usd": 9.883604
+          }
+        }
+      },
+      "raw_cost_labels": {
+        "cost_estimated": {
+          "key_path": "$.cost_estimated",
+          "present": true,
+          "value": false
+        },
+        "cost_basis": {
+          "key_path": "$.cost_basis",
+          "present": true,
+          "value": "api"
+        }
+      },
+      "current_by_stage": {
+        "key_path": "$.by_stage",
+        "values": {
+          "report": {
+            "calls": 131,
+            "cached": 4,
+            "prompt_tokens": 2269946,
+            "completion_tokens": 116914,
+            "total_tokens": 2386860,
+            "cost_usd": 0.809589
+          }
+        }
+      },
+      "current_by_model": {
+        "key_path": "$.by_model",
+        "values": {
+          "minimax:MiniMax-M3": {
+            "calls": 131,
+            "cached": 4,
+            "prompt_tokens": 2269946,
+            "completion_tokens": 116914,
+            "total_tokens": 2386860,
+            "cost_usd": 0.809589
+          }
+        }
+      },
+      "embedded_stage_total": {
+        "key_path": "$.options.llm_telemetry.total",
+        "values": {
+          "calls": 131,
+          "input_tokens": 2269946,
+          "output_tokens": 116914,
+          "est_cost_usd": 0.809589
+        }
+      },
+      "embedded_run_projection": {
+        "key_path": "$.options.llm_telemetry.by_stage.run",
+        "present": true,
+        "values": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "est_cost_usd": 0.0
+        }
+      },
+      "run_meter_entry_present": false,
+      "child_token_snapshot_exists": false,
+      "saved_health_calls": 456,
+      "monetary_settings_and_receipts": {
+        "meter": {
+          "matching_fields": []
+        },
+        "state": {
+          "matching_fields": []
+        },
+        "manifest": {
+          "matching_fields": []
+        },
+        "simulation_config": {
+          "matching_fields": []
+        }
+      },
+      "historical_active_usd_cap": null,
+      "historical_rate_policy": null,
+      "historical_unknown_price_request_count": null,
+      "billed_invoice_cost_usd": null,
+      "invoice_discrepancy_usd": null
+    },
+    {
+      "pipeline_id": "pipe_bef6879b2e94",
+      "simulation_id": "sim_05ab2bdebbd2",
+      "created_at": "2026-07-14T21:20:23.971987+00:00",
+      "sources": {
+        "meter": {
+          "path": "backend/uploads/pipelines/pipe_bef6879b2e94/run_telemetry.json",
+          "sha256": "42dace2bb7276a04eb3f987ee232fee04905852bd97691449cc59dcb1e22ff1e"
+        },
+        "state": {
+          "path": "backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json",
+          "sha256": "23b04b0b065ef9cd1639041ed0d87a3615a95f06dc242466a5ebe7522add1e22"
+        },
+        "manifest": {
+          "path": "backend/uploads/pipelines/pipe_bef6879b2e94/run.json",
+          "sha256": "59e2683039b0d5646138068b7b2202170eefd21a627c6c8524a8ce58a59cf3ff"
+        },
+        "simulation_config": {
+          "path": "backend/uploads/simulations/sim_05ab2bdebbd2/simulation_config.json",
+          "sha256": "a5bacb97c35260219e60e07c6166c5227daae06a05385582feaa2f79ff9792a9"
+        }
+      },
+      "scopes": {
+        "current": {
+          "key_path": "$.total",
+          "present": true,
+          "values": {
+            "calls": 217,
+            "cached": 12,
+            "prompt_tokens": 2350514,
+            "completion_tokens": 208104,
+            "total_tokens": 2558618,
+            "cost_usd": 0.934069
+          }
+        },
+        "previous_attempt": {
+          "key_path": "$.previous_attempt.total",
+          "present": true,
+          "values": {
+            "calls": 118,
+            "cached": 0,
+            "prompt_tokens": 2619677,
+            "completion_tokens": 174990,
+            "total_tokens": 2794667,
+            "cost_usd": 0.978392
+          }
+        },
+        "cumulative": {
+          "key_path": "$.cumulative_total",
+          "present": true,
+          "values": {
+            "calls": 335,
+            "cached": 12,
+            "prompt_tokens": 4970191,
+            "completion_tokens": 383094,
+            "total_tokens": 5353285,
+            "cost_usd": 1.912461
+          }
+        }
+      },
+      "raw_cost_labels": {
+        "cost_estimated": {
+          "key_path": "$.cost_estimated",
+          "present": true,
+          "value": false
+        },
+        "cost_basis": {
+          "key_path": "$.cost_basis",
+          "present": true,
+          "value": "api"
+        }
+      },
+      "current_by_stage": {
+        "key_path": "$.by_stage",
+        "values": {
+          "report": {
+            "calls": 217,
+            "cached": 12,
+            "prompt_tokens": 2350514,
+            "completion_tokens": 208104,
+            "total_tokens": 2558618,
+            "cost_usd": 0.934069
+          }
+        }
+      },
+      "current_by_model": {
+        "key_path": "$.by_model",
+        "values": {
+          "minimax:MiniMax-M3": {
+            "calls": 217,
+            "cached": 12,
+            "prompt_tokens": 2350514,
+            "completion_tokens": 208104,
+            "total_tokens": 2558618,
+            "cost_usd": 0.934069
+          }
+        }
+      },
+      "embedded_stage_total": {
+        "key_path": "$.options.llm_telemetry.total",
+        "values": {
+          "calls": 217,
+          "input_tokens": 2350514,
+          "output_tokens": 208104,
+          "est_cost_usd": 0.934069
+        }
+      },
+      "embedded_run_projection": {
+        "key_path": "$.options.llm_telemetry.by_stage.run",
+        "present": true,
+        "values": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "est_cost_usd": 0.0
+        }
+      },
+      "run_meter_entry_present": false,
+      "child_token_snapshot_exists": false,
+      "saved_health_calls": 648,
+      "monetary_settings_and_receipts": {
+        "meter": {
+          "matching_fields": []
+        },
+        "state": {
+          "matching_fields": []
+        },
+        "manifest": {
+          "matching_fields": []
+        },
+        "simulation_config": {
+          "matching_fields": []
+        }
+      },
+      "historical_active_usd_cap": null,
+      "historical_rate_policy": null,
+      "historical_unknown_price_request_count": null,
+      "billed_invoice_cost_usd": null,
+      "invoice_discrepancy_usd": null
+    },
+    {
+      "pipeline_id": "pipe_0e1b84d2682a",
+      "simulation_id": "sim_9fc88d28ccb1",
+      "created_at": "2026-07-15T14:15:27.286816+00:00",
+      "sources": {
+        "meter": {
+          "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/run_telemetry.json",
+          "sha256": "71f60f4930ba2d325c8ce6f395f1b897cbbcd4c17aaa912d0ce936e46ecad968"
+        },
+        "state": {
+          "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json",
+          "sha256": "f2ba0ca5dadcb28264c29ef948d35f04453498530bc1819d4e0a5532ab8684c1"
+        },
+        "manifest": {
+          "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/run.json",
+          "sha256": "90a89e823e19070c9ef18a2a4ff15f1337db4df91af922b1de0dd6d1c7bb2cdd"
+        },
+        "simulation_config": {
+          "path": "backend/uploads/simulations/sim_9fc88d28ccb1/simulation_config.json",
+          "sha256": "5e5848f6093c3f381458423c4ffca0ab909607e082b36cee0a36b7c166abd8f7"
+        }
+      },
+      "scopes": {
+        "current": {
+          "key_path": "$.total",
+          "present": true,
+          "values": {
+            "calls": 252,
+            "cached": 26,
+            "prompt_tokens": 2679956,
+            "completion_tokens": 260706,
+            "total_tokens": 2940662,
+            "cost_usd": 1.090763
+          }
+        },
+        "previous_attempt": {
+          "key_path": "$.previous_attempt.total",
+          "present": true,
+          "values": {
+            "calls": 3,
+            "cached": 0,
+            "prompt_tokens": 8626,
+            "completion_tokens": 5462,
+            "total_tokens": 14088,
+            "cost_usd": 0.008596
+          }
+        },
+        "cumulative": {
+          "key_path": "$.cumulative_total",
+          "present": true,
+          "values": {
+            "calls": 255,
+            "cached": 26,
+            "prompt_tokens": 2688582,
+            "completion_tokens": 266168,
+            "total_tokens": 2954750,
+            "cost_usd": 1.099359
+          }
+        }
+      },
+      "raw_cost_labels": {
+        "cost_estimated": {
+          "key_path": "$.cost_estimated",
+          "present": true,
+          "value": false
+        },
+        "cost_basis": {
+          "key_path": "$.cost_basis",
+          "present": true,
+          "value": "api"
+        }
+      },
+      "current_by_stage": {
+        "key_path": "$.by_stage",
+        "values": {
+          "report": {
+            "calls": 252,
+            "cached": 26,
+            "prompt_tokens": 2679956,
+            "completion_tokens": 260706,
+            "total_tokens": 2940662,
+            "cost_usd": 1.090763
+          }
+        }
+      },
+      "current_by_model": {
+        "key_path": "$.by_model",
+        "values": {
+          "minimax:MiniMax-M3": {
+            "calls": 252,
+            "cached": 26,
+            "prompt_tokens": 2679956,
+            "completion_tokens": 260706,
+            "total_tokens": 2940662,
+            "cost_usd": 1.090763
+          }
+        }
+      },
+      "embedded_stage_total": {
+        "key_path": "$.options.llm_telemetry.total",
+        "values": {
+          "calls": 252,
+          "input_tokens": 2679956,
+          "output_tokens": 260706,
+          "est_cost_usd": 1.090763
+        }
+      },
+      "embedded_run_projection": {
+        "key_path": "$.options.llm_telemetry.by_stage.run",
+        "present": true,
+        "values": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "est_cost_usd": 0.0
+        }
+      },
+      "run_meter_entry_present": false,
+      "child_token_snapshot_exists": false,
+      "saved_health_calls": 212,
+      "monetary_settings_and_receipts": {
+        "meter": {
+          "matching_fields": []
+        },
+        "state": {
+          "matching_fields": []
+        },
+        "manifest": {
+          "matching_fields": []
+        },
+        "simulation_config": {
+          "matching_fields": []
+        }
+      },
+      "historical_active_usd_cap": null,
+      "historical_rate_policy": null,
+      "historical_unknown_price_request_count": null,
+      "billed_invoice_cost_usd": null,
+      "invoice_discrepancy_usd": null
+    }
+  ],
+  "arithmetic_checks": [
+    {
+      "pipeline_id": "pipe_f23527f7d903",
+      "scope_token_sums_equal": true,
+      "current_stage_calls_and_tokens_equal_total": true,
+      "current_stage_cost_sum_minus_total_usd": -1e-06,
+      "embedded_cost_minus_current_total_usd": -1e-06,
+      "pinned_minimax_table_recalculation": {
+        "current": {
+          "rounded_estimate_usd": 26.279737,
+          "recorded_minus_recalculated_usd": 0.0
+        }
+      },
+      "cumulative_minus_current_and_previous": null
+    },
+    {
+      "pipeline_id": "pipe_91aaf91f6392",
+      "scope_token_sums_equal": true,
+      "current_stage_calls_and_tokens_equal_total": true,
+      "current_stage_cost_sum_minus_total_usd": 0.0,
+      "embedded_cost_minus_current_total_usd": 0.0,
+      "pinned_minimax_table_recalculation": {
+        "current": {
+          "rounded_estimate_usd": 0.809589,
+          "recorded_minus_recalculated_usd": 0.0
+        },
+        "previous_attempt": {
+          "rounded_estimate_usd": 0.868847,
+          "recorded_minus_recalculated_usd": 0.0
+        },
+        "cumulative": {
+          "rounded_estimate_usd": 9.883604,
+          "recorded_minus_recalculated_usd": 0.0
+        }
+      },
+      "cumulative_minus_current_and_previous": {
+        "calls": 362,
+        "total_tokens": 25367340,
+        "cost_usd": 8.205168
+      }
+    },
+    {
+      "pipeline_id": "pipe_bef6879b2e94",
+      "scope_token_sums_equal": true,
+      "current_stage_calls_and_tokens_equal_total": true,
+      "current_stage_cost_sum_minus_total_usd": 0.0,
+      "embedded_cost_minus_current_total_usd": 0.0,
+      "pinned_minimax_table_recalculation": {
+        "current": {
+          "rounded_estimate_usd": 0.934069,
+          "recorded_minus_recalculated_usd": 0.0
+        },
+        "previous_attempt": {
+          "rounded_estimate_usd": 0.978392,
+          "recorded_minus_recalculated_usd": 0.0
+        },
+        "cumulative": {
+          "rounded_estimate_usd": 1.912461,
+          "recorded_minus_recalculated_usd": 0.0
+        }
+      },
+      "cumulative_minus_current_and_previous": {
+        "calls": 0,
+        "total_tokens": 0,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "pipeline_id": "pipe_0e1b84d2682a",
+      "scope_token_sums_equal": true,
+      "current_stage_calls_and_tokens_equal_total": true,
+      "current_stage_cost_sum_minus_total_usd": 0.0,
+      "embedded_cost_minus_current_total_usd": 0.0,
+      "pinned_minimax_table_recalculation": {
+        "current": {
+          "rounded_estimate_usd": 1.090763,
+          "recorded_minus_recalculated_usd": 0.0
+        },
+        "previous_attempt": {
+          "rounded_estimate_usd": 0.008596,
+          "recorded_minus_recalculated_usd": 0.0
+        },
+        "cumulative": {
+          "rounded_estimate_usd": 1.099359,
+          "recorded_minus_recalculated_usd": 0.0
+        }
+      },
+      "cumulative_minus_current_and_previous": {
+        "calls": 0,
+        "total_tokens": 0,
+        "cost_usd": 0.0
+      }
+    }
+  ],
+  "pinned_source_snapshot": [
+    {
+      "path": "backend/app/utils/telemetry.py",
+      "revision": "186af1a6bcd5ec8587365b398dfeb49d98d2ef63",
+      "sha256": "4a91c2a4ae3c667580dcc909c3f78fcefce32a1d23d186644b2c122fdbf15621",
+      "anchors": {
+        "_COST_PER_1K:": 116,
+        "def _cost_overrides": 151,
+        "def estimate_cost": 181,
+        "def cost_is_estimated": 193,
+        "def check_budget": 737,
+        "def build_stage_telemetry": 781,
+        "def render_telemetry_appendix": 827
+      }
+    },
+    {
+      "path": "backend/app/config.py",
+      "revision": "186af1a6bcd5ec8587365b398dfeb49d98d2ef63",
+      "sha256": "237c5b4ff6538f75e24c7727690d17469030246e4b7906f8dbe5a786ce127c1c",
+      "anchors": {
+        "LLM_RUN_BUDGET_USD =": 59,
+        "LLM_COST_PER_MTOK =": 67
+      }
+    }
+  ],
+  "pinned_cost_model_observations": {
+    "minimax_code_rates_usd_per_million": {
+      "input": 0.3,
+      "output": 1.1
+    },
+    "rate_scope": "Pinned rough per-provider code defaults, not current provider prices or proof of historical environment overrides.",
+    "source_usd_budget_default": 0,
+    "current_runtime_usd_budget": null,
+    "selected_recorded_costs_match_pinned_minimax_formula_to_six_decimals": true,
+    "legacy_estimation_flag_is_provider_classification_not_invoice_receipt": true,
+    "unknown_provider_without_matching_override_default_rates": [
+      0,
+      0
+    ]
+  },
+  "interpretation": [
+    "All 77 saved hashes, the exact 32-state inventory and 12 bounded logs are unchanged. Prior bounded log aggregates are reused without parsing unchanged logs.",
+    "The four selected legacy telemetry files explicitly store cost_estimated=false and cost_basis=api. Preserve these raw labels; they do not establish invoiced cost, per-operation rate provenance, complete cache billing or complete priced-request coverage.",
+    "Selected route labels are minimax:minimax and minimax:MiniMax-M3. Their aggregate costs match the pinned rough provider table numerically, but no inspected rate receipt establishes historical overrides or model-specific prices. Unknown-price activity is unproven, not measured zero.",
+    "No allowlisted dollar-cap setting, saved rate policy, invoice receipt or billed amount was found in the 16 selected documents. Active historical USD caps and invoice discrepancies remain unknown.",
+    "Current, previous and cumulative telemetry are overlapping scopes and must not be added together. pipe_91aaf91f6392 cumulative exceeds its displayed current-plus-one-previous snapshot; that arithmetic alone does not establish replay count, extra physical requests or billed waste.",
+    "The largest selected current total is 26.279737 USD. Its embedded stage sum is 26.279736 USD; the 0.000001 difference follows summing rounded stage costs and is not an invoice discrepancy.",
+    "Saved state embeds zero-valued RUN cost/token placeholders, while raw parent RUN meter entries and child token snapshots remain absent. Those zeros cannot establish zero simulation consumption. Health counters also overlap parent copies and are not physical request or billing receipts.",
+    "Cost figures justify testing a monetary provenance/admission prerequisite offline. They establish no production savings, historical overshoot, provider invoice ceiling or global Pareto optimum."
+  ]
+}

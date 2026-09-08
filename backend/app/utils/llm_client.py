@@ -454,11 +454,22 @@ class LLMClient:
             UsageLedgerUnresolvedError, check_budget, resolve_run_attribution,
         )
         from .api_budget import prepare_token_request
+        from .api_cost import capture_cost_quote
         run_id, stage, inferred = resolve_run_attribution()
         LLMMeter.assert_accounting_available(run_id)
         check_budget(run_id)
         # Plan and send one private snapshot when token planning is enabled.
         kwargs, reservation = prepare_token_request(kwargs, run_id)
+        # The quote must describe the model actually sent. Keep attribution
+        # fields private even when token planning does not copy the full input.
+        kwargs = dict(kwargs)
+        if kwargs.get("model") != model:
+            raise BudgetExceeded("API request model does not match its price attribution")
+        if kwargs.get("extra_body") is not None:
+            if not isinstance(kwargs["extra_body"], dict) or "model" in kwargs["extra_body"]:
+                raise BudgetExceeded("API price attribution cannot use an extra_body model override")
+            kwargs["extra_body"] = dict(kwargs["extra_body"])
+        cost_quote = capture_cost_quote(provider, model)
         self._last_usage = None
         # Request-local options also cover shared/injected SDK clients whose
         # constructor defaults still permit retries. Lightweight offline fakes
@@ -478,6 +489,7 @@ class LLMClient:
                     run_id=run_id, stage=stage, calls=calls, status=status,
                     usage_source=usage_source, uncached_tokens=None,
                     token_reservation=reservation if status == "in_flight" else None,
+                    cost_quote=cost_quote,
                     _fallback=inferred, **cache,
                 )
 

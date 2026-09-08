@@ -62,8 +62,10 @@ class Config:
     # 而非对已死提供方持续空转（2026-07-08 曾以 231 错误/分钟磨了 ~26 小时）。≤0 关闭。
     LLM_OUTAGE_HALT_CONSECUTIVE = int(os.environ.get('LLM_OUTAGE_HALT_CONSECUTIVE', '10') or '10')
     # ITEM-18：每个 provider 的 $/Mtok 成本覆盖表（JSON），形如 {"openai":[5.0,15.0],"myprov":[0.5,1.5]}
-    # （每百万 token 的 [输入, 输出] 美元价）。叠加在 telemetry._COST_PER_1K 的保守内建默认之上（同名覆盖、
-    # 新名新增）。留空=纯用内建默认；解析失败=退回无覆盖（degrade-safe，见 telemetry._cost_overrides）。
+    # （每百万 token 的 [输入, 输出] 美元价）。Native/shared API quotes also accept
+    # exact provider:model keys before provider defaults, capture rates before
+    # dispatch, and reject malformed rates. Empty uses rough built-in estimates.
+    # Historical/non-API estimate_cost callers retain their legacy fallback parser.
     LLM_COST_PER_MTOK = os.environ.get('LLM_COST_PER_MTOK', '').strip()
 
     # —— 调优后的 LLM HTTP 客户端（R2-EXEC-6）——
