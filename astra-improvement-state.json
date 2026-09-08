@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-08T00:36:08.402049+00:00",
+  "updated_at": "2026-09-08T00:40:49.727088+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -159,7 +159,8 @@
                       "id": "ASTRA-04b5b2",
                       "title": "Expose explicit native output caps through the production factory and child configuration without changing defaults",
                       "status": "verified_offline",
-                      "evidence": "docs/research/astra-native-cap-verification.json"
+                      "evidence": "docs/research/astra-native-cap-verification.json",
+                      "implementation_commit": "4de6d4fc67bef158d765752a6f02ca47dc581fe4"
                     },
                     {
                       "id": "ASTRA-04b5b3",
@@ -401,10 +402,11 @@
       ],
       "result": "1,165 backend tests passed with one deployment-only skip; all 67 new cases independently reviewed. Actual factory cap admission and child policy/seal scenarios verified offline.",
       "next": "ASTRA-04b5b3: monetary reservation feasibility, rate and missing-price policy, then remaining accounting coverage and graph/report recovery.",
-      "verified_source_hashes": "docs/research/astra-native-cap-verification.json"
+      "verified_source_hashes": "docs/research/astra-native-cap-verification.json",
+      "implementation_commit": "4de6d4fc67bef158d765752a6f02ca47dc581fe4"
     }
   ],
-  "last_implementation_commit": "04c981b4119726019a50ec15eb19272e4ac012da",
+  "last_implementation_commit": "4de6d4fc67bef158d765752a6f02ca47dc581fe4",
   "optimization_objectives": {
     "minimize": [
       "provider work and accounted consumption",
