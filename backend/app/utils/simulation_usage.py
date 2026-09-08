@@ -21,8 +21,24 @@ _AUTH_KEYS = ("schema", "run_id", "attempt_id", "simulation_id", "launch_token")
 _context: dict[str, Any] | None = None
 
 
-def authority(context: dict[str, Any]) -> dict[str, str]:
-    return {key: context[key] for key in _AUTH_KEYS}
+def _output_policy(context: dict[str, Any]) -> dict[str, Any]:
+    from .oasis_output_policy import SCHEMA as POLICY_SCHEMA, validate_output_policy
+    try:
+        return validate_output_policy(context.get("native_output_policy", {
+            "schema": POLICY_SCHEMA, "max_output_tokens": 0, "parameter": "max_tokens",
+        }))
+    except (TypeError, ValueError) as exc:
+        raise UsageLedgerConflict("Invalid simulation native output policy") from exc
+
+
+def authority(context: dict[str, Any]) -> dict[str, Any]:
+    result = {key: context[key] for key in _AUTH_KEYS}
+    if "native_output_policy" in context:
+        # Optional v1 extension: new receipts bind the complete launch policy,
+        # while historical five-field receipts remain readable without upgrade.
+        result.update(native_output_policy=_output_policy(context),
+                      budget_tokens=context["budget_tokens"], budget_usd=context["budget_usd"])
+    return result
 
 
 def _validate(context: Any, config_path: str) -> dict[str, Any]:
@@ -63,7 +79,10 @@ def _validate(context: Any, config_path: str) -> dict[str, Any]:
         if isinstance(exc, UsageLedgerConflict):
             raise
         raise UsageLedgerStorageError("Simulation accounting lineage is unreadable") from exc
-    return dict(context)
+    checked = dict(context)
+    if "native_output_policy" in context:
+        checked["native_output_policy"] = _output_policy(context)
+    return checked
 
 
 def child_environment(env: dict[str, str], context: dict[str, Any] | None,
@@ -74,11 +93,16 @@ def child_environment(env: dict[str, str], context: dict[str, Any] | None,
     if context is not None:
         checked = _validate(context, config_path)
         checked["config_sha256"] = hashlib.sha256(Path(config_path).read_bytes()).hexdigest()
+        policy = _output_policy(checked)
+        # Entry scripts import Config before bootstrap, so pin import-time values
+        # in this private environment as well as the runtime authority below.
+        result["OASIS_MAX_OUTPUT_TOKENS"] = str(policy["max_output_tokens"])
+        result["OASIS_OUTPUT_TOKEN_PARAMETER"] = policy["parameter"]
         result[CONTEXT_ENV] = json.dumps(checked, separators=(",", ":"))
     return result
 
 
-def bootstrap(config_path: str) -> dict[str, str] | None:
+def bootstrap(config_path: str) -> dict[str, Any] | None:
     """Join only the validated launch's existing parent ledger before model work."""
     global _context
     raw = os.environ.get(CONTEXT_ENV)
@@ -102,14 +126,22 @@ def bootstrap(config_path: str) -> dict[str, str] | None:
     from app.config import Config
     Config.LLM_RUN_BUDGET_TOKENS = context["budget_tokens"]
     Config.LLM_RUN_BUDGET_USD = context["budget_usd"]
+    policy = _output_policy(context)
+    Config.OASIS_MAX_OUTPUT_TOKENS = policy["max_output_tokens"]
+    Config.OASIS_OUTPUT_TOKEN_PARAMETER = policy["parameter"]
     LLMMeter.assert_accounting_available(context["run_id"])
     check_budget(context["run_id"])
     _context = context
     return authority(context)
 
 
-def current_authority() -> dict[str, str] | None:
+def current_authority() -> dict[str, Any] | None:
     return authority(_context) if _context is not None else None
+
+
+def current_output_policy() -> dict[str, Any] | None:
+    """Return an independent pinned policy; legacy bound launches stay uncapped."""
+    return _output_policy(_context) if _context is not None else None
 
 
 def assert_complete() -> None:

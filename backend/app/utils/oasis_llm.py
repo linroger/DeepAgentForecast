@@ -327,6 +327,9 @@ def _fallback_completion(model, provider: str, exc: Exception, *args, **kwargs) 
     cfg = getattr(model, "model_config_dict", None) or {}
     temperature = float(cfg.get("temperature", 0.7) or 0.7)
     max_tokens = int(cfg.get("max_tokens", 4096) or 4096)
+    output_policy = getattr(model, "_drf_native_output_policy", None)
+    if output_policy is not None and output_policy["max_output_tokens"] > 0:
+        max_tokens = output_policy["max_output_tokens"]
 
     llm = LLMClient(provider=provider)  # 自带重试、422 熔断与 LLM_FALLBACK_PROVIDER 故障转移
     tool_calls: List[Dict[str, Any]] = []
@@ -492,10 +495,69 @@ def _resolve_provider(config: Dict[str, Any]) -> str:
     ).lower()
 
 
+def _install_native_output_policy(model: Any, policy: Dict[str, Any]) -> None:
+    """Cap SDK requests without changing CAMEL's model/context token limit."""
+    from .oasis_output_policy import validate_output_policy
+    policy = validate_output_policy(policy)
+    identity = (policy["schema"], policy["max_output_tokens"], policy["parameter"])
+
+    def request_options(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        options = dict(kwargs)
+        options.pop("max_tokens", None)
+        options.pop("max_completion_tokens", None)
+        extra = options.get("extra_body")
+        if extra is not None:
+            if not isinstance(extra, dict):
+                raise BudgetExceeded("Native output policy requires object-valued extra_body")
+            copied_extra = dict(extra)
+            copied_extra.pop("max_tokens", None)
+            copied_extra.pop("max_completion_tokens", None)
+            options["extra_body"] = copied_extra
+        options[policy["parameter"]] = policy["max_output_tokens"]
+        return options
+
+    def wrap(original: Any, asynchronous: bool) -> Any:
+        if asynchronous:
+            async def capped(*args: Any, **kwargs: Any) -> Any:
+                return await original(*args, **request_options(kwargs))
+        else:
+            def capped(*args: Any, **kwargs: Any) -> Any:
+                return original(*args, **request_options(kwargs))
+        return capped
+
+    clients = ((model._client, False), (model._async_client, True))
+    for sdk, _ in clients:
+        existing = getattr(sdk, "_drf_native_output_policy_identity", None)
+        if existing is not None and existing != identity:
+            raise BudgetExceeded("SDK client already belongs to another native output policy")
+    for sdk, asynchronous in clients:
+        existing = getattr(sdk, "_drf_native_output_policy_identity", None)
+        if existing is not None:
+            continue
+        if policy["max_output_tokens"] > 0:
+            # Depending on SDK version beta.chat can alias chat. Wrap each
+            # resource once, covering both create and structured parse calls.
+            seen = set()
+            for resource in (sdk.chat.completions, sdk.beta.chat.completions):
+                if id(resource) in seen:
+                    continue
+                seen.add(id(resource))
+                for name in ("create", "parse"):
+                    original = getattr(resource, name, None)
+                    if not callable(original):
+                        raise BudgetExceeded("SDK lacks the native output policy request boundary")
+                    setattr(resource, name, wrap(original, asynchronous))
+        sdk._drf_native_output_policy_identity = identity
+    model._drf_native_output_policy = dict(policy)
+
+
 def _create_openai_model(config: Dict[str, Any], use_boost: bool = False):
     """provider=openai 时的原有 ModelFactory 路径（保留 boost 加速配置）。"""
     from camel.models import ModelFactory
     from camel.types import ModelPlatformType
+    from .oasis_output_policy import model_output_policy
+
+    output_policy = model_output_policy()
 
     boost_api_key = os.environ.get("LLM_BOOST_API_KEY", "")
     boost_base_url = os.environ.get("LLM_BOOST_BASE_URL", "")
@@ -534,6 +596,7 @@ def _create_openai_model(config: Dict[str, Any], use_boost: bool = False):
         api_key=eff_api_key,
         url=eff_base_url or None,
     )
+    _install_native_output_policy(_m, output_policy)
     return _wrap_openai_empty_guard(_m)  # S2-llm: prevent empty-assistant 400 cascade
 
 
@@ -590,6 +653,9 @@ def create_oasis_model(config: Dict[str, Any], use_boost: bool = False):
     if provider == 'kimi':
         # 仅 Kimi-for-coding 网关按 UA 校验 coding-agent 身份；MiniMax 不需要。
         _inject_coding_agent_ua(model)
+        output_policy = getattr(model, "_drf_native_output_policy", None)
+        if output_policy is not None:
+            _install_native_output_policy(model, output_policy)
     # 推理模型(kimi/minimax/deepseek/qwen/glm)默认关闭推理，避免 reasoning 吃光 token 预算
     # 导致 content 为空。reasoning_extra_body() 对非推理提供方返回 None，故可统一调用。
     # CAMEL 会把 model_config_dict 透传为 create() 关键字参数，故注入 extra_body。

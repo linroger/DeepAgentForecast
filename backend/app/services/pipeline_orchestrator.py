@@ -10541,6 +10541,8 @@ class PipelineOrchestrator:
         """Persist launch ownership before the runner can dispatch a child."""
         from ..utils.telemetry import LLMMeter
         from ..utils.simulation_usage import SCHEMA, authority
+        from ..utils.oasis_output_policy import configured_output_policy, validate_output_policy
+        from ..utils.usage_ledger import UsageLedgerConflict
         context = LLMMeter.durable_binding(state.pipeline_id)
         if context is None:
             if state.options.get("usage_attempt_id"):
@@ -10554,10 +10556,22 @@ class PipelineOrchestrator:
                 PipelineManager._dir(state.pipeline_id), "pipeline_state.json")),
             "budget_tokens": int(Config.LLM_RUN_BUDGET_TOKENS or 0),
             "budget_usd": float(Config.LLM_RUN_BUDGET_USD or 0),
+            "native_output_policy": configured_output_policy(),
         })
         with self._simulation_usage_lock:
             # Main and ensemble calls on this orchestrator share one state object.
-            state.options.setdefault("simulation_usage_launches", {})[context["launch_token"]] = authority(context)
+            launches = state.options.setdefault("simulation_usage_launches", {})
+            for previous in launches.values():
+                if (not isinstance(previous, dict) or previous.get("simulation_id") != simulation_id
+                        or "native_output_policy" not in previous):
+                    continue
+                try:
+                    previous_policy = validate_output_policy(previous["native_output_policy"])
+                except (TypeError, ValueError) as exc:
+                    raise UsageLedgerConflict("Saved simulation native output policy is invalid") from exc
+                if previous_policy != context["native_output_policy"]:
+                    raise UsageLedgerConflict("Native output policy changed for an existing simulation")
+            launches[context["launch_token"]] = authority(context)
             PipelineManager.save(state)
         return context
 

@@ -1047,6 +1047,10 @@ class Config:
     # OpenAI 兼容提供方：纯 HTTP 并发。SIM-3：默认 24（在飞 agent LLM 调用数，//platforms 分摊）；
     # 从保守值 16→24→32 逐档 ramp 盯 p95，而非一步到 64。
     OASIS_SEMAPHORE = int(os.environ.get('OASIS_SEMAPHORE', '24') or '24')
+    # Native OASIS output cap. Zero leaves the SDK field omitted, preserving
+    # existing requests. Select the field supported by the configured endpoint.
+    OASIS_MAX_OUTPUT_TOKENS = int(os.environ.get('OASIS_MAX_OUTPUT_TOKENS', '0') or '0')
+    OASIS_OUTPUT_TOKEN_PARAMETER = os.environ.get('OASIS_OUTPUT_TOKEN_PARAMETER', 'max_tokens').strip()
     
     # OASIS平台可用动作配置
     OASIS_TWITTER_ACTIONS = [
@@ -1580,6 +1584,12 @@ class Config:
             _sem_val = getattr(cls, _sem_name, None)
             if not isinstance(_sem_val, int) or _sem_val < 1:
                 errors.append(f"{_sem_name} 必须是 >=1 的整数，当前为 '{_sem_val}'")
+        from .utils.oasis_output_policy import SCHEMA, validate_output_policy
+        try:
+            validate_output_policy({"schema": SCHEMA, "max_output_tokens": cls.OASIS_MAX_OUTPUT_TOKENS,
+                                    "parameter": cls.OASIS_OUTPUT_TOKEN_PARAMETER})
+        except ValueError as exc:
+            errors.append(str(exc))
         return errors
 
 

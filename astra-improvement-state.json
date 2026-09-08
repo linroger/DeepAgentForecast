@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-07T23:37:33.781203+00:00",
+  "updated_at": "2026-09-08T00:36:08.402049+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -84,7 +84,11 @@
         "docs/research/astra-reservation-verification.md",
         "docs/research/astra-reservation-verification.json",
         "docs/research/astra-reservation-run-evidence.json",
-        "docs/research/astra-reservation-comparison.json"
+        "docs/research/astra-reservation-comparison.json",
+        "docs/research/astra-native-cap-verification.json",
+        "docs/research/astra-native-cap-verification.md",
+        "docs/research/astra-native-cap-comparison.json",
+        "docs/research/astra-native-cap-run-evidence.json"
       ],
       "subtasks": [
         {
@@ -154,7 +158,8 @@
                     {
                       "id": "ASTRA-04b5b2",
                       "title": "Expose explicit native output caps through the production factory and child configuration without changing defaults",
-                      "status": "pending"
+                      "status": "verified_offline",
+                      "evidence": "docs/research/astra-native-cap-verification.json"
                     },
                     {
                       "id": "ASTRA-04b5b3",
@@ -175,9 +180,9 @@
         "Simulation aggregate model labels retain stable identity; detailed model diagnostics are separate.",
         "Imported historical baselines are opaque and legacy marker-first ambiguity is explicit.",
         "Unknown/cache partition coverage is not inferred; usage_complete remains false.",
-        "Backend and factory-instrumented nonstreaming CAMEL physical attempts, unresolved recovery and token reservations are verified offline; production native output-cap configuration, monetary reservations, CLI physical failures and custom SDK replacement remain incomplete.",
+        "Backend and factory-instrumented nonstreaming CAMEL physical attempts, unresolved recovery and token reservations are verified offline; monetary reservations, CLI physical failures and custom SDK replacement remain incomplete.",
         "Enabled budget guards use a verified narrow projection; token sums remain O(delta rows), and cost grouping is retained for exact rounding compatibility. No default-disabled or production speedup claim.",
-        "Native factory requests remain uncapped by default and are rejected before send if token reservations are enabled. Explicit production output-cap configuration is next; held allowance is separate from recorded usage."
+        "Native factory requests remain uncapped by default and are rejected before send if token reservations are enabled. An explicit native output policy now reaches actual factory/child requests and is pinned per simulation; held allowance stays separate from recorded usage."
       ]
     },
     {
@@ -295,7 +300,7 @@
   ],
   "next_recommendation": "ASTRA-04",
   "last_completed_slice": [
-    "ASTRA-04b5b1"
+    "ASTRA-04b5b2"
   ],
   "iterations": [
     {
@@ -388,6 +393,15 @@
       "next": "ASTRA-04b5b2 explicit native output-cap configuration through the production factory and child path; then monetary policy and remaining coverage.",
       "verified_source_hashes": "docs/research/astra-reservation-verification.json",
       "implementation_commit": "04c981b4119726019a50ec15eb19272e4ac012da"
+    },
+    {
+      "completed_at": "2026-09-08T00:36:08.402049+00:00",
+      "recommendations": [
+        "ASTRA-04b5b2"
+      ],
+      "result": "1,165 backend tests passed with one deployment-only skip; all 67 new cases independently reviewed. Actual factory cap admission and child policy/seal scenarios verified offline.",
+      "next": "ASTRA-04b5b3: monetary reservation feasibility, rate and missing-price policy, then remaining accounting coverage and graph/report recovery.",
+      "verified_source_hashes": "docs/research/astra-native-cap-verification.json"
     }
   ],
   "last_implementation_commit": "04c981b4119726019a50ec15eb19272e4ac012da",
@@ -417,11 +431,12 @@
     {
       "id": "ASTRA-TOKEN-01",
       "priority": "P2",
-      "status": "planned",
+      "status": "resolved_offline",
       "recommendation": "ASTRA-04b5b2",
       "description": "Native production model creation has no explicit output-token cap configuration path. Token-enabled reservations therefore stop its uncapped requests before dispatch.",
-      "evidence": "docs/research/astra-reservation-verification.md",
-      "resolution": "Add validated opt-in output-cap configuration through the factory and child launch path, preserving current uncapped defaults and actor/source provenance; cover actual SDK sends offline."
+      "evidence": "docs/research/astra-native-cap-verification.json",
+      "resolution": "Validated opt-in native output policy reaches actual factory/SDK and child shared-ledger requests without changing uncapped defaults, agent memory or sealed configuration. Policy and budgets bind new authorities; same-simulation launches reject drift. 67 new cases independently reviewed.",
+      "resolved_at": "2026-09-08T00:36:08.402049+00:00"
     }
   ]
 }
