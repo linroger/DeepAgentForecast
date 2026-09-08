@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-08T01:41:49.138035+00:00",
+  "updated_at": "2026-09-08T01:46:55.093494+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -175,7 +175,8 @@
                           "id": "ASTRA-04b5b3a",
                           "title": "Capture immutable API price estimates with explicit missing-price admission and replay consistency",
                           "status": "verified_offline",
-                          "evidence": "docs/research/astra-api-cost-verification.json"
+                          "evidence": "docs/research/astra-api-cost-verification.json",
+                          "implementation_commit": "98ed4b7d804b531774d69b1287e492e9782c7164"
                         },
                         {
                           "id": "ASTRA-04b5b3b",
@@ -430,10 +431,11 @@
       ],
       "result": "1,266 backend tests passed with one deployment-only skip; all101 new pricing/ledger/child cases independently reviewed. Paired mocked paths reject missing-price work before send and preserve captured settlement and zero-delta exact replay.",
       "next": "ASTRA-04b5b3b: monetary admission with explicit rate/cap pinning and incomplete-price coverage; graph/report recovery follows.",
-      "verified_source_hashes": "docs/research/astra-api-cost-verification.json"
+      "verified_source_hashes": "docs/research/astra-api-cost-verification.json",
+      "implementation_commit": "98ed4b7d804b531774d69b1287e492e9782c7164"
     }
   ],
-  "last_implementation_commit": "4de6d4fc67bef158d765752a6f02ca47dc581fe4",
+  "last_implementation_commit": "98ed4b7d804b531774d69b1287e492e9782c7164",
   "optimization_objectives": {
     "minimize": [
       "provider work and accounted consumption",
